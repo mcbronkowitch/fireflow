@@ -11,6 +11,20 @@ static constexpr float kGravity  = 0.10f;  // GROW: mild pull toward 0 (the root
 static constexpr float kGrooveVarStart   = 0.25f;  // |variation| below: melody only
 static constexpr float kGrooveRerollGate = 0.9f;   // RENEW near the stop may re-roll all
 static constexpr float kGrooveRerollProb = 0.25f;  // ...with this chance, when the dice hits
+static constexpr float kEndpointSampleEpsilon = 0.001f;
+
+// Rare endpoint fallback for tick(): when continuous edge math lands within a
+// thousandth of one sample of the right edge, repeat process()'s float adds to
+// decide which side of the boundary that observation actually reports.
+static bool process_reaches_endpoint(float phase, float boundary,
+                                     float phase_per_sample, float samples) {
+    const int whole_samples = static_cast<int>(std::lround(samples));
+    if (std::fabs(samples - static_cast<float>(whole_samples))
+        > kEndpointSampleEpsilon)
+        return phase + samples * phase_per_sample >= boundary;
+    for (int i = 0; i < whole_samples; ++i) phase += phase_per_sample;
+    return phase >= boundary;
+}
 
 void ModLane::init(float sample_rate, uint32_t seed) {
     _sr = sample_rate;
@@ -369,16 +383,18 @@ float ModLane::tick() {
             : 1.f;
         const float dist = next_edge - _phase;
         const float to_edge = dp1 > 0.f ? dist / dp1 : 1e30f;
-        // The interval is half-open at its right edge. The tiny sample-space
-        // guard absorbs division roundoff at an exact edge (not real timing:
-        // it is ten thousand times smaller than one sample), keeping control
-        // updates made between ticks ahead of the same boundary that process()
-        // enters on its next sample.
-        if (to_edge >= samples_left - 0.0001f) {
+        const bool near_endpoint =
+            std::fabs(to_edge - samples_left) <= kEndpointSampleEpsilon;
+        const bool reached = near_endpoint
+            ? process_reaches_endpoint(
+                _phase, next_edge, dp1, samples_left)
+            : to_edge <= samples_left;
+        if (!reached) {
             _phase += samples_left * dp1;
             break;
         }
         samples_left -= to_edge;
+        if (samples_left < 0.f) samples_left = 0.f; // numerical endpoint only
         if (next_edge >= 1.f) {
             _phase = 0.f;
             _wrapped = true;

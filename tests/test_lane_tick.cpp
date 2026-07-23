@@ -292,9 +292,9 @@ TEST_CASE("tick: exact-endpoint live shuffle latches the same even-step pair") {
         l.set_shuffle(0.f);
     });
 
-    // Step 2 is exactly 96 samples from reset: one control interval.
-    // The interval is half-open at its right edge, so neither path has
-    // entered step 2 when the control update is applied at that edge.
+    // Step 2 is mathematically at sample 96, but repeated float addition lands
+    // a hair below phase 0.4. Both paths therefore still report odd step 1
+    // when the control update is applied at that observation boundary.
     tp.advance_one_tick();
     REQUIRE(tp.ref.cur_step() == 1);
     REQUIRE(tp.dut.cur_step() == 1);
@@ -302,8 +302,8 @@ TEST_CASE("tick: exact-endpoint live shuffle latches the same even-step pair") {
     tp.ref.set_shuffle(1.f);
     tp.dut.set_shuffle(1.f);
 
-    // Both paths enter even step 2 with the new value. At probe phase 0.63,
-    // straight timing is already in step 3 while full shuffle remains in 2.
+    // Both enter even step 2 with the new target. Probe phase 0.63 proves
+    // that both paths latched full shuffle (step 2 rather than straight 3).
     tp.advance_one_tick();
     CHECK((tp.ref_fires > 0) == tp.dut_fired);
     CHECK(tp.ref.cur_step() == 3);
@@ -318,6 +318,41 @@ TEST_CASE("tick: exact-endpoint live shuffle latches the same even-step pair") {
     CHECK((tp.ref_fires > 0) == tp.dut_fired);
     CHECK(tp.ref.cur_step() == 0);
     CHECK(tp.dut.cur_step() == 0);
+    CHECK(tp.dut.target() == tp.ref.target());
+    CHECK(tp.dut_out == tp.ref_out);
+}
+
+TEST_CASE("tick: exactly representable endpoint latches before live shuffle target") {
+    TickPair tp;
+    tp.boot(29u, [](ModLane& l) {
+        l.set_range(1.f); l.set_shape(1.f); l.set_smooth(0.f);
+        l.set_step(true, 8); l.set_rate_hz(375.f); // phase_inc = 1/128
+        l.set_shuffle(0.f);
+    });
+
+    // After 96 samples phase is exactly 0.75, the even step-6 boundary.
+    tp.advance_one_tick();
+    REQUIRE(tp.ref.phase() == 0.75f);
+    REQUIRE(tp.dut.phase() == 0.75f);
+    REQUIRE(tp.ref.cur_step() == 6);
+    REQUIRE(tp.dut.cur_step() == 6);
+
+    tp.ref.set_shuffle(1.f);
+    tp.dut.set_shuffle(1.f);
+
+    // Step 6 already latched straight timing, so a probe between the straight
+    // and shuffled odd boundaries remains in step 7 for both paths.
+    CHECK(tp.ref.step_at_phase(0.89f) == 7);
+    CHECK(tp.dut.step_at_phase(0.89f) == 7);
+
+    // The next even step is cycle step 0, which latches full shuffle. Both
+    // paths traverse the same wrap and subsequent pair sequence.
+    tp.advance_one_tick();
+    CHECK((tp.ref_fires > 0) == tp.dut_fired);
+    CHECK(tp.ref.cur_step() == 4);
+    CHECK(tp.dut.cur_step() == 4);
+    CHECK(tp.ref.step_at_phase(0.89f) == 6);
+    CHECK(tp.dut.step_at_phase(0.89f) == 6);
     CHECK(tp.dut.target() == tp.ref.target());
     CHECK(tp.dut_out == tp.ref_out);
 }
