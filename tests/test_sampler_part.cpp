@@ -940,29 +940,64 @@ TEST_CASE("part: sampler shuffle alternates fires without warping the step clock
         p.process(l, r);
     }
 
-    p.mod().set_rate(1.f);       // 30 Hz, 8 STEP slots -> nominal 200 samples
+    // Transientless deterministic content keeps the sampler on its straight
+    // tempo-grid fallback. Its 1600 frames make exactly eight nominal
+    // 200-sample source slots at the configured rate.
+    std::vector<float> content(1600);
+    for (size_t i = 0; i < content.size(); ++i)
+        content[i] = 0.25f * std::sin(6.2831853f * 110.f
+                                     * static_cast<float>(i) / 48000.f);
+    p.sampler().load_sample(content.data(), content.data(), content.size());
+    REQUIRE(p.sampler().slice_count() < sampler_cfg::kMinSlices);
+
+    p.set_depth(0.f);                 // no SOURCE/MOTION walk
+    p.set_target_base(LANE_SOURCE, 0.f);
+    p.set_target_base(LANE_SIZE, 0.f); // 1/16-slot grains: no ceiling drops
+    p.mod().set_rate(1.f);            // 30 Hz, 8 STEP slots -> nominal 200 samples
     p.mod().set_density(1.f);
     p.mod().set_shuffle(1.f);
     p.set_step(true, 8);
 
-    std::vector<int> fires;
-    for (int sample = 0; sample < 4000 && fires.size() < 10; ++sample) {
+    std::vector<int> spawn_times;
+    std::vector<float> spawn_positions;
+    int lane_fires = 0;
+    int last_count = p.sampler().spawn_count();
+    for (int sample = 0; sample < 4000 && spawn_times.size() < 10; ++sample) {
         float l = 0.f, r = 0.f;
         p.process(l, r);
-        if (p.mod().lane_fired(LANE_PITCH)) fires.push_back(sample);
+        if (p.mod().lane_fired(LANE_PITCH)) ++lane_fires;
+        const int count = p.sampler().spawn_count();
+        if (count != last_count) {
+            REQUIRE(count == last_count + 1);
+            REQUIRE(p.mod().lane_fired(LANE_PITCH));
+            last_count = count;
+            spawn_times.push_back(sample);
+            spawn_positions.push_back(p.sampler().last_spawn_pos());
+        }
     }
 
-    REQUIRE(fires.size() >= 5);
-    int short_gap = fires[1] - fires[0];
+    REQUIRE(spawn_times.size() >= 5);
+    CHECK(lane_fires == static_cast<int>(spawn_times.size()));
+    int short_gap = spawn_times[1] - spawn_times[0];
     int long_gap = short_gap;
-    for (size_t i = 2; i < fires.size(); ++i) {
-        const int gap = fires[i] - fires[i - 1];
+    for (size_t i = 2; i < spawn_times.size(); ++i) {
+        const int gap = spawn_times[i] - spawn_times[i - 1];
         if (gap < short_gap) short_gap = gap;
         if (gap > long_gap) long_gap = gap;
     }
     CHECK(long_gap == doctest::Approx(2.f * short_gap).epsilon(0.03));
     CHECK(p.sampler().step_clock() == doctest::Approx(200.f));
     CHECK(p.sampler().step_clock() == doctest::Approx(p.mod().pitch_step_samples()));
+
+    // Shuffle moves WHEN fires occur, never WHERE the source grid is sliced.
+    // With SOURCE at zero, every real spawn advances by one nominal straight
+    // slot and wraps after the eighth.
+    REQUIRE(spawn_positions.size() == spawn_times.size());
+    for (size_t i = 0; i < spawn_positions.size(); ++i) {
+        const float expected = static_cast<float>((i % 8) * 200);
+        CHECK(spawn_positions[i] == doctest::Approx(expected));
+    }
+    CHECK(p.sampler().dropped_spawns() == 0);
 }
 
 // Part must push set_phrase_pos before every fire. With the roll gone (spec

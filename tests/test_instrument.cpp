@@ -703,28 +703,68 @@ TEST_CASE("instrument: shared shuffle reaches both STEP parts") {
     CHECK(long_gap == doctest::Approx(2.f * short_gap).epsilon(0.03));
 }
 
-TEST_CASE("instrument: FLOW lane output is invariant under shared shuffle") {
+TEST_CASE("instrument: shared shuffle leaves FLOW exact beside an active STEP sibling") {
     Instrument straight;
     Instrument shuffled;
     straight.init(48000.f);
     shuffled.init(48000.f);
-    straight.set_rate(PART_A, 0.8f);
-    shuffled.set_rate(PART_A, 0.8f);
+    for (int p = 0; p < PART_COUNT; ++p) {
+        straight.set_rate(p, 1.f);
+        shuffled.set_rate(p, 1.f);
+        straight.set_density(p, 1.f);
+        shuffled.set_density(p, 1.f);
+    }
     straight.set_shuffle(0.f);
     shuffled.set_shuffle(1.f);
+    straight.set_step(PART_B, true, 8);
+    shuffled.set_step(PART_B, true, 8);
 
     std::vector<float> output_straight;
     std::vector<float> output_shuffled;
-    output_straight.reserve(4096);
-    output_shuffled.reserve(4096);
+    std::vector<int> step_fires_straight;
+    std::vector<int> step_fires_shuffled;
+    output_straight.reserve(4000);
+    output_shuffled.reserve(4000);
     float al = 0.f, ar = 0.f, bl = 0.f, br = 0.f;
-    for (int sample = 0; sample < 4096; ++sample) {
+    for (int sample = 0; sample < 4000; ++sample) {
         straight.process(nullptr, nullptr, &al, &ar, 1);
         shuffled.process(nullptr, nullptr, &bl, &br, 1);
         output_straight.push_back(straight.lane_output(PART_A, LANE_PITCH));
         output_shuffled.push_back(shuffled.lane_output(PART_A, LANE_PITCH));
+        if (straight.lane_fired(PART_B, LANE_PITCH))
+            step_fires_straight.push_back(sample);
+        if (shuffled.lane_fired(PART_B, LANE_PITCH))
+            step_fires_shuffled.push_back(sample);
     }
+
+    // PART_A remains FLOW and therefore bit-exact even while the same shared
+    // control actively warps PART_B's STEP boundaries.
     CHECK(output_straight == output_shuffled);
+    REQUIRE(step_fires_straight.size() >= 5);
+    REQUIRE(step_fires_shuffled.size() == step_fires_straight.size());
+    CHECK(step_fires_shuffled != step_fires_straight);
+
+    int straight_short = step_fires_straight[1] - step_fires_straight[0];
+    int straight_long = straight_short;
+    for (size_t i = 2; i < step_fires_straight.size(); ++i) {
+        const int gap = step_fires_straight[i] - step_fires_straight[i - 1];
+        if (gap < straight_short) straight_short = gap;
+        if (gap > straight_long) straight_long = gap;
+    }
+    // Repeated float phase additions can quantize a nominal boundary to
+    // either adjacent integer sample; straight timing still has no groove-
+    // sized spread.
+    CHECK(straight_long - straight_short <= 1);
+    CHECK(straight_long == doctest::Approx(200.f).epsilon(0.01));
+
+    int shuffled_short = step_fires_shuffled[1] - step_fires_shuffled[0];
+    int shuffled_long = shuffled_short;
+    for (size_t i = 2; i < step_fires_shuffled.size(); ++i) {
+        const int gap = step_fires_shuffled[i] - step_fires_shuffled[i - 1];
+        if (gap < shuffled_short) shuffled_short = gap;
+        if (gap > shuffled_long) shuffled_long = gap;
+    }
+    CHECK(shuffled_long == doctest::Approx(2.f * shuffled_short).epsilon(0.03));
 }
 
 TEST_CASE("instrument: set_color blooms the FLOW pad live, click-free") {
