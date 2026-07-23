@@ -40,6 +40,7 @@ public:
     void set_smooth(int p, float n)          { _parts[p].mod().set_smooth(n); }
     void set_range(int p, float n)           { _parts[p].mod().set_range(n); }
     void set_variation(int p, float n)       { _parts[p].mod().set_variation(n); }  // -1..+1
+    void set_shuffle(float amount)           { for (auto& part : _parts) part.mod().set_shuffle(amount); }
     void set_principle(int p, int pr)        { _parts[p].mod().set_principle(static_cast<Principle>(pr)); }
     void set_step(int p, bool on, int steps) { _parts[p].set_step(on, steps); }
     void new_phrase(int p)                   { _parts[p].mod().new_phrase(); }

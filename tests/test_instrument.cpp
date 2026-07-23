@@ -669,6 +669,64 @@ TEST_CASE("instrument: RST restarts both loops at the bar start") {
     CHECK(inst.lane_fired(PART_B, LANE_PITCH));
 }
 
+TEST_CASE("instrument: shared shuffle reaches both STEP parts") {
+    Instrument inst;
+    inst.init(48000.f);
+    for (int p = 0; p < PART_COUNT; ++p) {
+        inst.set_rate(p, 1.f);       // 30 Hz: nominal 200-sample STEP spacing
+        inst.set_density(p, 1.f);    // every composed boundary fires
+    }
+    inst.set_shuffle(1.f);           // the only shuffle call: shared surface
+    inst.set_step(PART_A, true, 8);
+    inst.set_step(PART_B, true, 8);
+
+    std::vector<int> fires_a;
+    std::vector<int> fires_b;
+    float l = 0.f, r = 0.f;
+    for (int sample = 0; sample < 4000 && fires_a.size() < 10; ++sample) {
+        inst.process(nullptr, nullptr, &l, &r, 1);
+        if (inst.lane_fired(PART_A, LANE_PITCH)) fires_a.push_back(sample);
+        if (inst.lane_fired(PART_B, LANE_PITCH)) fires_b.push_back(sample);
+    }
+
+    REQUIRE(fires_a.size() >= 5);
+    REQUIRE(fires_b.size() == fires_a.size());
+    CHECK(fires_a == fires_b);
+
+    int short_gap = fires_a[1] - fires_a[0];
+    int long_gap = short_gap;
+    for (size_t i = 2; i < fires_a.size(); ++i) {
+        const int gap = fires_a[i] - fires_a[i - 1];
+        if (gap < short_gap) short_gap = gap;
+        if (gap > long_gap) long_gap = gap;
+    }
+    CHECK(long_gap == doctest::Approx(2.f * short_gap).epsilon(0.03));
+}
+
+TEST_CASE("instrument: FLOW lane output is invariant under shared shuffle") {
+    Instrument straight;
+    Instrument shuffled;
+    straight.init(48000.f);
+    shuffled.init(48000.f);
+    straight.set_rate(PART_A, 0.8f);
+    shuffled.set_rate(PART_A, 0.8f);
+    straight.set_shuffle(0.f);
+    shuffled.set_shuffle(1.f);
+
+    std::vector<float> output_straight;
+    std::vector<float> output_shuffled;
+    output_straight.reserve(4096);
+    output_shuffled.reserve(4096);
+    float al = 0.f, ar = 0.f, bl = 0.f, br = 0.f;
+    for (int sample = 0; sample < 4096; ++sample) {
+        straight.process(nullptr, nullptr, &al, &ar, 1);
+        shuffled.process(nullptr, nullptr, &bl, &br, 1);
+        output_straight.push_back(straight.lane_output(PART_A, LANE_PITCH));
+        output_shuffled.push_back(shuffled.lane_output(PART_A, LANE_PITCH));
+    }
+    CHECK(output_straight == output_shuffled);
+}
+
 TEST_CASE("instrument: set_color blooms the FLOW pad live, click-free") {
     Instrument inst;
     inst.init(48000.f);

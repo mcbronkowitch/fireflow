@@ -145,3 +145,18 @@ TEST_CASE("super: texture lanes hold between control ticks, pitch stays per-samp
     }
     CHECK(stair_ok);            // texture = 96-sample staircase by construction
 }
+
+TEST_CASE("super modulator: shared shuffle exposes the pitch lane's warped lookup") {
+    SuperModulator m;
+    m.init(48000.f, 42u);
+    m.set_shuffle(1.f);
+    m.set_step(true, 8);
+
+    // Full shuffle delays the odd boundary from 1/8 to 1/6 of the cycle.
+    // This phase is therefore still step 0 on the performed grid, although
+    // the retired straight lookup would already call it step 1.
+    const float between_grids = 0.14f;
+    REQUIRE(ModLane::step_index(between_grids, 8) == 1);
+    CHECK(m.pitch_step_at_phase(between_grids) == 0);
+    CHECK(m.pitch_step_at_phase(0.17f) == 1);
+}

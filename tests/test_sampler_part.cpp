@@ -930,6 +930,41 @@ TEST_CASE("part: a sampler STEP part pushes a real step clock and fires on slice
     CHECK(spawns_on_marker == spawns);            // every fire hit a slice
 }
 
+TEST_CASE("part: sampler shuffle alternates fires without warping the step clock") {
+    std::vector<SampleBuffer::Frame> mem(48000);
+    Part p;
+    p.init(48000.f, 1234u, nullptr, nullptr, mem.data(), mem.size());
+    p.set_engine(ENGINE_SAMPLER);
+    for (int i = 0; i < 400; ++i) {
+        float l = 0.f, r = 0.f;
+        p.process(l, r);
+    }
+
+    p.mod().set_rate(1.f);       // 30 Hz, 8 STEP slots -> nominal 200 samples
+    p.mod().set_density(1.f);
+    p.mod().set_shuffle(1.f);
+    p.set_step(true, 8);
+
+    std::vector<int> fires;
+    for (int sample = 0; sample < 4000 && fires.size() < 10; ++sample) {
+        float l = 0.f, r = 0.f;
+        p.process(l, r);
+        if (p.mod().lane_fired(LANE_PITCH)) fires.push_back(sample);
+    }
+
+    REQUIRE(fires.size() >= 5);
+    int short_gap = fires[1] - fires[0];
+    int long_gap = short_gap;
+    for (size_t i = 2; i < fires.size(); ++i) {
+        const int gap = fires[i] - fires[i - 1];
+        if (gap < short_gap) short_gap = gap;
+        if (gap > long_gap) long_gap = gap;
+    }
+    CHECK(long_gap == doctest::Approx(2.f * short_gap).epsilon(0.03));
+    CHECK(p.sampler().step_clock() == doctest::Approx(200.f));
+    CHECK(p.sampler().step_clock() == doctest::Approx(p.mod().pitch_step_samples()));
+}
+
 // Part must push set_phrase_pos before every fire. With the roll gone (spec
 // 2026-07-23) the one remaining observable consumer is the phrase wrap:
 // _fire_slice resets the cursor when the slot number goes BACKWARDS, so a

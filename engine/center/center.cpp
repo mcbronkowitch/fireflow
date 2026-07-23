@@ -279,7 +279,7 @@ void Center::_snap_phase(SuperModulator& m, Part& p, int i,
     }
 
     m.snap_pitch_phase(tgt);
-    p.snap_sampler_cursor(ModLane::step_index(tgt, m.pitch_steps()));
+    p.snap_sampler_cursor(m.pitch_step_at_phase(tgt));
 }
 
 float Center::_grid_servo(const SuperModulator& m, float off) const {

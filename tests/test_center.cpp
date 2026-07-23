@@ -690,6 +690,7 @@ TEST_CASE("center: the FLOW->STEP snap reaches the sampler's slice cursor") {
     Center c; Part pa, pb;
     c.init(48000.f, 123u); pa.init(48000.f, 1u); pb.init(48000.f, 2u);
     pa.set_engine(ENGINE_SAMPLER);
+    pa.mod().set_shuffle(1.f);
     auto run = [&](int n) {
         for (int k = 0; k < n; ++k) {
             c.update(pa.mod(), pb.mod(), pa, pb);
@@ -697,11 +698,13 @@ TEST_CASE("center: the FLOW->STEP snap reaches the sampler's slice cursor") {
         }
     };
     c.set_sync(true);
-    run(40);
+    // 31 ticks plus the snap tick puts the raw transport target at ~0.128:
+    // after the straight 1/8 boundary but before full shuffle's delayed 1/6
+    // boundary, so the two cursor lookups observably disagree.
+    run(31);
 
     pa.set_step(true, 8);
     pa.set_step(false, 8);
-    run(10);
 
     pa.set_step(true, 8);
     c.update(pa.mod(), pb.mod(), pa, pb);
@@ -709,9 +712,16 @@ TEST_CASE("center: the FLOW->STEP snap reaches the sampler's slice cursor") {
     const float cpb = kDivisions[pa.mod().division()].cpb * pa.mod().clock_scale();
     const double t  = c.transport().beats() * static_cast<double>(cpb);
     const float tgt = static_cast<float>(t - std::floor(t));
-    const int expect_slot = ModLane::step_index(tgt, pa.mod().pitch_steps());
+    const int expect_slot = pa.mod().pitch_step_at_phase(tgt);
 
+    REQUIRE(expect_slot != ModLane::step_index(tgt, pa.mod().pitch_steps()));
+    CHECK(pa.mod().pitch_phase() == doctest::Approx(tgt).epsilon(1e-6));
     CHECK(pa.sampler().test_cursor()    == expect_slot);
     CHECK(pa.sampler().test_last_slot() == expect_slot);
+
+    // RST remains a raw-phase gesture; shuffle only warps boundary lookup.
+    c.reset_transport();
+    pa.mod().reset_phases();
+    CHECK(pa.mod().pitch_phase() == 0.f);
 }
 

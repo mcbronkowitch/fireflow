@@ -24,6 +24,7 @@ public:
     void set_smooth(float s);
     void set_range(float r);
     void set_variation(float v);
+    void set_shuffle(float amount);
     void set_step(bool on, int steps);
     void set_fixed_slew(bool on);
     void set_principle(Principle p) { _lanes[LANE_PITCH].set_principle(p); }
@@ -33,6 +34,9 @@ public:
     // Slice-groove side channel (spec 2026-07-22), master/PITCH lane only.
     int   pitch_cur_step()     const { return _lanes[LANE_PITCH].cur_step(); }
     int   pitch_steps()        const { return _lanes[LANE_PITCH].steps(); }
+    int   pitch_step_at_phase(float phase) const {
+        return _lanes[LANE_PITCH].step_at_phase(phase);
+    }
     float pitch_step_samples() const { return _lanes[LANE_PITCH].step_samples(); }
 
     void process();                // advance all lanes one sample
