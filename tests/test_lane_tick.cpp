@@ -371,6 +371,10 @@ TEST_CASE("tick: warped multi-edge wrap endpoint keeps live shuffle pair aligned
     tp.advance_one_tick();
     REQUIRE(tp.ref.phase() < 1.f);
     REQUIRE(tp.ref.phase() > 0.999f);
+    REQUIRE(tp.dut.phase() >= 0.f);
+    REQUIRE(tp.dut.phase() < 1.f);
+    REQUIRE(tp.dut.phase() > 0.999f);
+    CHECK(std::fabs(tp.dut.phase() - tp.ref.phase()) < 0.01f);
     REQUIRE(tp.ref.cur_step() == 1);
     REQUIRE(tp.dut.cur_step() == 1);
 
@@ -386,6 +390,11 @@ TEST_CASE("tick: warped multi-edge wrap endpoint keeps live shuffle pair aligned
              " dut_step=", tp.dut.cur_step(),
              " ref_phase=", tp.ref.phase(), " dut_phase=", tp.dut.phase());
         CHECK((tp.ref_fires > 0) == tp.dut_fired);
+        CHECK(tp.dut.phase() >= 0.f);
+        CHECK(tp.dut.phase() < 1.f);
+        CHECK(tp.ref.phase() > 0.999f);
+        CHECK(tp.dut.phase() > 0.999f);
+        CHECK(std::fabs(tp.dut.phase() - tp.ref.phase()) < 0.01f);
         CHECK(tp.ref.cur_step() == 1);
         CHECK(tp.dut.cur_step() == 1);
         CHECK(tp.ref.step_at_phase(0.6f) == 0);

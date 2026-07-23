@@ -401,23 +401,28 @@ float ModLane::tick() {
         const bool near_endpoint =
             std::fabs(to_edge - samples_left) <= kEndpointSampleEpsilon;
         bool reached = to_edge <= samples_left;
+        ProcessWindowEnd shadow_end = {_phase, window_wraps};
+        bool have_shadow_end = false;
         if (near_endpoint) {
-            const ProcessWindowEnd end =
+            shadow_end =
                 process_window_end(window_start_phase, window_dp, window_dp_count);
+            have_shadow_end = true;
             if (_step_mode) {
                 const int end_step =
-                    shuffle_step_index(end.phase, _steps, _shuffle_latched);
-                const int end_position = end.wraps * _steps + end_step;
+                    shuffle_step_index(shadow_end.phase, _steps, _shuffle_latched);
+                const int end_position = shadow_end.wraps * _steps + end_step;
                 const int edge_position = next_edge >= 1.f
                     ? (window_wraps + 1) * _steps
                     : window_wraps * _steps + _cur_step + 1;
                 reached = end_position >= edge_position;
             } else {
-                reached = end.wraps > window_wraps;
+                reached = shadow_end.wraps > window_wraps;
             }
         }
         if (!reached) {
-            _phase += samples_left * dp1;
+            _phase = have_shadow_end && shadow_end.wraps == window_wraps
+                ? shadow_end.phase
+                : _phase + samples_left * dp1;
             break;
         }
         samples_left -= to_edge;
