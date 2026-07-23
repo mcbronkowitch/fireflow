@@ -356,3 +356,41 @@ TEST_CASE("tick: exactly representable endpoint latches before live shuffle targ
     CHECK(tp.dut.target() == tp.ref.target());
     CHECK(tp.dut_out == tp.ref_out);
 }
+
+TEST_CASE("tick: warped multi-edge wrap endpoint keeps live shuffle pair aligned") {
+    TickPair tp;
+    tp.boot(31u, [](ModLane& l) {
+        l.set_range(1.f); l.set_shape(1.f); l.set_smooth(0.f);
+        l.set_step(true, 2); l.set_rate_hz(250.f);
+        l.set_shuffle(0.2f);
+    });
+
+    // One tick is mathematically two cycles. The warped odd edges occur at
+    // fractional sample 25.6 in each cycle, and repeated process additions
+    // finish just below the second wrap on step 1.
+    tp.advance_one_tick();
+    REQUIRE(tp.ref.phase() < 1.f);
+    REQUIRE(tp.ref.phase() > 0.999f);
+    REQUIRE(tp.ref.cur_step() == 1);
+    REQUIRE(tp.dut.cur_step() == 1);
+
+    tp.ref.set_shuffle(1.f);
+    tp.dut.set_shuffle(1.f);
+
+    // Both enter the pending wrap after the update and latch the same full
+    // shuffle value for step 0. Repeated whole-window comparisons prove the
+    // step/RNG/target sequence remains aligned across subsequent wraps.
+    for (int t = 0; t < 3; ++t) {
+        tp.advance_one_tick();
+        INFO("t=", t, " ref_step=", tp.ref.cur_step(),
+             " dut_step=", tp.dut.cur_step(),
+             " ref_phase=", tp.ref.phase(), " dut_phase=", tp.dut.phase());
+        CHECK((tp.ref_fires > 0) == tp.dut_fired);
+        CHECK(tp.ref.cur_step() == 1);
+        CHECK(tp.dut.cur_step() == 1);
+        CHECK(tp.ref.step_at_phase(0.6f) == 0);
+        CHECK(tp.dut.step_at_phase(0.6f) == 0);
+        CHECK(tp.dut.target() == tp.ref.target());
+        CHECK(tp.dut_out == tp.ref_out);
+    }
+}

@@ -13,17 +13,26 @@ static constexpr float kGrooveRerollGate = 0.9f;   // RENEW near the stop may re
 static constexpr float kGrooveRerollProb = 0.25f;  // ...with this chance, when the dice hits
 static constexpr float kEndpointSampleEpsilon = 0.001f;
 
-// Rare endpoint fallback for tick(): when continuous edge math lands within a
-// thousandth of one sample of the right edge, repeat process()'s float adds to
-// decide which side of the boundary that observation actually reports.
-static bool process_reaches_endpoint(float phase, float boundary,
-                                     float phase_per_sample, float samples) {
-    const int whole_samples = static_cast<int>(std::lround(samples));
-    if (std::fabs(samples - static_cast<float>(whole_samples))
-        > kEndpointSampleEpsilon)
-        return phase + samples * phase_per_sample >= boundary;
-    for (int i = 0; i < whole_samples; ++i) phase += phase_per_sample;
-    return phase >= boundary;
+struct ProcessWindowEnd {
+    float phase;
+    int wraps;
+};
+
+// Rare endpoint fallback for tick(): replay only process()'s raw float phase
+// additions for the whole control window. Per-wrap rates come from the real
+// tick traversal, so this shadow performs no events and consumes no RNG.
+static ProcessWindowEnd process_window_end(
+    float phase, const float* phase_per_sample_by_wrap, int rate_count) {
+    int wraps = 0;
+    for (int sample = 0; sample < ModLane::kTickInterval; ++sample) {
+        const int rate_index = wraps < rate_count ? wraps : rate_count - 1;
+        phase += phase_per_sample_by_wrap[rate_index];
+        while (phase >= 1.f) {
+            phase -= 1.f;
+            ++wraps;
+        }
+    }
+    return {phase, wraps};
 }
 
 void ModLane::init(float sample_rate, uint32_t seed) {
@@ -353,6 +362,12 @@ float ModLane::tick() {
         _kick_shape *= _settle_coef_tick;
     }
 
+    const float window_start_phase = _phase;
+    float window_dp[2 * kSeqSlots + 1];
+    int window_dp_count = 1;
+    int window_wraps = 0;
+    window_dp[0] = _phase_inc * (1.f + _ev_rate);
+
     // Pending step mismatch first: init/reset leave _cur_step = -1 and the
     // per-sample path fires step 0 on its very first sample the same way.
     // This same check also absorbs kick()'s phase jumps (a kick can land
@@ -385,10 +400,22 @@ float ModLane::tick() {
         const float to_edge = dp1 > 0.f ? dist / dp1 : 1e30f;
         const bool near_endpoint =
             std::fabs(to_edge - samples_left) <= kEndpointSampleEpsilon;
-        const bool reached = near_endpoint
-            ? process_reaches_endpoint(
-                _phase, next_edge, dp1, samples_left)
-            : to_edge <= samples_left;
+        bool reached = to_edge <= samples_left;
+        if (near_endpoint) {
+            const ProcessWindowEnd end =
+                process_window_end(window_start_phase, window_dp, window_dp_count);
+            if (_step_mode) {
+                const int end_step =
+                    shuffle_step_index(end.phase, _steps, _shuffle_latched);
+                const int end_position = end.wraps * _steps + end_step;
+                const int edge_position = next_edge >= 1.f
+                    ? (window_wraps + 1) * _steps
+                    : window_wraps * _steps + _cur_step + 1;
+                reached = end_position >= edge_position;
+            } else {
+                reached = end.wraps > window_wraps;
+            }
+        }
         if (!reached) {
             _phase += samples_left * dp1;
             break;
@@ -399,6 +426,10 @@ float ModLane::tick() {
             _phase = 0.f;
             _wrapped = true;
             _wrap_events();
+            ++window_wraps;
+            if (window_dp_count < 2 * kSeqSlots + 1)
+                window_dp[window_dp_count++] =
+                    _phase_inc * (1.f + _ev_rate);
             if (_step_mode) _enter_step(0);
             else _on_boundary();         // FLOW fires per wrap; STEP fires step 0
         } else {
