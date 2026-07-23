@@ -369,7 +369,15 @@ float ModLane::tick() {
             : 1.f;
         const float dist = next_edge - _phase;
         const float to_edge = dp1 > 0.f ? dist / dp1 : 1e30f;
-        if (to_edge > samples_left) { _phase += samples_left * dp1; break; }
+        // The interval is half-open at its right edge. The tiny sample-space
+        // guard absorbs division roundoff at an exact edge (not real timing:
+        // it is ten thousand times smaller than one sample), keeping control
+        // updates made between ticks ahead of the same boundary that process()
+        // enters on its next sample.
+        if (to_edge >= samples_left - 0.0001f) {
+            _phase += samples_left * dp1;
+            break;
+        }
         samples_left -= to_edge;
         if (next_edge >= 1.f) {
             _phase = 0.f;

@@ -234,7 +234,9 @@ TEST_CASE("tick: shuffled odd grid and mid-pair target change match process") {
         l.set_shuffle(0.6f);
     });
 
-    int skew = 0;
+    int skew_events = 0;
+    int full_state_checks = 0;
+    bool reconverge_next = false;
     for (int t = 0; t < 80; ++t) {
         tp.advance_one_tick();
         if (t == 1) {
@@ -244,12 +246,24 @@ TEST_CASE("tick: shuffled odd grid and mid-pair target change match process") {
             tp.dut.set_shuffle(1.f);
         }
 
-        if ((tp.ref_fires > 0) != tp.dut_fired) {
-            skew = 1;
+        const bool fire_mismatch = (tp.ref_fires > 0) != tp.dut_fired;
+        if (reconverge_next) {
+            INFO("reconvergence t=", t);
+            CHECK(tp.dut.cur_step() == tp.ref.cur_step());
+            CHECK(tp.dut.target() == tp.ref.target());
+            CHECK(tp.dut_out == tp.ref_out);
+            float d = std::fabs(tp.dut.phase_eff() - tp.ref.phase_eff());
+            if (d > 0.5f) d = 1.f - d;
+            CHECK(d < 0.01f);
+            reconverge_next = false;
+            ++full_state_checks;
             continue;
         }
-        if (skew > 0) {
-            --skew;
+
+        if (fire_mismatch) {
+            ++skew_events;
+            CHECK(skew_events <= 2);
+            reconverge_next = true;
             continue;
         }
 
@@ -257,10 +271,53 @@ TEST_CASE("tick: shuffled odd grid and mid-pair target change match process") {
              " dut_step=", tp.dut.cur_step(),
              " ref_fires=", tp.ref_fires, " dut_fired=", tp.dut_fired,
              " ref_phase=", tp.ref.phase(), " dut_phase=", tp.dut.phase());
+        CHECK(tp.dut.cur_step() == tp.ref.cur_step());
         CHECK(tp.dut.target() == tp.ref.target());
         CHECK(tp.dut_out == tp.ref_out);
         float d = std::fabs(tp.dut.phase_eff() - tp.ref.phase_eff());
         if (d > 0.5f) d = 1.f - d;
         CHECK(d < 0.01f);
+        ++full_state_checks;
     }
+    CHECK(skew_events <= 2);
+    CHECK_FALSE(reconverge_next);
+    CHECK(full_state_checks >= 78);
+}
+
+TEST_CASE("tick: exact-endpoint live shuffle latches the same even-step pair") {
+    TickPair tp;
+    tp.boot(23u, [](ModLane& l) {
+        l.set_range(1.f); l.set_shape(1.f); l.set_smooth(0.f);
+        l.set_step(true, 5); l.set_rate_hz(125.f); // step = 48 samples
+        l.set_shuffle(0.f);
+    });
+
+    // Step 2 is exactly 96 samples from reset: one control interval.
+    // The interval is half-open at its right edge, so neither path has
+    // entered step 2 when the control update is applied at that edge.
+    tp.advance_one_tick();
+    REQUIRE(tp.ref.cur_step() == 1);
+    REQUIRE(tp.dut.cur_step() == 1);
+
+    tp.ref.set_shuffle(1.f);
+    tp.dut.set_shuffle(1.f);
+
+    // Both paths enter even step 2 with the new value. At probe phase 0.63,
+    // straight timing is already in step 3 while full shuffle remains in 2.
+    tp.advance_one_tick();
+    CHECK((tp.ref_fires > 0) == tp.dut_fired);
+    CHECK(tp.ref.cur_step() == 3);
+    CHECK(tp.dut.cur_step() == 3);
+    CHECK(tp.ref.step_at_phase(0.63f) == 2);
+    CHECK(tp.dut.step_at_phase(0.63f) == 2);
+    CHECK(tp.dut.target() == tp.ref.target());
+    CHECK(tp.dut_out == tp.ref_out);
+
+    // Both then traverse the same odd boundary, final straight step and wrap.
+    tp.advance_one_tick();
+    CHECK((tp.ref_fires > 0) == tp.dut_fired);
+    CHECK(tp.ref.cur_step() == 0);
+    CHECK(tp.dut.cur_step() == 0);
+    CHECK(tp.dut.target() == tp.ref.target());
+    CHECK(tp.dut_out == tp.ref_out);
 }
