@@ -35,6 +35,14 @@ draws in the light layer and lights a moving dot per modulation lane from
 `Instrument::lane_output()` / `lane_fired()`, so the rings animate with the
 engine (mirroring `src/ui/led.ring.h`). The SVG only provides the dim housing.
 
+## TIME
+
+**SHUFFLE** is one shared control for both parts: `0` is a straight grid and
+full travel gives a classic `2:1` long/short pair. It warps only STEP timing;
+FLOW stays straight. Live changes latch at each lane's next pair boundary so
+the active pair finishes intact, while external CLOCK pulses, resets, phrase
+downbeats, and the transport's raw-phase anchors stay straight.
+
 ## Sampler
 
 **ENG** (per part, latched) selects the part's engine: **Synth** or **Sampler**

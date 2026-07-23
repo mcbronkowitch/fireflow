@@ -289,37 +289,37 @@ OUTPUTS = [jack_at(e) for e in ("OUT_L", "OUT_R", "PITCH_A", "GATE_A",
 # move out from +-10.5 to +-11.5.
 L, R = CX - 11.5, CX + 11.5
 ROW_BLEND = 21.5
-ROW_TIME  = 41.0
-ROW_DUO1, ROW_DUO2 = 56.5, 66.0
-ROW_ROOM1, ROW_ROOM2, ROW_ROOM3 = 82.5, 93.0, 103.5
+ROW_TIME1, ROW_TIME2 = 42.0, 54.0
+ROW_DUO1, ROW_DUO2 = 68.0, 78.0
+ROW_ROOM1, ROW_ROOM2 = 94.0, 104.5
 # The four free-standing centre boxes (spec 2026-07-18 §6); GROUPS is assigned
 # here, not alongside part_groups() above, because these entries need CX.
 GROUPS = part_groups(False) + part_groups(True) + [
     (CX - 20.5, 13.0, 41.0, 19.5, "BLEND", MUTED),
-    (CX - 20.5, 35.0, 41.0, 13.5, "TIME",  MUTED),
-    (CX - 20.5, 51.0, 41.0, 22.5, "DUO",   MUTED),
-    (CX - 20.5, 76.5, 41.0, 34.7, "ROOM",  MUTED),
+    (CX - 20.5, 35.0, 41.0, 25.0, "TIME",  MUTED),
+    (CX - 20.5, 62.5, 41.0, 22.5, "DUO",   MUTED),
+    (CX - 20.5, 87.5, 41.0, 23.7, "ROOM",  MUTED),
 ] + [(bx, JACK_BOX_Y, JACK_BOX_W, JACK_BOX_H, lg, col)
      for (bx, lg, col, _well, _items) in JACK_GROUPS]
 SHARED = [
     Ctl("MORPH",  BIGKNOB, CX - 7.0, ROW_BLEND, "MORPH"),
-    # TIME: the one clock story -- the mode switch, its tempo, and how tightly
-    # the two parts hang together (spec 2026-07-16 sync/couple redesign)
-    Ctl("SYNC",   SW2,     L,  ROW_TIME, "SYNC"),
-    Ctl("TEMPO",  SMKNOB,  CX, ROW_TIME, "TEMPO"),
-    Ctl("COUPLE", SMKNOB,  R,  ROW_TIME, "COUPL"),
+    # TIME: a 2x2 clock story -- sync/tempo above, couple/shuffle below.
+    # SHUFFLE's control is appended to PARAMS after every existing id.
+    Ctl("SYNC",   SW2,     CX - 9.0, ROW_TIME1, "SYNC"),
+    Ctl("TEMPO",  SMKNOB,  CX + 9.0, ROW_TIME1, "TEMPO"),
+    Ctl("COUPLE", SMKNOB,  CX - 9.0, ROW_TIME2, "COUPL"),
     Ctl("SCALE",  KNOBI,   L,  ROW_DUO1, "SCALE"),
     Ctl("DRIFT",  SMKNOB,  R,  ROW_DUO1, "DRIFT"),
     Ctl("SPOT",   SMBTN,   L,  ROW_DUO2, "SPOT"),
     Ctl("MASTER_DRIVE", SMKNOB, CX, ROW_DUO2, "DRIVE"),
     Ctl("SETTLE", SMBTN,   R,  ROW_DUO2, "SETL"),
-    # ROOM: three rows in its own box, bottom edge flush with the PLAY boxes.
-    Ctl("REV_SIZE",  SMKNOB, L,  ROW_ROOM1, "SIZE"),
-    Ctl("REV_DECAY", SMKNOB, R,  ROW_ROOM1, "DECAY"),
-    Ctl("REV_TONE",  SMKNOB, L,  ROW_ROOM2, "TONE"),
-    Ctl("REV_DIFF",  SMKNOB, R,  ROW_ROOM2, "DIFF"),
-    Ctl("REV_SMEAR", SMKNOB, L,  ROW_ROOM3, "SMEAR"),
-    Ctl("REV_MOD",   SMKNOB, R,  ROW_ROOM3, "WOBL"),
+    # ROOM: three semantic columns, bottom edge flush with the PLAY boxes.
+    Ctl("REV_SIZE",  SMKNOB, CX - 12.0, ROW_ROOM1, "SIZE"),
+    Ctl("REV_DECAY", SMKNOB, CX - 12.0, ROW_ROOM2, "DECAY"),
+    Ctl("REV_TONE",  SMKNOB, CX,        ROW_ROOM1, "TONE"),
+    Ctl("REV_DIFF",  SMKNOB, CX,        ROW_ROOM2, "DIFF"),
+    Ctl("REV_SMEAR", SMKNOB, CX + 12.0, ROW_ROOM1, "SMEAR"),
+    Ctl("REV_MOD",   SMKNOB, CX + 12.0, ROW_ROOM2, "WOBL"),
     # CHOKE: bipolar event-priority between the decks (spec 2026-07-16
     # choke-priority). Appended LAST on purpose: existing .vcv patches keep
     # their param ids.
@@ -383,6 +383,9 @@ PARAMS = PART_A + PART_B + SHARED + [
     # patches load shifted reverb/CHOKE/tail params).
     Ctl("REV_MIX_A", SMKNOB, FX_TOP[3],     ROW_V1, "ROOM"),
     Ctl("REV_MIX_B", SMKNOB, W - FX_TOP[3], ROW_V1, "ROOM"),
+    # Shared STEP-lane shuffle. Appended after every existing ParamId so saved
+    # patches retain all prior ids; the glyph fills TIME's bottom-right slot.
+    Ctl("SHUFFLE", SMKNOB, CX + 9.0, ROW_TIME2, "SHUFL"),
 ]
 
 # --- lights --------------------------------------------------------------------

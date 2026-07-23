@@ -49,6 +49,7 @@ PARAM_ORDER = [
     'FLUXRATE_A', 'FLUXRATE_B', 'FLUXFB_A', 'FLUXFB_B', 'COLOR_A', 'COLOR_B',
     'DUST_A', 'DUST_B', 'ROT_A', 'ROT_B',
     'REC_A', 'REC_B', 'REV_MIX_A', 'REV_MIX_B',
+    'SHUFFLE',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
@@ -58,6 +59,8 @@ LIGHT_ORDER = ['GATE_A_L', 'GATE_B_L', 'REC_A_L', 'REC_B_L']
 def test_enum_order():
     """Patch compatibility. If this fails, every saved .vcv breaks."""
     check([c.enum for c in g.PARAMS] == PARAM_ORDER, "PARAMS order changed")
+    check(g.PARAMS[-1].enum == 'SHUFFLE',
+          "SHUFFLE must append after every existing ParamId")
     check([c.enum for c in g.INPUTS] == INPUT_ORDER, "INPUTS order changed")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
@@ -317,26 +320,30 @@ def test_pad_backplates_are_gone():
 
 CENTER = {   # enum -> (x offset from CX, y)
     'MORPH': (-7.0, 21.5), 'TIDE': (11.0, 21.5),
-    'SYNC': (-11.5, 41.0), 'TEMPO': (0.0, 41.0), 'COUPLE': (11.5, 41.0),
-    'SCALE': (-11.5, 56.5), 'CHOKE': (0.0, 56.5), 'DRIFT': (11.5, 56.5),
-    'SPOT': (-11.5, 66.0), 'MASTER_DRIVE': (0.0, 66.0), 'SETTLE': (11.5, 66.0),
-    'REV_SIZE': (-11.5, 82.5), 'REV_DECAY': (11.5, 82.5),
-    'REV_TONE': (-11.5, 93.0), 'REV_DIFF': (11.5, 93.0),
-    'REV_SMEAR': (-11.5, 103.5), 'REV_MOD': (11.5, 103.5),
+    'SYNC': (-9.0, 42.0), 'TEMPO': (9.0, 42.0),
+    'COUPLE': (-9.0, 54.0), 'SHUFFLE': (9.0, 54.0),
+    'SCALE': (-11.5, 68.0), 'CHOKE': (0.0, 68.0), 'DRIFT': (11.5, 68.0),
+    'SPOT': (-11.5, 78.0), 'MASTER_DRIVE': (0.0, 78.0), 'SETTLE': (11.5, 78.0),
+    'REV_SIZE': (-12.0, 94.0), 'REV_TONE': (0.0, 94.0), 'REV_SMEAR': (12.0, 94.0),
+    'REV_DECAY': (-12.0, 104.5), 'REV_DIFF': (0.0, 104.5), 'REV_MOD': (12.0, 104.5),
 }
 
 
 def test_center_positions():
     for enum, (dx, y) in CENTER.items():
-        c = ctl(enum)
+        try:
+            c = ctl(enum)
+        except KeyError:
+            check(False, f"{enum} missing from center controls")
+            continue
         want_x = g.CX + dx
         check(approx(c.x, want_x) and approx(c.y, y),
               f"{enum} at ({c.x:.2f}, {c.y:.2f}), want ({want_x:.2f}, {y})")
 
 
 def test_center_group_boxes():
-    want = [(13.0, 19.5, 'BLEND'), (35.0, 13.5, 'TIME'),
-            (51.0, 22.5, 'DUO'), (76.5, 34.7, 'ROOM')]
+    want = [(13.0, 19.5, 'BLEND'), (35.0, 25.0, 'TIME'),
+            (62.5, 22.5, 'DUO'), (87.5, 23.7, 'ROOM')]
     for (y, h, name) in want:
         check(any(approx(gx, g.CX - 20.5) and approx(gy, y) and approx(gw, 41.0)
                   and approx(gh, h) and gn == name
@@ -468,6 +475,19 @@ def test_config_wires_tip_not_label():
           "configInput is not wired to c.tip -- jack tooltips will show panel labels")
     check("configOutput(c.id, c.tip)" in cpp,
           "configOutput is not wired to c.tip -- jack tooltips will show panel labels")
+
+
+def test_shuffle_host_wiring():
+    """Rack exposes the appended shared knob with a straight default and pushes
+    it into the shared instrument once per control update."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp_path = os.path.join(here, "..", "src", "Spotymod.cpp")
+    with open(cpp_path) as f:
+        cpp = f.read()
+    check("case SHUFFLE:      return 0.f;" in cpp,
+          "SHUFFLE default must be straight (0)")
+    check("inst.set_shuffle(params[SHUFFLE].getValue());" in cpp,
+          "Rack SHUFFLE param is not wired to Instrument::set_shuffle")
 
 
 # --- 2026-07-21 morphagene-controls: the sampler meanings on the plate --------

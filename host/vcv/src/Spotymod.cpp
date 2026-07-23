@@ -241,6 +241,7 @@ struct Spotymod : Module {
             case REV_SMEAR:    return 0.568f;  // diffuser LFO smear (wash)
             case REV_MOD:      return 0.237f;  // tail LFO wobble
             case TEMPO:        return 0.00f;   // as saved (40 BPM floor; parts run Synced)
+            case SHUFFLE:      return 0.f;
             case FLUXRATE_A:   return 3.f / 11.f;   // "1/4" for part A's pad echo
             case FLUXRATE_B:   return 4.f / 11.f;   // "1/8." for part B's bass echo
             case FLUXFB_A:     return 0.563f;
@@ -539,6 +540,7 @@ struct Spotymod : Module {
         inst.set_couple(params[COUPLE].getValue());
         inst.set_drift(params[DRIFT].getValue());
         inst.set_tide(params[TIDE].getValue());
+        inst.set_shuffle(params[SHUFFLE].getValue());
         inst.set_sync(params[SYNC].getValue() > 0.5f);
         inst.set_choke(params[CHOKE].getValue() * 0.5f);   // snap -2..+2 -> zones
         inst.set_reverb_size(params[REV_SIZE].getValue());
