@@ -177,6 +177,40 @@ TEST_CASE("scenario: center actions dispatch to the instrument") {
     CHECK(true);
 }
 
+TEST_CASE("scenario: set_shuffle dispatch matches direct instruments across STEP pairs") {
+    Instrument via_event;
+    Instrument direct;
+    via_event.init(48000.f);
+    direct.init(48000.f);
+
+    for (int p = 0; p < PART_COUNT; ++p) {
+        via_event.set_rate(p, 1.f);       // 30 Hz: short, deterministic pairs
+        direct.set_rate(p, 1.f);
+        via_event.set_density(p, 1.f);
+        direct.set_density(p, 1.f);
+        via_event.set_step(p, true, 8);
+        direct.set_step(p, true, 8);
+    }
+
+    Event e;
+    e.action = "set_shuffle";
+    e.value = 1.f;
+    apply_event(via_event, e);
+    direct.set_shuffle(1.f);
+
+    float event_l = 0.f, event_r = 0.f;
+    float direct_l = 0.f, direct_r = 0.f;
+    // Twelve 8-step cycles covers many long-short pairs, not only the
+    // initial edge where straight and shuffled grids agree.
+    for (int sample = 0; sample < 19200; ++sample) {
+        via_event.process(nullptr, nullptr, &event_l, &event_r, 1);
+        direct.process(nullptr, nullptr, &direct_l, &direct_r, 1);
+        for (int p = 0; p < PART_COUNT; ++p)
+            REQUIRE(via_event.lane_fired(p, LANE_PITCH) ==
+                    direct.lane_fired(p, LANE_PITCH));
+    }
+}
+
 TEST_CASE("scenario: set_comp and set_master_drive dispatch without throwing") {
     Instrument inst;
     inst.init(48000.f);

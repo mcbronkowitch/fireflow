@@ -1,0 +1,29 @@
+{
+  "sample_rate": 48000,
+  "bpm": 121,
+  "duration_s": 24,
+  "init": [
+    {"_comment":"Deterministic listening pass: an 8-step STEP LOOP phrase at DENSITY 1 exposes every grid boundary."},
+    {"action":"set_engine","part":0,"value":"test_tone"},
+    {"_comment":"Part B is silent so the audible rhythm and CSV gate belong to the one shuffled phrase."},
+    {"action":"set_engine","part":1,"value":"test_tone"},
+    {"action":"set_target_active","part":1,"slot":4,"flag":false},
+    {"action":"set_target_base","part":1,"slot":4,"value":0.0},
+    {"action":"set_sync","ivalue":1},
+    {"action":"set_rate","part":0,"value":0.125},
+    {"action":"set_step","part":0,"flag":true,"ivalue":8},
+    {"action":"set_shape","part":0,"value":1.0},
+    {"action":"set_density","part":0,"value":1.0},
+    {"action":"set_principle","part":0,"ivalue":0},
+    {"action":"set_variation","part":0,"value":0.0},
+    {"action":"set_voice_decay","part":0,"value":0.2}
+  ],
+  "events": [
+    {"_comment":"4s: begin the intermediate shuffle segment."},
+    {"t":4,  "action":"set_shuffle","value":0.5},
+    {"_comment":"12s: this full-shuffle change intentionally may land mid-pair; it waits for the next even boundary."},
+    {"t":12, "action":"set_shuffle","value":1.0},
+    {"_comment":"20s: return to the straight grid at the next eligible pair boundary."},
+    {"t":20, "action":"set_shuffle","value":0.0}
+  ]
+}

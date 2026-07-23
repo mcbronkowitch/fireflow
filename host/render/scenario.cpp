@@ -100,6 +100,7 @@ static int parse_scale_name(const std::string& s) {
 void spky::apply_event(Instrument& inst, const Event& e) {
     const std::string& a = e.action;
     if      (a == "set_tempo_bpm")     inst.set_tempo_bpm(e.value);
+    else if (a == "set_shuffle")       inst.set_shuffle(e.value);
     else if (a == "set_rate")          inst.set_rate(e.part, e.value);
     else if (a == "set_sync")          inst.set_sync(e.ivalue != 0);
     else if (a == "set_shape")         inst.set_shape(e.part, e.value);
