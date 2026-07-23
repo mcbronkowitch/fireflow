@@ -17,6 +17,8 @@ void ModLane::init(float sample_rate, uint32_t seed) {
     _rng.seed(seed);
     _phase = 0.f;
     _cur_step = -1;
+    _shuffle_target = 0.f;
+    _shuffle_latched = 0.f;
     if (_melodic) {
         generate_phrase(_principle, _rng, _steps, _seq, _gate, _motif_id, _layout);
         pg_gen_groove(_rng, _layout.motif_len, _groove);
@@ -55,6 +57,7 @@ void ModLane::set_range(float r)      { _range = clampf(r, 0.f, 1.f); }
 void ModLane::set_variation(float v)  { _variation = clampf(v, -1.f, 1.f); }
 
 void ModLane::set_step(bool on, int steps) {
+    if (on && !_step_mode) _shuffle_latched = _shuffle_target;
     if (on && !_step_mode) { _note_age = 0; _note_hold = 0; }  // STEP entry: no stale sustain
     int new_steps = steps < 1 ? 1 : steps;
     if (_melodic) {
@@ -69,14 +72,17 @@ void ModLane::set_step(bool on, int steps) {
         // _cur_step >= 0 guard keeps pre-run configuration (init -> set_step
         // before the first process()) on the old path, where the first sample
         // must still fire step 0.
-        // _cur_step is derived from the stored _phase (assigned first) so it
-        // can never disagree with the next process()'s
-        // step_index(_phase, _steps) by an ulp; a same-tick SPOT kick() +
+        // _cur_step is derived from the stored _phase (assigned first) using
+        // the same warped lookup as process(), so a same-tick SPOT kick() +
         // STEPS turn is absorbed into this rescale (accepted trade).
-        float pos = std::fmod(_phase * static_cast<float>(_steps),
-                              static_cast<float>(new_steps));
-        _phase = pos / static_cast<float>(new_steps);
-        _cur_step = step_index(_phase, new_steps);
+        int old_step = shuffle_step_index(_phase, _steps, _shuffle_latched);
+        float old_frac = shuffle_step_fraction(
+            _phase, old_step, _steps, _shuffle_latched);
+        float pos = std::fmod(
+            static_cast<float>(old_step) + old_frac,
+            static_cast<float>(new_steps));
+        _phase = shuffle_phase_for_position(pos, new_steps, _shuffle_latched);
+        _cur_step = shuffle_step_index(_phase, new_steps, _shuffle_latched);
     }
     _step_mode = on;
     _steps = new_steps;
@@ -132,6 +138,7 @@ void ModLane::settle() {
 
 void ModLane::reset(float phase) {
     _phase = clampf(phase, 0.f, 0.999999f);
+    _shuffle_latched = _shuffle_target;
     _cur_step = -1;
     _note_age = 0;
     _note_hold = 0;
@@ -180,6 +187,12 @@ void ModLane::_on_boundary() {
         ++_note_age;   // rest step: the running note ages toward its release
     }
     // if !gated: hold the previous _target (frozen) — and the buffer slot with it
+}
+
+void ModLane::_enter_step(int step, bool latch_now) {
+    if (latch_now || (step % 2 == 0)) _shuffle_latched = _shuffle_target;
+    _cur_step = step;
+    _on_boundary();
 }
 
 void ModLane::_start_note(int slot) {
@@ -286,11 +299,8 @@ float ModLane::process() {
     if (wrapped) _wrap_events();
 
     if (_step_mode) {
-        const int step = step_index(_phase, _steps);
-        if (step != _cur_step) {
-            _cur_step = step;
-            _on_boundary();
-        }
+        const int step = shuffle_step_index(_phase, _steps, _shuffle_latched);
+        if (step != _cur_step) _enter_step(step);
     } else {
         if (wrapped) _on_boundary();
         if (!_frozen) _target = _compute_raw();     // continuous in FLOW
@@ -341,8 +351,8 @@ float ModLane::tick() {
     // step than _cur_step remembers" symptom and this one branch catches
     // them all.
     if (_step_mode) {
-        const int step = step_index(_phase, _steps);
-        if (step != _cur_step) { _cur_step = step; _on_boundary(); }
+        const int step = shuffle_step_index(_phase, _steps, _shuffle_latched);
+        if (step != _cur_step) _enter_step(step);
     }
 
     // Walk every edge inside the interval, in order. Panel-reachable worst
@@ -355,7 +365,7 @@ float ModLane::tick() {
         // is re-derived per edge -- the per-sample path does the same.
         const float dp1 = _phase_inc * (1.f + _ev_rate);
         const float next_edge = _step_mode
-            ? static_cast<float>(_cur_step + 1) / static_cast<float>(_steps)
+            ? shuffle_boundary_phase(_cur_step + 1, _steps, _shuffle_latched)
             : 1.f;
         const float dist = next_edge - _phase;
         const float to_edge = dp1 > 0.f ? dist / dp1 : 1e30f;
@@ -365,12 +375,11 @@ float ModLane::tick() {
             _phase = 0.f;
             _wrapped = true;
             _wrap_events();
-            if (_step_mode) _cur_step = 0;
-            _on_boundary();              // FLOW fires per wrap; STEP fires step 0
+            if (_step_mode) _enter_step(0);
+            else _on_boundary();         // FLOW fires per wrap; STEP fires step 0
         } else {
             _phase = next_edge;
-            ++_cur_step;
-            _on_boundary();
+            _enter_step(_cur_step + 1);
         }
     }
 

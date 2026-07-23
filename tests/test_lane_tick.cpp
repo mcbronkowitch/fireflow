@@ -225,3 +225,42 @@ TEST_CASE("tick: SETTLE glides the audible phase the same way") {
         CHECK(d < 0.01f);
     }
 }
+
+TEST_CASE("tick: shuffled odd grid and mid-pair target change match process") {
+    TickPair tp;
+    tp.boot(17u, [](ModLane& l) {
+        l.set_range(1.f); l.set_shape(1.f); l.set_smooth(0.f);
+        l.set_step(true, 5); l.set_rate_hz(47.f);
+        l.set_shuffle(0.6f);
+    });
+
+    int skew = 0;
+    for (int t = 0; t < 80; ++t) {
+        tp.advance_one_tick();
+        if (t == 1) {
+            REQUIRE(tp.ref.cur_step() == 1);
+            REQUIRE(tp.dut.cur_step() == 1);
+            tp.ref.set_shuffle(1.f);
+            tp.dut.set_shuffle(1.f);
+        }
+
+        if ((tp.ref_fires > 0) != tp.dut_fired) {
+            skew = 1;
+            continue;
+        }
+        if (skew > 0) {
+            --skew;
+            continue;
+        }
+
+        INFO("t=", t, " ref_step=", tp.ref.cur_step(),
+             " dut_step=", tp.dut.cur_step(),
+             " ref_fires=", tp.ref_fires, " dut_fired=", tp.dut_fired,
+             " ref_phase=", tp.ref.phase(), " dut_phase=", tp.dut.phase());
+        CHECK(tp.dut.target() == tp.ref.target());
+        CHECK(tp.dut_out == tp.ref_out);
+        float d = std::fabs(tp.dut.phase_eff() - tp.ref.phase_eff());
+        if (d > 0.5f) d = 1.f - d;
+        CHECK(d < 0.01f);
+    }
+}

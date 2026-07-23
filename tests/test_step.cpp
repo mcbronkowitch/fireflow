@@ -1,6 +1,18 @@
 #include <doctest/doctest.h>
+#include <vector>
 #include "mod/lane.h"
 using namespace spky;
+
+namespace {
+std::vector<int> lane_fire_samples(ModLane& l, int samples) {
+    std::vector<int> out;
+    for (int i = 0; i < samples; ++i) {
+        l.process();
+        if (l.fired()) out.push_back(i);
+    }
+    return out;
+}
+} // namespace
 
 TEST_CASE("lane STEP: fires once per step") {
     ModLane l;
@@ -44,4 +56,29 @@ TEST_CASE("lane STEP: fixed slew ignores the SMOOTH knob") {
         return l.process();            // ~100 samples past the step-1 boundary
     };
     CHECK(glide_after_boundary(0.0f) == doctest::Approx(glide_after_boundary(1.0f)).epsilon(0.001));
+}
+
+TEST_CASE("lane STEP: full shuffle makes long-short timing") {
+    ModLane l;
+    l.init(48000.f, 7);
+    l.set_density(1.f);
+    l.set_step(true, 8);
+    l.set_rate_hz(1.f);       // nominal step = 6000 samples
+    l.set_shuffle(1.f);
+    auto fires = lane_fire_samples(l, 26000);
+    REQUIRE(fires.size() >= 5);
+    CHECK(fires[2] - fires[1] == doctest::Approx(4000).epsilon(0.02));
+    CHECK(fires[3] - fires[2] == doctest::Approx(8000).epsilon(0.02));
+}
+
+TEST_CASE("lane STEP: odd step count leaves the final interval straight") {
+    ModLane l;
+    l.init(48000.f, 7);
+    l.set_density(1.f);
+    l.set_step(true, 5);
+    l.set_rate_hz(1.f);
+    l.set_shuffle(1.f);
+    auto fires = lane_fire_samples(l, 31000);
+    REQUIRE(fires.size() >= 6);
+    CHECK(fires[5] - fires[4] == doctest::Approx(6000).epsilon(0.02));
 }

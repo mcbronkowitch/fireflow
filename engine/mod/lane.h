@@ -3,6 +3,7 @@
 #include "util/onepole.h"
 #include "mod/rng.h"
 #include "mod/phrase_gen.h"
+#include "mod/shuffle_grid.h"
 
 namespace spky {
 
@@ -21,6 +22,7 @@ public:
     void set_shape(float s);          // 0..1
     void set_density(float d) { _density = pg_clampf(d, 0.f, 1.f); }  // 0..1 -> how deep into the groove ranking (k of L cell notes)
     void set_step(bool on, int steps);
+    void set_shuffle(float amount) { _shuffle_target = shuffle_amount(amount); }
     void set_fixed_slew(bool on);     // panel switch 3 middle position
     void set_smooth(float s);         // 0..1
     void set_range(float r);          // 0..1
@@ -57,19 +59,15 @@ public:
     // where in the phrase a fire sits and how long a step is in samples.
     int   cur_step() const { return _cur_step; }
     int   steps()    const { return _steps; }
-    // Die Phase-auf-Slot-Regel, an EINER Stelle. process() rechnet damit, und
-    // der STEP-Einstiegs-Snap (spec 2026-07-23 sampler-performance-fixes)
-    // braucht denselben Slot fuer eine Phase, die diese Lane noch nicht
-    // gesehen hat -- zurueckgelesen waere _cur_step dort noch -1, weil
-    // reset() es genau darauf setzt. Zwei Kopien dieser Rundung wuerden
-    // spaeter still auseinanderlaufen.
+    int step_at_phase(float phase) const {
+        return shuffle_step_index(phase, _steps, _shuffle_latched);
+    }
+    // Legacy straight-grid lookup kept for external callers until they
+    // migrate to step_at_phase(), which follows this lane's latched shuffle.
     static int step_index(float phase, int steps) {
         int s = static_cast<int>(phase * static_cast<float>(steps));
         if (s >= steps) s = steps - 1;
-        // Guard, not a live path: every production caller (lane.cpp's three
-        // call sites, Center's STEP-entry snap) passes a phase already in
-        // [0, 1), so s is never negative in practice. Kept for any future
-        // caller that doesn't -- don't go hunting for the one that needs it.
+        // Guard for callers that do not already constrain phase to [0, 1).
         if (s < 0)      s = 0;
         return s;
     }
@@ -99,6 +97,7 @@ public:
 private:
     void  _update_slew();
     void  _update_inc();            // step-clock: inc = rate/sr * (STEP ? 8/steps : 1)
+    void  _enter_step(int step, bool latch_now = false);
     void  _on_boundary();
     void  _wrap_events();           // regen/EVOLVE/groove events at a cycle wrap
     float _compute_raw() const;
@@ -129,6 +128,8 @@ private:
 
     bool  _step_mode = false;
     int   _steps = 8;
+    float _shuffle_target = 0.f;
+    float _shuffle_latched = 0.f;
     bool  _fixed_slew = false;
 
     int   _cur_step = -1;

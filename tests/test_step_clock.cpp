@@ -24,6 +24,12 @@ static std::vector<int> fire_samples(ModLane& l, int samples) {
     return out;
 }
 
+static float audible_step_position(const ModLane& l) {
+    int step = l.step_at_phase(l.phase());
+    return static_cast<float>(step)
+        + shuffle_step_fraction(l.phase(), step, l.steps(), 1.f);
+}
+
 TEST_CASE("step-clock: 8 steps is the reference — step = 6000 samples at 1 Hz") {
     ModLane l = step_lane(8, 1.f);
     // boundaries every 6000 samples: 8 fires in [0, 47000)
@@ -50,31 +56,46 @@ TEST_CASE("step-clock: 8 vs 14 steps stay boundary-aligned (polymeter)") {
 
 TEST_CASE("step-clock: live STEPS grow 8->16 keeps position and timing") {
     ModLane l = step_lane(8, 1.f);
+    l.set_shuffle(1.f);
     for (int i = 0; i < 3000; ++i) l.process();   // mid step 0
-    float pos = l.phase() * 8.f;                  // step index + fraction
+    float pos = audible_step_position(l);
     l.set_step(true, 16);
-    CHECK(l.phase() == doctest::Approx(pos / 16.f).epsilon(0.001));  // rescaled, not jumped
+    CHECK(audible_step_position(l) == doctest::Approx(pos).epsilon(0.001));
     l.process();
     CHECK_FALSE(l.fired());                       // no ghost boundary on the switch
     int to_fire = 1;
     while (to_fire < 20000) { l.process(); ++to_fire; if (l.fired()) break; }
-    CHECK(to_fire > 2900); CHECK(to_fire < 3100); // next boundary still ~sample 6000
-    CHECK(static_cast<int>(l.phase() * 16.f) == 1);   // ...and it is step 1
+    CHECK(to_fire > 4900); CHECK(to_fire < 5100); // shuffled step 0 remains 8000 samples
+    CHECK(l.step_at_phase(l.phase()) == 1);
 }
 
 TEST_CASE("step-clock: live STEPS shrink 16->8 wraps the index, keeps the grid") {
     ModLane l = step_lane(16, 1.f);
+    l.set_shuffle(1.f);
     for (int i = 0; i < 61000; ++i) l.process();  // step 10 of 16 (step = 6000 samples)
-    float pos = std::fmod(l.phase() * 16.f, 8.f); // 10.x -> 2.x
+    float pos = std::fmod(audible_step_position(l), 8.f); // 10.x -> 2.x
     l.set_step(true, 8);
-    CHECK(l.phase() == doctest::Approx(pos / 8.f).epsilon(0.001));
+    CHECK(audible_step_position(l) == doctest::Approx(pos).epsilon(0.001));
     l.process();
     CHECK_FALSE(l.fired());
     int to_fire = 1;
     while (to_fire < 20000) { l.process(); ++to_fire; if (l.fired()) break; }
-    // grid unbroken: next fire lands where step 11 of 16 would have (~5000 on)
-    CHECK(to_fire > 4700); CHECK(to_fire < 5300);
-    CHECK(static_cast<int>(l.phase() * 8.f) == 3);
+    // Audible fraction is preserved inside shuffled step 2; its delayed odd
+    // boundary therefore remains about 7000 samples away.
+    CHECK(to_fire > 6900); CHECK(to_fire < 7100);
+    CHECK(l.step_at_phase(l.phase()) == 3);
+}
+
+TEST_CASE("lane STEP: live shuffle waits for next even step") {
+    ModLane l = step_lane(8, 1.f);
+    l.set_shuffle(0.f);
+    auto first = fire_samples(l, 7000);
+    REQUIRE(first.size() == 2);
+    l.set_shuffle(1.f);       // currently inside odd step 1
+    auto later = fire_samples(l, 18000);
+    REQUIRE(later.size() >= 3);
+    CHECK(later[1] - later[0] == doctest::Approx(8000).epsilon(0.02));
+    CHECK(later[2] - later[1] == doctest::Approx(4000).epsilon(0.02));
 }
 
 TEST_CASE("step-clock: FLOW rate is untouched by the step count") {
