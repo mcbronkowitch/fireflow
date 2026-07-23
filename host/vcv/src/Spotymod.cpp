@@ -347,6 +347,10 @@ struct Spotymod : Module {
     inline bool ppb(int baseA, int part) { return pp(baseA, part) > 0.5f; }
 
     void pushParams() {
+        // STEP entry latches the groove target immediately. Push the shared
+        // amount before either deck sees its FLOW->STEP transition so both
+        // decks latch the value from this same control update.
+        inst.set_shuffle(params[SHUFFLE].getValue());
         for (int p = 0; p < 2; ++p) {
             inst.set_rate(p, pp(RATE_A, p));
             inst.set_shape(p, pp(SHAPE_A, p));
@@ -540,7 +544,6 @@ struct Spotymod : Module {
         inst.set_couple(params[COUPLE].getValue());
         inst.set_drift(params[DRIFT].getValue());
         inst.set_tide(params[TIDE].getValue());
-        inst.set_shuffle(params[SHUFFLE].getValue());
         inst.set_sync(params[SYNC].getValue() > 0.5f);
         inst.set_choke(params[CHOKE].getValue() * 0.5f);   // snap -2..+2 -> zones
         inst.set_reverb_size(params[REV_SIZE].getValue());

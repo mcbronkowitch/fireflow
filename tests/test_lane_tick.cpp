@@ -160,6 +160,46 @@ TEST_CASE("tick: multiple boundaries inside one interval are replayed in order")
     CHECK(tp.dut.target() == tp.ref.target());     // re-converged at the end
 }
 
+TEST_CASE("tick: shuffled high-rate wraps replay every intermediate boundary") {
+    // Five steps plus full shuffle exercises the odd final straight step.
+    // At 480 Hz the 96-sample texture tick spans more than one full cycle and
+    // at least seven boundaries. GROW consumes RNG at the boundaries/wraps,
+    // so a skipped or duplicated intermediate edge permanently changes the
+    // exact target even when the final step index happens to match.
+    TickPair tp;
+    tp.boot(73u, [](ModLane& l) {
+        l.set_range(1.f); l.set_shape(1.f); l.set_smooth(0.f);
+        l.set_density(1.f);
+        l.set_shuffle(1.f);
+        l.set_step(true, 5);
+        l.set_rate_hz(480.f);
+        l.set_variation(0.6f);
+    });
+
+    int verified_multi_edge_windows = 0;
+    for (int t = 0; t < 200; ++t) {
+        tp.advance_one_tick();
+        INFO("t=", t, " ref_fires=", tp.ref_fires,
+             " ref_step=", tp.ref.cur_step(), " dut_step=", tp.dut.cur_step(),
+             " ref_phase=", tp.ref.phase(), " dut_phase=", tp.dut.phase());
+        REQUIRE(tp.ref_fires >= 7);
+        CHECK(tp.dut_fired);
+        CHECK(tp.dut.cur_step() == tp.ref.cur_step());
+        // GROW also walks phase/shape at each wrap. The reference samples a
+        // boundary after per-sample float accumulation while tick() samples
+        // its exact grid phase, so matching RNG state can differ by a tiny
+        // waveform-evaluation epsilon. A skipped RNG mutation is orders of
+        // magnitude larger and persists across later windows.
+        CHECK(tp.dut.target()
+              == doctest::Approx(tp.ref.target()).epsilon(0.001));
+        float phase_distance = std::fabs(tp.dut.phase() - tp.ref.phase());
+        if (phase_distance > 0.5f) phase_distance = 1.f - phase_distance;
+        CHECK(phase_distance < 0.01f);
+        ++verified_multi_edge_windows;
+    }
+    CHECK(verified_multi_edge_windows == 200);
+}
+
 TEST_CASE("tick: wrap events land before the new cycle's step 0") {
     // variation -1 makes the RENEW walk-regen dice certain (v^2 = 1), so the
     // whole _seq walk regenerates at EVERY wrap. Step 0's target right after

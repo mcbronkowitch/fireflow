@@ -801,3 +801,28 @@ TEST_CASE("part: init() resets the STEP edge memory so a mid-session reinit cann
     p.set_step(true, 8);
     CHECK(p.take_step_snap() == false);
 }
+
+TEST_CASE("part: FLOW to STEP latches the shuffle value already pushed in that control update") {
+    Part current_order;
+    Part stale_order;
+    current_order.init(48000.f, 0, nullptr, nullptr, nullptr, 0);
+    stale_order.init(48000.f, 0, nullptr, nullptr, nullptr, 0);
+
+    // Rack pushes every control value once per control tick. The shared
+    // target must arrive first: entering STEP copies it into the lane's
+    // latched timing grid immediately.
+    current_order.mod().set_shuffle(1.f);
+    current_order.set_step(true, 8);
+
+    // This is the former Rack order. A simultaneous knob update + STEP entry
+    // latches the previous straight target; the later push cannot repair the
+    // active pair.
+    stale_order.set_step(true, 8);
+    stale_order.mod().set_shuffle(1.f);
+
+    constexpr float between_straight_and_shuffled_edge = 0.15f;
+    CHECK(current_order.mod().pitch_step_at_phase(
+              between_straight_and_shuffled_edge) == 0);
+    CHECK(stale_order.mod().pitch_step_at_phase(
+              between_straight_and_shuffled_edge) == 1);
+}

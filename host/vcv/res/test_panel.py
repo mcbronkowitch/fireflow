@@ -479,7 +479,8 @@ def test_config_wires_tip_not_label():
 
 def test_shuffle_host_wiring():
     """Rack exposes the appended shared knob with a straight default and pushes
-    it into the shared instrument once per control update."""
+    it into the shared instrument once per control update, before either deck
+    can enter STEP and latch that control-tick's groove value."""
     here = os.path.dirname(os.path.abspath(__file__))
     cpp_path = os.path.join(here, "..", "src", "Spotymod.cpp")
     with open(cpp_path) as f:
@@ -488,6 +489,10 @@ def test_shuffle_host_wiring():
           "SHUFFLE default must be straight (0)")
     check("inst.set_shuffle(params[SHUFFLE].getValue());" in cpp,
           "Rack SHUFFLE param is not wired to Instrument::set_shuffle")
+    shuffle_push = cpp.index("inst.set_shuffle(params[SHUFFLE].getValue());")
+    first_step_push = cpp.index("inst.set_step(")
+    check(shuffle_push < first_step_push,
+          "Rack must push shared SHUFFLE before either FLOW->STEP transition")
 
 
 # --- 2026-07-21 morphagene-controls: the sampler meanings on the plate --------

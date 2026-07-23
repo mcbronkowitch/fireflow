@@ -1,6 +1,8 @@
 #include <doctest/doctest.h>
 
+#include <cmath>
 #include <initializer_list>
+#include <limits>
 
 #include "mod/shuffle_grid.h"
 
@@ -39,4 +41,49 @@ TEST_CASE("shuffle-grid: position round-trips") {
                 CHECK(shuffle_phase_for_position(pos, steps, s)
                     == doctest::Approx(ph).epsilon(0.0001));
             }
+}
+
+TEST_CASE("shuffle-grid: every computed interior boundary belongs to the new step") {
+    for (int steps = 1; steps <= 16; ++steps)
+        for (float amount : {0.f, 0.125f, 0.4f, 0.75f, 1.f})
+            for (int boundary = 1; boundary < steps; ++boundary) {
+                const float edge =
+                    shuffle_boundary_phase(boundary, steps, amount);
+                INFO("steps=", steps, " amount=", amount,
+                     " boundary=", boundary, " edge=", edge);
+                CHECK(shuffle_step_index(edge, steps, amount) == boundary);
+            }
+}
+
+TEST_CASE("shuffle-grid: next representable phase below a boundary stays in the old step") {
+    for (int steps = 2; steps <= 16; ++steps)
+        for (float amount : {0.f, 0.125f, 0.4f, 0.75f, 1.f})
+            for (int boundary = 1; boundary < steps; ++boundary) {
+                const float edge =
+                    shuffle_boundary_phase(boundary, steps, amount);
+                const float below =
+                    std::nextafter(edge, -std::numeric_limits<float>::infinity());
+                INFO("steps=", steps, " amount=", amount,
+                     " boundary=", boundary, " edge=", edge,
+                     " below=", below);
+                CHECK(shuffle_step_index(below, steps, amount) == boundary - 1);
+            }
+}
+
+TEST_CASE("shuffle-grid: boundaries are strictly monotonic with positive intervals") {
+    for (int steps = 1; steps <= 16; ++steps)
+        for (float amount : {0.f, 0.125f, 0.4f, 0.75f, 1.f}) {
+            float previous = shuffle_boundary_phase(0, steps, amount);
+            CHECK(previous == 0.f);
+            for (int boundary = 1; boundary <= steps; ++boundary) {
+                const float edge =
+                    shuffle_boundary_phase(boundary, steps, amount);
+                INFO("steps=", steps, " amount=", amount,
+                     " boundary=", boundary, " previous=", previous,
+                     " edge=", edge);
+                CHECK(edge > previous);
+                previous = edge;
+            }
+            CHECK(previous == 1.f);
+        }
 }
