@@ -24,7 +24,9 @@
 - Sector annulus is `20.50..31.00 mm` with SVG `fill-opacity="0.045"`.
 - Deck-A PLAY mode field is `(5.00, 99.60, 29.00, 10.60 mm)`, PAPER_DEEP at `fill-opacity="0.25"`; deck B mirrors it.
 - `SCAN`, `LEN`, and `ORG` use MUTED `#656056`, not deck accents.
-- `host/vcv/src/Spotymod.cpp`, DSP, defaults, ranges, and tooltips remain unchanged.
+- The one-line `host/vcv/src/Spotymod.cpp` `c.tip` compatibility wiring preserves
+  runtime parameter names/tooltips while generator data controls faceplate
+  captions; DSP, defaults, and ranges remain unchanged.
 
 ---
 

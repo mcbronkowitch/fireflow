@@ -27,7 +27,7 @@ def main():
     chunks = dict(riff_chunks(raw))
     assert b"fmt " in chunks and b"data" in chunks, "missing fmt/data chunk"
     fmt = chunks[b"fmt "]
-    tag, channels, rate, _byte_rate, block_align, bits = struct.unpack_from(
+    tag, channels, rate, byte_rate, block_align, bits = struct.unpack_from(
         "<HHIIHH", fmt
     )
     if tag == 0xFFFE:
@@ -37,7 +37,17 @@ def main():
     assert channels == CHANNELS, f"{channels} channels, want {CHANNELS}"
     assert rate == RATE, f"{rate} Hz, want {RATE}"
     assert bits == BITS, f"{bits}-bit, want {BITS}-bit"
-    frames = len(chunks[b"data"]) // block_align
+    expected_block_align = channels * ((bits + 7) // 8)
+    assert block_align == expected_block_align, (
+        f"block align {block_align}, want {expected_block_align}"
+    )
+    expected_byte_rate = rate * block_align
+    assert byte_rate == expected_byte_rate, (
+        f"byte rate {byte_rate}, want {expected_byte_rate}"
+    )
+    data = chunks[b"data"]
+    assert len(data) % block_align == 0, "data length is not block-aligned"
+    frames = len(data) // block_align
     assert abs(frames - EXPECTED_FRAMES) <= 1, (
         f"{frames} frames, want {EXPECTED_FRAMES} +/- 1"
     )

@@ -1,6 +1,6 @@
 # Spotymod label micro-adjustments
 
-**Date:** 2026-07-24  
+**Date:** 2026-07-24
 **Status:** Approved design, pending written-spec review
 
 ## Goal

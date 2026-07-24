@@ -255,9 +255,11 @@ Expected test updates:
 
 - `host/vcv/res/test_panel.py`
 
-`host/vcv/src/Spotymod.cpp` remains unchanged. The existing generated label
-metadata already carries explicit positions, anchors, sizes, and colors; this
-redesign changes generator data only.
+`host/vcv/src/Spotymod.cpp` has one compatibility-wiring change: it uses
+`c.tip` when configuring runtime parameter names/tooltips, preserving those
+names while generator data controls the faceplate captions. The existing
+generated label metadata already carries explicit positions, anchors, sizes,
+and colors; the visual redesign otherwise changes generator data only.
 
 ## 9. Verification
 
