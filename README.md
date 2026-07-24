@@ -144,7 +144,11 @@ the desktop clang path); the build, install and I/O details live in
 | **M5** | Sampler -- the texture deck: granular cloud, live recording + overdub, WAV load/save, Morphagene-style DENS/SCAN/NEW/LEN/ORG controls, clocked slice-groove, FEEL accents, and FLOW cloud dispersion | **done** (engine + hosts; released through 2.10.1) |
 | **M5h** | Per-deck ROOM mix: independent dry/send mix per deck into one shared Oliverb reverb | **done** (engine + VCV panel; pending the next release) |
 | **CPU** | Three measured rounds on real hardware: `instrument_worst`'s worst block went from ~156 % of the audio-block budget to 94 %. Method and every number in [`bench/`](bench/README.md) and [`docs/bench/`](docs/bench/) | **done** (ongoing as a tool) |
-| **M6** | Firmware shell: pads, gestures, panel, LEDs -- runs on real hardware | planned (spec ready; implementation not started) |
+| **M5i** | WAVE: four-voice PPG-style wavetable part engine | planned (spec ready; not implemented) |
+| **M5j** | STRING: four-voice Karplus-Strong part engine | planned (spec ready; not implemented) |
+| **M5k** | ZAP: monophonic percussion part engine | planned (spec ready; not implemented) |
+| **M5l** | PULL: chord gravity between the two decks | planned (spec ready; not implemented) |
+| **M6** | Firmware shell: pads, gestures, panel, LEDs -- runs on real hardware | planned after M5l (spec ready; implementation not started) |
 
 Per-milestone detail and current status live in [`docs/roadmap.md`](docs/roadmap.md).
 

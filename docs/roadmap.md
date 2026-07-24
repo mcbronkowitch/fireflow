@@ -10,7 +10,8 @@ is actually built today, and what is still design-only.
   (`2026-07-11-spotykach-fx-design.md`), the center-section spec
   (`2026-07-12-spotykach-center-section-design.md`) and the ambient-reverb v2
   spec (`2026-07-12-spotykach-ambient-reverb-v2-design.md`).
-- **Last updated:** 2026-07-23 (sampler slice-groove, FEEL accents, FLOW dispersion, and a playability pass; plus the per-deck ROOM mix). These software milestones are complete; M6 remains the next, hardware-facing milestone.
+- **Last updated:** 2026-07-24 (WAVE, STRING, ZAP, and PULL are now
+  scheduled as M5i–M5l before the hardware-facing M6 milestone).
 
 > **Reminder:** the engine and its milestones are still verified only against
 > the desktop offline renderer (unit tests + WAV/CSV render) — the Daisy
@@ -48,6 +49,10 @@ is actually built today, and what is still design-only.
 | **M5h** | Per-deck ROOM mix -- each deck has its own equal-power dry/send mix into one shared reverb; the central REV_MIX is removed | ✅ **done** (engine + VCV panel; released in 2.11.0) |
 | **Sampler bench + grain cap** | The texture deck priced on the Daisy (7 rows + 6 ablations), and the grain-count spike it exposed capped via `kSpawnHeadroom` | ✅ **done** (`bench/workloads_sampler.cpp`, `docs/bench/2026-07-22-*`) |
 | **CPU hunt round 3** | Three measured removals: libm `sinf` on the reverb send per sample, a filter computing five outputs to use one (`engine/util/svf_lp.h`), and control-rate libm re-run on unchanged inputs | ✅ **done** (engine; released in 2.8.0) |
+| **M5i** | WAVE — four-voice PPG-style wavetable part engine | ⬜ **planned** (spec ready; not implemented) |
+| **M5j** | STRING — four-voice Karplus-Strong part engine | ⬜ **planned** (spec ready; not implemented) |
+| **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
+| **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
 | **M6** | Firmware shell: pads, gestures, panel, LEDs — runs on real hardware | ⬜ planned |
 
 Milestone order follows the design spec's build order (audible first, hardware
@@ -55,7 +60,9 @@ last). The scale layer was inserted after M1 because it only touches the PITCH
 lane's output stage and needed no new engine. M1.6 sits before M2 so that
 M2–M5 build on the final signal chain (part FX + reverb sends) from the start
 instead of rewiring it later; the M1 test tone is enough to hear and verify
-the effects in the renderer.
+the effects in the renderer. M5i–M5l are the remaining engine-level milestones
+that can be completed without the target hardware; M6 follows them as the
+hardware bring-up.
 
 ## Done
 
@@ -622,7 +629,38 @@ Two things a later reader should not have to re-derive:
 
 ## Planned
 
-### M6 — Firmware shell ⬜ (next; spec ready)
+### M5i — WAVE ⬜
+
+Four-voice PPG-style wavetable part engine behind the existing part-engine
+interface. The design is complete, but implementation has not started.
+
+Spec: `docs/superpowers/specs/2026-07-18-wave-engine-design.md`
+
+### M5j — STRING ⬜
+
+Four-voice Karplus-Strong part engine with a playable exciter and tape
+excitation from the part's own FLUX echo. The design is complete, but
+implementation has not started.
+
+Spec: `docs/superpowers/specs/2026-07-18-string-engine-design.md`
+
+### M5k — ZAP ⬜
+
+Monophonic two-oscillator FM/AM percussion part engine whose PITCH lane selects
+percussion archetypes. The design is complete, but implementation has not
+started.
+
+Spec: `docs/superpowers/specs/2026-07-18-zap-percussion-engine-design.md`
+
+### M5l — PULL ⬜
+
+Chord gravity between the two decks, using the existing scale, root, and chord
+layers. PULL is deliberately the last engine milestone before M6. The design is
+complete, but implementation has not started.
+
+Spec: `docs/superpowers/specs/2026-07-19-pull-chord-gravity-design.md`
+
+### M6 — Firmware shell ⬜ (after M5l; spec ready)
 Thin Daisy shell hosting `engine/` next to the original `app.cpp` (kept
 buildable). Wires up pads (release-based tap/hold gestures), the three 3-position
 panel switches, LED ring / pad / CYCLE feedback, CV + gate + V/Oct + clock I/O,
