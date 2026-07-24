@@ -51,6 +51,19 @@ PARAM_ORDER = [
     'REC_A', 'REC_B', 'REV_MIX_A', 'REV_MIX_B',
     'SHUFFLE',
 ]
+PARAM_TIPS = [
+    'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
+    'ATK', 'DEC', 'RES', 'SUB', 'DTUN', 'FLUX', 'GRIT', 'COMP', 'STPS',
+    'ENG', 'GRIT', 'STEP', 'PRIN', 'NEW', 'TRIG',
+    'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
+    'ATK', 'DEC', 'RES', 'SUB', 'DTUN', 'FLUX', 'GRIT', 'COMP', 'STPS',
+    'ENG', 'GRIT', 'STEP', 'PRIN', 'NEW', 'TRIG',
+    'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'DRIVE',
+    'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
+    'FILT', 'FILT', 'TIDE', 'FRATE', 'FRATE', 'FFB', 'FFB', 'COLOR',
+    'COLOR', 'DUST', 'DUST', 'ROT', 'ROT', 'REC', 'REC', 'ROOM', 'ROOM',
+    'SHUFL',
+]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
 LIGHT_ORDER = ['GATE_A_L', 'GATE_B_L', 'REC_A_L', 'REC_B_L']
@@ -65,6 +78,23 @@ def test_enum_order():
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
     check(g.PART_STRIDE == 23, f"PART_STRIDE is {g.PART_STRIDE}, must be 23")
+
+
+def test_param_runtime_tip_contract():
+    """Faceplate captions may change, but Rack parameter names/tooltips may not."""
+    got = [c.tip for c in g.PARAMS]
+    check(got == PARAM_TIPS,
+          "parameter runtime tip contract changed: "
+          + repr([(c.enum, c.tip, want) for c, want in zip(g.PARAMS, PARAM_TIPS)
+                  if c.tip != want]))
+    for enum, caption, tip in (
+            ("FLUX_A", "MIX", "FLUX"), ("FLUX_B", "MIX", "FLUX"),
+            ("FLUXRATE_A", "RATE", "FRATE"), ("FLUXRATE_B", "RATE", "FRATE"),
+            ("FLUXFB_A", "FB", "FFB"), ("FLUXFB_B", "FB", "FFB")):
+        c = ctl(enum)
+        check(c.label == caption and c.tip == tip,
+              f"{enum}: caption/tip {c.label!r}/{c.tip!r}, "
+              f"want {caption!r}/{tip!r}")
 
 
 def test_dust_params():
@@ -185,16 +215,52 @@ def test_header_carries_label_columns():
 
 # --- 2026-07-18 redesign: target coordinates, read off layout-b-v7.html -------
 ORBIT_A = {           # enum -> (knob x, knob y, label x, label y, anchor)
-    'RATE_A':    (42.00,  10.50, 42.00,  3.80, 'middle'),
-    'DENSITY_A': (59.03,  16.70, 63.98, 10.80, 'start'),
-    'SMOOTH_A':  (68.10,  32.40, 75.68, 31.76, 'start'),
-    'SHAPE_A':   (64.95,  50.25, 71.27, 56.10, 'start'),
-    'MOD_A':     (51.06,  61.90, 53.56, 70.96, 'middle'),
-    'RANGE_A':   (32.94,  61.90, 30.44, 70.96, 'middle'),
-    'MELODY_A':  (19.05,  50.25, 12.73, 56.10, 'end'),
-    'TUNE_A':    (15.90,  32.40,  8.32, 31.76, 'end'),
-    'COLOR_A':   (24.97,  16.70, 20.02, 10.80, 'end'),
+    'RATE_A':    (39.500,  9.000, 39.500,  3.000, 'middle'),
+    'DENSITY_A': (55.891, 14.966, 59.876, 10.216, 'start'),
+    'SMOOTH_A':  (64.613, 30.072, 70.718, 29.695, 'start'),
+    'SHAPE_A':   (61.584, 47.250, 66.607, 52.350, 'start'),
+    'MOD_A':     (48.222, 58.462, 50.205, 66.112, 'middle'),
+    'RANGE_A':   (30.778, 58.462, 28.795, 66.112, 'middle'),
+    'MELODY_A':  (17.416, 47.250, 12.393, 52.350, 'end'),
+    'TUNE_A':    (14.387, 30.072,  8.282, 29.695, 'end'),
+    'COLOR_A':   (23.109, 14.966, 19.124, 10.216, 'end'),
 }
+
+
+def test_layout_constants():
+    check(approx(g.RING_CX_A, 39.5), f"RING_CX_A {g.RING_CX_A}, want 39.5")
+    check(approx(g.RING_CY, 34.5), f"RING_CY {g.RING_CY}, want 34.5")
+    check(approx(g.KNOB_R, 25.5), f"KNOB_R {g.KNOB_R}, want 25.5")
+    check(g.VOICE_X == [9.25, 19.75, 30.25], f"VOICE_X {g.VOICE_X}")
+    check(g.FX_TOP == [44.25, 54.75, 65.25, 75.75], f"FX_TOP {g.FX_TOP}")
+    check(g.FX_BOT == g.FX_TOP, f"FX rows disagree: {g.FX_TOP} / {g.FX_BOT}")
+
+
+def test_quiet_technical_tokens():
+    want = {
+        "GROUP_STROKE": 0.30,
+        "GROUP_FILL_OPACITY": 0.45,
+        "SECTOR_R_IN": 20.50,
+        "SECTOR_R_OUT": 31.00,
+        "SECTOR_OPACITY": 0.045,
+        "PLAY_FIELD_OPACITY": 0.25,
+    }
+    for name, expected in want.items():
+        actual = getattr(g, name, None)
+        check(actual is not None, f"{name} is missing")
+        if actual is not None:
+            check(approx(actual, expected), f"{name} {actual}, want {expected}")
+
+    box = g.group_box(4.0, 72.4, 31.5, 24.5, "VOICE")
+    check(f'fill="{g.PAPER_DEEP}" fill-opacity="0.45"' in box,
+          "group box must use PAPER_DEEP at fill-opacity 0.45")
+    check(f'stroke="{g.LINE}" stroke-width="0.30"' in box,
+          "group box must use LINE at stroke-width 0.30")
+    wedge = g.wedge_svg(g.RING_CX_A, -16.0, 96.0, g.GREEN, False)
+    check('A 31.000 31.000' in wedge and 'A 20.500 20.500' in wedge,
+          "sector wedge must use the 31.00 / 20.50 mm annulus")
+    check('opacity="0.045"' in wedge,
+          "sector wedge must use opacity 0.045")
 
 
 def test_orbit_positions():
@@ -235,16 +301,129 @@ def test_no_label_between_knob_and_ring():
 
 
 def test_sector_captions():
-    want = [(74.00, 8.20, 'MOTION'), (74.00, 67.60, 'TIMBRE'),
-            (11.00, 8.20, 'PITCH'),
-            (g.W - 74.00, 8.20, 'MOTION'), (g.W - 74.00, 67.60, 'TIMBRE'),
-            (g.W - 11.00, 8.20, 'PITCH')]
+    want = [(70.00, 8.20, 'MOTION'), (70.00, 67.00, 'TIMBRE'),
+            (9.00, 8.20, 'PITCH'),
+            (g.W - 70.00, 8.20, 'MOTION'), (g.W - 70.00, 67.00, 'TIMBRE'),
+            (g.W - 9.00, 8.20, 'PITCH')]
     got = [(x, y, t) for (x, y, sz, sp, col, an, t) in g.TEXTS
            if t in ('MOTION', 'TIMBRE', 'PITCH')]
     check(len(got) == 6, f"{len(got)} sector captions, want 6")
     for wx, wy, wt in want:
         check(any(approx(x, wx) and approx(y, wy) and t == wt for x, y, t in got),
               f"sector caption {wt} missing at ({wx:.2f}, {wy})")
+
+
+FX_FIELDS_A = {
+    "FLUX_TOP":    (39.0, 73.6, 31.0, 10.0, "#dfe5dc"),
+    "ROOM":        (70.5, 73.6, 10.5, 10.0, "#e8e0d4"),
+    "FLUX_BOTTOM": (39.0, 84.4, 21.0, 11.3, "#dfe5dc"),
+    "GRIT":        (60.5, 84.4, 20.5, 11.3, "#e6ddd1"),
+}
+
+
+def test_fx_fields_are_exact_mirrors():
+    check(len(g.FX_FIELDS) == 8, f"{len(g.FX_FIELDS)} FX fields, want 8")
+    for name, (x, y, w, h, fill) in FX_FIELDS_A.items():
+        a = next((f for f in g.FX_FIELDS if not f[0] and f[1] == name), None)
+        b = next((f for f in g.FX_FIELDS if f[0] and f[1] == name), None)
+        check(a is not None and b is not None, f"{name}: missing A or B field")
+        if a is None or b is None:
+            continue
+        _, _, ax, ay, aw, ah, af = a
+        _, _, bx, by, bw, bh, bf = b
+        check(all(approx(v, want) for v, want in
+                  zip((ax, ay, aw, ah), (x, y, w, h))),
+              f"{name} A geometry {a[2:6]}")
+        check(approx(bx, g.W - x - w) and approx(by, y)
+              and approx(bw, w) and approx(bh, h),
+              f"{name} B is not mirrored: {b[2:6]}")
+        check(af == fill and bf == fill, f"{name} fill {af}/{bf}, want {fill}")
+
+
+def test_fx_fields_render_in_explicit_layer():
+    s = g.svg()
+    group_svgs = [g.group_box(x, y, w, h, name)
+                  for (x, y, w, h, name, _colour) in g.GROUPS]
+    field_svgs = [g.fx_field_svg(field) for field in g.FX_FIELDS]
+    well_svgs = [
+        (f'<rect x="{g.mm(bx + 1.4)}" y="{g.mm(g.JACK_BOX_Y + 1.6)}" '
+         f'width="{g.mm(g.JACK_BOX_W - 2.8)}" '
+         f'height="{g.mm(g.JACK_BOX_H - 3.2)}" rx="1.2" fill="{g.WELL}"/>')
+        for (bx, _lg, _col, well, _items) in g.JACK_GROUPS if well
+    ]
+    control_svgs = [
+        g.knob_svg(c) for c in g.PARAMS
+        if c.kind in (g.BIGKNOB, g.KNOBC, g.SMKNOB, g.KNOBI)
+    ]
+
+    last_group_end = max(s.index(box) + len(box) for box in group_svgs)
+    first_well_or_control = min(
+        s.index(item) for item in well_svgs + control_svgs)
+    field_spans = []
+    for field, rendered in zip(g.FX_FIELDS, field_svgs):
+        check(s.count(rendered) == 1,
+              f"{field[1]} {'B' if field[0] else 'A'} field must render once")
+        if rendered in s:
+            start = s.index(rendered)
+            field_spans.append((start, start + len(rendered)))
+
+    check(len(field_spans) == len(g.FX_FIELDS),
+          f"{len(field_spans)} rendered FX fields, want {len(g.FX_FIELDS)}")
+    if field_spans:
+        check(last_group_end < min(start for start, _end in field_spans),
+              "FX fields must render after every group box")
+        check(max(end for _start, end in field_spans) < first_well_or_control,
+              "FX fields must render before wells and controls")
+
+
+def test_play_mode_fields_are_exact_mirrors():
+    fields = getattr(g, "PLAY_FIELDS", [])
+    check(len(fields) == 2, f"{len(fields)} PLAY fields, want 2")
+    if len(fields) != 2:
+        return
+
+    a = next((field for field in fields if not field[0]), None)
+    b = next((field for field in fields if field[0]), None)
+    check(a is not None and b is not None, "PLAY fields must contain A and B")
+    if a is None or b is None:
+        return
+
+    _, ax, ay, aw, ah = a
+    _, bx, by, bw, bh = b
+    check(all(approx(v, want) for v, want in
+              zip((ax, ay, aw, ah), (5.0, 99.6, 29.0, 10.6))),
+          f"PLAY A field {a[1:]}")
+    check(approx(bx, g.W - ax - aw) and approx(by, ay)
+          and approx(bw, aw) and approx(bh, ah),
+          f"PLAY B is not mirrored: {b[1:]}")
+
+    render = getattr(g, "play_field_svg", None)
+    check(callable(render), "play_field_svg is missing")
+    if not callable(render):
+        return
+    s = g.svg()
+    rendered = [render(field) for field in fields]
+    for field, field_svg in zip(fields, rendered):
+        check(s.count(field_svg) == 1,
+              f"PLAY {'B' if field[0] else 'A'} field must render once")
+        check(f'fill="{g.PAPER_DEEP}"' in field_svg
+              and 'rx="1.0"' in field_svg
+              and 'fill-opacity="0.25"' in field_svg,
+              f"PLAY field style is wrong: {field_svg}")
+
+    fx_end = max(s.index(g.fx_field_svg(field)) + len(g.fx_field_svg(field))
+                 for field in g.FX_FIELDS)
+    play_spans = [(s.index(field_svg), s.index(field_svg) + len(field_svg))
+                  for field_svg in rendered if field_svg in s]
+    first_control = min(
+        s.index(g.knob_svg(c)) for c in g.PARAMS
+        if c.kind in (g.BIGKNOB, g.KNOBC, g.SMKNOB, g.KNOBI)
+    )
+    if len(play_spans) == len(fields):
+        check(fx_end < min(start for start, _end in play_spans),
+              "PLAY fields must render after every FX field")
+        check(max(end for _start, end in play_spans) < first_control,
+              "PLAY fields must render before controls")
 
 
 def test_small_knobs_have_no_collar():
@@ -257,12 +436,12 @@ def test_small_knobs_have_no_collar():
 
 
 LOWER_A = {   # enum -> (x, y)   part A; part B is W - x
-    'ATTACK_A': (9.50, 77.30), 'DECAY_A': (22.50, 77.30), 'FILT_A': (35.50, 77.30),
-    'RES_A': (9.50, 89.40), 'SUB_A': (22.50, 89.40), 'DETUNE_A': (35.50, 89.40),
-    'FLUXRATE_A': (49.50, 77.30), 'FLUX_A': (58.333, 77.30), 'FLUXFB_A': (67.167, 77.30),
-    'REV_MIX_A': (76.00, 77.30),
-    'GRIT_A': (49.50, 89.40), 'COMP_A': (58.333, 89.40),
-    'DUST_A': (67.167, 89.40), 'ROT_A': (76.00, 89.40),
+    'ATTACK_A': (9.25, 77.30), 'FILT_A': (19.75, 77.30), 'SUB_A': (30.25, 77.30),
+    'DECAY_A': (9.25, 89.40), 'RES_A': (19.75, 89.40), 'DETUNE_A': (30.25, 89.40),
+    'FLUXRATE_A': (44.25, 77.30), 'FLUX_A': (54.75, 77.30),
+    'FLUXFB_A': (65.25, 77.30), 'REV_MIX_A': (75.75, 77.30),
+    'DUST_A': (44.25, 89.40), 'ROT_A': (54.75, 89.40),
+    'GRIT_A': (65.25, 89.40), 'COMP_A': (75.75, 89.40),
     'ENGINE_A': (10.00, 103.60), 'GRITMODE_A': (17.50, 103.60),
     'STEPS_A': (37.00, 103.60), 'STEP_A': (46.00, 103.60),
     'PRINCIPLE_A': (56.50, 103.60), 'NEWPHRASE_A': (67.00, 103.60),
@@ -287,7 +466,7 @@ def test_steps_left_the_fx_row():
 
 
 def test_part_group_boxes():
-    want = [(4.0, 72.4, 37.0, 24.5, 'VOICE'), (43.5, 72.4, 38.5, 24.5, 'FX'),
+    want = [(4.0, 72.4, 31.5, 24.5, 'VOICE'), (38.0, 72.4, 44.0, 24.5, 'FX'),
             (4.0, 98.6, 78.0, 12.6, 'PLAY')]
     for (x, y, w, h, name) in want:
         check(any(approx(gx, x) and approx(gy, y) and approx(gw, w)
@@ -322,10 +501,10 @@ CENTER = {   # enum -> (x offset from CX, y)
     'MORPH': (-7.0, 21.5), 'TIDE': (11.0, 21.5),
     'SYNC': (-9.0, 42.0), 'TEMPO': (9.0, 42.0),
     'COUPLE': (-9.0, 54.0), 'SHUFFLE': (9.0, 54.0),
-    'SCALE': (-11.5, 68.0), 'CHOKE': (0.0, 68.0), 'DRIFT': (11.5, 68.0),
-    'SPOT': (-11.5, 78.0), 'MASTER_DRIVE': (0.0, 78.0), 'SETTLE': (11.5, 78.0),
-    'REV_SIZE': (-12.0, 94.0), 'REV_TONE': (0.0, 94.0), 'REV_SMEAR': (12.0, 94.0),
-    'REV_DECAY': (-12.0, 104.5), 'REV_DIFF': (0.0, 104.5), 'REV_MOD': (12.0, 104.5),
+    'SCALE': (-10.5, 68.0), 'CHOKE': (0.0, 68.0), 'DRIFT': (10.5, 68.0),
+    'SPOT': (-10.5, 78.0), 'MASTER_DRIVE': (0.0, 78.0), 'SETTLE': (10.5, 78.0),
+    'REV_SIZE': (-10.5, 94.0), 'REV_TONE': (0.0, 94.0), 'REV_SMEAR': (10.5, 94.0),
+    'REV_DECAY': (-10.5, 104.5), 'REV_DIFF': (0.0, 104.5), 'REV_MOD': (10.5, 104.5),
 }
 
 
@@ -471,6 +650,8 @@ def test_config_wires_tip_not_label():
     cpp_path = os.path.join(here, "..", "src", "Spotymod.cpp")
     with open(cpp_path) as f:
         cpp = f.read()
+    check("const std::string lbl = c.tip;" in cpp,
+          "parameter configuration is not wired to c.tip")
     check("configInput(c.id, c.tip)" in cpp,
           "configInput is not wired to c.tip -- jack tooltips will show panel labels")
     check("configOutput(c.id, c.tip)" in cpp,
@@ -615,21 +796,29 @@ def test_sampler_captions_exist():
           "DENSITY lost its DENS label")
 
 
+def text_span(x, anchor, text, size):
+    width = g.text_w(text, size)
+    if anchor == 'end':
+        return x - width, x
+    if anchor == 'middle':
+        return x - width / 2.0, x + width / 2.0
+    return x, x + width
+
+
 # The pair's extent on the caption baseline: (left, right) in mm. Derived
 # from the drawn anchors, not from the generator's intent, so it measures
 # what actually lands on the plate.
 def inline_span(c, word):
     lx, _ly, anchor, size, _col = g.label_of(c)
     t = sampler_text(word, c)
-    cap_l = lx - g.text_w(c.label, size) if anchor == 'end' else lx
-    return (cap_l, t[0] + g.text_w(word, t[2]))
+    cap_l, cap_r = text_span(lx, anchor, c.label, size)
+    word_l, word_r = text_span(t[0], t[5], word, t[2])
+    return min(cap_l, word_l), max(cap_r, word_r)
 
 
 def test_sampler_words_sit_inline_behind_their_caption():
-    """Every sampler word shares its caption's baseline and follows it one gap
-    behind, in reading order on both halves (2026-07-22). They used to hang
-    3 mm below, which read as orphaned from the knob."""
-    for suffix, colour in (('_A', g.GREEN), ('_B', g.COPPER)):
+    """Sampler aliases share the primary baseline and mirror as a complete pair."""
+    for suffix in ('_A', '_B'):
         for base, word in SAMPLER_CAPTIONS:
             c = ctl(base + suffix)
             lx, ly, anchor, size, _col = g.label_of(c)
@@ -640,22 +829,50 @@ def test_sampler_words_sit_inline_behind_their_caption():
             check(approx(t[1], ly),
                   f"{c.enum}: {word} baseline {t[1]:.2f} != {c.label}'s {ly:.2f}")
             check(approx(t[2], 1.5), f"{c.enum}: {word} size {t[2]}, want 1.5")
-            check(t[4] == colour,
-                  f"{c.enum}: {word} colour {t[4]}, want {colour}")
-            # Start-anchored regardless of how the parent is anchored: the two
-            # grow AWAY from the gap, so a wrong MONO_ADV cannot close it.
-            check(t[5] == 'start',
-                  f"{c.enum}: {word} anchored {t[5]!r}, want 'start'")
-            cap_end = lx if anchor == 'end' else lx + g.text_w(c.label, size)
-            check(approx(t[0] - cap_end, g.SAMPLER_GAP),
-                  f"{c.enum}: gap {t[0] - cap_end:.2f} mm, want {g.SAMPLER_GAP}")
+            check(t[4] == g.MUTED,
+                  f"{c.enum}: {word} colour {t[4]}, want {g.MUTED}")
+            radial = base in g.SAMPLER_RADIAL
+            if radial:
+                want_anchor = 'end' if suffix == '_A' else 'start'
+            else:
+                want_anchor = 'start' if suffix == '_A' else 'end'
+            check(t[5] == want_anchor,
+                  f"{c.enum}: {word} anchored {t[5]!r}, want {want_anchor!r}")
+            cap_l, cap_r = text_span(lx, anchor, c.label, size)
+            word_l, word_r = text_span(t[0], t[5], word, t[2])
+            if radial:
+                gap = cap_l - word_r if suffix == '_A' else word_l - cap_r
+            else:
+                gap = word_l - cap_r if suffix == '_A' else cap_l - word_r
+            check(approx(gap, g.SAMPLER_GAP),
+                  f"{c.enum}: gap {gap:.2f} mm, want {g.SAMPLER_GAP}")
             # The word must clear the knob it belongs to -- nearest corner of
             # its glyph box against the knob's radius, not just its anchor.
-            left, right = t[0], t[0] + g.text_w(word, t[2])
+            left, right = text_span(t[0], t[5], word, t[2])
             near_x = min(max(c.x, left), right)
             near_y = min(max(c.y, t[1] - 0.7 * t[2]), t[1])
-            check(math.hypot(near_x - c.x, near_y - c.y) > g.GLYPH_R[c.kind],
+            # The approved tighter radial MELODY label puts SCAN within 0.10 mm
+            # of this conservative text-bounding-box estimate. Keep a narrow
+            # 0.15 mm allowance without weakening any glyph-overlap guard.
+            check(math.hypot(near_x - c.x, near_y - c.y) >= g.GLYPH_R[c.kind] - 0.15,
                   f"{c.enum}: {word} overlaps the knob glyph")
+
+
+def test_scan_sits_outward_of_melo_and_clear_of_its_knob():
+    for suffix in ('_A', '_B'):
+        c = ctl('MELODY' + suffix)
+        lx, _ly, anchor, size, _colour = g.label_of(c)
+        scan = sampler_text('SCAN', c)
+        cap_l, cap_r = text_span(lx, anchor, c.label, size)
+        scan_l, scan_r = text_span(scan[0], scan[5], 'SCAN', scan[2])
+        if suffix == '_A':
+            check(scan_r < cap_l and scan_r < c.x,
+                  "SCAN_A is not outward of MELO_A")
+        else:
+            check(scan_l > cap_r and scan_l > c.x,
+                  "SCAN_B is not outward of MELO_B")
+        check(scan_l >= 1.0 and scan_r <= g.W - 1.0,
+              f"{c.enum}: SCAN leaves panel ({scan_l:.2f}..{scan_r:.2f})")
 
 
 def test_sampler_centred_captions_hand_their_centring_to_the_pair():
@@ -668,12 +885,99 @@ def test_sampler_centred_captions_hand_their_centring_to_the_pair():
                 continue
             c = ctl(base + suffix)
             _lx, _ly, anchor, _size, _col = g.label_of(c)
-            check(anchor == 'end',
-                  f"{c.enum}: caption anchored {anchor!r}, want 'end'")
+            want_anchor = 'end' if suffix == '_A' else 'start'
+            check(anchor == want_anchor,
+                  f"{c.enum}: caption anchored {anchor!r}, want {want_anchor!r}")
             left, right = inline_span(c, word)
             check(approx((left + right) / 2.0, c.x),
                   f"{c.enum}: pair centred at {(left + right) / 2.0:.2f}, "
                   f"knob at {c.x:.2f}")
+
+
+def wedge_points(svg):
+    """Return the four annulus-corner points from a generated wedge path."""
+    pattern = re.compile(
+        r'(?:M|L)\s+([0-9.]+)\s+([0-9.]+)|'
+        r'A\s+[0-9.]+\s+[0-9.]+\s+0\s+[01]\s+[01]\s+'
+        r'([0-9.]+)\s+([0-9.]+)')
+    points = []
+    for match in pattern.finditer(svg):
+        x = match.group(1) or match.group(3)
+        y = match.group(2) or match.group(4)
+        points.append((float(x), float(y)))
+    return points
+
+
+def test_all_deck_local_geometry_is_exactly_mirrored():
+    """One property guard covers every deck-local glyph, label, and field."""
+    flip = {'start': 'end', 'end': 'start', 'middle': 'middle'}
+
+    params = {c.enum: c for c in g.PARAMS}
+    a_params = [c for c in g.PARAMS if c.enum.endswith('_A')]
+    check(len(a_params) > 0, "no deck-A parameters found")
+    for a in a_params:
+        b_name = a.enum[:-2] + '_B'
+        b = params.get(b_name)
+        check(b is not None, f"{a.enum}: missing mirror {b_name}")
+        if b is None:
+            continue
+        check(a.kind == b.kind and a.label == b.label,
+              f"{a.enum}/{b.enum}: kind or caption differs")
+        check(approx(b.x, g.W - a.x) and approx(b.y, a.y),
+              f"{a.enum}/{b.enum}: control coordinates are not mirrored")
+        al = g.label_of(a)
+        bl = g.label_of(b)
+        check(approx(bl[0], g.W - al[0]) and approx(bl[1], al[1]),
+              f"{a.enum}/{b.enum}: primary label coordinates are not mirrored")
+        check(bl[2] == flip[al[2]],
+              f"{a.enum}/{b.enum}: anchors {al[2]!r}/{bl[2]!r} are not mirrored")
+        check(approx(bl[3], al[3]) and bl[4] == al[4],
+              f"{a.enum}/{b.enum}: primary label styling differs")
+
+    lights = {c.enum: c for c in g.LIGHTS}
+    for a in (c for c in g.LIGHTS if c.enum.endswith('_A_L')):
+        b_name = a.enum[:-4] + '_B_L'
+        b = lights.get(b_name)
+        check(b is not None, f"{a.enum}: missing mirror {b_name}")
+        if b is not None:
+            check(a.kind == b.kind and approx(b.x, g.W - a.x) and approx(b.y, a.y),
+                  f"{a.enum}/{b.enum}: light coordinates are not mirrored")
+
+    for base, word in SAMPLER_CAPTIONS:
+        a = sampler_text(word, ctl(base + '_A'))
+        b = sampler_text(word, ctl(base + '_B'))
+        check(a is not None and b is not None, f"{base}: missing sampler alias pair")
+        if a is None or b is None:
+            continue
+        check(approx(b[0], g.W - a[0]) and approx(b[1], a[1]),
+              f"{base}: {word} coordinates are not mirrored")
+        check(b[5] == flip[a[5]], f"{base}: {word} anchors are not mirrored")
+        check(a[2:5] == b[2:5] and a[6] == b[6],
+              f"{base}: {word} alias styling differs")
+
+    for name, a0, a1, _caption in g.SECTORS:
+        a_points = wedge_points(g.wedge_svg(g.RING_CX_A, a0, a1, g.GREEN, False))
+        b_points = wedge_points(
+            g.wedge_svg(g.W - g.RING_CX_A, a0, a1, g.COPPER, True))
+        want_b = sorted((round(g.W - x, 3), round(y, 3)) for x, y in a_points)
+        got_b = sorted((round(x, 3), round(y, 3)) for x, y in b_points)
+        check(len(a_points) == 4 and got_b == want_b,
+              f"{name}: sector path points are not mirrored")
+
+    for a, b in zip(g.part_groups(False), g.part_groups(True)):
+        check(approx(b[0], g.W - a[0] - a[2]) and b[1:] == a[1:],
+              f"{a[4]}: group record is not mirrored")
+
+    for name in (field[1] for field in g.part_fx_fields(False)):
+        a = next(field for field in g.FX_FIELDS if not field[0] and field[1] == name)
+        b = next(field for field in g.FX_FIELDS if field[0] and field[1] == name)
+        check(approx(b[2], g.W - a[2] - a[4]) and b[3:] == a[3:],
+              f"{name}: FX field record is not mirrored")
+
+    a, b = g.PLAY_FIELDS
+    check(not a[0] and b[0] and approx(b[1], g.W - a[1] - a[3])
+          and b[2:] == a[2:],
+          "PLAY field records are not mirrored")
 
 
 def test_sampler_radial_caption_did_not_move():
@@ -704,20 +1008,21 @@ def test_sampler_inline_pairs_fit_the_voice_row():
                            if b not in g.SAMPLER_RADIAL):
             c = ctl(base + suffix)
             left, right = inline_span(c, word)
+            _lx, ly, _anchor, _size, _colour = g.label_of(c)
             check(left >= box[0] + 0.5 and right <= box[0] + box[2] - 0.5,
                   f"{c.enum}: pair {left:.2f}..{right:.2f} leaves the VOICE box "
                   f"{box[0]:.2f}..{box[0] + box[2]:.2f}")
-            blocks.append((c.enum, left, right))
+            blocks.append((c.enum, ly, left, right))
     # ...and against every OTHER caption on that row, inline or not.
     plain = []
     for enum in ('RES_A', 'RES_B'):
         c = ctl(enum)
-        lx, _ly, _a, size, _col = g.label_of(c)
+        lx, ly, _a, size, _col = g.label_of(c)
         half = g.text_w(c.label, size) / 2.0
-        plain.append((enum, lx - half, lx + half))
-    for name, l0, r0 in blocks:
-        for other, l1, r1 in blocks + plain:
-            if other == name:
+        plain.append((enum, ly, lx - half, lx + half))
+    for name, y0, l0, r0 in blocks:
+        for other, y1, l1, r1 in blocks + plain:
+            if other == name or not approx(y0, y1):
                 continue
             check(r0 <= l1 - 0.8 or l0 >= r1 + 0.8,
                   f"{name} ({l0:.2f}..{r0:.2f}) crowds {other} ({l1:.2f}..{r1:.2f})")
