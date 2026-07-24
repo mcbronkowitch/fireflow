@@ -10,6 +10,10 @@ namespace {
 // string. The bkpt is the call. This is the whole transport.
 constexpr int kSysWrite0 = 0x04;
 #define DTCM_REPORT_BSS __attribute__((section(".dtcmram_bss")))
+#define DTCM_REPORT_TEXT __attribute__((section(".dtcmram_text")))
+#define DTCM_REPORT_RODATA __attribute__((section(".dtcmram_rodata")))
+#define SRAM_REPORT_LAYOUT_GUARD \
+    __attribute__((section(".sram_exec_layout_guard"), used))
 
 inline void sh_write0(const char* s)
 {
@@ -21,6 +25,12 @@ inline void sh_write0(const char* s)
 // Reporting is outside measured windows. Preserve the proven 256-byte format
 // capacity while using roomy DTCM rather than scarce AXI SRAM.
 char DTCM_REPORT_BSS g_buf[256];
+
+// Moving report_begin into DTCM would otherwise shift the 64 KiB measurement
+// arena earlier in AXI SRAM and change its cache alignment. This bench-only
+// NOLOAD reservation keeps the accepted Task 8 map; shipping code has no
+// input section and pays nothing.
+uint8_t SRAM_REPORT_LAYOUT_GUARD g_axi_layout_guard[0x70];
 
 } // namespace
 
@@ -38,7 +48,9 @@ void logf(const char* fmt, ...)
     sh_write0(g_buf);
 }
 
-void report_begin(const char* githash, const char* qspi_sha256)
+void DTCM_REPORT_TEXT report_begin(
+    const char* githash,
+    const char* qspi_sha256)
 {
     // Measured, not asserted: this is exactly the failure mode that already
     // bit this project once (the plan claimed 480 MHz while hw.Init() was
@@ -52,8 +64,17 @@ void report_begin(const char* githash, const char* qspi_sha256)
                       : ic         ? "icache"
                       : dc         ? "dcache"
                                    : "none";
-    logf("BENCH_BEGIN,%s,%lu,96,%s,%s\n",
-         githash, (unsigned long)clk, cache, qspi_sha256);
+    const auto* uid = reinterpret_cast<const uint32_t*>(UID_BASE);
+    static const char DTCM_REPORT_RODATA kBeginFormat[] =
+        "BENCH_BEGIN,%s,%lu,96,%s,%s,%08lx%08lx%08lx\n";
+    logf(kBeginFormat,
+         githash,
+         (unsigned long)clk,
+         cache,
+         qspi_sha256,
+         static_cast<unsigned long>(uid[0]),
+         static_cast<unsigned long>(uid[1]),
+         static_cast<unsigned long>(uid[2]));
 }
 
 void report_end()

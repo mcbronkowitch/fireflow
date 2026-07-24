@@ -9,8 +9,6 @@
 
 namespace {
 
-constexpr std::size_t kTestSize = 17;
-
 struct FakeQspi {
     bool erase_ok = true;
     bool write_ok = true;
@@ -19,7 +17,7 @@ struct FakeQspi {
     uint32_t written_offset = 0;
     std::size_t written_size = 0;
     std::size_t invalidated_size = 0;
-    std::array<uint8_t, kTestSize> mapped = {};
+    std::array<uint8_t, 0xfe00> mapped = {};
 
     bool erase_block(uint32_t offset)
     {
@@ -45,9 +43,9 @@ struct FakeQspi {
     }
 };
 
-std::array<uint8_t, kTestSize> payload()
+std::array<uint8_t, 0xfe00> payload()
 {
-    std::array<uint8_t, kTestSize> result = {};
+    std::array<uint8_t, 0xfe00> result = {};
     for(std::size_t i = 0; i < result.size(); ++i)
         result[i] = static_cast<uint8_t>(i * 13 + 5);
     return result;
@@ -63,14 +61,13 @@ TEST_CASE("QSPI programmer erases writes and compares the exact payload")
     const auto result = bench::program_qspi_payload(
         device,
         source.data(),
-        source.size(),
         reinterpret_cast<const volatile uint8_t*>(device.mapped.data()));
 
     CHECK(result == bench::QspiProgramResult::ok);
-    CHECK(device.erased_offset == bench::kQspiPayloadOffset);
-    CHECK(device.written_offset == bench::kQspiPayloadOffset);
-    CHECK(device.written_size == source.size());
-    CHECK(device.invalidated_size == source.size());
+    CHECK(device.erased_offset == 0x00040000u);
+    CHECK(device.written_offset == 0x00040000u);
+    CHECK(device.written_size == 0xfe00);
+    CHECK(device.invalidated_size == 0xfe00);
     CHECK(std::equal(source.begin(), source.end(), device.mapped.begin()));
 }
 
@@ -83,7 +80,6 @@ TEST_CASE("QSPI programmer reports an erase failure without writing")
     const auto result = bench::program_qspi_payload(
         device,
         source.data(),
-        source.size(),
         reinterpret_cast<const volatile uint8_t*>(device.mapped.data()));
 
     CHECK(result == bench::QspiProgramResult::erase_failed);
@@ -99,7 +95,6 @@ TEST_CASE("QSPI programmer reports a write failure without comparing")
     const auto result = bench::program_qspi_payload(
         device,
         source.data(),
-        source.size(),
         reinterpret_cast<const volatile uint8_t*>(device.mapped.data()));
 
     CHECK(result == bench::QspiProgramResult::write_failed);
@@ -115,9 +110,8 @@ TEST_CASE("QSPI programmer rejects a byte mismatch after cache invalidation")
     const auto result = bench::program_qspi_payload(
         device,
         source.data(),
-        source.size(),
         reinterpret_cast<const volatile uint8_t*>(device.mapped.data()));
 
     CHECK(result == bench::QspiProgramResult::compare_failed);
-    CHECK(device.invalidated_size == source.size());
+    CHECK(device.invalidated_size == 0xfe00);
 }

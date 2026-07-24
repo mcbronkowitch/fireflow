@@ -12,6 +12,9 @@ QSPI_SIZE = 65024
 QSPI_SECTION = ".qspiflash_data"
 SRAM_BASE = 0x24000000
 STAGING_ADDRESS = 0x24040000
+AXI_SRAM_END = 0x24080000
+INTERNAL_FLASH_RANGE = (0x08000000, 0x08200000)
+MAPPED_QSPI_RANGE = (0x90000000, 0x90800000)
 RECEIPT_MODE = "swd-sram-target-byte-identity"
 
 
@@ -197,6 +200,8 @@ def require_verified_payload(payload_path, receipt_path, current_identity):
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
         raise QspiGuardError("QSPI verification receipt is unreadable") from error
+    if not re.fullmatch(r"[0-9a-f]{24}", receipt.get("device_id", "")):
+        raise QspiGuardError("QSPI verification receipt has an invalid device UID")
     expected = {
         "address": QSPI_ADDRESS,
         "size": QSPI_SIZE,
@@ -210,6 +215,18 @@ def require_verified_payload(payload_path, receipt_path, current_identity):
                 "QSPI verification receipt does not match current payload (%s)" % key
             )
     return receipt
+
+
+def require_live_device(observed_device_id, receipt):
+    if not re.fullmatch(r"[0-9a-f]{24}", observed_device_id or ""):
+        raise QspiGuardError("firmware did not report a valid lowercase MCU UID")
+    receipt_device_id = receipt.get("device_id", "")
+    if not re.fullmatch(r"[0-9a-f]{24}", receipt_device_id):
+        raise QspiGuardError("QSPI verification receipt has an invalid device UID")
+    if observed_device_id != receipt_device_id:
+        raise QspiGuardError(
+            "live Seed MCU UID does not match the QSPI programming receipt"
+        )
 
 
 def require_live_digest(observed_sha256, payload_path):
@@ -244,6 +261,9 @@ def require_clean_tree(repo_path, run=subprocess.run):
 
 
 def parse_helper_load_segments(readelf_text):
+    def overlaps(start, end, protected):
+        return start < protected[1] and end > protected[0]
+
     segments = []
     for line in readelf_text.splitlines():
         match = re.match(
@@ -257,8 +277,24 @@ def parse_helper_load_segments(readelf_text):
         )
         if not match:
             continue
+        virtual = int(match.group(2), 16)
         physical = int(match.group(3), 16)
         file_size = int(match.group(4), 16)
+        memory_size = int(match.group(5), 16)
+        runtime_end = virtual + memory_size
+        if (
+            overlaps(
+                virtual,
+                runtime_end,
+                (STAGING_ADDRESS, AXI_SRAM_END),
+            )
+            or overlaps(virtual, runtime_end, INTERNAL_FLASH_RANGE)
+            or overlaps(virtual, runtime_end, MAPPED_QSPI_RANGE)
+        ):
+            raise QspiGuardError(
+                "programmer runtime VMA 0x%08x..0x%08x overlaps staging, "
+                "internal flash, or mapped QSPI" % (virtual, runtime_end)
+            )
         if file_size == 0:
             continue
         end = physical + file_size

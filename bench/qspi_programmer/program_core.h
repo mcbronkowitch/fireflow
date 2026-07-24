@@ -6,6 +6,7 @@
 namespace bench {
 
 constexpr uint32_t kQspiPayloadOffset = 0x00040000u;
+constexpr std::size_t kQspiPayloadSize = 0x0000fe00u;
 
 enum class QspiProgramResult {
     ok,
@@ -18,16 +19,15 @@ template <typename Device>
 QspiProgramResult program_qspi_payload(
     Device& device,
     const uint8_t* source,
-    std::size_t size,
     const volatile uint8_t* mapped)
 {
     if(!device.erase_block(kQspiPayloadOffset))
         return QspiProgramResult::erase_failed;
-    if(!device.write(kQspiPayloadOffset, size, source))
+    if(!device.write(kQspiPayloadOffset, kQspiPayloadSize, source))
         return QspiProgramResult::write_failed;
 
-    device.invalidate(mapped, size);
-    for(std::size_t i = 0; i < size; ++i)
+    device.invalidate(mapped, kQspiPayloadSize);
+    for(std::size_t i = 0; i < kQspiPayloadSize; ++i)
     {
         if(mapped[i] != source[i])
             return QspiProgramResult::compare_failed;

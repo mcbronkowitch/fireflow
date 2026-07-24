@@ -18,6 +18,7 @@ from qspi_tools import (
     prepare_split_artifacts,
     program_and_verify,
     require_clean_tree,
+    require_live_device,
     require_live_digest,
     require_verified_payload,
     validate_helper_elf,
@@ -131,7 +132,7 @@ def parse(lines):
     for line in lines:
         if line.startswith("BENCH_BEGIN,"):
             f = line.split(",")
-            if len(f) != 6:
+            if len(f) != 7:
                 continue
             header = {
                 "githash": f[1],
@@ -139,6 +140,7 @@ def parse(lines):
                 "block": f[3],
                 "cache": f[4],
                 "qspi_sha256": f[5],
+                "device_id": f[6],
             }
         elif line.startswith("BENCH,"):
             f = line.split(",")
@@ -444,8 +446,11 @@ def main():
                 config=PROGRAMMER_CFG,
                 readelf=READELF,
             )
+        verified_receipt = None
         if not args.build_only:
-            require_verified_payload(QSPI_PAYLOAD, QSPI_RECEIPT, identity)
+            verified_receipt = require_verified_payload(
+                QSPI_PAYLOAD, QSPI_RECEIPT, identity
+            )
     except (QspiGuardError, subprocess.CalledProcessError) as error:
         print("ERROR: %s" % error, file=sys.stderr)
         return 2
@@ -468,6 +473,7 @@ def main():
         header, _rows, _anchors = parsed
         try:
             require_live_digest(header["qspi_sha256"], QSPI_PAYLOAD)
+            require_live_device(header["device_id"], verified_receipt)
         except QspiGuardError as error:
             print("ERROR: %s" % error, file=sys.stderr)
             return 2

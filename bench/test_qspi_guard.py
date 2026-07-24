@@ -1,6 +1,7 @@
 """Host tests for the split QSPI/SRAM bench programming guard."""
 
 import importlib.util
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -111,6 +112,41 @@ Idx Name                Size      VMA       LMA       File off  Algn
                 )
             self.assertFalse(receipt.exists())
 
+    def test_receipt_rejects_a_tampered_device_uid(self) -> None:
+        tools = self.require_module()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            payload = root / "bench-qspi.bin"
+            receipt = root / "qspi-verified.json"
+            payload.write_bytes(bytes(range(256)) * 254)
+            identity = {
+                "elf_sha256": "a" * 64,
+                "sram_elf_sha256": "b" * 64,
+                "qspi_sha256": tools.payload_sha256(payload),
+                "programmer_elf_sha256": "d" * 64,
+            }
+            tools.write_verified_receipt(
+                payload,
+                receipt,
+                device_id="00112233445566778899aabb",
+                artifact_identity=identity,
+                observed_sha256=tools.payload_sha256(payload),
+            )
+            tampered = json.loads(receipt.read_text(encoding="utf-8"))
+            tampered["device_id"] = "not-a-uid"
+            receipt.write_text(json.dumps(tampered), encoding="utf-8")
+            with self.assertRaises(tools.QspiGuardError):
+                tools.require_verified_payload(payload, receipt, identity)
+
+    def test_live_device_uid_must_match_the_programming_receipt(self) -> None:
+        tools = self.require_module()
+        receipt = {"device_id": "00112233445566778899aabb"}
+        tools.require_live_device("00112233445566778899aabb", receipt)
+        with self.assertRaises(tools.QspiGuardError):
+            tools.require_live_device("00112233445566778899aabc", receipt)
+        with self.assertRaises(tools.QspiGuardError):
+            tools.require_live_device("00112233445566778899AABB", receipt)
+
     def test_live_bank_digest_must_match_current_extracted_payload(self) -> None:
         tools = self.require_module()
         with tempfile.TemporaryDirectory() as temp:
@@ -160,6 +196,25 @@ Idx Name                Size      VMA       LMA       File off  Algn
             self.assertIsNone(runner.run_once("fake.cfg", 0.05))
         self.assertLess(time.monotonic() - started, 0.5)
 
+    def test_bench_header_requires_and_exposes_the_current_device_uid(self) -> None:
+        self.assertIsNotNone(runner)
+        digest = "a" * 64
+        uid = "00112233445566778899aabb"
+        lines = [
+            "BENCH_BEGIN,45fd78d,480000000,96,dcache+icache,%s,%s"
+            % (digest, uid),
+            "BENCH,system,wave_2x4,1,2,0.01,0.02,12345678",
+            "BENCH_END",
+        ]
+        header, rows, anchors = runner.parse(lines)
+        self.assertEqual(header["device_id"], uid)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(anchors, [])
+
+        old_header = list(lines)
+        old_header[0] = old_header[0].rsplit(",", 1)[0]
+        self.assertIsNone(runner.parse(old_header))
+
     def test_helper_layout_rejects_file_backed_bytes_at_the_staging_address(self) -> None:
         tools = self.require_module()
         safe = """
@@ -170,6 +225,23 @@ Idx Name                Size      VMA       LMA       File off  Algn
         unsafe = safe.replace("0x0003e0", "0x030000")
         with self.assertRaises(tools.QspiGuardError):
             tools.parse_helper_load_segments(unsafe)
+
+    def test_helper_layout_rejects_unsafe_runtime_vma_ranges(self) -> None:
+        tools = self.require_module()
+        safe = (
+            "  LOAD 0x010000 0x24000000 0x24000000 "
+            "0x011910 0x011910 RWE 0x10000\n"
+        )
+        unsafe_layouts = {
+            "starts at staging": safe.replace("0x24000000", "0x24040000", 1),
+            "crosses staging": safe.replace("0x011910 RWE", "0x040001 RWE"),
+            "uses internal flash": safe.replace("0x24000000", "0x08000000", 1),
+            "uses mapped QSPI": safe.replace("0x24000000", "0x90000000", 1),
+        }
+        for label, layout in unsafe_layouts.items():
+            with self.subTest(label=label):
+                with self.assertRaises(tools.QspiGuardError):
+                    tools.parse_helper_load_segments(layout)
 
     def test_programmer_result_requires_one_exact_success_record(self) -> None:
         tools = self.require_module()

@@ -73,9 +73,11 @@ physical artifacts before accepting the receipt.
 
 Every measurement also SHA-256 hashes the 65,024 live bytes through the
 Seed's memory-mapped QSPI interface before `BENCH_BEGIN`; the host compares
-that firmware-reported digest with the extracted payload. This catches a
-different Seed, a later QSPI overwrite, or blank/wrong QSPI even if an old
-local receipt remains. Hardware evidence is refused from a dirty Git tree.
+that firmware-reported digest with the extracted payload. `BENCH_BEGIN` also
+reports the Seed's 96-bit MCU UID, which must strictly match the UID captured
+by the programming receipt. Together these checks catch a different Seed, a
+later QSPI overwrite, or blank/wrong QSPI even if an old local receipt
+remains. Hardware evidence is refused from a dirty Git tree.
 
 Programming this address overwrites the leading bank region and therefore
 invalidates whatever BOOT_SRAM/BOOT_QSPI application was previously stored

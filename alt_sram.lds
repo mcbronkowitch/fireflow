@@ -99,6 +99,19 @@ SECTIONS
 		PROVIDE(__fini_array_end = .);
 	} > SRAM_EXEC
 
+	/* Reporting runs outside every measured window. Keep its expanded
+	 * BENCH_BEGIN identity record in roomy DTCM so adding evidence fields
+	 * cannot displace the cycle-sensitive AXI objects that follow .text. */
+	.dtcmram_code :
+	{
+		. = ALIGN(4);
+		*(.dtcmram_text)
+		*(.dtcmram_text*)
+		*(.dtcmram_rodata)
+		*(.dtcmram_rodata*)
+		. = ALIGN(4);
+	} > DTCMRAM
+
 	.data :
 	{
 		. = ALIGN(4);
@@ -127,6 +140,15 @@ SECTIONS
 	 * data parked here is AXI SRAM in every sense a cycle count can see;
 	 * it is only on the other side of a bookkeeping line. Placed after the
 	 * .data LMA so it starts past everything SRAM_EXEC already carries. */
+	/* Empty in shipping firmware. The bench may reserve a small layout guard
+	 * here to keep cycle-sensitive AXI objects at their accepted addresses. */
+	.sram_exec_layout_guard (NOLOAD) :
+	{
+		. = ALIGN(4);
+		KEEP(*(.sram_exec_layout_guard))
+		. = ALIGN(4);
+	} > SRAM_EXEC
+
 	.sram_exec_bss (NOLOAD) :
 	{
 		. = ALIGN(4);

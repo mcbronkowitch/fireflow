@@ -9,7 +9,6 @@
 
 namespace {
 
-constexpr std::size_t kPayloadSize = 65024;
 constexpr uintptr_t kStagingAddress = 0x24040000u;
 constexpr uintptr_t kMappedAddress = 0x90040000u;
 
@@ -76,7 +75,7 @@ int main()
     auto* mapped = reinterpret_cast<const volatile uint8_t*>(kMappedAddress);
     DaisyQspiDevice device;
     const auto result =
-        bench::program_qspi_payload(device, source, kPayloadSize, mapped);
+        bench::program_qspi_payload(device, source, mapped);
 
     if(result != bench::QspiProgramResult::ok)
     {
@@ -90,7 +89,7 @@ int main()
     }
 
     char digest[65] = {};
-    bench::sha256_hex(mapped, kPayloadSize, digest);
+    bench::sha256_hex(mapped, bench::kQspiPayloadSize, digest);
     const auto* uid = reinterpret_cast<const uint32_t*>(UID_BASE);
     std::snprintf(
         g_message,
