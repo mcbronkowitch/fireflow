@@ -1,6 +1,6 @@
 <p align="center">
   <img src="docs/img/spotymod-panel.png" width="820"
-       alt="The Spotymod front panel: two mirrored halves — green A on the left, copper B on the right — each with nine macro knobs orbiting an LED ring inside MOTION, TIMBRE and PITCH sectors, above VOICE, FX and PLAY rows. The centre column holds BLEND, TIME, DUO and ROOM, with the SPOTYMOD wordmark on top and ten jacks in five labelled groups along the bottom.">
+       alt="The Spotymod front panel: two mirrored halves — green A on the left, copper B on the right — each with nine macro knobs orbiting an LED ring inside MOTION, TIMBRE and PITCH sectors, above VOICE, FX and PLAY rows. The centre column holds BLEND, a TIME group with SYNC, TEMPO, COUPLE and the SHUFFLE swing control, DUO, and a six-knob ROOM, with the SPOTYMOD wordmark on top and ten jacks in five labelled groups along the bottom.">
 </p>
 
 # spotymod — modulation-first firmware for the Spotykach
