@@ -771,11 +771,24 @@ inst.set_engine(p, id);"""
         issues.append("sampler controls must use one exact samplerPart engine-id gate")
     for required in ("if(samplerPart)inst.sampler_scan(p,pp(MELODY_A,p));",
                      "if(samplerPart){",
-                     "inst.set_target_active(p,spky::LANE_PITCH,!samplerPart);",
-                     "if(samplerPart)inst.sampler_punch(p);"):
+                     "inst.set_target_active(p,spky::LANE_PITCH,!samplerPart);"):
         if required not in push_n:
             issues.append("a sampler-only pushParams control escaped samplerPart gating")
             break
+    new_punch = """
+if (newPhraseTrig[p].process(ppb(NEWPHRASE_A, p))) {
+    if (samplerPart) inst.sampler_punch(p);
+    else             inst.new_phrase(p);
+}"""
+    if push_n.count(compact_cpp(new_punch)) != 1:
+        issues.append("NEW must gate sampler_punch() with samplerPart")
+    trig_punch = """
+if (triggerTrig[p].process(ppb(TRIGGER_A, p))) {
+    if (samplerPart) inst.sampler_punch(p);
+    inst.trigger_manual(p);
+}"""
+    if push_n.count(compact_cpp(trig_punch)) != 1:
+        issues.append("TRIG must gate sampler_punch() with samplerPart")
     if any(bad in push_n for bad in ("eng>0", "eng!=0", "eng>=1", "eng==1||eng==2")):
         issues.append("pushParams has a boolean ENG alternative that can route Wave as Sampler")
 
@@ -827,6 +840,12 @@ def test_engine_cycle_guard_rejects_representative_regressions():
          "if (eng > 0 && !smp[p].testTone", "factory"),
         ("const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;",
          "const bool samplerPart = eng > 0;", "sampler"),
+        ("if (samplerPart) inst.sampler_punch(p);",
+         "inst.sampler_punch(p);", "NEW sampler punch"),
+        ("if (triggerTrig[p].process(ppb(TRIGGER_A, p))) {\n"
+         "                if (samplerPart) inst.sampler_punch(p);",
+         "if (triggerTrig[p].process(ppb(TRIGGER_A, p))) {\n"
+         "                inst.sampler_punch(p);", "TRIG sampler punch"),
     ]
     for before, after, label in mutations:
         mutated = cpp.replace(before, after, 1)
