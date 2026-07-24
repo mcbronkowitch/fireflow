@@ -3,6 +3,7 @@
 #include "workload.h"
 #include "cycles.h"
 #include "qspi_digest.h"
+#include "rand_shim.h"
 #include "synth/wt_bank.h"
 
 namespace bench { void run_anchors(daisy::DaisySeed& hw); }
@@ -42,6 +43,11 @@ int main(void)
     hw.Init(true);              // 480 MHz boost, caches on, SDRAM up
     hw.SetAudioBlockSize(96);
     hw.SetAudioSampleRate(daisy::SaiHandle::Config::SampleRate::SAI_48KHZ);
+
+    // The bench's DTCM NOLOAD state survives reset and is not covered by the
+    // startup handler's AXI _sbss.._ebss clear. Seed through the C entry point
+    // before any DaisySP workload so retained RAM cannot affect the run.
+    ::srand(1u);
 
     // No logger start and no host handshake: semihosting writes are synchronous
     // through the probe, so the first line cannot be lost to enumeration timing.

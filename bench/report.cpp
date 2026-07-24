@@ -30,7 +30,7 @@ char DTCM_REPORT_BSS g_buf[256];
 // shrink AXI text. This bench-only NOLOAD reservation keeps the accepted
 // Task 8 measurement-object addresses and cache alignment; shipping code has
 // no input section and pays nothing.
-uint8_t SRAM_REPORT_LAYOUT_GUARD g_axi_layout_guard[0xcd8];
+uint8_t SRAM_REPORT_LAYOUT_GUARD g_axi_layout_guard[0xcc8];
 
 } // namespace
 

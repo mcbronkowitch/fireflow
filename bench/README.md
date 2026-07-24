@@ -375,6 +375,14 @@ Production firmware and DaisySP are unchanged. Before this shim, the corrected
 accepted map used 8,596 DTCM bytes; the eight-byte state accounts for the
 8,604-byte figure above.
 
+Because `.dtcmram_bss` is NOLOAD and the startup handler clears only the AXI
+`_sbss.._ebss` range, `main` explicitly calls the shim's `srand(1)` after
+hardware initialization and before any workload. This both overwrites retained
+DTCM state on every debug reset and keeps the target `srand` entry point in the
+linked image. The final symbols are `srand=0x240010f4` and
+`rand=0x24001104`; disassembly shows the call from `main` before the first
+`run_workload`.
+
 Hardware measurement remains **NEEDS_CONTEXT**, not complete: the Seed must
 be connected through the ST-Link so the SRAM helper can program and verify
 the separate QSPI payload. No `synth_2x4`/`wave_2x4` cycle or checksum result

@@ -19,6 +19,7 @@ QSPI_PROGRAMMER_MAKEFILE = ROOT / "bench" / "qspi_programmer" / "Makefile"
 QSPI_PROGRAMMER_CORE = ROOT / "bench" / "qspi_programmer" / "program_core.h"
 REPORT_SOURCE = ROOT / "bench" / "report.cpp"
 RAND_SHIM = ROOT / "bench" / "rand_shim.cpp"
+BENCH_MAIN = ROOT / "bench" / "main.cpp"
 SAMPLE_SHA = "81a914d0248bc7265703b81e27e4546264993705c11c1e30acd45cae2390e747"
 
 
@@ -237,6 +238,15 @@ class Task8Contract(unittest.TestCase):
         self.assertIn('section(".dtcmram_bss")', source)
         for allocator in ("malloc(", "calloc(", "realloc(", "free("):
             self.assertNotIn(allocator, source)
+
+    def test_bench_seeds_retained_dtcm_rand_state_before_workloads(self) -> None:
+        main = compact(BENCH_MAIN.read_text(encoding="utf-8"))
+        self.assertIn("::srand(1u);", main)
+        hardware_init = main.index("hw.Init(true);")
+        seed = main.index("::srand(1u);")
+        first_workload = main.index("bench::run_workload(w)")
+        self.assertLess(hardware_init, seed)
+        self.assertLess(seed, first_workload)
 
 
 if __name__ == "__main__":
