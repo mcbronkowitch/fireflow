@@ -85,6 +85,8 @@ add_executable(spky_tests
     tests/test_fast_sin.cpp
     tests/test_fast_tanh.cpp
     tests/test_morph_osc.cpp
+    engine/synth/wt_bank.cpp
+    tests/test_wt_bank.cpp
     tests/test_env.cpp
     engine/synth/voice.cpp
     tests/test_voice.cpp
@@ -123,6 +125,7 @@ add_executable(render
     engine/fx/reverb.cpp
     engine/fx/part_fx.cpp
     engine/fx/comp.cpp
+    engine/synth/wt_bank.cpp
     engine/synth/voice.cpp
     engine/synth/synth_engine.cpp
     engine/sampler/sample_buffer.cpp
