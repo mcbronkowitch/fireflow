@@ -45,6 +45,12 @@ downbeats, and the transport's raw-phase anchors stay straight.
 
 ## Sampler
 
+ENG is patch-compatible in the exact order **Synth = 0**, **Sampler = 1**,
+**Wave = 2**. State 2 selects the portable wavetable engine and is never
+treated as Sampler. The context-menu test-tone development override remains
+limited to state 1; it cannot replace Wave. The latch has no halo for Synth,
+a warm halo for Sampler, and an ice-blue halo for Wave.
+
 **ENG** (per part, latched) selects the part's engine: **Synth** or **Sampler**
 — a granular texture deck over the shared record buffer. Flipping ENG to
 Sampler on an empty part autoloads the embedded first four bars of the

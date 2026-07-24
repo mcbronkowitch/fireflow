@@ -658,6 +658,38 @@ def test_config_wires_tip_not_label():
           "configOutput is not wired to c.tip -- jack tooltips will show panel labels")
 
 
+def test_engine_cycle_host_wiring():
+    """ENG keeps its saved 0/1 meanings and exposes Wave at 2 without any
+    boolean sampler routing that would mistake Wave for Sampler."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    with open(os.path.join(here, "..", "Makefile")) as f:
+        makefile = f.read()
+
+    check('configSwitch(c.id, 0.f, 2.f, init, "Engine", {"Synth", "Sampler", "Wave"});' in cpp,
+          "ENG is not configured as Synth/Sampler/Wave states 0/1/2")
+    check('struct EngineCycleLatch : VCVLatch' in cpp,
+          "ENG has no three-state visual latch overlay")
+    check('if (c.id == ENGINE_A || c.id == ENGINE_B)' in cpp and
+          'createParamCentered<EngineCycleLatch>' in cpp,
+          "ENGINE_A/B are not using EngineCycleLatch")
+    check('const int eng = static_cast<int>(std::round(pp(ENGINE_A, p)));' in cpp,
+          "ENG state is not rounded to an exact integer")
+    check('eng == 0 ? spky::ENGINE_SYNTH' in cpp and
+          'eng == 2 ? spky::ENGINE_WAVE' in cpp and
+          'smp[p].testTone ? spky::ENGINE_TEST_TONE : spky::ENGINE_SAMPLER' in cpp,
+          "ENG dispatch does not preserve Synth/Sampler/test-tone/Wave meanings")
+    check('if (eng == 1 && !smp[p].testTone && inst.sampler_empty(p)' in cpp,
+          "factory loading is not restricted to Sampler")
+    check('const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;' in cpp,
+          "sampler-only behavior is not gated by the selected engine id")
+    check('ppb(ENGINE_A, p)' not in cpp,
+          "ENG still has a boolean check that would route Wave as Sampler")
+    check('$(REPO)/engine/synth/wt_bank.cpp' in makefile,
+          "VCV build does not link the wavetable bank")
+
+
 def test_shuffle_host_wiring():
     """Rack pushes the appended shared knob into the instrument once per
     control update, before either deck can enter STEP and latch that

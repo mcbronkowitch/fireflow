@@ -71,6 +71,29 @@ struct DustQuantity : ParamQuantity {
     }
 };
 
+// ENG is a three-position Rack switch. VCVLatch retains Rack's native switch
+// handling; this overlay only makes the non-Synth positions readable at a
+// glance without changing its footprint.
+struct EngineCycleLatch : VCVLatch {
+    void drawLayer(const DrawArgs& args, int layer) override {
+        VCVLatch::drawLayer(args, layer);
+        if (layer != 1) return;
+        engine::ParamQuantity* pq = getParamQuantity();
+        if (!pq) return;
+        const int state = static_cast<int>(std::round(pq->getValue()));
+        if (state == 0) return;
+        const NVGcolor color = state == 1
+            ? nvgRGBA(255, 174, 92, 105)
+            : nvgRGBA(120, 210, 255, 145);
+        const Vec c = box.size.div(2.f);
+        nvgBeginPath(args.vg);
+        nvgCircle(args.vg, c.x, c.y, 5.2f);
+        nvgStrokeWidth(args.vg, 1.4f);
+        nvgStrokeColor(args.vg, color);
+        nvgStroke(args.vg);
+    }
+};
+
 // SCALE tooltip: the raw index carried meaning at six entries and stopped
 // carrying it at thirteen. Names come from the engine's table, never a copy.
 struct ScaleQuantity : ParamQuantity {
@@ -206,8 +229,10 @@ struct Spotymod : Module {
                     if (c.id == REC_A || c.id == REC_B)
                         configSwitch(c.id, 0.f, 1.f, init, "Record",
                                      {"Stopped", "Recording"});
-                    else if (c.id == ENGINE_A || c.id == ENGINE_B)
-                        configSwitch(c.id, 0.f, 1.f, init, "Engine", {"Synth", "Sampler"});
+                    else if (c.id == ENGINE_A || c.id == ENGINE_B) {
+                        configSwitch(c.id, 0.f, 2.f, init, "Engine", {"Synth", "Sampler", "Wave"});
+                        getParamQuantity(c.id)->snapEnabled = true;
+                    }
                     else if (c.id == GRITMODE_A || c.id == GRITMODE_B)
                         configSwitch(c.id, 0.f, 1.f, init,
                                      "Grit mode", {"Drive", "Reduce"});   // init: A=Reduce
@@ -337,15 +362,14 @@ struct Spotymod : Module {
             inst.set_fx_on(p, spky::FxBlock::Grit, pp(GRIT_A, p) > 1e-4f);
             inst.set_comp(p, pp(COMP_A, p));
 
-            // ENG picks Synth or Sampler. The test tone survives as a dev tool
-            // in the context menu: with testTone set, ENG's second position
-            // plays it instead of the sampler. A patch saved before M5b that
-            // had "test tone" selected therefore opens as sampler -- accepted
-            // (spec 2026-07-18 "VCV layer"), no real patch uses it.
-            const bool eng2 = ppb(ENGINE_A, p);
-            inst.set_engine(p, !eng2 ? spky::ENGINE_SYNTH
-                                     : (smp[p].testTone ? spky::ENGINE_TEST_TONE
-                                                        : spky::ENGINE_SAMPLER));
+            // Saved ENG meanings remain 0 = Synth and 1 = Sampler; 2 adds
+            // Wave. The development test tone remains a Sampler-only override.
+            const int eng = static_cast<int>(std::round(pp(ENGINE_A, p)));
+            const spky::EngineId id =
+                eng == 0 ? spky::ENGINE_SYNTH :
+                eng == 2 ? spky::ENGINE_WAVE :
+                smp[p].testTone ? spky::ENGINE_TEST_TONE : spky::ENGINE_SAMPLER;
+            inst.set_engine(p, id);
 
             // First-user experience: flipping ENG to Sampler on an empty part
             // loads the factory drone, so one pad press makes sound. It never
@@ -364,7 +388,7 @@ struct Spotymod : Module {
             // SampleBuffer::clear()'s _size==0 fast path (sample_buffer.cpp)
             // that memset is skipped here: what actually runs is the guard
             // check above plus a ~3.4 MB memcpy of the factory sample.
-            if (eng2 && !smp[p].testTone && inst.sampler_empty(p)
+            if (eng == 1 && !smp[p].testTone && inst.sampler_empty(p)
                      && !factoryTried[p]) {
                 factoryTried[p] = true;
                 if (!factoryL.empty()) {
@@ -386,7 +410,7 @@ struct Spotymod : Module {
             // NOT ppb(REC_A, p): REC is not part-strided (see the static_assert
             // block near the top of this file).
             const bool wantRec = params[p ? REC_B : REC_A].getValue() > 0.5f
-                                 && eng2 && !smp[p].testTone;
+                                 && inst.engine_id(p) == spky::ENGINE_SAMPLER;
             if (wantRec != inst.sampler_is_recording(p)) {
                 inst.sampler_record(p, wantRec);
                 // path/factoryLoaded mean "the buffer still holds exactly
@@ -411,7 +435,7 @@ struct Spotymod : Module {
             // gate AND now sets grain overlap. Both point the same direction
             // (sparser), so this is left as-is and flagged for the listening
             // pass rather than special-cased.
-            const bool samplerPart = eng2 && !smp[p].testTone;
+            const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;
             inst.sampler_overlap(p, pp(DENSITY_A, p));
 
             // SCAN nur fuer Sampler-Parts (K-03). Der urspruengliche Grund --
@@ -567,7 +591,7 @@ struct Spotymod : Module {
         // relight the LED -- ENG, not buffer state, decides what's shown.
         for (int p = 0; p < spky::PART_COUNT; ++p) {
             float b = 0.f;
-            const bool samplerPart = ppb(ENGINE_A, p) && !smp[p].testTone;
+            const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;
             if (inst.sampler_is_recording(p)) {
                 recPhase[p] += 2.f / args.sampleRate;      // 2 Hz pulse
                 if (recPhase[p] >= 1.f) recPhase[p] -= 1.f;
@@ -1043,7 +1067,11 @@ struct SpotymodWidget : ModuleWidget {
                 case WK_SW2:
                     addParam(createParamCentered<CKSS>(pos, module, c.id)); break;
                 case WK_LATCH:
-                    addParam(createParamCentered<VCVLatch>(pos, module, c.id)); break;
+                    if (c.id == ENGINE_A || c.id == ENGINE_B)
+                        addParam(createParamCentered<EngineCycleLatch>(pos, module, c.id));
+                    else
+                        addParam(createParamCentered<VCVLatch>(pos, module, c.id));
+                    break;
                 case WK_SMBTN:
                     addParam(createParamCentered<VCVButton>(pos, module, c.id)); break;
                 default: break;
