@@ -25,6 +25,7 @@ public:
         _mip = _select_mip(_freq);
         _old_mip = _mip;
         _mip_xfade_remaining = 0;
+        _set_mip_source(_mip);
     }
 
     void set_freq(float hz) {
@@ -35,6 +36,15 @@ public:
 
         const int next_mip = _select_mip(actual_hz);
         if (next_mip != _mip) {
+            if (_mip_xfade_remaining > 0) {
+                const float completed = static_cast<float>(kRampSamples - _mip_xfade_remaining)
+                    / kRampSamples;
+                for (int mip = 0; mip < wt::kMipCount; ++mip)
+                    _mip_source_weight[mip] *= 1.f - completed;
+                _mip_source_weight[_mip] += completed;
+            } else {
+                _set_mip_source(_mip);
+            }
             _old_mip = _mip;
             _mip = next_mip;
             _mip_xfade_remaining = kRampSamples;
@@ -71,12 +81,15 @@ public:
         const float current = _read_mip(_mip);
         if (_mip_xfade_remaining == 0) return current;
 
-        const float old = _read_mip(_old_mip);
+        const float old = _read_mip_source();
         const float mix = static_cast<float>(kRampSamples - _mip_xfade_remaining + 1)
             / kRampSamples;
         const float output = lerpf(old, current, mix);
         --_mip_xfade_remaining;
-        if (_mip_xfade_remaining == 0) _old_mip = _mip;
+        if (_mip_xfade_remaining == 0) {
+            _old_mip = _mip;
+            _set_mip_source(_mip);
+        }
         return output;
     }
 
@@ -115,6 +128,20 @@ private:
         return lerpf(samples[index0] * kI16Scale, samples[index1] * kI16Scale, blend);
     }
 
+    void _set_mip_source(int mip) {
+        for (int i = 0; i < wt::kMipCount; ++i) _mip_source_weight[i] = 0.f;
+        _mip_source_weight[mip] = 1.f;
+    }
+
+    float _read_mip_source() const {
+        float value = 0.f;
+        for (int mip = 0; mip < wt::kMipCount; ++mip) {
+            if (_mip_source_weight[mip] != 0.f)
+                value += _mip_source_weight[mip] * _read_mip(mip);
+        }
+        return value;
+    }
+
     float _sr = 48000.f;
     float _phase = 0.f;
     float _freq = 220.f;
@@ -126,8 +153,9 @@ private:
     float _position_step = 0.f;
     int _position_remaining = 0;
     int _mip = 0;
-    int _old_mip = 0;
+    int _old_mip = 0; // Snap-state contract; active sources live in the weight array.
     int _mip_xfade_remaining = 0;
+    float _mip_source_weight[wt::kMipCount] = {};
 };
 
 } // namespace spky

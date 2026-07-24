@@ -93,6 +93,71 @@ TEST_CASE("wt_osc: mip changes crossfade for one control block") {
     CHECK_FALSE(o.mip_crossfading());
 }
 
+TEST_CASE("wt_osc: retargeting an active mip fade preserves the audible blend") {
+    float max_retarget_residual = 0.f;
+    for (int phase_step = 0; phase_step < 32; ++phase_step) {
+        WtOsc retargeted;
+        retargeted.init(48000.f);
+        retargeted.set_freq(90.f);
+        for (int i = 0; i < WtOsc::kRampSamples; ++i) retargeted.process();
+        retargeted.set_morph(13.f / 15.f);
+        for (int i = 0; i < WtOsc::kRampSamples; ++i) retargeted.process();
+
+        retargeted.set_freq(190.f);
+        for (int i = 0; i < WtOsc::kRampSamples / 2; ++i) retargeted.process();
+        WtOsc uninterrupted = retargeted;
+
+        retargeted.set_freq(90.f);
+        CHECK(retargeted.mip_crossfading());
+        const float output_phase = (phase_step + 0.5f) / 32.f;
+        retargeted.reset_phase(output_phase - 90.f / 48000.f);
+        uninterrupted.reset_phase(output_phase - 190.f / 48000.f);
+        max_retarget_residual = std::max(max_retarget_residual,
+            std::fabs(retargeted.process() - uninterrupted.process()));
+        for (int i = 0; i < WtOsc::kRampSamples - 1; ++i) retargeted.process();
+        CHECK_FALSE(retargeted.mip_crossfading());
+    }
+    CHECK(max_retarget_residual < 0.01f);
+}
+
+static float read_frame_mip_at_phase(int frame, int mip, float phase) {
+    const int length = wt::kMipLength[mip];
+    const float index = phase * length;
+    const int index0 = static_cast<int>(index);
+    const int index1 = index0 + 1 < length ? index0 + 1 : 0;
+    const float blend = index - index0;
+    const int16_t* const samples = wt::table(frame, mip);
+    return (samples[index0] + (samples[index1] - samples[index0]) * blend) / 32112.f;
+}
+
+TEST_CASE("wt_osc: multiple active retargets preserve the weighted mip source") {
+    constexpr float sample_rate = 48000.f;
+    constexpr float output_phase = 0.375f;
+    WtOsc o;
+    o.init(sample_rate);
+    o.set_freq(90.f);  // mip 0
+    for (int i = 0; i < WtOsc::kRampSamples; ++i) o.process();
+    o.set_morph(13.f / 15.f);
+    for (int i = 0; i < WtOsc::kRampSamples; ++i) o.process();
+
+    o.set_freq(190.f); // mip 2
+    for (int i = 0; i < 48; ++i) o.process();
+    o.set_freq(110.f); // mip 1; source becomes 0.5 * mip 0 + 0.5 * mip 2
+    for (int i = 0; i < 24; ++i) o.process();
+    o.set_freq(90.f);  // mip 0; source becomes 0.375 * mip 0 + 0.375 * mip 2 + 0.25 * mip 1
+    CHECK(o.mip_crossfading());
+
+    o.reset_phase(output_phase - 90.f / sample_rate);
+    const float source = 0.375f * read_frame_mip_at_phase(13, 0, output_phase)
+        + 0.375f * read_frame_mip_at_phase(13, 2, output_phase)
+        + 0.25f * read_frame_mip_at_phase(13, 1, output_phase);
+    const float expected = source * (95.f / 96.f)
+        + read_frame_mip_at_phase(13, 0, output_phase) * (1.f / 96.f);
+    CHECK(o.process() == doctest::Approx(expected).epsilon(1e-6));
+    for (int i = 0; i < WtOsc::kRampSamples - 1; ++i) o.process();
+    CHECK_FALSE(o.mip_crossfading());
+}
+
 TEST_CASE("wt_osc: mip selection follows octave-floor boundaries") {
     WtOsc o;
     o.init(48000.f);
@@ -137,6 +202,43 @@ static std::vector<double> dft_energy(const std::vector<float>& samples) {
     return energy;
 }
 
+static double other_bin_energy_db(const std::vector<float>& samples, float freq,
+                                  float sample_rate, int mip) {
+    const std::vector<double> energy = dft_energy(samples);
+    double wanted = 0.0;
+    double unwanted = 0.0;
+    const int max_retained_partial = wt::kMipLength[mip] / 4;
+    for (int bin = 0; bin < static_cast<int>(energy.size()); ++bin) {
+        bool harmonic = false;
+        for (int h = 1; h <= max_retained_partial && h * freq < sample_rate * 0.5f; ++h) {
+            const float harmonic_bin = h * freq * samples.size() / sample_rate;
+            if (std::fabs(bin - harmonic_bin) <= 1.f) {
+                harmonic = true;
+                break;
+            }
+        }
+        if (harmonic) wanted += energy[bin];
+        else unwanted += energy[bin];
+    }
+    return 10.0 * std::log10(unwanted / wanted);
+}
+
+TEST_CASE("wt_osc: retained-partial mask detects a folded high harmonic") {
+    constexpr float sample_rate = 56320.f;
+    constexpr float freq = 3520.f;
+    constexpr int sample_count = 2048;
+    std::vector<float> samples;
+    samples.reserve(sample_count);
+    for (int i = 0; i < sample_count; ++i) {
+        const float phase = 6.28318530717958647692f * freq * i / sample_rate;
+        samples.push_back(std::sin(phase) + 0.1f * std::sin(9.f * phase));
+    }
+
+    // The ninth partial folds onto the seventh harmonic bin.  Mip 6 retains
+    // only four source partials, so this must count as out-of-band energy.
+    CHECK(other_bin_energy_db(samples, freq, sample_rate, 6) > -36.0);
+}
+
 TEST_CASE("wt_osc: band-limited mips keep alias energy 36 dB below harmonics") {
     constexpr float sample_rate = 56320.f; // Each test pitch is a DFT bin and advances its selected mip by one sample.
     constexpr int sample_count = 2048;
@@ -151,21 +253,6 @@ TEST_CASE("wt_osc: band-limited mips keep alias energy 36 dB below harmonics") {
         samples.reserve(sample_count);
         for (int i = 0; i < sample_count; ++i) samples.push_back(o.process());
 
-        const std::vector<double> energy = dft_energy(samples);
-        double wanted = 0.0;
-        double unwanted = 0.0;
-        for (int bin = 0; bin < static_cast<int>(energy.size()); ++bin) {
-            bool harmonic = false;
-            for (int h = 1; h * freq < sample_rate * 0.5f; ++h) {
-                const float harmonic_bin = h * freq * sample_count / sample_rate;
-                if (std::fabs(bin - harmonic_bin) <= 1.f) {
-                    harmonic = true;
-                    break;
-                }
-            }
-            if (harmonic) wanted += energy[bin];
-            else unwanted += energy[bin];
-        }
-        CHECK(10.0 * std::log10(unwanted / wanted) <= -36.0);
+        CHECK(other_bin_energy_db(samples, freq, sample_rate, o.mip_level()) <= -36.0);
     }
 }
