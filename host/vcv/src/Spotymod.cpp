@@ -6,6 +6,7 @@
 #include <osdialog.h>
 #include "plugin.hpp"
 #include "generated_panel.hpp"   // enums + control table (generated from res/gen_panel.py)
+#include "init_patch.hpp"       // sampler.vcvm snapshot + non-param init state
 
 // The portable engine core -- exactly the same headers the desktop render host
 // and (later) the Daisy firmware use. No hardware type crosses this boundary.
@@ -150,60 +151,57 @@ struct Spotymod : Module {
     void configControls() {
         for (const auto& c : kParamCtls) {
             const std::string lbl = c.label;
+            const float init = initParamDefault(c.id);
             switch (c.kind) {
                 case WK_BIGKNOB:
                 case WK_SMKNOB:
                     if (c.id == RATE_A || c.id == RATE_B)
-                        configParam<RateQuantity>(c.id, 0.f, 1.f, defaultFor(c.id), lbl);
+                        configParam<RateQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == CHOKE) {  // event-priority, 5 snapped states
-                        configSwitch(c.id, -2.f, 2.f, 0.f, lbl,
+                        configSwitch(c.id, -2.f, 2.f, init, lbl,
                                      {"A chokes B thru decay", "A chokes B while playing",
                                       "Off", "B chokes A while playing", "B chokes A thru decay"});
                         getParamQuantity(c.id)->snapEnabled = true;
                     }
                     else if (c.id == FILT_A || c.id == FILT_B)  // bipolar cutoff trim
-                        configParam(c.id, -1.f, 1.f,
-                                    c.id == FILT_A ? -0.061f : -0.230f, lbl);
+                        configParam(c.id, -1.f, 1.f, init, lbl);
                     else if (c.id == TIDE)  // texture-lane rate, snaps under SYNC
-                        configParam<TideQuantity>(c.id, 0.f, 1.f, 0.5f, lbl);
+                        configParam<TideQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == FLUXRATE_A || c.id == FLUXRATE_B)
-                        configParam<FluxRateQuantity>(c.id, 0.f, 1.f, defaultFor(c.id), lbl);
+                        configParam<FluxRateQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == FLUXFB_A || c.id == FLUXFB_B)
-                        configParam<FluxFbQuantity>(c.id, 0.f, 1.f, defaultFor(c.id), lbl);
+                        configParam<FluxFbQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == DUST_A || c.id == DUST_B)
-                        configParam<DustQuantity>(c.id, 0.f, 1.f, defaultFor(c.id), lbl);
+                        configParam<DustQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == ROT_A || c.id == ROT_B)
-                        configParam<RotQuantity>(c.id, 0.f, 1.f, defaultFor(c.id), lbl);
+                        configParam<RotQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else
-                        configParam(c.id, 0.f, 1.f, defaultFor(c.id), lbl);
+                        configParam(c.id, 0.f, 1.f, init, lbl);
                     break;
                 case WK_KNOBC:  // MELO (bipolar): both decks loop — A drifts a little, B is frozen
-                    configParam(c.id, -1.f, 1.f,
-                                c.id == MELODY_A ? -0.728f : -1.f, lbl); break;
+                    configParam(c.id, -1.f, 1.f, init, lbl); break;
                 case WK_KNOBI:
                     if (c.id == SCALE)  // init patch is Lydian — the bright end of the sweep
                         configParam(c.id, 0.f, (float)(spky::SCALE_LIST_COUNT - 1),
-                                    (float)spky::SCALE_LYDIAN, "Scale");
+                                    init, "Scale");
                     else  // STEPS_A / STEPS_B
-                        configParam(c.id, 2.f, 16.f, 8.f, "Steps");
+                        configParam(c.id, 2.f, 16.f, init, "Steps");
                     getParamQuantity(c.id)->snapEnabled = true;
                     break;
                 case WK_SW2:  // init patch runs the instrument on the grid
-                    configSwitch(c.id, 0.f, 1.f, 1.f, "Sync", {"Free", "Synced"});
+                    configSwitch(c.id, 0.f, 1.f, init, "Sync", {"Free", "Synced"});
                     break;
                 case WK_LATCH:
                     if (c.id == REC_A || c.id == REC_B)
-                        configSwitch(c.id, 0.f, 1.f, 0.f, "Record",
+                        configSwitch(c.id, 0.f, 1.f, init, "Record",
                                      {"Stopped", "Recording"});
                     else if (c.id == ENGINE_A || c.id == ENGINE_B)
-                        configSwitch(c.id, 0.f, 1.f, 0.f, "Engine", {"Synth", "Sampler"});
+                        configSwitch(c.id, 0.f, 1.f, init, "Engine", {"Synth", "Sampler"});
                     else if (c.id == GRITMODE_A || c.id == GRITMODE_B)
-                        configSwitch(c.id, 0.f, 1.f, c.id == GRITMODE_A ? 1.f : 0.f,
+                        configSwitch(c.id, 0.f, 1.f, init,
                                      "Grit mode", {"Drive", "Reduce"});   // init: A=Reduce
                     else  // STEP (on for the init patch's stepped sequences) / PRINCIPLE / NEWPHRASE
-                        configSwitch(c.id, 0.f, 1.f,
-                                     (c.id == STEP_A || c.id == STEP_B) ? 1.f : 0.f,
-                                     lbl, {"Off", "On"});
+                        configSwitch(c.id, 0.f, 1.f, init, lbl, {"Off", "On"});
                     break;
                 case WK_SMBTN: configButton(c.id, lbl); break;
                 default: break;
@@ -213,67 +211,6 @@ struct Spotymod : Module {
         // so tooltips use the control table's spelled-out tip instead
         for (const auto& c : kInputCtls)  configInput(c.id, c.tip);
         for (const auto& c : kOutputCtls) configOutput(c.id, c.tip);
-    }
-
-    // Init "patch" (Rack Initialize / fresh instance): part A = a slow chord
-    // pad (COLOR up, the chord layer sounding from the first note), part B = a
-    // short plucked bass under it, both in Lydian. Knob values are a snapshot
-    // of a hand-dialled panel state (cpu.vcvm, 2026-07-19, superseding the
-    // 2026-07-18 chord_init snapshot): MORPH left of centre so both decks are
-    // audible, COUPLE/DRIFT full, both MELO knobs negative so the progression
-    // loops instead of wandering off, both FLUX lanes well up.
-    // Only knob params (WK_BIGKNOB/WK_SMKNOB) come through here;
-    // STEP/SYNC/STEPS/SCALE/MELO/FILT defaults live in configControls().
-    // RATE values are expressed on the 17-rung ladder introduced 2026-07-16
-    // (0.0625 = 4 bars, 0.5 = 1/4 — the rungs the snapshot lands on).
-    static float defaultFor(int id) {
-        switch (id) {                       // global knobs (cpu snapshot 2026-07-19)
-            case MORPH:        return 0.312f;  // left of centre — pad forward, bass under it
-            case COUPLE:       return 1.00f;   // full = hard loop lock
-            case DRIFT:        return 1.00f;
-            case MASTER_DRIVE: return 0.619f;
-            case REV_SIZE:     return 0.851f;
-            case REV_DECAY:    return 0.851f;
-            case REV_TONE:     return 0.803f;
-            case REV_DIFF:     return 0.863f;
-            case REV_MIX_A:
-            case REV_MIX_B:    return 0.410f;  // per-deck room send; was the shared REV_MIX
-            case REV_SMEAR:    return 0.568f;  // diffuser LFO smear (wash)
-            case REV_MOD:      return 0.237f;  // tail LFO wobble
-            case TEMPO:        return 0.00f;   // as saved (40 BPM floor; parts run Synced)
-            case SHUFFLE:      return 0.f;
-            case FLUXRATE_A:   return 3.f / 11.f;   // "1/4" for part A's pad echo
-            case FLUXRATE_B:   return 4.f / 11.f;   // "1/8." for part B's bass echo
-            case FLUXFB_A:     return 0.563f;
-            case FLUXFB_B:     return 0.354f;
-            case COLOR_A:      return 0.647f;  // pad blooms into a seventh/ninth stack
-            case COLOR_B:      return 0.f;     // bass stays single notes
-            case DUST_A:       return 0.f;     // DUST off: bit-exact with the
-            case DUST_B:       return 0.f;     // pre-DUST init patch
-            case ROT_A:        return 0.f;     // zone S, fully grid-locked
-            case ROT_B:        return 0.f;
-            default: break;
-        }
-        const int part = id / PART_STRIDE;  // 0 = A (chord pad), 1 = B (bass)
-        switch (id % PART_STRIDE) {         // fold part B onto the *_A enum; part ? B : A
-            case RATE_A:   return part ? 8.f / 16.f : 0.0625f;  // B "1/4", A "4 bars"
-            case SHAPE_A:  return part ? 0.600f : 0.616f;
-            case DENSITY_A: return part ? 0.370f : 0.345f;
-            case SMOOTH_A: return part ? 0.300f : 1.000f;  // A fully smoothed = the pad breathes
-            case RANGE_A:  return part ? 0.236f : 0.679f;  // melody ambitus
-            case MOD_A:    return part ? 0.790f : 0.593f;  // texture depth
-            case TUNE_A:   return part ? 0.000f : 0.550f;  // B down an octave-ish
-            case ATTACK_A: return part ? 0.000f : 0.657f;  // B snaps in, A swells
-            case DECAY_A:  return part ? 0.268f : 0.902f;  // A rings/stacks; B plucks short
-            case RES_A:    return part ? 0.379f : 0.259f;
-            case SUB_A:    return part ? 0.663f : 0.350f;  // weight under the bass
-            case DETUNE_A: return part ? 0.088f : 0.773f;  // A wide, B nearly clean
-            case FLUX_A:   return part ? 0.736f : 0.793f;  // both echo lanes well up
-            case GRIT_A:   return part ? 0.113f : 0.000f;  // B light grit; A off
-            case COMP_A:   return part ? 0.547f : 0.363f;
-            default: break;
-        }
-        return 0.5f;
     }
 
     // Re-init the engine for a new sample rate. Without the snapshot below,

@@ -9,7 +9,7 @@ the 2026-07-18 faceplate redesign.
 No pytest in this environment -- plain asserts, exit code says it all.
 Run from host/vcv/:  python res/test_panel.py
 """
-import os, sys, math
+import os, sys, math, re
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_panel as g
@@ -478,21 +478,93 @@ def test_config_wires_tip_not_label():
 
 
 def test_shuffle_host_wiring():
-    """Rack exposes the appended shared knob with a straight default and pushes
-    it into the shared instrument once per control update, before either deck
-    can enter STEP and latch that control-tick's groove value."""
+    """Rack pushes the appended shared knob into the instrument once per
+    control update, before either deck can enter STEP and latch that
+    control-tick's groove value. The init value lives in init_patch.hpp."""
     here = os.path.dirname(os.path.abspath(__file__))
     cpp_path = os.path.join(here, "..", "src", "Spotymod.cpp")
     with open(cpp_path) as f:
         cpp = f.read()
-    check("case SHUFFLE:      return 0.f;" in cpp,
-          "SHUFFLE default must be straight (0)")
     check("inst.set_shuffle(params[SHUFFLE].getValue());" in cpp,
           "Rack SHUFFLE param is not wired to Instrument::set_shuffle")
     shuffle_push = cpp.index("inst.set_shuffle(params[SHUFFLE].getValue());")
     first_step_push = cpp.index("inst.set_step(")
     check(shuffle_push < first_step_push,
           "Rack must push shared SHUFFLE before either FLOW->STEP transition")
+
+
+def test_sampler_preset_init_snapshot():
+    """The init patch is the approved sampler.vcvm snapshot, while its sample
+    comes from the bundled factory asset instead of the preset's absolute
+    machine-specific path."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    header_path = os.path.join(here, "..", "src", "init_patch.hpp")
+    if not os.path.isfile(header_path):
+        check(False, "init_patch.hpp missing")
+        return
+    with open(header_path) as f:
+        header = f.read()
+
+    match = re.search(
+        r"kInitParamDefaults\[\]\s*=\s*\{(.*?)\};", header, re.DOTALL)
+    check(match is not None, "kInitParamDefaults array missing")
+    if match is None:
+        return
+    actual = []
+    for raw in match.group(1).splitlines():
+        value = raw.split("//", 1)[0].strip().rstrip(",")
+        if value:
+            actual.append(float(value.removesuffix("f")))
+
+    expected = [
+        0.20466864109039307, 0.61599999666213989, 0.69518107175827026,
+        1.0, 0.84406059980392456, -0.76896363496780396,
+        0.6036144495010376, 0.5, 0.0, 0.32266658544540405,
+        0.3190000057220459, 0.45866644382476807, 0.0,
+        0.6773335337638855, 0.0, 0.62966680526733398, 16.0, 0.0,
+        1.0, 1.0, 0.0, 0.0, 0.0,
+        0.18674719333648682, 0.60000002384185791,
+        0.31939762830734253, 0.30000001192092896,
+        0.26144576072692871, -0.69156646728515625,
+        0.34457823634147644, 0.5, 0.0, 0.4506666362285614,
+        0.37900000810623169, 0.53633320331573486,
+        0.087999999523162842, 0.46266642212867737,
+        0.057000085711479187, 0.71099996566772461, 8.0, 1.0, 0.0,
+        1.0, 0.0, 0.0, 0.0,
+        0.49277070164680481, 1.0, 0.5, 1.0, 4.0, 0.0, 0.0,
+        0.79066669940948486, 0.0, 0.64266586303710938,
+        0.66399866342544556, 0.76133310794830322,
+        0.86299997568130493, 0.48400050401687622,
+        0.2370000034570694, 0.0, 0.064333423972129822,
+        -0.2460000067949295, 0.5, 0.39272749423980713,
+        0.36363637447357178, 0.28566798567771912,
+        0.43933644890785217, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0,
+        0.0, 0.0, 0.43066525459289551, 0.21200035512447357, 1.0,
+    ]
+    check(len(actual) == len(PARAM_ORDER) == len(expected),
+          f"init snapshot has {len(actual)} values, want {len(PARAM_ORDER)}")
+    for i, (got, want) in enumerate(zip(actual, expected)):
+        check(math.isclose(got, want, rel_tol=0.0, abs_tol=1e-7),
+              f"{PARAM_ORDER[i]} init {got}, want {want}")
+
+    check("static constexpr int kInitPrinciple[] = {2, 0};" in header,
+          "init principle must be [2, 0]")
+
+    cpp_path = os.path.join(here, "..", "src", "Spotymod.cpp")
+    with open(cpp_path) as f:
+        cpp = f.read()
+    check('#include "init_patch.hpp"' in cpp,
+          "Spotymod.cpp does not include the init snapshot")
+    check("const float init = initParamDefault(c.id);" in cpp,
+          "configControls does not read the indexed init snapshot")
+    check("defaultFor(" not in cpp,
+          "legacy split defaultFor table still exists")
+
+    makefile_path = os.path.join(here, "..", "Makefile")
+    with open(makefile_path) as f:
+        makefile = f.read()
+    check("res/factory.wav" in makefile,
+          "factory.wav is not included in the VCV distribution")
 
 
 # --- 2026-07-21 morphagene-controls: the sampler meanings on the plate --------
