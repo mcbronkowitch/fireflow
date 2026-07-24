@@ -17,6 +17,8 @@ void Part::init(float sample_rate, uint32_t seed_base,
     _tone.init(sample_rate);
     _synth.set_seed(seed_base ^ 0x5eedC0DEu);   // per-part drift decorrelation
     _synth.init(sample_rate);
+    _wave.set_seed(seed_base ^ 0x57415645u);    // "WAVE", distinct melodic drift
+    _wave.init(sample_rate);
     _sampler.set_seed(seed_base ^ 0x5A11E20Du);
     _sampler.set_memory(sampler_mem, sampler_frames);
     _sampler.init(sample_rate);

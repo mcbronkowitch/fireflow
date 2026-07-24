@@ -94,20 +94,20 @@ public:
     }
     float max_voice_env() const;   // 0 when idle or on the test-tone engine
 
-    // VOICE edit layer - forwarded to BOTH engines directly, so edits stick
-    // whichever engine is active. The sampler reinterprets each knob as its
-    // cloud analogue (spec: "no dead knobs"), so one panel row serves both.
-    void set_voice_attack(float n)    { _synth.set_attack(n);    _sampler.set_window_attack(n); }
-    void set_voice_decay(float n)     { _synth.set_decay(n);     _sampler.set_window_decay(n); }
-    void set_voice_resonance(float n) { _synth.set_resonance(n); _sampler.set_resonance(n); }
+    // VOICE edit layer - forwarded to both melodic engines directly, so edits
+    // stick whichever engine is active. The sampler reinterprets each knob as
+    // its cloud analogue (spec: "no dead knobs"), so one panel row serves all.
+    void set_voice_attack(float n)    { _synth.set_attack(n);    _wave.set_attack(n);    _sampler.set_window_attack(n); }
+    void set_voice_decay(float n)     { _synth.set_decay(n);     _wave.set_decay(n);     _sampler.set_window_decay(n); }
+    void set_voice_resonance(float n) { _synth.set_resonance(n); _wave.set_resonance(n); _sampler.set_resonance(n); }
     // SUB and DETUNE are synth-only from the morphagene-controls spec on
     // (2026-07-21): on the panel these two knobs are GENE SIZE and ORGANIZE
     // in the sampler, so forwarding them here as well would give one knob two
     // simultaneous jobs in the same engine. SamplerEngine::_sub_n and
     // _detune_n default to 0 and now stay there.
-    void set_voice_sub(float n)       { _synth.set_sub(n); }
-    void set_voice_detune(float n)    { _synth.set_detune(n); }
-    void set_voice_filt(float t)      { _synth.set_filt(t);      _sampler.set_filt(t); }
+    void set_voice_sub(float n)       { _synth.set_sub(n);       _wave.set_sub(n); }
+    void set_voice_detune(float n)    { _synth.set_detune(n);    _wave.set_detune(n); }
+    void set_voice_filt(float t)      { _synth.set_filt(t);      _wave.set_filt(t);      _sampler.set_filt(t); }
 
     SamplerEngine& sampler() { return _sampler; }
     const SamplerEngine& sampler() const { return _sampler; }
@@ -116,12 +116,18 @@ public:
     // sampler() already lets it reach the sampler leg.
     SynthEngine& synth() { return _synth; }
     const SynthEngine& synth() const { return _synth; }
+    WaveEngine& wave() { return _wave; }
+    const WaveEngine& wave() const { return _wave; }
 
     int active_voices() const {
-        return _engine_id == ENGINE_SYNTH ? _synth.active_voices() : 0;
+        if (_engine_id == ENGINE_SYNTH) return _synth.active_voices();
+        if (_engine_id == ENGINE_WAVE) return _wave.active_voices();
+        return 0;
     }
     float voice_env(int v) const {
-        return _engine_id == ENGINE_SYNTH ? _synth.voice_env(v) : 0.f;
+        if (_engine_id == ENGINE_SYNTH) return _synth.voice_env(v);
+        if (_engine_id == ENGINE_WAVE) return _wave.voice_env(v);
+        return 0.f;
     }
 
     float target_value(int slot) const;
@@ -155,6 +161,7 @@ private:
     TestToneEngine _tone;
     IPartEngine*   _engine = nullptr;
     SynthEngine    _synth;
+    WaveEngine     _wave;
     SamplerEngine  _sampler;
     bool           _last_gate = false;
     SoftSwitch     _engine_fade;
@@ -177,6 +184,7 @@ private:
         switch (e) {
             case ENGINE_SYNTH:   return static_cast<IPartEngine*>(&_synth);
             case ENGINE_SAMPLER: return static_cast<IPartEngine*>(&_sampler);
+            case ENGINE_WAVE:    return static_cast<IPartEngine*>(&_wave);
             default:             return static_cast<IPartEngine*>(&_tone);
         }
     }

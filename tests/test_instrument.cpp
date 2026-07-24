@@ -315,6 +315,31 @@ TEST_CASE("instrument: set_engine switches to the test tone and back") {
     CHECK(inst.active_voices(PART_A) >= 1);   // the drone resumes
 }
 
+TEST_CASE("instrument: WAVE is a melodic engine through the public API") {
+    Instrument inst;
+    inst.init(48000.f);
+    inst.set_engine(PART_A, ENGINE_WAVE);
+    inst.set_density(PART_A, 0.f);
+    float l, r;
+    for (int i = 0; i < 1000; ++i) inst.process(nullptr, nullptr, &l, &r, 1);
+    REQUIRE(inst.engine_id(PART_A) == ENGINE_WAVE);
+    CHECK(inst.active_voices(PART_A) >= 1);   // FLOW drone is observable at the Instrument API
+
+    // A FLOW->STEP change releases the live drone, so it legitimately leaves
+    // a tail beside the next strike. Start a fresh STEP part to test the
+    // single-trigger contract itself rather than its release behavior.
+    Instrument step;
+    step.init(48000.f);
+    step.set_step(PART_A, true, 8);
+    step.set_density(PART_A, 0.f);
+    step.set_engine(PART_A, ENGINE_WAVE);
+    for (int i = 0; i < 500; ++i) step.process(nullptr, nullptr, &l, &r, 1);
+    REQUIRE(step.engine_id(PART_A) == ENGINE_WAVE);
+    step.trigger_manual(PART_A);
+    step.process(nullptr, nullptr, &l, &r, 1);
+    CHECK(step.active_voices(PART_A) == 1);   // STEP remains a single struck voice
+}
+
 TEST_CASE("instrument M4: couple 0 + drift 0 -> PITCH lane matches a bare SuperModulator") {
     Instrument inst; inst.init(48000.f);
     inst.set_couple(0.f); inst.set_drift(0.f);

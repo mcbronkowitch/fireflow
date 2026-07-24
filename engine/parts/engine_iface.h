@@ -5,8 +5,13 @@ namespace spky {
 
 // Selectable part engines. ENGINE_SYNTH is the boot default from M2 on;
 // the test tone stays selectable (tests, A/B reference). M5 adds the
-// sampler -- appended, so no persisted id changes meaning.
-enum EngineId { ENGINE_TEST_TONE = 0, ENGINE_SYNTH = 1, ENGINE_SAMPLER = 2 };
+// sampler and WAVE -- appended, so no persisted id changes meaning.
+enum EngineId {
+    ENGINE_TEST_TONE = 0,
+    ENGINE_SYNTH = 1,
+    ENGINE_SAMPLER = 2,
+    ENGINE_WAVE = 3
+};
 
 // A part's sound engine. Consumes the 5 normalized target values; produces
 // stereo audio. TestToneEngine (M1), SynthEngine (M2) and SamplerEngine

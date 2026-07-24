@@ -265,6 +265,114 @@ TEST_CASE("part: engine switch test tone <-> synth is click-free") {
     CHECK(p.engine_id() == ENGINE_SYNTH);   // second switch completed
 }
 
+TEST_CASE("part: engine ids stay patch-stable when WAVE is appended") {
+    CHECK(ENGINE_TEST_TONE == 0);
+    CHECK(ENGINE_SYNTH == 1);
+    CHECK(ENGINE_SAMPLER == 2);
+    CHECK(ENGINE_WAVE == 3);
+}
+
+TEST_CASE("part: WAVE switches through the existing 4 ms engine fade") {
+    Part p;
+    p.init(48000.f, 5u);
+    float l, r;
+    auto complete_switch = [&] {
+        for (int i = 0; i < 500; ++i) p.process(l, r);
+    };
+
+    p.set_engine(ENGINE_WAVE);
+    complete_switch();
+    CHECK(p.engine_id() == ENGINE_WAVE);
+    p.set_engine(ENGINE_SAMPLER);
+    complete_switch();
+    CHECK(p.engine_id() == ENGINE_SAMPLER);
+    p.set_engine(ENGINE_WAVE);
+    complete_switch();
+    CHECK(p.engine_id() == ENGINE_WAVE);
+}
+
+TEST_CASE("part: WAVE is one voice in STEP and sustains the FLOW chord surface") {
+    Part p;
+    p.init(48000.f, 5u);
+    float l, r;
+    p.set_step(true, 8);                          // WAVE must enter STEP, not boot FLOW
+    p.mod().set_density(0.f);
+    p.set_engine(ENGINE_WAVE);
+    for (int i = 0; i < 500; ++i) p.process(l, r);  // complete the fade
+    REQUIRE(p.engine_id() == ENGINE_WAVE);
+
+    p.trigger_manual();                           // an actual WAVE STEP trigger
+    p.process(l, r);                               // STEP downbeat
+    CHECK(p.active_voices() == 1);
+
+    p.set_step(false, 8);
+    p.set_depth(0.f);                              // high COLOR, no MOTION swing
+    p.set_color(0.8f);
+    for (int i = 0; i < 500; ++i) p.process(l, r);
+    CHECK(p.wave().chord_n() >= 3);
+    CHECK(p.active_voices() >= 3);
+}
+
+TEST_CASE("part: WAVE keeps VOICE edits made while sampler is active") {
+    auto render_after_sampler_edit = [](float attack, float decay,
+                                        float resonance, float filt) {
+        Part p;
+        p.init(48000.f, 91u);
+        p.set_engine(ENGINE_SAMPLER);
+        p.set_voice_attack(attack);
+        p.set_voice_decay(decay);
+        p.set_voice_resonance(resonance);
+        p.set_voice_sub(0.62f);
+        p.set_voice_detune(0.71f);
+        p.set_voice_filt(filt);
+        float l, r;
+        for (int i = 0; i < 500; ++i) p.process(l, r);
+        REQUIRE(p.engine_id() == ENGINE_SAMPLER);
+
+        p.set_engine(ENGINE_WAVE);
+        for (int i = 0; i < 500; ++i) p.process(l, r);
+        REQUIRE(p.engine_id() == ENGINE_WAVE);
+        CHECK(p.wave().sub_level() == doctest::Approx(0.62f));
+        CHECK(p.wave().detune_max_ct() == doctest::Approx(0.71f * WaveEngine::kDetuneCeilCt));
+
+        p.set_step(true, 8);
+        p.mod().set_density(0.f);
+        p.trigger_manual();
+        std::vector<float> out;
+        out.reserve(4096);
+        for (int i = 0; i < 4096; ++i) {
+            p.process(l, r);
+            out.push_back(l);
+        }
+        return out;
+    };
+
+    const auto base = render_after_sampler_edit(0.1f, 0.2f, 0.15f, 0.f);
+    CHECK(base != render_after_sampler_edit(0.9f, 0.2f, 0.15f, 0.f));
+    CHECK(base != render_after_sampler_edit(0.1f, 0.9f, 0.15f, 0.f));
+    CHECK(base != render_after_sampler_edit(0.1f, 0.2f, 0.9f, 0.f));
+    CHECK(base != render_after_sampler_edit(0.1f, 0.2f, 0.15f, 0.8f));
+}
+
+TEST_CASE("part: WAVE keeps composed chords while sampler remains flattened") {
+    Part p;
+    p.init(48000.f, 13u);
+    p.set_depth(0.f);
+    p.set_color(0.8f);
+    float l, r;
+    p.set_engine(ENGINE_WAVE);
+    for (int i = 0; i < 500; ++i) p.process(l, r);
+    REQUIRE(p.engine_id() == ENGINE_WAVE);
+    CHECK(p.wave().chord_n() >= 3);
+
+    // Existing sampler-part coverage pins the one-pitch sampler behavior.
+    // This WAVE leg guards the engine qualification on _flatten_for_sampler:
+    // a broadened sampler condition would collapse this surface to one note.
+    p.set_engine(ENGINE_SAMPLER);
+    for (int i = 0; i < 500; ++i) p.process(l, r);
+    CHECK(p.engine_id() == ENGINE_SAMPLER);
+}
+
 TEST_CASE("part: the test tone engine reports zero active voices") {
     Part p;
     p.init(48000.f, 5);
