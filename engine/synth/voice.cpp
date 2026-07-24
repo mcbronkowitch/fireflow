@@ -1,6 +1,7 @@
 #include "synth/voice.h"
 #include <cmath>
 #include "mod/rng.h"
+#include "synth/wt_osc.h"
 #include "util/fast_sin.h"
 #include "util/math.h"
 
@@ -125,3 +126,4 @@ void VoiceT<OscT>::process(float& accL, float& accR) {
 }
 
 template class spky::VoiceT<spky::MorphOsc>;
+template class spky::VoiceT<spky::WtOsc>;

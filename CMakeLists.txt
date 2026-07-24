@@ -93,6 +93,7 @@ add_executable(spky_tests
     tests/test_voice.cpp
     engine/synth/synth_engine.cpp
     tests/test_synth_engine.cpp
+    tests/test_wave_engine.cpp
     tests/test_phrase_gen.cpp
     tests/test_choke.cpp
     tests/test_filt.cpp

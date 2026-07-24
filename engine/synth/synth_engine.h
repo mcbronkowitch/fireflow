@@ -5,6 +5,7 @@
 #include "parts/engine_iface.h"
 #include "pitch/chord.h"
 #include "synth/voice.h"
+#include "synth/wt_osc.h"
 #include "util/onepole.h"
 
 namespace spky {
@@ -128,5 +129,8 @@ private:
 
 using SynthEngine = SynthEngineT<MorphOsc>;
 extern template class SynthEngineT<MorphOsc>;
+
+using WaveEngine = SynthEngineT<WtOsc>;
+extern template class SynthEngineT<WtOsc>;
 
 } // namespace spky

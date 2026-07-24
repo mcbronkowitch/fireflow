@@ -315,3 +315,4 @@ float SynthEngineT<OscT>::voice_env(int v) const {
 }
 
 template class spky::SynthEngineT<spky::MorphOsc>;
+template class spky::SynthEngineT<spky::WtOsc>;
