@@ -87,6 +87,7 @@ add_executable(spky_tests
     tests/test_morph_osc.cpp
     engine/synth/wt_bank.cpp
     tests/test_wt_bank.cpp
+    tests/test_wt_osc.cpp
     tests/test_env.cpp
     engine/synth/voice.cpp
     tests/test_voice.cpp
