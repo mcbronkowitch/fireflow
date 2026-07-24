@@ -10,6 +10,7 @@
 /mods.csv
 /renders/
 .superpowers/
+.worktrees/
 
 # Sampler source material for the render-host scenarios. Two kinds live here,
 # neither belongs in the repo: the user's own sample library (large, and not
