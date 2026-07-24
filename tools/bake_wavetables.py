@@ -109,11 +109,17 @@ def render_cpp():
         "// Sample SHA-256: " + digest,
         "#include \"synth/wt_bank.h\"",
         "",
+        "#if defined(__ARM_EABI__)",
+        "#define WT_BANK_QSPI __attribute__((section(\".qspiflash_data\")))",
+        "#else",
+        "#define WT_BANK_QSPI",
+        "#endif",
+        "",
         "namespace spky::wt {",
         "",
         "const int kMipLength[kMipCount] = {1024, 512, 256, 128, 64, 32, 16};",
         "const int kMipOffset[kMipCount] = {0, 1024, 1536, 1792, 1920, 1984, 2016};",
-        "const int16_t kBankSamples[kTotalSamples] = {",
+        "const int16_t kBankSamples[kTotalSamples] WT_BANK_QSPI = {",
     ]
     for index in range(0, len(samples), 16):
         lines.append("    " + ", ".join(str(sample) for sample in samples[index:index + 16]) + ",")

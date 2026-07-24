@@ -8,6 +8,12 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SYSTEM_SOURCE = ROOT / "bench" / "workloads_system.cpp"
 MAKEFILE = ROOT / "bench" / "Makefile"
+GENERATOR = ROOT / "tools" / "bake_wavetables.py"
+BANK_SOURCE = ROOT / "engine" / "synth" / "wt_bank.cpp"
+LINKER = ROOT / "alt_sram.lds"
+RUNNER = ROOT / "bench" / "run.py"
+OPENOCD_CFG = ROOT / "bench" / "openocd" / "spotykach-sram.cfg"
+SAMPLE_SHA = "81a914d0248bc7265703b81e27e4546264993705c11c1e30acd45cae2390e747"
 
 
 def compact(text: str) -> str:
@@ -114,6 +120,50 @@ class Task8Contract(unittest.TestCase):
                 "../engine/synth/wt_bank.cpp",
             ],
         )
+
+    def test_generator_owns_arm_only_qspi_placement_without_sample_drift(self) -> None:
+        generator = GENERATOR.read_text(encoding="utf-8")
+        bank = BANK_SOURCE.read_text(encoding="utf-8")
+        expected_macro = compact(
+            """
+            #if defined(__ARM_EABI__)
+            #define WT_BANK_QSPI __attribute__((section(".qspiflash_data")))
+            #else
+            #define WT_BANK_QSPI
+            #endif
+            """
+        )
+        for generated_line in (
+            '"#if defined(__ARM_EABI__)",',
+            '"#define WT_BANK_QSPI '
+            '__attribute__((section(\\".qspiflash_data\\")))",',
+            '"#else",',
+            '"#define WT_BANK_QSPI",',
+            '"#endif",',
+            '"const int16_t kBankSamples[kTotalSamples] WT_BANK_QSPI = {",',
+        ):
+            self.assertIn(generated_line, generator)
+        self.assertIn(expected_macro, compact(bank))
+        self.assertIn(
+            "const int16_t kBankSamples[kTotalSamples] WT_BANK_QSPI = {",
+            bank,
+        )
+        self.assertIn(f"// Sample SHA-256: {SAMPLE_SHA}", bank)
+
+    def test_qspi_region_and_sram_loader_respect_split_image_contract(self) -> None:
+        linker = compact(LINKER.read_text(encoding="utf-8"))
+        self.assertIn(
+            "QSPIFLASH (RX) : ORIGIN = 0x90040000, LENGTH = 7936K",
+            linker,
+        )
+        runner = RUNNER.read_text(encoding="utf-8")
+        self.assertIn('"bench-sram.elf"', runner)
+        self.assertIn("require_verified_payload", runner)
+        self.assertIn("prepare_existing_artifacts", runner)
+        self.assertIn("require_live_digest", runner)
+        self.assertIn("require_clean_tree", runner)
+        cfg = OPENOCD_CFG.read_text(encoding="utf-8")
+        self.assertIn("load_image $IMAGE", cfg)
 
 
 if __name__ == "__main__":

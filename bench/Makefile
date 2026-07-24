@@ -26,6 +26,7 @@ GIT_HASH = $(shell git -C .. rev-parse --short HEAD)
 CPP_SOURCES = \
 	main.cpp \
 	report.cpp \
+	qspi_digest.cpp \
 	runner.cpp \
 	anchor.cpp \
 	mem.cpp \

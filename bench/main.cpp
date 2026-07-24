@@ -2,6 +2,8 @@
 #include "report.h"
 #include "workload.h"
 #include "cycles.h"
+#include "qspi_digest.h"
+#include "synth/wt_bank.h"
 
 namespace bench { void run_anchors(daisy::DaisySeed& hw); }
 
@@ -45,7 +47,12 @@ int main(void)
     // through the probe, so the first line cannot be lost to enumeration timing.
     bench::cycles_init();
 
-    bench::report_begin(BENCH_GIT_HASH);
+    char qspi_sha256[65];
+    bench::sha256_hex(
+        reinterpret_cast<const volatile uint8_t*>(spky::wt::kBankSamples),
+        sizeof(spky::wt::kBankSamples),
+        qspi_sha256);
+    bench::report_begin(BENCH_GIT_HASH, qspi_sha256);
     for (int i = 0; i < bench::kCoreCount; ++i) {
         const bench::Workload& w = bench::kCoreWorkloads[i];
         bench::report_row(w, bench::run_workload(w));

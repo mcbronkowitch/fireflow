@@ -35,7 +35,7 @@ void logf(const char* fmt, ...)
     sh_write0(g_buf);
 }
 
-void report_begin(const char* githash)
+void report_begin(const char* githash, const char* qspi_sha256)
 {
     // Measured, not asserted: this is exactly the failure mode that already
     // bit this project once (the plan claimed 480 MHz while hw.Init() was
@@ -49,7 +49,8 @@ void report_begin(const char* githash)
                       : ic         ? "icache"
                       : dc         ? "dcache"
                                    : "none";
-    logf("BENCH_BEGIN,%s,%lu,96,%s\n", githash, (unsigned long)clk, cache);
+    logf("BENCH_BEGIN,%s,%lu,96,%s,%s\n",
+         githash, (unsigned long)clk, cache, qspi_sha256);
 }
 
 void report_end()

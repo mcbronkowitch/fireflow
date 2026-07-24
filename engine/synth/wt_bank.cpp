@@ -2,11 +2,17 @@
 // Sample SHA-256: 81a914d0248bc7265703b81e27e4546264993705c11c1e30acd45cae2390e747
 #include "synth/wt_bank.h"
 
+#if defined(__ARM_EABI__)
+#define WT_BANK_QSPI __attribute__((section(".qspiflash_data")))
+#else
+#define WT_BANK_QSPI
+#endif
+
 namespace spky::wt {
 
 const int kMipLength[kMipCount] = {1024, 512, 256, 128, 64, 32, 16};
 const int kMipOffset[kMipCount] = {0, 1024, 1536, 1792, 1920, 1984, 2016};
-const int16_t kBankSamples[kTotalSamples] = {
+const int16_t kBankSamples[kTotalSamples] WT_BANK_QSPI = {
     0, 197, 394, 591, 788, 985, 1182, 1379, 1576, 1772, 1969, 2166, 2362, 2559, 2755, 2951,
     3147, 3344, 3539, 3735, 3931, 4126, 4322, 4517, 4712, 4907, 5101, 5296, 5490, 5684, 5878, 6071,
     6265, 6458, 6651, 6843, 7036, 7228, 7420, 7611, 7802, 7993, 8184, 8375, 8565, 8754, 8944, 9133,

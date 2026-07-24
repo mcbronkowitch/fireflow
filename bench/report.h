@@ -16,7 +16,7 @@ void logf(const char* fmt, ...);
 
 // Marker contract, parsed by run.py. Anything printed outside these markers
 // is free-form and ignored by the parser.
-void report_begin(const char* githash);
+void report_begin(const char* githash, const char* qspi_sha256);
 void report_end();
 
 void report_row(const Workload& w, const Result& r);

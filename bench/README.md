@@ -18,8 +18,9 @@ context (SRAM vs SDRAM latency) matches production.
 python run.py
 ```
 
-From `bench/`. This builds the bench firmware, loads it into the Seed's SRAM
-through the debug probe (no bootloader, no flash wear), captures its
+From `bench/`. This builds the bench firmware, verifies that the separately
+programmed WAVE bank matches the current linked QSPI payload, loads only the
+SRAM side of the image through the debug probe, and captures its
 semihosting output **twice** (`--repeat 2` is the default — see "Anchor
 mode's audio" below for what that means out loud), compares the two runs'
 checksums, and writes `../docs/bench/YYYY-MM-DD-<githash>.md` and `.csv`.
@@ -30,15 +31,59 @@ determinism is a measured property of this engine, not an assumption.
 
 Useful flags: `--repeat N` (default 2), `--out-dir DIR` (default
 `../docs/bench`), `--build-only`, `--no-build`, `--timeout SECONDS` (default
-600, per run), `--interface CFG` (see below).
+600, per run), `--interface CFG` (see below), and `--program-qspi`.
+
+## Programming the WAVE bank
+
+The 65,024-byte bank is a loadable `.qspiflash_data` section at
+`0x90040000`, after the four 64 KiB sectors reserved by the Daisy bootloader.
+It is deliberately not part of the debug probe's SRAM load. The build creates
+three distinct artifacts:
+
+- `build/bench.elf`: authoritative linked image and map source;
+- `build/bench-sram.elf`: `.qspiflash_data` removed; the only ELF OpenOCD
+  loads;
+- `build/bench-qspi.bin`: only `.qspiflash_data`, exactly 65,024 bytes.
+
+Do not use `make program-dfu` for this custom layout. libDaisy's generic rule
+expects one flat `build/bench.bin` beginning at the BOOT_SRAM app address;
+an image spanning SRAM and QSPI is not that format. `run.py` builds only the
+ELF and extracts the two physical payloads explicitly.
+
+Before the first WAVE run, or whenever `bench-qspi.bin` changes:
+
+1. Build with `python run.py --build-only`.
+2. Put the Seed explicitly into Daisy bootloader DFU mode (BOOT, then RESET)
+   and connect its micro-USB port.
+3. Run `python run.py --no-build --program-qspi --build-only`.
+4. Run `python run.py --repeat 2`.
+
+The programming command downloads only `bench-qspi.bin` to `0x90040000`,
+uploads the same 65,024-byte range again, compares every byte, and only then
+writes `build/qspi-verified.json`. The receipt binds the verified payload to
+the authoritative `bench.elf` and its freshly derived `bench-sram.elf`.
+Even with `--no-build`, `run.py` re-inspects `bench.elf` and regenerates both
+physical artifacts before accepting the receipt.
+
+Every measurement also SHA-256 hashes the 65,024 live bytes through the
+Seed's memory-mapped QSPI interface before `BENCH_BEGIN`; the host compares
+that firmware-reported digest with the extracted payload. This catches a
+different Seed, a later QSPI overwrite, or blank/wrong QSPI even if an old
+local receipt remains. Hardware evidence is refused from a dirty Git tree.
+
+Programming this address overwrites the leading bank region and therefore
+invalidates whatever BOOT_SRAM/BOOT_QSPI application was previously stored
+in the Daisy bootloader's app slot; remnants beyond the 65,024-byte write may
+remain. The bench itself starts directly from SRAM through OpenOCD.
 
 ## Hardware setup
 
-Only the debug probe's SWD cable is connected — 4 wires (SWDIO, SWCLK, GND,
-3V3 or just GND+SWD if the probe supplies its own power) from the ST-Link to
-the Seed's SWD header. The Seed's own micro-USB port is **not** used for
-anything in the normal flow; the bench never talks over it. If anchor mode
-is going to run (it always does, as part of the family-1 sweep), have
+The measurement itself uses the debug probe's SWD cable: 4 wires (SWDIO,
+SWCLK, GND, and 3V3, or just GND+SWD if the probe supplies its own power)
+from the ST-Link to the Seed's SWD header. The Seed's micro-USB port is also
+needed during the explicit DFU provisioning step above, but the bench never
+uses it as a reporting transport. If anchor mode is going to run (it always
+does, as part of the family-1 sweep), have
 monitors connected to the Seed's audio out at **low volume** first — see
 below for what you'll actually hear.
 
@@ -75,14 +120,12 @@ are untested against this bench.
 
 ## Fallbacks
 
-**(a) If the SRAM load ever stops working** (i.e. `spotykach-sram.cfg`'s
-`load_image` / `reset halt` path stops taking): fall back to
-`make program-dfu` from `bench/`, with the usual BOOT-button-then-RESET
-dance to get the Seed into its DFU bootloader. Semihosting still needs
-openocd attached afterwards for `run.py` to read anything — since the board
-is already running the bench image at that point, bring openocd up against
-it and issue `arm semihosting enable` directly (there is no `load_image` or
-`reset halt` step in this path, the board is already executing).
+**(a) If the SRAM load ever stops working**, stop and design a complete
+bootloader image path for the custom SRAM+QSPI layout. The old
+`make program-dfu` suggestion is not valid for this split image: libDaisy's
+generic BOOT_SRAM rule programs one flat BIN at `0x90040000`, while this
+bench has an SRAM executable plus a separate QSPI bank. Do not substitute
+that rule silently.
 
 **(b) If semihosting itself proves inadequate** (too slow, or the probe
 setup won't cooperate), the escape hatch is USB-CDC: swap `report.cpp`'s

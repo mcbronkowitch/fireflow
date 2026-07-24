@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Build the bench firmware, load it into the Seed's SRAM through the debug
-probe, and capture its semihosting output. One command, one cable."""
+"""Build the split bench firmware, guard its QSPI payload, load the SRAM image
+through the debug probe, and capture semihosting output."""
 
 import argparse
 import csv
@@ -10,16 +10,48 @@ import os
 import subprocess
 import sys
 import time
+import queue
+import threading
+
+from qspi_tools import (
+    QspiGuardError,
+    prepare_split_artifacts,
+    program_and_verify,
+    require_clean_tree,
+    require_live_digest,
+    require_verified_payload,
+)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 OPENOCD = r"C:\Program Files\DaisyToolchain\bin\openocd.exe"
 SCRIPTS = r"C:\Program Files\DaisyToolchain\openocd\scripts"
 ELF = os.path.join(HERE, "build", "bench.elf")
+SRAM_ELF = os.path.join(HERE, "build", "bench-sram.elf")
+QSPI_PAYLOAD = os.path.join(HERE, "build", "bench-qspi.bin")
+QSPI_RECEIPT = os.path.join(HERE, "build", "qspi-verified.json")
+OBJCOPY = r"C:\Program Files\DaisyToolchain\bin\arm-none-eabi-objcopy.exe"
+OBJDUMP = r"C:\Program Files\DaisyToolchain\bin\arm-none-eabi-objdump.exe"
+DFU_UTIL = r"C:\Program Files\DaisyToolchain\bin\dfu-util.exe"
 
 
 def build():
-    subprocess.run(["make", "-j8"], cwd=HERE, check=True)
+    # Do not ask libDaisy's default `all` target for bench.bin: one flat
+    # binary spanning SRAM (0x24000000) and QSPI (0x90040000) would encode the
+    # address gap. Build the ELF, then extract two explicit artifacts.
+    subprocess.run(["make", "-j8", "build/bench.elf"], cwd=HERE, check=True)
+    return prepare_existing_artifacts()
+
+
+def prepare_existing_artifacts():
+    """Re-derive both physical images from the authoritative linked ELF."""
+    return prepare_split_artifacts(
+        ELF,
+        SRAM_ELF,
+        QSPI_PAYLOAD,
+        objcopy=OBJCOPY,
+        objdump=OBJDUMP,
+    )
 
 
 def run_once(interface, timeout):
@@ -34,27 +66,38 @@ def run_once(interface, timeout):
         "-s", SCRIPTS,
         "-f", "interface/%s" % interface,
         "-f", "target/stm32h7x.cfg",
-        "-c", "set IMAGE {%s}" % ELF.replace("\\", "/"),
+        "-c", "set IMAGE {%s}" % SRAM_ELF.replace("\\", "/"),
         "-f", os.path.join(HERE, "openocd", "spotykach-sram.cfg"),
     ]
     # openocd logs to stderr and semihosting output can land on either --
     # merge them so no line is missed.
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True, bufsize=1)
-    deadline = time.time() + timeout
+    deadline = time.monotonic() + timeout
     lines, done = [], False
-    try:
-        # iter(readline) NOT `for raw in proc.stdout`: the latter uses Python's
-        # read-ahead buffer, which on Windows blocks until the pipe fills and
-        # deadlocks this loop. readline() returns per line. Verified on hardware.
+    output = queue.Queue()
+
+    def read_output():
         for raw in iter(proc.stdout.readline, ""):
+            output.put(raw)
+        output.put(None)
+
+    reader = threading.Thread(target=read_output, daemon=True)
+    reader.start()
+    try:
+        while time.monotonic() < deadline:
+            remaining = deadline - time.monotonic()
+            try:
+                raw = output.get(timeout=max(0.01, min(0.25, remaining)))
+            except queue.Empty:
+                continue
+            if raw is None:
+                break
             line = raw.rstrip("\r\n")
             print(line)
             lines.append(line)
             if line.startswith("BENCH_END"):
                 done = True
-                break
-            if time.time() > deadline:
                 break
     finally:
         proc.terminate()
@@ -75,7 +118,15 @@ def parse(lines):
     for line in lines:
         if line.startswith("BENCH_BEGIN,"):
             f = line.split(",")
-            header = {"githash": f[1], "clock": f[2], "block": f[3], "cache": f[4]}
+            if len(f) != 6:
+                continue
+            header = {
+                "githash": f[1],
+                "clock": f[2],
+                "block": f[3],
+                "cache": f[4],
+                "qspi_sha256": f[5],
+            }
         elif line.startswith("BENCH,"):
             f = line.split(",")
             rows.append({
@@ -350,13 +401,36 @@ def main():
                     help="seconds to wait for BENCH_END")
     ap.add_argument("--build-only", action="store_true")
     ap.add_argument("--no-build", action="store_true")
+    ap.add_argument(
+        "--program-qspi",
+        action="store_true",
+        help=(
+            "with the Seed explicitly in Daisy bootloader DFU mode, program "
+            "the extracted 65024-byte bank at 0x90040000, upload it again, "
+            "and write a byte-identity receipt"
+        ),
+    )
     ap.add_argument("--repeat", type=int, default=2,
                     help="runs to compare for the determinism check")
     ap.add_argument("--out-dir", default=os.path.join(REPO, "docs", "bench"))
     args = ap.parse_args()
 
-    if not args.no_build:
-        build()
+    try:
+        identity = build() if not args.no_build else prepare_existing_artifacts()
+        if args.program_qspi or not args.build_only:
+            require_clean_tree(REPO)
+        if args.program_qspi:
+            program_and_verify(
+                QSPI_PAYLOAD,
+                QSPI_RECEIPT,
+                artifact_identity=identity,
+                dfu_util=DFU_UTIL,
+            )
+        if not args.build_only:
+            require_verified_payload(QSPI_PAYLOAD, QSPI_RECEIPT, identity)
+    except (QspiGuardError, subprocess.CalledProcessError) as error:
+        print("ERROR: %s" % error, file=sys.stderr)
+        return 2
     if args.build_only:
         return 0
 
@@ -374,6 +448,11 @@ def main():
                   file=sys.stderr)
             return 2
         header, _rows, _anchors = parsed
+        try:
+            require_live_digest(header["qspi_sha256"], QSPI_PAYLOAD)
+        except QspiGuardError as error:
+            print("ERROR: %s" % error, file=sys.stderr)
+            return 2
         if not check_hash(header):
             return 2
         captures.append(parsed)
