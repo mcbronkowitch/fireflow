@@ -1,5 +1,6 @@
 #include "workload.h"
 #include "mem.h"
+#include "serial_arena.h"
 #include "instrument.h"
 #include "mod/super_modulator.h"
 #include "mod/lane_id.h"
@@ -14,7 +15,43 @@ namespace {
 
 using namespace spky;
 
-float g_out_l[kBlock], g_out_r[kBlock];
+struct ModGroup {
+    SuperModulator mod_a, mod_b;
+    Center center;
+    Part hook_a, hook_b;
+};
+
+struct SynthGroup {
+    SynthEngine synth;
+    int voices;
+};
+
+struct SynthPairGroup {
+    SynthEngine a, b;
+};
+
+struct WavePairGroup {
+    WaveEngine a, b;
+};
+
+struct FxGroup {
+    PartFx fx;
+    float values[FXT_COUNT];
+};
+
+struct InstrumentGroup {
+    Instrument instrument;
+    int counter;
+    float out_l[kBlock], out_r[kBlock];
+};
+
+SerialArena<
+    ModGroup,
+    SynthGroup,
+    SynthPairGroup,
+    WavePairGroup,
+    FxGroup,
+    InstrumentGroup> g_system_arena;
 
 // --- 1. baseline ------------------------------------------------------------
 void setup_empty() {}
@@ -27,32 +64,32 @@ float proc_empty() { return 0.f; }
 // Center::update needs two Parts to write its hooks into, so two live here --
 // but they are never process()ed. What this row measures is the mod plane and
 // the control tick, not the parts.
-SuperModulator g_mod_a, g_mod_b;
-Center         g_center;
-Part           g_hook_a, g_hook_b;
-
 void setup_mod()
 {
-    g_mod_a.init(kSampleRate, 1u);
-    g_mod_b.init(kSampleRate, 2u);
-    g_center.init(kSampleRate, 11u);
-    g_hook_a.init(kSampleRate, 1u);
-    g_hook_b.init(kSampleRate, 2u);
-    g_mod_a.set_rate(0.5f); g_mod_b.set_rate(0.6f);
-    g_mod_a.set_density(0.7f); g_mod_b.set_density(0.7f);
+    auto& group = g_system_arena.emplace<ModGroup>();
+    group.mod_a.init(kSampleRate, 1u);
+    group.mod_b.init(kSampleRate, 2u);
+    group.center.init(kSampleRate, 11u);
+    group.hook_a.init(kSampleRate, 1u);
+    group.hook_b.init(kSampleRate, 2u);
+    group.mod_a.set_rate(0.5f); group.mod_b.set_rate(0.6f);
+    group.mod_a.set_density(0.7f); group.mod_b.set_density(0.7f);
 }
 float proc_mod()
 {
+    auto& group = g_system_arena.get<ModGroup>();
     float acc = 0.f;
     for (size_t i = 0; i < kBlock; ++i) {
-        g_mod_a.process();
-        g_mod_b.process();
-        acc += g_mod_a.lane_output(LANE_PITCH) + g_mod_b.lane_output(LANE_PITCH);
+        group.mod_a.process();
+        group.mod_b.process();
+        acc += group.mod_a.lane_output(LANE_PITCH)
+             + group.mod_b.lane_output(LANE_PITCH);
     }
     // Control rate: one tick per Center::kCtrlInterval (96) samples, which is
     // exactly one per block. Running it per sample would measure a cadence the
     // firmware never has.
-    g_center.update(g_mod_a, g_mod_b, g_hook_a, g_hook_b);
+    group.center.update(
+        group.mod_a, group.mod_b, group.hook_a, group.hook_b);
     return acc;
 }
 
@@ -69,18 +106,16 @@ float proc_mod()
 // structural: trigger the intended count once, and rely on the same long
 // decay (now a feature, not a bug) to keep exactly those voices sounding,
 // unrefreshed, for the whole ~2.2 s measured window.
-SynthEngine g_synth;
-int         g_synth_voices = 1;
-
 void setup_synth_n(int n)
 {
-    g_synth_voices = n;
-    g_synth.set_seed(3u);
-    g_synth.init(kSampleRate);
-    g_synth.set_decay(1.f);       // 8x cycle: ~16s decay outlives the measured window
-    g_synth.set_cycle(2.f);
-    g_synth.set_flow(false);
-    for (int v = 0; v < n; ++v) g_synth.trigger(0.3f + 0.1f * v);
+    auto& group = g_system_arena.emplace<SynthGroup>();
+    group.voices = n;
+    group.synth.set_seed(3u);
+    group.synth.init(kSampleRate);
+    group.synth.set_decay(1.f); // 8x cycle: ~16s decay outlives measured window
+    group.synth.set_cycle(2.f);
+    group.synth.set_flow(false);
+    for (int v = 0; v < n; ++v) group.synth.trigger(0.3f + 0.1f * v);
 }
 void setup_synth_1() { setup_synth_n(1); }
 void setup_synth_2() { setup_synth_n(2); }
@@ -88,16 +123,17 @@ void setup_synth_4() { setup_synth_n(4); }
 
 float proc_synth()
 {
+    auto& group = g_system_arena.get<SynthGroup>();
     float acc = 0.f, l, r;
     for (size_t i = 0; i < kBlock; ++i) {
-        g_synth.process(l, r);
+        group.synth.process(l, r);
         acc += l + r;
     }
     // Cheap regression guard: fold the actual active voice count into the
     // returned value so it reaches the checksum. If a future change makes
     // this row hold the wrong number of voices, the checksum moves -- no
     // print inside the measured loop, no silent pass.
-    acc += static_cast<float>(g_synth.active_voices());
+    acc += static_cast<float>(group.synth.active_voices());
     return acc;
 }
 
@@ -105,9 +141,6 @@ float proc_synth()
 // Direct-engine A/B comparison: every setup and process operation is shared
 // by construction, so the oscillator type is the only measured difference.
 constexpr float kEngine2x4Pitches[] = { 0.25f, 0.35f, 0.45f, 0.55f };
-
-SynthEngine g_synth_2x4_a, g_synth_2x4_b;
-WaveEngine  g_wave_2x4_a,  g_wave_2x4_b;
 
 template <class EngineT>
 void setup_engine_2x4(EngineT& a, EngineT& b)
@@ -128,8 +161,16 @@ void setup_engine_2x4(EngineT& a, EngineT& b)
     }
 }
 
-void setup_synth_2x4() { setup_engine_2x4(g_synth_2x4_a, g_synth_2x4_b); }
-void setup_wave_2x4()  { setup_engine_2x4(g_wave_2x4_a,  g_wave_2x4_b);  }
+void setup_synth_2x4()
+{
+    auto& pair = g_system_arena.emplace<SynthPairGroup>();
+    setup_engine_2x4(pair.a, pair.b);
+}
+void setup_wave_2x4()
+{
+    auto& pair = g_system_arena.emplace<WavePairGroup>();
+    setup_engine_2x4(pair.a, pair.b);
+}
 
 template <class EngineT>
 float proc_engine_2x4(EngineT& a, EngineT& b)
@@ -146,8 +187,16 @@ float proc_engine_2x4(EngineT& a, EngineT& b)
     return acc;
 }
 
-float proc_synth_2x4() { return proc_engine_2x4(g_synth_2x4_a, g_synth_2x4_b); }
-float proc_wave_2x4()  { return proc_engine_2x4(g_wave_2x4_a,  g_wave_2x4_b);  }
+float proc_synth_2x4()
+{
+    auto& pair = g_system_arena.get<SynthPairGroup>();
+    return proc_engine_2x4(pair.a, pair.b);
+}
+float proc_wave_2x4()
+{
+    auto& pair = g_system_arena.get<WavePairGroup>();
+    return proc_engine_2x4(pair.a, pair.b);
+}
 
 // --- 8. FX blocks, one at a time -------------------------------------------
 // PartFx carries GRIT, FLUX and COMP; each row turns on exactly one so the
@@ -162,29 +211,27 @@ float proc_wave_2x4()  { return proc_engine_2x4(g_wave_2x4_a,  g_wave_2x4_b);  }
 // this is the row that makes fx_X - fx_none the block's isolated cost.
 enum FxSel { SEL_GRIT = 0, SEL_FLUX = 1, SEL_COMP = 2, SEL_NONE = 3 };
 
-PartFx g_fx;
-float  g_fxv[FXT_COUNT];
-
 void setup_fx(int sel)
 {
+    auto& group = g_system_arena.emplace<FxGroup>();
     const FxMem& m = fx_mem();
-    g_fx.init(kSampleRate, m.echo[0][0], m.echo[0][1]);
+    group.fx.init(kSampleRate, m.echo[0][0], m.echo[0][1]);
     // immediate = true: the soft switches would otherwise fade in over the
     // warm-up and the measured window would see a partly-engaged chain.
-    g_fx.set_fx_on(FxBlock::Grit, sel == SEL_GRIT, true);
-    g_fx.set_fx_on(FxBlock::Flux, sel == SEL_FLUX, true);
-    g_fx.set_comp(sel == SEL_COMP ? 0.8f : 0.f);
-    g_fx.set_grit_mix(1.f);
-    g_fx.set_flux_mix(1.f);
-    g_fx.set_bpm(120.f);
+    group.fx.set_fx_on(FxBlock::Grit, sel == SEL_GRIT, true);
+    group.fx.set_fx_on(FxBlock::Flux, sel == SEL_FLUX, true);
+    group.fx.set_comp(sel == SEL_COMP ? 0.8f : 0.f);
+    group.fx.set_grit_mix(1.f);
+    group.fx.set_flux_mix(1.f);
+    group.fx.set_bpm(120.f);
 
     // Already-modulated target values, as Part::fx_target_value() would hand
     // them over. Fixed here: this row measures the FX, not the modulation.
-    g_fxv[FXT_GRIT_INT]  = 0.8f;
-    g_fxv[FXT_FLUX_TIME] = 0.5f;
-    g_fxv[FXT_FX_MIX]    = 1.f;
-    g_fxv[FXT_REV_SEND]  = 0.5f;
-    g_fxv[FXT_FLUX_FB]   = 0.7f;
+    group.values[FXT_GRIT_INT]  = 0.8f;
+    group.values[FXT_FLUX_TIME] = 0.5f;
+    group.values[FXT_FX_MIX]    = 1.f;
+    group.values[FXT_REV_SEND]  = 0.5f;
+    group.values[FXT_FLUX_FB]   = 0.7f;
 }
 void setup_fx_none() { setup_fx(SEL_NONE); }
 void setup_fx_grit() { setup_fx(SEL_GRIT); }
@@ -193,11 +240,12 @@ void setup_fx_comp() { setup_fx(SEL_COMP); }
 
 float proc_fx()
 {
+    auto& group = g_system_arena.get<FxGroup>();
     const float* in = test_input();
     float acc = 0.f;
     for (size_t i = 0; i < kBlock; ++i) {
         float l = in[i], r = in[i] * 0.9f, sl = 0.f, sr = 0.f;
-        g_fx.process(l, r, sl, sr, g_fxv);
+        group.fx.process(l, r, sl, sr, group.values);
         acc += l + r + sl + sr;
     }
     return acc;
@@ -209,6 +257,7 @@ float proc_fx()
 // blooming decay, dense diffusion, both LFOs up.
 void setup_reverb()
 {
+    g_system_arena.reset();
     AmbientReverb& v = reverb_sram();
     v.init(kSampleRate);
     v.clear();
@@ -233,20 +282,17 @@ float proc_reverb()
 }
 
 // --- 8-9. the whole instrument ---------------------------------------------
-Instrument g_inst;
-int        g_inst_ctr = 0;
-
 void setup_inst_common()
 {
-    g_inst.init(kSampleRate, fx_mem());
-    g_inst.set_tempo_bpm(120.f);
+    auto& group = g_system_arena.emplace<InstrumentGroup>();
+    group.instrument.init(kSampleRate, fx_mem());
+    group.instrument.set_tempo_bpm(120.f);
     // Reset the retrigger phase here, not just at file-scope initialization:
     // without this, instrument_worst's phase silently inherits whatever
-    // instrument_init's process() loop left it at (they share g_inst_ctr and
-    // run in table order). Deterministic today because nothing runs between
-    // them, but a row inserted before either would then shift both retrigger
-    // phases with it, unnoticed.
-    g_inst_ctr = 0;
+    // instrument_init's process() loop left it at. Each row now constructs a
+    // fresh InstrumentGroup, and this explicit assignment documents the
+    // intended retrigger phase rather than relying on value-initialization.
+    group.counter = 0;
 }
 
 // Init patch: the typical load.
@@ -260,47 +306,51 @@ void setup_inst_init()
 void setup_inst_worst()
 {
     setup_inst_common();
+    auto& inst = g_system_arena.get<InstrumentGroup>().instrument;
     for (int p = 0; p < PART_COUNT; ++p) {
-        g_inst.set_color(p, 1.f);          // 4-note chords -> 4 voices per part
-        g_inst.set_density(p, 1.f);
-        g_inst.set_depth(p, 1.f);
-        g_inst.set_rate(p, 0.8f);
-        g_inst.set_fx_on(p, FxBlock::Grit, true);
-        g_inst.set_fx_on(p, FxBlock::Flux, true);
-        g_inst.set_grit_mix(p, 1.f);
-        g_inst.set_flux_mix(p, 1.f);
-        g_inst.set_comp(p, 1.f);
-        g_inst.set_voice_decay(p, 1.f);
-        g_inst.trigger_manual(p);
+        inst.set_color(p, 1.f);          // 4-note chords -> 4 voices per part
+        inst.set_density(p, 1.f);
+        inst.set_depth(p, 1.f);
+        inst.set_rate(p, 0.8f);
+        inst.set_fx_on(p, FxBlock::Grit, true);
+        inst.set_fx_on(p, FxBlock::Flux, true);
+        inst.set_grit_mix(p, 1.f);
+        inst.set_flux_mix(p, 1.f);
+        inst.set_comp(p, 1.f);
+        inst.set_voice_decay(p, 1.f);
+        inst.trigger_manual(p);
     }
-    g_inst.set_reverb_mix(0.5f);
-    g_inst.set_reverb_size(1.f);
-    g_inst.set_reverb_decay(0.95f);
-    g_inst.set_reverb_diffusion(0.9f);
-    g_inst.set_reverb_smear(1.f);
-    g_inst.set_reverb_mod(1.f);
-    g_inst.set_master_drive(1.f);
+    inst.set_reverb_mix(0.5f);
+    inst.set_reverb_size(1.f);
+    inst.set_reverb_decay(0.95f);
+    inst.set_reverb_diffusion(0.9f);
+    inst.set_reverb_smear(1.f);
+    inst.set_reverb_mod(1.f);
+    inst.set_master_drive(1.f);
 }
 
 float proc_inst()
 {
+    auto& group = g_system_arena.get<InstrumentGroup>();
+    auto& inst = group.instrument;
     const float* in = test_input();
-    g_inst.process(in, in, g_out_l, g_out_r, kBlock);
+    inst.process(in, in, group.out_l, group.out_r, kBlock);
     // Keep the voices busy: a fire every ~half second on both parts.
-    if (++g_inst_ctr >= 250) {
-        g_inst_ctr = 0;
-        g_inst.trigger_manual(PART_A);
-        g_inst.trigger_manual(PART_B);
+    if (++group.counter >= 250) {
+        group.counter = 0;
+        inst.trigger_manual(PART_A);
+        inst.trigger_manual(PART_B);
     }
     float acc = 0.f;
-    for (size_t i = 0; i < kBlock; ++i) acc += g_out_l[i] + g_out_r[i];
+    for (size_t i = 0; i < kBlock; ++i)
+        acc += group.out_l[i] + group.out_r[i];
     // Same guard proc_synth uses: fold both parts' active voice counts into
     // the returned value so a wrong voice count -- the exact failure that
     // shipped undetected as a "1 voice" row measuring 2.8 voices -- moves
     // the checksum instead of passing silently. No printing inside the
     // measured loop.
-    acc += static_cast<float>(g_inst.active_voices(PART_A));
-    acc += static_cast<float>(g_inst.active_voices(PART_B));
+    acc += static_cast<float>(inst.active_voices(PART_A));
+    acc += static_cast<float>(inst.active_voices(PART_B));
     return acc;
 }
 
@@ -343,9 +393,11 @@ float proc_inst()
 void setup_inst_worst_taps()
 {
     setup_inst_worst();
+    auto& group = g_system_arena.get<InstrumentGroup>();
+    auto& inst = group.instrument;
     for (int p = 0; p < PART_COUNT; ++p) {
-        g_inst.set_dust(p, 1.f);   // both taps at full gain
-        g_inst.set_rot(p, 0.5f);   // mid spread -- neither one-pole collapses
+        inst.set_dust(p, 1.f);   // both taps at full gain
+        inst.set_rot(p, 0.5f);   // mid spread -- neither one-pole collapses
     }
 
     const float* in = test_input();
@@ -360,9 +412,9 @@ void setup_inst_worst_taps()
     constexpr int kSafetyBlocks = 2000;
     bool ready = false;
     for (int b = 0; b < kSafetyBlocks && !ready; ++b) {
-        g_inst.process(in, in, g_out_l, g_out_r, kBlock);
-        const RhythmView& ra = g_inst.rhythm(PART_A);
-        const RhythmView& rb = g_inst.rhythm(PART_B);
+        inst.process(in, in, group.out_l, group.out_r, kBlock);
+        const RhythmView& ra = inst.rhythm(PART_A);
+        const RhythmView& rb = inst.rhythm(PART_B);
         if (ra.valid && rb.valid) {
             int32_t off_a[tap_tuning::kTaps], off_b[tap_tuning::kTaps];
             derive_offsets(rb, kTapeLen, off_a);   // A's taps read B's rhythm
@@ -378,7 +430,8 @@ void setup_inst_worst_taps()
     // the mute->live transition with an immediate dip-out + dip-in (2 x
     // kDipSeconds = 2 x 96 samples @ 48 kHz) before the first live read. 50
     // blocks (4800 samples) is >15x that ~288-sample worst case.
-    for (int b = 0; b < 50; ++b) g_inst.process(in, in, g_out_l, g_out_r, kBlock);
+    for (int b = 0; b < 50; ++b)
+        inst.process(in, in, group.out_l, group.out_r, kBlock);
 }
 
 } // namespace

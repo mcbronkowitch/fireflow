@@ -89,6 +89,7 @@ add_executable(spky_tests
     tests/test_wt_bank.cpp
     bench/qspi_digest.cpp
     tests/test_bench_qspi_digest.cpp
+    tests/test_bench_serial_arena.cpp
     tests/test_wt_osc.cpp
     tests/test_env.cpp
     engine/synth/voice.cpp

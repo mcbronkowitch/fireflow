@@ -9,6 +9,7 @@ namespace {
 // ARM semihosting SYS_WRITE0: r0 = op, r1 = pointer to a NUL-terminated
 // string. The bkpt is the call. This is the whole transport.
 constexpr int kSysWrite0 = 0x04;
+#define DTCM_REPORT_BSS __attribute__((section(".dtcmram_bss")))
 
 inline void sh_write0(const char* s)
 {
@@ -17,7 +18,9 @@ inline void sh_write0(const char* s)
     asm volatile("bkpt 0xAB" : "+r"(r0) : "r"(r1) : "memory");
 }
 
-char g_buf[256];
+// Reporting is outside measured windows. Preserve the proven 256-byte format
+// capacity while using roomy DTCM rather than scarce AXI SRAM.
+char DTCM_REPORT_BSS g_buf[256];
 
 } // namespace
 

@@ -329,14 +329,31 @@ the exact pitches `{0.25, 0.35, 0.45, 0.55}` on both engines. One measured
 call processes both engines for exactly the 96-sample block, accumulates all
 four L/R outputs, and folds both active-voice counts into the checksum.
 
-The 2026-07-24 Task 8 gate is **blocked before hardware measurement**. With
-the 65,024-byte bank linked, `python run.py --build-only` reports
-`SRAM_EXEC` 334,776/262,144 bytes and `SRAM` 280,784/262,144 bytes, so no
-`bench.elf` is produced. The failed link map assigns `kBankSamples` address
-`0x2402c9b8`; against `alt_sram.lds` that is the AXI `SRAM_EXEC` region
-(`0x24000000..0x2403ffff`), not QSPI. This address is evidence from a failed
-link, not an accepted final placement. There are therefore no current
-`synth_2x4`/`wave_2x4` cycle figures and no linked-bank production decision.
-Per the WAVE gate, resolve the SRAM capacity/design question before adding
-any QSPI section or storage-copy mechanism, then rebuild and rerun twice on
-hardware.
+The 2026-07-24 Task 8 firmware gate now builds. The generated ARM-only
+placement puts the 65,024-byte `kBankSamples` at `0x90040000`. Serial system
+rows construct their measured objects in one max-sized lifetime arena;
+construction of the next row destroys the previous group before reusing the
+same aligned AXI storage. The 64 KiB `g_sram` measurement arena remains in
+physical AXI SRAM. The linker split was moved 736 bytes inside that same
+contiguous 512 KiB AXI block; no measured object changed bus, cache, or
+latency class.
+
+The accepted build-only map is deliberately recorded because the margins are
+tight:
+
+```text
+DTCMRAM     8,420 / 131,072 bytes   6.42%
+SRAM_EXEC 262,864 / 262,880 bytes  99.99%  (16 bytes free)
+SRAM      261,384 / 261,408 bytes  99.99%  (24 bytes free)
+QSPIFLASH  65,024 / 8,126,464 bytes 0.80%
+```
+
+`build/bench.elf`, `build/bench-sram.elf`, and the exact 65,024-byte
+`build/bench-qspi.bin` are produced. `g_sram` maps to `0x240302d0`,
+`g_system_arena` to `0x240606c0`, and `kBankSamples` to `0x90040000`.
+
+Hardware measurement remains **NEEDS_CONTEXT**, not complete: the Seed must
+be placed physically into Daisy bootloader DFU mode before the separate QSPI
+payload can be programmed and uploaded for byte verification. No
+`synth_2x4`/`wave_2x4` cycle or checksum result is claimed until that step and
+the subsequent two-run SWD measurement have actually happened.

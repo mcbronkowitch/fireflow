@@ -13,6 +13,7 @@ BANK_SOURCE = ROOT / "engine" / "synth" / "wt_bank.cpp"
 LINKER = ROOT / "alt_sram.lds"
 RUNNER = ROOT / "bench" / "run.py"
 OPENOCD_CFG = ROOT / "bench" / "openocd" / "spotykach-sram.cfg"
+REPORT_SOURCE = ROOT / "bench" / "report.cpp"
 SAMPLE_SHA = "81a914d0248bc7265703b81e27e4546264993705c11c1e30acd45cae2390e747"
 
 
@@ -66,13 +67,13 @@ class Task8Contract(unittest.TestCase):
         ):
             self.assertIn(expected, body)
         self.assertIn(
-            "void setup_synth_2x4() "
-            "{ setup_engine_2x4(g_synth_2x4_a, g_synth_2x4_b); }",
+            "auto& pair = g_system_arena.emplace<SynthPairGroup>(); "
+            "setup_engine_2x4(pair.a, pair.b);",
             normalized,
         )
         self.assertIn(
-            "void setup_wave_2x4() "
-            "{ setup_engine_2x4(g_wave_2x4_a, g_wave_2x4_b); }",
+            "auto& pair = g_system_arena.emplace<WavePairGroup>(); "
+            "setup_engine_2x4(pair.a, pair.b);",
             normalized,
         )
 
@@ -89,15 +90,39 @@ class Task8Contract(unittest.TestCase):
         ):
             self.assertIn(expected, body)
         self.assertIn(
-            "float proc_synth_2x4() "
-            "{ return proc_engine_2x4(g_synth_2x4_a, g_synth_2x4_b); }",
+            "auto& pair = g_system_arena.get<SynthPairGroup>(); "
+            "return proc_engine_2x4(pair.a, pair.b);",
             normalized,
         )
         self.assertIn(
-            "float proc_wave_2x4() "
-            "{ return proc_engine_2x4(g_wave_2x4_a, g_wave_2x4_b); }",
+            "auto& pair = g_system_arena.get<WavePairGroup>(); "
+            "return proc_engine_2x4(pair.a, pair.b);",
             normalized,
         )
+
+    def test_serial_system_groups_do_not_coexist_as_globals(self) -> None:
+        normalized = compact(self.source)
+        for group in (
+            "ModGroup",
+            "SynthGroup",
+            "SynthPairGroup",
+            "WavePairGroup",
+            "FxGroup",
+            "InstrumentGroup",
+        ):
+            self.assertIn(f"struct {group}", normalized)
+        self.assertIn("SerialArena<", self.source)
+        self.assertIn("g_system_arena", self.source)
+        for obsolete in (
+            "SuperModulator g_mod_a",
+            "Part g_hook_a",
+            "SynthEngine g_synth;",
+            "SynthEngine g_synth_2x4_a",
+            "WaveEngine g_wave_2x4_a",
+            "PartFx g_fx;",
+            "Instrument g_inst;",
+        ):
+            self.assertNotIn(obsolete, self.source)
 
     def test_rows_and_bank_source_are_linked_together(self) -> None:
         rows = compact(self.source)
@@ -153,6 +178,14 @@ class Task8Contract(unittest.TestCase):
     def test_qspi_region_and_sram_loader_respect_split_image_contract(self) -> None:
         linker = compact(LINKER.read_text(encoding="utf-8"))
         self.assertIn(
+            "SRAM_EXEC (RWX) : ORIGIN = 0x24000000, LENGTH = 0x402E0",
+            linker,
+        )
+        self.assertIn(
+            "SRAM (RWX) : ORIGIN = 0x240402E0, LENGTH = 0x3FD20",
+            linker,
+        )
+        self.assertIn(
             "QSPIFLASH (RX) : ORIGIN = 0x90040000, LENGTH = 7936K",
             linker,
         )
@@ -164,6 +197,16 @@ class Task8Contract(unittest.TestCase):
         self.assertIn("require_clean_tree", runner)
         cfg = OPENOCD_CFG.read_text(encoding="utf-8")
         self.assertIn("load_image $IMAGE", cfg)
+
+    def test_report_format_scratch_is_preserved_in_dtcm_not_axi_bss(self) -> None:
+        report = REPORT_SOURCE.read_text(encoding="utf-8")
+        self.assertIn(
+            '#define DTCM_REPORT_BSS __attribute__((section(".dtcmram_bss")))',
+            report,
+        )
+        self.assertIn("char DTCM_REPORT_BSS g_buf[256];", report)
+        body = compact(function_body(report, "logf"))
+        self.assertIn("vsnprintf(g_buf, sizeof(g_buf), fmt, ap);", body)
 
 
 if __name__ == "__main__":

@@ -9,8 +9,12 @@ MEMORY
 {
 	FLASH		(RX)  : ORIGIN = 0x08000000, LENGTH = 128K
 	DTCMRAM		(RWX) : ORIGIN = 0x20000000, LENGTH = 128K
-	SRAM_EXEC	(RWX) : ORIGIN = 0x24000000, LENGTH = 256K
-	SRAM		(RWX) : ORIGIN = 0x24000000 + 256K, LENGTH = 512K - 256K
+	/*
+	 * One physical 512K AXI SRAM. The 0x2e0 boundary shift only balances
+	 * linker bookkeeping; bus, cache, and latency remain identical.
+	 */
+	SRAM_EXEC	(RWX) : ORIGIN = 0x24000000, LENGTH = 0x402E0
+	SRAM		(RWX) : ORIGIN = 0x240402E0, LENGTH = 0x3FD20
 	RAM_D2		(RWX) : ORIGIN = 0x30000000, LENGTH = 32K
 	RAM_D2CACHE	(RWX) : ORIGIN = 0x30000000 + 32K, LENGTH = 288K - 32K
 	RAM_D3		(RWX) : ORIGIN = 0x38000000, LENGTH = 64K
@@ -118,7 +122,7 @@ SECTIONS
 	 * SamplerEngine.
 	 *
 	 * SRAM_EXEC and SRAM are the SAME physical AXI SRAM (D1, 512K at
-	 * 0x24000000), split into a code half and a data half by the MEMORY
+	 * 0x24000000), split into contiguous code/data regions by the MEMORY
 	 * block above -- same bus, same latency, same MPU cache attributes. So
 	 * data parked here is AXI SRAM in every sense a cycle count can see;
 	 * it is only on the other side of a bookkeeping line. Placed after the
