@@ -23,7 +23,7 @@ is actually built today, and what is still design-only.
 | Milestone | Scope | Status |
 |-----------|-------|--------|
 | **M1** | Portable engine foundation: SuperModulator, five lanes, `Instrument` API, desktop render host + tests | ✅ **done** |
-| **+ Scales** | Pitch quantization (6 scales, SCALE/CHROM/FREE, root) layered onto the PITCH lane | ✅ **done** (engine + host; UI wiring deferred to M6) |
+| **+ Scales** | Pitch quantization (13 scales, SCALE/CHROM/FREE, root) layered onto the PITCH lane | ✅ **done** (engine + host; UI wiring deferred to M6) |
 | **M1.6** | FX: per-part FLUX (tape echo) + GRIT (drive/reduce), shared ambient reverb, FX params as modulation targets | ✅ **done** (engine + host; UI wiring deferred to M6) |
 | **M2** | Polyphonic synth voice (replaces the M1 test tone) | ✅ **done** (engine + host; UI wiring deferred to M6) |
 | **M3** | Capture sequencer (freeze the PITCH lane into a loop) | ✅ **done** (engine + host; UI wiring deferred to M6) |
@@ -96,8 +96,10 @@ but not yet wired (that is UI work, i.e. M6).
   `SCALE / CHROM / FREE`, 12-bit scale mask, root in semitones, ±15-cent
   hysteresis at raster boundaries, ~30–50 ms change slew (FREE is a bit-exact
   passthrough).
-- **6 scales, dark → bright:** minor pentatonic, Aeolian, **Dorian (default)**,
-  major pentatonic, Lydian, whole tone. Boot default: Dorian, both parts SCALE.
+- **13 scales in three groups,** dark → bright inside each: modes (Aeolian,
+  **Dorian (default)**, Mixolydian, Lydian), pentatonics (Hirajoshi, Pygmy,
+  minor pentatonic, Kumoi, major pentatonic), exotic (Phrygian, Hijaz,
+  harmonic minor, whole tone). Boot default: Dorian, both parts SCALE.
 - **Placement** — last stage of `Part::target_value(LANE_PITCH)`, so SMOOTH
   glides step through scale notes and ENTROPY grows or erodes the melody. `pitch_cv()` is
   the single quantized source of truth for engine, CV out, and the future

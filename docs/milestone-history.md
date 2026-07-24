@@ -41,8 +41,8 @@ MSVC; `source env.sh`).
 
 ### Scales layer (2026-07-11, on `main`)
 
-Pitch quantization (6 scales, SCALE/CHROM/FREE, root) on the PITCH lane; UI
-wiring deferred to M6.
+Pitch quantization (13 scales in three groups, SCALE/CHROM/FREE, root) on the
+PITCH lane; UI wiring deferred to M6. The list expanded on 2026-07-23.
 
 ## M1.6 — FX (2026-07-11)
 
@@ -237,7 +237,7 @@ shipped; M6 implementation itself has not started as of M5a.)
 Three parallel reviewer agents (UX / embedded / promise-accounting) audited
 all 8 specs against the fork; essential findings folded back into the
 specs before M4/M5/M6 implementation started. Key amendments implementers
-had to honor: (1) M6 scales re-home to a global-scale + per-part-mode
+had to honor: (1) M6 scale controls re-home to a global-scale + per-part-mode
 model, mode = 3-zone SHAPE knob in the PITCH edit layer (an earlier 8-zone
 per-part idea was dropped). (2) ALT-entered edit layers latch; a plain ALT
 tap exits. (3) M6 gained 4 engine deltas: `set_pitch_cv_offset` (V/Oct,

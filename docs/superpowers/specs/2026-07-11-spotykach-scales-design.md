@@ -24,7 +24,12 @@ for pitch-drift experiments.
 | CHROM | quantize to 12 semitones — drift steps audibly in semitones |
 | FREE  | passthrough, exactly today's continuous behavior |
 
-Global scale list — 6 scales ordered dark → bright, so the selection knob
+> **[Superseded by `2026-07-23-spotykach-scale-list-expansion-design.md`]**
+> — the list below grew to 13 entries in three groups (modes / pentatonics /
+> exotic). Dark → bright ordering now holds inside each group rather than
+> across the whole list. The model around it is unchanged.
+
+Original global scale list — six entries ordered dark → bright, so the selection knob
 sweep is a brightness axis:
 
 | # | Scale | Semitones | Character |
@@ -146,5 +151,7 @@ public:
   milestone; this spec fixes the gestures so the UI work has a contract.
 - Per-part scales (rejected: one global scale keeps the two parts
   harmonically coherent; FREE/CHROM per part covers the divergent cases).
-- Larger scale lists / user-defined scales (rejected for now: no display,
-  every scale must be blind-navigable).
+- ~~Larger scale lists~~ — reversed on 2026-07-23: the list grew to 13,
+  with grouping rather than brevity carrying blind navigability. See
+  `2026-07-23-spotykach-scale-list-expansion-design.md`. User-defined
+  scales remain out of scope.
