@@ -276,3 +276,24 @@ not just within one file's table — libDaisy's Makefile flattens every
 source path with `notdir` when it builds the object list, so two files
 named e.g. `voice.cpp` in different directories would collide at link time
 even though their paths differ.
+
+## WAVE direct-engine gate
+
+`system/synth_2x4` and `system/wave_2x4` are an intentionally matched
+direct-engine pair. Each row owns two engines seeded `3` and `4`, initializes
+them at 48 kHz, sets decay to `1`, cycle to 2 s, and FLOW false, and triggers
+the exact pitches `{0.25, 0.35, 0.45, 0.55}` on both engines. One measured
+call processes both engines for exactly the 96-sample block, accumulates all
+four L/R outputs, and folds both active-voice counts into the checksum.
+
+The 2026-07-24 Task 8 gate is **blocked before hardware measurement**. With
+the 65,024-byte bank linked, `python run.py --build-only` reports
+`SRAM_EXEC` 334,776/262,144 bytes and `SRAM` 280,784/262,144 bytes, so no
+`bench.elf` is produced. The failed link map assigns `kBankSamples` address
+`0x2402c9b8`; against `alt_sram.lds` that is the AXI `SRAM_EXEC` region
+(`0x24000000..0x2403ffff`), not QSPI. This address is evidence from a failed
+link, not an accepted final placement. There are therefore no current
+`synth_2x4`/`wave_2x4` cycle figures and no linked-bank production decision.
+Per the WAVE gate, resolve the SRAM capacity/design question before adding
+any QSPI section or storage-copy mechanism, then rebuild and rerun twice on
+hardware.

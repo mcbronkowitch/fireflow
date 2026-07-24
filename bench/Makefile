@@ -39,6 +39,7 @@ CPP_SOURCES = \
 	../engine/mod/lane.cpp \
 	../engine/sampler/sampler_engine.cpp \
 	../engine/sampler/sample_buffer.cpp \
+	../engine/sampler/slice_map.cpp \
 	../engine/mod/super_modulator.cpp \
 	../engine/parts/part.cpp \
 	../engine/instrument.cpp \
@@ -50,7 +51,8 @@ CPP_SOURCES = \
 	../engine/fx/part_fx.cpp \
 	../engine/fx/comp.cpp \
 	../engine/synth/voice.cpp \
-	../engine/synth/synth_engine.cpp
+	../engine/synth/synth_engine.cpp \
+	../engine/synth/wt_bank.cpp
 
 SYSTEM_FILES_DIR = $(LIBDAISY_DIR)/core
 include $(SYSTEM_FILES_DIR)/Makefile

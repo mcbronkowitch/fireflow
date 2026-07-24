@@ -101,7 +101,55 @@ float proc_synth()
     return acc;
 }
 
-// --- 6. FX blocks, one at a time -------------------------------------------
+// --- 6-7. matched two-engine, four-voice SYNTH / WAVE -----------------------
+// Direct-engine A/B comparison: every setup and process operation is shared
+// by construction, so the oscillator type is the only measured difference.
+constexpr float kEngine2x4Pitches[] = { 0.25f, 0.35f, 0.45f, 0.55f };
+
+SynthEngine g_synth_2x4_a, g_synth_2x4_b;
+WaveEngine  g_wave_2x4_a,  g_wave_2x4_b;
+
+template <class EngineT>
+void setup_engine_2x4(EngineT& a, EngineT& b)
+{
+    a.set_seed(3u);
+    b.set_seed(4u);
+    a.init(kSampleRate);
+    b.init(kSampleRate);
+    a.set_decay(1.f);
+    b.set_decay(1.f);
+    a.set_cycle(2.f);
+    b.set_cycle(2.f);
+    a.set_flow(false);
+    b.set_flow(false);
+    for (float pitch : kEngine2x4Pitches) {
+        a.trigger(pitch);
+        b.trigger(pitch);
+    }
+}
+
+void setup_synth_2x4() { setup_engine_2x4(g_synth_2x4_a, g_synth_2x4_b); }
+void setup_wave_2x4()  { setup_engine_2x4(g_wave_2x4_a,  g_wave_2x4_b);  }
+
+template <class EngineT>
+float proc_engine_2x4(EngineT& a, EngineT& b)
+{
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i) {
+        float a_l, a_r, b_l, b_r;
+        a.process(a_l, a_r);
+        b.process(b_l, b_r);
+        acc += a_l + a_r + b_l + b_r;
+    }
+    acc += static_cast<float>(a.active_voices());
+    acc += static_cast<float>(b.active_voices());
+    return acc;
+}
+
+float proc_synth_2x4() { return proc_engine_2x4(g_synth_2x4_a, g_synth_2x4_b); }
+float proc_wave_2x4()  { return proc_engine_2x4(g_wave_2x4_a,  g_wave_2x4_b);  }
+
+// --- 8. FX blocks, one at a time -------------------------------------------
 // PartFx carries GRIT, FLUX and COMP; each row turns on exactly one so the
 // 8-10 % FX estimate decomposes. `FxBlock` is an enum class with only Flux and
 // Grit -- COMP is not a block, it is set_comp(amount) and bypasses bit-exactly
@@ -341,6 +389,8 @@ const Workload kCoreWorkloads[] = {
     { "system", "synth_1_voice",      setup_synth_1,   proc_synth   },
     { "system", "synth_2_voices",     setup_synth_2,   proc_synth   },
     { "system", "synth_4_voices",     setup_synth_4,   proc_synth   },
+    { "system", "synth_2x4",          setup_synth_2x4, proc_synth_2x4 },
+    { "system", "wave_2x4",           setup_wave_2x4,  proc_wave_2x4  },
     { "system", "fx_none",            setup_fx_none,   proc_fx      },
     { "system", "fx_grit",            setup_fx_grit,   proc_fx      },
     { "system", "fx_flux_sdram",      setup_fx_flux,   proc_fx      },
