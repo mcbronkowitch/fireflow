@@ -383,8 +383,23 @@ linked image. The final symbols are `srand=0x240010f4` and
 `rand=0x24001104`; disassembly shows the call from `main` before the first
 `run_workload`.
 
-Hardware measurement remains **NEEDS_CONTEXT**, not complete: the Seed must
-be connected through the ST-Link so the SRAM helper can program and verify
-the separate QSPI payload. No `synth_2x4`/`wave_2x4` cycle or checksum result
-is claimed until the controller performs that step and the subsequent
-two-run SWD measurement.
+The controller completed two full hardware runs on 2026-07-24. Both reached
+`BENCH_END`, neither emitted a checksum-drift warning, and both verified that
+the live QSPI SHA-256 and MCU UID matched the programming receipt.
+
+| run | `synth_2x4` avg/max | `wave_2x4` avg/max |
+|---|---:|---:|
+| 1 | 340,352 / 346,091 | 308,662 / 312,534 |
+| 2 | 340,345 / 346,132 | 308,597 / 312,170 |
+
+In both runs WAVE is lower than Synth on both average and maximum cycles, and
+both WAVE maxima are below the 960,000-cycle block budget. Task 8 therefore
+passes its direct-engine acceptance gate. The generated
+`docs/bench/2026-07-24-7ab2e26.md` and `.csv` contain the complete first-run
+table; the second-run comparison is recorded separately above.
+
+The verdict is protected by the receipt-bound live-payload check, target UID
+check, full-run terminator, repeat-run checksum comparison, heap-free random
+shim, explicit reset-safe random seed, fixed QSPI bank placement, and unchanged
+measured AXI object addresses. Production firmware and DaisySP remain
+unchanged.
