@@ -1,7 +1,7 @@
 # Spotykach Song-Form Pattern Chaining — Persistent `AAAB` Turnaround
 
 **Date:** 2026-07-24
-**Status:** Approved design; written-spec review pending
+**Status:** Approved design and written spec
 **Scope:** PITCH lane in STEP mode, phrase/rhythm generation, VCV FORM control,
 and tests. FLOW, non-melodic lanes, synth/sampler engines, scales, and hardware
 firmware mapping are unchanged.
