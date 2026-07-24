@@ -38,7 +38,7 @@ static constexpr float kInitParamDefaults[] = {
      0.000000000f, // ATTACK_B
      0.450666636f, // DECAY_B
      0.379000008f, // RES_B
-     0.536333203f, // SUB_B
+     0.400000000f, // SUB_B
      0.087999999f, // DETUNE_B
      0.462666422f, // FLUX_B
      0.057000086f, // GRIT_B
