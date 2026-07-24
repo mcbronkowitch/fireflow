@@ -106,6 +106,11 @@ PLAY retains all current controls and the current two-part rhythm:
 The two clusters are distinguished by spacing and a very light tonal change,
 not by an additional divider line.
 
+Deck A receives one borderless mode/record field at
+`(5.00, 99.60, 29.00, 10.60 mm)`, filled with PAPER_DEEP at SVG
+`fill-opacity="0.25"`. Deck B mirrors this rectangle. The sequencer cluster
+uses the parent PLAY fill without another nested field.
+
 ## 3. VOICE functional order
 
 VOICE is organized as three vertical functional pairs. Deck A reads from the
@@ -250,9 +255,11 @@ Expected test updates:
 
 - `host/vcv/res/test_panel.py`
 
-`host/vcv/src/Spotymod.cpp` remains unchanged. The existing generated label
-metadata already carries explicit positions, anchors, sizes, and colors; this
-redesign changes generator data only.
+`host/vcv/src/Spotymod.cpp` has one compatibility-wiring change: it uses
+`c.tip` when configuring runtime parameter names/tooltips, preserving those
+names while generator data controls the faceplate captions. The existing
+generated label metadata already carries explicit positions, anchors, sizes,
+and colors; the visual redesign otherwise changes generator data only.
 
 ## 9. Verification
 

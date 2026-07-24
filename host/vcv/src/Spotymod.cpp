@@ -161,7 +161,7 @@ struct Spotymod : Module {
 
     void configControls() {
         for (const auto& c : kParamCtls) {
-            const std::string lbl = c.label;
+            const std::string lbl = c.tip;
             const float init = initParamDefault(c.id);
             switch (c.kind) {
                 case WK_BIGKNOB:

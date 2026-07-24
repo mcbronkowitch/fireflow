@@ -47,11 +47,12 @@ downbeats, and the transport's raw-phase anchors stay straight.
 
 **ENG** (per part, latched) selects the part's engine: **Synth** or **Sampler**
 — a granular texture deck over the shared record buffer. Flipping ENG to
-Sampler on an empty part autoloads a factory sample (Bastian's own recording,
-`res/factory.wav`) so the deck makes sound on the very first gesture; it never
-overwrites content already in the buffer, and a deliberate *Clear sample*
-stays cleared even if you flip ENG back and forth. On a Synth part, ENG is the
-only mode control — REC is inert there.
+Sampler on an empty part autoloads the embedded first four bars of the
+project author's own 110 BPM bass loop (`res/factory.wav`) so the deck makes
+sound on the very first gesture; it never overwrites content already in the
+buffer, and a deliberate *Clear sample* stays cleared even if you flip ENG
+back and forth. On a Synth part, ENG is the only mode control — REC is inert
+there.
 
 **REC** (per part, latched) records from **IN L/R** into that part's buffer
 while the sampler is free to keep playing what it already has (fill-follows:

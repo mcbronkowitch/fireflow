@@ -36,6 +36,9 @@ PAPER      = "#f7f4ec"   # plate
 PAPER_HI   = "#faf8f2"   # plate gradient top
 PAPER_LO   = "#f0ebdd"   # plate gradient bottom
 PAPER_DEEP = "#ede5d6"   # cards / pad backplates
+FX_FLUX    = "#dfe5dc"   # connected FLUX/TAPE fields
+FX_GRIT    = "#e6ddd1"   # connected GRIT/dynamics fields
+FX_ROOM    = "#e8e0d4"   # per-deck ROOM fields
 LINE       = "#d7cdbb"   # hairlines
 INK        = "#171713"   # lettering
 MUTED      = "#656056"   # eyebrows / neutral collars
@@ -47,6 +50,14 @@ COPPER     = "#b96532"   # part B accent (copper orange)
 GREEN_DIM  = "#2e6355"   # A ring track dots / letter (on the dark well)
 COPPER_DIM = "#8a5230"   # B ring track dots / letter
 GLOW       = (0x3FBF9C, 0xE8945A)   # runtime LED glow per part (A, B)
+
+# --- Quiet Technical surface constants ---------------------------------------
+GROUP_STROKE = 0.30
+GROUP_FILL_OPACITY = 0.45
+SECTOR_R_IN = 20.50
+SECTOR_R_OUT = 31.00
+SECTOR_OPACITY = 0.045
+PLAY_FIELD_OPACITY = 0.25
 
 # --- control kinds ------------------------------------------------------------
 BIGKNOB = "BIGKNOB"   # macro pot (0..1)
@@ -88,20 +99,20 @@ def label_of(c):
     return default_label_of(c)
 
 class Ctl:
-    def __init__(self, enum, kind, x, y, label):
+    def __init__(self, enum, kind, x, y, label, tip=None):
         self.enum, self.kind, self.x, self.y, self.label = enum, kind, x, y, label
         self.r = GLYPH_R[kind]
         # None -> default placement (centred below the glyph); otherwise an
         # explicit (x, y, anchor, size, colour) tuple. Radial orbit captions
         # and white-on-well jack labels set this.
         self.lbl = None
-        self.tip = label   # tooltip text; panel label and tooltip differ on jacks
+        self.tip = label if tip is None else tip
 
 # geometry of a side ring
-RING_CY   = 37.0
+RING_CY   = 34.5
 RING_R    = 16.0       # LED dot radius
-KNOB_R    = 26.5       # macro-knob orbit radius
-RING_CX_A = 42.0       # left ring center; B is mirrored (W - x)
+KNOB_R    = 25.5       # macro-knob orbit radius
+RING_CX_A = 39.5       # left ring center; B is mirrored (W - x)
 
 # Sector orbit (spec 2026-07-18 §1): 9 positions at 40 deg pitch, sorted by
 # meaning -- MOTION, then TIMBRE, then PITCH. 0 deg = top, clockwise on part A;
@@ -111,18 +122,36 @@ ORBIT_ANG = {"RATE": 0.0, "DENSITY": 40.0, "SMOOTH": 80.0, "SHAPE": 120.0,
              "COLOR": 320.0}
 
 # (caption, start angle, end angle, part-A caption position)
-SECTORS = [("MOTION", -16.0,  96.0, (74.0,  8.2)),
-           ("TIMBRE", 112.0, 176.0, (74.0, 67.6)),
-           ("PITCH",  192.0, 336.0, (11.0,  8.2))]
+SECTORS = [("MOTION", -16.0,  96.0, (70.0,  8.2)),
+           ("TIMBRE", 112.0, 176.0, (70.0, 67.0)),
+           ("PITCH",  192.0, 336.0, ( 9.0,  8.2))]
 
 # --- fieldset groups (spec 2026-07-18 §4) ------------------------------------
 # One shared style: paper-deep panel, hairline stroke, and a legend riding the
 # top border on a small paper chip. (x, y, w, h, legend, legend colour)
 def part_groups(mir):
     def fx(x, w): return (W - x - w) if mir else x
-    return [(fx(4.0, 37.0),  72.4, 37.0, 24.5, "VOICE", MUTED),
-            (fx(43.5, 38.5), 72.4, 38.5, 24.5, "FX",    MUTED),
+    return [(fx(4.0, 31.5),  72.4, 31.5, 24.5, "VOICE", MUTED),
+            (fx(38.0, 44.0), 72.4, 44.0, 24.5, "FX",    MUTED),
             (fx(4.0, 78.0),  98.6, 78.0, 12.6, "PLAY",  MUTED)]
+
+def part_fx_fields(mir):
+    def mx(x, w):
+        return W - x - w if mir else x
+    return [
+        (mir, "FLUX_TOP",    mx(39.0, 31.0), 73.6, 31.0, 10.0, FX_FLUX),
+        (mir, "ROOM",        mx(70.5, 10.5), 73.6, 10.5, 10.0, FX_ROOM),
+        (mir, "FLUX_BOTTOM", mx(39.0, 21.0), 84.4, 21.0, 11.3, FX_FLUX),
+        (mir, "GRIT",        mx(60.5, 20.5), 84.4, 20.5, 11.3, FX_GRIT),
+    ]
+
+FX_FIELDS = part_fx_fields(False) + part_fx_fields(True)
+
+def part_play_field(mir):
+    x, y, w, h = 5.0, 99.6, 29.0, 10.6
+    return (mir, W - x - w if mir else x, y, w, h)
+
+PLAY_FIELDS = [part_play_field(False), part_play_field(True)]
 
 def group_box(x, y, w, h, legend):
     """Box + the paper chip that breaks the top border for the legend. The
@@ -131,7 +160,8 @@ def group_box(x, y, w, h, legend):
     cw = 1.35 * len(legend) + 2.5
     return "\n".join([
         f'<rect x="{mm(x)}" y="{mm(y)}" width="{mm(w)}" height="{mm(h)}" rx="1.5" '
-        f'fill="{PAPER_DEEP}" stroke="{LINE}" stroke-width="0.35"/>',
+        f'fill="{PAPER_DEEP}" fill-opacity="{GROUP_FILL_OPACITY:.2f}" '
+        f'stroke="{LINE}" stroke-width="{GROUP_STROKE:.2f}"/>',
         f'<rect x="{mm(x + 5.0 - cw / 2)}" y="{mm(y - 1.3)}" width="{mm(cw)}" '
         f'height="2.6" fill="{PAPER}"/>'])
 
@@ -149,7 +179,7 @@ def orbit_label(cx, cy, ang_deg, mir):
     knob and the LED ring (spec 2026-07-18 §2)."""
     a = math.radians(ang_deg)
     s, c = math.sin(a), math.cos(a)
-    r = 33.8 if c < -0.38 else (33.2 if (abs(s) < 0.38 and c > 0.38) else 34.2)
+    r = 31.3 if c < -0.38 else (31.5 if (abs(s) < 0.38 and c > 0.38) else 31.7)
     dy = 2.2 if c < -0.38 else (0.0 if c > 0.38 else 0.7)
     anchor = "start" if s > 0.38 else ("end" if s < -0.38 else "middle")
     if mir:
@@ -159,14 +189,14 @@ def orbit_label(cx, cy, ang_deg, mir):
 
 # --- lower half per part (spec 2026-07-18 §5) --------------------------------
 # VOICE and FX sit side by side, PLAY spans the full part width below them.
-VOICE_X  = [9.5, 22.5, 35.5]        # ATK DEC FILT / RES SUB DTUN
+VOICE_X  = [9.25, 19.75, 30.25]      # ATK FILT SUB / DEC RES DTUN
 ROW_V1, ROW_V2 = 77.3, 89.4
-# 4-wide, aligned to FX_BOT so the FX box's two rows flush: FRATE FLUX FFB ROOM.
-FX_TOP   = [49.5, 58.333, 67.167, 76.0]   # FRATE FLUX FFB | ROOM (per-deck reverb mix)
+# 4-wide, aligned to FX_BOT so the FX box's two rows flush: RATE MIX FB ROOM.
+FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # RATE MIX FB | ROOM (per-deck reverb mix)
 # FX bottom row went from two slots to four (spec 2026-07-18 dust-grain-cloud):
-# GRIT COMP DUST ROT. Pitch 8.833 mm against a 3.0 mm knob radius, so the
+# DUST ROT GRIT COMP. Pitch 10.50 mm against a 3.0 mm knob radius, so the
 # 6.0 mm minimum in test_no_overlap still has room to spare.
-FX_BOT   = [49.5, 58.333, 67.167, 76.0]   # GRIT COMP | DUST ROT
+FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # DUST ROT | GRIT COMP
 PLAY_Y   = 103.6
 # The PLAY row's left block re-spaced to seat REC between GRIT and STEPS
 # (spec 2026-07-18 "VCV layer": REC is the only new panel element). All four
@@ -197,21 +227,21 @@ def part_controls(mir=False):
         c = Ctl(enum, KNOBC if enum == "MELODY" else BIGKNOB, x, y, lbl)
         c.lbl = orbit_label(cx, RING_CY, ang, mir)
         out.append(c)
-    # voice row (small): ATK DEC | RES SUB DTUN. FILT fills slot 2 of the top
+    # voice row (small): ATK FILT SUB | DEC RES DTUN. FILT fills slot 2 of the top
     # row but is appended at the END of PARAMS (see below), never here -- that
     # would grow PART_STRIDE and shift every part-B/SHARED param id.
-    for (enum, lbl, x, y) in [("ATTACK", "ATK", VOICE_X[0], ROW_V1),
-                              ("DECAY",  "DEC", VOICE_X[1], ROW_V1),
-                              ("RES",    "RES", VOICE_X[0], ROW_V2),
-                              ("SUB",    "SUB", VOICE_X[1], ROW_V2),
+    for (enum, lbl, x, y) in [("ATTACK", "ATK",  VOICE_X[0], ROW_V1),
+                              ("DECAY",  "DEC",  VOICE_X[0], ROW_V2),
+                              ("RES",    "RES",  VOICE_X[1], ROW_V2),
+                              ("SUB",    "SUB",  VOICE_X[2], ROW_V1),
                               ("DETUNE", "DTUN", VOICE_X[2], ROW_V2)]:
         out.append(Ctl(enum, SMKNOB, fx(x), y, lbl))
     # fx box: the FLUX delay cluster (RATE . MIX . FB) on top, GRIT/COMP below.
     # FLUX (the delay MIX) is the template member; RATE/FB are appended at the
     # end of PARAMS. STEPS keeps its append slot here but has moved to the PLAY
     # box -- it is a sequencer parameter, not an effect (spec 2026-07-18 §5).
-    out.append(Ctl("FLUX", SMKNOB, fx(FX_TOP[1]), ROW_V1, "FLUX"))
-    for i, (enum, lbl) in enumerate([("GRIT", "GRIT"), ("COMP", "COMP")]):
+    out.append(Ctl("FLUX", SMKNOB, fx(FX_TOP[1]), ROW_V1, "MIX", "FLUX"))
+    for enum, lbl, i in (("GRIT", "GRIT", 2), ("COMP", "COMP", 3)):
         out.append(Ctl(enum, SMKNOB, fx(FX_BOT[i]), ROW_V2, lbl))
     out.append(Ctl("STEPS", KNOBI, fx(STEPS_X), PLAY_Y, "STPS"))
     pads = [("ENGINE", LATCH, "ENG"), ("GRITMODE", LATCH, "GRIT"),
@@ -286,8 +316,8 @@ OUTPUTS = [jack_at(e) for e in ("OUT_L", "OUT_R", "PITCH_A", "GATE_A",
 
 # The centre's outer background card is gone (spec 2026-07-18 §6) -- the four
 # fieldset boxes carry the grouping alone and grew to 41 mm, so the columns
-# move out from +-10.5 to +-11.5.
-L, R = CX - 11.5, CX + 11.5
+# use +/-10.5 outer columns.
+L, R = CX - 10.5, CX + 10.5
 ROW_BLEND = 21.5
 ROW_TIME1, ROW_TIME2 = 42.0, 54.0
 ROW_DUO1, ROW_DUO2 = 68.0, 78.0
@@ -314,12 +344,12 @@ SHARED = [
     Ctl("MASTER_DRIVE", SMKNOB, CX, ROW_DUO2, "DRIVE"),
     Ctl("SETTLE", SMBTN,   R,  ROW_DUO2, "SETL"),
     # ROOM: three semantic columns, bottom edge flush with the PLAY boxes.
-    Ctl("REV_SIZE",  SMKNOB, CX - 12.0, ROW_ROOM1, "SIZE"),
-    Ctl("REV_DECAY", SMKNOB, CX - 12.0, ROW_ROOM2, "DECAY"),
+    Ctl("REV_SIZE",  SMKNOB, L,         ROW_ROOM1, "SIZE"),
+    Ctl("REV_DECAY", SMKNOB, L,         ROW_ROOM2, "DECAY"),
     Ctl("REV_TONE",  SMKNOB, CX,        ROW_ROOM1, "TONE"),
     Ctl("REV_DIFF",  SMKNOB, CX,        ROW_ROOM2, "DIFF"),
-    Ctl("REV_SMEAR", SMKNOB, CX + 12.0, ROW_ROOM1, "SMEAR"),
-    Ctl("REV_MOD",   SMKNOB, CX + 12.0, ROW_ROOM2, "WOBL"),
+    Ctl("REV_SMEAR", SMKNOB, R,         ROW_ROOM1, "SMEAR"),
+    Ctl("REV_MOD",   SMKNOB, R,         ROW_ROOM2, "WOBL"),
     # CHOKE: bipolar event-priority between the decks (spec 2026-07-16
     # choke-priority). Appended LAST on purpose: existing .vcv patches keep
     # their param ids.
@@ -337,9 +367,9 @@ def color_ctl(suffix, mir):
 PARAMS = PART_A + PART_B + SHARED + [
     # FILT: bipolar cutoff trim (spec 2026-07-17). Appended LAST like CHOKE so
     # existing .vcv patches keep their param ids; coordinates put it in the
-    # top voice row, third slot (after ATK, DEC).
-    Ctl("FILT_A", SMKNOB, VOICE_X[2],     ROW_V1, "FILT"),
-    Ctl("FILT_B", SMKNOB, W - VOICE_X[2], ROW_V1, "FILT"),
+    # top voice row's middle slot (after ATK).
+    Ctl("FILT_A", SMKNOB, VOICE_X[1],     ROW_V1, "FILT"),
+    Ctl("FILT_B", SMKNOB, W - VOICE_X[1], ROW_V1, "FILT"),
     # TIDE: texture-lane rate of both decks (spec 2026-07-17 mod-tide).
     # Appended LAST like CHOKE/FILT so existing .vcv patches keep their ids;
     # the coordinate puts it beside MORPH in the centre's movement column
@@ -350,10 +380,10 @@ PARAMS = PART_A + PART_B + SHARED + [
     # They complete the FLUX delay cluster atop the FX box: RATE (FX_TOP[0]),
     # MIX (FX_TOP[1], from the template), FB (FX_TOP[2]) sit together;
     # GRIT/COMP fill FX_BOT below.
-    Ctl("FLUXRATE_A", SMKNOB, FX_TOP[0],     ROW_V1, "FRATE"),
-    Ctl("FLUXRATE_B", SMKNOB, W - FX_TOP[0], ROW_V1, "FRATE"),
-    Ctl("FLUXFB_A",   SMKNOB, FX_TOP[2],     ROW_V1, "FFB"),
-    Ctl("FLUXFB_B",   SMKNOB, W - FX_TOP[2], ROW_V1, "FFB"),
+    Ctl("FLUXRATE_A", SMKNOB, FX_TOP[0],     ROW_V1, "RATE", "FRATE"),
+    Ctl("FLUXRATE_B", SMKNOB, W - FX_TOP[0], ROW_V1, "RATE", "FRATE"),
+    Ctl("FLUXFB_A",   SMKNOB, FX_TOP[2],     ROW_V1, "FB", "FFB"),
+    Ctl("FLUXFB_B",   SMKNOB, W - FX_TOP[2], ROW_V1, "FB", "FFB"),
     # COLOR: chord density/colour per part (spec 2026-07-17 chord-layer), a full
     # orbit member since the 2026-07-18 redesign -- it is pitch material, so it
     # sits in the PITCH sector. Still appended LAST: order defines the param id.
@@ -362,13 +392,13 @@ PARAMS = PART_A + PART_B + SHARED + [
     # DUST / ROT: two read taps on the FLUX tape, placed by the other bank's
     # rhythm (spec 2026-07-20 rhythm-fed-delay-taps; supersedes the 2026-07-18
     # dust-grain-cloud design). Appended LAST like FILT/TIDE/FLUXRATE/COLOR so
-    # existing .vcv patches keep their param ids; the coordinates fill slots 3
-    # and 4 of the widened FX bottom row, right under the delay cluster they
-    # feed off.
-    Ctl("DUST_A", SMKNOB, FX_BOT[2],     ROW_V2, "DUST"),
-    Ctl("DUST_B", SMKNOB, W - FX_BOT[2], ROW_V2, "DUST"),
-    Ctl("ROT_A",  SMKNOB, FX_BOT[3],     ROW_V2, "ROT"),
-    Ctl("ROT_B",  SMKNOB, W - FX_BOT[3], ROW_V2, "ROT"),
+    # existing .vcv patches keep their param ids; the coordinates fill the
+    # left two slots of the widened FX bottom row, right under the delay
+    # cluster they feed off.
+    Ctl("DUST_A", SMKNOB, FX_BOT[0],     ROW_V2, "DUST"),
+    Ctl("DUST_B", SMKNOB, W - FX_BOT[0], ROW_V2, "DUST"),
+    Ctl("ROT_A",  SMKNOB, FX_BOT[1],     ROW_V2, "ROT"),
+    Ctl("ROT_B",  SMKNOB, W - FX_BOT[1], ROW_V2, "ROT"),
     # M5b: REC, the one new panel element of the texture deck. Appended LAST
     # so REC_A/REC_B take fresh trailing ids and PART_STRIDE stays 23 -- every
     # already-saved .vcv keeps every param id it has.
@@ -376,7 +406,7 @@ PARAMS = PART_A + PART_B + SHARED + [
     Ctl("REC_B", LATCH, W - REC_X, PLAY_Y, "REC"),
     # Per-deck reverb mix (spec 2026-07-23 per-deck-reverb-mix). Appended LAST
     # like FILT/FLUXRATE/COLOR/DUST/REC so PART_STRIDE stays 23 and no id before
-    # them moves. They fill the FX top row's 4th slot -- FRATE.FLUX.FFB.ROOM --
+    # them moves. They fill the FX top row's 4th slot -- RATE.MIX.FB.ROOM --
     # aligned to the FX bottom row. Label "ROOM" (not "MIX": FLUX beside it is
     # already the delay mix). The old shared centre REV_MIX is removed from
     # SHARED; its id and every id after it shift by one (accepted: old .vcv
@@ -416,9 +446,9 @@ SAMPLER_SIZE = 1.5     # mm; the main captions are 1.9
 # SAMPLER_DY = 3.0 mm below their parent, which read as orphaned -- the words
 # belonged to nothing in particular.
 #
-# The word always follows in reading order, on both halves. The panel mirrors
-# geometry, but text does not: "SCAN MELO" on part B to match a mirrored
-# layout would be a different label, not a mirrored one.
+# Deck A is the source geometry. Deck B mirrors the complete primary/secondary
+# label pair, including flipped anchors, so labels obey the same exact mirror
+# invariant as the controls and background fields.
 SAMPLER_GAP    = 0.8   # mm of air between a caption and its sampler word
 # MELODY's caption is placed radially by orbit_label(); SUB and DETUNE use the
 # centred default. That difference decides which pair rule applies -- see
@@ -434,15 +464,20 @@ MONO_ADV       = 0.6
 def text_w(s, size_mm):
     return len(s) * MONO_ADV * size_mm
 
-def sampler_texts():
-    """The sampler word beside its caption, derived from it -- never typed out.
+def mirror_anchor(anchor):
+    return {"start": "end", "end": "start", "middle": "middle"}[anchor]
 
-    The word is always start-anchored one SAMPLER_GAP behind where the
-    caption ENDS. Anchoring it away from the gap rather than from the pair's
-    left edge is what makes the layout tolerant of MONO_ADV being wrong: if
-    Rack's monospace face is wider than the estimate, caption and word grow
-    away from each other, so the pair can drift but the gap can never close
-    and the two can never overlap.
+def mirror_label(label):
+    x, y, anchor, size, colour = label
+    return (W - x, y, mirror_anchor(anchor), size, colour)
+
+def sampler_texts():
+    """Mirrored sampler aliases derived from Deck A -- never typed out twice.
+
+    Centred Deck-A aliases follow their caption in reading order. The radial
+    SCAN alias grows outward from MELO instead, keeping both words clear of the
+    MELODY knob. Deck B mirrors both the resolved primary caption and alias,
+    including their anchors.
 
     Where the pair as a whole sits depends on how the parent was placed, and
     the two rules are NOT interchangeable:
@@ -451,36 +486,41 @@ def sampler_texts():
       caption gives up its "middle" anchor and ends half a gap left of the
       knob's centre-of-pair, so "SUB LEN" straddles the knob the way "SUB"
       used to.
-    * The radial caption (MELODY) keeps its anchor point EXACTLY. That
-      position is measured, not free: orbit_label puts it outside the knob so
-      nothing lands between knob and LED ring, and the earlier attempt to
-      push a second line further out ended at x ~= 4 mm, hard against the
-      plate edge and visually orphaned from its knob. Re-anchoring the pair
-      would move MELO there for the same reason, so the word follows the
-      caption instead and the caption does not move at all.
+    * The radial caption (MELODY) keeps its anchor point EXACTLY. SCAN sits
+      one gap beyond MELO's outward glyph edge, so the pair reads SCAN MELO on
+      Deck A and mirrors to MELO SCAN on Deck B without crossing the knob.
 
-    NOTE: this MUTATES c.lbl. It reads SAMPLER_RADIAL and default_label_of
-    rather than inspecting c.lbl, so a second call recomputes from the same
-    starting point instead of from its own output.
+    NOTE: this MUTATES c.lbl. Deck A reads SAMPLER_RADIAL/default_label_of
+    rather than an already-mutated centred label, then Deck B is derived only
+    from Deck A. A second call therefore reproduces the same geometry.
     """
     out = []
-    for suffix, colour in (("_A", GREEN), ("_B", COPPER)):
-        for base, word in SAMPLER_LBL:
-            c = next(c for c in PARAMS if c.enum == base + suffix)
-            ws = text_w(word, SAMPLER_SIZE)
-            if base in SAMPLER_RADIAL:
-                lx, ly, anchor, size, col = c.lbl          # set by orbit_label
-                # Where the caption's own glyphs end, whichever side it is
-                # anchored from -- part A ends at its anchor, part B starts
-                # there and runs a caption-width to the right.
-                cap_end = lx if anchor == "end" else lx + text_w(c.label, size)
-            else:
-                _lx, ly, _anchor, size, col = default_label_of(c)
-                mid = (text_w(c.label, size) - ws) / 2.0
-                cap_end = c.x + mid - SAMPLER_GAP / 2.0
-                c.lbl = (cap_end, ly, "end", size, col)
-            out.append((cap_end + SAMPLER_GAP, ly, SAMPLER_SIZE,
-                        0.0, colour, "start", word))
+    aliases_a = {}
+    for base, word in SAMPLER_LBL:
+        c = next(c for c in PARAMS if c.enum == base + "_A")
+        ws = text_w(word, SAMPLER_SIZE)
+        if base in SAMPLER_RADIAL:
+            lx, ly, anchor, size, col = c.lbl          # set by orbit_label
+            cap_left = lx - text_w(c.label, size) if anchor == "end" else lx
+            alias = (cap_left - SAMPLER_GAP, ly, SAMPLER_SIZE,
+                     0.0, MUTED, "end", word)
+        else:
+            _lx, ly, _anchor, size, col = default_label_of(c)
+            mid = (text_w(c.label, size) - ws) / 2.0
+            cap_end = c.x + mid - SAMPLER_GAP / 2.0
+            c.lbl = (cap_end, ly, "end", size, col)
+            alias = (cap_end + SAMPLER_GAP, ly, SAMPLER_SIZE,
+                     0.0, MUTED, "start", word)
+        aliases_a[base] = alias
+        out.append(alias)
+
+    for base, word in SAMPLER_LBL:
+        a = next(c for c in PARAMS if c.enum == base + "_A")
+        b = next(c for c in PARAMS if c.enum == base + "_B")
+        b.lbl = mirror_label(label_of(a))
+        x, y, size, spacing, colour, anchor, _word = aliases_a[base]
+        out.append((W - x, y, size, spacing, colour,
+                    mirror_anchor(anchor), word))
     return out
 
 # --- shared panel lettering (drawn by SVG for preview, by C++ at runtime) -----
@@ -504,6 +544,17 @@ TEXTS = [
 #  SVG
 # =============================================================================
 def mm(v): return f"{v:.3f}"
+
+def fx_field_svg(field):
+    _mir, _name, x, y, w, h, fill = field
+    return (f'<rect x="{mm(x)}" y="{mm(y)}" width="{mm(w)}" '
+            f'height="{mm(h)}" rx="1.0" fill="{fill}"/>')
+
+def play_field_svg(field):
+    _mir, x, y, w, h = field
+    return (f'<rect x="{mm(x)}" y="{mm(y)}" width="{mm(w)}" '
+            f'height="{mm(h)}" rx="1.0" fill="{PAPER_DEEP}" '
+            f'fill-opacity="{PLAY_FIELD_OPACITY:.2f}"/>')
 
 def side_accent(x):
     """Panel accent for a control: green left half, copper right half,
@@ -552,8 +603,8 @@ def knob_svg(c):
 
 def wedge_svg(cx, a0, a1, colour, mir):
     """One tinted sector segment behind the orbit knobs: an annulus slice
-    between r 20.5 and 33.5 mm (spec 2026-07-18 §1)."""
-    R_OUT, R_IN = 33.5, 20.5
+    using the fixed Quiet Technical radii."""
+    R_OUT, R_IN = SECTOR_R_OUT, SECTOR_R_IN
     if mir:
         a0, a1 = a1, a0          # keep the on-screen sweep direction
     def pt(r, a):
@@ -565,7 +616,8 @@ def wedge_svg(cx, a0, a1, colour, mir):
     ix1, iy1 = pt(R_IN,  a1); ix0, iy0 = pt(R_IN,  a0)
     return (f'<path d="M {mm(ox0)} {mm(oy0)} A {mm(R_OUT)} {mm(R_OUT)} 0 {laf} 1 '
             f'{mm(ox1)} {mm(oy1)} L {mm(ix1)} {mm(iy1)} A {mm(R_IN)} {mm(R_IN)} '
-            f'0 {laf} 0 {mm(ix0)} {mm(iy0)} Z" fill="{colour}" opacity="0.07"/>')
+            f'0 {laf} 0 {mm(ix0)} {mm(iy0)} Z" fill="{colour}" '
+            f'opacity="{SECTOR_OPACITY:.3f}"/>')
 
 def svg():
     P = []
@@ -595,6 +647,12 @@ def svg():
     # fieldset group boxes (drawn under the glyphs, over the sector tints)
     for (x, y, w, h, name, _colour) in GROUPS:
         P.append(group_box(x, y, w, h, name))
+    # connected low-contrast family fields inside the mirrored FX boxes
+    for field in FX_FIELDS:
+        P.append(fx_field_svg(field))
+    # mode/record fields inside PLAY, after FX fields and below every control
+    for field in PLAY_FIELDS:
+        P.append(play_field_svg(field))
     # dark inner wells under the output groups -- in/out at a glance (spec §7)
     for (bx, _lg, _col, well, _items) in JACK_GROUPS:
         if well:
