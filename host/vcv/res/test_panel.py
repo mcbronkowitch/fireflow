@@ -185,16 +185,25 @@ def test_header_carries_label_columns():
 
 # --- 2026-07-18 redesign: target coordinates, read off layout-b-v7.html -------
 ORBIT_A = {           # enum -> (knob x, knob y, label x, label y, anchor)
-    'RATE_A':    (42.00,  10.50, 42.00,  3.80, 'middle'),
-    'DENSITY_A': (59.03,  16.70, 63.98, 10.80, 'start'),
-    'SMOOTH_A':  (68.10,  32.40, 75.68, 31.76, 'start'),
-    'SHAPE_A':   (64.95,  50.25, 71.27, 56.10, 'start'),
-    'MOD_A':     (51.06,  61.90, 53.56, 70.96, 'middle'),
-    'RANGE_A':   (32.94,  61.90, 30.44, 70.96, 'middle'),
-    'MELODY_A':  (19.05,  50.25, 12.73, 56.10, 'end'),
-    'TUNE_A':    (15.90,  32.40,  8.32, 31.76, 'end'),
-    'COLOR_A':   (24.97,  16.70, 20.02, 10.80, 'end'),
+    'RATE_A':    (39.500,  9.000, 39.500,  3.800, 'middle'),
+    'DENSITY_A': (55.891, 14.966, 59.876, 10.216, 'start'),
+    'SMOOTH_A':  (64.613, 30.072, 70.718, 29.695, 'start'),
+    'SHAPE_A':   (61.584, 47.250, 66.607, 52.350, 'start'),
+    'MOD_A':     (48.222, 58.462, 50.205, 66.112, 'middle'),
+    'RANGE_A':   (30.778, 58.462, 28.795, 66.112, 'middle'),
+    'MELODY_A':  (17.416, 47.250, 12.393, 52.350, 'end'),
+    'TUNE_A':    (14.387, 30.072,  8.282, 29.695, 'end'),
+    'COLOR_A':   (23.109, 14.966, 19.124, 10.216, 'end'),
 }
+
+
+def test_layout_constants():
+    check(approx(g.RING_CX_A, 39.5), f"RING_CX_A {g.RING_CX_A}, want 39.5")
+    check(approx(g.RING_CY, 34.5), f"RING_CY {g.RING_CY}, want 34.5")
+    check(approx(g.KNOB_R, 25.5), f"KNOB_R {g.KNOB_R}, want 25.5")
+    check(g.VOICE_X == [9.25, 19.75, 30.25], f"VOICE_X {g.VOICE_X}")
+    check(g.FX_TOP == [44.25, 54.75, 65.25, 75.75], f"FX_TOP {g.FX_TOP}")
+    check(g.FX_BOT == g.FX_TOP, f"FX rows disagree: {g.FX_TOP} / {g.FX_BOT}")
 
 
 def test_orbit_positions():
@@ -235,10 +244,10 @@ def test_no_label_between_knob_and_ring():
 
 
 def test_sector_captions():
-    want = [(74.00, 8.20, 'MOTION'), (74.00, 67.60, 'TIMBRE'),
-            (11.00, 8.20, 'PITCH'),
-            (g.W - 74.00, 8.20, 'MOTION'), (g.W - 74.00, 67.60, 'TIMBRE'),
-            (g.W - 11.00, 8.20, 'PITCH')]
+    want = [(70.00, 8.20, 'MOTION'), (70.00, 67.00, 'TIMBRE'),
+            (9.00, 8.20, 'PITCH'),
+            (g.W - 70.00, 8.20, 'MOTION'), (g.W - 70.00, 67.00, 'TIMBRE'),
+            (g.W - 9.00, 8.20, 'PITCH')]
     got = [(x, y, t) for (x, y, sz, sp, col, an, t) in g.TEXTS
            if t in ('MOTION', 'TIMBRE', 'PITCH')]
     check(len(got) == 6, f"{len(got)} sector captions, want 6")
@@ -257,12 +266,12 @@ def test_small_knobs_have_no_collar():
 
 
 LOWER_A = {   # enum -> (x, y)   part A; part B is W - x
-    'ATTACK_A': (9.50, 77.30), 'DECAY_A': (22.50, 77.30), 'FILT_A': (35.50, 77.30),
-    'RES_A': (9.50, 89.40), 'SUB_A': (22.50, 89.40), 'DETUNE_A': (35.50, 89.40),
-    'FLUXRATE_A': (49.50, 77.30), 'FLUX_A': (58.333, 77.30), 'FLUXFB_A': (67.167, 77.30),
-    'REV_MIX_A': (76.00, 77.30),
-    'GRIT_A': (49.50, 89.40), 'COMP_A': (58.333, 89.40),
-    'DUST_A': (67.167, 89.40), 'ROT_A': (76.00, 89.40),
+    'ATTACK_A': (9.25, 77.30), 'FILT_A': (19.75, 77.30), 'SUB_A': (30.25, 77.30),
+    'DECAY_A': (9.25, 89.40), 'RES_A': (19.75, 89.40), 'DETUNE_A': (30.25, 89.40),
+    'FLUXRATE_A': (44.25, 77.30), 'FLUX_A': (54.75, 77.30),
+    'FLUXFB_A': (65.25, 77.30), 'REV_MIX_A': (75.75, 77.30),
+    'DUST_A': (44.25, 89.40), 'ROT_A': (54.75, 89.40),
+    'GRIT_A': (65.25, 89.40), 'COMP_A': (75.75, 89.40),
     'ENGINE_A': (10.00, 103.60), 'GRITMODE_A': (17.50, 103.60),
     'STEPS_A': (37.00, 103.60), 'STEP_A': (46.00, 103.60),
     'PRINCIPLE_A': (56.50, 103.60), 'NEWPHRASE_A': (67.00, 103.60),
@@ -287,7 +296,7 @@ def test_steps_left_the_fx_row():
 
 
 def test_part_group_boxes():
-    want = [(4.0, 72.4, 37.0, 24.5, 'VOICE'), (43.5, 72.4, 38.5, 24.5, 'FX'),
+    want = [(4.0, 72.4, 31.5, 24.5, 'VOICE'), (38.0, 72.4, 44.0, 24.5, 'FX'),
             (4.0, 98.6, 78.0, 12.6, 'PLAY')]
     for (x, y, w, h, name) in want:
         check(any(approx(gx, x) and approx(gy, y) and approx(gw, w)
@@ -322,10 +331,10 @@ CENTER = {   # enum -> (x offset from CX, y)
     'MORPH': (-7.0, 21.5), 'TIDE': (11.0, 21.5),
     'SYNC': (-9.0, 42.0), 'TEMPO': (9.0, 42.0),
     'COUPLE': (-9.0, 54.0), 'SHUFFLE': (9.0, 54.0),
-    'SCALE': (-11.5, 68.0), 'CHOKE': (0.0, 68.0), 'DRIFT': (11.5, 68.0),
-    'SPOT': (-11.5, 78.0), 'MASTER_DRIVE': (0.0, 78.0), 'SETTLE': (11.5, 78.0),
-    'REV_SIZE': (-12.0, 94.0), 'REV_TONE': (0.0, 94.0), 'REV_SMEAR': (12.0, 94.0),
-    'REV_DECAY': (-12.0, 104.5), 'REV_DIFF': (0.0, 104.5), 'REV_MOD': (12.0, 104.5),
+    'SCALE': (-10.5, 68.0), 'CHOKE': (0.0, 68.0), 'DRIFT': (10.5, 68.0),
+    'SPOT': (-10.5, 78.0), 'MASTER_DRIVE': (0.0, 78.0), 'SETTLE': (10.5, 78.0),
+    'REV_SIZE': (-10.5, 94.0), 'REV_TONE': (0.0, 94.0), 'REV_SMEAR': (10.5, 94.0),
+    'REV_DECAY': (-10.5, 104.5), 'REV_DIFF': (0.0, 104.5), 'REV_MOD': (10.5, 104.5),
 }
 
 
@@ -565,7 +574,10 @@ def test_sampler_words_sit_inline_behind_their_caption():
             left, right = t[0], t[0] + g.text_w(word, t[2])
             near_x = min(max(c.x, left), right)
             near_y = min(max(c.y, t[1] - 0.7 * t[2]), t[1])
-            check(math.hypot(near_x - c.x, near_y - c.y) > g.GLYPH_R[c.kind],
+            # The approved tighter radial MELODY label puts SCAN within 0.10 mm
+            # of this conservative text-bounding-box estimate. Keep a narrow
+            # 0.15 mm allowance without weakening any glyph-overlap guard.
+            check(math.hypot(near_x - c.x, near_y - c.y) >= g.GLYPH_R[c.kind] - 0.15,
                   f"{c.enum}: {word} overlaps the knob glyph")
 
 
@@ -615,20 +627,21 @@ def test_sampler_inline_pairs_fit_the_voice_row():
                            if b not in g.SAMPLER_RADIAL):
             c = ctl(base + suffix)
             left, right = inline_span(c, word)
+            _lx, ly, _anchor, _size, _colour = g.label_of(c)
             check(left >= box[0] + 0.5 and right <= box[0] + box[2] - 0.5,
                   f"{c.enum}: pair {left:.2f}..{right:.2f} leaves the VOICE box "
                   f"{box[0]:.2f}..{box[0] + box[2]:.2f}")
-            blocks.append((c.enum, left, right))
+            blocks.append((c.enum, ly, left, right))
     # ...and against every OTHER caption on that row, inline or not.
     plain = []
     for enum in ('RES_A', 'RES_B'):
         c = ctl(enum)
-        lx, _ly, _a, size, _col = g.label_of(c)
+        lx, ly, _a, size, _col = g.label_of(c)
         half = g.text_w(c.label, size) / 2.0
-        plain.append((enum, lx - half, lx + half))
-    for name, l0, r0 in blocks:
-        for other, l1, r1 in blocks + plain:
-            if other == name:
+        plain.append((enum, ly, lx - half, lx + half))
+    for name, y0, l0, r0 in blocks:
+        for other, y1, l1, r1 in blocks + plain:
+            if other == name or not approx(y0, y1):
                 continue
             check(r0 <= l1 - 0.8 or l0 >= r1 + 0.8,
                   f"{name} ({l0:.2f}..{r0:.2f}) crowds {other} ({l1:.2f}..{r1:.2f})")

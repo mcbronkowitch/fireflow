@@ -98,10 +98,10 @@ class Ctl:
         self.tip = label   # tooltip text; panel label and tooltip differ on jacks
 
 # geometry of a side ring
-RING_CY   = 37.0
+RING_CY   = 34.5
 RING_R    = 16.0       # LED dot radius
-KNOB_R    = 26.5       # macro-knob orbit radius
-RING_CX_A = 42.0       # left ring center; B is mirrored (W - x)
+KNOB_R    = 25.5       # macro-knob orbit radius
+RING_CX_A = 39.5       # left ring center; B is mirrored (W - x)
 
 # Sector orbit (spec 2026-07-18 §1): 9 positions at 40 deg pitch, sorted by
 # meaning -- MOTION, then TIMBRE, then PITCH. 0 deg = top, clockwise on part A;
@@ -111,17 +111,17 @@ ORBIT_ANG = {"RATE": 0.0, "DENSITY": 40.0, "SMOOTH": 80.0, "SHAPE": 120.0,
              "COLOR": 320.0}
 
 # (caption, start angle, end angle, part-A caption position)
-SECTORS = [("MOTION", -16.0,  96.0, (74.0,  8.2)),
-           ("TIMBRE", 112.0, 176.0, (74.0, 67.6)),
-           ("PITCH",  192.0, 336.0, (11.0,  8.2))]
+SECTORS = [("MOTION", -16.0,  96.0, (70.0,  8.2)),
+           ("TIMBRE", 112.0, 176.0, (70.0, 67.0)),
+           ("PITCH",  192.0, 336.0, ( 9.0,  8.2))]
 
 # --- fieldset groups (spec 2026-07-18 §4) ------------------------------------
 # One shared style: paper-deep panel, hairline stroke, and a legend riding the
 # top border on a small paper chip. (x, y, w, h, legend, legend colour)
 def part_groups(mir):
     def fx(x, w): return (W - x - w) if mir else x
-    return [(fx(4.0, 37.0),  72.4, 37.0, 24.5, "VOICE", MUTED),
-            (fx(43.5, 38.5), 72.4, 38.5, 24.5, "FX",    MUTED),
+    return [(fx(4.0, 31.5),  72.4, 31.5, 24.5, "VOICE", MUTED),
+            (fx(38.0, 44.0), 72.4, 44.0, 24.5, "FX",    MUTED),
             (fx(4.0, 78.0),  98.6, 78.0, 12.6, "PLAY",  MUTED)]
 
 def group_box(x, y, w, h, legend):
@@ -149,7 +149,7 @@ def orbit_label(cx, cy, ang_deg, mir):
     knob and the LED ring (spec 2026-07-18 §2)."""
     a = math.radians(ang_deg)
     s, c = math.sin(a), math.cos(a)
-    r = 33.8 if c < -0.38 else (33.2 if (abs(s) < 0.38 and c > 0.38) else 34.2)
+    r = 31.3 if c < -0.38 else (30.7 if (abs(s) < 0.38 and c > 0.38) else 31.7)
     dy = 2.2 if c < -0.38 else (0.0 if c > 0.38 else 0.7)
     anchor = "start" if s > 0.38 else ("end" if s < -0.38 else "middle")
     if mir:
@@ -159,14 +159,14 @@ def orbit_label(cx, cy, ang_deg, mir):
 
 # --- lower half per part (spec 2026-07-18 §5) --------------------------------
 # VOICE and FX sit side by side, PLAY spans the full part width below them.
-VOICE_X  = [9.5, 22.5, 35.5]        # ATK DEC FILT / RES SUB DTUN
+VOICE_X  = [9.25, 19.75, 30.25]      # ATK FILT SUB / DEC RES DTUN
 ROW_V1, ROW_V2 = 77.3, 89.4
 # 4-wide, aligned to FX_BOT so the FX box's two rows flush: FRATE FLUX FFB ROOM.
-FX_TOP   = [49.5, 58.333, 67.167, 76.0]   # FRATE FLUX FFB | ROOM (per-deck reverb mix)
+FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # RATE MIX FB | ROOM (per-deck reverb mix)
 # FX bottom row went from two slots to four (spec 2026-07-18 dust-grain-cloud):
-# GRIT COMP DUST ROT. Pitch 8.833 mm against a 3.0 mm knob radius, so the
+# DUST ROT GRIT COMP. Pitch 8.833 mm against a 3.0 mm knob radius, so the
 # 6.0 mm minimum in test_no_overlap still has room to spare.
-FX_BOT   = [49.5, 58.333, 67.167, 76.0]   # GRIT COMP | DUST ROT
+FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # DUST ROT | GRIT COMP
 PLAY_Y   = 103.6
 # The PLAY row's left block re-spaced to seat REC between GRIT and STEPS
 # (spec 2026-07-18 "VCV layer": REC is the only new panel element). All four
@@ -197,21 +197,21 @@ def part_controls(mir=False):
         c = Ctl(enum, KNOBC if enum == "MELODY" else BIGKNOB, x, y, lbl)
         c.lbl = orbit_label(cx, RING_CY, ang, mir)
         out.append(c)
-    # voice row (small): ATK DEC | RES SUB DTUN. FILT fills slot 2 of the top
+    # voice row (small): ATK FILT SUB | DEC RES DTUN. FILT fills slot 2 of the top
     # row but is appended at the END of PARAMS (see below), never here -- that
     # would grow PART_STRIDE and shift every part-B/SHARED param id.
-    for (enum, lbl, x, y) in [("ATTACK", "ATK", VOICE_X[0], ROW_V1),
-                              ("DECAY",  "DEC", VOICE_X[1], ROW_V1),
-                              ("RES",    "RES", VOICE_X[0], ROW_V2),
-                              ("SUB",    "SUB", VOICE_X[1], ROW_V2),
+    for (enum, lbl, x, y) in [("ATTACK", "ATK",  VOICE_X[0], ROW_V1),
+                              ("DECAY",  "DEC",  VOICE_X[0], ROW_V2),
+                              ("RES",    "RES",  VOICE_X[1], ROW_V2),
+                              ("SUB",    "SUB",  VOICE_X[2], ROW_V1),
                               ("DETUNE", "DTUN", VOICE_X[2], ROW_V2)]:
         out.append(Ctl(enum, SMKNOB, fx(x), y, lbl))
     # fx box: the FLUX delay cluster (RATE . MIX . FB) on top, GRIT/COMP below.
     # FLUX (the delay MIX) is the template member; RATE/FB are appended at the
     # end of PARAMS. STEPS keeps its append slot here but has moved to the PLAY
     # box -- it is a sequencer parameter, not an effect (spec 2026-07-18 §5).
-    out.append(Ctl("FLUX", SMKNOB, fx(FX_TOP[1]), ROW_V1, "FLUX"))
-    for i, (enum, lbl) in enumerate([("GRIT", "GRIT"), ("COMP", "COMP")]):
+    out.append(Ctl("FLUX", SMKNOB, fx(FX_TOP[1]), ROW_V1, "MIX"))
+    for enum, lbl, i in (("GRIT", "GRIT", 2), ("COMP", "COMP", 3)):
         out.append(Ctl(enum, SMKNOB, fx(FX_BOT[i]), ROW_V2, lbl))
     out.append(Ctl("STEPS", KNOBI, fx(STEPS_X), PLAY_Y, "STPS"))
     pads = [("ENGINE", LATCH, "ENG"), ("GRITMODE", LATCH, "GRIT"),
@@ -286,8 +286,8 @@ OUTPUTS = [jack_at(e) for e in ("OUT_L", "OUT_R", "PITCH_A", "GATE_A",
 
 # The centre's outer background card is gone (spec 2026-07-18 §6) -- the four
 # fieldset boxes carry the grouping alone and grew to 41 mm, so the columns
-# move out from +-10.5 to +-11.5.
-L, R = CX - 11.5, CX + 11.5
+# use +/-10.5 outer columns.
+L, R = CX - 10.5, CX + 10.5
 ROW_BLEND = 21.5
 ROW_TIME1, ROW_TIME2 = 42.0, 54.0
 ROW_DUO1, ROW_DUO2 = 68.0, 78.0
@@ -314,12 +314,12 @@ SHARED = [
     Ctl("MASTER_DRIVE", SMKNOB, CX, ROW_DUO2, "DRIVE"),
     Ctl("SETTLE", SMBTN,   R,  ROW_DUO2, "SETL"),
     # ROOM: three semantic columns, bottom edge flush with the PLAY boxes.
-    Ctl("REV_SIZE",  SMKNOB, CX - 12.0, ROW_ROOM1, "SIZE"),
-    Ctl("REV_DECAY", SMKNOB, CX - 12.0, ROW_ROOM2, "DECAY"),
+    Ctl("REV_SIZE",  SMKNOB, L,         ROW_ROOM1, "SIZE"),
+    Ctl("REV_DECAY", SMKNOB, L,         ROW_ROOM2, "DECAY"),
     Ctl("REV_TONE",  SMKNOB, CX,        ROW_ROOM1, "TONE"),
     Ctl("REV_DIFF",  SMKNOB, CX,        ROW_ROOM2, "DIFF"),
-    Ctl("REV_SMEAR", SMKNOB, CX + 12.0, ROW_ROOM1, "SMEAR"),
-    Ctl("REV_MOD",   SMKNOB, CX + 12.0, ROW_ROOM2, "WOBL"),
+    Ctl("REV_SMEAR", SMKNOB, R,         ROW_ROOM1, "SMEAR"),
+    Ctl("REV_MOD",   SMKNOB, R,         ROW_ROOM2, "WOBL"),
     # CHOKE: bipolar event-priority between the decks (spec 2026-07-16
     # choke-priority). Appended LAST on purpose: existing .vcv patches keep
     # their param ids.
@@ -337,9 +337,9 @@ def color_ctl(suffix, mir):
 PARAMS = PART_A + PART_B + SHARED + [
     # FILT: bipolar cutoff trim (spec 2026-07-17). Appended LAST like CHOKE so
     # existing .vcv patches keep their param ids; coordinates put it in the
-    # top voice row, third slot (after ATK, DEC).
-    Ctl("FILT_A", SMKNOB, VOICE_X[2],     ROW_V1, "FILT"),
-    Ctl("FILT_B", SMKNOB, W - VOICE_X[2], ROW_V1, "FILT"),
+    # top voice row's middle slot (after ATK).
+    Ctl("FILT_A", SMKNOB, VOICE_X[1],     ROW_V1, "FILT"),
+    Ctl("FILT_B", SMKNOB, W - VOICE_X[1], ROW_V1, "FILT"),
     # TIDE: texture-lane rate of both decks (spec 2026-07-17 mod-tide).
     # Appended LAST like CHOKE/FILT so existing .vcv patches keep their ids;
     # the coordinate puts it beside MORPH in the centre's movement column
@@ -350,10 +350,10 @@ PARAMS = PART_A + PART_B + SHARED + [
     # They complete the FLUX delay cluster atop the FX box: RATE (FX_TOP[0]),
     # MIX (FX_TOP[1], from the template), FB (FX_TOP[2]) sit together;
     # GRIT/COMP fill FX_BOT below.
-    Ctl("FLUXRATE_A", SMKNOB, FX_TOP[0],     ROW_V1, "FRATE"),
-    Ctl("FLUXRATE_B", SMKNOB, W - FX_TOP[0], ROW_V1, "FRATE"),
-    Ctl("FLUXFB_A",   SMKNOB, FX_TOP[2],     ROW_V1, "FFB"),
-    Ctl("FLUXFB_B",   SMKNOB, W - FX_TOP[2], ROW_V1, "FFB"),
+    Ctl("FLUXRATE_A", SMKNOB, FX_TOP[0],     ROW_V1, "RATE"),
+    Ctl("FLUXRATE_B", SMKNOB, W - FX_TOP[0], ROW_V1, "RATE"),
+    Ctl("FLUXFB_A",   SMKNOB, FX_TOP[2],     ROW_V1, "FB"),
+    Ctl("FLUXFB_B",   SMKNOB, W - FX_TOP[2], ROW_V1, "FB"),
     # COLOR: chord density/colour per part (spec 2026-07-17 chord-layer), a full
     # orbit member since the 2026-07-18 redesign -- it is pitch material, so it
     # sits in the PITCH sector. Still appended LAST: order defines the param id.
@@ -362,13 +362,13 @@ PARAMS = PART_A + PART_B + SHARED + [
     # DUST / ROT: two read taps on the FLUX tape, placed by the other bank's
     # rhythm (spec 2026-07-20 rhythm-fed-delay-taps; supersedes the 2026-07-18
     # dust-grain-cloud design). Appended LAST like FILT/TIDE/FLUXRATE/COLOR so
-    # existing .vcv patches keep their param ids; the coordinates fill slots 3
-    # and 4 of the widened FX bottom row, right under the delay cluster they
-    # feed off.
-    Ctl("DUST_A", SMKNOB, FX_BOT[2],     ROW_V2, "DUST"),
-    Ctl("DUST_B", SMKNOB, W - FX_BOT[2], ROW_V2, "DUST"),
-    Ctl("ROT_A",  SMKNOB, FX_BOT[3],     ROW_V2, "ROT"),
-    Ctl("ROT_B",  SMKNOB, W - FX_BOT[3], ROW_V2, "ROT"),
+    # existing .vcv patches keep their param ids; the coordinates fill the
+    # left two slots of the widened FX bottom row, right under the delay
+    # cluster they feed off.
+    Ctl("DUST_A", SMKNOB, FX_BOT[0],     ROW_V2, "DUST"),
+    Ctl("DUST_B", SMKNOB, W - FX_BOT[0], ROW_V2, "DUST"),
+    Ctl("ROT_A",  SMKNOB, FX_BOT[1],     ROW_V2, "ROT"),
+    Ctl("ROT_B",  SMKNOB, W - FX_BOT[1], ROW_V2, "ROT"),
     # M5b: REC, the one new panel element of the texture deck. Appended LAST
     # so REC_A/REC_B take fresh trailing ids and PART_STRIDE stays 23 -- every
     # already-saved .vcv keeps every param id it has.
