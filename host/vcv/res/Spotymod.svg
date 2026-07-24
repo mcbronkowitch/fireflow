@@ -3,12 +3,12 @@
 <rect x="0" y="0" width="213.360" height="128.500" fill="url(#plate)"/>
 <rect x="0" y="0" width="1.4" height="128.500" fill="#1d6f5f"/>
 <rect x="211.960" y="0" width="1.4" height="128.500" fill="#b96532"/>
-<path d="M 30.266 2.298 A 33.500 33.500 0 0 1 72.816 38.002 L 59.888 36.643 A 20.500 20.500 0 0 0 33.849 14.794 Z" fill="#1d6f5f" opacity="0.07"/>
-<path d="M 70.561 47.049 A 33.500 33.500 0 0 1 41.837 67.918 L 40.930 54.950 A 20.500 20.500 0 0 0 58.507 42.179 Z" fill="#1d6f5f" opacity="0.07"/>
-<path d="M 32.535 67.268 A 33.500 33.500 0 0 1 25.874 3.896 L 31.162 15.772 A 20.500 20.500 0 0 0 35.238 54.552 Z" fill="#1d6f5f" opacity="0.07"/>
-<path d="M 140.544 38.002 A 33.500 33.500 0 0 1 183.094 2.298 L 179.511 14.794 A 20.500 20.500 0 0 0 153.472 36.643 Z" fill="#b96532" opacity="0.07"/>
-<path d="M 171.523 67.918 A 33.500 33.500 0 0 1 142.799 47.049 L 154.853 42.179 A 20.500 20.500 0 0 0 172.430 54.950 Z" fill="#b96532" opacity="0.07"/>
-<path d="M 187.486 3.896 A 33.500 33.500 0 0 1 180.825 67.268 L 178.122 54.552 A 20.500 20.500 0 0 0 182.198 15.772 Z" fill="#b96532" opacity="0.07"/>
+<path d="M 30.955 4.701 A 31.000 31.000 0 0 1 70.330 37.740 L 59.888 36.643 A 20.500 20.500 0 0 0 33.849 14.794 Z" fill="#1d6f5f" opacity="0.045"/>
+<path d="M 68.243 46.113 A 31.000 31.000 0 0 1 41.662 65.424 L 40.930 54.950 A 20.500 20.500 0 0 0 58.507 42.179 Z" fill="#1d6f5f" opacity="0.045"/>
+<path d="M 33.055 64.823 A 31.000 31.000 0 0 1 26.891 6.180 L 31.162 15.772 A 20.500 20.500 0 0 0 35.238 54.552 Z" fill="#1d6f5f" opacity="0.045"/>
+<path d="M 143.030 37.740 A 31.000 31.000 0 0 1 182.405 4.701 L 179.511 14.794 A 20.500 20.500 0 0 0 153.472 36.643 Z" fill="#b96532" opacity="0.045"/>
+<path d="M 171.698 65.424 A 31.000 31.000 0 0 1 145.117 46.113 L 154.853 42.179 A 20.500 20.500 0 0 0 172.430 54.950 Z" fill="#b96532" opacity="0.045"/>
+<path d="M 186.469 6.180 A 31.000 31.000 0 0 1 180.305 64.823 L 178.122 54.552 A 20.500 20.500 0 0 0 182.198 15.772 Z" fill="#b96532" opacity="0.045"/>
 <circle cx="39.500" cy="34.500" r="18.400" fill="#1d1f1a" stroke="#252721" stroke-width="0.5"/>
 <circle cx="39.500" cy="18.500" r="0.7" fill="#2e6355"/>
 <circle cx="42.621" cy="18.807" r="0.7" fill="#2e6355"/>
@@ -75,35 +75,35 @@
 <circle cx="164.971" cy="21.196" r="0.7" fill="#8a5230"/>
 <circle cx="167.737" cy="19.718" r="0.7" fill="#8a5230"/>
 <circle cx="170.739" cy="18.807" r="0.7" fill="#8a5230"/>
-<rect x="4.000" y="72.400" width="31.500" height="24.500" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
+<rect x="4.000" y="72.400" width="31.500" height="24.500" rx="1.5" fill="#ede5d6" fill-opacity="0.45" stroke="#d7cdbb" stroke-width="0.30"/>
 <rect x="4.375" y="71.100" width="9.250" height="2.6" fill="#f7f4ec"/>
-<rect x="38.000" y="72.400" width="44.000" height="24.500" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
+<rect x="38.000" y="72.400" width="44.000" height="24.500" rx="1.5" fill="#ede5d6" fill-opacity="0.45" stroke="#d7cdbb" stroke-width="0.30"/>
 <rect x="40.400" y="71.100" width="5.200" height="2.6" fill="#f7f4ec"/>
-<rect x="4.000" y="98.600" width="78.000" height="12.600" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
+<rect x="4.000" y="98.600" width="78.000" height="12.600" rx="1.5" fill="#ede5d6" fill-opacity="0.45" stroke="#d7cdbb" stroke-width="0.30"/>
 <rect x="5.050" y="97.300" width="7.900" height="2.6" fill="#f7f4ec"/>
-<rect x="177.860" y="72.400" width="31.500" height="24.500" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
+<rect x="177.860" y="72.400" width="31.500" height="24.500" rx="1.5" fill="#ede5d6" fill-opacity="0.45" stroke="#d7cdbb" stroke-width="0.30"/>
 <rect x="178.235" y="71.100" width="9.250" height="2.6" fill="#f7f4ec"/>
-<rect x="131.360" y="72.400" width="44.000" height="24.500" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
+<rect x="131.360" y="72.400" width="44.000" height="24.500" rx="1.5" fill="#ede5d6" fill-opacity="0.45" stroke="#d7cdbb" stroke-width="0.30"/>
 <rect x="133.760" y="71.100" width="5.200" height="2.6" fill="#f7f4ec"/>
-<rect x="131.360" y="98.600" width="78.000" height="12.600" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
+<rect x="131.360" y="98.600" width="78.000" height="12.600" rx="1.5" fill="#ede5d6" fill-opacity="0.45" stroke="#d7cdbb" stroke-width="0.30"/>
 <rect x="132.410" y="97.300" width="7.900" height="2.6" fill="#f7f4ec"/>
-<rect x="86.180" y="13.000" width="41.000" height="19.500" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
+<rect x="86.180" y="13.000" width="41.000" height="19.500" rx="1.5" fill="#ede5d6" fill-opacity="0.45" stroke="#d7cdbb" stroke-width="0.30"/>
 <rect x="86.555" y="11.700" width="9.250" height="2.6" fill="#f7f4ec"/>
-<rect x="86.180" y="35.000" width="41.000" height="25.000" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
+<rect x="86.180" y="35.000" width="41.000" height="25.000" rx="1.5" fill="#ede5d6" fill-opacity="0.45" stroke="#d7cdbb" stroke-width="0.30"/>
 <rect x="87.230" y="33.700" width="7.900" height="2.6" fill="#f7f4ec"/>
-<rect x="86.180" y="62.500" width="41.000" height="22.500" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
+<rect x="86.180" y="62.500" width="41.000" height="22.500" rx="1.5" fill="#ede5d6" fill-opacity="0.45" stroke="#d7cdbb" stroke-width="0.30"/>
 <rect x="87.905" y="61.200" width="6.550" height="2.6" fill="#f7f4ec"/>
-<rect x="86.180" y="87.500" width="41.000" height="23.700" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
+<rect x="86.180" y="87.500" width="41.000" height="23.700" rx="1.5" fill="#ede5d6" fill-opacity="0.45" stroke="#d7cdbb" stroke-width="0.30"/>
 <rect x="87.230" y="86.200" width="7.900" height="2.6" fill="#f7f4ec"/>
-<rect x="7.200" y="112.600" width="23.000" height="14.400" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
+<rect x="7.200" y="112.600" width="23.000" height="14.400" rx="1.5" fill="#ede5d6" fill-opacity="0.45" stroke="#d7cdbb" stroke-width="0.30"/>
 <rect x="8.250" y="111.300" width="7.900" height="2.6" fill="#f7f4ec"/>
-<rect x="49.500" y="112.600" width="23.000" height="14.400" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
+<rect x="49.500" y="112.600" width="23.000" height="14.400" rx="1.5" fill="#ede5d6" fill-opacity="0.45" stroke="#d7cdbb" stroke-width="0.30"/>
 <rect x="51.900" y="111.300" width="5.200" height="2.6" fill="#f7f4ec"/>
-<rect x="95.180" y="112.600" width="23.000" height="14.400" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
+<rect x="95.180" y="112.600" width="23.000" height="14.400" rx="1.5" fill="#ede5d6" fill-opacity="0.45" stroke="#d7cdbb" stroke-width="0.30"/>
 <rect x="95.555" y="111.300" width="9.250" height="2.6" fill="#f7f4ec"/>
-<rect x="140.860" y="112.600" width="23.000" height="14.400" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
+<rect x="140.860" y="112.600" width="23.000" height="14.400" rx="1.5" fill="#ede5d6" fill-opacity="0.45" stroke="#d7cdbb" stroke-width="0.30"/>
 <rect x="142.585" y="111.300" width="6.550" height="2.6" fill="#f7f4ec"/>
-<rect x="183.160" y="112.600" width="23.000" height="14.400" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
+<rect x="183.160" y="112.600" width="23.000" height="14.400" rx="1.5" fill="#ede5d6" fill-opacity="0.45" stroke="#d7cdbb" stroke-width="0.30"/>
 <rect x="184.210" y="111.300" width="7.900" height="2.6" fill="#f7f4ec"/>
 <rect x="39.000" y="73.600" width="31.000" height="10.000" rx="1.0" fill="#dfe5dc"/>
 <rect x="70.500" y="73.600" width="10.500" height="10.000" rx="1.0" fill="#e8e0d4"/>
@@ -113,6 +113,8 @@
 <rect x="132.360" y="73.600" width="10.500" height="10.000" rx="1.0" fill="#e8e0d4"/>
 <rect x="153.360" y="84.400" width="21.000" height="11.300" rx="1.0" fill="#dfe5dc"/>
 <rect x="132.360" y="84.400" width="20.500" height="11.300" rx="1.0" fill="#e6ddd1"/>
+<rect x="5.000" y="99.600" width="29.000" height="10.600" rx="1.0" fill="#ede5d6" fill-opacity="0.25"/>
+<rect x="179.360" y="99.600" width="29.000" height="10.600" rx="1.0" fill="#ede5d6" fill-opacity="0.25"/>
 <rect x="8.600" y="114.200" width="20.200" height="11.200" rx="1.2" fill="#1d1f1a"/>
 <rect x="142.260" y="114.200" width="20.200" height="11.200" rx="1.2" fill="#1d1f1a"/>
 <rect x="184.560" y="114.200" width="20.200" height="11.200" rx="1.2" fill="#1d1f1a"/>
@@ -420,10 +422,10 @@
 <text x="100.180" y="113.350" fill="#656056" text-anchor="middle" font-family="monospace" font-size="1.8" letter-spacing="0.35" font-weight="bold">CLOCK</text>
 <text x="145.860" y="113.350" fill="#656056" text-anchor="middle" font-family="monospace" font-size="1.8" letter-spacing="0.35" font-weight="bold">OUT</text>
 <text x="188.160" y="113.350" fill="#b96532" text-anchor="middle" font-family="monospace" font-size="1.8" letter-spacing="0.35" font-weight="bold">CV B</text>
-<text x="13.193" y="52.350" fill="#1d6f5f" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">SCAN</text>
-<text x="31.010" y="82.900" fill="#1d6f5f" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">LEN</text>
-<text x="31.580" y="95.000" fill="#1d6f5f" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">ORG</text>
-<text x="206.327" y="52.350" fill="#b96532" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">SCAN</text>
-<text x="183.870" y="82.900" fill="#b96532" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">LEN</text>
-<text x="184.440" y="95.000" fill="#b96532" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">ORG</text>
+<text x="13.193" y="52.350" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">SCAN</text>
+<text x="31.010" y="82.900" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">LEN</text>
+<text x="31.580" y="95.000" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">ORG</text>
+<text x="206.327" y="52.350" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">SCAN</text>
+<text x="183.870" y="82.900" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">LEN</text>
+<text x="184.440" y="95.000" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">ORG</text>
 </svg>

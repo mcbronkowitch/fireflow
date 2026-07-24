@@ -51,6 +51,14 @@ GREEN_DIM  = "#2e6355"   # A ring track dots / letter (on the dark well)
 COPPER_DIM = "#8a5230"   # B ring track dots / letter
 GLOW       = (0x3FBF9C, 0xE8945A)   # runtime LED glow per part (A, B)
 
+# --- Quiet Technical surface constants ---------------------------------------
+GROUP_STROKE = 0.30
+GROUP_FILL_OPACITY = 0.45
+SECTOR_R_IN = 20.50
+SECTOR_R_OUT = 31.00
+SECTOR_OPACITY = 0.045
+PLAY_FIELD_OPACITY = 0.25
+
 # --- control kinds ------------------------------------------------------------
 BIGKNOB = "BIGKNOB"   # macro pot (0..1)
 KNOBC   = "KNOBC"     # bipolar macro (-1..1)  (MELODY)
@@ -139,6 +147,12 @@ def part_fx_fields(mir):
 
 FX_FIELDS = part_fx_fields(False) + part_fx_fields(True)
 
+def part_play_field(mir):
+    x, y, w, h = 5.0, 99.6, 29.0, 10.6
+    return (mir, W - x - w if mir else x, y, w, h)
+
+PLAY_FIELDS = [part_play_field(False), part_play_field(True)]
+
 def group_box(x, y, w, h, legend):
     """Box + the paper chip that breaks the top border for the legend. The
     legend TEXT itself goes through TEXTS, so Rack draws it too (NanoSVG
@@ -146,7 +160,8 @@ def group_box(x, y, w, h, legend):
     cw = 1.35 * len(legend) + 2.5
     return "\n".join([
         f'<rect x="{mm(x)}" y="{mm(y)}" width="{mm(w)}" height="{mm(h)}" rx="1.5" '
-        f'fill="{PAPER_DEEP}" stroke="{LINE}" stroke-width="0.35"/>',
+        f'fill="{PAPER_DEEP}" fill-opacity="{GROUP_FILL_OPACITY:.2f}" '
+        f'stroke="{LINE}" stroke-width="{GROUP_STROKE:.2f}"/>',
         f'<rect x="{mm(x + 5.0 - cw / 2)}" y="{mm(y - 1.3)}" width="{mm(cw)}" '
         f'height="2.6" fill="{PAPER}"/>'])
 
@@ -479,7 +494,7 @@ def sampler_texts():
     starting point instead of from its own output.
     """
     out = []
-    for suffix, colour in (("_A", GREEN), ("_B", COPPER)):
+    for suffix in ("_A", "_B"):
         for base, word in SAMPLER_LBL:
             c = next(c for c in PARAMS if c.enum == base + suffix)
             ws = text_w(word, SAMPLER_SIZE)
@@ -495,7 +510,7 @@ def sampler_texts():
                 cap_end = c.x + mid - SAMPLER_GAP / 2.0
                 c.lbl = (cap_end, ly, "end", size, col)
             out.append((cap_end + SAMPLER_GAP, ly, SAMPLER_SIZE,
-                        0.0, colour, "start", word))
+                        0.0, MUTED, "start", word))
     return out
 
 # --- shared panel lettering (drawn by SVG for preview, by C++ at runtime) -----
@@ -524,6 +539,12 @@ def fx_field_svg(field):
     _mir, _name, x, y, w, h, fill = field
     return (f'<rect x="{mm(x)}" y="{mm(y)}" width="{mm(w)}" '
             f'height="{mm(h)}" rx="1.0" fill="{fill}"/>')
+
+def play_field_svg(field):
+    _mir, x, y, w, h = field
+    return (f'<rect x="{mm(x)}" y="{mm(y)}" width="{mm(w)}" '
+            f'height="{mm(h)}" rx="1.0" fill="{PAPER_DEEP}" '
+            f'fill-opacity="{PLAY_FIELD_OPACITY:.2f}"/>')
 
 def side_accent(x):
     """Panel accent for a control: green left half, copper right half,
@@ -572,8 +593,8 @@ def knob_svg(c):
 
 def wedge_svg(cx, a0, a1, colour, mir):
     """One tinted sector segment behind the orbit knobs: an annulus slice
-    between r 20.5 and 33.5 mm (spec 2026-07-18 §1)."""
-    R_OUT, R_IN = 33.5, 20.5
+    using the fixed Quiet Technical radii."""
+    R_OUT, R_IN = SECTOR_R_OUT, SECTOR_R_IN
     if mir:
         a0, a1 = a1, a0          # keep the on-screen sweep direction
     def pt(r, a):
@@ -585,7 +606,8 @@ def wedge_svg(cx, a0, a1, colour, mir):
     ix1, iy1 = pt(R_IN,  a1); ix0, iy0 = pt(R_IN,  a0)
     return (f'<path d="M {mm(ox0)} {mm(oy0)} A {mm(R_OUT)} {mm(R_OUT)} 0 {laf} 1 '
             f'{mm(ox1)} {mm(oy1)} L {mm(ix1)} {mm(iy1)} A {mm(R_IN)} {mm(R_IN)} '
-            f'0 {laf} 0 {mm(ix0)} {mm(iy0)} Z" fill="{colour}" opacity="0.07"/>')
+            f'0 {laf} 0 {mm(ix0)} {mm(iy0)} Z" fill="{colour}" '
+            f'opacity="{SECTOR_OPACITY:.3f}"/>')
 
 def svg():
     P = []
@@ -618,6 +640,9 @@ def svg():
     # connected low-contrast family fields inside the mirrored FX boxes
     for field in FX_FIELDS:
         P.append(fx_field_svg(field))
+    # mode/record fields inside PLAY, after FX fields and below every control
+    for field in PLAY_FIELDS:
+        P.append(play_field_svg(field))
     # dark inner wells under the output groups -- in/out at a glance (spec §7)
     for (bx, _lg, _col, well, _items) in JACK_GROUPS:
         if well:

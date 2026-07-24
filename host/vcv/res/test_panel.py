@@ -206,6 +206,33 @@ def test_layout_constants():
     check(g.FX_BOT == g.FX_TOP, f"FX rows disagree: {g.FX_TOP} / {g.FX_BOT}")
 
 
+def test_quiet_technical_tokens():
+    want = {
+        "GROUP_STROKE": 0.30,
+        "GROUP_FILL_OPACITY": 0.45,
+        "SECTOR_R_IN": 20.50,
+        "SECTOR_R_OUT": 31.00,
+        "SECTOR_OPACITY": 0.045,
+        "PLAY_FIELD_OPACITY": 0.25,
+    }
+    for name, expected in want.items():
+        actual = getattr(g, name, None)
+        check(actual is not None, f"{name} is missing")
+        if actual is not None:
+            check(approx(actual, expected), f"{name} {actual}, want {expected}")
+
+    box = g.group_box(4.0, 72.4, 31.5, 24.5, "VOICE")
+    check(f'fill="{g.PAPER_DEEP}" fill-opacity="0.45"' in box,
+          "group box must use PAPER_DEEP at fill-opacity 0.45")
+    check(f'stroke="{g.LINE}" stroke-width="0.30"' in box,
+          "group box must use LINE at stroke-width 0.30")
+    wedge = g.wedge_svg(g.RING_CX_A, -16.0, 96.0, g.GREEN, False)
+    check('A 31.000 31.000' in wedge and 'A 20.500 20.500' in wedge,
+          "sector wedge must use the 31.00 / 20.50 mm annulus")
+    check('opacity="0.045"' in wedge,
+          "sector wedge must use opacity 0.045")
+
+
 def test_orbit_positions():
     for enum, (kx, ky, lx, ly, anchor) in ORBIT_A.items():
         c = ctl(enum)
@@ -317,6 +344,56 @@ def test_fx_fields_render_in_explicit_layer():
               "FX fields must render after every group box")
         check(max(end for _start, end in field_spans) < first_well_or_control,
               "FX fields must render before wells and controls")
+
+
+def test_play_mode_fields_are_exact_mirrors():
+    fields = getattr(g, "PLAY_FIELDS", [])
+    check(len(fields) == 2, f"{len(fields)} PLAY fields, want 2")
+    if len(fields) != 2:
+        return
+
+    a = next((field for field in fields if not field[0]), None)
+    b = next((field for field in fields if field[0]), None)
+    check(a is not None and b is not None, "PLAY fields must contain A and B")
+    if a is None or b is None:
+        return
+
+    _, ax, ay, aw, ah = a
+    _, bx, by, bw, bh = b
+    check(all(approx(v, want) for v, want in
+              zip((ax, ay, aw, ah), (5.0, 99.6, 29.0, 10.6))),
+          f"PLAY A field {a[1:]}")
+    check(approx(bx, g.W - ax - aw) and approx(by, ay)
+          and approx(bw, aw) and approx(bh, ah),
+          f"PLAY B is not mirrored: {b[1:]}")
+
+    render = getattr(g, "play_field_svg", None)
+    check(callable(render), "play_field_svg is missing")
+    if not callable(render):
+        return
+    s = g.svg()
+    rendered = [render(field) for field in fields]
+    for field, field_svg in zip(fields, rendered):
+        check(s.count(field_svg) == 1,
+              f"PLAY {'B' if field[0] else 'A'} field must render once")
+        check(f'fill="{g.PAPER_DEEP}"' in field_svg
+              and 'rx="1.0"' in field_svg
+              and 'fill-opacity="0.25"' in field_svg,
+              f"PLAY field style is wrong: {field_svg}")
+
+    fx_end = max(s.index(g.fx_field_svg(field)) + len(g.fx_field_svg(field))
+                 for field in g.FX_FIELDS)
+    play_spans = [(s.index(field_svg), s.index(field_svg) + len(field_svg))
+                  for field_svg in rendered if field_svg in s]
+    first_control = min(
+        s.index(g.knob_svg(c)) for c in g.PARAMS
+        if c.kind in (g.BIGKNOB, g.KNOBC, g.SMKNOB, g.KNOBI)
+    )
+    if len(play_spans) == len(fields):
+        check(fx_end < min(start for start, _end in play_spans),
+              "PLAY fields must render after every FX field")
+        check(max(end for _start, end in play_spans) < first_control,
+              "PLAY fields must render before controls")
 
 
 def test_small_knobs_have_no_collar():
@@ -612,7 +689,7 @@ def test_sampler_words_sit_inline_behind_their_caption():
     """Every sampler word shares its caption's baseline and follows it one gap
     behind, in reading order on both halves (2026-07-22). They used to hang
     3 mm below, which read as orphaned from the knob."""
-    for suffix, colour in (('_A', g.GREEN), ('_B', g.COPPER)):
+    for suffix in ('_A', '_B'):
         for base, word in SAMPLER_CAPTIONS:
             c = ctl(base + suffix)
             lx, ly, anchor, size, _col = g.label_of(c)
@@ -623,8 +700,8 @@ def test_sampler_words_sit_inline_behind_their_caption():
             check(approx(t[1], ly),
                   f"{c.enum}: {word} baseline {t[1]:.2f} != {c.label}'s {ly:.2f}")
             check(approx(t[2], 1.5), f"{c.enum}: {word} size {t[2]}, want 1.5")
-            check(t[4] == colour,
-                  f"{c.enum}: {word} colour {t[4]}, want {colour}")
+            check(t[4] == g.MUTED,
+                  f"{c.enum}: {word} colour {t[4]}, want {g.MUTED}")
             # Start-anchored regardless of how the parent is anchored: the two
             # grow AWAY from the gap, so a wrong MONO_ADV cannot close it.
             check(t[5] == 'start',
