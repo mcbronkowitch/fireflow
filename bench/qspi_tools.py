@@ -269,11 +269,10 @@ def program_and_verify(
     )
 
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        prefix="qspi-readback-", suffix=".bin", dir=receipt_path.parent, delete=False
+    with tempfile.TemporaryDirectory(
+        prefix="qspi-readback-", dir=receipt_path.parent
     ) as temporary:
-        readback_path = Path(temporary.name)
-    try:
+        readback_path = Path(temporary) / "readback.bin"
         _checked_run(
             run,
             [
@@ -295,6 +294,3 @@ def program_and_verify(
             device_id,
             artifact_identity,
         )
-    finally:
-        if readback_path.exists():
-            readback_path.unlink()

@@ -184,6 +184,8 @@ Idx Name                Size      VMA       LMA       File off  Algn
                     )
                 if "-U" in command:
                     upload_path = Path(command[command.index("-U") + 1])
+                    if upload_path.exists():
+                        raise subprocess.CalledProcessError(74, command)
                     shutil.copyfile(payload, upload_path)
                 return subprocess.CompletedProcess(
                     command, 0, stdout="", stderr=""
