@@ -13,6 +13,10 @@ BANK_SOURCE = ROOT / "engine" / "synth" / "wt_bank.cpp"
 LINKER = ROOT / "alt_sram.lds"
 RUNNER = ROOT / "bench" / "run.py"
 OPENOCD_CFG = ROOT / "bench" / "openocd" / "spotykach-sram.cfg"
+QSPI_PROGRAMMER_CFG = ROOT / "bench" / "openocd" / "qspi-programmer.cfg"
+QSPI_PROGRAMMER_MAIN = ROOT / "bench" / "qspi_programmer" / "main.cpp"
+QSPI_PROGRAMMER_MAKEFILE = ROOT / "bench" / "qspi_programmer" / "Makefile"
+QSPI_PROGRAMMER_CORE = ROOT / "bench" / "qspi_programmer" / "program_core.h"
 REPORT_SOURCE = ROOT / "bench" / "report.cpp"
 SAMPLE_SHA = "81a914d0248bc7265703b81e27e4546264993705c11c1e30acd45cae2390e747"
 
@@ -207,6 +211,22 @@ class Task8Contract(unittest.TestCase):
         self.assertIn("char DTCM_REPORT_BSS g_buf[256];", report)
         body = compact(function_body(report, "logf"))
         self.assertIn("vsnprintf(g_buf, sizeof(g_buf), fmt, ap);", body)
+
+    def test_qspi_programmer_is_an_sram_only_debug_helper(self) -> None:
+        makefile = QSPI_PROGRAMMER_MAKEFILE.read_text(encoding="utf-8")
+        source = compact(QSPI_PROGRAMMER_MAIN.read_text(encoding="utf-8"))
+        core = compact(QSPI_PROGRAMMER_CORE.read_text(encoding="utf-8"))
+        cfg = QSPI_PROGRAMMER_CFG.read_text(encoding="utf-8")
+        self.assertIn("APP_TYPE = BOOT_SRAM", makefile)
+        self.assertIn("program_core.h", source)
+        self.assertIn("EraseBlock(offset, false)", source)
+        self.assertIn("kQspiPayloadOffset = 0x00040000u", core)
+        self.assertIn("0x24040000u", source)
+        self.assertIn("0x90040000u", source)
+        self.assertIn("QSPI_PROGRAM_OK,90040000,65024,", source)
+        self.assertIn("load_image $HELPER", cfg)
+        self.assertIn("load_image $PAYLOAD 0x24040000 bin", cfg)
+        self.assertNotIn("reset run", cfg)
 
 
 if __name__ == "__main__":

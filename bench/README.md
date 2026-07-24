@@ -38,12 +38,14 @@ Useful flags: `--repeat N` (default 2), `--out-dir DIR` (default
 The 65,024-byte bank is a loadable `.qspiflash_data` section at
 `0x90040000`, after the four 64 KiB sectors reserved by the Daisy bootloader.
 It is deliberately not part of the debug probe's SRAM load. The build creates
-three distinct artifacts:
+four distinct artifacts:
 
 - `build/bench.elf`: authoritative linked image and map source;
-- `build/bench-sram.elf`: `.qspiflash_data` removed; the only ELF OpenOCD
-  loads;
-- `build/bench-qspi.bin`: only `.qspiflash_data`, exactly 65,024 bytes.
+- `build/bench-sram.elf`: `.qspiflash_data` removed; the ELF OpenOCD loads
+  for measurement;
+- `build/bench-qspi.bin`: only `.qspiflash_data`, exactly 65,024 bytes;
+- `qspi_programmer/build/qspi-programmer.elf`: a temporary SRAM-only helper
+  used solely to erase, write, compare, and hash that raw payload.
 
 Do not use `make program-dfu` for this custom layout. libDaisy's generic rule
 expects one flat `build/bench.bin` beginning at the BOOT_SRAM app address;
@@ -53,15 +55,19 @@ ELF and extracts the two physical payloads explicitly.
 Before the first WAVE run, or whenever `bench-qspi.bin` changes:
 
 1. Build with `python run.py --build-only`.
-2. Put the Seed explicitly into Daisy bootloader DFU mode (BOOT, then RESET)
-   and connect its micro-USB port.
-3. Run `python run.py --no-build --program-qspi --build-only`.
+2. Connect the ST-Link to the Seed's SWD header and power the Seed.
+3. Run `python run.py --no-build --program-qspi --build-only`. Do not put the
+   Seed into DFU mode.
 4. Run `python run.py --repeat 2`.
 
-The programming command downloads only `bench-qspi.bin` to `0x90040000`,
-uploads the same 65,024-byte range again, compares every byte, and only then
-writes `build/qspi-verified.json`. The receipt binds the verified payload to
-the authoritative `bench.elf` and its freshly derived `bench-sram.elf`.
+The programming command uses OpenOCD to load the helper below `0x24040000`
+and the raw payload at `0x24040000`; it never programs internal flash. The
+helper erases one 64 KiB external-QSPI block at offset `0x40000`, writes
+exactly 65,024 bytes, invalidates the mapped cache, compares every byte at
+`0x90040000`, and reports the live SHA-256 plus the MCU UID over semihosting.
+Only an exact success record writes `build/qspi-verified.json`. The receipt
+binds that target-verified digest and UID to `bench.elf`,
+`bench-sram.elf`, `bench-qspi.bin`, and the helper ELF.
 Even with `--no-build`, `run.py` re-inspects `bench.elf` and regenerates both
 physical artifacts before accepting the receipt.
 
@@ -80,10 +86,9 @@ remain. The bench itself starts directly from SRAM through OpenOCD.
 
 The measurement itself uses the debug probe's SWD cable: 4 wires (SWDIO,
 SWCLK, GND, and 3V3, or just GND+SWD if the probe supplies its own power)
-from the ST-Link to the Seed's SWD header. The Seed's micro-USB port is also
-needed during the explicit DFU provisioning step above, but the bench never
-uses it as a reporting transport. If anchor mode is going to run (it always
-does, as part of the family-1 sweep), have
+from the ST-Link to the Seed's SWD header. The Seed's micro-USB port is usable
+as a power source but is not used for DFU or reporting. If anchor mode is
+going to run (it always does, as part of the family-1 sweep), have
 monitors connected to the Seed's audio out at **low volume** first — see
 below for what you'll actually hear.
 
@@ -353,7 +358,7 @@ QSPIFLASH  65,024 / 8,126,464 bytes 0.80%
 `g_system_arena` to `0x240606c0`, and `kBankSamples` to `0x90040000`.
 
 Hardware measurement remains **NEEDS_CONTEXT**, not complete: the Seed must
-be placed physically into Daisy bootloader DFU mode before the separate QSPI
-payload can be programmed and uploaded for byte verification. No
-`synth_2x4`/`wave_2x4` cycle or checksum result is claimed until that step and
-the subsequent two-run SWD measurement have actually happened.
+be connected through the ST-Link so the SRAM helper can program and verify
+the separate QSPI payload. No `synth_2x4`/`wave_2x4` cycle or checksum result
+is claimed until the controller performs that step and the subsequent
+two-run SWD measurement.

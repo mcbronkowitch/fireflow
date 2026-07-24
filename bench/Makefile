@@ -65,17 +65,15 @@ include $(SYSTEM_FILES_DIR)/Makefile
 # while HEAD was 0e6eeb5). Emit the hash as a real header instead, and make
 # it a real prerequisite of the one object that uses it.
 #
-# Written via a temp file, promoted only if content differs, so the
-# header's mtime -- and therefore whether main.o rebuilds -- reflects
-# whether the hash actually changed, not merely whether `make` ran.
+# Written by a tiny cross-platform helper only when content differs, so the
+# header's mtime -- and therefore whether main.o rebuilds -- reflects whether
+# the hash actually changed, not merely whether `make` ran.
 C_INCLUDES += -I$(BUILD_DIR)
 
 .PHONY: FORCE
 FORCE:
 
 $(BUILD_DIR)/git_hash.h: FORCE | $(BUILD_DIR)
-	@echo '#define BENCH_GIT_HASH "$(GIT_HASH)"' > $@.tmp
-	@cmp -s $@.tmp $@ 2>/dev/null || mv -f $@.tmp $@
-	@rm -f $@.tmp
+	@python write_git_hash.py $@ $(GIT_HASH)
 
 $(BUILD_DIR)/main.o: $(BUILD_DIR)/git_hash.h

@@ -20,6 +20,7 @@ from qspi_tools import (
     require_clean_tree,
     require_live_digest,
     require_verified_payload,
+    validate_helper_elf,
 )
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -30,25 +31,37 @@ ELF = os.path.join(HERE, "build", "bench.elf")
 SRAM_ELF = os.path.join(HERE, "build", "bench-sram.elf")
 QSPI_PAYLOAD = os.path.join(HERE, "build", "bench-qspi.bin")
 QSPI_RECEIPT = os.path.join(HERE, "build", "qspi-verified.json")
+PROGRAMMER_DIR = os.path.join(HERE, "qspi_programmer")
+PROGRAMMER_ELF = os.path.join(
+    PROGRAMMER_DIR, "build", "qspi-programmer.elf"
+)
+PROGRAMMER_CFG = os.path.join(HERE, "openocd", "qspi-programmer.cfg")
 OBJCOPY = r"C:\Program Files\DaisyToolchain\bin\arm-none-eabi-objcopy.exe"
 OBJDUMP = r"C:\Program Files\DaisyToolchain\bin\arm-none-eabi-objdump.exe"
-DFU_UTIL = r"C:\Program Files\DaisyToolchain\bin\dfu-util.exe"
+READELF = r"C:\Program Files\DaisyToolchain\bin\arm-none-eabi-readelf.exe"
 
 
 def build():
     # Do not ask libDaisy's default `all` target for bench.bin: one flat
     # binary spanning SRAM (0x24000000) and QSPI (0x90040000) would encode the
     # address gap. Build the ELF, then extract two explicit artifacts.
+    subprocess.run(
+        ["make", "-j8", "build/qspi-programmer.elf"],
+        cwd=PROGRAMMER_DIR,
+        check=True,
+    )
     subprocess.run(["make", "-j8", "build/bench.elf"], cwd=HERE, check=True)
     return prepare_existing_artifacts()
 
 
 def prepare_existing_artifacts():
     """Re-derive both physical images from the authoritative linked ELF."""
+    validate_helper_elf(PROGRAMMER_ELF, readelf=READELF)
     return prepare_split_artifacts(
         ELF,
         SRAM_ELF,
         QSPI_PAYLOAD,
+        programmer_elf_path=PROGRAMMER_ELF,
         objcopy=OBJCOPY,
         objdump=OBJDUMP,
     )
@@ -405,9 +418,9 @@ def main():
         "--program-qspi",
         action="store_true",
         help=(
-            "with the Seed explicitly in Daisy bootloader DFU mode, program "
-            "the extracted 65024-byte bank at 0x90040000, upload it again, "
-            "and write a byte-identity receipt"
+            "through the connected ST-Link, load an SRAM-only helper and the "
+            "65024-byte payload, program and byte-compare QSPI at 0x90040000, "
+            "then write a helper-bound identity receipt"
         ),
     )
     ap.add_argument("--repeat", type=int, default=2,
@@ -422,9 +435,14 @@ def main():
         if args.program_qspi:
             program_and_verify(
                 QSPI_PAYLOAD,
+                PROGRAMMER_ELF,
                 QSPI_RECEIPT,
                 artifact_identity=identity,
-                dfu_util=DFU_UTIL,
+                openocd=OPENOCD,
+                scripts=SCRIPTS,
+                interface=args.interface,
+                config=PROGRAMMER_CFG,
+                readelf=READELF,
             )
         if not args.build_only:
             require_verified_payload(QSPI_PAYLOAD, QSPI_RECEIPT, identity)
