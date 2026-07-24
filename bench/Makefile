@@ -27,6 +27,7 @@ CPP_SOURCES = \
 	main.cpp \
 	report.cpp \
 	qspi_digest.cpp \
+	rand_shim.cpp \
 	runner.cpp \
 	anchor.cpp \
 	mem.cpp \

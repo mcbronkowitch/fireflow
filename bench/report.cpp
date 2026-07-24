@@ -26,11 +26,11 @@ inline void sh_write0(const char* s)
 // capacity while using roomy DTCM rather than scarce AXI SRAM.
 char DTCM_REPORT_BSS g_buf[256];
 
-// Moving report_begin into DTCM would otherwise shift the 64 KiB measurement
-// arena earlier in AXI SRAM and change its cache alignment. This bench-only
-// NOLOAD reservation keeps the accepted Task 8 map; shipping code has no
-// input section and pays nothing.
-uint8_t SRAM_REPORT_LAYOUT_GUARD g_axi_layout_guard[0x70];
+// Moving reporting into DTCM and replacing newlib's heap-backed rand() both
+// shrink AXI text. This bench-only NOLOAD reservation keeps the accepted
+// Task 8 measurement-object addresses and cache alignment; shipping code has
+// no input section and pays nothing.
+uint8_t SRAM_REPORT_LAYOUT_GUARD g_axi_layout_guard[0xcd8];
 
 } // namespace
 

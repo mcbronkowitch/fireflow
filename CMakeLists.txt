@@ -90,6 +90,8 @@ add_executable(spky_tests
     bench/qspi_digest.cpp
     tests/test_bench_qspi_digest.cpp
     tests/test_qspi_programmer.cpp
+    bench/rand_shim.cpp
+    tests/test_bench_rand_shim.cpp
     tests/test_bench_serial_arena.cpp
     tests/test_wt_osc.cpp
     tests/test_env.cpp

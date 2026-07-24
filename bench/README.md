@@ -349,7 +349,7 @@ The accepted build-only map is deliberately recorded because the margins are
 tight:
 
 ```text
-DTCMRAM     8,420 / 131,072 bytes   6.42%
+DTCMRAM     8,604 / 131,072 bytes   6.56%
 SRAM_EXEC 262,864 / 262,880 bytes  99.99%  (16 bytes free)
 SRAM      261,384 / 261,408 bytes  99.99%  (24 bytes free)
 QSPIFLASH  65,024 / 8,126,464 bytes 0.80%
@@ -358,6 +358,22 @@ QSPIFLASH  65,024 / 8,126,464 bytes 0.80%
 `build/bench.elf`, `build/bench-sram.elf`, and the exact 65,024-byte
 `build/bench-qspi.bin` are produced. `g_sram` maps to `0x240302d0`,
 `g_system_arena` to `0x240606c0`, and `kBankSamples` to `0x90040000`.
+
+The first full hardware traversal exposed a bench-only failure after
+`modal_voice`, while setting up `string_voice`. The fault was an imprecise
+bus error (`CFSR=0x00000400`) in newlib `rand`: its first call lazily
+allocated a 24-byte state object, then allocator metadata/state writes crossed
+the AXI boundary at `0x24080000`. The linked image had `_ebss=end=0x2407ffe8`,
+leaving exactly 24 bytes and no room for allocator overhead.
+
+The harness therefore supplies its own deterministic, heap-free `rand` and
+`srand`. Its five-byte logical state occupies eight aligned bytes in DTCM;
+the linked `rand` symbol comes from `build/rand_shim.o`, whose undefined-symbol
+set is empty. A bench-only NOLOAD layout reservation absorbs the removed
+newlib text so all measured engine objects retain the accepted AXI addresses.
+Production firmware and DaisySP are unchanged. Before this shim, the corrected
+accepted map used 8,596 DTCM bytes; the eight-byte state accounts for the
+8,604-byte figure above.
 
 Hardware measurement remains **NEEDS_CONTEXT**, not complete: the Seed must
 be connected through the ST-Link so the SRAM helper can program and verify

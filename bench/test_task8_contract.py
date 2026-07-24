@@ -18,6 +18,7 @@ QSPI_PROGRAMMER_MAIN = ROOT / "bench" / "qspi_programmer" / "main.cpp"
 QSPI_PROGRAMMER_MAKEFILE = ROOT / "bench" / "qspi_programmer" / "Makefile"
 QSPI_PROGRAMMER_CORE = ROOT / "bench" / "qspi_programmer" / "program_core.h"
 REPORT_SOURCE = ROOT / "bench" / "report.cpp"
+RAND_SHIM = ROOT / "bench" / "rand_shim.cpp"
 SAMPLE_SHA = "81a914d0248bc7265703b81e27e4546264993705c11c1e30acd45cae2390e747"
 
 
@@ -227,6 +228,15 @@ class Task8Contract(unittest.TestCase):
         self.assertIn("load_image $HELPER", cfg)
         self.assertIn("load_image $PAYLOAD 0x24040000 bin", cfg)
         self.assertNotIn("reset run", cfg)
+
+    def test_bench_rand_is_deterministic_dtcm_and_heap_free(self) -> None:
+        source = RAND_SHIM.read_text(encoding="utf-8")
+        self.assertIn("rand_shim.cpp", self.makefile)
+        self.assertIn('extern "C" int rand(void)', source)
+        self.assertIn('extern "C" void srand(unsigned int seed)', source)
+        self.assertIn('section(".dtcmram_bss")', source)
+        for allocator in ("malloc(", "calloc(", "realloc(", "free("):
+            self.assertNotIn(allocator, source)
 
 
 if __name__ == "__main__":
