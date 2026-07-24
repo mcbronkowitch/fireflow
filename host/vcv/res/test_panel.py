@@ -256,6 +256,42 @@ def test_sector_captions():
               f"sector caption {wt} missing at ({wx:.2f}, {wy})")
 
 
+FX_FIELDS_A = {
+    "FLUX_TOP":    (39.0, 73.6, 31.0, 10.0, "#dfe5dc"),
+    "ROOM":        (70.5, 73.6, 10.5, 10.0, "#e8e0d4"),
+    "FLUX_BOTTOM": (39.0, 84.4, 21.0, 11.3, "#dfe5dc"),
+    "GRIT":        (60.5, 84.4, 20.5, 11.3, "#e6ddd1"),
+}
+
+
+def test_fx_fields_are_exact_mirrors():
+    check(len(g.FX_FIELDS) == 8, f"{len(g.FX_FIELDS)} FX fields, want 8")
+    for name, (x, y, w, h, fill) in FX_FIELDS_A.items():
+        a = next((f for f in g.FX_FIELDS if not f[0] and f[1] == name), None)
+        b = next((f for f in g.FX_FIELDS if f[0] and f[1] == name), None)
+        check(a is not None and b is not None, f"{name}: missing A or B field")
+        if a is None or b is None:
+            continue
+        _, _, ax, ay, aw, ah, af = a
+        _, _, bx, by, bw, bh, bf = b
+        check(all(approx(v, want) for v, want in
+                  zip((ax, ay, aw, ah), (x, y, w, h))),
+              f"{name} A geometry {a[2:6]}")
+        check(approx(bx, g.W - x - w) and approx(by, y)
+              and approx(bw, w) and approx(bh, h),
+              f"{name} B is not mirrored: {b[2:6]}")
+        check(af == fill and bf == fill, f"{name} fill {af}/{bf}, want {fill}")
+
+
+def test_fx_fields_render_below_controls():
+    s = g.svg()
+    field = g.fx_field_svg(next(f for f in g.FX_FIELDS
+                                if not f[0] and f[1] == "FLUX_TOP"))
+    knob = g.knob_svg(ctl("FLUX_A"))
+    check(field in s, "FLUX_TOP field missing from SVG")
+    check(s.index(field) < s.index(knob), "FX field must render below controls")
+
+
 def test_small_knobs_have_no_collar():
     """Spec §3: only the orbit and MORPH keep an accent collar."""
     s = g.svg()

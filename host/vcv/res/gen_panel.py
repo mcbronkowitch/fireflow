@@ -36,6 +36,9 @@ PAPER      = "#f7f4ec"   # plate
 PAPER_HI   = "#faf8f2"   # plate gradient top
 PAPER_LO   = "#f0ebdd"   # plate gradient bottom
 PAPER_DEEP = "#ede5d6"   # cards / pad backplates
+FX_FLUX    = "#dfe5dc"   # connected FLUX/TAPE fields
+FX_GRIT    = "#e6ddd1"   # connected GRIT/dynamics fields
+FX_ROOM    = "#e8e0d4"   # per-deck ROOM fields
 LINE       = "#d7cdbb"   # hairlines
 INK        = "#171713"   # lettering
 MUTED      = "#656056"   # eyebrows / neutral collars
@@ -123,6 +126,18 @@ def part_groups(mir):
     return [(fx(4.0, 31.5),  72.4, 31.5, 24.5, "VOICE", MUTED),
             (fx(38.0, 44.0), 72.4, 44.0, 24.5, "FX",    MUTED),
             (fx(4.0, 78.0),  98.6, 78.0, 12.6, "PLAY",  MUTED)]
+
+def part_fx_fields(mir):
+    def mx(x, w):
+        return W - x - w if mir else x
+    return [
+        (mir, "FLUX_TOP",    mx(39.0, 31.0), 73.6, 31.0, 10.0, FX_FLUX),
+        (mir, "ROOM",        mx(70.5, 10.5), 73.6, 10.5, 10.0, FX_ROOM),
+        (mir, "FLUX_BOTTOM", mx(39.0, 21.0), 84.4, 21.0, 11.3, FX_FLUX),
+        (mir, "GRIT",        mx(60.5, 20.5), 84.4, 20.5, 11.3, FX_GRIT),
+    ]
+
+FX_FIELDS = part_fx_fields(False) + part_fx_fields(True)
 
 def group_box(x, y, w, h, legend):
     """Box + the paper chip that breaks the top border for the legend. The
@@ -505,6 +520,11 @@ TEXTS = [
 # =============================================================================
 def mm(v): return f"{v:.3f}"
 
+def fx_field_svg(field):
+    _mir, _name, x, y, w, h, fill = field
+    return (f'<rect x="{mm(x)}" y="{mm(y)}" width="{mm(w)}" '
+            f'height="{mm(h)}" rx="1.0" fill="{fill}"/>')
+
 def side_accent(x):
     """Panel accent for a control: green left half, copper right half,
     neutral muted inside the center strip."""
@@ -595,6 +615,9 @@ def svg():
     # fieldset group boxes (drawn under the glyphs, over the sector tints)
     for (x, y, w, h, name, _colour) in GROUPS:
         P.append(group_box(x, y, w, h, name))
+    # connected low-contrast family fields inside the mirrored FX boxes
+    for field in FX_FIELDS:
+        P.append(fx_field_svg(field))
     # dark inner wells under the output groups -- in/out at a glance (spec §7)
     for (bx, _lg, _col, well, _items) in JACK_GROUPS:
         if well:

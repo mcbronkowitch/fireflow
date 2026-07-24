@@ -105,6 +105,14 @@
 <rect x="142.585" y="111.300" width="6.550" height="2.6" fill="#f7f4ec"/>
 <rect x="183.160" y="112.600" width="23.000" height="14.400" rx="1.5" fill="#ede5d6" stroke="#d7cdbb" stroke-width="0.35"/>
 <rect x="184.210" y="111.300" width="7.900" height="2.6" fill="#f7f4ec"/>
+<rect x="39.000" y="73.600" width="31.000" height="10.000" rx="1.0" fill="#dfe5dc"/>
+<rect x="70.500" y="73.600" width="10.500" height="10.000" rx="1.0" fill="#e8e0d4"/>
+<rect x="39.000" y="84.400" width="21.000" height="11.300" rx="1.0" fill="#dfe5dc"/>
+<rect x="60.500" y="84.400" width="20.500" height="11.300" rx="1.0" fill="#e6ddd1"/>
+<rect x="143.360" y="73.600" width="31.000" height="10.000" rx="1.0" fill="#dfe5dc"/>
+<rect x="132.360" y="73.600" width="10.500" height="10.000" rx="1.0" fill="#e8e0d4"/>
+<rect x="153.360" y="84.400" width="21.000" height="11.300" rx="1.0" fill="#dfe5dc"/>
+<rect x="132.360" y="84.400" width="20.500" height="11.300" rx="1.0" fill="#e6ddd1"/>
 <rect x="8.600" y="114.200" width="20.200" height="11.200" rx="1.2" fill="#1d1f1a"/>
 <rect x="142.260" y="114.200" width="20.200" height="11.200" rx="1.2" fill="#1d1f1a"/>
 <rect x="184.560" y="114.200" width="20.200" height="11.200" rx="1.2" fill="#1d1f1a"/>
