@@ -215,7 +215,7 @@ def test_header_carries_label_columns():
 
 # --- 2026-07-18 redesign: target coordinates, read off layout-b-v7.html -------
 ORBIT_A = {           # enum -> (knob x, knob y, label x, label y, anchor)
-    'RATE_A':    (39.500,  9.000, 39.500,  3.800, 'middle'),
+    'RATE_A':    (39.500,  9.000, 39.500,  3.000, 'middle'),
     'DENSITY_A': (55.891, 14.966, 59.876, 10.216, 'start'),
     'SMOOTH_A':  (64.613, 30.072, 70.718, 29.695, 'start'),
     'SHAPE_A':   (61.584, 47.250, 66.607, 52.350, 'start'),
@@ -742,12 +742,19 @@ def test_sampler_words_sit_inline_behind_their_caption():
             check(approx(t[2], 1.5), f"{c.enum}: {word} size {t[2]}, want 1.5")
             check(t[4] == g.MUTED,
                   f"{c.enum}: {word} colour {t[4]}, want {g.MUTED}")
-            want_anchor = 'start' if suffix == '_A' else 'end'
+            radial = base in g.SAMPLER_RADIAL
+            if radial:
+                want_anchor = 'end' if suffix == '_A' else 'start'
+            else:
+                want_anchor = 'start' if suffix == '_A' else 'end'
             check(t[5] == want_anchor,
                   f"{c.enum}: {word} anchored {t[5]!r}, want {want_anchor!r}")
             cap_l, cap_r = text_span(lx, anchor, c.label, size)
             word_l, word_r = text_span(t[0], t[5], word, t[2])
-            gap = word_l - cap_r if suffix == '_A' else cap_l - word_r
+            if radial:
+                gap = cap_l - word_r if suffix == '_A' else word_l - cap_r
+            else:
+                gap = word_l - cap_r if suffix == '_A' else cap_l - word_r
             check(approx(gap, g.SAMPLER_GAP),
                   f"{c.enum}: gap {gap:.2f} mm, want {g.SAMPLER_GAP}")
             # The word must clear the knob it belongs to -- nearest corner of
@@ -760,6 +767,23 @@ def test_sampler_words_sit_inline_behind_their_caption():
             # 0.15 mm allowance without weakening any glyph-overlap guard.
             check(math.hypot(near_x - c.x, near_y - c.y) >= g.GLYPH_R[c.kind] - 0.15,
                   f"{c.enum}: {word} overlaps the knob glyph")
+
+
+def test_scan_sits_outward_of_melo_and_clear_of_its_knob():
+    for suffix in ('_A', '_B'):
+        c = ctl('MELODY' + suffix)
+        lx, _ly, anchor, size, _colour = g.label_of(c)
+        scan = sampler_text('SCAN', c)
+        cap_l, cap_r = text_span(lx, anchor, c.label, size)
+        scan_l, scan_r = text_span(scan[0], scan[5], 'SCAN', scan[2])
+        if suffix == '_A':
+            check(scan_r < cap_l and scan_r < c.x,
+                  "SCAN_A is not outward of MELO_A")
+        else:
+            check(scan_l > cap_r and scan_l > c.x,
+                  "SCAN_B is not outward of MELO_B")
+        check(scan_l >= 1.0 and scan_r <= g.W - 1.0,
+              f"{c.enum}: SCAN leaves panel ({scan_l:.2f}..{scan_r:.2f})")
 
 
 def test_sampler_centred_captions_hand_their_centring_to_the_pair():

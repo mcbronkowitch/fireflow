@@ -119,7 +119,7 @@ enum LightId {
     NUM_LIGHTS
 };
 static const PanelCtl kParamCtls[] = {
-    {RATE_A, WK_BIGKNOB, {39.500f, 9.000f}, "RATE", {39.500f, 3.800f}, 0, 1.90f, 0x171713, "RATE"},
+    {RATE_A, WK_BIGKNOB, {39.500f, 9.000f}, "RATE", {39.500f, 3.000f}, 0, 1.90f, 0x171713, "RATE"},
     {SHAPE_A, WK_BIGKNOB, {61.584f, 47.250f}, "SHAPE", {66.607f, 52.350f}, 1, 1.90f, 0x171713, "SHAPE"},
     {DENSITY_A, WK_BIGKNOB, {55.891f, 14.966f}, "DENS", {59.876f, 10.216f}, 1, 1.90f, 0x171713, "DENS"},
     {SMOOTH_A, WK_BIGKNOB, {64.613f, 30.072f}, "SMTH", {70.718f, 29.695f}, 1, 1.90f, 0x171713, "SMTH"},
@@ -142,7 +142,7 @@ static const PanelCtl kParamCtls[] = {
     {PRINCIPLE_A, WK_SMBTN, {56.500f, 103.600f}, "PRIN", {56.500f, 109.000f}, 0, 1.90f, 0x171713, "PRIN"},
     {NEWPHRASE_A, WK_SMBTN, {67.000f, 103.600f}, "NEW", {67.000f, 109.000f}, 0, 1.90f, 0x171713, "NEW"},
     {TRIGGER_A, WK_SMBTN, {77.500f, 103.600f}, "TRIG", {77.500f, 109.000f}, 0, 1.90f, 0x171713, "TRIG"},
-    {RATE_B, WK_BIGKNOB, {173.860f, 9.000f}, "RATE", {173.860f, 3.800f}, 0, 1.90f, 0x171713, "RATE"},
+    {RATE_B, WK_BIGKNOB, {173.860f, 9.000f}, "RATE", {173.860f, 3.000f}, 0, 1.90f, 0x171713, "RATE"},
     {SHAPE_B, WK_BIGKNOB, {151.776f, 47.250f}, "SHAPE", {146.753f, 52.350f}, 2, 1.90f, 0x171713, "SHAPE"},
     {DENSITY_B, WK_BIGKNOB, {157.469f, 14.966f}, "DENS", {153.484f, 10.216f}, 2, 1.90f, 0x171713, "DENS"},
     {SMOOTH_B, WK_BIGKNOB, {148.747f, 30.072f}, "SMTH", {142.642f, 29.695f}, 2, 1.90f, 0x171713, "SMTH"},
@@ -245,10 +245,10 @@ static const PanelTxt kPanelTexts[] = {
     {{100.180f, 113.350f}, 1.80f, 0.35f, 0x656056, 0, "CLOCK"},
     {{145.860f, 113.350f}, 1.80f, 0.35f, 0x656056, 0, "OUT"},
     {{188.160f, 113.350f}, 1.80f, 0.35f, 0xB96532, 0, "CV B"},
-    {{13.193f, 52.350f}, 1.50f, 0.00f, 0x656056, 1, "SCAN"},
+    {{7.033f, 52.350f}, 1.50f, 0.00f, 0x656056, 2, "SCAN"},
     {{31.010f, 82.900f}, 1.50f, 0.00f, 0x656056, 1, "LEN"},
     {{31.580f, 95.000f}, 1.50f, 0.00f, 0x656056, 1, "ORG"},
-    {{200.167f, 52.350f}, 1.50f, 0.00f, 0x656056, 2, "SCAN"},
+    {{206.327f, 52.350f}, 1.50f, 0.00f, 0x656056, 1, "SCAN"},
     {{182.350f, 82.900f}, 1.50f, 0.00f, 0x656056, 2, "LEN"},
     {{181.780f, 95.000f}, 1.50f, 0.00f, 0x656056, 2, "ORG"},
 };

@@ -123,7 +123,7 @@
 <circle cx="39.500" cy="9.000" r="5.050" fill="none" stroke="#1d6f5f" stroke-width="0.5"/>
 <circle cx="39.500" cy="9.000" r="4.200" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="39.500" y1="9.000" x2="39.500" y2="5.500" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
-<text x="39.500" y="3.800" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">RATE</text>
+<text x="39.500" y="3.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">RATE</text>
 <circle cx="61.584" cy="47.250" r="5.050" fill="none" stroke="#1d6f5f" stroke-width="0.5"/>
 <circle cx="61.584" cy="47.250" r="4.200" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="61.584" y1="47.250" x2="61.584" y2="43.750" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
@@ -194,7 +194,7 @@
 <circle cx="173.860" cy="9.000" r="5.050" fill="none" stroke="#b96532" stroke-width="0.5"/>
 <circle cx="173.860" cy="9.000" r="4.200" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="173.860" y1="9.000" x2="173.860" y2="5.500" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
-<text x="173.860" y="3.800" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">RATE</text>
+<text x="173.860" y="3.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">RATE</text>
 <circle cx="151.776" cy="47.250" r="5.050" fill="none" stroke="#b96532" stroke-width="0.5"/>
 <circle cx="151.776" cy="47.250" r="4.200" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="151.776" y1="47.250" x2="151.776" y2="43.750" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
@@ -422,10 +422,10 @@
 <text x="100.180" y="113.350" fill="#656056" text-anchor="middle" font-family="monospace" font-size="1.8" letter-spacing="0.35" font-weight="bold">CLOCK</text>
 <text x="145.860" y="113.350" fill="#656056" text-anchor="middle" font-family="monospace" font-size="1.8" letter-spacing="0.35" font-weight="bold">OUT</text>
 <text x="188.160" y="113.350" fill="#b96532" text-anchor="middle" font-family="monospace" font-size="1.8" letter-spacing="0.35" font-weight="bold">CV B</text>
-<text x="13.193" y="52.350" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">SCAN</text>
+<text x="7.033" y="52.350" fill="#656056" text-anchor="end" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">SCAN</text>
 <text x="31.010" y="82.900" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">LEN</text>
 <text x="31.580" y="95.000" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">ORG</text>
-<text x="200.167" y="52.350" fill="#656056" text-anchor="end" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">SCAN</text>
+<text x="206.327" y="52.350" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">SCAN</text>
 <text x="182.350" y="82.900" fill="#656056" text-anchor="end" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">LEN</text>
 <text x="181.780" y="95.000" fill="#656056" text-anchor="end" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">ORG</text>
 </svg>

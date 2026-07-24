@@ -179,7 +179,7 @@ def orbit_label(cx, cy, ang_deg, mir):
     knob and the LED ring (spec 2026-07-18 §2)."""
     a = math.radians(ang_deg)
     s, c = math.sin(a), math.cos(a)
-    r = 31.3 if c < -0.38 else (30.7 if (abs(s) < 0.38 and c > 0.38) else 31.7)
+    r = 31.3 if c < -0.38 else (31.5 if (abs(s) < 0.38 and c > 0.38) else 31.7)
     dy = 2.2 if c < -0.38 else (0.0 if c > 0.38 else 0.7)
     anchor = "start" if s > 0.38 else ("end" if s < -0.38 else "middle")
     if mir:
@@ -474,9 +474,10 @@ def mirror_label(label):
 def sampler_texts():
     """Mirrored sampler aliases derived from Deck A -- never typed out twice.
 
-    On Deck A the alias is start-anchored one SAMPLER_GAP behind where the
-    caption ends. Deck B mirrors both the resolved primary caption and alias,
-    including their anchors, so the pair grows away from the gap on both sides.
+    Centred Deck-A aliases follow their caption in reading order. The radial
+    SCAN alias grows outward from MELO instead, keeping both words clear of the
+    MELODY knob. Deck B mirrors both the resolved primary caption and alias,
+    including their anchors.
 
     Where the pair as a whole sits depends on how the parent was placed, and
     the two rules are NOT interchangeable:
@@ -485,13 +486,9 @@ def sampler_texts():
       caption gives up its "middle" anchor and ends half a gap left of the
       knob's centre-of-pair, so "SUB LEN" straddles the knob the way "SUB"
       used to.
-    * The radial caption (MELODY) keeps its anchor point EXACTLY. That
-      position is measured, not free: orbit_label puts it outside the knob so
-      nothing lands between knob and LED ring, and the earlier attempt to
-      push a second line further out ended at x ~= 4 mm, hard against the
-      plate edge and visually orphaned from its knob. Re-anchoring the pair
-      would move MELO there for the same reason, so the word follows the
-      caption instead and the caption does not move at all.
+    * The radial caption (MELODY) keeps its anchor point EXACTLY. SCAN sits
+      one gap beyond MELO's outward glyph edge, so the pair reads SCAN MELO on
+      Deck A and mirrors to MELO SCAN on Deck B without crossing the knob.
 
     NOTE: this MUTATES c.lbl. Deck A reads SAMPLER_RADIAL/default_label_of
     rather than an already-mutated centred label, then Deck B is derived only
@@ -504,14 +501,16 @@ def sampler_texts():
         ws = text_w(word, SAMPLER_SIZE)
         if base in SAMPLER_RADIAL:
             lx, ly, anchor, size, col = c.lbl          # set by orbit_label
-            cap_end = lx if anchor == "end" else lx + text_w(c.label, size)
+            cap_left = lx - text_w(c.label, size) if anchor == "end" else lx
+            alias = (cap_left - SAMPLER_GAP, ly, SAMPLER_SIZE,
+                     0.0, MUTED, "end", word)
         else:
             _lx, ly, _anchor, size, col = default_label_of(c)
             mid = (text_w(c.label, size) - ws) / 2.0
             cap_end = c.x + mid - SAMPLER_GAP / 2.0
             c.lbl = (cap_end, ly, "end", size, col)
-        alias = (cap_end + SAMPLER_GAP, ly, SAMPLER_SIZE,
-                 0.0, MUTED, "start", word)
+            alias = (cap_end + SAMPLER_GAP, ly, SAMPLER_SIZE,
+                     0.0, MUTED, "start", word)
         aliases_a[base] = alias
         out.append(alias)
 
