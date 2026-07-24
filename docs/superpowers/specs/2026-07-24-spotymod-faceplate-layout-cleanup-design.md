@@ -106,6 +106,11 @@ PLAY retains all current controls and the current two-part rhythm:
 The two clusters are distinguished by spacing and a very light tonal change,
 not by an additional divider line.
 
+Deck A receives one borderless mode/record field at
+`(5.00, 99.60, 29.00, 10.60 mm)`, filled with PAPER_DEEP at SVG
+`fill-opacity="0.25"`. Deck B mirrors this rectangle. The sequencer cluster
+uses the parent PLAY fill without another nested field.
+
 ## 3. VOICE functional order
 
 VOICE is organized as three vertical functional pairs. Deck A reads from the
