@@ -560,6 +560,23 @@ def test_sampler_preset_init_snapshot():
     check("defaultFor(" not in cpp,
           "legacy split defaultFor table still exists")
 
+    check("int principleIdx[2] = {kInitPrinciple[0], kInitPrinciple[1]};" in cpp,
+          "fresh module principle state is not [2, 0]")
+
+    after_init = cpp.split("inst.init(sr, fxmem);", 1)[1]
+    reinit_tail = after_init.split("// Rebuild the factory-drone cache", 1)[0]
+    check("inst.set_principle(p, principleIdx[p]);" in reinit_tail,
+          "reinit does not restore the current principle after inst.init")
+
+    on_reset = cpp.split("void onReset() override {", 1)[1]
+    on_reset = on_reset.split("// --- persistence", 1)[0]
+    check("principleIdx[p] = kInitPrinciple[p];" in on_reset,
+          "Initialize does not restore principle defaults")
+    check("smp[p] = SamplerPartState{};" in on_reset,
+          "Initialize does not reset sampler edit state")
+    check("inst.sampler_clear(p);" in on_reset,
+          "Initialize does not empty sampler audio before factory autoload")
+
     makefile_path = os.path.join(here, "..", "Makefile")
     with open(makefile_path) as f:
         makefile = f.read()

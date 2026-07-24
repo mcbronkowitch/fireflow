@@ -132,7 +132,7 @@ struct Spotymod : Module {
     dsp::SchmittTrigger clockTrig, resetTrig;
     dsp::BooleanTrigger triggerTrig[2], spotTrig, settleTrig;
     dsp::BooleanTrigger principleTrig[2], newPhraseTrig[2];
-    int principleIdx[2] = {0, 0};   // current principle per part (0=TwoMotif)
+    int principleIdx[2] = {kInitPrinciple[0], kInitPrinciple[1]};
     float clkSamples = 0.f;                 // samples since last external clock edge
     float gateFilt[2] = {0.f, 0.f};
     float recPhase[2] = {0.f, 0.f};        // REC LED pulse while recording
@@ -248,6 +248,8 @@ struct Spotymod : Module {
         fxmem.sampler_frames = frames;
 
         inst.init(sr, fxmem);
+        for (int p = 0; p < spky::PART_COUNT; ++p)
+            inst.set_principle(p, principleIdx[p]);
 
         for (int p = 0; p < spky::PART_COUNT; ++p)
             if (!snapL[p].empty())
@@ -567,9 +569,15 @@ struct Spotymod : Module {
     }
 
     void onReset() override {
-        // Rack Initialize is the only gesture that should let the factory
-        // sample autoload again -- a mid-session Clear must stay cleared.
-        for (int p = 0; p < spky::PART_COUNT; ++p) factoryTried[p] = false;
+        // Rack Initialize restores the complete init patch, including the
+        // non-param principle state and an empty sampler ready for the
+        // bundled factory WAV. A mid-session Clear still stays cleared.
+        for (int p = 0; p < spky::PART_COUNT; ++p) {
+            principleIdx[p] = kInitPrinciple[p];
+            smp[p] = SamplerPartState{};
+            inst.sampler_clear(p);
+            factoryTried[p] = false;
+        }
         reinit(curSr > 0.f ? curSr : 48000.f);
     }
 
