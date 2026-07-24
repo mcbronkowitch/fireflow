@@ -71,6 +71,17 @@ struct DustQuantity : ParamQuantity {
     }
 };
 
+// SCALE tooltip: the raw index carried meaning at six entries and stopped
+// carrying it at thirteen. Names come from the engine's table, never a copy.
+struct ScaleQuantity : ParamQuantity {
+    std::string getDisplayValueString() override {
+        int i = (int)std::round(getValue());
+        if (i < 0) i = 0;
+        if (i >= spky::SCALE_LIST_COUNT) i = spky::SCALE_LIST_COUNT - 1;
+        return spky::SCALE_NAMES[i];
+    }
+};
+
 // Part A params occupy [0..PART_STRIDE), part B the next PART_STRIDE. The
 // generator lays both part blocks out identically (same order, mirrored x) and
 // emits PART_STRIDE; these guards catch any drift.
@@ -181,9 +192,9 @@ struct Spotymod : Module {
                 case WK_KNOBC:  // MELO (bipolar): both decks loop — A drifts a little, B is frozen
                     configParam(c.id, -1.f, 1.f, init, lbl); break;
                 case WK_KNOBI:
-                    if (c.id == SCALE)  // init patch is Lydian — the bright end of the sweep
-                        configParam(c.id, 0.f, (float)(spky::SCALE_LIST_COUNT - 1),
-                                    init, "Scale");
+                    if (c.id == SCALE)  // init patch is Lydian -- the bright end of group A
+                        configParam<ScaleQuantity>(c.id, 0.f, (float)(spky::SCALE_LIST_COUNT - 1),
+                                                   (float)spky::SCALE_LYDIAN, "Scale");
                     else  // STEPS_A / STEPS_B
                         configParam(c.id, 2.f, 16.f, init, "Steps");
                     getParamQuantity(c.id)->snapEnabled = true;
