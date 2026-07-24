@@ -9,7 +9,7 @@ the 2026-07-18 faceplate redesign.
 No pytest in this environment -- plain asserts, exit code says it all.
 Run from host/vcv/:  python res/test_panel.py
 """
-import os, sys, math
+import os, sys, math, re
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_panel as g
@@ -51,6 +51,19 @@ PARAM_ORDER = [
     'REC_A', 'REC_B', 'REV_MIX_A', 'REV_MIX_B',
     'SHUFFLE',
 ]
+PARAM_TIPS = [
+    'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
+    'ATK', 'DEC', 'RES', 'SUB', 'DTUN', 'FLUX', 'GRIT', 'COMP', 'STPS',
+    'ENG', 'GRIT', 'STEP', 'PRIN', 'NEW', 'TRIG',
+    'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
+    'ATK', 'DEC', 'RES', 'SUB', 'DTUN', 'FLUX', 'GRIT', 'COMP', 'STPS',
+    'ENG', 'GRIT', 'STEP', 'PRIN', 'NEW', 'TRIG',
+    'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'DRIVE',
+    'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
+    'FILT', 'FILT', 'TIDE', 'FRATE', 'FRATE', 'FFB', 'FFB', 'COLOR',
+    'COLOR', 'DUST', 'DUST', 'ROT', 'ROT', 'REC', 'REC', 'ROOM', 'ROOM',
+    'SHUFL',
+]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
 LIGHT_ORDER = ['GATE_A_L', 'GATE_B_L', 'REC_A_L', 'REC_B_L']
@@ -65,6 +78,23 @@ def test_enum_order():
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
     check(g.PART_STRIDE == 23, f"PART_STRIDE is {g.PART_STRIDE}, must be 23")
+
+
+def test_param_runtime_tip_contract():
+    """Faceplate captions may change, but Rack parameter names/tooltips may not."""
+    got = [c.tip for c in g.PARAMS]
+    check(got == PARAM_TIPS,
+          "parameter runtime tip contract changed: "
+          + repr([(c.enum, c.tip, want) for c, want in zip(g.PARAMS, PARAM_TIPS)
+                  if c.tip != want]))
+    for enum, caption, tip in (
+            ("FLUX_A", "MIX", "FLUX"), ("FLUX_B", "MIX", "FLUX"),
+            ("FLUXRATE_A", "RATE", "FRATE"), ("FLUXRATE_B", "RATE", "FRATE"),
+            ("FLUXFB_A", "FB", "FFB"), ("FLUXFB_B", "FB", "FFB")):
+        c = ctl(enum)
+        check(c.label == caption and c.tip == tip,
+              f"{enum}: caption/tip {c.label!r}/{c.tip!r}, "
+              f"want {caption!r}/{tip!r}")
 
 
 def test_dust_params():
@@ -620,6 +650,8 @@ def test_config_wires_tip_not_label():
     cpp_path = os.path.join(here, "..", "src", "Spotymod.cpp")
     with open(cpp_path) as f:
         cpp = f.read()
+    check("const std::string lbl = c.tip;" in cpp,
+          "parameter configuration is not wired to c.tip")
     check("configInput(c.id, c.tip)" in cpp,
           "configInput is not wired to c.tip -- jack tooltips will show panel labels")
     check("configOutput(c.id, c.tip)" in cpp,
@@ -675,20 +707,28 @@ def test_sampler_captions_exist():
           "DENSITY lost its DENS label")
 
 
+def text_span(x, anchor, text, size):
+    width = g.text_w(text, size)
+    if anchor == 'end':
+        return x - width, x
+    if anchor == 'middle':
+        return x - width / 2.0, x + width / 2.0
+    return x, x + width
+
+
 # The pair's extent on the caption baseline: (left, right) in mm. Derived
 # from the drawn anchors, not from the generator's intent, so it measures
 # what actually lands on the plate.
 def inline_span(c, word):
     lx, _ly, anchor, size, _col = g.label_of(c)
     t = sampler_text(word, c)
-    cap_l = lx - g.text_w(c.label, size) if anchor == 'end' else lx
-    return (cap_l, t[0] + g.text_w(word, t[2]))
+    cap_l, cap_r = text_span(lx, anchor, c.label, size)
+    word_l, word_r = text_span(t[0], t[5], word, t[2])
+    return min(cap_l, word_l), max(cap_r, word_r)
 
 
 def test_sampler_words_sit_inline_behind_their_caption():
-    """Every sampler word shares its caption's baseline and follows it one gap
-    behind, in reading order on both halves (2026-07-22). They used to hang
-    3 mm below, which read as orphaned from the knob."""
+    """Sampler aliases share the primary baseline and mirror as a complete pair."""
     for suffix in ('_A', '_B'):
         for base, word in SAMPLER_CAPTIONS:
             c = ctl(base + suffix)
@@ -702,16 +742,17 @@ def test_sampler_words_sit_inline_behind_their_caption():
             check(approx(t[2], 1.5), f"{c.enum}: {word} size {t[2]}, want 1.5")
             check(t[4] == g.MUTED,
                   f"{c.enum}: {word} colour {t[4]}, want {g.MUTED}")
-            # Start-anchored regardless of how the parent is anchored: the two
-            # grow AWAY from the gap, so a wrong MONO_ADV cannot close it.
-            check(t[5] == 'start',
-                  f"{c.enum}: {word} anchored {t[5]!r}, want 'start'")
-            cap_end = lx if anchor == 'end' else lx + g.text_w(c.label, size)
-            check(approx(t[0] - cap_end, g.SAMPLER_GAP),
-                  f"{c.enum}: gap {t[0] - cap_end:.2f} mm, want {g.SAMPLER_GAP}")
+            want_anchor = 'start' if suffix == '_A' else 'end'
+            check(t[5] == want_anchor,
+                  f"{c.enum}: {word} anchored {t[5]!r}, want {want_anchor!r}")
+            cap_l, cap_r = text_span(lx, anchor, c.label, size)
+            word_l, word_r = text_span(t[0], t[5], word, t[2])
+            gap = word_l - cap_r if suffix == '_A' else cap_l - word_r
+            check(approx(gap, g.SAMPLER_GAP),
+                  f"{c.enum}: gap {gap:.2f} mm, want {g.SAMPLER_GAP}")
             # The word must clear the knob it belongs to -- nearest corner of
             # its glyph box against the knob's radius, not just its anchor.
-            left, right = t[0], t[0] + g.text_w(word, t[2])
+            left, right = text_span(t[0], t[5], word, t[2])
             near_x = min(max(c.x, left), right)
             near_y = min(max(c.y, t[1] - 0.7 * t[2]), t[1])
             # The approved tighter radial MELODY label puts SCAN within 0.10 mm
@@ -731,12 +772,99 @@ def test_sampler_centred_captions_hand_their_centring_to_the_pair():
                 continue
             c = ctl(base + suffix)
             _lx, _ly, anchor, _size, _col = g.label_of(c)
-            check(anchor == 'end',
-                  f"{c.enum}: caption anchored {anchor!r}, want 'end'")
+            want_anchor = 'end' if suffix == '_A' else 'start'
+            check(anchor == want_anchor,
+                  f"{c.enum}: caption anchored {anchor!r}, want {want_anchor!r}")
             left, right = inline_span(c, word)
             check(approx((left + right) / 2.0, c.x),
                   f"{c.enum}: pair centred at {(left + right) / 2.0:.2f}, "
                   f"knob at {c.x:.2f}")
+
+
+def wedge_points(svg):
+    """Return the four annulus-corner points from a generated wedge path."""
+    pattern = re.compile(
+        r'(?:M|L)\s+([0-9.]+)\s+([0-9.]+)|'
+        r'A\s+[0-9.]+\s+[0-9.]+\s+0\s+[01]\s+[01]\s+'
+        r'([0-9.]+)\s+([0-9.]+)')
+    points = []
+    for match in pattern.finditer(svg):
+        x = match.group(1) or match.group(3)
+        y = match.group(2) or match.group(4)
+        points.append((float(x), float(y)))
+    return points
+
+
+def test_all_deck_local_geometry_is_exactly_mirrored():
+    """One property guard covers every deck-local glyph, label, and field."""
+    flip = {'start': 'end', 'end': 'start', 'middle': 'middle'}
+
+    params = {c.enum: c for c in g.PARAMS}
+    a_params = [c for c in g.PARAMS if c.enum.endswith('_A')]
+    check(len(a_params) > 0, "no deck-A parameters found")
+    for a in a_params:
+        b_name = a.enum[:-2] + '_B'
+        b = params.get(b_name)
+        check(b is not None, f"{a.enum}: missing mirror {b_name}")
+        if b is None:
+            continue
+        check(a.kind == b.kind and a.label == b.label,
+              f"{a.enum}/{b.enum}: kind or caption differs")
+        check(approx(b.x, g.W - a.x) and approx(b.y, a.y),
+              f"{a.enum}/{b.enum}: control coordinates are not mirrored")
+        al = g.label_of(a)
+        bl = g.label_of(b)
+        check(approx(bl[0], g.W - al[0]) and approx(bl[1], al[1]),
+              f"{a.enum}/{b.enum}: primary label coordinates are not mirrored")
+        check(bl[2] == flip[al[2]],
+              f"{a.enum}/{b.enum}: anchors {al[2]!r}/{bl[2]!r} are not mirrored")
+        check(approx(bl[3], al[3]) and bl[4] == al[4],
+              f"{a.enum}/{b.enum}: primary label styling differs")
+
+    lights = {c.enum: c for c in g.LIGHTS}
+    for a in (c for c in g.LIGHTS if c.enum.endswith('_A_L')):
+        b_name = a.enum[:-4] + '_B_L'
+        b = lights.get(b_name)
+        check(b is not None, f"{a.enum}: missing mirror {b_name}")
+        if b is not None:
+            check(a.kind == b.kind and approx(b.x, g.W - a.x) and approx(b.y, a.y),
+                  f"{a.enum}/{b.enum}: light coordinates are not mirrored")
+
+    for base, word in SAMPLER_CAPTIONS:
+        a = sampler_text(word, ctl(base + '_A'))
+        b = sampler_text(word, ctl(base + '_B'))
+        check(a is not None and b is not None, f"{base}: missing sampler alias pair")
+        if a is None or b is None:
+            continue
+        check(approx(b[0], g.W - a[0]) and approx(b[1], a[1]),
+              f"{base}: {word} coordinates are not mirrored")
+        check(b[5] == flip[a[5]], f"{base}: {word} anchors are not mirrored")
+        check(a[2:5] == b[2:5] and a[6] == b[6],
+              f"{base}: {word} alias styling differs")
+
+    for name, a0, a1, _caption in g.SECTORS:
+        a_points = wedge_points(g.wedge_svg(g.RING_CX_A, a0, a1, g.GREEN, False))
+        b_points = wedge_points(
+            g.wedge_svg(g.W - g.RING_CX_A, a0, a1, g.COPPER, True))
+        want_b = sorted((round(g.W - x, 3), round(y, 3)) for x, y in a_points)
+        got_b = sorted((round(x, 3), round(y, 3)) for x, y in b_points)
+        check(len(a_points) == 4 and got_b == want_b,
+              f"{name}: sector path points are not mirrored")
+
+    for a, b in zip(g.part_groups(False), g.part_groups(True)):
+        check(approx(b[0], g.W - a[0] - a[2]) and b[1:] == a[1:],
+              f"{a[4]}: group record is not mirrored")
+
+    for name in (field[1] for field in g.part_fx_fields(False)):
+        a = next(field for field in g.FX_FIELDS if not field[0] and field[1] == name)
+        b = next(field for field in g.FX_FIELDS if field[0] and field[1] == name)
+        check(approx(b[2], g.W - a[2] - a[4]) and b[3:] == a[3:],
+              f"{name}: FX field record is not mirrored")
+
+    a, b = g.PLAY_FIELDS
+    check(not a[0] and b[0] and approx(b[1], g.W - a[1] - a[3])
+          and b[2:] == a[2:],
+          "PLAY field records are not mirrored")
 
 
 def test_sampler_radial_caption_did_not_move():

@@ -99,14 +99,14 @@ def label_of(c):
     return default_label_of(c)
 
 class Ctl:
-    def __init__(self, enum, kind, x, y, label):
+    def __init__(self, enum, kind, x, y, label, tip=None):
         self.enum, self.kind, self.x, self.y, self.label = enum, kind, x, y, label
         self.r = GLYPH_R[kind]
         # None -> default placement (centred below the glyph); otherwise an
         # explicit (x, y, anchor, size, colour) tuple. Radial orbit captions
         # and white-on-well jack labels set this.
         self.lbl = None
-        self.tip = label   # tooltip text; panel label and tooltip differ on jacks
+        self.tip = label if tip is None else tip
 
 # geometry of a side ring
 RING_CY   = 34.5
@@ -191,10 +191,10 @@ def orbit_label(cx, cy, ang_deg, mir):
 # VOICE and FX sit side by side, PLAY spans the full part width below them.
 VOICE_X  = [9.25, 19.75, 30.25]      # ATK FILT SUB / DEC RES DTUN
 ROW_V1, ROW_V2 = 77.3, 89.4
-# 4-wide, aligned to FX_BOT so the FX box's two rows flush: FRATE FLUX FFB ROOM.
+# 4-wide, aligned to FX_BOT so the FX box's two rows flush: RATE MIX FB ROOM.
 FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # RATE MIX FB | ROOM (per-deck reverb mix)
 # FX bottom row went from two slots to four (spec 2026-07-18 dust-grain-cloud):
-# DUST ROT GRIT COMP. Pitch 8.833 mm against a 3.0 mm knob radius, so the
+# DUST ROT GRIT COMP. Pitch 10.50 mm against a 3.0 mm knob radius, so the
 # 6.0 mm minimum in test_no_overlap still has room to spare.
 FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # DUST ROT | GRIT COMP
 PLAY_Y   = 103.6
@@ -240,7 +240,7 @@ def part_controls(mir=False):
     # FLUX (the delay MIX) is the template member; RATE/FB are appended at the
     # end of PARAMS. STEPS keeps its append slot here but has moved to the PLAY
     # box -- it is a sequencer parameter, not an effect (spec 2026-07-18 §5).
-    out.append(Ctl("FLUX", SMKNOB, fx(FX_TOP[1]), ROW_V1, "MIX"))
+    out.append(Ctl("FLUX", SMKNOB, fx(FX_TOP[1]), ROW_V1, "MIX", "FLUX"))
     for enum, lbl, i in (("GRIT", "GRIT", 2), ("COMP", "COMP", 3)):
         out.append(Ctl(enum, SMKNOB, fx(FX_BOT[i]), ROW_V2, lbl))
     out.append(Ctl("STEPS", KNOBI, fx(STEPS_X), PLAY_Y, "STPS"))
@@ -380,10 +380,10 @@ PARAMS = PART_A + PART_B + SHARED + [
     # They complete the FLUX delay cluster atop the FX box: RATE (FX_TOP[0]),
     # MIX (FX_TOP[1], from the template), FB (FX_TOP[2]) sit together;
     # GRIT/COMP fill FX_BOT below.
-    Ctl("FLUXRATE_A", SMKNOB, FX_TOP[0],     ROW_V1, "RATE"),
-    Ctl("FLUXRATE_B", SMKNOB, W - FX_TOP[0], ROW_V1, "RATE"),
-    Ctl("FLUXFB_A",   SMKNOB, FX_TOP[2],     ROW_V1, "FB"),
-    Ctl("FLUXFB_B",   SMKNOB, W - FX_TOP[2], ROW_V1, "FB"),
+    Ctl("FLUXRATE_A", SMKNOB, FX_TOP[0],     ROW_V1, "RATE", "FRATE"),
+    Ctl("FLUXRATE_B", SMKNOB, W - FX_TOP[0], ROW_V1, "RATE", "FRATE"),
+    Ctl("FLUXFB_A",   SMKNOB, FX_TOP[2],     ROW_V1, "FB", "FFB"),
+    Ctl("FLUXFB_B",   SMKNOB, W - FX_TOP[2], ROW_V1, "FB", "FFB"),
     # COLOR: chord density/colour per part (spec 2026-07-17 chord-layer), a full
     # orbit member since the 2026-07-18 redesign -- it is pitch material, so it
     # sits in the PITCH sector. Still appended LAST: order defines the param id.
@@ -406,7 +406,7 @@ PARAMS = PART_A + PART_B + SHARED + [
     Ctl("REC_B", LATCH, W - REC_X, PLAY_Y, "REC"),
     # Per-deck reverb mix (spec 2026-07-23 per-deck-reverb-mix). Appended LAST
     # like FILT/FLUXRATE/COLOR/DUST/REC so PART_STRIDE stays 23 and no id before
-    # them moves. They fill the FX top row's 4th slot -- FRATE.FLUX.FFB.ROOM --
+    # them moves. They fill the FX top row's 4th slot -- RATE.MIX.FB.ROOM --
     # aligned to the FX bottom row. Label "ROOM" (not "MIX": FLUX beside it is
     # already the delay mix). The old shared centre REV_MIX is removed from
     # SHARED; its id and every id after it shift by one (accepted: old .vcv
@@ -446,9 +446,9 @@ SAMPLER_SIZE = 1.5     # mm; the main captions are 1.9
 # SAMPLER_DY = 3.0 mm below their parent, which read as orphaned -- the words
 # belonged to nothing in particular.
 #
-# The word always follows in reading order, on both halves. The panel mirrors
-# geometry, but text does not: "SCAN MELO" on part B to match a mirrored
-# layout would be a different label, not a mirrored one.
+# Deck A is the source geometry. Deck B mirrors the complete primary/secondary
+# label pair, including flipped anchors, so labels obey the same exact mirror
+# invariant as the controls and background fields.
 SAMPLER_GAP    = 0.8   # mm of air between a caption and its sampler word
 # MELODY's caption is placed radially by orbit_label(); SUB and DETUNE use the
 # centred default. That difference decides which pair rule applies -- see
@@ -464,15 +464,19 @@ MONO_ADV       = 0.6
 def text_w(s, size_mm):
     return len(s) * MONO_ADV * size_mm
 
-def sampler_texts():
-    """The sampler word beside its caption, derived from it -- never typed out.
+def mirror_anchor(anchor):
+    return {"start": "end", "end": "start", "middle": "middle"}[anchor]
 
-    The word is always start-anchored one SAMPLER_GAP behind where the
-    caption ENDS. Anchoring it away from the gap rather than from the pair's
-    left edge is what makes the layout tolerant of MONO_ADV being wrong: if
-    Rack's monospace face is wider than the estimate, caption and word grow
-    away from each other, so the pair can drift but the gap can never close
-    and the two can never overlap.
+def mirror_label(label):
+    x, y, anchor, size, colour = label
+    return (W - x, y, mirror_anchor(anchor), size, colour)
+
+def sampler_texts():
+    """Mirrored sampler aliases derived from Deck A -- never typed out twice.
+
+    On Deck A the alias is start-anchored one SAMPLER_GAP behind where the
+    caption ends. Deck B mirrors both the resolved primary caption and alias,
+    including their anchors, so the pair grows away from the gap on both sides.
 
     Where the pair as a whole sits depends on how the parent was placed, and
     the two rules are NOT interchangeable:
@@ -489,28 +493,35 @@ def sampler_texts():
       would move MELO there for the same reason, so the word follows the
       caption instead and the caption does not move at all.
 
-    NOTE: this MUTATES c.lbl. It reads SAMPLER_RADIAL and default_label_of
-    rather than inspecting c.lbl, so a second call recomputes from the same
-    starting point instead of from its own output.
+    NOTE: this MUTATES c.lbl. Deck A reads SAMPLER_RADIAL/default_label_of
+    rather than an already-mutated centred label, then Deck B is derived only
+    from Deck A. A second call therefore reproduces the same geometry.
     """
     out = []
-    for suffix in ("_A", "_B"):
-        for base, word in SAMPLER_LBL:
-            c = next(c for c in PARAMS if c.enum == base + suffix)
-            ws = text_w(word, SAMPLER_SIZE)
-            if base in SAMPLER_RADIAL:
-                lx, ly, anchor, size, col = c.lbl          # set by orbit_label
-                # Where the caption's own glyphs end, whichever side it is
-                # anchored from -- part A ends at its anchor, part B starts
-                # there and runs a caption-width to the right.
-                cap_end = lx if anchor == "end" else lx + text_w(c.label, size)
-            else:
-                _lx, ly, _anchor, size, col = default_label_of(c)
-                mid = (text_w(c.label, size) - ws) / 2.0
-                cap_end = c.x + mid - SAMPLER_GAP / 2.0
-                c.lbl = (cap_end, ly, "end", size, col)
-            out.append((cap_end + SAMPLER_GAP, ly, SAMPLER_SIZE,
-                        0.0, MUTED, "start", word))
+    aliases_a = {}
+    for base, word in SAMPLER_LBL:
+        c = next(c for c in PARAMS if c.enum == base + "_A")
+        ws = text_w(word, SAMPLER_SIZE)
+        if base in SAMPLER_RADIAL:
+            lx, ly, anchor, size, col = c.lbl          # set by orbit_label
+            cap_end = lx if anchor == "end" else lx + text_w(c.label, size)
+        else:
+            _lx, ly, _anchor, size, col = default_label_of(c)
+            mid = (text_w(c.label, size) - ws) / 2.0
+            cap_end = c.x + mid - SAMPLER_GAP / 2.0
+            c.lbl = (cap_end, ly, "end", size, col)
+        alias = (cap_end + SAMPLER_GAP, ly, SAMPLER_SIZE,
+                 0.0, MUTED, "start", word)
+        aliases_a[base] = alias
+        out.append(alias)
+
+    for base, word in SAMPLER_LBL:
+        a = next(c for c in PARAMS if c.enum == base + "_A")
+        b = next(c for c in PARAMS if c.enum == base + "_B")
+        b.lbl = mirror_label(label_of(a))
+        x, y, size, spacing, colour, anchor, _word = aliases_a[base]
+        out.append((W - x, y, size, spacing, colour,
+                    mirror_anchor(anchor), word))
     return out
 
 # --- shared panel lettering (drawn by SVG for preview, by C++ at runtime) -----

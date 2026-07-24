@@ -234,10 +234,10 @@
 <text x="193.610" y="95.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">RES</text>
 <circle cx="183.110" cy="77.300" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="183.110" y1="77.300" x2="183.110" y2="75.000" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
-<text x="183.070" y="82.900" fill="#171713" text-anchor="end" font-family="monospace" font-size="1.9">SUB</text>
+<text x="183.150" y="82.900" fill="#171713" text-anchor="start" font-family="monospace" font-size="1.9">SUB</text>
 <circle cx="183.110" cy="89.400" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="183.110" y1="89.400" x2="183.110" y2="87.100" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
-<text x="183.640" y="95.000" fill="#171713" text-anchor="end" font-family="monospace" font-size="1.9">DTUN</text>
+<text x="182.580" y="95.000" fill="#171713" text-anchor="start" font-family="monospace" font-size="1.9">DTUN</text>
 <circle cx="158.610" cy="77.300" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="158.610" y1="77.300" x2="158.610" y2="75.000" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
 <text x="158.610" y="82.900" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">MIX</text>
@@ -425,7 +425,7 @@
 <text x="13.193" y="52.350" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">SCAN</text>
 <text x="31.010" y="82.900" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">LEN</text>
 <text x="31.580" y="95.000" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">ORG</text>
-<text x="206.327" y="52.350" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">SCAN</text>
-<text x="183.870" y="82.900" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">LEN</text>
-<text x="184.440" y="95.000" fill="#656056" text-anchor="start" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">ORG</text>
+<text x="200.167" y="52.350" fill="#656056" text-anchor="end" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">SCAN</text>
+<text x="182.350" y="82.900" fill="#656056" text-anchor="end" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">LEN</text>
+<text x="181.780" y="95.000" fill="#656056" text-anchor="end" font-family="monospace" font-size="1.5" letter-spacing="0.0" font-weight="bold">ORG</text>
 </svg>
