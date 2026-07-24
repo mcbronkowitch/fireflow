@@ -345,3 +345,18 @@ TEST_CASE("scenario: the new scale names reach the instrument") {
     CHECK(settled_pitch_semis("hijaz",    15.8f / 36.f) == doctest::Approx(16.f));
     CHECK(settled_pitch_semis("nonsense", 15.8f / 36.f) == doctest::Approx(15.f));
 }
+
+TEST_CASE("scenario: wave engine spelling selects ENGINE_WAVE") {
+    Instrument inst;
+    inst.init(48000.f);
+    Event e;
+    e.action = "set_engine";
+    e.part = 0;
+    e.svalue = "wave";
+    apply_event(inst, e);
+    for (int i = 0; i < 500; ++i) {
+        float in[1] {}, l[1], r[1];
+        inst.process(in, in, l, r, 1);
+    }
+    CHECK(inst.engine_id(0) == ENGINE_WAVE);
+}

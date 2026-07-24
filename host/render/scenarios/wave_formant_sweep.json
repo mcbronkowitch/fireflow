@@ -1,0 +1,40 @@
+{
+  "sample_rate": 48000,
+  "bpm": 90,
+  "duration_s": 24,
+  "init": [
+    {"action":"set_engine","part":0,"value":"wave"},
+    {"action":"set_engine","part":1,"value":"test_tone"},
+    {"action":"set_target_active","part":1,"slot":4,"flag":false},
+    {"action":"set_target_base","part":1,"slot":4,"value":0.0},
+    {"action":"set_step","part":0,"flag":false,"ivalue":8},
+    {"action":"set_color","part":0,"value":0.0},
+    {"action":"set_rate","part":0,"value":0.18},
+    {"action":"set_shape","part":0,"value":0.18},
+    {"action":"set_smooth","part":0,"value":0.65},
+    {"action":"set_depth","part":0,"value":1.0},
+    {"action":"set_target_active","part":0,"slot":0,"flag":true},
+    {"action":"set_target_base","part":0,"slot":0,"value":0.10},
+    {"action":"set_target_depth","part":0,"slot":0,"value":0.10},
+    {"action":"set_target_active","part":0,"slot":2,"flag":false},
+    {"action":"set_target_base","part":0,"slot":2,"value":0.32},
+    {"action":"set_target_active","part":0,"slot":3,"flag":false},
+    {"action":"set_target_active","part":0,"slot":4,"flag":false},
+    {"action":"set_target_base","part":0,"slot":4,"value":0.72},
+    {"action":"set_voice_attack","part":0,"value":0.12},
+    {"action":"set_voice_decay","part":0,"value":0.80},
+    {"action":"set_voice_resonance","part":0,"value":0.32},
+    {"action":"set_voice_sub","part":0,"value":0.08},
+    {"action":"set_voice_detune","part":0,"value":0.22},
+    {"action":"set_voice_filt","part":0,"value":0.35},
+    {"action":"set_fx_on","part":0,"value":"flux","flag":false},
+    {"action":"set_fx_on","part":0,"value":"grit","flag":false},
+    {"action":"set_reverb_mix","value":0.0}
+  ],
+  "events": [
+    {"t":8.0,"action":"set_target_base","part":0,"slot":0,"value":0.35},
+    {"t":8.0,"action":"set_target_depth","part":0,"slot":0,"value":0.12},
+    {"t":16.0,"action":"set_target_base","part":0,"slot":0,"value":0.82},
+    {"t":16.0,"action":"set_target_depth","part":0,"slot":0,"value":0.18}
+  ]
+}

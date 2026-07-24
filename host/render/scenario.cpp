@@ -85,6 +85,7 @@ static GritMode parse_grit_mode(const std::string& s) {
 static EngineId parse_engine(const std::string& s) {
     if (s == "test_tone") return ENGINE_TEST_TONE;
     if (s == "sampler")   return ENGINE_SAMPLER;
+    if (s == "wave")      return ENGINE_WAVE;
     return ENGINE_SYNTH;
 }
 
