@@ -283,13 +283,40 @@ def test_fx_fields_are_exact_mirrors():
         check(af == fill and bf == fill, f"{name} fill {af}/{bf}, want {fill}")
 
 
-def test_fx_fields_render_below_controls():
+def test_fx_fields_render_in_explicit_layer():
     s = g.svg()
-    field = g.fx_field_svg(next(f for f in g.FX_FIELDS
-                                if not f[0] and f[1] == "FLUX_TOP"))
-    knob = g.knob_svg(ctl("FLUX_A"))
-    check(field in s, "FLUX_TOP field missing from SVG")
-    check(s.index(field) < s.index(knob), "FX field must render below controls")
+    group_svgs = [g.group_box(x, y, w, h, name)
+                  for (x, y, w, h, name, _colour) in g.GROUPS]
+    field_svgs = [g.fx_field_svg(field) for field in g.FX_FIELDS]
+    well_svgs = [
+        (f'<rect x="{g.mm(bx + 1.4)}" y="{g.mm(g.JACK_BOX_Y + 1.6)}" '
+         f'width="{g.mm(g.JACK_BOX_W - 2.8)}" '
+         f'height="{g.mm(g.JACK_BOX_H - 3.2)}" rx="1.2" fill="{g.WELL}"/>')
+        for (bx, _lg, _col, well, _items) in g.JACK_GROUPS if well
+    ]
+    control_svgs = [
+        g.knob_svg(c) for c in g.PARAMS
+        if c.kind in (g.BIGKNOB, g.KNOBC, g.SMKNOB, g.KNOBI)
+    ]
+
+    last_group_end = max(s.index(box) + len(box) for box in group_svgs)
+    first_well_or_control = min(
+        s.index(item) for item in well_svgs + control_svgs)
+    field_spans = []
+    for field, rendered in zip(g.FX_FIELDS, field_svgs):
+        check(s.count(rendered) == 1,
+              f"{field[1]} {'B' if field[0] else 'A'} field must render once")
+        if rendered in s:
+            start = s.index(rendered)
+            field_spans.append((start, start + len(rendered)))
+
+    check(len(field_spans) == len(g.FX_FIELDS),
+          f"{len(field_spans)} rendered FX fields, want {len(g.FX_FIELDS)}")
+    if field_spans:
+        check(last_group_end < min(start for start, _end in field_spans),
+              "FX fields must render after every group box")
+        check(max(end for _start, end in field_spans) < first_well_or_control,
+              "FX fields must render before wells and controls")
 
 
 def test_small_knobs_have_no_collar():
