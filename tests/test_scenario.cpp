@@ -313,3 +313,35 @@ TEST_CASE("scenario: the sampler control actions reach the engine") {
     // this isn't just reading a head that was already parked at home.
     CHECK(inst.sampler_scan_pos(0) == 0.f);
 }
+
+// One fresh instrument per scale: PITCH depth 0 and base fixed, so pitch_cv
+// settles on whatever the scale allows nearest to `base`, with nothing
+// carried over from a previous scale.
+static float settled_pitch_semis(const char* scale_name, float base) {
+    Instrument inst;
+    inst.init(48000.f);
+    Event depth; depth.action = "set_target_depth"; depth.part = 0;
+    depth.slot = LANE_PITCH; depth.value = 0.f;
+    apply_event(inst, depth);
+    Event b;     b.action = "set_target_base"; b.part = 0;
+    b.slot = LANE_PITCH; b.value = base;
+    apply_event(inst, b);
+    Event s;     s.action = "set_scale"; s.svalue = scale_name;
+    apply_event(inst, s);
+
+    float l = 0.f, r = 0.f;
+    for (int i = 0; i < 4000; ++i) inst.process(nullptr, nullptr, &l, &r, 1);
+    return inst.pitch_cv(0) * 36.f;
+}
+
+TEST_CASE("scenario: the new scale names reach the instrument") {
+    // 18 semis is degree 6. Hirajoshi (0 2 3 7 8) has neither 6 nor 5, so the
+    // search walks up to 19; dorian would tie 17/19 and take 17.
+    CHECK(settled_pitch_semis("hirajoshi", 0.5f) == doctest::Approx(19.f));
+
+    // Below 16 semis, hijaz (0 1 4 5 7 8 10) snaps to 16 while dorian snaps
+    // to 15. Using 15.8 also clears the quantizer's 0.30-semitone hysteresis
+    // around the exact 15/17 midpoint.
+    CHECK(settled_pitch_semis("hijaz",    15.8f / 36.f) == doctest::Approx(16.f));
+    CHECK(settled_pitch_semis("nonsense", 15.8f / 36.f) == doctest::Approx(15.f));
+}

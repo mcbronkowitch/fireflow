@@ -89,11 +89,18 @@ static EngineId parse_engine(const std::string& s) {
 }
 
 static int parse_scale_name(const std::string& s) {
-    if (s == "min_pent") return SCALE_MIN_PENT;
-    if (s == "aeolian")  return SCALE_AEOLIAN;
-    if (s == "maj_pent") return SCALE_MAJ_PENT;
-    if (s == "lydian")   return SCALE_LYDIAN;
-    if (s == "whole")    return SCALE_WHOLE;
+    if (s == "aeolian")   return SCALE_AEOLIAN;
+    if (s == "mixo")      return SCALE_MIXO;
+    if (s == "lydian")    return SCALE_LYDIAN;
+    if (s == "hirajoshi") return SCALE_HIRAJOSHI;
+    if (s == "pygmy")     return SCALE_PYGMY;
+    if (s == "min_pent")  return SCALE_MIN_PENT;
+    if (s == "kumoi")     return SCALE_KUMOI;
+    if (s == "maj_pent")  return SCALE_MAJ_PENT;
+    if (s == "phrygian")  return SCALE_PHRYGIAN;
+    if (s == "hijaz")     return SCALE_HIJAZ;
+    if (s == "harm_min")  return SCALE_HARM_MIN;
+    if (s == "whole")     return SCALE_WHOLE;
     return SCALE_DORIAN;   // "dorian" and anything unknown -> the default
 }
 
