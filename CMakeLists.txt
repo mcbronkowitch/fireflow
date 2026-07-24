@@ -131,3 +131,13 @@ add_executable(render
 )
 target_include_directories(render PRIVATE host engine third_party)
 target_link_libraries(render PRIVATE nlohmann_json daisysp_min)
+
+add_test(
+    NAME ctrl_identity
+    COMMAND ${CMAKE_COMMAND}
+        -DRENDER=$<TARGET_FILE:render>
+        -DSCENARIO=${CMAKE_SOURCE_DIR}/host/render/scenarios/ctrl_identity.json
+        -DEXPECTED=659af928e1f273d9ba9619f9ad235844fec1c2277557ed81a0c2dc065c6eb336
+        -DOUT_DIR=${CMAKE_BINARY_DIR}
+        -P ${CMAKE_SOURCE_DIR}/tests/check_render_hash.cmake
+)

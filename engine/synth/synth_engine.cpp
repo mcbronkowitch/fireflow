@@ -7,7 +7,7 @@ using namespace spky;
 namespace {
 // 4 voices at full level + sub must stay inside the part's +/-1.5 headroom.
 constexpr float kVoiceGain = 0.22f;
-constexpr float kPanFan[SynthEngine::kVoices] = { -1.f, 1.f, -0.5f, 0.5f };
+constexpr float kPanFan[4] = { -1.f, 1.f, -0.5f, 0.5f };
 
 // Pitch contract (identical numbers to TestToneEngine): 0..1 = 36 semitones.
 // std::pow is fine here - trigger/control rate, never per sample.
@@ -19,7 +19,8 @@ inline float filter_hz(float n) {
 }
 } // namespace
 
-void SynthEngine::init(float sample_rate) {
+template <class OscT>
+void SynthEngineT<OscT>::init(float sample_rate) {
     _sr = sample_rate;
     for (int v = 0; v < kVoices; ++v) {
         _voices[v].init(sample_rate, _seed + 0x9e3779b9u * static_cast<uint32_t>(v + 1));
@@ -42,20 +43,23 @@ void SynthEngine::init(float sample_rate) {
     _update_control();
 }
 
-int SynthEngine::sustain_voice() const {
+template <class OscT>
+int SynthEngineT<OscT>::sustain_voice() const {
     for (int v = 0; v < kVoices; ++v)
         if (_sustaining[v]) return v;
     return -1;
 }
 
-int SynthEngine::sustain_count() const {
+template <class OscT>
+int SynthEngineT<OscT>::sustain_count() const {
     int n = 0;
     for (int v = 0; v < kVoices; ++v)
         if (_sustaining[v]) ++n;
     return n;
 }
 
-void SynthEngine::_demote_all() {
+template <class OscT>
+void SynthEngineT<OscT>::_demote_all() {
     for (int v = 0; v < kVoices; ++v)
         if (_sustaining[v]) {
             _voices[v].set_sustaining(false);
@@ -64,7 +68,8 @@ void SynthEngine::_demote_all() {
         }
 }
 
-void SynthEngine::set_targets(const float* t, float /*tune*/) {
+template <class OscT>
+void SynthEngineT<OscT>::set_targets(const float* t, float /*tune*/) {
     // tune is already summed into the quantized PITCH target upstream (Part).
     for (int i = 0; i < LANE_COUNT; ++i) _targets[i] = t[i];
     // engine-standalone default: with no chord fed, the surface is the pitch
@@ -72,18 +77,21 @@ void SynthEngine::set_targets(const float* t, float /*tune*/) {
     if (_chord_n <= 1) _chord[0] = _targets[LANE_PITCH];
 }
 
-void SynthEngine::set_chord(const float* p, int n) {
+template <class OscT>
+void SynthEngineT<OscT>::set_chord(const float* p, int n) {
     if (n < 1) n = 1;
     if (n > kMaxChord) n = kMaxChord;
     for (int i = 0; i < n; ++i) _chord[i] = p[i];
     _chord_n = n;
 }
 
-void SynthEngine::set_cycle(float seconds) {
+template <class OscT>
+void SynthEngineT<OscT>::set_cycle(float seconds) {
     _cycle_s = clampf(seconds, 0.01f, 120.f);   // applied at the next ctrl tick
 }
 
-void SynthEngine::set_flow(bool flow) {
+template <class OscT>
+void SynthEngineT<OscT>::set_flow(bool flow) {
     if (flow == _flow) return;
     _flow = flow;
     if (!flow) {
@@ -95,7 +103,8 @@ void SynthEngine::set_flow(bool flow) {
     }
 }
 
-void SynthEngine::set_hold(bool on) {
+template <class OscT>
+void SynthEngineT<OscT>::set_hold(bool on) {
     if (on == _hold) return;
     _hold = on;
     if (on) {
@@ -107,9 +116,11 @@ void SynthEngine::set_hold(bool on) {
     }
 }
 
-void SynthEngine::trigger(float pitch_norm) { _do_trigger(pitch_norm, 1.f, 0); }
+template <class OscT>
+void SynthEngineT<OscT>::trigger(float pitch_norm) { _do_trigger(pitch_norm, 1.f, 0); }
 
-void SynthEngine::trigger_chord(const float* p, int n) {
+template <class OscT>
+void SynthEngineT<OscT>::trigger_chord(const float* p, int n) {
     if (n < 1) return;                                   // nothing to trigger
     if (n <= 1) { _do_trigger(p[0], 1.f, 0); return; }   // COLOR-0 exact path
     if (n > kMaxChord) n = kMaxChord;
@@ -126,7 +137,8 @@ void SynthEngine::trigger_chord(const float* p, int n) {
     }
 }
 
-void SynthEngine::_do_trigger(float pitch_norm, float vel, int chord_slot) {
+template <class OscT>
+void SynthEngineT<OscT>::_do_trigger(float pitch_norm, float vel, int chord_slot) {
     int pick = -1;
     for (int i = 0; i < kVoices; ++i) {              // round-robin over free voices
         int v = (_next_rr + i) % kVoices;
@@ -166,7 +178,8 @@ void SynthEngine::_do_trigger(float pitch_norm, float vel, int chord_slot) {
     _voices[pick].trigger(pitch_to_hz(pitch_norm));   // pitch LATCHED here
 }
 
-void SynthEngine::_adjust_surface() {
+template <class OscT>
+void SynthEngineT<OscT>::_adjust_surface() {
     int m = 0, worst = -1;
     bool has[kMaxChord] = { false, false, false, false };
     for (int v = 0; v < kVoices; ++v)
@@ -188,7 +201,8 @@ void SynthEngine::_adjust_surface() {
     }
 }
 
-void SynthEngine::_update_control() {
+template <class OscT>
+void SynthEngineT<OscT>::_update_control() {
     // chord surface follows COLOR live (spec §2 amendment): one voice per
     // control tick blooms in / the top slot collapses out — never while a
     // stab is still strewing in
@@ -207,7 +221,7 @@ void SynthEngine::_update_control() {
     const float dt_s   = kCtrlInterval / _sr;
 
     for (int v = 0; v < kVoices; ++v) {
-        Voice& vc = _voices[v];
+        VoiceT<OscT>& vc = _voices[v];
         vc.set_env_times(attack_s, decay_s);
         vc.set_morph(timbre);
         vc.set_detune_cents(det_ct);
@@ -229,7 +243,8 @@ void SynthEngine::_update_control() {
         }
 }
 
-void SynthEngine::process(float& outL, float& outR) {
+template <class OscT>
+void SynthEngineT<OscT>::process(float& outL, float& outR) {
     if (_pending_n > 0) {                        // strewed stab tones land here
         int w = 0;
         for (int i = 0; i < _pending_n; ++i) {
@@ -263,30 +278,40 @@ void SynthEngine::process(float& outL, float& outR) {
     outR = r * gain;
 }
 
-void SynthEngine::set_attack(float n) {
+template <class OscT>
+void SynthEngineT<OscT>::set_attack(float n) {
     _attack_ratio = 0.002f * std::pow(250.f, clampf(n, 0.f, 1.f));
 }
 
-void SynthEngine::set_decay(float n) {
+template <class OscT>
+void SynthEngineT<OscT>::set_decay(float n) {
     _decay_ratio = 0.1f * std::pow(80.f, clampf(n, 0.f, 1.f));
 }
 
-void SynthEngine::set_resonance(float n) { _resonance = clampf(n, 0.f, 1.f); }
-void SynthEngine::set_sub(float n)       { _sub_level = clampf(n, 0.f, 1.f); }
-void SynthEngine::set_filt(float n) { _filt_amt = clampf(n, -1.f, 1.f); }
+template <class OscT>
+void SynthEngineT<OscT>::set_resonance(float n) { _resonance = clampf(n, 0.f, 1.f); }
+template <class OscT>
+void SynthEngineT<OscT>::set_sub(float n)       { _sub_level = clampf(n, 0.f, 1.f); }
+template <class OscT>
+void SynthEngineT<OscT>::set_filt(float n) { _filt_amt = clampf(n, -1.f, 1.f); }
 
-void SynthEngine::set_detune(float n) {
+template <class OscT>
+void SynthEngineT<OscT>::set_detune(float n) {
     _detune_max_ct = clampf(n, 0.f, 1.f) * kDetuneCeilCt;
 }
 
-int SynthEngine::active_voices() const {
+template <class OscT>
+int SynthEngineT<OscT>::active_voices() const {
     int n = 0;
     for (const auto& v : _voices)
         if (v.active()) ++n;
     return n;
 }
 
-float SynthEngine::voice_env(int v) const {
+template <class OscT>
+float SynthEngineT<OscT>::voice_env(int v) const {
     if (v < 0 || v >= kVoices) return 0.f;
     return _voices[v].env_value();
 }
+
+template class spky::SynthEngineT<spky::MorphOsc>;

@@ -27,7 +27,8 @@ namespace spky {
 //   master gain). All but PITCH act on all voices continuously.
 // - Control rate: drift LFOs + envelope coefficients + all voice parameter
 //   pushes run once per kCtrlInterval samples (CPU-budget constraint).
-class SynthEngine : public IPartEngine {
+template <class OscT>
+class SynthEngineT : public IPartEngine {
 public:
     static constexpr int   kVoices       = 4;
     static constexpr int   kCtrlInterval = 96;
@@ -90,7 +91,7 @@ private:
     void _update_control();
     void _adjust_surface();
 
-    std::array<Voice, kVoices>    _voices;
+    std::array<VoiceT<OscT>, kVoices>    _voices;
     std::array<uint32_t, kVoices> _order {};   // trigger sequence per voice
     uint32_t _seq = 0;
     uint32_t _seed = 0xC0FFEEu;
@@ -124,5 +125,8 @@ private:
 
     OnePole _level;                // smoothed master gain (LEVEL target)
 };
+
+using SynthEngine = SynthEngineT<MorphOsc>;
+extern template class SynthEngineT<MorphOsc>;
 
 } // namespace spky

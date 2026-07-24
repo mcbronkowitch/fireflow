@@ -19,7 +19,8 @@ namespace spky {
 // fast_sin only. The FILTER is spky::SvfLp (util/svf_lp.h) -- daisysp::Svf
 // with its four unread outputs and its provably-zero drive term removed;
 // Low() is bit-identical. Voice now has no DaisySP dependency at all.
-class Voice {
+template <class OscT>
+class VoiceT {
 public:
     void init(float sample_rate, uint32_t seed);
 
@@ -47,8 +48,8 @@ public:
 private:
     void _apply_freq();                   // osc A/B freq from pitch+detune+drift
 
-    MorphOsc _osc_a;
-    MorphOsc _osc_b;
+    OscT _osc_a;
+    OscT _osc_b;
     Env _env;
     SvfLp _filt;
 
@@ -72,5 +73,8 @@ private:
     float _drift_det_hz = 0.1f;
     float _drift_ct_cur = 0.f;            // current micro-detune drift (cents)
 };
+
+using Voice = VoiceT<MorphOsc>;
+extern template class VoiceT<MorphOsc>;
 
 } // namespace spky
