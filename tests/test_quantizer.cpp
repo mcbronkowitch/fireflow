@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 #include <cmath>
 #include <initializer_list>
+#include <string>
 #include "pitch/quantizer.h"
 using namespace spky;
 
@@ -130,4 +131,37 @@ TEST_CASE("quantizer: slew length scales with the caller's interval") {
 
     CHECK(calls_to_settle(96) <= 25);    // ~20 control ticks, not ~1920
     CHECK(calls_to_settle(1)  > 100);    // default: still a sample-rate slew
+}
+
+// The masks are hand-written hex. A mistyped digit otherwise surfaces only as
+// a melody that sounds slightly wrong, so state the semitones independently
+// and rebuild the mask from them.
+TEST_CASE("quantizer: masks match their documented semitones and names") {
+    struct Row { int id; const char* name; int n; int semis[7]; };
+    static const Row kRows[] = {
+        { SCALE_AEOLIAN,   "Aeolian",        7, {0,2,3,5,7,8,10} },
+        { SCALE_DORIAN,    "Dorian",         7, {0,2,3,5,7,9,10} },
+        { SCALE_MIXO,      "Mixolydian",     7, {0,2,4,5,7,9,10} },
+        { SCALE_LYDIAN,    "Lydian",         7, {0,2,4,6,7,9,11} },
+        { SCALE_HIRAJOSHI, "Hirajoshi",      5, {0,2,3,7,8} },
+        { SCALE_PYGMY,     "Pygmy",          5, {0,2,3,7,10} },
+        { SCALE_MIN_PENT,  "Minor pent",     5, {0,3,5,7,10} },
+        { SCALE_KUMOI,     "Kumoi",          5, {0,2,3,7,9} },
+        { SCALE_MAJ_PENT,  "Major pent",     5, {0,2,4,7,9} },
+        { SCALE_PHRYGIAN,  "Phrygian",       7, {0,1,3,5,7,8,10} },
+        { SCALE_HIJAZ,     "Hijaz",          7, {0,1,4,5,7,8,10} },
+        { SCALE_HARM_MIN,  "Harmonic minor", 7, {0,2,3,5,7,8,11} },
+        { SCALE_WHOLE,     "Whole tone",     6, {0,2,4,6,8,10} },
+    };
+    CHECK(sizeof(kRows) / sizeof(kRows[0]) == static_cast<size_t>(SCALE_LIST_COUNT));
+
+    for (const auto& r : kRows) {
+        CAPTURE(r.name);
+        uint16_t want = 0;
+        for (int i = 0; i < r.n; ++i) want |= static_cast<uint16_t>(1u << r.semis[i]);
+        CHECK(SCALE_MASKS[r.id] == want);
+        CHECK((SCALE_MASKS[r.id] & 1u) == 1u);            // root always allowed
+        CHECK((SCALE_MASKS[r.id] & ~0x0FFFu) == 0u);      // fits in 12 bits
+        CHECK(std::string(SCALE_NAMES[r.id]) == std::string(r.name));
+    }
 }

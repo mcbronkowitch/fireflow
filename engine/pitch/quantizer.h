@@ -7,25 +7,54 @@ namespace spky {
 
 enum class QuantMode { Scale, Chrom, Free };
 
-// Global scale list, ordered dark -> bright (spec: the selection knob sweep
-// is a brightness axis). Bit i set = semitone i relative to root is allowed.
+// Global scale list in three groups: modes, pentatonics, exotic/handpan.
+// Dark -> bright ordering survives inside each group, so the direction of the
+// selection sweep still means what it always meant; the groups themselves run
+// familiar -> exotic and are what makes the longer list blind-navigable
+// (count blocks of 4/5/4, then step within one). Bit i set = semitone i
+// relative to root is allowed.
 enum ScaleId {
-    SCALE_MIN_PENT = 0,
-    SCALE_AEOLIAN,
-    SCALE_DORIAN,      // boot default
-    SCALE_MAJ_PENT,
+    // A -- modes
+    SCALE_AEOLIAN = 0,
+    SCALE_DORIAN,          // boot default
+    SCALE_MIXO,
     SCALE_LYDIAN,
+    // B -- pentatonics
+    SCALE_HIRAJOSHI,
+    SCALE_PYGMY,
+    SCALE_MIN_PENT,
+    SCALE_KUMOI,
+    SCALE_MAJ_PENT,
+    // C -- exotic / handpan
+    SCALE_PHRYGIAN,
+    SCALE_HIJAZ,
+    SCALE_HARM_MIN,
     SCALE_WHOLE,
     SCALE_LIST_COUNT
 };
 
 constexpr uint16_t SCALE_MASKS[SCALE_LIST_COUNT] = {
-    0x04A9,  // minor pentatonic  0 3 5 7 10
     0x05AD,  // aeolian           0 2 3 5 7 8 10
     0x06AD,  // dorian            0 2 3 5 7 9 10
-    0x0295,  // major pentatonic  0 2 4 7 9
+    0x06B5,  // mixolydian        0 2 4 5 7 9 10
     0x0AD5,  // lydian            0 2 4 6 7 9 11
+    0x018D,  // hirajoshi         0 2 3 7 8
+    0x048D,  // pygmy             0 2 3 7 10
+    0x04A9,  // minor pentatonic  0 3 5 7 10
+    0x028D,  // kumoi             0 2 3 7 9
+    0x0295,  // major pentatonic  0 2 4 7 9
+    0x05AB,  // phrygian          0 1 3 5 7 8 10
+    0x05B3,  // hijaz             0 1 4 5 7 8 10
+    0x09AD,  // harmonic minor    0 2 3 5 7 8 11
     0x0555,  // whole tone        0 2 4 6 8 10
+};
+
+// Display names, read by the VCV tooltip. Kept here rather than in the host so
+// the two lists cannot drift apart.
+constexpr const char* SCALE_NAMES[SCALE_LIST_COUNT] = {
+    "Aeolian", "Dorian", "Mixolydian", "Lydian",
+    "Hirajoshi", "Pygmy", "Minor pent", "Kumoi", "Major pent",
+    "Phrygian", "Hijaz", "Harmonic minor", "Whole tone",
 };
 
 constexpr uint16_t CHROM_MASK = 0x0FFF;
