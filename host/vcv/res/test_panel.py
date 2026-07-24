@@ -658,6 +658,145 @@ def test_config_wires_tip_not_label():
           "configOutput is not wired to c.tip -- jack tooltips will show panel labels")
 
 
+def cpp_scope(source, anchor):
+    """Return the braced C++ declaration beginning at *anchor*.
+
+    The host guard deliberately inspects the owning declaration rather than a
+    whole translation unit: a stale duplicate elsewhere must not make wiring
+    appear correct.
+    """
+    start = source.find(anchor)
+    if start < 0:
+        return None
+    opening = source.find("{", start)
+    if opening < 0:
+        return None
+    depth = 0
+    for pos in range(opening, len(source)):
+        if source[pos] == "{":
+            depth += 1
+        elif source[pos] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start:pos + 1]
+    return None
+
+
+def compact_cpp(source):
+    return re.sub(r"\s+", "", source)
+
+
+def engine_cycle_wiring_issues(cpp, makefile):
+    """Return scoped ENG integration regressions found in host source."""
+    issues = []
+    latch = cpp_scope(cpp, "struct EngineCycleLatch : VCVLatch")
+    config = cpp_scope(cpp, "void configControls()")
+    push = cpp_scope(cpp, "void pushParams()")
+    process = cpp_scope(cpp, "void process(const ProcessArgs& args) override")
+    ring = cpp_scope(cpp, "struct SpkyRing : Widget")
+    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
+
+    for label, block in (("latch", latch), ("config", config),
+                         ("parameter push", push), ("REC LED", process),
+                         ("sampler ring", ring), ("widget", widget)):
+        if block is None:
+            issues.append(f"ENG {label} scope is missing")
+    if issues:
+        return issues
+
+    latch_expected = """
+struct EngineCycleLatch : VCVLatch {
+    void drawLayer(const DrawArgs& args, int layer) override {
+        VCVLatch::drawLayer(args, layer);
+        if (layer != 1) return;
+        engine::ParamQuantity* pq = getParamQuantity();
+        if (!pq) return;
+        const int state = static_cast<int>(std::round(pq->getValue()));
+        if (state == 0) return;
+        const NVGcolor color = state == 1
+            ? nvgRGBA(255, 174, 92, 105)
+            : nvgRGBA(120, 210, 255, 145);
+        const Vec c = box.size.div(2.f);
+        nvgBeginPath(args.vg);
+        nvgCircle(args.vg, c.x, c.y, 5.2f);
+        nvgStrokeWidth(args.vg, 1.4f);
+        nvgStrokeColor(args.vg, color);
+        nvgStroke(args.vg);
+    }
+}"""
+    if compact_cpp(latch) != compact_cpp(latch_expected):
+        issues.append("ENG latch must contain only the specified drawLayer overlay")
+
+    engine_config = """
+else if (c.id == ENGINE_A || c.id == ENGINE_B) {
+    configSwitch(c.id, 0.f, 2.f, init, "Engine", {"Synth", "Sampler", "Wave"});
+    getParamQuantity(c.id)->snapEnabled = true;
+}"""
+    if compact_cpp(config).count(compact_cpp(engine_config)) != 1:
+        issues.append("ENG config must be one snapped Synth/Sampler/Wave 0/1/2 branch")
+
+    engine_widget = """
+case WK_LATCH:
+    if (c.id == ENGINE_A || c.id == ENGINE_B)
+        addParam(createParamCentered<EngineCycleLatch>(pos, module, c.id));
+    else
+        addParam(createParamCentered<VCVLatch>(pos, module, c.id));
+    break;"""
+    if compact_cpp(widget).count(compact_cpp(engine_widget)) != 1:
+        issues.append("only ENGINE_A/B may use EngineCycleLatch; other latches use VCVLatch")
+    if widget.count("createParamCentered<EngineCycleLatch>") != 1:
+        issues.append("widget must create exactly one EngineCycleLatch branch")
+
+    push_n = compact_cpp(push)
+    dispatch = """
+const int eng = static_cast<int>(std::round(pp(ENGINE_A, p)));
+const spky::EngineId id =
+    eng == 0 ? spky::ENGINE_SYNTH :
+    eng == 2 ? spky::ENGINE_WAVE :
+    smp[p].testTone ? spky::ENGINE_TEST_TONE : spky::ENGINE_SAMPLER;
+inst.set_engine(p, id);"""
+    if push_n.count(compact_cpp(dispatch)) != 1:
+        issues.append("ENG dispatch must exactly preserve Synth/Sampler/Wave/test-tone states")
+    factory = "if(eng==1&&!smp[p].testTone&&inst.sampler_empty(p)&&!factoryTried[p]){"
+    if push_n.count(factory) != 1:
+        issues.append("factory autoload must be restricted to ENG state 1")
+
+    sampler_id = "inst.engine_id(p)==spky::ENGINE_SAMPLER"
+    want_rec = ("constboolwantRec=params[p?REC_B:REC_A].getValue()>0.5f&&" +
+                sampler_id + ";")
+    sampler_part = "constboolsamplerPart=" + sampler_id + ";"
+    if push_n.count(want_rec) != 1:
+        issues.append("REC must be gated by the exact sampler engine id")
+    if push_n.count(sampler_part) != 1:
+        issues.append("sampler controls must use one exact samplerPart engine-id gate")
+    for required in ("if(samplerPart)inst.sampler_scan(p,pp(MELODY_A,p));",
+                     "if(samplerPart){",
+                     "inst.set_target_active(p,spky::LANE_PITCH,!samplerPart);",
+                     "if(samplerPart)inst.sampler_punch(p);"):
+        if required not in push_n:
+            issues.append("a sampler-only pushParams control escaped samplerPart gating")
+            break
+    if any(bad in push_n for bad in ("eng>0", "eng!=0", "eng>=1", "eng==1||eng==2")):
+        issues.append("pushParams has a boolean ENG alternative that can route Wave as Sampler")
+
+    process_n = compact_cpp(process)
+    if process_n.count(sampler_part) != 1:
+        issues.append("REC LED must use the exact sampler engine id")
+    if "elseif(samplerPart&&!inst.sampler_empty(p)){" not in process_n:
+        issues.append("REC LED fill state must remain sampler-only")
+
+    ring_n = compact_cpp(ring)
+    if ring_n.count("if(module&&module->inst.engine_id(part)==spky::ENGINE_SAMPLER){") != 1:
+        issues.append("sampler ring display must use the exact sampler engine id")
+
+    cpp_n = compact_cpp(cpp)
+    if "ppb(ENGINE_A,p)" in cpp_n or "eng2" in cpp:
+        issues.append("legacy boolean ENG routing remains")
+    if makefile.count("$(REPO)/engine/synth/wt_bank.cpp") != 1:
+        issues.append("VCV build must link wt_bank.cpp exactly once")
+    return issues
+
+
 def test_engine_cycle_host_wiring():
     """ENG keeps its saved 0/1 meanings and exposes Wave at 2 without any
     boolean sampler routing that would mistake Wave for Sampler."""
@@ -667,27 +806,32 @@ def test_engine_cycle_host_wiring():
     with open(os.path.join(here, "..", "Makefile")) as f:
         makefile = f.read()
 
-    check('configSwitch(c.id, 0.f, 2.f, init, "Engine", {"Synth", "Sampler", "Wave"});' in cpp,
-          "ENG is not configured as Synth/Sampler/Wave states 0/1/2")
-    check('struct EngineCycleLatch : VCVLatch' in cpp,
-          "ENG has no three-state visual latch overlay")
-    check('if (c.id == ENGINE_A || c.id == ENGINE_B)' in cpp and
-          'createParamCentered<EngineCycleLatch>' in cpp,
-          "ENGINE_A/B are not using EngineCycleLatch")
-    check('const int eng = static_cast<int>(std::round(pp(ENGINE_A, p)));' in cpp,
-          "ENG state is not rounded to an exact integer")
-    check('eng == 0 ? spky::ENGINE_SYNTH' in cpp and
-          'eng == 2 ? spky::ENGINE_WAVE' in cpp and
-          'smp[p].testTone ? spky::ENGINE_TEST_TONE : spky::ENGINE_SAMPLER' in cpp,
-          "ENG dispatch does not preserve Synth/Sampler/test-tone/Wave meanings")
-    check('if (eng == 1 && !smp[p].testTone && inst.sampler_empty(p)' in cpp,
-          "factory loading is not restricted to Sampler")
-    check('const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;' in cpp,
-          "sampler-only behavior is not gated by the selected engine id")
-    check('ppb(ENGINE_A, p)' not in cpp,
-          "ENG still has a boolean check that would route Wave as Sampler")
-    check('$(REPO)/engine/synth/wt_bank.cpp' in makefile,
-          "VCV build does not link the wavetable bank")
+    for issue in engine_cycle_wiring_issues(cpp, makefile):
+        check(False, issue)
+
+
+def test_engine_cycle_guard_rejects_representative_regressions():
+    """The source guard must fail when a scoped ENG behavior regresses."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    with open(os.path.join(here, "..", "Makefile")) as f:
+        makefile = f.read()
+
+    mutations = [
+        ("createParamCentered<EngineCycleLatch>",
+         "createParamCentered<VCVLatch>", "widget"),
+        ("nvgRGBA(120, 210, 255, 145)",
+         "nvgRGBA(121, 210, 255, 145)", "latch"),
+        ("if (eng == 1 && !smp[p].testTone",
+         "if (eng > 0 && !smp[p].testTone", "factory"),
+        ("const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;",
+         "const bool samplerPart = eng > 0;", "sampler"),
+    ]
+    for before, after, label in mutations:
+        mutated = cpp.replace(before, after, 1)
+        check(engine_cycle_wiring_issues(mutated, makefile),
+              f"ENG guard accepted a {label} regression")
 
 
 def test_shuffle_host_wiring():

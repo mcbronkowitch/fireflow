@@ -586,7 +586,7 @@ struct Spotymod : Module {
         lights[GATE_B_L].setBrightness(gateFilt[1]);
 
         // REC LED: pulsing while recording, steady at the fill level when the
-        // part holds content, dark when empty or when ENG is on Synth. Content
+        // part holds content, dark when empty or on any non-Sampler engine. Content
         // left over from a part that was switched away from Sampler must not
         // relight the LED -- ENG, not buffer state, decides what's shown.
         for (int p = 0; p < spky::PART_COUNT; ++p) {

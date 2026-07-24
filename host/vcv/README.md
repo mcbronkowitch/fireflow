@@ -51,13 +51,13 @@ treated as Sampler. The context-menu test-tone development override remains
 limited to state 1; it cannot replace Wave. The latch has no halo for Synth,
 a warm halo for Sampler, and an ice-blue halo for Wave.
 
-**ENG** (per part, latched) selects the part's engine: **Synth** or **Sampler**
-— a granular texture deck over the shared record buffer. Flipping ENG to
+**ENG** (per part, latched) selects **Synth**, **Sampler**, or **Wave**.
+**Sampler** is a granular texture deck over the shared record buffer. Flipping ENG to
 Sampler on an empty part autoloads the embedded first four bars of the
 project author's own 110 BPM bass loop (`res/factory.wav`) so the deck makes
 sound on the very first gesture; it never overwrites content already in the
 buffer, and a deliberate *Clear sample* stays cleared even if you flip ENG
-back and forth. On a Synth part, ENG is the only mode control — REC is inert
+back and forth. On a Synth or Wave part, ENG is the only mode control — REC is inert
 there.
 
 **REC** (per part, latched) records from **IN L/R** into that part's buffer
@@ -69,7 +69,7 @@ longer matches a file on disk or the factory sample, so *Save sample…* is
 the only way to keep it. The REC LED has three states: **pulsing** (2 Hz)
 while recording, a **steady brightness proportional to fill level** once the
 part holds content and isn't recording, and **dark** when the part is empty
-or on Synth — the light tracks ENG, not leftover buffer state, so switching
+or on a non-Sampler engine — the light tracks ENG, not leftover buffer state, so switching
 a part away from Sampler doesn't relight it.
 
 **Four Synth controls take on a different job the moment ENG says Sampler.**
