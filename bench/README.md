@@ -356,7 +356,8 @@ QSPIFLASH  65,024 / 8,126,464 bytes 0.80%
 ```
 
 `build/bench.elf`, `build/bench-sram.elf`, and the exact 65,024-byte
-`build/bench-qspi.bin` are produced. `g_sram` maps to `0x240302d0`,
+`build/bench-qspi.bin` are produced. The receipt-bound `build/bench.elf` used
+for the final runs is 3,728,648 bytes. `g_sram` maps to `0x240302d0`,
 `g_system_arena` to `0x240606c0`, and `kBankSamples` to `0x90040000`.
 
 The first full hardware traversal exposed a bench-only failure after
@@ -397,6 +398,21 @@ both WAVE maxima are below the 960,000-cycle block budget. Task 8 therefore
 passes its direct-engine acceptance gate. The generated
 `docs/bench/2026-07-24-7ab2e26.md` and `.csv` contain the complete first-run
 table; the second-run comparison is recorded separately above.
+
+The `66d359d` attribution values came from minimal diagnostic binaries because
+the full parent bench did not link. Those diagnostics retained the exact
+parent engine code and the exact Task 8 workload setup/process: 96-sample
+blocks, a 100-block warmup, then 1,000 blocks measured with DWT. Parent
+`lane_step_shape00` measured 27,971 / 29,042 average/maximum cycles versus
+28,040 / 29,050 in the current full bench, changes of +0.247% / +0.028%.
+Parent `synth_1_voice` measured 52,967 / 53,880 versus 55,576 / 56,570,
+changes of +4.925% / +4.993%. The displayed parent diagnostic average/maximum
+cycle values—not a checksum claim—were exact repeats across two captures.
+The current full captures differ slightly in cycles as recorded above, while
+their checksum comparison reported no drift. Both parent/current changes are
+within this bench's documented cross-build noise. The roughly 11,614-cycle
+lane figure in an older report predates intervening lane and workload-shuffle
+changes; it is not the `66d359d` diagnostic comparator.
 
 The verdict is protected by the receipt-bound live-payload check, target UID
 check, full-run terminator, repeat-run checksum comparison, heap-free random
