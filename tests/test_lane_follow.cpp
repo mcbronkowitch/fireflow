@@ -64,12 +64,25 @@ TEST_CASE("follow: a multi-step advance replays every slot in order") {
     configure(l, 4);
     l.follow(0, 0.f, 0.f);
     std::vector<int> seen;
-    for (int32_t s = 3; s <= 15; s += 3) {          // three slots per call
+    int wraps = 0;
+    for (int32_t s = 3; s <= 24; s += 3) {          // three slots per call
         l.follow(s, 0.f, 0.f);
         seen.push_back(l.cur_step());
+        if (l.wrapped()) ++wraps;
     }
-    // Landing slots after 3, 6, 9, 12, 15 deck steps in a 4-slot cycle.
-    CHECK(seen == std::vector<int>{3, 2, 1, 0, 3});
+    // Landing slots after 3, 6, ..., 24 deck steps in a 4-slot cycle.
+    CHECK(seen == std::vector<int>{3, 2, 1, 0, 3, 2, 1, 0});
+    // The landing slots alone don't prove the walk ran: a "land only" guard
+    // (skip straight to slot_of(pos, slots) instead of stepping through every
+    // intervening slot) produces the exact same sequence above, because the
+    // final slot after N elapsed steps is the same either way. What only the
+    // walk can produce is a wrap EVERY time the walk crosses slot 0 -- and it
+    // drives EVOLVE's per-wrap walk and RENEW's regen, which a landing skips
+    // entirely. 24 elapsed steps in a 4-slot cycle cross slot 0 exactly 6
+    // times (multiples of 4 from 1 to 24: 4, 8, 12, 16, 20, 24), regardless of
+    // how the 24 steps are chunked across follow() calls -- verified against
+    // slot_of's definition, not assumed.
+    CHECK(wraps == 6);
 }
 
 TEST_CASE("follow: wrapped() marks the cycle seam, once per cycle") {
@@ -112,6 +125,24 @@ TEST_CASE("follow: a slot nudge offsets the lane and fires immediately") {
 
     l.follow(5, 0.f, 0.f);                  // the offset persists
     CHECK(l.cur_step() == 0);
+
+    // A nudge that crosses the cycle seam is a positional jump, not elapsed
+    // time -- pin that it is never mistaken for a genuine wrap (which would
+    // also walk EVOLVE and burn RNG draws nobody asked for). nudge_slots()
+    // has to move _follow_pos by the same amount as _follow_offset, or the
+    // next follow() sees a phantom elapsed distance and replays through
+    // every slot in between -- including slot 0, if the jump happens to
+    // cross it, exactly as here (slot 4, nudge by +4, straight over the
+    // seam to slot 8 == slot 0 of the next cycle).
+    ModLane l3;
+    configure(l3, 8);
+    for (int32_t s = 0; s <= 4; ++s) l3.follow(s, 0.f, 0.f);
+    REQUIRE(l3.cur_step() == 4);
+
+    l3.nudge_slots(4, 0.f);                 // 4 -> 8: exactly one full cycle
+    l3.follow(4, 0.5f, 0.f);                // same deck step
+    CHECK(l3.cur_step() == 0);
+    CHECK_FALSE(l3.wrapped());              // the seam crossing is not a wrap
 }
 
 TEST_CASE("follow: a zero-slot nudge is a shape kick and nothing more") {
