@@ -459,6 +459,34 @@ def device_fingerprint(device_id):
     return hashlib.sha256(device_id.encode("ascii")).hexdigest()
 
 
+def wave_gate_verdict(captures):
+    out = io.StringIO()
+    out.write("## WAVE performance gate — PASS\n\n")
+    out.write(
+        "All %d runs satisfy the matched WAVE/SYNTH acceptance gates.\n\n"
+        % len(captures)
+    )
+    for run_index, (_, rows, _) in enumerate(captures, start=1):
+        named = by_name(rows)
+        synth = named["synth_2x4"]
+        wave = named["wave_2x4"]
+        out.write(
+            "- **Run %d — PASS:** `wave_2x4` average %s <= "
+            "`synth_2x4` average %s; maximum %s <= %s; maximum %s < %d.\n"
+            % (
+                run_index,
+                wave["avg_cyc"],
+                synth["avg_cyc"],
+                wave["max_cyc"],
+                synth["max_cyc"],
+                wave["max_cyc"],
+                BUDGET_CYCLES,
+            )
+        )
+    out.write("\n")
+    return out.getvalue()
+
+
 def write_results(out_dir, captures):
     header, rows, anchors = captures[0]
     os.makedirs(out_dir, exist_ok=True)
@@ -499,6 +527,7 @@ def write_results(out_dir, captures):
             "fingerprint `%s` (SHA-256 of the MCU UID).\n\n"
             % (len(captures), header["qspi_sha256"], fingerprint)
         )
+        fh.write(wave_gate_verdict(captures))
         fh.write(verdict(rows, anchors))
         for run_index, (run_header, run_rows, run_anchors) in enumerate(
                 captures, start=1):

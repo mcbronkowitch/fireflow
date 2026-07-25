@@ -261,6 +261,36 @@ class RunContract(unittest.TestCase):
         self.assertIn("| `instrument_worst` | 92.50 | 97.70 |", md_text)
         self.assertFalse(md_text.endswith("\n\n"))
 
+    def test_evidence_persists_explicit_wave_gate_pass_verdict(self):
+        first = [
+            bench_row("synth_2x4", 340000, 350000, "11111111"),
+            bench_row("wave_2x4", 300000, 310000, "22222222"),
+        ]
+        second = [
+            bench_row("synth_2x4", 340100, 350100, "11111111"),
+            bench_row("wave_2x4", 300100, 310100, "22222222"),
+        ]
+
+        result, artifacts = self.run_evidence(
+            [capture_lines(first), capture_lines(second)]
+        )
+
+        self.assertEqual(result, 0)
+        md_text = artifacts[".md"]
+        self.assertIn("## WAVE performance gate — PASS", md_text)
+        self.assertIn(
+            "**Run 1 — PASS:** `wave_2x4` average 300000 <= "
+            "`synth_2x4` average 340000; maximum 310000 <= 350000; "
+            "maximum 310000 < 960000.",
+            md_text,
+        )
+        self.assertIn(
+            "**Run 2 — PASS:** `wave_2x4` average 300100 <= "
+            "`synth_2x4` average 340100; maximum 310100 <= 350100; "
+            "maximum 310100 < 960000.",
+            md_text,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
