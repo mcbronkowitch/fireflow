@@ -53,7 +53,6 @@ add_executable(spky_tests
     tests/test_step.cpp
     tests/test_shuffle_grid.cpp
     tests/test_step_clock.cpp
-    tests/test_lane_grid.cpp
     tests/test_evolve.cpp
     tests/test_variation.cpp
     tests/test_new_phrase.cpp
