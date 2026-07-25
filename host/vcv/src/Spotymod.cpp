@@ -126,7 +126,7 @@ struct ScaleQuantity : ParamQuantity {
 // emits PART_STRIDE; these guards catch any drift.
 static_assert(RATE_B == RATE_A + PART_STRIDE, "part-block stride drifted from generator");
 static_assert(TUNE_B == TUNE_A + PART_STRIDE, "part-block stride drifted from generator");
-static_assert(TRIGGER_B == TRIGGER_A + PART_STRIDE, "part-block stride drifted from generator");
+static_assert(SONG_B == SONG_A + PART_STRIDE, "part-block stride drifted from generator");
 
 // REC is the exception and must never be read with pp()/ppb(). M5b appended it
 // LAST (gen_panel.py:359) so that adding it would not grow PART_STRIDE and
@@ -180,9 +180,8 @@ struct Spotymod : Module {
     float curSr = 0.f;
     dsp::ClockDivider ctrlDiv;              // throttle param push to control rate
     dsp::SchmittTrigger clockTrig, resetTrig;
-    dsp::BooleanTrigger triggerTrig[2], spotTrig, settleTrig;
+    dsp::BooleanTrigger spotTrig, settleTrig;
     dsp::BooleanTrigger newPhraseTrig[2];
-    int lastBasis[2] = {kInitLastBasis[0], kInitLastBasis[1]};
     float clkSamples = 0.f;                 // samples since last external clock edge
     float gateFilt[2] = {0.f, 0.f};
     float recPhase[2] = {0.f, 0.f};        // REC LED pulse while recording
@@ -241,10 +240,14 @@ struct Spotymod : Module {
                     if (c.id == SCALE)  // init patch is Lydian -- the bright end of group A
                         configParam<ScaleQuantity>(c.id, 0.f, (float)(spky::SCALE_LIST_COUNT - 1),
                                                    (float)spky::SCALE_LYDIAN, "Scale");
-                    else if (c.id == PRINCIPLE_A || c.id == PRINCIPLE_B)
-                        configSwitch(c.id, 0.f, 5.f, init, "Form",
-                                     {"SONG · AAAB", "TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
+                    else if (c.id == FORM_A || c.id == FORM_B)
+                        configSwitch(c.id, 0.f, 4.f, init, "Form",
+                                     {"TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
                                       "CALL / RESPONSE", "OSTINATO"});
+                    else if (c.id == SONG_A || c.id == SONG_B)
+                        configSwitch(c.id, 0.f, 6.f, init, "Song",
+                                     {"AAAB", "ABAB", "ABBB", "BUILD",
+                                      "ROTATE", "MIRROR", "OFF"});
                     else  // STEPS_A / STEPS_B
                         configParam(c.id, 2.f, 16.f, init, "Steps");
                     getParamQuantity(c.id)->snapEnabled = true;
@@ -315,8 +318,6 @@ struct Spotymod : Module {
         fxmem.sampler_frames = frames;
 
         inst.init(sr, fxmem);
-        for (int p = 0; p < spky::PART_COUNT; ++p)
-            inst.set_last_basis(p, lastBasis[p]);
 
         for (int p = 0; p < spky::PART_COUNT; ++p)
             if (!snapL[p].empty())
@@ -520,26 +521,17 @@ struct Spotymod : Module {
                                                      : spky::GritMode::Drive);
             inst.set_step(p, ppb(STEP_A, p), (int)std::round(pp(STEPS_A, p)));
 
-            const int form = static_cast<int>(std::lround(pp(PRINCIPLE_A, p)));
-            if (form >= 1 && form <= 5) lastBasis[p] = form - 1;
-            inst.set_last_basis(p, lastBasis[p]);
+            const int form = static_cast<int>(std::lround(pp(FORM_A, p)));
+            const int song = static_cast<int>(std::lround(pp(SONG_A, p)));
             inst.set_form(p, form);
+            inst.set_song(p, song);
             // NEW is "new gene now" in the sampler: the playhead returns to
             // ORGANIZE and a grain spawns immediately. Without it the long
             // end of GENE SIZE is unplayable -- every knob stays dead until
             // the next scheduled spawn, tens of seconds away at overlap 1.
             if (newPhraseTrig[p].process(ppb(NEWPHRASE_A, p))) {
+                inst.new_phrase(p);
                 if (samplerPart) inst.sampler_punch(p);
-                else             inst.new_phrase(p);
-            }
-            // TRIG punches AND triggers. trigger_manual alone is inert in the
-            // sampler's FLOW cloud -- _next_ratio reads the burst latch only
-            // when !_flow (sampler_engine.cpp:247) -- so the pad has been
-            // dead there since M5b. The punch fixes FLOW; the trigger keeps
-            // STEP behaving as it does today.
-            if (triggerTrig[p].process(ppb(TRIGGER_A, p))) {
-                if (samplerPart) inst.sampler_punch(p);
-                inst.trigger_manual(p);
             }
         }
 
@@ -634,10 +626,9 @@ struct Spotymod : Module {
 
     void onReset() override {
         // Rack Initialize restores the complete init patch, including the
-        // remembered normal-form basis and an empty sampler ready for the
-        // bundled factory WAV. A mid-session Clear still stays cleared.
+        // parameter defaults and an empty sampler ready for the bundled
+        // factory WAV. A mid-session Clear still stays cleared.
         for (int p = 0; p < spky::PART_COUNT; ++p) {
-            lastBasis[p] = kInitLastBasis[p];
             smp[p] = SamplerPartState{};
             inst.sampler_clear(p);
             factoryTried[p] = false;
@@ -646,16 +637,12 @@ struct Spotymod : Module {
     }
 
     // --- persistence -----------------------------------------------------
-    // The module had no dataToJson at all: everything below is non-param
-    // state (Tasks 4-6's edit layer, the sample path, and the remembered
-    // normal-form basis used when FORM returns to SONG) that would otherwise
-    // die with the session.
+    // FORM and SONG themselves are ordinary Rack parameters. The marker lets
+    // dataFromJson distinguish their new meanings from the stable numeric
+    // slots used by older patches.
     json_t* dataToJson() override {
         json_t* root = json_object();
-        json_t* bases = json_array();
-        for (int p = 0; p < spky::PART_COUNT; ++p)
-            json_array_append_new(bases, json_integer(lastBasis[p]));
-        json_object_set_new(root, "lastBasis", bases);
+        json_object_set_new(root, "formSongVersion", json_integer(1));
 
         json_t* parts = json_array();
         for (int p = 0; p < spky::PART_COUNT; ++p) {
@@ -680,16 +667,19 @@ struct Spotymod : Module {
 
     void dataFromJson(json_t* root) override {
         if (!root) return;
-        json_t* bases = json_object_get(root, "lastBasis");
-        for (int p = 0; p < spky::PART_COUNT; ++p) {
-            json_t* v = bases ? json_array_get(bases, p) : nullptr;
-            int basis = v ? static_cast<int>(json_integer_value(v))
-                          : kInitLastBasis[p];
-            if (basis < 0) basis = 0;
-            const int last = static_cast<int>(spky::Principle::kCount) - 1;
-            if (basis > last) basis = last;
-            lastBasis[p] = basis;
-            inst.set_last_basis(p, lastBasis[p]);
+        if (!json_object_get(root, "formSongVersion")) {
+            json_t* bases = json_object_get(root, "lastBasis");
+            json_t* principles = json_object_get(root, "principle");
+            for (int p = 0; p < spky::PART_COUNT; ++p) {
+                json_t* v = bases ? json_array_get(bases, p) : nullptr;
+                if (!v && principles) v = json_array_get(principles, p);
+                int form = v ? static_cast<int>(json_integer_value(v)) : 2;
+                if (form < 0) form = 0;
+                const int last = static_cast<int>(spky::Principle::kCount) - 1;
+                if (form > last) form = last;
+                params[p ? FORM_B : FORM_A].setValue((float)form);
+                params[p ? SONG_B : SONG_A].setValue(0.f);
+            }
         }
         json_t* parts = json_object_get(root, "sampler");
         if (!parts) return;

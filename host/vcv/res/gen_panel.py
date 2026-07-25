@@ -203,7 +203,7 @@ PLAY_Y   = 103.6
 # (spec 2026-07-18 "VCV layer": REC is the only new panel element). All four
 # left-block glyphs are LATCH r=2.7 except STEPS and FORM (KNOBI r=3.0); the pitches
 # below clear test_no_overlap's radius-sum minimum with >=1.8 mm to spare.
-PAD_X    = [10.0, 17.5, 46.0, 56.5, 67.0, 77.5]   # ENG GRIT | STEP FORM NEW TRIG
+PAD_X    = [10.0, 17.5, 46.0, 56.5, 67.0, 77.5]   # ENG GRIT | STEP FORM SONG NEW
 STEPS_X  = 37.0                     # sequencer knob, between the two pad blocks
 REC_X    = 25.0                     # REC pad (appended param, not templated)
 # Its state LED, centred in the gap between the REC pad and the STEPS knob.
@@ -250,10 +250,11 @@ def part_controls(mir=False):
             ("STEP", LATCH, "STEP")]
     for i, (enum, kind, lbl) in enumerate(pads):
         out.append(Ctl(enum, kind, fx(PAD_X[i]), PLAY_Y, lbl))
-    out.append(Ctl("PRINCIPLE", KNOBI, fx(PAD_X[3]), PLAY_Y, "FORM"))
-    for enum, kind, lbl, i in (("NEWPHRASE", SMBTN, "NEW", 4),
-                               ("TRIGGER", SMBTN, "TRIG", 5)):
-        out.append(Ctl(enum, kind, fx(PAD_X[i]), PLAY_Y, lbl))
+    out.append(Ctl("FORM", KNOBI, fx(PAD_X[3]), PLAY_Y, "FORM"))
+    # Keep the frozen ParamId order FORM, NEWPHRASE, SONG while laying the
+    # controls out visually as FORM, SONG, NEW.
+    out.append(Ctl("NEWPHRASE", SMBTN, fx(PAD_X[5]), PLAY_Y, "NEW"))
+    out.append(Ctl("SONG", KNOBI, fx(PAD_X[4]), PLAY_Y, "SONG"))
     return out
 
 def part(suffix, mir):

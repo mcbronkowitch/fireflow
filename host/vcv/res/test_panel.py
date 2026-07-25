@@ -38,11 +38,11 @@ PARAM_ORDER = [
     'RATE_A', 'SHAPE_A', 'DENSITY_A', 'SMOOTH_A', 'RANGE_A', 'MELODY_A',
     'MOD_A', 'TUNE_A', 'ATTACK_A', 'DECAY_A', 'RES_A', 'SUB_A', 'SOURCE_A',
     'FLUX_A', 'GRIT_A', 'COMP_A', 'STEPS_A', 'ENGINE_A', 'GRITMODE_A',
-    'STEP_A', 'PRINCIPLE_A', 'NEWPHRASE_A', 'TRIGGER_A',
+    'STEP_A', 'FORM_A', 'NEWPHRASE_A', 'SONG_A',
     'RATE_B', 'SHAPE_B', 'DENSITY_B', 'SMOOTH_B', 'RANGE_B', 'MELODY_B',
     'MOD_B', 'TUNE_B', 'ATTACK_B', 'DECAY_B', 'RES_B', 'SUB_B', 'SOURCE_B',
     'FLUX_B', 'GRIT_B', 'COMP_B', 'STEPS_B', 'ENGINE_B', 'GRITMODE_B',
-    'STEP_B', 'PRINCIPLE_B', 'NEWPHRASE_B', 'TRIGGER_B',
+    'STEP_B', 'FORM_B', 'NEWPHRASE_B', 'SONG_B',
     'MORPH', 'SYNC', 'TEMPO', 'COUPLE', 'SCALE', 'DRIFT', 'SPOT',
     'MASTER_DRIVE', 'SETTLE', 'REV_SIZE', 'REV_DECAY', 'REV_TONE',
     'REV_DIFF', 'REV_SMEAR', 'REV_MOD', 'CHOKE', 'FILT_A', 'FILT_B', 'TIDE',
@@ -54,10 +54,10 @@ PARAM_ORDER = [
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'GRIT', 'STEP', 'FORM', 'NEW', 'TRIG',
+    'ENG', 'GRIT', 'STEP', 'FORM', 'NEW', 'SONG',
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'GRIT', 'STEP', 'FORM', 'NEW', 'TRIG',
+    'ENG', 'GRIT', 'STEP', 'FORM', 'NEW', 'SONG',
     'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'DRIVE',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
     'FILT', 'FILT', 'TIDE', 'FRATE', 'FRATE', 'FFB', 'FFB', 'COLOR',
@@ -182,7 +182,7 @@ def test_param_runtime_tip_contract():
 
 def test_dust_params():
     """DUST/ROT are appended at the end of PARAMS, not templated into
-    part_controls() -- appending keeps PART_STRIDE unchanged so TRIGGER_A/B,
+    part_controls() -- appending keeps PART_STRIDE unchanged so SONG_A/B,
     every part-B id and every already-appended tail param keep their id."""
     check(g.PART_STRIDE == 23, "PART_STRIDE must stay 23")
     ids = {c.enum: i for i, c in enumerate(g.PARAMS)}
@@ -527,8 +527,8 @@ LOWER_A = {   # enum -> (x, y)   part A; part B is W - x
     'GRIT_A': (65.25, 89.40), 'COMP_A': (75.75, 89.40),
     'ENGINE_A': (10.00, 103.60), 'GRITMODE_A': (17.50, 103.60),
     'STEPS_A': (37.00, 103.60), 'STEP_A': (46.00, 103.60),
-    'PRINCIPLE_A': (56.50, 103.60), 'NEWPHRASE_A': (67.00, 103.60),
-    'TRIGGER_A': (77.50, 103.60),
+    'FORM_A': (56.50, 103.60), 'SONG_A': (67.00, 103.60),
+    'NEWPHRASE_A': (77.50, 103.60),
 }
 
 
@@ -542,29 +542,54 @@ def test_lower_half_positions():
               f"{b.enum} at ({b.x:.2f}, {b.y:.2f}), want ({g.W - x:.2f}, {y})")
 
 
-def test_form_control_contract():
-    """PRINCIPLE keeps its frozen ParamId but becomes the six-state FORM knob."""
+def test_form_song_control_contract():
+    """The frozen final slots now expose independent FORM and SONG knobs."""
     for suffix in ("_A", "_B"):
-        c = ctl("PRINCIPLE" + suffix)
-        check(c.kind == g.KNOBI,
-              f"{c.enum} kind is {c.kind}, want snapped integer knob")
-        check(c.label == "FORM" and c.tip == "FORM",
-              f"{c.enum} caption/tip is {c.label!r}/{c.tip!r}, want FORM")
+        form = ctl("FORM" + suffix)
+        song = ctl("SONG" + suffix)
+        for c, label in ((form, "FORM"), (song, "SONG")):
+            check(c.kind == g.KNOBI,
+                  f"{c.enum} kind is {c.kind}, want snapped integer knob")
+            check(c.label == label and c.tip == label,
+                  f"{c.enum} caption/tip is {c.label!r}/{c.tip!r}, want {label}")
 
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Spotymod.cpp"),
               encoding="utf-8") as f:
         cpp = f.read()
-    switch = """
-configSwitch(c.id, 0.f, 5.f, init, "Form",
-             {"SONG · AAAB", "TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
+    form_switch = """
+configSwitch(c.id, 0.f, 4.f, init, "Form",
+             {"TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
               "CALL / RESPONSE", "OSTINATO"});"""
-    check(compact_cpp(switch) in compact_cpp(cpp),
-          "FORM must be a snapped six-state Rack switch with named choices")
+    song_switch = """
+configSwitch(c.id, 0.f, 6.f, init, "Song",
+             {"AAAB", "ABAB", "ABBB", "BUILD", "ROTATE", "MIRROR", "OFF"});"""
+    check(compact_cpp(form_switch) in compact_cpp(cpp),
+          "FORM must be a snapped five-state Rack switch with named choices")
+    check(compact_cpp(song_switch) in compact_cpp(cpp),
+          "SONG must be a snapped seven-state Rack switch with named choices")
     check("inst.set_form(p, form);" in cpp,
           "Rack FORM parameter is not forwarded to Instrument::set_form")
-    check("inst.set_last_basis(p, lastBasis[p]);" in cpp,
-          "Rack does not forward its remembered normal-form basis")
+    check("inst.set_song(p, song);" in cpp,
+          "Rack SONG parameter is not forwarded to Instrument::set_song")
+
+
+def test_form_song_user_documentation():
+    """The host README describes the independent phrase and arrangement axes."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "README.md"), encoding="utf-8") as f:
+        readme = f.read()
+    for term in ("TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
+                 "CALL / RESPONSE", "OSTINATO", "AAAB", "ABAB", "ABBB",
+                 "BUILD", "ROTATE", "MIRROR", "OFF"):
+        check(term in readme, f"VCV README does not document {term}")
+    check("STEP · FORM · SONG · NEW" in readme,
+          "VCV README does not document the PLAY-row order")
+    check("NEW always" in readme and "fresh A/B" in readme,
+          "VCV README does not document NEW's cross-engine phrase rebuild")
+    check(re.search(r"\bTRIG\b[^.\n]*(?:button|control|pad)", readme,
+                    flags=re.IGNORECASE) is None,
+          "VCV README still presents TRIG as an available control")
 
 
 def test_steps_left_the_fx_row():
@@ -885,18 +910,13 @@ inst.set_engine(p, id);"""
             break
     new_punch = """
 if (newPhraseTrig[p].process(ppb(NEWPHRASE_A, p))) {
+    inst.new_phrase(p);
     if (samplerPart) inst.sampler_punch(p);
-    else             inst.new_phrase(p);
 }"""
     if push_n.count(compact_cpp(new_punch)) != 1:
-        issues.append("NEW must gate sampler_punch() with samplerPart")
-    trig_punch = """
-if (triggerTrig[p].process(ppb(TRIGGER_A, p))) {
-    if (samplerPart) inst.sampler_punch(p);
-    inst.trigger_manual(p);
-}"""
-    if push_n.count(compact_cpp(trig_punch)) != 1:
-        issues.append("TRIG must gate sampler_punch() with samplerPart")
+        issues.append("NEW must rebuild A/B and additionally punch the Sampler")
+    if "triggerTrig" in push or "trigger_manual" in push:
+        issues.append("removed TRIG behavior remains in pushParams")
     if any(bad in push_n for bad in ("eng>0", "eng!=0", "eng>=1", "eng==1||eng==2")):
         issues.append("pushParams has a boolean ENG alternative that can route Wave as Sampler")
 
@@ -950,10 +970,11 @@ def test_engine_cycle_guard_rejects_representative_regressions():
          "const bool samplerPart = eng > 0;", "sampler"),
         ("if (samplerPart) inst.sampler_punch(p);",
          "inst.sampler_punch(p);", "NEW sampler punch"),
-        ("if (triggerTrig[p].process(ppb(TRIGGER_A, p))) {\n"
+        ("inst.new_phrase(p);\n"
          "                if (samplerPart) inst.sampler_punch(p);",
-         "if (triggerTrig[p].process(ppb(TRIGGER_A, p))) {\n"
-         "                inst.sampler_punch(p);", "TRIG sampler punch"),
+         "if (!samplerPart) inst.new_phrase(p);\n"
+         "                if (samplerPart) inst.sampler_punch(p);",
+         "NEW phrase rebuild"),
     ]
     for before, after, label in mutations:
         mutated = cpp.replace(before, after, 1)
@@ -1214,7 +1235,7 @@ def test_sampler_preset_init_snapshot():
         0.6036144495010376, 0.5, 0.0, 0.32266658544540405,
         0.3190000057220459, 0.45866644382476807, 0.5,
         0.6773335337638855, 0.0, 0.62966680526733398, 16.0, 0.0,
-        1.0, 1.0, 0.0, 0.0, 0.0,
+        1.0, 1.0, 2.0, 0.0, 0.0,
         0.18674719333648682, 0.60000002384185791,
         0.31939762830734253, 0.30000001192092896,
         0.26144576072692871, -0.69156646728515625,
@@ -1222,7 +1243,7 @@ def test_sampler_preset_init_snapshot():
         0.37900000810623169, 0.4,
         0.5, 0.46266642212867737,
         0.057000085711479187, 0.71099996566772461, 8.0, 1.0, 0.0,
-        1.0, 0.0, 0.0, 0.0,
+        1.0, 2.0, 0.0, 0.0,
         0.49277070164680481, 1.0, 0.5, 1.0, 4.0, 0.0, 0.0,
         0.79066669940948486, 0.0, 0.64266586303710938,
         0.66399866342544556, 0.76133310794830322,
@@ -1240,8 +1261,8 @@ def test_sampler_preset_init_snapshot():
         check(math.isclose(got, want, rel_tol=0.0, abs_tol=1e-7),
               f"{PARAM_ORDER[i]} init {got}, want {want}")
 
-    check("static constexpr int kInitLastBasis[] = {2, 2};" in header,
-          "init remembered normal-form basis must be [2, 2]")
+    check("kInitLastBasis" not in header,
+          "obsolete remembered-form init state remains")
 
     cpp_path = os.path.join(here, "..", "src", "Spotymod.cpp")
     with open(cpp_path) as f:
@@ -1253,29 +1274,28 @@ def test_sampler_preset_init_snapshot():
     check("defaultFor(" not in cpp,
           "legacy split defaultFor table still exists")
 
-    check("int lastBasis[2] = {kInitLastBasis[0], kInitLastBasis[1]};" in cpp,
-          "fresh module remembered basis is not [2, 2]")
-
-    after_init = cpp.split("inst.init(sr, fxmem);", 1)[1]
-    reinit_tail = after_init.split("// Rebuild the factory-drone cache", 1)[0]
-    check("inst.set_last_basis(p, lastBasis[p]);" in reinit_tail,
-          "reinit does not restore the remembered basis after inst.init")
+    check("lastBasis[" not in cpp,
+          "obsolete remembered-form runtime state remains")
 
     on_reset = cpp.split("void onReset() override {", 1)[1]
     on_reset = on_reset.split("// --- persistence", 1)[0]
-    check("lastBasis[p] = kInitLastBasis[p];" in on_reset,
-          "Initialize does not restore remembered-basis defaults")
     check("smp[p] = SamplerPartState{};" in on_reset,
           "Initialize does not reset sampler edit state")
     check("inst.sampler_clear(p);" in on_reset,
           "Initialize does not empty sampler audio before factory autoload")
 
-    check('json_object_set_new(root, "lastBasis", bases);' in cpp,
-          "remembered normal-form bases are not persisted")
+    check('json_object_set_new(root, "formSongVersion", json_integer(1));' in cpp,
+          "new patches do not carry the FORM/SONG schema marker")
+    check('json_object_get(root, "formSongVersion")' in cpp,
+          "FORM/SONG migration does not check the schema marker")
     check('json_object_get(root, "lastBasis")' in cpp,
-          "remembered normal-form bases are not restored")
-    check('"principle"' not in cpp,
-          "legacy principleIdx JSON state must not survive the FORM migration")
+          "legacy lastBasis state is not read for migration")
+    check('json_object_get(root, "principle")' in cpp,
+          "older legacy principle state is not read for migration")
+    check("params[p ? FORM_B : FORM_A].setValue((float)form);" in cpp,
+          "legacy FORM value is not migrated into the renamed stable slot")
+    check("params[p ? SONG_B : SONG_A].setValue(0.f);" in cpp,
+          "legacy patches do not default SONG to AAAB")
 
     makefile_path = os.path.join(here, "..", "Makefile")
     with open(makefile_path) as f:

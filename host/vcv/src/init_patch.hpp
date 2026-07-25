@@ -24,9 +24,9 @@ static constexpr float kInitParamDefaults[] = {
      0.000000000f, // ENGINE_A
      1.000000000f, // GRITMODE_A
      1.000000000f, // STEP_A
-     0.000000000f, // PRINCIPLE_A
+     2.000000000f, // FORM_A = HIERARCHICAL
      0.000000000f, // NEWPHRASE_A
-     0.000000000f, // TRIGGER_A
+     0.000000000f, // SONG_A = AAAB
      0.186747193f, // RATE_B
      0.600000024f, // SHAPE_B
      0.319397628f, // DENSITY_B
@@ -47,9 +47,9 @@ static constexpr float kInitParamDefaults[] = {
      1.000000000f, // ENGINE_B
      0.000000000f, // GRITMODE_B
      1.000000000f, // STEP_B
-     0.000000000f, // PRINCIPLE_B
+     2.000000000f, // FORM_B = HIERARCHICAL
      0.000000000f, // NEWPHRASE_B
-     0.000000000f, // TRIGGER_B
+     0.000000000f, // SONG_B = AAAB
      0.492770702f, // MORPH
      1.000000000f, // SYNC
      0.500000000f, // TEMPO
@@ -91,10 +91,6 @@ static constexpr float kInitParamDefaults[] = {
 static_assert(sizeof(kInitParamDefaults) / sizeof(kInitParamDefaults[0])
                   == NUM_PARAMS,
               "init snapshot must contain one value for every ParamId");
-
-static constexpr int kInitLastBasis[] = {2, 2};
-static_assert(sizeof(kInitLastBasis) / sizeof(kInitLastBasis[0]) == 2,
-              "init remembered basis must contain one value per part");
 
 inline float initParamDefault(int id) {
     return kInitParamDefaults[id];

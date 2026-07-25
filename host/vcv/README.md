@@ -43,6 +43,31 @@ FLOW stays straight. Live changes latch at each lane's next pair boundary so
 the active pair finishes intact, while external CLOCK pulses, resets, phrase
 downbeats, and the transport's raw-phase anchors stay straight.
 
+## FORM, SONG, and NEW
+
+Each Part's PLAY row reads **STEP · FORM · SONG · NEW**. FORM and SONG are
+independent: FORM creates the musical material, while SONG decides when the
+two persistent phrase snapshots A and B are heard.
+
+**FORM** has five phrase engines: **TWO MOTIFS**, **ONE + VAR**,
+**HIERARCHICAL**, **CALL / RESPONSE**, and **OSTINATO**. The factory setting
+is HIERARCHICAL.
+
+**SONG** has seven arrangements:
+
+- **AAAB**, **ABAB**, and **ABBB** repeat their named four-phrase sequence.
+- **BUILD** follows `AAAB · AABB · ABBB · AABB`.
+- **ROTATE** follows `AAAB · AABA · ABAA · BAAA`.
+- **MIRROR** follows the deterministic, non-repeating Thue–Morse A/B stream.
+- **OFF** disables arrangement by playing A continuously; A still evolves,
+  while the stored B phrase is retained for returning to another SONG mode.
+
+The factory SONG setting is AAAB. FORM and SONG changes wait for the next STEP
+phrase boundary. SONG changes preserve A and B; FORM changes rebuild them.
+**NEW always queues a fresh A/B pair and restarts SONG at its first phrase.**
+On a Sampler it also jumps the tape head back to ORGANIZE and spawns a grain
+immediately.
+
 ## SOURCE and Detune
 
 Each part has one physical **SOURCE** control. Its live caption follows the
@@ -129,20 +154,20 @@ es dieses `pow` gar nicht mehr — das Gate bleibt trotzdem: außerhalb des
 Sampler-Decks wird `_scan_rate` nie gelesen, und hineinzuschreiben wäre nur
 Arbeit ohne Wirkung.
 
-**NEW and TRIG both fire "new grain now" in the Sampler:** the tape head
-snaps back to ORGANIZE's position and a fresh grain spawns immediately. This
-exists because a grain's position, pitch and length are frozen the instant
-it's spawned, and the next chance to change any of them is the next
-scheduled spawn — at overlap 1 and a long LEN that's up to ten seconds away.
-Without this gesture, the long end of LEN wouldn't be a playable state at
-all; the deck would just stop answering every knob for that stretch. On
-TRIG this comes on top of the ordinary trigger, not instead of it.
+**NEW also fires "new grain now" in the Sampler:** the tape head snaps back to
+ORGANIZE's position and a fresh grain spawns immediately, in addition to the
+fresh phrase-pair request described above. This exists because a grain's
+position, pitch and length are frozen the instant it's spawned, and the next
+chance to change any of them is the next scheduled spawn — at overlap 1 and a
+long LEN that's up to ten seconds away. Without this gesture, the long end of
+LEN wouldn't be a playable state at all; the deck would just stop answering
+every knob for that stretch.
 
 **LEN is live downward, latched upward.** Turning LEN *down* immediately
 rescales every grain that's already sounding to the length it would have got
 at the new setting, fading it out click-free; turning LEN *up* leaves running
 grains exactly as they are. The asymmetry is the point. Length is latched at
-spawn (see NEW/TRIG above), and that used to apply in both directions: a grain
+spawn (see NEW above), and that used to apply in both directions: a grain
 spawned at the top of LEN sounded for its full 42 s however far the knob came
 back down — 84 s in Tape with a pitch an octave under — and nothing on the
 deck could stop it, since the only thing that releases a running grain is the
