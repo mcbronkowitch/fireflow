@@ -16,7 +16,7 @@ static constexpr float kInitParamDefaults[] = {
      0.322666585f, // DECAY_A
      0.319000006f, // RES_A
      0.458666444f, // SUB_A
-     0.000000000f, // DETUNE_A
+     0.500000000f, // SOURCE_A
      0.677333534f, // FLUX_A
      0.000000000f, // GRIT_A
      0.629666805f, // COMP_A
@@ -39,7 +39,7 @@ static constexpr float kInitParamDefaults[] = {
      0.450666636f, // DECAY_B
      0.379000008f, // RES_B
      0.400000000f, // SUB_B
-     0.087999999f, // DETUNE_B
+     0.500000000f, // SOURCE_B
      0.462666422f, // FLUX_B
      0.057000086f, // GRIT_B
      0.710999966f, // COMP_B
@@ -84,6 +84,8 @@ static constexpr float kInitParamDefaults[] = {
      0.430665255f, // REV_MIX_A
      0.212000355f, // REV_MIX_B
      1.000000000f, // SHUFFLE
+     0.171428576f, // DETUNE_A = 6 / 35
+     0.171428576f, // DETUNE_B = 6 / 35
 };
 
 static_assert(sizeof(kInitParamDefaults) / sizeof(kInitParamDefaults[0])

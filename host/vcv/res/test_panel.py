@@ -27,7 +27,7 @@ def approx(a, b, tol=0.02):
 
 
 def ctl(enum):
-    for c in g.PARAMS + g.INPUTS + g.OUTPUTS:
+    for c in g.PANEL_PARAMS + g.INPUTS + g.OUTPUTS:
         if c.enum == enum:
             return c
     raise KeyError(enum)
@@ -36,11 +36,11 @@ def ctl(enum):
 # --- the frozen contract: enum ORDER defines param ids in every saved patch ---
 PARAM_ORDER = [
     'RATE_A', 'SHAPE_A', 'DENSITY_A', 'SMOOTH_A', 'RANGE_A', 'MELODY_A',
-    'MOD_A', 'TUNE_A', 'ATTACK_A', 'DECAY_A', 'RES_A', 'SUB_A', 'DETUNE_A',
+    'MOD_A', 'TUNE_A', 'ATTACK_A', 'DECAY_A', 'RES_A', 'SUB_A', 'SOURCE_A',
     'FLUX_A', 'GRIT_A', 'COMP_A', 'STEPS_A', 'ENGINE_A', 'GRITMODE_A',
     'STEP_A', 'PRINCIPLE_A', 'NEWPHRASE_A', 'TRIGGER_A',
     'RATE_B', 'SHAPE_B', 'DENSITY_B', 'SMOOTH_B', 'RANGE_B', 'MELODY_B',
-    'MOD_B', 'TUNE_B', 'ATTACK_B', 'DECAY_B', 'RES_B', 'SUB_B', 'DETUNE_B',
+    'MOD_B', 'TUNE_B', 'ATTACK_B', 'DECAY_B', 'RES_B', 'SUB_B', 'SOURCE_B',
     'FLUX_B', 'GRIT_B', 'COMP_B', 'STEPS_B', 'ENGINE_B', 'GRITMODE_B',
     'STEP_B', 'PRINCIPLE_B', 'NEWPHRASE_B', 'TRIGGER_B',
     'MORPH', 'SYNC', 'TEMPO', 'COUPLE', 'SCALE', 'DRIFT', 'SPOT',
@@ -49,20 +49,20 @@ PARAM_ORDER = [
     'FLUXRATE_A', 'FLUXRATE_B', 'FLUXFB_A', 'FLUXFB_B', 'COLOR_A', 'COLOR_B',
     'DUST_A', 'DUST_B', 'ROT_A', 'ROT_B',
     'REC_A', 'REC_B', 'REV_MIX_A', 'REV_MIX_B',
-    'SHUFFLE',
+    'SHUFFLE', 'DETUNE_A', 'DETUNE_B',
 ]
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
-    'ATK', 'DEC', 'RES', 'SUB', 'DTUN', 'FLUX', 'GRIT', 'COMP', 'STPS',
+    'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
     'ENG', 'GRIT', 'STEP', 'PRIN', 'NEW', 'TRIG',
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
-    'ATK', 'DEC', 'RES', 'SUB', 'DTUN', 'FLUX', 'GRIT', 'COMP', 'STPS',
+    'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
     'ENG', 'GRIT', 'STEP', 'PRIN', 'NEW', 'TRIG',
     'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'DRIVE',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
     'FILT', 'FILT', 'TIDE', 'FRATE', 'FRATE', 'FFB', 'FFB', 'COLOR',
     'COLOR', 'DUST', 'DUST', 'ROT', 'ROT', 'REC', 'REC', 'ROOM', 'ROOM',
-    'SHUFL',
+    'SHUFL', 'Detune A', 'Detune B',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
@@ -72,12 +72,29 @@ LIGHT_ORDER = ['GATE_A_L', 'GATE_B_L', 'REC_A_L', 'REC_B_L']
 def test_enum_order():
     """Patch compatibility. If this fails, every saved .vcv breaks."""
     check([c.enum for c in g.PARAMS] == PARAM_ORDER, "PARAMS order changed")
-    check(g.PARAMS[-1].enum == 'SHUFFLE',
-          "SHUFFLE must append after every existing ParamId")
+    check([c.enum for c in g.PARAMS[-3:]] == ['SHUFFLE', 'DETUNE_A', 'DETUNE_B'],
+          "hidden detune must append after SHUFFLE")
     check([c.enum for c in g.INPUTS] == INPUT_ORDER, "INPUTS order changed")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
     check(g.PART_STRIDE == 23, f"PART_STRIDE is {g.PART_STRIDE}, must be 23")
+
+
+def test_source_and_hidden_detune_partition():
+    """SOURCE owns the former DTUN widgets; detune remains parameter-only."""
+    visible = [c.enum for c in g.PANEL_PARAMS]
+    hidden = [c.enum for c in g.HIDDEN_PARAMS]
+    check("SOURCE_A" in visible and "SOURCE_B" in visible,
+          "SOURCE controls must stay visible")
+    check(hidden == ["DETUNE_A", "DETUNE_B"],
+          f"hidden params are {hidden!r}")
+    check(not any(e in visible for e in hidden),
+          "widgetless detune leaked into panel controls")
+    check([c.enum for c in g.PARAMS] == visible + hidden,
+          "complete ParamId order must end with hidden detune")
+    h = g.header()
+    check("{DETUNE_A," not in h and "{DETUNE_B," not in h,
+          "widgetless detune leaked into kParamCtls")
 
 
 def test_param_runtime_tip_contract():
@@ -161,7 +178,7 @@ def test_reverb_mix_params():
 
 def test_no_overlap():
     """No two glyphs may touch -- Rack widgets would steal each other's clicks."""
-    all_c = g.PARAMS + g.INPUTS + g.OUTPUTS
+    all_c = g.PANEL_PARAMS + g.INPUTS + g.OUTPUTS
     for i, a in enumerate(all_c):
         ra = g.GLYPH_R[a.kind]
         for b in all_c[i + 1:]:
@@ -173,7 +190,7 @@ def test_no_overlap():
 
 def test_on_panel():
     """Every glyph stays 2 mm inside the plate."""
-    for c in g.PARAMS + g.INPUTS + g.OUTPUTS + g.LIGHTS:
+    for c in g.PANEL_PARAMS + g.INPUTS + g.OUTPUTS + g.LIGHTS:
         check(2.0 <= c.x <= g.W - 2.0 and 2.0 <= c.y <= g.Hh - 2.0,
               f"{c.enum} off panel at ({c.x:.2f}, {c.y:.2f})")
 
@@ -184,7 +201,7 @@ def test_panel_size():
 
 def test_label_metadata_exists():
     """Every labelled control resolves to an absolute label placement."""
-    for c in g.PARAMS + g.INPUTS + g.OUTPUTS:
+    for c in g.PANEL_PARAMS + g.INPUTS + g.OUTPUTS:
         if not c.label:
             continue
         x, y, anchor, size, colour = g.label_of(c)
@@ -196,7 +213,7 @@ def test_label_metadata_exists():
 
 def test_label_defaults_match_todays_layout():
     """The default rule must reproduce the pre-redesign placement exactly."""
-    for c in g.PARAMS + g.INPUTS + g.OUTPUTS:
+    for c in g.PANEL_PARAMS + g.INPUTS + g.OUTPUTS:
         if not c.label or c.lbl is not None:
             continue
         x, y, anchor, size, colour = g.label_of(c)
@@ -352,7 +369,7 @@ def test_fx_fields_render_in_explicit_layer():
         for (bx, _lg, _col, well, _items) in g.JACK_GROUPS if well
     ]
     control_svgs = [
-        g.knob_svg(c) for c in g.PARAMS
+        g.knob_svg(c) for c in g.PANEL_PARAMS
         if c.kind in (g.BIGKNOB, g.KNOBC, g.SMKNOB, g.KNOBI)
     ]
 
@@ -416,7 +433,7 @@ def test_play_mode_fields_are_exact_mirrors():
     play_spans = [(s.index(field_svg), s.index(field_svg) + len(field_svg))
                   for field_svg in rendered if field_svg in s]
     first_control = min(
-        s.index(g.knob_svg(c)) for c in g.PARAMS
+        s.index(g.knob_svg(c)) for c in g.PANEL_PARAMS
         if c.kind in (g.BIGKNOB, g.KNOBC, g.SMKNOB, g.KNOBI)
     )
     if len(play_spans) == len(fields):
@@ -437,7 +454,7 @@ def test_small_knobs_have_no_collar():
 
 LOWER_A = {   # enum -> (x, y)   part A; part B is W - x
     'ATTACK_A': (9.25, 77.30), 'FILT_A': (19.75, 77.30), 'SUB_A': (30.25, 77.30),
-    'DECAY_A': (9.25, 89.40), 'RES_A': (19.75, 89.40), 'DETUNE_A': (30.25, 89.40),
+    'DECAY_A': (9.25, 89.40), 'RES_A': (19.75, 89.40), 'SOURCE_A': (30.25, 89.40),
     'FLUXRATE_A': (44.25, 77.30), 'FLUX_A': (54.75, 77.30),
     'FLUXFB_A': (65.25, 77.30), 'REV_MIX_A': (75.75, 77.30),
     'DUST_A': (44.25, 89.40), 'ROT_A': (54.75, 89.40),
@@ -630,7 +647,7 @@ def test_group_count():
 
 def test_every_label_is_reachable():
     """Nothing may be drawn off-plate or under a neighbouring box edge."""
-    for c in g.PARAMS + g.INPUTS + g.OUTPUTS:
+    for c in g.PANEL_PARAMS + g.INPUTS + g.OUTPUTS:
         if not c.label:
             continue
         lx, ly, _a, size, _col = g.label_of(c)
@@ -896,7 +913,7 @@ def test_sampler_preset_init_snapshot():
         0.20466864109039307, 0.61599999666213989, 0.69518107175827026,
         1.0, 0.84406059980392456, -0.76896363496780396,
         0.6036144495010376, 0.5, 0.0, 0.32266658544540405,
-        0.3190000057220459, 0.45866644382476807, 0.0,
+        0.3190000057220459, 0.45866644382476807, 0.5,
         0.6773335337638855, 0.0, 0.62966680526733398, 16.0, 0.0,
         1.0, 1.0, 0.0, 0.0, 0.0,
         0.18674719333648682, 0.60000002384185791,
@@ -904,7 +921,7 @@ def test_sampler_preset_init_snapshot():
         0.26144576072692871, -0.69156646728515625,
         0.34457823634147644, 0.5, 0.0, 0.4506666362285614,
         0.37900000810623169, 0.4,
-        0.087999999523162842, 0.46266642212867737,
+        0.5, 0.46266642212867737,
         0.057000085711479187, 0.71099996566772461, 8.0, 1.0, 0.0,
         1.0, 0.0, 0.0, 0.0,
         0.49277070164680481, 1.0, 0.5, 1.0, 4.0, 0.0, 0.0,
@@ -916,6 +933,7 @@ def test_sampler_preset_init_snapshot():
         0.36363637447357178, 0.28566798567771912,
         0.43933644890785217, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0,
         0.0, 0.0, 0.43066525459289551, 0.21200035512447357, 1.0,
+        0.171428576, 0.171428576,
     ]
     check(len(actual) == len(PARAM_ORDER) == len(expected),
           f"init snapshot has {len(actual)} values, want {len(PARAM_ORDER)}")
@@ -965,11 +983,11 @@ def test_sampler_preset_init_snapshot():
 # does not -- DENS reads correctly in both engines (groove density / grain
 # density), and the obvious alternative "MRPH" is already the global A/B knob's
 # name, so putting it on a part knob would be an operating error by design.
-SAMPLER_CAPTIONS = [("MELODY", "SCAN"), ("SUB", "LEN"), ("DETUNE", "ORG")]
+SAMPLER_CAPTIONS = [("MELODY", "SCAN"), ("SUB", "LEN")]
 
 
 def sampler_text(word, near):
-    """The SCAN/LEN/ORG entry nearest to a given control glyph. Picking by
+    """The SCAN/LEN entry nearest to a given control glyph. Picking by
     distance rather than by exact coordinate keeps this test independent of
     how the generator derives the position -- it can only pass if the caption
     really landed next to its knob."""
@@ -1071,7 +1089,7 @@ def test_scan_sits_outward_of_melo_and_clear_of_its_knob():
 
 
 def test_sampler_centred_captions_hand_their_centring_to_the_pair():
-    """SUB and DTUN are centred below their knob, so the PAIR takes over that
+    """SUB is centred below its knob, so the PAIR takes over that
     centring -- otherwise adding a word would shove the caption off its knob.
     MELODY is excluded: its caption is placed radially and keeps its anchor."""
     for suffix in ('_A', '_B'):
@@ -1107,8 +1125,8 @@ def test_all_deck_local_geometry_is_exactly_mirrored():
     """One property guard covers every deck-local glyph, label, and field."""
     flip = {'start': 'end', 'end': 'start', 'middle': 'middle'}
 
-    params = {c.enum: c for c in g.PARAMS}
-    a_params = [c for c in g.PARAMS if c.enum.endswith('_A')]
+    params = {c.enum: c for c in g.PANEL_PARAMS}
+    a_params = [c for c in g.PANEL_PARAMS if c.enum.endswith('_A')]
     check(len(a_params) > 0, "no deck-A parameters found")
     for a in a_params:
         b_name = a.enum[:-2] + '_B'

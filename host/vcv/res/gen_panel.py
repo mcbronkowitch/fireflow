@@ -189,7 +189,7 @@ def orbit_label(cx, cy, ang_deg, mir):
 
 # --- lower half per part (spec 2026-07-18 §5) --------------------------------
 # VOICE and FX sit side by side, PLAY spans the full part width below them.
-VOICE_X  = [9.25, 19.75, 30.25]      # ATK FILT SUB / DEC RES DTUN
+VOICE_X  = [9.25, 19.75, 30.25]      # ATK FILT SUB / DEC RES TIMB
 ROW_V1, ROW_V2 = 77.3, 89.4
 # 4-wide, aligned to FX_BOT so the FX box's two rows flush: RATE MIX FB ROOM.
 FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # RATE MIX FB | ROOM (per-deck reverb mix)
@@ -227,15 +227,16 @@ def part_controls(mir=False):
         c = Ctl(enum, KNOBC if enum == "MELODY" else BIGKNOB, x, y, lbl)
         c.lbl = orbit_label(cx, RING_CY, ang, mir)
         out.append(c)
-    # voice row (small): ATK FILT SUB | DEC RES DTUN. FILT fills slot 2 of the top
+    # voice row (small): ATK FILT SUB | DEC RES TIMB. FILT fills slot 2 of the top
     # row but is appended at the END of PARAMS (see below), never here -- that
     # would grow PART_STRIDE and shift every part-B/SHARED param id.
     for (enum, lbl, x, y) in [("ATTACK", "ATK",  VOICE_X[0], ROW_V1),
                               ("DECAY",  "DEC",  VOICE_X[0], ROW_V2),
                               ("RES",    "RES",  VOICE_X[1], ROW_V2),
                               ("SUB",    "SUB",  VOICE_X[2], ROW_V1),
-                              ("DETUNE", "DTUN", VOICE_X[2], ROW_V2)]:
-        out.append(Ctl(enum, SMKNOB, fx(x), y, lbl))
+                              ("SOURCE", "TIMB", VOICE_X[2], ROW_V2)]:
+        out.append(Ctl(enum, SMKNOB, fx(x), y, lbl,
+                       "SOURCE" if enum == "SOURCE" else None))
     # fx box: the FLUX delay cluster (RATE . MIX . FB) on top, GRIT/COMP below.
     # FLUX (the delay MIX) is the template member; RATE/FB are appended at the
     # end of PARAMS. STEPS keeps its append slot here but has moved to the PLAY
@@ -364,7 +365,7 @@ def color_ctl(suffix, mir):
     c.lbl = orbit_label(cx, RING_CY, ang, mir)
     return c
 
-PARAMS = PART_A + PART_B + SHARED + [
+PANEL_PARAMS = PART_A + PART_B + SHARED + [
     # FILT: bipolar cutoff trim (spec 2026-07-17). Appended LAST like CHOKE so
     # existing .vcv patches keep their param ids; coordinates put it in the
     # top voice row's middle slot (after ATK).
@@ -418,6 +419,13 @@ PARAMS = PART_A + PART_B + SHARED + [
     Ctl("SHUFFLE", SMKNOB, CX + 9.0, ROW_TIME2, "SHUFL"),
 ]
 
+HIDDEN_PARAMS = [
+    Ctl("DETUNE_A", SMKNOB, 0.0, 0.0, "", "Detune A"),
+    Ctl("DETUNE_B", SMKNOB, 0.0, 0.0, "", "Detune B"),
+]
+
+PARAMS = PANEL_PARAMS + HIDDEN_PARAMS
+
 # --- lights --------------------------------------------------------------------
 # INPUTS/OUTPUTS are built above (see JACK_GROUPS, near CX) -- they had to move
 # ahead of GROUPS, which folds the jack boxes in. Only the lights are left here.
@@ -436,7 +444,7 @@ LIGHTS = [
 # on the plate. DENS is deliberately absent: the word already fits both engines
 # (groove density / grain density), and MORPH is taken by the global A/B knob --
 # two things called MORPH on one plate would be a built-in operating error.
-SAMPLER_LBL = [("MELODY", "SCAN"), ("SUB", "LEN"), ("DETUNE", "ORG")]
+SAMPLER_LBL = [("MELODY", "SCAN"), ("SUB", "LEN")]
 SAMPLER_SIZE = 1.5     # mm; the main captions are 1.9
 
 # All three sit INLINE, on the same baseline as the caption they qualify and
@@ -450,7 +458,7 @@ SAMPLER_SIZE = 1.5     # mm; the main captions are 1.9
 # label pair, including flipped anchors, so labels obey the same exact mirror
 # invariant as the controls and background fields.
 SAMPLER_GAP    = 0.8   # mm of air between a caption and its sampler word
-# MELODY's caption is placed radially by orbit_label(); SUB and DETUNE use the
+# MELODY's caption is placed radially by orbit_label(); SUB uses the
 # centred default. That difference decides which pair rule applies -- see
 # sampler_texts. Keyed by name rather than by "does c.lbl exist", because this
 # function overwrites c.lbl and such a test would answer differently on a
@@ -482,7 +490,7 @@ def sampler_texts():
     Where the pair as a whole sits depends on how the parent was placed, and
     the two rules are NOT interchangeable:
 
-    * Centred captions (SUB, DETUNE) hand their centring to the pair. The
+    * Centred captions (SUB) hand their centring to the pair. The
       caption gives up its "middle" anchor and ends half a gap left of the
       knob's centre-of-pair, so "SUB LEN" straddles the knob the way "SUB"
       used to.
@@ -497,7 +505,7 @@ def sampler_texts():
     out = []
     aliases_a = {}
     for base, word in SAMPLER_LBL:
-        c = next(c for c in PARAMS if c.enum == base + "_A")
+        c = next(c for c in PANEL_PARAMS if c.enum == base + "_A")
         ws = text_w(word, SAMPLER_SIZE)
         if base in SAMPLER_RADIAL:
             lx, ly, anchor, size, col = c.lbl          # set by orbit_label
@@ -515,8 +523,8 @@ def sampler_texts():
         out.append(alias)
 
     for base, word in SAMPLER_LBL:
-        a = next(c for c in PARAMS if c.enum == base + "_A")
-        b = next(c for c in PARAMS if c.enum == base + "_B")
+        a = next(c for c in PANEL_PARAMS if c.enum == base + "_A")
+        b = next(c for c in PANEL_PARAMS if c.enum == base + "_B")
         b.lbl = mirror_label(label_of(a))
         x, y, size, spacing, colour, anchor, _word = aliases_a[base]
         out.append((W - x, y, size, spacing, colour,
@@ -668,7 +676,7 @@ def svg():
     P.append(f'<circle cx="{mm(CX-15)}" cy="5.9" r="0.9" fill="{GREEN}"/>')
     P.append(f'<circle cx="{mm(CX+15)}" cy="5.9" r="0.9" fill="{COPPER}"/>')
     # glyphs + labels
-    for c in PARAMS + INPUTS + OUTPUTS + LIGHTS:
+    for c in PANEL_PARAMS + INPUTS + OUTPUTS + LIGHTS:
         if c.kind in (IN, OUT):
             P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="{mm(c.r)}" '
                      f'fill="{GRAPHITE}" stroke="#4a4a40" stroke-width="0.4"/>')
@@ -754,7 +762,7 @@ def header():
                       f'{size:.2f}f, {rgb(colour)}, "{c.tip}"}},')
         L2.append("};")
 
-    emit_table("kParamCtls",  PARAMS)
+    emit_table("kParamCtls",  PANEL_PARAMS)
     emit_table("kInputCtls",  INPUTS)
     emit_table("kOutputCtls", OUTPUTS)
     emit_table("kLightCtls",  LIGHTS)

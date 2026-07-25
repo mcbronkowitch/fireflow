@@ -25,7 +25,7 @@ enum ParamId {
     DECAY_A,
     RES_A,
     SUB_A,
-    DETUNE_A,
+    SOURCE_A,
     FLUX_A,
     GRIT_A,
     COMP_A,
@@ -48,7 +48,7 @@ enum ParamId {
     DECAY_B,
     RES_B,
     SUB_B,
-    DETUNE_B,
+    SOURCE_B,
     FLUX_B,
     GRIT_B,
     COMP_B,
@@ -93,6 +93,8 @@ enum ParamId {
     REV_MIX_A,
     REV_MIX_B,
     SHUFFLE,
+    DETUNE_A,
+    DETUNE_B,
     NUM_PARAMS
 };
 enum InputId {
@@ -131,7 +133,7 @@ static const PanelCtl kParamCtls[] = {
     {DECAY_A, WK_SMKNOB, {9.250f, 89.400f}, "DEC", {9.250f, 95.000f}, 0, 1.90f, 0x171713, "DEC"},
     {RES_A, WK_SMKNOB, {19.750f, 89.400f}, "RES", {19.750f, 95.000f}, 0, 1.90f, 0x171713, "RES"},
     {SUB_A, WK_SMKNOB, {30.250f, 77.300f}, "SUB", {30.210f, 82.900f}, 2, 1.90f, 0x171713, "SUB"},
-    {DETUNE_A, WK_SMKNOB, {30.250f, 89.400f}, "DTUN", {30.780f, 95.000f}, 2, 1.90f, 0x171713, "DTUN"},
+    {SOURCE_A, WK_SMKNOB, {30.250f, 89.400f}, "TIMB", {30.250f, 95.000f}, 0, 1.90f, 0x171713, "SOURCE"},
     {FLUX_A, WK_SMKNOB, {54.750f, 77.300f}, "MIX", {54.750f, 82.900f}, 0, 1.90f, 0x171713, "FLUX"},
     {GRIT_A, WK_SMKNOB, {65.250f, 89.400f}, "GRIT", {65.250f, 95.000f}, 0, 1.90f, 0x171713, "GRIT"},
     {COMP_A, WK_SMKNOB, {75.750f, 89.400f}, "COMP", {75.750f, 95.000f}, 0, 1.90f, 0x171713, "COMP"},
@@ -154,7 +156,7 @@ static const PanelCtl kParamCtls[] = {
     {DECAY_B, WK_SMKNOB, {204.110f, 89.400f}, "DEC", {204.110f, 95.000f}, 0, 1.90f, 0x171713, "DEC"},
     {RES_B, WK_SMKNOB, {193.610f, 89.400f}, "RES", {193.610f, 95.000f}, 0, 1.90f, 0x171713, "RES"},
     {SUB_B, WK_SMKNOB, {183.110f, 77.300f}, "SUB", {183.150f, 82.900f}, 1, 1.90f, 0x171713, "SUB"},
-    {DETUNE_B, WK_SMKNOB, {183.110f, 89.400f}, "DTUN", {182.580f, 95.000f}, 1, 1.90f, 0x171713, "DTUN"},
+    {SOURCE_B, WK_SMKNOB, {183.110f, 89.400f}, "TIMB", {183.110f, 95.000f}, 0, 1.90f, 0x171713, "SOURCE"},
     {FLUX_B, WK_SMKNOB, {158.610f, 77.300f}, "MIX", {158.610f, 82.900f}, 0, 1.90f, 0x171713, "FLUX"},
     {GRIT_B, WK_SMKNOB, {148.110f, 89.400f}, "GRIT", {148.110f, 95.000f}, 0, 1.90f, 0x171713, "GRIT"},
     {COMP_B, WK_SMKNOB, {137.610f, 89.400f}, "COMP", {137.610f, 95.000f}, 0, 1.90f, 0x171713, "COMP"},
@@ -247,9 +249,7 @@ static const PanelTxt kPanelTexts[] = {
     {{188.160f, 113.350f}, 1.80f, 0.35f, 0xB96532, 0, "CV B"},
     {{7.033f, 52.350f}, 1.50f, 0.00f, 0x656056, 2, "SCAN"},
     {{31.010f, 82.900f}, 1.50f, 0.00f, 0x656056, 1, "LEN"},
-    {{31.580f, 95.000f}, 1.50f, 0.00f, 0x656056, 1, "ORG"},
     {{206.327f, 52.350f}, 1.50f, 0.00f, 0x656056, 1, "SCAN"},
     {{182.350f, 82.900f}, 1.50f, 0.00f, 0x656056, 2, "LEN"},
-    {{181.780f, 95.000f}, 1.50f, 0.00f, 0x656056, 2, "ORG"},
 };
 } // namespace spkyvcv
