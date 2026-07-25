@@ -25,8 +25,8 @@ WinLibs GCC.
   `.worktrees/song-pattern-chaining`; baseline commit is `6c6a215`.
 - FORM has exactly five values in this order: `TWO MOTIFS`, `ONE + VAR`,
   `HIERARCHICAL`, `CALL / RESPONSE`, `OSTINATO`.
-- SONG has exactly six values in this order: `AAAB`, `ABAB`, `ABBB`, `BUILD`,
-  `ROTATE`, `MIRROR`.
+- SONG has exactly seven values in this order: `AAAB`, `ABAB`, `ABBB`, `BUILD`,
+  `ROTATE`, `MIRROR`, `OFF`.
 - Factory defaults are `FORM = HIERARCHICAL` and `SONG = AAAB` for both Parts.
 - SONG only selects persistent A/B snapshots; it never mutates musical content
   or consumes random draws.
@@ -70,7 +70,7 @@ WinLibs GCC.
   `set_principle`.
 - `host/render/scenarios/demo_song_aaab.json` — keep the focused AAAB/GROW/RENEW
   audition using the split API.
-- `host/render/scenarios/demo_song_modes.json` — audition all six SONG modes.
+- `host/render/scenarios/demo_song_modes.json` — audition all seven SONG modes.
 - `tests/test_song_form.cpp` — pure sequence, clamping, turnaround, storage, and
   determinism tests.
 - `tests/test_song_lane.cpp`, `tests/test_lane_tick.cpp` — lane boundary,
@@ -120,7 +120,7 @@ Replace `TEST_CASE("song form is exactly AAAB")` with:
 ```cpp
 TEST_CASE("song modes clamp and produce the approved sequences") {
     CHECK(clamp_song(-7) == SongMode::AAAB);
-    CHECK(clamp_song(99) == SongMode::Mirror);
+    CHECK(clamp_song(99) == SongMode::Off);
 
     CHECK(song_text(SongMode::AAAB, 8) == "AAABAAAB");
     CHECK(song_text(SongMode::ABAB, 8) == "ABABABAB");
@@ -129,6 +129,8 @@ TEST_CASE("song modes clamp and produce the approved sequences") {
           "AAABAABBABBBAABBAAABAABBABBBAABB");
     CHECK(song_text(SongMode::Rotate, 32) ==
           "AAABAABAABAABAAAAAABAABAABAABAAA");
+    CHECK(song_text(SongMode::Off, 32) ==
+          "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
 }
 
 TEST_CASE("MIRROR is the deterministic Thue-Morse stream") {
@@ -178,6 +180,7 @@ enum class SongMode : uint8_t {
     Build,
     Rotate,
     Mirror,
+    Off,
     kCount
 };
 
@@ -205,13 +208,16 @@ inline uint8_t song_symbol_at(SongMode mode, uint32_t phrase_index) {
         0,0,0,1, 0,0,1,0, 0,1,0,0, 1,0,0,0
     };
 
-    const int value = static_cast<int>(clamp_song(static_cast<int>(mode)));
+    const SongMode clamped = clamp_song(static_cast<int>(mode));
+    const int value = static_cast<int>(clamped);
     if (value <= static_cast<int>(SongMode::ABBB))
         return fixed[value][phrase_index & 3u];
-    if (mode == SongMode::Build)
+    if (clamped == SongMode::Build)
         return build[phrase_index & 15u];
-    if (mode == SongMode::Rotate)
+    if (clamped == SongMode::Rotate)
         return rotate[phrase_index & 15u];
+    if (clamped == SongMode::Off)
+        return 0u;
 
     uint8_t parity = 0;
     while (phrase_index != 0u) {
@@ -339,7 +345,7 @@ Keep and adapt the existing NEW and effective-length tests so both require
 final FORM/SONG values to one lane and only the final values to its equal-seed
 twin; after the wrap require byte-identical snapshots and equal active symbols.
 
-- [ ] **Step 4: Add failing exact lane-stream cases for all six SONG modes**
+- [ ] **Step 4: Add failing exact lane-stream cases for all seven SONG modes**
 
 Add a helper:
 
@@ -355,8 +361,9 @@ std::vector<uint8_t> collect_symbols(ModLane lane, int count) {
 }
 ```
 
-Add a table that checks 32 symbols for AAAB, ABAB, ABBB, BUILD, and ROTATE
-against `song_symbol_at`, and 64 symbols for MIRROR. Configure variation to LOOP
+Add a table that checks 32 symbols for AAAB, ABAB, ABBB, BUILD, ROTATE, and OFF
+against `song_symbol_at`, and 64 symbols for MIRROR. OFF must select only A while
+both stored snapshots remain byte-identical at LOOP. Configure variation to LOOP
 so snapshot evolution cannot obscure arrangement behavior.
 
 - [ ] **Step 5: Run the lane-focused tests and confirm the split API fails**
@@ -619,7 +626,7 @@ CHECK(inst.song(PART_B) == static_cast<int>(SongMode::Rotate));
 ```
 
 Add a second instance with FORM values `-7` and `99` and SONG values `-7` and
-`99`; require `TwoMotif`, `Ostinato`, `AAAB`, and `Mirror` respectively.
+`99`; require `TwoMotif`, `Ostinato`, `AAAB`, and `Off` respectively.
 
 - [ ] **Step 2: Add a failing renderer dispatch test**
 
@@ -736,14 +743,15 @@ t=32:  SONG ABBB
 t=48:  SONG BUILD
 t=112: SONG ROTATE
 t=176: SONG MIRROR
+t=240: SONG OFF
 ```
 
-Set `duration_s` to 240 so each fixed mode gets one four-phrase cycle and each
-dynamic mode gets one complete 16-phrase listening window. Use the same Part A
-synth and Part B silencing setup as `demo_song_aaab.json`.
+Set `duration_s` to 256 so each fixed mode and OFF get one four-phrase cycle and
+each dynamic mode gets one complete 16-phrase listening window. Use the same
+Part A synth and Part B silencing setup as `demo_song_aaab.json`.
 
-Add a scenario test that loads the file, requires `duration_s == 240`, requires
-FORM 2, STEP 16, LOOP variation, and sees each `set_song` integer `0..5` exactly
+Add a scenario test that loads the file, requires `duration_s == 256`, requires
+FORM 2, STEP 16, LOOP variation, and sees each `set_song` integer `0..6` exactly
 once across init plus timeline.
 
 - [ ] **Step 9: Run API and scenario tests**
@@ -809,8 +817,8 @@ configSwitch(c.id, 0.f, 4.f, init, "Form",
              {"TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
               "CALL / RESPONSE", "OSTINATO"});
 
-configSwitch(c.id, 0.f, 5.f, init, "Song",
-             {"AAAB", "ABAB", "ABBB", "BUILD", "ROTATE", "MIRROR"});
+configSwitch(c.id, 0.f, 6.f, init, "Song",
+             {"AAAB", "ABAB", "ABBB", "BUILD", "ROTATE", "MIRROR", "OFF"});
 ```
 
 - [ ] **Step 2: Add failing runtime guards**
@@ -1013,7 +1021,7 @@ Have `test_panel.py` read `host/vcv/README.md` and require:
 
 - the row text `STEP · FORM · SONG · NEW`;
 - the five FORM display names;
-- the six SONG display names;
+- the seven SONG display names;
 - a statement that NEW always rebuilds A/B;
 - a statement that Sampler NEW also spawns immediately;
 - no description of a visible TRIG button.
@@ -1081,15 +1089,16 @@ Document:
 
 ```text
 FORM: TWO MOTIFS / ONE + VAR / HIERARCHICAL / CALL / RESPONSE / OSTINATO
-SONG: AAAB / ABAB / ABBB / BUILD / ROTATE / MIRROR
+SONG: AAAB / ABAB / ABBB / BUILD / ROTATE / MIRROR / OFF
 PLAY row: STEP · FORM · SONG · NEW
 ```
 
 Explain BUILD as `AAAB → AABB → ABBB → AABB`, ROTATE as
 `AAAB → AABA → ABAA → BAAA`, and MIRROR as deterministic
-`ABBA · BAAB · BAAB · ABBA …`. State that NEW rebuilds A/B and restarts SONG;
-Sampler NEW additionally returns to ORGANIZE and spawns immediately. Remove the
-old visible-TRIG description.
+`ABBA · BAAB · BAAB · ABBA …`. Explain OFF as `AAAA …`: MELODY continues to
+evolve A while B remains stored for a seamless return to an active arrangement.
+State that NEW rebuilds A/B and restarts SONG; Sampler NEW additionally returns
+to ORGANIZE and spawns immediately. Remove the old visible-TRIG description.
 
 - [ ] **Step 7: Run panel, source, migration, and documentation guards**
 
