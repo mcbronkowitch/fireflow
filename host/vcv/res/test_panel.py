@@ -975,9 +975,12 @@ def source_detune_wiring_issues(cpp):
          "Detune B must be a normalized persistent Rack parameter"),
         ("if(c.id==SOURCE_A||c.id==SOURCE_B)",
          "SOURCE controls need their own stable Rack names"),
-        (compact_cpp('configParam(c.id, 0.f, 1.f, init, '
-                     'c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");'),
-         "SOURCE controls must be named SOURCE A/B, not engine captions"),
+        (compact_cpp(
+            'auto* source = configParam(c.id, 0.f, 1.f, init, '
+            'c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");'
+            'source->description = "Controls Synth TIMB, Wave FRAME, or '
+            'Sampler ORG according to the selected engine.";'),
+         "SOURCE A/B need stable names and a TIMB/FRAME/ORG description"),
     ):
         if required not in config_n:
             issues.append(label)
@@ -1043,6 +1046,9 @@ def test_source_detune_guard_rejects_representative_regressions():
          "DETUNE_A, 0.f, 1.f, initParamDefault(DETUNE_A), \"Detune A\"",
          "Detune B quantity"),
         ("\"Detune B\"", "\"Detune\"", "Detune B name"),
+        ("Synth TIMB, Wave FRAME, or Sampler ORG",
+         "Synth COLOR, Wave POSITION, or Sampler START",
+         "SOURCE description"),
         ("\"Reset to 6.0 ct\"", "\"Reset\"", "menu reset"),
         ("string::f(\"%.1f ct\"", "string::f(\"%.0f ct\"",
          "Detune cents precision"),

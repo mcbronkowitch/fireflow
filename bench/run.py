@@ -137,10 +137,110 @@ def run_once(interface, timeout):
                 proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 proc.kill()
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired as error:
+                    raise RuntimeError(
+                        "OpenOCD did not exit after kill"
+                    ) from error
     return lines if done else None
 
 
 BUDGET_CYCLES = 960000
+
+# Host-side form of the workload protocol emitted by main.cpp. Keep the
+# families grouped like the seven k*Workloads tables so adding or removing a
+# firmware row has one obvious fail-closed host update. Validation uses the
+# row set, never the incidental table/output order.
+BENCH_PROTOCOL_ROWS_BY_FAMILY = {
+    "system": (
+        "empty_callback",
+        "mod_plane_2x_center",
+        "synth_1_voice",
+        "synth_2_voices",
+        "synth_4_voices",
+        "synth_2x4",
+        "wave_2x4",
+        "fx_none",
+        "fx_grit",
+        "fx_flux_sdram",
+        "fx_comp",
+        "oliverb_solo_sram",
+        "instrument_init",
+        "instrument_worst",
+        "instrument_worst_taps",
+    ),
+    "voice": (
+        "morph_osc_bare",
+        "modal_voice",
+        "string_voice",
+        "resonator",
+        "formant_osc",
+        "vosim_osc",
+        "harmonic_osc",
+        "grainlet_osc",
+        "z_osc",
+        "variable_shape_osc",
+    ),
+    "mem": (
+        "grain_read_sram",
+        "grain_read_sdram",
+        "oliverb_sdram",
+        "echo_walk_sram",
+        "echo_walk_sdram",
+    ),
+    "mod": (
+        "lane_flow_shape00",
+        "lane_flow_shape03",
+        "lane_flow_shape07",
+        "lane_flow_shape10",
+        "lane_step_shape00",
+        "super_mod_5lanes",
+        "center_tick",
+    ),
+    "abl": (
+        "micro_sinf",
+        "micro_tanhf",
+        "micro_powf",
+        "micro_fast_sin",
+        "part_glue_flow",
+        "inst_worst_noflux",
+        "inst_worst_noreverb",
+        "inst_worst_nogrit",
+        "inst_worst_choked",
+        "limiter_clean",
+        "limiter_driven",
+        "echo_short_sram",
+        "echo_short_sdram",
+        "grit_drive_solo",
+        "grit_reduce_solo",
+    ),
+    "taps": (
+        "taps_2_opt",
+        "tap_read_sdram",
+    ),
+    "sampler": (
+        "sampler_flow_typ",
+        "sampler_flow_worst",
+        "sampler_overdub_worst",
+        "sampler_scan_ctrl",
+        "sampler_win_sram",
+        "sampler_win_sdram",
+        "inst_sampler_worst",
+        "sampler_worst_slowspawn",
+        "inst_sampler_nomotion",
+        "inst_sampler_slowspawn",
+        "inst_sampler_noflux",
+        "inst_sampler_noreverb",
+        "inst_sampler_onepart",
+        "sampler_worst_nomotion",
+    ),
+}
+BENCH_PROTOCOL_ROWSET = frozenset(
+    (family, name)
+    for family, names in BENCH_PROTOCOL_ROWS_BY_FAMILY.items()
+    for name in names
+)
 
 
 def parse(lines):
@@ -184,7 +284,6 @@ class BenchValidationError(ValueError):
 
 def validate_captures(captures):
     """Reject any repeat capture that cannot be accepted as hardware evidence."""
-    expected = None
     expected_rows = None
     expected_identity = None
     for run_index, (header, rows, _) in enumerate(captures, start=1):
@@ -196,16 +295,33 @@ def validate_captures(captures):
                 "run %d QSPI digest or device fingerprint differs from run 1"
                 % run_index
             )
-        row_names = [row["name"] for row in rows]
-        names = set(row_names)
-        if len(names) != len(row_names):
+        row_keys = [(row["family"], row["name"]) for row in rows]
+        keys = set(row_keys)
+        if len(keys) != len(row_keys):
             duplicates = sorted(
-                name for name in names if row_names.count(name) > 1
+                "%s/%s" % key for key in keys if row_keys.count(key) > 1
             )
             raise BenchValidationError(
-                "run %d has duplicate row names: %s"
+                "run %d has duplicate bench rows: %s"
                 % (run_index, ", ".join(duplicates))
             )
+        if keys != BENCH_PROTOCOL_ROWSET:
+            missing = sorted(BENCH_PROTOCOL_ROWSET - keys)
+            extra = sorted(keys - BENCH_PROTOCOL_ROWSET)
+            fmt = lambda items: ", ".join(
+                "%s/%s" % item for item in items
+            ) or "none"
+            raise BenchValidationError(
+                "run %d does not match the complete %d-row bench protocol "
+                "(missing: %s; extra: %s)"
+                % (
+                    run_index,
+                    len(BENCH_PROTOCOL_ROWSET),
+                    fmt(missing),
+                    fmt(extra),
+                )
+            )
+        names = {row["name"] for row in rows}
         required = {"synth_2x4", "wave_2x4"}
         if not required.issubset(names):
             raise BenchValidationError(
@@ -239,25 +355,13 @@ def validate_captures(captures):
                 "run %d WAVE maximum %d is not below the %d-cycle block budget"
                 % (run_index, wave_max, BUDGET_CYCLES)
             )
-        if expected is None:
-            expected = names
+        if expected_rows is None:
             expected_rows = by_name(rows)
             continue
-        if names != expected:
-            missing = sorted(expected - names)
-            extra = sorted(names - expected)
-            raise BenchValidationError(
-                "run %d row set differs (missing: %s; extra: %s)"
-                % (
-                    run_index,
-                    ", ".join(missing) or "none",
-                    ", ".join(extra) or "none",
-                )
-            )
         current_rows = by_name(rows)
         drifted = sorted(
             name
-            for name in expected
+            for name in expected_rows
             if expected_rows[name]["checksum"] != current_rows[name]["checksum"]
         )
         if drifted:

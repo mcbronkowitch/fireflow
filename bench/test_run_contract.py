@@ -1,5 +1,6 @@
 """Host contracts for fail-closed repeated benchmark evidence."""
 
+import csv
 import importlib.util
 import io
 from pathlib import Path
@@ -21,6 +22,12 @@ else:
 
 QSPI_SHA256 = "a" * 64
 DEVICE_ID = "00112233445566778899aabb"
+REAL_EVIDENCE_PATH = (
+    RUNNER_PATH.parent.parent
+    / "docs"
+    / "bench"
+    / "2026-07-25-d294556.csv"
+)
 
 
 class FakeOpenOcd:
@@ -49,6 +56,19 @@ class FakeOpenOcd:
         self.killed = True
 
 
+class KillRequiredOpenOcd(FakeOpenOcd):
+    def poll(self):
+        return 0 if self.killed else None
+
+    def terminate(self):
+        self.terminated = True
+
+
+class UnkillableOpenOcd(KillRequiredOpenOcd):
+    def poll(self):
+        return None
+
+
 def bench_row(name, avg_cyc, max_cyc, checksum):
     return (
         "BENCH,system,%s,%d,%d,%.2f,%.2f,%s"
@@ -72,6 +92,30 @@ def capture_lines(
         *rows,
         *anchors,
         "BENCH_END",
+    ]
+
+
+def real_evidence_rows(run_index):
+    with REAL_EVIDENCE_PATH.open(newline="", encoding="utf-8") as stream:
+        rows = [
+            row for row in csv.DictReader(stream)
+            if int(row["run"]) == run_index
+        ]
+    return [
+        "BENCH,{family},{name},{avg_cyc},{max_cyc},{pct_avg},{pct_max},{checksum}"
+        .format(**row)
+        for row in rows
+    ]
+
+
+def replace_rows(rows, *replacements):
+    replacements_by_name = {
+        replacement.split(",")[2]: replacement
+        for replacement in replacements
+    }
+    return [
+        replacements_by_name.get(row.split(",")[2], row)
+        for row in rows
     ]
 
 
@@ -123,6 +167,44 @@ class RunContract(unittest.TestCase):
         self.assertFalse(process.killed)
         self.assertEqual(process.wait_calls, [10])
 
+    def test_run_once_waits_for_openocd_after_kill(self):
+        process = KillRequiredOpenOcd()
+
+        with (
+            mock.patch.object(runner.subprocess, "Popen", return_value=process),
+            mock.patch.object(
+                socket,
+                "create_connection",
+                side_effect=OSError("control port unavailable"),
+            ),
+        ):
+            lines = runner.run_once("stlink-dap.cfg", 1)
+
+        self.assertEqual(lines, ["BENCH_END"])
+        self.assertTrue(process.terminated)
+        self.assertTrue(process.killed)
+        self.assertEqual(process.wait_calls, [10, 10])
+
+    def test_run_once_errors_if_openocd_survives_kill(self):
+        process = UnkillableOpenOcd()
+
+        with (
+            mock.patch.object(runner.subprocess, "Popen", return_value=process),
+            mock.patch.object(
+                socket,
+                "create_connection",
+                side_effect=OSError("control port unavailable"),
+            ),
+            self.assertRaisesRegex(
+                RuntimeError, "OpenOCD did not exit after kill"
+            ),
+        ):
+            runner.run_once("stlink-dap.cfg", 1)
+
+        self.assertTrue(process.terminated)
+        self.assertTrue(process.killed)
+        self.assertEqual(process.wait_calls, [10, 10])
+
     def run_evidence(self, captures):
         with tempfile.TemporaryDirectory() as temp:
             argv = [
@@ -157,12 +239,10 @@ class RunContract(unittest.TestCase):
         return self.run_evidence(captures)[0]
 
     def test_repeat_rejects_a_missing_row(self):
-        complete = [
-            bench_row("synth_2x4", 340000, 350000, "11111111"),
-            bench_row("wave_2x4", 300000, 310000, "22222222"),
-            bench_row("empty_callback", 2, 12, "33333333"),
+        complete = real_evidence_rows(1)
+        missing_empty = [
+            row for row in complete if row.split(",")[2] != "empty_callback"
         ]
-        missing_empty = complete[:2]
 
         self.assertEqual(
             self.run_main(
@@ -172,10 +252,7 @@ class RunContract(unittest.TestCase):
         )
 
     def test_repeat_rejects_duplicate_row_names(self):
-        complete = [
-            bench_row("synth_2x4", 340000, 350000, "11111111"),
-            bench_row("wave_2x4", 300000, 310000, "22222222"),
-        ]
+        complete = real_evidence_rows(1)
         duplicate_wave = complete + [
             bench_row("wave_2x4", 299000, 309000, "22222222")
         ]
@@ -188,14 +265,12 @@ class RunContract(unittest.TestCase):
         )
 
     def test_repeat_rejects_checksum_drift(self):
-        first = [
-            bench_row("synth_2x4", 340000, 350000, "11111111"),
-            bench_row("wave_2x4", 300000, 310000, "22222222"),
-        ]
-        drifted = [
+        first = real_evidence_rows(1)
+        drifted = replace_rows(
+            real_evidence_rows(2),
             bench_row("synth_2x4", 340100, 350100, "11111111"),
             bench_row("wave_2x4", 300100, 310100, "33333333"),
-        ]
+        )
 
         self.assertEqual(
             self.run_main([capture_lines(first), capture_lines(drifted)]),
@@ -203,41 +278,60 @@ class RunContract(unittest.TestCase):
         )
 
     def test_repeat_requires_the_matched_wave_acceptance_rows(self):
-        synth_only = [
-            bench_row("synth_2x4", 340000, 350000, "11111111")
+        missing_wave = [
+            row for row in real_evidence_rows(1)
+            if row.split(",")[2] != "wave_2x4"
         ]
 
         self.assertEqual(
             self.run_main(
-                [capture_lines(synth_only), capture_lines(synth_only)]
+                [capture_lines(missing_wave), capture_lines(missing_wave)]
+            ),
+            2,
+        )
+
+    def test_repeat_rejects_two_identically_truncated_runs(self):
+        truncated = [
+            bench_row("synth_2x4", 340000, 350000, "11111111"),
+            bench_row("wave_2x4", 300000, 310000, "22222222"),
+        ]
+
+        self.assertEqual(
+            self.run_main(
+                [capture_lines(truncated), capture_lines(truncated)]
             ),
             2,
         )
 
     def test_repeat_rejects_each_wave_acceptance_violation(self):
         cases = {
-            "average exceeds synth": [
+            "average exceeds synth": (
                 bench_row("synth_2x4", 340000, 360000, "11111111"),
                 bench_row("wave_2x4", 350000, 350000, "22222222"),
-            ],
-            "maximum exceeds synth": [
+            ),
+            "maximum exceeds synth": (
                 bench_row("synth_2x4", 340000, 360000, "11111111"),
                 bench_row("wave_2x4", 300000, 370000, "22222222"),
-            ],
-            "maximum reaches block budget": [
+            ),
+            "maximum reaches block budget": (
                 bench_row("synth_2x4", 950000, 970000, "11111111"),
                 bench_row("wave_2x4", 900000, runner.BUDGET_CYCLES, "22222222"),
-            ],
-            "non-numeric WAVE result": [
+            ),
+            "non-numeric WAVE result": (
                 bench_row("synth_2x4", 340000, 360000, "11111111"),
                 "BENCH,system,wave_2x4,TIMEOUT,TIMEOUT,TIMEOUT,TIMEOUT,22222222",
-            ],
+            ),
         }
-        for label, rows in cases.items():
-            valid = [
-                bench_row("synth_2x4", 340000, 360000, "11111111"),
-                bench_row("wave_2x4", 300000, 350000, "22222222"),
-            ]
+        valid = replace_rows(
+            real_evidence_rows(1),
+            bench_row("synth_2x4", 340000, 360000, "11111111"),
+            bench_row("wave_2x4", 300000, 350000, "22222222"),
+        )
+        for label, wave_rows in cases.items():
+            rows = replace_rows(
+                real_evidence_rows(1),
+                *wave_rows,
+            )
             for failing_run in (1, 2):
                 captures = [capture_lines(valid), capture_lines(valid)]
                 captures[failing_run - 1] = capture_lines(rows)
@@ -245,7 +339,8 @@ class RunContract(unittest.TestCase):
                     self.assertEqual(self.run_main(captures), 2)
 
     def test_wave_acceptance_allows_exact_comparison_boundaries(self):
-        rows = [
+        rows = replace_rows(
+            real_evidence_rows(1),
             bench_row(
                 "synth_2x4",
                 900000,
@@ -258,7 +353,7 @@ class RunContract(unittest.TestCase):
                 runner.BUDGET_CYCLES - 1,
                 "22222222",
             ),
-        ]
+        )
 
         self.assertEqual(
             self.run_main([capture_lines(rows), capture_lines(rows)]),
@@ -266,18 +361,12 @@ class RunContract(unittest.TestCase):
         )
 
     def test_evidence_requires_at_least_two_runs(self):
-        rows = [
-            bench_row("synth_2x4", 340000, 350000, "11111111"),
-            bench_row("wave_2x4", 300000, 310000, "22222222"),
-        ]
+        rows = real_evidence_rows(1)
 
         self.assertEqual(self.run_main([capture_lines(rows)]), 2)
 
     def test_repeat_rejects_unstable_device_or_qspi_identity(self):
-        rows = [
-            bench_row("synth_2x4", 340000, 350000, "11111111"),
-            bench_row("wave_2x4", 300000, 310000, "22222222"),
-        ]
+        rows = real_evidence_rows(1)
         changed = {
             "device fingerprint": capture_lines(
                 rows, device_id="ffeeddccbbaa998877665544"
@@ -289,15 +378,28 @@ class RunContract(unittest.TestCase):
             with self.subTest(label=label):
                 self.assertEqual(self.run_main([first, second]), 2)
 
+    def test_existing_real_68_row_evidence_is_accepted_without_row_order(self):
+        first = real_evidence_rows(1)
+        second = list(reversed(real_evidence_rows(2)))
+
+        self.assertEqual(len(first), 68)
+        self.assertEqual(len(second), 68)
+        self.assertEqual(
+            self.run_main([capture_lines(first), capture_lines(second)]),
+            0,
+        )
+
     def test_evidence_persists_both_runs_qspi_digest_and_device_fingerprint(self):
-        first = [
+        first = replace_rows(
+            real_evidence_rows(1),
             bench_row("synth_2x4", 340000, 350000, "11111111"),
             bench_row("wave_2x4", 300000, 310000, "22222222"),
-        ]
-        second = [
+        )
+        second = replace_rows(
+            real_evidence_rows(2),
             bench_row("synth_2x4", 340100, 350100, "11111111"),
             bench_row("wave_2x4", 300100, 310100, "22222222"),
-        ]
+        )
         result, artifacts = self.run_evidence(
             [
                 capture_lines(
@@ -319,8 +421,8 @@ class RunContract(unittest.TestCase):
             "753749e56483677c494f96c8bf00abd"
         )
         self.assertEqual(csv_text.count("\nsystem,"), 0)
-        self.assertEqual(csv_text.count("\n1,"), 2)
-        self.assertEqual(csv_text.count("\n2,"), 2)
+        self.assertEqual(csv_text.count("\n1,"), 68)
+        self.assertEqual(csv_text.count("\n2,"), 68)
         self.assertIn("run,qspi_sha256,device_fingerprint", csv_text)
         self.assertIn(QSPI_SHA256, csv_text)
         self.assertIn(fingerprint, csv_text)
@@ -337,14 +439,16 @@ class RunContract(unittest.TestCase):
         self.assertFalse(md_text.endswith("\n\n"))
 
     def test_evidence_persists_explicit_wave_gate_pass_verdict(self):
-        first = [
+        first = replace_rows(
+            real_evidence_rows(1),
             bench_row("synth_2x4", 340000, 350000, "11111111"),
             bench_row("wave_2x4", 300000, 310000, "22222222"),
-        ]
-        second = [
+        )
+        second = replace_rows(
+            real_evidence_rows(2),
             bench_row("synth_2x4", 340100, 350100, "11111111"),
             bench_row("wave_2x4", 300100, 310100, "22222222"),
-        ]
+        )
 
         result, artifacts = self.run_evidence(
             [capture_lines(first), capture_lines(second)]

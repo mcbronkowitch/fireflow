@@ -225,9 +225,13 @@ struct Spotymod : Module {
                         configParam<DustQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == ROT_A || c.id == ROT_B)
                         configParam<RotQuantity>(c.id, 0.f, 1.f, init, lbl);
-                    else if (c.id == SOURCE_A || c.id == SOURCE_B)
-                        configParam(c.id, 0.f, 1.f, init,
-                                    c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");
+                    else if (c.id == SOURCE_A || c.id == SOURCE_B) {
+                        auto* source = configParam(
+                            c.id, 0.f, 1.f, init,
+                            c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");
+                        source->description =
+                            "Controls Synth TIMB, Wave FRAME, or Sampler ORG according to the selected engine.";
+                    }
                     else
                         configParam(c.id, 0.f, 1.f, init, lbl);
                     break;

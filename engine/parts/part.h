@@ -100,11 +100,11 @@ public:
     void set_voice_attack(float n)    { _synth.set_attack(n);    _wave.set_attack(n);    _sampler.set_window_attack(n); }
     void set_voice_decay(float n)     { _synth.set_decay(n);     _wave.set_decay(n);     _sampler.set_window_decay(n); }
     void set_voice_resonance(float n) { _synth.set_resonance(n); _wave.set_resonance(n); _sampler.set_resonance(n); }
-    // SUB and DETUNE are synth-only from the morphagene-controls spec on
-    // (2026-07-21): on the panel these two knobs are GENE SIZE and ORGANIZE
-    // in the sampler, so forwarding them here as well would give one knob two
-    // simultaneous jobs in the same engine. SamplerEngine::_sub_n and
-    // _detune_n default to 0 and now stay there.
+    // The visible SUB control is routed separately as GENE SIZE on a sampler,
+    // while visible SOURCE becomes ORG through LANE_SOURCE. The independent,
+    // widgetless Detune parameter has no sampler meaning. Keep melodic SUB and
+    // Detune on Synth/Wave only; SamplerEngine::_sub_n and _detune_n default
+    // to 0 and stay there until sampler cloud dispersion sets them.
     void set_voice_sub(float n)       { _synth.set_sub(n);       _wave.set_sub(n); }
     void set_voice_detune(float n)    { _synth.set_detune(n);    _wave.set_detune(n); }
     void set_voice_filt(float t)      { _synth.set_filt(t);      _wave.set_filt(t);      _sampler.set_filt(t); }
@@ -112,8 +112,8 @@ public:
     SamplerEngine& sampler() { return _sampler; }
     const SamplerEngine& sampler() const { return _sampler; }
     // Observer twin of sampler() above -- lets a test reach the Synth leg of
-    // the SUB/DTUN split directly (final-fixes pass, Befund B) the same way
-    // sampler() already lets it reach the sampler leg.
+    // the melodic SUB/widgetless-Detune split directly (final-fixes pass,
+    // Befund B) the same way sampler() already lets it reach the sampler leg.
     SynthEngine& synth() { return _synth; }
     const SynthEngine& synth() const { return _synth; }
     WaveEngine& wave() { return _wave; }
@@ -216,7 +216,7 @@ private:
     // general granular engine that can spread a chord (its own tests still
     // cover that), and the INSTRUMENT decides a sampler deck has no melody.
     // Same layer, and the same reasoning, as switching LANE_PITCH off and
-    // keeping SUB/DTUN on the synth.
+    // keeping melodic SUB and widgetless Detune off the sampler.
     int _flatten_for_sampler(float* chord, int nch) const {
         if (_engine_id != ENGINE_SAMPLER) return nch;
         chord[0] = _tg[LANE_PITCH];

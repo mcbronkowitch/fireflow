@@ -439,16 +439,17 @@ TEST_CASE("sampler part: punch() produces a grain in the FLOW cloud") {
     CHECK(p.sampler().spawn_count() > before);
 }
 
-TEST_CASE("sampler part: the SUB and DTUN knobs reach the synth, not the sampler") {
-    // They are GENE SIZE and ORGANIZE on the panel now (spec 2026-07-21
-    // morphagene-controls). The sampler's own sub/detune stay at their
-    // silent defaults, and the synth keeps both.
+TEST_CASE("sampler part: SUB and widgetless Detune reach synth, not sampler") {
+    // Visible SUB is routed separately as GENE SIZE on the sampler. Visible
+    // SOURCE becomes ORG through LANE_SOURCE; it is not Detune. Detune is an
+    // independent widgetless parameter for the melodic engines. The sampler's
+    // own sub/detune stay at their silent defaults, and the synth keeps both.
     //
     // Task 4 review, Befund 2: set_voice_sub/set_voice_detune (part.h) now
-    // forward ONLY to _synth.set_sub()/_synth.set_detune() -- the sampler
-    // leg below is only half this case pinned. Deleting BOTH forwarding
-    // calls (not just the sampler one) would still pass every CHECK that
-    // used to be here, because nothing observed the synth leg.
+    // forward only to the melodic Synth/Wave engines -- the sampler leg below
+    // is only half this case pinned. Deleting BOTH Synth forwarding calls
+    // (not just the sampler one) would still pass every CHECK that used to be
+    // here, because nothing observed the Synth leg.
     //
     // Final-fixes pass, Befund B: closed. SynthEngine now exposes
     // sub_level()/detune_spread_ct() (engine/synth/synth_engine.h) and Part
@@ -459,9 +460,10 @@ TEST_CASE("sampler part: the SUB and DTUN knobs reach the synth, not the sampler
     // now be caught here.
     //
     // Cloud-dispersion (spec 2026-07-23): die sampler-seitigen FELDER sind
-    // inzwischen ueber COLOR schreibbar. Dieser Fall pinnt weiterhin die
-    // KNOEPFE -- er ruft nie process(), also feuert kein Control-Tick und
-    // set_dispersion laeuft nie. Genau deshalb misst er noch, was er soll.
+    // inzwischen ueber COLOR schreibbar. Dieser Fall pinnt weiterhin den
+    // direkten Melodic-Forwarding-Pfad -- er ruft nie process(), also feuert
+    // kein Control-Tick und set_dispersion laeuft nie. Genau deshalb misst er
+    // noch, was er soll.
     Part p;
     p.init(48000.f, 0);
     p.set_voice_sub(1.f);
