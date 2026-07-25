@@ -202,6 +202,23 @@ TEST_CASE("follow: a slot nudge offsets the lane and fires immediately") {
     CHECK(l.cur_step() == 0);
 }
 
+TEST_CASE("follow: a zero-slot nudge is a shape kick and nothing more") {
+    ModLane l;
+    configure(l, 8);
+    for (int32_t s = 0; s <= 4; ++s) l.follow(s, 0.f, 0.f);
+    REQUIRE(l.cur_step() == 4);
+
+    l.nudge_slots(0, 0.2f);
+    l.follow(4, 0.5f, 0.f);            // same deck step: nothing moved, nothing fires
+    CHECK_FALSE(l.fired());
+    CHECK(l.cur_step() == 4);
+
+    l.nudge_slots(2, 0.f);             // a real move in the same situation does
+    l.follow(4, 0.6f, 0.f);
+    CHECK(l.fired());
+    CHECK(l.cur_step() == 6);
+}
+
 TEST_CASE("follow: a negative nudge does not stall the lane") {
     ModLane l;
     configure(l, 8);
@@ -293,6 +310,12 @@ Directly after the existing `void kick(float dphase, float dshape);` in the
     // and is exact; the new slot fires at the next follow() call, which is the
     // audible stumble. No rounding or parity care is needed -- boundary times
     // come from the deck, never from this lane's own warp.
+    //
+    // A draw that rounds to n == 0 is a shape kick and nothing more. It must
+    // NOT force a boundary: re-entering the slot the lane is already on would
+    // fire a stumble that moves nothing and, under GROW, spend an RNG draw on
+    // it. FLOW behaves the same way -- kick() with a near-zero dphase applies
+    // the shape offset and leaves the clock alone.
     void  nudge_slots(int n, float dshape);
 ```
 
@@ -333,7 +356,9 @@ void ModLane::nudge_slots(int n, float dshape) {
     // n slots (or, for a negative n, stall until the deck caught back up).
     _follow_offset += n;
     _follow_pos    += n;
-    _follow_jumped  = true;
+    // Only a real move fires. See the header comment: a zero-slot draw is a
+    // shape kick, not a stumble.
+    if (n != 0) _follow_jumped = true;
     _kick_shape    += dshape;
 }
 
@@ -459,7 +484,7 @@ directly after the line `if (entering_step) { _note_age = 0; _note_hold = 0; }`
 source env.sh && cmake --build build && ./build/spky_tests.exe -tc="follow:*"
 ```
 
-Expected: `[doctest] Status: SUCCESS!` with 9 test cases passing.
+Expected: `[doctest] Status: SUCCESS!` with 10 test cases passing.
 
 - [ ] **Step 8: Run the whole suite**
 
@@ -841,9 +866,18 @@ LockResult run_locked(float shape, bool chaos, int samples, int spot_at = -1) {
     Rng spot_rng;
     spot_rng.seed(5u);
 
+    // The loop runs one call PAST `samples`, and `samples` is required to be a
+    // whole number of raster windows, so that final call is itself a tick. A
+    // deck step landing in the last window is counted the sample it happens,
+    // but its boundary is only reported at the NEXT follow() -- without the
+    // flush the equality below would hold by luck of where the last transition
+    // fell rather than by construction. Two deck steps inside one window would
+    // still collapse into one latched fired(), but at any panel-reachable rate
+    // a step is ~200 samples against a 96-sample raster.
+    REQUIRE(samples % ModLane::kTickInterval == 0);
     LockResult r;
     int last = m.pitch_cur_step();
-    for (int i = 0; i < samples; ++i) {
+    for (int i = 0; i <= samples; ++i) {
         if (i == spot_at) m.spot(spot_rng);
         m.process();
         if (m.pitch_cur_step() != last) { last = m.pitch_cur_step(); ++r.deck_steps; }
