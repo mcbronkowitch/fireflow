@@ -144,3 +144,91 @@ TEST_CASE("steplock: a live SHUFFLE turn does not clamp the follower phase") {
     // fire per distinct deck step, including the cold-start landing.
     CHECK(fires_source == m.deck_step_for_test() + 1);
 }
+
+namespace {
+// In follower mode every deck step gives every texture lane exactly one
+// boundary. So "on the grid" needs no sample arithmetic and no tolerance at
+// all: the fire counts simply have to match the deck's step count. That
+// equality is what an equal-rate design could not hold -- it drifted about two
+// samples per step and lost a whole one every 90 seconds.
+//
+// A boundary is reported at the raster edge that covers it, and fired()
+// latches until the next follow(), so counting at raster edges counts each
+// boundary exactly once as long as a step is never shorter than the raster.
+// At the fastest panel rate a step is ~200 samples against a 96-sample raster.
+struct LockResult {
+    int   deck_steps = 0;
+    int   fires[LANE_COUNT] = {0, 0, 0, 0, 0};
+    float end_phase[LANE_COUNT] = {0.f, 0.f, 0.f, 0.f, 0.f};
+};
+
+LockResult run_locked(float shape, bool chaos, int samples, int spot_at = -1) {
+    SuperModulator m;
+    m.init(48000.f, 99u);
+    m.set_rate(0.45f);
+    m.set_step(true, 8);
+    m.set_shape(shape);
+    m.set_smooth(0.f);
+    m.set_tide(0.25f);                       // off-centre ladder rung
+    if (chaos) {
+        m.set_variation(0.8f);               // EVOLVE walks the master rate
+        m.set_rate_scale(1.f, 1.6f);         // DRIFT: mod_scale != pitch_scale
+        m.set_shuffle(0.6f);
+    }
+    Rng spot_rng;
+    spot_rng.seed(5u);
+
+    LockResult r;
+    int last = m.pitch_cur_step();
+    for (int i = 0; i < samples; ++i) {
+        if (i == spot_at) m.spot(spot_rng);
+        m.process();
+        if (m.pitch_cur_step() != last) { last = m.pitch_cur_step(); ++r.deck_steps; }
+        if (i % ModLane::kTickInterval == 0)
+            for (int l = 0; l < LANE_COUNT; ++l)
+                if (l != LANE_PITCH && m.lane_fired(l)) ++r.fires[l];
+    }
+    for (int l = 0; l < LANE_COUNT; ++l) r.end_phase[l] = m.lane_phase(l);
+    return r;
+}
+} // namespace
+
+TEST_CASE("steplock: every texture boundary is a deck step, under chaos") {
+    const LockResult r = run_locked(0.5f, true, 480000, -1);
+    REQUIRE(r.deck_steps >= 16);
+    for (int l = 0; l < LANE_COUNT; ++l)
+        if (l != LANE_PITCH) CHECK(r.fires[l] == r.deck_steps);
+}
+
+TEST_CASE("steplock: SPOT stumbles by whole slots and stays on the grid") {
+    const LockResult plain = run_locked(0.5f, true, 480000);
+    const LockResult spot  = run_locked(0.5f, true, 480000, 160000);
+    REQUIRE(spot.deck_steps >= 16);
+    CHECK(spot.deck_steps == plain.deck_steps);   // SPOT never touches PITCH
+
+    // The offset has to have landed somewhere: at least one texture lane sits
+    // at a different point in its cycle than the un-stumbled run.
+    bool moved = false;
+    for (int l = 0; l < LANE_COUNT; ++l)
+        if (l != LANE_PITCH && spot.end_phase[l] != plain.end_phase[l]) moved = true;
+    CHECK(moved);
+
+    // And it stayed on the grid. The jump adds at most one extra boundary --
+    // the stumble itself -- and it is only separately countable when it falls
+    // in a raster window that had no deck step of its own, so the count is
+    // deck_steps or deck_steps + 1, never more and never less.
+    for (int l = 0; l < LANE_COUNT; ++l) {
+        if (l == LANE_PITCH) continue;
+        CHECK(spot.fires[l] >= spot.deck_steps);
+        CHECK(spot.fires[l] <= spot.deck_steps + 1);
+    }
+}
+
+TEST_CASE("steplock: the lock holds over ten minutes of audio") {
+    // The test the reverted equal-rate design would have failed. Ten minutes
+    // is well past the ~90 s at which that design lost a whole step.
+    const LockResult r = run_locked(0.5f, true, 48000 * 600);
+    REQUIRE(r.deck_steps >= 2000);
+    for (int l = 0; l < LANE_COUNT; ++l)
+        if (l != LANE_PITCH) CHECK(r.fires[l] == r.deck_steps);
+}

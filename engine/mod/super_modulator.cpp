@@ -179,6 +179,17 @@ void SuperModulator::spot(Rng& rng) {
     for (int i = 0; i < LANE_COUNT; ++i) {
         float dphase = rng.next_bipolar() * 0.5f;    // uniform +/- 1/2 cycle
         float dshape = rng.next_bipolar() * 0.35f;   // uniform +/- 0.35
-        if (i != LANE_PITCH) _lanes[i].kick(dphase, dshape);
+        if (i == LANE_PITCH) continue;
+        if (_step_on) {
+            // A follower has no phase to jump, so the same gesture becomes an
+            // offset on its slot index (spec 2026-07-25
+            // mod-lane-step-grid-lock). Exact, permanent, and incapable of
+            // leaving the grid.
+            const int n = static_cast<int>(std::lround(
+                dphase * static_cast<float>(_lanes[i].steps())));
+            _lanes[i].nudge_slots(n, dshape);
+        } else {
+            _lanes[i].kick(dphase, dshape);
+        }
     }
 }
