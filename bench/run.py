@@ -525,7 +525,8 @@ def write_results(out_dir, captures):
                 for x in run_anchors:
                     fh.write("| `%s` | %s | %s |\n"
                              % (x["name"], x["avg_pct"], x["max_pct"]))
-            fh.write("\n")
+            if run_index < len(captures):
+                fh.write("\n")
     return base
 
 

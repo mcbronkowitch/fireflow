@@ -159,13 +159,16 @@ The direct-engine hardware gate passed. The bench firmware measures matched
 
 | run | `synth_2x4` average / maximum | `wave_2x4` average / maximum |
 |---|---:|---:|
-| 1 | 340352 / 346091 | 308662 / 312534 |
-| 2 | 340345 / 346132 | 308597 / 312170 |
+| 1 | 340347 / 346106 | 308497 / 312180 |
+| 2 | 340342 / 346105 | 308503 / 311962 |
 
 WAVE average and maximum are no greater than SYNTH in both runs, and WAVE
-maximum is below the 960,000-cycle block budget. Evidence:
-`docs/bench/2026-07-24-7ab2e26.md` and
-`docs/bench/2026-07-24-7ab2e26.csv`.
+maximum is below the 960,000-cycle block budget. Both accepted captures have
+identical unique 68-row sets and checksums and report the byte-verified QSPI
+payload digest
+`ac234ac7f7540ed5cd0e8b8496b84fca8084a3b2c05cc513aa4dad8ed811fc27`.
+Evidence: `docs/bench/2026-07-25-8c5f2e1.md` and
+`docs/bench/2026-07-25-8c5f2e1.csv`.
 
 ### 8. Testing
 

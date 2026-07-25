@@ -390,20 +390,25 @@ linked image. The final symbols are `srand=0x240010f4` and
 `rand=0x24001104`; disassembly shows the call from `main` before the first
 `run_workload`.
 
-The controller completed two full hardware runs on 2026-07-24. Both reached
-`BENCH_END`, neither emitted a checksum-drift warning, and both verified that
-the live QSPI SHA-256 and MCU UID matched the programming receipt.
+The controller completed two full hardware runs on 2026-07-25 from commit
+`8c5f2e1`. Both reached `BENCH_END`; the fail-closed controller accepted
+identical unique 68-row sets and checksums; and both verified that the live
+QSPI SHA-256 and MCU UID matched the programming receipt. The persisted
+payload digest is
+`ac234ac7f7540ed5cd0e8b8496b84fca8084a3b2c05cc513aa4dad8ed811fc27`;
+the stable, non-raw device fingerprint is
+`1157cbd949e6c4100daa57d61d85e016d57e733f949f39e9a967add1e5e22dc8`.
 
 | run | `synth_2x4` avg/max | `wave_2x4` avg/max |
 |---|---:|---:|
-| 1 | 340,352 / 346,091 | 308,662 / 312,534 |
-| 2 | 340,345 / 346,132 | 308,597 / 312,170 |
+| 1 | 340,347 / 346,106 | 308,497 / 312,180 |
+| 2 | 340,342 / 346,105 | 308,503 / 311,962 |
 
 In both runs WAVE is lower than Synth on both average and maximum cycles, and
 both WAVE maxima are below the 960,000-cycle block budget. Task 8 therefore
 passes its direct-engine acceptance gate. The generated
-`docs/bench/2026-07-24-7ab2e26.md` and `.csv` contain the complete first-run
-table; the second-run comparison is recorded separately above.
+`docs/bench/2026-07-25-8c5f2e1.md` and `.csv` persist both complete runs,
+including both anchor sets, the QSPI digest, and the hashed device fingerprint.
 
 The `66d359d` attribution values came from minimal diagnostic binaries because
 the full parent bench did not link. Those diagnostics retained the exact

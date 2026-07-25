@@ -259,6 +259,7 @@ class RunContract(unittest.TestCase):
         self.assertNotIn(DEVICE_ID, md_text)
         self.assertIn("| `instrument_worst` | 92.40 | 97.60 |", md_text)
         self.assertIn("| `instrument_worst` | 92.50 | 97.70 |", md_text)
+        self.assertFalse(md_text.endswith("\n\n"))
 
 
 if __name__ == "__main__":

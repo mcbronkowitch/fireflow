@@ -49,7 +49,7 @@ is actually built today, and what is still design-only.
 | **M5h** | Per-deck ROOM mix -- each deck has its own equal-power dry/send mix into one shared reverb; the central REV_MIX is removed | ✅ **done** (engine + VCV panel; released in 2.11.0) |
 | **Sampler bench + grain cap** | The texture deck priced on the Daisy (7 rows + 6 ablations), and the grain-count spike it exposed capped via `kSpawnHeadroom` | ✅ **done** (`bench/workloads_sampler.cpp`, `docs/bench/2026-07-22-*`) |
 | **CPU hunt round 3** | Three measured removals: libm `sinf` on the reverb send per sample, a filter computing five outputs to use one (`engine/util/svf_lp.h`), and control-rate libm re-run on unchanged inputs | ✅ **done** (engine; released in 2.8.0) |
-| **M5i** | WAVE — four-voice PPG-style wavetable part engine | ✅ **done** (engine/core, renderer, and VCV; 65,024-byte mapped-QSPI bank; `wave_2x4` 308662 / 312534 cycles, below SYNTH and budget) |
+| **M5i** | WAVE — four-voice PPG-style wavetable part engine | ✅ **done** (engine/core, renderer, and VCV; 65,024-byte mapped-QSPI bank; `wave_2x4` 308497 / 312180 cycles in hardware run 1, below SYNTH and budget) |
 | **M5j** | STRING — four-voice Karplus-Strong part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
@@ -637,14 +637,16 @@ Synth → Sampler → Wave while retaining saved values 0 and 1.
 
 The committed generated bank is 65,024 bytes (32,512 int16 samples), linked in
 `.qspiflash_data` at `0x90040000`. Hardware run 1 measured `synth_2x4`
-340352 / 346091 and `wave_2x4` 308662 / 312534 average/maximum cycles; run 2
-measured 340345 / 346132 and 308597 / 312170. WAVE is no slower than SYNTH in
-either run and its maximum is below the 960,000-cycle block budget.
+340347 / 346106 and `wave_2x4` 308497 / 312180 average/maximum cycles; run 2
+measured 340342 / 346105 and 308503 / 311962. WAVE is no slower than SYNTH in
+either run and its maximum is below the 960,000-cycle block budget. Both
+accepted captures contain identical unique 68-row sets and checksums and
+report the byte-verified QSPI payload digest `ac234ac7f7540ed5cd0e8b8496b84fca8084a3b2c05cc513aa4dad8ed811fc27`.
 
 Scenario: `host/render/scenarios/wave_formant_sweep.json`
 (`wave_formant_sweep.sha256`). Spec:
 `docs/superpowers/specs/2026-07-18-wave-engine-design.md`. Hardware evidence:
-`docs/bench/2026-07-24-7ab2e26.md` and `docs/bench/2026-07-24-7ab2e26.csv`.
+`docs/bench/2026-07-25-8c5f2e1.md` and `docs/bench/2026-07-25-8c5f2e1.csv`.
 
 ## Planned
 

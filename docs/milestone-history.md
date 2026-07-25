@@ -1196,8 +1196,11 @@ preserved SYNTH reference is
 `659af928e1f273d9ba9619f9ad235844fec1c2277557ed81a0c2dc065c6eb336`.
 
 Two full hardware runs recorded `synth_2x4` / `wave_2x4` average/maximum cycles
-of `340352 / 346091` / `308662 / 312534` and `340345 / 346132` / `308597 /
-312170`, respectively. WAVE is no slower than SYNTH in both runs and its
-maximum is below the 960,000-cycle block budget. Evidence:
-`docs/bench/2026-07-24-7ab2e26.md` and
-`docs/bench/2026-07-24-7ab2e26.csv`.
+of `340347 / 346106` / `308497 / 312180` and `340342 / 346105` / `308503 /
+311962`, respectively. WAVE is no slower than SYNTH in both runs and its
+maximum is below the 960,000-cycle block budget. The accepted captures have
+identical unique 68-row sets and checksums and report the byte-verified QSPI
+payload digest
+`ac234ac7f7540ed5cd0e8b8496b84fca8084a3b2c05cc513aa4dad8ed811fc27`.
+Evidence: `docs/bench/2026-07-25-8c5f2e1.md` and
+`docs/bench/2026-07-25-8c5f2e1.csv`.
