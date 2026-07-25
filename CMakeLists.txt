@@ -102,6 +102,7 @@ add_executable(spky_tests
     tests/test_synth_engine.cpp
     tests/test_wave_engine.cpp
     tests/test_phrase_gen.cpp
+    tests/test_song_form.cpp
     tests/test_choke.cpp
     tests/test_filt.cpp
     tests/test_mod_tide.cpp
