@@ -397,6 +397,11 @@ Before selecting B, call `bind_song_cadence`; it must be a no-op if A slot 0 did
 
 Queue `set_form`, `new_phrase`, and effective length changes rather than touching active buffers. Apply FORM first, then NEW. Entering SONG without NEW captures the outgoing normal pattern as A; entering with NEW generates A from `last_basis`. Leaving SONG or changing normal forms generates a fresh normal pattern at the boundary.
 
+Treat configuration before the first audible STEP as a pre-roll boundary: apply
+the final pending FORM/NEW/length state before step 0 fires. This keeps restored
+normal-FORM patches from emitting one unintended SONG cycle while preserving
+the boundary-only rule once playback has begun.
+
 - [ ] **Step 4: Add failing pending-change, FLOW, and short-length tests**
 
 Add cases that change FORM, NEW, and STEPS halfway through a pattern and confirm no target/form change before wrap, exactly one rebuild at wrap, and restart at A with the final settings. Exercise lengths `{1,2,3,12,32}` at the engine level. Add:
@@ -539,6 +544,11 @@ git commit -m "feat(engine): expose song form controls"
 - Consumes: Task 4 `Instrument::set_form`, `set_last_basis`, `form`, and `last_basis`.
 - Produces: a snapped six-position Rack parameter in the existing `PRINCIPLE_A/B` enum slots, visually labeled `FORM`, with display values `SONG · AAAB`, `TWO MOTIFS`, `ONE + VAR`, `HIERARCHICAL`, `CALL / RESPONSE`, `OSTINATO`; host state `int lastBasis[2] = {2,2}` mirrors the remembered normal principle without reading mutable audio-thread state during JSON save.
 
+**Rebase note (2026-07-25):** Current `main` includes the SOURCE knob/detune
+context-menu work added after this plan was written. Preserve its appended
+`DETUNE_A/B` parameter IDs, SOURCE defaults/captions, generated metadata, and
+panel guards while regenerating the FORM artifacts.
+
 - [ ] **Step 1: Change panel guard expectations first**
 
 In `host/vcv/res/test_panel.py`, keep the enum IDs `PRINCIPLE_A/B` but require:
@@ -676,13 +686,18 @@ Expected: test fails because the scenario file does not exist.
 Add these exact actions to `host/render/scenario.cpp`:
 
 ```cpp
-else if (action == "form")
+else if (action == "set_form")
     inst.set_form(part, static_cast<int>(value));
-else if (action == "last_basis")
+else if (action == "set_last_basis")
     inst.set_last_basis(part, static_cast<int>(value));
 ```
 
 Cover it in the existing scenario action tests. Keep the older `principle` action as an alias for normal forms used by older listening scenarios.
+
+Use the existing dispatcher variables (`a`, `e.part`, and `e.ivalue`) in the
+actual implementation. Keep the existing `set_principle` action as the
+compatibility alias; the bare `principle` spelling does not exist in current
+scenarios.
 
 - [ ] **Step 4: Create the listening scenario**
 
