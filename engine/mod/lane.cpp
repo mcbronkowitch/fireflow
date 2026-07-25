@@ -288,8 +288,13 @@ void ModLane::nudge_slots(int n, float dshape) {
     // n slots (or, for a negative n, stall until the deck caught back up).
     _follow_offset += n;
     _follow_pos    += n;
-    _follow_jumped  = true;
-    _kick_shape    += dshape;
+    // A draw that rounds to n == 0 lands on the same slot it already occupies
+    // -- there is no new slot to make audible, so no forced re-entry at the
+    // next follow(). Same call FLOW makes for a near-zero dphase in kick():
+    // the shape kick still applies unconditionally (it is real at any draw),
+    // but nothing else moves.
+    if (n != 0) _follow_jumped = true;
+    _kick_shape += dshape;
 }
 
 float ModLane::follow(int32_t deck_step, float frac, float shuffle) {

@@ -114,6 +114,29 @@ TEST_CASE("follow: a slot nudge offsets the lane and fires immediately") {
     CHECK(l.cur_step() == 0);
 }
 
+TEST_CASE("follow: a zero-slot nudge is a shape kick and nothing more") {
+    ModLane l;
+    configure(l, 8);
+    for (int32_t s = 0; s <= 4; ++s) l.follow(s, 0.f, 0.f);
+    REQUIRE(l.cur_step() == 4);
+
+    l.nudge_slots(0, 0.1f);
+    l.follow(4, 0.5f, 0.f);                 // same deck step, mid-step
+    CHECK_FALSE(l.fired());                 // no new slot -- nothing to report
+    CHECK(l.cur_step() == 4);               // slot unchanged
+
+    // Contrast: a non-zero nudge in the exact same situation still fires.
+    ModLane l2;
+    configure(l2, 8);
+    for (int32_t s = 0; s <= 4; ++s) l2.follow(s, 0.f, 0.f);
+    REQUIRE(l2.cur_step() == 4);
+
+    l2.nudge_slots(1, 0.1f);
+    l2.follow(4, 0.5f, 0.f);
+    CHECK(l2.fired());
+    CHECK(l2.cur_step() == 5);
+}
+
 TEST_CASE("follow: a negative nudge does not stall the lane") {
     ModLane l;
     configure(l, 8);

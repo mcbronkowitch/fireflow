@@ -142,7 +142,11 @@ public:
     // SPOT in STEP: shift this lane by `n` whole slots. The offset persists
     // and is exact; the new slot fires at the next follow() call, which is the
     // audible stumble. No rounding or parity care is needed -- boundary times
-    // come from the deck, never from this lane's own warp.
+    // come from the deck, never from this lane's own warp. A draw that rounds
+    // to n == 0 is common (SPOT's dphase can round to zero slots on a short
+    // lane) and is a shape kick and nothing more, the same as a near-zero
+    // dphase reaching kick() in FLOW: dshape still applies, but there is no
+    // new slot to fire at the next follow().
     void  nudge_slots(int n, float dshape);
 
 private:
