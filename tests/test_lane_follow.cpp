@@ -77,7 +77,25 @@ TEST_CASE("follow: wrapped() marks the cycle seam, once per cycle") {
     configure(l, 4);
     for (int32_t s = 0; s < 13; ++s) {
         l.follow(s, 0.f);
-        CHECK(l.wrapped() == (s % 4 == 0));
+        // s == 0 is the cold start. It enters slot 0, but no cycle ended, so
+        // no wrap runs -- the same choice tick() makes at its own cold start.
+        CHECK(l.wrapped() == (s != 0 && s % 4 == 0));
+    }
+}
+
+TEST_CASE("follow: arming never runs a cycle wrap, whatever slot it lands on") {
+    // Wrap events evolve the pattern that just ENDED. At a cold start none
+    // did, and STEP entry restarts the deck count at 0 -- so without this,
+    // every switch into STEP would walk EVOLVE once on all four texture lanes
+    // and burn RNG draws for a phrase nobody heard.
+    for (int32_t start : {0, 1, 4, 8, 13}) {
+        ModLane l;
+        configure(l, 4);
+        l.set_variation(0.9f);        // GROW: a wrap here would walk _ev_*
+        l.follow(start, 0.f);
+        CHECK_FALSE(l.wrapped());
+        CHECK(l.fired());
+        CHECK(l.cur_step() == static_cast<int>(start % 4));
     }
 }
 

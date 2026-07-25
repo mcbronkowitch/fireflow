@@ -307,43 +307,56 @@ float ModLane::follow(int32_t deck_step, float frac) {
 
     const int     slots = _steps < 1 ? 1 : _steps;
     const int32_t pos   = deck_step + _follow_offset;
+    const int     here  = slot_of(pos, slots);
 
-    // First call after init/reset/STEP entry: land on the current position
-    // without replaying every step the deck has taken since it started.
+    bool    land_only = false;
+    int32_t elapsed   = 0;
     if (!_follow_armed) {
+        // First call after init/reset/STEP entry. Land on the current position
+        // without replaying every step the deck has taken since it started --
+        // and, just as important, WITHOUT running a wrap even when the landing
+        // slot is 0. Wrap events evolve the pattern that just ENDED
+        // (_evolve_outgoing_pattern); at a cold start none did. STEP entry
+        // restarts the deck count at 0, so treating that as a wrap would walk
+        // EVOLVE once on all four texture lanes every time the switch is
+        // thrown. tick() makes the same choice at its own cold start: it
+        // enters the step its phase points at and runs no wrap events.
         _follow_armed = true;
-        _follow_pos   = pos - 1;
-    }
-
-    int32_t elapsed = pos - _follow_pos;
-    if (elapsed < 0) elapsed = 0;              // only nudge_slots moves backwards
-    // A jump this large means the caller skipped a long stretch (a stopped
-    // transport, a mode switch). Replaying it would burn RNG draws for cycles
-    // nobody heard; land on the current slot instead. Same spirit as tick()'s
-    // edge-walk guard.
-    const int32_t kMaxReplay = 2 * kSeqSlots;
-    if (elapsed > kMaxReplay) {
-        _follow_pos = pos - 1;
-        elapsed     = 1;
+        land_only     = true;
+    } else {
+        elapsed = pos - _follow_pos;
+        if (elapsed < 0) elapsed = 0;          // only nudge_slots moves backwards
+        // A jump this large means the caller skipped a long stretch (a stopped
+        // transport, a mode switch). Replaying it would burn RNG draws for
+        // cycles nobody heard; land on the current slot instead. Same spirit
+        // as tick()'s edge-walk guard.
+        if (elapsed > 2 * kSeqSlots) land_only = true;
     }
 
     bool entered = false;
-    for (int32_t k = 1; k <= elapsed; ++k) {
-        const int slot = slot_of(_follow_pos + k, slots);
-        // Boundary targets are evaluated at the exact grid phase, the same
-        // sampling tick() documents for its edge walk.
+    if (land_only) {
         _phase = shuffle_phase_for_position(
-            static_cast<float>(slot), slots, _shuffle_latched);
-        if (slot == 0) {
-            _wrapped = true;
-            _wrap_events();          // before the new cycle's step 0, as in tick()
-        }
-        _enter_step(slot);
+            static_cast<float>(here), slots, _shuffle_latched);
+        _enter_step(here);
         entered = true;
+    } else {
+        const int32_t prev = pos - elapsed;
+        for (int32_t k = 1; k <= elapsed; ++k) {
+            const int slot = slot_of(prev + k, slots);
+            // Boundary targets are evaluated at the exact grid phase, the same
+            // sampling tick() documents for its edge walk.
+            _phase = shuffle_phase_for_position(
+                static_cast<float>(slot), slots, _shuffle_latched);
+            if (slot == 0) {
+                _wrapped = true;
+                _wrap_events();      // before the new cycle's step 0, as in tick()
+            }
+            _enter_step(slot);
+            entered = true;
+        }
     }
     _follow_pos = pos;
 
-    const int here = slot_of(pos, slots);
     if (_follow_jumped) {
         _follow_jumped = false;
         if (!entered) {
