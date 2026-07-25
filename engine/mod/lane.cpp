@@ -292,7 +292,7 @@ void ModLane::nudge_slots(int n, float dshape) {
     _kick_shape    += dshape;
 }
 
-float ModLane::follow(int32_t deck_step, float frac) {
+float ModLane::follow(int32_t deck_step, float frac, float shuffle) {
     _fired   = false;
     _wrapped = false;
     _apply_preroll_work();
@@ -336,7 +336,7 @@ float ModLane::follow(int32_t deck_step, float frac) {
     bool entered = false;
     if (land_only) {
         _phase = shuffle_phase_for_position(
-            static_cast<float>(here), slots, _shuffle_latched);
+            static_cast<float>(here), slots, shuffle);
         _enter_step(here);
         entered = true;
     } else {
@@ -346,7 +346,7 @@ float ModLane::follow(int32_t deck_step, float frac) {
             // Boundary targets are evaluated at the exact grid phase, the same
             // sampling tick() documents for its edge walk.
             _phase = shuffle_phase_for_position(
-                static_cast<float>(slot), slots, _shuffle_latched);
+                static_cast<float>(slot), slots, shuffle);
             if (slot == 0) {
                 _wrapped = true;
                 _wrap_events();      // before the new cycle's step 0, as in tick()
@@ -361,7 +361,7 @@ float ModLane::follow(int32_t deck_step, float frac) {
         _follow_jumped = false;
         if (!entered) {
             _phase = shuffle_phase_for_position(
-                static_cast<float>(here), slots, _shuffle_latched);
+                static_cast<float>(here), slots, shuffle);
             _enter_step(here);
         }
     }
@@ -369,7 +369,7 @@ float ModLane::follow(int32_t deck_step, float frac) {
     // Park at the live position so phase(), phase_eff() and any external
     // reader see where the lane actually is inside its slot.
     _phase = shuffle_phase_for_position(
-        static_cast<float>(here) + frac, slots, _shuffle_latched);
+        static_cast<float>(here) + frac, slots, shuffle);
 
     float smoothed = _slew_tick.process(_target);
     return apply_range(smoothed, _range);

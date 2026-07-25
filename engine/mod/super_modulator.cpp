@@ -82,7 +82,6 @@ void SuperModulator::set_smooth(float s)      { for (auto& l : _lanes) l.set_smo
 void SuperModulator::set_range(float r)       { _lanes[LANE_PITCH].set_range(r); }
 void SuperModulator::set_variation(float v)   { for (auto& l : _lanes) l.set_variation(v); }
 void SuperModulator::set_shuffle(float amount){
-    _shuffle = shuffle_amount(amount);
     for (auto& l : _lanes) l.set_shuffle(amount);
 }
 void SuperModulator::set_step(bool on, int n) {
@@ -155,12 +154,17 @@ void SuperModulator::process() {
         _tick_ctr = ModLane::kTickInterval;
         const int   deck = _deck_steps < 1 ? 1 : _deck_steps;
         const int   ps   = _lanes[LANE_PITCH].cur_step();
+        // The amount PITCH's own phase was actually built from -- not a
+        // separately mirrored target, which would reach a live SHUFFLE turn
+        // before PITCH's latch does and disagree with `frac` below on an
+        // odd-parity PITCH step (see ModLane::shuffle_latched(), lane.h).
+        const float sh   = _lanes[LANE_PITCH].shuffle_latched();
         const float frac = ps < 0 ? 0.f
             : shuffle_step_fraction(
-                  _lanes[LANE_PITCH].phase(), ps, deck, _shuffle);
+                  _lanes[LANE_PITCH].phase(), ps, deck, sh);
         for (int i = 0; i < LANE_COUNT; ++i) {
             if (i == LANE_PITCH) continue;
-            _out[i] = _step_on ? _lanes[i].follow(_deck_step, frac)
+            _out[i] = _step_on ? _lanes[i].follow(_deck_step, frac, sh)
                                : _lanes[i].tick();
         }
     }

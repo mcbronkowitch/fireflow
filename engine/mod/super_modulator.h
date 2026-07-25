@@ -46,6 +46,12 @@ public:
     float   lane_rate_hz_for_test(int i) const { return _lanes[i].rate_hz_for_test(); }
     int     lane_slots_for_test(int i)   const { return _lanes[i].steps(); }
     int32_t deck_step_for_test()         const { return _deck_step; }
+    // The amount PITCH's own phase (and so the deck's follow fraction) was
+    // actually built from -- the reference a follower's phase must be
+    // measured against, per shuffle_latched()'s contract (lane.h).
+    float   pitch_shuffle_latched_for_test() const {
+        return _lanes[LANE_PITCH].shuffle_latched();
+    }
 #endif
     bool pitch_gate() const { return _lanes[LANE_PITCH].gate_state(); }
     bool pitch_sustain() const { return _lanes[LANE_PITCH].note_sustain(); }
@@ -146,7 +152,6 @@ private:
     bool     _synced = false;
     bool    _step_on    = false;   // the deck's STEP flag; drives the grid lock
     int     _deck_steps = 8;       // the phrase length; PITCH's slot count
-    float   _shuffle    = 0.f;     // latched target, mirrored from set_shuffle
     // The deck's own clock, in whole steps. This integer is what makes the
     // grid exact: every follower derives its slot from it, so no float
     // rounding can put two lanes on different boundaries. int32_t is ample --

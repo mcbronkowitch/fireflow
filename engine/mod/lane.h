@@ -76,6 +76,12 @@ public:
     int step_at_phase(float phase) const {
         return shuffle_step_index(phase, _steps, _shuffle_latched);
     }
+    // The shuffle amount this lane's current grid was built with. _shuffle_target
+    // only reaches _shuffle_latched at an even step entry, so a live SHUFFLE turn
+    // leaves the two apart for up to a step -- anyone deriving a position from
+    // this lane's phase has to use the latched value or they are measuring
+    // against boundaries that never existed.
+    float shuffle_latched() const { return _shuffle_latched; }
     // Legacy straight-grid lookup kept for external callers until they
     // migrate to step_at_phase(), which follows this lane's latched shuffle.
     static int step_index(float phase, int steps) {
@@ -124,7 +130,15 @@ public:
     // integer count and one shared fraction cannot do that.
     //
     // Returns the post-range output, exactly like tick() does for FLOW.
-    float follow(int32_t deck_step, float frac);
+    //
+    // `shuffle` is the amount to build this lane's grid with -- NOT this
+    // lane's own _shuffle_latched. In STEP a follower owns no clock: its
+    // boundary times come entirely from the deck, so its slot-to-phase
+    // mapping must use the same amount the deck's own phase (and `frac`,
+    // which was measured against that phase) was built from, or the mapping
+    // and `frac` disagree -- the mismatch this signature exists to prevent.
+    // The caller passes the PITCH lane's shuffle_latched() (super_modulator.cpp).
+    float follow(int32_t deck_step, float frac, float shuffle);
     // SPOT in STEP: shift this lane by `n` whole slots. The offset persists
     // and is exact; the new slot fires at the next follow() call, which is the
     // audible stumble. No rounding or parity care is needed -- boundary times

@@ -27,7 +27,7 @@ TEST_CASE("follow: one deck step is one slot, whatever the cycle length") {
         configure(l, slots);
         int fires = 0;
         for (int32_t s = 0; s < 200; ++s) {
-            l.follow(s, 0.f);
+            l.follow(s, 0.f, 0.f);
             if (l.fired()) ++fires;
         }
         CHECK(fires == 200);          // exactly one boundary per deck step
@@ -38,7 +38,7 @@ TEST_CASE("follow: the slot index is the deck count modulo the cycle") {
     ModLane l;
     configure(l, 6);
     for (int32_t s = 0; s < 40; ++s) {
-        l.follow(s, 0.f);
+        l.follow(s, 0.f, 0.f);
         CHECK(l.cur_step() == static_cast<int>(s % 6));
     }
 }
@@ -46,14 +46,14 @@ TEST_CASE("follow: the slot index is the deck count modulo the cycle") {
 TEST_CASE("follow: repeat calls inside one deck step do not re-fire") {
     ModLane l;
     configure(l, 8);
-    l.follow(0, 0.f);
+    l.follow(0, 0.f, 0.f);
     REQUIRE(l.fired());
     for (float frac : {0.25f, 0.5f, 0.75f, 0.99f}) {
-        l.follow(0, frac);
+        l.follow(0, frac, 0.f);
         CHECK_FALSE(l.fired());
         CHECK(l.cur_step() == 0);
     }
-    l.follow(1, 0.f);
+    l.follow(1, 0.f, 0.f);
     CHECK(l.fired());
 }
 
@@ -62,10 +62,10 @@ TEST_CASE("follow: a multi-step advance replays every slot in order") {
     // DRIFT can push pitch_scale up. A skipped slot would drop a wrap event.
     ModLane l;
     configure(l, 4);
-    l.follow(0, 0.f);
+    l.follow(0, 0.f, 0.f);
     std::vector<int> seen;
     for (int32_t s = 3; s <= 15; s += 3) {          // three slots per call
-        l.follow(s, 0.f);
+        l.follow(s, 0.f, 0.f);
         seen.push_back(l.cur_step());
     }
     // Landing slots after 3, 6, 9, 12, 15 deck steps in a 4-slot cycle.
@@ -76,7 +76,7 @@ TEST_CASE("follow: wrapped() marks the cycle seam, once per cycle") {
     ModLane l;
     configure(l, 4);
     for (int32_t s = 0; s < 13; ++s) {
-        l.follow(s, 0.f);
+        l.follow(s, 0.f, 0.f);
         // s == 0 is the cold start. It enters slot 0, but no cycle ended, so
         // no wrap runs -- the same choice tick() makes at its own cold start.
         CHECK(l.wrapped() == (s != 0 && s % 4 == 0));
@@ -92,7 +92,7 @@ TEST_CASE("follow: arming never runs a cycle wrap, whatever slot it lands on") {
         ModLane l;
         configure(l, 4);
         l.set_variation(0.9f);        // GROW: a wrap here would walk _ev_*
-        l.follow(start, 0.f);
+        l.follow(start, 0.f, 0.f);
         CHECK_FALSE(l.wrapped());
         CHECK(l.fired());
         CHECK(l.cur_step() == static_cast<int>(start % 4));
@@ -102,28 +102,28 @@ TEST_CASE("follow: arming never runs a cycle wrap, whatever slot it lands on") {
 TEST_CASE("follow: a slot nudge offsets the lane and fires immediately") {
     ModLane l;
     configure(l, 8);
-    for (int32_t s = 0; s <= 4; ++s) l.follow(s, 0.f);
+    for (int32_t s = 0; s <= 4; ++s) l.follow(s, 0.f, 0.f);
     REQUIRE(l.cur_step() == 4);
 
     l.nudge_slots(3, 0.f);
-    l.follow(4, 0.5f);                 // same deck step, mid-step
+    l.follow(4, 0.5f, 0.f);                 // same deck step, mid-step
     CHECK(l.fired());                  // the stumble is audible at once
     CHECK(l.cur_step() == 7);
 
-    l.follow(5, 0.f);                  // the offset persists
+    l.follow(5, 0.f, 0.f);                  // the offset persists
     CHECK(l.cur_step() == 0);
 }
 
 TEST_CASE("follow: a negative nudge does not stall the lane") {
     ModLane l;
     configure(l, 8);
-    for (int32_t s = 0; s <= 4; ++s) l.follow(s, 0.f);
+    for (int32_t s = 0; s <= 4; ++s) l.follow(s, 0.f, 0.f);
 
     l.nudge_slots(-3, 0.f);
-    l.follow(4, 0.5f);
+    l.follow(4, 0.5f, 0.f);
     CHECK(l.cur_step() == 1);
     int fires = 0;
-    for (int32_t s = 5; s < 15; ++s) { l.follow(s, 0.f); if (l.fired()) ++fires; }
+    for (int32_t s = 5; s < 15; ++s) { l.follow(s, 0.f, 0.f); if (l.fired()) ++fires; }
     CHECK(fires == 10);                // still one boundary per deck step
 }
 
@@ -136,8 +136,8 @@ TEST_CASE("follow: two lanes of different length never diverge") {
     configure(b, 16);
     int fa = 0, fb = 0;
     for (int32_t s = 0; s < 200000; ++s) {     // ~7 hours of 8-step bars
-        a.follow(s, 0.f);
-        b.follow(s, 0.f);
+        a.follow(s, 0.f, 0.f);
+        b.follow(s, 0.f, 0.f);
         if (a.fired()) ++fa;
         if (b.fired()) ++fb;
     }
