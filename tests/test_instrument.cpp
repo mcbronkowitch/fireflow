@@ -1149,3 +1149,73 @@ TEST_CASE("instrument: a FLOW->STEP snap mutes the sibling's taps until the "
     const double rms = std::sqrt(sum_sq / (double)(resume_end - resume_start));
     CHECK(rms > 1e-4);
 }
+
+TEST_CASE("instrument FORM API clamps values and advances both Parts independently") {
+    Instrument inst;
+    inst.init(48000.f);
+    for (int part = 0; part < PART_COUNT; ++part) {
+        inst.set_last_basis(part, static_cast<int>(Principle::Hierarchical));
+        inst.set_form(part, static_cast<int>(FormMode::SongAAAB));
+        inst.set_rate(part, 1.f);
+        inst.set_shape(part, 1.f);
+        inst.set_density(part, 1.f);
+        inst.set_step(part, true, part == PART_A ? 8 : 12);
+    }
+
+    std::vector<uint8_t> symbols[PART_COUNT];
+    uint8_t previous_position[PART_COUNT] = {
+        inst.song_position_for_test(PART_A),
+        inst.song_position_for_test(PART_B)
+    };
+    for (int part = 0; part < PART_COUNT; ++part)
+        symbols[part].push_back(inst.active_pattern_for_test(part));
+
+    float left = 0.f;
+    float right = 0.f;
+    for (int sample = 0; sample < 200000; ++sample) {
+        inst.process(nullptr, nullptr, &left, &right, 1);
+        for (int part = 0; part < PART_COUNT; ++part) {
+            const uint8_t position = inst.song_position_for_test(part);
+            if (position != previous_position[part]) {
+                previous_position[part] = position;
+                symbols[part].push_back(
+                    inst.active_pattern_for_test(part));
+            }
+        }
+        if (symbols[PART_A].size() >= 8 &&
+            symbols[PART_B].size() >= 8)
+            break;
+    }
+
+    const std::vector<uint8_t> expected = {0, 0, 0, 1, 0, 0, 0, 1};
+    REQUIRE(symbols[PART_A].size() >= expected.size());
+    REQUIRE(symbols[PART_B].size() >= expected.size());
+    CHECK(std::equal(expected.begin(), expected.end(),
+                     symbols[PART_A].begin()));
+    CHECK(std::equal(expected.begin(), expected.end(),
+                     symbols[PART_B].begin()));
+    CHECK(inst.form(PART_A) == static_cast<int>(FormMode::SongAAAB));
+    CHECK(inst.form(PART_B) == static_cast<int>(FormMode::SongAAAB));
+    CHECK(inst.last_basis(PART_A) ==
+          static_cast<int>(Principle::Hierarchical));
+    CHECK(inst.last_basis(PART_B) ==
+          static_cast<int>(Principle::Hierarchical));
+
+    Instrument clamped;
+    clamped.init(48000.f);
+    clamped.set_form(PART_A, -7);
+    clamped.set_form(PART_B, 99);
+    clamped.set_last_basis(PART_A, -7);
+    clamped.set_last_basis(PART_B, 99);
+    clamped.set_step(PART_A, true, 8);
+    clamped.set_step(PART_B, true, 8);
+    clamped.process(nullptr, nullptr, &left, &right, 1);
+    CHECK(clamped.form(PART_A) ==
+          static_cast<int>(FormMode::SongAAAB));
+    CHECK(clamped.form(PART_B) ==
+          static_cast<int>(FormMode::Ostinato));
+    CHECK(clamped.last_basis(PART_A) ==
+          static_cast<int>(Principle::TwoMotif));
+    CHECK(clamped.last_basis(PART_B) ==
+          static_cast<int>(Principle::Ostinato));
+}

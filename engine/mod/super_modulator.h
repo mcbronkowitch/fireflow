@@ -27,8 +27,24 @@ public:
     void set_shuffle(float amount);
     void set_step(bool on, int steps);
     void set_fixed_slew(bool on);
+    void set_form(FormMode form) { _lanes[LANE_PITCH].set_form(form); }
+    void set_last_basis(Principle basis) {
+        _lanes[LANE_PITCH].set_last_basis(basis);
+    }
+    FormMode form() const { return _lanes[LANE_PITCH].form(); }
+    Principle last_basis() const {
+        return _lanes[LANE_PITCH].last_basis();
+    }
     void set_principle(Principle p) { _lanes[LANE_PITCH].set_principle(p); }
     void new_phrase() { _lanes[LANE_PITCH].new_phrase(); }
+#ifdef SPKY_TESTING
+    uint8_t song_position_for_test() const {
+        return _lanes[LANE_PITCH].song_position();
+    }
+    uint8_t active_pattern_for_test() const {
+        return _lanes[LANE_PITCH].active_pattern();
+    }
+#endif
     bool pitch_gate() const { return _lanes[LANE_PITCH].gate_state(); }
     bool pitch_sustain() const { return _lanes[LANE_PITCH].note_sustain(); }
     // Slice-groove side channel (spec 2026-07-22), master/PITCH lane only.

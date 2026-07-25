@@ -41,9 +41,41 @@ public:
     void set_range(int p, float n)           { _parts[p].mod().set_range(n); }
     void set_variation(int p, float n)       { _parts[p].mod().set_variation(n); }  // -1..+1
     void set_shuffle(float amount)           { for (auto& part : _parts) part.mod().set_shuffle(amount); }
-    void set_principle(int p, int pr)        { _parts[p].mod().set_principle(static_cast<Principle>(pr)); }
+    void set_form(int p, int form) {
+        _parts[p].mod().set_form(clamp_form(form));
+    }
+    void set_last_basis(int p, int principle) {
+        int clamped = principle;
+        if (clamped < 0) clamped = 0;
+        const int last = static_cast<int>(Principle::kCount) - 1;
+        if (clamped > last) clamped = last;
+        _parts[p].mod().set_last_basis(
+            static_cast<Principle>(clamped));
+    }
+    int form(int p) const {
+        return static_cast<int>(_parts[p].mod().form());
+    }
+    int last_basis(int p) const {
+        return static_cast<int>(_parts[p].mod().last_basis());
+    }
+    void set_principle(int p, int pr) {
+        int clamped = pr;
+        if (clamped < 0) clamped = 0;
+        const int last = static_cast<int>(Principle::kCount) - 1;
+        if (clamped > last) clamped = last;
+        _parts[p].mod().set_principle(
+            static_cast<Principle>(clamped));
+    }
     void set_step(int p, bool on, int steps) { _parts[p].set_step(on, steps); }
     void new_phrase(int p)                   { _parts[p].mod().new_phrase(); }
+#ifdef SPKY_TESTING
+    uint8_t song_position_for_test(int p) const {
+        return _parts[p].mod().song_position_for_test();
+    }
+    uint8_t active_pattern_for_test(int p) const {
+        return _parts[p].mod().active_pattern_for_test();
+    }
+#endif
     void set_fixed_slew(int p, bool on)      { _parts[p].mod().set_fixed_slew(on); }
     void set_depth(int p, float n)           { _parts[p].set_depth(n); }
     void set_tune(int p, float n)            { _parts[p].set_tune(n); }
