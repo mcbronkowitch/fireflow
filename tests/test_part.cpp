@@ -333,7 +333,7 @@ TEST_CASE("part: WAVE keeps VOICE edits made while sampler is active") {
         for (int i = 0; i < 500; ++i) p.process(l, r);
         REQUIRE(p.engine_id() == ENGINE_WAVE);
         CHECK(p.wave().sub_level() == doctest::Approx(0.62f));
-        CHECK(p.wave().detune_max_ct() == doctest::Approx(0.71f * WaveEngine::kDetuneCeilCt));
+        CHECK(p.wave().detune_spread_ct() == doctest::Approx(0.71f * WaveEngine::kDetuneCeilCt));
 
         p.set_step(true, 8);
         p.mod().set_density(0.f);

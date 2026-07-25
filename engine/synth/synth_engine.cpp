@@ -212,7 +212,7 @@ void SynthEngineT<OscT>::_update_control() {
     const float decay_s  = clampf(_decay_ratio  * _cycle_s, kDecayMinS,  kDecayMaxS);
 
     const float timbre = _targets[LANE_SOURCE];       // pad 1 = TIMBRE
-    const float det_ct = timbre * timbre * _detune_max_ct;   // t^2 law (spec)
+    _applied_detune_ct = _detune_spread_ct;
     const float off    = _filt_amt < 0.f ? kFiltLeftScale * _filt_amt : _filt_amt;
     const float n_raw  = _targets[LANE_SIZE] + off;          // pad 2 = FILTER + trim
     const float cutoff = filter_hz(n_raw);                   // clamps 0..1 internally
@@ -224,7 +224,7 @@ void SynthEngineT<OscT>::_update_control() {
         VoiceT<OscT>& vc = _voices[v];
         vc.set_env_times(attack_s, decay_s);
         vc.set_morph(timbre);
-        vc.set_detune_cents(det_ct);
+        vc.set_detune_cents(_applied_detune_ct);
         vc.set_sub_level(_sub_level);
         vc.set_cutoff_hz(cutoff);
         vc.set_resonance(_resonance);
@@ -297,7 +297,7 @@ void SynthEngineT<OscT>::set_filt(float n) { _filt_amt = clampf(n, -1.f, 1.f); }
 
 template <class OscT>
 void SynthEngineT<OscT>::set_detune(float n) {
-    _detune_max_ct = clampf(n, 0.f, 1.f) * kDetuneCeilCt;
+    _detune_spread_ct = clampf(n, 0.f, 1.f) * kDetuneCeilCt;
 }
 
 template <class OscT>

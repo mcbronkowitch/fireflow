@@ -338,3 +338,21 @@ void contract_deterministic_seed() {
         CHECK(ra == rb);
     }
 }
+
+template <class EngineT>
+void contract_detune_is_independent_of_source() {
+    using namespace spky_contract;
+
+    EngineT e;
+    e.init(48000.f);
+    e.set_detune(6.f / EngineT::kDetuneCeilCt);
+
+    feed(e, 0.5f, 0.f);
+    render_l(e, EngineT::kCtrlInterval + 1);
+    CHECK(e.applied_detune_ct() == doctest::Approx(6.f));
+
+    feed(e, 0.5f, 1.f);
+    render_l(e, EngineT::kCtrlInterval + 1);
+    CHECK(e.applied_detune_ct() == doctest::Approx(6.f));
+    CHECK(e.detune_spread_ct() == doctest::Approx(6.f));
+}

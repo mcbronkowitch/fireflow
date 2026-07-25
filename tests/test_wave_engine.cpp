@@ -10,6 +10,7 @@ TEST_CASE("wave engine satisfies the shared part-engine contract") {
     contract_flow_drone_and_surface<WaveEngine>();
     contract_chord_surface_and_hold<WaveEngine>();
     contract_deterministic_seed<WaveEngine>();
+    contract_detune_is_independent_of_source<WaveEngine>();
 }
 
 TEST_CASE("wave engine TIMBRE scans the bank instead of analog shapes") {

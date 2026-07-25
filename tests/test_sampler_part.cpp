@@ -451,7 +451,7 @@ TEST_CASE("sampler part: the SUB and DTUN knobs reach the synth, not the sampler
     // used to be here, because nothing observed the synth leg.
     //
     // Final-fixes pass, Befund B: closed. SynthEngine now exposes
-    // sub_level()/detune_max_ct() (engine/synth/synth_engine.h) and Part
+    // sub_level()/detune_spread_ct() (engine/synth/synth_engine.h) and Part
     // exposes synth() alongside the existing sampler() (engine/parts/
     // part.h), purely as observers -- neither changes what either engine
     // does. The two CHECKs below pin that a future edit deleting both
@@ -469,7 +469,7 @@ TEST_CASE("sampler part: the SUB and DTUN knobs reach the synth, not the sampler
     CHECK(p.sampler().sub() == doctest::Approx(0.f));
     CHECK(p.sampler().detune() == doctest::Approx(0.f));
     CHECK(p.synth().sub_level() == doctest::Approx(1.f));
-    CHECK(p.synth().detune_max_ct() == doctest::Approx(SynthEngine::kDetuneCeilCt));
+    CHECK(p.synth().detune_spread_ct() == doctest::Approx(SynthEngine::kDetuneCeilCt));
 }
 
 TEST_CASE("part: the sampler does not quantize its pitch, the synth still does") {

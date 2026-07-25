@@ -58,7 +58,7 @@ private:
     float _sub_phase = 0.f;
     float _sub_inc = 0.f;
     float _sub_level = 0.3f;
-    float _detune_ct = 0.f;               // TIMBRE-spread detune (max, split half)
+    float _detune_ct = 0.f;               // independent total spread (max, split half)
     float _pan_base = 0.f;
     float _drift_amt = 0.f;
     float _gain_l = 0.70710678f;

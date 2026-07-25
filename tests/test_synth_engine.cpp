@@ -83,4 +83,5 @@ TEST_CASE("synth engine satisfies the shared part-engine contract") {
     contract_flow_drone_and_surface<SynthEngine>();
     contract_chord_surface_and_hold<SynthEngine>();
     contract_deterministic_seed<SynthEngine>();
+    contract_detune_is_independent_of_source<SynthEngine>();
 }

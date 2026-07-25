@@ -22,7 +22,7 @@ namespace spky {
 //   takes over. Entering FLOW with no sustaining voice auto-triggers one at
 //   the current PITCH target (the drone promise) - deferred to the next
 //   process() call so the targets are fresh.
-// - Targets: TIMBRE (morph + t^2 * DETUNE_MAX detune), FILTER (60 Hz-14 kHz
+// - Targets: TIMBRE (oscillator morph/frame), FILTER (60 Hz-14 kHz
 //   exp), PITCH (latched at trigger, 110*8^p), MOTION (pan fan
 //   [-1,+1,-0.5,+0.5] * width + drift ~ width), LEVEL (OnePole-smoothed
 //   master gain). All but PITCH act on all voices continuously.
@@ -66,7 +66,7 @@ public:
     void set_decay(float n);       // ratio = 0.1 * 80^n     (0.1x..8x cycle)
     void set_resonance(float n);
     void set_sub(float n);
-    void set_detune(float n);      // DETUNE_MAX = n * 35 ct
+    void set_detune(float n);      // independent symmetric spread = n * 35 ct
     void set_filt(float n);        // -1..+1 cutoff trim; left end fades to silence
 
     int   active_voices() const;
@@ -79,8 +79,9 @@ public:
     // Synth-only leg of the SUB/DTUN split (spec 2026-07-21
     // morphagene-controls, Part::set_voice_sub/set_voice_detune) without
     // reaching into private state. Not used on the audio path.
-    float sub_level() const     { return _sub_level; }
-    float detune_max_ct() const { return _detune_max_ct; }
+    float sub_level() const         { return _sub_level; }
+    float detune_spread_ct() const  { return _detune_spread_ct; }
+    float applied_detune_ct() const { return _applied_detune_ct; }
     // How many notes the last set_chord() pushed. Lets a test pin that
     // Part::_flatten_for_sampler collapses the chord for the SAMPLER only and
     // leaves the synth's chord surface intact. Not used on the audio path.
@@ -120,7 +121,8 @@ private:
     float _decay_ratio  = 1.5f;    // boot: 1.5 x cycle (spec)
     float _resonance = 0.15f;      // boot (spec)
     float _sub_level = 0.3f;       // boot (spec)
-    float _detune_max_ct = 18.f;   // boot DETUNE_MAX (spec)
+    float _detune_spread_ct = 18.f;
+    float _applied_detune_ct = 18.f;
     float _filt_amt  = 0.f;        // FILT knob -1..+1 (boot: neutral)
     float _filt_gain = 1.f;        // silence fade below the 60 Hz rail (control-rate)
 
