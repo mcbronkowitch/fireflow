@@ -1,7 +1,7 @@
 # README and Roadmap Refresh
 
-**Date:** 2026-07-25  
-**Status:** Approved design  
+**Date:** 2026-07-25
+**Status:** Approved design
 **Scope:** `README.md` and `docs/roadmap.md`
 
 ## Purpose
