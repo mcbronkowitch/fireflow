@@ -43,6 +43,17 @@ FLOW stays straight. Live changes latch at each lane's next pair boundary so
 the active pair finishes intact, while external CLOCK pulses, resets, phrase
 downbeats, and the transport's raw-phase anchors stay straight.
 
+## SOURCE and Detune
+
+Each part has one physical **SOURCE** control. Its live caption follows the
+selected ENG: **Synth** shows `TIMB`, **Wave** shows `FRAME`, and **Sampler**
+shows `ORG`. SOURCE-lane modulation moves the selected source around the
+knob's base value.
+
+Each part's right-click context menu provides a separate **Detune A** or
+**Detune B** control. Detune is independent of SOURCE: it is a constant
+`0..35 ct` spread and defaults to `6 ct`.
+
 ## Sampler
 
 ENG is patch-compatible in the exact order **Synth = 0**, **Sampler = 1**,
@@ -72,7 +83,7 @@ part holds content and isn't recording, and **dark** when the part is empty
 or on a non-Sampler engine — the light tracks ENG, not leftover buffer state, so switching
 a part away from Sampler doesn't relight it.
 
-**Four Synth controls take on a different job the moment ENG says Sampler.**
+**Four controls take on a different job the moment ENG says Sampler.**
 The parameter IDs don't change — for the hardware this is a merge of existing
 controls, not a new set of them — only what turning the knob does:
 
@@ -81,7 +92,7 @@ controls, not a new set of them — only what turning the knob does:
 | MELODY | `MELO` / `SCAN` | tape-head advance | centre is a true dead zone; linear out to real time at three-quarters of travel, then linear up to 4×; sign is direction |
 | DENSITY | `DENS` | grain overlap | 1…8, continuous; the MOTION lane modulates around it |
 | SUB | `SUB` / `LEN` | grain length | 1 ms…42 s |
-| DETUNE | `DTUN` / `ORG` | read position in the material | full material length |
+| SOURCE | `TIMB` / `FRAME` / `ORG` | read position in the material | full material length |
 
 SCAN's dead zone is exact and deliberate: a frozen tape head has to stay
 frozen even through knob noise, so nothing moves for the first couple of
@@ -111,11 +122,11 @@ Mit derselben Änderung ging eine stille Last weg (K-03): `sampler_scan()`
 wurde für **beide** Decks aufgerufen, auch für ein Synth-Deck, und
 `scan_rate()` enthielt im unteren Zweig ein `std::pow`. Bei `ctrlDiv = 16`
 waren das bis zu 6000 `pow`-Aufrufe pro Sekunde im Audio-Callback für eine
-Engine, die niemand hört. Der Aufruf hängt seither an `samplerPart`, wie SUB
-und DTUN es schon taten. Die untere Zone ist inzwischen linear (spec
-2026-07-23 sampler-performance-fixes), also gibt es dieses `pow` gar nicht
-mehr — das Gate bleibt trotzdem, jetzt einfach aus Konsistenz mit SUB und
-DTUN: ein Synth-Deck liest `_scan_rate` nie, und hineinzuschreiben wäre nur
+Engine, die niemand hört. Der Aufruf hängt seither an `samplerPart`, weil
+`sampler_scan()` nur auf einem Sampler-Deck eine Wirkung hat. Die untere Zone
+ist inzwischen linear (spec 2026-07-23 sampler-performance-fixes), also gibt
+es dieses `pow` gar nicht mehr — das Gate bleibt trotzdem: außerhalb des
+Sampler-Decks wird `_scan_rate` nie gelesen, und hineinzuschreiben wäre nur
 Arbeit ohne Wirkung.
 
 **NEW and TRIG both fire "new grain now" in the Sampler:** the tape head
@@ -151,10 +162,10 @@ deck and a Dorian-played Synth on the other land in the same key. Rhythmic
 triggering through STEP survives this untouched — the lane keeps firing on
 step boundaries, it just stops moving pitch while it does.
 
-**SUB and DTUN give up their Synth jobs in the Sampler.** They no longer
-reach it as octave share and detune — those two abilities are retired here
-so that a single knob doesn't carry two jobs inside the same engine. The
-Synth keeps both.
+**SUB stays a sub-level control; SOURCE carries the contextual source job.**
+On a Sampler, SOURCE reads `ORG` and selects position in the material; on
+Synth and Wave it reads `TIMB` and `FRAME`. Detune A/B stays an independent
+per-part context-menu spread for Synth and Wave, not a visible `DTUN` knob.
 
 The right-click context menu carries a **Sampler A / Sampler B** submenu per
 part:
@@ -210,10 +221,10 @@ stale WAV sitting in patch storage.
   soft takeover.** This is on purpose: it's the one behaviour VCV and the
   eventual hardware can share exactly, since the hardware has no
   soft-takeover to fall back on. The price is that an ENG switch can't be
-  prepared in advance. Right up until the last second, these four knobs are
-  still the Synth's knobs — dialing in SUB ahead of time audibly detunes the
-  Synth that's still playing. Every switch forces the sequence "wrong first,
-  then dial it in." Fine for a staged transition on stage; not for a
+  prepared in advance: SOURCE keeps its knob base, so a `TIMB`/`FRAME` setting
+  becomes the initial `ORG` setting after the switch. SUB remains sub-level,
+  while Detune A/B stays independent in the context menu; neither is
+  repurposed by SOURCE. Fine for a staged transition on stage; not for a
   seamless one.
 - **There are no parameter CV inputs.** The jacks are IN L/R, CLOCK and
   RESET; PIT and GAT are outputs. External modulation of these controls only

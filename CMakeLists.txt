@@ -149,7 +149,7 @@ add_test(
     COMMAND ${CMAKE_COMMAND}
         -DRENDER=$<TARGET_FILE:render>
         -DSCENARIO=${CMAKE_SOURCE_DIR}/host/render/scenarios/ctrl_identity.json
-        -DEXPECTED=659af928e1f273d9ba9619f9ad235844fec1c2277557ed81a0c2dc065c6eb336
+        -DEXPECTED=2b73f2483dc4a85b7c967c5820815829055de4e98e685d031a096d57abb699cd
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -P ${CMAKE_SOURCE_DIR}/tests/check_render_hash.cmake
 )
@@ -159,7 +159,7 @@ add_test(
     COMMAND ${CMAKE_COMMAND}
         -DRENDER=$<TARGET_FILE:render>
         -DSCENARIO=${CMAKE_SOURCE_DIR}/host/render/scenarios/wave_formant_sweep.json
-        -DEXPECTED=a2a2fdb22044a0554e08b4ce6145033a81f105d980bc3f125e01d7e5271dc651
+        -DEXPECTED=82aac4d6d818d205711b90a68a6b562e5d2fc435cf5f2f88e6df2ba3694706b5
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -DGATE_STEM=wave_formant_sweep
         -DREFERENCE=WAVE

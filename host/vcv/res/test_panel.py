@@ -111,6 +111,58 @@ def test_source_caption_states_and_static_default():
           "ORG/FRAME must not be generated as static kPanelTexts aliases")
 
 
+def test_source_and_detune_user_documentation():
+    """The VCV README must explain the contextual SOURCE control and the
+    independent constant detune spread users configure from the menu."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "README.md"), encoding="utf-8") as f:
+        readme = f.read()
+    for term in ("TIMB", "FRAME", "ORG", "6 ct"):
+        check(term in readme, f"VCV README does not document {term}")
+    check(
+        re.search(
+            r"Detune\b[^.\n]*\bindependent of SOURCE\b",
+            readme,
+            flags=re.IGNORECASE,
+        ) is not None,
+        "VCV README must state that Detune is independent of SOURCE",
+    )
+
+
+def test_source_and_detune_documentation_has_no_legacy_surface_contract():
+    """The old visible-DTUN and SOURCE-coupled-detune claims must not return."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "README.md"), encoding="utf-8") as f:
+        readme = f.read()
+    with open(os.path.join(here, "..", "..", "..", "docs", "roadmap.md"),
+              encoding="utf-8") as f:
+        roadmap = f.read()
+    for legacy in (
+            "SUB and DTUN give up their Synth jobs in the Sampler.",
+            "Synth keeps both.",
+    ):
+        check(legacy not in readme, f"VCV README retains legacy claim: {legacy}")
+    check(
+        re.search(
+            r"dialing in SUB ahead of time audibly detunes the\s+Synth that's still playing\.",
+            readme,
+        ) is None,
+        "VCV README retains the legacy SUB-detunes-Synth claim",
+    )
+    for legacy, message in (
+            (r"wie SUB\s+und DTUN es schon taten\.",
+             "VCV README retains DTUN as a sampler-bound control"),
+            (r"aus Konsistenz mit SUB und\s+DTUN:",
+             "VCV README retains DTUN as a sampler control alias"),
+    ):
+        check(re.search(legacy, readme) is None, message)
+    for legacy in (
+            "(ATK DEC FILT RES SUB DTUN)",
+            "Morphagene-style surface (DENS, SCAN, NEW, LEN/ORG)",
+    ):
+        check(legacy not in roadmap, f"roadmap retains legacy surface: {legacy}")
+
+
 def test_param_runtime_tip_contract():
     """Faceplate captions may change, but Rack parameter names/tooltips may not."""
     got = [c.tip for c in g.PARAMS]

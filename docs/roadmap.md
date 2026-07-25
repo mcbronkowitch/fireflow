@@ -41,7 +41,7 @@ is actually built today, and what is still design-only.
 | **M5a** | Sampler — the texture deck: engine + render host (granular cloud, live resampling) | ✅ **done** (engine + desktop host; VCV wiring is M5b) |
 | **M5a — generous ranges** | SIZE, PITCH, resonance, MOTION scatter and record-feedback ranges opened from M5a's conservative first pass, each ceiling chosen from measurement rather than habit; listening renders produced for the ranges to be judged by ear | ✅ **done** (engine + render host; spec `docs/superpowers/specs/2026-07-21-sampler-generous-ranges-design.md`; merged) |
 | **M5b** | Sampler on the panel — ENG remap, REC pad, WAV load/save, patch persistence, factory sample | ✅ **done** (VCV host; merged) |
-| **M5c** | Morphagene-style control surface — DENS (runtime grain overlap), SCAN (running playhead with a real dead zone), NEW/punch, LEN and ORG remapped onto the voice row; SIZE made live downward so turning LEN back shortens what is already sounding | ✅ **done** (engine + VCV host; spec `docs/superpowers/specs/2026-07-21-sampler-morphagene-controls.md`) |
+| **M5c** | Morphagene-style control surface — DENS (runtime grain overlap), SCAN (running playhead with a real dead zone), NEW/punch, LEN, and contextual SOURCE (`TIMB` Synth, `FRAME` Wave, `ORG` Sampler); per-part Detune A/B is a constant context-menu spread; SIZE made live downward so turning LEN back shortens what is already sounding | ✅ **done** (engine + VCV host; spec `docs/superpowers/specs/2026-07-21-sampler-morphagene-controls.md`) |
 | **M5d** | Slice-groove -- recorded/loaded material becomes a live slice map; STEP plays clocked slices, MOTION moves from ordered playback to free traversal, and SIZE sets the slice length | ✅ **done** (engine + render host; released in 2.9.0) |
 | **M5e** | Sampler FEEL -- COLOR becomes material-derived accents in STEP, while preserving the synth COLOR/chord path | ✅ **done** (engine + VCV panel; released in 2.9.0) |
 | **M5f** | Sampler cloud dispersion -- COLOR in FLOW spreads grain pitch through detune and octave layers, with no new control or RNG draw | ✅ **done** (engine + VCV panel; released in 2.10.0) |
@@ -153,7 +153,7 @@ reference).
   level; STEP = plain AD notes; FLOW = sustaining-last-voice drone (sustain
   0.7, pitch continuously follows the quantized PITCH target; entering FLOW
   with no sustaining voice auto-triggers — the drone promise). Targets:
-  TIMBRE (morph + t²·DETUNE_MAX detune), FILTER (60 Hz–14 kHz exp), PITCH
+  TIMBRE (morph), FILTER (60 Hz–14 kHz exp), PITCH
   (latched at trigger, 110·8^p), MOTION (pan fan ±1/±0.5 × width + drift),
   LEVEL (smoothed master gain).
 - **Tempo-coupled envelopes** — attack/decay are ratios of the master
@@ -594,12 +594,15 @@ melodic instrument, but the room the synth part plays in. Grain scheduler
 (16 slots/part, chord-locked, MOTION as an order→chaos scatter macro) over a
 ported `Buffer` record core; live IN L/R recording is the primary path, WAV
 loading the second, and the cloud plays while recording. The voice row
-(ATK DEC FILT RES SUB DTUN) is remapped to analogous cloud meanings so no knob
-goes dead. Panel cost: the existing ENG pad plus one REC button per part.
+(ATK DEC FILT RES SUB SOURCE) keeps one contextual visible SOURCE control:
+`TIMB` on Synth, `FRAME` on Wave, and `ORG` on Sampler. Detune A/B is an
+independent per-part context-menu spread, not a visible voice-row control.
+Panel cost: the existing ENG pad plus one REC button per part.
 
 Shipped in three passes — **M5a** engine + render host, **M5b** the VCV panel
 (ENG/REC, WAV load/save, patch persistence, factory sample), **M5c** the
-Morphagene-style surface (DENS, SCAN, NEW, LEN/ORG). Released in **2.8.0**.
+Morphagene-style surface (DENS, SCAN, NEW, LEN, contextual SOURCE/ORG, and
+independent Detune A/B in the context menu). Released in **2.8.0**.
 
 The deck then received five completed follow-up milestones before hardware work:
 
