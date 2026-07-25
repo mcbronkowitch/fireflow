@@ -596,17 +596,15 @@ melodic instrument, but the room the synth part plays in. Grain scheduler
 (16 slots/part, chord-locked, MOTION as an order→chaos scatter macro) over a
 ported `Buffer` record core; live IN L/R recording is the primary path, WAV
 loading the second, and the cloud plays while recording. The voice row
-(ATK DEC FILT RES SUB SOURCE) keeps one contextual visible SOURCE control:
-`TIMB` on Synth, `FRAME` on Wave, and `ORG` on Sampler. Detune A/B is an
-independent per-part context-menu spread, not a visible voice-row control.
-Panel cost: the existing ENG pad plus one REC button per part.
+(ATK DEC FILT RES SUB SOURCE) provides the original common surface. Panel cost:
+the existing ENG pad plus one REC button per part.
 
 Shipped in three passes — **M5a** engine + render host, **M5b** the VCV panel
 (ENG/REC, WAV load/save, patch persistence, factory sample), **M5c** the
-Morphagene-style surface (DENS, SCAN, NEW, LEN, contextual SOURCE/ORG, and
-independent Detune A/B in the context menu). Released in **2.8.0**. The
-contextual SOURCE control plus independent context-menu Detune was released in
-**2.13.0**.
+Morphagene-style surface (DENS, SCAN, NEW, LEN). Released in **2.8.0**. In
+**2.13.0**, the visible SOURCE control became contextual â€” `TIMB` on Synth,
+`FRAME` on WAVE, and `ORG` on Sampler â€” and independent per-part Detune A/B
+arrived in the context menu.
 
 The deck then received five completed follow-up milestones before hardware work:
 
