@@ -990,7 +990,14 @@ struct SpkyRing : Widget {
 // Rack can never drift apart. Font is a stock Rack asset, present in every
 // v2 install -- note it has no bold cut, so the SVG's bold legends render
 // regular here. That is accepted.
+static const char* sourceCaption(int state) {
+    return state == 1 ? "ORG" : state == 2 ? "FRAME" : "TIMB";
+}
+
 struct PanelText : Widget {
+    Spotymod* module;
+    explicit PanelText(Spotymod* m) : module(m) {}
+
     void draw(const DrawArgs& args) override {
         std::shared_ptr<Font> font =
             APP->window->loadFont(asset::system("res/fonts/ShareTechMono-Regular.ttf"));
@@ -1013,7 +1020,8 @@ struct PanelText : Widget {
         };
         auto captions = [&](const PanelCtl* t, size_t n) {
             for (size_t i = 0; i < n; ++i) {
-                if (!t[i].label[0]) continue;
+                if (!t[i].label[0] || t[i].id == SOURCE_A || t[i].id == SOURCE_B)
+                    continue;
                 nvgTextAlign(args.vg, alignOf(t[i].anchor) | NVG_ALIGN_BASELINE);
                 text(t[i].lbl.x, t[i].lbl.y, t[i].lblSize, col(t[i].lblRgb),
                      t[i].label);
@@ -1023,6 +1031,25 @@ struct PanelText : Widget {
         captions(kParamCtls,  sizeof(kParamCtls)  / sizeof(kParamCtls[0]));
         captions(kInputCtls,  sizeof(kInputCtls)  / sizeof(kInputCtls[0]));
         captions(kOutputCtls, sizeof(kOutputCtls) / sizeof(kOutputCtls[0]));
+
+        auto sourceCaptionAt = [&](int sourceId, int engineId) {
+            const PanelCtl* source = nullptr;
+            for (const auto& c : kParamCtls) {
+                if (c.id == sourceId) {
+                    source = &c;
+                    break;
+                }
+            }
+            if (!source) return;
+            const int state = module
+                ? static_cast<int>(std::round(module->params[engineId].getValue()))
+                : 0;
+            nvgTextAlign(args.vg, alignOf(source->anchor) | NVG_ALIGN_BASELINE);
+            text(source->lbl.x, source->lbl.y, source->lblSize,
+                 col(source->lblRgb), sourceCaption(state));
+        };
+        sourceCaptionAt(SOURCE_A, ENGINE_A);
+        sourceCaptionAt(SOURCE_B, ENGINE_B);
 
         // section titles + brand -- the shared TEXTS table from the generator,
         // so runtime lettering matches the SVG preview one-to-one
@@ -1074,7 +1101,7 @@ struct SpotymodWidget : ModuleWidget {
         setPanel(createPanel(asset::plugin(pluginInstance, "res/Spotymod.svg")));
 
         // panel lettering (NanoSVG can't render the SVG's <text>; see PanelText)
-        auto* labels = new PanelText;
+        auto* labels = new PanelText(module);
         labels->box.size = box.size;
         addChild(labels);
 

@@ -191,6 +191,7 @@ def orbit_label(cx, cy, ang_deg, mir):
 # VOICE and FX sit side by side, PLAY spans the full part width below them.
 VOICE_X  = [9.25, 19.75, 30.25]      # ATK FILT SUB / DEC RES TIMB
 ROW_V1, ROW_V2 = 77.3, 89.4
+SOURCE_CAPTIONS = {0: "TIMB", 1: "ORG", 2: "FRAME"}
 # 4-wide, aligned to FX_BOT so the FX box's two rows flush: RATE MIX FB ROOM.
 FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # RATE MIX FB | ROOM (per-deck reverb mix)
 # FX bottom row went from two slots to four (spec 2026-07-18 dust-grain-cloud):
@@ -234,7 +235,7 @@ def part_controls(mir=False):
                               ("DECAY",  "DEC",  VOICE_X[0], ROW_V2),
                               ("RES",    "RES",  VOICE_X[1], ROW_V2),
                               ("SUB",    "SUB",  VOICE_X[2], ROW_V1),
-                              ("SOURCE", "TIMB", VOICE_X[2], ROW_V2)]:
+                              ("SOURCE", SOURCE_CAPTIONS[0], VOICE_X[2], ROW_V2)]:
         out.append(Ctl(enum, SMKNOB, fx(x), y, lbl,
                        "SOURCE" if enum == "SOURCE" else None))
     # fx box: the FLUX delay cluster (RATE . MIX . FB) on top, GRIT/COMP below.

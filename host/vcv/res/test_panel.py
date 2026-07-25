@@ -97,6 +97,20 @@ def test_source_and_hidden_detune_partition():
           "widgetless detune leaked into kParamCtls")
 
 
+def test_source_caption_states_and_static_default():
+    """The generated preview shows Synth's default caption, while Rack owns
+    the live ENG-dependent choice and must not receive static alias rows."""
+    want = {0: "TIMB", 1: "ORG", 2: "FRAME"}
+    got = getattr(g, "SOURCE_CAPTIONS", None)
+    check(got == want, f"SOURCE caption states are {got!r}, want {want!r}")
+    for suffix in ("_A", "_B"):
+        check(ctl("SOURCE" + suffix).label == want[0],
+              f"SOURCE{suffix} preview caption must be TIMB")
+    panel_words = [t[-1] for t in g.TEXTS]
+    check("ORG" not in panel_words and "FRAME" not in panel_words,
+          "ORG/FRAME must not be generated as static kPanelTexts aliases")
+
+
 def test_param_runtime_tip_contract():
     """Faceplate captions may change, but Rack parameter names/tooltips may not."""
     got = [c.tip for c in g.PARAMS]
@@ -989,6 +1003,89 @@ def test_source_detune_guard_rejects_representative_regressions():
               f"SOURCE/Detune guard accepted a {label} regression")
 
 
+def source_caption_wiring_issues(cpp):
+    """Return regressions in the one-live-SOURCE-caption-per-part contract."""
+    issues = []
+    mapping = cpp_scope(cpp, "static const char* sourceCaption(int state)")
+    panel = cpp_scope(cpp, "struct PanelText : Widget")
+    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
+    expected_mapping = """
+static const char* sourceCaption(int state) {
+    return state == 1 ? "ORG" : state == 2 ? "FRAME" : "TIMB";
+}"""
+    if mapping is None:
+        issues.append("SOURCE caption mapping scope is missing")
+    elif compact_cpp(mapping) != compact_cpp(expected_mapping):
+        issues.append("SOURCE caption mapping must be 0 TIMB, 1 ORG, 2 FRAME")
+
+    if panel is None:
+        issues.append("SOURCE caption PanelText scope is missing")
+        return issues
+    panel_n = compact_cpp(panel)
+    if "Spotymod*module;explicitPanelText(Spotymod*m):module(m){}" not in panel_n:
+        issues.append("PanelText must retain its Spotymod module pointer")
+    source_skip = (
+        "if(!t[i].label[0]||t[i].id==SOURCE_A||t[i].id==SOURCE_B)continue;")
+    if panel_n.count(source_skip) != 1:
+        issues.append("generic caption loop must skip SOURCE_A/B exactly once")
+    if panel_n.count(
+            "static_cast<int>(std::round(module->params[engineId].getValue()))"
+            ) != 1:
+        issues.append("SOURCE caption state must round the matching ENG parameter")
+    if "?static_cast<int>(std::round(module->params[engineId].getValue())):0;" not in panel_n:
+        issues.append("module browser SOURCE captions must fall back to state 0")
+    if panel_n.count("text(source->lbl.x,source->lbl.y,source->lblSize,"
+                     "col(source->lblRgb),sourceCaption(state));") != 1:
+        issues.append("dynamic SOURCE helper must draw one resolved caption")
+    for source_id, engine_id in (("SOURCE_A", "ENGINE_A"),
+                                 ("SOURCE_B", "ENGINE_B")):
+        call = f"sourceCaptionAt({source_id},{engine_id});"
+        if panel_n.count(call) != 1:
+            issues.append(f"{source_id} must draw once from {engine_id}")
+    if panel_n.find("captions(kOutputCtls") > panel_n.find(
+            "sourceCaptionAt(SOURCE_A,ENGINE_A);"):
+        issues.append("live SOURCE captions must draw after the generic caption loop")
+
+    if widget is None:
+        issues.append("SOURCE caption widget scope is missing")
+        return issues
+    widget_n = compact_cpp(widget)
+    if widget_n.count("newPanelText(module)") != 1:
+        issues.append("SpotymodWidget must construct PanelText with its module")
+    return issues
+
+
+def test_source_caption_host_wiring():
+    """Rack draws one live caption for each SOURCE from its own rounded ENG."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    for issue in source_caption_wiring_issues(cpp):
+        check(False, issue)
+
+
+def test_source_caption_guard_rejects_representative_regressions():
+    """The source guard catches wrong mappings, bindings, fallback and draws."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    mutations = [
+        ('state == 1 ? "ORG"', 'state == 1 ? "FRAME"', "state mapping"),
+        ("t[i].id == SOURCE_A || t[i].id == SOURCE_B",
+         "t[i].id == SOURCE_A", "generic SOURCE skip"),
+        ("std::round(module->params[engineId].getValue())",
+         "module->params[engineId].getValue()", "ENG rounding"),
+        ("sourceCaptionAt(SOURCE_B, ENGINE_B)",
+         "sourceCaptionAt(SOURCE_B, ENGINE_A)", "part B ENG binding"),
+        (": 0;", ": 2;", "module-browser fallback"),
+        ("new PanelText(module)", "new PanelText(nullptr)", "widget module"),
+    ]
+    for before, after, label in mutations:
+        mutated = cpp.replace(before, after, 1)
+        check(source_caption_wiring_issues(mutated),
+              f"SOURCE caption guard accepted a {label} regression")
+
+
 def test_shuffle_host_wiring():
     """Rack pushes the appended shared knob into the instrument once per
     control update, before either deck can enter STEP and latch that
@@ -1358,6 +1455,44 @@ def test_sampler_inline_pairs_fit_the_voice_row():
                 continue
             check(r0 <= l1 - 0.8 or l0 >= r1 + 0.8,
                   f"{name} ({l0:.2f}..{r0:.2f}) crowds {other} ({l1:.2f}..{r1:.2f})")
+
+
+def test_source_caption_geometry_for_every_engine_state():
+    """TIMB/ORG/FRAME share one generated label box that stays inside VOICE
+    and clear of the neighbouring SUB/RES glyphs and captions on both parts."""
+    captions = getattr(g, "SOURCE_CAPTIONS", {})
+    voice_a = next(gr for gr in g.GROUPS if gr[4] == "VOICE" and gr[0] < g.CX)
+    voice_b = next(gr for gr in g.GROUPS if gr[4] == "VOICE" and gr[0] > g.CX)
+
+    def label_box(c, word):
+        x, y, anchor, size, _colour = g.label_of(c)
+        left, right = text_span(x, anchor, word, size)
+        return left, y - size, right, y + size * 0.25
+
+    def boxes_clear(a, b, gap=0.0):
+        al, at, ar, ab = a
+        bl, bt, br, bb = b
+        return ar + gap <= bl or br + gap <= al or ab + gap <= bt or bb + gap <= at
+
+    for suffix, box in (("_A", voice_a), ("_B", voice_b)):
+        source = ctl("SOURCE" + suffix)
+        for state, word in captions.items():
+            bounds = label_box(source, word)
+            left, top, right, bottom = bounds
+            check(left >= box[0] + 0.5 and right <= box[0] + box[2] - 0.5
+                  and top >= box[1] + 0.5 and bottom <= box[1] + box[3] - 0.5,
+                  f"SOURCE{suffix} state {state} {word} leaves VOICE: {bounds}")
+            for base in ("SUB", "RES"):
+                other = ctl(base + suffix)
+                # Caption rectangle against the neighbouring circular control.
+                near_x = min(max(other.x, left), right)
+                near_y = min(max(other.y, top), bottom)
+                distance = math.hypot(near_x - other.x, near_y - other.y)
+                check(distance >= g.GLYPH_R[other.kind] + 0.3,
+                      f"SOURCE{suffix} {word} crowds {other.enum} control")
+                other_bounds = label_box(other, other.label)
+                check(boxes_clear(bounds, other_bounds, 0.8),
+                      f"SOURCE{suffix} {word} crowds {other.enum} label")
 
 
 def test_panel_texts_stay_on_the_plate():
