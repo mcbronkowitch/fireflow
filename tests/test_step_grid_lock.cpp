@@ -266,6 +266,50 @@ TEST_CASE("steplock: the fire grid is identical at every SHAPE setting") {
     }
 }
 
+TEST_CASE("steplock: rests advance the grid, so followers move when the melody does not") {
+    // SuperModulator::process() counts step-index CHANGES on the PITCH lane,
+    // not fires -- the comment above that block says why: "a gated melodic
+    // step still advances the grid -- the followers must move even when the
+    // melody rests." set_density() only reaches the PITCH lane (see its
+    // forwarder above), so a low DENSE masks most of PITCH's own note fires
+    // while its step index keeps changing on schedule, giving a direct test
+    // of that claim.
+    SuperModulator m;
+    m.init(48000.f, 99u);
+    m.set_rate(0.45f);
+    m.set_density(0.25f);      // most PITCH steps rest (gated off)
+    m.set_step(true, 8);
+
+    const int32_t kRunSamples = 480000;
+    REQUIRE(kRunSamples % ModLane::kTickInterval == 0);   // same trailing-tick reasoning as run_locked
+
+    int deck_steps = 0, pitch_fires = 0, fires[LANE_COUNT] = {0, 0, 0, 0, 0};
+    int last = m.pitch_cur_step();
+    for (int32_t i = 0; i <= kRunSamples; ++i) {
+        m.process();
+        if (m.pitch_cur_step() != last) { last = m.pitch_cur_step(); ++deck_steps; }
+        // PITCH is driven per-sample, and fired() latches until the next
+        // process() call -- unlike the texture lanes' once-per-raster-tick
+        // fired(), sampling every sample counts each note onset exactly once.
+        if (m.lane_fired(LANE_PITCH)) ++pitch_fires;
+        if (i % ModLane::kTickInterval == 0)
+            for (int l = 0; l < LANE_COUNT; ++l)
+                if (l != LANE_PITCH && m.lane_fired(l)) ++fires[l];
+    }
+    REQUIRE(deck_steps >= 16);
+
+    // Prove the rests actually happened -- otherwise this case could pass
+    // vacuously (e.g. under a lane_fired(LANE_PITCH)-driven deck counter,
+    // where PITCH's fire count and the deck-step count are the same thing
+    // by construction, so equality would tell us nothing).
+    CHECK(pitch_fires < deck_steps);
+
+    // The claim under test: every texture lane still gets one boundary per
+    // deck step, rests or not.
+    for (int l = 0; l < LANE_COUNT; ++l)
+        if (l != LANE_PITCH) CHECK(fires[l] == deck_steps);
+}
+
 TEST_CASE("steplock: a live STEPS turn keeps the deck aligned") {
     SuperModulator m;
     m.init(48000.f, 99u);
