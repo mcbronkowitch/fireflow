@@ -43,6 +43,14 @@ cloud's pitch in FLOW. Material without enough transients falls back to the
 even tempo grid automatically, so drones and pads stay playable. FLOW still
 moves continuously across the same lanes regardless of engine.
 
+Melodic **STEP** lanes keep two persistent full-pattern snapshots, A and B.
+**FORM** chooses how those phrases are composed — TWO MOTIFS, ONE + VAR,
+HIERARCHICAL, CALL / RESPONSE, or OSTINATO — while **SONG** independently
+arranges them as AAAB, ABAB, ABBB, BUILD, ROTATE, MIRROR, or OFF. Structural
+changes land on phrase boundaries; OFF keeps A evolving while B remains stored.
+On the Rack panel the PLAY row is **STEP · FORM · SONG · NEW**. NEW rebuilds
+the A/B pair and, on a Sampler, also spawns a grain immediately.
+
 Each of the two **parts** is a **SuperModulator** — one performable macro
 surface (RATE, SHAPE, DENSITY, SMOOTH, RANGE, MOD) sitting on top of
 **five independent modulation lanes**, one per target. Every lane has its own
@@ -69,7 +77,7 @@ module, and (later) on the Spotykach itself.
 
 <p align="center">
   <img src="docs/img/architecture.png" width="900"
-       alt="Architecture diagram: one portable engine/ core (mod, parts, synth, pitch, fx, util behind a single engine/instrument.h API) feeds three hosts — host/render (desktop CLI → WAV + mods.csv, built), host/vcv (VCV Rack module, beta) and the Spotykach hardware (host/daisy firmware shell, M6, planned). No hardware type crosses into engine/; tests/ runs 200 deterministic doctest checks over the core.">
+       alt="Architecture diagram: one portable engine/ core (mod, parts, synth, pitch, fx, util behind a single engine/instrument.h API) feeds three hosts — host/render (desktop CLI → WAV + mods.csv, built), host/vcv (VCV Rack module, beta) and the Spotykach hardware (host/daisy firmware shell, M6, planned). No hardware type crosses into engine/; tests/ runs 680 deterministic Doctest cases.">
 </p>
 
 `Instrument` (`engine/instrument.h`) is the complete public API: `init(sample_rate)`,
@@ -121,8 +129,8 @@ playable Rack module and a permanent part of the workflow, not yet a finished
 instrument.
 
 **[Download the latest release](https://github.com/mcbronkowitch/spotymod/releases/latest)**
-— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.12.2**
-(both engines, the expanded texture deck included). Unpack into Rack's user plugin
+— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.13.1**
+(Synth, Sampler, and WAVE, including the independent FORM/SONG phrase arranger). Unpack into Rack's user plugin
 directory and restart Rack.
 
 Building it yourself needs its own toolchain (a native MinGW/GCC compiler, not
@@ -143,10 +151,11 @@ the desktop clang path); the build, install and I/O details live in
 | **M4.8** | Reverb dry/wet — equal-power MIX at the master join + clear-on-sleep CPU bypass | **done** (engine + host) |
 | **M4.9** | Reverb DIFFUSION knob (replaces DEPTH) — room density 0–0.9, weak line-mod coupling | **done** (engine + host) |
 | **M4.10** | Chord layer — COLOR knob, diatonic stacks, voice-leading, live FLOW surface | **done** (engine + hosts; hardware placement deferred) |
-| **M5** | Sampler -- the texture deck: granular cloud, live recording + overdub, WAV load/save, Morphagene-style DENS/SCAN/NEW/LEN/ORG controls, clocked slice-groove, FEEL accents, and FLOW cloud dispersion | **done** (engine + hosts; released through 2.10.1) |
-| **M5h** | Per-deck ROOM mix: independent dry/send mix per deck into one shared Oliverb reverb | **done** (engine + VCV panel; pending the next release) |
+| **M5** | Sampler -- the texture deck: granular cloud, live recording + overdub, WAV load/save, Morphagene-style DENS/SCAN/NEW/LEN/ORG controls, clocked slice-groove, FEEL accents, and FLOW cloud dispersion | **done** (engine + hosts; released through 2.11.0) |
+| **M5h** | Per-deck ROOM mix: independent dry/send mix per deck into one shared Oliverb reverb | **done** (engine + VCV panel; released in 2.11.0) |
 | **CPU** | Three measured rounds on real hardware: `instrument_worst`'s worst block went from ~156 % of the audio-block budget to 94 %. Method and every number in [`bench/`](bench/README.md) and [`docs/bench/`](docs/bench/) | **done** (ongoing as a tool) |
-| **M5i** | WAVE: four-voice PPG-style wavetable part engine | **done** (engine + renderer + VCV; 65,024-byte mapped-QSPI bank; hardware-gated) |
+| **M5i** | WAVE: four-voice PPG-style wavetable part engine | **done** (engine + renderer + VCV; 65,024-byte mapped-QSPI bank; hardware-gated; released in 2.13.0) |
+| **+ FORM/SONG** | Persistent A/B phrase snapshots: five FORM phrase engines plus AAAB, ABAB, ABBB, BUILD, ROTATE, MIRROR, and OFF SONG arrangements; boundary-safe changes and legacy patch migration | **done** (engine + renderer + VCV; released in 2.13.1) |
 | **M5j** | STRING: four-voice Karplus-Strong part engine | planned (spec ready; not implemented) |
 | **M5k** | ZAP: monophonic percussion part engine | planned (spec ready; not implemented) |
 | **M5l** | PULL: chord gravity between the two decks | planned (spec ready; not implemented) |
