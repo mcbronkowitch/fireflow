@@ -2,23 +2,28 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** In STEP mode the four texture modulation lanes run on the deck's step
-clock instead of their own, so they can never drift off the step grid at any
-SHAPE setting.
+**Goal:** In STEP mode the four texture modulation lanes stop owning a clock
+and read the deck's integer step count instead, so they cannot drift off the
+step grid at any SHAPE setting.
 
-**Architecture:** The step clock is already normalized — `_phase_inc =
-rate_hz / sr * (8 / steps)` makes one step last `sr / (8 * rate_hz)` regardless
-of `_steps`. Giving all five lanes the same `rate_hz` therefore yields one
-shared step grid, and the old per-lane rate ratio moves into the lane's slot
-count (its cycle length). TIDE scales slot counts instead of rates, DRIFT's
-separate `mod_scale` and the per-lane EVOLVE rate walk are bypassed in STEP,
-SPOT's phase kick is quantized to whole slots, and FLOW→STEP entry snaps all
-five lanes rather than PITCH alone.
+**Architecture:** `SuperModulator` counts the steps the PITCH lane enters and
+hands each texture lane that count plus the fraction the deck sits at inside
+its current step. A texture lane's position is `count mod slots` plus that
+fraction — one integer modulo and one shared float, so no lane can round away
+from another. The old rate ratio becomes the lane's slot count; TIDE scales
+slot counts instead of rates.
 
 **Tech Stack:** C++17, doctest (vendored in `third_party/`), CMake + Ninja +
 clang. Engine only — no VCV panel change, no new control.
 
 **Spec:** `docs/superpowers/specs/2026-07-25-mod-lane-step-grid-lock-design.md`
+
+**History:** Task 1 is done (`51f65c7`). An earlier Task 2 gave every lane the
+same `rate_hz` and let each keep its own phasor; it was reverted (`370206e`)
+after measurement showed float32 accumulation makes lanes with different cycle
+lengths drift ~2 samples per step — a full step of slip in about 90 seconds,
+worst at SIZE's default 16 slots. The spec's "Why not equal rates" section
+carries the numbers. Do not reintroduce a per-lane phasor in STEP.
 
 ## Global Constraints
 
@@ -28,345 +33,198 @@ clang. Engine only — no VCV panel change, no new control.
 - Configure/build/test: `cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure`.
   Ninja is single-config; the binary is at `build/spky_tests.exe`.
 - Run one doctest case: `./build/spky_tests.exe -tc="<case name>"`.
-- Patch compatibility is out of scope; the instrument is in development. No
-  parameter-ID migration, no preservation of old behaviour.
-- No byte-identity or checksum gates. Renders are sanity checks only.
+- The baseline is green: 4/4 ctest, including the `ctrl_identity` render gate,
+  whose stale reference was refreshed in `2278a53`. Any render-gate movement
+  from here is caused by this work and must be explained, not re-baselined.
+- Patch compatibility is out of scope; the instrument is in development.
 - FLOW behaviour must be unchanged by every task in this plan.
+- Integer types follow the codebase: `int32_t`, not `int64_t`. The deck step
+  count runs at most a few hundred per second and this engine ships on a
+  Cortex-M7 — do not introduce 64-bit arithmetic into the mod plane.
 - Commit trailer for every commit:
   `Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>`
 - New test files must be added to the `spky_tests` source list in
-  `CMakeLists.txt` (around line 37-60) or they will not run.
-- Float phase drift (~0.0006/cycle) makes exact sample-index comparisons across
-  many cycles flaky. Where two lanes' boundary sample indices are compared,
-  allow a tolerance of 1 sample. This is a known trap in this codebase, not
-  sloppiness.
+  `CMakeLists.txt` or they will not run.
 
 ## File Structure
 
 | File | Responsibility |
 |---|---|
-| `engine/mod/lane_len.h` (create) | The STEP cycle-length table and `lane_slots()`. Pure, header-only, no dependency on `ModLane`. |
-| `engine/mod/lane.h` / `lane.cpp` (modify) | Two new lane capabilities: an externally supplied EVOLVE rate walk, and a whole-slot phase kick. |
-| `engine/mod/super_modulator.h` / `.cpp` (modify) | Owns the STEP decision: per-lane slot counts, one shared rate, EVOLVE inheritance, quantized SPOT, deck-wide snap. |
-| `engine/center/center.cpp` (modify) | One call site rename. No logic change — DRIFT's `mod_scale` is ignored inside `SuperModulator`, not recomputed here. |
-| `tests/test_lane_len.cpp` (create) | Slot-count table. |
-| `tests/test_lane_grid.cpp` (create) | ModLane-level: shared grid, external rate walk, whole-slot kick. |
-| `tests/test_step_grid_lock.cpp` (create) | SuperModulator-level: the grid invariant under chaos, shape independence, STEP entry, live STEPS turn, FLOW regression. |
-| `tests/test_lane.cpp` (modify) | Rename in the existing FLOW snap test. |
+| `engine/mod/lane_len.h` | DONE (Task 1). The STEP cycle-length table and `lane_slots()`. |
+| `engine/mod/lane.h` / `lane.cpp` (modify) | The follower mode: a lane that is told where the deck is instead of integrating a phase. |
+| `engine/mod/super_modulator.h` / `.cpp` (modify) | Owns the STEP decision: the deck step count, per-lane slot counts, follow dispatch, SPOT's slot offset. |
+| `tests/test_lane_follow.cpp` (create) | ModLane-level: follow fires on deck steps, multi-step catch-up, slot nudge, exactness over a long horizon. |
+| `tests/test_step_grid_lock.cpp` (create) | SuperModulator-level: rates and slots, the grid invariant under chaos, ten-minute lock, shape independence, live STEPS turn, FLOW regression. |
 | `docs/roadmap.md` (modify) | One row. |
 
----
-
-### Task 1: Cycle-length table
-
-**Files:**
-- Create: `engine/mod/lane_len.h`
-- Create: `tests/test_lane_len.cpp`
-- Modify: `CMakeLists.txt` (test source list)
-
-**Interfaces:**
-- Consumes: `LaneId` / `LANE_COUNT` from `engine/mod/lane_id.h`, `kTideRatios` /
-  `kTideCount` from `engine/mod/divisions.h` (test only).
-- Produces: `spky::kLaneLenFactor[LANE_COUNT]`, `spky::kLaneSlotsMin` (= 2),
-  `spky::kLaneSlotsMax` (= 64), and
-  `int spky::lane_slots(int lane, int steps, float tide)`.
-
-- [ ] **Step 1: Write the failing test**
-
-Create `tests/test_lane_len.cpp`:
-
-```cpp
-#include <doctest/doctest.h>
-#include "mod/lane_len.h"
-#include "mod/divisions.h"
-using namespace spky;
-
-TEST_CASE("lane_len: the default phrase yields the 4/6/8/12/16 set") {
-    CHECK(lane_slots(LANE_SOURCE, 8, 1.f) ==  4);
-    CHECK(lane_slots(LANE_LEVEL,  8, 1.f) ==  6);
-    CHECK(lane_slots(LANE_PITCH,  8, 1.f) ==  8);
-    CHECK(lane_slots(LANE_MOTION, 8, 1.f) == 12);
-    CHECK(lane_slots(LANE_SIZE,   8, 1.f) == 16);
-}
-
-TEST_CASE("lane_len: TIDE stretches the texture lanes and never PITCH") {
-    CHECK(lane_slots(LANE_SOURCE, 8, 0.5f) ==  8);
-    CHECK(lane_slots(LANE_SIZE,   8, 0.5f) == 32);
-    CHECK(lane_slots(LANE_MOTION, 8, 0.5f) == 24);
-    CHECK(lane_slots(LANE_LEVEL,  8, 0.5f) == 12);
-    CHECK(lane_slots(LANE_PITCH,  8, 0.5f) ==  8);
-    CHECK(lane_slots(LANE_PITCH,  8, 4.f)  ==  8);
-}
-
-TEST_CASE("lane_len: clamps at both ends") {
-    // 1 slot would pin the lane to phase 0 and emit a constant value.
-    CHECK(lane_slots(LANE_SOURCE,  2, 1.f)   ==  2);
-    CHECK(lane_slots(LANE_SIZE,   16, 0.25f) == 64);   // wants 128
-}
-
-TEST_CASE("lane_len: odd phrase lengths round half away from zero") {
-    CHECK(lane_slots(LANE_SOURCE, 5, 1.f) ==  3);   // 2.50
-    CHECK(lane_slots(LANE_LEVEL,  5, 1.f) ==  4);   // 3.75
-    CHECK(lane_slots(LANE_MOTION, 5, 1.f) ==  8);   // 7.50
-    CHECK(lane_slots(LANE_SIZE,   5, 1.f) == 10);
-}
-
-TEST_CASE("lane_len: every panel-reachable combination stays inside bounds") {
-    for (int s = 2; s <= 16; ++s)
-        for (int t = 0; t < kTideCount; ++t)
-            for (int l = 0; l < LANE_COUNT; ++l) {
-                const int n = lane_slots(l, s, kTideRatios[t]);
-                CHECK(n >= kLaneSlotsMin);
-                CHECK(n <= kLaneSlotsMax);
-            }
-}
-```
-
-- [ ] **Step 2: Register the test file**
-
-In `CMakeLists.txt`, inside the `add_executable(spky_tests ...)` list, add the
-new file directly after the line `tests/test_divisions.cpp`:
-
-```cmake
-    tests/test_lane_len.cpp
-```
-
-- [ ] **Step 3: Run the test to verify it fails**
-
-```bash
-source env.sh && cmake -S . -B build && cmake --build build
-```
-
-Expected: FAIL at compile time with `fatal error: 'mod/lane_len.h' file not found`.
-
-- [ ] **Step 4: Write the implementation**
-
-Create `engine/mod/lane_len.h`:
-
-```cpp
-#pragma once
-#include <cmath>
-#include "mod/lane_id.h"
-
-namespace spky {
-
-// STEP-mode cycle lengths (spec 2026-07-25 mod-lane-step-grid-lock).
-//
-// In STEP every lane runs on the deck's step clock, so the old rate ratio in
-// super_modulator.cpp's kLaneRatio becomes a length factor f = 1 / ratio on
-// the phrase length. MOTION and LEVEL are deliberately rounded from x3/4 and
-// x3/2 to x2/3 and x4/3: that turns the two lanes that could never align into
-// clean 2- and 3-relations to the phrase, giving the set 4, 6, 8, 12, 16 at
-// STEPS = 8 -- congruent again every 48 steps, or six phrases. The polyrhythm
-// is preserved, it is just deliberate now.
-inline constexpr float kLaneLenFactor[LANE_COUNT] = {
-    0.5f,    // LANE_SOURCE  was x2    -> half the phrase
-    2.f,     // LANE_SIZE    was x1/2  -> twice the phrase
-    1.f,     // LANE_PITCH   x1        -> the phrase itself
-    1.5f,    // LANE_MOTION  x3/4 -> x2/3 -> one and a half phrases
-    0.75f,   // LANE_LEVEL   x3/2 -> x4/3 -> three quarters of a phrase
-};
-
-// A single slot would put the lane's only boundary at phase 0, so it would
-// emit a constant value. 64 bounds the other end; the contour buffer is 32
-// slots (ModLane::kSeqSlots) and repeats inside longer cycles, which is
-// accepted for texture lanes and documented in the spec.
-inline constexpr int kLaneSlotsMin = 2;
-inline constexpr int kLaneSlotsMax = 64;
-
-// Slot count of one lane in STEP. `tide` is the ladder ratio (kTideRatios), so
-// a slower lane (tide < 1) loops over proportionally more steps. The PITCH
-// lane is the phrase itself: it returns `steps` unchanged and never sees TIDE
-// or the clamps, because changing it would change the phrase length.
-inline int lane_slots(int lane, int steps, float tide) {
-    if (lane == LANE_PITCH) return steps;
-    if (tide <= 0.f) tide = 1.f;
-    const float want =
-        static_cast<float>(steps) * kLaneLenFactor[lane] / tide;
-    int n = static_cast<int>(std::lround(want));
-    if (n < kLaneSlotsMin) n = kLaneSlotsMin;
-    if (n > kLaneSlotsMax) n = kLaneSlotsMax;
-    return n;
-}
-
-} // namespace spky
-```
-
-- [ ] **Step 5: Run the test to verify it passes**
-
-```bash
-source env.sh && cmake --build build && ./build/spky_tests.exe -ts="*" -tc="lane_len:*"
-```
-
-Expected: `[doctest] Status: SUCCESS!` with 5 test cases passing.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add engine/mod/lane_len.h tests/test_lane_len.cpp CMakeLists.txt
-git commit -m "feat(mod): add STEP cycle-length table
-
-Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
-```
+`engine/center/center.cpp` is deliberately absent: a follower has no rate, so
+`mod_scale` has nothing to act on and the DRIFT/COUPLE call sites need no
+change.
 
 ---
 
-### Task 2: ModLane — external rate walk and whole-slot kick
+### Task 2: ModLane follower mode
 
 **Files:**
 - Modify: `engine/mod/lane.h`
 - Modify: `engine/mod/lane.cpp`
-- Create: `tests/test_lane_grid.cpp`
+- Create: `tests/test_lane_follow.cpp`
 - Modify: `CMakeLists.txt`
 
 **Interfaces:**
 - Consumes: nothing from Task 1.
 - Produces, on `spky::ModLane`:
-  - `void set_ev_rate_external(bool on, float v)` — while `on`, the phase
-    advance uses `v` instead of the lane's own `_ev_rate`.
-  - `float ev_rate() const` — the lane's own walked rate offset.
-  - `void kick_steps(int n, float dshape)` — jump `n` whole slots.
+  - `float follow(int32_t deck_step, float frac)` — advance this lane to the
+    deck's position and return the post-range output, the follower twin of
+    `tick()`.
+  - `void nudge_slots(int n, float dshape)` — SPOT: shift this lane's slot
+    offset by `n`, fire the new slot at the next `follow()`.
   - `float rate_hz_for_test() const` — under `SPKY_TESTING` only.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/test_lane_grid.cpp`:
+Create `tests/test_lane_follow.cpp`:
 
 ```cpp
 #include <doctest/doctest.h>
-#include <cstdlib>
 #include <vector>
 #include "mod/lane.h"
 using namespace spky;
 
-// One shared step grid (spec 2026-07-25 mod-lane-step-grid-lock). The step
-// clock is normalized -- _phase_inc = rate/sr * (8/steps) makes one step last
-// sr/(8*rate) whatever _steps is -- so lanes at the same rate_hz share their
-// boundaries no matter how long their cycles are. These tests pin that down at
-// the ModLane level, on the per-sample path, away from the 96-sample raster.
+// Follower mode (spec 2026-07-25 mod-lane-step-grid-lock). A lane in STEP
+// holds no clock: it is told the deck's cumulative step count and where the
+// deck sits inside its current step, and derives everything from that. These
+// tests drive follow() with hand-written integer counts, so they pin the
+// contract without a SuperModulator and without any float clock at all.
 namespace {
-constexpr float kSr   = 48000.f;
-constexpr float kRate = 2.f;          // step = 3000 samples
+constexpr float kSr = 48000.f;
 
-void configure(ModLane& l, int slots, float shuffle, float variation) {
+void configure(ModLane& l, int slots) {
     l.set_melodic(false);
     l.init(kSr, 4242u);
-    l.set_shuffle(shuffle);
     l.set_step(true, slots);
-    l.set_rate_hz(kRate);
+    l.set_rate_hz(2.f);        // assigned but unused by a follower
     l.set_shape(1.f);
     l.set_smooth(0.f);
-    l.set_variation(variation);
-}
-
-std::vector<int> fire_samples(int slots, int n, float shuffle = 0.f,
-                              float variation = 0.f) {
-    ModLane l;
-    configure(l, slots, shuffle, variation);
-    std::vector<int> out;
-    for (int i = 0; i < n; ++i) {
-        l.process();
-        if (l.fired()) out.push_back(i);
-    }
-    return out;
-}
-
-// Boundary detection reads a free-running float phasor, so two lanes with
-// different _phase_inc can cross the same instant one sample apart. That is
-// float drift, not misalignment -- see the plan's global constraints.
-void check_aligned(const std::vector<int>& got, const std::vector<int>& ref) {
-    REQUIRE(got.size() == ref.size());
-    for (size_t i = 0; i < ref.size(); ++i)
-        CHECK(std::abs(got[i] - ref[i]) <= 1);
 }
 } // namespace
 
-TEST_CASE("grid: equal rate gives one shared step grid for any slot count") {
-    const auto ref = fire_samples(8, 48000);
-    REQUIRE(ref.size() >= 16);
-    for (int slots : {2, 4, 6, 12, 16, 24, 32})
-        check_aligned(fire_samples(slots, 48000), ref);
-}
-
-TEST_CASE("grid: SHUFFLE warps every even-slot lane identically") {
-    const auto ref = fire_samples(8, 48000, 0.7f);
-    REQUIRE(ref.size() >= 16);
-    for (int slots : {4, 6, 12, 16})
-        check_aligned(fire_samples(slots, 48000, 0.7f), ref);
-}
-
-TEST_CASE("grid: an external rate walk overrides the lane's own EVOLVE walk") {
-    const auto ref = fire_samples(8, 96000, 0.f, 0.f);
-
-    ModLane dut;
-    configure(dut, 8, 0.f, 0.9f);            // GROW: would walk _ev_rate +-20%
-    dut.set_ev_rate_external(true, 0.f);
-    std::vector<int> got;
-    for (int i = 0; i < 96000; ++i) {
-        dut.process();
-        if (dut.fired()) got.push_back(i);
-    }
-    check_aligned(got, ref);
-
-    // The lane still walks its own value; it is simply not the one used.
-    CHECK(dut.ev_rate() != 0.f);
-}
-
-TEST_CASE("grid: an even whole-slot kick keeps the lane on the grid") {
-    // SHUFFLE is on deliberately: the kick has to preserve both the position
-    // inside the step and the step parity the warp is keyed to. An even jump
-    // does; that is why SuperModulator::spot rounds to an even count.
-    ModLane ref, dut;
-    configure(ref, 8, 0.5f, 0.f);
-    configure(dut, 12, 0.5f, 0.f);
-
-    std::vector<int> ref_fires, dut_fires;
-    for (int i = 0; i < 96000; ++i) {
-        ref.process();
-        if (ref.fired()) ref_fires.push_back(i);
-        if (i == 30000) dut.kick_steps(4, 0.f);
-        dut.process();
-        if (dut.fired()) dut_fires.push_back(i);
-    }
-    // The jump itself fires one extra boundary -- that is the audible stumble.
-    // Every OTHER fire must still land on a reference boundary.
-    REQUIRE(ref_fires.size() >= 16);
-    REQUIRE(dut_fires.size() >= 16);
-    for (int f : dut_fires) {
-        if (f == 30000) continue;
-        bool on_ref = false;
-        for (int r : ref_fires)
-            if (std::abs(f - r) <= 1) { on_ref = true; break; }
-        CHECK(on_ref);
+TEST_CASE("follow: one deck step is one slot, whatever the cycle length") {
+    for (int slots : {2, 3, 4, 6, 8, 12, 16, 32}) {
+        ModLane l;
+        configure(l, slots);
+        int fires = 0;
+        for (int32_t s = 0; s < 200; ++s) {
+            l.follow(s, 0.f);
+            if (l.fired()) ++fires;
+        }
+        CHECK(fires == 200);          // exactly one boundary per deck step
     }
 }
 
-TEST_CASE("grid: a zero-slot kick is a no-op, not a rewind to the boundary") {
-    // Regression guard for the tempting wrong implementation: snapping to
-    // shuffle_phase_for_position(cur_step) drops the fraction inside the step
-    // and silently delays every later boundary by it.
-    ModLane ref, dut;
-    configure(ref, 8, 0.f, 0.f);
-    configure(dut, 8, 0.f, 0.f);
-
-    std::vector<int> ref_fires, dut_fires;
-    for (int i = 0; i < 96000; ++i) {
-        ref.process();
-        if (ref.fired()) ref_fires.push_back(i);
-        if (i == 30000) dut.kick_steps(0, 0.f);
-        dut.process();
-        if (dut.fired()) dut_fires.push_back(i);
+TEST_CASE("follow: the slot index is the deck count modulo the cycle") {
+    ModLane l;
+    configure(l, 6);
+    for (int32_t s = 0; s < 40; ++s) {
+        l.follow(s, 0.f);
+        CHECK(l.cur_step() == static_cast<int>(s % 6));
     }
-    check_aligned(dut_fires, ref_fires);
+}
+
+TEST_CASE("follow: repeat calls inside one deck step do not re-fire") {
+    ModLane l;
+    configure(l, 8);
+    l.follow(0, 0.f);
+    REQUIRE(l.fired());
+    for (float frac : {0.25f, 0.5f, 0.75f, 0.99f}) {
+        l.follow(0, frac);
+        CHECK_FALSE(l.fired());
+        CHECK(l.cur_step() == 0);
+    }
+    l.follow(1, 0.f);
+    CHECK(l.fired());
+}
+
+TEST_CASE("follow: a multi-step advance replays every slot in order") {
+    // The raster window normally holds at most one deck step, but COUPLE and
+    // DRIFT can push pitch_scale up. A skipped slot would drop a wrap event.
+    ModLane l;
+    configure(l, 4);
+    l.follow(0, 0.f);
+    std::vector<int> seen;
+    for (int32_t s = 3; s <= 15; s += 3) {          // three slots per call
+        l.follow(s, 0.f);
+        seen.push_back(l.cur_step());
+    }
+    // Landing slots after 3, 6, 9, 12, 15 deck steps in a 4-slot cycle.
+    CHECK(seen == std::vector<int>{3, 2, 1, 0, 3});
+}
+
+TEST_CASE("follow: wrapped() marks the cycle seam, once per cycle") {
+    ModLane l;
+    configure(l, 4);
+    for (int32_t s = 0; s < 13; ++s) {
+        l.follow(s, 0.f);
+        CHECK(l.wrapped() == (s % 4 == 0));
+    }
+}
+
+TEST_CASE("follow: a slot nudge offsets the lane and fires immediately") {
+    ModLane l;
+    configure(l, 8);
+    for (int32_t s = 0; s <= 4; ++s) l.follow(s, 0.f);
+    REQUIRE(l.cur_step() == 4);
+
+    l.nudge_slots(3, 0.f);
+    l.follow(4, 0.5f);                 // same deck step, mid-step
+    CHECK(l.fired());                  // the stumble is audible at once
+    CHECK(l.cur_step() == 7);
+
+    l.follow(5, 0.f);                  // the offset persists
+    CHECK(l.cur_step() == 0);
+}
+
+TEST_CASE("follow: a negative nudge does not stall the lane") {
+    ModLane l;
+    configure(l, 8);
+    for (int32_t s = 0; s <= 4; ++s) l.follow(s, 0.f);
+
+    l.nudge_slots(-3, 0.f);
+    l.follow(4, 0.5f);
+    CHECK(l.cur_step() == 1);
+    int fires = 0;
+    for (int32_t s = 5; s < 15; ++s) { l.follow(s, 0.f); if (l.fired()) ++fires; }
+    CHECK(fires == 10);                // still one boundary per deck step
+}
+
+TEST_CASE("follow: two lanes of different length never diverge") {
+    // The whole point of the design. An equal-rate implementation drifts about
+    // two samples per step here; a follower cannot, because the position is an
+    // integer modulo of one shared count.
+    ModLane a, b;
+    configure(a, 8);
+    configure(b, 16);
+    int fa = 0, fb = 0;
+    for (int32_t s = 0; s < 200000; ++s) {     // ~7 hours of 8-step bars
+        a.follow(s, 0.f);
+        b.follow(s, 0.f);
+        if (a.fired()) ++fa;
+        if (b.fired()) ++fb;
+    }
+    CHECK(fa == 200000);
+    CHECK(fb == 200000);
+    CHECK(a.cur_step() == static_cast<int>((200000 - 1) % 8));
+    CHECK(b.cur_step() == static_cast<int>((200000 - 1) % 16));
 }
 ```
 
 - [ ] **Step 2: Register the test file**
 
-In `CMakeLists.txt`, add directly after `tests/test_step_clock.cpp`:
+In `CMakeLists.txt`, inside `add_executable(spky_tests ...)`, add directly
+after `tests/test_step_clock.cpp`:
 
 ```cmake
-    tests/test_lane_grid.cpp
+    tests/test_lane_follow.cpp
 ```
 
 - [ ] **Step 3: Run the test to verify it fails**
@@ -375,8 +233,7 @@ In `CMakeLists.txt`, add directly after `tests/test_step_clock.cpp`:
 source env.sh && cmake -S . -B build && cmake --build build
 ```
 
-Expected: FAIL at compile time — `no member named 'set_ev_rate_external' in 'spky::ModLane'`
-and `no member named 'kick_steps'`.
+Expected: FAIL at compile time — `no member named 'follow' in 'spky::ModLane'`.
 
 - [ ] **Step 4: Add the public API in `engine/mod/lane.h`**
 
@@ -391,157 +248,203 @@ Directly after the existing `void kick(float dphase, float dshape);` in the
 `--- M4 center hooks ---` section, add:
 
 ```cpp
-    // STEP grid lock (spec 2026-07-25 mod-lane-step-grid-lock). In STEP the
-    // texture lanes must not walk their own EVOLVE rate -- an independent
-    // +-20% walk per lane is one of the six things that used to push them off
-    // the deck's step grid for good. While `on`, the phase advance uses `v`
-    // (the master lane's walk) instead of this lane's `_ev_rate`. The per-lane
-    // draw in _evolve_outgoing_pattern still happens and is discarded, which
-    // keeps _ev_phase and _ev_shape on their established RNG progression.
-    void  set_ev_rate_external(bool on, float v) {
-        _ev_rate_ext_on = on;
-        _ev_rate_ext = v;
-    }
-    float ev_rate() const { return _ev_rate; }
-    // SPOT in STEP: a phase jump of `n` whole slots. Unlike kick()'s raw
-    // phase addition this lands on a real boundary under SHUFFLE too, so the
-    // stumble stays on the grid.
-    void  kick_steps(int n, float dshape);
-```
-
-In the private section, next to `_ev_rate`, add:
-
-```cpp
-    // The rate offset the phase advance actually uses. Every advance path
-    // must read this, never _ev_rate directly -- process(), tick()'s dp
-    // derivations and step_samples() are a matched set here.
-    float _rate_walk() const { return _ev_rate_ext_on ? _ev_rate_ext : _ev_rate; }
-    bool  _ev_rate_ext_on = false;
-    float _ev_rate_ext    = 0.f;
-```
-
-- [ ] **Step 5: Route every advance path through `_rate_walk()`**
-
-In `engine/mod/lane.h`, `step_samples()` — replace `_ev_rate` with `_rate_walk()`:
-
-```cpp
-    float step_samples() const {
-        return _phase_inc > 0.f
-            ? 1.f / (_phase_inc * (1.f + _rate_walk()) * static_cast<float>(_steps))
-            : 0.f;
-    }
-```
-
-In `engine/mod/lane.cpp`, four sites:
-
-`process()` — `_phase += _phase_inc * (1.f + _ev_rate);` becomes
-
-```cpp
-    _phase += _phase_inc * (1.f + _rate_walk());
-```
-
-`tick()` — `window_dp[0] = _phase_inc * (1.f + _ev_rate);` becomes
-
-```cpp
-    window_dp[0] = _phase_inc * (1.f + _rate_walk());
-```
-
-`tick()` — `const float dp1 = _phase_inc * (1.f + _ev_rate);` becomes
-
-```cpp
-        const float dp1 = _phase_inc * (1.f + _rate_walk());
-```
-
-`tick()` — inside the wrap branch, the `window_dp` append becomes
-
-```cpp
-                window_dp[window_dp_count++] =
-                    _phase_inc * (1.f + _rate_walk());
-```
-
-Verify none are left:
-
-```bash
-grep -n "1.f + _ev_rate" engine/mod/lane.cpp engine/mod/lane.h
-```
-
-Expected: no output.
-
-- [ ] **Step 6: Reset the new state in `init()`**
-
-In `ModLane::init()` in `engine/mod/lane.cpp`, directly after the line
-`_ev_rate  = 0.f;`, add:
-
-```cpp
-    _ev_rate_ext_on = false;
-    _ev_rate_ext    = 0.f;
-```
-
-- [ ] **Step 7: Implement `kick_steps`**
-
-In `engine/mod/lane.cpp`, directly after the existing `ModLane::kick`
-definition, add:
-
-```cpp
-void ModLane::kick_steps(int n, float dshape) {
-    // Jump n whole slots while KEEPING the position inside the current step.
-    // Dropping that fraction would look like a clean landing on a boundary and
-    // is in fact the one thing this must not do: the lane would then need a
-    // full step to reach its next boundary while the deck needs only what is
-    // left of the current one, so the two would come out `frac` apart and stay
-    // that way. Preserving it is what makes the kick grid-neutral.
+    // --- STEP follower mode (spec 2026-07-25 mod-lane-step-grid-lock) ---
     //
-    // The position is expressed in step units and mapped back through the same
-    // warp the clock walker uses, so a shuffled lane lands on a shuffled
-    // position rather than a straight one. _cur_step is deliberately left
-    // alone -- both process() and tick() open with a "phase says a different
-    // step than _cur_step remembers" check, which fires the new step for us
-    // (see the comment in tick()). That one fire at the moment of the kick is
-    // the audible stumble; it is the only boundary SPOT places off the grid.
-    const int   steps = _steps < 1 ? 1 : _steps;
-    const int   cur   = _cur_step < 0 ? 0 : _cur_step;
-    const float frac  = shuffle_step_fraction(
-        _phase, cur, steps, _shuffle_latched);
-    _phase = shuffle_phase_for_position(
-        static_cast<float>(cur + n) + frac, steps, _shuffle_latched);
-    _kick_shape += dshape;
+    // In STEP a texture lane owns no clock. Instead of integrating a phase it
+    // is told where the deck is: `deck_step` is the cumulative count of steps
+    // the master lane has entered, `frac` where the deck currently sits inside
+    // its step. This lane's position is (deck_step + offset) mod _steps plus
+    // that fraction.
+    //
+    // That is not a cheaper way to stay aligned, it is the only exact one.
+    // Five float phasors at the same nominal rate round differently depending
+    // on how large their phase gets, so lanes with different cycle lengths
+    // drift apart -- measured at ~2 samples per 3000-sample step between an
+    // 8-slot and a 16-slot lane, a full step of slip in about 90 seconds. One
+    // integer count and one shared fraction cannot do that.
+    //
+    // Returns the post-range output, exactly like tick() does for FLOW.
+    float follow(int32_t deck_step, float frac);
+    // SPOT in STEP: shift this lane by `n` whole slots. The offset persists
+    // and is exact; the new slot fires at the next follow() call, which is the
+    // audible stumble. No rounding or parity care is needed -- boundary times
+    // come from the deck, never from this lane's own warp.
+    void  nudge_slots(int n, float dshape);
+```
+
+In the private section, next to the other M4 center-hook state, add:
+
+```cpp
+    // Follower state. _follow_pos is the last absolute position this lane was
+    // advanced to (deck count + offset), _follow_armed false until the first
+    // follow() call after init/reset/STEP entry so that entering STEP does not
+    // replay history. _follow_jumped makes a nudge audible on the next call
+    // even when no deck step has elapsed.
+    int32_t _follow_pos    = 0;
+    int32_t _follow_offset = 0;
+    bool    _follow_armed  = false;
+    bool    _follow_jumped = false;
+```
+
+- [ ] **Step 5: Implement the follower in `engine/mod/lane.cpp`**
+
+Add near the top of the file, below the existing anonymous helpers:
+
+```cpp
+// Positive modulo: _follow_offset can be negative after a backwards SPOT
+// nudge, and C++'s % keeps the sign of the dividend.
+static int slot_of(int32_t pos, int slots) {
+    int m = static_cast<int>(pos % slots);
+    if (m < 0) m += slots;
+    return m;
 }
 ```
 
-Note for the caller (Task 5): under SHUFFLE the warp is applied to odd step
-indices, so a jump of an odd number of slots flips the lane's swing parity
-against the deck's and offsets it by up to a third of a step. `kick_steps`
-itself does not round — `SuperModulator::spot` quantizes to an even count.
+Add, directly after the existing `ModLane::kick` definition:
 
-- [ ] **Step 8: Run the tests to verify they pass**
+```cpp
+void ModLane::nudge_slots(int n, float dshape) {
+    // Move the offset AND the remembered position by the same amount: the
+    // jump must not look like elapsed time, or the next follow() would replay
+    // n slots (or, for a negative n, stall until the deck caught back up).
+    _follow_offset += n;
+    _follow_pos    += n;
+    _follow_jumped  = true;
+    _kick_shape    += dshape;
+}
 
-```bash
-source env.sh && cmake --build build && ./build/spky_tests.exe -tc="grid:*"
+float ModLane::follow(int32_t deck_step, float frac) {
+    _fired   = false;
+    _wrapped = false;
+    _apply_preroll_work();
+    _kick_shape *= _kick_coef_tick;
+    if (_settle_ctr > 0) {
+        _settle_ctr = _settle_ctr > kTickInterval ? _settle_ctr - kTickInterval : 0;
+        _ev_phase   *= _settle_coef_tick;
+        _ev_shape   *= _settle_coef_tick;
+        _ev_rate    *= _settle_coef_tick;
+        _kick_shape *= _settle_coef_tick;
+    }
+
+    const int     slots = _steps < 1 ? 1 : _steps;
+    const int32_t pos   = deck_step + _follow_offset;
+
+    // First call after init/reset/STEP entry: land on the current position
+    // without replaying every step the deck has taken since it started.
+    if (!_follow_armed) {
+        _follow_armed = true;
+        _follow_pos   = pos - 1;
+    }
+
+    int32_t elapsed = pos - _follow_pos;
+    if (elapsed < 0) elapsed = 0;              // only nudge_slots moves backwards
+    // A jump this large means the caller skipped a long stretch (a stopped
+    // transport, a mode switch). Replaying it would burn RNG draws for cycles
+    // nobody heard; land on the current slot instead. Same spirit as tick()'s
+    // edge-walk guard.
+    const int32_t kMaxReplay = 2 * kSeqSlots;
+    if (elapsed > kMaxReplay) {
+        _follow_pos = pos - 1;
+        elapsed     = 1;
+    }
+
+    bool entered = false;
+    for (int32_t k = 1; k <= elapsed; ++k) {
+        const int slot = slot_of(_follow_pos + k, slots);
+        // Boundary targets are evaluated at the exact grid phase, the same
+        // sampling tick() documents for its edge walk.
+        _phase = shuffle_phase_for_position(
+            static_cast<float>(slot), slots, _shuffle_latched);
+        if (slot == 0) {
+            _wrapped = true;
+            _wrap_events();          // before the new cycle's step 0, as in tick()
+        }
+        _enter_step(slot);
+        entered = true;
+    }
+    _follow_pos = pos;
+
+    const int here = slot_of(pos, slots);
+    if (_follow_jumped) {
+        _follow_jumped = false;
+        if (!entered) {
+            _phase = shuffle_phase_for_position(
+                static_cast<float>(here), slots, _shuffle_latched);
+            _enter_step(here);
+        }
+    }
+
+    // Park at the live position so phase(), phase_eff() and any external
+    // reader see where the lane actually is inside its slot.
+    _phase = shuffle_phase_for_position(
+        static_cast<float>(here) + frac, slots, _shuffle_latched);
+
+    float smoothed = _slew_tick.process(_target);
+    return apply_range(smoothed, _range);
+}
 ```
 
-Expected: `[doctest] Status: SUCCESS!` with 5 test cases passing.
+- [ ] **Step 6: Clear the follower state in `init()`, `reset()` and STEP entry**
 
-- [ ] **Step 9: Run the whole suite**
+In `ModLane::init()`, directly after the line `_ev_rate  = 0.f;`, add:
+
+```cpp
+    _follow_pos    = 0;
+    _follow_offset = 0;
+    _follow_armed  = false;
+    _follow_jumped = false;
+```
+
+In `ModLane::reset()`, directly after `_cur_step = -1;`, add:
+
+```cpp
+    // RST is the resync gesture: it clears the SPOT offset too, so the lane
+    // comes back to the deck's own slot 0 rather than to a stumbled one.
+    _follow_pos    = 0;
+    _follow_offset = 0;
+    _follow_armed  = false;
+    _follow_jumped = false;
+```
+
+In `ModLane::set_step()`, inside the existing `if (entering_step)` handling —
+directly after the line `if (entering_step) { _note_age = 0; _note_hold = 0; }`
+— add:
+
+```cpp
+    // Entering STEP disarms the follower so its first follow() call lands on
+    // the deck's current position instead of replaying the whole count.
+    if (entering_step) { _follow_armed = false; _follow_jumped = false; }
+```
+
+- [ ] **Step 7: Run the tests to verify they pass**
+
+```bash
+source env.sh && cmake --build build && ./build/spky_tests.exe -tc="follow:*"
+```
+
+Expected: `[doctest] Status: SUCCESS!` with 8 test cases passing.
+
+- [ ] **Step 8: Run the whole suite**
 
 ```bash
 ctest --test-dir build --output-on-failure
 ```
 
-Expected: all tests pass. `test_lane_tick`'s equivalence cases in particular
-must stay green — both `process()` and `tick()` were touched.
+Expected: 4/4. Nothing calls `follow()` yet, so every existing suite —
+`test_lane_tick` in particular — must be untouched.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add engine/mod/lane.h engine/mod/lane.cpp tests/test_lane_grid.cpp CMakeLists.txt
-git commit -m "feat(mod): give ModLane an external rate walk and a whole-slot kick
+git add engine/mod/lane.h engine/mod/lane.cpp tests/test_lane_follow.cpp CMakeLists.txt
+git commit -m "feat(mod): give ModLane a follower mode
 
 Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 ```
 
 ---
 
-### Task 3: SuperModulator — one clock, per-lane slot counts
+### Task 3: SuperModulator — deck step count and follow dispatch
 
 **Files:**
 - Modify: `engine/mod/super_modulator.h`
@@ -550,12 +453,12 @@ Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 - Modify: `CMakeLists.txt`
 
 **Interfaces:**
-- Consumes: `spky::lane_slots` (Task 1), `ModLane::rate_hz_for_test` (Task 2).
+- Consumes: `spky::lane_slots` (Task 1), `ModLane::follow`,
+  `ModLane::rate_hz_for_test` (Task 2).
 - Produces, on `spky::SuperModulator`:
-  - `bool step_mode() const`
-  - `int  deck_steps() const`
+  - `bool step_mode() const`, `int deck_steps() const`
   - under `SPKY_TESTING`: `float lane_rate_hz_for_test(int i) const`,
-    `int lane_slots_for_test(int i) const`.
+    `int lane_slots_for_test(int i) const`, `int32_t deck_step_for_test() const`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -569,16 +472,11 @@ Create `tests/test_step_grid_lock.cpp`:
 #include "mod/divisions.h"
 using namespace spky;
 
-TEST_CASE("steplock: STEP gives every lane one rate and its own slot count") {
+TEST_CASE("steplock: STEP gives each lane its own slot count") {
     SuperModulator m;
     m.init(48000.f, 7u);
     m.set_rate(0.5f);
     m.set_step(true, 8);
-
-    const float r = m.lane_rate_hz_for_test(LANE_PITCH);
-    CHECK(r > 0.f);
-    for (int i = 0; i < LANE_COUNT; ++i)
-        CHECK(m.lane_rate_hz_for_test(i) == doctest::Approx(r));
 
     CHECK(m.lane_slots_for_test(LANE_SOURCE) ==  4);
     CHECK(m.lane_slots_for_test(LANE_LEVEL)  ==  6);
@@ -596,8 +494,7 @@ TEST_CASE("steplock: TIDE moves slot counts in STEP, not rates") {
 
     m.set_tide(0.25f);                       // ladder rung x1/2
     REQUIRE(kTideRatios[tide_index(0.25f)] == doctest::Approx(0.5f));
-    for (int i = 0; i < LANE_COUNT; ++i)
-        CHECK(m.lane_rate_hz_for_test(i) == doctest::Approx(r));
+    CHECK(m.lane_rate_hz_for_test(LANE_PITCH) == doctest::Approx(r));
     CHECK(m.lane_slots_for_test(LANE_SOURCE) ==  8);
     CHECK(m.lane_slots_for_test(LANE_SIZE)   == 32);
     CHECK(m.lane_slots_for_test(LANE_MOTION) == 24);
@@ -605,16 +502,22 @@ TEST_CASE("steplock: TIDE moves slot counts in STEP, not rates") {
     CHECK(m.lane_slots_for_test(LANE_PITCH)  ==  8);   // the phrase, always
 }
 
-TEST_CASE("steplock: STEP ignores DRIFT's separate mod_scale") {
+TEST_CASE("steplock: the deck step count follows the pitch lane") {
     SuperModulator m;
     m.init(48000.f, 7u);
     m.set_rate(0.5f);
     m.set_step(true, 8);
-    m.set_rate_scale(1.f, 1.6f);             // COUPLE < max under DRIFT
 
-    const float r = m.lane_rate_hz_for_test(LANE_PITCH);
-    for (int i = 0; i < LANE_COUNT; ++i)
-        CHECK(m.lane_rate_hz_for_test(i) == doctest::Approx(r));
+    int last = m.pitch_cur_step();
+    int changes = 0;
+    for (int i = 0; i < 200000; ++i) {
+        m.process();
+        if (m.pitch_cur_step() != last) { last = m.pitch_cur_step(); ++changes; }
+    }
+    REQUIRE(changes > 8);
+    // The count starts at 0 on the first step, so it trails the change count
+    // by exactly one.
+    CHECK(m.deck_step_for_test() == changes - 1);
 }
 
 TEST_CASE("steplock: FLOW keeps the old ratios, TIDE and mod_scale") {
@@ -632,6 +535,19 @@ TEST_CASE("steplock: FLOW keeps the old ratios, TIDE and mod_scale") {
     for (int i = 0; i < LANE_COUNT; ++i)
         CHECK(m.lane_slots_for_test(i) == 8);          // no per-lane slots
 }
+
+TEST_CASE("steplock: FLOW lane ratios are unchanged on the phase") {
+    SuperModulator m;
+    m.init(48000.f, 42u);
+    m.set_rate(0.3f);
+    m.set_step(false, 8);
+    for (int i = 0; i < ModLane::kTickInterval; ++i) m.process();
+    const float pitch = m.lane_phase(LANE_PITCH);
+    CHECK(m.lane_phase(LANE_SOURCE) == doctest::Approx(pitch * 2.00f));
+    CHECK(m.lane_phase(LANE_SIZE)   == doctest::Approx(pitch * 0.50f));
+    CHECK(m.lane_phase(LANE_MOTION) == doctest::Approx(pitch * 0.75f));
+    CHECK(m.lane_phase(LANE_LEVEL)  == doctest::Approx(pitch * 1.50f));
+}
 ```
 
 - [ ] **Step 2: Register the test file**
@@ -648,7 +564,7 @@ In `CMakeLists.txt`, add directly after `tests/test_super_modulator.cpp`:
 source env.sh && cmake -S . -B build && cmake --build build
 ```
 
-Expected: FAIL at compile time — `no member named 'lane_rate_hz_for_test' in 'spky::SuperModulator'`.
+Expected: FAIL at compile time — `no member named 'lane_slots_for_test' in 'spky::SuperModulator'`.
 
 - [ ] **Step 4: Extend `engine/mod/super_modulator.h`**
 
@@ -668,8 +584,9 @@ In the public section, directly after `void set_step(bool on, int steps);`, add:
 Inside the existing `#ifdef SPKY_TESTING` block, add:
 
 ```cpp
-    float lane_rate_hz_for_test(int i) const { return _lanes[i].rate_hz_for_test(); }
-    int   lane_slots_for_test(int i)   const { return _lanes[i].steps(); }
+    float   lane_rate_hz_for_test(int i) const { return _lanes[i].rate_hz_for_test(); }
+    int     lane_slots_for_test(int i)   const { return _lanes[i].steps(); }
+    int32_t deck_step_for_test()         const { return _deck_step; }
 ```
 
 In the private declarations, next to `void _update_tide();`, add:
@@ -681,12 +598,19 @@ In the private declarations, next to `void _update_tide();`, add:
 In the private data, next to `bool _synced = false;`, add:
 
 ```cpp
-    bool  _step_on    = false;   // the deck's STEP flag; drives the grid lock
-    int   _deck_steps = 8;       // the phrase length; PITCH's slot count
-    float _shuffle    = 0.f;     // latched target, mirrored from set_shuffle
+    bool    _step_on    = false;   // the deck's STEP flag; drives the grid lock
+    int     _deck_steps = 8;       // the phrase length; PITCH's slot count
+    float   _shuffle    = 0.f;     // latched target, mirrored from set_shuffle
+    // The deck's own clock, in whole steps. This integer is what makes the
+    // grid exact: every follower derives its slot from it, so no float
+    // rounding can put two lanes on different boundaries. int32_t is ample --
+    // a few hundred steps per second overflows in centuries -- and this engine
+    // ships on a Cortex-M7, where 64-bit arithmetic is not free.
+    int32_t _deck_step       = 0;
+    int     _last_pitch_step = -1;
 ```
 
-- [ ] **Step 5: Rewrite the rate and step wiring in `engine/mod/super_modulator.cpp`**
+- [ ] **Step 5: Wire the slot counts and the rates in `engine/mod/super_modulator.cpp`**
 
 Replace `SuperModulator::_apply_rate` with:
 
@@ -695,14 +619,11 @@ void SuperModulator::_apply_rate() {
     _master_hz = _base_hz * _pitch_scale;
     for (int i = 0; i < LANE_COUNT; ++i) {
         if (_step_on) {
-            // STEP: one clock for the whole deck (spec 2026-07-25
-            // mod-lane-step-grid-lock). kLaneRatio, TIDE and _mod_scale all
-            // drop out here -- the first two reappear as slot counts in
-            // _apply_steps(), the third is deliberately discarded, because a
-            // texture rate that differs from PITCH's is exactly what used to
-            // walk the lanes off the grid and never bring them back. The step
-            // clock is normalized (_phase_inc = rate/sr * 8/steps), so equal
-            // rate_hz means one shared grid whatever each cycle's length is.
+            // STEP: the PITCH lane is the deck's only clock. The texture lanes
+            // are followers and consume no rate at all -- kLaneRatio and TIDE
+            // reappear as slot counts in _apply_steps(), and _mod_scale has
+            // nothing left to scale. They are still handed the master rate so
+            // nothing reads a stale value across a mode switch.
             _lanes[i].set_rate_hz(_master_hz);
         } else {
             const float s = (i == LANE_PITCH) ? _pitch_scale
@@ -735,8 +656,10 @@ Replace `SuperModulator::set_step` with:
 
 ```cpp
 void SuperModulator::set_step(bool on, int n) {
+    const bool entering = on && !_step_on;
     _step_on    = on;
     _deck_steps = n < 1 ? 1 : n;
+    if (entering) { _deck_step = 0; _last_pitch_step = -1; }
     _apply_steps();
     _apply_rate();
 }
@@ -751,8 +674,7 @@ void SuperModulator::set_shuffle(float amount) {
 }
 ```
 
-Extend `SuperModulator::_update_tide` so a TIDE turn also re-derives the slot
-counts:
+Extend `SuperModulator::_update_tide` so a TIDE turn re-derives the slot counts:
 
 ```cpp
 void SuperModulator::_update_tide() {
@@ -763,219 +685,53 @@ void SuperModulator::_update_tide() {
 }
 ```
 
-Note that `set_synced()` already calls `_update_tide()` followed by
-`_update_rate()`, so the synced switch picks the slot counts up for free.
+`set_synced()` already calls `_update_tide()` followed by `_update_rate()`, so
+the synced switch picks the slot counts up for free.
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [ ] **Step 6: Count the deck's steps and dispatch follow in `process()`**
 
-```bash
-source env.sh && cmake --build build && ./build/spky_tests.exe -tc="steplock:*"
-```
-
-Expected: `[doctest] Status: SUCCESS!` with 4 test cases passing.
-
-- [ ] **Step 7: Run the whole suite**
-
-```bash
-ctest --test-dir build --output-on-failure
-```
-
-Expected: all tests pass, including `super: lane rate ratios (x2, x1/2, x1, x3/4, x3/2)`
-in `tests/test_super_modulator.cpp` — that case runs in FLOW and must be
-untouched by this change. If it fails, the FLOW branch of `_apply_rate` was
-altered; restore it verbatim.
-
-- [ ] **Step 8: Commit**
-
-```bash
-git add engine/mod/super_modulator.h engine/mod/super_modulator.cpp \
-        tests/test_step_grid_lock.cpp CMakeLists.txt
-git commit -m "feat(mod): run every lane on the deck clock in STEP
-
-Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
-```
-
----
-
-### Task 4: Deck-wide STEP-entry snap
-
-**Files:**
-- Modify: `engine/mod/super_modulator.h`
-- Modify: `engine/center/center.cpp:263-283` (the `_snap_phase` body)
-- Modify: `tests/test_lane.cpp:162-181`
-- Modify: `tests/test_step_grid_lock.cpp`
-
-**Interfaces:**
-- Consumes: `_step_on`, `_deck_steps`, `_shuffle` (Task 3).
-- Produces: `void SuperModulator::snap_deck_phase(float ph)` — replaces
-  `snap_pitch_phase(float)`, which is removed. In FLOW it behaves exactly as
-  `snap_pitch_phase` did; in STEP it additionally places every texture lane on
-  the same deck boundary.
-
-- [ ] **Step 1: Write the failing test**
-
-Append to `tests/test_step_grid_lock.cpp`:
+In `SuperModulator::process()`, directly after the line
+`_out[LANE_PITCH] = _lanes[LANE_PITCH].process();` insert:
 
 ```cpp
-TEST_CASE("steplock: STEP entry puts every lane on the same deck boundary") {
-    SuperModulator m;
-    m.init(48000.f, 7u);
-    m.set_rate(0.5f);
-    m.set_step(false, 8);
-    for (int i = 0; i < 5000; ++i) m.process();   // let the lanes de-phase
-
-    m.set_step(true, 8);
-    m.snap_deck_phase(0.f);
-
-    // Phase 0 is slot 0 for every slot count, so this is the assertion --
-    // do not try to read it back through lane_fired(): the texture lanes only
-    // report at their 96-sample raster edge, which after 5000 samples is 88
-    // process() calls away.
-    for (int i = 0; i < LANE_COUNT; ++i)
-        CHECK(m.lane_phase(i) == doctest::Approx(0.f).epsilon(1e-6));
-}
-
-TEST_CASE("steplock: a mid-phrase snap folds into each lane's own cycle") {
-    SuperModulator m;
-    m.init(48000.f, 7u);
-    m.set_rate(0.5f);
-    m.set_step(true, 8);
-
-    m.snap_deck_phase(0.25f);                     // deck step 2 of 8, frac 0
-
-    // Step position 2 in a 4-slot lane is phase 2/4; in a 12-slot lane 2/12.
-    CHECK(m.lane_phase(LANE_PITCH)  == doctest::Approx(0.25f).epsilon(1e-6));
-    CHECK(m.lane_phase(LANE_SOURCE) == doctest::Approx(0.5f).epsilon(1e-6));
-    CHECK(m.lane_phase(LANE_SIZE)   == doctest::Approx(2.f / 16.f).epsilon(1e-6));
-    CHECK(m.lane_phase(LANE_MOTION) == doctest::Approx(2.f / 12.f).epsilon(1e-6));
-    CHECK(m.lane_phase(LANE_LEVEL)  == doctest::Approx(2.f / 6.f).epsilon(1e-6));
-}
-```
-
-- [ ] **Step 2: Run the test to verify it fails**
-
-```bash
-source env.sh && cmake --build build
-```
-
-Expected: FAIL at compile time — `no member named 'snap_deck_phase' in 'spky::SuperModulator'`.
-
-- [ ] **Step 3: Replace `snap_pitch_phase` in `engine/mod/super_modulator.h`**
-
-Replace the whole `snap_pitch_phase` member — its long German comment block
-included — with:
-
-```cpp
-    // STEP-Einstiegs-Snap (spec 2026-07-23 sampler-performance-fixes, in STEP
-    // erweitert durch spec 2026-07-25 mod-lane-step-grid-lock). Bewusst nicht
-    // reset_phases: das ist die RST-Geste, die beide Decks auf Phase 0 wirft.
-    //
-    // In FLOW setzt das hier weiterhin NUR die PITCH-Lane -- ein Sprung in
-    // freilaufenden Texturlanes waere ein hoerbarer Ruck in Filter und Pan,
-    // ohne dass er einem Raster nuetzt, das es in FLOW gar nicht gibt.
-    //
-    // In STEP teilen sich alle fuenf Lanes den Step-Clock des Decks, und dann
-    // ist genau das Gegenteil richtig: eine Texturlane, die ihre alte Phase
-    // behaelt, sitzt fuer immer neben dem Raster. Der Snap nimmt deshalb die
-    // gebrochene Step-Position der Master-Lane und faltet sie in die eigene
-    // Slot-Zahl jeder Texturlane. Der Ruck bleibt, er wird vom vorhandenen
-    // SMOOTH-Slew abgefangen und liest sich in einem rhythmischen Deck als
-    // Akzent.
-    //
-    // Der Onset-Gap-Ring wird mitgenullt, dieselbe Kopplung, auf der
-    // reset_phases oben besteht: nach einem Phasensprung misst der erste
-    // Onset sonst einen Abstand, den es nie gab, und dieser Rhythmus-Blick
-    // steuert ueber Instrument die FX-Abgriffe des ANDEREN Decks. Das Nullen
-    // hier setzt _rhythm.valid auf false (super_modulator.cpp, _onsets >= 3),
-    // und derive_offsets (taps.cpp) liefert fuer ein ungueltiges RhythmView
-    // kMuted auf beiden Taps -- das andere Deck verliert also seine beiden
-    // Tape-Abgriffe, bis das snappende Deck erneut drei Onsets gezaehlt hat.
-    // Das ist kein neuer Nebeneffekt: reset_phases loescht denselben Ring auf
-    // dieselbe Weise, also traegt RST bereits denselben Preis.
-    void snap_deck_phase(float ph);
-```
-
-- [ ] **Step 4: Implement it in `engine/mod/super_modulator.cpp`**
-
-Add, directly after `SuperModulator::set_step`:
-
-```cpp
-void SuperModulator::snap_deck_phase(float ph) {
-    _lanes[LANE_PITCH].reset(ph);
+    // The deck's step clock. Counted from the master lane's own step index
+    // rather than from lane_fired(), because a gated melodic step still
+    // advances the grid -- the followers must move even when the melody rests.
     if (_step_on) {
-        // The deck's fractional step position is the one quantity every lane
-        // shares. Folding it into each lane's slot count (fmod is inside
-        // shuffle_phase_for_position) puts them all on the same boundary,
-        // each at its own point in its own cycle.
-        const int   deck = _deck_steps < 1 ? 1 : _deck_steps;
-        const int   step = shuffle_step_index(ph, deck, _shuffle);
-        const float frac = shuffle_step_fraction(ph, step, deck, _shuffle);
-        const float pos  = static_cast<float>(step) + frac;
-        for (int i = 0; i < LANE_COUNT; ++i) {
-            if (i == LANE_PITCH) continue;
-            _lanes[i].reset(shuffle_phase_for_position(
-                pos, _lanes[i].steps(), _shuffle));
+        const int cs = _lanes[LANE_PITCH].cur_step();
+        if (cs != _last_pitch_step) {
+            if (_last_pitch_step >= 0) ++_deck_step;
+            _last_pitch_step = cs;
         }
     }
-    _since_onset = 0;
-    _onsets = 0;
-    _gap[0] = _gap[1] = 0;
-    _rhythm = RhythmView{};
-}
 ```
 
-- [ ] **Step 5: Update the one production call site**
-
-In `engine/center/center.cpp`, inside `Center::_snap_phase`, change
+Then replace the texture-lane tick block at the end of `process()` with:
 
 ```cpp
-    m.snap_pitch_phase(tgt);
-```
-
-to
-
-```cpp
-    m.snap_deck_phase(tgt);
-```
-
-Confirm there are no others:
-
-```bash
-grep -rn "snap_pitch_phase" engine/ host/vcv/src/ host/render/ tests/
-```
-
-Expected: only `tests/test_lane.cpp` (handled in the next step).
-
-- [ ] **Step 6: Update the existing FLOW snap test**
-
-In `tests/test_lane.cpp`, replace the comment and case name at lines 162-175.
-The behaviour under test is unchanged — in FLOW the snap still moves PITCH
-alone — only the method name and the reason change:
-
-```cpp
-// snap_deck_phase setzt in FLOW die PITCH-Lane und NUR sie -- die vier
-// Texturlanes laufen weiter, sonst waere es die RST-Geste (reset_phases)
-// unter anderem Namen. In FLOW gibt es kein Raster, auf das ein Sprung sie
-// bringen koennte; der STEP-Fall steht in tests/test_step_grid_lock.cpp.
-// Der Onset-Gap-Ring wird mitgenullt: nach einem Phasensprung waere der
-// naechste gemessene Abstand einer, den es nie gab, und dieser
-// Rhythmus-Blick steuert die FX-Abgriffe des ANDEREN Decks.
-TEST_CASE("mod: snap_deck_phase moves the pitch lane alone in FLOW") {
-```
-
-and the call at line 175:
-
-```cpp
-    m.snap_deck_phase(0.25f);
+    if (_tick_ctr == 0) {
+        _tick_ctr = ModLane::kTickInterval;
+        const int   deck = _deck_steps < 1 ? 1 : _deck_steps;
+        const int   ps   = _lanes[LANE_PITCH].cur_step();
+        const float frac = ps < 0 ? 0.f
+            : shuffle_step_fraction(
+                  _lanes[LANE_PITCH].phase(), ps, deck, _shuffle);
+        for (int i = 0; i < LANE_COUNT; ++i) {
+            if (i == LANE_PITCH) continue;
+            _out[i] = _step_on ? _lanes[i].follow(_deck_step, frac)
+                               : _lanes[i].tick();
+        }
+    }
+    --_tick_ctr;
 ```
 
 - [ ] **Step 7: Run the tests to verify they pass**
 
 ```bash
-source env.sh && cmake --build build && ./build/spky_tests.exe -tc="steplock:*,mod: snap_deck_phase*"
+source env.sh && cmake --build build && ./build/spky_tests.exe -tc="steplock:*"
 ```
 
-Expected: `[doctest] Status: SUCCESS!` with 7 test cases passing.
+Expected: `[doctest] Status: SUCCESS!` with 5 test cases passing.
 
 - [ ] **Step 8: Run the whole suite**
 
@@ -983,54 +739,56 @@ Expected: `[doctest] Status: SUCCESS!` with 7 test cases passing.
 ctest --test-dir build --output-on-failure
 ```
 
-Expected: all tests pass, including `tests/test_instrument.cpp`'s onset-ring
-cases, which depend on the snap clearing the ring.
+Expected: 4/4. FLOW is untouched, so `test_super_modulator`, `test_mod_tide`,
+`test_center` and the render gates must all stay green. If `ctrl_identity`
+moves, stop and report it — the baseline was refreshed in `2278a53` and any
+movement from here is caused by this change.
 
 - [ ] **Step 9: Commit**
 
 ```bash
 git add engine/mod/super_modulator.h engine/mod/super_modulator.cpp \
-        engine/center/center.cpp tests/test_lane.cpp tests/test_step_grid_lock.cpp
-git commit -m "feat(mod): snap the whole deck onto the grid at STEP entry
+        tests/test_step_grid_lock.cpp CMakeLists.txt
+git commit -m "feat(mod): follow the deck step count in STEP
 
 Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 ```
 
 ---
 
-### Task 5: EVOLVE inheritance and quantized SPOT
+### Task 4: SPOT on the grid, and the invariant that proves it
 
 **Files:**
-- Modify: `engine/mod/super_modulator.cpp` (`process`, `spot`)
+- Modify: `engine/mod/super_modulator.cpp` (`spot`)
 - Modify: `tests/test_step_grid_lock.cpp`
 
 **Interfaces:**
-- Consumes: `ModLane::set_ev_rate_external`, `ModLane::ev_rate`,
-  `ModLane::kick_steps` (Task 2); `_step_on` (Task 3).
+- Consumes: `ModLane::nudge_slots` (Task 2), `_step_on` (Task 3).
 - Produces: no new API.
 
 - [ ] **Step 1: Write the failing test**
 
 Append to `tests/test_step_grid_lock.cpp`:
 
-`Rng` needs no new include — `super_modulator.h` pulls in `mod/rng.h` through
-`mod/lane.h`.
-
 ```cpp
 namespace {
-// The texture lanes advance on the 96-sample raster, so a boundary is reported
-// at the tick that covers it, never at the boundary sample itself. A tick at
-// sample f advances the lane across [f, f + kTickInterval), so the master's
-// own step for the same boundary is reported at some s in [f, f + 96).
-constexpr int kTick = ModLane::kTickInterval;
-
-struct GridTrace {
-    std::vector<int> deck_step;
-    std::vector<int> fire[LANE_COUNT];
-    int spot_sample = -1;
+// In follower mode every deck step gives every texture lane exactly one
+// boundary. So "on the grid" needs no sample arithmetic and no tolerance at
+// all: the fire counts simply have to match the deck's step count. That
+// equality is what an equal-rate design could not hold -- it drifted about two
+// samples per step and lost a whole one every 90 seconds.
+//
+// A boundary is reported at the raster edge that covers it, and fired()
+// latches until the next follow(), so counting at raster edges counts each
+// boundary exactly once as long as a step is never shorter than the raster.
+// At the fastest panel rate a step is ~200 samples against a 96-sample raster.
+struct LockResult {
+    int   deck_steps = 0;
+    int   fires[LANE_COUNT] = {0, 0, 0, 0, 0};
+    float end_phase[LANE_COUNT] = {0.f, 0.f, 0.f, 0.f, 0.f};
 };
 
-GridTrace run_deck(float shape, bool chaos, int samples) {
+LockResult run_locked(float shape, bool chaos, int samples, int spot_at = -1) {
     SuperModulator m;
     m.init(48000.f, 99u);
     m.set_rate(0.45f);
@@ -1039,89 +797,83 @@ GridTrace run_deck(float shape, bool chaos, int samples) {
     m.set_smooth(0.f);
     m.set_tide(0.25f);                       // off-centre ladder rung
     if (chaos) {
-        m.set_variation(0.8f);               // EVOLVE rate walk per lane
+        m.set_variation(0.8f);               // EVOLVE walks the master rate
         m.set_rate_scale(1.f, 1.6f);         // DRIFT: mod_scale != pitch_scale
         m.set_shuffle(0.6f);
     }
     Rng spot_rng;
     spot_rng.seed(5u);
 
-    GridTrace t;
-    int last_step = m.pitch_cur_step();
+    LockResult r;
+    int last = m.pitch_cur_step();
     for (int i = 0; i < samples; ++i) {
-        if (chaos && i == samples / 3) { m.spot(spot_rng); t.spot_sample = i; }
+        if (i == spot_at) m.spot(spot_rng);
         m.process();
-        if (m.pitch_cur_step() != last_step) {
-            last_step = m.pitch_cur_step();
-            t.deck_step.push_back(i);
-        }
-        // fired() latches for the whole control interval, so only the raster
-        // edge itself carries a fresh verdict.
-        if (i % kTick == 0)
+        if (m.pitch_cur_step() != last) { last = m.pitch_cur_step(); ++r.deck_steps; }
+        if (i % ModLane::kTickInterval == 0)
             for (int l = 0; l < LANE_COUNT; ++l)
-                if (l != LANE_PITCH && m.lane_fired(l)) t.fire[l].push_back(i);
+                if (l != LANE_PITCH && m.lane_fired(l)) ++r.fires[l];
     }
-    return t;
-}
-
-bool on_grid(const GridTrace& t) {
-    for (int l = 0; l < LANE_COUNT; ++l) {
-        if (l == LANE_PITCH) continue;
-        for (int f : t.fire[l]) {
-            // SPOT's jump fires one boundary at the moment of the kick. That
-            // is the stumble itself, not drift -- skip the raster edge that
-            // reports it, and demand the grid everywhere else.
-            if (t.spot_sample >= 0 &&
-                f >= t.spot_sample && f - t.spot_sample <= kTick) continue;
-            bool ok = false;
-            for (int s : t.deck_step)
-                if (s >= f && s - f < kTick) { ok = true; break; }
-            if (!ok) return false;
-        }
-    }
-    return true;
+    for (int l = 0; l < LANE_COUNT; ++l) r.end_phase[l] = m.lane_phase(l);
+    return r;
 }
 } // namespace
 
-TEST_CASE("steplock: the grid survives EVOLVE, DRIFT, TIDE, SHUFFLE and SPOT") {
-    const GridTrace t = run_deck(0.5f, true, 240000);
-    REQUIRE(t.deck_step.size() >= 8);
+TEST_CASE("steplock: every texture boundary is a deck step, under chaos") {
+    const LockResult r = run_locked(0.5f, true, 480000, -1);
+    REQUIRE(r.deck_steps >= 16);
     for (int l = 0; l < LANE_COUNT; ++l)
-        if (l != LANE_PITCH) REQUIRE(t.fire[l].size() >= 8);
-    CHECK(on_grid(t));
+        if (l != LANE_PITCH) CHECK(r.fires[l] == r.deck_steps);
+}
+
+TEST_CASE("steplock: SPOT stumbles by whole slots and stays on the grid") {
+    const LockResult plain = run_locked(0.5f, true, 480000);
+    const LockResult spot  = run_locked(0.5f, true, 480000, 160000);
+    REQUIRE(spot.deck_steps >= 16);
+    CHECK(spot.deck_steps == plain.deck_steps);   // SPOT never touches PITCH
+
+    // The offset has to have landed somewhere: at least one texture lane sits
+    // at a different point in its cycle than the un-stumbled run.
+    bool moved = false;
+    for (int l = 0; l < LANE_COUNT; ++l)
+        if (l != LANE_PITCH && spot.end_phase[l] != plain.end_phase[l]) moved = true;
+    CHECK(moved);
+
+    // And it stayed on the grid. The jump adds at most one extra boundary --
+    // the stumble itself -- and it is only separately countable when it falls
+    // in a raster window that had no deck step of its own, so the count is
+    // deck_steps or deck_steps + 1, never more and never less.
+    for (int l = 0; l < LANE_COUNT; ++l) {
+        if (l == LANE_PITCH) continue;
+        CHECK(spot.fires[l] >= spot.deck_steps);
+        CHECK(spot.fires[l] <= spot.deck_steps + 1);
+    }
+}
+
+TEST_CASE("steplock: the lock holds over ten minutes of audio") {
+    // The test the reverted equal-rate design would have failed. Ten minutes
+    // is well past the ~90 s at which that design lost a whole step.
+    const LockResult r = run_locked(0.5f, true, 48000 * 600);
+    REQUIRE(r.deck_steps >= 2000);
+    for (int l = 0; l < LANE_COUNT; ++l)
+        if (l != LANE_PITCH) CHECK(r.fires[l] == r.deck_steps);
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
-source env.sh && cmake --build build && ./build/spky_tests.exe -tc="steplock: the grid survives*"
+source env.sh && cmake --build build && ./build/spky_tests.exe -tc="steplock: SPOT stumbles*"
 ```
 
-Expected: FAIL — `CHECK( on_grid(t) )` is false. The per-lane EVOLVE walk and
-SPOT's raw phase kick are still pushing the texture lanes off the grid.
+Expected: FAIL on `CHECK( moved )`. SPOT still calls `kick()`, which moves the
+raw phase — but a follower's position is derived from the deck count, so the
+next `follow()` overwrites that phase and the gesture leaves no trace at all.
+The two runs come out identical.
 
-- [ ] **Step 3: Inherit the master's rate walk in `process()`**
+- [ ] **Step 3: Route SPOT through the slot offset**
 
-In `engine/mod/super_modulator.cpp`, in `SuperModulator::process()`, directly
-after the line `_out[LANE_PITCH] = _lanes[LANE_PITCH].process();` insert:
-
-```cpp
-    // STEP grid lock (spec 2026-07-25): the texture lanes take the master's
-    // EVOLVE rate walk instead of their own, so no lane can wander off the
-    // shared step clock. Pushed every sample rather than at a wrap because the
-    // master's walk changes at ITS wrap, which the texture lanes do not see.
-    // In FLOW the flag goes false and each lane is back on its own walk.
-    {
-        const float ev = _lanes[LANE_PITCH].ev_rate();
-        for (int i = 0; i < LANE_COUNT; ++i)
-            if (i != LANE_PITCH) _lanes[i].set_ev_rate_external(_step_on, ev);
-    }
-```
-
-- [ ] **Step 4: Quantize SPOT's phase kick**
-
-Replace `SuperModulator::spot` with:
+Replace `SuperModulator::spot` in `engine/mod/super_modulator.cpp` with:
 
 ```cpp
 void SuperModulator::spot(Rng& rng) {
@@ -1134,18 +886,13 @@ void SuperModulator::spot(Rng& rng) {
         float dshape = rng.next_bipolar() * 0.35f;   // uniform +/- 0.35
         if (i == LANE_PITCH) continue;
         if (_step_on) {
-            // In STEP the same gesture is rounded to whole slots (spec
-            // 2026-07-25 mod-lane-step-grid-lock). Still a stumble, but one
-            // that lands on the deck's grid instead of permanently beside it.
-            //
-            // Rounded to an EVEN count, because SHUFFLE keys its warp to step
-            // parity: an odd jump would put the lane on the opposite swing
-            // from the deck and leave it up to a third of a step out. The lost
-            // resolution is one slot out of a +-slots/2 range.
-            const float slots = static_cast<float>(_lanes[i].steps());
-            const int   n = 2 * static_cast<int>(
-                std::lround(dphase * slots * 0.5f));
-            _lanes[i].kick_steps(n, dshape);
+            // A follower has no phase to jump, so the same gesture becomes an
+            // offset on its slot index (spec 2026-07-25
+            // mod-lane-step-grid-lock). Exact, permanent, and incapable of
+            // leaving the grid.
+            const int n = static_cast<int>(std::lround(
+                dphase * static_cast<float>(_lanes[i].steps())));
+            _lanes[i].nudge_slots(n, dshape);
         } else {
             _lanes[i].kick(dphase, dshape);
         }
@@ -1153,13 +900,28 @@ void SuperModulator::spot(Rng& rng) {
 }
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
 source env.sh && cmake --build build && ./build/spky_tests.exe -tc="steplock:*"
 ```
 
-Expected: `[doctest] Status: SUCCESS!` with 7 test cases passing.
+Expected: `[doctest] Status: SUCCESS!` with 8 test cases passing. The
+ten-minute case walks 28.8 M samples and takes a few seconds.
+
+- [ ] **Step 5: Red-prove the invariant**
+
+A guard that has never failed is not a guard. Temporarily make the followers
+integrate again by changing the dispatch in `process()` to
+`_out[i] = _lanes[i].tick();` unconditionally, then run:
+
+```bash
+cmake --build build && ./build/spky_tests.exe -tc="steplock: the lock holds*"
+```
+
+Expected: FAIL — the fire counts no longer equal the deck step count. Restore
+the `_step_on ? … : …` dispatch and re-run to confirm SUCCESS. Do not commit
+the temporary edit.
 
 - [ ] **Step 6: Run the whole suite**
 
@@ -1167,29 +929,29 @@ Expected: `[doctest] Status: SUCCESS!` with 7 test cases passing.
 ctest --test-dir build --output-on-failure
 ```
 
-Expected: all tests pass. `tests/test_center.cpp`'s SPOT cases run their decks
-in FLOW, where the raw `kick()` path is unchanged.
+Expected: 4/4. `test_center.cpp`'s SPOT cases run their decks in FLOW, where
+the raw `kick()` path is unchanged.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add engine/mod/super_modulator.cpp tests/test_step_grid_lock.cpp
-git commit -m "feat(mod): inherit the master rate walk and quantize SPOT in STEP
+git commit -m "feat(mod): make SPOT a slot offset in STEP
 
 Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 ```
 
 ---
 
-### Task 6: Shape independence, live STEPS turn, docs
+### Task 5: Shape independence, live STEPS turn, docs
 
 **Files:**
 - Modify: `tests/test_step_grid_lock.cpp`
-- Modify: `docs/roadmap.md:53` (insert a row after the `+ FORM/SONG` row)
+- Modify: `docs/roadmap.md` (insert a row after the `+ FORM/SONG` row)
 
 **Interfaces:**
-- Consumes: `run_deck` / `on_grid` from Task 5's anonymous namespace in the
-  same file.
+- Consumes: `run_locked` / `LockResult` from Task 4's anonymous namespace in
+  the same file.
 - Produces: nothing.
 
 - [ ] **Step 1: Write the failing test**
@@ -1201,12 +963,12 @@ TEST_CASE("steplock: the fire grid is identical at every SHAPE setting") {
     // This is the whole point of the change: SHAPE was the detector, never the
     // cause. At the S&H end an offset reads as different random values; left
     // of it, as a ramp stepping beside the beat.
-    const GridTrace ref = run_deck(1.f, true, 240000);
+    const LockResult ref = run_locked(1.f, true, 480000);
     for (float shape : {0.f, 0.25f, 0.5f, 0.75f}) {
-        const GridTrace t = run_deck(shape, true, 240000);
-        CHECK(t.deck_step == ref.deck_step);
+        const LockResult r = run_locked(shape, true, 480000);
+        CHECK(r.deck_steps == ref.deck_steps);
         for (int l = 0; l < LANE_COUNT; ++l)
-            if (l != LANE_PITCH) CHECK(t.fire[l] == ref.fire[l]);
+            if (l != LANE_PITCH) CHECK(r.fires[l] == ref.fires[l]);
     }
 }
 
@@ -1216,36 +978,40 @@ TEST_CASE("steplock: a live STEPS turn keeps the deck aligned") {
     m.set_rate(0.45f);
     m.set_step(true, 8);
 
-    GridTrace t;
-    int last_step = m.pitch_cur_step();
-    for (int i = 0; i < 240000; ++i) {
-        if (i ==  80000) m.set_step(true, 16);
-        if (i == 160000) m.set_step(true, 8);
+    int deck_steps = 0, fires[LANE_COUNT] = {0, 0, 0, 0, 0};
+    int last = m.pitch_cur_step();
+    for (int i = 0; i < 480000; ++i) {
+        if (i == 160000) m.set_step(true, 16);
+        if (i == 320000) m.set_step(true, 8);
         m.process();
-        if (m.pitch_cur_step() != last_step) {
-            last_step = m.pitch_cur_step();
-            t.deck_step.push_back(i);
-        }
-        if (i % kTick == 0)
+        if (m.pitch_cur_step() != last) { last = m.pitch_cur_step(); ++deck_steps; }
+        if (i % ModLane::kTickInterval == 0)
             for (int l = 0; l < LANE_COUNT; ++l)
-                if (l != LANE_PITCH && m.lane_fired(l)) t.fire[l].push_back(i);
+                if (l != LANE_PITCH && m.lane_fired(l)) ++fires[l];
     }
-    REQUIRE(t.deck_step.size() >= 8);
-    CHECK(on_grid(t));
+    REQUIRE(deck_steps >= 16);
+    for (int l = 0; l < LANE_COUNT; ++l)
+        if (l != LANE_PITCH) CHECK(fires[l] == deck_steps);
 }
 
-TEST_CASE("steplock: FLOW is untouched by the grid lock") {
-    // The texture lanes must still run at their old ratios off the master.
+TEST_CASE("steplock: leaving STEP hands the lanes back their own clocks") {
     SuperModulator m;
-    m.init(48000.f, 42u);
-    m.set_rate(0.3f);
+    m.init(48000.f, 99u);
+    m.set_rate(0.45f);
+    m.set_step(true, 8);
+    for (int i = 0; i < 240000; ++i) m.process();
+
     m.set_step(false, 8);
-    for (int i = 0; i < ModLane::kTickInterval; ++i) m.process();
-    const float pitch = m.lane_phase(LANE_PITCH);
-    CHECK(m.lane_phase(LANE_SOURCE) == doctest::Approx(pitch * 2.00f));
-    CHECK(m.lane_phase(LANE_SIZE)   == doctest::Approx(pitch * 0.50f));
-    CHECK(m.lane_phase(LANE_MOTION) == doctest::Approx(pitch * 0.75f));
-    CHECK(m.lane_phase(LANE_LEVEL)  == doctest::Approx(pitch * 1.50f));
+    for (int i = 0; i < ModLane::kTickInterval * 64; ++i) m.process();
+
+    // Back on their own ratios: SOURCE runs at twice the master's rate.
+    CHECK(m.lane_rate_hz_for_test(LANE_SOURCE)
+          == doctest::Approx(m.lane_rate_hz_for_test(LANE_PITCH) * 2.f));
+    for (int i = 0; i < LANE_COUNT; ++i) {
+        CHECK(m.lane_slots_for_test(i) == 8);
+        CHECK(m.lane_phase(i) >= 0.f);
+        CHECK(m.lane_phase(i) <  1.f);
+    }
 }
 ```
 
@@ -1255,48 +1021,29 @@ TEST_CASE("steplock: FLOW is untouched by the grid lock") {
 source env.sh && cmake --build build && ./build/spky_tests.exe -tc="steplock:*"
 ```
 
-Expected: `[doctest] Status: SUCCESS!` with 10 test cases passing. If the
+Expected: `[doctest] Status: SUCCESS!` with 11 test cases passing. If the
 shape-independence case fails, a timing path is reading SHAPE — check that
-nothing added in Tasks 2-5 feeds `_shape`, `_ev_shape`, `_shape_offset` or
-`_kick_shape` into a phase or boundary computation.
+nothing feeds `_shape`, `_ev_shape`, `_shape_offset` or `_kick_shape` into a
+slot or boundary computation.
 
-- [ ] **Step 3: Red-prove the grid invariant**
-
-A guard that has never failed is not a guard. Temporarily revert the STEP
-branch of `_apply_rate` in `engine/mod/super_modulator.cpp` to the FLOW
-formula:
-
-```cpp
-        if (false) {
-```
-
-Then run:
-
-```bash
-cmake --build build && ./build/spky_tests.exe -tc="steplock: the grid survives*"
-```
-
-Expected: FAIL on `CHECK( on_grid(t) )`. Restore `if (_step_on) {` and re-run
-to confirm SUCCESS. Do not commit the temporary edit.
-
-- [ ] **Step 4: Run the whole suite**
+- [ ] **Step 3: Run the whole suite**
 
 ```bash
 ctest --test-dir build --output-on-failure
 ```
 
-Expected: all tests pass.
+Expected: 4/4.
 
-- [ ] **Step 5: Update the roadmap**
+- [ ] **Step 4: Update the roadmap**
 
 In `docs/roadmap.md`, insert a row directly after the `| **+ FORM/SONG** | ... |`
-row (line 53) and before the `| **M5j** |` row:
+row and before the `| **M5j** |` row:
 
 ```markdown
-| **Mod grid lock** | In STEP the four texture lanes run on the deck's step clock; the lane ratios become cycle lengths (4/6/8/12/16 at STEPS = 8), TIDE stretches slot counts, and DRIFT, EVOLVE and SPOT can no longer push a lane off the grid | ✅ **done** (engine; spec `docs/superpowers/specs/2026-07-25-mod-lane-step-grid-lock-design.md`) |
+| **Mod grid lock** | In STEP the four texture lanes stop owning a clock and follow the deck's integer step count; the lane ratios become cycle lengths (4/6/8/12/16 at STEPS = 8), TIDE stretches slot counts, and DRIFT, EVOLVE, SPOT and float drift can no longer push a lane off the grid | ✅ **done** (engine; spec `docs/superpowers/specs/2026-07-25-mod-lane-step-grid-lock-design.md`) |
 ```
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add tests/test_step_grid_lock.cpp docs/roadmap.md
@@ -1309,7 +1056,7 @@ Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 
 ## Verification
 
-After Task 6, from the fork root:
+After Task 5, from the fork root:
 
 ```bash
 source env.sh
@@ -1317,9 +1064,9 @@ cmake -S . -B build && cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Expected: every test passes, including the pre-existing `test_lane_tick`,
-`test_step_clock`, `test_super_modulator`, `test_center` and `test_instrument`
-suites.
+Expected: 4/4, including the pre-existing `test_lane_tick`, `test_step_clock`,
+`test_super_modulator`, `test_center` and `test_instrument` suites and both
+render gates.
 
 Then build the VCV plugin and play a deck in STEP with SHAPE swept end to end,
 DRIFT up, VARIATION toward GROW and SPOT triggered:
