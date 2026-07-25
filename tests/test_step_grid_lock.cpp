@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include <cmath>
 #include <vector>
 #include "mod/super_modulator.h"
 #include "mod/lane_len.h"
@@ -246,12 +247,22 @@ TEST_CASE("steplock: the fire grid is identical at every SHAPE setting") {
     // This is the whole point of the change: SHAPE was the detector, never the
     // cause. At the S&H end an offset reads as different random values; left
     // of it, as a ramp stepping beside the beat.
+    //
+    // Counts alone are not enough: a shape-dependent slot shift moves where
+    // every lane sits without changing how often it fires. Comparing only
+    // deck_steps and fires[] would pass a follow() that adds a shape-gated
+    // offset to its slot -- every lane still fires once per deck step, just
+    // at a different slot -- so end_phase, which run_locked already
+    // computes, has to agree too.
     const LockResult ref = run_locked(1.f, true, 480000);
     for (float shape : {0.f, 0.25f, 0.5f, 0.75f}) {
         const LockResult r = run_locked(shape, true, 480000);
         CHECK(r.deck_steps == ref.deck_steps);
-        for (int l = 0; l < LANE_COUNT; ++l)
-            if (l != LANE_PITCH) CHECK(r.fires[l] == ref.fires[l]);
+        for (int l = 0; l < LANE_COUNT; ++l) {
+            if (l == LANE_PITCH) continue;
+            CHECK(r.fires[l] == ref.fires[l]);
+            CHECK(r.end_phase[l] == doctest::Approx(ref.end_phase[l]));
+        }
     }
 }
 
@@ -299,5 +310,37 @@ TEST_CASE("steplock: leaving STEP hands the lanes back their own clocks") {
         CHECK(m.lane_slots_for_test(i) == 8);
         CHECK(m.lane_phase(i) >= 0.f);
         CHECK(m.lane_phase(i) <  1.f);
+    }
+
+    // Rates, slot counts and a phase sitting in [0, 1) all survive a frozen
+    // clock -- a tick() turned into a no-op for these lanes leaves every
+    // assertion above green. Only running the deck further and counting
+    // actual wrap boundaries proves the clock is moving at all, let alone at
+    // the right speed. In FLOW a non-melodic lane fires once per cycle wrap,
+    // so over a known number of samples each texture lane's wrap count has
+    // to match that lane's own configured rate -- pinning three things at
+    // once: the clock advances, it advances at the lane's rate, and the old
+    // per-lane ratios are back (SOURCE wraps twice as often as PITCH, SIZE
+    // half as often).
+    //
+    // Same trailing-flush treatment as the rest of this file: the loop runs
+    // one call past kRunSamples, and kRunSamples is a whole number of
+    // 96-sample raster windows, so that final call is itself a tick and
+    // reports a wrap that landed in the last window with no follow-up
+    // process() left to flush it.
+    const int32_t kRunSamples = 480000;
+    REQUIRE(kRunSamples % ModLane::kTickInterval == 0);
+    int32_t fires[LANE_COUNT] = {0, 0, 0, 0, 0};
+    for (int32_t i = 0; i <= kRunSamples; ++i) {
+        m.process();
+        if (i % ModLane::kTickInterval == 0)
+            for (int l = 0; l < LANE_COUNT; ++l)
+                if (l != LANE_PITCH && m.lane_fired(l)) ++fires[l];
+    }
+    for (int l = 0; l < LANE_COUNT; ++l) {
+        if (l == LANE_PITCH) continue;
+        const float rate_hz  = m.lane_rate_hz_for_test(l);
+        const float expected = rate_hz * 480000.f / 48000.f;
+        CHECK(std::fabs(static_cast<float>(fires[l]) - expected) <= 1.f);
     }
 }
