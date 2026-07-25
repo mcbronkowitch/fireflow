@@ -178,9 +178,18 @@ LockResult run_locked(float shape, bool chaos, int samples, int spot_at = -1) {
     Rng spot_rng;
     spot_rng.seed(5u);
 
+    // The loop runs one call PAST `samples`, and `samples` is required to be a
+    // whole number of raster windows, so that final call is itself a tick. A
+    // deck step landing in the last window is counted the sample it happens,
+    // but its boundary is only reported at the NEXT follow() -- without the
+    // flush the equality below would hold by luck of where the last transition
+    // fell rather than by construction. Two deck steps inside one window would
+    // still collapse into one latched fired(), but at any panel-reachable rate
+    // a step is ~200 samples against a 96-sample raster.
+    REQUIRE(samples % ModLane::kTickInterval == 0);
     LockResult r;
     int last = m.pitch_cur_step();
-    for (int i = 0; i < samples; ++i) {
+    for (int i = 0; i <= samples; ++i) {
         if (i == spot_at) m.spot(spot_rng);
         m.process();
         if (m.pitch_cur_step() != last) { last = m.pitch_cur_step(); ++r.deck_steps; }
