@@ -74,7 +74,7 @@ change.
 **Interfaces:**
 - Consumes: nothing from Task 1.
 - Produces, on `spky::ModLane`:
-  - `float follow(int32_t deck_step, float frac)` — advance this lane to the
+  - `float follow(int32_t deck_step, float frac, float shuffle)` — advance this lane to the
     deck's position and return the post-range output, the follower twin of
     `tick()`.
   - `void nudge_slots(int n, float dshape)` — SPOT: shift this lane's slot
@@ -115,7 +115,7 @@ TEST_CASE("follow: one deck step is one slot, whatever the cycle length") {
         configure(l, slots);
         int fires = 0;
         for (int32_t s = 0; s < 200; ++s) {
-            l.follow(s, 0.f);
+            l.follow(s, 0.f, 0.f);
             if (l.fired()) ++fires;
         }
         CHECK(fires == 200);          // exactly one boundary per deck step
@@ -126,7 +126,7 @@ TEST_CASE("follow: the slot index is the deck count modulo the cycle") {
     ModLane l;
     configure(l, 6);
     for (int32_t s = 0; s < 40; ++s) {
-        l.follow(s, 0.f);
+        l.follow(s, 0.f, 0.f);
         CHECK(l.cur_step() == static_cast<int>(s % 6));
     }
 }
@@ -134,14 +134,14 @@ TEST_CASE("follow: the slot index is the deck count modulo the cycle") {
 TEST_CASE("follow: repeat calls inside one deck step do not re-fire") {
     ModLane l;
     configure(l, 8);
-    l.follow(0, 0.f);
+    l.follow(0, 0.f, 0.f);
     REQUIRE(l.fired());
     for (float frac : {0.25f, 0.5f, 0.75f, 0.99f}) {
-        l.follow(0, frac);
+        l.follow(0, frac, 0.f);
         CHECK_FALSE(l.fired());
         CHECK(l.cur_step() == 0);
     }
-    l.follow(1, 0.f);
+    l.follow(1, 0.f, 0.f);
     CHECK(l.fired());
 }
 
@@ -150,10 +150,10 @@ TEST_CASE("follow: a multi-step advance replays every slot in order") {
     // DRIFT can push pitch_scale up. A skipped slot would drop a wrap event.
     ModLane l;
     configure(l, 4);
-    l.follow(0, 0.f);
+    l.follow(0, 0.f, 0.f);
     std::vector<int> seen;
     for (int32_t s = 3; s <= 15; s += 3) {          // three slots per call
-        l.follow(s, 0.f);
+        l.follow(s, 0.f, 0.f);
         seen.push_back(l.cur_step());
     }
     // Landing slots after 3, 6, 9, 12, 15 deck steps in a 4-slot cycle.
@@ -164,7 +164,7 @@ TEST_CASE("follow: wrapped() marks the cycle seam, once per cycle") {
     ModLane l;
     configure(l, 4);
     for (int32_t s = 0; s < 13; ++s) {
-        l.follow(s, 0.f);
+        l.follow(s, 0.f, 0.f);
         // s == 0 is the cold start. It enters slot 0, but no cycle ended, so
         // no wrap runs -- the same choice tick() makes at its own cold start.
         CHECK(l.wrapped() == (s != 0 && s % 4 == 0));
@@ -180,7 +180,7 @@ TEST_CASE("follow: arming never runs a cycle wrap, whatever slot it lands on") {
         ModLane l;
         configure(l, 4);
         l.set_variation(0.9f);        // GROW: a wrap here would walk _ev_*
-        l.follow(start, 0.f);
+        l.follow(start, 0.f, 0.f);
         CHECK_FALSE(l.wrapped());
         CHECK(l.fired());
         CHECK(l.cur_step() == static_cast<int>(start % 4));
@@ -190,28 +190,28 @@ TEST_CASE("follow: arming never runs a cycle wrap, whatever slot it lands on") {
 TEST_CASE("follow: a slot nudge offsets the lane and fires immediately") {
     ModLane l;
     configure(l, 8);
-    for (int32_t s = 0; s <= 4; ++s) l.follow(s, 0.f);
+    for (int32_t s = 0; s <= 4; ++s) l.follow(s, 0.f, 0.f);
     REQUIRE(l.cur_step() == 4);
 
     l.nudge_slots(3, 0.f);
-    l.follow(4, 0.5f);                 // same deck step, mid-step
+    l.follow(4, 0.5f, 0.f);                 // same deck step, mid-step
     CHECK(l.fired());                  // the stumble is audible at once
     CHECK(l.cur_step() == 7);
 
-    l.follow(5, 0.f);                  // the offset persists
+    l.follow(5, 0.f, 0.f);                  // the offset persists
     CHECK(l.cur_step() == 0);
 }
 
 TEST_CASE("follow: a negative nudge does not stall the lane") {
     ModLane l;
     configure(l, 8);
-    for (int32_t s = 0; s <= 4; ++s) l.follow(s, 0.f);
+    for (int32_t s = 0; s <= 4; ++s) l.follow(s, 0.f, 0.f);
 
     l.nudge_slots(-3, 0.f);
-    l.follow(4, 0.5f);
+    l.follow(4, 0.5f, 0.f);
     CHECK(l.cur_step() == 1);
     int fires = 0;
-    for (int32_t s = 5; s < 15; ++s) { l.follow(s, 0.f); if (l.fired()) ++fires; }
+    for (int32_t s = 5; s < 15; ++s) { l.follow(s, 0.f, 0.f); if (l.fired()) ++fires; }
     CHECK(fires == 10);                // still one boundary per deck step
 }
 
@@ -224,8 +224,8 @@ TEST_CASE("follow: two lanes of different length never diverge") {
     configure(b, 16);
     int fa = 0, fb = 0;
     for (int32_t s = 0; s < 200000; ++s) {     // ~7 hours of 8-step bars
-        a.follow(s, 0.f);
-        b.follow(s, 0.f);
+        a.follow(s, 0.f, 0.f);
+        b.follow(s, 0.f, 0.f);
         if (a.fired()) ++fa;
         if (b.fired()) ++fb;
     }
@@ -282,7 +282,13 @@ Directly after the existing `void kick(float dphase, float dshape);` in the
     // integer count and one shared fraction cannot do that.
     //
     // Returns the post-range output, exactly like tick() does for FLOW.
-    float follow(int32_t deck_step, float frac);
+    float follow(int32_t deck_step, float frac, float shuffle);
+    // `shuffle` is the amount the DECK's grid was built with, not this lane's
+    // own _shuffle_latched. In STEP a follower's latch is irrelevant: its
+    // boundary times come from the deck, so its slot-to-phase mapping has to
+    // use the deck's amount or the mapping and `frac` disagree -- and a live
+    // SHUFFLE turn on an odd step would then clamp the phase to a slot edge.
+    //
     // SPOT in STEP: shift this lane by `n` whole slots. The offset persists
     // and is exact; the new slot fires at the next follow() call, which is the
     // audible stumble. No rounding or parity care is needed -- boundary times
@@ -331,7 +337,7 @@ void ModLane::nudge_slots(int n, float dshape) {
     _kick_shape    += dshape;
 }
 
-float ModLane::follow(int32_t deck_step, float frac) {
+float ModLane::follow(int32_t deck_step, float frac, float shuffle) {
     _fired   = false;
     _wrapped = false;
     _apply_preroll_work();
@@ -375,7 +381,7 @@ float ModLane::follow(int32_t deck_step, float frac) {
     bool entered = false;
     if (land_only) {
         _phase = shuffle_phase_for_position(
-            static_cast<float>(here), slots, _shuffle_latched);
+            static_cast<float>(here), slots, shuffle);
         _enter_step(here);
         entered = true;
     } else {
@@ -385,7 +391,7 @@ float ModLane::follow(int32_t deck_step, float frac) {
             // Boundary targets are evaluated at the exact grid phase, the same
             // sampling tick() documents for its edge walk.
             _phase = shuffle_phase_for_position(
-                static_cast<float>(slot), slots, _shuffle_latched);
+                static_cast<float>(slot), slots, shuffle);
             if (slot == 0) {
                 _wrapped = true;
                 _wrap_events();      // before the new cycle's step 0, as in tick()
@@ -400,7 +406,7 @@ float ModLane::follow(int32_t deck_step, float frac) {
         _follow_jumped = false;
         if (!entered) {
             _phase = shuffle_phase_for_position(
-                static_cast<float>(here), slots, _shuffle_latched);
+                static_cast<float>(here), slots, shuffle);
             _enter_step(here);
         }
     }
@@ -408,7 +414,7 @@ float ModLane::follow(int32_t deck_step, float frac) {
     // Park at the live position so phase(), phase_eff() and any external
     // reader see where the lane actually is inside its slot.
     _phase = shuffle_phase_for_position(
-        static_cast<float>(here) + frac, slots, _shuffle_latched);
+        static_cast<float>(here) + frac, slots, shuffle);
 
     float smoothed = _slew_tick.process(_target);
     return apply_range(smoothed, _range);
@@ -631,7 +637,6 @@ In the private data, next to `bool _synced = false;`, add:
 ```cpp
     bool    _step_on    = false;   // the deck's STEP flag; drives the grid lock
     int     _deck_steps = 8;       // the phrase length; PITCH's slot count
-    float   _shuffle    = 0.f;     // latched target, mirrored from set_shuffle
     // The deck's own clock, in whole steps. This integer is what makes the
     // grid exact: every follower derives its slot from it, so no float
     // rounding can put two lanes on different boundaries. int32_t is ample --
@@ -696,14 +701,9 @@ void SuperModulator::set_step(bool on, int n) {
 }
 ```
 
-Replace `SuperModulator::set_shuffle` with:
-
-```cpp
-void SuperModulator::set_shuffle(float amount) {
-    _shuffle = shuffle_amount(amount);
-    for (auto& l : _lanes) l.set_shuffle(amount);
-}
-```
+`SuperModulator::set_shuffle` is unchanged: it forwards to the lanes and
+keeps no copy of its own. The follow path reads the PITCH lane's latched
+amount instead, which is the only one that matches the phase it measures.
 
 Extend `SuperModulator::_update_tide` so a TIDE turn re-derives the slot counts:
 
@@ -744,12 +744,18 @@ Then replace the texture-lane tick block at the end of `process()` with:
         _tick_ctr = ModLane::kTickInterval;
         const int   deck = _deck_steps < 1 ? 1 : _deck_steps;
         const int   ps   = _lanes[LANE_PITCH].cur_step();
+        // The amount the PITCH lane's grid was actually built with.
+        // _shuffle_target only reaches _shuffle_latched at an even step entry,
+        // so a live SHUFFLE turn leaves them apart for up to a step -- reading
+        // the target here would measure `frac` against boundaries that never
+        // existed and clamp the followers to a slot edge.
+        const float sh   = _lanes[LANE_PITCH].shuffle_latched();
         const float frac = ps < 0 ? 0.f
             : shuffle_step_fraction(
-                  _lanes[LANE_PITCH].phase(), ps, deck, _shuffle);
+                  _lanes[LANE_PITCH].phase(), ps, deck, sh);
         for (int i = 0; i < LANE_COUNT; ++i) {
             if (i == LANE_PITCH) continue;
-            _out[i] = _step_on ? _lanes[i].follow(_deck_step, frac)
+            _out[i] = _step_on ? _lanes[i].follow(_deck_step, frac, sh)
                                : _lanes[i].tick();
         }
     }
