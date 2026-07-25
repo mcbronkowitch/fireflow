@@ -26,11 +26,13 @@ The stock firmware is a granular sampler you modulate. This fork inverts that:
 the **modulation system is the primary interface**, and the sound engine is
 whatever you point it at.
 
-Each part currently points at one of two: a **polyphonic synth voice**, or a
-**granular texture deck** that granulates live input or a loaded sample. The
-deck is deliberately not a second melodic instrument — it is the room the
-synth part plays in. Both sit behind the same five modulation lanes and the
-same voice row, so no knob goes dead when you flip the engine.
+Each part currently points at one of three: a **polyphonic synth voice**, a
+**granular texture deck** that granulates live input or a loaded sample, or
+**WAVE**, a digital-glassy PPG-style wavetable voice. The deck is deliberately
+not a second melodic instrument — it is the room the synth part plays in;
+WAVE covers the bell, vocal-formant, hollow-resonant, and bright-digital corner.
+All three sit behind the same five modulation lanes and the same voice row, so
+no knob goes dead when you flip the engine.
 
 On the texture deck, **STEP** walks a `SliceMap` of transients marked while the
 buffer is recorded or loaded: each phrase fire spawns one grain on a real
@@ -144,7 +146,7 @@ the desktop clang path); the build, install and I/O details live in
 | **M5** | Sampler -- the texture deck: granular cloud, live recording + overdub, WAV load/save, Morphagene-style DENS/SCAN/NEW/LEN/ORG controls, clocked slice-groove, FEEL accents, and FLOW cloud dispersion | **done** (engine + hosts; released through 2.10.1) |
 | **M5h** | Per-deck ROOM mix: independent dry/send mix per deck into one shared Oliverb reverb | **done** (engine + VCV panel; pending the next release) |
 | **CPU** | Three measured rounds on real hardware: `instrument_worst`'s worst block went from ~156 % of the audio-block budget to 94 %. Method and every number in [`bench/`](bench/README.md) and [`docs/bench/`](docs/bench/) | **done** (ongoing as a tool) |
-| **M5i** | WAVE: four-voice PPG-style wavetable part engine | planned (spec ready; not implemented) |
+| **M5i** | WAVE: four-voice PPG-style wavetable part engine | **done** (engine + renderer + VCV; 65,024-byte mapped-QSPI bank; hardware-gated) |
 | **M5j** | STRING: four-voice Karplus-Strong part engine | planned (spec ready; not implemented) |
 | **M5k** | ZAP: monophonic percussion part engine | planned (spec ready; not implemented) |
 | **M5l** | PULL: chord gravity between the two decks | planned (spec ready; not implemented) |

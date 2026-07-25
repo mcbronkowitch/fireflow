@@ -1167,3 +1167,33 @@ Open at the release: the sampler's worst case is still 107 % of the block
 budget against the synth's 94 %. The ablations put that on steady FX-chain
 load rather than on the cloud — dropping either FLUX or the reverb from that
 patch clears it — so it is a design decision, not a bug to chase.
+
+## M5i — WAVE (2026-07-25)
+
+Completed the four-voice PPG-style wavetable part engine after the hardware
+bench gate. `WaveEngine` reuses the SYNTH allocation, FLOW/STEP, chord, CHOKE,
+envelope, and voice-edit semantics, with `spky::SvfLp` retained bit-identically
+from SYNTH. `ENGINE_SAMPLER = 2` remains stable and `ENGINE_WAVE = 3` is the
+new engine ID.
+
+The desktop renderer accepts `"wave"`; VCV ENG is now Synth → Sampler → Wave,
+so saved values `0` and `1` retain their SYNTH and SAMPLER meanings. The
+generated 16-frame, 7-mip bank is 65,024 bytes (32,512 int16 samples), linked
+in `.qspiflash_data` at `0x90040000`. Keeping it in AXI SRAM overflowed that
+region, while mapped QSPI passed the hardware CPU gate; no SDRAM boot copy was
+needed.
+
+The completed oscillator tests set alias energy at `<= -36.0 dB`, adjacent-frame
+control-boundary residual at `< 0.01`, active-mip retarget residual at `< 0.01`,
+and both position and mip ramps at exactly 96 samples. The final WAVE listening
+anchor, `host/render/scenarios/wave_formant_sweep.json`, has SHA-256
+`c0e7c1c5b5257cd2dcf0b2060de7e89816745c88da9441f7b4d9a2ad81a4cdb9`; the
+preserved SYNTH reference is
+`659af928e1f273d9ba9619f9ad235844fec1c2277557ed81a0c2dc065c6eb336`.
+
+Two full hardware runs recorded `synth_2x4` / `wave_2x4` average/maximum cycles
+of `340352 / 346091` / `308662 / 312534` and `340345 / 346132` / `308597 /
+312170`, respectively. WAVE is no slower than SYNTH in both runs and its
+maximum is below the 960,000-cycle block budget. Evidence:
+`docs/bench/2026-07-24-7ab2e26.md` and
+`docs/bench/2026-07-24-7ab2e26.csv`.

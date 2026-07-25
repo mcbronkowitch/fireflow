@@ -1,7 +1,7 @@
 # WAVE — PPG-style wavetable part engine
 
 **Date:** 2026-07-18
-**Status:** design approved, implementation gated on the hardware bench (see §7)
+**Status:** implemented and completed after the hardware bench (2026-07-25).
 **Scope:** a third selectable part engine (`ENGINE_WAVE`) — a 4-voice wavetable
 scanner behind the existing `IPartEngine`/`SynthEngine` semantics. One baked-in
 curated bank, no new panel control, no new parameter id. No change to the mod
@@ -28,8 +28,8 @@ than SYNTH, and implementation waits for the on-hardware bench.
   (`gen_panel.py` precedent). No SD, no runtime loading.
 - Polyphony: **4 voices, full parity** with SYNTH (round-robin, steal, FLOW
   drone, chord layer, CHOKE hold).
-- FILTER lane: **per-voice `daisysp::Svf` exactly like SYNTH** (RESO/FILT knobs
-  keep their meaning).
+- FILTER lane: **per-voice `spky::SvfLp`**, retained bit-identically from SYNTH
+  (RESO/FILT knobs keep their meaning).
 - Voice interior: **2 detuned table reads + sub sine** — DETUNE knob works as
   today; only the oscillator core is swapped.
 - DSP core: **hybrid scanner** — continuous frame lerp (audible, must be
@@ -44,7 +44,7 @@ than SYNTH, and implementation waits for the on-hardware bench.
   cadence (`kCtrlInterval = 96`).
 - `engine/synth/morph_osc.h` — the oscillator interface WAVE's core mimics:
   `init / set_freq / set_detune_cents / set_morph / reset_phase / process`.
-- `engine/synth/env.h`, `daisysp::Svf`, `engine/util/fast_sin.h` (sub sine),
+- `engine/synth/env.h`, `spky::SvfLp`, `engine/util/fast_sin.h` (sub sine),
   `engine/mod/rng.h` (drift rates) — unchanged, one level above the osc.
 - `host/render/scenario.cpp` engine parsing; VCV per-part engine button
   (`Spotymod.cpp` ENGINE_A/B); `docs` bench-firmware workload list.
@@ -64,11 +64,12 @@ same TIMBRE mapping (position + t² · DETUNE_MAX detune spread).
   reference renders must stay **byte-identical** after the refactor.
 - The new engine is `SynthEngineT<WtOsc>` (`using WaveEngine = ...`). All
   allocation/FLOW/chord/CHOKE semantics are inherited, not copied.
-- `EngineId` grows `ENGINE_WAVE = 2`. `Part` holds the third engine instance
+- `EngineId` grows `ENGINE_WAVE = 3` because `ENGINE_SAMPLER = 2`. `Part` holds
+  the third engine instance
   (tables are `static const`, shared; the instance itself is small — voices +
-  bookkeeping). Scenario parser learns `"wave"`. The VCV engine button cycles
-  test-tone → synth → wave (LED shade distinguishes; panel unchanged —
-  hardware-reducibility constraint). No other surface.
+  bookkeeping). Scenario parser learns `"wave"`. VCV ENG is
+  **Synth → Sampler → Wave**; saved values `0` and `1` remain compatible, and
+  value `2` selects WAVE. No other surface.
 - VOICE edit layer (ATTACK/DECAY/RESO/SUB/DETUNE/FILT) applies literally —
   the setters live in `SynthEngineT` and are engine-agnostic already.
 
@@ -81,8 +82,8 @@ Python).
 
 - **16 frames.** Base mip 1024 samples per frame; halved-length mip chain
   1024 → 512 → 256 → 128 → 64 → 32 → 16 (7 levels, one per octave of
-  fundamental) ≈ 2032 samples/frame ≈ 4 KB int16 → **bank ≈ 64 KB**, `static
-  const` (QSPI flash). SDRAM untouched (FLUX tapes keep it).
+  fundamental) ≈ 2032 samples/frame ≈ 4 KB int16 → **65,024 bytes**
+  (**32,512 int16 samples**), `static const`.
 - **Band-limiting happens at bake time.** Each mip level is spectrally
   truncated in the tool: a level of length N keeps partials up to ~N/4 — a
   guard margin for the images of linear interpolation. The exact guard factor
@@ -142,26 +143,26 @@ philosophy as the DUST zone breakpoints).
 
 ### 6. Memory & data path
 
-- Bank lives as `const int16_t` in the firmware image (QSPI-mapped flash).
-- **Bench question:** random int16 reads from QSPI may be slower than internal
-  RAM. If the bench shows it, the fallback is copying the 64 KB bank into
-  SDRAM at boot (64 KB of 64 MB; the FLUX tapes don't care). The core reads
-  through a base pointer either way, so the fallback is a boot-time memcpy,
-  not a redesign.
+- The production bank is linked in `.qspiflash_data` at `0x90040000`.
+  Keeping it in AXI SRAM overflowed that region, while mapped QSPI passed the
+  hardware CPU gate; no SDRAM boot copy was needed.
 - Desktop/VCV hosts compile the same generated `wt_bank.cpp` — identical bits
   on every platform.
 
 ### 7. CPU budget & the hardware gate
 
-Expectation: WAVE 2×4 voices ≤ SYNTH 2×4 (bench spec estimate 15–18 %),
-because the per-sample core is strictly simpler. That stays an *estimate*
-until measured:
+The direct-engine hardware gate passed. The bench firmware measures matched
+`synth_2x4` and `wave_2x4` rows (two four-voice engines):
 
-- The bench firmware's workload list grows one entry: **“WaveEngine 2×4
-  voices (both parts)”** — same harness, same anchor calibration.
-- **Implementation of this spec starts only after the hardware bench has run**
-  and confirms (a) the WAVE workload fits alongside the full instrument and
-  (b) the QSPI-vs-SDRAM answer (§6).
+| run | `synth_2x4` average / maximum | `wave_2x4` average / maximum |
+|---|---:|---:|
+| 1 | 340352 / 346091 | 308662 / 312534 |
+| 2 | 340345 / 346132 | 308597 / 312170 |
+
+WAVE average and maximum are no greater than SYNTH in both runs, and WAVE
+maximum is below the 960,000-cycle block budget. Evidence:
+`docs/bench/2026-07-24-7ab2e26.md` and
+`docs/bench/2026-07-24-7ab2e26.csv`.
 
 ### 8. Testing
 
@@ -169,14 +170,18 @@ until measured:
   steal order, CHOKE) run as a second template instantiation against
   `SynthEngineT<WtOsc>`. SYNTH reference renders stay byte-identical after the
   templatization (regression gate for the refactor itself).
-- **Aliasing:** a pitch-chirp render across the full register, FFT-checked:
-  no partial above the Nyquist guard line, threshold in dB as a test constant.
-- **Continuity:** position-sweep render has no derivative jumps; mip
-  crossfades are click-free.
+- **Aliasing:** pitch coverage confirms alias energy `<= -36.0 dB`.
+- **Continuity:** adjacent-frame control-boundary residual is `< 0.01` and
+  active-mip retarget residual is `< 0.01`; position and mip ramps last exactly
+  96 samples.
 - **Determinism:** same seed → bit-identical render on desktop and VCV (int16
   tables are exact; no float bake drift).
 - **Reference scenario:** a new `wave_formant_sweep.json` (TIMBRE lane
   traversing the formant zone in FLOW) as listening + regression anchor.
+  Its final SHA-256 is
+  `c0e7c1c5b5257cd2dcf0b2060de7e89816745c88da9441f7b4d9a2ad81a4cdb9`.
+  The preserved SYNTH reference SHA-256 is
+  `659af928e1f273d9ba9619f9ad235844fec1c2277557ed81a0c2dc065c6eb336`.
 
 ## Out of scope
 
