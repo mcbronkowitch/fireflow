@@ -81,7 +81,8 @@ public:
     // reaching into private state. Not used on the audio path.
     float sub_level() const         { return _sub_level; }
     float detune_spread_ct() const  { return _detune_spread_ct; }
-    float applied_detune_ct() const { return _detune_spread_ct; }
+    // Every control tick pushes the same spread to all voices.
+    float applied_detune_ct() const { return _voices[0].detune_cents(); }
     // How many notes the last set_chord() pushed. Lets a test pin that
     // Part::_flatten_for_sampler collapses the chord for the SAMPLER only and
     // leaves the synth's chord surface intact. Not used on the audio path.

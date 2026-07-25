@@ -345,7 +345,12 @@ void contract_detune_is_independent_of_source() {
 
     EngineT e;
     e.init(48000.f);
+    CHECK(e.detune_spread_ct() == doctest::Approx(18.f));
+    CHECK(e.applied_detune_ct() == doctest::Approx(18.f));
+
     e.set_detune(6.f / EngineT::kDetuneCeilCt);
+    CHECK(e.detune_spread_ct() == doctest::Approx(6.f));
+    CHECK(e.applied_detune_ct() == doctest::Approx(18.f));
 
     feed(e, 0.5f, 0.f);
     render_l(e, EngineT::kCtrlInterval + 1);

@@ -44,6 +44,7 @@ public:
 
     bool  active() const { return _env.active(); }
     float env_value() const { return _env.value(); }
+    float detune_cents() const { return _detune_ct; }
 
 private:
     void _apply_freq();                   // osc A/B freq from pitch+detune+drift
