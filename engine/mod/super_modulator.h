@@ -98,6 +98,15 @@ public:
     // was ever read).
     void reset_phases() {
         for (auto& l : _lanes) l.reset(0.f);
+        // Every follower derives its slot from THIS counter, not from any
+        // state ModLane::reset() clears -- resetting the lanes without also
+        // resetting the deck clock leaves each texture lane re-arming at
+        // slot_of(_deck_step, slots) on its next follow(), an arbitrary slot
+        // that depends on how long the deck had been running, while PITCH
+        // restarts at phase 0. RST is the resync gesture for the whole
+        // deck's clock, not just the lanes' own state.
+        _deck_step = 0;
+        _last_pitch_step = -1;
         _since_onset = 0;
         _onsets = 0;
         _gap[0] = _gap[1] = 0;
@@ -123,6 +132,13 @@ public:
     // Autors, keine, die dieser Kommentar trifft.
     void snap_pitch_phase(float ph) {
         _lanes[LANE_PITCH].reset(ph);
+        // ModLane::reset() leaves _cur_step at -1; without also resetting
+        // this, the deck-step counter in process() reads the next real step
+        // change as an extra elapsed step (cs != _last_pitch_step with
+        // _last_pitch_step >= 0 still holding its pre-snap value) and
+        // rotates every follower by one phantom slot it never actually
+        // crossed.
+        _last_pitch_step = -1;
         _since_onset = 0;
         _onsets = 0;
         _gap[0] = _gap[1] = 0;

@@ -293,6 +293,40 @@ TEST_CASE("steplock: a live STEPS turn keeps the deck aligned") {
         if (l != LANE_PITCH) CHECK(fires[l] == deck_steps);
 }
 
+TEST_CASE("steplock: RST puts every lane back on slot 0") {
+    SuperModulator m;
+    m.init(48000.f, 7u);
+    m.set_rate(0.45f);
+    m.set_step(true, 8);
+
+    // Run well past every texture lane's slot count (max 16, for SIZE) so a
+    // stumbled resync would land on an obviously wrong slot, not on 0 by
+    // luck. Matches the bug report's own repro point (_deck_step == 22).
+    while (m.deck_step_for_test() < 22) m.process();
+    REQUIRE(m.deck_step_for_test() >= 22);
+
+    // Slow PITCH to a crawl before resetting, so the one raster tick this
+    // test advances afterward cannot itself carry PITCH into step 1 -- the
+    // point is to isolate reset_phases()'s own effect from step timing.
+    m.set_rate(0.f);
+
+    m.reset_phases();
+
+    // The PITCH lane restarts on the very next sample (per-sample path); the
+    // texture lanes only catch up at their next raster tick, up to 96
+    // samples later -- see reset_phases()'s own comment.
+    for (int i = 0; i < ModLane::kTickInterval; ++i) m.process();
+
+    CHECK(m.deck_step_for_test() == 0);
+    CHECK(m.pitch_phase() < 0.001f);
+    for (int i = 0; i < LANE_COUNT; ++i) {
+        if (i == LANE_PITCH) continue;
+        const int slots = m.lane_slots_for_test(i);
+        const int slot  = shuffle_step_index(m.lane_phase(i), slots, 0.f);
+        CHECK(slot == 0);
+    }
+}
+
 TEST_CASE("steplock: leaving STEP hands the lanes back their own clocks") {
     SuperModulator m;
     m.init(48000.f, 99u);
