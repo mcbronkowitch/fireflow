@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "mod/lane.h"
 #include "mod/song_form.h"
 #include <cmath>
 #include <cstring>
@@ -59,6 +60,14 @@ void check_pattern_groove(const PatternGroove& groove) {
         seen[groove.rank_of_slot[i]] = true;
         CHECK(groove.note_len[i] >= 1);
         CHECK(groove.note_len[i] <= 4);
+    }
+}
+
+void fnv_feed(uint64_t& hash, const void* data, size_t length) {
+    const auto* bytes = static_cast<const uint8_t*>(data);
+    for (size_t i = 0; i < length; ++i) {
+        hash ^= bytes[i];
+        hash *= 1099511628211ull;
     }
 }
 
@@ -216,4 +225,75 @@ TEST_CASE("pattern groove mutation is deterministic and preserves invariants") {
         CHECK(std::memcmp(&first, &second, sizeof(first)) == 0);
         check_pattern_groove(first);
     }
+}
+
+TEST_CASE("normal forms survive pattern snapshot migration") {
+    const uint32_t seeds[] = {1u, 0xBEEFu};
+    const int step_counts[] = {1, 8, 16, 32};
+    const float variations[] = {-1.f, 0.f, 1.f};
+    uint64_t hash = 1469598103934665603ull;
+
+    for (int principle = 0;
+         principle < static_cast<int>(Principle::kCount);
+         ++principle) {
+        for (const uint32_t seed : seeds) {
+            for (const int steps : step_counts) {
+                for (const float variation : variations) {
+                    ModLane lane;
+                    lane.set_melodic(true);
+                    lane.set_principle(static_cast<Principle>(principle));
+                    lane.init(48000.f, seed);
+                    lane.set_rate_hz(120.f);
+                    lane.set_shape(1.f);
+                    lane.set_density(0.73f);
+                    lane.set_step(true, steps);
+                    lane.set_variation(variation);
+
+                    for (int sample = 0; sample < 1600; ++sample) {
+                        const float output = lane.process();
+                        const float target = lane.target();
+                        const uint8_t state = static_cast<uint8_t>(
+                            (lane.fired() ? 1 : 0) |
+                            (lane.wrapped() ? 2 : 0) |
+                            (lane.gate_state() ? 4 : 0));
+                        fnv_feed(hash, &output, sizeof(output));
+                        fnv_feed(hash, &target, sizeof(target));
+                        fnv_feed(hash, &state, sizeof(state));
+                    }
+                }
+            }
+        }
+    }
+
+    CHECK(hash == 0x68396762664c16f8ull);
+}
+
+TEST_CASE("normal FORM selection becomes observable only at a STEP wrap") {
+    ModLane lane;
+    lane.set_melodic(true);
+    lane.set_principle(Principle::TwoMotif);
+    lane.init(48000.f, 0xBEEFu);
+    lane.set_rate_hz(120.f);
+    lane.set_step(true, 8);
+    lane.process();
+    REQUIRE(lane.form() == FormMode::TwoMotifs);
+
+    lane.set_principle(Principle::CallResponse);
+    CHECK(lane.form() == FormMode::TwoMotifs);
+    do {
+        lane.process();
+    } while (!lane.wrapped());
+    CHECK(lane.form() == FormMode::CallResponse);
+    CHECK(lane.last_basis() == Principle::CallResponse);
+}
+
+TEST_CASE("song storage budget") {
+    constexpr size_t kLaneBytesBefore = 412u; // ARM/Daisy ABI at c3c3c70
+    static_assert(sizeof(ModLane) >= kLaneBytesBefore,
+                  "song-form migration unexpectedly shrank ModLane");
+    constexpr size_t kAddedAcrossTwoParts =
+        (sizeof(ModLane) - kLaneBytesBefore) * 10u;
+    INFO("ModLane bytes after migration: " << sizeof(ModLane));
+    INFO("added bytes across ten uniform lanes: " << kAddedAcrossTwoParts);
+    CHECK(kAddedAcrossTwoParts < 5u * 1024u);
 }

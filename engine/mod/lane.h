@@ -2,7 +2,7 @@
 #include <cstdint>
 #include "util/onepole.h"
 #include "mod/rng.h"
-#include "mod/phrase_gen.h"
+#include "mod/song_form.h"
 #include "mod/shuffle_grid.h"
 
 namespace spky {
@@ -29,7 +29,13 @@ public:
     void set_variation(float v);      // -1..+1: renew / loop (0) / grow
 
     void set_melodic(bool m) { _melodic = m; }
-    void set_principle(Principle p) { _principle = p; }
+    void set_form(FormMode form);
+    FormMode form() const { return _song.selected_form; }
+    Principle last_basis() const { return _song.last_basis; }
+    void set_last_basis(Principle basis) { _song.last_basis = basis; }
+    uint8_t song_position() const { return _song.form_position; }
+    uint8_t active_pattern() const { return _song.active_pattern; }
+    void set_principle(Principle p) { set_form(form_for_principle(p)); }
     void new_phrase();                 // audition a fresh phrase at the next STEP-mode wrap
 
     float process();                  // advance one sample, return post-range value
@@ -110,6 +116,12 @@ private:
     void  _renew_walk();            // RENEW (non-melodic): dice-gated whole-walk regen
     void  _mutate_groove(bool renew_side);  // VARIATION outer zone: rhythm dice (wrap only)
     void  _start_note(int slot);    // groove: set _note_hold (tie-capped) on fire
+    MelodyPattern& _active_pattern() {
+        return _song.patterns[_song.active_pattern & 1u];
+    }
+    const MelodyPattern& _active_pattern() const {
+        return _song.patterns[_song.active_pattern & 1u];
+    }
 
     Rng     _rng;
     OnePole _slew;
@@ -134,15 +146,9 @@ private:
 
     int   _cur_step = -1;
     static constexpr int kSeqSlots = 32;
-    float _seq[kSeqSlots] = {};  // looping S&H step buffer — the melody (spec: entropy sequencer)
-    bool      _gate[kSeqSlots]      = {};
-    uint8_t   _motif_id[kSeqSlots]  = {};
-    PhraseLayout _layout;
-    GrooveCell _groove;
-    Principle _principle = Principle::TwoMotif;
+    SongForm _song;
     bool      _melodic   = false;
     float     _density   = 1.f;
-    bool      _regen_pending = false;
     float _target = 0.f;     // pre-smooth held value
     bool  _fired = false;
     bool  _wrapped = false;
