@@ -1,7 +1,7 @@
 # Spotykach FORM / SONG Split
 
 **Date:** 2026-07-25
-**Status:** Approved design, awaiting written-spec review
+**Status:** Approved design and written spec
 **Scope:** PITCH lanes in STEP mode, the VCV PLAY row, patch migration, and
 tests. This document supersedes the FORM-control and fixed-form portions of
 `2026-07-24-spotykach-song-pattern-chaining-design.md`.
