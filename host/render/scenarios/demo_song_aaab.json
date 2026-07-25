@@ -1,0 +1,46 @@
+{
+  "sample_rate": 48000,
+  "bpm": 120,
+  "duration_s": 192,
+  "init": [
+    {
+      "_comment": "Part A: 16 quarter-note steps make each AAAB supercycle 32 seconds. Hierarchical is remembered as the normal-form basis behind SONG.",
+      "action": "set_engine",
+      "part": 0,
+      "value": "synth"
+    },
+    {"action": "set_sync", "ivalue": 1},
+    {"action": "set_rate", "part": 0, "value": 0.125},
+    {"action": "set_shape", "part": 0, "value": 1.0},
+    {"action": "set_density", "part": 0, "value": 0.6},
+    {"action": "set_voice_decay", "part": 0, "value": 0.25},
+    {"action": "set_last_basis", "part": 0, "ivalue": 2},
+    {"action": "set_form", "part": 0, "ivalue": 0},
+    {"action": "set_step", "part": 0, "flag": true, "ivalue": 16},
+    {"action": "set_variation", "part": 0, "value": 0.0},
+    {
+      "_comment": "Silence Part B so only Part A's form is audible.",
+      "action": "set_engine",
+      "part": 1,
+      "value": "test_tone"
+    },
+    {"action": "set_target_active", "part": 1, "slot": 4, "flag": false},
+    {"action": "set_target_base", "part": 1, "slot": 4, "value": 0.0}
+  ],
+  "events": [
+    {
+      "_comment": "After two LOOP supercycles, moderately GROW both stored patterns for two supercycles.",
+      "t": 64,
+      "action": "set_variation",
+      "part": 0,
+      "value": 0.55
+    },
+    {
+      "_comment": "Then moderately RENEW both patterns for the final two supercycles.",
+      "t": 128,
+      "action": "set_variation",
+      "part": 0,
+      "value": -0.55
+    }
+  ]
+}

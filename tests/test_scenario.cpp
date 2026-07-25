@@ -5,6 +5,53 @@
 #include "render/scenario.h"
 using namespace spky;
 
+static std::string repo_file(const char* relative) {
+    std::string file = __FILE__;
+    size_t slash = file.find_last_of("/\\");
+    if (slash != std::string::npos) file.erase(slash);  // tests/
+    slash = file.find_last_of("/\\");
+    if (slash == std::string::npos) file.clear();
+    else file.erase(slash + 1);                         // repository root
+    return file + relative;
+}
+
+TEST_CASE("AAAB listening scenario: covers LOOP, GROW, and RENEW supercycles") {
+    Scenario s;
+    std::string err;
+    const std::string path =
+        repo_file("host/render/scenarios/demo_song_aaab.json");
+    REQUIRE_MESSAGE(load_scenario(path, s, err), err);
+
+    const double step_s = 60.0 / s.bpm;
+    CHECK(s.duration_s >= 2.0 * 64.0 * step_s);
+
+    bool song = false;
+    bool step16 = false;
+    bool loop = false;
+    bool grow = false;
+    bool renew = false;
+    const auto inspect = [&](const Event& e) {
+        if (e.action == "set_form" && e.part == PART_A && e.ivalue == 0)
+            song = true;
+        if (e.action == "set_step" && e.part == PART_A &&
+            e.flag && e.ivalue == 16)
+            step16 = true;
+        if (e.action == "set_variation" && e.part == PART_A) {
+            loop  = loop  || e.value == 0.f;
+            grow  = grow  || e.value > 0.f;
+            renew = renew || e.value < 0.f;
+        }
+    };
+    for (const Event& e : s.init_events) inspect(e);
+    for (const Event& e : s.events) inspect(e);
+
+    CHECK(song);
+    CHECK(step16);
+    CHECK(loop);
+    CHECK(grow);
+    CHECK(renew);
+}
+
 TEST_CASE("scenario: parses init + timeline and sorts events by time") {
     const char* path = "test_scenario.json";
     {
@@ -209,6 +256,41 @@ TEST_CASE("scenario: set_shuffle dispatch matches direct instruments across STEP
             REQUIRE(via_event.lane_fired(p, LANE_PITCH) ==
                     direct.lane_fired(p, LANE_PITCH));
     }
+}
+
+TEST_CASE("scenario: song form actions reach the instrument") {
+    Instrument inst;
+    inst.init(48000.f);
+
+    Event basis;
+    basis.action = "set_last_basis";
+    basis.part = PART_A;
+    basis.ivalue = static_cast<int>(Principle::Ostinato);
+    apply_event(inst, basis);
+    CHECK(inst.last_basis(PART_A) ==
+          static_cast<int>(Principle::Ostinato));
+
+    Event form;
+    form.action = "set_form";
+    form.part = PART_A;
+    form.ivalue = static_cast<int>(FormMode::Ostinato);
+    apply_event(inst, form);
+    inst.set_step(PART_A, true, 8);
+    float l = 0.f, r = 0.f;
+    inst.process(nullptr, nullptr, &l, &r, 1);
+    CHECK(inst.form(PART_A) == static_cast<int>(FormMode::Ostinato));
+
+    Instrument legacy;
+    legacy.init(48000.f);
+    Event principle;
+    principle.action = "set_principle";
+    principle.part = PART_A;
+    principle.ivalue = static_cast<int>(Principle::CallResponse);
+    apply_event(legacy, principle);
+    legacy.set_step(PART_A, true, 8);
+    legacy.process(nullptr, nullptr, &l, &r, 1);
+    CHECK(legacy.form(PART_A) ==
+          static_cast<int>(FormMode::CallResponse));
 }
 
 TEST_CASE("scenario: set_comp and set_master_drive dispatch without throwing") {
