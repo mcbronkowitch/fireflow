@@ -54,10 +54,10 @@ PARAM_ORDER = [
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'GRIT', 'STEP', 'PRIN', 'NEW', 'TRIG',
+    'ENG', 'GRIT', 'STEP', 'FORM', 'NEW', 'TRIG',
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'GRIT', 'STEP', 'PRIN', 'NEW', 'TRIG',
+    'ENG', 'GRIT', 'STEP', 'FORM', 'NEW', 'TRIG',
     'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'DRIVE',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
     'FILT', 'FILT', 'TIDE', 'FRATE', 'FRATE', 'FFB', 'FFB', 'COLOR',
@@ -540,6 +540,31 @@ def test_lower_half_positions():
         b = ctl(enum[:-2] + '_B')
         check(approx(b.x, g.W - x) and approx(b.y, y),
               f"{b.enum} at ({b.x:.2f}, {b.y:.2f}), want ({g.W - x:.2f}, {y})")
+
+
+def test_form_control_contract():
+    """PRINCIPLE keeps its frozen ParamId but becomes the six-state FORM knob."""
+    for suffix in ("_A", "_B"):
+        c = ctl("PRINCIPLE" + suffix)
+        check(c.kind == g.KNOBI,
+              f"{c.enum} kind is {c.kind}, want snapped integer knob")
+        check(c.label == "FORM" and c.tip == "FORM",
+              f"{c.enum} caption/tip is {c.label!r}/{c.tip!r}, want FORM")
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp"),
+              encoding="utf-8") as f:
+        cpp = f.read()
+    switch = """
+configSwitch(c.id, 0.f, 5.f, init, "Form",
+             {"SONG · AAAB", "TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
+              "CALL / RESPONSE", "OSTINATO"});"""
+    check(compact_cpp(switch) in compact_cpp(cpp),
+          "FORM must be a snapped six-state Rack switch with named choices")
+    check("inst.set_form(p, form);" in cpp,
+          "Rack FORM parameter is not forwarded to Instrument::set_form")
+    check("inst.set_last_basis(p, lastBasis[p]);" in cpp,
+          "Rack does not forward its remembered normal-form basis")
 
 
 def test_steps_left_the_fx_row():
@@ -1215,8 +1240,8 @@ def test_sampler_preset_init_snapshot():
         check(math.isclose(got, want, rel_tol=0.0, abs_tol=1e-7),
               f"{PARAM_ORDER[i]} init {got}, want {want}")
 
-    check("static constexpr int kInitPrinciple[] = {2, 0};" in header,
-          "init principle must be [2, 0]")
+    check("static constexpr int kInitLastBasis[] = {2, 2};" in header,
+          "init remembered normal-form basis must be [2, 2]")
 
     cpp_path = os.path.join(here, "..", "src", "Spotymod.cpp")
     with open(cpp_path) as f:
@@ -1228,22 +1253,29 @@ def test_sampler_preset_init_snapshot():
     check("defaultFor(" not in cpp,
           "legacy split defaultFor table still exists")
 
-    check("int principleIdx[2] = {kInitPrinciple[0], kInitPrinciple[1]};" in cpp,
-          "fresh module principle state is not [2, 0]")
+    check("int lastBasis[2] = {kInitLastBasis[0], kInitLastBasis[1]};" in cpp,
+          "fresh module remembered basis is not [2, 2]")
 
     after_init = cpp.split("inst.init(sr, fxmem);", 1)[1]
     reinit_tail = after_init.split("// Rebuild the factory-drone cache", 1)[0]
-    check("inst.set_principle(p, principleIdx[p]);" in reinit_tail,
-          "reinit does not restore the current principle after inst.init")
+    check("inst.set_last_basis(p, lastBasis[p]);" in reinit_tail,
+          "reinit does not restore the remembered basis after inst.init")
 
     on_reset = cpp.split("void onReset() override {", 1)[1]
     on_reset = on_reset.split("// --- persistence", 1)[0]
-    check("principleIdx[p] = kInitPrinciple[p];" in on_reset,
-          "Initialize does not restore principle defaults")
+    check("lastBasis[p] = kInitLastBasis[p];" in on_reset,
+          "Initialize does not restore remembered-basis defaults")
     check("smp[p] = SamplerPartState{};" in on_reset,
           "Initialize does not reset sampler edit state")
     check("inst.sampler_clear(p);" in on_reset,
           "Initialize does not empty sampler audio before factory autoload")
+
+    check('json_object_set_new(root, "lastBasis", bases);' in cpp,
+          "remembered normal-form bases are not persisted")
+    check('json_object_get(root, "lastBasis")' in cpp,
+          "remembered normal-form bases are not restored")
+    check('"principle"' not in cpp,
+          "legacy principleIdx JSON state must not survive the FORM migration")
 
     makefile_path = os.path.join(here, "..", "Makefile")
     with open(makefile_path) as f:

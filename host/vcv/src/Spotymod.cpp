@@ -181,8 +181,8 @@ struct Spotymod : Module {
     dsp::ClockDivider ctrlDiv;              // throttle param push to control rate
     dsp::SchmittTrigger clockTrig, resetTrig;
     dsp::BooleanTrigger triggerTrig[2], spotTrig, settleTrig;
-    dsp::BooleanTrigger principleTrig[2], newPhraseTrig[2];
-    int principleIdx[2] = {kInitPrinciple[0], kInitPrinciple[1]};
+    dsp::BooleanTrigger newPhraseTrig[2];
+    int lastBasis[2] = {kInitLastBasis[0], kInitLastBasis[1]};
     float clkSamples = 0.f;                 // samples since last external clock edge
     float gateFilt[2] = {0.f, 0.f};
     float recPhase[2] = {0.f, 0.f};        // REC LED pulse while recording
@@ -241,6 +241,10 @@ struct Spotymod : Module {
                     if (c.id == SCALE)  // init patch is Lydian -- the bright end of group A
                         configParam<ScaleQuantity>(c.id, 0.f, (float)(spky::SCALE_LIST_COUNT - 1),
                                                    (float)spky::SCALE_LYDIAN, "Scale");
+                    else if (c.id == PRINCIPLE_A || c.id == PRINCIPLE_B)
+                        configSwitch(c.id, 0.f, 5.f, init, "Form",
+                                     {"SONG · AAAB", "TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
+                                      "CALL / RESPONSE", "OSTINATO"});
                     else  // STEPS_A / STEPS_B
                         configParam(c.id, 2.f, 16.f, init, "Steps");
                     getParamQuantity(c.id)->snapEnabled = true;
@@ -259,7 +263,7 @@ struct Spotymod : Module {
                     else if (c.id == GRITMODE_A || c.id == GRITMODE_B)
                         configSwitch(c.id, 0.f, 1.f, init,
                                      "Grit mode", {"Drive", "Reduce"});   // init: A=Reduce
-                    else  // STEP (on for the init patch's stepped sequences) / PRINCIPLE / NEWPHRASE
+                    else  // STEP (on for the init patch's stepped sequences)
                         configSwitch(c.id, 0.f, 1.f, init, lbl, {"Off", "On"});
                     break;
                 case WK_SMBTN: configButton(c.id, lbl); break;
@@ -312,7 +316,7 @@ struct Spotymod : Module {
 
         inst.init(sr, fxmem);
         for (int p = 0; p < spky::PART_COUNT; ++p)
-            inst.set_principle(p, principleIdx[p]);
+            inst.set_last_basis(p, lastBasis[p]);
 
         for (int p = 0; p < spky::PART_COUNT; ++p)
             if (!snapL[p].empty())
@@ -516,10 +520,10 @@ struct Spotymod : Module {
                                                      : spky::GritMode::Drive);
             inst.set_step(p, ppb(STEP_A, p), (int)std::round(pp(STEPS_A, p)));
 
-            if (principleTrig[p].process(ppb(PRINCIPLE_A, p))) {
-                principleIdx[p] = (principleIdx[p] + 1) % 5;   // cycle the 5 principles
-                inst.set_principle(p, principleIdx[p]);
-            }
+            const int form = static_cast<int>(std::lround(pp(PRINCIPLE_A, p)));
+            if (form >= 1 && form <= 5) lastBasis[p] = form - 1;
+            inst.set_last_basis(p, lastBasis[p]);
+            inst.set_form(p, form);
             // NEW is "new gene now" in the sampler: the playhead returns to
             // ORGANIZE and a grain spawns immediately. Without it the long
             // end of GENE SIZE is unplayable -- every knob stays dead until
@@ -630,10 +634,10 @@ struct Spotymod : Module {
 
     void onReset() override {
         // Rack Initialize restores the complete init patch, including the
-        // non-param principle state and an empty sampler ready for the
+        // remembered normal-form basis and an empty sampler ready for the
         // bundled factory WAV. A mid-session Clear still stays cleared.
         for (int p = 0; p < spky::PART_COUNT; ++p) {
-            principleIdx[p] = kInitPrinciple[p];
+            lastBasis[p] = kInitLastBasis[p];
             smp[p] = SamplerPartState{};
             inst.sampler_clear(p);
             factoryTried[p] = false;
@@ -643,15 +647,15 @@ struct Spotymod : Module {
 
     // --- persistence -----------------------------------------------------
     // The module had no dataToJson at all: everything below is non-param
-    // state (Tasks 4-6's edit layer, the sample path, and principleIdx,
-    // which the PRIN button cycles and no param ever recorded) that would
-    // otherwise die with the session.
+    // state (Tasks 4-6's edit layer, the sample path, and the remembered
+    // normal-form basis used when FORM returns to SONG) that would otherwise
+    // die with the session.
     json_t* dataToJson() override {
         json_t* root = json_object();
-        json_t* pr = json_array();
+        json_t* bases = json_array();
         for (int p = 0; p < spky::PART_COUNT; ++p)
-            json_array_append_new(pr, json_integer(principleIdx[p]));
-        json_object_set_new(root, "principle", pr);
+            json_array_append_new(bases, json_integer(lastBasis[p]));
+        json_object_set_new(root, "lastBasis", bases);
 
         json_t* parts = json_array();
         for (int p = 0; p < spky::PART_COUNT; ++p) {
@@ -676,14 +680,16 @@ struct Spotymod : Module {
 
     void dataFromJson(json_t* root) override {
         if (!root) return;
-        if (json_t* pr = json_object_get(root, "principle")) {
-            for (int p = 0; p < spky::PART_COUNT; ++p) {
-                json_t* v = json_array_get(pr, p);
-                if (v) {
-                    principleIdx[p] = (int)json_integer_value(v);
-                    inst.set_principle(p, principleIdx[p]);
-                }
-            }
+        json_t* bases = json_object_get(root, "lastBasis");
+        for (int p = 0; p < spky::PART_COUNT; ++p) {
+            json_t* v = bases ? json_array_get(bases, p) : nullptr;
+            int basis = v ? static_cast<int>(json_integer_value(v))
+                          : kInitLastBasis[p];
+            if (basis < 0) basis = 0;
+            const int last = static_cast<int>(spky::Principle::kCount) - 1;
+            if (basis > last) basis = last;
+            lastBasis[p] = basis;
+            inst.set_last_basis(p, lastBasis[p]);
         }
         json_t* parts = json_object_get(root, "sampler");
         if (!parts) return;

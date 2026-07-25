@@ -92,9 +92,9 @@ static_assert(sizeof(kInitParamDefaults) / sizeof(kInitParamDefaults[0])
                   == NUM_PARAMS,
               "init snapshot must contain one value for every ParamId");
 
-static constexpr int kInitPrinciple[] = {2, 0};
-static_assert(sizeof(kInitPrinciple) / sizeof(kInitPrinciple[0]) == 2,
-              "init principle must contain one value per part");
+static constexpr int kInitLastBasis[] = {2, 2};
+static_assert(sizeof(kInitLastBasis) / sizeof(kInitLastBasis[0]) == 2,
+              "init remembered basis must contain one value per part");
 
 inline float initParamDefault(int id) {
     return kInitParamDefaults[id];

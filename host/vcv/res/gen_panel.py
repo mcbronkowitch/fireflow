@@ -201,9 +201,9 @@ FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # DUST ROT | GRIT COMP
 PLAY_Y   = 103.6
 # The PLAY row's left block re-spaced to seat REC between GRIT and STEPS
 # (spec 2026-07-18 "VCV layer": REC is the only new panel element). All four
-# left-block glyphs are LATCH r=2.7 except STEPS (KNOBI r=3.0); the pitches
+# left-block glyphs are LATCH r=2.7 except STEPS and FORM (KNOBI r=3.0); the pitches
 # below clear test_no_overlap's radius-sum minimum with >=1.8 mm to spare.
-PAD_X    = [10.0, 17.5, 46.0, 56.5, 67.0, 77.5]   # ENG GRIT | STEP PRIN NEW TRIG
+PAD_X    = [10.0, 17.5, 46.0, 56.5, 67.0, 77.5]   # ENG GRIT | STEP FORM NEW TRIG
 STEPS_X  = 37.0                     # sequencer knob, between the two pad blocks
 REC_X    = 25.0                     # REC pad (appended param, not templated)
 # Its state LED, centred in the gap between the REC pad and the STEPS knob.
@@ -247,9 +247,12 @@ def part_controls(mir=False):
         out.append(Ctl(enum, SMKNOB, fx(FX_BOT[i]), ROW_V2, lbl))
     out.append(Ctl("STEPS", KNOBI, fx(STEPS_X), PLAY_Y, "STPS"))
     pads = [("ENGINE", LATCH, "ENG"), ("GRITMODE", LATCH, "GRIT"),
-            ("STEP", LATCH, "STEP"), ("PRINCIPLE", SMBTN, "PRIN"),
-            ("NEWPHRASE", SMBTN, "NEW"), ("TRIGGER", SMBTN, "TRIG")]
+            ("STEP", LATCH, "STEP")]
     for i, (enum, kind, lbl) in enumerate(pads):
+        out.append(Ctl(enum, kind, fx(PAD_X[i]), PLAY_Y, lbl))
+    out.append(Ctl("PRINCIPLE", KNOBI, fx(PAD_X[3]), PLAY_Y, "FORM"))
+    for enum, kind, lbl, i in (("NEWPHRASE", SMBTN, "NEW", 4),
+                               ("TRIGGER", SMBTN, "TRIG", 5)):
         out.append(Ctl(enum, kind, fx(PAD_X[i]), PLAY_Y, lbl))
     return out
 
