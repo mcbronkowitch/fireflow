@@ -41,11 +41,11 @@ TEST_CASE("DENSE is monotonic: raising density only adds notes to the groove") {
     CHECK(prev.size() == 16);        // density 1 -> every step fires
 }
 
-TEST_CASE("DENSE 0 leaves exactly the cell anchors") {
-    ModLane l = melodic_step(0x11, 16);   // n=16 -> 2 instances of L=8
+TEST_CASE("DENSE 0 leaves exactly the absolute pattern anchor") {
+    ModLane l = melodic_step(0x11, 16);
     l.set_density(0.f);
     auto s = fired_step_set(l, 16, 47000);
-    CHECK(s == std::set<int>{0, 8});      // slot 0 of each instance (rank 0)
+    CHECK(s == std::set<int>{0});
 }
 
 TEST_CASE("DENSE is reversible: density 1 == the full pattern") {
@@ -110,21 +110,15 @@ TEST_CASE("gate can sustain across a frozen (rest) step") {
     CHECK(bridged >= 8);                   // expected ~18/40
 }
 
-// steps=20 forces a tail: pg_derive_sizing(TwoMotif, 20) -> k=3, L=6, r=2
-// (3*6+2==20). At density 0 only the cell anchor (rank 0, always cell-relative
-// slot 0) fires: once per full instance (0, 6, 12) plus the tail's own slot 0,
-// which lands at absolute slot 18 (18 % L(=6) == 0). set_step() only flags a
-// regen (it lands at the next STEP-mode wrap), so the lane still runs its
-// stale init()-time layout (steps=8) for the first cycle; with the step-clock
-// a 20-step cycle is 60000 samples, so run past the first wrap before sampling.
-// The window deliberately spans the wrap (65000 > 60000) so the step-0 anchor
-// of the next cycle is captured robustly, not just by float-phasor drift.
-TEST_CASE("DENSE 0 truncates cleanly over a tail: anchors plus the tail's own anchor") {
+// steps=20 forces a tail in the phrase layout. The full-pattern groove still
+// owns one absolute rank-0 anchor. set_step() lands its rebuild at the next
+// STEP wrap, so run past that first 60000-sample cycle before sampling.
+TEST_CASE("DENSE 0 keeps one absolute anchor after a tail rebuild") {
     ModLane l = melodic_step(0x11, 20);
     l.set_density(0.f);
     for (int n = 0; n < 61000; ++n) l.process();       // let the steps=20 regen land
     auto s = fired_step_set(l, 20, 65000);
-    CHECK(s == std::set<int>{0, 6, 12, 18});
+    CHECK(s == std::set<int>{0});
 }
 
 TEST_CASE("STEP re-entry clears stale note state (live FLOW/STEP toggle)") {

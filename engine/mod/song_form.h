@@ -5,16 +5,6 @@
 
 namespace spky {
 
-enum class FormMode : uint8_t {
-    SongAAAB = 0,
-    TwoMotifs,
-    OnePlusVar,
-    Hierarchical,
-    CallResponse,
-    Ostinato,
-    kCount
-};
-
 enum class SongMode : uint8_t {
     AAAB = 0,
     ABAB,
@@ -31,35 +21,6 @@ inline SongMode clamp_song(int value) {
     const int last = static_cast<int>(SongMode::kCount) - 1;
     if (value > last) value = last;
     return static_cast<SongMode>(value);
-}
-
-inline FormMode clamp_form(int value) {
-    if (value < 0) value = 0;
-    const int last = static_cast<int>(FormMode::kCount) - 1;
-    if (value > last) value = last;
-    return static_cast<FormMode>(value);
-}
-
-inline Principle form_basis(FormMode form, Principle fallback) {
-    switch (form) {
-    case FormMode::TwoMotifs:    return Principle::TwoMotif;
-    case FormMode::OnePlusVar:   return Principle::OneMotif;
-    case FormMode::Hierarchical: return Principle::Hierarchical;
-    case FormMode::CallResponse: return Principle::CallResponse;
-    case FormMode::Ostinato:     return Principle::Ostinato;
-    default:                     return fallback;
-    }
-}
-
-inline FormMode form_for_principle(Principle principle) {
-    switch (principle) {
-    case Principle::TwoMotif:     return FormMode::TwoMotifs;
-    case Principle::OneMotif:     return FormMode::OnePlusVar;
-    case Principle::Hierarchical: return FormMode::Hierarchical;
-    case Principle::CallResponse: return FormMode::CallResponse;
-    case Principle::Ostinato:     return FormMode::Ostinato;
-    default:                      return FormMode::Ostinato;
-    }
 }
 
 struct PatternGroove {
@@ -86,12 +47,14 @@ struct TurnaroundZones {
 
 struct SongForm {
     MelodyPattern patterns[2] = {};
-    uint8_t form_position = 0;
+    uint32_t phrase_index = 0;
     uint8_t active_pattern = 0;
-    FormMode selected_form = FormMode::SongAAAB;
-    FormMode pending_form = FormMode::SongAAAB;
-    Principle last_basis = Principle::Hierarchical;
+    Principle selected_form = Principle::Hierarchical;
+    Principle pending_form = Principle::Hierarchical;
+    SongMode selected_song = SongMode::AAAB;
+    SongMode pending_song = SongMode::AAAB;
     bool form_pending = false;
+    bool song_pending = false;
     bool new_pending = false;
     bool length_pending = false;
     uint8_t cadence_slot = 0;
@@ -139,10 +102,6 @@ inline uint8_t song_symbol_at(SongMode mode, uint32_t phrase_index) {
         phrase_index >>= 1u;
     }
     return parity;
-}
-
-inline uint8_t song_symbol_at(uint8_t form_position) {
-    return song_symbol_at(SongMode::AAAB, form_position);
 }
 
 inline void expand_pattern_groove(const GrooveCell& cell, int steps,

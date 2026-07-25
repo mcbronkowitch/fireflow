@@ -25,13 +25,16 @@ TEST_CASE("AAAB listening scenario: covers LOOP, GROW, and RENEW supercycles") {
     const double step_s = 60.0 / s.bpm;
     CHECK(s.duration_s >= 2.0 * 64.0 * step_s);
 
+    bool form = false;
     bool song = false;
     bool step16 = false;
     bool loop = false;
     bool grow = false;
     bool renew = false;
     const auto inspect = [&](const Event& e) {
-        if (e.action == "set_form" && e.part == PART_A && e.ivalue == 0)
+        if (e.action == "set_form" && e.part == PART_A && e.ivalue == 2)
+            form = true;
+        if (e.action == "set_song" && e.part == PART_A && e.ivalue == 0)
             song = true;
         if (e.action == "set_step" && e.part == PART_A &&
             e.flag && e.ivalue == 16)
@@ -45,11 +48,47 @@ TEST_CASE("AAAB listening scenario: covers LOOP, GROW, and RENEW supercycles") {
     for (const Event& e : s.init_events) inspect(e);
     for (const Event& e : s.events) inspect(e);
 
+    CHECK(form);
     CHECK(song);
     CHECK(step16);
     CHECK(loop);
     CHECK(grow);
     CHECK(renew);
+}
+
+TEST_CASE("SONG modes listening scenario covers all seven positions") {
+    Scenario s;
+    std::string err;
+    const std::string path =
+        repo_file("host/render/scenarios/demo_song_modes.json");
+    REQUIRE_MESSAGE(load_scenario(path, s, err), err);
+    CHECK(s.duration_s == 256.0);
+
+    bool form = false;
+    bool step16 = false;
+    bool loop = false;
+    int song_count[7] = {};
+    const auto inspect = [&](const Event& e) {
+        if (e.action == "set_form" && e.part == PART_A && e.ivalue == 2)
+            form = true;
+        if (e.action == "set_step" && e.part == PART_A &&
+            e.flag && e.ivalue == 16)
+            step16 = true;
+        if (e.action == "set_variation" && e.part == PART_A &&
+            e.value == 0.f)
+            loop = true;
+        if (e.action == "set_song" && e.part == PART_A &&
+            e.ivalue >= 0 && e.ivalue < 7)
+            ++song_count[e.ivalue];
+    };
+    for (const Event& e : s.init_events) inspect(e);
+    for (const Event& e : s.events) inspect(e);
+
+    CHECK(form);
+    CHECK(step16);
+    CHECK(loop);
+    for (int mode = 0; mode < 7; ++mode)
+        CHECK(song_count[mode] == 1);
 }
 
 TEST_CASE("scenario: parses init + timeline and sorts events by time") {
@@ -258,27 +297,25 @@ TEST_CASE("scenario: set_shuffle dispatch matches direct instruments across STEP
     }
 }
 
-TEST_CASE("scenario: song form actions reach the instrument") {
+TEST_CASE("scenario: FORM SONG actions reach the instrument") {
     Instrument inst;
     inst.init(48000.f);
-
-    Event basis;
-    basis.action = "set_last_basis";
-    basis.part = PART_A;
-    basis.ivalue = static_cast<int>(Principle::Ostinato);
-    apply_event(inst, basis);
-    CHECK(inst.last_basis(PART_A) ==
-          static_cast<int>(Principle::Ostinato));
 
     Event form;
     form.action = "set_form";
     form.part = PART_A;
-    form.ivalue = static_cast<int>(FormMode::Ostinato);
+    form.ivalue = static_cast<int>(Principle::Ostinato);
     apply_event(inst, form);
+    Event song;
+    song.action = "set_song";
+    song.part = PART_A;
+    song.ivalue = static_cast<int>(SongMode::Mirror);
+    apply_event(inst, song);
     inst.set_step(PART_A, true, 8);
     float l = 0.f, r = 0.f;
     inst.process(nullptr, nullptr, &l, &r, 1);
-    CHECK(inst.form(PART_A) == static_cast<int>(FormMode::Ostinato));
+    CHECK(inst.form(PART_A) == static_cast<int>(Principle::Ostinato));
+    CHECK(inst.song(PART_A) == static_cast<int>(SongMode::Mirror));
 
     Instrument legacy;
     legacy.init(48000.f);
@@ -290,7 +327,7 @@ TEST_CASE("scenario: song form actions reach the instrument") {
     legacy.set_step(PART_A, true, 8);
     legacy.process(nullptr, nullptr, &l, &r, 1);
     CHECK(legacy.form(PART_A) ==
-          static_cast<int>(FormMode::CallResponse));
+          static_cast<int>(Principle::CallResponse));
 }
 
 TEST_CASE("scenario: set_comp and set_master_drive dispatch without throwing") {

@@ -41,8 +41,8 @@ struct TickPair {
         auto prepare = [seed](ModLane& lane) {
             lane.set_melodic(true);
             lane.set_step(true, 8);
-            lane.set_last_basis(Principle::Hierarchical);
-            lane.set_form(FormMode::SongAAAB);
+            lane.set_form(Principle::Hierarchical);
+            lane.set_song(SongMode::AAAB);
             lane.init(kSr, seed);
             lane.set_range(1.f);
             lane.set_shape(1.f);

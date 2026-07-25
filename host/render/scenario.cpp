@@ -117,7 +117,7 @@ void spky::apply_event(Instrument& inst, const Event& e) {
     else if (a == "set_range")         inst.set_range(e.part, e.value);
     else if (a == "set_entropy" || a == "set_variation") inst.set_variation(e.part, e.value);
     else if (a == "set_form")          inst.set_form(e.part, e.ivalue);
-    else if (a == "set_last_basis")    inst.set_last_basis(e.part, e.ivalue);
+    else if (a == "set_song")          inst.set_song(e.part, e.ivalue);
     else if (a == "set_principle")     inst.set_principle(e.part, e.ivalue);
     else if (a == "set_depth")         inst.set_depth(e.part, e.value);
     else if (a == "set_tune")          inst.set_tune(e.part, e.value);

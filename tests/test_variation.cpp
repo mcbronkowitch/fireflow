@@ -11,6 +11,7 @@ static ModLane make_melodic_step_lane(uint32_t seed, int steps) {
     ModLane l;
     l.set_melodic(true);
     l.set_principle(Principle::TwoMotif);
+    l.set_song(SongMode::Off);
     l.init(48000.f, seed);
     l.set_shape(1.0f);
     l.set_step(true, steps);

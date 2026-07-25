@@ -42,34 +42,27 @@ public:
     void set_variation(int p, float n)       { _parts[p].mod().set_variation(n); }  // -1..+1
     void set_shuffle(float amount)           { for (auto& part : _parts) part.mod().set_shuffle(amount); }
     void set_form(int p, int form) {
-        _parts[p].mod().set_form(clamp_form(form));
-    }
-    void set_last_basis(int p, int principle) {
-        int clamped = principle;
-        if (clamped < 0) clamped = 0;
+        if (form < 0) form = 0;
         const int last = static_cast<int>(Principle::kCount) - 1;
-        if (clamped > last) clamped = last;
-        _parts[p].mod().set_last_basis(
-            static_cast<Principle>(clamped));
+        if (form > last) form = last;
+        _parts[p].mod().set_form(static_cast<Principle>(form));
+    }
+    void set_song(int p, int song) {
+        _parts[p].mod().set_song(clamp_song(song));
     }
     int form(int p) const {
         return static_cast<int>(_parts[p].mod().form());
     }
-    int last_basis(int p) const {
-        return static_cast<int>(_parts[p].mod().last_basis());
+    int song(int p) const {
+        return static_cast<int>(_parts[p].mod().song());
     }
     void set_principle(int p, int pr) {
-        int clamped = pr;
-        if (clamped < 0) clamped = 0;
-        const int last = static_cast<int>(Principle::kCount) - 1;
-        if (clamped > last) clamped = last;
-        _parts[p].mod().set_principle(
-            static_cast<Principle>(clamped));
+        set_form(p, pr);
     }
     void set_step(int p, bool on, int steps) { _parts[p].set_step(on, steps); }
     void new_phrase(int p)                   { _parts[p].mod().new_phrase(); }
 #ifdef SPKY_TESTING
-    uint8_t song_position_for_test(int p) const {
+    uint32_t song_position_for_test(int p) const {
         return _parts[p].mod().song_position_for_test();
     }
     uint8_t active_pattern_for_test(int p) const {

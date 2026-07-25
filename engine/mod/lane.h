@@ -29,13 +29,13 @@ public:
     void set_variation(float v);      // -1..+1: renew / loop (0) / grow
 
     void set_melodic(bool m) { _melodic = m; }
-    void set_form(FormMode form);
-    FormMode form() const { return _song.selected_form; }
-    Principle last_basis() const { return _song.last_basis; }
-    void set_last_basis(Principle basis) { _song.last_basis = basis; }
-    uint8_t song_position() const { return _song.form_position; }
+    void set_form(Principle form);
+    Principle form() const { return _song.selected_form; }
+    void set_song(SongMode song);
+    SongMode song() const { return _song.selected_song; }
+    uint32_t song_position() const { return _song.phrase_index; }
     uint8_t active_pattern() const { return _song.active_pattern; }
-    void set_principle(Principle p) { set_form(form_for_principle(p)); }
+    void set_principle(Principle p) { set_form(p); }
     void new_phrase();                 // audition a fresh phrase at the next STEP-mode wrap
 #ifdef SPKY_TESTING
     const MelodyPattern& pattern_for_test(uint8_t index) const {
@@ -124,14 +124,11 @@ private:
     void  _mutate_groove(bool renew_side);  // VARIATION outer zone: rhythm dice (wrap only)
     void  _start_note(int slot);    // groove: set _note_hold (tie-capped) on fire
     int   _effective_length() const;
-    bool  _song_active() const;
     void  _generate_pattern_a();
     void  _derive_pattern_b();
-    void  _capture_active_as_a();
-    void  _generate_normal_pattern();
-    void  _apply_pending_form_work();
+    void  _apply_pending_song_work();
     void  _apply_preroll_work();
-    void  _advance_song_form();
+    void  _advance_song();
     void  _evolve_outgoing_pattern();
     void  _clear_fresh_phrase_state();
     MelodyPattern& _active_pattern() {

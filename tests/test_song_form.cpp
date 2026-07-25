@@ -82,26 +82,6 @@ std::string song_text(SongMode mode, uint32_t count) {
 
 } // namespace
 
-TEST_CASE("form values clamp and normal forms map bijectively to principles") {
-    CHECK(clamp_form(-7) == FormMode::SongAAAB);
-    CHECK(clamp_form(99) == FormMode::Ostinato);
-    CHECK(form_basis(FormMode::SongAAAB, Principle::CallResponse)
-          == Principle::CallResponse);
-
-    const Principle principles[] = {
-        Principle::TwoMotif,
-        Principle::OneMotif,
-        Principle::Hierarchical,
-        Principle::CallResponse,
-        Principle::Ostinato
-    };
-    for (const auto principle : principles) {
-        const FormMode form = form_for_principle(principle);
-        CHECK(form != FormMode::SongAAAB);
-        CHECK(form_basis(form, Principle::TwoMotif) == principle);
-    }
-}
-
 TEST_CASE("song modes clamp and produce the approved sequences") {
     CHECK(clamp_song(-7) == SongMode::AAAB);
     CHECK(clamp_song(99) == SongMode::Off);
@@ -264,7 +244,7 @@ TEST_CASE("pattern groove mutation is deterministic and preserves invariants") {
     }
 }
 
-TEST_CASE("normal forms survive pattern snapshot migration") {
+TEST_CASE("phrase engines remain deterministic after FORM SONG split") {
     const uint32_t seeds[] = {1u, 0xBEEFu};
     const int step_counts[] = {1, 8, 16, 32};
     const float variations[] = {-1.f, 0.f, 1.f};
@@ -302,7 +282,7 @@ TEST_CASE("normal forms survive pattern snapshot migration") {
         }
     }
 
-    CHECK(hash == 0x68396762664c16f8ull);
+    CHECK(hash == 0x3f816108ebe77c77ull);
 }
 
 TEST_CASE("normal FORM selection becomes observable only at a STEP wrap") {
@@ -313,15 +293,14 @@ TEST_CASE("normal FORM selection becomes observable only at a STEP wrap") {
     lane.set_rate_hz(120.f);
     lane.set_step(true, 8);
     lane.process();
-    REQUIRE(lane.form() == FormMode::TwoMotifs);
+    REQUIRE(lane.form() == Principle::TwoMotif);
 
     lane.set_principle(Principle::CallResponse);
-    CHECK(lane.form() == FormMode::TwoMotifs);
+    CHECK(lane.form() == Principle::TwoMotif);
     do {
         lane.process();
     } while (!lane.wrapped());
-    CHECK(lane.form() == FormMode::CallResponse);
-    CHECK(lane.last_basis() == Principle::CallResponse);
+    CHECK(lane.form() == Principle::CallResponse);
 }
 
 TEST_CASE("song storage budget") {

@@ -27,18 +27,14 @@ public:
     void set_shuffle(float amount);
     void set_step(bool on, int steps);
     void set_fixed_slew(bool on);
-    void set_form(FormMode form) { _lanes[LANE_PITCH].set_form(form); }
-    void set_last_basis(Principle basis) {
-        _lanes[LANE_PITCH].set_last_basis(basis);
-    }
-    FormMode form() const { return _lanes[LANE_PITCH].form(); }
-    Principle last_basis() const {
-        return _lanes[LANE_PITCH].last_basis();
-    }
-    void set_principle(Principle p) { _lanes[LANE_PITCH].set_principle(p); }
+    void set_form(Principle form) { _lanes[LANE_PITCH].set_form(form); }
+    void set_song(SongMode song) { _lanes[LANE_PITCH].set_song(song); }
+    Principle form() const { return _lanes[LANE_PITCH].form(); }
+    SongMode song() const { return _lanes[LANE_PITCH].song(); }
+    void set_principle(Principle p) { set_form(p); }
     void new_phrase() { _lanes[LANE_PITCH].new_phrase(); }
 #ifdef SPKY_TESTING
-    uint8_t song_position_for_test() const {
+    uint32_t song_position_for_test() const {
         return _lanes[LANE_PITCH].song_position();
     }
     uint8_t active_pattern_for_test() const {

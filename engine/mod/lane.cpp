@@ -8,9 +8,6 @@ using namespace spky;
 
 // Mutation character — tuned by ear; the spec fixes behavior, not constants.
 static constexpr float kGravity  = 0.10f;  // GROW: mild pull toward 0 (the root)
-static constexpr float kGrooveVarStart   = 0.25f;  // |variation| below: melody only
-static constexpr float kGrooveRerollGate = 0.9f;   // RENEW near the stop may re-roll all
-static constexpr float kGrooveRerollProb = 0.25f;  // ...with this chance, when the dice hits
 static constexpr float kEndpointSampleEpsilon = 0.001f;
 
 struct ProcessWindowEnd {
@@ -42,28 +39,18 @@ void ModLane::init(float sample_rate, uint32_t seed) {
     _cur_step = -1;
     _shuffle_target = 0.f;
     _shuffle_latched = 0.f;
-    if (_song.form_pending) {
+    if (_song.form_pending)
         _song.selected_form = _song.pending_form;
-        if (_song.selected_form != FormMode::SongAAAB)
-            _song.last_basis =
-                form_basis(_song.selected_form, _song.last_basis);
-    }
+    if (_song.song_pending)
+        _song.selected_song = _song.pending_song;
     _song.active_pattern = 0;
-    _song.form_position = 0;
+    _song.phrase_index = 0;
     MelodyPattern& pattern = _active_pattern();
     if (_melodic) {
-        if (_song_active()) {
-            _generate_pattern_a();
-            _derive_pattern_b();
-        } else {
-            const Principle basis = _song.selected_form == FormMode::SongAAAB
-                ? Principle::TwoMotif
-                : form_basis(_song.selected_form, _song.last_basis);
-            generate_phrase(basis, _rng, _steps,
-                            pattern.pitch, pattern.gate, pattern.motif_id,
-                            pattern.layout);
-            pg_gen_groove(_rng, pattern.layout.motif_len, pattern.cell_groove);
-        }
+        _generate_pattern_a();
+        _derive_pattern_b();
+        _song.active_pattern =
+            song_symbol_at(_song.selected_song, _song.phrase_index);
     } else {
         _fill_walk();
         for (int i = 0; i < kSeqSlots; ++i) {
@@ -73,6 +60,7 @@ void ModLane::init(float sample_rate, uint32_t seed) {
     }
     _melodic_at_init = _melodic;
     _song.form_pending = false;
+    _song.song_pending = false;
     _song.new_pending = false;
     _song.length_pending = false;
     _density = 1.f;
@@ -104,9 +92,18 @@ void ModLane::set_shape(float s)      { _shape = clampf(s, 0.f, 1.f); }
 void ModLane::set_range(float r)      { _range = clampf(r, 0.f, 1.f); }
 void ModLane::set_variation(float v)  { _variation = clampf(v, -1.f, 1.f); }
 
-void ModLane::set_form(FormMode form) {
-    _song.pending_form = clamp_form(static_cast<int>(form));
+void ModLane::set_form(Principle form) {
+    int value = static_cast<int>(form);
+    if (value < 0) value = 0;
+    const int last = static_cast<int>(Principle::kCount) - 1;
+    if (value > last) value = last;
+    _song.pending_form = static_cast<Principle>(value);
     _song.form_pending = _song.pending_form != _song.selected_form;
+}
+
+void ModLane::set_song(SongMode song) {
+    _song.pending_song = clamp_song(static_cast<int>(song));
+    _song.song_pending = _song.pending_song != _song.selected_song;
 }
 
 void ModLane::set_step(bool on, int steps) {
@@ -141,9 +138,7 @@ void ModLane::set_step(bool on, int steps) {
     }
     _step_mode = on;
     _steps = new_steps;
-    if (entering_step &&
-        _melodic_at_init &&
-        _song.selected_form == FormMode::SongAAAB &&
+    if (entering_step && _melodic_at_init &&
         _song.patterns[1].pattern_groove.len == 0)
         _song.new_pending = true;
     _update_inc();
@@ -166,14 +161,9 @@ int ModLane::_effective_length() const {
     return _steps > kSeqSlots ? kSeqSlots : _steps;
 }
 
-bool ModLane::_song_active() const {
-    return _melodic && _step_mode &&
-           _song.selected_form == FormMode::SongAAAB;
-}
-
 void ModLane::_generate_pattern_a() {
     MelodyPattern& pattern = _song.patterns[0];
-    generate_phrase(_song.last_basis, _rng, _steps,
+    generate_phrase(_song.selected_form, _rng, _steps,
                     pattern.pitch, pattern.gate, pattern.motif_id,
                     pattern.layout);
     pg_gen_groove(_rng, pattern.layout.motif_len, pattern.cell_groove);
@@ -186,26 +176,6 @@ void ModLane::_derive_pattern_b() {
                       _song.cadence_slot, _song.bound_a_opening);
 }
 
-void ModLane::_capture_active_as_a() {
-    if (_song.active_pattern != 0)
-        _song.patterns[0] = _active_pattern();
-    expand_pattern_groove(
-        _song.patterns[0].cell_groove, _steps,
-        _song.patterns[0].pattern_groove);
-}
-
-void ModLane::_generate_normal_pattern() {
-    _song.active_pattern = 0;
-    MelodyPattern& pattern = _song.patterns[0];
-    const Principle basis =
-        form_basis(_song.selected_form, _song.last_basis);
-    generate_phrase(basis, _rng, _steps,
-                    pattern.pitch, pattern.gate, pattern.motif_id,
-                    pattern.layout);
-    pg_gen_groove(_rng, pattern.layout.motif_len, pattern.cell_groove);
-    pattern.pattern_groove = {};
-}
-
 void ModLane::_clear_fresh_phrase_state() {
     _note_age = 0;
     _note_hold = 0;
@@ -214,62 +184,48 @@ void ModLane::_clear_fresh_phrase_state() {
     _ev_rate = 0.f;
 }
 
-void ModLane::_apply_pending_form_work() {
-    const FormMode outgoing_form = _song.selected_form;
-    const FormMode incoming_form = _song.form_pending
-        ? _song.pending_form : _song.selected_form;
-    const bool entering_song =
-        outgoing_form != FormMode::SongAAAB &&
-        incoming_form == FormMode::SongAAAB;
-    const bool fresh_song =
-        _song.new_pending || _song.length_pending;
+void ModLane::_apply_pending_song_work() {
+    const bool rebuild =
+        _song.form_pending || _song.new_pending ||
+        _song.length_pending ||
+        _song.patterns[1].pattern_groove.len == 0;
 
-    _song.selected_form = incoming_form;
-    if (_song.selected_form != FormMode::SongAAAB)
-        _song.last_basis =
-            form_basis(_song.selected_form, _song.last_basis);
+    if (_song.form_pending)
+        _song.selected_form = _song.pending_form;
+    if (_song.song_pending)
+        _song.selected_song = _song.pending_song;
 
-    if (_song.selected_form == FormMode::SongAAAB) {
-        const bool missing_song_snapshot =
-            _song.patterns[1].pattern_groove.len == 0;
-        if (fresh_song) {
-            _generate_pattern_a();
-        } else if (entering_song) {
-            _capture_active_as_a();
-        } else if (missing_song_snapshot) {
-            _generate_pattern_a();
-        }
-        if (fresh_song || entering_song ||
-            missing_song_snapshot)
-            _derive_pattern_b();
-        _song.form_position = 0;
-        _song.active_pattern = 0;
+    if (rebuild) {
+        _generate_pattern_a();
+        _derive_pattern_b();
         _clear_fresh_phrase_state();
-    } else {
-        _song.form_position = 0;
-        _generate_normal_pattern();
-        // Preserve the pre-SONG normal-mode rebuild semantics: EVOLVE resets,
-        // while the current note ages naturally across the wrap.
-        _ev_phase = 0.f;
-        _ev_shape = 0.f;
-        _ev_rate = 0.f;
     }
 
+    _song.phrase_index = 0;
+    _song.active_pattern =
+        song_symbol_at(_song.selected_song, _song.phrase_index);
+    if (_song.active_pattern == 1u)
+        bind_song_cadence(
+            _song.patterns[0], _song.patterns[1],
+            _song.cadence_slot, _song.bound_a_opening);
+
     _song.form_pending = false;
+    _song.song_pending = false;
     _song.new_pending = false;
     _song.length_pending = false;
 }
 
 void ModLane::_apply_preroll_work() {
     if (_melodic && _step_mode && _cur_step < 0 &&
-        (_song.form_pending || _song.new_pending))
-        _apply_pending_form_work();
+        (_song.form_pending || _song.song_pending ||
+         _song.new_pending || _song.length_pending))
+        _apply_pending_song_work();
 }
 
-void ModLane::_advance_song_form() {
-    _song.form_position = static_cast<uint8_t>(
-        (_song.form_position + 1u) & 3u);
-    const uint8_t incoming = song_symbol_at(_song.form_position);
+void ModLane::_advance_song() {
+    ++_song.phrase_index;
+    const uint8_t incoming =
+        song_symbol_at(_song.selected_song, _song.phrase_index);
     if (incoming == 1u) {
         bind_song_cadence(
             _song.patterns[0], _song.patterns[1],
@@ -340,7 +296,7 @@ int ModLane::_sh_slot() const {
 
 int ModLane::_groove_k() const {
     const MelodyPattern& pattern = _active_pattern();
-    int L = _song_active()
+    int L = (_melodic && _step_mode)
         ? static_cast<int>(pattern.pattern_groove.len)
         : static_cast<int>(pattern.cell_groove.len);
     if (L < 1) L = 1;
@@ -354,7 +310,7 @@ bool ModLane::_effective_gate(int slot) const {
     const MelodyPattern& pattern = _active_pattern();
     if (!_melodic)
         return pattern.gate[slot];   // non-melodic lanes: all-true, DENSE unrouted
-    if (_song_active()) {
+    if (_step_mode) {
         const int groove_length =
             pattern.pattern_groove.len < 1
                 ? 1 : pattern.pattern_groove.len;
@@ -376,9 +332,7 @@ void ModLane::_on_boundary() {
     if (gated) {
         _fired = true;
         if (_melodic && _step_mode) _start_note(slot);
-        if (_variation > 0.f &&
-            !(_melodic && !_step_mode &&
-              _song.selected_form == FormMode::SongAAAB))
+        if (_variation > 0.f && !(_melodic && !_step_mode))
             _mutate_slot(slot);  // GROW pitch
         _target = _compute_raw();
     } else {
@@ -403,7 +357,7 @@ void ModLane::_start_note(int slot) {
     while (dist < n && !_effective_gate((slot + dist) % n)) ++dist;
     const MelodyPattern& pattern = _active_pattern();
     int hold = 1;
-    if (_song_active()) {
+    if (_melodic && _step_mode) {
         const int groove_length =
             pattern.pattern_groove.len < 1
                 ? 1 : pattern.pattern_groove.len;
@@ -441,8 +395,7 @@ void ModLane::_fill_walk() {
 void ModLane::_renew_units() {
     MelodyPattern& pattern = _active_pattern();
     int units = pattern.layout.motif_count;          // number of renewal units
-    const Principle basis =
-        form_basis(_song.selected_form, _song.last_basis);
+    const Principle basis = _song.selected_form;
     for (int u = 0; u < units; ++u) {
         if (_rng.next_unipolar() < _variation * _variation)  // per-unit dice
             regenerate_unit(basis, _rng, pattern.layout,
@@ -457,26 +410,9 @@ void ModLane::_renew_walk() {
 
 void ModLane::_mutate_groove(bool renew_side) {
     if (!_melodic || !_step_mode) return;
-    if (_song_active()) {
-        mutate_pattern_groove(
-            _rng, _active_pattern().pattern_groove,
-            _variation, renew_side);
-        return;
-    }
-    float a = _variation < 0.f ? -_variation : _variation;
-    float r = (a - kGrooveVarStart) / (1.f - kGrooveVarStart);
-    if (r < 0.f) r = 0.f;
-    if (r > 1.f) r = 1.f;
-    // Dice always drawn while this side is active: fixed base draw count per
-    // wrap; in zone 1 (r == 0) it can never pass.
-    if (_rng.next_unipolar() >= r * r) return;
-    GrooveCell& groove = _active_pattern().cell_groove;
-    if (renew_side) {
-        bool reroll = a >= kGrooveRerollGate && _rng.next_unipolar() < kGrooveRerollProb;
-        pg_groove_mutate_renew(_rng, groove, reroll);
-    } else {
-        pg_groove_mutate_grow(_rng, groove);
-    }
+    mutate_pattern_groove(
+        _rng, _active_pattern().pattern_groove,
+        _variation, renew_side);
 }
 
 void ModLane::_evolve_outgoing_pattern() {
@@ -496,36 +432,23 @@ void ModLane::_evolve_outgoing_pattern() {
     }                                       // variation 0 (LOOP): walk frozen
 }
 
-// Cycle-wrap events, shared by process() and tick(). SONG's order is
-// outgoing evolution -> pending work or AAAB advance. Normal modes retain
-// their historical pending-regeneration -> evolution order.
+// Cycle-wrap events, shared by process() and tick(): outgoing evolution,
+// then pending structural work or SONG advancement.
 void ModLane::_wrap_events() {
     const bool pending =
         _song.form_pending ||
+        _song.song_pending ||
         _song.new_pending ||
         _song.length_pending;
 
-    if (_melodic && !_step_mode &&
-        _song.selected_form == FormMode::SongAAAB)
-        return; // FLOW pauses both SONG snapshots and their form position
-
-    const bool entering_song =
-        _melodic && _step_mode &&
-        _song.form_pending &&
-        _song.selected_form != FormMode::SongAAAB &&
-        _song.pending_form == FormMode::SongAAAB;
-    if (_song_active() || entering_song) {
-        _evolve_outgoing_pattern();
-        if (pending)
-            _apply_pending_form_work();
-        else
-            _advance_song_form();
+    if (_melodic && !_step_mode)
         return;
-    }
 
-    if (pending && _melodic && _step_mode)
-        _apply_pending_form_work();
     _evolve_outgoing_pattern();
+    if (_melodic && _step_mode) {
+        if (pending) _apply_pending_song_work();
+        else         _advance_song();
+    }
 }
 
 float ModLane::process() {
