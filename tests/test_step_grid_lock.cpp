@@ -156,7 +156,9 @@ namespace {
 // A boundary is reported at the raster edge that covers it, and fired()
 // latches until the next follow(), so counting at raster edges counts each
 // boundary exactly once as long as a step is never shorter than the raster.
-// At the fastest panel rate a step is ~200 samples against a 96-sample raster.
+// At the true fastest rate -- SYNC, "1/32", 400 BPM external clock (see
+// super_modulator.h's _deck_step comment for the derivation) -- a step is
+// ~112 samples against a 96-sample raster.
 struct LockResult {
     int   deck_steps = 0;
     int   fires[LANE_COUNT] = {0, 0, 0, 0, 0};
@@ -185,8 +187,8 @@ LockResult run_locked(float shape, bool chaos, int samples, int spot_at = -1) {
     // but its boundary is only reported at the NEXT follow() -- without the
     // flush the equality below would hold by luck of where the last transition
     // fell rather than by construction. Two deck steps inside one window would
-    // still collapse into one latched fired(), but at any panel-reachable rate
-    // a step is ~200 samples against a 96-sample raster.
+    // still collapse into one latched fired(), but even at the true fastest
+    // rate a step is ~112 samples against a 96-sample raster.
     REQUIRE(samples % ModLane::kTickInterval == 0);
     LockResult r;
     int last = m.pitch_cur_step();

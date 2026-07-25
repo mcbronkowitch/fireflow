@@ -171,9 +171,16 @@ private:
     // The deck's own clock, in whole steps. This integer is what makes the
     // grid exact: every follower derives its slot from it, so no float
     // rounding can put two lanes on different boundaries. int32_t is ample
-    // for how long this can actually run continuously: INT32_MAX / 240
-    // (steps/s, well past any panel-reachable STEP rate) is about 104 days;
-    // at a musical 8 steps/s it's 8.5 years. That is a "practically never"
+    // for how long this can actually run continuously. steps/s is always
+    // 8 x master_hz regardless of STEPS (clock_scale() = 8/steps cancels
+    // the step count back out -- lane.h), so the bound is on master_hz, and
+    // the worst case is SYNC, not FREE: FREE tops out at kRateFreeMax (30 Hz,
+    // divisions.h), but SYNC's fastest division, "1/32", has cpb = 8
+    // (divisions.h) and its Hz scales with tempo, and the external-clock path
+    // accepts BPM up to 400 (host/vcv/src/Spotymod.cpp), well past the 240
+    // BPM the TEMPO knob alone reaches. That puts the true fastest rate at
+    // 8 x (400/60 x 8) ~= 427 steps/s. INT32_MAX / 427 is about 58 days; at a
+    // musical 8 steps/s it's still 8.5 years. That is a "practically never"
     // bound, not a "and it's fine if it does" one -- signed overflow is UB in
     // C++, not the graceful wraparound this comment used to imply. int32_t is
     // still the right choice: this engine ships on a Cortex-M7, where 64-bit
