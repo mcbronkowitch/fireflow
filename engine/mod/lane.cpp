@@ -32,6 +32,14 @@ static ProcessWindowEnd process_window_end(
     return {phase, wraps};
 }
 
+// Positive modulo: _follow_offset can be negative after a backwards SPOT
+// nudge, and C++'s % keeps the sign of the dividend.
+static int slot_of(int32_t pos, int slots) {
+    int m = static_cast<int>(pos % slots);
+    if (m < 0) m += slots;
+    return m;
+}
+
 void ModLane::init(float sample_rate, uint32_t seed) {
     _sr = sample_rate;
     _rng.seed(seed);
@@ -73,6 +81,10 @@ void ModLane::init(float sample_rate, uint32_t seed) {
     _ev_phase = 0.f;
     _ev_shape = 0.f;
     _ev_rate  = 0.f;
+    _follow_pos    = 0;
+    _follow_offset = 0;
+    _follow_armed  = false;
+    _follow_jumped = false;
     _shape_offset = 0.f;
     _kick_shape   = 0.f;
     _kick_coef    = std::exp(-1.f / (1.5f * _sr));   // SPOT shape decay tau = 1.5 s
@@ -110,6 +122,9 @@ void ModLane::set_step(bool on, int steps) {
     const bool entering_step = on && !_step_mode;
     if (entering_step) _shuffle_latched = _shuffle_target;
     if (entering_step) { _note_age = 0; _note_hold = 0; }  // STEP entry: no stale sustain
+    // Entering STEP disarms the follower so its first follow() call lands on
+    // the deck's current position instead of replaying the whole count.
+    if (entering_step) { _follow_armed = false; _follow_jumped = false; }
     int new_steps = steps < 1 ? 1 : steps;
     if (_melodic) {
         int old_n = _steps > kSeqSlots ? kSeqSlots : _steps;
@@ -267,6 +282,86 @@ void ModLane::kick(float dphase, float dshape) {
     _kick_shape += dshape;                 // decays back to 0 over ~1.5 s
 }
 
+void ModLane::nudge_slots(int n, float dshape) {
+    // Move the offset AND the remembered position by the same amount: the
+    // jump must not look like elapsed time, or the next follow() would replay
+    // n slots (or, for a negative n, stall until the deck caught back up).
+    _follow_offset += n;
+    _follow_pos    += n;
+    _follow_jumped  = true;
+    _kick_shape    += dshape;
+}
+
+float ModLane::follow(int32_t deck_step, float frac) {
+    _fired   = false;
+    _wrapped = false;
+    _apply_preroll_work();
+    _kick_shape *= _kick_coef_tick;
+    if (_settle_ctr > 0) {
+        _settle_ctr = _settle_ctr > kTickInterval ? _settle_ctr - kTickInterval : 0;
+        _ev_phase   *= _settle_coef_tick;
+        _ev_shape   *= _settle_coef_tick;
+        _ev_rate    *= _settle_coef_tick;
+        _kick_shape *= _settle_coef_tick;
+    }
+
+    const int     slots = _steps < 1 ? 1 : _steps;
+    const int32_t pos   = deck_step + _follow_offset;
+
+    // First call after init/reset/STEP entry: land on the current position
+    // without replaying every step the deck has taken since it started.
+    if (!_follow_armed) {
+        _follow_armed = true;
+        _follow_pos   = pos - 1;
+    }
+
+    int32_t elapsed = pos - _follow_pos;
+    if (elapsed < 0) elapsed = 0;              // only nudge_slots moves backwards
+    // A jump this large means the caller skipped a long stretch (a stopped
+    // transport, a mode switch). Replaying it would burn RNG draws for cycles
+    // nobody heard; land on the current slot instead. Same spirit as tick()'s
+    // edge-walk guard.
+    const int32_t kMaxReplay = 2 * kSeqSlots;
+    if (elapsed > kMaxReplay) {
+        _follow_pos = pos - 1;
+        elapsed     = 1;
+    }
+
+    bool entered = false;
+    for (int32_t k = 1; k <= elapsed; ++k) {
+        const int slot = slot_of(_follow_pos + k, slots);
+        // Boundary targets are evaluated at the exact grid phase, the same
+        // sampling tick() documents for its edge walk.
+        _phase = shuffle_phase_for_position(
+            static_cast<float>(slot), slots, _shuffle_latched);
+        if (slot == 0) {
+            _wrapped = true;
+            _wrap_events();          // before the new cycle's step 0, as in tick()
+        }
+        _enter_step(slot);
+        entered = true;
+    }
+    _follow_pos = pos;
+
+    const int here = slot_of(pos, slots);
+    if (_follow_jumped) {
+        _follow_jumped = false;
+        if (!entered) {
+            _phase = shuffle_phase_for_position(
+                static_cast<float>(here), slots, _shuffle_latched);
+            _enter_step(here);
+        }
+    }
+
+    // Park at the live position so phase(), phase_eff() and any external
+    // reader see where the lane actually is inside its slot.
+    _phase = shuffle_phase_for_position(
+        static_cast<float>(here) + frac, slots, _shuffle_latched);
+
+    float smoothed = _slew_tick.process(_target);
+    return apply_range(smoothed, _range);
+}
+
 void ModLane::settle() {
     _settle_ctr = static_cast<int>(_sr * 1.0f);   // glide EVOLVE + kick over ~1 s
 }
@@ -275,6 +370,12 @@ void ModLane::reset(float phase) {
     _phase = clampf(phase, 0.f, 0.999999f);
     _shuffle_latched = _shuffle_target;
     _cur_step = -1;
+    // RST is the resync gesture: it clears the SPOT offset too, so the lane
+    // comes back to the deck's own slot 0 rather than to a stumbled one.
+    _follow_pos    = 0;
+    _follow_offset = 0;
+    _follow_armed  = false;
+    _follow_jumped = false;
     _note_age = 0;
     _note_hold = 0;
     _slew.reset(_target);

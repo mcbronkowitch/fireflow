@@ -43,6 +43,7 @@ public:
     }
     uint8_t cadence_slot_for_test() const { return _song.cadence_slot; }
     float bound_a_opening_for_test() const { return _song.bound_a_opening; }
+    float rate_hz_for_test() const { return _rate_hz; }
 #endif
 
     float process();                  // advance one sample, return post-range value
@@ -106,6 +107,29 @@ public:
     void set_shape_offset(float o) { _shape_offset = o; }  // DRIFT bank-wide shape tap
     void kick(float dphase, float dshape);                 // SPOT: phase jump + decaying shape
     void settle();                                         // panic: glide EVOLVE + kick to 0
+
+    // --- STEP follower mode (spec 2026-07-25 mod-lane-step-grid-lock) ---
+    //
+    // In STEP a texture lane owns no clock. Instead of integrating a phase it
+    // is told where the deck is: `deck_step` is the cumulative count of steps
+    // the master lane has entered, `frac` where the deck currently sits inside
+    // its step. This lane's position is (deck_step + offset) mod _steps plus
+    // that fraction.
+    //
+    // That is not a cheaper way to stay aligned, it is the only exact one.
+    // Five float phasors at the same nominal rate round differently depending
+    // on how large their phase gets, so lanes with different cycle lengths
+    // drift apart -- measured at ~2 samples per 3000-sample step between an
+    // 8-slot and a 16-slot lane, a full step of slip in about 90 seconds. One
+    // integer count and one shared fraction cannot do that.
+    //
+    // Returns the post-range output, exactly like tick() does for FLOW.
+    float follow(int32_t deck_step, float frac);
+    // SPOT in STEP: shift this lane by `n` whole slots. The offset persists
+    // and is exact; the new slot fires at the next follow() call, which is the
+    // audible stumble. No rounding or parity care is needed -- boundary times
+    // come from the deck, never from this lane's own warp.
+    void  nudge_slots(int n, float dshape);
 
 private:
     void  _update_slew();
@@ -184,6 +208,16 @@ private:
     float _settle_coef  = 1.f;   // per-sample settle glide (tau ~ 0.3 s)
     float _kick_coef_tick   = 1.f;   // _kick_coef ^ kTickInterval
     float _settle_coef_tick = 1.f;   // _settle_coef ^ kTickInterval
+
+    // Follower state. _follow_pos is the last absolute position this lane was
+    // advanced to (deck count + offset), _follow_armed false until the first
+    // follow() call after init/reset/STEP entry so that entering STEP does not
+    // replay history. _follow_jumped makes a nudge audible on the next call
+    // even when no deck step has elapsed.
+    int32_t _follow_pos    = 0;
+    int32_t _follow_offset = 0;
+    bool    _follow_armed  = false;
+    bool    _follow_jumped = false;
 };
 
 } // namespace spky
