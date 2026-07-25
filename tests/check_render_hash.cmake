@@ -2,8 +2,15 @@ if(NOT DEFINED RENDER OR NOT DEFINED SCENARIO OR NOT DEFINED EXPECTED OR NOT DEF
     message(FATAL_ERROR "RENDER, SCENARIO, EXPECTED, and OUT_DIR are required")
 endif()
 
-set(WAV "${OUT_DIR}/ctrl_identity_gate.wav")
-set(CSV "${OUT_DIR}/ctrl_identity_gate.csv")
+if(NOT DEFINED GATE_STEM)
+    set(GATE_STEM "ctrl_identity")
+endif()
+if(NOT DEFINED REFERENCE)
+    set(REFERENCE "SYNTH")
+endif()
+
+set(WAV "${OUT_DIR}/${GATE_STEM}_gate.wav")
+set(CSV "${OUT_DIR}/${GATE_STEM}_gate.csv")
 execute_process(
     COMMAND "${RENDER}" "${SCENARIO}" "${WAV}" "${CSV}"
     RESULT_VARIABLE render_result
@@ -16,5 +23,5 @@ endif()
 file(SHA256 "${WAV}" actual)
 file(REMOVE "${WAV}" "${CSV}")
 if(NOT actual STREQUAL EXPECTED)
-    message(FATAL_ERROR "SYNTH reference moved: expected ${EXPECTED}, got ${actual}")
+    message(FATAL_ERROR "${REFERENCE} reference moved: expected ${EXPECTED}, got ${actual}")
 endif()

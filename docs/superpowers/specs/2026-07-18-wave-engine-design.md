@@ -85,9 +85,12 @@ Python).
   fundamental) ≈ 2032 samples/frame ≈ 4 KB int16 → **65,024 bytes**
   (**32,512 int16 samples**), `static const`.
 - **Band-limiting happens at bake time.** Each mip level is spectrally
-  truncated in the tool: a level of length N keeps partials up to ~N/4 — a
-  guard margin for the images of linear interpolation. The exact guard factor
-  is a bake constant, verified by the aliasing test (§8), not a runtime cost.
+  truncated in the tool: a level of length N keeps partials through N/11,
+  yielding caps of 93, 46, 23, 11, 5, 2, and 1 partials. This is the smallest
+  uniform guard that keeps the images of 2-tap linear interpolation below the
+  `-36 dB` acceptance threshold across every frame and the full admitted pitch
+  range. The top mip is therefore fundamental-only, making WtOsc's existing
+  `0.45 * sample_rate` cap honestly alias-safe without narrowing its API.
 - int16 → float scaling is folded into the output gain (free).
 
 ### 3. WtOsc audio path
@@ -170,7 +173,10 @@ maximum is below the 960,000-cycle block budget. Evidence:
   steal order, CHOKE) run as a second template instantiation against
   `SynthEngineT<WtOsc>`. SYNTH reference renders stay byte-identical after the
   templatization (regression gate for the refactor itself).
-- **Aliasing:** pitch coverage confirms alias energy `<= -36.0 dB`.
+- **Aliasing:** all 16 frames are covered immediately below and above every
+  mip handoff, at every coherent DFT pitch through `0.45 * sample_rate`, and
+  at that exact admitted ceiling; every case keeps alias energy
+  `<= -36.0 dB`.
 - **Continuity:** adjacent-frame control-boundary residual is `< 0.01` and
   active-mip retarget residual is `< 0.01`; position and mip ramps last exactly
   96 samples.
@@ -179,7 +185,7 @@ maximum is below the 960,000-cycle block budget. Evidence:
 - **Reference scenario:** a new `wave_formant_sweep.json` (TIMBRE lane
   traversing the formant zone in FLOW) as listening + regression anchor.
   Its final SHA-256 is
-  `c0e7c1c5b5257cd2dcf0b2060de7e89816745c88da9441f7b4d9a2ad81a4cdb9`.
+  `a2a2fdb22044a0554e08b4ce6145033a81f105d980bc3f125e01d7e5271dc651`.
   The preserved SYNTH reference SHA-256 is
   `659af928e1f273d9ba9619f9ad235844fec1c2277557ed81a0c2dc065c6eb336`.
 

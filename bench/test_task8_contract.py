@@ -20,7 +20,7 @@ QSPI_PROGRAMMER_CORE = ROOT / "bench" / "qspi_programmer" / "program_core.h"
 REPORT_SOURCE = ROOT / "bench" / "report.cpp"
 RAND_SHIM = ROOT / "bench" / "rand_shim.cpp"
 BENCH_MAIN = ROOT / "bench" / "main.cpp"
-SAMPLE_SHA = "81a914d0248bc7265703b81e27e4546264993705c11c1e30acd45cae2390e747"
+SAMPLE_SHA = "1dd351d78cd1d087308862838ac4960da1113e1061ea48003af62a2c56a83193"
 
 
 def compact(text: str) -> str:

@@ -5,6 +5,7 @@ through the debug probe, and capture semihosting output."""
 import argparse
 import csv
 import datetime
+import hashlib
 import io
 import os
 import subprocess
@@ -158,6 +159,95 @@ def parse(lines):
 
 def by_name(rows):
     return {r["name"]: r for r in rows}
+
+
+class BenchValidationError(ValueError):
+    pass
+
+
+def validate_captures(captures):
+    """Reject any repeat capture that cannot be accepted as hardware evidence."""
+    expected = None
+    expected_rows = None
+    expected_identity = None
+    for run_index, (header, rows, _) in enumerate(captures, start=1):
+        identity = (header["qspi_sha256"], header["device_id"])
+        if expected_identity is None:
+            expected_identity = identity
+        elif identity != expected_identity:
+            raise BenchValidationError(
+                "run %d QSPI digest or device fingerprint differs from run 1"
+                % run_index
+            )
+        row_names = [row["name"] for row in rows]
+        names = set(row_names)
+        if len(names) != len(row_names):
+            duplicates = sorted(
+                name for name in names if row_names.count(name) > 1
+            )
+            raise BenchValidationError(
+                "run %d has duplicate row names: %s"
+                % (run_index, ", ".join(duplicates))
+            )
+        required = {"synth_2x4", "wave_2x4"}
+        if not required.issubset(names):
+            raise BenchValidationError(
+                "run %d is missing WAVE acceptance rows: %s"
+                % (run_index, ", ".join(sorted(required - names)))
+            )
+        named = by_name(rows)
+        synth = named["synth_2x4"]
+        wave = named["wave_2x4"]
+        try:
+            synth_avg = int(synth["avg_cyc"])
+            synth_max = int(synth["max_cyc"])
+            wave_avg = int(wave["avg_cyc"])
+            wave_max = int(wave["max_cyc"])
+        except (TypeError, ValueError) as error:
+            raise BenchValidationError(
+                "run %d has a non-numeric WAVE acceptance result" % run_index
+            ) from error
+        if wave_avg > synth_avg:
+            raise BenchValidationError(
+                "run %d WAVE average %d exceeds SYNTH average %d"
+                % (run_index, wave_avg, synth_avg)
+            )
+        if wave_max > synth_max:
+            raise BenchValidationError(
+                "run %d WAVE maximum %d exceeds SYNTH maximum %d"
+                % (run_index, wave_max, synth_max)
+            )
+        if wave_max >= BUDGET_CYCLES:
+            raise BenchValidationError(
+                "run %d WAVE maximum %d is not below the %d-cycle block budget"
+                % (run_index, wave_max, BUDGET_CYCLES)
+            )
+        if expected is None:
+            expected = names
+            expected_rows = by_name(rows)
+            continue
+        if names != expected:
+            missing = sorted(expected - names)
+            extra = sorted(names - expected)
+            raise BenchValidationError(
+                "run %d row set differs (missing: %s; extra: %s)"
+                % (
+                    run_index,
+                    ", ".join(missing) or "none",
+                    ", ".join(extra) or "none",
+                )
+            )
+        current_rows = by_name(rows)
+        drifted = sorted(
+            name
+            for name in expected
+            if expected_rows[name]["checksum"] != current_rows[name]["checksum"]
+        )
+        if drifted:
+            raise BenchValidationError(
+                "run 1 vs run %d checksum drift: %s"
+                % (run_index, ", ".join(drifted))
+            )
 
 
 def current_head():
@@ -364,45 +454,78 @@ def verdict(rows, anchors):
     return out.getvalue()
 
 
-def write_results(out_dir, header, rows, anchors, drift):
+def device_fingerprint(device_id):
+    """Stable, non-reversible identifier for the measured Daisy Seed."""
+    return hashlib.sha256(device_id.encode("ascii")).hexdigest()
+
+
+def write_results(out_dir, captures):
+    header, rows, anchors = captures[0]
     os.makedirs(out_dir, exist_ok=True)
     stamp = datetime.date.today().isoformat()
     base = os.path.join(out_dir, "%s-%s" % (stamp, header["githash"]))
+    fingerprint = device_fingerprint(header["device_id"])
 
     with open(base + ".csv", "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
-        w.writerow(["family", "name", "avg_cyc", "max_cyc",
+        w.writerow(["run", "qspi_sha256", "device_fingerprint",
+                    "family", "name", "avg_cyc", "max_cyc",
                     "pct_avg", "pct_max", "checksum"])
-        for r in rows:
-            w.writerow([r["family"], r["name"], r["avg_cyc"], r["max_cyc"],
-                        r["pct_avg"], r["pct_max"], r["checksum"]])
+        for run_index, (run_header, run_rows, _) in enumerate(captures, start=1):
+            run_fingerprint = device_fingerprint(run_header["device_id"])
+            for r in run_rows:
+                w.writerow([
+                    run_index,
+                    run_header["qspi_sha256"],
+                    run_fingerprint,
+                    r["family"],
+                    r["name"],
+                    r["avg_cyc"],
+                    r["max_cyc"],
+                    r["pct_avg"],
+                    r["pct_max"],
+                    r["checksum"],
+                ])
 
     with open(base + ".md", "w", encoding="utf-8") as fh:
-        fh.write("# Bench run %s — `%s`\n\n" % (stamp, header["githash"]))
+        fh.write("# Bench evidence %s — `%s`\n\n" % (stamp, header["githash"]))
         fh.write("Measured on a Daisy Seed (STM32H750). %s Hz core clock, "
                  "block size %s, %s, `-ffast-math -funroll-loops`. "
                  "Block budget %d cycles.\n\n"
                  % (header["clock"], header["block"], header["cache"],
                     BUDGET_CYCLES))
-        if drift:
-            fh.write("> **WARNING — checksum drift between runs.** %s\n>\n"
-                     "> Determinism is a measured property of this engine, not "
-                     "an assumption. These numbers are suspect until the drift "
-                     "is explained.\n\n" % drift)
+        fh.write(
+            "All %d runs report QSPI payload SHA-256 `%s` and device "
+            "fingerprint `%s` (SHA-256 of the MCU UID).\n\n"
+            % (len(captures), header["qspi_sha256"], fingerprint)
+        )
         fh.write(verdict(rows, anchors))
-        fh.write("## Offline table\n\n")
-        fh.write("| family | workload | avg cyc | max cyc | avg % | max % | checksum |\n")
-        fh.write("|---|---|---:|---:|---:|---:|---|\n")
-        for r in rows:
-            fh.write("| %s | `%s` | %s | %s | %s | %s | `%s` |\n"
-                     % (r["family"], r["name"], r["avg_cyc"], r["max_cyc"],
-                        r["pct_avg"], r["pct_max"], r["checksum"]))
-        if anchors:
-            fh.write("\n## Anchor mode (real audio callback, CpuLoadMeter)\n\n")
-            fh.write("| workload | avg % | max % |\n|---|---:|---:|\n")
-            for x in anchors:
-                fh.write("| `%s` | %s | %s |\n"
-                         % (x["name"], x["avg_pct"], x["max_pct"]))
+        for run_index, (run_header, run_rows, run_anchors) in enumerate(
+                captures, start=1):
+            fh.write("## Run %d\n\n" % run_index)
+            fh.write(
+                "QSPI payload SHA-256 `%s`; device fingerprint `%s`.\n\n"
+                % (
+                    run_header["qspi_sha256"],
+                    device_fingerprint(run_header["device_id"]),
+                )
+            )
+            fh.write("### Offline table\n\n")
+            fh.write("| family | workload | avg cyc | max cyc | avg % | max % | checksum |\n")
+            fh.write("|---|---|---:|---:|---:|---:|---|\n")
+            for r in run_rows:
+                fh.write("| %s | `%s` | %s | %s | %s | %s | `%s` |\n"
+                         % (r["family"], r["name"], r["avg_cyc"], r["max_cyc"],
+                            r["pct_avg"], r["pct_max"], r["checksum"]))
+            if run_anchors:
+                fh.write(
+                    "\n### Anchor mode (real audio callback, CpuLoadMeter)\n\n"
+                )
+                fh.write("| workload | avg % | max % |\n|---|---:|---:|\n")
+                for x in run_anchors:
+                    fh.write("| `%s` | %s | %s |\n"
+                             % (x["name"], x["avg_pct"], x["max_pct"]))
+            fh.write("\n")
     return base
 
 
@@ -429,6 +552,10 @@ def main():
                     help="runs to compare for the determinism check")
     ap.add_argument("--out-dir", default=os.path.join(REPO, "docs", "bench"))
     args = ap.parse_args()
+    if not args.build_only and args.repeat < 2:
+        print("ERROR: hardware evidence requires at least two runs",
+              file=sys.stderr)
+        return 2
 
     try:
         identity = build() if not args.no_build else prepare_existing_artifacts()
@@ -481,22 +608,13 @@ def main():
             return 2
         captures.append(parsed)
 
-    header, rows, anchors = captures[0]
+    try:
+        validate_captures(captures)
+    except BenchValidationError as error:
+        print("ERROR: %s" % error, file=sys.stderr)
+        return 2
 
-    # A repeat run must produce identical checksums. If it does not, the
-    # engine is not deterministic under these conditions and the numbers say
-    # less than they appear to -- so it goes in the file, loudly.
-    drift = ""
-    for j, (_, other, _) in enumerate(captures[1:], start=2):
-        a, b = by_name(rows), by_name(other)
-        bad = [n for n in a
-               if n in b and a[n]["checksum"] != b[n]["checksum"]]
-        if bad:
-            drift += ("Run 1 vs run %d differ on: %s. " % (j, ", ".join(bad)))
-    if drift:
-        print("WARNING: %s" % drift, file=sys.stderr)
-
-    base = write_results(args.out_dir, header, rows, anchors, drift)
+    base = write_results(args.out_dir, captures)
     print("# wrote %s.md and %s.csv" % (base, base), file=sys.stderr)
     return 0
 

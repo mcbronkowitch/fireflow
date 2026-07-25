@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 #include <vector>
 
 #include "synth/wt_osc.h"
@@ -186,19 +187,58 @@ TEST_CASE("wt_osc: same calls produce bit-identical output") {
 
 static std::vector<double> dft_energy(const std::vector<float>& samples) {
     const int n = static_cast<int>(samples.size());
-    std::vector<double> energy(n / 2 + 1);
-    for (int bin = 0; bin <= n / 2; ++bin) {
-        double real = 0.0;
-        double imag = 0.0;
-        for (int i = 0; i < n; ++i) {
-            const double phase = 6.28318530717958647692 * bin * i / n;
-            const double window = 0.5 - 0.5 * std::cos(6.28318530717958647692 * i / (n - 1));
-            const double sample = samples[i] * window;
-            real += sample * std::cos(phase);
-            imag -= sample * std::sin(phase);
+    if ((n & (n - 1)) != 0) {
+        std::vector<double> energy(n / 2 + 1);
+        for (int bin = 0; bin <= n / 2; ++bin) {
+            double real = 0.0;
+            double imag = 0.0;
+            for (int i = 0; i < n; ++i) {
+                const double phase =
+                    6.28318530717958647692 * bin * i / n;
+                const double window =
+                    0.5 - 0.5 * std::cos(
+                        6.28318530717958647692 * i / (n - 1));
+                const double sample = samples[i] * window;
+                real += sample * std::cos(phase);
+                imag -= sample * std::sin(phase);
+            }
+            energy[bin] = real * real + imag * imag;
         }
-        energy[bin] = real * real + imag * imag;
+        return energy;
     }
+
+    std::vector<std::complex<double>> bins(n);
+    for (int i = 0; i < n; ++i) {
+        const double window =
+            0.5 - 0.5 * std::cos(6.28318530717958647692 * i / (n - 1));
+        bins[i] = samples[i] * window;
+    }
+
+    for (int i = 1, j = 0; i < n; ++i) {
+        int bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) std::swap(bins[i], bins[j]);
+    }
+    for (int length = 2; length <= n; length <<= 1) {
+        const double angle = -6.28318530717958647692 / length;
+        const std::complex<double> step(std::cos(angle), std::sin(angle));
+        for (int start = 0; start < n; start += length) {
+            std::complex<double> twiddle(1.0, 0.0);
+            for (int offset = 0; offset < length / 2; ++offset) {
+                const std::complex<double> even = bins[start + offset];
+                const std::complex<double> odd =
+                    bins[start + offset + length / 2] * twiddle;
+                bins[start + offset] = even + odd;
+                bins[start + offset + length / 2] = even - odd;
+                twiddle *= step;
+            }
+        }
+    }
+
+    std::vector<double> energy(n / 2 + 1);
+    for (int bin = 0; bin <= n / 2; ++bin)
+        energy[bin] = std::norm(bins[bin]);
     return energy;
 }
 
@@ -207,7 +247,9 @@ static double other_bin_energy_db(const std::vector<float>& samples, float freq,
     const std::vector<double> energy = dft_energy(samples);
     double wanted = 0.0;
     double unwanted = 0.0;
-    const int max_retained_partial = wt::kMipLength[mip] / 4;
+    constexpr int kSpectralGuardDivisor = 11;
+    const int max_retained_partial =
+        wt::kMipLength[mip] / kSpectralGuardDivisor;
     for (int bin = 0; bin < static_cast<int>(energy.size()); ++bin) {
         bool harmonic = false;
         for (int h = 1; h <= max_retained_partial && h * freq < sample_rate * 0.5f; ++h) {
@@ -234,8 +276,8 @@ TEST_CASE("wt_osc: retained-partial mask detects a folded high harmonic") {
         samples.push_back(std::sin(phase) + 0.1f * std::sin(9.f * phase));
     }
 
-    // The ninth partial folds onto the seventh harmonic bin.  Mip 6 retains
-    // only four source partials, so this must count as out-of-band energy.
+    // The ninth partial folds onto the seventh harmonic bin.  The guarded
+    // 16-sample mip retains only its fundamental, so this is out-of-band.
     CHECK(other_bin_energy_db(samples, freq, sample_rate, 6) > -36.0);
 }
 
@@ -254,5 +296,87 @@ TEST_CASE("wt_osc: band-limited mips keep alias energy 36 dB below harmonics") {
         for (int i = 0; i < sample_count; ++i) samples.push_back(o.process());
 
         CHECK(other_bin_energy_db(samples, freq, sample_rate, o.mip_level()) <= -36.0);
+    }
+}
+
+static std::vector<float> render_wt_frame(float sample_rate, float freq,
+                                          int frame, int sample_count,
+                                          int* selected_mip = nullptr) {
+    WtOsc o;
+    o.init(sample_rate);
+    o.set_morph(frame / 15.f);
+    o.set_freq(freq);
+    for (int i = 0; i < WtOsc::kRampSamples; ++i) o.process();
+    if (selected_mip) *selected_mip = o.mip_level();
+
+    std::vector<float> samples;
+    samples.reserve(sample_count);
+    for (int i = 0; i < sample_count; ++i) samples.push_back(o.process());
+    return samples;
+}
+
+TEST_CASE("wt_osc: every frame is alias-safe immediately around every mip handoff") {
+    constexpr float sample_rate = 48000.f;
+    constexpr int sample_count = 32768;
+    constexpr float bin_hz = sample_rate / sample_count;
+    for (int frame = 0; frame < wt::kFrameCount; ++frame) {
+        for (int mip = 0; mip < wt::kMipCount - 1; ++mip) {
+            const float boundary =
+                2.f * sample_rate / wt::kMipLength[mip];
+            for (float side : {-1.f, 1.f}) {
+                const float freq = boundary + side * bin_hz;
+                int selected_mip = -1;
+                const std::vector<float> samples =
+                    render_wt_frame(sample_rate, freq, frame, sample_count,
+                                    &selected_mip);
+                const double alias_db = other_bin_energy_db(
+                    samples, freq, sample_rate, selected_mip);
+                CHECK_MESSAGE(
+                    alias_db <= -36.0,
+                    "frame=" << frame << " freq=" << freq
+                    << " mip=" << selected_mip << " alias_db=" << alias_db);
+            }
+        }
+    }
+}
+
+TEST_CASE("wt_osc: coherent pitch grid is alias-safe across the admitted range") {
+    constexpr float sample_rate = 56320.f;
+    constexpr int sample_count = 2048;
+    constexpr float bin_hz = sample_rate / sample_count;
+    constexpr int max_coherent_bin =
+        static_cast<int>(0.45f * sample_count);
+    for (int frame = 0; frame < wt::kFrameCount; ++frame) {
+        for (int bin = 1; bin <= max_coherent_bin; ++bin) {
+            const float freq = bin * bin_hz;
+            int selected_mip = -1;
+            const std::vector<float> samples =
+                render_wt_frame(sample_rate, freq, frame, sample_count,
+                                &selected_mip);
+            const double alias_db = other_bin_energy_db(
+                samples, freq, sample_rate, selected_mip);
+            CHECK_MESSAGE(
+                alias_db <= -36.0,
+                "frame=" << frame << " freq=" << freq
+                << " mip=" << selected_mip << " alias_db=" << alias_db);
+        }
+    }
+}
+
+TEST_CASE("wt_osc: the exact admitted frequency ceiling is alias-safe") {
+    constexpr float sample_rate = 48000.f;
+    constexpr float max_freq = 0.45f * sample_rate;
+    constexpr int sample_count = 640; // 0.45 * 640 = coherent DFT bin 288.
+    for (int frame = 0; frame < wt::kFrameCount; ++frame) {
+        int selected_mip = -1;
+        const std::vector<float> samples =
+            render_wt_frame(sample_rate, max_freq, frame, sample_count,
+                            &selected_mip);
+        const double alias_db = other_bin_energy_db(
+            samples, max_freq, sample_rate, selected_mip);
+        CHECK_MESSAGE(
+            alias_db <= -36.0,
+            "frame=" << frame << " freq=" << max_freq
+            << " mip=" << selected_mip << " alias_db=" << alias_db);
     }
 }

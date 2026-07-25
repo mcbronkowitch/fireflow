@@ -17,6 +17,8 @@ TEST_CASE("wave engine TIMBRE scans the bank instead of analog shapes") {
     WaveEngine vocal;
     dark.init(48000.f);
     vocal.init(48000.f);
+    dark.set_detune(0.f);
+    vocal.set_detune(0.f);
     float td[LANE_COUNT] = {0.f, 1.f, 0.45f, 0.f, 1.f};
     float tv[LANE_COUNT] = {0.35f, 1.f, 0.45f, 0.f, 1.f};
     dark.set_targets(td, 0.5f);

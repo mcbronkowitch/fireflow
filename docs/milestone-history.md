@@ -1183,11 +1183,15 @@ in `.qspiflash_data` at `0x90040000`. Keeping it in AXI SRAM overflowed that
 region, while mapped QSPI passed the hardware CPU gate; no SDRAM boot copy was
 needed.
 
-The completed oscillator tests set alias energy at `<= -36.0 dB`, adjacent-frame
-control-boundary residual at `< 0.01`, active-mip retarget residual at `< 0.01`,
-and both position and mip ramps at exactly 96 samples. The final WAVE listening
-anchor, `host/render/scenarios/wave_formant_sweep.json`, has SHA-256
-`c0e7c1c5b5257cd2dcf0b2060de7e89816745c88da9441f7b4d9a2ad81a4cdb9`; the
+The completed oscillator tests set alias energy at `<= -36.0 dB` across all
+16 frames, both sides of every mip handoff, every coherent pitch through the
+public `0.45 * sample_rate` ceiling, and that exact ceiling. The N/11 bake
+guard retains 93, 46, 23, 11, 5, 2, and 1 partials while preserving the
+16-frame, 7-mip, 65,024-byte layout. Adjacent-frame control-boundary residual
+is `< 0.01`, active-mip retarget residual is `< 0.01`, and both position and
+mip ramps remain exactly 96 samples. The final WAVE listening anchor,
+`host/render/scenarios/wave_formant_sweep.json`, has SHA-256
+`a2a2fdb22044a0554e08b4ce6145033a81f105d980bc3f125e01d7e5271dc651`; the
 preserved SYNTH reference is
 `659af928e1f273d9ba9619f9ad235844fec1c2277557ed81a0c2dc065c6eb336`.
 

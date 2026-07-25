@@ -3,6 +3,7 @@ project(spky LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 # Portable engine: header-only for now; carries the include dir.
 add_library(spky_engine INTERFACE)
@@ -151,4 +152,23 @@ add_test(
         -DEXPECTED=659af928e1f273d9ba9619f9ad235844fec1c2277557ed81a0c2dc065c6eb336
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -P ${CMAKE_SOURCE_DIR}/tests/check_render_hash.cmake
+)
+
+add_test(
+    NAME wave_formant_sweep
+    COMMAND ${CMAKE_COMMAND}
+        -DRENDER=$<TARGET_FILE:render>
+        -DSCENARIO=${CMAKE_SOURCE_DIR}/host/render/scenarios/wave_formant_sweep.json
+        -DEXPECTED=a2a2fdb22044a0554e08b4ce6145033a81f105d980bc3f125e01d7e5271dc651
+        -DOUT_DIR=${CMAKE_BINARY_DIR}
+        -DGATE_STEM=wave_formant_sweep
+        -DREFERENCE=WAVE
+        -P ${CMAKE_SOURCE_DIR}/tests/check_render_hash.cmake
+)
+
+add_test(
+    NAME wavetable_bank_fresh
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tools/bake_wavetables.py
+        --check
 )

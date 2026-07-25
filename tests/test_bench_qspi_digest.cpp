@@ -14,7 +14,7 @@ TEST_CASE("bench QSPI digest matches the independently baked bank SHA") {
         digest);
     CHECK(std::strcmp(
               digest,
-              "0163e3ba4988f5769eece514be01fbf48e134af4b407b0710762f81356f20f82")
+              "ac234ac7f7540ed5cd0e8b8496b84fca8084a3b2c05cc513aa4dad8ed811fc27")
           == 0);
 }
 

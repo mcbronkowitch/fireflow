@@ -23,13 +23,17 @@ programmed WAVE bank matches the current linked QSPI payload, loads only the
 SRAM side of the image through the debug probe, and captures its
 semihosting output **twice** (`--repeat 2` is the default — see "Anchor
 mode's audio" below for what that means out loud), compares the two runs'
-checksums, and writes `../docs/bench/YYYY-MM-DD-<githash>.md` and `.csv`.
-Exit code 0 means both runs completed and a file was written; a checksum
-mismatch between the two runs does **not** stop the file from being
-written — it lands in the `.md` as a warning block instead, because
-determinism is a measured property of this engine, not an assumption.
+unique row sets and checksums, enforces the matched WAVE/SYNTH acceptance
+gate on every run, and writes both complete captures to
+`../docs/bench/YYYY-MM-DD-<githash>.md` and `.csv`. The CSV carries a run
+index, the live QSPI payload digest, and a SHA-256 device fingerprint on every
+row; the Markdown records those identities and both offline/anchor tables.
+Exit code 0 means at least two runs passed every gate and both were persisted.
+A missing/extra/duplicate row, checksum drift, identity drift, non-numeric
+WAVE result, WAVE result slower than SYNTH, or WAVE maximum at or above the
+960,000-cycle block budget exits nonzero and writes no accepted evidence.
 
-Useful flags: `--repeat N` (default 2), `--out-dir DIR` (default
+Useful flags: `--repeat N` (default and minimum 2), `--out-dir DIR` (default
 `../docs/bench`), `--build-only`, `--no-build`, `--timeout SECONDS` (default
 600, per run), `--interface CFG` (see below), and `--program-qspi`.
 
@@ -77,7 +81,9 @@ that firmware-reported digest with the extracted payload. `BENCH_BEGIN` also
 reports the Seed's 96-bit MCU UID, which must strictly match the UID captured
 by the programming receipt. Together these checks catch a different Seed, a
 later QSPI overwrite, or blank/wrong QSPI even if an old local receipt
-remains. Hardware evidence is refused from a dirty Git tree.
+remains. Accepted evidence persists the payload digest and a stable SHA-256
+fingerprint of that UID without publishing the raw device identifier.
+Hardware evidence is refused from a dirty Git tree.
 
 Programming this address overwrites the leading bank region and therefore
 invalidates whatever BOOT_SRAM/BOOT_QSPI application was previously stored

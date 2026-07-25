@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 MIP_LENGTHS = (1024, 512, 256, 128, 64, 32, 16)
-GUARD_DIVISOR = 4
+GUARD_DIVISOR = 11
 RECIPES = [
     [(1, 1.00, 0.00)],
     [(1, 1.00, 0.00), (2, 0.16, 0.13), (3, 0.28, 0.37), (5, 0.10, 0.61)],
