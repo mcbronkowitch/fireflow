@@ -34,8 +34,8 @@ WAVE covers the bell, vocal-formant, hollow-resonant, and bright-digital corner.
 All three sit behind the same five modulation lanes and the same voice row, so
 no knob goes dead when you flip the engine.
 
-That voice-row **SOURCE** control is contextual â€” **TIMB** on Synth, **FRAME**
-on WAVE, and **ORG** on Sampler â€” while **Detune A/B** remains an independent
+That voice-row **SOURCE** control is contextual — **TIMB** on Synth, **FRAME**
+on WAVE, and **ORG** on Sampler — while **Detune A/B** remains an independent
 per-part setting.
 
 On the texture deck, **STEP** walks a `SliceMap` of transients marked while the

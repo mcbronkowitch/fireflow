@@ -602,8 +602,8 @@ the existing ENG pad plus one REC button per part.
 Shipped in three passes — **M5a** engine + render host, **M5b** the VCV panel
 (ENG/REC, WAV load/save, patch persistence, factory sample), **M5c** the
 Morphagene-style surface (DENS, SCAN, NEW, LEN). Released in **2.8.0**. In
-**2.13.0**, the visible SOURCE control became contextual â€” `TIMB` on Synth,
-`FRAME` on WAVE, and `ORG` on Sampler â€” and independent per-part Detune A/B
+**2.13.0**, the visible SOURCE control became contextual — `TIMB` on Synth,
+`FRAME` on WAVE, and `ORG` on Sampler — and independent per-part Detune A/B
 arrived in the context menu.
 
 The deck then received five completed follow-up milestones before hardware work:
