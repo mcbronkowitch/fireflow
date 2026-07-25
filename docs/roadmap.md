@@ -9,15 +9,15 @@ is actually built today, and what is still design-only.
   (`2026-07-11-spotykach-scales-design.md`), the FX spec
   (`2026-07-11-spotykach-fx-design.md`), the center-section spec
   (`2026-07-12-spotykach-center-section-design.md`) and the ambient-reverb v2
-  spec (`2026-07-12-spotykach-ambient-reverb-v2-design.md`).
-- **Last updated:** 2026-07-25 (M5i WAVE is complete; STRING is the next
-  planned engine milestone before the hardware-facing M6 milestone).
+  spec (`2026-07-12-spotykach-ambient-reverb-v2-design.md`), and the FORM/SONG split spec
+  (`2026-07-25-spotykach-form-song-split-design.md`).
+- **Last updated:** 2026-07-25 (VCV 2.13.1; the FORM/SONG A/B arranger is
+  complete; STRING remains the next planned engine milestone before M6).
 
-> **Reminder:** the engine and its milestones are still verified only against
-> the desktop offline renderer (unit tests + WAV/CSV render) — the Daisy
-> firmware shell that runs the actual synth on hardware is milestone **M6**.
-> The CPU budget, though, has now been measured on real hardware: see
-> `docs/bench/`.
+> **Reminder:** the portable engine is exercised by the desktop offline
+> renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
+> hardware measurements in `docs/bench/`, but the modulation-first firmware
+> shell that runs the instrument on Spotykach hardware remains milestone M6.
 
 ## Status at a glance
 
@@ -50,6 +50,7 @@ is actually built today, and what is still design-only.
 | **Sampler bench + grain cap** | The texture deck priced on the Daisy (7 rows + 6 ablations), and the grain-count spike it exposed capped via `kSpawnHeadroom` | ✅ **done** (`bench/workloads_sampler.cpp`, `docs/bench/2026-07-22-*`) |
 | **CPU hunt round 3** | Three measured removals: libm `sinf` on the reverb send per sample, a filter computing five outputs to use one (`engine/util/svf_lp.h`), and control-rate libm re-run on unchanged inputs | ✅ **done** (engine; released in 2.8.0) |
 | **M5i** | WAVE — four-voice PPG-style wavetable part engine | ✅ **done** (engine/core, renderer, and VCV; 65,024-byte mapped-QSPI bank; `wave_2x4` 308497 / 312180 cycles in hardware run 1, below SYNTH and budget) |
+| **+ FORM/SONG** | Persistent A/B phrase snapshots with independent phrase-engine FORM and seven-mode SONG arrangement | ✅ **done** (engine, renderer, and VCV; released in 2.13.1; stable VCV parameter IDs and legacy patch migration) |
 | **M5j** | STRING — four-voice Karplus-Strong part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
@@ -60,9 +61,10 @@ last). The scale layer was inserted after M1 because it only touches the PITCH
 lane's output stage and needed no new engine. M1.6 sits before M2 so that
 M2–M5 build on the final signal chain (part FX + reverb sends) from the start
 instead of rewiring it later; the M1 test tone is enough to hear and verify
-the effects in the renderer. M5j–M5l are the remaining engine-level milestones
-that can be completed without the target hardware; M6 follows them as the
-hardware bring-up.
+the effects in the renderer. FORM/SONG is a completed cross-cutting melodic STEP
+capability and does not change the M5j → M5k → M5l → M6 order. M5j–M5l are the
+remaining engine-level milestones that can be completed without the target
+hardware; M6 follows them as the hardware bring-up.
 
 ## Done
 
@@ -602,7 +604,9 @@ Panel cost: the existing ENG pad plus one REC button per part.
 Shipped in three passes — **M5a** engine + render host, **M5b** the VCV panel
 (ENG/REC, WAV load/save, patch persistence, factory sample), **M5c** the
 Morphagene-style surface (DENS, SCAN, NEW, LEN, contextual SOURCE/ORG, and
-independent Detune A/B in the context menu). Released in **2.8.0**.
+independent Detune A/B in the context menu). Released in **2.8.0**. The
+contextual SOURCE control plus independent context-menu Detune was released in
+**2.13.0**.
 
 The deck then received five completed follow-up milestones before hardware work:
 
@@ -650,6 +654,42 @@ Scenario: `host/render/scenarios/wave_formant_sweep.json`
 (`wave_formant_sweep.sha256`). Spec:
 `docs/superpowers/specs/2026-07-18-wave-engine-design.md`. Hardware evidence:
 `docs/bench/2026-07-25-8c5f2e1.md` and `docs/bench/2026-07-25-8c5f2e1.csv`.
+Released in **2.13.0**.
+
+### FORM/SONG phrase arranger ✅
+
+Melodic STEP lanes own two persistent full-pattern snapshots. FORM generates A
+with one of TWO MOTIFS, ONE + VAR, HIERARCHICAL, CALL / RESPONSE, or OSTINATO;
+B is derived as a related turnaround. SONG selects only which stored snapshot
+plays and therefore consumes no random draw.
+
+| SONG | Sequence |
+|------|----------|
+| AAAB | `AAAB · AAAB · …` |
+| ABAB | `ABAB · ABAB · …` |
+| ABBB | `ABBB · ABBB · …` |
+| BUILD | `AAAB · AABB · ABBB · AABB` |
+| ROTATE | `AAAB · AABA · ABAA · BAAA` |
+| MIRROR | deterministic Thue–Morse A/B selection |
+| OFF | A plays and evolves continuously; B remains stored |
+
+FORM, SONG, NEW, and effective STEPS changes apply only at melodic STEP phrase
+boundaries. SONG-only changes preserve both snapshots; FORM, NEW, and effective
+STEPS rebuild the pair and restart SONG. NEW also punches an active Sampler
+immediately. FLOW pauses arrangement position and snapshot evolution.
+
+The VCV PLAY row is `STEP · FORM · SONG · NEW`; TRIG was removed. The stable
+PRINCIPLE numeric slots became FORM, stable TRIGGER numeric slots became SONG,
+and NEW kept its IDs while moving outward. Old `principle` and beta `lastBasis`
+JSON states migrate to FORM; SONG starts at AAAB. Generated notes and live phrase
+position are not serialized.
+
+Verification includes `host/render/scenarios/demo_song_aaab.json`,
+`host/render/scenarios/demo_song_modes.json`, deterministic helper/lane/host
+tests, the VCV panel guard, and the 2.13.1 release.
+
+Approved split spec:
+`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`.
 
 ## Planned
 
