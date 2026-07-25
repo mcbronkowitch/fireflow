@@ -371,6 +371,27 @@ TEST_CASE("steplock: RST puts every lane back on slot 0") {
     }
 }
 
+TEST_CASE("steplock: a mid-STEP snap does not bank a phantom deck step") {
+    // snap_pitch_phase() is a positional jump, not elapsed time: it moves
+    // PITCH straight to a given phase without ever crossing the boundaries
+    // in between. ModLane::reset() (called from snap_pitch_phase()) leaves
+    // _cur_step at -1, and snap_pitch_phase() must re-arm
+    // _last_pitch_step to -1 right along with it -- SuperModulator::process()
+    // banks a deck step on every _cur_step CHANGE it sees, with no way to
+    // tell "the lane actually played through a step" apart from "the lane's
+    // step index just looks different because of a jump". Without that
+    // rearm, the stale pre-snap _last_pitch_step disagrees with the
+    // post-snap cur_step on the very next process() call, and the deck
+    // counts a step that was never played -- rotating all four texture
+    // followers onto a slot the deck never crossed.
+    SuperModulator m; m.init(48000.f, 7u); m.set_rate(0.45f); m.set_step(true, 8);
+    while (m.deck_step_for_test() < 5) m.process();
+    const int32_t before = m.deck_step_for_test();
+    m.snap_pitch_phase(m.pitch_cur_step() == 0 ? 0.6f : 0.02f);
+    for (int i = 0; i < 4; ++i) m.process();
+    CHECK(m.deck_step_for_test() == before);
+}
+
 TEST_CASE("steplock: leaving STEP hands the lanes back their own clocks") {
     SuperModulator m;
     m.init(48000.f, 99u);
