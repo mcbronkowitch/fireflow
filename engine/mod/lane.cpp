@@ -73,6 +73,8 @@ void ModLane::init(float sample_rate, uint32_t seed) {
     _ev_phase = 0.f;
     _ev_shape = 0.f;
     _ev_rate  = 0.f;
+    _ev_rate_ext_on = false;
+    _ev_rate_ext    = 0.f;
     _shape_offset = 0.f;
     _kick_shape   = 0.f;
     _kick_coef    = std::exp(-1.f / (1.5f * _sr));   // SPOT shape decay tau = 1.5 s
@@ -265,6 +267,30 @@ void ModLane::kick(float dphase, float dshape) {
     _phase += dphase;
     _phase -= std::floor(_phase);          // permanent wrap into [0,1)
     _kick_shape += dshape;                 // decays back to 0 over ~1.5 s
+}
+
+void ModLane::kick_steps(int n, float dshape) {
+    // Jump n whole slots while KEEPING the position inside the current step.
+    // Dropping that fraction would look like a clean landing on a boundary and
+    // is in fact the one thing this must not do: the lane would then need a
+    // full step to reach its next boundary while the deck needs only what is
+    // left of the current one, so the two would come out `frac` apart and stay
+    // that way. Preserving it is what makes the kick grid-neutral.
+    //
+    // The position is expressed in step units and mapped back through the same
+    // warp the clock walker uses, so a shuffled lane lands on a shuffled
+    // position rather than a straight one. _cur_step is deliberately left
+    // alone -- both process() and tick() open with a "phase says a different
+    // step than _cur_step remembers" check, which fires the new step for us
+    // (see the comment in tick()). That one fire at the moment of the kick is
+    // the audible stumble; it is the only boundary SPOT places off the grid.
+    const int   steps = _steps < 1 ? 1 : _steps;
+    const int   cur   = _cur_step < 0 ? 0 : _cur_step;
+    const float frac  = shuffle_step_fraction(
+        _phase, cur, steps, _shuffle_latched);
+    _phase = shuffle_phase_for_position(
+        static_cast<float>(cur + n) + frac, steps, _shuffle_latched);
+    _kick_shape += dshape;
 }
 
 void ModLane::settle() {
@@ -463,7 +489,7 @@ float ModLane::process() {
         _ev_rate    *= _settle_coef;
         _kick_shape *= _settle_coef;
     }
-    _phase += _phase_inc * (1.f + _ev_rate);
+    _phase += _phase_inc * (1.f + _rate_walk());
     bool wrapped = false;
     while (_phase >= 1.f) { _phase -= 1.f; wrapped = true; }
     _wrapped = wrapped;
@@ -516,7 +542,7 @@ float ModLane::tick() {
     float window_dp[2 * kSeqSlots + 1];
     int window_dp_count = 1;
     int window_wraps = 0;
-    window_dp[0] = _phase_inc * (1.f + _ev_rate);
+    window_dp[0] = _phase_inc * (1.f + _rate_walk());
 
     // Pending step mismatch first: init/reset leave _cur_step = -1 and the
     // per-sample path fires step 0 on its very first sample the same way.
@@ -542,7 +568,7 @@ float ModLane::tick() {
     while (guard-- > 0) {
         // _ev_rate can change at a wrap (GROW walk), so the per-sample rate
         // is re-derived per edge -- the per-sample path does the same.
-        const float dp1 = _phase_inc * (1.f + _ev_rate);
+        const float dp1 = _phase_inc * (1.f + _rate_walk());
         const float next_edge = _step_mode
             ? shuffle_boundary_phase(_cur_step + 1, _steps, _shuffle_latched)
             : 1.f;
@@ -584,7 +610,7 @@ float ModLane::tick() {
             ++window_wraps;
             if (window_dp_count < 2 * kSeqSlots + 1)
                 window_dp[window_dp_count++] =
-                    _phase_inc * (1.f + _ev_rate);
+                    _phase_inc * (1.f + _rate_walk());
             if (_step_mode) _enter_step(0);
             else _on_boundary();         // FLOW fires per wrap; STEP fires step 0
         } else {

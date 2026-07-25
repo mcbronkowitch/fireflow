@@ -43,6 +43,7 @@ public:
     }
     uint8_t cadence_slot_for_test() const { return _song.cadence_slot; }
     float bound_a_opening_for_test() const { return _song.bound_a_opening; }
+    float rate_hz_for_test() const { return _rate_hz; }
 #endif
 
     float process();                  // advance one sample, return post-range value
@@ -94,7 +95,7 @@ public:
     // fallback, inherits the error straight from here. 0 when stopped.
     float step_samples() const {
         return _phase_inc > 0.f
-            ? 1.f / (_phase_inc * (1.f + _ev_rate) * static_cast<float>(_steps))
+            ? 1.f / (_phase_inc * (1.f + _rate_walk()) * static_cast<float>(_steps))
             : 0.f;
     }
     float phase_eff() const;                  // audible phase = (_phase + EVOLVE offset), wrapped
@@ -105,6 +106,22 @@ public:
     // --- M4 center hooks ---
     void set_shape_offset(float o) { _shape_offset = o; }  // DRIFT bank-wide shape tap
     void kick(float dphase, float dshape);                 // SPOT: phase jump + decaying shape
+    // STEP grid lock (spec 2026-07-25 mod-lane-step-grid-lock). In STEP the
+    // texture lanes must not walk their own EVOLVE rate -- an independent
+    // +-20% walk per lane is one of the six things that used to push them off
+    // the deck's step grid for good. While `on`, the phase advance uses `v`
+    // (the master lane's walk) instead of this lane's `_ev_rate`. The per-lane
+    // draw in _evolve_outgoing_pattern still happens and is discarded, which
+    // keeps _ev_phase and _ev_shape on their established RNG progression.
+    void  set_ev_rate_external(bool on, float v) {
+        _ev_rate_ext_on = on;
+        _ev_rate_ext = v;
+    }
+    float ev_rate() const { return _ev_rate; }
+    // SPOT in STEP: a phase jump of `n` whole slots. Unlike kick()'s raw
+    // phase addition this lands on a real boundary under SHUFFLE too, so the
+    // stumble stays on the grid.
+    void  kick_steps(int n, float dshape);
     void settle();                                         // panic: glide EVOLVE + kick to 0
 
 private:
@@ -175,6 +192,12 @@ private:
     float _ev_phase = 0.f;   // EVOLVE random-walk offsets: shape / phase / rate (Task 7)
     float _ev_shape = 0.f;
     float _ev_rate  = 0.f;
+    // The rate offset the phase advance actually uses. Every advance path
+    // must read this, never _ev_rate directly -- process(), tick()'s dp
+    // derivations and step_samples() are a matched set here.
+    float _rate_walk() const { return _ev_rate_ext_on ? _ev_rate_ext : _ev_rate; }
+    bool  _ev_rate_ext_on = false;
+    float _ev_rate_ext    = 0.f;
 
     // M4 center hooks
     float _shape_offset = 0.f;   // DRIFT shape tap (set per control tick)
