@@ -39,7 +39,7 @@ FORM has five snapped values:
 4. `CALL / RESPONSE`
 5. `OSTINATO`
 
-SONG has six snapped values:
+SONG has seven snapped values:
 
 1. `AAAB`
 2. `ABAB`
@@ -47,6 +47,7 @@ SONG has six snapped values:
 4. `BUILD`
 5. `ROTATE`
 6. `MIRROR`
+7. `OFF`
 
 SONG only selects A or B. It does not mutate pitches, gates, groove ranks, note
 lengths, or motif metadata, and it consumes no random draws.
@@ -98,6 +99,19 @@ ABBA · BAAB · BAAB · ABBA · …
 
 This is deterministic and non-periodic without storing a long sequence or
 using randomness.
+
+### 3.5 OFF
+
+OFF selects Phrase A for every phrase index:
+
+```text
+AAAA · AAAA · AAAA · …
+```
+
+It disables only A/B arrangement. Phrase A continues to evolve under MELODY.
+Phrase B remains allocated and unchanged during OFF playback, so returning to an
+active SONG mode does not require regeneration. FORM, NEW, and effective STEPS
+changes still rebuild both A and B while OFF is selected.
 
 ## 4. Boundary lifecycle
 
@@ -152,6 +166,7 @@ enum class SongMode : uint8_t {
     Build,
     Rotate,
     Mirror,
+    Off,
     kCount
 };
 ```
@@ -168,10 +183,10 @@ The former four-position `form_position` is no longer sufficient because BUILD,
 ROTATE, and MIRROR span or exceed one four-phrase group.
 
 A pure allocation-free helper
-`song_symbol_at(SongMode mode, uint32_t phrase_index)` implements all six
+`song_symbol_at(SongMode mode, uint32_t phrase_index)` implements all seven
 sequences. Fixed modes use four-symbol lookup tables, BUILD and ROTATE use
-16-symbol lookup tables, and MIRROR computes bit parity. It returns only 0 or 1
-and never reads mutable lane state.
+16-symbol lookup tables, MIRROR computes bit parity, and OFF always returns 0.
+It returns only 0 or 1 and never reads mutable lane state.
 
 The portable API exposes clamped setters and observability for both dimensions:
 
@@ -210,7 +225,7 @@ Part B mirrors the same geometry. TRIG disappears from the faceplate.
 Parameter IDs remain stable in count and per-Part stride:
 
 - the existing `PRINCIPLE_A/B` slots become the five-value FORM parameters;
-- the existing `TRIGGER_A/B` slots become the six-value SONG parameters;
+- the existing `TRIGGER_A/B` slots become the seven-value SONG parameters;
 - `NEWPHRASE_A/B` retain their IDs but move geometrically to the former TRIG
   coordinates.
 
@@ -265,6 +280,7 @@ Factory reset restores `HIERARCHICAL / AAAB` and clears pending structural work.
 
 - SONG selection and advancement consume no RNG.
 - MIRROR depends only on bit parity of the phrase index.
+- OFF always selects A; it does not bypass snapshot storage or phrase evolution.
 - A SONG-only change cannot change A/B bytes.
 - Pending changes never switch snapshots mid-phrase.
 - `process()` and `tick()` share the same boundary helper and select the same
@@ -283,7 +299,8 @@ Factory reset restores `HIERARCHICAL / AAAB` and clears pending structural work.
 - Exact 32-phrase output for two BUILD and ROTATE cycles.
 - Exact first 64 MIRROR symbols and bit-parity agreement across representative
   large indices.
-- SONG clamping for negative and oversized integers.
+- Exact OFF output of A across representative small and large indices.
+- SONG clamping maps negative integers to AAAB and oversized integers to OFF.
 - No RNG consumption by symbol lookup or advancement.
 
 ### 9.2 Lane and instrument tests
@@ -296,7 +313,8 @@ Factory reset restores `HIERARCHICAL / AAAB` and clears pending structural work.
 - Final FORM/SONG writes win when several arrive inside one phrase.
 - RENEW and GROW mutate only the outgoing snapshot before advancement.
 - LOOP repeats every finite sequence bit-identically; MIRROR follows its exact
-  deterministic stream.
+  deterministic stream; OFF plays only A while A retains ordinary outgoing
+  MELODY evolution.
 - FLOW pauses and resumes arrangement state.
 - `process()` and `tick()` remain observably equivalent.
 - Both Parts advance independently.
@@ -308,7 +326,7 @@ Factory reset restores `HIERARCHICAL / AAAB` and clears pending structural work.
 
 - Generated geometry and labels are exactly `STEP · FORM · SONG · NEW`.
 - FORM is a snapped five-value control with the approved names.
-- SONG is a snapped six-value control with the approved names.
+- SONG is a snapped seven-value control with the approved names.
 - NEW occupies the old TRIG coordinate and remains a button.
 - Param count, numeric IDs, and Part stride do not change.
 - TRIG processing and BooleanTrigger state are absent.
@@ -323,13 +341,14 @@ Factory reset restores `HIERARCHICAL / AAAB` and clears pending structural work.
 
 ### 9.4 Listening pass
 
-At 16 STEPS and LOOP, audition all six SONG positions with
+At 16 STEPS and LOOP, audition all seven SONG positions with
 FORM=HIERARCHICAL. Confirm that:
 
 - the three fixed forms are immediately recognizable;
 - BUILD increases and then releases B dominance;
 - ROTATE moves the turnaround earlier by one phrase per group;
 - MIRROR feels structured but avoids a short loop;
+- OFF repeats A without selecting B;
 - every transition occurs cleanly at a phrase boundary;
 - NEW restarts each form from its opening;
 - Sampler NEW still spawns immediately.
