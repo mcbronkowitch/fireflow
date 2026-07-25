@@ -1,7 +1,9 @@
 """Host contracts for fail-closed repeated benchmark evidence."""
 
 import importlib.util
+import io
 from pathlib import Path
+import socket
 import sys
 import tempfile
 import unittest
@@ -19,6 +21,32 @@ else:
 
 QSPI_SHA256 = "a" * 64
 DEVICE_ID = "00112233445566778899aabb"
+
+
+class FakeOpenOcd:
+    def __init__(self):
+        self.stdout = io.StringIO("BENCH_END\n")
+        self.gracefully_stopped = False
+        self.terminated = False
+        self.killed = False
+        self.wait_calls = []
+
+    def poll(self):
+        if self.gracefully_stopped or self.terminated or self.killed:
+            return 0
+        return None
+
+    def wait(self, timeout):
+        self.wait_calls.append(timeout)
+        if self.poll() is None:
+            raise runner.subprocess.TimeoutExpired("openocd", timeout)
+        return 0
+
+    def terminate(self):
+        self.terminated = True
+
+    def kill(self):
+        self.killed = True
 
 
 def bench_row(name, avg_cyc, max_cyc, checksum):
@@ -48,6 +76,53 @@ def capture_lines(
 
 
 class RunContract(unittest.TestCase):
+    def test_run_once_gracefully_shuts_down_openocd_after_bench_end(self):
+        process = FakeOpenOcd()
+        sent = []
+
+        class ControlSocket:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+            def sendall(self, payload):
+                sent.append(payload)
+                process.gracefully_stopped = True
+
+        with (
+            mock.patch.object(runner.subprocess, "Popen", return_value=process),
+            mock.patch.object(
+                socket, "create_connection", return_value=ControlSocket()
+            ),
+        ):
+            lines = runner.run_once("stlink-dap.cfg", 1)
+
+        self.assertEqual(lines, ["BENCH_END"])
+        self.assertEqual(sent, [b"shutdown\x1a"])
+        self.assertEqual(process.wait_calls, [10])
+        self.assertFalse(process.terminated)
+        self.assertFalse(process.killed)
+
+    def test_run_once_terminates_when_control_shutdown_fails(self):
+        process = FakeOpenOcd()
+
+        with (
+            mock.patch.object(runner.subprocess, "Popen", return_value=process),
+            mock.patch.object(
+                socket,
+                "create_connection",
+                side_effect=OSError("control port unavailable"),
+            ),
+        ):
+            lines = runner.run_once("stlink-dap.cfg", 1)
+
+        self.assertEqual(lines, ["BENCH_END"])
+        self.assertTrue(process.terminated)
+        self.assertFalse(process.killed)
+        self.assertEqual(process.wait_calls, [10])
+
     def run_evidence(self, captures):
         with tempfile.TemporaryDirectory() as temp:
             argv = [

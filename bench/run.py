@@ -8,6 +8,7 @@ import datetime
 import hashlib
 import io
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -41,6 +42,8 @@ PROGRAMMER_CFG = os.path.join(HERE, "openocd", "qspi-programmer.cfg")
 OBJCOPY = r"C:\Program Files\DaisyToolchain\bin\arm-none-eabi-objcopy.exe"
 OBJDUMP = r"C:\Program Files\DaisyToolchain\bin\arm-none-eabi-objdump.exe"
 READELF = r"C:\Program Files\DaisyToolchain\bin\arm-none-eabi-readelf.exe"
+OPENOCD_TCL_ADDRESS = ("127.0.0.1", 6666)
+OPENOCD_SHUTDOWN = b"shutdown\x1a"
 
 
 def build():
@@ -67,6 +70,19 @@ def prepare_existing_artifacts():
         objcopy=OBJCOPY,
         objdump=OBJDUMP,
     )
+
+
+def gracefully_shutdown_openocd(proc):
+    """Ask OpenOCD to release the probe, then wait for its normal exit."""
+    if proc.poll() is not None:
+        return True
+    try:
+        with socket.create_connection(OPENOCD_TCL_ADDRESS, timeout=1) as control:
+            control.sendall(OPENOCD_SHUTDOWN)
+        proc.wait(timeout=10)
+        return True
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def run_once(interface, timeout):
@@ -115,11 +131,12 @@ def run_once(interface, timeout):
                 done = True
                 break
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+        if not (done and gracefully_shutdown_openocd(proc)):
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
     return lines if done else None
 
 
