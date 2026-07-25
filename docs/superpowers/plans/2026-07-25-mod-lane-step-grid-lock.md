@@ -1038,8 +1038,15 @@ TEST_CASE("steplock: the fire grid is identical at every SHAPE setting") {
     for (float shape : {0.f, 0.25f, 0.5f, 0.75f}) {
         const LockResult r = run_locked(shape, true, 480000);
         CHECK(r.deck_steps == ref.deck_steps);
-        for (int l = 0; l < LANE_COUNT; ++l)
-            if (l != LANE_PITCH) CHECK(r.fires[l] == ref.fires[l]);
+        for (int l = 0; l < LANE_COUNT; ++l) {
+            if (l == LANE_PITCH) continue;
+            CHECK(r.fires[l] == ref.fires[l]);
+            // Counts alone are not enough. A shape-dependent slot offset moves
+            // where every lane SITS without changing how often it fires, and
+            // that is exactly the failure this case is named for -- so compare
+            // the position too.
+            CHECK(r.end_phase[l] == doctest::Approx(ref.end_phase[l]));
+        }
     }
 }
 
@@ -1082,6 +1089,28 @@ TEST_CASE("steplock: leaving STEP hands the lanes back their own clocks") {
         CHECK(m.lane_slots_for_test(i) == 8);
         CHECK(m.lane_phase(i) >= 0.f);
         CHECK(m.lane_phase(i) <  1.f);
+    }
+
+    // The assertions above all read static state, which survives a dead clock:
+    // freezing tick() entirely leaves every one of them true. So count wraps.
+    // A non-melodic lane in FLOW fires once per cycle, which pins three things
+    // at once -- the clock advances, it advances at this lane's configured
+    // rate, and the old ratios are back (SOURCE wraps twice as often as PITCH,
+    // SIZE half as often).
+    const int kRun = 480000;
+    REQUIRE(kRun % ModLane::kTickInterval == 0);
+    int wraps[LANE_COUNT] = {0, 0, 0, 0, 0};
+    for (int i = 0; i <= kRun; ++i) {
+        m.process();
+        if (i % ModLane::kTickInterval == 0)
+            for (int l = 0; l < LANE_COUNT; ++l)
+                if (l != LANE_PITCH && m.lane_fired(l)) ++wraps[l];
+    }
+    for (int l = 0; l < LANE_COUNT; ++l) {
+        if (l == LANE_PITCH) continue;
+        const float expected =
+            m.lane_rate_hz_for_test(l) * static_cast<float>(kRun) / 48000.f;
+        CHECK(std::abs(static_cast<float>(wraps[l]) - expected) <= 1.f);
     }
 }
 ```
