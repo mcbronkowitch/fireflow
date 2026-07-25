@@ -189,7 +189,7 @@ TEST_CASE("Seed audition applies the VCV init engine and arranger state") {
 }
 
 TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot") {
-    CHECK(spkyvcv::NUM_PARAMS == 85);
+    CHECK(spkyvcv::NUM_PARAMS == 82);
     CHECK(spkyvcv::initParamDefault(spkyvcv::ENGINE_A) == doctest::Approx(0.f));
     CHECK(spkyvcv::initParamDefault(spkyvcv::ENGINE_B) == doctest::Approx(1.f));
     CHECK(spkyvcv::initParamDefault(spkyvcv::TEMPO) == doctest::Approx(0.5f));

@@ -60,7 +60,9 @@ add_executable(spky_tests
     engine/parts/part.cpp
     tests/test_part.cpp
     engine/instrument.cpp
+    bench/audition/init_patch.cpp
     tests/test_instrument.cpp
+    tests/test_seed_audition_init.cpp
     engine/center/center.cpp
     tests/test_center.cpp
     tests/test_wav.cpp
