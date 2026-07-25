@@ -401,11 +401,14 @@ TEST_CASE("steplock: leaving STEP hands the lanes back their own clocks") {
     // per-lane ratios are back (SOURCE wraps twice as often as PITCH, SIZE
     // half as often).
     //
-    // Same trailing-flush treatment as the rest of this file: the loop runs
-    // one call past kRunSamples, and kRunSamples is a whole number of
-    // 96-sample raster windows, so that final call is itself a tick and
-    // reports a wrap that landed in the last window with no follow-up
-    // process() left to flush it.
+    // One call past kRunSamples, same loop shape as run_locked above -- but
+    // unlike STEP's follow(), FLOW's tick() decides a wrap and latches
+    // fired() entirely within the call whose window contains it, so there is
+    // never anything pending for a later call to flush (contrast run_locked's
+    // comment, which is about follow() and does not apply here). The extra
+    // iteration is simply the tick() call for the LAST raster window: since
+    // kRunSamples is a whole number of 96-sample windows, without it that
+    // window's fired() flags would never get read at all.
     const int32_t kRunSamples = 480000;
     REQUIRE(kRunSamples % ModLane::kTickInterval == 0);
     int32_t fires[LANE_COUNT] = {0, 0, 0, 0, 0};

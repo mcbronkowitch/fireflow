@@ -610,6 +610,17 @@ float ModLane::process() {
 // phase (step/steps, resp. 0 at a wrap) instead of the per-sample path's
 // detection overshoot (< 1 sample of phase) -- an equally valid sampling of
 // the same waveform, covered by the equivalence suite.
+//
+// STEP note (spec 2026-07-25 mod-lane-step-grid-lock): SuperModulator calls
+// this from exactly one site, and only on the !_step_on branch -- a STEP
+// lane's own _step_mode always mirrors _step_on (set_step()), so every
+// `if (_step_mode)` below (the pending-step-mismatch entry, the
+// shuffle_boundary_phase edge walk, the shadow process_window_end
+// arithmetic) is unreachable in production. SuperModulator now drives STEP
+// lanes through follow() instead (see there and lane.h). Kept deliberately,
+// not deleted: this is ModLane's own standalone contract, exercised directly
+// by tests/test_lane_tick.cpp's STEP cases, independent of whatever engine
+// wiring happens to call it today.
 float ModLane::tick() {
     _fired = false;
     _wrapped = false;

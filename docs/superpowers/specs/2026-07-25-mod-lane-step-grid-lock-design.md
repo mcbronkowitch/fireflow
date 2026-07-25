@@ -3,7 +3,7 @@
 **Date:** 2026-07-25
 **Status:** Approved in brainstorming; revised during implementation after a
 float-drift measurement invalidated the first mechanism (see "Why not equal
-rates"). Not implemented.
+rates"). Implemented, branch `mod-grid-lock`.
 **Scope:** `engine/mod/` (lane, super_modulator). No panel change, no new
 control.
 

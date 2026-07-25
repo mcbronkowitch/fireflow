@@ -170,9 +170,14 @@ private:
     int     _deck_steps = 8;       // the phrase length; PITCH's slot count
     // The deck's own clock, in whole steps. This integer is what makes the
     // grid exact: every follower derives its slot from it, so no float
-    // rounding can put two lanes on different boundaries. int32_t is ample --
-    // a few hundred steps per second overflows in centuries -- and this engine
-    // ships on a Cortex-M7, where 64-bit arithmetic is not free.
+    // rounding can put two lanes on different boundaries. int32_t is ample
+    // for how long this can actually run continuously: INT32_MAX / 240
+    // (steps/s, well past any panel-reachable STEP rate) is about 104 days;
+    // at a musical 8 steps/s it's 8.5 years. That is a "practically never"
+    // bound, not a "and it's fine if it does" one -- signed overflow is UB in
+    // C++, not the graceful wraparound this comment used to imply. int32_t is
+    // still the right choice: this engine ships on a Cortex-M7, where 64-bit
+    // arithmetic is not free.
     int32_t _deck_step       = 0;
     int     _last_pitch_step = -1;
     float    _pitch_scale = 1.f;   // COUPLE/DRIFT on the melody clock
