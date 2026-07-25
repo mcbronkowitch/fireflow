@@ -398,9 +398,12 @@ Before selecting B, call `bind_song_cadence`; it must be a no-op if A slot 0 did
 Queue `set_form`, `new_phrase`, and effective length changes rather than touching active buffers. Apply FORM first, then NEW. Entering SONG without NEW captures the outgoing normal pattern as A; entering with NEW generates A from `last_basis`. Leaving SONG or changing normal forms generates a fresh normal pattern at the boundary.
 
 Treat configuration before the first audible STEP as a pre-roll boundary: apply
-the final pending FORM/NEW/length state before step 0 fires. This keeps restored
+the final pending FORM/NEW state, including the requested length when that work
+builds an uninitialized SONG snapshot, before step 0 fires. This keeps restored
 normal-FORM patches from emitting one unintended SONG cycle while preserving
-the boundary-only rule once playback has begun.
+the boundary-only rule once playback has begun. A normal mode's length-only
+change retains the existing first-wrap regeneration timing so normal transport
+and RNG behavior remain bit-identical.
 
 - [ ] **Step 4: Add failing pending-change, FLOW, and short-length tests**
 

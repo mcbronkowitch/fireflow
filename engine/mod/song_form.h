@@ -57,6 +57,7 @@ struct MelodyPattern {
     PhraseLayout layout{};
     GrooveCell cell_groove{};
     PatternGroove pattern_groove{};
+    uint8_t reserved[2] = {}; // occupy tail padding so POD byte snapshots are stable
 };
 
 struct TurnaroundZones {

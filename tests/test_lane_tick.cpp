@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 #include <cmath>
+#include <cstring>
 #include "mod/lane.h"
 using namespace spky;
 
@@ -17,6 +18,8 @@ struct TickPair {
     float ref_out = 0.f, dut_out = 0.f;
     int   ref_fires = 0;
     bool  dut_fired = false;
+    bool  ref_wrapped = false;
+    bool  dut_wrapped = false;
 
     void boot(uint32_t seed, void (*cfg)(ModLane&)) {
         ref.init(kSr, seed); cfg(ref);
@@ -24,12 +27,31 @@ struct TickPair {
     }
     void advance_one_tick() {
         ref_fires = 0;
+        ref_wrapped = false;
         for (int i = 0; i < kTick; ++i) {
             ref_out = ref.process();
             if (ref.fired()) ++ref_fires;
+            if (ref.wrapped()) ref_wrapped = true;
         }
         dut_out = dut.tick();
         dut_fired = dut.fired();
+        dut_wrapped = dut.wrapped();
+    }
+    void boot_song(uint32_t seed) {
+        auto prepare = [seed](ModLane& lane) {
+            lane.set_melodic(true);
+            lane.set_step(true, 8);
+            lane.set_last_basis(Principle::Hierarchical);
+            lane.set_form(FormMode::SongAAAB);
+            lane.init(kSr, seed);
+            lane.set_range(1.f);
+            lane.set_shape(1.f);
+            lane.set_smooth(0.f);
+            lane.set_density(1.f);
+            lane.set_rate_hz(7.3f);
+        };
+        prepare(ref);
+        prepare(dut);
     }
 };
 } // namespace
@@ -442,4 +464,69 @@ TEST_CASE("tick: warped multi-edge wrap endpoint keeps live shuffle pair aligned
         CHECK(tp.dut.target() == tp.ref.target());
         CHECK(tp.dut_out == tp.ref_out);
     }
+}
+
+TEST_CASE("tick: SONG process and tick keep form snapshots aligned") {
+    TickPair tp;
+    tp.boot_song(0x5150u);
+    int skew_windows = 0;
+    bool require_reconvergence = false;
+    int full_checks = 0;
+
+    for (int tick = 0; tick < 900; ++tick) {
+        if (tick == 180) {
+            tp.ref.set_variation(0.8f);
+            tp.dut.set_variation(0.8f);
+        }
+        if (tick == 360) {
+            tp.ref.set_variation(-0.8f);
+            tp.dut.set_variation(-0.8f);
+        }
+        if (tick == 540) {
+            tp.ref.new_phrase();
+            tp.dut.new_phrase();
+            tp.ref.set_step(true, 12);
+            tp.dut.set_step(true, 12);
+        }
+
+        tp.advance_one_tick();
+        const bool boundary_skew =
+            tp.ref_wrapped != tp.dut_wrapped ||
+            tp.ref.song_position() != tp.dut.song_position() ||
+            tp.ref.active_pattern() != tp.dut.active_pattern();
+        if (boundary_skew) {
+            ++skew_windows;
+            require_reconvergence = true;
+            continue;
+        }
+
+        INFO("tick=", tick,
+             " ref_form_pos=", static_cast<int>(tp.ref.song_position()),
+             " dut_form_pos=", static_cast<int>(tp.dut.song_position()),
+             " ref_pattern=", static_cast<int>(tp.ref.active_pattern()),
+             " dut_pattern=", static_cast<int>(tp.dut.active_pattern()));
+        CHECK(tp.dut.form() == tp.ref.form());
+        CHECK(tp.dut.song_position() == tp.ref.song_position());
+        CHECK(tp.dut.active_pattern() == tp.ref.active_pattern());
+        CHECK(tp.dut.cadence_slot_for_test() ==
+              tp.ref.cadence_slot_for_test());
+        CHECK(tp.dut.bound_a_opening_for_test() ==
+              tp.ref.bound_a_opening_for_test());
+        CHECK(std::memcmp(&tp.dut.pattern_for_test(0),
+                          &tp.ref.pattern_for_test(0),
+                          sizeof(MelodyPattern)) == 0);
+        CHECK(std::memcmp(&tp.dut.pattern_for_test(1),
+                          &tp.ref.pattern_for_test(1),
+                          sizeof(MelodyPattern)) == 0);
+        if ((tp.ref_fires > 0) == tp.dut_fired) {
+            CHECK(tp.dut.target() == tp.ref.target());
+            CHECK(tp.dut_out == tp.ref_out);
+        }
+        require_reconvergence = false;
+        ++full_checks;
+    }
+
+    CHECK(skew_windows <= 8);
+    CHECK_FALSE(require_reconvergence);
+    CHECK(full_checks >= 892);
 }

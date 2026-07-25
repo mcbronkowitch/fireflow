@@ -37,6 +37,13 @@ public:
     uint8_t active_pattern() const { return _song.active_pattern; }
     void set_principle(Principle p) { set_form(form_for_principle(p)); }
     void new_phrase();                 // audition a fresh phrase at the next STEP-mode wrap
+#ifdef SPKY_TESTING
+    const MelodyPattern& pattern_for_test(uint8_t index) const {
+        return _song.patterns[index & 1u];
+    }
+    uint8_t cadence_slot_for_test() const { return _song.cadence_slot; }
+    float bound_a_opening_for_test() const { return _song.bound_a_opening; }
+#endif
 
     float process();                  // advance one sample, return post-range value
     float tick();                     // advance kTickInterval samples in one call
@@ -116,6 +123,17 @@ private:
     void  _renew_walk();            // RENEW (non-melodic): dice-gated whole-walk regen
     void  _mutate_groove(bool renew_side);  // VARIATION outer zone: rhythm dice (wrap only)
     void  _start_note(int slot);    // groove: set _note_hold (tie-capped) on fire
+    int   _effective_length() const;
+    bool  _song_active() const;
+    void  _generate_pattern_a();
+    void  _derive_pattern_b();
+    void  _capture_active_as_a();
+    void  _generate_normal_pattern();
+    void  _apply_pending_form_work();
+    void  _apply_preroll_work();
+    void  _advance_song_form();
+    void  _evolve_outgoing_pattern();
+    void  _clear_fresh_phrase_state();
     MelodyPattern& _active_pattern() {
         return _song.patterns[_song.active_pattern & 1u];
     }
@@ -148,6 +166,7 @@ private:
     static constexpr int kSeqSlots = 32;
     SongForm _song;
     bool      _melodic   = false;
+    bool      _melodic_at_init = false;
     float     _density   = 1.f;
     float _target = 0.f;     // pre-smooth held value
     bool  _fired = false;

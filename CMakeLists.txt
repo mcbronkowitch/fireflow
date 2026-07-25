@@ -103,6 +103,7 @@ add_executable(spky_tests
     tests/test_wave_engine.cpp
     tests/test_phrase_gen.cpp
     tests/test_song_form.cpp
+    tests/test_song_lane.cpp
     tests/test_choke.cpp
     tests/test_filt.cpp
     tests/test_mod_tide.cpp
@@ -118,6 +119,7 @@ add_executable(spky_tests
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
 target_include_directories(spky_tests PRIVATE host)
+target_compile_definitions(spky_tests PRIVATE SPKY_TESTING=1)
 add_test(NAME spky_tests COMMAND spky_tests)
 
 # --- render host CLI ---
