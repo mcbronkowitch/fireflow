@@ -15,6 +15,24 @@ enum class FormMode : uint8_t {
     kCount
 };
 
+enum class SongMode : uint8_t {
+    AAAB = 0,
+    ABAB,
+    ABBB,
+    Build,
+    Rotate,
+    Mirror,
+    Off,
+    kCount
+};
+
+inline SongMode clamp_song(int value) {
+    if (value < 0) value = 0;
+    const int last = static_cast<int>(SongMode::kCount) - 1;
+    if (value > last) value = last;
+    return static_cast<SongMode>(value);
+}
+
 inline FormMode clamp_form(int value) {
     if (value < 0) value = 0;
     const int last = static_cast<int>(FormMode::kCount) - 1;
@@ -91,9 +109,40 @@ inline TurnaroundZones song_zones(int steps) {
     return {related_end, turn_start, length};
 }
 
+inline uint8_t song_symbol_at(SongMode mode, uint32_t phrase_index) {
+    static constexpr uint8_t fixed[3][4] = {
+        {0, 0, 0, 1},
+        {0, 1, 0, 1},
+        {0, 1, 1, 1}
+    };
+    static constexpr uint8_t build[16] = {
+        0,0,0,1, 0,0,1,1, 0,1,1,1, 0,0,1,1
+    };
+    static constexpr uint8_t rotate[16] = {
+        0,0,0,1, 0,0,1,0, 0,1,0,0, 1,0,0,0
+    };
+
+    const SongMode clamped = clamp_song(static_cast<int>(mode));
+    const int value = static_cast<int>(clamped);
+    if (value <= static_cast<int>(SongMode::ABBB))
+        return fixed[value][phrase_index & 3u];
+    if (clamped == SongMode::Build)
+        return build[phrase_index & 15u];
+    if (clamped == SongMode::Rotate)
+        return rotate[phrase_index & 15u];
+    if (clamped == SongMode::Off)
+        return 0u;
+
+    uint8_t parity = 0;
+    while (phrase_index != 0u) {
+        parity ^= static_cast<uint8_t>(phrase_index & 1u);
+        phrase_index >>= 1u;
+    }
+    return parity;
+}
+
 inline uint8_t song_symbol_at(uint8_t form_position) {
-    static constexpr uint8_t symbols[4] = {0, 0, 0, 1};
-    return symbols[form_position & 3u];
+    return song_symbol_at(SongMode::AAAB, form_position);
 }
 
 inline void expand_pattern_groove(const GrooveCell& cell, int steps,

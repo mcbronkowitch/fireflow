@@ -3,6 +3,7 @@
 #include "mod/song_form.h"
 #include <cmath>
 #include <cstring>
+#include <string>
 
 using namespace spky;
 
@@ -71,6 +72,14 @@ void fnv_feed(uint64_t& hash, const void* data, size_t length) {
     }
 }
 
+std::string song_text(SongMode mode, uint32_t count) {
+    std::string result;
+    result.reserve(count);
+    for (uint32_t i = 0; i < count; ++i)
+        result.push_back(song_symbol_at(mode, i) == 0 ? 'A' : 'B');
+    return result;
+}
+
 } // namespace
 
 TEST_CASE("form values clamp and normal forms map bijectively to principles") {
@@ -93,10 +102,38 @@ TEST_CASE("form values clamp and normal forms map bijectively to principles") {
     }
 }
 
-TEST_CASE("song form is exactly AAAB") {
-    const uint8_t expected[] = {0, 0, 0, 1, 0, 0, 0, 1};
-    for (int i = 0; i < 8; ++i)
-        CHECK(song_symbol_at(static_cast<uint8_t>(i)) == expected[i]);
+TEST_CASE("song modes clamp and produce the approved sequences") {
+    CHECK(clamp_song(-7) == SongMode::AAAB);
+    CHECK(clamp_song(99) == SongMode::Off);
+
+    CHECK(song_text(SongMode::AAAB, 8) == "AAABAAAB");
+    CHECK(song_text(SongMode::ABAB, 8) == "ABABABAB");
+    CHECK(song_text(SongMode::ABBB, 8) == "ABBBABBB");
+    CHECK(song_text(SongMode::Build, 32) ==
+          "AAABAABBABBBAABBAAABAABBABBBAABB");
+    CHECK(song_text(SongMode::Rotate, 32) ==
+          "AAABAABAABAABAAAAAABAABAABAABAAA");
+    CHECK(song_text(SongMode::Off, 32) ==
+          "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+}
+
+TEST_CASE("MIRROR is the deterministic Thue-Morse stream") {
+    CHECK(song_text(SongMode::Mirror, 64) ==
+          "ABBABAABBAABABBABAABABBAABBABAAB"
+          "BAABABBAABBABAABABBABAABBAABABBA");
+
+    const uint32_t indices[] = {
+        0u, 1u, 2u, 3u, 31u, 255u, 0x12345678u, 0xffffffffu
+    };
+    for (const uint32_t index : indices) {
+        uint32_t bits = index;
+        uint8_t parity = 0;
+        while (bits != 0u) {
+            parity ^= static_cast<uint8_t>(bits & 1u);
+            bits >>= 1u;
+        }
+        CHECK(song_symbol_at(SongMode::Mirror, index) == parity);
+    }
 }
 
 TEST_CASE("song zones scale safely from 1 through 32 steps") {
