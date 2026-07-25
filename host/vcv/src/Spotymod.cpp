@@ -71,6 +71,22 @@ struct DustQuantity : ParamQuantity {
     }
 };
 
+static constexpr float kDefaultDetune = 6.f / spky::SynthEngine::kDetuneCeilCt;
+
+struct DetuneQuantity : ParamQuantity {
+    std::string getDisplayValueString() override {
+        return string::f("%.1f ct",
+            getValue() * spky::SynthEngine::kDetuneCeilCt);
+    }
+};
+
+struct ParamMenuSlider : ui::Slider {
+    explicit ParamMenuSlider(ParamQuantity* pq) {
+        box.size.x = 180.f;
+        quantity = pq;
+    }
+};
+
 // ENG is a three-position Rack switch. VCVLatch retains Rack's native switch
 // handling; this overlay only makes the non-Synth positions readable at a
 // glance without changing its footprint.
@@ -209,6 +225,9 @@ struct Spotymod : Module {
                         configParam<DustQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == ROT_A || c.id == ROT_B)
                         configParam<RotQuantity>(c.id, 0.f, 1.f, init, lbl);
+                    else if (c.id == SOURCE_A || c.id == SOURCE_B)
+                        configParam(c.id, 0.f, 1.f, init,
+                                    c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");
                     else
                         configParam(c.id, 0.f, 1.f, init, lbl);
                     break;
@@ -243,6 +262,10 @@ struct Spotymod : Module {
                 default: break;
             }
         }
+        configParam<DetuneQuantity>(
+            DETUNE_A, 0.f, 1.f, initParamDefault(DETUNE_A), "Detune A");
+        configParam<DetuneQuantity>(
+            DETUNE_B, 0.f, 1.f, initParamDefault(DETUNE_B), "Detune B");
         // panel labels are short ("L", "PIT"); the group legend carries the rest,
         // so tooltips use the control table's spelled-out tip instead
         for (const auto& c : kInputCtls)  configInput(c.id, c.tip);
@@ -342,7 +365,8 @@ struct Spotymod : Module {
             inst.set_voice_filt(p, params[p ? FILT_B : FILT_A].getValue());
             inst.set_color(p, params[p ? COLOR_B : COLOR_A].getValue());
             inst.set_voice_sub(p, pp(SUB_A, p));
-            inst.set_voice_detune(p, pp(DETUNE_A, p));
+            inst.set_voice_detune(
+                p, params[p ? DETUNE_B : DETUNE_A].getValue());
 
             inst.set_flux_mix(p, pp(FLUX_A, p));
             inst.set_flux_rate(p, spky::flux_division_index(
@@ -437,6 +461,7 @@ struct Spotymod : Module {
             // pass rather than special-cased.
             const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;
             inst.sampler_overlap(p, pp(DENSITY_A, p));
+            inst.set_target_base(p, spky::LANE_SOURCE, pp(SOURCE_A, p));
 
             // SCAN nur fuer Sampler-Parts (K-03). Der urspruengliche Grund --
             // set_scan -> scan_rate enthielt im unteren Zweig ein std::pow,
@@ -444,8 +469,8 @@ struct Spotymod : Module {
             // Audio-Callback fuer eine Engine, die niemand hoert -- ist mit
             // der linearen Kurve (spec 2026-07-23 sampler-performance-fixes)
             // weg: scan_rate() ruft kein pow mehr auf. Das Gate bleibt
-            // trotzdem, jetzt aus demselben Grund wie bei SUB/DTUN wenige
-            // Zeilen weiter unten: SCAN treibt ein sampler-eigenes Stueck
+            // trotzdem, jetzt aus demselben Grund wie beim sampler-only SIZE-
+            // Routing weiter unten: SCAN treibt ein sampler-eigenes Stueck
             // Zustand (_scan_rate), das ein Synth-Deck nie liest, und es dort
             // unbedingt zu schreiben waere nur Arbeit ohne Wirkung. Das ist
             // ein Konsistenz-, kein Kosten-Argument mehr.
@@ -468,17 +493,13 @@ struct Spotymod : Module {
             // Instruments, nicht fuer die Engine.
             if (samplerPart) inst.sampler_scan(p, pp(MELODY_A, p));
 
-            // GENE SIZE and ORGANIZE ride the lane BASES, so they must be
-            // gated: in the synth these two slots drive the filter and the
-            // timbre position, and writing SUB/DTUN into them there would be
-            // wrong. The else branch is load-bearing -- a base left behind on
-            // an engine flip would silently stick.
+            // GENE SIZE rides the lane base only in the sampler. The else
+            // branch is load-bearing -- a base left behind on an engine flip
+            // would silently stick.
             if (samplerPart) {
                 inst.set_target_base(p, spky::LANE_SIZE,   pp(SUB_A, p));
-                inst.set_target_base(p, spky::LANE_SOURCE, pp(DETUNE_A, p));
             } else {
                 inst.set_target_base(p, spky::LANE_SIZE,   0.5f);
-                inst.set_target_base(p, spky::LANE_SOURCE, 0.5f);
             }
 
             // Stable pitch in the sampler: the lane still FIRES (that is what
@@ -1110,6 +1131,22 @@ struct SpotymodWidget : ModuleWidget {
         // loops at the bar start (a live STEPS turn leaves them free-running).
         menu->addChild(createMenuItem("Resync loops to bar", "",
                                       [m]() { m->resyncReq = true; }));
+
+        menu->addChild(new MenuSeparator);
+        menu->addChild(createSubmenuItem("Detune A", "", [m](Menu* sub) {
+            auto* quantity = m->getParamQuantity(DETUNE_A);
+            sub->addChild(new ParamMenuSlider(quantity));
+            sub->addChild(createMenuItem("Reset to 6.0 ct", "", [m]() {
+                m->params[DETUNE_A].setValue(kDefaultDetune);
+            }));
+        }));
+        menu->addChild(createSubmenuItem("Detune B", "", [m](Menu* sub) {
+            auto* quantity = m->getParamQuantity(DETUNE_B);
+            sub->addChild(new ParamMenuSlider(quantity));
+            sub->addChild(createMenuItem("Reset to 6.0 ct", "", [m]() {
+                m->params[DETUNE_B].setValue(kDefaultDetune);
+            }));
+        }));
 
         menu->addChild(new MenuSeparator);
         for (int p = 0; p < spky::PART_COUNT; ++p) {

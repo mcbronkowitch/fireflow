@@ -870,6 +870,125 @@ def test_engine_cycle_guard_rejects_representative_regressions():
               f"ENG guard accepted a {label} regression")
 
 
+def source_detune_wiring_issues(cpp):
+    """Return regressions in the stable SOURCE/hidden-Detune host boundary."""
+    issues = []
+    config = cpp_scope(cpp, "void configControls()")
+    push = cpp_scope(cpp, "void pushParams()")
+    menu = cpp_scope(cpp, "void appendContextMenu(Menu* menu) override")
+    slider = cpp_scope(cpp, "struct ParamMenuSlider : ui::Slider")
+    detune_quantity = cpp_scope(cpp, "struct DetuneQuantity : ParamQuantity")
+    for label, block in (("configuration", config), ("parameter push", push),
+                         ("context menu", menu)):
+        if block is None:
+            issues.append(f"SOURCE/Detune {label} scope is missing")
+    if issues:
+        return issues
+
+    cpp_n = compact_cpp(cpp)
+    default_detune = (
+        "staticconstexprfloatkDefaultDetune=6.f/spky::SynthEngine::kDetuneCeilCt;")
+    if cpp_n.count(default_detune) != 1:
+        issues.append("Detune reset default must be exactly 6 ct normalized by kDetuneCeilCt")
+    if detune_quantity is None:
+        issues.append("DetuneQuantity scope is missing")
+    else:
+        expected_quantity = (
+            "structDetuneQuantity:ParamQuantity{std::stringgetDisplayValueString()override{"
+            "returnstring::f(\"%.1fct\",getValue()*spky::SynthEngine::kDetuneCeilCt);}}")
+        if compact_cpp(detune_quantity) != expected_quantity:
+            issues.append("DetuneQuantity must display normalized values as one-decimal cents")
+
+    config_n = compact_cpp(config)
+    for required, label in (
+        (compact_cpp('configParam<DetuneQuantity>(DETUNE_A, 0.f, 1.f, '
+                     'initParamDefault(DETUNE_A), "Detune A");'),
+         "Detune A must be a normalized persistent Rack parameter"),
+        (compact_cpp('configParam<DetuneQuantity>(DETUNE_B, 0.f, 1.f, '
+                     'initParamDefault(DETUNE_B), "Detune B");'),
+         "Detune B must be a normalized persistent Rack parameter"),
+        ("if(c.id==SOURCE_A||c.id==SOURCE_B)",
+         "SOURCE controls need their own stable Rack names"),
+        (compact_cpp('configParam(c.id, 0.f, 1.f, init, '
+                     'c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");'),
+         "SOURCE controls must be named SOURCE A/B, not engine captions"),
+    ):
+        if required not in config_n:
+            issues.append(label)
+
+    push_n = compact_cpp(push)
+    source_base = "inst.set_target_base(p,spky::LANE_SOURCE,pp(SOURCE_A,p));"
+    detune = "inst.set_voice_detune(p,params[p?DETUNE_B:DETUNE_A].getValue());"
+    if push_n.count(source_base) != 1:
+        issues.append("SOURCE must set LANE_SOURCE once for every engine")
+    if push_n.count(detune) != 1:
+        issues.append("hidden Detune A/B must independently feed voice detune")
+    if "set_voice_detune(p,pp(SOURCE_A,p))" in push_n:
+        issues.append("SOURCE must not feed voice detune")
+    if "set_voice_detune(p,pp(DETUNE_A,p))" in push_n:
+        issues.append("part B detune must not use the strided accessor")
+    if "if(samplerPart){inst.set_target_base(p,spky::LANE_SOURCE," in push_n:
+        issues.append("SOURCE base must not be gated on samplerPart")
+
+    if slider is None:
+        issues.append("SOURCE/Detune menu slider scope is missing")
+        return issues
+    slider_n = compact_cpp(slider)
+    expected_slider = (
+        "structParamMenuSlider:ui::Slider{explicitParamMenuSlider(ParamQuantity*pq)"
+        "{box.size.x=180.f;quantity=pq;}}")
+    if slider_n != expected_slider:
+        issues.append("Detune menu slider must non-owningly bind the existing ParamQuantity")
+
+    menu_n = compact_cpp(menu)
+    for part, enum in (("A", "DETUNE_A"), ("B", "DETUNE_B")):
+        required = compact_cpp(
+            f'createSubmenuItem("Detune {part}","",[m](Menu*sub){{'
+            f'auto*quantity=m->getParamQuantity({enum});'
+            f'sub->addChild(newParamMenuSlider(quantity));'
+            f'sub->addChild(createMenuItem("Reset to 6.0 ct","",[m](){{'
+            f'm->params[{enum}].setValue(kDefaultDetune);}}));}}));')
+        if required not in menu_n:
+            issues.append(f"Detune {part} menu needs its own slider and exact reset")
+    return issues
+
+
+def test_source_detune_host_wiring():
+    """SOURCE owns LANE_SOURCE on every engine; hidden detune stays per part
+    and persistently controllable in the Rack context menu."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    for issue in source_detune_wiring_issues(cpp):
+        check(False, issue)
+
+
+def test_source_detune_guard_rejects_representative_regressions():
+    """The source guard must catch wrong lane routing and independently
+    missing A/B detune menu state, not merely recognize today's source."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    mutations = [
+        ("pp(SOURCE_A, p)", "pp(DETUNE_A, p)", "SOURCE lane"),
+        ("params[p ? DETUNE_B : DETUNE_A].getValue()",
+         "pp(SOURCE_A, p)", "voice detune"),
+        ("DETUNE_B, 0.f, 1.f, initParamDefault(DETUNE_B), \"Detune B\"",
+         "DETUNE_A, 0.f, 1.f, initParamDefault(DETUNE_A), \"Detune A\"",
+         "Detune B quantity"),
+        ("\"Detune B\"", "\"Detune\"", "Detune B name"),
+        ("\"Reset to 6.0 ct\"", "\"Reset\"", "menu reset"),
+        ("string::f(\"%.1f ct\"", "string::f(\"%.0f ct\"",
+         "Detune cents precision"),
+        ("6.f / spky::SynthEngine::kDetuneCeilCt",
+         "5.f / spky::SynthEngine::kDetuneCeilCt", "Detune reset default"),
+    ]
+    for before, after, label in mutations:
+        mutated = cpp.replace(before, after, 1)
+        check(source_detune_wiring_issues(mutated),
+              f"SOURCE/Detune guard accepted a {label} regression")
+
+
 def test_shuffle_host_wiring():
     """Rack pushes the appended shared knob into the instrument once per
     control update, before either deck can enter STEP and latch that
