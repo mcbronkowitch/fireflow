@@ -241,3 +241,63 @@ TEST_CASE("steplock: the lock holds over ten minutes of audio") {
     for (int l = 0; l < LANE_COUNT; ++l)
         if (l != LANE_PITCH) CHECK(r.fires[l] == r.deck_steps);
 }
+
+TEST_CASE("steplock: the fire grid is identical at every SHAPE setting") {
+    // This is the whole point of the change: SHAPE was the detector, never the
+    // cause. At the S&H end an offset reads as different random values; left
+    // of it, as a ramp stepping beside the beat.
+    const LockResult ref = run_locked(1.f, true, 480000);
+    for (float shape : {0.f, 0.25f, 0.5f, 0.75f}) {
+        const LockResult r = run_locked(shape, true, 480000);
+        CHECK(r.deck_steps == ref.deck_steps);
+        for (int l = 0; l < LANE_COUNT; ++l)
+            if (l != LANE_PITCH) CHECK(r.fires[l] == ref.fires[l]);
+    }
+}
+
+TEST_CASE("steplock: a live STEPS turn keeps the deck aligned") {
+    SuperModulator m;
+    m.init(48000.f, 99u);
+    m.set_rate(0.45f);
+    m.set_step(true, 8);
+
+    int deck_steps = 0, fires[LANE_COUNT] = {0, 0, 0, 0, 0};
+    int last = m.pitch_cur_step();
+    // The loop runs one call PAST 480000 samples, same as run_locked: 480000
+    // is a whole number of 96-sample raster windows, so the extra call is
+    // itself a tick and flushes a fire that landed in the final window with
+    // no follow() left to report it (see run_locked's own comment above).
+    REQUIRE(480000 % ModLane::kTickInterval == 0);
+    for (int i = 0; i <= 480000; ++i) {
+        if (i == 160000) m.set_step(true, 16);
+        if (i == 320000) m.set_step(true, 8);
+        m.process();
+        if (m.pitch_cur_step() != last) { last = m.pitch_cur_step(); ++deck_steps; }
+        if (i % ModLane::kTickInterval == 0)
+            for (int l = 0; l < LANE_COUNT; ++l)
+                if (l != LANE_PITCH && m.lane_fired(l)) ++fires[l];
+    }
+    REQUIRE(deck_steps >= 16);
+    for (int l = 0; l < LANE_COUNT; ++l)
+        if (l != LANE_PITCH) CHECK(fires[l] == deck_steps);
+}
+
+TEST_CASE("steplock: leaving STEP hands the lanes back their own clocks") {
+    SuperModulator m;
+    m.init(48000.f, 99u);
+    m.set_rate(0.45f);
+    m.set_step(true, 8);
+    for (int i = 0; i < 240000; ++i) m.process();
+
+    m.set_step(false, 8);
+    for (int i = 0; i < ModLane::kTickInterval * 64; ++i) m.process();
+
+    // Back on their own ratios: SOURCE runs at twice the master's rate.
+    CHECK(m.lane_rate_hz_for_test(LANE_SOURCE)
+          == doctest::Approx(m.lane_rate_hz_for_test(LANE_PITCH) * 2.f));
+    for (int i = 0; i < LANE_COUNT; ++i) {
+        CHECK(m.lane_slots_for_test(i) == 8);
+        CHECK(m.lane_phase(i) >= 0.f);
+        CHECK(m.lane_phase(i) <  1.f);
+    }
+}
