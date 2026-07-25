@@ -81,7 +81,7 @@ public:
     // reaching into private state. Not used on the audio path.
     float sub_level() const         { return _sub_level; }
     float detune_spread_ct() const  { return _detune_spread_ct; }
-    float applied_detune_ct() const { return _applied_detune_ct; }
+    float applied_detune_ct() const { return _detune_spread_ct; }
     // How many notes the last set_chord() pushed. Lets a test pin that
     // Part::_flatten_for_sampler collapses the chord for the SAMPLER only and
     // leaves the synth's chord surface intact. Not used on the audio path.
@@ -122,7 +122,6 @@ private:
     float _resonance = 0.15f;      // boot (spec)
     float _sub_level = 0.3f;       // boot (spec)
     float _detune_spread_ct = 18.f;
-    float _applied_detune_ct = 18.f;
     float _filt_amt  = 0.f;        // FILT knob -1..+1 (boot: neutral)
     float _filt_gain = 1.f;        // silence fade below the 60 Hz rail (control-rate)
 
