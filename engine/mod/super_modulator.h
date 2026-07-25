@@ -4,6 +4,7 @@
 #include "mod/lane.h"
 #include "mod/lane_id.h"
 #include "mod/divisions.h"
+#include "mod/lane_len.h"
 #include "mod/rhythm_view.h"
 
 namespace spky {
@@ -26,6 +27,8 @@ public:
     void set_variation(float v);
     void set_shuffle(float amount);
     void set_step(bool on, int steps);
+    bool step_mode()  const { return _step_on; }
+    int  deck_steps() const { return _deck_steps; }
     void set_fixed_slew(bool on);
     void set_form(Principle form) { _lanes[LANE_PITCH].set_form(form); }
     void set_song(SongMode song) { _lanes[LANE_PITCH].set_song(song); }
@@ -40,6 +43,9 @@ public:
     uint8_t active_pattern_for_test() const {
         return _lanes[LANE_PITCH].active_pattern();
     }
+    float   lane_rate_hz_for_test(int i) const { return _lanes[i].rate_hz_for_test(); }
+    int     lane_slots_for_test(int i)   const { return _lanes[i].steps(); }
+    int32_t deck_step_for_test()         const { return _deck_step; }
 #endif
     bool pitch_gate() const { return _lanes[LANE_PITCH].gate_state(); }
     bool pitch_sustain() const { return _lanes[LANE_PITCH].note_sustain(); }
@@ -129,6 +135,7 @@ private:
     void _update_rate();
     void _apply_rate();
     void _update_tide();
+    void _apply_steps();
 
     std::array<ModLane, LANE_COUNT> _lanes;
     std::array<float, LANE_COUNT>   _out {};
@@ -137,6 +144,16 @@ private:
     float    _bpm = 120.f;
     float    _rate_norm = 0.5f;
     bool     _synced = false;
+    bool    _step_on    = false;   // the deck's STEP flag; drives the grid lock
+    int     _deck_steps = 8;       // the phrase length; PITCH's slot count
+    float   _shuffle    = 0.f;     // latched target, mirrored from set_shuffle
+    // The deck's own clock, in whole steps. This integer is what makes the
+    // grid exact: every follower derives its slot from it, so no float
+    // rounding can put two lanes on different boundaries. int32_t is ample --
+    // a few hundred steps per second overflows in centuries -- and this engine
+    // ships on a Cortex-M7, where 64-bit arithmetic is not free.
+    int32_t _deck_step       = 0;
+    int     _last_pitch_step = -1;
     float    _pitch_scale = 1.f;   // COUPLE/DRIFT on the melody clock
     float    _mod_scale   = 1.f;   // COUPLE/DRIFT on the texture lanes
     float    _master_hz = 1.f;

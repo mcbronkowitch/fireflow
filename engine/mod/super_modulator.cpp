@@ -33,9 +33,32 @@ void SuperModulator::_update_rate() {
 void SuperModulator::_apply_rate() {
     _master_hz = _base_hz * _pitch_scale;
     for (int i = 0; i < LANE_COUNT; ++i) {
-        const float s = (i == LANE_PITCH) ? _pitch_scale
-                                          : _mod_scale * _tide_mult;
-        _lanes[i].set_rate_hz(_base_hz * s * kLaneRatio[i]);
+        if (_step_on) {
+            // STEP: the PITCH lane is the deck's only clock. The texture lanes
+            // are followers and consume no rate at all -- kLaneRatio and TIDE
+            // reappear as slot counts in _apply_steps(), and _mod_scale has
+            // nothing left to scale. They are still handed the master rate so
+            // nothing reads a stale value across a mode switch.
+            _lanes[i].set_rate_hz(_master_hz);
+        } else {
+            const float s = (i == LANE_PITCH) ? _pitch_scale
+                                              : _mod_scale * _tide_mult;
+            _lanes[i].set_rate_hz(_base_hz * s * kLaneRatio[i]);
+        }
+    }
+}
+
+void SuperModulator::_apply_steps() {
+    // In STEP each lane gets its own cycle length; in FLOW every lane keeps
+    // the deck's phrase length, exactly as before. TIDE always uses the
+    // rational ladder here, even when the global SYNC switch is Free -- a
+    // continuous factor is the one TIDE setting that cannot be expressed as
+    // an integer slot count.
+    const float tide = kTideRatios[tide_index(_tide_norm)];
+    for (int i = 0; i < LANE_COUNT; ++i) {
+        const int slots = _step_on ? lane_slots(i, _deck_steps, tide)
+                                   : _deck_steps;
+        _lanes[i].set_step(_step_on, slots);
     }
 }
 
@@ -47,6 +70,7 @@ void SuperModulator::set_tide(float norm) {
 void SuperModulator::_update_tide() {
     _tide_mult = _synced ? kTideRatios[tide_index(_tide_norm)]
                          : tide_free(_tide_norm);
+    _apply_steps();
     _apply_rate();
 }
 
@@ -57,8 +81,18 @@ void SuperModulator::set_smooth(float s)      { for (auto& l : _lanes) l.set_smo
 // target combine (spec 2026-07-17 mod-tide).
 void SuperModulator::set_range(float r)       { _lanes[LANE_PITCH].set_range(r); }
 void SuperModulator::set_variation(float v)   { for (auto& l : _lanes) l.set_variation(v); }
-void SuperModulator::set_shuffle(float amount){ for (auto& l : _lanes) l.set_shuffle(amount); }
-void SuperModulator::set_step(bool on, int n) { for (auto& l : _lanes) l.set_step(on, n); }
+void SuperModulator::set_shuffle(float amount){
+    _shuffle = shuffle_amount(amount);
+    for (auto& l : _lanes) l.set_shuffle(amount);
+}
+void SuperModulator::set_step(bool on, int n) {
+    const bool entering = on && !_step_on;
+    _step_on    = on;
+    _deck_steps = n < 1 ? 1 : n;
+    if (entering) { _deck_step = 0; _last_pitch_step = -1; }
+    _apply_steps();
+    _apply_rate();
+}
 void SuperModulator::set_fixed_slew(bool on)  { for (auto& l : _lanes) l.set_fixed_slew(on); }
 
 void SuperModulator::process() {
@@ -74,6 +108,17 @@ void SuperModulator::process() {
     // grids happen to coincide again. Documented as the spec's "Accepted
     // asymmetry"; see also part.h.
     _out[LANE_PITCH] = _lanes[LANE_PITCH].process();
+
+    // The deck's step clock. Counted from the master lane's own step index
+    // rather than from lane_fired(), because a gated melodic step still
+    // advances the grid -- the followers must move even when the melody rests.
+    if (_step_on) {
+        const int cs = _lanes[LANE_PITCH].cur_step();
+        if (cs != _last_pitch_step) {
+            if (_last_pitch_step >= 0) ++_deck_step;
+            _last_pitch_step = cs;
+        }
+    }
 
     // Onset-gap ring, moved up from ModLane (see the field comments in
     // super_modulator.h): fed only by LANE_PITCH's per-sample process()
@@ -108,8 +153,16 @@ void SuperModulator::process() {
 
     if (_tick_ctr == 0) {
         _tick_ctr = ModLane::kTickInterval;
-        for (int i = 0; i < LANE_COUNT; ++i)
-            if (i != LANE_PITCH) _out[i] = _lanes[i].tick();
+        const int   deck = _deck_steps < 1 ? 1 : _deck_steps;
+        const int   ps   = _lanes[LANE_PITCH].cur_step();
+        const float frac = ps < 0 ? 0.f
+            : shuffle_step_fraction(
+                  _lanes[LANE_PITCH].phase(), ps, deck, _shuffle);
+        for (int i = 0; i < LANE_COUNT; ++i) {
+            if (i == LANE_PITCH) continue;
+            _out[i] = _step_on ? _lanes[i].follow(_deck_step, frac)
+                               : _lanes[i].tick();
+        }
     }
     --_tick_ctr;
 }

@@ -59,6 +59,7 @@ add_executable(spky_tests
     tests/test_new_phrase.cpp
     engine/mod/super_modulator.cpp
     tests/test_super_modulator.cpp
+    tests/test_step_grid_lock.cpp
     engine/parts/part.cpp
     tests/test_part.cpp
     engine/instrument.cpp
