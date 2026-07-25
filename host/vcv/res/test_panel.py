@@ -1292,9 +1292,16 @@ def test_sampler_preset_init_snapshot():
           "legacy lastBasis state is not read for migration")
     check('json_object_get(root, "principle")' in cpp,
           "older legacy principle state is not read for migration")
-    check("params[p ? FORM_B : FORM_A].setValue((float)form);" in cpp,
+    check("is_modern_form_song_version(" in cpp
+          and "version && json_is_integer(version)" in cpp,
+          "schema marker type/version is not validated")
+    check("json_is_array(bases)" in cpp and "json_is_array(principles)" in cpp
+          and "json_is_integer(basis)" in cpp
+          and "json_is_integer(principle)" in cpp,
+          "legacy arrays and values are not type-checked")
+    check("params[p ? FORM_B : FORM_A].setValue((float)migrated.form);" in cpp,
           "legacy FORM value is not migrated into the renamed stable slot")
-    check("params[p ? SONG_B : SONG_A].setValue(0.f);" in cpp,
+    check("params[p ? SONG_B : SONG_A].setValue((float)migrated.song);" in cpp,
           "legacy patches do not default SONG to AAAB")
 
     makefile_path = os.path.join(here, "..", "Makefile")

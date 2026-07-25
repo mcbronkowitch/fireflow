@@ -7,6 +7,7 @@
 #include "plugin.hpp"
 #include "generated_panel.hpp"   // enums + control table (generated from res/gen_panel.py)
 #include "init_patch.hpp"       // sampler.vcvm snapshot + non-param init state
+#include "form_song_migration.hpp"
 
 // The portable engine core -- exactly the same headers the desktop render host
 // and (later) the Daisy firmware use. No hardware type crosses this boundary.
@@ -667,18 +668,26 @@ struct Spotymod : Module {
 
     void dataFromJson(json_t* root) override {
         if (!root) return;
-        if (!json_object_get(root, "formSongVersion")) {
+        json_t* version = json_object_get(root, "formSongVersion");
+        const bool modern = is_modern_form_song_version(
+            version && json_is_integer(version),
+            version && json_is_integer(version) ? json_integer_value(version) : 0);
+        if (!modern) {
             json_t* bases = json_object_get(root, "lastBasis");
             json_t* principles = json_object_get(root, "principle");
             for (int p = 0; p < spky::PART_COUNT; ++p) {
-                json_t* v = bases ? json_array_get(bases, p) : nullptr;
-                if (!v && principles) v = json_array_get(principles, p);
-                int form = v ? static_cast<int>(json_integer_value(v)) : 2;
-                if (form < 0) form = 0;
-                const int last = static_cast<int>(spky::Principle::kCount) - 1;
-                if (form > last) form = last;
-                params[p ? FORM_B : FORM_A].setValue((float)form);
-                params[p ? SONG_B : SONG_A].setValue(0.f);
+                json_t* basis = json_is_array(bases) ? json_array_get(bases, p) : nullptr;
+                json_t* principle =
+                    json_is_array(principles) ? json_array_get(principles, p) : nullptr;
+                const FormSongMigration migrated = migrate_legacy_form_song(
+                    bases != nullptr,
+                    basis && json_is_integer(basis),
+                    basis && json_is_integer(basis) ? json_integer_value(basis) : 0,
+                    principle && json_is_integer(principle),
+                    principle && json_is_integer(principle)
+                        ? json_integer_value(principle) : 0);
+                params[p ? FORM_B : FORM_A].setValue((float)migrated.form);
+                params[p ? SONG_B : SONG_A].setValue((float)migrated.song);
             }
         }
         json_t* parts = json_object_get(root, "sampler");
