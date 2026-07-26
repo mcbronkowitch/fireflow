@@ -314,8 +314,10 @@ def validate_captures(captures, profile):
         reported = tuple(header["families"])
         if reported != tuple(profile.families):
             raise BenchValidationError(
-                "run %d reports families %s but the profile requested %s "
-                "(stale image? try without --no-build)"
+                "run %d reports families %s but --profile requested %s -- "
+                "the flashed image and the --profile argument disagree; "
+                "rebuild for this profile (drop --no-build), or pass the "
+                "--profile that matches the image actually on the device"
                 % (run_index, " ".join(reported) or "none",
                    " ".join(profile.families))
             )
@@ -633,7 +635,7 @@ def wave_gate_verdict(captures):
     return out.getvalue()
 
 
-def write_results(out_dir, captures):
+def write_results(out_dir, captures, profile):
     header, rows, anchors = captures[0]
     os.makedirs(out_dir, exist_ok=True)
     stamp = datetime.date.today().isoformat()
@@ -673,7 +675,13 @@ def write_results(out_dir, captures):
             "fingerprint `%s` (SHA-256 of the MCU UID).\n\n"
             % (len(captures), header["qspi_sha256"], fingerprint)
         )
-        fh.write(wave_gate_verdict(captures))
+        # Only claim the WAVE gate passed when the profile actually declared
+        # (and therefore validate_captures actually enforced) it -- otherwise
+        # this document would either assert an untrue PASS for an ungated
+        # profile, or KeyError on synth_2x4/wave_2x4 rows a system-less
+        # profile never had, after the hardware time is already spent.
+        if WAVE_ACCEPTANCE in profile.gates:
+            fh.write(wave_gate_verdict(captures))
         fh.write(verdict(rows, anchors))
         for run_index, (run_header, run_rows, run_anchors) in enumerate(
                 captures, start=1):
@@ -802,7 +810,7 @@ def main():
         print("ERROR: %s" % error, file=sys.stderr)
         return 2
 
-    base = write_results(args.out_dir, captures)
+    base = write_results(args.out_dir, captures, profile)
     print("# wrote %s.md and %s.csv" % (base, base), file=sys.stderr)
     return 0
 

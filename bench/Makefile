@@ -56,7 +56,7 @@ $(foreach f,$(BENCH_FAMILIES),\
   $(if $(FAMILY_SOURCE_$(f)),,$(error unknown bench family '$(f)')))
 
 FAMILY_SOURCES = $(foreach f,$(BENCH_FAMILIES),$(FAMILY_SOURCE_$(f)))
-C_DEFS += $(foreach f,$(BENCH_FAMILIES),-D$(FAMILY_DEFINE_$(f))=1)
+FAMILY_DEFINES = $(foreach f,$(BENCH_FAMILIES),$(FAMILY_DEFINE_$(f)))
 
 CPP_SOURCES = \
 	main.cpp \
@@ -108,3 +108,19 @@ $(BUILD_DIR)/git_hash.h: FORCE | $(BUILD_DIR)
 	@python write_git_hash.py $@ $(GIT_HASH)
 
 $(BUILD_DIR)/main.o: $(BUILD_DIR)/git_hash.h
+
+# --- bench family selection header -------------------------------------
+# `-DBENCH_FAMILY_*` on the compile line has the exact same hazard as
+# `-DBENCH_GIT_HASH` above, and it is not hypothetical: switching
+# BENCH_FAMILIES leaves a stale build/families.o believing it still holds
+# the old family set. Narrow-after-wide dies at link on an undefined
+# reference to a family the narrower rebuild dropped (families.o still
+# references it); wide-after-narrow links *silently*, producing an image
+# that reports the wide build's size while only containing the narrow
+# family's workloads. Same fix, same shape as the git hash: emit the
+# selection into a real header, written only when its content differs, and
+# declare it a real prerequisite of the one object that reads it.
+$(BUILD_DIR)/bench_families.h: FORCE | $(BUILD_DIR)
+	@python write_bench_families.py $@ $(FAMILY_DEFINES)
+
+$(BUILD_DIR)/families.o: $(BUILD_DIR)/bench_families.h

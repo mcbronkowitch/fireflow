@@ -74,10 +74,11 @@ class UnkillableOpenOcd(KillRequiredOpenOcd):
         return None
 
 
-def bench_row(name, avg_cyc, max_cyc, checksum):
+def family_row(family, name, avg_cyc, max_cyc, checksum):
     return (
-        "BENCH,system,%s,%d,%d,%.2f,%.2f,%s"
+        "BENCH,%s,%s,%d,%d,%.2f,%.2f,%s"
         % (
+            family,
             name,
             avg_cyc,
             max_cyc,
@@ -86,6 +87,10 @@ def bench_row(name, avg_cyc, max_cyc, checksum):
             checksum,
         )
     )
+
+
+def bench_row(name, avg_cyc, max_cyc, checksum):
+    return family_row("system", name, avg_cyc, max_cyc, checksum)
 
 
 def capture_lines(
@@ -563,6 +568,90 @@ class ProfileContract(unittest.TestCase):
         )
         with self.assertRaises(runner.BenchValidationError):
             runner.validate_captures([capture, capture], gated)  # rejected
+
+
+class ProfileAwareEvidenceContract(unittest.TestCase):
+    """write_results (and the WAVE verdict it writes) must follow the
+    profile's gates, not assume `system` / WAVE_ACCEPTANCE are always
+    present. Neither shipped profile currently omits either, so both tests
+    use a synthetic profile -- the BODY branch adds a real one that does."""
+
+    def run_with_profile(self, captures, profile):
+        with tempfile.TemporaryDirectory() as temp:
+            argv = [
+                "run.py",
+                "--no-build",
+                "--repeat",
+                str(len(captures)),
+                "--out-dir",
+                temp,
+            ]
+            with (
+                mock.patch.object(runner, "prepare_existing_artifacts", return_value={}),
+                mock.patch.object(runner, "require_clean_tree"),
+                mock.patch.object(
+                    runner,
+                    "require_verified_payload",
+                    return_value={"device_id": DEVICE_ID},
+                ),
+                mock.patch.object(runner, "require_live_digest"),
+                mock.patch.object(runner, "require_live_device"),
+                mock.patch.object(runner, "run_once", side_effect=captures),
+                mock.patch.object(runner, "resolve", return_value=profile),
+                mock.patch.object(sys, "argv", argv),
+            ):
+                result = runner.main()
+            artifacts = {
+                path.suffix: path.read_text(encoding="utf-8")
+                for path in Path(temp).iterdir()
+            }
+            return result, artifacts
+
+    def test_a_profile_without_system_writes_a_complete_document(self):
+        """A family-only profile with no `system` rows must not KeyError
+        inside write_results after a complete two-run hardware capture --
+        that is the worst possible moment to lose the evidence."""
+        from profiles import Profile
+
+        names = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["voice"]
+        rows = [
+            family_row("voice", name, 100, 101, "%08x" % i)
+            for i, name in enumerate(names)
+        ]
+        capture = capture_lines(rows, families="voice")
+        profile = Profile(families=("voice",), gates=frozenset())
+
+        result, artifacts = self.run_with_profile([capture, capture], profile)
+
+        self.assertEqual(result, 0)
+        self.assertIn(".md", artifacts)
+        self.assertNotIn("WAVE performance gate", artifacts[".md"])
+
+    def test_an_ungated_profile_does_not_claim_the_wave_gate_passed(self):
+        """A profile that carries `system` but does not declare
+        WAVE_ACCEPTANCE must not print a PASS claim for a capture that
+        would fail the gate outright -- the document's only purpose is to
+        be evidence, and a false PASS defeats that."""
+        from profiles import Profile
+
+        names = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["system"]
+        rows = []
+        for i, name in enumerate(names):
+            if name == "synth_2x4":
+                avg = 100
+            elif name == "wave_2x4":
+                avg = 900  # deliberately slower: would fail the gate outright
+            else:
+                avg = 100
+            rows.append(bench_row(name, avg, avg + 1, "%08x" % i))
+        capture = capture_lines(rows, families="system")
+        profile = Profile(families=("system",), gates=frozenset())
+
+        result, artifacts = self.run_with_profile([capture, capture], profile)
+
+        self.assertEqual(result, 0)
+        self.assertNotIn("WAVE performance gate", artifacts[".md"])
+        self.assertNotIn("PASS", artifacts[".md"])
 
 
 if __name__ == "__main__":
