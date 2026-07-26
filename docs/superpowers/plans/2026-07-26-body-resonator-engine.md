@@ -1360,6 +1360,7 @@ private:
     float _freq = 220.f, _matl = 0.f, _detune_ct = 0.f;
     float _damping = 0.5f, _brightness = 0.5f, _sub = 0.f;
     float _vel = 1.f, _vel_target = 1.f;
+    float _mix_string = 1.f, _mix_modal = 0.f;   // equal-power MATL gains
     float _excitation = 0.f;
     float _follower = 0.f, _peak = 0.f;
     float _gain_l = 0.70710678f, _gain_r = 0.70710678f;
@@ -1411,6 +1412,13 @@ void BodyVoice::_apply_params() {
                      _hold ? 0.f : _damping, _brightness);
 
     _exciter.set_freq(_freq);
+
+    // Equal-power blend gains for MATL, computed here so process() carries no
+    // square root. Global constraint: derived quantities live on the control
+    // tick.
+    const float m = _matl < 0.f ? 0.f : (_matl > 1.f ? 1.f : _matl);
+    _mix_string = std::sqrt(1.f - m);
+    _mix_modal  = std::sqrt(m);
 }
 
 void BodyVoice::process(float& accL, float& accR) {
@@ -1421,10 +1429,12 @@ void BodyVoice::process(float& accL, float& accR) {
     const float string = 0.5f * (_str_a.Process(drive) + _str_b.Process(drive));
     const float modal  = _bank.process(drive);
 
-    // Equal-power blend along MATL.
-    const float a = std::sqrt(1.f - _matl);
-    const float b = std::sqrt(_matl);
-    const float s = (string * a + modal * b) * _vel;
+    // Equal-power blend along MATL. The two gains are computed in
+    // _apply_params, NOT here: MATL is a control-rate parameter, so its
+    // square roots are control-rate work. Two sqrt per sample per voice would
+    // be 16 per sample across a full instrument for a value that changes once
+    // per 96 samples.
+    const float s = (string * _mix_string + modal * _mix_modal) * _vel;
 
     const float mag = s < 0.f ? -s : s;
     if (mag > _peak) _peak = mag;
