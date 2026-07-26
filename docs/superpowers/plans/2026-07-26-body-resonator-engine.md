@@ -746,9 +746,18 @@ Seed, turn the monitor level down.
 - [ ] **Step 1: Run the bench**
 
 ```bash
-cd bench && python run.py
+cd bench
+python run.py --profile body --build-only
+python run.py --profile body --no-build --program-qspi --build-only
+python run.py --profile body --repeat 2
 ```
-Expected: exit 0, two runs agreeing, capture written to `../docs/bench/`.
+Expected: exit 0, two runs agreeing, capture written to
+`../docs/bench/YYYY-MM-DD-<githash>-body.md`.
+
+Name `--profile body` in all three commands. A bare `python run.py` defaults
+to `full`, which does not link. The QSPI payload itself is
+profile-independent, but the programming receipt is bound to `bench.elf`'s
+hash, so a profile change invalidates it and step 2 has to re-run.
 
 - [ ] **Step 2: Read the two rows and compute the per-voice cost**
 
