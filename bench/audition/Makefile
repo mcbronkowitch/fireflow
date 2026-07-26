@@ -39,7 +39,10 @@ CPP_SOURCES = \
 	../../engine/fx/comp.cpp \
 	../../engine/synth/voice.cpp \
 	../../engine/synth/synth_engine.cpp \
-	../../engine/synth/wt_bank.cpp
+	../../engine/synth/wt_bank.cpp \
+	../../engine/body/ks_string.cpp \
+	../../engine/body/mode_bank.cpp \
+	../../engine/body/body_voice.cpp
 
 SYSTEM_FILES_DIR = $(LIBDAISY_DIR)/core
 include $(SYSTEM_FILES_DIR)/Makefile

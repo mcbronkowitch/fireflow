@@ -88,8 +88,21 @@ constexpr int cap(int n) {
 }
 
 // Fill every voice, then steal one, measuring everything either contract
-// wants to know. Shared setup rather than two copies, so the machine claims
-// and the AD-envelope claims can never drift onto different engine states.
+// wants to know.
+//
+// This is shared SETUP CODE, not a shared measurement. Both
+// contract_round_robin_and_steal (machine claims) and
+// voicet_steal_retriggers_from_level (envelope claim) call it, and each call
+// constructs its own EngineT and runs the whole thing again. The two runs
+// agree because the engine is deterministic -- which is not an assumption
+// here, it is contract_deterministic_seed, asserted for every engine that
+// runs this suite. Nothing memoises the result, and nothing would notice if
+// an engine acquired run-to-run state: contract_deterministic_seed would go
+// red first, and that is the intended order.
+//
+// The reason to factor it out is therefore that the two contracts drive the
+// engine through the SAME steps rather than through two copies of them that
+// can be edited apart -- not that they observe the same object.
 struct StealProbe {
     int   active_after_fill  = -1;
     std::vector<float> env_after_fill;   // kVoices entries

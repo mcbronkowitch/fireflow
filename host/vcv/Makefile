@@ -29,7 +29,13 @@ EXTRA_CXXFLAGS += -std=c++17
 # plugin glue
 SOURCES += $(wildcard src/*.cpp)
 
-# portable engine core (identical list to the render target in CMakeLists.txt)
+# Portable engine core (identical list to the render target in CMakeLists.txt).
+#
+# Keep it identical. synth_engine.cpp instantiates SynthEngineT for every
+# engine alias in synth_engine.h -- SYNTH, WAVE and now BODY -- and Part holds
+# one of each by value, so a source this host omits is not a feature it lacks,
+# it is a link error. That is what BODY's body/*.cpp entries below are: nothing
+# in src/ names BodyEngine, and the plugin still cannot link without them.
 SOURCES += \
 	$(REPO)/engine/mod/lane.cpp \
 	$(REPO)/engine/mod/super_modulator.cpp \
@@ -47,15 +53,25 @@ SOURCES += \
 	$(REPO)/engine/synth/synth_engine.cpp \
 	$(REPO)/engine/sampler/sample_buffer.cpp \
 	$(REPO)/engine/sampler/sampler_engine.cpp \
-	$(REPO)/engine/sampler/slice_map.cpp
+	$(REPO)/engine/sampler/slice_map.cpp \
+	$(REPO)/engine/body/ks_string.cpp \
+	$(REPO)/engine/body/mode_bank.cpp \
+	$(REPO)/engine/body/body_voice.cpp
 
-# minimal DaisySP slice the FX chain needs
+# Minimal DaisySP slice the FX chain and BODY need. Mirrors the daisysp_min
+# target in CMakeLists.txt (minus KarplusString.cpp, which only the desktop
+# test suite links, to compare against engine/body/ks_string.cpp). dcblock and
+# crossfade are BODY's: KsString holds a DcBlock and a CrossFade by value, and
+# both are out-of-line. The bench never needed them listed because it links
+# -ldaisysp; this host compiles its slice from source.
 SOURCES += \
 	$(REPO)/lib/DaisySP/Source/Effects/overdrive.cpp \
 	$(REPO)/lib/DaisySP/Source/Effects/decimator.cpp \
 	$(REPO)/lib/DaisySP/Source/Effects/sampleratereducer.cpp \
 	$(REPO)/lib/DaisySP/Source/Control/phasor.cpp \
-	$(REPO)/lib/DaisySP/Source/Filters/svf.cpp
+	$(REPO)/lib/DaisySP/Source/Filters/svf.cpp \
+	$(REPO)/lib/DaisySP/Source/Utility/dcblock.cpp \
+	$(REPO)/lib/DaisySP/Source/Dynamics/crossfade.cpp
 
 # The two runtime assets only -- NOT the whole res/ directory. res/ also holds
 # gen_panel.py, test_panel.py and their __pycache__, and shipping the panel
