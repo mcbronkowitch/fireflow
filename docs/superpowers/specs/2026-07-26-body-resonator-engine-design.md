@@ -221,7 +221,8 @@ earned.
 | ATTACK | env attack (% of cycle) | exciter length: 2 ms click ↔ bowed swell (tempo-coupled) |
 | DECAY | env decay (× cycle) | damping — ring time follows the tempo; sets string damping and mode Q together |
 | RESO | Svf resonance | **exciter character**, four zones (§2) |
-| DETUNE | ±35 ct osc spread | inharmonicity: string spread × ~4 (up to ~140 ct) *and* mode-bank stretch — one "how broken is this material" axis |
+| DETUNE | ±35 ct osc spread | inharmonicity **amount**: string spread × ~4 (up to ~140 ct) *and* mode-bank stretch — one "how broken is this material" axis |
+| COLOR | chord slots (4-note layer) | inharmonicity **character**: the chord quality picks which way the partials stretch; only the root sounds (`kVoices = 1`, §7). Scaled by DETUNE, so DETUNE = 0 is harmonic and silences it |
 | SUB | sub-sine level | **excitation bus level** (§6) — how open the body is to the room |
 | CHOKE | drone release + retrigger pause | the same + **palm mute**: damping snaps high on both structures |
 | PITCH / MOTION / LEVEL | (unchanged) | (unchanged: latch/track, pan fan + drift, master gain) |
@@ -233,8 +234,22 @@ tuning material for the listening pass.
 stab humanization work on BODY — struck bell chords, strummed.~~
 
 **Superseded by the measured gate (§7).** `kVoices = 1`: there are no chord
-slots to fill and no second voice to humanize a stab against. What COLOR does
-on a BODY deck is an open design decision, not a settled one — see §7.
+slots to fill and no second voice to humanize a stab against.
+
+**COLOR drives the material instead** (user decision, 2026-07-26). The chord
+the layer would have voiced is read as a *quality* rather than a set of
+pitches: a major triad asks for near-harmonic partials — a tuned, singing
+bell — and each step toward clusters and extensions asks for a more broken
+mode ratio. Only the root sounds.
+
+COLOR and DETUNE would otherwise both be "how inharmonic is this", which
+would make the panel worse, not richer. They split as **character and
+amount**: COLOR chooses *which* way the partials are stretched, DETUNE
+chooses *how far*. DETUNE keeps exactly the meaning §5 already gives it and
+its existing curve, so at DETUNE = 0 a BODY deck is harmonic and COLOR is
+inaudible — the same way any depth control behaves here. That split is the
+design decision; the mapping from chord quality to ratio character is tuning
+material for the listening pass (Task 12), not a contract.
 
 ### 6. The excitation bus
 
