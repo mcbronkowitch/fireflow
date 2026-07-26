@@ -28,10 +28,10 @@ namespace spky {
 //   master gain). All but PITCH act on all voices continuously.
 // - Control rate: drift LFOs + envelope coefficients + all voice parameter
 //   pushes run once per kCtrlInterval samples (CPU-budget constraint).
-template <class OscT>
+template <class V>
 class SynthEngineT : public IPartEngine {
 public:
-    static constexpr int   kVoices       = 4;
+    static constexpr int   kVoices       = V::kEngineVoices;
     static constexpr int   kCtrlInterval = 96;
     static constexpr float kAttackFloorS = 0.002f;
     static constexpr float kDecayMinS    = 0.05f;
@@ -94,7 +94,7 @@ private:
     void _update_control();
     void _adjust_surface();
 
-    std::array<VoiceT<OscT>, kVoices>    _voices;
+    std::array<V, kVoices> _voices;
     std::array<uint32_t, kVoices> _order {};   // trigger sequence per voice
     uint32_t _seq = 0;
     uint32_t _seed = 0xC0FFEEu;
@@ -129,10 +129,10 @@ private:
     OnePole _level;                // smoothed master gain (LEVEL target)
 };
 
-using SynthEngine = SynthEngineT<MorphOsc>;
-extern template class SynthEngineT<MorphOsc>;
+using SynthEngine = SynthEngineT<VoiceT<MorphOsc>>;
+extern template class SynthEngineT<VoiceT<MorphOsc>>;
 
-using WaveEngine = SynthEngineT<WtOsc>;
-extern template class SynthEngineT<WtOsc>;
+using WaveEngine = SynthEngineT<VoiceT<WtOsc>>;
+extern template class SynthEngineT<VoiceT<WtOsc>>;
 
 } // namespace spky
