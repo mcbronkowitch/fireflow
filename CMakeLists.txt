@@ -125,6 +125,8 @@ add_executable(spky_tests
     tests/test_sampler_part.cpp
     tests/test_review_register.cpp
     tests/test_slice_map.cpp
+    engine/body/mode_bank.cpp
+    tests/test_mode_bank.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
 target_include_directories(spky_tests PRIVATE host)
@@ -152,6 +154,7 @@ add_executable(render
     engine/sampler/sample_buffer.cpp
     engine/sampler/sampler_engine.cpp
     engine/sampler/slice_map.cpp
+    engine/body/mode_bank.cpp
 )
 target_include_directories(render PRIVATE host engine third_party)
 target_link_libraries(render PRIVATE nlohmann_json daisysp_min)
