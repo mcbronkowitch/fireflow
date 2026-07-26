@@ -48,6 +48,18 @@ void logf(const char* fmt, ...)
     sh_write0(g_buf);
 }
 
+// Ceiling: g_buf[256] (declared above) is shared by every logf() call, and
+// kBeginFormat below is the widest user of it. Its fixed fields --
+// "BENCH_BEGIN,", githash, the clock (up to 10 digits), "96", the cache
+// string, a 64-hex-char QSPI digest, a 24-hex-char UID, and the format's own
+// commas/newline -- consume roughly 125 of those 256 bytes, leaving about
+// 128 for `families`. That is the same order of magnitude as, and
+// independent of, families.cpp's own 128-byte families_csv() ceiling (see
+// the comment there); either one truncating silently still leaves a
+// syntactically valid BENCH_BEGIN line, so the failure surfaces downstream
+// and unhelpfully -- as run.py rejecting a families mismatch -- rather than
+// here. If a future family or a longer githash prefix makes this tight,
+// widen g_buf (and DTCM has room: it's at 6.56% per bench/README.md).
 void DTCM_REPORT_TEXT report_begin(
     const char* githash,
     const char* qspi_sha256,

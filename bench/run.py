@@ -635,7 +635,48 @@ def wave_gate_verdict(captures):
     return out.getvalue()
 
 
+def wave_gate_not_applicable_reason(profile):
+    """Why `wave_acceptance` did not run for this profile.
+
+    There are two genuinely different reasons, and the gate ledger must not
+    conflate them: a profile whose families cannot supply synth_2x4 and
+    wave_2x4 at all, versus a profile whose families could but whose
+    manifest simply does not declare the gate. Hardcoded prose here once
+    said "which this profile does not contain" unconditionally -- false for
+    the second case, inside a document whose only purpose is to be
+    evidence. Derive it instead.
+    """
+    supplied = {
+        row_name
+        for family in profile.families
+        for row_name in BENCH_PROTOCOL_ROWS_BY_FAMILY.get(family, ())
+    }
+    required = {"synth_2x4", "wave_2x4"}
+    missing = required - supplied
+    if missing:
+        return (
+            "needs %s, which this profile's families (%s) do not supply"
+            % (", ".join(sorted(missing)), ", ".join(profile.families) or "none")
+        )
+    return "this profile's manifest does not declare it"
+
+
 def write_results(out_dir, captures, profile, profile_name):
+    # The gate ledger below claims every universal gate ran and passed,
+    # including "at least two runs". Checking that here makes the claim
+    # true by construction rather than by trusting the caller got the
+    # order right. The other four universal gates (row set, duplicates,
+    # identity, checksum drift) are still only true because main() calls
+    # validate_captures before calling this function -- re-running that
+    # full check here would duplicate real validation work for a function
+    # whose job is to persist a capture, not gate it, and whose caller
+    # already wraps validate_captures in its own error handling. That
+    # ordering dependency is the residual convention this does not remove.
+    if len(captures) < 2:
+        raise ValueError(
+            "write_results claims the 'at least two runs' gate passed; "
+            "called with %d capture(s)" % len(captures)
+        )
     header, rows, anchors = captures[0]
     os.makedirs(out_dir, exist_ok=True)
     stamp = datetime.date.today().isoformat()
@@ -679,6 +720,7 @@ def write_results(out_dir, captures, profile, profile_name):
             "no duplicate rows",
             "QSPI digest and device fingerprint identical across runs",
             "per-row checksums identical across runs",
+            "at least two runs (`--repeat`, minimum 2)",
         )
         fh.write("## Gate ledger\n\n")
         fh.write("Profile `%s` — families: %s\n\n"
@@ -693,9 +735,8 @@ def write_results(out_dir, captures, profile, profile_name):
                      % BUDGET_CYCLES)
         fh.write("\nNot applicable to this profile:\n\n")
         if WAVE_ACCEPTANCE not in profile.gates:
-            fh.write("- `wave_acceptance` — needs the `system` family's "
-                     "synth_2x4 and wave_2x4 rows, which this profile "
-                     "does not contain\n")
+            fh.write("- `wave_acceptance` — %s\n"
+                     % wave_gate_not_applicable_reason(profile))
         else:
             fh.write("- none\n")
         fh.write("\n")
@@ -775,8 +816,8 @@ def main():
     ap.add_argument("--out-dir", default=os.path.join(REPO, "docs", "bench"))
     args = ap.parse_args()
     try:
-        profile = resolve(args.profile)
-    except KeyError as error:
+        profile = resolve(args.profile, BENCH_PROTOCOL_ROWS_BY_FAMILY)
+    except (KeyError, ValueError) as error:
         print("ERROR: %s" % error, file=sys.stderr)
         return 2
     if not args.build_only and args.repeat < 2:

@@ -38,6 +38,16 @@ const int kFamilyCount = sizeof(kFamilies) / sizeof(kFamilies[0]);
 static_assert(sizeof(kFamilies) / sizeof(kFamilies[0]) > 0,
               "at least one BENCH_FAMILY_* must be defined");
 
+// Ceiling: buf[128] holds space-separated family names plus a NUL, so at
+// most 127 characters of names-and-spaces. Today's registry ("system voice
+// mem mod abl taps sampler") is 37. Past the ceiling this silently
+// truncates -- no assert, no error -- and report.cpp's report_begin() has a
+// second, related ceiling of its own (see the comment there). Neither is a
+// correctness risk today, but the family count is about to grow: if you are
+// adding a family and this comment caught your eye, that is the point.
+// Growing buf[] here is cheap; growing report.cpp's shared 256-byte g_buf
+// is the harder half, because it also carries the githash, clock, cache
+// string, QSPI digest, and device UID on the same line.
 const char* families_csv()
 {
     static char buf[128];

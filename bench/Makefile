@@ -54,6 +54,16 @@ FAMILY_DEFINE_sampler = BENCH_FAMILY_SAMPLER
 # Fail loudly on a typo rather than silently building a smaller image.
 $(foreach f,$(BENCH_FAMILIES),\
   $(if $(FAMILY_SOURCE_$(f)),,$(error unknown bench family '$(f)')))
+# Guard FAMILY_DEFINE_* the same way as FAMILY_SOURCE_* above. A family added
+# with a source entry but no define entry would compile its workloads.cpp in
+# (FAMILY_SOURCES) while silently contributing an empty FAMILY_DEFINES entry,
+# so families.cpp's `#if BENCH_FAMILY_*` guard for it is never true and its
+# registry entry disappears -- the image then self-reports fewer families
+# than were requested, which run.py's validate_captures surfaces as "the
+# flashed image and the --profile argument disagree", pointing the reader at
+# a stale image instead of this Makefile's actual omission.
+$(foreach f,$(BENCH_FAMILIES),\
+  $(if $(FAMILY_DEFINE_$(f)),,$(error bench family '$(f)' has no FAMILY_DEFINE_ entry)))
 
 FAMILY_SOURCES = $(foreach f,$(BENCH_FAMILIES),$(FAMILY_SOURCE_$(f)))
 FAMILY_DEFINES = $(foreach f,$(BENCH_FAMILIES),$(FAMILY_DEFINE_$(f)))

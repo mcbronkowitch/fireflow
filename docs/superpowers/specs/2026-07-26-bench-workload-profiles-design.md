@@ -163,11 +163,22 @@ Two on this branch. No catalogue.
 
 **Not here: the `body` profile.** This branch starts from `main`, where the
 `body` workload family does not exist — it lives on `body-resonator-engine`
-(`bench/workloads_body.cpp`, added by that milestone's Task 3). A profile naming
-a family that is not compiled would fail at manifest load, which is the correct
-behaviour and exactly why it is not declared here. The BODY branch adds its own
-`body` profile entry once it merges this work; the manifest is designed so that
-is a two-line addition.
+(`bench/workloads_body.cpp`, added by that milestone's Task 3), and
+`run.py`'s `BENCH_PROTOCOL_ROWS_BY_FAMILY` on this branch has no `body`
+entry either. `resolve()` (`bench/profiles.py`) checks every family a
+profile names against that dict before anything is built, so naming `body`
+here does fail at manifest load — but only because `body` is unknown to
+`BENCH_PROTOCOL_ROWS_BY_FAMILY`, not because it is uncompiled: `resolve()`
+knows nothing about the Makefile. A family that *does* have a
+`BENCH_PROTOCOL_ROWS_BY_FAMILY` entry but is never wired into
+`bench/Makefile`'s `FAMILY_SOURCE_*`/`FAMILY_DEFINE_*` pairs would sail
+through `resolve()` and fail later instead: at the Makefile's own
+unknown-family guard on a normal build, or, under `--no-build` against a
+stale image that never had it compiled in, as a families mismatch once
+hardware has already run. The BODY branch adds its own `body` profile entry
+once it merges this work, and must give `body` a `BENCH_PROTOCOL_ROWS_BY_FAMILY`
+entry and a Makefile entry alongside it for the manifest to resolve and the
+image to build; the profile half of that is a two-line addition.
 
 That ordering is deliberate: this branch lands on `main`, BODY picks it up from
 `main`, and BODY's blocked hardware gate resumes there.

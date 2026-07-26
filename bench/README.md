@@ -12,30 +12,55 @@ own `Makefile`, its own `main.cpp`, and links against `alt_sram.lds` only to
 reuse the same BOOT_SRAM placement the real firmware uses, so the timing
 context (SRAM vs SDRAM latency) matches production.
 
-## The one command
+## Profiles, and one command per profile
+
+The bench image cannot hold every workload family at once — at `d294556` it
+linked with 40 bytes of `SRAM_EXEC` and 24 bytes of `SRAM` to spare, and the
+next engine took it over. A profile selects which families an image
+contains.
+
+`bench/profiles.py` is the source of truth for what ships. On this branch:
+
+| profile | families | purpose |
+|---|---|---|
+| `system` | system | carries the WAVE acceptance gate; fits comfortably |
+| `full` (default) | system, voice, mem, mod, abl, taps, sampler | the complete run, as before profiles existed |
+
+**`full` currently fails to link, and that is deliberate, not broken.** The
+engine has outgrown the image; no profile change fixes that on its own (see
+the history above), and the point of profiles is to make forward progress
+possible without hiding the debt. Running `python run.py` with no
+`--profile` resolves to `full` and fails at the link step with an
+SRAM/SRAM_EXEC region overflow. For a build that actually links and
+measures today, name a profile:
 
 ```
-python run.py
+python run.py --profile system
 ```
 
-From `bench/`. This builds the bench firmware, verifies that the separately
-programmed WAVE bank matches the current linked QSPI payload, loads only the
-SRAM side of the image through the debug probe, and captures its
-semihosting output **twice** (`--repeat 2` is the default — see "Anchor
-mode's audio" below for what that means out loud), compares the two runs'
-unique row sets and checksums, enforces the matched WAVE/SYNTH acceptance
-gate on every run, and writes both complete captures to
-`../docs/bench/YYYY-MM-DD-<githash>.md` and `.csv`. The CSV carries a run
-index, the live QSPI payload digest, and a SHA-256 device fingerprint on every
-row; the Markdown records those identities and both offline/anchor tables.
-Exit code 0 means at least two runs passed every gate and both were persisted.
-A missing/extra/duplicate row, checksum drift, identity drift, non-numeric
-WAVE result, WAVE result slower than SYNTH, or WAVE maximum at or above the
-960,000-cycle block budget exits nonzero and writes no accepted evidence.
+From `bench/`. This builds the bench firmware for the named profile,
+verifies that the separately programmed WAVE bank matches the current
+linked QSPI payload, loads only the SRAM side of the image through the
+debug probe, and captures its semihosting output **twice** (`--repeat 2` is
+the default — see "Anchor mode's audio" below for what that means out
+loud), compares the two runs' unique row sets and checksums, enforces every
+gate the profile declares on every run, and writes both complete captures
+to `../docs/bench/YYYY-MM-DD-<githash>-<profile>.md` and `.csv`. The CSV
+carries a run index, the profile name, the live QSPI payload digest, and a
+SHA-256 device fingerprint on every row; the Markdown records those
+identities, a gate ledger (which gates ran and passed, and which were not
+applicable and why), and both offline/anchor tables. Exit code 0 means at
+least two runs passed every gate the profile declares and both were
+persisted. A missing/extra/duplicate row, checksum drift, identity drift,
+non-numeric WAVE result, WAVE result slower than SYNTH, or WAVE maximum at
+or above the 960,000-cycle block budget exits nonzero and writes no
+accepted evidence.
 
-Useful flags: `--repeat N` (default and minimum 2), `--out-dir DIR` (default
-`../docs/bench`), `--build-only`, `--no-build`, `--timeout SECONDS` (default
-600, per run), `--interface CFG` (see below), and `--program-qspi`.
+Useful flags: `--profile NAME` (default `full`; see the table above and
+`bench/profiles.py` for what ships), `--repeat N` (default and minimum 2),
+`--out-dir DIR` (default `../docs/bench`), `--build-only`, `--no-build`,
+`--timeout SECONDS` (default 600, per run), `--interface CFG` (see below),
+and `--program-qspi`.
 
 ## Programming the WAVE bank
 

@@ -514,6 +514,15 @@ class RunContract(unittest.TestCase):
         )
 
 
+def resolve_profile(name):
+    """resolve() validates a profile's manifest against the row protocol
+    (bench/profiles.py's resolve() docstring), so it needs run.py's
+    BENCH_PROTOCOL_ROWS_BY_FAMILY passed in -- this helper is the one place
+    in this file that wires the two together, so every call site below
+    doesn't have to repeat it."""
+    return resolve(name, runner.BENCH_PROTOCOL_ROWS_BY_FAMILY)
+
+
 class ProfileContract(unittest.TestCase):
     def system_rows(self, wave_avg=200):
         """A complete row set for the system-only profile. wave_2x4 defaults
@@ -537,7 +546,7 @@ class ProfileContract(unittest.TestCase):
             capture_lines(self.system_rows(), families="system")
         )
 
-        runner.validate_captures([capture, capture], resolve("system"))
+        runner.validate_captures([capture, capture], resolve_profile("system"))
 
     def test_reported_families_must_match_the_requested_profile(self):
         """A stale image built for a different profile is rejected."""
@@ -547,11 +556,11 @@ class ProfileContract(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(runner.BenchValidationError, "families"):
-            runner.validate_captures([capture, capture], resolve("system"))
+            runner.validate_captures([capture, capture], resolve_profile("system"))
 
     def test_unknown_profile_name_is_rejected(self):
         with self.assertRaises(KeyError):
-            resolve("nonsense")
+            resolve_profile("nonsense")
 
     def test_a_profile_without_wave_acceptance_does_not_run_it(self):
         """The gate must be genuinely skipped, not accidentally satisfied.
@@ -586,7 +595,7 @@ class ProfileContract(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp:
             base = runner.write_results(
-                temp, [capture, capture], resolve("system"), "system"
+                temp, [capture, capture], resolve_profile("system"), "system"
             )
 
             self.assertTrue(base.endswith("-system"))
@@ -611,7 +620,7 @@ class ProfileContract(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp:
             base = runner.write_results(
-                temp, [capture, capture], resolve("system"), "system"
+                temp, [capture, capture], resolve_profile("system"), "system"
             )
             with open(base + ".md", encoding="utf-8") as fh:
                 md = fh.read()
@@ -631,6 +640,13 @@ class ProfileContract(unittest.TestCase):
         synth_2x4 here (a capture that would fail the gate outright), so a
         ledger bug that claims 'applied and passed' regardless of the
         profile can't hide behind a capture that happened to pass anyway.
+
+        This profile carries `system`, so its families COULD supply the
+        gate's rows -- it simply doesn't declare the gate. The reason must
+        say that, not the (false, for this case) "does not contain" the
+        rows -- that sentence belongs to a different profile shape, see
+        test_gate_ledger_reason_distinguishes_missing_rows_from_undeclared_gate
+        below.
         """
         from profiles import Profile
 
@@ -652,7 +668,150 @@ class ProfileContract(unittest.TestCase):
         )
         self.assertNotIn("wave_acceptance", applied)
         self.assertIn("`wave_acceptance`", not_applicable)
-        self.assertIn("does not contain", not_applicable)
+        self.assertIn("does not declare", not_applicable)
+        self.assertNotIn("does not supply", not_applicable)
+
+    def test_gate_ledger_reason_distinguishes_missing_rows_from_undeclared_gate(self):
+        """The two ways wave_acceptance can be 'not applicable' say
+        different things, and the ledger must not use the same sentence
+        for both: a profile whose families genuinely cannot supply
+        synth_2x4/wave_2x4 (voice-only, below) is a different situation
+        from a profile that carries `system` but simply never declared the
+        gate (the previous test)."""
+        from profiles import Profile
+
+        voice_names = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["voice"]
+        voice_rows = [
+            family_row("voice", name, 100, 101, "%08x" % i)
+            for i, name in enumerate(voice_names)
+        ]
+        voice_capture = runner.parse(
+            capture_lines(voice_rows, families="voice")
+        )
+        voice_only = Profile(families=("voice",), gates=frozenset())
+
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(
+                temp, [voice_capture, voice_capture], voice_only, "voice"
+            )
+            with open(base + ".md", encoding="utf-8") as fh:
+                md = fh.read()
+
+        not_applicable = gate_ledger_section(md).split(
+            "Not applicable to this profile:"
+        )[1]
+        self.assertIn("do not supply", not_applicable)
+        self.assertNotIn("does not declare", not_applicable)
+
+
+class ManifestValidationContract(unittest.TestCase):
+    """resolve()'s load-time manifest checks (design spec S3): a profile
+    naming a family run.py has no row expectations for, or declaring
+    wave_acceptance without families that supply its rows, must be caught
+    before anything is built or flashed -- not after two hardware repeats.
+    """
+
+    def test_resolve_rejects_a_profile_naming_an_unknown_family(self):
+        from profiles import Profile
+        import profiles as profiles_module
+
+        with mock.patch.dict(
+            profiles_module.PROFILES,
+            {"bogus": Profile(families=("nope",), gates=frozenset())},
+        ):
+            with self.assertRaisesRegex(ValueError, "nope"):
+                resolve_profile("bogus")
+
+    def test_resolve_rejects_wave_acceptance_without_a_supplying_family(self):
+        from profiles import Profile, WAVE_ACCEPTANCE
+        import profiles as profiles_module
+
+        with mock.patch.dict(
+            profiles_module.PROFILES,
+            {
+                "bogus": Profile(
+                    families=("voice",), gates=frozenset({WAVE_ACCEPTANCE})
+                )
+            },
+        ):
+            with self.assertRaisesRegex(ValueError, "wave_acceptance"):
+                resolve_profile("bogus")
+
+    def test_resolve_accepts_a_profile_whose_families_supply_wave_acceptance(self):
+        from profiles import Profile, WAVE_ACCEPTANCE
+        import profiles as profiles_module
+
+        with mock.patch.dict(
+            profiles_module.PROFILES,
+            {
+                "bogus": Profile(
+                    families=("system", "voice"),
+                    gates=frozenset({WAVE_ACCEPTANCE}),
+                )
+            },
+        ):
+            resolve_profile("bogus")  # must not raise
+
+    def test_both_shipped_profiles_pass_manifest_validation(self):
+        for name in ("system", "full"):
+            with self.subTest(profile=name):
+                resolve_profile(name)  # must not raise
+
+
+class FullProfileLinkContract(unittest.TestCase):
+    """`full` is expected to fail to link (SRAM_EXEC/SRAM region overflow --
+    design spec S1, S5). A full arm-none-eabi cross-compile inside the unit
+    suite would be slow and would make this suite depend on the toolchain
+    being on PATH; these tests instead pin the two properties that let a
+    link failure be trusted as "the known size problem" rather than a
+    manifest bug wearing its symptoms: `full`'s manifest resolves cleanly
+    (no unknown family, no ungated wave_acceptance -- see
+    ManifestValidationContract above), and its families are exactly the
+    seven the Makefile and BENCH_PROTOCOL_ROWS_BY_FAMILY both know about --
+    not fewer (which would silently shrink what "full" means and might
+    happen to fit) and not more (an eighth family would be a real,
+    deliberate size change, not a stale manifest).
+
+    What this does NOT prove: that the link actually fails, or that it
+    fails at the *link* step specifically rather than earlier (a
+    genuinely broken manifest could still fail at compile or at the
+    Makefile's own family guard). That property is established by hand
+    per the spec, and by any CI/hardware run that attempts to build
+    `full`; it is not re-proven by this host-only suite.
+    """
+
+    KNOWN_FAMILIES = frozenset(
+        {"system", "voice", "mem", "mod", "abl", "taps", "sampler"}
+    )
+
+    def test_full_profile_manifest_resolves_cleanly(self):
+        resolve_profile("full")  # must not raise a manifest error
+
+    def test_full_profile_names_exactly_the_seven_known_families(self):
+        profile = resolve_profile("full")
+
+        self.assertEqual(set(profile.families), self.KNOWN_FAMILIES)
+        self.assertEqual(
+            set(runner.BENCH_PROTOCOL_ROWS_BY_FAMILY), self.KNOWN_FAMILIES
+        )
+
+    def test_full_profile_families_match_the_makefiles_known_families(self):
+        """Guards against the Makefile and profiles.py drifting apart --
+        e.g. a family renamed in one but not the other, which would leave
+        `full` naming a family the Makefile no longer recognises (or vice
+        versa), and a link failure could then be a manifest bug in
+        disguise rather than the known size problem."""
+        import re
+
+        makefile = (Path(__file__).with_name("Makefile")).read_text(
+            encoding="utf-8"
+        )
+        known_to_makefile = set(
+            re.findall(r"^FAMILY_SOURCE_(\w+)\s*=", makefile, re.MULTILINE)
+        )
+        profile = resolve_profile("full")
+
+        self.assertEqual(set(profile.families), known_to_makefile)
 
 
 class ProfileAwareEvidenceContract(unittest.TestCase):
