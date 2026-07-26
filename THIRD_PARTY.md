@@ -40,6 +40,12 @@ Located under `third_party/`.
   stereo-linked peak follower, an exactly-transparent sub-knee path, and a
   built-in master drive. No stmlib code is copied verbatim; the recipe
   credit is retained here out of courtesy.
+- **DaisySP ResonatorSvf recurrence** — `engine/util/svf_bp.h` ports the
+  two-integrator recurrence, topology, and coefficient formulation from
+  `daisysp::ResonatorSvf<N>::Process` (© 2020 Electrosmith / Emilie Gillet,
+  MIT). The class wraps it to accept pre-computed coefficients so the per-sample
+  path contains arithmetic only, keeping transcendentals and divisions out of
+  the audio-rate loop.
 
 ## Dependencies (referenced as git submodules — source NOT included here)
 

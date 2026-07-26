@@ -90,6 +90,7 @@ add_executable(spky_tests
     tests/test_comp.cpp
     tests/test_limiter.cpp
     tests/test_svf_lp.cpp
+    tests/test_svf_bp.cpp
     tests/test_fast_sin.cpp
     tests/test_fast_tanh.cpp
     tests/test_morph_osc.cpp
