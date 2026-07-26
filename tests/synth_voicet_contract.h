@@ -35,8 +35,8 @@
 // own call built and threw away its own engine. Same setup code, run twice,
 // and the two runs land on the same numbers only because the engine is
 // deterministic -- see the note on fill_and_steal in
-// synth_engine_contract.h for why that is a tested property and not an
-// assumption.
+// synth_engine_contract.h, which says how much of that is tested and how
+// much is inference (the two envelope fields this reads are the inference).
 // (Category 1: on a resonator the follower LAGS a strike instead of jumping,
 // so it is still falling one sample after the steal even when the strike
 // landed. voice_env is the wrong instrument to ask a resonator that with.)

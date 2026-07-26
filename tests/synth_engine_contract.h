@@ -94,11 +94,18 @@ constexpr int cap(int n) {
 // contract_round_robin_and_steal (machine claims) and
 // voicet_steal_retriggers_from_level (envelope claim) call it, and each call
 // constructs its own EngineT and runs the whole thing again. The two runs
-// agree because the engine is deterministic -- which is not an assumption
-// here, it is contract_deterministic_seed, asserted for every engine that
-// runs this suite. Nothing memoises the result, and nothing would notice if
-// an engine acquired run-to-run state: contract_deterministic_seed would go
-// red first, and that is the intended order.
+// agree because the engine is deterministic. Nothing memoises the result.
+//
+// How far that is TESTED, exactly: contract_deterministic_seed pins
+// determinism of the AUDIO -- it compares l and r sample by sample and never
+// calls active_voices(), voice_env() or sustain_count(). Of the five fields
+// below only max_delta is derived from audio, so only max_delta is covered
+// by it. The other four rest on active_voices() and voice_env() being pure
+// readouts of the same state that produces the audio, which is true of every
+// engine here today but is an inference, not something the suite proves. An
+// engine that acquired run-to-run state reaching only the accessors would
+// leave contract_deterministic_seed green and desynchronise these two runs
+// silently.
 //
 // The reason to factor it out is therefore that the two contracts drive the
 // engine through the SAME steps rather than through two copies of them that
