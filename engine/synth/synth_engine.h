@@ -171,8 +171,15 @@ namespace detail {
 struct VoiceCountProbe {
     static constexpr int kEngineVoices = 1;
 
+    // Counts triggers so a test can pin how OFTEN the engine fires, not just
+    // how many voices ended up active -- the one observation a real voice
+    // cannot give (see the surface-bloom case in
+    // tests/test_synth_engine_voice_count.cpp). Static because SynthEngineT
+    // owns its voices by value; the test zeroes it before each run.
+    static inline int trig_count = 0;
+
     void init(float /*sample_rate*/, uint32_t /*seed*/) {}
-    void trigger(float /*freq_hz*/) { _active = true; }
+    void trigger(float /*freq_hz*/) { ++trig_count; _active = true; }
     void set_sustaining(bool on) { _sustaining = on; if (!on) _active = false; }
     void set_pitch_hz(float /*freq_hz*/) {}
     void set_vel(float /*v*/) {}

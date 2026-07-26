@@ -122,8 +122,18 @@ void SynthEngineT<V>::trigger(float pitch_norm) { _do_trigger(pitch_norm, 1.f, 0
 template <class V>
 void SynthEngineT<V>::trigger_chord(const float* p, int n) {
     if (n < 1) return;                                   // nothing to trigger
-    if (n <= 1) { _do_trigger(p[0], 1.f, 0); return; }   // COLOR-0 exact path
     if (n > kMaxChord) n = kMaxChord;
+    // ...and never more notes than there are voices to hold them. At
+    // kVoices >= kMaxChord this line never fires, so SYNTH and WAVE are
+    // untouched. Below it, the notes past kVoices had nowhere to go: each one
+    // stole a voice that had just been struck, so a 4-note chord on a
+    // one-voice engine was four strikes inside kStabSpreadS (~8 ms) that all
+    // landed on the same voice, and only the LAST one survived -- a flam, at
+    // 1/sqrt(4) of the level, where the caller asked for one note. Taking the
+    // first kVoices notes keeps the root, which _do_trigger already treats as
+    // the slot that owns the surface.
+    if (n > kVoices) n = kVoices;
+    if (n <= 1) { _do_trigger(p[0], 1.f, 0); return; }   // COLOR-0 exact path
     _vel_now = 1.f / std::sqrt(static_cast<float>(n));   // equal-power comp
     _pending_n = 0;
     _do_trigger(p[0], _vel_now, 0);                      // root lands on the beat
@@ -190,11 +200,24 @@ void SynthEngineT<V>::_adjust_surface() {
             if (worst < 0 || _chord_slot[v] > _chord_slot[worst]) worst = v;
         }
     if (m == 0) return;                    // no surface -> nothing to grow
-    _vel_now = 1.f / std::sqrt(static_cast<float>(_chord_n));
-    if (_chord_n > m) {                    // bloom: add the first missing slot
-        for (int s = 0; s < _chord_n; ++s)
+    // How much of the requested chord this engine can actually hold. At
+    // kVoices >= kMaxChord this is always _chord_n (set_chord clamps to
+    // kMaxChord), so SYNTH and WAVE are untouched -- the render gates check
+    // that byte for byte. Below it, the clamp is what stops the bloom from
+    // chasing a slot it has no voice for: without it, every control tick
+    // found a missing slot, stole the voice already sustaining and retriggered
+    // it, measured at 501 triggers/second on a one-voice engine (see
+    // tests/test_synth_engine_voice_count.cpp). It also restores the
+    // invariant _do_trigger's steal comment relies on -- "bloom implies
+    // m < _chord_n <= kVoices".
+    const int want = _chord_n < kVoices ? _chord_n : kVoices;
+    // Equal-power compensation follows the notes that will actually sound,
+    // not the notes that were asked for -- same value at kVoices >= kMaxChord.
+    _vel_now = 1.f / std::sqrt(static_cast<float>(want));
+    if (want > m) {                        // bloom: add the first missing slot
+        for (int s = 0; s < want; ++s)
             if (!has[s]) { _do_trigger(_chord[s], _vel_now, s); break; }
-    } else if (m > _chord_n && worst >= 0 && _chord_slot[worst] >= _chord_n) {
+    } else if (m > want && worst >= 0 && _chord_slot[worst] >= _chord_n) {
         _voices[worst].set_sustaining(false);   // collapse: drop the top slot
         _sustaining[worst] = false;
         _chord_slot[worst] = -1;
