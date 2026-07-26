@@ -588,6 +588,48 @@ class ProfileContract(unittest.TestCase):
         with self.assertRaises(runner.BenchValidationError):
             runner.validate_captures([capture, capture], gated)  # rejected
 
+    def test_candidate_section_says_why_it_is_empty_under_a_partial_profile(self):
+        """The verdict's candidate list is fed by the `voice` family. Under a
+        profile that omits it, the heading must not stand over an empty body:
+        a reader cannot tell that apart from 'no candidate cost anything worth
+        reporting'. The neighbouring SRAM-vs-SDRAM prose already says
+        'n/a (row missing)' for the same reason."""
+        capture = runner.parse(
+            capture_lines(self.system_rows(), families="system")
+        )
+
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(
+                temp, [capture, capture], resolve_profile("system"), "system"
+            )
+            with open(base + ".md", encoding="utf-8") as fh:
+                md = fh.read()
+
+        self.assertIn("n/a (family `voice` not in this profile)", md)
+
+    def test_candidate_section_lists_the_rows_when_the_profile_carries_them(self):
+        """The empty-case marker must not displace the real listing -- a fix
+        that always printed 'n/a' would satisfy the test above."""
+        from profiles import Profile
+
+        rows = self.system_rows()
+        for i, name in enumerate(runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["voice"]):
+            rows.append(family_row("voice", name, 100, 101, "1%07x" % i))
+        capture = runner.parse(
+            capture_lines(rows, families="system voice")
+        )
+        both = Profile(
+            families=("system", "voice"), gates=frozenset({WAVE_ACCEPTANCE})
+        )
+
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(temp, [capture, capture], both, "sysvoice")
+            with open(base + ".md", encoding="utf-8") as fh:
+                md = fh.read()
+
+        self.assertNotIn("n/a (family `voice` not in this profile)", md)
+        self.assertIn("one real voice", md)
+
     def test_written_evidence_names_the_profile_and_ledgers_the_gates(self):
         capture = runner.parse(
             capture_lines(self.system_rows(), families="system")

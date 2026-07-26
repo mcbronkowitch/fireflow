@@ -516,12 +516,18 @@ def verdict(rows, anchors):
     # single oscillator kernel and ~7.3x cheaper; anchoring on that inflates
     # every ratio by that factor and misranks the table.
     out.write("**Cost per candidate, relative to one real spotymod voice.**\n\n")
-    for r in rows:
-        if r["family"] == "voice" and r["name"] != "morph_osc_bare":
-            out.write("- `%s` — %s one real voice (%s a bare oscillator kernel)\n"
-                      % (r["name"],
-                         sig2(ratio(rows, r["name"], "synth_1_voice")),
-                         sig2(ratio(rows, r["name"], "morph_osc_bare"))))
+    candidates = [r for r in rows
+                  if r["family"] == "voice" and r["name"] != "morph_osc_bare"]
+    # An empty body here would read as "no candidates cost anything worth
+    # reporting" rather than "this profile did not carry them" -- the same
+    # silent omission the gate ledger exists to prevent. Say which it is.
+    if not candidates:
+        out.write("- n/a (family `voice` not in this profile)\n")
+    for r in candidates:
+        out.write("- `%s` — %s one real voice (%s a bare oscillator kernel)\n"
+                  % (r["name"],
+                     sig2(ratio(rows, r["name"], "synth_1_voice")),
+                     sig2(ratio(rows, r["name"], "morph_osc_bare"))))
     out.write("\n")
 
     out.write(
