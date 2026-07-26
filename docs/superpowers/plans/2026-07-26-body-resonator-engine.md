@@ -1138,7 +1138,7 @@ Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 - Modify: `CMakeLists.txt` (`spky_tests` and `render` sources)
 
 **Interfaces:**
-- Consumes: `spky::ModeBank` (Task 2), `spky::Exciter` (Task 6), `daisysp::String`, and the value of `kVoices` decided in Task 4.
+- Consumes: `spky::ModeBank` (Task 2), `spky::Exciter` (Task 6), `spky::KsString` (`engine/body/ks_string.h` — the control-rate port, NOT `daisysp::String`, which costs 4.2x more per sample), and `kVoices = 1` as decided in Task 4.
 - Produces: `class spky::BodyVoice` implementing the full voice contract that `SynthEngineT` calls (Task 5): `init(float sample_rate, uint32_t seed)`, `trigger(float freq_hz)`, `set_sustaining(bool)`, `set_pitch_hz(float)`, `set_vel(float)`, `set_env_times(float attack_s, float decay_s)`, `set_morph(float)`, `set_detune_cents(float)`, `set_sub_level(float)`, `set_cutoff_hz(float)`, `set_resonance(float)`, `set_pan(float)`, `set_drift_amount(float)`, `set_hold(bool)`, `set_excitation(float)`, `update_control(float dt_s)`, `process(float& accL, float& accR)`, `active()`, `env_value()`, `detune_cents()`.
 
 **Contract mapping** (spec §5) — the setter names come from SYNTH, the
@@ -1176,7 +1176,7 @@ static void tick(BodyVoice& v, int samples, float* l = nullptr, float* r = nullp
     }
 }
 
-// Configure in place: BodyVoice owns daisysp::String instances with internal
+// Configure in place: BodyVoice owns spky::KsString instances with internal
 // buffers, so it is never copied or returned by value.
 static void fresh_voice(BodyVoice& v, float matl) {
     v.init(48000.f, 42);
@@ -1376,7 +1376,7 @@ private:
     static constexpr float kFloor = 0.000251f;   // -72 dB
     static constexpr int   kMinHoldSamples = 4800;   // 100 ms
 
-    daisysp::String _str_a, _str_b;
+    KsString        _str_a, _str_b;
     ModeBank        _bank;
     Exciter         _exciter;
     Rng             _rng;
@@ -1524,17 +1524,18 @@ void BodyVoice::set_cutoff_hz(float hz) {
 
 - [ ] **Step 5: Set `kVoices` from the Task 4 result**
 
-In `engine/synth/synth_engine.h`, `kVoices` is currently a single
-`static constexpr int kVoices = 4` on `SynthEngineT`. If Task 4 chose 4, no
-change. If it chose 2 or 1, make the count come from the voice type so only
-BODY is reduced:
+Task 4 chose **`kVoices = 1`** (measured 1 395 cycles/sample per voice; see
+`docs/bench/2026-07-26-1ec4429-body.md`). In `engine/synth/synth_engine.h`,
+`kVoices` is currently a single `static constexpr int kVoices = 4` on
+`SynthEngineT`. Make the count come from the voice type so only BODY is
+reduced:
 
 ```cpp
     static constexpr int kVoices = V::kEngineVoices;
 ```
 
 and add `static constexpr int kEngineVoices = 4;` to `VoiceT` and
-`static constexpr int kEngineVoices = <Task 4 value>;` to `BodyVoice`. Rerun
+`static constexpr int kEngineVoices = 1;` to `BodyVoice`. Rerun
 `ctrl_identity` and `wave_formant_sweep` after this change — they must still
 hash unchanged.
 

@@ -229,10 +229,12 @@ earned.
 Exact response curves (damping-vs-decay map, stretch taper, spread scale) are
 tuning material for the listening pass.
 
-**The chord layer survives.** With four voices intact, COLOR, chord slots and
-stab humanization work on BODY — struck bell chords, strummed. This is
-precisely what the §7 degradation ladder would spend, and the reason the ladder
-is a fallback rather than the plan.
+~~**The chord layer survives.** With four voices intact, COLOR, chord slots and
+stab humanization work on BODY — struck bell chords, strummed.~~
+
+**Superseded by the measured gate (§7).** `kVoices = 1`: there are no chord
+slots to fill and no second voice to humanize a stab against. What COLOR does
+on a BODY deck is an open design decision, not a settled one — see §7.
 
 ### 6. The excitation bus
 
@@ -306,6 +308,33 @@ cost. What is spent, in order: overlapping STEP notes first, then the chord
 layer entirely (a 1-voice BODY makes COLOR meaningless on that deck). Mode
 reduction is **not** the first lever — the user chose a rich bell at low
 polyphony over four poor ones.
+
+**The bench refused, and the ladder ran to its bottom rung: `kVoices = 1`**
+(`docs/bench/2026-07-26-1ec4429-body.md`, user decision 2026-07-26).
+
+The estimate above was wrong in both directions and the correction is worth
+recording, because it is the third time this project has been misled the same
+way. A voice costs **1 395 cycles/sample**, not 365–405 — but only after
+`daisysp::String` was replaced by `engine/body/ks_string.{h,cpp}`, which moves
+its per-sample parameter block (two `powf`, an `atanf`, a `tanf`) to the
+control tick. Unported, a single string cost 975 cycles/sample on its own;
+ported, 233. The library was the expense, not the synthesis method — the same
+finding that had already invalidated STRING's reason for rejecting modal
+territory.
+
+At one voice per deck BODY costs 2 790 cycles/sample, 27.9 % of the block, and
+a SYNTH deck at four voices costs 1 764 against BODY's 1 395: **BODY is cheaper
+than the part it replaces.** Two voices per deck do not fit.
+
+With the string ported, the mode bank is now 65 % of a voice (904 of 1 395).
+Any future polyphony has to come from there, and the mode count is the user
+decision above, not a cost decision.
+
+**What one voice costs musically, and what is still undecided.** Overlapping
+STEP notes are gone: a new note takes the voice. The chord layer has no slots
+to fill. Whether COLOR then does nothing on a BODY deck, arpeggiates its notes
+through the one voice, or drives the material instead of pitch is an open
+design question that Phase 3 (plan Task 7 onward) cannot start without.
 
 ### 8. Memory
 
