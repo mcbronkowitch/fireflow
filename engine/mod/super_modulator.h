@@ -4,6 +4,7 @@
 #include "mod/lane.h"
 #include "mod/lane_id.h"
 #include "mod/divisions.h"
+#include "mod/lane_len.h"
 #include "mod/rhythm_view.h"
 
 namespace spky {
@@ -26,6 +27,8 @@ public:
     void set_variation(float v);
     void set_shuffle(float amount);
     void set_step(bool on, int steps);
+    bool step_mode()  const { return _step_on; }
+    int  deck_steps() const { return _deck_steps; }
     void set_fixed_slew(bool on);
     void set_form(Principle form) { _lanes[LANE_PITCH].set_form(form); }
     void set_song(SongMode song) { _lanes[LANE_PITCH].set_song(song); }
@@ -39,6 +42,15 @@ public:
     }
     uint8_t active_pattern_for_test() const {
         return _lanes[LANE_PITCH].active_pattern();
+    }
+    float   lane_rate_hz_for_test(int i) const { return _lanes[i].rate_hz_for_test(); }
+    int     lane_slots_for_test(int i)   const { return _lanes[i].steps(); }
+    int32_t deck_step_for_test()         const { return _deck_step; }
+    // The amount PITCH's own phase (and so the deck's follow fraction) was
+    // actually built from -- the reference a follower's phase must be
+    // measured against, per shuffle_latched()'s contract (lane.h).
+    float   pitch_shuffle_latched_for_test() const {
+        return _lanes[LANE_PITCH].shuffle_latched();
     }
 #endif
     bool pitch_gate() const { return _lanes[LANE_PITCH].gate_state(); }
@@ -86,6 +98,15 @@ public:
     // was ever read).
     void reset_phases() {
         for (auto& l : _lanes) l.reset(0.f);
+        // Every follower derives its slot from THIS counter, not from any
+        // state ModLane::reset() clears -- resetting the lanes without also
+        // resetting the deck clock leaves each texture lane re-arming at
+        // slot_of(_deck_step, slots) on its next follow(), an arbitrary slot
+        // that depends on how long the deck had been running, while PITCH
+        // restarts at phase 0. RST is the resync gesture for the whole
+        // deck's clock, not just the lanes' own state.
+        _deck_step = 0;
+        _last_pitch_step = -1;
         _since_onset = 0;
         _onsets = 0;
         _gap[0] = _gap[1] = 0;
@@ -111,6 +132,13 @@ public:
     // Autors, keine, die dieser Kommentar trifft.
     void snap_pitch_phase(float ph) {
         _lanes[LANE_PITCH].reset(ph);
+        // ModLane::reset() leaves _cur_step at -1; without also resetting
+        // this, the deck-step counter in process() reads the next real step
+        // change as an extra elapsed step (cs != _last_pitch_step with
+        // _last_pitch_step >= 0 still holding its pre-snap value) and
+        // rotates every follower by one phantom slot it never actually
+        // crossed.
+        _last_pitch_step = -1;
         _since_onset = 0;
         _onsets = 0;
         _gap[0] = _gap[1] = 0;
@@ -129,6 +157,7 @@ private:
     void _update_rate();
     void _apply_rate();
     void _update_tide();
+    void _apply_steps();
 
     std::array<ModLane, LANE_COUNT> _lanes;
     std::array<float, LANE_COUNT>   _out {};
@@ -137,6 +166,27 @@ private:
     float    _bpm = 120.f;
     float    _rate_norm = 0.5f;
     bool     _synced = false;
+    bool    _step_on    = false;   // the deck's STEP flag; drives the grid lock
+    int     _deck_steps = 8;       // the phrase length; PITCH's slot count
+    // The deck's own clock, in whole steps. This integer is what makes the
+    // grid exact: every follower derives its slot from it, so no float
+    // rounding can put two lanes on different boundaries. int32_t is ample
+    // for how long this can actually run continuously. steps/s is always
+    // 8 x master_hz regardless of STEPS (clock_scale() = 8/steps cancels
+    // the step count back out -- lane.h), so the bound is on master_hz, and
+    // the worst case is SYNC, not FREE: FREE tops out at kRateFreeMax (30 Hz,
+    // divisions.h), but SYNC's fastest division, "1/32", has cpb = 8
+    // (divisions.h) and its Hz scales with tempo, and the external-clock path
+    // accepts BPM up to 400 (host/vcv/src/Spotymod.cpp), well past the 240
+    // BPM the TEMPO knob alone reaches. That puts the true fastest rate at
+    // 8 x (400/60 x 8) ~= 427 steps/s. INT32_MAX / 427 is about 58 days; at a
+    // musical 8 steps/s it's still 8.5 years. That is a "practically never"
+    // bound, not a "and it's fine if it does" one -- signed overflow is UB in
+    // C++, not the graceful wraparound this comment used to imply. int32_t is
+    // still the right choice: this engine ships on a Cortex-M7, where 64-bit
+    // arithmetic is not free.
+    int32_t _deck_step       = 0;
+    int     _last_pitch_step = -1;
     float    _pitch_scale = 1.f;   // COUPLE/DRIFT on the melody clock
     float    _mod_scale   = 1.f;   // COUPLE/DRIFT on the texture lanes
     float    _master_hz = 1.f;

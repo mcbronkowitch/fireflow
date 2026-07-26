@@ -41,6 +41,7 @@ add_executable(spky_tests
     tests/test_chord.cpp
     tests/test_rng.cpp
     tests/test_divisions.cpp
+    tests/test_lane_len.cpp
     tests/test_transport.cpp
     tests/test_waveforms.cpp
     tests/test_range.cpp
@@ -52,11 +53,13 @@ add_executable(spky_tests
     tests/test_step.cpp
     tests/test_shuffle_grid.cpp
     tests/test_step_clock.cpp
+    tests/test_lane_follow.cpp
     tests/test_evolve.cpp
     tests/test_variation.cpp
     tests/test_new_phrase.cpp
     engine/mod/super_modulator.cpp
     tests/test_super_modulator.cpp
+    tests/test_step_grid_lock.cpp
     engine/parts/part.cpp
     tests/test_part.cpp
     engine/instrument.cpp
@@ -157,7 +160,7 @@ add_test(
     COMMAND ${CMAKE_COMMAND}
         -DRENDER=$<TARGET_FILE:render>
         -DSCENARIO=${CMAKE_SOURCE_DIR}/host/render/scenarios/ctrl_identity.json
-        -DEXPECTED=2b73f2483dc4a85b7c967c5820815829055de4e98e685d031a096d57abb699cd
+        -DEXPECTED=4296cf27d94aef392cfe5fdc9c48a9df2ceaae85c15c5993c42966bed16e59a7
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -P ${CMAKE_SOURCE_DIR}/tests/check_render_hash.cmake
 )

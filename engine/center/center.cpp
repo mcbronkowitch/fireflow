@@ -154,6 +154,10 @@ void Center::update(SuperModulator& a, SuperModulator& b, Part& pa, Part& pb) {
         // tightly the four texture lanes follow. texture = 0 at full COUPLE
         // -> the DRIFT rate wander is fully suppressed and the mod lanes hold
         // their exact ratios (lockstep); smaller COUPLE lets it through.
+        // For a STEP deck this reaches nothing: a follower has no rate to
+        // wander, it derives its slot from the deck's step count (spec
+        // 2026-07-25 mod-lane-step-grid-lock). mod_a/mod_b below are still
+        // computed and passed to set_rate_scale(), just dead for STEP lanes.
         const float pitch_a = 1.f + _grid_servo(a, _grid_off[0]);
         const float pitch_b = 1.f + _grid_servo(b, _grid_off[1]);
         const float texture = 1.f - _couple;

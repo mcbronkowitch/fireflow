@@ -32,6 +32,14 @@ static ProcessWindowEnd process_window_end(
     return {phase, wraps};
 }
 
+// Positive modulo: _follow_offset can be negative after a backwards SPOT
+// nudge, and C++'s % keeps the sign of the dividend.
+static int slot_of(int32_t pos, int slots) {
+    int m = static_cast<int>(pos % slots);
+    if (m < 0) m += slots;
+    return m;
+}
+
 void ModLane::init(float sample_rate, uint32_t seed) {
     _sr = sample_rate;
     _rng.seed(seed);
@@ -73,6 +81,10 @@ void ModLane::init(float sample_rate, uint32_t seed) {
     _ev_phase = 0.f;
     _ev_shape = 0.f;
     _ev_rate  = 0.f;
+    _follow_pos    = 0;
+    _follow_offset = 0;
+    _follow_armed  = false;
+    _follow_jumped = false;
     _shape_offset = 0.f;
     _kick_shape   = 0.f;
     _kick_coef    = std::exp(-1.f / (1.5f * _sr));   // SPOT shape decay tau = 1.5 s
@@ -110,6 +122,9 @@ void ModLane::set_step(bool on, int steps) {
     const bool entering_step = on && !_step_mode;
     if (entering_step) _shuffle_latched = _shuffle_target;
     if (entering_step) { _note_age = 0; _note_hold = 0; }  // STEP entry: no stale sustain
+    // Entering STEP disarms the follower so its first follow() call lands on
+    // the deck's current position instead of replaying the whole count.
+    if (entering_step) { _follow_armed = false; _follow_jumped = false; }
     int new_steps = steps < 1 ? 1 : steps;
     if (_melodic) {
         int old_n = _steps > kSeqSlots ? kSeqSlots : _steps;
@@ -267,6 +282,104 @@ void ModLane::kick(float dphase, float dshape) {
     _kick_shape += dshape;                 // decays back to 0 over ~1.5 s
 }
 
+void ModLane::nudge_slots(int n, float dshape) {
+    // Move the offset AND the remembered position by the same amount: the
+    // jump must not look like elapsed time, or the next follow() would replay
+    // n slots (or, for a negative n, stall until the deck caught back up).
+    _follow_offset += n;
+    _follow_pos    += n;
+    // A draw that rounds to n == 0 lands on the same slot it already occupies
+    // -- there is no new slot to make audible, so no forced re-entry at the
+    // next follow(). Same call FLOW makes for a near-zero dphase in kick():
+    // the shape kick still applies unconditionally (it is real at any draw),
+    // but nothing else moves.
+    if (n != 0) _follow_jumped = true;
+    _kick_shape += dshape;
+}
+
+float ModLane::follow(int32_t deck_step, float frac, float shuffle) {
+    _fired   = false;
+    _wrapped = false;
+    _apply_preroll_work();
+    _kick_shape *= _kick_coef_tick;
+    if (_settle_ctr > 0) {
+        _settle_ctr = _settle_ctr > kTickInterval ? _settle_ctr - kTickInterval : 0;
+        _ev_phase   *= _settle_coef_tick;
+        _ev_shape   *= _settle_coef_tick;
+        _ev_rate    *= _settle_coef_tick;
+        _kick_shape *= _settle_coef_tick;
+    }
+
+    const int     slots = _steps < 1 ? 1 : _steps;
+    const int32_t pos   = deck_step + _follow_offset;
+    const int     here  = slot_of(pos, slots);
+
+    bool    land_only = false;
+    int32_t elapsed   = 0;
+    if (!_follow_armed) {
+        // First call after init/reset/STEP entry. Land on the current position
+        // without replaying every step the deck has taken since it started --
+        // and, just as important, WITHOUT running a wrap even when the landing
+        // slot is 0. Wrap events evolve the pattern that just ENDED
+        // (_evolve_outgoing_pattern); at a cold start none did. STEP entry
+        // restarts the deck count at 0, so treating that as a wrap would walk
+        // EVOLVE once on all four texture lanes every time the switch is
+        // thrown. tick() makes the same choice at its own cold start: it
+        // enters the step its phase points at and runs no wrap events.
+        _follow_armed = true;
+        land_only     = true;
+    } else {
+        elapsed = pos - _follow_pos;
+        if (elapsed < 0) elapsed = 0;          // only nudge_slots moves backwards
+        // A jump this large means the caller skipped a long stretch (a stopped
+        // transport, a mode switch). Replaying it would burn RNG draws for
+        // cycles nobody heard; land on the current slot instead. Same spirit
+        // as tick()'s edge-walk guard.
+        if (elapsed > 2 * kSeqSlots) land_only = true;
+    }
+
+    bool entered = false;
+    if (land_only) {
+        _phase = shuffle_phase_for_position(
+            static_cast<float>(here), slots, shuffle);
+        _enter_step(here);
+        entered = true;
+    } else {
+        const int32_t prev = pos - elapsed;
+        for (int32_t k = 1; k <= elapsed; ++k) {
+            const int slot = slot_of(prev + k, slots);
+            // Boundary targets are evaluated at the exact grid phase, the same
+            // sampling tick() documents for its edge walk.
+            _phase = shuffle_phase_for_position(
+                static_cast<float>(slot), slots, shuffle);
+            if (slot == 0) {
+                _wrapped = true;
+                _wrap_events();      // before the new cycle's step 0, as in tick()
+            }
+            _enter_step(slot);
+            entered = true;
+        }
+    }
+    _follow_pos = pos;
+
+    if (_follow_jumped) {
+        _follow_jumped = false;
+        if (!entered) {
+            _phase = shuffle_phase_for_position(
+                static_cast<float>(here), slots, shuffle);
+            _enter_step(here);
+        }
+    }
+
+    // Park at the live position so phase(), phase_eff() and any external
+    // reader see where the lane actually is inside its slot.
+    _phase = shuffle_phase_for_position(
+        static_cast<float>(here) + frac, slots, shuffle);
+
+    float smoothed = _slew_tick.process(_target);
+    return apply_range(smoothed, _range);
+}
+
 void ModLane::settle() {
     _settle_ctr = static_cast<int>(_sr * 1.0f);   // glide EVOLVE + kick over ~1 s
 }
@@ -275,6 +388,12 @@ void ModLane::reset(float phase) {
     _phase = clampf(phase, 0.f, 0.999999f);
     _shuffle_latched = _shuffle_target;
     _cur_step = -1;
+    // RST is the resync gesture: it clears the SPOT offset too, so the lane
+    // comes back to the deck's own slot 0 rather than to a stumbled one.
+    _follow_pos    = 0;
+    _follow_offset = 0;
+    _follow_armed  = false;
+    _follow_jumped = false;
     _note_age = 0;
     _note_hold = 0;
     _slew.reset(_target);
@@ -491,6 +610,17 @@ float ModLane::process() {
 // phase (step/steps, resp. 0 at a wrap) instead of the per-sample path's
 // detection overshoot (< 1 sample of phase) -- an equally valid sampling of
 // the same waveform, covered by the equivalence suite.
+//
+// STEP note (spec 2026-07-25 mod-lane-step-grid-lock): SuperModulator calls
+// this from exactly one site, and only on the !_step_on branch -- a STEP
+// lane's own _step_mode always mirrors _step_on (set_step()), so every
+// `if (_step_mode)` below (the pending-step-mismatch entry, the
+// shuffle_boundary_phase edge walk, the shadow process_window_end
+// arithmetic) is unreachable in production. SuperModulator now drives STEP
+// lanes through follow() instead (see there and lane.h). Kept deliberately,
+// not deleted: this is ModLane's own standalone contract, exercised directly
+// by tests/test_lane_tick.cpp's STEP cases, independent of whatever engine
+// wiring happens to call it today.
 float ModLane::tick() {
     _fired = false;
     _wrapped = false;
