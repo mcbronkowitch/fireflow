@@ -322,4 +322,9 @@ template class spky::SynthEngineT<spky::VoiceT<spky::WtOsc>>;
 // defines SPKY_TESTING.
 #ifdef SPKY_TESTING
 template class spky::SynthEngineT<spky::detail::VoiceCountProbe>;
+
+// Task 7 review: prove SynthEngineT<BodyVoice> (kVoices == 1, a real voice)
+// compiles, links and runs -- see SynthEngineBodyVoiceProof in
+// synth_engine.h. Not the production BODY part engine.
+template class spky::SynthEngineT<spky::BodyVoice>;
 #endif

@@ -7,6 +7,9 @@
 #include "synth/voice.h"
 #include "synth/wt_osc.h"
 #include "util/onepole.h"
+#ifdef SPKY_TESTING
+#include "body/body_voice.h"
+#endif
 
 namespace spky {
 
@@ -197,6 +200,15 @@ struct VoiceCountProbe {
 
 using SynthEngineVoiceCountProof = SynthEngineT<detail::VoiceCountProbe>;
 extern template class SynthEngineT<detail::VoiceCountProbe>;
+
+// Task 7 review: BodyVoice is the first REAL voice run through SynthEngineT
+// at a voice count other than 4 (VoiceCountProbe above is a stub -- it
+// proves the template compiles at kVoices==1, not that a real voice's
+// method set integrates correctly). This is a compile/link/run proof only,
+// same as SynthEngineVoiceCountProof -- NOT the production BODY part engine
+// (Task 8 owns that alias, plus wiring COLOR to chord quality).
+using SynthEngineBodyVoiceProof = SynthEngineT<BodyVoice>;
+extern template class SynthEngineT<BodyVoice>;
 #endif // SPKY_TESTING
 
 } // namespace spky
