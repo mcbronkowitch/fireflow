@@ -150,6 +150,14 @@ extern template class SynthEngineT<VoiceT<MorphOsc>>;
 using WaveEngine = SynthEngineT<VoiceT<WtOsc>>;
 extern template class SynthEngineT<VoiceT<WtOsc>>;
 
+#ifdef SPKY_TESTING
+// Test-only, like the SPKY_TESTING accessors in engine/instrument.h,
+// engine/mod/lane.h and engine/mod/super_modulator.h. Only the tests target
+// defines SPKY_TESTING, so `render` and the firmware never instantiate this
+// template class at all -- the linker was already dropping it, but not
+// compiling it is cheaper than dropping it, and Task 7's author reading this
+// header should not have to wonder whether a second engine alias next to
+// SynthEngine and WaveEngine is something they need to extend.
 namespace detail {
 // Exists solely so SynthEngineT<V> gets exercised at a voice count other
 // than 4 in this build (fix round 1, 2026-07-26 body-resonator, Task 5
@@ -189,5 +197,6 @@ struct VoiceCountProbe {
 
 using SynthEngineVoiceCountProof = SynthEngineT<detail::VoiceCountProbe>;
 extern template class SynthEngineT<detail::VoiceCountProbe>;
+#endif // SPKY_TESTING
 
 } // namespace spky

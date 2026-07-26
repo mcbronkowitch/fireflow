@@ -318,5 +318,8 @@ template class spky::SynthEngineT<spky::VoiceT<spky::WtOsc>>;
 
 // Compile-time proof (fix round 1, Task 5 review): SynthEngineT actually
 // works at a voice count other than 4. See detail::VoiceCountProbe in
-// synth_engine.h.
+// synth_engine.h, which is guarded the same way -- only the tests target
+// defines SPKY_TESTING.
+#ifdef SPKY_TESTING
 template class spky::SynthEngineT<spky::detail::VoiceCountProbe>;
+#endif
