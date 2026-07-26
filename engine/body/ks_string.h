@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 
+#include "mod/rng.h"
+
 #include "Dynamics/crossfade.h"
 #include "Filters/onepole.h"
 #include "Utility/dcblock.h"
@@ -33,9 +35,21 @@ namespace spky {
 // test_ks_string.cpp). Moving a parameter takes effect on the next control
 // tick instead of the next sample, which is what every other control in this
 // engine already does.
+//
+// ONE deliberate divergence from the reference, and it is not about
+// scheduling. daisysp::String draws its dispersion noise from libc rand():
+// process-global state, seeded by nobody, and a different sequence under
+// glibc, msvcrt and newlib. This engine's rule is that one seed gives
+// bit-identical renders on desktop, in VCV and on the Seed (engine/mod/
+// rng.h), so the draw comes from an owned spky::Rng instead, seeded through
+// init() and re-seeded by reset(). Same range ([-0.5, +0.5)), same role,
+// different sequence. Below nonlinearity 0.75 the noise is multiplied by a
+// zero amount and the outputs stay bit-identical anyway; above it they
+// diverge by construction. tests/test_ks_string.cpp asserts exactly that
+// split rather than quietly relaxing to a tolerance.
 class KsString {
 public:
-    void init(float sample_rate);
+    void init(float sample_rate, uint32_t seed);
     void reset();
 
     // Control rate ONLY.
@@ -64,6 +78,12 @@ private:
     daisysp::OnePole                              _iir_damping;
     daisysp::DcBlock                              _dc_blocker;
     daisysp::CrossFade                            _crossfade;
+
+    // Dispersion noise. Held so reset() can restore the sequence: a reset
+    // string has to ring the same way twice, or a render stops being
+    // reproducible across a retrigger.
+    Rng      _rng;
+    uint32_t _seed = 0x5EEDu;
 
     float _sample_rate = 48000.f;
 

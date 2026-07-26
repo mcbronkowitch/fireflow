@@ -15,8 +15,12 @@ constexpr float kDriftPanAmt   = 0.25f;   // pan drift ceiling around the fan sl
 
 void BodyVoice::init(float sample_rate, uint32_t seed) {
     _sr = sample_rate;
-    _str_a.init(sample_rate);
-    _str_b.init(sample_rate);
+    // Distinct seeds, not the same one twice: the pair is two strings a few
+    // cents apart, and identical dispersion noise on both would move them
+    // together instead of letting them beat. The offsets are arbitrary odd
+    // constants -- only their distinctness matters.
+    _str_a.init(sample_rate, seed ^ 0x9E3779B9u);
+    _str_b.init(sample_rate, seed ^ 0x85EBCA6Bu);
     _bank.init(sample_rate);
     _exciter.init(seed, sample_rate);
 

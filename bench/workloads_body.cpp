@@ -167,8 +167,8 @@ float proc_ks_pair_nolin()
 void setup_ks_pair_port()
 {
     auto& group = g_body_arena.emplace<KsPortGroup>();
-    group.a.init(kSampleRate);
-    group.b.init(kSampleRate);
+    group.a.init(kSampleRate, 0x9E3779B9u);
+    group.b.init(kSampleRate, 0x85EBCA6Bu);
     group.a.set_params(220.f, 0.7f, 0.7f, 0.4f);
     group.b.set_params(220.f * 1.008f, 0.7f, 0.7f, 0.4f);
     group.wobble_up = false;

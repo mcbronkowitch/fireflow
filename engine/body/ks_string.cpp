@@ -1,7 +1,6 @@
 #include "body/ks_string.h"
 
 #include <cmath>
-#include <cstdlib>
 
 #include "Utility/dsp.h"
 
@@ -13,26 +12,25 @@ using daisysp::fonepole;
 namespace {
 // daisysp::String's own constants, by the names it uses them under.
 constexpr float kOneTwelfth = 1.f / 12.f;
-constexpr float kRandFrac   = 1.f / static_cast<float>(RAND_MAX);
 constexpr float kTwoPi      = 2.f * 3.1415926535897932f;
 } // namespace
 
-void KsString::init(float sample_rate)
+void KsString::init(float sample_rate, uint32_t seed)
 {
     _sample_rate = sample_rate;
+    _seed        = seed;
     _string.Init();
     _stretch.Init();
     _crossfade.Init();
-    reset();
 
     // The reference's Init() defaults, so an uninitialised string is the same
-    // string here as there.
+    // string here as there. Set BEFORE reset(), which recomputes from them.
     _freq_hz      = 440.f;
     _brightness   = 0.5f;
     _damping      = 0.8f;
     _nonlinearity = 0.1f;
-    _dirty        = true;
-    recompute();
+
+    reset();
 }
 
 void KsString::reset()
@@ -41,15 +39,21 @@ void KsString::reset()
     _stretch.Reset();
     _iir_damping.Init();
     _dc_blocker.Init(_sample_rate);
+    _rng.seed(_seed);   // same string, same noise -- see the header note
 
     _dispersion_noise = 0.f;
     _curved_bridge    = 0.f;
     _out_sample[0] = _out_sample[1] = 0.f;
     _src_phase                      = 0.f;
 
-    // OnePole::Init() clears the coefficients SetFrequency wrote, so the
-    // cache is stale by definition after a reset.
+    // OnePole::Init() above cleared the coefficients SetFrequency wrote, so
+    // they have to be written again -- and only recompute() knows how. A
+    // reset string is the same string, ready to ring on the next sample; it
+    // is not one waiting for a set_params that the caller has no reason to
+    // send (the parameters did not change, so the dirty check would swallow
+    // it anyway).
     _dirty = true;
+    recompute();
 }
 
 void KsString::set_params(float freq_hz, float brightness, float damping,
@@ -164,7 +168,9 @@ float KsString::process(float in)
         float s     = 0.0f;
 
         if (_dispersion) {
-            const float noise = rand() * kRandFrac - 0.5f;
+            // Reference: rand() * (1/RAND_MAX) - 0.5. Same range, owned
+            // state -- header note.
+            const float noise = _rng.next_unipolar() - 0.5f;
             fonepole(_dispersion_noise, noise, _noise_filter);
             delay *= 1.0f + _dispersion_noise * _noise_amount;
 
