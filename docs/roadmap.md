@@ -712,6 +712,38 @@ per-sample coefficient math rather than modal synthesis itself.
 
 Spec: `docs/superpowers/specs/2026-07-26-body-resonator-engine-design.md`
 
+**Hardware gate: BLOCKED on cost** (`docs/bench/2026-07-26-0010b45-body.md`,
+profile `body`, two runs agreeing).
+
+| row | avg cyc / block | per sample |
+|---|---:|---:|
+| `body/mode_bank_24` (24 modes, coefficients moving) | 86 761 | 904 |
+| `body/mode_bank_24_static` (same bank, coefficients held) | 81 688 | 851 |
+| `body/ks_string_pair` (two `daisysp::String`) | 196 556 | 2 047 |
+
+Per voice per sample, by the plan's formula
+`(mode_bank_24 + ks_string_pair)/96 + 25`: **2 976 cycles**. The ladder's
+bottom rung is 810, so this is 3.7× past even `kVoices = 1`. One BODY voice
+alone costs 30 % of the whole block budget; the two the design needs (one per
+deck) cost 60 %, on top of an instrument already anchored at 97 %.
+
+**Where the cost is, and it is not where the design assumed.** The modal bank
+is fine: 24 modes cost 904 cycles/sample, and the control-rate coefficient
+caching works exactly as intended — holding the parameters still saves only
+53 of those, so `_recompute()` is ~6 % of the bank, not the per-sample tax
+that made STRING rule modal territory out. The Karplus pair is the problem at
+2 047 cycles/sample, **1 024 per string** — one `daisysp::String` costs 1.8×
+an entire SYNTH voice (`synth_1_voice`, 558 cycles/sample: two MorphOsc, sub,
+SVF and envelope). STRING's spec called Karplus-Strong "structurally cheaper"
+than SYNTH. Measured, it is the opposite, and the modal half it rejected is
+the affordable one.
+
+Not yet investigated: the bench configures the strings with
+`SetNonLinearity(0.4f)`, which selects the dispersion/curved-bridge path. That
+is a setting, not physics, and is the first thing to price before treating
+2 047 as the floor. `kVoices` stays undecided; Phase 3 of the plan does not
+start.
+
 ### M5k — ZAP ⬜
 
 Monophonic two-oscillator FM/AM percussion part engine whose PITCH lane selects
