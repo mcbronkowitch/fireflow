@@ -1,4 +1,5 @@
 #include "workload.h"
+#include "body/ks_string.h"
 #include "body/mode_bank.h"
 #include "PhysicalModeling/KarplusString.h"
 #include "mem.h"
@@ -21,7 +22,12 @@ struct KsGroup {
     daisysp::String a, b;
 };
 
-SerialArena<ModeBankGroup, KsGroup> g_body_arena;
+struct KsPortGroup {
+    spky::KsString a, b;
+    bool           wobble_up = false;
+};
+
+SerialArena<ModeBankGroup, KsGroup, KsPortGroup> g_body_arena;
 
 // +-3 cents = 2^(+-3/1200), precomputed so no pow() call sits in the
 // control-tick path measured below -- the row prices ModeBank::set_params,
@@ -146,6 +152,42 @@ float proc_ks_pair_nolin()
     return acc;
 }
 
+// --- body/ks_string_pair_port: the same pair, coefficients at control rate --
+// spky::KsString is daisysp::String with the parameter block moved out of the
+// per-sample path (engine/body/ks_string.h). Same four parameters as
+// setup_ks_pair, same nonlinearity, and set_params called once per block --
+// the 96-sample control tick a real BodyVoice runs on. Against ks_string_pair
+// this is the whole question: what the string costs once it stops recomputing
+// two powf, an atanf and a tanf every sample.
+//
+// The parameters wobble by +-3 cents per block for the same reason
+// body/mode_bank_24 does: a held parameter would let the dirty check
+// short-circuit recompute() away entirely and price a voice nobody is
+// modulating. This is the moving case.
+void setup_ks_pair_port()
+{
+    auto& group = g_body_arena.emplace<KsPortGroup>();
+    group.a.init(kSampleRate);
+    group.b.init(kSampleRate);
+    group.a.set_params(220.f, 0.7f, 0.7f, 0.4f);
+    group.b.set_params(220.f * 1.008f, 0.7f, 0.7f, 0.4f);
+    group.wobble_up = false;
+}
+
+float proc_ks_pair_port()
+{
+    auto& group = g_body_arena.get<KsPortGroup>();
+    const float* in = test_input();
+    group.wobble_up = !group.wobble_up;
+    const float r = group.wobble_up ? kWobbleUpRatio : kWobbleDownRatio;
+    group.a.set_params(220.f * r, 0.7f, 0.7f, 0.4f);
+    group.b.set_params(220.f * 1.008f * r, 0.7f, 0.7f, 0.4f);
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i)
+        acc += group.a.process(in[i]) + group.b.process(in[i]);
+    return acc;
+}
+
 } // namespace
 
 const Workload kBodyWorkloads[] = {
@@ -153,6 +195,7 @@ const Workload kBodyWorkloads[] = {
     { "body", "mode_bank_24_static", setup_mode_bank_static, proc_mode_bank_static },
     { "body", "ks_string_pair",      setup_ks_pair,          proc_ks_pair          },
     { "body", "ks_string_pair_nolin", setup_ks_pair_nolin,   proc_ks_pair_nolin    },
+    { "body", "ks_string_pair_port",  setup_ks_pair_port,    proc_ks_pair_port     },
 };
 const int kBodyCount = sizeof(kBodyWorkloads) / sizeof(kBodyWorkloads[0]);
 

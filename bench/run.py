@@ -230,6 +230,7 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "mode_bank_24_static",
         "ks_string_pair",
         "ks_string_pair_nolin",
+        "ks_string_pair_port",
     ),
     "sampler": (
         "sampler_flow_typ",

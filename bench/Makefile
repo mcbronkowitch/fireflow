@@ -81,6 +81,7 @@ CPP_SOURCES = \
 	mem.cpp \
 	$(FAMILY_SOURCES) \
 	../engine/body/mode_bank.cpp \
+	../engine/body/ks_string.cpp \
 	../engine/mod/lane.cpp \
 	../engine/sampler/sampler_engine.cpp \
 	../engine/sampler/sample_buffer.cpp \
