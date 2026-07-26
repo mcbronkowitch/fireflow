@@ -3,7 +3,7 @@
 **Date:** 2026-07-18
 **Status:** design approved (brainstorm with Bastian, 2026-07-18), implementation
 gated on the hardware bench (STRING precedent)
-**Scope:** a fifth selectable part engine (`ENGINE_ZAP`) — a monophonic
+**Scope:** a sixth selectable part engine (`ENGINE_ZAP`) — a monophonic
 two-oscillator FM/AM percussion voice modeled on the Winter Modular ×
 Plankton Electronics **Zaps** module. The PITCH lane selects one of 12
 percussion archetypes instead of playing a melody; a deterministic seed
@@ -91,9 +91,11 @@ ZAP does not fit `SynthEngineT<V>`: the entire allocation machine
 for a mono voice. ZAP implements `IPartEngine` directly — integration
 surface at test-tone level, voice interior at SYNTH level.
 
-- `EngineId` grows `ENGINE_ZAP = 4`; scenario parser learns `"zap"`; the
-  VCV engine button cycles five states (LED shade; panel unchanged —
-  hardware-reducibility constraint). No other surface.
+- `EngineId` grows `ENGINE_ZAP = 5`; scenario parser learns `"zap"`; the
+  VCV engine button cycles six states (LED shade; panel unchanged —
+  hardware-reducibility constraint). No other surface. (Was 4 / five states
+  until M5j claimed id 4 for BODY — ids are appended in milestone order so no
+  persisted id changes meaning.)
 - Conventions carried over: all parameter smoothing/derivation on the
   96-sample control cadence; `_filt_gain` silence-fade; deterministic
   `Rng` with a fixed seed-derivation path (part index → bank → slot).
@@ -284,7 +286,7 @@ the risk here is nominal.
 ### 8. Hosts & demo scenarios
 
 - Scenario parser: `"zap"`. VCV: engine button cycles
-  test-tone → synth → wave → string → zap.
+  test-tone → synth → sampler → wave → body → zap (`EngineId` order).
 - `zap_kit.json` — STEP, kit sequence walking the scale degrees, DETUNE
   ride across two bank zones, MOTION ramp (mutation audible), then MOTION
   back to 0 + DETUNE to zone start (the home invariant, audible), ending

@@ -4,7 +4,7 @@
 **Status:** design approved, implementation gated on the hardware bench (see §7)
 **Supersedes:** `2026-07-18-string-engine-design.md` (STRING). That spec's core
 decisions survive; its scope, its integration plan and its cost model do not.
-**Scope:** a fourth selectable part engine (`ENGINE_BODY`) — a 4-voice
+**Scope:** a fifth selectable part engine (`ENGINE_BODY`) — a 4-voice
 resonator instrument behind the existing `IPartEngine` semantics, morphing
 continuously from Karplus-Strong string through dispersive metal into a modal
 bell, with a playable exciter and a sympathetic excitation bus. One template
