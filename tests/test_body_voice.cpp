@@ -290,6 +290,25 @@ TEST_CASE("BodyVoice MATL endpoints sound different") {
 // -> 0.60, even drifting slightly DOWN) and only jumps at MATL == 1.0
 // exactly (-> 5.32) -- both a monotonicity violation and a midpoint nowhere
 // close to the string/bank interpolation.
+//
+// Fix round 2: this monotonicity is NOT a general property of the blend --
+// it is specific to 220 Hz, and the note above was silent about that. String
+// and bank are not uncorrelated equal-power partners: both are driven by the
+// SAME exciter, and which one carries more raw energy at a given pitch
+// depends on how that pitch interacts with each structure's own damping/Q
+// (the same mechanism as the wrong-harmonic-dominance finding documented on
+// the pitch-tracking test above). Swept on the correct, unmutated
+// implementation: at 220 Hz the rise is monotonic with wide margins (this
+// test). At 1760 Hz it is NOT monotonic and inverts -- the pure string
+// (MATL 0) is louder than the pure bank (MATL 1) at that pitch, at these
+// fresh_voice() settings. At 3520 Hz it decreases monotonically instead of
+// increasing. If this test is ever generalised into a pitch sweep, expect it
+// to need a per-pitch direction/shape rather than one fixed "rises
+// monotonically" assertion -- that is a real acoustic property of the
+// engine at this pitch, not a bug, and re-deriving that the hard way from a
+// red test is exactly what this comment is here to save someone from doing.
+// 220 Hz was chosen because it is fresh_voice()'s pitch in every other
+// BodyVoice test, not because it is special to this property.
 TEST_CASE("BodyVoice MATL blends continuously, not as a step function") {
     const float mvals[] = { 0.f, 0.25f, 0.5f, 0.75f, 1.f };
     float energy[5] = { 0.f, 0.f, 0.f, 0.f, 0.f };
@@ -459,7 +478,25 @@ TEST_CASE("BodyVoice palm mute chokes the ring, not just cuts the gain") {
     const float ratio_late  = em1 / eo1;
     CAPTURE(ratio_early);
     CAPTURE(ratio_late);
-    CHECK(ratio_late < ratio_early * 0.5f);
+    // Fix round 2: the contract under test is "the held voice decays FASTER
+    // than the open one -- the ratio keeps shrinking", not "shrinks by at
+    // least half within three windows". That specific number was read off
+    // today's kMuteDamping = 0.02f (body_voice.cpp:99), a by-ear constant
+    // this project's own conventions expect to get retuned (see
+    // spotykach-by-ear-decisions). Probing the shipped code at gentler
+    // damp values confirms the old 0.5x bound would break long before the
+    // choke itself does: damp 0.4 -> ratio 0.44x (12 % margin left), damp
+    // 0.55 -> ratio 0.54x (FAILS a 0.5x bound outright, while the ratio is
+    // still genuinely falling 0.119 -> 0.064, a real 46 % drop -- a false
+    // red on a working mute). The flat-gain imposter this test exists to
+    // catch sits at EXACTLY 1.0x (no rate change at all, by construction),
+    // so any bound meaningfully below 1.0 still separates it from a real
+    // choke, however gentle. 0.9x leaves an order of magnitude more room
+    // than floating-point noise needs against that 1.0x imposter, while
+    // clearing every by-ear damping value probed here (0.29x .. 0.64x) with
+    // margin to spare -- chosen for that headroom, not fitted to the 0.29x
+    // the shipped constant happens to produce today.
+    CHECK(ratio_late < ratio_early * 0.9f);
 }
 
 TEST_CASE("BodyVoice excitation is bit-exact off at sub level zero") {
