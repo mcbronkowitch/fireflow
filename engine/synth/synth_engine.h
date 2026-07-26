@@ -42,6 +42,10 @@ public:
 
     static_assert(kMaxChord == ChordBuilder::kMaxNotes,
                   "chord slot count must match the builder");
+    // kPanFan (synth_engine.cpp) has exactly 4 entries and is indexed by
+    // voice index in _update_control(); raising kVoices past 4 would read
+    // past its end.
+    static_assert(kVoices <= 4, "kPanFan has only 4 entries");
 
     // FILT: linke Haelfte uebersteuert die Schiene um genau die Blendzone,
     // damit t = -1 bei JEDER Lane-Stellung in Stille endet (Invariante:
@@ -94,6 +98,17 @@ private:
     void _update_control();
     void _adjust_surface();
 
+    // std::array<int, kVoices> filled with -1 -- a brace initialiser can't
+    // express "every element" independent of kVoices, so this fills it at
+    // compile time instead (spec 2026-07-26 body-resonator, fix round 1:
+    // the old `{ -1, -1, -1, -1 }` only compiled because kVoices was always
+    // exactly 4).
+    static constexpr std::array<int, kVoices> _no_chord_slots() {
+        std::array<int, kVoices> a{};
+        for (int i = 0; i < kVoices; ++i) a[i] = -1;
+        return a;
+    }
+
     std::array<V, kVoices> _voices;
     std::array<uint32_t, kVoices> _order {};   // trigger sequence per voice
     uint32_t _seq = 0;
@@ -109,8 +124,8 @@ private:
 
     float _chord[kMaxChord] = { 0.f, 0.f, 0.f, 0.f };   // surface targets (Part)
     int   _chord_n = 1;
-    bool  _sustaining[kVoices] = { false, false, false, false };
-    int   _chord_slot[kVoices] = { -1, -1, -1, -1 };
+    std::array<bool, kVoices> _sustaining {};                 // value-init: all false
+    std::array<int, kVoices>  _chord_slot = _no_chord_slots();
     struct Pending { int ctr; float pitch; int slot; };
     Pending _pending[kMaxChord] = {};
     int   _pending_n = 0;
@@ -134,5 +149,45 @@ extern template class SynthEngineT<VoiceT<MorphOsc>>;
 
 using WaveEngine = SynthEngineT<VoiceT<WtOsc>>;
 extern template class SynthEngineT<VoiceT<WtOsc>>;
+
+namespace detail {
+// Exists solely so SynthEngineT<V> gets exercised at a voice count other
+// than 4 in this build (fix round 1, 2026-07-26 body-resonator, Task 5
+// review): the template's deliverable is the V::kEngineVoices indirection
+// actually working, and nothing else instantiates it below kVoices == 4
+// until BODY's real voice (Task 7) does. Not a real voice -- does not need
+// to make sound. See tests/test_synth_engine_voice_count.cpp.
+struct VoiceCountProbe {
+    static constexpr int kEngineVoices = 1;
+
+    void init(float /*sample_rate*/, uint32_t /*seed*/) {}
+    void trigger(float /*freq_hz*/) { _active = true; }
+    void set_sustaining(bool on) { _sustaining = on; if (!on) _active = false; }
+    void set_pitch_hz(float /*freq_hz*/) {}
+    void set_vel(float /*v*/) {}
+    void set_env_times(float /*attack_s*/, float /*decay_s*/) {}
+    void set_morph(float /*m*/) {}
+    void set_detune_cents(float /*max_ct*/) {}
+    void set_sub_level(float /*n*/) {}
+    void set_cutoff_hz(float /*hz*/) {}
+    void set_resonance(float /*n*/) {}
+    void set_pan(float /*pan*/) {}
+    void set_drift_amount(float /*a*/) {}
+    void update_control(float /*dt_s*/) {}
+    void process(float& accL, float& accR) { if (_active) { accL += 0.f; accR += 0.f; } }
+    void set_hold(bool /*on*/) {}
+    void set_excitation(float /*x*/) {}
+
+    bool  active() const { return _active; }
+    float env_value() const { return _active ? 1.f : 0.f; }
+    float detune_cents() const { return 0.f; }
+
+    bool _active = false;
+    bool _sustaining = false;
+};
+} // namespace detail
+
+using SynthEngineVoiceCountProof = SynthEngineT<detail::VoiceCountProbe>;
+extern template class SynthEngineT<detail::VoiceCountProbe>;
 
 } // namespace spky

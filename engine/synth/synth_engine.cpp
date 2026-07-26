@@ -315,3 +315,8 @@ float SynthEngineT<V>::voice_env(int v) const {
 
 template class spky::SynthEngineT<spky::VoiceT<spky::MorphOsc>>;
 template class spky::SynthEngineT<spky::VoiceT<spky::WtOsc>>;
+
+// Compile-time proof (fix round 1, Task 5 review): SynthEngineT actually
+// works at a voice count other than 4. See detail::VoiceCountProbe in
+// synth_engine.h.
+template class spky::SynthEngineT<spky::detail::VoiceCountProbe>;

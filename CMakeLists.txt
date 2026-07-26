@@ -115,6 +115,7 @@ add_executable(spky_tests
     engine/synth/synth_engine.cpp
     tests/test_synth_engine.cpp
     tests/test_wave_engine.cpp
+    tests/test_synth_engine_voice_count.cpp
     tests/test_phrase_gen.cpp
     tests/test_song_form.cpp
     tests/test_song_lane.cpp
