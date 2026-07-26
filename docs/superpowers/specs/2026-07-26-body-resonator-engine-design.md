@@ -222,7 +222,7 @@ earned.
 | DECAY | env decay (× cycle) | damping — ring time follows the tempo; sets string damping and mode Q together |
 | RESO | Svf resonance | **exciter character**, four zones (§2) |
 | DETUNE | ±35 ct osc spread | inharmonicity **amount**: string spread × ~4 (up to ~140 ct) *and* mode-bank stretch — one "how broken is this material" axis |
-| COLOR | chord slots (4-note layer) | inharmonicity **character**: the chord quality picks which way the partials stretch; only the root sounds (`kVoices = 1`, §7). Scaled by DETUNE, so DETUNE = 0 is harmonic and silences it |
+| COLOR | chord slots (4-note layer) | inharmonicity **character**: the chord quality *bends* the direction the partials stretch, away from a base direction DETUNE alone already sets (§7 amendment 2). Only the root sounds (`kVoices = 1`, §7). Scaled by DETUNE, so DETUNE = 0 is harmonic and silences it |
 | SUB | sub-sine level | **excitation bus level** (§6) — how open the body is to the room |
 | CHOKE | drone release + retrigger pause | the same + **palm mute**: damping snaps high on both structures |
 | PITCH / MOTION / LEVEL | (unchanged) | (unchanged: latch/track, pan fan + drift, master gain) |
@@ -247,7 +247,32 @@ would make the panel worse, not richer. They split as **character and
 amount**: COLOR chooses *which* way the partials are stretched, DETUNE
 chooses *how far*. DETUNE keeps exactly the meaning §5 already gives it and
 its existing curve, so at DETUNE = 0 a BODY deck is harmonic and COLOR is
-inaudible — the same way any depth control behaves here. That split is the
+inaudible — the same way any depth control behaves here.
+
+**Amendment 2 (user decision, 2026-07-26).** The first reading of the split
+was `stretch = amount * character`, which made COLOR a gate rather than a
+bend: `chord_character` returns exactly 0 for a one-note chord, which is what
+COLOR at minimum produces, so the mode bank stayed harmonic wherever DETUNE
+sat. At MATL = 1 the strings are inaudible, so in that corner of the panel
+DETUNE did nothing at all -- a dead control, against the rule that the panel
+must stay reducible to hardware where every knob carries.
+
+That reading also contradicted the DETUNE row in §5, which says DETUNE is one
+axis doing string spread **and** mode-bank stretch. It does. The composition
+is therefore
+
+    stretch = amount * clamp(kBase + character, -1, +1)
+
+with `kBase` positive: DETUNE always spreads the bank in a base direction,
+and COLOR bends that direction, reaching the compressed side once the chord
+quality asks for it. §7's promise survives by arithmetic rather than by a
+special case -- amount = 0 still zeroes the product, so DETUNE = 0 is
+harmonic and COLOR inaudible. What changed is only that COLOR at minimum is
+no longer *exactly* harmonic; it is the base direction.
+
+`kBase` and COLOR's own gain interact -- together they decide how much of the
+compressed side is reachable at the knob -- so they are tuning material to be
+turned **together** in the Task 12 listening pass, not one at a time. That split is the
 design decision; the mapping from chord quality to ratio character is tuning
 material for the listening pass (Task 12), not a contract.
 
