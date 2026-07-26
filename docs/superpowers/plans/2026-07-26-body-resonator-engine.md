@@ -297,6 +297,22 @@ Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 `brightness` 0..1 is the high-mode roll-off (FILTER). Mode amplitudes come
 from a fixed strike position — position is not a control (spec §2).
 
+> **Amendment (2026-07-26, after Task 2's review).** The `_recompute()` code
+> in Step 4 below understated the stretch: it collapsed the reference's two
+> accumulators (`harmonic` = n·f₀ and `stretch_factor`, *multiplied*) into one
+> additive accumulator, and omitted `NthHarmonicCompensation`. Measured against
+> the reference, that reaches only ~31× the base unit at mode 23 where the
+> reference reaches ~202× — the stretch is where the bell character lives, so
+> the simplification cost exactly the thing the engine is for.
+>
+> **Ruling:** *faithful* binds the **mode ladder**, not the **knob curve**.
+> Restore the reference's multiplicative two-accumulator structure, its
+> `NthHarmonicCompensation(3, stiffness)` rescale of `f0`, and its `>= 0.499f`
+> Nyquist guard. The mapping from DETUNE to `stiffness` stays **our own curve**
+> — the reference's `CalcStiff` maps a `structure` knob BODY does not have, and
+> spec §5 names the stretch taper as tuning material for the Task 12 listening
+> pass. Step 4's code below is superseded on those three points.
+
 - [ ] **Step 1: Write the failing test**
 
 Create `tests/test_mode_bank.cpp`:
