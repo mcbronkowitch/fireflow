@@ -49,8 +49,23 @@ public:
         // than switching to a different signal (that would collapse into
         // the noise-burst zone, which is exactly what the zone-distinctness
         // tests guard against). The interval is TUNING MATERIAL, like every
-        // other zone constant here -- 5 ms is a placeholder for "audibly a
-        // rapid rattle, not a buzz."
+        // other zone constant here.
+        //
+        // 5 ms is 200 Hz, well above the ~20 Hz where discrete pulses fuse:
+        // this reads as a pitched buzz, NOT as a rattle. That pitch is fixed
+        // and unrelated to the note, so a bowed click currently excites the
+        // body at a constant 200 Hz whatever is played. Listening pass
+        // (Task 12) decides whether that is the character we want, whether
+        // the interval should track the fundamental, or whether it belongs
+        // below the fusion threshold where it would actually rattle.
+        //
+        // One coupling to know before changing it: the filter is not reset
+        // between re-arms, so shortening the interval raises per-impulse
+        // amplitude as well as rate. Measured steady-state peak: flat at
+        // 0.230 for intervals down to ~60 samples, then 0.248 at 20, 0.316
+        // at 10, 0.565 at 5, saturating at 1.0 by 1. Bounded and monotonic
+        // -- the one-pole is stable, so this never runs away -- but rate and
+        // loudness move together, which is not obvious from the constant.
         _click_interval = static_cast<int>(0.005f * _sr);
         if (_click_interval < 1) _click_interval = 1;
         _click_counter = 0;
