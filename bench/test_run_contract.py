@@ -20,8 +20,26 @@ if RUNNER_SPEC and RUNNER_SPEC.loader:
 else:
     runner = None
 
+from profiles import Profile, WAVE_ACCEPTANCE, resolve
+
 QSPI_SHA256 = "a" * 64
 DEVICE_ID = "00112233445566778899aabb"
+# Registry order from bench/families.cpp -- every real capture below carries
+# rows from all seven families that existed when it was measured, so the
+# header declares those seven. The `body` family arrived later (M5j); a
+# capture from before it cannot and should not name it.
+ALL_FAMILIES = "system voice mem mod abl taps sampler"
+
+# The profile those captures ARE: `full` as it stood before the `body` family
+# joined it. Today's `full` names eight families, so a pre-body capture is no
+# longer a complete run of it -- correctly so. Validating this real evidence
+# against the profile of its own era keeps it doing the job it is here for
+# (proving the universal gates accept a genuine, complete capture) instead of
+# turning it into a stale-manifest test it was never meant to be.
+PRE_BODY_FULL = Profile(
+    families=tuple(ALL_FAMILIES.split()),
+    gates=frozenset({WAVE_ACCEPTANCE}),
+)
 REAL_EVIDENCE_PATH = (
     RUNNER_PATH.parent.parent
     / "docs"
@@ -69,10 +87,11 @@ class UnkillableOpenOcd(KillRequiredOpenOcd):
         return None
 
 
-def bench_row(name, avg_cyc, max_cyc, checksum):
+def family_row(family, name, avg_cyc, max_cyc, checksum):
     return (
-        "BENCH,system,%s,%d,%d,%.2f,%.2f,%s"
+        "BENCH,%s,%s,%d,%d,%.2f,%.2f,%s"
         % (
+            family,
             name,
             avg_cyc,
             max_cyc,
@@ -83,12 +102,17 @@ def bench_row(name, avg_cyc, max_cyc, checksum):
     )
 
 
+def bench_row(name, avg_cyc, max_cyc, checksum):
+    return family_row("system", name, avg_cyc, max_cyc, checksum)
+
+
 def capture_lines(
-    rows, *, anchors=(), device_id=DEVICE_ID, qspi_sha256=QSPI_SHA256
+    rows, *, anchors=(), device_id=DEVICE_ID, qspi_sha256=QSPI_SHA256,
+    families=ALL_FAMILIES
 ):
     return [
-        "BENCH_BEGIN,%s,480000000,96,dcache+icache,%s,%s"
-        % (runner.current_head(), qspi_sha256, device_id),
+        "BENCH_BEGIN,%s,480000000,96,dcache+icache,%s,%s,%s"
+        % (runner.current_head(), qspi_sha256, device_id, families),
         *rows,
         *anchors,
         "BENCH_END",
@@ -117,6 +141,38 @@ def replace_rows(rows, *replacements):
         replacements_by_name.get(row.split(",")[2], row)
         for row in rows
     ]
+
+
+def gate_ledger_section(md):
+    """Isolate the '## Gate ledger' section of a written evidence Markdown
+    document, so a test can assert against gate-ledger content specifically
+    rather than the whole document -- which also holds a verdict and
+    per-run tables that could accidentally contain a matching substring."""
+    start = md.index("## Gate ledger")
+    end = md.index("\n## ", start + len("## Gate ledger"))
+    return md[start:end]
+
+
+class ParseContract(unittest.TestCase):
+    def test_parse_reads_the_families_field(self):
+        lines = [
+            "BENCH_BEGIN,abc1234,480000000,96,dcache+icache,"
+            + "0" * 64 + ",dead,system voice\n",
+            "BENCH,system,empty_callback,2,12,0.00,0.00,ea306fb5\n",
+            "BENCH_END\n",
+        ]
+        header, rows, _ = runner.parse(lines)
+        self.assertEqual(header["families"], ("system", "voice"))
+
+    def test_parse_rejects_a_header_without_families(self):
+        """An old firmware image must not validate against the new host."""
+        lines = [
+            "BENCH_BEGIN,abc1234,480000000,96,dcache+icache,"
+            + "0" * 64 + ",dead\n",
+            "BENCH,system,empty_callback,2,12,0.00,0.00,ea306fb5\n",
+            "BENCH_END\n",
+        ]
+        self.assertIsNone(runner.parse(lines))
 
 
 class RunContract(unittest.TestCase):
@@ -226,6 +282,9 @@ class RunContract(unittest.TestCase):
                 mock.patch.object(runner, "require_live_digest"),
                 mock.patch.object(runner, "require_live_device"),
                 mock.patch.object(runner, "run_once", side_effect=captures),
+                # See PRE_BODY_FULL: these captures are real pre-body evidence,
+                # so they are validated against the profile they actually are.
+                mock.patch.object(runner, "resolve", return_value=PRE_BODY_FULL),
                 mock.patch.object(sys, "argv", argv),
             ):
                 result = runner.main()
@@ -423,7 +482,7 @@ class RunContract(unittest.TestCase):
         self.assertEqual(csv_text.count("\nsystem,"), 0)
         self.assertEqual(csv_text.count("\n1,"), 68)
         self.assertEqual(csv_text.count("\n2,"), 68)
-        self.assertIn("run,qspi_sha256,device_fingerprint", csv_text)
+        self.assertIn("run,profile,qspi_sha256,device_fingerprint", csv_text)
         self.assertIn(QSPI_SHA256, csv_text)
         self.assertIn(fingerprint, csv_text)
         self.assertNotIn(DEVICE_ID, csv_text)
@@ -469,6 +528,432 @@ class RunContract(unittest.TestCase):
             "maximum 310100 < 960000.",
             md_text,
         )
+
+
+def resolve_profile(name):
+    """resolve() validates a profile's manifest against the row protocol
+    (bench/profiles.py's resolve() docstring), so it needs run.py's
+    BENCH_PROTOCOL_ROWS_BY_FAMILY passed in -- this helper is the one place
+    in this file that wires the two together, so every call site below
+    doesn't have to repeat it."""
+    return resolve(name, runner.BENCH_PROTOCOL_ROWS_BY_FAMILY)
+
+
+class ProfileContract(unittest.TestCase):
+    def system_rows(self, wave_avg=200):
+        """A complete row set for the system-only profile. wave_2x4 defaults
+        to well under synth_2x4 (400) so the WAVE gate passes; callers that
+        want it to fail the gate pass a larger wave_avg."""
+        names = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["system"]
+        rows = []
+        for i, name in enumerate(names):
+            if name == "synth_2x4":
+                avg = 400
+            elif name == "wave_2x4":
+                avg = wave_avg
+            else:
+                avg = 100
+            rows.append(bench_row(name, avg, avg + 1, "%08x" % i))
+        return rows
+
+    def test_system_profile_validates_against_its_filtered_rowset(self):
+        """A system-only capture is complete for the system profile."""
+        capture = runner.parse(
+            capture_lines(self.system_rows(), families="system")
+        )
+
+        runner.validate_captures([capture, capture], resolve_profile("system"))
+
+    def test_reported_families_must_match_the_requested_profile(self):
+        """A stale image built for a different profile is rejected."""
+        capture = runner.parse(
+            # firmware says more than asked
+            capture_lines(self.system_rows(), families="system voice")
+        )
+
+        with self.assertRaisesRegex(runner.BenchValidationError, "families"):
+            runner.validate_captures([capture, capture], resolve_profile("system"))
+
+    def test_unknown_profile_name_is_rejected(self):
+        with self.assertRaises(KeyError):
+            resolve_profile("nonsense")
+
+    def test_a_profile_without_wave_acceptance_does_not_run_it(self):
+        """The gate must be genuinely skipped, not accidentally satisfied.
+
+        Neither shipped profile omits wave_acceptance, so this uses a
+        synthetic one. Without it, nothing proves the gate is actually
+        conditional -- an `if WAVE_ACCEPTANCE in profile.gates` that was
+        never false would pass every test in this file.
+        """
+        from profiles import Profile
+
+        # wave_2x4 deliberately SLOWER than synth_2x4: this capture would
+        # fail wave_acceptance outright. A profile that does not declare the
+        # gate must accept it anyway.
+        capture = runner.parse(
+            capture_lines(self.system_rows(wave_avg=900), families="system")
+        )
+
+        ungated = Profile(families=("system",), gates=frozenset())
+        runner.validate_captures([capture, capture], ungated)  # accepted
+
+        gated = Profile(
+            families=("system",), gates=frozenset({WAVE_ACCEPTANCE})
+        )
+        with self.assertRaises(runner.BenchValidationError):
+            runner.validate_captures([capture, capture], gated)  # rejected
+
+    def test_candidate_section_says_why_it_is_empty_under_a_partial_profile(self):
+        """The verdict's candidate list is fed by the `voice` family. Under a
+        profile that omits it, the heading must not stand over an empty body:
+        a reader cannot tell that apart from 'no candidate cost anything worth
+        reporting'. The neighbouring SRAM-vs-SDRAM prose already says
+        'n/a (row missing)' for the same reason."""
+        capture = runner.parse(
+            capture_lines(self.system_rows(), families="system")
+        )
+
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(
+                temp, [capture, capture], resolve_profile("system"), "system"
+            )
+            with open(base + ".md", encoding="utf-8") as fh:
+                md = fh.read()
+
+        self.assertIn("n/a (family `voice` not in this profile)", md)
+
+    def test_candidate_section_lists_the_rows_when_the_profile_carries_them(self):
+        """The empty-case marker must not displace the real listing -- a fix
+        that always printed 'n/a' would satisfy the test above."""
+        from profiles import Profile
+
+        rows = self.system_rows()
+        for i, name in enumerate(runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["voice"]):
+            rows.append(family_row("voice", name, 100, 101, "1%07x" % i))
+        capture = runner.parse(
+            capture_lines(rows, families="system voice")
+        )
+        both = Profile(
+            families=("system", "voice"), gates=frozenset({WAVE_ACCEPTANCE})
+        )
+
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(temp, [capture, capture], both, "sysvoice")
+            with open(base + ".md", encoding="utf-8") as fh:
+                md = fh.read()
+
+        self.assertNotIn("n/a (family `voice` not in this profile)", md)
+        self.assertIn("one real voice", md)
+
+    def test_written_evidence_names_the_profile_and_ledgers_the_gates(self):
+        capture = runner.parse(
+            capture_lines(self.system_rows(), families="system")
+        )
+
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(
+                temp, [capture, capture], resolve_profile("system"), "system"
+            )
+
+            self.assertTrue(base.endswith("-system"))
+            with open(base + ".md", encoding="utf-8") as fh:
+                md = fh.read()
+            self.assertIn("system", md)
+            self.assertIn("wave_acceptance", md)
+            # Every universal gate is recorded as having run.
+            self.assertIn("row set", md.lower())
+            with open(base + ".csv", encoding="utf-8") as fh:
+                csv_text = fh.read()
+            self.assertIn("profile", csv_text.splitlines()[0])
+            self.assertIn(",system,", csv_text)
+
+    def test_gate_ledger_marks_wave_acceptance_applied_when_the_profile_declares_it(self):
+        """The 'system' profile declares wave_acceptance, so the ledger
+        must record it under 'Applied and passed' -- not silently drop it,
+        and not misfile it under 'Not applicable' either."""
+        capture = runner.parse(
+            capture_lines(self.system_rows(), families="system")
+        )
+
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(
+                temp, [capture, capture], resolve_profile("system"), "system"
+            )
+            with open(base + ".md", encoding="utf-8") as fh:
+                md = fh.read()
+
+        ledger = gate_ledger_section(md)
+        applied, not_applicable = ledger.split(
+            "Not applicable to this profile:"
+        )
+        self.assertIn("`wave_acceptance`", applied)
+        self.assertNotIn("wave_acceptance", not_applicable)
+        self.assertIn("none", not_applicable)
+
+    def test_gate_ledger_marks_wave_acceptance_not_applicable_with_reason_when_the_profile_omits_it(self):
+        """A profile that does not declare wave_acceptance must not have
+        the ledger claim the gate ran -- that would convert a real gap
+        into a false assurance. wave_2x4 is deliberately made SLOWER than
+        synth_2x4 here (a capture that would fail the gate outright), so a
+        ledger bug that claims 'applied and passed' regardless of the
+        profile can't hide behind a capture that happened to pass anyway.
+
+        This profile carries `system`, so its families COULD supply the
+        gate's rows -- it simply doesn't declare the gate. The reason must
+        say that, not the (false, for this case) "does not contain" the
+        rows -- that sentence belongs to a different profile shape, see
+        test_gate_ledger_reason_distinguishes_missing_rows_from_undeclared_gate
+        below.
+        """
+        from profiles import Profile
+
+        capture = runner.parse(
+            capture_lines(self.system_rows(wave_avg=900), families="system")
+        )
+        ungated = Profile(families=("system",), gates=frozenset())
+
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(
+                temp, [capture, capture], ungated, "system"
+            )
+            with open(base + ".md", encoding="utf-8") as fh:
+                md = fh.read()
+
+        ledger = gate_ledger_section(md)
+        applied, not_applicable = ledger.split(
+            "Not applicable to this profile:"
+        )
+        self.assertNotIn("wave_acceptance", applied)
+        self.assertIn("`wave_acceptance`", not_applicable)
+        self.assertIn("does not declare", not_applicable)
+        self.assertNotIn("does not supply", not_applicable)
+
+    def test_gate_ledger_reason_distinguishes_missing_rows_from_undeclared_gate(self):
+        """The two ways wave_acceptance can be 'not applicable' say
+        different things, and the ledger must not use the same sentence
+        for both: a profile whose families genuinely cannot supply
+        synth_2x4/wave_2x4 (voice-only, below) is a different situation
+        from a profile that carries `system` but simply never declared the
+        gate (the previous test)."""
+        from profiles import Profile
+
+        voice_names = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["voice"]
+        voice_rows = [
+            family_row("voice", name, 100, 101, "%08x" % i)
+            for i, name in enumerate(voice_names)
+        ]
+        voice_capture = runner.parse(
+            capture_lines(voice_rows, families="voice")
+        )
+        voice_only = Profile(families=("voice",), gates=frozenset())
+
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(
+                temp, [voice_capture, voice_capture], voice_only, "voice"
+            )
+            with open(base + ".md", encoding="utf-8") as fh:
+                md = fh.read()
+
+        not_applicable = gate_ledger_section(md).split(
+            "Not applicable to this profile:"
+        )[1]
+        self.assertIn("do not supply", not_applicable)
+        self.assertNotIn("does not declare", not_applicable)
+
+
+class ManifestValidationContract(unittest.TestCase):
+    """resolve()'s load-time manifest checks (design spec S3): a profile
+    naming a family run.py has no row expectations for, or declaring
+    wave_acceptance without families that supply its rows, must be caught
+    before anything is built or flashed -- not after two hardware repeats.
+    """
+
+    def test_resolve_rejects_a_profile_naming_an_unknown_family(self):
+        from profiles import Profile
+        import profiles as profiles_module
+
+        with mock.patch.dict(
+            profiles_module.PROFILES,
+            {"bogus": Profile(families=("nope",), gates=frozenset())},
+        ):
+            with self.assertRaisesRegex(ValueError, "nope"):
+                resolve_profile("bogus")
+
+    def test_resolve_rejects_wave_acceptance_without_a_supplying_family(self):
+        from profiles import Profile, WAVE_ACCEPTANCE
+        import profiles as profiles_module
+
+        with mock.patch.dict(
+            profiles_module.PROFILES,
+            {
+                "bogus": Profile(
+                    families=("voice",), gates=frozenset({WAVE_ACCEPTANCE})
+                )
+            },
+        ):
+            with self.assertRaisesRegex(ValueError, "wave_acceptance"):
+                resolve_profile("bogus")
+
+    def test_resolve_accepts_a_profile_whose_families_supply_wave_acceptance(self):
+        from profiles import Profile, WAVE_ACCEPTANCE
+        import profiles as profiles_module
+
+        with mock.patch.dict(
+            profiles_module.PROFILES,
+            {
+                "bogus": Profile(
+                    families=("system", "voice"),
+                    gates=frozenset({WAVE_ACCEPTANCE}),
+                )
+            },
+        ):
+            resolve_profile("bogus")  # must not raise
+
+    def test_both_shipped_profiles_pass_manifest_validation(self):
+        for name in ("system", "full"):
+            with self.subTest(profile=name):
+                resolve_profile(name)  # must not raise
+
+
+class FullProfileLinkContract(unittest.TestCase):
+    """`full` is expected to fail to link (SRAM_EXEC/SRAM region overflow --
+    design spec S1, S5). A full arm-none-eabi cross-compile inside the unit
+    suite would be slow and would make this suite depend on the toolchain
+    being on PATH; these tests instead pin the two properties that let a
+    link failure be trusted as "the known size problem" rather than a
+    manifest bug wearing its symptoms: `full`'s manifest resolves cleanly
+    (no unknown family, no ungated wave_acceptance -- see
+    ManifestValidationContract above), and its families are exactly the
+    ones the Makefile and BENCH_PROTOCOL_ROWS_BY_FAMILY both know about --
+    not fewer (which would silently shrink what "full" means and might
+    happen to fit) and not more (an extra family is a real, deliberate
+    size change, not a stale manifest, and belongs in this set).
+
+    What this does NOT prove: that the link actually fails, or that it
+    fails at the *link* step specifically rather than earlier (a
+    genuinely broken manifest could still fail at compile or at the
+    Makefile's own family guard). That property is established by hand
+    per the spec, and by any CI/hardware run that attempts to build
+    `full`; it is not re-proven by this host-only suite.
+    """
+
+    KNOWN_FAMILIES = frozenset(
+        {"system", "voice", "mem", "mod", "abl", "taps", "body", "sampler"}
+    )
+
+    def test_full_profile_manifest_resolves_cleanly(self):
+        resolve_profile("full")  # must not raise a manifest error
+
+    def test_full_profile_names_exactly_the_known_families(self):
+        profile = resolve_profile("full")
+
+        self.assertEqual(set(profile.families), self.KNOWN_FAMILIES)
+        self.assertEqual(
+            set(runner.BENCH_PROTOCOL_ROWS_BY_FAMILY), self.KNOWN_FAMILIES
+        )
+
+    def test_full_profile_families_match_the_makefiles_known_families(self):
+        """Guards against the Makefile and profiles.py drifting apart --
+        e.g. a family renamed in one but not the other, which would leave
+        `full` naming a family the Makefile no longer recognises (or vice
+        versa), and a link failure could then be a manifest bug in
+        disguise rather than the known size problem."""
+        import re
+
+        makefile = (Path(__file__).with_name("Makefile")).read_text(
+            encoding="utf-8"
+        )
+        known_to_makefile = set(
+            re.findall(r"^FAMILY_SOURCE_(\w+)\s*=", makefile, re.MULTILINE)
+        )
+        profile = resolve_profile("full")
+
+        self.assertEqual(set(profile.families), known_to_makefile)
+
+
+class ProfileAwareEvidenceContract(unittest.TestCase):
+    """write_results (and the WAVE verdict it writes) must follow the
+    profile's gates, not assume `system` / WAVE_ACCEPTANCE are always
+    present. Neither shipped profile currently omits either, so both tests
+    use a synthetic profile -- the BODY branch adds a real one that does."""
+
+    def run_with_profile(self, captures, profile):
+        with tempfile.TemporaryDirectory() as temp:
+            argv = [
+                "run.py",
+                "--no-build",
+                "--repeat",
+                str(len(captures)),
+                "--out-dir",
+                temp,
+            ]
+            with (
+                mock.patch.object(runner, "prepare_existing_artifacts", return_value={}),
+                mock.patch.object(runner, "require_clean_tree"),
+                mock.patch.object(
+                    runner,
+                    "require_verified_payload",
+                    return_value={"device_id": DEVICE_ID},
+                ),
+                mock.patch.object(runner, "require_live_digest"),
+                mock.patch.object(runner, "require_live_device"),
+                mock.patch.object(runner, "run_once", side_effect=captures),
+                mock.patch.object(runner, "resolve", return_value=profile),
+                mock.patch.object(sys, "argv", argv),
+            ):
+                result = runner.main()
+            artifacts = {
+                path.suffix: path.read_text(encoding="utf-8")
+                for path in Path(temp).iterdir()
+            }
+            return result, artifacts
+
+    def test_a_profile_without_system_writes_a_complete_document(self):
+        """A family-only profile with no `system` rows must not KeyError
+        inside write_results after a complete two-run hardware capture --
+        that is the worst possible moment to lose the evidence."""
+        from profiles import Profile
+
+        names = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["voice"]
+        rows = [
+            family_row("voice", name, 100, 101, "%08x" % i)
+            for i, name in enumerate(names)
+        ]
+        capture = capture_lines(rows, families="voice")
+        profile = Profile(families=("voice",), gates=frozenset())
+
+        result, artifacts = self.run_with_profile([capture, capture], profile)
+
+        self.assertEqual(result, 0)
+        self.assertIn(".md", artifacts)
+        self.assertNotIn("WAVE performance gate", artifacts[".md"])
+
+    def test_an_ungated_profile_does_not_claim_the_wave_gate_passed(self):
+        """A profile that carries `system` but does not declare
+        WAVE_ACCEPTANCE must not print a PASS claim for a capture that
+        would fail the gate outright -- the document's only purpose is to
+        be evidence, and a false PASS defeats that."""
+        from profiles import Profile
+
+        names = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["system"]
+        rows = []
+        for i, name in enumerate(names):
+            if name == "synth_2x4":
+                avg = 100
+            elif name == "wave_2x4":
+                avg = 900  # deliberately slower: would fail the gate outright
+            else:
+                avg = 100
+            rows.append(bench_row(name, avg, avg + 1, "%08x" % i))
+        capture = capture_lines(rows, families="system")
+        profile = Profile(families=("system",), gates=frozenset())
+
+        result, artifacts = self.run_with_profile([capture, capture], profile)
+
+        self.assertEqual(result, 0)
+        self.assertNotIn("WAVE performance gate", artifacts[".md"])
+        self.assertNotIn("PASS", artifacts[".md"])
 
 
 if __name__ == "__main__":

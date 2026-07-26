@@ -1,4 +1,5 @@
 #include "workload.h"
+#include "families.h"
 #include "cycles.h"
 #include <cstring>
 
@@ -48,11 +49,10 @@ Result run_workload(const Workload& w)
 
 const Workload* find_workload(const char* name)
 {
-    const Workload* tables[] = { kCoreWorkloads, kVoiceWorkloads, kMemWorkloads, kModWorkloads, kAblWorkloads, kTapsWorkloads, kSamplerWorkloads, kBodyWorkloads };
-    const int       counts[] = { kCoreCount,     kVoiceCount,     kMemCount,     kModCount,     kAblCount,     kTapsCount,     kSamplerCount,     kBodyCount     };
-    for (int t = 0; t < 8; ++t)
-        for (int i = 0; i < counts[t]; ++i)
-            if (std::strcmp(tables[t][i].name, name) == 0) return &tables[t][i];
+    for (int f = 0; f < kFamilyCount; ++f)
+        for (int i = 0; i < kFamilies[f].count; ++i)
+            if (std::strcmp(kFamilies[f].rows[i].name, name) == 0)
+                return &kFamilies[f].rows[i];
     return nullptr;
 }
 

@@ -12,30 +12,55 @@ own `Makefile`, its own `main.cpp`, and links against `alt_sram.lds` only to
 reuse the same BOOT_SRAM placement the real firmware uses, so the timing
 context (SRAM vs SDRAM latency) matches production.
 
-## The one command
+## Profiles, and one command per profile
+
+The bench image cannot hold every workload family at once — at `d294556` it
+linked with 40 bytes of `SRAM_EXEC` and 24 bytes of `SRAM` to spare, and the
+next engine took it over. A profile selects which families an image
+contains.
+
+`bench/profiles.py` is the source of truth for what ships. On this branch:
+
+| profile | families | purpose |
+|---|---|---|
+| `system` | system | carries the WAVE acceptance gate; fits comfortably |
+| `full` (default) | system, voice, mem, mod, abl, taps, sampler | the complete run, as before profiles existed |
+
+**`full` currently fails to link, and that is deliberate, not broken.** The
+engine has outgrown the image; no profile change fixes that on its own (see
+the history above), and the point of profiles is to make forward progress
+possible without hiding the debt. Running `python run.py` with no
+`--profile` resolves to `full` and fails at the link step with an
+SRAM/SRAM_EXEC region overflow. For a build that actually links and
+measures today, name a profile:
 
 ```
-python run.py
+python run.py --profile system
 ```
 
-From `bench/`. This builds the bench firmware, verifies that the separately
-programmed WAVE bank matches the current linked QSPI payload, loads only the
-SRAM side of the image through the debug probe, and captures its
-semihosting output **twice** (`--repeat 2` is the default — see "Anchor
-mode's audio" below for what that means out loud), compares the two runs'
-unique row sets and checksums, enforces the matched WAVE/SYNTH acceptance
-gate on every run, and writes both complete captures to
-`../docs/bench/YYYY-MM-DD-<githash>.md` and `.csv`. The CSV carries a run
-index, the live QSPI payload digest, and a SHA-256 device fingerprint on every
-row; the Markdown records those identities and both offline/anchor tables.
-Exit code 0 means at least two runs passed every gate and both were persisted.
-A missing/extra/duplicate row, checksum drift, identity drift, non-numeric
-WAVE result, WAVE result slower than SYNTH, or WAVE maximum at or above the
-960,000-cycle block budget exits nonzero and writes no accepted evidence.
+From `bench/`. This builds the bench firmware for the named profile,
+verifies that the separately programmed WAVE bank matches the current
+linked QSPI payload, loads only the SRAM side of the image through the
+debug probe, and captures its semihosting output **twice** (`--repeat 2` is
+the default — see "Anchor mode's audio" below for what that means out
+loud), compares the two runs' unique row sets and checksums, enforces every
+gate the profile declares on every run, and writes both complete captures
+to `../docs/bench/YYYY-MM-DD-<githash>-<profile>.md` and `.csv`. The CSV
+carries a run index, the profile name, the live QSPI payload digest, and a
+SHA-256 device fingerprint on every row; the Markdown records those
+identities, a gate ledger (which gates ran and passed, and which were not
+applicable and why), and both offline/anchor tables. Exit code 0 means at
+least two runs passed every gate the profile declares and both were
+persisted. A missing/extra/duplicate row, checksum drift, identity drift,
+non-numeric WAVE result, WAVE result slower than SYNTH, or WAVE maximum at
+or above the 960,000-cycle block budget exits nonzero and writes no
+accepted evidence.
 
-Useful flags: `--repeat N` (default and minimum 2), `--out-dir DIR` (default
-`../docs/bench`), `--build-only`, `--no-build`, `--timeout SECONDS` (default
-600, per run), `--interface CFG` (see below), and `--program-qspi`.
+Useful flags: `--profile NAME` (default `full`; see the table above and
+`bench/profiles.py` for what ships), `--repeat N` (default and minimum 2),
+`--out-dir DIR` (default `../docs/bench`), `--build-only`, `--no-build`,
+`--timeout SECONDS` (default 600, per run), `--interface CFG` (see below),
+and `--program-qspi`.
 
 ## Programming the WAVE bank
 
@@ -56,13 +81,26 @@ expects one flat `build/bench.bin` beginning at the BOOT_SRAM app address;
 an image spanning SRAM and QSPI is not that format. `run.py` builds only the
 ELF and extracts the two physical payloads explicitly.
 
-Before the first WAVE run, or whenever `bench-qspi.bin` changes:
+Before the first WAVE run, or whenever `bench-qspi.bin` changes, run the
+four steps below. Every command names `--profile system`: it is the only
+profile that links today (see "Profiles, and one command per profile"
+above — the WAVE bank itself, `engine/synth/wt_bank.cpp`, is compiled
+unconditionally regardless of profile, so any linking profile would carry
+the same 65,024 bytes, but `system` is also the profile that exercises the
+WAVE acceptance gate this bank is for), and steps 1, 3, and 4 must agree on
+it exactly: the identity check in step 4 compares that rebuild's
+ELF/SRAM-ELF/QSPI/programmer-ELF hashes against the receipt step 3 wrote,
+and a different profile produces a different ELF even when the QSPI bytes
+are unchanged.
 
-1. Build with `python run.py --build-only`.
+1. Build with `python run.py --profile system --build-only`.
 2. Connect the ST-Link to the Seed's SWD header and power the Seed.
-3. Run `python run.py --no-build --program-qspi --build-only`. Do not put the
-   Seed into DFU mode.
-4. Run `python run.py --repeat 2`.
+3. Run `python run.py --profile system --no-build --program-qspi --build-only`.
+   Do not put the Seed into DFU mode. (`--no-build` means this step doesn't
+   use `--profile` to rebuild anything — it just re-derives the QSPI payload
+   from whatever `bench.elf` step 1 left behind — but passing `system` here
+   too keeps the sequence consistent and avoids relying on that detail.)
+4. Run `python run.py --profile system --repeat 2`.
 
 The programming command uses OpenOCD to load the helper below `0x24040000`
 and the raw payload at `0x24040000`; it never programs internal flash. The
