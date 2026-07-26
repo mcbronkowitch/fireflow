@@ -738,11 +738,30 @@ SVF and envelope). STRING's spec called Karplus-Strong "structurally cheaper"
 than SYNTH. Measured, it is the opposite, and the modal half it rejected is
 the affordable one.
 
-Not yet investigated: the bench configures the strings with
-`SetNonLinearity(0.4f)`, which selects the dispersion/curved-bridge path. That
-is a setting, not physics, and is the first thing to price before treating
-2 047 as the floor. `kVoices` stays undecided; Phase 3 of the plan does not
-start.
+**The nonlinearity was measured and acquitted**
+(`docs/bench/2026-07-26-f58644f-body.md`). `body/ks_string_pair_nolin` runs the
+same pair with `SetNonLinearity(0)` — no allpass stretch line, no dispersion
+noise, no curved bridge — and costs 173 956 cycles against 196 794. The entire
+nonlinearity is **119 cycles per string per sample, 11.6 %**. Per voice that is
+2 741 instead of 2 976: still 3.4× past the ladder.
+
+What remains is 906 cycles/sample for a Karplus-Strong stripped to a delay-line
+read, a DC blocker and a one-pole — arithmetic worth tens of cycles. The rest is
+`String::ProcessInternal` recomputing its parameter block **every sample, in
+both nonlinearity branches**: two `powf`, one `atanf`, one filter
+`SetFrequency`. Our own `abl/micro_powf` row prices `powf` at 198 cycles, so the
+two `powf` alone account for ~400 of the 906.
+
+This is the same defect as `daisysp::Resonator` — the one whose cost made the
+STRING spec rule modal territory out. Both halves of BODY were priced on
+libraries that recompute coefficients per sample; the modal half was already
+fixed here (`engine/body/mode_bank.h`, control-rate `_recompute()`), and the
+Karplus half has not been.
+
+`kVoices` stays undecided and Phase 3 does not start. The open question is no
+longer whether BODY is affordable as written — it is not — but what a
+control-rate port of the string costs, mirroring what ModeBank did. That is a
+measurement, not an estimate, and it has not been made.
 
 ### M5k — ZAP ⬜
 
