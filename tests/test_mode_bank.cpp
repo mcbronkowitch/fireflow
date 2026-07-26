@@ -52,20 +52,17 @@ TEST_CASE("ModeBank stretch makes the partials inharmonic") {
     stretched.init(48000.f);
     harmonic.set_params(220.f, 0.f, 0.8f, 0.8f);
     stretched.set_params(220.f, 1.f, 0.8f, 0.8f);
-    // Window: 256 samples (~5 ms), not the full 8192-sample ring-out. Stretch
-    // and brightness are coupled in _recompute() (bright *= 1 - stretch*0.3),
-    // so a stretched bank's upper partials have lower Q and die out faster
-    // than the harmonic bank's -- over a long window that decay difference
-    // dominates and *reverses* the crossing count (measured: harm=1802,
-    // stretch=1005 over 8192 samples). That is the same effect the "damping
-    // sets ring time" test already covers, not inharmonicity. A short window
-    // taken right after the strike, before the decay rates diverge, isolates
-    // the frequency-content difference the test name is actually about
-    // (measured: harm=56, stretch=69 over 256 samples -- stays same-signed
-    // with a comfortable margin from 128 samples up to ~550, where the decay
-    // effect starts to win).
-    const auto a = strike(harmonic, 256);
-    const auto b = strike(stretched, 256);
+    // Full 8192-sample window, as in the brief. With the corrected two-
+    // accumulator ladder (harmonic * stretch_factor, not one additive sum),
+    // stretch scales with the harmonic index -- mode 23's stretch_factor
+    // reaches ~202x at stiffness 0.4 -- so the stretched bank's partials sit
+    // far enough above the harmonic series that they dominate the crossing
+    // count at every window size from 32 samples out past 8192 (measured:
+    // harm=1802, stretch=2183 at 8192; margin stays positive and grows
+    // monotonically at every checkpoint in between). No crossover exists, so
+    // no early window is needed.
+    const auto a = strike(harmonic, 8192);
+    const auto b = strike(stretched, 8192);
     bool differs = false;
     for (size_t i = 0; i < a.size(); ++i) if (a[i] != b[i]) differs = true;
     CHECK(differs);

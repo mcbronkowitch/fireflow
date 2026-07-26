@@ -3,6 +3,30 @@
 
 namespace spky {
 
+namespace {
+
+// Ported character-for-character from daisysp::NthHarmonicCompensation
+// (lib/DaisySP/Source/PhysicalModeling/resonator.cpp). Rescales f0 so the
+// fundamental's perceived pitch stays put as stiffness (stretch) grows,
+// instead of drifting. Includes the negative-stiffness branch even though
+// this engine's stretch -> stiffness curve (0..0.4) never produces a
+// negative value; the reference takes stiffness both ways and this is a
+// faithful port of the whole function, not the branch BODY happens to use.
+float NthHarmonicCompensation(int n, float stiffness) {
+    float stretch_factor = 1.0f;
+    for (int i = 0; i < n - 1; ++i) {
+        stretch_factor += stiffness;
+        if (stiffness < 0.0f) {
+            stiffness *= 0.93f;
+        } else {
+            stiffness *= 0.98f;
+        }
+    }
+    return 1.0f / stretch_factor;
+}
+
+} // namespace
+
 void ModeBank::init(float sample_rate) {
     _sr = sample_rate;
     reset();
@@ -27,13 +51,16 @@ void ModeBank::set_params(float f0_hz, float stretch, float damping,
 }
 
 // Everything below runs once per control tick, never per sample.
+//
+// The mode ladder (harmonic / stretch_factor / NthHarmonicCompensation) is
+// ported character-for-character from daisysp::Resonator::Process
+// (lib/DaisySP/Source/PhysicalModeling/resonator.cpp). The knob curve that
+// feeds it -- how _stretch maps to stiffness -- is this engine's own:
+// Resonator derives stiffness from a `structure` control via CalcStiff,
+// which this engine has no knob for (spec 2), so CalcStiff is not ported.
 void ModeBank::_recompute() {
-    // Stiffness drives how far the partials depart from the harmonic series:
-    // 0 = harmonic (string), 1 = strongly stretched (bell). Ported from
-    // Resonator's CalcStiff/structure path, reduced to the branch this engine
-    // uses (positive stiffness only -- negative stiffness compresses partials
-    // toward the fundamental, which the MATL axis reaches through the string
-    // side instead).
+    // 0 = harmonic (string), 1 = strongly stretched (bell). This curve is
+    // tuning material, not a port of anything -- see the comment above.
     const float stiffness = _stretch * 0.4f;
 
     // Q from damping: the Resonator mapping, evaluated once.
@@ -47,14 +74,24 @@ void ModeBank::_recompute() {
 
     const float amp0 = std::cos(kPosition * 2.f * kPi) * 0.25f;
 
+    // f0, in cycles/sample, rescaled by NthHarmonicCompensation so the
+    // fundamental's pitch does not drift as stiffness grows.
+    const float f0_norm = (_f0 / _sr) * NthHarmonicCompensation(3, stiffness);
+
+    // Two accumulators, multiplied per mode -- not one additive one.
+    // `harmonic` steps by f0_norm each mode (n * f0_norm, the harmonic
+    // series); `stretch_factor` accumulates decaying stiffness and is what
+    // pulls the ladder away from that series. mode_frequency = harmonic *
+    // stretch_factor is what makes stretch scale with the harmonic index
+    // instead of growing linearly.
+    float harmonic = f0_norm;
     float stretch_factor = 1.f;
     float stiff_iter = stiffness;
     float loss = 1.f;
 
     for (int i = 0; i < kModes; ++i) {
-        const float mode_hz = _f0 * stretch_factor;
-        float f = mode_hz / _sr;                 // cycles per sample
-        if (f > 0.49f) f = 0.49f;                // Nyquist guard
+        float f = harmonic * stretch_factor;      // cycles per sample
+        if (f >= 0.499f) f = 0.499f;              // Nyquist guard
 
         const float attenuation = 1.f - f * 2.f;
         const float q = 1.f + f * q_base * loss;
@@ -67,10 +104,18 @@ void ModeBank::_recompute() {
         _svf[b].set_coeffs(s, g, r + g, h);
         _gain[b][s] = amp0 * attenuation;
 
-        // Advance to the next partial. stretch_factor grows superlinearly with
-        // stiffness -- that is what turns a harmonic series into a bell.
-        stretch_factor += 1.f + stiff_iter;
-        stiff_iter *= 0.98f;
+        // Advance to the next partial.
+        stretch_factor += stiff_iter;
+        if (stiff_iter < 0.f) {
+            // Keep partials from folding back into negative frequencies.
+            // This engine's stretch never makes stiffness negative; the
+            // branch is kept because it is part of the reference's ladder.
+            stiff_iter *= 0.93f;
+        } else {
+            // Adds a few extra partials in the highest frequencies.
+            stiff_iter *= 0.98f;
+        }
+        harmonic += f0_norm;
         loss *= q_loss;
     }
 }
