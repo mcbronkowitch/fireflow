@@ -20,6 +20,8 @@ if RUNNER_SPEC and RUNNER_SPEC.loader:
 else:
     runner = None
 
+from profiles import WAVE_ACCEPTANCE, resolve
+
 QSPI_SHA256 = "a" * 64
 DEVICE_ID = "00112233445566778899aabb"
 # Registry order from bench/families.cpp -- every real capture below carries
@@ -495,6 +497,72 @@ class RunContract(unittest.TestCase):
             "maximum 310100 < 960000.",
             md_text,
         )
+
+
+class ProfileContract(unittest.TestCase):
+    def system_rows(self, wave_avg=200):
+        """A complete row set for the system-only profile. wave_2x4 defaults
+        to well under synth_2x4 (400) so the WAVE gate passes; callers that
+        want it to fail the gate pass a larger wave_avg."""
+        names = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["system"]
+        rows = []
+        for i, name in enumerate(names):
+            if name == "synth_2x4":
+                avg = 400
+            elif name == "wave_2x4":
+                avg = wave_avg
+            else:
+                avg = 100
+            rows.append(bench_row(name, avg, avg + 1, "%08x" % i))
+        return rows
+
+    def test_system_profile_validates_against_its_filtered_rowset(self):
+        """A system-only capture is complete for the system profile."""
+        capture = runner.parse(
+            capture_lines(self.system_rows(), families="system")
+        )
+
+        runner.validate_captures([capture, capture], resolve("system"))
+
+    def test_reported_families_must_match_the_requested_profile(self):
+        """A stale image built for a different profile is rejected."""
+        capture = runner.parse(
+            # firmware says more than asked
+            capture_lines(self.system_rows(), families="system voice")
+        )
+
+        with self.assertRaisesRegex(runner.BenchValidationError, "families"):
+            runner.validate_captures([capture, capture], resolve("system"))
+
+    def test_unknown_profile_name_is_rejected(self):
+        with self.assertRaises(KeyError):
+            resolve("nonsense")
+
+    def test_a_profile_without_wave_acceptance_does_not_run_it(self):
+        """The gate must be genuinely skipped, not accidentally satisfied.
+
+        Neither shipped profile omits wave_acceptance, so this uses a
+        synthetic one. Without it, nothing proves the gate is actually
+        conditional -- an `if WAVE_ACCEPTANCE in profile.gates` that was
+        never false would pass every test in this file.
+        """
+        from profiles import Profile
+
+        # wave_2x4 deliberately SLOWER than synth_2x4: this capture would
+        # fail wave_acceptance outright. A profile that does not declare the
+        # gate must accept it anyway.
+        capture = runner.parse(
+            capture_lines(self.system_rows(wave_avg=900), families="system")
+        )
+
+        ungated = Profile(families=("system",), gates=frozenset())
+        runner.validate_captures([capture, capture], ungated)  # accepted
+
+        gated = Profile(
+            families=("system",), gates=frozenset({WAVE_ACCEPTANCE})
+        )
+        with self.assertRaises(runner.BenchValidationError):
+            runner.validate_captures([capture, capture], gated)  # rejected
 
 
 if __name__ == "__main__":

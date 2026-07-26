@@ -15,6 +15,7 @@ import time
 import queue
 import threading
 
+from profiles import DEFAULT_PROFILE, WAVE_ACCEPTANCE, resolve
 from qspi_tools import (
     QspiGuardError,
     prepare_split_artifacts,
@@ -46,7 +47,7 @@ OPENOCD_TCL_ADDRESS = ("127.0.0.1", 6666)
 OPENOCD_SHUTDOWN = b"shutdown\x1a"
 
 
-def build():
+def build(families):
     # Do not ask libDaisy's default `all` target for bench.bin: one flat
     # binary spanning SRAM (0x24000000) and QSPI (0x90040000) would encode the
     # address gap. Build the ELF, then extract two explicit artifacts.
@@ -55,7 +56,12 @@ def build():
         cwd=PROGRAMMER_DIR,
         check=True,
     )
-    subprocess.run(["make", "-j8", "build/bench.elf"], cwd=HERE, check=True)
+    subprocess.run(
+        ["make", "-j8", "BENCH_FAMILIES=%s" % " ".join(families),
+         "build/bench.elf"],
+        cwd=HERE,
+        check=True,
+    )
     return prepare_existing_artifacts()
 
 
@@ -236,11 +242,15 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "sampler_worst_nomotion",
     ),
 }
-BENCH_PROTOCOL_ROWSET = frozenset(
-    (family, name)
-    for family, names in BENCH_PROTOCOL_ROWS_BY_FAMILY.items()
-    for name in names
-)
+
+
+def protocol_rowset(profile):
+    """The (family, name) pairs a capture from this profile must contain."""
+    return frozenset(
+        (family, name)
+        for family in profile.families
+        for name in BENCH_PROTOCOL_ROWS_BY_FAMILY[family]
+    )
 
 
 def parse(lines):
@@ -287,8 +297,9 @@ class BenchValidationError(ValueError):
     pass
 
 
-def validate_captures(captures):
+def validate_captures(captures, profile):
     """Reject any repeat capture that cannot be accepted as hardware evidence."""
+    expected_rowset = protocol_rowset(profile)
     expected_rows = None
     expected_identity = None
     for run_index, (header, rows, _) in enumerate(captures, start=1):
@@ -300,6 +311,14 @@ def validate_captures(captures):
                 "run %d QSPI digest or device fingerprint differs from run 1"
                 % run_index
             )
+        reported = tuple(header["families"])
+        if reported != tuple(profile.families):
+            raise BenchValidationError(
+                "run %d reports families %s but the profile requested %s "
+                "(stale image? try without --no-build)"
+                % (run_index, " ".join(reported) or "none",
+                   " ".join(profile.families))
+            )
         row_keys = [(row["family"], row["name"]) for row in rows]
         keys = set(row_keys)
         if len(keys) != len(row_keys):
@@ -310,9 +329,9 @@ def validate_captures(captures):
                 "run %d has duplicate bench rows: %s"
                 % (run_index, ", ".join(duplicates))
             )
-        if keys != BENCH_PROTOCOL_ROWSET:
-            missing = sorted(BENCH_PROTOCOL_ROWSET - keys)
-            extra = sorted(keys - BENCH_PROTOCOL_ROWSET)
+        if keys != expected_rowset:
+            missing = sorted(expected_rowset - keys)
+            extra = sorted(keys - expected_rowset)
             fmt = lambda items: ", ".join(
                 "%s/%s" % item for item in items
             ) or "none"
@@ -321,45 +340,46 @@ def validate_captures(captures):
                 "(missing: %s; extra: %s)"
                 % (
                     run_index,
-                    len(BENCH_PROTOCOL_ROWSET),
+                    len(expected_rowset),
                     fmt(missing),
                     fmt(extra),
                 )
             )
-        names = {row["name"] for row in rows}
-        required = {"synth_2x4", "wave_2x4"}
-        if not required.issubset(names):
-            raise BenchValidationError(
-                "run %d is missing WAVE acceptance rows: %s"
-                % (run_index, ", ".join(sorted(required - names)))
-            )
-        named = by_name(rows)
-        synth = named["synth_2x4"]
-        wave = named["wave_2x4"]
-        try:
-            synth_avg = int(synth["avg_cyc"])
-            synth_max = int(synth["max_cyc"])
-            wave_avg = int(wave["avg_cyc"])
-            wave_max = int(wave["max_cyc"])
-        except (TypeError, ValueError) as error:
-            raise BenchValidationError(
-                "run %d has a non-numeric WAVE acceptance result" % run_index
-            ) from error
-        if wave_avg > synth_avg:
-            raise BenchValidationError(
-                "run %d WAVE average %d exceeds SYNTH average %d"
-                % (run_index, wave_avg, synth_avg)
-            )
-        if wave_max > synth_max:
-            raise BenchValidationError(
-                "run %d WAVE maximum %d exceeds SYNTH maximum %d"
-                % (run_index, wave_max, synth_max)
-            )
-        if wave_max >= BUDGET_CYCLES:
-            raise BenchValidationError(
-                "run %d WAVE maximum %d is not below the %d-cycle block budget"
-                % (run_index, wave_max, BUDGET_CYCLES)
-            )
+        if WAVE_ACCEPTANCE in profile.gates:
+            names = {row["name"] for row in rows}
+            required = {"synth_2x4", "wave_2x4"}
+            if not required.issubset(names):
+                raise BenchValidationError(
+                    "run %d is missing WAVE acceptance rows: %s"
+                    % (run_index, ", ".join(sorted(required - names)))
+                )
+            named = by_name(rows)
+            synth = named["synth_2x4"]
+            wave = named["wave_2x4"]
+            try:
+                synth_avg = int(synth["avg_cyc"])
+                synth_max = int(synth["max_cyc"])
+                wave_avg = int(wave["avg_cyc"])
+                wave_max = int(wave["max_cyc"])
+            except (TypeError, ValueError) as error:
+                raise BenchValidationError(
+                    "run %d has a non-numeric WAVE acceptance result" % run_index
+                ) from error
+            if wave_avg > synth_avg:
+                raise BenchValidationError(
+                    "run %d WAVE average %d exceeds SYNTH average %d"
+                    % (run_index, wave_avg, synth_avg)
+                )
+            if wave_max > synth_max:
+                raise BenchValidationError(
+                    "run %d WAVE maximum %d exceeds SYNTH maximum %d"
+                    % (run_index, wave_max, synth_max)
+                )
+            if wave_max >= BUDGET_CYCLES:
+                raise BenchValidationError(
+                    "run %d WAVE maximum %d is not below the %d-cycle block budget"
+                    % (run_index, wave_max, BUDGET_CYCLES)
+                )
         if expected_rows is None:
             expected_rows = by_name(rows)
             continue
@@ -706,15 +726,27 @@ def main():
     )
     ap.add_argument("--repeat", type=int, default=2,
                     help="runs to compare for the determinism check")
+    ap.add_argument(
+        "--profile", default=DEFAULT_PROFILE,
+        help="which workload families to build and measure "
+             "(see bench/profiles.py)")
     ap.add_argument("--out-dir", default=os.path.join(REPO, "docs", "bench"))
     args = ap.parse_args()
+    try:
+        profile = resolve(args.profile)
+    except KeyError as error:
+        print("ERROR: %s" % error, file=sys.stderr)
+        return 2
     if not args.build_only and args.repeat < 2:
         print("ERROR: hardware evidence requires at least two runs",
               file=sys.stderr)
         return 2
 
     try:
-        identity = build() if not args.no_build else prepare_existing_artifacts()
+        identity = (
+            build(profile.families) if not args.no_build
+            else prepare_existing_artifacts()
+        )
         if args.program_qspi or not args.build_only:
             require_clean_tree(REPO)
         if args.program_qspi:
@@ -765,7 +797,7 @@ def main():
         captures.append(parsed)
 
     try:
-        validate_captures(captures)
+        validate_captures(captures, profile)
     except BenchValidationError as error:
         print("ERROR: %s" % error, file=sys.stderr)
         return 2
