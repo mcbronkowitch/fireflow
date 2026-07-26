@@ -42,6 +42,18 @@ public:
         _burst = 0;
         _continuous = false;
         _fresh = false;
+        // Re-arm interval for the click zone's bowed form (spec 2: "in FLOW
+        // the same character becomes continuous excitation"). A click is a
+        // single impulse through the one-pole; a bowed click is a *stream*
+        // of them, so continuous mode re-fires the impulse on a timer rather
+        // than switching to a different signal (that would collapse into
+        // the noise-burst zone, which is exactly what the zone-distinctness
+        // tests guard against). The interval is TUNING MATERIAL, like every
+        // other zone constant here -- 5 ms is a placeholder for "audibly a
+        // rapid rattle, not a buzz."
+        _click_interval = static_cast<int>(0.005f * _sr);
+        if (_click_interval < 1) _click_interval = 1;
+        _click_counter = 0;
         _recompute_filter();
     }
 
@@ -70,6 +82,7 @@ public:
         _burst = 0;
         _gate = 0.f;
         _fresh = true;
+        _click_counter = 0;   // next continuous-mode re-arm check fires immediately
         _lp.reset();   // clean impulse response per strike, no bleed-through
     }
 
@@ -80,7 +93,15 @@ public:
         float s = 0.f;
 
         if (z < 1.f) {                              // zone 0: click
-            s = _lp.process(_fresh ? 1.f : 0.f);
+            bool fire = _fresh;
+            if (_continuous) {                      // bow: re-arm the impulse on a timer
+                if (_click_counter <= 0) {
+                    fire = true;
+                    _click_counter = _click_interval;
+                }
+                --_click_counter;
+            }
+            s = _lp.process(fire ? 1.f : 0.f);
         } else if (z < 2.f) {                        // zone 1: noise burst
             s = _lp.process(_rng.next_bipolar());
         } else {                                     // zone 2: sputter -> ping
@@ -132,6 +153,7 @@ private:
     float _char = 0.f, _decay = 0.f, _inc = 0.f;
     float _env = 0.f, _phase = 0.f, _gate = 0.f;
     int   _burst = 0;
+    int   _click_counter = 0, _click_interval = 240;   // see init(): 5 ms at 48 kHz
     bool  _continuous = false, _fresh = false;
 };
 
