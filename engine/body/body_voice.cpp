@@ -11,6 +11,22 @@ namespace spky {
 namespace {
 constexpr float kDriftDetuneCt = 3.f;     // micro-detune drift ceiling (+/-3 ct)
 constexpr float kDriftPanAmt   = 0.25f;   // pan drift ceiling around the fan slot
+
+// Mode-bank stretch with COLOR at minimum, i.e. the direction DETUNE spreads
+// the bank in before COLOR bends it (see _apply_params). TUNING MATERIAL --
+// no test pins this value, only the property that it is non-zero.
+//
+// Where 0.3 comes from, so it can be argued with. Two ends bound it:
+//   - big enough that DETUNE is audibly doing something at COLOR 0. 0.3
+//     gives stiffness 0.12, which puts the 24th partial about 3.2x above its
+//     harmonic position -- unmistakably a bell rather than a string.
+//   - small enough that COLOR keeps most of the compressed side. character
+//     runs to -1, so the sum reaches -0.7: 70 % of the drum/plate range is
+//     still reachable, and the deepest real chord (a quartal voicing, -0.67)
+//     still lands at -0.37, comfortably compressed.
+// It is deliberately NOT 1.0 (the pre-Task-8b behaviour, where DETUNE alone
+// drove the bank): that would leave COLOR able to subtract only.
+constexpr float kBaseStretch = 0.3f;
 } // namespace
 
 void BodyVoice::init(float sample_rate, uint32_t seed) {
@@ -115,18 +131,31 @@ void BodyVoice::_apply_params() {
     _str_a.set_params(_freq * ratio_a, _brightness, damp, m);
     _str_b.set_params(_freq * ratio_b, _brightness, damp, m);
 
-    // The bank's stretch is DETUNE times COLOR, its Q from DECAY, its
-    // roll-off from FILTER. All of this is control rate -- ModeBank::
-    // set_params is the one place the coefficient math is allowed to run.
+    // The bank's stretch is DETUNE times a BASE DIRECTION that COLOR bends,
+    // its Q from DECAY, its roll-off from FILTER. All of this is control rate
+    // -- ModeBank::set_params is the one place the coefficient math is
+    // allowed to run.
     //
-    // The split is spec §7: DETUNE is the AMOUNT of inharmonicity and keeps
-    // exactly the curve §5 gives it (unsigned, /140 ct, unchanged); COLOR is
-    // the signed CHARACTER, which way. They MULTIPLY, so "DETUNE = 0 is
-    // harmonic and COLOR is inaudible" is arithmetic rather than a special
-    // case somebody can forget to write -- and no COLOR value can make a
-    // DETUNE-0 deck inharmonic.
+    // DETUNE is the AMOUNT of inharmonicity and keeps exactly the curve §5
+    // gives it; COLOR is the signed CHARACTER, which way (§7). They MULTIPLY,
+    // so "DETUNE = 0 is harmonic and COLOR is inaudible" stays arithmetic
+    // rather than a special case somebody can forget to write.
+    //
+    // kBaseStretch is what stops COLOR at minimum from silencing DETUNE's
+    // half of the knob (user decision, 2026-07-26, review round on Task 8b):
+    // character is exactly 0 for a one-note chord, so without a base the bank
+    // was permanently harmonic with COLOR down -- and at MATL = 1, where the
+    // strings are inaudible, DETUNE was a dead control. Spec §5 wants DETUNE
+    // to be "one 'how broken is this material' axis" on its own; §7 wants
+    // COLOR to choose the direction. A positive base gives both: DETUNE
+    // always spreads the bank toward the bell, COLOR shifts which way from
+    // there, and amount = 0 still zeroes the whole product.
     const float amount = clampf(_detune_ct / 140.f, 0.f, 1.f);
-    _bank.set_params(_freq, amount * _material_char,
+    // Clamped because ModeBank::set_params's contract is -1..+1 and the sum
+    // can leave it: only a semitone cluster (character ~ +0.95) saturates,
+    // and a chord that broken is already asking for the maximum.
+    const float stretch = clampf(kBaseStretch + _material_char, -1.f, 1.f);
+    _bank.set_params(_freq, amount * stretch,
                      _hold ? 0.f : _damping, _brightness);
 
     _exciter.set_freq(_freq);

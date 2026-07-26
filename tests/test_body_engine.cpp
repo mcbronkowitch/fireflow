@@ -130,6 +130,44 @@ TEST_CASE("body engine: DETUNE > 0 makes COLOR audible") {
     CHECK(differs);
 }
 
+TEST_CASE("body engine: DETUNE reaches the bank with COLOR at minimum") {
+    // The assertion whose absence let a dead knob through review. COLOR at
+    // minimum is a one-note chord, whose character is exactly 0; at MATL = 1
+    // the strings are mixed out entirely, so the mode bank is the ONLY thing
+    // that can carry DETUNE. If the bank's stretch were nothing but
+    // amount * character, this corner of the panel would do nothing at all --
+    // which the fork's "every control must carry" rule does not allow.
+    //
+    // What is pinned is the property (DETUNE moves the bank), not the base
+    // value that makes it true: kBaseStretch is tuning material.
+    auto run = [](float detune) {
+        BodyEngine e;
+        e.set_seed(7u);
+        e.init(48000.f);
+        e.set_detune(detune);
+        float t[LANE_COUNT] = { 1.f, 0.7f, 0.45f, 0.f, 1.f };   // MATL = 1
+        e.set_targets(t, 0.f);
+        e.trigger(0.35f);                                       // COLOR at 0
+        std::vector<float> out(8192);
+        for (int i = 0; i < 8192; ++i) {
+            float l = 0.f, r = 0.f;
+            e.process(l, r);
+            out[i] = l + r;
+        }
+        return out;
+    };
+    const auto dry = run(0.f);
+    const auto wide = run(1.f);
+    bool differs = false;
+    for (size_t i = 0; i < dry.size(); ++i) if (dry[i] != wide[i]) differs = true;
+    CHECK(differs);
+
+    // ...and the deck is audible, so the claim cannot be satisfied by silence.
+    float peak = 0.f;
+    for (float s : wide) peak = std::max(peak, std::fabs(s));
+    CHECK(peak > 0.001f);
+}
+
 TEST_CASE("body engine: a chord struck between control ticks gets its material now") {
     // Triggers do not land on control-tick boundaries -- Part fires them from
     // the step clock. The material therefore has to reach the voice on the
