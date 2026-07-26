@@ -133,8 +133,9 @@ playable Rack module and a permanent part of the workflow, not yet a finished
 instrument.
 
 **[Download the latest release](https://github.com/mcbronkowitch/spotymod/releases/latest)**
-— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.13.1**
-(Synth, Sampler, and WAVE, including the independent FORM/SONG phrase arranger). Unpack into Rack's user plugin
+— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.13.2**
+(Synth, Sampler, and WAVE, the independent FORM/SONG phrase arranger, and the
+STEP mod grid lock). Unpack into Rack's user plugin
 directory and restart Rack.
 
 Building it yourself needs its own toolchain (a native MinGW/GCC compiler, not
