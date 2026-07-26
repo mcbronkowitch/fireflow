@@ -23,21 +23,51 @@ C_USR_FLAGS = -ffast-math -funroll-loops
 
 GIT_HASH = $(shell git -C .. rev-parse --short HEAD)
 
+# --- workload family selection ---------------------------------------
+# Which families this image contains. Override on the command line, or let
+# run.py pass it from a profile:
+#
+#   make BENCH_FAMILIES="system voice" build/bench.elf
+#
+# Selecting a subset drops the family's workload translation unit AND its
+# BENCH_FAMILY_* define, so families.cpp's registry entry disappears too; the
+# engine code only that family referenced then goes with --gc-sections. That
+# is where the SRAM comes back.
+BENCH_FAMILIES ?= system voice mem mod abl taps sampler
+
+FAMILY_SOURCE_system  = workloads_system.cpp
+FAMILY_SOURCE_voice   = workloads_daisysp.cpp
+FAMILY_SOURCE_mem     = workloads_memory.cpp
+FAMILY_SOURCE_mod     = workloads_mod.cpp
+FAMILY_SOURCE_abl     = workloads_abl.cpp
+FAMILY_SOURCE_taps    = workloads_taps.cpp
+FAMILY_SOURCE_sampler = workloads_sampler.cpp
+
+FAMILY_DEFINE_system  = BENCH_FAMILY_SYSTEM
+FAMILY_DEFINE_voice   = BENCH_FAMILY_VOICE
+FAMILY_DEFINE_mem     = BENCH_FAMILY_MEM
+FAMILY_DEFINE_mod     = BENCH_FAMILY_MOD
+FAMILY_DEFINE_abl     = BENCH_FAMILY_ABL
+FAMILY_DEFINE_taps    = BENCH_FAMILY_TAPS
+FAMILY_DEFINE_sampler = BENCH_FAMILY_SAMPLER
+
+# Fail loudly on a typo rather than silently building a smaller image.
+$(foreach f,$(BENCH_FAMILIES),\
+  $(if $(FAMILY_SOURCE_$(f)),,$(error unknown bench family '$(f)')))
+
+FAMILY_SOURCES = $(foreach f,$(BENCH_FAMILIES),$(FAMILY_SOURCE_$(f)))
+C_DEFS += $(foreach f,$(BENCH_FAMILIES),-D$(FAMILY_DEFINE_$(f))=1)
+
 CPP_SOURCES = \
 	main.cpp \
 	report.cpp \
 	qspi_digest.cpp \
 	rand_shim.cpp \
 	runner.cpp \
+	families.cpp \
 	anchor.cpp \
 	mem.cpp \
-	workloads_system.cpp \
-	workloads_daisysp.cpp \
-	workloads_memory.cpp \
-	workloads_mod.cpp \
-	workloads_abl.cpp \
-	workloads_taps.cpp \
-	workloads_sampler.cpp \
+	$(FAMILY_SOURCES) \
 	../engine/mod/lane.cpp \
 	../engine/sampler/sampler_engine.cpp \
 	../engine/sampler/sample_buffer.cpp \

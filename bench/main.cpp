@@ -1,6 +1,7 @@
 #include <daisy_seed.h>
 #include "report.h"
 #include "workload.h"
+#include "families.h"
 #include "cycles.h"
 #include "qspi_digest.h"
 #include "rand_shim.h"
@@ -59,36 +60,12 @@ int main(void)
         sizeof(spky::wt::kBankSamples),
         qspi_sha256);
     bench::report_begin(BENCH_GIT_HASH, qspi_sha256);
-    for (int i = 0; i < bench::kCoreCount; ++i) {
-        const bench::Workload& w = bench::kCoreWorkloads[i];
-        bench::report_row(w, bench::run_workload(w));
-    }
-    for (int i = 0; i < bench::kVoiceCount; ++i) {
-        const bench::Workload& w = bench::kVoiceWorkloads[i];
-        bench::report_row(w, bench::run_workload(w));
-    }
-    for (int i = 0; i < bench::kMemCount; ++i) {
-        const bench::Workload& w = bench::kMemWorkloads[i];
-        bench::report_row(w, bench::run_workload(w));
-    }
-    for (int i = 0; i < bench::kModCount; ++i) {
-        const bench::Workload& w = bench::kModWorkloads[i];
-        bench::report_row(w, bench::run_workload(w));
-    }
-    for (int i = 0; i < bench::kAblCount; ++i) {
-        const bench::Workload& w = bench::kAblWorkloads[i];
-        bench::report_row(w, bench::run_workload(w));
-    }
-    for (int i = 0; i < bench::kTapsCount; ++i) {
-        const bench::Workload& w = bench::kTapsWorkloads[i];
-        bench::report_row(w, bench::run_workload(w));
-    }
-    // Last on purpose: the sampler rows use the 8 MB SDRAM arena as their
-    // load source and overwrite whatever family 3 and the taps rows left in
-    // it. Nothing downstream reads it.
-    for (int i = 0; i < bench::kSamplerCount; ++i) {
-        const bench::Workload& w = bench::kSamplerWorkloads[i];
-        bench::report_row(w, bench::run_workload(w));
+    for (int f = 0; f < bench::kFamilyCount; ++f) {
+        const bench::Family& fam = bench::kFamilies[f];
+        for (int i = 0; i < fam.count; ++i) {
+            const bench::Workload& w = fam.rows[i];
+            bench::report_row(w, bench::run_workload(w));
+        }
     }
 
     // Offline is optimistic: no cache/DMA contention from a live audio

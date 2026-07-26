@@ -1,0 +1,50 @@
+#include "families.h"
+
+namespace bench {
+
+const Family kFamilies[] = {
+#if BENCH_FAMILY_SYSTEM
+    { "system",  kCoreWorkloads,    kCoreCount    },
+#endif
+#if BENCH_FAMILY_VOICE
+    { "voice",   kVoiceWorkloads,   kVoiceCount   },
+#endif
+#if BENCH_FAMILY_MEM
+    { "mem",     kMemWorkloads,     kMemCount     },
+#endif
+#if BENCH_FAMILY_MOD
+    { "mod",     kModWorkloads,     kModCount     },
+#endif
+#if BENCH_FAMILY_ABL
+    { "abl",     kAblWorkloads,     kAblCount     },
+#endif
+#if BENCH_FAMILY_TAPS
+    { "taps",    kTapsWorkloads,    kTapsCount    },
+#endif
+#if BENCH_FAMILY_SAMPLER
+    // Last on purpose: the sampler rows use the 8 MB SDRAM arena as their load
+    // source and overwrite whatever earlier families left in it.
+    { "sampler", kSamplerWorkloads, kSamplerCount },
+#endif
+};
+
+const int kFamilyCount = sizeof(kFamilies) / sizeof(kFamilies[0]);
+
+static_assert(sizeof(kFamilies) / sizeof(kFamilies[0]) > 0,
+              "at least one BENCH_FAMILY_* must be defined");
+
+const char* families_csv()
+{
+    static char buf[128];
+    char*       out = buf;
+    const char* end = buf + sizeof(buf) - 1;
+    for (int i = 0; i < kFamilyCount; ++i) {
+        if (i > 0 && out < end) *out++ = ' ';
+        for (const char* c = kFamilies[i].name; *c && out < end; ++c)
+            *out++ = *c;
+    }
+    *out = '\0';
+    return buf;
+}
+
+} // namespace bench
