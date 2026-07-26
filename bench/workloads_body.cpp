@@ -108,12 +108,51 @@ float proc_ks_pair()
     return acc;
 }
 
+// --- body/ks_string_pair_nolin: the same pair with dispersion OFF ---------
+// SetNonLinearity(0) sends String::Process down the CURVED_BRIDGE branch with
+// a zero amount: no allpass stretch line, no rand()/fonepole dispersion noise,
+// bridge_curving and ap_gain both zero. Everything the nonlinearity buys is
+// gone; a plain ReadHermite plus the damping filter remains.
+//
+// What it does NOT remove: the per-sample parameter block at the top of
+// ProcessInternal (two powf, one atanf, one SetFrequency), which runs
+// unconditionally in both branches. That is the point of this row. Against
+// ks_string_pair it splits the string's cost in two -- what the nonlinearity
+// costs, and what the recomputation costs -- and only the second is a defect
+// this fork already knows how to fix (see engine/body/mode_bank.h, and the
+// same shape in daisysp::Resonator).
+void setup_ks_pair_nolin()
+{
+    auto& group = g_body_arena.emplace<KsGroup>();
+    group.a.Init(kSampleRate);
+    group.b.Init(kSampleRate);
+    group.a.SetFreq(220.f);
+    group.b.SetFreq(220.f * 1.008f);
+    group.a.SetBrightness(0.7f);
+    group.b.SetBrightness(0.7f);
+    group.a.SetDamping(0.7f);
+    group.b.SetDamping(0.7f);
+    group.a.SetNonLinearity(0.f);       // the only difference from setup_ks_pair
+    group.b.SetNonLinearity(0.f);
+}
+
+float proc_ks_pair_nolin()
+{
+    auto& group = g_body_arena.get<KsGroup>();
+    const float* in = test_input();
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i)
+        acc += group.a.Process(in[i]) + group.b.Process(in[i]);
+    return acc;
+}
+
 } // namespace
 
 const Workload kBodyWorkloads[] = {
     { "body", "mode_bank_24",        setup_mode_bank,        proc_mode_bank        },
     { "body", "mode_bank_24_static", setup_mode_bank_static, proc_mode_bank_static },
     { "body", "ks_string_pair",      setup_ks_pair,          proc_ks_pair          },
+    { "body", "ks_string_pair_nolin", setup_ks_pair_nolin,   proc_ks_pair_nolin    },
 };
 const int kBodyCount = sizeof(kBodyWorkloads) / sizeof(kBodyWorkloads[0]);
 
