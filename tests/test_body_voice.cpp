@@ -267,6 +267,56 @@ TEST_CASE("BodyVoice MATL endpoints sound different") {
     CHECK(es != eb);
 }
 
+// Fix round 1 (spec 2026-07-26 body-resonator, Task 7 review): the endpoint
+// test above cannot tell a real equal-power crossfade from a binary switch
+// that happens to agree at MATL 0 and 1 -- e.g.
+//   _mix_string = (m >= 1.f) ? 0.f : 1.f;
+//   _mix_modal  = (m >= 1.f) ? 1.f : 0.f;
+// satisfies every existing BodyVoice assertion (endpoints unchanged, 7/7
+// green) while the modal half stays completely dead for every MATL short of
+// 1.0. Checking that the midpoint's *waveform* merely differs from the
+// endpoints does not catch this either: nonlinearity is fed `m` directly
+// regardless of the mix gains, so the string's own dispersion character
+// still shifts with MATL even when mix_modal is hard-zeroed -- confirmed by
+// applying the mutation above and observing the midpoint output still
+// differed sample-for-sample from both endpoints (1797/2000 and 2000/2000
+// samples respectively), passing a naive "differs from both" check.
+//
+// Energy isolates the mix gains from that confound: with the real
+// sqrt(1-m)/sqrt(m) blend, total energy rises smoothly and monotonically
+// from the string's level to the bank's (measured 0.69 -> 1.78 -> 2.95 ->
+// 4.12 -> 5.32 across MATL 0/0.25/0.5/0.75/1). Under the binary-switch
+// mutation it instead sits flat at the string's level (0.69 -> 0.66 -> 0.64
+// -> 0.60, even drifting slightly DOWN) and only jumps at MATL == 1.0
+// exactly (-> 5.32) -- both a monotonicity violation and a midpoint nowhere
+// close to the string/bank interpolation.
+TEST_CASE("BodyVoice MATL blends continuously, not as a step function") {
+    const float mvals[] = { 0.f, 0.25f, 0.5f, 0.75f, 1.f };
+    float energy[5] = { 0.f, 0.f, 0.f, 0.f, 0.f };
+    for (int i = 0; i < 5; ++i) {
+        BodyVoice v;
+        fresh_voice(v, mvals[i]);
+        v.trigger(220.f);
+        tick(v, 4800, &energy[i], nullptr);
+    }
+
+    // Monotonically increasing across the whole sweep: a step function is
+    // flat (or drifts down, per the mutation's own numbers) everywhere
+    // except the last hop.
+    for (int i = 1; i < 5; ++i) {
+        CAPTURE(i);
+        CAPTURE(energy[i - 1]);
+        CAPTURE(energy[i]);
+        CHECK(energy[i] > energy[i - 1]);
+    }
+
+    // The midpoint must land meaningfully inside the string/bank range, not
+    // hug the string's end of it.
+    const float lo = energy[0], hi = energy[4];
+    CHECK(energy[2] > lo + 0.25f * (hi - lo));
+    CHECK(energy[2] < hi - 0.05f * (hi - lo));
+}
+
 TEST_CASE("BodyVoice reports inactive after ringing out") {
     BodyVoice v;
     fresh_voice(v, 0.5f);
@@ -359,6 +409,57 @@ TEST_CASE("BodyVoice palm mute drops energy fast") {
     tick(open, 9600, &eo, nullptr);
     tick(muted, 9600, &em, nullptr);
     CHECK(em < eo * 0.5f);
+}
+
+// Fix round 1 (spec 2026-07-26 body-resonator, Task 7 review): the test
+// above only checks the LEVEL is lower, which a flat gain cut in process()
+// satisfies just as well as real choking --
+//   const float mute_gain = _hold ? 0.3f : 1.f;
+//   const float s = (...) * _vel * mute_gain;
+// with both damping paths left untouched (so decay RATE is identical to an
+// open voice) -- confirmed by applying that mutation and observing "drops
+// energy fast" above still passes.
+//
+// set_hold is meant to snap damping high -- the body physically chokes, an
+// ONGOING effect, not a one-off level trim. That shows up as the held/open
+// energy ratio shrinking window over window, where a flat gain keeps it
+// constant. Measured on the real implementation, four successive 1000-sample
+// windows after set_hold(true), muted/open energy ratio: window 0 = 0.0900,
+// window 3 = 0.0261 (0.29x -- still falling). The flat-gain mutation held
+// this exact ratio at 1.00x across the same two windows (0.09 -> 0.09).
+TEST_CASE("BodyVoice palm mute chokes the ring, not just cuts the gain") {
+    BodyVoice open, muted;
+    fresh_voice(open, 0.5f);
+    fresh_voice(muted, 0.5f);
+    open.trigger(220.f);
+    muted.trigger(220.f);
+    tick(open, 960);
+    tick(muted, 960);
+    muted.set_hold(true);
+    muted.update_control(96.f / 48000.f);
+
+    // Window 0, right after the mute engages.
+    float eo0 = 0.f, em0 = 0.f;
+    tick(open, 1000, &eo0, nullptr);
+    tick(muted, 1000, &em0, nullptr);
+
+    // Two windows of settle, discarded.
+    tick(open, 1000);
+    tick(muted, 1000);
+    tick(open, 1000);
+    tick(muted, 1000);
+
+    // Window 3: a real choke keeps damping the signal further; a flat gain
+    // cut has nothing left to do after its one-time trim.
+    float eo1 = 0.f, em1 = 0.f;
+    tick(open, 1000, &eo1, nullptr);
+    tick(muted, 1000, &em1, nullptr);
+
+    const float ratio_early = em0 / eo0;
+    const float ratio_late  = em1 / eo1;
+    CAPTURE(ratio_early);
+    CAPTURE(ratio_late);
+    CHECK(ratio_late < ratio_early * 0.5f);
 }
 
 TEST_CASE("BodyVoice excitation is bit-exact off at sub level zero") {
