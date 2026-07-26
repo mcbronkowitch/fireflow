@@ -69,11 +69,16 @@ void ModeBank::_recompute() {
     // walks it through ZERO at about -0.0866, past which mode frequencies go
     // negative and std::tan(kPi * f) stops meaning anything. Measured over the
     // 24 modes: -0.060 -> min 0.304, -0.080 -> min 0.073, -0.087 -> min
-    // -0.009 (collapsed). kCompressScale = 0.06 stops at the first of those:
-    // a 4x margin below the collapse, and still deep enough that the top
-    // partials sit near a third of their harmonic frequency -- a flat,
-    // drum/plate ladder. Do not raise it toward 0.087 to "use the range":
-    // the last 0.02 is the cliff, not headroom.
+    // -0.009 (collapsed). kCompressScale = 0.06 stops at the first of those,
+    // and still leaves the top partials near a third of their harmonic
+    // frequency -- a flat, drum/plate ladder.
+    //
+    // The margin is 1.44x in the SCALE (0.06 against 0.0866) but 4.2x in what
+    // that scale leaves standing: minimum stretch factor 0.304 at 0.06
+    // against 0.073 at 0.080. The second number is the one that matters,
+    // because it is the distance from zero that everything downstream
+    // divides and tangents. Do not raise the scale toward 0.087 to "use the
+    // range": the last 0.02 of scale is the whole cliff.
     //
     // kStretchScale keeps the original 0.4 exactly, so the bell side is
     // bit-identical to what it was before stretch became signed.

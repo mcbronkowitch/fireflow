@@ -138,8 +138,14 @@ TEST_CASE("chord_character: different chord qualities give different values") {
     // semitone cluster is. Still not a value -- an ordering.
     CHECK(std::fabs(maj) < std::fabs(clus));
 
-    // A power chord (root + fifth) is the most consonant chord there is; it
-    // must not read as more broken than a triad with a third in it.
+    // NOT a spec claim, unlike the ordering above. §5 gives the
+    // triad-to-cluster direction and says nothing about a perfect fifth
+    // reading nearer-harmonic than a minor third; this holds because
+    // kPartialPc happens to contain 7.0196 (partial 3) and no partial within
+    // 0.8 semitones of the minor third. That table is declared tuning
+    // material, so if Bastian retunes it this line is expected to move with
+    // it -- it documents the current table, it does not constrain the next
+    // one. Delete it rather than bending the table to keep it green.
     const auto power = chord(-5, 0, 0);
     CHECK(std::fabs(chord_character(power.data(), 2)) < std::fabs(min));
 }
