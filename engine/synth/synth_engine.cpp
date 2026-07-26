@@ -338,16 +338,13 @@ float SynthEngineT<V>::voice_env(int v) const {
 
 template class spky::SynthEngineT<spky::VoiceT<spky::MorphOsc>>;
 template class spky::SynthEngineT<spky::VoiceT<spky::WtOsc>>;
+template class spky::SynthEngineT<spky::BodyVoice>;
 
 // Compile-time proof (fix round 1, Task 5 review): SynthEngineT actually
 // works at a voice count other than 4. See detail::VoiceCountProbe in
 // synth_engine.h, which is guarded the same way -- only the tests target
-// defines SPKY_TESTING.
+// defines SPKY_TESTING. BodyEngine now covers that with a real voice, but
+// the probe is what lets a test count TRIGGERS, which no real voice exposes.
 #ifdef SPKY_TESTING
 template class spky::SynthEngineT<spky::detail::VoiceCountProbe>;
-
-// Task 7 review: prove SynthEngineT<BodyVoice> (kVoices == 1, a real voice)
-// compiles, links and runs -- see SynthEngineBodyVoiceProof in
-// synth_engine.h. Not the production BODY part engine.
-template class spky::SynthEngineT<spky::BodyVoice>;
 #endif

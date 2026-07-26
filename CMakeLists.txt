@@ -138,7 +138,7 @@ add_executable(spky_tests
     tests/test_ks_string.cpp
     engine/body/body_voice.cpp
     tests/test_body_voice.cpp
-    tests/test_synth_engine_body_voice_proof.cpp
+    tests/test_body_engine.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
 target_include_directories(spky_tests PRIVATE host)

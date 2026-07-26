@@ -94,20 +94,27 @@ public:
     }
     float max_voice_env() const;   // 0 when idle or on the test-tone engine
 
-    // VOICE edit layer - forwarded to both melodic engines directly, so edits
+    // VOICE edit layer - forwarded to every melodic engine directly, so edits
     // stick whichever engine is active. The sampler reinterprets each knob as
     // its cloud analogue (spec: "no dead knobs"), so one panel row serves all.
-    void set_voice_attack(float n)    { _synth.set_attack(n);    _wave.set_attack(n);    _sampler.set_window_attack(n); }
-    void set_voice_decay(float n)     { _synth.set_decay(n);     _wave.set_decay(n);     _sampler.set_window_decay(n); }
-    void set_voice_resonance(float n) { _synth.set_resonance(n); _wave.set_resonance(n); _sampler.set_resonance(n); }
+    // BODY reinterprets them again, resonator-side, through the SAME
+    // SynthEngineT setters: ATTACK is the exciter's length, DECAY is damping
+    // (ring time), RESONANCE is the exciter's character, SUB is the
+    // excitation bus level, Detune is string spread plus mode stretch and
+    // FILT is brightness (spec 2026-07-26 body-resonator, section 5, and the
+    // setter comments on BodyVoice). Without these forwards those knobs would
+    // simply be dead on a BODY deck.
+    void set_voice_attack(float n)    { _synth.set_attack(n);    _wave.set_attack(n);    _body.set_attack(n);    _sampler.set_window_attack(n); }
+    void set_voice_decay(float n)     { _synth.set_decay(n);     _wave.set_decay(n);     _body.set_decay(n);     _sampler.set_window_decay(n); }
+    void set_voice_resonance(float n) { _synth.set_resonance(n); _wave.set_resonance(n); _body.set_resonance(n); _sampler.set_resonance(n); }
     // The visible SUB control is routed separately as GENE SIZE on a sampler,
     // while visible SOURCE becomes ORG through LANE_SOURCE. The independent,
     // widgetless Detune parameter has no sampler meaning. Keep melodic SUB and
     // Detune on Synth/Wave only; SamplerEngine::_sub_n and _detune_n default
     // to 0 and stay there until sampler cloud dispersion sets them.
-    void set_voice_sub(float n)       { _synth.set_sub(n);       _wave.set_sub(n); }
-    void set_voice_detune(float n)    { _synth.set_detune(n);    _wave.set_detune(n); }
-    void set_voice_filt(float t)      { _synth.set_filt(t);      _wave.set_filt(t);      _sampler.set_filt(t); }
+    void set_voice_sub(float n)       { _synth.set_sub(n);       _wave.set_sub(n);       _body.set_sub(n); }
+    void set_voice_detune(float n)    { _synth.set_detune(n);    _wave.set_detune(n);    _body.set_detune(n); }
+    void set_voice_filt(float t)      { _synth.set_filt(t);      _wave.set_filt(t);      _body.set_filt(t);      _sampler.set_filt(t); }
 
     SamplerEngine& sampler() { return _sampler; }
     const SamplerEngine& sampler() const { return _sampler; }
@@ -118,15 +125,24 @@ public:
     const SynthEngine& synth() const { return _synth; }
     WaveEngine& wave() { return _wave; }
     const WaveEngine& wave() const { return _wave; }
+    BodyEngine& body() { return _body; }
+    const BodyEngine& body() const { return _body; }
 
     int active_voices() const {
         if (_engine_id == ENGINE_SYNTH) return _synth.active_voices();
         if (_engine_id == ENGINE_WAVE) return _wave.active_voices();
+        if (_engine_id == ENGINE_BODY) return _body.active_voices();
         return 0;
     }
     float voice_env(int v) const {
         if (_engine_id == ENGINE_SYNTH) return _synth.voice_env(v);
         if (_engine_id == ENGINE_WAVE) return _wave.voice_env(v);
+        // BodyEngine::voice_env is an ENERGY FOLLOWER, not an envelope (see
+        // BodyVoice::env_value). max_voice_env() below therefore reads "how
+        // much is this resonator ringing", which is the same thing the
+        // envelope reading meant for the meter that consumes it, but do not
+        // expect an AD shape from it.
+        if (_engine_id == ENGINE_BODY) return _body.voice_env(v);
         return 0.f;
     }
 
@@ -162,6 +178,7 @@ private:
     IPartEngine*   _engine = nullptr;
     SynthEngine    _synth;
     WaveEngine     _wave;
+    BodyEngine     _body;
     SamplerEngine  _sampler;
     bool           _last_gate = false;
     SoftSwitch     _engine_fade;
@@ -185,6 +202,7 @@ private:
             case ENGINE_SYNTH:   return static_cast<IPartEngine*>(&_synth);
             case ENGINE_SAMPLER: return static_cast<IPartEngine*>(&_sampler);
             case ENGINE_WAVE:    return static_cast<IPartEngine*>(&_wave);
+            case ENGINE_BODY:    return static_cast<IPartEngine*>(&_body);
             default:             return static_cast<IPartEngine*>(&_tone);
         }
     }

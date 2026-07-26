@@ -7,9 +7,7 @@
 #include "synth/voice.h"
 #include "synth/wt_osc.h"
 #include "util/onepole.h"
-#ifdef SPKY_TESTING
 #include "body/body_voice.h"
-#endif
 
 namespace spky {
 
@@ -153,6 +151,15 @@ extern template class SynthEngineT<VoiceT<MorphOsc>>;
 using WaveEngine = SynthEngineT<VoiceT<WtOsc>>;
 extern template class SynthEngineT<VoiceT<WtOsc>>;
 
+// BODY (spec 2026-07-26 body-resonator, Task 8). Same machine, a resonator
+// instead of an oscillator+envelope voice, and kVoices == 1 rather than 4 --
+// BodyVoice::kEngineVoices, measured at 1395 cycles/sample, is what the Seed
+// affords. It runs the shared part-engine contract
+// (tests/synth_engine_contract.h) and NOT the AD-envelope one next to it;
+// tests/test_body_engine.cpp and both header comments explain the boundary.
+using BodyEngine = SynthEngineT<BodyVoice>;
+extern template class SynthEngineT<BodyVoice>;
+
 #ifdef SPKY_TESTING
 // Test-only, like the SPKY_TESTING accessors in engine/instrument.h,
 // engine/mod/lane.h and engine/mod/super_modulator.h. Only the tests target
@@ -207,15 +214,6 @@ struct VoiceCountProbe {
 
 using SynthEngineVoiceCountProof = SynthEngineT<detail::VoiceCountProbe>;
 extern template class SynthEngineT<detail::VoiceCountProbe>;
-
-// Task 7 review: BodyVoice is the first REAL voice run through SynthEngineT
-// at a voice count other than 4 (VoiceCountProbe above is a stub -- it
-// proves the template compiles at kVoices==1, not that a real voice's
-// method set integrates correctly). This is a compile/link/run proof only,
-// same as SynthEngineVoiceCountProof -- NOT the production BODY part engine
-// (Task 8 owns that alias, plus wiring COLOR to chord quality).
-using SynthEngineBodyVoiceProof = SynthEngineT<BodyVoice>;
-extern template class SynthEngineT<BodyVoice>;
 #endif // SPKY_TESTING
 
 } // namespace spky

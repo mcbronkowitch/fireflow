@@ -479,3 +479,18 @@ TEST_CASE("scenario: wave engine spelling selects ENGINE_WAVE") {
     }
     CHECK(inst.engine_id(0) == ENGINE_WAVE);
 }
+
+TEST_CASE("scenario: body engine spelling selects ENGINE_BODY") {
+    Instrument inst;
+    inst.init(48000.f);
+    Event e;
+    e.action = "set_engine";
+    e.part = 0;
+    e.svalue = "body";
+    apply_event(inst, e);
+    for (int i = 0; i < 500; ++i) {
+        float in[1] {}, l[1], r[1];
+        inst.process(in, in, l, r, 1);
+    }
+    CHECK(inst.engine_id(0) == ENGINE_BODY);
+}

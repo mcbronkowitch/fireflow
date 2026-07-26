@@ -270,6 +270,99 @@ TEST_CASE("part: engine ids stay patch-stable when WAVE is appended") {
     CHECK(ENGINE_SYNTH == 1);
     CHECK(ENGINE_SAMPLER == 2);
     CHECK(ENGINE_WAVE == 3);
+    // Appended, never renumbered: a saved patch stores the id, so moving one
+    // silently reassigns every deck that used it.
+    CHECK(ENGINE_BODY == 4);
+}
+
+TEST_CASE("part: BODY switches through the existing 4 ms engine fade") {
+    Part p;
+    p.init(48000.f, 5u);
+    float l, r;
+    auto complete_switch = [&] {
+        for (int i = 0; i < 500; ++i) p.process(l, r);
+    };
+
+    p.set_engine(ENGINE_BODY);
+    complete_switch();
+    CHECK(p.engine_id() == ENGINE_BODY);
+    p.set_engine(ENGINE_SAMPLER);
+    complete_switch();
+    CHECK(p.engine_id() == ENGINE_SAMPLER);
+    p.set_engine(ENGINE_BODY);
+    complete_switch();
+    CHECK(p.engine_id() == ENGINE_BODY);
+}
+
+TEST_CASE("part: a BODY deck sounds, and holds one note however big the chord") {
+    Part p;
+    p.init(48000.f, 5u);
+    p.set_engine(ENGINE_BODY);
+    float l, r;
+    float energy = 0.f;
+    for (int i = 0; i < 24000; ++i) {
+        p.process(l, r);
+        energy += l * l + r * r;
+    }
+    REQUIRE(p.engine_id() == ENGINE_BODY);
+    CHECK(energy > 0.f);                    // the deck is audible, not silent
+    CHECK(p.active_voices() == 1);
+    CHECK(p.max_voice_env() > 0.f);         // the meter reads the resonator
+
+    // COLOR still builds a chord upstream -- Part does not know the engine is
+    // monophonic -- but a one-voice engine holds the root and nothing else.
+    // Before Task 8's clamp this re-struck the single voice every control
+    // tick chasing the slots it had no voice for.
+    p.set_depth(0.f);
+    p.set_color(0.8f);
+    for (int i = 0; i < 48000; ++i) p.process(l, r);
+    CHECK(p.body().chord_n() >= 3);         // the surface pushed a real chord
+    CHECK(p.body().sustain_count() == 1);   // the engine sustained one note
+    CHECK(p.active_voices() == 1);
+}
+
+// The VOICE row is one panel row serving every engine ("no dead knobs"). On
+// BODY each knob means something resonator-side (part.h), so each has to
+// actually reach _body. Two of them land on state a test can read straight
+// out; the rest are proved the only way a resonator allows -- turning the
+// knob has to change the sound.
+TEST_CASE("part: the VOICE row reaches a BODY deck") {
+    Part p;
+    p.init(48000.f, 5u);
+    p.set_engine(ENGINE_BODY);
+    p.set_voice_sub(0.62f);
+    p.set_voice_detune(0.71f);
+    CHECK(p.body().sub_level() == doctest::Approx(0.62f));
+    CHECK(p.body().detune_spread_ct()
+          == doctest::Approx(0.71f * BodyEngine::kDetuneCeilCt));
+
+    // ATTACK, DECAY, RESONANCE and FILT have no getter on the engine, so the
+    // claim is the one that matters anyway: a BODY deck rendered with the
+    // knob at one end must not be sample-identical to the same deck rendered
+    // with it at the other.
+    auto render = [](void (Part::*knob)(float), float v) {
+        Part q;
+        q.init(48000.f, 5u);
+        q.set_engine(ENGINE_BODY);
+        (q.*knob)(v);
+        std::vector<float> out;
+        out.reserve(24000);
+        float l, r;
+        for (int i = 0; i < 24000; ++i) { q.process(l, r); out.push_back(l); }
+        return out;
+    };
+    CHECK(render(&Part::set_voice_attack, 0.f)
+          != render(&Part::set_voice_attack, 1.f));
+    CHECK(render(&Part::set_voice_decay, 0.f)
+          != render(&Part::set_voice_decay, 1.f));
+    CHECK(render(&Part::set_voice_resonance, 0.f)
+          != render(&Part::set_voice_resonance, 1.f));
+    CHECK(render(&Part::set_voice_filt, -1.f)
+          != render(&Part::set_voice_filt, 1.f));
+    // ...and the same render twice is identical, so the inequalities above
+    // are the knob and not the engine drifting between runs.
+    CHECK(render(&Part::set_voice_decay, 1.f)
+          == render(&Part::set_voice_decay, 1.f));
 }
 
 TEST_CASE("part: WAVE switches through the existing 4 ms engine fade") {

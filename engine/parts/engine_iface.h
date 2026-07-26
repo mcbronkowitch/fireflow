@@ -5,12 +5,15 @@ namespace spky {
 
 // Selectable part engines. ENGINE_SYNTH is the boot default from M2 on;
 // the test tone stays selectable (tests, A/B reference). M5 adds the
-// sampler and WAVE -- appended, so no persisted id changes meaning.
+// sampler and WAVE -- appended, so no persisted id changes meaning. BODY
+// (spec 2026-07-26 body-resonator) is appended for the same reason: ids go
+// in milestone order and are never renumbered, because patches persist them.
 enum EngineId {
     ENGINE_TEST_TONE = 0,
     ENGINE_SYNTH = 1,
     ENGINE_SAMPLER = 2,
-    ENGINE_WAVE = 3
+    ENGINE_WAVE = 3,
+    ENGINE_BODY = 4
 };
 
 // A part's sound engine. Consumes the 5 normalized target values; produces
