@@ -215,10 +215,24 @@ accepted capture with its gate ledger — which also re-establishes the WAVE
 acceptance evidence that has been missing since the grid lock landed. The
 `body` profile is verified on the BODY branch, where its family exists.
 
-A `full` run is expected to fail at build. The test suite asserts that it fails
-at the *link* step with a region overflow rather than at manifest load or family
-mismatch, so that a genuinely broken manifest can never masquerade as the known
-size problem.
+A `full` run is expected to fail at build. `FullProfileLinkContract` in
+`bench/test_run_contract.py` does not invoke the ARM toolchain and does not
+assert that the link step itself fails; a full cross-compile inside the unit
+suite would be slow and would tie the suite to the toolchain being on PATH.
+What it does assert, host-side: `full`'s manifest resolves without error, and
+its family set is exactly the seven families both `BENCH_PROTOCOL_ROWS_BY_FAMILY`
+and the Makefile's `FAMILY_SOURCE_*` entries know about — not fewer (which
+would silently shrink what "full" means and might happen to fit) and not more
+(a real, deliberate size change rather than a stale manifest). That pins the
+precondition that lets a link failure be trusted as "the known size problem"
+rather than a manifest bug wearing its symptoms, so a genuinely broken
+manifest can never masquerade as the known size problem by short-circuiting
+before link.
+
+That the failure actually happens, and that it happens at the *link* step
+specifically rather than at compile or at the Makefile's own family guard, is
+verified by hand — per this spec, and by any CI/hardware run that attempts to
+build `full` — and is not re-proven by the host-only suite.
 
 ### 7. Documentation
 

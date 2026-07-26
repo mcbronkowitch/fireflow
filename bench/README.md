@@ -81,13 +81,26 @@ expects one flat `build/bench.bin` beginning at the BOOT_SRAM app address;
 an image spanning SRAM and QSPI is not that format. `run.py` builds only the
 ELF and extracts the two physical payloads explicitly.
 
-Before the first WAVE run, or whenever `bench-qspi.bin` changes:
+Before the first WAVE run, or whenever `bench-qspi.bin` changes, run the
+four steps below. Every command names `--profile system`: it is the only
+profile that links today (see "Profiles, and one command per profile"
+above — the WAVE bank itself, `engine/synth/wt_bank.cpp`, is compiled
+unconditionally regardless of profile, so any linking profile would carry
+the same 65,024 bytes, but `system` is also the profile that exercises the
+WAVE acceptance gate this bank is for), and steps 1, 3, and 4 must agree on
+it exactly: the identity check in step 4 compares that rebuild's
+ELF/SRAM-ELF/QSPI/programmer-ELF hashes against the receipt step 3 wrote,
+and a different profile produces a different ELF even when the QSPI bytes
+are unchanged.
 
-1. Build with `python run.py --build-only`.
+1. Build with `python run.py --profile system --build-only`.
 2. Connect the ST-Link to the Seed's SWD header and power the Seed.
-3. Run `python run.py --no-build --program-qspi --build-only`. Do not put the
-   Seed into DFU mode.
-4. Run `python run.py --repeat 2`.
+3. Run `python run.py --profile system --no-build --program-qspi --build-only`.
+   Do not put the Seed into DFU mode. (`--no-build` means this step doesn't
+   use `--profile` to rebuild anything — it just re-derives the QSPI payload
+   from whatever `bench.elf` step 1 left behind — but passing `system` here
+   too keeps the sequence consistent and avoids relying on that detail.)
+4. Run `python run.py --profile system --repeat 2`.
 
 The programming command uses OpenOCD to load the helper below `0x24040000`
 and the raw payload at `0x24040000`; it never programs internal flash. The
