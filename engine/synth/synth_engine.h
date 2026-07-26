@@ -127,9 +127,10 @@ private:
     int   _chord_n = 1;
     // COLOR-as-material (spec §7), pushed to every voice; a no-op on every
     // voice but BodyVoice. Derived from the chord surface ONLY when the
-    // surface actually moved -- set_chord() runs per sample (see the
-    // IPartEngine::set_chord comment), _update_control() runs once per
-    // kCtrlInterval samples, and the derivation lives in the latter.
+    // surface actually moved: the derivation lives in _update_control(), the
+    // control tick, and set_chord() only raises the flag. See set_chord() for
+    // why the flag stays even though Part pushes at control rate, not per
+    // sample.
     float _material_char = 0.f;
     bool  _material_dirty = true;
     std::array<bool, kVoices> _sustaining {};                 // value-init: all false

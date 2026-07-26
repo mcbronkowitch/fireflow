@@ -40,9 +40,12 @@ public:
 
     // Chord layer (spec 2026-07-17 chord-layer). trigger_chord fires one
     // chord; the default keeps single-note engines working unchanged.
-    // set_chord feeds the CURRENT chord surface targets (refreshed every
-    // sample by Part) so a FLOW engine can track root + COLOR live; engines
-    // without a surface ignore it.
+    // set_chord feeds the CURRENT chord surface targets so a FLOW engine can
+    // track root + COLOR live; engines without a surface ignore it. Part
+    // pushes it from _control_tick() (engine/parts/part.cpp), i.e. once per
+    // Part::kCtrlInterval samples plus once on each step fire -- NOT every
+    // sample, which this comment claimed until 2026-07-26 and which two
+    // later comments in synth_engine were written on top of.
     virtual void trigger_chord(const float* pitches_norm, int n) {
         for (int i = 0; i < n; ++i) trigger(pitches_norm[i]);
     }

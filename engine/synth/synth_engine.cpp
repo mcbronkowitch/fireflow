@@ -84,12 +84,17 @@ template <class V>
 void SynthEngineT<V>::set_chord(const float* p, int n) {
     if (n < 1) n = 1;
     if (n > kMaxChord) n = kMaxChord;
-    // Part calls this EVERY SAMPLE (IPartEngine::set_chord comment), so the
-    // body here has to stay cheap bookkeeping. All this adds is a compare per
-    // slot; the material derivation itself is deferred to _update_control(),
-    // which process() only enters once per kCtrlInterval samples. The flag is
-    // what makes "once per change" true rather than "once per tick": in FLOW
-    // the surface is rewritten with identical values every sample.
+    // Part pushes the surface from its own control tick and on each step fire
+    // (IPartEngine::set_chord), so this is control rate, not per sample --
+    // and the material derivation still does not belong here. Two reasons it
+    // lives in _update_control() behind this flag instead:
+    //
+    //  - Part re-pushes the same chord every tick whether or not it moved, so
+    //    without the flag chord_character() would re-derive a static chord
+    //    every 2 ms. The compare below is cheaper than the derivation.
+    //  - trigger_chord() computes the character from the chord being STRUCK,
+    //    which is fresher than the surface. Leaving the flag down lets that
+    //    value stand until the surface actually moves.
     bool moved = (n != _chord_n);
     for (int i = 0; i < n; ++i) {
         if (_chord[i] != p[i]) moved = true;
@@ -260,7 +265,8 @@ void SynthEngineT<V>::_update_control() {
     // COLOR-as-material (spec §7). This function is the control tick --
     // process() only calls it when _ctrl_ctr runs out, once per
     // kCtrlInterval samples -- so the derivation is off the per-sample path
-    // by construction, and the dirty flag takes it off the per-tick path too.
+    // by construction whatever rate set_chord() is called at, and the dirty
+    // flag keeps it off the per-tick path as well (see set_chord).
     if (_material_dirty) {
         _material_char = chord_character(_chord, _chord_n);
         _material_dirty = false;
