@@ -33,6 +33,13 @@ public:
         _g[i] = g; _rg[i] = r_plus_g; _h[i] = h;
     }
 
+    // Observation only -- the coefficients that were last pushed in. Lets a
+    // test read what the bank actually computed instead of re-deriving the
+    // mode ladder beside it (ModeBank::mode_freq / mode_q). Never called on
+    // the audio path.
+    float g(int i) const        { return _g[i]; }
+    float r_plus_g(int i) const { return _rg[i]; }
+
     // Per-sample. Returns sum(gain[i] * bandpass_i(in)).
     float process(const float* gain, float in) {
         float out = 0.f;

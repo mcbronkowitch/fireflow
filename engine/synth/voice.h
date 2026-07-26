@@ -52,11 +52,15 @@ public:
     float env_value() const { return _env.value(); }
     float detune_cents() const { return _detune_ct; }
 
-    // BODY contract methods. A synth voice has no body to mute and no
-    // excitation input; both are no-ops here so SynthEngineT can call them
-    // unconditionally (spec 2026-07-26 body-resonator, §1).
+    // BODY contract methods. A synth voice has no body to mute, no excitation
+    // input and no material whose partials could be stretched; all three are
+    // no-ops here so SynthEngineT can call them unconditionally (spec
+    // 2026-07-26 body-resonator, §1). On SYNTH and WAVE, COLOR keeps its
+    // original meaning -- chord slots -- and this method is what makes the
+    // engine's extra push cost nothing there.
     void set_hold(bool /*on*/) {}
     void set_excitation(float /*x*/) {}
+    void set_material_character(float /*c*/) {}
 
 private:
     void _apply_freq();                   // osc A/B freq from pitch+detune+drift

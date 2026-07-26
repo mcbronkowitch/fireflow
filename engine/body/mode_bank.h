@@ -27,9 +27,14 @@ public:
     void init(float sample_rate);
     void reset();
 
-    // Control rate ONLY. f0_hz: fundamental. stretch/damping/brightness: 0..1
-    // (DETUNE / DECAY / FILTER). Recomputes cached coefficients when any
-    // argument actually changed; otherwise returns without touching them.
+    // Control rate ONLY. f0_hz: fundamental. damping/brightness: 0..1
+    // (DECAY / FILTER). stretch: SIGNED, -1..+1 -- the inharmonicity that
+    // DETUNE's amount and COLOR's character multiply out to (spec §5/§7).
+    // 0 is harmonic, positive stretches the partials sharp (bell), negative
+    // compresses them flat (drum, plate). The two sides do not scale alike;
+    // _recompute() says why, and the reason is numerical, not taste.
+    // Recomputes cached coefficients when any argument actually changed;
+    // otherwise returns without touching them.
     void set_params(float f0_hz, float stretch, float damping, float brightness);
 
     // Per sample.
@@ -37,11 +42,30 @@ public:
 
     uint32_t coeff_updates() const { return _updates; }
 
+    // Frequency floor in cycles/sample, the partner of the 0.499 Nyquist
+    // ceiling. Public so a test can assert the guard did NOT fire (an f that
+    // came out of the mapping is never exactly this value). See _recompute().
+    static constexpr float kFMin = 1e-5f;
+
+    // --- observation (tests) --------------------------------------------
+    // Mode i's cached normalized frequency and Q, recovered from the
+    // coefficients the bank actually pushed into the SVF (g = tan(pi*f),
+    // r_plus_g = 1/q + g). A test that re-derived the ladder next to
+    // _recompute() would only be checking its own copy of the arithmetic;
+    // these read production state. Not used on the audio path.
+    float mode_freq(int i) const;
+    float mode_q(int i) const;
+
 private:
     void _recompute();
 
     static constexpr float kPosition = 0.31f;   // strike position, tuning material
     static constexpr float kPi = 3.14159265358979f;
+
+    // Stretch -> stiffness, one scale per side. See _recompute().
+    static constexpr float kStretchScale  = 0.4f;    // bell side (unchanged)
+    static constexpr float kCompressScale = 0.06f;   // drum/plate side
+
 
     SvfBp<kBatch> _svf[kBatches];
     float _gain[kBatches][kBatch] = {};

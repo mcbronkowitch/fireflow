@@ -43,6 +43,10 @@ public:
     void set_drift_amount(float a);
     void set_hold(bool on);                             // palm mute
     void set_excitation(float x);                       // per-sample bus feed
+    // COLOR, read as the chord's QUALITY (spec §5/§7). Signed -1..+1: which
+    // WAY the partials stretch. DETUNE (set_detune_cents) is how far, and
+    // multiplies this -- so DETUNE = 0 is harmonic whatever COLOR says.
+    void set_material_character(float c);
 
     void update_control(float dt_s);
     void process(float& accL, float& accR);
@@ -63,6 +67,7 @@ private:
 
     float _sr = 48000.f;
     float _freq = 220.f, _matl = 0.f, _detune_ct = 0.f;
+    float _material_char = 0.f;                  // COLOR: signed, -1..+1
     float _damping = 0.5f, _brightness = 0.5f, _sub = 0.f;
     float _vel = 1.f, _vel_target = 1.f;
     float _mix_string = 1.f, _mix_modal = 0.f;   // equal-power MATL gains

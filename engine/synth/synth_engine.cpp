@@ -1,5 +1,6 @@
 #include "synth/synth_engine.h"
 #include <cmath>
+#include "body/material.h"
 #include "util/math.h"
 
 using namespace spky;
@@ -36,6 +37,8 @@ void SynthEngineT<V>::init(float sample_rate) {
     _pending_n = 0;
     _chord_n = 1;
     _chord[0] = _targets[LANE_PITCH];
+    _material_char = 0.f;          // one note has no quality
+    _material_dirty = true;
     _vel_now = 1.f;
     _stab_rng.seed(_seed ^ 0x57AB5EEDu);
     _level.init(sample_rate, 0.01f);
@@ -81,8 +84,19 @@ template <class V>
 void SynthEngineT<V>::set_chord(const float* p, int n) {
     if (n < 1) n = 1;
     if (n > kMaxChord) n = kMaxChord;
-    for (int i = 0; i < n; ++i) _chord[i] = p[i];
+    // Part calls this EVERY SAMPLE (IPartEngine::set_chord comment), so the
+    // body here has to stay cheap bookkeeping. All this adds is a compare per
+    // slot; the material derivation itself is deferred to _update_control(),
+    // which process() only enters once per kCtrlInterval samples. The flag is
+    // what makes "once per change" true rather than "once per tick": in FLOW
+    // the surface is rewritten with identical values every sample.
+    bool moved = (n != _chord_n);
+    for (int i = 0; i < n; ++i) {
+        if (_chord[i] != p[i]) moved = true;
+        _chord[i] = p[i];
+    }
     _chord_n = n;
+    if (moved) _material_dirty = true;
 }
 
 template <class V>
@@ -123,6 +137,14 @@ template <class V>
 void SynthEngineT<V>::trigger_chord(const float* p, int n) {
     if (n < 1) return;                                   // nothing to trigger
     if (n > kMaxChord) n = kMaxChord;
+    // The chord's QUALITY is read from every note the layer built, BEFORE the
+    // voice clamp below throws the unplayable ones away (spec §7: a BODY deck
+    // sounds only the root, but what COLOR did to the material is the whole
+    // chord's doing). Trigger rate, and it makes the strike land on the right
+    // material instead of picking it up at the next control tick; the
+    // surface's own derivation in _update_control() still owns the steady
+    // state, so _material_dirty is deliberately left alone here.
+    _material_char = chord_character(p, n);
     // ...and never more notes than there are voices to hold them. At
     // kVoices >= kMaxChord this line never fires, so SYNTH and WAVE are
     // untouched. Below it, the notes past kVoices had nowhere to go: each one
@@ -184,6 +206,10 @@ void SynthEngineT<V>::_do_trigger(float pitch_norm, float vel, int chord_slot) {
         _sustaining[pick] = false;
         _chord_slot[pick] = -1;
     }
+    // Material before the strike: BodyVoice::trigger() recomputes the mode
+    // bank, and it should do that with the chord that is being struck rather
+    // than with the one the last control tick saw. No-op on VoiceT.
+    _voices[pick].set_material_character(_material_char);
     _voices[pick].set_vel(vel);
     _voices[pick].trigger(pitch_to_hz(pitch_norm));   // pitch LATCHED here
 }
@@ -231,6 +257,15 @@ void SynthEngineT<V>::_update_control() {
     // stab is still strewing in
     if (_flow && !_hold && _pending_n == 0) _adjust_surface();
 
+    // COLOR-as-material (spec §7). This function is the control tick --
+    // process() only calls it when _ctrl_ctr runs out, once per
+    // kCtrlInterval samples -- so the derivation is off the per-sample path
+    // by construction, and the dirty flag takes it off the per-tick path too.
+    if (_material_dirty) {
+        _material_char = chord_character(_chord, _chord_n);
+        _material_dirty = false;
+    }
+
     const float attack_s = clampf(_attack_ratio * _cycle_s, kAttackFloorS, kDecayMaxS);
     const float decay_s  = clampf(_decay_ratio  * _cycle_s, kDecayMinS,  kDecayMaxS);
 
@@ -252,6 +287,7 @@ void SynthEngineT<V>::_update_control() {
         vc.set_resonance(_resonance);
         vc.set_pan(kPanFan[v] * width);
         vc.set_drift_amount(width);
+        vc.set_material_character(_material_char);   // no-op on VoiceT
         vc.update_control(dt_s);
     }
 

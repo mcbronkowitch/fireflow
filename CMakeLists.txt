@@ -139,6 +139,10 @@ add_executable(spky_tests
     engine/body/body_voice.cpp
     tests/test_body_voice.cpp
     tests/test_body_engine.cpp
+    # engine/body/material.h is header-only on purpose: it is one stateless
+    # free function, and a .cpp would have to be added to spky_tests, render,
+    # bench/Makefile, bench/audition/Makefile AND host/vcv/Makefile.
+    tests/test_material.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
 target_include_directories(spky_tests PRIVATE host)

@@ -125,6 +125,13 @@ private:
 
     float _chord[kMaxChord] = { 0.f, 0.f, 0.f, 0.f };   // surface targets (Part)
     int   _chord_n = 1;
+    // COLOR-as-material (spec §7), pushed to every voice; a no-op on every
+    // voice but BodyVoice. Derived from the chord surface ONLY when the
+    // surface actually moved -- set_chord() runs per sample (see the
+    // IPartEngine::set_chord comment), _update_control() runs once per
+    // kCtrlInterval samples, and the derivation lives in the latter.
+    float _material_char = 0.f;
+    bool  _material_dirty = true;
     std::array<bool, kVoices> _sustaining {};                 // value-init: all false
     std::array<int, kVoices>  _chord_slot = _no_chord_slots();
     struct Pending { int ctr; float pitch; int slot; };
@@ -202,6 +209,7 @@ struct VoiceCountProbe {
     void process(float& accL, float& accR) { if (_active) { accL += 0.f; accR += 0.f; } }
     void set_hold(bool /*on*/) {}
     void set_excitation(float /*x*/) {}
+    void set_material_character(float /*c*/) {}
 
     bool  active() const { return _active; }
     float env_value() const { return _active ? 1.f : 0.f; }

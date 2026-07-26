@@ -72,6 +72,10 @@ void BodyVoice::set_pan(float pan)          { _pan_base = clampf(pan, -1.f, 1.f)
 void BodyVoice::set_drift_amount(float a)   { _drift_amt = clampf(a, 0.f, 1.f); }
 void BodyVoice::set_hold(bool on)           { _hold = on; }
 void BodyVoice::set_excitation(float x)     { _excitation = x; }
+// Clamped even though spky::chord_character already bounds its result: this
+// setter is the voice's edge of the contract, and the mode bank's compressed
+// side has a collapse point a caller must not be able to walk into.
+void BodyVoice::set_material_character(float c) { _material_char = clampf(c, -1.f, 1.f); }
 
 // ATTACK is exciter length, DECAY is damping (spec §5).
 void BodyVoice::set_env_times(float attack_s, float decay_s) {
@@ -111,11 +115,19 @@ void BodyVoice::_apply_params() {
     _str_a.set_params(_freq * ratio_a, _brightness, damp, m);
     _str_b.set_params(_freq * ratio_b, _brightness, damp, m);
 
-    // The bank's stretch comes from DETUNE, its Q from DECAY, its roll-off
-    // from FILTER. All of this is control rate -- ModeBank::set_params is the
-    // one place the coefficient math is allowed to run.
-    const float stretch = clampf(_detune_ct / 140.f, 0.f, 1.f);
-    _bank.set_params(_freq, stretch, _hold ? 0.f : _damping, _brightness);
+    // The bank's stretch is DETUNE times COLOR, its Q from DECAY, its
+    // roll-off from FILTER. All of this is control rate -- ModeBank::
+    // set_params is the one place the coefficient math is allowed to run.
+    //
+    // The split is spec §7: DETUNE is the AMOUNT of inharmonicity and keeps
+    // exactly the curve §5 gives it (unsigned, /140 ct, unchanged); COLOR is
+    // the signed CHARACTER, which way. They MULTIPLY, so "DETUNE = 0 is
+    // harmonic and COLOR is inaudible" is arithmetic rather than a special
+    // case somebody can forget to write -- and no COLOR value can make a
+    // DETUNE-0 deck inharmonic.
+    const float amount = clampf(_detune_ct / 140.f, 0.f, 1.f);
+    _bank.set_params(_freq, amount * _material_char,
+                     _hold ? 0.f : _damping, _brightness);
 
     _exciter.set_freq(_freq);
 

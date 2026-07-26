@@ -15,6 +15,9 @@
 #include "synth/synth_engine.h"
 #include "synth_engine_contract.h"
 
+#include <cmath>
+#include <vector>
+
 using namespace spky;
 
 TEST_CASE("body engine satisfies the shared part-engine contract") {
@@ -61,6 +64,133 @@ TEST_CASE("body engine is one voice, and the surface never asks for more") {
     }
     CHECK(f.sustain_count() == 1);
     CHECK(peak_4 == doctest::Approx(peak_1));
+}
+
+// --- COLOR is the material's CHARACTER, DETUNE is its AMOUNT ---------------
+//
+// Spec §7, in as many words: "COLOR chooses WHICH WAY the partials are
+// stretched, DETUNE chooses HOW FAR ... so at DETUNE = 0 a BODY deck is
+// harmonic and COLOR is inaudible". Both halves of that are Bastian's
+// contract, not this implementation's taste, so both are pinned here. The
+// VALUE the mapping gives any particular chord is tuning material and is
+// asserted nowhere.
+namespace {
+
+// Same root, different quality: only what COLOR reads can differ.
+// Slot ladder (engine/pitch/chord.h): root, fifth an octave down, third.
+constexpr float kSemi = 1.f / 36.f;
+constexpr float kRoot = 0.4f;
+const float kMajorTriad[3] = { kRoot, kRoot - 5.f * kSemi, kRoot + 4.f * kSemi };
+const float kMinorTriad[3] = { kRoot, kRoot - 5.f * kSemi, kRoot + 3.f * kSemi };
+
+std::vector<float> render_chord(const float* chord, float detune, int n_samples) {
+    BodyEngine e;
+    e.set_seed(11u);
+    e.init(48000.f);
+    e.set_detune(detune);
+    float t[LANE_COUNT] = { 0.6f, 0.7f, 0.45f, 0.f, 1.f };
+    e.set_targets(t, 0.f);
+    e.set_chord(chord, 3);
+    e.trigger_chord(chord, 3);
+    std::vector<float> out(n_samples);
+    for (int i = 0; i < n_samples; ++i) {
+        e.set_chord(chord, 3);          // Part re-pushes the surface per sample
+        float l = 0.f, r = 0.f;
+        e.process(l, r);
+        out[i] = l + r;
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("body engine: DETUNE = 0 makes COLOR inaudible") {
+    // Bit-identical, not a tolerance: the promise is that the amount MULTIPLIES
+    // the character, so at amount 0 there is nothing left of it to hear.
+    const auto maj = render_chord(kMajorTriad, 0.f, 12000);
+    const auto min = render_chord(kMinorTriad, 0.f, 12000);
+    REQUIRE(maj.size() == min.size());
+    int differing = 0;
+    for (size_t i = 0; i < maj.size(); ++i) if (maj[i] != min[i]) ++differing;
+    CHECK(differing == 0);
+
+    // ...and the deck is not simply silent, which would satisfy the above for
+    // the wrong reason.
+    float peak = 0.f;
+    for (float s : maj) peak = std::max(peak, std::fabs(s));
+    CHECK(peak > 0.001f);
+}
+
+TEST_CASE("body engine: DETUNE > 0 makes COLOR audible") {
+    const auto maj = render_chord(kMajorTriad, 1.f, 12000);
+    const auto min = render_chord(kMinorTriad, 1.f, 12000);
+    REQUIRE(maj.size() == min.size());
+    bool differs = false;
+    for (size_t i = 0; i < maj.size(); ++i) if (maj[i] != min[i]) differs = true;
+    CHECK(differs);
+}
+
+TEST_CASE("body engine: a chord struck between control ticks gets its material now") {
+    // Triggers do not land on control-tick boundaries -- Part fires them from
+    // the step clock. The material therefore has to reach the voice on the
+    // TRIGGER path too, not only on the tick: otherwise the strike, which is
+    // the loudest part of a struck body, rings with the previous chord's body
+    // for up to kCtrlInterval samples.
+    //
+    // The window below is deliberately shorter than one control interval, and
+    // nothing calls set_chord, so the tick's own derivation cannot rescue it.
+    auto run = [](const float* chord) {
+        BodyEngine e;
+        e.set_seed(9u);
+        e.init(48000.f);
+        e.set_detune(1.f);
+        float t[LANE_COUNT] = { 0.6f, 0.7f, 0.45f, 0.f, 1.f };
+        e.set_targets(t, 0.f);
+        std::vector<float> out(64);
+        float l = 0.f, r = 0.f;
+        for (int i = 0; i < 10; ++i) e.process(l, r);   // land mid-interval
+        e.trigger_chord(chord, 3);
+        for (int i = 0; i < 64; ++i) { e.process(l, r); out[i] = l + r; }
+        return out;
+    };
+    const auto maj = run(kMajorTriad);
+    const auto min = run(kMinorTriad);
+    bool differs = false;
+    for (size_t i = 0; i < maj.size(); ++i) if (maj[i] != min[i]) differs = true;
+    CHECK(differs);
+}
+
+TEST_CASE("body engine: COLOR reaches the material without a retrigger") {
+    // A FLOW deck holds one sustained voice and Part re-pushes the surface
+    // every sample, so a live COLOR sweep changes the chord's quality WITHOUT
+    // firing a new note. The material has to follow on the control tick; if
+    // only the trigger path pushed it, the deck would keep the old body until
+    // the next step.
+    auto run = [](bool switch_to_minor) {
+        BodyEngine e;
+        e.set_seed(5u);
+        e.init(48000.f);
+        e.set_detune(1.f);
+        float t[LANE_COUNT] = { 0.6f, 0.7f, 0.45f, 0.f, 1.f };
+        e.set_targets(t, 0.f);
+        e.set_flow(true);
+        std::vector<float> out(16000);
+        for (int i = 0; i < 16000; ++i) {
+            const bool minor = switch_to_minor && i >= 4000;
+            e.set_chord(minor ? kMinorTriad : kMajorTriad, 3);
+            float l = 0.f, r = 0.f;
+            e.process(l, r);
+            out[i] = l + r;
+        }
+        return out;
+    };
+    const auto held = run(false);
+    const auto swept = run(true);
+    // Identical before the sweep -- nothing else may differ between the runs.
+    for (int i = 0; i < 4000; ++i) REQUIRE(held[i] == swept[i]);
+    bool differs = false;
+    for (size_t i = 4000; i < held.size(); ++i) if (held[i] != swept[i]) differs = true;
+    CHECK(differs);
 }
 
 TEST_CASE("body engine SOURCE moves the material, not an oscillator shape") {
