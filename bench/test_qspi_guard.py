@@ -201,7 +201,7 @@ Idx Name                Size      VMA       LMA       File off  Algn
         digest = "a" * 64
         uid = "00112233445566778899aabb"
         lines = [
-            "BENCH_BEGIN,45fd78d,480000000,96,dcache+icache,%s,%s"
+            "BENCH_BEGIN,45fd78d,480000000,96,dcache+icache,%s,%s,system"
             % (digest, uid),
             "BENCH,system,wave_2x4,1,2,0.01,0.02,12345678",
             "BENCH_END",

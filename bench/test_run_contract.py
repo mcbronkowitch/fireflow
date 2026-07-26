@@ -22,6 +22,9 @@ else:
 
 QSPI_SHA256 = "a" * 64
 DEVICE_ID = "00112233445566778899aabb"
+# Registry order from bench/families.cpp -- every real capture below carries
+# rows from all seven families, so the header declares all seven.
+ALL_FAMILIES = "system voice mem mod abl taps sampler"
 REAL_EVIDENCE_PATH = (
     RUNNER_PATH.parent.parent
     / "docs"
@@ -84,11 +87,12 @@ def bench_row(name, avg_cyc, max_cyc, checksum):
 
 
 def capture_lines(
-    rows, *, anchors=(), device_id=DEVICE_ID, qspi_sha256=QSPI_SHA256
+    rows, *, anchors=(), device_id=DEVICE_ID, qspi_sha256=QSPI_SHA256,
+    families=ALL_FAMILIES
 ):
     return [
-        "BENCH_BEGIN,%s,480000000,96,dcache+icache,%s,%s"
-        % (runner.current_head(), qspi_sha256, device_id),
+        "BENCH_BEGIN,%s,480000000,96,dcache+icache,%s,%s,%s"
+        % (runner.current_head(), qspi_sha256, device_id, families),
         *rows,
         *anchors,
         "BENCH_END",
@@ -117,6 +121,28 @@ def replace_rows(rows, *replacements):
         replacements_by_name.get(row.split(",")[2], row)
         for row in rows
     ]
+
+
+class ParseContract(unittest.TestCase):
+    def test_parse_reads_the_families_field(self):
+        lines = [
+            "BENCH_BEGIN,abc1234,480000000,96,dcache+icache,"
+            + "0" * 64 + ",dead,system voice\n",
+            "BENCH,system,empty_callback,2,12,0.00,0.00,ea306fb5\n",
+            "BENCH_END\n",
+        ]
+        header, rows, _ = runner.parse(lines)
+        self.assertEqual(header["families"], ("system", "voice"))
+
+    def test_parse_rejects_a_header_without_families(self):
+        """An old firmware image must not validate against the new host."""
+        lines = [
+            "BENCH_BEGIN,abc1234,480000000,96,dcache+icache,"
+            + "0" * 64 + ",dead\n",
+            "BENCH,system,empty_callback,2,12,0.00,0.00,ea306fb5\n",
+            "BENCH_END\n",
+        ]
+        self.assertIsNone(runner.parse(lines))
 
 
 class RunContract(unittest.TestCase):

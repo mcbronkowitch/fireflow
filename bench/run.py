@@ -250,7 +250,11 @@ def parse(lines):
     for line in lines:
         if line.startswith("BENCH_BEGIN,"):
             f = line.split(",")
-            if len(f) != 7:
+            # 8 fields since the families field landed. A 7-field header is a
+            # pre-profiles firmware image: reject it rather than guess, so a
+            # stale build cannot be measured against a profile it never knew
+            # about.
+            if len(f) != 8:
                 continue
             header = {
                 "githash": f[1],
@@ -259,6 +263,7 @@ def parse(lines):
                 "cache": f[4],
                 "qspi_sha256": f[5],
                 "device_id": f[6],
+                "families": tuple(f[7].split()),
             }
         elif line.startswith("BENCH,"):
             f = line.split(",")

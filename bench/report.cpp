@@ -50,7 +50,8 @@ void logf(const char* fmt, ...)
 
 void DTCM_REPORT_TEXT report_begin(
     const char* githash,
-    const char* qspi_sha256)
+    const char* qspi_sha256,
+    const char* families)
 {
     // Measured, not asserted: this is exactly the failure mode that already
     // bit this project once (the plan claimed 480 MHz while hw.Init() was
@@ -66,7 +67,7 @@ void DTCM_REPORT_TEXT report_begin(
                                    : "none";
     const auto* uid = reinterpret_cast<const uint32_t*>(UID_BASE);
     static const char DTCM_REPORT_RODATA kBeginFormat[] =
-        "BENCH_BEGIN,%s,%lu,96,%s,%s,%08lx%08lx%08lx\n";
+        "BENCH_BEGIN,%s,%lu,96,%s,%s,%08lx%08lx%08lx,%s\n";
     logf(kBeginFormat,
          githash,
          (unsigned long)clk,
@@ -74,7 +75,8 @@ void DTCM_REPORT_TEXT report_begin(
          qspi_sha256,
          static_cast<unsigned long>(uid[0]),
          static_cast<unsigned long>(uid[1]),
-         static_cast<unsigned long>(uid[2]));
+         static_cast<unsigned long>(uid[2]),
+         families);
 }
 
 void report_end()

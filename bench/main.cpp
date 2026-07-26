@@ -59,7 +59,7 @@ int main(void)
         reinterpret_cast<const volatile uint8_t*>(spky::wt::kBankSamples),
         sizeof(spky::wt::kBankSamples),
         qspi_sha256);
-    bench::report_begin(BENCH_GIT_HASH, qspi_sha256);
+    bench::report_begin(BENCH_GIT_HASH, qspi_sha256, bench::families_csv());
     for (int f = 0; f < bench::kFamilyCount; ++f) {
         const bench::Family& fam = bench::kFamilies[f];
         for (int i = 0; i < fam.count; ++i) {
