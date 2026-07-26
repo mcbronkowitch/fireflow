@@ -1,8 +1,10 @@
 #include "doctest/doctest.h"
 #include "body/exciter.h"
 #include "body/body_voice.h"
+#include <algorithm>
 #include <cmath>
 #include <string>
+#include <vector>
 
 using namespace spky;
 
@@ -530,4 +532,61 @@ TEST_CASE("BodyVoice is deterministic for a given seed") {
         }
     }
     for (int i = 0; i < 2048; ++i) CHECK(first[i] == second[i]);
+}
+
+// --- DETUNE's rail (spec 2026-07-26 body-resonator §5) ---------------------
+//
+// BODY reads DETUNE four times as wide as SYNTH does ("string spread x ~4, up
+// to ~140 ct"), and the bank's stretch amount divides by that same 140 ct. The
+// two numbers are only correct together: before the scale existed, the divisor
+// was already written as though it did, so the amount topped out at a quarter
+// of its range and three quarters of the bank's inharmonicity was unreachable.
+//
+// What is pinned is the RELATIONSHIP, not the factor: the engine's ceiling and
+// the bank's ceiling must be the same place. Both halves are needed --
+// saturating AT the ceiling alone would also pass with too large a scale, and
+// not saturating below it alone would also pass with too small a one.
+//
+// MATL = 1 mixes the strings out, so the mode bank is the only thing left that
+// DETUNE can move, which is what makes this an observation of the amount.
+static std::vector<float> detune_render(float ct, int n) {
+    BodyVoice v;
+    fresh_voice(v, 1.f);
+    v.set_detune_cents(ct);
+    v.update_control(96.f / 48000.f);
+    v.trigger(220.f);
+    std::vector<float> out(n);
+    for (int i = 0; i < n; ++i) {
+        float l = 0.f, r = 0.f;
+        v.process(l, r);
+        out[i] = l + r;
+    }
+    return out;
+}
+
+TEST_CASE("BodyVoice: DETUNE's ceiling is exactly the bank's ceiling") {
+    // SynthEngineT::kDetuneCeilCt -- the most any engine ever pushes.
+    constexpr float kEngineCeilCt = 35.f;
+
+    // At the ceiling the amount has saturated: pushing past it changes nothing
+    // in the bank, so no bank range is left stranded above the knob.
+    const auto at_ceiling = detune_render(kEngineCeilCt, 6000);
+    const auto past       = detune_render(kEngineCeilCt * 2.f, 6000);
+    int differing = 0;
+    for (size_t i = 0; i < at_ceiling.size(); ++i)
+        if (at_ceiling[i] != past[i]) ++differing;
+    CHECK(differing == 0);
+
+    // ...and it has NOT saturated below the ceiling, so no knob travel is
+    // dead either. 1 ct short is the tightest form of that claim.
+    const auto below = detune_render(kEngineCeilCt - 1.f, 6000);
+    bool differs = false;
+    for (size_t i = 0; i < below.size(); ++i)
+        if (below[i] != at_ceiling[i]) differs = true;
+    CHECK(differs);
+
+    // Neither claim may be satisfied by silence.
+    float peak = 0.f;
+    for (float s : at_ceiling) peak = std::max(peak, std::fabs(s));
+    CHECK(peak > 0.001f);
 }

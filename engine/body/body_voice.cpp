@@ -27,6 +27,20 @@ constexpr float kDriftPanAmt   = 0.25f;   // pan drift ceiling around the fan sl
 // It is deliberately NOT 1.0 (the pre-Task-8b behaviour, where DETUNE alone
 // drove the bank): that would leave COLOR able to subtract only.
 constexpr float kBaseStretch = 0.3f;
+
+// BODY reads DETUNE four times as wide as SYNTH does: spec §5, "inharmonicity
+// amount: string spread x ~4 (up to ~140 ct) AND mode-bank stretch -- one
+// 'how broken is this material' axis". SynthEngineT hands every engine the
+// same 0..kDetuneCeilCt = 0..35 ct spread; this is where BODY's own rail
+// comes from, and it is what makes the /kDetuneMaxCt divisor below reach 1.0
+// instead of topping out at a quarter of its range.
+//
+// It is applied here rather than in set_detune_cents() so that
+// detune_cents() -- which SynthEngineT::applied_detune_ct() and the shared
+// part-engine contract read -- keeps reporting the spread the ENGINE pushed,
+// the same number on every engine.
+constexpr float kDetuneScale = 4.f;
+constexpr float kDetuneMaxCt = 140.f;   // = kDetuneCeilCt * kDetuneScale
 } // namespace
 
 void BodyVoice::init(float sample_rate, uint32_t seed) {
@@ -113,9 +127,15 @@ void BodyVoice::set_cutoff_hz(float hz) {
 }
 
 void BodyVoice::_apply_params() {
+    // DETUNE on BODY is the engine's spread times kDetuneScale (spec §5).
+    // Both halves of the axis read this one value: the string pair below and
+    // the bank's stretch amount further down.
+    const float spread_ct = _detune_ct * kDetuneScale;      // 0..140 ct
+
     // Detune splits +/- half the spread (plus drift) across the two strings,
-    // exactly as VoiceT does for its oscillator pair.
-    const float half = (_detune_ct + _drift_ct_cur) * 0.5f;
+    // exactly as VoiceT does for its oscillator pair. The drift ceiling is
+    // NOT scaled -- it is its own +/-3 ct micro-motion, not part of DETUNE.
+    const float half = (spread_ct + _drift_ct_cur) * 0.5f;
     const float ratio_a = std::pow(2.f, -half / 1200.f);
     const float ratio_b = std::pow(2.f, +half / 1200.f);
 
@@ -150,7 +170,7 @@ void BodyVoice::_apply_params() {
     // COLOR to choose the direction. A positive base gives both: DETUNE
     // always spreads the bank toward the bell, COLOR shifts which way from
     // there, and amount = 0 still zeroes the whole product.
-    const float amount = clampf(_detune_ct / 140.f, 0.f, 1.f);
+    const float amount = clampf(spread_ct / kDetuneMaxCt, 0.f, 1.f);
     // Clamped because ModeBank::set_params's contract is -1..+1 and the sum
     // can leave it: only a semitone cluster (character ~ +0.95) saturates,
     // and a chord that broken is already asking for the maximum.
