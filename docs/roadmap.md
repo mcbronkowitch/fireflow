@@ -712,8 +712,42 @@ per-sample coefficient math rather than modal synthesis itself.
 
 Spec: `docs/superpowers/specs/2026-07-26-body-resonator-engine-design.md`
 
-**Hardware gate: BLOCKED on cost** (`docs/bench/2026-07-26-0010b45-body.md`,
-profile `body`, two runs agreeing).
+**Hardware gate: passed at `kVoices = 1`**
+(`docs/bench/2026-07-26-1ec4429-body.md`, profile `body`, two runs agreeing).
+
+| row | avg cyc / block | per sample |
+|---|---:|---:|
+| `body/mode_bank_24` (24 modes, coefficients moving) | 86 762 | 904 |
+| `body/ks_string_pair` (two `daisysp::String`) | 187 251 | 1 950 |
+| `body/ks_string_pair_port` (two `spky::KsString`) | 44 741 | **466** |
+
+Per voice per sample, `(mode_bank_24 + ks_string_pair_port)/96 + 25`:
+**1 395 cycles**. Against the ladder that is `kVoices = 1` — and one voice per
+deck costs 2 790 cycles/sample, **27.9 % of the block**, inside the ~32 %
+envelope every rung of that ladder was drawn around.
+
+The comparison that settles it: a SYNTH deck at four voices (`synth_4_voices`)
+costs 1 764 cycles/sample. A BODY deck at one voice costs 1 395. **BODY is
+cheaper than the part it replaces**, so the instrument gets no more expensive
+by carrying it.
+
+At two voices per deck it does not fit: 5 580 against `synth_2x4`'s 3 535 would
+push the worst case past 100 %. One voice per deck is the answer, which is the
+trade the design already chose — spec §7 keeps 24 modes and spends polyphony
+first.
+
+With the string fixed, **the mode bank is now the expensive half** — 904 of the
+1 395, 65 % of a voice. That is where any future voice count would have to come
+from, and the mode count is a user decision, not a cost decision.
+
+Open, and a design question rather than a measurement: the spec's control
+mapping assumes polyphony it will not have. The chord layer and stab
+humanisation need a ruling at one voice per deck before Phase 3 starts.
+
+<details>
+<summary>How the gate got here — two earlier runs, both superseded</summary>
+
+**First run: blocked** (`docs/bench/2026-07-26-0010b45-body.md`).
 
 | row | avg cyc / block | per sample |
 |---|---:|---:|
@@ -756,12 +790,10 @@ This is the same defect as `daisysp::Resonator` — the one whose cost made the
 STRING spec rule modal territory out. Both halves of BODY were priced on
 libraries that recompute coefficients per sample; the modal half was already
 fixed here (`engine/body/mode_bank.h`, control-rate `_recompute()`), and the
-Karplus half has not been.
+Karplus half was not — until `engine/body/ks_string.{h,cpp}`, which is what the
+third run measures.
 
-`kVoices` stays undecided and Phase 3 does not start. The open question is no
-longer whether BODY is affordable as written — it is not — but what a
-control-rate port of the string costs, mirroring what ModeBank did. That is a
-measurement, not an estimate, and it has not been made.
+</details>
 
 ### M5k — ZAP ⬜
 
