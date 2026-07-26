@@ -252,3 +252,57 @@ TEST_CASE("body engine SOURCE moves the material, not an oscillator shape") {
     }
     CHECK(differs);
 }
+
+// Task 9 (spec 2026-07-26 body-resonator, §6): the FLUX tape tap feeds the
+// excitation bus through SynthEngineT<V>::set_excitation -> V::set_excitation
+// per voice. BodyVoice's own SUB gate (Task 7) already hard-gates this at
+// SUB == 0 -- that gate, and the per-sample math it guards, are NOT this
+// task's work. What Task 9 adds is the forwarding path onto that gate, so
+// the two cases below pin exactly that: SUB == 0 must stay bit-exact off
+// (the brief's own test, kept as written -- it compiles against this tree),
+// and SUB > 0 must actually let a fed excitation change the render (added
+// here: the brief's test alone cannot distinguish "set_excitation forwards
+// correctly" from "set_excitation silently forwards to nothing," since both
+// look identical at SUB == 0).
+TEST_CASE("body engine excitation is bit-exact off at SUB 0") {
+    BodyEngine gated, fed;
+    gated.init(48000.f);
+    fed.init(48000.f);
+    gated.set_sub(0.f);
+    fed.set_sub(0.f);
+    float t[LANE_COUNT] = {0.5f, 1.f, 0.45f, 0.f, 1.f};
+    gated.set_targets(t, 0.5f);
+    fed.set_targets(t, 0.5f);
+    gated.trigger(0.35f);
+    fed.trigger(0.35f);
+    for (int i = 0; i < 9600; ++i) {
+        fed.set_excitation(0.8f);
+        float gl, gr, fl, fr;
+        gated.process(gl, gr);
+        fed.process(fl, fr);
+        REQUIRE(gl == fl);
+        REQUIRE(gr == fr);
+    }
+}
+
+TEST_CASE("body engine excitation reaches the voice and changes the render when SUB is open") {
+    BodyEngine quiet, fed;
+    quiet.init(48000.f);
+    fed.init(48000.f);
+    quiet.set_sub(0.6f);
+    fed.set_sub(0.6f);
+    float t[LANE_COUNT] = {0.5f, 1.f, 0.45f, 0.f, 1.f};
+    quiet.set_targets(t, 0.5f);
+    fed.set_targets(t, 0.5f);
+    quiet.trigger(0.35f);
+    fed.trigger(0.35f);
+    bool differs = false;
+    for (int i = 0; i < 9600; ++i) {
+        fed.set_excitation(0.8f);   // quiet gets the engine default (0.f) every sample
+        float ql, qr, fl, fr;
+        quiet.process(ql, qr);
+        fed.process(fl, fr);
+        if (ql != fl || qr != fr) differs = true;
+    }
+    CHECK(differs);
+}

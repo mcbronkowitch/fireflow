@@ -64,6 +64,24 @@ public:
     // EDGES, not per sample (the set_cycle idiom). The synth ignores it: it
     // has its own envelope.
     virtual void set_gate(bool /*on*/) {}
+
+    // Excitation bus (spec 2026-07-26 body-resonator §6, Task 9): the part's
+    // own FLUX tape tap, one control block late, pushed once per control
+    // tick alongside set_chord() (Part::_control_tick(), part.cpp). Default
+    // no-op, same shape as set_chord/set_gate/set_cycle above -- so
+    // TestToneEngine and SamplerEngine ignore it for free, and only
+    // SynthEngineT<BodyVoice> (synth/synth_engine.h) does anything with it.
+    // Chosen over a concrete `if (_engine_id == ENGINE_BODY) _body.set_
+    // excitation(...)` at the call site: that alternative is provably
+    // cheaper for the other three engines, but it would need its own
+    // re-sync reasoning for a deck that switches away from BODY and back
+    // (does the stale value in a re-activated _body matter?). Going through
+    // `_engine` sidesteps the question entirely -- whichever engine is
+    // active is exactly the one that gets pushed, identical to how
+    // set_chord already behaves across an engine switch -- at a cost
+    // (one virtual call per part per control tick) that is immeasurable
+    // next to the audio-rate budget this file's other comments are about.
+    virtual void set_excitation(float /*x*/) {}
 };
 
 } // namespace spky

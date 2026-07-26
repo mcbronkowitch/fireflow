@@ -312,6 +312,16 @@ void Part::_control_tick() {
     // this raster hold inaudible.
     _engine->set_targets(_tg, _tune);
     for (int i = 0; i < FXT_COUNT; ++i) _fxv[i] = fx_target_value(i);
+
+    // Excitation bus, own-FLUX source (spec §6, Task 9). Order within one
+    // sample is _control_tick() -> _engine->process() -> _fx.process()
+    // (below in Part::process), so _fx.tape_tap() here is whatever the LAST
+    // sample of the PREVIOUS block left cached -- exactly the "one control
+    // block late" the spec asks for, with no delay line of our own needed.
+    // IPartEngine::set_excitation defaults to a no-op (engine_iface.h), so
+    // this line changes nothing for TestToneEngine, SamplerEngine, SYNTH or
+    // WAVE; only SynthEngineT<BodyVoice> forwards it anywhere.
+    _engine->set_excitation(_fx.tape_tap());
 }
 
 void Part::process(float inL, float inR, float& outL, float& outR,

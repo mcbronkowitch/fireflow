@@ -365,6 +365,49 @@ TEST_CASE("part: the VOICE row reaches a BODY deck") {
           == render(&Part::set_voice_decay, 1.f));
 }
 
+TEST_CASE("part: BODY's own FLUX tape reaches its excitation bus through Part::_control_tick") {
+    // Task 9 (spec 2026-07-26 body-resonator, §6): Part::_control_tick()
+    // (part.cpp) pushes _fx.tape_tap() into _engine->set_excitation() once
+    // per control tick. Neither test_part_fx.cpp (PartFx in isolation) nor
+    // test_body_engine.cpp (BodyEngine fed set_excitation() directly,
+    // bypassing Part entirely) exercises that specific line -- this is the
+    // one test where removing it is observable: an otherwise-identical BODY
+    // deck must sound different once its own FLUX is switched on, because
+    // doing so is the only thing that changes (its own echo now reaches its
+    // own excitation bus; with FLUX off the deck's SUB gate is still open,
+    // but nothing feeds it).
+    //
+    // Every other TEST_CASE in this file calls Part::init(sr, seed) with the
+    // echo-buffer arguments left at their nullptr default, which pins
+    // PartFx::_buf_ok false and makes FLUX a permanent no-op regardless of
+    // set_fx_on() -- fine for those tests (none of them touch FLUX), but
+    // this one needs real buffers, the same idiom test_instrument.cpp uses.
+    // FX MIX is pinned to 0 so FLUX's own audible send-effect on the main
+    // output stays bit-identical between the two renders (dry, either way);
+    // the only channel left that CAN move the render is the excitation bus,
+    // because the tap is captured pre-FX-MIX (part_fx.cpp) but consumed
+    // by BODY's resonator, whose own dry output then differs. Without this,
+    // FLUX's ordinary output-shaping would make the two renders diverge
+    // regardless of whether Task 9's wiring exists at all, which is exactly
+    // what happened the first time this test was written (see the WAVE/
+    // SYNTH-style comment above about isolating claims from side effects).
+    static float s_pbody_echo_l[Flux::kMaxSamples], s_pbody_echo_r[Flux::kMaxSamples];
+    auto render = [](bool flux_on) {
+        Part p;
+        p.init(48000.f, 5u, s_pbody_echo_l, s_pbody_echo_r);
+        p.set_engine(ENGINE_BODY);
+        p.set_voice_sub(0.7f);                     // excitation bus open
+        p.set_fx_target_base(FXT_FX_MIX, 0.f);      // isolate the tap from the send
+        if (flux_on) p.fx().set_fx_on(FxBlock::Flux, true, true);
+        std::vector<float> out;
+        out.reserve(48000);
+        float l, r;
+        for (int i = 0; i < 48000; ++i) { p.process(l, r); out.push_back(l); }
+        return out;
+    };
+    CHECK(render(false) != render(true));
+}
+
 TEST_CASE("part: WAVE switches through the existing 4 ms engine fade") {
     Part p;
     p.init(48000.f, 5u);

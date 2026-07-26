@@ -66,6 +66,17 @@ public:
     void set_flow(bool flow) override;
     void set_hold(bool on) override;
 
+    // Excitation bus (spec 2026-07-26 body-resonator, §6, Task 9): forwards
+    // to every voice unconditionally, same idiom as set_hold/set_material_
+    // character in BODY's voice contract. A no-op on SYNTH and WAVE --
+    // VoiceT::set_excitation (synth/voice.h) is an empty inline -- so this
+    // costs those two engines one dead store call per voice per control
+    // tick and changes nothing about their signal path (ctrl_identity and
+    // wave_formant_sweep are the proof).
+    void set_excitation(float x) override {
+        for (int i = 0; i < kVoices; ++i) _voices[i].set_excitation(x);
+    }
+
     // VOICE edit layer (normalized knobs; boot defaults live as raw ratios)
     void set_attack(float n);      // ratio = 0.002 * 250^n  (0.2%..50% of cycle)
     void set_decay(float n);       // ratio = 0.1 * 80^n     (0.1x..8x cycle)
