@@ -635,16 +635,17 @@ def wave_gate_verdict(captures):
     return out.getvalue()
 
 
-def write_results(out_dir, captures, profile):
+def write_results(out_dir, captures, profile, profile_name):
     header, rows, anchors = captures[0]
     os.makedirs(out_dir, exist_ok=True)
     stamp = datetime.date.today().isoformat()
-    base = os.path.join(out_dir, "%s-%s" % (stamp, header["githash"]))
+    base = os.path.join(
+        out_dir, "%s-%s-%s" % (stamp, header["githash"], profile_name))
     fingerprint = device_fingerprint(header["device_id"])
 
     with open(base + ".csv", "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
-        w.writerow(["run", "qspi_sha256", "device_fingerprint",
+        w.writerow(["run", "profile", "qspi_sha256", "device_fingerprint",
                     "family", "name", "avg_cyc", "max_cyc",
                     "pct_avg", "pct_max", "checksum"])
         for run_index, (run_header, run_rows, _) in enumerate(captures, start=1):
@@ -652,6 +653,7 @@ def write_results(out_dir, captures, profile):
             for r in run_rows:
                 w.writerow([
                     run_index,
+                    profile_name,
                     run_header["qspi_sha256"],
                     run_fingerprint,
                     r["family"],
@@ -665,6 +667,38 @@ def write_results(out_dir, captures, profile):
 
     with open(base + ".md", "w", encoding="utf-8") as fh:
         fh.write("# Bench evidence %s — `%s`\n\n" % (stamp, header["githash"]))
+        # The gate ledger is the point of this document: it must record a
+        # gate as applied only when validate_captures actually ran it, and
+        # name a not-applicable gate together with the reason -- so a
+        # partial (profile-scoped) run cannot skip a gate silently. The
+        # universal gates below always ran if validation passed, because
+        # validate_captures enforces them unconditionally for every
+        # profile; only wave_acceptance is profile-scoped.
+        universal = (
+            "row set matches the profile exactly (no missing, no extra rows)",
+            "no duplicate rows",
+            "QSPI digest and device fingerprint identical across runs",
+            "per-row checksums identical across runs",
+        )
+        fh.write("## Gate ledger\n\n")
+        fh.write("Profile `%s` — families: %s\n\n"
+                 % (profile_name,
+                    ", ".join("`%s`" % f for f in profile.families)))
+        fh.write("Applied and passed:\n\n")
+        for g in universal:
+            fh.write("- %s\n" % g)
+        if WAVE_ACCEPTANCE in profile.gates:
+            fh.write("- `wave_acceptance`: wave_2x4 no slower than "
+                     "synth_2x4, below the %d-cycle block budget\n"
+                     % BUDGET_CYCLES)
+        fh.write("\nNot applicable to this profile:\n\n")
+        if WAVE_ACCEPTANCE not in profile.gates:
+            fh.write("- `wave_acceptance` — needs the `system` family's "
+                     "synth_2x4 and wave_2x4 rows, which this profile "
+                     "does not contain\n")
+        else:
+            fh.write("- none\n")
+        fh.write("\n")
         fh.write("Measured on a Daisy Seed (STM32H750). %s Hz core clock, "
                  "block size %s, %s, `-ffast-math -funroll-loops`. "
                  "Block budget %d cycles.\n\n"
@@ -810,7 +844,7 @@ def main():
         print("ERROR: %s" % error, file=sys.stderr)
         return 2
 
-    base = write_results(args.out_dir, captures, profile)
+    base = write_results(args.out_dir, captures, profile, args.profile)
     print("# wrote %s.md and %s.csv" % (base, base), file=sys.stderr)
     return 0
 

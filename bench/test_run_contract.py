@@ -130,6 +130,16 @@ def replace_rows(rows, *replacements):
     ]
 
 
+def gate_ledger_section(md):
+    """Isolate the '## Gate ledger' section of a written evidence Markdown
+    document, so a test can assert against gate-ledger content specifically
+    rather than the whole document -- which also holds a verdict and
+    per-run tables that could accidentally contain a matching substring."""
+    start = md.index("## Gate ledger")
+    end = md.index("\n## ", start + len("## Gate ledger"))
+    return md[start:end]
+
+
 class ParseContract(unittest.TestCase):
     def test_parse_reads_the_families_field(self):
         lines = [
@@ -456,7 +466,7 @@ class RunContract(unittest.TestCase):
         self.assertEqual(csv_text.count("\nsystem,"), 0)
         self.assertEqual(csv_text.count("\n1,"), 68)
         self.assertEqual(csv_text.count("\n2,"), 68)
-        self.assertIn("run,qspi_sha256,device_fingerprint", csv_text)
+        self.assertIn("run,profile,qspi_sha256,device_fingerprint", csv_text)
         self.assertIn(QSPI_SHA256, csv_text)
         self.assertIn(fingerprint, csv_text)
         self.assertNotIn(DEVICE_ID, csv_text)
@@ -568,6 +578,81 @@ class ProfileContract(unittest.TestCase):
         )
         with self.assertRaises(runner.BenchValidationError):
             runner.validate_captures([capture, capture], gated)  # rejected
+
+    def test_written_evidence_names_the_profile_and_ledgers_the_gates(self):
+        capture = runner.parse(
+            capture_lines(self.system_rows(), families="system")
+        )
+
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(
+                temp, [capture, capture], resolve("system"), "system"
+            )
+
+            self.assertTrue(base.endswith("-system"))
+            with open(base + ".md", encoding="utf-8") as fh:
+                md = fh.read()
+            self.assertIn("system", md)
+            self.assertIn("wave_acceptance", md)
+            # Every universal gate is recorded as having run.
+            self.assertIn("row set", md.lower())
+            with open(base + ".csv", encoding="utf-8") as fh:
+                csv_text = fh.read()
+            self.assertIn("profile", csv_text.splitlines()[0])
+            self.assertIn(",system,", csv_text)
+
+    def test_gate_ledger_marks_wave_acceptance_applied_when_the_profile_declares_it(self):
+        """The 'system' profile declares wave_acceptance, so the ledger
+        must record it under 'Applied and passed' -- not silently drop it,
+        and not misfile it under 'Not applicable' either."""
+        capture = runner.parse(
+            capture_lines(self.system_rows(), families="system")
+        )
+
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(
+                temp, [capture, capture], resolve("system"), "system"
+            )
+            with open(base + ".md", encoding="utf-8") as fh:
+                md = fh.read()
+
+        ledger = gate_ledger_section(md)
+        applied, not_applicable = ledger.split(
+            "Not applicable to this profile:"
+        )
+        self.assertIn("`wave_acceptance`", applied)
+        self.assertNotIn("wave_acceptance", not_applicable)
+        self.assertIn("none", not_applicable)
+
+    def test_gate_ledger_marks_wave_acceptance_not_applicable_with_reason_when_the_profile_omits_it(self):
+        """A profile that does not declare wave_acceptance must not have
+        the ledger claim the gate ran -- that would convert a real gap
+        into a false assurance. wave_2x4 is deliberately made SLOWER than
+        synth_2x4 here (a capture that would fail the gate outright), so a
+        ledger bug that claims 'applied and passed' regardless of the
+        profile can't hide behind a capture that happened to pass anyway.
+        """
+        from profiles import Profile
+
+        capture = runner.parse(
+            capture_lines(self.system_rows(wave_avg=900), families="system")
+        )
+        ungated = Profile(families=("system",), gates=frozenset())
+
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(
+                temp, [capture, capture], ungated, "system"
+            )
+            with open(base + ".md", encoding="utf-8") as fh:
+                md = fh.read()
+
+        ledger = gate_ledger_section(md)
+        applied, not_applicable = ledger.split(
+            "Not applicable to this profile:"
+        )
+        self.assertNotIn("wave_acceptance", applied)
+        self.assertIn("`wave_acceptance`", not_applicable)
+        self.assertIn("does not contain", not_applicable)
 
 
 class ProfileAwareEvidenceContract(unittest.TestCase):
