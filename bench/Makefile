@@ -38,6 +38,8 @@ CPP_SOURCES = \
 	workloads_abl.cpp \
 	workloads_taps.cpp \
 	workloads_sampler.cpp \
+	workloads_body.cpp \
+	../engine/body/mode_bank.cpp \
 	../engine/mod/lane.cpp \
 	../engine/sampler/sampler_engine.cpp \
 	../engine/sampler/sample_buffer.cpp \

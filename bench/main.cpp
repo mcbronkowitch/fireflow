@@ -83,6 +83,10 @@ int main(void)
         const bench::Workload& w = bench::kTapsWorkloads[i];
         bench::report_row(w, bench::run_workload(w));
     }
+    for (int i = 0; i < bench::kBodyCount; ++i) {
+        const bench::Workload& w = bench::kBodyWorkloads[i];
+        bench::report_row(w, bench::run_workload(w));
+    }
     // Last on purpose: the sampler rows use the 8 MB SDRAM arena as their
     // load source and overwrite whatever family 3 and the taps rows left in
     // it. Nothing downstream reads it.
