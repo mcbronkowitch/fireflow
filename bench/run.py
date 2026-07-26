@@ -15,6 +15,7 @@ import time
 import queue
 import threading
 
+from profiles import DEFAULT_PROFILE, WAVE_ACCEPTANCE, resolve
 from qspi_tools import (
     QspiGuardError,
     prepare_split_artifacts,
@@ -46,7 +47,7 @@ OPENOCD_TCL_ADDRESS = ("127.0.0.1", 6666)
 OPENOCD_SHUTDOWN = b"shutdown\x1a"
 
 
-def build():
+def build(families):
     # Do not ask libDaisy's default `all` target for bench.bin: one flat
     # binary spanning SRAM (0x24000000) and QSPI (0x90040000) would encode the
     # address gap. Build the ELF, then extract two explicit artifacts.
@@ -55,7 +56,12 @@ def build():
         cwd=PROGRAMMER_DIR,
         check=True,
     )
-    subprocess.run(["make", "-j8", "build/bench.elf"], cwd=HERE, check=True)
+    subprocess.run(
+        ["make", "-j8", "BENCH_FAMILIES=%s" % " ".join(families),
+         "build/bench.elf"],
+        cwd=HERE,
+        check=True,
+    )
     return prepare_existing_artifacts()
 
 
@@ -236,11 +242,15 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "sampler_worst_nomotion",
     ),
 }
-BENCH_PROTOCOL_ROWSET = frozenset(
-    (family, name)
-    for family, names in BENCH_PROTOCOL_ROWS_BY_FAMILY.items()
-    for name in names
-)
+
+
+def protocol_rowset(profile):
+    """The (family, name) pairs a capture from this profile must contain."""
+    return frozenset(
+        (family, name)
+        for family in profile.families
+        for name in BENCH_PROTOCOL_ROWS_BY_FAMILY[family]
+    )
 
 
 def parse(lines):
@@ -250,7 +260,11 @@ def parse(lines):
     for line in lines:
         if line.startswith("BENCH_BEGIN,"):
             f = line.split(",")
-            if len(f) != 7:
+            # 8 fields since the families field landed. A 7-field header is a
+            # pre-profiles firmware image: reject it rather than guess, so a
+            # stale build cannot be measured against a profile it never knew
+            # about.
+            if len(f) != 8:
                 continue
             header = {
                 "githash": f[1],
@@ -259,6 +273,7 @@ def parse(lines):
                 "cache": f[4],
                 "qspi_sha256": f[5],
                 "device_id": f[6],
+                "families": tuple(f[7].split()),
             }
         elif line.startswith("BENCH,"):
             f = line.split(",")
@@ -282,8 +297,9 @@ class BenchValidationError(ValueError):
     pass
 
 
-def validate_captures(captures):
+def validate_captures(captures, profile):
     """Reject any repeat capture that cannot be accepted as hardware evidence."""
+    expected_rowset = protocol_rowset(profile)
     expected_rows = None
     expected_identity = None
     for run_index, (header, rows, _) in enumerate(captures, start=1):
@@ -295,6 +311,16 @@ def validate_captures(captures):
                 "run %d QSPI digest or device fingerprint differs from run 1"
                 % run_index
             )
+        reported = tuple(header["families"])
+        if reported != tuple(profile.families):
+            raise BenchValidationError(
+                "run %d reports families %s but --profile requested %s -- "
+                "the flashed image and the --profile argument disagree; "
+                "rebuild for this profile (drop --no-build), or pass the "
+                "--profile that matches the image actually on the device"
+                % (run_index, " ".join(reported) or "none",
+                   " ".join(profile.families))
+            )
         row_keys = [(row["family"], row["name"]) for row in rows]
         keys = set(row_keys)
         if len(keys) != len(row_keys):
@@ -305,9 +331,9 @@ def validate_captures(captures):
                 "run %d has duplicate bench rows: %s"
                 % (run_index, ", ".join(duplicates))
             )
-        if keys != BENCH_PROTOCOL_ROWSET:
-            missing = sorted(BENCH_PROTOCOL_ROWSET - keys)
-            extra = sorted(keys - BENCH_PROTOCOL_ROWSET)
+        if keys != expected_rowset:
+            missing = sorted(expected_rowset - keys)
+            extra = sorted(keys - expected_rowset)
             fmt = lambda items: ", ".join(
                 "%s/%s" % item for item in items
             ) or "none"
@@ -316,45 +342,46 @@ def validate_captures(captures):
                 "(missing: %s; extra: %s)"
                 % (
                     run_index,
-                    len(BENCH_PROTOCOL_ROWSET),
+                    len(expected_rowset),
                     fmt(missing),
                     fmt(extra),
                 )
             )
-        names = {row["name"] for row in rows}
-        required = {"synth_2x4", "wave_2x4"}
-        if not required.issubset(names):
-            raise BenchValidationError(
-                "run %d is missing WAVE acceptance rows: %s"
-                % (run_index, ", ".join(sorted(required - names)))
-            )
-        named = by_name(rows)
-        synth = named["synth_2x4"]
-        wave = named["wave_2x4"]
-        try:
-            synth_avg = int(synth["avg_cyc"])
-            synth_max = int(synth["max_cyc"])
-            wave_avg = int(wave["avg_cyc"])
-            wave_max = int(wave["max_cyc"])
-        except (TypeError, ValueError) as error:
-            raise BenchValidationError(
-                "run %d has a non-numeric WAVE acceptance result" % run_index
-            ) from error
-        if wave_avg > synth_avg:
-            raise BenchValidationError(
-                "run %d WAVE average %d exceeds SYNTH average %d"
-                % (run_index, wave_avg, synth_avg)
-            )
-        if wave_max > synth_max:
-            raise BenchValidationError(
-                "run %d WAVE maximum %d exceeds SYNTH maximum %d"
-                % (run_index, wave_max, synth_max)
-            )
-        if wave_max >= BUDGET_CYCLES:
-            raise BenchValidationError(
-                "run %d WAVE maximum %d is not below the %d-cycle block budget"
-                % (run_index, wave_max, BUDGET_CYCLES)
-            )
+        if WAVE_ACCEPTANCE in profile.gates:
+            names = {row["name"] for row in rows}
+            required = {"synth_2x4", "wave_2x4"}
+            if not required.issubset(names):
+                raise BenchValidationError(
+                    "run %d is missing WAVE acceptance rows: %s"
+                    % (run_index, ", ".join(sorted(required - names)))
+                )
+            named = by_name(rows)
+            synth = named["synth_2x4"]
+            wave = named["wave_2x4"]
+            try:
+                synth_avg = int(synth["avg_cyc"])
+                synth_max = int(synth["max_cyc"])
+                wave_avg = int(wave["avg_cyc"])
+                wave_max = int(wave["max_cyc"])
+            except (TypeError, ValueError) as error:
+                raise BenchValidationError(
+                    "run %d has a non-numeric WAVE acceptance result" % run_index
+                ) from error
+            if wave_avg > synth_avg:
+                raise BenchValidationError(
+                    "run %d WAVE average %d exceeds SYNTH average %d"
+                    % (run_index, wave_avg, synth_avg)
+                )
+            if wave_max > synth_max:
+                raise BenchValidationError(
+                    "run %d WAVE maximum %d exceeds SYNTH maximum %d"
+                    % (run_index, wave_max, synth_max)
+                )
+            if wave_max >= BUDGET_CYCLES:
+                raise BenchValidationError(
+                    "run %d WAVE maximum %d is not below the %d-cycle block budget"
+                    % (run_index, wave_max, BUDGET_CYCLES)
+                )
         if expected_rows is None:
             expected_rows = by_name(rows)
             continue
@@ -489,12 +516,18 @@ def verdict(rows, anchors):
     # single oscillator kernel and ~7.3x cheaper; anchoring on that inflates
     # every ratio by that factor and misranks the table.
     out.write("**Cost per candidate, relative to one real spotymod voice.**\n\n")
-    for r in rows:
-        if r["family"] == "voice" and r["name"] != "morph_osc_bare":
-            out.write("- `%s` — %s one real voice (%s a bare oscillator kernel)\n"
-                      % (r["name"],
-                         sig2(ratio(rows, r["name"], "synth_1_voice")),
-                         sig2(ratio(rows, r["name"], "morph_osc_bare"))))
+    candidates = [r for r in rows
+                  if r["family"] == "voice" and r["name"] != "morph_osc_bare"]
+    # An empty body here would read as "no candidates cost anything worth
+    # reporting" rather than "this profile did not carry them" -- the same
+    # silent omission the gate ledger exists to prevent. Say which it is.
+    if not candidates:
+        out.write("- n/a (family `voice` not in this profile)\n")
+    for r in candidates:
+        out.write("- `%s` — %s one real voice (%s a bare oscillator kernel)\n"
+                  % (r["name"],
+                     sig2(ratio(rows, r["name"], "synth_1_voice")),
+                     sig2(ratio(rows, r["name"], "morph_osc_bare"))))
     out.write("\n")
 
     out.write(
@@ -608,16 +641,58 @@ def wave_gate_verdict(captures):
     return out.getvalue()
 
 
-def write_results(out_dir, captures):
+def wave_gate_not_applicable_reason(profile):
+    """Why `wave_acceptance` did not run for this profile.
+
+    There are two genuinely different reasons, and the gate ledger must not
+    conflate them: a profile whose families cannot supply synth_2x4 and
+    wave_2x4 at all, versus a profile whose families could but whose
+    manifest simply does not declare the gate. Hardcoded prose here once
+    said "which this profile does not contain" unconditionally -- false for
+    the second case, inside a document whose only purpose is to be
+    evidence. Derive it instead.
+    """
+    supplied = {
+        row_name
+        for family in profile.families
+        for row_name in BENCH_PROTOCOL_ROWS_BY_FAMILY.get(family, ())
+    }
+    required = {"synth_2x4", "wave_2x4"}
+    missing = required - supplied
+    if missing:
+        return (
+            "needs %s, which this profile's families (%s) do not supply"
+            % (", ".join(sorted(missing)), ", ".join(profile.families) or "none")
+        )
+    return "this profile's manifest does not declare it"
+
+
+def write_results(out_dir, captures, profile, profile_name):
+    # The gate ledger below claims every universal gate ran and passed,
+    # including "at least two runs". Checking that here makes the claim
+    # true by construction rather than by trusting the caller got the
+    # order right. The other four universal gates (row set, duplicates,
+    # identity, checksum drift) are still only true because main() calls
+    # validate_captures before calling this function -- re-running that
+    # full check here would duplicate real validation work for a function
+    # whose job is to persist a capture, not gate it, and whose caller
+    # already wraps validate_captures in its own error handling. That
+    # ordering dependency is the residual convention this does not remove.
+    if len(captures) < 2:
+        raise ValueError(
+            "write_results claims the 'at least two runs' gate passed; "
+            "called with %d capture(s)" % len(captures)
+        )
     header, rows, anchors = captures[0]
     os.makedirs(out_dir, exist_ok=True)
     stamp = datetime.date.today().isoformat()
-    base = os.path.join(out_dir, "%s-%s" % (stamp, header["githash"]))
+    base = os.path.join(
+        out_dir, "%s-%s-%s" % (stamp, header["githash"], profile_name))
     fingerprint = device_fingerprint(header["device_id"])
 
     with open(base + ".csv", "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
-        w.writerow(["run", "qspi_sha256", "device_fingerprint",
+        w.writerow(["run", "profile", "qspi_sha256", "device_fingerprint",
                     "family", "name", "avg_cyc", "max_cyc",
                     "pct_avg", "pct_max", "checksum"])
         for run_index, (run_header, run_rows, _) in enumerate(captures, start=1):
@@ -625,6 +700,7 @@ def write_results(out_dir, captures):
             for r in run_rows:
                 w.writerow([
                     run_index,
+                    profile_name,
                     run_header["qspi_sha256"],
                     run_fingerprint,
                     r["family"],
@@ -638,6 +714,38 @@ def write_results(out_dir, captures):
 
     with open(base + ".md", "w", encoding="utf-8") as fh:
         fh.write("# Bench evidence %s — `%s`\n\n" % (stamp, header["githash"]))
+        # The gate ledger is the point of this document: it must record a
+        # gate as applied only when validate_captures actually ran it, and
+        # name a not-applicable gate together with the reason -- so a
+        # partial (profile-scoped) run cannot skip a gate silently. The
+        # universal gates below always ran if validation passed, because
+        # validate_captures enforces them unconditionally for every
+        # profile; only wave_acceptance is profile-scoped.
+        universal = (
+            "row set matches the profile exactly (no missing, no extra rows)",
+            "no duplicate rows",
+            "QSPI digest and device fingerprint identical across runs",
+            "per-row checksums identical across runs",
+            "at least two runs (`--repeat`, minimum 2)",
+        )
+        fh.write("## Gate ledger\n\n")
+        fh.write("Profile `%s` — families: %s\n\n"
+                 % (profile_name,
+                    ", ".join("`%s`" % f for f in profile.families)))
+        fh.write("Applied and passed:\n\n")
+        for g in universal:
+            fh.write("- %s\n" % g)
+        if WAVE_ACCEPTANCE in profile.gates:
+            fh.write("- `wave_acceptance`: wave_2x4 no slower than "
+                     "synth_2x4, below the %d-cycle block budget\n"
+                     % BUDGET_CYCLES)
+        fh.write("\nNot applicable to this profile:\n\n")
+        if WAVE_ACCEPTANCE not in profile.gates:
+            fh.write("- `wave_acceptance` — %s\n"
+                     % wave_gate_not_applicable_reason(profile))
+        else:
+            fh.write("- none\n")
+        fh.write("\n")
         fh.write("Measured on a Daisy Seed (STM32H750). %s Hz core clock, "
                  "block size %s, %s, `-ffast-math -funroll-loops`. "
                  "Block budget %d cycles.\n\n"
@@ -648,7 +756,13 @@ def write_results(out_dir, captures):
             "fingerprint `%s` (SHA-256 of the MCU UID).\n\n"
             % (len(captures), header["qspi_sha256"], fingerprint)
         )
-        fh.write(wave_gate_verdict(captures))
+        # Only claim the WAVE gate passed when the profile actually declared
+        # (and therefore validate_captures actually enforced) it -- otherwise
+        # this document would either assert an untrue PASS for an ungated
+        # profile, or KeyError on synth_2x4/wave_2x4 rows a system-less
+        # profile never had, after the hardware time is already spent.
+        if WAVE_ACCEPTANCE in profile.gates:
+            fh.write(wave_gate_verdict(captures))
         fh.write(verdict(rows, anchors))
         for run_index, (run_header, run_rows, run_anchors) in enumerate(
                 captures, start=1):
@@ -701,15 +815,27 @@ def main():
     )
     ap.add_argument("--repeat", type=int, default=2,
                     help="runs to compare for the determinism check")
+    ap.add_argument(
+        "--profile", default=DEFAULT_PROFILE,
+        help="which workload families to build and measure "
+             "(see bench/profiles.py)")
     ap.add_argument("--out-dir", default=os.path.join(REPO, "docs", "bench"))
     args = ap.parse_args()
+    try:
+        profile = resolve(args.profile, BENCH_PROTOCOL_ROWS_BY_FAMILY)
+    except (KeyError, ValueError) as error:
+        print("ERROR: %s" % error, file=sys.stderr)
+        return 2
     if not args.build_only and args.repeat < 2:
         print("ERROR: hardware evidence requires at least two runs",
               file=sys.stderr)
         return 2
 
     try:
-        identity = build() if not args.no_build else prepare_existing_artifacts()
+        identity = (
+            build(profile.families) if not args.no_build
+            else prepare_existing_artifacts()
+        )
         if args.program_qspi or not args.build_only:
             require_clean_tree(REPO)
         if args.program_qspi:
@@ -760,12 +886,12 @@ def main():
         captures.append(parsed)
 
     try:
-        validate_captures(captures)
+        validate_captures(captures, profile)
     except BenchValidationError as error:
         print("ERROR: %s" % error, file=sys.stderr)
         return 2
 
-    base = write_results(args.out_dir, captures)
+    base = write_results(args.out_dir, captures, profile, args.profile)
     print("# wrote %s.md and %s.csv" % (base, base), file=sys.stderr)
     return 0
 

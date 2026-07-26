@@ -23,21 +23,61 @@ C_USR_FLAGS = -ffast-math -funroll-loops
 
 GIT_HASH = $(shell git -C .. rev-parse --short HEAD)
 
+# --- workload family selection ---------------------------------------
+# Which families this image contains. Override on the command line, or let
+# run.py pass it from a profile:
+#
+#   make BENCH_FAMILIES="system voice" build/bench.elf
+#
+# Selecting a subset drops the family's workload translation unit AND its
+# BENCH_FAMILY_* define, so families.cpp's registry entry disappears too; the
+# engine code only that family referenced then goes with --gc-sections. That
+# is where the SRAM comes back.
+BENCH_FAMILIES ?= system voice mem mod abl taps sampler
+
+FAMILY_SOURCE_system  = workloads_system.cpp
+FAMILY_SOURCE_voice   = workloads_daisysp.cpp
+FAMILY_SOURCE_mem     = workloads_memory.cpp
+FAMILY_SOURCE_mod     = workloads_mod.cpp
+FAMILY_SOURCE_abl     = workloads_abl.cpp
+FAMILY_SOURCE_taps    = workloads_taps.cpp
+FAMILY_SOURCE_sampler = workloads_sampler.cpp
+
+FAMILY_DEFINE_system  = BENCH_FAMILY_SYSTEM
+FAMILY_DEFINE_voice   = BENCH_FAMILY_VOICE
+FAMILY_DEFINE_mem     = BENCH_FAMILY_MEM
+FAMILY_DEFINE_mod     = BENCH_FAMILY_MOD
+FAMILY_DEFINE_abl     = BENCH_FAMILY_ABL
+FAMILY_DEFINE_taps    = BENCH_FAMILY_TAPS
+FAMILY_DEFINE_sampler = BENCH_FAMILY_SAMPLER
+
+# Fail loudly on a typo rather than silently building a smaller image.
+$(foreach f,$(BENCH_FAMILIES),\
+  $(if $(FAMILY_SOURCE_$(f)),,$(error unknown bench family '$(f)')))
+# Guard FAMILY_DEFINE_* the same way as FAMILY_SOURCE_* above. A family added
+# with a source entry but no define entry would compile its workloads.cpp in
+# (FAMILY_SOURCES) while silently contributing an empty FAMILY_DEFINES entry,
+# so families.cpp's `#if BENCH_FAMILY_*` guard for it is never true and its
+# registry entry disappears -- the image then self-reports fewer families
+# than were requested, which run.py's validate_captures surfaces as "the
+# flashed image and the --profile argument disagree", pointing the reader at
+# a stale image instead of this Makefile's actual omission.
+$(foreach f,$(BENCH_FAMILIES),\
+  $(if $(FAMILY_DEFINE_$(f)),,$(error bench family '$(f)' has no FAMILY_DEFINE_ entry)))
+
+FAMILY_SOURCES = $(foreach f,$(BENCH_FAMILIES),$(FAMILY_SOURCE_$(f)))
+FAMILY_DEFINES = $(foreach f,$(BENCH_FAMILIES),$(FAMILY_DEFINE_$(f)))
+
 CPP_SOURCES = \
 	main.cpp \
 	report.cpp \
 	qspi_digest.cpp \
 	rand_shim.cpp \
 	runner.cpp \
+	families.cpp \
 	anchor.cpp \
 	mem.cpp \
-	workloads_system.cpp \
-	workloads_daisysp.cpp \
-	workloads_memory.cpp \
-	workloads_mod.cpp \
-	workloads_abl.cpp \
-	workloads_taps.cpp \
-	workloads_sampler.cpp \
+	$(FAMILY_SOURCES) \
 	../engine/mod/lane.cpp \
 	../engine/sampler/sampler_engine.cpp \
 	../engine/sampler/sample_buffer.cpp \
@@ -78,3 +118,19 @@ $(BUILD_DIR)/git_hash.h: FORCE | $(BUILD_DIR)
 	@python write_git_hash.py $@ $(GIT_HASH)
 
 $(BUILD_DIR)/main.o: $(BUILD_DIR)/git_hash.h
+
+# --- bench family selection header -------------------------------------
+# `-DBENCH_FAMILY_*` on the compile line has the exact same hazard as
+# `-DBENCH_GIT_HASH` above, and it is not hypothetical: switching
+# BENCH_FAMILIES leaves a stale build/families.o believing it still holds
+# the old family set. Narrow-after-wide dies at link on an undefined
+# reference to a family the narrower rebuild dropped (families.o still
+# references it); wide-after-narrow links *silently*, producing an image
+# that reports the wide build's size while only containing the narrow
+# family's workloads. Same fix, same shape as the git hash: emit the
+# selection into a real header, written only when its content differs, and
+# declare it a real prerequisite of the one object that reads it.
+$(BUILD_DIR)/bench_families.h: FORCE | $(BUILD_DIR)
+	@python write_bench_families.py $@ $(FAMILY_DEFINES)
+
+$(BUILD_DIR)/families.o: $(BUILD_DIR)/bench_families.h
