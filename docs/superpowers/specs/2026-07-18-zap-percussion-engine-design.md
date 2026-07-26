@@ -283,6 +283,36 @@ Bench: one entry in the bench-firmware workload list — "ZapEngine ×2
 starts only after the hardware bench has run (STRING precedent), though
 the risk here is nominal.
 
+**Before estimating ZAP's cost, check what every imported primitive does per
+sample.** This fork has now been misled three times by the same thing, and
+each time the wrong conclusion looked like a fact about the synthesis method:
+
+- `daisysp::Resonator` recomputes every mode's frequency, Q and amplitude on
+  every sample, including a `powf`. Measured at 34.3 %, that made the STRING
+  spec (2026-07-18) rule modal and bell territory out as too expensive.
+- `daisysp::String` recomputes its whole parameter block on every sample, in
+  both nonlinearity branches: two `powf`, an `atanf`, and a
+  `OnePole::SetFrequency` that costs a `tanf`. One string measured **975
+  cycles/sample** — 1.8× an entire SYNTH voice, from a primitive the same
+  STRING spec had called "structurally cheaper than SYNTH".
+- Moved to the 96-sample control tick (`engine/body/mode_bank.h`,
+  `engine/body/ks_string.h`), the same DSP costs 904 cycles/sample for
+  24 modes and **233 for a string**. The audio path never changed; only the
+  schedule did.
+
+ZAP is in better shape here — it reuses this fork's own `env.h`,
+`fast_sin.h`, `onepole.h` and `rng.h`, all of which already respect the
+control cadence — but "structurally the cheapest engine in the fork" and
+"the risk here is nominal" above are exactly the shape of claim that was
+wrong twice. They are estimates. The gate decides.
+
+Running that gate is now cheap: the bench selects workload families at
+compile time (`docs/superpowers/specs/2026-07-26-bench-workload-profiles-design.md`),
+so ZAP needs a `zap` family and a `zap` profile — a `FAMILY_SOURCE_`/
+`FAMILY_DEFINE_` pair in `bench/Makefile`, a row list in `bench/run.py`, an
+entry in `bench/families.cpp` and one in `bench/profiles.py`. The full image
+does not link; a per-engine profile is the supported path, not a workaround.
+
 ### 8. Hosts & demo scenarios
 
 - Scenario parser: `"zap"`. VCV: engine button cycles
