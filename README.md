@@ -161,7 +161,7 @@ the desktop clang path); the build, install and I/O details live in
 | **CPU** | Three measured rounds on real hardware: `instrument_worst`'s worst block went from ~156 % of the audio-block budget to 94 %. Method and every number in [`bench/`](bench/README.md) and [`docs/bench/`](docs/bench/) | **done** (ongoing as a tool) |
 | **M5i** | WAVE: four-voice PPG-style wavetable part engine | **done** (engine + renderer + VCV; 65,024-byte mapped-QSPI bank; hardware-gated; released in 2.13.0) |
 | **+ FORM/SONG** | Persistent A/B phrase snapshots: five FORM phrase engines plus AAAB, ABAB, ABBB, BUILD, ROTATE, MIRROR, and OFF SONG arrangements; boundary-safe changes and legacy patch migration | **done** (engine + renderer + VCV; released in 2.13.1) |
-| **M5j** | STRING: four-voice Karplus-Strong part engine | planned (spec ready; not implemented) |
+| **M5j** | BODY: four-voice resonator part engine, morphing string -> metal -> bell, with a sympathetic excitation bus | planned (spec ready; not implemented) |
 | **M5k** | ZAP: monophonic percussion part engine | planned (spec ready; not implemented) |
 | **M5l** | PULL: chord gravity between the two decks | planned (spec ready; not implemented) |
 | **M6** | Firmware shell: pads, gestures, panel, LEDs -- runs on real hardware | planned after M5l (spec ready; implementation not started) |
