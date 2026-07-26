@@ -52,3 +52,27 @@ TEST_CASE("SvfBp reset clears state") {
     bank.reset();
     CHECK(bank.process(gain, 0.f) == 0.f);
 }
+
+TEST_CASE("SvfBp has zero DC gain (band-pass, not low-pass)") {
+    SvfBp<4> bank;
+    bank.reset();
+
+    // 1 kHz at 48 kHz, Q = 40.
+    const float f  = 1000.f / 48000.f;
+    const float q  = 40.f;
+    const float g  = std::tan(3.14159265f * f);
+    const float r  = 1.f / q;
+    const float h  = 1.f / (1.f + r * g + g * g);
+    bank.set_coeffs(0, g, r + g, h);
+    for (int i = 1; i < 4; ++i) bank.set_coeffs(i, 0.f, 0.f, 1.f);
+
+    const float gain[4] = { 1.f, 0.f, 0.f, 0.f };
+
+    // Feed constant DC (1.0) for 10000 samples to allow filter to settle.
+    for (int i = 0; i < 10000; ++i) bank.process(gain, 1.f);
+
+    // DC gain of band-pass is zero; output should be negligible.
+    // Low-pass would have unity DC gain, so output would be ~1.0.
+    const float dc_response = bank.process(gain, 1.f);
+    CHECK(std::fabs(dc_response) < 0.01f);
+}
