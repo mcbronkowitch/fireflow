@@ -47,9 +47,6 @@ public:
     void set_flux_rate(int slice_idx) { _flux.set_rate(slice_idx); }
     void set_dust(float n) { _flux.set_dust(n); }
     void set_rot(float n)  { _flux.set_rot(n); }
-    void set_tap_offsets(const int32_t off[tap_tuning::kTaps]) {
-        _flux.set_tap_offsets(off);
-    }
 
     // fxv[FXT_COUNT]: already-modulated values from Part::fx_target_value().
     void process(float& l, float& r, float& send_l, float& send_r,

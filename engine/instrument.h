@@ -209,8 +209,11 @@ public:
     bool  gate(int p)  const { return _parts[p].gate(); }
     float pitch_cv(int p) const { return _parts[p].pitch_cv(); }
     bool  pitch_gate(int p) const { return _parts[p].mod().pitch_gate(); }
-    // The bank's own published rhythm (see mod/rhythm_view.h). Read by the
-    // control tick to place the OTHER bank's taps -- and by tests.
+    // The bank's own published rhythm (see mod/rhythm_view.h). No longer read
+    // by the control tick -- the cross-feed that placed the OTHER bank's tap
+    // offsets here is gone with the taps (a BBD has no read pointer). Kept as
+    // a plain observer; currently unused, but harmless to leave in place for
+    // a future cross-deck mechanism.
     const RhythmView& rhythm(int p) const { return _parts[p].mod().rhythm(); }
 
     // --- M4 center section ---

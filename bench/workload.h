@@ -47,9 +47,6 @@ extern const int      kModCount;
 extern const Workload kAblWorkloads[];
 extern const int      kAblCount;
 
-extern const Workload kTapsWorkloads[];
-extern const int      kTapsCount;
-
 extern const Workload kSamplerWorkloads[];
 extern const int      kSamplerCount;
 

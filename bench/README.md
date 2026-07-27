@@ -24,7 +24,7 @@ contains.
 | profile | families | purpose |
 |---|---|---|
 | `system` | system | carries the WAVE acceptance gate; fits comfortably |
-| `full` (default) | system, voice, mem, mod, abl, taps, sampler | the complete run, as before profiles existed |
+| `full` (default) | system, voice, mem, mod, abl, body, sampler | the complete run, as before profiles existed |
 
 **`full` currently fails to link, and that is deliberate, not broken.** The
 engine has outgrown the image; no profile change fixes that on its own (see
@@ -299,8 +299,8 @@ half to move it to.
 because `SamplerEngine::load_sample` takes two `float*`, so the 8 MB
 `sdram_arena()` doubles as the source material both channels are copied from
 (L from the front, R from an offset view — the offset is what makes both
-windows land inside it exactly). Family 3 and the taps rows are done with the
-arena by then, and every sampler `setup()` refills what it is about to read.
+windows land inside it exactly). Family 3 is done with the arena by then, and
+every sampler `setup()` refills what it is about to read.
 Anything appended after the sampler family must not assume the arena still
 holds what family 3 put there.
 
@@ -359,8 +359,7 @@ this paragraph is the record of it.
 Add one row to the relevant `kXxxWorkloads[]` table (`workloads_system.cpp`
 for family 1, `workloads_daisysp.cpp` for family 2, `workloads_memory.cpp`
 for family 3, `workloads_mod.cpp` for the modulation plane, `workloads_abl.cpp`
-for the ablation rows, `workloads_taps.cpp` for the FLUX tap bank,
-`workloads_sampler.cpp` for the texture deck) with a
+for the ablation rows, `workloads_sampler.cpp` for the texture deck) with a
 family tag, a name, a setup function and a process function. A new *table*
 additionally needs its `extern` in `workload.h`, an entry in `runner.cpp`'s
 `find_workload` arrays (and its loop bound), a loop in `main.cpp`, and the

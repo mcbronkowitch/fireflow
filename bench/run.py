@@ -174,7 +174,6 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "oliverb_solo_sram",
         "instrument_init",
         "instrument_worst",
-        "instrument_worst_taps",
     ),
     "voice": (
         "morph_osc_bare",
@@ -220,10 +219,6 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "echo_short_sdram",
         "grit_drive_solo",
         "grit_reduce_solo",
-    ),
-    "taps": (
-        "taps_2_opt",
-        "tap_read_sdram",
     ),
     "body": (
         "mode_bank_24",

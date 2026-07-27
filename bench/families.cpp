@@ -23,9 +23,6 @@ const Family kFamilies[] = {
 #if BENCH_FAMILY_ABL
     { "abl",     kAblWorkloads,     kAblCount     },
 #endif
-#if BENCH_FAMILY_TAPS
-    { "taps",    kTapsWorkloads,    kTapsCount    },
-#endif
 #if BENCH_FAMILY_BODY
     { "body",    kBodyWorkloads,    kBodyCount    },
 #endif

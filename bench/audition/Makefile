@@ -33,7 +33,6 @@ CPP_SOURCES = \
 	../../engine/center/center.cpp \
 	../../engine/fx/grit.cpp \
 	../../engine/fx/flux.cpp \
-	../../engine/fx/taps.cpp \
 	../../engine/fx/reverb.cpp \
 	../../engine/fx/part_fx.cpp \
 	../../engine/fx/comp.cpp \

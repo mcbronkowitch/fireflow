@@ -18,9 +18,8 @@ void Flux::init(float sample_rate, float* buf_l, float* buf_r) {
     _dt_coef = daisysp::fmin(1.f / (0.03f * sample_rate), 1.f);
     _rate_idx = 3;               // boot "1/4"
     _bpm = 120.f;
-    _dust_norm = 0.f;            // TapBank::init resets its own _dust to 0 --
-    _rot_norm = 0.f;             // these guards must restart from the same place
-    _taps.init(sample_rate);
+    _dust_norm = -1.f;
+    _rot_norm = -1.f;
     recompute_time(true);        // snap the boot delay time
     set_feedback(0.45f);
     set_mix(0.5f);
@@ -62,25 +61,15 @@ void Flux::set_mix(float norm) {
     _mix_lin = dbfs2lin(daisysp::fmap(clampf(norm, 0.f, 1.f), -40.f, 0.f));
 }
 
+// Store-only for now (dead guards; see the _dust_norm/_rot_norm comment in
+// flux.h): the taps these forwarded to are gone, and the BBD rewrite that
+// gives them a real destination (renamed set_drive/set_stages) is Task 8.
 void Flux::set_dust(float norm) {
-    if (!_buf_ok) return;
-    const float d = clampf(norm, 0.f, 1.f);
-    if (d == _dust_norm) return;   // I3: see the guard comment on _dust_norm
-    _dust_norm = d;
-    _taps.set_dust(d);
+    _dust_norm = norm;
 }
 
 void Flux::set_rot(float norm) {
-    if (!_buf_ok) return;
-    const float r = clampf(norm, 0.f, 1.f);
-    if (r == _rot_norm) return;    // I3: same guard as set_dust
-    _rot_norm = r;
-    _taps.set_rot(r);
-}
-
-void Flux::set_tap_offsets(const int32_t off[tap_tuning::kTaps]) {
-    if (!_buf_ok) return;
-    _taps.set_offsets(off);
+    _rot_norm = norm;
 }
 
 void Flux::process(float& l, float& r) {
@@ -88,37 +77,9 @@ void Flux::process(float& l, float& r) {
     float send = _sw.process();
     if (_sw.is_idle()) return;   // fully off: bit-exact dry
 
-    // The shared delay-time slew (8723bc5) advances exactly ONCE per sample,
-    // before the branch -- both paths must see the same tape geometry or the
-    // DUST = 0 bypass stops being bit-exact.
     daisysp::fonepole(_dt_current, _dt_target, _dt_coef);
     const float ds = _dt_current * _sr;
 
-    if (!_taps.active()) {       // DUST = 0: bit-exact with the pre-DUST path
-        l += _echo_l.Process(l * send, ds) * _mix_lin;
-        r += _echo_r.Process(r * send, ds) * _mix_lin;
-        return;
-    }
-
-    // The taps read the tape as it stands at the START of this sample -- built
-    // before Process() advances the write head. Both channels share one write
-    // pointer (they are written in lockstep).
-    const TapeTap tape{_echo_l.line(), _echo_r.line(), _echo_l.write_ptr(),
-                       static_cast<int32_t>(kMaxSamples) - 1};
-    float tl = 0.f, tr = 0.f;
-    _taps.process(tape, tl, tr);
-
-    const float e_l = _echo_l.Process(l * send, ds);
-    const float e_r = _echo_r.Process(r * send, ds);
-
-    // Taps join BEFORE _mix_lin: FLUX MIX stays the single wet control for
-    // everything coming off the tape. Tap reads deliberately skip the
-    // band-pass and tanh -- the taps are rawer and brighter than the echo.
-    // They are scaled by `send` (the SoftSwitch fade level) like the dry
-    // signal feeding the echo: a raw read has no decay envelope of its own
-    // and would otherwise hold full level right up to is_idle()'s hard cut.
-    // The taps sit BESIDE the echo, never in its place -- there is no head
-    // takeover any more.
-    l += (e_l + tl * send) * _mix_lin;
-    r += (e_r + tr * send) * _mix_lin;
+    l += _echo_l.Process(l * send, ds) * _mix_lin;
+    r += _echo_r.Process(r * send, ds) * _mix_lin;
 }

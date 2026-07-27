@@ -33,14 +33,13 @@ GIT_HASH = $(shell git -C .. rev-parse --short HEAD)
 # BENCH_FAMILY_* define, so families.cpp's registry entry disappears too; the
 # engine code only that family referenced then goes with --gc-sections. That
 # is where the SRAM comes back.
-BENCH_FAMILIES ?= system voice mem mod abl taps body sampler
+BENCH_FAMILIES ?= system voice mem mod abl body sampler
 
 FAMILY_SOURCE_system  = workloads_system.cpp
 FAMILY_SOURCE_voice   = workloads_daisysp.cpp
 FAMILY_SOURCE_mem     = workloads_memory.cpp
 FAMILY_SOURCE_mod     = workloads_mod.cpp
 FAMILY_SOURCE_abl     = workloads_abl.cpp
-FAMILY_SOURCE_taps    = workloads_taps.cpp
 FAMILY_SOURCE_sampler = workloads_sampler.cpp
 FAMILY_SOURCE_body    = workloads_body.cpp
 
@@ -49,7 +48,6 @@ FAMILY_DEFINE_voice   = BENCH_FAMILY_VOICE
 FAMILY_DEFINE_mem     = BENCH_FAMILY_MEM
 FAMILY_DEFINE_mod     = BENCH_FAMILY_MOD
 FAMILY_DEFINE_abl     = BENCH_FAMILY_ABL
-FAMILY_DEFINE_taps    = BENCH_FAMILY_TAPS
 FAMILY_DEFINE_sampler = BENCH_FAMILY_SAMPLER
 FAMILY_DEFINE_body    = BENCH_FAMILY_BODY
 
@@ -94,7 +92,6 @@ CPP_SOURCES = \
 	../engine/fx/grit.cpp \
 	../engine/fx/flux.cpp \
 	../engine/fx/bbd.cpp \
-	../engine/fx/taps.cpp \
 	../engine/fx/reverb.cpp \
 	../engine/fx/part_fx.cpp \
 	../engine/fx/comp.cpp \

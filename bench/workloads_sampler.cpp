@@ -33,8 +33,8 @@ using namespace spky;
 // makes both windows land inside kSdramFloats exactly.
 //
 // Clobbering the arena is safe because the sampler family runs LAST in
-// main.cpp -- family 3 and the taps rows are long done with it -- and every
-// setup below refills whatever it is about to read.
+// main.cpp -- family 3 is long done with it -- and every setup below refills
+// whatever it is about to read.
 constexpr size_t kSrcOffset = kSdramFloats - kSamplerFrames;   // 81 152
 static_assert(kSdramFloats >= kSamplerFrames + 1, "source arena too small");
 

@@ -28,7 +28,7 @@ DEVICE_ID = "00112233445566778899aabb"
 # rows from all seven families that existed when it was measured, so the
 # header declares those seven. The `body` family arrived later (M5j); a
 # capture from before it cannot and should not name it.
-ALL_FAMILIES = "system voice mem mod abl taps sampler"
+ALL_FAMILIES = "system voice mem mod abl sampler"
 
 # The profile those captures ARE: `full` as it stood before the `body` family
 # joined it. Today's `full` names eight families, so a pre-body capture is no
@@ -839,7 +839,7 @@ class FullProfileLinkContract(unittest.TestCase):
     """
 
     KNOWN_FAMILIES = frozenset(
-        {"system", "voice", "mem", "mod", "abl", "taps", "body", "sampler"}
+        {"system", "voice", "mem", "mod", "abl", "body", "sampler"}
     )
 
     def test_full_profile_manifest_resolves_cleanly(self):
