@@ -85,6 +85,8 @@ add_executable(spky_tests
     tests/test_grit.cpp
     engine/fx/flux.cpp
     tests/test_flux.cpp
+    engine/fx/bbd.cpp
+    tests/test_bbd.cpp
     engine/fx/taps.cpp
     tests/test_taps.cpp
     engine/fx/reverb.cpp
@@ -160,6 +162,7 @@ add_executable(render
     engine/center/center.cpp
     engine/fx/grit.cpp
     engine/fx/flux.cpp
+    engine/fx/bbd.cpp
     engine/fx/taps.cpp
     engine/fx/reverb.cpp
     engine/fx/part_fx.cpp

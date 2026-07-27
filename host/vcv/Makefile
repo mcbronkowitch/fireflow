@@ -44,6 +44,7 @@ SOURCES += \
 	$(REPO)/engine/center/center.cpp \
 	$(REPO)/engine/fx/grit.cpp \
 	$(REPO)/engine/fx/flux.cpp \
+	$(REPO)/engine/fx/bbd.cpp \
 	$(REPO)/engine/fx/taps.cpp \
 	$(REPO)/engine/fx/reverb.cpp \
 	$(REPO)/engine/fx/part_fx.cpp \
