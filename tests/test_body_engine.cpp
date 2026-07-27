@@ -355,3 +355,64 @@ TEST_CASE("body engine excitation reaches the voice and changes the render when 
     }
     CHECK(differs);
 }
+
+// Reported by ear (Bastian, 2026-07-27): a BODY deck is audibly louder on the
+// left, on both decks, at every pan-related setting -- so not the part's own
+// panning, which sits after the engine.
+//
+// Cause: SynthEngineT::_update_control pans voice v to kPanFan[v] * width,
+// and kPanFan is { -1, +1, -0.5, +0.5 } (synth_engine.cpp). That is a FAN --
+// it spreads a four-voice chord across the field, and the four slots balance
+// each other. BODY has kVoices == 1, so its single voice permanently takes
+// slot 0, which is hard LEFT. At the boot MOTION width the static pan lands
+// near -0.5, i.e. about 7.7 dB of level difference; at width 1 the voice is
+// panned fully left and the right channel gets the drift only.
+//
+// Nothing in the suite could have caught this. contract_deterministic_seed
+// compares two RUNS sample by sample -- l against l and r against r -- and no
+// assertion anywhere compares l against r. Determinism is not balance.
+TEST_CASE("body engine: one voice sits centred, not on the fan's leftmost slot") {
+    // MOTION full open, so the fan slot (if it is applied) reaches its
+    // extreme. This is the premise of the whole test: at width 0 the bug is
+    // multiplied by zero and a centred and an uncentred engine are identical.
+    BodyEngine e;
+    e.set_seed(3u);
+    e.init(48000.f);
+    float t[LANE_COUNT] = { 0.5f, 0.5f, 0.45f, 1.f, 1.f };   // LANE_MOTION = 1
+    e.set_targets(t, 0.5f);
+    e.trigger(0.35f);
+
+    // Measured on the DRONE, over a window derived from the drift rate. Two
+    // things would otherwise make this read the wrong number, and both bit
+    // while writing it:
+    //
+    //  - A struck resonator's energy is almost all in the first moments, so
+    //    integrating a decaying strike weights whatever the drift LFO happened
+    //    to be doing at the attack. Lengthening the window does not help --
+    //    2 s and 25 s both read ~2.15 on a correctly centred engine. FLOW
+    //    gives a sustained signal, so the integral samples the whole window
+    //    evenly.
+    //  - BodyVoice::init draws the pan drift rate as 0.05 + 0.15 * u, so the
+    //    slowest LFO is 0.05 Hz -- a 20 s period -- with a random start phase.
+    //    The window has to cover a full cycle or the drift's own excursion
+    //    (+/-0.25 at width 1, i.e. up to (0.831/0.5556)^2 = 2.24 in energy)
+    //    reads as an imbalance. 25 s covers the slowest case with margin.
+    e.set_flow(true);
+    double el = 0.0, er = 0.0;
+    for (int i = 0; i < 48000 * 25; ++i) {
+        float l = 0.f, r = 0.f;
+        e.process(l, r);
+        el += double(l) * l;
+        er += double(r) * r;
+    }
+    REQUIRE(el > 0.0);            // premise: the voice actually sounded
+    REQUIRE(er > 0.0);
+    MESSAGE("energy L=", el, " R=", er, " ratio=", el / er);
+
+    // Drift still moves the voice around the centre (set_drift_amount(width)
+    // is unchanged and deliberately still lives), so this is a balance bound,
+    // not an equality. A centred voice differs by the drift LFO only; the fan
+    // slot would put the ratio in the hundreds.
+    const double ratio = el > er ? el / er : er / el;
+    CHECK(ratio < 1.5);
+}
