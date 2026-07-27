@@ -293,9 +293,19 @@ TEST_CASE("body engine excitation is bit-exact off at SUB 0") {
 // this as mutation 5 and the suite stayed green). It cannot tell "the gate
 // works" from "the gate is absent" or even "set_excitation forwards
 // nowhere" -- it can only fail on a non-finite tap. This test supplies that
-// case: as of this task the excitation bus carries real audio from the FX
-// chain, so a pathological value reaching it is not a hypothetical. Plain
-// arithmetic does not survive one: 0.f * inf is NaN in IEEE754, so an
+// case.
+//
+// Be honest about what it is: a CONTRACT test on the guard, not a live
+// hazard. Infinity cannot reach the bus by today's only route -- PartFx::
+// tape_tap() is itself fast_tanh-bounded (part_fx.cpp), so the one source
+// wired as of Task 9 physically cannot deliver one. What the guard buys is
+// that "SUB == 0 is bit-exact off" holds for ANY value on the bus rather
+// than only for the values the current source happens to produce, which
+// matters because Task 10 adds two more sources (cross-deck output and the
+// audio input) that this task's clip does not sit in front of.
+//
+// Plain arithmetic does not survive a non-finite input: 0.f * inf is NaN in
+// IEEE754, so an
 // ungated `_excitation * _sub * _sub * 0.5f` poisons `drive` with NaN the
 // instant infinity reaches the bus, and NaN propagates forever through the
 // resonator's own feedback loop (string delay lines, mode bank) once it's

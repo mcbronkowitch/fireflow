@@ -362,6 +362,19 @@ TEST_CASE("part_fx: tape_tap's soft clip bounds the raw taps, which skip Flux's 
         REQUIRE(std::fabs(fx.tape_tap()) <= 1.f);
     }
     MESSAGE("maxabs=", maxabs);
+    // Premise guard (scoped re-review of the Task 9 fix round). Everything
+    // above only MEANS something if the loop actually reached the clipping
+    // regime: `<= 1.f` is trivially true of a signal that never got near 1,
+    // so without this line a future tuning change that stopped the raw taps
+    // from blooming would leave the test green while testing nothing.
+    //
+    // The threshold is not the measurement. Measured today: 0.9749 clipped,
+    // from a raw peak of 1.00653 (the value the clip-deleted mutation
+    // reports). 0.9 says "the drive got within about ten percent of the
+    // ceiling" -- loose enough that ordinary retuning of the echo, the taps
+    // or fast_tanh's curve does not trip it, tight enough that a loop which
+    // decays instead of blooming cannot pass.
+    REQUIRE(maxabs > 0.9);
 }
 
 TEST_CASE("part_fx: tape_tap's DC block removes a sustained offset, fast_tanh alone cannot") {
