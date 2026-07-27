@@ -4,12 +4,15 @@
 #include "PhysicalModeling/KarplusString.h"
 #include "mem.h"
 #include "serial_arena.h"
+#include "engine_2x4.h"
+#include "instrument.h"
 
 namespace bench {
 namespace {
 
-// Rows in this family run strictly serially (body/mode_bank_24,
-// body/mode_bank_24_static, body/ks_string_pair, in table order below), so
+using namespace spky;
+
+// Rows in this family run strictly serially (in table order below), so
 // their state shares one max-sized, max-aligned allocation instead of each
 // holding its own permanent globals -- see bench/serial_arena.h and
 // bench/workloads_system.cpp for the worked pattern this follows.
@@ -27,7 +30,25 @@ struct KsPortGroup {
     bool           wobble_up = false;
 };
 
-SerialArena<ModeBankGroup, KsGroup, KsPortGroup> g_body_arena;
+// Task 13: the engine-level rows. A matched BodyEngine pair (mirrors
+// SynthPairGroup / WavePairGroup, bench/workloads_system.cpp) and a whole
+// Instrument (mirrors InstrumentGroup) -- both defined here, not reached from
+// workloads_system.cpp's anonymous namespace, because that namespace gives
+// them internal linkage private to that translation unit. Keeping the body
+// family's own group types also means this row can never perturb
+// instrument_worst's arena slot: the two live in entirely separate arenas
+// (g_system_arena vs g_body_arena).
+struct BodyPairGroup {
+    BodyEngine a, b;
+};
+
+struct BodyInstGroup {
+    Instrument instrument;
+    int        counter;
+    float      out_l[kBlock], out_r[kBlock];
+};
+
+SerialArena<ModeBankGroup, KsGroup, KsPortGroup, BodyPairGroup, BodyInstGroup> g_body_arena;
 
 // +-3 cents = 2^(+-3/1200), precomputed so no pow() call sits in the
 // control-tick path measured below -- the row prices ModeBank::set_params,
@@ -188,6 +209,128 @@ float proc_ks_pair_port()
     return acc;
 }
 
+// --- body/body_2x4 & body/body_2x4_string: engine-level worst case ---------
+// Task 13: mirrors Task 8's matched-pair pattern (bench/engine_2x4.h) with
+// BodyEngine standing in for SynthEngine/WaveEngine -- kVoices == 1 rather
+// than 4, but setup_engine_2x4/proc_engine_2x4 only call set_seed, init,
+// set_decay, set_cycle, set_flow, trigger and active_voices, every one of
+// which SynthEngineT<BodyVoice> provides.
+//
+// MATL (LANE_SOURCE) must reach the engine BEFORE trigger(): BodyVoice::
+// trigger() calls _apply_params() itself (body_voice.cpp), which reads
+// _matl as pushed by the LAST set_morph() call -- and set_morph() is only
+// ever called from SynthEngineT::_update_control(), the control tick.
+// set_targets() below runs before setup_engine_2x4() (which owns both
+// init() and trigger()); init() calls _update_control() once at its own end
+// (synth_engine.cpp), so by the time setup_engine_2x4()'s trigger() calls
+// land, the mode bank and the string/modal blend are already primed at the
+// row's intended MATL, not the engine's boot default. Every lane but
+// LANE_SOURCE stays at the engine's own boot default (synth_engine.h);
+// LANE_SOURCE is the only difference between the two rows below.
+void setup_body_pair(float matl)
+{
+    auto& pair = g_body_arena.emplace<BodyPairGroup>();
+    float t[LANE_COUNT] = { matl, 0.5f, 0.5f, 0.f, 0.8f };
+    pair.a.set_targets(t, 0.f);
+    pair.b.set_targets(t, 0.f);
+    setup_engine_2x4(pair.a, pair.b);
+}
+
+float proc_body_2x4_pair()
+{
+    auto& pair = g_body_arena.get<BodyPairGroup>();
+    return proc_engine_2x4(pair.a, pair.b);
+}
+
+// body/body_2x4: MATL = 1, the modal end. BodyVoice::process() computes the
+// string pair AND the mode bank unconditionally every sample -- MATL only
+// weights their blend, spec §3 -- but MATL also reaches KsString::set_params
+// as the dispersion amount (body_voice.cpp _apply_params): at MATL = 1 the
+// string pair runs its full nonlinear dispersion branch, the more expensive
+// of the two, so this is the worst case, not merely a representative one.
+void setup_body_2x4() { setup_body_pair(1.f); }
+
+// body/body_2x4_string: the same pair at MATL = 0, the ablation that prices
+// the mode bank in context -- body_2x4 minus body_2x4_string is what the
+// bank costs a running BODY voice on top of the (cheaper, non-dispersing)
+// string pair, the same way ks_string_pair_nolin isolates the string's own
+// nonlinearity above.
+void setup_body_2x4_string() { setup_body_pair(0.f); }
+
+// --- body/inst_body_worst: BODY on both decks, excitation bus hot ----------
+// Mirrors setup_inst_worst / proc_inst (bench/workloads_system.cpp:306,332)
+// -- same instrument-worst configuration (8 voices via 4-note COLOR, every
+// FX block on, high diffusion, echo at maximum) -- with BODY on both parts
+// and the excitation bus actually reaching the voices. Not reusable
+// literally: InstrumentGroup and proc_inst are internal-linkage names in
+// workloads_system.cpp's anonymous namespace, invisible from this
+// translation unit, so this row carries its own group (BodyInstGroup above)
+// and its own process function, duplicating proc_inst's shape exactly
+// (process the block, retrigger both parts every ~250 blocks, fold both
+// parts' active_voices() into the checksum) rather than inventing a
+// different one.
+void setup_inst_body_worst()
+{
+    auto& group = g_body_arena.emplace<BodyInstGroup>();
+    Instrument& inst = group.instrument;
+    inst.init(kSampleRate, fx_mem());
+    inst.set_tempo_bpm(120.f);
+    group.counter = 0;
+
+    for (int p = 0; p < PART_COUNT; ++p) {
+        inst.set_engine(p, ENGINE_BODY);
+        inst.set_color(p, 1.f);          // 4-note chords -> 4 voices per part
+        inst.set_density(p, 1.f);
+        inst.set_depth(p, 1.f);
+        inst.set_rate(p, 0.8f);
+        inst.set_fx_on(p, FxBlock::Grit, true);
+        inst.set_fx_on(p, FxBlock::Flux, true);
+        inst.set_grit_mix(p, 1.f);
+        inst.set_flux_mix(p, 1.f);
+        inst.set_comp(p, 1.f);
+        inst.set_voice_decay(p, 1.f);
+        // Excitation bus (spec §6, Tasks 9+10): all three sources enabled
+        // and SUB > 0. BodyVoice hard-gates the whole bus at SUB == 0
+        // (body_voice.cpp process()); leaving SUB at whatever
+        // setup_inst_worst never touches would price a BODY instrument with
+        // the bus switched OFF -- the opposite of a worst case.
+        inst.set_excitation_sources(p, true, true, true);
+        inst.set_voice_sub(p, 1.f);
+        inst.trigger_manual(p);
+    }
+    inst.set_reverb_mix(0.5f);
+    inst.set_reverb_size(1.f);
+    inst.set_reverb_decay(0.95f);
+    inst.set_reverb_diffusion(0.9f);
+    inst.set_reverb_smear(1.f);
+    inst.set_reverb_mod(1.f);
+    inst.set_master_drive(1.f);
+}
+
+float proc_inst_body_worst()
+{
+    auto& group = g_body_arena.get<BodyInstGroup>();
+    Instrument& inst = group.instrument;
+    const float* in = test_input();
+    inst.process(in, in, group.out_l, group.out_r, kBlock);
+    // Keep the voices busy: a fire every ~half second on both parts, same
+    // cadence proc_inst uses.
+    if (++group.counter >= 250) {
+        group.counter = 0;
+        inst.trigger_manual(PART_A);
+        inst.trigger_manual(PART_B);
+    }
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i)
+        acc += group.out_l[i] + group.out_r[i];
+    // Same guard proc_inst uses: fold both parts' active voice counts into
+    // the returned value so a wrong voice count moves the checksum instead
+    // of passing silently.
+    acc += static_cast<float>(inst.active_voices(PART_A));
+    acc += static_cast<float>(inst.active_voices(PART_B));
+    return acc;
+}
+
 } // namespace
 
 const Workload kBodyWorkloads[] = {
@@ -196,6 +339,9 @@ const Workload kBodyWorkloads[] = {
     { "body", "ks_string_pair",      setup_ks_pair,          proc_ks_pair          },
     { "body", "ks_string_pair_nolin", setup_ks_pair_nolin,   proc_ks_pair_nolin    },
     { "body", "ks_string_pair_port",  setup_ks_pair_port,    proc_ks_pair_port     },
+    { "body", "body_2x4",             setup_body_2x4,        proc_body_2x4_pair    },
+    { "body", "body_2x4_string",      setup_body_2x4_string, proc_body_2x4_pair    },
+    { "body", "inst_body_worst",      setup_inst_body_worst, proc_inst_body_worst  },
 };
 const int kBodyCount = sizeof(kBodyWorkloads) / sizeof(kBodyWorkloads[0]);
 

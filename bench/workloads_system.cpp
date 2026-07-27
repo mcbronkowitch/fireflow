@@ -9,6 +9,7 @@
 #include "synth/synth_engine.h"
 #include "fx/part_fx.h"
 #include "fx/taps.h"
+#include "engine_2x4.h"
 
 namespace bench {
 namespace {
@@ -140,26 +141,9 @@ float proc_synth()
 // --- 6-7. matched two-engine, four-voice SYNTH / WAVE -----------------------
 // Direct-engine A/B comparison: every setup and process operation is shared
 // by construction, so the oscillator type is the only measured difference.
-constexpr float kEngine2x4Pitches[] = { 0.25f, 0.35f, 0.45f, 0.55f };
-
-template <class EngineT>
-void setup_engine_2x4(EngineT& a, EngineT& b)
-{
-    a.set_seed(3u);
-    b.set_seed(4u);
-    a.init(kSampleRate);
-    b.init(kSampleRate);
-    a.set_decay(1.f);
-    b.set_decay(1.f);
-    a.set_cycle(2.f);
-    b.set_cycle(2.f);
-    a.set_flow(false);
-    b.set_flow(false);
-    for (float pitch : kEngine2x4Pitches) {
-        a.trigger(pitch);
-        b.trigger(pitch);
-    }
-}
+// setup_engine_2x4 / proc_engine_2x4 themselves now live in bench/engine_2x4.h
+// (Task 13), hoisted out so bench/workloads_body.cpp can reuse them for
+// BodyEngine without copying them.
 
 void setup_synth_2x4()
 {
@@ -170,21 +154,6 @@ void setup_wave_2x4()
 {
     auto& pair = g_system_arena.emplace<WavePairGroup>();
     setup_engine_2x4(pair.a, pair.b);
-}
-
-template <class EngineT>
-float proc_engine_2x4(EngineT& a, EngineT& b)
-{
-    float acc = 0.f;
-    for (size_t i = 0; i < kBlock; ++i) {
-        float a_l, a_r, b_l, b_r;
-        a.process(a_l, a_r);
-        b.process(b_l, b_r);
-        acc += a_l + a_r + b_l + b_r;
-    }
-    acc += static_cast<float>(a.active_voices());
-    acc += static_cast<float>(b.active_voices());
-    return acc;
 }
 
 float proc_synth_2x4()

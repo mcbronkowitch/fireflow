@@ -7,6 +7,13 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SYSTEM_SOURCE = ROOT / "bench" / "workloads_system.cpp"
+BODY_SOURCE = ROOT / "bench" / "workloads_body.cpp"
+# setup_engine_2x4 / proc_engine_2x4 and kEngine2x4Pitches were hoisted out of
+# workloads_system.cpp into their own header (Task 13, body-resonator-engine)
+# so workloads_body.cpp could reuse them for BodyEngine without copying them
+# -- a pure move, so the source contract below moves with it rather than
+# weakening to "the symbol exists somewhere".
+ENGINE_2X4_SOURCE = ROOT / "bench" / "engine_2x4.h"
 MAKEFILE = ROOT / "bench" / "Makefile"
 GENERATOR = ROOT / "tools" / "bake_wavetables.py"
 BANK_SOURCE = ROOT / "engine" / "synth" / "wt_bank.cpp"
@@ -47,16 +54,37 @@ class Task8Contract(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.source = SYSTEM_SOURCE.read_text(encoding="utf-8")
+        cls.body_source = BODY_SOURCE.read_text(encoding="utf-8")
+        cls.engine_2x4 = ENGINE_2X4_SOURCE.read_text(encoding="utf-8")
         cls.makefile = MAKEFILE.read_text(encoding="utf-8")
 
+    def test_engine_2x4_is_hoisted_and_included_not_copied(self) -> None:
+        # The pure-move contract itself: both workload files reach the shared
+        # header instead of each carrying their own copy.
+        self.assertIn('#include "engine_2x4.h"', self.source)
+        self.assertIn('#include "engine_2x4.h"', self.body_source)
+        # workloads_system.cpp and workloads_body.cpp only ever CALL these
+        # names (setup_engine_2x4(pair.a, pair.b), proc_engine_2x4(pair.a,
+        # pair.b)); neither file defines them again -- function_body() would
+        # find the header's own definition first if a stray copy existed
+        # anywhere before it in the file, so the real guard is that grepping
+        # each workload file for the definition signature (name followed by
+        # a template parameter list, not a two-argument call) comes up empty.
+        for source in (self.source, self.body_source):
+            self.assertNotRegex(
+                compact(source),
+                r"\btemplate\s*<\s*class\s+EngineT\s*>\s*(void|float)\s+"
+                r"(setup|proc)_engine_2x4",
+            )
+
     def test_common_setup_is_exactly_matched(self) -> None:
-        normalized = compact(self.source)
+        normalized = compact(self.engine_2x4)
         self.assertIn(
             "constexpr float kEngine2x4Pitches[] = "
             "{ 0.25f, 0.35f, 0.45f, 0.55f };",
             normalized,
         )
-        body = compact(function_body(self.source, "setup_engine_2x4"))
+        body = compact(function_body(self.engine_2x4, "setup_engine_2x4"))
         for expected in (
             "a.set_seed(3u);",
             "b.set_seed(4u);",
@@ -72,20 +100,21 @@ class Task8Contract(unittest.TestCase):
             "{ a.trigger(pitch); b.trigger(pitch); }",
         ):
             self.assertIn(expected, body)
+        # Call sites live in workloads_system.cpp, not the header.
+        system_normalized = compact(self.source)
         self.assertIn(
             "auto& pair = g_system_arena.emplace<SynthPairGroup>(); "
             "setup_engine_2x4(pair.a, pair.b);",
-            normalized,
+            system_normalized,
         )
         self.assertIn(
             "auto& pair = g_system_arena.emplace<WavePairGroup>(); "
             "setup_engine_2x4(pair.a, pair.b);",
-            normalized,
+            system_normalized,
         )
 
     def test_process_contract_renders_two_engines_for_one_block(self) -> None:
-        normalized = compact(self.source)
-        body = compact(function_body(self.source, "proc_engine_2x4"))
+        body = compact(function_body(self.engine_2x4, "proc_engine_2x4"))
         for expected in (
             "for (size_t i = 0; i < kBlock; ++i)",
             "a.process(a_l, a_r);",
@@ -95,15 +124,17 @@ class Task8Contract(unittest.TestCase):
             "acc += static_cast<float>(b.active_voices());",
         ):
             self.assertIn(expected, body)
+        # Call sites live in workloads_system.cpp, not the header.
+        system_normalized = compact(self.source)
         self.assertIn(
             "auto& pair = g_system_arena.get<SynthPairGroup>(); "
             "return proc_engine_2x4(pair.a, pair.b);",
-            normalized,
+            system_normalized,
         )
         self.assertIn(
             "auto& pair = g_system_arena.get<WavePairGroup>(); "
             "return proc_engine_2x4(pair.a, pair.b);",
-            normalized,
+            system_normalized,
         )
 
     def test_serial_system_groups_do_not_coexist_as_globals(self) -> None:

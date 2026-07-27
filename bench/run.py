@@ -231,6 +231,9 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "ks_string_pair",
         "ks_string_pair_nolin",
         "ks_string_pair_port",
+        "body_2x4",
+        "body_2x4_string",
+        "inst_body_worst",
     ),
     "sampler": (
         "sampler_flow_typ",
