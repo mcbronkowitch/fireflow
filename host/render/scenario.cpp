@@ -138,6 +138,9 @@ void spky::apply_event(Instrument& inst, const Event& e) {
     else if (a == "set_fx_target_base")   inst.set_fx_target_base(e.part, e.slot, e.value);
     else if (a == "set_fx_target_depth")  inst.set_fx_target_depth(e.part, e.slot, e.value);
     else if (a == "set_flux_mix")         inst.set_flux_mix(e.part, e.value);
+    else if (a == "set_drive")            inst.set_drive(e.part, e.value);
+    else if (a == "set_stages")           inst.set_stages(e.part, e.value);
+    else if (a == "set_flux_rate")        inst.set_flux_rate(e.part, e.ivalue);
     else if (a == "set_grit_mix")         inst.set_grit_mix(e.part, e.value);
     else if (a == "set_comp")             inst.set_comp(e.part, e.value);
     else if (a == "set_master_drive")     inst.set_master_drive(e.value);
