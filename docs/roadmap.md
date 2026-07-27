@@ -11,9 +11,9 @@ is actually built today, and what is still design-only.
   (`2026-07-12-spotykach-center-section-design.md`) and the ambient-reverb v2
   spec (`2026-07-12-spotykach-ambient-reverb-v2-design.md`), and the FORM/SONG split spec
   (`2026-07-25-spotykach-form-song-split-design.md`).
-- **Last updated:** 2026-07-26 (VCV 2.13.2; the STEP mod grid lock is complete;
-  BODY — STRING reworked into a string/metal/bell resonator — remains the next
-  planned engine milestone before M6).
+- **Last updated:** 2026-07-27 (VCV 2.13.2; BODY is complete and merged, priced
+  on the Seed at 30.7 % of the block; ZAP is the next planned engine milestone
+  before M6).
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
