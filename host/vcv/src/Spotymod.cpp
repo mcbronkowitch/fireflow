@@ -238,7 +238,7 @@ struct Spotymod : Module {
                             c.id, 0.f, 1.f, init,
                             c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");
                         source->description =
-                            "Controls Synth TIMB, Wave FRAME, or Sampler ORG according to the selected engine.";
+                            "Controls Synth TIMB, Sampler ORG, Wave FRAME, or Body MATL according to the selected engine.";
                     }
                     else
                         configParam(c.id, 0.f, 1.f, init, lbl);

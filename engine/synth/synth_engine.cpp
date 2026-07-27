@@ -292,8 +292,8 @@ void SynthEngineT<V>::_update_control() {
         vc.set_cutoff_hz(cutoff);
         vc.set_resonance(_resonance);
         // kPanFan is a FAN, not a pan law: it spreads a four-voice chord
-        // across the field, and the four slots balance each other out. That
-        // only holds when all four exist. A ONE-voice engine (BodyVoice::
+        // across the field, and the four slots balance each other out. A
+        // ONE-voice engine (BodyVoice::
         // kEngineVoices == 1) would permanently take slot 0, which is hard
         // LEFT -- at MOTION 1 the right channel gets exactly zero, and at the
         // boot width it is about 7.7 dB down. Reported by ear before any test
@@ -307,6 +307,14 @@ void SynthEngineT<V>::_update_control() {
         //
         // kVoices == 4 keeps kPanFan[v] exactly, so SYNTH and WAVE are
         // bit-identical (ctrl_identity, wave_formant_sweep).
+        //
+        // The guard covers kVoices <= 1 and nothing else, deliberately. Two
+        // and three voices would ALSO be off-centre under this table (2 gives
+        // -1/+1, which balances; 3 gives -1/+1/-0.5, which does not), but no
+        // such engine exists, and a fan for a voice count nobody has built is
+        // a guess about music, not a fix. If one ever appears, this is the
+        // line to revisit -- and the balance test in tests/test_body_engine.cpp
+        // is the shape to copy for it.
         vc.set_pan((kVoices > 1 ? kPanFan[v] : 0.f) * width);
         vc.set_drift_amount(width);
         vc.set_material_character(_material_char);   // no-op on VoiceT
