@@ -87,13 +87,7 @@ TEST_CASE("flux: STAGES is geometric, 512 to 16384, and 0.8 is the Memory Man") 
     };
     CHECK(settled_stages(0.f) == Flux::kMinStages);
     CHECK(settled_stages(0.8f) == doctest::Approx(8192).epsilon(0.01));
-    // Measured (not exact equality, unlike the kMinStages case above): the 30
-    // ms one-pole runs in float32, and at this magnitude (16384) its ULP
-    // (~0.002) versus the tiny per-sample increment near convergence makes it
-    // stall about 0.7 stages short of the exact target -- settles at 16383,
-    // not 16384. The endpoint still reaches the top of the range; only exact
-    // last-bit convergence doesn't survive float32 at this scale.
-    CHECK(settled_stages(1.f) == doctest::Approx(Flux::kMaxStages).epsilon(0.001));
+    CHECK(settled_stages(1.f) == Flux::kMaxStages);
     CHECK(settled_stages(0.4f) == doctest::Approx(2048).epsilon(0.01));
 }
 

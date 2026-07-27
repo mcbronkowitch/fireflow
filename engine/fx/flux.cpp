@@ -113,6 +113,15 @@ void Flux::process(float& l, float& r) {
     // Both slews advance exactly ONCE per sample, before anything reads them.
     daisysp::fonepole(_dt_current, _dt_target, _dt_coef);
     daisysp::fonepole(_stage_current, _stage_target, _dt_coef);
+    // fonepole's float32 recurrence stalls before full convergence at large
+    // magnitudes -- at kMaxStages (16384) its ULP is comparable to the
+    // shrinking per-sample increment near the target, so it never quite gets
+    // there (measured: settles ~0.7 stages short). Stage count is an integer
+    // quantity, so snapping once the slew is within one stage of its target
+    // is below anything downstream can observe, and it is what makes
+    // kMaxStages an actually reachable STAGES setting rather than a name
+    // fully clockwise can never produce.
+    if (std::fabs(_stage_target - _stage_current) < 1.f) _stage_current = _stage_target;
 
     const int stages = static_cast<int>(_stage_current + 0.5f);
     if (stages != _stages_now) {
