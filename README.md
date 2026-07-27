@@ -26,17 +26,20 @@ The stock firmware is a granular sampler you modulate. This fork inverts that:
 the **modulation system is the primary interface**, and the sound engine is
 whatever you point it at.
 
-Each part currently points at one of three: a **polyphonic synth voice**, a
-**granular texture deck** that granulates live input or a loaded sample, or
-**WAVE**, a digital-glassy PPG-style wavetable voice. The deck is deliberately
-not a second melodic instrument — it is the room the synth part plays in;
-WAVE covers the bell, vocal-formant, hollow-resonant, and bright-digital corner.
-All three sit behind the same five modulation lanes and the same voice row, so
+Each part currently points at one of four: a **polyphonic synth voice**, a
+**granular texture deck** that granulates live input or a loaded sample,
+**WAVE**, a digital-glassy PPG-style wavetable voice, or **BODY**, a resonator
+that morphs along a physical axis from plucked string through prepared piano to
+struck bell. The deck is deliberately not a second melodic instrument — it is
+the room the synth part plays in; WAVE covers the bell, vocal-formant,
+hollow-resonant, and bright-digital corner; BODY is the struck and bowed one,
+and it can be excited by its own echo, by the other deck, or by the audio input.
+All four sit behind the same five modulation lanes and the same voice row, so
 no knob goes dead when you flip the engine.
 
 That voice-row **SOURCE** control is contextual — **TIMB** on Synth, **FRAME**
-on WAVE, and **ORG** on Sampler — while **Detune A/B** remains an independent
-per-part setting.
+on WAVE, **MATL** on BODY, and **ORG** on Sampler — while **Detune A/B** remains
+an independent per-part setting.
 
 On the texture deck, **STEP** walks a `SliceMap` of transients marked while the
 buffer is recorded or loaded: each phrase fire spawns one grain on a real
@@ -133,9 +136,9 @@ playable Rack module and a permanent part of the workflow, not yet a finished
 instrument.
 
 **[Download the latest release](https://github.com/mcbronkowitch/spotymod/releases/latest)**
-— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.13.2**
-(Synth, Sampler, and WAVE, the independent FORM/SONG phrase arranger, and the
-STEP mod grid lock). Unpack into Rack's user plugin
+— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.14.0**
+(Synth, Sampler, WAVE and BODY, the independent FORM/SONG phrase arranger, and
+the STEP mod grid lock). Unpack into Rack's user plugin
 directory and restart Rack.
 
 Building it yourself needs its own toolchain (a native MinGW/GCC compiler, not
