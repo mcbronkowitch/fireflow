@@ -1,4 +1,5 @@
 #include "parts/part.h"
+#include "util/fast_tanh.h"
 #include <cmath>
 
 using namespace spky;
@@ -49,6 +50,16 @@ void Part::init(float sample_rate, uint32_t seed_base,
     _gate_ctr = 0;
     _inhibit = false;
     _note_suppressed = false;
+    // Excitation bus (spec §6, Task 10): _src_tape/_src_deck/_src_audio are
+    // PATCH state, same footing as _active/_base/_tdepth above -- neither
+    // group is touched here, so a reinit (VCV sample-rate change) does not
+    // silently discard a live patch's source selection. _other_deck_tap and
+    // _audio_in_tap are runtime-derived instead (same footing as _gate_ctr
+    // just above), so they DO reset -- a reinit must not let stale
+    // pre-reinit audio leak into the first post-reinit control tick.
+    _other_deck_tap = 0.f;
+    _audio_in_tap = 0.f;
+    _bus_dc.Init(sample_rate);
     _ctrl_ctr = 0;                              // first process() runs a tick
     _quant.init(sample_rate, SynthEngine::kCtrlInterval);   // slew in ticks
     _pitch_q = _quant.process(pitch_pre_quant());
@@ -313,15 +324,41 @@ void Part::_control_tick() {
     _engine->set_targets(_tg, _tune);
     for (int i = 0; i < FXT_COUNT; ++i) _fxv[i] = fx_target_value(i);
 
-    // Excitation bus, own-FLUX source (spec §6, Task 9). Order within one
-    // sample is _control_tick() -> _engine->process() -> _fx.process()
-    // (below in Part::process), so _fx.tape_tap() here is whatever the LAST
-    // sample of the PREVIOUS block left cached -- exactly the "one control
-    // block late" the spec asks for, with no delay line of our own needed.
-    // IPartEngine::set_excitation defaults to a no-op (engine_iface.h), so
-    // this line changes nothing for TestToneEngine, SamplerEngine, SYNTH or
-    // WAVE; only SynthEngineT<BodyVoice> forwards it anywhere.
-    _engine->set_excitation(_fx.tape_tap());
+    // Excitation bus (spec §6, Tasks 9 + 10). Three enabled-by-flag sources,
+    // each one control block late for its own reason:
+    //   - _fx.tape_tap(): order within one sample is _control_tick() ->
+    //     _engine->process() -> _fx.process() (below in Part::process), so
+    //     the value read here is whatever the LAST sample of the PREVIOUS
+    //     block left cached in PartFx -- no delay line of our own needed
+    //     (Task 9's mechanism, unchanged).
+    //   - _other_deck_tap: pushed by Instrument once per control block, from
+    //     the SIBLING part's dry output latched at the end of the block
+    //     before this one (instrument.cpp) -- symmetric and independent of
+    //     which part CHOKE processes first (task-10-brief-addendum.md
+    //     section D).
+    //   - _audio_in_tap: this part's own doing, latched the same way
+    //     Instrument latches its cross-deck floats -- see the capture point
+    //     in process() below.
+    // Sum first, DC-block and soft-clip the SUM second: tape_tap() is
+    // already DC-blocked and fast_tanh-clipped inside PartFx (that bound is
+    // what makes tape_tap() a safe getter for ANY caller), but the cross-deck
+    // and audio-in taps arrive un-blocked, and three sources summed can
+    // reach toward 3.0 even when each is individually bounded. Both clips
+    // stay -- fast_tanh(fast_tanh(x)) ~= x well below unity, so the double
+    // compression is inaudible at ordinary levels and only bites in
+    // self-oscillation territory, exactly where spec §6 wants a bound
+    // (task-10-brief-addendum.md section E; a Task 12 listening item, not a
+    // defect here). IPartEngine::set_excitation defaults to a no-op
+    // (engine_iface.h), so this changes nothing for TestToneEngine,
+    // SamplerEngine, SYNTH or WAVE; only SynthEngineT<BodyVoice> forwards it
+    // anywhere, and BodyVoice hard-gates on SUB > 0 regardless of what this
+    // sum contains (part.h set_voice_sub comment; BodyVoice::process).
+    float bus = 0.f;
+    if (_src_tape)  bus += _fx.tape_tap();
+    if (_src_deck)  bus += _other_deck_tap;
+    if (_src_audio) bus += _audio_in_tap;
+    bus = fast_tanh(_bus_dc.Process(bus));
+    _engine->set_excitation(bus);
 }
 
 void Part::process(float inL, float inR, float& outL, float& outR,
@@ -417,6 +454,16 @@ void Part::process(float inL, float inR, float& outL, float& outR,
         _last_gate = g;
         _engine->set_gate(g);
     }
+
+    // Excitation bus, audio-in capture (spec §6, Task 10): latch the mono
+    // input ONLY on this control block's last sample (_ctrl_ctr, already
+    // decremented above, has reached 0), mirroring exactly how Instrument
+    // latches _dry_tap for the cross-deck source (instrument.cpp). The next
+    // block's _control_tick() runs at the TOP of process(), before this
+    // point is reached again, so it reads whatever was latched here at the
+    // end of the block before it -- one control block late, same as the
+    // other two sources.
+    if (_ctrl_ctr == 0) _audio_in_tap = 0.5f * (inL + inR);
 
     _engine->process_in(inL, inR);
     _engine->process(outL, outR);

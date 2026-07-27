@@ -11,6 +11,7 @@
 #include "fx/fx_util.h"
 #include "fx/part_fx.h"
 #include "util/math.h"
+#include "Utility/dcblock.h"
 
 namespace spky {
 
@@ -27,6 +28,25 @@ public:
     const SuperModulator& mod() const { return _mod; }
     Quantizer& quant() { return _quant; }
     PartFx& fx() { return _fx; }
+    const PartFx& fx() const { return _fx; }
+
+    // Excitation bus source selection (spec 2026-07-26 body-resonator §6,
+    // Task 10): patch state, not a performance control -- three checkboxes
+    // in a context menu, never a panel knob or parameter id. Default: own
+    // FLUX tape on, the sibling deck's dry tap off, audio input off, so an
+    // unmodified BODY deck behaves exactly like Task 9 left it and two BODY
+    // decks never couple unasked (spec: "SUB = 0 ... including the
+    // cross-deck tap, so two BODY decks never couple unasked" -- true a
+    // fortiori when the cross-deck source itself is off).
+    void set_excitation_sources(bool tape, bool other_deck, bool audio_in) {
+        _src_tape = tape;
+        _src_deck = other_deck;
+        _src_audio = audio_in;
+    }
+    // Pushed once per control block by Instrument (the only scope where both
+    // parts are visible -- see instrument.cpp), holding the SIBLING part's
+    // dry mono output from the PREVIOUS control block. Not for panel/host use.
+    void set_other_deck_tap(float x) { _other_deck_tap = x; }
 
     void set_depth(float d) { _depth = clampf(d, 0.f, 1.f); }
     void set_tune(float t)  { _tune = clampf(t, 0.f, 1.f); }
@@ -303,6 +323,22 @@ private:
     float _fxv[FXT_COUNT] = { 0.3f, 0.4f, 1.f, 0.25f, 0.45f };
 
     PartFx         _fx;
+
+    // Excitation bus (spec §6, Task 10). Source enables -- default matches
+    // Task 9's shipped behaviour exactly (tape only). _other_deck_tap is
+    // written by Instrument (set_other_deck_tap); _audio_in_tap is this
+    // part's own doing, latched the same way Instrument latches _dry_tap --
+    // see the capture point in process() below. _bus_dc is the POST-SUM DC
+    // block spec §6 asks for, distinct from PartFx's own _tap_dc: Task 9's
+    // clip makes tape_tap() safe for any caller, this one bounds the sum of
+    // up to three such callers (task-10-brief-addendum.md section E). Both
+    // stay; do not remove either.
+    bool  _src_tape = true;
+    bool  _src_deck = false;
+    bool  _src_audio = false;
+    float _other_deck_tap = 0.f;
+    float _audio_in_tap = 0.f;
+    daisysp::DcBlock _bus_dc;
 
     // Modulation first is the shipped state (spec 2026-07-17 boot-targets):
     // all five targets boot active, with staggered depths — FILTER 0.55 (the

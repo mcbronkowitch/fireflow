@@ -91,6 +91,16 @@ void Instrument::process(const float* inL, const float* inR,
             derive_offsets(_parts[PART_A].mod().rhythm(), kTapeLen, off_b);
             _parts[PART_A].fx().set_tap_offsets(off_a);
             _parts[PART_B].fx().set_tap_offsets(off_b);
+            // Excitation bus, cross-deck hand-over (spec §6, Task 10): each
+            // part gets the SIBLING's dry mono output as latched at the end
+            // of the block that just finished (see the capture point below,
+            // after MORPH panning). _dry_tap still holds last block's values
+            // here -- this block's capture has not run yet -- so the swap is
+            // exactly "read the previous block", the same one-block lag
+            // Task 9 gets for free from _control_tick() running before
+            // _fx.process() each sample.
+            _parts[PART_A].set_other_deck_tap(_dry_tap[PART_B]);
+            _parts[PART_B].set_other_deck_tap(_dry_tap[PART_A]);
             _ctrl_ctr = Center::kCtrlInterval;
         }
         --_ctrl_ctr;
@@ -124,6 +134,17 @@ void Instrument::process(const float* inL, const float* inR,
         const float bl = pl[PART_B],  br = prr[PART_B];
         const float asl = psl[PART_A], asr = psr[PART_A];
         const float bsl = psl[PART_B], bsr = psr[PART_B];
+
+        // Excitation bus, cross-deck capture (spec §6, Task 10): latch this
+        // sample's dry mono output ONLY on the block's last sample (the
+        // instant _ctrl_ctr -- already decremented above -- reaches 0), so
+        // the two floats update once per control block, exactly like the
+        // brief asks, and the NEXT block's top-of-loop hand-over above reads
+        // a value that is a whole block old rather than one sample old.
+        if (_ctrl_ctr == 0) {
+            _dry_tap[PART_A] = 0.5f * (al + ar);
+            _dry_tap[PART_B] = 0.5f * (bl + br);
+        }
 
         const float ga = _center.gain_a();
         const float gb = _center.gain_b();

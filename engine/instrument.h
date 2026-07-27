@@ -84,6 +84,12 @@ public:
     void set_quant_mode(int p, QuantMode m) { _parts[p].quant().set_mode(m); }
     void set_root(int p, int semis)         { _parts[p].quant().set_root(semis); }
 
+    // Excitation bus source selection (spec 2026-07-26 body-resonator §6,
+    // Task 10): patch state, not a performance control. Default (tape on,
+    // other-deck off, audio-in off) is set inside Part.
+    void set_excitation_sources(int p, bool tape, bool other_deck, bool audio_in) {
+        _parts[p].set_excitation_sources(tape, other_deck, audio_in);
+    }
     void set_fx_on(int p, FxBlock which, bool on)  { _parts[p].fx().set_fx_on(which, on); }
     void set_grit_mode(int p, GritMode m)          { _parts[p].fx().set_grit_mode(m); }
     void set_fx_target_active(int p, int i, bool on) { _parts[p].set_fx_target_active(i, on); }
@@ -107,6 +113,12 @@ public:
     void set_reverb_mix(float n);             // convenience: both decks
     void set_master_drive(float n) { _limiter.set_drive(n); }
     float fx_target_value(int p, int i) const { return _parts[p].fx_target_value(i); }
+    // Observer only, for tests (Task 10): the part's own FLUX tape tap, so a
+    // test claiming "the excitation bus's tape source is hot" can assert it
+    // instead of merely hoping FLUX ever engaged (see task-10-brief-addendum.md
+    // section B -- init(sample_rate) alone builds no FX chain, so this would
+    // read a permanent 0.f without a real FxMem and FLUX actually switched on).
+    float tape_tap(int p) const { return _parts[p].fx().tape_tap(); }
 
     // --- M2 synth voice API (spec "Instrument API") ---
     void set_engine(int p, EngineId e)       { _parts[p].set_engine(e); }
@@ -242,6 +254,19 @@ private:
     bool    _rev_asleep = false;    // both decks dry: room cleared, process() skipped
     Limiter _limiter;
     Center _center;
+    // Excitation bus, cross-deck source (spec §6, Task 10): each part's own
+    // dry mono output (pre-MORPH, pre-reverb-send, pre-limiter -- see the
+    // capture point in process()), latched once per control block on the
+    // block's LAST sample and handed to the SIBLING part on the FOLLOWING
+    // block's first sample. That one-block lag is load-bearing, not
+    // incidental: CHOKE picks which part processes first every sample
+    // (process()'s `pri`/`yld` swap below), so a same-sample read would make
+    // deck A hear deck B's current sample or its previous one depending on a
+    // knob that has nothing to do with excitation. Reading the previous
+    // block for both decks removes the question and keeps the coupling
+    // symmetric regardless of that order. Instrument is the only scope where
+    // both parts are visible; Part still gets no pointer to its sibling.
+    float  _dry_tap[PART_COUNT] = { 0.f, 0.f };
     int    _ctrl_ctr = 0;    // counts down to the next control-rate Center::update
     float _choke = 0.f;        // -1..+1 event-priority knob (discrete zones)
                                // (boots true: the FLOW drone predates any fire)

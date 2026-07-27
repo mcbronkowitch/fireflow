@@ -1215,3 +1215,198 @@ TEST_CASE("instrument FORM SONG API clamps values and advances both Parts indepe
     CHECK(clamped.song(PART_A) == static_cast<int>(SongMode::AAAB));
     CHECK(clamped.song(PART_B) == static_cast<int>(SongMode::Off));
 }
+
+// --- Task 10: cross-deck tap, audio input, and source selection -----------
+//
+// The brief's own test code for this task is a sketch that does not compile
+// against this tree (task-10-brief-addendum.md, top) -- `Instrument::part(int)`
+// does not exist, `trigger(int, float)` is really `trigger_manual(int)` with
+// no pitch argument, and `process(...)` is the block-based 5-argument form
+// used everywhere else in this file. Both cases below are written against
+// the real API and against what the two claims (symmetric + off by default;
+// bounded with everything hot) actually require to be verified, not against
+// the brief's literal sketch.
+
+TEST_CASE("cross-deck excitation is symmetric and off by default") {
+    // Deck A on the synth, deck B on BODY, with no manual trigger of B's
+    // own. Both engines boot in FLOW ("lanes boot in FLOW -> drone",
+    // part.cpp), so deck A sustains a drone tone with no trigger_manual
+    // needed, and deck B fires exactly one auto-drone pluck the instant its
+    // engine-switch fade completes -- identical in both instruments below,
+    // since neither the cross-deck flag nor SUB gates a note's OWN exciter
+    // pluck (only the EXTERNAL bus term is SUB-gated -- body_voice.cpp,
+    // BodyVoice::process: `_exciter.process() + (_sub > 0.f ? ... : 0.f)`).
+    // set_voice_sub is pushed identically on both instruments so the ONLY
+    // difference between them is the cross-deck flag (same isolation idiom
+    // test_dust/test_rot above use).
+    //
+    // The settle loop waits for that one-off boot pluck to decay out of the
+    // QUIET instrument specifically, rather than assuming a fixed sample
+    // count -- DECAY's default mapping is tuning material this test has no
+    // business depending on (same reasoning as test_part_fx.cpp's
+    // warm_up_tape_tap). COUPLED is stepped in lockstep so the two stay
+    // time-aligned for the comparison window that follows, and never gets
+    // asked to decay itself -- the cross-deck tap keeps it fed on purpose.
+    Instrument quiet, coupled;
+    for (Instrument* inst : { &quiet, &coupled }) {
+        inst->init(48000.f);
+        inst->set_engine(PART_A, ENGINE_SYNTH);
+        inst->set_engine(PART_B, ENGINE_BODY);
+        inst->set_voice_sub(PART_B, 1.f);
+    }
+    coupled.set_excitation_sources(PART_B, false, true, false);
+
+    float l, r;
+    int settle = 0;
+    for (; settle < 480000 && quiet.voice_env(PART_B, 0) > 1e-4f; ++settle) {
+        quiet.process(nullptr, nullptr, &l, &r, 1);
+        coupled.process(nullptr, nullptr, &l, &r, 1);
+    }
+    // The premise this loop exists to establish -- that B's own boot pluck
+    // really does decay away with the cross-deck source off -- must itself
+    // be true, or a settle loop that "times out" every run would still let
+    // the CHECK below pass for the wrong reason.
+    REQUIRE(settle < 480000);
+
+    double e_quiet = 0.0, e_coupled = 0.0;
+    for (int i = 0; i < 24000; ++i) {
+        quiet.process(nullptr, nullptr, &l, &r, 1);
+        const float qe = quiet.voice_env(PART_B, 0);
+        e_quiet += (double)qe * qe;
+
+        coupled.process(nullptr, nullptr, &l, &r, 1);
+        const float ce = coupled.voice_env(PART_B, 0);
+        e_coupled += (double)ce * ce;
+    }
+    CHECK(e_coupled > e_quiet);
+
+    // Stronger claim: B's elevated energy must depend on A specifically, not
+    // merely on "some feedback loop exists". set_other_deck_tap wired to the
+    // WRONG index (B fed its OWN delayed output instead of A's) is itself a
+    // legitimate feedback loop through B's SUB-gated bus, and measurement
+    // showed it is NOT distinguishable from the CHECK above alone
+    // (task-10-report.md's mutation table) -- a single BODY deck feeding its
+    // own dry output back into its own excitation bus is exactly the kind of
+    // self-oscillation spec §6 says is intended and bounded. Silencing A and
+    // requiring B's energy to fall back closes that gap: under the
+    // self-feedback bug, muting A has no effect on B at all, because B was
+    // never listening to A in the first place.
+    coupled.set_target_active(PART_A, LANE_LEVEL, false);
+    coupled.set_target_base(PART_A, LANE_LEVEL, 0.f);
+    for (int i = 0; i < 24000; ++i)      // let A's ~10 ms level smoother settle
+        coupled.process(nullptr, nullptr, &l, &r, 1);
+    double e_after_mute = 0.0;
+    for (int i = 0; i < 24000; ++i) {
+        coupled.process(nullptr, nullptr, &l, &r, 1);
+        const float ce = coupled.voice_env(PART_B, 0);
+        e_after_mute += (double)ce * ce;
+    }
+    CHECK(e_after_mute < e_coupled);
+}
+
+// The trap this test guards against (task-10-brief-addendum.md section B):
+// Instrument::init(sample_rate) alone builds NO FX chain, so FLUX can never
+// engage and enabling the tape source would silently exercise nothing --
+// this test would then prove a silent path is bounded and call it done. So:
+// a real FxMem (test_fx_mem(), already used above in this file), FLUX
+// actually switched on with a nonzero mix on both decks, and an assertion
+// that the tape tap really did go live (Instrument::tape_tap(), added for
+// this purpose) rather than merely that FLUX::set_on(true) was called.
+//
+// What it checks for boundedness is deliberately NOT the final master
+// output: fx/limiter.h's shape() runs every sample through fast_tanh, which
+// is itself hard-clamped to |y| <= 1 (util/fast_tanh.h) -- so |l| < N (for
+// any N) on the POST-LIMITER signal would hold even if the excitation loop
+// between the two decks were genuinely diverging underneath it. What can
+// actually run away is the RAW resonator energy feeding that limiter --
+// BodyVoice's own unclamped follower, read here via voice_env -- so that is
+// what this test watches, both for non-finiteness and for gross magnitude.
+//
+// Mutation testing this claim (task-10-report.md has the full table) found
+// the system's headroom against THIS specific two-deck loop is large: with
+// the post-sum clip removed outright, peak_env plateaus around ~22-24
+// (same order as the correct build) for a full 60 s rather than diverging
+// -- BodyVoice's own resonance cap and the SUB^2 <= 0.5 gate already give
+// this particular loop enough margin that the outer clip alone isn't what
+// is keeping it stable here. A gain bug IS caught: scaling the summed bus
+// by 5x (simulating e.g. a doubled/mis-added source) reaches peak_env in
+// the thousands within this test's 10 s window and eventually goes
+// non-finite past it. So: isfinite() is the claim this test can actually
+// prove teeth for, and peak_env's bound below is a coarse canary sized well
+// above the correct build's ~24 with real margin (not fitted to it) but
+// nowhere near the gain-bug failure's ~10^3 -- it will not catch a subtler
+// gain error, and the report says so plainly rather than implying it does.
+TEST_CASE("two BODY decks with the bus hot stay bounded") {
+    Instrument inst;
+    inst.init(48000.f, test_fx_mem());
+    inst.set_engine(PART_A, ENGINE_BODY);
+    inst.set_engine(PART_B, ENGINE_BODY);
+    for (int p = 0; p < PART_COUNT; ++p) {
+        inst.set_fx_on(p, FxBlock::Flux, true);
+        inst.set_flux_mix(p, 1.f);
+        inst.set_excitation_sources(p, true, true, true);
+        inst.set_voice_sub(p, 1.f);
+    }
+    inst.trigger_manual(PART_A);
+    inst.trigger_manual(PART_B);
+
+    bool tape_a = false, tape_b = false;
+    float peak_env = 0.f;
+    float l = 0.f, r = 0.f;
+    float inL = 0.3f, inR = 0.3f;
+    for (int i = 0; i < 48000 * 10; ++i) {
+        inst.process(&inL, &inR, &l, &r, 1);
+        REQUIRE(std::isfinite(l));
+        REQUIRE(std::isfinite(r));
+        const float ea = inst.voice_env(PART_A, 0);
+        const float eb = inst.voice_env(PART_B, 0);
+        REQUIRE(std::isfinite(ea));
+        REQUIRE(std::isfinite(eb));
+        if (ea > peak_env) peak_env = ea;
+        if (eb > peak_env) peak_env = eb;
+        if (inst.tape_tap(PART_A) != 0.f) tape_a = true;
+        if (inst.tape_tap(PART_B) != 0.f) tape_b = true;
+    }
+    CHECK(tape_a);   // the tape source really was live, not just switched on
+    CHECK(tape_b);
+    // Coarse canary against a gross gain bug, not a proof of the post-sum
+    // clip specifically -- see the mutation note above this test.
+    CHECK(peak_env < 100.f);
+}
+
+// Neither test above independently pins the third source: the bounded test
+// enables all three at once (so a broken audio-in term could hide behind the
+// other two), and the cross-deck test's assertion is specific to the
+// other_deck flag. Same isolation idiom as the cross-deck test, mirrored
+// onto a single deck fed through Instrument::process's inL/inR instead of a
+// sibling part.
+TEST_CASE("audio input reaches the excitation bus and is off by default") {
+    Instrument quiet, fed;
+    for (Instrument* inst : { &quiet, &fed }) {
+        inst->init(48000.f);
+        inst->set_engine(PART_A, ENGINE_BODY);
+        inst->set_voice_sub(PART_A, 1.f);
+    }
+    fed.set_excitation_sources(PART_A, false, false, true);
+
+    float l, r;
+    float inL = 0.4f, inR = 0.4f;
+    int settle = 0;
+    for (; settle < 480000 && quiet.voice_env(PART_A, 0) > 1e-4f; ++settle) {
+        quiet.process(&inL, &inR, &l, &r, 1);
+        fed.process(&inL, &inR, &l, &r, 1);
+    }
+    REQUIRE(settle < 480000);
+
+    double e_quiet = 0.0, e_fed = 0.0;
+    for (int i = 0; i < 24000; ++i) {
+        quiet.process(&inL, &inR, &l, &r, 1);
+        const float qe = quiet.voice_env(PART_A, 0);
+        e_quiet += (double)qe * qe;
+
+        fed.process(&inL, &inR, &l, &r, 1);
+        const float fe = fed.voice_env(PART_A, 0);
+        e_fed += (double)fe * fe;
+    }
+    CHECK(e_fed > e_quiet);
+}
