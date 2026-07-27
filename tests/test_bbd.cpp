@@ -320,3 +320,14 @@ TEST_CASE("bbd line: a zero clock holds instead of crashing") {
     line.SetClock(-1.f);
     for (int i = 0; i < 1000; ++i) CHECK(std::isfinite(line.Process(0.5f)));
 }
+
+TEST_CASE("bbd line: a degenerate Init holds instead of writing through null") {
+    // Init(nullptr, 0, sr) leaves cells_ at its floor of 1 -- nonzero -- so a
+    // tick-loop guard that only checks cells_ would still dereference mem_.
+    // No tick may run while the line has no usable memory.
+    BbdLine line;
+    line.Init(nullptr, 0, 48000.f);
+    line.SetClock(8192.f);                     // well above zero: many ticks
+    for (int i = 0; i < 10000; ++i)
+        CHECK(std::isfinite(line.Process(0.5f)));
+}

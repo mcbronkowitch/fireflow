@@ -265,7 +265,10 @@ public:
         Cf Xout[bbd_tuning::kFiltOrder] = {};
 
         const float fclk = ticks_;
-        if (fclk > 0.f) {
+        // mem_ can be null with cells_ still nonzero -- Init(nullptr, 0, sr)
+        // leaves cells_ at 1 (its floor), and SetStages's own floor does the
+        // same. No tick may run while the line has no usable memory.
+        if (fclk > 0.f && mem_) {
             const float pclk_old = pclk_;
             const float p = pclk_ + fclk;
             const int tick_count = static_cast<int>(p);
