@@ -47,8 +47,8 @@ void apply_init_patch(spky::Instrument& inst)
             spky::FXT_FLUX_FB,
             value(deck ? FLUXFB_B : FLUXFB_A));
         inst.set_grit_mix(deck, part(GRIT_A, deck));
-        inst.set_dust(deck, value(deck ? DUST_B : DUST_A));
-        inst.set_rot(deck, value(deck ? ROT_B : ROT_A));
+        inst.set_drive(deck, value(deck ? DUST_B : DUST_A));
+        inst.set_stages(deck, value(deck ? ROT_B : ROT_A));
         inst.set_fx_on(
             deck, spky::FxBlock::Flux, part(FLUX_A, deck) > 1e-4f);
         inst.set_fx_on(
