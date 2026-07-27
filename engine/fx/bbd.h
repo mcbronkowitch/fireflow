@@ -46,6 +46,31 @@
 
 namespace spky {
 
+// Minimal complex float. std::complex<float> would do the same job, but it
+// drags <complex> into every translation unit that includes this header and
+// its operator* is not guaranteed to avoid the NaN-safe slow path on every
+// toolchain. Six lines here, no surprises on the M7.
+struct Cf {
+    float re = 0.f;
+    float im = 0.f;
+};
+
+inline Cf cf_add(Cf a, Cf b) { return Cf{ a.re + b.re, a.im + b.im }; }
+inline Cf cf_scale(Cf a, float s) { return Cf{ a.re * s, a.im * s }; }
+inline Cf cf_mul(Cf a, Cf b) {
+    return Cf{ a.re * b.re - a.im * b.im, a.re * b.im + a.im * b.re };
+}
+inline Cf cf_div(Cf a, Cf b) {
+    const float d = b.re * b.re + b.im * b.im;
+    const float inv = (d != 0.f) ? 1.f / d : 0.f;
+    return Cf{ (a.re * b.re + a.im * b.im) * inv,
+               (a.im * b.re - a.re * b.im) * inv };
+}
+inline Cf cf_exp(Cf a) {
+    const float m = std::exp(a.re);
+    return Cf{ m * std::cos(a.im), m * std::sin(a.im) };
+}
+
 namespace bbd_tuning {
 
 // --- the clock law ---------------------------------------------------------
@@ -124,5 +149,50 @@ inline float bbd_clock_hz(float delay_seconds, int stages) {
     const float hz = static_cast<float>(stages) / (2.f * delay_seconds);
     return hz < bbd_tuning::kClockMaxHz ? hz : bbd_tuning::kClockMaxHz;
 }
+
+// Discretised filter, one per direction, shared by every BbdLine at a given
+// sample rate.
+//
+//   P[m] = exp(ts * p_m)                          per-sample pole advance
+//   G[step][m]                                    the tick's sub-sample
+//     input  kind: ts * R[m] * P[m]^d               position d, tabulated
+//     output kind: (R[m] / p_m) * P[m]^(1-d)        and lerped in the hot path
+//   H = sum(-R[m] / p_m)                          output DC feed-through
+//
+// The G table is why there is no powf/cosf per event: the reference's own
+// suggestion, and the desktop build profits from it too.
+struct BbdFilterCoef {
+    Cf    G[bbd_tuning::kInterpSteps][bbd_tuning::kFiltOrder];
+    Cf    P[bbd_tuning::kFiltOrder];
+    float H = 0.f;
+
+    void interpolate_g(float d, Cf* g) const {
+        float row = d * static_cast<float>(bbd_tuning::kInterpSteps - 1);
+        if (!(row > 0.f)) row = 0.f;                    // also catches NaN
+        int r1 = static_cast<int>(row);
+        if (r1 > bbd_tuning::kInterpSteps - 1) r1 = bbd_tuning::kInterpSteps - 1;
+        const int r2 = (r1 + 1 < bbd_tuning::kInterpSteps) ? r1 + 1 : r1;
+        const float mu = row - static_cast<float>(r1);
+        for (int m = 0; m < bbd_tuning::kFiltOrder; ++m) {
+            g[m].re = G[r1][m].re + (G[r2][m].re - G[r1][m].re) * mu;
+            g[m].im = G[r1][m].im + (G[r2][m].im - G[r1][m].im) * mu;
+        }
+    }
+};
+
+// The analog specification: kFiltOrder Butterworth poles at kFilterHz and
+// their partial-fraction residues for H(s) = prod(-p_j) / prod(s - p_j).
+// Both directions currently share the same prototype; the flag is kept
+// because the DISCRETISATION differs (see BbdFilterCoef) and because giving
+// the two chains different corners later must not need a signature change.
+void bbd_analog_spec(bool output_kind, Cf* poles, Cf* residues);
+
+// Shared, built on first call and rebuilt in place if the sample rate moves.
+// Not thread-safe by design: both hosts call Flux::init from one thread with
+// the audio callback stopped (Rack's onSampleRateChange, the render host's
+// setup), which is the same contract hann_curve() in fx/fx_util.h already
+// relies on.
+const BbdFilterCoef& bbd_filter_in(float sample_rate);
+const BbdFilterCoef& bbd_filter_out(float sample_rate);
 
 }  // namespace spky

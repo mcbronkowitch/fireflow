@@ -30,3 +30,103 @@
 
 // Init-time only. Everything in the per-sample path lives in bbd.h so it
 // inlines, the same split flux.h/flux.cpp already uses.
+
+namespace {
+
+using spky::Cf;
+using spky::cf_add;
+using spky::cf_div;
+using spky::cf_exp;
+using spky::cf_mul;
+using spky::cf_scale;
+namespace tuning = spky::bbd_tuning;
+
+spky::BbdFilterCoef g_fin;
+spky::BbdFilterCoef g_fout;
+float g_built_sr = 0.f;
+
+// Butterworth poles, order M, corner w:  p_k = w * exp(j*pi*(2k + M + 1)/(2M))
+// For M = 3 that is 120 deg, 180 deg, 240 deg -- one real pole and one
+// conjugate pair, all with Re < 0.
+void butterworth_poles(Cf* poles) {
+    constexpr int M = tuning::kFiltOrder;
+    const float w = spky::TWO_PI * tuning::kFilterHz;
+    for (int k = 0; k < M; ++k) {
+        const float ang = 3.14159265358979f
+                        * static_cast<float>(2 * k + M + 1)
+                        / static_cast<float>(2 * M);
+        poles[k] = Cf{ w * std::cos(ang), w * std::sin(ang) };
+    }
+}
+
+void residues_for(const Cf* poles, Cf* residues) {
+    constexpr int M = tuning::kFiltOrder;
+    // num = prod(-p_j): the numerator that makes H(0) == 1 exactly.
+    Cf num{ 1.f, 0.f };
+    for (int j = 0; j < M; ++j) num = cf_mul(num, Cf{ -poles[j].re, -poles[j].im });
+    for (int k = 0; k < M; ++k) {
+        Cf den{ 1.f, 0.f };
+        for (int j = 0; j < M; ++j) {
+            if (j == k) continue;
+            den = cf_mul(den, Cf{ poles[k].re - poles[j].re,
+                                  poles[k].im - poles[j].im });
+        }
+        residues[k] = cf_div(num, den);
+    }
+}
+
+void compute_filter(float sample_rate, bool output_kind, spky::BbdFilterCoef& out) {
+    constexpr int M = tuning::kFiltOrder;
+    Cf poles[M], residues[M];
+    spky::bbd_analog_spec(output_kind, poles, residues);
+
+    const float ts = 1.f / sample_rate;
+    for (int m = 0; m < M; ++m)
+        out.P[m] = cf_exp(Cf{ ts * poles[m].re, ts * poles[m].im });
+
+    for (int step = 0; step < tuning::kInterpSteps; ++step) {
+        const float d = static_cast<float>(step)
+                      / static_cast<float>(tuning::kInterpSteps - 1);
+        for (int m = 0; m < M; ++m) {
+            if (!output_kind) {
+                // ts * R[m] * P[m]^d, with P^d spelled as exp(d*ts*p) so no
+                // complex pow is needed.
+                const Cf pd = cf_exp(Cf{ d * ts * poles[m].re, d * ts * poles[m].im });
+                out.G[step][m] = cf_mul(cf_scale(residues[m], ts), pd);
+            } else {
+                const Cf pd = cf_exp(Cf{ (1.f - d) * ts * poles[m].re,
+                                         (1.f - d) * ts * poles[m].im });
+                out.G[step][m] = cf_mul(cf_div(residues[m], poles[m]), pd);
+            }
+        }
+    }
+
+    Cf h{ 0.f, 0.f };
+    for (int m = 0; m < M; ++m) h = cf_add(h, cf_div(residues[m], poles[m]));
+    out.H = -h.re;
+}
+
+void build_if_needed(float sample_rate) {
+    if (!(sample_rate > 0.f)) return;
+    if (sample_rate == g_built_sr) return;
+    compute_filter(sample_rate, false, g_fin);
+    compute_filter(sample_rate, true,  g_fout);
+    g_built_sr = sample_rate;
+}
+
+}  // namespace
+
+void spky::bbd_analog_spec(bool /*output_kind*/, Cf* poles, Cf* residues) {
+    butterworth_poles(poles);
+    residues_for(poles, residues);
+}
+
+const spky::BbdFilterCoef& spky::bbd_filter_in(float sample_rate) {
+    build_if_needed(sample_rate);
+    return g_fin;
+}
+
+const spky::BbdFilterCoef& spky::bbd_filter_out(float sample_rate) {
+    build_if_needed(sample_rate);
+    return g_fout;
+}
