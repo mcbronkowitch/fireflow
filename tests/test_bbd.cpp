@@ -449,9 +449,15 @@ TEST_CASE("bbd echo: each repeat is darker than the last") {
     const float hz = bbd_clock_hz(0.25f, 8192);
     std::vector<float> out(60000);
     for (int i = 0; i < 60000; ++i) {
-        // A burst with real high-frequency content to lose.
+        // A burst with real high-frequency content to lose. 4200 Hz, not the
+        // plan's 1500 Hz: 1500 Hz sits below BOTH the fixed 3600 Hz filter
+        // chain and the BBD's own f_clk/4 = 4096 Hz corner at this clock, so
+        // a second pass has almost no brightness left to remove (measured
+        // b1=0.038107, b2=0.038088 -- a 0.05% margin, too thin to catch a
+        // regression). 4200 Hz clears both corners and measures a real
+        // multiplicative loss (b1=0.209076, b2=0.067975 -- 67%).
         const float x = (i < 480)
-            ? 0.5f * std::sin(TWO_PI * 1500.f * static_cast<float>(i) / 48000.f)
+            ? 0.5f * std::sin(TWO_PI * 4200.f * static_cast<float>(i) / 48000.f)
             : 0.f;
         out[i] = e.Process(x, hz);
     }
