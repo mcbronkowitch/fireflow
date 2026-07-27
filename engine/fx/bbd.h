@@ -129,12 +129,40 @@ constexpr float kCompCeilE  = kCompRef * 4.f;
 
 // --- drive -----------------------------------------------------------------
 // DRIVE sits INSIDE the loop, so every repeat saturates again. The threshold
-// is fixed at the MN3005's 0.9 V_RMS ceiling; DRIVE moves the signal against
-// it, with makeup gain after the saturator so that small-signal loop gain --
-// and therefore FEEDBACK's meaning -- does not move with DRIVE.
+// is fixed at the MN3005's 0.9 V_RMS ceiling (kSatCeil) and stays fixed
+// regardless of DRIVE -- see BbdEcho::SetDrive for why. DRIVE only moves the
+// SIGNAL against that fixed ceiling (kDriveLoDb..kDriveHiDb, into sat_in_).
+//
+// This pair was revised once already, by measurement, after the fixed
+// ceiling first shipped at -6..+24 dB (the range inherited from the old
+// makeup-gain law, never itself re-examined): that range made small-signal
+// loop gain equal `g` directly (BbdEcho::SetDrive), and Flux::set_feedback's
+// existing "up to 1.2x" ceiling collided with it two different ways at the
+// two ends of the knob. At DRIVE 0, g(-6dB) = 0.501 pushed the self-
+// oscillation FEEDBACK threshold up to ~1.71 -- ABOVE the panel's 1.2
+// maximum, so self-oscillation became unreachable at DRIVE 0, violating the
+// design's own "self-oscillation must stay reachable" constraint. At DRIVE 1,
+// g(+24dB) = 15.85 dragged the threshold down to ~0.05 -- FEEDBACK bloomed at
+// almost any setting, a hair-trigger rather than a knob.
+//
+// 0..+12 dB was chosen from a measured bracket (0..+9, +12, +15, +18 dB, and
+// negative-floor variants down to -3 dB -- see
+// .superpowers/sdd/2026-07-27-flux-bbd-delay/drive-fix-report.md, "DRIVE
+// range follow-up"). A negative floor was ruled out first: any floor below 0
+// pushes the DRIVE-0 threshold to within a hair of 1.2 (measured 1.19 at
+// -3 dB), which is "reachable" in name only. Among 0-floor candidates, +12
+// keeps DRIVE 0's threshold comfortably clear of the 1.2 ceiling (measured
+// 0.84, ~30% of headroom to spare) while leaving DRIVE 1 a real span of
+// non-oscillating FEEDBACK travel before it blooms (measured 0.21, roughly
+// 4x the ~0.05 the old range left) -- +9 protects FEEDBACK's travel even
+// more but never gets DRIVE's own distortion above ~4% THD anywhere on the
+// knob, which reproduces the original "DRIVE does nothing" complaint by a
+// different route; +15/+18 push the dirt earlier into the knob's travel but
+// tighten FEEDBACK's headroom back down toward the hair-trigger this
+// revision exists to fix.
 constexpr float kSatCeil   = 0.9f;
-constexpr float kDriveLoDb = -6.f;
-constexpr float kDriveHiDb = 24.f;
+constexpr float kDriveLoDb = 0.f;
+constexpr float kDriveHiDb = 12.f;
 
 }  // namespace bbd_tuning
 
@@ -449,14 +477,14 @@ public:
 
     // 0..1 -> kDriveLoDb .. kDriveHiDb into a FIXED-threshold saturator.
     //
-    // sat_out_ is now a FIXED ceiling (kSatCeil), not `kSatCeil / g`. The
+    // sat_out_ is a FIXED ceiling (kSatCeil), not `kSatCeil / g`. The
     // inverse-gain makeup law that used to live here held small-signal loop
     // gain at unity across all of DRIVE -- deliberate, and there was a
     // passing test for it -- but it also meant the saturator's MAXIMUM
     // possible output (the value `fast_tanh` returns once driven anywhere
-    // near its asymptote, times sat_out_) fell by exactly
-    // kDriveHiDb - kDriveLoDb = 30 dB across the knob (1.796 -> 0.057). The
-    // 2026-07-27 DRIVE investigation
+    // near its asymptote, times sat_out_) fell by exactly the dB range's own
+    // width across the knob -- 30 dB at the range then in force (-6..+24,
+    // 1.796 -> 0.057). The 2026-07-27 DRIVE investigation
     // (.superpowers/sdd/2026-07-27-flux-bbd-delay/drive-investigation.md)
     // measured the audible consequence: a 14.0 dB peak-level drop in the
     // actual echo return between DRIVE 0 and DRIVE 1, at the level a real
@@ -468,12 +496,24 @@ public:
     // it, and the result gets denser and louder up to that limit, not
     // quieter. No physical circuit's ceiling recedes as you push it harder.
     // A fixed sat_out_ matches that: small-signal loop gain now equals `g`
-    // itself (no longer DRIVE-independent -- at DRIVE 0, kDriveLoDb = -6 dB
-    // puts the loop 6 dB below unity; at DRIVE 1, kDriveHiDb = +24 dB puts it
-    // 24 dB above), so FEEDBACK moves closer to self-oscillation as DRIVE
-    // rises. That is authentic behaviour, not a bug, and the loop still
-    // cannot diverge: fast_tanh clamps hard at +-1, so Process() is bounded
-    // by construction at sat_out_ = kSatCeil regardless of DRIVE or FEEDBACK.
+    // itself (no longer DRIVE-independent), so FEEDBACK moves closer to
+    // self-oscillation as DRIVE rises -- authentic, not a bug, and the loop
+    // still cannot diverge: fast_tanh clamps hard at +-1, so Process() is
+    // bounded by construction at sat_out_ = kSatCeil regardless of DRIVE or
+    // FEEDBACK.
+    //
+    // The dB range itself (kDriveLoDb, kDriveHiDb -- see their own comment)
+    // was revised once already, by measurement, because the fixed ceiling
+    // makes FEEDBACK's self-oscillation point track DRIVE directly: the
+    // first range tried (-6..+24, inherited unexamined from the old law)
+    // pushed the DRIVE-0 threshold to ~1.71, past Flux::set_feedback's own
+    // 1.2 ceiling -- self-oscillation became UNREACHABLE at DRIVE 0, and at
+    // DRIVE 1 the threshold fell to ~0.05, a hair-trigger. At the shipped
+    // 0..+12 range: DRIVE 0 puts the loop at unity gain (g=1, no attenuation
+    // or boost) with the self-oscillation threshold comfortably below the
+    // 1.2 ceiling (measured ~0.84); DRIVE 1 puts it +12 dB up (g~3.98),
+    // leaving FEEDBACK a real non-oscillating span before that point
+    // (measured ~0.21) rather than collapsing to a switch.
     void SetDrive(float norm) {
         const float n = clampf(norm, 0.f, 1.f);
         const float db = bbd_tuning::kDriveLoDb

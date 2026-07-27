@@ -561,14 +561,13 @@ TEST_CASE("bbd echo: DRIVE dirties every pass, not just the input") {
     // 0.5, not the top of the knob: delta vs DRIVE is an inverted U -- the
     // compounding effect peaks near the middle of the range and collapses at
     // the top, where a single pass already saturates the burst flat and
-    // leaves repeat 1 with no headroom left to compound over. Measured post
-    // the 2026-07-27 fixed-ceiling change (sat_out_ = kSatCeil, not
-    // kSatCeil/g): dirty=0.221906 vs clean=-0.00150919 at drive 0.5 -- both
-    // numbers moved from the pre-fix values (dirty=0.0617, clean=0.0048)
-    // because DRIVE 0's own sat_out_ is now 6 dB lower than before (it used
-    // to be boosted to kSatCeil/g with g<1 at low DRIVE; now it is the fixed
-    // kSatCeil), but the relation this test pins -- dirty > clean -- still
-    // holds, with more margin than before.
+    // leaves repeat 1 with no headroom left to compound over. Measured at
+    // the shipped 0..+12 range: dirty=0.2464 vs clean=0.0240524 at drive
+    // 0.5. Both numbers moved again from the -6..+24 range's values
+    // (dirty=0.221906, clean=-0.00150919) and from the original pre-fix
+    // values (dirty=0.0617, clean=0.0048) -- DRIVE 0 is unity gain now
+    // rather than boosted or attenuated -- but `dirty > clean` has held
+    // through every revision of this constant pair.
     const float dirty = harmonic_growth(0.5f);
     INFO("clean=" << clean << " dirty=" << dirty);
     CHECK(dirty > clean);
@@ -579,30 +578,41 @@ TEST_CASE("bbd echo: DRIVE dirties every pass, not just the input") {
 // which held small-signal loop gain at unity by construction -- deliberate,
 // and this was its test. The 2026-07-27 DRIVE investigation
 // (.superpowers/sdd/2026-07-27-flux-bbd-delay/drive-investigation.md) traced
-// the reason DRIVE read as inaudible back to that same law: it shrinks the
-// saturator's MAXIMUM possible output by exactly kDriveHiDb - kDriveLoDb =
-// 30 dB across the knob (1.796 -> 0.057), which measured as a 14.0 dB
-// peak-level drop in the actual echo return between DRIVE 0 and DRIVE 1 --
-// the one part of the knob's travel that does add real distortion also made
-// the echo quieter at the same rate, so the two cues cancelled out
-// perceptually. The owner's fix, after listening: sat_out_ is now the FIXED
-// kSatCeil. The real MN3005's headroom does not recede as you drive it
-// harder, and neither does this one anymore. That retires the unity-gain
-// contract on purpose -- small-signal loop gain now equals `g` itself, so it
-// is no longer DRIVE-independent -- and the three cases below pin what
-// replaces it: the ceiling itself does not move, the loop gain now rises
-// (monotonically, the thing that used to be forbidden), and the loop still
-// cannot run away even at the new worst case (max DRIVE, max FEEDBACK).
+// the reason DRIVE read as inaudible back to that same law: at the dB range
+// then in force (-6..+24) it shrank the saturator's MAXIMUM possible output
+// by exactly that range's own 30 dB width across the knob (1.796 -> 0.057),
+// which measured as a 14.0 dB peak-level drop in the actual echo return
+// between DRIVE 0 and DRIVE 1 -- the one part of the knob's travel that does
+// add real distortion also made the echo quieter at the same rate, so the
+// two cues cancelled out perceptually. The owner's fix, after listening:
+// sat_out_ is now the FIXED kSatCeil. The real MN3005's headroom does not
+// recede as you drive it harder, and neither does this one anymore. That
+// retires the unity-gain contract on purpose -- small-signal loop gain now
+// equals `g` itself, so it is no longer DRIVE-independent -- and the three
+// cases below pin what replaces it: the ceiling itself does not move, the
+// loop gain now rises (monotonically, the thing that used to be forbidden),
+// and the loop still cannot run away even at the new worst case (max DRIVE,
+// max FEEDBACK).
+//
+// A follow-up measurement then moved kDriveLoDb/kDriveHiDb themselves from
+// that first -6..+24 range to the shipped 0..+12 (see the constants' own
+// comment in bbd.h and drive-fix-report.md's "DRIVE range follow-up"): the
+// -6..+24 range pushed DRIVE 0's self-oscillation FEEDBACK threshold to
+// ~1.71, past Flux's 1.2 ceiling, making self-oscillation unreachable at
+// DRIVE 0 -- a regression this file did not have a test for, which is why it
+// went unnoticed. The three cases below were re-measured against 0..+12 and
+// hold with the same relations; a fourth case pins the constraint that broke
+// (self-oscillation reachable at DRIVE 0, within FEEDBACK's 1.2 ceiling).
 
 TEST_CASE("bbd echo: the saturator's output ceiling does not move with DRIVE") {
     // sat_out_ = kSatCeil, fixed, regardless of DRIVE. Drive the input hard
     // enough that fast_tanh clamps at every DRIVE setting -- even DRIVE 0's
-    // smallest sat_in_ (~0.557) needs an input over 3.646739/0.557 = 6.55 to
-    // reach the knee, so amplitude 50 clamps deeply everywhere on the knob --
-    // and feedback is held at 0 so only the forward chain (no loop
-    // recirculation) is under test. If the ceiling really is fixed, the peak
-    // that comes out of the delay should land in the same place no matter
-    // where DRIVE sits.
+    // smallest sat_in_ (kDriveLoDb=0 -> g=1 -> sat_in_ = 1/kSatCeil ~= 1.111)
+    // needs an input over 3.646739/1.111 = 3.28 to reach the knee, so
+    // amplitude 50 clamps deeply everywhere on the knob -- and feedback is
+    // held at 0 so only the forward chain (no loop recirculation) is under
+    // test. If the ceiling really is fixed, the peak that comes out of the
+    // delay should land in the same place no matter where DRIVE sits.
     auto clamped_peak = [](float drive) {
         BbdEcho e;
         static float mem[8192];
@@ -625,8 +635,9 @@ TEST_CASE("bbd echo: the saturator's output ceiling does not move with DRIVE") {
     const float p75  = clamped_peak(0.75f);
     const float p100 = clamped_peak(1.f);
     INFO("p0=" << p0 << " p25=" << p25 << " p50=" << p50 << " p75=" << p75 << " p100=" << p100);
-    // Measured: 1.508 / 1.512 / 1.512 / 1.512 / 1.512 -- max deviation from
-    // DRIVE 0 is 0.28%. epsilon(0.02) leaves ~7x that margin.
+    // Measured at the shipped 0..+12 range: 1.51143 / 1.51193 / 1.51202 /
+    // 1.51202 / 1.51202 -- max deviation from DRIVE 0 is 0.04%. epsilon(0.02)
+    // (2%) leaves ~50x that margin.
     REQUIRE(p0 > 0.5f);                  // sanity: this really did clamp hard
     CHECK(p25  == doctest::Approx(p0).epsilon(0.02));
     CHECK(p50  == doctest::Approx(p0).epsilon(0.02));
@@ -638,15 +649,15 @@ TEST_CASE("bbd echo: DRIVE now raises the small-signal loop gain, monotonically"
     // The exact thing the retired test forbade. Reuses that test's own probe
     // (a quiet 0.01-amplitude impulse, feedback 0.7, the same late window) --
     // only the assertion direction changed. Small-signal loop gain is now
-    // `g` itself: -6 dB (kDriveLoDb) at DRIVE 0 up to +24 dB (kDriveHiDb) at
-    // DRIVE 1, so at feedback 0.7 (comfortably above the DRIVE-0 threshold
-    // for this test's amplitude but nowhere near DRIVE-0's own
-    // self-oscillation point) the tail climbs from inaudible to fully
-    // blooming as DRIVE rises -- FEEDBACK moving closer to self-oscillation
-    // as DRIVE increases IS the authentic, accepted consequence of this
-    // change, not a bug. A future silent reversion to the old inverse-gain
-    // law would flatten this back to "b/a ~= 1" and this assertion would
-    // catch it.
+    // `g` itself: unity (kDriveLoDb=0 dB) at DRIVE 0 up to +12 dB
+    // (kDriveHiDb) at DRIVE 1 -- comfortably below this test's own feedback
+    // (0.7) and DRIVE 0's self-oscillation threshold (~0.84, see the
+    // constraint test below), so the tail still climbs measurably from quiet
+    // to loud as DRIVE rises, without DRIVE 0 itself blooming here. FEEDBACK
+    // moving closer to self-oscillation as DRIVE increases IS the authentic,
+    // accepted consequence of this change, not a bug. A future silent
+    // reversion to the old inverse-gain law would flatten this back to
+    // "b/a ~= 1" and this assertion would catch it.
     auto tail_at = [](float drive) {
         BbdEcho e;
         static float mem[8192];
@@ -665,7 +676,14 @@ TEST_CASE("bbd echo: DRIVE now raises the small-signal loop gain, monotonically"
     const float a = tail_at(0.f);
     const float b = tail_at(0.5f);
     const float c = tail_at(1.f);
-    // Measured: a=0.000079, b=0.560563, c=1.500203.
+    // Measured at the shipped 0..+12 range: a=0.00247503, b=0.0763823,
+    // c=1.4489. DRIVE 0's threshold (~0.84) sits above this feedback (0.7),
+    // so `a` is still a genuine decaying tail; DRIVE 0.5's and DRIVE 1's
+    // thresholds (~0.42, ~0.21) sit below it, so `b` and `c` are actually
+    // partway into a growing/blooming loop by this window rather than a
+    // simple quiet decay -- which is exactly "FEEDBACK moves closer to
+    // self-oscillation as DRIVE rises" showing up directly, not a test
+    // artifact.
     INFO("a=" << a << " b=" << b << " c=" << c);
     REQUIRE(a > 1e-6f);
     CHECK(b > a);
@@ -699,9 +717,45 @@ TEST_CASE("bbd echo: max DRIVE and max FEEDBACK together still cannot run away")
         if (i >= 432000) { late_sq += (double)y * y; ++late_n; }
     }
     const float late_rms = static_cast<float>(std::sqrt(late_sq / late_n));
-    // Measured: peak=1.52620, late_rms=0.36611.
+    // Measured at the shipped 0..+12 range: peak=1.54485, late_rms=0.24392.
     INFO("peak=" << peak << " late_rms=" << late_rms);
     CHECK(peak > 0.2f);                              // it did bloom
     CHECK(peak < 12.f);                               // and it stayed bounded
     CHECK(late_rms > 0.01f);                          // and it sustained
+}
+
+TEST_CASE("bbd echo: self-oscillation is reachable at DRIVE 0, within FEEDBACK's 1.2 ceiling") {
+    // The constraint that broke unnoticed when the fixed ceiling first
+    // shipped at kDriveLoDb=-6/kDriveHiDb=24: the design's own rule is that
+    // self-oscillation must stay reachable ("FEEDBACK keeps its 1.2 over
+    // unity so self-oscillation stays reachable -- documented behaviour of
+    // the original", see "feedback at max blooms but stays bounded"). At
+    // -6..+24, DRIVE 0's small-signal loop gain was g(-6dB)=0.501, which
+    // pushed the self-oscillation FEEDBACK threshold to ~1.71 -- past
+    // Flux::set_feedback's own 1.2 maximum, so self-oscillation became
+    // UNREACHABLE at DRIVE 0. Nothing in this file guarded that constraint,
+    // which is why nobody noticed it breaking. At the shipped 0..+12 range,
+    // DRIVE 0 is unity gain (g=1), and FEEDBACK 1.2 must bloom.
+    BbdEcho e;
+    static float mem[8192];
+    e.Init(48000.f, mem, 8192);
+    e.SetStages(8192);
+    e.SetDrive(0.f);
+    e.SetFeedback(1.2f);
+    const float hz = bbd_clock_hz(0.25f, 8192);
+    float early = 0.f, late = 0.f;
+    for (int i = 0; i < 480000; ++i) {               // 10 s
+        const float y = e.Process((i < 32) ? 1.f : 0.f, hz);
+        REQUIRE(std::isfinite(y));
+        if (i > 11000 && i < 13000) early = std::max(early, std::fabs(y));
+        if (i > 400000) late = std::max(late, std::fabs(y));
+    }
+    // Measured: early=0.885514, late=1.4634 -- late is BIGGER than early
+    // (a decaying echo would have late << early, as in "feedback below unity
+    // decays to silence"), i.e. genuinely blooming, not just failing to
+    // decay all the way.
+    INFO("early=" << early << " late=" << late);
+    CHECK(early > 1e-3f);
+    CHECK(late > early * 0.05f);                     // the "sustains" criterion this file already uses
+    CHECK(late > early);                             // stronger: it actually GREW, i.e. it oscillates
 }
