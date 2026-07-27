@@ -318,6 +318,20 @@ void SynthEngineT<V>::_update_control() {
         vc.set_pan((kVoices > 1 ? kPanFan[v] : 0.f) * width);
         vc.set_drift_amount(width);
         vc.set_material_character(_material_char);   // no-op on VoiceT
+        // CHOKE's palm mute. set_hold() above records _hold and demotes the
+        // surface, but never pushed the flag to the voices -- so BodyVoice::
+        // set_hold was dead code and a BODY deck ignored CHOKE entirely
+        // (found by ear during the Task 12 listening pass: the palm mute had
+        // "no measurable effect"). Three branches inside BodyVoice were
+        // unreachable because of it: the strings' 0.02 damping, the mode
+        // bank's zeroed ring, and the energy follower's faster fall.
+        //
+        // Pushed here rather than inside set_hold() so a voice allocated
+        // WHILE the hold is on still gets it -- same reason every other
+        // parameter on this list is pushed per tick instead of on its edge.
+        // A no-op on VoiceT (synth/voice.h), so SYNTH and WAVE are
+        // bit-identical (ctrl_identity, wave_formant_sweep).
+        vc.set_hold(_hold);
         vc.update_control(dt_s);
     }
 

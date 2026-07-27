@@ -416,3 +416,51 @@ TEST_CASE("body engine: one voice sits centred, not on the fan's leftmost slot")
     const double ratio = el > er ? el / er : er / el;
     CHECK(ratio < 1.5);
 }
+
+// CHOKE's palm mute has to reach the resonator (spec section 5: HOLD/CHOKE
+// snaps damping high on both structures). Found by ear during the Task 12
+// listening pass -- the palm mute measured as having "no measurable effect"
+// on a BODY deck, and the reason was that SynthEngineT::set_hold recorded
+// _hold and demoted the surface but never pushed the flag to the voices at
+// all. BodyVoice::set_hold was dead code.
+//
+// The claim is about AUDIO, so this measures audio: the ring after the mute
+// must collapse, not merely report a lower env_value(). Both engines are
+// struck identically and diverge only in the hold.
+TEST_CASE("body engine: CHOKE's palm mute actually damps the ring") {
+    auto ring_energy_after_mute = [](bool mute) {
+        BodyEngine e;
+        e.set_seed(5u);
+        e.init(48000.f);
+        float t[LANE_COUNT] = { 0.3f, 0.5f, 0.45f, 0.f, 1.f };
+        e.set_targets(t, 0.5f);
+        e.set_decay(0.9f);                 // a long ring, so there is something to mute
+        e.trigger(0.35f);
+
+        // Let it establish for 0.25 s, then mute (or not) and measure the
+        // NEXT 0.25 s. The window is longer than one control tick (2 ms) by a
+        // wide margin, so the tick that carries the flag lands inside it.
+        for (int i = 0; i < 12000; ++i) { float l, r; e.process(l, r); }
+        e.set_hold(mute);
+        double energy = 0.0;
+        for (int i = 0; i < 12000; ++i) {
+            float l = 0.f, r = 0.f;
+            e.process(l, r);
+            energy += double(l) * l + double(r) * r;
+        }
+        return energy;
+    };
+
+    const double open = ring_energy_after_mute(false);
+    const double held = ring_energy_after_mute(true);
+    MESSAGE("ring energy open=", open, " held=", held, " ratio=", open / held);
+
+    // Premise: there IS a ring to mute. Without this the test would pass on a
+    // silent engine, which is the failure mode that cost this branch two
+    // rounds already.
+    REQUIRE(open > 1e-6);
+    // The mute must take a real bite out of it. Not an exact figure -- the
+    // damping values are tuning material (body_voice.cpp) -- but "audibly
+    // quieter" is the contract, and half is a conservative reading of it.
+    CHECK(held < open * 0.5);
+}
