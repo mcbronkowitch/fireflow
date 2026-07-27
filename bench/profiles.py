@@ -36,7 +36,7 @@ PROFILES = {
     # meant to be visible to whoever runs the bare command.
     "full": Profile(
         families=(
-            "system", "voice", "mem", "mod", "abl", "body", "sampler",
+            "system", "voice", "mem", "mod", "abl", "bbd", "body", "sampler",
         ),
         gates=frozenset({WAVE_ACCEPTANCE}),
     ),

@@ -23,6 +23,9 @@ const Family kFamilies[] = {
 #if BENCH_FAMILY_ABL
     { "abl",     kAblWorkloads,     kAblCount     },
 #endif
+#if BENCH_FAMILY_BBD
+    { "bbd",     kBbdWorkloads,     kBbdCount     },
+#endif
 #if BENCH_FAMILY_BODY
     { "body",    kBodyWorkloads,    kBodyCount    },
 #endif
@@ -40,7 +43,7 @@ static_assert(sizeof(kFamilies) / sizeof(kFamilies[0]) > 0,
 
 // Ceiling: buf[128] holds space-separated family names plus a NUL, so at
 // most 127 characters of names-and-spaces. Today's registry ("system voice
-// mem mod abl taps sampler") is 37. Past the ceiling this silently
+// mem mod abl bbd body sampler") is 41. Past the ceiling this silently
 // truncates -- no assert, no error -- and report.cpp's report_begin() has a
 // second, related ceiling of its own (see the comment there). Neither is a
 // correctness risk today, but the family count is about to grow: if you are

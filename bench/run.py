@@ -174,6 +174,7 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "oliverb_solo_sram",
         "instrument_init",
         "instrument_worst",
+        "instrument_worst_bbd",
     ),
     "voice": (
         "morph_osc_bare",
@@ -219,6 +220,11 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "echo_short_sdram",
         "grit_drive_solo",
         "grit_reduce_solo",
+    ),
+    "bbd": (
+        "bbd_ceiling",
+        "bbd_line_only",
+        "bbd_walk_sdram",
     ),
     "body": (
         "mode_bank_24",

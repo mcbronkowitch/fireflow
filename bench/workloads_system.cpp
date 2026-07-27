@@ -297,6 +297,35 @@ void setup_inst_worst()
     inst.set_master_drive(1.f);
 }
 
+// --- 10. the whole instrument, FLUX at the BBD's ceiling ---------------------
+// instrument_worst never touches the FLUX voicing controls, so the combined
+// worst case would otherwise be an extrapolation. This row measures
+// instrument_worst's exact configuration plus STAGES at maximum and DRIVE
+// high on both parts, with the FLUX rate pushed to the shortest division so
+// the clock sits on its ceiling.
+//
+// Unlike the tap row this replaces, there is nothing to wait for: the BBD's
+// cost does not depend on the OTHER deck's rhythm becoming valid, so the
+// runner's fixed 100-block warm-up is enough. That simplification is the
+// point -- the worst case is now constant and knowable, which is exactly what
+// the design claimed.
+void setup_inst_worst_bbd()
+{
+    setup_inst_worst();
+    auto& group = g_system_arena.get<InstrumentGroup>();
+    auto& inst = group.instrument;
+    for (int p = 0; p < PART_COUNT; ++p) {
+        inst.set_stages(p, 1.f);            // 16384: the largest cell array
+        inst.set_drive(p, 0.85f);           // saturating every pass
+        inst.set_flux_rate(p, kFluxRateCount - 1);   // "1/32" -> clock ceiling
+        inst.set_fx_target_base(p, FXT_FLUX_FB, 0.9f);
+    }
+    // Fill both lines and settle every envelope before the runner measures.
+    const float* in = test_input();
+    for (int b = 0; b < 200; ++b)
+        inst.process(in, in, group.out_l, group.out_r, kBlock);
+}
+
 float proc_inst()
 {
     auto& group = g_system_arena.get<InstrumentGroup>();
@@ -339,6 +368,7 @@ const Workload kCoreWorkloads[] = {
     { "system", "oliverb_solo_sram",  setup_reverb,    proc_reverb  },
     { "system", "instrument_init",    setup_inst_init, proc_inst    },
     { "system", "instrument_worst",   setup_inst_worst,proc_inst    },
+    { "system", "instrument_worst_bbd", setup_inst_worst_bbd, proc_inst },
 };
 const int kCoreCount = sizeof(kCoreWorkloads) / sizeof(kCoreWorkloads[0]);
 

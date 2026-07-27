@@ -839,7 +839,7 @@ class FullProfileLinkContract(unittest.TestCase):
     """
 
     KNOWN_FAMILIES = frozenset(
-        {"system", "voice", "mem", "mod", "abl", "body", "sampler"}
+        {"system", "voice", "mem", "mod", "abl", "bbd", "body", "sampler"}
     )
 
     def test_full_profile_manifest_resolves_cleanly(self):

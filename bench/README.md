@@ -24,7 +24,7 @@ contains.
 | profile | families | purpose |
 |---|---|---|
 | `system` | system | carries the WAVE acceptance gate; fits comfortably |
-| `full` (default) | system, voice, mem, mod, abl, body, sampler | the complete run, as before profiles existed |
+| `full` (default) | system, voice, mem, mod, abl, bbd, body, sampler | the complete run, as before profiles existed |
 
 **`full` currently fails to link, and that is deliberate, not broken.** The
 engine has outgrown the image; no profile change fixes that on its own (see
@@ -359,7 +359,8 @@ this paragraph is the record of it.
 Add one row to the relevant `kXxxWorkloads[]` table (`workloads_system.cpp`
 for family 1, `workloads_daisysp.cpp` for family 2, `workloads_memory.cpp`
 for family 3, `workloads_mod.cpp` for the modulation plane, `workloads_abl.cpp`
-for the ablation rows, `workloads_sampler.cpp` for the texture deck) with a
+for the ablation rows, `workloads_bbd.cpp` for the bucket-brigade delay,
+`workloads_sampler.cpp` for the texture deck) with a
 family tag, a name, a setup function and a process function. A new *table*
 additionally needs its `extern` in `workload.h`, an entry in `runner.cpp`'s
 `find_workload` arrays (and its loop bound), a loop in `main.cpp`, and the
@@ -369,6 +370,18 @@ not just within one file's table — libDaisy's Makefile flattens every
 source path with `notdir` when it builds the object list, so two files
 named e.g. `voice.cpp` in different directories would collide at link time
 even though their paths differ.
+
+## The bbd family, and why its rows are worst cases on purpose
+
+`bbd_ceiling` runs `BbdEcho` with the clock pinned to `kClockMaxHz` and
+`STAGES` at `kMaxStages` — the combination that maximises tick rate and cell
+array size at once. It is a ceiling, not a typical patch, because the design's
+whole CPU claim ("the taps pay for the BBD and nothing more") is only settled
+by the worst case: cost here is driven by clock Hz, not by delay time, so a
+typical setting would still leave the ceiling unmeasured. `bbd_line_only`
+strips the compander and drive path to split the ceiling's cost between the
+model and the surrounding device; `bbd_walk_sdram` isolates the line's
+sequential-write memory access pattern.
 
 ## WAVE direct-engine gate
 

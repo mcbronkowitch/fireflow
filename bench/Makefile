@@ -33,7 +33,7 @@ GIT_HASH = $(shell git -C .. rev-parse --short HEAD)
 # BENCH_FAMILY_* define, so families.cpp's registry entry disappears too; the
 # engine code only that family referenced then goes with --gc-sections. That
 # is where the SRAM comes back.
-BENCH_FAMILIES ?= system voice mem mod abl body sampler
+BENCH_FAMILIES ?= system voice mem mod abl bbd body sampler
 
 FAMILY_SOURCE_system  = workloads_system.cpp
 FAMILY_SOURCE_voice   = workloads_daisysp.cpp
@@ -42,6 +42,7 @@ FAMILY_SOURCE_mod     = workloads_mod.cpp
 FAMILY_SOURCE_abl     = workloads_abl.cpp
 FAMILY_SOURCE_sampler = workloads_sampler.cpp
 FAMILY_SOURCE_body    = workloads_body.cpp
+FAMILY_SOURCE_bbd     = workloads_bbd.cpp
 
 FAMILY_DEFINE_system  = BENCH_FAMILY_SYSTEM
 FAMILY_DEFINE_voice   = BENCH_FAMILY_VOICE
@@ -50,6 +51,7 @@ FAMILY_DEFINE_mod     = BENCH_FAMILY_MOD
 FAMILY_DEFINE_abl     = BENCH_FAMILY_ABL
 FAMILY_DEFINE_sampler = BENCH_FAMILY_SAMPLER
 FAMILY_DEFINE_body    = BENCH_FAMILY_BODY
+FAMILY_DEFINE_bbd     = BENCH_FAMILY_BBD
 
 # Fail loudly on a typo rather than silently building a smaller image.
 $(foreach f,$(BENCH_FAMILIES),\
