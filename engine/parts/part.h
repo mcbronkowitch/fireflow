@@ -331,7 +331,11 @@ private:
     // FX target cache, filled at the control tick. PartFx smooths each value
     // over 2 ms, so the raster's steps never reach an FX parameter raw.
     // Boot values mirror _fx_base so the first block cannot push zeros.
-    float _fxv[FXT_COUNT] = { 0.3f, 0.4f, 1.f, 0.25f, 0.45f };
+    // Slot 1 (FXT_FLUX_TIME) is 0.5 because the BBD reads it as a geometric
+    // multiplier on the clock with 0.5 == x1. The 0.4 it carried while the
+    // target was retired and unread would put every deck 1.3x off its own
+    // synced grid.
+    float _fxv[FXT_COUNT] = { 0.3f, 0.5f, 1.f, 0.25f, 0.45f };
 
     PartFx         _fx;
 
@@ -370,9 +374,13 @@ private:
     std::array<float, LANE_COUNT> _tdepth { { 1.f, 0.55f, 1.f, 0.7f, 1.f } };
 
     // FX target row (boot: all modulation inactive, spec "Boot defaults").
-    // Bases, by FxTargetId: GRIT_INT .3 | FLUX_TIME .4 | FX_MIX 1 | REV_SEND .25 | FLUX_FB .45
+    // Bases, by FxTargetId: GRIT_INT .3 | FLUX_TIME .5 | FX_MIX 1 | REV_SEND .25 | FLUX_FB .45
+    // Slot 1 (FXT_FLUX_TIME) is 0.5 because the BBD reads it as a geometric
+    // multiplier on the clock with 0.5 == x1. The 0.4 it carried while the
+    // target was retired and unread would put every deck 1.3x off its own
+    // synced grid.
     std::array<bool,  FXT_COUNT> _fx_active { { false, false, false, false, false } };
-    std::array<float, FXT_COUNT> _fx_base   { { 0.3f, 0.4f, 1.f, 0.25f, 0.45f } };
+    std::array<float, FXT_COUNT> _fx_base   { { 0.3f, 0.5f, 1.f, 0.25f, 0.45f } };
     std::array<float, FXT_COUNT> _fx_depth  { { 1.f, 1.f, 1.f, 1.f, 1.f } };
 
     // Modulation may duck LEVEL to at most this fraction of its base — the

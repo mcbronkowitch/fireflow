@@ -136,24 +136,80 @@ TEST_CASE("part_fx: comp sits BEFORE the send tap — the send gets louder too")
     CHECK(send_rms(1.f) > send_rms(0.f) * 1.5f);   // full-wet motivation, verified
 }
 
-TEST_CASE("part_fx: synced rate + BPM place the echo, not FXT_FLUX_TIME") {
+TEST_CASE("part_fx: FXT_FLUX_TIME reaches the clock -- and RATE still sets the base") {
+    // The 2026-07-17 spec retired this target; the BBD reactivates it. This
+    // case is the inverse of the one it replaces: the lane MUST move the
+    // clock now, while the ladder still decides what it moves relative to.
     PartFx fx;
     fx.init(48000.f, s_pf_l, s_pf_r);
     fx.set_fx_on(FxBlock::Flux, true, true);
-    fx.set_flux_mix(1.f);              // 0 dB wet
     fx.set_bpm(120.f);
-    fx.set_flux_rate(3);              // "1/4" @120 -> 0.5 s
+    fx.set_flux_rate(3);                  // "1/4" -> 0.5 s
+    fx.set_flux_mix(1.f);
     float v[FXT_COUNT];
-    fill(v, 0.f, 0.99f, 1.f, 0.f, 0.f);   // FXT_FLUX_TIME = 0.99 must NOT move the echo
-    int idx = -1;
-    for (int i = 0; i < 30000; ++i) {
-        float l = (i == 0) ? 1.f : 0.f;
-        float r = l, sl, sr;
+    fill(v, 0.f, 0.5f, 1.f, 0.f, 0.f);    // FXT_FLUX_TIME neutral
+    for (int i = 0; i < 40000; ++i) {
+        float l = 0.f, r = 0.f, sl = 0.f, sr = 0.f;
         fx.process(l, r, sl, sr, v);
-        if (i > 100 && std::fabs(l) > 1e-3f) { idx = i; break; }
     }
-    CHECK(idx >= 23900);
-    CHECK(idx <= 24200);             // ~24000 (0.5 s), independent of v[FXT_FLUX_TIME]
+    const float neutral = fx.flux().clock_hz();
+    CHECK(neutral > 0.f);
+    fill(v, 0.f, 1.f, 1.f, 0.f, 0.f);     // FXT_FLUX_TIME hard up -> x4
+    for (int i = 0; i < 2000; ++i) {      // past PartFx's 2 ms smoother
+        float l = 0.f, r = 0.f, sl = 0.f, sr = 0.f;
+        fx.process(l, r, sl, sr, v);
+    }
+    INFO("neutral=" << neutral << " modulated=" << fx.flux().clock_hz());
+    CHECK(fx.flux().clock_hz() > neutral * 3.f);
+}
+
+TEST_CASE("part_fx: the FLUX TIME lane rides the 2 ms path, so a 4 Hz vibrato survives") {
+    // PartFx's own OnePole is 2 ms (part_fx.cpp:12). A 4 Hz sine on the lane
+    // must still swing the clock by most of its range; through the 30 ms
+    // ladder slew it would be a ~5 Hz low-pass and would not.
+    PartFx fx;
+    fx.init(48000.f, s_pf_l, s_pf_r);
+    fx.set_fx_on(FxBlock::Flux, true, true);
+    fx.set_bpm(120.f);
+    fx.set_flux_rate(3);
+    fx.set_flux_mix(1.f);
+    float v[FXT_COUNT];
+    fill(v, 0.f, 0.5f, 1.f, 0.f, 0.f);
+    for (int i = 0; i < 40000; ++i) {
+        float l = 0.f, r = 0.f, sl = 0.f, sr = 0.f;
+        fx.process(l, r, sl, sr, v);
+    }
+    float lo = 1e30f, hi = 0.f;
+    for (int i = 0; i < 24000; ++i) {     // 0.5 s = two vibrato cycles
+        const float m = 0.5f + 0.4f * std::sin(TWO_PI * 4.f * i / 48000.f);
+        fill(v, 0.f, m, 1.f, 0.f, 0.f);
+        float l = 0.f, r = 0.f, sl = 0.f, sr = 0.f;
+        fx.process(l, r, sl, sr, v);
+        if (i > 12000) {
+            lo = std::min(lo, fx.flux().clock_hz());
+            hi = std::max(hi, fx.flux().clock_hz());
+        }
+    }
+    INFO("lo=" << lo << " hi=" << hi << " ratio=" << hi / lo);
+    // Full depth 0.1..0.9 is a ratio of 2^(4*0.8) = 9.19; the 2 ms smoother
+    // takes some of it back. Anything above 5 proves the vibrato survived.
+    CHECK(hi / lo > 5.f);
+}
+
+TEST_CASE("part_fx: DRIVE and STAGES reach FLUX") {
+    PartFx fx;
+    fx.init(48000.f, s_pf_l, s_pf_r);
+    fx.set_fx_on(FxBlock::Flux, true, true);
+    fx.set_stages(0.4f);
+    fx.set_drive(0.6f);
+    float v[FXT_COUNT];
+    fill(v, 0.f, 0.5f, 1.f, 0.f, 0.f);
+    for (int i = 0; i < 20000; ++i) {
+        float l = 0.f, r = 0.f, sl = 0.f, sr = 0.f;
+        fx.process(l, r, sl, sr, v);
+    }
+    CHECK(fx.flux().stages() == doctest::Approx(2048).epsilon(0.01));
+    CHECK(fx.flux().drive_norm_for_test() == doctest::Approx(0.6f));
 }
 
 TEST_CASE("part_fx: tape_tap exposes the FLUX echo, not the mix, and starts at exact 0") {
@@ -186,7 +242,12 @@ TEST_CASE("part_fx: tape_tap exposes the FLUX echo, not the mix, and starts at e
     fx.set_bpm(120.f);
     fx.set_flux_rate(3);           // "1/4" @ 120 bpm -> 0.5 s, ~24000 samples
     float v[FXT_COUNT];
-    fill(v, 0.f, 0.f, 0.f, 0.f, 0.5f);   // FX MIX (index 2) left at 0.f on purpose
+    // FXT_FLUX_TIME (index 1) at 0.5f, its new neutral (Task 8): at 0.f it is
+    // a x0.25 clock multiplier, quadrupling this test's delay from 0.5 s to
+    // 2 s -- past the 48000-sample (1 s) window below. 0.f here used to be
+    // an inert placeholder; it no longer is, so this test asks for the
+    // no-op value instead of accidentally exercising FXT_FLUX_TIME at all.
+    fill(v, 0.f, 0.5f, 0.f, 0.f, 0.5f);   // FX MIX (index 2) left at 0.f on purpose
 
     bool tap_nonzero = false;
     for (int i = 0; i < 48000; ++i) {

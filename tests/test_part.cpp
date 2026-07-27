@@ -117,6 +117,17 @@ TEST_CASE("part: inactive fx target contributes only its base value") {
     CHECK(p.fx_target_value(FXT_FLUX_TIME) == doctest::Approx(0.37f));
 }
 
+TEST_CASE("part: FXT_FLUX_TIME's base default is the neutral x1") {
+    // The BBD reads this target as a multiplier around 0.5 == x1. A base of
+    // 0.4 -- the value it carried while the target was retired and unread --
+    // would put every un-modulated deck permanently 1.3x off its own synced
+    // grid, which is the kind of bug that reads as "the delay is slightly
+    // wrong" for weeks.
+    Part p;
+    p.init(48000.f, 0x1234abcdu, nullptr, nullptr, nullptr, 0);
+    CHECK(p.fx_target_value(FXT_FLUX_TIME) == doctest::Approx(0.5f));
+}
+
 TEST_CASE("part: active fx target modulates around its base, clamped") {
     Part p;
     p.init(48000.f, 5);

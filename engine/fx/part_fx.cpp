@@ -36,6 +36,14 @@ void PartFx::process(float& l, float& r, float& send_l, float& send_r,
             _grit_applied = v[FXT_GRIT_INT];
         }
         _flux.set_feedback(v[FXT_FLUX_FB]);
+        // v[FXT_FLUX_TIME] was smoothed and then DISCARDED here -- alone
+        // among the five targets -- for as long as FLUX was a crossfade
+        // delay, where modulating the delay time made no musical sense. In a
+        // BBD, clock modulation IS the sound generation, so it lands. This
+        // rides the 2 ms smoother above, deliberately NOT the 30 ms ladder
+        // slew inside Flux: through that path a 4 Hz vibrato would not
+        // survive (spec "Modulation": two smoothers, two jobs).
+        _flux.set_time_mod(v[FXT_FLUX_TIME]);
         const float dry_l = l, dry_r = r;
         _grit.process(l, r);
 
