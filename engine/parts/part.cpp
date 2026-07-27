@@ -59,7 +59,18 @@ void Part::init(float sample_rate, uint32_t seed_base,
     // pre-reinit audio leak into the first post-reinit control tick.
     _other_deck_tap = 0.f;
     _audio_in_tap = 0.f;
-    _bus_dc.Init(sample_rate);
+    // _bus_dc.Process() only ever runs from _control_tick(), i.e. once per
+    // SynthEngine::kCtrlInterval samples (500 Hz at 48 kHz) -- NOT once per
+    // sample. daisysp::DcBlock::Init(rate) sizes its pole from the rate it is
+    // told Process() will be called at (dcblock.cpp: gain_ = 1 - 10/rate), so
+    // it must be told the CALL rate, sample_rate / kCtrlInterval, not the
+    // audio sample rate itself (task-10-review.md finding 1: at sample_rate
+    // the corner lands near 0.017 Hz, a ~9.6 s time constant, instead of the
+    // intended ~1.6 Hz). Contrast with PartFx::_tap_dc (part_fx.cpp), which
+    // IS Process()ed every sample and is correctly Init(sample_rate) there --
+    // do not "fix" one to match the other, they run at genuinely different
+    // rates.
+    _bus_dc.Init(sample_rate / static_cast<float>(SynthEngine::kCtrlInterval));
     _ctrl_ctr = 0;                              // first process() runs a tick
     _quant.init(sample_rate, SynthEngine::kCtrlInterval);   // slew in ticks
     _pitch_q = _quant.process(pitch_pre_quant());
@@ -455,14 +466,16 @@ void Part::process(float inL, float inR, float& outL, float& outR,
         _engine->set_gate(g);
     }
 
-    // Excitation bus, audio-in capture (spec §6, Task 10): latch the mono
-    // input ONLY on this control block's last sample (_ctrl_ctr, already
-    // decremented above, has reached 0), mirroring exactly how Instrument
-    // latches _dry_tap for the cross-deck source (instrument.cpp). The next
-    // block's _control_tick() runs at the TOP of process(), before this
-    // point is reached again, so it reads whatever was latched here at the
-    // end of the block before it -- one control block late, same as the
-    // other two sources.
+    // Excitation bus, audio-in capture (spec §6, Task 10): write the mono
+    // input into _audio_in_tap only on this control block's last sample
+    // (_ctrl_ctr, already decremented above, has reached 0), mirroring
+    // Instrument's _dry_tap capture (instrument.cpp) -- same micro-
+    // optimisation, same non-claim: _control_tick() only ever READS this
+    // once per block too (at the TOP of the next process() call), so an
+    // unconditional write every sample would leave the identical value
+    // sitting there at read time, just after 96 redundant writes (see
+    // task-10-review.md finding 6). The one-control-block lag comes from the
+    // read cadence, not from this guard.
     if (_ctrl_ctr == 0) _audio_in_tap = 0.5f * (inL + inR);
 
     _engine->process_in(inL, inR);

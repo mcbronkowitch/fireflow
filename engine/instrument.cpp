@@ -135,12 +135,19 @@ void Instrument::process(const float* inL, const float* inR,
         const float asl = psl[PART_A], asr = psr[PART_A];
         const float bsl = psl[PART_B], bsr = psr[PART_B];
 
-        // Excitation bus, cross-deck capture (spec §6, Task 10): latch this
-        // sample's dry mono output ONLY on the block's last sample (the
-        // instant _ctrl_ctr -- already decremented above -- reaches 0), so
-        // the two floats update once per control block, exactly like the
-        // brief asks, and the NEXT block's top-of-loop hand-over above reads
-        // a value that is a whole block old rather than one sample old.
+        // Excitation bus, cross-deck capture (spec §6, Task 10): write this
+        // sample's dry mono output into _dry_tap only on the block's last
+        // sample (the instant _ctrl_ctr -- already decremented above --
+        // reaches 0). This guard is a micro-optimisation, not what makes the
+        // hand-over "one block late": the top-of-loop read above only ever
+        // runs once per block too, so it always sees whichever value was
+        // written LAST before that boundary -- unconditional writes every
+        // sample would leave the SAME value sitting there when the read
+        // happens, just after 96 redundant writes instead of one. What the
+        // guard actually buys is skipping those 96 writes (task-10-review.md
+        // finding 6 -- an earlier version of this comment overclaimed that
+        // the guard itself produced the one-block lag; it does not, the
+        // once-per-block READ does).
         if (_ctrl_ctr == 0) {
             _dry_tap[PART_A] = 0.5f * (al + ar);
             _dry_tap[PART_B] = 0.5f * (bl + br);

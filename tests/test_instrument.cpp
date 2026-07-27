@@ -1410,3 +1410,119 @@ TEST_CASE("audio input reaches the excitation bus and is off by default") {
     }
     CHECK(e_fed > e_quiet);
 }
+
+// Task 10 review (task-10-review.md), finding 3: the report's mutation 10
+// only flipped the DEFAULT of _src_tape (true -> false), which
+// tests/test_part.cpp's pre-existing Task 9 test catches independently --
+// nothing ever set _src_tape = false on a deck whose tape is genuinely LIVE
+// and required the tape to stop reaching the bus. Reproduced the reviewer's
+// mutation myself first (part.cpp:357, `if (_src_tape) bus += ...` ->
+// unconditional `bus += _fx.tape_tap();`): full suite stayed 785/785 green.
+//
+// Same real-FX-chain idiom as "two BODY decks... stay bounded" above
+// (test_fx_mem(), FLUX on with a nonzero mix) so the tape source is provably
+// live in BOTH renders -- REQUIRE(tape_live) below closes the addendum's §B
+// trap the same way that test does, just landing on this source instead.
+TEST_CASE("tape source is honoured: switching it off changes a live FLUX render") {
+    auto render = [](bool tape) {
+        Instrument inst;
+        inst.init(48000.f, test_fx_mem());
+        inst.set_engine(PART_A, ENGINE_BODY);
+        inst.set_fx_on(PART_A, FxBlock::Flux, true);
+        inst.set_flux_mix(PART_A, 1.f);
+        inst.set_excitation_sources(PART_A, tape, false, false);
+        inst.set_voice_sub(PART_A, 1.f);
+        inst.trigger_manual(PART_A);
+        bool tape_live = false;
+        std::vector<float> out;
+        out.reserve(48000);
+        float l, r;
+        for (int i = 0; i < 48000; ++i) {
+            inst.process(nullptr, nullptr, &l, &r, 1);
+            if (inst.tape_tap(PART_A) != 0.f) tape_live = true;
+            out.push_back(l);
+        }
+        // The premise: FLUX really did engage in THIS render, tape flag or
+        // not (tape_tap() reflects PartFx's own FLUX state, independent of
+        // whether Part's bus sum is honouring _src_tape -- see instrument.h's
+        // tape_tap() comment). Without this, a render pair that both happen
+        // to have a dead FLUX chain would trivially compare equal for the
+        // wrong reason.
+        REQUIRE(tape_live);
+        return out;
+    };
+    CHECK(render(true) != render(false));
+}
+
+// Task 10 review, finding 2: M1/M2 showed the whole post-sum DC-block +
+// fast_tanh stage (part.cpp:_control_tick, the line after the three `if
+// (_src_*)` adds) can be deleted and the two-BODY-deck "bus hot stays
+// bounded" test never notices, because that scenario's own sources are
+// self-limiting (the resonator's own damping, SUB^2 <= 0.5, and Task 9's
+// per-source clip on the tape tap already keep it stable without any help
+// from the post-sum stage). The reviewer's fix: stop trying to provoke
+// instability and test the stage's actual CONTRACT directly -- soft
+// clipping means the response to a 10x-louder drive is compressed, not
+// proportional. Audio-in is the right source to drive this through because
+// it is the one source with NO clip anywhere upstream of the post-sum stage
+// (tape_tap() has Task 9's own clip; the cross-deck tap is a deck's dry
+// output, plausibly loud but not adversarially so in this repo's other
+// tests) -- so this is also the closest thing to a regression test for the
+// exact failure scenario finding 1 names (an unclipped, unblocked source
+// riding the bus at speaker-destroying levels).
+//
+// Driven with a 220 Hz tone (not a constant/DC level): _audio_in_tap
+// captures one instantaneous sample per 96-sample control block, and with
+// Important 1 now fixed the post-sum DcBlock's corner is a real ~1.6 Hz --
+// a held DC input would just get removed, telling this test nothing. 220 Hz
+// comfortably survives that highpass and is well below the 500 Hz rate the
+// captured sequence is effectively sampled at.
+TEST_CASE("audio-in excitation bus is soft-clipped, not proportional to drive") {
+    auto measure_energy = [](float drive) {
+        Instrument inst;
+        inst.init(48000.f);
+        inst.set_engine(PART_A, ENGINE_BODY);
+        inst.set_voice_sub(PART_A, 1.f);
+        inst.set_excitation_sources(PART_A, false, false, true);
+
+        constexpr double kTwoPi = 6.283185307179586;
+        constexpr double kFreqHz = 220.0;
+        double phase = 0.0;
+        const double dphase = kTwoPi * kFreqHz / 48000.0;
+        float l, r;
+        auto step = [&] {
+            const float s = static_cast<float>(drive * std::sin(phase));
+            phase += dphase;
+            float inL = s, inR = s;
+            inst.process(&inL, &inR, &l, &r, 1);
+        };
+        for (int i = 0; i < 48000; ++i) step();   // past the boot pluck, into steady state
+
+        double e = 0.0;
+        for (int i = 0; i < 24000; ++i) {
+            step();
+            const float ve = inst.voice_env(PART_A, 0);
+            e += (double)ve * ve;
+        }
+        return e;
+    };
+
+    const double e_lo = measure_energy(0.4f);
+    const double e_hi = measure_energy(4.0f);
+    // Premise: the low-drive render genuinely excited the resonator (SUB is
+    // open and the tone is above the DC block's corner) -- otherwise a ratio
+    // computed against ~0 would pass or divide-by-zero for the wrong reason.
+    REQUIRE(e_lo > 0.0);
+
+    const double ratio = e_hi / e_lo;
+    // A 10x amplitude increase with NO clip anywhere in the chain would
+    // reach the resonator roughly proportionally, i.e. an ENERGY (squared)
+    // ratio near 10^2 = 100 modulo the resonator's own dynamics. With the
+    // post-sum fast_tanh in place, 4.0 sits past its |x| >= 3.646739 hard
+    // clamp (returns exactly +-1) while 0.4 is barely compressed
+    // (fast_tanh(0.4) ~= 0.380), an amplitude ratio of ~2.6 rather than 10,
+    // energy ratio ~<7. 20 sits with real margin above the clipped case and
+    // real margin below the unclipped one -- derived from the clip's own
+    // arithmetic, not fitted to either measurement.
+    CHECK(ratio < 20.0);
+}
