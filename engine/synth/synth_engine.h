@@ -7,6 +7,7 @@
 #include "synth/voice.h"
 #include "synth/wt_osc.h"
 #include "util/onepole.h"
+#include "body/body_voice.h"
 
 namespace spky {
 
@@ -28,10 +29,10 @@ namespace spky {
 //   master gain). All but PITCH act on all voices continuously.
 // - Control rate: drift LFOs + envelope coefficients + all voice parameter
 //   pushes run once per kCtrlInterval samples (CPU-budget constraint).
-template <class OscT>
+template <class V>
 class SynthEngineT : public IPartEngine {
 public:
-    static constexpr int   kVoices       = 4;
+    static constexpr int   kVoices       = V::kEngineVoices;
     static constexpr int   kCtrlInterval = 96;
     static constexpr float kAttackFloorS = 0.002f;
     static constexpr float kDecayMinS    = 0.05f;
@@ -42,6 +43,10 @@ public:
 
     static_assert(kMaxChord == ChordBuilder::kMaxNotes,
                   "chord slot count must match the builder");
+    // kPanFan (synth_engine.cpp) has exactly 4 entries and is indexed by
+    // voice index in _update_control(); raising kVoices past 4 would read
+    // past its end.
+    static_assert(kVoices <= 4, "kPanFan has only 4 entries");
 
     // FILT: linke Haelfte uebersteuert die Schiene um genau die Blendzone,
     // damit t = -1 bei JEDER Lane-Stellung in Stille endet (Invariante:
@@ -60,6 +65,17 @@ public:
     void set_cycle(float seconds) override;
     void set_flow(bool flow) override;
     void set_hold(bool on) override;
+
+    // Excitation bus (spec 2026-07-26 body-resonator, §6, Task 9): forwards
+    // to every voice unconditionally, same idiom as set_hold/set_material_
+    // character in BODY's voice contract. A no-op on SYNTH and WAVE --
+    // VoiceT::set_excitation (synth/voice.h) is an empty inline -- so this
+    // costs those two engines one dead store call per voice per control
+    // tick and changes nothing about their signal path (ctrl_identity and
+    // wave_formant_sweep are the proof).
+    void set_excitation(float x) override {
+        for (int i = 0; i < kVoices; ++i) _voices[i].set_excitation(x);
+    }
 
     // VOICE edit layer (normalized knobs; boot defaults live as raw ratios)
     void set_attack(float n);      // ratio = 0.002 * 250^n  (0.2%..50% of cycle)
@@ -94,7 +110,18 @@ private:
     void _update_control();
     void _adjust_surface();
 
-    std::array<VoiceT<OscT>, kVoices>    _voices;
+    // std::array<int, kVoices> filled with -1 -- a brace initialiser can't
+    // express "every element" independent of kVoices, so this fills it at
+    // compile time instead (spec 2026-07-26 body-resonator, fix round 1:
+    // the old `{ -1, -1, -1, -1 }` only compiled because kVoices was always
+    // exactly 4).
+    static constexpr std::array<int, kVoices> _no_chord_slots() {
+        std::array<int, kVoices> a{};
+        for (int i = 0; i < kVoices; ++i) a[i] = -1;
+        return a;
+    }
+
+    std::array<V, kVoices> _voices;
     std::array<uint32_t, kVoices> _order {};   // trigger sequence per voice
     uint32_t _seq = 0;
     uint32_t _seed = 0xC0FFEEu;
@@ -109,8 +136,16 @@ private:
 
     float _chord[kMaxChord] = { 0.f, 0.f, 0.f, 0.f };   // surface targets (Part)
     int   _chord_n = 1;
-    bool  _sustaining[kVoices] = { false, false, false, false };
-    int   _chord_slot[kVoices] = { -1, -1, -1, -1 };
+    // COLOR-as-material (spec §7), pushed to every voice; a no-op on every
+    // voice but BodyVoice. Derived from the chord surface ONLY when the
+    // surface actually moved: the derivation lives in _update_control(), the
+    // control tick, and set_chord() only raises the flag. See set_chord() for
+    // why the flag stays even though Part pushes at control rate, not per
+    // sample.
+    float _material_char = 0.f;
+    bool  _material_dirty = true;
+    std::array<bool, kVoices> _sustaining {};                 // value-init: all false
+    std::array<int, kVoices>  _chord_slot = _no_chord_slots();
     struct Pending { int ctr; float pitch; int slot; };
     Pending _pending[kMaxChord] = {};
     int   _pending_n = 0;
@@ -129,10 +164,76 @@ private:
     OnePole _level;                // smoothed master gain (LEVEL target)
 };
 
-using SynthEngine = SynthEngineT<MorphOsc>;
-extern template class SynthEngineT<MorphOsc>;
+using SynthEngine = SynthEngineT<VoiceT<MorphOsc>>;
+extern template class SynthEngineT<VoiceT<MorphOsc>>;
 
-using WaveEngine = SynthEngineT<WtOsc>;
-extern template class SynthEngineT<WtOsc>;
+using WaveEngine = SynthEngineT<VoiceT<WtOsc>>;
+extern template class SynthEngineT<VoiceT<WtOsc>>;
+
+// BODY (spec 2026-07-26 body-resonator, Task 8). Same machine, a resonator
+// instead of an oscillator+envelope voice, and kVoices == 1 rather than 4 --
+// BodyVoice::kEngineVoices, measured at 1395 cycles/sample, is what the Seed
+// affords. It runs the shared part-engine contract
+// (tests/synth_engine_contract.h) and NOT the AD-envelope one next to it;
+// tests/test_body_engine.cpp and both header comments explain the boundary.
+using BodyEngine = SynthEngineT<BodyVoice>;
+extern template class SynthEngineT<BodyVoice>;
+
+#ifdef SPKY_TESTING
+// Test-only, like the SPKY_TESTING accessors in engine/instrument.h,
+// engine/mod/lane.h and engine/mod/super_modulator.h. Only the tests target
+// defines SPKY_TESTING, so `render` and the firmware never instantiate this
+// template class at all -- the linker was already dropping it, but not
+// compiling it is cheaper than dropping it, and Task 7's author reading this
+// header should not have to wonder whether a second engine alias next to
+// SynthEngine and WaveEngine is something they need to extend.
+namespace detail {
+// Exists solely so SynthEngineT<V> gets exercised at a voice count other
+// than 4 in this build (fix round 1, 2026-07-26 body-resonator, Task 5
+// review): the template's deliverable is the V::kEngineVoices indirection
+// actually working, and nothing else instantiates it below kVoices == 4
+// until BODY's real voice (Task 7) does. Not a real voice -- does not need
+// to make sound. See tests/test_synth_engine_voice_count.cpp.
+struct VoiceCountProbe {
+    static constexpr int kEngineVoices = 1;
+
+    // Counts triggers so a test can pin how OFTEN the engine fires, not just
+    // how many voices ended up active -- the one observation a real voice
+    // cannot give (see the surface-bloom case in
+    // tests/test_synth_engine_voice_count.cpp). Static because SynthEngineT
+    // owns its voices by value; the test zeroes it before each run.
+    static inline int trig_count = 0;
+
+    void init(float /*sample_rate*/, uint32_t /*seed*/) {}
+    void trigger(float /*freq_hz*/) { ++trig_count; _active = true; }
+    void set_sustaining(bool on) { _sustaining = on; if (!on) _active = false; }
+    void set_pitch_hz(float /*freq_hz*/) {}
+    void set_vel(float /*v*/) {}
+    void set_env_times(float /*attack_s*/, float /*decay_s*/) {}
+    void set_morph(float /*m*/) {}
+    void set_detune_cents(float /*max_ct*/) {}
+    void set_sub_level(float /*n*/) {}
+    void set_cutoff_hz(float /*hz*/) {}
+    void set_resonance(float /*n*/) {}
+    void set_pan(float /*pan*/) {}
+    void set_drift_amount(float /*a*/) {}
+    void update_control(float /*dt_s*/) {}
+    void process(float& accL, float& accR) { if (_active) { accL += 0.f; accR += 0.f; } }
+    void set_hold(bool /*on*/) {}
+    void set_excitation(float /*x*/) {}
+    void set_material_character(float /*c*/) {}
+
+    bool  active() const { return _active; }
+    float env_value() const { return _active ? 1.f : 0.f; }
+    float detune_cents() const { return 0.f; }
+
+    bool _active = false;
+    bool _sustaining = false;
+};
+} // namespace detail
+
+using SynthEngineVoiceCountProof = SynthEngineT<detail::VoiceCountProbe>;
+extern template class SynthEngineT<detail::VoiceCountProbe>;
+#endif // SPKY_TESTING
 
 } // namespace spky

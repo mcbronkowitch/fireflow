@@ -88,9 +88,17 @@ struct ParamMenuSlider : ui::Slider {
     }
 };
 
-// ENG is a three-position Rack switch. VCVLatch retains Rack's native switch
-// handling; this overlay only makes the non-Synth positions readable at a
-// glance without changing its footprint.
+// ENG is a four-position Rack switch (Synth/Sampler/Wave/Body). VCVLatch
+// retains Rack's native switch handling; this overlay only makes the
+// non-Synth positions readable at a glance without changing its footprint.
+// Indexed defensively: an out-of-range state (there isn't one today) reuses
+// the last shade rather than reading past the array.
+static const NVGcolor kEngineShades[] = {
+    nvgRGBA(0, 0, 0, 0),          // Synth: no ring
+    nvgRGBA(255, 174, 92, 105),   // Sampler: amber
+    nvgRGBA(120, 210, 255, 145),  // Wave: blue
+    nvgRGBA(160, 255, 150, 140),  // Body: green
+};
 struct EngineCycleLatch : VCVLatch {
     void drawLayer(const DrawArgs& args, int layer) override {
         VCVLatch::drawLayer(args, layer);
@@ -99,9 +107,9 @@ struct EngineCycleLatch : VCVLatch {
         if (!pq) return;
         const int state = static_cast<int>(std::round(pq->getValue()));
         if (state == 0) return;
-        const NVGcolor color = state == 1
-            ? nvgRGBA(255, 174, 92, 105)
-            : nvgRGBA(120, 210, 255, 145);
+        constexpr int kShadeCount = sizeof(kEngineShades) / sizeof(kEngineShades[0]);
+        const NVGcolor color = kEngineShades[
+            state >= 0 && state < kShadeCount ? state : kShadeCount - 1];
         const Vec c = box.size.div(2.f);
         nvgBeginPath(args.vg);
         nvgCircle(args.vg, c.x, c.y, 5.2f);
@@ -230,7 +238,7 @@ struct Spotymod : Module {
                             c.id, 0.f, 1.f, init,
                             c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");
                         source->description =
-                            "Controls Synth TIMB, Wave FRAME, or Sampler ORG according to the selected engine.";
+                            "Controls Synth TIMB, Sampler ORG, Wave FRAME, or Body MATL according to the selected engine.";
                     }
                     else
                         configParam(c.id, 0.f, 1.f, init, lbl);
@@ -261,7 +269,8 @@ struct Spotymod : Module {
                         configSwitch(c.id, 0.f, 1.f, init, "Record",
                                      {"Stopped", "Recording"});
                     else if (c.id == ENGINE_A || c.id == ENGINE_B) {
-                        configSwitch(c.id, 0.f, 2.f, init, "Engine", {"Synth", "Sampler", "Wave"});
+                        configSwitch(c.id, 0.f, 3.f, init, "Engine",
+                                     {"Synth", "Sampler", "Wave", "Body"});
                         getParamQuantity(c.id)->snapEnabled = true;
                     }
                     else if (c.id == GRITMODE_A || c.id == GRITMODE_B)
@@ -397,13 +406,26 @@ struct Spotymod : Module {
             inst.set_comp(p, pp(COMP_A, p));
 
             // Saved ENG meanings remain 0 = Synth and 1 = Sampler; 2 adds
-            // Wave. The development test tone remains a Sampler-only override.
+            // Wave, 3 adds Body. Each new engine needs its own explicit arm
+            // here -- anything that isn't 0/2/3 still falls through to
+            // Sampler (or the dev test tone), which is also why old patches
+            // (which only ever stored 0..2) keep their exact meaning. The
+            // development test tone remains a Sampler-only override.
             const int eng = static_cast<int>(std::round(pp(ENGINE_A, p)));
             const spky::EngineId id =
                 eng == 0 ? spky::ENGINE_SYNTH :
                 eng == 2 ? spky::ENGINE_WAVE :
+                eng == 3 ? spky::ENGINE_BODY :
                 smp[p].testTone ? spky::ENGINE_TEST_TONE : spky::ENGINE_SAMPLER;
             inst.set_engine(p, id);
+
+            // The excitation bus is patch state (design spec §6), pushed
+            // every control tick like the other per-part settings below --
+            // cheap, idempotent, and correct after a patch load without a
+            // separate "apply on restore" path.
+            inst.set_excitation_sources(p, smp[p].exciteTape,
+                                         smp[p].exciteOtherDeck,
+                                         smp[p].exciteAudioIn);
 
             // First-user experience: flipping ENG to Sampler on an empty part
             // loads the factory drone, so one pad press makes sound. It never
@@ -660,6 +682,14 @@ struct Spotymod : Module {
             // deliberately-cleared part on the first control tick after
             // patch open with no user gesture at all (I-1b).
             json_object_set_new(o, "factoryTried", json_boolean(factoryTried[p]));
+            // BODY's excitation bus (design spec §6) -- patch state, not a
+            // performance control. A missing key on load leaves the
+            // constructor default (tape on, deck/audio off) in place, so old
+            // patches load with tape-only excitation, matching what a
+            // pre-Task-10 patch effectively had.
+            json_object_set_new(o, "exciteTape", json_boolean(smp[p].exciteTape));
+            json_object_set_new(o, "exciteOtherDeck", json_boolean(smp[p].exciteOtherDeck));
+            json_object_set_new(o, "exciteAudioIn", json_boolean(smp[p].exciteAudioIn));
             json_array_append_new(parts, o);
         }
         json_object_set_new(root, "sampler", parts);
@@ -710,6 +740,15 @@ struct Spotymod : Module {
             // which no longer overwrites this.
             json_t* v = json_object_get(o, "factoryTried");
             factoryTried[p] = v ? json_boolean_value(v) : false;
+            // Read-guarded like every other field here: a patch saved before
+            // this task has none of these keys, so the struct's own
+            // defaults (tape on, deck/audio off) stand.
+            if (json_t* e = json_object_get(o, "exciteTape"))
+                smp[p].exciteTape = json_boolean_value(e);
+            if (json_t* e = json_object_get(o, "exciteOtherDeck"))
+                smp[p].exciteOtherDeck = json_boolean_value(e);
+            if (json_t* e = json_object_get(o, "exciteAudioIn"))
+                smp[p].exciteAudioIn = json_boolean_value(e);
         }
         // On a whole-patch open, dataFromJson runs before the module is in
         // the engine (curSr == 0.f, reinit() hasn't sized the sampler
@@ -1000,7 +1039,7 @@ struct SpkyRing : Widget {
 // v2 install -- note it has no bold cut, so the SVG's bold legends render
 // regular here. That is accepted.
 static const char* sourceCaption(int state) {
-    return state == 1 ? "ORG" : state == 2 ? "FRAME" : "TIMB";
+    return state == 1 ? "ORG" : state == 2 ? "FRAME" : state == 3 ? "MATL" : "TIMB";
 }
 
 struct PanelText : Widget {
@@ -1183,6 +1222,23 @@ struct SpotymodWidget : ModuleWidget {
                 m->params[DETUNE_B].setValue(kDefaultDetune);
             }));
         }));
+
+        // BODY's excitation bus (design spec §6): patch state, not a
+        // performance control -- there is no panel knob for it on any
+        // engine, so it lives here, same shape as Detune A/B above. Reads
+        // (and does nothing audible) on Synth/Sampler/Wave decks; only BODY
+        // routes it. Defaults: tape on, other deck / audio in off.
+        for (int p = 0; p < spky::PART_COUNT; ++p) {
+            const std::string name = p ? "Excite B" : "Excite A";
+            menu->addChild(createSubmenuItem(name, "", [m, p](Menu* sub) {
+                sub->addChild(createBoolPtrMenuItem("Excite: FLUX tape", "",
+                                                    &m->smp[p].exciteTape));
+                sub->addChild(createBoolPtrMenuItem("Excite: other deck", "",
+                                                    &m->smp[p].exciteOtherDeck));
+                sub->addChild(createBoolPtrMenuItem("Excite: audio in", "",
+                                                    &m->smp[p].exciteAudioIn));
+            }));
+        }
 
         menu->addChild(new MenuSeparator);
         for (int p = 0; p < spky::PART_COUNT; ++p) {

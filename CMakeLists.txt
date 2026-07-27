@@ -23,6 +23,12 @@ add_library(daisysp_min STATIC
     lib/DaisySP/Source/Effects/sampleratereducer.cpp
     lib/DaisySP/Source/Control/phasor.cpp
     lib/DaisySP/Source/Filters/svf.cpp
+    # MIT, not LGPL. engine/body/ks_string.* is a control-rate port of this
+    # file; tests/test_ks_string.cpp compares the two, so the reference has to
+    # be linkable on the desktop as well as in the bench.
+    lib/DaisySP/Source/PhysicalModeling/KarplusString.cpp
+    lib/DaisySP/Source/Utility/dcblock.cpp
+    lib/DaisySP/Source/Dynamics/crossfade.cpp
 )
 target_include_directories(daisysp_min PUBLIC
     lib/DaisySP/Source
@@ -90,6 +96,7 @@ add_executable(spky_tests
     tests/test_comp.cpp
     tests/test_limiter.cpp
     tests/test_svf_lp.cpp
+    tests/test_svf_bp.cpp
     tests/test_fast_sin.cpp
     tests/test_fast_tanh.cpp
     tests/test_morph_osc.cpp
@@ -108,6 +115,7 @@ add_executable(spky_tests
     engine/synth/synth_engine.cpp
     tests/test_synth_engine.cpp
     tests/test_wave_engine.cpp
+    tests/test_synth_engine_voice_count.cpp
     tests/test_phrase_gen.cpp
     tests/test_song_form.cpp
     tests/test_song_lane.cpp
@@ -124,6 +132,17 @@ add_executable(spky_tests
     tests/test_sampler_part.cpp
     tests/test_review_register.cpp
     tests/test_slice_map.cpp
+    engine/body/mode_bank.cpp
+    tests/test_mode_bank.cpp
+    engine/body/ks_string.cpp
+    tests/test_ks_string.cpp
+    engine/body/body_voice.cpp
+    tests/test_body_voice.cpp
+    tests/test_body_engine.cpp
+    # engine/body/material.h is header-only on purpose: it is one stateless
+    # free function, and a .cpp would have to be added to spky_tests, render,
+    # bench/Makefile, bench/audition/Makefile AND host/vcv/Makefile.
+    tests/test_material.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
 target_include_directories(spky_tests PRIVATE host)
@@ -151,6 +170,9 @@ add_executable(render
     engine/sampler/sample_buffer.cpp
     engine/sampler/sampler_engine.cpp
     engine/sampler/slice_map.cpp
+    engine/body/mode_bank.cpp
+    engine/body/ks_string.cpp
+    engine/body/body_voice.cpp
 )
 target_include_directories(render PRIVATE host engine third_party)
 target_link_libraries(render PRIVATE nlohmann_json daisysp_min)

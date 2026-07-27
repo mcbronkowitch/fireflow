@@ -3,6 +3,7 @@
 #include "fx/flux.h"
 #include "fx/grit.h"
 #include "util/onepole.h"
+#include "Utility/dcblock.h"
 
 namespace spky {
 
@@ -54,6 +55,25 @@ public:
     void process(float& l, float& r, float& send_l, float& send_r,
                  const float* fxv);
 
+    // The excitation bus's own-FLUX source (spec §6): the part's echo
+    // playback signal, one sample behind (per-sample cache, not a block
+    // buffer -- see the comment above _tape_tap for why that already lands
+    // on "the previous block" once Part reads it at its control tick).
+    // DC-blocked and soft-clipped so it is safe to feed straight into a
+    // resonator's excitation input; NOT the FX-MIXed/comp'd output -- see
+    // the capture point in process().
+    //
+    // FX MIX (fxv[FXT_FX_MIX], the dry/wet blend PartFx itself applies
+    // AFTER the capture point) does NOT gate this. FLUX's OWN internal wet
+    // level does: `_flux.process()` folds `_mix_lin` (set_flux_mix /
+    // PartFx::set_flux_mix) into the echo BEFORE this class ever sees it
+    // (flux.cpp), and the capture point is downstream of that. So FLUX
+    // MIX == 0 silences the excitation bus even while the echo is still
+    // running internally -- deliberate (with no wet level there is
+    // arguably no "echo playback signal" to tap), but worth knowing before
+    // debugging a BODY deck that seems deaf to its own FLUX.
+    float tape_tap() const { return _tape_tap; }
+
 private:
     Grit _grit;
     Flux _flux;
@@ -61,6 +81,20 @@ private:
     OnePole _smooth[FXT_COUNT];
     float _grit_applied = -1.f;   // change guard: Overdrive::SetDrive costs
     bool _primed = false;         // first process() snaps the smoothers
+
+    // Tape tap (spec §6). Only reached inside the existing
+    // `_grit.engaged() || _flux.engaged()` branch, so a fully FX-off deck
+    // pays nothing extra; within it, the DC block/soft clip only actually
+    // RUN when `_flux.engaged()` itself (process()'s inner gate) -- a
+    // GRIT-only deck must not read a slowly-decaying tail off old FLUX
+    // filter memory. _tap_dc's internal state is allowed to persist across a
+    // FLUX-off period (a real filter's memory, same as ks_string's
+    // always-running DcBlock) -- what must NOT persist is the visible
+    // output: _tape_tap is force-set to exactly 0.f whenever FLUX is not
+    // engaged, so a deck that turns FLUX off never leaves the excitation bus
+    // hearing a stale echo.
+    daisysp::DcBlock _tap_dc;
+    float _tape_tap = 0.f;
 };
 
 } // namespace spky

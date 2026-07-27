@@ -1,7 +1,16 @@
 # STRING — experimental Karplus-Strong part engine
 
+> **Superseded (2026-07-26) by
+> `2026-07-26-body-resonator-engine-design.md` (BODY).** Never implemented.
+> Two findings retired it: the modal/bell exclusion below rests on
+> `daisysp::Resonator`'s per-sample coefficient math rather than on the cost of
+> modal synthesis, and §1's `SynthEngineT<V>` premise was overtaken by WAVE
+> shipping as `SynthEngineT<OscT>`. The core decisions — Karplus strings, a
+> playable exciter, tape excitation, strict reinterpretation, the hardware
+> bench gate — carry forward unchanged.
+
 **Date:** 2026-07-18
-**Status:** design approved, implementation gated on the hardware bench (see §7)
+**Status:** superseded (was: design approved, implementation gated on the hardware bench)
 **Scope:** a fourth selectable part engine (`ENGINE_STRING`) — a 4-voice
 double-string Karplus-Strong instrument behind the existing
 `IPartEngine`/`SynthEngine` semantics, with a playable exciter, tape

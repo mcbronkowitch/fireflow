@@ -225,6 +225,16 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "taps_2_opt",
         "tap_read_sdram",
     ),
+    "body": (
+        "mode_bank_24",
+        "mode_bank_24_static",
+        "ks_string_pair",
+        "ks_string_pair_nolin",
+        "ks_string_pair_port",
+        "body_2x4",
+        "body_2x4_string",
+        "inst_body_worst",
+    ),
     "sampler": (
         "sampler_flow_typ",
         "sampler_flow_worst",

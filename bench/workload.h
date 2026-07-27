@@ -53,6 +53,9 @@ extern const int      kTapsCount;
 extern const Workload kSamplerWorkloads[];
 extern const int      kSamplerCount;
 
+extern const Workload kBodyWorkloads[];
+extern const int      kBodyCount;
+
 // Anchor mode re-runs rows the offline tables already define, by name.
 const Workload* find_workload(const char* name);
 

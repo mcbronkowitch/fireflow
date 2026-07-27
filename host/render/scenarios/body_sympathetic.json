@@ -1,0 +1,33 @@
+{
+  "_comment": "Task 12 listening render 3/3 (task-12-brief-addendum.md section B/E). Deck A (part 0) is the sampler, recording then looping the factory demo clip (host/vcv/res/factory.wav, 48 kHz stereo, ~8.7 s). Deck B (part 1) is BODY with ONLY the cross-deck excitation source on -- set_excitation_sources part 1 flag=false (tape off), ivalue=1 (bit0 = other deck on, bit1 = audio-in off) -- so it can hear nothing but part A's dry output, not the raw input_wav directly. Deck B never gets set_step, trigger_manual or any other trigger action anywhere in this file: the lanes cannot fire it. IMPORTANT, found while building this render (see task-12 report): FLOW is not a decaying pluck that goes quiet. Part::flow()'s own comment says a FLOW drone is always on, and BodyVoice::set_sustaining(true) sets the exciter continuous (body_voice.cpp) -- so every untouched BODY deck bows at a low constant level forever, not silence. set_rate part 1 = 0.0 stops the lane from ever wrapping again after its one boot-time auto-trigger (engine/mod/lane.cpp _on_boundary: FLOW has no per-step gate, so an active lane always re-fires on every wrap -- without this, deck B was measurably retriggering itself every ~1.3s, which is exactly the 'simply triggering' failure mode section E warns against). RESO is parked in the click zone (0.1, not a bell-like ping) and DECAY short (0.05): a continuous ping-zone exciter at higher RESO measured as literally unbounded growth here (task-12 report has the numbers) -- not a tuned choice, just what keeps this demo legible. The result is a quiet, bounded, ever-present hum plus whatever deck A adds: A/B rendered against a coupling-off control, RMS(b_v0) over the loop-playback window is 2.66 coupled vs 1.84 uncoupled -- real, measurable, but not dramatic, which is exactly the kind of thing to flag for the listening pass rather than paper over by hand-tuning further.",
+  "sample_rate": 48000,
+  "bpm": 96,
+  "duration_s": 32,
+  "input_wav": "host/vcv/res/factory.wav",
+  "init": [
+    {"action":"set_engine","part":0,"value":"sampler"},
+    {"action":"set_engine","part":1,"value":"body"},
+
+    {"_comment":"Deck A (sampler): plain loop playback, no scatter/chop, so it reads as a single repeating factory loop."},
+    {"action":"set_target_base","part":0,"slot":4,"value":1.0},
+    {"action":"set_target_active","part":0,"slot":3,"flag":false},
+    {"action":"set_target_base","part":0,"slot":3,"value":0.0},
+
+    {"_comment":"Deck B (BODY): click-zone exciter, short damping, cross-deck source only, SUB at max for the strongest legible coupling, RATE 0 so the lane can never fire itself again after boot -- see the top comment."},
+    {"action":"set_voice_decay","part":1,"value":0.05},
+    {"action":"set_voice_resonance","part":1,"value":0.1},
+    {"action":"set_voice_filt","part":1,"value":0.6},
+    {"action":"set_voice_detune","part":1,"value":0.2},
+    {"action":"set_target_active","part":1,"slot":0,"flag":true},
+    {"action":"set_target_base","part":1,"slot":0,"value":1.0},
+    {"action":"set_target_depth","part":1,"slot":0,"value":0.0},
+    {"action":"set_voice_sub","part":1,"value":1.0},
+    {"action":"set_excitation_sources","part":1,"flag":false,"ivalue":1},
+    {"action":"set_rate","part":1,"value":0.0}
+  ],
+  "events": [
+    {"t":0.0,"action":"sampler_record","part":0,"flag":true},
+    {"_comment":"9s: stop recording -- the ~8.7s factory clip is now fully in the buffer, and deck A starts looping it back."},
+    {"t":9.0,"action":"sampler_record","part":0,"flag":false}
+  ]
+}

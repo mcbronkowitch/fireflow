@@ -80,9 +80,9 @@ int main(int argc, char** argv) {
     if (csv) {
         std::fprintf(csv, "t,"
             "a_src,a_size,a_pitch,a_motion,a_level,a_pcv,a_gate,"
-            "a_fx0,a_fx1,a_fx2,a_fx3,a_fx4,a_voices,a_v0,a_v1,a_v2,a_v3,a_pgate,a_fill,a_grains,a_slices,"
+            "a_fx0,a_fx1,a_fx2,a_fx3,a_fx4,a_voices,a_v0,a_v1,a_v2,a_v3,a_pgate,a_fill,a_grains,a_slices,a_exc,a_matl,"
             "b_src,b_size,b_pitch,b_motion,b_level,b_pcv,b_gate,"
-            "b_fx0,b_fx1,b_fx2,b_fx3,b_fx4,b_voices,b_v0,b_v1,b_v2,b_v3,b_pgate,b_fill,b_grains,b_slices,"
+            "b_fx0,b_fx1,b_fx2,b_fx3,b_fx4,b_voices,b_v0,b_v1,b_v2,b_v3,b_pgate,b_fill,b_grains,b_slices,b_exc,b_matl,"
             "morph,couple,drift,weather,phase_err\n");
     }
 
@@ -117,6 +117,22 @@ int main(int argc, char** argv) {
                 std::fprintf(csv, ",%d", inst.pitch_gate(p) ? 1 : 0);
                 std::fprintf(csv, ",%.4f,%d,%d", inst.sampler_fill(p),
                              inst.sampler_grains(p), inst.sampler_slices(p));
+                // Excitation bus (spec §6, Task 10 observer): the post-sum,
+                // post-clip value actually pushed to the engine this control
+                // block. Zero on every engine but BODY (IPartEngine::
+                // set_excitation defaults to a no-op) and zero on BODY too
+                // whenever the bus is disabled -- a column a demo scenario
+                // can point at to prove the bus was actually hot, not merely
+                // that a checkbox was set (task-12-brief-addendum.md §E).
+                std::fprintf(csv, ",%.4f", inst.excitation_bus(p));
+                // Effective SOURCE-lane value actually fed to the engine
+                // (base + active-mod*depth, clamped -- Part::target_value,
+                // NOT lane_output()/a_src above, which is the raw bipolar
+                // modulation source and stays nonzero even when depth = 0
+                // pins the effective value at its base). On BODY this IS
+                // MATL (spec §5), so this is the column body_strum.json's
+                // sweep shows up in.
+                std::fprintf(csv, ",%.4f", inst.target_value(p, LANE_SOURCE));
             }
             std::fprintf(csv, ",%.4f,%.4f,%.4f,%.4f,%.4f",
                          inst.morph(), inst.couple(), inst.drift(),

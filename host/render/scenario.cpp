@@ -86,6 +86,7 @@ static EngineId parse_engine(const std::string& s) {
     if (s == "test_tone") return ENGINE_TEST_TONE;
     if (s == "sampler")   return ENGINE_SAMPLER;
     if (s == "wave")      return ENGINE_WAVE;
+    if (s == "body")      return ENGINE_BODY;
     return ENGINE_SYNTH;
 }
 
@@ -141,6 +142,7 @@ void spky::apply_event(Instrument& inst, const Event& e) {
     else if (a == "set_comp")             inst.set_comp(e.part, e.value);
     else if (a == "set_master_drive")     inst.set_master_drive(e.value);
     else if (a == "set_tide")             inst.set_tide(e.value);
+    else if (a == "set_choke")            inst.set_choke(e.value);
     else if (a == "set_reverb_size")      inst.set_reverb_size(e.value);
     else if (a == "set_reverb_tone")      inst.set_reverb_tone(e.value);
     else if (a == "set_reverb_decay")     inst.set_reverb_decay(e.value);
@@ -155,6 +157,15 @@ void spky::apply_event(Instrument& inst, const Event& e) {
     else if (a == "set_voice_sub")       inst.set_voice_sub(e.part, e.value);
     else if (a == "set_voice_detune")    inst.set_voice_detune(e.part, e.value);
     else if (a == "set_voice_filt")      inst.set_voice_filt(e.part, e.value);
+    // Excitation bus source selection (spec §6, Task 10 -- Instrument::
+    // set_excitation_sources, engine/instrument.h). Three booleans, no new
+    // Event field: `flag` carries the tape source (the same slot every other
+    // single-bool action already uses), `ivalue` carries the remaining two
+    // as a bitmask -- bit 0 = other deck, bit 1 = audio in -- following
+    // set_step's precedent of packing flag + ivalue into one action.
+    else if (a == "set_excitation_sources")
+        inst.set_excitation_sources(e.part, e.flag,
+                                     (e.ivalue & 1) != 0, (e.ivalue & 2) != 0);
     else if (a == "trigger_manual")      inst.trigger_manual(e.part);
     else if (a == "set_morph")           inst.set_morph(e.value);
     else if (a == "set_couple")          inst.set_couple(e.value);

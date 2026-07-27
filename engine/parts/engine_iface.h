@@ -5,12 +5,15 @@ namespace spky {
 
 // Selectable part engines. ENGINE_SYNTH is the boot default from M2 on;
 // the test tone stays selectable (tests, A/B reference). M5 adds the
-// sampler and WAVE -- appended, so no persisted id changes meaning.
+// sampler and WAVE -- appended, so no persisted id changes meaning. BODY
+// (spec 2026-07-26 body-resonator) is appended for the same reason: ids go
+// in milestone order and are never renumbered, because patches persist them.
 enum EngineId {
     ENGINE_TEST_TONE = 0,
     ENGINE_SYNTH = 1,
     ENGINE_SAMPLER = 2,
-    ENGINE_WAVE = 3
+    ENGINE_WAVE = 3,
+    ENGINE_BODY = 4
 };
 
 // A part's sound engine. Consumes the 5 normalized target values; produces
@@ -37,9 +40,12 @@ public:
 
     // Chord layer (spec 2026-07-17 chord-layer). trigger_chord fires one
     // chord; the default keeps single-note engines working unchanged.
-    // set_chord feeds the CURRENT chord surface targets (refreshed every
-    // sample by Part) so a FLOW engine can track root + COLOR live; engines
-    // without a surface ignore it.
+    // set_chord feeds the CURRENT chord surface targets so a FLOW engine can
+    // track root + COLOR live; engines without a surface ignore it. Part
+    // pushes it from _control_tick() (engine/parts/part.cpp), i.e. once per
+    // Part::kCtrlInterval samples plus once on each step fire -- NOT every
+    // sample, which this comment claimed until 2026-07-26 and which two
+    // later comments in synth_engine were written on top of.
     virtual void trigger_chord(const float* pitches_norm, int n) {
         for (int i = 0; i < n; ++i) trigger(pitches_norm[i]);
     }
@@ -58,6 +64,24 @@ public:
     // EDGES, not per sample (the set_cycle idiom). The synth ignores it: it
     // has its own envelope.
     virtual void set_gate(bool /*on*/) {}
+
+    // Excitation bus (spec 2026-07-26 body-resonator §6, Task 9): the part's
+    // own FLUX tape tap, one control block late, pushed once per control
+    // tick alongside set_chord() (Part::_control_tick(), part.cpp). Default
+    // no-op, same shape as set_chord/set_gate/set_cycle above -- so
+    // TestToneEngine and SamplerEngine ignore it for free, and only
+    // SynthEngineT<BodyVoice> (synth/synth_engine.h) does anything with it.
+    // Chosen over a concrete `if (_engine_id == ENGINE_BODY) _body.set_
+    // excitation(...)` at the call site: that alternative is provably
+    // cheaper for the other three engines, but it would need its own
+    // re-sync reasoning for a deck that switches away from BODY and back
+    // (does the stale value in a re-activated _body matter?). Going through
+    // `_engine` sidesteps the question entirely -- whichever engine is
+    // active is exactly the one that gets pushed, identical to how
+    // set_chord already behaves across an engine switch -- at a cost
+    // (one virtual call per part per control tick) that is immeasurable
+    // next to the audio-rate budget this file's other comments are about.
+    virtual void set_excitation(float /*x*/) {}
 };
 
 } // namespace spky

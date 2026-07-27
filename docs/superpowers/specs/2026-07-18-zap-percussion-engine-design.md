@@ -3,7 +3,7 @@
 **Date:** 2026-07-18
 **Status:** design approved (brainstorm with Bastian, 2026-07-18), implementation
 gated on the hardware bench (STRING precedent)
-**Scope:** a fifth selectable part engine (`ENGINE_ZAP`) — a monophonic
+**Scope:** a sixth selectable part engine (`ENGINE_ZAP`) — a monophonic
 two-oscillator FM/AM percussion voice modeled on the Winter Modular ×
 Plankton Electronics **Zaps** module. The PITCH lane selects one of 12
 percussion archetypes instead of playing a melody; a deterministic seed
@@ -91,9 +91,11 @@ ZAP does not fit `SynthEngineT<V>`: the entire allocation machine
 for a mono voice. ZAP implements `IPartEngine` directly — integration
 surface at test-tone level, voice interior at SYNTH level.
 
-- `EngineId` grows `ENGINE_ZAP = 4`; scenario parser learns `"zap"`; the
-  VCV engine button cycles five states (LED shade; panel unchanged —
-  hardware-reducibility constraint). No other surface.
+- `EngineId` grows `ENGINE_ZAP = 5`; scenario parser learns `"zap"`; the
+  VCV engine button cycles six states (LED shade; panel unchanged —
+  hardware-reducibility constraint). No other surface. (Was 4 / five states
+  until M5j claimed id 4 for BODY — ids are appended in milestone order so no
+  persisted id changes meaning.)
 - Conventions carried over: all parameter smoothing/derivation on the
   96-sample control cadence; `_filt_gain` silence-fade; deterministic
   `Rng` with a fixed seed-derivation path (part index → bank → slot).
@@ -281,10 +283,40 @@ Bench: one entry in the bench-firmware workload list — "ZapEngine ×2
 starts only after the hardware bench has run (STRING precedent), though
 the risk here is nominal.
 
+**Before estimating ZAP's cost, check what every imported primitive does per
+sample.** This fork has now been misled three times by the same thing, and
+each time the wrong conclusion looked like a fact about the synthesis method:
+
+- `daisysp::Resonator` recomputes every mode's frequency, Q and amplitude on
+  every sample, including a `powf`. Measured at 34.3 %, that made the STRING
+  spec (2026-07-18) rule modal and bell territory out as too expensive.
+- `daisysp::String` recomputes its whole parameter block on every sample, in
+  both nonlinearity branches: two `powf`, an `atanf`, and a
+  `OnePole::SetFrequency` that costs a `tanf`. One string measured **975
+  cycles/sample** — 1.8× an entire SYNTH voice, from a primitive the same
+  STRING spec had called "structurally cheaper than SYNTH".
+- Moved to the 96-sample control tick (`engine/body/mode_bank.h`,
+  `engine/body/ks_string.h`), the same DSP costs 904 cycles/sample for
+  24 modes and **233 for a string**. The audio path never changed; only the
+  schedule did.
+
+ZAP is in better shape here — it reuses this fork's own `env.h`,
+`fast_sin.h`, `onepole.h` and `rng.h`, all of which already respect the
+control cadence — but "structurally the cheapest engine in the fork" and
+"the risk here is nominal" above are exactly the shape of claim that was
+wrong twice. They are estimates. The gate decides.
+
+Running that gate is now cheap: the bench selects workload families at
+compile time (`docs/superpowers/specs/2026-07-26-bench-workload-profiles-design.md`),
+so ZAP needs a `zap` family and a `zap` profile — a `FAMILY_SOURCE_`/
+`FAMILY_DEFINE_` pair in `bench/Makefile`, a row list in `bench/run.py`, an
+entry in `bench/families.cpp` and one in `bench/profiles.py`. The full image
+does not link; a per-engine profile is the supported path, not a workaround.
+
 ### 8. Hosts & demo scenarios
 
 - Scenario parser: `"zap"`. VCV: engine button cycles
-  test-tone → synth → wave → string → zap.
+  test-tone → synth → sampler → wave → body → zap (`EngineId` order).
 - `zap_kit.json` — STEP, kit sequence walking the scale degrees, DETUNE
   ride across two bank zones, MOTION ramp (mutation audible), then MOTION
   back to 0 + DETUNE to zone start (the home invariant, audible), ending

@@ -12,7 +12,8 @@ is actually built today, and what is still design-only.
   spec (`2026-07-12-spotykach-ambient-reverb-v2-design.md`), and the FORM/SONG split spec
   (`2026-07-25-spotykach-form-song-split-design.md`).
 - **Last updated:** 2026-07-26 (VCV 2.13.2; the STEP mod grid lock is complete;
-  STRING remains the next planned engine milestone before M6).
+  BODY — STRING reworked into a string/metal/bell resonator — remains the next
+  planned engine milestone before M6).
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
@@ -52,7 +53,7 @@ is actually built today, and what is still design-only.
 | **M5i** | WAVE — four-voice PPG-style wavetable part engine | ✅ **done** (engine/core, renderer, and VCV; 65,024-byte mapped-QSPI bank; `wave_2x4` 308497 / 312180 cycles in hardware run 1, below SYNTH and budget) |
 | **+ FORM/SONG** | Persistent A/B phrase snapshots with independent phrase-engine FORM and seven-mode SONG arrangement | ✅ **done** (engine, renderer, and VCV; released in 2.13.1; stable VCV parameter IDs and legacy patch migration) |
 | **Mod grid lock** | In STEP the four texture lanes stop owning a clock and follow the deck's integer step count; the lane ratios become cycle lengths (4/6/8/12/16 at STEPS = 8), TIDE stretches slot counts, and DRIFT, EVOLVE, SPOT and float drift can no longer push a lane off the grid | ✅ **done** (engine + VCV; released in 2.13.2; spec `docs/superpowers/specs/2026-07-25-mod-lane-step-grid-lock-design.md`) |
-| **M5j** | STRING — four-voice Karplus-Strong part engine | ⬜ **planned** (spec ready; not implemented) |
+| **M5j** | BODY — one-voice-per-deck resonator part engine, morphing string → metal → bell, with a sympathetic excitation bus | ✅ **done** (engine, renderer and VCV; `body_2x4` 295078 / 295724 cycles, 30.7 % of the block, inside the spec's 29–32 % prediction and below SYNTH) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
 | **M6** | Firmware shell: pads, gestures, panel, LEDs — runs on real hardware | ⬜ planned |
@@ -63,8 +64,8 @@ lane's output stage and needed no new engine. M1.6 sits before M2 so that
 M2–M5 build on the final signal chain (part FX + reverb sends) from the start
 instead of rewiring it later; the M1 test tone is enough to hear and verify
 the effects in the renderer. FORM/SONG is a completed cross-cutting melodic STEP
-capability and does not change the M5j → M5k → M5l → M6 order. M5j–M5l are the
-remaining engine-level milestones that can be completed without the target
+capability and does not change the M5j → M5k → M5l → M6 order. M5k and M5l are
+the remaining engine-level milestones that can be completed without the target
 hardware; M6 follows them as the hardware bring-up.
 
 ## Done
@@ -690,15 +691,147 @@ tests, the VCV panel guard, and the 2.13.1 release.
 Approved split spec:
 `docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`.
 
+### M5j — BODY ✅
+
+BODY is the completed resonator part engine behind the existing part-engine
+interface. One continuous morph along a physical axis — harmonic partials
+(Karplus string) → stretched (dispersion) → freely inharmonic (24-mode bank) —
+with both structures live, so the mod lanes drive the material. A playable
+exciter on RESO, and a sympathetic excitation bus fed by the part's own FLUX
+echo, the other deck and the audio input, selected per deck in the VCV context
+menu. `SynthEngineT` was lifted from the oscillator to the voice type; the
+SYNTH and WAVE reference renders held byte-identical throughout.
+
+**It ships at one voice per deck, not four.** The hardware gate (below) priced
+a BODY voice at 1 395 cycles/sample against a four-voice SYNTH deck's 1 764, so
+one BODY voice per deck is both what fits and cheaper than the part it
+replaces. The spec's chord layer survives in altered form: `trigger_chord`
+keeps the root and drops the rest, while COLOR still reads the chord's quality
+and bends the mode bank's inharmonicity with it (`chord_character`), so the
+chord controls move the material even though one note sounds.
+
+**Measured on the Seed** (`docs/bench/2026-07-27-c3c0cdb-body.md`, profile
+`body`, two runs agreeing):
+
+| row | avg cyc | max cyc | % of block |
+|---|---:|---:|---:|
+| `body_2x4` | 295 078 | 295 724 | 30.7 % |
+| `body_2x4_string` (MATL 0) | 295 220 | 296 402 | 30.8 % |
+| `inst_body_worst` | 900 266 | 980 090 | 93.8 % / 102.1 % |
+| *for comparison* `synth_2x4` | 338 694 | 343 751 | 35.3 % |
+
+The spec predicted 280 000 – 311 000 cycles for `body_2x4`. The estimate held.
+`SRAM_EXEC` finished at 187 168 B of 262 880 B (71.2 %); the string delay lines
+are in SRAM, not SDRAM, as the cache analysis required.
+
+`body_2x4_string` measures the same as `body_2x4` because both structures run
+every sample regardless of MATL — it is not the ablation the plan expected, and
+the component rows below are where the string/bank split actually lives.
+
+**One regression the branch introduces, deferred by decision.** The Task 9 tape
+tap runs per sample on every deck with FLUX or GRIT engaged, including decks
+carrying no BODY. Measured by mutation on hardware it costs 51 607 cycles —
+**5.4 % of the block** — and is what moves `instrument_worst` from 96.9 % to
+101.9 % on its maximum, flipping that capture's generated verdict from "fits"
+to "does not fit". It is left in place because FLUX is being redesigned as a
+BBD delay and will be benched fresh; gating the tap at control rate remains
+open for that work. Full measurement table in the bench capture.
+
+Supersedes STRING (`2026-07-18-string-engine-design.md`), which ruled out
+modal/bell territory on a cost figure that measured `daisysp::Resonator`'s
+per-sample coefficient math rather than modal synthesis itself.
+
+Scenarios: `host/render/scenarios/body_strum.json`, `body_bow.json`,
+`body_sympathetic.json` (no hash gates yet — the tuning pass is open). Spec:
+`docs/superpowers/specs/2026-07-26-body-resonator-engine-design.md`.
+Hardware evidence: `docs/bench/2026-07-27-c3c0cdb-body.md` and `.csv`.
+
+<details>
+<summary>How the hardware gate got here — the voice-count decision and two superseded runs</summary>
+
+**Hardware gate: passed at `kVoices = 1`**
+(`docs/bench/2026-07-26-1ec4429-body.md`, profile `body`, two runs agreeing).
+
+| row | avg cyc / block | per sample |
+|---|---:|---:|
+| `body/mode_bank_24` (24 modes, coefficients moving) | 86 762 | 904 |
+| `body/ks_string_pair` (two `daisysp::String`) | 187 251 | 1 950 |
+| `body/ks_string_pair_port` (two `spky::KsString`) | 44 741 | **466** |
+
+Per voice per sample, `(mode_bank_24 + ks_string_pair_port)/96 + 25`:
+**1 395 cycles**. Against the ladder that is `kVoices = 1` — and one voice per
+deck costs 2 790 cycles/sample, **27.9 % of the block**, inside the ~32 %
+envelope every rung of that ladder was drawn around.
+
+The comparison that settles it: a SYNTH deck at four voices (`synth_4_voices`)
+costs 1 764 cycles/sample. A BODY deck at one voice costs 1 395. **BODY is
+cheaper than the part it replaces**, so the instrument gets no more expensive
+by carrying it.
+
+At two voices per deck it does not fit: 5 580 against `synth_2x4`'s 3 535 would
+push the worst case past 100 %. One voice per deck is the answer, which is the
+trade the design already chose — spec §7 keeps 24 modes and spends polyphony
+first.
+
+With the string fixed, **the mode bank is now the expensive half** — 904 of the
+1 395, 65 % of a voice. That is where any future voice count would have to come
+from, and the mode count is a user decision, not a cost decision.
+
+Open, and a design question rather than a measurement: the spec's control
+mapping assumes polyphony it will not have. The chord layer and stab
+humanisation need a ruling at one voice per deck before Phase 3 starts.
+
+
+**First run: blocked** (`docs/bench/2026-07-26-0010b45-body.md`).
+
+| row | avg cyc / block | per sample |
+|---|---:|---:|
+| `body/mode_bank_24` (24 modes, coefficients moving) | 86 761 | 904 |
+| `body/mode_bank_24_static` (same bank, coefficients held) | 81 688 | 851 |
+| `body/ks_string_pair` (two `daisysp::String`) | 196 556 | 2 047 |
+
+Per voice per sample, by the plan's formula
+`(mode_bank_24 + ks_string_pair)/96 + 25`: **2 976 cycles**. The ladder's
+bottom rung is 810, so this is 3.7× past even `kVoices = 1`. One BODY voice
+alone costs 30 % of the whole block budget; the two the design needs (one per
+deck) cost 60 %, on top of an instrument already anchored at 97 %.
+
+**Where the cost is, and it is not where the design assumed.** The modal bank
+is fine: 24 modes cost 904 cycles/sample, and the control-rate coefficient
+caching works exactly as intended — holding the parameters still saves only
+53 of those, so `_recompute()` is ~6 % of the bank, not the per-sample tax
+that made STRING rule modal territory out. The Karplus pair is the problem at
+2 047 cycles/sample, **1 024 per string** — one `daisysp::String` costs 1.8×
+an entire SYNTH voice (`synth_1_voice`, 558 cycles/sample: two MorphOsc, sub,
+SVF and envelope). STRING's spec called Karplus-Strong "structurally cheaper"
+than SYNTH. Measured, it is the opposite, and the modal half it rejected is
+the affordable one.
+
+**The nonlinearity was measured and acquitted**
+(`docs/bench/2026-07-26-f58644f-body.md`). `body/ks_string_pair_nolin` runs the
+same pair with `SetNonLinearity(0)` — no allpass stretch line, no dispersion
+noise, no curved bridge — and costs 173 956 cycles against 196 794. The entire
+nonlinearity is **119 cycles per string per sample, 11.6 %**. Per voice that is
+2 741 instead of 2 976: still 3.4× past the ladder.
+
+What remains is 906 cycles/sample for a Karplus-Strong stripped to a delay-line
+read, a DC blocker and a one-pole — arithmetic worth tens of cycles. The rest is
+`String::ProcessInternal` recomputing its parameter block **every sample, in
+both nonlinearity branches**: two `powf`, one `atanf`, one filter
+`SetFrequency`. Our own `abl/micro_powf` row prices `powf` at 198 cycles, so the
+two `powf` alone account for ~400 of the 906.
+
+This is the same defect as `daisysp::Resonator` — the one whose cost made the
+STRING spec rule modal territory out. Both halves of BODY were priced on
+libraries that recompute coefficients per sample; the modal half was already
+fixed here (`engine/body/mode_bank.h`, control-rate `_recompute()`), and the
+Karplus half was not — until `engine/body/ks_string.{h,cpp}`, which is what the
+third run measures.
+
+</details>
+
+
 ## Planned
-
-### M5j — STRING ⬜
-
-Four-voice Karplus-Strong part engine with a playable exciter and tape
-excitation from the part's own FLUX echo. The design is complete, but
-implementation has not started.
-
-Spec: `docs/superpowers/specs/2026-07-18-string-engine-design.md`
 
 ### M5k — ZAP ⬜
 

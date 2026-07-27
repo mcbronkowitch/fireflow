@@ -15,6 +15,22 @@ static void fill(float* v, float grit, float time, float mix, float send, float 
     v[FXT_FLUX_FB] = fb;
 }
 
+// Push a single impulse through, then silence, until the echo genuinely
+// returns (task-9-review.md, Minor 4). A fixed sample count tied to a
+// specific BPM/rate-index -> delay-time mapping turns red the day somebody
+// retunes that mapping, for a reason that has nothing to do with the tap
+// itself. This decouples the two: the loop stops the instant tape_tap()
+// goes nonzero, whatever the actual delay setting resolves to. Bounded
+// generously (2 s) so a genuine regression still fails loudly rather than
+// looping forever.
+static void warm_up_tape_tap(PartFx& fx, const float* v) {
+    for (int i = 0; i < 96000 && fx.tape_tap() == 0.f; ++i) {
+        float s = (i == 0) ? 0.6f : 0.f;
+        float l = s, r = s, sl, sr;
+        fx.process(l, r, sl, sr, v);
+    }
+}
+
 TEST_CASE("part_fx: both blocks off is bit-exact dry, send 0 is exact zero") {
     PartFx fx;
     fx.init(48000.f, s_pf_l, s_pf_r);
@@ -201,4 +217,202 @@ TEST_CASE("part_fx: set_rot reaches the flux block") {
         if (l0 != l1) { any_diff = true; break; }
     }
     CHECK(any_diff);   // ROT actually reached the flux block and changed its output
+}
+
+TEST_CASE("part_fx: tape_tap exposes the FLUX echo, not the mix, and starts at exact 0") {
+    // Task 9 (spec 2026-07-26 body-resonator, §6). The brief's original test
+    // body here (fx.set_flux(0.6f), init(sr) with no echo buffers) does not
+    // compile against this tree -- there is no set_flux(), and init() needs
+    // the injected echo buffers, per this file's own idiom (top of file).
+    // The two claims it was written to pin are unchanged:
+    //   1. tape_tap() reads exactly 0.f before any audio has been processed.
+    //   2. Once FLUX is engaged and fed signal, tape_tap() goes nonzero.
+    // A third is added here because it is the other half of spec §6's own
+    // wording ("not the mixed output"): the tap must go nonzero even at
+    // FX MIX = 0, where the part's own dry/wet output never moves at all.
+    //
+    // task-9-review.md Minor 5: the `CHECK(l == s)` below reads `l` AFTER
+    // `_comp.process(l, r)` (part_fx.cpp), not the pre-Comp FX-MIX-0 value
+    // directly -- it holds only because Comp defaults to `_amount_target =
+    // 0.f`, its own documented "bit-exact bypass" (comp.h). Not reset here
+    // on purpose (this test is about the tap, and PartFx's own default IS
+    // that bypass), but the dependency is real: if one-knob comp ever grew
+    // a nonzero default, this is the assertion that would start failing,
+    // for a reason that has nothing to do with the tape tap.
+    static float s_pf_tap_l[Flux::kMaxSamples], s_pf_tap_r[Flux::kMaxSamples];
+    PartFx fx;
+    fx.init(48000.f, s_pf_tap_l, s_pf_tap_r);
+    CHECK(fx.tape_tap() == 0.f);   // claim 1
+
+    fx.set_fx_on(FxBlock::Flux, true, true);
+    fx.set_flux_mix(1.f);
+    fx.set_bpm(120.f);
+    fx.set_flux_rate(3);           // "1/4" @ 120 bpm -> 0.5 s, ~24000 samples
+    float v[FXT_COUNT];
+    fill(v, 0.f, 0.f, 0.f, 0.f, 0.5f);   // FX MIX (index 2) left at 0.f on purpose
+
+    bool tap_nonzero = false;
+    for (int i = 0; i < 48000; ++i) {
+        float s = (i == 0) ? 0.6f : 0.f;   // one impulse, then silence
+        float l = s, r = s, sl, sr;
+        fx.process(l, r, sl, sr, v);
+        CHECK(l == s);                     // FX MIX 0: the part's own output never moves
+        if (fx.tape_tap() != 0.f) tap_nonzero = true;
+    }
+    CHECK(tap_nonzero);   // claim 2 + the "not the mix" claim above, together
+}
+
+TEST_CASE("part_fx: tape_tap drops to exact 0 the sample FLUX disengages, whole branch skipped") {
+    // Addendum D: "When FLUX is not engaged the tap must be exactly 0.f. It
+    // must not freeze at a stale value from the last time it was on."
+    // process() has two separate reset paths for this -- the outer `else`
+    // (whole `_grit.engaged() || _flux.engaged()` branch skipped, GRIT never
+    // engaged here) and, inside the branch, the inner `if (_flux.engaged())`
+    // (exercised by the next TEST_CASE, where GRIT stays on). This case
+    // isolates the outer one: if it silently dropped, _tape_tap would keep
+    // returning whatever the branch last computed instead of 0.f, because
+    // skipping the branch means process() never touches _tape_tap at all.
+    static float s_pf_tap2_l[Flux::kMaxSamples], s_pf_tap2_r[Flux::kMaxSamples];
+    PartFx fx;
+    fx.init(48000.f, s_pf_tap2_l, s_pf_tap2_r);
+    fx.set_fx_on(FxBlock::Flux, true, true);
+    fx.set_flux_mix(1.f);
+    fx.set_bpm(120.f);
+    fx.set_flux_rate(3);
+    float v[FXT_COUNT];
+    fill(v, 0.f, 0.f, 1.f, 0.f, 0.5f);
+    warm_up_tape_tap(fx, v);
+    REQUIRE(fx.tape_tap() != 0.f);   // the echo really is live going into this test
+
+    // GRIT was never turned on, so this single call takes the branch
+    // condition straight from true (FLUX engaged) to false (nothing
+    // engaged) -- the outer `else` is the ONLY reset path that can run.
+    fx.set_fx_on(FxBlock::Flux, false, true);
+    float l = 0.f, r = 0.f, sl, sr;
+    fx.process(l, r, sl, sr, v);
+    CHECK(fx.tape_tap() == 0.f);
+}
+
+TEST_CASE("part_fx: tape_tap drops to exact 0 the sample FLUX disengages, GRIT alone does not feed it") {
+    // Same claim as above, but GRIT stays on through the transition, so the
+    // outer branch keeps running and the reset has to come from the INNER
+    // `if (_flux.engaged())` gate instead -- a naive version that instead
+    // fed _tap_dc.Process(0.f) every sample (trusting the zero echo
+    // difference rather than checking engaged()) would read a slowly-
+    // decaying tail off the DC blocker's filter memory here, not a hard 0.
+    static float s_pf_tap3_l[Flux::kMaxSamples], s_pf_tap3_r[Flux::kMaxSamples];
+    PartFx fx;
+    fx.init(48000.f, s_pf_tap3_l, s_pf_tap3_r);
+    fx.set_fx_on(FxBlock::Flux, true, true);
+    fx.set_flux_mix(1.f);
+    fx.set_bpm(120.f);
+    fx.set_flux_rate(3);
+    float v[FXT_COUNT];
+    fill(v, 0.f, 0.f, 1.f, 0.f, 0.5f);
+    warm_up_tape_tap(fx, v);
+    REQUIRE(fx.tape_tap() != 0.f);   // the echo really is live going into this test
+
+    // Turn FLUX off but GRIT on: the outer branch stays taken.
+    fx.set_fx_on(FxBlock::Flux, false, true);
+    fx.set_fx_on(FxBlock::Grit, true, true);
+    float l = 0.f, r = 0.f, sl, sr;
+    fx.process(l, r, sl, sr, v);
+    CHECK(fx.tape_tap() == 0.f);   // instantaneous, not a decaying tail
+}
+
+TEST_CASE("part_fx: tape_tap's soft clip bounds the raw taps, which skip Flux's own tanh") {
+    // Task 9 review (task-9-review.md), Important 1. fast_tanh(_tap_dc.
+    // Process(echo_mono)) is the whole of what lets tape_tap()'s doc
+    // comment (part_fx.h) promise the tap is "safe to feed straight into a
+    // resonator's excitation input" -- deleting either stage left the full
+    // 779-case suite green, so neither promise had a witness. This binds
+    // the clip.
+    //
+    // EchoDelay::Process (flux.cpp) already clamps its OWN output to
+    // |y| <= 1 via an internal fast_tanh, so a plain no-taps echo can never
+    // exceed 1 even with PartFx's OWN clip removed -- that path alone would
+    // prove nothing. TapBank's raw taps are different: they "deliberately
+    // skip the band-pass and tanh" (flux.cpp) and read straight off a delay
+    // line written as `out*feedback_ + in`, with feedback normalized up to
+    // 1.2 (EchoDelay::SetFeedback) -- so a raw read can genuinely overshoot
+    // unity once the loop is driven hard. DUST engaged, feedback maxed, and
+    // a loud drive is what actually reaches that regime.
+    static float s_pf_clip_l[Flux::kMaxSamples], s_pf_clip_r[Flux::kMaxSamples];
+    PartFx fx;
+    fx.init(48000.f, s_pf_clip_l, s_pf_clip_r);
+    fx.set_fx_on(FxBlock::Flux, true, true);
+    fx.set_flux_mix(1.f);
+    fx.set_bpm(120.f);
+    fx.set_flux_rate(3);
+    fx.set_dust(0.9f);                    // TapBank engaged: raw, tanh-free reads join
+    const int32_t off[tap_tuning::kTaps] = { 400, 900 };
+    fx.set_tap_offsets(off);
+    float v[FXT_COUNT];
+    fill(v, 0.f, 0.f, 1.f, 0.f, 1.f);     // feedback maxed: norm 1 -> 1.2 in EchoDelay
+
+    double maxabs = 0.0;
+    for (int i = 0; i < 96000; ++i) {
+        // 0.10472 rad/sample == 800 Hz at 48 kHz, TapeBpf's own center --
+        // matching it is what actually lets the feedback loop bloom toward
+        // the echo's tanh ceiling instead of decaying.
+        float s = 0.95f * std::sin(0.10472f * i);
+        float l = s, r = s, sl, sr;
+        fx.process(l, r, sl, sr, v);
+        maxabs = std::max(maxabs, (double)std::fabs(fx.tape_tap()));
+        REQUIRE(std::fabs(fx.tape_tap()) <= 1.f);
+    }
+    MESSAGE("maxabs=", maxabs);
+    // Premise guard (scoped re-review of the Task 9 fix round). Everything
+    // above only MEANS something if the loop actually reached the clipping
+    // regime: `<= 1.f` is trivially true of a signal that never got near 1,
+    // so without this line a future tuning change that stopped the raw taps
+    // from blooming would leave the test green while testing nothing.
+    //
+    // The threshold is not the measurement. Measured today: 0.9749 clipped,
+    // from a raw peak of 1.00653 (the value the clip-deleted mutation
+    // reports). 0.9 says "the drive got within about ten percent of the
+    // ceiling" -- loose enough that ordinary retuning of the echo, the taps
+    // or fast_tanh's curve does not trip it, tight enough that a loop which
+    // decays instead of blooming cannot pass.
+    REQUIRE(maxabs > 0.9);
+}
+
+TEST_CASE("part_fx: tape_tap's DC block removes a sustained offset, fast_tanh alone cannot") {
+    // Important 1 continued. fast_tanh maps a constant nonzero input to a
+    // constant nonzero output forever -- only the DcBlock stage can make a
+    // genuinely SUSTAINED offset's running average fall toward 0.
+    //
+    // With FEEDBACK at 0, EchoDelay writes `out*0 + in` -- the dry input,
+    // verbatim, with no bandpass and no tanh applied to what gets stored.
+    // A raw TapBank read of that region (DUST engaged) then returns the
+    // same literal constant forever: a real, sustained DC signal reaching
+    // PartFx's own tap, not a decaying transient. A tap with the DC block
+    // deleted could only wrap that constant through fast_tanh into a
+    // DIFFERENT nonzero constant -- it could never make the running mean
+    // decay, which is exactly the property asserted below.
+    static float s_pf_dc_l[Flux::kMaxSamples], s_pf_dc_r[Flux::kMaxSamples];
+    PartFx fx;
+    fx.init(48000.f, s_pf_dc_l, s_pf_dc_r);
+    fx.set_fx_on(FxBlock::Flux, true, true);
+    fx.set_flux_mix(1.f);
+    fx.set_dust(0.9f);                     // TapBank engaged: raw reads join
+    const int32_t off[tap_tuning::kTaps] = { 500, 700 };
+    fx.set_tap_offsets(off);
+    float v[FXT_COUNT];
+    fill(v, 0.f, 0.f, 1.f, 0.f, 0.f);      // feedback 0: delay line holds the dry input verbatim
+
+    double early_sum = 0.0, late_sum = 0.0;
+    int early_n = 0, late_n = 0;
+    for (int i = 0; i < 96000; ++i) {
+        float l = 0.5f, r = 0.5f;          // constant, one-sided drive: a real DC offset
+        float sl, sr;
+        fx.process(l, r, sl, sr, v);
+        if (i >= 3000 && i < 5000)  { early_sum += fx.tape_tap(); ++early_n; }
+        if (i >= 90000)              { late_sum  += fx.tape_tap(); ++late_n; }
+    }
+    const double early_mean = early_sum / early_n;
+    const double late_mean  = late_sum  / late_n;
+    MESSAGE("early_mean=", early_mean, " late_mean=", late_mean);
+    CHECK(std::fabs(early_mean) > 0.05);                        // the DC genuinely reached the tap
+    CHECK(std::fabs(late_mean) < std::fabs(early_mean) * 0.3);  // and the block pulls it toward 0
 }

@@ -22,6 +22,12 @@ namespace spky {
 template <class OscT>
 class VoiceT {
 public:
+    // How many of these the owning SynthEngineT<V> allocates (spec
+    // 2026-07-26 body-resonator, §1 -- SynthEngineT reads V::kEngineVoices
+    // rather than a fixed count, so BODY can run at a different voice count
+    // from SYNTH/WAVE without touching the shared template).
+    static constexpr int kEngineVoices = 4;
+
     void init(float sample_rate, uint32_t seed);
 
     void trigger(float freq_hz);          // latch pitch + retrigger env from level
@@ -45,6 +51,16 @@ public:
     bool  active() const { return _env.active(); }
     float env_value() const { return _env.value(); }
     float detune_cents() const { return _detune_ct; }
+
+    // BODY contract methods. A synth voice has no body to mute, no excitation
+    // input and no material whose partials could be stretched; all three are
+    // no-ops here so SynthEngineT can call them unconditionally (spec
+    // 2026-07-26 body-resonator, §1). On SYNTH and WAVE, COLOR keeps its
+    // original meaning -- chord slots -- and this method is what makes the
+    // engine's extra push cost nothing there.
+    void set_hold(bool /*on*/) {}
+    void set_excitation(float /*x*/) {}
+    void set_material_character(float /*c*/) {}
 
 private:
     void _apply_freq();                   // osc A/B freq from pitch+detune+drift

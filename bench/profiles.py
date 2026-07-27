@@ -23,12 +23,20 @@ PROFILES = {
         families=("system",),
         gates=frozenset({WAVE_ACCEPTANCE}),
     ),
+    # The M5j gate: prices the BODY mode bank and KS pair. Carries `system`
+    # as well, so the same document shows what one real synth voice and the
+    # worst-case instrument cost -- the figures the kVoices ladder is judged
+    # against -- and so the WAVE guard keeps running while BODY is measured.
+    "body": Profile(
+        families=("system", "body"),
+        gates=frozenset({WAVE_ACCEPTANCE}),
+    ),
     # The complete run, as before profiles existed. Expected to FAIL TO LINK
     # until the engine shrinks or the region grows -- that debt is real and is
     # meant to be visible to whoever runs the bare command.
     "full": Profile(
         families=(
-            "system", "voice", "mem", "mod", "abl", "taps", "sampler",
+            "system", "voice", "mem", "mod", "abl", "taps", "body", "sampler",
         ),
         gates=frozenset({WAVE_ACCEPTANCE}),
     ),

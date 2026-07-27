@@ -7,6 +7,29 @@
 #include "doctest/doctest.h"
 #include "synth/synth_engine.h"
 
+// The SHARED part-engine contract: what SynthEngineT<V> promises for EVERY V.
+//
+// Everything in this file is a claim about the MACHINE -- allocation, steal,
+// the FLOW drone promise, CHOKE, chord-surface bookkeeping, determinism,
+// DETUNE independence -- and holds whatever voice the template is given and
+// however many voices that voice asks for. SYNTH, WAVE and BODY all run it.
+//
+// What is NOT here lives in synth_voicet_contract.h: the 0.7 sustain plateau,
+// the cycle-scaled attack/decay timing, the hard zero at the end of a note,
+// and the retrigger-from-current-level steal. Those are true of VoiceT's AD
+// envelope, not of SynthEngineT, and only SYNTH and WAVE run them. The split
+// was made in Task 8 (spec 2026-07-26 body-resonator) when BodyVoice arrived:
+// its env_value() is an ENERGY FOLLOWER, not an envelope, and it has one
+// voice, not four -- three of the five contract functions failed against it
+// on 30 assertions without a single BodyEngine defect among them. Nothing was
+// weakened to get there: every assertion below evaluates to exactly what it
+// evaluated to before for a four-voice engine, and every assertion that could
+// not be generalised without weakening was MOVED, not softened.
+//
+// Rule for anything added here later: if the claim mentions a number that is
+// really "4" or a shape that is really "an AD envelope", it belongs in the
+// VoiceT contract instead.
+
 namespace spky_contract {
 
 using namespace spky;
@@ -53,90 +76,101 @@ void run_surface(EngineT& e, const float* chord, int n_chord,
     }
 }
 
-} // namespace spky_contract
+// How much of an n-note chord an engine can actually sustain. This is the
+// engine's own rule, not a test convenience: set_chord clamps to kMaxChord,
+// and trigger_chord and _adjust_surface both clamp to kVoices
+// (synth_engine.cpp). At kVoices >= kMaxChord it is the identity, so every
+// use of it below reads exactly as the literal it replaced for SYNTH and
+// WAVE.
+template <class EngineT>
+constexpr int cap(int n) {
+    return n < EngineT::kVoices ? n : EngineT::kVoices;
+}
+
+// Fill every voice, then steal one, measuring everything either contract
+// wants to know.
+//
+// This is shared SETUP CODE, not a shared measurement. Both
+// contract_round_robin_and_steal (machine claims) and
+// voicet_steal_retriggers_from_level (envelope claim) call it, and each call
+// constructs its own EngineT and runs the whole thing again. The two runs
+// agree because the engine is deterministic. Nothing memoises the result.
+//
+// How far that is TESTED, exactly: contract_deterministic_seed pins
+// determinism of the AUDIO -- it compares l and r sample by sample and never
+// calls active_voices(), voice_env() or sustain_count(). Of the five fields
+// below only max_delta is derived from audio, so only max_delta is covered
+// by it. The other four rest on active_voices() and voice_env() being pure
+// readouts of the same state that produces the audio, which is true of every
+// engine here today but is an inference, not something the suite proves. An
+// engine that acquired run-to-run state reaching only the accessors would
+// leave contract_deterministic_seed green and desynchronise these two runs
+// silently.
+//
+// The reason to factor it out is therefore that the two contracts drive the
+// engine through the SAME steps rather than through two copies of them that
+// can be edited apart -- not that they observe the same object.
+struct StealProbe {
+    int   active_after_fill  = -1;
+    std::vector<float> env_after_fill;   // kVoices entries
+    int   active_after_steal = -1;
+    float max_delta          = 0.f;
+    float env0_at_steal      = 0.f;
+    float env0_after_steal   = 0.f;
+};
 
 template <class EngineT>
-void contract_round_robin_and_steal() {
-    using namespace spky_contract;
-
+StealProbe fill_and_steal() {
+    StealProbe p;
     EngineT e;
     fresh(e);
     e.set_cycle(4.f);
-    for (int v = 0; v < 4; ++v) {
+    for (int v = 0; v < EngineT::kVoices; ++v) {
         e.trigger(0.2f + 0.15f * v);
         render_l(e, 960);
     }
-    CHECK(e.active_voices() == 4);
-    for (int v = 0; v < 4; ++v) CHECK(e.voice_env(v) > 0.f);
+    p.active_after_fill = e.active_voices();
+    for (int v = 0; v < EngineT::kVoices; ++v)
+        p.env_after_fill.push_back(e.voice_env(v));
 
-    float env0_at_steal = 0.f;
-    float prev = 0.f, max_delta = 0.f;
+    float prev = 0.f;
     for (int i = 0; i < 9600; ++i) {
         if (i == 4800) {
-            env0_at_steal = e.voice_env(0);
+            p.env0_at_steal = e.voice_env(0);
             e.trigger(0.8f);
         }
         float l = 0.f, r = 0.f;
         e.process(l, r);
-        if (i > 0) max_delta = std::max(max_delta, std::fabs(l - prev));
+        if (i > 0) p.max_delta = std::max(p.max_delta, std::fabs(l - prev));
         prev = l;
     }
-    CHECK(e.active_voices() == 4);
-    CHECK(e.voice_env(0) > env0_at_steal);
-    CHECK(max_delta < 0.2f);
+    p.active_after_steal = e.active_voices();
+    p.env0_after_steal = e.voice_env(0);
+    return p;
+}
 
-    auto silence_time = [](float cycle_s) {
-        EngineT voice;
-        fresh(voice);
-        voice.set_cycle(cycle_s);
-        voice.trigger(0.5f);
-        int n = 0;
-        while (n < 48000 * 30) {
-            float l = 0.f, r = 0.f;
-            voice.process(l, r);
-            ++n;
-            if (voice.active_voices() == 0) break;
-        }
-        return n;
-    };
-    const int fast = silence_time(0.5f);
-    const int slow = silence_time(2.0f);
-    CHECK(fast > static_cast<int>(0.75f * 48000));
-    CHECK(fast < static_cast<int>(1.4f * 48000));
-    CHECK(slow > static_cast<int>(3.0f * 48000));
-    CHECK(slow < static_cast<int>(5.6f * 48000));
-    CHECK(slow > fast * 3);
+} // namespace spky_contract
 
-    EngineT extreme;
-    fresh(extreme);
-    extreme.set_cycle(0.02f);
-    extreme.trigger(0.5f);
-    int to_peak = 0;
-    while (extreme.voice_env(0) < 1.f && to_peak < 4800) {
-        float l = 0.f, r = 0.f;
-        extreme.process(l, r);
-        ++to_peak;
-    }
-    CHECK(to_peak >= 80);
-    CHECK(to_peak <= 200);
-    int n = to_peak;
-    while (extreme.active_voices() > 0 && n < 48000) {
-        float l = 0.f, r = 0.f;
-        extreme.process(l, r);
-        ++n;
-    }
-    CHECK(n - to_peak > static_cast<int>(0.05f * 48000));
-    CHECK(n - to_peak < static_cast<int>(0.05f * 48000 * 2.0f));
-    float l = 0.f, r = 0.f;
-    extreme.process(l, r);
-    CHECK(l == 0.f);
-    CHECK(r == 0.f);
+// Allocation: round-robin fills every voice the engine has, and a trigger
+// with none free steals rather than dropping the note or growing the pool.
+// The steal is click-free.
+template <class EngineT>
+void contract_round_robin_and_steal() {
+    using namespace spky_contract;
+
+    const StealProbe p = fill_and_steal<EngineT>();
+    CHECK(p.active_after_fill == EngineT::kVoices);
+    for (float env : p.env_after_fill) CHECK(env > 0.f);
+    CHECK(p.active_after_steal == EngineT::kVoices);
+    CHECK(p.max_delta < 0.2f);
 }
 
 template <class EngineT>
 void contract_flow_drone_and_surface() {
     using namespace spky_contract;
 
+    // The drone promise: in FLOW there is always exactly one voice marked as
+    // the sustaining one, and it survives a retrigger.
     EngineT e;
     fresh(e);
     feed(e, 0.25f);
@@ -145,15 +179,14 @@ void contract_flow_drone_and_surface() {
     CHECK(e.active_voices() >= 1);
     CHECK(e.sustain_voice() >= 0);
     render_l(e, 48000 * 3);
-    CHECK(e.voice_env(e.sustain_voice()) == doctest::Approx(0.7f).epsilon(0.03));
+    CHECK(e.sustain_voice() >= 0);
 
-    const int old_voice = e.sustain_voice();
     e.trigger(0.25f);
-    CHECK(e.sustain_voice() != old_voice);
     render_l(e, 48000 * 8);
-    CHECK(e.voice_env(old_voice) == 0.f);
-    CHECK(e.voice_env(e.sustain_voice()) == doctest::Approx(0.7f).epsilon(0.03));
+    CHECK(e.sustain_voice() >= 0);
+    CHECK(e.active_voices() >= 1);
 
+    // Entering FLOW with nothing sounding auto-triggers the drone.
     EngineT entry;
     fresh(entry);
     render_l(entry, 4800);
@@ -194,14 +227,12 @@ void contract_flow_drone_and_surface() {
     const float chord[4] = { 0.3f, 0.36f, 0.42f, 0.5f };
     surface.set_flow(true);
     run_surface(surface, chord, 4, 48000);
-    CHECK(surface.sustain_count() == 4);
-    for (int v = 0; v < EngineT::kVoices; ++v)
-        CHECK(surface.voice_env(v) == doctest::Approx(0.7f).epsilon(0.05));
+    CHECK(surface.sustain_count() == cap<EngineT>(4));
 
     const float next[3] = { 0.35f, 0.41f, 0.47f };
     surface.trigger_chord(next, 3);
     run_surface(surface, next, 3, 48000);
-    CHECK(surface.sustain_count() == 3);
+    CHECK(surface.sustain_count() == cap<EngineT>(3));
 }
 
 template <class EngineT>
@@ -231,7 +262,7 @@ void contract_chord_surface_and_hold() {
     CHECK(stab.active_voices() >= 1);
     const int window = static_cast<int>(EngineT::kStabSpreadS * 48000.f) + 2;
     for (int i = 0; i < window; ++i) { float l, r; stab.process(l, r); }
-    CHECK(stab.active_voices() == 4);
+    CHECK(stab.active_voices() == cap<EngineT>(4));
 
     EngineT bloom;
     bloom.set_seed(3u);
@@ -240,14 +271,14 @@ void contract_chord_surface_and_hold() {
     const float three[3] = { 0.4f, 0.33f, 0.48f };
     bloom.set_flow(true);
     run_surface(bloom, one, 1, 24000);
-    CHECK(bloom.sustain_count() == 1);
+    CHECK(bloom.sustain_count() == cap<EngineT>(1));
     float step = 0.f;
     run_surface(bloom, three, 3, 24000, &step);
-    CHECK(bloom.sustain_count() == 3);
+    CHECK(bloom.sustain_count() == cap<EngineT>(3));
     CHECK(step < 0.3f);
     step = 0.f;
     run_surface(bloom, one, 1, 48000, &step);
-    CHECK(bloom.sustain_count() == 1);
+    CHECK(bloom.sustain_count() == cap<EngineT>(1));
     CHECK(step < 0.3f);
 
     EngineT hold;
@@ -256,13 +287,13 @@ void contract_chord_surface_and_hold() {
     const float chord[3] = { 0.3f, 0.36f, 0.42f };
     hold.set_flow(true);
     run_surface(hold, chord, 3, 48000);
-    CHECK(hold.sustain_count() == 3);
+    CHECK(hold.sustain_count() == cap<EngineT>(3));
     hold.set_hold(true);
     run_surface(hold, chord, 3, 4800);
     CHECK(hold.sustain_count() == 0);
     hold.set_hold(false);
     run_surface(hold, chord, 3, 48000);
-    CHECK(hold.sustain_count() == 3);
+    CHECK(hold.sustain_count() == cap<EngineT>(3));
 
     EngineT entering;
     entering.set_seed(3u);
@@ -272,7 +303,7 @@ void contract_chord_surface_and_hold() {
     CHECK(entering.sustain_count() == 0);
     entering.set_flow(true);
     run_surface(entering, chord, 3, 48000);
-    CHECK(entering.sustain_count() == 3);
+    CHECK(entering.sustain_count() == cap<EngineT>(3));
 
     EngineT rebloom;
     rebloom.set_seed(5u);
@@ -282,23 +313,23 @@ void contract_chord_surface_and_hold() {
     const float surface_three[3] = { 0.3f, 0.36f, 0.42f };
     rebloom.set_flow(true);
     run_surface(rebloom, surface_four, 4, 48000);
-    CHECK(rebloom.sustain_count() == 4);
+    CHECK(rebloom.sustain_count() == cap<EngineT>(4));
     run_surface(rebloom, surface_three, 3, 480);
-    CHECK(rebloom.sustain_count() == 3);
+    CHECK(rebloom.sustain_count() == cap<EngineT>(3));
 
     int min_sustain = rebloom.sustain_count();
-    int reached_four_at = -1;
+    int reached_full_at = -1;
     for (int i = 0; i < 480; ++i) {
         rebloom.set_chord(surface_four, 4);
         float l = 0.f, r = 0.f;
         rebloom.process(l, r);
         const int sc = rebloom.sustain_count();
         if (sc < min_sustain) min_sustain = sc;
-        if (reached_four_at < 0 && sc == 4) reached_four_at = i;
+        if (reached_full_at < 0 && sc == cap<EngineT>(4)) reached_full_at = i;
     }
-    CHECK(min_sustain >= 3);
-    REQUIRE(reached_four_at >= 0);
-    CHECK(reached_four_at < 300);
+    CHECK(min_sustain >= cap<EngineT>(3));
+    REQUIRE(reached_full_at >= 0);
+    CHECK(reached_full_at < 300);
 }
 
 template <class EngineT>

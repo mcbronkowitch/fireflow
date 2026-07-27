@@ -20,13 +20,26 @@ if RUNNER_SPEC and RUNNER_SPEC.loader:
 else:
     runner = None
 
-from profiles import WAVE_ACCEPTANCE, resolve
+from profiles import Profile, WAVE_ACCEPTANCE, resolve
 
 QSPI_SHA256 = "a" * 64
 DEVICE_ID = "00112233445566778899aabb"
 # Registry order from bench/families.cpp -- every real capture below carries
-# rows from all seven families, so the header declares all seven.
+# rows from all seven families that existed when it was measured, so the
+# header declares those seven. The `body` family arrived later (M5j); a
+# capture from before it cannot and should not name it.
 ALL_FAMILIES = "system voice mem mod abl taps sampler"
+
+# The profile those captures ARE: `full` as it stood before the `body` family
+# joined it. Today's `full` names eight families, so a pre-body capture is no
+# longer a complete run of it -- correctly so. Validating this real evidence
+# against the profile of its own era keeps it doing the job it is here for
+# (proving the universal gates accept a genuine, complete capture) instead of
+# turning it into a stale-manifest test it was never meant to be.
+PRE_BODY_FULL = Profile(
+    families=tuple(ALL_FAMILIES.split()),
+    gates=frozenset({WAVE_ACCEPTANCE}),
+)
 REAL_EVIDENCE_PATH = (
     RUNNER_PATH.parent.parent
     / "docs"
@@ -269,6 +282,9 @@ class RunContract(unittest.TestCase):
                 mock.patch.object(runner, "require_live_digest"),
                 mock.patch.object(runner, "require_live_device"),
                 mock.patch.object(runner, "run_once", side_effect=captures),
+                # See PRE_BODY_FULL: these captures are real pre-body evidence,
+                # so they are validated against the profile they actually are.
+                mock.patch.object(runner, "resolve", return_value=PRE_BODY_FULL),
                 mock.patch.object(sys, "argv", argv),
             ):
                 result = runner.main()
@@ -809,10 +825,10 @@ class FullProfileLinkContract(unittest.TestCase):
     manifest bug wearing its symptoms: `full`'s manifest resolves cleanly
     (no unknown family, no ungated wave_acceptance -- see
     ManifestValidationContract above), and its families are exactly the
-    seven the Makefile and BENCH_PROTOCOL_ROWS_BY_FAMILY both know about --
+    ones the Makefile and BENCH_PROTOCOL_ROWS_BY_FAMILY both know about --
     not fewer (which would silently shrink what "full" means and might
-    happen to fit) and not more (an eighth family would be a real,
-    deliberate size change, not a stale manifest).
+    happen to fit) and not more (an extra family is a real, deliberate
+    size change, not a stale manifest, and belongs in this set).
 
     What this does NOT prove: that the link actually fails, or that it
     fails at the *link* step specifically rather than earlier (a
@@ -823,13 +839,13 @@ class FullProfileLinkContract(unittest.TestCase):
     """
 
     KNOWN_FAMILIES = frozenset(
-        {"system", "voice", "mem", "mod", "abl", "taps", "sampler"}
+        {"system", "voice", "mem", "mod", "abl", "taps", "body", "sampler"}
     )
 
     def test_full_profile_manifest_resolves_cleanly(self):
         resolve_profile("full")  # must not raise a manifest error
 
-    def test_full_profile_names_exactly_the_seven_known_families(self):
+    def test_full_profile_names_exactly_the_known_families(self):
         profile = resolve_profile("full")
 
         self.assertEqual(set(profile.families), self.KNOWN_FAMILIES)

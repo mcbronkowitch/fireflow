@@ -5,6 +5,7 @@
 
 #include "synth/synth_engine.h"
 #include "synth_engine_contract.h"
+#include "synth_voicet_contract.h"
 
 using namespace spky;
 
@@ -84,4 +85,14 @@ TEST_CASE("synth engine satisfies the shared part-engine contract") {
     contract_chord_surface_and_hold<SynthEngine>();
     contract_deterministic_seed<SynthEngine>();
     contract_detune_is_independent_of_source<SynthEngine>();
+}
+
+// The half of the old single contract that is about VoiceT's AD envelope and
+// its four voices rather than about SynthEngineT. Split out in Task 8 (spec
+// 2026-07-26 body-resonator) so BODY could run the machine contract without
+// any of these being softened -- see the header for what qualifies.
+TEST_CASE("synth engine satisfies the AD-envelope voice contract") {
+    voicet_steal_retriggers_from_level<SynthEngine>();
+    voicet_cycle_scaled_ad_envelope<SynthEngine>();
+    voicet_flow_plateau_and_handover<SynthEngine>();
 }
