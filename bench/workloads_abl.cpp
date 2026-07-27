@@ -198,48 +198,18 @@ float proc_lim()
     return acc;
 }
 
-// --- EchoDelay core, SRAM vs SDRAM ------------------------------------------
-//
-// The same template FLUX uses (EchoDelay<N> is header-only), instantiated
-// small enough to fit the 16k-float SRAM arena, mono, identical settings in
-// both regions. 0.25 s at 48 kHz = a 12 000-sample read offset — far outside
-// any cache, so the SDRAM row's scatter is honest. The pair splits FLUX's
-// isolated 77k into memory tax (sdram − sram) and compute (bpf + tanh +
-// per-sample SetDelay; cross-check the tanh share against micro_tanhf).
-// One shipping FLUX = 2 channels; the full instrument runs 2 parts = x4.
-//
-// NOT COMPARABLE TO THE 9be5df9 RUN. `perf(flux): one shared delay-time slew
-// for both channels` moved the delay-time one-pole out of EchoDelay and into
-// Flux, which now hands the smoothed length in as `delay_samples`; SetLagTime
-// and SetDelayTime no longer exist. These two rows therefore no longer carry
-// the per-sample slew they carried before, and read lower by that amount. The
-// row still measures bpf + tanh + per-sample SetDelay as the comment above
-// says — only the fonepole is gone. Whoever next re-defines these rows should
-// decide whether the bench should reproduce Flux's slew itself; until then,
-// do not diff echo_short_* against the 9be5df9 report.
-constexpr size_t kShortEcho = 16 * 1024;   // == kSramFloats, whole arena, mono
-
-// 0.25 s at 48 kHz, the fixed offset SetDelayTime(0.25f, true) used to set.
-constexpr float kEchoDelaySamples = 0.25f * kSampleRate;
-
-EchoDelay<kShortEcho> g_echo_abl;
-
-void setup_echo_region(float* buf)
-{
-    g_echo_abl.Init(kSampleRate, buf);
-    g_echo_abl.SetFeedback(0.7f);
-}
-void setup_echo_sram()  { setup_echo_region(sram_arena());  }
-void setup_echo_sdram() { setup_echo_region(sdram_arena()); }
-
-float proc_echo()
-{
-    const float* in = test_input();
-    float acc = 0.f;
-    for (size_t i = 0; i < kBlock; ++i)
-        acc += g_echo_abl.Process(in[i], kEchoDelaySamples);
-    return acc;
-}
+// echo_short_sram / echo_short_sdram (EchoDelay<N> core, SRAM vs SDRAM) were
+// removed here: `feat(flux): the clock is the instrument -- FLUX becomes a
+// bucket-brigade delay` (21087f2) deleted EchoDelay from engine/fx/flux.h,
+// and these two rows were its last consumer. Their premise -- that SRAM was
+// a live placement option for the echo buffer, so splitting FLUX's isolated
+// cost into memory tax (sdram − sram) and compute meant something -- no
+// longer holds: the BBD design commits all four lines to SDRAM
+// (docs/superpowers/specs/2026-07-27-flux-bbd-delay-design.md, "Memory").
+// The `bbd` family (workloads_bbd.cpp) covers this ground directly instead:
+// `bbd_ceiling` vs `bbd_line_only` splits compander/drive cost from core BBD
+// physics, and `bbd_walk_sdram` measures the sequential-SDRAM access shape
+// these two rows used to proxy.
 
 // --- GRIT, both modes -------------------------------------------------------
 //
@@ -285,8 +255,6 @@ const Workload kAblWorkloads[] = {
     { "abl", "inst_worst_choked",   setup_worst_choked,   proc_abl_inst       },
     { "abl", "limiter_clean",       setup_lim_clean,      proc_lim            },
     { "abl", "limiter_driven",      setup_lim_driven,     proc_lim            },
-    { "abl", "echo_short_sram",     setup_echo_sram,      proc_echo           },
-    { "abl", "echo_short_sdram",    setup_echo_sdram,     proc_echo           },
     { "abl", "grit_drive_solo",     setup_grit_drive,     proc_grit           },
     { "abl", "grit_reduce_solo",    setup_grit_reduce,    proc_grit           },
 };

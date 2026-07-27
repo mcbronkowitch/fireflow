@@ -216,8 +216,6 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "inst_worst_choked",
         "limiter_clean",
         "limiter_driven",
-        "echo_short_sram",
-        "echo_short_sdram",
         "grit_drive_solo",
         "grit_reduce_solo",
     ),
