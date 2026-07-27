@@ -392,11 +392,11 @@ TEST_CASE("part: BODY's own FLUX tape reaches its excitation bus through Part::_
     // what happened the first time this test was written (see the WAVE/
     // SYNTH-style comment above about isolating claims from side effects).
     static float s_pbody_echo_l[Flux::kMaxSamples], s_pbody_echo_r[Flux::kMaxSamples];
-    auto render = [](bool flux_on) {
+    auto render = [](bool flux_on, float sub) {
         Part p;
         p.init(48000.f, 5u, s_pbody_echo_l, s_pbody_echo_r);
         p.set_engine(ENGINE_BODY);
-        p.set_voice_sub(0.7f);                     // excitation bus open
+        p.set_voice_sub(sub);
         p.set_fx_target_base(FXT_FX_MIX, 0.f);      // isolate the tap from the send
         if (flux_on) p.fx().set_fx_on(FxBlock::Flux, true, true);
         std::vector<float> out;
@@ -405,7 +405,17 @@ TEST_CASE("part: BODY's own FLUX tape reaches its excitation bus through Part::_
         for (int i = 0; i < 48000; ++i) { p.process(l, r); out.push_back(l); }
         return out;
     };
-    CHECK(render(false) != render(true));
+    CHECK(render(false, 0.7f) != render(true, 0.7f));
+
+    // Task 9 review (task-9-review.md), Minor 1. The isolation above rests
+    // entirely on fx_target_value(FXT_FX_MIX) actually resolving to 0.f --
+    // nothing before this asserted that. Pin SUB to 0 (excitation gate
+    // closed, per BodyVoice's own guard) and require the two renders come
+    // back IDENTICAL: with the excitation bus shut, FLUX on vs. off has no
+    // channel left to move this render through EXCEPT a leaking FX MIX, so
+    // an unexpected divergence here means the isolation assumption broke,
+    // not that Task 9's wiring did.
+    CHECK(render(false, 0.f) == render(true, 0.f));
 }
 
 TEST_CASE("part: WAVE switches through the existing 4 ms engine fade") {

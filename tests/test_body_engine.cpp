@@ -16,6 +16,7 @@
 #include "synth_engine_contract.h"
 
 #include <cmath>
+#include <limits>
 #include <vector>
 
 using namespace spky;
@@ -281,6 +282,44 @@ TEST_CASE("body engine excitation is bit-exact off at SUB 0") {
         gated.process(gl, gr);
         fed.process(fl, fr);
         REQUIRE(gl == fl);
+        REQUIRE(gr == fr);
+    }
+}
+
+// Task 9 review (task-9-review.md), Important 2. The test above feeds a
+// finite excitation, and `x * 0.f * 0.f * 0.5f` is already exactly `0.f` for
+// EVERY finite `x` -- so that test would still pass with the `_sub > 0.f`
+// guard deleted at body_voice.cpp:192 (confirmed: the reviewer reproduced
+// this as mutation 5 and the suite stayed green). It cannot tell "the gate
+// works" from "the gate is absent" or even "set_excitation forwards
+// nowhere" -- it can only fail on a non-finite tap. This test supplies that
+// case: as of this task the excitation bus carries real audio from the FX
+// chain, so a pathological value reaching it is not a hypothetical. Plain
+// arithmetic does not survive one: 0.f * inf is NaN in IEEE754, so an
+// ungated `_excitation * _sub * _sub * 0.5f` poisons `drive` with NaN the
+// instant infinity reaches the bus, and NaN propagates forever through the
+// resonator's own feedback loop (string delay lines, mode bank) once it's
+// in. The `_sub > 0.f` guard is what keeps SUB == 0 silence exact -- and
+// finite -- regardless of what is fed to it.
+TEST_CASE("body engine excitation gate at SUB 0 survives a non-finite bus input") {
+    BodyEngine gated, fed;
+    gated.init(48000.f);
+    fed.init(48000.f);
+    gated.set_sub(0.f);
+    fed.set_sub(0.f);
+    float t[LANE_COUNT] = {0.5f, 1.f, 0.45f, 0.f, 1.f};
+    gated.set_targets(t, 0.5f);
+    fed.set_targets(t, 0.5f);
+    gated.trigger(0.35f);
+    fed.trigger(0.35f);
+    for (int i = 0; i < 9600; ++i) {
+        fed.set_excitation(std::numeric_limits<float>::infinity());
+        float gl, gr, fl, fr;
+        gated.process(gl, gr);
+        fed.process(fl, fr);
+        REQUIRE(std::isfinite(fl));
+        REQUIRE(std::isfinite(fr));
+        REQUIRE(gl == fl);   // the gate, not luck, is what keeps these equal
         REQUIRE(gr == fr);
     }
 }

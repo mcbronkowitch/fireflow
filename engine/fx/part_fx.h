@@ -62,6 +62,16 @@ public:
     // DC-blocked and soft-clipped so it is safe to feed straight into a
     // resonator's excitation input; NOT the FX-MIXed/comp'd output -- see
     // the capture point in process().
+    //
+    // FX MIX (fxv[FXT_FX_MIX], the dry/wet blend PartFx itself applies
+    // AFTER the capture point) does NOT gate this. FLUX's OWN internal wet
+    // level does: `_flux.process()` folds `_mix_lin` (set_flux_mix /
+    // PartFx::set_flux_mix) into the echo BEFORE this class ever sees it
+    // (flux.cpp), and the capture point is downstream of that. So FLUX
+    // MIX == 0 silences the excitation bus even while the echo is still
+    // running internally -- deliberate (with no wet level there is
+    // arguably no "echo playback signal" to tap), but worth knowing before
+    // debugging a BODY deck that seems deaf to its own FLUX.
     float tape_tap() const { return _tape_tap; }
 
 private:
