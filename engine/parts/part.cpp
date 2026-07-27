@@ -369,6 +369,7 @@ void Part::_control_tick() {
     if (_src_deck)  bus += _other_deck_tap;
     if (_src_audio) bus += _audio_in_tap;
     bus = fast_tanh(_bus_dc.Process(bus));
+    _excitation_eff = bus;   // observer only (excitation_eff(), part.h)
     _engine->set_excitation(bus);
 }
 

@@ -1526,3 +1526,63 @@ TEST_CASE("audio-in excitation bus is soft-clipped, not proportional to drive") 
     // arithmetic, not fitted to either measurement.
     CHECK(ratio < 20.0);
 }
+
+// Task 10 review, round 2: the 0.4-vs-4.0 test above binds fast_tanh (its
+// own mutation table shows so) but is blind to the DC block -- a 220 Hz
+// probe cannot tell a 1.6 Hz corner from a 0.017 Hz corner apart over that
+// test's timescale, so neither "delete the DcBlock" nor "revert Important
+// 1's calibration fix" moved its result. Same shape as test_part_fx.cpp's
+// "tape_tap's DC block removes a sustained offset, fast_tanh alone cannot"
+// (Task 9's equivalent claim, same 0.3 threshold, reused deliberately --
+// see the derivation below): a genuinely sustained DC input, early_mean
+// versus late_mean, read through excitation_eff() (part.h) so this watches
+// the RAW post-clip bus directly rather than inferring the DC block's
+// behaviour through resonator dynamics.
+//
+// Window/threshold, derived from the corner frequencies, not fitted to a
+// run:
+//   _bus_dc.Process() runs once per control TICK (kCtrlInterval = 96
+//   samples @ 48 kHz = 2 ms), not once per sample. DcBlock's difference
+//   equation (dcblock.cpp: out = in - input_ + gain*output_) fed a CONSTANT
+//   input C settles to y[n] = gain^n * C -- pure geometric decay per TICK.
+//     Correct calibration (Important 1): gain = 1 - 10/(48000/96)
+//                                              = 1 - 10/500 = 0.98
+//       tick-rate time constant tau = 1/(1-gain) = 50 ticks = 100 ms.
+//     Reverted/miscalibrated: gain = 1 - 10/48000 ~= 0.999792
+//       tau = 1/(1-gain) ~= 4800 ticks = 9.6 s -- the exact 96x the review
+//       named (kCtrlInterval itself).
+//   EARLY window: ticks ~2-7 (samples 200-700, 4-15 ms) -- close enough to
+//   the offset first reaching the bus that decay is negligible under
+//   EITHER calibration (correct: 0.98^5 ~= 0.90; miscalibrated: ~1.00), so
+//   early_mean is a clean "the DC genuinely got here" reference for both.
+//   LATE window: 300-500 ms (samples 14400-24000), chosen as 3x the
+//   CORRECT tau -- at the correct rate that is 150-250 ticks in, decayed to
+//   roughly 0.98^200 ~= e^-4 ~= 1.8% of early; at the miscalibrated rate
+//   the SAME 300-500 ms is only ~0.03-0.05 tau, decayed to roughly
+//   0.999792^200 ~= e^-0.042 ~= 96% of early -- barely moved. With the
+//   DcBlock deleted outright, fast_tanh alone maps a constant to a constant
+//   forever: 100% of early, forever. 0.3 -- test_part_fx.cpp's own
+//   threshold for the identical shape of claim -- sits with wide margin
+//   above ~1.8% and wide margin below both ~96% and 100%.
+TEST_CASE("audio-in excitation bus: post-sum DC block decays a sustained offset, fast_tanh alone cannot") {
+    Instrument inst;
+    inst.init(48000.f);
+    inst.set_engine(PART_A, ENGINE_BODY);
+    inst.set_voice_sub(PART_A, 1.f);
+    inst.set_excitation_sources(PART_A, false, false, true);
+
+    double early_sum = 0.0, late_sum = 0.0;
+    int early_n = 0, late_n = 0;
+    float l, r;
+    float inL = 0.5f, inR = 0.5f;   // constant, one-sided drive: a real DC offset
+    for (int i = 0; i < 24000; ++i) {          // 500 ms
+        inst.process(&inL, &inR, &l, &r, 1);
+        if (i >= 200   && i < 700)   { early_sum += inst.excitation_bus(PART_A); ++early_n; }
+        if (i >= 14400 && i < 24000) { late_sum  += inst.excitation_bus(PART_A); ++late_n;  }
+    }
+    const double early_mean = early_sum / early_n;
+    const double late_mean  = late_sum  / late_n;
+    MESSAGE("early_mean=", early_mean, " late_mean=", late_mean);
+    CHECK(std::fabs(early_mean) > 0.05);                        // the DC genuinely reached the bus
+    CHECK(std::fabs(late_mean) < std::fabs(early_mean) * 0.3);  // and the block pulls it toward 0
+}

@@ -47,6 +47,17 @@ public:
     // parts are visible -- see instrument.cpp), holding the SIBLING part's
     // dry mono output from the PREVIOUS control block. Not for panel/host use.
     void set_other_deck_tap(float x) { _other_deck_tap = x; }
+    // Observer only, for tests (Task 10 review round 2): the excitation bus
+    // value actually pushed to _engine->set_excitation() at the last control
+    // tick -- i.e. the enabled sources summed, THEN DC-blocked and
+    // fast_tanh-clipped. Same idiom as overlap_eff()/color_eff() above: a
+    // cache filled by _control_tick(), read back by a test, never written
+    // from outside. Lets a test watch the post-clip signal directly instead
+    // of inferring it from BodyVoice's render, which is what a DC-corner
+    // claim needs (a probe frequency the render is sensitive to is a
+    // different thing from a probe frequency the RAW bus decay is sensitive
+    // to once resonator dynamics are in between).
+    float excitation_eff() const { return _excitation_eff; }
 
     void set_depth(float d) { _depth = clampf(d, 0.f, 1.f); }
     void set_tune(float t)  { _tune = clampf(t, 0.f, 1.f); }
@@ -339,6 +350,9 @@ private:
     float _other_deck_tap = 0.f;
     float _audio_in_tap = 0.f;
     daisysp::DcBlock _bus_dc;
+    // Backing store for excitation_eff() (observer only) -- the exact value
+    // handed to _engine->set_excitation() at the last control tick.
+    float _excitation_eff = 0.f;
 
     // Modulation first is the shipped state (spec 2026-07-17 boot-targets):
     // all five targets boot active, with staggered depths — FILTER 0.55 (the

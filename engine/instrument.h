@@ -119,6 +119,10 @@ public:
     // section B -- init(sample_rate) alone builds no FX chain, so this would
     // read a permanent 0.f without a real FxMem and FLUX actually switched on).
     float tape_tap(int p) const { return _parts[p].fx().tape_tap(); }
+    // Observer only, for tests (Task 10 review round 2): the excitation bus
+    // value actually pushed to the engine at the last control tick -- see
+    // Part::excitation_eff().
+    float excitation_bus(int p) const { return _parts[p].excitation_eff(); }
 
     // --- M2 synth voice API (spec "Instrument API") ---
     void set_engine(int p, EngineId e)       { _parts[p].set_engine(e); }
