@@ -67,6 +67,10 @@ inline Cf cf_div(Cf a, Cf b) {
     return Cf{ (a.re * b.re + a.im * b.im) * inv,
                (a.im * b.re - a.re * b.im) * inv };
 }
+// INIT TIME ONLY -- std::exp/cos/sin. The only cf_* helper that touches libm;
+// the other five are arithmetic-only. Reached from bbd_analog_spec() (pole/
+// residue construction) and BbdFilterCoef building, both init-time paths --
+// never call this from a per-sample path.
 inline Cf cf_exp(Cf a) {
     const float m = std::exp(a.re);
     return Cf{ m * std::cos(a.im), m * std::sin(a.im) };
@@ -241,11 +245,18 @@ struct BbdFilterCoef {
 // the two chains different corners later must not need a signature change.
 void bbd_analog_spec(bool output_kind, Cf* poles, Cf* residues);
 
-// Shared, built on first call and rebuilt in place if the sample rate moves.
-// Not thread-safe by design: both hosts call Flux::init from one thread with
-// the audio callback stopped (Rack's onSampleRateChange, the render host's
-// setup), which is the same contract hann_curve() in fx/fx_util.h already
-// relies on.
+// Shared, built on first call and rebuilt IN PLACE if the sample rate moves.
+// This is NOT the same contract as hann_curve() (fx/fx_util.h): that table is
+// a magic static, built exactly once behind the standard's thread-safe
+// function-local-static init guarantee, and never mutated again -- there is
+// nothing for two threads to race on after the first call. bbd_filter_in/out
+// are different: on a sample-rate change they mutate g_fin/g_fout's contents
+// in place, while OTHER BbdLines already hold raw pointers into them (fin_/
+// fout_, set in BbdLine::Init) -- a genuine shared-mutable-state hazard the
+// language's static-init guarantee does not cover. It is safe here only
+// because both hosts call Flux::init from one thread with the audio callback
+// stopped (Rack's onSampleRateChange, the render host's setup), so no BbdLine
+// is ever reading through fin_/fout_ while this rebuild runs.
 const BbdFilterCoef& bbd_filter_in(float sample_rate);
 const BbdFilterCoef& bbd_filter_out(float sample_rate);
 

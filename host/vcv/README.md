@@ -275,6 +275,23 @@ stale WAV sitting in patch storage.
   imported file is always in tune. The asymmetry is intentional: importing a
   file at the wrong pitch would be a bug, but re-rating material that's
   already sitting in the buffer is varispeed, not a bug.
+- **An old patch's DRIVE knob can scream on FLUX the moment it loads.**
+  DRIVE and STAGES replaced the old DUST/ROT controls (2.14.0, the FLUX ->
+  BBD rewrite) **in place, on the same param IDs**, so a saved patch's DUST
+  value loads straight into DRIVE — there is no migration and none is
+  planned; that is a deliberate product decision, not an oversight. The
+  problem is the value itself: the previously shipped init default for
+  DUST was **maximum** (`1.0`), and under the shipped DRIVE law, maximum
+  DRIVE drops the self-oscillation FEEDBACK threshold to **0.209** (against
+  `Flux::set_feedback`'s `norm × 1.2`). The previously shipped FEEDBACK
+  defaults were **0.343** and **0.527** (both well above that threshold) —
+  so a patch descending from that old init state self-oscillates the
+  instant FLUX is engaged, at full DRIVE, with no warning. **If an old
+  patch screams (or you're about to load one and FLUX was ever used on
+  it), turn DRIVE down before switching FLUX on.** For contrast: the
+  *current* factory init ships DRIVE at `0.15`, whose threshold (~0.75) sits
+  comfortably above both current FEEDBACK defaults — new patches are not
+  affected.
 - **Memory:** each `Spotymod` instance allocates well over its two 42 s
   stereo record buffers up front, whether or not the sampler is ever used on
   either part — closer to **~38.66 MB total**, not the 32 MB the record

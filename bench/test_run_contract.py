@@ -27,8 +27,13 @@ DEVICE_ID = "00112233445566778899aabb"
 # Registry order from bench/families.cpp -- every real capture below carries
 # rows from all seven families that existed when it was measured, so the
 # header declares those seven. The `body` family arrived later (M5j); a
-# capture from before it cannot and should not name it.
-ALL_FAMILIES = "system voice mem mod abl sampler"
+# capture from before it cannot and should not name it. `taps` is the other
+# direction: Task 6 (e004a3d) retired the whole taps bench family going
+# forward and dropped it from this list to match -- but that capture was
+# measured before Task 6 too, so it genuinely reported `taps` rows on the
+# wire. Dropping the name here doesn't un-measure them; it only made this
+# fixture disagree with its own header. Kept at seven.
+ALL_FAMILIES = "system voice mem mod abl taps sampler"
 
 # The profile those captures ARE: `full` as it stood before the `body` family
 # joined it. Today's `full` names eight families, so a pre-body capture is no
@@ -40,6 +45,105 @@ PRE_BODY_FULL = Profile(
     families=tuple(ALL_FAMILIES.split()),
     gates=frozenset({WAVE_ACCEPTANCE}),
 )
+
+# The row protocol those captures ARE, mirroring PRE_BODY_FULL immediately
+# above: run.py's BENCH_PROTOCOL_ROWS_BY_FAMILY is today's row protocol, not
+# 2026-07-25's. Three things moved since this capture was measured -- `system`
+# now expects `instrument_worst_bbd` where this capture reported
+# `instrument_worst_taps` (M5j/bbd hadn't landed yet); `abl` no longer carries
+# `echo_short_sdram`/`echo_short_sram` (they left with the tap bank); and the
+# whole `taps` family is gone from today's registry (Task 6, e004a3d) even
+# though this capture is exactly the evidence that it once existed. Pointing
+# validation at today's table would reject a real, complete, correctly-shaped
+# capture for not being a capture of something that did not exist yet -- the
+# same failure mode PRE_BODY_FULL exists to prevent, one level down at the row
+# instead of the family. Pinned to what the instrument actually reported that
+# day; every other family below is unchanged from today's table because
+# nothing else about it has moved.
+PRE_BODY_ROWS_BY_FAMILY = {
+    "system": (
+        "empty_callback",
+        "mod_plane_2x_center",
+        "synth_1_voice",
+        "synth_2_voices",
+        "synth_4_voices",
+        "synth_2x4",
+        "wave_2x4",
+        "fx_none",
+        "fx_grit",
+        "fx_flux_sdram",
+        "fx_comp",
+        "oliverb_solo_sram",
+        "instrument_init",
+        "instrument_worst",
+        "instrument_worst_taps",
+    ),
+    "voice": (
+        "morph_osc_bare",
+        "modal_voice",
+        "string_voice",
+        "resonator",
+        "formant_osc",
+        "vosim_osc",
+        "harmonic_osc",
+        "grainlet_osc",
+        "z_osc",
+        "variable_shape_osc",
+    ),
+    "mem": (
+        "grain_read_sram",
+        "grain_read_sdram",
+        "oliverb_sdram",
+        "echo_walk_sram",
+        "echo_walk_sdram",
+    ),
+    "mod": (
+        "lane_flow_shape00",
+        "lane_flow_shape03",
+        "lane_flow_shape07",
+        "lane_flow_shape10",
+        "lane_step_shape00",
+        "super_mod_5lanes",
+        "center_tick",
+    ),
+    "abl": (
+        "micro_sinf",
+        "micro_tanhf",
+        "micro_powf",
+        "micro_fast_sin",
+        "part_glue_flow",
+        "inst_worst_noflux",
+        "inst_worst_noreverb",
+        "inst_worst_nogrit",
+        "inst_worst_choked",
+        "limiter_clean",
+        "limiter_driven",
+        "grit_drive_solo",
+        "grit_reduce_solo",
+        "echo_short_sdram",
+        "echo_short_sram",
+    ),
+    "taps": (
+        "tap_read_sdram",
+        "taps_2_opt",
+    ),
+    "sampler": (
+        "sampler_flow_typ",
+        "sampler_flow_worst",
+        "sampler_overdub_worst",
+        "sampler_scan_ctrl",
+        "sampler_win_sram",
+        "sampler_win_sdram",
+        "inst_sampler_worst",
+        "sampler_worst_slowspawn",
+        "inst_sampler_nomotion",
+        "inst_sampler_slowspawn",
+        "inst_sampler_noflux",
+        "inst_sampler_noreverb",
+        "inst_sampler_onepart",
+        "sampler_worst_nomotion",
+    ),
+}
 REAL_EVIDENCE_PATH = (
     RUNNER_PATH.parent.parent
     / "docs"
@@ -285,6 +389,14 @@ class RunContract(unittest.TestCase):
                 # See PRE_BODY_FULL: these captures are real pre-body evidence,
                 # so they are validated against the profile they actually are.
                 mock.patch.object(runner, "resolve", return_value=PRE_BODY_FULL),
+                # See PRE_BODY_ROWS_BY_FAMILY: validate_captures's row check
+                # (protocol_rowset) reads this table directly, not through
+                # resolve(), so it needs its own pin alongside the profile's.
+                mock.patch.object(
+                    runner,
+                    "BENCH_PROTOCOL_ROWS_BY_FAMILY",
+                    PRE_BODY_ROWS_BY_FAMILY,
+                ),
                 mock.patch.object(sys, "argv", argv),
             ):
                 result = runner.main()

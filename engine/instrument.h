@@ -123,6 +123,15 @@ public:
     // value actually pushed to the engine at the last control tick -- see
     // Part::excitation_eff().
     float excitation_bus(int p) const { return _parts[p].excitation_eff(); }
+    // Observers only, for tests (2026-07-27 whole-branch review, finding 7):
+    // set_dust/set_rot's per-part isolation had a witness (test_instrument.cpp,
+    // removed with the tap bank, e004a3d); set_drive/set_stages, their
+    // replacements at this same call site, did not. Flux already exposes both
+    // as direct observers (drive_norm_for_test(), stages() -- see flux.h),
+    // so unlike the deleted dust/rot tests this needs no audio-domain
+    // isolation trick, just a way to reach the named part's Flux from here.
+    float drive_norm_for_test(int p) const { return _parts[p].fx().flux().drive_norm_for_test(); }
+    int stages_for_test(int p) const { return _parts[p].fx().flux().stages(); }
 
     // --- M2 synth voice API (spec "Instrument API") ---
     void set_engine(int p, EngineId e)       { _parts[p].set_engine(e); }

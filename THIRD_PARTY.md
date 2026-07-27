@@ -87,7 +87,8 @@ attribution belong here regardless.
   `engine/fx/flux.h`/`flux.cpp` (the `Flux` class). Design spec:
   `docs/superpowers/specs/2026-07-27-flux-bbd-delay-design.md`.
 - **License — Boost Software License - Version 1.0 - August 17th, 2003**,
-  reproduced in full (also present verbatim at the top of `engine/fx/bbd.h`):
+  reproduced in full (also present verbatim at the top of both
+  `engine/fx/bbd.h` and `engine/fx/bbd.cpp`):
 
   ```
   Boost Software License - Version 1.0 - August 17th, 2003

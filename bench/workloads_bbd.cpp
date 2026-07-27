@@ -1,6 +1,7 @@
 #include "workload.h"
 #include "mem.h"
 #include "fx/bbd.h"
+#include "fx/flux.h"
 #include <cmath>
 
 namespace bench {
@@ -23,13 +24,11 @@ using namespace spky;
 // least cache-friendly. One line, because BbdEcho is per channel and the
 // two-part instrument cost is this row four times.
 
-constexpr int kBbdMaxCells = 8192;      // Flux::kMaxSamples
-
 BbdEcho g_echo;
 
 void setup_bbd_ceiling()
 {
-    g_echo.Init(kSampleRate, sdram_arena(), kBbdMaxCells);
+    g_echo.Init(kSampleRate, sdram_arena(), Flux::kMaxSamples);
     g_echo.SetStages(bbd_tuning::kMaxStages);
     g_echo.SetDrive(0.85f);             // deep into the saturator every pass
     g_echo.SetFeedback(1.1f);           // just under the bloom, loop always hot
@@ -63,7 +62,7 @@ BbdLine g_line;
 
 void setup_bbd_line_only()
 {
-    g_line.Init(sdram_arena(), kBbdMaxCells, kSampleRate);
+    g_line.Init(sdram_arena(), Flux::kMaxSamples, kSampleRate);
     g_line.SetStages(bbd_tuning::kMaxStages);
     g_line.SetClock(bbd_tuning::kClockMaxHz);
     for (int i = 0; i < 49152; ++i)

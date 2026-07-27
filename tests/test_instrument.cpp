@@ -125,6 +125,43 @@ TEST_CASE("instrument: fx setters reach the parts and reverb setters are null-sa
     CHECK(l == l);   // not NaN
 }
 
+TEST_CASE("instrument: set_drive forwards to the named part only") {
+    // Ported for the BBD rewrite (2026-07-27 whole-branch review, finding 7)
+    // from "instrument: set_dust forwards to the named part only"
+    // (test_instrument.cpp, removed with the tap bank, e004a3d) -- set_drive
+    // is set_dust's replacement at this same call site (Instrument ->
+    // PartFx -> Flux) and had no isolation witness of its own. Unlike DUST,
+    // DRIVE is a direct, unslewed control-rate value (Flux::set_drive), and
+    // Flux already exposes it as a test observer, so this needs no
+    // audio-domain isolation trick -- just read each part's own Flux back.
+    Instrument inst;
+    inst.init(48000.f, test_fx_mem());
+    inst.set_drive(PART_A, 0.7f);
+    inst.set_drive(PART_B, 0.2f);
+    CHECK(inst.drive_norm_for_test(PART_A) == doctest::Approx(0.7f));
+    CHECK(inst.drive_norm_for_test(PART_B) == doctest::Approx(0.2f));
+}
+
+TEST_CASE("instrument: set_stages forwards to the named part only") {
+    // Ported for the BBD rewrite (2026-07-27 whole-branch review, finding 7)
+    // from "instrument: set_rot forwards to the named part only"
+    // (test_instrument.cpp, removed with the tap bank, e004a3d) -- set_stages
+    // is set_rot's replacement at this same call site. Unlike ROT, STAGES
+    // rides Flux's own 30 ms slew and only updates while FLUX is actually
+    // processing (Flux::process's `_sw.is_idle()` early-return skips it
+    // entirely), so FLUX is switched on for both parts and given time to
+    // settle before reading back.
+    Instrument inst;
+    inst.init(48000.f, test_fx_mem());
+    inst.set_fx_on(PART_A, FxBlock::Flux, true);
+    inst.set_fx_on(PART_B, FxBlock::Flux, true);
+    inst.set_stages(PART_A, 0.f);     // -> kMinStages (512)
+    inst.set_stages(PART_B, 1.f);     // -> kMaxStages (16384)
+    float l, r;
+    for (int i = 0; i < 6000; ++i) inst.process(nullptr, nullptr, &l, &r, 1);  // settle the stage slew
+    CHECK(inst.stages_for_test(PART_A) < inst.stages_for_test(PART_B));
+}
+
 TEST_CASE("instrument: boots both parts on the synth engine with an audible drone") {
     Instrument inst;
     inst.init(48000.f);

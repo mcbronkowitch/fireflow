@@ -400,3 +400,41 @@ than silently rewritten into the sections above so the record of what was
    loop gain at unity by construction at every DRIVE setting. Not resolved
    here; a separate measurement investigation is open and its outcome is
    the instrument owner's decision.
+
+   **Superseded by item 7.** The "not resolved here" investigation this item
+   describes ran, found a real bug in the makeup-gain law itself, and fixed
+   it in two commits landed after this item was written. DRIVE's status is
+   no longer "open, no audible difference reported" — see item 7 for what
+   changed and what is still outstanding.
+7. **DRIVE's silence (item 6) was diagnosed, and fixed — but not yet
+   re-heard.** That separate measurement investigation ran, and it found the
+   makeup-gain law itself at fault, not the owner's ear or the BBD model.
+   The law held small-signal loop gain at unity by shrinking the
+   saturator's output ceiling (`sat_out_`) by exactly the dB range's own
+   width across the knob — at the range then in force (-6..+24 dB) that is
+   30 dB, `0.9/0.501 = 1.796` at DRIVE 0 down to `0.057` at DRIVE 1.
+   Measured consequence: a 14.0 dB drop in the actual echo return's peak
+   level between DRIVE 0 and DRIVE 1 (`drive-investigation.md`) — DRIVE got
+   *quieter* as it was turned
+   up, not dirtier, so "no audible difference" read more like "getting
+   weaker" than "doing nothing."
+
+   Fixed in `ce07532`: `sat_out_` is now a **fixed** ceiling
+   (`bbd_tuning::kSatCeil`), matching the real MN3005 (headroom does not
+   recede as you drive it harder). Documented, accepted consequence:
+   small-signal loop gain now equals `g` itself, so FEEDBACK moves closer to
+   self-oscillation as DRIVE rises — the loop still cannot diverge
+   (`fast_tanh` clamps hard at ±1). That consequence broke a different
+   design constraint at the range then in force: DRIVE 0's self-oscillation
+   FEEDBACK threshold rose to 1.714, *above* `Flux::set_feedback`'s 1.2
+   maximum — self-oscillation, required to stay reachable at every DRIVE
+   setting, became unreachable at DRIVE 0. Fixed in `3dea01a`: DRIVE's range
+   moved from -6..+24 dB to `bbd_tuning::kDriveLoDb/kDriveHiDb` = 0..+12 dB,
+   giving final measured self-oscillation thresholds of 0.837 / 0.418 / 0.209
+   at DRIVE 0 / 0.5 / 1.0 (`drive-fix-report.md`) — all comfortably below the
+   1.2 ceiling, with real FEEDBACK travel left at every setting.
+
+   **DRIVE's status is therefore neither "open" nor "confirmed by ear."** It
+   is diagnosed and fixed by measurement; the owner confirmed RATE, STAGES
+   and `FXT_FLUX_TIME` by ear in item 6, but has **not yet re-listened to the
+   fixed DRIVE** — that listening pass is still outstanding.

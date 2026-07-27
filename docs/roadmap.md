@@ -54,7 +54,7 @@ is actually built today, and what is still design-only.
 | **+ FORM/SONG** | Persistent A/B phrase snapshots with independent phrase-engine FORM and seven-mode SONG arrangement | ✅ **done** (engine, renderer, and VCV; released in 2.13.1; stable VCV parameter IDs and legacy patch migration) |
 | **Mod grid lock** | In STEP the four texture lanes stop owning a clock and follow the deck's integer step count; the lane ratios become cycle lengths (4/6/8/12/16 at STEPS = 8), TIDE stretches slot counts, and DRIFT, EVOLVE, SPOT and float drift can no longer push a lane off the grid | ✅ **done** (engine + VCV; released in 2.13.2; spec `docs/superpowers/specs/2026-07-25-mod-lane-step-grid-lock-design.md`) |
 | **M5j** | BODY — one-voice-per-deck resonator part engine, morphing string → metal → bell, with a sympathetic excitation bus | ✅ **done** (engine, renderer and VCV; `body_2x4` 295078 / 295724 cycles, 30.7 % of the block, inside the spec's 29–32 % prediction and below SYNTH; released in 2.14.0) |
-| **FLUX → BBD** | FLUX's interpolating tape echo replaced by a bucket-brigade delay model — the clock rate *is* the delay time, so RATE bends stored pitch, STAGES is a brightness axis, and `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane | ✅ **done** (engine, renderer and VCV; three of four design claims confirmed by ear, DRIVE open; hardware CPU measurement outstanding — see below) |
+| **FLUX → BBD** | FLUX's interpolating tape echo replaced by a bucket-brigade delay model — the clock rate *is* the delay time, so RATE bends stored pitch, STAGES is a brightness axis, and `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane | ✅ **done** (engine, renderer and VCV; RATE/STAGES/`FXT_FLUX_TIME` confirmed by ear, DRIVE diagnosed and fixed but awaiting re-listening; hardware CPU measurement outstanding — see below) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
 | **M6** | Firmware shell: pads, gestures, panel, LEDs — runs on real hardware | ⬜ planned |
@@ -929,16 +929,22 @@ expense the model can no longer afford.
 listening, not derivable from the render host or from any measurement):
 three of the four design claims above are now heard, not merely computed —
 RATE bending stored pitch, STAGES as a brightness axis, and
-`FXT_FLUX_TIME` as a live modulation lane. **DRIVE is open**: no audible
-difference reported at any setting. This is not a wiring fault — traced
-end to end, `Spotymod.cpp` → `Instrument::set_drive` → `PartFx::set_drive`
-→ `Flux::set_drive` — and the leading evidence is a measured inverted-U in
+`FXT_FLUX_TIME` as a live modulation lane. DRIVE was reported inaudible at
+any setting; that report was investigated and traced end to end,
+`Spotymod.cpp` → `Instrument::set_drive` → `PartFx::set_drive` →
+`Flux::set_drive`, and the leading evidence was a measured inverted-U in
 DRIVE's effect on output delta (peaking near DRIVE ≈ 0.5, collapsing by
 DRIVE = 1.0; see the design spec's errata item 5), together with the
 makeup gain around the saturator holding small-signal loop gain at unity by
-construction at every DRIVE setting. Whether that calls for a voicing
-change, a range change, or is simply correct behaviour on realistic
-material is the owner's decision and is not made here.
+construction at every DRIVE setting. **That makeup-gain law was the bug**:
+it shrank the saturator's ceiling by 30 dB across the knob (1.796 → 0.057),
+measured as a 14 dB drop in the actual echo return between DRIVE 0 and
+DRIVE 1. Fixed in two commits (`ce07532`, `3dea01a`; see the design spec's
+errata item 7): the ceiling is now fixed at `kSatCeil`, and DRIVE's range
+moved to 0..+12 dB so self-oscillation stays reachable at DRIVE 0. **DRIVE
+is diagnosed and fixed, not yet re-heard** — the owner has not yet listened
+to the corrected DRIVE, and that listening pass is the remaining open
+item, not a voicing or range decision.
 
 Spec: `docs/superpowers/specs/2026-07-27-flux-bbd-delay-design.md`. Plan:
 `docs/superpowers/plans/2026-07-27-flux-bbd-delay.md`.

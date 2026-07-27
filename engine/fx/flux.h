@@ -42,7 +42,7 @@ public:
     float delay_time() const { return _delay_time; }
     void set_feedback(float norm);
     void set_mix(float norm);
-    void set_drive(float norm);      // 0..1 -> -6..+24 dB INSIDE the loop
+    void set_drive(float norm);      // 0..1 -> 0..+12 dB INSIDE the loop (bbd_tuning::kDriveLoDb/kDriveHiDb)
     void set_stages(float norm);     // 0..1 -> 512..16384, geometric
     // FXT_FLUX_TIME. Pulls MULTIPLICATIVELY on the clock, downstream of the
     // base time, so it rides PartFx's 2 ms smoother and not the 30 ms

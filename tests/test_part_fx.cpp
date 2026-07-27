@@ -318,3 +318,108 @@ TEST_CASE("part_fx: tape_tap drops to exact 0 the sample FLUX disengages, GRIT a
     CHECK(fx.tape_tap() == 0.f);   // instantaneous, not a decaying tail
 }
 
+TEST_CASE("part_fx: tape_tap's soft clip bounds the raw BBD echo, which is not bounded to unity") {
+    // Ported for the BBD rewrite (2026-07-27 whole-branch review, finding 3)
+    // from the tape-era case this replaces: "part_fx: tape_tap's soft clip
+    // bounds the raw taps, which skip Flux's own tanh" (task-9-review.md,
+    // Important 1), deleted with the tap bank (e004a3d) with no replacement
+    // -- deleting either this stage or the DC block below left the full
+    // suite green, so neither promise had a witness.
+    //
+    // fast_tanh(_tap_dc.Process(echo_mono)) is the whole of what lets
+    // tape_tap()'s doc comment (part_fx.h) promise the tap is "safe to feed
+    // straight into a resonator's excitation input". BbdEcho::Process is NOT
+    // bounded at 1 the way the old EchoDelay was: fast_tanh only clamps the
+    // SATURATOR stage inside the loop (sat_out_ = kSatCeil = 0.9, bbd.h), and
+    // the compander's Expand() stage runs AFTER that, multiplying by up to
+    // kCompCeilE = 4 -- so the line's own output genuinely exceeds unity
+    // (tests/test_bbd.cpp's "max DRIVE and max FEEDBACK together still
+    // cannot run away" measures peak = 1.54485 at DRIVE 1, FEEDBACK 1.2).
+    // DRIVE maxed and FEEDBACK near its 1.2 ceiling is that same regime,
+    // reached here through PartFx's own knobs rather than BbdEcho directly.
+    static float s_pf_clip_l[Flux::kMaxSamples], s_pf_clip_r[Flux::kMaxSamples];
+    PartFx fx;
+    fx.init(48000.f, s_pf_clip_l, s_pf_clip_r);
+    fx.set_fx_on(FxBlock::Flux, true, true);
+    fx.set_flux_mix(1.f);
+    fx.set_drive(1.f);
+    float v[FXT_COUNT];
+    fill(v, 0.f, 0.5f, 1.f, 0.f, 1.f);   // FEEDBACK maxed: norm 1 -> 1.2 raw (Flux::set_feedback)
+
+    double maxabs = 0.0;
+    for (int i = 0; i < 480000; ++i) {   // 10 s: matches test_bbd's own self-oscillation window
+        // A single impulse, then silence -- lets the loop build its own
+        // sustained self-oscillation rather than tracking a driven tone, the
+        // same shape as test_bbd's "still cannot run away" case.
+        float s = (i < 32) ? 1.f : 0.f;
+        float l = s, r = s, sl, sr;
+        fx.process(l, r, sl, sr, v);
+        maxabs = std::max(maxabs, (double)std::fabs(fx.tape_tap()));
+        REQUIRE(std::fabs(fx.tape_tap()) <= 1.f);
+    }
+    MESSAGE("maxabs=", maxabs);
+    // Premise guard (same idiom as the deleted test it replaces): everything
+    // above only means something if the loop actually reached the clipping
+    // regime -- `<= 1.f` is trivially true of a signal that never got near
+    // 1, so without this line a future tuning change that stopped the loop
+    // from blooming past unity would leave the test green while testing
+    // nothing.
+    REQUIRE(maxabs > 0.9);
+}
+
+TEST_CASE("part_fx: tape_tap's DC block removes a sustained offset, fast_tanh alone cannot") {
+    // Ported for the BBD rewrite (2026-07-27 whole-branch review, finding 3)
+    // from the tape-era case this replaces: "part_fx: tape_tap's DC block
+    // removes a sustained offset, fast_tanh alone cannot" (task-9-review.md,
+    // Important 1), deleted with the tap bank (e004a3d) with no replacement.
+    //
+    // fast_tanh maps a constant nonzero input to a constant nonzero output
+    // forever -- only the DcBlock stage can make a genuinely SUSTAINED
+    // offset's running mean fall toward 0. BbdLine::Process (bbd.h) has its
+    // own DC feed-through term (`fout_->H * ybbd_old_`, H == 1 by
+    // construction and pinned by test_bbd.cpp), so a constant input reaches
+    // this tap as a real, sustained DC signal, not a decaying transient -- a
+    // tap with the DC block deleted could only wrap that constant through
+    // fast_tanh into a DIFFERENT nonzero constant, never make the running
+    // mean decay.
+    //
+    // STAGES is pulled to its minimum here purely so the delay line's own
+    // fill time (and the clock-ramp settle) stay short: at the default 8192
+    // stages, bbd_clock_hz's ceiling (kClockMaxHz, bbd.h) caps how short a
+    // delay is reachable at all, and the point of this test is the DC
+    // block's own decay, not how long the line takes to fill.
+    static float s_pf_dc_l[Flux::kMaxSamples], s_pf_dc_r[Flux::kMaxSamples];
+    PartFx fx;
+    fx.init(48000.f, s_pf_dc_l, s_pf_dc_r);
+    fx.set_fx_on(FxBlock::Flux, true, true);
+    fx.set_flux_mix(1.f);
+    fx.set_stages(0.f);            // 512 stages: the shortest reachable delay
+    fx.set_bpm(600.f);
+    fx.set_flux_rate(11);          // fastest sync division ("1/32")
+    float v[FXT_COUNT];
+    fill(v, 0.f, 0.5f, 1.f, 0.f, 0.45f);
+
+    // Settle the stage/clock slew and fill the delay line with the DC input
+    // before measuring, so the "early" window below reads a genuine steady
+    // tap rather than the transient onset of the line filling.
+    for (int i = 0; i < 3000; ++i) {
+        float l = 0.5f, r = 0.5f, sl, sr;
+        fx.process(l, r, sl, sr, v);
+    }
+
+    double early_sum = 0.0, late_sum = 0.0;
+    int early_n = 0, late_n = 0;
+    for (int i = 0; i < 96000; ++i) {
+        float l = 0.5f, r = 0.5f;       // constant, one-sided drive: a real DC offset
+        float sl, sr;
+        fx.process(l, r, sl, sr, v);
+        if (i < 2000)     { early_sum += fx.tape_tap(); ++early_n; }
+        if (i >= 90000)   { late_sum  += fx.tape_tap(); ++late_n; }
+    }
+    const double early_mean = early_sum / early_n;
+    const double late_mean  = late_sum  / late_n;
+    MESSAGE("early_mean=", early_mean, " late_mean=", late_mean);
+    CHECK(std::fabs(early_mean) > 0.05);                        // the DC genuinely reached the tap
+    CHECK(std::fabs(late_mean) < std::fabs(early_mean) * 0.3);  // and the block pulls it toward 0
+}
+
