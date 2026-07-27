@@ -208,6 +208,26 @@ Coefficients are linearly interpolated across the block toward their new
 targets where a step would be audible (pitch, stretch); Q and amplitude step at
 the tick like every other control-rate parameter in the engine.
 
+**Amended 2026-07-27, after implementation: the interpolation is not built, and
+the tick step is accepted.** This paragraph was not implemented and the
+omission was not noticed until the final whole-branch review (finding I-2) —
+neither the plan nor any of the thirteen task reviews mentioned it. It is
+recorded here rather than quietly dropped, because a deviation this branch did
+not decide is worse than one it did.
+
+What the step actually costs was measured, not argued: over a 10 s continuous
+pitch glide, the mean sample-to-sample difference at control-tick boundaries
+against the mean elsewhere reads **1.067 on BODY and 0.999 on SYNTH**. SYNTH
+shows nothing because a phase-continuous oscillator absorbs a parameter step;
+BODY shows a 6.7 % elevation because a delay-line length and a bank of high-Q
+resonator coefficients do not. The artifact is small and sits at the 500 Hz
+control rate.
+
+Accepted by ear on 2026-07-27, sweeping DETUNE and MATL — the two controls that
+drive the stretch and are pushed to sounding voices every tick — across their
+full travel on a ringing note. Reopen this only if a future control moves the
+stretch faster than a hand can, or if the control rate drops.
+
 A test counts coefficient recomputations per block and fails if the count
 exceeds one per control tick — the same shape of guard the `svf_lp` work
 earned.
