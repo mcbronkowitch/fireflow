@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include "util/fast_tanh.h"
 #include "util/math.h"
 
 // Bucket-brigade delay: the Holters/Parker combined model of a BBD and its
@@ -395,6 +396,64 @@ private:
     float coef_ = 1.f;
     float env_c_ = bbd_tuning::kCompFloorC;
     float env_e_ = bbd_tuning::kCompFloorE;
+};
+
+// The chain: DRIVE -> soft saturation -> compressor -> BbdLine -> expander,
+// with the feedback path re-entering BEFORE the compander so every repeat
+// pays the whole chain again.
+//
+// Drops into EchoDelay's place with the same Process(in, ...) shape -- only
+// the second argument changed meaning, from a length in samples to a clock in
+// Hz, which is the entire redesign in one signature.
+class BbdEcho {
+public:
+    BbdEcho() = default;
+    BbdEcho(const BbdEcho&) = delete;
+    BbdEcho& operator=(const BbdEcho&) = delete;
+
+    void Init(float sample_rate, float* buf, size_t max_cells) {
+        line_.Init(buf, max_cells, sample_rate);
+        comp_.Init(sample_rate);
+        feedback_ = 0.f;
+        fb_state_ = 0.f;
+        SetDrive(0.f);
+    }
+
+    void SetFeedback(float fb) { feedback_ = fb; }
+    float Feedback() const { return feedback_; }
+
+    // 0..1 -> kDriveLoDb .. kDriveHiDb into a FIXED-threshold saturator, with
+    // makeup after it so small-signal loop gain -- and therefore FEEDBACK's
+    // meaning -- does not move with DRIVE.
+    void SetDrive(float norm) {
+        const float n = clampf(norm, 0.f, 1.f);
+        const float db = bbd_tuning::kDriveLoDb
+                       + n * (bbd_tuning::kDriveHiDb - bbd_tuning::kDriveLoDb);
+        const float g = std::pow(10.f, db * 0.05f);   // control rate only
+        sat_in_ = g * (1.f / bbd_tuning::kSatCeil);
+        sat_out_ = bbd_tuning::kSatCeil / g;
+    }
+
+    void SetStages(int stages) { line_.SetStages(stages); }
+
+    float Process(float in, float clock_hz) {
+        line_.SetClock(clock_hz);
+        const float x = in + fb_state_ * feedback_;
+        // MN3005 ceiling: the loop saturates softly and then self-oscillates
+        // as a thick distorted tone rather than a screech.
+        const float sat = fast_tanh(x * sat_in_) * sat_out_;
+        const float y = comp_.Expand(line_.Process(comp_.Compress(sat)));
+        fb_state_ = y;
+        return y;
+    }
+
+private:
+    BbdLine   line_;
+    Compander comp_;
+    float feedback_ = 0.f;
+    float sat_in_ = 1.f;
+    float sat_out_ = 1.f;
+    float fb_state_ = 0.f;
 };
 
 }  // namespace spky

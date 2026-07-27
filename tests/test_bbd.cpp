@@ -1,5 +1,7 @@
 #include <doctest/doctest.h>
 #include <cmath>
+#include <vector>
+#include <algorithm>
 #include "fx/bbd.h"
 using namespace spky;
 
@@ -404,4 +406,184 @@ TEST_CASE("compander: gain is bounded in both directions") {
         REQUIRE(std::isfinite(y));
         REQUIRE(std::fabs(y) < 16.f);
     }
+}
+
+// --- BbdEcho ----------------------------------------------------------------
+
+static float s_echo_mem[8192];
+
+TEST_CASE("bbd echo: feedback produces decaying repeats") {
+    BbdEcho e;
+    e.Init(48000.f, s_echo_mem, 8192);
+    e.SetStages(8192);
+    e.SetDrive(0.f);
+    e.SetFeedback(0.5f);
+    const float hz = bbd_clock_hz(0.25f, 8192);      // 250 ms
+    std::vector<float> out(60000);
+    for (int i = 0; i < 60000; ++i)
+        out[i] = e.Process((i < 32) ? 1.f : 0.f, hz);
+    auto peak_around = [&](int c) {
+        float p = 0.f;
+        for (int i = c - 900; i < c + 900; ++i) p = std::max(p, std::fabs(out[i]));
+        return p;
+    };
+    const float p1 = peak_around(12000);
+    const float p2 = peak_around(24000);
+    const float p3 = peak_around(36000);
+    INFO("p1=" << p1 << " p2=" << p2 << " p3=" << p3);
+    CHECK(p1 > 1e-3f);
+    CHECK(p2 < p1);
+    CHECK(p3 < p2);
+}
+
+TEST_CASE("bbd echo: each repeat is darker than the last") {
+    // The feedback path re-enters BEFORE the compander, so every repeat pays
+    // the whole chain again and bandwidth shrinks multiplicatively. That is
+    // the difference between this and a delay with a one-off filter on it.
+    BbdEcho e;
+    static float mem[8192];
+    e.Init(48000.f, mem, 8192);
+    e.SetStages(8192);
+    e.SetDrive(0.f);
+    e.SetFeedback(0.7f);
+    const float hz = bbd_clock_hz(0.25f, 8192);
+    std::vector<float> out(60000);
+    for (int i = 0; i < 60000; ++i) {
+        // A burst with real high-frequency content to lose.
+        const float x = (i < 480)
+            ? 0.5f * std::sin(TWO_PI * 1500.f * static_cast<float>(i) / 48000.f)
+            : 0.f;
+        out[i] = e.Process(x, hz);
+    }
+    // High-frequency energy per repeat, measured as first-difference energy
+    // normalised by total energy -- a cheap brightness proxy that needs no FFT.
+    auto brightness = [&](int c) {
+        double hf = 0.0, tot = 0.0;
+        for (int i = c - 700; i < c + 700; ++i) {
+            const double d = out[i] - out[i - 1];
+            hf += d * d;
+            tot += (double)out[i] * out[i];
+        }
+        return tot > 0.0 ? hf / tot : 0.0;
+    };
+    const double b1 = brightness(12300);
+    const double b2 = brightness(24300);
+    INFO("b1=" << b1 << " b2=" << b2);
+    CHECK(b2 < b1);
+}
+
+TEST_CASE("bbd echo: feedback at max blooms but stays bounded") {
+    // FEEDBACK keeps its 1.2 over unity so self-oscillation stays reachable
+    // -- documented behaviour of the original. The bound now comes from
+    // saturation WITHIN the loop rather than a tanh on the read path.
+    BbdEcho e;
+    static float mem[8192];
+    e.Init(48000.f, mem, 8192);
+    e.SetStages(8192);
+    e.SetDrive(0.5f);
+    e.SetFeedback(1.2f);
+    const float hz = bbd_clock_hz(0.25f, 8192);
+    float peak = 0.f;
+    double late_sq = 0.0;
+    int late_n = 0;
+    for (int i = 0; i < 480000; ++i) {               // 10 s
+        const float y = e.Process((i < 32) ? 1.f : 0.f, hz);
+        REQUIRE(std::isfinite(y));
+        peak = std::max(peak, std::fabs(y));
+        if (i >= 432000) { late_sq += (double)y * y; ++late_n; }
+    }
+    const float late_rms = static_cast<float>(std::sqrt(late_sq / late_n));
+    INFO("peak=" << peak << " late_rms=" << late_rms);
+    CHECK(peak > 0.2f);                              // it did bloom
+    CHECK(peak < 12.f);                              // and it stayed bounded
+    CHECK(late_rms > 0.01f);                         // and it sustained
+}
+
+TEST_CASE("bbd echo: feedback below unity decays to silence") {
+    BbdEcho e;
+    static float mem[8192];
+    e.Init(48000.f, mem, 8192);
+    e.SetStages(8192);
+    e.SetDrive(0.f);
+    e.SetFeedback(0.6f);
+    const float hz = bbd_clock_hz(0.25f, 8192);
+    float early = 0.f, late = 0.f;
+    for (int i = 0; i < 480000; ++i) {
+        const float y = e.Process((i < 32) ? 1.f : 0.f, hz);
+        if (i > 11000 && i < 13000) early = std::max(early, std::fabs(y));
+        if (i > 400000) late = std::max(late, std::fabs(y));
+    }
+    CHECK(early > 1e-3f);
+    CHECK(late < early * 0.05f);
+}
+
+TEST_CASE("bbd echo: DRIVE dirties every pass, not just the input") {
+    // This is what makes DRIVE not redundant with GRIT: GRIT runs before FLUX
+    // and dirties the input once; DRIVE sits inside the loop.
+    auto harmonic_growth = [](float drive) {
+        BbdEcho e;
+        static float mem[8192];
+        e.Init(48000.f, mem, 8192);
+        e.SetStages(8192);
+        e.SetDrive(drive);
+        e.SetFeedback(0.85f);
+        const float hz = bbd_clock_hz(0.25f, 8192);
+        // A pure 200 Hz tone for one delay's worth, then silence: what comes
+        // back is the loop's own doing.
+        std::vector<float> out(140000);
+        for (int i = 0; i < 140000; ++i) {
+            const float x = (i < 12000)
+                ? 0.4f * std::sin(TWO_PI * 200.f * static_cast<float>(i) / 48000.f)
+                : 0.f;
+            out[i] = e.Process(x, hz);
+        }
+        // Compare the first repeat's waveform crest factor with the fourth's.
+        // Saturation flattens peaks: crest falls as harmonics accumulate.
+        auto crest = [&](int c) {
+            float pk = 0.f;
+            double sq = 0.0;
+            for (int i = c; i < c + 6000; ++i) {
+                pk = std::max(pk, std::fabs(out[i]));
+                sq += (double)out[i] * out[i];
+            }
+            const float rms = static_cast<float>(std::sqrt(sq / 6000.0));
+            return rms > 0.f ? pk / rms : 0.f;
+        };
+        return crest(15000) - crest(51000);          // repeat 1 vs repeat 4
+    };
+    const float clean = harmonic_growth(0.f);
+    // 0.5, not the top of the knob: delta vs DRIVE is an inverted U -- the
+    // compounding effect peaks near the middle of the range and collapses at
+    // the top, where a single pass already saturates the burst flat and
+    // leaves repeat 1 with no headroom left to compound over. Measured:
+    // dirty=0.0617 vs clean=0.0048 at drive 0.5.
+    const float dirty = harmonic_growth(0.5f);
+    INFO("clean=" << clean << " dirty=" << dirty);
+    CHECK(dirty > clean);
+}
+
+TEST_CASE("bbd echo: DRIVE does not move the small-signal loop gain") {
+    // Makeup after the saturator: FEEDBACK must mean the same thing at DRIVE
+    // 0 and DRIVE 1 for quiet material, or the two knobs fight.
+    auto tail_at = [](float drive) {
+        BbdEcho e;
+        static float mem[8192];
+        e.Init(48000.f, mem, 8192);
+        e.SetStages(8192);
+        e.SetDrive(drive);
+        e.SetFeedback(0.7f);
+        const float hz = bbd_clock_hz(0.25f, 8192);
+        float p = 0.f;
+        for (int i = 0; i < 100000; ++i) {
+            // 40 dB below the saturator's knee: nothing here should clip.
+            const float y = e.Process((i < 32) ? 0.01f : 0.f, hz);
+            if (i > 60000 && i < 64000) p = std::max(p, std::fabs(y));
+        }
+        return p;
+    };
+    const float a = tail_at(0.f);
+    const float b = tail_at(1.f);
+    INFO("a=" << a << " b=" << b);
+    REQUIRE(a > 1e-6f);
+    CHECK(b / a == doctest::Approx(1.f).epsilon(0.25));
 }
