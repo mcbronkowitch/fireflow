@@ -340,4 +340,61 @@ private:
     Cf       Xout_mem_[bbd_tuning::kFiltOrder];
 };
 
+// The NE570 pair: a 2:1 compressor before the line and a 1:2 expander after
+// it, both with tau = 10 ms. Its job is the BBD's 75 dB noise floor; its
+// audible signature is tails pulled down harder than a linear delay would
+// pull them, with the noise breathing along.
+//
+// The round trip is unity by construction, not by tuning. With a compressor
+// envelope e and reference r:
+//
+//   g_c = sqrt(r / e)                     -> out level = sqrt(e * r)
+//   the expander's own envelope is then sqrt(e * r)
+//   g_e = sqrt(e * r) / r = sqrt(e / r)
+//   g_c * g_e = 1
+//
+// It is NOT a parameter. It is tuned by ear and fixed: the device's
+// character, not a setting of it, and "compression" is already spoken for by
+// COMP on the panel.
+class Compander {
+public:
+    void Init(float sample_rate) {
+        float k = 1.f / (bbd_tuning::kCompTauS * (sample_rate > 0.f ? sample_rate : 48000.f));
+        coef_ = k > 1.f ? 1.f : k;
+        Reset();
+    }
+
+    void Reset() {
+        env_c_ = bbd_tuning::kCompFloorC;
+        env_e_ = bbd_tuning::kCompFloorE;
+    }
+
+    float Compress(float x) {
+        const float a = x < 0.f ? -x : x;
+        env_c_ += coef_ * (a - env_c_);
+        float e = env_c_;
+        if (!(e > bbd_tuning::kCompFloorC)) e = bbd_tuning::kCompFloorC;
+        return x * std::sqrt(bbd_tuning::kCompRef / e);
+    }
+
+    float Expand(float x) {
+        const float a = x < 0.f ? -x : x;
+        env_e_ += coef_ * (a - env_e_);
+        float e = env_e_;
+        if (!(e > bbd_tuning::kCompFloorE)) e = bbd_tuning::kCompFloorE;
+        if (e > bbd_tuning::kCompCeilE) e = bbd_tuning::kCompCeilE;
+        return x * (e * (1.f / bbd_tuning::kCompRef));
+    }
+
+    // Observers for tests only: the 10 ms time constant is otherwise
+    // unobservable, and "the compander breathes" is not an assertion.
+    float env_comp() const { return env_c_; }
+    float env_exp() const { return env_e_; }
+
+private:
+    float coef_ = 1.f;
+    float env_c_ = bbd_tuning::kCompFloorC;
+    float env_e_ = bbd_tuning::kCompFloorE;
+};
+
 }  // namespace spky

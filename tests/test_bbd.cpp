@@ -331,3 +331,77 @@ TEST_CASE("bbd line: a degenerate Init holds instead of writing through null") {
     for (int i = 0; i < 10000; ++i)
         CHECK(std::isfinite(line.Process(0.5f)));
 }
+
+// --- Compander --------------------------------------------------------------
+
+TEST_CASE("compander: the 10 ms time constant is measurable") {
+    // tau = 10 kOhm * 1 uF. A one-pole reaches 1 - 1/e = 63.2 % of a step in
+    // exactly tau, and this is the only place that number is observable.
+    Compander c;
+    c.Init(48000.f);
+    const float target = 0.5f;                       // |x| of a DC step
+    const int tau_samples = static_cast<int>(bbd_tuning::kCompTauS * 48000.f);
+    for (int i = 0; i < tau_samples; ++i) c.Compress(target);
+    CHECK(c.env_comp() == doctest::Approx(0.632f * target).epsilon(0.05));
+    for (int i = 0; i < 4 * tau_samples; ++i) c.Compress(target);
+    CHECK(c.env_comp() == doctest::Approx(target).epsilon(0.05));
+}
+
+TEST_CASE("compander: compress then expand is unity in steady state") {
+    // 2:1 followed by 1:2 must give back the level it was handed, or every
+    // gain staging decision downstream is built on sand. Checked at three
+    // levels spanning 30 dB.
+    for (float amp : { 0.03f, 0.1f, 0.5f }) {
+        Compander c;
+        c.Init(48000.f);
+        double in_sq = 0.0, out_sq = 0.0;
+        for (int i = 0; i < 48000; ++i) {
+            const float x = amp * std::sin(TWO_PI * 220.f * static_cast<float>(i) / 48000.f);
+            const float y = c.Expand(c.Compress(x));
+            if (i > 24000) { in_sq += (double)x * x; out_sq += (double)y * y; }
+        }
+        const float ratio = static_cast<float>(std::sqrt(out_sq / in_sq));
+        INFO("amp=" << amp << " ratio=" << ratio);
+        CHECK(ratio == doctest::Approx(1.f).epsilon(0.15));
+    }
+}
+
+TEST_CASE("compander: 2:1 really is 2:1 on the way in") {
+    // A 12 dB input change must come out as a 6 dB change from Compress
+    // alone. This is what pulls the tails down harder than a linear delay
+    // would -- the audible signature of the part.
+    auto compressed_rms = [](float amp) {
+        Compander c;
+        c.Init(48000.f);
+        double acc = 0.0;
+        for (int i = 0; i < 48000; ++i) {
+            const float x = amp * std::sin(TWO_PI * 220.f * static_cast<float>(i) / 48000.f);
+            const float y = c.Compress(x);
+            if (i > 24000) acc += (double)y * y;
+        }
+        return static_cast<float>(std::sqrt(acc / 24000.0));
+    };
+    const float lo = compressed_rms(0.05f);
+    const float hi = compressed_rms(0.2f);           // +12 dB in
+    const float db = 20.f * std::log10(hi / lo);
+    INFO("delta_db=" << db);
+    CHECK(db > 4.f);
+    CHECK(db < 8.f);
+}
+
+TEST_CASE("compander: gain is bounded in both directions") {
+    // Silence must not be amplified into the noise floor of the universe,
+    // and a loud transient must not be expanded without limit. The bounds are
+    // derived from kCompRef, not tasted -- see the constants.
+    Compander c;
+    c.Init(48000.f);
+    for (int i = 0; i < 48000; ++i) CHECK(std::isfinite(c.Compress(0.f)));
+    CHECK(std::fabs(c.Compress(1e-9f)) < 1e-6f);     // gain capped at 4
+    Compander d;
+    d.Init(48000.f);
+    for (int i = 0; i < 48000; ++i) {
+        const float y = d.Expand(3.f);
+        REQUIRE(std::isfinite(y));
+        REQUIRE(std::fabs(y) < 16.f);
+    }
+}
