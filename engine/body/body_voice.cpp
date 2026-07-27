@@ -127,6 +127,9 @@ void BodyVoice::set_cutoff_hz(float hz) {
 }
 
 void BodyVoice::_apply_params() {
+#ifdef SPKY_TESTING
+    ++_apply_calls_for_test;
+#endif
     // DETUNE on BODY is the engine's spread times kDetuneScale (spec §5).
     // Both halves of the axis read this one value: the string pair below and
     // the bank's stretch amount further down.

@@ -55,6 +55,19 @@ public:
     float env_value() const { return _follower; }
     float detune_cents() const { return _detune_ct; }
 
+#ifdef SPKY_TESTING
+    // Counts entries into _apply_params() itself -- NOT a primitive's own
+    // coeff_updates() (ModeBank/KsString), which only increments when a
+    // value actually CHANGED. That indirection is exactly what would hide a
+    // per-sample caller that keeps re-entering with unchanged numbers (I-1,
+    // final review, 2026-07-26-body-resonator-engine/final-review.md). This
+    // counter answers "how often does the parameter block itself run",
+    // which is the spec §4 claim, directly. Test-only, like the SPKY_TESTING
+    // accessors in engine/instrument.h, engine/mod/lane.h and
+    // engine/mod/super_modulator.h.
+    int apply_params_calls_for_test() const { return _apply_calls_for_test; }
+#endif
+
 private:
     void _apply_params();
 
@@ -80,6 +93,10 @@ private:
     float _drift_ct_cur = 0.f;
     int   _hold_samples = 0;
     bool  _sustaining = false, _hold = false;
+
+#ifdef SPKY_TESTING
+    int _apply_calls_for_test = 0;
+#endif
 };
 
 } // namespace spky

@@ -564,6 +564,117 @@ static std::vector<float> detune_render(float ct, int n) {
     return out;
 }
 
+// --- I-1 (final review): the CADENCE of BodyVoice's parameter block -------
+//
+// Spec §4: "A test counts coefficient recomputations per block and fails if
+// the count exceeds one per control tick." The idempotence tests on the
+// primitives (test_mode_bank.cpp:73, test_ks_string.cpp:134) check a
+// DIFFERENT claim: calling set_params twice with the SAME arguments does not
+// recompute twice. That is not this claim, and their own dirty check is
+// exactly what would HIDE the gap this test is for: a caller that re-enters
+// _apply_params() every sample, always with the same numbers, would leave
+// ModeBank::coeff_updates()/KsString::coeff_updates() completely flat -- so
+// asserting on those counters could pass on a broken build for the same
+// reason the idempotence tests already do.
+//
+// This test instead counts entries into BodyVoice::_apply_params() itself
+// (apply_params_calls_for_test(), SPKY_TESTING-only, body_voice.h/.cpp), so
+// a per-sample caller cannot hide behind any primitive's dirty check. DETUNE
+// is also driven to a genuinely MOVING value every control tick (not
+// idempotent re-entry) so the test does not accidentally depend on the
+// primitives' dirty checks either.
+//
+// Reviewer's mutation: add a call to _apply_params() at the top of
+// BodyVoice::process() (one added line, the whole parameter block now on
+// the per-sample path). Measured numbers from applying that exact mutation
+// are recorded in final-fix-report.md.
+TEST_CASE("BodyVoice recomputes params at most once per control tick") {
+    BodyVoice v;
+    fresh_voice(v, 0.5f);
+    v.trigger(220.f);
+
+    constexpr int kCtrlInterval = 96;
+    constexpr int n = kCtrlInterval * 100;   // 100 control ticks, 200 ms
+    const int calls_before = v.apply_params_calls_for_test();
+    for (int i = 0; i < n; ++i) {
+        if (i % kCtrlInterval == 0) {
+            // A genuinely moving control, not idempotent re-entry: DETUNE
+            // walks a slow sine every tick so a per-sample caller cannot
+            // hide behind ModeBank's/KsString's own dirty checks.
+            v.set_detune_cents(10.f + 5.f * std::sin(i * 0.01f));
+            v.update_control(float(kCtrlInterval) / 48000.f);
+        }
+        float l = 0.f, r = 0.f;
+        v.process(l, r);
+    }
+    const int calls = v.apply_params_calls_for_test() - calls_before;
+    CAPTURE(calls);
+    // One call per control tick (n / kCtrlInterval == 100 of them), plus one
+    // of slack for a boundary tick. Nothing on this path may call
+    // _apply_params() from process().
+    CHECK(calls <= n / kCtrlInterval + 1);
+}
+
+// --- I-3 (final review): the RESO ping zone must actually be wired in -----
+//
+// engine/body/body_voice.cpp's _apply_params() calls
+// _exciter.set_freq(_freq) -- the ONLY thing that ever gives Exciter::_inc a
+// non-zero value (engine/body/exciter.h). Delete that one call and _inc
+// stays 0 forever: at RESO 1 (pure ping, Exciter::process()'s zone 2 with
+// t == 1) the ping term is fast_sin(phase-that-never-advances) == 0 every
+// sample. fresh_voice() leaves SUB at 0 (the excitation bus is hard-gated
+// off, spec §6), so the exciter is the ONLY thing driving the strings and
+// the mode bank -- with it silent, drive is exactly 0.f every sample, and
+// every downstream stage here is a linear filter starting from rest, so the
+// WHOLE voice is exactly, bit-for-bit silent.
+//
+// test_body_voice.cpp's own "Exciter ping zone tracks the fundamental"
+// (above) cannot see this: it constructs an Exciter directly and calls
+// set_freq itself, so it tests the primitive, never BodyVoice's wiring to
+// it. test_part.cpp's RESO 0 vs RESO 1 render-differs check cannot see it
+// either: silence differs from a click just as well as a ping does.
+//
+// The floor here is not fitted to today's output: it is the plainest
+// possible one, exact non-zero energy, which is also literally the
+// reviewer's own description of the defect ("a BODY deck is silent"). Every
+// stage between the exciter and the output is a linear filter with zero
+// initial state (KsString/ModeBank driven only by "drive", no free-running
+// energy source at MATL 0.5 -- dispersion noise only turns on at MATL
+// >= 0.75, Minor 3), so "the exciter never contributes" and "measured
+// energy is exactly 0.0" are the same fact, not an approximation of it.
+static double body_voice_reso1_energy(float hz) {
+    BodyVoice v;
+    fresh_voice(v, 0.5f);      // SUB stays 0: the exciter is the ONLY
+                                // excitation source reaching the voice here.
+    v.set_resonance(1.f);      // RESO 1: pure ping zone (t == 1 in Exciter::process())
+    v.update_control(96.f / 48000.f);
+    v.trigger(hz);
+    float el = 0.f, er = 0.f;
+    tick(v, 9600, &el, &er);   // 200 ms: well past the strike transient
+    return double(el) + double(er);
+}
+
+TEST_CASE("BodyVoice at RESO 1 is audible") {
+    const double energy = body_voice_reso1_energy(220.f);
+    CAPTURE(energy);
+    // Exact non-zero, not a small-epsilon bound: see the comment above for
+    // why "the ping never contributes" and "energy is exactly 0.0" coincide
+    // here.
+    CHECK(energy > 0.0);
+}
+
+TEST_CASE("BodyVoice at RESO 1's energy is pitch-dependent") {
+    const double e_low  = body_voice_reso1_energy(220.f);
+    const double e_high = body_voice_reso1_energy(1760.f);
+    CAPTURE(e_low);
+    CAPTURE(e_high);
+    CHECK(e_low > 0.0);
+    CHECK(e_high > 0.0);
+    // Under the deleted-wiring mutation both readings are exactly 0.0 == 0.0
+    // (see above); a live ping excites two different structures differently.
+    CHECK(e_low != e_high);
+}
+
 TEST_CASE("BodyVoice: DETUNE's ceiling is exactly the bank's ceiling") {
     // SynthEngineT::kDetuneCeilCt -- the most any engine ever pushes.
     constexpr float kEngineCeilCt = 35.f;

@@ -15,6 +15,7 @@
 #include "synth/synth_engine.h"
 #include "synth_engine_contract.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <vector>
