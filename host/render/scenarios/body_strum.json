@@ -1,0 +1,46 @@
+{
+  "_comment": "Task 12 listening render 1/3 (task-12-brief-addendum.md section C). BODY on part A, STEP plucking every ~2s. SOURCE (slot 0) is MATL here, swept 0 -> 0.5 -> 1.0 across three 8 s sections: plucked harp (string-dominant) -> prepared piano (blend) -> struck bells (modal-dominant). This is NOT a four-note chord strum: BodyVoice::kEngineVoices == 1, so trigger_chord keeps only the root (synth_engine.cpp's n > kVoices clamp). What COLOR does here is move the chord's QUALITY the layer would have voiced -- read as chord_character and used to bend the mode bank's inharmonicity direction (spec section 5/section 7 amendment 2) -- so the material sweep is real even though only one note ever sounds. DETUNE is left nonzero on purpose: at DETUNE = 0 the stretch product is zero and COLOR's bend is inaudible (section 7 amendment 2), which would make this scenario silently fail to demonstrate the thing its own COLOR events claim to move.",
+  "sample_rate": 48000,
+  "bpm": 100,
+  "duration_s": 24,
+  "init": [
+    {"action":"set_engine","part":0,"value":"body"},
+    {"action":"set_engine","part":1,"value":"test_tone"},
+    {"_comment":"Part B silenced: default lanes would otherwise siren its own pitch."},
+    {"action":"set_target_active","part":1,"slot":4,"flag":false},
+    {"action":"set_target_base","part":1,"slot":4,"value":0.0},
+
+    {"action":"set_sync","ivalue":1},
+    {"action":"set_rate","part":0,"value":0.2},
+    {"action":"set_step","part":0,"flag":true,"ivalue":8},
+    {"action":"set_shape","part":0,"value":0.4},
+    {"action":"set_density","part":0,"value":0.7},
+
+    {"_comment":"Exciter: short click, moderate ring -- a pluck, not a bow."},
+    {"action":"set_voice_attack","part":0,"value":0.05},
+    {"action":"set_voice_decay","part":0,"value":0.55},
+    {"action":"set_voice_resonance","part":0,"value":0.1},
+    {"action":"set_voice_filt","part":0,"value":0.6},
+    {"action":"set_voice_detune","part":0,"value":0.6},
+    {"_comment":"SUB (excitation bus level) left at 0: this scenario is about MATL and chord quality, not the excitation bus -- SUB = 0 hard-gates that whole path (spec section 6), which keeps this render free of a second variable."},
+    {"action":"set_voice_sub","part":0,"value":0.0},
+
+    {"action":"set_target_active","part":0,"slot":0,"flag":true},
+    {"action":"set_target_base","part":0,"slot":0,"value":0.0},
+    {"action":"set_target_depth","part":0,"slot":0,"value":0.0},
+    {"action":"set_color","part":0,"value":0.0},
+
+    {"_comment":"LEVEL pinned high and steady, for a deterministic non-modulated level. Note for the listening pass: this did NOT raise the peak (still ~-24 dBFS/0.056 -- checked while building this render) -- LEVEL is not what is quiet here, the click-zone pluck patch itself (ATTACK .05 / DECAY .55 / RESO .1) is just intrinsically low-output relative to body_bow's continuous exciter. Worth knowing before judging the MATL sweep by ear: turn the monitor up rather than assume this scenario failed to trigger."},
+    {"action":"set_target_active","part":0,"slot":4,"flag":false},
+    {"action":"set_target_base","part":0,"slot":4,"value":0.9}
+  ],
+  "events": [
+    {"_comment":"0-8s: plucked harp -- string-dominant, near-harmonic (COLOR at minimum is the base stretch direction, spec section 7 amendment 2)."},
+    {"t":8.0,"action":"set_target_base","part":0,"slot":0,"value":0.5},
+    {"t":8.0,"action":"set_color","part":0,"value":0.5},
+    {"_comment":"8-16s: prepared piano -- string/modal blend, chord quality bending toward a more broken ratio."},
+    {"t":16.0,"action":"set_target_base","part":0,"slot":0,"value":1.0},
+    {"t":16.0,"action":"set_color","part":0,"value":1.0},
+    {"_comment":"16-24s: struck bells -- modal-dominant, most-stretched chord quality."}
+  ]
+}

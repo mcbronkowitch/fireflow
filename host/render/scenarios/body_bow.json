@@ -1,0 +1,40 @@
+{
+  "_comment": "Task 12 listening render 2/3 (task-12-brief-addendum.md section E). BODY on part A, left in FLOW (set_step is never called for part 0, so Part::flow() stays true -- 'lanes boot in FLOW -> drone', part.cpp/test_instrument.cpp). RESO sits in the noise-burst zone (0.33 <= c < 0.67, engine/body/exciter.h) -- a bowed character once FLOW makes the exciter continuous. FLUX tape is on with mix 1.0 and the excitation bus reads only the tape source, so SUB (excitation bus level) sweeping up feeds this deck's own delayed output back into its own resonator: single-deck self-oscillation, the other territory spec section 6 names ('high SUB + echo feedback... intended but bounded'). RATE is deliberately left at its default here, NOT zeroed: an untouched FLOW lane re-fires trigger_chord on every lane wrap (engine/mod/lane.cpp _on_boundary: FLOW has no per-step gate), so this drone is actually a repeated re-strike roughly every 1.3s, not one continuous bow -- found while building this render (task-12 report). That turns out to be load-bearing for CHOKE: test_choke.cpp's own proven mechanism is blocking new gate onsets, and this scenario's 20s CHOKE dip in the CSV (a_v0) is that mechanism at work. A separate check (isolating CHOKE from the retrigger and the SUB bus both, task-12 report) found BodyVoice's own 'palm mute' damping override (body_voice.cpp's _hold branch, spec section 5's 'damping snaps high') produces NO measurable change in voice_env by itself -- worth a closer look, not something this task's constraints let it chase further. Part B is left completely untouched (default engine, no set_step call), which is deliberate: Part::flow() is true for it by construction, and that alone is what CHOKE's priority window reads (instrument.cpp: window = pri.gate() || pri.flow()) -- so the set_choke event at 20s needs no setup on part B to duck part A at the end.",
+  "sample_rate": 48000,
+  "bpm": 90,
+  "duration_s": 24,
+  "init": [
+    {"action":"set_engine","part":0,"value":"body"},
+    {"action":"set_engine","part":1,"value":"test_tone"},
+    {"_comment":"Part B silenced audibly (LEVEL off) but its FLOW state is untouched -- see the top comment for why that matters for CHOKE."},
+    {"action":"set_target_active","part":1,"slot":4,"flag":false},
+    {"action":"set_target_base","part":1,"slot":4,"value":0.0},
+
+    {"_comment":"Exciter: long bowed swell, noise-zone character, moderate brightness/inharmonicity."},
+    {"action":"set_voice_attack","part":0,"value":0.9},
+    {"action":"set_voice_decay","part":0,"value":0.85},
+    {"action":"set_voice_resonance","part":0,"value":0.5},
+    {"action":"set_voice_filt","part":0,"value":0.5},
+    {"action":"set_voice_detune","part":0,"value":0.3},
+    {"action":"set_target_active","part":0,"slot":0,"flag":true},
+    {"action":"set_target_base","part":0,"slot":0,"value":0.2},
+    {"action":"set_target_depth","part":0,"slot":0,"value":0.0},
+
+    {"action":"set_fx_on","part":0,"value":"flux","flag":true},
+    {"action":"set_flux_mix","part":0,"value":1.0},
+    {"_comment":"Excitation bus: tape only, self-feedback within this one deck."},
+    {"action":"set_excitation_sources","part":0,"flag":true,"ivalue":0},
+    {"action":"set_voice_sub","part":0,"value":0.0}
+  ],
+  "events": [
+    {"_comment":"0-4s: bus closed, the bare bowed drone."},
+    {"t":4.0,"action":"set_voice_sub","part":0,"value":0.3},
+    {"_comment":"4-10s: bus opening, feedback starts to color the drone."},
+    {"t":10.0,"action":"set_voice_sub","part":0,"value":0.6},
+    {"_comment":"10-16s: well into feedback territory."},
+    {"t":16.0,"action":"set_voice_sub","part":0,"value":1.0},
+    {"_comment":"16-20s: SUB at max -- tape self-oscillation, bounded by the post-sum soft clip and the SUB^2 gain cap (spec section 6)."},
+    {"t":20.0,"action":"set_choke","value":1.0},
+    {"_comment":"20-24s: CHOKE mirrors (part.h set_inhibit / body_voice.h set_hold: 'the same + palm mute' from spec section 5) -- part A yields to part B's untouched FLOW state, damping snaps high and the drone/feedback ducks out."}
+  ]
+}

@@ -494,3 +494,81 @@ TEST_CASE("scenario: body engine spelling selects ENGINE_BODY") {
     }
     CHECK(inst.engine_id(0) == ENGINE_BODY);
 }
+
+// Task 12: body_sympathetic.json needs the excitation bus source flags
+// reachable from a scenario (task-12-brief-addendum.md §B -- no action for
+// Instrument::set_excitation_sources existed before this task). Parity
+// against a direct call, PLUS a divergence check against an instrument that
+// never got the event, so a dispatch line that silently does nothing (the
+// exact defect shape task-10 and task-8 already caught once each on this
+// branch) cannot pass this test by accident -- see the mutation run in the
+// task-12 report.
+TEST_CASE("scenario: set_excitation_sources dispatches all three flags") {
+    Instrument via_event, direct, untouched;
+    for (Instrument* inst : { &via_event, &direct, &untouched }) {
+        inst->init(48000.f);
+        inst->set_engine(PART_A, ENGINE_SYNTH);
+        inst->set_engine(PART_B, ENGINE_BODY);
+        inst->set_voice_sub(PART_B, 1.f);
+    }
+    Event e;
+    e.action = "set_excitation_sources";
+    e.part   = PART_B;
+    e.flag   = true;    // tape
+    e.ivalue = 3;        // bit0 other_deck, bit1 audio_in -- all three on
+    apply_event(via_event, e);
+    direct.set_excitation_sources(PART_B, true, true, true);
+    // untouched keeps the boot default (tape on, other_deck/audio_in off).
+
+    float vl = 0.f, vr = 0.f, dl = 0.f, dr = 0.f, ul = 0.f, ur = 0.f;
+    bool diverged_from_untouched = false;
+    for (int i = 0; i < 48000; ++i) {
+        via_event.process(nullptr, nullptr, &vl, &vr, 1);
+        direct.process(nullptr, nullptr, &dl, &dr, 1);
+        untouched.process(nullptr, nullptr, &ul, &ur, 1);
+        REQUIRE(vl == dl);
+        REQUIRE(vr == dr);
+        if (vl != ul || vr != ur) diverged_from_untouched = true;
+    }
+    // Sanity: enabling the extra two sources actually changed something --
+    // otherwise the parity check above would still pass with the dispatch
+    // line missing entirely (both sides silently no-op'd the same way).
+    CHECK(diverged_from_untouched);
+}
+
+// Task 12: body_bow.json's "CHOKE at the end" (task-12-brief-addendum.md §E)
+// needs CHOKE reachable from a scenario too -- Instrument::set_choke had no
+// action before this task (a second gap the addendum's file list didn't
+// name; see the task-12 report). Same parity + divergence shape as the
+// excitation test above, mirroring test_choke.cpp's own "+1 is the mirror"
+// case so this is proven against known-good CHOKE behaviour, not just "some
+// value changed."
+TEST_CASE("scenario: set_choke dispatches the priority knob") {
+    Instrument via_event, direct, untouched;
+    for (Instrument* inst : { &via_event, &direct, &untouched }) {
+        inst->init(48000.f);
+        for (int p = 0; p < PART_COUNT; ++p) {
+            inst->set_rate(p, p == PART_A ? 0.8f : 0.9f);
+            inst->set_density(p, 1.f);
+            inst->set_range(p, 1.f);
+        }
+    }
+    Event e;
+    e.action = "set_choke";
+    e.value  = 1.f;    // "+1 is the mirror: A yields to B" (test_choke.cpp)
+    apply_event(via_event, e);
+    direct.set_choke(1.f);
+    // untouched keeps choke at the boot default (0 -- no priority effect).
+
+    float vl = 0.f, vr = 0.f, dl = 0.f, dr = 0.f, ul = 0.f, ur = 0.f;
+    bool diverged_from_untouched = false;
+    for (int i = 0; i < 48000; ++i) {
+        via_event.process(nullptr, nullptr, &vl, &vr, 1);
+        direct.process(nullptr, nullptr, &dl, &dr, 1);
+        untouched.process(nullptr, nullptr, &ul, &ur, 1);
+        REQUIRE(vl == dl);
+        REQUIRE(vr == dr);
+        if (vl != ul || vr != ur) diverged_from_untouched = true;
+    }
+    CHECK(diverged_from_untouched);
+}
