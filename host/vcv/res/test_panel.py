@@ -47,7 +47,7 @@ PARAM_ORDER = [
     'MASTER_DRIVE', 'SETTLE', 'REV_SIZE', 'REV_DECAY', 'REV_TONE',
     'REV_DIFF', 'REV_SMEAR', 'REV_MOD', 'CHOKE', 'FILT_A', 'FILT_B', 'TIDE',
     'FLUXRATE_A', 'FLUXRATE_B', 'FLUXFB_A', 'FLUXFB_B', 'COLOR_A', 'COLOR_B',
-    'DUST_A', 'DUST_B', 'ROT_A', 'ROT_B',
+    'DRIVE_A', 'DRIVE_B', 'STAGES_A', 'STAGES_B',
     'REC_A', 'REC_B', 'REV_MIX_A', 'REV_MIX_B',
     'SHUFFLE', 'DETUNE_A', 'DETUNE_B',
 ]
@@ -61,7 +61,7 @@ PARAM_TIPS = [
     'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'DRIVE',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
     'FILT', 'FILT', 'TIDE', 'FRATE', 'FRATE', 'FFB', 'FFB', 'COLOR',
-    'COLOR', 'DUST', 'DUST', 'ROT', 'ROT', 'REC', 'REC', 'ROOM', 'ROOM',
+    'COLOR', 'DRIV', 'DRIV', 'STGS', 'STGS', 'REC', 'REC', 'ROOM', 'ROOM',
     'SHUFL', 'Detune A', 'Detune B',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
@@ -180,29 +180,32 @@ def test_param_runtime_tip_contract():
               f"want {caption!r}/{tip!r}")
 
 
-def test_dust_params():
-    """DUST/ROT are appended at the end of PARAMS, not templated into
+def test_bbd_voicing_params():
+    """DRIVE/STAGES are appended at the end of PARAMS, not templated into
     part_controls() -- appending keeps PART_STRIDE unchanged so SONG_A/B,
-    every part-B id and every already-appended tail param keep their id."""
+    every part-B id and every already-appended tail param keep their id.
+    They were renamed in place from DUST/ROT (spec 2026-07-27 flux-bbd-delay):
+    the POSITIONS are what saved patches depend on, and they did not move."""
     check(g.PART_STRIDE == 23, "PART_STRIDE must stay 23")
     ids = {c.enum: i for i, c in enumerate(g.PARAMS)}
-    for e in ("DUST_A", "DUST_B", "ROT_A", "ROT_B"):
+    for e in ("DRIVE_A", "DRIVE_B", "STAGES_A", "STAGES_B"):
         check(e in ids, f"{e} missing")
         check(ids[e] >= 2 * g.PART_STRIDE, f"{e} must be appended, not templated")
+    # The rename must not have reordered them: COLOR_B then DRIVE_A, DRIVE_B,
+    # STAGES_A, STAGES_B, then REC_A. A reorder here silently remaps every
+    # saved patch's two FLUX voicing knobs onto each other.
+    check(ids["DRIVE_A"] == ids["COLOR_B"] + 1, "DRIVE_A must follow COLOR_B")
+    check(ids["STAGES_B"] + 1 == ids["REC_A"], "REC_A must follow STAGES_B")
 
 
-def test_dust_rot_kind():
-    """DUST/ROT must render as the small knob (GLYPH_R[SMKNOB] = 3.0 mm), not
-    the big knob (GLYPH_R[BIGKNOB] = 4.2 mm) -- a SMKNOB->BIGKNOB typo grows
-    the glyph radius by 1.2 mm and still clears test_no_overlap's minimum
-    spacing in the FX row by 0.43 mm, so it would ship silently without a kind
-    pin of its own. Same idiom as test_header_carries_label_columns's
-    RATE_A/WK_BIGKNOB check -- read the actual generated header string, not
-    g.PARAMS' in-memory `.kind`, so a generator bug that diverges the two
-    still fails here (two previous panel guards on this project asserted
-    against strings the generator never emits and were vacuous on arrival)."""
+def test_bbd_voicing_kind():
+    """DRIVE/STAGES must render as the small knob (GLYPH_R[SMKNOB] = 3.0 mm),
+    not the big knob (4.2 mm) -- a SMKNOB->BIGKNOB typo still clears
+    test_no_overlap's minimum spacing by 0.43 mm, so it would ship silently
+    without a kind pin of its own. Read the generated header string, not
+    g.PARAMS' in-memory `.kind`."""
     h = g.header()
-    for enum in ("DUST_A", "DUST_B", "ROT_A", "ROT_B"):
+    for enum in ("DRIVE_A", "DRIVE_B", "STAGES_A", "STAGES_B"):
         check(h.count(f"{{{enum}, WK_SMKNOB,") == 1,
               f"{enum} is not WK_SMKNOB in the generated header")
 
@@ -218,7 +221,7 @@ def test_rec_params():
     for e in ("REC_A", "REC_B"):
         check(e in ids, f"{e} missing")
         check(ids[e] >= 2 * g.PART_STRIDE, f"{e} must be appended, not templated")
-    check(ids["REC_A"] > ids["ROT_B"], "REC must append AFTER the existing tail")
+    check(ids["REC_A"] > ids["STAGES_B"], "REC must append AFTER the existing tail")
     h = g.header()
     for e in ("REC_A", "REC_B"):
         check(h.count(f"{{{e}, WK_LATCH,") == 1,
@@ -523,7 +526,7 @@ LOWER_A = {   # enum -> (x, y)   part A; part B is W - x
     'DECAY_A': (9.25, 89.40), 'RES_A': (19.75, 89.40), 'SOURCE_A': (30.25, 89.40),
     'FLUXRATE_A': (44.25, 77.30), 'FLUX_A': (54.75, 77.30),
     'FLUXFB_A': (65.25, 77.30), 'REV_MIX_A': (75.75, 77.30),
-    'DUST_A': (44.25, 89.40), 'ROT_A': (54.75, 89.40),
+    'DRIVE_A': (44.25, 89.40), 'STAGES_A': (54.75, 89.40),
     'GRIT_A': (65.25, 89.40), 'COMP_A': (75.75, 89.40),
     'ENGINE_A': (10.00, 103.60), 'GRITMODE_A': (17.50, 103.60),
     'STEPS_A': (37.00, 103.60), 'STEP_A': (46.00, 103.60),
@@ -1251,7 +1254,7 @@ def test_sampler_preset_init_snapshot():
         0.2370000034570694, 0.0, 0.064333423972129822,
         -0.2460000067949295, 0.5, 0.39272749423980713,
         0.36363637447357178, 0.28566798567771912,
-        0.43933644890785217, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0,
+        0.43933644890785217, 0.0, 0.0, 0.15, 0.15, 0.8, 0.8,
         0.0, 0.0, 0.43066525459289551, 0.21200035512447357, 1.0,
         0.171428576, 0.171428576,
     ]

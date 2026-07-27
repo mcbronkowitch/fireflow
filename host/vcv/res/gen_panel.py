@@ -194,10 +194,11 @@ ROW_V1, ROW_V2 = 77.3, 89.4
 SOURCE_CAPTIONS = {0: "TIMB", 1: "ORG", 2: "FRAME", 3: "MATL"}
 # 4-wide, aligned to FX_BOT so the FX box's two rows flush: RATE MIX FB ROOM.
 FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # RATE MIX FB | ROOM (per-deck reverb mix)
-# FX bottom row went from two slots to four (spec 2026-07-18 dust-grain-cloud):
-# DUST ROT GRIT COMP. Pitch 10.50 mm against a 3.0 mm knob radius, so the
+# FX bottom row went from two slots to four (spec 2026-07-18 dust-grain-cloud);
+# the left two were renamed in place when FLUX became a BBD (spec 2026-07-27):
+# DRIVE STAGES GRIT COMP. Pitch 10.50 mm against a 3.0 mm knob radius, so the
 # 6.0 mm minimum in test_no_overlap still has room to spare.
-FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # DUST ROT | GRIT COMP
+FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # DRIV STGS | GRIT COMP
 PLAY_Y   = 103.6
 # The PLAY row's left block re-spaced to seat REC between GRIT and STEPS
 # (spec 2026-07-18 "VCV layer": REC is the only new panel element). All four
@@ -395,16 +396,16 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     # sits in the PITCH sector. Still appended LAST: order defines the param id.
     color_ctl("_A", False),
     color_ctl("_B", True),
-    # DUST / ROT: two read taps on the FLUX tape, placed by the other bank's
-    # rhythm (spec 2026-07-20 rhythm-fed-delay-taps; supersedes the 2026-07-18
-    # dust-grain-cloud design). Appended LAST like FILT/TIDE/FLUXRATE/COLOR so
-    # existing .vcv patches keep their param ids; the coordinates fill the
-    # left two slots of the widened FX bottom row, right under the delay
-    # cluster they feed off.
-    Ctl("DUST_A", SMKNOB, FX_BOT[0],     ROW_V2, "DUST"),
-    Ctl("DUST_B", SMKNOB, W - FX_BOT[0], ROW_V2, "DUST"),
-    Ctl("ROT_A",  SMKNOB, FX_BOT[1],     ROW_V2, "ROT"),
-    Ctl("ROT_B",  SMKNOB, W - FX_BOT[1], ROW_V2, "ROT"),
+    # DRIVE / STAGES: the BBD's two voicing controls (spec 2026-07-27
+    # flux-bbd-delay). Renamed IN PLACE from DUST / ROT -- same positions,
+    # same param ids, PART_STRIDE untouched, so every already-saved .vcv
+    # keeps every id it has. A patch's old DUST value lands in DRIVE and its
+    # old ROT value in STAGES; it sounds different, which full replacement
+    # already conceded.
+    Ctl("DRIVE_A",  SMKNOB, FX_BOT[0],     ROW_V2, "DRIV"),
+    Ctl("DRIVE_B",  SMKNOB, W - FX_BOT[0], ROW_V2, "DRIV"),
+    Ctl("STAGES_A", SMKNOB, FX_BOT[1],     ROW_V2, "STGS"),
+    Ctl("STAGES_B", SMKNOB, W - FX_BOT[1], ROW_V2, "STGS"),
     # M5b: REC, the one new panel element of the texture deck. Appended LAST
     # so REC_A/REC_B take fresh trailing ids and PART_STRIDE stays 23 -- every
     # already-saved .vcv keeps every param id it has.

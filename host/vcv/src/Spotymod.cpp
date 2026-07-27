@@ -52,23 +52,27 @@ struct FluxFbQuantity : ParamQuantity {
     }
 };
 
-// ROT tooltip: how far apart the two taps are spread spectrally. 0 = both
-// filters open and the taps read as a plain two-tap delay; 1 = tap 0 dark,
-// tap 1 bright, which is what stops them sounding like the echo.
-struct RotQuantity : ParamQuantity {
+// STAGES tooltip: the physical stage count of the virtual chip. 8192 is a
+// pair of MN3005s, i.e. a Deluxe Memory Man; below that the line gets darker
+// and grainier at the same delay time, above it cleaner and faster.
+struct StagesQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
-        return string::f("SPREAD %.0f%%", getValue() * 100.f);
+        const float n = getValue();
+        const float s = static_cast<float>(spky::Flux::kMinStages)
+            * std::pow(static_cast<float>(spky::Flux::kMaxStages)
+                       / spky::Flux::kMinStages, n);
+        return string::f("%.0f stages", s);
     }
 };
 
-// DUST tooltip: the tap morph. Tap 0 fades in over the first half of the
-// knob, tap 1 over the second, so the middle is an accent hierarchy.
-struct DustQuantity : ParamQuantity {
+// DRIVE tooltip: gain into a fixed saturation threshold, INSIDE the feedback
+// loop -- so each repeat saturates again. Not redundant with GRIT, which runs
+// before FLUX and dirties the input once.
+struct DriveQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
-        const float d = getValue();
-        if (d <= 0.f) return "OFF";
-        if (d < 0.5f) return string::f("1 TAP %.0f%%", d * 200.f);
-        return string::f("2 TAPS %.0f%%", (d - 0.5f) * 200.f);
+        const float db = spky::bbd_tuning::kDriveLoDb
+            + getValue() * (spky::bbd_tuning::kDriveHiDb - spky::bbd_tuning::kDriveLoDb);
+        return string::f("%+.1f dB", db);
     }
 };
 
@@ -229,10 +233,10 @@ struct Spotymod : Module {
                         configParam<FluxRateQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == FLUXFB_A || c.id == FLUXFB_B)
                         configParam<FluxFbQuantity>(c.id, 0.f, 1.f, init, lbl);
-                    else if (c.id == DUST_A || c.id == DUST_B)
-                        configParam<DustQuantity>(c.id, 0.f, 1.f, init, lbl);
-                    else if (c.id == ROT_A || c.id == ROT_B)
-                        configParam<RotQuantity>(c.id, 0.f, 1.f, init, lbl);
+                    else if (c.id == DRIVE_A || c.id == DRIVE_B)
+                        configParam<DriveQuantity>(c.id, 0.f, 1.f, init, lbl);
+                    else if (c.id == STAGES_A || c.id == STAGES_B)
+                        configParam<StagesQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == SOURCE_A || c.id == SOURCE_B) {
                         auto* source = configParam(
                             c.id, 0.f, 1.f, init,
@@ -395,8 +399,8 @@ struct Spotymod : Module {
             inst.set_grit_mix(p, pp(GRIT_A, p));
             // Appended params are outside the stride, so pp() would compute the
             // wrong id — the explicit ternary is required (see FLUXRATE/FLUXFB).
-            inst.set_dust(p, params[p ? DUST_B : DUST_A].getValue());
-            inst.set_rot(p, params[p ? ROT_B : ROT_A].getValue());
+            inst.set_drive(p, params[p ? DRIVE_B : DRIVE_A].getValue());
+            inst.set_stages(p, params[p ? STAGES_B : STAGES_A].getValue());
             // The FX blocks are gated by an explicit on/off (a pad on hardware,
             // a scenario action on the desktop). VCV has no such pad, so the mix
             // knob doubles as the on switch: knob up == engaged. At 0 the block

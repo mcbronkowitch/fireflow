@@ -3,6 +3,9 @@
 namespace spkyvcv {
 
 // Panel snapshot from sampler.vcvm (2026-07-24), in stable ParamId order.
+// DRIVE_A/B and STAGES_A/B are the exception: those four were set deliberately
+// for the BBD redesign (spec 2026-07-27 flux-bbd-delay), not carried from the
+// snapshot -- do not "restore" them to the old DUST/ROT value of 1.0.
 static constexpr float kInitParamDefaults[] = {
      0.204668641f, // RATE_A
      0.615999997f, // SHAPE_A
@@ -75,10 +78,10 @@ static constexpr float kInitParamDefaults[] = {
      0.439336449f, // FLUXFB_B
      0.000000000f, // COLOR_A
      0.000000000f, // COLOR_B
-     1.000000000f, // DUST_A
-     1.000000000f, // DUST_B
-     1.000000000f, // ROT_A
-     1.000000000f, // ROT_B
+     0.150000000f, // DRIVE_A   -- starts low: clean repeats, dirt on demand
+     0.150000000f, // DRIVE_B
+     0.800000000f, // STAGES_A  -- 512 * 32^0.8 == 8192, a Memory Man
+     0.800000000f, // STAGES_B
      0.000000000f, // REC_A
      0.000000000f, // REC_B
      0.430665255f, // REV_MIX_A
