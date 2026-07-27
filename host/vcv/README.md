@@ -277,8 +277,8 @@ stale WAV sitting in patch storage.
   already sitting in the buffer is varispeed, not a bug.
 - **Memory:** each `Spotymod` instance allocates well over its two 42 s
   stereo record buffers up front, whether or not the sampler is ever used on
-  either part — closer to **42 MB total**, not the 32 MB the record buffers
-  alone account for:
+  either part — closer to **~38.66 MB total**, not the 32 MB the record
+  buffers alone account for:
   - ~32 MB — the two 42 s stereo sampler record buffers (`samplerMem`).
   - ~131 KB — the per-part stereo echo buffers the FX chain requires
     (`echo[]`: `2 × 2 × 8192` floats = 131,072 B), unrelated to the

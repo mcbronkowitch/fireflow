@@ -7,9 +7,15 @@ namespace spky {
 // the sample distances between its last three gated boundaries, most recent
 // first, as latched at the lane's last cycle wrap.
 //
-// Lives in the mod layer, NOT in fx/taps.h, because the mod layer must not
-// include fx headers -- the same layering rule that keeps SynthEngine out of
-// ModLane (see the static_assert in parts/part.cpp). fx/taps.h includes this.
+// Lives in the mod layer, NOT alongside any fx header, because the mod layer
+// must not include fx headers -- the same layering rule that keeps
+// SynthEngine out of ModLane (see the static_assert in parts/part.cpp).
+// `fx/taps.h` was the fx-side consumer that needed this view (read via
+// `SuperModulator::rhythm()`, engine/instrument.h); it is deleted -- a BBD
+// has no read pointer, docs/superpowers/plans/2026-07-27-flux-bbd-delay.md
+// Task 6 -- so nothing under fx/ currently includes this header. The
+// layering rule stands regardless, should a future fx consumer of
+// RhythmView appear.
 //
 // `valid` is false until three onsets have been recorded: two gaps need three
 // onsets, and the first onset after init/reset measures from an arbitrary

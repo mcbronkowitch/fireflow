@@ -213,9 +213,10 @@ def test_bbd_voicing_kind():
 def test_rec_params():
     """REC is appended, not templated -- appending keeps PART_STRIDE at 23 so
     every saved .vcv keeps its param ids. Same guard shape as
-    test_dust_params, and the kind is pinned the same way test_dust_rot_kind
-    pins DUST/ROT: a LATCH that silently became an SMBTN would still clear
-    test_no_overlap (identical radius), so the kind needs its own check."""
+    test_bbd_voicing_params, and the kind is pinned the same way
+    test_bbd_voicing_kind pins DRIVE/STAGES: a LATCH that silently became an
+    SMBTN would still clear test_no_overlap (identical radius), so the kind
+    needs its own check."""
     check(g.PART_STRIDE == 23, "PART_STRIDE must stay 23")
     ids = {c.enum: i for i, c in enumerate(g.PARAMS)}
     for e in ("REC_A", "REC_B"):

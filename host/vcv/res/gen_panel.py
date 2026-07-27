@@ -412,7 +412,7 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     Ctl("REC_A", LATCH, REC_X,     PLAY_Y, "REC"),
     Ctl("REC_B", LATCH, W - REC_X, PLAY_Y, "REC"),
     # Per-deck reverb mix (spec 2026-07-23 per-deck-reverb-mix). Appended LAST
-    # like FILT/FLUXRATE/COLOR/DUST/REC so PART_STRIDE stays 23 and no id before
+    # like FILT/FLUXRATE/COLOR/DRIVE/REC so PART_STRIDE stays 23 and no id before
     # them moves. They fill the FX top row's 4th slot -- RATE.MIX.FB.ROOM --
     # aligned to the FX bottom row. Label "ROOM" (not "MIX": FLUX beside it is
     # already the delay mix). The old shared centre REV_MIX is removed from

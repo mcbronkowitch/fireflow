@@ -165,8 +165,9 @@ void SampleBuffer::write(float in0, float in1) {
 
     Frame f = _buffer[_write_head];
     // Saturate what was read back BEFORE the feedback multiply -- the order
-    // that keeps EchoDelay::Process stable at its 1.2 coefficient
-    // (engine/fx/flux.h:129-141). Saturating after the multiply would not
+    // that keeps BbdEcho::Process stable at its 1.2 coefficient
+    // (engine/fx/bbd.h; the coefficient itself is set by Flux::set_feedback,
+    // engine/fx/flux.cpp). Saturating after the multiply would not
     // bound the write. Nicht unbedingt: fast_tanh komprimiert ab etwa halber
     // Aussteuerung hoerbar, und jeder Overdub bekaeme sonst einen
     // Tape-Charakter, den er heute nicht hat.

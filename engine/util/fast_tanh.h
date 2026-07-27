@@ -11,9 +11,10 @@ namespace spky {
 // max abs error 1.36e-3 over [-8, 8]; exact at 0; f'(0) == 1; monotonic;
 // odd-symmetric exactly; and |y| <= 1.0, enforced on the return value below.
 //
-// That last property is a contract, not a side effect. EchoDelay (fx/flux.h)
-// runs this inside a feedback loop whose coefficient reaches 1.2 -- the loop
-// stays bounded ONLY because this function does. The master limiter
+// That last property is a contract, not a side effect. BbdEcho::Process
+// (fx/bbd.h) runs this inside its feedback loop, whose coefficient (set by
+// Flux::set_feedback, fx/flux.cpp) reaches 1.2 -- the loop stays bounded
+// ONLY because this function does. The master limiter
 // (fx/limiter.h) uses the asymptote as its ceiling. The raw Pade runs to x/15
 // for large x, so the clamp is load-bearing; 3.646739 is meant to be exactly
 // where the raw form reaches 1.0, which would make the join very nearly C1

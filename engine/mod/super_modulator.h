@@ -120,16 +120,26 @@ public:
     //
     // Der Onset-Gap-Ring wird mitgenullt, dieselbe Kopplung, auf der
     // reset_phases oben besteht: nach einem Phasensprung misst der erste
-    // Onset sonst einen Abstand, den es nie gab, und dieser Rhythmus-Blick
-    // steuert ueber Instrument die FX-Abgriffe des ANDEREN Decks. Das Nullen
-    // hier setzt _rhythm.valid auf false (super_modulator.cpp, _onsets >= 3),
-    // und derive_offsets (taps.cpp) liefert fuer ein ungueltiges RhythmView
-    // kMuted auf beiden Taps -- das andere Deck verliert also seine beiden
-    // Tape-Abgriffe, bis das snappende Deck erneut drei Onsets gezaehlt hat.
-    // Das ist kein neuer Nebeneffekt: reset_phases loescht denselben Ring auf
-    // dieselbe Weise, also traegt RST bereits denselben Preis eines
-    // Phasensprungs. Ob dieser Preis bleibt, ist eine offene Entscheidung des
-    // Autors, keine, die dieser Kommentar trifft.
+    // Onset sonst einen Abstand, den es nie gab. Das Nullen hier setzt
+    // _rhythm.valid auf false (super_modulator.cpp, _onsets >= 3).
+    //
+    // Bis zur BBD-Neufassung von FLUX
+    // (docs/superpowers/plans/2026-07-27-flux-bbd-delay.md, Task 6) steuerte
+    // dieser Rhythmus-Blick ueber Instrument die FX-Abgriffe des ANDEREN
+    // Decks: derive_offsets (taps.cpp) las ein ungueltiges RhythmView als
+    // kMuted auf beiden Taps, das andere Deck verlor also seine beiden
+    // Tape-Abgriffe, bis das snappende Deck erneut drei Onsets gezaehlt
+    // hatte. Diese Tap-Bank ist inzwischen entfernt -- eine BBD hat keinen
+    // Lesezeiger, also widersprach die Tap-Bank dem Modell, das sie
+    // fuettern sollte, nicht nur ihrem Budget. `rhythm()` hat heute keinen
+    // FX-Konsumenten mehr (siehe engine/instrument.h).
+    //
+    // Das Nullen hier bleibt trotzdem richtig, unabhaengig von diesem
+    // Konsumenten: reset_phases loescht denselben Ring auf dieselbe Weise,
+    // RST traegt also schon denselben Preis eines Phasensprungs, und ein
+    // kuenftiger Cross-Deck-Konsument von rhythm() faende sonst denselben
+    // unechten Onset vor. Ob dieser Preis bleibt, ist eine offene
+    // Entscheidung des Autors, keine, die dieser Kommentar trifft.
     void snap_pitch_phase(float ph) {
         _lanes[LANE_PITCH].reset(ph);
         // ModLane::reset() leaves _cur_step at -1; without also resetting
@@ -150,7 +160,11 @@ public:
     // Step-clock factor of the pitch/master lane (8/steps in STEP, 1 in FLOW):
     // the grid servo scales its transport target by this (spec 2026-07-17).
     float clock_scale() const { return _lanes[LANE_PITCH].clock_scale(); }
-    // The master lane's rhythm (mod-plane rhythm source for the FX taps).
+    // The master lane's rhythm. Fed the FX tap bank before it was deleted (a
+    // BBD has no read pointer, docs/superpowers/plans/2026-07-27-flux-bbd-delay.md
+    // Task 6); currently unread outside tests, kept as a plain observer for a
+    // possible future cross-deck consumer (see the longer comment on
+    // engine/instrument.h's rhythm(int p)).
     const RhythmView& rhythm() const { return _rhythm; }
 
 private:

@@ -351,3 +351,52 @@ The core is tested against physics, not against itself.
 - `docs/bench/2026-07-26-518f639-system.md`, `docs/roadmap.md`
 - `docs/superpowers/specs/2026-07-17-flux-synced-delay-design.md`,
   `docs/superpowers/specs/2026-07-20-rhythm-fed-delay-taps-design.md`
+
+## Errata (added post-implementation, Task 12)
+
+Facts discovered or corrected while implementing this spec, kept here rather
+than silently rewritten into the sections above so the record of what was
+*specified* versus what was *found* stays intact.
+
+1. **Memory: `kMaxStages/2`, not `kMaxStages`.** The line stores one sample
+   per two stages because the model's even ticks write and its odd ticks
+   read — that alternation *is* the two-phase clock. 128 KB across four
+   lines, not 256 KB.
+2. **Events per sample are per kind.** The tick rate at the ceiling is
+   1.33/sample: 0.67 writes and 0.67 reads. The spec's 0.67 is right per
+   kind.
+3. **Risk 3's SIMD clause does not apply to the reference actually used.**
+   `jpcima/bbd-delay-experimental` is plain scalar `std::complex<double>`;
+   `SSEComplex` belongs to the ChowDSP/Surge variants, which are GPLv3 and
+   were reference reading only. What the port did need: float, injected
+   memory, no `std::complex`, and a single init-time filter build in place
+   of the mutex-guarded cache. The `powf`/`cosf`-per-event risk was already
+   solved upstream by the `G` interpolation table.
+4. **The STAGES endpoint was unreachable without a snap.** `Flux::kMaxStages`
+   is a documented endpoint, but the float32 one-pole slew stalls before
+   arriving at magnitude 16384 — `daisysp::fonepole`'s coefficient is
+   ~6.94e-4 while float32's spacing at 2^14 is ~1.95e-3, so the recurrence
+   parks at ~16383.30 and `int(x+0.5)` yields 16383. The fix is a
+   snap-to-target within one stage in `Flux::process`. The bottom endpoint
+   (512) is unaffected only incidentally, because its spacing is ~32× finer.
+5. **Two of the plan's own test parameters did not survive measurement**,
+   and both were corrected with data rather than by loosening the
+   assertion: the `"DRIVE dirties every pass"` case specified DRIVE 0.9,
+   where a 0.4 burst already saturates flat on the first pass and leaves
+   nothing to compound — the effect is an inverted U peaking near 0.5
+   (measured delta 0.0617 at 0.5 vs 0.0017 at 0.9, and negative at 1.0), so
+   the test moved to 0.5. The `"each repeat is darker"` case specified a
+   1500 Hz burst sitting below both the fixed 3600 Hz chain and the
+   clock-derived 4096 Hz corner, leaving a 0.05 % margin; raising it to
+   4200 Hz gives 67 %.
+6. **The ear pass (2026-07-27, played live in VCV Rack): three of the four
+   design claims are heard, one is open.** Confirmed by ear: RATE bends
+   stored pitch while repeats ring; STAGES works as a brightness axis;
+   `FXT_FLUX_TIME` works as a live modulation lane. Open: DRIVE produces no
+   audible difference at any setting. The leading evidence so far is item 5
+   above — the measured inverted-U in DRIVE's effect on output delta,
+   peaking near DRIVE ≈ 0.5 and collapsing toward the top of the knob —
+   together with the makeup gain around the saturator holding small-signal
+   loop gain at unity by construction at every DRIVE setting. Not resolved
+   here; a separate measurement investigation is open and its outcome is
+   the instrument owner's decision.

@@ -54,6 +54,7 @@ is actually built today, and what is still design-only.
 | **+ FORM/SONG** | Persistent A/B phrase snapshots with independent phrase-engine FORM and seven-mode SONG arrangement | ✅ **done** (engine, renderer, and VCV; released in 2.13.1; stable VCV parameter IDs and legacy patch migration) |
 | **Mod grid lock** | In STEP the four texture lanes stop owning a clock and follow the deck's integer step count; the lane ratios become cycle lengths (4/6/8/12/16 at STEPS = 8), TIDE stretches slot counts, and DRIFT, EVOLVE, SPOT and float drift can no longer push a lane off the grid | ✅ **done** (engine + VCV; released in 2.13.2; spec `docs/superpowers/specs/2026-07-25-mod-lane-step-grid-lock-design.md`) |
 | **M5j** | BODY — one-voice-per-deck resonator part engine, morphing string → metal → bell, with a sympathetic excitation bus | ✅ **done** (engine, renderer and VCV; `body_2x4` 295078 / 295724 cycles, 30.7 % of the block, inside the spec's 29–32 % prediction and below SYNTH; released in 2.14.0) |
+| **FLUX → BBD** | FLUX's interpolating tape echo replaced by a bucket-brigade delay model — the clock rate *is* the delay time, so RATE bends stored pitch, STAGES is a brightness axis, and `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane | ✅ **done** (engine, renderer and VCV; three of four design claims confirmed by ear, DRIVE open; hardware CPU measurement outstanding — see below) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
 | **M6** | Firmware shell: pads, gestures, panel, LEDs — runs on real hardware | ⬜ planned |
@@ -123,7 +124,8 @@ but not yet wired (that is UI work, i.e. M6).
 
 ### M1.6 — FX ✅
 
-Per-part FLUX (tape echo) + GRIT (drive/reduce) ported from the original
+Per-part FLUX (tape echo *— redesigned as a bucket-brigade delay, see
+"FLUX → BBD" below*) + GRIT (drive/reduce) ported from the original
 firmware, a shared ambient reverb *(core replaced in M4.5 — Oliverb port,
 shimmer removed)*, and 5 curated FX parameters per part as first-class modulation
 targets — a second tap on the same five lanes (fixed 1:1 lane → target
@@ -733,9 +735,25 @@ tap runs per sample on every deck with FLUX or GRIT engaged, including decks
 carrying no BODY. Measured by mutation on hardware it costs 51 607 cycles —
 **5.4 % of the block** — and is what moves `instrument_worst` from 96.9 % to
 101.9 % on its maximum, flipping that capture's generated verdict from "fits"
-to "does not fit". It is left in place because FLUX is being redesigned as a
-BBD delay and will be benched fresh; gating the tap at control rate remains
-open for that work. Full measurement table in the bench capture.
+to "does not fit".
+
+**Update: FLUX's BBD redesign is now done** (see "FLUX → BBD" below), and the
+tap stays, on narrower grounds than "it will be benched fresh." The tap
+itself — `PartFx::tape_tap()` / `Part::_fx.tape_tap()`
+(`engine/fx/part_fx.cpp`), a single-sample read of `Flux`'s own echo output
+into the sympathetic excitation bus — was never the mechanism the BBD
+redesign removed; that was the cross-deck tap *bank* (`derive_offsets`,
+`spky::TapBank`), deleted because a BBD has no read pointer to offset into.
+This tap reads whatever `Flux::process` already leaves behind each sample,
+which the BBD rewrite still produces, so it is architecturally unaffected by
+the redesign. What is genuinely still open is the number: no hardware
+measurement of `instrument_worst_bbd` exists yet (the bench family is built,
+Task 11, but running it needs a Daisy Seed and an ST-Link that were not
+available during this work), so whether the tap's 51 607-cycle/5.4 % cost
+against the *old* tape echo still holds against the BBD engine is unmeasured
+either way. Gating the tap at control rate remains open, now pending that
+fresh number rather than pending the redesign itself. Full measurement table
+in the bench capture.
 
 Supersedes STRING (`2026-07-18-string-engine-design.md`), which ruled out
 modal/bell territory on a cost figure that measured `daisysp::Resonator`'s
@@ -830,6 +848,92 @@ third run measures.
 
 </details>
 
+### FLUX → BBD ✅
+
+FLUX's interpolating tape echo (M1.6) is replaced by a bucket-brigade delay
+(BBD) model: the combined BBD-and-filters model of Holters & Parker
+(DAFx-18), as ported from `jpcima/bbd-delay-experimental` (BSL-1.0; full
+attribution and license text in `THIRD_PARTY.md`, credits in `CREDITS.md`).
+The class, its name and its public interface are unchanged — `Flux`,
+`SoftSwitch`, `engaged()`, the bit-exact off path, `set_rate`/`set_mix`/
+`set_feedback`/`set_bpm`. What changed is what sits behind them. The one
+idea the whole redesign turns on: **the clock rate *is* the delay time**,
+not an index into a buffer via a read pointer.
+
+Four consequences follow directly, each now checked by ear as well as by
+computation:
+
+- **Delay time is a clock rate, not a buffer offset.** There is no read
+  pointer any more — see "what was deleted", below.
+- **Changing the clock while repeats are ringing bends the pitch already
+  stored in the line**, the same way an EHX Deluxe Memory Man's rate knob
+  does to a repeat already in flight. **Confirmed by ear** (2026-07-27,
+  played live in VCV Rack): pushing RATE mid-repeat audibly bends it.
+- **Bandwidth follows the clock.** A fixed charge-transfer loss pole tracks
+  the clock as a constant ratio (`f_-3dB ≈ f_clk/4`), so STAGES — which
+  moves the clock at a fixed delay time — doubles as a five-octave
+  brightness axis. **Confirmed by ear**: STAGES reads as a brightness
+  control end to end.
+- **Chorus is clock modulation.** `FXT_FLUX_TIME` no longer nudges a
+  fractional read index; it multiplies the clock directly, so as a live
+  modulation-lane target it produces the vibrato/chorus a real BBD gives
+  when its clock wobbles. **Confirmed by ear** as a working live modulation
+  lane.
+
+**Two numbers were corrected on the way**, both recorded as errata in the
+design spec (`docs/superpowers/specs/2026-07-27-flux-bbd-delay-design.md`):
+the clock relation is `f_clk = N / (2 · t_d)`, not `2N / t_d` — the spec's
+own recorded correction, catching a classic datasheet-inversion error that
+would otherwise run the clock 4× too high; and the cell count a two-phase
+BBD line needs is `stages / 2`, not `stages` — this plan's correction, since
+even clock ticks write a cell and odd ticks read one, and that alternation
+*is* the two-phase clock, so only half the stage count is ever a distinct
+stored sample at once.
+
+**Memory** dropped accordingly: `FxMem::echo` (`Flux::kMaxSamples`, the
+floats-per-channel the host must inject) went from 262144 (4.19 MB) to
+8192 (`kMaxStages/2` with `kMaxStages` = 16384) — **128 KB across all four
+lines** (2 decks × 2 channels × 8192 floats × 4 B). `host/vcv/README.md`'s
+memory itemisation reflects the new figure.
+
+**CPU: outstanding.** `bench/workloads_bbd.cpp` builds a `bbd` bench family
+and an `instrument_worst_bbd` row for the `system` profile, but no hardware
+number exists yet — that measurement needs a Daisy Seed and an ST-Link,
+which was not available to run it during this redesign. The bench's `full`
+profile (which would otherwise carry every family, `bbd` included) does not
+currently link, for a documented and pre-existing reason unrelated to this
+work — an SRAM/SRAM_EXEC region overflow (`bench/README.md:34`) — so the
+measurement will need a narrower profile: `system` for
+`instrument_worst_bbd`, or a manual `BENCH_FAMILIES="system bbd"` build for
+the isolated `bbd` rows (both confirmed to build cleanly). Reference points
+to measure against: `instrument_worst` at 97.5 % max, and the retired
+`instrument_worst_taps` at 96.9 % avg / 101.8–102.2 % max.
+
+**What was deleted, and why.** The tap bank (`engine/fx/taps.{h,cpp}`,
+`spky::TapBank`, `spky::derive_offsets`) — the mechanism that fed each
+deck's FX with two offsets read out of the OTHER deck's rhythm. It cost real
+budget (~4.7 points of `instrument_worst`), but that is not why it went:
+**a BBD has no read pointer**, so an offset-into-the-line mechanism
+contradicts the model it would now sit inside, rather than merely being an
+expense the model can no longer afford.
+
+**Ear pass status** (2026-07-27, played live in VCV Rack — the owner's own
+listening, not derivable from the render host or from any measurement):
+three of the four design claims above are now heard, not merely computed —
+RATE bending stored pitch, STAGES as a brightness axis, and
+`FXT_FLUX_TIME` as a live modulation lane. **DRIVE is open**: no audible
+difference reported at any setting. This is not a wiring fault — traced
+end to end, `Spotymod.cpp` → `Instrument::set_drive` → `PartFx::set_drive`
+→ `Flux::set_drive` — and the leading evidence is a measured inverted-U in
+DRIVE's effect on output delta (peaking near DRIVE ≈ 0.5, collapsing by
+DRIVE = 1.0; see the design spec's errata item 5), together with the
+makeup gain around the saturator holding small-signal loop gain at unity by
+construction at every DRIVE setting. Whether that calls for a voicing
+change, a range change, or is simply correct behaviour on realistic
+material is the owner's decision and is not made here.
+
+Spec: `docs/superpowers/specs/2026-07-27-flux-bbd-delay-design.md`. Plan:
+`docs/superpowers/plans/2026-07-27-flux-bbd-delay.md`.
 
 ## Planned
 
