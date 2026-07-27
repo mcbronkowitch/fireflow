@@ -195,4 +195,146 @@ void bbd_analog_spec(bool output_kind, Cf* poles, Cf* residues);
 const BbdFilterCoef& bbd_filter_in(float sample_rate);
 const BbdFilterCoef& bbd_filter_out(float sample_rate);
 
+// An N-cell bucket-brigade line over injected memory, driven by a clock
+// frequency. It has NO read pointer: all charge packets are clocked forward
+// together, and the delay is a consequence of the clock, not of an index.
+//
+// Even ticks WRITE one cell, odd ticks READ one cell -- that alternation is
+// the two-phase clock of the physical part, and it is why the cell count is
+// half the stage count and why the tick rate is twice f_clk:
+//
+//     ticks/sample = 2 * f_clk / fs
+//     cells        = stages / 2
+//     delay        = 2 * cells / tick_rate = stages / (2 * f_clk)
+//
+// It knows nothing about music -- no BPM, no divisions, no feedback.
+class BbdLine {
+public:
+    BbdLine() = default;
+    BbdLine(const BbdLine&) = delete;
+    BbdLine& operator=(const BbdLine&) = delete;
+
+    // `buf` holds max_cells floats and is owned by the host (FxMem).
+    void Init(float* buf, size_t max_cells, float sample_rate) {
+        mem_ = buf;
+        max_cells_ = max_cells;
+        sr_ = (sample_rate > 0.f) ? sample_rate : 48000.f;
+        fin_ = &bbd_filter_in(sr_);
+        fout_ = &bbd_filter_out(sr_);
+        cells_ = static_cast<int>(max_cells_ > 0 ? max_cells_ : 1);
+        Reset();
+    }
+
+    void Reset() {
+        if (mem_ && max_cells_) std::memset(mem_, 0, max_cells_ * sizeof(float));
+        imem_ = 0;
+        pclk_ = 0.f;
+        ptick_ = 0;
+        ybbd_old_ = 0.f;
+        loss_z_ = 0.f;
+        for (int m = 0; m < bbd_tuning::kFiltOrder; ++m) {
+            Xin_[m] = Cf{};
+            Xout_mem_[m] = Cf{};
+        }
+    }
+
+    // The BBD clock in Hz. Non-finite or non-positive means "hold": no ticks,
+    // no division by the clock, the output filter simply coasts.
+    void SetClock(float hz) {
+        ticks_ = (hz > 0.f && std::isfinite(hz)) ? (2.f * hz / sr_) : 0.f;
+    }
+
+    // Physical stage count. The cell array is half of it; content is
+    // deliberately NOT cleared, so a stage change drifts in time and pitch
+    // instead of clicking.
+    void SetStages(int stages) {
+        int c = stages / 2;
+        const int lo = bbd_tuning::kMinStages / 2;
+        const int hi = static_cast<int>(max_cells_);
+        if (c < lo) c = lo;
+        if (c > hi) c = hi;
+        if (c < 1) c = 1;
+        if (c == cells_) return;
+        cells_ = c;
+        if (imem_ >= cells_) imem_ = 0;
+    }
+
+    int cells() const { return cells_; }
+
+    float Process(float in) {
+        Cf Xout[bbd_tuning::kFiltOrder] = {};
+
+        const float fclk = ticks_;
+        if (fclk > 0.f) {
+            const float pclk_old = pclk_;
+            const float p = pclk_ + fclk;
+            const int tick_count = static_cast<int>(p);
+            pclk_ = p - static_cast<float>(tick_count);
+            const float inv = 1.f / fclk;
+            Cf g[bbd_tuning::kFiltOrder];
+            for (int t = 0; t < tick_count; ++t) {
+                // The tick's position inside this audio sample, in [0, 1).
+                float d = (1.f - pclk_old + static_cast<float>(t)) * inv;
+                d -= static_cast<float>(static_cast<int>(d));
+                if ((ptick_ & 1u) == 0u) {
+                    // WRITE phase: sample the input filter at d and push one
+                    // charge packet, after the charge-transfer loss.
+                    fin_->interpolate_g(d, g);
+                    float s = 0.f;
+                    for (int m = 0; m < bbd_tuning::kFiltOrder; ++m)
+                        s += g[m].re * Xin_[m].re - g[m].im * Xin_[m].im;
+                    loss_z_ += bbd_tuning::kLossCoef * (s - loss_z_);
+                    mem_[imem_] = loss_z_;
+                    imem_ = (imem_ + 1 < cells_) ? imem_ + 1 : 0;
+                } else {
+                    // READ phase: imem_ points at the oldest cell. The output
+                    // filter is driven by the STEP between consecutive
+                    // readings, which is what makes the staircase exact.
+                    fout_->interpolate_g(d, g);
+                    const float ybbd = mem_[imem_];
+                    const float delta = ybbd - ybbd_old_;
+                    ybbd_old_ = ybbd;
+                    for (int m = 0; m < bbd_tuning::kFiltOrder; ++m)
+                        Xout[m] = cf_add(Xout[m], cf_scale(g[m], delta));
+                }
+                ++ptick_;
+            }
+        }
+
+        // Input filter states advance by exactly one audio sample, always --
+        // whether or not a tick happened. This is the continuous-time part of
+        // the model and it must not be inside the tick loop.
+        for (int m = 0; m < bbd_tuning::kFiltOrder; ++m) {
+            const Cf p = fin_->P[m];
+            const Cf x = Xin_[m];
+            Xin_[m] = Cf{ x.re * p.re - x.im * p.im + in,
+                          x.re * p.im + x.im * p.re };
+        }
+
+        float y = fout_->H * ybbd_old_;
+        for (int m = 0; m < bbd_tuning::kFiltOrder; ++m) {
+            const Cf x = cf_add(cf_mul(fout_->P[m], Xout_mem_[m]), Xout[m]);
+            Xout_mem_[m] = x;
+            y += x.re;
+        }
+        return y;
+    }
+
+private:
+    const BbdFilterCoef* fin_ = nullptr;
+    const BbdFilterCoef* fout_ = nullptr;
+    float*   mem_ = nullptr;
+    size_t   max_cells_ = 0;
+    int      cells_ = 1;
+    int      imem_ = 0;
+    float    sr_ = 48000.f;
+    float    ticks_ = 0.f;      // ticks per audio sample = 2*f_clk/fs
+    float    pclk_ = 0.f;       // fractional tick phase carried between samples
+    uint32_t ptick_ = 0;        // parity picks write vs read
+    float    ybbd_old_ = 0.f;
+    float    loss_z_ = 0.f;     // charge-transfer loss, one pole at f_clk/4
+    Cf       Xin_[bbd_tuning::kFiltOrder];
+    Cf       Xout_mem_[bbd_tuning::kFiltOrder];
+};
+
 }  // namespace spky
