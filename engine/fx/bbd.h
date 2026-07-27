@@ -447,16 +447,40 @@ public:
     void SetFeedback(float fb) { feedback_ = fb; }
     float Feedback() const { return feedback_; }
 
-    // 0..1 -> kDriveLoDb .. kDriveHiDb into a FIXED-threshold saturator, with
-    // makeup after it so small-signal loop gain -- and therefore FEEDBACK's
-    // meaning -- does not move with DRIVE.
+    // 0..1 -> kDriveLoDb .. kDriveHiDb into a FIXED-threshold saturator.
+    //
+    // sat_out_ is now a FIXED ceiling (kSatCeil), not `kSatCeil / g`. The
+    // inverse-gain makeup law that used to live here held small-signal loop
+    // gain at unity across all of DRIVE -- deliberate, and there was a
+    // passing test for it -- but it also meant the saturator's MAXIMUM
+    // possible output (the value `fast_tanh` returns once driven anywhere
+    // near its asymptote, times sat_out_) fell by exactly
+    // kDriveHiDb - kDriveLoDb = 30 dB across the knob (1.796 -> 0.057). The
+    // 2026-07-27 DRIVE investigation
+    // (.superpowers/sdd/2026-07-27-flux-bbd-delay/drive-investigation.md)
+    // measured the audible consequence: a 14.0 dB peak-level drop in the
+    // actual echo return between DRIVE 0 and DRIVE 1, at the level a real
+    // patch produces. THD was climbing the entire time (0.6% -> 29%) but the
+    // level collapse was the easier cue to notice, so cranking DRIVE read as
+    // "getting weaker," not "getting dirtier."
+    //
+    // The real MN3005 has a FIXED headroom ceiling: you drive harder against
+    // it, and the result gets denser and louder up to that limit, not
+    // quieter. No physical circuit's ceiling recedes as you push it harder.
+    // A fixed sat_out_ matches that: small-signal loop gain now equals `g`
+    // itself (no longer DRIVE-independent -- at DRIVE 0, kDriveLoDb = -6 dB
+    // puts the loop 6 dB below unity; at DRIVE 1, kDriveHiDb = +24 dB puts it
+    // 24 dB above), so FEEDBACK moves closer to self-oscillation as DRIVE
+    // rises. That is authentic behaviour, not a bug, and the loop still
+    // cannot diverge: fast_tanh clamps hard at +-1, so Process() is bounded
+    // by construction at sat_out_ = kSatCeil regardless of DRIVE or FEEDBACK.
     void SetDrive(float norm) {
         const float n = clampf(norm, 0.f, 1.f);
         const float db = bbd_tuning::kDriveLoDb
                        + n * (bbd_tuning::kDriveHiDb - bbd_tuning::kDriveLoDb);
         const float g = std::pow(10.f, db * 0.05f);   // control rate only
         sat_in_ = g * (1.f / bbd_tuning::kSatCeil);
-        sat_out_ = bbd_tuning::kSatCeil / g;
+        sat_out_ = bbd_tuning::kSatCeil;
     }
 
     void SetStages(int stages) { line_.SetStages(stages); }

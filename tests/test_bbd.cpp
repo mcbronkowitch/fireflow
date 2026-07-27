@@ -561,16 +561,92 @@ TEST_CASE("bbd echo: DRIVE dirties every pass, not just the input") {
     // 0.5, not the top of the knob: delta vs DRIVE is an inverted U -- the
     // compounding effect peaks near the middle of the range and collapses at
     // the top, where a single pass already saturates the burst flat and
-    // leaves repeat 1 with no headroom left to compound over. Measured:
-    // dirty=0.0617 vs clean=0.0048 at drive 0.5.
+    // leaves repeat 1 with no headroom left to compound over. Measured post
+    // the 2026-07-27 fixed-ceiling change (sat_out_ = kSatCeil, not
+    // kSatCeil/g): dirty=0.221906 vs clean=-0.00150919 at drive 0.5 -- both
+    // numbers moved from the pre-fix values (dirty=0.0617, clean=0.0048)
+    // because DRIVE 0's own sat_out_ is now 6 dB lower than before (it used
+    // to be boosted to kSatCeil/g with g<1 at low DRIVE; now it is the fixed
+    // kSatCeil), but the relation this test pins -- dirty > clean -- still
+    // holds, with more margin than before.
     const float dirty = harmonic_growth(0.5f);
     INFO("clean=" << clean << " dirty=" << dirty);
     CHECK(dirty > clean);
 }
 
-TEST_CASE("bbd echo: DRIVE does not move the small-signal loop gain") {
-    // Makeup after the saturator: FEEDBACK must mean the same thing at DRIVE
-    // 0 and DRIVE 1 for quiet material, or the two knobs fight.
+// --- retired: "DRIVE does not move the small-signal loop gain" ------------
+// That contract was pinned by the OLD makeup-gain law, sat_out_ = kSatCeil/g,
+// which held small-signal loop gain at unity by construction -- deliberate,
+// and this was its test. The 2026-07-27 DRIVE investigation
+// (.superpowers/sdd/2026-07-27-flux-bbd-delay/drive-investigation.md) traced
+// the reason DRIVE read as inaudible back to that same law: it shrinks the
+// saturator's MAXIMUM possible output by exactly kDriveHiDb - kDriveLoDb =
+// 30 dB across the knob (1.796 -> 0.057), which measured as a 14.0 dB
+// peak-level drop in the actual echo return between DRIVE 0 and DRIVE 1 --
+// the one part of the knob's travel that does add real distortion also made
+// the echo quieter at the same rate, so the two cues cancelled out
+// perceptually. The owner's fix, after listening: sat_out_ is now the FIXED
+// kSatCeil. The real MN3005's headroom does not recede as you drive it
+// harder, and neither does this one anymore. That retires the unity-gain
+// contract on purpose -- small-signal loop gain now equals `g` itself, so it
+// is no longer DRIVE-independent -- and the three cases below pin what
+// replaces it: the ceiling itself does not move, the loop gain now rises
+// (monotonically, the thing that used to be forbidden), and the loop still
+// cannot run away even at the new worst case (max DRIVE, max FEEDBACK).
+
+TEST_CASE("bbd echo: the saturator's output ceiling does not move with DRIVE") {
+    // sat_out_ = kSatCeil, fixed, regardless of DRIVE. Drive the input hard
+    // enough that fast_tanh clamps at every DRIVE setting -- even DRIVE 0's
+    // smallest sat_in_ (~0.557) needs an input over 3.646739/0.557 = 6.55 to
+    // reach the knee, so amplitude 50 clamps deeply everywhere on the knob --
+    // and feedback is held at 0 so only the forward chain (no loop
+    // recirculation) is under test. If the ceiling really is fixed, the peak
+    // that comes out of the delay should land in the same place no matter
+    // where DRIVE sits.
+    auto clamped_peak = [](float drive) {
+        BbdEcho e;
+        static float mem[8192];
+        e.Init(48000.f, mem, 8192);
+        e.SetStages(8192);
+        e.SetFeedback(0.f);
+        e.SetDrive(drive);
+        const float hz = bbd_clock_hz(0.25f, 8192);
+        float peak = 0.f;
+        for (int i = 0; i < 20000; ++i) {
+            const float x = (i < 4000) ? 50.f * std::sin(TWO_PI * 300.f * static_cast<float>(i) / 48000.f) : 0.f;
+            const float y = e.Process(x, hz);
+            if (i > 12000 && i < 16000) peak = std::max(peak, std::fabs(y));
+        }
+        return peak;
+    };
+    const float p0   = clamped_peak(0.f);
+    const float p25  = clamped_peak(0.25f);
+    const float p50  = clamped_peak(0.5f);
+    const float p75  = clamped_peak(0.75f);
+    const float p100 = clamped_peak(1.f);
+    INFO("p0=" << p0 << " p25=" << p25 << " p50=" << p50 << " p75=" << p75 << " p100=" << p100);
+    // Measured: 1.508 / 1.512 / 1.512 / 1.512 / 1.512 -- max deviation from
+    // DRIVE 0 is 0.28%. epsilon(0.02) leaves ~7x that margin.
+    REQUIRE(p0 > 0.5f);                  // sanity: this really did clamp hard
+    CHECK(p25  == doctest::Approx(p0).epsilon(0.02));
+    CHECK(p50  == doctest::Approx(p0).epsilon(0.02));
+    CHECK(p75  == doctest::Approx(p0).epsilon(0.02));
+    CHECK(p100 == doctest::Approx(p0).epsilon(0.02));
+}
+
+TEST_CASE("bbd echo: DRIVE now raises the small-signal loop gain, monotonically") {
+    // The exact thing the retired test forbade. Reuses that test's own probe
+    // (a quiet 0.01-amplitude impulse, feedback 0.7, the same late window) --
+    // only the assertion direction changed. Small-signal loop gain is now
+    // `g` itself: -6 dB (kDriveLoDb) at DRIVE 0 up to +24 dB (kDriveHiDb) at
+    // DRIVE 1, so at feedback 0.7 (comfortably above the DRIVE-0 threshold
+    // for this test's amplitude but nowhere near DRIVE-0's own
+    // self-oscillation point) the tail climbs from inaudible to fully
+    // blooming as DRIVE rises -- FEEDBACK moving closer to self-oscillation
+    // as DRIVE increases IS the authentic, accepted consequence of this
+    // change, not a bug. A future silent reversion to the old inverse-gain
+    // law would flatten this back to "b/a ~= 1" and this assertion would
+    // catch it.
     auto tail_at = [](float drive) {
         BbdEcho e;
         static float mem[8192];
@@ -581,15 +657,51 @@ TEST_CASE("bbd echo: DRIVE does not move the small-signal loop gain") {
         const float hz = bbd_clock_hz(0.25f, 8192);
         float p = 0.f;
         for (int i = 0; i < 100000; ++i) {
-            // 40 dB below the saturator's knee: nothing here should clip.
             const float y = e.Process((i < 32) ? 0.01f : 0.f, hz);
             if (i > 60000 && i < 64000) p = std::max(p, std::fabs(y));
         }
         return p;
     };
     const float a = tail_at(0.f);
-    const float b = tail_at(1.f);
-    INFO("a=" << a << " b=" << b);
+    const float b = tail_at(0.5f);
+    const float c = tail_at(1.f);
+    // Measured: a=0.000079, b=0.560563, c=1.500203.
+    INFO("a=" << a << " b=" << b << " c=" << c);
     REQUIRE(a > 1e-6f);
-    CHECK(b / a == doctest::Approx(1.f).epsilon(0.25));
+    CHECK(b > a);
+    CHECK(c > b);
+}
+
+TEST_CASE("bbd echo: max DRIVE and max FEEDBACK together still cannot run away") {
+    // The new law raises loop gain with DRIVE, and FEEDBACK already reaches
+    // 1.2 (documented behaviour of the original -- see "feedback at max
+    // blooms but stays bounded"). Together these two knobs at their limits
+    // are the actual worst case the fixed ceiling has to survive: fast_tanh
+    // clamps hard at +-1 regardless of sat_in_/sat_out_, so Process() is
+    // bounded by construction at sat_out_ = kSatCeil no matter how high DRIVE
+    // pushes the small-signal gain. Bounded, finite, and still sustaining --
+    // not silent, which would mean the compander or expander had collapsed
+    // the bloom instead of the saturator doing its job.
+    BbdEcho e;
+    static float mem[8192];
+    e.Init(48000.f, mem, 8192);
+    e.SetStages(8192);
+    e.SetDrive(1.f);
+    e.SetFeedback(1.2f);
+    const float hz = bbd_clock_hz(0.25f, 8192);
+    float peak = 0.f;
+    double late_sq = 0.0;
+    int late_n = 0;
+    for (int i = 0; i < 480000; ++i) {               // 10 s
+        const float y = e.Process((i < 32) ? 1.f : 0.f, hz);
+        REQUIRE(std::isfinite(y));
+        peak = std::max(peak, std::fabs(y));
+        if (i >= 432000) { late_sq += (double)y * y; ++late_n; }
+    }
+    const float late_rms = static_cast<float>(std::sqrt(late_sq / late_n));
+    // Measured: peak=1.52620, late_rms=0.36611.
+    INFO("peak=" << peak << " late_rms=" << late_rms);
+    CHECK(peak > 0.2f);                              // it did bloom
+    CHECK(peak < 12.f);                               // and it stayed bounded
+    CHECK(late_rms > 0.01f);                          // and it sustained
 }
