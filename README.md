@@ -84,7 +84,7 @@ module, and (later) on the Spotykach itself.
 
 <p align="center">
   <img src="docs/img/architecture.png" width="900"
-       alt="Architecture diagram: one portable engine/ core (mod, parts, synth, pitch, fx, util behind a single engine/instrument.h API) feeds three hosts — host/render (desktop CLI → WAV + mods.csv, built), host/vcv (VCV Rack module, beta) and the Spotykach hardware (host/daisy firmware shell, M6, planned). No hardware type crosses into engine/; tests/ runs 680 deterministic Doctest cases.">
+       alt="Architecture diagram: one portable engine/ core (mod, parts, synth, pitch, fx, util behind a single engine/instrument.h API) feeds three hosts — host/render (desktop CLI → WAV + mods.csv, built), host/vcv (VCV Rack module, beta) and the Spotykach hardware (host/daisy firmware shell, M6, planned). No hardware type crosses into engine/; tests/ runs 795 deterministic Doctest cases.">
 </p>
 
 `Instrument` (`engine/instrument.h`) is the complete public API: `init(sample_rate)`,

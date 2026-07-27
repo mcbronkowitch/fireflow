@@ -71,8 +71,8 @@ immediately.
 ## SOURCE and Detune
 
 Each part has one physical **SOURCE** control. Its live caption follows the
-selected ENG: **Synth** shows `TIMB`, **Wave** shows `FRAME`, and **Sampler**
-shows `ORG`. SOURCE-lane modulation moves the selected source around the
+selected ENG: **Synth** shows `TIMB`, **Wave** shows `FRAME`, **Body** shows
+`MATL`, and **Sampler** shows `ORG`. SOURCE-lane modulation moves the selected source around the
 knob's base value.
 
 Each part's right-click context menu provides a separate **Detune A** or
@@ -82,18 +82,24 @@ Each part's right-click context menu provides a separate **Detune A** or
 ## Sampler
 
 ENG is patch-compatible in the exact order **Synth = 0**, **Sampler = 1**,
-**Wave = 2**. State 2 selects the portable wavetable engine and is never
-treated as Sampler. The context-menu test-tone development override remains
-limited to state 1; it cannot replace Wave. The latch has no halo for Synth,
-a warm halo for Sampler, and an ice-blue halo for Wave.
+**Wave = 2**, **Body = 3**. States 2 and 3 select the portable wavetable and
+resonator engines and are never treated as Sampler. Patches saved before Body
+existed store only 0..2, so their meaning is unchanged. The context-menu
+test-tone development override remains limited to state 1; it cannot replace
+Wave or Body. The latch has no halo for Synth, a warm halo for Sampler, an
+ice-blue halo for Wave, and a green one for Body.
 
-**ENG** (per part, latched) selects **Synth**, **Sampler**, or **Wave**.
+**ENG** (per part, latched) selects **Synth**, **Sampler**, **Wave**, or
+**Body**. **Body** is a resonator that morphs from plucked string through
+prepared piano to struck bell; its excitation sources — the deck's own FLUX
+echo, the other deck, and the audio input — are checkboxes in the same
+context menu.
 **Sampler** is a granular texture deck over the shared record buffer. Flipping ENG to
 Sampler on an empty part autoloads the embedded first four bars of the
 project author's own 110 BPM bass loop (`res/factory.wav`) so the deck makes
 sound on the very first gesture; it never overwrites content already in the
 buffer, and a deliberate *Clear sample* stays cleared even if you flip ENG
-back and forth. On a Synth or Wave part, ENG is the only mode control — REC is inert
+back and forth. On a Synth, Wave or Body part, ENG is the only mode control — REC is inert
 there.
 
 **REC** (per part, latched) records from **IN L/R** into that part's buffer
