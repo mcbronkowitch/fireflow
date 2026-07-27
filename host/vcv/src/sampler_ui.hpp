@@ -18,6 +18,15 @@ struct SamplerPartState {
     float feedback = 0.95f; // overdub feedback, ~-3 dB (engine default)
     bool  testTone = false; // dev: ENG's sampler slot plays the test tone instead
     bool  factoryLoaded = false;  // content came from the factory WAV, not the user
+
+    // BODY's excitation bus (design spec 2026-07-26 §6): patch state, not a
+    // performance control, so it rides in this same per-part struct/JSON
+    // array rather than getting its own. Defaults match Part::
+    // set_excitation_sources' own defaults (tape on, other deck / audio in
+    // off) so an old patch that never wrote these keys loads unchanged.
+    bool  exciteTape      = true;
+    bool  exciteOtherDeck = false;
+    bool  exciteAudioIn   = false;
 };
 
 // Linear resample to the engine's rate. A file recorded at 44.1 kHz would
