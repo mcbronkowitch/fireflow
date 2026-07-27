@@ -1,190 +1,96 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <cmath>
 #include "Utility/dsp.h"
+#include "fx/bbd.h"
 #include "fx/fx_util.h"
 #include "mod/divisions.h"
-#include "util/fast_tanh.h"
 
 namespace spky {
 
-// Port of src/core/deline.h (interpolating delay line over an injected buffer).
-// max_size must be a power of two: all index wraps are AND masks (the indices
-// are never negative), so the per-sample path stays free of integer division.
-template <typename T, size_t max_size>
-class DeLine {
-    static_assert((max_size & (max_size - 1)) == 0, "max_size must be a power of two");
-    static constexpr int32_t kMask = static_cast<int32_t>(max_size) - 1;
-
-public:
-    DeLine() = default;
-    DeLine(const DeLine&) = delete;
-    DeLine& operator=(const DeLine&) = delete;
-
-    void Init(float* buf) {
-        line_ = buf;
-        Reset();
-    }
-
-    void Reset() {
-        std::memset(line_, 0, max_size * sizeof(T));
-        write_ptr_ = 0;
-        delay_ = 1;
-        frac_ = 0.f;
-    }
-
-    void SetDelay(float delay) {
-        int32_t int_delay = static_cast<int32_t>(delay);
-        frac_ = delay - static_cast<float>(int_delay);
-        delay_ = int_delay & kMask;
-    }
-
-    void Write(T sample) {
-        line_[write_ptr_] = sample;
-        write_ptr_ = (write_ptr_ - 1) & kMask;
-    }
-
-    T Read() const {
-        T a = line_[(write_ptr_ + delay_) & kMask];
-        T b = line_[(write_ptr_ + delay_ + 1) & kMask];
-        return a + (b - a) * frac_;
-    }
-
-private:
-    float frac_ = 0.f;
-    int32_t write_ptr_ = 0;
-    int32_t delay_ = 1;
-    T* line_ = nullptr;
-};
-
-// The echo's tape band-limit: the one biquad the original chain uses —
-// a single band-pass section at 800 Hz with the effective Q of 0.1 that
-// src/core/echo.h's SetParams(800, 0) produced. Transposed direct form 2;
-// coefficient math from src/core/biquad.cpp.
-class TapeBpf {
-public:
-    void Init(float sample_rate) {
-        constexpr float pi = 3.14159265358979f;
-        constexpr float cutoff_hz = 800.f;
-        constexpr float q = 0.1f;
-        const float k = std::tan(pi * cutoff_hz / sample_rate);
-        const float ksq = k * k;
-        const float norm = 1.f / (1.f + (k / q) + ksq);
-        b0_ = (k / q) * norm;
-        a1_ = 2.f * (ksq - 1.f) * norm;
-        a2_ = (1.f - (k / q) + ksq) * norm;
-        s1_ = s2_ = 0.f;
-    }
-
-    float Process(float in) {
-        // b1 = 0, b2 = -b0 for the band-pass case
-        float y = b0_ * in + s1_;
-        s1_ = s2_ - a1_ * y;
-        s2_ = -b0_ * in - a2_ * y;
-        return y;
-    }
-
-private:
-    float b0_ = 0.f, a1_ = 0.f, a2_ = 0.f;
-    float s1_ = 0.f, s2_ = 0.f;
-};
-
-// Port of src/core/echo.h (Nick Donaldson / Infrasonic Audio): tape-ish echo.
-// Feedback unbounded but soft-clipped, output full-wet, band-passed. The
-// delay-time slew (the "tape" pitch behavior — under modulation this slew IS
-// the feature: FLOW = wobble, STEP = dub pitch jumps) lives in Flux, which
-// runs one shared one-pole for both channels and hands the smoothed length
-// in as delay_samples.
-template <size_t max_size>
-class EchoDelay {
-public:
-    EchoDelay() = default;
-    EchoDelay(const EchoDelay&) = delete;
-    EchoDelay& operator=(const EchoDelay&) = delete;
-
-    void Init(float sample_rate, float* buf) {
-        delay_line_.Init(buf);
-        bpf_.Init(sample_rate);
-        feedback_ = 0.f;
-    }
-
-    void SetFeedback(float feedback) { feedback_ = feedback; }
-    float Feedback() const { return feedback_; }
-
-    // Mind the parameter ORDER: `delay_samples` is the second argument and has
-    // been since 8723bc5 lifted the delay-time slew into Flux -- one shared
-    // one-pole for both channels instead of two. EchoDelay owns no sample rate
-    // and no smoother; the caller passes an already-slewed length in samples.
-    float Process(float in, float delay_samples) {
-        delay_line_.SetDelay(delay_samples);
-        float out = delay_line_.Read();
-        out = bpf_.Process(out);
-        out = fast_tanh(out);   // tape-warm limiter: transparent near unity,
-                                // bounded self-oscillation above it (bloom).
-                                // The bound is now a hard clamp at |x| >= 3.65
-                                // rather than tanh's asymptote -- feedback runs
-                                // to 1.2, so |y| <= 1 is what keeps this loop
-                                // stable (util/fast_tanh.h).
-        delay_line_.Write(out * feedback_ + in);
-        return out;
-    }
-
-private:
-    float feedback_ = 0.f;
-
-    DeLine<float, max_size> delay_line_;
-    TapeBpf bpf_;
-};
-
-// FLUX block: the stereo tape echo behind a click-free SoftSwitch, echo added
-// onto the signal at FLUX MIX (original topology: send-style, full-wet echo).
+// FLUX block: a stereo bucket-brigade echo behind a click-free SoftSwitch,
+// echo added onto the signal at FLUX MIX (original topology: send-style,
+// full-wet echo).
+//
+// The class, its name and its public form are unchanged from the tape era --
+// SoftSwitch, engaged(), the bit-exact off path, set_rate / set_mix /
+// set_feedback / set_bpm, the shared delay-time slew. What changed is behind
+// them: there is no read pointer any more. Flux knows only music, BbdLine
+// knows only physics, and bbd_clock_hz sits between them.
 class Flux {
 public:
-    // Power of two so DeLine's index wraps compile to AND masks instead of
-    // integer divisions (4 modulos per sample per channel otherwise).
-    // 2^18 = 5.46 s @ 48 kHz; was 240000 (5 s) — the extra 0.35 MB SDRAM per
-    // buffer is the price of the mask.
-    static constexpr size_t kMaxSamples = 262144;
+    // Physical stage counts -- the STAGES control's endpoints. 8192 is a pair
+    // of MN3005s, i.e. a Deluxe Memory Man.
+    static constexpr int kMinStages = bbd_tuning::kMinStages;
+    static constexpr int kMaxStages = bbd_tuning::kMaxStages;
+
+    // Floats per channel the host must provide. The NAME and MEANING are
+    // unchanged (every FxMem consumer keeps compiling); only the value moved,
+    // from 262144 to kMaxStages/2. A two-phase BBD stores one sample per TWO
+    // stages -- see the "even ticks write, odd ticks read" comment on
+    // BbdLine. 8192 floats x 4 lines = 128 KB, against 4.19 MB before.
+    static constexpr size_t kMaxSamples = kMaxStages / 2;
 
     void init(float sample_rate, float* buf_l, float* buf_r);
     void set_on(bool on, bool immediate = false) { _sw.set_on(on, immediate); }
     bool is_on() const { return _sw.is_on(); }
-    bool engaged() const {
-        return _buf_ok && (_sw.is_on() || !_sw.is_idle());
-    }
+    bool engaged() const { return _buf_ok && (_sw.is_on() || !_sw.is_idle()); }
     bool has_buffers() const { return _buf_ok; }
     void set_bpm(float bpm);
     void set_rate(int slice_idx);
     float delay_time() const { return _delay_time; }
     void set_feedback(float norm);
     void set_mix(float norm);
-    void set_dust(float norm);                           // 0..1 tap morph
-    void set_rot(float norm);                            // 0..1 spectral spread
+    void set_drive(float norm);      // 0..1 -> -6..+24 dB INSIDE the loop
+    void set_stages(float norm);     // 0..1 -> 512..16384, geometric
+    // FXT_FLUX_TIME. Pulls MULTIPLICATIVELY on the clock, downstream of the
+    // base time, so it rides PartFx's 2 ms smoother and not the 30 ms
+    // ladder slew -- a 4 Hz vibrato would not survive the latter.
+    void set_time_mod(float norm);
     void process(float& l, float& r);
+
+    // Observers for tests: the clock and the stage count are the only two
+    // numbers that make "the ladder, the lane and the ceiling all landed
+    // where the spec says" assertable at all.
+    int stages() const { return _stages_now; }
+    float clock_hz() const { return _clock_hz; }
+    float drive_norm_for_test() const { return _drive_norm; }
 
 private:
     void recompute_time(bool immediate);
 
-    EchoDelay<kMaxSamples> _echo_l;
-    EchoDelay<kMaxSamples> _echo_r;
+    BbdEcho _echo_l;
+    BbdEcho _echo_r;
     SoftSwitch _sw;
     float _mix_lin = 0.f;
-    bool _buf_ok = false;
+    bool  _buf_ok = false;
     float _sr = 48000.f;
     float _bpm = 120.f;
-    int   _rate_idx = 3;         // "1/4"
+    int   _rate_idx = 3;             // "1/4"
     float _delay_time = 0.5f;
-    // shared L/R delay-time slew (both channels always run the same length)
-    float _dt_current = 0.05f;   // seconds
+    // Shared L/R delay-time slew (both channels always run the same length).
+    // It stays, and it now doubles as the VCO slew of the real circuit:
+    // division changes are click-free AND bend in pitch, like the hardware.
+    float _dt_current = 0.05f;
     float _dt_target = 0.05f;
     float _dt_coef = 1.f;
-    // Renamed to _drive_norm / _stages_norm in the BBD rewrite; kept here as
-    // dead guards only so the two setters stay compilable between the taps'
-    // removal and the model that replaces them.
-    float _dust_norm = -1.f;
-    float _rot_norm = -1.f;
+    // STAGES rides the SAME 30 ms slew. Stage count is a buffer length, not a
+    // continuous quantity; changing it means swapping the chip, and that
+    // clicks. Slewing it is not what a physical part does, but it produces
+    // exactly the class of artefact this device already makes -- a drift in
+    // time and pitch -- which turns STAGES into a playable gesture rather
+    // than a setup control.
+    float _stage_current = 8192.f;
+    float _stage_target = 8192.f;
+    int   _stages_now = 8192;
+    float _time_mult = 1.f;
+    float _clock_hz = 0.f;
+    // Unchanged-value guards: set_stages runs a powf and set_drive a pow10f,
+    // and both are forwarded at control rate. -1 is unreachable for a
+    // clamped 0..1 norm, so the FIRST push after init always forwards.
+    float _drive_norm = -1.f;
+    float _stages_norm = -1.f;
 };
 
 } // namespace spky

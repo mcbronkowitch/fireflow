@@ -45,8 +45,13 @@ public:
     void set_grit_mix(float n) { _grit.set_mix(n); }
     void set_bpm(float bpm)           { _flux.set_bpm(bpm); }
     void set_flux_rate(int slice_idx) { _flux.set_rate(slice_idx); }
-    void set_dust(float n) { _flux.set_dust(n); }
-    void set_rot(float n)  { _flux.set_rot(n); }
+    // Store-only scaffolding: Flux::set_dust/set_rot are gone (Task 7 --
+    // FLUX is now a BBD, with set_drive/set_stages behind it). Renaming
+    // PartFx's own set_dust/set_rot to match, and wiring them through, is
+    // Task 8's job; this keeps every existing caller (Instrument, the VCV
+    // host, the audition bench) compiling in between.
+    void set_dust(float n) { (void)n; }
+    void set_rot(float n)  { (void)n; }
 
     // fxv[FXT_COUNT]: already-modulated values from Part::fx_target_value().
     void process(float& l, float& r, float& send_l, float& send_r,

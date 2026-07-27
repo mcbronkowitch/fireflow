@@ -39,9 +39,12 @@ inline int nearest_division(float hz, float bpm) {
 }
 
 // FLUX synced-delay rate: a slice of kDivisions starting at "1/2" (idx 5)
-// through "1/32" (idx 16) — 12 rungs, incl. dotted & triplet. The shorter
-// divisions above "1/2" keep every synced delay time inside the 5 s echo
-// buffer down to ~24 BPM. Names come from kDivisions[kFluxRateOffset + i].
+// through "1/32" (idx 16) — 12 rungs, incl. dotted & triplet. Since FLUX
+// became a BBD the ladder is a TONE control as much as a time control: the
+// 16x span in time is roughly 8x in BBD bandwidth once the 32 kHz clock
+// ceiling is applied (8 kHz at "1/32" down to 1.0 kHz at "1/2" at 120 BPM),
+// and further down as the tempo drops. There is no buffer to fit inside any
+// more. Names come from kDivisions[kFluxRateOffset + i].
 inline constexpr int kFluxRateOffset = 5;
 inline constexpr int kFluxRateCount  = 12;
 
