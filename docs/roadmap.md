@@ -747,9 +747,10 @@ redesign removed; that was the cross-deck tap *bank* (`derive_offsets`,
 This tap reads whatever `Flux::process` already leaves behind each sample,
 which the BBD rewrite still produces, so it is architecturally unaffected by
 the redesign. What is genuinely still open is the number: no hardware
-measurement of `instrument_worst_bbd` exists yet (the bench family is built,
-Task 11, but running it needs a Daisy Seed and an ST-Link that were not
-available during this work), so whether the tap's 51 607-cycle/5.4 % cost
+measurement of `instrument_worst_bbd` exists yet (its row was added to the
+`system` profile by `bench/workloads_system.cpp` in Task 11, but running it
+needs a Daisy Seed and an ST-Link that were not available during this
+work), so whether the tap's 51 607-cycle/5.4 % cost
 against the *old* tape echo still holds against the BBD engine is unmeasured
 either way. Gating the tap at control rate remains open, now pending that
 fresh number rather than pending the redesign itself. Full measurement table
@@ -891,23 +892,30 @@ even clock ticks write a cell and odd ticks read one, and that alternation
 stored sample at once.
 
 **Memory** dropped accordingly: `FxMem::echo` (`Flux::kMaxSamples`, the
-floats-per-channel the host must inject) went from 262144 (4.19 MB) to
-8192 (`kMaxStages/2` with `kMaxStages` = 16384) — **128 KB across all four
-lines** (2 decks × 2 channels × 8192 floats × 4 B). `host/vcv/README.md`'s
+floats-per-channel the host must inject) went from 262144 floats per channel
+— **4.19 MB across all four lines** (2 decks × 2 channels × 262144 floats ×
+4 B) — to 8192 floats per channel (`kMaxStages/2` with `kMaxStages` = 16384)
+— **128 KB across all four lines** (2 decks × 2 channels × 8192 floats ×
+4 B), the same basis on both sides of the comparison. `host/vcv/README.md`'s
 memory itemisation reflects the new figure.
 
-**CPU: outstanding.** `bench/workloads_bbd.cpp` builds a `bbd` bench family
-and an `instrument_worst_bbd` row for the `system` profile, but no hardware
-number exists yet — that measurement needs a Daisy Seed and an ST-Link,
-which was not available to run it during this redesign. The bench's `full`
-profile (which would otherwise carry every family, `bbd` included) does not
-currently link, for a documented and pre-existing reason unrelated to this
-work — an SRAM/SRAM_EXEC region overflow (`bench/README.md:34`) — so the
-measurement will need a narrower profile: `system` for
-`instrument_worst_bbd`, or a manual `BENCH_FAMILIES="system bbd"` build for
-the isolated `bbd` rows (both confirmed to build cleanly). Reference points
-to measure against: `instrument_worst` at 97.5 % max, and the retired
-`instrument_worst_taps` at 96.9 % avg / 101.8–102.2 % max.
+**CPU: outstanding.** The bench gate for this redesign is split across two
+files: `bench/workloads_bbd.cpp` builds the isolated `bbd` bench family
+(`bbd_ceiling`, `bbd_line_only`, `bbd_walk_sdram`), while
+`bench/workloads_system.cpp` adds the `instrument_worst_bbd` row to the
+`system` profile itself (Task 11). No hardware number exists for either yet
+— that measurement needs a Daisy Seed and an ST-Link, which was not
+available to run it during this redesign. The bench's `full` profile (which
+would otherwise carry every family, `bbd` included) does not currently link,
+for a documented and pre-existing reason unrelated to this work — an
+SRAM/SRAM_EXEC region overflow (`bench/README.md:34`) — so the measurement
+will need a narrower profile: `system` for `instrument_worst_bbd`, or a
+manual `BENCH_FAMILIES="system bbd"` build for the isolated `bbd` rows.
+Task 11 (`docs/superpowers/plans/2026-07-27-flux-bbd-delay.md`) confirmed
+both of those narrower builds link cleanly; this later documentation pass
+did not re-run either build, only recorded what Task 11 already verified.
+Reference points to measure against: `instrument_worst` at 97.5 % max, and
+the retired `instrument_worst_taps` at 96.9 % avg / 101.8–102.2 % max.
 
 **What was deleted, and why.** The tap bank (`engine/fx/taps.{h,cpp}`,
 `spky::TapBank`, `spky::derive_offsets`) — the mechanism that fed each
