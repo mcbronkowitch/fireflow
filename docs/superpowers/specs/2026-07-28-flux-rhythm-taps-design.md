@@ -1,7 +1,8 @@
 # FLUX rhythm taps — design
 
 **Date:** 2026-07-28
-**Status:** design approved, not yet planned
+**Status:** design approved (revised after a second review pass the same day —
+see §10), not yet planned
 **Depends on:** `docs/superpowers/specs/2026-07-27-flux-bbd-delay-design.md` (the BBD rewrite, branch `bbd-delay`)
 
 ## What this is
@@ -30,22 +31,22 @@ machinery.
 Own tap lines instead cost **64 KiB**, for the reason the BBD rewrite exists:
 **delay length is clock rate, not buffer size.** A two-second tap does not need
 a bigger buffer, only a slower clock. What it costs instead is bandwidth, since
-bandwidth follows the clock — and that turns out to be a feature (§3).
+bandwidth follows the clock — and that is a two-edged gift (§3).
 
 ## 1. Architecture
 
 New `engine/fx/taps.{h,cpp}`. The name is reclaimed; one piece of the content
 is not new.
 
-### 1.1 `derive_offsets` returns verbatim
+### 1.1 `derive_offsets` returns with its rules intact and its bounds opened up
 
 ```cpp
-void derive_offsets(const RhythmView& rv, int32_t max_offset, int32_t out[2]);
+void derive_offsets(const RhythmView& rv, int32_t min_offset,
+                    int32_t max_offset, int32_t out[2]);
 ```
 
-Restored from `main` unchanged. It is pure — a `RhythmView` and a length in
-samples, nothing tape-specific — and it carries the two rules that were
-expensive to arrive at:
+Restored from `main` with one change of shape. The two rules that were
+expensive to arrive at come back untouched:
 
 - **The uniformity guard.** Evenly spaced taps *are* a delay; that diagnosis
   killed zone S twice. When both gaps fall within `kUniformTol` of their mean,
@@ -54,6 +55,28 @@ expensive to arrive at:
 - **Mute, never clamp.** An out-of-range offset silences that tap. Clamping
   would place two taps at the same position, turning a missing echo into a
   doubled one.
+
+What changes: the old signature took a single `tape_len` and derived its upper
+bound from it, because on tape the only bound that existed was the buffer. A
+BBD has no buffer bound and two *physical* ones instead, so both arrive as
+arguments and the function stays pure:
+
+- **`min_offset` is new, and it is not cosmetic.** `bbd_clock_hz` clamps at
+  `kClockMaxHz = 32000` (`bbd.h:88,205`). At `kTapStages = 4096` that ceiling
+  binds at `4096 / (2 × 32000)` = **64 ms**: anything shorter is silently
+  pulled up to 64 ms. Two taps at 20 ms and 45 ms would both land there — the
+  doubled echo that "mute, never clamp" exists to prevent, arriving through the
+  clock instead of through a clamp. 64 ms is reachable, not theoretical: 1/32
+  at 120 BPM is 62.5 ms. The bound depends on the sample rate, so it cannot be
+  a header constant; `Flux` computes it and passes it in.
+- **`max_offset` is a musical bound, and it needs a number.** There is no
+  buffer to run out of. **1.5 s** (≈341 Hz of bandwidth, §3) is the point below
+  which a tap stops reading as an echo and starts reading as a thud. It is an
+  ear value and is marked as one.
+
+`tap_tuning::kMinGap` (32 samples) survives alongside `min_offset` and is not
+redundant with it: it rejects gaps that are a buzz rather than a rhythm, and it
+guards the spread the uniformity guard applies. Different concern, kept.
 
 One deletion: the `static_assert` on `Flux::kMaxSamples` being a power of two.
 It guarded `TapeTap`'s AND-masked read, and there is no masked read any more.
@@ -64,22 +87,40 @@ Two taps × two channels. Each line is an independent head:
 
 ```
 part send ─┬─→ BbdEcho   (main line: FEEDBACK, DRIVE, compander)  ──→ echo
-           ├─→ BbdLine   clock set so its delay == gap[0]         ─┐
-           └─→ BbdLine   clock set so its delay == gap[0]+gap[1]  ─┴→ taps
+           ├─→ BbdLine   clock set so its delay == r·gap[0]        ─┐
+           └─→ BbdLine   clock set so its delay == r·(gap[0]+gap[1])─┴→ taps
 ```
 
 Parallel heads off the **same send**, not in series behind the echo. That makes
 a tap what it was before: this deck's own delayed material, at a position the
 neighbour chose. No feedback on the tap lines.
 
-Each line's clock comes from the existing `bbd_clock_hz(offset_seconds,
-kTapStages)`. Offsets arrive in samples from `derive_offsets`; seconds is
-`offset / sample_rate`.
+`r` is the TAPS ratio (§4.1). The clock for each line is
+
+```
+f = clamp( kTapStages / (2 · r · offset_seconds) · lane_mult , 0, kClockMaxHz )
+```
+
+built from the existing `bbd_clock_hz(offset_seconds, kTapStages)` with the
+ratio folded into the time and the lane multiplier applied after, exactly as
+`Flux::process` already does for the main line (`flux.cpp:167-171`).
+
+**The ratio is applied to the bounds, not to the offsets.** `Flux` passes
+`min_offset / r` and `max_offset / r` to `derive_offsets` and multiplies the
+surviving offsets by `r` afterwards. Same result, and it keeps `derive_offsets`
+free of the ratio. It also buys a property worth having: turning TAPS up
+*recovers* taps that a fast neighbour rhythm had pushed under the floor.
+
+**The tap lines do not follow STAGES.** They are fixed at `kTapStages = 4096`.
+Following the knob looks free and is not: more stages need a *faster* clock for
+the same delay, so at 16384 stages the 32 kHz ceiling binds below 256 ms and
+most rhythm gaps would fall under the floor. Turning STAGES up would mute the
+taps in rows. The echo sweeps its brightness; the taps hold theirs.
 
 ### 1.2.1 Where it lives, and who feeds it
 
 `TapBank` is a member of `Flux`, not of `PartFx`. It has to be: §4.1 puts the
-taps into the sum before `_mix_lin`, and that sum is computed inside
+taps into `Flux::process`'s output sum, and that sum is computed inside
 `Flux::process`. `Flux` gains `set_taps(float norm)` and
 `set_rhythm(const RhythmView&)`, matching the shape of its existing setters.
 
@@ -128,40 +169,112 @@ must not include fx headers — is preserved: `taps.h` includes
 
 On Daisy this lives in SDRAM (`bench/mem.cpp:36`, `DSY_SDRAM_BSS`) where it is
 not a constraint. In VCV it is a per-instance member array; 64 KiB against the
-~38.7 MB an instance already takes is noise.
+~38.7 MB an instance already takes is noise. §1.2's decision not to follow
+STAGES keeps it at 64 KiB rather than 256 KiB, but that decision was made on
+musical grounds, not this one.
 
-## 3. Bandwidth is the price, and it replaces a control
+## 3. Bandwidth is the price, and it cuts both ways
 
-Bandwidth follows the clock, so longer taps are darker:
+Bandwidth follows the clock (`f_-3dB ≈ f_clk / 4`, `bbd.h:84`), so longer taps
+are darker:
 
 | tap offset | clock | bandwidth |
 |---|---|---|
-| 0.25 s | 8192 Hz | 4.1 kHz |
-| 0.5 s | 4096 Hz | 2.0 kHz |
-| 1 s | 2048 Hz | 1.0 kHz |
-| 2 s | 1024 Hz | 512 Hz |
+| 0.064 s (floor) | 32000 Hz | 8.0 kHz |
+| 0.25 s | 8192 Hz | 2.0 kHz |
+| 0.5 s | 4096 Hz | 1.0 kHz |
+| 1 s | 2048 Hz | 512 Hz |
+| 1.5 s (ceiling) | 1365 Hz | 341 Hz |
 
 The tape-era tap bank had a ROT knob whose whole job was to filter the taps
 apart from the echo (`kLpOpenHz`/`kLpSplitHz`, `kHpOpenHz`/`kHpSplitHz`). The
-per-tap clock now does that by physics. **ROT's filter spread is dropped**, not
-ported — one less control, and closer to the part being modelled.
+per-tap clock now does part of that by physics — but only part, and only in one
+direction. It separates the taps tonally by moving them **down**; ROT could
+also move their band **up** (`kHpSplitHz = 1500`), into where a mix has room.
+Down is the same direction as being buried.
+
+**ROT's filter spread is still dropped**, not ported — one less control, and
+closer to the part being modelled. But the audibility work it was doing does
+not disappear with it; §4.1 does that work with level and position instead.
 
 ## 4. Controls
 
-### 4.1 TAPS takes DRIVE's panel slot
+### 4.1 TAPS takes DRIVE's panel slot, and is one knob doing one thing
 
 `TAPS` occupies `{44.250, 89.400}` and `{169.110, 89.400}` — the positions DRIVE
 vacates — same `WK_SMKNOB`, label `TAPS`, generated by `res/gen_panel.py`.
-`PART_STRIDE` stays 23. STAGES is unaffected.
+`PART_STRIDE` stays 23. STAGES is unaffected. Default **0**: the taps change
+BODY's excitation source (§5), which is too much behavioural change to ship on.
 
-`0..1` maps to a gain up to `kTapGain = 0.7`, the value at which full tap level
-sits at parity with a direct read (set by ear in the tape era; kept with its
-rationale). Taps join **before `_mix_lin`**, so FLUX MIX remains the single wet
-control — the same rule the tape-era `flux.cpp` stated. Equal-power spread
-±22.5° (`kPanNear`/`kPanFar`) puts the taps beside the echo rather than inside
-it.
+| knob | taps | ratio `r` |
+|---|---|---|
+| 0 | silent | — |
+| 0 → 0.15 | tap 0 fades in | ×1 |
+| 0.15 → 0.3 | tap 1 fades in | ×1 |
+| 0.3 → 1.0 | both at full level | ×1 → ×2 |
 
-### 4.2 DRIVE moves to the right-click menu
+Two quantities, one knob, and they do not fight because on a BBD they are not
+independent: farther is darker by construction, and darker is quieter to the
+ear. The knob reads as a single physical axis — distance. Turning it up tells
+one story: one echo, then two, then they drift apart and lose an octave of
+brightness doing it. No point on the travel changes the knob's meaning, and
+0.3 is a usable rest position — full presence, unstretched.
+
+The staggered fade-in is not invented here. It is the tape-era `set_dust`
+mapping, whose own comment calls it *"an accent hierarchy (strong/weak), which
+is the groove dimension a stepped tap count could not give"*. Restored
+deliberately; a flat two-taps-together fade would be a level control, and a
+level control is not worth a panel slot.
+
+**Accepted limitation:** quiet *and* far is no longer reachable from TAPS
+alone. Physically that is consistent — distant things are dull and recessed —
+but a wide, very reticent field of taps now needs FLUX MIX to get there.
+
+**The taps get their own send level and do not pass through `_mix_lin`.** This
+reverses the tape era's "MIX is the single wet control" rule, deliberately and
+for cause. `flux.cpp:174` is a send structure — `l += echo * _mix_lin` — and
+`_mix_lin` spans −40…0 dB (`flux.cpp:108`). Taps placed before it arrive at
+MIX 0.5 at roughly −23 dB, band-limited to a few hundred Hz. That is precisely
+the failure the tape taps died of ("man hört sie nur wenn Delay weit
+aufgedreht ist"), and the BBD makes it worse, not better, because these taps
+are narrow where the tape's were full-band. So:
+
+```
+l += echo_l * _mix_lin + taps_l * _taps_lin
+```
+
+The bit-exact off path is untouched: the tap lines are fed from the same
+`send`, inside the same `_sw.is_idle()` early-out, so FLUX off is still FLUX
+off. MIX simply stops being their valve.
+
+The gain this buys is not only audibility. **MIX becomes a crossfader between
+two worlds:** MIX low with TAPS high is dry material with rhythmic
+interjections and no echo wash — a sound the old arrangement could not make at
+all, because the wash had to be bought to hear the taps.
+
+**`kTapGain = 0.7` is retired as a starting point.** It was set by ear for
+parity with a *full-band* tape read. Against a signal limited to 0.5–2 kHz,
+equal amplitude is not equal audibility, and the value is expected to land
+above 1. It is re-derived on the ear pass against a band-limited reference.
+
+**Panning widens.** `kPanNear`/`kPanFar` = 0.92388/0.38268 is 22.5° off hard —
+timid. Starting point 0.98/0.195 (11.25°). For a signal that already sits
+tonally under the echo, stereo position is the last free axis of separation and
+costs nothing.
+
+### 4.2 The ratio's other direction belongs to the modulation lane
+
+`FXT_FLUX_TIME`'s multiplicative clock pull reaches the tap clocks too. Without
+it nothing moves a tap at performance rate except the neighbour changing its
+pattern — and §6, the best property this design has, would have no trigger.
+
+**Bounded to ×1/2 … ×2 on the taps**, against the main line's ×1/4 … ×4. The
+floor check in §1.1 runs on the un-modulated offset; a ×4 shove could push both
+taps into the ceiling at once and collide them there. ±1 octave on the whole
+constellation is plenty, and it halves that window. Clean division of labour:
+the knob stretches outward, the lane bends both ways.
+
+### 4.3 DRIVE moves to the right-click menu
 
 Same shape as `Detune A/B` (`Spotymod.cpp:1215-1229`): a real param with a
 `ParamQuantity`, surfaced as a `ParamMenuSlider` in a submenu, with no panel
@@ -172,6 +285,13 @@ The criterion is already written into the codebase, above the excitation-source
 menu (`Spotymod.cpp:1230`): *"patch state, not a performance control — there is
 no panel knob for it on any engine, so it lives here."* DRIVE qualifies. You set
 it once; you do not ride it.
+
+That criterion is not the whole argument, because DRIVE was made audible only
+two days ago at the cost of two measurement rounds and two fixes, and the BBD
+spec's errata closes by freeing `kDriveHiDb` to be chosen for distortion
+character alone — an invitation to make DRIVE *more* rewarding, not less
+present. Against a plain tap level the trade would have been close. Against
+§4.1's knob — presence, count and distance in one gesture — it is not.
 
 On hardware DRIVE becomes a setup value with no knob. Nothing depends on that
 today — `set_drive` is called from bench, render and VCV, from no firmware host.
@@ -191,6 +311,10 @@ upgrade warning about DUST landing on DRIVE is removed rather than reworded.
 A resonator lives on transients. The point of the tap bank as an exciter was its
 sparse articulation, and mixing the continuous echo back in would bury it. The
 fallback exists so BODY does not go silent when the neighbouring deck rests.
+
+This path never had §4.1's audibility problem — as BODY's exciter the taps are
+the *sole* source. That the side path was already sound is a plausible reason
+the hole in the main path went unnoticed.
 
 `fast_tanh(_tap_dc.Process(...))` in `part_fx.cpp:72` is unchanged. It now bounds
 two unbounded sources instead of one — the tap lines are no more bounded to unity
@@ -216,22 +340,34 @@ BBD rewrite, confirmed by ear. A drifting tap offset therefore glides, exactly
 as a RATE or STAGES change does on the main line. The entire dip machinery is
 dropped.
 
+With §4.1 and §4.2 this stops being a property the design merely tolerates and
+becomes the reason to touch the knob: the TAPS ratio sweeps the whole
+constellation outward, in pitch and in time and in brightness at once, and the
+lane bends it back.
+
 ## 7. Testing
 
-### 7.1 Restored
+### 7.1 Restored, with one bound added
 
 `tests/test_taps.cpp` returns from `main` for `derive_offsets`: the uniformity
-guard, mute-not-clamp, `kMinGap`, invalid rhythm. The function is unchanged, so
-its tests are too.
+guard, mute-not-clamp, `kMinGap`, invalid rhythm. Those four are unchanged. The
+signature change adds two: an offset below `min_offset` mutes rather than
+clocking into the ceiling, and the two-taps-collide-at-the-ceiling case is
+demonstrably prevented.
 
 ### 7.2 New
 
 - **A tap arrives where the neighbour's rhythm puts it.** Arrival time measured
   the way `test_flux.cpp`'s `first_echo_index` does, against `gap[0]` and
   `gap[0]+gap[1]`.
+- **Ratio.** At TAPS 1.0 arrival is at `2 × gap`, and a tap that was muted
+  under the floor at ratio 1 sounds at ratio 2.
 - **Symmetry.** A follows B and B follows A, in one case.
 - **Self-gating.** No valid neighbour rhythm → measurably no taps. This is the
   property that makes the absence of a mute switch affordable.
+- **Taps survive MIX.** At MIX 0 with TAPS up, the tap signal is present in the
+  output — the assertion that pins §4.1's reversal and would have caught the
+  original arrangement.
 - **Excitation switching.** Taps active → the bus carries them; TAPS at 0 → the
   bus carries the echo. Asserted on the signal's sparseness over a window, not
   on an instantaneous sample.
@@ -246,7 +382,13 @@ green.
 
 ### 7.4 Not replaceable by a test
 
-A bench workload for the tap lines, then the CPU gate on hardware. See §8.
+- A bench workload for the tap lines, then the CPU gate on hardware. See §8.
+- The ear pass owns `kTapGain`, the pan width, and the missing compander — and
+  must audition the **top** of the TAPS travel specifically, not the middle.
+  Full stretch is the darkest and therefore the most burial-prone setting the
+  knob can reach. If it collapses there, the honest remedy is a modest level
+  rise along the ratio: it dents the distance metaphor, but a knob must not
+  fade itself out.
 
 ## 8. Risks
 
@@ -254,25 +396,57 @@ A bench workload for the tap lines, then the CPU gate on hardware. See §8.
 lines. The gate is unmeasured and `instrument_worst` last sat at 97.5 % of the
 block budget at maximum.
 
-Two things ease it, neither of them a guarantee:
+**The expensive case is the common one, and it is not the one intuition
+suggests.** Long taps clock slowly and cost little — but tap offsets come from
+a rhythm, and rhythms are mostly fast. A gap near the 64 ms floor puts a line
+at the 32 kHz ceiling, i.e. 0.67 events per sample per kind, and eight lines
+there is twice the four main lines' ceiling. That, not a long-tap case, is what
+`bench/workloads_taps.cpp` must configure. The per-sample filter-branch work
+does not shrink with the clock either, and that is the floor under everything.
 
-- A `BbdLine`'s tick loop runs `2·f_clk/fs` times per sample, so long taps clock
-  slowly and cost little. The per-sample filter-branch work does not shrink with
-  the clock, and that is the floor.
-- At `TAPS == 0`, or with no valid neighbour rhythm, the lines do not run at
-  all.
+The one genuine relief: at `TAPS == 0`, or with no valid neighbour rhythm, the
+lines do not run at all.
 
 **The measurement comes before shipping, not after.** A cheap lever is already
 identified if it is close: hoisting two per-sample divisions out of `BbdLine`
 (~8 `VDIV.F32` per sample across the current four lines).
 
-**Second risk: `kTapGain = 0.7` and the missing compander are both ear
-decisions inherited from a different signal path.** They are starting points, not
-settled values.
+**Second risk: the ear values.** `kTapGain`, the pan width, `max_offset` and the
+missing compander are all inherited from, or reasoned about against, a different
+signal path. They are starting points (§7.4).
 
 ## 9. Out of scope
 
 - Restoring the tape delay, in any form.
 - A mode switch between delay models.
-- Per-tap controls beyond the single TAPS level.
+- Per-tap controls beyond the single TAPS knob.
+- **A latch/freeze for the derived offsets.** Worth wanting while the taps were
+  passive; with a playable ratio the knob already gives a reason to hold on to
+  a moment, and a hold control has nowhere to live.
+- **Feeding the taps back into the main line's input.** One addition, and it
+  would let the neighbour's rhythm seed the echo — a real idea, and its own
+  decision. Not this spec's.
 - Any migration path for patches saved before this change.
+
+## 10. Review pass, 2026-07-28
+
+Recorded rather than silently folded in, because these are places the first
+draft was *wrong*, not merely thinner:
+
+1. **The bandwidth table was off by 2×.** It applied `f_clk / 2` where the
+   model uses `f_clk / 4` (`bbd.h:84`). A 1 s tap is 512 Hz, not 1 kHz.
+   Corrected in §3, and it is what turned §4.1's audibility question from a
+   nicety into the reason for the send change.
+2. **The 32 kHz clock ceiling collides with short gaps** and produces exactly
+   the doubled tap that `derive_offsets`' own "mute, never clamp" rule forbids.
+   Fixed by `min_offset` (§1.1). The first draft's claim that the function
+   returns verbatim did not survive.
+3. **Taps placed before `_mix_lin` reproduce the failure that killed the tape
+   taps.** The rule they were obeying — one wet control — is the rule that
+   caused it. Reversed in §4.1.
+4. **Making the taps follow STAGES was proposed and rejected during the same
+   pass.** More stages need a faster clock at fixed time, so following the knob
+   would mute the taps as STAGES rises. Recorded because it looks free from a
+   memory table and is not.
+5. **`max_offset` had no value at all.** It was inherited implicitly from the
+   tape's buffer length, which no longer exists.
