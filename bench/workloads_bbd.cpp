@@ -78,6 +78,68 @@ float proc_bbd_line_only()
     return acc;
 }
 
+// --- a tap line, at the ceiling and at half the clock ------------------------
+// The rhythm-taps design (docs/superpowers/specs/2026-07-28-flux-rhythm-taps-
+// design.md) puts eight bare BbdLines beside the four BbdEchos, fixed at
+// kTapStages = 4096, and its own section 8 says the COMMON case is the
+// expensive one: tap offsets come from a rhythm, rhythms are mostly fast, and
+// a short offset means a fast clock.
+//
+// Two rows, because one number cannot answer the question that decides the
+// design. bbd_line_only above prices 16384 stages at the ceiling; these price
+// the tap configuration itself, and then the same line at half the clock:
+//
+//   - the pair against each other splits the bill between EVENT work (scales
+//     with the clock: 2*f/fs ticks per sample) and the FIXED per-sample filter
+//     work (does not). Only that split says whether raising the tap floor from
+//     64 ms to 128 ms -- which halves the maximum clock -- buys anything.
+//   - bbd_line_tap against bbd_line_only says what the stage count alone is
+//     worth, at identical clock. bbd_walk_sdram's 0.09 % predicts "almost
+//     nothing"; this measures it rather than assuming it.
+//
+// A separate BbdLine object rather than reusing g_line: the runner calls
+// setup() immediately before each workload's warmup (bench/runner.cpp:23-28),
+// so sharing the arena between rows is safe, but sharing the OBJECT would
+// leave the second row's SetStages fighting the first row's settled state.
+
+constexpr int kTapStages = 4096;
+
+BbdLine g_tap;
+
+// Full line at the ceiling is 4096/(2*32000) = 64 ms = 3072 samples; at half
+// clock, 128 ms = 6144. 32768 covers both several times over -- the line must
+// be FULL before measuring, for the same reason setup_bbd_ceiling says.
+void settle_tap()
+{
+    for (int i = 0; i < 32768; ++i)
+        g_tap.Process(0.3f * sinf(static_cast<float>(i) * 0.01f));
+}
+
+void setup_bbd_line_tap()
+{
+    g_tap.Init(sdram_arena(), kTapStages / 2, kSampleRate);
+    g_tap.SetStages(kTapStages);
+    g_tap.SetClock(bbd_tuning::kClockMaxHz);
+    settle_tap();
+}
+
+void setup_bbd_line_tap_half()
+{
+    g_tap.Init(sdram_arena(), kTapStages / 2, kSampleRate);
+    g_tap.SetStages(kTapStages);
+    g_tap.SetClock(0.5f * bbd_tuning::kClockMaxHz);
+    settle_tap();
+}
+
+float proc_bbd_line_tap()
+{
+    const float* in = test_input();
+    float acc = 0.f;
+    for (size_t s = 0; s < kBlock; ++s)
+        acc += g_tap.Process(in[s]);
+    return acc;
+}
+
 // --- the SDRAM shape --------------------------------------------------------
 // The active window at 8192 stages is 4096 cells = 16 KB per line, walked
 // SEQUENTIALLY (imem advances by exactly one cell per write tick and the read
@@ -113,6 +175,8 @@ float proc_bbd_walk_sdram()
 const Workload kBbdWorkloads[] = {
     { "bbd", "bbd_ceiling",     setup_bbd_ceiling,     proc_bbd_ceiling     },
     { "bbd", "bbd_line_only",   setup_bbd_line_only,   proc_bbd_line_only   },
+    { "bbd", "bbd_line_tap",      setup_bbd_line_tap,      proc_bbd_line_tap },
+    { "bbd", "bbd_line_tap_half", setup_bbd_line_tap_half, proc_bbd_line_tap },
     { "bbd", "bbd_walk_sdram",  setup_bbd_walk_sdram,  proc_bbd_walk_sdram  },
 };
 const int kBbdCount = sizeof(kBbdWorkloads) / sizeof(kBbdWorkloads[0]);

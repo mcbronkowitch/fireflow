@@ -222,6 +222,8 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
     "bbd": (
         "bbd_ceiling",
         "bbd_line_only",
+        "bbd_line_tap",
+        "bbd_line_tap_half",
         "bbd_walk_sdram",
     ),
     "body": (
