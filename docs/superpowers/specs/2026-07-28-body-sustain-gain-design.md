@@ -253,3 +253,56 @@ the listening pass judges k.
   are 0.069 against 0.156, so BODY is quieter in STEP even while it is far
   louder in FLOW. Closing that is a makeup-gain question the bass-string spec
   already parked, and compressing FLOW does not settle it.
+
+---
+
+## §8 Errata — the design in §1–§4 was built and abandoned (2026-07-28)
+
+**The sustain-gain contract does not work as specified. Do not implement §1–§4.**
+What shipped instead is a bounding nonlinearity; the reasoning is below so the
+next reader does not re-run the same three experiments.
+
+**What broke it.** §1 derives `KsString`'s sustain gain as `1/(1 - |H(f0)|)` on
+the argument that the rest of the loop is unit magnitude. It is not.
+`KsString::process` already contains `s = fclamp(s, -20.f, +20.f)` inside the
+loop — a hard clamp that bounds the real structure long before the damping
+filter approaches lossless. So the closed form diverges toward its 1000 cap
+exactly where the real loop stays near 30–135. The model did not miss a small
+term; it ignored a nonlinearity that was already in the code.
+
+**How that was established, in the order it happened.** A sine at the nominal
+f0 measured 20–34 dB off — but that test is itself unsound, because the damping
+filter's phase shifts the loop's true resonance and, at these Q values, the
+peak is narrow enough that driving beside it reads far too low. A ring-down
+measurement was tried next and also failed: peak-per-period confuses a pulse
+spreading with a pulse dissipating, and an integer period slips against the
+true one, which produced round-trip gains above 1.0 for a passive structure.
+The third experiment was the decisive one because it tested the thing that
+matters rather than an intermediate: compensating by the closed form and
+measuring whether the FLOW-to-STEP *spread* compresses. It moved 27.0 dB to
+20.9 dB where a correct shape would have reached about 5. A wrong absolute
+value shifts everything uniformly and leaves the spread intact — a wrong shape
+is what this was.
+
+**Why a saturator inside `KsString` was not the answer either.** Replacing the
+hard clamp with a soft one at ceilings from 8.0 down to 0.4 leaves the worst
+case untouched: peak 629, spread 67 dB. The divergence lives in `ModeBank`,
+which the string's loop never sees.
+
+**What shipped.** `BodyVoice::process` bounds its own output when `_sustaining`,
+`kFlowSatCeil * fast_tanh(s / kFlowSatCeil)` with the ceiling at 0.4. Measured
+worst FLOW peak: 629 → 0.283. This follows M5a's rule — where opening a path
+lets a value diverge, add the bounding nonlinearity the instrument already has
+rather than re-imposing a limit.
+
+**What it does NOT do, and remains open.** The spread falls from 67 dB to about
+34, not to the 8–12 dB the user asked for, and the residual sits at the low end
+(`lo` falls faster than `hi` does) for reasons not yet understood. The ceiling
+cannot close it: 0.4 and 0.2 give the same spread and only move both ends
+together. Evenness is a separate question and should start from understanding
+that residual, not from a fourth guess.
+
+**Also found, also open:** a STRUCK BODY note exceeds full scale at some
+settings (measured peak 1.088). Pre-existing, untouched by this change, and the
+reason the ceiling is gated on `_sustaining` rather than applied to everything —
+bounding the strike would alter a character that was tuned by ear.

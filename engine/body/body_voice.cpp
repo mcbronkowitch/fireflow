@@ -4,6 +4,7 @@
 
 #include "mod/rng.h"
 #include "util/fast_sin.h"
+#include "util/fast_tanh.h"
 #include "util/math.h"
 
 namespace spky {
@@ -11,6 +12,14 @@ namespace spky {
 namespace {
 constexpr float kDriftDetuneCt = 3.f;     // micro-detune drift ceiling (+/-3 ct)
 constexpr float kDriftPanAmt   = 0.25f;   // pan drift ceiling around the fan slot
+
+// FLOW's output ceiling -- see process() for what it bounds and why it sits
+// there rather than inside a resonator. TUNING MATERIAL: it is the one number
+// a listening pass turns. Lower means the loud corners compress harder and
+// distort sooner; higher means more of the runaway survives. Measured worst
+// FLOW peak against it: 0.708 at 1.0, 0.283 at 0.4, 0.142 at 0.2.
+constexpr float kFlowSatCeil = 0.4f;
+constexpr float kFlowSatInv  = 1.f / kFlowSatCeil;
 
 // FILTER's loudness tilt -- see set_cutoff_hz for what it repairs and why the
 // numbers are what they are. TUNING MATERIAL, both of them.
@@ -233,7 +242,28 @@ void BodyVoice::process(float& accL, float& accR) {
 
     // Equal-power blend along MATL. The two gains are computed in
     // _apply_params, NOT here: MATL is a control-rate parameter.
-    const float s = (string * _mix_string + modal * _mix_modal) * _vel;
+    const float s_raw = (string * _mix_string + modal * _mix_modal) * _vel;
+
+    // FLOW's bounding nonlinearity. A struck resonator decays; a continuously
+    // driven one accumulates until dissipation balances the input, and the
+    // gain that balance settles at is the structure's own -- which here spans
+    // three orders of magnitude across MATL and DECAY. Measured peak of a
+    // single voice before this: 629, i.e. 56 dB over full scale, which does
+    // not merely clip, it slams the master limiter and ducks the other deck
+    // with it. That is why FLOW read as flat and lifeless whatever the
+    // controls said.
+    //
+    // A ceiling rather than a computed compensation, following M5a's rule:
+    // where opening a path lets a value diverge, add the bounding
+    // nonlinearity the instrument already has rather than re-imposing a
+    // limit. `KsString` already carries one for the same reason (its
+    // fclamp at +/-20 inside the loop) -- it simply cannot see the mode bank,
+    // which is where the divergence actually lives.
+    //
+    // STEP takes the raw branch untouched -- not multiplied by anything, so
+    // the struck path this engine was tuned on stays bit-identical.
+    const float s = _sustaining ? kFlowSatCeil * fast_tanh(s_raw * kFlowSatInv)
+                                : s_raw;
 
     const float mag = s < 0.f ? -s : s;
     if (mag > _peak) _peak = mag;

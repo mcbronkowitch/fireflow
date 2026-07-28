@@ -465,3 +465,58 @@ TEST_CASE("body engine: CHOKE's palm mute actually damps the ring") {
     // quieter" is the contract, and half is a conservative reading of it.
     CHECK(held < open * 0.5);
 }
+
+// --- FLOW's output ceiling (2026-07-28) ----------------------------------
+// A continuously driven resonator accumulates until dissipation balances the
+// input, and BODY's structure gain spans three orders of magnitude across
+// MATL and DECAY. Before the ceiling in BodyVoice::process, a single voice
+// measured a peak of 629 -- 56 dB over full scale.
+
+static float body_flow_step_peak(bool flow, float matl, float dec, float reso,
+                                 float pitch) {
+    BodyEngine e;
+    e.set_seed(99);
+    e.init(48000.f);
+    e.set_sub(0.f);
+    e.set_detune(0.f);
+    e.set_cycle(4.f);
+    e.set_decay(dec);
+    e.set_resonance(reso);
+    float t[LANE_COUNT] = { matl, 1.f, pitch, 0.f, 1.f };
+    e.set_targets(t, 0.5f);
+    e.set_flow(flow);
+    e.trigger(pitch);
+
+    float p = 0.f;
+    const int n = flow ? 4 * 48000 : 2 * 48000;
+    for (int i = 0; i < n; ++i) {
+        float l = 0.f, r = 0.f;
+        e.process(l, r);
+        if (!flow || i >= 3 * 48000) {
+            const float m = std::fabs(l);
+            if (m > p) p = m;
+        }
+    }
+    return p;
+}
+
+TEST_CASE("body: one FLOW voice never leaves full scale") {
+    // The whole point. Worst corner before the ceiling was MATL 1 with a long
+    // DECAY -- the mode bank, which KsString's own in-loop clamp cannot see.
+    for (float matl : { 0.f, 0.5f, 1.f })
+        for (float dec : { 0.2f, 0.5f, 0.9f })
+            for (float reso : { 0.f, 0.5f, 1.f })
+                for (float pitch : { 0.f, 1.f }) {
+                    CAPTURE(matl); CAPTURE(dec); CAPTURE(reso); CAPTURE(pitch);
+                    const float p = body_flow_step_peak(true, matl, dec, reso, pitch);
+                    CAPTURE(p);
+                    CHECK(p < 1.f);
+                }
+}
+
+// NOT tested here, and worth knowing: a STRUCK note also exceeds full scale at
+// some settings -- measured peak 1.088 at one corner of the same sweep. That is
+// pre-existing (this change touches only the _sustaining branch) and it means
+// the gate above is load-bearing rather than a formality: were the ceiling
+// ungated it would compress struck notes too, which is a real change to the
+// character this engine was tuned on by ear. Bounding STEP is its own decision.
