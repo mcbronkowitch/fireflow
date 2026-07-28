@@ -275,23 +275,29 @@ stale WAV sitting in patch storage.
   imported file is always in tune. The asymmetry is intentional: importing a
   file at the wrong pitch would be a bug, but re-rating material that's
   already sitting in the buffer is varispeed, not a bug.
-- **An old patch's DRIVE knob can scream on FLUX the moment it loads.**
-  DRIVE and STAGES replaced the old DUST/ROT controls (2.14.0, the FLUX ->
-  BBD rewrite) **in place, on the same param IDs**, so a saved patch's DUST
-  value loads straight into DRIVE — there is no migration and none is
-  planned; that is a deliberate product decision, not an oversight. The
-  problem is the value itself: the previously shipped init default for
-  DUST was **maximum** (`1.0`), and under the shipped DRIVE law, maximum
-  DRIVE drops the self-oscillation FEEDBACK threshold to **0.209** (against
-  `Flux::set_feedback`'s `norm × 1.2`). The previously shipped FEEDBACK
-  defaults were **0.343** and **0.527** (both well above that threshold) —
-  so a patch descending from that old init state self-oscillates the
-  instant FLUX is engaged, at full DRIVE, with no warning. **If an old
-  patch screams (or you're about to load one and FLUX was ever used on
-  it), turn DRIVE down before switching FLUX on.** For contrast: the
-  *current* factory init ships DRIVE at `0.15`, whose threshold (~0.75) sits
-  comfortably above both current FEEDBACK defaults — new patches are not
-  affected.
+- **An old patch loads its DUST value straight into DRIVE.** DRIVE and
+  STAGES replaced the old DUST/ROT controls (2.14.0, the FLUX -> BBD
+  rewrite) **in place, on the same param IDs**, so a saved patch's DUST
+  value lands on DRIVE — there is no migration and none is planned; that is
+  a deliberate product decision, not an oversight. The previously shipped
+  init default for DUST was **maximum** (`1.0`), so a patch descending from
+  that old init state comes up at full DRIVE: loud and heavily saturated,
+  which may not be what the patch sounded like. Turn DRIVE down.
+
+  It will not, however, run away. An earlier revision of this note warned
+  that it would, and that warning was correct at the time: DRIVE's gain sat
+  inside the feedback loop, so full DRIVE dragged the self-oscillation
+  FEEDBACK threshold down to 0.209 — below both of the old FEEDBACK defaults
+  (0.343 and 0.527), which meant instant runaway on load. `Flux::set_feedback`
+  now divides DRIVE's gain back out, so the threshold no longer moves with
+  DRIVE at all.
+- **FLUX self-oscillates above roughly 0.56 on FEEDBACK, at any DRIVE.**
+  That is the intended behaviour, not a fault — but it means DRIVE cannot
+  stop it. If the echo is ringing forever, **turn FEEDBACK down**; turning
+  DRIVE down will not help, because DRIVE was never what was holding it up.
+  Measured: histories that reach the same settings hot or cold converge to
+  the same level, so there is no stuck state to clear. Below ~0.56 the tail
+  always dies, at every DRIVE setting.
 - **Memory:** each `Spotymod` instance allocates well over its two 42 s
   stereo record buffers up front, whether or not the sampler is ever used on
   either part — closer to **~38.66 MB total**, not the 32 MB the record

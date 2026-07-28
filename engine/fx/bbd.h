@@ -164,11 +164,33 @@ constexpr float kCompCeilE  = kCompRef * 4.f;
 // different route; +15/+18 push the dirt earlier into the knob's travel but
 // tighten FEEDBACK's headroom back down toward the hair-trigger this
 // revision exists to fix.
+//
+// NOTE for whoever revisits this: the constraint that picked +12 no longer
+// binds. Every argument above trades DRIVE's dirt against FEEDBACK's travel,
+// because at the time the two were coupled. Flux::set_feedback now divides
+// bbd_drive_gain() out, so the bloom point sits at the same knob position at
+// every DRIVE (measured: 0.57 -> 0.56 across the range) and the range is free
+// to be chosen for distortion character alone. Raising kDriveHiDb is now the
+// cheap lever if DRIVE is ever judged too tame; it costs FEEDBACK nothing.
 constexpr float kSatCeil   = 0.9f;
 constexpr float kDriveLoDb = 0.f;
 constexpr float kDriveHiDb = 12.f;
 
 }  // namespace bbd_tuning
+
+// The DRIVE knob's 0..1 mapped to its linear gain. Both consumers go through
+// here rather than open-coding the pow: BbdEcho::SetDrive pushes it into the
+// saturator, and Flux::set_feedback divides it back out of the feedback
+// coefficient. If those two ever disagreed about the law -- which they would
+// the first time kDriveLoDb/kDriveHiDb moved, and that pair has moved once
+// already -- DRIVE would silently start dragging FEEDBACK's bloom point again,
+// which is the exact defect the division exists to prevent.
+inline float bbd_drive_gain(float norm) {
+    const float n = clampf(norm, 0.f, 1.f);
+    const float db = bbd_tuning::kDriveLoDb
+                   + n * (bbd_tuning::kDriveHiDb - bbd_tuning::kDriveLoDb);
+    return std::pow(10.f, db * 0.05f);
+}
 
 // The one formula. Pure, stateless, separately tested. Everything else in
 // this file trusts it.
@@ -507,11 +529,21 @@ public:
     // it, and the result gets denser and louder up to that limit, not
     // quieter. No physical circuit's ceiling recedes as you push it harder.
     // A fixed sat_out_ matches that: small-signal loop gain now equals `g`
-    // itself (no longer DRIVE-independent), so FEEDBACK moves closer to
-    // self-oscillation as DRIVE rises -- authentic, not a bug, and the loop
-    // still cannot diverge: fast_tanh clamps hard at +-1, so Process() is
-    // bounded by construction at sat_out_ = kSatCeil regardless of DRIVE or
-    // FEEDBACK.
+    // itself (no longer DRIVE-independent), so within THIS class FEEDBACK
+    // moves closer to self-oscillation as DRIVE rises -- what the physical
+    // circuit does, and the loop still cannot diverge: fast_tanh clamps hard
+    // at +-1, so Process() is bounded by construction at sat_out_ = kSatCeil
+    // regardless of DRIVE or FEEDBACK.
+    //
+    // That coupling is real but proved unplayable at the panel: measured, the
+    // FEEDBACK knob producing a 15 s tail slid from 0.57 at DRIVE 0 to 0.14 at
+    // DRIVE 1, so most of FEEDBACK's travel was runaway above a quarter DRIVE.
+    // Flux::set_feedback therefore divides bbd_drive_gain() back out of the
+    // coefficient it hands down -- see the comment there. BbdEcho itself is
+    // left honest: its loop gain IS feedback * g, and test_bbd.cpp's "DRIVE
+    // now raises the small-signal loop gain, monotonically" still holds it to
+    // that. Anything reasoning about what a FEEDBACK knob position does at the
+    // panel has to go through Flux, not this class.
     //
     // The dB range itself (kDriveLoDb, kDriveHiDb -- see their own comment)
     // was revised once already, by measurement, because the fixed ceiling
@@ -526,10 +558,7 @@ public:
     // leaving FEEDBACK a real non-oscillating span before that point
     // (measured ~0.21) rather than collapsing to a switch.
     void SetDrive(float norm) {
-        const float n = clampf(norm, 0.f, 1.f);
-        const float db = bbd_tuning::kDriveLoDb
-                       + n * (bbd_tuning::kDriveHiDb - bbd_tuning::kDriveLoDb);
-        const float g = std::pow(10.f, db * 0.05f);   // control rate only
+        const float g = bbd_drive_gain(norm);   // control rate only
         sat_in_ = g * (1.f / bbd_tuning::kSatCeil);
         sat_out_ = bbd_tuning::kSatCeil;
     }

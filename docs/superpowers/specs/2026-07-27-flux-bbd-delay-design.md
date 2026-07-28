@@ -434,7 +434,48 @@ than silently rewritten into the sections above so the record of what was
    at DRIVE 0 / 0.5 / 1.0 (`drive-fix-report.md`) — all comfortably below the
    1.2 ceiling, with real FEEDBACK travel left at every setting.
 
-   **DRIVE's status is therefore neither "open" nor "confirmed by ear."** It
-   is diagnosed and fixed by measurement; the owner confirmed RATE, STAGES
-   and `FXT_FLUX_TIME` by ear in item 6, but has **not yet re-listened to the
-   fixed DRIVE** — that listening pass is still outstanding.
+   **Superseded in part by item 8.** DRIVE was re-heard and the level fix
+   confirmed by ear; the "accepted consequence" above — FEEDBACK moving with
+   DRIVE — was then rejected by the same listening pass.
+8. **DRIVE's coupling into FEEDBACK, accepted in item 7, was rejected by ear
+   and removed.** The owner's report after listening to the fixed DRIVE: it
+   works, *and* "das drive schickt das delay aber früh ins blooming
+   feedback." Measured (350 ms, 4096 stages, tail length to −60 dB below the
+   tail's own peak): the FEEDBACK knob position producing a 15 s tail slid
+   from **0.57** at DRIVE 0 to **0.14** at DRIVE 1 — from a quarter DRIVE
+   upward, most of FEEDBACK's travel was runaway territory. This is exactly
+   what the plan's own design claim 4 had predicted before item 7 retired it
+   ("FEEDBACK means something different at every DRIVE setting and the two
+   knobs fight"), and the prediction was correct; what item 7 got right was
+   only that the *makeup-gain* remedy was the wrong one.
+
+   Fixed by dividing `bbd_drive_gain()` back out of the coefficient in
+   `Flux::set_feedback`, not by touching `sat_out_`. That distinction is the
+   whole point: the ceiling stays fixed, so everything item 7 bought
+   survives. Measured, identical before and after on the first repeat —
+   peak 0.512 / 0.923 / 1.279 at DRIVE 0 / 0.5 / 1.0 — while the knob
+   position for a 15 s tail goes flat at 0.57 / 0.56 / 0.56. Accepted
+   residual: the fed-back signal enters the saturator `1/g` quieter, so
+   repeats compound less distortion than the coupled law gave; the first
+   repeat, which carries the audible DRIVE cue, is untouched. The division
+   lives in `Flux` rather than `BbdEcho` so the model stays a faithful BBD
+   whose loop gain honestly equals `feedback × g`.
+
+   **Consequence for item 7's range argument: it no longer binds.** Every
+   trade-off that picked 0..+12 dB weighed DRIVE's dirt against FEEDBACK's
+   travel. Decoupled, that trade does not exist, and `kDriveHiDb` is free to
+   be chosen for distortion character alone.
+
+   **Separately investigated and found NOT to be a defect.** The same
+   listening pass reported that once the echo is blooming, turning DRIVE back
+   down does not stop it — only moving FEEDBACK does. Measured with a
+   path-dependence probe (same final settings, one run driven hot for 3 s
+   first, one never): the two histories converge to the same level at every
+   FEEDBACK setting, so there is no latched state. Above a FEEDBACK knob of
+   roughly **0.56** the loop self-oscillates at *any* DRIVE including 0 —
+   DRIVE was never what held it up, so turning it down cannot stop it.
+   That is the design's required "self-oscillation stays reachable" behaviour.
+   The reason it read as a bug is item 8's own defect: under the coupled law
+   DRIVE really could push an otherwise-safe FEEDBACK setting into runaway,
+   so DRIVE was the reasonable suspect. With the coupling gone, any FEEDBACK
+   below ~0.56 is safe at every DRIVE.

@@ -59,6 +59,11 @@ public:
 
 private:
     void recompute_time(bool immediate);
+    // Pushes _fb_norm to both echoes with DRIVE's gain divided out. Called
+    // from set_feedback AND set_drive, because either knob moving invalidates
+    // the coefficient the other one produced -- see the comment on the
+    // definition for why the division lives here rather than in BbdEcho.
+    void apply_feedback();
 
     BbdEcho _echo_l;
     BbdEcho _echo_r;
@@ -91,6 +96,10 @@ private:
     // clamped 0..1 norm, so the FIRST push after init always forwards.
     float _drive_norm = -1.f;
     float _stages_norm = -1.f;
+    // The FEEDBACK knob itself, kept because the coefficient handed to BbdEcho
+    // is a function of BOTH knobs and has to be re-derived whenever either
+    // moves. Matches init()'s set_feedback(0.45f).
+    float _fb_norm = 0.45f;
 };
 
 } // namespace spky

@@ -66,10 +66,39 @@ void Flux::recompute_time(bool immediate) {
 
 void Flux::set_feedback(float norm) {
     if (!_buf_ok) return;
+    _fb_norm = clampf(norm, 0.f, 1.f);
+    apply_feedback();
+}
+
+// FEEDBACK's coefficient, with DRIVE's gain divided back out.
+//
+// BbdEcho's saturator sits INSIDE the loop, so its gain multiplies the loop
+// gain directly: the loop sees feedback * g. That is what a real BBD does, and
+// BbdEcho stays that faithful part -- but it means the FEEDBACK knob addresses
+// a different circuit at every DRIVE setting. Measured on the coupled law
+// (350 ms, 4096 stages): the knob position producing a 15 s tail slid from
+// 0.57 at DRIVE 0 to 0.14 at DRIVE 1, and from a quarter DRIVE upward most of
+// FEEDBACK's travel was runaway. Dividing here restores the plan's original
+// intent -- "FEEDBACK must not mean something different at every DRIVE" --
+// which an earlier attempt had bought by shrinking the saturator's CEILING
+// instead, costing 14 dB of echo level and making DRIVE inaudible. This
+// touches neither sat_out_ nor the input path: the first repeat's level and
+// distortion still rise across the whole knob, unchanged (measured peak
+// 0.512 -> 1.279). Only the tail length stops moving.
+//
+// The residual is deliberate: the fed-back signal enters the saturator 1/g
+// quieter, so repeats compound less dirt than the coupled law gave. The first
+// repeat -- which carries the audible DRIVE cue -- is untouched.
+//
+// Flux, not BbdEcho, is the right home. Flux is already the layer that turns
+// musical intent into physics (BPM and divisions into a delay time, a 0..1
+// knob into a stage count); this is the same kind of mapping. BbdEcho remains
+// a plain BBD whose loop gain honestly equals feedback * g.
+void Flux::apply_feedback() {
     // Up to ~120 %: self-oscillation stays reachable, documented behaviour of
     // the original. The bound now comes from saturation WITHIN the loop
     // (BbdEcho) rather than a fast_tanh on the read path.
-    float fb = clampf(norm, 0.f, 1.f) * 1.2f;
+    const float fb = _fb_norm * 1.2f / bbd_drive_gain(_drive_norm);
     _echo_l.SetFeedback(fb);
     _echo_r.SetFeedback(fb);
 }
@@ -86,6 +115,11 @@ void Flux::set_drive(float norm) {
     _drive_norm = d;
     _echo_l.SetDrive(d);
     _echo_r.SetDrive(d);
+    // DRIVE just moved the loop gain, so the feedback coefficient that keeps
+    // the bloom point fixed moved with it. Order-independent: a host may push
+    // these two in either order, and every DRIVE change re-derives FEEDBACK
+    // from the knob position rather than from the coefficient now in force.
+    apply_feedback();
 }
 
 void Flux::set_stages(float norm) {

@@ -364,7 +364,24 @@ TEST_CASE("part_fx: tape_tap's soft clip bounds the raw BBD echo, which is not b
     // 1, so without this line a future tuning change that stopped the loop
     // from blooming past unity would leave the test green while testing
     // nothing.
-    REQUIRE(maxabs > 0.9);
+    //
+    // The bound is read backwards through the clip, which is what makes it a
+    // premise rather than a preference: maxabs is POST-tanh, so it can never
+    // exceed 1 by construction, and asserting a number on it is only ever a
+    // statement about what went IN. fast_tanh(x) > 0.85 requires x > 1.25, so
+    // this line says "the raw echo exceeded unity by at least 25%" -- exactly
+    // the premise the case needs, and the reason the clip is load-bearing.
+    //
+    // 0.9 originally, lowered when Flux::set_feedback began dividing DRIVE's
+    // gain out of the feedback coefficient. The guard fired on that change,
+    // correctly: the loop's reachable peak fell from 1.54485 to a measured
+    // 1.4659 (max over a stimulus sweep -- burst lengths 1..2000 ms at
+    // amplitudes 0.4 and 1.0), and 0.9 needs 1.47. Nothing about the claim
+    // changed -- 1.4659 is still 47% above unity, and deleting the fast_tanh
+    // still fails the `<= 1.f` REQUIRE above on this very case. Widening the
+    // stimulus was tried first and cannot recover 0.9: the sweep's own
+    // maximum is below it.
+    REQUIRE(maxabs > 0.85);
 }
 
 TEST_CASE("part_fx: tape_tap's DC block removes a sustained offset, fast_tanh alone cannot") {

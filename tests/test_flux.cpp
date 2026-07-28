@@ -229,6 +229,64 @@ TEST_CASE("flux: feedback at max blooms but stays bounded") {
     CHECK(late_rms > 0.01f);
 }
 
+// Self-normalised decay ratio at a FIXED feedback knob: rms of the tail in
+// [3.0,3.5]s over rms in [1.0,1.5]s. Normalising against the tail's own
+// earlier level keeps the ~8 dB that DRIVE legitimately adds out of the
+// number, so what is left is purely "how long does it ring".
+static float decay_ratio(Flux& f) {
+    const int burst_n = 32;
+    const int a_at = 48000, b_at = 3 * 48000;
+    const int win = 24000;
+    const int total = b_at + win + 1000;
+    double A = 0.0, B = 0.0;
+    for (int i = 0; i < total; ++i) {
+        float l = (i < burst_n) ? 0.8f * std::sin(0.2f * i) : 0.f;
+        float r = l;
+        f.process(l, r);
+        const int t = i - burst_n;
+        if (t >= a_at && t < a_at + win) A += (double)l * l;
+        if (t >= b_at && t < b_at + win) B += (double)l * l;
+    }
+    const double a = std::sqrt(A / win), b = std::sqrt(B / win);
+    return a > 1e-12 ? static_cast<float>(b / a) : 0.f;
+}
+
+TEST_CASE("flux: DRIVE does not move where FEEDBACK blooms") {
+    // The saturator sits INSIDE the feedback loop, so its gain `g` multiplies
+    // the loop gain: raising DRIVE by +12 dB used to quadruple it. Measured on
+    // the coupled law, the feedback knob that produces a 15 s tail slid from
+    // 0.57 at DRIVE 0 to 0.14 at DRIVE 1 -- above roughly a quarter DRIVE,
+    // most of FEEDBACK's travel was runaway territory and the two controls
+    // fought each other. Flux::set_feedback now divides the coefficient by the
+    // same `g`, so a feedback setting means one thing at every DRIVE.
+    //
+    // This asserts the DECAY only. The level and dirt DRIVE adds are a
+    // separate contract, covered in test_bbd.cpp -- and deliberately
+    // untouched here: the fix divides the feedback coefficient, never
+    // sat_out_, which is what the 2026-07-27 investigation had to repair.
+    //
+    // Measured at knob 0.40: coupled 0.027 -> 1.216 across DRIVE (a factor of
+    // 46); decoupled 0.027 -> 0.053 (a factor of 2). The factor-of-4 bound
+    // below therefore fails loudly on the coupled law and passes with room on
+    // the decoupled one.
+    auto ratio_at_drive = [](float drive) {
+        Flux f;
+        f.init(48000.f, s_buf_l, s_buf_r);
+        f.set_on(true, true);
+        f.set_bpm(120.f);
+        f.set_rate(6);
+        f.set_mix(1.f);
+        f.set_feedback(0.40f);
+        f.set_drive(drive);      // pushed AFTER feedback: set_drive must re-apply it
+        return decay_ratio(f);
+    };
+    const float clean = ratio_at_drive(0.f);
+    const float dirty = ratio_at_drive(1.f);
+    INFO("decay ratio: DRIVE 0 = " << clean << ", DRIVE 1 = " << dirty);
+    REQUIRE(clean > 1e-4f);
+    CHECK(dirty < 4.f * clean);
+}
+
 TEST_CASE("flux: init resets the DRIVE guard so a re-init's repeated push isn't swallowed") {
     // Reproduces Spotymod::reinit() -> Instrument::init() -> Flux::init(): a
     // sample-rate change rebuilds BbdEcho, and if Flux::init did not also
