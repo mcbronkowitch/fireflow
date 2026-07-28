@@ -97,17 +97,34 @@ protects, and the "future fx consumer" it anticipated.
 
 ### 1.2 The target alternates on the echo's own repeats
 
-Self-clocked, deliberately. `Flux` accumulates elapsed samples at control rate
-and flips the active target index each time the *current* delay time has
-elapsed:
+Self-clocked, deliberately. `Flux` accumulates elapsed samples PER SAMPLE, not
+at control rate, and flips the active target index once the *current* step's
+length has elapsed:
 
 ```
-_drag_phase += ctrl_block_samples
-if (_drag_phase >= t_current · sr) { _drag_phase -= t_current · sr; _drag_i ^= 1; }
+_drag_phase += 1
+if (_drag_phase >= _drag_step_len) { _drag_phase = 0.f; _drag_i ^= 1; apply_drag(); }
 ```
 
-One add and one compare per control block. Since the echo's repeat interval
-*is* `t_current`, "one target per elapsed delay time" is exactly one target per
+(`flux.cpp`'s `process()`; `_drag_step_len` is `_dt_target · sr` as of the last
+`apply_drag()` call, so it always names the CURRENT step's length, not the
+neighbour's raw interval.)
+
+Per sample, not per control block, because the step length *is* the echo's
+own repeat interval — at a fast RATE or a short neighbour gap that can be well
+under one control block (96 samples), and a control-rate accumulator only
+checks the flip condition at block boundaries, so the flip (and the pitch
+bend it carries) could land audibly late. The cost is symmetric either way —
+one add and one compare, just paid every sample instead of every block — so
+sub-block flip accuracy is free (see §4). The reset assigns `_drag_phase =
+0.f` rather than subtracting `_drag_step_len`; the two differ only by the
+previous sample's overshoot, which is at most one sample at per-sample
+cadence, so the plain assignment is the simpler and equally correct choice —
+a deliberate divergence from the pseudocode above's `-=`, not an oversight.
+
+One add and one compare per sample when DRAG is engaged, nothing but the
+compare when it is not. Since the echo's repeat interval *is* the current
+step's length, "one target per elapsed delay time" is exactly one target per
 repeat, without any cross-deck event.
 
 The alternative — stepping on the neighbour's onsets — would tie the two decks
@@ -181,8 +198,12 @@ GRIT and FLUX. TAPS no longer describes anything.
 ## 3. Where it lives
 
 `Flux` gains `set_drag(float)` and `set_rhythm(const RhythmView&)`, matching the
-shape of its existing setters, plus two members (`_drag_phase`, `_drag_i`). One
-DRAG state per part, since one `Flux` already carries both channels
+shape of its existing setters, plus six members: `_drag` (the knob value),
+`_drag_iv[2]` (the neighbour's two intervals in samples), `_drag_i` (which one
+is currently in force), `_drag_phase` (the per-sample phase accumulator,
+§1.2), `_drag_step_len` (that step's cached length in samples), and
+`_drag_active` (whether the neighbour's rhythm is currently usable). One DRAG
+state per part, since one `Flux` already carries both channels
 (`Flux::process(float& l, float& r)`).
 
 `Instrument` already publishes `rhythm(int p)` and already pushes cross-deck
@@ -201,10 +222,14 @@ it is one add and one compare to advance the step counter; the interpolation
 itself — two `powf`-class operations — runs only on a step change, not on
 every sample.
 
-Per control block, per part: one add, one compare, two `powf`-class operations
-for the geometric interpolation. If those turn out to matter they become a
-`daisysp::fmap`-style approximation, but a per-control-block cost against a
-96-sample block is roughly 1 % of a per-sample cost by construction.
+Per part, the two `powf`-class operations for the geometric interpolation run
+only on a step flip (`apply_drag()`, called from `process()`'s flip branch),
+not per control block — a flip happens once per repeat, i.e. once every
+`_drag_step_len` samples, which at musical tempos is thousands of samples and
+so far less often than the per-sample add-and-compare above. If the flip rate
+ever turns out to matter, those two `powf` calls become a `daisysp::fmap`-
+style approximation, but at any rate slower than once per sample this is
+already a small fraction of a per-sample cost.
 
 **This design needs no bench gate**, which is why it can be planned
 immediately. The `system`-profile run that the tap design was blocked on

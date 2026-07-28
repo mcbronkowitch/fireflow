@@ -223,11 +223,12 @@ public:
     bool  gate(int p)  const { return _parts[p].gate(); }
     float pitch_cv(int p) const { return _parts[p].pitch_cv(); }
     bool  pitch_gate(int p) const { return _parts[p].mod().pitch_gate(); }
-    // The bank's own published rhythm (see mod/rhythm_view.h). No longer read
-    // by the control tick -- the cross-feed that placed the OTHER bank's tap
-    // offsets here is gone with the taps (a BBD has no read pointer). Kept as
-    // a plain observer; currently unused, but harmless to leave in place for
-    // a future cross-deck mechanism.
+    // The bank's own published rhythm (see mod/rhythm_view.h). Read again by
+    // the control tick (spec 2026-07-28 flux-rhythm-drag): each part's FLUX
+    // takes its delay-time targets from the SIBLING's rhythm through this
+    // accessor -- `_parts[PART_A].fx().set_rhythm(rhythm(PART_B))` and the
+    // mirror, in instrument.cpp's control tick -- and tests read it directly
+    // (tests/test_instrument.cpp).
     const RhythmView& rhythm(int p) const { return _parts[p].mod().rhythm(); }
 
     // --- M4 center section ---

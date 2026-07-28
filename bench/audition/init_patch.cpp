@@ -49,6 +49,7 @@ void apply_init_patch(spky::Instrument& inst)
         inst.set_grit_mix(deck, part(GRIT_A, deck));
         inst.set_drive(deck, value(deck ? DRIVE_B : DRIVE_A));
         inst.set_stages(deck, value(deck ? STAGES_B : STAGES_A));
+        inst.set_drag(deck, value(deck ? DRAG_B : DRAG_A));
         inst.set_fx_on(
             deck, spky::FxBlock::Flux, part(FLUX_A, deck) > 1e-4f);
         inst.set_fx_on(

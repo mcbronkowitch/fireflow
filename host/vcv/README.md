@@ -79,6 +79,11 @@ Each part's right-click context menu provides a separate **Detune A** or
 **Detune B** control. Detune is independent of SOURCE: it is a constant
 `0..35 ct` spread and defaults to `6 ct`.
 
+Each part's context menu also carries a **Drive A** / **Drive B** control —
+FLUX's BBD echo saturation, moved off the panel to make room for DRAG (spec
+2026-07-28 flux-rhythm-drag). It behaves exactly as it always did: `0..1`
+maps to `0..+12 dB` of drive inside the delay loop, and it defaults to `0.2`.
+
 ## Sampler
 
 ENG is patch-compatible in the exact order **Synth = 0**, **Sampler = 1**,
@@ -278,10 +283,18 @@ stale WAV sitting in patch storage.
 - **FLUX self-oscillates above roughly 0.56 on FEEDBACK, at any DRIVE.**
   That is the intended behaviour, not a fault — but it means DRIVE cannot
   stop it. If the echo is ringing forever, **turn FEEDBACK down**; turning
-  DRIVE down will not help, because DRIVE was never what was holding it up.
-  Measured: histories that reach the same settings hot or cold converge to
-  the same level, so there is no stuck state to clear. Below ~0.56 the tail
-  always dies, at every DRIVE setting.
+  the context menu's DRIVE control down will not help, because DRIVE was
+  never what was holding it up. Measured: histories that reach the same
+  settings hot or cold converge to the same level, so there is no stuck
+  state to clear. Below ~0.56 the tail always dies, at every DRIVE setting.
+- **DRAG (per part) pulls FLUX's delay time toward the OTHER deck's
+  rhythm**, on the panel knob that used to be DRIVE. At 0 it is silent —
+  bit-identical to a FLUX that never heard a rhythm. Turned up, FLUX's
+  clock alternates between the sibling deck's two most recent onset gaps
+  instead of tracking RATE, so the echo audibly locks onto whatever the
+  other part is playing; RATE's influence fades out as DRAG rises. DRIVE,
+  which still governs BBD saturation, moved to each part's context menu
+  (see SOURCE and Detune).
 - **Memory:** each `Spotymod` instance allocates well over its two 42 s
   stereo record buffers up front, whether or not the sampler is ever used on
   either part — closer to **~38.66 MB total**, not the 32 MB the record

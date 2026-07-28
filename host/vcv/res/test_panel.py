@@ -47,9 +47,9 @@ PARAM_ORDER = [
     'MASTER_DRIVE', 'SETTLE', 'REV_SIZE', 'REV_DECAY', 'REV_TONE',
     'REV_DIFF', 'REV_SMEAR', 'REV_MOD', 'CHOKE', 'FILT_A', 'FILT_B', 'TIDE',
     'FLUXRATE_A', 'FLUXRATE_B', 'FLUXFB_A', 'FLUXFB_B', 'COLOR_A', 'COLOR_B',
-    'DRIVE_A', 'DRIVE_B', 'STAGES_A', 'STAGES_B',
+    'DRAG_A', 'DRAG_B', 'STAGES_A', 'STAGES_B',
     'REC_A', 'REC_B', 'REV_MIX_A', 'REV_MIX_B',
-    'SHUFFLE', 'DETUNE_A', 'DETUNE_B',
+    'SHUFFLE', 'DETUNE_A', 'DETUNE_B', 'DRIVE_A', 'DRIVE_B',
 ]
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
@@ -61,8 +61,8 @@ PARAM_TIPS = [
     'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'DRIVE',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
     'FILT', 'FILT', 'TIDE', 'FRATE', 'FRATE', 'FFB', 'FFB', 'COLOR',
-    'COLOR', 'DRIV', 'DRIV', 'STGS', 'STGS', 'REC', 'REC', 'ROOM', 'ROOM',
-    'SHUFL', 'Detune A', 'Detune B',
+    'COLOR', 'DRAG', 'DRAG', 'STGS', 'STGS', 'REC', 'REC', 'ROOM', 'ROOM',
+    'SHUFL', 'Detune A', 'Detune B', 'Drive A', 'Drive B',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
@@ -72,8 +72,9 @@ LIGHT_ORDER = ['GATE_A_L', 'GATE_B_L', 'REC_A_L', 'REC_B_L']
 def test_enum_order():
     """Patch compatibility. If this fails, every saved .vcv breaks."""
     check([c.enum for c in g.PARAMS] == PARAM_ORDER, "PARAMS order changed")
-    check([c.enum for c in g.PARAMS[-3:]] == ['SHUFFLE', 'DETUNE_A', 'DETUNE_B'],
-          "hidden detune must append after SHUFFLE")
+    check([c.enum for c in g.PARAMS[-5:]] ==
+          ['SHUFFLE', 'DETUNE_A', 'DETUNE_B', 'DRIVE_A', 'DRIVE_B'],
+          "hidden params must append after SHUFFLE")
     check([c.enum for c in g.INPUTS] == INPUT_ORDER, "INPUTS order changed")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
@@ -81,20 +82,25 @@ def test_enum_order():
 
 
 def test_source_and_hidden_detune_partition():
-    """SOURCE owns the former DTUN widgets; detune remains parameter-only."""
+    """SOURCE owns the former DTUN widgets; detune remains parameter-only.
+    DRIVE joined the hidden set the same way (spec 2026-07-28
+    flux-rhythm-drag): DRAG took its panel slot, and DRIVE became menu-only
+    patch state with the identical widgetless shape DETUNE_A/B already have."""
     visible = [c.enum for c in g.PANEL_PARAMS]
     hidden = [c.enum for c in g.HIDDEN_PARAMS]
     check("SOURCE_A" in visible and "SOURCE_B" in visible,
           "SOURCE controls must stay visible")
-    check(hidden == ["DETUNE_A", "DETUNE_B"],
+    check(hidden == ["DETUNE_A", "DETUNE_B", "DRIVE_A", "DRIVE_B"],
           f"hidden params are {hidden!r}")
     check(not any(e in visible for e in hidden),
-          "widgetless detune leaked into panel controls")
+          "widgetless detune/drive leaked into panel controls")
     check([c.enum for c in g.PARAMS] == visible + hidden,
-          "complete ParamId order must end with hidden detune")
+          "complete ParamId order must end with hidden detune/drive")
     h = g.header()
     check("{DETUNE_A," not in h and "{DETUNE_B," not in h,
           "widgetless detune leaked into kParamCtls")
+    check("{DRIVE_A," not in h and "{DRIVE_B," not in h,
+          "widgetless drive leaked into kParamCtls")
 
 
 def test_source_caption_states_and_static_default():
@@ -180,32 +186,36 @@ def test_param_runtime_tip_contract():
               f"want {caption!r}/{tip!r}")
 
 
-def test_bbd_voicing_params():
-    """DRIVE/STAGES are appended at the end of PARAMS, not templated into
+def test_drag_stages_params():
+    """DRAG/STAGES are appended at the end of PARAMS, not templated into
     part_controls() -- appending keeps PART_STRIDE unchanged so SONG_A/B,
     every part-B id and every already-appended tail param keep their id.
-    They were renamed in place from DUST/ROT (spec 2026-07-27 flux-bbd-delay):
-    the POSITIONS are what saved patches depend on, and they did not move."""
+    DRAG took over the panel slot DRIVE used to hold, renamed in place
+    (spec 2026-07-28 flux-rhythm-drag) exactly as DUST -> DRIVE was renamed
+    in place on 2026-07-27, which is itself where STAGES came from (DUST/ROT,
+    spec 2026-07-27 flux-bbd-delay): the POSITIONS are what saved patches
+    depend on, and they did not move. DRIVE itself became hidden patch state
+    -- see test_source_and_hidden_detune_partition for that half."""
     check(g.PART_STRIDE == 23, "PART_STRIDE must stay 23")
     ids = {c.enum: i for i, c in enumerate(g.PARAMS)}
-    for e in ("DRIVE_A", "DRIVE_B", "STAGES_A", "STAGES_B"):
+    for e in ("DRAG_A", "DRAG_B", "STAGES_A", "STAGES_B"):
         check(e in ids, f"{e} missing")
         check(ids[e] >= 2 * g.PART_STRIDE, f"{e} must be appended, not templated")
-    # The rename must not have reordered them: COLOR_B then DRIVE_A, DRIVE_B,
+    # The rename must not have reordered them: COLOR_B then DRAG_A, DRAG_B,
     # STAGES_A, STAGES_B, then REC_A. A reorder here silently remaps every
     # saved patch's two FLUX voicing knobs onto each other.
-    check(ids["DRIVE_A"] == ids["COLOR_B"] + 1, "DRIVE_A must follow COLOR_B")
+    check(ids["DRAG_A"] == ids["COLOR_B"] + 1, "DRAG_A must follow COLOR_B")
     check(ids["STAGES_B"] + 1 == ids["REC_A"], "REC_A must follow STAGES_B")
 
 
-def test_bbd_voicing_kind():
-    """DRIVE/STAGES must render as the small knob (GLYPH_R[SMKNOB] = 3.0 mm),
+def test_drag_stages_kind():
+    """DRAG/STAGES must render as the small knob (GLYPH_R[SMKNOB] = 3.0 mm),
     not the big knob (4.2 mm) -- a SMKNOB->BIGKNOB typo still clears
     test_no_overlap's minimum spacing by 0.43 mm, so it would ship silently
     without a kind pin of its own. Read the generated header string, not
     g.PARAMS' in-memory `.kind`."""
     h = g.header()
-    for enum in ("DRIVE_A", "DRIVE_B", "STAGES_A", "STAGES_B"):
+    for enum in ("DRAG_A", "DRAG_B", "STAGES_A", "STAGES_B"):
         check(h.count(f"{{{enum}, WK_SMKNOB,") == 1,
               f"{enum} is not WK_SMKNOB in the generated header")
 
@@ -213,8 +223,8 @@ def test_bbd_voicing_kind():
 def test_rec_params():
     """REC is appended, not templated -- appending keeps PART_STRIDE at 23 so
     every saved .vcv keeps its param ids. Same guard shape as
-    test_bbd_voicing_params, and the kind is pinned the same way
-    test_bbd_voicing_kind pins DRIVE/STAGES: a LATCH that silently became an
+    test_drag_stages_params, and the kind is pinned the same way
+    test_drag_stages_kind pins DRAG/STAGES: a LATCH that silently became an
     SMBTN would still clear test_no_overlap (identical radius), so the kind
     needs its own check."""
     check(g.PART_STRIDE == 23, "PART_STRIDE must stay 23")
@@ -527,7 +537,7 @@ LOWER_A = {   # enum -> (x, y)   part A; part B is W - x
     'DECAY_A': (9.25, 89.40), 'RES_A': (19.75, 89.40), 'SOURCE_A': (30.25, 89.40),
     'FLUXRATE_A': (44.25, 77.30), 'FLUX_A': (54.75, 77.30),
     'FLUXFB_A': (65.25, 77.30), 'REV_MIX_A': (75.75, 77.30),
-    'DRIVE_A': (44.25, 89.40), 'STAGES_A': (54.75, 89.40),
+    'DRAG_A': (44.25, 89.40), 'STAGES_A': (54.75, 89.40),
     'GRIT_A': (65.25, 89.40), 'COMP_A': (75.75, 89.40),
     'ENGINE_A': (10.00, 103.60), 'GRITMODE_A': (17.50, 103.60),
     'STEPS_A': (37.00, 103.60), 'STEP_A': (46.00, 103.60),
@@ -1255,9 +1265,9 @@ def test_sampler_preset_init_snapshot():
         0.2370000034570694, 0.0, 0.064333423972129822,
         -0.2460000067949295, 0.5, 0.39272749423980713,
         0.36363637447357178, 0.28566798567771912,
-        0.43933644890785217, 0.0, 0.0, 0.15, 0.15, 0.8, 0.8,
+        0.43933644890785217, 0.0, 0.0, 0.0, 0.0, 0.8, 0.8,
         0.0, 0.0, 0.43066525459289551, 0.21200035512447357, 1.0,
-        0.171428576, 0.171428576,
+        0.171428576, 0.171428576, 0.2, 0.2,
     ]
     check(len(actual) == len(PARAM_ORDER) == len(expected),
           f"init snapshot has {len(actual)} values, want {len(PARAM_ORDER)}")

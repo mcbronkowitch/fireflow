@@ -93,8 +93,8 @@ void Instrument::process(const float* inL, const float* inR,
             // its delay-time targets from the SIBLING's PITCH-lane rhythm.
             // Same cadence and same cross-over as the excitation tap above;
             // derive_intervals runs here, never per sample.
-            _parts[PART_A].fx().set_rhythm(_parts[PART_B].mod().rhythm());
-            _parts[PART_B].fx().set_rhythm(_parts[PART_A].mod().rhythm());
+            _parts[PART_A].fx().set_rhythm(rhythm(PART_B));
+            _parts[PART_B].fx().set_rhythm(rhythm(PART_A));
             _ctrl_ctr = Center::kCtrlInterval;
         }
         --_ctrl_ctr;

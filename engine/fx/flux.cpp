@@ -159,6 +159,7 @@ void Flux::apply_drag() {
     if (_drag <= 0.f || !_drag_active) {
         _dt_target = _delay_time;
         _drag_step_len = 0.f;
+        _drag_phase = 0.f;
         return;
     }
     const float target = static_cast<float>(_drag_iv[_drag_i]) / _sr;

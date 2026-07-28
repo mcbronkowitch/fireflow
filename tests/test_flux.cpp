@@ -426,16 +426,21 @@ TEST_CASE("flux: DRAG reaches the clock") {
     f.init(48000.f, s_buf_l, s_buf_r);
     f.set_on(true, true);
     f.set_bpm(120.f);
-    f.set_rate(3);
-    f.set_stages(0.8f);                  // 8192
+    f.set_rate(3);                       // ladder = 0.5 s -- must NOT be the value read
     f.set_mix(1.f);
     f.set_feedback(0.f);
-    f.set_rhythm(drag_view(24000, 18000));   // 0.5 s and 0.375 s, long plateaus
+    // 0.375 s and 0.5 s: the FIRST interval (0.375 s) is off the 0.5 s ladder,
+    // so a DRAG-ignoring apply_drag (one that just kept _delay_time) would
+    // read the ladder's 0.5 s and land on the wrong clock below -- unlike the
+    // old (24000, 18000) pair, whose first interval WAS 0.5 s and so passed
+    // even with DRAG doing nothing.
+    f.set_rhythm(drag_view(18000, 24000));
     f.set_drag(1.f);
     // The 30 ms slew has to run before clock_hz() reflects the target.
     for (int i = 0; i < 5000; ++i) { float l = 0.f, r = 0.f; f.process(l, r); }
-    // f = stages / (2 * t) = 8192 / (2 * 0.5) = 8192 Hz
-    CHECK(f.clock_hz() == doctest::Approx(8192.f).epsilon(0.02));
+    // stages stays the 8192 boot default (kBootStagesNorm == 0.8, set by init()).
+    // f = stages / (2 * t) = 8192 / (2 * 0.375) = 10922.667 Hz
+    CHECK(f.clock_hz() == doctest::Approx(10922.667f).epsilon(0.02));
 }
 
 TEST_CASE("flux: a step bends pitch by the ratio of the two intervals") {
@@ -469,11 +474,22 @@ TEST_CASE("flux: an invalid neighbour rhythm leaves DRAG inert at any setting") 
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(3);                       // ladder = 0.5 s
+    // Make the rhythm VALID first and let DRAG actually engage and flip once --
+    // otherwise set_rhythm's reset branch and the `active == _drag_active`
+    // clause of its guard are never exercised, and the case only proves DRAG
+    // is inert on a Flux that was never dragged in the first place.
+    f.set_rhythm(drag_view(12000, 6000));   // 0.25 s and 0.125 s
+    f.set_drag(1.f);
+    CHECK(f.drag_time_s() == doctest::Approx(0.25f).epsilon(0.001));  // off the ladder
+
+    auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
+    run(12000);                          // step 0 (12000 samples) elapses -- flip
+    CHECK(f.drag_time_s() == doctest::Approx(0.125f).epsilon(0.001));  // flipped
+
     RhythmView rv = drag_view(12000, 6000);
     rv.valid = false;
     f.set_rhythm(rv);
-    f.set_drag(1.f);
-    CHECK(f.drag_time_s() == doctest::Approx(0.5f).epsilon(0.001));
+    CHECK(f.drag_time_s() == doctest::Approx(0.5f).epsilon(0.001));  // back on the ladder
 }
 
 TEST_CASE("flux: RATE still reaches the ladder at intermediate DRAG") {

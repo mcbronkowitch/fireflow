@@ -41,6 +41,7 @@ TEST_CASE("derive_intervals: uniform gaps are spread into a limp") {
 TEST_CASE("derive_intervals: gaps within the tolerance still count as uniform") {
     int32_t out[2];
     derive_intervals(view(6000, 6060), out);    // 1 % apart, inside kUniformTol
+    CHECK(out[0] == 6000);      // the guard rewrites only the second gap
     CHECK(out[1] == 4500);
 }
 

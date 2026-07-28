@@ -131,8 +131,11 @@ public:
     // Tape-Abgriffe, bis das snappende Deck erneut drei Onsets gezaehlt
     // hatte. Diese Tap-Bank ist inzwischen entfernt -- eine BBD hat keinen
     // Lesezeiger, also widersprach die Tap-Bank dem Modell, das sie
-    // fuettern sollte, nicht nur ihrem Budget. `rhythm()` hat heute keinen
-    // FX-Konsumenten mehr (siehe engine/instrument.h).
+    // fuettern sollte, nicht nur ihrem Budget. `rhythm()` hat heute wieder
+    // einen FX-Konsumenten: DRAG (spec 2026-07-28 flux-rhythm-drag, siehe
+    // engine/instrument.h) liest diesen Ring ueber Instrument's Kontroll-Tick
+    // und fuettert damit die FLUX des ANDEREN Decks -- als Dauer, nicht mehr
+    // als Position wie bei der alten Tap-Bank.
     //
     // Das Nullen hier bleibt trotzdem richtig, unabhaengig von diesem
     // Konsumenten: reset_phases loescht denselben Ring auf dieselbe Weise,
@@ -162,9 +165,11 @@ public:
     float clock_scale() const { return _lanes[LANE_PITCH].clock_scale(); }
     // The master lane's rhythm. Fed the FX tap bank before it was deleted (a
     // BBD has no read pointer, docs/superpowers/plans/2026-07-27-flux-bbd-delay.md
-    // Task 6); currently unread outside tests, kept as a plain observer for a
-    // possible future cross-deck consumer (see the longer comment on
-    // engine/instrument.h's rhythm(int p)).
+    // Task 6); DRAG is its current FX consumer (spec 2026-07-28
+    // flux-rhythm-drag): Instrument's control tick reads this deck's rhythm
+    // through this accessor and feeds it to the SIBLING deck's
+    // `Flux::set_rhythm` (see the longer comment on engine/instrument.h's
+    // rhythm(int p)). Also read directly by tests.
     const RhythmView& rhythm() const { return _rhythm; }
 
 private:
