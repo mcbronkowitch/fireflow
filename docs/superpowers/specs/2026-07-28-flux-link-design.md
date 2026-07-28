@@ -227,3 +227,55 @@ The load-bearing one first:
   which the bipolar split has now made a deliberate, opt-in character rather
   than the default behaviour.
 - Any migration for patches saved before this change.
+
+## 8. Errata (ear pass, 2026-07-28)
+
+Implemented on `bbd-delay` as `db5d94c`, `f735f78`, `334c754`, `45ec3aa`,
+`c944c78`. Auditioned by the owner in Rack and accepted as built.
+
+**No tuning value moved.** `kMaxSkip = 16`, `kGateRampS = 0.003` and the
+linear depth curve of §2.3 all stand as specified. §6 named these three as
+ear values expected to shift; none did.
+
+**§6's risks were not heard.** The free-running pattern phase (risk 1) and
+the smear at coarse rungs with high feedback (risk 2) drew no objection in
+play. That is weaker evidence than a deliberate hunt for them would be — the
+pass confirmed the control works, it did not stress the two risks
+individually — so neither is struck, only unconfirmed.
+
+**§2.4's two input classes were not separately reported**, so the question
+that section asks — whether the sustained-input reading (a rhythmic tremolo
+on the wet return rather than separate echoes) earns its keep as a second
+sound — remains open. Nothing about the mechanism changed, so §2.4's
+description still holds; only its evaluation is outstanding.
+
+### Two behaviours the implementation has that this spec did not describe
+
+Both were surfaced by review, flagged to the owner before the ear pass, and
+drew no objection. They are recorded here rather than fixed.
+
+1. **Depth is dead until the next repeat boundary.** `_gate_target` is only
+   written when the pattern advances, so moving the knob mid-repeat changes
+   nothing audible until that repeat ends — 62 ms at the intended 1/32 rung,
+   but half a second at 1/4 and longer at a slow tempo. Making the knob live
+   is one guarded line in `set_link`; left out because a control that only
+   commits on the grid may be the better feel, and that is an ear question.
+
+2. **The gate also thins the FLUX excitation tap.** `PartFx` derives the tap
+   from `(l - pre_flux_l)`, which is the gated contribution, so a deck
+   selecting FLUX as an excitation source inherits the pattern. Coherent,
+   arguably right, and not a decision this spec made.
+
+### One property of the gate's smoother, for whoever tunes it next
+
+The snap that returns the gate to exactly unity was widened from `1e-6` to
+`1e-4` during the branch, because `1e-6` sat *below* the float32 stall floor
+of the one-pole and therefore never fired — the branch that restores the
+bit-exact path could not switch itself off. The floor is `8.9e-11 · sr`.
+
+The widened threshold also swallows the first step away from unity, so
+thinning depths below `1e-4 · kGateRampS · sr` pin the gate at 1 and do
+nothing: 1.4 % of the knob's travel at 48 kHz, 5.8 % at 192 kHz. This dead
+zone is inherent to snap-on-`fonepole` and cannot be tuned away — a smaller
+threshold stops catching the stall. Anyone replacing the smoother should
+know that both properties come as a pair.
