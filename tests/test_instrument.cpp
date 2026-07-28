@@ -5,6 +5,7 @@
 #include <limits>
 #include "instrument.h"
 #include "fx/reverb.h"
+#include "fx/drag.h"
 #include "mod/super_modulator.h"
 using namespace spky;
 
@@ -1238,6 +1239,15 @@ TEST_CASE("instrument: each deck's DRAG is fed by the OTHER deck's rhythm") {
     static Instrument inst;
     inst.init(48000.f, test_fx_mem());   // the file's own fixture, line 67
     inst.set_tempo_bpm(120.f);
+    // Asymmetric PITCH-lane rates (spec review, fix round 1): two identical
+    // decks would publish bit-identical RhythmViews, and a bugged SELF-push
+    // (each deck fed its own rhythm instead of the sibling's) would then
+    // satisfy every assertion below just as well as a real cross-push. A
+    // ~9x period difference gives the two decks' derived interval sets no
+    // room to collide, so only a genuine cross-push can land deck A's DRAG
+    // time inside deck B's set (and vice versa).
+    inst.set_rate(PART_A, 0.5f);   // free_hz(0.5) ~ 0.77 Hz, period ~1.29 s
+    inst.set_rate(PART_B, 0.8f);   // free_hz(0.8) ~ 6.95 Hz, period ~0.144 s
     for (int p = 0; p < PART_COUNT; ++p) {
         inst.set_fx_on(p, FxBlock::Flux, true);
         inst.set_flux_rate(p, 3);            // ladder = 0.5 s
@@ -1254,8 +1264,41 @@ TEST_CASE("instrument: each deck's DRAG is fed by the OTHER deck's rhythm") {
     REQUIRE(inst.rhythm(PART_A).valid);
     REQUIRE(inst.rhythm(PART_B).valid);
 
-    // Each deck has left its ladder time, which can only have come from the
-    // sibling's rhythm reaching its Flux.
-    CHECK(inst.drag_time_for_test(PART_A) != doctest::Approx(0.5f).epsilon(0.001));
-    CHECK(inst.drag_time_for_test(PART_B) != doctest::Approx(0.5f).epsilon(0.001));
+    // Ground truth: each deck's OWN derived interval set, computed directly
+    // from its published rhythm via the same pure function Flux uses
+    // internally (fx/drag.h). This is what makes the rest of the test a
+    // real cross-deck check rather than a "left the ladder value" check.
+    int32_t iv_a[2], iv_b[2];
+    derive_intervals(inst.rhythm(PART_A), iv_a);
+    derive_intervals(inst.rhythm(PART_B), iv_b);
+
+    // The two sets must be disjoint, or a self-push could satisfy the
+    // membership checks below by accident -- this is what the asymmetric
+    // rates above are for. If this ever fails, the rates need to move
+    // further apart, not the assertion.
+    REQUIRE(iv_a[0] != iv_b[0]);
+    REQUIRE(iv_a[0] != iv_b[1]);
+    REQUIRE(iv_a[1] != iv_b[0]);
+    REQUIRE(iv_a[1] != iv_b[1]);
+
+    const float sr = 48000.f;
+    const float a_time = inst.drag_time_for_test(PART_A);
+    const float b_time = inst.drag_time_for_test(PART_B);
+
+    // Deck A's DRAG time must land on one of deck B's two intervals (at
+    // DRAG 1 the interpolation returns the selected interval exactly --
+    // Flux::apply_drag -- but WHICH of the two depends on where the
+    // alternator happens to sit, so this asserts membership, not equality
+    // with a specific slot) ...
+    CHECK((a_time == doctest::Approx(iv_b[0] / sr).epsilon(0.001) ||
+           a_time == doctest::Approx(iv_b[1] / sr).epsilon(0.001)));
+    // ... and on NEITHER of deck A's own -- the clause a self-push fails.
+    CHECK(a_time != doctest::Approx(iv_a[0] / sr).epsilon(0.001));
+    CHECK(a_time != doctest::Approx(iv_a[1] / sr).epsilon(0.001));
+
+    // Mirror for deck B.
+    CHECK((b_time == doctest::Approx(iv_a[0] / sr).epsilon(0.001) ||
+           b_time == doctest::Approx(iv_a[1] / sr).epsilon(0.001)));
+    CHECK(b_time != doctest::Approx(iv_b[0] / sr).epsilon(0.001));
+    CHECK(b_time != doctest::Approx(iv_b[1] / sr).epsilon(0.001));
 }
