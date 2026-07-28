@@ -20,6 +20,12 @@ void Flux::init(float sample_rate, float* buf_l, float* buf_r) {
     _rate_idx = 3;               // boot "1/4"
     _bpm = 120.f;
     _time_mult = 1.f;
+    _drag = 0.f;
+    _drag_iv[0] = _drag_iv[1] = 0;
+    _drag_i = 0;
+    _drag_phase = 0.f;
+    _drag_step_len = 0.f;
+    _drag_active = false;
     // Both guards restart from an unreachable value: BbdEcho::Init has just
     // reset the drive to 0 and the stage count to its own default, so a
     // repeated push of the value the user already had dialled in must NOT be
@@ -60,8 +66,8 @@ void Flux::recompute_time(bool immediate) {
     // ceiling is a sanity bound against a pathological tempo, not a musical
     // limit -- at 512 stages that is already a 4.3 Hz clock.
     _delay_time = clampf(t, 0.001f, 60.f);
-    _dt_target = _delay_time;
-    if (immediate) _dt_current = _delay_time;
+    apply_drag();
+    if (immediate) _dt_current = _dt_target;
 }
 
 void Flux::set_feedback(float norm) {
@@ -139,10 +145,70 @@ void Flux::set_time_mod(float norm) {
     _time_mult = bbd_time_mult(norm);
 }
 
+// The single writer of _dt_target.
+//
+// Geometric, not linear: pitch tracks the clock RATIO directly, so a linear
+// blend would put the perceived midpoint in the wrong place. Same reasoning
+// that gave the modulation lane its x1/4..x4 mapping.
+//
+// _drag_step_len is the step's length in SAMPLES of the interpolated time, not
+// of the neighbour's raw interval -- the echo's repeat interval is what is
+// actually in force, so stepping on it is what makes "one interval per repeat"
+// true at every DRAG setting rather than only at 1.
+void Flux::apply_drag() {
+    if (_drag <= 0.f || !_drag_active) {
+        _dt_target = _delay_time;
+        _drag_step_len = 0.f;
+        return;
+    }
+    const float target = static_cast<float>(_drag_iv[_drag_i]) / _sr;
+    _dt_target = std::pow(_delay_time, 1.f - _drag) * std::pow(target, _drag);
+    _drag_step_len = _dt_target * _sr;
+}
+
+void Flux::set_drag(float norm) {
+    if (!_buf_ok) return;
+    const float d = clampf(norm, 0.f, 1.f);
+    if (d == _drag) return;      // apply_drag runs two powf; do not run per push
+    _drag = d;
+    apply_drag();
+}
+
+void Flux::set_rhythm(const RhythmView& rv) {
+    if (!_buf_ok) return;
+    int32_t iv[2];
+    derive_intervals(rv, iv);
+    const bool active = (iv[0] != drag_tuning::kNone && iv[1] != drag_tuning::kNone);
+    if (active == _drag_active && iv[0] == _drag_iv[0] && iv[1] == _drag_iv[1]) return;
+    _drag_iv[0] = iv[0];
+    _drag_iv[1] = iv[1];
+    _drag_active = active;
+    if (!active) { _drag_i = 0; _drag_phase = 0.f; }
+    apply_drag();
+}
+
 void Flux::process(float& l, float& r) {
     if (!_buf_ok) return;
     float send = _sw.process();
     if (_sw.is_idle()) return;   // fully off: bit-exact dry
+
+    // DRAG's step. One add and one compare per sample when engaged, nothing
+    // but the compare when it is not -- which is what keeps DRAG 0 on the
+    // same path it has always been on.
+    //
+    // Strict '>', not '>=': _drag_phase counts samples ELAPSED since the last
+    // flip, starting from 0, so a step of _drag_step_len samples has fully
+    // elapsed only once the counter exceeds it, not when it first reaches it
+    // -- '>=' would fire the flip one sample early, exactly on the boundary
+    // sample itself rather than after it.
+    if (_drag > 0.f && _drag_active) {
+        _drag_phase += 1.f;
+        if (_drag_phase > _drag_step_len) {
+            _drag_phase = 0.f;
+            _drag_i ^= 1;
+            apply_drag();
+        }
+    }
 
     // Both slews advance exactly ONCE per sample, before anything reads them.
     daisysp::fonepole(_dt_current, _dt_target, _dt_coef);

@@ -195,8 +195,11 @@ whole §1.2.1 — host-provided buffers, a `kTapSamples` constant, a parallel
 
 ## 4. CPU
 
-Per sample: **nothing changes.** `Flux::process` runs the same path it runs
-today; DRAG only alters what `_dt_target` holds when it gets there.
+Per sample: **no new arithmetic of consequence.** At DRAG 0 it is one extra
+compare (`_drag > 0.f`) against a path that otherwise runs unchanged. Engaged,
+it is one add and one compare to advance the step counter; the interpolation
+itself — two `powf`-class operations — runs only on a step change, not on
+every sample.
 
 Per control block, per part: one add, one compare, two `powf`-class operations
 for the geometric interpolation. If those turn out to matter they become a

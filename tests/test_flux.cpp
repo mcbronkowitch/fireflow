@@ -335,3 +335,151 @@ TEST_CASE("flux slice: norm endpoints hit 1/2 and 1/32") {
     CHECK(std::string(kDivisions[kFluxRateOffset + flux_division_index(1.f)].name) == "1/32");
     CHECK(std::string(kDivisions[kFluxRateOffset + flux_division_index(3.f/11.f)].name) == "1/4");
 }
+
+static float s_buf_l2[Flux::kMaxSamples];
+static float s_buf_r2[Flux::kMaxSamples];
+
+static RhythmView drag_view(int32_t g0, int32_t g1) {
+    RhythmView rv;
+    rv.gap[0] = g0;
+    rv.gap[1] = g1;
+    rv.valid  = true;
+    return rv;
+}
+
+TEST_CASE("flux: DRAG at 0 is bit-identical to a Flux that never heard a rhythm") {
+    Flux plain, dragged;
+    plain.init(48000.f, s_buf_l, s_buf_r);
+    dragged.init(48000.f, s_buf_l2, s_buf_r2);
+    for (Flux* f : { &plain, &dragged }) {
+        f->set_on(true, true);
+        f->set_bpm(120.f);
+        f->set_rate(3);
+        f->set_stages(0.8f);
+        f->set_mix(1.f);
+        f->set_feedback(0.5f);
+    }
+    dragged.set_rhythm(drag_view(12000, 6000));
+    dragged.set_drag(0.f);
+
+    for (int i = 0; i < 60000; ++i) {
+        const float in = (i < 32) ? 1.f : 0.f;
+        float al = in, ar = in, bl = in, br = in;
+        plain.process(al, ar);
+        dragged.process(bl, br);
+        REQUIRE(al == bl);      // bit-identical, not Approx
+        REQUIRE(ar == br);
+    }
+}
+
+TEST_CASE("flux: DRAG at 1 alternates between the neighbour's two intervals") {
+    Flux f;
+    f.init(48000.f, s_buf_l, s_buf_r);
+    f.set_on(true, true);
+    f.set_bpm(120.f);
+    f.set_rate(3);                       // ladder = 0.5 s, well away from both
+    f.set_stages(0.8f);
+    f.set_mix(1.f);
+    f.set_feedback(0.f);
+    f.set_rhythm(drag_view(12000, 6000));   // 0.25 s and 0.125 s
+    f.set_drag(1.f);
+
+    CHECK(f.drag_time_s() == doctest::Approx(0.25f).epsilon(0.001));
+
+    auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
+
+    run(11990);
+    CHECK(f.drag_time_s() == doctest::Approx(0.25f).epsilon(0.001));   // not yet
+    run(20);
+    CHECK(f.drag_time_s() == doctest::Approx(0.125f).epsilon(0.001));  // flipped
+    run(5990);
+    CHECK(f.drag_time_s() == doctest::Approx(0.125f).epsilon(0.001));
+    run(20);
+    CHECK(f.drag_time_s() == doctest::Approx(0.25f).epsilon(0.001));   // and back
+}
+
+TEST_CASE("flux: DRAG interpolates geometrically") {
+    // Pitch tracks the clock RATIO, so the interpolation is geometric --
+    // the same reasoning behind the modulation lane's x1/4..x4 mapping.
+    Flux f;
+    f.init(48000.f, s_buf_l, s_buf_r);
+    f.set_on(true, true);
+    f.set_bpm(120.f);
+    f.set_rate(3);                       // ladder = 0.5 s
+    f.set_rhythm(drag_view(12000, 18000));   // 0.25 s and 0.375 s
+    f.set_drag(0.5f);
+    // sqrt(0.5 * 0.25) == 0.353553
+    CHECK(f.drag_time_s() == doctest::Approx(0.353553f).epsilon(0.001));
+}
+
+TEST_CASE("flux: DRAG reaches the clock") {
+    Flux f;
+    f.init(48000.f, s_buf_l, s_buf_r);
+    f.set_on(true, true);
+    f.set_bpm(120.f);
+    f.set_rate(3);
+    f.set_stages(0.8f);                  // 8192
+    f.set_mix(1.f);
+    f.set_feedback(0.f);
+    f.set_rhythm(drag_view(24000, 18000));   // 0.5 s and 0.375 s, long plateaus
+    f.set_drag(1.f);
+    // The 30 ms slew has to run before clock_hz() reflects the target.
+    for (int i = 0; i < 5000; ++i) { float l = 0.f, r = 0.f; f.process(l, r); }
+    // f = stages / (2 * t) = 8192 / (2 * 0.5) = 8192 Hz
+    CHECK(f.clock_hz() == doctest::Approx(8192.f).epsilon(0.02));
+}
+
+TEST_CASE("flux: a step bends pitch by the ratio of the two intervals") {
+    // The bend IS the clock ratio -- there is no crossfade in a BBD and there
+    // must be none in the model. Asserting the clock ratio across a step is
+    // asserting the pitch ratio (spec section 1.4).
+    Flux f;
+    f.init(48000.f, s_buf_l, s_buf_r);
+    f.set_on(true, true);
+    f.set_bpm(120.f);
+    f.set_rate(3);
+    f.set_stages(0.8f);
+    f.set_mix(1.f);
+    f.set_feedback(0.f);
+    f.set_rhythm(drag_view(24000, 12000));   // 0.5 s and 0.25 s -- a 2:1 step
+    f.set_drag(1.f);
+
+    auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
+
+    run(5000);                               // past the 30 ms slew, still step 0
+    const float before = f.clock_hz();
+    run(24000);                              // step 0 elapses, flip to 0.25 s
+    run(5000);                               // let the slew settle on the new one
+    const float after = f.clock_hz();
+    CHECK(after / before == doctest::Approx(2.0f).epsilon(0.02));
+}
+
+TEST_CASE("flux: an invalid neighbour rhythm leaves DRAG inert at any setting") {
+    Flux f;
+    f.init(48000.f, s_buf_l, s_buf_r);
+    f.set_on(true, true);
+    f.set_bpm(120.f);
+    f.set_rate(3);                       // ladder = 0.5 s
+    RhythmView rv = drag_view(12000, 6000);
+    rv.valid = false;
+    f.set_rhythm(rv);
+    f.set_drag(1.f);
+    CHECK(f.drag_time_s() == doctest::Approx(0.5f).epsilon(0.001));
+}
+
+TEST_CASE("flux: RATE still reaches the ladder at intermediate DRAG") {
+    // Guards against an interpolation that accidentally saturates to the
+    // neighbour's interval as soon as DRAG leaves zero.
+    Flux f;
+    f.init(48000.f, s_buf_l, s_buf_r);
+    f.set_on(true, true);
+    f.set_bpm(120.f);
+    f.set_rhythm(drag_view(12000, 18000));
+    f.set_drag(0.5f);
+    f.set_rate(3);                       // 0.5 s -> sqrt(0.5*0.25)  = 0.353553
+    const float at_quarter = f.drag_time_s();
+    f.set_rate(0);                       // 1.0 s -> sqrt(1.0*0.25)  = 0.5
+    const float at_half = f.drag_time_s();
+    CHECK(at_quarter == doctest::Approx(0.353553f).epsilon(0.001));
+    CHECK(at_half    == doctest::Approx(0.5f).epsilon(0.001));
+}

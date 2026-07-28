@@ -4,6 +4,7 @@
 #include <cmath>
 #include "Utility/dsp.h"
 #include "fx/bbd.h"
+#include "fx/drag.h"
 #include "fx/fx_util.h"
 #include "mod/divisions.h"
 
@@ -48,6 +49,12 @@ public:
     // base time, so it rides PartFx's 2 ms smoother and not the 30 ms
     // ladder slew -- a 4 Hz vibrato would not survive the latter.
     void set_time_mod(float norm);
+    // DRAG: how much of the delay time the OTHER deck's rhythm owns. 0 is the
+    // bit-exact today-path; 1 hands the time over outright and RATE goes
+    // inert. Interpolation is geometric because pitch tracks the clock ratio.
+    void set_drag(float norm);
+    // The other deck's published rhythm, pushed at control rate by Instrument.
+    void set_rhythm(const RhythmView& rv);
     void process(float& l, float& r);
 
     // Observers for tests: the clock and the stage count are the only two
@@ -56,6 +63,9 @@ public:
     int stages() const { return _stages_now; }
     float clock_hz() const { return _clock_hz; }
     float drive_norm_for_test() const { return _drive_norm; }
+    // The delay time DRAG is currently aiming at, before the 30 ms slew. Equal
+    // to the ladder time whenever DRAG is 0 or the neighbour has no rhythm.
+    float drag_time_s() const { return _dt_target; }
 
 private:
     void recompute_time(bool immediate);
@@ -64,6 +74,9 @@ private:
     // the coefficient the other one produced -- see the comment on the
     // definition for why the division lives here rather than in BbdEcho.
     void apply_feedback();
+    // The ONLY place _dt_target is written. Called from recompute_time,
+    // set_drag, set_rhythm and the step flip in process().
+    void apply_drag();
 
     BbdEcho _echo_l;
     BbdEcho _echo_r;
@@ -100,6 +113,17 @@ private:
     // is a function of BOTH knobs and has to be re-derived whenever either
     // moves. Matches init()'s set_feedback(0.45f).
     float _fb_norm = 0.45f;
+
+    // DRAG state. _drag_iv holds the neighbour's two intervals in samples;
+    // _drag_i selects which one is in force; _drag_phase counts samples into
+    // the current step and _drag_step_len is that step's length in samples,
+    // cached so process() does not multiply per sample.
+    float   _drag = 0.f;
+    int32_t _drag_iv[2] = { 0, 0 };
+    int     _drag_i = 0;
+    float   _drag_phase = 0.f;
+    float   _drag_step_len = 0.f;
+    bool    _drag_active = false;
 };
 
 } // namespace spky
