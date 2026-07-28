@@ -1233,3 +1233,29 @@ TEST_CASE("audio-in excitation bus: post-sum DC block decays a sustained offset,
     CHECK(std::fabs(early_mean) > 0.05);                        // the DC genuinely reached the bus
     CHECK(std::fabs(late_mean) < std::fabs(early_mean) * 0.3);  // and the block pulls it toward 0
 }
+
+TEST_CASE("instrument: each deck's DRAG is fed by the OTHER deck's rhythm") {
+    static Instrument inst;
+    inst.init(48000.f, test_fx_mem());   // the file's own fixture, line 67
+    inst.set_tempo_bpm(120.f);
+    for (int p = 0; p < PART_COUNT; ++p) {
+        inst.set_fx_on(p, FxBlock::Flux, true);
+        inst.set_flux_rate(p, 3);            // ladder = 0.5 s
+        inst.set_drag(p, 1.f);               // the neighbour owns the time
+    }
+
+    // Long enough for both PITCH lanes to record three onsets, which is what
+    // makes a RhythmView valid (engine/mod/rhythm_view.h).
+    float out_l[64], out_r[64];
+    for (int block = 0; block < 4000; ++block)
+        inst.process(nullptr, nullptr, out_l, out_r, 64);
+
+    // If this fails the rhythm ring never filled -- look there, not at DRAG.
+    REQUIRE(inst.rhythm(PART_A).valid);
+    REQUIRE(inst.rhythm(PART_B).valid);
+
+    // Each deck has left its ladder time, which can only have come from the
+    // sibling's rhythm reaching its Flux.
+    CHECK(inst.drag_time_for_test(PART_A) != doctest::Approx(0.5f).epsilon(0.001));
+    CHECK(inst.drag_time_for_test(PART_B) != doctest::Approx(0.5f).epsilon(0.001));
+}

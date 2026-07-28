@@ -47,6 +47,8 @@ public:
     void set_flux_rate(int slice_idx) { _flux.set_rate(slice_idx); }
     void set_drive(float n)  { _flux.set_drive(n); }
     void set_stages(float n) { _flux.set_stages(n); }
+    void set_drag(float n)   { _flux.set_drag(n); }
+    void set_rhythm(const RhythmView& rv) { _flux.set_rhythm(rv); }
 
     // fxv[FXT_COUNT]: already-modulated values from Part::fx_target_value().
     void process(float& l, float& r, float& send_l, float& send_r,

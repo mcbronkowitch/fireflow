@@ -100,6 +100,7 @@ public:
     void set_grit_mix(int p, float n)              { _parts[p].fx().set_grit_mix(n); }
     void set_drive(int p, float n)  { _parts[p].fx().set_drive(n); }
     void set_stages(int p, float n) { _parts[p].fx().set_stages(n); }
+    void set_drag(int p, float n)   { _parts[p].fx().set_drag(n); }
     void set_comp(int p, float n)                  { _parts[p].fx().set_comp(n); }
     void set_reverb_size(float n)  { if (_reverb) _reverb->set_size(n); }
     void set_reverb_decay(float n) { if (_reverb) _reverb->set_decay(n); }
@@ -132,6 +133,10 @@ public:
     // isolation trick, just a way to reach the named part's Flux from here.
     float drive_norm_for_test(int p) const { return _parts[p].fx().flux().drive_norm_for_test(); }
     int stages_for_test(int p) const { return _parts[p].fx().flux().stages(); }
+    // Observer only, for tests (2026-07-28 flux-rhythm-drag, Task 3): the
+    // delay time DRAG is aiming FLUX at, before the 30 ms slew -- see
+    // Flux::drag_time_s().
+    float drag_time_for_test(int p) const { return _parts[p].fx().flux().drag_time_s(); }
 
     // --- M2 synth voice API (spec "Instrument API") ---
     void set_engine(int p, EngineId e)       { _parts[p].set_engine(e); }
