@@ -1,5 +1,15 @@
 # BODY Sustain Gain Implementation Plan
 
+> **SUPERSEDED — DO NOT EXECUTE.** Task 1 was attempted and came back BLOCKED:
+> the closed form in the spec's §1 ignores a nonlinearity already present in
+> `KsString::process` (`fclamp(s, -20.f, +20.f)` inside the loop), so it
+> diverges exactly where the real structure stays bounded. Compensating by it
+> moved the FLOW-to-STEP spread 27.0 dB to 20.9 where a correct shape would
+> have reached about 5. What shipped instead is a bounding nonlinearity on
+> `BodyVoice`'s own output — see commit `a599ce9` and §8 of the spec, which
+> records all three experiments so they are not repeated. This file is kept
+> for that history only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Level BODY's continuous (FLOW) excitation so it stops running 5–60 dB above its own struck level, by having each resonator declare the gain it applies to sustained excitation and compensating for it feed-forward.
