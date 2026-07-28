@@ -461,6 +461,13 @@ than silently rewritten into the sections above so the record of what was
    lives in `Flux` rather than `BbdEcho` so the model stays a faithful BBD
    whose loop gain honestly equals `feedback × g`.
 
+   **Confirmed by ear, 2026-07-28**, on the branch build: "jetzt ist das
+   feedback stabil, drive klingt gut." That closes the listening pass item 7
+   left outstanding — DRIVE's level fix and this decoupling were both heard,
+   on the same build, and both hold. The accepted residual above (later
+   repeats compounding less dirt) was audible-in-principle and did not
+   register as a loss.
+
    **Consequence for item 7's range argument: it no longer binds.** Every
    trade-off that picked 0..+12 dB weighed DRIVE's dirt against FEEDBACK's
    travel. Decoupled, that trade does not exist, and `kDriveHiDb` is free to
