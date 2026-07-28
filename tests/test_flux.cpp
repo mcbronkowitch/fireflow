@@ -617,3 +617,43 @@ TEST_CASE("flux: no valid neighbour rhythm leaves every repeat sounding") {
     for (int i = 0; i < 20000; ++i) { float l = 0.f, r = 0.f; f.process(l, r); }
     CHECK(f.gate_for_test() == 1.f);
 }
+
+TEST_CASE("flux: a valid but DRAG-unusable rhythm still arms the thinning accumulator") {
+    // set_rhythm's early-return guard only tracks the DRAG intervals: a
+    // 20-sample gap is legal on RhythmView (gaps clamp at 1, not at
+    // drag_tuning::kMinGap == 32) but derive_intervals rejects it, so
+    // derive_intervals(rv, iv) == {kNone, kNone} and, with LINK set BEFORE
+    // any rhythm was ever seen (_drag_active starts false, _drag_iv starts
+    // {0,0}), active == _drag_active and iv == _drag_iv -- the guard's
+    // "nothing changed for DRAG" branch. That branch is also the thinning
+    // half's ONLY arming point for _drag_step_len (apply_drag is the single
+    // writer). Order matters: LINK first, rhythm second, is what leaves the
+    // accumulator unarmed if that branch does not also call apply_drag().
+    Flux f;
+    f.init(48000.f, s_buf_l, s_buf_r);
+    f.set_on(true, true);
+    f.set_bpm(120.f);
+    f.set_rate(11);                  // "1/32" -> 0.0625 s -> 3000 samples/repeat
+    f.set_stages(0.f);
+    f.set_mix(1.f);
+    f.set_feedback(0.f);
+    f.set_link(-1.f);                        // LINK before any rhythm
+    f.set_rhythm(drag_view(6000, 20));        // valid, DRAG-unusable: n0=2, n1=1
+    auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
+
+    // On the repeat grid (verified against the fixed implementation and
+    // cross-checked against the already-passing n0=4,n1=2 pattern case,
+    // which has the same shape): the FIRST counted repeat of an interval
+    // always sounds, so interval1's lone repeat (n1=1) merges with
+    // interval0's own first repeat into one continuous dwell at 1 spanning
+    // TWO repeat lengths, alternating with interval0's second repeat (a
+    // single repeat length) ducked -- sound[0,6000), duck[6000,9000),
+    // sound[9000,15000), duck[15000,18000), ... If the accumulator were
+    // left unarmed (_drag_step_len == 0), advance_gate() would instead fire
+    // every SAMPLE (or, with the defensive process() guard alone, never
+    // fire at all) -- either way the gate would never track this grid.
+    run(1500);  CHECK(f.gate_for_test() == doctest::Approx(1.f).epsilon(0.02));  // mid first sound dwell
+    run(6000);  CHECK(f.gate_for_test() == doctest::Approx(0.f).epsilon(0.02));  // t=7500, mid duck dwell
+    run(4500);  CHECK(f.gate_for_test() == doctest::Approx(1.f).epsilon(0.02));  // t=12000, mid second sound dwell
+    run(4500);  CHECK(f.gate_for_test() == doctest::Approx(0.f).epsilon(0.02));  // t=16500, mid second duck dwell
+}

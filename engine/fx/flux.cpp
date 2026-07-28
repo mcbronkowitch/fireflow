@@ -227,7 +227,15 @@ void Flux::set_rhythm(const RhythmView& rv) {
     int32_t iv[2];
     derive_intervals(rv, iv);
     const bool active = (iv[0] != drag_tuning::kNone && iv[1] != drag_tuning::kNone);
-    if (active == _drag_active && iv[0] == _drag_iv[0] && iv[1] == _drag_iv[1]) return;
+    if (active == _drag_active && iv[0] == _drag_iv[0] && iv[1] == _drag_iv[1]) {
+        // The guard only knows about the DRAG intervals, but _rhy_valid may
+        // have just changed above it, and apply_drag is where the thinning
+        // half arms the shared accumulator. It has to run. It costs nothing:
+        // thinning implies _drag == 0, which takes apply_drag's inert branch,
+        // and that branch leaves _drag_phase alone while thinning is running.
+        if (_thin > 0.f) apply_drag();
+        return;
+    }
     _drag_iv[0] = iv[0];
     _drag_iv[1] = iv[1];
     _drag_active = active;
@@ -246,7 +254,7 @@ void Flux::process(float& l, float& r) {
     const bool dragging = (_drag > 0.f && _drag_active);
     if (thinning || dragging) {
         _drag_phase += 1.f;
-        if (_drag_phase >= _drag_step_len) {
+        if (_drag_step_len > 0.f && _drag_phase >= _drag_step_len) {
             _drag_phase = 0.f;
             if (dragging) { _drag_i ^= 1; apply_drag(); }
             else            advance_gate();
