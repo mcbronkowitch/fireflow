@@ -329,8 +329,19 @@ void Flux::process(float& l, float& r) {
     // measured 4e-6 residual at 48 kHz and ~1.7e-5 at 192 kHz (the stall
     // floor scales with sample rate, since _gate_coef shrinks as 1/sr while
     // the ULP near 1.0 does not), so 1e-6 never actually catches it and this
-    // branch could never switch itself off again. 1e-4 clears both with
-    // margin and is still 80 dB below unity -- inaudible.
+    // branch could never switch itself off again. 1e-4 is still 80 dB below
+    // unity -- inaudible as a step -- and clears the floor at every rate a
+    // host will plausibly run: the floor is 8.9e-11 * sr, so the threshold
+    // holds until about 1.1 MHz, though the margin is only 1.45x at Rack's
+    // 768 kHz ceiling.
+    //
+    // The price, inherent to snap-on-fonepole rather than to this constant:
+    // it also swallows the FIRST step away from unity, so a thinning depth
+    // below 1e-4 * kGateRampS * sr pins the gate at 1 and does nothing. That
+    // is 0.0144 of the knob's travel at 48 kHz (0.13 dB of lost duck) and
+    // 0.058 at 192 kHz. No threshold can do better -- the dead zone cannot
+    // fall below stall_floor / _gate_coef -- so it is a documented edge of
+    // the idiom, not a tuning choice to revisit.
     if (thinning || _gate != 1.f) {
         daisysp::fonepole(_gate, _gate_target, _gate_coef);
         if (std::fabs(_gate - 1.f) < 1e-4f) _gate = 1.f;

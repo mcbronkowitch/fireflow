@@ -772,7 +772,7 @@ TEST_CASE("flux: crossing LINK from a ducked THIN repeat straight to DRAG un-mut
     CHECK(f.gate_for_test() == 1.f);
 }
 
-TEST_CASE("flux: changing RATE while thinning re-derives the pattern from the new ladder time") {
+TEST_CASE("flux: changing RATE re-derives the thinning pattern from the new ladder time") {
     // recompute_time's update_thin_pattern() call was previously uncovered:
     // thin_setup always calls set_rate BEFORE set_rhythm, so at
     // recompute_time time _rhy_gap was still {0,0} in every existing case,
@@ -794,7 +794,7 @@ TEST_CASE("flux: changing RATE while thinning re-derives the pattern from the ne
     CHECK(f.thin_n_for_test(0) == 2);       // same raw gap, re-derived against the new repeat length
 }
 
-TEST_CASE("flux: changing BPM while thinning re-derives the pattern from the new ladder time") {
+TEST_CASE("flux: changing BPM re-derives the thinning pattern from the new ladder time") {
     // BPM changes hit the same recompute_time -> update_thin_pattern line.
     Flux f;
     f.init(48000.f, s_buf_l, s_buf_r);

@@ -299,12 +299,12 @@ stale WAV sitting in patch storage.
   as this half rises. Reach left when you want the neighbour's rhythm without
   moving FLUX's pitch, right when the pitch bend is the point. The left half
   needs two things to have anything to say: RATE sets its resolution, since
-  the pattern can only place events on FLUX's own repeat grid — a coarse
-  rung smears it into a single pulse, so 1/16 or 1/32 is where it actually
-  articulates — and nothing happens at all until the other deck has
-  published a valid rhythm. DRIVE, which still governs BBD saturation,
-  moved to each part's context menu (see
-  SOURCE and Detune).
+  the pattern can only place events on FLUX's own repeat grid — once a rung
+  is coarse enough that the neighbour's gaps round to a single repeat there
+  is nothing left to skip and the control goes quiet, so 1/16 or 1/32 is
+  where it actually articulates — and nothing happens at all until the other
+  deck has published a valid rhythm. DRIVE, which still governs BBD
+  saturation, moved to each part's context menu (see SOURCE and Detune).
 - **Memory:** each `Spotymod` instance allocates well over its two 42 s
   stereo record buffers up front, whether or not the sampler is ever used on
   either part — closer to **~38.66 MB total**, not the 32 MB the record
