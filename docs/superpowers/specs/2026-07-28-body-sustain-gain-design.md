@@ -228,7 +228,7 @@ used here.
 | property | FLOW-to-STEP peak ratio stays inside a stated band (target 4–14 dB) across MATL x DEC x RESO x pitch — the finding this whole document exists for, and the test that would have caught +59.8 dB |
 | property | a struck note is bit-identical between a build at k = 0.82 and one at k = 0 — the §3 guarantee |
 | property | `sustain_gain()` is finite and >= 1 for every damping, brightness and pitch in the contract, including the infinite-decay crossfade region |
-| property | `sustain_gain()` decreases monotonically as damping rises |
+| property | `sustain_gain()` rises monotonically with `damping`. Note the name: in this codebase `damping` is the DECAY amount, and higher means *longer* ring — `KsString` raises its filter cutoff with it and `ModeBank` raises its Q (`q_sqrt = pow(2, damping * 79.7/12)`). A reader who takes the word at face value will expect the opposite sign |
 | property | `KsString::sustain_gain()` matches a measured steady state within 1.5 dB at three pitches x three dampings — the closed form is only worth having if it is right, and the tolerance is wide enough for the DC blocker and the allpass, which the derivation treats as unity |
 | property | `_apply_params()` still runs once per control tick, not per sample — the parent spec's §4 claim, which the new `pow` must not break |
 | render | a FLOW scenario at MATL 1 and long DECAY stays below full scale |
