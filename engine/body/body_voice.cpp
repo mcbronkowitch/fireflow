@@ -12,6 +12,12 @@ namespace {
 constexpr float kDriftDetuneCt = 3.f;     // micro-detune drift ceiling (+/-3 ct)
 constexpr float kDriftPanAmt   = 0.25f;   // pan drift ceiling around the fan slot
 
+// FILTER's loudness tilt -- see set_cutoff_hz for what it repairs and why the
+// numbers are what they are. TUNING MATERIAL, both of them.
+constexpr float kBrightTiltDb    = 17.f;   // dB down at brightness 0
+constexpr float kBrightTiltShape = 3.f;    // documented; the cube is written out
+constexpr float kLn10Over20      = 0.11512925f;   // dB -> natural log
+
 // Mode-bank stretch with COLOR at minimum, i.e. the direction DETUNE spreads
 // the bank in before COLOR bends it (see _apply_params). TUNING MATERIAL --
 // no test pins this value, only the property that it is non-zero.
@@ -119,11 +125,39 @@ void BodyVoice::set_env_times(float attack_s, float decay_s) {
 void BodyVoice::set_resonance(float n) { _exciter.set_character(n); }
 
 // FILTER's Hz value becomes brightness on a log map over the engine's own
-// 60 Hz - 14 kHz rail.
+// 60 Hz - 14 kHz rail, plus the loudness tilt that brightness alone does not
+// produce.
+//
+// Why the tilt exists. On VoiceT, FILTER drives a real SVF lowpass, so turning
+// it down removes energy: measured against its own brightest setting, SYNTH
+// runs flat from b = 1 down to b ~ 0.3 and then falls 28 dB in the last
+// quarter. On BODY the same control is a TIMBRE parameter -- it re-tunes the
+// strings' damping filter and the mode bank -- and a duller resonator is only
+// slightly quieter: BODY measured a near-perfect straight line spanning just
+// 10.8 dB end to end.
+//
+// That gap is what made FILT unusable below -0.5. SynthEngineT fades the voice
+// out over the last 0.25 of n_raw (kFiltFadeRange), a window sized for an
+// engine that is ALREADY ~28 dB down when the fade begins. BODY arrived there
+// at -5.7 dB, so the fade had to do the whole job inside 0.2 of knob travel --
+// heard as the sound falling off a cliff and vanishing by -0.6.
+//
+// The tilt adds the missing ~17 dB, weighted toward the dark end so the top of
+// the control stays neutral the way it is on every other engine. Both
+// constants are TUNING MATERIAL: kBrightTiltDb sets how much quieter the
+// darkest setting is, kBrightTiltShape where along the travel it happens
+// (1 = a straight line in dB, higher = flatter at the top and steeper at the
+// bottom). The 17 dB / cubic pair is the measured starting point, not a law.
 void BodyVoice::set_cutoff_hz(float hz) {
     const float lo = std::log(60.f), hi = std::log(14000.f);
     float b = (std::log(hz < 60.f ? 60.f : hz) - lo) / (hi - lo);
     _brightness = clampf(b, 0.f, 1.f);
+
+    // Control rate, like every other derivation in this class -- set_cutoff_hz
+    // is called once per engine control tick, and process() stays free of libm.
+    const float dark = 1.f - _brightness;
+    _bright_gain = std::exp(-kBrightTiltDb * kLn10Over20
+                            * std::pow(dark, kBrightTiltShape));
 }
 
 void BodyVoice::_apply_params() {
@@ -205,8 +239,11 @@ void BodyVoice::process(float& accL, float& accR) {
     if (mag > _peak) _peak = mag;
     if (_hold_samples > 0) --_hold_samples;
 
-    accL += s * _gain_l;
-    accR += s * _gain_r;
+    // The FILTER tilt lands AFTER the follower on purpose. active() reads the
+    // follower, so tilting before it would make a dark voice look dead and get
+    // stolen early -- a note-length change dressed up as a loudness change.
+    accL += s * _gain_l * _bright_gain;
+    accR += s * _gain_r * _bright_gain;
 }
 
 void BodyVoice::update_control(float dt_s) {
