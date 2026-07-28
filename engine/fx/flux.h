@@ -72,6 +72,11 @@ public:
     // The delay time DRAG is currently aiming at, before the 30 ms slew. Equal
     // to the ladder time whenever DRAG is 0 or the neighbour has no rhythm.
     float drag_time_s() const { return _dt_target; }
+    // The gate's current gain, 1 whenever thinning is disengaged, and the
+    // neighbour's gaps expressed in whole repeats. Both exist because the
+    // thinning pattern is otherwise only observable as a level over time.
+    float gate_for_test() const { return _gate; }
+    int   thin_n_for_test(int i) const { return _thin_n[i]; }
 
 private:
     void recompute_time(bool immediate);
@@ -83,6 +88,11 @@ private:
     // The ONLY place _dt_target is written. Called from recompute_time,
     // set_link, set_rhythm and the step flip in process().
     void apply_drag();
+    // Re-derives _thin_n from the neighbour's raw gaps and the CURRENT ladder
+    // time. Called whenever either moves.
+    void update_thin_pattern();
+    // Advances the skip pattern by one repeat and sets the gate's target.
+    void advance_gate();
 
     BbdEcho _echo_l;
     BbdEcho _echo_r;
@@ -133,6 +143,21 @@ private:
     float   _drag_phase = 0.f;
     float   _drag_step_len = 0.f;
     bool    _drag_active = false;
+
+    // LINK's negative half. _rhy_gap holds the neighbour's RAW gaps -- not
+    // derive_intervals' output: an even pattern is a failure for DRAG and a
+    // RESULT here (link spec 2.1), so the uniformity guard must not reach this
+    // path. _thin_n is those gaps in whole repeats of the current delay time,
+    // _thin_i selects which is running, _thin_count counts repeats into it.
+    float   _thin = 0.f;
+    int32_t _rhy_gap[2] = { 0, 0 };
+    bool    _rhy_valid = false;
+    int     _thin_n[2] = { 1, 1 };
+    int     _thin_i = 0;
+    int     _thin_count = 0;
+    float   _gate = 1.f;
+    float   _gate_target = 1.f;
+    float   _gate_coef = 1.f;
 };
 
 } // namespace spky

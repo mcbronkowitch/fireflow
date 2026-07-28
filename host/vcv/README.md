@@ -287,14 +287,19 @@ stale WAV sitting in patch storage.
   never what was holding it up. Measured: histories that reach the same
   settings hot or cold converge to the same level, so there is no stuck
   state to clear. Below ~0.56 the tail always dies, at every DRIVE setting.
-- **DRAG (per part) pulls FLUX's delay time toward the OTHER deck's
-  rhythm**, on the panel knob that used to be DRIVE. At 0 it is silent —
-  bit-identical to a FLUX that never heard a rhythm. Turned up, FLUX's
+- **LINK (per part) reaches the OTHER deck's rhythm into FLUX's echo**, on
+  the panel knob that used to be DRIVE. Centre is off — bit-identical to a
+  FLUX that never heard a rhythm. The two halves get there in opposite ways:
+  turned **left**, FLUX's clock never moves — the delay stays on its RATE
+  rung, and the neighbour's rhythm just decides which of FLUX's own repeats
+  sound, ducking the rest with a short ramped gain. Turned **right**, FLUX's
   clock alternates between the sibling deck's two most recent onset gaps
   instead of tracking RATE, so the echo audibly locks onto whatever the
-  other part is playing; RATE's influence fades out as DRAG rises. DRIVE,
-  which still governs BBD saturation, moved to each part's context menu
-  (see SOURCE and Detune).
+  other part is playing and bends pitch doing it; RATE's influence fades out
+  as this half rises. Reach left when you want the neighbour's rhythm without
+  moving FLUX's pitch, right when the pitch bend is the point. DRIVE, which
+  still governs BBD saturation, moved to each part's context menu (see
+  SOURCE and Detune).
 - **Memory:** each `Spotymod` instance allocates well over its two 42 s
   stereo record buffers up front, whether or not the sampler is ever used on
   either part — closer to **~38.66 MB total**, not the 32 MB the record

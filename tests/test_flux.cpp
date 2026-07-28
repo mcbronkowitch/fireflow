@@ -347,7 +347,7 @@ static RhythmView drag_view(int32_t g0, int32_t g1) {
     return rv;
 }
 
-TEST_CASE("flux: DRAG at 0 is bit-identical to a Flux that never heard a rhythm") {
+TEST_CASE("flux: LINK at 0 (centre) is bit-identical to a Flux that never heard a rhythm") {
     Flux plain, dragged;
     plain.init(48000.f, s_buf_l, s_buf_r);
     dragged.init(48000.f, s_buf_l2, s_buf_r2);
@@ -509,16 +509,111 @@ TEST_CASE("flux: RATE still reaches the ladder at intermediate DRAG") {
     CHECK(at_half    == doctest::Approx(0.5f).epsilon(0.001));
 }
 
-TEST_CASE("flux: LINK's negative half is inert until the thinning lands") {
-    // Task 1 of the link plan wires the bipolar range and nothing else. This
-    // case is REPLACED in Task 2 by the real thinning tests -- it exists so
-    // the intermediate state is asserted rather than assumed.
+// A 1/32 rung at 120 BPM is 0.0625 s = 3000 samples per repeat, so a 12000
+// sample gap is 4 repeats and a 6000 sample gap is 2. 512 stages keeps the
+// clock (512/(2*0.0625) = 4096 Hz) well under the 32 kHz ceiling, so a
+// clamped clock cannot be mistaken for a stable one.
+static void thin_setup(Flux& f, float* bl, float* br, int32_t g0, int32_t g1) {
+    f.init(48000.f, bl, br);
+    f.set_on(true, true);
+    f.set_bpm(120.f);
+    f.set_rate(11);                  // "1/32" -> 0.0625 s
+    f.set_stages(0.f);               // 512
+    f.set_mix(1.f);
+    f.set_feedback(0.f);
+    f.set_rhythm(drag_view(g0, g1));
+}
+
+TEST_CASE("flux: LINK's negative half never moves the clock") {
+    // THE assertion this whole design exists for. Per sample, bit-equal, over
+    // a full second -- long enough to cross many pattern boundaries.
+    //
+    // Fixture note: thin_setup's set_stages(0.f) moves STAGES from the boot
+    // default (8192) down to 512, and that 30 ms slew -- unrelated to
+    // thinning -- takes ~13000 samples to snap (measured). Every other
+    // STAGES-changing case in this file (e.g. "the clock law reaches the
+    // line") warms up 20000 samples before reading clock_hz() for exactly
+    // this reason; the brief's original 5000-sample warm-up here left the
+    // capture of hz0 mid-slew, so the first several thousand REQUIRE checks
+    // below were failing on the ordinary STAGES settle, not on anything LINK
+    // does. Widened to 20000 to match the file's own convention.
+    Flux f;
+    thin_setup(f, s_buf_l, s_buf_r, 12000, 6000);
+    f.set_link(-1.f);
+    for (int i = 0; i < 20000; ++i) { float l = 0.f, r = 0.f; f.process(l, r); }
+    const float hz0 = f.clock_hz();
+    for (int i = 0; i < 48000; ++i) {
+        float l = 0.f, r = 0.f;
+        f.process(l, r);
+        REQUIRE(f.clock_hz() == hz0);
+    }
+}
+
+TEST_CASE("flux: LINK -1 sounds one repeat in n and ducks the rest") {
+    Flux f;
+    thin_setup(f, s_buf_l, s_buf_r, 12000, 6000);   // n0 = 4, n1 = 2
+    f.set_link(-1.f);
+    auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
+
+    // 4500 lands mid-way into the first COUNTED repeat window (the first
+    // boundary fires at 3000); every later probe steps one whole repeat, so
+    // each reads a settled gate rather than the 3 ms ramp.
+    run(4500);  CHECK(f.gate_for_test() == doctest::Approx(1.f).epsilon(0.02));
+    run(3000);  CHECK(f.gate_for_test() == doctest::Approx(0.f).epsilon(0.02));
+    run(3000);  CHECK(f.gate_for_test() == doctest::Approx(0.f).epsilon(0.02));
+    run(3000);  CHECK(f.gate_for_test() == doctest::Approx(0.f).epsilon(0.02));
+    run(3000);  CHECK(f.gate_for_test() == doctest::Approx(1.f).epsilon(0.02));  // interval 1
+    run(3000);  CHECK(f.gate_for_test() == doctest::Approx(0.f).epsilon(0.02));
+    run(3000);  CHECK(f.gate_for_test() == doctest::Approx(1.f).epsilon(0.02));  // back to 0
+}
+
+TEST_CASE("flux: LINK's depth ducks rather than mutes") {
+    Flux f;
+    thin_setup(f, s_buf_l, s_buf_r, 12000, 6000);
+    f.set_link(-0.5f);
+    auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
+    run(4500);  CHECK(f.gate_for_test() == doctest::Approx(1.f).epsilon(0.02));
+    run(3000);  CHECK(f.gate_for_test() == doctest::Approx(0.5f).epsilon(0.02));
+}
+
+TEST_CASE("flux: an even neighbour rhythm is preserved, not spread") {
+    // The uniformity guard must NOT reach this path: n0 == n1 is a musical
+    // result here (a quarter-note echo whose repeats keep 1/32 resolution),
+    // where for DRAG it would be a failure. Going through derive_intervals
+    // would give 4 and 3.
+    Flux f;
+    thin_setup(f, s_buf_l, s_buf_r, 12000, 12000);
+    f.set_link(-1.f);
+    CHECK(f.thin_n_for_test(0) == 4);
+    CHECK(f.thin_n_for_test(1) == 4);
+}
+
+TEST_CASE("flux: a gap far longer than the delay clamps rather than mutes") {
+    Flux f;
+    thin_setup(f, s_buf_l, s_buf_r, 1000000, 6000);   // 333 repeats
+    f.set_link(-1.f);
+    CHECK(f.thin_n_for_test(0) == link_tuning::kMaxSkip);
+    CHECK(f.thin_n_for_test(1) == 2);
+}
+
+TEST_CASE("flux: a gap shorter than one repeat means every repeat sounds") {
+    Flux f;
+    thin_setup(f, s_buf_l, s_buf_r, 100, 6000);
+    f.set_link(-1.f);
+    CHECK(f.thin_n_for_test(0) == 1);
+}
+
+TEST_CASE("flux: no valid neighbour rhythm leaves every repeat sounding") {
     Flux f;
     f.init(48000.f, s_buf_l, s_buf_r);
     f.set_on(true, true);
     f.set_bpm(120.f);
-    f.set_rate(3);                       // ladder = 0.5 s
-    f.set_rhythm(drag_view(12000, 6000));
+    f.set_rate(11);
+    f.set_mix(1.f);
+    RhythmView rv = drag_view(12000, 6000);
+    rv.valid = false;
+    f.set_rhythm(rv);
     f.set_link(-1.f);
-    CHECK(f.drag_time_s() == doctest::Approx(0.5f).epsilon(0.001));
+    for (int i = 0; i < 20000; ++i) { float l = 0.f, r = 0.f; f.process(l, r); }
+    CHECK(f.gate_for_test() == 1.f);
 }

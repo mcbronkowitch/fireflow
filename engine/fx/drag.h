@@ -25,6 +25,25 @@ constexpr float kUniformSpread = 0.75f;
 
 }  // namespace drag_tuning
 
+// LINK's negative half. These live beside drag_tuning because both halves are
+// consumers of the same neighbour rhythm, but the thinning path deliberately
+// does NOT go through derive_intervals -- see the link spec's section 2.1.
+namespace link_tuning {
+
+// The sparse end of the pattern. Beyond sixteen repeats between audible ones
+// the result stops reading as an echo pattern; clamping keeps something
+// audible rather than silently muting the control, and at a 1/16 rung sixteen
+// repeats is a bar.
+constexpr int kMaxSkip = 16;
+
+// Edge on the gate's gain. The only new smoother in this design, and it sits
+// on a LEVEL rather than on the clock, so it cannot interact with the 30 ms
+// delay-time slew the DRAG half depends on. Without it a gate on a continuous
+// signal clicks.
+constexpr float kGateRampS = 0.003f;
+
+}  // namespace link_tuning
+
 // Turn the other deck's published rhythm into two repeat intervals, in samples.
 // Pure: no state, no sample rate, no bounds.
 //

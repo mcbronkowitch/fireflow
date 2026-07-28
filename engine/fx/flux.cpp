@@ -26,6 +26,13 @@ void Flux::init(float sample_rate, float* buf_l, float* buf_r) {
     _drag_phase = 0.f;
     _drag_step_len = 0.f;
     _drag_active = false;
+    _gate_coef = daisysp::fmin(1.f / (link_tuning::kGateRampS * sample_rate), 1.f);
+    _thin = 0.f;
+    _rhy_gap[0] = _rhy_gap[1] = 0;
+    _rhy_valid = false;
+    _thin_n[0] = _thin_n[1] = 1;
+    _thin_i = _thin_count = 0;
+    _gate = _gate_target = 1.f;
     // Both guards restart from an unreachable value: BbdEcho::Init has just
     // reset the drive to 0 and the stage count to its own default, so a
     // repeated push of the value the user already had dialled in must NOT be
@@ -66,6 +73,7 @@ void Flux::recompute_time(bool immediate) {
     // ceiling is a sanity bound against a pathological tempo, not a musical
     // limit -- at 512 stages that is already a 4.3 Hz clock.
     _delay_time = clampf(t, 0.001f, 60.f);
+    update_thin_pattern();
     apply_drag();
     if (immediate) _dt_current = _dt_target;
 }
@@ -145,6 +153,32 @@ void Flux::set_time_mod(float norm) {
     _time_mult = bbd_time_mult(norm);
 }
 
+// The neighbour's gaps, in whole repeats of the CURRENT ladder time. Rounded,
+// not truncated: a gap of 3.6 repeats is heard as 4, not 3.
+void Flux::update_thin_pattern() {
+    const float rep = _delay_time * _sr;
+    for (int i = 0; i < 2; ++i) {
+        int n = 1;
+        if (rep > 0.f)
+            n = static_cast<int>(static_cast<float>(_rhy_gap[i]) / rep + 0.5f);
+        if (n < 1) n = 1;                                  // shorter than one
+        if (n > link_tuning::kMaxSkip) n = link_tuning::kMaxSkip;
+        _thin_n[i] = n;
+    }
+}
+
+// One repeat further into the pattern. The FIRST repeat of each interval
+// sounds and the rest are ducked, which puts the audible event on the
+// neighbour's onset rather than before it.
+void Flux::advance_gate() {
+    ++_thin_count;
+    _gate_target = (_thin_count == 1) ? 1.f : (1.f - _thin);
+    if (_thin_count >= _thin_n[_thin_i]) {
+        _thin_count = 0;
+        _thin_i ^= 1;
+    }
+}
+
 // The single writer of _dt_target.
 //
 // Geometric, not linear: pitch tracks the clock RATIO directly, so a linear
@@ -156,10 +190,13 @@ void Flux::set_time_mod(float norm) {
 // actually in force, so stepping on it is what makes "one interval per repeat"
 // true at every DRAG setting rather than only at 1.
 void Flux::apply_drag() {
+    const bool thinning = (_thin > 0.f && _rhy_valid);
     if (_drag <= 0.f || !_drag_active) {
         _dt_target = _delay_time;
-        _drag_step_len = 0.f;
-        _drag_phase = 0.f;
+        // Thinning needs the same accumulator, stepping on the LADDER time --
+        // the clock never moves on that half, which is the entire point.
+        _drag_step_len = thinning ? _delay_time * _sr : 0.f;
+        if (!thinning) { _drag_phase = 0.f; _gate_target = 1.f; }
         return;
     }
     const float target = static_cast<float>(_drag_iv[_drag_i]) / _sr;
@@ -173,11 +210,20 @@ void Flux::set_link(float norm) {
     if (n == _link) return;      // apply_drag runs two powf; do not run per push
     _link = n;
     _drag = n > 0.f ? n : 0.f;
+    _thin = n < 0.f ? -n : 0.f;
     apply_drag();
 }
 
 void Flux::set_rhythm(const RhythmView& rv) {
     if (!_buf_ok) return;
+    // The raw gaps and validity feed the thinning half, which does NOT go
+    // through derive_intervals. Stored before the guard below, which only
+    // knows about the DRAG intervals.
+    _rhy_gap[0] = rv.gap[0];
+    _rhy_gap[1] = rv.gap[1];
+    _rhy_valid  = rv.valid;
+    update_thin_pattern();
+
     int32_t iv[2];
     derive_intervals(rv, iv);
     const bool active = (iv[0] != drag_tuning::kNone && iv[1] != drag_tuning::kNone);
@@ -194,15 +240,16 @@ void Flux::process(float& l, float& r) {
     float send = _sw.process();
     if (_sw.is_idle()) return;   // fully off: bit-exact dry
 
-    // DRAG's step. One add and one compare per sample when engaged, nothing
-    // but the compare when it is not -- which is what keeps DRAG 0 on the
-    // same path it has always been on.
-    if (_drag > 0.f && _drag_active) {
+    // One accumulator, two consumers. They are mutually exclusive by
+    // construction: _drag and _thin come from opposite signs of one knob.
+    const bool thinning = (_thin > 0.f && _rhy_valid);
+    const bool dragging = (_drag > 0.f && _drag_active);
+    if (thinning || dragging) {
         _drag_phase += 1.f;
         if (_drag_phase >= _drag_step_len) {
             _drag_phase = 0.f;
-            _drag_i ^= 1;
-            apply_drag();
+            if (dragging) { _drag_i ^= 1; apply_drag(); }
+            else            advance_gate();
         }
     }
 
@@ -233,6 +280,18 @@ void Flux::process(float& l, float& r) {
                             0.f, bbd_tuning::kClockMaxHz);
     _clock_hz = hz;
 
-    l += _echo_l.Process(l * send, hz) * _mix_lin;
-    r += _echo_r.Process(r * send, hz) * _mix_lin;
+    float el = _echo_l.Process(l * send, hz);
+    float er = _echo_r.Process(r * send, hz);
+    // The gate keeps running after thinning disengages so the gain ramps back
+    // to unity instead of stepping; the snap is what lets the branch switch
+    // itself off again and restore the bit-exact path (fonepole never quite
+    // arrives -- the same reason _stage_current carries a snap above).
+    if (thinning || _gate != 1.f) {
+        daisysp::fonepole(_gate, _gate_target, _gate_coef);
+        if (std::fabs(_gate - 1.f) < 1e-6f) _gate = 1.f;
+        el *= _gate;
+        er *= _gate;
+    }
+    l += el * _mix_lin;
+    r += er * _mix_lin;
 }
