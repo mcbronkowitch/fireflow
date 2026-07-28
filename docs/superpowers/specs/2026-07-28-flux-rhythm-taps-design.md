@@ -1,9 +1,21 @@
 # FLUX rhythm taps — design
 
 **Date:** 2026-07-28
-**Status:** design approved (revised twice the same day — a review pass and a
-measurement pass, both recorded in §10), not yet planned. **Blocked on one
-number:** the `system`-profile whole-instrument figure, §8.
+**Status:** **SUPERSEDED, never implemented.** Replaced entirely by
+`docs/superpowers/specs/2026-07-28-flux-rhythm-drag-design.md` (same day). No
+tap lines are built.
+
+The idea survives; the implementation does not. Rather than adding delay heads
+beside the echo, DRAG hands the existing echo's clock to the neighbour's
+rhythm — zero new lines, zero CPU per sample, and none of the three fights with
+the BBD model that this document works so hard to win (bandwidth falling toward
+burial, the clock ceiling colliding with short gaps, cost scaling with line
+count).
+
+**Kept for the record**, because it is where the numbers live: §8's hardware
+measurements of the BBD, including the correction that the shipping echo costs
+2.2× its design estimate, and §10's account of what two review passes found.
+Read it for those; do not build from it.
 **Depends on:** `docs/superpowers/specs/2026-07-27-flux-bbd-delay-design.md` (the BBD rewrite, branch `bbd-delay`)
 
 ## What this is
