@@ -74,9 +74,10 @@ half and would mislabel the knob.
 
 The param id is reused again, exactly as DRIVE→DRAG did: renamed in place in
 `res/gen_panel.py`, `PART_STRIDE` stays 23, nothing before it moves. Old
-patches carrying a DRAG value in `0..1` land on the same position in the new
-range, so the positive half is bit-compatible by accident of arithmetic — worth
-noting, not worth designing around.
+patches carrying a DRAG value in `0..1` land on the same *value* at a
+different *position* in the new range — a saved 0.5 was mid-travel and is
+now three-quarters travel — so the positive half is bit-compatible by
+accident of arithmetic — worth noting, not worth designing around.
 
 ## 2. The left half
 

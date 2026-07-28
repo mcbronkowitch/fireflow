@@ -328,6 +328,38 @@ TEST_CASE("flux: init resets the STAGES guard the same way") {
     CHECK(f.stages() == doctest::Approx(1024).epsilon(0.01));
 }
 
+TEST_CASE("flux: init resets the LINK guard so a re-init's repeated push isn't swallowed") {
+    // Reproduces Spotymod::reinit(): a sample-rate change, a reset, or a
+    // fresh sampler add all call Flux::init() again without touching
+    // params[]. If init left _link at whatever the knob last was while
+    // resetting _drag/_thin to 0, the next pushParams(SAME value) would be
+    // swallowed by set_link's n == _link guard and LINK would go silent
+    // until the knob physically moved.
+    auto setup = [](Flux& f) {
+        f.init(48000.f, s_buf_l, s_buf_r);
+        f.set_on(true, true);
+        f.set_bpm(120.f);
+        f.set_rate(11);                  // "1/32" -> 0.0625 s -> 3000 samples/repeat
+        f.set_stages(0.f);
+        f.set_mix(1.f);
+        f.set_feedback(0.f);
+        RhythmView rv;
+        rv.gap[0] = 12000; rv.gap[1] = 6000; rv.valid = true;   // n0=4, n1=2
+        f.set_rhythm(rv);
+    };
+    Flux f;
+    setup(f);
+    f.set_link(-1.f);
+    setup(f);                                        // simulates the re-init
+    f.set_link(-1.f);                                // SAME value as before
+    // With a stale _link guard this push is dropped and _thin stays at
+    // init's reset value (0), so the gate would never leave 1 -- run to a
+    // point that must be ducked if thinning actually re-engaged.
+    auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
+    run(7500);
+    CHECK(f.gate_for_test() == doctest::Approx(0.f).epsilon(0.02));
+}
+
 TEST_CASE("flux slice: norm endpoints hit 1/2 and 1/32") {
     CHECK(kFluxRateCount == 12);
     CHECK(kFluxRateOffset == 5);
@@ -601,6 +633,7 @@ TEST_CASE("flux: a gap shorter than one repeat means every repeat sounds") {
     thin_setup(f, s_buf_l, s_buf_r, 100, 6000);
     f.set_link(-1.f);
     CHECK(f.thin_n_for_test(0) == 1);
+    CHECK(f.thin_n_for_test(1) == 2);   // 2 is not the idle default: non-vacuous
 }
 
 TEST_CASE("flux: no valid neighbour rhythm leaves every repeat sounding") {
@@ -657,3 +690,124 @@ TEST_CASE("flux: a valid but DRAG-unusable rhythm still arms the thinning accumu
     run(4500);  CHECK(f.gate_for_test() == doctest::Approx(1.f).epsilon(0.02));  // t=12000, mid second sound dwell
     run(4500);  CHECK(f.gate_for_test() == doctest::Approx(0.f).epsilon(0.02));  // t=16500, mid second duck dwell
 }
+
+TEST_CASE("flux: an oscillating DRAG-active flag does not restart the thinning accumulator") {
+    // set_rhythm's `if (!active) { _drag_i = 0; _drag_phase = 0.f; }` used to
+    // reset _drag_phase on every active-flag flip, including into thinning --
+    // the one case where it must not (apply_drag, called on the very next
+    // line, already owns that reset for the non-thinning case; this line's
+    // only REACHABLE effect was to break the one case it should leave alone).
+    // Reachable whenever the neighbour republishes a rhythm that flips
+    // DRAG-usability without stopping THIN: a uniform pair, or (as here) a
+    // gap that crosses drag_tuning::kMinGap.
+    Flux f;
+    f.init(48000.f, s_buf_l, s_buf_r);
+    f.set_on(true, true);
+    f.set_bpm(120.f);
+    f.set_rate(11);                  // "1/32" -> 0.0625 s -> 3000 samples/repeat
+    f.set_stages(0.f);
+    f.set_mix(1.f);
+    f.set_feedback(0.f);
+    f.set_rhythm(drag_view(12000, 6000));   // DRAG-usable (active=true), n0=4, n1=2
+    f.set_link(-1.f);
+    auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
+    run(1000);                                // partway into the first repeat, no boundary yet
+
+    // Republish a valid rhythm that flips active (20 < kMinGap == 32) without
+    // touching _rhy_valid or _thin. update_thin_pattern() also re-derives
+    // _thin_n from the NEW gaps: n0 becomes 1 (20 rounds below one repeat).
+    f.set_rhythm(drag_view(20, 6000));
+
+    // update_thin_pattern() re-derives _thin_n = {1, 2} from the republish
+    // BEFORE either schedule's first boundary ever fires, so both schedules
+    // use the new {1, 2}, and interval0's single repeat means the first
+    // boundary in either schedule immediately flips to interval1 (n1 = 2) --
+    // the first duck is therefore the THIRD boundary of the interval0+
+    // interval1 cycle, not the second (verified with a scratch probe before
+    // trusting these numbers, in the same spirit as the branch's earlier
+    // fixture checks: b1 interval0 sound+flip, b2 interval1 sound, b3
+    // interval1 duck+flip).
+    //
+    // With the fix, the elapsed 1000 samples carry over, so the schedule is
+    // undisturbed: b1@3000, b2@6000, b3@9000 (first duck). With the bug,
+    // this republish restarts the window -- the elapsed 1000 samples are
+    // discarded, so the first boundary needs a full 3000 MORE (global
+    // t=4000), and every later boundary inherits that same 1000-sample
+    // offset: b1@4000, b2@7000, b3@10000 (first duck). The two schedules are
+    // only 1000 samples apart here, and the 3 ms/144-sample ramp needs
+    // ~565+ samples past a boundary before Approx(epsilon=0.02) reads it as
+    // settled (measured), so the probe has to land solidly inside that
+    // narrow window: 700 samples past the FIXED schedule's duck boundary
+    // (well past the ramp) and 300 samples short of the BUGGY schedule's own
+    // boundary (still untouched there).
+    run(8700);                                // 1000 + 8700 = 9700 total
+    CHECK(f.gate_for_test() == doctest::Approx(0.f).epsilon(0.02));
+}
+
+TEST_CASE("flux: crossing LINK from a ducked THIN repeat straight to DRAG un-mutes the return") {
+    // apply_drag's gate reset must be owned by `thinning`, not by which
+    // branch is taken: the DRAG branch never touches the gate, so if the
+    // reset lived only in the inert branch's !thinning arm, a knob move
+    // that jumps straight from THIN to DRAG without a push landing exactly
+    // on 0 -- routine on a bipolar knob driven at frame rate against a
+    // param push every 16 samples -- would leave a stale duck target (and a
+    // stale _gate) in force for as long as DRAG stayed engaged, because the
+    // gate branch in process() never switches itself off while _gate != 1.
+    //
+    // The rhythm here (12000, 6000) is deliberately the ordinary case, not
+    // a contrived one: it is usable for BOTH halves (n0=4/n1=2 for
+    // thinning, and a legal DRAG interval pair), because a rhythm usable
+    // for thinning is usually also usable for DRAG -- this is the state a
+    // player actually reaches turning the knob.
+    Flux f;
+    thin_setup(f, s_buf_l, s_buf_r, 12000, 6000);   // usable for both halves
+    f.set_link(-1.f);
+    auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
+
+    run(7500);                                       // lands mid a ducked repeat (see the pattern case above)
+    CHECK(f.gate_for_test() == doctest::Approx(0.f).epsilon(0.02));
+
+    f.set_link(1.f);                                 // straight across, no stop at 0
+    run(2000);                                        // well past the 3 ms / 144-sample gate ramp
+    CHECK(f.gate_for_test() == 1.f);
+}
+
+TEST_CASE("flux: changing RATE while thinning re-derives the pattern from the new ladder time") {
+    // recompute_time's update_thin_pattern() call was previously uncovered:
+    // thin_setup always calls set_rate BEFORE set_rhythm, so at
+    // recompute_time time _rhy_gap was still {0,0} in every existing case,
+    // and every thin_n_for_test assertion in the suite came from
+    // set_rhythm's own call instead. "Vary RATE while thinning" is Task 3
+    // step 3 and the spec's risk-2 lever, and it hits this exact line.
+    Flux f;
+    f.init(48000.f, s_buf_l, s_buf_r);
+    f.set_on(true, true);
+    f.set_bpm(120.f);
+    f.set_rate(11);                        // "1/32" -> 0.0625 s -> 3000 samples/repeat
+    f.set_stages(0.f);
+    f.set_mix(1.f);
+    f.set_feedback(0.f);
+    f.set_rhythm(drag_view(12000, 6000));  // n0 = 12000/3000 = 4 on this rung
+    CHECK(f.thin_n_for_test(0) == 4);
+
+    f.set_rate(9);                          // "1/16" -> 0.125 s -> 6000 samples/repeat
+    CHECK(f.thin_n_for_test(0) == 2);       // same raw gap, re-derived against the new repeat length
+}
+
+TEST_CASE("flux: changing BPM while thinning re-derives the pattern from the new ladder time") {
+    // BPM changes hit the same recompute_time -> update_thin_pattern line.
+    Flux f;
+    f.init(48000.f, s_buf_l, s_buf_r);
+    f.set_on(true, true);
+    f.set_bpm(120.f);
+    f.set_rate(11);                        // "1/32" -> 0.0625 s -> 3000 samples/repeat
+    f.set_stages(0.f);
+    f.set_mix(1.f);
+    f.set_feedback(0.f);
+    f.set_rhythm(drag_view(12000, 6000));  // n0 = 12000/3000 = 4 at 120 BPM
+    CHECK(f.thin_n_for_test(0) == 4);
+
+    f.set_bpm(60.f);                         // half tempo -> repeat doubles to 6000 samples
+    CHECK(f.thin_n_for_test(0) == 2);
+}
+

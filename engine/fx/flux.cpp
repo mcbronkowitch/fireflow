@@ -27,6 +27,23 @@ void Flux::init(float sample_rate, float* buf_l, float* buf_r) {
     _drag_step_len = 0.f;
     _drag_active = false;
     _gate_coef = daisysp::fmin(1.f / (link_tuning::kGateRampS * sample_rate), 1.f);
+    // set_link's guard compares against _link, and this reset also zeroes
+    // _drag and _thin below -- so _link must land on the value that
+    // actually MATCHES that reset state, which is 0, not an unreachable
+    // sentinel like _drive_norm/_stages_norm use below. Those two guard a
+    // 0..1 knob, where -1 is outside the range and therefore guaranteed to
+    // differ from the next legitimate push; LINK's range is -1..1, so -1 is
+    // a real value a user could be sitting on and would wrongly swallow a
+    // repeated push of it. 0.f is correct here precisely because it IS the
+    // neutral state this reset just put the derived halves into: any other
+    // knob position the user pushes next will correctly differ from it, and
+    // if they push 0 again that's a no-op on an already-neutral Flux, not a
+    // swallowed change. Without this, a re-init (Spotymod::reinit(), called
+    // from a sample-rate change, a reset, or a fresh sampler add) leaves
+    // _link at whatever the knob last was while _drag/_thin have already
+    // been zeroed, so the next pushParams(same value) is silently swallowed
+    // and LINK stays dead until the knob physically moves.
+    _link = 0.f;
     _thin = 0.f;
     _rhy_gap[0] = _rhy_gap[1] = 0;
     _rhy_valid = false;
@@ -191,12 +208,26 @@ void Flux::advance_gate() {
 // true at every DRAG setting rather than only at 1.
 void Flux::apply_drag() {
     const bool thinning = (_thin > 0.f && _rhy_valid);
+    // Owned by thinning, not by which branch below is taken: the DRAG branch
+    // never touches the gate, so if the reset lived only in the !thinning arm
+    // of the branch below, crossing the knob from THIN straight to DRAG
+    // (without a push landing exactly on 0) would leave a stale duck target
+    // in force for as long as DRAG stayed engaged -- the gate branch in
+    // process() never switches itself off because _gate never reaches 1.
+    if (!thinning) {
+        _gate_target = 1.f;
+        // Engagement starts at the pattern's first repeat, not wherever the
+        // last run of thinning left off -- otherwise re-engaging resumes
+        // mid-interval and the pattern is not reproducible push to push.
+        _thin_count = 0;
+        _thin_i = 0;
+    }
     if (_drag <= 0.f || !_drag_active) {
         _dt_target = _delay_time;
         // Thinning needs the same accumulator, stepping on the LADDER time --
         // the clock never moves on that half, which is the entire point.
         _drag_step_len = thinning ? _delay_time * _sr : 0.f;
-        if (!thinning) { _drag_phase = 0.f; _gate_target = 1.f; }
+        if (!thinning) _drag_phase = 0.f;
         return;
     }
     const float target = static_cast<float>(_drag_iv[_drag_i]) / _sr;
@@ -239,7 +270,7 @@ void Flux::set_rhythm(const RhythmView& rv) {
     _drag_iv[0] = iv[0];
     _drag_iv[1] = iv[1];
     _drag_active = active;
-    if (!active) { _drag_i = 0; _drag_phase = 0.f; }
+    if (!active) _drag_i = 0;   // apply_drag() below owns _drag_phase
     apply_drag();
 }
 
@@ -293,10 +324,16 @@ void Flux::process(float& l, float& r) {
     // The gate keeps running after thinning disengages so the gain ramps back
     // to unity instead of stepping; the snap is what lets the branch switch
     // itself off again and restore the bit-exact path (fonepole never quite
-    // arrives -- the same reason _stage_current carries a snap above).
+    // arrives -- the same reason _stage_current carries a snap above). The
+    // tolerance has to clear the float32 stall floor, not just be "small":
+    // measured 4e-6 residual at 48 kHz and ~1.7e-5 at 192 kHz (the stall
+    // floor scales with sample rate, since _gate_coef shrinks as 1/sr while
+    // the ULP near 1.0 does not), so 1e-6 never actually catches it and this
+    // branch could never switch itself off again. 1e-4 clears both with
+    // margin and is still 80 dB below unity -- inaudible.
     if (thinning || _gate != 1.f) {
         daisysp::fonepole(_gate, _gate_target, _gate_coef);
-        if (std::fabs(_gate - 1.f) < 1e-6f) _gate = 1.f;
+        if (std::fabs(_gate - 1.f) < 1e-4f) _gate = 1.f;
         el *= _gate;
         er *= _gate;
     }

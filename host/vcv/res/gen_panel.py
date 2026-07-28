@@ -405,9 +405,12 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     # IN PLACE from DRAG -- same positions, same param ids, PART_STRIDE
     # untouched, so every already-saved .vcv keeps every id it has -- exactly
     # the move DUST -> DRIVE made on 2026-07-27 and DRIVE -> DRAG made on
-    # 2026-07-28. A patch's old DRAG value lands in LINK, where it means the
-    # same thing (DRAG was LINK's positive half all along); the spec's
-    # no-migration decision accepts that. DRIVE itself moved to the menu as
+    # 2026-07-28. A patch's old DRAG value lands on the same VALUE in LINK's
+    # wider range, not the same position on the knob's travel (a saved 0.5
+    # was mid-travel on 0..1 and is now three-quarters travel on -1..1), and
+    # that value means the same thing (DRAG was LINK's positive half all
+    # along); the spec's no-migration decision accepts that. DRIVE itself
+    # moved to the menu as
     # patch state and stays there, appended below in HIDDEN_PARAMS with fresh
     # trailing ids. STAGES is untouched.
     Ctl("LINK_A",   SMKNOB, FX_BOT[0],     ROW_V2, "LINK"),

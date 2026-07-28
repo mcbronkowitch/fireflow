@@ -297,8 +297,13 @@ stale WAV sitting in patch storage.
   instead of tracking RATE, so the echo audibly locks onto whatever the
   other part is playing and bends pitch doing it; RATE's influence fades out
   as this half rises. Reach left when you want the neighbour's rhythm without
-  moving FLUX's pitch, right when the pitch bend is the point. DRIVE, which
-  still governs BBD saturation, moved to each part's context menu (see
+  moving FLUX's pitch, right when the pitch bend is the point. The left half
+  needs two things to have anything to say: RATE sets its resolution, since
+  the pattern can only place events on FLUX's own repeat grid — a coarse
+  rung smears it into a single pulse, so 1/16 or 1/32 is where it actually
+  articulates — and nothing happens at all until the other deck has
+  published a valid rhythm. DRIVE, which still governs BBD saturation,
+  moved to each part's context menu (see
   SOURCE and Detune).
 - **Memory:** each `Spotymod` instance allocates well over its two 42 s
   stereo record buffers up front, whether or not the sampler is ever used on
