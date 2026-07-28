@@ -31,6 +31,20 @@ PROFILES = {
         families=("system", "body"),
         gates=frozenset({WAVE_ACCEPTANCE}),
     ),
+    # The BBD gate, on its own. `system` is deliberately NOT carried: the
+    # question this profile answers -- what does one BBD line cost at its
+    # ceiling -- is answered by the three bbd rows alone, and leaving system
+    # out is what makes it a small image that links without argument.
+    #
+    # The price is that `verdict()` finds no `instrument_worst` anchor and
+    # reports "undetermined" rather than an anchored figure. That is correct
+    # and not a defect: this profile prices a component, it does not judge
+    # whether the instrument fits. Use `full` (or a later profile that carries
+    # `system`) for that.
+    "bbd": Profile(
+        families=("bbd",),
+        gates=frozenset(),
+    ),
     # The complete run, as before profiles existed. Expected to FAIL TO LINK
     # until the engine shrinks or the region grows -- that debt is real and is
     # meant to be visible to whoever runs the bare command.
