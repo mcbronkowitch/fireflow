@@ -21,6 +21,28 @@ namespace spky {
 // is "four distinguishable characters that all decay with the strike" (spec
 // 2, DUST-zone precedent), not these particular numbers.
 //
+// The bow (FLOW). A click is a single impulse through the one-pole; a bowed
+// click is a *stream* of them, so continuous mode re-fires the impulse rather
+// than switching to a different signal -- switching would collapse zone 0
+// into zone 1, which the zone-distinctness tests guard against.
+//
+// The re-arm runs at the FUNDAMENTAL. It used to run on a fixed 5 ms timer,
+// which is exactly 200 Hz at 48 kHz, so a bowed click droned at 200 Hz
+// whatever was played: a FLOW recording from 2026-07-28 measured an exact
+// 200 Hz harmonic series with the played note nowhere in it. Driving the
+// resonator at its own period is also the physically right answer -- every
+// impulse then arrives in phase with the wave already circulating in the
+// string, which is what a bow does.
+//
+// One coupling to know before changing it: the filter is not reset between
+// re-arms, so a shorter period raises per-impulse amplitude as well as rate.
+// Measured steady-state peak: flat at 0.230 for periods down to ~60 samples,
+// then 0.248 at 20, 0.316 at 10, 0.565 at 5, saturating at 1.0 by 1. The
+// pitch contract spans 110-880 Hz, i.e. 436 down to 55 samples at 48 kHz --
+// the whole range sits in the flat part, so tracking f0 does not tilt the
+// excitation level across the keyboard. Anyone extending the contract upward
+// leaves the flat region and should re-measure.
+//
 // Everything derived from a parameter (the click/noise filter cutoff, the
 // decay-per-sample coefficient, the ping phase increment) is computed in a
 // setter, on the engine's 96-sample control tick -- never in process(). That
@@ -42,33 +64,7 @@ public:
         _burst = 0;
         _continuous = false;
         _fresh = false;
-        // Re-arm interval for the click zone's bowed form (spec 2: "in FLOW
-        // the same character becomes continuous excitation"). A click is a
-        // single impulse through the one-pole; a bowed click is a *stream*
-        // of them, so continuous mode re-fires the impulse on a timer rather
-        // than switching to a different signal (that would collapse into
-        // the noise-burst zone, which is exactly what the zone-distinctness
-        // tests guard against). The interval is TUNING MATERIAL, like every
-        // other zone constant here.
-        //
-        // 5 ms is 200 Hz, well above the ~20 Hz where discrete pulses fuse:
-        // this reads as a pitched buzz, NOT as a rattle. That pitch is fixed
-        // and unrelated to the note, so a bowed click currently excites the
-        // body at a constant 200 Hz whatever is played. Listening pass
-        // (Task 12) decides whether that is the character we want, whether
-        // the interval should track the fundamental, or whether it belongs
-        // below the fusion threshold where it would actually rattle.
-        //
-        // One coupling to know before changing it: the filter is not reset
-        // between re-arms, so shortening the interval raises per-impulse
-        // amplitude as well as rate. Measured steady-state peak: flat at
-        // 0.230 for intervals down to ~60 samples, then 0.248 at 20, 0.316
-        // at 10, 0.565 at 5, saturating at 1.0 by 1. Bounded and monotonic
-        // -- the one-pole is stable, so this never runs away -- but rate and
-        // loudness move together, which is not obvious from the constant.
-        _click_interval = static_cast<int>(0.005f * _sr);
-        if (_click_interval < 1) _click_interval = 1;
-        _click_counter = 0;
+        _click_phase = 0.f;
         _recompute_filter();
     }
 
@@ -84,7 +80,10 @@ public:
         _decay = n > 1.f ? (1.f - 1.f / n) : 0.f;
     }
 
-    // Control rate. Fundamental for the ping zone.
+    // Control rate. Fundamental for the ping zone AND for the click zone's
+    // bow -- one increment, two consumers. At 0 Hz neither advances, which is
+    // the same "no pitch, no excitation" the ping zone already had; the pitch
+    // contract floors at 110 Hz, so nothing reaches it in practice.
     void set_freq(float hz) { _inc = hz > 0.f ? hz / _sr : 0.f; }
 
     // Control rate. FLOW bows instead of striking: the envelope stops
@@ -97,7 +96,7 @@ public:
         _burst = 0;
         _gate = 0.f;
         _fresh = true;
-        _click_counter = 0;   // next continuous-mode re-arm check fires immediately
+        _click_phase = 1.f;   // next continuous-mode re-arm fires immediately
         _lp.reset();   // clean impulse response per strike, no bleed-through
     }
 
@@ -109,12 +108,12 @@ public:
 
         if (z < 1.f) {                              // zone 0: click
             bool fire = _fresh;
-            if (_continuous) {                      // bow: re-arm the impulse on a timer
-                if (_click_counter <= 0) {
+            if (_continuous) {                      // bow: re-arm at the fundamental
+                _click_phase += _inc;
+                if (_click_phase >= 1.f) {
+                    _click_phase -= 1.f;
                     fire = true;
-                    _click_counter = _click_interval;
                 }
-                --_click_counter;
             }
             s = _lp.process(fire ? 1.f : 0.f);
         } else if (z < 2.f) {                        // zone 1: noise burst
@@ -168,7 +167,11 @@ private:
     float _char = 0.f, _decay = 0.f, _inc = 0.f;
     float _env = 0.f, _phase = 0.f, _gate = 0.f;
     int   _burst = 0;
-    int   _click_counter = 0, _click_interval = 240;   // see init(): 5 ms at 48 kHz
+    // Bow phase for the click zone, advanced by _inc -- see the class comment.
+    // Separate from _phase, which the ping zone owns: the two zones are
+    // mutually exclusive per sample, but a shared accumulator would still make
+    // the crossfade between them depend on which one ran last.
+    float _click_phase = 0.f;
     bool  _continuous = false, _fresh = false;
 };
 

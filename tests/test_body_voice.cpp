@@ -204,8 +204,9 @@ TEST_CASE("Exciter sputter zone gates its noise, unlike the noise zone") {
 
 TEST_CASE("Exciter ping zone tracks the fundamental it was set to") {
     // Pure tonal ping (RESO 1.0) should ring near set_freq, not at some
-    // unrelated rate -- distinguishing it from every other zone, none of
-    // which are frequency-locked to set_freq at all.
+    // unrelated rate. The struck zones are not frequency-locked at all; the
+    // bowed click is (see the FLOW bow test below), so the ping is no longer
+    // the only zone that reads set_freq.
     Exciter e;
     e.init(7, 48000.f);
     e.set_character(1.f);
@@ -225,6 +226,46 @@ TEST_CASE("Exciter ping zone tracks the fundamental it was set to") {
     // the fast_sin approximation and envelope decay near the tail.
     CHECK(crossings > 30);
     CHECK(crossings < 60);
+}
+
+// Counts the bow's re-arms over `n` samples. The click zone drives a one-pole
+// with an impulse, so the output rises on exactly the samples that fire and
+// decays monotonically in between: one rising sample = one impulse.
+static int bow_impulses(float hz, int n) {
+    Exciter e;
+    e.init(7, 48000.f);
+    e.set_character(0.f);          // zone 0: click
+    e.set_length(0.005f);
+    e.set_freq(hz);
+    e.set_continuous(true);        // FLOW: bow instead of strike
+    e.strike(1.f);
+
+    int   rises = 0;
+    float prev  = e.process();
+    for (int i = 1; i < n; ++i) {
+        const float s = e.process();
+        if (s > prev) ++rises;
+        prev = s;
+    }
+    return rises;
+}
+
+TEST_CASE("Exciter bows the click zone at the fundamental, not a fixed rate") {
+    // The bow re-fires the click impulse on a timer. That timer was a fixed
+    // 5 ms -- exactly 200 Hz at 48 kHz -- so a bowed click droned at 200 Hz
+    // whatever was played. Measured on a FLOW recording (2026-07-28): an
+    // exact 200 Hz harmonic series, with the played note nowhere in it. The
+    // re-arm has to track the fundamental so the bow drives the resonator at
+    // its own period instead of blowing an unrelated pitch through it.
+    //
+    // One second per note, so the impulse count IS the excitation frequency.
+    const int low  = bow_impulses(110.f, 48000);   // bottom of the contract
+    const int high = bow_impulses(880.f, 48000);   // top of the contract
+
+    CHECK(low  > 105);
+    CHECK(low  < 115);
+    CHECK(high > 840);
+    CHECK(high < 920);
 }
 
 // --- BodyVoice (Task 7) ---------------------------------------------------
