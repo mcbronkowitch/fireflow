@@ -196,9 +196,11 @@ SOURCE_CAPTIONS = {0: "TIMB", 1: "ORG", 2: "FRAME", 3: "MATL"}
 FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # RATE MIX FB | ROOM (per-deck reverb mix)
 # FX bottom row went from two slots to four (spec 2026-07-18 dust-grain-cloud);
 # the left two were renamed in place when FLUX became a BBD (spec 2026-07-27):
-# DRIVE STAGES GRIT COMP. Pitch 10.50 mm against a 3.0 mm knob radius, so the
-# 6.0 mm minimum in test_no_overlap still has room to spare.
-FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # DRIV STGS | GRIT COMP
+# DUST/ROT -> DRIVE/STAGES. The first slot was renamed in place again (spec
+# 2026-07-28 flux-rhythm-drag): DRIVE -> DRAG, DRIVE moving to the menu.
+# Pitch 10.50 mm against a 3.0 mm knob radius, so the 6.0 mm minimum in
+# test_no_overlap still has room to spare.
+FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # DRAG STGS | GRIT COMP
 PLAY_Y   = 103.6
 # The PLAY row's left block re-spaced to seat REC between GRIT and STEPS
 # (spec 2026-07-18 "VCV layer": REC is the only new panel element). All four
@@ -414,7 +416,7 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     Ctl("REC_A", LATCH, REC_X,     PLAY_Y, "REC"),
     Ctl("REC_B", LATCH, W - REC_X, PLAY_Y, "REC"),
     # Per-deck reverb mix (spec 2026-07-23 per-deck-reverb-mix). Appended LAST
-    # like FILT/FLUXRATE/COLOR/DRIVE/REC so PART_STRIDE stays 23 and no id before
+    # like FILT/FLUXRATE/COLOR/DRAG/REC so PART_STRIDE stays 23 and no id before
     # them moves. They fill the FX top row's 4th slot -- RATE.MIX.FB.ROOM --
     # aligned to the FX bottom row. Label "ROOM" (not "MIX": FLUX beside it is
     # already the delay mix). The old shared centre REV_MIX is removed from

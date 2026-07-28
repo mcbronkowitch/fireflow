@@ -243,8 +243,6 @@ struct Spotymod : Module {
                         configParam<FluxRateQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == FLUXFB_A || c.id == FLUXFB_B)
                         configParam<FluxFbQuantity>(c.id, 0.f, 1.f, init, lbl);
-                    else if (c.id == DRIVE_A || c.id == DRIVE_B)
-                        configParam<DriveQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == DRAG_A || c.id == DRAG_B)
                         configParam<DragQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == STAGES_A || c.id == STAGES_B)
