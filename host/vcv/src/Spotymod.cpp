@@ -76,6 +76,16 @@ struct DriveQuantity : ParamQuantity {
     }
 };
 
+// DRAG tooltip: how much of the delay time the OTHER deck's rhythm owns. At 0
+// the RATE ladder is untouched; at 1 it is overridden outright.
+struct DragQuantity : ParamQuantity {
+    std::string getDisplayValueString() override {
+        const float pct = 100.f * getValue();
+        if (pct < 0.5f) return "off (RATE only)";
+        return string::f("%.0f %% toward the other deck", pct);
+    }
+};
+
 static constexpr float kDefaultDetune = 6.f / spky::SynthEngine::kDetuneCeilCt;
 
 struct DetuneQuantity : ParamQuantity {
@@ -235,6 +245,8 @@ struct Spotymod : Module {
                         configParam<FluxFbQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == DRIVE_A || c.id == DRIVE_B)
                         configParam<DriveQuantity>(c.id, 0.f, 1.f, init, lbl);
+                    else if (c.id == DRAG_A || c.id == DRAG_B)
+                        configParam<DragQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == STAGES_A || c.id == STAGES_B)
                         configParam<StagesQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == SOURCE_A || c.id == SOURCE_B) {
@@ -291,6 +303,13 @@ struct Spotymod : Module {
             DETUNE_A, 0.f, 1.f, initParamDefault(DETUNE_A), "Detune A");
         configParam<DetuneQuantity>(
             DETUNE_B, 0.f, 1.f, initParamDefault(DETUNE_B), "Detune B");
+        // DRIVE moved to HIDDEN_PARAMS (spec 2026-07-28 flux-rhythm-drag) and so
+        // is no longer in kParamCtls; configured explicitly here, same as Detune
+        // above, so the menu-only quantity exists for the submenu slider.
+        configParam<DriveQuantity>(
+            DRIVE_A, 0.f, 1.f, initParamDefault(DRIVE_A), "Drive A");
+        configParam<DriveQuantity>(
+            DRIVE_B, 0.f, 1.f, initParamDefault(DRIVE_B), "Drive B");
         // panel labels are short ("L", "PIT"); the group legend carries the rest,
         // so tooltips use the control table's spelled-out tip instead
         for (const auto& c : kInputCtls)  configInput(c.id, c.tip);
@@ -400,6 +419,7 @@ struct Spotymod : Module {
             // Appended params are outside the stride, so pp() would compute the
             // wrong id — the explicit ternary is required (see FLUXRATE/FLUXFB).
             inst.set_drive(p, params[p ? DRIVE_B : DRIVE_A].getValue());
+            inst.set_drag(p, params[p ? DRAG_B : DRAG_A].getValue());
             inst.set_stages(p, params[p ? STAGES_B : STAGES_A].getValue());
             // The FX blocks are gated by an explicit on/off (a pad on hardware,
             // a scenario action on the desktop). VCV has no such pad, so the mix
@@ -1226,6 +1246,16 @@ struct SpotymodWidget : ModuleWidget {
                 m->params[DETUNE_B].setValue(kDefaultDetune);
             }));
         }));
+
+        // DRIVE lost its panel slot to DRAG (spec 2026-07-28 flux-rhythm-drag)
+        // and lives here now, same menu-only shape as Detune A/B above.
+        for (int p = 0; p < spky::PART_COUNT; ++p) {
+            const std::string name = p ? "Drive B" : "Drive A";
+            const int id = p ? DRIVE_B : DRIVE_A;
+            menu->addChild(createSubmenuItem(name, "", [m, id](Menu* sub) {
+                sub->addChild(new ParamMenuSlider(m->getParamQuantity(id)));
+            }));
+        }
 
         // BODY's excitation bus (design spec §6): patch state, not a
         // performance control -- there is no panel knob for it on any

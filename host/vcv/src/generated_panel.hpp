@@ -84,8 +84,8 @@ enum ParamId {
     FLUXFB_B,
     COLOR_A,
     COLOR_B,
-    DRIVE_A,
-    DRIVE_B,
+    DRAG_A,
+    DRAG_B,
     STAGES_A,
     STAGES_B,
     REC_A,
@@ -95,6 +95,8 @@ enum ParamId {
     SHUFFLE,
     DETUNE_A,
     DETUNE_B,
+    DRIVE_A,
+    DRIVE_B,
     NUM_PARAMS
 };
 enum InputId {
@@ -192,8 +194,8 @@ static const PanelCtl kParamCtls[] = {
     {FLUXFB_B, WK_SMKNOB, {148.110f, 77.300f}, "FB", {148.110f, 82.900f}, 0, 1.90f, 0x171713, "FFB"},
     {COLOR_A, WK_BIGKNOB, {23.109f, 14.966f}, "COLOR", {19.124f, 10.216f}, 2, 1.90f, 0x171713, "COLOR"},
     {COLOR_B, WK_BIGKNOB, {190.251f, 14.966f}, "COLOR", {194.236f, 10.216f}, 1, 1.90f, 0x171713, "COLOR"},
-    {DRIVE_A, WK_SMKNOB, {44.250f, 89.400f}, "DRIV", {44.250f, 95.000f}, 0, 1.90f, 0x171713, "DRIV"},
-    {DRIVE_B, WK_SMKNOB, {169.110f, 89.400f}, "DRIV", {169.110f, 95.000f}, 0, 1.90f, 0x171713, "DRIV"},
+    {DRAG_A, WK_SMKNOB, {44.250f, 89.400f}, "DRAG", {44.250f, 95.000f}, 0, 1.90f, 0x171713, "DRAG"},
+    {DRAG_B, WK_SMKNOB, {169.110f, 89.400f}, "DRAG", {169.110f, 95.000f}, 0, 1.90f, 0x171713, "DRAG"},
     {STAGES_A, WK_SMKNOB, {54.750f, 89.400f}, "STGS", {54.750f, 95.000f}, 0, 1.90f, 0x171713, "STGS"},
     {STAGES_B, WK_SMKNOB, {158.610f, 89.400f}, "STGS", {158.610f, 95.000f}, 0, 1.90f, 0x171713, "STGS"},
     {REC_A, WK_LATCH, {25.000f, 103.600f}, "REC", {25.000f, 109.000f}, 0, 1.90f, 0x171713, "REC"},

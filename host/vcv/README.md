@@ -275,22 +275,6 @@ stale WAV sitting in patch storage.
   imported file is always in tune. The asymmetry is intentional: importing a
   file at the wrong pitch would be a bug, but re-rating material that's
   already sitting in the buffer is varispeed, not a bug.
-- **An old patch loads its DUST value straight into DRIVE.** DRIVE and
-  STAGES replaced the old DUST/ROT controls (2.14.0, the FLUX -> BBD
-  rewrite) **in place, on the same param IDs**, so a saved patch's DUST
-  value lands on DRIVE — there is no migration and none is planned; that is
-  a deliberate product decision, not an oversight. The previously shipped
-  init default for DUST was **maximum** (`1.0`), so a patch descending from
-  that old init state comes up at full DRIVE: loud and heavily saturated,
-  which may not be what the patch sounded like. Turn DRIVE down.
-
-  It will not, however, run away. An earlier revision of this note warned
-  that it would, and that warning was correct at the time: DRIVE's gain sat
-  inside the feedback loop, so full DRIVE dragged the self-oscillation
-  FEEDBACK threshold down to 0.209 — below both of the old FEEDBACK defaults
-  (0.343 and 0.527), which meant instant runaway on load. `Flux::set_feedback`
-  now divides DRIVE's gain back out, so the threshold no longer moves with
-  DRIVE at all.
 - **FLUX self-oscillates above roughly 0.56 on FEEDBACK, at any DRIVE.**
   That is the intended behaviour, not a fault — but it means DRIVE cannot
   stop it. If the echo is ringing forever, **turn FEEDBACK down**; turning

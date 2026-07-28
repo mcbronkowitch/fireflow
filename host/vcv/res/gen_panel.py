@@ -396,14 +396,16 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     # sits in the PITCH sector. Still appended LAST: order defines the param id.
     color_ctl("_A", False),
     color_ctl("_B", True),
-    # DRIVE / STAGES: the BBD's two voicing controls (spec 2026-07-27
-    # flux-bbd-delay). Renamed IN PLACE from DUST / ROT -- same positions,
-    # same param ids, PART_STRIDE untouched, so every already-saved .vcv
-    # keeps every id it has. A patch's old DUST value lands in DRIVE and its
-    # old ROT value in STAGES; it sounds different, which full replacement
-    # already conceded.
-    Ctl("DRIVE_A",  SMKNOB, FX_BOT[0],     ROW_V2, "DRIV"),
-    Ctl("DRIVE_B",  SMKNOB, W - FX_BOT[0], ROW_V2, "DRIV"),
+    # DRAG / STAGES: DRAG takes over the BBD voicing slot that DRIVE held
+    # (spec 2026-07-28 flux-rhythm-drag). Renamed IN PLACE from DRIVE -- same
+    # positions, same param ids, PART_STRIDE untouched, so every already-saved
+    # .vcv keeps every id it has -- exactly the move DUST -> DRIVE made on
+    # 2026-07-27. A patch's old DRIVE value lands in DRAG; the spec's
+    # no-migration decision accepts that. DRIVE itself moves to the menu as
+    # patch state and is re-appended below in HIDDEN_PARAMS with fresh
+    # trailing ids. STAGES is untouched.
+    Ctl("DRAG_A",   SMKNOB, FX_BOT[0],     ROW_V2, "DRAG"),
+    Ctl("DRAG_B",   SMKNOB, W - FX_BOT[0], ROW_V2, "DRAG"),
     Ctl("STAGES_A", SMKNOB, FX_BOT[1],     ROW_V2, "STGS"),
     Ctl("STAGES_B", SMKNOB, W - FX_BOT[1], ROW_V2, "STGS"),
     # M5b: REC, the one new panel element of the texture deck. Appended LAST
@@ -428,6 +430,12 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
 HIDDEN_PARAMS = [
     Ctl("DETUNE_A", SMKNOB, 0.0, 0.0, "", "Detune A"),
     Ctl("DETUNE_B", SMKNOB, 0.0, 0.0, "", "Detune B"),
+    # DRIVE loses its panel slot to DRAG (spec 2026-07-28 flux-rhythm-drag) and
+    # becomes patch state, same menu-only shape as DETUNE_A/B above: position
+    # 0,0 and an empty label mean no panel widget is emitted. Appended LAST so
+    # every id before it stays put and PART_STRIDE remains 23.
+    Ctl("DRIVE_A", SMKNOB, 0.0, 0.0, "", "Drive A"),
+    Ctl("DRIVE_B", SMKNOB, 0.0, 0.0, "", "Drive B"),
 ]
 
 PARAMS = PANEL_PARAMS + HIDDEN_PARAMS

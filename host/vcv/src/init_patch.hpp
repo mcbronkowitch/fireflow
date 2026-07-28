@@ -3,9 +3,13 @@
 namespace spkyvcv {
 
 // Panel snapshot from sampler.vcvm (2026-07-24), in stable ParamId order.
-// DRIVE_A/B and STAGES_A/B are the exception: those four were set deliberately
-// for the BBD redesign (spec 2026-07-27 flux-bbd-delay), not carried from the
-// snapshot -- do not "restore" them to the old DUST/ROT value of 1.0.
+// STAGES_A/B is the exception carried over from the BBD redesign (spec
+// 2026-07-27 flux-bbd-delay): set deliberately, not carried from the
+// snapshot -- do not "restore" it to the old ROT value of 1.0.
+// DRAG_A/B (spec 2026-07-28 flux-rhythm-drag) reused DRIVE's old slot and
+// defaults to 0.0 -- the bit-identical path; the instrument must not ship
+// with the neighbour owning FLUX's delay time. DRIVE_A/B moved to the menu
+// as patch state and were appended at the end with the new default 0.2.
 static constexpr float kInitParamDefaults[] = {
      0.204668641f, // RATE_A
      0.615999997f, // SHAPE_A
@@ -78,8 +82,8 @@ static constexpr float kInitParamDefaults[] = {
      0.439336449f, // FLUXFB_B
      0.000000000f, // COLOR_A
      0.000000000f, // COLOR_B
-     0.150000000f, // DRIVE_A   -- starts low: clean repeats, dirt on demand
-     0.150000000f, // DRIVE_B
+     0.000000000f, // DRAG_A
+     0.000000000f, // DRAG_B
      0.800000000f, // STAGES_A  -- 512 * 32^0.8 == 8192, a Memory Man
      0.800000000f, // STAGES_B
      0.000000000f, // REC_A
@@ -89,6 +93,8 @@ static constexpr float kInitParamDefaults[] = {
      1.000000000f, // SHUFFLE
      0.171428576f, // DETUNE_A = 6 / 35
      0.171428576f, // DETUNE_B = 6 / 35
+     0.200000000f, // DRIVE_A
+     0.200000000f, // DRIVE_B
 };
 
 static_assert(sizeof(kInitParamDefaults) / sizeof(kInitParamDefaults[0])
