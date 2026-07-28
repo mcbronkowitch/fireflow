@@ -1,8 +1,9 @@
 # FLUX rhythm taps — design
 
 **Date:** 2026-07-28
-**Status:** design approved (revised after a second review pass the same day —
-see §10), not yet planned
+**Status:** design approved (revised twice the same day — a review pass and a
+measurement pass, both recorded in §10), not yet planned. **Blocked on one
+number:** the `system`-profile whole-instrument figure, §8.
 **Depends on:** `docs/superpowers/specs/2026-07-27-flux-bbd-delay-design.md` (the BBD rewrite, branch `bbd-delay`)
 
 ## What this is
@@ -28,7 +29,7 @@ reducible to real hardware, two knobs that change meaning per mode, and the
 restored tap bank on top. It also drags back `taps.{h,cpp}`'s tape-specific
 machinery.
 
-Own tap lines instead cost **64 KiB**, for the reason the BBD rewrite exists:
+Own tap lines instead cost **32 KiB**, for the reason the BBD rewrite exists:
 **delay length is clock rate, not buffer size.** A two-second tap does not need
 a bigger buffer, only a slower clock. What it costs instead is bandwidth, since
 bandwidth follows the clock — and that is a two-edged gift (§3).
@@ -69,6 +70,14 @@ arguments and the function stays pure:
   clock instead of through a clamp. 64 ms is reachable, not theoretical: 1/32
   at 120 BPM is 62.5 ms. The bound depends on the sample rate, so it cannot be
   a header constant; `Flux` computes it and passes it in.
+
+  **64 ms, not higher.** A larger floor is a real CPU lever — it caps the
+  clock, and half the clock is 26 % off a tap line (§8) — but it is charged
+  musically at a bad rate. At 128 ms a 1/16 PITCH lane at 120 BPM (125 ms)
+  falls under it, so the most ordinary rhythm in the instrument would mute its
+  near tap and show a single echo. The physical floor costs nothing and mutes
+  only what the clock genuinely cannot render. A raised floor stays available
+  as a pre-authorised lever if the budget demands it (§8).
 - **`max_offset` is a musical bound, and it needs a number.** There is no
   buffer to run out of. **1.5 s** (≈341 Hz of bandwidth, §3) is the point below
   which a tap stops reading as an echo and starts reading as a thud. It is an
@@ -81,19 +90,37 @@ guards the spread the uniformity guard applies. Different concern, kept.
 One deletion: the `static_assert` on `Flux::kMaxSamples` being a power of two.
 It guarded `TapeTap`'s AND-masked read, and there is no masked read any more.
 
-### 1.2 `TapBank` owns four `BbdLine` per part
+### 1.2 `TapBank` owns two **mono** `BbdLine` per part
 
-Two taps × two channels. Each line is an independent head:
+One line per tap, not one per tap per channel. Each line is an independent
+head, fed from the summed send and placed in the image by gains:
 
 ```
-part send ─┬─→ BbdEcho   (main line: FEEDBACK, DRIVE, compander)  ──→ echo
-           ├─→ BbdLine   clock set so its delay == r·gap[0]        ─┐
-           └─→ BbdLine   clock set so its delay == r·(gap[0]+gap[1])─┴→ taps
+part send ─┬─→ BbdEcho   (main line, stereo: FEEDBACK, DRIVE, compander) ──→ echo
+   (L+R)/2 ├─→ BbdLine   clock set so its delay == r·gap[0]         ─┐
+           └─→ BbdLine   clock set so its delay == r·(gap[0]+gap[1]) ─┴→ pan → taps
 ```
 
 Parallel heads off the **same send**, not in series behind the echo. That makes
 a tap what it was before: this deck's own delayed material, at a position the
 neighbour chose. No feedback on the tap lines.
+
+**Mono is a measurement, not a preference.** A bare `BbdLine` in the tap
+configuration costs 3.59 % of the block budget at its ceiling clock
+(`docs/bench/2026-07-28-6338f63-bbd.md`). Stereo lines would be eight of those,
+28.7 %, on top of the echo's four at 22.4 % — over half the block budget for
+FLUX alone, which no other lever recovers (§8). Four mono lines are 14.4 %.
+
+What it costs musically is close to nothing, because §4.1 pans the taps anyway:
+a mono line at two gains produces the same image as two lines plus a pan. What
+is genuinely lost is stereo information *within* one tap, which a sparse
+rhythmic interjection barely carries.
+
+**Two taps is the floor of the idea, not a budget compromise.** One tap placed
+at `gap[0]` is just another echo — the "evenly spaced taps *are* a delay"
+diagnosis that killed zone S twice applies directly, and the uniformity guard
+would have nothing to guard. §4.1's knob would also lose its first half. Two
+taps make a figure; one makes a repeat.
 
 `r` is the TAPS ratio (§4.1). The clock for each line is
 
@@ -143,8 +170,11 @@ line state, so re-pushing an unchanged rhythm is harmless. That it does not
 reset the line is also precisely what §6 depends on: the stored charge stays put
 while the clock moves, which is the pitch bend.
 
-A parallel `FxMem` field (`float* taps[PART_COUNT][2][2]` — part, channel, tap)
-carries the storage, alongside the existing `echo[PART_COUNT][2]`.
+A parallel `FxMem` field (`float* taps[PART_COUNT][2]` — part, tap) carries the
+storage, alongside the existing `echo[PART_COUNT][2]`. The two indices are not
+the same two: `echo`'s second index is the channel, `taps`' is the tap, because
+the tap lines are mono (§1.2). Same shape, different meaning — worth a comment
+at the declaration.
 
 ### 1.3 Rhythm source
 
@@ -163,15 +193,21 @@ must not include fx headers — is preserved: `taps.h` includes
 
 | | lines | total |
 |---|---|---|
-| main BBD lines (today) | 4 | 128 KiB |
-| tap lines (new) | 8 | 64 KiB |
+| main BBD lines (today) | 4 (stereo × 2 parts) | 128 KiB |
+| tap lines (new) | 4 (mono × 2 taps × 2 parts) | 32 KiB |
 | restoring the tape instead | — | 3.88 MiB |
 
 On Daisy this lives in SDRAM (`bench/mem.cpp:36`, `DSY_SDRAM_BSS`) where it is
-not a constraint. In VCV it is a per-instance member array; 64 KiB against the
-~38.7 MB an instance already takes is noise. §1.2's decision not to follow
-STAGES keeps it at 64 KiB rather than 256 KiB, but that decision was made on
-musical grounds, not this one.
+not a constraint. In VCV it is a per-instance member array; 32 KiB against the
+~38.7 MB an instance already takes is noise.
+
+**Memory is not what decides anything here, and the bench says so twice.**
+`bbd_walk_sdram` costs 0.09 % of the block budget, and a tap line at 4096
+stages (3.59 %) against one at 16384 (3.68 %) differs by 2.4 % at identical
+clock. The working set is nearly free; the arithmetic is what costs. Both of
+the decisions that look like memory decisions — mono lines (§1.2), not
+following STAGES (§1.2) — were made on CPU and musical grounds respectively,
+and the memory table merely follows them.
 
 ## 3. Bandwidth is the price, and it cuts both ways
 
@@ -257,10 +293,12 @@ parity with a *full-band* tape read. Against a signal limited to 0.5–2 kHz,
 equal amplitude is not equal audibility, and the value is expected to land
 above 1. It is re-derived on the ear pass against a band-limited reference.
 
-**Panning widens.** `kPanNear`/`kPanFar` = 0.92388/0.38268 is 22.5° off hard —
-timid. Starting point 0.98/0.195 (11.25°). For a signal that already sits
-tonally under the echo, stereo position is the last free axis of separation and
-costs nothing.
+**Panning widens, and now carries the whole stereo job.** `kPanNear`/`kPanFar`
+= 0.92388/0.38268 is 22.5° off hard — timid. Starting point 0.98/0.195
+(11.25°). For a signal that already sits tonally under the echo, stereo
+position is the last free axis of separation, and since §1.2 made the lines
+mono these two gains *are* the tap's stereo image rather than a treatment
+applied to one.
 
 ### 4.2 The ratio's other direction belongs to the modulation lane
 
@@ -326,8 +364,13 @@ than `BbdEcho` is (`BbdLine` carries a DC feed-through term, `fout_->H == 1`).
 machine the companding wraps the delay path once, not each head, and a compander
 per tap would cost more and give the taps different dynamics from the echo.
 
-This is a voicing decision, not an implementation detail. It belongs on the ear
-pass.
+"Would cost more" now has a number: the compander and drive path together are
+the difference between `bbd_ceiling` (5.61 %) and `bbd_line_only` (3.68 %) —
+**1.93 % of the block budget per line**, better than a third of an echo line.
+Four tap lines with companders would be 7.7 % on top of §8's 14.4 %.
+
+This remains a voicing decision, not a cost one; the cost merely agrees. It
+belongs on the ear pass.
 
 ## 6. What a moving tap sounds like — a simplification the rewrite paid for
 
@@ -382,7 +425,9 @@ green.
 
 ### 7.4 Not replaceable by a test
 
-- A bench workload for the tap lines, then the CPU gate on hardware. See §8.
+- The whole-instrument CPU gate. The component figures are in (§8); what is
+  still missing is `instrument_worst_bbd` from the `system` profile, and no
+  unit test can stand in for it.
 - The ear pass owns `kTapGain`, the pan width, and the missing compander — and
   must audition the **top** of the TAPS travel specifically, not the middle.
   Full stretch is the darkest and therefore the most burial-prone setting the
@@ -390,30 +435,62 @@ green.
   rise along the ratio: it dents the distance metaphor, but a knob must not
   fade itself out.
 
-## 8. Risks
+## 8. CPU — measured, and the one gate still open
 
-**CPU is the one that can kill this.** Eight tap lines on top of four main
-lines. The gate is unmeasured and `instrument_worst` last sat at 97.5 % of the
-block budget at maximum.
+Measured on the Seed, `bbd` profile, two runs, identical checksums
+(`docs/bench/2026-07-28-3a6820c-bbd.md`, `docs/bench/2026-07-28-6338f63-bbd.md`).
+All figures are percent of the block budget, per line:
 
-**The expensive case is the common one, and it is not the one intuition
-suggests.** Long taps clock slowly and cost little — but tap offsets come from
-a rhythm, and rhythms are mostly fast. A gap near the 64 ms floor puts a line
-at the 32 kHz ceiling, i.e. 0.67 events per sample per kind, and eight lines
-there is twice the four main lines' ceiling. That, not a long-tap case, is what
-`bench/workloads_taps.cpp` must configure. The per-sample filter-branch work
-does not shrink with the clock either, and that is the floor under everything.
+| row | configuration | avg |
+|---|---|---:|
+| `bbd_ceiling` | `BbdEcho`, 16384 stages, clock at the ceiling | 5.61 % |
+| `bbd_line_only` | bare `BbdLine`, 16384 stages, ceiling | 3.68 % |
+| `bbd_line_tap` | bare `BbdLine`, 4096 stages, ceiling | **3.59 %** |
+| `bbd_line_tap_half` | bare `BbdLine`, 4096 stages, half clock | **2.67 %** |
+| `bbd_walk_sdram` | the memory shape alone | 0.09 % |
 
-The one genuine relief: at `TAPS == 0`, or with no valid neighbour rhythm, the
-lines do not run at all.
+**The BBD is 2.2× more expensive than its own design predicted.** 561 cycles
+per sample per line against the estimated ~260, so the four shipping echo lines
+are ~22.4 % of the block budget at their worst case, not the ~10 % the BBD spec
+claimed. That correction belongs to that spec as much as to this one.
 
-**The measurement comes before shipping, not after.** A cheap lever is already
-identified if it is close: hoisting two per-sample divisions out of `BbdLine`
-(~8 `VDIV.F32` per sample across the current four lines).
+**Half of a tap line's cost cannot be clocked away.** Solving
+`cost = fixed + k·f` over the last two rows: ~176 cycles per sample are fixed
+filter work and ~183 are event work at the ceiling. Halving the clock therefore
+saves 26 %, not 50 %, and 1.76 % per line survives however slowly a tap runs.
 
-**Second risk: the ear values.** `kTapGain`, the pan width, `max_offset` and the
-missing compander are all inherited from, or reasoned about against, a different
-signal path. They are starting points (§7.4).
+This is what settles the shape of the design. Ranked by effect:
+
+| lever | effect |
+|---|---|
+| mono tap lines (8 → 4) | **−50 %**, exact — taken, §1.2 |
+| one tap instead of two | −50 % again — **rejected**, §1.2: the idea does not survive it |
+| raising the tap floor to 128 ms | −26 % — **not taken**, §1.1: it mutes 1/16 rhythms |
+| stage count | nothing (3.59 % vs 3.68 %) |
+
+**Where that leaves the budget:** four mono tap lines at the ceiling are
+**14.4 %**, on top of the echo's 22.4 %, so FLUX at its worst case is roughly
+**37 %** of the block budget. At typical rhythm gaps (125–500 ms, i.e. an
+eighth to a half of the ceiling clock) the tap lines fall toward their 1.76 %
+floor and the figure is nearer 10 %.
+
+At `TAPS == 0`, or with no valid neighbour rhythm, the lines do not run at all.
+
+**The gate that is still open.** Whether 37 % fits is not answerable from this
+profile: it needs `instrument_worst_bbd`, which lives in the `system` family.
+The last whole-instrument figure, `instrument_worst` at 97.5 %, was measured
+with the *tape* delay and a much cheaper FLUX; it no longer describes anything.
+**The `system` run is a precondition of the plan, not a follow-up to it.**
+
+Two levers stay pre-authorised if it does not fit, in this order: raise the tap
+floor to 128 ms (−26 %, at §1.1's musical price), and hoist two per-sample
+divisions out of `BbdLine` (~8 `VDIV.F32` per sample across the current four
+lines) — the second helps the echo as much as the taps and costs nothing
+musically, so it is worth doing regardless of the verdict.
+
+**Second risk, unchanged: the ear values.** `kTapGain`, the pan width,
+`max_offset` and the missing compander are all inherited from, or reasoned
+about against, a different signal path. They are starting points (§7.4).
 
 ## 9. Out of scope
 
@@ -450,3 +527,30 @@ draft was *wrong*, not merely thinner:
    memory table and is not.
 5. **`max_offset` had no value at all.** It was inherited implicitly from the
    tape's buffer length, which no longer exists.
+
+### Measurement pass, same day
+
+The bench ran before planning rather than after, on a new `bbd`-only profile
+(`bench/profiles.py`, commit `3a6820c`) that links at 56.2 % SRAM where the
+`full` profile does not link at all. Three things changed as a result, and one
+did not:
+
+6. **Eight stereo tap lines were never affordable.** At 3.59 % per line they
+   are 28.7 %, against the echo's 22.4 % — over half the block budget for
+   FLUX. §1.2 is now mono lines: four, 14.4 %, with an image that §4.1's pan
+   already produced anyway. The draft treated stereo tap lines as the obvious
+   shape and never priced them.
+7. **The clock was assumed to be the lever, and it is not.** The draft's §8
+   reasoned entirely about clock rate. Measurement split a tap line's cost
+   evenly between fixed per-sample filter work and clock-driven event work, so
+   the floor lever saves 26 % where the draft's reasoning implied 50 %. Line
+   count turned out to be the only strong lever, which is why §1.2's mono
+   decision is architecture rather than an optimisation.
+8. **A 128 ms tap floor was proposed in review and rejected on the numbers'
+   own terms.** It is the second-best CPU lever, but 1/16 at 120 BPM is 125 ms:
+   it would mute the near tap of the most ordinary rhythm the instrument plays.
+   Kept as a pre-authorised lever (§8) rather than a default.
+9. **What did not change: the BBD's own cost is 2.2× its design estimate.**
+   561 cycles per sample per line against ~260. That is a correction owed to
+   `2026-07-27-flux-bbd-delay-design.md`, not to this spec, and it is recorded
+   here only because this measurement is what found it.
