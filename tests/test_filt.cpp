@@ -2,6 +2,7 @@
 #include <cmath>
 #include <vector>
 #include "synth/synth_engine.h"
+#include "body/body_voice.h"
 #include "instrument.h"
 #include "render/scenario.h"
 using namespace spky;
@@ -96,6 +97,59 @@ TEST_CASE("filt: bites from the first movement (no dead zone)") {
     for (int i = 0; i < 48000; ++i)
         maxdiff = std::max(maxdiff, std::abs(va[i] - vb[i]));
     CHECK(maxdiff > 1e-3f);
+}
+
+// --- BODY --------------------------------------------------------------
+// On VoiceT, FILTER drives a real lowpass, so the loudness comes for free.
+// BodyVoice maps the same control to brightness -- a timbre parameter -- so
+// its loudness has to be produced deliberately. These two pin that.
+
+static double body_energy(float lane, float filt) {
+    BodyEngine e;
+    e.set_seed(99);
+    e.init(48000.f);
+    e.set_sub(0.f);
+    e.set_detune(0.f);
+    e.set_cycle(1.f);
+    float t[LANE_COUNT] = { 0.f, lane, 0.5f, 0.f, 1.f };
+    e.set_targets(t, 0.5f);
+    e.set_filt(filt);
+    e.trigger(0.5f);
+    double acc = 0.0;
+    for (int i = 0; i < 2 * 48000; ++i) {
+        float l = 0.f, r = 0.f;
+        e.process(l, r);
+        acc += (double)l * l + (double)r * r;
+    }
+    return acc;
+}
+
+TEST_CASE("filt: BODY loses most of its loudness before the fade begins") {
+    // At lane 0.5, FILT -0.4 puts n_raw at exactly 0, where the fade
+    // (1 + n_raw/kFiltFadeRange) still equals exactly 1. Everything measured
+    // here is therefore the engine's own response, with the fade uninvolved.
+    //
+    // Before BodyVoice had a loudness tilt this read -5.7 dB, so the fade was
+    // left to erase the remaining 100 % inside 0.2 of knob travel -- the cliff
+    // that made FILT below -0.5 unusable on this engine. SYNTH reaches
+    // -28.6 dB at the same point.
+    const double ref  = body_energy(0.5f, 0.f);
+    const double dark = body_energy(0.5f, -0.4f);
+    const float  drop = 10.f * std::log10((float)(dark / ref));
+    CAPTURE(drop);
+    CHECK(drop < -15.f);
+}
+
+TEST_CASE("filt: BODY's left half only ever gets quieter") {
+    // The tilt must not introduce a bump: every step left is a step down, so
+    // the control reads as one continuous move rather than a swell.
+    double prev = body_energy(0.5f, 0.f);
+    for (float filt = -0.1f; filt >= -0.51f; filt -= 0.1f) {
+        CAPTURE(filt);
+        const double e = body_energy(0.5f, filt);
+        CHECK(e < prev);
+        prev = e;
+    }
 }
 
 TEST_CASE("filt: sweep through the whole range is click-free") {

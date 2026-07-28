@@ -82,6 +82,9 @@ private:
     float _freq = 220.f, _matl = 0.f, _detune_ct = 0.f;
     float _material_char = 0.f;                  // COLOR: signed, -1..+1
     float _damping = 0.5f, _brightness = 0.5f, _sub = 0.f;
+    // Loudness tilt derived from _brightness -- see set_cutoff_hz. 1 at the
+    // brightest setting, so a voice that never sees FILTER is unaffected.
+    float _bright_gain = 1.f;
     float _vel = 1.f, _vel_target = 1.f;
     float _mix_string = 1.f, _mix_modal = 0.f;   // equal-power MATL gains
     float _excitation = 0.f;
