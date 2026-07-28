@@ -41,6 +41,6 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
           == doctest::Approx(6.f / 35.f));
     // DRAG's default is the branch's one load-bearing product invariant:
     // 0 is the bit-identical path (spec 2026-07-28 flux-rhythm-drag).
-    CHECK(spkyvcv::initParamDefault(spkyvcv::DRAG_A) == doctest::Approx(0.f));
-    CHECK(spkyvcv::initParamDefault(spkyvcv::DRAG_B) == doctest::Approx(0.f));
+    CHECK(spkyvcv::initParamDefault(spkyvcv::LINK_A) == doctest::Approx(0.f));
+    CHECK(spkyvcv::initParamDefault(spkyvcv::LINK_B) == doctest::Approx(0.f));
 }

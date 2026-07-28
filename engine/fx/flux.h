@@ -49,10 +49,16 @@ public:
     // base time, so it rides PartFx's 2 ms smoother and not the 30 ms
     // ladder slew -- a 4 Hz vibrato would not survive the latter.
     void set_time_mod(float norm);
-    // DRAG: how much of the delay time the OTHER deck's rhythm owns. 0 is the
-    // bit-exact today-path; 1 hands the time over outright and RATE goes
-    // inert. Interpolation is geometric because pitch tracks the clock ratio.
-    void set_drag(float norm);
+    // LINK: how the OTHER deck's rhythm reaches into this echo. Bipolar, and
+    // the two halves never run together.
+    //   0        neutral -- the bit-exact today-path.
+    //   0 -> +1  DRAG: the neighbour's rhythm pulls the delay time. The clock
+    //            moves, so the stored charge bends in pitch. Interpolation is
+    //            geometric because pitch tracks the clock ratio.
+    //   0 -> -1  THIN: the clock never moves. The delay stays on its RATE rung
+    //            and the neighbour's rhythm decides which repeats sound.
+    //            Rhythm without pitch (spec 2026-07-28 flux-link).
+    void set_link(float norm);
     // The other deck's published rhythm, pushed at control rate by Instrument.
     void set_rhythm(const RhythmView& rv);
     void process(float& l, float& r);
@@ -75,7 +81,7 @@ private:
     // definition for why the division lives here rather than in BbdEcho.
     void apply_feedback();
     // The ONLY place _dt_target is written. Called from recompute_time,
-    // set_drag, set_rhythm and the step flip in process().
+    // set_link, set_rhythm and the step flip in process().
     void apply_drag();
 
     BbdEcho _echo_l;
@@ -114,10 +120,13 @@ private:
     // moves. Matches init()'s set_feedback(0.45f).
     float _fb_norm = 0.45f;
 
-    // DRAG state. _drag_iv holds the neighbour's two intervals in samples;
-    // _drag_i selects which one is in force; _drag_phase counts samples into
-    // the current step and _drag_step_len is that step's length in samples,
-    // cached so process() does not multiply per sample.
+    // DRAG state. _drag is now the derived positive half of _link (the
+    // negative half, THIN, is separate and lands in a later step). _drag_iv
+    // holds the neighbour's two intervals in samples; _drag_i selects which
+    // one is in force; _drag_phase counts samples into the current step and
+    // _drag_step_len is that step's length in samples, cached so process()
+    // does not multiply per sample.
+    float   _link = 0.f;
     float   _drag = 0.f;
     int32_t _drag_iv[2] = { 0, 0 };
     int     _drag_i = 0;

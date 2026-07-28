@@ -360,7 +360,7 @@ TEST_CASE("flux: DRAG at 0 is bit-identical to a Flux that never heard a rhythm"
         f->set_feedback(0.5f);
     }
     dragged.set_rhythm(drag_view(12000, 6000));
-    dragged.set_drag(0.f);
+    dragged.set_link(0.f);
 
     for (int i = 0; i < 60000; ++i) {
         const float in = (i < 32) ? 1.f : 0.f;
@@ -382,7 +382,7 @@ TEST_CASE("flux: DRAG at 1 alternates between the neighbour's two intervals") {
     f.set_mix(1.f);
     f.set_feedback(0.f);
     f.set_rhythm(drag_view(12000, 6000));   // 0.25 s and 0.125 s
-    f.set_drag(1.f);
+    f.set_link(1.f);
 
     CHECK(f.drag_time_s() == doctest::Approx(0.25f).epsilon(0.001));
 
@@ -416,7 +416,7 @@ TEST_CASE("flux: DRAG interpolates geometrically") {
     f.set_bpm(120.f);
     f.set_rate(3);                       // ladder = 0.5 s
     f.set_rhythm(drag_view(12000, 18000));   // 0.25 s and 0.375 s
-    f.set_drag(0.5f);
+    f.set_link(0.5f);
     // sqrt(0.5 * 0.25) == 0.353553
     CHECK(f.drag_time_s() == doctest::Approx(0.353553f).epsilon(0.001));
 }
@@ -435,7 +435,7 @@ TEST_CASE("flux: DRAG reaches the clock") {
     // old (24000, 18000) pair, whose first interval WAS 0.5 s and so passed
     // even with DRAG doing nothing.
     f.set_rhythm(drag_view(18000, 24000));
-    f.set_drag(1.f);
+    f.set_link(1.f);
     // The 30 ms slew has to run before clock_hz() reflects the target.
     for (int i = 0; i < 5000; ++i) { float l = 0.f, r = 0.f; f.process(l, r); }
     // stages stays the 8192 boot default (kBootStagesNorm == 0.8, set by init()).
@@ -456,7 +456,7 @@ TEST_CASE("flux: a step bends pitch by the ratio of the two intervals") {
     f.set_mix(1.f);
     f.set_feedback(0.f);
     f.set_rhythm(drag_view(24000, 12000));   // 0.5 s and 0.25 s -- a 2:1 step
-    f.set_drag(1.f);
+    f.set_link(1.f);
 
     auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
 
@@ -479,7 +479,7 @@ TEST_CASE("flux: an invalid neighbour rhythm leaves DRAG inert at any setting") 
     // clause of its guard are never exercised, and the case only proves DRAG
     // is inert on a Flux that was never dragged in the first place.
     f.set_rhythm(drag_view(12000, 6000));   // 0.25 s and 0.125 s
-    f.set_drag(1.f);
+    f.set_link(1.f);
     CHECK(f.drag_time_s() == doctest::Approx(0.25f).epsilon(0.001));  // off the ladder
 
     auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
@@ -500,11 +500,25 @@ TEST_CASE("flux: RATE still reaches the ladder at intermediate DRAG") {
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rhythm(drag_view(12000, 18000));
-    f.set_drag(0.5f);
+    f.set_link(0.5f);
     f.set_rate(3);                       // 0.5 s -> sqrt(0.5*0.25)  = 0.353553
     const float at_quarter = f.drag_time_s();
     f.set_rate(0);                       // 1.0 s -> sqrt(1.0*0.25)  = 0.5
     const float at_half = f.drag_time_s();
     CHECK(at_quarter == doctest::Approx(0.353553f).epsilon(0.001));
     CHECK(at_half    == doctest::Approx(0.5f).epsilon(0.001));
+}
+
+TEST_CASE("flux: LINK's negative half is inert until the thinning lands") {
+    // Task 1 of the link plan wires the bipolar range and nothing else. This
+    // case is REPLACED in Task 2 by the real thinning tests -- it exists so
+    // the intermediate state is asserted rather than assumed.
+    Flux f;
+    f.init(48000.f, s_buf_l, s_buf_r);
+    f.set_on(true, true);
+    f.set_bpm(120.f);
+    f.set_rate(3);                       // ladder = 0.5 s
+    f.set_rhythm(drag_view(12000, 6000));
+    f.set_link(-1.f);
+    CHECK(f.drag_time_s() == doctest::Approx(0.5f).epsilon(0.001));
 }

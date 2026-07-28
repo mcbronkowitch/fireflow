@@ -1251,7 +1251,7 @@ TEST_CASE("instrument: each deck's DRAG is fed by the OTHER deck's rhythm") {
     for (int p = 0; p < PART_COUNT; ++p) {
         inst.set_fx_on(p, FxBlock::Flux, true);
         inst.set_flux_rate(p, 3);            // ladder = 0.5 s
-        inst.set_drag(p, 1.f);               // the neighbour owns the time
+        inst.set_link(p, 1.f);               // the neighbour owns the time
     }
 
     // Long enough for both PITCH lanes to record three onsets, which is what

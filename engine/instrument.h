@@ -100,7 +100,7 @@ public:
     void set_grit_mix(int p, float n)              { _parts[p].fx().set_grit_mix(n); }
     void set_drive(int p, float n)  { _parts[p].fx().set_drive(n); }
     void set_stages(int p, float n) { _parts[p].fx().set_stages(n); }
-    void set_drag(int p, float n)   { _parts[p].fx().set_drag(n); }
+    void set_link(int p, float n)   { _parts[p].fx().set_link(n); }
     void set_comp(int p, float n)                  { _parts[p].fx().set_comp(n); }
     void set_reverb_size(float n)  { if (_reverb) _reverb->set_size(n); }
     void set_reverb_decay(float n) { if (_reverb) _reverb->set_decay(n); }

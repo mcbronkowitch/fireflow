@@ -76,13 +76,14 @@ struct DriveQuantity : ParamQuantity {
     }
 };
 
-// DRAG tooltip: how much of the delay time the OTHER deck's rhythm owns. At 0
-// the RATE ladder is untouched; at 1 it is overridden outright.
-struct DragQuantity : ParamQuantity {
+// LINK tooltip: bipolar. Left thins the echo on the neighbour's rhythm without
+// touching the clock; right hands the delay time over and bends pitch doing it.
+struct LinkQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
-        const float pct = 100.f * getValue();
-        if (pct < 0.5f) return "off (RATE only)";
-        return string::f("%.0f %% toward the other deck", pct);
+        const float v = getValue();
+        if (v > 0.005f)  return string::f("drag %.0f %%", 100.f * v);
+        if (v < -0.005f) return string::f("thin %.0f %%", -100.f * v);
+        return "off";
     }
 };
 
@@ -243,8 +244,8 @@ struct Spotymod : Module {
                         configParam<FluxRateQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == FLUXFB_A || c.id == FLUXFB_B)
                         configParam<FluxFbQuantity>(c.id, 0.f, 1.f, init, lbl);
-                    else if (c.id == DRAG_A || c.id == DRAG_B)
-                        configParam<DragQuantity>(c.id, 0.f, 1.f, init, lbl);
+                    else if (c.id == LINK_A || c.id == LINK_B)
+                        configParam<LinkQuantity>(c.id, -1.f, 1.f, init, lbl);
                     else if (c.id == STAGES_A || c.id == STAGES_B)
                         configParam<StagesQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == SOURCE_A || c.id == SOURCE_B) {
@@ -417,7 +418,7 @@ struct Spotymod : Module {
             // Appended params are outside the stride, so pp() would compute the
             // wrong id — the explicit ternary is required (see FLUXRATE/FLUXFB).
             inst.set_drive(p, params[p ? DRIVE_B : DRIVE_A].getValue());
-            inst.set_drag(p, params[p ? DRAG_B : DRAG_A].getValue());
+            inst.set_link(p, params[p ? LINK_B : LINK_A].getValue());
             inst.set_stages(p, params[p ? STAGES_B : STAGES_A].getValue());
             // The FX blocks are gated by an explicit on/off (a pad on hardware,
             // a scenario action on the desktop). VCV has no such pad, so the mix

@@ -82,8 +82,8 @@ static constexpr float kInitParamDefaults[] = {
      0.439336449f, // FLUXFB_B
      0.000000000f, // COLOR_A
      0.000000000f, // COLOR_B
-     0.000000000f, // DRAG_A
-     0.000000000f, // DRAG_B
+     0.000000000f, // LINK_A
+     0.000000000f, // LINK_B
      0.800000000f, // STAGES_A  -- 512 * 32^0.8 == 8192, a Memory Man
      0.800000000f, // STAGES_B
      0.000000000f, // REC_A

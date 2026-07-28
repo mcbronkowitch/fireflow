@@ -167,11 +167,12 @@ void Flux::apply_drag() {
     _drag_step_len = _dt_target * _sr;
 }
 
-void Flux::set_drag(float norm) {
+void Flux::set_link(float norm) {
     if (!_buf_ok) return;
-    const float d = clampf(norm, 0.f, 1.f);
-    if (d == _drag) return;      // apply_drag runs two powf; do not run per push
-    _drag = d;
+    const float n = clampf(norm, -1.f, 1.f);
+    if (n == _link) return;      // apply_drag runs two powf; do not run per push
+    _link = n;
+    _drag = n > 0.f ? n : 0.f;
     apply_drag();
 }
 

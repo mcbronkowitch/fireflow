@@ -47,7 +47,7 @@ PARAM_ORDER = [
     'MASTER_DRIVE', 'SETTLE', 'REV_SIZE', 'REV_DECAY', 'REV_TONE',
     'REV_DIFF', 'REV_SMEAR', 'REV_MOD', 'CHOKE', 'FILT_A', 'FILT_B', 'TIDE',
     'FLUXRATE_A', 'FLUXRATE_B', 'FLUXFB_A', 'FLUXFB_B', 'COLOR_A', 'COLOR_B',
-    'DRAG_A', 'DRAG_B', 'STAGES_A', 'STAGES_B',
+    'LINK_A', 'LINK_B', 'STAGES_A', 'STAGES_B',
     'REC_A', 'REC_B', 'REV_MIX_A', 'REV_MIX_B',
     'SHUFFLE', 'DETUNE_A', 'DETUNE_B', 'DRIVE_A', 'DRIVE_B',
 ]
@@ -61,7 +61,7 @@ PARAM_TIPS = [
     'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'DRIVE',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
     'FILT', 'FILT', 'TIDE', 'FRATE', 'FRATE', 'FFB', 'FFB', 'COLOR',
-    'COLOR', 'DRAG', 'DRAG', 'STGS', 'STGS', 'REC', 'REC', 'ROOM', 'ROOM',
+    'COLOR', 'LINK', 'LINK', 'STGS', 'STGS', 'REC', 'REC', 'ROOM', 'ROOM',
     'SHUFL', 'Detune A', 'Detune B', 'Drive A', 'Drive B',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
@@ -186,36 +186,37 @@ def test_param_runtime_tip_contract():
               f"want {caption!r}/{tip!r}")
 
 
-def test_drag_stages_params():
-    """DRAG/STAGES are appended at the end of PARAMS, not templated into
+def test_link_stages_params():
+    """LINK/STAGES are appended at the end of PARAMS, not templated into
     part_controls() -- appending keeps PART_STRIDE unchanged so SONG_A/B,
     every part-B id and every already-appended tail param keep their id.
-    DRAG took over the panel slot DRIVE used to hold, renamed in place
-    (spec 2026-07-28 flux-rhythm-drag) exactly as DUST -> DRIVE was renamed
-    in place on 2026-07-27, which is itself where STAGES came from (DUST/ROT,
+    LINK took over the panel slot DRIVE, then DRAG, used to hold, renamed
+    in place (spec 2026-07-28 flux-link) exactly as DRIVE -> DRAG was
+    renamed in place the same day, and DUST -> DRIVE was renamed in place
+    on 2026-07-27, which is itself where STAGES came from (DUST/ROT,
     spec 2026-07-27 flux-bbd-delay): the POSITIONS are what saved patches
     depend on, and they did not move. DRIVE itself became hidden patch state
     -- see test_source_and_hidden_detune_partition for that half."""
     check(g.PART_STRIDE == 23, "PART_STRIDE must stay 23")
     ids = {c.enum: i for i, c in enumerate(g.PARAMS)}
-    for e in ("DRAG_A", "DRAG_B", "STAGES_A", "STAGES_B"):
+    for e in ("LINK_A", "LINK_B", "STAGES_A", "STAGES_B"):
         check(e in ids, f"{e} missing")
         check(ids[e] >= 2 * g.PART_STRIDE, f"{e} must be appended, not templated")
-    # The rename must not have reordered them: COLOR_B then DRAG_A, DRAG_B,
+    # The rename must not have reordered them: COLOR_B then LINK_A, LINK_B,
     # STAGES_A, STAGES_B, then REC_A. A reorder here silently remaps every
     # saved patch's two FLUX voicing knobs onto each other.
-    check(ids["DRAG_A"] == ids["COLOR_B"] + 1, "DRAG_A must follow COLOR_B")
+    check(ids["LINK_A"] == ids["COLOR_B"] + 1, "LINK_A must follow COLOR_B")
     check(ids["STAGES_B"] + 1 == ids["REC_A"], "REC_A must follow STAGES_B")
 
 
-def test_drag_stages_kind():
-    """DRAG/STAGES must render as the small knob (GLYPH_R[SMKNOB] = 3.0 mm),
+def test_link_stages_kind():
+    """LINK/STAGES must render as the small knob (GLYPH_R[SMKNOB] = 3.0 mm),
     not the big knob (4.2 mm) -- a SMKNOB->BIGKNOB typo still clears
     test_no_overlap's minimum spacing by 0.43 mm, so it would ship silently
     without a kind pin of its own. Read the generated header string, not
     g.PARAMS' in-memory `.kind`."""
     h = g.header()
-    for enum in ("DRAG_A", "DRAG_B", "STAGES_A", "STAGES_B"):
+    for enum in ("LINK_A", "LINK_B", "STAGES_A", "STAGES_B"):
         check(h.count(f"{{{enum}, WK_SMKNOB,") == 1,
               f"{enum} is not WK_SMKNOB in the generated header")
 
@@ -223,8 +224,8 @@ def test_drag_stages_kind():
 def test_rec_params():
     """REC is appended, not templated -- appending keeps PART_STRIDE at 23 so
     every saved .vcv keeps its param ids. Same guard shape as
-    test_drag_stages_params, and the kind is pinned the same way
-    test_drag_stages_kind pins DRAG/STAGES: a LATCH that silently became an
+    test_link_stages_params, and the kind is pinned the same way
+    test_link_stages_kind pins LINK/STAGES: a LATCH that silently became an
     SMBTN would still clear test_no_overlap (identical radius), so the kind
     needs its own check."""
     check(g.PART_STRIDE == 23, "PART_STRIDE must stay 23")
@@ -537,7 +538,7 @@ LOWER_A = {   # enum -> (x, y)   part A; part B is W - x
     'DECAY_A': (9.25, 89.40), 'RES_A': (19.75, 89.40), 'SOURCE_A': (30.25, 89.40),
     'FLUXRATE_A': (44.25, 77.30), 'FLUX_A': (54.75, 77.30),
     'FLUXFB_A': (65.25, 77.30), 'REV_MIX_A': (75.75, 77.30),
-    'DRAG_A': (44.25, 89.40), 'STAGES_A': (54.75, 89.40),
+    'LINK_A': (44.25, 89.40), 'STAGES_A': (54.75, 89.40),
     'GRIT_A': (65.25, 89.40), 'COMP_A': (75.75, 89.40),
     'ENGINE_A': (10.00, 103.60), 'GRITMODE_A': (17.50, 103.60),
     'STEPS_A': (37.00, 103.60), 'STEP_A': (46.00, 103.60),
