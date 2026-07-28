@@ -388,11 +388,20 @@ TEST_CASE("flux: DRAG at 1 alternates between the neighbour's two intervals") {
 
     auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
 
+    // _drag_phase is never reset to 0 by a run() boundary, only by a flip --
+    // so each leg's margin is measured from wherever the PREVIOUS leg left
+    // phase, not from a fresh 0. Step 0 is 12000 samples: run(11990) leaves
+    // phase at 11990 (10 short), and the first 10 calls of the next run(20)
+    // reach the flip, leaving phase at 10 afterwards. Step 1 is 6000 samples,
+    // so from that phase of 10 it takes 5990 more calls to reach the flip --
+    // one sample short of run(5990) is run(5980), which is what leaves phase
+    // at 5990 (still short) for the "not yet" check below; the following
+    // run(20) then supplies the last 10 calls needed to flip back.
     run(11990);
     CHECK(f.drag_time_s() == doctest::Approx(0.25f).epsilon(0.001));   // not yet
     run(20);
     CHECK(f.drag_time_s() == doctest::Approx(0.125f).epsilon(0.001));  // flipped
-    run(5990);
+    run(5980);
     CHECK(f.drag_time_s() == doctest::Approx(0.125f).epsilon(0.001));
     run(20);
     CHECK(f.drag_time_s() == doctest::Approx(0.25f).epsilon(0.001));   // and back

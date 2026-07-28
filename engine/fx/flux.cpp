@@ -195,15 +195,9 @@ void Flux::process(float& l, float& r) {
     // DRAG's step. One add and one compare per sample when engaged, nothing
     // but the compare when it is not -- which is what keeps DRAG 0 on the
     // same path it has always been on.
-    //
-    // Strict '>', not '>=': _drag_phase counts samples ELAPSED since the last
-    // flip, starting from 0, so a step of _drag_step_len samples has fully
-    // elapsed only once the counter exceeds it, not when it first reaches it
-    // -- '>=' would fire the flip one sample early, exactly on the boundary
-    // sample itself rather than after it.
     if (_drag > 0.f && _drag_active) {
         _drag_phase += 1.f;
-        if (_drag_phase > _drag_step_len) {
+        if (_drag_phase >= _drag_step_len) {
             _drag_phase = 0.f;
             _drag_i ^= 1;
             apply_drag();
