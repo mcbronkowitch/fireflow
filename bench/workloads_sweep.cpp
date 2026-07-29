@@ -123,11 +123,18 @@ struct SweepGritGroup {
 
 // --- Ablation E: the Flux wrapper's own cost ---------------------------------
 // Two bare BbdEcho, at the stage count and clock an ENGAGED Flux computes,
-// with no Flux around them. Then
-//   fx_flux_sdram - sweep_flux_lines_2ch - fx_none
-// is the wrapper's own per-sample work: two fonepole slews, two std::fabs
-// snaps, a clampf and bbd_clock_hz's division -- all of which run every
-// sample although their inputs only move on the 96-sample control tick.
+// with no Flux around them -- kept at TWO lines on purpose, even though
+// fx_flux_sdram's PartFx now runs only one, so this row stays comparable to
+// the previous round's own figure (9.16 points) instead of quietly becoming
+// a different measurement under the same name. The wrapper's own per-sample
+// work is therefore
+//   fx_flux_sdram - fx_none - sweep_flux_lines_2ch / 2
+// (the /2 undoes the deliberate doubling: this row runs twice as many bare
+// lines as fx_flux_sdram now has, so its raw figure must be halved before
+// subtracting to isolate one line's worth of raw BBD cost). That gives two
+// fonepole slews, two std::fabs snaps, a clampf and bbd_clock_hz's division
+// -- all of which run every sample although their inputs only move on the
+// 96-sample control tick.
 //
 // That is NOT the whole of what this row isolates, though. PartFx::process
 // calls _flux.set_feedback(v[FXT_FLUX_FB]) unconditionally, every sample
@@ -463,7 +470,9 @@ float proc_grit_bare()
 // the send calc -- still runs exactly as it does in fx_grit.
 //
 // Net effect: relative to fx_grit, this row removes BOTH (a) the BBD's
-// ~128 KB of echo memory ever being resident, AND (b) the per-sample
+// ~32 KB of echo memory ever being resident -- one mono line, kMaxSamples
+// (8192) floats, post-mono-collapse; the whole of g_echo (both parts) is
+// 64 KB, not this row's single line -- AND (b) the per-sample
 // set_feedback/apply_feedback/std::pow work (plus the trivial idle-path
 // _sw.process() call) that _buf_ok also happens to gate. A low reading
 // here is therefore ambiguous between "cache pressure from residency" and
@@ -518,7 +527,14 @@ void setup_flux_lines_2ch()
     // buffer for the measured line -- safe because it happens strictly after
     // the probe's one process() call, and BbdEcho::Init (via BbdLine::Init's
     // Reset()) memsets the buffer before the measured line ever reads it, so
-    // nothing the probe wrote survives into the measured window.
+    // nothing the probe wrote survives into the measured window. That safety
+    // is a DURABLE invariant, not just a fact about the code as written
+    // today: `probe` is static and keeps a live pointer into m.echo[1] for
+    // the rest of the run, so it must never be process()'d again after this
+    // point -- a later call (a second probe.process() added below, or this
+    // block moved after group.r.Init()) would write through that pointer
+    // and silently corrupt the measured line, the same class of silent
+    // failure the assert below already exists to catch for a stopped clock.
     probe.init(kSampleRate, m.echo[1]);
     // MUST engage the probe. Flux::process (flux.cpp) returns before line 320
     // (where _clock_hz is assigned) at TWO guards: `if (!_buf_ok) return;`

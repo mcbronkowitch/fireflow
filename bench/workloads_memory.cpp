@@ -80,9 +80,10 @@ float proc_verb_sdram()
 }
 
 // --- echo-style streaming access -------------------------------------------
-// FLUX's real buffer is 240 000 floats (937 KB per channel) and does not fit
-// SRAM at any size, so this is a shortened window in BOTH regions: what is
-// measured is the access-pattern factor, not the full delay length.
+// FLUX's real buffer is one mono line per part, kMaxSamples (8192) floats =
+// 32 KB, and does not fit SRAM at any size, so this is a shortened window in
+// BOTH regions: what is measured is the access-pattern factor, not the full
+// delay length.
 constexpr size_t kEchoFrames = kSramFloats;   // same window in both regions
 
 float*   g_echo_buf = nullptr;

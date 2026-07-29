@@ -21,8 +21,9 @@ using namespace spky;
 // purpose"). So this row runs the clock at its 32 kHz ceiling -- 2*32000/48000
 // = 1.33 ticks per audio sample, 0.67 write events and 0.67 read events --
 // and STAGES at its maximum, which is where the cell array is largest and
-// least cache-friendly. One line, because BbdEcho is per channel and the
-// two-part instrument cost is this row four times.
+// least cache-friendly. One line, because FLUX is mono per part (one BbdEcho
+// per deck, not per channel, post-mono-collapse) and the two-part instrument
+// cost is this row TWO times, not four.
 
 BbdEcho g_echo;
 
