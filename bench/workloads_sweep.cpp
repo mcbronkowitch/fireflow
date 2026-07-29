@@ -533,11 +533,17 @@ float proc_flux_lines_2ch()
         acc += group.r.Process(in[i] * 0.9f, group.clock_hz);
     }
     // Fold the achieved clock into the checksum, once per call (not per
-    // sample), exactly as proc_sweep_fx folds stages_achieved above: belt
-    // and suspenders against the assert in setup_flux_lines_2ch. If
-    // clock_hz ever silently reads back 0 again, the per-row checksum the
-    // bench compares across hardware runs moves too, instead of quietly
-    // reporting a stopped line as if it were running.
+    // sample), exactly as proc_sweep_fx folds stages_achieved above. This
+    // does NOT guard the silent-zero failure the comment on the assert in
+    // setup_flux_lines_2ch describes: acc += 0.f changes nothing, and in
+    // the run that actually hit that failure the accumulator was already
+    // exactly 0.0, checksum ea306fb5 -- folding a zero clock into a
+    // zero-valued sum moves nothing. The assert above is what catches a
+    // zero clock. What this fold DOES guard is a WRONG NONZERO clock: if a
+    // future change ever made clock_hz read back some other incorrect but
+    // nonzero value (the assert only checks `> 0.f`), that value changes
+    // acc and the per-row checksum moves, instead of the row silently
+    // measuring the wrong configuration.
     acc += group.clock_hz;
     return acc;
 }
@@ -605,8 +611,9 @@ float proc_flux_lines_2ch()
 // the first. Those are clean isolated-engine rows (one SynthEngine,
 // triggered once, no FX/reverb/modulation confound); this instrument-level
 // sweep would have been a worse instrument for the same question even if
-// COLOR had controlled the voice count. See task-6-report.md for the full
-// account.
+// COLOR had controlled the voice count. See the commit that removed these
+// rows (e525084, "fix(bench/sweep): remove sweep_voices_1..4, the mapping
+// cannot hold") and S9.4 of the design spec for the full account.
 //
 // SweepInstrumentGroup itself is NOT removed -- Task 7's reverb sweep
 // (sweep_room_lo/mid/hi below) needs it.
@@ -650,8 +657,17 @@ float proc_flux_lines_2ch()
 //   mid: diffusion 0.45, smear 0.45/0.9 = 0.500, mod 0.500
 //   hi:  diffusion 0.90, smear 0.90/0.9 = 1.000, mod 1.000
 // sweep_room_hi therefore reproduces setup_inst_worst's room exactly -- a
-// cross-check that this family's instrument setup matches the system
-// family's, worth having on its own.
+// cross-check worth having, but a weaker one than a like-for-like comparison:
+// proc_sweep_room (this row) never re-triggers, while proc_inst
+// (workloads_system.cpp), which setup_inst_worst measures through, fires
+// both parts every 250 blocks -- so the two readings (sweep_room_hi 120.81
+// vs instrument_worst 120.14, a 0.67-point gap) compare two different proc
+// functions, not the same one twice. That 0.67-point gap is itself larger
+// than the 0.64-point span S9.3 found across the room's ENTIRE travel, so it
+// cannot be read as confirming instrument-level parity on its own. The room
+// controls' "flat / leave it" disposition does not depend on this check,
+// though: the weakness here is common-mode across lo/mid/hi alike, not
+// specific to hi.
 //
 // Checksum fold: Task 3's stages_achieved reads back Flux's REAL settled
 // state (it can legitimately differ from the requested norm -- see the
