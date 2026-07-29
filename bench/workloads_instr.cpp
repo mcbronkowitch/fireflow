@@ -8,6 +8,7 @@
 #include "parts/part.h"
 #include "mod/super_modulator.h"
 #include "mod/lane_id.h"
+#include "mod/divisions.h"
 
 using namespace spky;
 
@@ -328,17 +329,40 @@ void setup_deck_mod_hot()
         for (size_t i = 0; i < kBlock; ++i) g.mod.process();
 
     // The self-check, same spirit as setup_instr_part_common's stages_a/
-    // clock_a asserts above: without it, a silently wrong RATE or DENSITY
-    // would just return a plausible-looking float and pass. master_hz() is
-    // the readback Task 2's deck_engine_hot row will also take from its own
-    // modulator, for a different purpose (deriving a cycle) -- so this
-    // asserts a bound, not an equality, the same way that row will: positive,
-    // and clear of the 0.5 Hz that the old set_cycle(2.f) operating point
-    // encoded (design spec section 3.2). free_hz(0.8) works out to ~6.95 Hz,
-    // nowhere near that band.
+    // clock_a asserts above: without it, a silently wrong RATE would just
+    // return a plausible-looking float and pass. master_hz() is the readback
+    // Task 2's deck_engine_hot row will also take from its own modulator, for
+    // a different purpose (deriving a cycle).
+    //
+    // This covers RATE and the _pitch_scale default, nothing else: _synced is
+    // false here (super_modulator.h:187) and nothing on this path calls
+    // set_synced(), so _update_rate() takes the FREE branch
+    // (super_modulator.cpp:28-29) and _apply_rate() sets
+    // master_hz() = free_hz(_rate_norm) * _pitch_scale (super_modulator.cpp:34).
+    // _pitch_scale defaults 1.0 and nothing here calls set_rate_scale(), so
+    // with RATE 0.8 master_hz() should equal free_hz(0.8f) exactly, less
+    // float noise -- checked against the live call rather than a hardcoded
+    // ~6.95 Hz so this cannot silently pass if the FREE curve is ever
+    // retuned. It also excludes the legacy set_cycle(2.f)'s 0.5 Hz by
+    // construction: free_hz(0.8f) is nowhere near 0.5, whereas RATE
+    // mistakenly left at 0.5 -- the value mod_plane_2x_center's mod_a uses,
+    // two rows up in this same file's history -- would be free_hz(0.5f) =~
+    // 0.775 Hz, which a loose band around 0.5 Hz would have let through.
+    //
+    // DENSITY is NOT covered, and cannot cheaply be: set_density() only
+    // writes ModLane::_density (lane.h:23), read solely by _groove_k()
+    // (lane.cpp:422), which _effective_gate() only consults when _step_mode
+    // is true (lane.cpp:449). This row never calls set_step(), so it runs in
+    // FLOW, where _on_boundary() hardcodes `gated = true` regardless of
+    // DENSITY (lane.cpp:449) -- the same operating point the real gate runs
+    // at (setup_inst_worst never calls set_step either, design spec section
+    // 2.4). DENSITY is therefore inert here, not merely untested: nothing
+    // this row can read -- lane_fired() included, since a wrap fires
+    // unconditionally in FLOW -- would move if DENSITY were silently wrong.
+    const float expected_hz = free_hz(0.8f);
     g.master_hz = g.mod.master_hz();
     assert(g.master_hz > 0.f);
-    assert(std::fabs(g.master_hz - 0.5f) > 0.05f);
+    assert(std::fabs(g.master_hz - expected_hz) < 1e-4f);
 }
 
 float proc_deck_mod_hot()
