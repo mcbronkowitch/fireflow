@@ -1085,8 +1085,9 @@ compounded once, into the 34-point figure this round was sized against, and
 that figure turned out wrong.
 
 Spec: `docs/superpowers/specs/2026-07-29-fx-cost-curves-design.md` §9. Evidence:
-`docs/bench/2026-07-29-cd6dafd-sweep.md`. Branch: `perf/fx-cost-curves` (not
-merged).
+`docs/bench/2026-07-29-cd6dafd-sweep.md`. Merged to `main` from
+`perf/fx-cost-curves` on 2026-07-29; the branch changes no production code, so
+it lands as evidence and documentation only.
 
 ### BODY playability ✅ (extends M5j)
 
