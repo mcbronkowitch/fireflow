@@ -111,9 +111,11 @@ struct SweepGritGroup {
 // by this repo's own bench at 198 cycles (fx_pow, workloads_system.cpp).
 // It is the LARGEST single item inside the number this row makes
 // measurable, not a footnote next to the slews -- and it is left exactly as
-// it is: fixing it is out of scope for this task (engine/ changes here are
-// limited to the one accessor below), however tempting a one-line dirty
-// check would be.
+// it is: fixing it is out of scope for this task, however tempting a
+// one-line dirty check would be. This task makes no engine/ change at all --
+// Flux::clock_hz() (engine/fx/flux.h) already existed before this plan and
+// already does what a test-only clock accessor would, so the plan's
+// conditional permission to add one never fires.
 //
 // clock_hz and the stage count come from a throwaway probe Flux rather than
 // being hard-coded, so this row cannot silently drift from what
@@ -127,7 +129,8 @@ struct SweepGritGroup {
 // set_bpm(120) nor set_flux_rate(3) needs to be called on the probe: those
 // are already init()'s defaults.
 //
-// clock_hz_for_test() only reads back _clock_hz, which Flux computes once
+// clock_hz() (engine/fx/flux.h -- pre-existing, already used throughout
+// tests/test_flux.cpp) only reads back _clock_hz, which Flux computes once
 // per process() call (flux.cpp, after the delay-time/stage slews) from
 // _dt_current and the stage count -- both of which init() already snaps
 // straight to their targets (immediate = true), with no slew left to run.
@@ -471,7 +474,7 @@ void setup_flux_lines_2ch()
         float pl = 0.f, pr = 0.f;
         probe.process(pl, pr);
     }
-    const float hz     = probe.clock_hz_for_test();
+    const float hz     = probe.clock_hz();
     const int   stages = probe.stages();
 
     auto& group = g_sweep_arena.emplace<SweepLineGroup>();
