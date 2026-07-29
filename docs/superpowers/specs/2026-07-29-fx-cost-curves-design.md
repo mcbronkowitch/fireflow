@@ -267,9 +267,23 @@ converged. Every new row containing a BBD or the reverb needs the same.
    because it carries `system`, which supplies `synth_2x4` and `wave_2x4`;
    `profiles.resolve` enforces this).
 
-**Memory.** The instrument-level sweeps (C and D) use the `Instrument` already
-in `g_system_arena` rather than constructing a second one; an `Instrument` is
-large and the image is at 78.6 % SRAM / 69.5 % SRAM_EXEC.
+**Memory, and a correction.** An earlier draft of this spec said the
+instrument-level sweeps should reuse the `Instrument` in `g_system_arena`.
+They cannot: that arena is a static in `workloads_system.cpp`'s **anonymous
+namespace**, invisible to any other translation unit. The choices are to
+export it through a new shared header — which edits `workloads_system.cpp`
+and therefore perturbs the very code layout §4.6 is investigating — or to give
+`workloads_sweep.cpp` its own arena.
+
+Take the second. `SerialArena` overlays its groups (`capacity` is the *max*
+`sizeof`, not the sum), so a second arena costs one more max-sized `.bss`
+block, and that maximum is set by the instrument-level sweeps. `mem.h` already
+notes two `Instrument`s in the bench globals; this makes three, against 56 KB
+free in an image at 78.6 % SRAM / 69.5 % SRAM_EXEC.
+
+That is a genuine risk, so it is proved before nineteen rows are written
+rather than discovered after: the first task scaffolds the family with a
+single trivial row, links it, and records the SRAM delta.
 
 ## 7. Verification
 
@@ -313,7 +327,17 @@ that each sweep's most-expensive point is consistent with the corresponding
 existing binary row.
 
 **The image may stop linking.** `full` already does not link
-(`bench/README.md:34`), and `sweep` + `system` adds rows to an image at 78.6 %
-SRAM. If it overflows, the fallback is to drop sweep D (reverb, 3 rows, the
-least suspicious of the four) rather than to drop `system` — losing the anchor
-would cost more than losing one curve.
+(`bench/README.md:34`), and `sweep` + `system` adds both rows and a second
+arena to an image at 78.6 % SRAM.
+
+The fallback is **not** to drop `system` — losing the `instrument_worst`
+anchor costs more than losing a curve. It is to drop sweeps **C and D
+together**, because they are what sets the new arena's size: both need an
+`Instrument`, while A, B, E and F need only a `Flux`, two `BbdEcho` and a
+`Grit`. Dropping D alone, as an earlier draft of this spec said, would save
+almost nothing — C would still pull the whole `Instrument` in.
+
+If that fallback is taken, the voice-count and reverb curves move to a later
+round measured under the `body` profile's precedent (`system` + one family),
+and the round must say so in writing rather than quietly reporting four
+sweeps' worth of conclusions from two.
