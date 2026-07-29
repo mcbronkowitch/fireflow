@@ -194,6 +194,8 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "sweep_room_hi",
     ),
     "instr": (
+        "instr_part_1",
+        "instr_part_2",
         "instr_noverb",
     ),
     "voice": (

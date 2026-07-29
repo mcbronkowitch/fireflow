@@ -1,3 +1,4 @@
+#include <cassert>
 #include "workload.h"
 #include "families.h"
 #include "mem.h"
@@ -33,7 +34,59 @@ struct InstrNoVerbGroup {
     int   counter = 0;
 };
 
-SerialArena<InstrNoVerbGroup> g_instr_arena;
+// Two bare Parts, driven directly. The point of the row is that NOTHING
+// wraps them -- no Instrument, so no Center, no CHOKE framing, no MORPH, no
+// dry taps, no cross-deck rhythm exchange, no limiter. Whatever
+// instr_noverb costs above this row is exactly that glue.
+struct InstrPartGroup {
+    Part  a, b;
+    int   counter = 0;
+    // Read back after the settle and folded into the checksum: a row that
+    // silently configured its Parts differently from the Instrument would
+    // otherwise produce a plausible number that means nothing.
+    float clock_a = 0.f, clock_b = 0.f;
+    int   stages_a = 0, stages_b = 0;
+};
+
+// Mirrors setup_inst_worst + setup_inst_worst_bbd, deck for deck.
+//
+// This is a CHECKLIST, not a reinterpretation: every Instrument setter used
+// there is a one-line forward declared in engine/instrument.h -- e.g.
+// `set_color(p,n)` IS `_parts[p].set_color(n)` and `set_rate(p,n)` IS
+// `_parts[p].mod().set_rate(n)`. Verify each line against
+// bench/workloads_system.cpp's setup_inst_worst/setup_inst_worst_bbd and
+// against engine/instrument.h's forward, in that order.
+//
+// Three things Instrument does that this deliberately does NOT (design spec
+// section 4.1), because they have no Part equivalent and therefore belong on
+// the glue side of the subtraction:
+//   - set_master_drive, which reaches Instrument's own _limiter;
+//   - set_other_deck_tap, supplied at control rate by Instrument;
+//   - fx().set_rhythm(), likewise -- and harmless as well as correct, since
+//     setup_inst_worst_bbd never touches LINK, so _link stays 0 and both
+//     DRAG and THIN are inert on either side of the comparison.
+void configure_worst_bbd(Part& part)
+{
+    part.mod().set_tempo_bpm(120.f);
+    part.fx().set_bpm(120.f);
+    part.set_color(1.f);
+    part.mod().set_density(1.f);
+    part.set_depth(1.f);
+    part.mod().set_rate(0.8f);
+    part.fx().set_fx_on(FxBlock::Grit, true);
+    part.fx().set_fx_on(FxBlock::Flux, true);
+    part.fx().set_grit_mix(1.f);
+    part.fx().set_flux_mix(1.f);
+    part.fx().set_comp(1.f);
+    part.set_voice_decay(1.f);
+    part.trigger_manual();
+    part.fx().set_stages(1.f);
+    part.fx().set_drive(0.85f);
+    part.fx().set_flux_rate(kFluxRateCount - 1);
+    part.set_fx_target_base(FXT_FLUX_FB, 0.9f);
+}
+
+SerialArena<InstrNoVerbGroup, InstrPartGroup> g_instr_arena;
 
 void setup_instr_noverb()
 {
@@ -100,9 +153,107 @@ float proc_instr_noverb()
     return acc;
 }
 
+void setup_instr_part_common(InstrPartGroup& g, int n_parts)
+{
+    // Seeds must match Instrument::init's, or the modulation streams differ
+    // and so does voice timing: PART_A 0x1234abcd, PART_B 0x9e3779b9
+    // (engine/instrument.cpp).
+    // Draw every buffer from the same FxMem the Instrument rows get, so the
+    // subtraction cannot be measuring different memory. Going through fx_mem()
+    // rather than sampler_arena()/kSamplerFrames directly keeps this row on
+    // the one accessor whose contents are guaranteed to match.
+    const FxMem& mem = fx_mem();
+    g.a.init(kSampleRate, 0x1234abcdu, mem.echo[PART_A],
+             mem.sampler_buf[PART_A], mem.sampler_frames);
+    configure_worst_bbd(g.a);
+    if (n_parts == 2) {
+        g.b.init(kSampleRate, 0x9e3779b9u, mem.echo[PART_B],
+                 mem.sampler_buf[PART_B], mem.sampler_frames);
+        configure_worst_bbd(g.b);
+    }
+    g.counter = 0;
+
+    for (int b = 0; b < kInstrSettleBlocks; ++b) {
+        const float* in = test_input();
+        for (size_t i = 0; i < kBlock; ++i) {
+            float ol, orr, sl, sr;
+            g.a.process(in[i], in[i], ol, orr, sl, sr);
+            if (n_parts == 2) g.b.process(in[i], in[i], ol, orr, sl, sr);
+        }
+    }
+
+    // The self-check. STAGES at 1.0 must have settled to kMaxStages, and the
+    // "1/32" rate at 120 BPM must have driven the clock onto its ceiling
+    // (16384 / (2 * 0.0625) = 131072 Hz, clamped to kClockMaxHz). A row that
+    // mirrored the configuration wrongly fails here instead of returning a
+    // plausible number.
+    g.stages_a = g.a.fx().flux().stages();
+    g.clock_a  = g.a.fx().flux().clock_hz();
+    assert(g.stages_a == bbd_tuning::kMaxStages);
+    assert(g.clock_a >= bbd_tuning::kClockMaxHz);
+    if (n_parts == 2) {
+        g.stages_b = g.b.fx().flux().stages();
+        g.clock_b  = g.b.fx().flux().clock_hz();
+        assert(g.stages_b == bbd_tuning::kMaxStages);
+        assert(g.clock_b >= bbd_tuning::kClockMaxHz);
+    }
+}
+
+void setup_instr_part_1()
+{
+    setup_instr_part_common(g_instr_arena.emplace<InstrPartGroup>(), 1);
+}
+
+void setup_instr_part_2()
+{
+    setup_instr_part_common(g_instr_arena.emplace<InstrPartGroup>(), 2);
+}
+
+float proc_instr_part_1()
+{
+    auto& g = g_instr_arena.get<InstrPartGroup>();
+    const float* in = test_input();
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i) {
+        float ol, orr, sl, sr;
+        g.a.process(in[i], in[i], ol, orr, sl, sr);
+        acc += ol + orr + sl + sr;
+    }
+    if (++g.counter >= 250) { g.counter = 0; g.a.trigger_manual(); }
+    acc += static_cast<float>(g.a.active_voices());
+    acc += g.clock_a + static_cast<float>(g.stages_a);
+    return acc;
+}
+
+float proc_instr_part_2()
+{
+    auto& g = g_instr_arena.get<InstrPartGroup>();
+    const float* in = test_input();
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i) {
+        float ol, orr, sl, sr;
+        g.a.process(in[i], in[i], ol, orr, sl, sr);
+        acc += ol + orr + sl + sr;
+        g.b.process(in[i], in[i], ol, orr, sl, sr);
+        acc += ol + orr + sl + sr;
+    }
+    if (++g.counter >= 250) {
+        g.counter = 0;
+        g.a.trigger_manual();
+        g.b.trigger_manual();
+    }
+    acc += static_cast<float>(g.a.active_voices());
+    acc += static_cast<float>(g.b.active_voices());
+    acc += g.clock_a + static_cast<float>(g.stages_a);
+    acc += g.clock_b + static_cast<float>(g.stages_b);
+    return acc;
+}
+
 } // namespace
 
 const Workload kInstrWorkloads[] = {
+    { "instr", "instr_part_1", setup_instr_part_1, proc_instr_part_1 },
+    { "instr", "instr_part_2", setup_instr_part_2, proc_instr_part_2 },
     { "instr", "instr_noverb", setup_instr_noverb, proc_instr_noverb },
 };
 const int kInstrCount = sizeof(kInstrWorkloads) / sizeof(kInstrWorkloads[0]);

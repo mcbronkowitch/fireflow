@@ -924,6 +924,10 @@ class AblateProfileTest(unittest.TestCase):
     def test_noverb_row_is_expected(self):
         self.assertIn("instr_noverb", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
 
+    def test_part_rows_are_expected(self):
+        self.assertIn("instr_part_1", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
+        self.assertIn("instr_part_2", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
+
 
 class ManifestValidationContract(unittest.TestCase):
     """resolve()'s load-time manifest checks (design spec S3): a profile
