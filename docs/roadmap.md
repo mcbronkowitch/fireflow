@@ -1043,16 +1043,20 @@ cache hypothesis; voices scale linearly, ~1.45 fixed + ~4.2/voice, no knee;
 the room controls span 0.64 points across their whole travel).
 
 **The wrapper, measured rather than inferred.** `Flux`'s own per-sample
-bookkeeping — slews, snaps, a clamp, a division, all driven by controls that
-only move at the 96-sample tick — costs **7.71 points per deck, 15.4 both**,
-46 % of what FLUX costs above the bare FX shell. It changes the sound at no
-setting.
+bookkeeping — slews, snaps, a clamp, a division, and a `std::pow` in
+`bbd_drive_gain` (reached every sample via an unconditional, un-dirty-checked
+`set_feedback` call whenever GRIT or FLUX is engaged), all driven by controls
+that only move at the 96-sample tick — costs **7.71 points per deck, 15.4
+both**, 46 % of what FLUX costs above the bare FX shell. The `std::pow` is
+the largest single identified component of that figure. It changes the sound
+at no setting.
 
 **`fx_grit`'s 2.9-point rise, answered.** Not GRIT itself (measured cheap in
-isolation) and not an unresolved shell mystery: a `std::pow` in
-`bbd_drive_gain` runs every sample, per deck, gated only on buffer validity
-with no dirty-check on DRIVE — found by reading, and now corroborated by
-measurement (≈1.60/deck) alongside 1.17 points of pure code-layout drift.
+isolation) and not an unresolved shell mystery: the same `std::pow` in
+`bbd_drive_gain`, gated only on buffer validity with no dirty-check on
+DRIVE — found by reading, and now corroborated by measurement (≈1.60/deck)
+alongside 1.17 points of pure code-layout drift. This saving is already
+counted inside the wrapper's 15.4 points above; it is not an addition to it.
 Fix, for the next round: cache the gain in `set_drive`, multiply in
 `apply_feedback`. `engine/` was off limits to this round, so nothing was
 changed yet.
@@ -1080,9 +1084,9 @@ re-measurement step exists precisely because two estimates were already
 compounded once, into the 34-point figure this round was sized against, and
 that figure turned out wrong.
 
-Spec: `docs/superpowers/specs/2026-07-29-fx-cost-curves-design.md`. Ledger:
-`.superpowers/sdd/2026-07-29-fx-cost-curves/progress.md`. Branch:
-`perf/fx-cost-curves` (not merged).
+Spec: `docs/superpowers/specs/2026-07-29-fx-cost-curves-design.md` §9. Evidence:
+`docs/bench/2026-07-29-cd6dafd-sweep.md`. Branch: `perf/fx-cost-curves` (not
+merged).
 
 ### BODY playability ✅ (extends M5j)
 
