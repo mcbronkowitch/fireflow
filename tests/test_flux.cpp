@@ -890,3 +890,46 @@ TEST_CASE("flux: init leaves the FEEDBACK coefficient at its boot value, even re
     CHECK(f.feedback_coef_l_for_test() == doctest::Approx(want).epsilon(1e-6));
     CHECK(f.feedback_coef_r_for_test() == doctest::Approx(want).epsilon(1e-6));
 }
+
+TEST_CASE("flux: the FXT_FLUX_TIME guard lands the first push and swallows repeats") {
+    // The clock is the only observable of _time_mult, so this asserts through
+    // clock_hz(). Rate 3 is the boot "1/4" (flux.cpp), i.e. 0.5 s at 120 BPM,
+    // and the boot stage count is 8192 -- so the base clock is
+    // 8192 / (2 * 0.5) = 8192 Hz.
+    //
+    // The DEPTH is 0.75, not 1.0. bbd_time_mult maps 0.5 -> x1 and 1.0 -> x4,
+    // and x4 on this base lands at 32768 Hz, above kClockMaxHz (32000) -- the
+    // ceiling would clamp it and the test would be asserting the clamp rather
+    // than the guard. 0.75 is x2, landing at 16384 Hz: comfortably under the
+    // ceiling and unmistakably different from neutral.
+    Flux f;
+    f.init(48000.f, s_buf_l, s_buf_r);
+    f.set_on(true, true);
+    f.set_bpm(120.f);
+    f.set_rate(3);
+    f.set_mix(1.f);
+    f.set_feedback(0.f);
+
+    auto run = [&f](int n) {
+        for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); }
+        return f.clock_hz();
+    };
+
+    const float neutral = run(48000);
+    REQUIRE(neutral > 0.f);
+
+    // First push after init lands, despite _time_mult already holding x1:
+    // the sentinel is -1, which no clamped norm can equal.
+    f.set_time_mod(0.75f);
+    const float doubled = run(4800);
+    CHECK(doubled == doctest::Approx(2.f * neutral).epsilon(0.02f));
+
+    // A repeat is swallowed, and swallowing it changes nothing.
+    f.set_time_mod(0.75f);
+    f.set_time_mod(0.75f);
+    CHECK(run(4800) == doctest::Approx(doubled).epsilon(0.02f));
+
+    // And back down again -- the guard must not make the control sticky.
+    f.set_time_mod(0.5f);
+    CHECK(run(4800) == doctest::Approx(neutral).epsilon(0.02f));
+}

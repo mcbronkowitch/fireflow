@@ -71,6 +71,7 @@ void Flux::init(float sample_rate, float* buf_l, float* buf_r) {
     // Written as the expression rather than the literal 1.2f so it cannot
     // drift if kDriveLoDb ever moves.
     _fb_scale = 1.2f / bbd_drive_gain(0.f);
+    _time_mod_norm = -1.f;
     set_stages(kBootStagesNorm);
     _stage_current = _stage_target;
     _stages_now = static_cast<int>(_stage_current + 0.5f);
@@ -216,7 +217,11 @@ void Flux::set_stages(float norm) {
                   * std::pow(static_cast<float>(kMaxStages) / kMinStages, n);
 }
 
+// No _buf_ok guard, deliberately: this function had none, and this round
+// changes cost, not behaviour.
 void Flux::set_time_mod(float norm) {
+    if (norm == _time_mod_norm) return;
+    _time_mod_norm = norm;
     _time_mult = bbd_time_mult(norm);
 }
 

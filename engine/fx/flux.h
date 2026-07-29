@@ -128,6 +128,13 @@ private:
     float _stage_target = 8192.f;
     int   _stages_now = 8192;
     float _time_mult = 1.f;
+    // set_time_mod's unchanged-value guard. PartFx pushes FXT_FLUX_TIME once
+    // per sample too, and bbd_time_mult is a clamp, a cast and a table lerp
+    // for a value that usually stands still. -1 is unreachable for a norm
+    // bbd_time_mult clamps to 0..1, so the first push after init always
+    // lands -- the sentinel idiom _drive_norm and _stages_norm use, which is
+    // right here and wrong for _fb_norm (see set_feedback).
+    float _time_mod_norm = -1.f;
     float _clock_hz = 0.f;
     // Unchanged-value guards: set_stages runs a powf and set_drive a pow10f,
     // and both are forwarded at control rate. -1 is unreachable for a
