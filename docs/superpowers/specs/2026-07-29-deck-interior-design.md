@@ -66,6 +66,21 @@ error means the row is right and the setting is wrong; unpriced work means the
 row is incomplete. §8.3 of the predecessor conflated exactly these two and had
 to be corrected.
 
+**Caveat, found in `deck_engine_hot`'s review (fix round 1):** on a SYNTH deck
+— this round's only engine — the "unpriced work" this section names is
+dispatch cost, not compute. `SynthEngineT` never overrides `process_in()`; it
+inherits `IPartEngine`'s empty default body (`engine/parts/engine_iface.h:57-
+59`, "Only the sampler implements it"). So for `deck_engine_hot`, the marginal
+cost of the `process_in` call this section describes **is** the virtual-
+dispatch cost §2.3 counts under "two virtual calls per sample" — not a
+second, additive charge on top of it. The distinction this section draws is
+real only on a SAMPLER deck: `SamplerEngine::process_in`
+(`engine/sampler/sampler_engine.cpp:158`) actually records and monitors from
+the call, so a sampler-engine row would price real internal work through it,
+not just a dispatch. `deck_engine_hot` measures a SYNTH deck, so its
+`process_in` difference from `synth_2x4` is dispatch-only, and the round must
+not budget it as a second cost beyond §2.3's.
+
 ### 2.3 The engine is called through a virtual interface, twice per sample
 
 `_engine` is an `IPartEngine*` (`engine/parts/part.h:231`), and every method
