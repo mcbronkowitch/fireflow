@@ -577,6 +577,184 @@ float proc_flux_lines_2ch()
 // SweepInstrumentGroup itself is NOT removed -- sweep_probe above still
 // uses it, and Task 7's reverb sweep needs it too.
 
+// --- Sweep D: cost against the room controls ---------------------------------
+// DIFF, SMEAR and MOD move together: setup_inst_worst (bench/workloads_system.cpp)
+// puts all three near maximum and in practice they are one gesture, so this
+// family sweeps them as a single knob rather than three independent rows.
+//
+// Are they reachable as modulation destinations under setup_inst_worst's
+// settings (DEPTH=1, DENSITY=1, RATE=0.8, all lanes live)? Checked before
+// writing a single row, because Task 6's sweep_voices_1..4 shipped-then-died
+// on exactly this trap (see the comment on Sweep C above). Answer: NO.
+//   - Instrument::set_reverb_diffusion/_smear/_mod (engine/instrument.h:108-110)
+//     call straight through to AmbientReverb::set_diffusion /
+//     set_diffuser_mod_depth / set_mod_depth (engine/fx/reverb.cpp) -- plain
+//     setters, no lane/target indirection, called ONLY from here and from
+//     AmbientReverb::init's boot defaults (grep across engine/ confirms no
+//     other call site).
+//   - The only per-Part modulation-destination enum touching FX is FxTargetId
+//     (engine/fx/part_fx.h): FXT_GRIT_INT, FXT_FLUX_TIME, FXT_FX_MIX,
+//     FXT_REV_SEND, FXT_FLUX_FB (FXT_COUNT == 5). FXT_REV_SEND is the
+//     per-part SEND LEVEL into the room -- a different control from the
+//     room's own diffusion/smear/mod, which have no slot in this enum at all.
+//   - The two functions that ever combine a base value with lane/DEPTH
+//     modulation are Part::target_raw (engine/parts/part.cpp:80, LANE_*
+//     slots) and Part::fx_target_value (part.cpp:126, FXT_* slots). Both
+//     index into Part-owned per-slot arrays (_base/_active/_tdepth or
+//     _fx_base/_fx_active/_fx_depth); neither array has a slot for the room.
+// So unlike COLOR (Sweep C), the knob position here fully determines the
+// state DIFF/SMEAR/MOD end up in -- DEPTH/DENSITY/RATE being live does not
+// touch them, and three distinct amounts give three distinct, controlled
+// instrument states.
+//
+// Read setup_inst_worst (workloads_system.cpp:274-298) for the setter names
+// and the exact top values -- diffusion 0.9, smear 1.0, mod 1.0 -- and mirror
+// it line for line, changing only those three calls. lo/mid/hi = 0.0/0.45/0.9
+// for diffusion; smear and mod scale off the SAME amount, divided by 0.9 so
+// hi reproduces setup_inst_worst's smear=1.0/mod=1.0 exactly:
+//   lo:  diffusion 0.00, smear 0.00/0.9 = 0.000, mod 0.000
+//   mid: diffusion 0.45, smear 0.45/0.9 = 0.500, mod 0.500
+//   hi:  diffusion 0.90, smear 0.90/0.9 = 1.000, mod 1.000
+// sweep_room_hi therefore reproduces setup_inst_worst's room exactly -- a
+// cross-check that this family's instrument setup matches the system
+// family's, worth having on its own.
+//
+// Checksum fold: Task 3's stages_achieved reads back Flux's REAL settled
+// state (it can legitimately differ from the requested norm -- see the
+// comment on SweepFxGroup) and folds that into the checksum, so a drift
+// between "requested" and "achieved" moves the number instead of passing
+// silently. No such readback exists here: AmbientReverb (engine/fx/reverb.h)
+// exposes set_diffusion/set_diffuser_mod_depth/set_mod_depth but no getters,
+// and the values they compute (the allpass coefficient and the two LFO
+// amounts) live as private members of third_party/oliverb/oliverb.h's
+// clouds::Oliverb with no accessor either. Both setters apply their norm
+// synchronously with no slew and no clamping that would ever engage at these
+// amounts, so there is no async-settling step to read back in the first
+// place -- but confirming that requires exactly the getter that does not
+// exist, and adding one would be an engine/ or third_party/ change, which
+// Task 7 has no exception for. Folding the locally-known requested amount
+// back into the checksum would be circular (it would just restate a
+// compile-time constant this file already wrote down) and would misrepresent
+// itself as the readback guard Task 3 has -- so it is deliberately NOT done.
+// What IS folded, because it is a real existing accessor and a real guard:
+// Instrument::reverb_asleep() (engine/instrument.h:263). setup_inst_worst's
+// set_reverb_mix(0.5f) keeps both decks' wet target above zero, so the room
+// never sleeps here (Instrument::process, instrument.cpp:154-189, only sets
+// _rev_asleep when BOTH wet targets are zero) -- reverb_asleep() should read
+// false for the life of every row below. It does not confirm the diffusion/
+// smear/mod VALUES took effect, only that the reverb is actually being
+// Process()ed at all rather than silently bypassed -- if a future change to
+// the mix/scaling above ever put the room to sleep, this is what would move
+// the checksum instead of the sweep quietly measuring an idle reverb.
+//
+// Settle: derived, not copied from setup_inst_worst_bbd's 200 blocks (that
+// row settles BBD lines at a much shorter clock period; this row is a
+// different device with its own period). The core loop (excluding the four
+// INPUT diffusers ap1-ap4, which are not part of the feedback path) is a
+// single ring: del1 -> dap2a -> dap2b -> del2 -> dap1a -> dap1b -> back to
+// del1 (third_party/oliverb/oliverb.h:111-219). At SIZE 1.0 -- set_reverb_size
+// isn't part of this sweep but setup_inst_worst sets it to 1.f, and every row
+// here mirrors that -- smooth_size_ settles (one-pole, coeff 0.0002/sample,
+// i.e. ~5000-sample/~104 ms time constant, fully negligible against what
+// follows) to 0.99, and each delay read sits at (length-1)*smooth_size, i.e.
+// essentially the full reserved length. Summing the six loop-member lengths
+// (the Reserve<> sizes at oliverb.h:111-120, already the parasites values
+// x1.5): dap1a 1880 + dap1b 2607 + del1 5117 + dap2a 2270 + dap2b 2045 +
+// del2 7173 = 21092 samples -- one full trip around the ring, ~439 ms at
+// 48 kHz, ~220 blocks. DECAY 0.95 (set_reverb_decay, held at setup_inst_worst's
+// own value, not swept) maps through AmbientReverb::set_decay to loop gain
+// 0.95*(1/0.9) = 1.0556, clamped to 1.05 -- ABOVE unity, the same "blooms,
+// self-sustains, stays bounded" configuration tests/test_reverb.cpp's decay-
+// past-100% case exercises (its set_decay(1.f) maps to the identical clamped
+// 1.05: 1.f*(1/0.9) = 1.111, also clamped). That test is this row's evidence
+// the growth is bounded (SoftLimit, stmlib_shim.h) rather than runaway, so
+// extending the settle window is safe, not a race against divergence.
+// decay_ is applied once per branch, twice per full ring trip, so gain per
+// trip is 1.05^2 = 1.1025 -- a modest ~10%/trip excess over unity. Four trips
+// (this file's standing "settle before measuring" multiple -- see
+// kSweepFluxSettleSamples/kSweepStagesSettleSamples/kSweepFluxLinesSettleSamples
+// above) is 4*21092 = 84368 samples = 878.83 blocks, rounded up to 879 --
+// comfortably past the point where a sample has had the chance to travel the
+// entire feedback ring four times over, so the measured window sees the
+// room's actual running state rather than a partially-filled one. The
+// runner's fixed 100-block warm-up (9600 samples) covers under HALF of one
+// single trip around this particular ring -- nowhere near enough on its
+// own -- which is exactly why this setup extends it explicitly instead of
+// relying on kWarmupBlocks, the same move setup_inst_worst_bbd (workloads_
+// system.cpp) already makes for its own, much shorter-period BBD lines.
+constexpr int kSweepRoomSettleBlocks = 879;   // 4 * 21092 samples / kBlock, see above
+
+void setup_room(float amount)
+{
+    auto& group = g_sweep_arena.emplace<SweepInstrumentGroup>();
+    group.instrument.init(kSampleRate, fx_mem());
+    group.instrument.set_tempo_bpm(120.f);
+    // Mirrors setup_inst_worst (workloads_system.cpp) line for line -- the
+    // three room calls at the end are the only change.
+    for (int p = 0; p < PART_COUNT; ++p) {
+        group.instrument.set_color(p, 1.f);          // 4-note chords -> 4 voices per part
+        group.instrument.set_density(p, 1.f);
+        group.instrument.set_depth(p, 1.f);
+        group.instrument.set_rate(p, 0.8f);
+        group.instrument.set_fx_on(p, FxBlock::Grit, true);
+        group.instrument.set_fx_on(p, FxBlock::Flux, true);
+        group.instrument.set_grit_mix(p, 1.f);
+        group.instrument.set_flux_mix(p, 1.f);
+        group.instrument.set_comp(p, 1.f);
+        group.instrument.set_voice_decay(p, 1.f);
+        group.instrument.trigger_manual(p);
+    }
+    group.instrument.set_reverb_mix(0.5f);
+    group.instrument.set_reverb_size(1.f);
+    group.instrument.set_reverb_decay(0.95f);
+    // The three swept controls -- see the derivation above the struct comment
+    // for why amount/0.9 makes sweep_room_hi (amount=0.9) land on exactly
+    // setup_inst_worst's smear=1.0/mod=1.0.
+    group.instrument.set_reverb_diffusion(amount);
+    group.instrument.set_reverb_smear(amount / 0.9f);
+    group.instrument.set_reverb_mod(amount / 0.9f);
+    group.instrument.set_master_drive(1.f);
+
+    // Settle OUTSIDE the measured window -- see kSweepRoomSettleBlocks above.
+    // voice_decay=1.f (set on both parts just above) is the same knob
+    // workloads_system.cpp's setup_synth_n documents as giving ~16 s of
+    // envelope at its own decay/cycle pairing; Task 6's scratch probe of this
+    // exact instrument-worst configuration found voices staying fully
+    // sounding for at least 1200 blocks with no re-trigger. This row's total
+    // window (879 settle + 1000 measured = 1879 blocks, ~3.76 s) is well
+    // inside both figures, so -- unlike proc_inst (workloads_system.cpp),
+    // which re-triggers every 250 blocks to counter a MUCH longer measured
+    // window -- no periodic re-trigger is needed here, and SweepInstrumentGroup
+    // (Task 1) has no counter field to drive one with anyway.
+    const float* in = test_input();
+    for (int b = 0; b < kSweepRoomSettleBlocks; ++b)
+        group.instrument.process(in, in, group.out_l, group.out_r, kBlock);
+}
+
+void setup_room_lo()  { setup_room(0.0f); }
+void setup_room_mid() { setup_room(0.45f); }
+void setup_room_hi()  { setup_room(0.9f); }
+
+float proc_sweep_room()
+{
+    auto& group = g_sweep_arena.get<SweepInstrumentGroup>();
+    const float* in = test_input();
+    group.instrument.process(in, in, group.out_l, group.out_r, kBlock);
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i)
+        acc += group.out_l[i] + group.out_r[i];
+    // Fold the closest thing to an "achieved setting" this row has access to
+    // without an engine/ or third_party/ change -- see the long comment
+    // above setup_room for why a true diffusion/smear/mod readback does not
+    // exist. reverb_asleep() is a real, pre-existing accessor
+    // (engine/instrument.h) and should read false for the life of this row;
+    // if it ever reads true the checksum moves, catching "the room silently
+    // stopped running" even though it cannot catch "the room is running with
+    // the wrong diffusion/smear/mod".
+    acc += group.instrument.reverb_asleep() ? 1.f : 0.f;
+    return acc;
+}
+
 } // namespace
 
 const Workload kSweepWorkloads[] = {
@@ -593,6 +771,9 @@ const Workload kSweepWorkloads[] = {
     { "sweep", "sweep_grit_bare",       setup_grit_bare,       proc_grit_bare },
     { "sweep", "sweep_grit_no_bbd_mem", setup_grit_no_bbd_mem, proc_sweep_fx  },
     { "sweep", "sweep_flux_lines_2ch",  setup_flux_lines_2ch,  proc_flux_lines_2ch },
+    { "sweep", "sweep_room_lo",  setup_room_lo,  proc_sweep_room },
+    { "sweep", "sweep_room_mid", setup_room_mid, proc_sweep_room },
+    { "sweep", "sweep_room_hi",  setup_room_hi,  proc_sweep_room },
 };
 const int kSweepCount = sizeof(kSweepWorkloads) / sizeof(kSweepWorkloads[0]);
 

@@ -190,6 +190,9 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "sweep_grit_bare",
         "sweep_grit_no_bbd_mem",
         "sweep_flux_lines_2ch",
+        "sweep_room_lo",
+        "sweep_room_mid",
+        "sweep_room_hi",
     ),
     "voice": (
         "morph_osc_bare",
