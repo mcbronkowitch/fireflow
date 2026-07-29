@@ -1089,6 +1089,36 @@ Spec: `docs/superpowers/specs/2026-07-29-fx-cost-curves-design.md` §9. Evidence
 `perf/fx-cost-curves` on 2026-07-29; the branch changes no production code, so
 it lands as evidence and documentation only.
 
+### FLUX control-rate wrapper ✅ (step 1 of the accepted plan above)
+
+The first of the three steps the owner fixed above: move `Flux`'s per-sample
+wrapper bookkeeping — the `std::pow` in `bbd_drive_gain`, reached every sample
+via an unguarded `set_feedback`/`set_time_mod` push — to control rate, via a
+cached feedback-coefficient scale and two unchanged-value guards. No control-
+tick restructuring, no musical change. Spec:
+`docs/superpowers/specs/2026-07-29-flux-control-rate-design.md`. Branch:
+`perf/flux-control-rate`, not yet merged.
+
+**Measured, not banked in advance.** Against §2's prediction of ~2.5
+points/deck, ~5 total: the isolated one-deck row (`fx_flux_sdram`) saved 1.49
+— over-predicted. The gate row (`instrument_worst_bbd`) saved **7.55
+points**, 132.79% → **125.24%** — under-predicted by 51%. The two GRIT-only
+checksums (`fx_grit`, `sweep_flux_lines_2ch`) held byte-identical while
+`fx_grit` dropped 1.37 points, confirming §7's read of the previous round
+exactly: GRIT alone was paying for a `pow` it never uses. Full reading,
+including the load-dependence pattern behind the isolated/gate-row gap (a
+hypothesis, not yet a re-measured fact) in
+`docs/superpowers/specs/2026-07-29-flux-control-rate-design.md` §13.
+
+**What remains.** 25.24 points over the gate, down from 32.79. Next in the
+owner's order: collapse FLUX to one mono `BbdEcho` per deck, estimated ~9.2
+points in isolation — which on isolated arithmetic alone would still leave
+the row over 100%, though §13.3 gives a specific reason (this round's own
+isolated estimate undershot the gate-row saving by more than 2×) not to treat
+that as settled until it is measured directly. `engine/fx/bbd.h`'s `1/sr_`
+division in `BbdLine::SetClock`, worth an estimated ~0.6 points, stays
+deliberately untouched — model territory, left for the mono round.
+
 ### BODY playability ✅ (extends M5j)
 
 BODY shipped in 2.14.0 measured and in budget, but the first extended session

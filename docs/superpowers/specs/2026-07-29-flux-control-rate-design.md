@@ -351,3 +351,208 @@ the bench fix together.
 - Build `host/vcv` only via `./build-local.sh` if it is touched at all (it is
   not, in this round).
 - No bit-exactness or checksum-against-stored-file gates (§9).
+
+## 13. Results
+
+Evidence: `docs/bench/2026-07-29-cd6dafd-sweep.csv`/`.md` (before, engine at
+`cd6dafd`) against `docs/bench/2026-07-29-4d1e929-sweep.csv`/`.md` (after, this
+round's three engine commits applied). Both are two-run hardware sweeps on
+the same Daisy Seed, same QSPI digest within each file, same device
+fingerprint across both files. Figures below are `pct_max` from **run 2** of
+each file, which is what the gate ledger anchors on; `avg_cyc` was checked
+for agreement in direction on every row (noted where it does not).
+
+### 13.1 The FLUX and GRIT rows, before/after
+
+| row | before | after | Δ (pts) | avg_cyc direction | checksum |
+|---|---:|---:|---:|---|---|
+| `instrument_worst_bbd` (the gate) | 132.79 | 125.24 | **−7.55** | agrees (1229934→1157377) | unchanged `607bb1af` |
+| `instrument_worst` | 120.14 | 115.83 | −4.31 | agrees (1121054→1079301) | unchanged `e8cb281f` |
+| `fx_flux_sdram` (one deck, isolated) | 19.42 | 17.93 | −1.49 | agrees (185098→170929) | unchanged `962535c1` |
+| `fx_grit` | 6.53 | 5.16 | −1.37 | agrees (62473→49407) | unchanged `74f9b9f5` |
+| `sweep_flux_lines_2ch` (bare `BbdEcho`, no `Flux` wrapper) | 9.16 | 9.17 | ≈0 (+0.01) | flat, noise-level (87433→87531) | unchanged `45b6f7aa` |
+| `sweep_grit_bare` (no Flux at all) | 1.53 | 1.53 | 0.00 | **disagrees at noise level**: avg ticked up 14689→14721 (32 cycles, 0.2%) while pct_max held at 1.53; below this bench's documented ~1700-cycle intra-run jitter, not a real signal | unchanged `f57bd5c9` |
+| `sweep_grit_no_bbd_mem` | 4.93 | 4.61 | −0.32 | agrees (47250→44128) | unchanged `9ddc20e9` |
+| `sweep_flux_rate_0` | 18.94 | 17.37 | −1.57 | agrees (180701→165657) | **moved** `0671aeeb`→`36125151` |
+| `sweep_flux_rate_3` | 19.48 | 18.00 | −1.48 | agrees (185941→171461) | **moved** `f04d97b9`→`0f18c879` |
+| `sweep_flux_rate_6` | 20.68 | 19.17 | −1.51 | agrees (196946→182326) | **moved** `5d31d4f1`→`f41e0f12` |
+| `sweep_flux_rate_8` | 21.78 | 20.38 | −1.40 | agrees (207455→194130) | **moved** `f7f487be`→`d088a597` |
+| `sweep_flux_rate_11` | 22.66 | 21.32 | −1.34 | agrees (216262→203354) | **moved** `217030e1`→`e1c20a65` |
+| `sweep_stages_512` | 18.45 | 16.85 | −1.60 | agrees (176100→160774) | **moved** `f7188542`→`b2a7aaf3` |
+| `sweep_stages_2048` | 18.63 | 17.05 | −1.58 | agrees (177929→162867) | **moved** `a4c5a8be`→`86fe0a22` |
+| `sweep_stages_8192` | 19.48 | 17.98 | −1.50 | agrees (185925→171461) | **moved** `6b75d87a`→`e1fa1cc4` |
+| `sweep_stages_16384` | 20.68 | 19.13 | −1.55 | agrees (196922→182394) | **moved** `18faea57`→`39ac3aed` |
+
+Every figure above was read from `pct_max`, run 2, in both CSVs directly (not
+carried forward from the brief that proposed them), and every `avg_cyc`
+column was cross-checked for direction. The `sweep_flux_rate_*` and
+`sweep_stages_*` rows move by roughly the same 1.3–1.6 points regardless of
+where on the rate/stage ladder they sit — consistent with §3's design: the
+removed work is control-rate overhead paid once per sample regardless of
+FLUX's operating point, not something that scales with the clock or stage
+count. The `sweep_room_*` rows also moved (checksums `d4b02ae8→a87305ad`,
+`a308f4b3→a04d6d7c`, `3b05b839→6439c691`) for the same reason as
+`instrument_worst`/`instrument_worst_bbd`: `sweep_room_*` runs the full
+instrument, decks included.
+
+### 13.2 The prediction missed — in both directions
+
+§2 predicted **~2.5 points per deck, ~5 points total**. Neither figure this
+round measured lands there.
+
+**Isolated, it over-predicted.** `fx_flux_sdram` — one deck, nothing else
+competing for cache or issue slots — saved **1.49 points**, not 2.5. At this
+bench's own convention (1 point = 100 cycles/sample over a 96-sample block),
+that is ~149 of the wrapper's 771 cycles/sample, against a ~250-cycle
+prediction. The `std::pow` and the guards did less work, in isolation, than
+§2 estimated.
+
+**On the full instrument, it under-predicted.** The gate row,
+`instrument_worst_bbd`, saved **7.55 points** — 51% more than the ~5-point
+total prediction, and its implied per-deck saving (3.78 points, see §13.3) is
+51% *above* the 2.5-point prediction, not below it.
+
+This is a plain finding, not something to round toward the original number:
+the wrapper's removable cost is not a fixed quantity independent of what else
+the CPU is doing. §2's per-line cycle accounting (the `std::pow`, the
+division, the two cross-TU calls) was reasoned from the source, not measured
+under load, and the isolated result confirms that reasoning was in the right
+neighbourhood but not exact even before load effects are considered. The part
+of the wrapper this round deliberately left standing — the crossfade, the two
+`fonepole` slews, the DRAG/THIN accumulator, `bbd_clock_hz`'s division, the
+stage-change compare, the gate branch, the mix additions (§2, "genuinely
+per-sample, stays") — is where the remaining ~622 of 771 cycles/sample sit in
+the isolated case, and §13.3 is the reason that number is not simply "what's
+left" on the gate row.
+
+### 13.3 The saving grows with machine load — a hypothesis, not a measurement
+
+This is the round's most interesting result. Two decks at the isolated
+`fx_flux_sdram` rate of 1.49 points each would sum to 2.98. The gate row,
+which runs both decks inside the full 8-voice, both-FX, high-diffusion,
+max-echo instrument, saved 7.55 — more than double.
+
+The per-deck saving implied by each row (Δ ÷ 2, since the instrument runs
+two decks):
+
+| row | Δ (total) | implied Δ/deck |
+|---|---:|---:|
+| `fx_flux_sdram` (1 deck measured directly, not halved) | −1.49 | 1.49 |
+| `instrument_worst` | −4.31 | 2.16 |
+| `instrument_worst_bbd` | −7.55 | 3.78 |
+
+The measurement, stated plainly first: the same code change is worth more on
+a row where the machine is already busy than on a row where it is nearly
+idle. 1.49 in isolation, 2.16 under a full-but-unloaded instrument, 3.78
+under the worst-case instrument with BBD lines running flat out.
+
+**Now the hypothesis, explicitly labelled as such and not a measurement:** a
+libm `powf`/`std::pow` call executed once per sample per deck is more
+expensive on a machine whose instruction and data caches are already under
+pressure from voices, both FX chains, and reverb, than it is in an otherwise
+near-idle row. Removing it returns not just its own cycles but the icache
+footprint and pipeline disruption it was imposing on everything else
+competing for the same core — a cost that does not show up at all when it is
+the only thing running.
+
+**If the hypothesis holds**, it means isolated single-row benchmarks
+systematically *understate* what a removal is worth once it lands on the
+gate row — the opposite of the usual worry that isolated numbers overstate
+real-world impact. That has a direct consequence for the next round: the
+mono-FLUX estimate of ~9.2 points (§13.5) is itself an isolated figure, and if
+this pattern repeats, the real saving on `instrument_worst_bbd` could be
+larger than 9.2.
+
+**This is a question the next round answers, not a number anyone may bank.**
+This round has one data point on the load/saving relationship (three rows,
+not a swept parameter), which is a pattern, not a proof. Nothing above should
+be read as license to plan against a >9.2 mono saving until it is measured on
+the gate row directly.
+
+### 13.4 The checksums are the strongest evidence
+
+Every row's checksum that moved between `cd6dafd` and `4d1e929` belongs to
+one of exactly three families, all of which run through the changed engine
+code with a fold added to the harness this round (§10): the five
+`sweep_flux_rate_*` rows, the four `sweep_stages_*` rows, and the three
+`sweep_room_*` rows. Every other checksum in both files — every `system` row,
+`sweep_grit_bare`, `sweep_grit_no_bbd_mem`, and `sweep_flux_lines_2ch` — is
+byte-identical across the two files. That split is exactly what a
+behaviour-preserving refactor with two ULP-neutral guards and one
+ULP-non-neutral cache (§9) predicts, and it is stronger evidence than any
+percentage figure above because a checksum match or mismatch is not subject
+to measurement jitter.
+
+Two of those identical checksums are load-bearing confirmations:
+
+- **`fx_grit`: 1.37 points cheaper at an identical checksum, `74f9b9f5`.**
+  This is §7's prediction confirmed exactly. A deck running GRIT alone was
+  computing the feedback coefficient every sample and discarding it, because
+  `Flux::process` returns at its idle guard before ever reading it. The
+  guards in §4/§5 remove that wasted computation; the checksum staying fixed
+  proves the audio GRIT actually produces did not change at all — the saving
+  is pure waste removed, not a behaviour change that happens to sound the
+  same.
+- **`sweep_flux_lines_2ch`: unchanged in both cost (9.16→9.17, noise-level)
+  and checksum, `45b6f7aa`.** This row is a bare `BbdEcho` pair with no
+  `Flux` wrapper around it at all. Its checksum and cost holding fixed
+  confirms the change is confined to the wrapper exactly as §3/§11 designed
+  — nothing in the BBD model itself moved.
+
+Note also that `fx_flux_sdram` kept checksum `962535c1` despite the
+coefficient reassociation of §9 (`_fb_norm * (1.2f / g)` vs
+`_fb_norm * 1.2f / g`, a ~1e-7 relative difference in loop gain). That is
+consistent with, not contradictory to, §9's own claim: the render A/B
+(§13.5, Task 5) found only 8 of 2,880,000 samples differing by one 16-bit
+LSB, and this row's checksum is a fold over 96 samples of a float
+accumulator — it need not resolve a perturbation that small, and evidently
+does not for this particular workload.
+
+### 13.5 Render A/B (Task 5, verbatim)
+
+```
+rms      0.011795 -> 0.011795   (0.0000 dB)
+peak     0.318848 -> 0.318848   (0.0000 dB)
+centroid 1094.30 Hz -> 1094.30 Hz   (0.0000 %)
+PASS
+```
+
+Honest caveat: "0.0000 dB" means the difference is below 0.00005 dB at the
+metric's printed precision, not that it is zero. These metrics are computed
+on 16-bit renders and cannot resolve below the LSB, so this result cannot by
+itself distinguish "no change" from "a change smaller than the quantisation
+floor." The load-bearing figure is the byte comparison done alongside it:
+of 2,880,000 sixteen-bit samples (1,440,000 frames × 2 channels) in the
+30-second `bbd_bloom` scenario, **8 samples differ, each by exactly ±1 LSB**,
+and none differs by more. That is the actual size of the reassociation's
+audible footprint, and it is consistent with a ~1e-7 relative change in loop
+gain landing almost entirely inside the rounding step to 16 bits.
+
+### 13.6 The gate row, and the arithmetic that remains
+
+`instrument_worst_bbd` needs to reach 100% of the block budget. Before this
+round it stood at 132.79% (32.79 points over). After this round it stands at
+**125.24%** — **25.24 points remain**, down from 32.79. The round is
+authorised, worked, measured, and moves the gate row in the right direction.
+
+The next step in the owner's fixed order (roadmap, "FX cost curves") is
+collapsing FLUX to one mono `BbdEcho` per deck, estimated at **~9.2 points**
+in isolation (half of the two-line model's measured cost, not yet
+re-measured). Stated plainly: **even with mono FLUX applied, 125.24 − 9.2 =
+116.04% — the row does not reach 100% on isolated estimates.** Some further
+saving, from the `kFiltOrder` lever or elsewhere, would still be needed on
+paper.
+
+That statement carries less weight than the same statement would have
+carried before this round, and §13.3 is the reason: this round's own isolated
+per-deck figure (1.49) undershot what the same change was actually worth on
+this same gate row (3.78) by more than double. If mono FLUX follows the same
+pattern — cheaper in isolation than under the load the gate row imposes — the
+"does not reach 100%" conclusion above may not survive being measured
+directly. It is not safe to plan around the isolated 9.2 as a floor or a
+ceiling; it is a number the next round has to re-measure on
+`instrument_worst_bbd` itself, not extrapolate from.
+
+`engine/fx/bbd.h`'s `1/sr_` division in `BbdLine::SetClock` (§11), worth an
+estimated ~0.6 points, remains deliberately untouched — model territory, left
+for the mono round that restructures `BbdEcho`'s use.
