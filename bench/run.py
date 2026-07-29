@@ -177,7 +177,6 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "instrument_worst_bbd",
     ),
     "sweep": (
-        "sweep_probe",
         "sweep_flux_rate_0",
         "sweep_flux_rate_3",
         "sweep_flux_rate_6",

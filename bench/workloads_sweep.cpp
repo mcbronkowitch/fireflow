@@ -173,23 +173,6 @@ struct SweepLineGroup {
 
 SerialArena<SweepInstrumentGroup, SweepFxGroup, SweepGritGroup, SweepLineGroup> g_sweep_arena;
 
-// A trivial row whose only job is to prove the family links and registers.
-// It is replaced by real rows in later tasks and must not survive to the
-// hardware run.
-void setup_sweep_probe()
-{
-    auto& group = g_sweep_arena.emplace<SweepInstrumentGroup>();
-    group.instrument.init(kSampleRate, fx_mem());
-}
-
-float proc_sweep_probe()
-{
-    auto& group = g_sweep_arena.get<SweepInstrumentGroup>();
-    const float* in = test_input();
-    group.instrument.process(in, in, group.out_l, group.out_r, kBlock);
-    return group.out_l[0] + group.out_r[0];
-}
-
 // Four line-fills of the SLOWEST of the five sampled divisions (rate 0), the
 // same "settle before measuring" precedent workloads_bbd.cpp's
 // setup_bbd_ceiling documents and uses (49152 = 4 * 16384/(2*32000)*48000).
@@ -574,8 +557,8 @@ float proc_flux_lines_2ch()
 // COLOR had controlled the voice count. See task-6-report.md for the full
 // account.
 //
-// SweepInstrumentGroup itself is NOT removed -- sweep_probe above still
-// uses it, and Task 7's reverb sweep needs it too.
+// SweepInstrumentGroup itself is NOT removed -- Task 7's reverb sweep
+// (sweep_room_lo/mid/hi below) needs it.
 
 // --- Sweep D: cost against the room controls ---------------------------------
 // DIFF, SMEAR and MOD move together: setup_inst_worst (bench/workloads_system.cpp)
@@ -758,7 +741,6 @@ float proc_sweep_room()
 } // namespace
 
 const Workload kSweepWorkloads[] = {
-    { "sweep", "sweep_probe",       setup_sweep_probe,  proc_sweep_probe },
     { "sweep", "sweep_flux_rate_0",  setup_flux_rate_0,  proc_sweep_fx },
     { "sweep", "sweep_flux_rate_3",  setup_flux_rate_3,  proc_sweep_fx },
     { "sweep", "sweep_flux_rate_6",  setup_flux_rate_6,  proc_sweep_fx },

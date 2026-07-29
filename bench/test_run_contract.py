@@ -882,8 +882,9 @@ class SweepProfileTest(unittest.TestCase):
 
     def test_sweep_family_has_row_expectations(self):
         rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["sweep"]
-        self.assertIn("sweep_probe", rows)
+        self.assertNotIn("sweep_probe", rows, "scaffolding row must not reach hardware run")
         self.assertEqual(len(rows), len(set(rows)), "duplicate row names")
+        self.assertEqual(len(rows), 15, "sweep family must have exactly 15 rows")
 
     def test_flux_rate_sweep_rows_are_expected(self):
         rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["sweep"]
