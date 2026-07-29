@@ -55,7 +55,7 @@ is actually built today, and what is still design-only.
 | **+ FORM/SONG** | Persistent A/B phrase snapshots with independent phrase-engine FORM and seven-mode SONG arrangement | ✅ **done** (engine, renderer, and VCV; released in 2.13.1; stable VCV parameter IDs and legacy patch migration) |
 | **Mod grid lock** | In STEP the four texture lanes stop owning a clock and follow the deck's integer step count; the lane ratios become cycle lengths (4/6/8/12/16 at STEPS = 8), TIDE stretches slot counts, and DRIFT, EVOLVE, SPOT and float drift can no longer push a lane off the grid | ✅ **done** (engine + VCV; released in 2.13.2; spec `docs/superpowers/specs/2026-07-25-mod-lane-step-grid-lock-design.md`) |
 | **M5j** | BODY — one-voice-per-deck resonator part engine, morphing string → metal → bell, with a sympathetic excitation bus | ✅ **done** (engine, renderer and VCV; `body_2x4` 295078 / 295724 cycles, 30.7 % of the block, inside the spec's 29–32 % prediction and below SYNTH; released in 2.14.0) |
-| **FLUX → BBD** | FLUX's interpolating tape echo replaced by a bucket-brigade delay model — the clock rate *is* the delay time, so RATE bends stored pitch, STAGES is a brightness axis, and `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane | ✅ **done** (engine, renderer and VCV; RATE/STAGES/`FXT_FLUX_TIME` confirmed by ear, DRIVE diagnosed and fixed but awaiting re-listening; hardware CPU measurement outstanding — see below) |
+| **FLUX → BBD** | FLUX's interpolating tape echo replaced by a bucket-brigade delay model — the clock rate *is* the delay time, so RATE bends stored pitch, STAGES is a brightness axis, and `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane | ✅ **done** (engine, renderer and VCV; RATE/STAGES/`FXT_FLUX_TIME` confirmed by ear, DRIVE diagnosed and fixed but awaiting re-listening; isolated `bbd` rows measured on hardware 2026-07-28, but `instrument_worst_bbd` — the system-level budget verdict — is still unmeasured, see below) |
 | **BODY playability** | Three fixes from the first extended ear pass: the bow follows the note instead of droning at a fixed 200 Hz, a continuously driven resonator no longer runs decades above its own struck level, and FILTER's left half fades evenly instead of falling off a cliff | ✅ **done** (engine; released in 2.15.0; two measured items left open — see below) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
@@ -901,23 +901,41 @@ floats-per-channel the host must inject) went from 262144 floats per channel
 4 B), the same basis on both sides of the comparison. `host/vcv/README.md`'s
 memory itemisation reflects the new figure.
 
-**CPU: outstanding.** The bench gate for this redesign is split across two
-files: `bench/workloads_bbd.cpp` builds the isolated `bbd` bench family
-(`bbd_ceiling`, `bbd_line_only`, `bbd_walk_sdram`), while
+**CPU: half measured, and the half that decides is the missing one.** The
+bench gate for this redesign is split across two files:
+`bench/workloads_bbd.cpp` builds the isolated `bbd` family, while
 `bench/workloads_system.cpp` adds the `instrument_worst_bbd` row to the
-`system` profile itself (Task 11). No hardware number exists for either yet
-— that measurement needs a Daisy Seed and an ST-Link, which was not
-available to run it during this redesign. The bench's `full` profile (which
-would otherwise carry every family, `bbd` included) does not currently link,
-for a documented and pre-existing reason unrelated to this work — an
-SRAM/SRAM_EXEC region overflow (`bench/README.md:34`) — so the measurement
-will need a narrower profile: `system` for `instrument_worst_bbd`, or a
-manual `BENCH_FAMILIES="system bbd"` build for the isolated `bbd` rows.
-Task 11 (`docs/superpowers/plans/2026-07-27-flux-bbd-delay.md`) confirmed
-both of those narrower builds link cleanly; this later documentation pass
-did not re-run either build, only recorded what Task 11 already verified.
-Reference points to measure against: `instrument_worst` at 97.5 % max, and
-the retired `instrument_worst_taps` at 96.9 % avg / 101.8–102.2 % max.
+`system` profile (Task 11).
+
+The isolated family **has** been measured on a Daisy Seed, 2026-07-28, two
+runs at `3a6820c` and `6338f63` (`docs/bench/2026-07-28-*-bbd.{md,csv}`):
+
+| workload | max cyc | max % of block |
+|---|---:|---:|
+| `bbd_ceiling` | 55 259 | 5.75 |
+| `bbd_line_only` | 35 944 | 3.74 |
+| `bbd_line_tap` | 34 566 | 3.60 |
+| `bbd_line_tap_half` | 25 774 | 2.68 |
+| `bbd_walk_sdram` | 3 306 | 0.34 |
+
+`instrument_worst_bbd` **still has no result** — both of those reports say so
+in their own verdict line: *"the go/no-go question is unanswered."* That is
+the number that matters, because a component cost cannot be added to a
+system figure by hand in this repo: CPU hunt round 3 measured components
+summing to ~120 % of budget while `instrument_worst` measured ~159 %, a
+39-point gap. So the shipped BBD has no system-level budget verdict.
+
+To get one: the bench's `full` profile does not link, for a documented and
+pre-existing reason unrelated to this work — an SRAM/SRAM_EXEC region
+overflow (`bench/README.md:34`) — so run the narrow profile from `bench/`:
+
+```
+python run.py --profile system
+```
+
+Reference points it must be read against: `instrument_worst` at 97.5 % max
+(2.5 points of headroom), and the retired `instrument_worst_taps` — the
+mechanism BBD replaced — at 96.9 % avg / 101.8–102.2 % max, i.e. over budget.
 
 **What was deleted, and why.** The tap bank (`engine/fx/taps.{h,cpp}`,
 `spky::TapBank`, `spky::derive_offsets`) — the mechanism that fed each
