@@ -911,6 +911,20 @@ class SweepProfileTest(unittest.TestCase):
             self.assertIn(name, rows)
 
 
+class AblateProfileTest(unittest.TestCase):
+    def test_ablate_profile_resolves_and_carries_system(self):
+        profile = resolve("ablate", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY)
+        self.assertIn("system", profile.families)
+        self.assertIn("instr", profile.families)
+
+    def test_instr_family_has_row_expectations(self):
+        self.assertIn("instr", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY)
+        self.assertTrue(runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
+
+    def test_noverb_row_is_expected(self):
+        self.assertIn("instr_noverb", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
+
+
 class ManifestValidationContract(unittest.TestCase):
     """resolve()'s load-time manifest checks (design spec S3): a profile
     naming a family run.py has no row expectations for, or declaring
@@ -999,7 +1013,12 @@ class FullProfileLinkContract(unittest.TestCase):
     # instead). Naming it here, rather than folding it into KNOWN_FAMILIES,
     # keeps the guard below able to still catch an *accidental* new family
     # that drifts between the Makefile and the row protocol.
-    NOT_IN_FULL = frozenset({"sweep"})
+    #
+    # `instr` (spec 2026-07-29-instrument-ablation) is the same story: a
+    # Makefile entry and a BENCH_PROTOCOL_ROWS_BY_FAMILY entry, deliberately
+    # left off the `BENCH_FAMILIES ?=` default list, carried instead by its
+    # own `ablate` profile.
+    NOT_IN_FULL = frozenset({"sweep", "instr"})
 
     def test_full_profile_manifest_resolves_cleanly(self):
         resolve_profile("full")  # must not raise a manifest error

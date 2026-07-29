@@ -193,6 +193,9 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "sweep_room_mid",
         "sweep_room_hi",
     ),
+    "instr": (
+        "instr_noverb",
+    ),
     "voice": (
         "morph_osc_bare",
         "modal_voice",
