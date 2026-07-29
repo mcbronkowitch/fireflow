@@ -90,30 +90,35 @@ This removes the `pow` **unconditionally** — not merely at rest, but during a
 FEEDBACK knob move as well. That is strictly better than the guard in §5,
 and the two compose.
 
-### 4.1 The init-order hazard
-
-This is the one real hazard in the design and must be handled explicitly.
+### 4.1 The init ordering, and why the reset is required anyway
 
 `Flux::init` calls `set_feedback(0.45f)` at `flux.cpp:65` **before**
-`set_drive(0.f)` at `flux.cpp:67`. Today this is safe by accident:
-`apply_feedback` reads `_drive_norm`, which is `-1.f` at that moment, and
-`bbd_drive_gain` clamps it to 0, giving a gain of 1 — the same value
-`set_drive(0.f)` will produce two lines later.
+`set_drive(0.f)` at `flux.cpp:67`. Today that is safe: `apply_feedback` reads
+`_drive_norm`, which is `-1.f` at that moment, and `bbd_drive_gain` clamps it
+to 0, giving a gain of 1 — the same value `set_drive(0.f)` produces two lines
+later. With the cache, `apply_feedback` reads `_fb_scale` instead, and on a
+*re-init* of an already-running `Flux` (`Spotymod::reinit()`, reached from a
+sample-rate change, a reset, or a fresh sampler add) that member still holds
+the previous DRIVE's factor.
 
-With the cache, `apply_feedback` reads `_fb_scale` instead. A member default
-alone is **not** sufficient: on a *re-init* of an already-running `Flux`
-(`Spotymod::reinit()`, reached from a sample-rate change, a reset, or a fresh
-sampler add) the member retains its old value, and `set_feedback(0.45f)` at
-line 65 would push a coefficient derived from the previous DRIVE setting
-before line 67 corrects it.
+**This is not an observable defect, and the spec should not pretend it is.**
+`init` sets `_drive_norm = -1.f` at line 57, so `set_drive(0.f)` at line 67
+always passes its own guard and always rewrites `_fb_scale`. The stale window
+is two lines wide, with no audio processed inside it, and `_fb_scale` is
+therefore correct by the time `init()` returns — with or without an explicit
+reset.
+
+**The reset is still required**, for a different reason: without it the
+correctness of a cached value rests entirely on that ordering, and nothing
+protects the ordering. Reordering `init()`, or giving `set_drive` a reason to
+return early, would turn a two-line window into a real one silently.
 
 **Requirement:** `Flux::init` sets `_fb_scale` explicitly, alongside
 `_drive_norm = -1.f`, to the value `set_drive(0.f)` will store — i.e.
-`1.2f / bbd_drive_gain(0.f)`. It must be written as that expression, not as
-the literal `1.2f`, so it cannot drift if `kDriveLoDb` ever moves.
-
-This is the same class of re-init defect the long comment at `flux.cpp:30-46`
-documents for `_link`, and it deserves a comment of the same kind.
+`1.2f / bbd_drive_gain(0.f)`. Written as that expression, not as the literal
+`1.2f`, so it cannot drift if `kDriveLoDb` ever moves. The accompanying
+comment must say that the reset is defence against a future reordering, not a
+fix for a reachable bug, or the next reader will delete it as dead code.
 
 ## 5. Change 2 — guard `set_feedback`
 
@@ -205,6 +210,14 @@ The previous round's reading and this one agree, from opposite directions.
 No bit-exactness or checksum-against-a-stored-file gate: this project does not
 use them, and §9 explains why one would fail here anyway.
 
+**This round is a behaviour-preserving refactor, so no test here fails first.**
+Every test below passes on the code as it stands and must still pass after —
+that is the entire point of writing them. Red-first is the wrong shape for
+this work, and a review that expects it is applying the wrong rule. The tests
+are a net under a change whose whole claim is that nothing observable moves,
+and they should be written and committed *before* the change so the net exists
+when it lands.
+
 **Unit tests** (in `tests/test_flux.cpp`, already registered at
 `CMakeLists.txt:87`):
 
@@ -218,9 +231,11 @@ use them, and §9 explains why one would fail here anyway.
 - pushing the same FEEDBACK value twice yields the same coefficient as
   pushing it once — the guard is a no-op, not a swallow;
 - immediately after `init()`, and again after a **re-init** of an instance
-  whose DRIVE was previously non-zero, the coefficient equals the value the
-  pre-change code produced — this is the §4.1 hazard, and it is the test that
-  must exist even if every other one is cut;
+  whose DRIVE was previously 1.0, the coefficient equals
+  `0.45f * 1.2f / bbd_drive_gain(0.f)`. Per §4.1 this **cannot fail on either
+  version** — it is a characterisation of the post-init state, and its job is
+  to fail later, if someone reorders `init()` or gives `set_drive` an early
+  return. Writing it as a bug-catcher would be a false claim;
 - `set_time_mod`: the first push after init lands, a repeated push is a no-op,
   and `_time_mult` is `1.f` before any push.
 
