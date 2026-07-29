@@ -1,3 +1,4 @@
+#include <cassert>
 #include "workload.h"
 #include "mem.h"
 #include "serial_arena.h"
@@ -97,8 +98,8 @@ struct SweepGritGroup {
 };
 
 // --- Ablation E: the Flux wrapper's own cost ---------------------------------
-// Two bare BbdEcho, at the stage count and clock a default-initialised Flux
-// computes, with no Flux around them. Then
+// Two bare BbdEcho, at the stage count and clock an ENGAGED Flux computes,
+// with no Flux around them. Then
 //   fx_flux_sdram - sweep_flux_lines_2ch - fx_none
 // is the wrapper's own per-sample work: two fonepole slews, two std::fabs
 // snaps, a clampf and bbd_clock_hz's division -- all of which run every
@@ -117,24 +118,47 @@ struct SweepGritGroup {
 // already does what a test-only clock accessor would, so the plan's
 // conditional permission to add one never fires.
 //
+// A hardware run of an earlier version of this row (before the "ENGAGED"
+// above) came back with checksum ea306fb5 -- byte-identical to
+// empty_callback's. Flux::process (flux.cpp) returns before the ONE line
+// that assigns _clock_hz (line 320) at two guards: `if (!_buf_ok) return;`
+// and `if (_sw.is_idle()) return;`. Flux::init never turns the soft switch
+// on, so a merely-init'd probe never reaches the assignment, clock_hz()
+// reads back its declared initialiser (0.f, flux.h), BbdEcho::Process(x,
+// 0.f) sets ticks_ = 0, and the two bare lines never advanced a single tick
+// -- silently, because the input/output filter poles the tick loop
+// surrounds still advance every sample regardless, so the row still
+// returned a plausible-looking nonzero number (6.70 % on that run) despite
+// measuring nothing of what it claims to. Recomputing bbd_clock_hz(0.5,
+// 8192) = 8192 from the formula could not catch this: the formula is
+// correct arithmetic about a value the row never actually used. Confirmed
+// against the running object instead, not the formula: a standalone build
+// of engine/fx/flux.{h,cpp} against this exact sequence prints
+// clock_hz()=0.000000 for an un-engaged probe and clock_hz()=8192.000000,
+// stable across repeated process() calls, once probe.set_on(true, true) is
+// called first -- see setup_flux_lines_2ch below and its assert.
+//
 // clock_hz and the stage count come from a throwaway probe Flux rather than
 // being hard-coded, so this row cannot silently drift from what
 // fx_flux_sdram (and setup_flux_rate/setup_stages above) actually run.
 // fx_flux_sdram (bench/workloads_system.cpp's setup_fx(SEL_FLUX)) never
 // calls set_stages or set_flux_rate away from Flux::init's boot defaults --
 // bpm 120, _rate_idx 3 ("1/4"), kBootStagesNorm 0.8 -> 512*32^0.8 == 8192
-// stages (flux.cpp) -- so a freshly-init'd probe, left untouched, lands on
-// exactly those numbers: clock 8192 Hz (the rate-3 row of the Sweep A
-// ladder table above already derives this) and 8192 stages. Neither
-// set_bpm(120) nor set_flux_rate(3) needs to be called on the probe: those
-// are already init()'s defaults.
+// stages (flux.cpp) -- and, like fx_flux_sdram (via PartFx::set_fx_on),
+// this row's probe is explicitly engaged (set_on(true, true) -- see
+// setup_flux_lines_2ch). Left at those untouched defaults plus engaged, the
+// probe lands on exactly those numbers: clock 8192 Hz (the rate-3 row of
+// the Sweep A ladder table above already derives this arithmetically, and
+// the standalone run above confirms it from the object) and 8192 stages.
+// Neither set_bpm(120) nor set_flux_rate(3) needs to be called on the
+// probe: those are already init()'s defaults.
 //
 // clock_hz() (engine/fx/flux.h -- pre-existing, already used throughout
 // tests/test_flux.cpp) only reads back _clock_hz, which Flux computes once
 // per process() call (flux.cpp, after the delay-time/stage slews) from
 // _dt_current and the stage count -- both of which init() already snaps
 // straight to their targets (immediate = true), with no slew left to run.
-// So a single process() call is enough for the probe's clock to be
+// So a single process() call is enough for the ENGAGED probe's clock to be
 // meaningful; no settling loop is needed on the probe itself.
 //
 // BbdEcho::Init leaves cells_ at its full capacity (Flux::kMaxSamples ==
@@ -450,15 +474,35 @@ void setup_flux_lines_2ch()
     // PART_A's (m.echo[0][*]) below, so this one throwaway call cannot
     // disturb the memory the measured lines settle into.
     probe.init(kSampleRate, m.echo[1][0], m.echo[1][1]);
+    // MUST engage the probe. Flux::process (flux.cpp) returns before line 320
+    // (where _clock_hz is assigned) at TWO guards: `if (!_buf_ok) return;`
+    // and `if (_sw.is_idle()) return;`. init() never turns the soft switch
+    // on, so an un-engaged probe's clock_hz() reads back its declared
+    // initialiser, 0.f, forever -- exactly the bug a hardware run caught
+    // here: this row's checksum came back byte-identical to empty_callback's
+    // because BbdEcho::Process(x, 0.f) sets ticks_ = 0 and the lines never
+    // advanced. set_on's immediate=true snaps the switch straight to
+    // Stage::hold (fx_util.h), so is_idle() is already false the moment the
+    // very first process() call below runs -- a switch merely fading in
+    // (immediate=false) is still idle and would reproduce the same bug.
+    probe.set_on(true, /*immediate=*/true);
     {
         // One call is enough: init() already snapped the delay-time and
         // stage slews to their targets, so _clock_hz is fully settled the
-        // instant process() computes it once.
+        // instant process() reaches its assignment.
         float pl = 0.f, pr = 0.f;
         probe.process(pl, pr);
     }
-    const float hz     = probe.clock_hz();
-    const int   stages = probe.stages();
+    const float hz = probe.clock_hz();
+    // Guard, not a formality: this exact silent-zero failure already reached
+    // hardware once (checksum ea306fb5, identical to empty_callback's). If
+    // clock_hz() is ever 0 again -- a future Flux::init/process change, a
+    // reordered call above, anything -- this row must fail loudly rather
+    // than quietly measure two stopped BBD lines a second time.
+    assert(hz > 0.f && "sweep_flux_lines_2ch: probe Flux produced a stopped "
+                        "(0 Hz) clock -- Flux::process returned before "
+                        "assigning _clock_hz; is the probe engaged?");
+    const int stages = probe.stages();
 
     auto& group = g_sweep_arena.emplace<SweepLineGroup>();
     group.clock_hz = hz;
@@ -488,6 +532,13 @@ float proc_flux_lines_2ch()
         acc += group.l.Process(in[i], group.clock_hz);
         acc += group.r.Process(in[i] * 0.9f, group.clock_hz);
     }
+    // Fold the achieved clock into the checksum, once per call (not per
+    // sample), exactly as proc_sweep_fx folds stages_achieved above: belt
+    // and suspenders against the assert in setup_flux_lines_2ch. If
+    // clock_hz ever silently reads back 0 again, the per-row checksum the
+    // bench compares across hardware runs moves too, instead of quietly
+    // reporting a stopped line as if it were running.
+    acc += group.clock_hz;
     return acc;
 }
 
