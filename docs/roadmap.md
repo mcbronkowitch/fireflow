@@ -37,14 +37,18 @@ is actually built today, and what is still design-only.
   saving does not confirm the earlier instruction-cache hypothesis.
   **Update, 2026-07-29 (instrument ablated; the gap is not where it was
   assumed to be):** the unattributed fifth of the budget has now been measured
-  directly rather than inferred by subtraction. It is **not contention and
-  barely glue** — 64 % of it sits *inside* the two decks, whose block rows are
-  priced at operating points the gate does not use. There is **no
-  instrument-level cut to be found**; the overshoot must come from inside the
-  blocks. The same round also proved that code layout alone moves the gate by
-  ~2 points at an unchanged checksum, which restates the target: **the
-  overshoot is 10.77 points, not 12.88.** Branch `perf/instrument-ablation`,
-  not merged. See "Instrument-level ablation" below.
+  directly rather than inferred by subtraction. It is **not contention between
+  the decks, and barely glue** — 64 % of it sits *inside* the two decks, which
+  the block rows were supposed to have priced. Part of that is rows set to
+  operating points the gate does not use (FLUX, ~4.6 points); the rest is
+  `Part`-internal work no row prices at all, and contention *within* a deck is
+  still an open candidate for some of it — the round measured contention only
+  between decks. There is **no instrument-level cut to be found**; the
+  overshoot must come from inside the blocks. The same round also proved that
+  code layout alone moves the gate by ~2 points at an unchanged checksum,
+  which restates the target: **the overshoot is 10.77 points, not 12.88.**
+  Branch `perf/instrument-ablation`, not merged. See "Instrument-level
+  ablation" below.
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
@@ -1241,41 +1245,64 @@ all three):
 `2 × 46.24 − 0.54 + 4.04 + 14.79 = 110.77`, the gate exactly.
 
 **The answer, and it is a null result the spec committed in advance to writing
-plainly.** The gap is neither of the two things the round offered. Contention
-is **zero** — two decks together cost *less* than two decks priced separately,
-so the cache/SDRAM-pressure hypothesis is refuted for the deck pair. Glue is
+plainly.** The gap is mostly neither of the two things the round offered.
+**Contention between the decks is nil** — two decks together cost *less* than
+two decks priced separately, so the cache/SDRAM-pressure hypothesis is
+refuted **for the deck pair**, at a bound of a few tenths of a point either
+way. (The ladder does not test contention *inside* a deck; see below.) Glue is
 only **4.04 points** in total, covering `Center::update`, the CHOKE framing,
 MORPH, the dry taps, the cross-deck rhythm exchange and the limiter together.
 Of the 24.14 unaccounted points in this build, **15.47 (64 %) sit inside the
-two decks** — one bare `Part` configured as the gate configures a deck costs
-46.24 points against 38.51 for its own block rows — **5.17 (21 %) is the
-reverb costing more in situ than `oliverb_solo_sram` prices it**, and 4.04
-(17 %) is the glue. **There is no instrument-level cut to be found.** About a
-quarter of the in-deck excess is FLUX being priced at STAGES 8192 / rate 3
-while the gate runs it at 16384 with the clock on its ceiling; the rest is
-`Part`-internal work (`process_in`, the engine fade, voice-to-FX routing,
-per-deck modulation at the gate's settings) that no row prices.
+two decks** — 7.73 per deck; one bare `Part` configured as the gate configures
+a deck costs 46.24 points against 38.51 for its own block rows — **5.17 (21 %)
+is the reverb costing more in situ than `oliverb_solo_sram` prices it**, and
+4.04 (17 %) is the glue. **There is no instrument-level cut to be found.**
+
+**More than one mechanism owns that 15.47, and the next round should not
+assume all of it is deletable.** About 30 % of it (~4.6 points) is FLUX being
+*priced wrong* — STAGES 8192 / rate 3 in the block row while the gate runs
+16384 with the clock on its ceiling — the same class as per-deck modulation
+being priced at rate 0.5 / density 0.7 against the gate's 0.8 / 1.0. The rest
+is `Part`-internal work no row prices *at all* (`process_in`, the engine fade,
+voice-to-FX routing are the suspects, none of them sized this round) — plus,
+unseparated by anything measured here, **contention between the blocks inside
+one deck**: every block row was measured in isolation, and running those
+blocks together in one `Part` shares a D-cache and an SDRAM bus. That part of
+the original hypothesis is still open.
 
 **The finer round is not worth running.** Its whole subject — reverb
-smoothers, MORPH, `derive_intervals` — divides 4.04 points four ways into
-sub-point quantities that this bench cannot resolve across builds. The two
-bare decks are 92.48 points, **83.5 % of the gate**; only FLUX (~13/deck) and
-the eight voices (35.80) are large enough to close a 10-point gap. The one
-cheap follow-up worth having is a single row, not a ladder: the reverb alone
-at the instrument's SIZE 1.0, to split the 5.17 into operating point versus
-smoothers-and-mixing.
+smoothers, MORPH, `derive_intervals` — divides 4.04 points four ways. Those
+sub-point quantities *are* resolvable within a single run (this round's
+within-run spreads were 0.10–0.32 points); they are simply too small to repay
+a hardware round, since deleting the entire glue bucket would still leave 6.73
+of the 10.77 points outstanding, and `process_in` is not in the glue at all.
+The two bare decks are 92.48 points, **83.5 % of the gate**; only FLUX
+(~13/deck) and the eight voices (35.80) are large enough to close a 10-point
+gap. The one cheap follow-up worth having is a single row, not a ladder: the
+reverb alone at the instrument's **SIZE 1.0 and TONE 0.5** (the isolated row
+differs from the instrument on both), to split the 5.17 into operating point
+versus smoothers-and-mixing.
 
 **A finding beyond this round: code layout moves the gate by ~2 points.**
 `instrument_worst_bbd` returned **110.78 / 110.77** here against **112.79 /
 112.88** in `docs/bench/2026-07-29-1ba3f18-sweep.csv`, at the **identical
-checksum `483e8e82`** — same computation, ~2 points cheaper, with no engine
-change, only a new bench translation unit. This is the effect the mono round
-saw on `fx_grit` and could not prove; the unchanged checksum proves it. Other
-rows moved too, at unchanged checksums: `instrument_init` +4.27 %, `fx_grit`
-+2.24 %, `oliverb_solo_sram` +1.73 %, several others −1 to −1.8 %. **Any
-cross-build claim in this project smaller than ~2 points on the gate or ~2 %
-on a small row has measured its own layout.** It also restates the target: the
-overshoot is **10.77 points, not the 12.88 the mono round recorded**.
+checksum `483e8e82`** — same computation, ~2 `pct_max` points cheaper, with no
+change to any instruction-generating engine code (the sole `engine/` edit in
+the interval is one comment line in `bbd.h`). The perturbation was a **profile
+family swap**, not a one-file addition: the baseline image carried
+`bench/workloads_sweep.cpp` (~900 lines, fifteen rows) and this one carries
+`bench/workloads_instr.cpp` (three rows) instead. This is the effect the mono
+round saw on `fx_grit` and could not prove; the unchanged checksum proves it.
+Other rows moved too, at unchanged checksums: `instrument_init` +4.27 %,
+`fx_grit` +2.24 %, `oliverb_solo_sram` +1.73 %, several others −1 to −1.8 %
+(those are `avg_cyc` changes, not `pct_max` points). **Any cross-build claim
+in this project smaller than ~2 points on the gate or ~2 % on a small row, at
+a comparable build change, has measured its own layout** — a bound calibrated
+across a family swap, so not a proven floor for the smallest possible edit,
+but proof that the perturbation is real and unbounded by anything measured.
+Differences taken *within* one run are not subject to it. It also restates the
+target: the overshoot is **10.77 points, not the 12.88 the mono round
+recorded**.
 
 **What remains.** The **10.77-point gap** to 100 %, which must now be found
 inside FLUX and the voices. The owner's **panning decision** from the mono

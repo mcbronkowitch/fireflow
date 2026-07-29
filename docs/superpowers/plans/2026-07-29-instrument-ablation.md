@@ -252,8 +252,11 @@ In `BENCH_PROTOCOL_ROWS_BY_FAMILY`, after the `sweep` entry:
     ),
 ```
 
-Task 2 extends this tuple. The order here must match the order in
-`kInstrWorkloads[]` exactly.
+Task 2 extends this tuple. The names here must match `kInstrWorkloads[]`
+exactly; the order does not have to. `run.py` folds this table into a
+frozenset of `(family, name)` pairs (`protocol_rowset`, `bench/run.py:281-286`,
+and the gate-supply check at `:689-693`), so what is enforced is the set, not
+the sequence.
 
 - [ ] **Step 6: Add the profile in `bench/profiles.py`**
 

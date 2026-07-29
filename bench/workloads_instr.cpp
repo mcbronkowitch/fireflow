@@ -12,8 +12,9 @@ namespace bench {
 namespace {
 
 // Mirrors setup_inst_worst_bbd's own settle (bench/workloads_system.cpp):
-// fill both BBD lines and let every envelope and slew arrive before the
-// runner's measured window opens.
+// fill the BBD line of every Part the row actually runs -- two for
+// instr_part_2 and instr_noverb, one for instr_part_1 -- and let every
+// envelope and slew arrive before the runner's measured window opens.
 constexpr int kInstrSettleBlocks = 200;
 
 // The full instrument at the gate row's configuration, with the reverb
@@ -34,16 +35,32 @@ struct InstrNoVerbGroup {
     int   counter = 0;
 };
 
-// Two bare Parts, driven directly. The point of the row is that NOTHING
-// wraps them -- no Instrument, so no Center, no CHOKE framing, no MORPH, no
-// dry taps, no cross-deck rhythm exchange, no limiter. Whatever
-// instr_noverb costs above this row is exactly that glue.
+// Bare Parts, driven directly. The point is that NOTHING wraps them -- no
+// Instrument, so no Center, no CHOKE framing, no MORPH, no dry taps, no
+// cross-deck rhythm exchange, no limiter.
+//
+// Both bare rows share this struct, and they do not use it identically:
+// instr_part_2 initialises and runs `a` and `b`, instr_part_1 initialises and
+// runs `a` only (`b` stays default-constructed and is never touched, so its
+// clock_b/stages_b remain 0). The glue subtraction is therefore
+// instr_noverb - instr_part_2 specifically; instr_part_1 is the single-deck
+// rung, and instr_part_2 - 2*instr_part_1 estimates inter-deck contention,
+// not glue.
 struct InstrPartGroup {
     Part  a, b;
     int   counter = 0;
-    // Read back after the settle and folded into the checksum: a row that
-    // silently configured its Parts differently from the Instrument would
-    // otherwise produce a plausible number that means nothing.
+    // Read back after the settle for the asserts at the end of
+    // setup_instr_part_common, and folded into the returned value so they are
+    // not dead stores.
+    //
+    // The fold is NOT itself a detector, and must not be read as one: nothing
+    // compares these against a stored expectation (run.py only compares run
+    // against run within one measurement), and they are constants once setup
+    // has finished, so a row that silently configured its Parts differently
+    // from the Instrument would just return a different-but-perfectly-stable
+    // checksum and pass. What actually catches a mis-mirrored row is the
+    // assert pair below, which is live: the bench builds -O2 with NDEBUG
+    // undefined.
     float clock_a = 0.f, clock_b = 0.f;
     int   stages_a = 0, stages_b = 0;
 };
@@ -104,7 +121,14 @@ void setup_instr_noverb()
     group.counter = 0;
 
     // Mirrors setup_inst_worst + setup_inst_worst_bbd exactly, minus the
-    // reverb calls, which have nothing to act on here.
+    // reverb calls. Omitting them is correct and costs nothing, but not for
+    // the obvious reason: set_reverb_size/decay/tone/diffusion/smear/mod are
+    // each `if (_reverb)`-guarded (engine/instrument.h) and genuinely have
+    // nothing to act on, while set_reverb_mix is NOT guarded
+    // (engine/instrument.cpp) -- it would still write _rev_dry_target and
+    // _rev_wet_target. Skipping it is still free and still faithful because
+    // those targets are only ever read inside Instrument::process's own
+    // `if (_reverb)` block, which never runs with a null reverb.
     for (int p = 0; p < PART_COUNT; ++p) {
         inst.set_color(p, 1.f);
         inst.set_density(p, 1.f);
