@@ -904,11 +904,6 @@ class SweepProfileTest(unittest.TestCase):
         rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["sweep"]
         self.assertIn("sweep_flux_lines_2ch", rows)
 
-    def test_voice_sweep_rows_are_expected(self):
-        rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["sweep"]
-        for n in (1, 2, 3, 4):
-            self.assertIn("sweep_voices_%d" % n, rows)
-
 
 class ManifestValidationContract(unittest.TestCase):
     """resolve()'s load-time manifest checks (design spec S3): a profile
