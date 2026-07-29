@@ -1,0 +1,133 @@
+# Bench evidence 2026-07-29 — `cd6dafd`
+
+## Gate ledger
+
+Profile `sweep` — families: `system`, `sweep`
+
+Applied and passed:
+
+- row set matches the profile exactly (no missing, no extra rows)
+- no duplicate rows
+- QSPI digest and device fingerprint identical across runs
+- per-row checksums identical across runs
+- at least two runs (`--repeat`, minimum 2)
+- `wave_acceptance`: wave_2x4 no slower than synth_2x4, below the 960000-cycle block budget
+
+Not applicable to this profile:
+
+- none
+
+Measured on a Daisy Seed (STM32H750). 480000000 Hz core clock, block size 96, dcache+icache, `-ffast-math -funroll-loops`. Block budget 960000 cycles.
+
+All 2 runs report QSPI payload SHA-256 `ac234ac7f7540ed5cd0e8b8496b84fca8084a3b2c05cc513aa4dad8ed811fc27` and device fingerprint `1157cbd949e6c4100daa57d61d85e016d57e733f949f39e9a967add1e5e22dc8` (SHA-256 of the MCU UID).
+
+## WAVE performance gate — PASS
+
+All 2 runs satisfy the matched WAVE/SYNTH acceptance gates.
+
+- **Run 1 — PASS:** `wave_2x4` average 307351 <= `synth_2x4` average 338845; maximum 310002 <= 343374; maximum 310002 < 960000.
+- **Run 2 — PASS:** `wave_2x4` average 307386 <= `synth_2x4` average 338845; maximum 310003 <= 343388; maximum 310003 < 960000.
+
+## Verdict
+
+**2x4 budget — go/no-go.** The full instrument at its worst case (8 voices, COLOR 4-note on both parts, all FX on, high diffusion, echo at max) costs **120 % of the block budget offline**, and **120 % measured inside a real audio callback**. The anchored figure is the one that decides. **Conclusion: the 2x4 architecture does not fit.** The anchored figure is over 100 % of the block budget, so the design has to shed voices or FX.
+
+**Cost per candidate, relative to one real spotymod voice.**
+
+- n/a (family `voice` not in this profile)
+
+**SRAM vs SDRAM.** The grain-read proxy (8 scattered interpolated stereo reads per sample, identical window in both regions) costs **n/a (row missing)** in SDRAM against SRAM. That is a bare access pattern, written before the sampler existed to stand in for it; the `sampler_win_*` pair below is the same contrast with the real engine around it. The Oliverb pair reads **n/a (row missing)**, and the shortened echo-style streaming walk **n/a (row missing)**.
+
+*Figures in this section are quoted to whole percentage points and two significant figures for ratios — honest to what this bench can actually resolve (intra-run jitter of roughly 1700 cycles on a 1.5M-cycle workload, and a cross-build layout shift that moved a 29K-cycle workload by about 7%). The tables below retain full measured precision.*
+
+## Run 1
+
+QSPI payload SHA-256 `ac234ac7f7540ed5cd0e8b8496b84fca8084a3b2c05cc513aa4dad8ed811fc27`; device fingerprint `1157cbd949e6c4100daa57d61d85e016d57e733f949f39e9a967add1e5e22dc8`.
+
+### Offline table
+
+| family | workload | avg cyc | max cyc | avg % | max % | checksum |
+|---|---|---:|---:|---:|---:|---|
+| system | `empty_callback` | 2 | 12 | 0.00 | 0.00 | `ea306fb5` |
+| system | `mod_plane_2x_center` | 74714 | 77027 | 7.78 | 8.02 | `61d42d20` |
+| system | `synth_1_voice` | 53563 | 54443 | 5.57 | 5.67 | `1816acc1` |
+| system | `synth_2_voices` | 93594 | 95220 | 9.74 | 9.91 | `4dc805b7` |
+| system | `synth_4_voices` | 169043 | 171170 | 17.60 | 17.83 | `2292dae2` |
+| system | `synth_2x4` | 338845 | 343374 | 35.29 | 35.76 | `0d15b5eb` |
+| system | `wave_2x4` | 307351 | 310002 | 32.01 | 32.29 | `6f28f4ea` |
+| system | `fx_none` | 24509 | 24546 | 2.55 | 2.55 | `b538ce01` |
+| system | `fx_grit` | 62445 | 62717 | 6.50 | 6.53 | `74f9b9f5` |
+| system | `fx_flux_sdram` | 185075 | 186207 | 19.27 | 19.39 | `962535c1` |
+| system | `fx_comp` | 31420 | 31544 | 3.27 | 3.28 | `47a4392b` |
+| system | `oliverb_solo_sram` | 90030 | 90935 | 9.37 | 9.47 | `f09fa14e` |
+| system | `instrument_init` | 621037 | 728834 | 64.69 | 75.92 | `2b52554a` |
+| system | `instrument_worst` | 1121062 | 1153042 | 116.77 | 120.10 | `e8cb281f` |
+| system | `instrument_worst_bbd` | 1230021 | 1275686 | 128.12 | 132.88 | `607bb1af` |
+| sweep | `sweep_flux_rate_0` | 180643 | 181780 | 18.81 | 18.93 | `0671aeeb` |
+| sweep | `sweep_flux_rate_3` | 185931 | 186866 | 19.36 | 19.46 | `f04d97b9` |
+| sweep | `sweep_flux_rate_6` | 196958 | 198324 | 20.51 | 20.65 | `5d31d4f1` |
+| sweep | `sweep_flux_rate_8` | 207422 | 209257 | 21.60 | 21.79 | `f7f487be` |
+| sweep | `sweep_flux_rate_11` | 216276 | 217910 | 22.52 | 22.69 | `217030e1` |
+| sweep | `sweep_stages_512` | 176059 | 177145 | 18.33 | 18.45 | `f7188542` |
+| sweep | `sweep_stages_2048` | 177862 | 178835 | 18.52 | 18.62 | `a4c5a8be` |
+| sweep | `sweep_stages_8192` | 185925 | 186944 | 19.36 | 19.47 | `6b75d87a` |
+| sweep | `sweep_stages_16384` | 196927 | 198144 | 20.51 | 20.64 | `18faea57` |
+| sweep | `sweep_grit_bare` | 14697 | 14743 | 1.53 | 1.53 | `f57bd5c9` |
+| sweep | `sweep_grit_no_bbd_mem` | 47256 | 47411 | 4.92 | 4.93 | `9ddc20e9` |
+| sweep | `sweep_flux_lines_2ch` | 87430 | 88107 | 9.10 | 9.17 | `45b6f7aa` |
+| sweep | `sweep_room_lo` | 1122726 | 1154370 | 116.95 | 120.24 | `d4b02ae8` |
+| sweep | `sweep_room_mid` | 1123334 | 1154054 | 117.01 | 120.21 | `a308f4b3` |
+| sweep | `sweep_room_hi` | 1123461 | 1158868 | 117.02 | 120.71 | `3b05b839` |
+
+### Anchor mode (real audio callback, CpuLoadMeter)
+
+| workload | avg % | max % |
+|---|---:|---:|
+| `oliverb_solo_sram` | 9.43 | 9.65 |
+| `instrument_worst` | 117.03 | 120.13 |
+
+## Run 2
+
+QSPI payload SHA-256 `ac234ac7f7540ed5cd0e8b8496b84fca8084a3b2c05cc513aa4dad8ed811fc27`; device fingerprint `1157cbd949e6c4100daa57d61d85e016d57e733f949f39e9a967add1e5e22dc8`.
+
+### Offline table
+
+| family | workload | avg cyc | max cyc | avg % | max % | checksum |
+|---|---|---:|---:|---:|---:|---|
+| system | `empty_callback` | 2 | 12 | 0.00 | 0.00 | `ea306fb5` |
+| system | `mod_plane_2x_center` | 75043 | 77445 | 7.81 | 8.06 | `61d42d20` |
+| system | `synth_1_voice` | 53566 | 54446 | 5.57 | 5.67 | `1816acc1` |
+| system | `synth_2_voices` | 93591 | 95206 | 9.74 | 9.91 | `4dc805b7` |
+| system | `synth_4_voices` | 169045 | 171179 | 17.60 | 17.83 | `2292dae2` |
+| system | `synth_2x4` | 338845 | 343388 | 35.29 | 35.76 | `0d15b5eb` |
+| system | `wave_2x4` | 307386 | 310003 | 32.01 | 32.29 | `6f28f4ea` |
+| system | `fx_none` | 24509 | 24546 | 2.55 | 2.55 | `b538ce01` |
+| system | `fx_grit` | 62473 | 62746 | 6.50 | 6.53 | `74f9b9f5` |
+| system | `fx_flux_sdram` | 185098 | 186454 | 19.28 | 19.42 | `962535c1` |
+| system | `fx_comp` | 31416 | 31530 | 3.27 | 3.28 | `47a4392b` |
+| system | `oliverb_solo_sram` | 90036 | 91009 | 9.37 | 9.48 | `f09fa14e` |
+| system | `instrument_init` | 621034 | 728589 | 64.69 | 75.89 | `2b52554a` |
+| system | `instrument_worst` | 1121054 | 1153374 | 116.77 | 120.14 | `e8cb281f` |
+| system | `instrument_worst_bbd` | 1229934 | 1274788 | 128.11 | 132.79 | `607bb1af` |
+| sweep | `sweep_flux_rate_0` | 180701 | 181895 | 18.82 | 18.94 | `0671aeeb` |
+| sweep | `sweep_flux_rate_3` | 185941 | 187072 | 19.36 | 19.48 | `f04d97b9` |
+| sweep | `sweep_flux_rate_6` | 196946 | 198600 | 20.51 | 20.68 | `5d31d4f1` |
+| sweep | `sweep_flux_rate_8` | 207455 | 209094 | 21.60 | 21.78 | `f7f487be` |
+| sweep | `sweep_flux_rate_11` | 216262 | 217626 | 22.52 | 22.66 | `217030e1` |
+| sweep | `sweep_stages_512` | 176100 | 177136 | 18.34 | 18.45 | `f7188542` |
+| sweep | `sweep_stages_2048` | 177929 | 178920 | 18.53 | 18.63 | `a4c5a8be` |
+| sweep | `sweep_stages_8192` | 185925 | 187082 | 19.36 | 19.48 | `6b75d87a` |
+| sweep | `sweep_stages_16384` | 196922 | 198561 | 20.51 | 20.68 | `18faea57` |
+| sweep | `sweep_grit_bare` | 14689 | 14746 | 1.53 | 1.53 | `f57bd5c9` |
+| sweep | `sweep_grit_no_bbd_mem` | 47250 | 47389 | 4.92 | 4.93 | `9ddc20e9` |
+| sweep | `sweep_flux_lines_2ch` | 87433 | 87952 | 9.10 | 9.16 | `45b6f7aa` |
+| sweep | `sweep_room_lo` | 1122731 | 1153778 | 116.95 | 120.18 | `d4b02ae8` |
+| sweep | `sweep_room_mid` | 1123302 | 1153684 | 117.01 | 120.17 | `a308f4b3` |
+| sweep | `sweep_room_hi` | 1123540 | 1159868 | 117.03 | 120.81 | `3b05b839` |
+
+### Anchor mode (real audio callback, CpuLoadMeter)
+
+| workload | avg % | max % |
+|---|---:|---:|
+| `oliverb_solo_sram` | 9.42 | 9.66 |
+| `instrument_worst` | 117.03 | 120.16 |
