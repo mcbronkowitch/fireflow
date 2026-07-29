@@ -110,9 +110,30 @@ void Flux::recompute_time(bool immediate) {
     if (immediate) _dt_current = _dt_target;
 }
 
+// PartFx pushes this once per SAMPLE, unguarded (part_fx.cpp), so the guard
+// below is what keeps apply_feedback out of the audio loop while the knob
+// stands still. It fires reliably because the value arrives through PartFx's
+// OnePole, which SNAPS: onepole.h assigns _value = target and clears
+// _smoothing once within 0.0005, so at rest the identical float arrives
+// sample after sample. That is not true of every slew in this file -- _gate
+// and _stage_current ride raw fonepole recurrences that stall short of their
+// targets in float32, which is why both carry explicit snaps of their own.
+//
+// The comparison is on the CLAMPED value, matching what _fb_norm stores, so
+// two pushes that clamp to the same value are correctly one change.
+//
+// _fb_norm's initial 0.45 is a REACHABLE knob position, so unlike
+// _drive_norm and _stages_norm this guard uses no unreachable sentinel. That
+// is deliberate and it is the same reasoning set_link's -- see the long
+// comment in init() on why _link resets to 0 rather than to -1: init() itself
+// calls set_feedback(0.45f), so by the time any host pushes, the state
+// already matches. Swallowing a repeated push of 0.45 is a no-op on
+// already-correct state, not a swallowed change.
 void Flux::set_feedback(float norm) {
     if (!_buf_ok) return;
-    _fb_norm = clampf(norm, 0.f, 1.f);
+    const float n = clampf(norm, 0.f, 1.f);
+    if (n == _fb_norm) return;
+    _fb_norm = n;
     apply_feedback();
 }
 
