@@ -183,7 +183,7 @@ void setup_fx(int sel)
 {
     auto& group = g_system_arena.emplace<FxGroup>();
     const FxMem& m = fx_mem();
-    group.fx.init(kSampleRate, m.echo[0][0], m.echo[0][1]);
+    group.fx.init(kSampleRate, m.echo[0]);
     // immediate = true: the soft switches would otherwise fade in over the
     // warm-up and the measured window would see a partly-engaged chain.
     group.fx.set_fx_on(FxBlock::Grit, sel == SEL_GRIT, true);

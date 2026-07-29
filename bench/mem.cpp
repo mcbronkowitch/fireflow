@@ -31,9 +31,10 @@ alignas(alignof(spky::AmbientReverb))
     unsigned char DSY_SDRAM_BSS g_rev_sdram_storage[sizeof(spky::AmbientReverb)];
 spky::AmbientReverb* g_rev_sdram_ptr = nullptr;
 
-// FLUX echo storage: 4 x 240 000 floats = 3.75 MB. SDRAM in the shipping
-// firmware too -- 937 KB per channel does not fit anywhere else.
-float DSY_SDRAM_BSS g_echo[2][2][spky::Flux::kMaxSamples];
+// FLUX echo storage: one mono line per part, 2 x 8192 floats = 64 KB (was
+// 128 KB before the mono collapse -- see engine/fx/flux.h's kMaxSamples
+// comment). SDRAM in the shipping firmware too.
+float DSY_SDRAM_BSS g_echo[2][spky::Flux::kMaxSamples];
 
 float g_input[kBlock];
 bool  g_input_ready = false;
@@ -60,8 +61,7 @@ const spky::FxMem& fx_mem()
 {
     if (!g_mem_ready) {
         for (int p = 0; p < 2; ++p) {
-            g_mem.echo[p][0] = g_echo[p][0];
-            g_mem.echo[p][1] = g_echo[p][1];
+            g_mem.echo[p] = g_echo[p];
         }
         g_mem.reverb = &g_rev_sram;
         // Injected for every Instrument the bench builds, not just the

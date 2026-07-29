@@ -194,12 +194,13 @@ struct SweepGritGroup {
 // explicit SetStages(stages) calls below, using the probe's own achieved
 // stage count, remove it.
 //
-// Two SEPARATE echo buffer pairs: the probe takes fx_mem()'s PART_B pair
-// (m.echo[1][*]) for its one throwaway process() call, and the two measured
-// bare lines take PART_A's pair (m.echo[0][*], the same pair
-// setup_flux_rate/setup_stages above use for their PartFx) -- so the probe
-// cannot disturb the memory the measured lines settle into and then read
-// from.
+// Two echo buffers, one per part (post-mono-collapse each part owns exactly
+// one, not a stereo pair): the probe takes PART_B's (m.echo[1]) for its one
+// throwaway process() call, group.l takes PART_A's (m.echo[0], the same
+// buffer setup_flux_rate/setup_stages above use for their PartFx), and
+// group.r reuses PART_B's after the probe is done with it -- see the comment
+// on probe.init below for why that reuse cannot leak into the measured
+// window.
 //
 // Settle: _rate_idx 3 at bpm 120 is the SAME division Sweep B holds fixed
 // (see the comment on setup_stages above), for the same reason -- the clock
@@ -241,7 +242,7 @@ void setup_flux_rate(int rate_index)
 {
     auto& group = g_sweep_arena.emplace<SweepFxGroup>();
     const FxMem& m = fx_mem();
-    group.fx.init(kSampleRate, m.echo[0][0], m.echo[0][1]);
+    group.fx.init(kSampleRate, m.echo[0]);
     group.fx.set_fx_on(FxBlock::Grit, false, true);
     group.fx.set_fx_on(FxBlock::Flux, true,  true);
     group.fx.set_comp(0.f);
@@ -346,7 +347,7 @@ void setup_stages(float norm)
 {
     auto& group = g_sweep_arena.emplace<SweepFxGroup>();
     const FxMem& m = fx_mem();
-    group.fx.init(kSampleRate, m.echo[0][0], m.echo[0][1]);
+    group.fx.init(kSampleRate, m.echo[0]);
     group.fx.set_fx_on(FxBlock::Grit, false, true);
     group.fx.set_fx_on(FxBlock::Flux, true,  true);
     group.fx.set_comp(0.f);
@@ -438,10 +439,9 @@ float proc_grit_bare()
 
 // sweep_grit_no_bbd_mem: fx_grit's exact shell (setup_fx(SEL_GRIT), mirrored
 // verbatim below) with one change -- PartFx::init receives null echo memory
-// instead of fx_mem()'s buffers. Flux::init (engine/fx/flux.cpp:11-17) sets
-// _buf_ok = (buf_l && buf_r) and returns BEFORE calling _echo_l/_echo_r.Init
-// when either pointer is null -- no BbdLine::Init runs, no dereference, no
-// UB.
+// instead of fx_mem()'s buffer. Flux::init (engine/fx/flux.cpp:11-17) sets
+// _buf_ok = (buf != nullptr) and returns BEFORE calling _echo.Init when the
+// pointer is null -- no BbdLine::Init runs, no dereference, no UB.
 //
 // IMPORTANT: this does NOT isolate memory residency alone. _buf_ok also
 // gates real per-sample arithmetic that fx_grit pays for and this row does
@@ -477,7 +477,7 @@ float proc_grit_bare()
 void setup_grit_no_bbd_mem()
 {
     auto& group = g_sweep_arena.emplace<SweepFxGroup>();
-    group.fx.init(kSampleRate, nullptr, nullptr);
+    group.fx.init(kSampleRate, nullptr);
     group.fx.set_fx_on(FxBlock::Grit, true, true);
     group.fx.set_fx_on(FxBlock::Flux, false, true);
     group.fx.set_comp(0.f);
@@ -513,10 +513,13 @@ void setup_flux_lines_2ch()
     // fx_flux_sdram measures -- see the derivation above SweepLineGroup.
     static Flux probe;
     const FxMem& m = fx_mem();
-    // PART_B's buffers (m.echo[1][*]) -- a genuinely separate pair from
-    // PART_A's (m.echo[0][*]) below, so this one throwaway call cannot
-    // disturb the memory the measured lines settle into.
-    probe.init(kSampleRate, m.echo[1][0], m.echo[1][1]);
+    // PART_B's buffer (m.echo[1]) for the throwaway probe. Post-mono-collapse
+    // each part owns exactly one buffer, so group.r below reuses this same
+    // buffer for the measured line -- safe because it happens strictly after
+    // the probe's one process() call, and BbdEcho::Init (via BbdLine::Init's
+    // Reset()) memsets the buffer before the measured line ever reads it, so
+    // nothing the probe wrote survives into the measured window.
+    probe.init(kSampleRate, m.echo[1]);
     // MUST engage the probe. Flux::process (flux.cpp) returns before line 320
     // (where _clock_hz is assigned) at TWO guards: `if (!_buf_ok) return;`
     // and `if (_sw.is_idle()) return;`. init() never turns the soft switch
@@ -549,8 +552,8 @@ void setup_flux_lines_2ch()
 
     auto& group = g_sweep_arena.emplace<SweepLineGroup>();
     group.clock_hz = hz;
-    group.l.Init(kSampleRate, m.echo[0][0], Flux::kMaxSamples);
-    group.r.Init(kSampleRate, m.echo[0][1], Flux::kMaxSamples);
+    group.l.Init(kSampleRate, m.echo[0], Flux::kMaxSamples);
+    group.r.Init(kSampleRate, m.echo[1], Flux::kMaxSamples);
     // Match the probe's stage count -- see the SweepLineGroup comment on why
     // leaving BbdEcho::Init's full-capacity default in place would confound
     // the subtraction this row exists to keep clean.
