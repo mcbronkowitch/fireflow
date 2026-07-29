@@ -236,3 +236,147 @@ The gate row stands at 125.24 %. Even a generous mono result leaves it above
 - Do not tune DRIVE, the compander, or `bbd_tuning` constants in this round
   (§4). If mono makes them wrong, that is a finding for the owner's ear, not
   a fix to slip in.
+
+## 10. Results
+
+**Evidence:** `docs/bench/2026-07-29-4d1e929-sweep.csv` (before, commit
+`4d1e929`) against `docs/bench/2026-07-29-1ba3f18-sweep.csv` (after, commit
+`1ba3f18`). All figures below are `pct_max` from **run 2** of each capture,
+verified by hand against the CSVs rather than carried over from the plan.
+`avg_cyc` agreed in direction on every row in the table — every row whose
+`pct_max` fell also has a falling `avg_cyc`, and the two rows whose `pct_max`
+rose (`fx_grit`, `sweep_grit_no_bbd_mem`) also rose in `avg_cyc` — so nothing
+below is an artifact of one column disagreeing with the other.
+
+### 10.1 Per-row table
+
+| row | before | after | Δ |
+|---|---:|---:|---:|
+| `instrument_worst_bbd` (the gate) | 125.24 | 112.88 | **−12.36** |
+| `instrument_worst` | 115.83 | 108.03 | −7.80 |
+| `fx_flux_sdram` (one deck, isolated) | 17.93 | 13.27 | −4.66 |
+| `fx_grit` | 5.16 | 5.48 | **+0.32** |
+| `sweep_flux_lines_2ch` | 9.17 | 9.17 | 0.00 |
+| `sweep_flux_rate_0` | 17.37 | 12.81 | −4.56 |
+| `sweep_flux_rate_3` | 18.00 | 13.13 | −4.87 |
+| `sweep_flux_rate_6` | 19.17 | 13.74 | −5.43 |
+| `sweep_flux_rate_8` | 20.38 | 14.33 | −6.05 |
+| `sweep_flux_rate_11` | 21.32 | 14.79 | −6.53 |
+| `sweep_stages_512` | 16.85 | 12.56 | −4.29 |
+| `sweep_stages_2048` | 17.05 | 12.67 | −4.38 |
+| `sweep_stages_8192` | 17.98 | 13.12 | −4.86 |
+| `sweep_stages_16384` | 19.13 | 13.75 | −5.38 |
+| `sweep_grit_bare` | 1.53 | 1.53 | 0.00 |
+| `sweep_grit_no_bbd_mem` | 4.61 | 4.91 | **+0.30** |
+| `sweep_room_lo` | 116.04 | 106.70 | −9.34 |
+| `sweep_room_mid` | 116.29 | 106.96 | −9.33 |
+| `sweep_room_hi` | 116.84 | 107.26 | −9.58 |
+
+Every figure the design carried into this task ahead of measurement checked
+out against the CSVs exactly as stated, with one figure worth a note rather
+than a correction: §8's "naive expectation" of **9.16** points is derived from
+`sweep_flux_lines_2ch`'s run-1 (before-round) reading of 9.16, halved and
+doubled back to itself; this task's run-2 reading of the same row is 9.17 in
+both the before and after capture. The two differ only in the bench's own
+±0.01 run-to-run rounding on this row and change nothing that follows — the
+naive expectation is 9.16–9.17 points either way.
+
+### 10.2 The gate
+
+`instrument_worst_bbd` moved from 125.24 % to **112.88 %** of the block
+budget — **12.36 points**, against a naive expectation of 9.16 (half of
+`sweep_flux_lines_2ch`'s 9.17, times two decks). Across both rounds of this
+program: **132.79 → 125.24 → 112.88**. **12.88 points remain** to reach
+100 %. That is an improvement, and it is not a pass. The instrument is still
+over budget by a comfortable margin, and this round does not close the gap by
+itself.
+
+### 10.3 Does the load factor generalise? No — and the evidence is deflationary.
+
+§8 asked directly whether the wrapper round's load-dependent saving would
+repeat for a structurally different kind of removal (bulk arithmetic and an
+SDRAM buffer, not a `libm` call). Per-deck savings implied by each row:
+isolated `fx_flux_sdram` **4.66**, `instrument_worst` **3.90** (half of 7.80),
+`instrument_worst_bbd` **6.18** (half of 12.36). That sequence — 4.66, then
+3.90, then 6.18 — is **not monotonic**: the middle figure sits *below* the
+isolated row, where the wrapper round's clean 1.49 / 2.16 / 3.78 rose at every
+step.
+
+The reason is in the sweep rows, and it is the primary explanation rather
+than a footnote: **this round's saving grows with the operating point, not
+with load.** `sweep_flux_rate_0` saves 4.56 points per line while
+`sweep_flux_rate_11` saves 6.53; `sweep_stages_512` saves 4.29 while
+`sweep_stages_16384` saves 5.38. A bigger, faster BBD line costs more to run,
+so removing one of its two copies saves more in absolute cycles — the entire
+rate ladder (4.56 → 4.87 → 5.43 → 6.05 → 6.53) and stage ladder
+(4.29 → 4.38 → 4.86 → 5.38) climb with their own knob, independent of
+anything else running. `instrument_worst_bbd` runs FLUX at its hottest
+reachable point (STAGES at 16384, clock at the 24 kHz ceiling), and its
+per-deck saving of 6.18 sits **inside** the 4.56–6.53 range the isolated sweep
+rows already show at that same operating point. No load multiplier is needed
+to explain the gate row at all — it is accounted for by "which point on the
+knob," not "how loaded is the machine."
+
+This **weakens the wrapper round's instruction-cache hypothesis as a general
+law**, and the two rounds legitimately differ for a stated reason: the
+wrapper round's own evidence found its per-deck saving **flat** across STAGES
+and RATE (§9 of the cost-curves spec — "STAGES is flat at a fixed clock,
+refuting a cache hypothesis"), which is exactly what let it rule the operating
+point out as a confound and attribute the load-scaling it did see to a cache
+effect. This round's per-deck saving is **not flat** across STAGES or RATE —
+it visibly climbs with both — so the same ruling-out step is not available
+here, and the honest reading is that operating-point sensitivity, not an
+icache mechanism, explains everything this round measured. The hypothesis
+stays confined to the wrapper round's `std::pow` call site; it does not
+license predicting the size of the next removal.
+
+### 10.4 Two rows got more expensive
+
+`fx_grit` rose from 5.16 to **5.48** (+0.32) and `sweep_grit_no_bbd_mem` rose
+from 4.61 to **4.91** (+0.30) — both rows that run no FLUX line at all. That
+is roughly 6 % on a 5-point row (0.32/5.16 = 6.2 %, 0.30/4.61 = 6.5 %),
+consistent with the icache/layout drift this project's own bench notes have
+already documented — the same evidence file's footnote records "a cross-build
+layout shift that moved a 29K-cycle workload by about 7 %." **Consistent is
+not proven.** This is stated as measured; the layout explanation is offered
+as the candidate and is labelled as a candidate, not a conclusion, because no
+row in this capture isolates layout drift from a genuine cost change on these
+two rows in particular.
+
+### 10.5 The checksum evidence
+
+`sweep_flux_lines_2ch` returned checksum `45b6f7aa` in both the before and
+after captures — byte-identical — which Task 4's review **predicted in
+advance**, on the grounds that the row's executable arithmetic was untouched
+by the mono collapse (it deliberately keeps two independent bare `BbdEcho`
+lines for comparability with the earlier round's figures). That prediction
+holding is what confirms the row still measures what its name says rather
+than having silently started measuring something else; it is worth recording
+as a method note, not just a fact, because it is the thing that lets every
+other number in this section be trusted.
+
+`sweep_grit_bare` (`f57bd5c9`) and `sweep_grit_no_bbd_mem` (`9ddc20e9`) also
+held their checksums across both captures. The second is the more notable of
+the two: its **cost** moved (+0.30 points, §10.4) while its **checksum** did
+not — precisely the signature of layout drift rather than changed work, since
+a genuine arithmetic change on this row would have produced a different
+checksum along with the different cost.
+
+### 10.6 The listening result, and the open decision
+
+From the render pair (Task 5, verbatim):
+
+```
+dry   side/mid  0.7394 -> 0.1675   (22.7 % of before)
+verb  side/mid  0.7671 -> 0.3063   (39.9 % of before)
+```
+
+The reverb roughly doubles what survives (22.7 % dry vs. 39.9 % with the room
+engaged), so §6's assumption — that the reverb recovers some of what a
+centred echo loses — holds. But even in the realistic case, **more than half
+the width is gone**: 39.9 % of before is well short of parity. The residual
+width that remains is carried by the **dry** path, which is still panned per
+voice exactly as before; the echo itself is centred in both renders. The
+owner's panning decision is still open, and this round does not make it —
+build mono, measure it, listen to it, as §1 set out. A follow-up round, if
+the listening pass calls for one, gets its own spec.

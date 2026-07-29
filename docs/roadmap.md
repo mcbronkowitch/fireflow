@@ -28,6 +28,13 @@ is actually built today, and what is still design-only.
   Projected, that programme reaches only **≈106 %**, not under 100 %.
   **An optimization round comes before ZAP (M5k), PULL (M5l) and M6** — see
   "FLUX → BBD" and "FX cost curves" for the row-by-row evidence.
+  **Update, 2026-07-29 (mono collapse measured):** step (1) landed at
+  **125.24 %** and step (3), the FLUX-to-mono collapse, is now measured too —
+  `instrument_worst_bbd` at **112.88 %** (branch `perf/flux-mono`, not yet
+  merged; both prior estimates undershot what steps 1 and 3 actually returned).
+  **The instrument is still over budget: 12.88 points remain to 100 %.** See
+  "FLUX mono collapse" below for the full reading, including why this round's
+  saving does not confirm the earlier instruction-cache hypothesis.
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
@@ -1122,6 +1129,69 @@ isolated estimate undershot the gate-row saving by more than 2×) not to treat
 that as settled until it is measured directly. `engine/fx/bbd.h`'s `1/sr_`
 division in `BbdLine::SetClock`, worth an estimated ~0.6 points, stays
 deliberately untouched — model territory, left for the mono round.
+
+### FLUX mono collapse ✅ (step 3 of the accepted plan above)
+
+Step three of the owner's fixed order: collapse FLUX's stereo `BbdEcho` pair
+to one line per deck (mono input, 0.5·(l+r), fanned back to both channels).
+This round changes the sound on purpose — the dry signal keeps its per-voice
+pan, but the echo it feeds is now centred — and where DRIVE bites, since one
+saturator/compander/feedback loop now sees the summed signal instead of two
+seeing their own channel. No panning, widening, or DRIVE/compander re-tuning
+was added; that is deliberately left to the owner. Branch: `perf/flux-mono`,
+not yet merged. Spec: `docs/superpowers/specs/2026-07-29-flux-mono-design.md`
+§10. Evidence: `docs/bench/2026-07-29-4d1e929-sweep.md` (before) against
+`docs/bench/2026-07-29-1ba3f18-sweep.md` (after).
+
+**Measured saving.** The gate, `instrument_worst_bbd`, fell **125.24 % →
+112.88 %**, a **12.36-point** cut — more than the naive 9.16-point expectation
+(half of `sweep_flux_lines_2ch`'s 9.17, times two decks). Across all three
+rounds of this programme: **132.79 → 125.24 → 112.88**. **12.88 points remain
+to reach 100 %.**
+
+**The load-factor question, answered, and the answer is deflationary.** The
+wrapper round (above) found the same kind of change worth 1.49 points/deck in
+isolation, 2.16 on `instrument_worst`, 3.78 on `instrument_worst_bbd` — a
+clean, monotonic climb it attributed to an instruction-cache hypothesis. This
+round's equivalent triplet is 4.66 / 3.90 / 6.18 — **not monotonic**, the
+middle figure dips *below* the isolated row. The actual mechanism is visible
+in the sweep rows instead: this round's per-line saving climbs with FLUX's
+own operating point (RATE 0→11: 4.56 → 4.87 → 5.43 → 6.05 → 6.53 points;
+STAGES 512→16384: 4.29 → 4.38 → 4.86 → 5.38), and `instrument_worst_bbd` runs
+FLUX at its hottest reachable point (STAGES 16384, clock at the 24 kHz
+ceiling) — its 6.18-point per-deck saving sits inside the 4.56–6.53 range the
+isolated sweep already shows there, no cache multiplier required. **This
+weakens the wrapper round's icache hypothesis as a general law**; it stays
+confined to that round's specific `std::pow` call site rather than becoming a
+rule for the next removal. Full reading, including the checksum evidence that
+confirms the comparison rows still measure what they say (`sweep_flux_lines_2ch`
+returned a byte-identical checksum across both captures, as Task 4's review
+predicted in advance), in the spec's §10.
+
+**Two rows got measurably more expensive**, with no FLUX line running at all:
+`fx_grit` +0.32 (5.16 → 5.48) and `sweep_grit_no_bbd_mem` +0.30 (4.61 → 4.91)
+— about 6 % on a 5-point row. `sweep_grit_no_bbd_mem`'s checksum held
+byte-identical while its cost moved, which is the signature of code-layout
+drift rather than new work, consistent with this project's own prior note
+that a cross-build layout shift once moved a 29K-cycle row by about 7 %. That
+is offered as the candidate explanation, not a proven one.
+
+**Listening: the reverb helps, but not enough to make the loss disappear.**
+Side/mid ratio, before → after: dry 0.7394 → 0.1675 (22.7 % of before), verb
+0.7671 → 0.3063 (39.9 % of before). The reverb roughly doubles what survives,
+confirming §6's assumption that it recovers some width from the now-centred
+echo — but even in the realistic (reverb-engaged) case, more than half the
+width is gone. What remains is carried by the dry path's existing per-voice
+pan, not by the echo, which is centred in both renders.
+
+**What remains.** The owner's panning decision is open — whether the lost
+width needs recovering, and in what form, decided by ear against the four
+render files this round produced, not by this measurement. `engine/fx/bbd.h`'s
+`1/sr_` division in `BbdLine::SetClock` is still unaddressed, worth an
+estimated ~0.6 points, left deliberately as model territory. And the gate
+itself: **12.88 points still separate `instrument_worst_bbd` from the 100 %
+line.** `perf/flux-mono` is not merged, pending the owner's listening pass —
+its outcome may change what belongs on this branch.
 
 ### BODY playability ✅ (extends M5j)
 
