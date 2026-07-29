@@ -319,10 +319,11 @@ The partition is exhaustive by construction:
   decks     contention  glue    reverb     gate
 ```
 
-**Contention *between the decks* is nil.** Two decks running together cost
-**0.54 points less** than two decks priced one at a time — a *negative*
-contention term. The hypothesis in §2, that a large part of the gap is the
-same work costing more inside the instrument through cache pressure and SDRAM
+**Contention *between the decks* is at most a few tenths of a point, in
+either direction.** Two decks running together cost **0.54 points less** than
+two decks priced one at a time, but the sign is not supported — see below.
+The hypothesis in §2, that a large part of the gap is the same work costing
+more inside the instrument through cache pressure and SDRAM
 contention, is **refuted for the deck pair**: whatever the two decks do to
 each other's D-cache lines and to the SDRAM bus, this ladder bounds it at a
 few tenths of a point. That is a statement about decks running *alongside*
@@ -392,9 +393,12 @@ ladder splits it exhaustively:
 | **total** | **24.14** | |
 
 Two things about that first row, so nobody carries them silently. It is a
-**two-deck** figure — 92.48 is `2 × instr_part_1` and 77.01 is `2 × 38.51`;
-per deck the excess is **7.73 points**, not 15.47. And the 38.51 per-deck
-block sum charges each deck **half of `mod_plane_2x_center`**, which is not a
+**two-deck** figure — 92.48 is `2 × instr_part_1` and 77.01 is `86.63 − 9.62`,
+not `2 × 38.51` (which is 77.02): the per-deck value is **38.505**, and 77.01
+is the block sum with the reverb's 9.62 — priced once for the whole
+instrument, not per deck — subtracted out. Per deck the excess is **7.73
+points**, not 15.47. And the 38.51 per-deck block sum charges each deck
+**half of `mod_plane_2x_center`**, which is not a
 per-deck quantity: that row runs two modulators *and* the instrument-level
 `Center`, and no bare `Part` runs a `Center` at all — while `Center::update`
 also sits inside the measured 4.04-point glue term, where it really runs. So
@@ -402,7 +406,8 @@ the `Center` is charged twice in this table. The **total is unaffected** —
 24.14 is `110.77 − 86.63` and the identity holds whatever split of 77.01 is
 written down — but the first row is **understated** by whatever
 `Center::update` costs, since that cost is charged against the decks in 77.01
-while the glue row already contains it. It is a fraction of a point, which is
+while the glue row already contains it. It is probably a fraction of a
+point — nothing in this round sizes `Center::update` on its own — which is
 why the halving is kept and flagged rather than invented around.
 
 **The answer to §1's question is that the gap is mostly neither of the two
@@ -442,14 +447,14 @@ per deck, +4.58 across the instrument** over what the block sum charged it.
 The remaining **~10.9 points** across two decks is `Part`-internal cost that
 no block row charges. One component of it is checked and is the same class of
 error as FLUX: the deck's own modulation. The gate runs it at rate 0.8 /
-density 1.0, while `mod_plane_2x_center` prices it at rate 0.5 / density 0.7
-(`bench/workloads_system.cpp:75-76`) — a different operating point,
-confirmed by reading. The other candidates named here — `process_in()`, the
-engine-fade multiply, the voice-to-FX routing — are **suspects, not
-measurements**: they are real `Part`-internal work that no row prices, but
-this round did not size any of them, and in-deck block contention (above) is
-not separated from them either. This round does not decompose that further,
-and §8.5 explains why it should not be asked to.
+density 1.0, while `mod_plane_2x_center` prices its two modulators at rate
+**0.5 and 0.6**, density 0.7 for both (`bench/workloads_system.cpp:75-76`) —
+a different operating point, confirmed by reading. The other candidates named
+here — `process_in()`, the engine-fade multiply, the voice-to-FX routing —
+are **suspects, not measurements**: they are real `Part`-internal work that
+no row prices, but this round did not size any of them, and in-deck block
+contention (above) is not separated from them either. This round does not
+decompose that further, and §8.5 explains why it should not be asked to.
 
 **This is a null result, and §5 committed in advance to writing it as plainly
 as the other kind.** No instrument-level cut exists to be found. The entire
@@ -457,10 +462,10 @@ glue bucket — `Center::update`, the CHOKE framing, the MORPH blend, the dry
 taps, the cross-deck rhythm exchange, the limiter and the per-sample loop, all
 of it together — is **4.04 points**, and most of that is features rather than
 overhead. Deleting the whole of it, which is not possible, would leave 6.73 of
-the 10.77 points still outstanding. **The remaining 10.77 points must come
-from inside the decks after all** — from the blocks, from their operating
-points, or from what they cost each other in there. The light was in the right
-place; the map of it was wrong.
+the 10.77 points still outstanding. **At least 6.73 of the remaining 10.77
+points must come from inside the decks regardless** — from the blocks, from
+their operating points, or from what they cost each other in there. The light
+was in the right place; the map of it was wrong.
 
 ### 8.4 The reverb in situ, against its isolated row
 
@@ -509,7 +514,8 @@ splitting 4.04 points four ways yields four sub-point quantities.
 
 Those quantities are **resolvable**, and this section should not pretend
 otherwise: a finer ladder would subtract *within one run*, exactly as this
-round did, and the within-run spreads here were 0.10 / 0.32 / 0.21 points.
+round did, and the run-to-run spread of those within-run differences here was
+0.10 / 0.32 / 0.21 points.
 §8.1's ±2-point bound is a **cross-build** bound and does not apply to that.
 The argument against the finer round is a value judgement — four sub-point
 numbers inside a 4.04-point bucket are too small to repay a hardware round —
