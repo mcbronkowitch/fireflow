@@ -30,9 +30,10 @@ public:
     // unchanged (every FxMem consumer keeps compiling); only the value moved,
     // from 262144 to kMaxStages/2. A two-phase BBD stores one sample per TWO
     // stages -- see the "even ticks write, odd ticks read" comment on
-    // BbdLine. 8192 floats x 4 lines = 128 KB, against 4.19 MB before. The
-    // count itself is unchanged by the mono collapse: one line still holds
-    // kMaxStages/2 cells and STAGES keeps its full range.
+    // BbdLine. 8192 floats x 2 lines = 64 KB (4 lines / 128 KB before the mono
+    // collapse), against 4.19 MB before the BBD redesign. The count itself is
+    // unchanged by the collapse: one line still holds kMaxStages/2 cells and
+    // STAGES keeps its full range.
     static constexpr size_t kMaxSamples = kMaxStages / 2;
 
     void init(float sample_rate, float* buf);
@@ -88,7 +89,7 @@ public:
 
 private:
     void recompute_time(bool immediate);
-    // Pushes _fb_norm to both echoes with DRIVE's gain divided out. Called
+    // Pushes _fb_norm to the echo with DRIVE's gain divided out. Called
     // from set_feedback AND set_drive, because either knob moving invalidates
     // the coefficient the other one produced -- see the comment on the
     // definition for why the division lives here rather than in BbdEcho.
@@ -110,9 +111,9 @@ private:
     float _bpm = 120.f;
     int   _rate_idx = 3;             // "1/4"
     float _delay_time = 0.5f;
-    // Shared L/R delay-time slew (both channels always run the same length).
-    // It stays, and it now doubles as the VCO slew of the real circuit:
-    // division changes are click-free AND bend in pitch, like the hardware.
+    // The delay-time slew. It stays, and it now doubles as the VCO slew of
+    // the real circuit: division changes are click-free AND bend in pitch,
+    // like the hardware.
     float _dt_current = 0.05f;
     float _dt_target = 0.05f;
     float _dt_coef = 1.f;

@@ -963,3 +963,71 @@ TEST_CASE("flux: init resets the FXT_FLUX_TIME guard so a re-init's repeated pus
     // neutral 1.0, and the clock reads 8192 instead of 16384.
     CHECK(settle(f) == doctest::Approx(16384.f).epsilon(0.02f));
 }
+
+TEST_CASE("flux: the single echo lands identically on both channels") {
+    // The mono collapse's whole structural claim in one assertion: there is
+    // one line, and its output is added to L and R unchanged. Asserted only
+    // in the silent tail, where the dry signal is exactly 0 in both channels
+    // and l and r therefore hold nothing but the echo -- so this is a bit-
+    // exact comparison, not a tolerance (design spec 2026-07-29-flux-mono §3).
+    //
+    // A TOPOLOGY test, not a taste test. It asserts nothing about what the
+    // echo sounds like, so the owner's listening pass cannot make it stale.
+    Flux f;
+    f.init(48000.f, s_buf);
+    f.set_on(true, true);
+    f.set_bpm(120.f);
+    f.set_rate(3);
+    f.set_mix(1.f);
+    f.set_feedback(0.5f);
+    bool saw_echo = false;
+    for (int i = 0; i < 96000; ++i) {
+        const float s = (i < 480) ? 0.4f * std::sin(0.2f * i) : 0.f;
+        float l = s, r = 0.f;                 // hard left: maximally asymmetric
+        f.process(l, r);
+        if (i >= 480) {
+            REQUIRE(l == r);                  // dry is silent; only wet remains
+            if (std::fabs(l) > 1e-4f) saw_echo = true;
+        }
+    }
+    // Guard against the assertion above passing on a dead echo (0 == 0).
+    CHECK(saw_echo);
+}
+
+TEST_CASE("flux: the echo is driven by the mono sum") {
+    // (s,s) and (2s,0) have the SAME mono sum, so they must give the identical
+    // echo -- that is what 0.5f * (l + r) means, stated as arithmetic. Both
+    // sums are exactly s in float32, so this is not an approximation.
+    //
+    // (s,0) sums to half and must give a quieter echo. Deliberately NOT
+    // asserted as exactly -6 dB: the line runs a saturator and a compander, so
+    // its output is not a linear function of its input and any decibel figure
+    // would be a claim this test cannot support. Direction and the sum's
+    // weights are what is structural here.
+    auto tail_rms = [](float gl, float gr) {
+        Flux f;
+        f.init(48000.f, s_buf);
+        f.set_on(true, true);
+        f.set_bpm(120.f);
+        f.set_rate(3);
+        f.set_mix(1.f);
+        f.set_feedback(0.5f);
+        double acc = 0.0;
+        int n = 0;
+        for (int i = 0; i < 96000; ++i) {
+            const float s = (i < 480) ? 0.4f * std::sin(0.2f * i) : 0.f;
+            float l = s * gl, r = s * gr;
+            f.process(l, r);
+            if (i >= 24000) { acc += double(l) * double(l); ++n; }
+        }
+        return n ? std::sqrt(acc / n) : 0.0;
+    };
+    const double both        = tail_rms(1.f, 1.f);
+    const double left_double = tail_rms(2.f, 0.f);
+    const double left_only   = tail_rms(1.f, 0.f);
+    INFO("both=" << both << " left_double=" << left_double << " left_only=" << left_only);
+    REQUIRE(both > 1e-6);
+    CHECK(left_double == doctest::Approx(both).epsilon(1e-9));   // same sum
+    CHECK(left_only < 0.85 * both);                              // quieter
+    CHECK(left_only > 0.20 * both);                              // not dead
+}

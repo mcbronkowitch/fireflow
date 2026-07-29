@@ -128,7 +128,7 @@ void Flux::recompute_time(bool immediate) {
 //
 // One consequence: on a fresh instance this guard swallows init()'s own
 // set_feedback(0.45f) call, since _fb_norm's default member initializer
-// already equals 0.45f. The echoes still end up carrying the right
+// already equals 0.45f. The echo still ends up carrying the right
 // coefficient regardless, because set_drive(0.f) at the end of init()
 // always passes its own sentinel guard (_drive_norm was just reset to -1)
 // and its apply_feedback() is unconditional. That is the same init()-
