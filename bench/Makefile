@@ -44,6 +44,7 @@ FAMILY_SOURCE_sampler = workloads_sampler.cpp
 FAMILY_SOURCE_body    = workloads_body.cpp
 FAMILY_SOURCE_bbd     = workloads_bbd.cpp
 FAMILY_SOURCE_sweep   = workloads_sweep.cpp
+FAMILY_SOURCE_instr   = workloads_instr.cpp
 
 FAMILY_DEFINE_system  = BENCH_FAMILY_SYSTEM
 FAMILY_DEFINE_voice   = BENCH_FAMILY_VOICE
@@ -54,6 +55,7 @@ FAMILY_DEFINE_sampler = BENCH_FAMILY_SAMPLER
 FAMILY_DEFINE_body    = BENCH_FAMILY_BODY
 FAMILY_DEFINE_bbd     = BENCH_FAMILY_BBD
 FAMILY_DEFINE_sweep   = BENCH_FAMILY_SWEEP
+FAMILY_DEFINE_instr   = BENCH_FAMILY_INSTR
 
 # Fail loudly on a typo rather than silently building a smaller image.
 $(foreach f,$(BENCH_FAMILIES),\

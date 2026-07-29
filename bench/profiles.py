@@ -64,6 +64,16 @@ PROFILES = {
         ),
         gates=frozenset({WAVE_ACCEPTANCE}),
     ),
+    # The instrument-level ablation (spec 2026-07-29-instrument-ablation).
+    # Carries `system` for two reasons, not one: it supplies the ladder's
+    # fourth rung (instrument_worst_bbd, which the whole round is measured
+    # against), and without an instrument_worst anchor verdict() reports
+    # "undetermined" -- which is how the BBD figures stood for two days with
+    # no verdict attached.
+    "ablate": Profile(
+        families=("system", "instr"),
+        gates=frozenset({WAVE_ACCEPTANCE}),
+    ),
 }
 
 DEFAULT_PROFILE = "full"
