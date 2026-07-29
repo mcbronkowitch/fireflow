@@ -17,8 +17,17 @@ is actually built today, and what is still design-only.
   run measured `instrument_worst` at **120.9 %** of the 960 000-cycle block
   inside a real audio callback, and `instrument_worst_bbd` at 133.2 %. The
   increase is entirely in the FX chain; voices, modulation plane and reverb are
-  unchanged. **An optimization round comes before ZAP (M5k), PULL (M5l) and
-  M6** — see "FLUX → BBD" for the row-by-row evidence.
+  unchanged. A follow-up cost-curves round (`cd6dafd`, same day) priced the FX
+  chain control-by-control and found `instrument_worst_bbd` at **132.79 %** —
+  **32.8 points** over the gate — with only **≈17.2** authorised points
+  reachable (wrapper-to-control-rate, the 24 kHz clock ceiling, STAGES) and
+  **18.3** more sitting in the BBD model itself. The owner has now decided the
+  next round, in order: **(1) move the FLUX wrapper's per-sample work to
+  control rate, (2) re-measure, (3) collapse FLUX to mono per deck** — this
+  supersedes the design spec's stereo refusal; `kFiltOrder` stays refused.
+  Projected, that programme reaches only **≈106 %**, not under 100 %.
+  **An optimization round comes before ZAP (M5k), PULL (M5l) and M6** — see
+  "FLUX → BBD" and "FX cost curves" for the row-by-row evidence.
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
@@ -1015,6 +1024,65 @@ item, not a voicing or range decision.
 
 Spec: `docs/superpowers/specs/2026-07-27-flux-bbd-delay-design.md`. Plan:
 `docs/superpowers/plans/2026-07-27-flux-bbd-delay.md`.
+
+### FX cost curves ✅
+
+The optimization round the FLUX → BBD entry above called for. Rather than
+guessing at fixes, it priced four suspect controls across their travel (FLUX
+clock, STAGES, voice count, reverb) and closed two open questions (the FLUX
+wrapper's own cost; the unexplained `fx_grit` rise) on real hardware —
+`docs/bench/2026-07-29-cd6dafd-sweep.md`, full reading in
+`docs/superpowers/specs/2026-07-29-fx-cost-curves-design.md` §9.
+
+**Dispositions.** FLUX's clock ladder: **reshape the range** — drop
+`kClockMaxHz` 32 → 24 kHz, worth 1.76 points across both decks, and note it
+also turns three indistinguishable top rungs on the rate control into four.
+STAGES, voice count and the reverb controls: **leave it** — each costs in
+proportion to what it gives (STAGES is flat at a fixed clock, refuting a
+cache hypothesis; voices scale linearly, ~1.45 fixed + ~4.2/voice, no knee;
+the room controls span 0.64 points across their whole travel).
+
+**The wrapper, measured rather than inferred.** `Flux`'s own per-sample
+bookkeeping — slews, snaps, a clamp, a division, all driven by controls that
+only move at the 96-sample tick — costs **7.71 points per deck, 15.4 both**,
+46 % of what FLUX costs above the bare FX shell. It changes the sound at no
+setting.
+
+**`fx_grit`'s 2.9-point rise, answered.** Not GRIT itself (measured cheap in
+isolation) and not an unresolved shell mystery: a `std::pow` in
+`bbd_drive_gain` runs every sample, per deck, gated only on buffer validity
+with no dirty-check on DRIVE — found by reading, and now corroborated by
+measurement (≈1.60/deck) alongside 1.17 points of pure code-layout drift.
+Fix, for the next round: cache the gain in `set_drive`, multiply in
+`apply_feedback`. `engine/` was off limits to this round, so nothing was
+changed yet.
+
+**The gate, and what it takes.** `instrument_worst_bbd` measured **132.79 %**,
+32.8 points over the 100 % gate. Everything this round was authorised to
+spend — the wrapper, the clock ceiling, STAGES, room — sums to **17.16**:
+short by 15.64. The remaining 18.3 points is the BBD model itself (the two
+`BbdEcho` lines per deck), reachable only through the two levers the design
+spec's §3 had refused: stereo FLUX and `kFiltOrder`.
+
+**Owner decision, 2026-07-29 — "Erst den Mantel, messen, dann auf mono."**
+Seeing these numbers, the owner took back half of that refusal. Order, fixed:
+(1) move the wrapper to control rate; (2) **re-measure**; (3) collapse FLUX
+to a single mono `BbdEcho` per deck. `kFiltOrder` stays refused. This
+supersedes §3 of the cost-curves spec for the stereo lever only — a later
+reader must not treat that refusal as still standing in full.
+
+Stacking the accepted plan (wrapper 15.4 + mono ≈9.2, the latter a half-share
+of the measured two-line cost and not yet re-measured + clock ceiling 1.76)
+reaches **≈26.4** against the 32.8-point gate — **≈106 %**, not under 100 %,
+even if every step lands as estimated. Stated plainly, not softened: the
+instrument does not fit yet, and this round did not claim otherwise. The
+re-measurement step exists precisely because two estimates were already
+compounded once, into the 34-point figure this round was sized against, and
+that figure turned out wrong.
+
+Spec: `docs/superpowers/specs/2026-07-29-fx-cost-curves-design.md`. Ledger:
+`.superpowers/sdd/2026-07-29-fx-cost-curves/progress.md`. Branch:
+`perf/fx-cost-curves` (not merged).
 
 ### BODY playability ✅ (extends M5j)
 
