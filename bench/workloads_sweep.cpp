@@ -845,6 +845,13 @@ float proc_sweep_room()
     // stopped running" even though it cannot catch "the room is running with
     // the wrong diffusion/smear/mod".
     acc += group.instrument.reverb_asleep() ? 1.f : 0.f;
+    // reverb_asleep() catches "the room stopped running"; this catches "the
+    // voices feeding it stopped". The three room rows sweep the reverb at a
+    // FIXED voice load, so a drifting voice count would change what the room
+    // is being fed while the row's name still claimed a controlled
+    // comparison. Same fold bench/workloads_abl.cpp already uses.
+    acc += static_cast<float>(group.instrument.active_voices(PART_A)
+                            + group.instrument.active_voices(PART_B));
     return acc;
 }
 
