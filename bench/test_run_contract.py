@@ -895,6 +895,11 @@ class SweepProfileTest(unittest.TestCase):
         for stages in (512, 2048, 8192, 16384):
             self.assertIn("sweep_stages_%d" % stages, rows)
 
+    def test_grit_ablation_rows_are_expected(self):
+        rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["sweep"]
+        self.assertIn("sweep_grit_bare", rows)
+        self.assertIn("sweep_grit_no_bbd_mem", rows)
+
 
 class ManifestValidationContract(unittest.TestCase):
     """resolve()'s load-time manifest checks (design spec S3): a profile

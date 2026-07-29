@@ -68,7 +68,24 @@ struct SweepFxGroup {
     int stages_achieved = 0;
 };
 
-SerialArena<SweepInstrumentGroup, SweepFxGroup> g_sweep_arena;
+// --- Ablation F: where did fx_grit's 2.9 points come from? -------------------
+// fx_grit rose 4.78 -> 7.70 % max between 518f639 and 1f7671d at an IDENTICAL
+// checksum, with no commits to engine/fx/grit.{cpp,h} in range and fx_none
+// unmoved. Three candidates: GRIT itself, the PartFx shell, or cache pressure
+// from the BBD buffers merely being resident.
+//
+// fx_grit - fx_none is 5.14 today against a historical 2.22.
+//   sweep_grit_bare ~ 5.14                 -> GRIT costs that; the old figure
+//                                             was a smaller image, i.e. layout
+//   sweep_grit_bare ~ 2.2, no_bbd_mem ~5.14 -> the shell is the suspect
+//   sweep_grit_no_bbd_mem ~ 2.2             -> cache pressure from the BBD
+//                                             buffers; nothing in FX is wrong,
+//                                             and sweep B should show it too
+struct SweepGritGroup {
+    Grit grit;
+};
+
+SerialArena<SweepInstrumentGroup, SweepFxGroup, SweepGritGroup> g_sweep_arena;
 
 // A trivial row whose only job is to prove the family links and registers.
 // It is replaced by real rows in later tasks and must not survive to the
@@ -263,6 +280,77 @@ float proc_sweep_fx()
     return acc;
 }
 
+// sweep_grit_bare: a bare Grit, no PartFx shell at all. Mirrors setup_fx
+// (SEL_GRIT)'s Grit-facing calls exactly (bench/workloads_system.cpp) --
+// set_grit_mix(1.f), intensity = values[FXT_GRIT_INT] = 0.8f, and the
+// immediate on-switch -- so this measures GRIT alone, fully engaged, nothing
+// else running.
+void setup_grit_bare()
+{
+    auto& group = g_sweep_arena.emplace<SweepGritGroup>();
+    group.grit.init(kSampleRate);
+    group.grit.set_mix(1.f);
+    group.grit.set_intensity(0.8f);
+    group.grit.set_on(true, true);
+}
+
+float proc_grit_bare()
+{
+    auto& group = g_sweep_arena.get<SweepGritGroup>();
+    const float* in = test_input();
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i) {
+        float l = in[i], r = in[i] * 0.9f;
+        group.grit.process(l, r);
+        acc += l + r;
+    }
+    return acc;
+}
+
+// sweep_grit_no_bbd_mem: fx_grit's exact shell (setup_fx(SEL_GRIT), mirrored
+// verbatim below) with one change -- PartFx::init receives null echo memory
+// instead of fx_mem()'s buffers. Flux::init (engine/fx/flux.cpp:11-17) sets
+// _buf_ok = (buf_l && buf_r) and returns BEFORE calling _echo_l/_echo_r.Init
+// when either pointer is null -- no BbdLine::Init runs, no dereference, no
+// UB. Every downstream Flux entry point PartFx::process reaches that could
+// touch buffer state -- set_feedback, Flux::process itself -- is gated on
+// the same _buf_ok and returns before touching any buffer (flux.cpp:99,
+// 278); set_time_mod only ever writes a scalar (_time_mult) and has no
+// guard because it needs none. engaged() is also gated on
+// _buf_ok, so it reads false, but GRIT alone still keeps PartFx::process's
+// outer `_grit.engaged() || _flux.engaged()` branch live, so the shell around
+// GRIT -- the smoothers, the tape-tap bookkeeping, the FX-MIX blend, COMP,
+// the send calc -- all still run exactly as they do in fx_grit. The only
+// thing missing is the BBD's ~128 KB of echo memory ever being resident.
+//
+// No settle loop: unlike setup_flux_rate/setup_stages, this PartFx has no
+// delay-line memory to fill (Flux::init returned before allocating any), and
+// setup_fx(SEL_GRIT) -- the row this mirrors -- does not settle either.
+void setup_grit_no_bbd_mem()
+{
+    auto& group = g_sweep_arena.emplace<SweepFxGroup>();
+    group.fx.init(kSampleRate, nullptr, nullptr);
+    group.fx.set_fx_on(FxBlock::Grit, true, true);
+    group.fx.set_fx_on(FxBlock::Flux, false, true);
+    group.fx.set_comp(0.f);
+    group.fx.set_grit_mix(1.f);
+    group.fx.set_flux_mix(1.f);
+    group.fx.set_bpm(120.f);
+
+    // Mirrors setup_fx(SEL_GRIT)'s values[] exactly (bench/workloads_system.cpp).
+    group.values[FXT_GRIT_INT]  = 0.8f;
+    group.values[FXT_FLUX_TIME] = 0.5f;
+    group.values[FXT_FX_MIX]    = 1.f;
+    group.values[FXT_REV_SEND]  = 0.5f;
+    group.values[FXT_FLUX_FB]   = 0.7f;
+
+    // Flux::process never reaches the stage-tracking code below its _buf_ok
+    // guard, so _stages_now stays at Flux's boot default (8192) for the life
+    // of this instance -- deterministic, and folded into the checksum like
+    // every other SweepFxGroup row (see the comment on the struct).
+    group.stages_achieved = group.fx.flux().stages();
+}
+
 } // namespace
 
 const Workload kSweepWorkloads[] = {
@@ -276,6 +364,8 @@ const Workload kSweepWorkloads[] = {
     { "sweep", "sweep_stages_2048",  setup_stages_2048,  proc_sweep_fx },
     { "sweep", "sweep_stages_8192",  setup_stages_8192,  proc_sweep_fx },
     { "sweep", "sweep_stages_16384", setup_stages_16384, proc_sweep_fx },
+    { "sweep", "sweep_grit_bare",       setup_grit_bare,       proc_grit_bare },
+    { "sweep", "sweep_grit_no_bbd_mem", setup_grit_no_bbd_mem, proc_sweep_fx  },
 };
 const int kSweepCount = sizeof(kSweepWorkloads) / sizeof(kSweepWorkloads[0]);
 

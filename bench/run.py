@@ -187,6 +187,8 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "sweep_stages_2048",
         "sweep_stages_8192",
         "sweep_stages_16384",
+        "sweep_grit_bare",
+        "sweep_grit_no_bbd_mem",
     ),
     "voice": (
         "morph_osc_bare",
