@@ -113,6 +113,30 @@ binds that target-verified digest and UID to `bench.elf`,
 Even with `--no-build`, `run.py` re-inspects `bench.elf` and regenerates both
 physical artifacts before accepting the receipt.
 
+### The receipt breaks on any engine change, and step 1 is not optional
+
+The heading above says "whenever `bench-qspi.bin` changes", which understates
+it. The receipt binds the verified digest to the **ELF hashes**, so *any*
+change under `engine/` invalidates it even though the bank's 65,024 bytes are
+untouched. The failure looks like this:
+
+```
+ERROR: QSPI verification receipt does not match current payload (artifacts)
+```
+
+That message names the artifacts, not the bank, and it does not mean the QSPI
+is corrupt or that a different Seed is attached — those have their own checks
+(the live digest comparison and the MCU UID match). It means the binding is
+stale. The fix is to re-run steps 1 and 3; nothing needs erasing.
+
+**Do not skip step 1 and go straight to step 3.** With `--no-build`, step 3
+binds to whatever `bench.elf` is lying on disk. If step 4 then relinks
+anything — and it will, after an engine change, because step 4 rebuilds — the
+hashes it computes differ from the ones step 3 wrote and the run aborts with
+the message above, having already reprogrammed the bank for nothing. Build
+first, bind second, measure third. Running it in the other order costs a full
+programming cycle and reads like a hardware fault.
+
 Every measurement also SHA-256 hashes the 65,024 live bytes through the
 Seed's memory-mapped QSPI interface before `BENCH_BEGIN`; the host compares
 that firmware-reported digest with the extracted payload. `BENCH_BEGIN` also
