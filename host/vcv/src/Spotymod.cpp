@@ -169,8 +169,9 @@ struct Spotymod : Module {
     spky::FxMem fxmem;
 
     // FX memory the engine's "no heap" contract requires the host to own.
-    // ~3.8 MB of echo buffer + one ~130 KB reverb, held per module instance.
-    float echo[spky::PART_COUNT][2][spky::Flux::kMaxSamples];
+    // 64 KB of echo buffer (was 128 KB before the mono-echo collapse) + one
+    // ~130 KB reverb, held per module instance.
+    float echo[spky::PART_COUNT][spky::Flux::kMaxSamples];
     spky::AmbientReverb reverb;
 
     // The texture deck's record buffers. Unlike the echo/reverb memory above
@@ -216,7 +217,7 @@ struct Spotymod : Module {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
         configControls();
         for (int p = 0; p < spky::PART_COUNT; ++p)
-            for (int c = 0; c < 2; ++c) fxmem.echo[p][c] = echo[p][c];
+            fxmem.echo[p] = echo[p];
         fxmem.reverb = &reverb;
         ctrlDiv.setDivision(16);
     }
