@@ -128,7 +128,7 @@ TEST_CASE("bbd filter: interpolate_g matches the table at both endpoints") {
 }
 
 TEST_CASE("bbd filter: the table is built once per sample rate") {
-    // Four lines call this at init. Rebuilding the 3 kB of tables four times
+    // Two lines call this at init. Rebuilding the 3 kB of tables twice
     // would be harmless but silly; rebuilding them from a DIFFERENT sample
     // rate and handing the stale result to the other lines would not be.
     const BbdFilterCoef& a = bbd_filter_in(48000.f);

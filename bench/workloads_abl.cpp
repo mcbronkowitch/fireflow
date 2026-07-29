@@ -204,7 +204,7 @@ float proc_lim()
 // and these two rows were its last consumer. Their premise -- that SRAM was
 // a live placement option for the echo buffer, so splitting FLUX's isolated
 // cost into memory tax (sdram − sram) and compute meant something -- no
-// longer holds: the BBD design commits all four lines to SDRAM
+// longer holds: the BBD design commits both lines to SDRAM
 // (docs/superpowers/specs/2026-07-27-flux-bbd-delay-design.md, "Memory").
 // The `bbd` family (workloads_bbd.cpp) covers this ground directly instead:
 // `bbd_ceiling` vs `bbd_line_only` splits compander/drive cost from core BBD

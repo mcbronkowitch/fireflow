@@ -116,6 +116,12 @@ known ones:
 | `tests/test_flux.cpp` | `s_buf_l`/`s_buf_r` → one buffer |
 | bench workloads that build a `PartFx` or `Flux` directly | whatever the compiler flags |
 
+**This table is now known-incomplete.** A whole-branch review found five test
+files (`test_instrument`, `test_part`, `test_part_fx`, `test_sampler_part`,
+`test_scenario`) and `bench/audition/memory.cpp` also touched by the signature
+change, none of them named above. Treat the table as a starting point for the
+next reader, not as an exhaustive list.
+
 Two notes on this table:
 
 - **`host/vcv` must be built only via `./build-local.sh`.** The system `g++`
@@ -302,20 +308,39 @@ isolated `fx_flux_sdram` **4.66**, `instrument_worst` **3.90** (half of 7.80),
 isolated row, where the wrapper round's clean 1.49 / 2.16 / 3.78 rose at every
 step.
 
-The reason is in the sweep rows, and it is the primary explanation rather
-than a footnote: **this round's saving grows with the operating point, not
-with load.** `sweep_flux_rate_0` saves 4.56 points per line while
+**Where the operating point is held fixed, the load factor does not merely
+fail to generalise — it goes mildly negative.** `fx_flux_sdram`
+(`setup_fx(SEL_FLUX)`) and `instrument_worst` (`setup_inst_worst`) run FLUX at
+the *identical* operating point: both boot at bpm 120, rate index 3, STAGES
+8192, `FXT_FLUX_TIME` neutral at 0.5, DRIVE 0 — an 8192 Hz clock either way.
+`setup_inst_worst` never touches STAGES, rate or DRIVE, and `Part::_fx_active`
+defaults to all `false`, so no lane modulation reaches `FXT_FLUX_TIME` there
+either. Same clock, same everything, and the per-line saving *falls* from
+4.66 to 3.90 — a 16 % shrink under load, the opposite sign of the wrapper
+round's multiplier. For scale, three isolated rows at that same operating
+point span only 4.66 / 4.86 / 4.87 (`fx_flux_sdram`, `sweep_stages_8192`,
+`sweep_flux_rate_3`), so 3.90 is well outside shell-to-shell spread — this is
+a real effect, not noise.
+
+The reason the *gate* row nonetheless lands higher, at 6.18, is in the sweep
+rows: **this round's per-line saving climbs with FLUX's own operating point**,
+independent of load. `sweep_flux_rate_0` saves 4.56 points per line while
 `sweep_flux_rate_11` saves 6.53; `sweep_stages_512` saves 4.29 while
 `sweep_stages_16384` saves 5.38. A bigger, faster BBD line costs more to run,
 so removing one of its two copies saves more in absolute cycles — the entire
 rate ladder (4.56 → 4.87 → 5.43 → 6.05 → 6.53) and stage ladder
 (4.29 → 4.38 → 4.86 → 5.38) climb with their own knob, independent of
-anything else running. `instrument_worst_bbd` runs FLUX at its hottest
-reachable point (STAGES at 16384, clock at the 24 kHz ceiling), and its
-per-deck saving of 6.18 sits **inside** the 4.56–6.53 range the isolated sweep
-rows already show at that same operating point. No load multiplier is needed
-to explain the gate row at all — it is accounted for by "which point on the
-knob," not "how loaded is the machine."
+anything else running. `sweep_flux_rate_11` is already clock-clamped at
+`bbd_tuning::kClockMaxHz` = **32 kHz** (`engine/fx/bbd.h:88`, enforced again
+in `flux.cpp`) — the same clock `instrument_worst_bbd` runs at (STAGES 16384,
+RATE at the ceiling) — so it is the right comparator: an operating-point-only
+model predicts the gate should save **at least 6.53** per deck, the hottest
+isolated row (`sweep_stages_16384` is next at 5.38). It returned **6.18**
+instead — a small deficit, in the same direction as the fixed-operating-point
+result above: composed into the full instrument, FLUX costs slightly *more*
+than the isolated rows predict, not less. "Which point on the knob" accounts
+for the great majority of the shape here, but not quite all of it, and what is
+left over runs the wrong way for a load multiplier to explain.
 
 This **weakens the wrapper round's instruction-cache hypothesis as a general
 law**, and the two rounds legitimately differ for a stated reason: the
@@ -325,10 +350,13 @@ refuting a cache hypothesis"), which is exactly what let it rule the operating
 point out as a confound and attribute the load-scaling it did see to a cache
 effect. This round's per-deck saving is **not flat** across STAGES or RATE —
 it visibly climbs with both — so the same ruling-out step is not available
-here, and the honest reading is that operating-point sensitivity, not an
-icache mechanism, explains everything this round measured. The hypothesis
-stays confined to the wrapper round's `std::pow` call site; it does not
-license predicting the size of the next removal.
+here. Operating-point sensitivity accounts for most of what this round
+measured, but not all of it: held at a fixed operating point
+(`fx_flux_sdram` vs. `instrument_worst`), the same removal costs slightly
+*more* per line under load — the opposite direction from the wrapper round's
+icache-style scaling, not an extension of it. The hypothesis stays confined
+to the wrapper round's `std::pow` call site; it does not license predicting
+the size of the next removal.
 
 ### 10.4 Two rows got more expensive
 
@@ -342,6 +370,31 @@ not proven.** This is stated as measured; the layout explanation is offered
 as the candidate and is labelled as a candidate, not a conclusion, because no
 row in this capture isolates layout drift from a genuine cost change on these
 two rows in particular.
+
+**A stronger argument for the same candidate, from rows this capture already
+has.** The rise is confined exactly to the rows that execute the `Flux`
+prologue — the unconditional, un-dirty-checked `set_feedback`/`set_time_mod`
+push the control-rate wrapper round priced, which runs whenever GRIT *or*
+FLUX is engaged, not only when a line actually processes a sample:
+
+| row | executes the `Flux` prologue? | Δ pct_max | Δ avg_cyc |
+|---|---|---:|---:|
+| `sweep_grit_bare` (bare `Grit`, no `PartFx`) | no | 0.00 | −41 |
+| `fx_none` (`PartFx`, both blocks off → branch skipped) | no | +0.02 | −105 |
+| `fx_grit` | **yes** | +0.32 | +2932 |
+| `sweep_grit_no_bbd_mem` | **yes** | +0.30 | +2806 |
+
+Two clean controls that did not move (`sweep_grit_bare`, `fx_none` — neither
+one ever reaches `Flux`'s per-sample bookkeeping), against two that did
+(`fx_grit`, `sweep_grit_no_bbd_mem` — both reach it, gated only on GRIT being
+engaged) — and the two that moved are exactly the two whose `flux.o` code
+this branch recompiled. `Flux::process`'s prologue, `set_feedback`,
+`set_time_mod` and `engaged()` are textually unchanged by the mono collapse,
+so no algorithmic path could have made them dearer; a build-layout shift from
+recompiling the surrounding object is what is left. This is still evidence
+for *layout*, not proof — no row here isolates layout drift from a genuine
+cost change with certainty — and the write-up stays a candidate explanation,
+not a conclusion.
 
 ### 10.5 The checksum evidence
 

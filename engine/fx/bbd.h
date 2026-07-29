@@ -104,7 +104,7 @@ constexpr int   kFiltOrder = 3;
 // Rows in the G interpolation table. The tick's sub-sample position d lands
 // between two rows and is lerped. 65 rows over exp(p*ts*d), |p*ts| <= 0.48 at
 // 48 kHz, gives a relative error below 1e-5 -- far under the model's own
-// error. The table is fs-dependent only, and shared by all four lines.
+// error. The table is fs-dependent only, and shared by both lines.
 constexpr int kInterpSteps = 65;
 
 // --- charge-transfer loss --------------------------------------------------

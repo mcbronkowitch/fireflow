@@ -1002,8 +1002,13 @@ TEST_CASE("flux: the echo is driven by the mono sum") {
     // (s,0) sums to half and must give a quieter echo. Deliberately NOT
     // asserted as exactly -6 dB: the line runs a saturator and a compander, so
     // its output is not a linear function of its input and any decibel figure
-    // would be a claim this test cannot support. Direction and the sum's
-    // weights are what is structural here.
+    // would be a claim this test cannot support. Direction and symmetry of
+    // the sum are what is structural here -- NOT the 0.5 weight itself: the
+    // left_double/both comparison below is w*(s+s) vs. w*(2s+0), the same
+    // expression for every w, so it cannot discriminate 0.5 from any other
+    // constant. That constant is pinned by the source comment in
+    // Flux::process and by design spec 2026-07-29-flux-mono §3, not by this
+    // test.
     auto tail_rms = [](float gl, float gr) {
         Flux f;
         f.init(48000.f, s_buf);

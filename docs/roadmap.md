@@ -1145,36 +1145,50 @@ not yet merged. Spec: `docs/superpowers/specs/2026-07-29-flux-mono-design.md`
 
 **Measured saving.** The gate, `instrument_worst_bbd`, fell **125.24 % →
 112.88 %**, a **12.36-point** cut — more than the naive 9.16-point expectation
-(half of `sweep_flux_lines_2ch`'s 9.17, times two decks). Across all three
-rounds of this programme: **132.79 → 125.24 → 112.88**. **12.88 points remain
+(half of `sweep_flux_lines_2ch`'s 9.17, times two decks). Across both rounds
+of this programme: **132.79 → 125.24 → 112.88**. **12.88 points remain
 to reach 100 %.**
 
-**The load-factor question, answered, and the answer is deflationary.** The
-wrapper round (above) found the same kind of change worth 1.49 points/deck in
-isolation, 2.16 on `instrument_worst`, 3.78 on `instrument_worst_bbd` — a
-clean, monotonic climb it attributed to an instruction-cache hypothesis. This
-round's equivalent triplet is 4.66 / 3.90 / 6.18 — **not monotonic**, the
-middle figure dips *below* the isolated row. The actual mechanism is visible
-in the sweep rows instead: this round's per-line saving climbs with FLUX's
-own operating point (RATE 0→11: 4.56 → 4.87 → 5.43 → 6.05 → 6.53 points;
-STAGES 512→16384: 4.29 → 4.38 → 4.86 → 5.38), and `instrument_worst_bbd` runs
-FLUX at its hottest reachable point (STAGES 16384, clock at the 24 kHz
-ceiling) — its 6.18-point per-deck saving sits inside the 4.56–6.53 range the
-isolated sweep already shows there, no cache multiplier required. **This
-weakens the wrapper round's icache hypothesis as a general law**; it stays
-confined to that round's specific `std::pow` call site rather than becoming a
-rule for the next removal. Full reading, including the checksum evidence that
-confirms the comparison rows still measure what they say (`sweep_flux_lines_2ch`
-returned a byte-identical checksum across both captures, as Task 4's review
-predicted in advance), in the spec's §10.
+**The load-factor question, answered, and the answer is deflationary — and
+where the operating point is held fixed, it is worse than "doesn't
+generalise."** The wrapper round (above) found the same kind of change worth
+1.49 points/deck in isolation, 2.16 on `instrument_worst`, 3.78 on
+`instrument_worst_bbd` — a clean, monotonic climb it attributed to an
+instruction-cache hypothesis. This round's equivalent triplet is 4.66 / 3.90 /
+6.18 — **not monotonic**, the middle figure dips *below* the isolated row.
+That dip is not noise: `fx_flux_sdram` and `instrument_worst` run FLUX at the
+identical operating point (bpm 120, rate index 3, STAGES 8192, `FXT_FLUX_TIME`
+neutral, DRIVE 0 — an 8192 Hz clock either way), and the per-line saving falls
+16 % between them — the opposite sign of the wrapper round's load scaling. The
+climb to 6.18 at the gate is explained instead by FLUX's own operating point,
+not by load: this round's per-line saving climbs with RATE (0→11: 4.56 →
+4.87 → 5.43 → 6.05 → 6.53 points) and STAGES (512→16384: 4.29 → 4.38 →
+4.86 → 5.38), independent of anything else running, and `instrument_worst_bbd`
+runs FLUX at its hottest reachable point (STAGES 16384, clock at the **32 kHz**
+ceiling, `bbd_tuning::kClockMaxHz`) — the same clock as `sweep_flux_rate_11`,
+the hottest isolated row at 6.53. An operating-point-only model therefore
+predicts the gate should save **at least 6.53** per deck; it returned
+**6.18** instead, a small deficit in the same direction as the fixed-point dip
+above. **This weakens the wrapper round's icache hypothesis as a general
+law**; it stays confined to that round's specific `std::pow` call site rather
+than becoming a rule for the next removal. Full reading, including the
+checksum evidence that confirms the comparison rows still measure what they
+say (`sweep_flux_lines_2ch` returned a byte-identical checksum across both
+captures, as Task 4's review predicted in advance), in the spec's §10.
 
 **Two rows got measurably more expensive**, with no FLUX line running at all:
 `fx_grit` +0.32 (5.16 → 5.48) and `sweep_grit_no_bbd_mem` +0.30 (4.61 → 4.91)
-— about 6 % on a 5-point row. `sweep_grit_no_bbd_mem`'s checksum held
-byte-identical while its cost moved, which is the signature of code-layout
-drift rather than new work, consistent with this project's own prior note
-that a cross-build layout shift once moved a 29K-cycle row by about 7 %. That
-is offered as the candidate explanation, not a proven one.
+— about 6 % on a 5-point row. Two clean controls that never reach `Flux`'s
+per-sample bookkeeping (`sweep_grit_bare`, `fx_none`) did not move; the two
+that did are exactly the two whose `flux.o` code this branch recompiled,
+while the code they actually execute (`Flux::process`'s prologue,
+`set_feedback`, `set_time_mod`, `engaged()`) is textually unchanged — a
+control set that strengthens the candidate explanation without proving it
+(full table in the spec's §10.4). `sweep_grit_no_bbd_mem`'s checksum held
+byte-identical while its cost moved, which is the signature of layout drift
+rather than new work, consistent with this project's own prior note that a
+cross-build layout shift once moved a 29K-cycle row by about 7 %. That is
+offered as the candidate explanation, not a proven one.
 
 **Listening: the reverb helps, but not enough to make the loss disappear.**
 Side/mid ratio, before → after: dry 0.7394 → 0.1675 (22.7 % of before), verb
