@@ -124,11 +124,20 @@ void Flux::recompute_time(bool immediate) {
 //
 // _fb_norm's initial 0.45 is a REACHABLE knob position, so unlike
 // _drive_norm and _stages_norm this guard uses no unreachable sentinel. That
-// is deliberate and it is the same reasoning set_link's -- see the long
-// comment in init() on why _link resets to 0 rather than to -1: init() itself
-// calls set_feedback(0.45f), so by the time any host pushes, the state
-// already matches. Swallowing a repeated push of 0.45 is a no-op on
-// already-correct state, not a swallowed change.
+// is deliberate and it is the same reasoning as set_link's -- see the long
+// comment in init() on why _link resets to 0 rather than to -1.
+//
+// One consequence: on a fresh instance this guard swallows init()'s own
+// set_feedback(0.45f) call, since _fb_norm's default member initializer
+// already equals 0.45f. The echoes still end up carrying the right
+// coefficient regardless, because set_drive(0.f) at the end of init()
+// always passes its own sentinel guard (_drive_norm was just reset to -1)
+// and its apply_feedback() is unconditional. That is the same init()-
+// ordering dependency the _fb_scale comment a few lines up in init()
+// already documents -- a reordering of init()'s calls, or an early return
+// added to set_drive, could silently break it. Nothing today takes that
+// path: swallowing a repeated push of 0.45 is a no-op on already-correct
+// state, not a swallowed change.
 void Flux::set_feedback(float norm) {
     if (!_buf_ok) return;
     const float n = clampf(norm, 0.f, 1.f);
