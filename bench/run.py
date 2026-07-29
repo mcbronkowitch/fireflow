@@ -197,6 +197,7 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "instr_part_1",
         "instr_part_2",
         "instr_noverb",
+        "deck_mod_hot",
     ),
     "voice": (
         "morph_osc_bare",

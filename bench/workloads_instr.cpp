@@ -5,6 +5,8 @@
 #include "serial_arena.h"
 #include "instrument.h"
 #include "parts/part.h"
+#include "mod/super_modulator.h"
+#include "mod/lane_id.h"
 
 using namespace spky;
 
@@ -103,7 +105,25 @@ void configure_worst_bbd(Part& part)
     part.set_fx_target_base(FXT_FLUX_FB, 0.9f);
 }
 
-SerialArena<InstrNoVerbGroup, InstrPartGroup> g_instr_arena;
+// One SuperModulator at the gate's operating point, with no Center.
+//
+// The row it corrects is mod_plane_2x_center, which runs two modulators at
+// RATE 0.5 and 0.6 and DENSITY 0.7 (bench/workloads_system.cpp:75-76), never
+// calls set_tempo_bpm, and does no settle. setup_inst_worst runs RATE 0.8 and
+// DENSITY 1.0 on both decks, and Instrument::set_tempo_bpm pushes 120 BPM
+// into every part's modulator (engine/instrument.cpp:70). All three
+// differences are deliberate here and all three are part of what the
+// subtraction measures -- see the design spec section 3.
+//
+// The Center is deliberately absent. mod_plane_2x_center includes it, so
+// charging each deck half of that row double-counts an instrument-level
+// object that no bare Part runs and that the measured 4.04-point glue term
+// already contains.
+struct DeckModGroup {
+    SuperModulator mod;
+};
+
+SerialArena<InstrNoVerbGroup, InstrPartGroup, DeckModGroup> g_instr_arena;
 
 void setup_instr_noverb()
 {
@@ -273,12 +293,42 @@ float proc_instr_part_2()
     return acc;
 }
 
+void setup_deck_mod_hot()
+{
+    auto& g = g_instr_arena.emplace<DeckModGroup>();
+    // PART_A's seed base, as Part::init passes it: _mod.init(sr, seed_base)
+    // with seed_base = 0x1234abcd for PART_A (engine/parts/part.cpp:16,
+    // engine/instrument.cpp:22).
+    g.mod.init(kSampleRate, 0x1234abcdu);
+    g.mod.set_tempo_bpm(120.f);
+    g.mod.set_rate(0.8f);
+    g.mod.set_density(1.f);
+
+    // Settle to the same depth the Instrument rows settle to, so the row is
+    // measured in the state the gate is measured in. mod_plane_2x_center has
+    // no settle at all; that difference is part of what this row corrects.
+    for (int b = 0; b < kInstrSettleBlocks; ++b)
+        for (size_t i = 0; i < kBlock; ++i) g.mod.process();
+}
+
+float proc_deck_mod_hot()
+{
+    auto& g = g_instr_arena.get<DeckModGroup>();
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i) {
+        g.mod.process();
+        acc += g.mod.lane_output(LANE_PITCH);
+    }
+    return acc;
+}
+
 } // namespace
 
 const Workload kInstrWorkloads[] = {
     { "instr", "instr_part_1", setup_instr_part_1, proc_instr_part_1 },
     { "instr", "instr_part_2", setup_instr_part_2, proc_instr_part_2 },
     { "instr", "instr_noverb", setup_instr_noverb, proc_instr_noverb },
+    { "instr", "deck_mod_hot",  setup_deck_mod_hot,  proc_deck_mod_hot  },
 };
 const int kInstrCount = sizeof(kInstrWorkloads) / sizeof(kInstrWorkloads[0]);
 
