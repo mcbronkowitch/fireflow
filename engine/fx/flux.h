@@ -68,6 +68,15 @@ public:
     // where the spec says" assertable at all.
     int stages() const { return _stages_now; }
     float clock_hz() const { return _clock_hz; }
+    // Observer for the bench only: the same number as clock_hz() above, under
+    // a name that says who it is for. The bench's sweep_flux_lines_2ch row
+    // reads it off a throwaway probe Flux to drive two bare BbdEcho at
+    // exactly the clock a real Flux would give them, which is what makes
+    // "fx_flux_sdram - sweep_flux_lines_2ch - fx_none" the wrapper's own
+    // cost rather than an estimate. Compander::env_comp()/env_exp() in
+    // engine/fx/bbd.h are the existing precedent for this shape: a plain
+    // accessor whose only job is to be readable from a test or a bench row.
+    float clock_hz_for_test() const { return _clock_hz; }
     float drive_norm_for_test() const { return _drive_norm; }
     // The delay time DRAG is currently aiming at, before the 30 ms slew. Equal
     // to the ladder time whenever DRAG is 0 or the neighbour has no rhythm.

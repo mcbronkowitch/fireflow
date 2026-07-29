@@ -900,6 +900,10 @@ class SweepProfileTest(unittest.TestCase):
         self.assertIn("sweep_grit_bare", rows)
         self.assertIn("sweep_grit_no_bbd_mem", rows)
 
+    def test_flux_wrapper_ablation_row_is_expected(self):
+        rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["sweep"]
+        self.assertIn("sweep_flux_lines_2ch", rows)
+
 
 class ManifestValidationContract(unittest.TestCase):
     """resolve()'s load-time manifest checks (design spec S3): a profile

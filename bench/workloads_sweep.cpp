@@ -96,7 +96,79 @@ struct SweepGritGroup {
     Grit grit;
 };
 
-SerialArena<SweepInstrumentGroup, SweepFxGroup, SweepGritGroup> g_sweep_arena;
+// --- Ablation E: the Flux wrapper's own cost ---------------------------------
+// Two bare BbdEcho, at the stage count and clock a default-initialised Flux
+// computes, with no Flux around them. Then
+//   fx_flux_sdram - sweep_flux_lines_2ch - fx_none
+// is the wrapper's own per-sample work: two fonepole slews, two std::fabs
+// snaps, a clampf and bbd_clock_hz's division -- all of which run every
+// sample although their inputs only move on the 96-sample control tick.
+//
+// That is NOT the whole of what this row isolates, though. PartFx::process
+// calls _flux.set_feedback(v[FXT_FLUX_FB]) unconditionally, every sample
+// (part_fx.cpp:38), and that reaches Flux::apply_feedback (flux.cpp:132),
+// which calls bbd_drive_gain -- a std::pow every sample (bbd.h:192), priced
+// by this repo's own bench at 198 cycles (fx_pow, workloads_system.cpp).
+// It is the LARGEST single item inside the number this row makes
+// measurable, not a footnote next to the slews -- and it is left exactly as
+// it is: fixing it is out of scope for this task (engine/ changes here are
+// limited to the one accessor below), however tempting a one-line dirty
+// check would be.
+//
+// clock_hz and the stage count come from a throwaway probe Flux rather than
+// being hard-coded, so this row cannot silently drift from what
+// fx_flux_sdram (and setup_flux_rate/setup_stages above) actually run.
+// fx_flux_sdram (bench/workloads_system.cpp's setup_fx(SEL_FLUX)) never
+// calls set_stages or set_flux_rate away from Flux::init's boot defaults --
+// bpm 120, _rate_idx 3 ("1/4"), kBootStagesNorm 0.8 -> 512*32^0.8 == 8192
+// stages (flux.cpp) -- so a freshly-init'd probe, left untouched, lands on
+// exactly those numbers: clock 8192 Hz (the rate-3 row of the Sweep A
+// ladder table above already derives this) and 8192 stages. Neither
+// set_bpm(120) nor set_flux_rate(3) needs to be called on the probe: those
+// are already init()'s defaults.
+//
+// clock_hz_for_test() only reads back _clock_hz, which Flux computes once
+// per process() call (flux.cpp, after the delay-time/stage slews) from
+// _dt_current and the stage count -- both of which init() already snaps
+// straight to their targets (immediate = true), with no slew left to run.
+// So a single process() call is enough for the probe's clock to be
+// meaningful; no settling loop is needed on the probe itself.
+//
+// BbdEcho::Init leaves cells_ at its full capacity (Flux::kMaxSamples ==
+// 8192 cells, i.e. a 16384-stage buffer) unless SetStages narrows it --
+// DOUBLE the boot-default Flux's actual footprint (8192 stages == 4096
+// cells). Sweep B above exists because stage count is not free on this
+// part; left uncorrected here, that mismatch would leak a buffer-size
+// confound into the very subtraction this row exists to keep clean. The
+// explicit SetStages(stages) calls below, using the probe's own achieved
+// stage count, remove it.
+//
+// Two SEPARATE echo buffer pairs: the probe takes fx_mem()'s PART_B pair
+// (m.echo[1][*]) for its one throwaway process() call, and the two measured
+// bare lines take PART_A's pair (m.echo[0][*], the same pair
+// setup_flux_rate/setup_stages above use for their PartFx) -- so the probe
+// cannot disturb the memory the measured lines settle into and then read
+// from.
+//
+// Settle: _rate_idx 3 at bpm 120 is the SAME division Sweep B holds fixed
+// (see the comment on setup_stages above), for the same reason -- the clock
+// stays unclamped (8192 Hz, comfortably under kClockMaxHz's 32000), so a
+// full line-fill takes exactly the division's own period regardless of
+// stage count: stages/(2*(stages/(2t))) = t = 0.5 s = 24000 samples at
+// 48 kHz. Four fills (this file's standing settle-before-measuring
+// precedent -- kSweepFluxSettleSamples and kSweepStagesSettleSamples above,
+// setup_bbd_ceiling in workloads_bbd.cpp) is 96000 samples -- the same
+// number as kSweepStagesSettleSamples, and for the identical reason, but
+// named separately here since it is this row's own derivation and not a
+// reuse of Sweep B's group.
+constexpr int kSweepFluxLinesSettleSamples = 96000;
+
+struct SweepLineGroup {
+    BbdEcho l, r;
+    float   clock_hz;
+};
+
+SerialArena<SweepInstrumentGroup, SweepFxGroup, SweepGritGroup, SweepLineGroup> g_sweep_arena;
 
 // A trivial row whose only job is to prove the family links and registers.
 // It is replaced by real rows in later tasks and must not survive to the
@@ -381,6 +453,58 @@ void setup_grit_no_bbd_mem()
     group.stages_achieved = group.fx.flux().stages();
 }
 
+void setup_flux_lines_2ch()
+{
+    // Derive the clock AND the stage count from a real Flux rather than
+    // hard-coding either, so this row cannot silently drift away from what
+    // fx_flux_sdram measures -- see the derivation above SweepLineGroup.
+    static Flux probe;
+    const FxMem& m = fx_mem();
+    // PART_B's buffers (m.echo[1][*]) -- a genuinely separate pair from
+    // PART_A's (m.echo[0][*]) below, so this one throwaway call cannot
+    // disturb the memory the measured lines settle into.
+    probe.init(kSampleRate, m.echo[1][0], m.echo[1][1]);
+    {
+        // One call is enough: init() already snapped the delay-time and
+        // stage slews to their targets, so _clock_hz is fully settled the
+        // instant process() computes it once.
+        float pl = 0.f, pr = 0.f;
+        probe.process(pl, pr);
+    }
+    const float hz     = probe.clock_hz_for_test();
+    const int   stages = probe.stages();
+
+    auto& group = g_sweep_arena.emplace<SweepLineGroup>();
+    group.clock_hz = hz;
+    group.l.Init(kSampleRate, m.echo[0][0], Flux::kMaxSamples);
+    group.r.Init(kSampleRate, m.echo[0][1], Flux::kMaxSamples);
+    // Match the probe's stage count -- see the SweepLineGroup comment on why
+    // leaving BbdEcho::Init's full-capacity default in place would confound
+    // the subtraction this row exists to keep clean.
+    group.l.SetStages(stages);
+    group.r.SetStages(stages);
+
+    // Settle OUTSIDE the measured window -- see kSweepFluxLinesSettleSamples.
+    const float* in = test_input();
+    for (int i = 0; i < kSweepFluxLinesSettleSamples; ++i) {
+        const float x = in[i % kBlock];
+        group.l.Process(x, hz);
+        group.r.Process(x * 0.9f, hz);
+    }
+}
+
+float proc_flux_lines_2ch()
+{
+    auto& group = g_sweep_arena.get<SweepLineGroup>();
+    const float* in = test_input();
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i) {
+        acc += group.l.Process(in[i], group.clock_hz);
+        acc += group.r.Process(in[i] * 0.9f, group.clock_hz);
+    }
+    return acc;
+}
+
 } // namespace
 
 const Workload kSweepWorkloads[] = {
@@ -396,6 +520,7 @@ const Workload kSweepWorkloads[] = {
     { "sweep", "sweep_stages_16384", setup_stages_16384, proc_sweep_fx },
     { "sweep", "sweep_grit_bare",       setup_grit_bare,       proc_grit_bare },
     { "sweep", "sweep_grit_no_bbd_mem", setup_grit_no_bbd_mem, proc_sweep_fx  },
+    { "sweep", "sweep_flux_lines_2ch",  setup_flux_lines_2ch,  proc_flux_lines_2ch },
 };
 const int kSweepCount = sizeof(kSweepWorkloads) / sizeof(kSweepWorkloads[0]);
 
