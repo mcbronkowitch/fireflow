@@ -61,27 +61,35 @@ struct SweepFxGroup {
     // The integer stage count Flux actually settled to, read once after each
     // setup's settle loop (flux().stages(), engine/fx/flux.h) and folded into
     // proc_sweep_fx's returned accumulator once per call -- see the comment
-    // there. Every setup that uses this group must set it: the five
-    // sweep_flux_rate_* rows never call set_stages, so for them it reads
-    // back whatever Flux::init's boot default (8192) settled to, which is
-    // well-defined and just as worth checksumming as the four sweep_stages_*
-    // rows' explicit settings.
+    // there. Every setup that uses this group must set it explicitly: the
+    // field has to carry the value actually achieved after that setup's own
+    // settle loop, not a placeholder default. For the five sweep_flux_rate_*
+    // rows, which never call set_stages, that achieved value is whatever
+    // Flux::init's boot default (8192) settled to -- well-defined, and just
+    // as worth checksumming as the four sweep_stages_* rows' explicit
+    // settings.
     int stages_achieved = 0;
     // The clock Flux actually settled to, read once after each setup's settle
     // loop (flux().clock_hz(), engine/fx/flux.h) and folded into
-    // proc_sweep_fx's accumulator once per call. stages_achieved alone is not
-    // enough: for the five sweep_flux_rate_* rows it reads back the boot
-    // default 8192 and is therefore IDENTICAL across all five, so it cannot
-    // tell a rate row that clocked from one that silently did not. The clock
-    // is the quantity those rows sweep, and folding it is what makes a
-    // stopped clock move the checksum -- the failure that took a discarded
-    // hardware run to find in sweep_flux_lines_2ch (docs/bench/
-    // 2026-07-29-cd6dafd-sweep.md).
+    // proc_sweep_fx's accumulator once per call. Every setup that uses this
+    // group must set it explicitly, the same as stages_achieved above: the
+    // field has to carry the live value read out of Flux after that setup's
+    // own settle loop, not the type's own zero-initialised default -- 0.f is
+    // not itself a measurement. stages_achieved alone is not enough: for the
+    // five sweep_flux_rate_* rows it reads back the boot default 8192 and is
+    // therefore IDENTICAL across all five, so it cannot tell a rate row that
+    // clocked from one that silently did not. The clock is the quantity
+    // those rows sweep, and folding it is what makes a stopped clock move
+    // the checksum -- the failure that took a discarded hardware run to find
+    // in sweep_flux_lines_2ch (docs/bench/2026-07-29-cd6dafd-sweep.md).
     //
-    // setup_grit_no_bbd_mem legitimately leaves this at 0: its Flux has null
-    // buffers, so Flux::process returns before _clock_hz is ever written. The
-    // "must be > 0" assertion therefore lives in the setups that run a clock,
-    // not in proc_sweep_fx.
+    // setup_grit_no_bbd_mem is the one exception: its clock genuinely is 0
+    // (its Flux has null buffers, so Flux::process returns before _clock_hz
+    // is ever written), so the explicit assignment there does not change the
+    // value -- it demonstrates the row actually read the real clock and got
+    // zero, rather than silently relying on this field's own default
+    // happening to agree. The "must be > 0" assertion accordingly lives in
+    // the setups that run a clock, not in proc_sweep_fx.
     float clock_achieved = 0.f;
 };
 
@@ -490,9 +498,11 @@ void setup_grit_no_bbd_mem()
     // every other SweepFxGroup row (see the comment on the struct).
     group.stages_achieved = group.fx.flux().stages();
     // Null buffers: Flux::process returns at its _buf_ok guard, so _clock_hz
-    // is never written and stays 0 for the life of this instance. Set
-    // explicitly rather than left to the arena, because SerialArena overlays
-    // its groups and emplace does not zero what a previous group wrote.
+    // is never written and stays 0 for the life of this instance. The
+    // assignment below does not change that value -- clock_hz() reads back
+    // 0 either way -- it is here so this row demonstrably reads the real
+    // clock and gets zero, instead of silently relying on clock_achieved's
+    // own default happening to agree. See the comment on the struct.
     group.clock_achieved = group.fx.flux().clock_hz();
 }
 
