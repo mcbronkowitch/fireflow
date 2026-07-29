@@ -874,6 +874,18 @@ class ProfileContract(unittest.TestCase):
         self.assertNotIn("does not declare", not_applicable)
 
 
+class SweepProfileTest(unittest.TestCase):
+    def test_sweep_profile_resolves_and_carries_system(self):
+        profile = resolve("sweep", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY)
+        self.assertEqual(profile.families, ("system", "sweep"))
+        self.assertIn(WAVE_ACCEPTANCE, profile.gates)
+
+    def test_sweep_family_has_row_expectations(self):
+        rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["sweep"]
+        self.assertIn("sweep_probe", rows)
+        self.assertEqual(len(rows), len(set(rows)), "duplicate row names")
+
+
 class ManifestValidationContract(unittest.TestCase):
     """resolve()'s load-time manifest checks (design spec S3): a profile
     naming a family run.py has no row expectations for, or declaring
@@ -954,6 +966,16 @@ class FullProfileLinkContract(unittest.TestCase):
         {"system", "voice", "mem", "mod", "abl", "bbd", "body", "sampler"}
     )
 
+    # `sweep` (spec 2026-07-29-fx-cost-curves) has a Makefile entry and a
+    # BENCH_PROTOCOL_ROWS_BY_FAMILY entry like every other family, but is
+    # deliberately absent from `full` -- bench/Makefile's BENCH_FAMILIES
+    # comment says that default line IS `full`'s family list, and `sweep`
+    # is intentionally not on it (its own `sweep` profile carries it
+    # instead). Naming it here, rather than folding it into KNOWN_FAMILIES,
+    # keeps the guard below able to still catch an *accidental* new family
+    # that drifts between the Makefile and the row protocol.
+    NOT_IN_FULL = frozenset({"sweep"})
+
     def test_full_profile_manifest_resolves_cleanly(self):
         resolve_profile("full")  # must not raise a manifest error
 
@@ -962,7 +984,8 @@ class FullProfileLinkContract(unittest.TestCase):
 
         self.assertEqual(set(profile.families), self.KNOWN_FAMILIES)
         self.assertEqual(
-            set(runner.BENCH_PROTOCOL_ROWS_BY_FAMILY), self.KNOWN_FAMILIES
+            set(runner.BENCH_PROTOCOL_ROWS_BY_FAMILY),
+            self.KNOWN_FAMILIES | self.NOT_IN_FULL,
         )
 
     def test_full_profile_families_match_the_makefiles_known_families(self):
@@ -970,7 +993,9 @@ class FullProfileLinkContract(unittest.TestCase):
         e.g. a family renamed in one but not the other, which would leave
         `full` naming a family the Makefile no longer recognises (or vice
         versa), and a link failure could then be a manifest bug in
-        disguise rather than the known size problem."""
+        disguise rather than the known size problem. `NOT_IN_FULL` families
+        are excluded from this comparison deliberately, not silently --
+        see the comment on that set."""
         import re
 
         makefile = (Path(__file__).with_name("Makefile")).read_text(
@@ -978,7 +1003,7 @@ class FullProfileLinkContract(unittest.TestCase):
         )
         known_to_makefile = set(
             re.findall(r"^FAMILY_SOURCE_(\w+)\s*=", makefile, re.MULTILINE)
-        )
+        ) - self.NOT_IN_FULL
         profile = resolve_profile("full")
 
         self.assertEqual(set(profile.families), known_to_makefile)

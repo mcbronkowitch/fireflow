@@ -45,6 +45,16 @@ PROFILES = {
         families=("bbd",),
         gates=frozenset(),
     ),
+    # The cost-curve round (spec 2026-07-29-fx-cost-curves-design). Carries
+    # `system` deliberately, unlike `bbd`: without it verdict() has no
+    # instrument_worst anchor and reports "undetermined", which is exactly
+    # how the BBD numbers came to stand for two days without a system
+    # verdict. `body` (system + body) is the precedent that a two-family
+    # image links.
+    "sweep": Profile(
+        families=("system", "sweep"),
+        gates=frozenset({WAVE_ACCEPTANCE}),
+    ),
     # The complete run, as before profiles existed. Expected to FAIL TO LINK
     # until the engine shrinks or the region grows -- that debt is real and is
     # meant to be visible to whoever runs the bare command.

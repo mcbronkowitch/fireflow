@@ -176,6 +176,9 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "instrument_worst",
         "instrument_worst_bbd",
     ),
+    "sweep": (
+        "sweep_probe",
+    ),
     "voice": (
         "morph_osc_bare",
         "modal_voice",

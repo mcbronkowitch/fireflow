@@ -26,6 +26,9 @@ const Family kFamilies[] = {
 #if BENCH_FAMILY_BBD
     { "bbd",     kBbdWorkloads,     kBbdCount     },
 #endif
+#if BENCH_FAMILY_SWEEP
+    { "sweep",   kSweepWorkloads,   kSweepCount   },
+#endif
 #if BENCH_FAMILY_BODY
     { "body",    kBodyWorkloads,    kBodyCount    },
 #endif
