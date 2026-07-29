@@ -933,3 +933,38 @@ TEST_CASE("flux: the FXT_FLUX_TIME guard lands the first push and swallows repea
     f.set_time_mod(0.5f);
     CHECK(run(4800) == doctest::Approx(neutral).epsilon(0.02f));
 }
+
+TEST_CASE("flux: init resets the FXT_FLUX_TIME guard so a re-init's repeated push isn't swallowed") {
+    // Reproduces Spotymod::reinit() -> Instrument::init() -> Flux::init() on
+    // an instance that already had a TIME depth pushed. init() puts _time_mult
+    // back to neutral; if it did not ALSO reset the guard, the next push of
+    // the SAME value the user still has dialled in would be swallowed and the
+    // clock would stay at neutral until the knob physically moved. Same trap
+    // the _link, _drive_norm and _stages_norm resets each document -- and
+    // unlike _fb_scale, nothing else rewrites _time_mod_norm afterwards, so
+    // this reset is load-bearing rather than defensive.
+    auto arm = [](Flux& f) {
+        f.set_on(true, true);
+        f.set_bpm(120.f);
+        f.set_rate(3);                      // "1/4" -> 0.5 s -> 8192 Hz base
+        f.set_mix(1.f);
+        f.set_feedback(0.f);
+    };
+    auto settle = [](Flux& f) {
+        for (int i = 0; i < 48000; ++i) { float l = 0.f, r = 0.f; f.process(l, r); }
+        return f.clock_hz();
+    };
+
+    Flux f;
+    f.init(48000.f, s_buf_l, s_buf_r);
+    arm(f);
+    f.set_time_mod(0.75f);                  // x2
+    CHECK(settle(f) == doctest::Approx(16384.f).epsilon(0.02f));
+
+    f.init(48000.f, s_buf_l, s_buf_r);      // the re-init
+    arm(f);
+    f.set_time_mod(0.75f);                  // the SAME value the host still holds
+    // With a stale guard this push is dropped, _time_mult stays at init()'s
+    // neutral 1.0, and the clock reads 8192 instead of 16384.
+    CHECK(settle(f) == doctest::Approx(16384.f).epsilon(0.02f));
+}
