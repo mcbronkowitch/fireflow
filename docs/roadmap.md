@@ -11,8 +11,9 @@ is actually built today, and what is still design-only.
   (`2026-07-12-spotykach-center-section-design.md`) and the ambient-reverb v2
   spec (`2026-07-12-spotykach-ambient-reverb-v2-design.md`), and the FORM/SONG split spec
   (`2026-07-25-spotykach-form-song-split-design.md`).
-- **Last updated:** 2026-07-27 (VCV 2.14.0; BODY is complete and merged, priced
-  on the Seed at 30.7 % of the block; ZAP is the next planned engine milestone
+- **Last updated:** 2026-07-28 (VCV 2.15.1; BODY is complete and merged, priced
+  on the Seed at 30.7 % of the block, and has had its first playability pass —
+  see "BODY playability" below; ZAP is the next planned engine milestone
   before M6).
 
 > **Reminder:** the portable engine is exercised by the desktop offline
@@ -55,6 +56,7 @@ is actually built today, and what is still design-only.
 | **Mod grid lock** | In STEP the four texture lanes stop owning a clock and follow the deck's integer step count; the lane ratios become cycle lengths (4/6/8/12/16 at STEPS = 8), TIDE stretches slot counts, and DRIFT, EVOLVE, SPOT and float drift can no longer push a lane off the grid | ✅ **done** (engine + VCV; released in 2.13.2; spec `docs/superpowers/specs/2026-07-25-mod-lane-step-grid-lock-design.md`) |
 | **M5j** | BODY — one-voice-per-deck resonator part engine, morphing string → metal → bell, with a sympathetic excitation bus | ✅ **done** (engine, renderer and VCV; `body_2x4` 295078 / 295724 cycles, 30.7 % of the block, inside the spec's 29–32 % prediction and below SYNTH; released in 2.14.0) |
 | **FLUX → BBD** | FLUX's interpolating tape echo replaced by a bucket-brigade delay model — the clock rate *is* the delay time, so RATE bends stored pitch, STAGES is a brightness axis, and `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane | ✅ **done** (engine, renderer and VCV; RATE/STAGES/`FXT_FLUX_TIME` confirmed by ear, DRIVE diagnosed and fixed but awaiting re-listening; hardware CPU measurement outstanding — see below) |
+| **BODY playability** | Three fixes from the first extended ear pass: the bow follows the note instead of droning at a fixed 200 Hz, a continuously driven resonator no longer runs decades above its own struck level, and FILTER's left half fades evenly instead of falling off a cliff | ✅ **done** (engine; released in 2.15.0; two measured items left open — see below) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
 | **M6** | Firmware shell: pads, gestures, panel, LEDs — runs on real hardware | ⬜ planned |
@@ -948,6 +950,78 @@ item, not a voicing or range decision.
 
 Spec: `docs/superpowers/specs/2026-07-27-flux-bbd-delay-design.md`. Plan:
 `docs/superpowers/plans/2026-07-27-flux-bbd-delay.md`.
+
+### BODY playability ✅ (extends M5j)
+
+BODY shipped in 2.14.0 measured and in budget, but the first extended session
+with it (2026-07-28, the owner playing FLOW in VCV Rack) found it hard to get a
+usable sound out of. Three separate causes, all found from that one report, all
+fixed and released in 2.15.0.
+
+**The bow droned at 200 Hz.** In FLOW the click zone re-fires its impulse
+continuously, and the re-arm ran on a fixed 5 ms timer — which is exactly
+200 Hz at 48 kHz, whatever note was played. An FFT of the owner's recording
+showed an exact harmonic series on 200.000 Hz with the played note absent from
+it. The re-arm now runs at the fundamental (`engine/body/exciter.h`), which is
+also the physically right answer: every impulse then arrives in phase with the
+wave already circulating in the string, which is what a bow does. One coupling
+is documented at the fix: the filter is not reset between re-arms, so a shorter
+period raises per-impulse amplitude as well as rate. Measured flat at 0.230 for
+periods down to ~60 samples; the 110–880 Hz pitch contract is 436–55 samples, so
+the whole range sits in the flat part and tracking f0 does not tilt excitation
+level across the keyboard. Anyone widening that contract upward leaves the flat
+region and should re-measure.
+
+**A driven resonator has no natural level.** A struck resonator decays; a
+continuously driven one accumulates until dissipation balances input, and that
+ratio is the structure's own gain — which for BODY spans three orders of
+magnitude across MATL and DECAY. Measured: one FLOW voice peaked at 629, 56 dB
+over full scale, against SYNTH which stays inside ±3 dB. This was on `main`,
+predated the bow fix, and affected every RESO zone. `VoiceT` does not have the
+problem because FLOW there sustains an envelope over an oscillator.
+
+The first attempt was a feed-forward compensation from a closed-form sustain
+gain, and it failed: the implementer measured 20–34 dB of error and correctly
+refused to widen the tolerance. Root cause — `KsString::process` already
+contains `fclamp(s, ±20)`, so the real loop is bounded long before the damping
+filter approaches lossless, and no closed form that ignores that clamp can
+predict it. The spec records this and three failed measurement designs in its
+§8 errata; the plan carries a SUPERSEDED banner.
+
+What shipped instead follows M5a's own rule — *where opening a path lets a value
+diverge, add the bounding nonlinearity the instrument already has rather than
+re-imposing a ceiling*: a `tanh` ceiling on the FLOW sum in
+`BodyVoice::process`, `kFlowSatCeil = 0.4`. Worst-case peak 629 → 0.283. STEP is
+untouched — the ceiling sits behind the `_sustaining` branch, so a struck note
+takes the same path it always did. A side effect worth knowing: the `cross-deck excitation` test, red since the bow fix, went
+green again.
+
+**FILTER died before its fade began.** Below FILT ≈ −0.4 BODY went almost
+silent. The cause is that BODY's loudness-versus-brightness curve is a straight
+line spanning only 10.8 dB, against SYNTH's 27.9 — so the *shared* left-hand
+fade, sized for an engine already ~28 dB down by the time it engages, had to
+erase everything in 0.2 of knob travel. Fixed with a 17 dB cubic loudness tilt
+in `set_cutoff_hz`, applied after the energy follower so a dark voice is not
+stolen early. Left half went from −1.5 / −2.9 / −4.4 / −5.7 dB to
+−3.5 / −8.0 / −13.6 / −20.6 dB. Confirmed by ear.
+
+**Two things measured and deliberately left open.**
+
+- **FLOW-to-STEP spread is 34 dB**, not the 8–12 dB the owner asked for. The
+  ceiling cannot close it — 0.4 and 0.2 give the same spread — because the
+  residual sits at the *low* end, and that end is not yet understood. Worth
+  understanding before anything is designed for it.
+- **A struck note reaches 1.088**, i.e. over full scale, at some settings. This
+  is pre-existing, not introduced here, and it affects STEP. `test_body_engine.cpp`
+  records the finding in a comment next to the FLOW peak test.
+
+Spec: `docs/superpowers/specs/2026-07-28-body-sustain-gain-design.md` (§1–§4
+abandoned, see its §8). Plan:
+`docs/superpowers/plans/2026-07-28-body-sustain-gain.md` (superseded, do not
+execute).
+
+2.15.1 is a separate, non-engine release: the owner's `drone.vcvm` panel became
+the init patch (`host/vcv/src/init_patch.hpp`).
 
 ## Planned
 
