@@ -508,6 +508,147 @@ float proc_flux_lines_2ch()
     return acc;
 }
 
+// --- Sweep C: cost against voice count ---------------------------------------
+// setup_inst_worst (bench/workloads_system.cpp) with COLOR as the only
+// variable. Everything else -- density, depth, rate, both FX blocks, comp,
+// voice decay, the reverb settings, master drive -- stays at its worst-case
+// value, so this curve is measured on the same instrument the CPU gate is
+// set on. Eight voices (2 parts x SynthEngineT::kVoices == 4, synth_engine.h)
+// are 35.8 points, the largest single item in the whole instrument; this
+// asks whether the last voice costs more than the first.
+//
+// COLOR norms for 1..4 notes, from engine/pitch/chord.h. Instrument::set_color
+// (engine/instrument.h) -> Part::set_color (engine/parts/part.h) only stores
+// the raw knob value; the CHORD layer only sees it through Part::_control_tick
+// (engine/parts/part.cpp:274-275, "_chord.set_color(_color_eff)"), which
+// calls ChordBuilder::set_color (chord.h). That function's zone edges are
+// its own constants -- kEdge2 = 0.125, kEdge3 = 0.375, kEdge4 = 0.625, kHyst
+// = 0.02 -- NOT evenly spaced fractions of 0-1 (0.125/0.375/0.625 are, but
+// the fourth "zone" is everything from kEdge4 up, i.e. unbounded above). On
+// the very first call (the state this row's single set_color(p, ...) call
+// produces -- _above2/_above3/_above4 all start false, chord.h:38-46),
+// ChordBuilder::_hyst(false, edge) resolves to `color >= edge + kHyst`, so
+// the four zones this row's four norms target are:
+//   1 note  -> color <  0.145                     (norm 0.0)
+//   2 notes -> 0.145 <= color < 0.395              (norm 0.25, zone centre)
+//   3 notes -> 0.395 <= color < 0.645              (norm 0.52, zone centre)
+//   4 notes -> color >= 0.645                      (norm 1.0 -- the exact
+//                                                    value setup_inst_worst
+//                                                    already uses)
+//
+// That is NOT the whole story. This row's mandated DEPTH = 1 also modulates
+// COLOR every control tick (Part::_control_tick, part.cpp:264-274): cmod =
+// mod_lane_output(LANE_MOTION) * depth * kColorMod(0.2, part.h) * cgate,
+// where cgate = clampf(base_color / kColorGate(0.01), 0, 1) saturates to 1
+// for any base color above 0.01. So the EFFECTIVE color swings by roughly
+// +/-0.2 around three of these four norms -- wider than the ~0.25-wide 2-
+// and 3-note zones -- for as long as DEPTH stays at its mandated worst-case
+// value. Only the 1-note norm (0.0, where cgate == 0 exactly, so the swing
+// is gated fully off) and the 4-note norm (1.0, where the swing can only
+// push color DOWN and 0.8 still clears kEdge4 + kHyst with margin) are
+// immune to it.
+//
+// A second, independent effect compounds this: DENSITY = 1 and RATE = 0.8
+// (also mandated) make the PITCH lane fire often, and each fire's
+// trigger_chord() (synth_engine.cpp:142) claims the next FREE voice for
+// every note in the chord before it ever steals a sounding one
+// (SynthEngineT::_do_trigger, synth_engine.cpp:178-183) -- and VOICE_DECAY
+// = 1 (also mandated) means a struck voice does not free up on any
+// timescale this bench measures. So repeated fires accumulate DISTINCT
+// struck voices across time, independent of how many notes any single fire
+// contains. Verified empirically with a scratch instrument mirroring this
+// setup exactly (engine-only init, same set_color/density/depth/rate/
+// voice_decay, same trigger_manual): active_voices(PART_A) +
+// active_voices(PART_B) reaches 8 (every voice on both parts) by block
+// ~150 (14 400 samples, ~0.3 s) for ALL FOUR norms above, including 0.0,
+// and stays at 8 for at least 1200 blocks -- well past this row's own
+// settle (below) plus the runner's fixed 1000-block measured window. See
+// the report's "concerns" section: under these mandated worst-case
+// settings, this sweep's four rows are expected to reach the SAME achieved
+// voice count once settled, not a graduated 1/2/3/4 (or 2/4/6/8) curve.
+// proc_voices() below folds the achieved active_voices() into the checksum
+// for exactly this reason -- so that fact is visible in the numbers
+// instead of hidden behind a plausible-looking row name.
+//
+// Settle: setup_inst_worst leaves this entirely to the runner's fixed
+// 100-block warm-up, which is NOT enough for what this row actually
+// contains -- the empirical trace above shows the slowest norm (0.0) still
+// climbing at block 100 (only 6 of 8 voices) and not yet flat. Settling
+// inside setup(), before the runner's own warm-up and its 1000-block
+// measured window even start, means every measured block sees the same
+// (saturated) voice count instead of blending a rising transient into the
+// average. 600 blocks (57 600 samples, 1.2 s) is four times the observed
+// ~150-block saturation point -- this file's standing "settle four times
+// over" margin (kSweepFluxSettleSamples, kSweepStagesSettleSamples,
+// kSweepFluxLinesSettleSamples above) -- and it is also six times longer
+// than the reverb's own precedent elsewhere in this bench: several other
+// families (workloads_abl.cpp, workloads_body.cpp, workloads_sampler.cpp)
+// run the identical decay = 0.95 AmbientReverb behind only the runner's
+// bare 100-block warm-up and are accepted rows, so 600 blocks covers the
+// reverb's settle needs as a side effect of covering the voice-saturation
+// need that actually drives this number.
+constexpr int kSweepVoicesSettleBlocks = 600;
+
+void setup_voices(float color_norm)
+{
+    auto& group = g_sweep_arena.emplace<SweepInstrumentGroup>();
+    auto& inst = group.instrument;
+    inst.init(kSampleRate, fx_mem());
+    inst.set_tempo_bpm(120.f);
+    for (int p = 0; p < PART_COUNT; ++p) {
+        inst.set_color(p, color_norm);   // <-- the one variable; see derivation above
+        inst.set_density(p, 1.f);
+        inst.set_depth(p, 1.f);
+        inst.set_rate(p, 0.8f);
+        inst.set_fx_on(p, FxBlock::Grit, true);
+        inst.set_fx_on(p, FxBlock::Flux, true);
+        inst.set_grit_mix(p, 1.f);
+        inst.set_flux_mix(p, 1.f);
+        inst.set_comp(p, 1.f);
+        inst.set_voice_decay(p, 1.f);
+        inst.trigger_manual(p);
+    }
+    inst.set_reverb_mix(0.5f);
+    inst.set_reverb_size(1.f);
+    inst.set_reverb_decay(0.95f);
+    inst.set_reverb_diffusion(0.9f);
+    inst.set_reverb_smear(1.f);
+    inst.set_reverb_mod(1.f);
+    inst.set_master_drive(1.f);
+
+    // Settle OUTSIDE the measured window -- see kSweepVoicesSettleBlocks above.
+    const float* in = test_input();
+    for (int b = 0; b < kSweepVoicesSettleBlocks; ++b)
+        inst.process(in, in, group.out_l, group.out_r, kBlock);
+}
+
+void setup_voices_1() { setup_voices(0.0f);  }
+void setup_voices_2() { setup_voices(0.25f); }
+void setup_voices_3() { setup_voices(0.52f); }
+void setup_voices_4() { setup_voices(1.0f);  }
+
+float proc_voices()
+{
+    auto& group = g_sweep_arena.get<SweepInstrumentGroup>();
+    auto& inst = group.instrument;
+    const float* in = test_input();
+    inst.process(in, in, group.out_l, group.out_r, kBlock);
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i)
+        acc += group.out_l[i] + group.out_r[i];
+    // Fold the achieved voice count into the checksum, once per call (not
+    // per sample) -- same idiom as proc_inst (workloads_system.cpp) and
+    // proc_sweep_fx's stages_achieved fold above. If this row's actual
+    // active_voices() ever differs from what its name claims -- whether
+    // from a bad COLOR-zone mapping or from the voice-stealing saturation
+    // documented on setup_voices above -- this moves the checksum the bench
+    // compares across hardware runs, instead of the curve quietly
+    // reporting a knee (or a flat line) that isn't explained.
+    acc += static_cast<float>(inst.active_voices(PART_A));
+    acc += static_cast<float>(inst.active_voices(PART_B));
+    return acc;
+}
+
 } // namespace
 
 const Workload kSweepWorkloads[] = {
@@ -524,6 +665,10 @@ const Workload kSweepWorkloads[] = {
     { "sweep", "sweep_grit_bare",       setup_grit_bare,       proc_grit_bare },
     { "sweep", "sweep_grit_no_bbd_mem", setup_grit_no_bbd_mem, proc_sweep_fx  },
     { "sweep", "sweep_flux_lines_2ch",  setup_flux_lines_2ch,  proc_flux_lines_2ch },
+    { "sweep", "sweep_voices_1", setup_voices_1, proc_voices },
+    { "sweep", "sweep_voices_2", setup_voices_2, proc_voices },
+    { "sweep", "sweep_voices_3", setup_voices_3, proc_voices },
+    { "sweep", "sweep_voices_4", setup_voices_4, proc_voices },
 };
 const int kSweepCount = sizeof(kSweepWorkloads) / sizeof(kSweepWorkloads[0]);
 
