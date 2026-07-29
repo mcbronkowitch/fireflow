@@ -32,15 +32,25 @@ struct SweepInstrumentGroup {
 // 512*32^0.8 == 512*16 == 8192, and this row never calls set_stages so it stays
 // there), each rate index's target repeat rate is (bpm/60)*kDivisions[5+idx].cpb
 // and the BBD clock that produces is stages/(2*t) = 4096/t Hz, clamped to
-// kClockMaxHz (32000):
+// kClockMaxHz (32000). The full ladder (all 12 indices, unclamped clock):
+//   0: 4096 Hz    1: 5461.3 Hz   2: 6144 Hz    3: 8192 Hz    4: 10922.7 Hz
+//   5: 12288 Hz   6: 16384 Hz    7: 21845.3 Hz 8: 24576 Hz
+//   9: 32768 Hz -> clamped     10: 49152 Hz -> clamped     11: 65536 Hz -> clamped
+// Indices 9, 10 and 11 all clamp to the SAME 32000 Hz -- rate 8 (24576 Hz) is
+// the highest rung whose unclamped clock still sits strictly below the
+// ceiling, i.e. the last rung before it engages. The five sampled points:
 //   rate 0  (cpb=1/2): t=1.0s    -> clock 4096 Hz
 //   rate 3  (cpb=1  ): t=0.5s    -> clock 8192 Hz
 //   rate 6  (cpb=2  ): t=0.25s   -> clock 16384 Hz
-//   rate 9  (cpb=4  ): t=0.125s  -> clock 32768 Hz -> clamped to 32000 Hz
+//   rate 8  (cpb=3  ): t=0.16667s-> clock 24576 Hz (last unclamped rung)
 //   rate 11 (cpb=8  ): t=0.0625s -> clock 65536 Hz -> clamped to 32000 Hz
-// So BOTH rate 9 and rate 11 land on the 32 kHz ceiling (1.33 ticks per audio
-// sample at 48 kHz) and should cost the same -- the knee sits between rate 6
-// and rate 9, not only at the last point. A prior draft of this row zeroed
+// rate 8 replaces an earlier choice of rate 9: rate 9's unclamped clock
+// (32768 Hz) already clamps to the same 32000 Hz as rate 11, so the two rows
+// would have returned the same clock, same cost and the same number twice --
+// four distinct points instead of five, with the knee between rate 6 (last
+// point below the clamp region) and the ceiling left unmeasured. rate 8 (1.33
+// ticks per audio sample only at rate 11; 1.024 at rate 8) pins exactly where
+// the ceiling starts biting instead. A prior draft of this row also zeroed
 // values[FXT_FLUX_TIME], which bbd_time_mult() maps to x0.25 (engine/fx/bbd.h),
 // quartering every row's real clock and hiding this ceiling entirely; fixed by
 // mirroring setup_fx's values[] array exactly (see setup_flux_rate below).
@@ -75,11 +85,11 @@ float proc_sweep_probe()
 // rate -- see the derivation on SweepFxGroup above -- so the fill time
 // stages/(2*clock_actual) differs per row and only rate 0 (the longest delay,
 // hence the longest fill) sets the bound all five rows share:
-//   rate 0:  clock 4096  Hz -> fill 8192/(2*4096)  = 1.000 s = 48000 samples
-//   rate 3:  clock 8192  Hz -> fill 8192/(2*8192)  = 0.500 s = 24000 samples
-//   rate 6:  clock 16384 Hz -> fill 8192/(2*16384) = 0.250 s = 12000 samples
-//   rate 9:  clock 32000 Hz -> fill 8192/(2*32000) = 0.128 s =  6144 samples
-//   rate 11: clock 32000 Hz -> fill 8192/(2*32000) = 0.128 s =  6144 samples
+//   rate 0:  clock 4096  Hz -> fill 8192/(2*4096)  = 1.000 s   = 48000 samples
+//   rate 3:  clock 8192  Hz -> fill 8192/(2*8192)  = 0.500 s   = 24000 samples
+//   rate 6:  clock 16384 Hz -> fill 8192/(2*16384) = 0.250 s   = 12000 samples
+//   rate 8:  clock 24576 Hz -> fill 8192/(2*24576) = 0.16667 s =  8000 samples
+//   rate 11: clock 32000 Hz -> fill 8192/(2*32000) = 0.128 s   =  6144 samples
 // Four times the largest (rate 0's 48000): 192000 samples, used for every row
 // so all five settle at least as long as their own four-fill requirement.
 constexpr int kSweepFluxSettleSamples = 192000;
@@ -121,7 +131,7 @@ void setup_flux_rate(int rate_index)
 void setup_flux_rate_0()  { setup_flux_rate(0);  }
 void setup_flux_rate_3()  { setup_flux_rate(3);  }
 void setup_flux_rate_6()  { setup_flux_rate(6);  }
-void setup_flux_rate_9()  { setup_flux_rate(9);  }
+void setup_flux_rate_8()  { setup_flux_rate(8);  }
 void setup_flux_rate_11() { setup_flux_rate(11); }
 
 float proc_sweep_fx()
@@ -144,7 +154,7 @@ const Workload kSweepWorkloads[] = {
     { "sweep", "sweep_flux_rate_0",  setup_flux_rate_0,  proc_sweep_fx },
     { "sweep", "sweep_flux_rate_3",  setup_flux_rate_3,  proc_sweep_fx },
     { "sweep", "sweep_flux_rate_6",  setup_flux_rate_6,  proc_sweep_fx },
-    { "sweep", "sweep_flux_rate_9",  setup_flux_rate_9,  proc_sweep_fx },
+    { "sweep", "sweep_flux_rate_8",  setup_flux_rate_8,  proc_sweep_fx },
     { "sweep", "sweep_flux_rate_11", setup_flux_rate_11, proc_sweep_fx },
 };
 const int kSweepCount = sizeof(kSweepWorkloads) / sizeof(kSweepWorkloads[0]);

@@ -181,7 +181,7 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "sweep_flux_rate_0",
         "sweep_flux_rate_3",
         "sweep_flux_rate_6",
-        "sweep_flux_rate_9",
+        "sweep_flux_rate_8",
         "sweep_flux_rate_11",
     ),
     "voice": (
