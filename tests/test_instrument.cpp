@@ -62,13 +62,13 @@ TEST_CASE("instrument: set_scale is global and reaches both parts") {
     CHECK(inst.pitch_cv(PART_B) == doctest::Approx(18.f / 36.f));
 }
 
-static float s_ti_echo[PART_COUNT][2][spky::Flux::kMaxSamples];
+static float s_ti_echo[PART_COUNT][spky::Flux::kMaxSamples];
 static spky::AmbientReverb s_ti_reverb;
 
 static spky::FxMem test_fx_mem() {
     spky::FxMem m;
     for (int p = 0; p < PART_COUNT; ++p)
-        for (int c = 0; c < 2; ++c) m.echo[p][c] = s_ti_echo[p][c];
+        m.echo[p] = s_ti_echo[p];
     m.reverb = &s_ti_reverb;
     return m;
 }
@@ -275,12 +275,12 @@ TEST_CASE("instrument M4: morph=1 isolates part A's dry path") {
 }
 
 TEST_CASE("instrument M4: morph=1 injects no new reverb from part A (send isolated)") {
-    static float echoX[PART_COUNT][2][Flux::kMaxSamples];
-    static float echoY[PART_COUNT][2][Flux::kMaxSamples];
+    static float echoX[PART_COUNT][Flux::kMaxSamples];
+    static float echoY[PART_COUNT][Flux::kMaxSamples];
     static AmbientReverb rvX, rvY;
     FxMem mx, my;
     for (int p = 0; p < PART_COUNT; ++p)
-        for (int c = 0; c < 2; ++c) { mx.echo[p][c] = echoX[p][c]; my.echo[p][c] = echoY[p][c]; }
+        { mx.echo[p] = echoX[p]; my.echo[p] = echoY[p]; }
     mx.reverb = &rvX; my.reverb = &rvY;
     Instrument x; x.init(48000.f, mx);
     Instrument y; y.init(48000.f, my);
@@ -406,14 +406,14 @@ TEST_CASE("instrument M4.8: mix 0.5 sits at equal power (both gains cos(pi/4))")
     //   out05  = 0.7071*dry + 0.7071*wet
     // => rms(out05 - 0.7071*out0) / rms(out1) == 0.7071  (wet gain)
     //    rms(out05 - 0.7071*out1) / rms(out0) == 0.7071  (dry gain)
-    static float echoEP[3][PART_COUNT][2][Flux::kMaxSamples];
+    static float echoEP[3][PART_COUNT][Flux::kMaxSamples];
     static AmbientReverb rvEP[3];
     Instrument inst[3];
     const float mixes[3] = { 0.f, 0.5f, 1.f };
     for (int k = 0; k < 3; ++k) {
         FxMem m;
         for (int p = 0; p < PART_COUNT; ++p)
-            for (int c = 0; c < 2; ++c) m.echo[p][c] = echoEP[k][p][c];
+            m.echo[p] = echoEP[k][p];
         m.reverb = &rvEP[k];
         inst[k].init(48000.f, m);
         inst[k].set_reverb_mix(mixes[k]);
@@ -468,12 +468,12 @@ TEST_CASE("instrument: reverb mix is per-deck (A wet-kills-dry while B stays dry
 }
 
 TEST_CASE("instrument M4.8: hard MIX jumps are smoothed (no zipper)") {
-    static float echoZ[PART_COUNT][2][Flux::kMaxSamples];
+    static float echoZ[PART_COUNT][Flux::kMaxSamples];
     static AmbientReverb rvZ;
     auto run_maxd = [&](bool stepped) {
         FxMem m;
         for (int p = 0; p < PART_COUNT; ++p)
-            for (int c = 0; c < 2; ++c) m.echo[p][c] = echoZ[p][c];
+            m.echo[p] = echoZ[p];
         m.reverb = &rvZ;
         Instrument inst;
         inst.init(48000.f, m);                 // init() re-clears the shared statics
@@ -508,12 +508,12 @@ TEST_CASE("instrument M4.8: MIX 0 sleeps the room, any MIX > 0 wakes it") {
 }
 
 TEST_CASE("instrument M4.8: waking from sleep starts with an empty room (no ghost tail)") {
-    static float echoGX[PART_COUNT][2][Flux::kMaxSamples];
-    static float echoGY[PART_COUNT][2][Flux::kMaxSamples];
+    static float echoGX[PART_COUNT][Flux::kMaxSamples];
+    static float echoGY[PART_COUNT][Flux::kMaxSamples];
     static AmbientReverb rvGX, rvGY;
     FxMem mx, my;
     for (int p = 0; p < PART_COUNT; ++p)
-        for (int c = 0; c < 2; ++c) { mx.echo[p][c] = echoGX[p][c]; my.echo[p][c] = echoGY[p][c]; }
+        { mx.echo[p] = echoGX[p]; my.echo[p] = echoGY[p]; }
     mx.reverb = &rvGX; my.reverb = &rvGY;
     Instrument x; x.init(48000.f, mx);
     Instrument y; y.init(48000.f, my);
@@ -548,11 +548,11 @@ TEST_CASE("instrument M4.8: waking from sleep starts with an empty room (no ghos
 
 TEST_CASE("instrument M4.8: mix automation incl. sleep is deterministic end to end") {
     auto run = [] {
-        static float echoD[PART_COUNT][2][Flux::kMaxSamples];
+        static float echoD[PART_COUNT][Flux::kMaxSamples];
         static AmbientReverb rvD;
         FxMem m;
         for (int p = 0; p < PART_COUNT; ++p)
-            for (int c = 0; c < 2; ++c) m.echo[p][c] = echoD[p][c];
+            m.echo[p] = echoD[p];
         m.reverb = &rvD;
         Instrument inst;
         inst.init(48000.f, m);            // init() re-clears the shared statics

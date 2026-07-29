@@ -367,15 +367,13 @@ TEST_CASE("scenario: the sampler control actions reach the engine") {
     // not exist in this repo. Follow the InstRig pattern already proven in
     // tests/test_sampler_part.cpp instead -- FxMem with injected per-part
     // sampler memory, then Instrument::init(sample_rate, mem).
-    std::vector<float> echo[PART_COUNT][2];
+    std::vector<float> echo[PART_COUNT];
     std::vector<SampleBuffer::Frame> sbuf[PART_COUNT];
     AmbientReverb reverb;
     FxMem mem;
     for (int p = 0; p < PART_COUNT; ++p) {
-        for (int c = 0; c < 2; ++c) {
-            echo[p][c].assign(Flux::kMaxSamples, 0.f);
-            mem.echo[p][c] = echo[p][c].data();
-        }
+        echo[p].assign(Flux::kMaxSamples, 0.f);
+        mem.echo[p] = echo[p].data();
         sbuf[p].assign(48000, SampleBuffer::Frame{ 0.f, 0.f });
         mem.sampler_buf[p] = sbuf[p].data();
     }

@@ -3,8 +3,7 @@
 #include "fx/part_fx.h"
 using namespace spky;
 
-static float s_pf_l[Flux::kMaxSamples];
-static float s_pf_r[Flux::kMaxSamples];
+static float s_pf[Flux::kMaxSamples];
 
 // fxv helper: boot bases with individual overrides
 static void fill(float* v, float grit, float time, float mix, float send, float fb) {
@@ -33,7 +32,7 @@ static void warm_up_tape_tap(PartFx& fx, const float* v) {
 
 TEST_CASE("part_fx: both blocks off is bit-exact dry, send 0 is exact zero") {
     PartFx fx;
-    fx.init(48000.f, s_pf_l, s_pf_r);
+    fx.init(48000.f, s_pf);
     float v[FXT_COUNT];
     fill(v, 0.3f, 0.4f, 1.f, 0.f, 0.45f);
     for (int i = 0; i < 2000; ++i) {
@@ -49,7 +48,7 @@ TEST_CASE("part_fx: both blocks off is bit-exact dry, send 0 is exact zero") {
 
 TEST_CASE("part_fx: FX MIX 0 keeps the dry signal even with grit engaged") {
     PartFx fx;
-    fx.init(48000.f, s_pf_l, s_pf_r);
+    fx.init(48000.f, s_pf);
     fx.set_fx_on(FxBlock::Grit, true, true);
     float v[FXT_COUNT];
     fill(v, 0.9f, 0.4f, 0.f, 0.f, 0.f);
@@ -63,7 +62,7 @@ TEST_CASE("part_fx: FX MIX 0 keeps the dry signal even with grit engaged") {
 
 TEST_CASE("part_fx: FX MIX 1 with grit on changes the signal") {
     PartFx fx;
-    fx.init(48000.f, s_pf_l, s_pf_r);
+    fx.init(48000.f, s_pf);
     fx.set_fx_on(FxBlock::Grit, true, true);
     float v[FXT_COUNT];
     fill(v, 0.9f, 0.4f, 1.f, 0.f, 0.f);
@@ -79,7 +78,7 @@ TEST_CASE("part_fx: FX MIX 1 with grit on changes the signal") {
 
 TEST_CASE("part_fx: send taps post-FX at the equal-power gain") {
     PartFx fx;
-    fx.init(48000.f, s_pf_l, s_pf_r);
+    fx.init(48000.f, s_pf);
     float v[FXT_COUNT];
     fill(v, 0.3f, 0.4f, 1.f, 1.f, 0.45f);   // send fully open
     // prime the smoothers (first process snaps), then measure
@@ -95,7 +94,7 @@ TEST_CASE("part_fx: send taps post-FX at the equal-power gain") {
 
 TEST_CASE("part_fx: comp default 0 leaves chain and send bit-exact") {
     PartFx fx;
-    fx.init(48000.f, s_pf_l, s_pf_r);
+    fx.init(48000.f, s_pf);
     const float fxv[FXT_COUNT] = {0.f, 0.5f, 1.f, 0.5f, 0.f};
     for (int i = 0; i < 4800; ++i) {
         float s = 0.5f * std::sin(6.2831853f * 220.f * i / 48000.f);
@@ -121,7 +120,7 @@ TEST_CASE("part_fx: comp sits BEFORE the send tap — the send gets louder too")
     const float fxv[FXT_COUNT] = {0.f, 0.5f, 1.f, 0.8f, 0.f};
     auto send_rms = [&](float amount) {
         PartFx fx;
-        fx.init(48000.f, s_pf_l, s_pf_r);
+        fx.init(48000.f, s_pf);
         fx.set_comp(amount);
         double acc = 0.0;
         int n = 0;
@@ -141,7 +140,7 @@ TEST_CASE("part_fx: FXT_FLUX_TIME reaches the clock -- and RATE still sets the b
     // case is the inverse of the one it replaces: the lane MUST move the
     // clock now, while the ladder still decides what it moves relative to.
     PartFx fx;
-    fx.init(48000.f, s_pf_l, s_pf_r);
+    fx.init(48000.f, s_pf);
     fx.set_fx_on(FxBlock::Flux, true, true);
     fx.set_bpm(120.f);
     fx.set_flux_rate(3);                  // "1/4" -> 0.5 s
@@ -168,7 +167,7 @@ TEST_CASE("part_fx: the FLUX TIME lane rides the 2 ms path, so a 4 Hz vibrato su
     // must still swing the clock by most of its range; through the 30 ms
     // ladder slew it would be a ~5 Hz low-pass and would not.
     PartFx fx;
-    fx.init(48000.f, s_pf_l, s_pf_r);
+    fx.init(48000.f, s_pf);
     fx.set_fx_on(FxBlock::Flux, true, true);
     fx.set_bpm(120.f);
     fx.set_flux_rate(3);
@@ -198,7 +197,7 @@ TEST_CASE("part_fx: the FLUX TIME lane rides the 2 ms path, so a 4 Hz vibrato su
 
 TEST_CASE("part_fx: DRIVE and STAGES reach FLUX") {
     PartFx fx;
-    fx.init(48000.f, s_pf_l, s_pf_r);
+    fx.init(48000.f, s_pf);
     fx.set_fx_on(FxBlock::Flux, true, true);
     fx.set_stages(0.4f);
     fx.set_drive(0.6f);
@@ -232,9 +231,9 @@ TEST_CASE("part_fx: tape_tap exposes the FLUX echo, not the mix, and starts at e
     // that bypass), but the dependency is real: if one-knob comp ever grew
     // a nonzero default, this is the assertion that would start failing,
     // for a reason that has nothing to do with the tape tap.
-    static float s_pf_tap_l[Flux::kMaxSamples], s_pf_tap_r[Flux::kMaxSamples];
+    static float s_pf_tap[Flux::kMaxSamples];
     PartFx fx;
-    fx.init(48000.f, s_pf_tap_l, s_pf_tap_r);
+    fx.init(48000.f, s_pf_tap);
     CHECK(fx.tape_tap() == 0.f);   // claim 1
 
     fx.set_fx_on(FxBlock::Flux, true, true);
@@ -270,9 +269,9 @@ TEST_CASE("part_fx: tape_tap drops to exact 0 the sample FLUX disengages, whole 
     // isolates the outer one: if it silently dropped, _tape_tap would keep
     // returning whatever the branch last computed instead of 0.f, because
     // skipping the branch means process() never touches _tape_tap at all.
-    static float s_pf_tap2_l[Flux::kMaxSamples], s_pf_tap2_r[Flux::kMaxSamples];
+    static float s_pf_tap2[Flux::kMaxSamples];
     PartFx fx;
-    fx.init(48000.f, s_pf_tap2_l, s_pf_tap2_r);
+    fx.init(48000.f, s_pf_tap2);
     fx.set_fx_on(FxBlock::Flux, true, true);
     fx.set_flux_mix(1.f);
     fx.set_bpm(120.f);
@@ -298,9 +297,9 @@ TEST_CASE("part_fx: tape_tap drops to exact 0 the sample FLUX disengages, GRIT a
     // fed _tap_dc.Process(0.f) every sample (trusting the zero echo
     // difference rather than checking engaged()) would read a slowly-
     // decaying tail off the DC blocker's filter memory here, not a hard 0.
-    static float s_pf_tap3_l[Flux::kMaxSamples], s_pf_tap3_r[Flux::kMaxSamples];
+    static float s_pf_tap3[Flux::kMaxSamples];
     PartFx fx;
-    fx.init(48000.f, s_pf_tap3_l, s_pf_tap3_r);
+    fx.init(48000.f, s_pf_tap3);
     fx.set_fx_on(FxBlock::Flux, true, true);
     fx.set_flux_mix(1.f);
     fx.set_bpm(120.f);
@@ -337,9 +336,9 @@ TEST_CASE("part_fx: tape_tap's soft clip bounds the raw BBD echo, which is not b
     // cannot run away" measures peak = 1.54485 at DRIVE 1, FEEDBACK 1.2).
     // DRIVE maxed and FEEDBACK near its 1.2 ceiling is that same regime,
     // reached here through PartFx's own knobs rather than BbdEcho directly.
-    static float s_pf_clip_l[Flux::kMaxSamples], s_pf_clip_r[Flux::kMaxSamples];
+    static float s_pf_clip[Flux::kMaxSamples];
     PartFx fx;
-    fx.init(48000.f, s_pf_clip_l, s_pf_clip_r);
+    fx.init(48000.f, s_pf_clip);
     fx.set_fx_on(FxBlock::Flux, true, true);
     fx.set_flux_mix(1.f);
     fx.set_drive(1.f);
@@ -405,9 +404,9 @@ TEST_CASE("part_fx: tape_tap's DC block removes a sustained offset, fast_tanh al
     // stages, bbd_clock_hz's ceiling (kClockMaxHz, bbd.h) caps how short a
     // delay is reachable at all, and the point of this test is the DC
     // block's own decay, not how long the line takes to fill.
-    static float s_pf_dc_l[Flux::kMaxSamples], s_pf_dc_r[Flux::kMaxSamples];
+    static float s_pf_dc[Flux::kMaxSamples];
     PartFx fx;
-    fx.init(48000.f, s_pf_dc_l, s_pf_dc_r);
+    fx.init(48000.f, s_pf_dc);
     fx.set_fx_on(FxBlock::Flux, true, true);
     fx.set_flux_mix(1.f);
     fx.set_stages(0.f);            // 512 stages: the shortest reachable delay

@@ -9,7 +9,7 @@ using namespace spky;
 static constexpr size_t kSFrames = 48000;   // 1 s per part is plenty for tests
 
 struct InstRig {
-    std::vector<float> echo[PART_COUNT][2];
+    std::vector<float> echo[PART_COUNT];
     std::vector<SampleBuffer::Frame> sbuf[PART_COUNT];
     AmbientReverb reverb;
     FxMem mem;
@@ -17,10 +17,8 @@ struct InstRig {
 
     InstRig() {
         for (int p = 0; p < PART_COUNT; ++p) {
-            for (int c = 0; c < 2; ++c) {
-                echo[p][c].assign(Flux::kMaxSamples, 0.f);
-                mem.echo[p][c] = echo[p][c].data();
-            }
+            echo[p].assign(Flux::kMaxSamples, 0.f);
+            mem.echo[p] = echo[p].data();
             sbuf[p].assign(kSFrames, SampleBuffer::Frame{ 0.f, 0.f });
             mem.sampler_buf[p] = sbuf[p].data();
         }
@@ -137,14 +135,13 @@ TEST_CASE("part: input reaches a part's SamplerEngine only while that part is ro
 }
 
 TEST_CASE("part: a nullptr sampler buffer leaves the part silent, not crashing") {
-    std::vector<float> echo[PART_COUNT][2];
+    std::vector<float> echo[PART_COUNT];
     AmbientReverb reverb;
     FxMem mem;
-    for (int p = 0; p < PART_COUNT; ++p)
-        for (int c = 0; c < 2; ++c) {
-            echo[p][c].assign(Flux::kMaxSamples, 0.f);
-            mem.echo[p][c] = echo[p][c].data();
-        }
+    for (int p = 0; p < PART_COUNT; ++p) {
+        echo[p].assign(Flux::kMaxSamples, 0.f);
+        mem.echo[p] = echo[p].data();
+    }
     mem.reverb = &reverb;                       // sampler_buf left nullptr
     Instrument inst;
     inst.init(48000.f, mem);
@@ -232,7 +229,7 @@ TEST_CASE("part: an engine swap re-pushes the held gate to the sampler") {
 
     Part p;
     std::vector<SampleBuffer::Frame> mem(48000);
-    p.init(48000.f, 1234, nullptr, nullptr, mem.data(), mem.size());
+    p.init(48000.f, 1234, nullptr, mem.data(), mem.size());
     p.sampler().load_sample(tone.data(), tone.data(), tone.size());
     p.set_step(true, 8);
     REQUIRE(p.engine_id() == ENGINE_SYNTH);
@@ -346,7 +343,7 @@ TEST_CASE("sampler part: the MOTION lane breathes the grain overlap") {
     // reaches COLOR (part.cpp:129-134).
     std::vector<SampleBuffer::Frame> sbuf(kSFrames, SampleBuffer::Frame{ 0.f, 0.f });
     Part p;
-    p.init(48000.f, 0, nullptr, nullptr, sbuf.data(), sbuf.size());
+    p.init(48000.f, 0, nullptr, sbuf.data(), sbuf.size());
     p.set_engine(ENGINE_SAMPLER);
     p.set_sampler_overlap(0.5f);
     p.set_depth(1.f);
@@ -368,7 +365,7 @@ TEST_CASE("sampler part: the MOTION lane breathes the grain overlap") {
 TEST_CASE("sampler part: an inactive MOTION target leaves the overlap on the knob") {
     std::vector<SampleBuffer::Frame> sbuf(kSFrames, SampleBuffer::Frame{ 0.f, 0.f });
     Part p;
-    p.init(48000.f, 0, nullptr, nullptr, sbuf.data(), sbuf.size());
+    p.init(48000.f, 0, nullptr, sbuf.data(), sbuf.size());
     p.set_engine(ENGINE_SAMPLER);
     p.set_sampler_overlap(0.4f);
     p.set_target_active(LANE_MOTION, false);
@@ -383,7 +380,7 @@ TEST_CASE("sampler part: a deactivated PITCH lane holds pitch but keeps firing")
     // which is why STEP still triggers.
     std::vector<SampleBuffer::Frame> sbuf(kSFrames, SampleBuffer::Frame{ 0.f, 0.f });
     Part p;
-    p.init(48000.f, 0, nullptr, nullptr, sbuf.data(), sbuf.size());
+    p.init(48000.f, 0, nullptr, sbuf.data(), sbuf.size());
     p.set_engine(ENGINE_SAMPLER);
     p.set_step(true, 8);
     p.set_depth(1.f);
@@ -410,7 +407,7 @@ TEST_CASE("sampler part: punch() produces a grain in the FLOW cloud") {
     // so a reader later must not mistake this for proof the panel path works.
     std::vector<SampleBuffer::Frame> sbuf(kSFrames, SampleBuffer::Frame{ 0.f, 0.f });
     Part p;
-    p.init(48000.f, 0, nullptr, nullptr, sbuf.data(), sbuf.size());
+    p.init(48000.f, 0, nullptr, sbuf.data(), sbuf.size());
     p.set_engine(ENGINE_SAMPLER);
     std::vector<float> tone(24000);
     for (size_t i = 0; i < tone.size(); ++i)
@@ -678,7 +675,7 @@ TEST_CASE("F-04: ORGANIZE reaches the spawn position on a sampler deck") {
     // increments once per spawn regardless of whether the position moved.
     std::vector<SampleBuffer::Frame> sbuf(kSFrames, SampleBuffer::Frame{ 0.f, 0.f });
     Part p;
-    p.init(48000.f, 0, nullptr, nullptr, sbuf.data(), sbuf.size());
+    p.init(48000.f, 0, nullptr, sbuf.data(), sbuf.size());
     p.set_engine(ENGINE_SAMPLER);
     p.set_depth(0.f);                    // MOD = 0
 
@@ -890,7 +887,7 @@ TEST_CASE("part: a sampler STEP part pushes a real step clock and fires on slice
     // below -- do not read this one as covering it.
     std::vector<SampleBuffer::Frame> mem(48000 * 4);
     Part p;
-    p.init(48000.f, 1234, nullptr, nullptr, mem.data(), mem.size());
+    p.init(48000.f, 1234, nullptr, mem.data(), mem.size());
     p.set_engine(ENGINE_SAMPLER);
     for (int i = 0; i < 400; ++i) { float a,b,c,d; p.process(a,b,c,d); } // fade+swap
     std::vector<float> l(48000, 0.f);
@@ -935,7 +932,7 @@ TEST_CASE("part: a sampler STEP part pushes a real step clock and fires on slice
 TEST_CASE("part: sampler shuffle alternates fires without warping the step clock") {
     std::vector<SampleBuffer::Frame> mem(48000);
     Part p;
-    p.init(48000.f, 1234u, nullptr, nullptr, mem.data(), mem.size());
+    p.init(48000.f, 1234u, nullptr, mem.data(), mem.size());
     p.set_engine(ENGINE_SAMPLER);
     for (int i = 0; i < 400; ++i) {
         float l = 0.f, r = 0.f;
@@ -1029,7 +1026,7 @@ TEST_CASE("part: the phrase position reaches the sampler -- the wrap sends the c
     // rate 0.35 so the pushed step clock is a real value.
     std::vector<SampleBuffer::Frame> mem(48000 * 4);
     Part p;
-    p.init(48000.f, 1234, nullptr, nullptr, mem.data(), mem.size());
+    p.init(48000.f, 1234, nullptr, mem.data(), mem.size());
     p.set_engine(ENGINE_SAMPLER);
     for (int i = 0; i < 400; ++i) { float a, b, c, d; p.process(a, b, c, d); }
     std::vector<float> l(48000, 0.f);
@@ -1087,7 +1084,7 @@ TEST_CASE("part: the phrase position reaches the sampler -- the wrap sends the c
 TEST_CASE("sampler part: FEEL reaches the sampler unswung by MOTION") {
     std::vector<SampleBuffer::Frame> sbuf(kSFrames, SampleBuffer::Frame{ 0.f, 0.f });
     Part p;
-    p.init(48000.f, 0, nullptr, nullptr, sbuf.data(), sbuf.size());
+    p.init(48000.f, 0, nullptr, sbuf.data(), sbuf.size());
     p.set_engine(ENGINE_SAMPLER);
     p.set_color(0.5f);                  // mid-knob: the swing has room both ways
     p.set_depth(1.f);
@@ -1124,7 +1121,7 @@ TEST_CASE("sampler part: FEEL reaches the sampler unswung by MOTION") {
 TEST_CASE("sampler part: COLOR reaches the cloud swung, FEEL raw") {
     std::vector<SampleBuffer::Frame> sbuf(kSFrames, SampleBuffer::Frame{ 0.f, 0.f });
     Part p;
-    p.init(48000.f, 0, nullptr, nullptr, sbuf.data(), sbuf.size());
+    p.init(48000.f, 0, nullptr, sbuf.data(), sbuf.size());
     p.set_engine(ENGINE_SAMPLER);
     p.set_color(0.5f);                  // Reglermitte: Swing hat nach beiden Seiten Platz
     p.set_depth(1.f);
@@ -1163,7 +1160,7 @@ TEST_CASE("sampler part: COLOR reaches the cloud swung, FEEL raw") {
 TEST_CASE("sampler part: COLOR 0 leaves the cloud unswung even at full MOTION") {
     std::vector<SampleBuffer::Frame> sbuf(kSFrames, SampleBuffer::Frame{ 0.f, 0.f });
     Part p;
-    p.init(48000.f, 0, nullptr, nullptr, sbuf.data(), sbuf.size());
+    p.init(48000.f, 0, nullptr, sbuf.data(), sbuf.size());
     p.set_engine(ENGINE_SAMPLER);
     p.set_color(0.f);
     p.set_depth(1.f);
@@ -1202,7 +1199,7 @@ TEST_CASE("sampler part: MOD moves the read position quadratically") {
     auto measure = [](float depth) {
         std::vector<SampleBuffer::Frame> sbuf(kSFrames, SampleBuffer::Frame{ 0.f, 0.f });
         Part p;
-        p.init(48000.f, 0, nullptr, nullptr, sbuf.data(), sbuf.size());
+        p.init(48000.f, 0, nullptr, sbuf.data(), sbuf.size());
         p.set_engine(ENGINE_SAMPLER);
         p.set_target_base(LANE_SOURCE, 0.5f);   // Mitte: Platz nach beiden Seiten
         p.set_depth(depth);
@@ -1264,7 +1261,7 @@ TEST_CASE("sampler part: the SOURCE curve leaves a synth deck alone") {
     struct Extent { float lo, hi; };
     auto measure = [](float depth) {
         Part p;
-        p.init(48000.f, 0, nullptr, nullptr, nullptr, 0);
+        p.init(48000.f, 0, nullptr, nullptr, 0);
         p.set_engine(ENGINE_SYNTH);
         p.set_target_base(LANE_SOURCE, 0.5f);
         p.set_depth(depth);

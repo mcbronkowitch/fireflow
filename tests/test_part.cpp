@@ -124,7 +124,7 @@ TEST_CASE("part: FXT_FLUX_TIME's base default is the neutral x1") {
     // grid, which is the kind of bug that reads as "the delay is slightly
     // wrong" for weeks.
     Part p;
-    p.init(48000.f, 0x1234abcdu, nullptr, nullptr, nullptr, 0);
+    p.init(48000.f, 0x1234abcdu, nullptr, nullptr, 0);
     CHECK(p.fx_target_value(FXT_FLUX_TIME) == doctest::Approx(0.5f));
 }
 
@@ -402,10 +402,10 @@ TEST_CASE("part: BODY's own FLUX tape reaches its excitation bus through Part::_
     // regardless of whether Task 9's wiring exists at all, which is exactly
     // what happened the first time this test was written (see the WAVE/
     // SYNTH-style comment above about isolating claims from side effects).
-    static float s_pbody_echo_l[Flux::kMaxSamples], s_pbody_echo_r[Flux::kMaxSamples];
+    static float s_pbody_echo[Flux::kMaxSamples];
     auto render = [](bool flux_on, float sub) {
         Part p;
-        p.init(48000.f, 5u, s_pbody_echo_l, s_pbody_echo_r);
+        p.init(48000.f, 5u, s_pbody_echo);
         p.set_engine(ENGINE_BODY);
         p.set_voice_sub(sub);
         p.set_fx_target_base(FXT_FX_MIX, 0.f);      // isolate the tap from the send
@@ -1012,7 +1012,7 @@ TEST_CASE("part: LEVEL reaches the engine (set_targets push) only on the raster"
 // und stuende dauerhaft still auf dem Raster.
 TEST_CASE("part: the FLOW->STEP edge raises the snap request exactly once") {
     Part p;
-    p.init(48000.f, 0, nullptr, nullptr, nullptr, 0);
+    p.init(48000.f, 0, nullptr, nullptr, 0);
 
     // Erste Beobachtung des Schalters nach init(): KEIN Snap. Ein Patch, der
     // mit STEP an geladen wird, erzeugt hier eine steigende Flanke, aber es
@@ -1050,7 +1050,7 @@ TEST_CASE("part: the FLOW->STEP edge raises the snap request exactly once") {
 // Snap erzeugen, den niemand gestisch ausgeloest hat.
 TEST_CASE("part: init() resets the STEP edge memory so a mid-session reinit cannot fake a gesture") {
     Part p;
-    p.init(48000.f, 0, nullptr, nullptr, nullptr, 0);
+    p.init(48000.f, 0, nullptr, nullptr, 0);
 
     // Eine echte Geste: raus aus der Wolke, rein in STEP.
     p.set_step(false, 8);
@@ -1059,7 +1059,7 @@ TEST_CASE("part: init() resets the STEP edge memory so a mid-session reinit cann
 
     // Samplerate-Wechsel waehrend STEP physisch weiter gehalten wird: der
     // Host ruft init() erneut auf, der Schalter selbst hat sich nicht bewegt.
-    p.init(44100.f, 0, nullptr, nullptr, nullptr, 0);
+    p.init(44100.f, 0, nullptr, nullptr, 0);
 
     // Derselbe (unveraenderte) Schalterzustand wird erneut gepusht. Das ist
     // keine Geste -- init() darf hier keine Flanke vorspiegeln.
@@ -1070,8 +1070,8 @@ TEST_CASE("part: init() resets the STEP edge memory so a mid-session reinit cann
 TEST_CASE("part: FLOW to STEP latches the shuffle value already pushed in that control update") {
     Part current_order;
     Part stale_order;
-    current_order.init(48000.f, 0, nullptr, nullptr, nullptr, 0);
-    stale_order.init(48000.f, 0, nullptr, nullptr, nullptr, 0);
+    current_order.init(48000.f, 0, nullptr, nullptr, 0);
+    stale_order.init(48000.f, 0, nullptr, nullptr, 0);
 
     // Rack pushes every control value once per control tick. The shared
     // target must arrive first: entering STEP copies it into the lane's
