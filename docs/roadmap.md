@@ -11,10 +11,14 @@ is actually built today, and what is still design-only.
   (`2026-07-12-spotykach-center-section-design.md`) and the ambient-reverb v2
   spec (`2026-07-12-spotykach-ambient-reverb-v2-design.md`), and the FORM/SONG split spec
   (`2026-07-25-spotykach-form-song-split-design.md`).
-- **Last updated:** 2026-07-28 (VCV 2.15.1; BODY is complete and merged, priced
-  on the Seed at 30.7 % of the block, and has had its first playability pass —
-  see "BODY playability" below; ZAP is the next planned engine milestone
-  before M6).
+- **Last updated:** 2026-07-29 (VCV 2.15.1; BODY is complete, merged and has had
+  its first playability pass — see "BODY playability" below).
+- **⚠ The instrument is currently over CPU budget.** The 2026-07-29 hardware
+  run measured `instrument_worst` at **120.9 %** of the 960 000-cycle block
+  inside a real audio callback, and `instrument_worst_bbd` at 133.2 %. The
+  increase is entirely in the FX chain; voices, modulation plane and reverb are
+  unchanged. **An optimization round comes before ZAP (M5k), PULL (M5l) and
+  M6** — see "FLUX → BBD" for the row-by-row evidence.
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
@@ -55,7 +59,7 @@ is actually built today, and what is still design-only.
 | **+ FORM/SONG** | Persistent A/B phrase snapshots with independent phrase-engine FORM and seven-mode SONG arrangement | ✅ **done** (engine, renderer, and VCV; released in 2.13.1; stable VCV parameter IDs and legacy patch migration) |
 | **Mod grid lock** | In STEP the four texture lanes stop owning a clock and follow the deck's integer step count; the lane ratios become cycle lengths (4/6/8/12/16 at STEPS = 8), TIDE stretches slot counts, and DRIFT, EVOLVE, SPOT and float drift can no longer push a lane off the grid | ✅ **done** (engine + VCV; released in 2.13.2; spec `docs/superpowers/specs/2026-07-25-mod-lane-step-grid-lock-design.md`) |
 | **M5j** | BODY — one-voice-per-deck resonator part engine, morphing string → metal → bell, with a sympathetic excitation bus | ✅ **done** (engine, renderer and VCV; `body_2x4` 295078 / 295724 cycles, 30.7 % of the block, inside the spec's 29–32 % prediction and below SYNTH; released in 2.14.0) |
-| **FLUX → BBD** | FLUX's interpolating tape echo replaced by a bucket-brigade delay model — the clock rate *is* the delay time, so RATE bends stored pitch, STAGES is a brightness axis, and `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane | ✅ **done** (engine, renderer and VCV; RATE/STAGES/`FXT_FLUX_TIME` confirmed by ear, DRIVE diagnosed and fixed but awaiting re-listening; isolated `bbd` rows measured on hardware 2026-07-28, but `instrument_worst_bbd` — the system-level budget verdict — is still unmeasured, see below) |
+| **FLUX → BBD** | FLUX's interpolating tape echo replaced by a bucket-brigade delay model — the clock rate *is* the delay time, so RATE bends stored pitch, STAGES is a brightness axis, and `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane | ✅ **done** (engine, renderer and VCV; RATE/STAGES/`FXT_FLUX_TIME` confirmed by ear, DRIVE diagnosed and fixed but awaiting re-listening; **over CPU budget** — measured 2026-07-29, `instrument_worst` 120.9 % anchored and `instrument_worst_bbd` 133.2 %, against a 960 000-cycle block; the FX chain is where the increase sits, see below) |
 | **BODY playability** | Three fixes from the first extended ear pass: the bow follows the note instead of droning at a fixed 200 Hz, a continuously driven resonator no longer runs decades above its own struck level, and FILTER's left half fades evenly instead of falling off a cliff | ✅ **done** (engine; released in 2.15.0; two measured items left open — see below) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
@@ -918,14 +922,57 @@ runs at `3a6820c` and `6338f63` (`docs/bench/2026-07-28-*-bbd.{md,csv}`):
 | `bbd_line_tap_half` | 25 774 | 2.68 |
 | `bbd_walk_sdram` | 3 306 | 0.34 |
 
-`instrument_worst_bbd` **still has no result** — both of those reports say so
-in their own verdict line: *"the go/no-go question is unanswered."* That is
-the number that matters, because a component cost cannot be added to a
-system figure by hand in this repo: CPU hunt round 3 measured components
-summing to ~120 % of budget while `instrument_worst` measured ~159 %, a
-39-point gap. So the shipped BBD has no system-level budget verdict.
+The system-level row was measured on 2026-07-29 at `1f7671d`
+(`docs/bench/2026-07-29-1f7671d-system.{md,csv}`), and **it does not fit.**
+Both runs agree, and the anchored figure — measured inside a real audio
+callback, which is the one that decides — agrees with the offline one:
 
-To get one: the bench's `full` profile does not link, for a documented and
+| workload | avg % | max % | anchored max % |
+|---|---:|---:|---:|
+| `instrument_worst` | 117.0 | 120.6 | **120.9** |
+| `instrument_worst_bbd` | 128.6 | 133.2 | — |
+
+The bench writes its own verdict: *"the 2x4 architecture does not fit… the
+design has to shed voices or FX."*
+
+**Where the cost went, row by row against `518f639` (2026-07-26).** Every
+row whose checksum is unchanged is the same computation on both dates, so
+these are like-for-like:
+
+| row | 07-26 max % | 07-29 max % | checksum |
+|---|---:|---:|---|
+| `mod_plane_2x_center` | 7.45 | 7.44 | same |
+| `synth_2x4` | 35.86 | 35.77 | same |
+| `wave_2x4` | 32.64 | 32.28 | same |
+| `fx_none` | 2.55 | 2.56 | same |
+| `fx_comp` | 3.26 | 3.29 | same |
+| `oliverb_solo_sram` | 9.46 | 9.48 | same |
+| `fx_grit` | 4.78 | **7.70** | same |
+| `fx_flux_sdram` | 7.08 | **19.76** | changed |
+| `instrument_worst` | 97.50 | **120.55** | changed |
+
+The voices, the modulation plane and the reverb did not move. **The whole
+increase is in FX.** `fx_flux_sdram` nearly tripled, which is the BBD
+replacing the tape echo — a different algorithm, so the changed checksum is
+expected, but 12.7 points is what it costs. `instrument_worst`'s own
+checksum changed for the same reason: FLUX inside it is now a BBD, so the
+97.5 % figure is the same *scenario* measured on a different *instrument*,
+not a like-for-like regression.
+
+**`fx_grit` is unexplained and should be treated as a lead.** It rose 61 %
+— 45 913 → 73 200 avg cycles — with an **identical checksum**, and
+`engine/fx/grit.{cpp,h}` has no commits in that range. FLUX is provably not
+leaking into it: `setup_fx` disables it with `immediate = true`, and
+`Flux::process` returns at `flux.cpp:280` when the soft switch is idle.
+`fx_none`, the same shell with everything off, did not move. So this is
+~2.9 points of the block that nothing in the source accounts for.
+
+**Consequence for the build order.** The instrument is over budget *before*
+ZAP (M5k) and PULL (M5l) add anything, and before M6's firmware shell adds
+its own overhead. The optimization round therefore comes first, and its
+target is the FX chain, not the voices.
+
+To reproduce: the bench's `full` profile does not link, for a documented and
 pre-existing reason unrelated to this work — an SRAM/SRAM_EXEC region
 overflow (`bench/README.md:34`) — so run the narrow profile from `bench/`:
 
@@ -933,9 +980,9 @@ overflow (`bench/README.md:34`) — so run the narrow profile from `bench/`:
 python run.py --profile system
 ```
 
-Reference points it must be read against: `instrument_worst` at 97.5 % max
-(2.5 points of headroom), and the retired `instrument_worst_taps` — the
-mechanism BBD replaced — at 96.9 % avg / 101.8–102.2 % max, i.e. over budget.
+If the QSPI guard rejects the receipt, the engine has changed since the bank
+was last programmed and only the ELF binding is stale; re-run step 3 of the
+`bench/README.md` sequence to rebind it.
 
 **What was deleted, and why.** The tap bank (`engine/fx/taps.{h,cpp}`,
 `spky::TapBank`, `spky::derive_offsets`) — the mechanism that fed each
