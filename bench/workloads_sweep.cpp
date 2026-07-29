@@ -57,6 +57,15 @@ struct SweepInstrumentGroup {
 struct SweepFxGroup {
     PartFx fx;
     float  values[FXT_COUNT];
+    // The integer stage count Flux actually settled to, read once after each
+    // setup's settle loop (flux().stages(), engine/fx/flux.h) and folded into
+    // proc_sweep_fx's returned accumulator once per call -- see the comment
+    // there. Every setup that uses this group must set it: the five
+    // sweep_flux_rate_* rows never call set_stages, so for them it reads
+    // back whatever Flux::init's boot default (8192) settled to, which is
+    // well-defined and just as worth checksumming as the four sweep_stages_*
+    // rows' explicit settings.
+    int stages_achieved = 0;
 };
 
 SerialArena<SweepInstrumentGroup, SweepFxGroup> g_sweep_arena;
@@ -126,6 +135,9 @@ void setup_flux_rate(int rate_index)
         float l = in[i % kBlock], r = l * 0.9f, sl = 0.f, sr = 0.f;
         group.fx.process(l, r, sl, sr, group.values);
     }
+    // This row never calls set_stages -- stages_achieved reads back whatever
+    // the boot default (8192, kBootStagesNorm in flux.cpp) settled to.
+    group.stages_achieved = group.fx.flux().stages();
 }
 
 void setup_flux_rate_0()  { setup_flux_rate(0);  }
@@ -147,7 +159,9 @@ void setup_flux_rate_11() { setup_flux_rate(11); }
 // bpm) and t = 1/hz; bbd_clock_hz (engine/fx/bbd.h) then computes
 // stages/(2*t), clamped to kClockMaxHz = 32000. At bpm=120 (set below):
 //   division 3 ("1/4", cpb=1):  hz = 2,   t = 0.5 s   -> clock = stages/1.0
-//   division 6 ("1/2", cpb=2):  hz = 4,   t = 0.25 s  -> clock = stages/0.5
+//   division 6 ("1/8", cpb=2):  hz = 4,   t = 0.25 s  -> clock = stages/0.5
+// (kFluxRateOffset=5, so slice index 6 resolves to kDivisions[11] = "1/8" --
+// the name only, the cpb=2 used above is unaffected.)
 // At division 6 the 16384-stage row computes 16384/(2*0.25) = 32768 Hz and
 // CLAMPS to 32000 -- exactly the confound this row exists to avoid. At
 // division 3 the same row computes 16384/(2*0.5) = 16384 Hz, comfortably
@@ -162,12 +176,18 @@ void setup_flux_rate_11() { setup_flux_rate(11); }
 // Flux::set_stages is geometric, 512 * 32^n (engine/fx/flux.cpp:156); the
 // four norms below are its exact solutions for the requested stage counts
 // (32^0.4 == 4, 32^0.8 == 16). tests/test_flux.cpp's "STAGES is geometric,
-// 512 to 16384" case exercises this same mapping (settled_stages(0.f) ==
-// 512, (0.4f) ~= 2048, (0.8f) ~= 8192, (1.f) == 16384) and passed at this
-// commit (`spky_tests.exe --test-case="flux: STAGES is geometric*"`,
-// 4/4 assertions). This row also reads flux().stages() after its own settle
-// (below) to confirm the same mapping holds under ITS configuration
-// (division 3, not that test's default rate/bpm).
+// 512 to 16384" case exercises this same mapping on a DIFFERENT Flux
+// instance that happens to share the same boot defaults (division 3, bpm
+// 120): settled_stages(0.f) == 512, (0.4f) ~= 2048, (0.8f) ~= 8192,
+// (1.f) == 16384, and passed at this commit
+// (`spky_tests.exe --test-case="flux: STAGES is geometric*"`, 4/4
+// assertions). THIS row's own instance is checked directly: setup_stages
+// reads flux().stages() after its own settle and stores it in
+// SweepFxGroup::stages_achieved, and proc_sweep_fx folds that into its
+// returned accumulator once per call -- so if this row's own achieved stage
+// count ever drifted from what its name claims, the per-row checksum the
+// bench compares across hardware runs would move and the run would be
+// rejected, instead of the curve quietly acquiring a knee that isn't there.
 //
 // Settle length: at division 3 the clock is unclamped for every row, so a
 // full line-fill takes exactly the division's own period regardless of
@@ -211,6 +231,9 @@ void setup_stages(float norm)
         float l = in[i % kBlock], r = l * 0.9f, sl = 0.f, sr = 0.f;
         group.fx.process(l, r, sl, sr, group.values);
     }
+    // Read back what this row's own Flux instance actually settled to -- see
+    // the comment above SweepFxGroup and the one on this row's block above.
+    group.stages_achieved = group.fx.flux().stages();
 }
 
 void setup_stages_512()   { setup_stages(0.0f); }
@@ -228,6 +251,15 @@ float proc_sweep_fx()
         group.fx.process(l, r, sl, sr, group.values);
         acc += l + r + sl + sr;
     }
+    // Fold the achieved stage count into the checksum, once per call (not
+    // per sample) so the added work is negligible and constant: a row whose
+    // Flux settled to a different stage count than its name claims moves
+    // the checksum the bench compares across hardware runs, instead of
+    // silently measuring something other than what it says it measures.
+    // Every SweepFxGroup setup sets stages_achieved (including the
+    // sweep_flux_rate_* rows, which never call set_stages and so read back
+    // Flux's boot default) -- see the comment on the struct.
+    acc += static_cast<float>(group.stages_achieved);
     return acc;
 }
 
