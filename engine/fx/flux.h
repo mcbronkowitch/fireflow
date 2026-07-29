@@ -69,6 +69,15 @@ public:
     int stages() const { return _stages_now; }
     float clock_hz() const { return _clock_hz; }
     float drive_norm_for_test() const { return _drive_norm; }
+    // The feedback coefficient actually handed to each BbdEcho. The law is a
+    // function of BOTH knobs (see the comment on apply_feedback), and the
+    // control-rate round assembles it from a cached factor rather than
+    // evaluating it whole -- which makes it the one quantity in this class
+    // whose correctness is numerical rather than audible. A 1e-6 drift in it
+    // is inaudible and still a bug, and no behavioural test in this file can
+    // see one.
+    float feedback_coef_l_for_test() const { return _echo_l.Feedback(); }
+    float feedback_coef_r_for_test() const { return _echo_r.Feedback(); }
     // The delay time DRAG is currently aiming at, before the 30 ms slew. Equal
     // to the ladder time whenever DRAG is 0 or the neighbour has no rhythm.
     float drag_time_s() const { return _dt_target; }

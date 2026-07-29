@@ -811,3 +811,82 @@ TEST_CASE("flux: changing BPM re-derives the thinning pattern from the new ladde
     CHECK(f.thin_n_for_test(0) == 2);
 }
 
+
+TEST_CASE("flux: the FEEDBACK coefficient is norm * 1.2 / the DRIVE gain, in either push order") {
+    // apply_feedback() divides bbd_drive_gain() back out so that a FEEDBACK
+    // knob position means one thing at every DRIVE -- see the long comment on
+    // its definition. The control-rate round caches that quotient in
+    // set_drive instead of evaluating it per call, which is a REASSOCIATION
+    // of the same arithmetic. The tolerance is chosen for exactly that: tight
+    // enough that a changed LAW fails, loose enough that the reassociation
+    // (~1e-7 relative) passes.
+    //
+    // Both push orders, because a host may send them either way round and
+    // set_drive is the thing that has to re-derive the coefficient when DRIVE
+    // moves.
+    const float drives[] = { 0.f, 0.25f, 0.5f, 0.75f, 1.f };
+    const float fbs[]    = { 0.f, 0.2f, 0.45f, 0.8f, 1.f };
+    for (float d : drives) {
+        for (float fb : fbs) {
+            const float want = fb * 1.2f / bbd_drive_gain(d);
+            Flux a;
+            a.init(48000.f, s_buf_l, s_buf_r);
+            a.set_feedback(fb);
+            a.set_drive(d);
+            Flux b;
+            b.init(48000.f, s_buf_l, s_buf_r);
+            b.set_drive(d);
+            b.set_feedback(fb);
+            INFO("drive=" << d << " feedback=" << fb);
+            CHECK(a.feedback_coef_l_for_test() == doctest::Approx(want).epsilon(1e-6));
+            CHECK(a.feedback_coef_r_for_test() == doctest::Approx(want).epsilon(1e-6));
+            CHECK(b.feedback_coef_l_for_test() == doctest::Approx(want).epsilon(1e-6));
+            CHECK(b.feedback_coef_r_for_test() == doctest::Approx(want).epsilon(1e-6));
+        }
+    }
+}
+
+TEST_CASE("flux: a repeated FEEDBACK push changes nothing, and DRIVE still re-derives") {
+    Flux f;
+    f.init(48000.f, s_buf_l, s_buf_r);
+    f.set_drive(0.6f);
+    f.set_feedback(0.3f);
+    const float once = f.feedback_coef_l_for_test();
+    f.set_feedback(0.3f);
+    f.set_feedback(0.3f);
+    CHECK(f.feedback_coef_l_for_test() == doctest::Approx(once).epsilon(1e-6));
+    // A DRIVE move re-derives the coefficient from the STORED knob position,
+    // not from the coefficient currently in force, so an unchanged-value
+    // guard on FEEDBACK must not make it sticky across a DRIVE change.
+    f.set_drive(0.f);
+    CHECK(f.feedback_coef_l_for_test()
+          == doctest::Approx(0.3f * 1.2f / bbd_drive_gain(0.f)).epsilon(1e-6));
+
+    // 0.45 -- the value init() itself pushes -- is a REACHABLE knob position,
+    // unlike the -1 sentinels _drive_norm and _stages_norm use. Pushing it
+    // straight after init is swallowed by the guard, and that is correct:
+    // init() already put the state there, so there is no change to swallow.
+    Flux g;
+    g.init(48000.f, s_buf_l, s_buf_r);
+    g.set_feedback(0.45f);
+    CHECK(g.feedback_coef_l_for_test()
+          == doctest::Approx(0.45f * 1.2f / bbd_drive_gain(0.f)).epsilon(1e-6));
+}
+
+TEST_CASE("flux: init leaves the FEEDBACK coefficient at its boot value, even re-initialised over a hot DRIVE") {
+    // A CHARACTERISATION, not a bug-catcher: it passes before and after the
+    // control-rate round by construction. init() sets _drive_norm = -1 before
+    // calling set_drive(0.f), so that call always passes its own guard and
+    // always rewrites whatever DRIVE-derived state exists. This test exists to
+    // fail LATER -- if someone reorders init(), or gives set_drive an early
+    // return, a cached DRIVE factor would silently survive a re-init. See
+    // section 4.1 of docs/superpowers/specs/2026-07-29-flux-control-rate-design.md.
+    const float want = 0.45f * 1.2f / bbd_drive_gain(0.f);
+    Flux f;
+    f.init(48000.f, s_buf_l, s_buf_r);
+    CHECK(f.feedback_coef_l_for_test() == doctest::Approx(want).epsilon(1e-6));
+    f.set_drive(1.f);                       // a hot DRIVE, then re-init over it
+    f.init(48000.f, s_buf_l, s_buf_r);      // reproduces Spotymod::reinit()
+    CHECK(f.feedback_coef_l_for_test() == doctest::Approx(want).epsilon(1e-6));
+    CHECK(f.feedback_coef_r_for_test() == doctest::Approx(want).epsilon(1e-6));
+}
