@@ -341,3 +341,272 @@ If that fallback is taken, the voice-count and reverb curves move to a later
 round measured under the `body` profile's precedent (`system` + one family),
 and the round must say so in writing rather than quietly reporting four
 sweeps' worth of conclusions from two.
+
+## 9. Results (2026-07-29, `cd6dafd`)
+
+Evidence: `docs/bench/2026-07-29-cd6dafd-sweep.md`, two accepted runs, gate
+passed (row set, checksums, QSPI digest and device fingerprint all identical
+across runs; `wave_acceptance` passed). Figures below are run 2's max % of
+the 960 000-cycle block, the more conservative of the two accepted runs;
+where it matters, both runs are named. §6's fallback was not taken — all
+four sweeps shipped, plus both ablations.
+
+Sweep C (voice count) does not appear as a curve: Task 6 found `setup_inst_worst`
+saturates all four COLOR settings to 8 voices within ~150 blocks regardless of
+the norm dialled, so four rows would have returned one number. The question
+sweep C was built to answer is addressed in §9.4 instead, from rows that
+already existed.
+
+### 9.1 Sweep A — FLUX clock
+
+| clock (Hz) | 4096 | 8192 | 16384 | 24576 | 32000 |
+|---|---:|---:|---:|---:|---:|
+| max % (one deck, shell included) | 18.94 | 19.48 | 20.68 | 21.78 | 22.66 |
+
+Monotonic in the clock, no knee independent of it. The pre-authorised ceiling
+lever, 32 → 24 kHz, is worth `22.66 − 21.78` = **0.88 points per deck, 1.76
+both** — small, and it is a range move, not a runtime cost.
+
+**Disposition: reshape the range.** The top of the ladder is exactly the
+region §5 describes: it costs the most and, per §9.4 below, three of its
+rungs (indices 9, 10, 11) are already indistinguishable from one another
+because they clamp to the same 32 000 Hz ceiling. Moving the ceiling to
+24 kHz is the textbook case — permanent, no runtime machinery, and it removes
+reachable travel rather than reacting to it.
+
+### 9.2 Sweep B — STAGES
+
+Division 3, so the clock equals the stage count in the table below.
+
+| stages | 512 | 2048 | 8192 | 16384 |
+|---|---:|---:|---:|---:|
+| max % | 18.45 | 18.63 | 19.48 | 20.68 |
+
+The cross-check the spec asked for: `sweep_stages_16384` (16384 stages
+clocked at 16384 Hz) and `sweep_flux_rate_6` (boot-default 8192 stages,
+also clocked at 16384 Hz) both read **20.68**, identically. Doubling the
+stage count at a fixed clock costs nothing measurable. The memory/cache
+hypothesis in §4.2 is refuted — the cost in this sweep is the clock alone,
+and stages help only indirectly, by letting a given delay time run at a
+lower clock.
+
+**Disposition: leave it.** There is no knee to reshape and nothing to
+throttle: the control's own cost is flat. This also means halving
+`kMaxStages` (the second pre-authorised lever) buys no CPU by itself — its
+case, if made, has to be argued on SDRAM footprint or cache pressure
+elsewhere, not on this curve.
+
+### 9.3 Sweep D — room
+
+| setting | lo | mid | hi |
+|---|---:|---:|---:|
+| max % (whole instrument) | 120.18 | 120.17 | 120.81 |
+
+Span across the entire travel of DIFF/SMEAR/MOD together, one gesture: `120.81
+− 120.17` = **0.64 points**. Flat.
+
+**Disposition: leave it.** No knee anywhere in the travel; the room controls
+are not a lever worth spending this round's budget on.
+
+### 9.4 Voice count — answered without a sweep
+
+`sweep_voices_*` was removed (Task 6). The question — does the eighth voice
+cost more than the first — is already answered by pre-existing `system` rows:
+
+| workload | voices | max % |
+|---|---:|---:|
+| `synth_1_voice` | 1 | 5.67 |
+| `synth_2_voices` | 2 | 9.91 |
+| `synth_4_voices` | 4 | 17.83 |
+
+About 1.45 points of fixed overhead plus ~4.2 points per additional voice,
+linear, no knee.
+
+**Disposition: leave it.** Nothing here is disproportionate; the control
+costs in proportion to what it gives.
+
+**Observation, not evidence** (from a reverted scratch test built to check
+this sweep's own premise, Task 6): under `setup_inst_worst`'s mandated
+DEPTH=1/DENSITY=1/RATE=0.8/VOICE_DECAY=1, COLOR is not a lever on voice count
+— all four COLOR settings saturate to 8 active voices because MOTION
+modulates COLOR and voices accumulate faster than the long decay frees them.
+Anything that later tries to manage CPU by reasoning about chord size needs
+to know this does not hold under dense settings. Labelled an observation
+because the test that found it was reverted, not committed.
+
+### 9.5 None of the four sweeps calls for a throttle
+
+Per §5, the three dispositions are exhaustive and "leave it" must be stated
+as explicitly as the others: sweep A gets **reshape the range**; sweeps B, D,
+and the voice-count question all get **leave it**. None of the four,
+individually, shows an extreme that is expensive *and* avoidable at that one
+control — which is exactly what a throttle requires to be worth building.
+The actual problem, per §5's own framing, is co-occurrence:
+`instrument_worst_bbd` is eight controls at their worst simultaneously, and
+no per-control cap found here addresses that. Whether a combination throttle
+is needed is a question for the round that follows this one, once the
+`sum(9.7)` below shows what is left to close after the fixes it does
+authorise.
+
+### 9.6 Ablation E — the Flux wrapper
+
+`sweep_flux_lines_2ch` drives two bare `BbdEcho` at `Flux`'s own boot-computed
+stage count and clock, no `Flux` wrapper around them. That makes the
+wrapper's own cost a measurement rather than an inference:
+
+```
+wrapper / deck = fx_flux_sdram − sweep_flux_lines_2ch − fx_none
+              = 19.42 − 9.16 − 2.55
+              = 7.71
+```
+
+FLUX costs 16.87 points per deck above the bare FX shell
+(`fx_flux_sdram − fx_none`). Of that, the two `BbdEcho` lines are **9.16**
+and the wrapper is **7.71** — **46 %** of FLUX's cost above the shell is the
+wrapper, not the model. Both decks: **18.3** points of model, **15.4** points
+of wrapper.
+
+The wrapper's per-sample work — two `fonepole` slews, two `std::fabs` snaps,
+a `clampf`, `bbd_clock_hz`'s division — runs every sample although its inputs
+(RATE, STAGES, DRIVE) only move at the 96-sample control tick. Moving it to
+control rate changes the sound at **no** setting, at any position of any
+control. This is the same defect class this repo has already fixed three
+times (`daisysp::String`, `daisysp::Resonator`, the mode bank).
+
+### 9.7 Ablation F — the `fx_grit` anomaly, answered
+
+`fx_grit` rose from 4.78 (`518f639`, 2026-07-26) to 6.53 here, at an
+**identical checksum**. §4.6 named three candidates: GRIT itself, the shell
+around it, or cache pressure from the mere presence of the BBD's memory. The
+numbers rule two out and the third needed a correction en route:
+
+- **GRIT itself is not the cause.** `sweep_grit_bare` (a bare `Grit`, no
+  `PartFx` shell) is **1.53** — far below either the historical
+  (`fx_grit − fx_none` = 2.22, 2026-07-26) or current (`6.53 − 2.55` = 3.98)
+  gap. GRIT's own cost did not grow.
+- **The clean three-way split the ablation was designed for did not hold.**
+  Task 4 found `sweep_grit_no_bbd_mem` conflates two effects, not one: it
+  removes the BBD's memory residency *and* the per-sample `set_feedback`
+  work gated behind the same `_buf_ok` flag — because `PartFx::process`
+  guards that work on `_buf_ok`, not on whether FLUX is engaged
+  (`part_fx.cpp:38`, `flux.cpp:99`). A low reading from that row alone cannot
+  distinguish "memory absent" from "work behind the gate absent."
+- **The fourth cause, found by reading and not listed in §4.6, is what the
+  numbers corroborate.** A `std::pow(10.f, db * 0.05f)` in `bbd_drive_gain`
+  runs every sample, per deck, whenever the `_buf_ok` gate is open, with no
+  dirty-check on DRIVE unlike the `set_intensity` call three lines above it
+  (`bbd.h:192`). `fx_grit − sweep_grit_no_bbd_mem` = `6.53 − 4.93` = **1.60**
+  per deck (**3.2** both) is the work behind that gate, and this repo's own
+  `abl/micro_powf` bench prices a single `powf` at 198 cycles — 198 × 96
+  samples ≈ 1.98 points per deck — the right neighbourhood for that 1.60.
+  Separately, `fx_grit` itself fell from 7.70 (the previous accepted image,
+  identical checksum) to 6.53 here: **1.17 points of pure code-layout
+  drift**, the same phenomenon the bench's own note already warns about.
+
+**Answer:** the 2.9-point rise between 07-26 and 07-29 is neither GRIT
+getting more expensive nor an unresolvable "shell" mystery. It is
+`std::pow`-under-a-stale-gate (≈1.60/deck measured, ≈1.98/deck predicted) plus
+image-layout drift (1.17), and the two together — 2.77 — account for the
+original 2.9, roughly half each. The fix, for the next round and not this
+one (`engine/` is off limits here): cache `bbd_drive_gain`'s result in
+`set_drive` and make `apply_feedback` a multiply. Control-rate work at
+control rate, changing the sound at no setting — the same shape of fix as
+§9.6's wrapper finding.
+
+### 9.8 The sum, honestly
+
+What this round actually authorises, added up:
+
+| item | points, both decks |
+|---|---:|
+| wrapper to control rate (§9.6) | up to 15.4 |
+| clock ceiling 32→24 kHz (§9.1) | 1.76 |
+| STAGES halving (§9.2) | 0 |
+| room (§9.3) | 0 |
+| **total** | **17.16** |
+
+The gate is `instrument_worst_bbd` under 100 %; it measured **132.79**, i.e.
+**32.8 points** to find. 17.16 against 32.8 falls short by **15.64** — about
+half the gap closes, not all of it. The remaining **18.3 points** is the two
+`BbdEcho` lines themselves (§9.6), the model's own cost, not the wrapper
+around it — and every lever this round was authorised to spend is already
+spent. §3 said this could happen and named exactly where the shortfall would
+have to be paid: "if the sweeps plus the wrapper work do not reach 34, the
+refused levers come back onto the table as a decision, not as a surprise."
+That is what has happened.
+
+**Owner decision, 2026-07-29, superseding §3's refusal — "Erst den Mantel,
+messen, dann auf mono."** Having seen the numbers above, the owner has taken
+back half of what §3 refused. The order is fixed:
+
+1. Move the `Flux` wrapper's per-sample work to control rate (§9.6) — up to
+   15.4 points across both decks, no sound change at any setting.
+2. **Re-measure before going further.**
+3. Only then, collapse FLUX to a single mono `BbdEcho` per deck.
+
+`kFiltOrder` stays refused — the owner accepted mono, not filter order. A
+later reader must not treat §3's "two levers refused" as still standing in
+full: one of the two — stereo FLUX — is now an accepted, ordered plan, dated
+2026-07-29. Filter order remains off the table.
+
+**The arithmetic for the accepted plan, done honestly rather than
+compounded.** `sweep_flux_lines_2ch` is 9.16 for *two* lines at once, so a
+single mono line saves roughly half that per deck: ≈4.6/deck, **≈9.2 both**.
+Stacking every authorised and now-accepted lever:
+
+| item | points, both decks |
+|---|---:|
+| wrapper to control rate | up to 15.4 |
+| mono FLUX | ≈9.2 |
+| clock ceiling 32→24 kHz | 1.76 |
+| STAGES halving | 0 |
+| room | 0 |
+| **total** | **≈26.4** |
+
+Against the 32.8-point gate, that is **short by ≈6.4** — the fully executed,
+perfectly delivered accepted programme lands near **106 %**, not under
+100 %. This is stated plainly and is not softened: three authorised fixes do
+not currently sum to a fit.
+
+**Two caveats on that estimate, both real and both cutting the same way.**
+First, 15.4 is an upper bound that assumes *every* per-sample wrapper
+operation can move to control rate; that has not been established, only
+identified. Second, these figures are all read off `fx_flux_sdram`'s default
+configuration, while the gate row `instrument_worst_bbd` runs FLUX at its
+clock ceiling — where the model's tick-loop cost is higher and the wrapper's
+fixed per-sample cost is not. So against the actual gate row, the mono saving
+is likely larger than 9.2 and the wrapper saving is likely close to 15.4 as
+estimated. That asymmetry is exactly why the owner put a measurement between
+steps 1 and 3 instead of ordering both at once: compounding two estimates
+instead of measuring between them is how this round's own 34-point starting
+figure (from hoisted, non-additive component rows, §1) came to be wrong in
+the first place, and re-measuring after the wrapper fix alone is what avoids
+repeating it here.
+
+**Not claimed:** that the instrument fits. It does not, on any accounting in
+this section. What this round produced is the coefficients — wrapper 15.4,
+mono ≈9.2 (pending re-measurement), clock ceiling 1.76 — that size the next
+round's work, and an owner decision, taken from this evidence, that puts
+stereo FLUX back into play with a measurement gate between the two steps
+rather than a single compounded bet.
+
+### 9.9 Consistency checks
+
+- `instrument_worst` (this sweep, run 2, offline): **120.14**, against
+  120.6 max reported at `1f7671d` two days earlier. A 0.46-point difference,
+  well inside the cross-build layout shift this bench's own note already
+  warns about (§7.3) — not a regression.
+- `sweep_stages_8192` (19.48) vs `sweep_flux_rate_3` (19.48): same
+  configuration reached two ways, agrees exactly.
+
+### 9.10 Side finding — the rate ladder's dead zone
+
+Independent of CPU: `sweep_flux_rate` samples clock indices 0/3/6/8/11
+(4096/8192/16384/24576/32000 Hz). Indices 9, 10 and 11 all clamp to the same
+32 000 Hz ceiling — same clock, same delay, same sound, same cost — so three
+of the twelve rungs on the control are indistinguishable from one another.
+Applying this round's own 24 kHz ceiling lever (§9.1) would make it **four**:
+index 8 sits at 24576 Hz, just above 24 kHz, so lowering the ceiling clamps
+it too. The clock-ceiling lever buys CPU by lengthening the ladder's own dead
+zone; index 8 is exactly the point where that trade becomes visible on the
+control surface, not just in the profiler.
