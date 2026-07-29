@@ -200,8 +200,9 @@ struct DeckModGroup {
 //      nch) (part.cpp:447-460), which demotes only on the chord's OWN root
 //      and adds the rest without demoting, so a real deck holds 4 sustained
 //      voices permanently. This row's setup below fires once; with
-//      set_decay(1.0) at THIS row's derived cycle (~0.144 s, not the old
-//      set_cycle(2.f)'s 16 s), decay_s is ~1.15 s
+//      set_decay(1.0) at THIS row's derived cycle (~0.144 s -- the old
+//      row's constant set_cycle(2.f) is a 2 s cycle, whose own decay_s
+//      would be 8 x 2 = 16 s), decay_s here is ~1.15 s
 //      (synth_engine.cpp:390,276) and the -80 dB Idle threshold arrives
 //      around decay_s * 80/60 ~= 1.54 s (env.h:12-13,17's 60 dB decay-time
 //      definition and -80 dB Idle threshold) -- far short of the ~2.6 s a
@@ -555,6 +556,23 @@ void setup_deck_engine_hot()
     // checksum so it is not a dead store.
     g.fire_period = static_cast<int>(std::lround(kSampleRate / g.master_hz));
     assert(g.fire_period > 0);
+    // The fix only works because fire_period lands inside the warmup window
+    // and well short of the Idle horizon -- neither is written down anywhere
+    // else, and both are consequences of RATE 0.8 (this row's master_hz),
+    // not of anything asserted directly. At RATE 0.8, fire_period is 6908
+    // samples (~0.144 s) against a 9600-sample (kWarmupBlocks * kBlock,
+    // ~0.2 s) warmup and a ~1.54 s Idle horizon (difference #5's
+    // decay_s * 80/60), so the first correcting fire lands inside warmup
+    // with ~56 ms to spare, and every later fire is ~10x sooner than a
+    // demoted voice's Idle time. A future RATE change could push
+    // fire_period past the warmup window, silently moving the first
+    // corrective fire into the MEASURED window instead of before it --
+    // this assert makes that fail loudly (an assert failure) instead of
+    // quietly reintroducing the collapse the fix round found. It checks
+    // only the warmup half of the margin, not the Idle half, because
+    // Idle's ~1.54 s is over ten times looser and the warmup window is the
+    // tighter constraint by a wide margin at every RATE this bench reaches.
+    assert(g.fire_period < kWarmupBlocks * static_cast<int>(kBlock));
     g.fire_ctr = g.fire_period;
 
     for (float p : kDeckEnginePitches) g.engine->trigger(p);
@@ -571,8 +589,10 @@ void setup_deck_engine_hot()
     // DeckModGroup's master_hz assert. What it actually covers is narrower
     // than the original comment here claimed (corrected in review): it
     // confirms only that 4 Env instances are non-Idle
-    // (Voice::process, engine/synth/voice.cpp:114, `if (!_env.active())
-    // return;`) at this point, ~0.4 s after the trigger loop above ran --
+    // (active_voices(), engine/synth/synth_engine.cpp:406-411, counts
+    // Voice::active() -- engine/synth/voice.h:51 -- which is the same flag
+    // Voice::process's cost early-return checks, engine/synth/voice.cpp:114)
+    // at this point, ~0.4 s after the trigger loop above ran --
     // NOT that all 4 are FLOW-sustaining, and not that FLOW is even
     // engaged. Only the LAST of the five triggers this row has made by now
     // (four explicit plus FLOW's auto-drone; see the comment on
@@ -612,8 +632,32 @@ float proc_deck_engine_hot()
         // trigger_chord() call, not four trigger() calls -- chord_slot 0
         // only demotes the current surface on a chord's OWN root note
         // (synth_engine.cpp:206), so the other three notes in this call add
-        // to it rather than replacing it, landing as 4 genuinely sustaining
-        // voices instead of self-cannibalizing to 1 (see difference #5).
+        // to it rather than replacing it, landing 4 voices as non-Idle
+        // (Voice::process branches on `_env.active()`, never on
+        // `_sustaining`, voice.cpp:113-114) -- non-Idle is the quantity this
+        // row's cost actually tracks, and the cadence holds it at 4.
+        //
+        // The FLOW *surface* does NOT stay at 4, and that is expected, not a
+        // second collapse to fix: nothing here ever calls set_chord(), so
+        // `_chord_n` stays at init()'s value of 1 (synth_engine.cpp:38-39)
+        // -- trigger_chord() never writes `_chord_n` either. Once this
+        // fire's three pending notes land (~8 ms, kStabSpreadS,
+        // synth_engine.h:42), `_update_control()`'s next few ticks call
+        // `_adjust_surface()` (gated on `_pending_n == 0`, synth_engine.cpp
+        // :263) with `want = 1`, `m = 4` (synth_engine.cpp:244), and take
+        // the collapse branch (synth_engine.cpp:251-254), demoting the
+        // highest-chord_slot voice one per tick until only slot 0 remains
+        // sustaining (~3 ticks, ~6 ms) -- and that survivor's pitch gets
+        // pulled to `_chord[0]` (0.5, synth_engine.cpp:39) by the same
+        // per-tick pitch-follow loop (synth_engine.cpp:339-344), regardless
+        // of what pitch it was struck at. set_chord() is a `_control_tick`
+        // push design spec section 4 deliberately excludes from this row
+        // (the remainder); this collapse is that exclusion's visible
+        // consequence, not an omission to fix here. It costs nothing extra:
+        // the three demoted voices stay non-Idle, releasing toward 0 over
+        // ~1.54 s (difference #5's timing) same as before, and the NEXT
+        // fire -- ~0.144 s later, far sooner -- steals them again before
+        // any of them gets there.
         // Through the base pointer, same as process_in/process above --
         // trigger_chord is virtual on IPartEngine (engine_iface.h).
         if (--g.fire_ctr <= 0) {

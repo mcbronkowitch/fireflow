@@ -83,7 +83,7 @@ not budget it as a second cost beyond §2.3's.
 
 ### 2.3 The engine is called through a virtual interface, twice per sample
 
-`_engine` is an `IPartEngine*` (`engine/parts/part.h:231`), and every method
+`_engine` is an `IPartEngine*` (`engine/parts/part.h:209`), and every method
 on that interface is virtual (`engine/parts/engine_iface.h:22-59`), including
 both `process` and `process_in`. `Part::process` therefore makes **two virtual
 calls per sample**, neither of which the compiler can inline.
