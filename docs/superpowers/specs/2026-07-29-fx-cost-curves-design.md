@@ -640,13 +640,18 @@ rather than a single compounded bet.
   warns about (§7.3) — not a regression.
 - `sweep_stages_8192` (19.48) vs `sweep_flux_rate_3` (19.48): same
   configuration reached two ways, agrees exactly.
-- `fx_flux_sdram`, one of the three terms in §9.6's wrapper subtraction, runs
-  with no settle beyond the runner's fixed 100-block warm-up, while the
-  other two settle 96k–192k samples. That mixed subtraction is exonerated by
-  a direct check rather than an assumption: `sweep_flux_rate_3` (19.48, at
-  the same configuration, fully settled) agrees with `fx_flux_sdram` (19.42,
-  unsettled beyond warm-up) to within **0.06** — the lack of settle on that
-  one term is not moving the wrapper figure measurably.
+- Of the three terms in §9.6's wrapper subtraction, two run with no settle
+  beyond the runner's fixed 100-block warm-up: `fx_flux_sdram` and `fx_none`.
+  Only `sweep_flux_lines_2ch` carries a long explicit settle (96 000
+  samples, `kSweepFluxLinesSettleSamples`). `fx_none` needs none — with
+  every FX block off there is no BBD or reverb state to fill, so the
+  generic warm-up is already sufficient; a later reader should not add a
+  settle loop to it. That leaves the subtraction mixing one settled term
+  against two unsettled ones, and the mix is exonerated not by assuming
+  uniform settling but by a direct cross-check: `sweep_flux_rate_3` (19.48,
+  same configuration as `fx_flux_sdram`, fully settled) agrees with
+  `fx_flux_sdram` (19.42, unsettled beyond warm-up) to within **0.06** — the
+  lack of settle on that term is not moving the wrapper figure measurably.
 
 ### 9.10 Side finding — the rate ladder's dead zone
 
