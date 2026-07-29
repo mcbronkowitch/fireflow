@@ -56,6 +56,21 @@ void Flux::init(float sample_rate, float* buf_l, float* buf_r) {
     // swallowed. Same trap the tape-era DUST/ROT guards carried, same fix.
     _drive_norm = -1.f;
     _stages_norm = -1.f;
+    // apply_feedback() reads _fb_scale, and set_feedback(0.45f) below runs
+    // BEFORE set_drive(0.f) -- so on a re-init of an instance whose DRIVE was
+    // hot, the member still holds the old DRIVE's factor at that moment.
+    //
+    // That window is NOT reachable today: _drive_norm was just set to -1, so
+    // set_drive(0.f) below always passes its own guard and always rewrites
+    // this. The window is two lines wide with no audio processed inside it.
+    // This reset is therefore defence against a future reordering of init(),
+    // or against set_drive gaining an early return -- not a fix for a live
+    // bug. Do not delete it as dead code; it is what stops the correctness of
+    // a cached value from resting on the order of two calls.
+    //
+    // Written as the expression rather than the literal 1.2f so it cannot
+    // drift if kDriveLoDb ever moves.
+    _fb_scale = 1.2f / bbd_drive_gain(0.f);
     set_stages(kBootStagesNorm);
     _stage_current = _stage_target;
     _stages_now = static_cast<int>(_stage_current + 0.5f);
@@ -129,7 +144,11 @@ void Flux::apply_feedback() {
     // Up to ~120 %: self-oscillation stays reachable, documented behaviour of
     // the original. The bound now comes from saturation WITHIN the loop
     // (BbdEcho) rather than a fast_tanh on the read path.
-    const float fb = _fb_norm * 1.2f / bbd_drive_gain(_drive_norm);
+    //
+    // _fb_scale is 1.2 / bbd_drive_gain(_drive_norm), maintained by set_drive.
+    // Same law as before, evaluated where DRIVE changes instead of here --
+    // this function is reached once per sample per deck.
+    const float fb = _fb_norm * _fb_scale;
     _echo_l.SetFeedback(fb);
     _echo_r.SetFeedback(fb);
 }
@@ -150,6 +169,7 @@ void Flux::set_drive(float norm) {
     // the bloom point fixed moved with it. Order-independent: a host may push
     // these two in either order, and every DRIVE change re-derives FEEDBACK
     // from the knob position rather than from the coefficient now in force.
+    _fb_scale = 1.2f / bbd_drive_gain(d);
     apply_feedback();
 }
 

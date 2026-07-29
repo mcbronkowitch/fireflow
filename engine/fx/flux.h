@@ -138,6 +138,15 @@ private:
     // is a function of BOTH knobs and has to be re-derived whenever either
     // moves. Matches init()'s set_feedback(0.45f).
     float _fb_norm = 0.45f;
+    // FEEDBACK's law is _fb_norm * 1.2 / bbd_drive_gain(_drive_norm), and
+    // that quotient depends on DRIVE alone. set_drive is the sole writer of
+    // _drive_norm and already guards itself, so the quotient is a
+    // control-rate constant -- cached here because apply_feedback used to
+    // evaluate a std::pow for it once per SAMPLE: PartFx pushes set_feedback
+    // unguarded from the per-sample path (part_fx.cpp), which made a ~198
+    // cycle libm call part of the audio loop. init() writes this explicitly;
+    // see the comment there for why the member default is not relied on.
+    float _fb_scale = 1.2f;
 
     // DRAG state. _drag is now the derived positive half of _link (the
     // negative half, THIN, is separate and lands in a later step). _drag_iv
