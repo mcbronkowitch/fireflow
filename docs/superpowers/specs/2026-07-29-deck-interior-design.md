@@ -101,7 +101,26 @@ if (hz != _last_master_hz && hz > 0.f) {
 }
 ```
 
-At 120 BPM with DENSITY 1.0 and RATE 0.8 that is not 2.0, and it moves.
+RATE 0.8 alone sets that baseline: `master_hz() = free_hz(0.8) ≈ 6.95 Hz`
+(`engine/mod/divisions.h`), not the 0.5 Hz `set_cycle(2.f)` encodes. DENSITY
+and BPM do not enter it: DENSITY is inert in FLOW (see the caveat under §3's
+row table), and the modulator runs in FREE mode — `_synced` defaults false,
+so `_update_rate()` never reads `_bpm` either (`engine/mod/super_modulator.cpp:28-29`).
+
+And for this exact configuration **it does not move**. `master_hz() =
+_base_hz * _pitch_scale`, and `_pitch_scale` changes only through
+`set_rate_scale()`, called only from `Center::update`
+(`engine/center/center.cpp:166-167,229-230`). `Center::init` sets `_couple =
+0.f` and `_drift = 0.f` (`engine/center/center.cpp:57-61`), and neither
+`setup_inst_common`, `setup_inst_worst`, nor `setup_inst_worst_bbd` ever calls
+`set_couple`, `set_drift`, or `set_sync` — so in `Center::update`'s FREE-WORLD
+branch (`_sync` stays false), `conv_a`/`conv_b` collapse to `pow(x, 0) = 1`,
+`corr = 0 * … = 0`, and `rate_drift_a`/`rate_drift_b = pow(2, … * 0) = 1`
+exactly (the source's own words: "exactly 0 while drift is 0",
+`engine/center/center.cpp:133`). `set_rate_scale(1.f, 1.f)` runs every
+control tick, always with the same arguments, so `_pitch_scale` is pinned at
+exactly 1.0 and `master_hz()` never changes for the gate either. See §3.2 for
+the consequence.
 
 **These are not two settings a knob apart. They are two modes.** Whether a
 mode difference costs anything is precisely what the round measures — it may
@@ -179,6 +198,27 @@ The read-back value is asserted non-zero, asserted different from 0.5 Hz (the
 `set_cycle(2.f)` the old row uses), and folded into the checksum. A row that
 silently fell back on the old operating point fails loudly instead of
 returning a plausible number.
+
+**The naive worry — that deriving the cycle once and holding it undermeasures
+against a gate whose cycle keeps changing — does not apply to this round's
+gate.** `Part::process` only re-pushes `set_cycle` when `master_hz()` actually
+changes (`if (hz != _last_master_hz && hz > 0.f) { … _engine->set_cycle(1.f /
+hz); }`, `engine/parts/part.cpp:399-402`, quoted in §2.4) — and for
+`instrument_worst_bbd`'s exact configuration, as §2.4 establishes, it never
+does: `_couple` and `_drift` both default to 0 and nothing in this bench path
+ever sets them, so `Center::update`'s `set_rate_scale` calls always pass
+`(1.f, 1.f)`, and `_pitch_scale` — hence `master_hz()` — is pinned for the
+whole run, on the gate exactly as much as on `deck_engine_hot`.
+
+**The bias is therefore zero, not merely small, for this round's rows.**
+`Part::process`'s guard (`hz != _last_master_hz`) fires `set_cycle` once, at
+the first control tick, on both sides, and never again — the derive-once
+cycle is exact here, not an approximation accepted for simplicity. This does
+not generalise past this configuration: a row that enabled COUPLE or DRIFT
+would make the gate's `set_rate_scale` arguments genuinely vary from tick to
+tick and reintroduce a real re-push cost that a derive-once row would still
+not pay. That is not the operating point `setup_inst_worst` configures, so it
+is out of scope for this round, not a bias this round carries.
 
 ## 4. The risk, and what bounds it
 
