@@ -1102,12 +1102,16 @@ tick restructuring, no musical change. Spec:
 **Measured, not banked in advance.** Against §2's prediction of ~2.5
 points/deck, ~5 total: the isolated one-deck row (`fx_flux_sdram`) saved 1.49
 — over-predicted. The gate row (`instrument_worst_bbd`) saved **7.55
-points**, 132.79% → **125.24%** — under-predicted by 51%. The two GRIT-only
-checksums (`fx_grit`, `sweep_flux_lines_2ch`) held byte-identical while
-`fx_grit` dropped 1.37 points, confirming §7's read of the previous round
-exactly: GRIT alone was paying for a `pow` it never uses. Full reading,
-including the load-dependence pattern behind the isolated/gate-row gap (a
-hypothesis, not yet a re-measured fact) in
+points**, 132.79% → **125.24%** — under-predicted by 51%. GRIT's own
+companion rows (`sweep_grit_bare`, `sweep_grit_no_bbd_mem`) held byte-identical
+while `fx_grit` — also byte-identical — dropped 1.37 points: GRIT alone was
+paying for gated `Flux` work it never uses, confirming §7's *mechanism*.
+§7's *number* was off by about a third, though: the gated-work residual
+(`fx_grit − sweep_grit_no_bbd_mem`) was 1.60 before this round and is 0.55
+after, not 0.00, so "confirmed exactly" overstates it. Full reading, including
+the load-dependence pattern behind the isolated/gate-row gap — **measured**
+across three rows, with only its icache/pipeline mechanism still a
+hypothesis — in
 `docs/superpowers/specs/2026-07-29-flux-control-rate-design.md` §13.
 
 **What remains.** 25.24 points over the gate, down from 32.79. Next in the

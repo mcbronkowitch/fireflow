@@ -391,9 +391,13 @@ where on the rate/stage ladder they sit — consistent with §3's design: the
 removed work is control-rate overhead paid once per sample regardless of
 FLUX's operating point, not something that scales with the clock or stage
 count. The `sweep_room_*` rows also moved (checksums `d4b02ae8→a87305ad`,
-`a308f4b3→a04d6d7c`, `3b05b839→6439c691`) for the same reason as
-`instrument_worst`/`instrument_worst_bbd`: `sweep_room_*` runs the full
-instrument, decks included.
+`a308f4b3→a04d6d7c`, `3b05b839→6439c691`) even though `instrument_worst` and
+`instrument_worst_bbd` did **not** — both keep their checksum unchanged in the
+table above. The reason is not that `sweep_room_*` runs the full instrument
+(so does `instrument_worst_bbd`, unmoved); it is the `active_voices` fold
+Task 7 of this round added to `bench/workloads_sweep.cpp` (§10), which
+`instrument_*` does not carry. §13.4 has the correct account of this; this
+paragraph is corrected to match it.
 
 ### 13.2 The prediction missed — in both directions
 
@@ -425,7 +429,7 @@ per-sample, stays") — is where the remaining ~622 of 771 cycles/sample sit in
 the isolated case, and §13.3 is the reason that number is not simply "what's
 left" on the gate row.
 
-### 13.3 The saving grows with machine load — a hypothesis, not a measurement
+### 13.3 The saving grows with machine load — measured; the mechanism is a hypothesis
 
 This is the round's most interesting result. Two decks at the isolated
 `fx_flux_sdram` rate of 1.49 points each would sum to 2.98. The gate row,
@@ -459,7 +463,7 @@ the only thing running.
 systematically *understate* what a removal is worth once it lands on the
 gate row — the opposite of the usual worry that isolated numbers overstate
 real-world impact. That has a direct consequence for the next round: the
-mono-FLUX estimate of ~9.2 points (§13.5) is itself an isolated figure, and if
+mono-FLUX estimate of ~9.2 points (§13.6) is itself an isolated figure, and if
 this pattern repeats, the real saving on `instrument_worst_bbd` could be
 larger than 9.2.
 
@@ -468,6 +472,16 @@ This round has one data point on the load/saving relationship (three rows,
 not a swept parameter), which is a pattern, not a proof. Nothing above should
 be read as license to plan against a >9.2 mono saving until it is measured on
 the gate row directly.
+
+**The three rows differ from each other in FLUX's own operating point, not
+only in load, and it is worth ruling out that the growth is the operating
+point rather than the load.** `instrument_worst_bbd` additionally runs STAGES
+16384, DRIVE 0.85 and the 24 kHz clock ceiling, which `fx_flux_sdram` and
+`instrument_worst` do not. §13.1's own rows already answer this: the saving is
+flat across the operating point — `sweep_stages_512` −1.60 vs
+`sweep_stages_16384` −1.55, and `sweep_flux_rate_0` −1.57 vs
+`sweep_flux_rate_11` −1.34 — so what varies between the three rows above is
+the load, not where FLUX itself sits on its own ladders.
 
 ### 13.4 The checksums are the strongest evidence
 
@@ -485,14 +499,39 @@ to measurement jitter.
 
 Two of those identical checksums are load-bearing confirmations:
 
-- **`fx_grit`: 1.37 points cheaper at an identical checksum, `74f9b9f5`.**
-  This is §7's prediction confirmed exactly. A deck running GRIT alone was
-  computing the feedback coefficient every sample and discarding it, because
-  `Flux::process` returns at its idle guard before ever reading it. The
-  guards in §4/§5 remove that wasted computation; the checksum staying fixed
-  proves the audio GRIT actually produces did not change at all — the saving
-  is pure waste removed, not a behaviour change that happens to sound the
-  same.
+- **`fx_grit` and `sweep_grit_no_bbd_mem`: §7's mechanism confirmed, its
+  number was not.** §7 attributed ~1.60 points of gated work at `fx_grit` —
+  the subtraction `fx_grit − sweep_grit_no_bbd_mem` from the cost-curves
+  round, 6.53 − 4.93 — to the `_buf_ok` guard eliding the DRIVE `pow` for a
+  deck running GRIT alone (`Flux::process` returns at its idle guard before
+  the coefficient is ever read). Recomputed on this round's figures, that
+  same subtraction is 5.16 − 4.61 = **0.55**, not 0.00 — which is what an
+  "exactly confirmed" prediction would leave. Say this plainly, at the same
+  standard §13.2 already holds itself to when it refuses to round toward
+  §2's prediction: **§7's mechanism is confirmed; its magnitude was about a
+  third too high.**
+
+  - `sweep_grit_no_bbd_mem` drops **0.32** points (4.93 → 4.61), checksum
+    identical (`9ddc20e9`). That row's `Flux` has null buffers, so
+    `set_feedback` early-returns at its `_buf_ok` guard both before and
+    after this round — its saving cannot come from `set_feedback`. It can
+    only come from `set_time_mod`, the one setter in §4–§6 with no
+    `_buf_ok` guard. This makes the row a **stronger** result than the one
+    it replaces: it is the branch's only clean isolation of the
+    `set_time_mod` guard on its own.
+  - `fx_grit` drops **1.37** points (6.53 → 5.16), checksum identical
+    (`74f9b9f5`). That 1.37 is `sweep_grit_no_bbd_mem`'s 0.32 plus ~1.05 for
+    the gated `set_feedback` `pow` §7 actually meant to isolate.
+  - The gated-work residual is `fx_grit − sweep_grit_no_bbd_mem` itself:
+    **1.60 → 0.55**, a drop of 1.05, not the full 1.60 §7 attributed to the
+    guard. What remains behind the `_buf_ok` gate is `SoftSwitch::process()`
+    plus the guards' own compares — the honest floor, not the `pow`.
+
+  The checksums staying fixed on both rows still proves the audio GRIT
+  actually produces did not change at all — that part of the claim holds.
+  What does not hold is "confirmed exactly": the mechanism (`_buf_ok`
+  gating wasted `set_feedback`/`set_time_mod` work) is right; the size of
+  what it was gating was overstated by roughly a third.
 - **`sweep_flux_lines_2ch`: unchanged in both cost (9.16→9.17, noise-level)
   and checksum, `45b6f7aa`.** This row is a bare `BbdEcho` pair with no
   `Flux` wrapper around it at all. Its checksum and cost holding fixed

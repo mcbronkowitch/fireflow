@@ -128,12 +128,19 @@ private:
     float _stage_target = 8192.f;
     int   _stages_now = 8192;
     float _time_mult = 1.f;
-    // set_time_mod's unchanged-value guard. PartFx pushes FXT_FLUX_TIME once
-    // per sample too, and bbd_time_mult is a clamp, a cast and a table lerp
-    // for a value that usually stands still. -1 is unreachable for a norm
-    // bbd_time_mult clamps to 0..1, so the first push after init always
-    // lands -- the sentinel idiom _drive_norm and _stages_norm use, which is
-    // right here and wrong for _fb_norm (see set_feedback).
+    // set_time_mod's unchanged-value guard, compared against the RAW pushed
+    // argument -- bbd_time_mult's own clamp to 0..1 runs a line later, inside
+    // set_time_mod, and so cannot be what keeps -1 unreachable at THIS
+    // compare. What actually keeps it unreachable is a caller-side
+    // invariant: PartFx pushes FXT_FLUX_TIME through Part::fx_target_value,
+    // which clamps to 0..1 at engine/parts/part.cpp:129, before the value
+    // ever reaches PartFx's OnePole smoother and, downstream of that, this
+    // setter. That is unlike _drive_norm and _stages_norm below: those two
+    // clamp their OWN argument first and compare the clamped value, so -1 is
+    // unreachable by construction, not by a caller's behaviour. Here it
+    // depends on `Part` continuing to clamp before this setter is reached --
+    // a future direct caller that skipped that clamp would reach -1 and
+    // defeat the guard.
     float _time_mod_norm = -1.f;
     float _clock_hz = 0.f;
     // Unchanged-value guards: set_stages runs a powf and set_drive a pow10f,
