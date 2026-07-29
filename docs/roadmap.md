@@ -35,6 +35,16 @@ is actually built today, and what is still design-only.
   **The instrument is still over budget: 12.88 points remain to 100 %.** See
   "FLUX mono collapse" below for the full reading, including why this round's
   saving does not confirm the earlier instruction-cache hypothesis.
+  **Update, 2026-07-29 (instrument ablated; the gap is not where it was
+  assumed to be):** the unattributed fifth of the budget has now been measured
+  directly rather than inferred by subtraction. It is **not contention and
+  barely glue** — 64 % of it sits *inside* the two decks, whose block rows are
+  priced at operating points the gate does not use. There is **no
+  instrument-level cut to be found**; the overshoot must come from inside the
+  blocks. The same round also proved that code layout alone moves the gate by
+  ~2 points at an unchanged checksum, which restates the target: **the
+  overshoot is 10.77 points, not 12.88.** Branch `perf/instrument-ablation`,
+  not merged. See "Instrument-level ablation" below.
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
@@ -1206,6 +1216,73 @@ estimated ~0.6 points, left deliberately as model territory. And the gate
 itself: **12.88 points still separate `instrument_worst_bbd` from the 100 %
 line.** `perf/flux-mono` is not merged, pending the owner's listening pass —
 its outcome may change what belongs on this branch.
+
+### Instrument-level ablation ✅ (where the unmeasured budget actually goes)
+
+Every optimisation round so far searched inside the blocks that have bench
+rows, because adding those rows up reached only ~87 % of the gate and the
+missing fifth had never been measured — only inferred by subtraction. This
+round built the ladder that measures it: three new rows in a new `instr`
+family (`bench/workloads_instr.cpp`) plus the existing gate, so the budget
+partitions exhaustively **inside a single run**. No `engine/` file was
+touched. Branch: `perf/instrument-ablation`, **not merged**. Spec:
+`docs/superpowers/specs/2026-07-29-instrument-ablation-design.md` §8.
+Evidence: `docs/bench/2026-07-29-930ec17-ablate.md` / `.csv`.
+
+**The three differences** (`pct_max`, run 2; `avg_cyc` agrees in direction on
+all three):
+
+| difference | isolates | points |
+|---|---|---:|
+| `instr_part_2` − 2 × `instr_part_1` | deck contention | **−0.54** |
+| `instr_noverb` − `instr_part_2` | instrument glue | **+4.04** |
+| `instrument_worst_bbd` − `instr_noverb` | reverb *in situ* | **+14.79** |
+
+`2 × 46.24 − 0.54 + 4.04 + 14.79 = 110.77`, the gate exactly.
+
+**The answer, and it is a null result the spec committed in advance to writing
+plainly.** The gap is neither of the two things the round offered. Contention
+is **zero** — two decks together cost *less* than two decks priced separately,
+so the cache/SDRAM-pressure hypothesis is refuted for the deck pair. Glue is
+only **4.04 points** in total, covering `Center::update`, the CHOKE framing,
+MORPH, the dry taps, the cross-deck rhythm exchange and the limiter together.
+Of the 24.14 unaccounted points in this build, **15.47 (64 %) sit inside the
+two decks** — one bare `Part` configured as the gate configures a deck costs
+46.24 points against 38.51 for its own block rows — **5.17 (21 %) is the
+reverb costing more in situ than `oliverb_solo_sram` prices it**, and 4.04
+(17 %) is the glue. **There is no instrument-level cut to be found.** About a
+quarter of the in-deck excess is FLUX being priced at STAGES 8192 / rate 3
+while the gate runs it at 16384 with the clock on its ceiling; the rest is
+`Part`-internal work (`process_in`, the engine fade, voice-to-FX routing,
+per-deck modulation at the gate's settings) that no row prices.
+
+**The finer round is not worth running.** Its whole subject — reverb
+smoothers, MORPH, `derive_intervals` — divides 4.04 points four ways into
+sub-point quantities that this bench cannot resolve across builds. The two
+bare decks are 92.48 points, **83.5 % of the gate**; only FLUX (~13/deck) and
+the eight voices (35.80) are large enough to close a 10-point gap. The one
+cheap follow-up worth having is a single row, not a ladder: the reverb alone
+at the instrument's SIZE 1.0, to split the 5.17 into operating point versus
+smoothers-and-mixing.
+
+**A finding beyond this round: code layout moves the gate by ~2 points.**
+`instrument_worst_bbd` returned **110.78 / 110.77** here against **112.79 /
+112.88** in `docs/bench/2026-07-29-1ba3f18-sweep.csv`, at the **identical
+checksum `483e8e82`** — same computation, ~2 points cheaper, with no engine
+change, only a new bench translation unit. This is the effect the mono round
+saw on `fx_grit` and could not prove; the unchanged checksum proves it. Other
+rows moved too, at unchanged checksums: `instrument_init` +4.27 %, `fx_grit`
++2.24 %, `oliverb_solo_sram` +1.73 %, several others −1 to −1.8 %. **Any
+cross-build claim in this project smaller than ~2 points on the gate or ~2 %
+on a small row has measured its own layout.** It also restates the target: the
+overshoot is **10.77 points, not the 12.88 the mono round recorded**.
+
+**What remains.** The **10.77-point gap** to 100 %, which must now be found
+inside FLUX and the voices. The owner's **panning decision** from the mono
+collapse is still open, decided by ear against that round's four renders. And
+`engine/fx/bbd.h`'s `1/sr_` division in `BbdLine::SetClock` is still
+unaddressed, worth an estimated ~0.6 points, still deliberately left as model
+territory.
 
 ### BODY playability ✅ (extends M5j)
 

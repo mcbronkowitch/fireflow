@@ -198,3 +198,232 @@ observed on `fx_grit` and could not prove.
 - Do not add, remove or rename any existing bench row.
 - No bit-exactness or checksum-against-stored-file gates; the bench's own
   cross-run comparison is a different thing and is required.
+
+---
+
+## 8. Results
+
+Measured 2026-07-29 on a Daisy Seed (STM32H750), branch
+`perf/instrument-ablation` at `930ec17`, profile `ablate`, two runs. Evidence:
+`docs/bench/2026-07-29-930ec17-ablate.csv` and `.md`. Every row returned an
+identical checksum in both runs; the QSPI digest and device fingerprint were
+identical too. Figures below are `pct_max` from **run 2**, with run 1 given
+where the spread matters, and `avg_cyc` checked to agree in direction on every
+difference. **Every difference is computed from within this one run** — §8.1 is
+why.
+
+*(One warning for anyone reading the evidence file directly: the "Verdict"
+prose in `2026-07-29-930ec17-ablate.md` is `run.py` boilerplate, templated off
+`instrument_worst` and reproduced word for word from the baseline file. It is
+not a verdict computed for this round. This section is.)*
+
+### 8.1 The anchor moved — and that is the round's first finding
+
+§6 said that if a checksum moved, that would be a real finding. None did: all
+15 `system` rows returned exactly the checksum they returned in the baseline.
+The **cost** moved anyway, and it moved on the gate.
+
+`instrument_worst_bbd` reads **110.78 / 110.77** (runs 1 / 2) here, against
+**112.79 / 112.88** in `docs/bench/2026-07-29-1ba3f18-sweep.csv` — at checksum
+`483e8e82` on both sides. Identical bytes out, roughly 2.0 points cheaper in.
+No `engine/` file was touched; the only difference between the two images is a
+new translation unit (`bench/workloads_instr.cpp`) and the storage its three
+rows need. This is the code-layout effect the mono round observed on `fx_grit`
+and could not prove. **Here it is proven**, because the checksum is provably
+identical: the same computation, at a different price.
+
+It is not confined to the gate. Comparing run 1 of each build (full table in
+`.superpowers/sdd/2026-07-29-instrument-ablation/task-3-report.md`):
+`instrument_init` **+4.27 %**, `fx_grit` **+2.24 %**, `oliverb_solo_sram`
+**+1.73 %** upward; `instrument_worst_bbd` **−1.77 %**, `mod_plane_2x_center`
+−1.24 %, `instrument_worst` −1.12 %, `fx_flux_sdram` −1.12 % downward. Every
+one at an unchanged checksum, so none of it is new work.
+
+Two consequences, and the second outlives this round:
+
+1. **Every ladder difference below is computed inside a single run.** The
+   quantities being measured are 0.5 to 15 points; a cross-build subtraction
+   would inject up to 2 points of layout noise into them. Where a baseline
+   figure is cited at all (§8.3), it is cited as an order-of-magnitude check,
+   never inside a difference.
+2. **Cross-run comparison in this project is worth about ±2 points on the
+   gate and about ±2 % on a 5-point row, before any real effect.** Any future
+   round claiming a saving smaller than that has measured its own build
+   layout. The mono round's 12.36-point cut clears this comfortably; a
+   one-point claim would not clear it at all.
+
+The round's own motivating arithmetic has to be restated as a result. §1
+quoted the gate at 112.88 and derived from it "around **23 points**... belongs
+to nothing anyone has measured" and "**12.88 points** remain to reach 100 %".
+Both were stated against a number that has since moved with no change to the
+instrument. In this build the gate is 110.77, so **the overshoot is 10.77
+points, not 12.88** — 2.11 points of the target disappeared without anyone
+optimising anything. The unaccounted region is re-derived from scratch in §8.3
+rather than patched.
+
+### 8.2 The three differences
+
+The ladder, run 2:
+
+| rung | avg cyc | `pct_max` |
+|---|---:|---:|
+| `instr_part_1` | 423095 | 46.24 |
+| `instr_part_2` | 840959 | 91.94 |
+| `instr_noverb` | 883797 | 95.98 |
+| `instrument_worst_bbd` | 1024664 | 110.77 |
+
+| difference | what it isolates | `pct_max` | avg cyc | run 1 |
+|---|---|---:|---:|---:|
+| `instr_part_2` − 2 × `instr_part_1` | deck contention | **−0.54** | −5231 | −0.64 |
+| `instr_noverb` − `instr_part_2` | instrument glue | **+4.04** | +42838 | +4.36 |
+| `instrument_worst_bbd` − `instr_noverb` | reverb *in situ* | **+14.79** | +140867 | +14.58 |
+
+`avg_cyc` agrees in direction and in rough proportion on all three. Run-to-run
+spread is 0.10, 0.32 and 0.21 points respectively — small against the
+quantities themselves except on the glue figure, where it is 8 % of the value.
+The partition is exhaustive by construction:
+
+```
+2 × 46.24  −  0.54  +  4.04  +  14.79  =  110.77
+  decks     contention  glue    reverb     gate
+```
+
+**Contention is zero.** Two decks running together cost **0.54 points less**
+than two decks priced one at a time — a *negative* contention term. The
+hypothesis in §2, that a large part of the gap is the same work costing more
+inside the instrument through cache pressure and SDRAM contention, is
+**refuted for the deck pair**. There is no penalty to find there because there
+is no penalty.
+
+**The bias in that figure, named rather than left to be found.** The
+per-sample accumulate loop is common to both bare-`Part` rows, but it appears
+**once** in `proc_instr_part_2` and **twice** in `2 × instr_part_1`, so the
+difference is biased low — too negative — by one loop's scaffolding. The
+accumulates themselves match (two `acc +=` per iteration on both sides) and
+`test_input()` is hoisted out of the loop on both sides, so the biased
+quantity is 96 iterations of an increment, a compare and a branch on a 480 MHz
+M7 — of order 10² cycles. `empty_callback` bounds the harness floor at 2 avg /
+11 max cycles, **0.0011 % of the block**, and the loop cannot exceed a few
+hundredths of a point above that. Correcting for it moves −0.54 to about
+−0.50. It does not change the sign, and the sign is the finding.
+
+### 8.3 The answer: neither glue nor contention — the block rows are underpriced
+
+§1's gap has to be rebuilt inside this run before it can be attributed. Every
+block row this project has, priced from `2026-07-29-930ec17-ablate.csv`, run 2,
+with the FX shell counted once per deck so the blocks do not double-charge for
+it:
+
+| block | source | per deck | points |
+|---|---|---:|---:|
+| 8 voices | `synth_2x4` | — | 35.80 |
+| FX shell | `fx_none` | 2.54 | 5.08 |
+| GRIT | `fx_grit` − `fx_none` | 3.07 | 6.14 |
+| FLUX | `fx_flux_sdram` − `fx_none` | 10.59 | 21.18 |
+| COMP | `fx_comp` − `fx_none` | 0.72 | 1.44 |
+| modulation plane | `mod_plane_2x_center` | — | 7.37 |
+| reverb | `oliverb_solo_sram` | — | 9.62 |
+| **sum** | | | **86.63** |
+
+Against the gate's 110.77 that leaves **24.14 unaccounted points** in this
+build — the same region §1 estimated at ~23 against the old gate value. The
+ladder splits it exhaustively:
+
+| where the 24.14 points are | points | share |
+|---|---:|---:|
+| inside one `Part`, beyond that deck's own block rows (92.48 − 77.01) | **+15.47** | 64 % |
+| deck contention | **−0.54** | −2 % |
+| instrument-level glue | **+4.04** | 17 % |
+| the reverb costing more *in situ* than `oliverb_solo_sram` prices it | **+5.17** | 21 % |
+| **total** | **24.14** | |
+
+**The answer to §1's question is that the gap is neither of the two things the
+round offered.** It is not contention (−0.54, and the wrong sign). It is only
+17 % glue. **Nearly two thirds of it — 15.47 points — is inside the two decks,
+which the block rows were supposed to have priced already.** One bare `Part`,
+configured exactly as the gate configures a deck, costs **46.24 points**; the
+block rows for that same deck sum to 38.51. The rows are not wrong. They are
+priced at operating points the gate does not use.
+
+Which is the reconciliation §1 asked for, and FLUX is the clearest case of it —
+the round's own suspicion, now with a size. `fx_flux_sdram` never calls
+`set_stages` or `set_flux_rate`, so it prices FLUX at STAGES 8192 and rate
+index 3, while the gate runs STAGES 16384 with the clock on `kClockMaxHz`. The
+`sweep` family priced each axis alone: 8192 → 16384 costs +0.63, rate 3 → 11
+costs +1.66 (`2026-07-29-1ba3f18-sweep.csv`, run 2 — a *different build*,
+quoted here only for scale and subject to §8.1's ±2 %, and the two axes
+together were never measured). If they add, FLUX hot is worth roughly **+2.2
+points per deck, +4.3 across the instrument** over what the block sum charged
+it. **That accounts for about a quarter of the 15.47.** The remaining ~11
+points across two decks is `Part`-internal work no row prices at all:
+`process_in()`, the engine-fade multiply, the voice-to-FX routing, and the
+deck's own modulation running at the gate's settings rather than
+`mod_plane_2x_center`'s. This round does not decompose that further, and §8.5
+explains why it should not be asked to.
+
+**This is a null result, and §5 committed in advance to writing it as plainly
+as the other kind.** No instrument-level cut exists to be found. The entire
+glue bucket — `Center::update`, the CHOKE framing, the MORPH blend, the dry
+taps, the cross-deck rhythm exchange, the limiter and the per-sample loop, all
+of it together — is **4.04 points**, and most of that is features rather than
+overhead. Deleting the whole of it, which is not possible, would leave 6.73 of
+the 10.77 points still outstanding. **The remaining 10.77 points must come
+from inside the blocks after all.** The light was in the right place; the map
+of it was wrong.
+
+### 8.4 The reverb in situ, against its isolated row
+
+`instrument_worst_bbd` − `instr_noverb` = **14.79** points. `oliverb_solo_sram`
+in the *same run* = **9.62**. The gap is **+5.17 points, 54 % more than the
+isolated row**, and run 1 agrees at +4.95.
+
+That gap is not a memory-region artefact: `bench/mem.cpp` hands `FxMem::reverb`
+the very same `g_rev_sram` object that `reverb_sram()` returns, so both figures
+measure one `AmbientReverb` in SRAM. Three things make it up, and this round
+can rank them but not separate them:
+
+- **A hotter operating point.** `setup_reverb` sets SIZE 0.9;
+  `setup_inst_worst` sets `set_reverb_size(1.f)`. DECAY, TONE, DIFFUSION and
+  both mod depths match. On a Doppler-SIZE reverb that is not a free
+  parameter, and it is the first thing to suspect.
+- **The four `OnePole` smoothers** on the per-deck dry/wet gains, which §2
+  listed as genuinely unmeasured.
+- **The send and return mixing** — the per-deck sends into the shared bus and
+  the equal-power join back — which the isolated row never included by
+  construction.
+
+So the round's smallest finding is still a real one: **`oliverb_solo_sram`
+under-prices the reverb as the instrument actually runs it, by about 5 points —
+more than half again its own value.** Anyone budgeting from that row should
+use the in-situ figure instead.
+
+### 8.5 Is the finer round worth running? No.
+
+§5 made this the round's decision and made it conditional: the finer ladder —
+reverb smoothers, MORPH, `process_in`, `derive_intervals` measured separately —
+is worth running **only if this one shows real work sitting in the glue.**
+
+It does not. **The glue is 4.04 points in total**, run-to-run spread 0.32, and
+that one number already covers every item the finer ladder would have split
+apart at the instrument level. `derive_intervals` and MORPH live inside it;
+splitting 4.04 points four ways yields four sub-point quantities, which §8.1
+has just established is below what a comparison in this project can resolve.
+The reverb smoothers live in the 5.17-point in-situ excess, whose largest
+component is probably an operating-point difference rather than overhead.
+`process_in` is the one named target that is *not* in the glue — it is inside
+the 15.47 — and the ladder §5 described would not have measured it.
+
+**Recommendation: do not run it.** The two bare decks are **92.48 points,
+83.5 % of the gate.** That is where the remaining 10.77 points have to come
+from, and the existing rows already say which lines are large enough to
+matter: FLUX hot at roughly 13 points per deck (~26 across the instrument, a
+quarter of the budget) and the eight voices at 35.80. Nothing else in the
+instrument is big enough to close a 10.77-point gap even if it were deleted
+outright.
+
+The one cheap follow-up worth having is **one row, not a ladder**: the reverb
+alone at the instrument's operating point (SIZE 1.0), which would split §8.4's
+5.17 points into "operating point" and "smoothers plus mixing" for the cost of
+a single workload. If it lands mostly on the operating point, the reverb has
+no overhead worth attacking either, and the search narrows to FLUX and the
+voices with nothing else outstanding.
