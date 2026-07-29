@@ -183,6 +183,10 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "sweep_flux_rate_6",
         "sweep_flux_rate_8",
         "sweep_flux_rate_11",
+        "sweep_stages_512",
+        "sweep_stages_2048",
+        "sweep_stages_8192",
+        "sweep_stages_16384",
     ),
     "voice": (
         "morph_osc_bare",

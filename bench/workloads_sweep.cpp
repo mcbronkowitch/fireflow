@@ -134,6 +134,90 @@ void setup_flux_rate_6()  { setup_flux_rate(6);  }
 void setup_flux_rate_8()  { setup_flux_rate(8);  }
 void setup_flux_rate_11() { setup_flux_rate(11); }
 
+// --- Sweep B: cost against STAGES --------------------------------------------
+// The hypothesis under test is CACHE, not arithmetic: stage count does not
+// change the tick rate at a fixed clock, but it does change how much SDRAM
+// the line walks against a 16 KB D-cache. That only holds if the clock is
+// the SAME (and unclamped) across all four rows -- otherwise a clamped row's
+// cost carries a clock effect on top of the memory effect and the curve
+// cannot separate the two.
+//
+// Division held at 3, NOT 6 (the brief's number, wrong -- corrected here).
+// Flux::recompute_time (engine/fx/flux.cpp) computes hz = division_hz(idx,
+// bpm) and t = 1/hz; bbd_clock_hz (engine/fx/bbd.h) then computes
+// stages/(2*t), clamped to kClockMaxHz = 32000. At bpm=120 (set below):
+//   division 3 ("1/4", cpb=1):  hz = 2,   t = 0.5 s   -> clock = stages/1.0
+//   division 6 ("1/2", cpb=2):  hz = 4,   t = 0.25 s  -> clock = stages/0.5
+// At division 6 the 16384-stage row computes 16384/(2*0.25) = 32768 Hz and
+// CLAMPS to 32000 -- exactly the confound this row exists to avoid. At
+// division 3 the same row computes 16384/(2*0.5) = 16384 Hz, comfortably
+// under the ceiling, so all four points sit on the linear (unclamped) part
+// of bbd_clock_hz and stages is the only variable:
+//   512 stages   -> clock   512 Hz
+//   2048 stages  -> clock  2048 Hz
+//   8192 stages  -> clock  8192 Hz
+//   16384 stages -> clock 16384 Hz
+// (all four strictly below 32000 -- none clamp.)
+//
+// Flux::set_stages is geometric, 512 * 32^n (engine/fx/flux.cpp:156); the
+// four norms below are its exact solutions for the requested stage counts
+// (32^0.4 == 4, 32^0.8 == 16). tests/test_flux.cpp's "STAGES is geometric,
+// 512 to 16384" case exercises this same mapping (settled_stages(0.f) ==
+// 512, (0.4f) ~= 2048, (0.8f) ~= 8192, (1.f) == 16384) and passed at this
+// commit (`spky_tests.exe --test-case="flux: STAGES is geometric*"`,
+// 4/4 assertions). This row also reads flux().stages() after its own settle
+// (below) to confirm the same mapping holds under ITS configuration
+// (division 3, not that test's default rate/bpm).
+//
+// Settle length: at division 3 the clock is unclamped for every row, so a
+// full line-fill takes exactly the division's own period regardless of
+// stage count -- stages/(2*(stages/(2t))) = t = 0.5 s = 24000 samples at
+// 48 kHz. Four fills (the same "settle before measuring" precedent
+// kSweepFluxSettleSamples above and workloads_bbd.cpp's setup_bbd_ceiling
+// use) is 4 * 24000 = 96000 samples, comfortably longer than the ~30 ms
+// (1440-sample) slew Flux::process applies to both the delay time and the
+// stage count, and used for all four rows since none of them clamp (unlike
+// Sweep A, there is no "slowest row" to derive from -- every row's fill time
+// is the same 0.5 s).
+constexpr int kSweepStagesSettleSamples = 96000;
+
+void setup_stages(float norm)
+{
+    auto& group = g_sweep_arena.emplace<SweepFxGroup>();
+    const FxMem& m = fx_mem();
+    group.fx.init(kSampleRate, m.echo[0][0], m.echo[0][1]);
+    group.fx.set_fx_on(FxBlock::Grit, false, true);
+    group.fx.set_fx_on(FxBlock::Flux, true,  true);
+    group.fx.set_comp(0.f);
+    group.fx.set_grit_mix(1.f);
+    group.fx.set_flux_mix(1.f);
+    group.fx.set_bpm(120.f);
+    group.fx.set_flux_rate(3);      // division 3 ("1/4") -- see derivation above
+    group.fx.set_stages(norm);
+
+    // Mirrors setup_fx's values[] exactly (bench/workloads_system.cpp), same
+    // as setup_flux_rate above: comparability with the sibling row
+    // fx_flux_sdram is the reason a divergence here would silently break
+    // later arithmetic.
+    group.values[FXT_GRIT_INT]  = 0.8f;
+    group.values[FXT_FLUX_TIME] = 0.5f;
+    group.values[FXT_FX_MIX]    = 1.f;
+    group.values[FXT_REV_SEND]  = 0.5f;
+    group.values[FXT_FLUX_FB]   = 0.7f;
+
+    // Settle OUTSIDE the measured window -- see kSweepStagesSettleSamples.
+    const float* in = test_input();
+    for (int i = 0; i < kSweepStagesSettleSamples; ++i) {
+        float l = in[i % kBlock], r = l * 0.9f, sl = 0.f, sr = 0.f;
+        group.fx.process(l, r, sl, sr, group.values);
+    }
+}
+
+void setup_stages_512()   { setup_stages(0.0f); }
+void setup_stages_2048()  { setup_stages(0.4f); }
+void setup_stages_8192()  { setup_stages(0.8f); }
+void setup_stages_16384() { setup_stages(1.0f); }
+
 float proc_sweep_fx()
 {
     auto& group = g_sweep_arena.get<SweepFxGroup>();
@@ -156,6 +240,10 @@ const Workload kSweepWorkloads[] = {
     { "sweep", "sweep_flux_rate_6",  setup_flux_rate_6,  proc_sweep_fx },
     { "sweep", "sweep_flux_rate_8",  setup_flux_rate_8,  proc_sweep_fx },
     { "sweep", "sweep_flux_rate_11", setup_flux_rate_11, proc_sweep_fx },
+    { "sweep", "sweep_stages_512",   setup_stages_512,   proc_sweep_fx },
+    { "sweep", "sweep_stages_2048",  setup_stages_2048,  proc_sweep_fx },
+    { "sweep", "sweep_stages_8192",  setup_stages_8192,  proc_sweep_fx },
+    { "sweep", "sweep_stages_16384", setup_stages_16384, proc_sweep_fx },
 };
 const int kSweepCount = sizeof(kSweepWorkloads) / sizeof(kSweepWorkloads[0]);
 
