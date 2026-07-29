@@ -6,6 +6,8 @@
 #include "serial_arena.h"
 #include "instrument.h"
 #include "parts/part.h"
+#include "parts/engine_iface.h"
+#include "synth/synth_engine.h"
 #include "mod/super_modulator.h"
 #include "mod/lane_id.h"
 #include "mod/divisions.h"
@@ -152,7 +154,42 @@ struct DeckModGroup {
     float master_hz = 0.f;
 };
 
-SerialArena<InstrNoVerbGroup, InstrPartGroup, DeckModGroup> g_instr_arena;
+// One SynthEngine, driven exactly as Part::process drives it.
+//
+// Four differences from synth_2x4 (bench/engine_2x4.h), each deliberate and
+// each part of what this row corrects:
+//
+//   1. Called through an IPartEngine*, not a concrete SynthEngine&. Part
+//      holds `IPartEngine* _engine` (engine/parts/part.h:209) and every
+//      method on that interface is virtual (engine/parts/engine_iface.h),
+//      so Part pays two virtual dispatches per sample and can inline
+//      neither. proc_engine_2x4 holds a concrete reference and the compiler
+//      inlines both calls. Calling the concrete type here would push that
+//      dispatch cost silently into the round's remainder -- the one way to
+//      get this row wrong (design spec section 2.3).
+//   2. FLOW, not STEP. _step_on initialises to false (part.cpp:35), flow()
+//      is !_step_on (part.h:98), and setup_inst_worst never calls set_step,
+//      so the gate runs both decks as a drone. setup_engine_2x4 calls
+//      set_flow(false).
+//   3. The cycle comes from a real modulator's master_hz(), as
+//      Part::process derives it (part.cpp:403-407), not from the constant
+//      set_cycle(2.f) the old row uses.
+//   4. process_in() is called every sample, before process()
+//      (part.cpp:482). proc_engine_2x4 never calls it, so the 35.80 points
+//      contain none of it.
+//
+// Not included, by design: the chord builder, the quantizer, _control_tick's
+// target pushes and the _engine_fade multiply. Those are Part-level and stay
+// in the round's remainder (design spec section 4).
+struct DeckEngineGroup {
+    SynthEngine    synth;
+    SuperModulator mod;          // setup only -- see setup_deck_engine_hot
+    IPartEngine*   engine = nullptr;
+    float          master_hz = 0.f;
+    int            voices = 0;
+};
+
+SerialArena<InstrNoVerbGroup, InstrPartGroup, DeckModGroup, DeckEngineGroup> g_instr_arena;
 
 void setup_instr_noverb()
 {
@@ -388,6 +425,86 @@ float proc_deck_mod_hot()
     return acc;
 }
 
+// Four fixed pitches, the same set setup_engine_2x4 uses
+// (bench/engine_2x4.h, kEngine2x4Pitches), so this row and synth_2x4 hold
+// the same voice occupancy and the difference between them cannot be a
+// voice count. The chord builder that Part::trigger_manual would normally
+// run (part.cpp:149-162) is Part-level and belongs in the remainder; what
+// this row needs from it is only the number of voices it lands.
+constexpr float kDeckEnginePitches[] = { 0.25f, 0.35f, 0.45f, 0.55f };
+
+void setup_deck_engine_hot()
+{
+    auto& g = g_instr_arena.emplace<DeckEngineGroup>();
+
+    // Mirrors Part::init for PART_A (engine/parts/part.cpp:16-45).
+    g.mod.init(kSampleRate, 0x1234abcdu);
+    g.mod.set_tempo_bpm(120.f);
+    g.mod.set_rate(0.8f);
+    g.mod.set_density(1.f);
+    g.synth.set_seed(0x1234abcdu ^ 0x5eedC0DEu);
+    g.synth.init(kSampleRate);
+
+    // From here on the engine is reached ONLY through the base pointer.
+    g.engine = &g.synth;
+    g.engine->set_flow(true);        // boot: lanes boot in FLOW -> drone
+    g.synth.set_decay(1.f);          // Part::set_voice_decay(1.0), part.h:139
+
+    // Derive the cycle the way Part::process does: run the modulator to a
+    // settled state, read master_hz(), push 1/hz. The modulator is then left
+    // alone -- driving it inside the measured loop would pay deck_mod_hot's
+    // cost a second time and corrupt both rows (design spec section 3.2).
+    for (int b = 0; b < kInstrSettleBlocks; ++b)
+        for (size_t i = 0; i < kBlock; ++i) g.mod.process();
+    g.master_hz = g.mod.master_hz();
+    assert(g.master_hz > 0.f);
+    // 0.5 Hz is exactly what set_cycle(2.f) encodes, i.e. the operating point
+    // this row exists to move away from. Landing on it would mean the
+    // modulator never came up and the row silently measures the old
+    // configuration. Banded rather than compared for equality: a float
+    // equality assert would be brittle and would read as an oversight.
+    // Checked against the live free_hz(0.8f) call, same idiom
+    // setup_deck_mod_hot uses, rather than a second hardcoded expectation.
+    assert(std::fabs(g.master_hz - free_hz(0.8f)) < 1e-4f);
+    assert(std::fabs(g.master_hz - 0.5f) > 1e-3f);
+    g.engine->set_cycle(1.f / g.master_hz);
+
+    for (float p : kDeckEnginePitches) g.engine->trigger(p);
+
+    const float* in = test_input();
+    for (int b = 0; b < kInstrSettleBlocks; ++b)
+        for (size_t i = 0; i < kBlock; ++i) {
+            float ol, orr;
+            g.engine->process_in(in[i], in[i]);
+            g.engine->process(ol, orr);
+        }
+
+    // A drone that has stopped sounding would make this row measure silence
+    // and produce a plausible, meaningless number. SynthEngine::kVoices is 4
+    // (engine/synth/synth_engine.h:35), so 4 is both the count triggered and
+    // the ceiling.
+    g.voices = g.synth.active_voices();
+    assert(g.voices == 4);
+}
+
+float proc_deck_engine_hot()
+{
+    auto& g = g_instr_arena.get<DeckEngineGroup>();
+    const float* in = test_input();
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i) {
+        float ol, orr;
+        // Both calls through the base pointer, in Part::process's order:
+        // process_in first, then process (part.cpp:482-483).
+        g.engine->process_in(in[i], in[i]);
+        g.engine->process(ol, orr);
+        acc += ol + orr;
+    }
+    acc += static_cast<float>(g.synth.active_voices());
+    acc += g.master_hz + static_cast<float>(g.voices);
+    return acc;
+}
+
 } // namespace
 
 const Workload kInstrWorkloads[] = {
@@ -395,6 +512,7 @@ const Workload kInstrWorkloads[] = {
     { "instr", "instr_part_2", setup_instr_part_2, proc_instr_part_2 },
     { "instr", "instr_noverb", setup_instr_noverb, proc_instr_noverb },
     { "instr", "deck_mod_hot", setup_deck_mod_hot, proc_deck_mod_hot },
+    { "instr", "deck_engine_hot", setup_deck_engine_hot, proc_deck_engine_hot },
 };
 const int kInstrCount = sizeof(kInstrWorkloads) / sizeof(kInstrWorkloads[0]);
 

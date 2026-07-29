@@ -931,6 +931,9 @@ class AblateProfileTest(unittest.TestCase):
     def test_deck_mod_row_is_expected(self):
         self.assertIn("deck_mod_hot", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
 
+    def test_deck_engine_row_is_expected(self):
+        self.assertIn("deck_engine_hot", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
+
 
 class ManifestValidationContract(unittest.TestCase):
     """resolve()'s load-time manifest checks (design spec S3): a profile
