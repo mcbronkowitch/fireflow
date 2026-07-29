@@ -1319,6 +1319,76 @@ collapse is still open, decided by ear against that round's four renders. And
 unaddressed, worth an estimated ~0.6 points, still deliberately left as model
 territory.
 
+### Deck-interior ablation ✅ (the 7.73 per deck, split)
+
+Branch `perf/deck-interior-ablation`. Spec
+`docs/superpowers/specs/2026-07-29-deck-interior-design.md` §8, evidence
+`docs/bench/2026-07-29-c4ae8db-ablate.{md,csv}`. Two rows added to the existing
+`instr` family and `ablate` profile; no engine change.
+
+The predecessor left **7.73 unpriced points per deck**. Two rows re-priced the
+two block rows whose operating point provably differed from the gate's:
+`deck_engine_hot` (one `SynthEngine` driven as `Part::process` drives it —
+through a virtual `IPartEngine*`, in FLOW, cycle derived from a real
+modulator's `master_hz()`, `process_in()` called) and `deck_mod_hot` (one
+`SuperModulator` at RATE 0.8, no `Center`).
+
+**Result: the operating points were not the problem.** All figures `pct_max`,
+run 2, computed entirely within one run.
+
+| | points |
+|---|---:|
+| voices: `deck_engine_hot` − `synth_2x4` / 2 | **+0.70** |
+| modulation: `deck_mod_hot` − `mod_plane_2x_center` / 2 | **+0.10** |
+| **remainder: `Part` structure** | **+6.85** |
+| per-deck excess | 7.645 |
+
+Nearly 90 % is `Part` structure — the chord builder, the quantizer,
+`_control_tick`'s pushes, `_adjust_surface` every tick in FLOW, the
+`_engine_fade` multiply, and `Part::process`'s own loop. The four differences
+established by reading (two virtual dispatches per sample, FLOW vs STEP, a
+14×-shorter derived cycle, `process_in` where the old row calls none) cost
+0.70 points per deck between them. All four were real; none was expensive.
+
+**The 35.80 points are not underpriced — but the "cut a voice" arithmetic
+needed a different correction than expected.** `synth_2x4` prices eight voices
+at 4.479 each and `deck_engine_hot` four at 4.65, so the rows were right. That
+average is the wrong number for the decision: differencing
+`synth_1_voice`/`_2_voices`/`_4_voices` (5.65 / 9.91 / 17.85) puts ~1.39 points
+of fixed engine overhead outside the per-voice cost and the **marginal** voice
+at about **3.97**. Cutting one voice per deck therefore saves ≈ **7.9 points**,
+not the 9.3 the average implies — **78 % of the gap**, cheap and structural,
+but not sufficient alone.
+
+**Two candidates closed by reading, not measuring.** The four engines a `Part`
+holds cost memory and no CPU (`_engine` is one pointer; the fade multiply is
+exactly 1.0 at hold). The two virtual dispatches per sample are structural —
+the interface *is* the four-engine design — and are now bounded inside the
+0.70-point voices correction. Separately: **DENSITY is inert in FLOW**, in both
+bench rows and in the gate itself (`_density` → `_groove_k` → `_effective_gate`,
+consulted only when `_step_mode` is true, which none of the three sets), and
+`set_tempo_bpm` is inert in FREE mode. A knob the gate sets to 1.0 has no cost
+implication at the gate's own operating point.
+
+**The layout drift reproduced a third time.** All 18 rows shared with
+`930ec17-ablate.csv` returned identical checksums, row counts matching on both
+sides. Costs moved anyway: the gate 110.77 → **110.10**, `fx_grit` 5.61 → 5.43,
+`oliverb_solo_sram` 9.62 → 9.66. `fx_grit` is the row the mono round first
+suspected and could not prove; it has now moved in three consecutive runs at an
+unchanged checksum. The ±2-point cross-build bound stands unchanged. The target
+is now **10.10 points**.
+
+**Unlike the predecessor, a finer round now has a subject.** The remainder is
+13.70 points across the instrument — larger than the gap. Last round's argument
+against splitting rested on the glue being 4.04 points, too small to repay a
+round; that does not apply here. Two cheap rows would split it: a `Part` with
+its chord surface held at one note (the chord/quantizer/`_adjust_surface`
+path, the largest named constituent and the one this round had to document as
+a consequence rather than measure), and the marginal voice at the gate's own
+operating point. The second changes a decision — if the marginal voice is
+nearer 4.65 than 3.97, cutting one closes 93 % of the gap rather than 78 %, and
+"four voices or three" becomes the cheapest route to 100 % this project has.
+
 ### BODY playability ✅ (extends M5j)
 
 BODY shipped in 2.14.0 measured and in budget, but the first extended session

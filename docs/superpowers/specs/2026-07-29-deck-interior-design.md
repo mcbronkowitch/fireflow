@@ -332,3 +332,162 @@ voice" option rests on is **understated** — cutting one would save more than
 - The bench refuses hardware evidence from a dirty git tree.
 - No bit-exactness or checksum-against-stored-file gates; the bench's own
   cross-run comparison is a different thing and is required.
+
+---
+
+## 8. Results
+
+**Evidence:** `docs/bench/2026-07-29-c4ae8db-ablate.{md,csv}`, run 2, `pct_max`
+unless stated. Every figure below comes from that single run; no baseline
+number enters any difference.
+
+### 8.1 The answer: the operating points were not the problem
+
+**Of the 7.645 unpriced points per deck, 6.85 — nearly 90 % — is `Part`
+structure.** The two corrections this round was built to measure come to
+0.795 between them.
+
+| | `pct_max` | `pct_avg` |
+|---|---:|---:|
+| voices: `deck_engine_hot` − `synth_2x4` / 2 | **+0.70** | +0.29 |
+| modulation: `deck_mod_hot` − `mod_plane_2x_center` / 2 | **+0.10** | −0.05 |
+| **remainder: `Part` structure** | **+6.85** | +5.77 |
+| total = the per-deck excess | 7.645 | 6.015 |
+
+This is a null result for the hypothesis §1 was written to test, and §5
+committed in advance to writing it as plainly as the other kind. The four
+differences §2.2–§2.4 established by reading — two virtual dispatches per
+sample, FLOW instead of STEP, a cycle 14× shorter than the old row's, and
+`process_in` called where the old row never calls it — **cost 0.70 points per
+deck in total.** All four were real; none of them was expensive.
+
+The remainder is what is left when the engine, the modulation and the four FX
+blocks are all subtracted from a whole deck: the chord builder, the quantizer,
+`_control_tick`'s target pushes, `_adjust_surface` running every tick in FLOW,
+the `_engine_fade` multiply, and `Part::process`'s own per-sample loop.
+
+**Both forms of the remainder agree**, which is where an arithmetic slip would
+have hidden:
+
+```
+46.00 − 18.61 − 3.81 − (2.54 + 2.89 + 10.58 + 0.72)                    = 6.85
+46.00 − 18.61 − 3.81 − (5.43 + 13.12 + 3.26 − 2 × 2.54)               = 6.85
+```
+
+and the per-deck block sum reconstructs the excess exactly:
+`17.915 + 16.73 + 3.71 = 38.355`, against `instr_part_1` at `46.00`, leaving
+`7.645 = 0.695 + 0.10 + 6.85`.
+
+### 8.2 The fix to `deck_engine_hot` was falsified, not merely confirmed
+
+The row's first version let voice occupancy collapse from 4 to 1 partway
+through the measured window: the derived cycle (0.1439 s) gives
+`decay_s = 8 × cycle = 1.151 s` and an `Env` Idle threshold at 1.535 s, which
+lands 0.94 s inside a 2.0 s window, while `synth_2x4` holds four voices for
+its whole run. The review that caught it predicted the symptom: unfixed, the
+row would return `pct_avg / pct_max ≈ 0.55–0.65`, an outlier no other row in
+this bench shows.
+
+After the fix — a `trigger_chord` cadence every 6908 samples, mirroring the
+`master_hz` rate at which a real deck's PITCH lane fires — the row returned
+**17.94 / 18.61 = 0.964**, inside the predicted 0.96–0.99. The spread of 3.7 %
+relative sits slightly above the predicted 1–3 % and well below the 5 % that
+would have meant the cadence itself needed pricing out.
+
+The predicted floor was the sharper test: the row **cannot** legitimately cost
+less than half of `synth_2x4` (17.915), since it runs the same four voices and
+additionally pays two un-inlined dispatches, `_adjust_surface` every control
+tick, and ~14 chord fires. It came back at 18.61 — above the floor by 0.695,
+which *is* the voices correction. A figure below ~17.5 would have meant the
+occupancy was still wrong and the `voices == 4` assert was passing on a state
+that does not persist.
+
+### 8.3 Are the 35.80 points underpriced? No — and the per-voice figure needs a
+different correction than expected
+
+`synth_2x4` prices eight voices at 35.83, i.e. **4.479 per voice**, and
+`deck_engine_hot` prices four at 18.61, i.e. **4.65 per voice** at the gate's
+own operating point. The rows were right.
+
+**But that average is the wrong number for the "cut a voice" decision, and it
+is too generous.** The existing ladder prices polyphony directly:
+
+| row | `pct_max` | increment |
+|---|---:|---|
+| `synth_1_voice` | 5.65 | — |
+| `synth_2_voices` | 9.91 | +4.26 |
+| `synth_4_voices` | 17.85 | +7.94, i.e. **+3.97 per voice** |
+
+So roughly 1.39 points per engine are fixed overhead that removing a voice
+does not reclaim, and the **marginal** voice costs about **3.97**, not 4.48.
+Going from four voices to three per deck therefore saves approximately
+**7.9 points**, not the 9.3 that the average implies.
+
+The gate stands at **110.10** in this run, so 10.10 points are needed. One
+voice per deck is about **78 % of the gap** — a large, cheap, structural
+saving, but not sufficient on its own. This figure is derived by differencing
+`synth_N_voices`, which run at the *old* operating point; the marginal cost at
+the gate's operating point is not measured, and a row for it would be one
+cheap row, not a ladder.
+
+### 8.4 Two findings from reading, which no row produced
+
+Recorded because a later round would otherwise spend a ladder rediscovering
+them:
+
+- **The four engines a `Part` holds cost memory and no CPU.** `_engine` is one
+  pointer, `Part::process` calls through it once, and the switch is a gain
+  multiply that is exactly 1.0 at hold (§2.1). **This candidate is closed.**
+- **The two virtual dispatches per sample are structural.** The interface *is*
+  the four-engine design (§2.3). They are inside the 0.70-point voices
+  correction, so their ceiling is now known and small — but they are not
+  deletable without changing that design.
+
+A third, narrower finding came out of the round's own fix rounds: **DENSITY is
+inert in FLOW**, in `deck_mod_hot`, in `mod_plane_2x_center` and in the gate
+itself, because `_density` is read only by `_groove_k()`, reached only from
+`_effective_gate()`, consulted only when `_step_mode` is true — and none of the
+three ever calls `set_step` (§3). A knob the gate sets to 1.0 has no cost
+implication at the gate's own operating point. `set_tempo_bpm` is inert for the
+same class of reason in FREE mode (§3).
+
+### 8.5 The layout drift is now reproducible, and `fx_grit` is its clearest case
+
+Every one of the 18 rows shared with `2026-07-29-930ec17-ablate.csv` returned
+an **identical checksum**, and the row count matches on both sides, so the
+comparison is not vacuously clean. The costs moved anyway:
+
+| row | 930ec17 | c4ae8db | Δ |
+|---|---:|---:|---:|
+| `instrument_worst_bbd` (the gate) | 110.77 | 110.10 | −0.67 |
+| `fx_grit` | 5.61 | 5.43 | −0.18 |
+| `oliverb_solo_sram` | 9.62 | 9.66 | +0.04 |
+
+`fx_grit` is the row the mono round first suspected of layout sensitivity and
+could not prove. This is the third consecutive run in which it moves at an
+unchanged checksum, and the gate has now moved in both transitions
+(112.79/112.88 → 110.78 → 110.10). The predecessor's ±2-point bound on
+cross-build comparison holds and is not tightened by this round.
+
+### 8.6 What is worth measuring next
+
+Unlike the predecessor round, **the finer ladder now has a subject.** The
+remainder is 6.85 points per deck — **13.70 across the instrument** — which is
+larger than the 10.10 the gate needs. Last round's recommendation against a
+finer split rested on the glue being only 4.04 points, too small to repay a
+round even if deleted entirely. That argument does not apply here.
+
+Two cheap rows would split it, in this order:
+
+1. **A `Part` with its chord surface held at one note** — i.e. the difference
+   `_adjust_surface` and the chord/quantizer path make. This is the largest
+   named constituent and the only one whose exclusion this round had to
+   document as a consequence rather than measure.
+2. **The marginal voice at the gate's operating point** — one row at three
+   voices instead of four, so the 7.9-point estimate in §8.3 stops being a
+   difference of rows measured at the old operating point.
+
+The second is the one that changes a decision. If the marginal voice at the
+faithful operating point is nearer 4.65 than 3.97, cutting one closes 93 % of
+the gap instead of 78 %, and the panel question ("four voices or three")
+becomes the cheapest route to 100 % that this project has.
