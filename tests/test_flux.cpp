@@ -7,8 +7,7 @@
 #include "mod/divisions.h"
 using namespace spky;
 
-static float s_buf_l[Flux::kMaxSamples];
-static float s_buf_r[Flux::kMaxSamples];
+static float s_buf[Flux::kMaxSamples];
 
 // Peak-detect the first echo arrival. A single-sample impulse comes out of a
 // band-limited BBD as a smear, so a burst plus a peak search is the honest
@@ -27,7 +26,7 @@ static int first_echo_index(Flux& f, int n) {
 
 TEST_CASE("flux: synced 1/4 at 120 BPM = 0.5 s echo") {
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(3);                   // slice 3 -> kDivisions[8] "1/4"
@@ -45,7 +44,7 @@ TEST_CASE("flux: the clock law reaches the line") {
     // 16x in time at a fixed tempo, which after the ceiling is roughly 8x in
     // brightness at 120 BPM -- 8 kHz at "1/32" down to 1.0 kHz at "1/2".
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_stages(0.8f);              // 8192, the Memory Man
@@ -64,7 +63,7 @@ TEST_CASE("flux: the buffer no longer bounds the delay time") {
     // willing to go, not by a buffer length -- a "1/2" at 20 BPM is 6 s and
     // that is now a legal, very muddy setting.
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(20.f);
     f.set_rate(0);
@@ -78,7 +77,7 @@ TEST_CASE("flux: the buffer no longer bounds the delay time") {
 
 TEST_CASE("flux: STAGES is geometric, 512 to 16384, and 0.8 is the Memory Man") {
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     auto settled_stages = [&](float norm) {
         f.set_stages(norm);
@@ -96,7 +95,7 @@ TEST_CASE("flux: FXT_FLUX_TIME moves the clock -- the test that could not exist 
     // makes no musical sense" -- true of a crossfade delay, false of a BBD,
     // where clock modulation IS the sound generation.
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_stages(0.8f);
@@ -118,7 +117,7 @@ TEST_CASE("flux: the lane reaches the clock through the FAST path, not the 30 ms
     // would have been a ~5 Hz low-pass and a 4 Hz vibrato would not have
     // survived. set_time_mod must therefore take effect within one sample.
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(3);
@@ -132,7 +131,7 @@ TEST_CASE("flux: the lane reaches the clock through the FAST path, not the 30 ms
 
 TEST_CASE("flux: the ceiling holds when ladder and lane push together") {
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(200.f);
     f.set_stages(1.f);               // 16384
@@ -144,7 +143,7 @@ TEST_CASE("flux: the ceiling holds when ladder and lane push together") {
 
 TEST_CASE("flux: off is bit-exact dry") {
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     for (int i = 0; i < 2000; ++i) {
         const float s = std::sin(0.01f * i) * 0.4f;
         float l = s, r = s;
@@ -156,7 +155,7 @@ TEST_CASE("flux: off is bit-exact dry") {
 
 TEST_CASE("flux: null buffers never engage") {
     Flux f;
-    f.init(48000.f, nullptr, nullptr);
+    f.init(48000.f, nullptr);
     f.set_on(true, true);
     CHECK(!f.has_buffers());
     CHECK(!f.engaged());
@@ -167,7 +166,7 @@ TEST_CASE("flux: null buffers never engage") {
 
 TEST_CASE("flux: feedback produces decaying repeats") {
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(6);                   // 0.25 s
@@ -204,7 +203,7 @@ TEST_CASE("flux: feedback produces decaying repeats") {
 
 TEST_CASE("flux: feedback at max blooms but stays bounded") {
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(6);
@@ -271,7 +270,7 @@ TEST_CASE("flux: DRIVE does not move where FEEDBACK blooms") {
     // the decoupled one.
     auto ratio_at_drive = [](float drive) {
         Flux f;
-        f.init(48000.f, s_buf_l, s_buf_r);
+        f.init(48000.f, s_buf);
         f.set_on(true, true);
         f.set_bpm(120.f);
         f.set_rate(6);
@@ -293,10 +292,10 @@ TEST_CASE("flux: init resets the DRIVE guard so a re-init's repeated push isn't 
     // reset its unchanged-value guard, the next push of the SAME value the
     // user already had dialled in would be swallowed forever.
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_drive(0.7f);
-    f.init(48000.f, s_buf_l, s_buf_r);     // simulate the re-init
+    f.init(48000.f, s_buf);     // simulate the re-init
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(6);
@@ -318,10 +317,10 @@ TEST_CASE("flux: init resets the DRIVE guard so a re-init's repeated push isn't 
 
 TEST_CASE("flux: init resets the STAGES guard the same way") {
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_stages(0.2f);
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_stages(0.2f);                     // SAME value again
     for (int i = 0; i < 20000; ++i) { float l = 0.f, r = 0.f; f.process(l, r); }
@@ -336,7 +335,7 @@ TEST_CASE("flux: init resets the LINK guard so a re-init's repeated push isn't s
     // swallowed by set_link's n == _link guard and LINK would go silent
     // until the knob physically moved.
     auto setup = [](Flux& f) {
-        f.init(48000.f, s_buf_l, s_buf_r);
+        f.init(48000.f, s_buf);
         f.set_on(true, true);
         f.set_bpm(120.f);
         f.set_rate(11);                  // "1/32" -> 0.0625 s -> 3000 samples/repeat
@@ -368,8 +367,7 @@ TEST_CASE("flux slice: norm endpoints hit 1/2 and 1/32") {
     CHECK(std::string(kDivisions[kFluxRateOffset + flux_division_index(3.f/11.f)].name) == "1/4");
 }
 
-static float s_buf_l2[Flux::kMaxSamples];
-static float s_buf_r2[Flux::kMaxSamples];
+static float s_buf2[Flux::kMaxSamples];
 
 static RhythmView drag_view(int32_t g0, int32_t g1) {
     RhythmView rv;
@@ -381,8 +379,8 @@ static RhythmView drag_view(int32_t g0, int32_t g1) {
 
 TEST_CASE("flux: LINK at 0 (centre) is bit-identical to a Flux that never heard a rhythm") {
     Flux plain, dragged;
-    plain.init(48000.f, s_buf_l, s_buf_r);
-    dragged.init(48000.f, s_buf_l2, s_buf_r2);
+    plain.init(48000.f, s_buf);
+    dragged.init(48000.f, s_buf2);
     for (Flux* f : { &plain, &dragged }) {
         f->set_on(true, true);
         f->set_bpm(120.f);
@@ -406,7 +404,7 @@ TEST_CASE("flux: LINK at 0 (centre) is bit-identical to a Flux that never heard 
 
 TEST_CASE("flux: DRAG at 1 alternates between the neighbour's two intervals") {
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(3);                       // ladder = 0.5 s, well away from both
@@ -443,7 +441,7 @@ TEST_CASE("flux: DRAG interpolates geometrically") {
     // Pitch tracks the clock RATIO, so the interpolation is geometric --
     // the same reasoning behind the modulation lane's x1/4..x4 mapping.
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(3);                       // ladder = 0.5 s
@@ -455,7 +453,7 @@ TEST_CASE("flux: DRAG interpolates geometrically") {
 
 TEST_CASE("flux: DRAG reaches the clock") {
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(3);                       // ladder = 0.5 s -- must NOT be the value read
@@ -480,7 +478,7 @@ TEST_CASE("flux: a step bends pitch by the ratio of the two intervals") {
     // must be none in the model. Asserting the clock ratio across a step is
     // asserting the pitch ratio (spec section 1.4).
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(3);
@@ -502,7 +500,7 @@ TEST_CASE("flux: a step bends pitch by the ratio of the two intervals") {
 
 TEST_CASE("flux: an invalid neighbour rhythm leaves DRAG inert at any setting") {
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(3);                       // ladder = 0.5 s
@@ -528,7 +526,7 @@ TEST_CASE("flux: RATE still reaches the ladder at intermediate DRAG") {
     // Guards against an interpolation that accidentally saturates to the
     // neighbour's interval as soon as DRAG leaves zero.
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rhythm(drag_view(12000, 18000));
@@ -545,8 +543,8 @@ TEST_CASE("flux: RATE still reaches the ladder at intermediate DRAG") {
 // sample gap is 4 repeats and a 6000 sample gap is 2. 512 stages keeps the
 // clock (512/(2*0.0625) = 4096 Hz) well under the 32 kHz ceiling, so a
 // clamped clock cannot be mistaken for a stable one.
-static void thin_setup(Flux& f, float* bl, float* br, int32_t g0, int32_t g1) {
-    f.init(48000.f, bl, br);
+static void thin_setup(Flux& f, float* buf, int32_t g0, int32_t g1) {
+    f.init(48000.f, buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(11);                  // "1/32" -> 0.0625 s
@@ -570,7 +568,7 @@ TEST_CASE("flux: LINK's negative half never moves the clock") {
     // below were failing on the ordinary STAGES settle, not on anything LINK
     // does. Widened to 20000 to match the file's own convention.
     Flux f;
-    thin_setup(f, s_buf_l, s_buf_r, 12000, 6000);
+    thin_setup(f, s_buf, 12000, 6000);
     f.set_link(-1.f);
     for (int i = 0; i < 20000; ++i) { float l = 0.f, r = 0.f; f.process(l, r); }
     const float hz0 = f.clock_hz();
@@ -583,7 +581,7 @@ TEST_CASE("flux: LINK's negative half never moves the clock") {
 
 TEST_CASE("flux: LINK -1 sounds one repeat in n and ducks the rest") {
     Flux f;
-    thin_setup(f, s_buf_l, s_buf_r, 12000, 6000);   // n0 = 4, n1 = 2
+    thin_setup(f, s_buf, 12000, 6000);   // n0 = 4, n1 = 2
     f.set_link(-1.f);
     auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
 
@@ -601,7 +599,7 @@ TEST_CASE("flux: LINK -1 sounds one repeat in n and ducks the rest") {
 
 TEST_CASE("flux: LINK's depth ducks rather than mutes") {
     Flux f;
-    thin_setup(f, s_buf_l, s_buf_r, 12000, 6000);
+    thin_setup(f, s_buf, 12000, 6000);
     f.set_link(-0.5f);
     auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
     run(4500);  CHECK(f.gate_for_test() == doctest::Approx(1.f).epsilon(0.02));
@@ -614,7 +612,7 @@ TEST_CASE("flux: an even neighbour rhythm is preserved, not spread") {
     // where for DRAG it would be a failure. Going through derive_intervals
     // would give 4 and 3.
     Flux f;
-    thin_setup(f, s_buf_l, s_buf_r, 12000, 12000);
+    thin_setup(f, s_buf, 12000, 12000);
     f.set_link(-1.f);
     CHECK(f.thin_n_for_test(0) == 4);
     CHECK(f.thin_n_for_test(1) == 4);
@@ -622,7 +620,7 @@ TEST_CASE("flux: an even neighbour rhythm is preserved, not spread") {
 
 TEST_CASE("flux: a gap far longer than the delay clamps rather than mutes") {
     Flux f;
-    thin_setup(f, s_buf_l, s_buf_r, 1000000, 6000);   // 333 repeats
+    thin_setup(f, s_buf, 1000000, 6000);   // 333 repeats
     f.set_link(-1.f);
     CHECK(f.thin_n_for_test(0) == link_tuning::kMaxSkip);
     CHECK(f.thin_n_for_test(1) == 2);
@@ -630,7 +628,7 @@ TEST_CASE("flux: a gap far longer than the delay clamps rather than mutes") {
 
 TEST_CASE("flux: a gap shorter than one repeat means every repeat sounds") {
     Flux f;
-    thin_setup(f, s_buf_l, s_buf_r, 100, 6000);
+    thin_setup(f, s_buf, 100, 6000);
     f.set_link(-1.f);
     CHECK(f.thin_n_for_test(0) == 1);
     CHECK(f.thin_n_for_test(1) == 2);   // 2 is not the idle default: non-vacuous
@@ -638,7 +636,7 @@ TEST_CASE("flux: a gap shorter than one repeat means every repeat sounds") {
 
 TEST_CASE("flux: no valid neighbour rhythm leaves every repeat sounding") {
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(11);
@@ -663,7 +661,7 @@ TEST_CASE("flux: a valid but DRAG-unusable rhythm still arms the thinning accumu
     // writer). Order matters: LINK first, rhythm second, is what leaves the
     // accumulator unarmed if that branch does not also call apply_drag().
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(11);                  // "1/32" -> 0.0625 s -> 3000 samples/repeat
@@ -701,7 +699,7 @@ TEST_CASE("flux: an oscillating DRAG-active flag does not restart the thinning a
     // DRAG-usability without stopping THIN: a uniform pair, or (as here) a
     // gap that crosses drag_tuning::kMinGap.
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(11);                  // "1/32" -> 0.0625 s -> 3000 samples/repeat
@@ -760,7 +758,7 @@ TEST_CASE("flux: crossing LINK from a ducked THIN repeat straight to DRAG un-mut
     // for thinning is usually also usable for DRAG -- this is the state a
     // player actually reaches turning the knob.
     Flux f;
-    thin_setup(f, s_buf_l, s_buf_r, 12000, 6000);   // usable for both halves
+    thin_setup(f, s_buf, 12000, 6000);   // usable for both halves
     f.set_link(-1.f);
     auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
 
@@ -780,7 +778,7 @@ TEST_CASE("flux: changing RATE re-derives the thinning pattern from the new ladd
     // set_rhythm's own call instead. "Vary RATE while thinning" is Task 3
     // step 3 and the spec's risk-2 lever, and it hits this exact line.
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(11);                        // "1/32" -> 0.0625 s -> 3000 samples/repeat
@@ -797,7 +795,7 @@ TEST_CASE("flux: changing RATE re-derives the thinning pattern from the new ladd
 TEST_CASE("flux: changing BPM re-derives the thinning pattern from the new ladder time") {
     // BPM changes hit the same recompute_time -> update_thin_pattern line.
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(11);                        // "1/32" -> 0.0625 s -> 3000 samples/repeat
@@ -830,36 +828,34 @@ TEST_CASE("flux: the FEEDBACK coefficient is norm * 1.2 / the DRIVE gain, in eit
         for (float fb : fbs) {
             const float want = fb * 1.2f / bbd_drive_gain(d);
             Flux a;
-            a.init(48000.f, s_buf_l, s_buf_r);
+            a.init(48000.f, s_buf);
             a.set_feedback(fb);
             a.set_drive(d);
             Flux b;
-            b.init(48000.f, s_buf_l, s_buf_r);
+            b.init(48000.f, s_buf);
             b.set_drive(d);
             b.set_feedback(fb);
             INFO("drive=" << d << " feedback=" << fb);
-            CHECK(a.feedback_coef_l_for_test() == doctest::Approx(want).epsilon(1e-6));
-            CHECK(a.feedback_coef_r_for_test() == doctest::Approx(want).epsilon(1e-6));
-            CHECK(b.feedback_coef_l_for_test() == doctest::Approx(want).epsilon(1e-6));
-            CHECK(b.feedback_coef_r_for_test() == doctest::Approx(want).epsilon(1e-6));
+            CHECK(a.feedback_coef_for_test() == doctest::Approx(want).epsilon(1e-6));
+            CHECK(b.feedback_coef_for_test() == doctest::Approx(want).epsilon(1e-6));
         }
     }
 }
 
 TEST_CASE("flux: a repeated FEEDBACK push changes nothing, and DRIVE still re-derives") {
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_drive(0.6f);
     f.set_feedback(0.3f);
-    const float once = f.feedback_coef_l_for_test();
+    const float once = f.feedback_coef_for_test();
     f.set_feedback(0.3f);
     f.set_feedback(0.3f);
-    CHECK(f.feedback_coef_l_for_test() == doctest::Approx(once).epsilon(1e-6));
+    CHECK(f.feedback_coef_for_test() == doctest::Approx(once).epsilon(1e-6));
     // A DRIVE move re-derives the coefficient from the STORED knob position,
     // not from the coefficient currently in force, so an unchanged-value
     // guard on FEEDBACK must not make it sticky across a DRIVE change.
     f.set_drive(0.f);
-    CHECK(f.feedback_coef_l_for_test()
+    CHECK(f.feedback_coef_for_test()
           == doctest::Approx(0.3f * 1.2f / bbd_drive_gain(0.f)).epsilon(1e-6));
 
     // 0.45 -- the value init() itself pushes -- is a REACHABLE knob position,
@@ -867,9 +863,9 @@ TEST_CASE("flux: a repeated FEEDBACK push changes nothing, and DRIVE still re-de
     // straight after init is swallowed by the guard, and that is correct:
     // init() already put the state there, so there is no change to swallow.
     Flux g;
-    g.init(48000.f, s_buf_l, s_buf_r);
+    g.init(48000.f, s_buf);
     g.set_feedback(0.45f);
-    CHECK(g.feedback_coef_l_for_test()
+    CHECK(g.feedback_coef_for_test()
           == doctest::Approx(0.45f * 1.2f / bbd_drive_gain(0.f)).epsilon(1e-6));
 }
 
@@ -883,12 +879,11 @@ TEST_CASE("flux: init leaves the FEEDBACK coefficient at its boot value, even re
     // section 4.1 of docs/superpowers/specs/2026-07-29-flux-control-rate-design.md.
     const float want = 0.45f * 1.2f / bbd_drive_gain(0.f);
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
-    CHECK(f.feedback_coef_l_for_test() == doctest::Approx(want).epsilon(1e-6));
+    f.init(48000.f, s_buf);
+    CHECK(f.feedback_coef_for_test() == doctest::Approx(want).epsilon(1e-6));
     f.set_drive(1.f);                       // a hot DRIVE, then re-init over it
-    f.init(48000.f, s_buf_l, s_buf_r);      // reproduces Spotymod::reinit()
-    CHECK(f.feedback_coef_l_for_test() == doctest::Approx(want).epsilon(1e-6));
-    CHECK(f.feedback_coef_r_for_test() == doctest::Approx(want).epsilon(1e-6));
+    f.init(48000.f, s_buf);      // reproduces Spotymod::reinit()
+    CHECK(f.feedback_coef_for_test() == doctest::Approx(want).epsilon(1e-6));
 }
 
 TEST_CASE("flux: the FXT_FLUX_TIME guard lands the first push and swallows repeats") {
@@ -903,7 +898,7 @@ TEST_CASE("flux: the FXT_FLUX_TIME guard lands the first push and swallows repea
     // than the guard. 0.75 is x2, landing at 16384 Hz: comfortably under the
     // ceiling and unmistakably different from neutral.
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     f.set_on(true, true);
     f.set_bpm(120.f);
     f.set_rate(3);
@@ -956,12 +951,12 @@ TEST_CASE("flux: init resets the FXT_FLUX_TIME guard so a re-init's repeated pus
     };
 
     Flux f;
-    f.init(48000.f, s_buf_l, s_buf_r);
+    f.init(48000.f, s_buf);
     arm(f);
     f.set_time_mod(0.75f);                  // x2
     CHECK(settle(f) == doctest::Approx(16384.f).epsilon(0.02f));
 
-    f.init(48000.f, s_buf_l, s_buf_r);      // the re-init
+    f.init(48000.f, s_buf);      // the re-init
     arm(f);
     f.set_time_mod(0.75f);                  // the SAME value the host still holds
     // With a stale guard this push is dropped, _time_mult stays at init()'s

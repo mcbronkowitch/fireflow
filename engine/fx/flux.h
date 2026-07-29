@@ -10,7 +10,7 @@
 
 namespace spky {
 
-// FLUX block: a stereo bucket-brigade echo behind a click-free SoftSwitch,
+// FLUX block: a mono bucket-brigade echo behind a click-free SoftSwitch,
 // echo added onto the signal at FLUX MIX (original topology: send-style,
 // full-wet echo).
 //
@@ -26,14 +26,16 @@ public:
     static constexpr int kMinStages = bbd_tuning::kMinStages;
     static constexpr int kMaxStages = bbd_tuning::kMaxStages;
 
-    // Floats per channel the host must provide. The NAME and MEANING are
+    // Floats the host must provide per deck. The NAME and MEANING are
     // unchanged (every FxMem consumer keeps compiling); only the value moved,
     // from 262144 to kMaxStages/2. A two-phase BBD stores one sample per TWO
     // stages -- see the "even ticks write, odd ticks read" comment on
-    // BbdLine. 8192 floats x 4 lines = 128 KB, against 4.19 MB before.
+    // BbdLine. 8192 floats x 4 lines = 128 KB, against 4.19 MB before. The
+    // count itself is unchanged by the mono collapse: one line still holds
+    // kMaxStages/2 cells and STAGES keeps its full range.
     static constexpr size_t kMaxSamples = kMaxStages / 2;
 
-    void init(float sample_rate, float* buf_l, float* buf_r);
+    void init(float sample_rate, float* buf);
     void set_on(bool on, bool immediate = false) { _sw.set_on(on, immediate); }
     bool is_on() const { return _sw.is_on(); }
     bool engaged() const { return _buf_ok && (_sw.is_on() || !_sw.is_idle()); }
@@ -69,15 +71,12 @@ public:
     int stages() const { return _stages_now; }
     float clock_hz() const { return _clock_hz; }
     float drive_norm_for_test() const { return _drive_norm; }
-    // The feedback coefficient actually handed to each BbdEcho. The law is a
-    // function of BOTH knobs (see the comment on apply_feedback), and the
-    // control-rate round assembles it from a cached factor rather than
-    // evaluating it whole -- which makes it the one quantity in this class
-    // whose correctness is numerical rather than audible. A 1e-6 drift in it
-    // is inaudible and still a bug, and no behavioural test in this file can
-    // see one.
-    float feedback_coef_l_for_test() const { return _echo_l.Feedback(); }
-    float feedback_coef_r_for_test() const { return _echo_r.Feedback(); }
+    // The feedback coefficient actually handed to the BbdEcho. The law is a
+    // function of BOTH knobs (see the comment on apply_feedback) and is
+    // assembled from a cached factor, so it is the one quantity in this class
+    // whose correctness is numerical rather than audible -- a 1e-6 drift is
+    // inaudible and still a bug.
+    float feedback_coef_for_test() const { return _echo.Feedback(); }
     // The delay time DRAG is currently aiming at, before the 30 ms slew. Equal
     // to the ladder time whenever DRAG is 0 or the neighbour has no rhythm.
     float drag_time_s() const { return _dt_target; }
@@ -103,8 +102,7 @@ private:
     // Advances the skip pattern by one repeat and sets the gate's target.
     void advance_gate();
 
-    BbdEcho _echo_l;
-    BbdEcho _echo_r;
+    BbdEcho _echo;
     SoftSwitch _sw;
     float _mix_lin = 0.f;
     bool  _buf_ok = false;

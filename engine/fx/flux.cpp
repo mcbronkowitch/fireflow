@@ -8,13 +8,12 @@ inline float dbfs2lin(float db) { return daisysp::pow10f(db * 0.05f); }
 constexpr float kBootStagesNorm = 0.8f;   // 512 * 32^0.8 == 8192, the DMM
 }
 
-void Flux::init(float sample_rate, float* buf_l, float* buf_r) {
+void Flux::init(float sample_rate, float* buf) {
     _sw.init(sample_rate);
     _sr = sample_rate;
-    _buf_ok = (buf_l != nullptr && buf_r != nullptr);
+    _buf_ok = (buf != nullptr);
     if (!_buf_ok) return;
-    _echo_l.Init(sample_rate, buf_l, kMaxSamples);
-    _echo_r.Init(sample_rate, buf_r, kMaxSamples);
+    _echo.Init(sample_rate, buf, kMaxSamples);
     // Short slew: click-free division changes, locks to grid (~30 ms lag).
     _dt_coef = daisysp::fmin(1.f / (0.03f * sample_rate), 1.f);
     _rate_idx = 3;               // boot "1/4"
@@ -75,8 +74,7 @@ void Flux::init(float sample_rate, float* buf_l, float* buf_r) {
     set_stages(kBootStagesNorm);
     _stage_current = _stage_target;
     _stages_now = static_cast<int>(_stage_current + 0.5f);
-    _echo_l.SetStages(_stages_now);
-    _echo_r.SetStages(_stages_now);
+    _echo.SetStages(_stages_now);
     recompute_time(true);        // snap the boot delay time
     set_feedback(0.45f);
     set_mix(0.5f);
@@ -180,8 +178,7 @@ void Flux::apply_feedback() {
     // Same law as before, evaluated where DRIVE changes instead of here --
     // this function is reached once per sample per deck.
     const float fb = _fb_norm * _fb_scale;
-    _echo_l.SetFeedback(fb);
-    _echo_r.SetFeedback(fb);
+    _echo.SetFeedback(fb);
 }
 
 void Flux::set_mix(float norm) {
@@ -194,8 +191,7 @@ void Flux::set_drive(float norm) {
     const float d = clampf(norm, 0.f, 1.f);
     if (d == _drive_norm) return;
     _drive_norm = d;
-    _echo_l.SetDrive(d);
-    _echo_r.SetDrive(d);
+    _echo.SetDrive(d);
     // DRIVE just moved the loop gain, so the feedback coefficient that keeps
     // the bloom point fixed moved with it. Order-independent: a host may push
     // these two in either order, and every DRIVE change re-derives FEEDBACK
@@ -363,8 +359,7 @@ void Flux::process(float& l, float& r) {
     const int stages = static_cast<int>(_stage_current + 0.5f);
     if (stages != _stages_now) {
         _stages_now = stages;
-        _echo_l.SetStages(stages);
-        _echo_r.SetStages(stages);
+        _echo.SetStages(stages);
     }
 
     // Base clock from the ladder, then the lane pulls multiplicatively on it,
@@ -374,8 +369,14 @@ void Flux::process(float& l, float& r) {
                             0.f, bbd_tuning::kClockMaxHz);
     _clock_hz = hz;
 
-    float el = _echo_l.Process(l * send, hz);
-    float er = _echo_r.Process(r * send, hz);
+    // One line: the deck's stereo image is summed in and the single echo is
+    // added back to both channels. 0.5 holds CENTRED material at exactly the
+    // level the stereo pair gave it, which is the case every by-ear setting
+    // in this instrument currently sits on; hard-panned material feeds the
+    // echo 6 dB quieter than it used to. The power-preserving 1/sqrt(2) would
+    // trade that for a 3 dB lift on the normal case, which is the worse
+    // bargain (design spec 2026-07-29-flux-mono, section 3).
+    float e = _echo.Process(0.5f * (l + r) * send, hz);
     // The gate keeps running after thinning disengages so the gain ramps back
     // to unity instead of stepping; the snap is what lets the branch switch
     // itself off again and restore the bit-exact path (fonepole never quite
@@ -400,9 +401,9 @@ void Flux::process(float& l, float& r) {
     if (thinning || _gate != 1.f) {
         daisysp::fonepole(_gate, _gate_target, _gate_coef);
         if (std::fabs(_gate - 1.f) < 1e-4f) _gate = 1.f;
-        el *= _gate;
-        er *= _gate;
+        e *= _gate;
     }
-    l += el * _mix_lin;
-    r += er * _mix_lin;
+    const float wet = e * _mix_lin;
+    l += wet;
+    r += wet;
 }

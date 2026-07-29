@@ -29,7 +29,7 @@ enum class FxBlock { Flux, Grit };
 // whole chain is skipped, so "FX off" costs nothing and changes nothing.
 class PartFx {
 public:
-    void init(float sample_rate, float* echo_l, float* echo_r);
+    void init(float sample_rate, float* echo);
 
     Grit& grit() { return _grit; }
     Flux& flux() { return _flux; }

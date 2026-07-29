@@ -5,9 +5,9 @@
 
 using namespace spky;
 
-void PartFx::init(float sample_rate, float* echo_l, float* echo_r) {
+void PartFx::init(float sample_rate, float* echo) {
     _grit.init(sample_rate);
-    _flux.init(sample_rate, echo_l, echo_r);
+    _flux.init(sample_rate, echo);
     _comp.init(sample_rate);
     for (auto& s : _smooth) s.init(sample_rate, 0.002f);
     _grit_applied = -1.f;

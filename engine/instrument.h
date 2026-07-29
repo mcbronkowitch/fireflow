@@ -13,11 +13,11 @@ namespace spky {
 
 enum PartId { PART_A = 0, PART_B = 1, PART_COUNT = 2 };
 
-// FX memory injected by the host (spec "No heap"): echo buffers of
-// Flux::kMaxSamples floats each, and storage for the one shared reverb.
+// FX memory injected by the host (spec "No heap"): one echo buffer of
+// Flux::kMaxSamples floats per part, and storage for the one shared reverb.
 // Desktop: static arrays / static object. Daisy (M6): SDRAM.
 struct FxMem {
-    float* echo[PART_COUNT][2] = { { nullptr, nullptr }, { nullptr, nullptr } };
+    float* echo[PART_COUNT] = { nullptr, nullptr };
     AmbientReverb* reverb = nullptr;
     // M5 texture deck: one stereo record buffer per part. Spec sizing is
     // 42 s at 48 kHz (~16 MB/part) -- hosts allocate on the heap (desktop,

@@ -11,7 +11,7 @@ static_assert(ModLane::kTickInterval == SynthEngine::kCtrlInterval,
               "mod tick interval must equal the engine control raster");
 
 void Part::init(float sample_rate, uint32_t seed_base,
-                float* echo_l, float* echo_r,
+                float* echo,
                 SampleBuffer::Frame* sampler_mem, size_t sampler_frames) {
     _sr = sample_rate;
     _mod.init(sample_rate, seed_base);
@@ -45,7 +45,7 @@ void Part::init(float sample_rate, uint32_t seed_base,
     _engine->set_flow(true);                    // lanes boot in FLOW -> drone
     _last_master_hz = -1.f;                     // force a cycle forward on
                                                 // the first process()
-    _fx.init(sample_rate, echo_l, echo_r);
+    _fx.init(sample_rate, echo);
     _gate_len = static_cast<int>(sample_rate * 0.005f);
     _gate_ctr = 0;
     _inhibit = false;

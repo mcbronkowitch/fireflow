@@ -21,7 +21,7 @@ namespace spky {
 class Part {
 public:
     void init(float sample_rate, uint32_t seed_base,
-              float* echo_l = nullptr, float* echo_r = nullptr,
+              float* echo = nullptr,
               SampleBuffer::Frame* sampler_mem = nullptr, size_t sampler_frames = 0);
 
     SuperModulator& mod() { return _mod; }

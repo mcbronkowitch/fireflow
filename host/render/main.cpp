@@ -10,7 +10,7 @@
 using namespace spky;
 
 // FX memory, injected per the engine's no-heap contract (FxMem pattern).
-static float s_echo[spky::PART_COUNT][2][spky::Flux::kMaxSamples];
+static float s_echo[spky::PART_COUNT][spky::Flux::kMaxSamples];
 static spky::AmbientReverb s_reverb;
 
 // M5 texture deck: one 42 s stereo record buffer per part (spec 2026-07-18
@@ -40,8 +40,7 @@ int main(int argc, char** argv) {
 
     Instrument inst;
     FxMem fx_mem;
-    for (int p = 0; p < PART_COUNT; ++p)
-        for (int c = 0; c < 2; ++c) fx_mem.echo[p][c] = s_echo[p][c];
+    for (int p = 0; p < PART_COUNT; ++p) fx_mem.echo[p] = s_echo[p];
     fx_mem.reverb = &s_reverb;
 
     const size_t sampler_frames =
