@@ -885,6 +885,11 @@ class SweepProfileTest(unittest.TestCase):
         self.assertIn("sweep_probe", rows)
         self.assertEqual(len(rows), len(set(rows)), "duplicate row names")
 
+    def test_flux_rate_sweep_rows_are_expected(self):
+        rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["sweep"]
+        for index in (0, 3, 6, 9, 11):
+            self.assertIn("sweep_flux_rate_%d" % index, rows)
+
 
 class ManifestValidationContract(unittest.TestCase):
     """resolve()'s load-time manifest checks (design spec S3): a profile
