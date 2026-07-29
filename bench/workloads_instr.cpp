@@ -116,15 +116,26 @@ void configure_worst_bbd(Part& part)
 // 0x1234abcd instead (engine/parts/part.cpp:17, engine/instrument.cpp:22),
 // runs RATE 0.8 and DENSITY 1.0 -- setup_inst_worst's operating point on both
 // decks -- and settles to the same depth the Instrument rows do. The seed,
-// RATE, DENSITY and settle-depth differences are all deliberate here and all
-// part of what the subtraction measures -- see the design spec section 3.
+// RATE and settle-depth differences are all deliberate here and all part of
+// what the subtraction measures -- see the design spec section 3.
+//
+// DENSITY 1.0 is configured for the same reason: faithfulness to
+// setup_inst_worst. But the difference from mod_plane_2x_center's DENSITY 0.7
+// contributes nothing to the subtraction -- DENSITY is a no-op on BOTH sides
+// of it. set_density() only writes ModLane::_density (lane.h:23), read solely
+// by _groove_k() (lane.cpp:422), which _effective_gate() only consults when
+// _step_mode is true (lane.cpp:449: `gated = _step_mode ? _effective_gate(...)
+// : true`). Neither this row, nor mod_plane_2x_center, nor the gate itself
+// (setup_inst_worst never calls set_step, design spec section 2.4) ever calls
+// set_step() -- all three run in FLOW, where gated is hardcoded true. The
+// value differs between the rows; the difference is not measured.
 //
 // set_tempo_bpm(120.f) is also called below, mirroring what
 // Instrument::set_tempo_bpm pushes into every part's modulator
 // (engine/instrument.cpp:70) and what configure_worst_bbd already does for
-// the bare-Part rows. Unlike the other four, this one is NOT part of what the
-// subtraction measures: _synced defaults to false (super_modulator.h:187) and
-// nothing on this path calls set_synced(), so _update_rate() takes the FREE
+// the bare-Part rows. Unlike the other three, this one is NOT part of what
+// the subtraction measures: _synced defaults to false (super_modulator.h:187)
+// and nothing on this path calls set_synced(), so _update_rate() takes the FREE
 // branch -- _base_hz = free_hz(_rate_norm), never _bpm
 // (engine/mod/super_modulator.cpp:28-29). The call is kept for faithfulness
 // to the real Part init sequence, not because it changes behaviour or cost.

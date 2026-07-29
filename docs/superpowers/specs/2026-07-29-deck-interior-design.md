@@ -131,6 +131,18 @@ differs from the gate's. Everything else is then a named remainder.
 | **`deck_engine_hot`** | one `SynthEngine`, driven as `Part::process` drives it: FLOW, cycle from a real modulator's `master_hz()`, `set_decay(1.0)`, and `process_in()` called every sample |
 | **`deck_mod_hot`** | one `SuperModulator` at the gate's RATE 0.8 / DENSITY 1.0, **without** a `Center` |
 
+DENSITY 1.0 is set for faithfulness to the gate, not because it costs
+anything: DENSITY is inert in FLOW, and `deck_mod_hot`, `mod_plane_2x_center`,
+and the gate itself all run in FLOW — `setup_inst_worst` never calls
+`set_step` (§2.4), and neither does `mod_plane_2x_center`'s setup. The
+mechanism is narrow: `set_density()` writes only `ModLane::_density`
+(`lane.h:23`), read solely by `_groove_k()` (`lane.cpp:422`), which
+`_effective_gate()` reaches only when `_step_mode` is true (`lane.cpp:449`).
+With `_step_mode` false on all three configurations, `_on_boundary()` hardcodes
+`gated = true` regardless of DENSITY. This is a finding of the round, not a
+caveat on the method: a knob the gate sets has no cost implication at the
+gate's own operating point.
+
 Three differences follow:
 
 - **`deck_engine_hot` − `synth_2x4` / 2** — what the voices really cost at the
