@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 #include "workload.h"
 #include "families.h"
 #include "mem.h"
@@ -107,13 +108,25 @@ void configure_worst_bbd(Part& part)
 
 // One SuperModulator at the gate's operating point, with no Center.
 //
-// The row it corrects is mod_plane_2x_center, which runs two modulators at
-// RATE 0.5 and 0.6 and DENSITY 0.7 (bench/workloads_system.cpp:75-76), never
-// calls set_tempo_bpm, and does no settle. setup_inst_worst runs RATE 0.8 and
-// DENSITY 1.0 on both decks, and Instrument::set_tempo_bpm pushes 120 BPM
-// into every part's modulator (engine/instrument.cpp:70). All three
-// differences are deliberate here and all three are part of what the
-// subtraction measures -- see the design spec section 3.
+// The row it corrects is mod_plane_2x_center, which seeds its two modulators
+// 1u and 2u (bench/workloads_system.cpp:70-71), runs them at RATE 0.5 and 0.6
+// and DENSITY 0.7 (bench/workloads_system.cpp:75-76), never calls
+// set_tempo_bpm, and does no settle. This row seeds from PART_A's real
+// 0x1234abcd instead (engine/parts/part.cpp:17, engine/instrument.cpp:22),
+// runs RATE 0.8 and DENSITY 1.0 -- setup_inst_worst's operating point on both
+// decks -- and settles to the same depth the Instrument rows do. The seed,
+// RATE, DENSITY and settle-depth differences are all deliberate here and all
+// part of what the subtraction measures -- see the design spec section 3.
+//
+// set_tempo_bpm(120.f) is also called below, mirroring what
+// Instrument::set_tempo_bpm pushes into every part's modulator
+// (engine/instrument.cpp:70) and what configure_worst_bbd already does for
+// the bare-Part rows. Unlike the other four, this one is NOT part of what the
+// subtraction measures: _synced defaults to false (super_modulator.h:187) and
+// nothing on this path calls set_synced(), so _update_rate() takes the FREE
+// branch -- _base_hz = free_hz(_rate_norm), never _bpm
+// (engine/mod/super_modulator.cpp:28-29). The call is kept for faithfulness
+// to the real Part init sequence, not because it changes behaviour or cost.
 //
 // The Center is deliberately absent. mod_plane_2x_center includes it, so
 // charging each deck half of that row double-counts an instrument-level
@@ -121,6 +134,10 @@ void configure_worst_bbd(Part& part)
 // already contains.
 struct DeckModGroup {
     SuperModulator mod;
+    // Read back after the settle for the self-check in setup_deck_mod_hot,
+    // and folded into the returned checksum so it is not a dead store -- same
+    // shape as InstrPartGroup's clock_a/stages_a above.
+    float master_hz = 0.f;
 };
 
 SerialArena<InstrNoVerbGroup, InstrPartGroup, DeckModGroup> g_instr_arena;
@@ -297,7 +314,7 @@ void setup_deck_mod_hot()
 {
     auto& g = g_instr_arena.emplace<DeckModGroup>();
     // PART_A's seed base, as Part::init passes it: _mod.init(sr, seed_base)
-    // with seed_base = 0x1234abcd for PART_A (engine/parts/part.cpp:16,
+    // with seed_base = 0x1234abcd for PART_A (engine/parts/part.cpp:17,
     // engine/instrument.cpp:22).
     g.mod.init(kSampleRate, 0x1234abcdu);
     g.mod.set_tempo_bpm(120.f);
@@ -309,6 +326,19 @@ void setup_deck_mod_hot()
     // no settle at all; that difference is part of what this row corrects.
     for (int b = 0; b < kInstrSettleBlocks; ++b)
         for (size_t i = 0; i < kBlock; ++i) g.mod.process();
+
+    // The self-check, same spirit as setup_instr_part_common's stages_a/
+    // clock_a asserts above: without it, a silently wrong RATE or DENSITY
+    // would just return a plausible-looking float and pass. master_hz() is
+    // the readback Task 2's deck_engine_hot row will also take from its own
+    // modulator, for a different purpose (deriving a cycle) -- so this
+    // asserts a bound, not an equality, the same way that row will: positive,
+    // and clear of the 0.5 Hz that the old set_cycle(2.f) operating point
+    // encoded (design spec section 3.2). free_hz(0.8) works out to ~6.95 Hz,
+    // nowhere near that band.
+    g.master_hz = g.mod.master_hz();
+    assert(g.master_hz > 0.f);
+    assert(std::fabs(g.master_hz - 0.5f) > 0.05f);
 }
 
 float proc_deck_mod_hot()
@@ -319,6 +349,7 @@ float proc_deck_mod_hot()
         g.mod.process();
         acc += g.mod.lane_output(LANE_PITCH);
     }
+    acc += g.master_hz;
     return acc;
 }
 
@@ -328,7 +359,7 @@ const Workload kInstrWorkloads[] = {
     { "instr", "instr_part_1", setup_instr_part_1, proc_instr_part_1 },
     { "instr", "instr_part_2", setup_instr_part_2, proc_instr_part_2 },
     { "instr", "instr_noverb", setup_instr_noverb, proc_instr_noverb },
-    { "instr", "deck_mod_hot",  setup_deck_mod_hot,  proc_deck_mod_hot  },
+    { "instr", "deck_mod_hot", setup_deck_mod_hot, proc_deck_mod_hot },
 };
 const int kInstrCount = sizeof(kInstrWorkloads) / sizeof(kInstrWorkloads[0]);
 
