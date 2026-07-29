@@ -78,9 +78,20 @@ struct SweepFxGroup {
 //   sweep_grit_bare ~ 5.14                 -> GRIT costs that; the old figure
 //                                             was a smaller image, i.e. layout
 //   sweep_grit_bare ~ 2.2, no_bbd_mem ~5.14 -> the shell is the suspect
-//   sweep_grit_no_bbd_mem ~ 2.2             -> cache pressure from the BBD
-//                                             buffers; nothing in FX is wrong,
-//                                             and sweep B should show it too
+//   sweep_grit_no_bbd_mem ~ 2.2             -> consistent with cache pressure
+//                                             from the BBD buffers, but NOT
+//                                             a clean isolation of it: the
+//                                             same _buf_ok guard that keeps
+//                                             the memory unresident also
+//                                             elides a per-sample std::pow
+//                                             in set_feedback/apply_feedback
+//                                             (see the comment on
+//                                             setup_grit_no_bbd_mem below) --
+//                                             a low reading is ambiguous
+//                                             between the two and cannot be
+//                                             split further without an
+//                                             engine/ change this task does
+//                                             not permit
 struct SweepGritGroup {
     Grit grit;
 };
@@ -312,16 +323,35 @@ float proc_grit_bare()
 // instead of fx_mem()'s buffers. Flux::init (engine/fx/flux.cpp:11-17) sets
 // _buf_ok = (buf_l && buf_r) and returns BEFORE calling _echo_l/_echo_r.Init
 // when either pointer is null -- no BbdLine::Init runs, no dereference, no
-// UB. Every downstream Flux entry point PartFx::process reaches that could
-// touch buffer state -- set_feedback, Flux::process itself -- is gated on
-// the same _buf_ok and returns before touching any buffer (flux.cpp:99,
-// 278); set_time_mod only ever writes a scalar (_time_mult) and has no
-// guard because it needs none. engaged() is also gated on
-// _buf_ok, so it reads false, but GRIT alone still keeps PartFx::process's
-// outer `_grit.engaged() || _flux.engaged()` branch live, so the shell around
-// GRIT -- the smoothers, the tape-tap bookkeeping, the FX-MIX blend, COMP,
-// the send calc -- all still run exactly as they do in fx_grit. The only
-// thing missing is the BBD's ~128 KB of echo memory ever being resident.
+// UB.
+//
+// IMPORTANT: this does NOT isolate memory residency alone. _buf_ok also
+// gates real per-sample arithmetic that fx_grit pays for and this row does
+// not. PartFx::process calls _flux.set_feedback(v[FXT_FLUX_FB])
+// unconditionally, every sample, whenever GRIT or FLUX is engaged
+// (part_fx.cpp:38) -- true here since GRIT is on. In fx_grit (_buf_ok
+// true), Flux::set_feedback (flux.cpp:99) runs through to apply_feedback
+// (flux.cpp:132), which calls bbd_drive_gain -- a std::pow every sample,
+// with no dirty-check unlike the set_intensity call three lines above it in
+// part_fx.cpp. In this row (_buf_ok false), set_feedback returns at its
+// guard and none of that runs. Flux::process's idle-path _sw.process()
+// call is skipped the same way -- trivial next to the pow, but the same
+// mechanism. set_time_mod is the one exception: it only ever writes a
+// scalar (_time_mult) and has no guard because it needs none, so it runs
+// identically either way. engaged() is also gated on _buf_ok, so it reads
+// false for Flux, but GRIT alone still keeps PartFx::process's outer
+// `_grit.engaged() || _flux.engaged()` branch live, so the rest of the
+// shell -- the smoothers, the tape-tap bookkeeping, the FX-MIX blend, COMP,
+// the send calc -- still runs exactly as it does in fx_grit.
+//
+// Net effect: relative to fx_grit, this row removes BOTH (a) the BBD's
+// ~128 KB of echo memory ever being resident, AND (b) the per-sample
+// set_feedback/apply_feedback/std::pow work (plus the trivial idle-path
+// _sw.process() call) that _buf_ok also happens to gate. A low reading
+// here is therefore ambiguous between "cache pressure from residency" and
+// "the elided pow cost" -- it cannot, without an engine/ change this task
+// does not permit, separate the two. Read it as an upper bound on the
+// memory-residency hypothesis alone, not a clean isolation of it.
 //
 // No settle loop: unlike setup_flux_rate/setup_stages, this PartFx has no
 // delay-line memory to fill (Flux::init returned before allocating any), and
