@@ -67,6 +67,22 @@ struct SweepFxGroup {
     // well-defined and just as worth checksumming as the four sweep_stages_*
     // rows' explicit settings.
     int stages_achieved = 0;
+    // The clock Flux actually settled to, read once after each setup's settle
+    // loop (flux().clock_hz(), engine/fx/flux.h) and folded into
+    // proc_sweep_fx's accumulator once per call. stages_achieved alone is not
+    // enough: for the five sweep_flux_rate_* rows it reads back the boot
+    // default 8192 and is therefore IDENTICAL across all five, so it cannot
+    // tell a rate row that clocked from one that silently did not. The clock
+    // is the quantity those rows sweep, and folding it is what makes a
+    // stopped clock move the checksum -- the failure that took a discarded
+    // hardware run to find in sweep_flux_lines_2ch (docs/bench/
+    // 2026-07-29-cd6dafd-sweep.md).
+    //
+    // setup_grit_no_bbd_mem legitimately leaves this at 0: its Flux has null
+    // buffers, so Flux::process returns before _clock_hz is ever written. The
+    // "must be > 0" assertion therefore lives in the setups that run a clock,
+    // not in proc_sweep_fx.
+    float clock_achieved = 0.f;
 };
 
 // --- Ablation F: where did fx_grit's 2.9 points come from? -------------------
@@ -248,6 +264,13 @@ void setup_flux_rate(int rate_index)
     // This row never calls set_stages -- stages_achieved reads back whatever
     // the boot default (8192, kBootStagesNorm in flux.cpp) settled to.
     group.stages_achieved = group.fx.flux().stages();
+    // The clock this row exists to sweep. Asserted non-zero here rather than
+    // trusted: a zero reading means the settle loop never reached the code
+    // that writes _clock_hz (flux.cpp, below two early returns), which is
+    // precisely how a row measures an idle machine while still producing a
+    // stable checksum.
+    group.clock_achieved = group.fx.flux().clock_hz();
+    assert(group.clock_achieved > 0.f);
 }
 
 void setup_flux_rate_0()  { setup_flux_rate(0);  }
@@ -344,6 +367,8 @@ void setup_stages(float norm)
     // Read back what this row's own Flux instance actually settled to -- see
     // the comment above SweepFxGroup and the one on this row's block above.
     group.stages_achieved = group.fx.flux().stages();
+    group.clock_achieved = group.fx.flux().clock_hz();
+    assert(group.clock_achieved > 0.f);
 }
 
 void setup_stages_512()   { setup_stages(0.0f); }
@@ -370,6 +395,9 @@ float proc_sweep_fx()
     // sweep_flux_rate_* rows, which never call set_stages and so read back
     // Flux's boot default) -- see the comment on the struct.
     acc += static_cast<float>(group.stages_achieved);
+    // Folded once per call, like stages_achieved above -- not per sample --
+    // so the added work is constant and negligible against the block.
+    acc += group.clock_achieved;
     return acc;
 }
 
@@ -461,6 +489,11 @@ void setup_grit_no_bbd_mem()
     // of this instance -- deterministic, and folded into the checksum like
     // every other SweepFxGroup row (see the comment on the struct).
     group.stages_achieved = group.fx.flux().stages();
+    // Null buffers: Flux::process returns at its _buf_ok guard, so _clock_hz
+    // is never written and stays 0 for the life of this instance. Set
+    // explicitly rather than left to the arena, because SerialArena overlays
+    // its groups and emplace does not zero what a previous group wrote.
+    group.clock_achieved = group.fx.flux().clock_hz();
 }
 
 void setup_flux_lines_2ch()
