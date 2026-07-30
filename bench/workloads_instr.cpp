@@ -251,7 +251,7 @@ struct DeckEngineGroup {
 // 8192, rate index 3, FEEDBACK 0.7 and DRIVE 0 -- none of which a deck runs.
 // configure_worst_bbd above pushes set_stages(1.f), set_drive(0.85f),
 // set_flux_rate(kFluxRateCount - 1) and FXT_FLUX_FB 0.9 into every Part
-// (bench/workloads_instr.cpp:107-110). Round 1 could only price the STAGES
+// (bench/workloads_instr.cpp:108-111). Round 1 could only price the STAGES
 // and RATE axes separately and add them (+2.29 points, never measured
 // together), and it never priced DRIVE at all; that estimate is the slop
 // design spec section 2 calls load-bearing, and this row replaces it with a
@@ -345,9 +345,16 @@ struct FxFluxHotGroup {
 // One TestToneEngine, driven exactly as Part::process drives its engine.
 //
 // Why the row exists at all: a shell pays Part-level code PLUS the FX shell
-// PLUS whatever engine it runs, so Part-level code is only readable as
-// deck_shell - fx_none - tone_solo (design spec sections 3.3 and 4.1). This
-// row is the third term, and without it deck_shell is uninterpretable.
+// PLUS whatever engine it runs PLUS the modulation plane, so Part-level code
+// is only readable as
+//   deck_shell - fx_none - tone_solo - deck_mod_hot
+// (design spec sections 3.3 and 4.1). This row is the tone term, and without
+// it deck_shell is uninterpretable. The modulation term was missing from the
+// formula this comment used to state: Part::process runs _mod.process() every
+// sample (engine/parts/part.cpp:378), so deck_shell contains the plane that
+// deck_mod_hot prices, and the three-term form charged it twice -- once inside
+// Part-level code and once beside it. See section 9.2, which traces all three
+// of the round's prediction misses to that one omission.
 //
 // What it reproduces from Part::process, and what it does not:
 //
@@ -462,10 +469,15 @@ struct ToneSoloGroup {
 // Part-level code -- the per-sample loop in Part::process, the control raster
 // and its two entry paths, _control_tick's target build, the quantizer, the
 // chord builder, the FX target-cache fill, the excitation bus and the
-// _engine_fade multiply -- but it prices them WITH the FX shell and the tone
-// riding along, so the quantity this round wants is
-// deck_shell - fx_none - tone_solo (design spec sections 3.3 and 4.1, and
-// section 6.10 on why that subtraction removes the harness one time too many).
+// _engine_fade multiply -- but it prices them WITH the FX shell, the tone AND
+// the modulation plane riding along, so the quantity this round wants is
+//   deck_shell - fx_none - tone_solo - deck_mod_hot
+// (design spec sections 3.3 and 4.1, and section 6.10 on why that subtraction
+// removes the harness two times too many). The modulation term is the one this
+// comment used to omit: Part::process calls _mod.process() every sample
+// (engine/parts/part.cpp:378), so a whole Part contains the plane deck_mod_hot
+// prices, and subtracting it only in the remainder' line charged it twice
+// (design spec sections 3.3 and 9.2).
 //
 // The operating point is setup_instr_part_common's, i.e. configure_worst_bbd
 // above: PART_A's 0x1234abcd seed base, the same FxMem buffers, BPM 120,
@@ -532,8 +544,14 @@ struct ToneSoloGroup {
 //     branch is skipped entirely (part_fx.cpp:33, 80-86), Comp::process takes
 //     its bit-exact bypass return on `!engaged()` at amount 0
 //     (engine/fx/comp.cpp:75-83) with _gain already 1 so not even the re-arm
-//     runs, and what remains is five OnePole::process calls, one fast_sin and
-//     two multiplies (part_fx.cpp:31, 96-98). Those five smoothers see a
+//     runs, and what remains is five OnePole::process calls (part_fx.cpp:31,
+//     FXT_COUNT == 5), the else-arm's single `_tape_tap = 0.f` store
+//     (part_fx.cpp:85), one fast_sin and THREE multiplies -- the 0.25f scale
+//     of the send argument and the two send gains (part_fx.cpp:96-98). The
+//     earlier "two multiplies" here undercounted and omitted the store; the
+//     claim they support -- that the branch is input-independent, so the two
+//     rows' different input signals are cost-neutral -- is unaffected and was
+//     confirmed in review. Those five smoothers see a
 //     CONSTANT target on both rows -- fx_none's fixed values[], and here
 //     Part's _fxv, filled from fx_target_value() with every _fx_active false
 //     (part.h:382, part.cpp:336) so no lane reaches them -- so both rows take
@@ -1066,8 +1084,8 @@ void setup_fx_flux_hot()
 
     // --- and now the deck's own operating point, differences 1-4 in
     // FxFluxHotGroup's comment above, in configure_worst_bbd's own call order
-    // (bench/workloads_instr.cpp:107-110) minus the lines there that do not
-    // address FLUX.
+    // (bench/workloads_instr.cpp:93-112) minus the lines there that do not
+    // address FLUX, i.e. its :108-111.
     //
     // DRIVE is one of the four axes, not a footnote left for another row.
     // There is no other row: bench/workloads_sweep.cpp registers only
@@ -1081,7 +1099,7 @@ void setup_fx_flux_hot()
     // which is false and was corrected in review: three other call sites push
     // 0.85 into a Flux -- configure_worst_bbd above
     // (bench/workloads_instr.cpp:109, which this comment block itself cites a
-    // few lines up), setup_instr_noverb (bench/workloads_instr.cpp:495) and
+    // few lines up), setup_instr_noverb (bench/workloads_instr.cpp:640) and
     // setup_inst_worst_bbd (bench/workloads_system.cpp:319) -- as does this
     // row a few lines below. What none of them does is MOVE it: every one
     // pushes the same 0.85, and the only row that leaves DRIVE at Flux::init's
@@ -1125,7 +1143,7 @@ void setup_fx_flux_hot()
     // this row exists not to measure, and all four asserts below would still
     // pass. Hence: before the settle.
     g.fx.set_stages(1.f);                      // -> kMaxStages, 16384
-    g.fx.set_drive(0.85f);                     // the deck's DRIVE, line 108
+    g.fx.set_drive(0.85f);                     // the deck's DRIVE, line 109
     g.fx.set_flux_rate(kFluxRateCount - 1);    // -> "1/32", clock ceiling
     g.values[FXT_FLUX_FB] = 0.9f;              // overrides setup_fx's 0.7
 
@@ -1636,8 +1654,16 @@ void setup_deck_shell()
 //   - the retrigger is kept rather than dropped, so the comparison does not
 //     acquire a third difference. On this row it costs the chord build inside
 //     trigger_manual (part.cpp:149-162), which IS Part-level code and belongs
-//     here, plus one trigger_chord dispatch into TestToneEngine::trigger,
-//     whose body is empty (test_tone_engine.h:26).
+//     here, plus the engine dispatch that follows it. That dispatch is not
+//     one call: TestToneEngine does NOT override trigger_chord, so
+//     _engine->trigger_chord (part.cpp:161) lands in the IPartEngine default
+//     (engine/parts/engine_iface.h:49-51), which then makes n further virtual
+//     trigger() calls -- n = 4 at this row's COLOR 1.0 (ChordBuilder::_count,
+//     engine/pitch/chord.h:54, kEdge4 = 0.625) since _flatten_for_sampler
+//     returns n unchanged off a sampler (part.h:269-273). Each of those four
+//     bodies is empty (test_tone_engine.h:26). The cost is unchanged either
+//     way -- once per 250 blocks -- but the earlier description of a single
+//     dispatch into an empty body was wrong about the path.
 //   - active_voices() returns 0 here, not a voice count: it is
 //     engine-qualified and _engine_id is none of SYNTH/WAVE/BODY
 //     (engine/parts/part.h:162-167), so it is three compares per block, not a

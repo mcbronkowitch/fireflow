@@ -946,20 +946,35 @@ class AblateProfileTest(unittest.TestCase):
         # The shell's own engine, priced through IPartEngine* so the dispatch a
         # Part pays is inside the figure (spec 2026-07-30-remainder-split-design
         # section 4). Task 3's deck_shell is only interpretable as
-        # deck_shell - fx_none - tone_solo, so this row is load-bearing for the
-        # round's arithmetic (section 4.1) rather than an extra data point.
+        # deck_shell - fx_none - tone_solo - deck_mod_hot, so this row is
+        # load-bearing for the round's arithmetic (section 4.1) rather than an
+        # extra data point. The fourth term is not decoration and was not in
+        # the formula as registered: Part::process runs _mod.process() every
+        # sample (engine/parts/part.cpp:378), so deck_shell contains the
+        # modulation plane, and the three-term version this comment carried
+        # until the fix round charged that plane twice (section 9.2).
         self.assertIn("tone_solo", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
 
     def test_deck_shell_row_is_expected(self):
         # A whole Part with the cheapest engine and no FX (spec
         # 2026-07-30-remainder-split-design section 4). It is the first term of
-        # section 4.1's `Part-level code = deck_shell - fx_none - tone_solo`,
-        # so the round's central quantity does not exist without it. All three
+        # section 4.1's corrected
+        # `Part-level code = deck_shell - fx_none - tone_solo - deck_mod_hot`,
+        # so the round's central quantity does not exist without it. All four
         # of those rows must be present together for that arithmetic to be
-        # computable in a single run, which is the reason this assertion sits
-        # beside the other two rather than standing alone.
+        # computable in a single run, which is the reason these assertions sit
+        # beside the other three rather than standing alone.
+        #
+        # deck_mod_hot became a term only after the run (section 9.2). The
+        # formula as registered omitted it, which charged the modulation plane
+        # -- run by Part::process every sample, engine/parts/part.cpp:378 --
+        # once inside Part-level code and once beside it in remainder', and
+        # that single defect accounts for all three of the round's prediction
+        # misses. Its co-presence here is load-bearing in exactly the way
+        # fx_none's and tone_solo's already were.
         self.assertIn("deck_shell", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
         self.assertIn("tone_solo", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
+        self.assertIn("deck_mod_hot", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
         self.assertIn("fx_none", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["system"])
 
 
