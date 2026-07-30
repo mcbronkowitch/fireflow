@@ -942,6 +942,14 @@ class AblateProfileTest(unittest.TestCase):
         # rounds of evidence -- stays untouched.
         self.assertIn("fx_flux_hot", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
 
+    def test_tone_solo_row_is_expected(self):
+        # The shell's own engine, priced through IPartEngine* so the dispatch a
+        # Part pays is inside the figure (spec 2026-07-30-remainder-split-design
+        # section 4). Task 3's deck_shell is only interpretable as
+        # deck_shell - fx_none - tone_solo, so this row is load-bearing for the
+        # round's arithmetic (section 4.1) rather than an extra data point.
+        self.assertIn("tone_solo", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
+
 
 class ManifestValidationContract(unittest.TestCase):
     """resolve()'s load-time manifest checks (design spec S3): a profile

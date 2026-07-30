@@ -7,6 +7,7 @@
 #include "instrument.h"
 #include "parts/part.h"
 #include "parts/engine_iface.h"
+#include "parts/test_tone_engine.h"
 #include "fx/part_fx.h"
 #include "synth/synth_engine.h"
 #include "mod/super_modulator.h"
@@ -341,8 +342,115 @@ struct FxFluxHotGroup {
     float  fb_coef  = 0.f;
 };
 
+// One TestToneEngine, driven exactly as Part::process drives its engine.
+//
+// Why the row exists at all: a shell pays Part-level code PLUS the FX shell
+// PLUS whatever engine it runs, so Part-level code is only readable as
+// deck_shell - fx_none - tone_solo (design spec sections 3.3 and 4.1). This
+// row is the third term, and without it deck_shell is uninterpretable.
+//
+// What it reproduces from Part::process, and what it does not:
+//
+//   1. The engine is reached ONLY through an IPartEngine*, never through the
+//      concrete TestToneEngine. Part holds `IPartEngine* _engine`
+//      (engine/parts/part.h:209), pointing at its own TestToneEngine member
+//      (part.h:208) once ENGINE_TEST_TONE is selected, and every IPartEngine
+//      method is virtual (engine/parts/engine_iface.h:25-28), so a Part can
+//      inline none of them. A concrete `TestToneEngine&` here would let the
+//      compiler inline process() outright -- it is a phase increment, a wrap,
+//      one sinf and two multiplies, with nothing to stop it -- and the row
+//      would then price something no Part ever pays. Same trap and same
+//      resolution as DeckEngineGroup's difference #1 above; on THIS engine
+//      the trap is sharper, because the body is small enough to disappear
+//      into the loop entirely.
+//   2. process_in(in, in) then process(ol, orr), per sample, in that order
+//      (engine/parts/part.cpp:482-483). TestToneEngine does NOT override
+//      process_in: it inherits IPartEngine's empty body
+//      (engine/parts/engine_iface.h:59). So on this row that call is ONE
+//      VIRTUAL DISPATCH AND NO COMPUTE -- it is one of the two dispatches per
+//      sample that point 1 already charges for, not a second cost stacked on
+//      top of them. Round 2's design section 2.2 conflated the two and had to
+//      be corrected; the compute/dispatch distinction it drew is real only on
+//      a SAMPLER deck, where SamplerEngine::process_in
+//      (engine/sampler/sampler_engine.cpp:158) genuinely records and monitors.
+//      Not this row's engine, and not deck_engine_hot's either (difference #4
+//      above carries the same correction).
+//   3. set_targets() once per SynthEngine::kCtrlInterval samples
+//      (engine/synth/synth_engine.h:36, == 96, == kBlock), which is the raster
+//      Part::_control_tick runs on. Read off part.cpp directly:
+//      `if (_ctrl_ctr == 0) { _ctrl_ctr = SynthEngine::kCtrlInterval;
+//      _control_tick(); } else if (fired) { _control_tick(); } --_ctrl_ctr;`
+//      (part.cpp:439-445), and _control_tick's own push into the engine is
+//      `_engine->set_targets(_tg, _tune)` (part.cpp:335). Two cadence facts
+//      follow and both are reproduced here exactly: _ctrl_ctr initialises to 0
+//      (part.h:322, re-zeroed in Part::init at part.cpp:74), so the tick lands
+//      on the FIRST sample of each 96-sample group, not the last; and the
+//      raster block sits ABOVE the engine calls in the same process() body
+//      (439-445 against 482-483), so the push precedes that sample's
+//      process_in/process rather than following it. This row's ctrl_ctr
+//      mirrors that counter for counter and lives in the group for the same
+//      reason Part's lives in the object: it has to survive across process()
+//      calls.
+//
+//      What the row does NOT reproduce is the fire refresh at part.cpp:442-444
+//      -- a SECOND _control_tick() on any sample where LANE_PITCH fired, i.e.
+//      one extra set_targets() roughly every 1/master_hz seconds, which
+//      setup_deck_engine_hot's fire_period puts at ~6908 samples (~72 blocks)
+//      at the gate's RATE 0.8. A deck therefore makes ~1.4% more set_targets
+//      calls than this row does, and that fraction of one push per 72 blocks
+//      stays on deck_shell's side of the subtraction. Reproducing it would
+//      need a live lane_fired() edge, i.e. deck_mod_hot's modulator running
+//      inside the measured loop, which would pay that row's cost twice and
+//      corrupt both (design spec section 3.2).
+//   4. Nothing else, deliberately. _control_tick's target build, the
+//      quantizer, the chord builder and the FX target cache are Part-level and
+//      belong to deck_shell, as does the _engine_fade multiply
+//      (part.cpp:484-485). This row pushes a fixed target array, so it prices
+//      the engine's set_targets and nothing upstream of it.
+//
+// The two targets that matter are the ones a deck actually produces:
+//   - LANE_LEVEL 0.8. That is Part's own `_base[LANE_LEVEL]` (part.h:373) and
+//     its boot `_tg[LANE_LEVEL]` (part.h:329) -- the value a deck at MOD 0
+//     pushes verbatim. At the gate's MOD 1.0 the lane moves it, floored at
+//     kLevelFloor * base == 0.4 * 0.8 == 0.32 (part.h:388, part.cpp:107-108);
+//     0.8 is the base that swing is taken around.
+//   - LANE_PITCH 0.5, likewise `_base[LANE_PITCH]` (part.h:373) and the boot
+//     `_tg[LANE_PITCH]` (part.h:329). On a deck this slot arrives already
+//     quantized and tuned (part.cpp:209-210), which is exactly what
+//     TestToneEngine::set_targets assumes of it (test_tone_engine.h:12-15), so
+//     handing it a plain 0.5 is the right shape rather than a shortcut. It
+//     maps to 110 * 8^0.5 == 311.13 Hz (test_tone_engine.h:22).
+//   - The tune argument is 0.5, Part's `_tune` default (part.h:413).
+//     TestToneEngine::set_targets ignores it entirely (test_tone_engine.h:20,
+//     `float /*tune*/`), so it is there for faithfulness and cannot move cost.
+//   - The other three slots stay 0. TestToneEngine reads only LANE_PITCH and
+//     LANE_LEVEL (test_tone_engine.h:21-23), so nothing reads them; the array
+//     is LANE_COUNT wide because that is set_targets' contract
+//     (`const float* targets /*[LANE_COUNT]*/`, engine_iface.h:26).
+//
+// One approximation, named rather than buried: the pitch target is CONSTANT
+// here, where a deck's walks the quantizer's staircase from tick to tick.
+// set_targets calls std::pow(8.f, p) (test_tone_engine.h:22); whether powf's
+// cost depends on its argument is NOT something reading settles, so if it
+// does, this row prices that call at one fixed argument. Either way it is one
+// call per 96 samples, not per sample.
+struct ToneSoloGroup {
+    TestToneEngine tone;
+    IPartEngine*   engine = nullptr;
+    float          targets[LANE_COUNT] = { 0.f, 0.f, 0.f, 0.f, 0.f };
+    // Part's _ctrl_ctr, mirrored (point 3 above). In the group, not a
+    // function-local static, because it must survive across process() calls --
+    // the same reason DeckEngineGroup keeps fire_ctr here.
+    int            ctrl_ctr = 0;
+    // Self-check readback: the largest |outL| seen in setup's check window,
+    // asserted there and folded into proc_tone_solo's return value so it is
+    // not a dead store. Same idiom as InstrPartGroup's clock_a/stages_a, and
+    // subject to the same non-claim: the fold is not a detector.
+    float          peak = 0.f;
+};
+
 SerialArena<InstrNoVerbGroup, InstrPartGroup, DeckModGroup, DeckEngineGroup,
-            FxFluxHotGroup> g_instr_arena;
+            FxFluxHotGroup, ToneSoloGroup> g_instr_arena;
 
 void setup_instr_noverb()
 {
@@ -984,6 +1092,136 @@ float proc_fx_flux_hot()
     return acc;
 }
 
+// The target values, and the tune argument, a deck produces -- see
+// ToneSoloGroup's comment for where each one comes from in Part.
+constexpr float kToneLevel = 0.8f;
+constexpr float kTonePitch = 0.5f;
+constexpr float kToneTune  = 0.5f;
+
+// Length of setup's self-check window. NOT a settle: see setup_tone_solo.
+constexpr int   kToneCheckBlocks = 2;
+
+void setup_tone_solo()
+{
+    auto& g = g_instr_arena.emplace<ToneSoloGroup>();
+
+    g.targets[LANE_PITCH] = kTonePitch;
+    g.targets[LANE_LEVEL] = kToneLevel;
+
+    // From here on the engine is reached ONLY through the base pointer, init()
+    // included -- IPartEngine::init is pure virtual (engine/parts/
+    // engine_iface.h:25) and Part reaches it through `_engine` too. Keeping
+    // even this call on the pointer is not decoration: it is the one place a
+    // concrete-type slip would be invisible, because init() is outside the
+    // measured loop and a devirtualised init() would still leave the loop
+    // looking right.
+    g.engine = &g.tone;
+    g.engine->init(kSampleRate);
+
+    // This row has NO settle, and it is the only row in this file that needs
+    // none. TestToneEngine's whole state is four floats -- _sr, _phase, _freq,
+    // _amp (test_tone_engine.h:36-40) -- with no slew, no envelope, no delay
+    // line and nothing that converges; init() and the first set_targets() put
+    // all four at their final values. The window below is a SELF-CHECK window
+    // and nothing else. Its length is set by the assert's arithmetic (below),
+    // not by anything arriving.
+    //
+    // The window drives the engine exactly as proc_tone_solo does, including
+    // the raster, so the first set_targets() push is made by the raster itself
+    // rather than by a separate hand-written call -- which is what Part does
+    // too: _ctrl_ctr starts at 0 (part.h:322, part.cpp:74), so a Part's first
+    // process() call ticks before its engine ever runs a sample. The body is
+    // written out again rather than shared with proc_tone_solo because the peak
+    // tracking must NOT appear in the measured loop.
+    const float* in = test_input();
+    for (int b = 0; b < kToneCheckBlocks; ++b)
+        for (size_t i = 0; i < kBlock; ++i) {
+            if (g.ctrl_ctr == 0) {
+                g.ctrl_ctr = SynthEngine::kCtrlInterval;
+                g.engine->set_targets(g.targets, kToneTune);
+            }
+            --g.ctrl_ctr;
+            float ol, orr;
+            g.engine->process_in(in[i], in[i]);
+            g.engine->process(ol, orr);
+            const float a = std::fabs(ol);
+            if (a > g.peak) g.peak = a;
+        }
+    // The window ends on a block boundary with ctrl_ctr back at 0 (the counter
+    // is reloaded to 96 and then decremented on the block's first sample, so it
+    // reaches 0 on the block's last one), so proc_tone_solo's first sample
+    // ticks -- the same phase every later block gets.
+
+    // The self-check. The mistake it guards is a setup that pushes a target
+    // array whose LANE_LEVEL is zero -- the natural way to get this row wrong,
+    // because a zero-filled `float targets[LANE_COUNT]` looks complete and the
+    // row would still run every dispatch, every sinf and every multiply and
+    // return a real, cheap, entirely meaningless number.
+    //
+    // Banded rather than merely non-zero, and the band is arithmetic. Settled,
+    // TestToneEngine::process emits sin(2*pi*phase) * _amp * 0.3f
+    // (test_tone_engine.h:31) with _amp == targets[LANE_LEVEL] == 0.8, so the
+    // waveform's true peak is 0.8 * 0.3 == 0.24 exactly. The window is 2
+    // blocks == 192 samples at 311.13 Hz, i.e. 1.24 cycles, so it contains one
+    // crest; the nearest sample to that crest can miss it by at most half a
+    // phase increment, 0.5 * 311.13/48000 == 0.00324 cycles, where |sin| is
+    // still cos(2*pi*0.00324) == 0.99979. The observed peak therefore lands in
+    // [0.23995, 0.24000] -- computed in float32 off this exact sample grid it
+    // is 0.2399831 -- and (0.239, 0.241) admits that with ~1e-3 of room on
+    // either side.
+    //
+    // What each mistake sees here:
+    //   - LANE_LEVEL 0 pushed -> _amp == 0, every sample exactly 0.f, peak
+    //     0.f: the lower assert fires. This is the one the row exists to
+    //     catch.
+    //   - set_targets never reaching the engine at all -> _amp and _freq keep
+    //     their member initialisers, 0.5f and 220.f
+    //     (test_tone_engine.h:39-40), so the peak is 0.15 (220 Hz crests at
+    //     sample ~55, well inside the window): the lower assert fires too.
+    //     Worth stating because a bare `> 0.f` check would NOT have caught
+    //     this one -- the default amplitude is audible, not silent.
+    //   - LANE_LEVEL pushed as 1.0 instead of the deck's 0.8 -> peak 0.30: the
+    //     UPPER assert fires. That is what the upper bound is for; it is the
+    //     difference between checking that the tone sounds and checking that it
+    //     sounds at the level a deck runs it at.
+    assert(g.peak > 0.239f);
+    assert(g.peak < 0.241f);
+}
+
+// proc_deck_engine_hot's shape, minus the re-fire cadence (a continuous tone
+// has nothing to re-strike: TestToneEngine::trigger is empty,
+// test_tone_engine.h:26) and plus the control-tick raster.
+float proc_tone_solo()
+{
+    auto& g = g_instr_arena.get<ToneSoloGroup>();
+    const float* in = test_input();
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i) {
+        // Part::process's raster, counter for counter (part.cpp:439-445):
+        // push when the counter has reached 0, reload it, decrement after --
+        // so the push lands on the block's first sample and before that
+        // sample's engine calls, which is where part.cpp puts it (439-445 sit
+        // above 482-483). Part's `else if (fired)` refresh is deliberately
+        // absent; ToneSoloGroup's point 3 sizes what that leaves out.
+        if (g.ctrl_ctr == 0) {
+            g.ctrl_ctr = SynthEngine::kCtrlInterval;
+            g.engine->set_targets(g.targets, kToneTune);
+        }
+        --g.ctrl_ctr;
+        float ol, orr;
+        // Both calls through the base pointer, in Part::process's order:
+        // process_in first, then process (part.cpp:482-483). process_in is one
+        // dispatch into IPartEngine's empty inherited body here
+        // (engine_iface.h:59) -- a dispatch, not a second unit of work.
+        g.engine->process_in(in[i], in[i]);
+        g.engine->process(ol, orr);
+        acc += ol + orr;
+    }
+    // Setup's asserted readback, folded so it is not a dead store.
+    acc += g.peak;
+    return acc;
+}
+
 } // namespace
 
 const Workload kInstrWorkloads[] = {
@@ -993,6 +1231,7 @@ const Workload kInstrWorkloads[] = {
     { "instr", "deck_mod_hot", setup_deck_mod_hot, proc_deck_mod_hot },
     { "instr", "deck_engine_hot", setup_deck_engine_hot, proc_deck_engine_hot },
     { "instr", "fx_flux_hot", setup_fx_flux_hot, proc_fx_flux_hot },
+    { "instr", "tone_solo", setup_tone_solo, proc_tone_solo },
 };
 const int kInstrCount = sizeof(kInstrWorkloads) / sizeof(kInstrWorkloads[0]);
 

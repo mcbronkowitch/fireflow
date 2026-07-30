@@ -200,6 +200,7 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "deck_mod_hot",
         "deck_engine_hot",
         "fx_flux_hot",
+        "tone_solo",
     ),
     "voice": (
         "morph_osc_bare",
