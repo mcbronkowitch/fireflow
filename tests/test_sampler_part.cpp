@@ -376,8 +376,9 @@ TEST_CASE("sampler part: an inactive MOTION target leaves the overlap on the kno
 TEST_CASE("sampler part: a deactivated PITCH lane holds pitch but keeps firing") {
     // The whole point of the pitch decision: material and a synth deck stay
     // in one key, WITHOUT losing rhythmic triggering. _active gates the
-    // VALUE (part.cpp:44-57); lane_fired is independent of it (part.cpp:194),
-    // which is why STEP still triggers.
+    // VALUE (Part::target_raw's _active gate, part.cpp:101); lane_fired is
+    // independent of it (Part::process, part.h:258), which is why STEP still
+    // triggers.
     std::vector<SampleBuffer::Frame> sbuf(kSFrames, SampleBuffer::Frame{ 0.f, 0.f });
     Part p;
     p.init(48000.f, 0, nullptr, sbuf.data(), sbuf.size());

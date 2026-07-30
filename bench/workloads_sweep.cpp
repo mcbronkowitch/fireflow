@@ -624,7 +624,7 @@ float proc_flux_lines_2ch()
 // _hyst() helper. Instrument::set_color (engine/instrument.h) ->
 // Part::set_color (engine/parts/part.h) only stores the raw knob value;
 // the chord layer only sees it through Part::_control_tick
-// (engine/parts/part.cpp:274-275, "_chord.set_color(_color_eff)"), which
+// (engine/parts/part.cpp:287-288, "_chord.set_color(_color_eff)"), which
 // calls ChordBuilder::set_color (chord.h). That function's zone edges are
 // its own constants -- kEdge2 = 0.125, kEdge3 = 0.375, kEdge4 = 0.625,
 // kHyst = 0.02 -- NOT evenly spaced fractions of 0-1 (0.125/0.375/0.625
@@ -644,7 +644,7 @@ float proc_flux_lines_2ch()
 // required to stay at worst-case so the curve would measure the same
 // instrument the CPU gate is set on -- COLOR does not end up controlling
 // the achieved voice count. Two compounding mechanisms:
-//   1. DEPTH=1 modulates COLOR every control tick (part.cpp:264-274):
+//   1. DEPTH=1 modulates COLOR every control tick (part.cpp:277-287):
 //      cmod = mod_lane_output(LANE_MOTION) * depth * kColorMod(0.2,
 //      part.h) * cgate, and cgate saturates to 1 for any base color above
 //      kColorGate (0.01, part.h). The resulting +/-0.2 swing is wider than

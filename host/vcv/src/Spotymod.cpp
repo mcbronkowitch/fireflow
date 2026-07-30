@@ -559,9 +559,10 @@ struct Spotymod : Module {
             }
 
             // Stable pitch in the sampler: the lane still FIRES (that is what
-            // keeps STEP triggering alive, part.cpp:194), it just stops
-            // moving the pitch. Sample material and a synth deck can then sit
-            // in the same key.
+            // keeps STEP triggering alive -- Part::process reads the fire as
+            // _mod.lane_fired(LANE_PITCH), part.h:258, while _active gates
+            // modulation only, part.cpp:101), it just stops moving the pitch.
+            // Sample material and a synth deck can then sit in the same key.
             inst.set_target_active(p, spky::LANE_PITCH, !samplerPart);
 
             inst.set_grit_mode(p, ppb(GRITMODE_A, p) ? spky::GritMode::Reduce
