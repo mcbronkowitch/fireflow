@@ -559,15 +559,37 @@ only partly see.** No figure is claimed for how much they would see — it is no
 measured, and this round has no host-side instrument that could measure it. The
 bound is structural: at least the inlining of the two `Part` bodies, at most the
 full 1.59, and the split between them is unknown for the same reason §9.11's
-residue is unexplained. The block-based production caller is the Daisy firmware
-shell, which is still M6.
+residue is unexplained.
 
-**Record this next to the `deck_shell` lesson, because it is the same class of
-error:** a call site that does not reproduce how the component will be called.
-`deck_shell` gets the loop right and drops the caller; the two hosts keep the
-caller and drop the block. Both are cases where the measured configuration and
-the shipped configuration differ in a way that the measurement itself cannot
-show, and both belong on the checklist for whoever chooses round 5's instrument.
+**But the product is not one of those two callers, and it is already the right
+shape.** Checked after this section was first written, because the wording above
+invites the opposite conclusion: `app.cpp:117` sets `block_size = 96` — the
+bench's block exactly — `app.cpp:118-119` hands it to `_hw.Init` and
+`_core.init`, `app.cpp:137` to `audio.SetBlockSize`, and `AppImpl::ProcessAudio`
+(`app.cpp:183-199`) passes `size` straight through to `_core.process(in, out,
+size)`. The Daisy audio callback is block-based at 96 by construction. So when
+M6 wires `_core.process` to `Instrument::process`, the block arrives without
+anything being buffered and without a latency cost, and the full measured saving
+applies. `app.cpp` does not reference `engine/` today, which is what M6 is for.
+
+**On this point the bench is a faithful model of the product, not an optimistic
+one** — same block size, same cadence. What the `n = 1` finding actually bounds
+is the two **development** hosts, and neither is the product. VCV cannot do
+better in principle: Rack calls a module once per sample, so a block would have
+to be buffered, costing up to 96 samples of latency on the audio *and* on the CV
+taps, and shifting when RESET and parameter pushes take effect. `host/render`
+could batch, but it applies scenario events at exact sample indices
+(`apply_event` inside its loop, `host/render/main.cpp:95-98`) and taps the lanes
+on a decimated schedule, so batching would move event timing and change the
+rendered output — which `ctrl_identity` hashes.
+
+**Record the `n = 1` observation next to the `deck_shell` lesson, because it is
+the same class of error:** a call site that does not reproduce how the component
+will be called. `deck_shell` gets the loop right and drops the caller; the two
+hosts keep the caller and drop the block. Both belong on the checklist for
+whoever chooses round 5's instrument. What differs is the consequence: the
+`deck_shell` mismatch cost this round its cleanest single-`Part` reading, while
+the host mismatch costs the *hosts* and not the firmware.
 
 ### 9.3 The control group, and what counts as a saving
 
@@ -1090,7 +1112,11 @@ having. But the round's more durable outputs are findings about measurement:
    `Instrument::process` with `n = 1`, dropping the block over which this round's
    saving was measured (§9.2 again). The second half of that was found by reading
    the hosts *after* the measurement, and it bounds what the change is worth to
-   the code that exists today — a bound this round cannot put a number on.
+   the code that exists today — a bound this round cannot put a number on. It
+   does **not** bound the firmware: `app.cpp:117` sets `block_size = 96` and the
+   callback passes it through, so on block size the bench and the product agree
+   (§9.2). The lesson is to make that comparison *before* the measurement, not
+   after; here it happened to come out well.
 2. **This bench's cross-build floor is around half a point on the gate** (§9.4),
    which bounds what any future bit-exact round can show.
 3. **Two of §5.1's four registered conditions were not tests.** One named no
