@@ -357,9 +357,17 @@ struct FxFluxHotGroup {
 //      (part.h:208) once ENGINE_TEST_TONE is selected, and every IPartEngine
 //      method is virtual (engine/parts/engine_iface.h:25-28), so a Part can
 //      inline none of them. A concrete `TestToneEngine&` here would let the
-//      compiler inline process() outright -- it is a phase increment, a wrap,
-//      one sinf and two multiplies, with nothing to stop it -- and the row
-//      would then price something no Part ever pays. Same trap and same
+//      compiler inline process() outright, and the body it would inline is,
+//      read off the emitted code rather than off the C++ (corrected in
+//      review, which found the divide missing and the multiply count one
+//      short): a single-precision DIVIDE for `_freq / _sr` (`vdiv.f32`), the
+//      phase increment, a BRANCHLESS wrap (`it ge` / `vsubge.f32`, not a
+//      taken branch), one `sinf`, and THREE multiplies -- `_phase * TWO_PI`,
+//      `* _amp`, `* 0.3f`. The divide is named because it is the
+//      second-costliest operation in the body after `sinf` (design spec
+//      section 3.1, corrected for the same omission). Nothing stops that
+//      inlining, and the row would then price something no Part ever pays.
+//      Same trap and same
 //      resolution as DeckEngineGroup's difference #1 above; on THIS engine
 //      the trap is sharper, because the body is small enough to disappear
 //      into the loop entirely.
@@ -946,11 +954,26 @@ void setup_fx_flux_hot()
     // There is no other row: bench/workloads_sweep.cpp registers only
     // sweep_flux_rate_*, sweep_stages_*, sweep_grit_*, sweep_flux_lines_2ch
     // and sweep_room_* (its table, bench/workloads_sweep.cpp:880-894), so the
-    // sweep family has no DRIVE row at all, and the only set_drive rows
-    // anywhere in the bench are lim_clean/lim_driven
-    // (bench/workloads_abl.cpp:186-187), which move the master Limiter's
-    // pre-gain (engine/fx/limiter.h:29) and never touch Flux. DRIVE's cost is
-    // this row's question or nobody's.
+    // sweep family has no DRIVE row at all, and no row anywhere in the bench
+    // VARIES Flux's DRIVE as an axis.
+    //
+    // The narrow claim is the one that holds. This comment used to say "the
+    // only set_drive rows anywhere in the bench are lim_clean/lim_driven",
+    // which is false and was corrected in review: three other call sites push
+    // 0.85 into a Flux -- configure_worst_bbd above
+    // (bench/workloads_instr.cpp:109, which this comment block itself cites a
+    // few lines up), setup_instr_noverb (bench/workloads_instr.cpp:495) and
+    // setup_inst_worst_bbd (bench/workloads_system.cpp:319) -- as does this
+    // row a few lines below. What none of them does is MOVE it: every one
+    // pushes the same 0.85, and the only row that leaves DRIVE at Flux::init's
+    // 0 is fx_flux_sdram, which differs from this row on three further axes as
+    // well, so it is not a DRIVE-isolating partner. There is therefore no
+    // DRIVE-comparison pair for Flux anywhere in the bench. The only rows that
+    // vary a DRIVE as an axis are lim_clean/lim_driven
+    // (bench/workloads_abl.cpp:186-187), and theirs is the master Limiter's
+    // pre-gain (engine/fx/limiter.h:29), which never reaches Flux. The
+    // conclusion is unchanged: DRIVE's cost is this row's question or
+    // nobody's.
     //
     // What reading DOES establish is that DRIVE cannot be omitted without
     // changing the regime, because it is coupled to FEEDBACK and to the
@@ -1067,9 +1090,21 @@ void setup_fx_flux_hot()
     // the knob was STORED, this one shows the coupling actually reached the
     // echo, and only the pair distinguishes a failed FEEDBACK push from a
     // failed DRIVE push. The 1e-3 tolerance is 74x smaller than the nearer of
-    // the two misses; it is sized only to absorb the difference in multiply
-    // order between the engine's _fb_norm * (1.2 / g) and this line's
-    // (0.9 * 1.2) / g, which is a last-bit effect.
+    // the two misses; it is sized to absorb TWO last-bit-scale differences,
+    // neither of which is a disagreement about the law:
+    //   - bbd_drive_gain(0.85f) on this line has a literal argument, so at -O2
+    //     the whole right-hand side is CONSTANT-FOLDED and the emitted code
+    //     loads one literal -- there is no powf call in setup_fx_flux_hot's
+    //     disassembly at all -- whereas Flux::set_drive computes the same
+    //     quantity at RUNTIME, with two `bl powf` calls inside
+    //     .text._ZN4spky4Flux9set_driveEf (bench/build/flux.lst). The host
+    //     compiler's fold and newlib's target powf need not agree to the last
+    //     bit. This is the LARGER of the two terms, and the original version
+    //     of this comment named only the second one (corrected in review).
+    //   - multiply order: the engine's _fb_norm * (1.2 / g) against this
+    //     line's (0.9 * 1.2) / g.
+    // Both are last-bit effects, so 1e-3 remains amply sized rather than
+    // merely adequate.
     g.fb_coef = g.fx.flux().feedback_coef_for_test();
     assert(std::fabs(g.fb_coef - 0.9f * 1.2f / bbd_drive_gain(0.85f)) < 1e-3f);
 }
@@ -1120,9 +1155,10 @@ void setup_tone_solo()
 
     // This row has NO settle, and it is the only row in this file that needs
     // none. TestToneEngine's whole state is four floats -- _sr, _phase, _freq,
-    // _amp (test_tone_engine.h:36-40) -- with no slew, no envelope, no delay
-    // line and nothing that converges; init() and the first set_targets() put
-    // all four at their final values. The window below is a SELF-CHECK window
+    // _amp (test_tone_engine.h:37-40; line 36 is the `private:` label) -- with
+    // no slew, no envelope, no delay line and nothing that converges; init()
+    // and the first set_targets() put all four at their final values. The
+    // window below is a SELF-CHECK window
     // and nothing else. Its length is set by the assert's arithmetic (below),
     // not by anything arriving.
     //
@@ -1162,12 +1198,24 @@ void setup_tone_solo()
     // TestToneEngine::process emits sin(2*pi*phase) * _amp * 0.3f
     // (test_tone_engine.h:31) with _amp == targets[LANE_LEVEL] == 0.8, so the
     // waveform's true peak is 0.8 * 0.3 == 0.24 exactly. The window is 2
-    // blocks == 192 samples at 311.13 Hz, i.e. 1.24 cycles, so it contains one
-    // crest; the nearest sample to that crest can miss it by at most half a
-    // phase increment, 0.5 * 311.13/48000 == 0.00324 cycles, where |sin| is
-    // still cos(2*pi*0.00324) == 0.99979. The observed peak therefore lands in
-    // [0.23995, 0.24000] -- computed in float32 off this exact sample grid it
-    // is 0.2399831 -- and (0.239, 0.241) admits that with ~1e-3 of room on
+    // blocks == 192 samples at 311.127 Hz (110 * 8^0.5), i.e. 1.2445 cycles.
+    //
+    // TWO extrema fall inside it, not one -- the loop below tracks
+    // std::fabs(ol), so a TROUGH counts exactly as much as a crest, and 1.2445
+    // cycles spans phase 0.25 AND phase 0.75 (only 1.25 falls outside). The
+    // original version of this comment said "one crest" and was corrected in
+    // review; the band and the figure below were right, the reason was not.
+    // Whichever sample lands nearest an extremum can miss it by at most half a
+    // phase increment, 0.5 * 311.127/48000 == 0.00324 cycles, where |sin| is
+    // still cos(2*pi*0.00324) == 0.99979 -- the worst case for either
+    // extremum. On this grid the nearer of the two is the SECOND one: the
+    // 116th phase increment sits at 0.751890, 0.001890 off, and in float32
+    // gives 0.24 * 0.9999295 == 0.2399831, which is the value observed. The
+    // first, the 39th increment at 0.252791, is 0.002791 off and would give
+    // 0.2399631 -- so had the window held only that one, the peak would sit
+    // further BELOW 0.24, and still 0.00096 above the lower bound asserted
+    // here. The band holds either way. Both values are inside
+    // [0.23995, 0.24000], and (0.239, 0.241) admits them with ~1e-3 of room on
     // either side.
     //
     // What each mistake sees here:
