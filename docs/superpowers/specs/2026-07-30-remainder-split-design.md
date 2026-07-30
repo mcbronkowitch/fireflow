@@ -111,7 +111,7 @@ already committed.
 
 | row | what it is |
 |---|---|
-| **`fx_flux_hot`** | The `fx_flux_sdram` configuration with FLUX at the deck's operating point: `set_stages(1.f)`, `set_flux_rate(kFluxRateCount - 1)`, `FXT_FLUX_FB` 0.9. Everything else identical to `setup_fx_flux`, so the difference against `fx_flux_sdram` isolates the operating point and nothing else. |
+| **`fx_flux_hot`** | The `fx_flux_sdram` configuration with FLUX at the deck's operating point on **all four** axes: `set_stages(1.f)`, `set_flux_rate(kFluxRateCount - 1)`, `FXT_FLUX_FB` 0.9 **and `set_drive(0.85f)`**. DRIVE was left out of the first version of this row and added after task 1's review — see §6.6, which explains why it is not optional. A 200-block settle is required (§6.7). Everything else identical to `setup_fx_flux`. |
 | **`tone_solo`** | One `TestToneEngine`, driven through an `IPartEngine*` — `process_in` then `process`, in `Part::process`'s order — with `set_targets` pushed once per 96-sample control tick, as `Part::_control_tick` does. Prices the shell's engine so it can be subtracted. |
 | **`deck_shell`** | A whole `Part` at the gate's operating point (FLOW, RATE 0.8, DENSITY 1.0, the same seed base), with `set_engine(ENGINE_TEST_TONE)` settled and every FX block off at **`fx_none`'s exact operating point**. Prices `Part`-level code plus the FX shell plus the tone. |
 
@@ -167,6 +167,33 @@ three measured rows, and if it comes out at or below zero the ladder has an
 error in it — that outcome is to be reported as a broken method, not written up
 as "the `Part` costs nothing".
 
+### 5.1 Amendment, 2026-07-30, after task 1's review
+
+§5 above is **not edited** — it stands as registered before the build. This
+subsection records that the subject of one prediction changed after
+registration, and why.
+
+`fx_flux_hot` as registered was a **three-axis** row at DRIVE 0. Task 1's review
+established that DRIVE is coupled to FEEDBACK and that DRIVE 0 puts the echo in
+a self-oscillating regime a deck never runs, which `fast_tanh`'s magnitude
+branch makes *cheaper* rather than merely different (§6.6). The row now sets
+DRIVE 0.85 and spans four axes.
+
+The registered band of 14.5 – 16.5 was formed against the three-axis row, so it
+no longer applies unchanged. Re-registered for the four-axis row, before the
+build:
+
+| quantity | predicted | falsified if |
+|---|---|---|
+| `fx_flux_hot` (four axes) | 15.0 – 17.5 | outside 13.5 – 19.0 |
+| `fx_flux_hot − fx_flux_sdram` | +2.0 – +4.5, against round 1's two-axis +2.29 | outside +0.5 – +6.0 |
+
+The band moves **upward** rather than widening symmetrically, for a stated
+reason: at DRIVE 0.85 the loop sits at 0.334 and the saturator evaluates its
+rational form, where the withdrawn DRIVE-0 configuration would have clamped and
+taken `fast_tanh`'s early return. If the measured figure comes in *below* the
+old 14.5, that reasoning is wrong and the result section must say so.
+
 **Secondary check, free to compute:** `deck_shell` must be strictly less than
 `instr_part_1`, and by roughly the engine and FX difference. A shell that comes
 out anywhere near 46 points means `set_engine` did not take effect and the row
@@ -202,20 +229,49 @@ measured; this section exists so that cannot happen again.
    what round 1 could not do. If it disagrees with round 1's additive +2.29,
    this round's figure supersedes it — but the two are from different builds, so
    the disagreement itself is subject to point 3.
-6. **`fx_flux_hot` covers three of FLUX's four operating-point axes, not all
-   four.** Found by task 1's implementer, recorded here rather than left for
-   review. It re-prices STAGES, the flux rate and FEEDBACK; it does **not** set
-   DRIVE, so it runs at `Flux::init`'s `set_drive(0.f)` while a deck runs
-   `set_drive(0.85f)` (`configure_worst_bbd`). DRIVE's cost therefore stays in
-   `remainder'`. Reading says that cost is **zero**: `BbdEcho::SetDrive`
-   (`engine/fx/bbd.h:560-564`) writes only `sat_in_` and `sat_out_`, and
-   `Process` applies `fast_tanh(x * sat_in_) * sat_out_` unconditionally
-   (`bbd.h:573`) — DRIVE scales that expression's gains without adding or
-   removing an operation, so the per-sample instruction path is identical. That
-   is **reading, not measurement**, and it is the reason DRIVE was left out
-   rather than folded in: adding a fourth axis would stop the
-   `fx_flux_hot − fx_flux_sdram` difference from isolating the three that
-   round 1 estimated. The result section must state this residual.
+6. **`fx_flux_hot` must set DRIVE, and the first version of it did not.** Task 1
+   priced STAGES, the flux rate and FEEDBACK but left DRIVE at `Flux::init`'s
+   `set_drive(0.f)`, while a deck runs `set_drive(0.85f)`
+   (`bench/workloads_instr.cpp:108`). Task 1's review established that this is
+   not a documentation footnote but a regime error, and the row was corrected:
+
+   `Flux::set_drive` rewrites `_fb_scale = 1.2f / bbd_drive_gain(d)`
+   (`engine/fx/flux.cpp:199`), so DRIVE and FEEDBACK are **coupled**. At the
+   deck's DRIVE 0.85, `bbd_drive_gain` is 3.236 and the echo's actual
+   coefficient is `0.9 × 1.2 / 3.236 = 0.334` — comfortably stable. At DRIVE 0
+   it is `0.9 × 1.2 = 1.08`, above unity: a self-oscillating loop bounded only
+   by the saturator. Those are two different regimes, and they do not cost the
+   same, because `fast_tanh` **branches on magnitude** — it early-returns ±1 for
+   `|x| >= 3.646739f` and skips the Padé numerator, denominator and divide
+   (`engine/util/fast_tanh.h:36-37`). A clamped, oscillating loop takes the
+   cheap path; a stable one at 0.334 evaluates the rational form. So DRIVE 0
+   would have made the row **cheaper than the FLUX a deck actually runs**, which
+   is the opposite of what this row exists to establish.
+
+   The earlier claim in this section — that DRIVE "adds no operation" so its
+   cost "is **zero**" — was wrong on both counts and is withdrawn. The correct
+   statement about the *operation set* is that DRIVE adds none and can only
+   remove one (the clamp branch), so its direct cost is ≤ 0; but via the
+   coupling it moves which branch the saturator takes on every sample, and that
+   is not bounded by reading.
+
+   With DRIVE set, `fx_flux_hot − fx_flux_sdram` spans **four** axes, where
+   round 1's +2.29 estimate spanned two (STAGES and rate only —
+   `2026-07-29-instrument-ablation-design.md` §8.3, and note there is no DRIVE
+   row anywhere in the `sweep` family). The comparison against +2.29 is
+   therefore four-axes-against-two and must be reported that way.
+7. **The row needs a settle, and 100 blocks of warm-up is not enough.** Also
+   from task 1, and confirmed independently in its review. `_stage_current`
+   slews at `_dt_coef = 1/1440` (`engine/fx/flux.cpp:18`), so
+   `8192 · (1 − 1/1440)^n < 1` first holds at n = 12972 samples = **135.1
+   blocks**, against the runner's `kWarmupBlocks` of 100 (`bench/workload.h:11`,
+   applied at `bench/runner.cpp:28`). Without a settle the first ~35 *measured*
+   blocks would price a BBD whose line length was still moving. `clock_hz()` is
+   also written only inside `Flux::process` (`flux.cpp:370`) and would still be
+   its `0.f` initialiser (`flux.h:144`), so the row's own asserts could not
+   evaluate. `fx_flux_sdram` needs no settle because it moves neither axis and
+   `init` snaps both slews (`flux.cpp:75,78`) — so the settle does not reduce
+   comparability, it is what puts both rows in a settled state.
 
 ## 7. Non-goals
 
