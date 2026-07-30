@@ -72,7 +72,10 @@ running FLUX at a cheaper operating point, which is audible.
 `EngineId` has `ENGINE_TEST_TONE = 0` (`engine/parts/engine_iface.h:11-17`) and
 `Part::set_engine(EngineId)` is public (`engine/parts/part.h:93`).
 `TestToneEngine` (`engine/parts/test_tone_engine.h`) is a sine oscillator: a
-phase increment, a wrap, one `std::sin`, two multiplies, per sample. It
+phase increment, a **single-precision divide** (`_freq / _sr`), a branchless
+wrap, one `sinf` and three multiplies, per sample. The divide is named because
+it is the second-costliest operation in the body after `sinf` — roughly 14
+cycles on this core — and the first version of this section omitted it. It
 overrides `process` and `set_targets`; `trigger` is empty; it does **not**
 override `process_in`, so it inherits `IPartEngine`'s empty body — the same
 situation §2.2 of round 2 established for `SynthEngineT`.
@@ -338,14 +341,34 @@ measured; this section exists so that cannot happen again.
    gate's RATE 0.8 a fire lands roughly every 6908 samples, about 72 blocks, so a
    deck makes ~1.4 % more `set_targets` calls than `tone_solo` does.
 
-   **This is correctly attributed and needs no correction**, which is why it is
-   recorded here rather than fixed: the extra tick is `Part`-level work, so
-   having it on `deck_shell`'s side of `deck_shell − tone_solo` puts it exactly
-   where it belongs. Reproducing it in `tone_solo` would need a live
+   **It is harmless because of its size, not because it is correctly
+   attributed** — an earlier version of this point claimed the latter and was
+   refuted in review. The extra tick is a whole `_control_tick()`, whose last two
+   acts are `_engine->set_targets` (`part.cpp:335`) and the FX target-cache fill
+   (`part.cpp:336`); neither is `Part`-level, so `deck_shell − tone_solo` really
+   does charge one extra *engine* push and one extra *FX* cache fill to
+   "`Part`-level code". The bound is what makes that acceptable:
+   `TestToneEngine::set_targets` is ~76 bytes including a `powf`, so at most a
+   few hundred cycles, once per 6908 samples — of order **7e-4 points**, four
+   orders of magnitude under §5's prediction band and far under the layout drift
+   §6.3 already concedes. Reproducing it in `tone_solo` would need a live
    `lane_fired()` edge, i.e. `deck_mod_hot`'s modulator running inside the
    measured loop, which §3.2 rules out because it would charge that row twice.
    §9 must not describe `tone_solo` as "the same engine driving as a deck does"
    without this qualifier.
+10. **§4.1's three-term subtraction removes the harness overhead twice.** Found
+   in review, and it is a defect in this design rather than in any row. Write
+   each row as harness plus parts: `deck_shell = H + P + F + E`,
+   `fx_none = H + F`, `tone_solo = H + E`. Then
+   `deck_shell − fx_none − tone_solo = P − H`. The per-row harness — the
+   `bl test_input()`, the loop counter, compare and branch, the accumulation,
+   the prologue — is subtracted twice and present once, so **`Part`-level code
+   comes out low by one `H`**. Measured off `proc_tone_solo`'s disassembly, `H`
+   is of order **0.08 points** against §5's 1.5–4.5 band: a 2–5 %
+   underestimate. It does not threaten the sign test, and it pushes in the same
+   direction as §6.1's floor, but §6.1 attributes that floor to contention
+   alone, so this is a second and independent reason the figure is a floor. §9
+   must say so when it shows the arithmetic.
 9. **`tone_solo` holds its pitch target constant; a deck's walks.**
    `TestToneEngine::set_targets` calls `std::pow(8.f, p)`
    (`engine/parts/test_tone_engine.h:22`) once per control tick. This row pushes
@@ -390,7 +413,16 @@ Unchanged from round 2, and it is not optional:
 5. The bench refuses hardware evidence from a dirty tree. Commit before
    measuring.
 6. Two runs; every shared checksum must match across them.
-7. Each row carries a self-check assert that would **fail** under the specific
+7. **Re-verify in the *measured* build that `tone_solo`'s and
+   `deck_engine_hot`'s three engine calls are still indirect** — one
+   `objdump -d` on `proc_tone_solo`, checking for `blx` through vtable offsets
+   12 / 44 / 20. This is not paranoia: in the task-2 build GCC devirtualised
+   *and* fully inlined `setup_tone_solo`'s `g.engine->init()` call, sixty lines
+   above the measured loop. That instance is harmless, but it proves the
+   compiler will do it here when it can, and adding `deck_shell` shifts layout
+   and inlining budgets. Nothing in the harness guards this; only a look at the
+   object code does.
+8. Each row carries a self-check assert that would **fail** under the specific
    mistake it guards — not a band so wide the bug would pass. Round 2 shipped
    one of those and had to correct it.
 8. Desktop suite acceptance is "no new failure". `tests/test_seed_audition_init.cpp`
