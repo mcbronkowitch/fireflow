@@ -329,6 +329,32 @@ measured; this section exists so that cannot happen again.
    `init` snaps both slews (`flux.cpp:75,78`) — so the settle does not reduce
    comparability, it is what puts both rows in a settled state.
 
+8. **`Part` has a second `set_targets` path, and only `deck_shell` pays it.**
+   Found by task 2's implementer; neither this design nor the plan had mentioned
+   it. The control raster is `if (_ctrl_ctr == 0) { … _control_tick(); } else if
+   (fired) { _control_tick(); }` (`engine/parts/part.cpp:439-445`), so a lane
+   fire triggers an **extra** tick — and therefore an extra
+   `_engine->set_targets` (`part.cpp:335`) — outside the 96-sample raster. At the
+   gate's RATE 0.8 a fire lands roughly every 6908 samples, about 72 blocks, so a
+   deck makes ~1.4 % more `set_targets` calls than `tone_solo` does.
+
+   **This is correctly attributed and needs no correction**, which is why it is
+   recorded here rather than fixed: the extra tick is `Part`-level work, so
+   having it on `deck_shell`'s side of `deck_shell − tone_solo` puts it exactly
+   where it belongs. Reproducing it in `tone_solo` would need a live
+   `lane_fired()` edge, i.e. `deck_mod_hot`'s modulator running inside the
+   measured loop, which §3.2 rules out because it would charge that row twice.
+   §9 must not describe `tone_solo` as "the same engine driving as a deck does"
+   without this qualifier.
+9. **`tone_solo` holds its pitch target constant; a deck's walks.**
+   `TestToneEngine::set_targets` calls `std::pow(8.f, p)`
+   (`engine/parts/test_tone_engine.h:22`) once per control tick. This row pushes
+   one fixed value, where a deck's PITCH target moves along the quantizer
+   staircase. Whether `powf`'s cost depends on its argument is **not** something
+   reading settles, and per §5.2's rule this design does not guess a direction.
+   The exposure is bounded — one `powf` per 96 samples — and it is named here so
+   §9 reports it as an approximation rather than discovering it later.
+
 ## 7. Non-goals
 
 - **`engine/` is locked.** `git diff main -- engine/` must be empty at every
