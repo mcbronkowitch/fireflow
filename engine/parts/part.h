@@ -218,8 +218,28 @@ public:
     // one out-of-line copy (a 0x360-byte weak symbol) and left all ten call
     // sites in bench.elf calling it with `bl`, prologue and epilogue intact.
     // -Winline reported nothing, so the threshold it exceeded is not named
-    // here. The attribute also turns a future growth of this body into a
-    // compile error rather than a silent return to the out-of-line form.
+    // here.
+    //
+    // What the attribute does NOT give you is a safety net against growth. It
+    // forces inlining regardless of this body's size: add statements here and
+    // gcc inlines the larger body into all ten call sites just the same, and
+    // silently. Its "inlining failed in call to always_inline" diagnostic is
+    // raised for STRUCTURAL reasons -- variadic arguments, alloca, a VLA,
+    // setjmp, an attribute or target-option mismatch, recursion -- and not
+    // because a body grew, so there is no size threshold left for any
+    // diagnostic to report.
+    //
+    // Nor does forcing this body inline force what it CALLS inline; here it
+    // pushed one inner decision the other way. spky::SoftSwitch::process(bool)
+    // -- the four-way `switch (_stage)` of engine/fx/fx_util.h, reached
+    // through _engine_fade.process() below -- was inlined into Part::process
+    // in the baseline ELF and carried no symbol of its own; in the final ELF
+    // it is a 392-byte weak symbol, `bl`-called once per Part per sample from
+    // three sites (design section 9.8, read off the linked ELF). NO COST
+    // DIRECTION IS CLAIMED for that trade -- no row isolates it. Nothing
+    // diagnosed the change either, and nothing would diagnose the next one:
+    // to know what this body actually compiled to, read the map and the
+    // disassembly, not the attribute.
     __attribute__((always_inline)) inline
     void process(float inL, float inR, float& outL, float& outR,
                  float& sendL, float& sendR) {
@@ -310,8 +330,18 @@ public:
 private:
     // --- the per-sample hot state, declared first on purpose ---
     //
-    // Everything process() above touches on every one of the 96 samples in a
-    // control block, and nothing else. The object is ~24 KB, so a member
+    // Each of the seven members below is touched by process() above on every
+    // one of the 96 samples in a control block, and none of them is cold. The
+    // one that could look cold is _note_suppressed, and it is read every sample
+    // through gate() above, once _gate_ctr has reached 0.
+    //
+    // The converse does not hold: this is NOT every member process() touches
+    // per sample. Four are still declared further down -- _mod (_mod.process(),
+    // lane_fired(), pitch_sustain() via gate()), _engine (the process_in/
+    // process pair), and _fx together with _fxv (_fx.process). What moving any
+    // of those would be worth is not claimed here; the bench settles that.
+    //
+    // The object is ~24 KB, so a member
     // declared after the engines sits far enough past the object base that
     // arm-none-eabi-g++ reaches it by re-deriving a scaled base (an
     // `add.w rN, r0, #20480` on entry) and then a 32-bit ldr.w/str.w per touch
@@ -425,13 +455,26 @@ private:
     // fade reaches idle, _push_master_cycle only when the master lane's rate
     // changes, _fire_trigger only on an unsuppressed PITCH fire, _gate_edge
     // only on a composed-gate edge.
+    // _engine_swap() does more than the name says. Besides _engine_id and
+    // _engine it clears _switching, re-arms _engine_fade (set_on(true)) and
+    // WRITES _ctrl_ctr = 0, so the sample the swap lands on is always a
+    // control tick -- the raster contract further down explains what that
+    // costs and what it does not re-align. It also re-pushes set_flow,
+    // set_hold, set_gate and, when _last_master_hz > 0, set_cycle into the
+    // freshly selected engine, which is the whole reason the write to
+    // _ctrl_ctr is there. Definition and full reasoning in part.cpp.
     void _engine_swap();
     void _push_master_cycle(float hz);
     void _fire_trigger();
     void _gate_edge(bool g);
 
-    // Control raster (_ctrl_ctr itself is declared with the per-sample hot
-    // block at the top of this section). Both this counter and
+    // --- CONTRACT OF THE CONTROL RASTER COUNTER _ctrl_ctr -------------------
+    // The counter itself is declared with the per-sample hot block at the top
+    // of this section; everything down to the END marker below documents it,
+    // and nothing here says anything about the member declared after that
+    // marker.
+    //
+    // Both this counter and
     // SynthEngine::_ctrl_ctr init to 0
     // and advance once per call to their respective process(), so while both
     // run continuously they fire on the same samples (0, kCtrlInterval,
@@ -473,6 +516,7 @@ private:
     // too. That is acceptable (it is a diagnostic engine, not the audio
     // path), just not "aligned" in the sense the rest of this comment
     // describes.
+    // --- END OF THE _ctrl_ctr CONTRACT --------------------------------------
 
     // Target cache: _control_tick() both fills it and pushes it to the
     // engine via set_targets() -- process() no longer pushes it itself, it
@@ -569,8 +613,12 @@ private:
     float _color_eff = 0.f;      // knob + MOTION swing, as last pushed to _chord
     float _overlap = 1.f;        // DENS knob; effective value computed in _control_tick
     float _overlap_eff = 1.f;    // knob + MOTION swing, as last pushed to _sampler
-    // _gate_ctr, its per-sample twin, is declared with the hot block at the top
-    // of this section; this one is read only on a fire.
+    // _gate_len is the pulse LENGTH, not the countdown: init() writes it, and
+    // it is read wherever a gate pulse is armed. That is two places, not one --
+    // process() above, on an unsuppressed PITCH fire, and trigger_manual()
+    // (part.cpp:149-162), the PLAY tap, which arms the same pulse outside the
+    // lanes entirely. Its per-sample twin _gate_ctr, the countdown, is declared
+    // with the hot block at the top of this section.
     int   _gate_len = 240;   // ~5 ms @ 48k, recomputed in init()
     float _sr = 48000.f;
 
