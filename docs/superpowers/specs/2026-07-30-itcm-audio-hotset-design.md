@@ -36,7 +36,9 @@ per-sample audio path. Control-plane objects (`lane.o`, `super_modulator.o`,
 before the audio hotset is weighed.
 
 The supplementary linker script selects only `.text`/`.text.*`; constants
-remain at their existing residency. Link failure is the capacity guard.
+remain at their existing residency. The first 256 ITCM bytes stay reserved so
+no legitimate code symbol is placed at the null address. Link failure is the
+capacity guard, including that reservation.
 
 ## 3. Loading model and product boundary
 
@@ -80,7 +82,7 @@ Static evidence must show:
 - `Instrument::process`, `Part::_control_tick`, `PartFx::process`,
   `Flux::process`, `BbdLine::Process`, `Grit::process`,
   `AmbientReverb::process`, `Comp::process`, the Morph voice process, and the
-  SynthEngine process in `0x00000000..0x0000ffff`;
+  SynthEngine process in `0x00000100..0x0000ffff`;
 - `g_dtcm_instrument_storage` still in DTCM;
 - the AXI control keeps those functions in `0x24000000..0x2403ffff`.
 
@@ -88,6 +90,14 @@ The AXI replay must stay within 0.25 points of the immediately preceding
 `8702bc8` DTCM result for both average and maximum. That confirms the new
 measurement plumbing did not move the control materially before ITCM is
 credited.
+
+The first hardware probe placed `.itcm_audio_hot` at `0x00000000`. Its first
+weak symbol, `SoftSwitch::process`, consequently occupied the null address.
+The instrument rows kept running but their audio sum collapsed to zero; for
+the BBD row the checksum became the fold of the constant eight active voices
+(`50306fb5`). A diagnostic relink at `0x00000100` restored every AXI checksum,
+including `483e8e82`, on two runs. The reserved prefix is therefore a
+correctness requirement, not a timing choice.
 
 ## 6. Decision rule
 

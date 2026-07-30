@@ -64,7 +64,7 @@ class ItcmLinkContract(unittest.TestCase):
         for symbol in hot_symbols:
             with self.subTest(symbol=symbol):
                 address = symbol_address(linked, symbol)
-                self.assertGreaterEqual(address, 0x00000000)
+                self.assertGreaterEqual(address, 0x00000100)
                 self.assertLess(address, 0x00010000)
 
         dtcm_address = symbol_address(linked, "g_dtcm_instrument_storage")
@@ -89,8 +89,8 @@ class ItcmLinkContract(unittest.TestCase):
         )
         self.assertGreater(size, 0)
         self.assertLessEqual(size, 0x10000)
-        self.assertEqual(vma, 0x00000000)
-        self.assertEqual(lma, 0x00000000)
+        self.assertEqual(vma, 0x00000100)
+        self.assertEqual(lma, 0x00000100)
 
         program_headers = subprocess.run(
             [str(READELF), "--wide", "--segments", str(ELF)],
@@ -100,7 +100,7 @@ class ItcmLinkContract(unittest.TestCase):
         ).stdout
         self.assertRegex(
             program_headers,
-            r"LOAD\s+\S+\s+0x00000000\s+0x00000000\s+"
+            r"LOAD\s+\S+\s+0x00000100\s+0x00000100\s+"
             r"\S+\s+\S+\s+R E\s+",
         )
         self.assertRegex(program_headers, r"\.itcm_audio_hot")

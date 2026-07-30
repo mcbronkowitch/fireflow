@@ -2,11 +2,13 @@
  * Supplement to ../alt_sram.lds for the benchmark's pre-registered audio
  * hotset. OpenOCD loads bench-sram.elf directly, including this ITCM segment.
  * Constants stay in their normal sections; only executable input sections
- * from the selected objects move.
+ * from the selected objects move. The first 256 bytes are deliberately
+ * reserved: placing the weak SoftSwitch::process symbol at address zero made
+ * the hardware instrument path return silence even though it kept running.
  */
 SECTIONS
 {
-    .itcm_audio_hot 0x00000000 :
+    .itcm_audio_hot 0x00000100 :
     {
         . = ALIGN(32);
         __itcm_audio_hot_start__ = .;
@@ -28,6 +30,6 @@ SECTIONS
 }
 
 ASSERT(
-    SIZEOF(.itcm_audio_hot) <= 0x10000,
+    ADDR(.itcm_audio_hot) + SIZEOF(.itcm_audio_hot) <= 0x10000,
     "ITCM audio hotset exceeds the 64 KiB ITCM region"
 );

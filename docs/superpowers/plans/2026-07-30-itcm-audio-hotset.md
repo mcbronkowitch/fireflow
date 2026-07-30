@@ -50,6 +50,8 @@ STM32H750/libDaisy, Python `unittest`, OpenOCD.
 - [x] Build AXI and ITCM variants. Confirm both fit all memory regions.
 - [x] Verify representative symbols and DTCM data placement with
   `arm-none-eabi-nm`; verify `bench-sram.elf` contains the ITCM load segment.
+- [x] Diagnose the null-address hardware failure and reserve
+  `0x00000000..0x000000ff`; two diagnostic runs restored every AXI checksum.
 - [x] Run desktop build plus controller tests and commit.
 
 ### Task 3: Hardware evidence
