@@ -1232,7 +1232,8 @@ This round changes the sound on purpose — the dry signal keeps its per-voice
 pan, but the echo it feeds is now centred — and where DRIVE bites, since one
 saturator/compander/feedback loop now sees the summed signal instead of two
 seeing their own channel. No panning, widening, or DRIVE/compander re-tuning
-was added; that is deliberately left to the owner. Branch: `perf/flux-mono`.
+was added; that was deliberately left to the owner — **and the owner decided on
+2026-07-30 to keep it mono and to add none of them.** Branch: `perf/flux-mono`.
 **The work is on `main`** — `bd346eb` (the collapse) and `1ba3f18` (the bench
 comment fixes) are both ancestors of `main`, verified — but it was
 fast-forwarded rather than merged, so there is no merge commit to cite and the
@@ -1303,10 +1304,12 @@ render files this round produced, not by this measurement. `engine/fx/bbd.h`'s
 estimated ~0.6 points, left deliberately as model territory. And the gate
 itself: **12.88 points still separate `instrument_worst_bbd` from the 100 %
 line.** `perf/flux-mono`'s content is on `main` (`bd346eb`, `1ba3f18`,
-fast-forwarded, no merge commit). **The owner's listening pass on the mono
-collapse remains open** — nothing in the ablation sequence has verified it, and
-this line records it as the open question it is rather than as a merge status.
-Its outcome may still change what belongs on top of that work.
+fast-forwarded, no merge commit). **The owner accepted the mono collapse on
+2026-07-30: FLUX stays mono.** The centred echo is the intended sound, and the
+lost stereo width does not need recovering — no panning or widening layer is to
+be added on top, and no DRIVE or compander re-tuning is owed to this change.
+A later round must not treat the collapse as provisional, and must not "restore"
+stereo FLUX as a fix.
 
 ### Instrument-level ablation ✅ (where the unmeasured budget actually goes)
 
