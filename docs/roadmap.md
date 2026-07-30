@@ -60,6 +60,20 @@ is actually built today, and what is still design-only.
   one voice per deck is worth ≈7.9 points — 78 % of the gap, not all of it.
   Branch `perf/deck-interior-ablation`, not merged. See "Deck-interior
   ablation" below.
+  **Update, 2026-07-30 (the remainder split; it is `Part`-level code):** the
+  gate reads **110.51** in this build, so **the overshoot is 10.51 points**, not
+  10.10. The predecessor's 6.85-point residue is now split, and the large
+  majority of it is **code this project wrote, carrying no sonic cost**:
+  `Part`-level code is **2.65–4.00 points per deck** (`pct_avg`–`pct_max`),
+  **5.3–8.0 across the instrument** — 76 % of the `pct_max` gap, 82 % of the
+  `pct_avg` one. **Contention was not the answer:** contention plus anything
+  still unnamed is **0.84 per deck as measured, 1.1–1.3 once a known bias in
+  the FX ladder is allowed for**, and that is an *upper bound*. FLUX's real
+  operating point costs **+1.30** per deck, not the +2.29 carried forward from
+  round 1. Next is a **fix round inside `Part::_control_tick`** — the first
+  non-diagnostic round in this sequence — with the voice cut (≈7.9 points) now
+  clearly the second option rather than the first. Branch
+  `perf/remainder-split`, not merged. See "Remainder split" below.
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
@@ -1431,6 +1445,123 @@ exclusions documented as a consequence rather than measured. The second changes 
 decision — if the marginal voice is nearer 4.65 than 3.97, cutting one closes
 **92 %** of the gap rather than 78 %, and "four voices or three" becomes the
 cheapest route to 100 % this project has.
+
+### Remainder split ✅ (the 6.85 per deck, named)
+
+Branch `perf/remainder-split`. Spec
+`docs/superpowers/specs/2026-07-30-remainder-split-design.md` §9, evidence
+`docs/bench/2026-07-30-ccd5f12-ablate.{md,csv}`. Three rows added to the existing
+`instr` family and `ablate` profile; no engine change.
+
+The predecessor left a **6.85-point residue per deck** it could not name, with
+FLUX's ~2.29-point operating-point error and in-deck contention both still
+inside it. Three rows separate them: `fx_flux_hot` (FLUX at the deck's own
+operating point on all **four** axes, DRIVE included), `tone_solo` (the shell's
+engine, reached through a virtual `IPartEngine*` exactly as `Part::process`
+reaches it) and `deck_shell` (a whole `Part` at the gate's operating point
+running that engine, with every FX block off at `fx_none`'s exact operating
+point).
+
+**Result: the residue is `Part`-level code, not contention.** All figures
+`pct_max`, run 2, computed entirely within one run. The gate reads **110.51**
+here, so the target is **10.51 points**, not the predecessor's 10.10.
+
+| per deck | `pct_max` | `pct_avg` |
+|---|---:|---:|
+| voices — `deck_engine_hot` | 18.57 | 17.93 |
+| modulation — `deck_mod_hot` | 3.76 | 3.50 |
+| FX, FLUX now faithful | 18.48 | 18.35 |
+| **`Part`-level code** | **4.00** | **2.65** |
+| `instr_part_1` | 45.65 | 43.54 |
+| **contention + anything still unnamed** | **0.84** | **1.11** |
+
+`Part`-level code is **2.65–4.00 per deck** — 2.65 (`pct_avg`) is the
+steady-state figure and 4.00 what a `Part` costs in its worst block, because
+`deck_shell` spreads 15.4 % against `tone_solo`'s 3.0 % and a 15 % spread is a
+**rare-event** signature rather than a once-per-block cost (`trigger_manual()`
+once per 250 blocks, the gate's lane fire once per ~72 blocks). Doubled that is
+**5.3–8.0 across the instrument** — and the doubling **assumes deck B's shell
+matches deck A's, which this round did not measure** (`instr_part_2 −
+instr_part_1` is 46.18 against 45.65, so the second deck is about half a point
+dearer). **Compared like with like, the compromise-free bucket is about three
+quarters of the overrun:** 8.00 against the `pct_max` gap of 10.51 (**76 %**),
+or 5.30 against the `pct_avg` gap of 6.50 (**82 %**, the gate reading 106.50 in
+both runs). Quoting the `pct_avg` bucket against the `pct_max` gap mixes metrics
+and understates the finding.
+
+**Contention is bounded, small, and now the *smallest* named term.** 0.84 as
+measured — **1.1–1.3** once §6.11's known negative bias is allowed for, since
+the FX line charges `PartFx`'s shared outer-branch work twice where a real deck
+pays it once — and it is an **upper bound**, because `deck_shell` runs the
+`Part` almost uncontended (§6.1) so every contention effect lands in this term.
+Three rounds have now failed to find contention anywhere: nil between decks, nil
+at deck granularity, about a point inside a deck. It is small enough to stop
+spending rounds on, but **it is not noise** — the run-to-run spread of the same
+quantity is **0.10**, an eighth of it.
+
+**FLUX's operating point costs +1.30 per deck.** `fx_flux_hot` −
+`fx_flux_sdram` = **+1.30** (`pct_max`; +1.34 `pct_avg`), four axes moved
+together on one build, against round 1's **+2.29** from two axes swept
+separately on a different build. So the residue was smaller than round 2
+reported — but **which of the two figures is "wrong" is not separable here.**
+The added DRIVE axis moves the BBD saturator's threshold in the direction that
+takes `fast_tanh`'s cheap early-return path *more* often, so a four-axis figure
+landing below a two-axis estimate is what that mechanism predicts with no
+round-1 error at all, and no row anywhere prices DRIVE alone. What is settled is
+the within-run number to use: **+1.30**. Round 2's own formula re-evaluated in
+this build gives **6.14**, and `1.30 + 4.00 + 0.84 = 6.14` exactly — the
+predecessor's residue is fully split, and the 6.85 → 6.14 balance is layout
+drift, not a correction.
+
+**§4.1's arithmetic was wrong, and the registered sharpest test did not catch
+it.** `Part::process` runs `_mod.process()` every sample
+(`engine/parts/part.cpp:378`), so `deck_shell` contains the modulation plane;
+the registered formula subtracted `deck_mod_hot` only from the residue and so
+charged it **twice**. That one defect inflated `Part`-level code to 7.76 and
+drove the residue to −2.92, falsifying two of six pre-registered predictions on
+its own — while every row *as measured* returned exactly what it was built to
+return. §5 nominated the *sign* of `Part`-level code as the test that would
+catch a broken ladder; the ladder was broken and the sign test passed
+comfortably. What caught it was the residue crossing its −1.0 sanity bound.
+**A future round should register the residue's sign, not a component's.**
+
+**The layout drift reproduced a fourth time, and did not shrink.** All **20**
+rows shared with `c4ae8db-ablate.csv` returned identical checksums, in both runs
+of this build and against the previous one; the two runs differ in cycles on 15
+rows and in checksum on none. Costs moved anyway: the gate 110.10 → **110.51**,
+`instr_part_1` 46.00 → 45.65, and the largest `pct_max` movement of any shared
+row is **`instr_noverb` at +0.86**, twice the gate's. Two rows again exceed ±2 %
+of `avg_cyc` at unchanged checksums — `fx_flux_sdram` **+2.65 %**,
+`mod_plane_2x_center` −2.56 % — so round 2's loosened ±2 %-on-a-small-row bound
+is not tightened here either. Which is why every figure above comes from one run
+and none from a subtraction across builds.
+
+**Next is a fix round on `Part`-level code — the first non-diagnostic round in
+this sequence.** 5.3–8.0 points across the instrument, no sonic cost, and now
+named rather than inferred. It starts inside **`Part::_control_tick`**
+(`engine/parts/part.cpp:180-374`): the chord build, the quantizer, the five
+`target_raw` evaluations, the target pushes, the FX target-cache fill and the
+excitation bus are the once-per-tick `Part`-level work `deck_shell` actually
+measured, and the rare-event shape of the spread points additionally at the
+chord build, which runs on every note. **`Flux::set_rhythm` is *not* in this
+bucket:** it is **instrument-level, not `Part`-level**, called only from
+`Instrument::process`'s control tick (`engine/instrument.cpp:96-97`) and never
+from `Part::_control_tick`, and `deck_shell` instantiates a bare `Part` with no
+`Instrument` — so it contributes exactly **zero** to the 2.65–4.00 measured
+here. It remains a real candidate (it runs `update_thin_pattern()` and
+`derive_intervals()` unguarded twice per tick, including at LINK 0 where nothing
+changed), but any saving there comes out of round 1's separately measured
+**4.04-point glue** bucket, not out of this round's `Part` bucket. One further
+row would repair the FX ladder — GRIT *and* FLUX both engaged, so `FXtotal` can
+be formed with one copy of the shared branch instead of two. **The voice cut
+remains the fallback at ≈7.9 points**, and it is now clearly the *second*
+option, not the first, because `Part`-level code is of comparable size and costs
+nothing to hear.
+
+Not a guaranteed close, and none of these points is free to take: a `Part`'s
+per-sample loop and control tick can be tightened, not deleted. But for the
+first time in three rounds the largest named quantity is code rather than a
+residue.
 
 ### BODY playability ✅ (extends M5j)
 

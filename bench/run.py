@@ -199,6 +199,9 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "instr_noverb",
         "deck_mod_hot",
         "deck_engine_hot",
+        "fx_flux_hot",
+        "tone_solo",
+        "deck_shell",
     ),
     "voice": (
         "morph_osc_bare",
