@@ -445,24 +445,29 @@ void setup_deck_mod_hot()
     // ~6.95 Hz so this cannot silently pass if the FREE curve is ever
     // retuned. It also excludes the legacy set_cycle(2.f)'s 0.5 Hz by
     // construction: free_hz(0.8f) is nowhere near 0.5, whereas RATE
-    // mistakenly left at 0.5 -- the value mod_plane_2x_center's mod_a uses,
-    // two rows up in this same file's history -- would be free_hz(0.5f) =~
-    // 0.775 Hz, which a loose band around 0.5 Hz would have let through.
+    // mistakenly left at 0.5 -- the value mod_plane_2x_center's mod_a uses
+    // (bench/workloads_system.cpp:75, not this file) -- would be
+    // free_hz(0.5f) =~ 0.775 Hz, which a loose band around 0.5 Hz would have
+    // let through.
     //
     // DENSITY is NOT covered, and cannot cheaply be: set_density() only
     // writes ModLane::_density (lane.h:23), read solely by _groove_k()
-    // (lane.cpp:422), which _effective_gate() only consults when _step_mode
-    // is true (lane.cpp:449). This row never calls set_step(), so it runs in
+    // (lane.cpp:422). _effective_gate() calls _groove_k() in both of its
+    // melodic branches (lane.cpp:437 and :442); what is step-gated is the call
+    // to _effective_gate() itself (lane.cpp:449). This row never calls
+    // set_step(), so it runs in
     // FLOW, where _on_boundary() hardcodes `gated = true` regardless of
     // DENSITY (lane.cpp:449) -- the same operating point the real gate runs
     // at (setup_inst_worst never calls set_step either, design spec section
     // 2.4). DENSITY is therefore inert here, not merely untested: nothing
     // this row can read -- lane_fired() included, since a wrap fires
     // unconditionally in FLOW -- would move if DENSITY were silently wrong.
-    const float expected_hz = free_hz(0.8f);
+    // free_hz(0.8f) inlined into the assert rather than held in a local, so
+    // this does not warn as an unused variable if NDEBUG is ever defined --
+    // setup_deck_engine_hot below already uses that form.
     g.master_hz = g.mod.master_hz();
     assert(g.master_hz > 0.f);
-    assert(std::fabs(g.master_hz - expected_hz) < 1e-4f);
+    assert(std::fabs(g.master_hz - free_hz(0.8f)) < 1e-4f);
 }
 
 float proc_deck_mod_hot()
@@ -506,8 +511,21 @@ void setup_deck_engine_hot()
 {
     auto& g = g_instr_arena.emplace<DeckEngineGroup>();
 
-    // Mirrors Part::init for PART_A (engine/parts/part.cpp:16-45).
+    // Two provenances, not one. The modulator and engine init below mirror
+    // Part::init for PART_A (engine/parts/part.cpp:17, 19-20); the three
+    // modulator settings do NOT appear in Part::init at all -- BPM arrives via
+    // Instrument::set_tempo_bpm's fan-out to every part (engine/
+    // instrument.cpp:70), and RATE/DENSITY come from the gate's own setup
+    // (setup_inst_worst). deck_mod_hot's header comment above draws the same
+    // distinction; this one used to claim all six mirrored Part::init.
     g.mod.init(kSampleRate, 0x1234abcdu);
+    // Both of these are inert here, for the reasons setup_deck_mod_hot's
+    // comment above sets out in full (BPM: _synced is false, so _update_rate()
+    // takes the FREE branch and never reads _bpm; DENSITY: only reaches
+    // _effective_gate(), which _on_boundary() calls only in STEP). Doubly moot
+    // in this row, which never process()es this modulator inside the measured
+    // loop -- it reads master_hz() from it and nothing else. Mirrored anyway,
+    // so the derived cycle comes from the state the gate actually runs in.
     g.mod.set_tempo_bpm(120.f);
     g.mod.set_rate(0.8f);
     g.mod.set_density(1.f);
@@ -666,6 +684,22 @@ float proc_deck_engine_hot()
         }
     }
     acc += static_cast<float>(g.synth.active_voices());
+    // The cadence's invariant, checked live rather than inferred. The value is
+    // already computed one line up and folded into the checksum -- but this
+    // file's own header comment (above, on the checksum fold) says plainly
+    // that the fold is not a detector: a collapse changes the checksum, and a
+    // changed checksum is indistinguishable from any other change. Until this
+    // assert, occupancy across the measured window was held only by the
+    // reasoning in setup's fire_period comment, and a collapse is exactly the
+    // failure the review round found once already -- a future RATE, decay or
+    // cadence change would reintroduce it and still return a plausible
+    // number. It holds for every block: the four triggers at setup leave 4
+    // Envs non-Idle with an Idle horizon of ~1.54 s (difference #5), the
+    // first corrective fire lands at ~0.544 s, and every later fire is ~10x
+    // sooner than that horizon, so nothing ever reaches Idle. kVoices is 4
+    // (synth_engine.h:35), so 4 is the ceiling as well as the expectation.
+    // Cost is one compare per block against this row's ~172000 cycles.
+    assert(g.synth.active_voices() == 4);
     acc += g.master_hz + static_cast<float>(g.voices)
          + static_cast<float>(g.fire_period);
     return acc;
