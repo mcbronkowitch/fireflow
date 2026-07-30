@@ -328,6 +328,46 @@ public:
     }
 
 private:
+    // --- the per-sample hot state, declared first on purpose ---
+    //
+    // Everything process() above touches on every one of the 96 samples in a
+    // control block, and nothing else. The object is ~24 KB, so a member
+    // declared after the engines sits far enough past the object base that
+    // arm-none-eabi-g++ reaches it by re-deriving a scaled base (an
+    // `add.w rN, r0, #20480` on entry) and then a 32-bit ldr.w/str.w per touch
+    // -- 22 such accesses per sample, measured on the linked ELF (design
+    // docs/superpowers/specs/2026-07-30-part-per-sample-design.md section 3.2).
+    // At the front of the object the same members are within the 5-bit byte /
+    // 7-bit word immediate ranges of the 16-bit Thumb load/store encodings, and
+    // they occupy 36 contiguous bytes instead of being spread across the object.
+    //
+    // Bit-exact by construction: this is a declaration reordering only. No
+    // statement, branch or arithmetic operation changed anywhere. It is safe to
+    // reorder because nothing in the tree depends on Part's layout -- there is
+    // no memcpy/memset over a member range, no offsetof, no static_assert on an
+    // offset or on sizeof(Part), no serialised snapshot (the VCV host's JSON is
+    // keyed by name), no aggregate or designated initialisation of Part or of
+    // any struct containing one (bench's InstrPartGroup is default-initialised
+    // through SerialArena::emplace, which sizes itself from sizeof), and no cast
+    // that reinterprets a Part as anything else. Part has no user-declared
+    // constructor, and none of its in-class initialisers reads another member,
+    // so construction order carries no information either.
+    //
+    // Field order inside the block is chosen for the encodings: the three bools
+    // land in the ldrb/strb 5-bit immediate window, the three words in the
+    // ldr/str 7-bit word window, and only one padding byte is spent.
+    //
+    // Whether this costs or saves cycles is not claimed here. It changes
+    // encodings and data-cache locality, not instruction counts, and this
+    // project settles cost with the bench, not by reading.
+    bool           _last_gate = false;
+    bool           _switching = false;
+    bool           _note_suppressed = false;   // last fire was swallowed
+    int            _ctrl_ctr = 0;              // control raster; see below
+    int            _gate_ctr = 0;
+    float          _last_master_hz = -1.f;
+    SoftSwitch     _engine_fade;
+
     SuperModulator _mod;
     TestToneEngine _tone;
     IPartEngine*   _engine = nullptr;
@@ -335,11 +375,8 @@ private:
     WaveEngine     _wave;
     BodyEngine     _body;
     SamplerEngine  _sampler;
-    bool           _last_gate = false;
-    SoftSwitch     _engine_fade;
     EngineId       _engine_id = ENGINE_SYNTH;
     EngineId       _pending_engine = ENGINE_SYNTH;
-    bool           _switching = false;
     bool           _step_on = false;
     // STEP-Einstiegs-Snap (spec 2026-07-23 sampler-performance-fixes).
     // _step_seen unterscheidet die erste Beobachtung des Schalters von einer
@@ -349,8 +386,6 @@ private:
     bool           _step_seen = false;
     bool           _step_snap = false;
     bool           _inhibit = false;
-    bool           _note_suppressed = false;   // last fire was swallowed
-    float          _last_master_hz = -1.f;
 
     IPartEngine* _engine_for(EngineId e) {
         switch (e) {
@@ -415,7 +450,9 @@ private:
     void _fire_trigger();
     void _gate_edge(bool g);
 
-    // Control raster. Both this counter and SynthEngine::_ctrl_ctr init to 0
+    // Control raster (_ctrl_ctr itself is declared with the per-sample hot
+    // block at the top of this section). Both this counter and
+    // SynthEngine::_ctrl_ctr init to 0
     // and advance once per call to their respective process(), so while both
     // run continuously they fire on the same samples (0, kCtrlInterval,
     // 2*kCtrlInterval, ...), and _control_tick() runs before _engine->
@@ -456,7 +493,6 @@ private:
     // too. That is acceptable (it is a diagnostic engine, not the audio
     // path), just not "aligned" in the sense the rest of this comment
     // describes.
-    int _ctrl_ctr = 0;
 
     // Target cache: _control_tick() both fills it and pushes it to the
     // engine via set_targets() -- process() no longer pushes it itself, it
@@ -553,7 +589,8 @@ private:
     float _color_eff = 0.f;      // knob + MOTION swing, as last pushed to _chord
     float _overlap = 1.f;        // DENS knob; effective value computed in _control_tick
     float _overlap_eff = 1.f;    // knob + MOTION swing, as last pushed to _sampler
-    int   _gate_ctr = 0;
+    // _gate_ctr, its per-sample twin, is declared with the hot block at the top
+    // of this section; this one is read only on a fire.
     int   _gate_len = 240;   // ~5 ms @ 48k, recomputed in init()
     float _sr = 48000.f;
 
