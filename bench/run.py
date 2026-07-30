@@ -46,8 +46,14 @@ READELF = r"C:\Program Files\DaisyToolchain\bin\arm-none-eabi-readelf.exe"
 OPENOCD_TCL_ADDRESS = ("127.0.0.1", 6666)
 OPENOCD_SHUTDOWN = b"shutdown\x1a"
 
+OPTIMIZATION_FLAGS = {
+    "o2": "-O2",
+    "o3": "-O3",
+    "o3-lto": "-O3 -flto",
+}
 
-def build(families, itcm_hot=False):
+
+def build(families, itcm_hot=False, optimization="o2"):
     # Do not ask libDaisy's default `all` target for bench.bin: one flat
     # binary spanning SRAM (0x24000000) and QSPI (0x90040000) would encode the
     # address gap. Build the ELF, then extract two explicit artifacts.
@@ -59,6 +65,7 @@ def build(families, itcm_hot=False):
     subprocess.run(
         ["make", "-j8", "BENCH_FAMILIES=%s" % " ".join(families),
          "BENCH_ITCM_HOT=%d" % int(itcm_hot),
+         "BENCH_OPTIMIZATION=%s" % optimization,
          "build/bench.elf"],
         cwd=HERE,
         check=True,
@@ -300,9 +307,9 @@ def parse(lines):
     for line in lines:
         if line.startswith("BENCH_BEGIN,"):
             f = line.split(",")
-            # Layout is fail-closed like families: an older 8-field image
-            # cannot be accepted as an ITCM measurement by guessing.
-            if len(f) != 9:
+            # Optimization is fail-closed like layout and families: an older
+            # image cannot be accepted by guessing what the compiler did.
+            if len(f) != 10:
                 continue
             header = {
                 "githash": f[1],
@@ -313,6 +320,7 @@ def parse(lines):
                 "device_id": f[6],
                 "families": tuple(f[7].split()),
                 "layout": f[8].strip(),
+                "optimization": f[9].strip(),
             }
         elif line.startswith("BENCH,"):
             f = line.split(",")
@@ -336,12 +344,15 @@ class BenchValidationError(ValueError):
     pass
 
 
-def validate_captures(captures, profile, expected_layout=None):
+def validate_captures(
+    captures, profile, expected_layout=None, expected_optimization=None
+):
     """Reject any repeat capture that cannot be accepted as hardware evidence."""
     expected_rowset = protocol_rowset(profile)
     expected_rows = None
     expected_identity = None
     first_layout = None
+    first_optimization = None
     for run_index, (header, rows, _) in enumerate(captures, start=1):
         identity = (header["qspi_sha256"], header["device_id"])
         if expected_identity is None:
@@ -363,6 +374,27 @@ def validate_captures(captures, profile, expected_layout=None):
             raise BenchValidationError(
                 "run %d reports layout %s but requested layout %s"
                 % (run_index, layout, expected_layout)
+            )
+        optimization = header["optimization"]
+        if optimization not in OPTIMIZATION_FLAGS:
+            raise BenchValidationError(
+                "run %d reports unknown optimization %s"
+                % (run_index, optimization)
+            )
+        if first_optimization is None:
+            first_optimization = optimization
+        elif optimization != first_optimization:
+            raise BenchValidationError(
+                "run %d optimization differs from run 1: %s vs %s"
+                % (run_index, optimization, first_optimization)
+            )
+        if (
+            expected_optimization is not None
+            and optimization != expected_optimization
+        ):
+            raise BenchValidationError(
+                "run %d reports optimization %s but requested optimization %s"
+                % (run_index, optimization, expected_optimization)
             )
         reported = tuple(header["families"])
         if reported != tuple(profile.families):
@@ -756,14 +788,20 @@ def write_results(out_dir, captures, profile, profile_name):
     stamp = datetime.date.today().isoformat()
     base = os.path.join(
         out_dir,
-        "%s-%s-%s-%s"
-        % (stamp, header["githash"], profile_name, header["layout"]),
+        "%s-%s-%s-%s-%s"
+        % (
+            stamp,
+            header["githash"],
+            profile_name,
+            header["layout"],
+            header["optimization"],
+        ),
     )
     fingerprint = device_fingerprint(header["device_id"])
 
     with open(base + ".csv", "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
-        w.writerow(["run", "profile", "layout", "qspi_sha256",
+        w.writerow(["run", "profile", "layout", "optimization", "qspi_sha256",
                     "device_fingerprint", "family", "name", "avg_cyc", "max_cyc",
                     "pct_avg", "pct_max", "checksum"])
         for run_index, (run_header, run_rows, _) in enumerate(captures, start=1):
@@ -773,6 +811,7 @@ def write_results(out_dir, captures, profile, profile_name):
                     run_index,
                     profile_name,
                     run_header["layout"],
+                    run_header["optimization"],
                     run_header["qspi_sha256"],
                     run_fingerprint,
                     r["family"],
@@ -802,6 +841,13 @@ def write_results(out_dir, captures, profile, profile_name):
         )
         fh.write("## Gate ledger\n\n")
         fh.write("Execution layout: `%s`.\n\n" % header["layout"])
+        fh.write(
+            "Optimization: `%s` (`%s`).\n\n"
+            % (
+                header["optimization"],
+                OPTIMIZATION_FLAGS[header["optimization"]],
+            )
+        )
         fh.write("Profile `%s` — families: %s\n\n"
                  % (profile_name,
                     ", ".join("`%s`" % f for f in profile.families)))
@@ -820,7 +866,7 @@ def write_results(out_dir, captures, profile, profile_name):
             fh.write("- none\n")
         fh.write("\n")
         fh.write("Measured on a Daisy Seed (STM32H750). %s Hz core clock, "
-                 "block size %s, %s, `-ffast-math -funroll-loops`. "
+                 "block size %s, %s. "
                  "Block budget %d cycles.\n\n"
                  % (header["clock"], header["block"], header["cache"],
                     BUDGET_CYCLES))
@@ -883,6 +929,12 @@ def main():
         help="link the pre-registered audio hotset into ITCM",
     )
     ap.add_argument(
+        "--optimization",
+        default="o2",
+        choices=tuple(OPTIMIZATION_FLAGS),
+        help="compiler optimization identity carried by the firmware",
+    )
+    ap.add_argument(
         "--program-qspi",
         action="store_true",
         help=(
@@ -911,7 +963,11 @@ def main():
 
     try:
         identity = (
-            build(profile.families, itcm_hot=args.itcm_hot)
+            build(
+                profile.families,
+                itcm_hot=args.itcm_hot,
+                optimization=args.optimization,
+            )
             if not args.no_build
             else prepare_existing_artifacts()
         )
@@ -969,6 +1025,7 @@ def main():
             captures,
             profile,
             expected_layout="itcm-hot" if args.itcm_hot else "axi",
+            expected_optimization=args.optimization,
         )
     except BenchValidationError as error:
         print("ERROR: %s" % error, file=sys.stderr)

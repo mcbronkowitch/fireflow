@@ -212,11 +212,18 @@ def bench_row(name, avg_cyc, max_cyc, checksum):
 
 def capture_lines(
     rows, *, anchors=(), device_id=DEVICE_ID, qspi_sha256=QSPI_SHA256,
-    families=ALL_FAMILIES, layout="axi"
+    families=ALL_FAMILIES, layout="axi", optimization="o2"
 ):
     return [
-        "BENCH_BEGIN,%s,480000000,96,dcache+icache,%s,%s,%s,%s"
-        % (runner.current_head(), qspi_sha256, device_id, families, layout),
+        "BENCH_BEGIN,%s,480000000,96,dcache+icache,%s,%s,%s,%s,%s"
+        % (
+            runner.current_head(),
+            qspi_sha256,
+            device_id,
+            families,
+            layout,
+            optimization,
+        ),
         *rows,
         *anchors,
         "BENCH_END",
@@ -261,7 +268,7 @@ class ParseContract(unittest.TestCase):
     def test_parse_reads_the_families_and_layout_fields(self):
         lines = [
             "BENCH_BEGIN,abc1234,480000000,96,dcache+icache,"
-            + "0" * 64 + ",dead,system voice,itcm-hot\n",
+            + "0" * 64 + ",dead,system voice,itcm-hot,o2\n",
             "BENCH,system,empty_callback,2,12,0.00,0.00,ea306fb5\n",
             "BENCH_END\n",
         ]
@@ -274,6 +281,28 @@ class ParseContract(unittest.TestCase):
         lines = [
             "BENCH_BEGIN,abc1234,480000000,96,dcache+icache,"
             + "0" * 64 + ",dead,system voice\n",
+            "BENCH,system,empty_callback,2,12,0.00,0.00,ea306fb5\n",
+            "BENCH_END\n",
+        ]
+        self.assertIsNone(runner.parse(lines))
+
+    def test_parse_reads_layout_and_optimization_fields(self):
+        lines = [
+            "BENCH_BEGIN,abc1234,480000000,96,dcache+icache,"
+            + "0" * 64
+            + ",dead,system voice,itcm-hot,o3\n",
+            "BENCH,system,empty_callback,2,12,0.00,0.00,ea306fb5\n",
+            "BENCH_END\n",
+        ]
+        header, _rows, _anchors = runner.parse(lines)
+        self.assertEqual(header["layout"], "itcm-hot")
+        self.assertEqual(header["optimization"], "o3")
+
+    def test_parse_rejects_a_header_without_optimization(self):
+        lines = [
+            "BENCH_BEGIN,abc1234,480000000,96,dcache+icache,"
+            + "0" * 64
+            + ",dead,system voice,itcm-hot\n",
             "BENCH,system,empty_callback,2,12,0.00,0.00,ea306fb5\n",
             "BENCH_END\n",
         ]
@@ -292,6 +321,19 @@ class ItcmLayoutContract(unittest.TestCase):
 
         self.assertIn(
             "BENCH_ITCM_HOT=1",
+            run.call_args_list[1].args[0],
+        )
+
+    def test_build_requests_the_optimization_make_mode(self):
+        with (
+            mock.patch.object(runner.subprocess, "run") as run,
+            mock.patch.object(
+                runner, "prepare_existing_artifacts", return_value={}
+            ),
+        ):
+            runner.build(("system",), itcm_hot=True, optimization="o3")
+        self.assertIn(
+            "BENCH_OPTIMIZATION=o3",
             run.call_args_list[1].args[0],
         )
 
@@ -667,7 +709,7 @@ class RunContract(unittest.TestCase):
         self.assertEqual(csv_text.count("\n1,"), 68)
         self.assertEqual(csv_text.count("\n2,"), 68)
         self.assertIn(
-            "run,profile,layout,qspi_sha256,device_fingerprint",
+            "run,profile,layout,optimization,qspi_sha256,device_fingerprint",
             csv_text,
         )
         self.assertIn(QSPI_SHA256, csv_text)
@@ -757,6 +799,42 @@ class ProfileContract(unittest.TestCase):
         )
 
         runner.validate_captures([capture, capture], resolve_profile("system"))
+
+    def test_repeat_rejects_mixed_optimizations(self):
+        rows = self.system_rows()
+        o2 = runner.parse(capture_lines(rows, families="system", optimization="o2"))
+        o3 = runner.parse(capture_lines(rows, families="system", optimization="o3"))
+        with self.assertRaisesRegex(
+            runner.BenchValidationError, "optimization differs"
+        ):
+            runner.validate_captures([o2, o3], resolve_profile("system"))
+
+    def test_requested_o3_rejects_an_o2_capture(self):
+        rows = self.system_rows()
+        capture = runner.parse(
+            capture_lines(rows, families="system", optimization="o2")
+        )
+        with self.assertRaisesRegex(
+            runner.BenchValidationError, "requested optimization o3"
+        ):
+            runner.validate_captures(
+                [capture, capture],
+                resolve_profile("system"),
+                expected_optimization="o3",
+            )
+
+    def test_unknown_reported_optimization_is_rejected(self):
+        rows = self.system_rows()
+        capture = runner.parse(
+            capture_lines(rows, families="system", optimization="turbo")
+        )
+        with self.assertRaisesRegex(
+            runner.BenchValidationError, "unknown optimization turbo"
+        ):
+            runner.validate_captures(
+                [capture, capture],
+                resolve_profile("system"),
+            )
 
     def test_dtcm_ab_rejects_unequal_checksums(self):
         """Moving the gate object may change its price, never its output."""
@@ -881,7 +959,7 @@ class ProfileContract(unittest.TestCase):
                 temp, [capture, capture], resolve_profile("system"), "system"
             )
 
-            self.assertTrue(base.endswith("-system-axi"))
+            self.assertTrue(base.endswith("-system-axi-o2"))
             with open(base + ".md", encoding="utf-8") as fh:
                 md = fh.read()
             self.assertIn("system", md)
@@ -893,6 +971,31 @@ class ProfileContract(unittest.TestCase):
                 csv_text = fh.read()
             self.assertIn("profile", csv_text.splitlines()[0])
             self.assertIn(",system,", csv_text)
+
+    def test_evidence_persists_layout_and_optimization_identity(self):
+        capture = runner.parse(
+            capture_lines(
+                self.system_rows(),
+                families="system",
+                layout="itcm-hot",
+                optimization="o3",
+            )
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(
+                temp, [capture, capture], resolve_profile("system"), "system"
+            )
+            with open(base + ".csv", encoding="utf-8") as stream:
+                csv_text = stream.read()
+            with open(base + ".md", encoding="utf-8") as stream:
+                md_text = stream.read()
+        self.assertTrue(base.endswith("-system-itcm-hot-o3"))
+        self.assertIn(
+            "run,profile,layout,optimization,qspi_sha256,device_fingerprint",
+            csv_text,
+        )
+        self.assertIn("Optimization: `o3` (`-O3`).", md_text)
+        self.assertNotIn("`-ffast-math -funroll-loops`", md_text)
 
     def test_gate_ledger_marks_wave_acceptance_applied_when_the_profile_declares_it(self):
         """The 'system' profile declares wave_acceptance, so the ledger

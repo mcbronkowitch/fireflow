@@ -4,9 +4,14 @@
 #include <daisy_seed.h>   // daisy::System::GetSysClkFreq(), CMSIS SCB/SCB_CCR_*_Msk
 
 #include "bench_layout.h"
+#include "bench_optimization.h"
 
 #ifndef BENCH_LAYOUT
 #define BENCH_LAYOUT "unknown"
+#endif
+
+#ifndef BENCH_OPTIMIZATION
+#define BENCH_OPTIMIZATION "unknown"
 #endif
 
 namespace bench {
@@ -85,7 +90,7 @@ void DTCM_REPORT_TEXT report_begin(
                                    : "none";
     const auto* uid = reinterpret_cast<const uint32_t*>(UID_BASE);
     static const char DTCM_REPORT_RODATA kBeginFormat[] =
-        "BENCH_BEGIN,%s,%lu,96,%s,%s,%08lx%08lx%08lx,%s,%s\n";
+        "BENCH_BEGIN,%s,%lu,96,%s,%s,%08lx%08lx%08lx,%s,%s,%s\n";
     logf(kBeginFormat,
          githash,
          (unsigned long)clk,
@@ -95,7 +100,8 @@ void DTCM_REPORT_TEXT report_begin(
          static_cast<unsigned long>(uid[1]),
          static_cast<unsigned long>(uid[2]),
          families,
-         BENCH_LAYOUT);
+         BENCH_LAYOUT,
+         BENCH_OPTIMIZATION);
 }
 
 void report_end()

@@ -45,9 +45,11 @@ debug probe, and captures its semihosting output **twice** (`--repeat 2` is
 the default — see "Anchor mode's audio" below for what that means out
 loud), compares the two runs' unique row sets and checksums, enforces every
  gate the profile declares on every run, and writes both complete captures
- to `../docs/bench/YYYY-MM-DD-<githash>-<profile>-<layout>.md` and `.csv`.
- The layout is `axi` by default or `itcm-hot` with `--itcm-hot`. The CSV
- carries a run index, the profile name, the execution layout, the live QSPI
+ to `../docs/bench/YYYY-MM-DD-<githash>-<profile>-<layout>-<optimization>.md`
+ and `.csv`. The layout is `axi` by default or `itcm-hot` with `--itcm-hot`.
+ The optimization identity is `o2` (the default, `-O2`), `o3` (`-O3`), or
+ `o3-lto` (`-O3 -flto`), selected with `--optimization`. The CSV carries a
+ run index, the profile name, the execution layout, optimization identity, the live QSPI
  payload digest, and a SHA-256 device fingerprint on every row; the Markdown records those
 identities, a gate ledger (which gates ran and passed, and which were not
 applicable and why), and both offline/anchor tables. Exit code 0 means at
@@ -61,9 +63,15 @@ Useful flags: `--profile NAME` (default `full`; see the table above and
 `bench/profiles.py` for what ships), `--repeat N` (default and minimum 2),
 `--out-dir DIR` (default `../docs/bench`), `--build-only`, `--no-build`,
  `--timeout SECONDS` (default 600, per run), `--interface CFG` (see below),
- `--program-qspi`, and `--itcm-hot`. The last flag links the pre-registered
+ `--program-qspi`, `--itcm-hot`, and `--optimization {o2,o3,o3-lto}`.
+ `--itcm-hot` links the pre-registered
  audio hotset into ITCM; use it consistently for build, QSPI binding, and
  measurement so the host can reject an AXI/ITCM mix-up.
+
+`C_USR_FLAGS = -ffast-math -funroll-loops` is currently dormant in the
+underlying build and is deliberately not corrected in this optimization
+identity round. The reported optimization identifies the requested benchmark
+mode; compiler-flag selection is a separate follow-up.
 
 ## Programming the WAVE bank
 
@@ -148,9 +156,10 @@ programming cycle and reads like a hardware fault.
 Every measurement also SHA-256 hashes the 65,024 live bytes through the
 Seed's memory-mapped QSPI interface before `BENCH_BEGIN`; the host compares
  that firmware-reported digest with the extracted payload. `BENCH_BEGIN` also
- reports the Seed's 96-bit MCU UID and the `axi` or `itcm-hot` execution
- layout. The UID must strictly match the programming receipt, and every repeat
- must report the requested layout. Together these checks catch a different
+ reports the Seed's 96-bit MCU UID, the `axi` or `itcm-hot` execution layout,
+ and the requested optimization identity. The UID must strictly match the
+ programming receipt, and every repeat must report the requested layout and
+ optimization. Together these checks catch a different
  Seed, a later QSPI overwrite, blank/wrong QSPI, or a stale/mixed execution
  layout even if an old local receipt remains. Accepted evidence persists the
  payload digest and a stable SHA-256 fingerprint of that UID without
