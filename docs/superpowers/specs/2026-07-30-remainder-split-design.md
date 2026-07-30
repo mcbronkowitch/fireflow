@@ -202,6 +202,20 @@ measured; this section exists so that cannot happen again.
    what round 1 could not do. If it disagrees with round 1's additive +2.29,
    this round's figure supersedes it — but the two are from different builds, so
    the disagreement itself is subject to point 3.
+6. **`fx_flux_hot` covers three of FLUX's four operating-point axes, not all
+   four.** Found by task 1's implementer, recorded here rather than left for
+   review. It re-prices STAGES, the flux rate and FEEDBACK; it does **not** set
+   DRIVE, so it runs at `Flux::init`'s `set_drive(0.f)` while a deck runs
+   `set_drive(0.85f)` (`configure_worst_bbd`). DRIVE's cost therefore stays in
+   `remainder'`. Reading says that cost is **zero**: `BbdEcho::SetDrive`
+   (`engine/fx/bbd.h:560-564`) writes only `sat_in_` and `sat_out_`, and
+   `Process` applies `fast_tanh(x * sat_in_) * sat_out_` unconditionally
+   (`bbd.h:573`) — DRIVE scales that expression's gains without adding or
+   removing an operation, so the per-sample instruction path is identical. That
+   is **reading, not measurement**, and it is the reason DRIVE was left out
+   rather than folded in: adding a fourth axis would stop the
+   `fx_flux_hot − fx_flux_sdram` difference from isolating the three that
+   round 1 estimated. The result section must state this residual.
 
 ## 7. Non-goals
 
