@@ -47,8 +47,8 @@ is actually built today, and what is still design-only.
   overshoot must come from inside the blocks. The same round also proved that
   code layout alone moves the gate by ~2 points at an unchanged checksum,
   which restates the target: **the overshoot is 10.77 points, not 12.88.**
-  Branch `perf/instrument-ablation`, not merged. See "Instrument-level
-  ablation" below.
+  Branch `perf/instrument-ablation`, merged as `1e9ec05`. See
+  "Instrument-level ablation" below.
   **Update, 2026-07-29 (deck interior split):** the gate reads **110.10** in
   this build, so **the overshoot is 10.10 points**. Of the 7.645 unpriced points
   per deck, **6.85 survives both operating-point corrections this round
@@ -58,7 +58,7 @@ is actually built today, and what is still design-only.
   FLUX comes before any further split. The round also reprices the "cut a voice"
   arithmetic: the **marginal** voice costs 3.97 points, not the 4.48 average, so
   one voice per deck is worth ≈7.9 points — 78 % of the gap, not all of it.
-  Branch `perf/deck-interior-ablation`, not merged. See "Deck-interior
+  Branch `perf/deck-interior-ablation`, merged as `57201ff`. See "Deck-interior
   ablation" below.
   **Update, 2026-07-30 (the remainder split; it is `Part`-level code):** the
   gate reads **110.51** in this build, so **the overshoot is 10.51 points**, not
@@ -73,7 +73,25 @@ is actually built today, and what is still design-only.
   round 1. Next is a **fix round inside `Part::_control_tick`** — the first
   non-diagnostic round in this sequence — with the voice cut (≈7.9 points) now
   clearly the second option rather than the first. Branch
-  `perf/remainder-split`, not merged. See "Remainder split" below.
+  `perf/remainder-split`, merged as `a93327e`. See "Remainder split" below.
+  **Update, 2026-07-30 (the per-sample call boundary; the first round that changed
+  `engine/`):** the gate reads **104.91** `pct_avg` / **108.69** `pct_max`, so
+  **the overrun is 4.91 / 8.69**, down from 6.50 / 10.76. Making `Part`'s
+  per-sample body inlinable at every call site recovered **about 1.6 points,
+  ± 0.5** — roughly a quarter to a third of the `Part`-level bucket — and it is
+  **bit-exact**: all 23 bench checksums are identical across all four builds of
+  the round and to round 3's. This was the first round in the sequence that could
+  have changed the sound, and it did not. Two findings outlast the points. **Only
+  rows that run their `Part` inside `Instrument::process` improved** —
+  `deck_shell`, the row built to isolate one `Part`, moved +0.20 — so a row that
+  isolates a component need not reproduce *how that component is called*. And
+  **this bench cannot demonstrate a change smaller than about 0.5 points on the
+  gate**, because every comparison it can make is cross-build and cross-build
+  layout drift moves rows containing no `Part` by up to 0.49. **No further
+  bit-exact `Part` round is recommended until that floor is lowered**; the two
+  remaining candidates — the block entry point and the voice cut (≈7.9 points) —
+  are both listening decisions rather than checksum ones. Branch
+  `perf/part-per-sample`. See "Per-sample call boundary" below.
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
@@ -1256,7 +1274,7 @@ family (`bench/workloads_instr.cpp`) plus the existing gate, so the budget
 partitions exhaustively **inside a single run**. No `engine/` file was
 touched **by this round's own change** — the wider compared interval has one
 comment-only edit in `bbd.h` (below), which cannot reach codegen. Branch:
-`perf/instrument-ablation`, **not merged**. Spec:
+`perf/instrument-ablation`, **merged as `1e9ec05`**. Spec:
 `docs/superpowers/specs/2026-07-29-instrument-ablation-design.md` §8.
 Evidence: `docs/bench/2026-07-29-930ec17-ablate.md` / `.csv`.
 
@@ -1562,6 +1580,65 @@ Not a guaranteed close, and none of these points is free to take: a `Part`'s
 per-sample loop and control tick can be tightened, not deleted. But for the
 first time in three rounds the largest named quantity is code rather than a
 residue.
+
+### Per-sample call boundary ✅ (the first round that changed `engine/`)
+
+Branch `perf/part-per-sample`. Spec
+`docs/superpowers/specs/2026-07-30-part-per-sample-design.md` §9, evidence
+`docs/bench/2026-07-30-7272b27-ablate.{md,csv}` (a same-session baseline, round
+3's source rebuilt) against `-dc17cdc-`, `-86cf817-` and `-cd639ec-`, two runs
+each. **The first round in this sequence that touched `engine/`**, and therefore
+the first that could have changed the sound.
+
+**The gate fell 106.50 → 104.91 `pct_avg` (110.76 → 108.69 `pct_max`), so the
+overrun is 4.91 / 8.69.** Round 3 named `Part`-level code as 2.65–4.00 points per
+deck; this round took **about a quarter to a third of it** by making `Part`'s
+per-sample body inlinable at every call site, so the nine-register `stmdb`/`ldmia`
+pair and the `vpush {d8-d9}` that `Part::process` paid 96 times per block are now
+paid once per block. Three smaller items followed in one build: two were below
+this bench's resolution, and one was reverted because its stated premise — "two
+wasted `vmul`" — turned out on the disassembly to be a trade rather than a
+removal, leaving it with no demonstrable justification either way.
+
+**Quote the saving as 1.6 ± 0.5, not 1.59.** The three builds that all contain
+the change read the gate at 104.40, 105.36 and 104.91.
+
+**Bit-exact, and measured as such.** All 23 rows returned identical checksums in
+every run of all four builds, and identical to round 3's `ccd5f12`. The audio is
+unchanged, and here that is a measurement rather than an argument.
+
+**Only rows that run their `Part` inside `Instrument::process` improved.** The
+four `Instrument`-based rows moved −1.38 to −2.71 `pct_avg`; the two bare-`Part`
+rows moved −1.16 and −1.25; and **`deck_shell`, the row round 3 built to isolate
+one `Part`, moved +0.20** — inside the control group's own drift, so neither a
+saving nor a regression. `Instrument::process` owns its own 96-sample loop
+(`engine/instrument.cpp:76`) and is the only non-bench caller of `Part::process`
+(`:112`, `:125`), so it is the production call shape and `deck_shell`'s bench loop
+is not. **A row that isolates a component does not necessarily reproduce how that
+component is called**, and for a change *at* the call boundary that is the
+property that matters. The round's sharpest pre-registered row-level prediction
+was placed on the row that could not see the change.
+
+**This bench cannot demonstrate a change smaller than about 0.5 points on the
+gate.** Run-to-run spread inside one build is ≤ 0.04 on `pct_avg` and the gate
+reads identically in both runs of all four builds — but every comparison the round
+can make is cross-build, and cross-build layout drift moved `fx_grit`, a row
+containing no `Part`, by 0.47–0.49, while a **−368-byte** `.text` change moved the
+four `Instrument` rows over a 2.11-point spread. That bounds what any future
+bit-exact round can *show*, whatever it actually saves, and it is this round's
+most useful output for whoever plans the next one.
+
+**Recommendation: no further bit-exact `Part` round until that floor is lowered.**
+The residue is real — roughly 1.9–3.0 points per deck, still 68–75 % of what is
+left of the overrun, and still free of sonic cost — but the one lever whose size
+the ISA could predict has now been pulled, and `Part::process` no longer exists as
+an out-of-line symbol to pull it again. The two candidates large enough for this
+bench as it stands are both listening decisions rather than checksum ones: the
+spec's Stage 2 block entry point, which is *not* bit-exact because
+`Instrument::process` interleaves the decks per sample and CHOKE reads the
+priority deck each sample, and the voice cut at ≈7.9 points. Lowering the bench's
+floor — a same-build A/B, or any way to hold layout fixed across a change — may be
+worth more than either.
 
 ### BODY playability ✅ (extends M5j)
 
