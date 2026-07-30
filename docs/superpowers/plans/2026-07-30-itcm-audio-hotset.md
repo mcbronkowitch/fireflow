@@ -56,10 +56,10 @@ STM32H750/libDaisy, Python `unittest`, OpenOCD.
 
 ### Task 3: Hardware evidence
 
-- [ ] Build the committed AXI control, bind QSPI, collect two runs.
-- [ ] Confirm it is within 0.25 points of `8702bc8`.
-- [ ] Build the committed ITCM variant, bind QSPI, collect two runs.
-- [ ] Confirm identical checksums and apply the 1.00-point decision rule.
-- [ ] Record both evidence sets, the delta table, capacity, and retain/revert
+- [x] Build the committed AXI control, bind QSPI, collect two runs.
+- [x] Confirm it is within 0.25 points of `8702bc8`.
+- [x] Build the committed ITCM variant, bind QSPI, collect two runs.
+- [x] Confirm identical checksums and apply the 1.00-point decision rule.
+- [x] Record both evidence sets, the delta table, capacity, and retain/revert
   decision in the design and roadmap.
-- [ ] Run final verification and commit the evidence.
+- [x] Run final verification and commit the evidence.

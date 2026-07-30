@@ -114,7 +114,28 @@ correctness requirement, not a timing choice.
 The 1.00-point threshold prices using most of a scarce 64 KiB execution
 memory. A smaller result is not sufficient justification for this hotset.
 
-## 7. Constraints
+## 7. Result
+
+Accepted evidence is
+`docs/bench/2026-07-30-d570e47-system-{axi,itcm-hot}.{md,csv}`.
+The linked hot section is 41,984 bytes at `0x00000100`; including the reserved
+prefix, it occupies 42,240 of 65,536 ITCM address bytes (64.45 %).
+
+| run | AXI avg | ITCM avg | paired saving | AXI max | ITCM max | paired saving |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 104.66 | 98.65 | **6.01** | 108.80 | 102.64 | **6.16** |
+| 2 | 104.67 | 98.65 | **6.02** | 108.85 | 102.71 | **6.14** |
+
+Every gate checksum is `483e8e82`. Comparing every ITCM run against both AXI
+runs, the minimum saving is 6.01 average and 6.09 maximum. The AXI replay is
+within 0.10 points of the preceding accepted DTCM maximum and within 0.02
+points average. The hotset therefore passes the keep rule.
+
+The accepted real-callback anchors are 98.81--98.82 % average and
+102.78--102.79 % maximum. The average is below budget, but the maximum is not;
+proceed to the separate `-O3`/LTO round.
+
+## 8. Constraints
 
 - Work on `codex/perf-tcm-ladder`, never directly on `main`.
 - Do not change engine behavior or voices.

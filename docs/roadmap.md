@@ -135,6 +135,17 @@ is actually built today, and what is still design-only.
   remain non-negotiable, so the next ordered round is ITCM. Branch
   `codex/perf-tcm-ladder`; evidence
   `docs/bench/2026-07-30-8702bc8-system.{md,csv}`.
+  **Update, 2026-07-30 (ITCM audio hotset):** moving 41,984 bytes of the
+  measured per-sample audio path into ITCM saves **at least 6.01 CPU points
+  average and 6.09 maximum** across every AXI/ITCM pairing. All four gate
+  captures return checksum `483e8e82`; four voices per deck and all DSP
+  settings are unchanged. The retained gate is **98.65 % average /
+  102.64–102.71 % maximum** offline and **98.81–98.82 % /
+  102.78–102.79 %** in the real callback. A first probe at ITCM address zero
+  produced silence and was rejected; reserving the first 256 bytes restored
+  bit-exact output. ITCM passes its pre-registered keep rule, but the maximum
+  is still over budget, so the next ordered round is `-O3`/LTO. Evidence
+  `docs/bench/2026-07-30-d570e47-system-{axi,itcm-hot}.{md,csv}`.
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
@@ -1803,6 +1814,38 @@ pre-registered 0.50-point threshold in both metrics and both runs; direction
 and spread checks pass. **Keep the DTCM placement for the firmware shell.**
 It does not close the budget, so the next round is the ordered ITCM A/B. No
 voice count, DSP setting, or audio buffer residency changed.
+
+### ITCM audio hotset ✅ (paired AXI/ITCM builds)
+
+Branch `codex/perf-tcm-ladder`. Spec
+`docs/superpowers/specs/2026-07-30-itcm-audio-hotset-design.md`, evidence
+`docs/bench/2026-07-30-d570e47-system-{axi,itcm-hot}.{md,csv}`.
+
+The ten-object audio hotset links 41,984 bytes of executable code at
+`0x00000100`; the reserved null prefix makes its total ITCM address footprint
+42,240 of 65,536 bytes (64.45 %). The `Instrument` state remains in DTCM.
+Layout identity is carried on the wire and in evidence, so an AXI image cannot
+be accepted as an ITCM run.
+
+| run | AXI avg | ITCM avg | paired saving | AXI max | ITCM max | paired saving |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 104.66 | 98.65 | **6.01** | 108.80 | 102.64 | **6.16** |
+| 2 | 104.67 | 98.65 | **6.02** | 108.85 | 102.71 | **6.14** |
+
+All gate captures return checksum `483e8e82`. Across the stricter comparison
+of every ITCM run against both AXI runs, the minimum saving is **6.01 average /
+6.09 maximum**, far above the pre-registered 1.00-point threshold. **Keep the
+ITCM hotset for the firmware shell.** The real callback agrees: 98.81–98.82 %
+average and 102.78–102.79 % maximum.
+
+The first hardware probe had placed the first weak function at
+`0x00000000`. It kept executing but collapsed the instrument audio sum to
+zero; the BBD checksum became `50306fb5`, the fold of the constant eight
+active voices. That apparent eight-point saving was rejected. Reserving
+`0x00000000..0x000000ff` restored every AXI checksum in two diagnostic runs
+and in both accepted ITCM runs. The retained, sound-preserving result is the
+six-point figure above. Since the maximum remains above 100 %, the next
+ordered round is `-O3`/LTO; half-rate reverb remains behind it.
 
 ### BODY playability ✅ (extends M5j)
 
