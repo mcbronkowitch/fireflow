@@ -349,6 +349,34 @@ directions are not claimed where the bench can settle them.
    blocks, a lane fire per ~72 blocks). None of Stage 1's items touch those
    events, so this round quotes both metrics and expects the saving to appear in
    both.
+9. **§5.1 failed to name the metric its bands are read on. That is a defect in
+   this document's own pre-registration**, and it is recorded here rather than
+   repaired in place, because §5 must stay byte-identical.
+
+   The choice is made **after the baseline run and before any `engine/` change
+   exists**, so it cannot be tuned to a result. The baseline
+   (`docs/bench/2026-07-30-7272b27-ablate.csv`, commit `f6e4b2c`) rebuilt round
+   3's source unchanged — all 23 checksums identical — and therefore measures this
+   bench's noise floor directly:
+
+   | metric | largest movement at identical source | on the gate | on `deck_shell` |
+   |---|---:|---:|---:|
+   | `pct_max` | **0.25** (`instrument_worst_bbd`) | +0.25 | −0.01 |
+   | `pct_avg` | **0.02** (`fx_flux_hot`) | 0.00 | 0.00 |
+
+   **§5.1's bands are therefore read on `pct_avg`.** On `pct_max` the gate's own
+   drift (0.25) covers a third of item 4's predicted 0.40–0.70 and the whole of
+   the falsification band's lower edge, so a `pct_max` reading could neither
+   confirm nor refute the prediction. On `pct_avg` the predicted effect is an
+   order of magnitude above the floor.
+
+   `pct_max` is still reported for every row, per item 8, and any disagreement
+   between the two metrics is a finding to be stated rather than resolved by
+   picking the friendlier one.
+
+   This also strengthens §6.1: the cross-build drift that round 3 §9.5 warned
+   about, and that §6.1 called the round's central threat, is a **`pct_max`**
+   phenomenon. On `pct_avg` this build pair drifted by at most 0.02.
 
 ## 7. Non-goals
 
