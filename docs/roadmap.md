@@ -146,6 +146,30 @@ is actually built today, and what is still design-only.
   bit-exact output. ITCM passes its pre-registered keep rule, but the maximum
   is still over budget, so the next ordered round is `-O3`/LTO. Evidence
   `docs/bench/2026-07-30-d570e47-system-{axi,itcm-hot}.{md,csv}`.
+  **Update, 2026-07-30 (O3/LTO compiler ladder):** select O3 and ship root
+  `OPT = -O3`; do not add LTO or activate the dormant `C_USR_FLAGS`. Against
+  O2's two 98.65 % / 102.66--102.71 % offline and 98.81 % /
+  102.74--102.75 % callback runs, O3 measured 95.44--95.45 % /
+  99.46--99.51 % offline and 95.63 % / 99.52--99.54 % in the callback. Its
+  strict savings are **3.20 average and 3.15 maximum CPU points**. O2 retains
+  gate checksum `483e8e82`; O3 is deterministic at `3ad2d267` and has four
+  documented cross-mode checksum changes. The owner explicitly accepts
+  changed sound, so deterministic cross-mode differences are no longer an
+  automatic rejection; hashes do not prove inaudibility or perceptual
+  equivalence. O2 and O3 retain `0xa400` and `0xd8e0` byte ITCM sections,
+  respectively, with ITCM `LOAD` segments, all ten representative symbols in
+  ITCM, and the `0xc280`-byte instrument store at `0x200005c8` in DTCM.
+  O3+LTO is rejected before hardware: its ITCM section is empty, it has no ITCM
+  `LOAD`, seven representative symbols are missing, and three are in AXI SRAM
+  (its DTCM store remains at `0x20000528`). The O3 production ELF links without
+  overflow. O3 passes the offline and callback stop gate, so the ladder stops
+  before half-rate reverb. Evidence:
+  [O2 Markdown](bench/2026-07-30-1aa74ee-system-itcm-hot-o2.md),
+  [O2 CSV](bench/2026-07-30-1aa74ee-system-itcm-hot-o2.csv),
+  [O2 QSPI receipt](bench/2026-07-30-1aa74ee-system-itcm-hot-o2-qspi-verified.json),
+  [O3 Markdown](bench/2026-07-30-1aa74ee-system-itcm-hot-o3.md),
+  [O3 CSV](bench/2026-07-30-1aa74ee-system-itcm-hot-o3.csv), and
+  [O3 QSPI receipt](bench/2026-07-30-1aa74ee-system-itcm-hot-o3-qspi-verified.json).
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy

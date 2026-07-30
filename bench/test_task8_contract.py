@@ -58,6 +58,11 @@ class Task8Contract(unittest.TestCase):
         cls.engine_2x4 = ENGINE_2X4_SOURCE.read_text(encoding="utf-8")
         cls.makefile = MAKEFILE.read_text(encoding="utf-8")
 
+    def test_shipping_recipe_uses_the_accepted_o3_mode(self) -> None:
+        root_makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        self.assertRegex(root_makefile, r"(?m)^OPT\s*=\s*-O3$")
+        self.assertNotRegex(root_makefile, r"(?m)^LDFLAGS\s*\+=\s*-flto$")
+
     def test_engine_2x4_is_hoisted_and_included_not_copied(self) -> None:
         # The pure-move contract itself: both workload files reach the shared
         # header instead of each carrying their own copy.

@@ -1,0 +1,13 @@
+{
+  "address": 2416181248,
+  "artifacts": {
+    "elf_sha256": "73fa7a256ea30606e477474787253f8ab89d20f59740af322983523c9620ead3",
+    "programmer_elf_sha256": "538e7e673a69a79626faa4fb4d331d55201f8e0c8f89c27ac290039236ee16fb",
+    "qspi_sha256": "ac234ac7f7540ed5cd0e8b8496b84fca8084a3b2c05cc513aa4dad8ed811fc27",
+    "sram_elf_sha256": "0f14825ab7e4456650b205858f7654060904257c73bc56b5639bc2c7efb1c44d"
+  },
+  "device_id": "002000403230510b33313932",
+  "sha256": "ac234ac7f7540ed5cd0e8b8496b84fca8084a3b2c05cc513aa4dad8ed811fc27",
+  "size": 65024,
+  "verification": "swd-sram-target-byte-identity"
+}
