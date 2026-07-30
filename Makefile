@@ -35,6 +35,7 @@ CPP_SOURCES = \
 
 # Core location, and generic Makefile.
 SYSTEM_FILES_DIR = $(LIBDAISY_DIR)/core
+OPT = -O3
 include $(SYSTEM_FILES_DIR)/Makefile
 
 libs:

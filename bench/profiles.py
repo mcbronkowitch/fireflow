@@ -36,7 +36,7 @@ PROFILES = {
     # ceiling -- is answered by the three bbd rows alone, and leaving system
     # out is what makes it a small image that links without argument.
     #
-    # The price is that `verdict()` finds no `instrument_worst` anchor and
+    # The price is that `verdict()` finds no DTCM+BBD gate anchor and
     # reports "undetermined" rather than an anchored figure. That is correct
     # and not a defect: this profile prices a component, it does not judge
     # whether the instrument fits. Use `full` (or a later profile that carries
@@ -47,7 +47,7 @@ PROFILES = {
     ),
     # The cost-curve round (spec 2026-07-29-fx-cost-curves-design). Carries
     # `system` deliberately, unlike `bbd`: without it verdict() has no
-    # instrument_worst anchor and reports "undetermined", which is exactly
+    # DTCM+BBD gate anchor and reports "undetermined", which is exactly
     # how the BBD numbers came to stand for two days without a system
     # verdict. `body` (system + body) is the precedent that a two-family
     # image links.
@@ -67,7 +67,7 @@ PROFILES = {
     # The instrument-level ablation (spec 2026-07-29-instrument-ablation).
     # Carries `system` for two reasons, not one: it supplies the ladder's
     # fourth rung (instrument_worst_bbd, which the whole round is measured
-    # against), and without an instrument_worst anchor verdict() reports
+    # against), and without a DTCM+BBD gate anchor verdict() reports
     # "undetermined" -- which is how the BBD figures stood for two days with
     # no verdict attached.
     "ablate": Profile(

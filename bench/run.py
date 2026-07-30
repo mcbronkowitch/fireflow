@@ -7,15 +7,18 @@ import csv
 import datetime
 import hashlib
 import io
+import math
 import os
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import queue
 import threading
 
 from profiles import DEFAULT_PROFILE, WAVE_ACCEPTANCE, resolve
+from itcm_placement import ItcmPlacementError, validate_itcm_placement
 from qspi_tools import (
     QspiGuardError,
     prepare_split_artifacts,
@@ -43,11 +46,18 @@ PROGRAMMER_CFG = os.path.join(HERE, "openocd", "qspi-programmer.cfg")
 OBJCOPY = r"C:\Program Files\DaisyToolchain\bin\arm-none-eabi-objcopy.exe"
 OBJDUMP = r"C:\Program Files\DaisyToolchain\bin\arm-none-eabi-objdump.exe"
 READELF = r"C:\Program Files\DaisyToolchain\bin\arm-none-eabi-readelf.exe"
+NM = r"C:\Program Files\DaisyToolchain\bin\arm-none-eabi-nm.exe"
 OPENOCD_TCL_ADDRESS = ("127.0.0.1", 6666)
 OPENOCD_SHUTDOWN = b"shutdown\x1a"
 
+OPTIMIZATION_FLAGS = {
+    "o2": "-O2",
+    "o3": "-O3",
+    "o3-lto": "-O3 -flto",
+}
 
-def build(families, itcm_hot=False):
+
+def build(families, itcm_hot=False, optimization="o2"):
     # Do not ask libDaisy's default `all` target for bench.bin: one flat
     # binary spanning SRAM (0x24000000) and QSPI (0x90040000) would encode the
     # address gap. Build the ELF, then extract two explicit artifacts.
@@ -59,6 +69,7 @@ def build(families, itcm_hot=False):
     subprocess.run(
         ["make", "-j8", "BENCH_FAMILIES=%s" % " ".join(families),
          "BENCH_ITCM_HOT=%d" % int(itcm_hot),
+         "BENCH_OPTIMIZATION=%s" % optimization,
          "build/bench.elf"],
         cwd=HERE,
         check=True,
@@ -283,6 +294,14 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
     ),
 }
 
+ANCHOR_NAMES = (
+    "oliverb_solo_sram",
+    "tap_read_sdram",
+    "instrument_worst_bbd_dtcm",
+    "instrument_worst_bbd",
+    "instrument_worst",
+)
+
 
 def protocol_rowset(profile):
     """The (family, name) pairs a capture from this profile must contain."""
@@ -293,6 +312,12 @@ def protocol_rowset(profile):
     )
 
 
+def anchor_names(profile):
+    """The exact callback anchors this profile's compiled rows can emit."""
+    row_names = {name for _family, name in protocol_rowset(profile)}
+    return frozenset(name for name in ANCHOR_NAMES if name in row_names)
+
+
 def parse(lines):
     """Pull the marker-delimited payload out of a capture. Returns
     (header, rows, anchors) or None if the run never completed."""
@@ -300,9 +325,9 @@ def parse(lines):
     for line in lines:
         if line.startswith("BENCH_BEGIN,"):
             f = line.split(",")
-            # Layout is fail-closed like families: an older 8-field image
-            # cannot be accepted as an ITCM measurement by guessing.
-            if len(f) != 9:
+            # Optimization is fail-closed like layout and families: an older
+            # image cannot be accepted by guessing what the compiler did.
+            if len(f) != 10:
                 continue
             header = {
                 "githash": f[1],
@@ -313,15 +338,20 @@ def parse(lines):
                 "device_id": f[6],
                 "families": tuple(f[7].split()),
                 "layout": f[8].strip(),
+                "optimization": f[9].strip(),
             }
         elif line.startswith("BENCH,"):
             f = line.split(",")
+            if len(f) != 8:
+                return None
             rows.append({
                 "family": f[1], "name": f[2], "avg_cyc": f[3], "max_cyc": f[4],
                 "pct_avg": f[5], "pct_max": f[6], "checksum": f[7],
             })
         elif line.startswith("ANCHOR,"):
             f = line.split(",")
+            if len(f) != 4:
+                return None
             anchors.append({"name": f[1], "avg_pct": f[2], "max_pct": f[3]})
     if header is None or not rows:
         return None
@@ -336,13 +366,27 @@ class BenchValidationError(ValueError):
     pass
 
 
-def validate_captures(captures, profile, expected_layout=None):
+def _require_numeric(value, error_message):
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as error:
+        raise BenchValidationError(error_message) from error
+    if not math.isfinite(number):
+        raise BenchValidationError(error_message)
+    return number
+
+
+def validate_captures(
+    captures, profile, expected_layout=None, expected_optimization=None
+):
     """Reject any repeat capture that cannot be accepted as hardware evidence."""
     expected_rowset = protocol_rowset(profile)
     expected_rows = None
     expected_identity = None
     first_layout = None
-    for run_index, (header, rows, _) in enumerate(captures, start=1):
+    first_optimization = None
+    expected_anchor_names = anchor_names(profile)
+    for run_index, (header, rows, anchors) in enumerate(captures, start=1):
         identity = (header["qspi_sha256"], header["device_id"])
         if expected_identity is None:
             expected_identity = identity
@@ -363,6 +407,27 @@ def validate_captures(captures, profile, expected_layout=None):
             raise BenchValidationError(
                 "run %d reports layout %s but requested layout %s"
                 % (run_index, layout, expected_layout)
+            )
+        optimization = header["optimization"]
+        if optimization not in OPTIMIZATION_FLAGS:
+            raise BenchValidationError(
+                "run %d reports unknown optimization %s"
+                % (run_index, optimization)
+            )
+        if first_optimization is None:
+            first_optimization = optimization
+        elif optimization != first_optimization:
+            raise BenchValidationError(
+                "run %d optimization differs from run 1: %s vs %s"
+                % (run_index, optimization, first_optimization)
+            )
+        if (
+            expected_optimization is not None
+            and optimization != expected_optimization
+        ):
+            raise BenchValidationError(
+                "run %d reports optimization %s but requested optimization %s"
+                % (run_index, optimization, expected_optimization)
             )
         reported = tuple(header["families"])
         if reported != tuple(profile.families):
@@ -400,9 +465,55 @@ def validate_captures(captures, profile, expected_layout=None):
                     fmt(extra),
                 )
             )
+        reported_anchor_names = [anchor["name"] for anchor in anchors]
+        unique_anchor_names = set(reported_anchor_names)
+        if len(unique_anchor_names) != len(reported_anchor_names):
+            duplicates = sorted(
+                name
+                for name in unique_anchor_names
+                if reported_anchor_names.count(name) > 1
+            )
+            raise BenchValidationError(
+                "run %d has duplicate anchors: %s"
+                % (run_index, ", ".join(duplicates))
+            )
+        if unique_anchor_names != expected_anchor_names:
+            missing = sorted(expected_anchor_names - unique_anchor_names)
+            extra = sorted(unique_anchor_names - expected_anchor_names)
+            raise BenchValidationError(
+                "run %d does not match the exact anchor protocol "
+                "(missing: %s; extra: %s)"
+                % (
+                    run_index,
+                    ", ".join(missing) or "none",
+                    ", ".join(extra) or "none",
+                )
+            )
+        for anchor in anchors:
+            for field in ("avg_pct", "max_pct"):
+                _require_numeric(
+                    anchor[field],
+                    "run %d has a non-numeric anchor %s/%s"
+                    % (run_index, anchor["name"], field),
+                )
         named = by_name(rows)
         axi_gate = named.get("instrument_worst_bbd")
         dtcm_gate = named.get("instrument_worst_bbd_dtcm")
+        gate_names = set()
+        if axi_gate and dtcm_gate:
+            gate_names.update(
+                ("instrument_worst_bbd", "instrument_worst_bbd_dtcm")
+            )
+        if WAVE_ACCEPTANCE in profile.gates:
+            gate_names.update(("synth_2x4", "wave_2x4"))
+        for gate_name in gate_names:
+            gate_row = named[gate_name]
+            for field in ("avg_cyc", "max_cyc", "pct_avg", "pct_max"):
+                _require_numeric(
+                    gate_row[field],
+                    "run %d has a non-numeric gate workload %s/%s"
+                    % (run_index, gate_name, field),
+                )
         if (
             axi_gate
             and dtcm_gate
@@ -539,45 +650,78 @@ def pct1(s):
         return s
 
 
-def verdict(rows, anchors):
+def verdict(captures):
     """The paragraph the spec's acceptance criterion 2 asks for: the three
     questions this bench exists to answer, answered in prose."""
+    _header, rows, _anchors = captures[0]
     d = by_name(rows)
-    a = {x["name"]: x for x in anchors}
     out = io.StringIO()
 
     worst = d.get("instrument_worst")
-    worst_anchor = a.get("instrument_worst")
     out.write("## Verdict\n\n")
 
-    if worst and worst["avg_cyc"] != "TIMEOUT":
-        offline = pct1(worst["pct_max"])
-        anchored_raw = worst_anchor["max_pct"] if worst_anchor else None
-        anchored = pct1(anchored_raw) if anchored_raw is not None else "not anchored"
+    gate_name = "instrument_worst_bbd_dtcm"
+    gate_results = []
+    for run_index, (_run_header, run_rows, run_anchors) in enumerate(
+        captures,
+        start=1,
+    ):
+        gate = by_name(run_rows).get(gate_name)
+        anchor = {
+            item["name"]: item for item in run_anchors
+        }.get(gate_name)
+        if gate is None or anchor is None:
+            break
         try:
-            fits = float(anchored_raw) < 100.0 if anchored_raw is not None else None
-        except ValueError:
-            fits = None
-        if fits is True:
-            conclusion = ("**Conclusion: the 2x4 architecture fits.** The "
-                          "anchored figure is under 100 % of the block budget.")
-        elif fits is False:
-            conclusion = ("**Conclusion: the 2x4 architecture does not fit.** "
-                          "The anchored figure is over 100 % of the block "
-                          "budget, so the design has to shed voices or FX.")
+            offline_max = float(gate["pct_max"])
+            callback_max = float(anchor["max_pct"])
+        except (TypeError, ValueError):
+            break
+        if not math.isfinite(offline_max) or not math.isfinite(callback_max):
+            break
+        gate_results.append((run_index, offline_max, callback_max))
+
+    if len(gate_results) == len(captures):
+        run_values = "; ".join(
+            "Run %d %.2f %% / %.2f %%" % result
+            for result in gate_results
+        )
+        worst_offline = max(result[1] for result in gate_results)
+        worst_callback = max(result[2] for result in gate_results)
+        fits = worst_offline < 100.0 and worst_callback < 100.0
+        if fits:
+            conclusion = (
+                "**Conclusion: the DTCM+BBD gate fits.** Every offline and "
+                "real-callback maximum is below 100 % of the block budget."
+            )
         else:
-            conclusion = ("**Conclusion: undetermined.** No anchored figure "
-                          "was measured to compare against the 100 % line.")
+            conclusion = (
+                "**Conclusion: the DTCM+BBD gate does not fit.** At least "
+                "one offline or real-callback maximum is at or above 100 % "
+                "of the block budget."
+            )
         out.write(
-            "**2x4 budget — go/no-go.** The full instrument at its worst case "
-            "(8 voices, COLOR 4-note on both parts, all FX on, high diffusion, "
-            "echo at max) costs **%s %% of the block budget offline**, and "
-            "**%s %% measured inside a real audio callback**. The anchored "
-            "figure is the one that decides. %s\n\n"
-            % (offline, anchored, conclusion))
+            "**DTCM+BBD budget — go/no-go.** The decision workload is "
+            "`instrument_worst_bbd_dtcm`: the full eight-voice instrument, "
+            "BBD echo and the retained DTCM instrument state. Run maxima "
+            "(offline / real callback): %s. Across all %d repeats, the worst "
+            "maxima are **%.2f %% offline** and **%.2f %% in the real "
+            "callback**. %s\n\n"
+            % (
+                run_values,
+                len(gate_results),
+                worst_offline,
+                worst_callback,
+                conclusion,
+            )
+        )
     else:
-        out.write("**2x4 budget — NO RESULT.** `instrument_worst` did not "
-                  "produce a number. The go/no-go question is unanswered.\n\n")
+        out.write(
+            "**DTCM+BBD budget — NO RESULT.** "
+            "`instrument_worst_bbd_dtcm` did not produce both numeric "
+            "offline and callback maxima in every repeat. The go/no-go "
+            "question is unanswered.\n\n"
+        )
 
     # Ratios are against synth_1_voice -- ONE REAL spotymod voice (two MorphOsc
     # in unison + sub + SVF + envelope). NOT against morph_osc_bare, which is a
@@ -667,12 +811,12 @@ def verdict(rows, anchors):
                sig2(ratio(rows, "sampler_win_sdram", "sampler_win_sram"))))
 
     out.write(
-        "*Figures in this section are quoted to whole percentage points and "
-        "two significant figures for ratios — honest to what this bench can "
-        "actually resolve (intra-run jitter of roughly 1700 cycles on a "
-        "1.5M-cycle workload, and a cross-build layout shift that moved a "
-        "29K-cycle workload by about 7%). The tables below retain full "
-        "measured precision.*\n\n")
+        "*The decision gate retains the firmware's two-decimal percentages "
+        "because values immediately around 100 % determine the stop gate. "
+        "Other prose uses whole percentage points and two significant "
+        "figures for ratios; the tables below retain full measured "
+        "precision.*\n\n"
+    )
     return out.getvalue()
 
 
@@ -756,14 +900,20 @@ def write_results(out_dir, captures, profile, profile_name):
     stamp = datetime.date.today().isoformat()
     base = os.path.join(
         out_dir,
-        "%s-%s-%s-%s"
-        % (stamp, header["githash"], profile_name, header["layout"]),
+        "%s-%s-%s-%s-%s"
+        % (
+            stamp,
+            header["githash"],
+            profile_name,
+            header["layout"],
+            header["optimization"],
+        ),
     )
     fingerprint = device_fingerprint(header["device_id"])
 
     with open(base + ".csv", "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
-        w.writerow(["run", "profile", "layout", "qspi_sha256",
+        w.writerow(["run", "profile", "layout", "optimization", "qspi_sha256",
                     "device_fingerprint", "family", "name", "avg_cyc", "max_cyc",
                     "pct_avg", "pct_max", "checksum"])
         for run_index, (run_header, run_rows, _) in enumerate(captures, start=1):
@@ -773,6 +923,7 @@ def write_results(out_dir, captures, profile, profile_name):
                     run_index,
                     profile_name,
                     run_header["layout"],
+                    run_header["optimization"],
                     run_header["qspi_sha256"],
                     run_fingerprint,
                     r["family"],
@@ -796,12 +947,21 @@ def write_results(out_dir, captures, profile, profile_name):
         universal = (
             "row set matches the profile exactly (no missing, no extra rows)",
             "no duplicate rows",
+            "anchor set matches the profile exactly and is numeric",
+            "all decision-gate measurements are numeric",
             "QSPI digest and device fingerprint identical across runs",
             "per-row checksums identical across runs",
             "at least two runs (`--repeat`, minimum 2)",
         )
         fh.write("## Gate ledger\n\n")
         fh.write("Execution layout: `%s`.\n\n" % header["layout"])
+        fh.write(
+            "Optimization: `%s` (`%s`).\n\n"
+            % (
+                header["optimization"],
+                OPTIMIZATION_FLAGS[header["optimization"]],
+            )
+        )
         fh.write("Profile `%s` — families: %s\n\n"
                  % (profile_name,
                     ", ".join("`%s`" % f for f in profile.families)))
@@ -820,7 +980,7 @@ def write_results(out_dir, captures, profile, profile_name):
             fh.write("- none\n")
         fh.write("\n")
         fh.write("Measured on a Daisy Seed (STM32H750). %s Hz core clock, "
-                 "block size %s, %s, `-ffast-math -funroll-loops`. "
+                 "block size %s, %s. "
                  "Block budget %d cycles.\n\n"
                  % (header["clock"], header["block"], header["cache"],
                     BUDGET_CYCLES))
@@ -836,7 +996,7 @@ def write_results(out_dir, captures, profile, profile_name):
         # profile never had, after the hardware time is already spent.
         if WAVE_ACCEPTANCE in profile.gates:
             fh.write(wave_gate_verdict(captures))
-        fh.write(verdict(rows, anchors))
+        fh.write(verdict(captures))
         for run_index, (run_header, run_rows, run_anchors) in enumerate(
                 captures, start=1):
             fh.write("## Run %d\n\n" % run_index)
@@ -883,6 +1043,12 @@ def main():
         help="link the pre-registered audio hotset into ITCM",
     )
     ap.add_argument(
+        "--optimization",
+        default="o2",
+        choices=tuple(OPTIMIZATION_FLAGS),
+        help="compiler optimization identity carried by the firmware",
+    )
+    ap.add_argument(
         "--program-qspi",
         action="store_true",
         help=(
@@ -909,19 +1075,49 @@ def main():
               file=sys.stderr)
         return 2
 
+    receipt_context = None
+    active_receipt = QSPI_RECEIPT
+    persist_program_receipt = args.program_qspi and not args.build_only
+    if persist_program_receipt:
+        receipt_context = tempfile.TemporaryDirectory(
+            prefix="spotykach-qspi-receipt-"
+        )
+        active_receipt = os.path.join(
+            receipt_context.name,
+            "qspi-verified.json",
+        )
+
+    def finish(result):
+        nonlocal receipt_context
+        if receipt_context is not None:
+            receipt_context.cleanup()
+            receipt_context = None
+        return result
+
     try:
         identity = (
-            build(profile.families, itcm_hot=args.itcm_hot)
+            build(
+                profile.families,
+                itcm_hot=args.itcm_hot,
+                optimization=args.optimization,
+            )
             if not args.no_build
             else prepare_existing_artifacts()
         )
+        if args.itcm_hot:
+            validate_itcm_placement(
+                ELF,
+                nm=NM,
+                objdump=OBJDUMP,
+                readelf=READELF,
+            )
         if args.program_qspi or not args.build_only:
             require_clean_tree(REPO)
         if args.program_qspi:
             program_and_verify(
                 QSPI_PAYLOAD,
                 PROGRAMMER_ELF,
-                QSPI_RECEIPT,
+                active_receipt,
                 artifact_identity=identity,
                 openocd=OPENOCD,
                 scripts=SCRIPTS,
@@ -932,13 +1128,17 @@ def main():
         verified_receipt = None
         if not args.build_only:
             verified_receipt = require_verified_payload(
-                QSPI_PAYLOAD, QSPI_RECEIPT, identity
+                QSPI_PAYLOAD, active_receipt, identity
             )
-    except (QspiGuardError, subprocess.CalledProcessError) as error:
+    except (
+        ItcmPlacementError,
+        QspiGuardError,
+        subprocess.CalledProcessError,
+    ) as error:
         print("ERROR: %s" % error, file=sys.stderr)
-        return 2
+        return finish(2)
     if args.build_only:
-        return 0
+        return finish(0)
 
     captures = []
     for i in range(max(1, args.repeat)):
@@ -947,21 +1147,21 @@ def main():
         if lines is None:
             print("ERROR: BENCH_END never arrived (timeout or openocd exited)",
                   file=sys.stderr)
-            return 2
+            return finish(2)
         parsed = parse(lines)
         if parsed is None:
             print("ERROR: capture completed but held no usable rows",
                   file=sys.stderr)
-            return 2
+            return finish(2)
         header, _rows, _anchors = parsed
         try:
             require_live_digest(header["qspi_sha256"], QSPI_PAYLOAD)
             require_live_device(header["device_id"], verified_receipt)
         except QspiGuardError as error:
             print("ERROR: %s" % error, file=sys.stderr)
-            return 2
+            return finish(2)
         if not check_hash(header):
-            return 2
+            return finish(2)
         captures.append(parsed)
 
     try:
@@ -969,14 +1169,17 @@ def main():
             captures,
             profile,
             expected_layout="itcm-hot" if args.itcm_hot else "axi",
+            expected_optimization=args.optimization,
         )
     except BenchValidationError as error:
         print("ERROR: %s" % error, file=sys.stderr)
-        return 2
+        return finish(2)
 
     base = write_results(args.out_dir, captures, profile, args.profile)
+    if persist_program_receipt:
+        os.replace(active_receipt, QSPI_RECEIPT)
     print("# wrote %s.md and %s.csv" % (base, base), file=sys.stderr)
-    return 0
+    return finish(0)
 
 
 if __name__ == "__main__":

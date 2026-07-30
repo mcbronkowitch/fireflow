@@ -33,3 +33,8 @@ ASSERT(
     ADDR(.itcm_audio_hot) + SIZEOF(.itcm_audio_hot) <= 0x10000,
     "ITCM audio hotset exceeds the 64 KiB ITCM region"
 );
+
+ASSERT(
+    SIZEOF(.itcm_audio_hot) > 0,
+    "ITCM audio hotset is empty"
+);

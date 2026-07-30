@@ -35,9 +35,14 @@ GIT_HASH = $(shell git -C .. rev-parse --short HEAD)
 # is where the SRAM comes back.
 BENCH_FAMILIES ?= system voice mem mod abl bbd body sampler
 BENCH_ITCM_HOT ?= 0
+BENCH_OPTIMIZATION ?= o2
 
 ifneq ($(filter $(BENCH_ITCM_HOT),0 1),$(BENCH_ITCM_HOT))
 $(error BENCH_ITCM_HOT must be 0 or 1)
+endif
+
+ifneq ($(filter $(BENCH_OPTIMIZATION),o2 o3 o3-lto),$(BENCH_OPTIMIZATION))
+$(error BENCH_OPTIMIZATION must be o2, o3, or o3-lto)
 endif
 
 BENCH_LAYOUT = $(if $(filter 1,$(BENCH_ITCM_HOT)),itcm-hot,axi)
@@ -113,8 +118,22 @@ CPP_SOURCES = \
 	../engine/synth/synth_engine.cpp \
 	../engine/synth/wt_bank.cpp
 
+ifeq ($(BENCH_OPTIMIZATION),o2)
+override OPT := -O2
+else ifeq ($(BENCH_OPTIMIZATION),o3)
+override OPT := -O3
+else
+override OPT := -O3 -flto
+endif
+
 SYSTEM_FILES_DIR = $(LIBDAISY_DIR)/core
 include $(SYSTEM_FILES_DIR)/Makefile
+
+$(OBJECTS): $(BUILD_DIR)/bench_optimization.h
+
+ifeq ($(BENCH_OPTIMIZATION),o3-lto)
+LDFLAGS += -flto
+endif
 
 # --- git hash header --------------------------------------------------
 # `-DBENCH_GIT_HASH=...` on the compile line is invisible to Make's
@@ -159,6 +178,11 @@ $(BUILD_DIR)/bench_layout.h: FORCE | $(BUILD_DIR)
 	@python write_bench_layout.py $@ $(BENCH_LAYOUT)
 
 $(BUILD_DIR)/report.o: $(BUILD_DIR)/bench_layout.h
+
+$(BUILD_DIR)/bench_optimization.h: FORCE | $(BUILD_DIR)
+	@python write_bench_optimization.py $@ $(BENCH_OPTIMIZATION)
+
+$(BUILD_DIR)/report.o: $(BUILD_DIR)/bench_optimization.h
 
 # Put the selector before the normal map so it consumes the chosen input
 # sections first; alt_sram.lds then places every remaining section normally.

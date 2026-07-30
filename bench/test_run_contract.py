@@ -210,13 +210,46 @@ def bench_row(name, avg_cyc, max_cyc, checksum):
     return family_row("system", name, avg_cyc, max_cyc, checksum)
 
 
+ANCHOR_NAMES = (
+    "oliverb_solo_sram",
+    "tap_read_sdram",
+    "instrument_worst_bbd_dtcm",
+    "instrument_worst_bbd",
+    "instrument_worst",
+)
+
+
+def anchor_lines(rows, overrides=None):
+    overrides = overrides or {}
+    row_names = {row.split(",")[2] for row in rows}
+    return tuple(
+        "ANCHOR,%s,%s,%s"
+        % (
+            name,
+            overrides.get(name, ("10.00", "11.00"))[0],
+            overrides.get(name, ("10.00", "11.00"))[1],
+        )
+        for name in ANCHOR_NAMES
+        if name in row_names
+    )
+
+
 def capture_lines(
-    rows, *, anchors=(), device_id=DEVICE_ID, qspi_sha256=QSPI_SHA256,
-    families=ALL_FAMILIES, layout="axi"
+    rows, *, anchors=None, device_id=DEVICE_ID, qspi_sha256=QSPI_SHA256,
+    families=ALL_FAMILIES, layout="axi", optimization="o2"
 ):
+    if anchors is None:
+        anchors = anchor_lines(rows)
     return [
-        "BENCH_BEGIN,%s,480000000,96,dcache+icache,%s,%s,%s,%s"
-        % (runner.current_head(), qspi_sha256, device_id, families, layout),
+        "BENCH_BEGIN,%s,480000000,96,dcache+icache,%s,%s,%s,%s,%s"
+        % (
+            runner.current_head(),
+            qspi_sha256,
+            device_id,
+            families,
+            layout,
+            optimization,
+        ),
         *rows,
         *anchors,
         "BENCH_END",
@@ -261,7 +294,7 @@ class ParseContract(unittest.TestCase):
     def test_parse_reads_the_families_and_layout_fields(self):
         lines = [
             "BENCH_BEGIN,abc1234,480000000,96,dcache+icache,"
-            + "0" * 64 + ",dead,system voice,itcm-hot\n",
+            + "0" * 64 + ",dead,system voice,itcm-hot,o2\n",
             "BENCH,system,empty_callback,2,12,0.00,0.00,ea306fb5\n",
             "BENCH_END\n",
         ]
@@ -279,6 +312,43 @@ class ParseContract(unittest.TestCase):
         ]
         self.assertIsNone(runner.parse(lines))
 
+    def test_parse_reads_layout_and_optimization_fields(self):
+        lines = [
+            "BENCH_BEGIN,abc1234,480000000,96,dcache+icache,"
+            + "0" * 64
+            + ",dead,system voice,itcm-hot,o3\n",
+            "BENCH,system,empty_callback,2,12,0.00,0.00,ea306fb5\n",
+            "BENCH_END\n",
+        ]
+        header, _rows, _anchors = runner.parse(lines)
+        self.assertEqual(header["layout"], "itcm-hot")
+        self.assertEqual(header["optimization"], "o3")
+
+    def test_parse_rejects_a_header_without_optimization(self):
+        lines = [
+            "BENCH_BEGIN,abc1234,480000000,96,dcache+icache,"
+            + "0" * 64
+            + ",dead,system voice,itcm-hot\n",
+            "BENCH,system,empty_callback,2,12,0.00,0.00,ea306fb5\n",
+            "BENCH_END\n",
+        ]
+        self.assertIsNone(runner.parse(lines))
+
+    def test_parse_rejects_a_structurally_malformed_anchor(self):
+        lines = [
+            "BENCH_BEGIN,abc1234,480000000,96,dcache+icache,"
+            + "0" * 64
+            + ",dead,system,itcm-hot,o3\n",
+            "BENCH,system,empty_callback,2,12,0.00,0.00,ea306fb5\n",
+            "ANCHOR,instrument_worst_bbd_dtcm,95.63\n",
+            "BENCH_END\n",
+        ]
+        try:
+            parsed = runner.parse(lines)
+        except Exception as error:
+            self.fail("malformed capture escaped parse validation: %s" % error)
+        self.assertIsNone(parsed)
+
 
 class ItcmLayoutContract(unittest.TestCase):
     def test_build_requests_the_itcm_make_mode(self):
@@ -294,6 +364,56 @@ class ItcmLayoutContract(unittest.TestCase):
             "BENCH_ITCM_HOT=1",
             run.call_args_list[1].args[0],
         )
+
+    def test_build_requests_the_optimization_make_mode(self):
+        with (
+            mock.patch.object(runner.subprocess, "run") as run,
+            mock.patch.object(
+                runner, "prepare_existing_artifacts", return_value={}
+            ),
+        ):
+            runner.build(("system",), itcm_hot=True, optimization="o3")
+        self.assertIn(
+            "BENCH_OPTIMIZATION=o3",
+            run.call_args_list[1].args[0],
+        )
+
+    def test_itcm_preflight_precedes_qspi_programming(self):
+        argv = [
+            "run.py",
+            "--profile",
+            "system",
+            "--no-build",
+            "--itcm-hot",
+            "--program-qspi",
+            "--build-only",
+        ]
+        preflight_error = getattr(
+            runner,
+            "ItcmPlacementError",
+            runner.QspiGuardError,
+        )
+        with (
+            mock.patch.object(
+                runner,
+                "prepare_existing_artifacts",
+                return_value={},
+            ),
+            mock.patch.object(runner, "require_clean_tree"),
+            mock.patch.object(
+                runner,
+                "validate_itcm_placement",
+                side_effect=preflight_error("invalid ITCM placement"),
+                create=True,
+            ) as preflight,
+            mock.patch.object(runner, "program_and_verify") as program,
+            mock.patch.object(sys, "argv", argv),
+        ):
+            result = runner.main()
+
+        self.assertEqual(result, 2)
+        preflight.assert_called_once()
+        program.assert_not_called()
 
     def test_repeat_rejects_mixed_layouts(self):
         profile = resolve("system", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY)
@@ -647,11 +767,17 @@ class RunContract(unittest.TestCase):
             [
                 capture_lines(
                     first,
-                    anchors=("ANCHOR,instrument_worst,92.40,97.60",),
+                    anchors=anchor_lines(
+                        first,
+                        {"instrument_worst": ("92.40", "97.60")},
+                    ),
                 ),
                 capture_lines(
                     second,
-                    anchors=("ANCHOR,instrument_worst,92.50,97.70",),
+                    anchors=anchor_lines(
+                        second,
+                        {"instrument_worst": ("92.50", "97.70")},
+                    ),
                 ),
             ]
         )
@@ -667,7 +793,7 @@ class RunContract(unittest.TestCase):
         self.assertEqual(csv_text.count("\n1,"), 68)
         self.assertEqual(csv_text.count("\n2,"), 68)
         self.assertIn(
-            "run,profile,layout,qspi_sha256,device_fingerprint",
+            "run,profile,layout,optimization,qspi_sha256,device_fingerprint",
             csv_text,
         )
         self.assertIn(QSPI_SHA256, csv_text)
@@ -750,6 +876,45 @@ class ProfileContract(unittest.TestCase):
             rows.append(bench_row(name, avg, avg + 1, checksum))
         return rows
 
+    def gate_capture(
+        self,
+        *,
+        avg_cyc,
+        max_cyc,
+        pct_avg,
+        pct_max,
+        callback_avg,
+        callback_max,
+    ):
+        rows = replace_rows(
+            self.system_rows(),
+            "BENCH,system,instrument_worst_bbd_dtcm,"
+            "%d,%d,%s,%s,aabbccdd"
+            % (avg_cyc, max_cyc, pct_avg, pct_max),
+        )
+        anchors = anchor_lines(
+            rows,
+            {
+                "instrument_worst_bbd_dtcm": (
+                    callback_avg,
+                    callback_max,
+                )
+            },
+        )
+        return runner.parse(
+            capture_lines(rows, anchors=anchors, families="system")
+        )
+
+    def write_system_report(self, captures):
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(
+                temp,
+                captures,
+                resolve_profile("system"),
+                "system",
+            )
+            return Path(base + ".md").read_text(encoding="utf-8")
+
     def test_system_profile_validates_against_its_filtered_rowset(self):
         """A system-only capture is complete for the system profile."""
         capture = runner.parse(
@@ -757,6 +922,172 @@ class ProfileContract(unittest.TestCase):
         )
 
         runner.validate_captures([capture, capture], resolve_profile("system"))
+
+    def test_capture_validation_rejects_duplicate_anchors(self):
+        rows = self.system_rows()
+        anchors = anchor_lines(rows)
+        capture = runner.parse(
+            capture_lines(
+                rows,
+                anchors=anchors + (anchors[0],),
+                families="system",
+            )
+        )
+
+        with self.assertRaisesRegex(
+            runner.BenchValidationError,
+            "duplicate anchor",
+        ):
+            runner.validate_captures(
+                [capture, capture],
+                resolve_profile("system"),
+            )
+
+    def test_capture_validation_rejects_nonnumeric_anchor_values(self):
+        rows = self.system_rows()
+        anchors = anchor_lines(
+            rows,
+            {"instrument_worst_bbd_dtcm": ("not-a-number", "99.54")},
+        )
+        capture = runner.parse(
+            capture_lines(rows, anchors=anchors, families="system")
+        )
+
+        with self.assertRaisesRegex(
+            runner.BenchValidationError,
+            "non-numeric anchor",
+        ):
+            runner.validate_captures(
+                [capture, capture],
+                resolve_profile("system"),
+            )
+
+    def test_capture_validation_rejects_timeout_dtcm_bbd_gate(self):
+        rows = replace_rows(
+            self.system_rows(),
+            "BENCH,system,instrument_worst_bbd_dtcm,"
+            "TIMEOUT,101,,,aabbccdd",
+        )
+        capture = runner.parse(
+            capture_lines(rows, families="system")
+        )
+
+        with self.assertRaisesRegex(
+            runner.BenchValidationError,
+            "non-numeric gate workload",
+        ):
+            runner.validate_captures(
+                [capture, capture],
+                resolve_profile("system"),
+            )
+
+    def test_o2_verdict_uses_worst_dtcm_bbd_offline_and_callback_repeat(self):
+        first = self.gate_capture(
+            avg_cyc=947087,
+            max_cyc=985609,
+            pct_avg="98.65",
+            pct_max="102.66",
+            callback_avg="98.81",
+            callback_max="102.74",
+        )
+        second = self.gate_capture(
+            avg_cyc=947092,
+            max_cyc=986105,
+            pct_avg="98.65",
+            pct_max="102.71",
+            callback_avg="98.81",
+            callback_max="102.75",
+        )
+
+        runner.validate_captures(
+            [first, second],
+            resolve_profile("system"),
+        )
+        report = self.write_system_report([first, second])
+
+        self.assertIn(
+            "Run 1 102.66 % / 102.74 %; Run 2 102.71 % / 102.75 %",
+            report,
+        )
+        self.assertIn(
+            "worst maxima are **102.71 % offline** and "
+            "**102.75 % in the real callback**",
+            report,
+        )
+        self.assertIn(
+            "**Conclusion: the DTCM+BBD gate does not fit.**",
+            report,
+        )
+
+    def test_o3_verdict_uses_worst_dtcm_bbd_offline_and_callback_repeat(self):
+        first = self.gate_capture(
+            avg_cyc=916310,
+            max_cyc=954884,
+            pct_avg="95.44",
+            pct_max="99.46",
+            callback_avg="95.63",
+            callback_max="99.52",
+        )
+        second = self.gate_capture(
+            avg_cyc=916322,
+            max_cyc=955328,
+            pct_avg="95.45",
+            pct_max="99.51",
+            callback_avg="95.63",
+            callback_max="99.54",
+        )
+
+        report = self.write_system_report([first, second])
+
+        self.assertIn(
+            "Run 1 99.46 % / 99.52 %; Run 2 99.51 % / 99.54 %",
+            report,
+        )
+        self.assertIn(
+            "worst maxima are **99.51 % offline** and "
+            "**99.54 % in the real callback**",
+            report,
+        )
+        self.assertIn(
+            "**Conclusion: the DTCM+BBD gate fits.**",
+            report,
+        )
+
+    def test_repeat_rejects_mixed_optimizations(self):
+        rows = self.system_rows()
+        o2 = runner.parse(capture_lines(rows, families="system", optimization="o2"))
+        o3 = runner.parse(capture_lines(rows, families="system", optimization="o3"))
+        with self.assertRaisesRegex(
+            runner.BenchValidationError, "optimization differs"
+        ):
+            runner.validate_captures([o2, o3], resolve_profile("system"))
+
+    def test_requested_o3_rejects_an_o2_capture(self):
+        rows = self.system_rows()
+        capture = runner.parse(
+            capture_lines(rows, families="system", optimization="o2")
+        )
+        with self.assertRaisesRegex(
+            runner.BenchValidationError, "requested optimization o3"
+        ):
+            runner.validate_captures(
+                [capture, capture],
+                resolve_profile("system"),
+                expected_optimization="o3",
+            )
+
+    def test_unknown_reported_optimization_is_rejected(self):
+        rows = self.system_rows()
+        capture = runner.parse(
+            capture_lines(rows, families="system", optimization="turbo")
+        )
+        with self.assertRaisesRegex(
+            runner.BenchValidationError, "unknown optimization turbo"
+        ):
+            runner.validate_captures(
+                [capture, capture],
+                resolve_profile("system"),
+            )
 
     def test_dtcm_ab_rejects_unequal_checksums(self):
         """Moving the gate object may change its price, never its output."""
@@ -881,7 +1212,7 @@ class ProfileContract(unittest.TestCase):
                 temp, [capture, capture], resolve_profile("system"), "system"
             )
 
-            self.assertTrue(base.endswith("-system-axi"))
+            self.assertTrue(base.endswith("-system-axi-o2"))
             with open(base + ".md", encoding="utf-8") as fh:
                 md = fh.read()
             self.assertIn("system", md)
@@ -893,6 +1224,31 @@ class ProfileContract(unittest.TestCase):
                 csv_text = fh.read()
             self.assertIn("profile", csv_text.splitlines()[0])
             self.assertIn(",system,", csv_text)
+
+    def test_evidence_persists_layout_and_optimization_identity(self):
+        capture = runner.parse(
+            capture_lines(
+                self.system_rows(),
+                families="system",
+                layout="itcm-hot",
+                optimization="o3",
+            )
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(
+                temp, [capture, capture], resolve_profile("system"), "system"
+            )
+            with open(base + ".csv", encoding="utf-8") as stream:
+                csv_text = stream.read()
+            with open(base + ".md", encoding="utf-8") as stream:
+                md_text = stream.read()
+        self.assertTrue(base.endswith("-system-itcm-hot-o3"))
+        self.assertIn(
+            "run,profile,layout,optimization,qspi_sha256,device_fingerprint",
+            csv_text,
+        )
+        self.assertIn("Optimization: `o3` (`-O3`).", md_text)
+        self.assertNotIn("`-ffast-math -funroll-loops`", md_text)
 
     def test_gate_ledger_marks_wave_acceptance_applied_when_the_profile_declares_it(self):
         """The 'system' profile declares wave_acceptance, so the ledger
@@ -1276,6 +1632,141 @@ class ProfileAwareEvidenceContract(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertIn(".md", artifacts)
         self.assertNotIn("WAVE performance gate", artifacts[".md"])
+
+    def test_missing_required_anchor_writes_no_evidence(self):
+        rows = ProfileContract().system_rows()
+        capture = capture_lines(
+            rows,
+            anchors=(),
+            families="system",
+        )
+        profile = resolve_profile("system")
+
+        result, artifacts = self.run_with_profile(
+            [capture, capture],
+            profile,
+        )
+
+        self.assertEqual(result, 2)
+        self.assertEqual(artifacts, {})
+
+    def test_invalid_capture_does_not_persist_program_receipt(self):
+        rows = ProfileContract().system_rows()
+        capture = capture_lines(
+            rows,
+            anchors=(),
+            families="system",
+        )
+        profile = resolve_profile("system")
+        with tempfile.TemporaryDirectory() as temp:
+            out_dir = Path(temp) / "evidence"
+            receipt = Path(temp) / "qspi-verified.json"
+            argv = [
+                "run.py",
+                "--no-build",
+                "--program-qspi",
+                "--repeat",
+                "2",
+                "--out-dir",
+                str(out_dir),
+            ]
+
+            def write_receipt(_payload, _helper, receipt_path, **_kwargs):
+                Path(receipt_path).write_text("provisional", encoding="utf-8")
+
+            with (
+                mock.patch.object(
+                    runner,
+                    "prepare_existing_artifacts",
+                    return_value={},
+                ),
+                mock.patch.object(runner, "require_clean_tree"),
+                mock.patch.object(
+                    runner,
+                    "program_and_verify",
+                    side_effect=write_receipt,
+                ),
+                mock.patch.object(
+                    runner,
+                    "require_verified_payload",
+                    return_value={"device_id": DEVICE_ID},
+                ),
+                mock.patch.object(runner, "require_live_digest"),
+                mock.patch.object(runner, "require_live_device"),
+                mock.patch.object(
+                    runner,
+                    "run_once",
+                    side_effect=[capture, capture],
+                ),
+                mock.patch.object(runner, "resolve", return_value=profile),
+                mock.patch.object(runner, "QSPI_RECEIPT", str(receipt)),
+                mock.patch.object(sys, "argv", argv),
+            ):
+                result = runner.main()
+
+            self.assertEqual(result, 2)
+            self.assertFalse(receipt.exists())
+            self.assertFalse(out_dir.exists())
+
+    def test_valid_capture_commits_provisional_program_receipt(self):
+        rows = ProfileContract().system_rows()
+        capture = capture_lines(rows, families="system")
+        profile = resolve_profile("system")
+        with tempfile.TemporaryDirectory() as temp:
+            out_dir = Path(temp) / "evidence"
+            receipt = Path(temp) / "qspi-verified.json"
+            argv = [
+                "run.py",
+                "--no-build",
+                "--program-qspi",
+                "--repeat",
+                "2",
+                "--out-dir",
+                str(out_dir),
+            ]
+
+            def write_receipt(_payload, _helper, receipt_path, **_kwargs):
+                Path(receipt_path).write_text("verified", encoding="utf-8")
+
+            with (
+                mock.patch.object(
+                    runner,
+                    "prepare_existing_artifacts",
+                    return_value={},
+                ),
+                mock.patch.object(runner, "require_clean_tree"),
+                mock.patch.object(
+                    runner,
+                    "program_and_verify",
+                    side_effect=write_receipt,
+                ),
+                mock.patch.object(
+                    runner,
+                    "require_verified_payload",
+                    return_value={"device_id": DEVICE_ID},
+                ),
+                mock.patch.object(runner, "require_live_digest"),
+                mock.patch.object(runner, "require_live_device"),
+                mock.patch.object(
+                    runner,
+                    "run_once",
+                    side_effect=[capture, capture],
+                ),
+                mock.patch.object(runner, "resolve", return_value=profile),
+                mock.patch.object(runner, "QSPI_RECEIPT", str(receipt)),
+                mock.patch.object(sys, "argv", argv),
+            ):
+                result = runner.main()
+
+            self.assertEqual(result, 0)
+            self.assertEqual(
+                receipt.read_text(encoding="utf-8"),
+                "verified",
+            )
+            self.assertEqual(
+                {path.suffix for path in out_dir.iterdir()},
+                {".csv", ".md"},
+            )
 
     def test_an_ungated_profile_does_not_claim_the_wave_gate_passed(self):
         """A profile that carries `system` but does not declare

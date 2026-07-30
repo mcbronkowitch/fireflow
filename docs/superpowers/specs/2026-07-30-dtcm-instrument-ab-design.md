@@ -1,7 +1,7 @@
 # DTCM instrument A/B
 
-**Date:** 2026-07-30  
-**Status:** approved by the owner  
+**Date:** 2026-07-30
+**Status:** approved by the owner
 **Predecessor:** `docs/superpowers/specs/2026-07-30-part-per-sample-design.md`
 
 ## 1. Question
