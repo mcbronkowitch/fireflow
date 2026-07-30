@@ -193,8 +193,112 @@ public:
     // advance mod one sample + engine + part FX; sends = post-FX x REVERB SEND
     // The input-carrying form is the real one; the two legacy overloads feed
     // silence, which keeps every existing caller and test bit-identical.
+    //
+    // Defined here rather than in part.cpp so that EVERY call site can inline
+    // it, not just engine/instrument.cpp -- bench/workloads_instr.cpp's
+    // deck_shell row calls part.process(...) directly, without an Instrument.
+    // The out-of-line form paid a nine-register stmdb/ldmia pair, a vpush/vpop
+    // of d8-d9 and a 28-byte frame once per sample (design
+    // docs/superpowers/specs/2026-07-30-part-per-sample-design.md section 3.2,
+    // read off the linked ELF).
+    //
+    // Bit-exact by construction: only the compilation site changed. The
+    // statements below, their order, their branch structure and their
+    // arithmetic are the ones part.cpp carried. What moved out of this body is
+    // four COLD blocks -- the engine swap, the master-cycle push, the fire
+    // path and the gate edge -- whose GUARDS are still here and whose bodies
+    // are now out-of-line private methods in part.cpp. _control_tick() also
+    // stays out of line there: it runs once per SynthEngine::kCtrlInterval
+    // samples, so inlining it would add its whole body at every call site
+    // without removing anything from the per-sample path.
+    //
+    // always_inline, not merely `inline`, because moving the definition into
+    // this header was measured NOT to be enough on its own: with the four cold
+    // blocks already lifted out, arm-none-eabi-g++ 10.2.1 at -O2 still emitted
+    // one out-of-line copy (a 0x360-byte weak symbol) and left all ten call
+    // sites in bench.elf calling it with `bl`, prologue and epilogue intact.
+    // -Winline reported nothing, so the threshold it exceeded is not named
+    // here. The attribute also turns a future growth of this body into a
+    // compile error rather than a silent return to the out-of-line form.
+    __attribute__((always_inline)) inline
     void process(float inL, float inR, float& outL, float& outR,
-                 float& sendL, float& sendR);
+                 float& sendL, float& sendR) {
+        _mod.process();
+
+        // click-free engine switch: fade out (4 ms) -> swap -> fade in (4 ms).
+        // At hold the multiplier is exactly 1.0, so unswitched runs stay
+        // bit-identical (M1.6 bypass invariant).
+        const float fade = _engine_fade.process();
+        if (_switching && _engine_fade.is_idle()) _engine_swap();
+
+        // forward the master-lane cycle length on change, not per sample
+        const float hz = _mod.master_hz();
+        if (hz != _last_master_hz && hz > 0.f) _push_master_cycle(hz);
+
+        const bool fired = _mod.lane_fired(LANE_PITCH);
+        if (fired) {
+            _note_suppressed = _inhibit;
+            if (!_inhibit) _gate_ctr = _gate_len;
+        }
+        if (_gate_ctr > 0) --_gate_ctr;
+
+        // Raster, plus an event refresh: a PITCH fire samples the lane at that
+        // exact sample, so a tick-stale pitch is not "late", it is the wrong
+        // note. The refresh deliberately does not re-phase _ctrl_ctr -- the
+        // alignment with the engine's own tick is the point. The two branches
+        // are mutually exclusive (else if, not a second if) because
+        // _control_tick() is not idempotent -- it advances Quantizer::process's
+        // slew and re-evaluates ChordBuilder::set_color's zone hysteresis -- so
+        // a sample that is both a raster tick and a fire must call it once, not
+        // twice, or the glide double-steps.
+        //
+        // Two consequences worth knowing about, neither a bug:
+        // - A fire refresh is an extra Quantizer::process call one sample after
+        //   a raster tick. Quantizer::process's slew counts *calls*, and each
+        //   call now spans SynthEngine::kCtrlInterval samples, so that refresh
+        //   advances the glide by a full tick's worth. Bounded at one extra step
+        //   per note and probably desirable, but not something the next reader
+        //   should have to rediscover.
+        // - The fire refresh only covers lane_fired(LANE_PITCH). SynthEngine's
+        //   _auto_pending drone promise (synth_engine.cpp:243-245) also reads
+        //   the chord surface, and a set_flow/set_hold transition landing
+        //   mid-interval triggers against a surface up to 95 samples (~2 ms)
+        //   stale. Musically negligible for rare knob transitions -- this is an
+        //   accepted asymmetry, not something to fix here.
+        if (_ctrl_ctr == 0) {
+            _ctrl_ctr = SynthEngine::kCtrlInterval;
+            _control_tick();
+        } else if (fired) {
+            _control_tick();
+        }
+        --_ctrl_ctr;
+
+        if (fired && !_note_suppressed) _fire_trigger();
+
+        // Composed gate, forwarded on edges only (see engine_iface.h). Computed
+        // after _gate_ctr has been advanced, so it reflects THIS sample.
+        const bool g = gate();
+        if (g != _last_gate) _gate_edge(g);
+
+        // Excitation bus, audio-in capture (spec §6, Task 10): write the mono
+        // input into _audio_in_tap only on this control block's last sample
+        // (_ctrl_ctr, already decremented above, has reached 0), mirroring
+        // Instrument's _dry_tap capture (instrument.cpp) -- same micro-
+        // optimisation, same non-claim: _control_tick() only ever READS this
+        // once per block too (at the TOP of the next process() call), so an
+        // unconditional write every sample would leave the identical value
+        // sitting there at read time, just after 96 redundant writes (see
+        // task-10-review.md finding 6). The one-control-block lag comes from the
+        // read cadence, not from this guard.
+        if (_ctrl_ctr == 0) _audio_in_tap = 0.5f * (inL + inR);
+
+        _engine->process_in(inL, inR);
+        _engine->process(outL, outR);
+        outL *= fade;
+        outR *= fade;
+
+        _fx.process(outL, outR, sendL, sendR, _fxv);
+    }
     void process(float& outL, float& outR, float& sendL, float& sendR) {
         process(0.f, 0.f, outL, outR, sendL, sendR);
     }
@@ -278,6 +382,19 @@ private:
     // phase-aligned with SynthEngine's own control tick).
     void _control_tick();
 
+    // The four cold blocks lifted out of process() above. Each one keeps its
+    // GUARD at the call site in process() and its BODY out of line in
+    // part.cpp -- the statements inside are unchanged and still run in the same
+    // order relative to everything around them. Their cadences, which is why
+    // they are the ones lifted: _engine_swap only on the sample a set_engine()
+    // fade reaches idle, _push_master_cycle only when the master lane's rate
+    // changes, _fire_trigger only on an unsuppressed PITCH fire, _gate_edge
+    // only on a composed-gate edge.
+    void _engine_swap();
+    void _push_master_cycle(float hz);
+    void _fire_trigger();
+    void _gate_edge(bool g);
+
     // Control raster. Both this counter and SynthEngine::_ctrl_ctr init to 0
     // and advance once per call to their respective process(), so while both
     // run continuously they fire on the same samples (0, kCtrlInterval,
@@ -286,7 +403,7 @@ private:
     // delivered.
     //
     // set_engine() re-arms this counter to 0 on the sample its swap
-    // completes (see the swap block in process()), so that sample is always
+    // completes (see _engine_swap(), part.cpp), so that sample is always
     // a raster tick: the freshly active engine gets set_targets()/
     // set_chord() then and there, not up to kCtrlInterval - 1 samples later
     // on its power-on defaults. A side effect worth knowing: if the swap
@@ -343,7 +460,7 @@ private:
     // Task 9's shipped behaviour exactly (tape only). _other_deck_tap is
     // written by Instrument (set_other_deck_tap); _audio_in_tap is this
     // part's own doing, latched the same way Instrument latches _dry_tap --
-    // see the capture point in process() below. _bus_dc is the POST-SUM DC
+    // see the capture point in process() above. _bus_dc is the POST-SUM DC
     // block spec §6 asks for, distinct from PartFx's own _tap_dc: Task 9's
     // clip makes tape_tap() safe for any caller, this one bounds the sum of
     // up to three such callers (task-10-brief-addendum.md section E). Both

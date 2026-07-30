@@ -151,8 +151,8 @@ void Part::trigger_manual() {
     float chord[ChordBuilder::kMaxNotes];
     const int n = _chord.build(target_value(LANE_PITCH), _chord_mask(),
                                _quant.root_semis(), chord);
-    // Durch _flatten_for_sampler, genau wie der Fire-Pfad in process()
-    // (part.cpp:306). Ohne das landeten bei COLOR > 0 bis zu vier Toene in
+    // Durch _flatten_for_sampler, genau wie der Fire-Pfad in
+    // _fire_trigger(). Ohne das landeten bei COLOR > 0 bis zu vier Toene in
     // der SamplerEngine, bis der naechste _control_tick (<= 96 Samples) ueber
     // set_chord korrigiert -- weit genug fuer rund ein Dutzend Spawns mit
     // Oktavspruengen beim TRIG-Druck, auf einem Deck, das ausdruecklich EINE
@@ -338,7 +338,7 @@ void Part::_control_tick() {
     // Excitation bus (spec §6, Tasks 9 + 10). Three enabled-by-flag sources,
     // each one control block late for its own reason:
     //   - _fx.tape_tap(): order within one sample is _control_tick() ->
-    //     _engine->process() -> _fx.process() (below in Part::process), so
+    //     _engine->process() -> _fx.process() (Part::process, part.h), so
     //     the value read here is whatever the LAST sample of the PREVIOUS
     //     block left cached in PartFx -- no delay line of our own needed
     //     (Task 9's mechanism, unchanged).
@@ -349,7 +349,7 @@ void Part::_control_tick() {
     //     section D).
     //   - _audio_in_tap: this part's own doing, latched the same way
     //     Instrument latches its cross-deck floats -- see the capture point
-    //     in process() below.
+    //     in Part::process (part.h).
     // Sum first, DC-block and soft-clip the SUM second: tape_tap() is
     // already DC-blocked and fast_tanh-clipped inside PartFx (that bound is
     // what makes tape_tap() a safe getter for ANY caller), but the cross-deck
@@ -373,116 +373,64 @@ void Part::_control_tick() {
     _engine->set_excitation(bus);
 }
 
-void Part::process(float inL, float inR, float& outL, float& outR,
-                   float& sendL, float& sendR) {
-    _mod.process();
+// --- the cold blocks of Part::process ---------------------------------------
+//
+// Part::process itself lives in part.h, inline, so that every call site can
+// inline the per-sample path (see the comment on its definition there). The
+// four blocks below are the ones that do NOT run every sample; each keeps its
+// guard at the call site in part.h and its body here, statement for statement
+// as process() carried it.
 
-    // click-free engine switch: fade out (4 ms) -> swap -> fade in (4 ms).
-    // At hold the multiplier is exactly 1.0, so unswitched runs stay
-    // bit-identical (M1.6 bypass invariant).
-    const float fade = _engine_fade.process();
-    if (_switching && _engine_fade.is_idle()) {
-        _engine_id = _pending_engine;
-        _engine = _engine_for(_engine_id);
-        _engine->set_flow(!_step_on);                          // re-sync state
-        _engine->set_hold(_inhibit);
-        _engine->set_gate(_last_gate);   // the freshly swapped-in engine
-        if (_last_master_hz > 0.f) _engine->set_cycle(1.f / _last_master_hz);
-        _switching = false;
-        _engine_fade.set_on(true);
-        // A freshly swapped-in engine holds none of the previous engine's
-        // pushed state -- set_targets()/set_chord() never reached it while
-        // it was inactive -- so re-arm the raster to run _control_tick()
-        // later in THIS SAME process() call, rather than up to
-        // SynthEngine::kCtrlInterval - 1 samples from now on its power-on
-        // defaults (e.g. TestToneEngine's 220 Hz _freq, test_tone_engine.h).
-        _ctrl_ctr = 0;
+// Guard in part.h: `if (_switching && _engine_fade.is_idle())`. The fade value
+// is read there BEFORE that test, and that order is load-bearing -- it decides
+// which call of the ramp the swap lands on, and therefore how far apart
+// engine_id()'s flip and the fade's end are. Do not reorder the two.
+void Part::_engine_swap() {
+    _engine_id = _pending_engine;
+    _engine = _engine_for(_engine_id);
+    _engine->set_flow(!_step_on);                          // re-sync state
+    _engine->set_hold(_inhibit);
+    _engine->set_gate(_last_gate);   // the freshly swapped-in engine
+    if (_last_master_hz > 0.f) _engine->set_cycle(1.f / _last_master_hz);
+    _switching = false;
+    _engine_fade.set_on(true);
+    // A freshly swapped-in engine holds none of the previous engine's
+    // pushed state -- set_targets()/set_chord() never reached it while
+    // it was inactive -- so re-arm the raster to run _control_tick()
+    // later in THIS SAME process() call, rather than up to
+    // SynthEngine::kCtrlInterval - 1 samples from now on its power-on
+    // defaults (e.g. TestToneEngine's 220 Hz _freq, test_tone_engine.h).
+    _ctrl_ctr = 0;
+}
+
+// Guard in part.h: `if (hz != _last_master_hz && hz > 0.f)`, i.e. this runs
+// only when the master lane's rate actually moved.
+void Part::_push_master_cycle(float hz) {
+    _last_master_hz = hz;
+    _engine->set_cycle(1.f / hz);
+}
+
+// Guard in part.h: `if (fired && !_note_suppressed)`, called after the
+// raster/fire branches. `fired` is true whenever this runs, so one of those two
+// branches has already run _control_tick() exactly once for this sample.
+void Part::_fire_trigger() {
+    if (_engine_id == ENGINE_SAMPLER) {
+        const int slot = _mod.pitch_cur_step();
+        _sampler.set_phrase_pos(slot, _mod.pitch_steps(),
+                                pg_metric_weight(slot));
     }
+    float chord[ChordBuilder::kMaxNotes];
+    // build() unconditionally, for the same state reason as apply() in
+    // _control_tick.
+    int nch = _chord.build(_tg[LANE_PITCH], _chord_mask(),
+                           _quant.root_semis(), chord);
+    nch = _flatten_for_sampler(chord, nch);
+    _engine->trigger_chord(chord, nch);
+}
 
-    // forward the master-lane cycle length on change, not per sample
-    const float hz = _mod.master_hz();
-    if (hz != _last_master_hz && hz > 0.f) {
-        _last_master_hz = hz;
-        _engine->set_cycle(1.f / hz);
-    }
-
-    const bool fired = _mod.lane_fired(LANE_PITCH);
-    if (fired) {
-        _note_suppressed = _inhibit;
-        if (!_inhibit) _gate_ctr = _gate_len;
-    }
-    if (_gate_ctr > 0) --_gate_ctr;
-
-    // Raster, plus an event refresh: a PITCH fire samples the lane at that
-    // exact sample, so a tick-stale pitch is not "late", it is the wrong
-    // note. The refresh deliberately does not re-phase _ctrl_ctr -- the
-    // alignment with the engine's own tick is the point. The two branches
-    // are mutually exclusive (else if, not a second if) because
-    // _control_tick() is not idempotent -- it advances Quantizer::process's
-    // slew and re-evaluates ChordBuilder::set_color's zone hysteresis -- so
-    // a sample that is both a raster tick and a fire must call it once, not
-    // twice, or the glide double-steps.
-    //
-    // Two consequences worth knowing about, neither a bug:
-    // - A fire refresh is an extra Quantizer::process call one sample after
-    //   a raster tick. Quantizer::process's slew counts *calls*, and each
-    //   call now spans SynthEngine::kCtrlInterval samples, so that refresh
-    //   advances the glide by a full tick's worth. Bounded at one extra step
-    //   per note and probably desirable, but not something the next reader
-    //   should have to rediscover.
-    // - The fire refresh only covers lane_fired(LANE_PITCH). SynthEngine's
-    //   _auto_pending drone promise (synth_engine.cpp:243-245) also reads
-    //   the chord surface, and a set_flow/set_hold transition landing
-    //   mid-interval triggers against a surface up to 95 samples (~2 ms)
-    //   stale. Musically negligible for rare knob transitions -- this is an
-    //   accepted asymmetry, not something to fix here.
-    if (_ctrl_ctr == 0) {
-        _ctrl_ctr = SynthEngine::kCtrlInterval;
-        _control_tick();
-    } else if (fired) {
-        _control_tick();
-    }
-    --_ctrl_ctr;
-
-    if (fired && !_note_suppressed) {
-        if (_engine_id == ENGINE_SAMPLER) {
-            const int slot = _mod.pitch_cur_step();
-            _sampler.set_phrase_pos(slot, _mod.pitch_steps(),
-                                    pg_metric_weight(slot));
-        }
-        float chord[ChordBuilder::kMaxNotes];
-        // build() unconditionally, for the same state reason as apply() in
-        // _control_tick.
-        int nch = _chord.build(_tg[LANE_PITCH], _chord_mask(),
-                               _quant.root_semis(), chord);
-        nch = _flatten_for_sampler(chord, nch);
-        _engine->trigger_chord(chord, nch);
-    }
-
-    // Composed gate, forwarded on edges only (see engine_iface.h). Computed
-    // after _gate_ctr has been advanced, so it reflects THIS sample.
-    const bool g = gate();
-    if (g != _last_gate) {
-        _last_gate = g;
-        _engine->set_gate(g);
-    }
-
-    // Excitation bus, audio-in capture (spec §6, Task 10): write the mono
-    // input into _audio_in_tap only on this control block's last sample
-    // (_ctrl_ctr, already decremented above, has reached 0), mirroring
-    // Instrument's _dry_tap capture (instrument.cpp) -- same micro-
-    // optimisation, same non-claim: _control_tick() only ever READS this
-    // once per block too (at the TOP of the next process() call), so an
-    // unconditional write every sample would leave the identical value
-    // sitting there at read time, just after 96 redundant writes (see
-    // task-10-review.md finding 6). The one-control-block lag comes from the
-    // read cadence, not from this guard.
-    if (_ctrl_ctr == 0) _audio_in_tap = 0.5f * (inL + inR);
-
-    _engine->process_in(inL, inR);
-    _engine->process(outL, outR);
-    outL *= fade;
-    outR *= fade;
-
-    _fx.process(outL, outR, sendL, sendR, _fxv);
+// Guard in part.h: `if (g != _last_gate)`, with g == gate() computed there
+// after _gate_ctr has been advanced.
+void Part::_gate_edge(bool g) {
+    _last_gate = g;
+    _engine->set_gate(g);
 }
