@@ -44,10 +44,11 @@ linked QSPI payload, loads only the SRAM side of the image through the
 debug probe, and captures its semihosting output **twice** (`--repeat 2` is
 the default — see "Anchor mode's audio" below for what that means out
 loud), compares the two runs' unique row sets and checksums, enforces every
-gate the profile declares on every run, and writes both complete captures
-to `../docs/bench/YYYY-MM-DD-<githash>-<profile>.md` and `.csv`. The CSV
-carries a run index, the profile name, the live QSPI payload digest, and a
-SHA-256 device fingerprint on every row; the Markdown records those
+ gate the profile declares on every run, and writes both complete captures
+ to `../docs/bench/YYYY-MM-DD-<githash>-<profile>-<layout>.md` and `.csv`.
+ The layout is `axi` by default or `itcm-hot` with `--itcm-hot`. The CSV
+ carries a run index, the profile name, the execution layout, the live QSPI
+ payload digest, and a SHA-256 device fingerprint on every row; the Markdown records those
 identities, a gate ledger (which gates ran and passed, and which were not
 applicable and why), and both offline/anchor tables. Exit code 0 means at
 least two runs passed every gate the profile declares and both were
@@ -59,8 +60,10 @@ accepted evidence.
 Useful flags: `--profile NAME` (default `full`; see the table above and
 `bench/profiles.py` for what ships), `--repeat N` (default and minimum 2),
 `--out-dir DIR` (default `../docs/bench`), `--build-only`, `--no-build`,
-`--timeout SECONDS` (default 600, per run), `--interface CFG` (see below),
-and `--program-qspi`.
+ `--timeout SECONDS` (default 600, per run), `--interface CFG` (see below),
+ `--program-qspi`, and `--itcm-hot`. The last flag links the pre-registered
+ audio hotset into ITCM; use it consistently for build, QSPI binding, and
+ measurement so the host can reject an AXI/ITCM mix-up.
 
 ## Programming the WAVE bank
 
@@ -102,6 +105,11 @@ are unchanged.
    too keeps the sequence consistent and avoids relying on that detail.)
 4. Run `python run.py --profile system --repeat 2`.
 
+For an ITCM-hotset experiment, append `--itcm-hot` to commands 1, 3, and 4.
+Do not reuse an AXI QSPI receipt for an ITCM run (or vice versa): the receipt
+is bound to the exact ELF, and the firmware-reported `BENCH_BEGIN` layout is
+checked before any evidence is accepted.
+
 The programming command uses OpenOCD to load the helper below `0x24040000`
 and the raw payload at `0x24040000`; it never programs internal flash. The
 helper erases one 64 KiB external-QSPI block at offset `0x40000`, writes
@@ -139,13 +147,15 @@ programming cycle and reads like a hardware fault.
 
 Every measurement also SHA-256 hashes the 65,024 live bytes through the
 Seed's memory-mapped QSPI interface before `BENCH_BEGIN`; the host compares
-that firmware-reported digest with the extracted payload. `BENCH_BEGIN` also
-reports the Seed's 96-bit MCU UID, which must strictly match the UID captured
-by the programming receipt. Together these checks catch a different Seed, a
-later QSPI overwrite, or blank/wrong QSPI even if an old local receipt
-remains. Accepted evidence persists the payload digest and a stable SHA-256
-fingerprint of that UID without publishing the raw device identifier.
-Hardware evidence is refused from a dirty Git tree.
+ that firmware-reported digest with the extracted payload. `BENCH_BEGIN` also
+ reports the Seed's 96-bit MCU UID and the `axi` or `itcm-hot` execution
+ layout. The UID must strictly match the programming receipt, and every repeat
+ must report the requested layout. Together these checks catch a different
+ Seed, a later QSPI overwrite, blank/wrong QSPI, or a stale/mixed execution
+ layout even if an old local receipt remains. Accepted evidence persists the
+ payload digest and a stable SHA-256 fingerprint of that UID without
+ publishing the raw device identifier. Hardware evidence is refused from a
+ dirty Git tree.
 
 Programming this address overwrites the leading bank region and therefore
 invalidates whatever BOOT_SRAM/BOOT_QSPI application was previously stored

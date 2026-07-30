@@ -34,6 +34,13 @@ GIT_HASH = $(shell git -C .. rev-parse --short HEAD)
 # engine code only that family referenced then goes with --gc-sections. That
 # is where the SRAM comes back.
 BENCH_FAMILIES ?= system voice mem mod abl bbd body sampler
+BENCH_ITCM_HOT ?= 0
+
+ifneq ($(filter $(BENCH_ITCM_HOT),0 1),$(BENCH_ITCM_HOT))
+$(error BENCH_ITCM_HOT must be 0 or 1)
+endif
+
+BENCH_LAYOUT = $(if $(filter 1,$(BENCH_ITCM_HOT)),itcm-hot,axi)
 
 FAMILY_SOURCE_system  = workloads_system.cpp
 FAMILY_SOURCE_voice   = workloads_daisysp.cpp
@@ -144,3 +151,18 @@ $(BUILD_DIR)/bench_families.h: FORCE | $(BUILD_DIR)
 	@python write_bench_families.py $@ $(FAMILY_DEFINES)
 
 $(BUILD_DIR)/families.o: $(BUILD_DIR)/bench_families.h
+
+# --- execution layout header -------------------------------------------
+# Like the hash and family headers above, this gives Make a real dependency
+# edge when one build directory is switched between AXI and ITCM modes.
+$(BUILD_DIR)/bench_layout.h: FORCE | $(BUILD_DIR)
+	@python write_bench_layout.py $@ $(BENCH_LAYOUT)
+
+$(BUILD_DIR)/report.o: $(BUILD_DIR)/bench_layout.h
+
+# Put the selector before the normal map so it consumes the chosen input
+# sections first; alt_sram.lds then places every remaining section normally.
+ifeq ($(BENCH_ITCM_HOT),1)
+LDFLAGS := -Titcm_hot.lds $(LDFLAGS)
+$(BUILD_DIR)/$(TARGET).elf: itcm_hot.lds
+endif

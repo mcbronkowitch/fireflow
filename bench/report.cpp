@@ -3,6 +3,12 @@
 #include <cstdarg>
 #include <daisy_seed.h>   // daisy::System::GetSysClkFreq(), CMSIS SCB/SCB_CCR_*_Msk
 
+#include "bench_layout.h"
+
+#ifndef BENCH_LAYOUT
+#define BENCH_LAYOUT "unknown"
+#endif
+
 namespace bench {
 namespace {
 
@@ -51,8 +57,8 @@ void logf(const char* fmt, ...)
 // Ceiling: g_buf[256] (declared above) is shared by every logf() call, and
 // kBeginFormat below is the widest user of it. Its fixed fields --
 // "BENCH_BEGIN,", githash, the clock (up to 10 digits), "96", the cache
-// string, a 64-hex-char QSPI digest, a 24-hex-char UID, and the format's own
-// commas/newline -- consume roughly 125 of those 256 bytes, leaving about
+// string, a 64-hex-char QSPI digest, a 24-hex-char UID, the layout, and the
+// format's own commas/newline -- consume roughly 135 of those 256 bytes, leaving
 // 128 for `families`. That is the same order of magnitude as, and
 // independent of, families.cpp's own 128-byte families_csv() ceiling (see
 // the comment there); either one truncating silently still leaves a
@@ -79,7 +85,7 @@ void DTCM_REPORT_TEXT report_begin(
                                    : "none";
     const auto* uid = reinterpret_cast<const uint32_t*>(UID_BASE);
     static const char DTCM_REPORT_RODATA kBeginFormat[] =
-        "BENCH_BEGIN,%s,%lu,96,%s,%s,%08lx%08lx%08lx,%s\n";
+        "BENCH_BEGIN,%s,%lu,96,%s,%s,%08lx%08lx%08lx,%s,%s\n";
     logf(kBeginFormat,
          githash,
          (unsigned long)clk,
@@ -88,7 +94,8 @@ void DTCM_REPORT_TEXT report_begin(
          static_cast<unsigned long>(uid[0]),
          static_cast<unsigned long>(uid[1]),
          static_cast<unsigned long>(uid[2]),
-         families);
+         families,
+         BENCH_LAYOUT);
 }
 
 void report_end()

@@ -47,7 +47,7 @@ OPENOCD_TCL_ADDRESS = ("127.0.0.1", 6666)
 OPENOCD_SHUTDOWN = b"shutdown\x1a"
 
 
-def build(families):
+def build(families, itcm_hot=False):
     # Do not ask libDaisy's default `all` target for bench.bin: one flat
     # binary spanning SRAM (0x24000000) and QSPI (0x90040000) would encode the
     # address gap. Build the ELF, then extract two explicit artifacts.
@@ -58,6 +58,7 @@ def build(families):
     )
     subprocess.run(
         ["make", "-j8", "BENCH_FAMILIES=%s" % " ".join(families),
+         "BENCH_ITCM_HOT=%d" % int(itcm_hot),
          "build/bench.elf"],
         cwd=HERE,
         check=True,
@@ -299,11 +300,9 @@ def parse(lines):
     for line in lines:
         if line.startswith("BENCH_BEGIN,"):
             f = line.split(",")
-            # 8 fields since the families field landed. A 7-field header is a
-            # pre-profiles firmware image: reject it rather than guess, so a
-            # stale build cannot be measured against a profile it never knew
-            # about.
-            if len(f) != 8:
+            # Layout is fail-closed like families: an older 8-field image
+            # cannot be accepted as an ITCM measurement by guessing.
+            if len(f) != 9:
                 continue
             header = {
                 "githash": f[1],
@@ -313,6 +312,7 @@ def parse(lines):
                 "qspi_sha256": f[5],
                 "device_id": f[6],
                 "families": tuple(f[7].split()),
+                "layout": f[8].strip(),
             }
         elif line.startswith("BENCH,"):
             f = line.split(",")
@@ -336,11 +336,12 @@ class BenchValidationError(ValueError):
     pass
 
 
-def validate_captures(captures, profile):
+def validate_captures(captures, profile, expected_layout=None):
     """Reject any repeat capture that cannot be accepted as hardware evidence."""
     expected_rowset = protocol_rowset(profile)
     expected_rows = None
     expected_identity = None
+    first_layout = None
     for run_index, (header, rows, _) in enumerate(captures, start=1):
         identity = (header["qspi_sha256"], header["device_id"])
         if expected_identity is None:
@@ -349,6 +350,19 @@ def validate_captures(captures, profile):
             raise BenchValidationError(
                 "run %d QSPI digest or device fingerprint differs from run 1"
                 % run_index
+            )
+        layout = header["layout"]
+        if first_layout is None:
+            first_layout = layout
+        elif layout != first_layout:
+            raise BenchValidationError(
+                "run %d layout differs from run 1: %s vs %s"
+                % (run_index, layout, first_layout)
+            )
+        if expected_layout is not None and layout != expected_layout:
+            raise BenchValidationError(
+                "run %d reports layout %s but requested layout %s"
+                % (run_index, layout, expected_layout)
             )
         reported = tuple(header["families"])
         if reported != tuple(profile.families):
@@ -741,13 +755,16 @@ def write_results(out_dir, captures, profile, profile_name):
     os.makedirs(out_dir, exist_ok=True)
     stamp = datetime.date.today().isoformat()
     base = os.path.join(
-        out_dir, "%s-%s-%s" % (stamp, header["githash"], profile_name))
+        out_dir,
+        "%s-%s-%s-%s"
+        % (stamp, header["githash"], profile_name, header["layout"]),
+    )
     fingerprint = device_fingerprint(header["device_id"])
 
     with open(base + ".csv", "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
-        w.writerow(["run", "profile", "qspi_sha256", "device_fingerprint",
-                    "family", "name", "avg_cyc", "max_cyc",
+        w.writerow(["run", "profile", "layout", "qspi_sha256",
+                    "device_fingerprint", "family", "name", "avg_cyc", "max_cyc",
                     "pct_avg", "pct_max", "checksum"])
         for run_index, (run_header, run_rows, _) in enumerate(captures, start=1):
             run_fingerprint = device_fingerprint(run_header["device_id"])
@@ -755,6 +772,7 @@ def write_results(out_dir, captures, profile, profile_name):
                 w.writerow([
                     run_index,
                     profile_name,
+                    run_header["layout"],
                     run_header["qspi_sha256"],
                     run_fingerprint,
                     r["family"],
@@ -783,6 +801,7 @@ def write_results(out_dir, captures, profile, profile_name):
             "at least two runs (`--repeat`, minimum 2)",
         )
         fh.write("## Gate ledger\n\n")
+        fh.write("Execution layout: `%s`.\n\n" % header["layout"])
         fh.write("Profile `%s` — families: %s\n\n"
                  % (profile_name,
                     ", ".join("`%s`" % f for f in profile.families)))
@@ -859,6 +878,11 @@ def main():
     ap.add_argument("--build-only", action="store_true")
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument(
+        "--itcm-hot",
+        action="store_true",
+        help="link the pre-registered audio hotset into ITCM",
+    )
+    ap.add_argument(
         "--program-qspi",
         action="store_true",
         help=(
@@ -887,7 +911,8 @@ def main():
 
     try:
         identity = (
-            build(profile.families) if not args.no_build
+            build(profile.families, itcm_hot=args.itcm_hot)
+            if not args.no_build
             else prepare_existing_artifacts()
         )
         if args.program_qspi or not args.build_only:
@@ -940,7 +965,11 @@ def main():
         captures.append(parsed)
 
     try:
-        validate_captures(captures, profile)
+        validate_captures(
+            captures,
+            profile,
+            expected_layout="itcm-hot" if args.itcm_hot else "axi",
+        )
     except BenchValidationError as error:
         print("ERROR: %s" % error, file=sys.stderr)
         return 2

@@ -212,11 +212,11 @@ def bench_row(name, avg_cyc, max_cyc, checksum):
 
 def capture_lines(
     rows, *, anchors=(), device_id=DEVICE_ID, qspi_sha256=QSPI_SHA256,
-    families=ALL_FAMILIES
+    families=ALL_FAMILIES, layout="axi"
 ):
     return [
-        "BENCH_BEGIN,%s,480000000,96,dcache+icache,%s,%s,%s"
-        % (runner.current_head(), qspi_sha256, device_id, families),
+        "BENCH_BEGIN,%s,480000000,96,dcache+icache,%s,%s,%s,%s"
+        % (runner.current_head(), qspi_sha256, device_id, families, layout),
         *rows,
         *anchors,
         "BENCH_END",
@@ -258,25 +258,97 @@ def gate_ledger_section(md):
 
 
 class ParseContract(unittest.TestCase):
-    def test_parse_reads_the_families_field(self):
+    def test_parse_reads_the_families_and_layout_fields(self):
+        lines = [
+            "BENCH_BEGIN,abc1234,480000000,96,dcache+icache,"
+            + "0" * 64 + ",dead,system voice,itcm-hot\n",
+            "BENCH,system,empty_callback,2,12,0.00,0.00,ea306fb5\n",
+            "BENCH_END\n",
+        ]
+        header, rows, _ = runner.parse(lines)
+        self.assertEqual(header["families"], ("system", "voice"))
+        self.assertEqual(header["layout"], "itcm-hot")
+
+    def test_parse_rejects_a_header_without_layout(self):
+        """An old firmware image must not validate against the new host."""
         lines = [
             "BENCH_BEGIN,abc1234,480000000,96,dcache+icache,"
             + "0" * 64 + ",dead,system voice\n",
             "BENCH,system,empty_callback,2,12,0.00,0.00,ea306fb5\n",
             "BENCH_END\n",
         ]
-        header, rows, _ = runner.parse(lines)
-        self.assertEqual(header["families"], ("system", "voice"))
-
-    def test_parse_rejects_a_header_without_families(self):
-        """An old firmware image must not validate against the new host."""
-        lines = [
-            "BENCH_BEGIN,abc1234,480000000,96,dcache+icache,"
-            + "0" * 64 + ",dead\n",
-            "BENCH,system,empty_callback,2,12,0.00,0.00,ea306fb5\n",
-            "BENCH_END\n",
-        ]
         self.assertIsNone(runner.parse(lines))
+
+
+class ItcmLayoutContract(unittest.TestCase):
+    def test_build_requests_the_itcm_make_mode(self):
+        with (
+            mock.patch.object(runner.subprocess, "run") as run,
+            mock.patch.object(
+                runner, "prepare_existing_artifacts", return_value={}
+            ),
+        ):
+            runner.build(("system",), itcm_hot=True)
+
+        self.assertIn(
+            "BENCH_ITCM_HOT=1",
+            run.call_args_list[1].args[0],
+        )
+
+    def test_repeat_rejects_mixed_layouts(self):
+        profile = resolve("system", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY)
+        names = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["system"]
+        rows = []
+        for index, name in enumerate(names):
+            checksum = (
+                "aabbccdd"
+                if name in {
+                    "instrument_worst_bbd",
+                    "instrument_worst_bbd_dtcm",
+                }
+                else "%08x" % index
+            )
+            rows.append(bench_row(name, 100, 101, checksum))
+        axi = runner.parse(
+            capture_lines(rows, families="system", layout="axi")
+        )
+        itcm = runner.parse(
+            capture_lines(rows, families="system", layout="itcm-hot")
+        )
+
+        with self.assertRaisesRegex(
+            runner.BenchValidationError,
+            "layout differs",
+        ):
+            runner.validate_captures([axi, itcm], profile)
+
+    def test_requested_itcm_rejects_an_axi_capture(self):
+        profile = resolve("system", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY)
+        names = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["system"]
+        rows = []
+        for index, name in enumerate(names):
+            checksum = (
+                "aabbccdd"
+                if name in {
+                    "instrument_worst_bbd",
+                    "instrument_worst_bbd_dtcm",
+                }
+                else "%08x" % index
+            )
+            rows.append(bench_row(name, 100, 101, checksum))
+        capture = runner.parse(
+            capture_lines(rows, families="system", layout="axi")
+        )
+
+        with self.assertRaisesRegex(
+            runner.BenchValidationError,
+            "requested layout itcm-hot",
+        ):
+            runner.validate_captures(
+                [capture, capture],
+                profile,
+                expected_layout="itcm-hot",
+            )
 
 
 class RunContract(unittest.TestCase):
@@ -594,7 +666,10 @@ class RunContract(unittest.TestCase):
         self.assertEqual(csv_text.count("\nsystem,"), 0)
         self.assertEqual(csv_text.count("\n1,"), 68)
         self.assertEqual(csv_text.count("\n2,"), 68)
-        self.assertIn("run,profile,qspi_sha256,device_fingerprint", csv_text)
+        self.assertIn(
+            "run,profile,layout,qspi_sha256,device_fingerprint",
+            csv_text,
+        )
         self.assertIn(QSPI_SHA256, csv_text)
         self.assertIn(fingerprint, csv_text)
         self.assertNotIn(DEVICE_ID, csv_text)
@@ -806,10 +881,11 @@ class ProfileContract(unittest.TestCase):
                 temp, [capture, capture], resolve_profile("system"), "system"
             )
 
-            self.assertTrue(base.endswith("-system"))
+            self.assertTrue(base.endswith("-system-axi"))
             with open(base + ".md", encoding="utf-8") as fh:
                 md = fh.read()
             self.assertIn("system", md)
+            self.assertIn("Execution layout: `axi`", md)
             self.assertIn("wave_acceptance", md)
             # Every universal gate is recorded as having run.
             self.assertIn("row set", md.lower())
