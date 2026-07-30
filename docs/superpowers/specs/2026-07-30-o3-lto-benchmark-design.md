@@ -35,6 +35,14 @@ The prebuilt platform libraries are not rebuilt in this experiment. The
 comparison changes the optimization of the application and engine sources
 that are already built by the Spotykach makefiles.
 
+The root and benchmark makefiles currently contain
+`C_USR_FLAGS = -ffast-math -funroll-loops`, but libDaisy consumes the
+differently named `C_USER_FLAGS` and `CPP_USER_FLAGS`. A dry-run compile
+confirms that neither intended flag reaches the compiler today. The `o2`
+control therefore means the actual retained `-O2` build, without those two
+dormant flags. This round must not activate them accidentally; doing so would
+mix three compiler changes into the `-O3` comparison.
+
 ## 3. LTO safety boundary
 
 The supplementary ITCM linker script currently selects code by input object
@@ -90,9 +98,8 @@ The `o2` control and every candidate must retain:
 
 All 16 row checksums in each of two hardware runs must exactly match the `o2`
 control. In particular, `instrument_worst_bbd_dtcm` must remain `483e8e82`.
-The existing `-ffast-math` setting makes this exact gate especially important:
-additional inlining, unrolling, or reassociation is not allowed to change the
-observed output.
+The more aggressive inlining, unrolling, and interprocedural transformations
+available to `-O3` and LTO are not allowed to change the observed output.
 
 Before hardware use, each candidate must pass the existing controller suite
 and linker-contract checks. New checks also prove the requested optimization
@@ -145,6 +152,10 @@ The benchmark establishes the cycle effect using the same engine sources as
 the product. Once a winner is accepted, the production makefile adopts the
 same optimization recipe and must pass its normal build, size, and link-map
 checks.
+
+The accepted recipe is expressed through the compiler's existing `OPT`
+interface. It does not rename or activate the dormant `C_USR_FLAGS` setting;
+that would require its own bit-exact performance experiment.
 
 This round does not add the firmware-shell ITCM loader. The earlier ITCM design
 still requires the later shell integration either to load the ITCM section
