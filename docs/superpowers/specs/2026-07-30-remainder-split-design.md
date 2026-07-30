@@ -537,7 +537,7 @@ comfortably; the point estimate does not.
 
 **The two metrics disagree by 1.35, and the spread says why — but not what the
 first version of this section claimed.** `deck_shell` spreads 15.4 %
-(10.79 → 12.46) against `instr_part_1`'s 4.8 % and `tone_solo`'s 3.0 %. That
+(10.79 → 12.46) against `instr_part_1`'s 4.9 % and `tone_solo`'s 3.0 %. That
 spread is **not** evidence of a once-per-block cost, and the control raster is the
 one candidate it rules out: `SynthEngine::kCtrlInterval` is 96
 (`engine/synth/synth_engine.h:36`) and `kBlock` is 96 (`bench/workload.h:8`), so
@@ -636,7 +636,8 @@ Consequence for round 2's arithmetic: its 6.85-point residue is now split into
 FLUX's real +1.30, `Part`-level code at 2.65–4.00, and the contention-plus-unnamed
 term. Re-evaluating round 2's own formula in this build gives 6.14, and
 `1.30 + 4.00 + 0.84 = 6.14` exactly. **The whole 6.85 → 6.14 balance is drift**
-(§9.5): `instr_part_1` −0.35, the FX rows +0.45, the two deck rows +0.09. It is
+(§9.5): `instr_part_1` −0.35, the FX rows +0.45, the two deck rows −0.09 —
+and −0.35 − 0.45 + 0.09 = −0.71, which is exactly 6.85 → 6.14. It is
 not a harness effect — under the corrected §4.1 the harness term cancels out of
 `remainder'` altogether (§6.11).
 
@@ -682,8 +683,9 @@ Round 2 found the predecessor's ±2 %-on-a-small-row bound **loosened**; this
 round does not tighten it. Two rows again exceed ±2 % of `avg_cyc` at unchanged
 checksums, across a build change of three appended rows — and the largest
 `pct_max` movement of any shared row is `instr_noverb` at **+0.86**, twice the
-gate's. (The table above lists every row that moved more than ±0.2 points, plus
-two that barely moved, for contrast.) **The gate moved +0.41
+gate's. (The table above lists all six shared rows that moved more than ±0.2 points,
+plus five smaller ones for contrast; the nine not shown all moved under
+0.1 points.) **The gate moved +0.41
 and the gap is 10.51 here, not 10.10** — which is why every figure in §9.1 comes
 from one run and none from a subtraction across builds.
 
