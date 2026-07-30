@@ -457,8 +457,127 @@ struct ToneSoloGroup {
     float          peak = 0.f;
 };
 
+// One whole Part at the gate's operating point, running the cheapest engine
+// there is, with every FX block off. This is the shell row: it prices
+// Part-level code -- the per-sample loop in Part::process, the control raster
+// and its two entry paths, _control_tick's target build, the quantizer, the
+// chord builder, the FX target-cache fill, the excitation bus and the
+// _engine_fade multiply -- but it prices them WITH the FX shell and the tone
+// riding along, so the quantity this round wants is
+// deck_shell - fx_none - tone_solo (design spec sections 3.3 and 4.1, and
+// section 6.10 on why that subtraction removes the harness one time too many).
+//
+// The operating point is setup_instr_part_common's, i.e. configure_worst_bbd
+// above: PART_A's 0x1234abcd seed base, the same FxMem buffers, BPM 120,
+// COLOR 1.0, DENSITY 1.0, MOD 1.0, RATE 0.8, VOICE DECAY 1.0, one
+// trigger_manual(), FLOW (nothing calls set_step, on either row). It departs
+// in exactly TWO ways, both deliberate, both required, and nothing else
+// differs in configuration.
+//
+// DEPARTURE 1 -- set_engine(ENGINE_TEST_TONE), run to completion.
+//
+// The switch is faded, not immediate (design spec section 3.2). set_engine
+// only arms it: _switching goes true and _engine_fade.set_on(false) is called
+// WITHOUT the immediate flag (engine/parts/part.cpp:132-137), so the swap
+// happens later, inside process(), at the fade's idle point
+// (engine/parts/part.cpp:384-400) -- where the freshly selected engine also
+// gets set_flow, set_hold, set_gate and set_cycle re-pushed into it, and
+// _ctrl_ctr is re-armed to 0 so the same sample runs a control tick.
+//
+// HOW LONG THAT TAKES, counted off SoftSwitch (engine/fx/fx_util.h:66-116),
+// one _engine_fade.process() call per Part::process call
+// (engine/parts/part.cpp:383). Part::init leaves the switch at Stage::hold via
+// set_on(true, true) (engine/parts/part.cpp:34):
+//   - call 1: the `hold` case emits 1.0, forces _iterator to 191 and, seeing
+//     !_on, moves to `fall` (fx_util.h:94-98). Because `hold` writes 191
+//     itself, this count does not depend on what _iterator held before.
+//   - calls 2-192: the `fall` case, 191 of them; --_iterator walks 190 down to
+//     0 and the stage becomes `idle` when it hits 0 (fx_util.h:99-103), i.e.
+//     ON call 192.
+//   - the SWAP lands on that same call 192, because process() tests
+//     is_idle() AFTER _engine_fade.process() has returned (part.cpp:383-384).
+//     set_on(true) re-arms from `idle`.
+//   - call 193: the `idle` case emits 0.0 and moves to `rise` (fx_util.h:84-88).
+//   - calls 194-384: the `rise` case, 191 of them; ++_iterator reaches 191 on
+//     call 384 and the stage becomes `hold` (fx_util.h:89-93).
+//   - call 385: `hold` again, so the multiplier is exactly 1.0 for the first
+//     time since the switch.
+// So: 192 samples to the swap, 385 samples until the fade multiplier is back
+// at 1.0. The 191 is the counter's own literal, not a sample-rate derivation
+// -- _kof = 1/(0.004*sr) (fx_util.h:72) only scales the Hann LOOKUP
+// (fx_util.h:91, 101), so the leg is 191 samples long at any sample rate.
+// 385 samples is 4.01 blocks of 96. The settle below is kInstrSettleBlocks
+// (200) = 19200 samples, 49.9x that, which is where the number comes from: it
+// is this file's existing settle depth, chosen so this row settles as deep as
+// instr_part_1 does, and it clears the fade by nearly two orders of magnitude
+// rather than being sized for it.
+//
+// DEPARTURE 2 -- every FX block off at fx_none's EXACT operating point.
+//
+// Not merely "off": off the way setup_fx(SEL_NONE) has it off
+// (bench/workloads_system.cpp:182-203), including the values[] entries, which
+// are part of that operating point. deck_shell - fx_none is the whole reason
+// this row exists, and any mismatch here turns that subtraction into a fourth
+// operating-point discrepancy instead of a clean difference. The mirror,
+// call by call, is written out in setup_deck_shell below and asserted there.
+//
+// What is NOT mirrored, because it cannot be, and why none of it is an
+// operating point:
+//   - The FX shell's INPUT SIGNAL. fx_none feeds PartFx test_input() with a
+//     r = in[i] * 0.9f stereo skew; on a Part, PartFx is fed the engine's
+//     output times the fade (part.cpp:484-487), i.e. the tone. This is
+//     structural -- a Part cannot hand its own FX anything else -- and it is
+//     cost-neutral, because with both blocks off PartFx::process does no
+//     input-dependent work: the outer `_grit.engaged() || _flux.engaged()`
+//     branch is skipped entirely (part_fx.cpp:33, 80-86), Comp::process takes
+//     its bit-exact bypass return on `!engaged()` at amount 0
+//     (engine/fx/comp.cpp:75-83) with _gain already 1 so not even the re-arm
+//     runs, and what remains is five OnePole::process calls, one fast_sin and
+//     two multiplies (part_fx.cpp:31, 96-98). Those five smoothers see a
+//     CONSTANT target on both rows -- fx_none's fixed values[], and here
+//     Part's _fxv, filled from fx_target_value() with every _fx_active false
+//     (part.h:382, part.cpp:336) so no lane reaches them -- so both rows take
+//     OnePole's `!_smoothing` early return every sample
+//     (engine/util/onepole.h:24-26).
+//   - The arena. This group sits in g_instr_arena, so its Part's PartFx is at
+//     a different address from fx_none's. Both arenas are plain globals
+//     (neither carries BENCH_SRAM_EXEC_BSS, which only bench/mem.cpp's g_sram
+//     uses), and the BBD line is the identical pointer either way:
+//     fx_mem().echo[PART_A] is fx_mem().echo[0], since PART_A == 0
+//     (engine/instrument.h:14). Same section, different address.
+//
+// THE READER'S SANITY CHECK. deck_shell must come out STRICTLY BELOW
+// instr_part_1's 46.00, and below it by roughly the engine and FX difference
+// (design spec section 5.2's secondary check). A figure anywhere near 46 means
+// the switch never took and the row is still running a SynthEngine with GRIT,
+// FLUX and COMP on. engine_id()'s assert below should catch that first; if the
+// assert passes and the number is still high, believe the number.
+//
+// One thing this row does NOT hold constant against tone_solo, named here
+// rather than discovered later: Part has a SECOND set_targets path. The raster
+// is `if (_ctrl_ctr == 0) {...} else if (fired) { _control_tick(); }`
+// (part.cpp:439-445), so a LANE_PITCH fire runs an extra whole tick -- an
+// extra engine push and an extra FX-cache fill -- outside the 96-sample
+// raster, roughly every 6908 samples at RATE 0.8. tone_solo does not reproduce
+// it, so it lands on this row's side of the subtraction. Design spec section
+// 6.8 bounds it at order 7e-4 points and states plainly that it is harmless
+// because of its SIZE, not because it is correctly attributed.
+struct DeckShellGroup {
+    Part  part;
+    int   counter = 0;
+    // Readbacks for the asserts at the end of setup_deck_shell, folded into
+    // proc_deck_shell's return value so they are not dead stores. Same idiom
+    // as InstrPartGroup's clock_a/stages_a above, and subject to the same
+    // non-claim: the fold is NOT a detector -- run.py compares run against run
+    // within one measurement, never against a stored expectation, so a row
+    // that configured itself differently would simply return a different and
+    // perfectly stable checksum. The asserts are what is live.
+    int   engine_id = -1;
+    float peak      = 0.f;
+};
+
 SerialArena<InstrNoVerbGroup, InstrPartGroup, DeckModGroup, DeckEngineGroup,
-            FxFluxHotGroup, ToneSoloGroup> g_instr_arena;
+            FxFluxHotGroup, ToneSoloGroup, DeckShellGroup> g_instr_arena;
 
 void setup_instr_noverb()
 {
@@ -1270,6 +1389,276 @@ float proc_tone_solo()
     return acc;
 }
 
+// setup_fx(SEL_NONE)'s five values[] entries (bench/workloads_system.cpp:
+// 198-202), by FxTargetId, in that function's own write order. Named here
+// because they are pushed in one place and asserted in another, and both must
+// stay the same five numbers: the pushes below are written out one per line
+// against fx_none's literals so a reader can diff them by eye, and the assert
+// loop then compares the readback against THIS array -- so a mistyped push
+// fires rather than agreeing with itself.
+//
+// Three of the five are live detectors and two are documentation, which is
+// worth knowing before trusting the assert: Part's own boot _fx_base is
+// { 0.3, 0.5, 1.0, 0.25, 0.45 } (engine/parts/part.h:383), so a missing push
+// on GRIT_INT, REV_SEND or FLUX_FB fires (0.3 != 0.8, 0.25 != 0.5,
+// 0.45 != 0.7), while FLUX_TIME and FX_MIX already agree with fx_none by
+// default and a missing push on either would pass unseen. They are pushed
+// anyway, because "identical to fx_none by coincidence of two defaults" is not
+// something a later reader should have to rediscover.
+constexpr float kFxNoneValues[FXT_COUNT] = { 0.8f, 0.5f, 1.f, 0.5f, 0.7f };
+
+// Total length of the engine fade, in samples, from set_engine to the first
+// sample at which the fade multiplier is exactly 1.0 again. Derived in full in
+// DeckShellGroup's comment above: 1 (hold -> fall) + 191 (fall, swap on the
+// last of them) + 1 (idle -> rise) + 191 (rise) + 1 (hold) == 385.
+constexpr int kEngineFadeSamples = 385;
+
+// The fade-finished guarantee, and it is a compile-time one because Part
+// exposes no runtime readback of the SoftSwitch -- see the assert block at the
+// end of setup_deck_shell for the full account of what was looked for and what
+// is there instead. This is what fails if the settle is ever shortened below
+// the fade, which is the one way this row could end up measuring a crossfade.
+static_assert(kInstrSettleBlocks * static_cast<int>(kBlock) > kEngineFadeSamples,
+              "the settle must outlast the engine fade, or deck_shell prices "
+              "two engines and a crossfade instead of a shell");
+
+// Length of setup's self-check window, in blocks. NOT a settle -- the settle
+// above it is what settles. Its length is set by the peak assert's arithmetic:
+// see that assert for why 288 samples is the smallest window whose bound is
+// clean at every pitch this row can reach.
+constexpr int kShellCheckBlocks = 3;
+
+void setup_deck_shell()
+{
+    auto& g = g_instr_arena.emplace<DeckShellGroup>();
+
+    // --- the gate's operating point, exactly as setup_instr_part_common
+    //     establishes it for PART_A: the same seed base, and every buffer
+    //     drawn from the same FxMem the Instrument rows get, so no subtraction
+    //     in this round can be measuring different memory
+    //     (bench/workloads_instr.cpp's setup_instr_part_common).
+    const FxMem& mem = fx_mem();
+    g.part.init(kSampleRate, 0x1234abcdu, mem.echo[PART_A],
+                mem.sampler_buf[PART_A], mem.sampler_frames);
+
+    // configure_worst_bbd above, line for line, MINUS its seven FX lines --
+    // the two that engage a block, the one that sets COMP, and the four that
+    // voice FLUX (STAGES, DRIVE, rate, FEEDBACK). Those belong to departure 2
+    // below, which replaces the first three with fx_none's values and drops
+    // the last four, because setup_fx(SEL_NONE) calls none of them. Order
+    // preserved so this reads as a checklist against that function.
+    g.part.mod().set_tempo_bpm(120.f);   // configure_worst_bbd line 1
+    g.part.fx().set_bpm(120.f);          // line 2 -- and fx_none's own set_bpm
+    g.part.set_color(1.f);               // line 3: 4-note chords, i.e. the
+                                         //   chord path this row exists to price
+    g.part.mod().set_density(1.f);       // line 4
+    g.part.set_depth(1.f);               // line 5: MOD 1.0
+    g.part.mod().set_rate(0.8f);         // line 6
+    g.part.set_voice_decay(1.f);         // line 12 -- reaches _synth/_wave/
+                                         //   _body/_sampler, none of them this
+                                         //   row's engine; kept for faithfulness
+    g.part.trigger_manual();             // line 13
+    // Lines 7, 8 and 11 (set_fx_on Grit/Flux, set_comp 1.0) are REPLACED by
+    // departure 2; lines 9 and 10 (set_grit_mix/set_flux_mix 1.0) are pushed
+    // there instead, because fx_none pushes the identical two values and the
+    // mirror reads better in one block; lines 14-16 (set_stages, set_drive,
+    // set_flux_rate) and line 17's FXT_FLUX_FB 0.9 are DROPPED, because
+    // setup_fx(SEL_NONE) calls none of them.
+    //
+    // Nothing calls set_step(), on this row or on the gate, so both run in
+    // FLOW -- asserted below via flow().
+
+    // --- DEPARTURE 1: the engine. Armed here, ahead of the settle, so the
+    //     settle runs the fade to completion; see DeckShellGroup's comment for
+    //     the 385-sample arithmetic and kEngineFadeSamples above for the
+    //     static_assert that keeps the settle longer than it.
+    g.part.set_engine(ENGINE_TEST_TONE);
+
+    // --- DEPARTURE 2: every FX block off at setup_fx(SEL_NONE)'s exact
+    //     operating point (bench/workloads_system.cpp:186-202), call for call
+    //     and value for value. The init() is already done, above, by
+    //     Part::init's own _fx.init(sample_rate, echo) (part.cpp:48) on the
+    //     same echo buffer.
+    g.part.fx().set_fx_on(FxBlock::Grit, false, true);   // sel != SEL_GRIT
+    g.part.fx().set_fx_on(FxBlock::Flux, false, true);   // sel != SEL_FLUX
+    g.part.fx().set_comp(0.f);                           // sel != SEL_COMP
+    g.part.fx().set_grit_mix(1.f);
+    g.part.fx().set_flux_mix(1.f);
+    // set_bpm(120.f) is above, with the operating-point block: fx_none and
+    // configure_worst_bbd push the identical value, so it is one line serving
+    // both mirrors rather than a difference.
+    //
+    // fx_none's values[] reach a bare PartFx as a caller-owned array; on a
+    // Part the same five numbers have to arrive as target BASES, which
+    // _control_tick turns into _fxv via fx_target_value() (part.cpp:336). With
+    // every _fx_active false -- Part's boot state (part.h:382), and nothing
+    // here calls set_fx_target_active -- fx_target_value returns
+    // clampf(_fx_base[i] + 0, 0, 1), i.e. the base unchanged, so _fxv holds
+    // fx_none's array exactly. Asserted below.
+    g.part.set_fx_target_base(FXT_GRIT_INT,  0.8f);   // fx_none: values[0] 0.8
+    g.part.set_fx_target_base(FXT_FLUX_TIME, 0.5f);   // fx_none: values[1] 0.5
+    g.part.set_fx_target_base(FXT_FX_MIX,    1.f);    // fx_none: values[2] 1.0
+    g.part.set_fx_target_base(FXT_REV_SEND,  0.5f);   // fx_none: values[3] 0.5
+    g.part.set_fx_target_base(FXT_FLUX_FB,   0.7f);   // fx_none: values[4] 0.7
+
+    g.counter = 0;
+
+    // The settle, at this file's own kInstrSettleBlocks depth so this row is
+    // measured as deep into its state as instr_part_1 is. It also runs the
+    // engine fade to completion 49.9x over -- see DeckShellGroup's comment.
+    // Written in setup_instr_part_common's own loop shape.
+    for (int b = 0; b < kInstrSettleBlocks; ++b) {
+        const float* in = test_input();
+        for (size_t i = 0; i < kBlock; ++i) {
+            float ol, orr, sl, sr;
+            g.part.process(in[i], in[i], ol, orr, sl, sr);
+        }
+    }
+
+    // The self-check window. Separate from the settle, and the peak tracking
+    // lives here rather than in proc_deck_shell for the same reason
+    // setup_tone_solo writes its window out twice: a compare-and-store per
+    // sample must not appear in the measured loop.
+    {
+        const float* in = test_input();
+        for (int b = 0; b < kShellCheckBlocks; ++b)
+            for (size_t i = 0; i < kBlock; ++i) {
+                float ol, orr, sl, sr;
+                g.part.process(in[i], in[i], ol, orr, sl, sr);
+                const float a = std::fabs(ol);
+                if (a > g.peak) g.peak = a;
+            }
+    }
+
+    // --- the self-checks.
+
+    // Departure 1 took. This is the assert design spec section 3.2 asks for
+    // and section 5.2's secondary check leans on. Under the mistake it guards
+    // -- set_engine never called, or a settle shorter than the fade's first
+    // 192 samples -- engine_id() returns Part::init's boot default
+    // ENGINE_SYNTH (engine/parts/part.cpp:29, ENGINE_SYNTH == 1,
+    // engine/parts/engine_iface.h:11-17), and the row would be pricing a
+    // SynthEngine at COLOR 1.0 with four voices: a figure near instr_part_1's
+    // 46.00, plausible and worthless. It fires on that.
+    g.engine_id = static_cast<int>(g.part.engine_id());
+    assert(g.part.engine_id() == ENGINE_TEST_TONE);
+
+    // FLOW, which the gate also runs (nothing calls set_step on either side).
+    // Under a stray set_step(true, n) this reads false and fires.
+    assert(g.part.flow());
+
+    // Departure 2 took, read back off the three blocks themselves rather than
+    // inferred from the setters having been called. Grit::engaged() and
+    // Flux::engaged() are `_sw.is_on() || !_sw.is_idle()` (engine/fx/grit.h:62,
+    // engine/fx/flux.h:42, the latter also gated on _buf_ok) and
+    // Comp::amount() returns _amount_target (engine/fx/comp.h:18) -- all three
+    // already public, so no getter had to be added to engine/, which this
+    // round has locked. Under the mistake they guard -- configure_worst_bbd's
+    // FX lines copied across with the rest of it -- they see true, true and
+    // 1.0 against false, false and 0.0, and all three fire. That mistake is
+    // the expensive one: it would leave GRIT, FLUX and COMP inside deck_shell
+    // while fx_none has none of them, so deck_shell - fx_none would count
+    // three whole FX blocks as "Part-level code".
+    assert(!g.part.fx().grit().engaged());
+    assert(!g.part.fx().flux().engaged());
+    assert(g.part.fx().comp().amount() == 0.f);
+
+    // ...and so did the values[] half of it, which is the half a reader is
+    // most likely to skip. Exact compares, not banded: fx_target_value is
+    // clampf(base + 0, 0, 1) with every _fx_active false, and clampf returns an
+    // in-range argument bit-for-bit, so there is no arithmetic between push and
+    // readback that could round. See kFxNoneValues above for which three of the
+    // five are live detectors and which two only document.
+    for (int i = 0; i < FXT_COUNT; ++i)
+        assert(g.part.fx_target_value(i) == kFxNoneValues[i]);
+
+    // The fade. Part exposes NO readback of _engine_fade, and this is not for
+    // want of looking: every public observer on Part was checked
+    // (engine/parts/part.h) -- engine_id(), flow(), active_voices(),
+    // voice_env(), max_voice_env(), color_eff(), overlap_eff(),
+    // excitation_eff(), gate(), pitch_cv(), chord_size(), target_value(),
+    // target_raw(), pitch_pre_quant(), lane_output(), lane_fired(), and the
+    // sub-object accessors mod()/quant()/fx()/synth()/wave()/body()/sampler()
+    // -- and none of them reads the SoftSwitch or anything downstream of it.
+    // The fade multiplies outL/outR between the engine and the FX
+    // (part.cpp:484-487), and PartFx's one level-ish getter, tape_tap(), is
+    // forced to exactly 0.f whenever FLUX is not engaged (part_fx.cpp:85), so
+    // on this row it carries no information about the fade at all. Adding a
+    // getter would mean editing engine/, which is locked.
+    //
+    // So the fade-finished guarantee is the settle arithmetic, and it is a
+    // static_assert (above kShellCheckBlocks) rather than a runtime one: 19200
+    // settle samples against 385, checked at compile time so a shortened
+    // settle cannot compile. engine_id() above covers the first 192 of those
+    // 385 at runtime and says nothing about the remaining 193.
+    //
+    // What the peak below adds is a genuine but WEAK runtime lower bound on
+    // the fade, and it is worth stating exactly how weak. With every FX block
+    // off, PartFx returns l untouched (the outer branch is skipped and Comp
+    // bypasses), so outL is exactly sin(2*pi*phase) * _amp * 0.3f * fade.
+    // _amp is _tg[LANE_LEVEL], which target_raw clamps to [0, 1] and floors at
+    // kLevelFloor * _base[LANE_LEVEL] == 0.4 * 0.8 == 0.32
+    // (engine/parts/part.cpp:102-108, part.h:373, 388), so _amp is in
+    // [0.32, 1.0] and the tone's own peak is in [0.096, 0.300].
+    //
+    // The window is kShellCheckBlocks (3) blocks == 288 samples, and 3 rather
+    // than 2 for a reason that is arithmetic, not taste. _freq is
+    // 110 * 8^clamp(pitch) (test_tone_engine.h:22), so it is in [110, 880] Hz
+    // whatever the quantizer does. At the low end 288 samples spans
+    // 288 * 110/48000 == 0.66 cycles, and |sin|'s extrema are 0.5 cycles
+    // apart, so at least one falls inside the window from ANY starting phase.
+    // 192 samples would span only 0.44 cycles, which can miss both. The
+    // nearest sample to that extremum misses it by at most half a phase
+    // increment, worst at the HIGH end: 0.5 * 880/48000 == 0.00917 cycles,
+    // where |sin| is still cos(2*pi*0.00917) == 0.99834. So with the fade at
+    // 1.0 the observed peak is in [0.0958, 0.3000].
+    //
+    // The band asserted is (0.095, 0.301). Since _amp <= 1 and |sin| <= 1, a
+    // peak above 0.095 requires fade > 0.095/0.3 == 0.317 on at least one
+    // sample in the window -- that, and no more, is what the lower bound
+    // proves about the fade. It cannot tell a fade of 0.5 from an _amp of 0.5.
+    // What it does catch outright is a fade sitting at or near 0, i.e. a
+    // settle that ended inside `fall` or at `idle`, where every sample is
+    // scaled to nothing and the peak collapses. The upper bound catches a
+    // shell whose FX are contributing wet signal on top of the tone, which is
+    // the same mistake the three engaged() asserts above catch directly and
+    // more reliably; it is here because 0.3f is a hard ceiling on this
+    // expression and a free bound is worth taking.
+    assert(g.peak > 0.095f);
+    assert(g.peak < 0.301f);
+}
+
+// proc_instr_part_1's shape, line for line -- the same per-sample
+// Part::process, the same accumulation of all four outputs, the same
+// 250-block trigger_manual() cadence, the same active_voices() fold -- because
+// instr_part_1 is the row this one is read against (design spec section 5.2's
+// secondary check). Two notes on that identity:
+//   - the retrigger is kept rather than dropped, so the comparison does not
+//     acquire a third difference. On this row it costs the chord build inside
+//     trigger_manual (part.cpp:149-162), which IS Part-level code and belongs
+//     here, plus one trigger_chord dispatch into TestToneEngine::trigger,
+//     whose body is empty (test_tone_engine.h:26).
+//   - active_voices() returns 0 here, not a voice count: it is
+//     engine-qualified and _engine_id is none of SYNTH/WAVE/BODY
+//     (engine/parts/part.h:162-167), so it is three compares per block, not a
+//     scan. Kept for the same shape-identity reason.
+float proc_deck_shell()
+{
+    auto& g = g_instr_arena.get<DeckShellGroup>();
+    const float* in = test_input();
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i) {
+        float ol, orr, sl, sr;
+        g.part.process(in[i], in[i], ol, orr, sl, sr);
+        acc += ol + orr + sl + sr;
+    }
+    if (++g.counter >= 250) { g.counter = 0; g.part.trigger_manual(); }
+    acc += static_cast<float>(g.part.active_voices());
+    // Setup's asserted readbacks, folded so they are not dead stores.
+    acc += static_cast<float>(g.engine_id) + g.peak;
+    return acc;
+}
+
 } // namespace
 
 const Workload kInstrWorkloads[] = {
@@ -1280,6 +1669,7 @@ const Workload kInstrWorkloads[] = {
     { "instr", "deck_engine_hot", setup_deck_engine_hot, proc_deck_engine_hot },
     { "instr", "fx_flux_hot", setup_fx_flux_hot, proc_fx_flux_hot },
     { "instr", "tone_solo", setup_tone_solo, proc_tone_solo },
+    { "instr", "deck_shell", setup_deck_shell, proc_deck_shell },
 };
 const int kInstrCount = sizeof(kInstrWorkloads) / sizeof(kInstrWorkloads[0]);
 

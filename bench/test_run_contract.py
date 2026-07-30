@@ -950,6 +950,18 @@ class AblateProfileTest(unittest.TestCase):
         # round's arithmetic (section 4.1) rather than an extra data point.
         self.assertIn("tone_solo", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
 
+    def test_deck_shell_row_is_expected(self):
+        # A whole Part with the cheapest engine and no FX (spec
+        # 2026-07-30-remainder-split-design section 4). It is the first term of
+        # section 4.1's `Part-level code = deck_shell - fx_none - tone_solo`,
+        # so the round's central quantity does not exist without it. All three
+        # of those rows must be present together for that arithmetic to be
+        # computable in a single run, which is the reason this assertion sits
+        # beside the other two rather than standing alone.
+        self.assertIn("deck_shell", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
+        self.assertIn("tone_solo", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
+        self.assertIn("fx_none", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["system"])
+
 
 class ManifestValidationContract(unittest.TestCase):
     """resolve()'s load-time manifest checks (design spec S3): a profile
