@@ -268,6 +268,8 @@ Archived evidence:
 - O3: [Markdown](../../bench/2026-07-30-1aa74ee-system-itcm-hot-o3.md),
   [CSV](../../bench/2026-07-30-1aa74ee-system-itcm-hot-o3.csv), and
   [exact-ELF QSPI receipt](../../bench/2026-07-30-1aa74ee-system-itcm-hot-o3-qspi-verified.json).
+- O3+LTO: [tracked static-rejection receipt](../../bench/2026-07-30-1aa74ee-system-itcm-hot-o3-lto-static-rejection.md);
+  no hardware capture or QSPI receipt exists.
 
 O3 satisfies the stop gate. The CPU ladder ends here; half-rate reverb is not
 the next implementation step.

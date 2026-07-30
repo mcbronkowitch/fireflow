@@ -57,21 +57,30 @@ least two runs passed every gate the profile declares and both were
 persisted. A missing/extra/duplicate row, checksum drift, identity drift,
 non-numeric WAVE result, WAVE result slower than SYNTH, or WAVE maximum at
 or above the 960,000-cycle block budget exits nonzero and writes no
-accepted evidence.
+accepted evidence. Every profile-derived callback anchor must appear exactly
+once with finite numeric values, and every decision-gate row must be numeric;
+malformed/timeout gate data exits nonzero before CSV, Markdown, or a combined
+program-and-run receipt is persisted. A valid over-budget DTCM+BBD result is
+still archived as rejected evidence rather than being treated as malformed.
 
 Useful flags: `--profile NAME` (default `full`; see the table above and
 `bench/profiles.py` for what ships), `--repeat N` (default and minimum 2),
 `--out-dir DIR` (default `../docs/bench`), `--build-only`, `--no-build`,
  `--timeout SECONDS` (default 600, per run), `--interface CFG` (see below),
  `--program-qspi`, `--itcm-hot`, and `--optimization {o2,o3,o3-lto}`.
- `--itcm-hot` links the pre-registered
- audio hotset into ITCM; use it consistently for build, QSPI binding, and
- measurement so the host can reject an AXI/ITCM mix-up.
+ `--itcm-hot` links the pre-registered audio hotset into ITCM and makes
+ `run.py` inspect the linked ELF before any QSPI helper or benchmark SRAM load.
+ The preflight fails closed if `nm`, `objdump`, or `readelf` is unavailable,
+ or if the hot section, load segment, representative symbols, or DTCM
+ instrument storage are missing or misplaced. Use the flag consistently for
+ build, QSPI binding, and measurement so the host can reject an AXI/ITCM
+ mix-up.
 
-`C_USR_FLAGS = -ffast-math -funroll-loops` is currently dormant in the
-underlying build and is deliberately not corrected in this optimization
-identity round. The reported optimization identifies the requested benchmark
-mode; compiler-flag selection is a separate follow-up.
+`C_USR_FLAGS = -ffast-math -funroll-loops` remains dormant in the underlying
+build and was deliberately not activated by the completed compiler-mode
+selection. The benchmark reports its requested `o2`, `o3`, or `o3-lto`
+identity; the measured winner is `o3`, the production root makefile now uses
+`OPT = -O3`, and LTO remains rejected.
 
 ## Programming the WAVE bank
 
@@ -114,6 +123,8 @@ are unchanged.
 4. Run `python run.py --profile system --repeat 2`.
 
 For an ITCM-hotset experiment, append `--itcm-hot` to commands 1, 3, and 4.
+Each command then performs the same mandatory linked-placement preflight
+before programming or loading the target.
 Do not reuse an AXI QSPI receipt for an ITCM run (or vice versa): the receipt
 is bound to the exact ELF, and the firmware-reported `BENCH_BEGIN` layout is
 checked before any evidence is accepted.
@@ -161,10 +172,14 @@ Seed's memory-mapped QSPI interface before `BENCH_BEGIN`; the host compares
  programming receipt, and every repeat must report the requested layout and
  optimization. Together these checks catch a different
  Seed, a later QSPI overwrite, blank/wrong QSPI, or a stale/mixed execution
- layout even if an old local receipt remains. Accepted evidence persists the
- payload digest and a stable SHA-256 fingerprint of that UID without
- publishing the raw device identifier. Hardware evidence is refused from a
- dirty Git tree.
+ layout even if an old local receipt remains. Public CSV and Markdown evidence
+ persist the payload digest and a stable SHA-256 fingerprint of that UID,
+ not the raw device identifier. The exact audit receipt
+ (`qspi-verified.json`) intentionally retains the raw UID because it is the
+ device-binding record used to reject a different Seed. The tracked O2/O3
+ receipts already follow that policy; their bytes and hashes are unchanged by
+ this documentation correction. Hardware evidence is refused from a dirty Git
+ tree.
 
 Programming this address overwrites the leading bank region and therefore
 invalidates whatever BOOT_SRAM/BOOT_QSPI application was previously stored
@@ -242,8 +257,11 @@ actually attached before assuming the firmware is broken.
 
 ## What anchor mode's audio actually proves, and what it does not
 
-Anchor mode re-runs three of the family-1 workloads inside a real audio
-callback and drives `CpuLoadMeter` for the anchored percentages. The DAC
+Anchor mode attempts five named workloads and re-runs the subset present in
+the selected profile inside a real audio callback. The `system` profile emits
+four anchors: Oliverb, the DTCM+BBD decision gate, its AXI comparison, and
+`instrument_worst`. The callback drives `CpuLoadMeter` for the anchored
+percentages. The DAC
 output during that segment is **not** the workload's audio — it is one
 value per block (`process()`'s return, the same checksum accumulator used
 everywhere else in this bench) held flat across all 96 samples of that
@@ -251,7 +269,7 @@ block. That produces a roughly 500 Hz staircase built out of accumulator
 sums, not a rendering of the reverb tail or the synth voice underneath it.
 
 Consequently **every workload sounds like the same harsh buzz**, and the
-three anchored segments cannot be told apart by ear. This is a
+anchored segments cannot be told apart by ear. This is a
 **non-silence detector**, nothing more: it distinguishes "this callback
 computed something" from "the optimiser deleted this workload as dead
 code." The checksum is the actual anti-dead-code guarantee — it is
@@ -260,7 +278,7 @@ data-dependent by construction. Do not read the monitor output as a
 listening test, and do not promise anyone they will hear a reverb, a
 synth voice, or anything resembling spotymod's actual sound in this mode.
 
-**Anchor mode's third segment sounds broken on purpose.** `instrument_worst`
+**Anchor mode's final segment sounds broken on purpose.** `instrument_worst`
 runs at roughly 160% of the block budget offline, so inside the real
 callback it cannot finish before the next block is due; the DAC ends up
 fed underrun garbage for that segment. That is not a bug in the bench — it

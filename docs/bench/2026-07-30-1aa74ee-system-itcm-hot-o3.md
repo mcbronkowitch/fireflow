@@ -34,7 +34,19 @@ All 2 runs satisfy the matched WAVE/SYNTH acceptance gates.
 
 ## Verdict
 
-**2x4 budget — go/no-go.** The full instrument at its worst case (8 voices, COLOR 4-note on both parts, all FX on, high diffusion, echo at max) costs **97 % of the block budget offline**, and **97 % measured inside a real audio callback**. The anchored figure is the one that decides. **Conclusion: the 2x4 architecture fits.** The anchored figure is under 100 % of the block budget.
+> **Corrected 2026-07-30 without a hardware rerun.** The original generated
+> paragraph used `instrument_worst` from run 1 even though the experiment's
+> decision workload is `instrument_worst_bbd_dtcm` across both repeats. The
+> figures below are recalculated from the unchanged CSV rows and the callback
+> anchor tables already archived in this document.
+
+**DTCM+BBD budget — go/no-go.** The decision workload is
+`instrument_worst_bbd_dtcm`: the full eight-voice instrument, BBD echo and the
+retained DTCM instrument state. Run maxima (offline / real callback): Run 1
+99.46 % / 99.52 %; Run 2 99.51 % / 99.54 %. Across both repeats, the worst
+maxima are **99.51 % offline** and **99.54 % in the real callback**.
+**Conclusion: the DTCM+BBD gate fits.** Every O3 offline and callback maximum
+is below the strict 100 % stop gate.
 
 **Cost per candidate, relative to one real spotymod voice.**
 
@@ -42,7 +54,10 @@ All 2 runs satisfy the matched WAVE/SYNTH acceptance gates.
 
 **SRAM vs SDRAM.** The grain-read proxy (8 scattered interpolated stereo reads per sample, identical window in both regions) costs **n/a (row missing)** in SDRAM against SRAM. That is a bare access pattern, written before the sampler existed to stand in for it; the `sampler_win_*` pair below is the same contrast with the real engine around it. The Oliverb pair reads **n/a (row missing)**, and the shortened echo-style streaming walk **n/a (row missing)**.
 
-*Figures in this section are quoted to whole percentage points and two significant figures for ratios — honest to what this bench can actually resolve (intra-run jitter of roughly 1700 cycles on a 1.5M-cycle workload, and a cross-build layout shift that moved a 29K-cycle workload by about 7%). The tables below retain full measured precision.*
+*The decision gate retains the captured two-decimal percentages because values
+immediately around 100 % determine the stop gate. Other prose uses whole
+percentage points and two significant figures for ratios; the tables below
+retain full measured precision.*
 
 ## Run 1
 

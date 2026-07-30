@@ -1,5 +1,17 @@
 # O3/LTO CPU Experiment Implementation Plan
 
+> **Executed result and supersession — 2026-07-30.** This is the preserved
+> historical pre-registration plan; its body below is not rewritten after the
+> fact. Execution occurred on `codex/perf-o3-lto`, not the earlier branch name
+> recorded in the global constraints. The final measured design and outcome
+> are in
+> [the O3/LTO result](../specs/2026-07-30-o3-lto-benchmark-design.md):
+> O3 was selected, O3+LTO was
+> [statically rejected](../../bench/2026-07-30-1aa74ee-system-itcm-hot-o3-lto-static-rejection.md),
+> and the human owner approved four deterministic O2/O3 cross-mode checksum
+> differences as acceptable selection evidence. That override does not claim
+> inaudibility, sound quality, or perceptual equivalence.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Compare the retained O2+DTCM+ITCM benchmark with bit-exact O3 and, only if necessary, O3+LTO builds, then apply the fastest correct compiler recipe to the production build.

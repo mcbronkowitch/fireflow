@@ -13,8 +13,14 @@ is actually built today, and what is still design-only.
   (`2026-07-25-spotykach-form-song-split-design.md`).
 - **Last updated:** 2026-07-30 (VCV 2.15.1; BODY is complete, merged and has had
   its first playability pass — see "BODY playability" below).
-- **⚠ The instrument is currently over CPU budget.** The 2026-07-29 hardware
-  run measured `instrument_worst` at **120.9 %** of the 960 000-cycle block
+- **CPU status: the selected O3 ITCM-hot benchmark passes; the production-shell
+  timing boundary remains pending.** Both O3 DTCM+BBD benchmark repeats are
+  below 100 % offline and in the real callback. This is the benchmark stop
+  gate, not a claim that the production firmware shell is measured: M6 still
+  needs an ITCM loader (or equivalent copy path) before the same placement and
+  timing can be established there. The optimization history began with the
+  2026-07-29 hardware run, which measured `instrument_worst` at **120.9 %** of
+  the 960 000-cycle block
   inside a real audio callback, and `instrument_worst_bbd` at 133.2 %. The
   increase is entirely in the FX chain; voices, modulation plane and reverb are
   unchanged. A follow-up cost-curves round (`cd6dafd`, same day) priced the FX
@@ -26,7 +32,8 @@ is actually built today, and what is still design-only.
   control rate, (2) re-measure, (3) collapse FLUX to mono per deck** — this
   supersedes the design spec's stereo refusal; `kFiltOrder` stays refused.
   Projected, that programme reaches only **≈106 %**, not under 100 %.
-  **An optimization round comes before ZAP (M5k), PULL (M5l) and M6** — see
+  **At that point, an optimization round was ordered before ZAP (M5k), PULL
+  (M5l) and M6** — see
   "FLUX → BBD" and "FX cost curves" for the row-by-row evidence.
   **Update, 2026-07-29 (mono collapse measured):** step (1) landed at
   **125.24 %** and step (3), the FLUX-to-mono collapse, is now measured too —
@@ -162,14 +169,18 @@ is actually built today, and what is still design-only.
   O3+LTO is rejected before hardware: its ITCM section is empty, it has no ITCM
   `LOAD`, seven representative symbols are missing, and three are in AXI SRAM
   (its DTCM store remains at `0x20000528`). The O3 production ELF links without
-  overflow. O3 passes the offline and callback stop gate, so the ladder stops
+  overflow, but it does not yet load the benchmark's ITCM section; production
+  shell timing remains pending at that loader boundary. O3 passes the
+  benchmark's offline and callback stop gate, so this benchmark ladder stops
   before half-rate reverb. Evidence:
   [O2 Markdown](bench/2026-07-30-1aa74ee-system-itcm-hot-o2.md),
   [O2 CSV](bench/2026-07-30-1aa74ee-system-itcm-hot-o2.csv),
   [O2 QSPI receipt](bench/2026-07-30-1aa74ee-system-itcm-hot-o2-qspi-verified.json),
   [O3 Markdown](bench/2026-07-30-1aa74ee-system-itcm-hot-o3.md),
-  [O3 CSV](bench/2026-07-30-1aa74ee-system-itcm-hot-o3.csv), and
-  [O3 QSPI receipt](bench/2026-07-30-1aa74ee-system-itcm-hot-o3-qspi-verified.json).
+  [O3 CSV](bench/2026-07-30-1aa74ee-system-itcm-hot-o3.csv),
+  [O3 QSPI receipt](bench/2026-07-30-1aa74ee-system-itcm-hot-o3-qspi-verified.json),
+  and the
+  [O3+LTO static rejection](bench/2026-07-30-1aa74ee-system-itcm-hot-o3-lto-static-rejection.md).
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
@@ -1858,9 +1869,10 @@ be accepted as an ITCM run.
 
 All gate captures return checksum `483e8e82`. Across the stricter comparison
 of every ITCM run against both AXI runs, the minimum saving is **6.01 average /
-6.09 maximum**, far above the pre-registered 1.00-point threshold. **Keep the
-ITCM hotset for the firmware shell.** The real callback agrees: 98.81–98.82 %
-average and 102.78–102.79 % maximum.
+6.09 maximum**, far above the pre-registered 1.00-point threshold. **Retain the
+ITCM hotset for later firmware-shell integration.** The current production
+shell has no ITCM loader, so it cannot claim this placement yet. The real
+benchmark callback agrees: 98.81–98.82 % average and 102.78–102.79 % maximum.
 
 The first hardware probe had placed the first weak function at
 `0x00000000`. It kept executing but collapsed the instrument audio sum to
@@ -1869,7 +1881,7 @@ active voices. That apparent eight-point saving was rejected. Reserving
 `0x00000000..0x000000ff` restored every AXI checksum in two diagnostic runs
 and in both accepted ITCM runs. The retained, sound-preserving result is the
 six-point figure above. Since the maximum remains above 100 %, the next
-ordered round is `-O3`/LTO; half-rate reverb remains behind it.
+ordered round at that point was `-O3`/LTO; half-rate reverb remained behind it.
 
 ### BODY playability ✅ (extends M5j)
 
