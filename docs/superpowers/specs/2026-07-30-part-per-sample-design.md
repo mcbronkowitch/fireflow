@@ -459,7 +459,7 @@ rows rather than about the change. Final (`cd639ec`) against baseline
 `_parts[yld].process(...)` at `:125` — two `Part` bodies per sample, interleaved.
 `instrument_init`, `instrument_worst` and `instrument_worst_bbd` all reach it
 through `proc_inst` (`bench/workloads_system.cpp:329-334`), `instr_noverb` through
-`proc_instr_noverb` (`bench/workloads_instr.cpp:650-655`).
+`proc_instr_noverb` (`bench/workloads_instr.cpp:655-660`).
 
 | row | `pct_avg` | `pct_max` |
 |---|---:|---:|
@@ -470,8 +470,8 @@ through `proc_inst` (`bench/workloads_system.cpp:329-334`), `instr_noverb` throu
 | **mean** | **−1.81** | **−1.86** |
 
 **Rows that call `part.process(...)` directly from a bench proc's own loop.**
-`proc_instr_part_1` and `proc_instr_part_2` (`bench/workloads_instr.cpp:728-766`)
-and `proc_deck_shell` (`:1671-1686`) each write their own `for (size_t i = 0; i <
+`proc_instr_part_1` and `proc_instr_part_2` (`bench/workloads_instr.cpp:733-771`)
+and `proc_deck_shell` (`:1677-1692`) each write their own `for (size_t i = 0; i <
 kBlock; ++i)` and call `Part::process` from it, with no `Instrument` anywhere.
 
 | row | `pct_avg` | `pct_max` |
@@ -490,7 +490,7 @@ rows moved −1.42 … −2.10 `pct_avg` while the three direct-call rows read �
 direct-call row reached a point. **In the final state it is false, and the table
 directly above refutes it.** `instr_part_2` (−1.25) and `instr_part_1` (−1.16)
 are direct-call rows — each writes its own `for (size_t i = 0; i < kBlock; ++i)`
-and calls `g.a.process(...)` from it (`bench/workloads_instr.cpp:728-766`) — and
+and calls `g.a.process(...)` from it (`bench/workloads_instr.cpp:733-771`) — and
 both improved by more than a point. Generalising a grouping that held on one
 build into a mechanism was the error; the grouping dissolved on the next build.
 
@@ -505,8 +505,8 @@ here.
 
 `Part::process` has exactly one caller in **shipping** code: `Instrument::process`,
 at `engine/instrument.cpp:112` and `:125`. It is not the only caller outside the
-bench. `Part` declares three `process` overloads (`engine/parts/part.h:224`,
-`:302`, `:305`), the 4- and 2-argument forms forwarding to the 6-argument body,
+bench. `Part` declares three `process` overloads (`engine/parts/part.h:244`,
+`:322`, `:325`), the 4- and 2-argument forms forwarding to the 6-argument body,
 and `tests/test_part.cpp`, `tests/test_choke.cpp`, `tests/test_mod_tide.cpp` and
 `tests/test_sampler_part.cpp` call them extensively, on `Part`-typed locals and
 on `Part&` helper parameters.
@@ -597,7 +597,7 @@ not eleven.
 
 Four are `instr` rows whose groups hold a `SuperModulator`, a `SynthEngine`, a
 `PartFx` and a `TestToneEngine` respectively (`bench/workloads_instr.cpp:151`,
-`:230`, `:336`, `:452`) — `deck_mod_hot`, `deck_engine_hot`, `fx_flux_hot` and
+`:233`, `:339`, `:456`) — `deck_mod_hot`, `deck_engine_hot`, `fx_flux_hot` and
 `tone_solo`. §6.2's list names none of the `instr` rows by that name except
 `deck_engine_hot`, `deck_mod_hot` and `tone_solo`; `fx_flux_hot` is reachable
 only through its `fx_*` glob, which sits among the `system` rows, so whether
@@ -841,7 +841,7 @@ which this project has none.
 
 **Independently confirmed on the desktop renderer, on a different compiler and a
 different code path.** The repo does carry two byte-identity render gates —
-`ctrl_identity` and `wave_formant_sweep` (`CMakeLists.txt:183` and `:192`), which
+`ctrl_identity` and `wave_formant_sweep` (`CMakeLists.txt:183` and `:193`), which
 render a scenario through `host/render` and SHA256 the whole WAV — and they had
 never been run on this branch. They have now been run on `main` (`a93327e`) and
 on the branch (`0eed246`), in worktrees built from the same toolchain:
