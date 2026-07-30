@@ -665,7 +665,14 @@ class ProfileContract(unittest.TestCase):
                 avg = wave_avg
             else:
                 avg = 100
-            rows.append(bench_row(name, avg, avg + 1, "%08x" % i))
+            if name in {
+                "instrument_worst_bbd",
+                "instrument_worst_bbd_dtcm",
+            }:
+                checksum = "aabbccdd"
+            else:
+                checksum = "%08x" % i
+            rows.append(bench_row(name, avg, avg + 1, checksum))
         return rows
 
     def test_system_profile_validates_against_its_filtered_rowset(self):
@@ -675,6 +682,37 @@ class ProfileContract(unittest.TestCase):
         )
 
         runner.validate_captures([capture, capture], resolve_profile("system"))
+
+    def test_dtcm_ab_rejects_unequal_checksums(self):
+        """Moving the gate object may change its price, never its output."""
+        rows = self.system_rows()
+        if not any(
+            row.split(",")[2] == "instrument_worst_bbd_dtcm"
+            for row in rows
+        ):
+            rows.append(
+                bench_row(
+                    "instrument_worst_bbd_dtcm",
+                    90,
+                    91,
+                    "22222222",
+                )
+            )
+        rows = replace_rows(
+            rows,
+            bench_row("instrument_worst_bbd", 100, 101, "11111111"),
+            bench_row("instrument_worst_bbd_dtcm", 90, 91, "22222222"),
+        )
+        capture = runner.parse(capture_lines(rows, families="system"))
+
+        with self.assertRaisesRegex(
+            runner.BenchValidationError,
+            "DTCM A/B checksum mismatch",
+        ):
+            runner.validate_captures(
+                [capture, capture],
+                resolve_profile("system"),
+            )
 
     def test_reported_families_must_match_the_requested_profile(self):
         """A stale image built for a different profile is rejected."""
@@ -1179,7 +1217,14 @@ class ProfileAwareEvidenceContract(unittest.TestCase):
                 avg = 900  # deliberately slower: would fail the gate outright
             else:
                 avg = 100
-            rows.append(bench_row(name, avg, avg + 1, "%08x" % i))
+            if name in {
+                "instrument_worst_bbd",
+                "instrument_worst_bbd_dtcm",
+            }:
+                checksum = "aabbccdd"
+            else:
+                checksum = "%08x" % i
+            rows.append(bench_row(name, avg, avg + 1, checksum))
         capture = capture_lines(rows, families="system")
         profile = Profile(families=("system",), gates=frozenset())
 

@@ -175,6 +175,7 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "instrument_init",
         "instrument_worst",
         "instrument_worst_bbd",
+        "instrument_worst_bbd_dtcm",
     ),
     "sweep": (
         "sweep_flux_rate_0",
@@ -385,6 +386,22 @@ def validate_captures(captures, profile):
                     fmt(extra),
                 )
             )
+        named = by_name(rows)
+        axi_gate = named.get("instrument_worst_bbd")
+        dtcm_gate = named.get("instrument_worst_bbd_dtcm")
+        if (
+            axi_gate
+            and dtcm_gate
+            and axi_gate["checksum"] != dtcm_gate["checksum"]
+        ):
+            raise BenchValidationError(
+                "run %d DTCM A/B checksum mismatch: AXI %s, DTCM %s"
+                % (
+                    run_index,
+                    axi_gate["checksum"],
+                    dtcm_gate["checksum"],
+                )
+            )
         if WAVE_ACCEPTANCE in profile.gates:
             names = {row["name"] for row in rows}
             required = {"synth_2x4", "wave_2x4"}
@@ -393,7 +410,6 @@ def validate_captures(captures, profile):
                     "run %d is missing WAVE acceptance rows: %s"
                     % (run_index, ", ".join(sorted(required - names)))
                 )
-            named = by_name(rows)
             synth = named["synth_2x4"]
             wave = named["wave_2x4"]
             try:
