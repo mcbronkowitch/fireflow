@@ -162,10 +162,14 @@ because it is free and provably neutral, not because it moves the total.
 Checked because §4's largest item grows `.text`, and the bench's memory line
 reads 97.83 %, which looks like no headroom at all. It is the wrong region.
 
-| region | origin, length | used | share |
-|---|---|---:|---:|
-| `SRAM_EXEC` — carries `.text` | `0x24000000`, `0x402E0` (262,880) | 194,976 | **74.2 %** |
-| `SRAM` — carries the bench arena `.bss` | `0x240402E0`, `0x3FD20` (261,920) | 255,744 | 97.6 % |
+Figures as the linker reports them (`--print-memory-usage`), not as computed from
+`alt_sram.lds` — the `SRAM` region ends up 512 bytes smaller than its `MEMORY`
+length, so the computed share would be wrong:
+
+| region | region size | used | share |
+|---|---:|---:|---:|
+| `SRAM_EXEC` — carries `.text` | 262,880 | 194,976 | **74.17 %** |
+| `SRAM` — carries the bench arena `.bss` | 261,408 | 255,744 | 97.83 % |
 
 `alt_sram.lds:16-17` defines the split and `:39-55` places `.text` in
 `SRAM_EXEC`. The 97.8 % figure belongs to the arena, which is data and cannot be
