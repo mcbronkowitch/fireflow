@@ -1327,12 +1327,29 @@ render files this round produced, not by this measurement. `engine/fx/bbd.h`'s
 estimated ~0.6 points, left deliberately as model territory. And the gate
 itself: **12.88 points still separate `instrument_worst_bbd` from the 100 %
 line.** `perf/flux-mono`'s content is on `main` (`bd346eb`, `1ba3f18`,
-fast-forwarded, no merge commit). **The owner accepted the mono collapse on
-2026-07-30: FLUX stays mono.** The centred echo is the intended sound, and the
-lost stereo width does not need recovering — no panning or widening layer is to
-be added on top, and no DRIVE or compander re-tuning is owed to this change.
-A later round must not treat the collapse as provisional, and must not "restore"
-stereo FLUX as a fix.
+fast-forwarded, no merge commit). The owner accepted the mono collapse on
+2026-07-30, and at the time that acceptance was written down as permanent:
+"FLUX stays mono… a later round must not treat the collapse as provisional,
+and must not 'restore' stereo FLUX as a fix." No panning or widening layer was
+to be added on top, and no DRIVE or compander re-tuning was owed to the change.
+
+**Superseded, 2026-07-30 — the collapse was a budget measure, not a
+preference.** The owner's own framing on revisiting it: mono came out of
+necessity. It was step (3) of a CPU programme (see the decision above it), and
+the listening pass that accepted it was accepting a *fait accompli* under
+budget pressure, not choosing a centred echo over a wide one. **The
+"do not restore" instruction is therefore withdrawn.** What stands from the
+paragraph above is the measurement (12.36 points for two lines, ≈6.18 each) and
+the observation that the dry path's per-voice pan, not the echo, carries the
+image on an FX-layer deck.
+
+Two consequences, both from
+`2026-07-30-bbd-part-engine-design.md` (in the residency repo pending a move
+here): a BBD **part engine** is stereo, because it *is* the signal path and has
+no dry path to carry an image; and the tape echo that replaces FLUX returns
+**stereo, as it was** (`EchoDelay _echo_l; _echo_r;` at `e004a3d^`), with mono
+still a legitimate outcome — decided by ear on the finished tape echo rather
+than inherited from a decision taken about a bucket-brigade.
 
 ### Instrument-level ablation ✅ (where the unmeasured budget actually goes)
 
