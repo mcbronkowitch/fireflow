@@ -1115,9 +1115,11 @@ measured as a 14 dB drop in the actual echo return between DRIVE 0 and
 DRIVE 1. Fixed in two commits (`ce07532`, `3dea01a`; see the design spec's
 errata item 7): the ceiling is now fixed at `kSatCeil`, and DRIVE's range
 moved to 0..+12 dB so self-oscillation stays reachable at DRIVE 0. **DRIVE
-is diagnosed and fixed, not yet re-heard** — the owner has not yet listened
-to the corrected DRIVE, and that listening pass is the remaining open
-item, not a voicing or range decision.
+is diagnosed, fixed and re-heard** — the owner accepted the corrected DRIVE on
+2026-07-30. Nothing is owed to it: the 0..+12 dB range stands as chosen, and
+`kDriveHiDb` is not to be raised as a "finish" to this work. It remains the
+cheap lever if DRIVE is ever judged too tame, but that would be a new voicing
+decision, not the completion of this one.
 
 Spec: `docs/superpowers/specs/2026-07-27-flux-bbd-delay-design.md`. Plan:
 `docs/superpowers/plans/2026-07-27-flux-bbd-delay.md`.
