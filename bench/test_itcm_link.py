@@ -1,5 +1,6 @@
 """Linked-address contract for the optional ITCM audio hotset."""
 
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -7,6 +8,12 @@ import unittest
 
 
 HERE = Path(__file__).resolve().parent
+OPTIMIZATION = os.environ.get("BENCH_TEST_OPTIMIZATION", "o2")
+if OPTIMIZATION not in {"o2", "o3", "o3-lto"}:
+    raise RuntimeError(
+        "BENCH_TEST_OPTIMIZATION must be o2, o3, or o3-lto"
+    )
+
 NM = Path(r"C:\Program Files\DaisyToolchain\bin\arm-none-eabi-nm.exe")
 OBJDUMP = Path(
     r"C:\Program Files\DaisyToolchain\bin\arm-none-eabi-objdump.exe"
@@ -35,6 +42,7 @@ class ItcmLinkContract(unittest.TestCase):
                 "-j8",
                 "BENCH_FAMILIES=system",
                 "BENCH_ITCM_HOT=1",
+                "BENCH_OPTIMIZATION=%s" % OPTIMIZATION,
                 "build/bench.elf",
             ],
             cwd=HERE,
@@ -88,7 +96,7 @@ class ItcmLinkContract(unittest.TestCase):
             int(value, 16) for value in hot_section.groups()
         )
         self.assertGreater(size, 0)
-        self.assertLessEqual(size, 0x10000)
+        self.assertLessEqual(0x100 + size, 0x10000)
         self.assertEqual(vma, 0x00000100)
         self.assertEqual(lma, 0x00000100)
 

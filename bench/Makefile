@@ -118,8 +118,22 @@ CPP_SOURCES = \
 	../engine/synth/synth_engine.cpp \
 	../engine/synth/wt_bank.cpp
 
+ifeq ($(BENCH_OPTIMIZATION),o2)
+override OPT := -O2
+else ifeq ($(BENCH_OPTIMIZATION),o3)
+override OPT := -O3
+else
+override OPT := -O3 -flto
+endif
+
 SYSTEM_FILES_DIR = $(LIBDAISY_DIR)/core
 include $(SYSTEM_FILES_DIR)/Makefile
+
+$(OBJECTS): $(BUILD_DIR)/bench_optimization.h
+
+ifeq ($(BENCH_OPTIMIZATION),o3-lto)
+LDFLAGS += -flto
+endif
 
 # --- git hash header --------------------------------------------------
 # `-DBENCH_GIT_HASH=...` on the compile line is invisible to Make's
