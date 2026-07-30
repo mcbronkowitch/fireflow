@@ -9,6 +9,14 @@
 #include "synth/synth_engine.h"
 #include "fx/part_fx.h"
 #include "engine_2x4.h"
+#include <cstddef>
+#include <new>
+
+#if defined(__ARM_EABI__)
+#define BENCH_DTCM_BSS __attribute__((section(".dtcmram_bss")))
+#else
+#define BENCH_DTCM_BSS
+#endif
 
 namespace bench {
 namespace {
@@ -39,19 +47,37 @@ struct FxGroup {
     float values[FXT_COUNT];
 };
 
-struct InstrumentGroup {
-    Instrument instrument;
+struct InstrumentHarness {
     int counter;
     float out_l[kBlock], out_r[kBlock];
 };
 
-SerialArena<
+struct InstrumentGroup {
+    Instrument instrument;
+};
+
+using SystemArena = SerialArena<
     ModGroup,
     SynthGroup,
     SynthPairGroup,
     WavePairGroup,
     FxGroup,
-    InstrumentGroup> g_system_arena;
+    InstrumentGroup>;
+
+SystemArena g_system_arena;
+
+// DTCM is NOLOAD in alt_sram.lds and therefore survives a debug reset.
+// Keep raw storage here and begin the Instrument lifetime explicitly in
+// setup_inst_worst_bbd_dtcm() before reading any retained byte.
+struct DtcmInstrumentStorage {
+    alignas(Instrument)
+        unsigned char bytes[sizeof(Instrument)];
+};
+
+DtcmInstrumentStorage BENCH_DTCM_BSS g_dtcm_instrument_storage;
+Instrument* g_dtcm_instrument = nullptr;
+Instrument* g_active_instrument = nullptr;
+InstrumentHarness g_instrument_harness;
 
 // --- 1. baseline ------------------------------------------------------------
 void setup_empty() {}
@@ -250,31 +276,51 @@ float proc_reverb()
 }
 
 // --- 8-9. the whole instrument ---------------------------------------------
-void setup_inst_common()
+InstrumentGroup& construct_axi_instrument_group()
 {
-    auto& group = g_system_arena.emplace<InstrumentGroup>();
-    group.instrument.init(kSampleRate, fx_mem());
-    group.instrument.set_tempo_bpm(120.f);
+    if (g_dtcm_instrument) {
+        g_dtcm_instrument->~Instrument();
+        g_dtcm_instrument = nullptr;
+    }
+    return g_system_arena.emplace<InstrumentGroup>();
+}
+
+Instrument& construct_dtcm_instrument()
+{
+    g_system_arena.reset();
+    if (g_dtcm_instrument) {
+        g_dtcm_instrument->~Instrument();
+        g_dtcm_instrument = nullptr;
+    }
+    g_dtcm_instrument = ::new (
+        static_cast<void*>(g_dtcm_instrument_storage.bytes)) Instrument{};
+    return *g_dtcm_instrument;
+}
+
+void configure_inst_common(Instrument& inst)
+{
+    g_active_instrument = &inst;
+    inst.init(kSampleRate, fx_mem());
+    inst.set_tempo_bpm(120.f);
     // Reset the retrigger phase here, not just at file-scope initialization:
     // without this, instrument_worst's phase silently inherits whatever
     // instrument_init's process() loop left it at. Each row now constructs a
     // fresh InstrumentGroup, and this explicit assignment documents the
     // intended retrigger phase rather than relying on value-initialization.
-    group.counter = 0;
+    g_instrument_harness.counter = 0;
 }
 
 // Init patch: the typical load.
 void setup_inst_init()
 {
-    setup_inst_common();
+    auto& group = construct_axi_instrument_group();
+    configure_inst_common(group.instrument);
 }
 
 // Worst case: 8 voices, 4-note COLOR on both parts, every FX block on, high
 // diffusion, echo at maximum. THE number.
-void setup_inst_worst()
+void configure_inst_worst(Instrument& inst)
 {
-    setup_inst_common();
-    auto& inst = g_system_arena.get<InstrumentGroup>().instrument;
     for (int p = 0; p < PART_COUNT; ++p) {
         inst.set_color(p, 1.f);          // 4-note chords -> 4 voices per part
         inst.set_density(p, 1.f);
@@ -297,6 +343,13 @@ void setup_inst_worst()
     inst.set_master_drive(1.f);
 }
 
+void setup_inst_worst()
+{
+    auto& group = construct_axi_instrument_group();
+    configure_inst_common(group.instrument);
+    configure_inst_worst(group.instrument);
+}
+
 // --- 10. the whole instrument, FLUX at the BBD's ceiling ---------------------
 // instrument_worst never touches the FLUX voicing controls, so the combined
 // worst case would otherwise be an extrapolation. This row measures
@@ -309,11 +362,8 @@ void setup_inst_worst()
 // runner's fixed 100-block warm-up is enough. That simplification is the
 // point -- the worst case is now constant and knowable, which is exactly what
 // the design claimed.
-void setup_inst_worst_bbd()
+void configure_inst_worst_bbd(Instrument& inst)
 {
-    setup_inst_worst();
-    auto& group = g_system_arena.get<InstrumentGroup>();
-    auto& inst = group.instrument;
     for (int p = 0; p < PART_COUNT; ++p) {
         inst.set_stages(p, 1.f);            // 16384: the largest cell array
         inst.set_drive(p, 0.85f);           // saturating every pass
@@ -323,24 +373,41 @@ void setup_inst_worst_bbd()
     // Fill both lines and settle every envelope before the runner measures.
     const float* in = test_input();
     for (int b = 0; b < 200; ++b)
-        inst.process(in, in, group.out_l, group.out_r, kBlock);
+        inst.process(in, in, g_instrument_harness.out_l,
+                     g_instrument_harness.out_r, kBlock);
+}
+
+void setup_inst_worst_bbd()
+{
+    auto& group = construct_axi_instrument_group();
+    configure_inst_common(group.instrument);
+    configure_inst_worst(group.instrument);
+    configure_inst_worst_bbd(group.instrument);
+}
+
+void setup_inst_worst_bbd_dtcm()
+{
+    auto& inst = construct_dtcm_instrument();
+    configure_inst_common(inst);
+    configure_inst_worst(inst);
+    configure_inst_worst_bbd(inst);
 }
 
 float proc_inst()
 {
-    auto& group = g_system_arena.get<InstrumentGroup>();
-    auto& inst = group.instrument;
+    auto& inst = *g_active_instrument;
+    auto& harness = g_instrument_harness;
     const float* in = test_input();
-    inst.process(in, in, group.out_l, group.out_r, kBlock);
+    inst.process(in, in, harness.out_l, harness.out_r, kBlock);
     // Keep the voices busy: a fire every ~half second on both parts.
-    if (++group.counter >= 250) {
-        group.counter = 0;
+    if (++harness.counter >= 250) {
+        harness.counter = 0;
         inst.trigger_manual(PART_A);
         inst.trigger_manual(PART_B);
     }
     float acc = 0.f;
     for (size_t i = 0; i < kBlock; ++i)
-        acc += group.out_l[i] + group.out_r[i];
+        acc += harness.out_l[i] + harness.out_r[i];
     // Same guard proc_synth uses: fold both parts' active voice counts into
     // the returned value so a wrong voice count -- the exact failure that
     // shipped undetected as a "1 voice" row measuring 2.8 voices -- moves
@@ -369,6 +436,8 @@ const Workload kCoreWorkloads[] = {
     { "system", "instrument_init",    setup_inst_init, proc_inst    },
     { "system", "instrument_worst",   setup_inst_worst,proc_inst    },
     { "system", "instrument_worst_bbd", setup_inst_worst_bbd, proc_inst },
+    { "system", "instrument_worst_bbd_dtcm",
+      setup_inst_worst_bbd_dtcm, proc_inst },
 };
 const int kCoreCount = sizeof(kCoreWorkloads) / sizeof(kCoreWorkloads[0]);
 

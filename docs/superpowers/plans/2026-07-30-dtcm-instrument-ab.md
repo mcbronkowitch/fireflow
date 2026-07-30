@@ -4,7 +4,7 @@
 
 **Goal:** Measure the exact worst-case instrument from DTCM and AXI SRAM inside one firmware image without changing voices, sound, or DSP behavior.
 
-**Architecture:** Add a raw aligned DTCM allocation for one `InstrumentGroup`, construct it explicitly during setup, and route both the AXI and DTCM rows through one active-group pointer and one process callback. Extend the fail-closed host controller so unequal A/B checksums invalidate the capture, then collect offline and real-callback hardware evidence.
+**Architecture:** Add a raw aligned DTCM allocation for one `Instrument`, construct it explicitly during setup, and give both rows the same counter and output arrays in AXI SRAM. Route both rows through one active-instrument pointer and one process callback. Extend the fail-closed host controller so unequal A/B checksums invalidate the capture, then collect offline and real-callback hardware evidence.
 
 **Tech Stack:** C++17, STM32H750/libDaisy, GNU Arm Embedded 10.2.1, Python `unittest`, OpenOCD bench controller.
 
@@ -140,7 +140,7 @@ Expected: link failure naming `dtcm_instrument_group_not_implemented`.
 
 In `workloads_system.cpp`:
 
-1. Include `<cstddef>`, `<new>`, and `<type_traits>`.
+1. Include `<cstddef>` and `<new>`.
 2. Define an ARM-only section macro:
 
 ```cpp
@@ -155,22 +155,28 @@ In `workloads_system.cpp`:
 
 ```cpp
 struct DtcmInstrumentStorage {
-    alignas(InstrumentGroup)
-        unsigned char bytes[sizeof(InstrumentGroup)];
+    alignas(Instrument)
+        unsigned char bytes[sizeof(Instrument)];
 };
 
-static_assert(std::is_trivially_destructible_v<InstrumentGroup>);
 DtcmInstrumentStorage BENCH_DTCM_BSS g_dtcm_instrument_storage;
-InstrumentGroup* g_active_instrument_group = nullptr;
+Instrument* g_dtcm_instrument = nullptr;
+Instrument* g_active_instrument = nullptr;
+InstrumentHarness g_instrument_harness;
 ```
 
-4. Construct the DTCM group with placement `new` on every DTCM setup. Never
-   read the retained NOLOAD bytes before construction.
-5. Refactor the existing AXI setup into shared helpers taking
-   `InstrumentGroup&`. Both BBD rows call those helpers.
-6. Set `g_active_instrument_group` during every instrument setup.
-7. Make `proc_inst()` read only `*g_active_instrument_group`; it must contain no
-   AXI/DTCM branch.
+4. Construct the DTCM instrument with placement `new` on every DTCM setup. If
+   `g_dtcm_instrument` is non-null, destroy that live instrument first,
+   matching `SerialArena::reset()`. Reset the arena before constructing the
+   DTCM object, and destroy the DTCM object before constructing an AXI object,
+   so only one instrument is live. Never read retained NOLOAD bytes before
+   construction; after a debug reset the ordinary-BSS pointer is null.
+5. Refactor the existing AXI setup into shared helpers taking `Instrument&`.
+   Both BBD rows call those helpers and use the exact same AXI-resident
+   `InstrumentHarness`.
+6. Set `g_active_instrument` during every instrument setup.
+7. Make `proc_inst()` read only `*g_active_instrument` plus the common harness;
+   it must contain no AXI/DTCM branch.
 
 In `anchor.cpp`, add both `instrument_worst_bbd` rows to `kAnchorNames` and
 update `kAnchorCount` from the array size rather than a hand-maintained literal.
@@ -200,7 +206,7 @@ arm-none-eabi-nm --print-size -C bench/build/bench.elf
 Verify:
 
 - `g_dtcm_instrument_storage` starts in `0x20000000..0x2001ffff`;
-- its size is at least `sizeof(InstrumentGroup)` and approximately 58 KiB;
+- its size is exactly `sizeof(Instrument)` and approximately 49 KiB;
 - `g_system_arena` remains in `0x24000000..0x2407ffff`;
 - the workload table points both A/B names at the same `proc_inst` symbol.
 

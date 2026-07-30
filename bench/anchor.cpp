@@ -7,15 +7,17 @@ namespace {
 
 using namespace daisy;
 
-// The three rows worth cross-checking. ORDER MATTERS: the two that fit inside
-// the block budget run first and sound clean; instrument_worst runs LAST
+// The rows worth cross-checking. ORDER MATTERS: the rows most likely to fit
+// inside the block budget run first and sound clean; instrument_worst runs LAST
 // because it does not fit and will sound broken -- see the note below.
 const char* kAnchorNames[] = {
     "oliverb_solo_sram",
     "tap_read_sdram",
+    "instrument_worst_bbd_dtcm",
+    "instrument_worst_bbd",
     "instrument_worst",
 };
-constexpr int kAnchorCount = 3;
+constexpr int kAnchorCount = sizeof(kAnchorNames) / sizeof(kAnchorNames[0]);
 constexpr int kAnchorSeconds = 2;
 
 CpuLoadMeter    g_meter;

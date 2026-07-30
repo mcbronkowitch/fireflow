@@ -16,11 +16,13 @@ bytes and its largest member is the `InstrumentGroup` used by the gate.
 
 This round asks one question:
 
-> How much does the exact gate cost when only the `InstrumentGroup` moves from
+> How much does the exact gate cost when only the `Instrument` moves from
 > cached AXI SRAM to DTCM?
 
-It does not move echo buffers, sample buffers, reverb storage, audio buffers,
-code, or any engine algorithm.
+It does not move the bench counter, output arrays, echo buffers, sample
+buffers, reverb storage, audio buffers, code, or any engine algorithm. Keeping
+the output arrays in AXI is load-bearing: shipping audio buffers are DMA-owned
+and cannot be placed in CPU-local DTCM.
 
 ## 2. Same-binary experiment
 
@@ -34,10 +36,12 @@ Both rows:
 - call the same `proc_inst` function through the workload table;
 - use the same input, external FX memory, warm-up, retrigger cadence, voice
   guard, and checksum path;
-- differ only in the address of the live `InstrumentGroup`.
+- differ only in the address of the live `Instrument`.
 
-The active group is selected during setup through one ordinary-BSS pointer.
-The measured callback therefore contains no row-specific branch.
+The active `Instrument*` is selected during setup through one ordinary-BSS
+pointer. Both rows use the same AXI-resident harness. The measured callback
+therefore contains no row-specific branch, and only the `Instrument` address
+differs.
 
 This makes the subtraction an intra-run comparison. Code-layout drift between
 builds cannot masquerade as a DTCM saving.
@@ -48,10 +52,12 @@ builds cannot masquerade as a DTCM saving.
 be assumed to start life there after a debug reset.
 
 The DTCM allocation is therefore raw, aligned storage. The DTCM row begins the
-`InstrumentGroup` lifetime explicitly with placement `new` during every setup.
-The group must be trivially destructible; a compile-time assertion enforces
-that assumption. The active-group pointer remains in normal `.bss`, which the
-startup path clears.
+`Instrument` lifetime explicitly with placement `new` during every setup.
+`Instrument` is not trivially destructible, so switching rows first destroys
+the live object, matching `SerialArena`'s lifecycle. A second ordinary-BSS
+pointer tracks the DTCM lifetime. Both pointers are cleared by startup; after a
+debug reset the retained DTCM bytes are therefore treated only as raw storage
+and are overwritten by placement `new`, never read as an old object.
 
 The linker remains the hard capacity gate. The build must prove that the DTCM
 symbol lies in `0x20000000..0x2001ffff` and that DTCMRAM usage remains below
@@ -104,4 +110,3 @@ keep a memory-layout change on a sub-resolution claim.
 - Commit trailer is exactly
   `Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>`,
   with nothing after it.
-
