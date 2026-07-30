@@ -30,7 +30,7 @@
 - Consumes: `validate_captures(captures, profile)` and `BENCH_PROTOCOL_ROWS_BY_FAMILY`.
 - Produces: a `system/instrument_worst_bbd_dtcm` protocol row and per-run equality validation against `instrument_worst_bbd`.
 
-- [ ] **Step 1: Write the failing checksum-equality test**
+- [x] **Step 1: Write the failing checksum-equality test**
 
 Add a test to `ProfileContract` that constructs a complete `system` capture
 plus `instrument_worst_bbd_dtcm`, gives the AXI and DTCM rows different literal
@@ -54,7 +54,7 @@ so the DTCM row copies the AXI row's literal checksum. Historical
 `PRE_BODY_ROWS_BY_FAMILY` fixtures remain untouched because they describe a
 real protocol from before this row existed.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -66,7 +66,7 @@ python -m unittest test_run_contract.ProfileContract.test_dtcm_ab_rejects_unequa
 Expected: FAIL because the new row is not yet part of the protocol and no
 DTCM-specific equality gate exists.
 
-- [ ] **Step 3: Add the protocol row and equality gate**
+- [x] **Step 3: Add the protocol row and equality gate**
 
 Append `"instrument_worst_bbd_dtcm"` after `"instrument_worst_bbd"` in
 `BENCH_PROTOCOL_ROWS_BY_FAMILY["system"]`.
@@ -83,7 +83,7 @@ raise BenchValidationError(
 )
 ```
 
-- [ ] **Step 4: Run the focused and full controller tests**
+- [x] **Step 4: Run the focused and full controller tests**
 
 Run:
 
@@ -96,7 +96,7 @@ python -m unittest test_run_contract
 Expected: the focused test passes and the full controller suite reports zero
 failures.
 
-- [ ] **Step 5: Commit the protocol gate**
+- [x] **Step 5: Commit the protocol gate**
 
 ```powershell
 git add bench/test_run_contract.py bench/run.py
@@ -113,7 +113,7 @@ git commit -m "test(bench): require identical DTCM gate output" -m "Co-Authored-
 - Consumes: `InstrumentGroup`, `setup_inst_worst_bbd`, `proc_inst`, and linker section `.dtcmram_bss`.
 - Produces: workload `system/instrument_worst_bbd_dtcm`; both A/B workloads use the identical `proc_inst` function.
 
-- [ ] **Step 1: Add the new workload row without storage**
+- [x] **Step 1: Add the new workload row without storage**
 
 Append this entry after the existing gate:
 
@@ -125,7 +125,7 @@ Append this entry after the existing gate:
 Declare a stub `setup_inst_worst_bbd_dtcm()` that deliberately fails at build
 time with an unresolved call to `dtcm_instrument_group_not_implemented()`.
 
-- [ ] **Step 2: Run build-only and verify RED**
+- [x] **Step 2: Run build-only and verify RED**
 
 Run:
 
@@ -136,7 +136,7 @@ python run.py --profile system --build-only
 
 Expected: link failure naming `dtcm_instrument_group_not_implemented`.
 
-- [ ] **Step 3: Implement raw DTCM storage and shared setup**
+- [x] **Step 3: Implement raw DTCM storage and shared setup**
 
 In `workloads_system.cpp`:
 
@@ -183,7 +183,7 @@ update `kAnchorCount` from the array size rather than a hand-maintained literal.
 Keep the DTCM row before the AXI row so the more likely under-budget segment is
 heard first.
 
-- [ ] **Step 4: Build and verify GREEN**
+- [x] **Step 4: Build and verify GREEN**
 
 Run:
 
@@ -195,7 +195,7 @@ python run.py --profile system --build-only
 Expected: exit 0, no new warnings, DTCMRAM below 131,072 bytes, SRAM and
 SRAM_EXEC below their limits.
 
-- [ ] **Step 5: Verify the linked placement and shared callback**
+- [x] **Step 5: Verify the linked placement and shared callback**
 
 Run:
 
@@ -210,7 +210,7 @@ Verify:
 - `g_system_arena` remains in `0x24000000..0x2407ffff`;
 - the workload table points both A/B names at the same `proc_inst` symbol.
 
-- [ ] **Step 6: Run desktop and controller verification**
+- [x] **Step 6: Run desktop and controller verification**
 
 Run:
 
@@ -223,7 +223,13 @@ python -m unittest test_run_contract test_task8_contract test_qspi_guard
 
 Expected: all commands exit 0 and all tests report zero failures.
 
-- [ ] **Step 7: Commit the workload**
+Executed result: firmware build and all 79 controller tests passed. The
+desktop build passed; `ctest` retained the two failures already present on
+`main` (`test_seed_audition_init.cpp` defaults and `ctrl_identity`'s stored
+render hash). This branch has no diff from `main` in `engine/`, `host/`,
+`tests/`, or `CMakeLists.txt`.
+
+- [x] **Step 7: Commit the workload**
 
 ```powershell
 git add bench/workloads_system.cpp bench/anchor.cpp
@@ -242,7 +248,7 @@ git commit -m "bench(dtcm): add same-binary instrument gate" -m "Co-Authored-By:
 - Consumes: committed clean-tree system profile with both A/B rows.
 - Produces: two-run offline and anchored A/B measurements plus a keep/revert decision.
 
-- [ ] **Step 1: Build the exact committed source**
+- [x] **Step 1: Build the exact committed source**
 
 Run:
 
@@ -253,7 +259,7 @@ python run.py --profile system --build-only
 
 Expected: exit 0 with the committed short hash embedded in the image.
 
-- [ ] **Step 2: Bind the QSPI receipt**
+- [x] **Step 2: Bind the QSPI receipt**
 
 Run:
 
@@ -265,7 +271,7 @@ python run.py --profile system --no-build --program-qspi --build-only
 Expected: target programming and byte verification succeed and
 `build/qspi-verified.json` is refreshed for the exact ELF artifacts.
 
-- [ ] **Step 3: Collect two hardware runs**
+- [x] **Step 3: Collect two hardware runs**
 
 Run:
 
@@ -278,7 +284,7 @@ Expected: both runs reach `BENCH_END`; the controller accepts complete unique
 row sets, identical per-row repeat checksums, equal AXI/DTCM checksums, matching
 QSPI digest, and matching device fingerprint.
 
-- [ ] **Step 4: Apply the pre-registered decision rule**
+- [x] **Step 4: Apply the pre-registered decision rule**
 
 For each run calculate AXI minus DTCM for `pct_avg` and `pct_max`, then calculate
 the same deltas for the two anchor rows. Record all raw values, both deltas, and
@@ -289,7 +295,7 @@ their directions agree, and each saving's spread is at most 0.25 points.
 Otherwise revert the DTCM workload implementation after preserving the evidence
 and record that data placement was not material.
 
-- [ ] **Step 5: Update roadmap and commit evidence**
+- [x] **Step 5: Update roadmap and commit evidence**
 
 Record the DTCM result and whether the next round is ITCM. Then run:
 
@@ -298,7 +304,7 @@ git add docs/bench docs/superpowers/specs/2026-07-30-dtcm-instrument-ab-design.m
 git commit -m "docs(dtcm): record instrument placement result" -m "Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 ```
 
-- [ ] **Step 6: Final verification**
+- [x] **Step 6: Final verification**
 
 Run:
 

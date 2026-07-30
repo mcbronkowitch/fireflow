@@ -110,3 +110,22 @@ keep a memory-layout change on a sub-resolution claim.
 - Commit trailer is exactly
   `Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>`,
   with nothing after it.
+
+## 7. Result
+
+Hardware evidence:
+`docs/bench/2026-07-30-8702bc8-system.{md,csv}`. Both runs used the same
+firmware (`8702bc8`), verified QSPI payload and Seed MCU. AXI and DTCM returned
+the identical checksum `483e8e82` in both runs.
+
+| run | AXI avg | DTCM avg | saving | AXI max | DTCM max | saving |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 105.28 | 104.64 | **0.64** | 109.49 | 108.77 | **0.72** |
+| 2 | 105.28 | 104.64 | **0.64** | 109.49 | 108.75 | **0.74** |
+
+Both metrics save at least 0.50 points in both runs, both directions agree,
+and the spread is 0.02 points at most. The DTCM placement therefore passes the
+pre-registered keep rule. It does not close the budget: the retained gate is
+still 104.64 % average and 108.75--108.77 % maximum offline (104.80 % average
+and 108.74--108.81 % maximum in the real callback). Proceed to a separate ITCM
+round.

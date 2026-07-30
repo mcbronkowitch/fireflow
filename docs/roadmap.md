@@ -11,7 +11,7 @@ is actually built today, and what is still design-only.
   (`2026-07-12-spotykach-center-section-design.md`) and the ambient-reverb v2
   spec (`2026-07-12-spotykach-ambient-reverb-v2-design.md`), and the FORM/SONG split spec
   (`2026-07-25-spotykach-form-song-split-design.md`).
-- **Last updated:** 2026-07-29 (VCV 2.15.1; BODY is complete, merged and has had
+- **Last updated:** 2026-07-30 (VCV 2.15.1; BODY is complete, merged and has had
   its first playability pass — see "BODY playability" below).
 - **⚠ The instrument is currently over CPU budget.** The 2026-07-29 hardware
   run measured `instrument_worst` at **120.9 %** of the 960 000-cycle block
@@ -125,6 +125,16 @@ is actually built today, and what is still design-only.
   `perf/part-per-sample`, merged as `bc0ff78` after a two-reviewer pass — unlike
   rounds 1–3 this one changes `engine/`, so it landed after review rather than as
   evidence. See "Per-sample call boundary" below.
+  **Update, 2026-07-30 (same-binary DTCM A/B):** placing only the 49,792-byte
+  `Instrument` state in CPU-local DTCM, while both variants share the same AXI
+  audio buffers and the exact same process callback, saves **0.64 CPU points
+  average and 0.72–0.74 maximum**. Both runs return the identical checksum
+  `483e8e82`; DTCM passes the pre-registered keep rule. The gate is still
+  **104.64 % average / 108.75–108.77 % maximum** offline and
+  **104.80 % / 108.74–108.81 %** in the real callback. Four voices per deck
+  remain non-negotiable, so the next ordered round is ITCM. Branch
+  `codex/perf-tcm-ladder`; evidence
+  `docs/bench/2026-07-30-8702bc8-system.{md,csv}`.
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
@@ -1769,6 +1779,30 @@ the `engine/` diff with bit-exactness as its first question, one auditing every
 figure against the CSVs — and a fix round before merging. Neither reviewer found
 a behavioural defect. The audit found seven prose defects, which is the same
 distribution rounds 2 and 3 produced.
+
+### DTCM instrument placement ✅ (same-binary A/B)
+
+Branch `codex/perf-tcm-ladder`. Spec
+`docs/superpowers/specs/2026-07-30-dtcm-instrument-ab-design.md`, evidence
+`docs/bench/2026-07-30-8702bc8-system.{md,csv}`.
+
+This round removes cross-build layout drift from the comparison. The AXI row
+and DTCM row live in one firmware image, call the same `proc_inst`, share the
+same AXI-resident counter and output arrays, and differ only in the address of
+the live `Instrument`. A fail-closed host check rejects unequal A/B checksums.
+The linked DTCM object is 49,792 bytes at `0x200005b0`; total DTCM use is 51,248
+of 131,072 bytes (39.10 %).
+
+| run | AXI avg | DTCM avg | saving | AXI max | DTCM max | saving |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 105.28 | 104.64 | **0.64** | 109.49 | 108.77 | **0.72** |
+| 2 | 105.28 | 104.64 | **0.64** | 109.49 | 108.75 | **0.74** |
+
+Both runs return checksum `483e8e82` for both rows. The saving clears the
+pre-registered 0.50-point threshold in both metrics and both runs; direction
+and spread checks pass. **Keep the DTCM placement for the firmware shell.**
+It does not close the budget, so the next round is the ordered ITCM A/B. No
+voice count, DSP setting, or audio buffer residency changed.
 
 ### BODY playability ✅ (extends M5j)
 
