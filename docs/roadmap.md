@@ -119,9 +119,9 @@ is actually built today, and what is still design-only.
   own prediction did not survive this round; the two
   remaining candidates — the block entry point and the voice cut (≈7.9 points) —
   are both listening decisions rather than checksum ones. Branch
-  `perf/part-per-sample`, **not merged** — unlike rounds 1–3 this one changes
-  `engine/`, so it lands after review rather than as evidence. See "Per-sample
-  call boundary" below.
+  `perf/part-per-sample`, merged as `bc0ff78` after a two-reviewer pass — unlike
+  rounds 1–3 this one changes `engine/`, so it landed after review rather than as
+  evidence. See "Per-sample call boundary" below.
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
@@ -1740,10 +1740,13 @@ worth more than either, and the `n = 1` finding above says where to start: the
 bench's call shape and the shipped call shape have to be checked against each
 other before the numbers mean anything.
 
-**Merge status: not merged.** Branch `perf/part-per-sample`, on `0eed246` plus
-this round's documentation fixes. Rounds 1–3 landed as evidence and documentation
-only; this is the first round in the sequence that changes `engine/`, so it waits
-for review rather than fast-forwarding.
+**Merge status: merged as `bc0ff78`** (`--no-ff`, matching rounds 1–3). Rounds
+1–3 landed as evidence and documentation only; this is the first round in the
+sequence that changes `engine/`, so it went through a two-reviewer pass — one on
+the `engine/` diff with bit-exactness as its first question, one auditing every
+figure against the CSVs — and a fix round before merging. Neither reviewer found
+a behavioural defect. The audit found seven prose defects, which is the same
+distribution rounds 2 and 3 produced.
 
 ### BODY playability ✅ (extends M5j)
 
