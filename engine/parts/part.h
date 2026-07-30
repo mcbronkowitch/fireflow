@@ -294,28 +294,8 @@ public:
 
         _engine->process_in(inL, inR);
         _engine->process(outL, outR);
-        // At hold SoftSwitch::process() returns exactly 1.0f: the hold case
-        // assigns _out = 1.f and the return is
-        // std::clamp(inverse ? 1.f - _out : _out, 0.f, 1.f) with inverse
-        // defaulted to false (engine/fx/fx_util.h), which is what the M1.6
-        // bypass invariant noted above rests on. Skipping the multiply then is
-        // bit-exact, not merely inaudible: x * 1.0f reproduces x's exact bit
-        // pattern for every finite value, both infinities and both zeros,
-        // -0.0f included.
-        //
-        // The guard tests the VALUE, not the stage, so it holds whichever stage
-        // produced the 1.0f, and every other multiplier -- the fade-in and
-        // fade-out ramps, and the 0.0f an idle fade returns -- still multiplies
-        // exactly as before.
-        //
-        // _engine_fade.process() itself stays unconditional above. That call IS
-        // the state machine: the hold -> fall transition a set_engine() starts
-        // is only taken inside it, so skipping the call at hold would strand
-        // the fade there and the pending engine swap would never run.
-        if (fade != 1.f) {
-            outL *= fade;
-            outR *= fade;
-        }
+        outL *= fade;
+        outR *= fade;
 
         _fx.process(outL, outR, sendL, sendR, _fxv);
     }
