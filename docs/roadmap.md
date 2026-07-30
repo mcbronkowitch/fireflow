@@ -110,7 +110,10 @@ is actually built today, and what is still design-only.
   per-block amortisation the bench measured at `n = 96` does not exist on them;
   the removal of the two `Part` prologue pairs still does, the register-holding
   candidate does not, and **no figure is claimed for what the hosts see**. The
-  block-based caller is the M6 Daisy shell. Third,
+  firmware is not affected: `app.cpp:117` already sets `block_size = 96` and
+  `ProcessAudio` passes it through, so M6 gets the full saving with nothing
+  buffered — on block size the bench models the firmware faithfully, and it is
+  the two development hosts the finding bounds. Third,
   **this bench cannot demonstrate a change smaller than about 0.5 points on the
   gate**, because every comparison it can make is cross-build and cross-build
   layout drift moves rows containing no `Part` by up to 0.49. **No further
@@ -1706,8 +1709,20 @@ sample — §3.2's 0.40–0.70. What does not hold is any part of the saving tha
 from state staying in registers across the block, which is precisely the
 unverified candidate for the unexplained majority above. **So the bench measured
 a saving the two current callers would only partly see. No figure is claimed for
-how much** — it is not measured — and the block-based production caller is the
-Daisy shell, still M6.
+how much** — it is not measured.
+
+**The product, however, is already the right shape, and this was checked after
+the section above was written.** `app.cpp:117` sets `block_size = 96` — the
+bench's block exactly — and `AppImpl::ProcessAudio` (`app.cpp:183-199`) passes
+`size` straight to `_core.process`. The Daisy audio callback is block-based at 96
+by construction, so when M6 wires it to `Instrument::process` the full saving
+applies with nothing buffered and no latency cost. **On block size the bench is a
+faithful model of the firmware, not an optimistic one.** The `n = 1` finding
+bounds the two *development* hosts: VCV cannot do better in principle, since Rack
+calls a module once per sample and a block would cost up to 96 samples of latency
+on audio and CV alike; `host/render` could batch but applies scenario events at
+exact sample indices, so batching would move event timing and change the render
+that `ctrl_identity` hashes. Neither is worth changing for CPU.
 
 **This bench cannot demonstrate a change smaller than about 0.5 points on the
 gate.** Run-to-run spread inside one build is ≤ 0.04 on `pct_avg` and the gate
@@ -1736,9 +1751,11 @@ spec's Stage 2 block entry point, which is *not* bit-exact because
 `Instrument::process` interleaves the decks per sample and CHOKE reads the
 priority deck each sample, and the voice cut at ≈7.9 points. Lowering the bench's
 floor — a same-build A/B, or any way to hold layout fixed across a change — may be
-worth more than either, and the `n = 1` finding above says where to start: the
-bench's call shape and the shipped call shape have to be checked against each
-other before the numbers mean anything.
+worth more than either. The `n = 1` finding says what to check first, not what to
+change: the bench's call shape and the shipped call shape have to be compared
+before the numbers mean anything. Done here, that comparison came out in the
+bench's favour — 96 on both sides — but it was checked after the fact rather than
+before, which is the habit worth keeping.
 
 **Merge status: merged as `bc0ff78`** (`--no-ff`, matching rounds 1–3). Rounds
 1–3 landed as evidence and documentation only; this is the first round in the
