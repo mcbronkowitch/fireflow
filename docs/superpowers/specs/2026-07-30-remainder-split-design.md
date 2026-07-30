@@ -194,6 +194,52 @@ rational form, where the withdrawn DRIVE-0 configuration would have clamped and
 taken `fast_tanh`'s early return. If the measured figure comes in *below* the
 old 14.5, that reasoning is wrong and the result section must say so.
 
+### 5.2 Second amendment, 2026-07-30, after task 1's fix round
+
+**§5.1's band shift was derived from an inverted mechanism and is withdrawn.**
+§5 and §5.1 remain unedited; this supersedes §5.1's *reason* and its band, and
+records the error rather than hiding it.
+
+§5.1 argued that DRIVE 0 puts the echo in a self-oscillating regime a deck never
+runs, so the four-axis row should cost *more*. Reading refutes both halves:
+
+- **The loop gain is DRIVE-independent at the panel, by design.** `BbdEcho`'s own
+  small-signal loop gain is `feedback_ * g` — its header says so in as many words
+  (`engine/fx/bbd.h:531-536`) — and `Flux::set_feedback` divides
+  `bbd_drive_gain()` back out of the coefficient it hands down (`flux.cpp:180`,
+  `_fb_norm * _fb_scale` with `_fb_scale = 1.2 / bbd_drive_gain`). The product is
+  therefore `0.9 x 1.2 = 1.08` at DRIVE 0 and `0.334 x 3.236 = 1.081` at DRIVE
+  0.85. **Both bloom identically**; keeping the bloom point fixed across DRIVE is
+  precisely what that division exists to do (`bbd.h:538-546`, and the measured
+  0.57 -> 0.56 note at `bbd.h:171-174`). There is no regime difference.
+- **The cost direction is the opposite of what §5.1 claimed.**
+  `sat_in_ = bbd_drive_gain(norm) / kSatCeil` (`bbd.h:562`), so `fast_tanh`'s
+  early return triggers at `|x| >= 3.282` at DRIVE 0 and at `|x| >= 1.014` at
+  DRIVE 0.85. `test_input()` is a full-scale LCG signal in +-1
+  (`bench/mem.cpp:81-93`), and the saturator's argument is `in + fb_state_ *
+  feedback_` with `fb_state_` bounded by `sat_out_ = 0.9`. At DRIVE 0 that
+  argument reaches ~2.19 after scaling and **never** clamps -- the Pade form runs
+  every sample. At DRIVE 0.85 it reaches ~4.67 and clamps often, taking the
+  cheap path. So the deck's DRIVE is, if anything, **cheaper per sample**.
+
+**The fix itself stands unchanged.** The row must set DRIVE 0.85 because a deck
+runs 0.85 -- faithfulness is the reason, and it was always the only sound one.
+Cost direction was never a good argument for it.
+
+Re-registered, before the build, with **no direction claimed**:
+
+| quantity | predicted | falsified if |
+|---|---|---|
+| `fx_flux_hot` (four axes) | 13.5 - 17.5 | outside 12.5 - 19.0 |
+| `fx_flux_hot` - `fx_flux_sdram` | +0.5 - +4.5, against round 1's two-axis +2.29 | outside -0.5 - +6.0 |
+
+The band is wide and symmetric on purpose. **This round has now had two
+mechanism-derived directional predictions refuted by reading** -- §6.6's original
+"cost is zero" and §5.1's "therefore higher" -- both written by the coordinator,
+both from the same habit of deriving a cost *direction* from a mechanism. Reading
+is reliable for what the code does and unreliable for what it costs. The
+measurement settles cost; predictions here are bounds, not directions.
+
 **Secondary check, free to compute:** `deck_shell` must be strictly less than
 `instr_part_1`, and by roughly the engine and FX difference. A shell that comes
 out anywhere near 46 points means `set_engine` did not take effect and the row
@@ -254,6 +300,16 @@ measured; this section exists so that cannot happen again.
    remove one (the clamp branch), so its direct cost is ≤ 0; but via the
    coupling it moves which branch the saturator takes on every sample, and that
    is not bounded by reading.
+
+   **Corrected again after task 1's fix round -- see §5.2.** The "two different
+   regimes" framing above is also wrong and is withdrawn. `Flux::set_feedback`
+   divides `bbd_drive_gain()` back out (`flux.cpp:180`), so the panel-level loop
+   gain is 1.08 at DRIVE 0 and 1.081 at DRIVE 0.85 -- DRIVE-independent by design
+   (`bbd.h:531-546`). The saturator's *threshold* does move, and in the direction
+   that makes the deck's DRIVE the **cheaper** path, not the dearer one. **The row
+   must set DRIVE 0.85 because a deck runs 0.85** -- faithfulness, not cost
+   direction. Read the two paragraphs above as a record of arriving at the right
+   requirement via two wrong reasons.
 
    With DRIVE set, `fx_flux_hot − fx_flux_sdram` spans **four** axes, where
    round 1's +2.29 estimate spanned two (STAGES and rate only —
