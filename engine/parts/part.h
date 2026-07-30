@@ -312,7 +312,15 @@ public:
         // read cadence, not from this guard.
         if (_ctrl_ctr == 0) _audio_in_tap = 0.5f * (inL + inR);
 
-        _engine->process_in(inL, inR);
+        // Skipped unless the engine actually implements process_in. The base
+        // declares it with an empty body (engine_iface.h), so on every engine
+        // but the sampler this call reaches nothing -- and an indirect call
+        // through the vtable is not free to reach nothing with, because it
+        // also forces the compiler to spill anything live across it in this
+        // inlined loop. Not calling it is observationally identical: the
+        // callee has no body to observe. Whether it costs or saves cycles is
+        // not claimed here; the bench settles that.
+        if (_engine_wants_in) _engine->process_in(inL, inR);
         _engine->process(outL, outR);
         outL *= fade;
         outR *= fade;
@@ -363,9 +371,11 @@ private:
     // constructor, and none of its in-class initialisers reads another member,
     // so construction order carries no information either.
     //
-    // Field order inside the block is chosen for the encodings: the three bools
-    // land in the ldrb/strb 5-bit immediate window, the three words in the
-    // ldr/str 7-bit word window, and only one padding byte is spent.
+    // Field order inside the block is chosen for the encodings: the four bools
+    // land in the ldrb/strb 5-bit immediate window and the three words in the
+    // ldr/str 7-bit word window. The four bools fill one word exactly, so the
+    // block now spends no padding at all (it spent one byte when there were
+    // three).
     //
     // Whether this costs or saves cycles is not claimed here. It changes
     // encodings and data-cache locality, not instruction counts, and this
@@ -373,6 +383,11 @@ private:
     bool           _last_gate = false;
     bool           _switching = false;
     bool           _note_suppressed = false;   // last fire was swallowed
+    // Cached IPartEngine::consumes_input() for the engine _engine points at.
+    // Written only where _engine is written -- Part::init and
+    // Part::_engine_swap, both in part.cpp -- so the two cannot drift apart.
+    // false is the safe boot value: _engine is null until init() runs.
+    bool           _engine_wants_in = false;
     int            _ctrl_ctr = 0;              // control raster; see below
     int            _gate_ctr = 0;
     float          _last_master_hz = -1.f;
