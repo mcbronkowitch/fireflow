@@ -25,7 +25,7 @@ takes four-voice polyphony to three. Reducing FLUX's STAGES or its rate is worth
 something similar and changes the echo. The remainder is the only candidate
 where the answer might be "nothing changes except the cycle count" — and it is
 also the largest, at ≈13.8 points across the two decks against a 10.10-point
-gap.
+gap. (Both figures are round 2's; §9 supersedes them.)
 
 But "might" is doing real work in that sentence, and this round exists to remove
 it. The remainder splits into two kinds of cost with opposite prospects:
@@ -118,7 +118,11 @@ per sample, which is **not** free on this target and whose size this project has
 never measured.
 
 So a shell row's cost is `Part`-level code **plus** the FX shell **plus** the
-tone. Two of those three are already priced or will be, which is what makes the
+tone — **and, corrected after the run, plus the modulation plane**, because
+`Part::process` runs `_mod.process()` every sample
+(`engine/parts/part.cpp:378`). The three-term version stated here originally is
+the misconception §9.2 traces all three prediction misses to; it survives in
+this paragraph only as the thing that was wrong. Two of those three are already priced or will be, which is what makes the
 third readable. This is why the round needs three rows and not two: without
 `tone_solo`, `deck_shell` is uninterpretable.
 
@@ -133,7 +137,7 @@ already committed.
 |---|---|
 | **`fx_flux_hot`** | The `fx_flux_sdram` configuration with FLUX at the deck's operating point on **all four** axes: `set_stages(1.f)`, `set_flux_rate(kFluxRateCount - 1)`, `FXT_FLUX_FB` 0.9 **and `set_drive(0.85f)`**. DRIVE was left out of the first version of this row and added after task 1's review — see §6.6, which explains why it is not optional. A 200-block settle is required (§6.7). Everything else identical to `setup_fx_flux`. |
 | **`tone_solo`** | One `TestToneEngine`, driven through an `IPartEngine*` — `process_in` then `process`, in `Part::process`'s order — with `set_targets` pushed once per 96-sample control tick, as `Part::_control_tick` does. Prices the shell's engine so it can be subtracted. |
-| **`deck_shell`** | A whole `Part` at the gate's operating point (FLOW, RATE 0.8, DENSITY 1.0, the same seed base), with `set_engine(ENGINE_TEST_TONE)` settled and every FX block off at **`fx_none`'s exact operating point**. Prices `Part`-level code plus the FX shell plus the tone. |
+| **`deck_shell`** | A whole `Part` at the gate's operating point (FLOW, RATE 0.8, DENSITY 1.0, the same seed base), with `set_engine(ENGINE_TEST_TONE)` settled and every FX block off at **`fx_none`'s exact operating point**. Prices `Part`-level code plus the FX shell plus the tone **plus the modulation plane** (§3.3, §9.2). |
 
 ### 4.1 The arithmetic
 
@@ -304,7 +308,7 @@ measured; this section exists so that cannot happen again.
 6. **`fx_flux_hot` must set DRIVE, and the first version of it did not.** Task 1
    priced STAGES, the flux rate and FEEDBACK but left DRIVE at `Flux::init`'s
    `set_drive(0.f)`, while a deck runs `set_drive(0.85f)`
-   (`bench/workloads_instr.cpp:108`). Task 1's review established that this is
+   (`bench/workloads_instr.cpp:109`). Task 1's review established that this is
    not a documentation footnote but a regime error, and the row was corrected:
 
    `Flux::set_drive` rewrites `_fb_scale = 1.2f / bbd_drive_gain(d)`
@@ -379,27 +383,61 @@ measured; this section exists so that cannot happen again.
    measured loop, which §3.2 rules out because it would charge that row twice.
    §9 must not describe `tone_solo` as "the same engine driving as a deck does"
    without this qualifier.
-10. **§4.1's three-term subtraction removes the harness overhead twice.** Found
-   in review, and it is a defect in this design rather than in any row. Write
-   each row as harness plus parts: `deck_shell = H + P + F + E`,
-   `fx_none = H + F`, `tone_solo = H + E`. Then
-   `deck_shell − fx_none − tone_solo = P − H`. The per-row harness — the
-   `bl test_input()`, the loop counter, compare and branch, the accumulation,
-   the prologue — is subtracted twice and present once, so **`Part`-level code
-   comes out low by one `H`**. Measured off `proc_tone_solo`'s disassembly, `H`
-   is of order **0.08 points** against §5's 1.5–4.5 band: a 2–5 %
-   underestimate. It does not threaten the sign test, and it pushes in the same
-   direction as §6.1's floor, but §6.1 attributes that floor to contention
-   alone, so this is a second and independent reason the figure is a floor. §9
-   must say so when it shows the arithmetic.
 9. **`tone_solo` holds its pitch target constant; a deck's walks.**
    `TestToneEngine::set_targets` calls `std::pow(8.f, p)`
    (`engine/parts/test_tone_engine.h:22`) once per control tick. This row pushes
    one fixed value, where a deck's PITCH target moves along the quantizer
    staircase. Whether `powf`'s cost depends on its argument is **not** something
    reading settles, and per §5.2's rule this design does not guess a direction.
-   The exposure is bounded — one `powf` per 96 samples — and it is named here so
-   §9 reports it as an approximation rather than discovering it later.
+   The *exposure* is bounded at one `powf` per 96 samples; what is unbounded is
+   `powf`'s **argument-dependence**, and §9 must report it as an approximation
+   rather than discovering it later.
+10. **§4.1's subtraction removes the per-row harness three times and has it
+   once.** Found in review. Write each row as harness plus parts:
+   `deck_shell = H + P + F + E + M`, `fx_none = H + F`, `tone_solo = H + E`,
+   `deck_mod_hot = H + M`. The corrected four-term form then gives
+   `P − 2H`, so **`Part`-level code comes out low by 2H**, of order
+   **0.16 points** against §5's 1.5–4.5 band. (The first version of this item
+   was written for the three-term formula and said one `H`; it also modelled the
+   three harnesses as identical, which the disassembly refutes — `proc_fx`
+   carries an extra load/store, the `× 0.9f` skew and four-way argument setup
+   that `proc_tone_solo` does not. Worked through, the residual is of order one
+   *`tone_solo`* harness, the lightest of the three, so the magnitude survives but
+   **the single-`H` model must not be reused on other rows**.) It does not
+   threaten the sign test, and it pushes the same direction as §6.1's floor —
+   but §6.1 attributes that floor to contention alone, so this is a second and
+   independent reason the figure is a floor.
+11. **The FX line of §4.1 charges `PartFx`'s shared outer-branch work twice.**
+   Found in review, and it is the largest defect in this ladder. `PartFx::process`
+   gates a block behind `_grit.engaged() || _flux.engaged()`
+   (`engine/fx/part_fx.cpp:33`), and that block contains work belonging to
+   *neither* block alone: the `_grit_applied` guard, `_flux.set_feedback`,
+   `_flux.set_time_mod`, the `dry_l`/`dry_r` save, the tape-tap capture
+   (`_tap_dc.Process` + `fast_tanh`) and the FX-MIX crossfade. Call it `C`. Then
+   `fx_grit` and `fx_flux_hot` each pay one `C`, while `fx_comp` and `fx_none` pay
+   none — `setup_fx(SEL_COMP)` and `setup_fx(SEL_NONE)` both leave GRIT and FLUX
+   disengaged (`bench/workloads_system.cpp:189-190`), so neither enters the
+   branch. `FXtotal` therefore carries **2C** where a real deck's single
+   `PartFx::process` call carries **one**, and `remainder'` is biased
+   **negative** by one `C`.
+
+   By inspection of `part_fx.cpp:34-79` — two guarded setters, two float saves, a
+   one-pole plus `fast_tanh`, four multiplies and four adds — `C` is of order
+   **0.3–0.5 points per deck**. That is *reading, not measurement*, and per
+   §5.2's rule no direction beyond the sign is claimed for it; the sign is
+   certain because the term is unconditionally present in both rows and absent
+   from both others. **It cannot be separated from GRIT's or FLUX's own cost by
+   any existing row**, so §9 must quote `remainder'` with this bias named rather
+   than as a point estimate. One additional row settles it — GRIT and FLUX both
+   engaged, so that `FXtotal` can be formed with a single `C`. This defect is
+   inherited from round 1's `fx_X − fx_none` decomposition and is not caused by
+   any row added here.
+
+   **The favourable counterpart, also from review:** substituting the corrected
+   §4.1, `deck_mod_hot` **cancels out of `remainder'` entirely** —
+   `remainder' = instr_part_1 − deck_engine_hot − deck_shell + tone_solo +
+   fx_none − FXtotal`. So the residue is immune to any `deck_mod_hot`
+   operating-point error, while `Part`-level code is fully exposed to it.
 
 ## 7. Non-goals
 
@@ -480,16 +518,47 @@ the large majority; the part that is blocks costing each other cache and bus —
 the part no amount of guarding recomputes would recover — is under a point per
 deck. **Contention was not the answer.**
 
-Two figures must travel with that headline. `Part`-level code is a **floor**
-(§6.1): `deck_shell` runs the `Part`'s own work with almost nothing competing
-for cache or SDRAM, so all contention lands in `remainder'`, and §6.10's harness
-term biases it by roughly another +0.08. And the `pct_avg` reading is 2.65, not
-4.00 — `deck_shell` has a 15 % avg-to-max spread (10.79 → 12.46) where `fx_none`
-and `tone_solo` are nearly flat, so subtracting flat rows from a spiky one gives
-a larger figure in `pct_max` than in `pct_avg`. **The honest range for
-`Part`-level code is 2.65–4.00 per deck, 5.3–8.0 across the instrument.** The
-spread itself is a finding: something in a `Part` costs once per block, and the
-control raster — chord, quantizer, FX target cache — is where to look.
+Three qualifications travel with that headline, all of them found in review
+rather than by the author.
+
+**`Part`-level code is a floor.** §6.1: `deck_shell` runs the `Part`'s own work
+with almost nothing competing for cache or SDRAM, so all contention lands in
+`remainder'`. §6.10 adds a harness term of order **0.16** in the same direction.
+
+**`remainder'` carries an undisclosed negative bias of its own size.** §6.11:
+`FXtotal` charges `PartFx`'s shared outer-branch work twice, because both
+`fx_grit` and `fx_flux_hot` enter the `_grit.engaged() || _flux.engaged()` block
+(`engine/fx/part_fx.cpp:33`) while `fx_comp` and `fx_none` do not, where a real
+deck's single `PartFx::process` call pays it once. By inspection that term is of
+order 0.3–0.5 points, so **the honest reading of `remainder'` is roughly
+1.1–1.3 per deck, not 0.84** — and no existing row can separate it, so the
+figure does not deserve two decimals. The conclusion survives the correction
+comfortably; the point estimate does not.
+
+**The two metrics disagree by 1.35, and the spread says why — but not what the
+first version of this section claimed.** `deck_shell` spreads 15.4 %
+(10.79 → 12.46) against `instr_part_1`'s 4.8 % and `tone_solo`'s 3.0 %. That
+spread is **not** evidence of a once-per-block cost, and the control raster is the
+one candidate it rules out: `SynthEngine::kCtrlInterval` is 96
+(`engine/synth/synth_engine.h:36`) and `kBlock` is 96 (`bench/workload.h:8`), so
+the raster fires in **every** measured block and is therefore in `avg_cyc` by
+construction. The CSV settles it — `tone_solo` pushes a once-per-block
+`set_targets` *including a `powf`* and spreads only 3.0 %; `fx_none` spreads
+0.15 %. A 15 % spread is a **rare-event** signature, and `deck_shell` has two:
+`trigger_manual()` once per 250 blocks and the gate's lane fire once per ~72
+blocks, each adding a chord build and, for the fire, a whole extra
+`_control_tick` (§6.8) to whichever block it lands in. Round 2's §8.1 had this
+right and this section originally contradicted it.
+
+So the `pct_max` figure of 4.00 is inflated by **per-note** work, and **2.65
+(`pct_avg`) is the better estimate of steady-state `Part` cost**; 4.00 is the
+better estimate of what a `Part` costs in its worst block. The honest range is
+**2.65–4.00 per deck** (2.62–4.00 across both runs), and doubling it to
+**5.3–8.0 across the instrument** assumes deck B's shell matches deck A's, which
+this round did not measure — `instr_part_2 − instr_part_1` is 46.18 against
+45.65, so the second deck is about half a point dearer. One further caveat on the
+subtraction: of the three rows removed, `fx_none` (+0.15 %) and `tone_solo`
+(+3.0 %) are nearly flat, but `deck_mod_hot` spreads 7.4 %.
 
 ### 9.2 §4.1's formula was wrong, and it falsified two predictions on its own
 
@@ -520,33 +589,62 @@ The three misses collapse to one when the modulation is removed once:
 - `Part`-level code = 12.46 − 2.54 − 2.16 − 3.76 = **4.00**, inside 1.5–4.5.
 - `remainder'` = **+0.84**, inside 0–3.0.
 
-§4.1 now carries the corrected formula with the error recorded in place. §5,
-§5.1 and §5.2 are untouched, as registered. **The measurement was not at
-fault: every row returned what it was built to return, and the defect was in
-the coordinator's arithmetic.** This is the tenth such defect in this round's
-own documents against zero in the three rows.
+§4.1 now carries the corrected formula with the error recorded in place, and
+§3.3 and §4's row description — which stated the same three-term composition —
+are annotated. **The measurement was not at fault: every row *as measured*
+returned what it was built to return, and the defect was in the coordinator's
+arithmetic.**
+
+That is not a claim of clean rows, and an earlier version of this paragraph made
+one. The rows needed a substantive fix and eight comment fixes before the
+measured build: `fx_flux_hot` was running at `Flux::init`'s DRIVE 0 while a deck
+runs 0.85 (`cec9fa0`), and the row files carried eight false declarative claims
+(`cec9fa0`, `0dc9c2b`). All were caught in review, all before the run.
+
+**§5's registered "sharpest test" did not fire, and that is the round's most
+useful methodological finding.** §5 nominated the *sign* of `Part`-level code as
+the test that would catch a broken ladder. The ladder *was* broken, and the sign
+test passed comfortably — 7.76, nowhere near zero. What caught the error was
+`remainder'` crossing its −1.0 threshold, a criterion registered as a
+sanity bound rather than as the primary guard. A double-count inflates one term
+and deflates another by the same amount; a sign test on the inflated term is
+structurally the wrong instrument. **A future round should register the
+*residue's* sign, not a component's.**
+
+Two citation slips inside §5.2 are recorded here rather than fixed in place,
+because §5.2 is pre-registration and must stay byte-identical: the phrase "its
+loop gain IS feedback * g" is at `engine/fx/bbd.h:543` (the surrounding argument
+runs to `:531-546`), and the measured 0.57 → 0.56 note is at `bbd.h:170-173`.
 
 ### 9.3 FLUX's operating point costs less than round 1 estimated
 
 `fx_flux_hot` − `fx_flux_sdram` = **+1.30** (`pct_max`; +1.34 `pct_avg`) — the
 four-axis difference, measured together on one build. Round 1 estimated **+2.29**
 from two axes swept separately on a different build
-(`2026-07-29-instrument-ablation-design.md` §8.3), so **round 1 overestimated
-FLUX's share of the residue by roughly a point per deck**, and round 2's §8.1,
-which carried that estimate forward, overstated it correspondingly. The
-comparison is four-axes-against-two and across builds, so it is subject to §6.3;
-the within-run +1.30 is the figure to use.
+(`2026-07-29-instrument-ablation-design.md` §8.3), and round 2's §8.1 carried
+that estimate forward. **So the residue was smaller than round 2 reported — but
+which of the two figures is "wrong" is not separable here.** §5.2 establishes by
+reading that the added DRIVE axis moves `fast_tanh`'s early return from
+`|x| >= 3.282` to `|x| >= 1.014` and therefore takes the cheap path more often,
+i.e. the fourth axis is itself cheaper per sample; a four-axis figure landing
+below a two-axis estimate is what that mechanism predicts with no round-1 error
+at all, and no row anywhere prices DRIVE alone (§6.6). The comparison is also
+four-axes-against-two and across builds, so §6.3 applies. **What is settled is
+the within-run number to use: +1.30.**
 
 Consequence for round 2's arithmetic: its 6.85-point residue is now split into
-FLUX's real +1.30, `Part`-level code at 2.65–4.00, and 0.84 of contention plus
-unnamed — with the balance absorbed by this build's drift (§9.5) and by the
-harness terms of §6.10.
+FLUX's real +1.30, `Part`-level code at 2.65–4.00, and the contention-plus-unnamed
+term. Re-evaluating round 2's own formula in this build gives 6.14, and
+`1.30 + 4.00 + 0.84 = 6.14` exactly. **The whole 6.85 → 6.14 balance is drift**
+(§9.5): `instr_part_1` −0.35, the FX rows +0.45, the two deck rows +0.09. It is
+not a harness effect — under the corrected §4.1 the harness term cancels out of
+`remainder'` altogether (§6.11).
 
 ### 9.4 What the rows themselves showed
 
 - **`tone_solo` = 2.16.** Two virtual dispatches, one `sinf`, one `vdiv` and
-  three multiplies per sample, plus one `powf` per 96 samples (§6.9's
-  unbounded term). It is 17 % of `deck_shell`, so the shell is not
+  three multiplies per sample, plus one `powf` per 96 samples — bounded in
+  exposure, unbounded in argument-dependence (§6.9). It is 17 % of `deck_shell`, so the shell is not
   tone-dominated.
 - **`deck_shell` = 12.46 against `instr_part_1`'s 45.65.** The reader's sanity
   check of §4 passes with room: a figure near 46 would have meant the engine
@@ -556,7 +654,9 @@ harness terms of §6.10.
   `objdump -d` on `proc_tone_solo` shows three `blx` through vtable offsets
   **12 / 44 / 20** with the engine pointer reloaded from `[r4, #20]` before each;
   `proc_deck_engine_hot` likewise. Nothing devirtualised in the build these
-  numbers come from.
+  numbers come from. Note that `bench/build/` is not committed, so this receipt
+  is not reproducible from the repository after the next build — the offsets are
+  recorded here for that reason.
 
 ### 9.5 Checksums held; the drift did not shrink
 
@@ -572,12 +672,18 @@ runs differ in cycles on 15 rows and in checksum on none.
 | `mod_plane_2x_center` | 7.42 | 7.25 | −0.17 | **−2.56 %** |
 | `oliverb_solo_sram` | 9.66 | 9.49 | −0.17 | −1.90 % |
 | `fx_comp` | 3.26 | 3.36 | +0.10 | +1.29 % |
+| `instr_noverb` | 95.55 | 96.41 | **+0.86** | +0.61 % |
+| `instrument_worst` | 105.90 | 106.23 | +0.33 | +0.43 % |
+| `instr_part_2` | 92.10 | 91.83 | −0.27 | −0.20 % |
 | `deck_engine_hot` | 18.61 | 18.57 | −0.04 | −0.03 % |
 | `synth_2x4` | 35.83 | 35.82 | −0.01 | −0.02 % |
 
 Round 2 found the predecessor's ±2 %-on-a-small-row bound **loosened**; this
 round does not tighten it. Two rows again exceed ±2 % of `avg_cyc` at unchanged
-checksums, across a build change of three appended rows. **The gate moved +0.41
+checksums, across a build change of three appended rows — and the largest
+`pct_max` movement of any shared row is `instr_noverb` at **+0.86**, twice the
+gate's. (The table above lists every row that moved more than ±0.2 points, plus
+two that barely moved, for contrast.) **The gate moved +0.41
 and the gap is 10.51 here, not 10.10** — which is why every figure in §9.1 comes
 from one run and none from a subtraction across builds.
 
@@ -585,23 +691,46 @@ from one run and none from a subtraction across builds.
 
 1. **A fix round on `Part`-level code — the first non-diagnostic round in this
    sequence.** 5.3–8.0 points across the instrument, no sonic cost, and now
-   named rather than inferred. Start where the once-per-block spread points: the
-   control raster. The candidate already on the table is
-   `Flux::set_rhythm` (`engine/fx/flux.cpp:299`), which runs
-   `update_thin_pattern()` and `derive_intervals()` unguarded twice per control
-   tick, including at LINK 0 where nothing has changed (§7 forbade touching it
-   here). Guarding recomputes on "did the value move" is the pattern.
-2. **Stop asking about contention.** 0.84 per deck is inside the noise this
-   project has been fighting all along, and three rounds have now failed to find
-   contention anywhere: nil between decks (round 1), nil at deck granularity
-   (round 2), under a point inside a deck (here). It is not where the budget
-   went.
-3. **The voice cut remains the fallback**, at ≈7.9 points for four-voice
+   named rather than inferred. Start inside **`Part::_control_tick`**
+   (`engine/parts/part.cpp:180-374`): the chord build, the quantizer, the five
+   `target_raw` evaluations, the target pushes, the FX target-cache fill and the
+   excitation bus are the `Part`-level once-per-tick work, and they are what
+   `deck_shell` actually measured. The rare-event shape of the spread (§9.1)
+   points additionally at the chord build, which runs on every note.
+
+   **`Flux::set_rhythm` is *not* the place to start, and §7 was wrong to imply
+   it is.** It is called only from `Instrument::process`'s control tick
+   (`engine/instrument.cpp:96-97`), never from `Part::_control_tick`, and
+   `deck_shell` instantiates a bare `Part` with no `Instrument` — so it
+   contributes exactly **zero** to the 2.65–4.00 measured here. It remains a
+   real candidate (it runs `update_thin_pattern()` and `derive_intervals()`
+   unguarded twice per tick, including at LINK 0 where nothing changed), but any
+   saving comes out of round 1's separately measured **4.04-point glue** bucket,
+   not out of this round's `Part` bucket.
+2. **One more row would repair the FX ladder.** §6.11's double-charged `C` is the
+   largest known defect in this decomposition and cannot be separated by any
+   existing row. A single row with GRIT *and* FLUX both engaged lets `FXtotal` be
+   formed with one `C` instead of two, and would put `remainder'` on a footing
+   the other three terms already have.
+3. **Contention is bounded and small, but it is not noise.** 0.84 as measured —
+   1.1–1.3 once §6.11's bias is allowed for — is an **upper bound**, since §6.1
+   pushes all contention into this term. That is small enough to stop spending
+   rounds on, and three rounds have now failed to find contention anywhere: nil
+   between decks (round 1), nil at deck granularity (round 2), around a point
+   inside a deck (here). But it is not noise: the run-to-run spread of this same
+   quantity is **0.10**, an eighth of it.
+4. **The voice cut remains the fallback**, at ≈7.9 points for four-voice
    polyphony going to three (round 2 §8.3) — and it is now clearly the *second*
    option, not the first, because `Part`-level code is of comparable size and
    costs nothing to hear.
 
-**The gap is 10.51 and the compromise-free bucket is 5.3–8.0.** That is not a
-guaranteed close, and none of those points is free to take — a `Part`'s
-per-sample loop cannot be deleted, only tightened. But for the first time in
-three rounds the largest named quantity is code rather than a residue.
+**Compared like with like, the compromise-free bucket is about three quarters of
+the overrun:** 8.00 against the `pct_max` gap of 10.51 (76 %), or 5.30 against
+the `pct_avg` gap of 6.50 (82 %, the gate reading 106.50 in both runs). Quoting
+the `pct_avg` bucket against the `pct_max` gap — as an earlier version of this
+section did — mixes metrics and understates the finding.
+
+That is not a guaranteed close, and none of those points is free to take: a
+`Part`'s per-sample loop and control tick cannot be deleted, only tightened. But
+for the first time in three rounds the largest named quantity is code rather
+than a residue.
