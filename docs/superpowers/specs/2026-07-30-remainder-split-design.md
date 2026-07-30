@@ -89,9 +89,26 @@ This makes it the right engine for a shell row: it is the smallest thing a
 completes through `_engine_fade` (`engine/parts/part.cpp:386-393`), which
 re-pushes `set_flow`, `set_hold`, `set_gate` and `set_cycle` into the
 freshly-selected engine. A shell row that measures during the fade would be
-measuring two engines and a crossfade. Setup must run the switch to completion
-and **assert `engine_id() == ENGINE_TEST_TONE`** before the measured window
-opens.
+measuring two engines and a crossfade.
+
+**Corrected after task 3: the `engine_id()` assert alone does not establish
+this**, and the first version of this section said it did. The fade is **385
+samples** end to end (`engine/fx/fx_util.h:82-105`): `hold` forces
+`_iterator = 191` and hands to `fall`, whose 191 decrements reach idle on call
+192 — where the swap lands, because `Part::process` tests `is_idle()` *after*
+calling `_engine_fade.process()` (`part.cpp:383-384`) — and then `rise` takes a
+further 191 calls before `hold` returns exactly 1.0 on call 385. So
+`engine_id()` flips **193 samples before the fade finishes**. It rules out
+measuring two *engines*; it does not rule out measuring a *crossfade*.
+
+What establishes it is the settle depth, and task 3 pins that at compile time
+with `static_assert(kInstrSettleBlocks * kBlock > kEngineFadeSamples)` —
+19200 > 385, so a shortened settle cannot compile. `Part` exposes no readback of
+the fade at all: task 3 checked every public observer in `part.h`, and the one
+level-ish getter downstream, `PartFx::tape_tap()`, is forced to exactly `0.f`
+whenever FLUX is disengaged (`engine/fx/part_fx.cpp:85`), so on this row it
+carries no information. Adding a getter was not an option — `engine/` is locked
+(§7).
 
 ### 3.3 A shell still pays the FX shell and the engine
 
