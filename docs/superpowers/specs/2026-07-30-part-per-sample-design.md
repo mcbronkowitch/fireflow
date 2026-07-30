@@ -467,7 +467,7 @@ through `proc_inst` (`bench/workloads_system.cpp:329-334`), `instr_noverb` throu
 | `instrument_worst_bbd` | −1.59 | −2.07 |
 | `instr_noverb` | −1.54 | −1.38 |
 | `instrument_worst` | −1.38 | −1.12 |
-| **mean** | **−1.80** | **−1.86** |
+| **mean** | **−1.81** | **−1.86** |
 
 **Rows that call `part.process(...)` directly from a bench proc's own loop.**
 `proc_instr_part_1` and `proc_instr_part_2` (`bench/workloads_instr.cpp:728-766`)
@@ -481,13 +481,38 @@ kBlock; ++i)` and call `Part::process` from it, with no `Instrument` anywhere.
 | `deck_shell` | **+0.20** | **+0.30** |
 | **mean** | **−0.74** | **−0.71** |
 
-**Every row that improved by more than a point runs its `Part` inside
-`Instrument::process`'s loop. `deck_shell`, the row round 3 built to isolate one
-`Part`, did not improve at all.** `instr_part_1` and `instr_part_2` sit between
-the two groups and are not explained here.
+**The split above is a description of two builds, not a mechanism, and an
+earlier draft of this section overstated it.** That draft read "every row that
+improved by more than a point runs its `Part` inside `Instrument::process`'s
+loop". On the item-4-only build (`dc17cdc`) that was true: the four `Instrument`
+rows moved −1.42 … −2.10 `pct_avg` while the three direct-call rows read −0.75
+(`instr_part_1`), +0.36 (`instr_part_2`) and +0.18 (`deck_shell`), so no
+direct-call row reached a point. **In the final state it is false, and the table
+directly above refutes it.** `instr_part_2` (−1.25) and `instr_part_1` (−1.16)
+are direct-call rows — each writes its own `for (size_t i = 0; i < kBlock; ++i)`
+and calls `g.a.process(...)` from it (`bench/workloads_instr.cpp:728-766`) — and
+both improved by more than a point. Generalising a grouping that held on one
+build into a mechanism was the error; the grouping dissolved on the next build.
 
-`Part::process` has exactly one non-bench caller: `Instrument::process`, at
-`engine/instrument.cpp:112` and `:125`. Both hosts that drive the engine call
+**What the data supports is much narrower: exactly one row failed to move.**
+`deck_shell` read **+0.20**, and the `Instrument`-versus-direct-call split does
+not explain it, because the same mechanism would have to distinguish
+`instr_part_1` — one `Part`, driven from a bench loop, −1.16 — from `deck_shell`
+— one `Part`, driven from a bench loop, +0.20 — and it cannot. Nor is +0.20 a
+demonstrated regression: it sits inside the 0.36 of control-group movement §9.3
+measures. It is a row that **did not move**, and no mechanism is named for that
+here.
+
+`Part::process` has exactly one caller in **shipping** code: `Instrument::process`,
+at `engine/instrument.cpp:112` and `:125`. It is not the only caller outside the
+bench. `Part` declares three `process` overloads (`engine/parts/part.h:224`,
+`:302`, `:305`), the 4- and 2-argument forms forwarding to the 6-argument body,
+and `tests/test_part.cpp`, `tests/test_choke.cpp`, `tests/test_mod_tide.cpp` and
+`tests/test_sampler_part.cpp` call them extensively, on `Part`-typed locals and
+on `Part&` helper parameters.
+Tests are not bench, so "exactly one non-bench caller" is false as
+written; the claim that holds is "exactly one caller in shipping code", and it is
+the one this section's argument needs. Both hosts that drive the engine call
 `Instrument::process` (`host/render/main.cpp:102`,
 `host/vcv/src/Spotymod.cpp:637`). Nothing under `src/` reaches `engine/` at all —
 `engine/instrument.cpp` is compiled only into the `spky_tests` and `render`
@@ -508,16 +533,76 @@ second property is the one that matters. Round 3 chose `deck_shell` for a
 different question and chose well for it; this round inherited it for a question
 it does not fit.
 
+**The same error is one level up, in the two hosts, and this round did not notice
+it until after the measurement.** `Instrument::process` owns the sample loop
+(`engine/instrument.cpp:76`), and **both hosts that exist today call it with
+`n = 1`**: `host/render/main.cpp:102` renders one sample per call
+(`inst.process(&in_l, &in_r, &l, &r, 1)`) and `host/vcv/src/Spotymod.cpp:637`
+does the same inside Rack's per-sample callback. Only the bench passes
+`kBlock` = 96 (`proc_inst`, `bench/workloads_system.cpp`). So at `n = 1` the
+loop body runs once per call and **`Instrument::process`'s own** nine-register
+`stmdb`/`ldmia` pair and `vpush {d8-d13}` — the ones §9.5 verifies execute once
+per block on the bench — are paid **per sample**.
+
+What still holds at `n = 1`: the two `Part::process` prologue/epilogue pairs per
+sample are gone, because the body is now inlined into the caller rather than
+called. That is the removal §5.1's static test registered and §9.5 verified, and
+it is §3.2's **0.40–0.70 for the instrument**.
+
+What does **not** hold at `n = 1`: any part of the saving that comes from state
+being kept in registers *across* the 96 iterations, since there are no 96
+iterations. That is exactly §9.11's unverified candidate for the unexplained
+majority of the measured 1.59.
+
+**So the bench measured a saving that the two callers which exist today would
+only partly see.** No figure is claimed for how much they would see — it is not
+measured, and this round has no host-side instrument that could measure it. The
+bound is structural: at least the inlining of the two `Part` bodies, at most the
+full 1.59, and the split between them is unknown for the same reason §9.11's
+residue is unexplained. The block-based production caller is the Daisy firmware
+shell, which is still M6.
+
+**Record this next to the `deck_shell` lesson, because it is the same class of
+error:** a call site that does not reproduce how the component will be called.
+`deck_shell` gets the loop right and drops the caller; the two hosts keep the
+caller and drop the block. Both are cases where the measured configuration and
+the shipped configuration differ in a way that the measurement itself cannot
+show, and both belong on the checklist for whoever chooses round 5's instrument.
+
 ### 9.3 The control group, and what counts as a saving
 
 **Membership, verified from the sources rather than from §6.2's list, as §6.2
 requires — and §6.2's list is wrong.** Sixteen of the 23 rows run no `Part` body.
-Twelve are `system` rows: `empty_callback`, which allocates nothing, and eleven
-whose groups declare no `Part` — `SynthGroup` (`bench/workloads_system.cpp:24-27`),
-`SynthPairGroup` (`:29-31`), `WavePairGroup` (`:33-35`) and `FxGroup` (`:37-40`).
+Twelve are `system` rows, enumerated against the row table at
+`bench/workloads_system.cpp:356-372`:
+
+- **Nine** are covered by four group types that declare no `Part`: `SynthGroup`
+  (`:24-27`) for `synth_1_voice`, `synth_2_voices` and `synth_4_voices`;
+  `SynthPairGroup` (`:29-31`) for `synth_2x4`; `WavePairGroup` (`:33-35`) for
+  `wave_2x4`; and `FxGroup` (`:37-40`) for `fx_none`, `fx_grit`, `fx_flux_sdram`
+  and `fx_comp`.
+- `empty_callback` allocates nothing.
+- `oliverb_solo_sram` uses **no arena group at all**: `setup_reverb` and
+  `proc_reverb` (`:226-250`) operate on a file-static `AmbientReverb` returned by
+  `reverb_sram()`.
+- `mod_plane_2x_center`'s `ModGroup` **does** declare two `Part`s — the
+  correction below.
+
+An earlier draft of this paragraph put all eleven non-`empty_callback` rows under
+the four group types, which silently absorbed the last two. The whole point of
+the paragraph is that membership was verified from source rather than from
+§6.2's list, so a miscount inside it is self-defeating; the enumeration is
+therefore spelled out row by row here and the group types are counted at **nine**,
+not eleven.
+
 Four are `instr` rows whose groups hold a `SuperModulator`, a `SynthEngine`, a
 `PartFx` and a `TestToneEngine` respectively (`bench/workloads_instr.cpp:151`,
-`:230`, `:336`, `:452`).
+`:230`, `:336`, `:452`) — `deck_mod_hot`, `deck_engine_hot`, `fx_flux_hot` and
+`tone_solo`. §6.2's list names none of the `instr` rows by that name except
+`deck_engine_hot`, `deck_mod_hot` and `tone_solo`; `fx_flux_hot` is reachable
+only through its `fx_*` glob, which sits among the `system` rows, so whether
+§6.2 meant to include it cannot be read off the sentence. It is included here,
+and it moved 0.00.
 
 The correction: **`mod_plane_2x_center` does construct two `Part`s** —
 `ModGroup` at `bench/workloads_system.cpp:18-22` declares `Part hook_a, hook_b`
@@ -541,8 +626,8 @@ classified: with it the control mean is −0.02 `pct_avg` over 16 rows, without 
 
 - All four `Instrument` rows (1.38–2.71) exceed 0.36 by between 3.8× and 7.5×.
   These are savings.
-- `instr_part_1` (1.16) and `instr_part_2` (1.25) exceed it by about 3.2×. These
-  are savings.
+- `instr_part_1` (1.16) exceeds it by 3.2× and `instr_part_2` (1.25) by 3.5×.
+  These are savings.
 - **`deck_shell` (+0.20) does not exceed it.** It is therefore neither a saving
   nor a demonstrated regression — it is inside drift. §5.1's band for it is still
   falsified (§9.5), because the band was two-sided and +0.20 is outside it; but no
@@ -565,8 +650,11 @@ within each build. Nothing in `Part` can reach it.
 **On the gate itself,** the three builds that all contain item 4 spread **0.96**
 (104.40, 105.36, 104.91). And the step from `dc17cdc` to `86cf817` moved the four
 `Instrument` rows by **−1.00, −0.59, +0.96 and +1.11** — a spread of **2.11
-points** — from a `.text` change of **−368 bytes** (`d93fa55`'s build 195,032 B →
-`86cf817` 194,664 B, both recorded in the commit messages).
+points** — from a `.text` change of **−368 bytes** (the `dc17cdc` build's
+195,032 B → `86cf817`'s 194,664 B). Neither figure is in `d93fa55`'s commit
+message, which records the item-4-alone measurement and no size: 195,032 is
+recorded in `dc17cdc`'s message and again in `b533372`'s, and 194,664 in
+`86cf817`'s.
 
 **§6.9's inference that `pct_avg` is nearly drift-free was overreaching, and this
 document should say so about itself.** §6.9 read the noise floor off the
@@ -586,9 +674,18 @@ run 2 against run 2, the largest `pct_avg` movement is 0.04
 `instrument_worst_bbd`, −0.01 on `deck_shell`).
 
 **§6.9's conclusion survives its faulty argument.** `pct_avg` is still the metric
-to read the bands on, because it is better on both noise-floor comparisons — 0.04
-against 0.15 run-to-run on the gate, 0.02 against 0.25 across the identical-source
-pair — and because `pct_max` is no better on the layout-drift comparison either
+to read the bands on, because it is better on both noise-floor comparisons — and
+the run-to-run one is stronger than an earlier draft of this sentence made it.
+That draft paired "0.04 against 0.15", but the two numbers are not the same
+measurement: **0.15 is the gate's worst run-to-run `pct_max`** (in `86cf817`;
+0.06–0.15 across the four builds), while **0.04 is the worst run-to-run
+`pct_avg` over all 23 rows** (`mod_plane_2x_center`, in `7272b27` and
+`86cf817`). Compared like for like on the gate itself, run-to-run `pct_avg` is
+**0.00 in all four builds** against `pct_max`'s 0.06–0.15; compared like for like
+over all 23 rows, `pct_avg`'s worst is 0.04. Either pairing favours `pct_avg`,
+and the on-the-gate one favours it more. The second comparison stands as
+written: 0.02 against 0.25 across the identical-source
+pair. `pct_max` is no better on the layout-drift comparison either
 (`fx_grit` 0.49 against 0.47). One place `pct_max` is *narrower*: the gate's
 spread across the three changed builds is 0.75 on `pct_max` against 0.96 on
 `pct_avg`. So `pct_max` is not uniformly worse, and the reason for preferring
@@ -655,8 +752,24 @@ FALSIFIED, in the favourable direction, on both readings.** Item 4 alone measure
 are past the far edge of the falsification band, item 4 alone by a factor of 1.75.
 §9.11 is what that costs the round.
 
-**Control group ≈ 0 — HELD.** Mean −0.02 `pct_avg` over the 16 rows, largest
-mover 0.36 (§9.3). The predicted movers all exceed it except `deck_shell`.
+**Control group ≈ 0 — HELD, but the condition could not have failed.** Mean
+−0.02 `pct_avg` over the 16 rows, largest mover 0.36 (§9.3), and the predicted
+movers all exceed it except `deck_shell`. **§5.1's registered falsification
+condition for this row is, however, self-referential:** "any row moves more than
+the largest control-group mover". For a control-group row that is "moves more
+than itself or than the largest of its peers" — the largest control-group mover
+is by construction not larger than the largest control-group mover, so no
+control-group reading can falsify it, whatever the drift turns out to be. Had
+`fx_flux_sdram` moved 5.00 instead of 0.36 the condition would still have read
+HELD. **A condition that cannot fail is not a prediction**, and this is the
+second defect in §5.1's pre-registration alongside §9.6's "a registered band
+without a registered metric is not a registered prediction" — same section, same
+class, and both recorded rather than repaired, because §5 must stay
+byte-identical. What the control group actually delivered is not a passed test
+but a *scale*: 0.36, the bar §9.3 measures the touched rows against. That is the
+useful output, and a future round should register it that way — as a threshold
+named in advance, e.g. "no row that constructs no `Part` moves more than 0.25" —
+rather than against itself.
 
 **Every shared checksum unchanged — HELD.** §9.7.
 
@@ -725,6 +838,45 @@ change in a single bit at any of the 23 operating points the `ablate` profile
 covers. §6.5 stands: this is the bench's own cross-run and cross-build comparison
 of rows whose inputs did not change, not a checksum against a stored file, of
 which this project has none.
+
+**Independently confirmed on the desktop renderer, on a different compiler and a
+different code path.** The repo does carry two byte-identity render gates —
+`ctrl_identity` and `wave_formant_sweep` (`CMakeLists.txt:183` and `:192`), which
+render a scenario through `host/render` and SHA256 the whole WAV — and they had
+never been run on this branch. They have now been run on `main` (`a93327e`) and
+on the branch (`0eed246`), in worktrees built from the same toolchain:
+
+| build type | scenario | `main` `a93327e` | branch `0eed246` |
+|---|---|---|---|
+| default (`Debug`) | `ctrl_identity` | `4296cf27…e59a7` | **identical** |
+| default (`Debug`) | `wave_formant_sweep` | `82aac4d6…706b5` | **identical** |
+| `-O3` (`Release`) | `ctrl_identity` | `2b73f248…b699cd` | **identical** |
+| `-O3` (`Release`) | `wave_formant_sweep` | `82aac4d6…706b5` | **identical** |
+
+**`main` and the branch render the same bytes at both optimisation levels.** Both
+gates pass on the branch at the build type the roadmap's "Build & verify" block
+documents (`cmake -S . -B build`, which resolves to `Debug` here).
+
+This matters because it is *independent* of §9.7's bench checksums in every way
+that could hide a shared cause: a different compiler and target (clang/x86-64,
+not `arm-none-eabi-gcc`), **no `-ffast-math`**, no `-O` level at all in the
+documented configuration, a different code path (`host/render`, not the bench
+runner), and a full rendered WAV hashed with SHA256 rather than a per-row
+accumulator folded to 32 bits. The code reviewer identified `-ffast-math`
+reassociation across the former call boundary as the one plausible way item 4
+could have altered output and found no site where it applies; this measures the
+question instead of arguing it, and the `-O3` row measures it a second time at a
+different optimisation level.
+
+**One caveat, and it is not this branch's.** `ctrl_identity`'s stored constant is
+**optimisation-level dependent**: it matches the default `Debug` build on both
+`main` and the branch, and does *not* match either at `-O3`, where both render
+`2b73f248…`. A build directory configured `-DCMAKE_BUILD_TYPE=Release` therefore
+fails the gate on `main` as well. That is a **pre-existing property of the gate**,
+not a finding about this branch — the constant pins a build configuration the
+test does not itself pin — and it is worth its own fix (pin the build type, or
+store a tolerance-based comparison). It is out of this round's scope.
+`wave_formant_sweep` is stable across both optimisation levels on both commits.
 
 ### 9.8 Sizes and symbols
 
@@ -850,9 +1002,27 @@ item 4's. Whoever wants the mechanism should measure it, not read it.
 Round 3 put `Part`-level code at **2.65 `pct_avg` / 4.00 `pct_max` per deck**
 (`docs/bench/2026-07-30-ccd5f12-ablate.csv` run 2, quoted in §1). That figure
 crosses a build boundary into this round, and it is safe to carry on `pct_avg` and
-less safe on `pct_max`: this session's baseline rebuilt the same source and returns
-identical `pct_avg` on every row but two (`fx_flux_hot` 0.01, `deck_shell` run 1
-0.03), while its `pct_max` on the gate differs by 0.25.
+less safe on `pct_max`: this session's baseline rebuilt the same source and its
+`pct_avg` moves by at most **0.04** on any row, while its `pct_max` on the gate
+differs by 0.25.
+
+Stated exactly, `ccd5f12` against `7272b27`, so that this paragraph agrees with
+§9.4 rather than reverting to §6.9's pre-correction reading:
+
+- **run 2, five rows move:** `instrument_init` −0.02, `wave_2x4` −0.01,
+  `oliverb_solo_sram` −0.01, `instr_noverb` −0.01, `fx_flux_hot` +0.01. The
+  largest is `instrument_init`, which is §9.4's correction to §6.9's table.
+- **run 1, seven rows move:** `mod_plane_2x_center` +0.04, `deck_shell` +0.03,
+  `synth_2x4` −0.01, `wave_2x4` −0.01, `instr_part_2` −0.01, `instr_noverb`
+  −0.01, `fx_flux_hot` +0.01.
+
+An earlier draft of this paragraph said "identical on every row but two
+(`fx_flux_hot` 0.01, `deck_shell` run 1 0.03)". That is §6.9's picture, which
+§9.4 had already corrected 250 lines earlier, and it undercounts both runs. **The
+conclusion is unchanged and slightly better supported:** every movement across
+the identical-source pair is ≤ 0.04, still an order of magnitude below §9.4's
+0.5-point cross-build floor, so round 3's `pct_avg` figure carries into this
+round safely.
 
 This round recovered **0.80 per deck on `pct_avg`** (1.04 on `pct_max`), the gate's
 1.59 / 2.07 halved — an average over the two decks, not each deck, and round 3
@@ -912,8 +1082,26 @@ a listening decision and a listening decision is the owner's, not this document'
 **What this round settled, and it is not the 1.6 points.** The gate went 106.50 →
 104.91 `pct_avg` and 110.76 → 108.69 `pct_max`, bit-for-bit identically, in the
 first round of the sequence that could have changed the sound. That is worth
-having. But the round's more durable outputs are two findings about measurement:
-that a row isolating a component need not reproduce how that component is called
-(§9.2), and that this bench's cross-build floor is around half a point on the gate
-(§9.4). Both were bought with hardware sessions, and both will save the next round
+having. But the round's more durable outputs are findings about measurement:
+
+1. **A call site that does not reproduce how the component will be called is not
+   an instrument for a change to the call.** `deck_shell` isolates one `Part` and
+   drops the caller (§9.2); the two hosts keep the caller and call
+   `Instrument::process` with `n = 1`, dropping the block over which this round's
+   saving was measured (§9.2 again). The second half of that was found by reading
+   the hosts *after* the measurement, and it bounds what the change is worth to
+   the code that exists today — a bound this round cannot put a number on.
+2. **This bench's cross-build floor is around half a point on the gate** (§9.4),
+   which bounds what any future bit-exact round can show.
+3. **Two of §5.1's four registered conditions were not tests.** One named no
+   metric (§9.6) and one was self-referential (§9.5). Pre-registration is only
+   worth what its conditions can fail on.
+
+A fourth, negative, output: **the `Instrument`-versus-direct-call grouping this
+section originally led with does not survive the final build** (§9.2). It held on
+one build, was written up as a mechanism, and was refuted by the table printed
+underneath it. The lesson that survives is the narrow one in item 1, not the
+grouping.
+
+All of these were bought with hardware sessions, and all will save the next round
 more than 1.6 points would.
