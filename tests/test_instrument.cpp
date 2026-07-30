@@ -1064,7 +1064,7 @@ TEST_CASE("audio input reaches the excitation bus and is off by default") {
 // tests/test_part.cpp's pre-existing Task 9 test catches independently --
 // nothing ever set _src_tape = false on a deck whose tape is genuinely LIVE
 // and required the tape to stop reaching the bus. Reproduced the reviewer's
-// mutation myself first (part.cpp:357, `if (_src_tape) bus += ...` ->
+// mutation myself first (part.cpp:381, `if (_src_tape) bus += ...` ->
 // unconditional `bus += _fx.tape_tap();`): full suite stayed 785/785 green.
 //
 // Same real-FX-chain idiom as "two BODY decks... stay bounded" above

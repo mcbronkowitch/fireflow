@@ -950,7 +950,7 @@ class AblateProfileTest(unittest.TestCase):
         # load-bearing for the round's arithmetic (section 4.1) rather than an
         # extra data point. The fourth term is not decoration and was not in
         # the formula as registered: Part::process runs _mod.process() every
-        # sample (engine/parts/part.cpp:378), so deck_shell contains the
+        # sample (Part::process, engine/parts/part.h:246), so deck_shell has the
         # modulation plane, and the three-term version this comment carried
         # until the fix round charged that plane twice (section 9.2).
         self.assertIn("tone_solo", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
@@ -967,7 +967,7 @@ class AblateProfileTest(unittest.TestCase):
         #
         # deck_mod_hot became a term only after the run (section 9.2). The
         # formula as registered omitted it, which charged the modulation plane
-        # -- run by Part::process every sample, engine/parts/part.cpp:378 --
+        # -- run by Part::process every sample, engine/parts/part.h:246 --
         # once inside Part-level code and once beside it in remainder', and
         # that single defect accounts for all three of the round's prediction
         # misses. Its co-presence here is load-bearing in exactly the way

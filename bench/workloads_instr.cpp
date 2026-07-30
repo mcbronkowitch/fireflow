@@ -162,7 +162,7 @@ struct DeckModGroup {
 // part of what this row corrects:
 //
 //   1. Called through an IPartEngine*, not a concrete SynthEngine&. Part
-//      holds `IPartEngine* _engine` (engine/parts/part.h:209) and every
+//      holds `IPartEngine* _engine` (engine/parts/part.h:383) and every
 //      method on that interface is virtual (engine/parts/engine_iface.h),
 //      so Part pays two virtual dispatches per sample and can inline
 //      neither. proc_engine_2x4 holds a concrete reference and the compiler
@@ -174,10 +174,12 @@ struct DeckModGroup {
 //      so the gate runs both decks as a drone. setup_engine_2x4 calls
 //      set_flow(false).
 //   3. The cycle comes from a real modulator's master_hz(), as
-//      Part::process derives it (part.cpp:403-407), not from the constant
+//      Part::process derives it (part.h:255-256, whose body is
+//      Part::_push_master_cycle, part.cpp:421-424), not from the constant
 //      set_cycle(2.f) the old row uses.
 //   4. process_in() is called every sample, before process()
-//      (part.cpp:482). proc_engine_2x4 never calls it, so the 35.80 points
+//      (Part::process, part.h:315). proc_engine_2x4 never calls it, so the
+//      35.80 points
 //      contain none of it -- but on THIS row's engine, that call costs
 //      exactly one virtual dispatch to an empty body, nothing more.
 //      SynthEngineT never overrides process_in(); it inherits IPartEngine's
@@ -199,7 +201,8 @@ struct DeckModGroup {
 //      sustaining voice] and takes over", synth_engine.h class comment). A
 //      real deck re-strikes its chord on every LANE_PITCH fire -- roughly
 //      once every 1/master_hz seconds -- via _engine->trigger_chord(chord,
-//      nch) (part.cpp:447-460), which demotes only on the chord's OWN root
+//      nch) (Part::_fire_trigger, part.cpp:429-442, whose guard is at
+//      part.h:296), which demotes only on the chord's OWN root
 //      and adds the rest without demoting, so a real deck holds 4 sustained
 //      voices permanently. This row's setup below fires once; with
 //      set_decay(1.0) at THIS row's derived cycle (~0.144 s -- the old
@@ -351,7 +354,8 @@ struct FxFluxHotGroup {
 // (design spec sections 3.3 and 4.1). This row is the tone term, and without
 // it deck_shell is uninterpretable. The modulation term was missing from the
 // formula this comment used to state: Part::process runs _mod.process() every
-// sample (engine/parts/part.cpp:378), so deck_shell contains the plane that
+// sample (Part::process, engine/parts/part.h:246), so deck_shell contains the
+// plane that
 // deck_mod_hot prices, and the three-term form charged it twice -- once inside
 // Part-level code and once beside it. See section 9.2, which traces all three
 // of the round's prediction misses to that one omission.
@@ -360,8 +364,8 @@ struct FxFluxHotGroup {
 //
 //   1. The engine is reached ONLY through an IPartEngine*, never through the
 //      concrete TestToneEngine. Part holds `IPartEngine* _engine`
-//      (engine/parts/part.h:209), pointing at its own TestToneEngine member
-//      (part.h:208) once ENGINE_TEST_TONE is selected, and every IPartEngine
+//      (engine/parts/part.h:383), pointing at its own TestToneEngine member
+//      (part.h:382) once ENGINE_TEST_TONE is selected, and every IPartEngine
 //      method is virtual (engine/parts/engine_iface.h:25-28), so a Part can
 //      inline none of them. A concrete `TestToneEngine&` here would let the
 //      compiler inline process() outright, and the body it would inline is,
@@ -379,8 +383,8 @@ struct FxFluxHotGroup {
 //      the trap is sharper, because the body is small enough to disappear
 //      into the loop entirely.
 //   2. process_in(in, in) then process(ol, orr), per sample, in that order
-//      (engine/parts/part.cpp:482-483). TestToneEngine does NOT override
-//      process_in: it inherits IPartEngine's empty body
+//      (Part::process, engine/parts/part.h:315-316). TestToneEngine does NOT
+//      override process_in: it inherits IPartEngine's empty body
 //      (engine/parts/engine_iface.h:59). So on this row that call is ONE
 //      VIRTUAL DISPATCH AND NO COMPUTE -- it is one of the two dispatches per
 //      sample that point 1 already charges for, not a second cost stacked on
@@ -392,22 +396,22 @@ struct FxFluxHotGroup {
 //      above carries the same correction).
 //   3. set_targets() once per SynthEngine::kCtrlInterval samples
 //      (engine/synth/synth_engine.h:36, == 96, == kBlock), which is the raster
-//      Part::_control_tick runs on. Read off part.cpp directly:
+//      Part::_control_tick runs on. Read off part.h directly:
 //      `if (_ctrl_ctr == 0) { _ctrl_ctr = SynthEngine::kCtrlInterval;
 //      _control_tick(); } else if (fired) { _control_tick(); } --_ctrl_ctr;`
-//      (part.cpp:439-445), and _control_tick's own push into the engine is
-//      `_engine->set_targets(_tg, _tune)` (part.cpp:335). Two cadence facts
-//      follow and both are reproduced here exactly: _ctrl_ctr initialises to 0
-//      (part.h:322, re-zeroed in Part::init at part.cpp:74), so the tick lands
-//      on the FIRST sample of each 96-sample group, not the last; and the
+//      (Part::process, part.h:288-294), and _control_tick's own push into the
+//      engine is `_engine->set_targets(_tg, _tune)` (part.cpp:348). Two cadence
+//      facts follow and both are reproduced here exactly: _ctrl_ctr initialises
+//      to 0 (part.h:376, re-zeroed in Part::init at part.cpp:74), so the tick
+//      lands on the FIRST sample of each 96-sample group, not the last; and the
 //      raster block sits ABOVE the engine calls in the same process() body
-//      (439-445 against 482-483), so the push precedes that sample's
+//      (part.h:288-294 against 315-316), so the push precedes that sample's
 //      process_in/process rather than following it. This row's ctrl_ctr
 //      mirrors that counter for counter and lives in the group for the same
 //      reason Part's lives in the object: it has to survive across process()
 //      calls.
 //
-//      What the row does NOT reproduce is the fire refresh at part.cpp:442-444
+//      What the row does NOT reproduce is the fire refresh at part.h:291-293
 //      -- a SECOND _control_tick() on any sample where LANE_PITCH fired, i.e.
 //      one extra set_targets() roughly every 1/master_hz seconds, which
 //      setup_deck_engine_hot's fire_period puts at ~6908 samples (~72 blocks)
@@ -420,22 +424,22 @@ struct FxFluxHotGroup {
 //   4. Nothing else, deliberately. _control_tick's target build, the
 //      quantizer, the chord builder and the FX target cache are Part-level and
 //      belong to deck_shell, as does the _engine_fade multiply
-//      (part.cpp:484-485). This row pushes a fixed target array, so it prices
+//      (part.h:317-318). This row pushes a fixed target array, so it prices
 //      the engine's set_targets and nothing upstream of it.
 //
 // The two targets that matter are the ones a deck actually produces:
-//   - LANE_LEVEL 0.8. That is Part's own `_base[LANE_LEVEL]` (part.h:373) and
-//     its boot `_tg[LANE_LEVEL]` (part.h:329) -- the value a deck at MOD 0
+//   - LANE_LEVEL 0.8. That is Part's own `_base[LANE_LEVEL]` (part.h:570) and
+//     its boot `_tg[LANE_LEVEL]` (part.h:526) -- the value a deck at MOD 0
 //     pushes verbatim. At the gate's MOD 1.0 the lane moves it, floored at
-//     kLevelFloor * base == 0.4 * 0.8 == 0.32 (part.h:388, part.cpp:107-108);
+//     kLevelFloor * base == 0.4 * 0.8 == 0.32 (part.h:585, part.cpp:107-108);
 //     0.8 is the base that swing is taken around.
-//   - LANE_PITCH 0.5, likewise `_base[LANE_PITCH]` (part.h:373) and the boot
-//     `_tg[LANE_PITCH]` (part.h:329). On a deck this slot arrives already
-//     quantized and tuned (part.cpp:209-210), which is exactly what
+//   - LANE_PITCH 0.5, likewise `_base[LANE_PITCH]` (part.h:570) and the boot
+//     `_tg[LANE_PITCH]` (part.h:526). On a deck this slot arrives already
+//     quantized and tuned (part.cpp:222-223), which is exactly what
 //     TestToneEngine::set_targets assumes of it (test_tone_engine.h:12-15), so
 //     handing it a plain 0.5 is the right shape rather than a shortcut. It
 //     maps to 110 * 8^0.5 == 311.13 Hz (test_tone_engine.h:22).
-//   - The tune argument is 0.5, Part's `_tune` default (part.h:413).
+//   - The tune argument is 0.5, Part's `_tune` default (part.h:610).
 //     TestToneEngine::set_targets ignores it entirely (test_tone_engine.h:20,
 //     `float /*tune*/`), so it is there for faithfulness and cannot move cost.
 //   - The other three slots stay 0. TestToneEngine reads only LANE_PITCH and
@@ -475,7 +479,7 @@ struct ToneSoloGroup {
 // (design spec sections 3.3 and 4.1, and section 6.10 on why that subtraction
 // removes the harness two times too many). The modulation term is the one this
 // comment used to omit: Part::process calls _mod.process() every sample
-// (engine/parts/part.cpp:378), so a whole Part contains the plane deck_mod_hot
+// (engine/parts/part.h:246), so a whole Part contains the plane deck_mod_hot
 // prices, and subtracting it only in the remainder' line charged it twice
 // (design spec sections 3.3 and 9.2).
 //
@@ -492,13 +496,14 @@ struct ToneSoloGroup {
 // only arms it: _switching goes true and _engine_fade.set_on(false) is called
 // WITHOUT the immediate flag (engine/parts/part.cpp:132-137), so the swap
 // happens later, inside process(), at the fade's idle point
-// (engine/parts/part.cpp:384-400) -- where the freshly selected engine also
+// (Part::_engine_swap, engine/parts/part.cpp:401-417) -- where the freshly
+// selected engine also
 // gets set_flow, set_hold, set_gate and set_cycle re-pushed into it, and
 // _ctrl_ctr is re-armed to 0 so the same sample runs a control tick.
 //
 // HOW LONG THAT TAKES, counted off SoftSwitch (engine/fx/fx_util.h:66-116),
 // one _engine_fade.process() call per Part::process call
-// (engine/parts/part.cpp:383). Part::init leaves the switch at Stage::hold via
+// (engine/parts/part.h:251). Part::init leaves the switch at Stage::hold via
 // set_on(true, true) (engine/parts/part.cpp:34):
 //   - call 1: the `hold` case emits 1.0, forces _iterator to 191 and, seeing
 //     !_on, moves to `fall` (fx_util.h:94-98). Because `hold` writes 191
@@ -507,7 +512,7 @@ struct ToneSoloGroup {
 //     0 and the stage becomes `idle` when it hits 0 (fx_util.h:99-103), i.e.
 //     ON call 192.
 //   - the SWAP lands on that same call 192, because process() tests
-//     is_idle() AFTER _engine_fade.process() has returned (part.cpp:383-384).
+//     is_idle() AFTER _engine_fade.process() has returned (part.h:251-252).
 //     set_on(true) re-arms from `idle`.
 //   - call 193: the `idle` case emits 0.0 and moves to `rise` (fx_util.h:84-88).
 //   - calls 194-384: the `rise` case, 191 of them; ++_iterator reaches 191 on
@@ -537,7 +542,7 @@ struct ToneSoloGroup {
 // operating point:
 //   - The FX shell's INPUT SIGNAL. fx_none feeds PartFx test_input() with a
 //     r = in[i] * 0.9f stereo skew; on a Part, PartFx is fed the engine's
-//     output times the fade (part.cpp:484-487), i.e. the tone. This is
+//     output times the fade (part.h:317-320), i.e. the tone. This is
 //     structural -- a Part cannot hand its own FX anything else -- and it is
 //     cost-neutral, because with both blocks off PartFx::process does no
 //     input-dependent work: the outer `_grit.engaged() || _flux.engaged()`
@@ -554,7 +559,7 @@ struct ToneSoloGroup {
 //     confirmed in review. Those five smoothers see a
 //     CONSTANT target on both rows -- fx_none's fixed values[], and here
 //     Part's _fxv, filled from fx_target_value() with every _fx_active false
-//     (part.h:382, part.cpp:336) so no lane reaches them -- so both rows take
+//     (part.h:579, part.cpp:349) so no lane reaches them -- so both rows take
 //     OnePole's `!_smoothing` early return every sample
 //     (engine/util/onepole.h:24-26).
 //   - The arena. This group sits in g_instr_arena, so its Part's PartFx is at
@@ -574,7 +579,7 @@ struct ToneSoloGroup {
 // One thing this row does NOT hold constant against tone_solo, named here
 // rather than discovered later: Part has a SECOND set_targets path. The raster
 // is `if (_ctrl_ctr == 0) {...} else if (fired) { _control_tick(); }`
-// (part.cpp:439-445), so a LANE_PITCH fire runs an extra whole tick -- an
+// (part.h:288-294), so a LANE_PITCH fire runs an extra whole tick -- an
 // extra engine push and an extra FX-cache fill -- outside the 96-sample
 // raster, roughly every 6908 samples at RATE 0.8. tone_solo does not reproduce
 // it, so it lands on this row's side of the subtraction. Design spec section
@@ -918,8 +923,9 @@ void setup_deck_engine_hot()
     // Re-fire cadence (post-review fix; DeckEngineGroup's difference #5
     // above explains why one is needed at all). A real deck re-strikes its
     // chord roughly once every 1/master_hz seconds -- the same quantity
-    // set_cycle just derived (part.cpp:403-407 derives the cycle from it;
-    // the fire itself is the `fired` check at part.cpp:409-460). Rounded to
+    // set_cycle just derived (part.h:255-256 with part.cpp:421-424 derives the
+    // cycle from it; the fire itself is the `fired` check at part.h:258 and the
+    // Part::_fire_trigger call it guards at part.h:296). Rounded to
     // the nearest sample and held as a fixed interval: Part re-derives its
     // fire from a live per-sample lane_fired() edge (ModLane/SuperModulator,
     // already priced by deck_mod_hot), which this row does not reproduce --
@@ -993,13 +999,13 @@ float proc_deck_engine_hot()
     for (size_t i = 0; i < kBlock; ++i) {
         float ol, orr;
         // Both calls through the base pointer, in Part::process's order:
-        // process_in first, then process (part.cpp:482-483).
+        // process_in first, then process (part.h:315-316).
         g.engine->process_in(in[i], in[i]);
         g.engine->process(ol, orr);
         acc += ol + orr;
         // Re-fire cadence (post-review fix, DeckEngineGroup's difference #5
         // above): a real deck never lets its FLOW voices sit un-restruck
-        // long enough to release past Idle (part.cpp:409-460's `fired`
+        // long enough to release past Idle (part.h:258's `fired`
         // check, roughly once every 1/master_hz seconds). ONE
         // trigger_chord() call, not four trigger() calls -- chord_slot 0
         // only demotes the current surface on a chord's OWN root note
@@ -1302,7 +1308,7 @@ void setup_tone_solo()
     // The window drives the engine exactly as proc_tone_solo does, including
     // the raster, so the first set_targets() push is made by the raster itself
     // rather than by a separate hand-written call -- which is what Part does
-    // too: _ctrl_ctr starts at 0 (part.h:322, part.cpp:74), so a Part's first
+    // too: _ctrl_ctr starts at 0 (part.h:376, part.cpp:74), so a Part's first
     // process() call ticks before its engine ever runs a sample. The body is
     // written out again rather than shared with proc_tone_solo because the peak
     // tracking must NOT appear in the measured loop.
@@ -1382,11 +1388,11 @@ float proc_tone_solo()
     const float* in = test_input();
     float acc = 0.f;
     for (size_t i = 0; i < kBlock; ++i) {
-        // Part::process's raster, counter for counter (part.cpp:439-445):
+        // Part::process's raster, counter for counter (part.h:288-294):
         // push when the counter has reached 0, reload it, decrement after --
         // so the push lands on the block's first sample and before that
-        // sample's engine calls, which is where part.cpp puts it (439-445 sit
-        // above 482-483). Part's `else if (fired)` refresh is deliberately
+        // sample's engine calls, which is where part.h puts it (288-294 sit
+        // above 315-316). Part's `else if (fired)` refresh is deliberately
         // absent; ToneSoloGroup's point 3 sizes what that leaves out.
         if (g.ctrl_ctr == 0) {
             g.ctrl_ctr = SynthEngine::kCtrlInterval;
@@ -1395,7 +1401,7 @@ float proc_tone_solo()
         --g.ctrl_ctr;
         float ol, orr;
         // Both calls through the base pointer, in Part::process's order:
-        // process_in first, then process (part.cpp:482-483). process_in is one
+        // process_in first, then process (part.h:315-316). process_in is one
         // dispatch into IPartEngine's empty inherited body here
         // (engine_iface.h:59) -- a dispatch, not a second unit of work.
         g.engine->process_in(in[i], in[i]);
@@ -1417,7 +1423,7 @@ float proc_tone_solo()
 //
 // Three of the five are live detectors and two are documentation, which is
 // worth knowing before trusting the assert: Part's own boot _fx_base is
-// { 0.3, 0.5, 1.0, 0.25, 0.45 } (engine/parts/part.h:383), so a missing push
+// { 0.3, 0.5, 1.0, 0.25, 0.45 } (engine/parts/part.h:580), so a missing push
 // on GRIT_INT, REV_SEND or FLUX_FB fires (0.3 != 0.8, 0.25 != 0.5,
 // 0.45 != 0.7), while FLUX_TIME and FX_MIX already agree with fx_none by
 // default and a missing push on either would pass unseen. They are pushed
@@ -1508,8 +1514,8 @@ void setup_deck_shell()
     //
     // fx_none's values[] reach a bare PartFx as a caller-owned array; on a
     // Part the same five numbers have to arrive as target BASES, which
-    // _control_tick turns into _fxv via fx_target_value() (part.cpp:336). With
-    // every _fx_active false -- Part's boot state (part.h:382), and nothing
+    // _control_tick turns into _fxv via fx_target_value() (part.cpp:349). With
+    // every _fx_active false -- Part's boot state (part.h:579), and nothing
     // here calls set_fx_target_active -- fx_target_value returns
     // clampf(_fx_base[i] + 0, 0, 1), i.e. the base unchanged, so _fxv holds
     // fx_none's array exactly. Asserted below.
@@ -1599,7 +1605,7 @@ void setup_deck_shell()
     // sub-object accessors mod()/quant()/fx()/synth()/wave()/body()/sampler()
     // -- and none of them reads the SoftSwitch or anything downstream of it.
     // The fade multiplies outL/outR between the engine and the FX
-    // (part.cpp:484-487), and PartFx's one level-ish getter, tape_tap(), is
+    // (part.h:317-320), and PartFx's one level-ish getter, tape_tap(), is
     // forced to exactly 0.f whenever FLUX is not engaged (part_fx.cpp:85), so
     // on this row it carries no information about the fade at all. Adding a
     // getter would mean editing engine/, which is locked.
@@ -1616,7 +1622,7 @@ void setup_deck_shell()
     // bypasses), so outL is exactly sin(2*pi*phase) * _amp * 0.3f * fade.
     // _amp is _tg[LANE_LEVEL], which target_raw clamps to [0, 1] and floors at
     // kLevelFloor * _base[LANE_LEVEL] == 0.4 * 0.8 == 0.32
-    // (engine/parts/part.cpp:102-108, part.h:373, 388), so _amp is in
+    // (engine/parts/part.cpp:102-108, part.h:570, 585), so _amp is in
     // [0.32, 1.0] and the tone's own peak is in [0.096, 0.300].
     //
     // The window is kShellCheckBlocks (3) blocks == 288 samples, and 3 rather
@@ -1660,7 +1666,7 @@ void setup_deck_shell()
 //     (engine/parts/engine_iface.h:49-51), which then makes n further virtual
 //     trigger() calls -- n = 4 at this row's COLOR 1.0 (ChordBuilder::_count,
 //     engine/pitch/chord.h:54, kEdge4 = 0.625) since _flatten_for_sampler
-//     returns n unchanged off a sampler (part.h:269-273). Each of those four
+//     returns n unchanged off a sampler (part.h:438-442). Each of those four
 //     bodies is empty (test_tone_engine.h:26). The cost is unchanged either
 //     way -- once per 250 blocks -- but the earlier description of a single
 //     dispatch into an empty body was wrong about the path.

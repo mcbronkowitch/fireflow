@@ -298,7 +298,8 @@ void SamplerEngine::_release_all() {
 // to hold still against a synth deck playing in the same key. That closed the
 // melody door but not this one: the octave roll rides LANE_MOTION, which the
 // VCV host never writes for a sampler part, so it sat on Part's default base
-// of 0.5 (part.h:238) even with MOD at zero -- kScatterOctProb * 0.5 == 12.5%
+// of 0.5 (Part::_base, part.h:570) even with MOD at zero -- kScatterOctProb
+// * 0.5 == 12.5%
 // of every grain jumping a full octave. Measured on the author's own panel
 // setting: 311 spawns, ratios {1.0, 2.0, 0.5}. The stated requirement was not
 // met, and no amount of knob-setting could meet it.
@@ -770,8 +771,9 @@ void SamplerEngine::_slice_pos(int k, float& pos, float& slice_len) const {
 // has to be able to silence. A fire is not a stream, it is one discrete note.
 //
 // And composed notes cannot reach this function under CHOKE anyway: Part
-// suppresses them upstream (part.cpp, `_note_suppressed = _inhibit` guarding
-// the trigger_chord call), so the only caller that gets here while _hold is
+// suppresses them upstream (Part::process, part.h:260 and 296:
+// `_note_suppressed = _inhibit` guards the _fire_trigger call that makes the
+// trigger_chord call), so the only caller that gets here while _hold is
 // true is trigger_manual -- the PLAY tap, which part.h documents as
 // deliberately not inhibited, being a live user gesture rather than a machine
 // one. SynthEngine::trigger_chord does not consult its own _hold either

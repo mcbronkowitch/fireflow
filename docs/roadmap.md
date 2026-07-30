@@ -30,8 +30,10 @@ is actually built today, and what is still design-only.
   "FLUX → BBD" and "FX cost curves" for the row-by-row evidence.
   **Update, 2026-07-29 (mono collapse measured):** step (1) landed at
   **125.24 %** and step (3), the FLUX-to-mono collapse, is now measured too —
-  `instrument_worst_bbd` at **112.88 %** (branch `perf/flux-mono`, not yet
-  merged; both prior estimates undershot what steps 1 and 3 actually returned).
+  `instrument_worst_bbd` at **112.88 %** (branch `perf/flux-mono`; its content is
+  on `main` — `bd346eb` is an ancestor — but it was fast-forwarded, so there is
+  no merge commit to cite; both prior estimates undershot what steps 1 and 3
+  actually returned).
   **The instrument is still over budget: 12.88 points remain to 100 %.** See
   "FLUX mono collapse" below for the full reading, including why this round's
   saving does not confirm the earlier instruction-cache hypothesis.
@@ -47,8 +49,8 @@ is actually built today, and what is still design-only.
   overshoot must come from inside the blocks. The same round also proved that
   code layout alone moves the gate by ~2 points at an unchanged checksum,
   which restates the target: **the overshoot is 10.77 points, not 12.88.**
-  Branch `perf/instrument-ablation`, not merged. See "Instrument-level
-  ablation" below.
+  Branch `perf/instrument-ablation`, merged as `1e9ec05`. See
+  "Instrument-level ablation" below.
   **Update, 2026-07-29 (deck interior split):** the gate reads **110.10** in
   this build, so **the overshoot is 10.10 points**. Of the 7.645 unpriced points
   per deck, **6.85 survives both operating-point corrections this round
@@ -58,7 +60,7 @@ is actually built today, and what is still design-only.
   FLUX comes before any further split. The round also reprices the "cut a voice"
   arithmetic: the **marginal** voice costs 3.97 points, not the 4.48 average, so
   one voice per deck is worth ≈7.9 points — 78 % of the gap, not all of it.
-  Branch `perf/deck-interior-ablation`, not merged. See "Deck-interior
+  Branch `perf/deck-interior-ablation`, merged as `57201ff`. See "Deck-interior
   ablation" below.
   **Update, 2026-07-30 (the remainder split; it is `Part`-level code):** the
   gate reads **110.51** in this build, so **the overshoot is 10.51 points**, not
@@ -73,7 +75,53 @@ is actually built today, and what is still design-only.
   round 1. Next is a **fix round inside `Part::_control_tick`** — the first
   non-diagnostic round in this sequence — with the voice cut (≈7.9 points) now
   clearly the second option rather than the first. Branch
-  `perf/remainder-split`, not merged. See "Remainder split" below.
+  `perf/remainder-split`, merged as `a93327e`. See "Remainder split" below.
+  **Update, 2026-07-30 (the per-sample call boundary; the first round that changed
+  `engine/`):** the gate reads **104.91** `pct_avg` / **108.69** `pct_max`, so
+  **the overrun is 4.91 / 8.69**. The round-3 line above reads the same-source
+  baseline as 110.51 `pct_max`; this round's own rebuild of that source reads
+  **110.76**, a 0.25 `pct_max` shift at an unchanged `.text` and unchanged
+  checksums (spec §9.12), so the "down from 6.50 / 10.76" this round quotes is
+  measured against its own baseline and not against the line above. Making
+  `Part`'s per-sample body inlinable at every call site recovered **about 1.6
+  points, ± 0.5** — roughly a quarter to a third of the `Part`-level bucket — and
+  it is **bit-exact**: all 23 bench checksums are identical across all four builds
+  of the round and to round 3's, and the desktop render gates confirm it
+  independently — `main` and the branch render byte-identical WAVs through
+  `host/render` on clang/x86-64 without `-ffast-math`. This was the first round in
+  the sequence that could have changed the sound, and it did not.
+  **The mechanism does not account for the size.** §3.2's ISA argument predicted
+  0.40–0.70 for removing the two per-sample prologue/epilogue pairs; the gate
+  moved 1.59 and the four `Instrument` rows 1.38–2.71 — **2–4× what the ISA
+  allows**, so the round's quantitative prediction is falsified in the favourable
+  direction and **the majority of the saving has no identified cause** (spec
+  §9.11). A candidate exists — registers held across the block — and it is
+  unverified.
+  Three findings outlast the points. **Exactly one row failed to move:**
+  `deck_shell`, the row built to isolate one `Part`, at +0.20 — inside drift, so
+  not a regression, but not a saving either — while `instr_part_1` and
+  `instr_part_2`, which drive a `Part` from a bench loop just as `deck_shell`
+  does, moved −1.16 and −1.25. **No mechanism separates them**, and an earlier
+  reading that only `Instrument::process` rows improved is refuted by those two
+  rows. What survives is narrower and still useful: **a row that isolates a
+  component need not reproduce *how that component is called*.** Second, the same
+  error one level up — **both hosts call `Instrument::process` with `n = 1`**
+  (`host/render/main.cpp:102`, `host/vcv/src/Spotymod.cpp:637`), so the
+  per-block amortisation the bench measured at `n = 96` does not exist on them;
+  the removal of the two `Part` prologue pairs still does, the register-holding
+  candidate does not, and **no figure is claimed for what the hosts see**. The
+  block-based caller is the M6 Daisy shell. Third,
+  **this bench cannot demonstrate a change smaller than about 0.5 points on the
+  gate**, because every comparison it can make is cross-build and cross-build
+  layout drift moves rows containing no `Part` by up to 0.49. **No further
+  bit-exact `Part` round is recommended until that floor is lowered** — a
+  recommendation that rests on the floor, not on the model, since the model's
+  own prediction did not survive this round; the two
+  remaining candidates — the block entry point and the voice cut (≈7.9 points) —
+  are both listening decisions rather than checksum ones. Branch
+  `perf/part-per-sample`, **not merged** — unlike rounds 1–3 this one changes
+  `engine/`, so it lands after review rather than as evidence. See "Per-sample
+  call boundary" below.
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
@@ -1143,7 +1191,11 @@ via an unguarded `set_feedback`/`set_time_mod` push — to control rate, via a
 cached feedback-coefficient scale and two unchanged-value guards. No control-
 tick restructuring, no musical change. Spec:
 `docs/superpowers/specs/2026-07-29-flux-control-rate-design.md`. Branch:
-`perf/flux-control-rate`, not yet merged.
+`perf/flux-control-rate`. **The work is on `main`** — `9f587bf`, the branch's
+last commit, is an ancestor of `main`, verified rather than assumed — but it was
+fast-forwarded rather than merged, so there is no merge commit to cite in the
+style of rounds 1–3 (`1e9ec05`, `57201ff`, `a93327e`), and the branch no longer
+exists locally.
 
 **Measured, not banked in advance.** Against §2's prediction of ~2.5
 points/deck, ~5 total: the isolated one-deck row (`fx_flux_sdram`) saved 1.49
@@ -1177,8 +1229,12 @@ This round changes the sound on purpose — the dry signal keeps its per-voice
 pan, but the echo it feeds is now centred — and where DRIVE bites, since one
 saturator/compander/feedback loop now sees the summed signal instead of two
 seeing their own channel. No panning, widening, or DRIVE/compander re-tuning
-was added; that is deliberately left to the owner. Branch: `perf/flux-mono`,
-not yet merged. Spec: `docs/superpowers/specs/2026-07-29-flux-mono-design.md`
+was added; that is deliberately left to the owner. Branch: `perf/flux-mono`.
+**The work is on `main`** — `bd346eb` (the collapse) and `1ba3f18` (the bench
+comment fixes) are both ancestors of `main`, verified — but it was
+fast-forwarded rather than merged, so there is no merge commit to cite and the
+branch no longer exists locally.
+Spec: `docs/superpowers/specs/2026-07-29-flux-mono-design.md`
 §10. Evidence: `docs/bench/2026-07-29-4d1e929-sweep.md` (before) against
 `docs/bench/2026-07-29-1ba3f18-sweep.md` (after).
 
@@ -1243,8 +1299,11 @@ render files this round produced, not by this measurement. `engine/fx/bbd.h`'s
 `1/sr_` division in `BbdLine::SetClock` is still unaddressed, worth an
 estimated ~0.6 points, left deliberately as model territory. And the gate
 itself: **12.88 points still separate `instrument_worst_bbd` from the 100 %
-line.** `perf/flux-mono` is not merged, pending the owner's listening pass —
-its outcome may change what belongs on this branch.
+line.** `perf/flux-mono`'s content is on `main` (`bd346eb`, `1ba3f18`,
+fast-forwarded, no merge commit). **The owner's listening pass on the mono
+collapse remains open** — nothing in the ablation sequence has verified it, and
+this line records it as the open question it is rather than as a merge status.
+Its outcome may still change what belongs on top of that work.
 
 ### Instrument-level ablation ✅ (where the unmeasured budget actually goes)
 
@@ -1256,7 +1315,7 @@ family (`bench/workloads_instr.cpp`) plus the existing gate, so the budget
 partitions exhaustively **inside a single run**. No `engine/` file was
 touched **by this round's own change** — the wider compared interval has one
 comment-only edit in `bbd.h` (below), which cannot reach codegen. Branch:
-`perf/instrument-ablation`, **not merged**. Spec:
+`perf/instrument-ablation`, **merged as `1e9ec05`**. Spec:
 `docs/superpowers/specs/2026-07-29-instrument-ablation-design.md` §8.
 Evidence: `docs/bench/2026-07-29-930ec17-ablate.md` / `.csv`.
 
@@ -1562,6 +1621,129 @@ Not a guaranteed close, and none of these points is free to take: a `Part`'s
 per-sample loop and control tick can be tightened, not deleted. But for the
 first time in three rounds the largest named quantity is code rather than a
 residue.
+
+### Per-sample call boundary ✅ (the first round that changed `engine/`)
+
+Branch `perf/part-per-sample`. Spec
+`docs/superpowers/specs/2026-07-30-part-per-sample-design.md` §9, evidence
+`docs/bench/2026-07-30-7272b27-ablate.{md,csv}` (a same-session baseline, round
+3's source rebuilt) against `-dc17cdc-`, `-86cf817-` and `-cd639ec-`, two runs
+each. **The first round in this sequence that touched `engine/`**, and therefore
+the first that could have changed the sound.
+
+**The gate fell 106.50 → 104.91 `pct_avg` (110.76 → 108.69 `pct_max`), so the
+overrun is 4.91 / 8.69.** That baseline is this round's own same-session rebuild
+of round 3's source; round 3's line above reads the same source at 110.51
+`pct_max`, and the 0.25 gap between them is itself the drift this round went on
+to measure (spec §9.12). Round 3 named `Part`-level code as 2.65–4.00 points per
+deck; this round took **about a quarter to a third of it** by making `Part`'s
+per-sample body inlinable at every call site, so the nine-register `stmdb`/`ldmia`
+pair and the `vpush {d8-d9}` that `Part::process` paid 96 times per block are now
+paid once per block. Three smaller items followed in one build. **Item 2** was
+predicted below this bench's resolution and duly produced no measurement.
+**Item 3** was reverted because its stated premise — "two wasted `vmul`" — turned
+out on the disassembly to be a trade rather than a removal, leaving it with no
+demonstrable justification either way. **Item 1** — reordering `Part`'s members —
+is different in kind: the spec's §5.2 registered **no prediction** for it, saying
+it "could be worth nothing or could be worth more than item 4", and this round
+measured it in one build together with items 2 and 3, so it has **no measured
+value here** either way. It is not a "below resolution" item; it is an unweighed
+one.
+
+**Quote the saving as 1.6 ± 0.5, not 1.59.** The three builds that all contain
+the change read the gate at 104.40, 105.36 and 104.91.
+
+**But the mechanism does not explain the size, and the round says so.** §3.2's
+ISA argument predicted **0.40–0.70** across the instrument for removing the two
+per-sample prologue/epilogue pairs. The gate moved **1.59** and the four
+`Instrument` rows **1.38–2.71** — **two to four times what the ISA allows**. The
+static half of the model held: `Part::process` has no symbol in the final ELF and
+the save/restore is verifiably gone. The quantitative half was **falsified**, in
+the favourable direction, and **the majority of the saving therefore has no
+identified cause** (spec §9.11). One candidate exists — that inlining the body
+into the caller's loop lets the compiler keep values in registers across the 96
+samples — and it is **unverified**; the attempt to read it out of the disassembly
+was abandoned without a clean loop boundary. Nothing here should be read as "the
+nine-register pair was worth 1.6 points".
+
+**Bit-exact, and measured as such — twice, on two independent instruments.** All
+23 bench rows returned identical checksums in every run of all four builds, and
+identical to round 3's `ccd5f12`. Independently, the repo's two byte-identity
+render gates were run on `main` (`a93327e`) and on the branch (`0eed246`) for the
+first time: **both commits render byte-identical WAVs**, at the default build
+type and again at `-O3`, through `host/render` on clang/x86-64 **without
+`-ffast-math`** — the one mechanism a reviewer identified as a plausible way the
+change could have altered output. `wave_formant_sweep` passes on the branch.
+(`ctrl_identity`'s stored constant is optimisation-level dependent: it matches
+the documented `cmake -S . -B build` configuration and fails at `-O3` **on `main`
+too**. That is a pre-existing gate defect worth its own fix, not a finding about
+this branch.)
+
+**Exactly one row failed to move, and no mechanism explains which one.** The four
+`Instrument`-based rows moved −1.38 to −2.71 `pct_avg`; the two bare-`Part` rows
+`instr_part_1` and `instr_part_2` moved −1.16 and −1.25; and **`deck_shell`, the
+row round 3 built to isolate one `Part`, moved +0.20** — inside the control
+group's own drift, so neither a saving nor a regression, but a row that did not
+move. An earlier reading of this round grouped the rows by whether they run their
+`Part` inside `Instrument::process` and concluded that only those improved; **the
+final build refutes that** — `instr_part_1` and `instr_part_2` are direct-call
+rows and both cleared a point — and the grouping cannot in any case distinguish
+`instr_part_1` (one `Part`, bench loop, −1.16) from `deck_shell` (one `Part`,
+bench loop, +0.20). What survives is the narrower lesson, and it is the useful
+one: **a row that isolates a component does not necessarily reproduce how that
+component is called**, and for a change *at* the call boundary that is the
+property that matters. The round's sharpest pre-registered row-level prediction
+was placed on the row that could not see the change.
+
+**The same error is one level up, and it bounds what this saving is worth
+today.** `Instrument::process` owns the 96-sample loop
+(`engine/instrument.cpp:76`), and **both hosts that exist call it with `n = 1`** —
+`host/render/main.cpp:102` and `host/vcv/src/Spotymod.cpp:637`. At `n = 1` the
+loop runs once per call, so `Instrument::process`'s *own* nine-register prologue
+and `vpush {d8-d13}` are paid per sample; only the bench passes 96. What still
+holds there is the removal of the two `Part::process` prologue/epilogue pairs per
+sample — §3.2's 0.40–0.70. What does not hold is any part of the saving that came
+from state staying in registers across the block, which is precisely the
+unverified candidate for the unexplained majority above. **So the bench measured
+a saving the two current callers would only partly see. No figure is claimed for
+how much** — it is not measured — and the block-based production caller is the
+Daisy shell, still M6.
+
+**This bench cannot demonstrate a change smaller than about 0.5 points on the
+gate.** Run-to-run spread inside one build is ≤ 0.04 on `pct_avg` and the gate
+reads identically in both runs of all four builds — but every comparison the round
+can make is cross-build, and cross-build layout drift moved `fx_grit`, a row
+containing no `Part`, by 0.47–0.49, while a **−368-byte** `.text` change moved the
+four `Instrument` rows over a 2.11-point spread. That bounds what any future
+bit-exact round can *show*, whatever it actually saves, and it is this round's
+most useful output for whoever plans the next one.
+
+**Recommendation: no further bit-exact `Part` round until that floor is lowered.**
+The residue is real — roughly 1.9–3.0 points per deck, still 68–75 % of what is
+left of the overrun, and still free of sonic cost. The structural lever is spent:
+`Part::process` no longer exists as an out-of-line symbol, so it cannot be pulled
+again. **But the recommendation rests on the floor, not on the model.** It would
+be tempting to say "the one lever whose size the ISA could predict has now been
+pulled, so nothing predictable remains" — and this round is not entitled to that,
+because the ISA's prediction was falsified by 2–4× and most of what was actually
+recovered is unexplained. An unidentified cause of that size is not evidence that
+no further lever exists; it is evidence that reading the code did not find the one
+that mattered. What is solid is the instrument limit: a round 5 of micro-items
+inside `Part` would spend hardware sessions on changes it could not weigh,
+whatever they saved. The two candidates large enough for this
+bench as it stands are both listening decisions rather than checksum ones: the
+spec's Stage 2 block entry point, which is *not* bit-exact because
+`Instrument::process` interleaves the decks per sample and CHOKE reads the
+priority deck each sample, and the voice cut at ≈7.9 points. Lowering the bench's
+floor — a same-build A/B, or any way to hold layout fixed across a change — may be
+worth more than either, and the `n = 1` finding above says where to start: the
+bench's call shape and the shipped call shape have to be checked against each
+other before the numbers mean anything.
+
+**Merge status: not merged.** Branch `perf/part-per-sample`, on `0eed246` plus
+this round's documentation fixes. Rounds 1–3 landed as evidence and documentation
+only; this is the first round in the sequence that changes `engine/`, so it waits
+for review rather than fast-forwarding.
 
 ### BODY playability ✅ (extends M5j)
 
