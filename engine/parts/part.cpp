@@ -180,7 +180,20 @@ float Part::max_voice_env() const {
 // stay mutually exclusive (else if, not a second if); calling this twice on
 // the same sample double-steps the glide.
 void Part::_control_tick() {
-    for (int i = 0; i < LANE_COUNT; ++i) _tg[i] = target_raw(i);
+    // LANE_PITCH is skipped on purpose: the assignment further down (after the
+    // quantizer) writes _tg[LANE_PITCH] unconditionally, so target_raw's value
+    // for that slot was only ever discarded. Nothing between the two points
+    // reads _tg[LANE_PITCH] -- the only statements in between are
+    // pitch_pre_quant(), which recomputes target_raw(LANE_PITCH) from members
+    // instead of reading the cache, _quant.process(), whose Quantizer holds no
+    // reference to this Part and touches only its own state, and the _pitch_q
+    // assignment.
+    //
+    // Bit-exact for the four remaining slots: target_raw is const, and reads
+    // only _base, _active, _tdepth, _depth, _engine_id and the lane outputs, so
+    // it neither writes _tg nor depends on which slots were visited before it.
+    for (int i = 0; i < LANE_COUNT; ++i)
+        if (i != LANE_PITCH) _tg[i] = target_raw(i);
 
     const float pitch_raw = pitch_pre_quant();
     // Called unconditionally, even when the sampler discards the result: the
