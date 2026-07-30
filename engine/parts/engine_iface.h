@@ -58,6 +58,22 @@ public:
     // Only the sampler implements it -- it records and monitors from here.
     virtual void process_in(float /*inL*/, float /*inR*/) {}
     //
+    // consumes_input: does this engine override process_in? Answered once per
+    // engine swap and never per sample -- Part caches the answer (part.h) so
+    // its per-sample path can skip an indirect call whose target is the empty
+    // body above. Skipping it is observationally identical for every engine
+    // that does not override process_in, which today is all of them but the
+    // sampler.
+    //
+    // The two default together and MUST be overridden together. Nothing
+    // enforces that: an engine cannot be asked at runtime whether it overrode
+    // a virtual, so an engine that implements process_in and forgets this one
+    // keeps returning false and its input feed goes silently missing -- no
+    // crash, no assert, just an engine that never hears the input. The pairing
+    // is a convention held by this comment and by the override sitting next to
+    // process_in in every implementer (sampler_engine.h).
+    virtual bool consumes_input() const { return false; }
+    //
     // set_gate: Part's composed gate signal (the manual 5 ms pulse OR'd with
     // the groove's note sustain -- exactly what Part::gate() computes), so a
     // cloud can sound for the composed note duration in STEP. Forwarded on

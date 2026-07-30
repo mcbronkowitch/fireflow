@@ -115,6 +115,10 @@ public:
     void set_hold(bool on) override;
     void set_gate(bool on) override;
     void process_in(float inL, float inR) override;
+    // Paired with the override above -- see the convention note at
+    // IPartEngine::consumes_input (engine_iface.h). This is the only engine
+    // that overrides either.
+    bool consumes_input() const override { return true; }
 
     // --- material ---
     void   set_recording(bool on);

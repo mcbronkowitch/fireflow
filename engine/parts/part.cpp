@@ -30,6 +30,7 @@ void Part::init(float sample_rate, uint32_t seed_base,
     _pending_engine = _engine_id;
     _switching = false;
     _engine = _engine_for(_engine_id);
+    _engine_wants_in = _engine->consumes_input();   // pairs with _engine
     _engine_fade.init(sample_rate);
     _engine_fade.set_on(true, true);            // boot: engine fully on
     _step_on = false;
@@ -401,6 +402,7 @@ void Part::_control_tick() {
 void Part::_engine_swap() {
     _engine_id = _pending_engine;
     _engine = _engine_for(_engine_id);
+    _engine_wants_in = _engine->consumes_input();   // pairs with _engine
     _engine->set_flow(!_step_on);                          // re-sync state
     _engine->set_hold(_inhibit);
     _engine->set_gate(_last_gate);   // the freshly swapped-in engine
