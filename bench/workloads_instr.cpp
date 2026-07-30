@@ -1,10 +1,16 @@
 #include <cassert>
+#include <cmath>
 #include "workload.h"
 #include "families.h"
 #include "mem.h"
 #include "serial_arena.h"
 #include "instrument.h"
 #include "parts/part.h"
+#include "parts/engine_iface.h"
+#include "synth/synth_engine.h"
+#include "mod/super_modulator.h"
+#include "mod/lane_id.h"
+#include "mod/divisions.h"
 
 using namespace spky;
 
@@ -103,7 +109,139 @@ void configure_worst_bbd(Part& part)
     part.set_fx_target_base(FXT_FLUX_FB, 0.9f);
 }
 
-SerialArena<InstrNoVerbGroup, InstrPartGroup> g_instr_arena;
+// One SuperModulator at the gate's operating point, with no Center.
+//
+// The row it corrects is mod_plane_2x_center, which seeds its two modulators
+// 1u and 2u (bench/workloads_system.cpp:70-71), runs them at RATE 0.5 and 0.6
+// and DENSITY 0.7 (bench/workloads_system.cpp:75-76), never calls
+// set_tempo_bpm, and does no settle. This row seeds from PART_A's real
+// 0x1234abcd instead (engine/parts/part.cpp:17, engine/instrument.cpp:22),
+// runs RATE 0.8 and DENSITY 1.0 -- setup_inst_worst's operating point on both
+// decks -- and settles to the same depth the Instrument rows do. The seed,
+// RATE and settle-depth differences are all deliberate here and all part of
+// what the subtraction measures -- see the design spec section 3.
+//
+// DENSITY 1.0 is configured for the same reason: faithfulness to
+// setup_inst_worst. But the difference from mod_plane_2x_center's DENSITY 0.7
+// contributes nothing to the subtraction -- DENSITY is a no-op on BOTH sides
+// of it. set_density() only writes ModLane::_density (lane.h:23), read solely
+// by _groove_k() (lane.cpp:422), which _effective_gate() only consults when
+// _step_mode is true (lane.cpp:449: `gated = _step_mode ? _effective_gate(...)
+// : true`). Neither this row, nor mod_plane_2x_center, nor the gate itself
+// (setup_inst_worst never calls set_step, design spec section 2.4) ever calls
+// set_step() -- all three run in FLOW, where gated is hardcoded true. The
+// value differs between the rows; the difference is not measured.
+//
+// set_tempo_bpm(120.f) is also called below, mirroring what
+// Instrument::set_tempo_bpm pushes into every part's modulator
+// (engine/instrument.cpp:70) and what configure_worst_bbd already does for
+// the bare-Part rows. Unlike the other three, this one is NOT part of what
+// the subtraction measures: _synced defaults to false (super_modulator.h:187)
+// and nothing on this path calls set_synced(), so _update_rate() takes the FREE
+// branch -- _base_hz = free_hz(_rate_norm), never _bpm
+// (engine/mod/super_modulator.cpp:28-29). The call is kept for faithfulness
+// to the real Part init sequence, not because it changes behaviour or cost.
+//
+// The Center is deliberately absent. mod_plane_2x_center includes it, so
+// charging each deck half of that row double-counts an instrument-level
+// object that no bare Part runs and that the measured 4.04-point glue term
+// already contains.
+struct DeckModGroup {
+    SuperModulator mod;
+    // Read back after the settle for the self-check in setup_deck_mod_hot,
+    // and folded into the returned checksum so it is not a dead store -- same
+    // shape as InstrPartGroup's clock_a/stages_a above.
+    float master_hz = 0.f;
+};
+
+// One SynthEngine, driven exactly as Part::process drives it.
+//
+// Differences from synth_2x4 (bench/engine_2x4.h), each deliberate and each
+// part of what this row corrects:
+//
+//   1. Called through an IPartEngine*, not a concrete SynthEngine&. Part
+//      holds `IPartEngine* _engine` (engine/parts/part.h:209) and every
+//      method on that interface is virtual (engine/parts/engine_iface.h),
+//      so Part pays two virtual dispatches per sample and can inline
+//      neither. proc_engine_2x4 holds a concrete reference and the compiler
+//      inlines both calls. Calling the concrete type here would push that
+//      dispatch cost silently into the round's remainder -- the one way to
+//      get this row wrong (design spec section 2.3).
+//   2. FLOW, not STEP. _step_on initialises to false (part.cpp:35), flow()
+//      is !_step_on (part.h:98), and setup_inst_worst never calls set_step,
+//      so the gate runs both decks as a drone. setup_engine_2x4 calls
+//      set_flow(false).
+//   3. The cycle comes from a real modulator's master_hz(), as
+//      Part::process derives it (part.cpp:403-407), not from the constant
+//      set_cycle(2.f) the old row uses.
+//   4. process_in() is called every sample, before process()
+//      (part.cpp:482). proc_engine_2x4 never calls it, so the 35.80 points
+//      contain none of it -- but on THIS row's engine, that call costs
+//      exactly one virtual dispatch to an empty body, nothing more.
+//      SynthEngineT never overrides process_in(); it inherits IPartEngine's
+//      empty default (engine/parts/engine_iface.h:57-59, "Only the sampler
+//      implements it"). So difference #1's "two virtual dispatches per
+//      sample" already covers this call's cost -- #4 is not a second,
+//      additive charge on top of #1's (a correction to this row's own
+//      original comment and to design spec section 2.2, found in review).
+//      The distinction section 2.2 draws is real only on a SAMPLER deck:
+//      SamplerEngine::process_in (engine/sampler/sampler_engine.cpp:158)
+//      actually records/monitors from the call. Not this row's engine.
+//   5. A periodic re-fire (added in review; see task-2-report.md's fix
+//      round). Once FLOW is engaged, holding a chord needs trigger_chord(),
+//      not repeated trigger() calls: trigger()'s chord_slot is hardcoded 0
+//      (synth_engine.cpp:139, `_do_trigger(pitch_norm, 1.f, 0)`), and in
+//      FLOW, chord_slot 0 always demotes whichever voice currently holds
+//      the surface before picking a new one (synth_engine.cpp:206, `if
+//      (chord_slot == 0) _demote_all();` -- "a new fire demotes [the
+//      sustaining voice] and takes over", synth_engine.h class comment). A
+//      real deck re-strikes its chord on every LANE_PITCH fire -- roughly
+//      once every 1/master_hz seconds -- via _engine->trigger_chord(chord,
+//      nch) (part.cpp:447-460), which demotes only on the chord's OWN root
+//      and adds the rest without demoting, so a real deck holds 4 sustained
+//      voices permanently. This row's setup below fires once; with
+//      set_decay(1.0) at THIS row's derived cycle (~0.144 s -- the old
+//      row's constant set_cycle(2.f) is a 2 s cycle, whose own decay_s
+//      would be 8 x 2 = 16 s), decay_s here is ~1.15 s
+//      (synth_engine.cpp:390,276) and the -80 dB Idle threshold arrives
+//      around decay_s * 80/60 ~= 1.54 s (env.h:12-13,17's 60 dB decay-time
+//      definition and -80 dB Idle threshold) -- far short of the ~2.6 s a
+//      full setup-settle + warmup + measurement run spans. Left unfixed,
+//      occupancy collapses well inside the measured window (found in
+//      review: see task-2-report.md). proc_deck_engine_hot below re-issues
+//      ONE trigger_chord(kDeckEnginePitches, 4) call -- not four trigger()
+//      calls, for the reason above -- through the base pointer, every
+//      fire_period samples (derived from master_hz in setup, stored below),
+//      matching cadence for cadence what a real deck does.
+//   6. Different seed: 0x1234abcd ^ 0x5eedC0DE (PART_A's own mirror,
+//      part.cpp:19) vs. setup_engine_2x4's set_seed(3u)/(4u). Cost-neutral
+//      -- the RNG draws it feeds run once, at init (engine/synth/
+//      voice.cpp:25-30) -- listed here for completeness, the same way
+//      deck_mod_hot's own comment lists its seed difference.
+//
+// Not included, by design: the chord builder, the quantizer, _control_tick's
+// target pushes and the _engine_fade multiply. Those are Part-level and stay
+// in the round's remainder (design spec section 4). The periodic
+// trigger_chord() call in #5 is not the chord builder: it re-strikes the
+// same fixed four pitches every cycle -- the set this row's setup already
+// triggers once -- rather than building a chord from COLOR or the quantizer.
+struct DeckEngineGroup {
+    SynthEngine    synth;
+    SuperModulator mod;          // setup only -- see setup_deck_engine_hot
+    IPartEngine*   engine = nullptr;
+    float          master_hz = 0.f;
+    int            voices = 0;
+    // Re-fire cadence (post-review fix, difference #5 above): samples
+    // between trigger_chord() calls in proc_deck_engine_hot, derived once in
+    // setup from master_hz and held fixed. fire_ctr is the running
+    // countdown; it lives in the group so it survives across process()
+    // calls, the same reason InstrNoVerbGroup and InstrPartGroup keep their
+    // own retrigger counters here rather than as function-local statics.
+    int            fire_period = 0;
+    int            fire_ctr = 0;
+};
+
+SerialArena<InstrNoVerbGroup, InstrPartGroup, DeckModGroup, DeckEngineGroup> g_instr_arena;
 
 void setup_instr_noverb()
 {
@@ -273,12 +411,308 @@ float proc_instr_part_2()
     return acc;
 }
 
+void setup_deck_mod_hot()
+{
+    auto& g = g_instr_arena.emplace<DeckModGroup>();
+    // PART_A's seed base, as Part::init passes it: _mod.init(sr, seed_base)
+    // with seed_base = 0x1234abcd for PART_A (engine/parts/part.cpp:17,
+    // engine/instrument.cpp:22).
+    g.mod.init(kSampleRate, 0x1234abcdu);
+    g.mod.set_tempo_bpm(120.f);
+    g.mod.set_rate(0.8f);
+    g.mod.set_density(1.f);
+
+    // Settle to the same depth the Instrument rows settle to, so the row is
+    // measured in the state the gate is measured in. mod_plane_2x_center has
+    // no settle at all; that difference is part of what this row corrects.
+    for (int b = 0; b < kInstrSettleBlocks; ++b)
+        for (size_t i = 0; i < kBlock; ++i) g.mod.process();
+
+    // The self-check, same spirit as setup_instr_part_common's stages_a/
+    // clock_a asserts above: without it, a silently wrong RATE would just
+    // return a plausible-looking float and pass. master_hz() is the readback
+    // Task 2's deck_engine_hot row will also take from its own modulator, for
+    // a different purpose (deriving a cycle).
+    //
+    // This covers RATE and the _pitch_scale default, nothing else: _synced is
+    // false here (super_modulator.h:187) and nothing on this path calls
+    // set_synced(), so _update_rate() takes the FREE branch
+    // (super_modulator.cpp:28-29) and _apply_rate() sets
+    // master_hz() = free_hz(_rate_norm) * _pitch_scale (super_modulator.cpp:34).
+    // _pitch_scale defaults 1.0 and nothing here calls set_rate_scale(), so
+    // with RATE 0.8 master_hz() should equal free_hz(0.8f) exactly, less
+    // float noise -- checked against the live call rather than a hardcoded
+    // ~6.95 Hz so this cannot silently pass if the FREE curve is ever
+    // retuned. It also excludes the legacy set_cycle(2.f)'s 0.5 Hz by
+    // construction: free_hz(0.8f) is nowhere near 0.5, whereas RATE
+    // mistakenly left at 0.5 -- the value mod_plane_2x_center's mod_a uses
+    // (bench/workloads_system.cpp:75, not this file) -- would be
+    // free_hz(0.5f) =~ 0.775 Hz, which a loose band around 0.5 Hz would have
+    // let through.
+    //
+    // DENSITY is NOT covered, and cannot cheaply be: set_density() only
+    // writes ModLane::_density (lane.h:23), read solely by _groove_k()
+    // (lane.cpp:422). _effective_gate() calls _groove_k() in both of its
+    // melodic branches (lane.cpp:437 and :442); what is step-gated is the call
+    // to _effective_gate() itself (lane.cpp:449). This row never calls
+    // set_step(), so it runs in
+    // FLOW, where _on_boundary() hardcodes `gated = true` regardless of
+    // DENSITY (lane.cpp:449) -- the same operating point the real gate runs
+    // at (setup_inst_worst never calls set_step either, design spec section
+    // 2.4). DENSITY is therefore inert here, not merely untested: nothing
+    // this row can read -- lane_fired() included, since a wrap fires
+    // unconditionally in FLOW -- would move if DENSITY were silently wrong.
+    // free_hz(0.8f) inlined into the assert rather than held in a local, so
+    // this does not warn as an unused variable if NDEBUG is ever defined --
+    // setup_deck_engine_hot below already uses that form.
+    g.master_hz = g.mod.master_hz();
+    assert(g.master_hz > 0.f);
+    assert(std::fabs(g.master_hz - free_hz(0.8f)) < 1e-4f);
+}
+
+float proc_deck_mod_hot()
+{
+    auto& g = g_instr_arena.get<DeckModGroup>();
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i) {
+        g.mod.process();
+        acc += g.mod.lane_output(LANE_PITCH);
+    }
+    acc += g.master_hz;
+    return acc;
+}
+
+// Four fixed pitches, the same set setup_engine_2x4 uses (bench/engine_2x4.h,
+// kEngine2x4Pitches). setup_deck_engine_hot's own trigger loop below fires
+// them once, the same way setup_engine_2x4 does; proc_deck_engine_hot's
+// periodic re-fire (DeckEngineGroup's difference #5 above) re-strikes this
+// SAME set every fire_period samples. This row and synth_2x4 hold the same
+// voice occupancy for the whole measured window BECAUSE of that cadence --
+// not merely because the same four pitches are named here (that claim,
+// unqualified, was wrong: found in review, see task-2-report.md). Without
+// the cadence, the setup's own one-shot quad-trigger below does not even
+// establish 4 sustained voices to begin with: each trigger() call's
+// chord_slot is hardcoded 0, and in FLOW every chord_slot-0 fire demotes
+// whatever the previous one left sustaining (difference #5) -- so by the
+// time FLOW's own auto-drone promise fires on the first process() call
+// below (sustain_count() == 0 when set_flow(true) ran, so synth_engine.cpp
+// :120-122 arms it; it fires at synth_engine.cpp:360-363, retriggering
+// SynthEngineT::init's default chord, _chord[0] = _targets[LANE_PITCH] =
+// 0.5, synth_engine.cpp:39), the sounding set is actually {0.5, 0.35, 0.45,
+// 0.55} from 5 total triggers, and only the LAST of those five is genuinely
+// FLOW-sustaining -- the other three are one-shot releases already headed
+// for Idle (see the self-check comment below). The chord builder that
+// Part::trigger_manual would normally run (part.cpp:149-162) is Part-level
+// and belongs in the remainder; what this row needs from it is only the
+// number of voices it lands.
+constexpr float kDeckEnginePitches[] = { 0.25f, 0.35f, 0.45f, 0.55f };
+
+void setup_deck_engine_hot()
+{
+    auto& g = g_instr_arena.emplace<DeckEngineGroup>();
+
+    // Two provenances, not one. The modulator and engine init below mirror
+    // Part::init for PART_A (engine/parts/part.cpp:17, 19-20); the three
+    // modulator settings do NOT appear in Part::init at all -- BPM arrives via
+    // Instrument::set_tempo_bpm's fan-out to every part (engine/
+    // instrument.cpp:70), and RATE/DENSITY come from the gate's own setup
+    // (setup_inst_worst). deck_mod_hot's header comment above draws the same
+    // distinction; this one used to claim all six mirrored Part::init.
+    g.mod.init(kSampleRate, 0x1234abcdu);
+    // Both of these are inert here, for the reasons setup_deck_mod_hot's
+    // comment above sets out in full (BPM: _synced is false, so _update_rate()
+    // takes the FREE branch and never reads _bpm; DENSITY: only reaches
+    // _effective_gate(), which _on_boundary() calls only in STEP). Doubly moot
+    // in this row, which never process()es this modulator inside the measured
+    // loop -- it reads master_hz() from it and nothing else. Mirrored anyway,
+    // so the derived cycle comes from the state the gate actually runs in.
+    g.mod.set_tempo_bpm(120.f);
+    g.mod.set_rate(0.8f);
+    g.mod.set_density(1.f);
+    g.synth.set_seed(0x1234abcdu ^ 0x5eedC0DEu);
+    g.synth.init(kSampleRate);
+
+    // From here on the engine is reached ONLY through the base pointer.
+    g.engine = &g.synth;
+    g.engine->set_flow(true);        // boot: lanes boot in FLOW -> drone
+    g.synth.set_decay(1.f);          // Part::set_voice_decay(1.0), part.h:139
+
+    // Derive the cycle the way Part::process does: run the modulator to a
+    // settled state, read master_hz(), push 1/hz. The modulator is then left
+    // alone -- driving it inside the measured loop would pay deck_mod_hot's
+    // cost a second time and corrupt both rows (design spec section 3.2).
+    for (int b = 0; b < kInstrSettleBlocks; ++b)
+        for (size_t i = 0; i < kBlock; ++i) g.mod.process();
+    g.master_hz = g.mod.master_hz();
+    assert(g.master_hz > 0.f);
+    // Checked against the live free_hz(0.8f) call -- same idiom
+    // setup_deck_mod_hot uses (this file, above) -- rather than a second
+    // hardcoded expectation, so this cannot silently pass if the FREE curve
+    // is ever retuned. This single tight-banded check already excludes the
+    // legacy set_cycle(2.f)'s 0.5 Hz by construction: free_hz(0.8f) is
+    // nowhere near 0.5, so a RATE that silently fell back to 0.5 (the
+    // operating point this row exists to move away from) fails this assert.
+    // A second, separate `fabs(master_hz - 0.5f) > ...` band used to sit
+    // here as well; dropped in review because this equality-strength check
+    // makes it unreachable -- fabs(master_hz - free_hz(0.8f)) < 1e-4f
+    // already implies fabs(master_hz - 0.5f) > 1e-3f whenever it holds, so
+    // the second assert could never fire and its comment ("banded rather
+    // than compared for equality") no longer described the code above it.
+    assert(std::fabs(g.master_hz - free_hz(0.8f)) < 1e-4f);
+    g.engine->set_cycle(1.f / g.master_hz);
+
+    // Re-fire cadence (post-review fix; DeckEngineGroup's difference #5
+    // above explains why one is needed at all). A real deck re-strikes its
+    // chord roughly once every 1/master_hz seconds -- the same quantity
+    // set_cycle just derived (part.cpp:403-407 derives the cycle from it;
+    // the fire itself is the `fired` check at part.cpp:409-460). Rounded to
+    // the nearest sample and held as a fixed interval: Part re-derives its
+    // fire from a live per-sample lane_fired() edge (ModLane/SuperModulator,
+    // already priced by deck_mod_hot), which this row does not reproduce --
+    // what this row needs to match is the cadence, not its exact phase, so
+    // fixed-interval is faithful here. Folded into proc_deck_engine_hot's
+    // checksum so it is not a dead store.
+    g.fire_period = static_cast<int>(std::lround(kSampleRate / g.master_hz));
+    assert(g.fire_period > 0);
+    // The fix only works because fire_period lands inside the warmup window
+    // and well short of the Idle horizon -- neither is written down anywhere
+    // else, and both are consequences of RATE 0.8 (this row's master_hz),
+    // not of anything asserted directly. At RATE 0.8, fire_period is 6908
+    // samples (~0.144 s) against a 9600-sample (kWarmupBlocks * kBlock,
+    // ~0.2 s) warmup and a ~1.54 s Idle horizon (difference #5's
+    // decay_s * 80/60), so the first correcting fire lands inside warmup
+    // with ~56 ms to spare, and every later fire is ~10x sooner than a
+    // demoted voice's Idle time. A future RATE change could push
+    // fire_period past the warmup window, silently moving the first
+    // corrective fire into the MEASURED window instead of before it --
+    // this assert makes that fail loudly (an assert failure) instead of
+    // quietly reintroducing the collapse the fix round found. It checks
+    // only the warmup half of the margin, not the Idle half, because
+    // Idle's ~1.54 s is over ten times looser and the warmup window is the
+    // tighter constraint by a wide margin at every RATE this bench reaches.
+    assert(g.fire_period < kWarmupBlocks * static_cast<int>(kBlock));
+    g.fire_ctr = g.fire_period;
+
+    for (float p : kDeckEnginePitches) g.engine->trigger(p);
+
+    const float* in = test_input();
+    for (int b = 0; b < kInstrSettleBlocks; ++b)
+        for (size_t i = 0; i < kBlock; ++i) {
+            float ol, orr;
+            g.engine->process_in(in[i], in[i]);
+            g.engine->process(ol, orr);
+        }
+
+    // Self-check, same shape as InstrPartGroup's stages_a/clock_a asserts and
+    // DeckModGroup's master_hz assert. What it actually covers is narrower
+    // than the original comment here claimed (corrected in review): it
+    // confirms only that 4 Env instances are non-Idle
+    // (active_voices(), engine/synth/synth_engine.cpp:406-411, counts
+    // Voice::active() -- engine/synth/voice.h:51 -- which is the same flag
+    // Voice::process's cost early-return checks, engine/synth/voice.cpp:114)
+    // at this point, ~0.4 s after the trigger loop above ran --
+    // NOT that all 4 are FLOW-sustaining, and not that FLOW is even
+    // engaged. Only the LAST of the five triggers this row has made by now
+    // (four explicit plus FLOW's auto-drone; see the comment on
+    // kDeckEnginePitches above) is genuinely sustaining; the other three are
+    // one-shot releases already headed for Idle around 1.54 s
+    // (difference #5, DeckEngineGroup's comment) if nothing re-strikes them
+    // first. The assert also cannot over-report -- SynthEngine::kVoices is 4
+    // (engine/synth/synth_engine.h:35), so 4 is the hard ceiling as well as
+    // the count asked for -- and it would pass identically even if
+    // set_flow(true) above had never been called: STEP-mode trigger() calls
+    // populate the same 4 envelopes on the same decay clock, with no notion
+    // of "sustaining" to tell FLOW and STEP apart at this single readback.
+    // What actually holds occupancy at 4 for the WHOLE measured window is
+    // proc_deck_engine_hot's periodic trigger_chord() cadence below
+    // (fire_period/fire_ctr), not this assert -- this assert only catches a
+    // setup that silently failed to trigger anything at all.
+    g.voices = g.synth.active_voices();
+    assert(g.voices == 4);
+}
+
+float proc_deck_engine_hot()
+{
+    auto& g = g_instr_arena.get<DeckEngineGroup>();
+    const float* in = test_input();
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i) {
+        float ol, orr;
+        // Both calls through the base pointer, in Part::process's order:
+        // process_in first, then process (part.cpp:482-483).
+        g.engine->process_in(in[i], in[i]);
+        g.engine->process(ol, orr);
+        acc += ol + orr;
+        // Re-fire cadence (post-review fix, DeckEngineGroup's difference #5
+        // above): a real deck never lets its FLOW voices sit un-restruck
+        // long enough to release past Idle (part.cpp:409-460's `fired`
+        // check, roughly once every 1/master_hz seconds). ONE
+        // trigger_chord() call, not four trigger() calls -- chord_slot 0
+        // only demotes the current surface on a chord's OWN root note
+        // (synth_engine.cpp:206), so the other three notes in this call add
+        // to it rather than replacing it, landing 4 voices as non-Idle
+        // (Voice::process branches on `_env.active()`, never on
+        // `_sustaining`, voice.cpp:113-114) -- non-Idle is the quantity this
+        // row's cost actually tracks, and the cadence holds it at 4.
+        //
+        // The FLOW *surface* does NOT stay at 4, and that is expected, not a
+        // second collapse to fix: nothing here ever calls set_chord(), so
+        // `_chord_n` stays at init()'s value of 1 (synth_engine.cpp:38-39)
+        // -- trigger_chord() never writes `_chord_n` either. Once this
+        // fire's three pending notes land (~8 ms, kStabSpreadS,
+        // synth_engine.h:42), `_update_control()`'s next few ticks call
+        // `_adjust_surface()` (gated on `_pending_n == 0`, synth_engine.cpp
+        // :263) with `want = 1`, `m = 4` (synth_engine.cpp:244), and take
+        // the collapse branch (synth_engine.cpp:251-254), demoting the
+        // highest-chord_slot voice one per tick until only slot 0 remains
+        // sustaining (~3 ticks, ~6 ms) -- and that survivor's pitch gets
+        // pulled to `_chord[0]` (0.5, synth_engine.cpp:39) by the same
+        // per-tick pitch-follow loop (synth_engine.cpp:339-344), regardless
+        // of what pitch it was struck at. set_chord() is a `_control_tick`
+        // push design spec section 4 deliberately excludes from this row
+        // (the remainder); this collapse is that exclusion's visible
+        // consequence, not an omission to fix here. It costs nothing extra:
+        // the three demoted voices stay non-Idle, releasing toward 0 over
+        // ~1.54 s (difference #5's timing) same as before, and the NEXT
+        // fire -- ~0.144 s later, far sooner -- steals them again before
+        // any of them gets there.
+        // Through the base pointer, same as process_in/process above --
+        // trigger_chord is virtual on IPartEngine (engine_iface.h).
+        if (--g.fire_ctr <= 0) {
+            g.fire_ctr = g.fire_period;
+            g.engine->trigger_chord(kDeckEnginePitches, 4);
+        }
+    }
+    acc += static_cast<float>(g.synth.active_voices());
+    // The cadence's invariant, checked live rather than inferred. The value is
+    // already computed one line up and folded into the checksum -- but this
+    // file's own header comment (above, on the checksum fold) says plainly
+    // that the fold is not a detector: a collapse changes the checksum, and a
+    // changed checksum is indistinguishable from any other change. Until this
+    // assert, occupancy across the measured window was held only by the
+    // reasoning in setup's fire_period comment, and a collapse is exactly the
+    // failure the review round found once already -- a future RATE, decay or
+    // cadence change would reintroduce it and still return a plausible
+    // number. It holds for every block: the four triggers at setup leave 4
+    // Envs non-Idle with an Idle horizon of ~1.54 s (difference #5), the
+    // first corrective fire lands at ~0.544 s, and every later fire is ~10x
+    // sooner than that horizon, so nothing ever reaches Idle. kVoices is 4
+    // (synth_engine.h:35), so 4 is the ceiling as well as the expectation.
+    // Cost is one compare per block against this row's ~172000 cycles.
+    assert(g.synth.active_voices() == 4);
+    acc += g.master_hz + static_cast<float>(g.voices)
+         + static_cast<float>(g.fire_period);
+    return acc;
+}
+
 } // namespace
 
 const Workload kInstrWorkloads[] = {
     { "instr", "instr_part_1", setup_instr_part_1, proc_instr_part_1 },
     { "instr", "instr_part_2", setup_instr_part_2, proc_instr_part_2 },
     { "instr", "instr_noverb", setup_instr_noverb, proc_instr_noverb },
+    { "instr", "deck_mod_hot", setup_deck_mod_hot, proc_deck_mod_hot },
+    { "instr", "deck_engine_hot", setup_deck_engine_hot, proc_deck_engine_hot },
 };
 const int kInstrCount = sizeof(kInstrWorkloads) / sizeof(kInstrWorkloads[0]);
 

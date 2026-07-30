@@ -49,6 +49,17 @@ is actually built today, and what is still design-only.
   which restates the target: **the overshoot is 10.77 points, not 12.88.**
   Branch `perf/instrument-ablation`, not merged. See "Instrument-level
   ablation" below.
+  **Update, 2026-07-29 (deck interior split):** the gate reads **110.10** in
+  this build, so **the overshoot is 10.10 points**. Of the 7.645 unpriced points
+  per deck, **6.85 survives both operating-point corrections this round
+  measured** — but it is *not* yet attributable to `Part` structure: ~2.29 of it
+  is FLUX's own operating-point error, which the predecessor sized and this
+  round did not re-price, and in-deck contention is still unseparated. Re-pricing
+  FLUX comes before any further split. The round also reprices the "cut a voice"
+  arithmetic: the **marginal** voice costs 3.97 points, not the 4.48 average, so
+  one voice per deck is worth ≈7.9 points — 78 % of the gap, not all of it.
+  Branch `perf/deck-interior-ablation`, not merged. See "Deck-interior
+  ablation" below.
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
@@ -1318,6 +1329,108 @@ collapse is still open, decided by ear against that round's four renders. And
 `engine/fx/bbd.h`'s `1/sr_` division in `BbdLine::SetClock` is still
 unaddressed, worth an estimated ~0.6 points, still deliberately left as model
 territory.
+
+### Deck-interior ablation ✅ (the 7.73 per deck, split)
+
+Branch `perf/deck-interior-ablation`. Spec
+`docs/superpowers/specs/2026-07-29-deck-interior-design.md` §8, evidence
+`docs/bench/2026-07-29-c4ae8db-ablate.{md,csv}`. Two rows added to the existing
+`instr` family and `ablate` profile; no engine change.
+
+The predecessor left **7.73 unpriced points per deck**. Two rows re-priced the
+two block rows whose operating point provably differed from the gate's:
+`deck_engine_hot` (one `SynthEngine` driven as `Part::process` drives it —
+through a virtual `IPartEngine*`, in FLOW, cycle derived from a real
+modulator's `master_hz()`, `process_in()` called) and `deck_mod_hot` (one
+`SuperModulator` at RATE 0.8, no `Center`).
+
+**Result: the two operating points this round re-priced were not the problem.**
+All figures `pct_max`, run 2, computed entirely within one run. (The headline was
+7.73 when the round was planned; 7.645 here is the layout drift below, not a
+correction — `instr_part_1` 46.24 → 46.00, block sum 38.505 → 38.355.)
+
+| | points |
+|---|---:|
+| voices: `deck_engine_hot` − `synth_2x4` / 2 | **+0.70** |
+| modulation: `deck_mod_hot` − `mod_plane_2x_center` / 2 | **+0.10** |
+| **remainder** | **+6.85** |
+| per-deck excess | 7.645 |
+
+89.6 % survives both corrections — but **it is not yet `Part` structure**, and
+this round cannot call it that. Roughly **2.29 of those 6.85 points per deck are
+FLUX's known operating-point error**, which the predecessor measured and this
+round did not re-price: `fx_flux_sdram` runs STAGES 8192 / rate index 3 /
+feedback 0.7 while a deck runs 16384 / top rate / 0.9, so the FX increments
+subtracted above are too cheap and the remainder is correspondingly too large.
+In-deck block contention, which the predecessor also left open, is still in there
+too. About **4.5 points** are genuinely unattributed. The `Part`-level work that
+*is* inside: the chord builder, the quantizer, `_control_tick`'s pushes, the
+`_engine_fade` multiply, and `Part::process`'s own loop — **not**
+`_adjust_surface`, which is a `SynthEngineT` member that `deck_engine_hot`
+already pays, so the subtraction removes it.
+
+The four differences established by reading (two virtual dispatches per sample,
+FLOW vs STEP, a 14×-shorter derived cycle, `process_in` where the old row calls
+none) are all inside the +0.70 as a **joint upper bound**; their own per-sample
+share is **+0.29**, which is what `pct_avg` moves by. The extra ~0.41 shows up
+only in `pct_max` because it is a per-block event this row pays and `synth_2x4`
+does not — the ~14 `trigger_chord` fires, landing in whichever block sets
+`max_cyc`. Read either way, none of the four was expensive. The remainder is
+unaffected: `instr_part_1` fires once per cycle too, so the fire cost cancels.
+
+**`synth_2x4`'s points are not underpriced — but the "cut a voice" arithmetic
+needed a different correction than expected.** `synth_2x4` prices eight voices
+at 4.479 each (35.83 in this build, 35.80 in the predecessor's) and
+`deck_engine_hot` four at 4.65, so the rows were right. Neither average is the
+right number for the decision: differencing
+`synth_1_voice`/`_2_voices`/`_4_voices` (5.65 / 9.91 / 17.85) shows a
+**non-linear** ladder — the second voice costs 4.26, the third and fourth 3.97
+each. So the **marginal** voice is about **3.97**, and **1.7–2.0 points** per
+engine are fixed overhead a cut does not reclaim. Cutting one voice per deck
+saves ≈ **7.9 points** — not the 9.3 `deck_engine_hot`'s average implies, nor
+the 8.96 `synth_2x4`'s does — i.e. **78 % of the gap**, cheap and structural,
+but not sufficient alone.
+
+**Two candidates closed by reading, not measuring.** The four engines a `Part`
+holds cost memory and no CPU (`_engine` is one pointer; the fade multiply is
+exactly 1.0 at hold). The two virtual dispatches per sample are structural —
+the interface *is* the four-engine design — and, being per-sample costs, sit
+inside the **+0.29** `pct_avg` share, net of the other three per-sample
+differences. Separately: **DENSITY is inert in FLOW**, in both bench rows and in
+the gate itself (`_density` → `_groove_k`, reached only from `_effective_gate()`,
+which `_on_boundary()` calls only in STEP — none of the three sets it), and
+`set_tempo_bpm` is inert in FREE mode. A knob the gate sets to 1.0 has no cost
+implication at the gate's own operating point.
+
+**The layout drift reproduced a third time.** All 18 rows shared with
+`930ec17-ablate.csv` returned identical checksums, and all 18 of the
+predecessor's rows are present here (this run has 20), so the shared set was not
+chosen after the fact. Costs moved anyway: the gate 110.77 → **110.10**,
+`fx_grit` 5.61 → 5.43, `oliverb_solo_sram` 9.62 → 9.66. `fx_grit` is the row the
+mono round first suspected and could not prove; it has now moved in three
+consecutive runs at an unchanged checksum. **The ±2-point bound is loosened, not
+confirmed:** its gate half holds (0.67 of ±2), but its small-row half does not —
+`fx_grit` moved −**2.84 %** of `avg_cyc` (53474 → 51957), past the ±2 % the
+predecessor calibrated across a *family swap*, and across a much smaller build
+change. Every other row moved ≤1.29 %. The target is now **10.10 points**.
+
+**Unlike the predecessor, a finer round now has a subject.** The remainder is
+6.85 points on deck A and 6.95 on the incremental deck B, ≈**13.8 across the
+two** — larger than the gap. Last round's argument against splitting rested on
+the glue being 4.04 points, too small to repay a round; that does not apply here.
+Three cheap rows, in order: (1) **FLUX at the deck's real operating point** —
+first, because the remainder cannot be named until those ~2.29 points per deck
+are re-attributed; it is a bench-row change, not an engine change, and
+re-attributing them does not by itself save them (whether STAGES 16384 and the
+top flux rate are settings the instrument needs is the owner's call). (2) **The
+marginal voice at the gate's operating point**, so the 7.9-point estimate stops
+being a difference of rows measured at the old one. (3) **A `Part` with its chord
+surface held at one note** — the chord/quantizer path; nothing in this round
+ranks the remainder's constituents, so it is not "the largest", just one of three
+exclusions documented as a consequence rather than measured. The second changes a
+decision — if the marginal voice is nearer 4.65 than 3.97, cutting one closes
+**92 %** of the gap rather than 78 %, and "four voices or three" becomes the
+cheapest route to 100 % this project has.
 
 ### BODY playability ✅ (extends M5j)
 
