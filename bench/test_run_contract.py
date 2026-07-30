@@ -934,6 +934,14 @@ class AblateProfileTest(unittest.TestCase):
     def test_deck_engine_row_is_expected(self):
         self.assertIn("deck_engine_hot", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
 
+    def test_flux_hot_row_is_expected(self):
+        # The remainder-split round's re-pricing of FLUX at the deck's own
+        # operating point (spec 2026-07-30-remainder-split-design section 4).
+        # It lives in `instr`, not `system`, so fx_flux_sdram's own setup --
+        # and therefore its checksum, and its comparability with two committed
+        # rounds of evidence -- stays untouched.
+        self.assertIn("fx_flux_hot", runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["instr"])
+
 
 class ManifestValidationContract(unittest.TestCase):
     """resolve()'s load-time manifest checks (design spec S3): a profile
