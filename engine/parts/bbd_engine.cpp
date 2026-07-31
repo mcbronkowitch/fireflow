@@ -11,25 +11,35 @@ constexpr float kDither = 4e-5f;
 // k0: the freeze's unity reference, measured with broadband material against
 // the per-octave criterion in tests/test_bbd_engine.cpp ("the freeze holds a
 // broadband burst per octave"). DECAY trims BELOW it; the acceptance test runs
-// at DECAY maximum. Operating point: div 1/2, T = 500 ms, DRIVE swept 0 -> 1,
-// DECAY 1, PITCH 0.5 in STEP (f_clk = 1448 Hz, 1448 stages).
+// at DECAY maximum.
 //
-// Bisected for zero MEAN across the six probe bands; the full trial table is in
+// Operating point: div 1/8 at a 1 s cycle -> T = 125 ms, PITCH 0.9 on the STEP
+// grid -> f_clk = 13308 Hz, 3327 stages, DRIVE swept 0 -> 1, DECAY 1. That
+// clock is not incidental: it is the lowest one at which all six probe octaves
+// (110 .. 3520 Hz) sit below the line's own Nyquist, and a probe above f_clk/2
+// measures fold-around rather than held content.
+//
+// Bisected for zero MEAN across the six bands; the full trial table is in
 // .superpowers/sdd/2026-07-31-bbd-part-engine/task-6-report.md. Read that
-// before touching this number: the criterion is MISSED (2-3 of 6 bands outside
-// +-1 dB, and the fit does not generalise across noise realisations), and the
-// report says why that is structural rather than a matter of a better k0.
-constexpr float kFreezeGain = 0.93125f;
+// before touching this number: the criterion is MISSED (4 of 6 bands outside
+// +-1 dB, worst +2.81 dB), and the report shows why -- the residual is what is
+// left when a FIRST-order feedback shelf is asked to invert the loss pole plus
+// a SIXTH-order fixed chain, and no value of the pair below removes it.
+constexpr float kFreezeGain = 1.096f;
 
 // The feedback-path tilt at the freeze's neutral point -- the value that
 // inverts kLossCoef so the line's round trip is flat to ~1 and the compander's
 // L^2 becomes harmless. RESONANCE (a later movement) plays the same filter and
 // takes this as its centre, which is why it is named rather than inlined.
+//
 // Measured at the same operating point as kFreezeGain, by minimising the
-// SPREAD across the six probe bands with the gain re-bisected to zero mean at
-// each tilt. The minimum is shallow and lands at 6.15 dB, not the <= 2 dB the
-// criterion needs -- again, see the report.
-constexpr float kFreezeTilt = 0.44f;
+// SPREAD across the six probe bands with the gain re-bisected at each tilt.
+// The minimum is shallow (4.46 dB over tilt 1.25..1.32) and lands at 4.47 dB,
+// not the <= 2 dB an all-bands-within-+-1 result needs. NOTE it is measured at
+// ONE clock: the corner tracks f_clk/4, but the fixed 3600 Hz chain does not
+// move with the clock, so the tilt that neutralises the loop at 13.3 kHz is
+// not the one that neutralises it at 1.4 kHz. See the report.
+constexpr float kFreezeTilt = 1.30f;
 
 // ATTACK's endpoints: how long the freeze takes to engage and release.
 constexpr float kFreezeRampMinS = 0.002f;

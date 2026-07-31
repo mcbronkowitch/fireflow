@@ -450,13 +450,32 @@ TEST_CASE("bbd engine: the freeze holds a broadband burst per octave") {
     e.set_cycle(1.0f);
     e.set_flow(false);
     e.set_decay(1.f);                      // DECAY max: no trim below k0
-    float t[LANE_COUNT] = { 0.f, 8.f / 10.f, 0.5f, 0.5f, 1.f };  // div 1/2 -> T=500ms
+    // The operating point is chosen by ONE requirement: every probe must be
+    // below the line's own Nyquist with real headroom. A BBD samples at f_clk,
+    // so a probe above f_clk/2 measures the staircase's fold-around, not held
+    // content -- and a "spread" computed across a mixture of real and aliased
+    // bands is not a spectrum-flatness figure at all. This case first shipped
+    // at div 1/2 / PITCH 0.5, i.e. f_clk = 1448 Hz, where 880, 1760 and 3520
+    // were ALL above f_clk/2 = 724 Hz; that instrument is what produced the
+    // un-fittable low/HIGH/ok/low/ok/ok residue.
+    //
+    // div 1/8 at a 1 s cycle -> T = 125 ms, PITCH 0.9 on the STEP grid ->
+    // f_lo = 2048 Hz, f_clk = 2048 * 2^2.7 = 13308 Hz (measured 13307.9,
+    // 3327 stages). Nyquist 6654 Hz against a top probe of 3520 Hz: 1.89x, and
+    // 1.48x even against that probe's upper -3 dB skirt at 4508 Hz.
+    //
+    // STEP is what bounds this: clock_step spans 36 semitones, so f_clk can
+    // never exceed 8 * f_lo = 2048/T, i.e. Nyquist <= 1024/T. Holding 3520 Hz
+    // clear by ~2x therefore REQUIRES T <= ~145 ms whatever the PITCH -- the
+    // fixture cannot be both long-tailed and validly probed, and the freeze is
+    // only reachable in STEP, so FLOW's wider window is not available.
+    float t[LANE_COUNT] = { 0.f, 4.f / 10.f, 0.9f, 0.5f, 1.f };
     e.set_targets(t, 0.5f);
     e.latch_clock();
 
     // A noise burst in, one delay period long.
     Rng rng; rng.seed(0xfeedu);
-    const int period = static_cast<int>(0.5f * 48000.f);
+    const int period = static_cast<int>(0.125f * 48000.f);
     for (int i = 0; i < period; ++i) {
         float l, r;
         const float n = rng.next_bipolar() * 0.3f;
@@ -509,7 +528,11 @@ TEST_CASE("bbd engine: the freeze holds a broadband burst per octave") {
     // than `a` rather than a second first circulation.
     octaves(9, b);
     for (int i = 0; i < 6; ++i) {
-        const float db = 20.f * std::log10((b[i] + 1e-12f) / (a[i] + 1e-12f));
+        // 10*log10, not 20: bands[] accumulates y*y, so this is an ENERGY
+        // ratio, and +-1 dB is written in LEVEL. 20*log10 of an energy ratio
+        // is twice the level figure and makes the criterion silently 2x
+        // stricter than spec 5.6 asks for.
+        const float db = 10.f * std::log10((b[i] + 1e-12f) / (a[i] + 1e-12f));
         CAPTURE(i);
         CAPTURE(db);
         CHECK(std::fabs(db) <= 1.0f);
