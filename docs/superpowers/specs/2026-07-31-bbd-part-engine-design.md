@@ -836,7 +836,9 @@ neither blooms nor sits silent, and §5.13 tests it.
   not, and both channels' repeat intervals stay equal.
 - Switching away from and back to `ENGINE_BBD` produces silence, not old charge.
 - `test_panel.py` is green.
-- The other four engines are bit-identical (see §4.7 on what the hash gates
+- The other four engines show **no unintended change** — see the note on
+  bit-exactness below; a deliberate change is fine, a surprising one is not.
+  (See §4.7 on what the hash gates
   actually cover).
 - `inst_bbd_engine_worst` exists as a bench row (§8.3).
 
@@ -1068,7 +1070,8 @@ remove them.**
   `set_mix`/`set_feedback`/`set_bpm`, the shared delay-time slew), with every
   symbol in §6.7 either kept with a stated meaning or removed with its tests.
 - `FXT_FLUX_TIME` has a decided meaning and a test for it.
-- With FLUX disengaged, every render hash is unchanged.
+- With FLUX disengaged, the deck sounds unchanged — **by ear and by sanity
+  render, not by hash.** See the note below.
 - THIN works over the full LINK travel, with its tests green **before** any DRAG
   symbol is deleted.
 - A patch saved before the change loads with its THIN setting intact, including
@@ -1077,6 +1080,31 @@ remove them.**
 - `bench/audition/Makefile` builds.
 - The DTCM A/B pair still exists, re-pointed.
 - `instrument_worst` is re-measured in the same build, reported as `pct_max`.
+
+---
+
+## Note on bit-exactness — it is not a gate
+
+**Owner's ruling, 2026-07-31: the project is in development and does not owe
+byte-identity.** Renders and hashes are sanity checks, not acceptance criteria,
+and a behaviour change is acceptable where it is *intended and stated*. What is
+not acceptable is a change nobody noticed.
+
+Two places this materially relieves the work:
+
+- **Movement 3 does not have to reproduce the old tape echo's sound.** §6.1
+  worried about whether a rebuilt `DeLine`/`TapeBpf`/`EchoDelay` would be
+  sound-neutral against `e004a3d^`. It does not need to be. It needs to sound
+  right by ear. The archaeology in §6.1 stays useful as a *reference* for how
+  the thing was shaped, not as a fidelity target.
+- **Movement 2's engine may change what a saved patch does**, as movement 1
+  already did for `exciteOtherDeck` on a sampler deck. Document the change where
+  a user or host author will meet it; do not contort the design to avoid it.
+
+Movement 1 was nonetheless built with a bit-exact source-off path, and that
+was not wasted: it fell out of putting the new work behind the existing
+`_src_deck` guard, which the design wanted anyway, and it made the neutrality
+proof cheap. Keep that shape where it is free. Do not pay for it.
 
 ---
 
