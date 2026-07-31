@@ -22,10 +22,26 @@ void BbdEngine::init_buffers(float* l, float* r, size_t cells) {
     _buf_ok = (l != nullptr && r != nullptr && cells > 0);
     _l.Init(_sr, l, cells);
     _r.Init(_sr, r, cells);
-    // Two seeds, or both lines dither identically and COLOR 0's bit-identity
-    // test would pass for the wrong reason.
-    _l.SeedDither(0x5bd1e995u);
-    _r.SeedDither(0x27d4eb2fu);
+    // NO per-line seed here, on purpose, and this is the one place to read
+    // about it. Both lines run the SAME dither stream, because a mono source
+    // through this engine has to come out mono: at zero width, L and R must be
+    // bit-identical, and two independent noise streams would break that in a
+    // way no listener could name -- a mono signal that quietly is not mono any
+    // more, with nothing on the panel to explain it.
+    //
+    // BbdLine::Reset (fx/bbd.h) seeds its own Rng from one fixed constant, so
+    // both lines already agree, and they go on agreeing across every
+    // BbdEngine::reset() -- which Part::_engine_swap runs on every activation,
+    // i.e. on the only path by which this engine is ever heard. Seeding the two
+    // lines apart HERE would therefore not even hold: reset() would put them
+    // back in step at the first swap. That is exactly the trap this comment
+    // replaces.
+    //
+    // Scope, so the next reader does not over-read it: this says the NOISE
+    // SOURCE is common to both channels. It is not a claim that the two
+    // channels stay identical in general -- what decorrelates them is COLOR
+    // moving their clocks apart, which is a later movement's work and acts on
+    // the signal path, not on the dither.
     _l.SetDither(kDither);
     _r.SetDither(kDither);
     _recompute();

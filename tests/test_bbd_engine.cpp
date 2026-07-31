@@ -155,6 +155,38 @@ TEST_CASE("bbd engine: the output stays inside its stated bound") {
     CHECK(peak <= 1.f);
 }
 
+TEST_CASE("bbd engine: a mono source through the stereo engine stays mono") {
+    // Two BbdEcho is a stereo engine, so nothing about the shape of it forces
+    // L and R to agree -- it is a property of what the two lines are fed and
+    // seeded with, and it is a LISTENING property: at zero width a mono source
+    // must arrive mono, or the deck quietly de-monoises everything sent
+    // through it with nothing on the panel to explain why. Pinned here instead
+    // of asserted in a comment, and pinned through Part's engine swap
+    // specifically, because that is where BbdEngine::reset() runs -- the call
+    // that decides which seeds the lines actually carry when the deck is
+    // audible, as opposed to which ones init_buffers set once.
+    Part p;
+    p.init(48000.f, 3u, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
+    p.set_engine(ENGINE_BBD);
+    // MIX strictly below 1 and off-lane, so the dry path is live and the
+    // output is loud enough to be worth comparing within this window.
+    p.set_target_active(LANE_LEVEL, false);
+    p.set_target_base(LANE_LEVEL, 0.5f);
+    float l, r, sl, sr;
+    for (int i = 0; i < 500; ++i) p.process(0.f, 0.f, l, r, sl, sr);  // swap + fade
+
+    float peak = 0.f;
+    for (int i = 0; i < 48000; ++i) {
+        const float in = std::sin(i * 0.05f);   // the same sample to both ears
+        p.process(in, in, l, r, sl, sr);
+        REQUIRE(l == r);                        // bit-identical, not Approx
+        peak = std::max(peak, std::fabs(l));
+    }
+    // Non-vacuity: silence is trivially mono. This must be a real signal whose
+    // two channels agree, not two channels that agree about nothing.
+    CHECK(peak > 1e-3f);
+}
+
 TEST_CASE("bbd engine: switching away and back returns silence, not old charge") {
     Part p;
     p.init(48000.f, 11u, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
