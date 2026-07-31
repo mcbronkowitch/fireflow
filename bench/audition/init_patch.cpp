@@ -61,6 +61,7 @@ void apply_init_patch(spky::Instrument& inst)
         const spky::EngineId engine
             = engine_value == 0 ? spky::ENGINE_SYNTH
               : engine_value == 2 ? spky::ENGINE_WAVE
+              : engine_value == 3 ? spky::ENGINE_BODY
                                   : spky::ENGINE_SAMPLER;
         inst.set_engine(deck, engine);
         const bool sampler = engine == spky::ENGINE_SAMPLER;
