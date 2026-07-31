@@ -24,6 +24,11 @@ struct FxMem {
     // Rack) or in SDRAM (M6). nullptr -> that part's sampler runs silent.
     SampleBuffer::Frame* sampler_buf[PART_COUNT] = { nullptr, nullptr };
     size_t sampler_frames = 0;
+    // The BBD part engine's two lines per deck (spec 2026-07-31 §5.7). Sized
+    // BbdEngine::kCells floats each = 32 KB per line, 128 KB for the
+    // instrument. SDRAM on the Seed, static or heap on the desktop.
+    // nullptr -> that deck's BBD engine runs silent.
+    float* bbd[PART_COUNT][2] = { { nullptr, nullptr }, { nullptr, nullptr } };
 };
 
 // The complete public API. No hardware type crosses this boundary; the same

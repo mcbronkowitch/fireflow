@@ -6,6 +6,7 @@
 #include "pitch/chord.h"
 #include "parts/engine_iface.h"
 #include "parts/test_tone_engine.h"
+#include "parts/bbd_engine.h"
 #include "synth/synth_engine.h"
 #include "sampler/sampler_engine.h"
 #include "fx/fx_util.h"
@@ -31,7 +32,8 @@ class Part {
 public:
     void init(float sample_rate, uint32_t seed_base,
               float* echo = nullptr,
-              SampleBuffer::Frame* sampler_mem = nullptr, size_t sampler_frames = 0);
+              SampleBuffer::Frame* sampler_mem = nullptr, size_t sampler_frames = 0,
+              float* bbd_l = nullptr, float* bbd_r = nullptr);
 
     SuperModulator& mod() { return _mod; }
     const SuperModulator& mod() const { return _mod; }
@@ -173,6 +175,8 @@ public:
     const WaveEngine& wave() const { return _wave; }
     BodyEngine& body() { return _body; }
     const BodyEngine& body() const { return _body; }
+    BbdEngine& bbd() { return _bbd; }
+    const BbdEngine& bbd() const { return _bbd; }
 
     int active_voices() const {
         if (_engine_id == ENGINE_SYNTH) return _synth.active_voices();
@@ -431,6 +435,7 @@ private:
     SynthEngine    _synth;
     WaveEngine     _wave;
     BodyEngine     _body;
+    BbdEngine      _bbd;
     SamplerEngine  _sampler;
     EngineId       _engine_id = ENGINE_SYNTH;
     EngineId       _pending_engine = ENGINE_SYNTH;
@@ -450,6 +455,7 @@ private:
             case ENGINE_SAMPLER: return static_cast<IPartEngine*>(&_sampler);
             case ENGINE_WAVE:    return static_cast<IPartEngine*>(&_wave);
             case ENGINE_BODY:    return static_cast<IPartEngine*>(&_body);
+            case ENGINE_BBD:     return static_cast<IPartEngine*>(&_bbd);
             default:             return static_cast<IPartEngine*>(&_tone);
         }
     }

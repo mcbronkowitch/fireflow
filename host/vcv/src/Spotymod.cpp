@@ -172,6 +172,9 @@ struct Spotymod : Module {
     // 64 KB of echo buffer (was 128 KB before the mono-echo collapse) + one
     // ~130 KB reverb, held per module instance.
     float echo[spky::PART_COUNT][spky::Flux::kMaxSamples];
+    // The BBD part engine's two lines per deck, held by value like the echo
+    // buffer above: 32 KB per line, 128 KB per module instance.
+    float bbd[spky::PART_COUNT][2][spky::BbdEngine::kCells];
     spky::AmbientReverb reverb;
 
     // The texture deck's record buffers. Unlike the echo/reverb memory above
@@ -216,8 +219,11 @@ struct Spotymod : Module {
     Spotymod() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
         configControls();
-        for (int p = 0; p < spky::PART_COUNT; ++p)
+        for (int p = 0; p < spky::PART_COUNT; ++p) {
             fxmem.echo[p] = echo[p];
+            fxmem.bbd[p][0] = bbd[p][0];
+            fxmem.bbd[p][1] = bbd[p][1];
+        }
         fxmem.reverb = &reverb;
         ctrlDiv.setDivision(16);
     }

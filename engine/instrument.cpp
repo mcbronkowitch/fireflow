@@ -37,10 +37,12 @@ void Instrument::init(float sample_rate, const FxMem& mem) {
     _reverb = mem.reverb;
     _parts[PART_A].init(sample_rate, 0x1234abcdu,
                         mem.echo[PART_A],
-                        mem.sampler_buf[PART_A], mem.sampler_frames);
+                        mem.sampler_buf[PART_A], mem.sampler_frames,
+                        mem.bbd[PART_A][0], mem.bbd[PART_A][1]);
     _parts[PART_B].init(sample_rate, 0x9e3779b9u,
                         mem.echo[PART_B],
-                        mem.sampler_buf[PART_B], mem.sampler_frames);
+                        mem.sampler_buf[PART_B], mem.sampler_frames,
+                        mem.bbd[PART_B][0], mem.bbd[PART_B][1]);
     if (_reverb) _reverb->init(sample_rate);
     for (int p = 0; p < PART_COUNT; ++p) {
         _rev_dry[p].init(sample_rate, kMixSmoothS);

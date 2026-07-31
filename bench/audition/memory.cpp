@@ -15,6 +15,10 @@ spky::SampleBuffer::Frame DSY_SDRAM_BSS
     g_sampler[spky::PART_COUNT][kFactoryFrames];
 float DSY_SDRAM_BSS
     g_echo[spky::PART_COUNT][spky::Flux::kMaxSamples];
+// The BBD part engine's two lines per deck, same SDRAM idiom as the echo
+// storage above: 128 KB in total.
+float DSY_SDRAM_BSS
+    g_bbd[spky::PART_COUNT][2][spky::BbdEngine::kCells];
 
 alignas(alignof(spky::AmbientReverb))
     unsigned char DSY_SDRAM_BSS
@@ -25,7 +29,7 @@ bool g_memory_ready = false;
 
 constexpr std::size_t kSdramBytes
     = sizeof(g_factory_upload) + sizeof(g_sampler) + sizeof(g_echo)
-      + sizeof(g_reverb_storage);
+      + sizeof(g_bbd) + sizeof(g_reverb_storage);
 static_assert(kSdramBytes < 64u * 1024u * 1024u,
               "audition memory must fit the Seed's 64 MiB SDRAM");
 
@@ -41,6 +45,8 @@ void init_memory()
     for(int part = 0; part < spky::PART_COUNT; ++part)
     {
         g_fx_memory.echo[part] = g_echo[part];
+        g_fx_memory.bbd[part][0] = g_bbd[part][0];
+        g_fx_memory.bbd[part][1] = g_bbd[part][1];
         g_fx_memory.sampler_buf[part] = g_sampler[part];
     }
     g_fx_memory.reverb = reverb;

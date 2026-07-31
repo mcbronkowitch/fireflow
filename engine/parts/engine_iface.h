@@ -14,6 +14,10 @@ enum EngineId {
     ENGINE_SAMPLER = 2,
     ENGINE_WAVE = 3,
     ENGINE_BODY = 4,
+    // The bucket-brigade delay (spec 2026-07-31 bbd-part-engine). Voiceless
+    // and input-consuming, so it is the second engine after the sampler to
+    // override the process_in/consumes_input pair.
+    ENGINE_BBD = 5,
     // Sentinel, not a selectable engine -- keep it last so it always equals
     // the count. Exists so a `static_assert(ENGINE_COUNT == N, ...)` next to
     // any hand-written "every engine" list (e.g. tests/test_deck_bus.cpp's

@@ -68,6 +68,8 @@ add_executable(spky_tests
     tests/test_step_grid_lock.cpp
     engine/parts/part.cpp
     tests/test_part.cpp
+    engine/parts/bbd_engine.cpp
+    tests/test_bbd_engine.cpp
     tests/test_deck_bus.cpp
     engine/instrument.cpp
     bench/audition/init_patch.cpp
@@ -160,6 +162,7 @@ add_executable(render
     engine/mod/lane.cpp
     engine/mod/super_modulator.cpp
     engine/parts/part.cpp
+    engine/parts/bbd_engine.cpp
     engine/instrument.cpp
     engine/center/center.cpp
     engine/fx/grit.cpp

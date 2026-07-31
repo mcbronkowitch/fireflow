@@ -12,7 +12,8 @@ static_assert(ModLane::kTickInterval == SynthEngine::kCtrlInterval,
 
 void Part::init(float sample_rate, uint32_t seed_base,
                 float* echo,
-                SampleBuffer::Frame* sampler_mem, size_t sampler_frames) {
+                SampleBuffer::Frame* sampler_mem, size_t sampler_frames,
+                float* bbd_l, float* bbd_r) {
     _sr = sample_rate;
     _mod.init(sample_rate, seed_base);
     _tone.init(sample_rate);
@@ -22,6 +23,8 @@ void Part::init(float sample_rate, uint32_t seed_base,
     _wave.init(sample_rate);
     _body.set_seed(seed_base ^ 0x424F4459u);    // "BODY", own drift + string noise
     _body.init(sample_rate);
+    _bbd.init(sample_rate);
+    _bbd.init_buffers(bbd_l, bbd_r, BbdEngine::kCells);
     _sampler.set_seed(seed_base ^ 0x5A11E20Du);
     _sampler.set_memory(sampler_mem, sampler_frames);
     _sampler.init(sample_rate);
@@ -403,6 +406,10 @@ void Part::_engine_swap() {
     _engine_id = _pending_engine;
     _engine = _engine_for(_engine_id);
     _engine_wants_in = _engine->consumes_input();   // pairs with _engine
+    // The BBD holds charge, and IPartEngine has no swap-away notification --
+    // Part only ever pushes state INTO the engine being swapped in. Without
+    // this a deck switched away from and back to returns the previous take.
+    if (_engine_id == ENGINE_BBD) _bbd.reset();
     _engine->set_flow(!_step_on);                          // re-sync state
     _engine->set_hold(_inhibit);
     _engine->set_gate(_last_gate);   // the freshly swapped-in engine

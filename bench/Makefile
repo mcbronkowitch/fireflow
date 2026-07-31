@@ -122,6 +122,7 @@ CPP_SOURCES = \
 	../engine/sampler/slice_map.cpp \
 	../engine/mod/super_modulator.cpp \
 	../engine/parts/part.cpp \
+	../engine/parts/bbd_engine.cpp \
 	../engine/instrument.cpp \
 	../engine/center/center.cpp \
 	../engine/fx/grit.cpp \
