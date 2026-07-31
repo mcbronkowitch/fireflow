@@ -15,8 +15,9 @@
 #include "Utility/dcblock.h"
 
 // Movement 1's cross-deck bus, behind a switch so the bench can build the
-// A arm without it. Default on; the B/A pair is the only thing that ever
-// sets it to 0.
+// A arm without it. Default on; bench/Makefile's `BENCH_DECK_BUS=0`
+// (never a bare `-DSPKY_DECK_BUS=0` -- see bench/write_bench_deck_bus.py)
+// is the only thing that ever sets it to 0.
 #ifndef SPKY_DECK_BUS
 #define SPKY_DECK_BUS 1
 #endif

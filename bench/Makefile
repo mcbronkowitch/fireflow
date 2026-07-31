@@ -37,8 +37,25 @@ BENCH_FAMILIES ?= system voice mem mod abl bbd body sampler
 BENCH_ITCM_HOT ?= 0
 BENCH_OPTIMIZATION ?= o2
 
+# Movement 1's cross-deck bus (engine/parts/part.h), off only for the A/B
+# pricing pair in the system family. Override on the command line:
+#
+#   make BENCH_DECK_BUS=0 build/bench.elf
+#
+# NOT `C_USER_FLAGS=-DSPKY_DECK_BUS=0` -- that form is invisible to Make's
+# dependency graph the same way BENCH_GIT_HASH/BENCH_FAMILIES/BENCH_ITCM_HOT
+# would be if passed as a bare `-D`, and because Part::process is `inline`
+# in a header, a rebuild that misses even one translation unit under the
+# stale value links an ODR violation, not merely a stale measurement (see
+# bench_deck_bus.h below).
+BENCH_DECK_BUS ?= 1
+
 ifneq ($(filter $(BENCH_ITCM_HOT),0 1),$(BENCH_ITCM_HOT))
 $(error BENCH_ITCM_HOT must be 0 or 1)
+endif
+
+ifneq ($(filter $(BENCH_DECK_BUS),0 1),$(BENCH_DECK_BUS))
+$(error BENCH_DECK_BUS must be 0 or 1)
 endif
 
 ifneq ($(filter $(BENCH_OPTIMIZATION),o2 o3 o3-lto),$(BENCH_OPTIMIZATION))
@@ -183,6 +200,20 @@ $(BUILD_DIR)/bench_optimization.h: FORCE | $(BUILD_DIR)
 	@python write_bench_optimization.py $@ $(BENCH_OPTIMIZATION)
 
 $(BUILD_DIR)/report.o: $(BUILD_DIR)/bench_optimization.h
+
+# --- cross-deck bus header -----------------------------------------------
+# Same shape again: SPKY_DECK_BUS is read (transitively, via
+# engine/parts/part.h's `#ifndef`/`#define`) by essentially every engine
+# translation unit, not just one, so this header is a prerequisite of
+# $(OBJECTS) as a whole -- like bench_optimization.h above -- rather than of
+# a single .o. `-include` (C_INCLUDES below) puts the `#define` ahead of
+# part.h's own `#ifndef SPKY_DECK_BUS` in every TU, so the header's value
+# wins and the ad hoc `-DSPKY_DECK_BUS=0` compile-line form is never needed.
+$(BUILD_DIR)/bench_deck_bus.h: FORCE | $(BUILD_DIR)
+	@python write_bench_deck_bus.py $@ $(BENCH_DECK_BUS)
+
+$(OBJECTS): $(BUILD_DIR)/bench_deck_bus.h
+C_INCLUDES += -include $(BUILD_DIR)/bench_deck_bus.h
 
 # Put the selector before the normal map so it consumes the chosen input
 # sections first; alt_sram.lds then places every remaining section normally.

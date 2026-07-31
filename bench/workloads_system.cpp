@@ -363,16 +363,22 @@ void setup_inst_worst()
 // engine untouched would measure nothing.
 //
 // Both decks are switched to ENGINE_SAMPLER with the monitor on instead --
-// Task 4's exact configuration (test_deck_bus.cpp,
-// "sampler <-> sampler mutual routing stays finite"), already proven to stay
-// finite and bounded over a 10 s run at full monitor, so this closed mutual
-// loop is known-safe on real hardware, not merely assumed so. This does mean
-// the row is no longer a same-source A/B against instrument_worst (the
-// engine swap dominates any diff there) -- the real A/B is this same row,
+// closely modelled on Task 4's mutual-routing test (test_deck_bus.cpp,
+// "sampler <-> sampler mutual routing stays finite": same engine pair, same
+// monitor, same other_deck), which proved THAT loop finite and bounded on
+// desktop over a 10 s run. This row is not identical to Task 4's, though,
+// and the differences matter enough to name: audio_in is false here (Task 4
+// passes true), the drive signal is bench's fixed test_input() noise (Task 4
+// drives a constant +-0.5), and this is a hardware bench row, not a desktop
+// doctest. Safety here rests on fast_tanh's own hard-clamp contract (the
+// mechanism Task 4 exercised), not on this exact configuration having been
+// separately proven finite -- it has not. This does mean the row is no
+// longer a same-source A/B against instrument_worst (the engine swap
+// dominates any diff there) -- the real A/B is this same row,
 // inst_worst_deck_bus, measured once with SPKY_DECK_BUS at its default 1 and
 // once rebuilt with it forced to 0; instrument_worst stays in this build
-// only as an unrelated control to gauge how much cross-build drift is layout
-// noise rather than the bus (see docs/bench/2026-07-31-<sha>-deck-bus.md).
+// only as one of several controls used to gauge cross-build drift separately
+// from the bus (see docs/bench/2026-07-31-20eafed-deck-bus.md).
 void setup_inst_worst_deck_bus()
 {
     auto& group = construct_axi_instrument_group();
@@ -384,11 +390,17 @@ void setup_inst_worst_deck_bus()
         group.instrument.set_excitation_sources(p, true, /*other_deck=*/true, false);
     }
     // Settle every envelope and slew -- including the engine swap's 4 ms
-    // SoftSwitch fade and the mutual loop's own build-up toward its fixed
-    // point (Task 4: the tap climbs from the input level over many blocks) --
-    // before the runner's measured window opens. Same 200-block depth the
-    // neighbouring instrument_worst_bbd row above uses, and that
-    // workloads_instr.cpp's kInstrSettleBlocks names for its own rows.
+    // SoftSwitch fade -- before the runner's measured window opens. Same
+    // 200-block depth the neighbouring instrument_worst_bbd row above uses,
+    // and that workloads_instr.cpp's kInstrSettleBlocks names for its own
+    // rows. NOTE this is NOT shown to be enough for the mutual loop's own
+    // slower dynamic: a desktop check of this exact configuration found the
+    // sibling tap still moving in a bounded band out to several thousand
+    // blocks (dipping ~3% around block 500, recovering by ~block 2000)
+    // before settling. The reported bench figure is conditioned on this
+    // 200-block depth and has not been shown to equal the steady-state cost
+    // -- see docs/bench/2026-07-31-20eafed-deck-bus.md's settle-sensitivity
+    // section.
     const float* in = test_input();
     for (int b = 0; b < 200; ++b)
         group.instrument.process(in, in, g_instrument_harness.out_l,
