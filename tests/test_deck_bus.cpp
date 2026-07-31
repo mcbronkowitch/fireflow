@@ -110,7 +110,21 @@ TEST_CASE("deck bus: the engine input is bounded") {
     }
 }
 
-TEST_CASE("deck bus: every engine is bit-identical with the source off") {
+// Only SamplerEngine overrides IPartEngine::consumes_input() (returns true,
+// sampler_engine.h:121); every other engine keeps the base default of false
+// (engine_iface.h:75), so Part::process's `if (_engine_wants_in)` guard
+// (part.h:330) never even calls process_in() for TEST_TONE, SYNTH, WAVE, or
+// BODY -- the `if (_src_deck)` check inside it (part.h:340) is structurally
+// unreachable for those four, not merely untested by them. (A second engine,
+// BBD, joins SAMPLER in a later movement.) So for those four the bit-identity
+// check below proves something narrower but still real: no *unconditional*
+// side effect was introduced anywhere else in Part::process. SAMPLER is the
+// one engine today where the guard is reachable, so it is the one case that
+// can actually go RED if the guard is broken -- which is why its monitor is
+// switched on below, giving the hostile tap a live path to the output
+// instead of a dead one.
+TEST_CASE("deck bus: with the source off, a hostile tap changes nothing -- "
+          "proven directly for SAMPLER, structurally for the rest") {
     for (EngineId e : {ENGINE_TEST_TONE, ENGINE_SYNTH, ENGINE_SAMPLER,
                        ENGINE_WAVE, ENGINE_BODY}) {
         Part a, b;
@@ -121,6 +135,13 @@ TEST_CASE("deck bus: every engine is bit-identical with the source off") {
         for (Part* p : {&a, &b}) {
             p->set_target_base(LANE_LEVEL, 1.f);
             p->mod().set_rate(0.5f);
+            // Only matters when e == ENGINE_SAMPLER (a harmless dead flag on
+            // the other four's inactive SamplerEngine instance): with the
+            // monitor on, SamplerEngine mixes its dry input straight into
+            // the output (sampler_engine.cpp:955), so a hostile tap that
+            // leaked past a broken _src_deck guard would be audible here,
+            // not silently absorbed by _monitor's default-off state.
+            p->sampler().set_monitor(true);
         }
         // b is handed a hostile tap it must ignore; a is never told anything.
         float al, ar, asl, asr, bl, br, bsl, bsr;
