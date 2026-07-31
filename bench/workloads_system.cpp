@@ -351,21 +351,44 @@ void setup_inst_worst()
 }
 
 // instrument_worst, plus the cross-deck bus (spec 2026-07-31
-// cross-deck-audio-bus, movement 1): otherwise byte-for-byte the same setup,
-// so a paired A/B against instrument_worst prices the bus itself and nothing
-// else. other_deck=true on BOTH decks, or the row would exercise the
-// _src_deck guard's false branch (a no-op) rather than the bus it gates.
+// cross-deck-audio-bus, movement 1). configure_inst_worst() never calls
+// set_engine, so a naive copy of it stays on the boot default, ENGINE_SYNTH,
+// on both decks -- and SynthEngine does not override
+// IPartEngine::consumes_input() (engine_iface.h; SamplerEngine is the ONLY
+// engine that does, sampler_engine.h). Part::process's
+// `if (_engine_wants_in)` guard is keyed off that cached override, and the
+// _src_deck branch (and process_in() itself) live INSIDE it -- so on
+// ENGINE_SYNTH the branch is not merely a false guard, it is never reached
+// at all, regardless of other_deck or SPKY_DECK_BUS. A row that left the
+// engine untouched would measure nothing.
+//
+// Both decks are switched to ENGINE_SAMPLER with the monitor on instead --
+// Task 4's exact configuration (test_deck_bus.cpp,
+// "sampler <-> sampler mutual routing stays finite"), already proven to stay
+// finite and bounded over a 10 s run at full monitor, so this closed mutual
+// loop is known-safe on real hardware, not merely assumed so. This does mean
+// the row is no longer a same-source A/B against instrument_worst (the
+// engine swap dominates any diff there) -- the real A/B is this same row,
+// inst_worst_deck_bus, measured once with SPKY_DECK_BUS at its default 1 and
+// once rebuilt with it forced to 0; instrument_worst stays in this build
+// only as an unrelated control to gauge how much cross-build drift is layout
+// noise rather than the bus (see docs/bench/2026-07-31-<sha>-deck-bus.md).
 void setup_inst_worst_deck_bus()
 {
     auto& group = construct_axi_instrument_group();
     configure_inst_common(group.instrument);
     configure_inst_worst(group.instrument);
-    for (int p = 0; p < PART_COUNT; ++p)
+    for (int p = 0; p < PART_COUNT; ++p) {
+        group.instrument.set_engine(p, ENGINE_SAMPLER);
+        group.instrument.sampler_monitor(p, true);
         group.instrument.set_excitation_sources(p, true, /*other_deck=*/true, false);
-    // Settle every envelope and slew before the runner's measured window
-    // opens -- same 200-block depth the neighbouring instrument_worst_bbd
-    // row above uses, and that workloads_instr.cpp's kInstrSettleBlocks
-    // names for its own rows.
+    }
+    // Settle every envelope and slew -- including the engine swap's 4 ms
+    // SoftSwitch fade and the mutual loop's own build-up toward its fixed
+    // point (Task 4: the tap climbs from the input level over many blocks) --
+    // before the runner's measured window opens. Same 200-block depth the
+    // neighbouring instrument_worst_bbd row above uses, and that
+    // workloads_instr.cpp's kInstrSettleBlocks names for its own rows.
     const float* in = test_input();
     for (int b = 0; b < 200; ++b)
         group.instrument.process(in, in, g_instrument_harness.out_l,
