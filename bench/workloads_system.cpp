@@ -350,6 +350,28 @@ void setup_inst_worst()
     configure_inst_worst(group.instrument);
 }
 
+// instrument_worst, plus the cross-deck bus (spec 2026-07-31
+// cross-deck-audio-bus, movement 1): otherwise byte-for-byte the same setup,
+// so a paired A/B against instrument_worst prices the bus itself and nothing
+// else. other_deck=true on BOTH decks, or the row would exercise the
+// _src_deck guard's false branch (a no-op) rather than the bus it gates.
+void setup_inst_worst_deck_bus()
+{
+    auto& group = construct_axi_instrument_group();
+    configure_inst_common(group.instrument);
+    configure_inst_worst(group.instrument);
+    for (int p = 0; p < PART_COUNT; ++p)
+        group.instrument.set_excitation_sources(p, true, /*other_deck=*/true, false);
+    // Settle every envelope and slew before the runner's measured window
+    // opens -- same 200-block depth the neighbouring instrument_worst_bbd
+    // row above uses, and that workloads_instr.cpp's kInstrSettleBlocks
+    // names for its own rows.
+    const float* in = test_input();
+    for (int b = 0; b < 200; ++b)
+        group.instrument.process(in, in, g_instrument_harness.out_l,
+                                  g_instrument_harness.out_r, kBlock);
+}
+
 // --- 10. the whole instrument, FLUX at the BBD's ceiling ---------------------
 // instrument_worst never touches the FLUX voicing controls, so the combined
 // worst case would otherwise be an extrapolation. This row measures
@@ -435,6 +457,7 @@ const Workload kCoreWorkloads[] = {
     { "system", "oliverb_solo_sram",  setup_reverb,    proc_reverb  },
     { "system", "instrument_init",    setup_inst_init, proc_inst    },
     { "system", "instrument_worst",   setup_inst_worst,proc_inst    },
+    { "system", "inst_worst_deck_bus", setup_inst_worst_deck_bus, proc_inst },
     { "system", "instrument_worst_bbd", setup_inst_worst_bbd, proc_inst },
     { "system", "instrument_worst_bbd_dtcm",
       setup_inst_worst_bbd_dtcm, proc_inst },

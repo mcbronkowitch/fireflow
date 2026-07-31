@@ -112,8 +112,10 @@ void Instrument::process(const float* inL, const float* inR,
         // feeds whoever runs second" bus would be 0 samples one way and 1 the
         // other, and would swap as the knob crossed zero -- and a mutual
         // routing would then contain a 0-sample algebraic loop.
+#if SPKY_DECK_BUS
         for (int p = 0; p < PART_COUNT; ++p)
             _parts[p].set_deck_in(_deck_tap[1 - p][0], _deck_tap[1 - p][1]);
+#endif
 
         float pl[PART_COUNT], prr[PART_COUNT];
         float psl[PART_COUNT], psr[PART_COUNT];
@@ -158,8 +160,10 @@ void Instrument::process(const float* inL, const float* inR,
 
         // Write at the BOTTOM, every sample -- unlike _dry_tap's once-per-block
         // guard above, which is a control-rate quantity.
+#if SPKY_DECK_BUS
         _deck_tap[PART_A][0] = al;  _deck_tap[PART_A][1] = ar;
         _deck_tap[PART_B][0] = bl;  _deck_tap[PART_B][1] = br;
+#endif
 
         const float ga = _center.gain_a();
         const float gb = _center.gain_b();

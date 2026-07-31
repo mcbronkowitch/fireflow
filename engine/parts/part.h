@@ -14,6 +14,13 @@
 #include "util/fast_tanh.h"
 #include "Utility/dcblock.h"
 
+// Movement 1's cross-deck bus, behind a switch so the bench can build the
+// A arm without it. Default on; the B/A pair is the only thing that ever
+// sets it to 0.
+#ifndef SPKY_DECK_BUS
+#define SPKY_DECK_BUS 1
+#endif
+
 namespace spky {
 
 // A part = SuperModulator + selectable engine + 5 targets. Combines each lane's
@@ -337,10 +344,12 @@ public:
             // break the neutrality proof. With _src_deck false -- the default,
             // and today's behaviour -- this branch is not taken and the path
             // is bit-exact unchanged.
+#if SPKY_DECK_BUS
             if (_src_deck) {
                 el = fast_tanh(el + _deck_in_l);
                 er = fast_tanh(er + _deck_in_r);
             }
+#endif
             _engine->process_in(el, er);
         }
         _engine->process(outL, outR);

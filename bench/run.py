@@ -186,6 +186,7 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "oliverb_solo_sram",
         "instrument_init",
         "instrument_worst",
+        "inst_worst_deck_bus",
         "instrument_worst_bbd",
         "instrument_worst_bbd_dtcm",
     ),
