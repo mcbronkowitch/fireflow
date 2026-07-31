@@ -90,6 +90,7 @@ add_executable(spky_tests
     tests/test_drag.cpp
     engine/fx/bbd.cpp
     tests/test_bbd.cpp
+    tests/test_bbd_music.cpp
     engine/fx/reverb.cpp
     tests/test_reverb.cpp
     tests/test_oliverb.cpp

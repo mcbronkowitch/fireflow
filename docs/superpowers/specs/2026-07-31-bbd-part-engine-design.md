@@ -454,10 +454,16 @@ required, not optional: `LANE_SIZE` is a continuously modulated lane, and a bare
 nearest-rung round chatters at every boundary. **One rung of overlap** — a rung
 holds until the lane passes the next rung's centre.
 
-`div = 1` is a whole phrase; at 40 BPM (the TEMPO floor) with a long phrase this
-can exceed the reachable stage count at any clock, in which case `T` is clamped
-to the longest `T` for which `stages ≤ kMaxStages` at the lane's lowest `f_clk`.
-That clamp must be reported by the observer (§9), not silent.
+**The clamp is at the SHORT end, not the long one.** Under §5.3's decision the
+long end is self-normalising: `f_lo` is *defined* as `kMinStages/(2T)`, so the
+stage count at the lane's lowest clock is exactly `kMinStages` for every `T`,
+and `div = 1` at 40 BPM cannot overflow. What does break is
+`f_lo > kClockMaxHz`, which happens whenever `T < kMinStages/(2·kClockMaxHz)
+= 8 ms` — reachable, because a free master lane at 30 Hz gives a 33 ms cycle
+and `div = 1/32` then asks for 1.04 ms. `T` is raised to that floor, which
+takes the repeats off the grid, and the observer reports it as `time_clamped`.
+Corrected 2026-07-31 while working the arithmetic for the implementation plan;
+`engine/parts/bbd_music.h` is the authority.
 
 ### 5.5 The grid, the gate, and the fires
 
@@ -1231,8 +1237,9 @@ still resolve" bullet.**
 - **The observer, which does not exist yet.** A BBD deck would write 0 into
   `a_voices`/`a_v0..3` and expose nothing, so a demo scenario would pass
   vacuously. **At minimum: `f_clk`, the derived stage count, the active `div`
-  rung, the freeze state, and both clamp flags** (§5.3's reachable-range clamp
-  and §5.4's long-division clamp) — a clamp that is invisible reads as a broken
+  rung, the freeze state, and the clamp flag `time_clamped` and the
+  span-truncation flag `scale_truncated` (see §5.4 — there is one clamp, not
+  two)** — a clamp that is invisible reads as a broken
   knob. Note that rev. 1 cited FLUX's `stages_for_test`/`drive_norm_for_test` as
   precedent for CSV output: `Flux`'s observer is `stages()` (`flux.h:72`),
   `stages_for_test` is an `Instrument` method used only by a test, and **neither
