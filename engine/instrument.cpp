@@ -106,6 +106,15 @@ void Instrument::process(const float* inL, const float* inR,
         const int yld = 1 - pri;
         const float amt = _choke < 0.f ? -_choke : _choke;
 
+        // Read the bus at the TOP of the sample, for BOTH decks, before either
+        // one runs. Doing it here rather than between the two process() calls
+        // is what makes the latency CHOKE-independent: a "whoever runs first
+        // feeds whoever runs second" bus would be 0 samples one way and 1 the
+        // other, and would swap as the knob crossed zero -- and a mutual
+        // routing would then contain a 0-sample algebraic loop.
+        for (int p = 0; p < PART_COUNT; ++p)
+            _parts[p].set_deck_in(_deck_tap[1 - p][0], _deck_tap[1 - p][1]);
+
         float pl[PART_COUNT], prr[PART_COUNT];
         float psl[PART_COUNT], psr[PART_COUNT];
         _parts[pri].set_inhibit(false);   // knob flips must never strand a part
@@ -146,6 +155,11 @@ void Instrument::process(const float* inL, const float* inR,
             _dry_tap[PART_A] = 0.5f * (al + ar);
             _dry_tap[PART_B] = 0.5f * (bl + br);
         }
+
+        // Write at the BOTTOM, every sample -- unlike _dry_tap's once-per-block
+        // guard above, which is a control-rate quantity.
+        _deck_tap[PART_A][0] = al;  _deck_tap[PART_A][1] = ar;
+        _deck_tap[PART_B][0] = bl;  _deck_tap[PART_B][1] = br;
 
         const float ga = _center.gain_a();
         const float gb = _center.gain_b();

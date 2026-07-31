@@ -137,6 +137,10 @@ public:
     // delay time DRAG is aiming FLUX at, before the 30 ms slew -- see
     // Flux::drag_time_s().
     float drag_time_for_test(int p) const { return _parts[p].fx().flux().drag_time_s(); }
+    // Observer only, for tests: deck p's post-FX output from the sample just
+    // processed. ch 0 = L, 1 = R. Latency cannot be measured from the summed
+    // output, which cannot distinguish 0 samples from 1.
+    float deck_tap(int p, int ch) const { return _deck_tap[p][ch]; }
 
     // --- M2 synth voice API (spec "Instrument API") ---
     void set_engine(int p, EngineId e)       { _parts[p].set_engine(e); }
@@ -289,6 +293,13 @@ private:
     // symmetric regardless of that order. Instrument is the only scope where
     // both parts are visible; Part still gets no pointer to its sibling.
     float  _dry_tap[PART_COUNT] = { 0.f, 0.f };
+    // Audio-rate cross-deck bus (spec 2026-07-31 bbd-part-engine §4.3).
+    // Distinct from _dry_tap above, which is the control-rate MONO excitation
+    // bus and is unchanged: this one is stereo, written every sample, and
+    // carries the deck's POST-FX output -- what the player hears. Read at the
+    // top of the sample and written at the bottom, so the latency is one
+    // sample in both directions no matter which deck CHOKE runs first.
+    float _deck_tap[PART_COUNT][2] = { { 0.f, 0.f }, { 0.f, 0.f } };
     int    _ctrl_ctr = 0;    // counts down to the next control-rate Center::update
     float _choke = 0.f;        // -1..+1 event-priority knob (discrete zones)
                                // (boots true: the FLOW drone predates any fire)
