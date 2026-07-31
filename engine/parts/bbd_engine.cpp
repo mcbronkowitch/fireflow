@@ -14,8 +14,10 @@ void BbdEngine::init(float sample_rate) {
     _l.Init(_sr, nullptr, 0);
     _r.Init(_sr, nullptr, 0);
     _buf_ok = false;
-    _win = bbd_music::window(_cycle);
-    _recompute();
+    // _refresh_window() derives _win from _cycle and the ladder's current
+    // rung (see _recompute()'s T), superseding the plain window(_cycle) this
+    // line used to compute directly.
+    _refresh_window();
 }
 
 void BbdEngine::init_buffers(float* l, float* r, size_t cells) {
@@ -44,7 +46,7 @@ void BbdEngine::init_buffers(float* l, float* r, size_t cells) {
     // the signal path, not on the dither.
     _l.SetDither(kDither);
     _r.SetDither(kDither);
-    _recompute();
+    _refresh_window();
 }
 
 void BbdEngine::reset() {
@@ -52,11 +54,17 @@ void BbdEngine::reset() {
     _r.Reset();
     _in_l = 0.f;
     _in_r = 0.f;
+    // Re-arm the cold-start latch: Part::_engine_swap() runs reset() on every
+    // activation, and a deck reactivated into STEP must not be stuck on
+    // whatever clock this engine happened to hold from its PREVIOUS
+    // activation (or its construction, if this is the first one) until a
+    // real STEP fire arrives -- the same reasoning as the member default.
+    _latched = true;
 }
 
 void BbdEngine::set_cycle(float seconds) {
     _cycle = seconds > 0.f ? seconds : 1.f;
-    _recompute();
+    _refresh_window();
 }
 
 void BbdEngine::set_targets(const float* t, float /*tune*/) {
@@ -86,12 +94,30 @@ void BbdEngine::_recompute() {
     _win = bbd_music::window(T);
     if (_flow) {
         _f_clk = bbd_music::clock_flow(_win, _pitch);
+        // FLOW has genuinely tracked a real pitch now, so the cold-start
+        // grace is spent: without this, an engine that spends its first
+        // while in FLOW (where _latched is simply never consulted) would
+        // still show _latched == true the moment it later switches to STEP,
+        // and the very next set_targets() would snap to the STEP grid with
+        // no STEP fire of its own -- the leak the guard in latch_clock() is
+        // there to prevent, just arriving from construction instead of from
+        // a stray latch_clock() call during FLOW.
+        _latched = false;
     } else if (_latched) {
         _f_clk = bbd_music::clock_step(_win, _pitch);
         _latched = false;
     }
     // Either way the stage count follows, so SIZE keeps moving the rhythm
     // between fires while the clock -- and therefore the pitch -- holds.
+    _stages = bbd_music::stages_for(_win, _f_clk);
+    _l.SetStages(_stages);
+    _r.SetStages(_stages);
+}
+
+// See the declaration in bbd_engine.h for why this is split from _recompute().
+void BbdEngine::_refresh_window() {
+    const float T = _cycle * bbd_music::kDivs[_ladder.index()];
+    _win = bbd_music::window(T);
     _stages = bbd_music::stages_for(_win, _f_clk);
     _l.SetStages(_stages);
     _r.SetStages(_stages);

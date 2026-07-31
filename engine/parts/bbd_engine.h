@@ -55,7 +55,25 @@ public:
     bool  scale_truncated() const { return _win.scale_truncated; }
 
 private:
+    // Pitch-aware: derives _f_clk from _pitch/_flow/_latched (STEP/FLOW rule),
+    // then always refreshes _win/_stages from whatever _f_clk ends up being.
+    // Called from set_targets(), latch_clock() and set_flow() -- the three
+    // places _pitch, a fire or the mode itself can actually change.
     void _recompute();
+    // Structural-only half of the above: refreshes _win/_stages from the
+    // CURRENT _f_clk, without touching _pitch, _flow or _latched. Called from
+    // init()/init_buffers()/set_cycle(), none of which carry a real PITCH
+    // value -- consuming the cold-start arm (_latched) here would burn it
+    // against whatever _pitch happens to be lying around (the ctor default,
+    // or a stale value left by a previous activation) before the engine's own
+    // set_targets() ever gets a chance to supply the real one. Concretely:
+    // Part::_engine_swap() calls reset() (which re-arms _latched) and THEN,
+    // when the master lane's rate is already established, set_cycle() --
+    // still before the freshly swapped-in engine's first set_targets(). If
+    // set_cycle() consumed the arm, a BBD deck swapped into an already-active
+    // STEP transport would latch onto stale/default pitch instead of the
+    // deck's actual current one.
+    void _refresh_window();
 
     BbdEcho _l, _r;
     bbd_music::DivLadder _ladder;
@@ -69,7 +87,11 @@ private:
     int   _stages = 8192;
     bool  _buf_ok = false;
     bool  _flow = false;
-    bool  _latched = false;
+    // Armed at construction and by every reset() (Part::_engine_swap runs
+    // reset() on every activation): a STEP deck that has never fired must
+    // still show a clock derived from PITCH, not the raw ctor literal above,
+    // the moment its first real set_targets() lands -- see _recompute().
+    bool  _latched = true;
 };
 
 }  // namespace spky

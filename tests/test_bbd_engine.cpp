@@ -97,6 +97,14 @@ TEST_CASE("bbd engine: the delay time follows LANE_SIZE and lands on the grid") 
     e.init(48000.f);
     e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
     e.set_cycle(2.0f);                  // a 2 s phrase
+    // Another Task-4 case predating the STEP/FLOW split: it changes SIZE
+    // across two set_targets() calls with no fire in between and expects the
+    // clock to land fresh in EACH window, which is a FLOW-mode property. In
+    // STEP the clock deliberately holds across a SIZE change with no fire
+    // (that is the point of the STEP-hold design), so the held clock from
+    // the first window can fall outside the second, narrower one and clamp
+    // -- not a bug, just not what this case is about.
+    e.set_flow(true);
     float t[LANE_COUNT] = { 0.f, 0.f, 0.5f, 0.f, 1.f };
     // SIZE 1 -> div 1 -> T = 2 s; SIZE at the 1/8 rung -> T = 250 ms.
     t[LANE_SIZE] = 1.f;
@@ -274,6 +282,73 @@ TEST_CASE("bbd engine: in STEP the clock holds between fires") {
     CHECK(e.clock_hz() == doctest::Approx(latched));
     e.latch_clock();                       // now it fires
     CHECK(e.clock_hz() != doctest::Approx(latched));
+}
+
+TEST_CASE("bbd engine: a freshly constructed STEP deck with no fires still reflects PITCH") {
+    // Construction-time defaults used to leave a STEP deck's clock frozen at
+    // the ctor literal (4000 Hz), completely disconnected from PITCH, forever
+    // -- until the first real fire. Reachable any time a deck boots into (or
+    // is swapped to) STEP and the player moves PITCH before ever triggering a
+    // step. The fix arms _latched at construction (and at every reset()), so
+    // the FIRST set_targets() call -- even with zero calls to latch_clock()
+    // -- derives a real clock from whatever PITCH actually is.
+    BbdEngine e;
+    e.init(48000.f);
+    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.set_cycle(1.0f);
+    e.set_flow(false);                      // STEP -- the default, made explicit
+    float t[LANE_COUNT] = { 0.f, 1.f, 0.8f, 0.f, 1.f };   // PITCH away from 0.5
+    e.set_targets(t, 0.5f);                 // zero calls to latch_clock()
+    CHECK(e.clock_hz() == doctest::Approx(
+        bbd_music::clock_step(bbd_music::window(1.0f), 0.8f)));
+}
+
+TEST_CASE("bbd engine: a BBD deck swapped into an already-running STEP transport "
+          "reflects PITCH before its first fire") {
+    // The same cold-start defect, reached the way a real deck reaches it:
+    // Part::_engine_swap() calls BbdEngine::reset() (re-arms the latch), then
+    // -- because the master lane's rate is already established the moment a
+    // SECOND engine ever activates -- pushes set_cycle() into the freshly
+    // swapped-in engine before that engine's own first set_targets(). If
+    // set_cycle() (or init()/init_buffers()) consumed the arm, this would
+    // still fail even after the ctor-default fix.
+    //
+    // Two SEPARATE decks, each cold-started at a different PITCH and read
+    // after zero fires -- not one deck whose PITCH is changed twice: STEP is
+    // supposed to hold the clock across a plane move with no fire in between
+    // (see "in STEP the clock holds between fires"), so asking a single
+    // cold-started deck to keep tracking a SECOND change would be asserting
+    // the wrong contract. The cold-start fix only owns the FIRST derivation.
+    //
+    // Asserted as a differential (two PITCH values, correctly ordered clock
+    // measurements) rather than against a hand-rebuilt window(): the window
+    // depends on Part's own cycle and its SIZE-lane-driven division index
+    // (LANE_SIZE defaults to 0.5 -> rung 5, not the tidy 1.0 the raw-engine
+    // tests pin explicitly), which is Part bookkeeping this test should not
+    // have to re-derive to prove the point.
+    auto cold_start_hz = [](float pitch) {
+        Part p;
+        p.init(48000.f, 21u, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
+        p.set_step(true, 8);                 // STEP, engaged before BBD exists
+        p.set_target_active(LANE_PITCH, false);
+        p.set_tune(0.5f);
+        p.set_target_base(LANE_PITCH, pitch);
+        p.set_engine(ENGINE_BBD);
+        float l, r;
+        // Enough samples to complete the swap fade and let several control
+        // ticks push real targets into the freshly-active engine; nowhere
+        // near the ~48000-sample master-lane period (master_hz defaults to
+        // 1) a lane fire would need -- checked below, not just assumed from
+        // the sample count.
+        for (int i = 0; i < 700; ++i) p.process(l, r);
+        CHECK_FALSE(p.lane_fired(LANE_PITCH));
+        return p.bbd().clock_hz();
+    };
+    const float low_hz = cold_start_hz(0.1f);
+    const float high_hz = cold_start_hz(0.95f);
+    CHECK(low_hz != doctest::Approx(4000.f));    // not the raw ctor literal
+    CHECK(high_hz != doctest::Approx(4000.f));
+    CHECK(high_hz > low_hz);                     // derived from PITCH, not a shared constant
 }
 
 TEST_CASE("bbd engine: PITCH is inaudible at FEEDBACK 0, and that is the design") {
