@@ -14,8 +14,12 @@ namespace spky {
 //
 // MIX is on LANE_LEVEL, not on a knob. Instrument::process composes
 // l = al*ga + bl*gb, so the audio input reaches the output nowhere else: on a
-// wet/dry engine the mix IS the level, and putting it there lets the plane open
-// and close the echo rhythmically.
+// wet/dry engine the mix IS the level, and putting it there lets the plane
+// open and close the echo rhythmically -- WITHIN Part::kLevelFloor (part.h),
+// which stops modulation ducking LEVEL below 40% of its base: the plane can
+// close the echo down to 0.4x base, never all the way to dry. A hand-set
+// LEVEL of 0 is unaffected (0.4 * 0 is still 0), so a muted deck stays muted;
+// only the MODULATED range has a floor.
 class BbdEngine : public IPartEngine {
 public:
     // Cells per line. Same sizing as Flux's, which is kMaxStages/2 -- a
@@ -34,6 +38,14 @@ public:
     void process_in(float inL, float inR) override;
     bool consumes_input() const override { return true; }
     void set_cycle(float seconds) override;
+    // Does NOT re-evaluate _freeze_want: a STEP deck frozen with the gate high
+    // and switched to FLOW keeps _freeze_want == 1 for a moment. Bounded to
+    // ~5 ms, not indefinite -- Part::gate()'s note_sustain half is
+    // _step_mode-qualified, so entering FLOW collapses gate() to
+    // _gate_ctr > 0, which expires within Part::_gate_len (240 samples) and
+    // fires a gate edge -> Part::set_gate(false) -> _freeze_want = 0. Left
+    // implicit until the whole-branch review (2026-07-31); recorded here so
+    // the next reader does not have to re-derive it.
     void set_flow(bool flow) override { _flow = flow; if (_flow) _recompute(); }
     bool flow() const { return _flow; }
 

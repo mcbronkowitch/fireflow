@@ -728,6 +728,19 @@ geometrically, and the buffer fills with denormals — a large, load-dependent
 stall on x86. Apply the same floor the repo already uses. The dither above
 largely solves this for free.
 
+**Recorded (whole-branch review, 2026-07-31): this floor applies to every
+`BbdLine`/`BbdEcho` user, including `Flux` — deliberately, not by oversight.**
+`BbdLine::Process`'s two flushes (`loss_z_`, `ybbd_old_`) run unconditionally
+every write/read tick, so they also change `Flux`'s tail below −180 dBFS —
+inaudible, and the same class of change `comp.cpp`/`limiter.h` already made
+unconditionally, but unlike those two this one was never stated as intentional
+for `Flux` specifically, only for the BBD part engine. It is stated now.
+`BbdEcho::fb_path`'s other two flushes (`dc_y1_`, `tilt_z_`) are narrower than
+that: both sit behind `dc_on_`/`tilt_ != 0.f` guards that `Flux` never opens —
+`Flux` never calls `SetFeedbackDcBlock` or a nonzero `SetFeedbackTilt`/
+`SetFeedbackTiltAmount` — so those two are dead code on every `Flux`-driven
+`BbdEcho` and reachable only through `BbdEngine`'s freeze/RESONANCE.
+
 **A stated output bound.** With the expander's 4× ceiling the engine returns
 **1.387, i.e. +2.8 dBFS**, in the self-oscillating regime, and it is the only
 engine whose bound is unstated and non-unity. *(Measured in Task 4 by deleting

@@ -540,6 +540,16 @@ struct Spotymod : Module {
             inst.sampler_overlap(p, pp(DENSITY_A, p));
             inst.set_target_base(p, spky::LANE_SOURCE, pp(SOURCE_A, p));
 
+            // Ledger of every lane base this function re-points per engine, so
+            // the next addition has one place to check itself against rather
+            // than re-discovering the rule by breaking it a third time:
+            //   - LANE_SIZE:  sampler-only (SUB_A -> GENE SIZE), restored to
+            //                 0.5f below when the deck is not the sampler.
+            //   - LANE_PITCH: BBD-only (STAGES_A/B), restored to 0.5f in the
+            //                 else branch immediately below.
+            // The restoring else is not optional for either: a base is part of
+            // Part's persistent state, so an engine that stops being asked for
+            // one keeps whatever the LAST asker left there.
             const bool bbdPart = inst.engine_id(p) == spky::ENGINE_BBD;
             // STAGES is orphaned by movement 3 and becomes the LANE_PITCH base
             // on a BBD deck. Re-pointing a knob per engine is not new -- the
@@ -550,11 +560,21 @@ struct Spotymod : Module {
             // would read params[STAGES_A + PART_STRIDE] = params[73 + 23] =
             // params[96], past the end of the 84-entry array. The explicit
             // ternary is required, exactly as for DRIVE/LINK.
+            //
+            // The else branch is load-bearing, same as GENE SIZE below: LANE_
+            // PITCH's base is written NOWHERE else in this function, and on a
+            // Synth/Wave/Body deck that base is a real transposition (it feeds
+            // pitch_pre_quant). Flip a deck to BBD, move STAGES, flip back --
+            // without this restore, _base[LANE_PITCH] would keep whatever
+            // STAGES last set it to, forever, on an engine that never touches
+            // LANE_PITCH itself.
             if (bbdPart)
                 inst.set_target_base(p, spky::LANE_PITCH,
                     params[p ? STAGES_B : STAGES_A].getValue());
-            else
+            else {
                 inst.set_stages(p, params[p ? STAGES_B : STAGES_A].getValue());
+                inst.set_target_base(p, spky::LANE_PITCH, 0.5f);
+            }
 
             if (bbdEdge[p].tick(bbdPart)) {
                 // Genuine player-driven entry into BBD (see bbd_edge_state.hpp

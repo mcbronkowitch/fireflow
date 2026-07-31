@@ -396,6 +396,15 @@ public:
                     // states in the denormal range during a long silence, and
                     // the buffer fills with them -- a large, load-dependent
                     // stall on x86. Same idiom as comp.cpp:56 / limiter.h:37.
+                    //
+                    // BbdLine is shared with Flux (fx/flux.h), so this floor
+                    // also changes Flux's tail below -180 dBFS -- inaudible,
+                    // and it is the same class of change comp.cpp/limiter.h
+                    // already made unconditionally, but it is stated here
+                    // because spec 5.9 mandated the floor for the BBD part
+                    // engine and was silent about Flux: DELIBERATE, applies to
+                    // every BbdLine/BbdEcho user including Flux. See spec
+                    // §5.9.
                     if (loss_z_ < 1e-9f && loss_z_ > -1e-9f) loss_z_ = 0.f;
                     mem_[imem_] = dither_ != 0.f
                                       ? loss_z_ + dither_ * rng_.next_bipolar()
@@ -409,6 +418,8 @@ public:
                     const float ybbd = mem_[imem_];
                     const float delta = ybbd - ybbd_old_;
                     ybbd_old_ = ybbd;
+                    // Same denormal floor, same Flux-shared scope -- see the
+                    // loss_z_ flush above, a few lines up, for the full note.
                     if (ybbd_old_ < 1e-9f && ybbd_old_ > -1e-9f) ybbd_old_ = 0.f;
                     for (int m = 0; m < bbd_tuning::kFiltOrder; ++m)
                         Xout[m] = cf_add(Xout[m], cf_scale(g[m], delta));
@@ -673,11 +684,21 @@ private:
             const float y = x - dc_x1_ + 0.999f * dc_y1_;
             dc_x1_ = x;
             dc_y1_ = y;
+            // Same denormal floor as BbdLine::Process (fx/bbd.h, loss_z_
+            // comment). Unlike THAT pair, this one is dead code for Flux
+            // specifically: Flux never calls SetFeedbackDcBlock, dc_on_ stays
+            // at Init()'s false forever, and this branch is never taken on a
+            // Flux-driven BbdEcho. Reachable only through BbdEngine's freeze
+            // (spec 5.6), which is the one caller of SetFeedbackDcBlock(true).
             if (dc_y1_ < 1e-9f && dc_y1_ > -1e-9f) dc_y1_ = 0.f;
             x = y;
         }
         if (tilt_ != 0.f) {
             tilt_z_ += tilt_c_ * (x - tilt_z_);
+            // Same note as dc_y1_ above: dead for Flux, which never calls
+            // SetFeedbackTilt/SetFeedbackTiltAmount with a nonzero tilt, so
+            // this guard is never open on a Flux-driven BbdEcho. Reachable
+            // only through BbdEngine's RESONANCE/freeze (spec 5.6/5.8).
             if (tilt_z_ < 1e-9f && tilt_z_ > -1e-9f) tilt_z_ = 0.f;
             x += tilt_ * (x - tilt_z_);
         }

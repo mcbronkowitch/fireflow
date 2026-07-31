@@ -346,7 +346,8 @@ public:
 
         // Skipped unless the engine actually implements process_in. The base
         // declares it with an empty body (engine_iface.h), so on every engine
-        // but the sampler this call reaches nothing -- and an indirect call
+        // but the sampler and the BBD (the two that consume input) this call
+        // reaches nothing -- and an indirect call
         // through the vtable is not free to reach nothing with, because it
         // also forces the compiler to spill anything live across it in this
         // inlined loop. Not calling it is observationally identical: the

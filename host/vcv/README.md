@@ -348,8 +348,10 @@ chip. Old patches only ever stored ENG 0..3, so this is purely additive.
 
 On a BBD deck the five modulation lanes take on the engine's own controls:
 **SOURCE** drives DRIVE (the loop's internal saturation), **MOTION** drives
-FEEDBACK, **LEVEL** sets the deck's overall output level, **PITCH** sets the
-delay clock (subject to the FEEDBACK caveat below), and **SIZE** picks the
+FEEDBACK, **LEVEL** sets the wet/dry mix between the deck's input and the
+delay's return (unlike every other engine, LEVEL 0 does not silence a BBD
+deck — it passes the input through dry, at unity), **PITCH** sets the delay
+clock (subject to the FEEDBACK caveat below), and **SIZE** picks the
 delay-time rung the same way FLUX's own RATE division does.
 
 Two panel controls change meaning:

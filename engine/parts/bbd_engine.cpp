@@ -105,6 +105,21 @@ void BbdEngine::init(float sample_rate) {
     // rung (see _recompute()'s T), superseding the plain window(_cycle) this
     // line used to compute directly.
     _refresh_window();
+    // _refresh_window() deliberately does not call _apply_freeze() (see its
+    // own comment), so without this call _freeze_k stays at its member
+    // default of 0 until the first reset()/set_targets()/set_decay()/
+    // set_resonance(). Unreached through Part today -- _engine_swap() always
+    // runs reset() before this engine is ever live -- but a BbdEngine
+    // constructed directly (a new host, a bench) and gated before any of
+    // those four calls would push _push_freeze()'s
+    // fb = _fb_lane + _freeze*(_freeze_k - _fb_lane) with _freeze_k == 0,
+    // i.e. the freeze would MUTE the loop instead of holding it. Calling
+    // _apply_freeze() directly here (not through _refresh_window()) is safe
+    // for the same reason reset() already calls it unconditionally: _f_clk,
+    // _drive, _fb_lane and _decay are all at their real member defaults by
+    // this point, so the tilt/gain it seeds are the correct at-rest values,
+    // not placeholders.
+    _apply_freeze();
 }
 
 void BbdEngine::init_buffers(float* l, float* r, size_t cells) {
