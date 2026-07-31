@@ -165,16 +165,22 @@ TEST_CASE("deck bus: with the source off, a hostile tap changes nothing -- "
     }
 }
 
-TEST_CASE("deck bus: sampler <-> sampler mutual routing stays finite") {
+// Runs the sampler<->sampler scenario for 10 s at 48 kHz with a hot,
+// constant, asymmetric input, and reports the output peak plus each deck's
+// final tap. `routed` selects whether other_deck is actually wired in --
+// false reproduces the "routing never established" case in-tree, so the
+// dead-routing baseline below is measured fresh on every run rather than
+// hardcoded from a one-off exploration.
+static float run_mutual_scenario(bool routed, float* tapA_out = nullptr,
+                                  float* tapB_out = nullptr) {
     Instrument inst;
     inst.init(48000.f);
     for (int p = 0; p < PART_COUNT; ++p) {
         inst.set_engine(p, ENGINE_SAMPLER);
         inst.sampler_monitor(p, true);
-        inst.set_excitation_sources(p, true, /*other_deck=*/true, /*audio_in=*/true);
+        inst.set_excitation_sources(p, true, /*other_deck=*/routed, /*audio_in=*/true);
     }
 
-    // 10 s at 48 kHz, with a hot input to give the loop something to build on.
     const int kBlock = 96;
     std::vector<float> inl(kBlock, 0.5f), inr(kBlock, -0.5f);
     std::vector<float> outL(kBlock), outR(kBlock);
@@ -187,6 +193,63 @@ TEST_CASE("deck bus: sampler <-> sampler mutual routing stays finite") {
             peak = std::max({peak, std::fabs(outL[i]), std::fabs(outR[i])});
         }
     }
-    CHECK(peak < 100.f);      // bounded, not merely finite
+    if (tapA_out) *tapA_out = inst.deck_tap(PART_A, 0);
+    if (tapB_out) *tapB_out = inst.deck_tap(PART_B, 0);
+    return peak;
+}
+
+TEST_CASE("deck bus: sampler <-> sampler mutual routing stays finite") {
+    // Dead-routing baseline, measured here rather than assumed: with
+    // other_deck off, SamplerEngine's dry-at-unity monitor still passes the
+    // constant +-0.5 input straight through the MORPH/reverb mix, settling
+    // at a fixed, non-zero peak that has nothing to do with the cross-deck
+    // bus. A broken _src_deck guard (routing silently never established)
+    // would make the "live" run below indistinguishable from this number.
+    const float baseline_peak = run_mutual_scenario(/*routed=*/false);
+
+    float tapA = 0.f, tapB = 0.f;
+    const float mutual_peak = run_mutual_scenario(/*routed=*/true, &tapA, &tapB);
+    MESSAGE("baseline_peak=", baseline_peak, " mutual_peak=", mutual_peak,
+            " tapA=", tapA, " tapB=", tapB);
+
+    // Liveness: the mutual loop must clear the dead-routing baseline by a
+    // margin no unrouted run could produce (measured live/dead gap here is
+    // ~0.29; 0.15 leaves comfortable room on both sides without being loose
+    // enough to pass a no-op).
+    CHECK(mutual_peak > baseline_peak + 0.15f);
+    CHECK(std::fabs(tapA) > 1e-3f);
+    CHECK(std::fabs(tapB) > 1e-3f);
+
+    // Bound: per channel this is a two-step loop, x[n] = bound(k + x[n-2])
+    // with k = +-0.5 the constant input. Three failure modes are worth
+    // naming, because isfinite() on the FINAL output cannot tell any of
+    // them apart: the master Limiter (instrument.cpp, applied to l/r after
+    // MORPH, downstream of _deck_tap) hard-ceilings whatever reaches it to
+    // ~1.0, so a genuinely unbounded internal recursion and a merely
+    // saturating one both come out of `mutual_peak` looking the same
+    // (measured: a wrong-ordered bound below ALSO reads mutual_peak == 1,
+    // just like the correct one's 0.998 -- too close to separate with an
+    // output-side ceiling). The discriminating quantity is `_deck_tap`
+    // itself, captured before the limiter and before the MORPH mix:
+    //  - bound correctly on the sum (fast_tanh(el + _deck_in_l), part.h):
+    //    converges to the fixed point of x = tanh(0.5 + x) -- measured
+    //    deck_tap ~ 0.881, comfortably inside fast_tanh's contract
+    //    |y| <= 1.0 (fast_tanh.h: hard-clamped on the return value, not
+    //    merely on the threshold).
+    //  - bound on the wrong side (el + fast_tanh(_deck_in_l)): still a
+    //    contraction, since the exogenous term is a fixed constant rather
+    //    than something that grows -- so it does NOT diverge to inf/NaN
+    //    either. It converges instead to the fixed point of
+    //    x = 0.5 + tanh(x) -- measured deck_tap ~ 1.381, which breaches
+    //    fast_tanh's |y| <= 1.0 contract because the sum was never actually
+    //    passed through the bound.
+    //  - bound removed entirely: x[n] = 0.5 + x[n-2] is unbounded linear
+    //    growth -- not inf/NaN inside a 10 s run, but it blows past 1.0
+    //    within a few hundred samples, so the same ceiling catches it too.
+    // 1.0 is not a round number chosen for convenience: it is fast_tanh's
+    // own hard-clamped range, so any deck_tap that exceeds it is direct,
+    // structural proof the bound was not applied to that sum.
+    CHECK(std::fabs(tapA) <= 1.0f);
+    CHECK(std::fabs(tapB) <= 1.0f);
 }
 
