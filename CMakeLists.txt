@@ -68,6 +68,7 @@ add_executable(spky_tests
     tests/test_step_grid_lock.cpp
     engine/parts/part.cpp
     tests/test_part.cpp
+    tests/test_deck_bus.cpp
     engine/instrument.cpp
     bench/audition/init_patch.cpp
     bench/audition/protocol.cpp

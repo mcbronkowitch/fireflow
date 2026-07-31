@@ -11,6 +11,7 @@
 #include "fx/fx_util.h"
 #include "fx/part_fx.h"
 #include "util/math.h"
+#include "util/fast_tanh.h"
 #include "Utility/dcblock.h"
 
 namespace spky {
@@ -47,6 +48,12 @@ public:
     // parts are visible -- see instrument.cpp), holding the SIBLING part's
     // dry mono output from the PREVIOUS control block. Not for panel/host use.
     void set_other_deck_tap(float x) { _other_deck_tap = x; }
+    // Pushed once per sample by Instrument (the only scope where both parts
+    // are visible), holding the SIBLING part's post-FX stereo output from the
+    // PREVIOUS sample. Audio rate, unlike _other_deck_tap, which is the
+    // control-rate mono excitation bus and stays exactly as it was. Not for
+    // panel or host use.
+    void set_deck_in(float l, float r) { _deck_in_l = l; _deck_in_r = r; }
     // Observer only, for tests (Task 10 review round 2): the excitation bus
     // value actually pushed to _engine->set_excitation() at the last control
     // tick -- i.e. the enabled sources summed, THEN DC-blocked and
@@ -320,7 +327,22 @@ public:
         // inlined loop. Not calling it is observationally identical: the
         // callee has no body to observe. Whether it costs or saves cycles is
         // not claimed here; the bench settles that.
-        if (_engine_wants_in) _engine->process_in(inL, inR);
+        if (_engine_wants_in) {
+            float el = inL, er = inR;
+            // Sum first, bound the sum -- the same idiom as the excitation
+            // bus's fast_tanh(_bus_dc.Process(bus)) at part.cpp:385. The bound
+            // lives HERE and not in SamplerEngine's monitor, which is
+            // deliberately "dry input at unity": a fast_tanh there would move
+            // the monitor level for every existing user (tanh(1) ~ 0.76) and
+            // break the neutrality proof. With _src_deck false -- the default,
+            // and today's behaviour -- this branch is not taken and the path
+            // is bit-exact unchanged.
+            if (_src_deck) {
+                el = fast_tanh(el + _deck_in_l);
+                er = fast_tanh(er + _deck_in_r);
+            }
+            _engine->process_in(el, er);
+        }
         _engine->process(outL, outR);
         outL *= fade;
         outR *= fade;
@@ -565,6 +587,8 @@ private:
     bool  _src_audio = false;
     float _other_deck_tap = 0.f;
     float _audio_in_tap = 0.f;
+    float _deck_in_l = 0.f;
+    float _deck_in_r = 0.f;
     daisysp::DcBlock _bus_dc;
     // Backing store for excitation_eff() (observer only) -- the exact value
     // handed to _engine->set_excitation() at the last control tick.
