@@ -394,13 +394,18 @@ void setup_inst_worst_deck_bus()
     // 200-block depth the neighbouring instrument_worst_bbd row above uses,
     // and that workloads_instr.cpp's kInstrSettleBlocks names for its own
     // rows. NOTE this is NOT shown to be enough for the mutual loop's own
-    // slower dynamic: a desktop check of this exact configuration found the
-    // sibling tap still moving in a bounded band out to several thousand
-    // blocks (dipping ~3% around block 500, recovering by ~block 2000)
-    // before settling. The reported bench figure is conditioned on this
-    // 200-block depth and has not been shown to equal the steady-state cost
-    // -- see docs/bench/2026-07-31-20eafed-deck-bus.md's settle-sensitivity
-    // section.
+    // slower dynamic: a desktop check of an ANALOGOUS configuration -- same
+    // engine/monitor/other_deck settings as this row, but driven with a
+    // fixed sine-plus-DC signal rather than this row's test_input() noise,
+    // run on desktop (not hardware), and deleted uncommitted after use, so
+    // it is not this exact configuration and is not reproducible from the
+    // tree -- found the sibling tap still moving in a bounded band out to
+    // several thousand blocks (dipping ~3% around block 500, recovering by
+    // ~block 2000) before settling. The reported bench figure is conditioned
+    // on this 200-block depth and has not been shown to equal the
+    // steady-state cost -- see docs/bench/2026-07-31-20eafed-deck-bus.md's
+    // settle-sensitivity section, which describes that desktop check in the
+    // same corrected terms.
     const float* in = test_input();
     for (int b = 0; b < 200; ++b)
         group.instrument.process(in, in, g_instrument_harness.out_l,

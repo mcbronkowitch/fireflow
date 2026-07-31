@@ -2,6 +2,22 @@
 #include "util/math.h"
 #include <cmath>
 
+// SPKY_DECK_BUS is defined by parts/part.h (`#ifndef`/`#define`, default 1),
+// reached transitively through instrument.h's `#include "parts/part.h"`.
+// The `#if SPKY_DECK_BUS` guards below rely on that chain having already run
+// by the time they're reached. If the include order above ever changes so
+// that guard is no longer defined when the preprocessor gets here, `#if` on
+// an undefined identifier evaluates to 0 silently -- the cross-deck bus
+// would vanish from this translation unit with no diagnostic, and the
+// desktop build never separately exercises SPKY_DECK_BUS=0 to catch it (only
+// the bench build does, deliberately, via BENCH_DECK_BUS). This #error turns
+// that silent failure into a build failure instead.
+#if !defined(SPKY_DECK_BUS)
+#error "SPKY_DECK_BUS is undefined here -- instrument.h must include " \
+       "parts/part.h (which defines it) before this point; check the " \
+       "include order at the top of this file and of instrument.h."
+#endif
+
 using namespace spky;
 
 namespace {

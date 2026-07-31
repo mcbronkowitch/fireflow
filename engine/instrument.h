@@ -296,9 +296,15 @@ private:
     // Audio-rate cross-deck bus (spec 2026-07-31 bbd-part-engine §4.3).
     // Distinct from _dry_tap above, which is the control-rate MONO excitation
     // bus and is unchanged: this one is stereo, written every sample, and
-    // carries the deck's POST-FX output -- what the player hears. Read at the
-    // top of the sample and written at the bottom, so the latency is one
-    // sample in both directions no matter which deck CHOKE runs first.
+    // carries the deck's post-*part*-FX output -- after that part's own
+    // Grit/Flux/Comp chain, but taken BEFORE the cross-deck MORPH blend
+    // (_center.gain_a/b below), the shared reverb return, and the master
+    // Limiter. So it is not simply "what the player hears": the reverb
+    // return in particular is deliberately excluded from the loop -- folding
+    // one shared room back into both decks would couple them acoustically,
+    // which this bus does not do. Read at the top of the sample and written
+    // at the bottom, so the latency is one sample in both directions no
+    // matter which deck CHOKE runs first.
     float _deck_tap[PART_COUNT][2] = { { 0.f, 0.f }, { 0.f, 0.f } };
     int    _ctrl_ctr = 0;    // counts down to the next control-rate Center::update
     float _choke = 0.f;        // -1..+1 event-priority knob (discrete zones)

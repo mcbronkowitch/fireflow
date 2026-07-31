@@ -39,12 +39,25 @@ static void check_latency_one_sample(float choke, int src, int dst) {
     // the diff between dst[n] and fast_tanh(src[n-1]) is a smooth, shrinking
     // residual through n ~ 383 and is exactly 0.0 from n = 384 on. 400 keeps
     // a margin over that measured boundary.
+    // Non-vacuity: `checked` proves the source deck was above the noise
+    // floor at some sample, which rules out a silent ENGINE_TEST_TONE making
+    // the loop pass by never exercising the tap at all. It does NOT prove
+    // the tap actually varied sample to sample -- a constant DC source would
+    // satisfy `|tap_src[n-1]| > 1e-4f` at every n while making the
+    // one-sample-shift comparison above vacuous (a stuck value trivially
+    // equals its own shifted copy). ENGINE_TEST_TONE happens to emit a
+    // >=110 Hz sine, so today's test does discriminate -- but that is a
+    // property of the fixture, not of this guard, so it is pinned directly
+    // below rather than left to happen to be true.
     int checked = 0;
+    bool varied = false;
     for (int n = 400; n < kN; ++n) {
         CHECK(tap_dst[n] == doctest::Approx(fast_tanh(tap_src[n - 1])));
         if (std::fabs(tap_src[n - 1]) > 1e-4f) ++checked;
+        if (tap_src[n] != tap_src[n - 1]) varied = true;
     }
     CHECK(checked > 0);        // the source must actually have been sounding
+    CHECK(varied);             // and not merely sounding at a stuck DC value
 }
 
 TEST_CASE("deck bus: one sample of latency, both directions, at every CHOKE") {
@@ -112,17 +125,34 @@ TEST_CASE("deck bus: the engine input is bounded") {
 
 // Only SamplerEngine overrides IPartEngine::consumes_input() (returns true,
 // sampler_engine.h:121); every other engine keeps the base default of false
-// (engine_iface.h:75), so Part::process's `if (_engine_wants_in)` guard
-// (part.h:330) never even calls process_in() for TEST_TONE, SYNTH, WAVE, or
-// BODY -- the `if (_src_deck)` check inside it (part.h:340) is structurally
-// unreachable for those four, not merely untested by them. (A second engine,
-// BBD, joins SAMPLER in a later movement.) So for those four the bit-identity
+// (engine_iface.h:75), so Part::process's `if (_engine_wants_in)` guard --
+// the outer guard around the process_in() call site in part.h -- never even
+// calls process_in() for TEST_TONE, SYNTH, WAVE, or BODY. The `if (_src_deck)`
+// check nested inside that guard is therefore structurally unreachable for
+// those four, not merely untested by them. (Line numbers deliberately not
+// cited here: this comment already went stale once, within this same branch,
+// when the SPKY_DECK_BUS guard was inserted above these two ifs and shifted
+// them eight lines -- naming the symbols instead of the lines is what keeps
+// this comment from rotting the same way again.) (A second engine, BBD,
+// joins SAMPLER in a later movement.) So for those four the bit-identity
 // check below proves something narrower but still real: no *unconditional*
 // side effect was introduced anywhere else in Part::process. SAMPLER is the
 // one engine today where the guard is reachable, so it is the one case that
 // can actually go RED if the guard is broken -- which is why its monitor is
 // switched on below, giving the hostile tap a live path to the output
 // instead of a dead one.
+//
+// ENGINE_COUNT below is a build-time tripwire, not a runtime check: it fires
+// at compile time the moment a new EngineId is added, forcing whoever adds
+// ENGINE_BBD to come back here and extend the list (and re-read the
+// "structurally unreachable for the other four" claim above, which becomes
+// false the day a second engine overrides consumes_input()).
+static_assert(ENGINE_COUNT == 5,
+              "a new EngineId was added -- extend the engine list in the "
+              "test below, and re-check whether 'unreachable for the other "
+              "four' still holds once a second engine overrides "
+              "consumes_input()");
+
 TEST_CASE("deck bus: with the source off, a hostile tap changes nothing -- "
           "proven directly for SAMPLER, structurally for the rest") {
     for (EngineId e : {ENGINE_TEST_TONE, ENGINE_SYNTH, ENGINE_SAMPLER,
@@ -249,6 +279,16 @@ TEST_CASE("deck bus: sampler <-> sampler mutual routing stays finite") {
     // 1.0 is not a round number chosen for convenience: it is fast_tanh's
     // own hard-clamped range, so any deck_tap that exceeds it is direct,
     // structural proof the bound was not applied to that sum.
+    //
+    // Scoped to this fixture: `inst.init(48000.f)` above leaves the FX chain
+    // off (no FxMem passed in), so `_deck_tap` here is exactly the engine's
+    // raw, unbounded-except-for-fast_tanh output. With the FX chain engaged
+    // (Grit/Flux/Comp/Reverb, as bench's `inst_worst_deck_bus` row runs),
+    // gain staged downstream of `_deck_tap` can legitimately push a deck's
+    // post-FX output above 1.0 -- fast_tanh only bounds what reaches the
+    // *engine input*, not what a deck emits after its own FX chain. The
+    // `<= 1.0f` proof above is specific to this fixture's FX-off setup, not
+    // a claim that `deck_tap` is bounded in general.
     CHECK(std::fabs(tapA) <= 1.0f);
     CHECK(std::fabs(tapB) <= 1.0f);
 }

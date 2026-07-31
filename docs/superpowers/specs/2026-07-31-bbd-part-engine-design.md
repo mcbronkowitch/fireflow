@@ -193,17 +193,75 @@ in the init patch and the host's engine-switch handler*, not a mutation of
 `_src_deck` would rewire that deck's BODY excitation bus as a side effect and put
 §4.7's neutrality proof at the mercy of engine selection.
 
+**`_src_deck` gates two independent paths today, and only because nothing
+consumes both.** The flag feeds the control-rate excitation bus
+(`part.cpp:383`, `bus += _other_deck_tap`) *and* the audio-rate bus of §4.5
+(`part.h:349`, `el = fast_tanh(el + _deck_in_l)`). Today that is safe because
+`SamplerEngine` ignores `set_excitation` (`engine_iface.h`'s no-op default)
+and `SynthEngineT<BodyVoice>` doesn't override `process_in` — exactly one of
+the two paths is ever live per engine. **Movement 2 must check this before
+`ENGINE_BBD` forwards both.** If a BBD deck both implements `process_in` and
+forwards `set_excitation`, the neighbour arrives twice through the same
+`_src_deck` flag — once through the audio-rate sum, once through the
+control-rate bus — which is exactly the double-count this section's
+`_audio_in_tap` paragraph above rules out for `audio_in`. Either the two
+paths need separate flags at that point (reopening the "no new panel
+control" constraint) or the engine must consume only one of them by
+construction. Recorded here, where movement 2 will meet it, rather than left
+implicit in a comment on `_src_deck`'s declaration.
+
+**A persisted host flag silently changed meaning on this branch, and the
+change is deliberate.** The VCV host's "Excite: other deck" checkbox
+(`host/vcv/src/Spotymod.cpp`, per-part context menu; JSON key
+`exciteOtherDeck`) predates this branch and was previously inert on a
+SAMPLER deck — `SamplerEngine::set_excitation` does not exist, so the flag
+only ever did anything for BODY. After this branch the same flag also drives
+the audio-rate bus above, because it is the one flag `set_excitation_sources`
+exposes. Two consequences follow, both correct applications of "bound the
+sum" under this movement's no-new-control constraint, and both worth
+knowing before touching a saved patch or the host's menu:
+
+- A patch saved with the flag on for a SAMPLER deck behaves differently
+  after upgrading to this branch, silently — it now audibly routes and
+  records the neighbouring deck, where before it did nothing.
+- With the flag on, the engine input becomes `fast_tanh(inL + _deck_in_l)`
+  even when the neighbour is silent (`_deck_in_l == 0`) — so toggling this
+  one checkbox also puts the sampler's **external audio-in** path through
+  `fast_tanh` for the first time. `tanh(0.5) ≈ 0.462`, `tanh(1) ≈ 0.762` —
+  the same ≈0.76 figure §4.5's `SamplerEngine` note cites as the reason the
+  monitor itself must stay linear. Toggling "Excite: other deck" measurably
+  attenuates external-input monitoring and recording, as a side effect of a
+  menu item whose name never mentions audio-in.
+
+Neither is a code defect; both are what "one shared flag, no new control"
+necessarily buys. The host's menu label and the surrounding documentation
+say so now (`host/vcv/src/Spotymod.cpp`'s "Excite: other deck" item,
+`host/vcv/README.md`'s Body/Sampler section) — the behaviour itself is
+unchanged from what this movement shipped.
+
 ### 4.5 Mutual routing is allowed; one bound replaces the exclusivity rule
 
 Both decks may select `other_deck`, exactly as today. Idempotence is untouched
 and `bench/workloads_body.cpp` keeps measuring what it measures.
 
 **Sampler ↔ sampler is the one unbounded case.** Both engines monitor their input
-through, neither bounds it, and the circulation reaches `inf`/`NaN` rather than
-merely getting loud. The master limiter cannot prevent it: `Limiter` is an
-`Instrument` member applied to the summed output after MORPH and reverb,
-**outside** the loop, and there is no per-deck limiter (per-deck COMP has a
-bit-exact bypass, `comp.h:17`).
+through and neither bounds it, so without a fix the recursion grows without
+limit. **An earlier draft of this section said the circulation reaches
+`inf`/`NaN` rather than merely getting loud. The cross-deck-audio-bus branch
+built the case this section warns about and measured it, rather than asserting
+it: with a constant exogenous input the per-channel recurrence is
+`x[n] = 0.5 + x[n-2]`, which is unbounded *linear* growth, not `inf`/`NaN` —
+it does not reach either within a 10 s run** (`tests/test_deck_bus.cpp`, the
+sampler↔sampler mutual-routing test's closing comment, which derives all
+three orderings — correct, swapped, and absent — side by side). **The
+correction changes only the predicted symptom, not the conclusion**: unbounded
+linear growth still poisons the record buffers exactly as thoroughly as a
+`NaN` would, just more slowly and without ever producing a non-finite sample
+for a naive `isfinite()` check to catch — which is itself an argument for
+bounding the sum rather than for leaving it be. The master limiter cannot
+prevent it either way: `Limiter` is an `Instrument` member applied to the
+summed output after MORPH and reverb, **outside** the loop, and there is no
+per-deck limiter (per-deck COMP has a bit-exact bypass, `comp.h:17`).
 
 **Fix: bound the cross-deck sum in `Part`, not in the sampler.**
 `SamplerEngine`'s monitor is `if (_monitor) { l += _in_l; r += _in_r; }`,
@@ -1181,10 +1239,13 @@ still resolve" bullet.**
 
 ## Appendix A — superseded claims
 
-Everything retracted, in one place. Rev. 1 items are marked ①, rev. 0 items ⓪.
+Everything retracted, in one place. Rev. 2 items — found after this document
+settled, by the `feat/cross-deck-audio-bus` branch that implements movement 1
+— are marked ②; rev. 1 items ①; rev. 0 items ⓪.
 
 | claim | why it is wrong |
 |---|---|
+| ② **"Sampler ↔ sampler circulation reaches `inf`/`NaN` rather than merely getting loud"** (§4.5) | Measured, not merely reasoned about: with a constant exogenous input the recurrence is `x[n] = 0.5 + x[n-2]` — unbounded *linear* growth, not `inf`/`NaN`, within a 10 s run (`tests/test_deck_bus.cpp`). The bound is still required; only the predicted failure mode was wrong. |
 | ① **"Under sync, STAGES becomes an absolute five-octave pitch axis"** | A BBD writes and reads at the same clock: **steady-state pitch is unity at every stage count.** Transposition is a transient lasting one delay period, and it is gated on feedback. §5.2 inverts the formula. |
 | ① "`LANE_SIZE` moves the rhythm, `LANE_PITCH` moves the pitch, and neither disturbs the other" | Under rev. 1's formula both moved the clock, so `LANE_SIZE` was an equally strong pitch control. True only after §5.2's inversion. |
 | ① "The roadmap's *STAGES is a brightness axis* is retired" | It is **confirmed by ear** (`roadmap.md:1044,1157-1160`) and correct. Rev. 1 overrode a listened result with a false inference. |

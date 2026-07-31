@@ -252,6 +252,22 @@ this exact kind of loop was previously falsified by 2–4×; here the honest
 comparison (≈2.7× the widest control's drift, not the ≈12× first claimed)
 still clears that floor, just less dramatically than first stated.
 
+**These two numbers are not commensurable, and putting them side by side
+under one heading invites reading them as if they were.** The 5.75-point
+figure is a *use* cost: `inst_worst_deck_bus`'s two arms are not
+audio-identical (checksum `8eaf4037` on vs `8b05a866` off), so 5.75 points is
+the price of actually running a two-sampler mutual routing with every FX
+block at maximum — a different, louder signal reaching Grit/Flux/Reverb/Comp,
+not merely different code executing on the same signal. The ≈0.04-point
+hand-count the spec avoided claiming was a *code* cost — four loads, four
+stores, two setter calls per sample, evaluated with **no signal change** at
+all. A measured use-cost and a hand-counted code-cost can disagree by an
+order of magnitude without either being wrong; they are pricing different
+things. Movement 2 will need to budget CPU for `ENGINE_BBD` off a number in
+this document, in a configuration already measured at 105–109 % of block
+budget (see "The noise floor" above) — so which of these two costs it reads
+off this section is load-bearing, not a rounding choice.
+
 The likely mechanism is that the closed mutual loop raises the signal energy
 reaching the FX chain (Grit/Flux/Reverb/Comp, all at their maxima in this
 row), and at least one of those stages' cost is amplitude- or
@@ -260,6 +276,22 @@ inferred, and per this project's own ablation discipline it is not asserted
 as the cause. Isolating it (e.g. a `_src_deck`-on/off pair with the FX chain
 bypassed, and/or a deeper-settle hardware re-run per the section above) is a
 natural follow-up and is out of scope for this task.
+
+**A follow-up that would separate the two costs, needing no rebuild and with
+zero cross-build drift:** add a second row in the *same* binary, identical to
+`inst_worst_deck_bus` in every respect except `other_deck=false` on both
+decks (i.e. `setup_inst_worst_deck_bus`'s setup with that one flag flipped,
+`SPKY_DECK_BUS` left at its compiled-in default of 1). That pair —
+`inst_worst_deck_bus` (routed) vs. this new row (unrouted, same binary) —
+isolates the *runtime* `_src_deck` effect: same code present in both, same
+build, only the flag differs, so any gap it shows cannot be cross-build
+noise. Either of those two rows measured against a bus-free equivalent
+(`SPKY_DECK_BUS=0`, i.e. the existing bus-off arm above) then isolates the
+*unconditional per-sample overhead* the spec's ≈0.04-point hand-count was
+pricing — the `set_deck_in` read and `_deck_tap` write that run for every
+instrument row regardless of routing (see "The control" above). This is
+recorded as a follow-up only: no row has been added, and nothing has been
+run to produce it.
 
 ## Gates
 

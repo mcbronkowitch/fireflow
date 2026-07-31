@@ -13,7 +13,13 @@ enum EngineId {
     ENGINE_SYNTH = 1,
     ENGINE_SAMPLER = 2,
     ENGINE_WAVE = 3,
-    ENGINE_BODY = 4
+    ENGINE_BODY = 4,
+    // Sentinel, not a selectable engine -- keep it last so it always equals
+    // the count. Exists so a `static_assert(ENGINE_COUNT == N, ...)` next to
+    // any hand-written "every engine" list (e.g. tests/test_deck_bus.cpp's
+    // bit-identity sweep) fails to build the day a new engine is added
+    // instead of silently continuing to cover only the old set.
+    ENGINE_COUNT
 };
 
 // A part's sound engine. Consumes the 5 normalized target values; produces
