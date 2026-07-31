@@ -150,6 +150,7 @@ add_executable(spky_tests
     # free function, and a .cpp would have to be added to spky_tests, render,
     # bench/Makefile, bench/audition/Makefile AND host/vcv/Makefile.
     tests/test_material.cpp
+    tests/test_part_engine_contract.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
 target_include_directories(spky_tests PRIVATE host)

@@ -28,7 +28,13 @@ namespace spky {
 //    because Part caches the flag once per swap and skips the call
 //    (engine_iface.h:78-85, part.h). The check is written so an engine that
 //    does not consume input passes vacuously -- which is correct, since for
-//    such an engine there is nothing to pair.
+//    such an engine there is nothing to pair. CALLER'S RESPONSIBILITY: the
+//    setup must leave the engine in a state where process_in's effect is
+//    OBSERVABLE at process(). For BbdEngine that is automatic (the input is
+//    always in the signal path); SamplerEngine, the only other engine that
+//    consumes input today, would need set_monitor(true) or recording armed,
+//    because otherwise process_in only writes to the record buffer and the
+//    two runs really are identical for a reason that is not a defect.
 // 3. Every no-op setter is safe to call in any order, at any time. The
 //    IPartEngine base declares set_flow/set_gate/set_hold/set_cycle/set_width
 //    as defaulted no-ops, so an engine that overrides one inherits no ordering
