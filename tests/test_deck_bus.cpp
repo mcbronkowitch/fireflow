@@ -165,3 +165,28 @@ TEST_CASE("deck bus: with the source off, a hostile tap changes nothing -- "
     }
 }
 
+TEST_CASE("deck bus: sampler <-> sampler mutual routing stays finite") {
+    Instrument inst;
+    inst.init(48000.f);
+    for (int p = 0; p < PART_COUNT; ++p) {
+        inst.set_engine(p, ENGINE_SAMPLER);
+        inst.sampler_monitor(p, true);
+        inst.set_excitation_sources(p, true, /*other_deck=*/true, /*audio_in=*/true);
+    }
+
+    // 10 s at 48 kHz, with a hot input to give the loop something to build on.
+    const int kBlock = 96;
+    std::vector<float> inl(kBlock, 0.5f), inr(kBlock, -0.5f);
+    std::vector<float> outL(kBlock), outR(kBlock);
+    float peak = 0.f;
+    for (int b = 0; b < 48000 * 10 / kBlock; ++b) {
+        inst.process(inl.data(), inr.data(), outL.data(), outR.data(), kBlock);
+        for (int i = 0; i < kBlock; ++i) {
+            REQUIRE(std::isfinite(outL[i]));
+            REQUIRE(std::isfinite(outR[i]));
+            peak = std::max({peak, std::fabs(outL[i]), std::fabs(outR[i])});
+        }
+    }
+    CHECK(peak < 100.f);      // bounded, not merely finite
+}
+
