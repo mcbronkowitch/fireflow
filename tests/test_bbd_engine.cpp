@@ -652,6 +652,255 @@ TEST_CASE("bbd engine: DECAY trims below k0, ATTACK sets the ramp") {
         return s;
     };
     CHECK(tail_after(0.2f, 8.f) < 0.05f * tail_after(1.f, 8.f));
+
+    // ...and DECAY has to act DURING a hold, not only before one. This leg is
+    // separate from the one above because the one above cannot see the
+    // difference: it calls set_decay() and then set_targets(), and
+    // set_targets -> _recompute -> _apply_freeze refreshes the cached loop
+    // gain regardless of whether set_decay did. Verified by measurement, not
+    // assumed -- with set_decay()'s own _apply_freeze() deleted, the case
+    // above still passes.
+    //
+    // Here nothing follows the knob: the deck is already frozen, the ramp has
+    // settled so process() pushes nothing, and _freeze_k would keep the value
+    // it was cached with. Turning DECAY down mid-hold is exactly what a player
+    // does to end a freeze, so a stale cache here is a dead knob.
+    auto tail_with_late_decay = [](float late_decay) {
+        BbdEngine e;
+        e.init(48000.f);
+        e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+        e.set_cycle(1.0f);
+        e.set_flow(false);
+        e.set_attack(0.f);
+        e.set_decay(1.f);
+        float t[LANE_COUNT] = { 0.f, 8.f / 10.f, 0.5f, 0.5f, 1.f };
+        e.set_targets(t, 0.5f);
+        e.latch_clock();
+        for (int i = 0; i < 24000; ++i) {
+            float l, r;
+            e.process_in(std::sin(i * 0.05f) * 0.5f, 0.f);
+            e.process(l, r);
+        }
+        e.set_gate(true);
+        for (int i = 0; i < 24000; ++i) {       // hold at k0 for half a second
+            float l, r;
+            e.process_in(0.f, 0.f);
+            e.process(l, r);
+        }
+        e.set_decay(late_decay);                // the knob moves mid-hold, and
+                                                // NOTHING else is pushed after
+        float acc = 0.f;
+        const int n = 8 * 48000;
+        for (int i = 0; i < n; ++i) {
+            float l, r;
+            e.process_in(0.f, 0.f);
+            e.process(l, r);
+            if (i > n - 24000) acc += l * l;
+        }
+        return acc;
+    };
+    CHECK(tail_with_late_decay(0.2f) < 0.05f * tail_with_late_decay(1.f));
+}
+
+TEST_CASE("bbd engine: reset() leaves the lines holding no freeze, not just no charge") {
+    // BbdEcho::Reset() clears STATE and not COEFFICIENTS -- feedback_, tilt_,
+    // tilt_c_ and dc_on_ all survive it -- so a deck reset out of a freeze
+    // would otherwise carry k0-ish feedback, kFreezeTilt and the DC blocker
+    // into its next life with the input gate reopened, and process() could
+    // never notice: _freeze == _freeze_last means nothing has moved, so the
+    // per-sample push never fires. The swap path does not rescue it either
+    // (Part::_engine_swap in STEP: reset -> set_flow(false) -> set_hold ->
+    // set_gate -> set_cycle, none of which recompute).
+    //
+    // Asserted through the SIGNAL rather than through an observer, because the
+    // defect is precisely that the observers say the freeze is off while the
+    // lines behave as though it is on. A reset deck at FEEDBACK 0 must take
+    // its input and let it die; one still holding the freeze's loop gain
+    // sustains it instead.
+    static float rl[Flux::kMaxSamples], rr[Flux::kMaxSamples];
+    BbdEngine e;
+    e.init(48000.f);
+    e.init_buffers(rl, rr, Flux::kMaxSamples);
+    e.set_cycle(1.0f);
+    e.set_flow(false);
+    e.set_decay(1.f);
+    // MOTION 0 -> the lane asks for NO feedback at all. Anything circulating
+    // after the reset below can only be the freeze's own coefficients.
+    float t[LANE_COUNT] = { 0.f, 4.f / 10.f, 0.9f, 0.f, 1.f };
+    e.set_targets(t, 0.5f);
+    e.latch_clock();
+    for (int i = 0; i < 12000; ++i) {
+        float l, r;
+        e.process_in(std::sin(i * 0.05f) * 0.5f, 0.f);
+        e.process(l, r);
+    }
+    e.set_gate(true);                       // freeze: loop gain goes to k0
+    for (int i = 0; i < 24000; ++i) {
+        float l, r;
+        e.process_in(0.f, 0.f);
+        e.process(l, r);
+    }
+    REQUIRE(e.freeze_amount() == 1.f);      // it really is frozen
+    e.reset();                              // ...and now it is not
+    CHECK(e.freeze_amount() == 0.f);
+    CHECK_FALSE(e.frozen());
+
+    // A short burst in, then silence. With the lane at MOTION 0 the burst must
+    // run out; with the freeze's coefficients still in the lines it circulates.
+    for (int i = 0; i < 2400; ++i) {
+        float l, r;
+        e.process_in(std::sin(i * 0.05f) * 0.5f, 0.f);
+        e.process(l, r);
+    }
+    float early = 0.f, late = 0.f;
+    for (int i = 0; i < 48000; ++i) {
+        float l, r;
+        e.process_in(0.f, 0.f);
+        e.process(l, r);
+        if (i < 6000) early = std::max(early, std::fabs(l));
+        if (i > 42000) late = std::max(late, std::fabs(l));
+    }
+    CAPTURE(early);
+    CAPTURE(late);
+    CHECK(early > 1e-3f);                   // non-vacuity: there WAS a signal
+    CHECK(late < 0.05f * early);            // and at FEEDBACK 0 it died
+}
+
+TEST_CASE("bbd engine: ATTACK sets the freeze ramp, and the ramp lands exactly") {
+    // The sibling DECAY case is named for ATTACK but sets it to 0 in both
+    // branches and asserts only the DECAY ratio, so until this case existed the
+    // geometric map, _freeze_step and the landing had no coverage at all -- and
+    // the ramp being LINEAR rather than the one-pole it was first written as
+    // rests entirely on an arithmetic claim that nothing witnessed. frozen()
+    // cannot witness it either: it reports the gate's decision, not the
+    // crossfade.
+    static float prime_l[Flux::kMaxSamples], prime_r[Flux::kMaxSamples];
+
+    // 1. The geometric map, 2 ms .. 2 s, read back through the observer.
+    {
+        BbdEngine e;
+        e.init(48000.f);
+        e.set_attack(0.f);
+        CHECK(e.freeze_ramp_s() == doctest::Approx(0.002f));
+        e.set_attack(1.f);
+        CHECK(e.freeze_ramp_s() == doctest::Approx(2.0f));
+        // Geometric, so the midpoint is the GEOMETRIC mean sqrt(0.002 * 2) =
+        // 0.0632 s, not the arithmetic 1.001 s. A linear map would pass the
+        // two endpoints above and fail here.
+        e.set_attack(0.5f);
+        CHECK(e.freeze_ramp_s() == doctest::Approx(0.063246f).epsilon(0.001));
+    }
+
+    // A frozen deck at a known ATTACK, run for `n` samples after the gate.
+    auto ramp_after = [](float attack, int n, float* freeze_out) {
+        BbdEngine e;
+        e.init(48000.f);
+        e.init_buffers(prime_l, prime_r, Flux::kMaxSamples);
+        e.set_cycle(1.0f);
+        e.set_flow(false);
+        e.set_attack(attack);
+        e.set_decay(1.f);
+        float t[LANE_COUNT] = { 0.f, 4.f / 10.f, 0.9f, 0.5f, 1.f };
+        e.set_targets(t, 0.5f);
+        e.latch_clock();
+        for (int i = 0; i < 12000; ++i) {          // fill the line
+            float l, r;
+            e.process_in(std::sin(i * 0.05f) * 0.5f, 0.f);
+            e.process(l, r);
+        }
+        CHECK(e.freeze_amount() == 0.f);           // nothing has engaged yet
+        e.set_gate(true);
+        for (int i = 0; i < n; ++i) {
+            float l, r;
+            e.process_in(0.f, 0.f);
+            e.process(l, r);
+        }
+        *freeze_out = e.freeze_amount();
+    };
+
+    // 2. ATTACK max is a 2 s ramp, so one second in it is genuinely PART WAY --
+    //    neither still open nor already held. This is the assertion that fails
+    //    if _freeze_step ignores ATTACK.
+    float half = -1.f;
+    ramp_after(1.f, 48000, &half);
+    CAPTURE(half);
+    CHECK(half > 0.45f);
+    CHECK(half < 0.55f);
+
+    // 3. ...and the same elapsed time at ATTACK min has long since landed, so
+    //    the knob is demonstrably doing the work rather than the ramp being
+    //    some fixed length.
+    float fast = -1.f;
+    ramp_after(0.f, 48000, &fast);
+    CHECK(fast == 1.f);
+
+    // 4. THE LANDING, and this is the claim the linear ramp exists for. A
+    //    one-pole `_freeze += (want - _freeze) * coef` never lands: at ATTACK
+    //    max the increment (1 - _freeze)/96000 drops below one float ulp while
+    //    _freeze is still ~3e-3 short of 1, so it sticks there forever, leaving
+    //    the input permanently ~0.3 % open and the loop that far under k0. The
+    //    denormal floor cannot see a 3e-3 residue. `== 1.f` is the whole point:
+    //    Approx would pass on exactly the arithmetic this asserts against.
+    float landed = -1.f;
+    ramp_after(1.f, 96000 + 4800, &landed);       // the full 2 s plus a margin
+    CHECK(landed == 1.f);
+
+    // 5. And the behavioural consequence of landing exactly, so the claim is
+    //    not only an assertion about a private float: once the ramp is home the
+    //    input must be COMPLETELY gone, not 99.7 % gone. Two identical frozen
+    //    decks, one fed full-scale audio after the landing and one fed silence
+    //    -- their outputs must agree. The residual tolerance is float rounding
+    //    in `_in_l + _mix * (wl - _in_l)`, which does not cancel exactly at
+    //    MIX 1; a 3e-3 leak through the line is orders above it.
+    auto after_landing = [](bool with_input, std::vector<float>* out) {
+        BbdEngine e;
+        e.init(48000.f);
+        e.init_buffers(prime_l, prime_r, Flux::kMaxSamples);
+        e.set_cycle(1.0f);
+        e.set_flow(false);
+        e.set_attack(1.f);                        // the ramp that sticks
+        e.set_decay(1.f);
+        float t[LANE_COUNT] = { 0.f, 4.f / 10.f, 0.9f, 0.5f, 1.f };
+        e.set_targets(t, 0.5f);
+        e.latch_clock();
+        for (int i = 0; i < 12000; ++i) {
+            float l, r;
+            e.process_in(std::sin(i * 0.05f) * 0.5f, 0.f);
+            e.process(l, r);
+        }
+        e.set_gate(true);
+        for (int i = 0; i < 96000 + 4800; ++i) {  // let the ramp land
+            float l, r;
+            e.process_in(0.f, 0.f);
+            e.process(l, r);
+        }
+        // CHECK, not REQUIRE: if the ramp ever stops landing, the leak
+        // figure below is the interesting half of the diagnosis and aborting
+        // the case would hide it.
+        CHECK(e.freeze_amount() == 1.f);
+        out->clear();
+        for (int i = 0; i < 24000; ++i) {
+            float l, r;
+            const float in = with_input ? std::sin(i * 0.07f) : 0.f;
+            e.process_in(in, in);
+            e.process(l, r);
+            out->push_back(l);
+        }
+    };
+    std::vector<float> fed, quiet;
+    after_landing(true, &fed);
+    after_landing(false, &quiet);
+    float worst_leak = 0.f;
+    for (size_t i = 0; i < fed.size(); ++i)
+        worst_leak = std::max(worst_leak, std::fabs(fed[i] - quiet[i]));
+    // Measured with the one-pole restored and given 20 s to converge: it
+    // settles at 0.997139 -- a 2.86e-3 residue, which is the arithmetic in
+    // process()'s comment confirmed to three figures -- and leaks 9.7e-3 here,
+    // 97x this threshold. Float rounding in the MIX-1 dry cancellation is
+    // ~1e-7, so 1e-4 sits three decades clear of the noise and two below the
+    // defect.
+    CAPTURE(worst_leak);
+    CHECK(worst_leak < 1e-4f);
 }
 
 TEST_CASE("bbd engine: FLOW ignores the gate, so the freeze is unreachable there") {

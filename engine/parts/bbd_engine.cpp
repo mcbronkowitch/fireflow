@@ -49,18 +49,6 @@ constexpr float kFreezeTilt = 1.30f;
 constexpr float kFreezeRampMinS = 0.002f;
 constexpr float kFreezeRampMaxS = 2.0f;
 
-// How far the ramp has to travel before it re-pushes the freeze into the two
-// lines. The crossfade itself is per-sample -- it gates the input, which is one
-// multiply -- but _apply_freeze() reaches BbdEcho::SetFeedbackTilt, whose
-// corner is an exp(), and engine/** may not call libm per sample.
-//
-// Quantised in TRAVEL rather than in samples so the bound holds at both ends of
-// ATTACK: any ramp, 2 ms or 2 s, costs at most 64 pushes (128 exp) in total,
-// where a per-sample push would cost 96 at the fast end and 96000 at the slow
-// one. Both endpoints are pushed exactly, on the sample they are reached, so a
-// settled freeze is never approximate -- only the moving ramp is a staircase,
-// and 64 steps of it is finer than the input crossfade beside it needs.
-constexpr float kFreezePushStep = 1.f / 64.f;
 }  // namespace
 
 void BbdEngine::init(float sample_rate) {
@@ -118,6 +106,25 @@ void BbdEngine::reset() {
     _freeze_want = 0.f;
     _freeze_last = 0.f;
     _choked = false;
+    // ...and the two lines have to be TOLD, or they keep the frozen loop's
+    // coefficients with the input gate reopened. BbdEcho::Reset() clears only
+    // STATE (fb_state_, tilt_z_, dc_x1_/dc_y1_); feedback_, tilt_, tilt_c_ and
+    // dc_on_ all survive it. process() cannot repair that on its own either:
+    // _freeze == _freeze_last, so nothing has "moved" and the per-sample push
+    // never fires. Nothing else reaches _apply_freeze() on the swap path
+    // Part::_engine_swap() takes in STEP (reset -> set_flow(false) -> set_hold
+    // -> set_gate -> set_cycle, none of which recompute), so without this line
+    // a deck swapped away mid-freeze comes back with feedback ~= k0, tilt at
+    // kFreezeTilt and the DC blocker on until its first set_targets().
+    //
+    // _fb_lane and _drive are deliberately NOT cleared here. They are lane
+    // PARAMETERS, and this class already lets every other one survive a reset
+    // -- _mix, _pitch, _cycle, the ladder rung, _f_clk -- precisely because
+    // Part re-pushes them. Zeroing these two and not those would be an
+    // inconsistency, and the safety argument for it does not hold: the line
+    // was just memset to zero, so there is no charge for a stale feedback
+    // coefficient to act on.
+    _apply_freeze();
     // Re-arm the cold-start latch: Part::_engine_swap() runs reset() on every
     // activation, and a deck reactivated into STEP must not be stuck on
     // whatever clock this engine happened to hold from its PREVIOUS
@@ -224,6 +231,13 @@ void BbdEngine::set_decay(float n) {
 }
 
 void BbdEngine::_apply_freeze() {
+    // CONTROL RATE. Everything in the freeze that costs libm lives here and in
+    // no other path: bbd_drive_gain() is a std::pow, and SetFeedbackTilt()'s
+    // corner is a std::exp. Both arguments can only change when the plane or
+    // the clock moves, i.e. once per control block -- never inside an audio
+    // block, because nothing there recomputes _f_clk or _drive. _push_freeze()
+    // below does the per-sample work with neither.
+    //
     // The three legs of spec 5.6, none of which the rev. 1 scalar-k scheme had:
     //
     // 1. A DC blocker in the feedback path. The Butterworth sections are
@@ -232,12 +246,28 @@ void BbdEngine::_apply_freeze() {
     //    parks the saturator.
     // 2. The feedback-path tilt, tracking f_clk/4 -- the same filter RESONANCE
     //    plays. The freeze is RESONANCE at its neutral point, not a separate
-    //    mechanism. Flattening the line's gain to ~1 is also what makes the
-    //    compander's L^2 round trip harmless: L^2 = L = 1.
+    //    mechanism. Flattening the line's gain as far as one zero can is also
+    //    what keeps the compander's L^2 round trip from running away.
     // 3. DRIVE divided out analytically. bbd_drive_gain spans 1.0..3.98 and the
     //    small-signal loop gain IS feedback * g, so with LANE_SOURCE running,
     //    the plane would otherwise swing the loop gain +-12 dB PER CIRCULATION.
     //    This term is exactly known; leaving it to the ear was wrong.
+    _freeze_k = kFreezeGain * _decay / bbd_drive_gain(_drive);
+    // The corner. The amount is re-stated by _push_freeze() a line later --
+    // one redundant store, in exchange for _push_freeze() being the single
+    // writer of the tilt amount and there being no window in which tilt_ and
+    // tilt_c_ disagree about which freeze they belong to.
+    const float corner = _f_clk * 0.25f;
+    _l.SetFeedbackTilt(_freeze * kFreezeTilt, corner);
+    _r.SetFeedbackTilt(_freeze * kFreezeTilt, corner);
+    _push_freeze();
+}
+
+void BbdEngine::_push_freeze() {
+    // PER SAMPLE while the ramp moves. Arithmetic and stores only -- no libm.
+    // This is what lets the crossfade run at full resolution instead of the
+    // 64-step staircase an exp()-carrying push had to be quantised to.
+    _freeze_last = _freeze;
     const bool on = _freeze > 0.f;
     _l.SetFeedbackDcBlock(on);
     _r.SetFeedbackDcBlock(on);
@@ -246,10 +276,9 @@ void BbdEngine::_apply_freeze() {
     // replaces that 0 with its own value in a later movement; kFreezeTilt is
     // the point it will be centred on.
     const float tilt = _freeze * kFreezeTilt;
-    _l.SetFeedbackTilt(tilt, _f_clk * 0.25f);
-    _r.SetFeedbackTilt(tilt, _f_clk * 0.25f);
-    const float k = kFreezeGain * _decay / bbd_drive_gain(_drive);
-    const float fb = _fb_lane + _freeze * (k - _fb_lane);
+    _l.SetFeedbackTiltAmount(tilt);
+    _r.SetFeedbackTiltAmount(tilt);
+    const float fb = _fb_lane + _freeze * (_freeze_k - _fb_lane);
     _l.SetFeedback(fb);
     _r.SetFeedback(fb);
 }
@@ -280,13 +309,13 @@ void BbdEngine::process(float& outL, float& outR) {
         _freeze -= _freeze_step;
         if (_freeze < _freeze_want) _freeze = _freeze_want;
     }
-    // ...but the PUSH is control rate -- see kFreezePushStep.
-    const float moved = _freeze - _freeze_last;
-    if (moved > kFreezePushStep || moved < -kFreezePushStep
-        || (moved != 0.f && _freeze == _freeze_want)) {
-        _freeze_last = _freeze;
-        _apply_freeze();
-    }
+    // Every sample it moves, at full resolution: _push_freeze() is stores and
+    // arithmetic, so there is nothing left to ration. (It used to call the
+    // control-rate _apply_freeze(), which put an exp() and a pow() on the
+    // audio path -- quantised to 64 steps to bound the damage. Caching both in
+    // _apply_freeze() removed the cost rather than budgeting it, and the
+    // staircase went with it.)
+    if (_freeze != _freeze_last) _push_freeze();
     const float gate_in = (_choked ? 0.f : 1.f) * (1.f - _freeze);
     const float wl = _l.Process(_in_l * gate_in, _f_clk);
     const float wr = _r.Process(_in_r * gate_in, _f_clk);

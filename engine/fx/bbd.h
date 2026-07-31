@@ -633,6 +633,19 @@ public:
         tilt_c_ = c > 1.f ? 1.f : (c < 1e-5f ? 1e-5f : c);
     }
 
+    // The AMOUNT only, leaving the corner where SetFeedbackTilt last put it.
+    // One store, no libm -- which is the entire reason it exists.
+    //
+    // The freeze crossfades the tilt from 0 to kFreezeTilt over ATTACK, i.e.
+    // per sample, while its corner (f_clk/4) cannot move during that ramp:
+    // nothing recomputes the clock inside an audio block. Calling the setter
+    // above for that would re-evaluate an exp() whose argument is provably
+    // unchanged, on up to two out of three samples in the audio callback at
+    // ATTACK minimum. engine/** may not call libm per sample at all, so this
+    // is not a budget question -- see BbdEngine::_push_freeze(), the only
+    // caller, and BbdEngine::_apply_freeze() for where the corner is set.
+    void SetFeedbackTiltAmount(float tilt) { tilt_ = tilt; }
+
     // The Butterworth sections are normalised H(0)=1 and the loss pole is unity
     // at DC, so any loop gain above unity at 1 kHz is strictly above unity at
     // DC and grows monotonically until it parks the saturator. daisysp::DcBlock

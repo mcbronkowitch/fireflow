@@ -53,6 +53,14 @@ public:
     bool frozen() const { return _freeze_want > 0.5f; }
     // Observer: the ATTACK time actually in force, in seconds.
     float freeze_ramp_s() const { return _freeze_ramp_s; }
+    // Observer: the crossfade ITSELF, 0 = input open / feedback at the lane,
+    // 1 = input closed / feedback at k0. Distinct from frozen(), which reports
+    // the gate's decision and therefore cannot witness the ramp at all.
+    // Exposed because "the ramp lands on exactly 1.0" is an arithmetic claim
+    // about this variable -- it is the whole reason the ramp is linear rather
+    // than a one-pole -- and a claim about a variable is honestly tested by
+    // reading it.
+    float freeze_amount() const { return _freeze; }
     // A step fire latches the clock and holds it until the next one -- the
     // pattern SynthEngine already uses for pitch. In FLOW the engine ignores
     // fires and follows the plane continuously: lane.cpp:447-452 makes a FLOW
@@ -94,14 +102,22 @@ private:
     // It also deliberately does NOT call _apply_freeze(): _f_clk cannot move
     // here, so the tilt corner it would push is the one already in force.
     void _refresh_window();
-    // Pushes the three legs of the freeze -- DC blocker, feedback-path tilt
-    // (corner at _f_clk/4) and the loop gain with DRIVE divided out -- for
-    // whatever _freeze currently is. Control rate: it reaches SetFeedbackTilt,
-    // whose corner costs an exp(). Must be reached from every path that can
-    // move _f_clk, _drive, _fb_lane, _decay or _freeze; _recompute() is the
-    // one that owns _f_clk, and _refresh_window() deliberately is not (it
-    // never touches the clock).
+    // The freeze's two-speed push, split by what it costs.
+    //
+    // _apply_freeze() is CONTROL RATE and owns both libm calls: the tilt's
+    // corner (an exp, inside SetFeedbackTilt) and the DRIVE division (a pow,
+    // inside bbd_drive_gain). It caches the latter in _freeze_k and ends by
+    // calling _push_freeze(). It must be reached from every path that can move
+    // _f_clk, _drive, _fb_lane or _decay -- _recompute() is the one that owns
+    // _f_clk, and _refresh_window() deliberately is not, since it never
+    // touches the clock -- and from reset(), which otherwise leaves the two
+    // lines holding a frozen loop's coefficients with the input gate reopened.
+    //
+    // _push_freeze() is PER SAMPLE and does the rest with arithmetic only.
+    // engine/** may not call libm in the audio path, so the split is a
+    // constraint, not an optimisation.
     void _apply_freeze();
+    void _push_freeze();
 
     BbdEcho _l, _r;
     bbd_music::DivLadder _ladder;
@@ -127,12 +143,15 @@ private:
     // lines. _freeze_ramp_s is ATTACK in seconds and _freeze_step the linear
     // per-sample travel it implies; the latter is re-derived in init() and in
     // set_attack(), both of which know the real sample rate.
-    // _freeze_last is what the lines were last told -- see kFreezePushStep.
+    // _freeze_last is the value the two lines were last told about.
     float _freeze = 0.f;
     float _freeze_want = 0.f;
     float _freeze_last = 0.f;
     float _freeze_ramp_s = 0.002f;
     float _freeze_step = 1.f / (0.002f * 48000.f);
+    // kFreezeGain * _decay / bbd_drive_gain(_drive), cached by _apply_freeze()
+    // so the per-sample crossfade never re-evaluates that pow().
+    float _freeze_k = 0.f;
     bool  _choked = false;
     bool  _buf_ok = false;
     bool  _flow = false;
