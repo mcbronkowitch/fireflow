@@ -206,7 +206,20 @@ struct Spotymod : Module {
     // excite-other-deck defaults below (spec 5.11/5.12) apply once on the
     // transition and never fight a player who deliberately turns them back
     // on afterward.
+    //
+    // wasBbd is always constructed false, but a loaded patch (or a Ctrl+D
+    // duplicate) can restore ENGINE_A/B already AT 4 before pushParams() ever
+    // runs for this instance -- Rack sets params[]/custom data without
+    // calling onReset(). A naive "false until proven otherwise" edge would
+    // then fire on the very first control tick and silently clobber that
+    // patch's saved FLUX/exciteOtherDeck. bbdEdgeSeeded defers the FIRST
+    // observation of each part to a baseline instead of a transition: on
+    // that first tick wasBbd[p] is set to whatever ENG already says, with no
+    // defaults applied, and only ticks after that can see a real 0->BBD
+    // edge. Entering BBD by player action applies the defaults; finding
+    // yourself already on BBD (freshly loaded or duplicated) does not.
     bool wasBbd[spky::PART_COUNT] = {false, false};
+    bool bbdEdgeSeeded[spky::PART_COUNT] = {false, false};
     spky::WavData factoryNative;
     bool factoryNativeTried = false;
     std::vector<float> factoryL, factoryR;
@@ -538,11 +551,28 @@ struct Spotymod : Module {
             // STAGES is orphaned by movement 3 and becomes the LANE_PITCH base
             // on a BBD deck. Re-pointing a knob per engine is not new -- the
             // sampler already moves SUB_A to LANE_SIZE as GENE SIZE.
+            //
+            // STAGES_A/B are appended params (outside the stride, like
+            // DRIVE/LINK above), so pp(STAGES_A, p) is wrong for Part B: it
+            // would read params[STAGES_A + PART_STRIDE] = params[73 + 23] =
+            // params[96], past the end of the 84-entry array. The explicit
+            // ternary is required, exactly as for DRIVE/LINK.
             if (bbdPart)
-                inst.set_target_base(p, spky::LANE_PITCH, pp(STAGES_A, p));
+                inst.set_target_base(p, spky::LANE_PITCH,
+                    params[p ? STAGES_B : STAGES_A].getValue());
             else
                 inst.set_stages(p, params[p ? STAGES_B : STAGES_A].getValue());
 
+            if (!bbdEdgeSeeded[p]) {
+                // First control tick this instance has ever evaluated ENG for
+                // this part -- fresh add, or the first tick after a JSON load
+                // with no prior process() call at all. Whatever state we find
+                // here is the baseline, never a transition: a patch that was
+                // already on BBD must load with its saved FLUX/exciteOtherDeck
+                // intact, not clobbered by an edge it never actually crossed.
+                wasBbd[p] = bbdPart;
+                bbdEdgeSeeded[p] = true;
+            }
             if (bbdPart && !wasBbd[p]) {
                 // FLUX defaults disengaged (spec 5.11). The BBD's output is
                 // already six poles at 3600 Hz plus a loss pole breathing under
