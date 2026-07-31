@@ -2,6 +2,8 @@
 #include "parts/part.h"
 #include "parts/bbd_engine.h"
 #include "fx/flux.h"
+#include "mod/rng.h"
+#include "util/svf_bp.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -434,4 +436,190 @@ TEST_CASE("bbd engine: switching away and back returns silence, not old charge")
         peak = std::max(peak, std::max(std::fabs(l), std::fabs(r)));
     }
     CHECK(peak < 1e-4f);
+}
+
+TEST_CASE("bbd engine: the freeze holds a broadband burst per octave") {
+    // Rev. 1's scalar-k scheme measured the one frequency it tuned. The
+    // compander's round trip is L^2 above about -40 dBFS and L below it, and L
+    // is a lowpass -- at 8192 stages with k tuned for 1 kHz, ten circulations
+    // left 110 Hz at +7.2 dB and 2.5 kHz at -48.8 dB. So: broadband material,
+    // per-octave criterion, DRIVE swept during the hold.
+    BbdEngine e;
+    e.init(48000.f);
+    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.set_cycle(1.0f);
+    e.set_flow(false);
+    e.set_decay(1.f);                      // DECAY max: no trim below k0
+    float t[LANE_COUNT] = { 0.f, 8.f / 10.f, 0.5f, 0.5f, 1.f };  // div 1/2 -> T=500ms
+    e.set_targets(t, 0.5f);
+    e.latch_clock();
+
+    // A noise burst in, one delay period long.
+    Rng rng; rng.seed(0xfeedu);
+    const int period = static_cast<int>(0.5f * 48000.f);
+    for (int i = 0; i < period; ++i) {
+        float l, r;
+        const float n = rng.next_bipolar() * 0.3f;
+        e.process_in(n, n);
+        e.process(l, r);
+    }
+    e.set_gate(true);                       // freeze engages
+    CHECK(e.frozen());
+
+    // Six one-octave probes at 110, 220, 440, 880, 1760, 3520 Hz. SvfBp<N>
+    // SUMS its N bands, so use six SvfBp<1> and read them one at a time.
+    constexpr float kProbeHz[6] = { 110.f, 220.f, 440.f, 880.f, 1760.f, 3520.f };
+    SvfBp<1> probe[6];
+    auto arm_probes = [&] {
+        for (int b = 0; b < 6; ++b) {
+            probe[b].reset();
+            const float g = std::tan(3.14159265f * kProbeHz[b] / 48000.f);
+            const float q = 2.f;                       // ~half an octave wide
+            probe[b].set_coeffs(0, g, 1.f / q + g, 1.f / (1.f + g / q + g * g));
+        }
+    };
+
+    // Band energy over the LAST circulation of a `circulations`-long hold, with
+    // DRIVE swept 0 -> 1 across the whole run -- the term k = k0/bbd_drive_gain
+    // exists precisely to keep that sweep from moving the loop gain.
+    auto octaves = [&](int circulations, float* bands) {
+        for (int b = 0; b < 6; ++b) bands[b] = 0.f;
+        arm_probes();
+        const int total = circulations * period;
+        const float one = 1.f;
+        for (int i = 0; i < total; ++i) {
+            t[LANE_SOURCE] = static_cast<float>(i) / static_cast<float>(total);
+            if ((i % 96) == 0) e.set_targets(t, 0.5f);   // control raster
+            float l, r;
+            e.process_in(0.f, 0.f);
+            e.process(l, r);
+            if (i >= total - period)
+                for (int b = 0; b < 6; ++b) {
+                    const float y = probe[b].process(&one, l);
+                    bands[b] += y * y;
+                }
+            else
+                for (int b = 0; b < 6; ++b) probe[b].process(&one, l);
+        }
+    };
+    float a[6], b[6];
+    octaves(1, a);
+    // The engine is NOT re-primed between the two calls: the second run
+    // continues the same frozen loop, so `b` really is ten circulations later
+    // than `a` rather than a second first circulation.
+    octaves(9, b);
+    for (int i = 0; i < 6; ++i) {
+        const float db = 20.f * std::log10((b[i] + 1e-12f) / (a[i] + 1e-12f));
+        CAPTURE(i);
+        CAPTURE(db);
+        CHECK(std::fabs(db) <= 1.0f);
+    }
+}
+
+TEST_CASE("bbd engine: a frozen loop shows no DC growth over 60 s") {
+    BbdEngine e;
+    e.init(48000.f);
+    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.set_cycle(1.0f);
+    e.set_flow(false);
+    e.set_decay(1.f);
+    float t[LANE_COUNT] = { 0.f, 8.f / 10.f, 0.5f, 0.5f, 1.f };
+    e.set_targets(t, 0.5f);
+    e.latch_clock();
+    for (int i = 0; i < 24000; ++i) {
+        float l, r;
+        e.process_in(0.4f, 0.4f);           // a deliberate DC offset
+        e.process(l, r);
+    }
+    e.set_gate(true);
+    // The DC already IN the line at freeze time is not what this case is
+    // about, and it dominates a mean taken from sample 0: the stored offset
+    // reads out unblocked once, and the blocker's own state starts from zero
+    // the moment it is switched in. Measured per 5 s block at the settled
+    // constants: block 1 = +3.56e-2, blocks 2..12 = +3.2e-4 .. -5.0e-4, flat
+    // and not growing. So skip a settle window and measure the rest -- the
+    // THRESHOLD is untouched, only the transient is excluded. Step 7 proves
+    // the remaining assertion still goes red without the blocker.
+    double mean = 0.0;
+    const int n = 48000 * 60;
+    const int settle = 48000 * 10;
+    float peak = 0.f;
+    for (int i = 0; i < n; ++i) {
+        float l, r;
+        e.process_in(0.f, 0.f);
+        e.process(l, r);
+        if (i >= settle) mean += l;
+        if (i > n - 48000) peak = std::max(peak, std::fabs(l));
+    }
+    CHECK(std::fabs(mean / (n - settle)) < 1e-3);
+    CHECK(peak < 1.f);                      // it has not parked the saturator
+}
+
+TEST_CASE("bbd engine: DECAY trims below k0, ATTACK sets the ramp") {
+    auto tail_after = [](float decay, float seconds) {
+        BbdEngine e;
+        e.init(48000.f);
+        e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+        e.set_cycle(1.0f);
+        e.set_flow(false);
+        e.set_attack(0.f);
+        e.set_decay(decay);
+        float t[LANE_COUNT] = { 0.f, 8.f / 10.f, 0.5f, 0.5f, 1.f };
+        e.set_targets(t, 0.5f);
+        e.latch_clock();
+        for (int i = 0; i < 24000; ++i) {
+            float l, r;
+            e.process_in(std::sin(i * 0.05f) * 0.5f, 0.f);
+            e.process(l, r);
+        }
+        e.set_gate(true);
+        float s = 0.f;
+        const int n = static_cast<int>(seconds * 48000.f);
+        for (int i = 0; i < n; ++i) {
+            float l, r;
+            e.process_in(0.f, 0.f);
+            e.process(l, r);
+            if (i > n - 24000) s += l * l;
+        }
+        return s;
+    };
+    CHECK(tail_after(0.2f, 8.f) < 0.05f * tail_after(1.f, 8.f));
+}
+
+TEST_CASE("bbd engine: FLOW ignores the gate, so the freeze is unreachable there") {
+    // A FLOW deck's gate is effectively always on. Without this rule a FLOW BBD
+    // would be permanently frozen. Consequence: ATTACK and DECAY are inert in
+    // FLOW -- a mode-dependent dead knob, accepted, and it belongs in the manual.
+    BbdEngine e;
+    e.init(48000.f);
+    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.set_flow(true);
+    e.set_gate(true);
+    CHECK(!e.frozen());
+}
+
+TEST_CASE("bbd engine: CHOKE closes the input and lets the tail run out") {
+    BbdEngine e;
+    e.init(48000.f);
+    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.set_cycle(0.5f);
+    e.set_flow(true);
+    float t[LANE_COUNT] = { 0.f, 1.f, 0.5f, 0.6f, 1.f };
+    e.set_targets(t, 0.5f);
+    for (int i = 0; i < 24000; ++i) {
+        float l, r;
+        e.process_in(std::sin(i * 0.05f), 0.f);
+        e.process(l, r);
+    }
+    e.set_hold(true);
+    float first = 0.f, later = 0.f;
+    for (int i = 0; i < 48000; ++i) {
+        float l, r;
+        e.process_in(std::sin(i * 0.05f), 0.f);   // still arriving, ignored
+        e.process(l, r);
+        if (i < 4800) first = std::max(first, std::fabs(l));
+        if (i > 43200) later = std::max(later, std::fabs(l));
+    }
+    CHECK(later < 0.5f * first);    // it ran out
+    CHECK(first > 1e-3f);           // and it was not cut dead
 }

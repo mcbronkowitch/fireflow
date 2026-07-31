@@ -36,6 +36,23 @@ public:
     void set_cycle(float seconds) override;
     void set_flow(bool flow) override { _flow = flow; if (_flow) _recompute(); }
     bool flow() const { return _flow; }
+
+    // The freeze (spec 5.6). Gate high in STEP mutes the input and holds the
+    // loop at k0, so the content keeps circulating and stays audible.
+    void set_gate(bool on) override;
+    // CHOKE: closes the input and lets the tail run out. Unlike the gate this
+    // is honoured in both modes -- it is not a freeze, it is a mute.
+    void set_hold(bool on) override;
+    // ATTACK -> the freeze's engage/release time; DECAY -> a trim BELOW k0.
+    void set_attack(float n);
+    void set_decay(float n);
+    // Whether the freeze is ENGAGED, not whether its ramp has finished: the
+    // gate's own state, so a caller (and the FLOW rule's test) can read the
+    // decision without first running the ramp out. _freeze_want is only ever
+    // 0 or 1.
+    bool frozen() const { return _freeze_want > 0.5f; }
+    // Observer: the ATTACK time actually in force, in seconds.
+    float freeze_ramp_s() const { return _freeze_ramp_s; }
     // A step fire latches the clock and holds it until the next one -- the
     // pattern SynthEngine already uses for pitch. In FLOW the engine ignores
     // fires and follows the plane continuously: lane.cpp:447-452 makes a FLOW
@@ -73,7 +90,18 @@ private:
     // set_cycle() consumed the arm, a BBD deck swapped into an already-active
     // STEP transport would latch onto stale/default pitch instead of the
     // deck's actual current one.
+    //
+    // It also deliberately does NOT call _apply_freeze(): _f_clk cannot move
+    // here, so the tilt corner it would push is the one already in force.
     void _refresh_window();
+    // Pushes the three legs of the freeze -- DC blocker, feedback-path tilt
+    // (corner at _f_clk/4) and the loop gain with DRIVE divided out -- for
+    // whatever _freeze currently is. Control rate: it reaches SetFeedbackTilt,
+    // whose corner costs an exp(). Must be reached from every path that can
+    // move _f_clk, _drive, _fb_lane, _decay or _freeze; _recompute() is the
+    // one that owns _f_clk, and _refresh_window() deliberately is not (it
+    // never touches the clock).
+    void _apply_freeze();
 
     BbdEcho _l, _r;
     bbd_music::DivLadder _ladder;
@@ -85,6 +113,27 @@ private:
     float _pitch = 0.5f;
     float _f_clk = 4000.f;
     int   _stages = 8192;
+    // Held rather than pushed straight down, because the freeze crossfades
+    // AWAY from them: _apply_freeze() is the only writer of the two lines'
+    // feedback coefficient, and it needs both the lane's value and the DRIVE
+    // it has to divide back out.
+    float _drive = 0.f;
+    float _fb_lane = 0.f;
+    // DECAY: a trim below k0, so the freeze runs out instead of holding
+    // forever. 1 is "no trim", which is the operating point k0 is measured at.
+    float _decay = 1.f;
+    // The freeze crossfade: _freeze_want is the gate's decision (0 or 1),
+    // _freeze the ramped value, _freeze_last the value last pushed into the
+    // lines. _freeze_ramp_s is ATTACK in seconds and _freeze_step the linear
+    // per-sample travel it implies; the latter is re-derived in init() and in
+    // set_attack(), both of which know the real sample rate.
+    // _freeze_last is what the lines were last told -- see kFreezePushStep.
+    float _freeze = 0.f;
+    float _freeze_want = 0.f;
+    float _freeze_last = 0.f;
+    float _freeze_ramp_s = 0.002f;
+    float _freeze_step = 1.f / (0.002f * 48000.f);
+    bool  _choked = false;
     bool  _buf_ok = false;
     bool  _flow = false;
     // Armed at construction and by every reset() (Part::_engine_swap runs
