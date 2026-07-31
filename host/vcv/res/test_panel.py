@@ -106,7 +106,7 @@ def test_source_and_hidden_detune_partition():
 def test_source_caption_states_and_static_default():
     """The generated preview shows Synth's default caption, while Rack owns
     the live ENG-dependent choice and must not receive static alias rows."""
-    want = {0: "TIMB", 1: "ORG", 2: "FRAME", 3: "MATL"}
+    want = {0: "TIMB", 1: "ORG", 2: "FRAME", 3: "MATL", 4: "DRIVE"}
     got = getattr(g, "SOURCE_CAPTIONS", None)
     check(got == want, f"SOURCE caption states are {got!r}, want {want!r}")
     for suffix in ("_A", "_B"):
@@ -838,19 +838,37 @@ def engine_cycle_wiring_issues(cpp, makefile):
     """Return scoped ENG integration regressions found in host source."""
     issues = []
     latch = cpp_scope(cpp, "struct EngineCycleLatch : VCVLatch")
+    shades = cpp_scope(cpp, "static const NVGcolor kEngineShades[]")
     config = cpp_scope(cpp, "void configControls()")
     push = cpp_scope(cpp, "void pushParams()")
     process = cpp_scope(cpp, "void process(const ProcessArgs& args) override")
     ring = cpp_scope(cpp, "struct SpkyRing : Widget")
     widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
 
-    for label, block in (("latch", latch), ("config", config),
+    for label, block in (("latch", latch), ("shade table", shades),
+                         ("config", config),
                          ("parameter push", push), ("REC LED", process),
                          ("sampler ring", ring), ("widget", widget)):
         if block is None:
             issues.append(f"ENG {label} scope is missing")
     if issues:
         return issues
+
+    # The bounds-check mutation below (state < kShadeCount -> <=) proves the
+    # *indexing* can go red, but nothing previously pinned the shade table's
+    # actual colours -- a fifth (or wrong) RGBA tuple here would draw the
+    # wrong ring colour for an entire engine and no guard would notice.
+    got_shades = [compact_cpp(s) for s in re.findall(r"nvgRGBA\([^)]*\)", shades)]
+    want_shades = [
+        "nvgRGBA(0,0,0,0)",
+        "nvgRGBA(255,174,92,105)",
+        "nvgRGBA(120,210,255,145)",
+        "nvgRGBA(160,255,150,140)",
+        "nvgRGBA(230,140,255,140)",
+    ]
+    if got_shades != want_shades:
+        issues.append(
+            f"kEngineShades colours are {got_shades!r}, want {want_shades!r}")
 
     latch_expected = """
 struct EngineCycleLatch : VCVLatch {
@@ -877,11 +895,12 @@ struct EngineCycleLatch : VCVLatch {
 
     engine_config = """
 else if (c.id == ENGINE_A || c.id == ENGINE_B) {
-    configSwitch(c.id, 0.f, 3.f, init, "Engine", {"Synth", "Sampler", "Wave", "Body"});
+    configSwitch(c.id, 0.f, 4.f, init, "Engine",
+                 {"Synth", "Sampler", "Wave", "Body", "BBD"});
     getParamQuantity(c.id)->snapEnabled = true;
 }"""
     if compact_cpp(config).count(compact_cpp(engine_config)) != 1:
-        issues.append("ENG config must be one snapped Synth/Sampler/Wave/Body 0..3 branch")
+        issues.append("ENG config must be one snapped Synth/Sampler/Wave/Body/BBD 0..4 branch")
 
     engine_widget = """
 case WK_LATCH:
@@ -902,10 +921,11 @@ const spky::EngineId id =
     eng == 0 ? spky::ENGINE_SYNTH :
     eng == 2 ? spky::ENGINE_WAVE :
     eng == 3 ? spky::ENGINE_BODY :
+    eng == 4 ? spky::ENGINE_BBD :
     smp[p].testTone ? spky::ENGINE_TEST_TONE : spky::ENGINE_SAMPLER;
 inst.set_engine(p, id);"""
     if push_n.count(compact_cpp(dispatch)) != 1:
-        issues.append("ENG dispatch must exactly preserve Synth/Sampler/Wave/Body/test-tone states")
+        issues.append("ENG dispatch must exactly preserve Synth/Sampler/Wave/Body/BBD/test-tone states")
     factory = "if(eng==1&&!smp[p].testTone&&inst.sampler_empty(p)&&!factoryTried[p]){"
     if push_n.count(factory) != 1:
         issues.append("factory autoload must be restricted to ENG state 1")
@@ -980,6 +1000,8 @@ def test_engine_cycle_guard_rejects_representative_regressions():
          "createParamCentered<VCVLatch>", "widget"),
         ("state >= 0 && state < kShadeCount",
          "state >= 0 && state <= kShadeCount", "latch"),
+        ("nvgRGBA(230, 140, 255, 140),  // BBD: violet",
+         "nvgRGBA(230, 140, 255, 141),  // BBD: violet", "shade values"),
         ("if (eng == 1 && !smp[p].testTone",
          "if (eng > 0 && !smp[p].testTone", "factory"),
         ("const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;",
@@ -1131,12 +1153,13 @@ def source_caption_wiring_issues(cpp):
     widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
     expected_mapping = """
 static const char* sourceCaption(int state) {
-    return state == 1 ? "ORG" : state == 2 ? "FRAME" : state == 3 ? "MATL" : "TIMB";
+    return state == 1 ? "ORG" : state == 2 ? "FRAME"
+         : state == 3 ? "MATL" : state == 4 ? "DRIVE" : "TIMB";
 }"""
     if mapping is None:
         issues.append("SOURCE caption mapping scope is missing")
     elif compact_cpp(mapping) != compact_cpp(expected_mapping):
-        issues.append("SOURCE caption mapping must be 0 TIMB, 1 ORG, 2 FRAME, 3 MATL")
+        issues.append("SOURCE caption mapping must be 0 TIMB, 1 ORG, 2 FRAME, 3 MATL, 4 DRIVE")
 
     if panel is None:
         issues.append("SOURCE caption PanelText scope is missing")
