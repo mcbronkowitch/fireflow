@@ -24,7 +24,38 @@ struct FxMem {
     // Rack) or in SDRAM (M6). nullptr -> that part's sampler runs silent.
     SampleBuffer::Frame* sampler_buf[PART_COUNT] = { nullptr, nullptr };
     size_t sampler_frames = 0;
+    // The BBD part engine's two lines per deck (spec 2026-07-31 §5.7). Sized
+    // BbdEngine::kCells floats each = 32 KB per line, 128 KB for the
+    // instrument. SDRAM on the Seed, static or heap on the desktop.
+    // nullptr -> that deck's BBD engine runs silent.
+    //
+    // Unlike sampler_buf/sampler_frames above, this field carries no size of
+    // its own: Part::init hardcodes BbdEngine::kCells regardless of what a
+    // host actually allocated here, so a host that under-allocates gets a
+    // silent overrun with no diagnostic. The static_assert below is the cheap
+    // half of a guard against that: every allocation site in this codebase
+    // (host/render/main.cpp, host/vcv/src/Spotymod.cpp,
+    // tests/test_bbd_engine.cpp, tests/test_deck_bus.cpp) currently sizes its
+    // bbd[][] buffers off BbdEngine::kCells directly, and the one place that
+    // silently drifted apart from a same-sized sibling before -- Flux's own
+    // echo buffer, both being bbd_tuning::kMaxStages/2 through different
+    // spellings -- is pinned here so it cannot happen again unnoticed. It
+    // does NOT catch a new host that mis-sizes its own bbd[][] array from
+    // scratch; only Part::init taking an explicit cell count from FxMem would
+    // close that fully, which is a wider signature change across every
+    // caller and was judged not cheap enough for this pass.
+    float* bbd[PART_COUNT][2] = { { nullptr, nullptr }, { nullptr, nullptr } };
 };
+
+// Flux::kMaxSamples and BbdEngine::kCells are the same constant
+// (bbd_tuning::kMaxStages / 2) spelled twice, and every FxMem::bbd[][]
+// allocation site in the tree sizes off the latter while Flux's own buffers
+// size off the former. If a future change ever let the two drift apart, a
+// host still sizing bbd[][] by the old assumption would silently under-
+// allocate -- this catches that at compile time instead.
+static_assert(Flux::kMaxSamples >= BbdEngine::kCells,
+              "FxMem::bbd[][] sizing assumes Flux::kMaxSamples >= "
+              "BbdEngine::kCells -- see the comment on FxMem::bbd above");
 
 // The complete public API. No hardware type crosses this boundary; the same
 // object is driven by the desktop render host and (later) the firmware shell.
@@ -154,6 +185,34 @@ public:
     int  active_voices(int p) const          { return _parts[p].active_voices(); }
     float voice_env(int p, int v) const      { return _parts[p].voice_env(v); }
     EngineId engine_id(int p) const          { return _parts[p].engine_id(); }
+
+    // BBD observers (spec 2026-07-31 9). A BBD deck writes 0 into a_voices and
+    // a_v0..3 and would otherwise expose nothing, so a demo scenario would
+    // pass vacuously. Zero (or the stated sentinel) on every other engine,
+    // which is what the CSV should show.
+    //
+    // clock_now(), not clock_hz(): DETUNE's glide means the two differ
+    // whenever the clock is chasing a moved lane, which is exactly when a CSV
+    // reader is most likely to be looking. The CSV should record what the
+    // instrument actually did, not merely what it was asked to do.
+    float bbd_clock_hz(int p) const {
+        return _parts[p].engine_id() == ENGINE_BBD ? _parts[p].bbd().clock_now() : 0.f;
+    }
+    int   bbd_stages(int p) const {
+        return _parts[p].engine_id() == ENGINE_BBD ? _parts[p].bbd().stages() : 0;
+    }
+    int   bbd_div(int p) const {
+        return _parts[p].engine_id() == ENGINE_BBD ? _parts[p].bbd().div_index() : -1;
+    }
+    bool  bbd_frozen(int p) const {
+        return _parts[p].engine_id() == ENGINE_BBD && _parts[p].bbd().frozen();
+    }
+    bool  bbd_time_clamped(int p) const {
+        return _parts[p].engine_id() == ENGINE_BBD && _parts[p].bbd().time_clamped();
+    }
+    bool  bbd_scale_truncated(int p) const {
+        return _parts[p].engine_id() == ENGINE_BBD && _parts[p].bbd().scale_truncated();
+    }
 
     // --- M5 sampler API (spec "Instrument API") ---
     void sampler_record(int p, bool on) {

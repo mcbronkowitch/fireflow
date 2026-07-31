@@ -29,11 +29,13 @@ CPP_SOURCES = \
 	../../engine/sampler/slice_map.cpp \
 	../../engine/mod/super_modulator.cpp \
 	../../engine/parts/part.cpp \
+	../../engine/parts/bbd_engine.cpp \
 	../../engine/instrument.cpp \
 	../../engine/center/center.cpp \
 	../../engine/fx/grit.cpp \
 	../../engine/fx/flux.cpp \
 	../../engine/fx/bbd.cpp \
+	../../engine/fx/drag.cpp \
 	../../engine/fx/reverb.cpp \
 	../../engine/fx/part_fx.cpp \
 	../../engine/fx/comp.cpp \

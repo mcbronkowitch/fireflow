@@ -18,6 +18,12 @@ SECTIONS
         build/part_fx.o(.text .text.*)
         build/flux.o(.text .text.*)
         build/bbd.o(.text .text.*)
+        /* The BBD part engine (spec 2026-07-31 bbd-part-engine, movement 2).
+           BbdLine::Process's only new user lives here, and its per-sample
+           kernel -- BbdEngine::process/process_in -- is on the audio path of
+           every deck set to ENGINE_BBD, so it belongs in the hotset for the
+           same reason synth_engine.o and voice.o do. */
+        build/bbd_engine.o(.text .text.*)
         build/grit.o(.text .text.*)
         build/reverb.o(.text .text.*)
         build/comp.o(.text .text.*)

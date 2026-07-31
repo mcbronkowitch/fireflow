@@ -1,0 +1,51 @@
+{
+  "_comment": "Task 9 (2026-07-31 bbd-part-engine) listening demo, NOT a gate -- this project does not add checksum gates for new audio paths, and this file is not wired into CMake. Deck A is ENGINE_BBD, fed the drone asset directly (input_wav) so the loop always has material circulating: FEEDBACK (LANE_MOTION) sits high so repeats build rather than decay away, and PITCH (LANE_PITCH, no lane modulation -- just the base -- so the value is exactly what the events below set) is walked across most of its travel while DETUNE (set_voice_detune) is given a real glide time, so f_clk (the target) and the CSV's a_fclk column (clock_now(), the line's actual running clock) audibly and measurably disagree for a while after each jump before the glide catches up. Deck B is silent (test_tone, LEVEL off) so only deck A's BBD is heard.",
+  "sample_rate": 48000,
+  "bpm": 100,
+  "duration_s": 24,
+  "input_wav": "host/render/scenarios/assets/in_drone.wav",
+  "init": [
+    {"action":"set_engine","part":0,"value":"bbd"},
+    {"action":"set_engine","part":1,"value":"test_tone"},
+    {"action":"set_target_active","part":1,"slot":4,"flag":false},
+    {"action":"set_target_base","part":1,"slot":4,"value":0.0},
+
+    {"_comment":"FLOW, not STEP: a BBD deck in STEP only re-latches its clock on a fire (BbdEngine::latch_clock). FLOW's clock_flow() tracks PITCH continuously, which is what lets the walk below actually move f_clk in real time."},
+    {"action":"set_step","part":0,"flag":false,"ivalue":8},
+
+    {"_comment":"SOURCE -> DRIVE: a little dirt in the loop, not saturated."},
+    {"action":"set_target_active","part":0,"slot":0,"flag":false},
+    {"action":"set_target_base","part":0,"slot":0,"value":0.2},
+
+    {"_comment":"SIZE -> the div ladder rung: held fixed so only PITCH is moving during the walk."},
+    {"action":"set_target_active","part":0,"slot":1,"flag":false},
+    {"action":"set_target_base","part":0,"slot":1,"value":0.5},
+
+    {"_comment":"PITCH -> the clock. No lane modulation (active=false): the base IS the target, and the events below walk it directly."},
+    {"action":"set_target_active","part":0,"slot":2,"flag":false},
+    {"action":"set_target_base","part":0,"slot":2,"value":0.1},
+
+    {"_comment":"MOTION -> FEEDBACK, up: repeats build instead of decaying, so the walked pitch is heard on many circulations, not just the first."},
+    {"action":"set_target_active","part":0,"slot":3,"flag":false},
+    {"action":"set_target_base","part":0,"slot":3,"value":0.85},
+
+    {"_comment":"LEVEL -> MIX (spec: the wet/dry IS the level on this engine): mostly wet so the delay dominates over the dry drone."},
+    {"action":"set_target_active","part":0,"slot":4,"flag":false},
+    {"action":"set_target_base","part":0,"slot":4,"value":0.85},
+
+    {"action":"set_voice_attack","part":0,"value":0.0},
+    {"action":"set_voice_decay","part":0,"value":1.0},
+    {"action":"set_voice_resonance","part":0,"value":0.6},
+    {"action":"set_voice_sub","part":0,"value":1.0},
+    {"_comment":"DETUNE (menu): a real glide time, so the walk below shows f_clk chasing rather than snapping."},
+    {"action":"set_voice_detune","part":0,"value":0.5},
+    {"action":"set_voice_filt","part":0,"value":0.0},
+
+    {"action":"set_reverb_mix","value":0.1}
+  ],
+  "events": [
+    {"_comment":"PITCH walked across most of its travel: up, back down past the start, then to the middle -- three jumps, each large enough that the glide is still visibly in flight when the next one lands.","t":4.0,"action":"set_target_base","part":0,"slot":2,"value":0.9},
+    {"t":10.0,"action":"set_target_base","part":0,"slot":2,"value":0.1},
+    {"t":16.0,"action":"set_target_base","part":0,"slot":2,"value":0.5}
+  ]
+}

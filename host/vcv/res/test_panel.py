@@ -106,7 +106,7 @@ def test_source_and_hidden_detune_partition():
 def test_source_caption_states_and_static_default():
     """The generated preview shows Synth's default caption, while Rack owns
     the live ENG-dependent choice and must not receive static alias rows."""
-    want = {0: "TIMB", 1: "ORG", 2: "FRAME"}
+    want = {0: "TIMB", 1: "ORG", 2: "FRAME", 3: "MATL", 4: "DRIVE"}
     got = getattr(g, "SOURCE_CAPTIONS", None)
     check(got == want, f"SOURCE caption states are {got!r}, want {want!r}")
     for suffix in ("_A", "_B"):
@@ -838,19 +838,37 @@ def engine_cycle_wiring_issues(cpp, makefile):
     """Return scoped ENG integration regressions found in host source."""
     issues = []
     latch = cpp_scope(cpp, "struct EngineCycleLatch : VCVLatch")
+    shades = cpp_scope(cpp, "static const NVGcolor kEngineShades[]")
     config = cpp_scope(cpp, "void configControls()")
     push = cpp_scope(cpp, "void pushParams()")
     process = cpp_scope(cpp, "void process(const ProcessArgs& args) override")
     ring = cpp_scope(cpp, "struct SpkyRing : Widget")
     widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
 
-    for label, block in (("latch", latch), ("config", config),
+    for label, block in (("latch", latch), ("shade table", shades),
+                         ("config", config),
                          ("parameter push", push), ("REC LED", process),
                          ("sampler ring", ring), ("widget", widget)):
         if block is None:
             issues.append(f"ENG {label} scope is missing")
     if issues:
         return issues
+
+    # The bounds-check mutation below (state < kShadeCount -> <=) proves the
+    # *indexing* can go red, but nothing previously pinned the shade table's
+    # actual colours -- a fifth (or wrong) RGBA tuple here would draw the
+    # wrong ring colour for an entire engine and no guard would notice.
+    got_shades = [compact_cpp(s) for s in re.findall(r"nvgRGBA\([^)]*\)", shades)]
+    want_shades = [
+        "nvgRGBA(0,0,0,0)",
+        "nvgRGBA(255,174,92,105)",
+        "nvgRGBA(120,210,255,145)",
+        "nvgRGBA(160,255,150,140)",
+        "nvgRGBA(230,140,255,140)",
+    ]
+    if got_shades != want_shades:
+        issues.append(
+            f"kEngineShades colours are {got_shades!r}, want {want_shades!r}")
 
     latch_expected = """
 struct EngineCycleLatch : VCVLatch {
@@ -861,9 +879,9 @@ struct EngineCycleLatch : VCVLatch {
         if (!pq) return;
         const int state = static_cast<int>(std::round(pq->getValue()));
         if (state == 0) return;
-        const NVGcolor color = state == 1
-            ? nvgRGBA(255, 174, 92, 105)
-            : nvgRGBA(120, 210, 255, 145);
+        constexpr int kShadeCount = sizeof(kEngineShades) / sizeof(kEngineShades[0]);
+        const NVGcolor color = kEngineShades[
+            state >= 0 && state < kShadeCount ? state : kShadeCount - 1];
         const Vec c = box.size.div(2.f);
         nvgBeginPath(args.vg);
         nvgCircle(args.vg, c.x, c.y, 5.2f);
@@ -877,11 +895,12 @@ struct EngineCycleLatch : VCVLatch {
 
     engine_config = """
 else if (c.id == ENGINE_A || c.id == ENGINE_B) {
-    configSwitch(c.id, 0.f, 2.f, init, "Engine", {"Synth", "Sampler", "Wave"});
+    configSwitch(c.id, 0.f, 4.f, init, "Engine",
+                 {"Synth", "Sampler", "Wave", "Body", "BBD"});
     getParamQuantity(c.id)->snapEnabled = true;
 }"""
     if compact_cpp(config).count(compact_cpp(engine_config)) != 1:
-        issues.append("ENG config must be one snapped Synth/Sampler/Wave 0/1/2 branch")
+        issues.append("ENG config must be one snapped Synth/Sampler/Wave/Body/BBD 0..4 branch")
 
     engine_widget = """
 case WK_LATCH:
@@ -901,10 +920,12 @@ const int eng = static_cast<int>(std::round(pp(ENGINE_A, p)));
 const spky::EngineId id =
     eng == 0 ? spky::ENGINE_SYNTH :
     eng == 2 ? spky::ENGINE_WAVE :
+    eng == 3 ? spky::ENGINE_BODY :
+    eng == 4 ? spky::ENGINE_BBD :
     smp[p].testTone ? spky::ENGINE_TEST_TONE : spky::ENGINE_SAMPLER;
 inst.set_engine(p, id);"""
     if push_n.count(compact_cpp(dispatch)) != 1:
-        issues.append("ENG dispatch must exactly preserve Synth/Sampler/Wave/test-tone states")
+        issues.append("ENG dispatch must exactly preserve Synth/Sampler/Wave/Body/BBD/test-tone states")
     factory = "if(eng==1&&!smp[p].testTone&&inst.sampler_empty(p)&&!factoryTried[p]){"
     if push_n.count(factory) != 1:
         issues.append("factory autoload must be restricted to ENG state 1")
@@ -977,8 +998,10 @@ def test_engine_cycle_guard_rejects_representative_regressions():
     mutations = [
         ("createParamCentered<EngineCycleLatch>",
          "createParamCentered<VCVLatch>", "widget"),
-        ("nvgRGBA(120, 210, 255, 145)",
-         "nvgRGBA(121, 210, 255, 145)", "latch"),
+        ("state >= 0 && state < kShadeCount",
+         "state >= 0 && state <= kShadeCount", "latch"),
+        ("nvgRGBA(230, 140, 255, 140),  // BBD: violet",
+         "nvgRGBA(230, 140, 255, 141),  // BBD: violet", "shade values"),
         ("if (eng == 1 && !smp[p].testTone",
          "if (eng > 0 && !smp[p].testTone", "factory"),
         ("const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;",
@@ -1039,9 +1062,9 @@ def source_detune_wiring_issues(cpp):
         (compact_cpp(
             'auto* source = configParam(c.id, 0.f, 1.f, init, '
             'c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");'
-            'source->description = "Controls Synth TIMB, Wave FRAME, or '
-            'Sampler ORG according to the selected engine.";'),
-         "SOURCE A/B need stable names and a TIMB/FRAME/ORG description"),
+            'source->description = "Controls Synth TIMB, Sampler ORG, Wave '
+            'FRAME, or Body MATL according to the selected engine.";'),
+         "SOURCE A/B need stable names and a TIMB/FRAME/ORG/MATL description"),
     ):
         if required not in config_n:
             issues.append(label)
@@ -1107,8 +1130,8 @@ def test_source_detune_guard_rejects_representative_regressions():
          "DETUNE_A, 0.f, 1.f, initParamDefault(DETUNE_A), \"Detune A\"",
          "Detune B quantity"),
         ("\"Detune B\"", "\"Detune\"", "Detune B name"),
-        ("Synth TIMB, Wave FRAME, or Sampler ORG",
-         "Synth COLOR, Wave POSITION, or Sampler START",
+        ("Synth TIMB, Sampler ORG, Wave FRAME, or Body MATL",
+         "Synth COLOR, Sampler POSITION, Wave START, or Body SHAPE",
          "SOURCE description"),
         ("\"Reset to 6.0 ct\"", "\"Reset\"", "menu reset"),
         ("string::f(\"%.1f ct\"", "string::f(\"%.0f ct\"",
@@ -1130,12 +1153,13 @@ def source_caption_wiring_issues(cpp):
     widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
     expected_mapping = """
 static const char* sourceCaption(int state) {
-    return state == 1 ? "ORG" : state == 2 ? "FRAME" : "TIMB";
+    return state == 1 ? "ORG" : state == 2 ? "FRAME"
+         : state == 3 ? "MATL" : state == 4 ? "DRIVE" : "TIMB";
 }"""
     if mapping is None:
         issues.append("SOURCE caption mapping scope is missing")
     elif compact_cpp(mapping) != compact_cpp(expected_mapping):
-        issues.append("SOURCE caption mapping must be 0 TIMB, 1 ORG, 2 FRAME")
+        issues.append("SOURCE caption mapping must be 0 TIMB, 1 ORG, 2 FRAME, 3 MATL, 4 DRIVE")
 
     if panel is None:
         issues.append("SOURCE caption PanelText scope is missing")
@@ -1245,30 +1269,34 @@ def test_sampler_preset_init_snapshot():
             actual.append(float(value.removesuffix("f")))
 
     expected = [
-        0.20466864109039307, 0.61599999666213989, 0.69518107175827026,
-        1.0, 0.84406059980392456, -0.76896363496780396,
-        0.6036144495010376, 0.5, 0.0, 0.32266658544540405,
-        0.3190000057220459, 0.45866644382476807, 0.5,
-        0.6773335337638855, 0.0, 0.62966680526733398, 16.0, 0.0,
-        1.0, 1.0, 2.0, 0.0, 0.0,
-        0.18674719333648682, 0.60000002384185791,
-        0.31939762830734253, 0.30000001192092896,
-        0.26144576072692871, -0.69156646728515625,
-        0.34457823634147644, 0.5, 0.0, 0.4506666362285614,
-        0.37900000810623169, 0.4,
-        0.5, 0.46266642212867737,
-        0.057000085711479187, 0.71099996566772461, 8.0, 1.0, 0.0,
-        1.0, 2.0, 0.0, 0.0,
-        0.49277070164680481, 1.0, 0.5, 1.0, 4.0, 0.0, 0.0,
-        0.79066669940948486, 0.0, 0.64266586303710938,
-        0.66399866342544556, 0.76133310794830322,
-        0.86299997568130493, 0.48400050401687622,
-        0.2370000034570694, 0.0, 0.064333423972129822,
-        -0.2460000067949295, 0.5, 0.39272749423980713,
-        0.36363637447357178, 0.28566798567771912,
-        0.43933644890785217, 0.0, 0.0, 0.0, 0.0, 0.8, 0.8,
-        0.0, 0.0, 0.43066525459289551, 0.21200035512447357, 1.0,
-        0.171428576, 0.171428576, 0.2, 0.2,
+        0.116716892, 0.0, 0.695181072,
+        0.995180666, 0.0, 0.0,
+        0.612047195, 0.0, 0.185333401,
+        0.322666585, 0.319000006, 0.458666444,
+        0.438666672, 0.86400038, 0.0,
+        0.629666805, 16.0, 0.0,
+        1.0, 0.0, 2.0,
+        0.0, 0.0, 0.202409565,
+        0.899999678, 0.64457792, 0.613253355,
+        0.0, -1.0, 0.35783118,
+        0.0, 0.093333311, 0.450666398,
+        0.217333555, 0.319999605, 0.177333504,
+        1.0, 0.0, 0.561333418,
+        16.0, 3.0, 0.0,
+        0.0, 2.0, 0.0,
+        0.0, 0.785541892, 1.0,
+        0.169333577, 1.0, 5.0,
+        0.958666623, 0.0, 0.482666761,
+        0.0, 0.869332671, 0.790665507,
+        0.761333108, 0.862999976, 0.484000504,
+        0.237000003, 0.0, -0.172999933,
+        -0.19999963, 0.0, 0.392727494,
+        0.25466612, 0.285667986, 0.555337131,
+        0.0, 0.469879329, 0.0,
+        0.0, 0.800000012, 1.0,
+        0.0, 0.0, 0.422665179,
+        0.613332987, 0.0, 0.171428576,
+        0.171428576, 0.200000003, 0.200000003,
     ]
     check(len(actual) == len(PARAM_ORDER) == len(expected),
           f"init snapshot has {len(actual)} values, want {len(PARAM_ORDER)}")

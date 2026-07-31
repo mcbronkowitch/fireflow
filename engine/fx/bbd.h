@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include "mod/rng.h"
 #include "util/fast_tanh.h"
 #include "util/math.h"
 
@@ -319,6 +320,7 @@ public:
         ptick_ = 0;
         ybbd_old_ = 0.f;
         loss_z_ = 0.f;
+        rng_.seed(0x9e3779b9u);
         for (int m = 0; m < bbd_tuning::kFiltOrder; ++m) {
             Xin_[m] = Cf{};
             Xout_mem_[m] = Cf{};
@@ -348,6 +350,22 @@ public:
 
     int cells() const { return cells_; }
 
+    // FILT. The loss pole is the pole that actually carries the darkness --
+    // at 16384 stages the fixed Butterworth chain contributes only -0.93 dB at
+    // 2.5 kHz. kFilterHz cannot be a knob: it is constexpr, baked into two
+    // file-scope singletons every line holds raw pointers into, and a rebuild
+    // is 396 transcendentals (see bbd.h:270-281).
+    void SetLossCoef(float a) {
+        loss_a_ = a < 1e-4f ? 1e-4f : (a > 0.999f ? 0.999f : a);
+    }
+    // A few LSBs injected at the WRITE tick. The compander exists to manage the
+    // BBD's 75 dB noise floor, which this model does not have: zero in, zero
+    // state, zero out, forever, at any feedback. Behind Flux's SoftSwitch that
+    // never mattered. An always-on part engine with FEEDBACK up and nothing
+    // connected would otherwise produce bit-exact silence. 0 keeps the old path.
+    void SetDither(float amp) { dither_ = amp < 0.f ? 0.f : amp; }
+    void SeedDither(uint32_t s) { rng_.seed(s); }
+
     float Process(float in) {
         Cf Xout[bbd_tuning::kFiltOrder] = {};
 
@@ -373,8 +391,24 @@ public:
                     float s = 0.f;
                     for (int m = 0; m < bbd_tuning::kFiltOrder; ++m)
                         s += g[m].re * Xin_[m].re - g[m].im * Xin_[m].im;
-                    loss_z_ += bbd_tuning::kLossCoef * (s - loss_z_);
-                    mem_[imem_] = loss_z_;
+                    loss_z_ += loss_a_ * (s - loss_z_);
+                    // Denormal floor: geometric decay parks every one of these
+                    // states in the denormal range during a long silence, and
+                    // the buffer fills with them -- a large, load-dependent
+                    // stall on x86. Same idiom as comp.cpp:56 / limiter.h:37.
+                    //
+                    // BbdLine is shared with Flux (fx/flux.h), so this floor
+                    // also changes Flux's tail below -180 dBFS -- inaudible,
+                    // and it is the same class of change comp.cpp/limiter.h
+                    // already made unconditionally, but it is stated here
+                    // because spec 5.9 mandated the floor for the BBD part
+                    // engine and was silent about Flux: DELIBERATE, applies to
+                    // every BbdLine/BbdEcho user including Flux. See spec
+                    // §5.9.
+                    if (loss_z_ < 1e-9f && loss_z_ > -1e-9f) loss_z_ = 0.f;
+                    mem_[imem_] = dither_ != 0.f
+                                      ? loss_z_ + dither_ * rng_.next_bipolar()
+                                      : loss_z_;
                     imem_ = (imem_ + 1 < cells_) ? imem_ + 1 : 0;
                 } else {
                     // READ phase: imem_ points at the oldest cell. The output
@@ -384,6 +418,9 @@ public:
                     const float ybbd = mem_[imem_];
                     const float delta = ybbd - ybbd_old_;
                     ybbd_old_ = ybbd;
+                    // Same denormal floor, same Flux-shared scope -- see the
+                    // loss_z_ flush above, a few lines up, for the full note.
+                    if (ybbd_old_ < 1e-9f && ybbd_old_ > -1e-9f) ybbd_old_ = 0.f;
                     for (int m = 0; m < bbd_tuning::kFiltOrder; ++m)
                         Xout[m] = cf_add(Xout[m], cf_scale(g[m], delta));
                 }
@@ -423,6 +460,9 @@ private:
     uint32_t ptick_ = 0;        // parity picks write vs read
     float    ybbd_old_ = 0.f;
     float    loss_z_ = 0.f;     // charge-transfer loss, one pole at f_clk/4
+    float    loss_a_ = bbd_tuning::kLossCoef;
+    float    dither_ = 0.f;
+    Rng      rng_;
     Cf       Xin_[bbd_tuning::kFiltOrder];
     Cf       Xout_mem_[bbd_tuning::kFiltOrder];
 };
@@ -498,11 +538,15 @@ public:
     BbdEcho& operator=(const BbdEcho&) = delete;
 
     void Init(float sample_rate, float* buf, size_t max_cells) {
+        sr_ = sample_rate > 0.f ? sample_rate : 48000.f;
         line_.Init(buf, max_cells, sample_rate);
         comp_.Init(sample_rate);
         feedback_ = 0.f;
         fb_state_ = 0.f;
         SetDrive(0.f);
+        SetFeedbackTilt(0.f, 4000.f);
+        dc_on_ = false;
+        Reset();
     }
 
     void SetFeedback(float fb) { feedback_ = fb; }
@@ -565,9 +609,65 @@ public:
 
     void SetStages(int stages) { line_.SetStages(stages); }
 
+    // Clears the line, the compander envelopes and the feedback state. Needed
+    // because Part has no swap-away notification: an engine switched away from
+    // and back to would otherwise return the previous take's charge. BbdLine::
+    // Reset was private to this class and BbdEcho exposed nothing.
+    void Reset() {
+        line_.Reset();
+        comp_.Reset();
+        fb_state_ = 0.f;
+        tilt_z_ = 0.f;
+        dc_x1_ = 0.f;
+        dc_y1_ = 0.f;
+    }
+
+    void SetLossCoef(float a) { line_.SetLossCoef(a); }
+    void SetDither(float amp) { line_.SetDither(amp); }
+    void SeedDither(uint32_t s) { line_.SeedDither(s); }
+
+    // RESONANCE, and the freeze's spectral leg. A one-pole shelf on the
+    // FEEDBACK path only: y = x + tilt * (x - lp(x)). tilt > 0 restores what
+    // the loss pole took, so repeats keep their brightness; tilt < 0 darkens
+    // faster than physics. EXACTLY 0 is `y = x`, hence bit-exact.
+    //
+    // Why the freeze needs it: the compander's round trip is L^2, not L (with
+    // constant inner gain L, compressor -> line -> expander measures L^2 above
+    // about -40 dBFS and L below it), so a scalar loop gain cannot hold a
+    // spectrum -- at 8192 stages, k tuned for 1 kHz leaves 110 Hz at +7.2 dB
+    // and 2.5 kHz at -48.8 dB after ten circulations. Flattening L to ~1 with
+    // this tilt is what makes L^2 harmless and makes one scalar sufficient.
+    void SetFeedbackTilt(float tilt, float corner_hz) {
+        tilt_ = tilt;
+        const float fc = corner_hz > 1.f ? corner_hz : 1.f;
+        float c = 1.f - std::exp(-2.f * 3.14159265f * fc / sr_);
+        tilt_c_ = c > 1.f ? 1.f : (c < 1e-5f ? 1e-5f : c);
+    }
+
+    // The AMOUNT only, leaving the corner where SetFeedbackTilt last put it.
+    // One store, no libm -- which is the entire reason it exists.
+    //
+    // The freeze crossfades the tilt from 0 to kFreezeTilt over ATTACK, i.e.
+    // per sample, while its corner (f_clk/4) cannot move during that ramp:
+    // nothing recomputes the clock inside an audio block. Calling the setter
+    // above for that would re-evaluate an exp() whose argument is provably
+    // unchanged, on up to two out of three samples in the audio callback at
+    // ATTACK minimum. engine/** may not call libm per sample at all, so this
+    // is not a budget question -- see BbdEngine::_push_freeze(), the only
+    // caller, and BbdEngine::_apply_freeze() for where the corner is set.
+    void SetFeedbackTiltAmount(float tilt) { tilt_ = tilt; }
+
+    // The Butterworth sections are normalised H(0)=1 and the loss pole is unity
+    // at DC, so any loop gain above unity at 1 kHz is strictly above unity at
+    // DC and grows monotonically until it parks the saturator. daisysp::DcBlock
+    // idiom, as part.cpp:385 uses it.
+    void SetFeedbackDcBlock(bool on) { dc_on_ = on; }
+
+    float FeedbackState() const { return fb_state_; }
+
     float Process(float in, float clock_hz) {
         line_.SetClock(clock_hz);
-        const float x = in + fb_state_ * feedback_;
+        const float x = in + fb_path(fb_state_) * feedback_;
         // MN3005 ceiling: the loop saturates softly and then self-oscillates
         // as a thick distorted tone rather than a screech.
         const float sat = fast_tanh(x * sat_in_) * sat_out_;
@@ -577,12 +677,47 @@ public:
     }
 
 private:
+    // Identity when tilt_ == 0 and dc_on_ == false -- the two defaults -- so
+    // the shipped Flux path is bit-exact through it.
+    float fb_path(float x) {
+        if (dc_on_) {
+            const float y = x - dc_x1_ + 0.999f * dc_y1_;
+            dc_x1_ = x;
+            dc_y1_ = y;
+            // Same denormal floor as BbdLine::Process (fx/bbd.h, loss_z_
+            // comment). Unlike THAT pair, this one is dead code for Flux
+            // specifically: Flux never calls SetFeedbackDcBlock, dc_on_ stays
+            // at Init()'s false forever, and this branch is never taken on a
+            // Flux-driven BbdEcho. Reachable only through BbdEngine's freeze
+            // (spec 5.6), which is the one caller of SetFeedbackDcBlock(true).
+            if (dc_y1_ < 1e-9f && dc_y1_ > -1e-9f) dc_y1_ = 0.f;
+            x = y;
+        }
+        if (tilt_ != 0.f) {
+            tilt_z_ += tilt_c_ * (x - tilt_z_);
+            // Same note as dc_y1_ above: dead for Flux, which never calls
+            // SetFeedbackTilt/SetFeedbackTiltAmount with a nonzero tilt, so
+            // this guard is never open on a Flux-driven BbdEcho. Reachable
+            // only through BbdEngine's RESONANCE/freeze (spec 5.6/5.8).
+            if (tilt_z_ < 1e-9f && tilt_z_ > -1e-9f) tilt_z_ = 0.f;
+            x += tilt_ * (x - tilt_z_);
+        }
+        return x;
+    }
+
     BbdLine   line_;
     Compander comp_;
     float feedback_ = 0.f;
     float sat_in_ = 1.f;
     float sat_out_ = 1.f;
     float fb_state_ = 0.f;
+    float sr_ = 48000.f;
+    float tilt_ = 0.f;
+    float tilt_c_ = 1e-5f;
+    float tilt_z_ = 0.f;
+    bool  dc_on_ = false;
+    float dc_x1_ = 0.f;
+    float dc_y1_ = 0.f;
 };
 
 }  // namespace spky

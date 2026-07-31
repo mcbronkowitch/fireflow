@@ -12,7 +12,8 @@ static_assert(ModLane::kTickInterval == SynthEngine::kCtrlInterval,
 
 void Part::init(float sample_rate, uint32_t seed_base,
                 float* echo,
-                SampleBuffer::Frame* sampler_mem, size_t sampler_frames) {
+                SampleBuffer::Frame* sampler_mem, size_t sampler_frames,
+                float* bbd_l, float* bbd_r) {
     _sr = sample_rate;
     _mod.init(sample_rate, seed_base);
     _tone.init(sample_rate);
@@ -22,6 +23,8 @@ void Part::init(float sample_rate, uint32_t seed_base,
     _wave.init(sample_rate);
     _body.set_seed(seed_base ^ 0x424F4459u);    // "BODY", own drift + string noise
     _body.init(sample_rate);
+    _bbd.init(sample_rate);
+    _bbd.init_buffers(bbd_l, bbd_r, BbdEngine::kCells);
     _sampler.set_seed(seed_base ^ 0x5A11E20Du);
     _sampler.set_memory(sampler_mem, sampler_frames);
     _sampler.init(sample_rate);
@@ -220,7 +223,13 @@ void Part::_control_tick() {
     // Unquantized, the centre is exactly 1.0 for every scale and root, and the
     // knob transposes continuously (the author's call: out-of-tune material has
     // to be tunable to the key, which a semitone grid cannot do).
-    _pitch_q = _engine_id == ENGINE_SAMPLER ? pitch_raw : pitch_quantized;
+    // The SAMPLER does not quantize (see the comment above). The BBD does not
+    // either, but only in FLOW: STEP puts the clock on scale steps so the bend
+    // is in the key, and FLOW leaves it continuous, which is the gesture FLOW
+    // exists for.
+    _pitch_q = (_engine_id == ENGINE_SAMPLER ||
+                (_engine_id == ENGINE_BBD && !_step_on)) ? pitch_raw
+                                                         : pitch_quantized;
     _tg[LANE_PITCH] = clampf(_pitch_q + _detune_cents * (1.f / 3600.f), 0.f, 1.f);
 
     // MOTION's Scatter startet auf einem Sampler-Deck bei null, nicht bei der
@@ -287,6 +296,11 @@ void Part::_control_tick() {
         : 0.f;
     _color_eff = clampf(_color + cmod, 0.f, 1.f);
     _chord.set_color(_color_eff);
+    // Stereo width (spec 5.7, Task 7): the SAME effective COLOR the chord
+    // layer just received, so a BBD deck's width breathes with MOTION exactly
+    // the way the chord surface does. Default no-op (engine_iface.h), so
+    // every other engine is untouched.
+    _engine->set_width(_color_eff);
 
     // DENS -> grain overlap, with MOTION's swing on top (spec 2026-07-21
     // morphagene-controls). Pushed straight at _sampler rather than through
@@ -403,6 +417,10 @@ void Part::_engine_swap() {
     _engine_id = _pending_engine;
     _engine = _engine_for(_engine_id);
     _engine_wants_in = _engine->consumes_input();   // pairs with _engine
+    // The BBD holds charge, and IPartEngine has no swap-away notification --
+    // Part only ever pushes state INTO the engine being swapped in. Without
+    // this a deck switched away from and back to returns the previous take.
+    if (_engine_id == ENGINE_BBD) _bbd.reset();
     _engine->set_flow(!_step_on);                          // re-sync state
     _engine->set_hold(_inhibit);
     _engine->set_gate(_last_gate);   // the freshly swapped-in engine
@@ -434,6 +452,7 @@ void Part::_fire_trigger() {
         _sampler.set_phrase_pos(slot, _mod.pitch_steps(),
                                 pg_metric_weight(slot));
     }
+    if (_engine_id == ENGINE_BBD) _bbd.latch_clock();
     float chord[ChordBuilder::kMaxNotes];
     // build() unconditionally, for the same state reason as apply() in
     // _control_tick.

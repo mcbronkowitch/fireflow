@@ -276,7 +276,7 @@ TEST_CASE("part: engine switch test tone <-> synth is click-free") {
     CHECK(p.engine_id() == ENGINE_SYNTH);   // second switch completed
 }
 
-TEST_CASE("part: engine ids stay patch-stable when WAVE is appended") {
+TEST_CASE("part: engine ids stay patch-stable when BBD is appended") {
     CHECK(ENGINE_TEST_TONE == 0);
     CHECK(ENGINE_SYNTH == 1);
     CHECK(ENGINE_SAMPLER == 2);
@@ -284,6 +284,7 @@ TEST_CASE("part: engine ids stay patch-stable when WAVE is appended") {
     // Appended, never renumbered: a saved patch stores the id, so moving one
     // silently reassigns every deck that used it.
     CHECK(ENGINE_BODY == 4);
+    CHECK(ENGINE_BBD == 5);
 }
 
 TEST_CASE("part: BODY switches through the existing 4 ms engine fade") {

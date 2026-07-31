@@ -8,6 +8,7 @@
 #include "generated_panel.hpp"   // enums + control table (generated from res/gen_panel.py)
 #include "init_patch.hpp"       // sampler.vcvm snapshot + non-param init state
 #include "form_song_migration.hpp"
+#include "bbd_edge_state.hpp"   // ENG->BBD edge detector (dependency-free, unit-tested)
 
 // The portable engine core -- exactly the same headers the desktop render host
 // and (later) the Daisy firmware use. No hardware type crosses this boundary.
@@ -103,7 +104,7 @@ struct ParamMenuSlider : ui::Slider {
     }
 };
 
-// ENG is a four-position Rack switch (Synth/Sampler/Wave/Body). VCVLatch
+// ENG is a five-position Rack switch (Synth/Sampler/Wave/Body/BBD). VCVLatch
 // retains Rack's native switch handling; this overlay only makes the
 // non-Synth positions readable at a glance without changing its footprint.
 // Indexed defensively: an out-of-range state (there isn't one today) reuses
@@ -113,6 +114,7 @@ static const NVGcolor kEngineShades[] = {
     nvgRGBA(255, 174, 92, 105),   // Sampler: amber
     nvgRGBA(120, 210, 255, 145),  // Wave: blue
     nvgRGBA(160, 255, 150, 140),  // Body: green
+    nvgRGBA(230, 140, 255, 140),  // BBD: violet
 };
 struct EngineCycleLatch : VCVLatch {
     void drawLayer(const DrawArgs& args, int layer) override {
@@ -172,6 +174,9 @@ struct Spotymod : Module {
     // 64 KB of echo buffer (was 128 KB before the mono-echo collapse) + one
     // ~130 KB reverb, held per module instance.
     float echo[spky::PART_COUNT][spky::Flux::kMaxSamples];
+    // The BBD part engine's two lines per deck, held by value like the echo
+    // buffer above: 32 KB per line, 128 KB per module instance.
+    float bbd[spky::PART_COUNT][2][spky::BbdEngine::kCells];
     spky::AmbientReverb reverb;
 
     // The texture deck's record buffers. Unlike the echo/reverb memory above
@@ -198,6 +203,16 @@ struct Spotymod : Module {
     // pushParams (audio thread) only ever reads factoryL/factoryR -- a
     // memcpy via inst.load_sample, no disk I/O and no resample.
     bool factoryTried[spky::PART_COUNT] = {false, false};
+    // Edge-detects the ENG switch landing on BBD, so the FLUX-off and
+    // excite-other-deck defaults below (spec 5.11/5.12) apply once on a
+    // genuine player-driven transition and never fight a player who
+    // deliberately turns them back on afterward -- and never fire at all on
+    // a RESTORE that lands on BBD (fresh add, whole-patch load, Ctrl+D
+    // duplicate, or an already-live preset Load/paste -- see
+    // dataFromJson()'s rearm() call). Full reasoning, and why this is its
+    // own unit-tested type rather than inline bools, lives in
+    // bbd_edge_state.hpp.
+    spkyvcv::BbdEdgeState bbdEdge[spky::PART_COUNT];
     spky::WavData factoryNative;
     bool factoryNativeTried = false;
     std::vector<float> factoryL, factoryR;
@@ -216,8 +231,11 @@ struct Spotymod : Module {
     Spotymod() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
         configControls();
-        for (int p = 0; p < spky::PART_COUNT; ++p)
+        for (int p = 0; p < spky::PART_COUNT; ++p) {
             fxmem.echo[p] = echo[p];
+            fxmem.bbd[p][0] = bbd[p][0];
+            fxmem.bbd[p][1] = bbd[p][1];
+        }
         fxmem.reverb = &reverb;
         ctrlDiv.setDivision(16);
     }
@@ -285,8 +303,8 @@ struct Spotymod : Module {
                         configSwitch(c.id, 0.f, 1.f, init, "Record",
                                      {"Stopped", "Recording"});
                     else if (c.id == ENGINE_A || c.id == ENGINE_B) {
-                        configSwitch(c.id, 0.f, 3.f, init, "Engine",
-                                     {"Synth", "Sampler", "Wave", "Body"});
+                        configSwitch(c.id, 0.f, 4.f, init, "Engine",
+                                     {"Synth", "Sampler", "Wave", "Body", "BBD"});
                         getParamQuantity(c.id)->snapEnabled = true;
                     }
                     else if (c.id == GRITMODE_A || c.id == GRITMODE_B)
@@ -420,7 +438,9 @@ struct Spotymod : Module {
             // wrong id — the explicit ternary is required (see FLUXRATE/FLUXFB).
             inst.set_drive(p, params[p ? DRIVE_B : DRIVE_A].getValue());
             inst.set_link(p, params[p ? LINK_B : LINK_A].getValue());
-            inst.set_stages(p, params[p ? STAGES_B : STAGES_A].getValue());
+            // STAGES itself is pushed further down, alongside samplerPart's
+            // analogous re-point gate -- it needs this tick's dispatched
+            // engine_id(p), which set_engine (below) hasn't set yet here.
             // The FX blocks are gated by an explicit on/off (a pad on hardware,
             // a scenario action on the desktop). VCV has no such pad, so the mix
             // knob doubles as the on switch: knob up == engaged. At 0 the block
@@ -430,16 +450,17 @@ struct Spotymod : Module {
             inst.set_comp(p, pp(COMP_A, p));
 
             // Saved ENG meanings remain 0 = Synth and 1 = Sampler; 2 adds
-            // Wave, 3 adds Body. Each new engine needs its own explicit arm
-            // here -- anything that isn't 0/2/3 still falls through to
+            // Wave, 3 Body, 4 the BBD. Each new engine needs its own explicit
+            // arm here -- anything that isn't 0/2/3/4 still falls through to
             // Sampler (or the dev test tone), which is also why old patches
-            // (which only ever stored 0..2) keep their exact meaning. The
-            // development test tone remains a Sampler-only override.
+            // keep their exact meaning. The test tone stays a Sampler-only
+            // override.
             const int eng = static_cast<int>(std::round(pp(ENGINE_A, p)));
             const spky::EngineId id =
                 eng == 0 ? spky::ENGINE_SYNTH :
                 eng == 2 ? spky::ENGINE_WAVE :
                 eng == 3 ? spky::ENGINE_BODY :
+                eng == 4 ? spky::ENGINE_BBD :
                 smp[p].testTone ? spky::ENGINE_TEST_TONE : spky::ENGINE_SAMPLER;
             inst.set_engine(p, id);
 
@@ -518,6 +539,61 @@ struct Spotymod : Module {
             const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;
             inst.sampler_overlap(p, pp(DENSITY_A, p));
             inst.set_target_base(p, spky::LANE_SOURCE, pp(SOURCE_A, p));
+
+            // Ledger of every lane base this function re-points per engine, so
+            // the next addition has one place to check itself against rather
+            // than re-discovering the rule by breaking it a third time:
+            //   - LANE_SIZE:  sampler-only (SUB_A -> GENE SIZE), restored to
+            //                 0.5f below when the deck is not the sampler.
+            //   - LANE_PITCH: BBD-only (STAGES_A/B), restored to 0.5f in the
+            //                 else branch immediately below.
+            // The restoring else is not optional for either: a base is part of
+            // Part's persistent state, so an engine that stops being asked for
+            // one keeps whatever the LAST asker left there.
+            const bool bbdPart = inst.engine_id(p) == spky::ENGINE_BBD;
+            // STAGES is orphaned by movement 3 and becomes the LANE_PITCH base
+            // on a BBD deck. Re-pointing a knob per engine is not new -- the
+            // sampler already moves SUB_A to LANE_SIZE as GENE SIZE.
+            //
+            // STAGES_A/B are appended params (outside the stride, like
+            // DRIVE/LINK above), so pp(STAGES_A, p) is wrong for Part B: it
+            // would read params[STAGES_A + PART_STRIDE] = params[73 + 23] =
+            // params[96], past the end of the 84-entry array. The explicit
+            // ternary is required, exactly as for DRIVE/LINK.
+            //
+            // The else branch is load-bearing, same as GENE SIZE below: LANE_
+            // PITCH's base is written NOWHERE else in this function, and on a
+            // Synth/Wave/Body deck that base is a real transposition (it feeds
+            // pitch_pre_quant). Flip a deck to BBD, move STAGES, flip back --
+            // without this restore, _base[LANE_PITCH] would keep whatever
+            // STAGES last set it to, forever, on an engine that never touches
+            // LANE_PITCH itself.
+            if (bbdPart)
+                inst.set_target_base(p, spky::LANE_PITCH,
+                    params[p ? STAGES_B : STAGES_A].getValue());
+            else {
+                inst.set_stages(p, params[p ? STAGES_B : STAGES_A].getValue());
+                inst.set_target_base(p, spky::LANE_PITCH, 0.5f);
+            }
+
+            if (bbdEdge[p].tick(bbdPart)) {
+                // Genuine player-driven entry into BBD (see bbd_edge_state.hpp
+                // for why a restore can never reach this branch).
+                //
+                // FLUX defaults disengaged (spec 5.11). The BBD's output is
+                // already six poles at 3600 Hz plus a loss pole breathing under
+                // a compander, and its gappy repeats are its most distinctive
+                // trait -- which a tape echo behind it fills in. The player can
+                // add it back; the default should not be darker-and-smeared.
+                params[p ? FLUX_B : FLUX_A].setValue(0.f);
+                // The silence trap's first half (spec 5.12): a BBD deck with no
+                // source selected is an FX unit wired to nothing. Default the
+                // neighbouring deck ON. Audio-in already reaches process_in
+                // unconditionally through Part::process; what the checkbox gates
+                // is the cross-deck bus (movement 1, Part::_src_deck), and that
+                // is what makes resampling work without external cabling.
+                smp[p].exciteOtherDeck = true;
+            }
 
             // SCAN nur fuer Sampler-Parts (K-03). Der urspruengliche Grund --
             // set_scan -> scan_rate enthielt im unteren Zweig ein std::pow,
@@ -789,6 +865,21 @@ struct Spotymod : Module {
         if (curSr > 0.f) {
             pendingRestore = false;
             restoreSamplerContent();
+            // This is a restore into an ALREADY-LIVE module (right-click Load
+            // preset / module paste), not a fresh add -- pushParams() has
+            // already run at least once, so bbdEdge[p] is already seeded from
+            // BEFORE this restore. Re-arm both parts (see bbd_edge_state.hpp)
+            // so the very next control tick treats whatever ENG this JSON
+            // just set as a fresh baseline, not a transition -- otherwise a
+            // preset saved on BBD, loaded onto a module currently on a
+            // different engine, would fire the "entering BBD" edge and
+            // clobber that preset's own saved FLUX/exciteOtherDeck. The
+            // fresh-add path (curSr == 0.f, the else branch below) needs no
+            // such re-arm: no tick has run yet, so bbdEdge[p] is still at its
+            // construction-time unseeded state and the ordinary first-tick
+            // baseline in tick() already applies.
+            for (int p = 0; p < spky::PART_COUNT; ++p)
+                bbdEdge[p].rearm();
         } else {
             pendingRestore = true;
         }
@@ -1064,7 +1155,8 @@ struct SpkyRing : Widget {
 // v2 install -- note it has no bold cut, so the SVG's bold legends render
 // regular here. That is accepted.
 static const char* sourceCaption(int state) {
-    return state == 1 ? "ORG" : state == 2 ? "FRAME" : state == 3 ? "MATL" : "TIMB";
+    return state == 1 ? "ORG" : state == 2 ? "FRAME"
+         : state == 3 ? "MATL" : state == 4 ? "DRIVE" : "TIMB";
 }
 
 struct PanelText : Widget {
@@ -1268,26 +1360,30 @@ struct SpotymodWidget : ModuleWidget {
         // "Excite: FLUX tape" and "Excite: audio in" are still exactly what
         // they say: BODY-only, inert everywhere else. "Excite: other deck"
         // is NOT -- exciteOtherDeck feeds Part::_src_deck, which now gates
-        // TWO paths: BODY's control-rate excitation bus (unchanged) AND the
-        // audio-rate cross-deck bus, which today only SAMPLER consumes
-        // (process_in()). So on a SAMPLER deck this flag went from inert to
-        // live: it audibly routes and records the neighbouring deck, and --
-        // because the bound is fast_tanh(engine_in + neighbour) rather than
-        // a separate path -- it also puts the deck's own external audio-in
-        // through fast_tanh for the first time even when the neighbour is
-        // silent (tanh(1) ~ 0.76), measurably attenuating audio-in
-        // monitoring/recording on that deck. A patch saved with this flag on
-        // for a SAMPLER deck therefore behaves differently after upgrading
-        // to this branch. Neither consequence is a bug -- see the spec
-        // section above -- but the label has to say so, because the old
-        // name promised BODY-only and nothing here enforces that anymore.
+        // THREE paths: BODY's control-rate excitation bus (unchanged), the
+        // audio-rate cross-deck bus SAMPLER consumes (process_in()), and now
+        // the same bus BBD consumes to feed its delay line (spec 5.12's
+        // silence-trap fix -- a BBD deck with no external cabling still has
+        // something to echo). So on a SAMPLER or BBD deck this flag went
+        // from inert to live: it audibly routes (and, for SAMPLER, records)
+        // the neighbouring deck, and -- because the bound is
+        // fast_tanh(engine_in + neighbour) rather than a separate path -- it
+        // also puts the deck's own external audio-in through fast_tanh for
+        // the first time even when the neighbour is silent (tanh(1) ~ 0.76),
+        // measurably attenuating audio-in monitoring/recording on that deck.
+        // A patch saved with this flag on for a SAMPLER or BBD deck
+        // therefore behaves differently after upgrading to this branch.
+        // Neither consequence is a bug -- see the spec sections above -- but
+        // the label has to say so, because the old name promised BODY-only
+        // and nothing here enforces that anymore.
         for (int p = 0; p < spky::PART_COUNT; ++p) {
             const std::string name = p ? "Excite B" : "Excite A";
             menu->addChild(createSubmenuItem(name, "", [m, p](Menu* sub) {
                 sub->addChild(createBoolPtrMenuItem("Excite: FLUX tape", "",
                                                     &m->smp[p].exciteTape));
                 sub->addChild(createBoolPtrMenuItem(
-                    "Route: other deck (BODY excite, SAMPLER feed+rec)", "",
+                    "Route: other deck (BODY excite, SAMPLER feed+rec, "
+                    "BBD feed)", "",
                     &m->smp[p].exciteOtherDeck));
                 sub->addChild(createBoolPtrMenuItem("Excite: audio in", "",
                                                     &m->smp[p].exciteAudioIn));

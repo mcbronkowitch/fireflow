@@ -123,47 +123,110 @@ TEST_CASE("deck bus: the engine input is bounded") {
     }
 }
 
-// Only SamplerEngine overrides IPartEngine::consumes_input() (returns true,
-// sampler_engine.h:121); every other engine keeps the base default of false
-// (engine_iface.h:75), so Part::process's `if (_engine_wants_in)` guard --
-// the outer guard around the process_in() call site in part.h -- never even
-// calls process_in() for TEST_TONE, SYNTH, WAVE, or BODY. The `if (_src_deck)`
-// check nested inside that guard is therefore structurally unreachable for
-// those four, not merely untested by them. (Line numbers deliberately not
-// cited here: this comment already went stale once, within this same branch,
-// when the SPKY_DECK_BUS guard was inserted above these two ifs and shifted
-// them eight lines -- naming the symbols instead of the lines is what keeps
-// this comment from rotting the same way again.) (A second engine, BBD,
-// joins SAMPLER in a later movement.) So for those four the bit-identity
-// check below proves something narrower but still real: no *unconditional*
-// side effect was introduced anywhere else in Part::process. SAMPLER is the
-// one engine today where the guard is reachable, so it is the one case that
-// can actually go RED if the guard is broken -- which is why its monitor is
-// switched on below, giving the hostile tap a live path to the output
-// instead of a dead one.
+// TWO engines override IPartEngine::consumes_input() to return true:
+// SamplerEngine (sampler_engine.h) and BbdEngine (bbd_engine.h). The other
+// four -- TEST_TONE, SYNTH, WAVE, BODY -- keep the base default of false
+// (engine_iface.h), so Part::process's `if (_engine_wants_in)` guard -- the
+// outer guard around the process_in() call site in part.h -- never even calls
+// process_in() for them. The `if (_src_deck)` check nested inside that guard
+// is therefore structurally unreachable for those four, not merely untested
+// by them. (Line numbers deliberately not cited here: this comment already
+// went stale once, within this same branch, when the SPKY_DECK_BUS guard was
+// inserted above these two ifs and shifted them eight lines -- naming the
+// symbols instead of the lines is what keeps this comment from rotting the
+// same way again.) So for those four the bit-identity check below proves
+// something narrower but still real: no *unconditional* side effect was
+// introduced anywhere else in Part::process.
+//
+// What ENGINE_BBD changed, and what it did not. It did NOT change the
+// membership of "the other four" -- BBD replaced SAMPLER's uniqueness, not
+// any of those four engines' silence about the guard, and the same four are
+// still structurally unreachable. What it DID falsify is the sentence that
+// used to follow: "SAMPLER is the one engine today where the guard is
+// reachable." There are now two such engines, and for a BBD deck the
+// `if (_src_deck)` check is the ONLY thing standing between the hostile tap
+// and a delay line that would then circulate it through its own feedback
+// path. So BBD, like SAMPLER, is a case that can actually go RED here, and
+// it is set up below to be one: both parts get real line memory, because
+// BbdEngine::process returns silence with nullptr buffers (documented:
+// "nullptr -> the deck is silent") and a silent engine absorbs a leaking tap
+// instead of exposing it, which would make exactly the case this comment
+// promises to prove the vacuous one.
 //
 // ENGINE_COUNT below is a build-time tripwire, not a runtime check: it fires
 // at compile time the moment a new EngineId is added, forcing whoever adds
-// ENGINE_BBD to come back here and extend the list (and re-read the
-// "structurally unreachable for the other four" claim above, which becomes
-// false the day a second engine overrides consumes_input()).
-static_assert(ENGINE_COUNT == 5,
+// the next engine to come back here, extend the list, and re-check both
+// claims above -- "structurally unreachable for the other four" (which needs
+// the new engine to leave consumes_input() at its default) and "reachable,
+// and proven so, for SAMPLER and BBD" (which needs the new engine to be
+// given whatever memory it takes to be audible here, or it joins the list
+// vacuously). The consumes_input() census pinned directly below it is the
+// runtime half of the same guard.
+static_assert(ENGINE_COUNT == 6,
               "a new EngineId was added -- extend the engine list in the "
-              "test below, and re-check whether 'unreachable for the other "
-              "four' still holds once a second engine overrides "
-              "consumes_input()");
+              "test below, and re-check both claims above: 'structurally "
+              "unreachable for the other four' (does the new engine override "
+              "consumes_input()?) and 'proven directly for SAMPLER and BBD' "
+              "(is the new engine actually audible in the sweep, or does it "
+              "join it vacuously?)");
+
+// The runtime half of the tripwire. Everything the comment above argues rests
+// on WHICH engines override consumes_input(), and that is not observable from
+// an EngineId: an engine that implements process_in and forgets this override
+// (the pairing engine_iface.h warns about, which nothing enforces) would
+// silently drop out of the "reachable" set and back into the "structurally
+// unreachable" one, taking the sweep below with it and changing nothing that
+// any assertion could see. Pinned by construction, on the engine objects
+// themselves rather than through Part, because Part exposes no accessor for
+// its test tone.
+TEST_CASE("deck bus: exactly two engines consume their input, and it is "
+          "SAMPLER and BBD") {
+    TestToneEngine tone;
+    SynthEngine    synth;
+    WaveEngine     wave;
+    BodyEngine     body;
+    SamplerEngine  sampler;
+    BbdEngine      bbd;
+    CHECK_FALSE(tone.consumes_input());
+    CHECK_FALSE(synth.consumes_input());
+    CHECK_FALSE(wave.consumes_input());
+    CHECK_FALSE(body.consumes_input());
+    CHECK(sampler.consumes_input());
+    CHECK(bbd.consumes_input());
+}
+
+// Line memory for the two BBD decks in the sweep below. Static, the idiom
+// every other test in this tree uses for a buffer the engine's no-heap
+// contract makes the caller own.
+static float s_dbus_bbd[2][2][BbdEngine::kCells];
 
 TEST_CASE("deck bus: with the source off, a hostile tap changes nothing -- "
-          "proven directly for SAMPLER, structurally for the rest") {
+          "proven directly for SAMPLER and BBD, structurally for the rest") {
     for (EngineId e : {ENGINE_TEST_TONE, ENGINE_SYNTH, ENGINE_SAMPLER,
-                       ENGINE_WAVE, ENGINE_BODY}) {
+                       ENGINE_WAVE, ENGINE_BODY, ENGINE_BBD}) {
+        // Six engines share one loop body, so a bit-identity failure that did
+        // not name the engine would send the next reader through all six.
+        INFO("engine ", static_cast<int>(e));
         Part a, b;
-        a.init(48000.f, 7);  b.init(48000.f, 7);
+        a.init(48000.f, 7, nullptr, nullptr, 0, s_dbus_bbd[0][0], s_dbus_bbd[0][1]);
+        b.init(48000.f, 7, nullptr, nullptr, 0, s_dbus_bbd[1][0], s_dbus_bbd[1][1]);
         a.set_engine(e);     b.set_engine(e);
         // Give the engines something to play, or a silent engine makes this
         // pass vacuously -- see the non-silence guard below.
         for (Part* p : {&a, &b}) {
-            p->set_target_base(LANE_LEVEL, 1.f);
+            // LEVEL is pinned to a constant 0.5 with its lane switched OFF, and
+            // that is what makes the BBD case discriminating instead of vacuous:
+            // LANE_LEVEL *is* the BBD's MIX (bbd_engine.cpp), and at MIX exactly
+            // 1.0 the engine's own dry term cancels -- in + 1*(wet - in) == wet --
+            // so a tap that leaked into process_in would stay invisible here until
+            // one whole delay period later, far outside this 4000-sample window at
+            // any musical division. Measured with the _src_deck guard forced open:
+            // at LEVEL 1.0 all six engines PASS (the leak is real and undetected),
+            // at LEVEL 0.5 engine 5 fails within ~190 samples. The lane is switched
+            // off as well so that 0.5 is exact rather than a value a live lane can
+            // momentarily clamp back up to 1.0.
+            p->set_target_active(LANE_LEVEL, false);
+            p->set_target_base(LANE_LEVEL, 0.5f);
             p->mod().set_rate(0.5f);
             // Only matters when e == ENGINE_SAMPLER (a harmless dead flag on
             // the other four's inactive SamplerEngine instance): with the
@@ -187,7 +250,11 @@ TEST_CASE("deck bus: with the source off, a hostile tap changes nothing -- "
         // The sampler runs silent with no buffer (documented: "nullptr ->
         // runs silent"), so it is exempt -- it is covered by Tasks 1 and 4,
         // which drive it through the monitor path. Every other engine must
-        // actually have sounded, or the identity above proved nothing.
+        // actually have sounded, or the identity above proved nothing. BBD is
+        // NOT exempt: it is handed line memory above precisely so it is not,
+        // and it clears this floor on its dither alone (BbdLine::SetDither),
+        // with no input and no note -- which is also the proof its process()
+        // ran at all rather than taking the silent no-buffer path.
         if (e != ENGINE_SAMPLER) {
             INFO("engine ", static_cast<int>(e), " produced silence");
             CHECK(peak > 1e-6f);

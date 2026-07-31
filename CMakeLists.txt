@@ -68,6 +68,8 @@ add_executable(spky_tests
     tests/test_step_grid_lock.cpp
     engine/parts/part.cpp
     tests/test_part.cpp
+    engine/parts/bbd_engine.cpp
+    tests/test_bbd_engine.cpp
     tests/test_deck_bus.cpp
     engine/instrument.cpp
     bench/audition/init_patch.cpp
@@ -75,6 +77,7 @@ add_executable(spky_tests
     tests/test_instrument.cpp
     tests/test_seed_audition_init.cpp
     tests/test_seed_audition_protocol.cpp
+    tests/test_bbd_edge_state.cpp
     engine/center/center.cpp
     tests/test_center.cpp
     tests/test_wav.cpp
@@ -90,6 +93,7 @@ add_executable(spky_tests
     tests/test_drag.cpp
     engine/fx/bbd.cpp
     tests/test_bbd.cpp
+    tests/test_bbd_music.cpp
     engine/fx/reverb.cpp
     tests/test_reverb.cpp
     tests/test_oliverb.cpp
@@ -146,6 +150,7 @@ add_executable(spky_tests
     # free function, and a .cpp would have to be added to spky_tests, render,
     # bench/Makefile, bench/audition/Makefile AND host/vcv/Makefile.
     tests/test_material.cpp
+    tests/test_part_engine_contract.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
 target_include_directories(spky_tests PRIVATE host)
@@ -159,6 +164,7 @@ add_executable(render
     engine/mod/lane.cpp
     engine/mod/super_modulator.cpp
     engine/parts/part.cpp
+    engine/parts/bbd_engine.cpp
     engine/instrument.cpp
     engine/center/center.cpp
     engine/fx/grit.cpp
@@ -186,7 +192,7 @@ add_test(
     COMMAND ${CMAKE_COMMAND}
         -DRENDER=$<TARGET_FILE:render>
         -DSCENARIO=${CMAKE_SOURCE_DIR}/host/render/scenarios/ctrl_identity.json
-        -DEXPECTED=4296cf27d94aef392cfe5fdc9c48a9df2ceaae85c15c5993c42966bed16e59a7
+        -DEXPECTED=2b73f2483dc4a85b7c967c5820815829055de4e98e685d031a096d57abb699cd
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -P ${CMAKE_SOURCE_DIR}/tests/check_render_hash.cmake
 )

@@ -189,6 +189,10 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "inst_worst_deck_bus",
         "instrument_worst_bbd",
         "instrument_worst_bbd_dtcm",
+        # Spec 2026-07-31 bbd-part-engine 8.3 row 1: both decks on the
+        # voiceless BBD PART ENGINE (its stereo pair), as distinct from
+        # instrument_worst_bbd above (FLUX's mono line behind a SYNTH deck).
+        "inst_bbd_engine_worst",
     ),
     "sweep": (
         "sweep_flux_rate_0",

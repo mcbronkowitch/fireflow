@@ -367,8 +367,29 @@ The difference from rev. 1 is which quantity the lane owns:
 - **`LANE_PITCH` moves `f_clk`** → the circulating charge bends, the delay time
   does not move. This is the gesture `docs/roadmap.md:1157-1160` records as
   **confirmed by ear** — *"RATE bending stored pitch"*.
-- **`LANE_SIZE` moves `T`**, and `stages` moves with it in exact proportion, so
-  `f_clk` is untouched → **the rhythm moves and nothing transposes.**
+- **`LANE_SIZE` moves `T`. In STEP, between fires, `stages` moves with it in
+  exact proportion and `f_clk` is untouched** — the clock is latched (§5.5),
+  so `_recompute()`'s STEP branch never re-derives it; only `stages_for`
+  recomputes against the new window, at the SAME clock → the rhythm moves and
+  nothing transposes. **In FLOW this does not hold** — see the amendment
+  below.
+
+*(Amended 2026-07-31, whole-branch review: this bullet used to read
+"`LANE_SIZE` moves `T`, and `stages` moves with it in exact proportion, so
+`f_clk` is untouched → the rhythm moves and nothing transposes," with no mode
+qualifier — true only in STEP between fires. In FLOW, `_recompute()`
+re-derives `f_clk = clock_flow(_win, _pitch)` from the CURRENT window on
+every tick regardless of what changed, and §5.3's "the lane is scaled to what
+is reachable" makes `_win`'s bounds (`f_lo`, `f_hi`) scale as `1/T` — so a
+`LANE_SIZE` move rescales the clock right along with the rhythm, even though
+`LANE_PITCH` itself never moved. Measured at a held lane of 0.5,
+`set_cycle(2.0f)`: `T = 2 s → 0.25 s` moves `clock_hz()` from 724.1 Hz to
+5724.3 Hz — **7.91×, 2.98 octaves**. This is not a defect to fix: it is the
+second instance of the non-orthogonality §5.3 already names for
+`LANE_PITCH`/`LANE_MOTION`, and the more faithful of the two — a real
+bucket-brigade delay's time control moves its clock and bends whatever is
+circulating, by construction. Owner's ruling: accept the coupling, no code
+change. See §5.13 bullet 3 and `host/vcv/README.md`'s BBD section.)*
 
 **The engine syncs to tempo through `set_cycle`**, which `Part` already pushes to
 every engine. A free-running clock was rejected: the engine would be the only
@@ -454,10 +475,16 @@ required, not optional: `LANE_SIZE` is a continuously modulated lane, and a bare
 nearest-rung round chatters at every boundary. **One rung of overlap** — a rung
 holds until the lane passes the next rung's centre.
 
-`div = 1` is a whole phrase; at 40 BPM (the TEMPO floor) with a long phrase this
-can exceed the reachable stage count at any clock, in which case `T` is clamped
-to the longest `T` for which `stages ≤ kMaxStages` at the lane's lowest `f_clk`.
-That clamp must be reported by the observer (§9), not silent.
+**The clamp is at the SHORT end, not the long one.** Under §5.3's decision the
+long end is self-normalising: `f_lo` is *defined* as `kMinStages/(2T)`, so the
+stage count at the lane's lowest clock is exactly `kMinStages` for every `T`,
+and `div = 1` at 40 BPM cannot overflow. What does break is
+`f_lo > kClockMaxHz`, which happens whenever `T < kMinStages/(2·kClockMaxHz)
+= 8 ms` — reachable, because a free master lane at 30 Hz gives a 33 ms cycle
+and `div = 1/32` then asks for 1.04 ms. `T` is raised to that floor, which
+takes the repeats off the grid, and the observer reports it as `time_clamped`.
+Corrected 2026-07-31 while working the arithmetic for the implementation plan;
+`engine/parts/bbd_music.h` is the authority.
 
 ### 5.5 The grid, the gate, and the fires
 
@@ -531,9 +558,44 @@ fail.** Three measured facts:
    swing the loop gain ±12 dB **per circulation**. This term is exactly known;
    leaving it to the ear was wrong.
 4. **`k₀` is measured with broadband material** — a noise burst or a chord — and
-   the acceptance criterion is **per-octave level within ±1 dB over 10
-   circulations**, at `f_clk` mid-range and DRIVE 0. `k` is a tuning constant;
-   DECAY (§5.8) trims *below* it.
+   the acceptance criterion is **per-octave level within ±2.5 dB over 10
+   circulations**, at DECAY maximum with DRIVE swept 0 → 1 during the hold. `k`
+   is a tuning constant; DECAY (§5.8) trims *below* it.
+
+**Why ±2.5 dB and not the ±1 dB this section asked for until now.** The ±1 was
+written by inference and never measured. Measured (Task 6, `div 1/8`, T = 125 ms,
+PITCH 0.9 in STEP → `f_clk` = 13.3 kHz, 3327 stages), the achievable worst band
+is **2.26 dB**, and the binding quantity is a **4.50 dB spread** across the six
+octaves that no `(k₀, tilt)` pair reduces. The mechanism: the fixed 3600 Hz
+Butterworth chain costs **5.45 dB per pass at 3520 Hz** against **0.12 dB at
+1760 Hz**, it is `constexpr`, and — unlike the loss pole — it **does not move
+with the clock**, so no corner tracking `f_clk/4` can be aligned to it. With the
+compander's `L²` round trip the feedback shelf would have to supply **+16.5 dB**
+at 3520 Hz; a one-pole shelf cornered at `f_clk/4` delivers **+4.3 dB**. One zero
+against one pole plus six. **A higher-order shelf is refused on the same CPU
+grounds that keep `kFiltOrder` at 3** (§5.8) — this is the same bill.
+Corrected 2026-07-31 by measurement in Task 6; the trial tables are in
+`.superpowers/sdd/2026-07-31-bbd-part-engine/task-6-report.md` and
+`tests/test_bbd_engine.cpp` is the authority.
+
+**A valid measurement requires every probe below the line's own Nyquist**, and
+this is a trap that cost Task 6 a full round. A BBD samples at `f_clk`, so a
+probe above `f_clk/2` reads the staircase's fold-around rather than held content;
+the first fixture used (`div 1/2`, PITCH 0.5 → `f_clk` = 1448 Hz) had **three of
+its six probes above Nyquist**, which produced a residue no shelf could fit and a
+tilt roughly 3× off. Because the freeze is reachable only in STEP, and
+`clock_step` spans 36 semitones, `f_clk ≤ 8·f_lo = 2048/T` and therefore
+Nyquist ≤ `1024/T`: holding a 3520 Hz probe clear by ~2× **forces `T ≲ 145 ms`
+whatever the PITCH**. The acceptance fixture cannot be both long-tailed and
+validly probed. Added 2026-07-31 from Task 6.
+
+**`k₀` is not content-independent, and that is a property, not a defect.** Across
+six noise seeds at the shipped constants the whole set slides by a mean offset of
+roughly ±3 dB (−2.59 … +2.40) and the spread ranges 3.84 … 8.00 dB. The loop
+**disperses** around unity rather than diverging from it — an earlier revision of
+the acceptance test, with the aliased probes above, appeared to show every
+realisation blooming monotonically, and that reading was withdrawn once the
+instrument was corrected. Recorded 2026-07-31 from Task 6.
 
 **The engine also keeps `Flux`'s feedback law on the normal path:**
 `fb = norm × 1.2 / bbd_drive_gain(drive)` (`flux.cpp:199`). Without the division
@@ -687,9 +749,26 @@ geometrically, and the buffer fills with denormals — a large, load-dependent
 stall on x86. Apply the same floor the repo already uses. The dither above
 largely solves this for free.
 
-**A stated output bound.** With the expander's 4× ceiling the engine can return
-roughly +8 to +11 dBFS in the self-oscillating regime, and it is the only engine
-whose bound is unstated and non-unity. There is no per-deck limiter, and the
+**Recorded (whole-branch review, 2026-07-31): this floor applies to every
+`BbdLine`/`BbdEcho` user, including `Flux` — deliberately, not by oversight.**
+`BbdLine::Process`'s two flushes (`loss_z_`, `ybbd_old_`) run unconditionally
+every write/read tick, so they also change `Flux`'s tail below −180 dBFS —
+inaudible, and the same class of change `comp.cpp`/`limiter.h` already made
+unconditionally, but unlike those two this one was never stated as intentional
+for `Flux` specifically, only for the BBD part engine. It is stated now.
+`BbdEcho::fb_path`'s other two flushes (`dc_y1_`, `tilt_z_`) are narrower than
+that: both sit behind `dc_on_`/`tilt_ != 0.f` guards that `Flux` never opens —
+`Flux` never calls `SetFeedbackDcBlock` or a nonzero `SetFeedbackTilt`/
+`SetFeedbackTiltAmount` — so those two are dead code on every `Flux`-driven
+`BbdEcho` and reachable only through `BbdEngine`'s freeze/RESONANCE.
+
+**A stated output bound.** With the expander's 4× ceiling the engine returns
+**1.387, i.e. +2.8 dBFS**, in the self-oscillating regime, and it is the only
+engine whose bound is unstated and non-unity. *(Measured in Task 4 by deleting
+the `fast_tanh` in `BbdEngine::process` at DRIVE 1 / FEEDBACK 1 — see
+`tests/test_bbd_engine.cpp`, "the output stays inside its stated bound". The
+"+8 to +11 dBFS" this sentence carried until 2026-07-31 was inferred, not
+measured, and was wrong; the bound is still required, only the figure changed.)* There is no per-deck limiter, and the
 reverb send taps before the master `Limiter`. **Normalise the engine's output**
 (or `fast_tanh` it, matching §4.5's idiom) and state the bound.
 
@@ -814,18 +893,56 @@ neither blooms nor sits silent, and §5.13 tests it.
 
 - A deck set to `ENGINE_BBD` passes audio from audio-in and from the neighbour,
   with MIX (`LANE_LEVEL`) at 0 and 1 both correct.
-- **With FEEDBACK up**, moving `LANE_PITCH` with content circulating transposes
-  the tail, and the repeat interval measured from the render CSV does not move.
-- Moving `LANE_SIZE` with content circulating moves the repeat interval, and the
-  pitch of the circulating tail does not move. *(Both bullets are measured
-  **across** the change with material in flight, not after it settles — the slew
-  time is a user parameter, so the settling convention has to be stated or the
-  two tests contradict each other.)*
+- **With FEEDBACK up, moving `LANE_PITCH` with content circulating transposes
+  the tail; the repeat interval does not move.** The repeat-interval half is
+  an **arithmetic identity, not a render measurement**: `stages_for`
+  recomputes `stages` from whatever `f_clk` and the window currently are, so
+  `delay = stages/(2·f_clk) = T` for every `f_clk`, however it got that value
+  (§5.2) — pinned at the parameter level by `tests/test_bbd_engine.cpp`'s
+  "LANE_PITCH moves the clock and leaves the delay alone" and
+  `tests/test_bbd_music.cpp`'s "the stage count holds the delay on the grid".
+  The transposition half is a **different claim, resting on physics
+  documented in `engine/fx/bbd.h`** — a bucket brigade writes and reads at
+  the same clock, so a grain tracks `f_now / f_at_entry`, which is why
+  FEEDBACK has to be up for the bend to be audible at all (§5.3) — the
+  identity above does not by itself prove it, and this bullet is not to be
+  read as if it did.
+- **Moving `LANE_SIZE` with content circulating moves the repeat interval**
+  (`tests/test_bbd_engine.cpp`'s "the delay time follows LANE_SIZE and lands
+  on the grid" — the same identity as above, now holding the NEW `T`).
+  **In STEP, between fires, the pitch of the circulating tail does not move
+  either** — the clock is latched (§5.5), so it is that same identity plus
+  the latch: `_recompute()`'s STEP branch never re-derives `f_clk` there, so
+  only `stages` moves, holding the new `T` at the unchanged clock. Proven by
+  the latch mechanism `tests/test_bbd_engine.cpp`'s "in STEP the clock holds
+  between fires" already exercises, plus a `LANE_SIZE`-specific compiled
+  check (not a committed test): `set_cycle(2.0f)`, one `latch_clock()`, then
+  two `LANE_SIZE` moves (`T = 2 s`, then `0.25 s`) with no fire in between —
+  `clock_hz()` reads 1448.15 Hz before and after, bit-identical, while
+  `stages()` moves 5793 → 724, the exact `T` ratio. **In FLOW this does not
+  hold, and this bullet does not claim it does** — see §5.2's amendment: the
+  clock re-derives from the window every tick there, and the window rescales
+  with `T`, so `LANE_SIZE` is also a pitch gesture in FLOW. That is the
+  coupling §5.2 records, not a violation of this bullet, which is scoped to
+  STEP. *(Restated 2026-07-31, whole-branch review: both bullets used to be
+  measured "across the change with material in flight" from a render CSV,
+  and the second bullet carried no mode qualifier. Neither survives as
+  written. What exists, and all that either bullet needs, is parameter-level
+  — a render-CSV measurement of an identity was considered and deliberately
+  not built, because an identity does not need measuring, only tracing. And
+  the second bullet's "pitch does not move" half is true in STEP and false
+  in FLOW, not universal — see §5.2 and `host/vcv/README.md`'s BBD section
+  for the FLOW coupling.)*
 - With FEEDBACK at 0, `LANE_PITCH` produces no pitch change — the documented
   gating, asserted rather than discovered.
 - `LANE_PITCH` spans its full travel at every division; no dead zone at the top.
-- The freeze holds a **broadband** burst within ±1 dB **per octave** over 10
-  circulations at DECAY maximum, with DRIVE swept 0 → 1 during the hold.
+- The freeze holds a **broadband** burst within ±2.5 dB **per octave** over 10
+  circulations at DECAY maximum, with DRIVE swept 0 → 1 during the hold, **and
+  the spread across the six octaves stays under 5 dB** — the spread is what the
+  tilt controls and it is the half of the result a re-centred gain cannot hide.
+  Every probe must sit below the line's own Nyquist or the figure is meaningless.
+  *(±2.5, not the ±1 this bullet carried until 2026-07-31: see §5.6 — the ±1 was
+  never measured, and the achievable worst band is 2.26 dB.)*
 - A frozen loop shows no DC growth over 60 s.
 - With no input connected and FEEDBACK high, the engine self-oscillates from the
   dither floor rather than outputting silence.
@@ -841,6 +958,15 @@ neither blooms nor sits silent, and §5.13 tests it.
   (See §4.7 on what the hash gates
   actually cover).
 - `inst_bbd_engine_worst` exists as a bench row (§8.3).
+- **The ITCM hotset still fits and both representative symbols still resolve
+  inside it** (§8.4). `bench/itcm_hot.lds` gains `bbd_engine.o`, and
+  `bench/itcm_placement.py`'s `HOT_SYMBOL_FRAGMENTS` must still find both
+  `spky::Flux::process(` and `spky::BbdLine::Process(` at an ITCM address.
+  This is not automatic: `BbdLine::Process` is a weak symbol, and once
+  `bbd_engine.o` is linked the linker may select **its** copy — so leaving
+  `bbd_engine.o` out of the hotset moves `BbdLine::Process` out of ITCM and
+  the guard fails, which is exactly what was measured on this branch before
+  the object was added.
 
 ---
 
@@ -1231,8 +1357,9 @@ still resolve" bullet.**
 - **The observer, which does not exist yet.** A BBD deck would write 0 into
   `a_voices`/`a_v0..3` and expose nothing, so a demo scenario would pass
   vacuously. **At minimum: `f_clk`, the derived stage count, the active `div`
-  rung, the freeze state, and both clamp flags** (§5.3's reachable-range clamp
-  and §5.4's long-division clamp) — a clamp that is invisible reads as a broken
+  rung, the freeze state, and the clamp flag `time_clamped` and the
+  span-truncation flag `scale_truncated` (see §5.4 — there is one clamp, not
+  two)** — a clamp that is invisible reads as a broken
   knob. Note that rev. 1 cited FLUX's `stages_for_test`/`drive_norm_for_test` as
   precedent for CSV output: `Flux`'s observer is `stages()` (`flux.h:72`),
   `stages_for_test` is an `Instrument` method used only by a test, and **neither
@@ -1241,6 +1368,11 @@ still resolve" bullet.**
 - **Does a BBD deck want a tape echo after it?** §5.11 now defaults it off.
   Whether dark-and-compressed into longer-and-cleaner is worth playing is a
   listening question.
+- **Does the FLOW `LANE_SIZE`/clock coupling (§5.2) want a control at all?**
+  E.g. an option to hold the clock across a division change, trading away
+  §5.3's "no dead zone" property for a `LANE_SIZE` move that does not also
+  bend pitch. The ear's question, not an engineering one — no design
+  proposed here.
 
 ---
 

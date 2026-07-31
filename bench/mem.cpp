@@ -36,6 +36,10 @@ spky::AmbientReverb* g_rev_sdram_ptr = nullptr;
 // comment). SDRAM in the shipping firmware too.
 float DSY_SDRAM_BSS g_echo[2][spky::Flux::kMaxSamples];
 
+// The BBD part engine's two lines per deck, same SDRAM idiom as the echo
+// storage above: 2 x 2 x 8192 floats = 128 KB.
+float DSY_SDRAM_BSS g_bbd[2][2][spky::BbdEngine::kCells];
+
 float g_input[kBlock];
 bool  g_input_ready = false;
 
@@ -62,6 +66,8 @@ const spky::FxMem& fx_mem()
     if (!g_mem_ready) {
         for (int p = 0; p < 2; ++p) {
             g_mem.echo[p] = g_echo[p];
+            g_mem.bbd[p][0] = g_bbd[p][0];
+            g_mem.bbd[p][1] = g_bbd[p][1];
         }
         g_mem.reverb = &g_rev_sram;
         // Injected for every Instrument the bench builds, not just the

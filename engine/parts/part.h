@@ -6,6 +6,7 @@
 #include "pitch/chord.h"
 #include "parts/engine_iface.h"
 #include "parts/test_tone_engine.h"
+#include "parts/bbd_engine.h"
 #include "synth/synth_engine.h"
 #include "sampler/sampler_engine.h"
 #include "fx/fx_util.h"
@@ -31,7 +32,8 @@ class Part {
 public:
     void init(float sample_rate, uint32_t seed_base,
               float* echo = nullptr,
-              SampleBuffer::Frame* sampler_mem = nullptr, size_t sampler_frames = 0);
+              SampleBuffer::Frame* sampler_mem = nullptr, size_t sampler_frames = 0,
+              float* bbd_l = nullptr, float* bbd_r = nullptr);
 
     SuperModulator& mod() { return _mod; }
     const SuperModulator& mod() const { return _mod; }
@@ -148,19 +150,32 @@ public:
     // (ring time), RESONANCE is the exciter's character, SUB is the
     // excitation bus level, Detune is string spread plus mode stretch and
     // FILT is brightness (spec 2026-07-26 body-resonator, section 5, and the
-    // setter comments on BodyVoice). Without these forwards those knobs would
-    // simply be dead on a BODY deck.
-    void set_voice_attack(float n)    { _synth.set_attack(n);    _wave.set_attack(n);    _body.set_attack(n);    _sampler.set_window_attack(n); }
-    void set_voice_decay(float n)     { _synth.set_decay(n);     _wave.set_decay(n);     _body.set_decay(n);     _sampler.set_window_decay(n); }
-    void set_voice_resonance(float n) { _synth.set_resonance(n); _wave.set_resonance(n); _body.set_resonance(n); _sampler.set_resonance(n); }
+    // setter comments on BodyVoice). The BBD reinterprets them a third time,
+    // delay-side (spec 2026-07-31 bbd-part-engine, section 5.8): ATTACK is the
+    // freeze's engage/release ramp, DECAY trims the frozen loop below its
+    // unity reference k0, RESONANCE is the feedback-path tilt (how bright the
+    // repeats stay), SUB is the input level (how much neighbour/audio-in
+    // actually reaches the line), DETUNE (menu-only) is the slew time the
+    // clock chases a moved lane at, and FILT moves the loss-pole corner, not
+    // kFilterHz (kFilterHz is constexpr and shared by every line -- see
+    // BbdEngine::set_filt()). Without these forwards those knobs would simply
+    // be dead on a BBD deck -- the same failure class as the process_in()/
+    // consumes_input() pairing, and why all six lines below carry a _bbd. call
+    // in one edit rather than each engine's forward landing on its own.
+    void set_voice_attack(float n)    { _synth.set_attack(n);    _wave.set_attack(n);    _body.set_attack(n);    _sampler.set_window_attack(n); _bbd.set_attack(n); }
+    void set_voice_decay(float n)     { _synth.set_decay(n);     _wave.set_decay(n);     _body.set_decay(n);     _sampler.set_window_decay(n);  _bbd.set_decay(n); }
+    void set_voice_resonance(float n) { _synth.set_resonance(n); _wave.set_resonance(n); _body.set_resonance(n); _sampler.set_resonance(n);     _bbd.set_resonance(n); }
     // The visible SUB control is routed separately as GENE SIZE on a sampler,
     // while visible SOURCE becomes ORG through LANE_SOURCE. The independent,
     // widgetless Detune parameter has no sampler meaning. Keep melodic SUB and
-    // Detune on Synth/Wave only; SamplerEngine::_sub_n and _detune_n default
-    // to 0 and stay there until sampler cloud dispersion sets them.
-    void set_voice_sub(float n)       { _synth.set_sub(n);       _wave.set_sub(n);       _body.set_sub(n); }
-    void set_voice_detune(float n)    { _synth.set_detune(n);    _wave.set_detune(n);    _body.set_detune(n); }
-    void set_voice_filt(float t)      { _synth.set_filt(t);      _wave.set_filt(t);      _body.set_filt(t);      _sampler.set_filt(t); }
+    // Detune off the sampler; SamplerEngine::_sub_n and _detune_n default to 0
+    // and stay there until sampler cloud dispersion sets them. The BBD is not
+    // the sampler either, but it DOES have its own reinterpretation of both
+    // (input level, slew time -- see the block comment above), so it joins
+    // Synth/Wave/BODY on these two lines.
+    void set_voice_sub(float n)       { _synth.set_sub(n);       _wave.set_sub(n);       _body.set_sub(n);       _bbd.set_sub(n); }
+    void set_voice_detune(float n)    { _synth.set_detune(n);    _wave.set_detune(n);    _body.set_detune(n);    _bbd.set_detune(n); }
+    void set_voice_filt(float t)      { _synth.set_filt(t);      _wave.set_filt(t);      _body.set_filt(t);      _sampler.set_filt(t);          _bbd.set_filt(t); }
 
     SamplerEngine& sampler() { return _sampler; }
     const SamplerEngine& sampler() const { return _sampler; }
@@ -173,6 +188,8 @@ public:
     const WaveEngine& wave() const { return _wave; }
     BodyEngine& body() { return _body; }
     const BodyEngine& body() const { return _body; }
+    BbdEngine& bbd() { return _bbd; }
+    const BbdEngine& bbd() const { return _bbd; }
 
     int active_voices() const {
         if (_engine_id == ENGINE_SYNTH) return _synth.active_voices();
@@ -329,7 +346,8 @@ public:
 
         // Skipped unless the engine actually implements process_in. The base
         // declares it with an empty body (engine_iface.h), so on every engine
-        // but the sampler this call reaches nothing -- and an indirect call
+        // but the sampler and the BBD (the two that consume input) this call
+        // reaches nothing -- and an indirect call
         // through the vtable is not free to reach nothing with, because it
         // also forces the compiler to spill anything live across it in this
         // inlined loop. Not calling it is observationally identical: the
@@ -431,6 +449,7 @@ private:
     SynthEngine    _synth;
     WaveEngine     _wave;
     BodyEngine     _body;
+    BbdEngine      _bbd;
     SamplerEngine  _sampler;
     EngineId       _engine_id = ENGINE_SYNTH;
     EngineId       _pending_engine = ENGINE_SYNTH;
@@ -450,6 +469,7 @@ private:
             case ENGINE_SAMPLER: return static_cast<IPartEngine*>(&_sampler);
             case ENGINE_WAVE:    return static_cast<IPartEngine*>(&_wave);
             case ENGINE_BODY:    return static_cast<IPartEngine*>(&_body);
+            case ENGINE_BBD:     return static_cast<IPartEngine*>(&_bbd);
             default:             return static_cast<IPartEngine*>(&_tone);
         }
     }

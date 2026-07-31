@@ -101,20 +101,22 @@ echo, the other deck, and the audio input — are checkboxes in the same
 context menu.
 
 **The "other deck" checkbox (menu item `Route: other deck (BODY excite,
-SAMPLER feed+rec)`) is not Body-only.** It also drives the audio-rate
-cross-deck bus (spec 2026-07-31 bbd-part-engine): the only engine that
-consumes that bus today is **Sampler**, so turning this on for a Sampler
-deck audibly routes and records the neighbouring deck's output — where on
-earlier releases the same checkbox did nothing for a Sampler deck. A patch
-saved with it on for a Sampler part will sound different after updating to
-a build with the cross-deck bus. It also has a second, easy-to-miss effect
-on a Sampler deck regardless of whether the neighbour is making sound: the
-external **audio input** is summed with the neighbour's tap and the sum is
-soft-clipped (`fast_tanh`) before reaching the engine, so enabling this
-checkbox puts the deck's own audio-in monitoring/recording through that
-same soft clip — audibly softer than the normal dry-at-unity monitor, even
-with a silent neighbour. Neither behaviour is a bug; it is what routing two
-decks' audio through one shared flag necessarily does.
+SAMPLER feed+rec, BBD feed)`) is not Body-only.** It also drives the
+audio-rate cross-deck bus (spec 2026-07-31 bbd-part-engine): the engines
+that consume that bus today are **Sampler** and **BBD**, so turning this on
+for either deck audibly routes (and, for Sampler, records) the neighbouring
+deck's output — where on earlier releases the same checkbox did nothing for
+either. A patch saved with it on for a Sampler or BBD part will sound
+different after updating to a build with the cross-deck bus. It also has a
+second, easy-to-miss effect regardless of whether the neighbour is making
+sound: the external **audio input** is summed with the neighbour's tap and
+the sum is soft-clipped (`fast_tanh`) before reaching the engine, so
+enabling this checkbox puts the deck's own audio-in monitoring/recording
+through that same soft clip — audibly softer than the normal dry-at-unity
+monitor, even with a silent neighbour. Neither behaviour is a bug; it is
+what routing two decks' audio through one shared flag necessarily does. A
+**BBD** deck defaults this checkbox ON the moment ENG lands on BBD (see
+below) precisely so it always has something to echo.
 
 **Sampler** is a granular texture deck over the shared record buffer. Flipping ENG to
 Sampler on an empty part autoloads the embedded first four bars of the
@@ -335,6 +337,71 @@ stale WAV sitting in patch storage.
     `onAdd()`, plus the rate-converted `factoryL`/`factoryR`, rebuilt in
     `reinit()`), held for the module's lifetime regardless of whether ENG
     is ever flipped to Sampler on either part.
+
+## BBD
+
+ENG's fifth position (**BBD**, state 4) selects a stereo bucket-brigade
+delay engine — a self-contained sound source, not to be confused with
+**FLUX**, the unrelated per-part echo effect present on every engine
+(including this one) that is *also* modelled after a bucket-brigade delay
+chip. Old patches only ever stored ENG 0..3, so this is purely additive.
+
+On a BBD deck the five modulation lanes take on the engine's own controls:
+**SOURCE** drives DRIVE (the loop's internal saturation), **MOTION** drives
+FEEDBACK, **LEVEL** sets the wet/dry mix between the deck's input and the
+delay's return (unlike every other engine, LEVEL 0 does not silence a BBD
+deck — it passes the input through dry, at unity), **PITCH** sets the delay
+clock (subject to the FEEDBACK caveat below), and **SIZE** picks the
+delay-time rung the same way FLUX's own RATE division does.
+
+Two panel controls change meaning:
+- **SOURCE**'s live caption reads `DRIVE` instead of `TIMB`/`ORG`/`FRAME`/`MATL`.
+- **STAGES** (the FX-box control that otherwise sets FLUX's own delay-line
+  stage count) is repointed to the PITCH lane's base — the same
+  "re-point a knob orphaned by the engine switch" pattern the Sampler
+  already uses to turn SUB into grain `LEN`.
+
+The **VOICE row**'s six controls take on BBD-specific jobs: **ATTACK** is
+the freeze's engage/release time, **DECAY** trims the tail below unity so a
+frozen loop still runs down instead of holding forever, **RES** tilts the
+feedback path's brightness, **SUB** sets how much signal (tape / other deck
+/ audio-in) actually reaches the delay line, **FILT** sets the loss-pole
+corner (the line's own damping/tone), and **SOURCE** (captioned `DRIVE`,
+see above) sets the saturation.
+
+The moment ENG lands on BBD (the switch *edge*, not every control tick, so
+it never fights a player who changes these back): **FLUX defaults off** —
+the BBD's own signal path already runs through six poles at 3600 Hz plus a
+loss pole breathing under a compander, and its gappy repeats are its most
+distinctive trait, which a FLUX echo behind it would otherwise smear — and
+the **"Route: other deck" checkbox defaults on** (see above), so a BBD deck
+with no external cabling still has the neighbouring deck's output to feed
+its line instead of silence.
+
+Three consequences that would otherwise read as bugs:
+- **PITCH is inaudible at FEEDBACK 0.** A bucket-brigade delay writes and
+  reads on the same clock, so the very first pass through the line is
+  always at unity pitch; only a signal that recirculates (FEEDBACK above
+  zero) samples the moved clock more than once, which is what actually
+  makes a pitch bend audible. With FEEDBACK at zero, turning PITCH changes
+  nothing you can hear — that is the physics of a single unity-pitch pass,
+  not a stuck knob.
+- **ATTACK and DECAY are inert in FLOW.** Both shape the freeze, and the
+  freeze is a STEP-only gate — FLOW ignores the gate entirely and free-runs,
+  so there is no freeze for either control to shape. This is an
+  owner-confirmed decision, not a bug: switch to STEP to hear either control
+  do anything.
+- **In FLOW, SIZE is also a pitch gesture.** The clock is re-derived from
+  the reachable window every control tick — which is also what gives PITCH
+  its full travel at every division, with no dead zone — and that window's
+  bounds move with the delay time. Moving SIZE therefore bends whatever is
+  circulating, the same way moving PITCH does, even if PITCH itself never
+  moved: at a fixed PITCH setting, taking SIZE from a 2 s repeat down to a
+  0.25 s repeat has been measured moving the clock by close to 3 octaves.
+  This is a real bucket-brigade delay's character, not a bug — its time
+  knob and its clock are the same knob. In STEP this does not happen
+  between fires: the clock only re-derives on a fire, so SIZE moves the
+  rhythm there and leaves the pitch alone.
 
 ## Build
 
