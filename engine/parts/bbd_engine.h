@@ -74,6 +74,22 @@ public:
     // ATTACK -> the freeze's engage/release time; DECAY -> a trim BELOW k0.
     void set_attack(float n);
     void set_decay(float n);
+    // RESONANCE -> the feedback-path tilt: how bright the repeats stay. Plays
+    // the SAME filter the freeze needs (spec 5.6/5.8) -- see _apply_freeze()/
+    // _push_freeze(), where _res_tilt is the crossfade's UNFROZEN endpoint.
+    void set_resonance(float n);
+    // SUB -> the input level: how much neighbour/audio-in actually reaches
+    // the line, applied in process_in() so both the wet and dry paths agree
+    // about how much signal arrived.
+    void set_sub(float n);
+    // DETUNE (menu-only) -> the slew time the clock chases a moved lane at.
+    // Stores the per-sample coefficient only -- see process()'s geometric
+    // glide, which is the one place that coefficient is spent.
+    void set_detune(float n);
+    // FILT -> the loss-pole corner, NOT kFilterHz (spec 5.8: kFilterHz is
+    // constexpr, baked into butterworth_poles(), and shared by every line via
+    // two file-scope singletons -- see the .cpp for the full argument).
+    void set_filt(float t);
     // Whether the freeze is ENGAGED, not whether its ramp has finished: the
     // gate's own state, so a caller (and the FLOW rule's test) can read the
     // decision without first running the ramp out. _freeze_want is only ever
@@ -106,6 +122,32 @@ public:
     int   div_index() const { return _ladder.index(); }
     bool  time_clamped() const { return _win.time_clamped; }
     bool  scale_truncated() const { return _win.scale_truncated; }
+
+    // Task 8's VOICE-row observers. clock_hz()/stages() above stay the
+    // un-spread TARGET the lane asks for; the four below read back what each
+    // new knob actually pushed.
+    //
+    // FILT: the loss-pole coefficient in force. Centre (FILT 0) reads exactly
+    // bbd_tuning::kLossCoef -- the knob's neutral position, provable because a
+    // knob left alone must change nothing.
+    float loss_coef() const { return _loss_a; }
+    // RESONANCE: the feedback-path tilt AT REST (freeze_amount() == 0). 0 at
+    // the knob's centre; see _apply_freeze()/_push_freeze() for how the
+    // freeze crossfades away from it.
+    float resonance_tilt() const { return _res_tilt; }
+    // SUB: the gain applied to the audio actually reaching the line.
+    float input_gain() const { return _in_gain; }
+    // DETUNE (menu): the slew time, in seconds.
+    float slew_seconds() const { return _slew_s; }
+    // DECAY, read back as the 0..1 the caller last set it to -- distinct from
+    // freeze_ramp_s() (ATTACK, already exposed by the freeze task), which this
+    // extends rather than duplicates.
+    float decay_norm() const { return _decay; }
+    // The clock the line is actually running at, as opposed to the one the
+    // lane is asking for. Before the slew existed the two were the same
+    // number; they are not any more, and every test about how the engine
+    // ANSWERS modulation has to read this one, not clock_hz().
+    float clock_now() const { return _f_now; }
 
 private:
     // Pitch-aware: derives _f_clk from _pitch/_flow/_latched (STEP/FLOW rule),
@@ -183,6 +225,32 @@ private:
     // DECAY: a trim below k0, so the freeze runs out instead of holding
     // forever. 1 is "no trim", which is the operating point k0 is measured at.
     float _decay = 1.f;
+    // FILT: the loss-pole coefficient actually pushed into both lines.
+    // Defaults to kLossCoef -- BbdLine's own ctor default already matches it,
+    // so an engine never touched by set_filt() behaves exactly as it did
+    // before this task.
+    float _loss_a = bbd_tuning::kLossCoef;
+    // RESONANCE: the feedback-path tilt at freeze_amount() == 0. 0 at the
+    // knob's centre, so an engine never touched by set_resonance() is
+    // bit-exact through the tilt at rest, same as before this task.
+    float _res_tilt = 0.f;
+    // SUB: the gain on the audio actually reaching the line (process_in()).
+    // Defaults to 1 (unity): a BbdEngine driven directly, without Part's
+    // set_sub() forward, behaves exactly as it did before this task.
+    float _in_gain = 1.f;
+    // DETUNE: the slew time and its per-sample multiply-toward-target
+    // coefficient (process()'s geometric glide). Kept apart because the glide
+    // needs the coefficient every sample and the seconds figure is only for
+    // the observer. The literal default here mirrors kSlewMinS in the .cpp
+    // (the fastest setting) at the default 48 kHz, same idiom as
+    // _freeze_step's default below; init() recomputes it for the real _sr.
+    float _slew_s = 0.001f;
+    float _slew_coef = 1.f / (0.001f * 48000.f);
+    // The clock each line is ACTUALLY running at, slewed toward _f_l/_f_r --
+    // see process(). Initialised to _f_clk in init(), never to zero: a zero
+    // would make the geometric glide's ratio non-finite.
+    float _f_now = 4000.f;
+    float _f_now_r = 4000.f;
     // The freeze crossfade: _freeze_want is the gate's decision (0 or 1),
     // _freeze the ramped value, _freeze_last the value last pushed into the
     // lines. _freeze_ramp_s is ATTACK in seconds and _freeze_step the linear

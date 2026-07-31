@@ -58,6 +58,16 @@ constexpr float kFreezeRampMaxS = 2.0f;
 // this once it is heard on hardware; do not "fix" it by measurement.
 constexpr float kWidthMaxCents = 30.f;
 
+// FILT's endpoints, geometric around kLossCoef so the knob centre is EXACTLY
+// the physical value -- a knob left alone must change nothing.
+constexpr float kFiltOctaves = 2.f;
+
+// DETUNE (menu): the slew the clock chases a moved lane at. Flux records this
+// as a deliberate musical value, and since PITCH and SIZE are both driven by
+// the plane, it decides HOW the engine answers modulation.
+constexpr float kSlewMinS = 0.001f;
+constexpr float kSlewMaxS = 0.5f;
+
 }  // namespace
 
 void BbdEngine::init(float sample_rate) {
@@ -67,6 +77,13 @@ void BbdEngine::init(float sample_rate) {
     _buf_ok = false;
     // The ramp rate is in samples, so it only becomes real once _sr is.
     _freeze_step = 1.f / (_freeze_ramp_s * _sr);
+    // Same reasoning for DETUNE's slew coefficient.
+    _slew_coef = 1.f / (_slew_s * _sr);
+    // The slewed clock starts EXACTLY at the (still-default) target -- a zero
+    // would make process()'s geometric glide divide by zero on its very first
+    // sample. See bbd_engine.h's member comment.
+    _f_now = _f_clk;
+    _f_now_r = _f_clk;
     // _refresh_window() derives _win from _cycle and the ladder's current
     // rung (see _recompute()'s T), superseding the plain window(_cycle) this
     // line used to compute directly.
@@ -265,6 +282,46 @@ void BbdEngine::set_decay(float n) {
     _apply_freeze();          // it scales the loop gain, so it lands at once
 }
 
+void BbdEngine::set_resonance(float n) {
+    // How bright the repeats stay. Neutral inverts kLossCoef's tilt; left,
+    // they darken faster than physics; right, they brighten and approach the
+    // freeze condition. The same filter the freeze needs, so it costs one
+    // biquad that is already there -- _apply_freeze() re-derives the
+    // crossfade from this new endpoint immediately.
+    _res_tilt = (clampf(n, 0.f, 1.f) - 0.5f) * 2.f * kFreezeTilt;
+    _apply_freeze();
+}
+
+void BbdEngine::set_sub(float n) { _in_gain = clampf(n, 0.f, 1.f); }
+
+void BbdEngine::set_detune(float n) {
+    // GEOMETRIC, because pitch tracks the clock RATIO: a linear map from
+    // 1 ms to 500 ms would spend nineteen twentieths of the knob's travel
+    // above 25 ms. The coefficient itself -- not just the seconds figure -- is
+    // computed here and stored, because process()'s glide runs every sample
+    // and engine/** may not call libm there.
+    const float s = kSlewMinS * std::pow(kSlewMaxS / kSlewMinS, clampf(n, 0.f, 1.f));
+    _slew_s = s;
+    _slew_coef = 1.f / (s * _sr);
+}
+
+void BbdEngine::set_filt(float t) {
+    // The loss pole, NOT kFilterHz. kFilterHz is constexpr, baked into
+    // butterworth_poles(), and its coefficients live in two file-scope
+    // singletons that every BbdLine holds raw pointers into -- one deck's knob
+    // would retune the whole instrument, a rebuild is 396 transcendentals, and
+    // bbd.h:270-281 documents in-place rebuild as a shared-mutable hazard safe
+    // only with the audio callback stopped. The loss pole is a per-line scalar
+    // with no rebuild cost, and it is the pole that carries the darkness: at
+    // 16384 stages the fixed chain contributes only -0.93 dB at 2.5 kHz.
+    _loss_a = bbd_tuning::kLossCoef
+              * std::pow(2.f, kFiltOctaves * clampf(t, -1.f, 1.f));
+    if (_loss_a > 0.999f) _loss_a = 0.999f;
+    if (_loss_a < 1e-4f) _loss_a = 1e-4f;
+    _l.SetLossCoef(_loss_a);
+    _r.SetLossCoef(_loss_a);
+}
+
 void BbdEngine::_apply_freeze() {
     // CONTROL RATE. Everything in the freeze that costs libm lives here and in
     // no other path: bbd_drive_gain() is a std::pow, and SetFeedbackTilt()'s
@@ -292,9 +349,19 @@ void BbdEngine::_apply_freeze() {
     // one redundant store, in exchange for _push_freeze() being the single
     // writer of the tilt amount and there being no window in which tilt_ and
     // tilt_c_ disagree about which freeze they belong to.
+    //
+    // The crossfade's UNFROZEN endpoint is _res_tilt (RESONANCE), not the
+    // literal 0 this used to be pinned at -- see set_resonance(). At
+    // RESONANCE's centre _res_tilt is 0, so an engine that has never touched
+    // RESONANCE and is not freezing is still bit-exact through the tilt, same
+    // as before this task; away from centre it colours the un-frozen repeats
+    // too, which is RESONANCE's whole job. kFreezeTilt (the freeze's own
+    // measured operating point) is what the crossfade approaches as
+    // _freeze -> 1, regardless of where RESONANCE sits.
     const float corner = _f_clk * 0.25f;
-    _l.SetFeedbackTilt(_freeze * kFreezeTilt, corner);
-    _r.SetFeedbackTilt(_freeze * kFreezeTilt, corner);
+    const float tilt = _res_tilt + _freeze * (kFreezeTilt - _res_tilt);
+    _l.SetFeedbackTilt(tilt, corner);
+    _r.SetFeedbackTilt(tilt, corner);
     _push_freeze();
 }
 
@@ -306,11 +373,12 @@ void BbdEngine::_push_freeze() {
     const bool on = _freeze > 0.f;
     _l.SetFeedbackDcBlock(on);
     _r.SetFeedbackDcBlock(on);
-    // The un-frozen endpoint is 0 -- exactly identity in BbdEcho::fb_path, so
-    // an engine that is not freezing is bit-exact through the tilt. RESONANCE
-    // replaces that 0 with its own value in a later movement; kFreezeTilt is
-    // the point it will be centred on.
-    const float tilt = _freeze * kFreezeTilt;
+    // The un-frozen endpoint is RESONANCE's own tilt (_res_tilt), not the
+    // literal 0 this used to be pinned at -- see set_resonance() and the
+    // matching comment in _apply_freeze(). At RESONANCE's centre _res_tilt is
+    // 0, exactly identity in BbdEcho::fb_path, so the bit-exact-at-rest case
+    // survives; kFreezeTilt is still the point the freeze is centred on.
+    const float tilt = _res_tilt + _freeze * (kFreezeTilt - _res_tilt);
     _l.SetFeedbackTiltAmount(tilt);
     _r.SetFeedbackTiltAmount(tilt);
     const float fb = _fb_lane + _freeze * (_freeze_k - _fb_lane);
@@ -319,8 +387,12 @@ void BbdEngine::_push_freeze() {
 }
 
 void BbdEngine::process_in(float inL, float inR) {
-    _in_l = inL;
-    _in_r = inR;
+    // SUB: how much neighbour/audio-in actually arrives. Applied here, once,
+    // so the wet path (fed to the lines below) and the dry path (outL/outR's
+    // own _in_l/_in_r term) agree about how much signal showed up -- a store
+    // and a multiply, safe on the per-sample side.
+    _in_l = inL * _in_gain;
+    _in_r = inR * _in_gain;
 }
 
 void BbdEngine::process(float& outL, float& outR) {
@@ -352,11 +424,38 @@ void BbdEngine::process(float& outL, float& outR) {
     // staircase went with it.)
     if (_freeze != _freeze_last) _push_freeze();
     const float gate_in = (_choked ? 0.f : 1.f) * (1.f - _freeze);
-    // Each line at its OWN clock -- COLOR's split (_apply_width()). _f_clk
-    // stays the un-spread centre for the observers only; nothing in the audio
-    // path reads it any more.
-    const float wl = _l.Process(_in_l * gate_in, _f_l);
-    const float wr = _r.Process(_in_r * gate_in, _f_r);
+
+    // DETUNE's slew (spec 5.8): the clock each line actually runs at chases
+    // _f_l/_f_r rather than jumping to them, because pitch tracks the clock
+    // RATIO, not its difference -- a linear slew from 500 Hz to 8000 Hz would
+    // cross the first octave in a twentieth of the time it spends on the
+    // last one. Interpolating the LOG makes a semitone take the same time
+    // wherever it starts. Flux's DRAG interpolates geometrically for exactly
+    // this reason, and it doubles as the VCO slew of the real circuit: a
+    // division change is click-free AND bends in pitch, like the hardware.
+    //
+    // A one-pole on the log is a per-sample logf/expf pair, which the
+    // per-sample budget will not carry. Multiply toward the target instead --
+    // the same fixed point, no transcendentals: x *= (target/x)^c is
+    // x * (1 + c*(ratio-1)) to first order, and the first order is what a
+    // slew is. Clamped so a large jump cannot overshoot.
+    auto glide = [](float now, float target, float c) {
+        const float ratio = target / now;
+        const float step = 1.f + c * (ratio - 1.f);
+        const float next = now * (step > 0.f ? step : 1.f);
+        return (ratio > 1.f) ? (next > target ? target : next)
+                             : (next < target ? target : next);
+    };
+    _f_now = glide(_f_now, _f_l, _slew_coef);
+    _f_now_r = glide(_f_now_r, _f_r, _slew_coef);
+
+    // Each line at its OWN slewed clock -- COLOR's split (_apply_width())
+    // supplies the TARGETS, DETUNE's glide above supplies what actually
+    // reaches the line. _f_clk/_f_l/_f_r stay the un-spread/spread targets
+    // for the observers only; nothing in the audio path reads them directly
+    // any more.
+    const float wl = _l.Process(_in_l * gate_in, _f_now);
+    const float wr = _r.Process(_in_r * gate_in, _f_now_r);
     // The engine's stated bound. The expander's 4x ceiling puts the raw return
     // above full scale in the self-oscillating regime (measured 1.387, +2.8
     // dBFS, at DRIVE 1 / FEEDBACK 1 with the bound deleted -- see

@@ -1006,3 +1006,94 @@ TEST_CASE("bbd engine: CHOKE closes the input and lets the tail run out") {
     CHECK(later < 0.5f * first);    // it ran out
     CHECK(first > 1e-3f);           // and it was not cut dead
 }
+
+TEST_CASE("bbd engine: every VOICE knob reaches the BBD") {
+    // Part::set_voice_* is six hand-written lines. An engine missing from one
+    // of them is a dead knob with no diagnostic, so this checks all six by
+    // observing a consequence, not by reading the source.
+    Part p;
+    p.init(48000.f, 17u, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
+    p.set_engine(ENGINE_BBD);
+    // Every lane defaults ACTIVE (part.h:637), i.e. modulated continuously by
+    // the mod plane -- including LANE_PITCH, which drives the clock in FLOW.
+    // The brief's snippet left all five live, and over the ~100k samples this
+    // case runs (two 48k-sample renders back to back) the plane walks the
+    // clock by more than an OCTAVE between the two hf() calls -- measured,
+    // clock_hz went from 297 Hz at FILT -1 to 8090 Hz at FILT +1, so the
+    // "less HF energy at FILT -1" result was actually "a lower clock aliases
+    // a fixed 3820 Hz probe tone harder", not FILT. Pin every lane inactive so
+    // the only thing that differs between the two calls is FILT itself --
+    // this is Task 8's own instruction #3: a RED or GREEN whose assertion
+    // does not depend on the changed line has to be strengthened, not trusted.
+    for (int lane = 0; lane < LANE_COUNT; ++lane) p.set_target_active(lane, false);
+    p.set_target_base(LANE_SOURCE, 0.f);
+    p.set_target_base(LANE_SIZE, 0.5f);
+    p.set_target_base(LANE_PITCH, 0.5f);
+    p.set_target_base(LANE_MOTION, 0.f);
+    p.set_target_base(LANE_LEVEL, 0.8f);
+    float l, r, sl, sr;
+    for (int i = 0; i < 500; ++i) p.process(l, r);
+    // FILT: the loss-pole corner. Dark and bright must differ in HF energy.
+    auto hf = [&](float filt) {
+        p.set_voice_filt(filt);
+        p.bbd().reset();
+        float s = 0.f;
+        for (int i = 0; i < 48000; ++i) {
+            const float x = std::sin(i * 0.5f);
+            p.process(x, x, l, r, sl, sr);
+            if (i > 24000) s += l * l;
+        }
+        return s;
+    };
+    CHECK(hf(-1.f) < hf(1.f));
+    // FILT centre is exactly kLossCoef -- the neutral position, so a knob left
+    // alone changes nothing.
+    p.set_voice_filt(0.f);
+    CHECK(p.bbd().loss_coef() == doctest::Approx(bbd_tuning::kLossCoef));
+    // RESONANCE plays the feedback tilt.
+    p.set_voice_resonance(0.f);
+    const float lo = p.bbd().resonance_tilt();
+    p.set_voice_resonance(1.f);
+    CHECK(p.bbd().resonance_tilt() > lo);
+    // SUB is the input level.
+    p.set_voice_sub(0.f);
+    CHECK(p.bbd().input_gain() == doctest::Approx(0.f));
+    p.set_voice_sub(1.f);
+    CHECK(p.bbd().input_gain() == doctest::Approx(1.f));
+    // DETUNE (menu-only) is the slew time.
+    p.set_voice_detune(0.f);
+    const float fast = p.bbd().slew_seconds();
+    p.set_voice_detune(1.f);
+    CHECK(p.bbd().slew_seconds() > fast);
+    // ATTACK and DECAY reached it in the freeze task; assert they still do.
+    // freeze_ramp_s(), not the brief's freeze_ramp_seconds() -- the freeze
+    // task already named this observer, and Task 8's own instructions say to
+    // extend the existing observer set rather than invent a parallel one.
+    p.set_voice_attack(1.f);
+    p.set_voice_decay(0.3f);
+    CHECK(p.bbd().freeze_ramp_s() > 0.5f);
+    CHECK(p.bbd().decay_norm() == doctest::Approx(0.3f));
+}
+
+TEST_CASE("bbd engine: DETUNE's slew decides how far a modulated bend travels") {
+    auto travel = [](float detune) {
+        BbdEngine e;
+        e.init(48000.f);
+        e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+        e.set_cycle(1.0f);
+        e.set_flow(true);
+        e.set_detune(detune);
+        float t[LANE_COUNT] = { 0.f, 1.f, 0.1f, 0.5f, 1.f };
+        e.set_targets(t, 0.5f);
+        for (int i = 0; i < 4800; ++i) { float l, r; e.process_in(0.f,0.f); e.process(l, r); }
+        const float start = e.clock_now();
+        t[LANE_PITCH] = 0.9f;                 // a step the slew must chase
+        e.set_targets(t, 0.5f);
+        for (int i = 0; i < 2400; ++i) { float l, r; e.process_in(0.f,0.f); e.process(l, r); }
+        return e.clock_now() / start;
+    };
+    // clock_now(), not clock_hz(): clock_hz() is the TARGET the lane asks for
+    // and moves instantly. What DETUNE decides is how fast the line follows it.
+    CHECK(travel(0.f) > travel(1.f));    // a short slew gets further in 50 ms
+}
+
