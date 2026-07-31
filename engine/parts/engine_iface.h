@@ -108,6 +108,13 @@ public:
     // (one virtual call per part per control tick) that is immeasurable
     // next to the audio-rate budget this file's other comments are about.
     virtual void set_excitation(float /*x*/) {}
+
+    // Stereo width, pushed once per control tick by Part::_control_tick from
+    // the SAME effective COLOR the chord layer receives. Default no-op, the
+    // set_excitation idiom: whichever engine is active is exactly the one that
+    // gets pushed, and an engine switched away from and back to needs no
+    // re-sync reasoning. One virtual call per part per control tick.
+    virtual void set_width(float /*n*/) {}
 };
 
 } // namespace spky

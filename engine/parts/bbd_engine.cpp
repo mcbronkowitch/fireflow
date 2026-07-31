@@ -49,6 +49,15 @@ constexpr float kFreezeTilt = 1.30f;
 constexpr float kFreezeRampMinS = 0.002f;
 constexpr float kFreezeRampMaxS = 2.0f;
 
+// COLOR's width ceiling, in cents of clock spread at COLOR = 1. A STARTING
+// POINT left for the ear, not a measured decision -- unlike kFreezeGain/
+// kFreezeTilt above, this one was not bisected against anything. It stays
+// small on purpose: the stage-count ratio the spread implies is r^2 (see
+// _apply_width()), so a few cents already move the stage count -- and hence
+// the bandwidth and grain -- audibly, at no rhythmic cost. The owner may move
+// this once it is heard on hardware; do not "fix" it by measurement.
+constexpr float kWidthMaxCents = 30.f;
+
 }  // namespace
 
 void BbdEngine::init(float sample_rate) {
@@ -181,8 +190,7 @@ void BbdEngine::_recompute() {
     // Either way the stage count follows, so SIZE keeps moving the rhythm
     // between fires while the clock -- and therefore the pitch -- holds.
     _stages = bbd_music::stages_for(_win, _f_clk);
-    _l.SetStages(_stages);
-    _r.SetStages(_stages);
+    _apply_width();
     // This is the one path on which _f_clk can move, and the freeze's tilt
     // corner tracks _f_clk/4 -- so it is also the one structural path that has
     // to re-push it. It doubles as set_targets()' push of _drive/_fb_lane,
@@ -195,8 +203,35 @@ void BbdEngine::_refresh_window() {
     const float T = _cycle * bbd_music::kDivs[_ladder.index()];
     _win = bbd_music::window(T);
     _stages = bbd_music::stages_for(_win, _f_clk);
-    _l.SetStages(_stages);
-    _r.SetStages(_stages);
+    _apply_width();
+}
+
+// See the declaration in bbd_engine.h for why this is shared by _recompute()
+// and _refresh_window() rather than living in only one of them.
+void BbdEngine::_apply_width() {
+    // COLOR: a symmetric geometric clock spread with the delay time held on
+    // the grid for BOTH lines. f_L = f*r, f_R = f/r, stage counts scaled to
+    // match, so both delays remain T and what differs is the stage count --
+    // hence the bandwidth and grain (f_clk/4), plus the comb offset from the
+    // sub-sample stage rounding.
+    //
+    // This deliberately gives up two-tone behaviour, which would need
+    // DIFFERENT delay times: at T = 500 ms and 50 cents the lines are 29 ms
+    // apart on the first repeat and 232 ms apart by the eighth, and the
+    // character changes completely with the division. Consequence to know:
+    // at self-oscillation both lines sing at 1/T, i.e. in unison.
+    //
+    // kWidthMaxCents is deliberately small: the stage-count ratio between the
+    // two lines is r^2, so a few cents already give an audible brightness
+    // split at no rhythmic cost.
+    const float cents = _width * kWidthMaxCents;
+    const float r = std::pow(2.f, cents * (1.f / 1200.f));
+    _f_l = _f_clk * r;
+    _f_r = _f_clk / r;
+    _st_l = bbd_music::stages_for(_win, _f_l);
+    _st_r = bbd_music::stages_for(_win, _f_r);
+    _l.SetStages(_st_l);
+    _r.SetStages(_st_r);
 }
 
 void BbdEngine::set_gate(bool on) {
@@ -317,8 +352,11 @@ void BbdEngine::process(float& outL, float& outR) {
     // staircase went with it.)
     if (_freeze != _freeze_last) _push_freeze();
     const float gate_in = (_choked ? 0.f : 1.f) * (1.f - _freeze);
-    const float wl = _l.Process(_in_l * gate_in, _f_clk);
-    const float wr = _r.Process(_in_r * gate_in, _f_clk);
+    // Each line at its OWN clock -- COLOR's split (_apply_width()). _f_clk
+    // stays the un-spread centre for the observers only; nothing in the audio
+    // path reads it any more.
+    const float wl = _l.Process(_in_l * gate_in, _f_l);
+    const float wr = _r.Process(_in_r * gate_in, _f_r);
     // The engine's stated bound. The expander's 4x ceiling puts the raw return
     // above full scale in the self-oscillating regime (measured 1.387, +2.8
     // dBFS, at DRIVE 1 / FEEDBACK 1 with the bound deleted -- see

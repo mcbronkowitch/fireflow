@@ -296,6 +296,11 @@ void Part::_control_tick() {
         : 0.f;
     _color_eff = clampf(_color + cmod, 0.f, 1.f);
     _chord.set_color(_color_eff);
+    // Stereo width (spec 5.7, Task 7): the SAME effective COLOR the chord
+    // layer just received, so a BBD deck's width breathes with MOTION exactly
+    // the way the chord surface does. Default no-op (engine_iface.h), so
+    // every other engine is untouched.
+    _engine->set_width(_color_eff);
 
     // DENS -> grain overlap, with MOTION's swing on top (spec 2026-07-21
     // morphagene-controls). Pushed straight at _sampler rather than through

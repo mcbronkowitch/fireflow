@@ -182,6 +182,11 @@ TEST_CASE("bbd engine: a mono source through the stereo engine stays mono") {
     Part p;
     p.init(48000.f, 3u, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
     p.set_engine(ENGINE_BBD);
+    // Width now rides COLOR (Task 7), and _color defaults to 0 already -- but
+    // pin it explicitly. This test is NAMED for the zero-width case, and
+    // relying on a member default to keep it there would make the assertion
+    // silently mean something else the day that default changes.
+    p.set_color(0.f);
     // MIX strictly below 1 and off-lane, so the dry path is live and the
     // output is loud enough to be worth comparing within this window.
     p.set_target_active(LANE_LEVEL, false);
@@ -199,6 +204,67 @@ TEST_CASE("bbd engine: a mono source through the stereo engine stays mono") {
     // Non-vacuity: silence is trivially mono. This must be a real signal whose
     // two channels agree, not two channels that agree about nothing.
     CHECK(peak > 1e-3f);
+}
+
+TEST_CASE("bbd engine: COLOR 0 with a mono source is bit-identical L to R") {
+    BbdEngine e;
+    e.init(48000.f);
+    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.set_cycle(0.5f);
+    e.set_width(0.f);
+    float t[LANE_COUNT] = { 0.3f, 1.f, 0.5f, 0.6f, 1.f };
+    e.set_targets(t, 0.5f);
+    for (int i = 0; i < 96000; ++i) {
+        float l, r;
+        const float x = std::sin(i * 0.05f) * (i < 24000 ? 1.f : 0.f);
+        e.process_in(x, x);
+        e.process(l, r);
+        // Same signal, same clock (width 0 -> r == 1 -> f_l == f_r exactly),
+        // same stage count. The identity ALSO needs the same dither seed, but
+        // there is nothing to arrange for that here: BbdLine::Reset (fx/bbd.h)
+        // seeds every line's Rng from one constant, 0x9e3779b9u, and this
+        // engine never calls SeedDither with anything else (checked: neither
+        // init_buffers nor reset() do). Two identical inputs into two
+        // identically-clocked, identically-seeded lines cannot diverge.
+        CHECK(l == r);
+    }
+}
+
+TEST_CASE("bbd engine: COLOR opened splits the lines and keeps the grid") {
+    BbdEngine e;
+    e.init(48000.f);
+    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.set_cycle(0.5f);
+    e.set_width(0.6f);
+    float t[LANE_COUNT] = { 0.3f, 1.f, 0.5f, 0.6f, 1.f };
+    e.set_targets(t, 0.5f);
+    bool differed = false;
+    for (int i = 0; i < 48000; ++i) {
+        float l, r;
+        const float x = std::sin(i * 0.05f);
+        e.process_in(x, x);
+        e.process(l, r);
+        if (l != r) differed = true;
+    }
+    CHECK(differed);
+    // Both lines still land on the same delay: what differs is the stage
+    // count, hence the bandwidth and grain, not the rhythm.
+    //
+    // The tolerance is the sub-sample stage rounding, not a tuned number:
+    // stages_for rounds 2*T*f to the nearest integer, so the stored stage
+    // count is 2*T*f +- 0.5, and dividing back out gives
+    // delay = T +- 0.25/f. At this fixture's operating point (T = 0.5 s,
+    // f_r ~= 1433 Hz, the lower of the two clocks and so the looser bound)
+    // that is a relative error of at most 0.25/(1433*0.5) ~= 3.5e-4.
+    // 0.001 leaves just under 3x margin over that bound without being the
+    // brief's much looser 0.01, which would have passed even a materially
+    // wrong split.
+    CHECK(e.stages_l() / (2.f * e.clock_l())
+          == doctest::Approx(e.stages_r() / (2.f * e.clock_r())).epsilon(0.001));
+    // Symmetric and geometric: the geometric mean of the two clocks is the
+    // un-spread one.
+    CHECK(std::sqrt(e.clock_l() * e.clock_r())
+          == doctest::Approx(e.clock_hz()).epsilon(0.001));
 }
 
 TEST_CASE("bbd engine: FLOW is free, STEP is on the scale grid") {

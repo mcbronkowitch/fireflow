@@ -37,6 +37,34 @@ public:
     void set_flow(bool flow) override { _flow = flow; if (_flow) _recompute(); }
     bool flow() const { return _flow; }
 
+    // COLOR (spec 5.7): a symmetric geometric clock spread with the delay
+    // held on the grid for both lines -- see _apply_width() for the maths and
+    // the trade it makes.
+    //
+    // Calls _apply_width() directly, NOT _recompute() -- deliberately, and it
+    // cost a real regression to learn: Part::_control_tick() pushes set_width
+    // BEFORE set_targets() in the same tick (both run every tick, but width
+    // rides the same early push as set_chord). _recompute() is pitch-aware and
+    // consumes the cold-start latch (_latched) the moment it runs; on a deck's
+    // very first tick after an engine swap that means it would derive _f_clk
+    // from clock_step(_win, _pitch) using whatever _pitch happened to be lying
+    // around -- the ctor default, not the real value set_targets() supplies
+    // moments later in that same tick -- and burn the arm on it. Measured: it
+    // broke "a BBD deck swapped into an already-running STEP transport
+    // reflects PITCH before its first fire" (both PITCH probes collapsed to
+    // the clock at PITCH 0.5). _apply_width() only reads the already-settled
+    // _f_clk/_win, so it cannot reach _pitch or _latched at all -- the same
+    // reasoning _refresh_window() already rests on for the same reason.
+    void set_width(float n) override { _width = clampf(n, 0.f, 1.f); _apply_width(); }
+    // Observers: the two lines' actual clock and stage count, as split by
+    // COLOR. clock_hz()/stages() above stay the un-spread CENTRE -- the value
+    // COLOR spreads away from -- so existing callers of those two are
+    // unaffected by this task.
+    float clock_l() const { return _f_l; }
+    float clock_r() const { return _f_r; }
+    int   stages_l() const { return _st_l; }
+    int   stages_r() const { return _st_r; }
+
     // The freeze (spec 5.6). Gate high in STEP mutes the input and holds the
     // loop at k0, so the content keeps circulating and stays audible.
     void set_gate(bool on) override;
@@ -102,6 +130,13 @@ private:
     // It also deliberately does NOT call _apply_freeze(): _f_clk cannot move
     // here, so the tilt corner it would push is the one already in force.
     void _refresh_window();
+    // COLOR's spread (spec 5.7): given the CURRENT _win and _f_clk, derives
+    // the two lines' clocks and stage counts and pushes the latter into
+    // _l/_r. Control rate only (one std::pow) -- called from both
+    // _recompute() and _refresh_window(), i.e. every path that can move
+    // either _f_clk or _win, so the two lines' actual SetStages() never lags
+    // behind a cycle/SIZE change the way a bare _recompute()-only call would.
+    void _apply_width();
     // The freeze's two-speed push, split by what it costs.
     //
     // _apply_freeze() is CONTROL RATE and owns both libm calls: the tilt's
@@ -129,6 +164,16 @@ private:
     float _pitch = 0.5f;
     float _f_clk = 4000.f;
     int   _stages = 8192;
+    // COLOR's width, and the two lines it produces. _width is the clamped
+    // knob; _f_l/_f_r and _st_l/_st_r are _apply_width()'s output, and what
+    // process() and BbdEcho::SetStages() actually use -- _f_clk/_stages above
+    // are deliberately left as the un-spread centre, for the observers that
+    // predate this task.
+    float _width = 0.f;
+    float _f_l = 4000.f;
+    float _f_r = 4000.f;
+    int   _st_l = 8192;
+    int   _st_r = 8192;
     // Held rather than pushed straight down, because the freeze crossfades
     // AWAY from them: _apply_freeze() is the only writer of the two lines'
     // feedback coefficient, and it needs both the lane's value and the DRIVE
