@@ -378,7 +378,7 @@ the **"Route: other deck" checkbox defaults on** (see above), so a BBD deck
 with no external cabling still has the neighbouring deck's output to feed
 its line instead of silence.
 
-Two consequences that would otherwise read as bugs:
+Three consequences that would otherwise read as bugs:
 - **PITCH is inaudible at FEEDBACK 0.** A bucket-brigade delay writes and
   reads on the same clock, so the very first pass through the line is
   always at unity pitch; only a signal that recirculates (FEEDBACK above
@@ -391,6 +391,17 @@ Two consequences that would otherwise read as bugs:
   so there is no freeze for either control to shape. This is an
   owner-confirmed decision, not a bug: switch to STEP to hear either control
   do anything.
+- **In FLOW, SIZE is also a pitch gesture.** The clock is re-derived from
+  the reachable window every control tick — which is also what gives PITCH
+  its full travel at every division, with no dead zone — and that window's
+  bounds move with the delay time. Moving SIZE therefore bends whatever is
+  circulating, the same way moving PITCH does, even if PITCH itself never
+  moved: at a fixed PITCH setting, taking SIZE from a 2 s repeat down to a
+  0.25 s repeat has been measured moving the clock by close to 3 octaves.
+  This is a real bucket-brigade delay's character, not a bug — its time
+  knob and its clock are the same knob. In STEP this does not happen
+  between fires: the clock only re-derives on a fire, so SIZE moves the
+  rhythm there and leaves the pitch alone.
 
 ## Build
 

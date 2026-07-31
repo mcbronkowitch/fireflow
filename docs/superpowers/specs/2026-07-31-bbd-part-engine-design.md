@@ -367,8 +367,29 @@ The difference from rev. 1 is which quantity the lane owns:
 - **`LANE_PITCH` moves `f_clk`** → the circulating charge bends, the delay time
   does not move. This is the gesture `docs/roadmap.md:1157-1160` records as
   **confirmed by ear** — *"RATE bending stored pitch"*.
-- **`LANE_SIZE` moves `T`**, and `stages` moves with it in exact proportion, so
-  `f_clk` is untouched → **the rhythm moves and nothing transposes.**
+- **`LANE_SIZE` moves `T`. In STEP, between fires, `stages` moves with it in
+  exact proportion and `f_clk` is untouched** — the clock is latched (§5.5),
+  so `_recompute()`'s STEP branch never re-derives it; only `stages_for`
+  recomputes against the new window, at the SAME clock → the rhythm moves and
+  nothing transposes. **In FLOW this does not hold** — see the amendment
+  below.
+
+*(Amended 2026-07-31, whole-branch review: this bullet used to read
+"`LANE_SIZE` moves `T`, and `stages` moves with it in exact proportion, so
+`f_clk` is untouched → the rhythm moves and nothing transposes," with no mode
+qualifier — true only in STEP between fires. In FLOW, `_recompute()`
+re-derives `f_clk = clock_flow(_win, _pitch)` from the CURRENT window on
+every tick regardless of what changed, and §5.3's "the lane is scaled to what
+is reachable" makes `_win`'s bounds (`f_lo`, `f_hi`) scale as `1/T` — so a
+`LANE_SIZE` move rescales the clock right along with the rhythm, even though
+`LANE_PITCH` itself never moved. Measured at a held lane of 0.5,
+`set_cycle(2.0f)`: `T = 2 s → 0.25 s` moves `clock_hz()` from 724.1 Hz to
+5724.3 Hz — **7.91×, 2.98 octaves**. This is not a defect to fix: it is the
+second instance of the non-orthogonality §5.3 already names for
+`LANE_PITCH`/`LANE_MOTION`, and the more faithful of the two — a real
+bucket-brigade delay's time control moves its clock and bends whatever is
+circulating, by construction. Owner's ruling: accept the coupling, no code
+change. See §5.13 bullet 3 and `host/vcv/README.md`'s BBD section.)*
 
 **The engine syncs to tempo through `set_cycle`**, which `Part` already pushes to
 every engine. A free-running clock was rejected: the engine would be the only
@@ -872,13 +893,46 @@ neither blooms nor sits silent, and §5.13 tests it.
 
 - A deck set to `ENGINE_BBD` passes audio from audio-in and from the neighbour,
   with MIX (`LANE_LEVEL`) at 0 and 1 both correct.
-- **With FEEDBACK up**, moving `LANE_PITCH` with content circulating transposes
-  the tail, and the repeat interval measured from the render CSV does not move.
-- Moving `LANE_SIZE` with content circulating moves the repeat interval, and the
-  pitch of the circulating tail does not move. *(Both bullets are measured
-  **across** the change with material in flight, not after it settles — the slew
-  time is a user parameter, so the settling convention has to be stated or the
-  two tests contradict each other.)*
+- **With FEEDBACK up, moving `LANE_PITCH` with content circulating transposes
+  the tail; the repeat interval does not move.** The repeat-interval half is
+  an **arithmetic identity, not a render measurement**: `stages_for`
+  recomputes `stages` from whatever `f_clk` and the window currently are, so
+  `delay = stages/(2·f_clk) = T` for every `f_clk`, however it got that value
+  (§5.2) — pinned at the parameter level by `tests/test_bbd_engine.cpp`'s
+  "LANE_PITCH moves the clock and leaves the delay alone" and
+  `tests/test_bbd_music.cpp`'s "the stage count holds the delay on the grid".
+  The transposition half is a **different claim, resting on physics
+  documented in `engine/fx/bbd.h`** — a bucket brigade writes and reads at
+  the same clock, so a grain tracks `f_now / f_at_entry`, which is why
+  FEEDBACK has to be up for the bend to be audible at all (§5.3) — the
+  identity above does not by itself prove it, and this bullet is not to be
+  read as if it did.
+- **Moving `LANE_SIZE` with content circulating moves the repeat interval**
+  (`tests/test_bbd_engine.cpp`'s "the delay time follows LANE_SIZE and lands
+  on the grid" — the same identity as above, now holding the NEW `T`).
+  **In STEP, between fires, the pitch of the circulating tail does not move
+  either** — the clock is latched (§5.5), so it is that same identity plus
+  the latch: `_recompute()`'s STEP branch never re-derives `f_clk` there, so
+  only `stages` moves, holding the new `T` at the unchanged clock. Proven by
+  the latch mechanism `tests/test_bbd_engine.cpp`'s "in STEP the clock holds
+  between fires" already exercises, plus a `LANE_SIZE`-specific compiled
+  check (not a committed test): `set_cycle(2.0f)`, one `latch_clock()`, then
+  two `LANE_SIZE` moves (`T = 2 s`, then `0.25 s`) with no fire in between —
+  `clock_hz()` reads 1448.15 Hz before and after, bit-identical, while
+  `stages()` moves 5793 → 724, the exact `T` ratio. **In FLOW this does not
+  hold, and this bullet does not claim it does** — see §5.2's amendment: the
+  clock re-derives from the window every tick there, and the window rescales
+  with `T`, so `LANE_SIZE` is also a pitch gesture in FLOW. That is the
+  coupling §5.2 records, not a violation of this bullet, which is scoped to
+  STEP. *(Restated 2026-07-31, whole-branch review: both bullets used to be
+  measured "across the change with material in flight" from a render CSV,
+  and the second bullet carried no mode qualifier. Neither survives as
+  written. What exists, and all that either bullet needs, is parameter-level
+  — a render-CSV measurement of an identity was considered and deliberately
+  not built, because an identity does not need measuring, only tracing. And
+  the second bullet's "pitch does not move" half is true in STEP and false
+  in FLOW, not universal — see §5.2 and `host/vcv/README.md`'s BBD section
+  for the FLOW coupling.)*
 - With FEEDBACK at 0, `LANE_PITCH` produces no pitch change — the documented
   gating, asserted rather than discovered.
 - `LANE_PITCH` spans its full travel at every division; no dead zone at the top.
@@ -1314,6 +1368,11 @@ still resolve" bullet.**
 - **Does a BBD deck want a tape echo after it?** §5.11 now defaults it off.
   Whether dark-and-compressed into longer-and-cleaner is worth playing is a
   listening question.
+- **Does the FLOW `LANE_SIZE`/clock coupling (§5.2) want a control at all?**
+  E.g. an option to hold the clock across a division change, trading away
+  §5.3's "no dead zone" property for a `LANE_SIZE` move that does not also
+  bend pitch. The ear's question, not an engineering one — no design
+  proposed here.
 
 ---
 
