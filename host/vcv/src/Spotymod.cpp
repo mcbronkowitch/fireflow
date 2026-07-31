@@ -8,6 +8,7 @@
 #include "generated_panel.hpp"   // enums + control table (generated from res/gen_panel.py)
 #include "init_patch.hpp"       // sampler.vcvm snapshot + non-param init state
 #include "form_song_migration.hpp"
+#include "bbd_edge_state.hpp"   // ENG->BBD edge detector (dependency-free, unit-tested)
 
 // The portable engine core -- exactly the same headers the desktop render host
 // and (later) the Daisy firmware use. No hardware type crosses this boundary.
@@ -203,23 +204,15 @@ struct Spotymod : Module {
     // memcpy via inst.load_sample, no disk I/O and no resample.
     bool factoryTried[spky::PART_COUNT] = {false, false};
     // Edge-detects the ENG switch landing on BBD, so the FLUX-off and
-    // excite-other-deck defaults below (spec 5.11/5.12) apply once on the
-    // transition and never fight a player who deliberately turns them back
-    // on afterward.
-    //
-    // wasBbd is always constructed false, but a loaded patch (or a Ctrl+D
-    // duplicate) can restore ENGINE_A/B already AT 4 before pushParams() ever
-    // runs for this instance -- Rack sets params[]/custom data without
-    // calling onReset(). A naive "false until proven otherwise" edge would
-    // then fire on the very first control tick and silently clobber that
-    // patch's saved FLUX/exciteOtherDeck. bbdEdgeSeeded defers the FIRST
-    // observation of each part to a baseline instead of a transition: on
-    // that first tick wasBbd[p] is set to whatever ENG already says, with no
-    // defaults applied, and only ticks after that can see a real 0->BBD
-    // edge. Entering BBD by player action applies the defaults; finding
-    // yourself already on BBD (freshly loaded or duplicated) does not.
-    bool wasBbd[spky::PART_COUNT] = {false, false};
-    bool bbdEdgeSeeded[spky::PART_COUNT] = {false, false};
+    // excite-other-deck defaults below (spec 5.11/5.12) apply once on a
+    // genuine player-driven transition and never fight a player who
+    // deliberately turns them back on afterward -- and never fire at all on
+    // a RESTORE that lands on BBD (fresh add, whole-patch load, Ctrl+D
+    // duplicate, or an already-live preset Load/paste -- see
+    // dataFromJson()'s rearm() call). Full reasoning, and why this is its
+    // own unit-tested type rather than inline bools, lives in
+    // bbd_edge_state.hpp.
+    spkyvcv::BbdEdgeState bbdEdge[spky::PART_COUNT];
     spky::WavData factoryNative;
     bool factoryNativeTried = false;
     std::vector<float> factoryL, factoryR;
@@ -563,17 +556,10 @@ struct Spotymod : Module {
             else
                 inst.set_stages(p, params[p ? STAGES_B : STAGES_A].getValue());
 
-            if (!bbdEdgeSeeded[p]) {
-                // First control tick this instance has ever evaluated ENG for
-                // this part -- fresh add, or the first tick after a JSON load
-                // with no prior process() call at all. Whatever state we find
-                // here is the baseline, never a transition: a patch that was
-                // already on BBD must load with its saved FLUX/exciteOtherDeck
-                // intact, not clobbered by an edge it never actually crossed.
-                wasBbd[p] = bbdPart;
-                bbdEdgeSeeded[p] = true;
-            }
-            if (bbdPart && !wasBbd[p]) {
+            if (bbdEdge[p].tick(bbdPart)) {
+                // Genuine player-driven entry into BBD (see bbd_edge_state.hpp
+                // for why a restore can never reach this branch).
+                //
                 // FLUX defaults disengaged (spec 5.11). The BBD's output is
                 // already six poles at 3600 Hz plus a loss pole breathing under
                 // a compander, and its gappy repeats are its most distinctive
@@ -588,7 +574,6 @@ struct Spotymod : Module {
                 // is what makes resampling work without external cabling.
                 smp[p].exciteOtherDeck = true;
             }
-            wasBbd[p] = bbdPart;
 
             // SCAN nur fuer Sampler-Parts (K-03). Der urspruengliche Grund --
             // set_scan -> scan_rate enthielt im unteren Zweig ein std::pow,
@@ -860,6 +845,21 @@ struct Spotymod : Module {
         if (curSr > 0.f) {
             pendingRestore = false;
             restoreSamplerContent();
+            // This is a restore into an ALREADY-LIVE module (right-click Load
+            // preset / module paste), not a fresh add -- pushParams() has
+            // already run at least once, so bbdEdge[p] is already seeded from
+            // BEFORE this restore. Re-arm both parts (see bbd_edge_state.hpp)
+            // so the very next control tick treats whatever ENG this JSON
+            // just set as a fresh baseline, not a transition -- otherwise a
+            // preset saved on BBD, loaded onto a module currently on a
+            // different engine, would fire the "entering BBD" edge and
+            // clobber that preset's own saved FLUX/exciteOtherDeck. The
+            // fresh-add path (curSr == 0.f, the else branch below) needs no
+            // such re-arm: no tick has run yet, so bbdEdge[p] is still at its
+            // construction-time unseeded state and the ordinary first-tick
+            // baseline in tick() already applies.
+            for (int p = 0; p < spky::PART_COUNT; ++p)
+                bbdEdge[p].rearm();
         } else {
             pendingRestore = true;
         }
