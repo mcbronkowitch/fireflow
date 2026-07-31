@@ -223,7 +223,13 @@ void Part::_control_tick() {
     // Unquantized, the centre is exactly 1.0 for every scale and root, and the
     // knob transposes continuously (the author's call: out-of-tune material has
     // to be tunable to the key, which a semitone grid cannot do).
-    _pitch_q = _engine_id == ENGINE_SAMPLER ? pitch_raw : pitch_quantized;
+    // The SAMPLER does not quantize (see the comment above). The BBD does not
+    // either, but only in FLOW: STEP puts the clock on scale steps so the bend
+    // is in the key, and FLOW leaves it continuous, which is the gesture FLOW
+    // exists for.
+    _pitch_q = (_engine_id == ENGINE_SAMPLER ||
+                (_engine_id == ENGINE_BBD && !_step_on)) ? pitch_raw
+                                                         : pitch_quantized;
     _tg[LANE_PITCH] = clampf(_pitch_q + _detune_cents * (1.f / 3600.f), 0.f, 1.f);
 
     // MOTION's Scatter startet auf einem Sampler-Deck bei null, nicht bei der
@@ -441,6 +447,7 @@ void Part::_fire_trigger() {
         _sampler.set_phrase_pos(slot, _mod.pitch_steps(),
                                 pg_metric_weight(slot));
     }
+    if (_engine_id == ENGINE_BBD) _bbd.latch_clock();
     float chord[ChordBuilder::kMaxNotes];
     // build() unconditionally, for the same state reason as apply() in
     // _control_tick.

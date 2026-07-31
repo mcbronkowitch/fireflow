@@ -34,6 +34,14 @@ public:
     void process_in(float inL, float inR) override;
     bool consumes_input() const override { return true; }
     void set_cycle(float seconds) override;
+    void set_flow(bool flow) override { _flow = flow; if (_flow) _recompute(); }
+    bool flow() const { return _flow; }
+    // A step fire latches the clock and holds it until the next one -- the
+    // pattern SynthEngine already uses for pitch. In FLOW the engine ignores
+    // fires and follows the plane continuously: lane.cpp:447-452 makes a FLOW
+    // deck fire once per master-lane cycle un-gated, so latching there would
+    // freeze the clock at the top of every cycle.
+    void latch_clock() { if (!_flow) { _latched = true; _recompute(); } }
 
     // Clears both lines, both companders and both feedback states. Part has no
     // swap-away notification, so this is called on activation instead.
@@ -60,6 +68,8 @@ private:
     float _f_clk = 4000.f;
     int   _stages = 8192;
     bool  _buf_ok = false;
+    bool  _flow = false;
+    bool  _latched = false;
 };
 
 }  // namespace spky

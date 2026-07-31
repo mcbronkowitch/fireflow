@@ -84,7 +84,14 @@ void BbdEngine::set_targets(const float* t, float /*tune*/) {
 void BbdEngine::_recompute() {
     const float T = _cycle * bbd_music::kDivs[_ladder.index()];
     _win = bbd_music::window(T);
-    _f_clk = bbd_music::clock_flow(_win, _pitch);
+    if (_flow) {
+        _f_clk = bbd_music::clock_flow(_win, _pitch);
+    } else if (_latched) {
+        _f_clk = bbd_music::clock_step(_win, _pitch);
+        _latched = false;
+    }
+    // Either way the stage count follows, so SIZE keeps moving the rhythm
+    // between fires while the clock -- and therefore the pitch -- holds.
     _stages = bbd_music::stages_for(_win, _f_clk);
     _l.SetStages(_stages);
     _r.SetStages(_stages);
