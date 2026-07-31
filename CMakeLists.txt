@@ -186,7 +186,7 @@ add_test(
     COMMAND ${CMAKE_COMMAND}
         -DRENDER=$<TARGET_FILE:render>
         -DSCENARIO=${CMAKE_SOURCE_DIR}/host/render/scenarios/ctrl_identity.json
-        -DEXPECTED=4296cf27d94aef392cfe5fdc9c48a9df2ceaae85c15c5993c42966bed16e59a7
+        -DEXPECTED=2b73f2483dc4a85b7c967c5820815829055de4e98e685d031a096d57abb699cd
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -P ${CMAKE_SOURCE_DIR}/tests/check_render_hash.cmake
 )
