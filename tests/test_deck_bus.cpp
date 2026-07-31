@@ -110,3 +110,37 @@ TEST_CASE("deck bus: the engine input is bounded") {
     }
 }
 
+TEST_CASE("deck bus: every engine is bit-identical with the source off") {
+    for (EngineId e : {ENGINE_TEST_TONE, ENGINE_SYNTH, ENGINE_SAMPLER,
+                       ENGINE_WAVE, ENGINE_BODY}) {
+        Part a, b;
+        a.init(48000.f, 7);  b.init(48000.f, 7);
+        a.set_engine(e);     b.set_engine(e);
+        // Give the engines something to play, or a silent engine makes this
+        // pass vacuously -- see the non-silence guard below.
+        for (Part* p : {&a, &b}) {
+            p->set_target_base(LANE_LEVEL, 1.f);
+            p->mod().set_rate(0.5f);
+        }
+        // b is handed a hostile tap it must ignore; a is never told anything.
+        float al, ar, asl, asr, bl, br, bsl, bsr;
+        float peak = 0.f;
+        for (int i = 0; i < 4000; ++i) {
+            a.process(0.f, 0.f, al, ar, asl, asr);
+            b.set_deck_in(3.f, -3.f);
+            b.process(0.f, 0.f, bl, br, bsl, bsr);
+            REQUIRE(bl == al);          // bit-identical, not Approx
+            REQUIRE(br == ar);
+            peak = std::max(peak, std::fabs(al));
+        }
+        // The sampler runs silent with no buffer (documented: "nullptr ->
+        // runs silent"), so it is exempt -- it is covered by Tasks 1 and 4,
+        // which drive it through the monitor path. Every other engine must
+        // actually have sounded, or the identity above proved nothing.
+        if (e != ENGINE_SAMPLER) {
+            INFO("engine ", static_cast<int>(e), " produced silence");
+            CHECK(peak > 1e-6f);
+        }
+    }
+}
+
