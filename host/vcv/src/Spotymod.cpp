@@ -1258,18 +1258,37 @@ struct SpotymodWidget : ModuleWidget {
             }));
         }
 
-        // BODY's excitation bus (design spec §6): patch state, not a
-        // performance control -- there is no panel knob for it on any
-        // engine, so it lives here, same shape as Detune A/B above. Reads
-        // (and does nothing audible) on Synth/Sampler/Wave decks; only BODY
-        // routes it. Defaults: tape on, other deck / audio in off.
+        // BODY's excitation bus (design spec §6) plus, since the
+        // cross-deck-audio-bus branch (spec 2026-07-31 bbd-part-engine §4.4),
+        // the audio-rate cross-deck tap: patch state, not a performance
+        // control -- there is no panel knob for any of this, so it lives
+        // here, same shape as Detune A/B above. Defaults: tape on, other
+        // deck / audio in off.
+        //
+        // "Excite: FLUX tape" and "Excite: audio in" are still exactly what
+        // they say: BODY-only, inert everywhere else. "Excite: other deck"
+        // is NOT -- exciteOtherDeck feeds Part::_src_deck, which now gates
+        // TWO paths: BODY's control-rate excitation bus (unchanged) AND the
+        // audio-rate cross-deck bus, which today only SAMPLER consumes
+        // (process_in()). So on a SAMPLER deck this flag went from inert to
+        // live: it audibly routes and records the neighbouring deck, and --
+        // because the bound is fast_tanh(engine_in + neighbour) rather than
+        // a separate path -- it also puts the deck's own external audio-in
+        // through fast_tanh for the first time even when the neighbour is
+        // silent (tanh(1) ~ 0.76), measurably attenuating audio-in
+        // monitoring/recording on that deck. A patch saved with this flag on
+        // for a SAMPLER deck therefore behaves differently after upgrading
+        // to this branch. Neither consequence is a bug -- see the spec
+        // section above -- but the label has to say so, because the old
+        // name promised BODY-only and nothing here enforces that anymore.
         for (int p = 0; p < spky::PART_COUNT; ++p) {
             const std::string name = p ? "Excite B" : "Excite A";
             menu->addChild(createSubmenuItem(name, "", [m, p](Menu* sub) {
                 sub->addChild(createBoolPtrMenuItem("Excite: FLUX tape", "",
                                                     &m->smp[p].exciteTape));
-                sub->addChild(createBoolPtrMenuItem("Excite: other deck", "",
-                                                    &m->smp[p].exciteOtherDeck));
+                sub->addChild(createBoolPtrMenuItem(
+                    "Route: other deck (BODY excite, SAMPLER feed+rec)", "",
+                    &m->smp[p].exciteOtherDeck));
                 sub->addChild(createBoolPtrMenuItem("Excite: audio in", "",
                                                     &m->smp[p].exciteAudioIn));
             }));

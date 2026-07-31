@@ -47,7 +47,7 @@ One new test file rather than additions to `tests/test_instrument.cpp`, because 
 - Produces: `void Part::set_deck_in(float l, float r)` — pushed once per deck per sample by `Instrument`, holding the **sibling** deck's post-FX stereo output from the previous sample. Not for panel or host use.
 - Consumes: the existing `_src_deck` flag from `set_excitation_sources(bool, bool, bool)`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/test_deck_bus.cpp`:
 
@@ -119,7 +119,7 @@ Register it in `CMakeLists.txt` alongside the other `tests/test_*.cpp` entries i
 
 **Note on the `process` overloads:** `Part` has `process(float, float, float&, float&, float&, float&)`, `process(float&, float&, float&, float&)` and `process(float&, float&)`. A call like `p.process(0.25f, 0.25f, l, r)` does **not** compile — literals cannot bind to the four-argument all-reference overload. Always use the six-argument form when passing input.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 source env.sh && cmake --build build --target spky_tests && ./build/spky_tests -tc="deck bus*"
@@ -127,7 +127,7 @@ source env.sh && cmake --build build --target spky_tests && ./build/spky_tests -
 
 Expected: FAIL — `'class spky::Part' has no member named 'set_deck_in'`.
 
-- [ ] **Step 3: Add the setter and members**
+- [x] **Step 3: Add the setter and members**
 
 In `engine/parts/part.h`, next to `set_other_deck_tap` (around line 66):
 
@@ -147,7 +147,7 @@ With the members, next to `_src_tape` / `_src_deck` / `_src_audio` (around line 
     float _deck_in_r = 0.f;
 ```
 
-- [ ] **Step 4: Sum and bound at the engine input**
+- [x] **Step 4: Sum and bound at the engine input**
 
 In `Part::process`, replace the engine-input line at `part.h:323`:
 
@@ -180,7 +180,7 @@ Add `#include "util/fast_tanh.h"` to `part.h` if it is not already included.
 
 **Do not touch `part.h:313`.** `_audio_in_tap = 0.5f * (inL + inR)` must keep latching the raw input — see Global Constraints.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 ```bash
 source env.sh && cmake --build build --target spky_tests && ./build/spky_tests -tc="deck bus*"
@@ -188,7 +188,7 @@ source env.sh && cmake --build build --target spky_tests && ./build/spky_tests -
 
 Expected: PASS, all three cases.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add engine/parts/part.h tests/test_deck_bus.cpp CMakeLists.txt
@@ -208,7 +208,7 @@ git commit -m "feat(part): the engine can hear the other deck, bounded at its in
 - Consumes: `Part::set_deck_in(float, float)` from Task 1.
 - Produces: `float Instrument::deck_tap(int p, int ch) const` — deck `p`'s post-FX output from the sample just processed, `ch` 0 = L, 1 = R. Observer only, for tests.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/test_deck_bus.cpp`:
 
@@ -257,7 +257,30 @@ TEST_CASE("deck bus: one sample of latency, both directions, at every CHOKE") {
 
 Signatures used above, all verified against the tree: `Instrument::process(const float* inL, const float* inR, float* outL, float* outR, size_t n)` (`instrument.h:265`), `set_choke(float)` (`:247`), `set_excitation_sources(int p, bool, bool, bool)` (`:90`), `sampler_monitor(int p, bool)` (`:165`).
 
-- [ ] **Step 2: Run it to verify it fails**
+> **Correction, from the review round — the skip window drafted here was too
+> short.** `n = 200` assumed a single 4 ms `SoftSwitch` ramp (192 samples)
+> covers the engine-swap transition. It does not: `set_engine()` above moves
+> each deck away from its boot default, which is a full swap — `SoftSwitch`
+> (`fx_util.h`) fades **out** (192 samples) before swapping engines and fades
+> back **in** (192 more) afterward, so the transition is not settled again
+> until sample ~384, not ~192. Measured directly (a debug dump, not
+> committed): the residual between `tap_dst[n]` and `fast_tanh(tap_src[n-1])`
+> shrinks smoothly through n ≈ 383 and is exactly 0.0 from n = 384 on. The
+> shipped test starts its checked window at `n = 400` — a small margin past
+> that measured boundary — see `tests/test_deck_bus.cpp`, which is
+> authoritative over this plan text.
+>
+> **This is a different defect class from Task 3 and Task 4's corrections
+> above.** Those were assertions that could not fail — a guard the test
+> never reached, a bound the test's own ceiling couldn't distinguish from its
+> absence. This one is a test that **would fail spuriously**: at `n = 200`
+> the fade is still resolving, so `tap_dst[n]` would not yet equal
+> `fast_tanh(tap_src[n-1])` even with a perfectly correct implementation,
+> and the assertion would flag a defect that isn't there. Both classes are
+> worth naming, because the fix looks different — a spurious failure needs a
+> wider settle window, not a stronger assertion.
+
+- [x] **Step 2: Run it to verify it fails**
 
 ```bash
 source env.sh && cmake --build build --target spky_tests && ./build/spky_tests -tc="deck bus: one sample*"
@@ -265,7 +288,7 @@ source env.sh && cmake --build build --target spky_tests && ./build/spky_tests -
 
 Expected: FAIL — `'class spky::Instrument' has no member named 'deck_tap'`.
 
-- [ ] **Step 3: Add the storage and the observer**
+- [x] **Step 3: Add the storage and the observer**
 
 In `engine/instrument.h`, next to `_dry_tap` (around line 291):
 
@@ -288,7 +311,7 @@ And with the other test observers (around line 130):
     float deck_tap(int p, int ch) const { return _deck_tap[p][ch]; }
 ```
 
-- [ ] **Step 4: Wire the read and the write**
+- [x] **Step 4: Wire the read and the write**
 
 In `engine/instrument.cpp`, **before** `_parts[pri].set_inhibit(false);` (i.e. before either deck processes):
 
@@ -312,7 +335,7 @@ And **after** both decks have produced `pl[]` / `prr[]`, next to the existing `_
         _deck_tap[PART_B][0] = bl;  _deck_tap[PART_B][1] = br;
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 ```bash
 source env.sh && cmake --build build --target spky_tests && ./build/spky_tests -tc="deck bus*"
@@ -320,7 +343,7 @@ source env.sh && cmake --build build --target spky_tests && ./build/spky_tests -
 
 Expected: PASS — ten latency checks (five CHOKE positions × two directions).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add engine/instrument.h engine/instrument.cpp tests/test_deck_bus.cpp
@@ -339,7 +362,7 @@ git commit -m "feat(instrument): the cross-deck bus, one sample either way regar
 
 This matters more here than it did for WAVE or BODY: those *added* engines, this changes `Part::process`, which every engine runs.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```cpp
 TEST_CASE("deck bus: every engine is bit-identical with the source off") {
@@ -348,20 +371,59 @@ TEST_CASE("deck bus: every engine is bit-identical with the source off") {
         Part a, b;
         a.init(48000.f, 7);  b.init(48000.f, 7);
         a.set_engine(e);     b.set_engine(e);
+        // Give the engines something to play, or a silent engine makes this
+        // pass vacuously -- see the non-silence guard below.
+        for (Part* p : {&a, &b}) {
+            p->set_target_base(LANE_LEVEL, 1.f);
+            p->mod().set_rate(0.5f);
+        }
         // b is handed a hostile tap it must ignore; a is never told anything.
         float al, ar, asl, asr, bl, br, bsl, bsr;
+        float peak = 0.f;
         for (int i = 0; i < 4000; ++i) {
             a.process(0.f, 0.f, al, ar, asl, asr);
             b.set_deck_in(3.f, -3.f);
             b.process(0.f, 0.f, bl, br, bsl, bsr);
             REQUIRE(bl == al);          // bit-identical, not Approx
             REQUIRE(br == ar);
+            peak = std::max(peak, std::fabs(al));
+        }
+        // The sampler runs silent with no buffer (documented: "nullptr ->
+        // runs silent"), so it is exempt -- it is covered by Tasks 1 and 4,
+        // which drive it through the monitor path. Every other engine must
+        // actually have sounded, or the identity above proved nothing.
+        if (e != ENGINE_SAMPLER) {
+            INFO("engine ", static_cast<int>(e), " produced silence");
+            CHECK(peak > 1e-6f);
         }
     }
 }
 ```
 
-- [ ] **Step 2: Run it**
+> If an engine other than the sampler comes back silent, **do not delete the
+> guard** — find the missing setup (a level base, a trigger, a target) and
+> make it sound. A silent reference is the failure this guard exists to catch.
+
+> **Correction, from the review round — this test as drafted could not fail.**
+> `_deck_in_l/_r` are read only inside `if (_engine_wants_in)`, i.e. only when
+> the engine overrides `consumes_input()` — and `SamplerEngine` is the **only**
+> override in the tree. So for TEST_TONE, SYNTH, WAVE and BODY the `_src_deck`
+> guard is never reached at all, and for the sampler the tap reaches the output
+> only through `if (_monitor)`, which defaults false and this draft never enabled.
+> Deleting the guard entirely would have left the test green.
+>
+> The shipped test enables the sampler's monitor so the guard is genuinely
+> exercised, and says in a comment that for the other four engines the guard is
+> *unreachable* rather than merely untested — a stronger guarantee than a test,
+> and the honest description of what their bit-identity proves. See
+> `tests/test_deck_bus.cpp`, which is authoritative over this plan text.
+>
+> **The general lesson, worth carrying into movements 2 and 3:** the cross-deck
+> bus does nothing for any engine but the sampler today. The BBD engine will be
+> the second consumer of `process_in`, and until it exists, any test written as
+> if the bus were live for other engines is testing nothing.
+
+- [x] **Step 2: Run it**
 
 ```bash
 source env.sh && ./build/spky_tests -tc="deck bus: every engine*"
@@ -369,7 +431,7 @@ source env.sh && ./build/spky_tests -tc="deck bus: every engine*"
 
 Expected: PASS immediately if Task 1 was implemented correctly (the `_src_deck` branch is not taken). **If it fails, Task 1 put work outside the guard** — fix that rather than relaxing the test.
 
-- [ ] **Step 3: Run the render-hash gates**
+- [x] **Step 3: Run the render-hash gates**
 
 ```bash
 source env.sh && ctest --test-dir build -R "ctrl_identity|wave_formant_sweep" --output-on-failure
@@ -379,7 +441,7 @@ Expected: PASS, hashes unchanged.
 
 **Know what this does and does not cover.** These are the **only two** render-hash ctests (`CMakeLists.txt:183-203`) — there is none for SAMPLER or BODY — and `tests/check_render_hash.cmake:23-24` hashes the **WAV only** and deletes the CSV unread. The doctest above is what actually covers the other three engines; do not report "the hashes cover it".
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/test_deck_bus.cpp
@@ -397,7 +459,7 @@ git commit -m "test(deck bus): the source-off path is bit-identical for all five
 
 Sampler ↔ sampler is the one topology that would otherwise run away: both engines monitor their input through, neither bounds it, and the circulation would reach `inf`/`NaN` rather than merely getting loud — which poisons the record buffers. The master `Limiter` cannot prevent it: it is applied to the summed output after MORPH and reverb, **outside** the loop, and there is no per-deck limiter (per-deck COMP has a bit-exact bypass, `comp.h:17`).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```cpp
 TEST_CASE("deck bus: sampler <-> sampler mutual routing stays finite") {
@@ -426,15 +488,42 @@ TEST_CASE("deck bus: sampler <-> sampler mutual routing stays finite") {
 }
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 ```bash
 source env.sh && ./build/spky_tests -tc="deck bus: sampler*"
 ```
 
-Expected: PASS. **If it fails with `inf`/`NaN`, the bound in Task 1 is on the wrong side of the sum** — it must be `fast_tanh(el + _deck_in_l)`, not `el + fast_tanh(_deck_in_l)`.
+Expected: PASS.
 
-- [ ] **Step 3: Commit**
+> **Correction, from the review round — the sentence that stood here was false.**
+> It claimed the wrong bound ordering would show up as `inf`/`NaN`. It does not.
+> Both orderings are contraction maps, because the exogenous term is a fixed
+> constant rather than something that grows: correct order `x[n] = tanh(0.5 + x[n-2])`
+> converges to ≈0.881, wrong order `x[n] = 0.5 + tanh(x[n-2])` converges to ≈1.381.
+> Both stay bounded and both would clear a `peak < 100.f` ceiling, so the test as
+> first drafted could not have caught the ordering bug it was written for. Worse,
+> the master `Limiter` compresses both to ≈1.0 at the instrument's *output*, so no
+> output-side ceiling can separate them at all.
+>
+> **What discriminates them is `deck_tap`, upstream of the limiter.** Correct
+> ordering hard-clamps at `|y| <= 1.0` by `fast_tanh`'s own compare-clamp
+> (`engine/util/fast_tanh.h:47`); wrong ordering adds the exogenous input *after*
+> the clamp, so it can reach 1.5 and measures 1.381. The shipped test asserts
+> that, plus a dead-routing baseline measured in the same test — see
+> `tests/test_deck_bus.cpp`, which is authoritative over this plan text.
+>
+> **Correction:** this annotation first cited `fast_tanh.h:37`, which is the
+> `ax >= 3.646739f` early-return on the *threshold* — the fast path for
+> already-saturated inputs, not the thing that bounds every other value.
+> `fast_tanh.h:19-22` says outright that the threshold alone does not
+> guarantee the bound (the raw Pade form can read fractionally above 1.0 just
+> below the threshold). The load-bearing compare-clamp is the one on the
+> *return value*, `:47` (`return y > 1.f ? 1.f : (y < -1.f ? -1.f : y);`) —
+> that is what makes `|y| <= 1.0` hold unconditionally, and it is what the
+> discrimination above actually relies on.
+
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/test_deck_bus.cpp
@@ -447,7 +536,7 @@ git commit -m "test(deck bus): mutual sampler routing saturates instead of diver
 
 **Files:**
 - Modify: `engine/parts/part.h`, `engine/instrument.cpp` (the compile-time guard)
-- Modify: `bench/workloads_system.cpp` (the row, and its registration in `kSystemWorkloads[]` around lines 423-442)
+- Modify: `bench/workloads_system.cpp` (the row, and its registration in `kCoreWorkloads[]` around lines 423-442 — this plan originally said `kSystemWorkloads[]`; the array the shipped code registers into is `kCoreWorkloads[]` (`bench/workloads_system.cpp:485`), "system" is the row's *family* string, not the array name)
 - Modify: `bench/run.py` (`BENCH_PROTOCOL_ROWS_BY_FAMILY`, lines 167-303)
 
 **Interfaces:** consumes Tasks 1 and 2.
@@ -456,7 +545,7 @@ git commit -m "test(deck bus): mutual sampler routing saturates instead of diver
 
 No cost figure is claimed for the bus anywhere in the spec, deliberately: an ISA hand-count would say ≈0.04 points, and round 4 made the same kind of count about the same loop and **was falsified by 2–4×, in the unfavourable direction**. This task replaces the guess with a measurement.
 
-- [ ] **Step 1: Add a compile-time switch**
+- [x] **Step 1: Add a compile-time switch**
 
 The A/B needs the bus code *absent* in one arm, and no such switch exists. In `engine/parts/part.h`, above the class:
 
@@ -471,7 +560,7 @@ The A/B needs the bus code *absent* in one arm, and no such switch exists. In `e
 
 Then wrap the `if (_src_deck) { ... }` body from Task 1 and both `instrument.cpp` hunks from Task 2 in `#if SPKY_DECK_BUS` / `#endif`. With it 0, `set_deck_in` must still exist and compile to nothing observable, so the tests' call sites keep building.
 
-- [ ] **Step 2: Add the row**
+- [x] **Step 2: Add the row**
 
 In `bench/workloads_system.cpp`, add `setup_inst_worst_deck_bus` as a copy of `setup_inst_worst` plus, on **both** decks, `inst.set_excitation_sources(p, true, /*other_deck=*/true, false)` — so the branch is actually taken and the row measures the bus rather than the guard. Reuse `proc_inst` as the process function. Register it:
 
@@ -485,15 +574,30 @@ next to the `instrument_worst` entry at line 437, and add the row name to `bench
 
 Note the settle requirement the neighbouring rows document: `kInstrSettleBlocks = 200` blocks, so every envelope and slew has arrived before the measured window opens.
 
-- [ ] **Step 3: Build and run both arms**
+- [x] **Step 3: Build and run both arms**
 
 ```bash
 source env.sh && cd bench && make clean && make && python run.py --rows inst_worst_deck_bus,instrument_worst
 ```
 
-Then rebuild with `-DSPKY_DECK_BUS=0` and run the same rows.
+Then rebuild the B arm with `make BENCH_DECK_BUS=0 build/bench.elf` and run the same rows.
 
-- [ ] **Step 4: Verify the row is real, not stale**
+> **Correction, from the review round — the bare `-DSPKY_DECK_BUS=0` form
+> named here is an ODR hazard, not merely an inconvenience.** `Part::process`
+> is `inline` in a header, so if even one translation unit is left over from
+> a build under the other value of `SPKY_DECK_BUS` — which a bare compile-line
+> `-D` invites, because it is invisible to Make's dependency graph the same
+> way `BENCH_GIT_HASH`/`BENCH_FAMILIES`/`BENCH_ITCM_HOT` would be if passed
+> the same way — the link mixes objects that disagree on an inline function's
+> definition. That is ill-formed, not merely stale, and it bit this session
+> once. `bench/Makefile:44-49` and `bench/write_bench_deck_bus.py` now emit
+> the selection into a generated header (`build/bench_deck_bus.h`) that is a
+> declared prerequisite of every object, the same mechanism already used for
+> `-O2`/`-O3`, closing the hole. Use `make BENCH_DECK_BUS=0 build/bench.elf`;
+> `make clean` first if switching arms without going through `run.py`, which
+> already sequences this correctly.
+
+- [x] **Step 4: Verify the row is real, not stale**
 
 ```bash
 grep -c "inst_worst_deck_bus" bench/bench.map
@@ -501,7 +605,7 @@ grep -c "inst_worst_deck_bus" bench/bench.map
 
 Expected: non-zero. **The bench build can silently relink a stale object** — verify new rows against `bench.map`, not against the memory table.
 
-- [ ] **Step 5: Write the report and commit**
+- [x] **Step 5: Write the report and commit**
 
 Record both arms in `docs/bench/2026-07-31-<sha>-deck-bus.md`, reporting **`pct_max`** (the gate), not `pct_avg`. Then:
 
@@ -516,11 +620,11 @@ git commit -m "bench(deck bus): price the cross-deck tap as a paired A/B"
 
 From the spec's §4.7. All must hold before this branch merges:
 
-- [ ] `_deck_tap[PART_COUNT][2]` and `Instrument::deck_tap(p, ch)` exist; latency is one sample and is **equal in both directions** across a CHOKE sweep that crosses zero. *(Task 2)*
-- [ ] With `other_deck` off on both decks, `ctrl_identity` and `wave_formant_sweep` are unchanged, **and** all five engines are bit-identical under the doctest — the hash gates alone do not cover SAMPLER or BODY. *(Task 3)*
-- [ ] Sampler ↔ sampler mutual routing at full monitor produces finite, bounded output over 10 s. *(Task 4)*
-- [ ] A paired same-source A/B prices the bus, reported as `pct_max`. *(Task 5)*
-- [ ] The full test suite is green: `ctest --test-dir build --output-on-failure`.
+- [x] `_deck_tap[PART_COUNT][2]` and `Instrument::deck_tap(p, ch)` exist; latency is one sample and is **equal in both directions** across a CHOKE sweep that crosses zero. *(Task 2)*
+- [x] With `other_deck` off on both decks, `ctrl_identity` and `wave_formant_sweep` are unchanged, **and** all five engines are bit-identical under the doctest — the hash gates alone do not cover SAMPLER or BODY. *(Task 3)*
+- [x] Sampler ↔ sampler mutual routing at full monitor produces finite, bounded output over 10 s. *(Task 4)*
+- [x] A paired same-source A/B prices the bus, reported as `pct_max`. *(Task 5)*
+- [x] Desktop suite acceptance is "no new failure": `ctest --test-dir build --output-on-failure`, judged against the pre-existing `test_seed_audition_init.cpp` failure already on `main` (out of scope, see below) — not a fully green suite. This plan originally said "the full test suite is green," which this branch cannot honestly claim and was never asked to: that case has been red on `main` for weeks, and every neighbouring plan (e.g. `docs/superpowers/plans/2026-07-29-instrument-ablation.md:51`) already states the standard this way.
 
 ## Out of scope
 
@@ -528,4 +632,5 @@ From the spec's §4.7. All must hold before this branch merges:
 - **The tape-echo revert** — movement 3.
 - **`FxMem` and `Part::init`'s signature.** Both grow in movements 2 and 3; nothing here touches either.
 - **`test_panel.py`'s 53 failures.** Pre-existing BODY-era drift; fixing it is movement 2's first task. Do not let it block this branch, and do not treat it as an acceptance gate here.
-- **The VCV surface.** The bus needs no new parameter, so `Spotymod.cpp` is untouched. The *default* for a BBD deck's source belongs to movement 2.
+- **`tests/test_seed_audition_init.cpp`'s failure.** Pre-existing on `main`, unrelated to this bus (VCV init-patch parameter defaults, BODY-era drift); not this branch's to fix, and not an acceptance gate here either.
+- **The VCV surface.** The bus needs no new parameter, so `Spotymod.cpp` is untouched beyond the documentation fix to the pre-existing "Excite: other deck" menu item's label (see the parent spec §4.4). The *default* for a BBD deck's source belongs to movement 2.

@@ -2,6 +2,22 @@
 #include "util/math.h"
 #include <cmath>
 
+// SPKY_DECK_BUS is defined by parts/part.h (`#ifndef`/`#define`, default 1),
+// reached transitively through instrument.h's `#include "parts/part.h"`.
+// The `#if SPKY_DECK_BUS` guards below rely on that chain having already run
+// by the time they're reached. If the include order above ever changes so
+// that guard is no longer defined when the preprocessor gets here, `#if` on
+// an undefined identifier evaluates to 0 silently -- the cross-deck bus
+// would vanish from this translation unit with no diagnostic, and the
+// desktop build never separately exercises SPKY_DECK_BUS=0 to catch it (only
+// the bench build does, deliberately, via BENCH_DECK_BUS). This #error turns
+// that silent failure into a build failure instead.
+#if !defined(SPKY_DECK_BUS)
+#error "SPKY_DECK_BUS is undefined here -- instrument.h must include " \
+       "parts/part.h (which defines it) before this point; check the " \
+       "include order at the top of this file and of instrument.h."
+#endif
+
 using namespace spky;
 
 namespace {
@@ -106,6 +122,17 @@ void Instrument::process(const float* inL, const float* inR,
         const int yld = 1 - pri;
         const float amt = _choke < 0.f ? -_choke : _choke;
 
+        // Read the bus at the TOP of the sample, for BOTH decks, before either
+        // one runs. Doing it here rather than between the two process() calls
+        // is what makes the latency CHOKE-independent: a "whoever runs first
+        // feeds whoever runs second" bus would be 0 samples one way and 1 the
+        // other, and would swap as the knob crossed zero -- and a mutual
+        // routing would then contain a 0-sample algebraic loop.
+#if SPKY_DECK_BUS
+        for (int p = 0; p < PART_COUNT; ++p)
+            _parts[p].set_deck_in(_deck_tap[1 - p][0], _deck_tap[1 - p][1]);
+#endif
+
         float pl[PART_COUNT], prr[PART_COUNT];
         float psl[PART_COUNT], psr[PART_COUNT];
         _parts[pri].set_inhibit(false);   // knob flips must never strand a part
@@ -146,6 +173,13 @@ void Instrument::process(const float* inL, const float* inR,
             _dry_tap[PART_A] = 0.5f * (al + ar);
             _dry_tap[PART_B] = 0.5f * (bl + br);
         }
+
+        // Write at the BOTTOM, every sample -- unlike _dry_tap's once-per-block
+        // guard above, which is a control-rate quantity.
+#if SPKY_DECK_BUS
+        _deck_tap[PART_A][0] = al;  _deck_tap[PART_A][1] = ar;
+        _deck_tap[PART_B][0] = bl;  _deck_tap[PART_B][1] = br;
+#endif
 
         const float ga = _center.gain_a();
         const float gb = _center.gain_b();

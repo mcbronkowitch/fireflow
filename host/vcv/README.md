@@ -99,6 +99,23 @@ ice-blue halo for Wave, and a green one for Body.
 prepared piano to struck bell; its excitation sources — the deck's own FLUX
 echo, the other deck, and the audio input — are checkboxes in the same
 context menu.
+
+**The "other deck" checkbox (menu item `Route: other deck (BODY excite,
+SAMPLER feed+rec)`) is not Body-only.** It also drives the audio-rate
+cross-deck bus (spec 2026-07-31 bbd-part-engine): the only engine that
+consumes that bus today is **Sampler**, so turning this on for a Sampler
+deck audibly routes and records the neighbouring deck's output — where on
+earlier releases the same checkbox did nothing for a Sampler deck. A patch
+saved with it on for a Sampler part will sound different after updating to
+a build with the cross-deck bus. It also has a second, easy-to-miss effect
+on a Sampler deck regardless of whether the neighbour is making sound: the
+external **audio input** is summed with the neighbour's tap and the sum is
+soft-clipped (`fast_tanh`) before reaching the engine, so enabling this
+checkbox puts the deck's own audio-in monitoring/recording through that
+same soft clip — audibly softer than the normal dry-at-unity monitor, even
+with a silent neighbour. Neither behaviour is a bug; it is what routing two
+decks' audio through one shared flag necessarily does.
+
 **Sampler** is a granular texture deck over the shared record buffer. Flipping ENG to
 Sampler on an empty part autoloads the embedded first four bars of the
 project author's own 110 BPM bass loop (`res/factory.wav`) so the deck makes
