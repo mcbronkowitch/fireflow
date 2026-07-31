@@ -59,8 +59,24 @@ constexpr float kFreezeRampMaxS = 2.0f;
 constexpr float kWidthMaxCents = 30.f;
 
 // FILT's endpoints, geometric around kLossCoef so the knob centre is EXACTLY
-// the physical value -- a knob left alone must change nothing.
-constexpr float kFiltOctaves = 2.f;
+// the physical value -- a knob left alone must change nothing. ASYMMETRIC on
+// purpose (code review finding, 2026-07-31): a shared +-2-octave span put the
+// NEGATIVE endpoint at a sensible kLossCoef/4 = 0.183, but asked the POSITIVE
+// endpoint for kLossCoef*4 = 2.928, which saturates BbdLine::SetLossCoef's
+// 0.999 ceiling at t ~= 0.22 -- so the top three quarters of FILT's positive
+// travel produced an identical, motionless _loss_a. A knob dead over most of
+// one half of its travel is not a knob.
+//
+// kFiltPosOctaves is DERIVED, not guessed: it solves
+// kLossCoef * 2^kFiltPosOctaves == kLossCoefCeiling, so the ceiling is
+// reached (up to float rounding) exactly at t = +1, and every positive
+// setting up to there actually moves the pole. kFiltNegOctaves keeps the
+// original span -- the darkening rate was never in question, only the
+// positive side's dead travel -- and is left as an open listening question
+// like kWidthMaxCents above, not re-tuned by this fix.
+constexpr float kFiltNegOctaves = 2.f;
+constexpr float kLossCoefCeiling = 0.999f;   // matches BbdLine::SetLossCoef's own clamp
+const float kFiltPosOctaves = std::log2(kLossCoefCeiling / bbd_tuning::kLossCoef);
 
 // DETUNE (menu): the slew the clock chases a moved lane at. Flux records this
 // as a deliberate musical value, and since PITCH and SIZE are both driven by
@@ -77,11 +93,12 @@ void BbdEngine::init(float sample_rate) {
     _buf_ok = false;
     // The ramp rate is in samples, so it only becomes real once _sr is.
     _freeze_step = 1.f / (_freeze_ramp_s * _sr);
-    // Same reasoning for DETUNE's slew coefficient.
-    _slew_coef = 1.f / (_slew_s * _sr);
+    // Same reasoning for DETUNE's per-sample multiplier.
+    _slew_mul = std::pow(2.f, 1.f / (_slew_s * _sr));
     // The slewed clock starts EXACTLY at the (still-default) target -- a zero
-    // would make process()'s geometric glide divide by zero on its very first
-    // sample. See bbd_engine.h's member comment.
+    // would make process()'s glide's target/now ratio non-finite (and,
+    // pointlessly, multiplying zero by anything stays zero forever). See
+    // bbd_engine.h's member comment.
     _f_now = _f_clk;
     _f_now_r = _f_clk;
     // _refresh_window() derives _win from _cycle and the ladder's current
@@ -297,12 +314,34 @@ void BbdEngine::set_sub(float n) { _in_gain = clampf(n, 0.f, 1.f); }
 void BbdEngine::set_detune(float n) {
     // GEOMETRIC, because pitch tracks the clock RATIO: a linear map from
     // 1 ms to 500 ms would spend nineteen twentieths of the knob's travel
-    // above 25 ms. The coefficient itself -- not just the seconds figure -- is
+    // above 25 ms. The MULTIPLIER itself -- not just the seconds figure -- is
     // computed here and stored, because process()'s glide runs every sample
     // and engine/** may not call libm there.
+    //
+    // Code review finding, 2026-07-31: the first version of this glide stored
+    // a coefficient `c` and did `next = now*(1 + c*(target/now - 1))`, which
+    // is algebraically an exact `next = now + c*(target-now)` -- a plain
+    // one-pole applied directly to Hz, NOT the "equal ratios take equal time"
+    // shape this comment already claimed. It reached the pathology it was
+    // written to avoid by a different route: the raw-Hz GAP shrinks
+    // exponentially regardless of how many octaves are left to cross, so a
+    // big jump still spent most of its travel on the first octave and
+    // crawled through the last one. Measured over a 500 -> 8000 Hz-scale
+    // jump: 787 samples to cross the first octave, 1657 to cross the
+    // second -- a ~2.1x mismatch where a geometric glide owes exactly 1x.
+    //
+    // _slew_s is therefore redefined as the time to cross ONE OCTAVE, and
+    // _slew_mul is the per-sample multiplicative step whose
+    // (_slew_s * _sr)-th power is exactly 2 -- i.e. multiplying (or, when
+    // descending, dividing) by _slew_mul every sample crosses any ratio in a
+    // time proportional to its size in octaves, wherever on the clock it
+    // starts. This is now a constant-RATE portamento rather than an
+    // exponential approach -- arguably the more faithful analogue anyway: an
+    // analog VCO's RC glide is exponential in the CONTROL VOLTAGE, and CV is
+    // log-frequency, so the hardware's glide is already geometric in Hz.
     const float s = kSlewMinS * std::pow(kSlewMaxS / kSlewMinS, clampf(n, 0.f, 1.f));
     _slew_s = s;
-    _slew_coef = 1.f / (s * _sr);
+    _slew_mul = std::pow(2.f, 1.f / (s * _sr));
 }
 
 void BbdEngine::set_filt(float t) {
@@ -314,10 +353,21 @@ void BbdEngine::set_filt(float t) {
     // only with the audio callback stopped. The loss pole is a per-line scalar
     // with no rebuild cost, and it is the pole that carries the darkness: at
     // 16384 stages the fixed chain contributes only -0.93 dB at 2.5 kHz.
+    //
+    // Asymmetric span (kFiltNegOctaves vs kFiltPosOctaves -- see their own
+    // comment): the two directions have different room before
+    // BbdLine::SetLossCoef's [1e-4, kLossCoefCeiling] clamp bites. At t = 0
+    // both branches agree (anything*0 = 0, 2^0 = 1), so the centre stays
+    // bit-exact regardless of which span is chosen.
+    //
+    // No clamp here any more, unlike the first version of this setter.
+    // BbdLine::SetLossCoef already clamps to the identical [1e-4, 0.999]
+    // range, so clamping again here was pure duplication, not a second line
+    // of defence -- both clamps bounded the same range, so the second one
+    // could only ever be a no-op. (Code review finding, 2026-07-31.)
+    const float c = clampf(t, -1.f, 1.f);
     _loss_a = bbd_tuning::kLossCoef
-              * std::pow(2.f, kFiltOctaves * clampf(t, -1.f, 1.f));
-    if (_loss_a > 0.999f) _loss_a = 0.999f;
-    if (_loss_a < 1e-4f) _loss_a = 1e-4f;
+              * std::pow(2.f, (c >= 0.f ? kFiltPosOctaves : kFiltNegOctaves) * c);
     _l.SetLossCoef(_loss_a);
     _r.SetLossCoef(_loss_a);
 }
@@ -429,25 +479,34 @@ void BbdEngine::process(float& outL, float& outR) {
     // _f_l/_f_r rather than jumping to them, because pitch tracks the clock
     // RATIO, not its difference -- a linear slew from 500 Hz to 8000 Hz would
     // cross the first octave in a twentieth of the time it spends on the
-    // last one. Interpolating the LOG makes a semitone take the same time
-    // wherever it starts. Flux's DRAG interpolates geometrically for exactly
-    // this reason, and it doubles as the VCO slew of the real circuit: a
-    // division change is click-free AND bends in pitch, like the hardware.
+    // last one. Flux's DRAG interpolates geometrically for exactly this
+    // reason, and it doubles as the VCO slew of the real circuit: a division
+    // change is click-free AND bends in pitch, like the hardware.
     //
-    // A one-pole on the log is a per-sample logf/expf pair, which the
-    // per-sample budget will not carry. Multiply toward the target instead --
-    // the same fixed point, no transcendentals: x *= (target/x)^c is
-    // x * (1 + c*(ratio-1)) to first order, and the first order is what a
-    // slew is. Clamped so a large jump cannot overshoot.
-    auto glide = [](float now, float target, float c) {
-        const float ratio = target / now;
-        const float step = 1.f + c * (ratio - 1.f);
-        const float next = now * (step > 0.f ? step : 1.f);
-        return (ratio > 1.f) ? (next > target ? target : next)
-                             : (next < target ? target : next);
+    // CONSTANT RATE, not an exponential approach: a one-pole (even one built
+    // from a multiplicative step rather than an additive one) still spends
+    // most of its travel on whichever octave it starts nearest and crawls
+    // through the rest, because what shrinks each sample is the RATIO left to
+    // cross, and an exponential shrinks that ratio fastest when it is
+    // largest. What "equal ratios take equal time" actually requires is a
+    // FIXED per-sample multiplier: _slew_mul's (_slew_s * _sr)-th power is
+    // exactly 2 (see set_detune()), so multiplying by it drives one octave in
+    // exactly _slew_s seconds, wherever on the clock it starts, with no
+    // per-sample transcendental -- one multiply (or divide) and two compares.
+    // Clamped so a step cannot overshoot the target it is chasing.
+    auto glide = [](float now, float target, float mul) {
+        if (now < target) {
+            const float next = now * mul;
+            return next > target ? target : next;
+        }
+        if (now > target) {
+            const float next = now / mul;
+            return next < target ? target : next;
+        }
+        return now;
     };
-    _f_now = glide(_f_now, _f_l, _slew_coef);
-    _f_now_r = glide(_f_now_r, _f_r, _slew_coef);
+    _f_now = glide(_f_now, _f_l, _slew_mul);
+    _f_now_r = glide(_f_now_r, _f_r, _slew_mul);
 
     // Each line at its OWN slewed clock -- COLOR's split (_apply_width())
     // supplies the TARGETS, DETUNE's glide above supplies what actually

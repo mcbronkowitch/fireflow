@@ -238,14 +238,19 @@ private:
     // Defaults to 1 (unity): a BbdEngine driven directly, without Part's
     // set_sub() forward, behaves exactly as it did before this task.
     float _in_gain = 1.f;
-    // DETUNE: the slew time and its per-sample multiply-toward-target
-    // coefficient (process()'s geometric glide). Kept apart because the glide
-    // needs the coefficient every sample and the seconds figure is only for
-    // the observer. The literal default here mirrors kSlewMinS in the .cpp
-    // (the fastest setting) at the default 48 kHz, same idiom as
-    // _freeze_step's default below; init() recomputes it for the real _sr.
+    // DETUNE: the slew time and its per-sample multiplicative step (process()'s
+    // constant-RATE glide -- see set_detune()'s comment for why this replaced
+    // an exponential-in-Hz approach that only looked geometric). _slew_s is
+    // redefined as the time to cross ONE OCTAVE; _slew_mul is the per-sample
+    // factor whose (_slew_s * _sr)-th power is exactly 2, so multiplying (or
+    // dividing) by it every sample crosses equal ratios in equal time, exactly,
+    // by construction. Kept apart because the glide needs the multiplier every
+    // sample and the seconds figure is only for the observer. The literal
+    // default here is 2^(1/(0.001*48000)) -- kSlewMinS's shape at the default
+    // 48 kHz, same idiom as _freeze_step's default below; init() recomputes it
+    // for the real _sr.
     float _slew_s = 0.001f;
-    float _slew_coef = 1.f / (0.001f * 48000.f);
+    float _slew_mul = 1.014545f;
     // The clock each line is ACTUALLY running at, slewed toward _f_l/_f_r --
     // see process(). Initialised to _f_clk in init(), never to zero: a zero
     // would make the geometric glide's ratio non-finite.

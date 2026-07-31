@@ -1097,3 +1097,90 @@ TEST_CASE("bbd engine: DETUNE's slew decides how far a modulated bend travels") 
     CHECK(travel(0.f) > travel(1.f));    // a short slew gets further in 50 ms
 }
 
+TEST_CASE("bbd engine: DETUNE's glide crosses equal clock RATIOS in equal time") {
+    // Code review finding, 2026-07-31: the shipped glide,
+    // next = now*(1 + c*(target/now - 1)), is algebraically an exact
+    // next = now + c*(target-now) -- a plain one-pole applied directly to
+    // Hz, not the geometric ("equal ratios, equal time") shape spec 5.8
+    // asks for. It reaches the pathology by a different route than a linear
+    // ramp but lands in the same place: the first octave of a big jump
+    // moves fast and the last one crawls, because the raw-Hz GAP shrinks
+    // exponentially regardless of how many octaves are left to cross.
+    //
+    // The discriminating measurement: time an octave-doubling from f0 to
+    // 2*f0, then time the NEXT doubling from 2*f0 to 4*f0, inside one
+    // continuous glide toward a target far beyond both. A geometric glide
+    // spends the same time on every octave; a one-pole-in-Hz spends much
+    // less on the second (the arithmetic gap it is chasing has already
+    // shrunk by the time it gets there).
+    BbdEngine e;
+    e.init(48000.f);
+    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.set_cycle(1.0f);
+    e.set_flow(true);
+    e.set_detune(1.f);                    // the slowest setting, easiest to resolve
+    // SIZE 1 -> div 1 -> T = cycle = 1 s -> window(1.0) gives f_lo = 256 Hz,
+    // f_hi = 8192 Hz (kMinStages*0.5/1, kMaxStages*0.5/1). PITCH 0 -> the
+    // target clock settles at f_lo = 256 Hz.
+    float t[LANE_COUNT] = { 0.f, 1.f, 0.f, 0.5f, 1.f };
+    e.set_targets(t, 0.5f);
+    // Settle well past DETUNE max's own time constant before measuring f0:
+    // the shipped glide's coefficient at DETUNE 1 gives a ~24000-sample (0.5 s)
+    // time constant, so 24000 samples is only ~63 % converged, not settled.
+    // 250000 samples is >10 time constants (<0.01 % residual) under either
+    // the shipped shape or the fixed one, so f0 is a fair reading either way.
+    for (int i = 0; i < 250000; ++i) { float l, r; e.process_in(0.f, 0.f); e.process(l, r); }
+    const float f0 = e.clock_now();
+    REQUIRE(f0 == doctest::Approx(256.f).epsilon(0.02));
+    // PITCH 1 -> target jumps to f_hi = 8192 Hz, 32x f0 and therefore far
+    // beyond the two octaves (4x) this case actually measures -- the glide
+    // is nowhere near arriving while it crosses them.
+    t[LANE_PITCH] = 1.f;
+    e.set_targets(t, 0.5f);
+    int i_2x = -1, i_4x = -1;
+    const int n = 200000;
+    for (int i = 0; i < n; ++i) {
+        float l, r;
+        e.process_in(0.f, 0.f);
+        e.process(l, r);
+        const float c = e.clock_now();
+        if (i_2x < 0 && c >= 2.f * f0) i_2x = i;
+        if (i_4x < 0 && c >= 4.f * f0) { i_4x = i; break; }
+    }
+    REQUIRE(i_2x > 0);
+    REQUIRE(i_4x > i_2x);
+    const float samples_f0_to_2f0 = static_cast<float>(i_2x);
+    const float samples_2f0_to_4f0 = static_cast<float>(i_4x - i_2x);
+    CAPTURE(samples_f0_to_2f0);
+    CAPTURE(samples_2f0_to_4f0);
+    // 10 % -- generous against measurement/quantisation noise, but nowhere
+    // near the ~2x the broken one-pole-in-Hz shape actually produces
+    // (verified: 787 vs 1656 samples at this fixture's operating point).
+    CHECK(samples_2f0_to_4f0 == doctest::Approx(samples_f0_to_2f0).epsilon(0.1));
+}
+
+TEST_CASE("bbd engine: FILT's positive half is not dead over most of its travel") {
+    // Code review finding, 2026-07-31: with a shared +-2-octave span, the
+    // positive endpoint asked for kLossCoef*4 = 2.928, saturating
+    // BbdLine::SetLossCoef's 0.999 ceiling at t ~= 0.22 -- so FILT +0.3
+    // (comfortably inside the knob's positive half) was already indistinguishable
+    // from FILT +1, and the whole top three quarters of that half did nothing.
+    // A knob dead over most of one half of its travel is not a knob.
+    BbdEngine e;
+    e.init(48000.f);
+    e.set_filt(0.3f);
+    const float mid = e.loss_coef();
+    e.set_filt(1.f);
+    const float top = e.loss_coef();
+    CAPTURE(mid);
+    CAPTURE(top);
+    // FILT +0.3 must not already be sitting at the same value as FILT +1 --
+    // there has to be real travel left between them.
+    CHECK(mid < top);
+    // And FILT +1 should land at (not far past) the physical ceiling -- the
+    // whole point of re-deriving the positive span was to spend the knob's
+    // full travel getting there, not to overshoot into more clamped dead zone
+    // the other way.
+    CHECK(top == doctest::Approx(0.999f).epsilon(0.001));
+}
+
