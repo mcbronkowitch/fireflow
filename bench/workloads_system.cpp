@@ -9,6 +9,8 @@
 #include "synth/synth_engine.h"
 #include "fx/part_fx.h"
 #include "engine_2x4.h"
+#include "parts/bbd_music.h"
+#include <cassert>
 #include <cstddef>
 #include <new>
 
@@ -455,6 +457,106 @@ void setup_inst_worst_bbd_dtcm()
     configure_inst_worst_bbd(inst);
 }
 
+// --- 11. the whole instrument, both decks on the BBD PART ENGINE ------------
+// Spec 2026-07-31 bbd-part-engine 8.3 row 1. Distinct from
+// instrument_worst_bbd above, which measures FLUX's own mono BBD at its
+// ceiling behind a SYNTH deck: this row measures the new voiceless engine's
+// STEREO pair, which is a different amount of BBD per deck (two lines, not
+// one) and a different amount of everything else (no voices at all).
+//
+// Two deliberate departures from a naive "instrument_worst plus set_engine":
+//
+//   * FLUX is switched OFF on both decks. Spec 3's first transitional hazard
+//     is that between movements 2 and 3 a BBD deck runs THREE BBD lines --
+//     the engine's stereo pair plus FLUX's own mono line behind it -- which
+//     is neither the configuration 5.11 describes nor what 2 prices. Leaving
+//     it on would make this row silently keep measuring that transitional
+//     shape after movement 3 lands, which 3 explicitly asks it not to.
+//   * The quantizer is put in Free mode. LANE_PITCH reaches the engine as
+//     _pitch_q (part.cpp:233), so under the boot Dorian scale a lane at 1.0
+//     arrives at the engine as the nearest scale degree BELOW 1.0 and the
+//     clock lands short of its ceiling. Free is what makes "PITCH at the
+//     clock ceiling" true rather than approximately true, and the assert at
+//     the end of the setup is what holds it there.
+void configure_inst_bbd_engine_worst(Instrument& inst)
+{
+    for (int p = 0; p < PART_COUNT; ++p) {
+        inst.set_engine(p, ENGINE_BBD);
+        // A voiceless engine has nothing of its own to make a sound with:
+        // with no source selected the lines see silence and the row measures
+        // an idling delay. Both sources on, which is also the mutual routing
+        // (inst_worst_deck_bus's shape) rather than a one-way feed.
+        inst.set_excitation_sources(p, /*tape=*/false, /*other_deck=*/true,
+                                    /*audio_in=*/true);
+        inst.set_fx_on(p, FxBlock::Flux, false);   // see the note above
+        inst.set_quant_mode(p, QuantMode::Free);
+
+        // PITCH at the top of its travel and SIZE at the shortest division
+        // (kDivs[0] == 1/32) put the clock on kClockMaxHz -- and the clock is
+        // what the per-sample cost is proportional to, because BbdLine::
+        // Process runs f_clk/f_s cell ticks per sample (fx/bbd.h:376-383).
+        // Both lanes are DEACTIVATED rather than merely based high: an active
+        // lane would spend most of its time below the ceiling, i.e. below the
+        // worst case. Deactivating a lane does not remove any modulation-plane
+        // work -- the plane runs regardless (part.cpp:107) -- it only pins the
+        // value the plane's output is not added to.
+        inst.set_target_active(p, LANE_PITCH, false);
+        inst.set_target_base(p, LANE_PITCH, 1.f);
+        inst.set_target_active(p, LANE_SIZE, false);
+        inst.set_target_base(p, LANE_SIZE, 0.f);
+        // MIX (LANE_LEVEL) fully wet and FEEDBACK (LANE_MOTION) at the top of
+        // its travel, both pinned for the same reason.
+        inst.set_target_active(p, LANE_LEVEL, false);
+        inst.set_target_base(p, LANE_LEVEL, 1.f);
+        inst.set_target_active(p, LANE_MOTION, false);
+        inst.set_target_base(p, LANE_MOTION, 1.f);
+        // LANE_SOURCE is left ACTIVE on purpose: it is DRIVE, and a moving
+        // DRIVE defeats BbdEcho::SetDrive's unchanged-value guard every
+        // control block (bbd_engine.cpp:185-190), which is a std::pow per line
+        // per block. That is the worst case, and it is what a plane-driven
+        // patch actually does.
+        //
+        // RESONANCE off centre so the feedback-path tilt one-pole is LIVE
+        // (bbd.h:679-683 is identity at tilt_ == 0). SUB at 1 so the input
+        // actually arrives at full level. DETUNE at 0 -> the fastest clock
+        // slew, so process()'s glide is doing arithmetic rather than sitting
+        // on its target.
+        inst.set_voice_resonance(p, 1.f);
+        inst.set_voice_sub(p, 1.f);
+        inst.set_voice_detune(p, 0.f);
+        inst.set_voice_filt(p, 1.f);
+    }
+    // Fill both stereo pairs and settle every envelope, slew and the engine
+    // swap's own SoftSwitch fade before the runner measures. Same 200-block
+    // depth the neighbouring BBD and deck-bus rows use.
+    const float* in = test_input();
+    for (int b = 0; b < 200; ++b)
+        inst.process(in, in, g_instrument_harness.out_l,
+                     g_instrument_harness.out_r, kBlock);
+
+    // The self-check, and the reason it is here rather than in a comment.
+    // Movement 1's Task 5 shipped a row that stayed on ENGINE_SYNTH and
+    // therefore never reached process_in at all -- it measured a SYNTH deck
+    // under a BBD row's name, and nothing in the harness noticed, because a
+    // wrong-but-stable configuration returns a wrong-but-stable checksum and
+    // run.py only compares run against run. asserts are live here: the bench
+    // builds -O2 with NDEBUG undefined (see workloads_instr.cpp:70).
+    for (int p = 0; p < PART_COUNT; ++p) {
+        assert(inst.engine_id(p) == ENGINE_BBD);
+        assert(inst.bbd_div(p) == 0);                       // 1/32, the shortest
+        assert(inst.bbd_clock_hz(p) >= bbd_tuning::kClockMaxHz);
+        assert(!inst.bbd_frozen(p));                        // the freeze is off
+    }
+}
+
+void setup_inst_bbd_engine_worst()
+{
+    auto& group = construct_axi_instrument_group();
+    configure_inst_common(group.instrument);
+    configure_inst_worst(group.instrument);
+    configure_inst_bbd_engine_worst(group.instrument);
+}
+
 float proc_inst()
 {
     auto& inst = *g_active_instrument;
@@ -501,6 +603,8 @@ const Workload kCoreWorkloads[] = {
     { "system", "instrument_worst_bbd", setup_inst_worst_bbd, proc_inst },
     { "system", "instrument_worst_bbd_dtcm",
       setup_inst_worst_bbd_dtcm, proc_inst },
+    { "system", "inst_bbd_engine_worst",
+      setup_inst_bbd_engine_worst, proc_inst },
 };
 const int kCoreCount = sizeof(kCoreWorkloads) / sizeof(kCoreWorkloads[0]);
 

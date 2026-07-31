@@ -891,6 +891,15 @@ neither blooms nor sits silent, and §5.13 tests it.
   (See §4.7 on what the hash gates
   actually cover).
 - `inst_bbd_engine_worst` exists as a bench row (§8.3).
+- **The ITCM hotset still fits and both representative symbols still resolve
+  inside it** (§8.4). `bench/itcm_hot.lds` gains `bbd_engine.o`, and
+  `bench/itcm_placement.py`'s `HOT_SYMBOL_FRAGMENTS` must still find both
+  `spky::Flux::process(` and `spky::BbdLine::Process(` at an ITCM address.
+  This is not automatic: `BbdLine::Process` is a weak symbol, and once
+  `bbd_engine.o` is linked the linker may select **its** copy — so leaving
+  `bbd_engine.o` out of the hotset moves `BbdLine::Process` out of ITCM and
+  the guard fails, which is exactly what was measured on this branch before
+  the object was added.
 
 ---
 

@@ -1,10 +1,13 @@
 #include <doctest/doctest.h>
+#include "instrument.h"
 #include "parts/part.h"
 #include "parts/bbd_engine.h"
+#include "part_engine_contract.h"
 #include "fx/flux.h"
 #include "mod/rng.h"
 #include "util/svf_bp.h"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <vector>
 
@@ -1184,3 +1187,241 @@ TEST_CASE("bbd engine: FILT's positive half is not dead over most of its travel"
     CHECK(top == doctest::Approx(0.999f).epsilon(0.001));
 }
 
+
+TEST_CASE("bbd engine: satisfies the part-engine contract") {
+    // tests/part_engine_contract.h, not tests/synth_engine_contract.h: WAVE
+    // and BODY both entered through the latter, which is about voices,
+    // envelopes and note allocation. A voiceless input-consuming engine
+    // cannot satisfy it, so the universal half was split out. See that header
+    // for why each of its three blocks is engine-agnostic.
+    check_part_engine_contract<BbdEngine>([](BbdEngine& e) {
+        e.init(48000.f);
+        e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+        e.set_cycle(0.5f);
+    });
+}
+
+TEST_CASE("bbd engine: with no input and FEEDBACK high it blooms from the dither floor") {
+    // Spec 5.13: "With no input connected and FEEDBACK high, the engine
+    // self-oscillates from the dither floor rather than outputting silence."
+    // A voiceless engine with nothing patched in is a real playing state --
+    // it is what a BBD deck IS before the player routes anything to it -- and
+    // the difference between "a delay that blooms" and "a delay that is
+    // silent" is the whole reason kDither exists (bbd_engine.cpp:9).
+    //
+    // reset() FIRST, and it is load-bearing: s_bbd_l/s_bbd_r are file-scope
+    // and shared with every other case here, so without the memset in
+    // BbdLine::Reset the loop could be seeded by a previous case's charge and
+    // the phrase "from the dither floor" would be false while the assertion
+    // still passed.
+    BbdEngine e;
+    e.init(48000.f);
+    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.reset();
+    e.set_cycle(0.5f);
+    // DRIVE 0.5, SIZE mid, PITCH mid, FEEDBACK 1, MIX 1. The loop gain is
+    // MOTION * 1.2 by construction (set_targets divides bbd_drive_gain back
+    // out), so FEEDBACK at the top is 1.2 -- above unity, which is what "high"
+    // has to mean for this bullet to be about anything.
+    float t[LANE_COUNT] = { 0.5f, 0.5f, 0.5f, 1.f, 1.f };
+    e.set_targets(t, 0.5f);
+
+    // process_in is fed exactly zero for the whole run: nothing is connected.
+    float early = 0.f, late = 0.f;
+    const int n = 48000 * 20;
+    for (int i = 0; i < n; ++i) {
+        float l, r;
+        e.process_in(0.f, 0.f);
+        e.process(l, r);
+        const float a = std::max(std::fabs(l), std::fabs(r));
+        if (i < 4800) early = std::max(early, a);            // first 100 ms
+        if (i > n - 48000) late = std::max(late, a);         // last second
+    }
+    CAPTURE(early);
+    CAPTURE(late);
+    // It started at the noise floor...
+    CHECK(early < 1e-2f);
+    // ...and it is emphatically not silent twenty seconds later.
+    CHECK(late > 0.1f);
+    CHECK(late < 1.f);                       // and still inside the bound
+
+    // The control leg, and the reason this case can go red for the right
+    // reason. Identical fixture with FEEDBACK at 0: the dither is still
+    // injected at every write tick, so if the growth above came from anything
+    // other than the loop -- a DC offset, an unstable filter, a seeded buffer
+    // -- this leg would grow too.
+    BbdEngine q;
+    q.init(48000.f);
+    q.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    q.reset();
+    q.set_cycle(0.5f);
+    float t0[LANE_COUNT] = { 0.5f, 0.5f, 0.5f, 0.f, 1.f };   // FEEDBACK 0
+    q.set_targets(t0, 0.5f);
+    float quiet = 0.f;
+    for (int i = 0; i < n; ++i) {
+        float l, r;
+        q.process_in(0.f, 0.f);
+        q.process(l, r);
+        quiet = std::max(quiet, std::max(std::fabs(l), std::fabs(r)));
+    }
+    CAPTURE(quiet);
+    CHECK(quiet < 1e-2f);
+}
+
+TEST_CASE("bbd engine: 60 s of silence at the input costs no denormal stall"
+          * doctest::timeout(600.0)) {
+    // Spec 5.13: "After 60 s of silence at the input, no denormal stall is
+    // measurable on x86." Every state in the line decays geometrically, so
+    // during a long silence they all approach zero without reaching it, and
+    // the result is arithmetically correct and -- on a CPU that traps
+    // subnormals into microcode -- catastrophically slow.
+    //
+    // TWO legs, because the wall-clock one alone would be a test that cannot
+    // fail on this machine:
+    //
+    //   * The CONDITION, measured numerically: after 60 s of silence, no
+    //     output sample is subnormal. That parked-between-zero-and-FLT_MIN
+    //     state is what a stall IS, and classifying it is machine-independent.
+    //     It goes red: with kDither set to 0 AND the four denormal flushes in
+    //     fx/bbd.h deleted (BbdLine::Process's loss_z_ and ybbd_old_ guards
+    //     and BbdEcho::fb_path's two), all 47999 of the last second's samples
+    //     come back FP_SUBNORMAL. Unmodified, none do, and the smallest normal
+    //     sample is 6.9e-11 -- twenty-seven orders of magnitude clear of the
+    //     subnormal range. The primary defence is kDither: a normal-magnitude
+    //     noise floor written into the line at every write tick means the line
+    //     never has a true silence to decay into.
+    //
+    //   * The CONSEQUENCE, measured as wall clock, which is the spec's own
+    //     wording. Against the same engine doing the same work on live
+    //     material in the same process, so it prices the machine rather than
+    //     assuming a budget. HONEST LIMIT: this leg did NOT go red on the
+    //     machine this was written on. With both defences removed as above the
+    //     silent run measured 1.19x the busy run, and a standalone one-pole
+    //     microbenchmark on the same CPU showed the UNFLUSHED loop running
+    //     faster than the flushed one (0.67x) -- i.e. this CPU has no
+    //     measurable subnormal penalty for these operations, so no bound
+    //     placed here could separate the two. The 2x bound is kept because the
+    //     bullet is about x86 in general and this leg will bite on a CPU that
+    //     does penalise; it is not what makes this case a gate today. The
+    //     subnormal leg is.
+    auto run = [](bool silent, long* subnormals) {
+        BbdEngine e;
+        e.init(48000.f);
+        e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+        e.reset();
+        e.set_cycle(0.5f);
+        // FEEDBACK below unity on purpose: a blooming loop never decays, so
+        // its states never approach the denormal range and the case would
+        // measure nothing. What this bullet is about is a line left to die.
+        float t[LANE_COUNT] = { 0.5f, 0.5f, 0.5f, 0.3f, 1.f };
+        e.set_targets(t, 0.5f);
+        float l, r;
+        // A burst first, so there is something in the line to decay AWAY.
+        for (int i = 0; i < 4800; ++i) {
+            e.process_in(std::sin(i * 0.05f), std::sin(i * 0.05f));
+            e.process(l, r);
+        }
+        const auto t0 = std::chrono::steady_clock::now();
+        double acc = 0.0;                    // keeps the loop from vanishing
+        const int n = 48000 * 60;
+        for (int i = 0; i < n; ++i) {
+            const float x = silent ? 0.f : std::sin(i * 0.05f) * 0.25f;
+            e.process_in(x, x);
+            e.process(l, r);
+            acc += l;
+            // The last second only: the decay has had 59 s to get there, and
+            // classifying all 5.76 M samples would price the measurement
+            // itself into the wall-clock leg running beside it.
+            if (i > n - 48000) {
+                if (std::fpclassify(l) == FP_SUBNORMAL) ++*subnormals;
+                if (std::fpclassify(r) == FP_SUBNORMAL) ++*subnormals;
+            }
+        }
+        const auto t1 = std::chrono::steady_clock::now();
+        CHECK(std::isfinite(static_cast<float>(acc)));
+        return std::chrono::duration<double>(t1 - t0).count();
+    };
+    long busy_sub = 0, silent_sub = 0;
+    const double busy_s = run(false, &busy_sub);
+    const double silent_s = run(true, &silent_sub);
+    CAPTURE(busy_s);
+    CAPTURE(silent_s);
+    CAPTURE(silent_sub);
+    CAPTURE(busy_sub);
+    // The condition.
+    CHECK(silent_sub == 0);
+    CHECK(busy_sub == 0);
+    // The consequence -- see the honest limit in the header comment.
+    CHECK(busy_s > 0.0);
+    CHECK(silent_s < busy_s * 2.0);
+}
+
+// Instrument-level line memory for the two-deck case below. Four lines, one
+// stereo pair per deck -- deliberately NOT the s_bbd_l/s_bbd_r pair the
+// engine-level cases share, because two decks running at once must not be
+// writing into the same cells.
+static float s_inst_bbd[PART_COUNT][2][BbdEngine::kCells];
+static float s_inst_echo[PART_COUNT][Flux::kMaxSamples];
+
+TEST_CASE("bbd engine: the output stays inside its stated bound with BOTH decks blooming") {
+    // Spec 5.13: "The engine's output stays within its stated bound with both
+    // decks blooming." The single-engine case above ("the output stays inside
+    // its stated bound") is not this bullet: it runs ONE BbdEngine in
+    // isolation. What this one adds is the configuration that can actually
+    // diverge -- two blooming loops routed INTO EACH OTHER through the
+    // cross-deck bus, so each deck's self-oscillating output is the other's
+    // input, on top of its own feedback. The bound is per deck (fast_tanh in
+    // BbdEngine::process), so it is read at deck_tap, before the summing and
+    // before the master limiter -- reading the master output instead would
+    // prove the limiter works, not the engine.
+    FxMem mem;
+    for (int p = 0; p < PART_COUNT; ++p) {
+        mem.echo[p] = s_inst_echo[p];
+        mem.bbd[p][0] = s_inst_bbd[p][0];
+        mem.bbd[p][1] = s_inst_bbd[p][1];
+    }
+    Instrument inst;
+    inst.init(48000.f, mem);
+    inst.set_tempo_bpm(120.f);
+    for (int p = 0; p < PART_COUNT; ++p) {
+        inst.set_engine(p, ENGINE_BBD);
+        // Mutual routing plus the audio input: every source a deck has.
+        inst.set_excitation_sources(p, /*tape=*/true, /*other_deck=*/true,
+                                    /*audio_in=*/true);
+        // FEEDBACK (LANE_MOTION) and MIX (LANE_LEVEL) at the top, DRIVE
+        // (LANE_SOURCE) high. Loop gain is MOTION * 1.2, i.e. blooming.
+        inst.set_target_active(p, LANE_MOTION, false);
+        inst.set_target_base(p, LANE_MOTION, 1.f);
+        inst.set_target_active(p, LANE_LEVEL, false);
+        inst.set_target_base(p, LANE_LEVEL, 1.f);
+        inst.set_target_active(p, LANE_SOURCE, false);
+        inst.set_target_base(p, LANE_SOURCE, 1.f);
+        inst.set_voice_sub(p, 1.f);        // SUB: the input arrives at full level
+        inst.set_voice_resonance(p, 1.f);  // the feedback-path tilt, live
+    }
+    float l, r;
+    float peak_a = 0.f, peak_b = 0.f, peak_out = 0.f;
+    for (int i = 0; i < 48000 * 20; ++i) {
+        const float x = std::sin(i * 0.031f) * 0.5f;
+        inst.process(&x, &x, &l, &r, 1);
+        for (int c = 0; c < 2; ++c) {
+            peak_a = std::max(peak_a, std::fabs(inst.deck_tap(PART_A, c)));
+            peak_b = std::max(peak_b, std::fabs(inst.deck_tap(PART_B, c)));
+        }
+        peak_out = std::max(peak_out, std::max(std::fabs(l), std::fabs(r)));
+        REQUIRE(std::isfinite(l));
+        REQUIRE(std::isfinite(r));
+    }
+    CAPTURE(peak_a);
+    CAPTURE(peak_b);
+    CAPTURE(peak_out);
+    // Non-vacuity FIRST: both decks must actually have bloomed, or the two
+    // bounds below are satisfied by a pair of silent decks. This is the exact
+    // failure mode movement 1's bench row shipped in another form -- a
+    // configuration that measured nothing and looked correct.
+    CHECK(peak_a > 0.1f);
+    CHECK(peak_b > 0.1f);
+    // The bound itself, per deck, before the sum and before the limiter.
+    CHECK(peak_a <= 1.f);
+    CHECK(peak_b <= 1.f);
+}

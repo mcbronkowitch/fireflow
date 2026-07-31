@@ -16,6 +16,10 @@ HOT_SYMBOL_FRAGMENTS = (
     "spky::PartFx::process(",
     "spky::Flux::process(",
     "spky::BbdLine::Process(",
+    # The BBD part engine's per-sample kernel (spec 8.4). BbdLine::Process
+    # above proves fx/bbd.o landed; this proves parts/bbd_engine.o did, which
+    # is a separate translation unit and a separate hotset line.
+    "spky::BbdEngine::process(",
     "spky::Grit::process(",
     "spky::AmbientReverb::process(",
     "spky::Comp::process(",

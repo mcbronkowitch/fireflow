@@ -17,6 +17,7 @@ HOT_SYMBOLS = (
     "spky::PartFx::process(",
     "spky::Flux::process(",
     "spky::BbdLine::Process(",
+    "spky::BbdEngine::process(",
     "spky::Grit::process(",
     "spky::AmbientReverb::process(",
     "spky::Comp::process(",
