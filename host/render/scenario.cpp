@@ -87,6 +87,7 @@ static EngineId parse_engine(const std::string& s) {
     if (s == "sampler")   return ENGINE_SAMPLER;
     if (s == "wave")      return ENGINE_WAVE;
     if (s == "body")      return ENGINE_BODY;
+    if (s == "bbd")       return ENGINE_BBD;
     return ENGINE_SYNTH;
 }
 

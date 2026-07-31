@@ -87,8 +87,10 @@ int main(int argc, char** argv) {
         std::fprintf(csv, "t,"
             "a_src,a_size,a_pitch,a_motion,a_level,a_pcv,a_gate,"
             "a_fx0,a_fx1,a_fx2,a_fx3,a_fx4,a_voices,a_v0,a_v1,a_v2,a_v3,a_pgate,a_fill,a_grains,a_slices,a_exc,a_matl,"
+            "a_fclk,a_stages,a_div,a_frz,a_tclamp,a_strunc,"
             "b_src,b_size,b_pitch,b_motion,b_level,b_pcv,b_gate,"
             "b_fx0,b_fx1,b_fx2,b_fx3,b_fx4,b_voices,b_v0,b_v1,b_v2,b_v3,b_pgate,b_fill,b_grains,b_slices,b_exc,b_matl,"
+            "b_fclk,b_stages,b_div,b_frz,b_tclamp,b_strunc,"
             "morph,couple,drift,weather,phase_err\n");
     }
 
@@ -139,6 +141,19 @@ int main(int argc, char** argv) {
                 // MATL (spec §5), so this is the column body_strum.json's
                 // sweep shows up in.
                 std::fprintf(csv, ",%.4f", inst.target_value(p, LANE_SOURCE));
+                // BBD observers (spec 2026-07-31 9): f_clk (the clock the line
+                // is actually running at -- see Instrument::bbd_clock_hz's own
+                // comment for why clock_now() and not clock_hz()), the derived
+                // stage count, the active div rung, the freeze state and the
+                // two clamp flags. Zero (or -1 for the div rung, which has no
+                // natural zero) on every engine but BBD, so a demo scenario on
+                // a BBD deck cannot pass vacuously the way a_voices/a_v0..3
+                // would let it.
+                std::fprintf(csv, ",%.4f,%d,%d,%d,%d,%d",
+                             inst.bbd_clock_hz(p), inst.bbd_stages(p),
+                             inst.bbd_div(p), inst.bbd_frozen(p) ? 1 : 0,
+                             inst.bbd_time_clamped(p) ? 1 : 0,
+                             inst.bbd_scale_truncated(p) ? 1 : 0);
             }
             std::fprintf(csv, ",%.4f,%.4f,%.4f,%.4f,%.4f",
                          inst.morph(), inst.couple(), inst.drift(),

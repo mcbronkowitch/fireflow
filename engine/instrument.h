@@ -160,6 +160,34 @@ public:
     float voice_env(int p, int v) const      { return _parts[p].voice_env(v); }
     EngineId engine_id(int p) const          { return _parts[p].engine_id(); }
 
+    // BBD observers (spec 2026-07-31 9). A BBD deck writes 0 into a_voices and
+    // a_v0..3 and would otherwise expose nothing, so a demo scenario would
+    // pass vacuously. Zero (or the stated sentinel) on every other engine,
+    // which is what the CSV should show.
+    //
+    // clock_now(), not clock_hz(): DETUNE's glide means the two differ
+    // whenever the clock is chasing a moved lane, which is exactly when a CSV
+    // reader is most likely to be looking. The CSV should record what the
+    // instrument actually did, not merely what it was asked to do.
+    float bbd_clock_hz(int p) const {
+        return _parts[p].engine_id() == ENGINE_BBD ? _parts[p].bbd().clock_now() : 0.f;
+    }
+    int   bbd_stages(int p) const {
+        return _parts[p].engine_id() == ENGINE_BBD ? _parts[p].bbd().stages() : 0;
+    }
+    int   bbd_div(int p) const {
+        return _parts[p].engine_id() == ENGINE_BBD ? _parts[p].bbd().div_index() : -1;
+    }
+    bool  bbd_frozen(int p) const {
+        return _parts[p].engine_id() == ENGINE_BBD && _parts[p].bbd().frozen();
+    }
+    bool  bbd_time_clamped(int p) const {
+        return _parts[p].engine_id() == ENGINE_BBD && _parts[p].bbd().time_clamped();
+    }
+    bool  bbd_scale_truncated(int p) const {
+        return _parts[p].engine_id() == ENGINE_BBD && _parts[p].bbd().scale_truncated();
+    }
+
     // --- M5 sampler API (spec "Instrument API") ---
     void sampler_record(int p, bool on) {
         _parts[p].sampler().set_recording(on);
