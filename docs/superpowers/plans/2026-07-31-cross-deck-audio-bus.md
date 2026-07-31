@@ -381,6 +381,25 @@ TEST_CASE("deck bus: every engine is bit-identical with the source off") {
 > guard** — find the missing setup (a level base, a trigger, a target) and
 > make it sound. A silent reference is the failure this guard exists to catch.
 
+> **Correction, from the review round — this test as drafted could not fail.**
+> `_deck_in_l/_r` are read only inside `if (_engine_wants_in)`, i.e. only when
+> the engine overrides `consumes_input()` — and `SamplerEngine` is the **only**
+> override in the tree. So for TEST_TONE, SYNTH, WAVE and BODY the `_src_deck`
+> guard is never reached at all, and for the sampler the tap reaches the output
+> only through `if (_monitor)`, which defaults false and this draft never enabled.
+> Deleting the guard entirely would have left the test green.
+>
+> The shipped test enables the sampler's monitor so the guard is genuinely
+> exercised, and says in a comment that for the other four engines the guard is
+> *unreachable* rather than merely untested — a stronger guarantee than a test,
+> and the honest description of what their bit-identity proves. See
+> `tests/test_deck_bus.cpp`, which is authoritative over this plan text.
+>
+> **The general lesson, worth carrying into movements 2 and 3:** the cross-deck
+> bus does nothing for any engine but the sampler today. The BBD engine will be
+> the second consumer of `process_in`, and until it exists, any test written as
+> if the bus were live for other engines is testing nothing.
+
 - [ ] **Step 2: Run it**
 
 ```bash
@@ -452,7 +471,24 @@ TEST_CASE("deck bus: sampler <-> sampler mutual routing stays finite") {
 source env.sh && ./build/spky_tests -tc="deck bus: sampler*"
 ```
 
-Expected: PASS. **If it fails with `inf`/`NaN`, the bound in Task 1 is on the wrong side of the sum** — it must be `fast_tanh(el + _deck_in_l)`, not `el + fast_tanh(_deck_in_l)`.
+Expected: PASS.
+
+> **Correction, from the review round — the sentence that stood here was false.**
+> It claimed the wrong bound ordering would show up as `inf`/`NaN`. It does not.
+> Both orderings are contraction maps, because the exogenous term is a fixed
+> constant rather than something that grows: correct order `x[n] = tanh(0.5 + x[n-2])`
+> converges to ≈0.881, wrong order `x[n] = 0.5 + tanh(x[n-2])` converges to ≈1.381.
+> Both stay bounded and both would clear a `peak < 100.f` ceiling, so the test as
+> first drafted could not have caught the ordering bug it was written for. Worse,
+> the master `Limiter` compresses both to ≈1.0 at the instrument's *output*, so no
+> output-side ceiling can separate them at all.
+>
+> **What discriminates them is `deck_tap`, upstream of the limiter.** Correct
+> ordering hard-clamps at `|y| <= 1.0` by `fast_tanh`'s own compare-clamp
+> (`engine/util/fast_tanh.h:37`); wrong ordering adds the exogenous input *after*
+> the clamp, so it can reach 1.5 and measures 1.381. The shipped test asserts
+> that, plus a dead-routing baseline measured in the same test — see
+> `tests/test_deck_bus.cpp`, which is authoritative over this plan text.
 
 - [ ] **Step 3: Commit**
 
