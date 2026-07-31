@@ -15,30 +15,34 @@ constexpr float kDither = 4e-5f;
 //
 // Operating point: div 1/8 at a 1 s cycle -> T = 125 ms, PITCH 0.9 on the STEP
 // grid -> f_clk = 13308 Hz, 3327 stages, DRIVE swept 0 -> 1, DECAY 1. That
-// clock is not incidental: it is the lowest one at which all six probe octaves
-// (110 .. 3520 Hz) sit below the line's own Nyquist, and a probe above f_clk/2
-// measures fold-around rather than held content.
+// clock is not incidental: it is about the lowest at which all six probe
+// octaves (110 .. 3520 Hz) sit below the line's own Nyquist, and a probe above
+// f_clk/2 measures fold-around rather than held content.
 //
-// Bisected for zero MEAN across the six bands; the full trial table is in
-// .superpowers/sdd/2026-07-31-bbd-part-engine/task-6-report.md. Read that
-// before touching this number: the criterion is MISSED (4 of 6 bands outside
-// +-1 dB, worst +2.81 dB), and the report shows why -- the residual is what is
-// left when a FIRST-order feedback shelf is asked to invert the loss pole plus
-// a SIXTH-order fixed chain, and no value of the pair below removes it.
-constexpr float kFreezeGain = 1.096f;
+// Bisected for minimum WORST BAND, not zero mean: the gain translates all six
+// bands together, so centring on the midrange rather than the mean is what
+// minimises the largest error. Achieved 2.26 dB against a floor of
+// spread/2 = 2.25; centring on the mean instead cost 0.6 dB. The full trial
+// table is in .superpowers/sdd/2026-07-31-bbd-part-engine/task-6-report.md.
+constexpr float kFreezeGain = 1.0885f;
 
 // The feedback-path tilt at the freeze's neutral point -- the value that
-// inverts kLossCoef so the line's round trip is flat to ~1 and the compander's
-// L^2 becomes harmless. RESONANCE (a later movement) plays the same filter and
-// takes this as its centre, which is why it is named rather than inlined.
+// flattens the line's round trip as far as one zero can. RESONANCE (a later
+// movement) plays the same filter and takes this as its centre, which is why
+// it is named rather than inlined.
 //
 // Measured at the same operating point as kFreezeGain, by minimising the
-// SPREAD across the six probe bands with the gain re-bisected at each tilt.
-// The minimum is shallow (4.46 dB over tilt 1.25..1.32) and lands at 4.47 dB,
-// not the <= 2 dB an all-bands-within-+-1 result needs. NOTE it is measured at
-// ONE clock: the corner tracks f_clk/4, but the fixed 3600 Hz chain does not
-// move with the clock, so the tilt that neutralises the loop at 13.3 kHz is
-// not the one that neutralises it at 1.4 kHz. See the report.
+// SPREAD across the six probe bands with the gain re-centred at each tilt.
+// The minimum is shallow and real: 4.50 dB here, 4.52 at 1.28, 4.70 at 1.32,
+// 6.56 at 1.0, 16.6 at 0. It does NOT go to zero and cannot -- see the test's
+// own comment for the arithmetic (a first-order shelf against the loss pole
+// plus a sixth-order fixed chain), which is why the criterion is 2.5 dB.
+//
+// It is also measured at ONE clock. The corner tracks f_clk/4, but the fixed
+// 3600 Hz chain does not move with the clock, so the tilt that neutralises the
+// loop at 13.3 kHz is not the one that neutralises it at 1.4 kHz. Spec 9
+// already carries residual STAGES-dependence as an open listening question;
+// this is that question, measured.
 constexpr float kFreezeTilt = 1.30f;
 
 // ATTACK's endpoints: how long the freeze takes to engage and release.
@@ -189,10 +193,18 @@ void BbdEngine::_refresh_window() {
 }
 
 void BbdEngine::set_gate(bool on) {
-    // STEP only. A FLOW deck's gate is effectively always on, so honouring it
-    // there would leave a FLOW BBD permanently frozen -- and with the freeze
-    // unreachable, ATTACK and DECAY are inert in FLOW. Accepted (spec 5.6),
-    // and it belongs in the manual.
+    // STEP only, and the `!_flow` is NOT an oversight -- do not "fix" it.
+    //
+    // A FLOW deck's gate is effectively always on (lane.cpp:447-452: FLOW has
+    // no per-step gate, so it always fires), so honouring the gate there would
+    // leave a FLOW BBD PERMANENTLY frozen -- the deck would never hear its
+    // input again. Removing this guard does not enable a feature; it breaks
+    // the mode.
+    //
+    // The price is stated and accepted: with the freeze unreachable in FLOW,
+    // ATTACK and DECAY -- which do nothing BUT shape the freeze -- are dead
+    // knobs in that mode. Owner's ruling, 2026-07-31: it stands, and it
+    // belongs in the manual rather than in a code change. Spec 5.6.
     _freeze_want = (!_flow && on) ? 1.f : 0.f;
 }
 

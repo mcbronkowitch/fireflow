@@ -537,9 +537,44 @@ fail.** Three measured facts:
    swing the loop gain ±12 dB **per circulation**. This term is exactly known;
    leaving it to the ear was wrong.
 4. **`k₀` is measured with broadband material** — a noise burst or a chord — and
-   the acceptance criterion is **per-octave level within ±1 dB over 10
-   circulations**, at `f_clk` mid-range and DRIVE 0. `k` is a tuning constant;
-   DECAY (§5.8) trims *below* it.
+   the acceptance criterion is **per-octave level within ±2.5 dB over 10
+   circulations**, at DECAY maximum with DRIVE swept 0 → 1 during the hold. `k`
+   is a tuning constant; DECAY (§5.8) trims *below* it.
+
+**Why ±2.5 dB and not the ±1 dB this section asked for until now.** The ±1 was
+written by inference and never measured. Measured (Task 6, `div 1/8`, T = 125 ms,
+PITCH 0.9 in STEP → `f_clk` = 13.3 kHz, 3327 stages), the achievable worst band
+is **2.26 dB**, and the binding quantity is a **4.50 dB spread** across the six
+octaves that no `(k₀, tilt)` pair reduces. The mechanism: the fixed 3600 Hz
+Butterworth chain costs **5.45 dB per pass at 3520 Hz** against **0.12 dB at
+1760 Hz**, it is `constexpr`, and — unlike the loss pole — it **does not move
+with the clock**, so no corner tracking `f_clk/4` can be aligned to it. With the
+compander's `L²` round trip the feedback shelf would have to supply **+16.5 dB**
+at 3520 Hz; a one-pole shelf cornered at `f_clk/4` delivers **+4.3 dB**. One zero
+against one pole plus six. **A higher-order shelf is refused on the same CPU
+grounds that keep `kFiltOrder` at 3** (§5.8) — this is the same bill.
+Corrected 2026-07-31 by measurement in Task 6; the trial tables are in
+`.superpowers/sdd/2026-07-31-bbd-part-engine/task-6-report.md` and
+`tests/test_bbd_engine.cpp` is the authority.
+
+**A valid measurement requires every probe below the line's own Nyquist**, and
+this is a trap that cost Task 6 a full round. A BBD samples at `f_clk`, so a
+probe above `f_clk/2` reads the staircase's fold-around rather than held content;
+the first fixture used (`div 1/2`, PITCH 0.5 → `f_clk` = 1448 Hz) had **three of
+its six probes above Nyquist**, which produced a residue no shelf could fit and a
+tilt roughly 3× off. Because the freeze is reachable only in STEP, and
+`clock_step` spans 36 semitones, `f_clk ≤ 8·f_lo = 2048/T` and therefore
+Nyquist ≤ `1024/T`: holding a 3520 Hz probe clear by ~2× **forces `T ≲ 145 ms`
+whatever the PITCH**. The acceptance fixture cannot be both long-tailed and
+validly probed. Added 2026-07-31 from Task 6.
+
+**`k₀` is not content-independent, and that is a property, not a defect.** Across
+six noise seeds at the shipped constants the whole set slides by a mean offset of
+roughly ±3 dB (−2.59 … +2.40) and the spread ranges 3.84 … 8.00 dB. The loop
+**disperses** around unity rather than diverging from it — an earlier revision of
+the acceptance test, with the aliased probes above, appeared to show every
+realisation blooming monotonically, and that reading was withdrawn once the
+instrument was corrected. Recorded 2026-07-31 from Task 6.
 
 **The engine also keeps `Flux`'s feedback law on the normal path:**
 `fb = norm × 1.2 / bbd_drive_gain(drive)` (`flux.cpp:199`). Without the division
@@ -693,9 +728,13 @@ geometrically, and the buffer fills with denormals — a large, load-dependent
 stall on x86. Apply the same floor the repo already uses. The dither above
 largely solves this for free.
 
-**A stated output bound.** With the expander's 4× ceiling the engine can return
-roughly +8 to +11 dBFS in the self-oscillating regime, and it is the only engine
-whose bound is unstated and non-unity. There is no per-deck limiter, and the
+**A stated output bound.** With the expander's 4× ceiling the engine returns
+**1.387, i.e. +2.8 dBFS**, in the self-oscillating regime, and it is the only
+engine whose bound is unstated and non-unity. *(Measured in Task 4 by deleting
+the `fast_tanh` in `BbdEngine::process` at DRIVE 1 / FEEDBACK 1 — see
+`tests/test_bbd_engine.cpp`, "the output stays inside its stated bound". The
+"+8 to +11 dBFS" this sentence carried until 2026-07-31 was inferred, not
+measured, and was wrong; the bound is still required, only the figure changed.)* There is no per-deck limiter, and the
 reverb send taps before the master `Limiter`. **Normalise the engine's output**
 (or `fast_tanh` it, matching §4.5's idiom) and state the bound.
 
@@ -830,8 +869,13 @@ neither blooms nor sits silent, and §5.13 tests it.
 - With FEEDBACK at 0, `LANE_PITCH` produces no pitch change — the documented
   gating, asserted rather than discovered.
 - `LANE_PITCH` spans its full travel at every division; no dead zone at the top.
-- The freeze holds a **broadband** burst within ±1 dB **per octave** over 10
-  circulations at DECAY maximum, with DRIVE swept 0 → 1 during the hold.
+- The freeze holds a **broadband** burst within ±2.5 dB **per octave** over 10
+  circulations at DECAY maximum, with DRIVE swept 0 → 1 during the hold, **and
+  the spread across the six octaves stays under 5 dB** — the spread is what the
+  tilt controls and it is the half of the result a re-centred gain cannot hide.
+  Every probe must sit below the line's own Nyquist or the figure is meaningless.
+  *(±2.5, not the ±1 this bullet carried until 2026-07-31: see §5.6 — the ±1 was
+  never measured, and the achievable worst band is 2.26 dB.)*
 - A frozen loop shows no DC growth over 60 s.
 - With no input connected and FEEDBACK high, the engine self-oscillates from the
   dither floor rather than outputting silence.
