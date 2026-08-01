@@ -48,7 +48,11 @@
   ```bash
   cd host/vcv/res && python test_panel.py
   ```
-- A claimed benchmark row is trusted only after `grep -c <row> bench/build/bench.map` returns at least 1.
+- A claimed benchmark row is trusted only when its family's registry symbol is
+  present in `bench/build/bench.map` **and** `arm-none-eabi-strings
+  bench/build/bench.elf | grep -c <row>` returns at least 1. GNU ld map files
+  do not retain workload row string literals, so the map proves the registry
+  object is linked while the ELF proves the exact row name is present.
 
 ---
 
@@ -179,12 +183,17 @@ using `m.echo` and both `BbdEcho::Init` calls using `m.bbd` plus
 - [ ] **Step 7: Build the bench and verify the BBD rows are linked**
 
 ```bash
-make -C bench clean all
-grep -c "sweep_flux_lines_2ch" bench/build/bench.map
-grep -c "inst_bbd_engine_worst" bench/build/bench.map
+make -C bench clean all BENCH_FAMILIES="system sweep"
+grep -c "kSystemWorkloads" bench/build/bench.map
+grep -c "kSweepWorkloads" bench/build/bench.map
+arm-none-eabi-strings bench/build/bench.elf | grep -c "sweep_flux_lines_2ch"
+arm-none-eabi-strings bench/build/bench.elf | grep -c "inst_bbd_engine_worst"
 ```
 
-Expected: both counts are at least 1. No figure is claimed in this task.
+Expected: both registry counts and both ELF row counts are at least 1. The
+focused profile is required because `bench/README.md` documents that the
+default full profile intentionally overflows SRAM. No figure is claimed in
+this task.
 
 - [ ] **Step 8: Commit**
 
@@ -1380,14 +1389,16 @@ Then use the exact build/inspection command documented in `bench/README.md` for 
 - [ ] **Step 5: Build the bench and prove every claimed row is in the image**
 
 ```bash
-make -C bench clean all
-grep -c "fx_flux_sdram" bench/build/bench.map
-grep -c "instrument_worst" bench/build/bench.map
-grep -c "instrument_worst_bbd" bench/build/bench.map
-grep -c "instrument_worst_bbd_dtcm" bench/build/bench.map
-grep -c "inst_bbd_engine_worst" bench/build/bench.map
-grep -c "sweep_flux_rate_0" bench/build/bench.map
-grep -c "sweep_flux_rate_11" bench/build/bench.map
+make -C bench clean all BENCH_FAMILIES="system sweep"
+grep -c "kSystemWorkloads" bench/build/bench.map
+grep -c "kSweepWorkloads" bench/build/bench.map
+arm-none-eabi-strings bench/build/bench.elf | grep -c "fx_flux_sdram"
+arm-none-eabi-strings bench/build/bench.elf | grep -c "instrument_worst"
+arm-none-eabi-strings bench/build/bench.elf | grep -c "instrument_worst_bbd"
+arm-none-eabi-strings bench/build/bench.elf | grep -c "instrument_worst_bbd_dtcm"
+arm-none-eabi-strings bench/build/bench.elf | grep -c "inst_bbd_engine_worst"
+arm-none-eabi-strings bench/build/bench.elf | grep -c "sweep_flux_rate_0"
+arm-none-eabi-strings bench/build/bench.elf | grep -c "sweep_flux_rate_11"
 ```
 
 Expected: every count is at least 1. Do not trust a memory table or an old serial capture.
@@ -1423,7 +1434,7 @@ The AXI/DTCM checksums must match. If any expected row is absent or the checksum
 Create `docs/bench/2026-08-01-<sha>-flux-tape.md` in the same structure as the latest movement-2 bench note. Include:
 
 - exact commit and build flags;
-- `bench.map` counts;
+- family-registry `bench.map` counts and exact ELF row-name counts;
 - the same-build system/gate rows above, with `pct_max` emphasized;
 - the five RATE sweep points in one table, with their target delays and
   `pct_max`; call the curve flat only if the observed spread is within the
@@ -1446,7 +1457,7 @@ clock ceiling, COLOR open and STEP freeze engaged. The explicit engine row
 shares the same configuration.
 
 fx_flux_sdram now prices the stereo tape echo. Every claimed row was verified
-in bench.map, and instrument_worst was captured in the same build as the
+through its linked map registry and exact ELF row name, and instrument_worst was captured in the same build as the
 pct_max control.
 
 Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>
@@ -1549,7 +1560,7 @@ Expected: all green; panel `OK`; audition builds.
 
 - [ ] **Step 5: Walk section 6.10 verbatim**
 
-Put this table in the final task report, filling the Evidence column with exact test names, build outputs, render filenames, map counts, and measured figures:
+Put this table in the final task report, filling the Evidence column with exact test names, build outputs, render filenames, map-registry counts, ELF row counts, and measured figures:
 
 | Section 6.10 bullet | Evidence required |
 |---|---|
@@ -1560,7 +1571,7 @@ Put this table in the final task report, filling the Evidence column with exact 
 | Old patch keeps THIN, including no version key | `test_vcv_link_migration`, deliberate early-return failure proof, and the three real Rack patch loads from Task 6 Step 9 |
 | Tape heap-allocated on VCV; `spky_tests` BSS sane | VCV vector source pin/build; before/after `llvm-size` delta < 1 MiB |
 | `bench/audition/Makefile` builds | Task 8 build output |
-| DTCM A/B pair exists, re-pointed | row registrations, `bench.map` counts, checksum equality |
+| DTCM A/B pair exists, re-pointed | row registrations, map-registry counts, ELF row counts, checksum equality |
 | `instrument_worst` re-measured same build as `pct_max` | hardware table in bench note |
 
 Also include this completed symbol-disposition table:
@@ -1611,7 +1622,7 @@ EOF
 ## Plan self-review checklist
 
 - **Spec coverage:** Sections 6.1-6.10 are covered by Tasks 1-8; section 7's final controls are covered in Tasks 4 and 6; section 9's FXT decision is signed off; section 10 exclusions appear in Global Constraints.
-- **Appendix A hazards:** no taps, no mono assumption, no `Flux::kMaxSamples` BBD sizing, no `form_song_migration.hpp` misuse, no deletion of the DTCM pair, no stale benchmark-row trust without `bench.map`, and no bit-exact acceptance gate.
+- **Appendix A hazards:** no taps, no mono assumption, no `Flux::kMaxSamples` BBD sizing, no `form_song_migration.hpp` misuse, no deletion of the DTCM pair, no stale benchmark-row trust without a linked map registry plus exact ELF row name, and no bit-exact acceptance gate.
 - **Type consistency:** tape memory is `[PART_COUNT][2]` at every boundary; BBD memory remains `[PART_COUNT][2]`; `Part::init` orders `echo_l, echo_r, sampler, frames, bbd_l, bbd_r`; LINK runtime and migration both end at 0..1.
 - **No placeholders:** the only runtime-created filename contains the measured commit SHA, as required by the repository's bench-note convention; every implementation/test interface and acceptance command is named above.
 
