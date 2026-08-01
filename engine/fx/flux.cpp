@@ -144,6 +144,11 @@ void Flux::set_rhythm(const RhythmView& rv) {
     _rhy_gap[1] = rv.gap[1];
     _rhy_valid = rv.valid;
     update_thin_pattern();
+    if (!_rhy_valid) {
+        _gate_target = 1.f;
+        _thin_count = 0;
+        _thin_i = 0;
+    }
     refresh_repeat_scheduler();
 }
 

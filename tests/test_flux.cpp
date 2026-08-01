@@ -308,6 +308,19 @@ TEST_CASE("flux tape: invalid rhythm leaves THIN open") {
     CHECK(f.gate_for_test() == 1.f);
 }
 
+TEST_CASE("flux tape: invalidating an active rhythm reopens THIN") {
+    FluxTapeMem mem;
+    Flux f;
+    thin_setup(f, mem, 12000, 6000);
+    f.set_link(1.f);
+    run_silence(f, 7500);
+    REQUIRE(f.gate_for_test() == doctest::Approx(0.f).epsilon(0.02));
+
+    f.set_rhythm(rhythm(12000, 6000, false));
+    run_silence(f, 2000);
+    CHECK(f.gate_for_test() == 1.f);
+}
+
 TEST_CASE("flux tape: re-init resets the LINK guard") {
     FluxTapeMem mem;
     Flux f;
