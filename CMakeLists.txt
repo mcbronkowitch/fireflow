@@ -89,6 +89,7 @@ add_executable(spky_tests
     tests/test_grit.cpp
     engine/fx/flux.cpp
     tests/test_flux.cpp
+    tests/test_tape_echo.cpp
     engine/fx/drag.cpp
     tests/test_drag.cpp
     engine/fx/bbd.cpp

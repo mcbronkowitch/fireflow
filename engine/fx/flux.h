@@ -6,6 +6,7 @@
 #include "fx/bbd.h"
 #include "fx/drag.h"
 #include "fx/fx_util.h"
+#include "fx/tape_echo.h"
 #include "mod/divisions.h"
 
 namespace spky {
@@ -130,7 +131,7 @@ private:
     int   _stages_now = 8192;
     float _time_mult = 1.f;
     // set_time_mod's unchanged-value guard, compared against the RAW pushed
-    // argument -- bbd_time_mult's own clamp to 0..1 runs a line later, inside
+    // argument -- tape_time_mult's own clamp to 0..1 runs a line later, inside
     // set_time_mod, and so cannot be what keeps -1 unreachable at THIS
     // compare. What actually keeps it unreachable is a caller-side
     // invariant: PartFx pushes FXT_FLUX_TIME through Part::fx_target_value,

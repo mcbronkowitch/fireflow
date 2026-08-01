@@ -52,7 +52,8 @@ struct SweepInstrumentGroup {
 // point below the clamp region) and the ceiling left unmeasured. rate 8 (1.33
 // ticks per audio sample only at rate 11; 1.024 at rate 8) pins exactly where
 // the ceiling starts biting instead. A prior draft of this row also zeroed
-// values[FXT_FLUX_TIME], which bbd_time_mult() maps to x0.25 (engine/fx/bbd.h),
+// values[FXT_FLUX_TIME], which tape_time_mult() maps to x0.25
+// (engine/fx/tape_echo.h),
 // quartering every row's real clock and hiding this ceiling entirely; fixed by
 // mirroring setup_fx's values[] array exactly (see setup_flux_rate below).
 struct SweepFxGroup {
@@ -256,8 +257,8 @@ void setup_flux_rate(int rate_index)
 
     // Mirrors setup_fx's values[] exactly (bench/workloads_system.cpp) -- same
     // already-modulated target values a real Part::fx_target_value() would
-    // hand over. FXT_FLUX_TIME = 0.5f is the neutral point of bbd_time_mult()
-    // (engine/fx/bbd.h: 0 -> x0.25, 0.5 -> x1, 1 -> x4) -- 0.f, used by an
+    // hand over. FXT_FLUX_TIME = 0.5f is the neutral point of tape_time_mult()
+    // (engine/fx/tape_echo.h: 0 -> x0.25, 0.5 -> x1, 1 -> x4) -- 0.f, used by an
     // earlier draft of this row, quarters the real clock instead.
     group.values[FXT_GRIT_INT]  = 0.8f;
     group.values[FXT_FLUX_TIME] = 0.5f;

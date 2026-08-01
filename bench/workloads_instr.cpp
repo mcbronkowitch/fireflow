@@ -1182,10 +1182,10 @@ void setup_fx_flux_hot()
     //
     // Settled, the clock sits exactly ON its ceiling rather than merely near
     // it: bbd_clock_hz(0.0625, 16384) is 131072 Hz before the clamp, and
-    // FXT_FLUX_TIME 0.5 contributes _time_mult == 1 exactly (bbd_time_mult's
-    // 65-row LUT: the table is built at engine/fx/bbd.h:218-225 with
+    // FXT_FLUX_TIME 0.5 contributes _time_mult == 1 exactly (tape_time_mult's
+    // 65-row LUT: the table is built at engine/fx/tape_echo.h with
     // t[i] == 2^(4*(i/64 - 0.5)), and the indexing and lerp at
-    // engine/fx/bbd.h:226-230 turn 0.5 into p == 32.f exactly, so i == 32,
+    // engine/fx/tape_echo.h turn 0.5 into p == 32.f exactly, so i == 32,
     // the fraction is 0 and the return is table[32] == 2^0 untouched by the
     // interpolation), so >= is an equality test here in every non-broken
     // case.

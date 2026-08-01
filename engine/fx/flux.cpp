@@ -18,7 +18,7 @@ void Flux::init(float sample_rate, float* buf) {
     _dt_coef = daisysp::fmin(1.f / (0.03f * sample_rate), 1.f);
     _rate_idx = 3;               // boot "1/4"
     _bpm = 120.f;
-    _time_mult = 1.f;
+    _time_mult = tape_time_mult(0.5f);  // construct the LUT before audio
     _drag = 0.f;
     _drag_iv[0] = _drag_iv[1] = 0;
     _drag_i = 0;
@@ -218,7 +218,7 @@ void Flux::set_stages(float norm) {
 void Flux::set_time_mod(float norm) {
     if (norm == _time_mod_norm) return;
     _time_mod_norm = norm;
-    _time_mult = bbd_time_mult(norm);
+    _time_mult = tape_time_mult(norm);
 }
 
 // The neighbour's gaps, in whole repeats of the CURRENT ladder time. Rounded,

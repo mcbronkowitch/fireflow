@@ -908,7 +908,7 @@ TEST_CASE("flux: the FXT_FLUX_TIME guard lands the first push and swallows repea
     // and the boot stage count is 8192 -- so the base clock is
     // 8192 / (2 * 0.5) = 8192 Hz.
     //
-    // The DEPTH is 0.75, not 1.0. bbd_time_mult maps 0.5 -> x1 and 1.0 -> x4,
+    // The DEPTH is 0.75, not 1.0. tape_time_mult maps 0.5 -> x1 and 1.0 -> x4,
     // and x4 on this base lands at 32768 Hz, above kClockMaxHz (32000) -- the
     // ceiling would clamp it and the test would be asserting the clamp rather
     // than the guard. 0.75 is x2, landing at 16384 Hz: comfortably under the

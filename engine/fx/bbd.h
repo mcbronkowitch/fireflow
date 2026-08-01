@@ -1,5 +1,4 @@
 #pragma once
-#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -204,31 +203,6 @@ inline float bbd_clock_hz(float delay_seconds, int stages) {
         return bbd_tuning::kClockMaxHz;
     const float hz = static_cast<float>(stages) / (2.f * delay_seconds);
     return hz < bbd_tuning::kClockMaxHz ? hz : bbd_tuning::kClockMaxHz;
-}
-
-// FXT_FLUX_TIME's geometric depth map: 0 -> x1/4, 0.5 -> x1, 1 -> x4. Since
-// pitch tracks the clock ratio directly, that is +-2 octaves at full depth --
-// the original's +-10 % clock swing (+-1.65 semitones) lands in the bottom
-// tenth of the control. The historical device is the start of the scale, not
-// the target.
-//
-// A LUT, not powf: this is evaluated once per sample per part. 65 rows over
-// four octaves with linear interpolation gives a worst-case error of 2.3e-4
-// relative, i.e. 0.4 cents -- inaudible on a modulation depth control.
-inline float bbd_time_mult(float norm) {
-    static const std::array<float, 65> table = [] {
-        std::array<float, 65> t{};
-        for (size_t i = 0; i < t.size(); ++i) {
-            const float n = static_cast<float>(i) / static_cast<float>(t.size() - 1);
-            t[i] = std::pow(2.f, 4.f * (n - 0.5f));
-        }
-        return t;
-    }();
-    const float p = clampf(norm, 0.f, 1.f) * 64.f;
-    int i = static_cast<int>(p);
-    if (i > 64) i = 64;
-    const int j = (i < 64) ? i + 1 : 64;
-    return table[i] + (table[j] - table[i]) * (p - static_cast<float>(i));
 }
 
 // Discretised filter, one per direction, shared by every BbdLine at a given
