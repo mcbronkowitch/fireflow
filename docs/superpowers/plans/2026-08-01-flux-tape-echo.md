@@ -184,7 +184,7 @@ using `m.echo` and both `BbdEcho::Init` calls using `m.bbd` plus
 
 ```bash
 make -C bench clean all BENCH_FAMILIES="system sweep"
-grep -c "kSystemWorkloads" bench/build/bench.map
+grep -c "kCoreWorkloads" bench/build/bench.map
 grep -c "kSweepWorkloads" bench/build/bench.map
 arm-none-eabi-strings bench/build/bench.elf | grep -c "sweep_flux_lines_2ch"
 arm-none-eabi-strings bench/build/bench.elf | grep -c "inst_bbd_engine_worst"
@@ -1390,7 +1390,7 @@ Then use the exact build/inspection command documented in `bench/README.md` for 
 
 ```bash
 make -C bench clean all BENCH_FAMILIES="system sweep"
-grep -c "kSystemWorkloads" bench/build/bench.map
+grep -c "kCoreWorkloads" bench/build/bench.map
 grep -c "kSweepWorkloads" bench/build/bench.map
 arm-none-eabi-strings bench/build/bench.elf | grep -c "fx_flux_sdram"
 arm-none-eabi-strings bench/build/bench.elf | grep -c "instrument_worst"
