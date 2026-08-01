@@ -208,8 +208,8 @@ TEST_CASE("deck bus: with the source off, a hostile tap changes nothing -- "
         // not name the engine would send the next reader through all six.
         INFO("engine ", static_cast<int>(e));
         Part a, b;
-        a.init(48000.f, 7, nullptr, nullptr, 0, s_dbus_bbd[0][0], s_dbus_bbd[0][1]);
-        b.init(48000.f, 7, nullptr, nullptr, 0, s_dbus_bbd[1][0], s_dbus_bbd[1][1]);
+        a.init(48000.f, 7, nullptr, nullptr, nullptr, 0, s_dbus_bbd[0][0], s_dbus_bbd[0][1]);
+        b.init(48000.f, 7, nullptr, nullptr, nullptr, 0, s_dbus_bbd[1][0], s_dbus_bbd[1][1]);
         a.set_engine(e);     b.set_engine(e);
         // Give the engines something to play, or a silent engine makes this
         // pass vacuously -- see the non-silence guard below.

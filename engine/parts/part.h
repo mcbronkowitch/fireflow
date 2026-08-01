@@ -31,7 +31,7 @@ namespace spky {
 class Part {
 public:
     void init(float sample_rate, uint32_t seed_base,
-              float* echo = nullptr,
+              float* echo_l = nullptr, float* echo_r = nullptr,
               SampleBuffer::Frame* sampler_mem = nullptr, size_t sampler_frames = 0,
               float* bbd_l = nullptr, float* bbd_r = nullptr);
 
@@ -595,8 +595,8 @@ private:
     // FX target cache, filled at the control tick. PartFx smooths each value
     // over 2 ms, so the raster's steps never reach an FX parameter raw.
     // Boot values mirror _fx_base so the first block cannot push zeros.
-    // Slot 1 (FXT_FLUX_TIME) is 0.5 because the BBD reads it as a geometric
-    // multiplier on the clock with 0.5 == x1. The 0.4 it carried while the
+    // Slot 1 (FXT_FLUX_TIME) is 0.5 because tape delay reads it as a geometric
+    // time multiplier with 0.5 == x1. The 0.4 it carried while the
     // target was retired and unread would put every deck 1.3x off its own
     // synced grid.
     float _fxv[FXT_COUNT] = { 0.3f, 0.5f, 1.f, 0.25f, 0.45f };
@@ -641,8 +641,8 @@ private:
 
     // FX target row (boot: all modulation inactive, spec "Boot defaults").
     // Bases, by FxTargetId: GRIT_INT .3 | FLUX_TIME .5 | FX_MIX 1 | REV_SEND .25 | FLUX_FB .45
-    // Slot 1 (FXT_FLUX_TIME) is 0.5 because the BBD reads it as a geometric
-    // multiplier on the clock with 0.5 == x1. The 0.4 it carried while the
+    // Slot 1 (FXT_FLUX_TIME) is 0.5 because tape delay reads it as a geometric
+    // time multiplier with 0.5 == x1. The 0.4 it carried while the
     // target was retired and unread would put every deck 1.3x off its own
     // synced grid.
     std::array<bool,  FXT_COUNT> _fx_active { { false, false, false, false, false } };

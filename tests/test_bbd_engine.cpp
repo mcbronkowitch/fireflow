@@ -8,6 +8,7 @@
 #include "util/svf_bp.h"
 #include <algorithm>
 #include <chrono>
+#include <vector>
 #include <cmath>
 #include <vector>
 
@@ -51,7 +52,7 @@ TEST_CASE("bbd engine: a deck set to BBD reaches the BBD, not the test tone") {
     // process_in/consumes_input pair implemented only halfway.
     auto render = [](bool with_input) {
         Part q;
-        q.init(48000.f, 7u, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
+        q.init(48000.f, 7u, nullptr, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
         q.set_engine(ENGINE_BBD);
         // MIX strictly below 1, so the dry path is live and the input shows
         // up immediately instead of one delay period later. Lane off, so the
@@ -183,7 +184,7 @@ TEST_CASE("bbd engine: a mono source through the stereo engine stays mono") {
     // that decides which seeds the lines actually carry when the deck is
     // audible, as opposed to which ones init_buffers set once.
     Part p;
-    p.init(48000.f, 3u, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
+    p.init(48000.f, 3u, nullptr, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
     p.set_engine(ENGINE_BBD);
     // Width now rides COLOR (Task 7), and _color defaults to 0 already -- but
     // pin it explicitly. This test is NAMED for the zero-width case, and
@@ -399,7 +400,7 @@ TEST_CASE("bbd engine: a BBD deck swapped into an already-running STEP transport
     // have to re-derive to prove the point.
     auto cold_start_hz = [](float pitch) {
         Part p;
-        p.init(48000.f, 21u, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
+        p.init(48000.f, 21u, nullptr, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
         p.set_step(true, 8);                 // STEP, engaged before BBD exists
         p.set_target_active(LANE_PITCH, false);
         p.set_tune(0.5f);
@@ -463,7 +464,7 @@ TEST_CASE("bbd engine: PITCH is inaudible at FEEDBACK 0, and that is the design"
 
 TEST_CASE("bbd engine: a BBD deck in FLOW gets the raw pitch, in STEP the scale") {
     Part p;
-    p.init(48000.f, 13u, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
+    p.init(48000.f, 13u, nullptr, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
     p.set_engine(ENGINE_BBD);
     float l, r;
     for (int i = 0; i < 500; ++i) p.process(l, r);
@@ -483,7 +484,7 @@ TEST_CASE("bbd engine: a BBD deck in FLOW gets the raw pitch, in STEP the scale"
 
 TEST_CASE("bbd engine: switching away and back returns silence, not old charge") {
     Part p;
-    p.init(48000.f, 11u, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
+    p.init(48000.f, 11u, nullptr, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
     p.set_engine(ENGINE_BBD);
     p.set_target_base(LANE_MOTION, 0.9f);    // FEEDBACK up: charge circulates
     // The input-carrying form is the six-argument one -- Part has no
@@ -1015,7 +1016,7 @@ TEST_CASE("bbd engine: every VOICE knob reaches the BBD") {
     // of them is a dead knob with no diagnostic, so this checks all six by
     // observing a consequence, not by reading the source.
     Part p;
-    p.init(48000.f, 17u, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
+    p.init(48000.f, 17u, nullptr, nullptr, nullptr, 0, s_bbd_l, s_bbd_r);
     p.set_engine(ENGINE_BBD);
     // Every lane defaults ACTIVE (part.h:637), i.e. modulated continuously by
     // the mod plane -- including LANE_PITCH, which drives the clock in FLOW.
@@ -1361,7 +1362,10 @@ TEST_CASE("bbd engine: 60 s of silence at the input costs no denormal stall"
 // engine-level cases share, because two decks running at once must not be
 // writing into the same cells.
 static float s_inst_bbd[PART_COUNT][2][BbdEngine::kCells];
-static float s_inst_echo[PART_COUNT][Flux::kMaxSamples];
+static std::vector<float> s_inst_echo[PART_COUNT][2] = {
+    {std::vector<float>(Flux::kMaxSamples), std::vector<float>(Flux::kMaxSamples)},
+    {std::vector<float>(Flux::kMaxSamples), std::vector<float>(Flux::kMaxSamples)},
+};
 
 TEST_CASE("bbd engine: the output stays inside its stated bound with BOTH decks blooming") {
     // Spec 5.13: "The engine's output stays within its stated bound with both
@@ -1376,7 +1380,8 @@ TEST_CASE("bbd engine: the output stays inside its stated bound with BOTH decks 
     // prove the limiter works, not the engine.
     FxMem mem;
     for (int p = 0; p < PART_COUNT; ++p) {
-        mem.echo[p] = s_inst_echo[p];
+        mem.echo[p][0] = s_inst_echo[p][0].data();
+        mem.echo[p][1] = s_inst_echo[p][1].data();
         mem.bbd[p][0] = s_inst_bbd[p][0];
         mem.bbd[p][1] = s_inst_bbd[p][1];
     }

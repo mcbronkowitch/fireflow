@@ -62,13 +62,25 @@ TEST_CASE("instrument: set_scale is global and reaches both parts") {
     CHECK(inst.pitch_cv(PART_B) == doctest::Approx(18.f / 36.f));
 }
 
-static float s_ti_echo[PART_COUNT][spky::Flux::kMaxSamples];
+struct TapeMem {
+    std::vector<float> echo[PART_COUNT][2];
+    TapeMem() {
+        for (int p = 0; p < PART_COUNT; ++p)
+            for (int ch = 0; ch < 2; ++ch)
+                echo[p][ch].resize(Flux::kMaxSamples);
+    }
+    void bind(FxMem& m) {
+        for (int p = 0; p < PART_COUNT; ++p)
+            for (int ch = 0; ch < 2; ++ch)
+                m.echo[p][ch] = echo[p][ch].data();
+    }
+};
+static TapeMem s_ti_tape;
 static spky::AmbientReverb s_ti_reverb;
 
 static spky::FxMem test_fx_mem() {
     spky::FxMem m;
-    for (int p = 0; p < PART_COUNT; ++p)
-        m.echo[p] = s_ti_echo[p];
+    s_ti_tape.bind(m);
     m.reverb = &s_ti_reverb;
     return m;
 }
@@ -124,43 +136,6 @@ TEST_CASE("instrument: fx setters reach the parts and reverb setters are null-sa
     inst.process(nullptr, nullptr, &l, &r, 1);
     CHECK(inst.fx_target_value(PART_A, FXT_GRIT_INT) >= 0.f);
     CHECK(l == l);   // not NaN
-}
-
-TEST_CASE("instrument: set_drive forwards to the named part only") {
-    // Ported for the BBD rewrite (2026-07-27 whole-branch review, finding 7)
-    // from "instrument: set_dust forwards to the named part only"
-    // (test_instrument.cpp, removed with the tap bank, e004a3d) -- set_drive
-    // is set_dust's replacement at this same call site (Instrument ->
-    // PartFx -> Flux) and had no isolation witness of its own. Unlike DUST,
-    // DRIVE is a direct, unslewed control-rate value (Flux::set_drive), and
-    // Flux already exposes it as a test observer, so this needs no
-    // audio-domain isolation trick -- just read each part's own Flux back.
-    Instrument inst;
-    inst.init(48000.f, test_fx_mem());
-    inst.set_drive(PART_A, 0.7f);
-    inst.set_drive(PART_B, 0.2f);
-    CHECK(inst.drive_norm_for_test(PART_A) == doctest::Approx(0.7f));
-    CHECK(inst.drive_norm_for_test(PART_B) == doctest::Approx(0.2f));
-}
-
-TEST_CASE("instrument: set_stages forwards to the named part only") {
-    // Ported for the BBD rewrite (2026-07-27 whole-branch review, finding 7)
-    // from "instrument: set_rot forwards to the named part only"
-    // (test_instrument.cpp, removed with the tap bank, e004a3d) -- set_stages
-    // is set_rot's replacement at this same call site. Unlike ROT, STAGES
-    // rides Flux's own 30 ms slew and only updates while FLUX is actually
-    // processing (Flux::process's `_sw.is_idle()` early-return skips it
-    // entirely), so FLUX is switched on for both parts and given time to
-    // settle before reading back.
-    Instrument inst;
-    inst.init(48000.f, test_fx_mem());
-    inst.set_fx_on(PART_A, FxBlock::Flux, true);
-    inst.set_fx_on(PART_B, FxBlock::Flux, true);
-    inst.set_stages(PART_A, 0.f);     // -> kMinStages (512)
-    inst.set_stages(PART_B, 1.f);     // -> kMaxStages (16384)
-    float l, r;
-    for (int i = 0; i < 6000; ++i) inst.process(nullptr, nullptr, &l, &r, 1);  // settle the stage slew
-    CHECK(inst.stages_for_test(PART_A) < inst.stages_for_test(PART_B));
 }
 
 TEST_CASE("instrument: boots both parts on the synth engine with an audible drone") {
@@ -275,12 +250,10 @@ TEST_CASE("instrument M4: morph=1 isolates part A's dry path") {
 }
 
 TEST_CASE("instrument M4: morph=1 injects no new reverb from part A (send isolated)") {
-    static float echoX[PART_COUNT][Flux::kMaxSamples];
-    static float echoY[PART_COUNT][Flux::kMaxSamples];
+    TapeMem echoX, echoY;
     static AmbientReverb rvX, rvY;
     FxMem mx, my;
-    for (int p = 0; p < PART_COUNT; ++p)
-        { mx.echo[p] = echoX[p]; my.echo[p] = echoY[p]; }
+    echoX.bind(mx); echoY.bind(my);
     mx.reverb = &rvX; my.reverb = &rvY;
     Instrument x; x.init(48000.f, mx);
     Instrument y; y.init(48000.f, my);
@@ -406,14 +379,13 @@ TEST_CASE("instrument M4.8: mix 0.5 sits at equal power (both gains cos(pi/4))")
     //   out05  = 0.7071*dry + 0.7071*wet
     // => rms(out05 - 0.7071*out0) / rms(out1) == 0.7071  (wet gain)
     //    rms(out05 - 0.7071*out1) / rms(out0) == 0.7071  (dry gain)
-    static float echoEP[3][PART_COUNT][Flux::kMaxSamples];
+    TapeMem echoEP[3];
     static AmbientReverb rvEP[3];
     Instrument inst[3];
     const float mixes[3] = { 0.f, 0.5f, 1.f };
     for (int k = 0; k < 3; ++k) {
         FxMem m;
-        for (int p = 0; p < PART_COUNT; ++p)
-            m.echo[p] = echoEP[k][p];
+        echoEP[k].bind(m);
         m.reverb = &rvEP[k];
         inst[k].init(48000.f, m);
         inst[k].set_reverb_mix(mixes[k]);
@@ -468,12 +440,11 @@ TEST_CASE("instrument: reverb mix is per-deck (A wet-kills-dry while B stays dry
 }
 
 TEST_CASE("instrument M4.8: hard MIX jumps are smoothed (no zipper)") {
-    static float echoZ[PART_COUNT][Flux::kMaxSamples];
+    TapeMem echoZ;
     static AmbientReverb rvZ;
     auto run_maxd = [&](bool stepped) {
         FxMem m;
-        for (int p = 0; p < PART_COUNT; ++p)
-            m.echo[p] = echoZ[p];
+        echoZ.bind(m);
         m.reverb = &rvZ;
         Instrument inst;
         inst.init(48000.f, m);                 // init() re-clears the shared statics
@@ -508,12 +479,10 @@ TEST_CASE("instrument M4.8: MIX 0 sleeps the room, any MIX > 0 wakes it") {
 }
 
 TEST_CASE("instrument M4.8: waking from sleep starts with an empty room (no ghost tail)") {
-    static float echoGX[PART_COUNT][Flux::kMaxSamples];
-    static float echoGY[PART_COUNT][Flux::kMaxSamples];
+    TapeMem echoGX, echoGY;
     static AmbientReverb rvGX, rvGY;
     FxMem mx, my;
-    for (int p = 0; p < PART_COUNT; ++p)
-        { mx.echo[p] = echoGX[p]; my.echo[p] = echoGY[p]; }
+    echoGX.bind(mx); echoGY.bind(my);
     mx.reverb = &rvGX; my.reverb = &rvGY;
     Instrument x; x.init(48000.f, mx);
     Instrument y; y.init(48000.f, my);
@@ -548,11 +517,10 @@ TEST_CASE("instrument M4.8: waking from sleep starts with an empty room (no ghos
 
 TEST_CASE("instrument M4.8: mix automation incl. sleep is deterministic end to end") {
     auto run = [] {
-        static float echoD[PART_COUNT][Flux::kMaxSamples];
+        TapeMem echoD;
         static AmbientReverb rvD;
         FxMem m;
-        for (int p = 0; p < PART_COUNT; ++p)
-            m.echo[p] = echoD[p];
+        echoD.bind(m);
         m.reverb = &rvD;
         Instrument inst;
         inst.init(48000.f, m);            // init() re-clears the shared statics

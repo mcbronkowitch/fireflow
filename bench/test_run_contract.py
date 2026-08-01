@@ -1354,17 +1354,17 @@ class SweepProfileTest(unittest.TestCase):
         rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["sweep"]
         self.assertNotIn("sweep_probe", rows, "scaffolding row must not reach hardware run")
         self.assertEqual(len(rows), len(set(rows)), "duplicate row names")
-        self.assertEqual(len(rows), 15, "sweep family must have exactly 15 rows")
+        self.assertEqual(len(rows), 11, "sweep family must have exactly 11 rows")
 
     def test_flux_rate_sweep_rows_are_expected(self):
         rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["sweep"]
         for index in (0, 3, 6, 8, 11):
             self.assertIn("sweep_flux_rate_%d" % index, rows)
 
-    def test_stages_sweep_rows_are_expected(self):
+    def test_retired_stages_sweep_rows_are_rejected(self):
         rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["sweep"]
         for stages in (512, 2048, 8192, 16384):
-            self.assertIn("sweep_stages_%d" % stages, rows)
+            self.assertNotIn("sweep_stages_%d" % stages, rows)
 
     def test_grit_ablation_rows_are_expected(self):
         rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["sweep"]

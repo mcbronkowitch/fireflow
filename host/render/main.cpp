@@ -10,7 +10,7 @@
 using namespace spky;
 
 // FX memory, injected per the engine's no-heap contract (FxMem pattern).
-static float s_echo[spky::PART_COUNT][spky::Flux::kMaxSamples];
+static float s_echo[spky::PART_COUNT][2][spky::Flux::kMaxSamples];
 // The BBD part engine's two lines per deck, same static idiom as the echo
 // buffer above: 32 KB per line, 128 KB in total.
 static float s_bbd[spky::PART_COUNT][2][spky::BbdEngine::kCells];
@@ -44,7 +44,8 @@ int main(int argc, char** argv) {
     Instrument inst;
     FxMem fx_mem;
     for (int p = 0; p < PART_COUNT; ++p) {
-        fx_mem.echo[p] = s_echo[p];
+        fx_mem.echo[p][0] = s_echo[p][0];
+        fx_mem.echo[p][1] = s_echo[p][1];
         fx_mem.bbd[p][0] = s_bbd[p][0];
         fx_mem.bbd[p][1] = s_bbd[p][1];
     }

@@ -14,7 +14,7 @@ namespace {
 spky::SampleBuffer::Frame DSY_SDRAM_BSS
     g_sampler[spky::PART_COUNT][kFactoryFrames];
 float DSY_SDRAM_BSS
-    g_echo[spky::PART_COUNT][spky::Flux::kMaxSamples];
+    g_echo[spky::PART_COUNT][2][spky::Flux::kMaxSamples];
 // The BBD part engine's two lines per deck, same SDRAM idiom as the echo
 // storage above: 128 KB in total.
 float DSY_SDRAM_BSS
@@ -44,7 +44,8 @@ void init_memory()
     auto* reverb = new(g_reverb_storage) spky::AmbientReverb();
     for(int part = 0; part < spky::PART_COUNT; ++part)
     {
-        g_fx_memory.echo[part] = g_echo[part];
+        g_fx_memory.echo[part][0] = g_echo[part][0];
+        g_fx_memory.echo[part][1] = g_echo[part][1];
         g_fx_memory.bbd[part][0] = g_bbd[part][0];
         g_fx_memory.bbd[part][1] = g_bbd[part][1];
         g_fx_memory.sampler_buf[part] = g_sampler[part];

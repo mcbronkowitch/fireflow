@@ -70,3 +70,24 @@ TEST_CASE("Seed audition boots the same engines the VCV host does")
     CHECK(inst.engine_id(spky::PART_A) == spky::ENGINE_SYNTH);
     CHECK(inst.engine_id(spky::PART_B) == spky::ENGINE_BODY);
 }
+
+TEST_CASE("Seed audition routes saved STAGES only to BBD pitch")
+{
+    spky::Instrument inst;
+    inst.init(48000.f);
+    inst.set_target_active(spky::PART_A, spky::LANE_PITCH, false);
+    inst.set_target_active(spky::PART_B, spky::LANE_PITCH, false);
+    float l = 0.f, r = 0.f;
+    for(int i = 0; i < 4000; ++i)
+        inst.process(nullptr, nullptr, &l, &r, 1);
+    const float before_a = inst.pitch_cv(spky::PART_A);
+    const float before_b = inst.pitch_cv(spky::PART_B);
+
+    audition::apply_engine_stages(inst, spky::PART_A, spky::ENGINE_BBD, 0.8f);
+    audition::apply_engine_stages(inst, spky::PART_B, spky::ENGINE_BODY, 1.f);
+    for(int i = 0; i < 4000; ++i)
+        inst.process(nullptr, nullptr, &l, &r, 1);
+
+    CHECK(inst.pitch_cv(spky::PART_A) != before_a);
+    CHECK(inst.pitch_cv(spky::PART_B) == before_b);
+}

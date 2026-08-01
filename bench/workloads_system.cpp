@@ -211,7 +211,7 @@ void setup_fx(int sel)
 {
     auto& group = g_system_arena.emplace<FxGroup>();
     const FxMem& m = fx_mem();
-    group.fx.init(kSampleRate, m.echo[0]);
+    group.fx.init(kSampleRate, m.echo[0][0], m.echo[0][1]);
     // immediate = true: the soft switches would otherwise fade in over the
     // warm-up and the measured window would see a partly-engaged chain.
     group.fx.set_fx_on(FxBlock::Grit, sel == SEL_GRIT, true);
@@ -414,24 +414,17 @@ void setup_inst_worst_deck_bus()
                                   g_instrument_harness.out_r, kBlock);
 }
 
-// --- 10. the whole instrument, FLUX at the BBD's ceiling ---------------------
-// instrument_worst never touches the FLUX voicing controls, so the combined
-// worst case would otherwise be an extrapolation. This row measures
-// instrument_worst's exact configuration plus STAGES at maximum and DRIVE
-// high on both parts, with the FLUX rate pushed to the shortest division so
-// the clock sits on its ceiling.
+// --- 10. legacy instrument pair, tape FLUX hot -------------------------------
+// These rows keep their historical protocol names until Task 7 re-points the
+// pair together. For now the tape RATE and feedback are held hot.
 //
-// Unlike the tap row this replaces, there is nothing to wait for: the BBD's
-// cost does not depend on the OTHER deck's rhythm becoming valid, so the
-// runner's fixed 100-block warm-up is enough. That simplification is the
-// point -- the worst case is now constant and knowable, which is exactly what
-// the design claimed.
+// The setup also performs its historical explicit settle so both stereo tape
+// pairs have filled before measurement; Task 7 will re-point this named pair
+// together before any new benchmark capture is reported.
 void configure_inst_worst_bbd(Instrument& inst)
 {
     for (int p = 0; p < PART_COUNT; ++p) {
-        inst.set_stages(p, 1.f);            // 16384: the largest cell array
-        inst.set_drive(p, 0.85f);           // saturating every pass
-        inst.set_flux_rate(p, kFluxRateCount - 1);   // "1/32" -> clock ceiling
+        inst.set_flux_rate(p, kFluxRateCount - 1);   // shortest tape division
         inst.set_fx_target_base(p, FXT_FLUX_FB, 0.9f);
     }
     // Fill both lines and settle every envelope before the runner measures.

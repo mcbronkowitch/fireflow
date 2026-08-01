@@ -5,22 +5,23 @@ using namespace spky;
 
 namespace {
 inline float dbfs2lin(float db) { return daisysp::pow10f(db * 0.05f); }
-constexpr float kBootStagesNorm = 0.8f;   // 512 * 32^0.8 == 8192, the DMM
 }
 
-void Flux::init(float sample_rate, float* buf) {
+void Flux::init(float sample_rate, float* left, float* right) {
     _sw.init(sample_rate);
     _sr = sample_rate;
-    // Force the tape-time LUT's one-time pow construction before the null
-    // memory return. PartFx can still call set_time_mod on the audio thread
-    // when GRIT is engaged without FLUX memory.
-    _time_mult = tape_time_mult(0.5f);
-    _buf_ok = (buf != nullptr);
+    // Construct the tape-time LUT before a null-memory return so a later
+    // audio-thread modulation push never performs the table's one-time pow.
+    _time_mod_norm = 0.5f;
+    _time_mult = tape_time_mult(_time_mod_norm);
+    _buf_ok = left != nullptr && right != nullptr;
     if (!_buf_ok) return;
-    _echo.Init(sample_rate, buf, kMaxSamples);
-    // Short slew: click-free division changes, locks to grid (~30 ms lag).
+
+    _echo_l.Init(sample_rate, left);
+    _echo_r.Init(sample_rate, right);
     _dt_coef = daisysp::fmin(1.f / (0.03f * sample_rate), 1.f);
-    _rate_idx = 3;               // boot "1/4"
+    _gate_coef = daisysp::fmin(1.f / (link_tuning::kGateRampS * sample_rate), 1.f);
+    _rate_idx = 3;
     _bpm = 120.f;
     _drag = 0.f;
     _drag_iv[0] = _drag_iv[1] = 0;
@@ -28,23 +29,6 @@ void Flux::init(float sample_rate, float* buf) {
     _repeat_phase_samples = 0.f;
     _repeat_period_samples = 0.f;
     _drag_active = false;
-    _gate_coef = daisysp::fmin(1.f / (link_tuning::kGateRampS * sample_rate), 1.f);
-    // set_link's guard compares against _link, and this reset also zeroes
-    // _drag and _thin below -- so _link must land on the value that
-    // actually MATCHES that reset state, which is 0, not an unreachable
-    // sentinel like _drive_norm/_stages_norm use below. Those two guard a
-    // 0..1 knob, where -1 is outside the range and therefore guaranteed to
-    // differ from the next legitimate push; LINK's range is -1..1, so -1 is
-    // a real value a user could be sitting on and would wrongly swallow a
-    // repeated push of it. 0.f is correct here precisely because it IS the
-    // neutral state this reset just put the derived halves into: any other
-    // knob position the user pushes next will correctly differ from it, and
-    // if they push 0 again that's a no-op on an already-neutral Flux, not a
-    // swallowed change. Without this, a re-init (Spotymod::reinit(), called
-    // from a sample-rate change, a reset, or a fresh sampler add) leaves
-    // _link at whatever the knob last was while _drag/_thin have already
-    // been zeroed, so the next pushParams(same value) is silently swallowed
-    // and LINK stays dead until the knob physically moves.
     _link = 0.f;
     _thin = 0.f;
     _rhy_gap[0] = _rhy_gap[1] = 0;
@@ -52,36 +36,10 @@ void Flux::init(float sample_rate, float* buf) {
     _thin_n[0] = _thin_n[1] = 1;
     _thin_i = _thin_count = 0;
     _gate = _gate_target = 1.f;
-    // Both guards restart from an unreachable value: BbdEcho::Init has just
-    // reset the drive to 0 and the stage count to its own default, so a
-    // repeated push of the value the user already had dialled in must NOT be
-    // swallowed. Same trap the tape-era DUST/ROT guards carried, same fix.
-    _drive_norm = -1.f;
-    _stages_norm = -1.f;
-    // apply_feedback() reads _fb_scale, and set_feedback(0.45f) below runs
-    // BEFORE set_drive(0.f) -- so on a re-init of an instance whose DRIVE was
-    // hot, the member still holds the old DRIVE's factor at that moment.
-    //
-    // That window is NOT reachable today: _drive_norm was just set to -1, so
-    // set_drive(0.f) below always passes its own guard and always rewrites
-    // this. The window is two lines wide with no audio processed inside it.
-    // This reset is therefore defence against a future reordering of init(),
-    // or against set_drive gaining an early return -- not a fix for a live
-    // bug. Do not delete it as dead code; it is what stops the correctness of
-    // a cached value from resting on the order of two calls.
-    //
-    // Written as the expression rather than the literal 1.2f so it cannot
-    // drift if kDriveLoDb ever moves.
-    _fb_scale = 1.2f / bbd_drive_gain(0.f);
-    _time_mod_norm = -1.f;
-    set_stages(kBootStagesNorm);
-    _stage_current = _stage_target;
-    _stages_now = static_cast<int>(_stage_current + 0.5f);
-    _echo.SetStages(_stages_now);
-    recompute_time(true);        // snap the boot delay time
+    _fb_norm = -1.f;
+    recompute_time(true);
     set_feedback(0.45f);
     set_mix(0.5f);
-    set_drive(0.f);
 }
 
 void Flux::set_bpm(float bpm) {
@@ -98,90 +56,33 @@ void Flux::set_rate(int slice_idx) {
 
 void Flux::recompute_time(bool immediate) {
     if (!_buf_ok) return;
-    int slice = _rate_idx < 0 ? 0
-              : (_rate_idx >= kFluxRateCount ? kFluxRateCount - 1 : _rate_idx);
-    float hz = division_hz(kFluxRateOffset + slice, _bpm);
-    float t = (hz > 0.f) ? 1.f / hz : 0.5f;
-    // The buffer-safety clamp is GONE: delay time is no longer bounded by
-    // buffer length, only by how dark the user is willing to go. The 60 s
-    // ceiling is a sanity bound against a pathological tempo, not a musical
-    // limit -- at 512 stages that is already a 4.3 Hz clock.
-    _delay_time = clampf(t, 0.001f, 60.f);
+    const int slice = _rate_idx < 0 ? 0
+                    : (_rate_idx >= kFluxRateCount ? kFluxRateCount - 1 : _rate_idx);
+    const float hz = division_hz(kFluxRateOffset + slice, _bpm);
+    _delay_time = hz > 0.f ? 1.f / hz : 0.5f;
     update_thin_pattern();
-    apply_drag();
-    if (immediate) _dt_current = _dt_target;
+    update_time_target(immediate);
+    if (_drag > 0.f && _drag_active) {
+        apply_drag();
+        if (immediate) _dt_current = _dt_target;
+    }
 }
 
-// PartFx pushes this once per SAMPLE, unguarded (part_fx.cpp), so the guard
-// below is what keeps apply_feedback out of the audio loop while the knob
-// stands still. It fires reliably because the value arrives through PartFx's
-// OnePole, which SNAPS: onepole.h assigns _value = target and clears
-// _smoothing once within 0.0005, so at rest the identical float arrives
-// sample after sample. That is not true of every slew in this file -- _gate
-// and _stage_current ride raw fonepole recurrences that stall short of their
-// targets in float32, which is why both carry explicit snaps of their own.
-//
-// The comparison is on the CLAMPED value, matching what _fb_norm stores, so
-// two pushes that clamp to the same value are correctly one change.
-//
-// _fb_norm's initial 0.45 is a REACHABLE knob position, so unlike
-// _drive_norm and _stages_norm this guard uses no unreachable sentinel. That
-// is deliberate and it is the same reasoning as set_link's -- see the long
-// comment in init() on why _link resets to 0 rather than to -1.
-//
-// One consequence: on a fresh instance this guard swallows init()'s own
-// set_feedback(0.45f) call, since _fb_norm's default member initializer
-// already equals 0.45f. The echo still ends up carrying the right
-// coefficient regardless, because set_drive(0.f) at the end of init()
-// always passes its own sentinel guard (_drive_norm was just reset to -1)
-// and its apply_feedback() is unconditional. That is the same init()-
-// ordering dependency the _fb_scale comment a few lines up in init()
-// already documents -- a reordering of init()'s calls, or an early return
-// added to set_drive, could silently break it. Nothing today takes that
-// path: swallowing a repeated push of 0.45 is a no-op on already-correct
-// state, not a swallowed change.
+void Flux::update_time_target(bool immediate) {
+    const float max_s = static_cast<float>(kTapeSamples - 2) / _sr;
+    _dt_target = clampf(_delay_time * _time_mult, 1.f / _sr, max_s);
+    if (immediate) _dt_current = _dt_target;
+    refresh_repeat_scheduler();
+}
+
 void Flux::set_feedback(float norm) {
     if (!_buf_ok) return;
     const float n = clampf(norm, 0.f, 1.f);
     if (n == _fb_norm) return;
     _fb_norm = n;
-    apply_feedback();
-}
-
-// FEEDBACK's coefficient, with DRIVE's gain divided back out.
-//
-// BbdEcho's saturator sits INSIDE the loop, so its gain multiplies the loop
-// gain directly: the loop sees feedback * g. That is what a real BBD does, and
-// BbdEcho stays that faithful part -- but it means the FEEDBACK knob addresses
-// a different circuit at every DRIVE setting. Measured on the coupled law
-// (350 ms, 4096 stages): the knob position producing a 15 s tail slid from
-// 0.57 at DRIVE 0 to 0.14 at DRIVE 1, and from a quarter DRIVE upward most of
-// FEEDBACK's travel was runaway. Dividing here restores the plan's original
-// intent -- "FEEDBACK must not mean something different at every DRIVE" --
-// which an earlier attempt had bought by shrinking the saturator's CEILING
-// instead, costing 14 dB of echo level and making DRIVE inaudible. This
-// touches neither sat_out_ nor the input path: the first repeat's level and
-// distortion still rise across the whole knob, unchanged (measured peak
-// 0.512 -> 1.279). Only the tail length stops moving.
-//
-// The residual is deliberate: the fed-back signal enters the saturator 1/g
-// quieter, so repeats compound less dirt than the coupled law gave. The first
-// repeat -- which carries the audible DRIVE cue -- is untouched.
-//
-// Flux, not BbdEcho, is the right home. Flux is already the layer that turns
-// musical intent into physics (BPM and divisions into a delay time, a 0..1
-// knob into a stage count); this is the same kind of mapping. BbdEcho remains
-// a plain BBD whose loop gain honestly equals feedback * g.
-void Flux::apply_feedback() {
-    // Up to ~120 %: self-oscillation stays reachable, documented behaviour of
-    // the original. The bound now comes from saturation WITHIN the loop
-    // (BbdEcho) rather than a fast_tanh on the read path.
-    //
-    // _fb_scale is 1.2 / bbd_drive_gain(_drive_norm), maintained by set_drive.
-    // Same law as before, evaluated where DRIVE changes instead of here --
-    // this function is reached once per sample per deck.
-    const float fb = _fb_norm * _fb_scale;
-    _echo.SetFeedback(fb);
+    const float feedback = n * 1.2f;
+    _echo_l.SetFeedback(feedback);
+    _echo_r.SetFeedback(feedback);
 }
 
 void Flux::set_mix(float norm) {
@@ -189,58 +90,28 @@ void Flux::set_mix(float norm) {
     _mix_lin = dbfs2lin(daisysp::fmap(clampf(norm, 0.f, 1.f), -40.f, 0.f));
 }
 
-void Flux::set_drive(float norm) {
-    if (!_buf_ok) return;
-    const float d = clampf(norm, 0.f, 1.f);
-    if (d == _drive_norm) return;
-    _drive_norm = d;
-    _echo.SetDrive(d);
-    // DRIVE just moved the loop gain, so the feedback coefficient that keeps
-    // the bloom point fixed moved with it. Order-independent: a host may push
-    // these two in either order, and every DRIVE change re-derives FEEDBACK
-    // from the knob position rather than from the coefficient now in force.
-    _fb_scale = 1.2f / bbd_drive_gain(d);
-    apply_feedback();
-}
-
-void Flux::set_stages(float norm) {
-    if (!_buf_ok) return;
-    const float n = clampf(norm, 0.f, 1.f);
-    if (n == _stages_norm) return;
-    _stages_norm = n;
-    // Geometric: 512 * (16384/512)^n == 512 * 32^n. Five octaves of
-    // brightness at fixed delay time -- grainy, dark and image-rich at the
-    // bottom, clean and fast at the top. Physically this is swapping the
-    // chip; no pedal exposes it. Control rate, behind the guard above.
-    _stage_target = static_cast<float>(kMinStages)
-                  * std::pow(static_cast<float>(kMaxStages) / kMinStages, n);
-}
-
-// No _buf_ok guard, deliberately: this function had none, and this round
-// changes cost, not behaviour.
 void Flux::set_time_mod(float norm) {
-    if (norm == _time_mod_norm) return;
-    _time_mod_norm = norm;
-    _time_mult = tape_time_mult(norm);
+    const float n = clampf(norm, 0.f, 1.f);
+    if (n == _time_mod_norm) return;
+    _time_mod_norm = n;
+    _time_mult = tape_time_mult(n);
+    if (!_buf_ok) return;
+    update_time_target(false);
+    if (_drag > 0.f && _drag_active) apply_drag();
 }
 
-// The neighbour's gaps, in whole repeats of the CURRENT ladder time. Rounded,
-// not truncated: a gap of 3.6 repeats is heard as 4, not 3.
 void Flux::update_thin_pattern() {
     const float rep = _delay_time * _sr;
     for (int i = 0; i < 2; ++i) {
         int n = 1;
         if (rep > 0.f)
             n = static_cast<int>(static_cast<float>(_rhy_gap[i]) / rep + 0.5f);
-        if (n < 1) n = 1;                                  // shorter than one
+        if (n < 1) n = 1;
         if (n > link_tuning::kMaxSkip) n = link_tuning::kMaxSkip;
         _thin_n[i] = n;
     }
 }
 
-// One repeat further into the pattern. The FIRST repeat of each interval
-// sounds and the rest are ducked, which puts the audible event on the
-// neighbour's onset rather than before it.
 void Flux::advance_gate() {
     ++_thin_count;
     _gate_target = (_thin_count == 1) ? 1.f : (1.f - _thin);
@@ -250,45 +121,27 @@ void Flux::advance_gate() {
     }
 }
 
-// The single writer of _dt_target.
-//
-// Geometric, not linear: pitch tracks the clock RATIO directly, so a linear
-// blend would put the perceived midpoint in the wrong place. Same reasoning
-// that gave the modulation lane its x1/4..x4 mapping.
-//
-// The DRAG branch's repeat period is the interpolated time, not the
-// neighbour's raw interval -- the echo's repeat interval is what is actually
-// in force, so stepping on it makes "one interval per repeat" true at every
-// DRAG setting rather than only at 1.
 void Flux::apply_drag() {
-    const bool thinning = (_thin > 0.f && _rhy_valid);
-    // Owned by thinning, not by which branch below is taken: the DRAG branch
-    // never touches the gate, so if the reset lived only in the !thinning arm
-    // of the branch below, crossing the knob from THIN straight to DRAG
-    // (without a push landing exactly on 0) would leave a stale duck target
-    // in force for as long as DRAG stayed engaged -- the gate branch in
-    // process() never switches itself off because _gate never reaches 1.
+    const bool thinning = _thin > 0.f && _rhy_valid;
     if (!thinning) {
         _gate_target = 1.f;
-        // Engagement starts at the pattern's first repeat, not wherever the
-        // last run of thinning left off -- otherwise re-engaging resumes
-        // mid-interval and the pattern is not reproducible push to push.
         _thin_count = 0;
         _thin_i = 0;
     }
     if (_drag <= 0.f || !_drag_active) {
-        _dt_target = _delay_time;
-        refresh_repeat_scheduler();
+        update_time_target(false);
         return;
     }
     const float target = static_cast<float>(_drag_iv[_drag_i]) / _sr;
     _dt_target = std::pow(_delay_time, 1.f - _drag) * std::pow(target, _drag);
+    const float max_s = static_cast<float>(kTapeSamples - 2) / _sr;
+    _dt_target = clampf(_dt_target, 1.f / _sr, max_s);
     refresh_repeat_scheduler();
 }
 
 void Flux::refresh_repeat_scheduler() {
-    const bool thinning = (_thin > 0.f && _rhy_valid);
-    const bool dragging = (_drag > 0.f && _drag_active);
+    const bool thinning = _thin > 0.f && _rhy_valid;
+    const bool dragging = _drag > 0.f && _drag_active;
     if (thinning)
         _repeat_period_samples = _delay_time * _sr;
     else if (dragging)
@@ -302,7 +155,7 @@ void Flux::refresh_repeat_scheduler() {
 void Flux::set_link(float norm) {
     if (!_buf_ok) return;
     const float n = clampf(norm, -1.f, 1.f);
-    if (n == _link) return;      // apply_drag runs two powf; do not run per push
+    if (n == _link) return;
     _link = n;
     _drag = n > 0.f ? n : 0.f;
     _thin = n < 0.f ? -n : 0.f;
@@ -311,114 +164,56 @@ void Flux::set_link(float norm) {
 
 void Flux::set_rhythm(const RhythmView& rv) {
     if (!_buf_ok) return;
-    // The raw gaps and validity feed the thinning half, which does NOT go
-    // through derive_intervals. Stored before the guard below, which only
-    // knows about the DRAG intervals.
     _rhy_gap[0] = rv.gap[0];
     _rhy_gap[1] = rv.gap[1];
-    _rhy_valid  = rv.valid;
+    _rhy_valid = rv.valid;
     update_thin_pattern();
 
     int32_t iv[2];
     derive_intervals(rv, iv);
-    const bool active = (iv[0] != drag_tuning::kNone && iv[1] != drag_tuning::kNone);
+    const bool active = iv[0] != drag_tuning::kNone && iv[1] != drag_tuning::kNone;
     if (active == _drag_active && iv[0] == _drag_iv[0] && iv[1] == _drag_iv[1]) {
-        // The guard only knows about the DRAG intervals, but _rhy_valid may
-        // have just changed above it, and apply_drag reaches the thinning
-        // half's repeat scheduler. It has to run. It costs nothing:
-        // thinning implies _drag == 0, which takes apply_drag's inert branch,
-        // and that branch leaves the scheduler phase alone while thinning is
-        // running.
         if (_thin > 0.f) apply_drag();
         return;
     }
     _drag_iv[0] = iv[0];
     _drag_iv[1] = iv[1];
     _drag_active = active;
-    if (!active) _drag_i = 0;   // apply_drag() below refreshes the scheduler
+    if (!active) _drag_i = 0;
     apply_drag();
 }
 
 void Flux::process(float& l, float& r) {
     if (!_buf_ok) return;
-    float send = _sw.process();
-    if (_sw.is_idle()) return;   // fully off: bit-exact dry
+    const float send = _sw.process();
+    if (_sw.is_idle()) return;
 
-    // One repeat scheduler, two consumers. They are mutually exclusive by
-    // construction: _drag and _thin come from opposite signs of one knob.
-    const bool thinning = (_thin > 0.f && _rhy_valid);
-    const bool dragging = (_drag > 0.f && _drag_active);
+    const bool thinning = _thin > 0.f && _rhy_valid;
+    const bool dragging = _drag > 0.f && _drag_active;
     if (thinning || dragging) {
         _repeat_phase_samples += 1.f;
         if (_repeat_period_samples > 0.f &&
             _repeat_phase_samples >= _repeat_period_samples) {
             _repeat_phase_samples = 0.f;
-            if (dragging) { _drag_i ^= 1; apply_drag(); }
-            else            advance_gate();
+            if (dragging) {
+                _drag_i ^= 1;
+                apply_drag();
+            } else {
+                advance_gate();
+            }
         }
     }
 
-    // Both slews advance exactly ONCE per sample, before anything reads them.
     daisysp::fonepole(_dt_current, _dt_target, _dt_coef);
-    daisysp::fonepole(_stage_current, _stage_target, _dt_coef);
-    // fonepole's float32 recurrence stalls before full convergence at large
-    // magnitudes -- at kMaxStages (16384) its ULP is comparable to the
-    // shrinking per-sample increment near the target, so it never quite gets
-    // there (measured: settles ~0.7 stages short). Stage count is an integer
-    // quantity, so snapping once the slew is within one stage of its target
-    // is below anything downstream can observe, and it is what makes
-    // kMaxStages an actually reachable STAGES setting rather than a name
-    // fully clockwise can never produce.
-    if (std::fabs(_stage_target - _stage_current) < 1.f) _stage_current = _stage_target;
-
-    const int stages = static_cast<int>(_stage_current + 0.5f);
-    if (stages != _stages_now) {
-        _stages_now = stages;
-        _echo.SetStages(stages);
-    }
-
-    // Base clock from the ladder, then the lane pulls multiplicatively on it,
-    // then the ceiling -- applied AFTER the lane, so ladder and lane pushing
-    // together still cannot overrun it.
-    const float hz = clampf(bbd_clock_hz(_dt_current, stages) * _time_mult,
-                            0.f, bbd_tuning::kClockMaxHz);
-    _clock_hz = hz;
-
-    // One line: the deck's stereo image is summed in and the single echo is
-    // added back to both channels. 0.5 holds CENTRED material at exactly the
-    // level the stereo pair gave it, which is the case every by-ear setting
-    // in this instrument currently sits on; hard-panned material feeds the
-    // echo 6 dB quieter than it used to. The power-preserving 1/sqrt(2) would
-    // trade that for a 3 dB lift on the normal case, which is the worse
-    // bargain (design spec 2026-07-29-flux-mono, section 3).
-    float e = _echo.Process(0.5f * (l + r) * send, hz);
-    // The gate keeps running after thinning disengages so the gain ramps back
-    // to unity instead of stepping; the snap is what lets the branch switch
-    // itself off again and restore the bit-exact path (fonepole never quite
-    // arrives -- the same reason _stage_current carries a snap above). The
-    // tolerance has to clear the float32 stall floor, not just be "small":
-    // measured 4e-6 residual at 48 kHz and ~1.7e-5 at 192 kHz (the stall
-    // floor scales with sample rate, since _gate_coef shrinks as 1/sr while
-    // the ULP near 1.0 does not), so 1e-6 never actually catches it and this
-    // branch could never switch itself off again. 1e-4 is still 80 dB below
-    // unity -- inaudible as a step -- and clears the floor at every rate a
-    // host will plausibly run: the floor is 8.9e-11 * sr, so the threshold
-    // holds until about 1.1 MHz, though the margin is only 1.45x at Rack's
-    // 768 kHz ceiling.
-    //
-    // The price, inherent to snap-on-fonepole rather than to this constant:
-    // it also swallows the FIRST step away from unity, so a thinning depth
-    // below 1e-4 * kGateRampS * sr pins the gate at 1 and does nothing. That
-    // is 0.0144 of the knob's travel at 48 kHz (0.13 dB of lost duck) and
-    // 0.058 at 192 kHz. No threshold can do better -- the dead zone cannot
-    // fall below stall_floor / _gate_coef -- so it is a documented edge of
-    // the idiom, not a tuning choice to revisit.
+    const float samples = _dt_current * _sr;
+    float wet_l = _echo_l.Process(l * send, samples);
+    float wet_r = _echo_r.Process(r * send, samples);
     if (thinning || _gate != 1.f) {
         daisysp::fonepole(_gate, _gate_target, _gate_coef);
         if (std::fabs(_gate - 1.f) < 1e-4f) _gate = 1.f;
-        e *= _gate;
+        wet_l *= _gate;
+        wet_r *= _gate;
     }
-    const float wet = e * _mix_lin;
-    l += wet;
-    r += wet;
+    l += wet_l * _mix_lin;
+    r += wet_r * _mix_lin;
 }

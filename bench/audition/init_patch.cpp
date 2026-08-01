@@ -10,6 +10,13 @@
 
 namespace audition {
 
+void apply_engine_stages(spky::Instrument& inst, int deck,
+                         spky::EngineId engine, float value)
+{
+    if(engine == spky::ENGINE_BBD)
+        inst.set_target_base(deck, spky::LANE_PITCH, value);
+}
+
 void apply_init_patch(spky::Instrument& inst)
 {
     using namespace spkyvcv;
@@ -21,6 +28,17 @@ void apply_init_patch(spky::Instrument& inst)
     inst.set_shuffle(value(SHUFFLE));
     for(int deck = 0; deck < spky::PART_COUNT; ++deck)
     {
+        const int engine_value
+            = static_cast<int>(std::lround(part(ENGINE_A, deck)));
+        const spky::EngineId engine
+            = engine_value == 0 ? spky::ENGINE_SYNTH
+              : engine_value == 2 ? spky::ENGINE_WAVE
+              : engine_value == 3 ? spky::ENGINE_BODY
+              : engine_value == 4 ? spky::ENGINE_BBD
+                                  : spky::ENGINE_SAMPLER;
+        inst.set_engine(deck, engine);
+        const bool sampler = engine == spky::ENGINE_SAMPLER;
+
         inst.set_rate(deck, part(RATE_A, deck));
         inst.set_shape(deck, part(SHAPE_A, deck));
         inst.set_density(deck, part(DENSITY_A, deck));
@@ -47,25 +65,14 @@ void apply_init_patch(spky::Instrument& inst)
             spky::FXT_FLUX_FB,
             value(deck ? FLUXFB_B : FLUXFB_A));
         inst.set_grit_mix(deck, part(GRIT_A, deck));
-        inst.set_drive(deck, value(deck ? DRIVE_B : DRIVE_A));
-        inst.set_stages(deck, value(deck ? STAGES_B : STAGES_A));
+        apply_engine_stages(
+            inst, deck, engine, value(deck ? STAGES_B : STAGES_A));
         inst.set_link(deck, value(deck ? LINK_B : LINK_A));
         inst.set_fx_on(
             deck, spky::FxBlock::Flux, part(FLUX_A, deck) > 1e-4f);
         inst.set_fx_on(
             deck, spky::FxBlock::Grit, part(GRIT_A, deck) > 1e-4f);
         inst.set_comp(deck, part(COMP_A, deck));
-
-        const int engine_value
-            = static_cast<int>(std::lround(part(ENGINE_A, deck)));
-        const spky::EngineId engine
-            = engine_value == 0 ? spky::ENGINE_SYNTH
-              : engine_value == 2 ? spky::ENGINE_WAVE
-              : engine_value == 3 ? spky::ENGINE_BODY
-              : engine_value == 4 ? spky::ENGINE_BBD
-                                  : spky::ENGINE_SAMPLER;
-        inst.set_engine(deck, engine);
-        const bool sampler = engine == spky::ENGINE_SAMPLER;
 
         inst.sampler_speed_mode(deck, true);
         inst.sampler_reverse(deck, false);

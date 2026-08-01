@@ -27,196 +27,29 @@ struct SweepInstrumentGroup {
     float out_l[kBlock], out_r[kBlock];
 };
 
-// --- Sweep A: cost against the FLUX division ladder --------------------------
-// engine/mod/divisions.h: kFluxRateCount == 12. At bpm=120 (set below, mirroring
-// setup_fx) and the boot stage count (8192 -- kBootStagesNorm=0.8 in flux.cpp,
-// 512*32^0.8 == 512*16 == 8192, and this row never calls set_stages so it stays
-// there), each rate index's target repeat rate is (bpm/60)*kDivisions[5+idx].cpb
-// and the BBD clock that produces is stages/(2*t) = 4096/t Hz, clamped to
-// kClockMaxHz (32000). The full ladder (all 12 indices, unclamped clock):
-//   0: 4096 Hz    1: 5461.3 Hz   2: 6144 Hz    3: 8192 Hz    4: 10922.7 Hz
-//   5: 12288 Hz   6: 16384 Hz    7: 21845.3 Hz 8: 24576 Hz
-//   9: 32768 Hz -> clamped     10: 49152 Hz -> clamped     11: 65536 Hz -> clamped
-// Indices 9, 10 and 11 all clamp to the SAME 32000 Hz -- rate 8 (24576 Hz) is
-// the highest rung whose unclamped clock still sits strictly below the
-// ceiling, i.e. the last rung before it engages. The five sampled points:
-//   rate 0  (cpb=1/2): t=1.0s    -> clock 4096 Hz
-//   rate 3  (cpb=1  ): t=0.5s    -> clock 8192 Hz
-//   rate 6  (cpb=2  ): t=0.25s   -> clock 16384 Hz
-//   rate 8  (cpb=3  ): t=0.16667s-> clock 24576 Hz (last unclamped rung)
-//   rate 11 (cpb=8  ): t=0.0625s -> clock 65536 Hz -> clamped to 32000 Hz
-// rate 8 replaces an earlier choice of rate 9: rate 9's unclamped clock
-// (32768 Hz) already clamps to the same 32000 Hz as rate 11, so the two rows
-// would have returned the same clock, same cost and the same number twice --
-// four distinct points instead of five, with the knee between rate 6 (last
-// point below the clamp region) and the ceiling left unmeasured. rate 8 (1.33
-// ticks per audio sample only at rate 11; 1.024 at rate 8) pins exactly where
-// the ceiling starts biting instead. A prior draft of this row also zeroed
-// values[FXT_FLUX_TIME], which tape_time_mult() maps to x0.25
-// (engine/fx/tape_echo.h),
-// quartering every row's real clock and hiding this ceiling entirely; fixed by
-// mirroring setup_fx's values[] array exactly (see setup_flux_rate below).
+// --- Sweep A: cost against the FLUX tape-time division ladder ----------------
+// Keep the five historical RATE samples so reports remain comparable. Each
+// row now observes and folds the achieved tape delay target; there is no BBD
+// clock ceiling or stage axis left to interpret.
 struct SweepFxGroup {
     PartFx fx;
-    float  values[FXT_COUNT];
-    // The integer stage count Flux actually settled to, read once after each
-    // setup's settle loop (flux().stages(), engine/fx/flux.h) and folded into
-    // proc_sweep_fx's returned accumulator once per call -- see the comment
-    // there. Every setup that uses this group must set it explicitly: the
-    // field has to carry the value actually achieved after that setup's own
-    // settle loop, not a placeholder default. For the five sweep_flux_rate_*
-    // rows, which never call set_stages, that achieved value is whatever
-    // Flux::init's boot default (8192) settled to -- well-defined, and just
-    // as worth checksumming as the four sweep_stages_* rows' explicit
-    // settings.
-    int stages_achieved = 0;
-    // The clock Flux actually settled to, read once after each setup's settle
-    // loop (flux().clock_hz(), engine/fx/flux.h) and folded into
-    // proc_sweep_fx's accumulator once per call. Every setup that uses this
-    // group must set it explicitly, the same as stages_achieved above: the
-    // field has to carry the live value read out of Flux after that setup's
-    // own settle loop, not the type's own zero-initialised default -- 0.f is
-    // not itself a measurement. stages_achieved alone is not enough: for the
-    // five sweep_flux_rate_* rows it reads back the boot default 8192 and is
-    // therefore IDENTICAL across all five, so it cannot tell a rate row that
-    // clocked from one that silently did not. The clock is the quantity
-    // those rows sweep, and folding it is what makes a stopped clock move
-    // the checksum -- the failure that took a discarded hardware run to find
-    // in sweep_flux_lines_2ch (docs/bench/2026-07-29-cd6dafd-sweep.md).
-    //
-    // setup_grit_no_bbd_mem is the one exception: its clock genuinely is 0
-    // (its Flux has null buffers, so Flux::process returns before _clock_hz
-    // is ever written), so the explicit assignment there does not change the
-    // value -- it demonstrates the row actually read the real clock and got
-    // zero, rather than silently relying on this field's own default
-    // happening to agree. The "must be > 0" assertion accordingly lives in
-    // the setups that run a clock, not in proc_sweep_fx.
-    float clock_achieved = 0.f;
+    float values[FXT_COUNT];
+    float delay_target_s = 0.f;
 };
 
-// --- Ablation F: where did fx_grit's 2.9 points come from? -------------------
-// fx_grit rose 4.78 -> 7.70 % max between 518f639 and 1f7671d at an IDENTICAL
-// checksum, with no commits to engine/fx/grit.{cpp,h} in range and fx_none
-// unmoved. Three candidates: GRIT itself, the PartFx shell, or cache pressure
-// from the BBD buffers merely being resident.
-//
-// fx_grit - fx_none is 5.14 today against a historical 2.22.
-//   sweep_grit_bare ~ 5.14                 -> GRIT costs that; the old figure
-//                                             was a smaller image, i.e. layout
-//   sweep_grit_bare ~ 2.2, no_bbd_mem ~5.14 -> the shell is the suspect
-//   sweep_grit_no_bbd_mem ~ 2.2             -> consistent with cache pressure
-//                                             from the BBD buffers, but NOT
-//                                             a clean isolation of it: the
-//                                             same _buf_ok guard that keeps
-//                                             the memory unresident also
-//                                             elides a per-sample std::pow
-//                                             in set_feedback/apply_feedback
-//                                             (see the comment on
-//                                             setup_grit_no_bbd_mem below) --
-//                                             a low reading is ambiguous
-//                                             between the two and cannot be
-//                                             split further without an
-//                                             engine/ change this task does
-//                                             not permit
+// --- Ablation F: GRIT with and without FLUX tape storage ---------------------
+// Retain the protocol row name for historical result files. The null-memory
+// row now removes FLUX's stereo tape arena and idle processing guard; it is a
+// storage/residency comparison, not a BBD or libm ablation.
 struct SweepGritGroup {
     Grit grit;
 };
 
-// --- Ablation E: the Flux wrapper's own cost ---------------------------------
-// Two bare BbdEcho, at the stage count and clock an ENGAGED Flux computes,
-// with no Flux around them -- kept at TWO lines on purpose, even though
-// fx_flux_sdram's PartFx now runs only one, so this row stays comparable to
-// the previous round's own figure (9.16 points) instead of quietly becoming
-// a different measurement under the same name. The wrapper's own per-sample
-// work is therefore
-//   fx_flux_sdram - fx_none - sweep_flux_lines_2ch / 2
-// (the /2 undoes the deliberate doubling: this row runs twice as many bare
-// lines as fx_flux_sdram now has, so its raw figure must be halved before
-// subtracting to isolate one line's worth of raw BBD cost). That gives two
-// fonepole slews, two std::fabs snaps, a clampf and bbd_clock_hz's division
-// -- all of which run every sample although their inputs only move on the
-// 96-sample control tick.
-//
-// That is NOT the whole of what this row isolates, though. PartFx::process
-// calls _flux.set_feedback(v[FXT_FLUX_FB]) unconditionally, every sample
-// (part_fx.cpp:38), and that reaches Flux::apply_feedback (flux.cpp:132),
-// which calls bbd_drive_gain -- a std::pow every sample (bbd.h:192), priced
-// by this repo's own bench at 198 cycles (fx_pow, workloads_system.cpp).
-// It is the LARGEST single item inside the number this row makes
-// measurable, not a footnote next to the slews -- and it is left exactly as
-// it is: fixing it is out of scope for this task, however tempting a
-// one-line dirty check would be. This task makes no engine/ change at all --
-// Flux::clock_hz() (engine/fx/flux.h) already existed before this plan and
-// already does what a test-only clock accessor would, so the plan's
-// conditional permission to add one never fires.
-//
-// A hardware run of an earlier version of this row (before the "ENGAGED"
-// above) came back with checksum ea306fb5 -- byte-identical to
-// empty_callback's. Flux::process (flux.cpp) returns before the ONE line
-// that assigns _clock_hz (line 320) at two guards: `if (!_buf_ok) return;`
-// and `if (_sw.is_idle()) return;`. Flux::init never turns the soft switch
-// on, so a merely-init'd probe never reaches the assignment, clock_hz()
-// reads back its declared initialiser (0.f, flux.h), BbdEcho::Process(x,
-// 0.f) sets ticks_ = 0, and the two bare lines never advanced a single tick
-// -- silently, because the input/output filter poles the tick loop
-// surrounds still advance every sample regardless, so the row still
-// returned a plausible-looking nonzero number (6.70 % on that run) despite
-// measuring nothing of what it claims to. Recomputing bbd_clock_hz(0.5,
-// 8192) = 8192 from the formula could not catch this: the formula is
-// correct arithmetic about a value the row never actually used. Confirmed
-// against the running object instead, not the formula: a standalone build
-// of engine/fx/flux.{h,cpp} against this exact sequence prints
-// clock_hz()=0.000000 for an un-engaged probe and clock_hz()=8192.000000,
-// stable across repeated process() calls, once probe.set_on(true, true) is
-// called first -- see setup_flux_lines_2ch below and its assert.
-//
-// clock_hz and the stage count come from a throwaway probe Flux rather than
-// being hard-coded, so this row cannot silently drift from what
-// fx_flux_sdram (and setup_flux_rate/setup_stages above) actually run.
-// fx_flux_sdram (bench/workloads_system.cpp's setup_fx(SEL_FLUX)) never
-// calls set_stages or set_flux_rate away from Flux::init's boot defaults --
-// bpm 120, _rate_idx 3 ("1/4"), kBootStagesNorm 0.8 -> 512*32^0.8 == 8192
-// stages (flux.cpp) -- and, like fx_flux_sdram (via PartFx::set_fx_on),
-// this row's probe is explicitly engaged (set_on(true, true) -- see
-// setup_flux_lines_2ch). Left at those untouched defaults plus engaged, the
-// probe lands on exactly those numbers: clock 8192 Hz (the rate-3 row of
-// the Sweep A ladder table above already derives this arithmetically, and
-// the standalone run above confirms it from the object) and 8192 stages.
-// Neither set_bpm(120) nor set_flux_rate(3) needs to be called on the
-// probe: those are already init()'s defaults.
-//
-// clock_hz() (engine/fx/flux.h -- pre-existing, already used throughout
-// tests/test_flux.cpp) only reads back _clock_hz, which Flux computes once
-// per process() call (flux.cpp, after the delay-time/stage slews) from
-// _dt_current and the stage count -- both of which init() already snaps
-// straight to their targets (immediate = true), with no slew left to run.
-// So a single process() call is enough for the ENGAGED probe's clock to be
-// meaningful; no settling loop is needed on the probe itself.
-//
-// BbdEcho::Init leaves cells_ at its full capacity (BbdEngine::kCells ==
-// 8192 cells, i.e. a 16384-stage buffer) unless SetStages narrows it --
-// DOUBLE the boot-default Flux's actual footprint (8192 stages == 4096
-// cells). Sweep B above exists because stage count is not free on this
-// part; left uncorrected here, that mismatch would leak a buffer-size
-// confound into the very subtraction this row exists to keep clean. The
-// explicit SetStages(stages) calls below, using the probe's own achieved
-// stage count, remove it.
-//
-// The throwaway Flux probe takes PART_B's echo buffer (m.echo[1]). The two
-// measured raw BBD lines take PART_A's dedicated BBD pair (m.bbd[PART_A]),
-// so their storage contract stays independent of FLUX.
-//
-// Settle: _rate_idx 3 at bpm 120 is the SAME division Sweep B holds fixed
-// (see the comment on setup_stages above), for the same reason -- the clock
-// stays unclamped (8192 Hz, comfortably under kClockMaxHz's 32000), so a
-// full line-fill takes exactly the division's own period regardless of
-// stage count: stages/(2*(stages/(2t))) = t = 0.5 s = 24000 samples at
-// 48 kHz. Four fills (this file's standing settle-before-measuring
-// precedent -- kSweepFluxSettleSamples and kSweepStagesSettleSamples above,
-// setup_bbd_ceiling in workloads_bbd.cpp) is 96000 samples -- the same
-// number as kSweepStagesSettleSamples, and for the identical reason, but
-// named separately here since it is this row's own derivation and not a
-// reuse of Sweep B's group.
+// --- Ablation E: historical raw BBD reference --------------------------------
+// The protocol name remains stable for comparison with existing captures.
+// It is no longer derived from FLUX: two dedicated BbdEcho lines use the
+// historical 8192-stage, 8192-Hz point in fx_mem().bbd[PART_A]. The new tape
+// arena is intentionally untouched. Four half-second fills settle the lines.
 constexpr int kSweepFluxLinesSettleSamples = 96000;
 
 struct SweepLineGroup {
@@ -226,27 +59,15 @@ struct SweepLineGroup {
 
 SerialArena<SweepInstrumentGroup, SweepFxGroup, SweepGritGroup, SweepLineGroup> g_sweep_arena;
 
-// Four line-fills of the SLOWEST of the five sampled divisions (rate 0), the
-// same "settle before measuring" precedent workloads_bbd.cpp's
-// setup_bbd_ceiling documents and uses (49152 = 4 * 16384/(2*32000)*48000).
-// Here stages=8192 and the actual (post-ceiling-clamp) BBD clock differs per
-// rate -- see the derivation on SweepFxGroup above -- so the fill time
-// stages/(2*clock_actual) differs per row and only rate 0 (the longest delay,
-// hence the longest fill) sets the bound all five rows share:
-//   rate 0:  clock 4096  Hz -> fill 8192/(2*4096)  = 1.000 s   = 48000 samples
-//   rate 3:  clock 8192  Hz -> fill 8192/(2*8192)  = 0.500 s   = 24000 samples
-//   rate 6:  clock 16384 Hz -> fill 8192/(2*16384) = 0.250 s   = 12000 samples
-//   rate 8:  clock 24576 Hz -> fill 8192/(2*24576) = 0.16667 s =  8000 samples
-//   rate 11: clock 32000 Hz -> fill 8192/(2*32000) = 0.128 s   =  6144 samples
-// Four times the largest (rate 0's 48000): 192000 samples, used for every row
-// so all five settle at least as long as their own four-fill requirement.
+// Four fills of the slowest tape RATE sample (rate 0, one second at 120 BPM)
+// settle all five rows beyond both buffer fill and the shared 30 ms slew.
 constexpr int kSweepFluxSettleSamples = 192000;
 
 void setup_flux_rate(int rate_index)
 {
     auto& group = g_sweep_arena.emplace<SweepFxGroup>();
     const FxMem& m = fx_mem();
-    group.fx.init(kSampleRate, m.echo[0]);
+    group.fx.init(kSampleRate, m.echo[0][0], m.echo[0][1]);
     group.fx.set_fx_on(FxBlock::Grit, false, true);
     group.fx.set_fx_on(FxBlock::Flux, true,  true);
     group.fx.set_comp(0.f);
@@ -274,16 +95,8 @@ void setup_flux_rate(int rate_index)
         float l = in[i % kBlock], r = l * 0.9f, sl = 0.f, sr = 0.f;
         group.fx.process(l, r, sl, sr, group.values);
     }
-    // This row never calls set_stages -- stages_achieved reads back whatever
-    // the boot default (8192, kBootStagesNorm in flux.cpp) settled to.
-    group.stages_achieved = group.fx.flux().stages();
-    // The clock this row exists to sweep. Asserted non-zero here rather than
-    // trusted: a zero reading means the settle loop never reached the code
-    // that writes _clock_hz (flux.cpp, below two early returns), which is
-    // precisely how a row measures an idle machine while still producing a
-    // stable checksum.
-    group.clock_achieved = group.fx.flux().clock_hz();
-    assert(group.clock_achieved > 0.f);
+    group.delay_target_s = group.fx.flux().delay_target_for_test();
+    assert(group.delay_target_s > 0.f);
 }
 
 void setup_flux_rate_0()  { setup_flux_rate(0);  }
@@ -291,103 +104,6 @@ void setup_flux_rate_3()  { setup_flux_rate(3);  }
 void setup_flux_rate_6()  { setup_flux_rate(6);  }
 void setup_flux_rate_8()  { setup_flux_rate(8);  }
 void setup_flux_rate_11() { setup_flux_rate(11); }
-
-// --- Sweep B: cost against STAGES --------------------------------------------
-// The hypothesis under test is CACHE, not arithmetic: stage count does not
-// change the tick rate at a fixed clock, but it does change how much SDRAM
-// the line walks against a 16 KB D-cache. That only holds if the clock is
-// the SAME (and unclamped) across all four rows -- otherwise a clamped row's
-// cost carries a clock effect on top of the memory effect and the curve
-// cannot separate the two.
-//
-// Division held at 3, NOT 6 (the brief's number, wrong -- corrected here).
-// Flux::recompute_time (engine/fx/flux.cpp) computes hz = division_hz(idx,
-// bpm) and t = 1/hz; bbd_clock_hz (engine/fx/bbd.h) then computes
-// stages/(2*t), clamped to kClockMaxHz = 32000. At bpm=120 (set below):
-//   division 3 ("1/4", cpb=1):  hz = 2,   t = 0.5 s   -> clock = stages/1.0
-//   division 6 ("1/8", cpb=2):  hz = 4,   t = 0.25 s  -> clock = stages/0.5
-// (kFluxRateOffset=5, so slice index 6 resolves to kDivisions[11] = "1/8" --
-// the name only, the cpb=2 used above is unaffected.)
-// At division 6 the 16384-stage row computes 16384/(2*0.25) = 32768 Hz and
-// CLAMPS to 32000 -- exactly the confound this row exists to avoid. At
-// division 3 the same row computes 16384/(2*0.5) = 16384 Hz, comfortably
-// under the ceiling, so all four points sit on the linear (unclamped) part
-// of bbd_clock_hz and stages is the only variable:
-//   512 stages   -> clock   512 Hz
-//   2048 stages  -> clock  2048 Hz
-//   8192 stages  -> clock  8192 Hz
-//   16384 stages -> clock 16384 Hz
-// (all four strictly below 32000 -- none clamp.)
-//
-// Flux::set_stages is geometric, 512 * 32^n (engine/fx/flux.cpp:156); the
-// four norms below are its exact solutions for the requested stage counts
-// (32^0.4 == 4, 32^0.8 == 16). tests/test_flux.cpp's "STAGES is geometric,
-// 512 to 16384" case exercises this same mapping on a DIFFERENT Flux
-// instance that happens to share the same boot defaults (division 3, bpm
-// 120): settled_stages(0.f) == 512, (0.4f) ~= 2048, (0.8f) ~= 8192,
-// (1.f) == 16384, and passed at this commit
-// (`spky_tests.exe --test-case="flux: STAGES is geometric*"`, 4/4
-// assertions). THIS row's own instance is checked directly: setup_stages
-// reads flux().stages() after its own settle and stores it in
-// SweepFxGroup::stages_achieved, and proc_sweep_fx folds that into its
-// returned accumulator once per call -- so if this row's own achieved stage
-// count ever drifted from what its name claims, the per-row checksum the
-// bench compares across hardware runs would move and the run would be
-// rejected, instead of the curve quietly acquiring a knee that isn't there.
-//
-// Settle length: at division 3 the clock is unclamped for every row, so a
-// full line-fill takes exactly the division's own period regardless of
-// stage count -- stages/(2*(stages/(2t))) = t = 0.5 s = 24000 samples at
-// 48 kHz. Four fills (the same "settle before measuring" precedent
-// kSweepFluxSettleSamples above and workloads_bbd.cpp's setup_bbd_ceiling
-// use) is 4 * 24000 = 96000 samples, comfortably longer than the ~30 ms
-// (1440-sample) slew Flux::process applies to both the delay time and the
-// stage count, and used for all four rows since none of them clamp (unlike
-// Sweep A, there is no "slowest row" to derive from -- every row's fill time
-// is the same 0.5 s).
-constexpr int kSweepStagesSettleSamples = 96000;
-
-void setup_stages(float norm)
-{
-    auto& group = g_sweep_arena.emplace<SweepFxGroup>();
-    const FxMem& m = fx_mem();
-    group.fx.init(kSampleRate, m.echo[0]);
-    group.fx.set_fx_on(FxBlock::Grit, false, true);
-    group.fx.set_fx_on(FxBlock::Flux, true,  true);
-    group.fx.set_comp(0.f);
-    group.fx.set_grit_mix(1.f);
-    group.fx.set_flux_mix(1.f);
-    group.fx.set_bpm(120.f);
-    group.fx.set_flux_rate(3);      // division 3 ("1/4") -- see derivation above
-    group.fx.set_stages(norm);
-
-    // Mirrors setup_fx's values[] exactly (bench/workloads_system.cpp), same
-    // as setup_flux_rate above: comparability with the sibling row
-    // fx_flux_sdram is the reason a divergence here would silently break
-    // later arithmetic.
-    group.values[FXT_GRIT_INT]  = 0.8f;
-    group.values[FXT_FLUX_TIME] = 0.5f;
-    group.values[FXT_FX_MIX]    = 1.f;
-    group.values[FXT_REV_SEND]  = 0.5f;
-    group.values[FXT_FLUX_FB]   = 0.7f;
-
-    // Settle OUTSIDE the measured window -- see kSweepStagesSettleSamples.
-    const float* in = test_input();
-    for (int i = 0; i < kSweepStagesSettleSamples; ++i) {
-        float l = in[i % kBlock], r = l * 0.9f, sl = 0.f, sr = 0.f;
-        group.fx.process(l, r, sl, sr, group.values);
-    }
-    // Read back what this row's own Flux instance actually settled to -- see
-    // the comment above SweepFxGroup and the one on this row's block above.
-    group.stages_achieved = group.fx.flux().stages();
-    group.clock_achieved = group.fx.flux().clock_hz();
-    assert(group.clock_achieved > 0.f);
-}
-
-void setup_stages_512()   { setup_stages(0.0f); }
-void setup_stages_2048()  { setup_stages(0.4f); }
-void setup_stages_8192()  { setup_stages(0.8f); }
-void setup_stages_16384() { setup_stages(1.0f); }
 
 float proc_sweep_fx()
 {
@@ -399,18 +115,9 @@ float proc_sweep_fx()
         group.fx.process(l, r, sl, sr, group.values);
         acc += l + r + sl + sr;
     }
-    // Fold the achieved stage count into the checksum, once per call (not
-    // per sample) so the added work is negligible and constant: a row whose
-    // Flux settled to a different stage count than its name claims moves
-    // the checksum the bench compares across hardware runs, instead of
-    // silently measuring something other than what it says it measures.
-    // Every SweepFxGroup setup sets stages_achieved (including the
-    // sweep_flux_rate_* rows, which never call set_stages and so read back
-    // Flux's boot default) -- see the comment on the struct.
-    acc += static_cast<float>(group.stages_achieved);
-    // Folded once per call, like stages_achieved above -- not per sample --
-    // so the added work is constant and negligible against the block.
-    acc += group.clock_achieved;
+    // Fold the achieved tape target once per block so a row stuck on the
+    // boot rate cannot return an apparently valid duplicate checksum.
+    acc += group.delay_target_s;
     return acc;
 }
 
@@ -441,49 +148,15 @@ float proc_grit_bare()
     return acc;
 }
 
-// sweep_grit_no_bbd_mem: fx_grit's exact shell (setup_fx(SEL_GRIT), mirrored
-// verbatim below) with one change -- PartFx::init receives null echo memory
-// instead of fx_mem()'s buffer. Flux::init (engine/fx/flux.cpp:11-17) sets
-// _buf_ok = (buf != nullptr) and returns BEFORE calling _echo.Init when the
-// pointer is null -- no BbdLine::Init runs, no dereference, no UB.
-//
-// IMPORTANT: this does NOT isolate memory residency alone. _buf_ok also
-// gates real per-sample arithmetic that fx_grit pays for and this row does
-// not. PartFx::process calls _flux.set_feedback(v[FXT_FLUX_FB])
-// unconditionally, every sample, whenever GRIT or FLUX is engaged
-// (part_fx.cpp:38) -- true here since GRIT is on. In fx_grit (_buf_ok
-// true), Flux::set_feedback (flux.cpp:99) runs through to apply_feedback
-// (flux.cpp:132), which calls bbd_drive_gain -- a std::pow every sample,
-// with no dirty-check unlike the set_intensity call three lines above it in
-// part_fx.cpp. In this row (_buf_ok false), set_feedback returns at its
-// guard and none of that runs. Flux::process's idle-path _sw.process()
-// call is skipped the same way -- trivial next to the pow, but the same
-// mechanism. set_time_mod is the one exception: it only ever writes a
-// scalar (_time_mult) and has no guard because it needs none, so it runs
-// identically either way. engaged() is also gated on _buf_ok, so it reads
-// false for Flux, but GRIT alone still keeps PartFx::process's outer
-// `_grit.engaged() || _flux.engaged()` branch live, so the rest of the
-// shell -- the smoothers, the tape-tap bookkeeping, the FX-MIX blend, COMP,
-// the send calc -- still runs exactly as it does in fx_grit.
-//
-// Net effect: relative to fx_grit, this row removes BOTH (a) the BBD's
-// ~32 KB of echo memory ever being resident -- one mono line, kMaxSamples
-// (8192) floats, post-mono-collapse; the whole of g_echo (both parts) is
-// 64 KB, not this row's single line -- AND (b) the per-sample
-// set_feedback/apply_feedback/std::pow work (plus the trivial idle-path
-// _sw.process() call) that _buf_ok also happens to gate. A low reading
-// here is therefore ambiguous between "cache pressure from residency" and
-// "the elided pow cost" -- it cannot, without an engine/ change this task
-// does not permit, separate the two. Read it as an upper bound on the
-// memory-residency hypothesis alone, not a clean isolation of it.
-//
-// No settle loop: unlike setup_flux_rate/setup_stages, this PartFx has no
-// delay-line memory to fill (Flux::init returned before allocating any), and
-// setup_fx(SEL_GRIT) -- the row this mirrors -- does not settle either.
+// Historical protocol name, now the exact GRIT PartFx shell with both tape
+// pointers null. Flux stays disengaged behind its two-pointer _buf_ok guard,
+// while GRIT and the surrounding shell remain active. This compares tape
+// storage/residency plus the guarded idle path; it makes no old BBD/pow claim.
+// No settle is needed because no delay line is initialized.
 void setup_grit_no_bbd_mem()
 {
     auto& group = g_sweep_arena.emplace<SweepFxGroup>();
-    group.fx.init(kSampleRate, nullptr);
+    group.fx.init(kSampleRate, nullptr, nullptr);
     group.fx.set_fx_on(FxBlock::Grit, true, true);
     group.fx.set_fx_on(FxBlock::Flux, false, true);
     group.fx.set_comp(0.f);
@@ -498,80 +171,31 @@ void setup_grit_no_bbd_mem()
     group.values[FXT_REV_SEND]  = 0.5f;
     group.values[FXT_FLUX_FB]   = 0.7f;
 
-    // Flux::process never reaches the stage-tracking code below its _buf_ok
-    // guard, so _stages_now stays at Flux's boot default (8192) for the life
-    // of this instance -- deterministic, and folded into the checksum like
-    // every other SweepFxGroup row (see the comment on the struct).
-    group.stages_achieved = group.fx.flux().stages();
-    // Null buffers: Flux::process returns at its _buf_ok guard, so _clock_hz
-    // is never written and stays 0 for the life of this instance. The
-    // assignment below does not change that value -- clock_hz() reads back
-    // 0 either way -- it is here so this row demonstrably reads the real
-    // clock and gets zero, instead of silently relying on clock_achieved's
-    // own default happening to agree. See the comment on the struct.
-    group.clock_achieved = group.fx.flux().clock_hz();
+    // Null stereo tape memory leaves Flux disengaged behind its _buf_ok guard.
+    group.delay_target_s = 0.f;
 }
 
 void setup_flux_lines_2ch()
 {
-    // Derive the clock AND the stage count from a real Flux rather than
-    // hard-coding either, so this row cannot silently drift away from what
-    // fx_flux_sdram measures -- see the derivation above SweepLineGroup.
-    static Flux probe;
+    // Historical protocol name: this remains the same-build raw second-BBD-
+    // line row and never borrows movement 3's tape arena.
+    constexpr float kBbdClockHz = 8192.f;
+    constexpr int kBbdStages = 8192;
     const FxMem& m = fx_mem();
-    // PART_B's echo buffer (m.echo[1]) is reserved for the throwaway Flux
-    // probe. The measured BBD lines below use the dedicated m.bbd arena, so
-    // the temporary probe remains independent of their benchmark window.
-    probe.init(kSampleRate, m.echo[1]);
-    // MUST engage the probe. Flux::process (flux.cpp) returns before line 320
-    // (where _clock_hz is assigned) at TWO guards: `if (!_buf_ok) return;`
-    // and `if (_sw.is_idle()) return;`. init() never turns the soft switch
-    // on, so an un-engaged probe's clock_hz() reads back its declared
-    // initialiser, 0.f, forever -- exactly the bug a hardware run caught
-    // here: this row's checksum came back byte-identical to empty_callback's
-    // because BbdEcho::Process(x, 0.f) sets ticks_ = 0 and the lines never
-    // advanced. set_on's immediate=true snaps the switch straight to
-    // Stage::hold (fx_util.h), so is_idle() is already false the moment the
-    // very first process() call below runs -- a switch merely fading in
-    // (immediate=false) is still idle and would reproduce the same bug.
-    probe.set_on(true, /*immediate=*/true);
-    {
-        // One call is enough: init() already snapped the delay-time and
-        // stage slews to their targets, so _clock_hz is fully settled the
-        // instant process() reaches its assignment.
-        float pl = 0.f, pr = 0.f;
-        probe.process(pl, pr);
-    }
-    const float hz = probe.clock_hz();
-    // Guard, not a formality: this exact silent-zero failure already reached
-    // hardware once (checksum ea306fb5, identical to empty_callback's). If
-    // clock_hz() is ever 0 again -- a future Flux::init/process change, a
-    // reordered call above, anything -- this row must fail loudly rather
-    // than quietly measure two stopped BBD lines a second time.
-    assert(hz > 0.f && "sweep_flux_lines_2ch: probe Flux produced a stopped "
-                        "(0 Hz) clock -- Flux::process returned before "
-                        "assigning _clock_hz; is the probe engaged?");
-    const int stages = probe.stages();
-
     auto& group = g_sweep_arena.emplace<SweepLineGroup>();
-    group.clock_hz = hz;
+    group.clock_hz = kBbdClockHz;
     group.l.Init(kSampleRate, m.bbd[PART_A][0], BbdEngine::kCells);
     group.r.Init(kSampleRate, m.bbd[PART_A][1], BbdEngine::kCells);
-    // Match the probe's stage count -- see the SweepLineGroup comment on why
-    // leaving BbdEcho::Init's full-capacity default in place would confound
-    // the subtraction this row exists to keep clean.
-    group.l.SetStages(stages);
-    group.r.SetStages(stages);
+    group.l.SetStages(kBbdStages);
+    group.r.SetStages(kBbdStages);
 
-    // Settle OUTSIDE the measured window -- see kSweepFluxLinesSettleSamples.
     const float* in = test_input();
     for (int i = 0; i < kSweepFluxLinesSettleSamples; ++i) {
         const float x = in[i % kBlock];
-        group.l.Process(x, hz);
-        group.r.Process(x * 0.9f, hz);
+        group.l.Process(x, kBbdClockHz);
+        group.r.Process(x * 0.9f, kBbdClockHz);
     }
 }
-
 float proc_flux_lines_2ch()
 {
     auto& group = g_sweep_arena.get<SweepLineGroup>();
@@ -582,7 +206,7 @@ float proc_flux_lines_2ch()
         acc += group.r.Process(in[i] * 0.9f, group.clock_hz);
     }
     // Fold the achieved clock into the checksum, once per call (not per
-    // sample), exactly as proc_sweep_fx folds stages_achieved above. This
+    // sample), exactly as proc_sweep_fx folds its delay target above. This
     // does NOT guard the silent-zero failure the comment on the assert in
     // setup_flux_lines_2ch describes: acc += 0.f changes nothing, and in
     // the run that actually hit that failure the accumulator was already
@@ -718,7 +342,7 @@ float proc_flux_lines_2ch()
 // though: the weakness here is common-mode across lo/mid/hi alike, not
 // specific to hi.
 //
-// Checksum fold: Task 3's stages_achieved reads back Flux's REAL settled
+// Checksum fold: the setup readback captures Flux's real settled target.
 // state (it can legitimately differ from the requested norm -- see the
 // comment on SweepFxGroup) and folds that into the checksum, so a drift
 // between "requested" and "achieved" moves the number instead of passing
@@ -869,10 +493,6 @@ const Workload kSweepWorkloads[] = {
     { "sweep", "sweep_flux_rate_6",  setup_flux_rate_6,  proc_sweep_fx },
     { "sweep", "sweep_flux_rate_8",  setup_flux_rate_8,  proc_sweep_fx },
     { "sweep", "sweep_flux_rate_11", setup_flux_rate_11, proc_sweep_fx },
-    { "sweep", "sweep_stages_512",   setup_stages_512,   proc_sweep_fx },
-    { "sweep", "sweep_stages_2048",  setup_stages_2048,  proc_sweep_fx },
-    { "sweep", "sweep_stages_8192",  setup_stages_8192,  proc_sweep_fx },
-    { "sweep", "sweep_stages_16384", setup_stages_16384, proc_sweep_fx },
     { "sweep", "sweep_grit_bare",       setup_grit_bare,       proc_grit_bare },
     { "sweep", "sweep_grit_no_bbd_mem", setup_grit_no_bbd_mem, proc_sweep_fx  },
     { "sweep", "sweep_flux_lines_2ch",  setup_flux_lines_2ch,  proc_flux_lines_2ch },

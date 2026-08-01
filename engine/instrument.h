@@ -17,19 +17,19 @@ enum PartId { PART_A = 0, PART_B = 1, PART_COUNT = 2 };
 // Flux::kMaxSamples floats per part, and storage for the one shared reverb.
 // Desktop: static arrays / static object. Daisy (M6): SDRAM.
 struct FxMem {
-    float* echo[PART_COUNT] = { nullptr, nullptr };
+    float* echo[PART_COUNT][2] = {};
     AmbientReverb* reverb = nullptr;
     // M5 texture deck: one stereo record buffer per part. Spec sizing is
     // 42 s at 48 kHz (~16 MB/part) -- hosts allocate on the heap (desktop,
     // Rack) or in SDRAM (M6). nullptr -> that part's sampler runs silent.
-    SampleBuffer::Frame* sampler_buf[PART_COUNT] = { nullptr, nullptr };
+    SampleBuffer::Frame* sampler_buf[PART_COUNT] = {};
     size_t sampler_frames = 0;
     // The BBD part engine's two lines per deck (spec 2026-07-31 §5.7). Sized
     // BbdEngine::kCells floats each = 32 KB per line, 128 KB for the
     // instrument. SDRAM on the Seed, static or heap on the desktop.
     // nullptr -> that deck's BBD engine runs silent.
     //
-    float* bbd[PART_COUNT][2] = { { nullptr, nullptr }, { nullptr, nullptr } };
+    float* bbd[PART_COUNT][2] = {};
 };
 
 static_assert(BbdEngine::kCells == bbd_tuning::kMaxStages / 2,
@@ -107,8 +107,6 @@ public:
     void set_flux_mix(int p, float n)              { _parts[p].fx().set_flux_mix(n); }
     void set_flux_rate(int p, int slice_idx) { _parts[p].fx().set_flux_rate(slice_idx); }
     void set_grit_mix(int p, float n)              { _parts[p].fx().set_grit_mix(n); }
-    void set_drive(int p, float n)  { _parts[p].fx().set_drive(n); }
-    void set_stages(int p, float n) { _parts[p].fx().set_stages(n); }
     void set_link(int p, float n)   { _parts[p].fx().set_link(n); }
     void set_comp(int p, float n)                  { _parts[p].fx().set_comp(n); }
     void set_reverb_size(float n)  { if (_reverb) _reverb->set_size(n); }
@@ -133,15 +131,6 @@ public:
     // value actually pushed to the engine at the last control tick -- see
     // Part::excitation_eff().
     float excitation_bus(int p) const { return _parts[p].excitation_eff(); }
-    // Observers only, for tests (2026-07-27 whole-branch review, finding 7):
-    // set_dust/set_rot's per-part isolation had a witness (test_instrument.cpp,
-    // removed with the tap bank, e004a3d); set_drive/set_stages, their
-    // replacements at this same call site, did not. Flux already exposes both
-    // as direct observers (drive_norm_for_test(), stages() -- see flux.h),
-    // so unlike the deleted dust/rot tests this needs no audio-domain
-    // isolation trick, just a way to reach the named part's Flux from here.
-    float drive_norm_for_test(int p) const { return _parts[p].fx().flux().drive_norm_for_test(); }
-    int stages_for_test(int p) const { return _parts[p].fx().flux().stages(); }
     // Observer only, for tests (2026-07-28 flux-rhythm-drag, Task 3): the
     // delay time DRAG is aiming FLUX at, before the 30 ms slew -- see
     // Flux::drag_time_s().

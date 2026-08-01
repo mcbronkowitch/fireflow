@@ -31,10 +31,8 @@ alignas(alignof(spky::AmbientReverb))
     unsigned char DSY_SDRAM_BSS g_rev_sdram_storage[sizeof(spky::AmbientReverb)];
 spky::AmbientReverb* g_rev_sdram_ptr = nullptr;
 
-// FLUX echo storage: one mono line per part, 2 x 8192 floats = 64 KB (was
-// 128 KB before the mono collapse -- see engine/fx/flux.h's kMaxSamples
-// comment). SDRAM in the shipping firmware too.
-float DSY_SDRAM_BSS g_echo[2][spky::Flux::kMaxSamples];
+// FLUX tape storage: one stereo pair per part, 4 MiB in total, in SDRAM.
+float DSY_SDRAM_BSS g_echo[spky::PART_COUNT][2][spky::Flux::kMaxSamples];
 
 // The BBD part engine's two lines per deck, same SDRAM idiom as the echo
 // storage above: 2 x 2 x 8192 floats = 128 KB.
@@ -65,7 +63,8 @@ const spky::FxMem& fx_mem()
 {
     if (!g_mem_ready) {
         for (int p = 0; p < 2; ++p) {
-            g_mem.echo[p] = g_echo[p];
+            g_mem.echo[p][0] = g_echo[p][0];
+            g_mem.echo[p][1] = g_echo[p][1];
             g_mem.bbd[p][0] = g_bbd[p][0];
             g_mem.bbd[p][1] = g_bbd[p][1];
         }

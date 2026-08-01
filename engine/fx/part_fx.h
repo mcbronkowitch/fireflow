@@ -29,7 +29,7 @@ enum class FxBlock { Flux, Grit };
 // whole chain is skipped, so "FX off" costs nothing and changes nothing.
 class PartFx {
 public:
-    void init(float sample_rate, float* echo);
+    void init(float sample_rate, float* echo_l, float* echo_r);
 
     Grit& grit() { return _grit; }
     Flux& flux() { return _flux; }
@@ -45,8 +45,6 @@ public:
     void set_grit_mix(float n) { _grit.set_mix(n); }
     void set_bpm(float bpm)           { _flux.set_bpm(bpm); }
     void set_flux_rate(int slice_idx) { _flux.set_rate(slice_idx); }
-    void set_drive(float n)  { _flux.set_drive(n); }
-    void set_stages(float n) { _flux.set_stages(n); }
     void set_link(float n)   { _flux.set_link(n); }
     void set_rhythm(const RhythmView& rv) { _flux.set_rhythm(rv); }
 

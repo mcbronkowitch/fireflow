@@ -1674,6 +1674,16 @@ def test_header_carries_text_anchor():
           "the kPanelTexts draw loop ignores the anchor column")
 
 
+def test_vcv_tape_memory_is_heap_backed_stereo_storage():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    check('std::vector<float> echoMem[spky::PART_COUNT][2];' in cpp,
+          "VCV tape memory is not heap-backed stereo storage")
+    check('float echo[spky::PART_COUNT][spky::Flux::kMaxSamples]' not in cpp,
+          "VCV still embeds the tape arena by value in every Module")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

@@ -5,9 +5,9 @@
 
 using namespace spky;
 
-void PartFx::init(float sample_rate, float* echo) {
+void PartFx::init(float sample_rate, float* echo_l, float* echo_r) {
     _grit.init(sample_rate);
-    _flux.init(sample_rate, echo);
+    _flux.init(sample_rate, echo_l, echo_r);
     _comp.init(sample_rate);
     for (auto& s : _smooth) s.init(sample_rate, 0.002f);
     _grit_applied = -1.f;
@@ -36,13 +36,10 @@ void PartFx::process(float& l, float& r, float& send_l, float& send_r,
             _grit_applied = v[FXT_GRIT_INT];
         }
         _flux.set_feedback(v[FXT_FLUX_FB]);
-        // v[FXT_FLUX_TIME] was smoothed and then DISCARDED here -- alone
-        // among the five targets -- for as long as FLUX was a crossfade
-        // delay, where modulating the delay time made no musical sense. In a
-        // BBD, clock modulation IS the sound generation, so it lands. This
-        // rides the 2 ms smoother above, deliberately NOT the 30 ms ladder
-        // slew inside Flux: through that path a 4 Hz vibrato would not
-        // survive (spec "Modulation": two smoothers, two jobs).
+        // The lane's ordinary 2 ms target smoothing feeds FLUX's one shared
+        // 30 ms tape-delay slew. RATE changes and modulation therefore meet
+        // at the same click-free delay target instead of moving independent
+        // clock/stage state.
         _flux.set_time_mod(v[FXT_FLUX_TIME]);
         const float dry_l = l, dry_r = r;
         _grit.process(l, r);

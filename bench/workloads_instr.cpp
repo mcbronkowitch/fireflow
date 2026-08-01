@@ -50,7 +50,7 @@ struct InstrNoVerbGroup {
 // Both bare rows share this struct, and they do not use it identically:
 // instr_part_2 initialises and runs `a` and `b`, instr_part_1 initialises and
 // runs `a` only (`b` stays default-constructed and is never touched, so its
-// clock_b/stages_b remain 0). The glue subtraction is therefore
+// delay_target_b remains 0). The glue subtraction is therefore
 // instr_noverb - instr_part_2 specifically; instr_part_1 is the single-deck
 // rung, and instr_part_2 - 2*instr_part_1 estimates inter-deck contention,
 // not glue.
@@ -69,8 +69,7 @@ struct InstrPartGroup {
     // checksum and pass. What actually catches a mis-mirrored row is the
     // assert pair below, which is live: the bench builds -O2 with NDEBUG
     // undefined.
-    float clock_a = 0.f, clock_b = 0.f;
-    int   stages_a = 0, stages_b = 0;
+    float delay_target_a = 0.f, delay_target_b = 0.f;
 };
 
 // Mirrors setup_inst_worst + setup_inst_worst_bbd, deck for deck.
@@ -90,7 +89,7 @@ struct InstrPartGroup {
 //   - fx().set_rhythm(), likewise -- and harmless as well as correct, since
 //     setup_inst_worst_bbd never touches LINK, so _link stays 0 and both
 //     DRAG and THIN are inert on either side of the comparison.
-void configure_worst_bbd(Part& part)
+void configure_worst_tape_flux(Part& part)
 {
     part.mod().set_tempo_bpm(120.f);
     part.fx().set_bpm(120.f);
@@ -105,8 +104,6 @@ void configure_worst_bbd(Part& part)
     part.fx().set_comp(1.f);
     part.set_voice_decay(1.f);
     part.trigger_manual();
-    part.fx().set_stages(1.f);
-    part.fx().set_drive(0.85f);
     part.fx().set_flux_rate(kFluxRateCount - 1);
     part.set_fx_target_base(FXT_FLUX_FB, 0.9f);
 }
@@ -136,7 +133,7 @@ void configure_worst_bbd(Part& part)
 //
 // set_tempo_bpm(120.f) is also called below, mirroring what
 // Instrument::set_tempo_bpm pushes into every part's modulator
-// (engine/instrument.cpp:70) and what configure_worst_bbd already does for
+// (engine/instrument.cpp:70) and what configure_worst_tape_flux does for
 // the bare-Part rows. Unlike the other three, this one is NOT part of what
 // the subtraction measures: _synced defaults to false (super_modulator.h:187)
 // and nothing on this path calls set_synced(), so _update_rate() takes the FREE
@@ -152,7 +149,7 @@ struct DeckModGroup {
     SuperModulator mod;
     // Read back after the settle for the self-check in setup_deck_mod_hot,
     // and folded into the returned checksum so it is not a dead store -- same
-    // shape as InstrPartGroup's clock_a/stages_a above.
+    // shape as InstrPartGroup's delay-target readback above.
     float master_hz = 0.f;
 };
 
@@ -246,103 +243,15 @@ struct DeckEngineGroup {
     int            fire_ctr = 0;
 };
 
-// One PartFx with FLUX on, at the operating point a deck actually runs it at.
-// FxGroup's shape (bench/workloads_system.cpp:37-40) plus four readbacks.
-//
-// The row this exists to correct is fx_flux_sdram (setup_fx(SEL_FLUX) +
-// proc_fx, bench/workloads_system.cpp:182-220), which prices FLUX at STAGES
-// 8192, rate index 3, FEEDBACK 0.7 and DRIVE 0 -- none of which a deck runs.
-// configure_worst_bbd above pushes set_stages(1.f), set_drive(0.85f),
-// set_flux_rate(kFluxRateCount - 1) and FXT_FLUX_FB 0.9 into every Part
-// (bench/workloads_instr.cpp:108-111). Round 1 could only price the STAGES
-// and RATE axes separately and add them (+2.29 points, never measured
-// together), and it never priced DRIVE at all; that estimate is the slop
-// design spec section 2 calls load-bearing, and this row replaces it with a
-// measurement.
-//
-// EVERY difference from fx_flux_sdram, read off setup_fx/proc_fx line by
-// line. Four are the operating point. There is a FIFTH, and it is named
-// here rather than left implicit:
-//
-//   1. STAGES. set_stages(1.f) -> _stage_target 16384 (Flux::set_stages,
-//      engine/fx/flux.cpp:203-214). setup_fx never calls set_stages, so
-//      fx_flux_sdram stays on Flux::init's boot value -- kBootStagesNorm
-//      0.8, which is exactly 8192 (engine/fx/flux.cpp:8, 74-77).
-//   2. RATE. set_flux_rate(kFluxRateCount - 1) -> slice 11, i.e.
-//      kDivisions[kFluxRateOffset + 11] == kDivisions[16] == "1/32", cpb 8,
-//      so 16 Hz at 120 BPM and a 0.0625 s delay time (engine/mod/
-//      divisions.h:12-19, 48-49; Flux::recompute_time, engine/fx/
-//      flux.cpp:96-110). setup_fx never calls set_flux_rate, so
-//      fx_flux_sdram stays on init's _rate_idx 3 (engine/fx/flux.cpp:19) --
-//      kDivisions[8] "1/4", 2 Hz, a 0.5 s delay.
-//   3. FEEDBACK. values[FXT_FLUX_FB] 0.9 rather than setup_fx's 0.7. It is
-//      the values[] entry and not a setter that carries this: PartFx pushes
-//      the smoothed target into Flux::set_feedback once per sample
-//      (engine/fx/part_fx.cpp:38), which is the same path
-//      Part::set_fx_target_base(FXT_FLUX_FB, 0.9f) reaches on a real deck.
-//   4. DRIVE. set_drive(0.85f) rather than setup_fx's nothing, which leaves
-//      Flux::init's own set_drive(0.f) (engine/fx/flux.cpp:81) standing. This
-//      axis is NOT independent of axis 3: Flux::set_drive rewrites
-//      _fb_scale = 1.2 / bbd_drive_gain(d) and calls apply_feedback
-//      (engine/fx/flux.cpp:189-201), so the coefficient the echo actually
-//      receives is _fb_norm * _fb_scale (engine/fx/flux.cpp:180) and moving
-//      DRIVE moves it. It also moves the saturator's input scale, which
-//      BbdEcho sets to bbd_drive_gain(norm) / kSatCeil
-//      (engine/fx/bbd.h:560-564) and which decides how often fast_tanh takes
-//      its magnitude early return (engine/util/fast_tanh.h:36-37). See the
-//      comment in setup_fx_flux_hot for what that does and does not settle.
-//   5. A settle in setup, which setup_fx has none of. THIS IS A FIFTH
-//      DIFFERENCE. It is not an operating point, and it is not optional:
-//      differences 1 and 2 both ride Flux's 30 ms slew, and STAGES'
-//      8192 -> 16384 leg needs 12972 samples to close to within the
-//      one-stage snap at _dt_coef == 1/1440 -- 8192 * (1 - 1/1440)^n < 1
-//      first holds at n == 12972 (engine/fx/flux.cpp:18, 348-357) -- which
-//      is 135.1 blocks, MORE than the runner's 100-block warmup
-//      (kWarmupBlocks, bench/workload.h:11, applied at bench/runner.cpp:28).
-//      Without a settle the first ~35 MEASURED blocks would price a BBD
-//      whose line length was still moving and whose _echo.SetStages() was
-//      firing per sample. The two readbacks below would also be untrustworthy
-//      -- but they fail DIFFERENTLY, and the difference is worth stating
-//      because only one of them is actually unreadable. _clock_hz has no
-//      writer outside Flux::process: its only assignment in the class is
-//      engine/fx/flux.cpp:370, so clock_hz() would still be the 0.f member
-//      initialiser (engine/fx/flux.h:144) and its assert would compare
-//      against nothing. _stages_now DOES have an init writer
-//      (engine/fx/flux.cpp:76; the other assignment is flux.cpp:361, inside
-//      process), so stages() would return a stale-but-VALID 8192 -- which is
-//      exactly fx_flux_sdram's own value, i.e. a number that looks like a
-//      reading and is not one. Neither of those is why the settle is
-//      mandatory: the 135.1-blocks-against-100-of-warm-up arithmetic above
-//      carries that on its own.
-//      fx_flux_sdram needs no settle because it moves neither axis -- init
-//      snaps _dt_current (recompute_time(true), engine/fx/flux.cpp:78) and
-//      _stage_current (engine/fx/flux.cpp:75-77) -- so the settle does not
-//      make the two rows less comparable; it is what makes BOTH of them
-//      measured in a settled state. Depth is kInstrSettleBlocks (200), this
-//      file's existing settle depth, not a number chosen for this row.
-//
-// Nothing else differs in configuration. The remaining differences are
-// structural and unavoidable for a row added in this translation unit; none
-// of them is an operating point:
-//   - it is emplaced in g_instr_arena, not g_system_arena, so its PartFx
-//     sits at a different address. Both arenas are plain globals -- neither
-//     carries BENCH_SRAM_EXEC_BSS, which only bench/mem.cpp's g_sram uses --
-//     so this is a different address in the same section, not different
-//     memory. The BBD line itself is the identical pointer in both rows:
-//     fx_mem().echo[0].
-//   - the group carries stages/clock/drive/fb_coef after the PartFx, which
-//     FxGroup does not, and proc_fx_flux_hot folds those four into its return
-//     value, which proc_fx does not. Same idiom as InstrPartGroup's
-//     clock_a/stages_a above, and for the same reason: the asserts' readbacks
-//     must not be dead stores. The fold is NOT a detector -- see
-//     InstrPartGroup's comment.
+// One PartFx with stereo tape FLUX at the deck's hot operating point: the
+// shortest RATE division and feedback 0.9. The setup settles the shared time
+// slew, then asserts and folds the achieved delay target so the row cannot
+// silently duplicate the boot-rate context. BBD stage/clock/drive state is
+// deliberately absent.
 struct FxFluxHotGroup {
     PartFx fx;
     float  values[FXT_COUNT];
-    int    stages   = 0;
-    float  clock_hz = 0.f;
-    float  drive    = 0.f;
-    float  fb_coef  = 0.f;
+    float  delay_target_s = 0.f;
 };
 
 // One TestToneEngine, driven exactly as Part::process drives its engine.
@@ -463,7 +372,7 @@ struct ToneSoloGroup {
     int            ctrl_ctr = 0;
     // Self-check readback: the largest |outL| seen in setup's check window,
     // asserted there and folded into proc_tone_solo's return value so it is
-    // not a dead store. Same idiom as InstrPartGroup's clock_a/stages_a, and
+    // not a dead store. Same idiom as InstrPartGroup's delay-target readback, and
     // subject to the same non-claim: the fold is not a detector.
     float          peak = 0.f;
 };
@@ -483,7 +392,7 @@ struct ToneSoloGroup {
 // prices, and subtracting it only in the remainder' line charged it twice
 // (design spec sections 3.3 and 9.2).
 //
-// The operating point is setup_instr_part_common's, i.e. configure_worst_bbd
+// The operating point is setup_instr_part_common's, i.e. configure_worst_tape_flux
 // above: PART_A's 0x1234abcd seed base, the same FxMem buffers, BPM 120,
 // COLOR 1.0, DENSITY 1.0, MOD 1.0, RATE 0.8, VOICE DECAY 1.0, one
 // trigger_manual(), FLOW (nothing calls set_step, on either row). It departs
@@ -590,7 +499,7 @@ struct DeckShellGroup {
     int   counter = 0;
     // Readbacks for the asserts at the end of setup_deck_shell, folded into
     // proc_deck_shell's return value so they are not dead stores. Same idiom
-    // as InstrPartGroup's clock_a/stages_a above, and subject to the same
+    // as InstrPartGroup's delay-target readback above, and subject to the same
     // non-claim: the fold is NOT a detector -- run.py compares run against run
     // within one measurement, never against a stored expectation, so a row
     // that configured itself differently would simply return a different and
@@ -641,8 +550,6 @@ void setup_instr_noverb()
     }
     inst.set_master_drive(1.f);
     for (int p = 0; p < PART_COUNT; ++p) {
-        inst.set_stages(p, 1.f);
-        inst.set_drive(p, 0.85f);
         inst.set_flux_rate(p, kFluxRateCount - 1);
         inst.set_fx_target_base(p, FXT_FLUX_FB, 0.9f);
     }
@@ -684,13 +591,15 @@ void setup_instr_part_common(InstrPartGroup& g, int n_parts)
     // rather than sampler_arena()/kSamplerFrames directly keeps this row on
     // the one accessor whose contents are guaranteed to match.
     const FxMem& mem = fx_mem();
-    g.a.init(kSampleRate, 0x1234abcdu, mem.echo[PART_A],
+    g.a.init(kSampleRate, 0x1234abcdu,
+             mem.echo[PART_A][0], mem.echo[PART_A][1],
              mem.sampler_buf[PART_A], mem.sampler_frames);
-    configure_worst_bbd(g.a);
+    configure_worst_tape_flux(g.a);
     if (n_parts == 2) {
-        g.b.init(kSampleRate, 0x9e3779b9u, mem.echo[PART_B],
+        g.b.init(kSampleRate, 0x9e3779b9u,
+                 mem.echo[PART_B][0], mem.echo[PART_B][1],
                  mem.sampler_buf[PART_B], mem.sampler_frames);
-        configure_worst_bbd(g.b);
+        configure_worst_tape_flux(g.b);
     }
     g.counter = 0;
 
@@ -703,20 +612,11 @@ void setup_instr_part_common(InstrPartGroup& g, int n_parts)
         }
     }
 
-    // The self-check. STAGES at 1.0 must have settled to kMaxStages, and the
-    // "1/32" rate at 120 BPM must have driven the clock onto its ceiling
-    // (16384 / (2 * 0.0625) = 131072 Hz, clamped to kClockMaxHz). A row that
-    // mirrored the configuration wrongly fails here instead of returning a
-    // plausible number.
-    g.stages_a = g.a.fx().flux().stages();
-    g.clock_a  = g.a.fx().flux().clock_hz();
-    assert(g.stages_a == bbd_tuning::kMaxStages);
-    assert(g.clock_a >= bbd_tuning::kClockMaxHz);
+    g.delay_target_a = g.a.fx().flux().delay_target_for_test();
+    assert(g.delay_target_a > 0.f);
     if (n_parts == 2) {
-        g.stages_b = g.b.fx().flux().stages();
-        g.clock_b  = g.b.fx().flux().clock_hz();
-        assert(g.stages_b == bbd_tuning::kMaxStages);
-        assert(g.clock_b >= bbd_tuning::kClockMaxHz);
+        g.delay_target_b = g.b.fx().flux().delay_target_for_test();
+        assert(g.delay_target_b > 0.f);
     }
 }
 
@@ -742,7 +642,7 @@ float proc_instr_part_1()
     }
     if (++g.counter >= 250) { g.counter = 0; g.a.trigger_manual(); }
     acc += static_cast<float>(g.a.active_voices());
-    acc += g.clock_a + static_cast<float>(g.stages_a);
+    acc += g.delay_target_a;
     return acc;
 }
 
@@ -765,8 +665,7 @@ float proc_instr_part_2()
     }
     acc += static_cast<float>(g.a.active_voices());
     acc += static_cast<float>(g.b.active_voices());
-    acc += g.clock_a + static_cast<float>(g.stages_a);
-    acc += g.clock_b + static_cast<float>(g.stages_b);
+    acc += g.delay_target_a + g.delay_target_b;
     return acc;
 }
 
@@ -787,8 +686,8 @@ void setup_deck_mod_hot()
     for (int b = 0; b < kInstrSettleBlocks; ++b)
         for (size_t i = 0; i < kBlock; ++i) g.mod.process();
 
-    // The self-check, same spirit as setup_instr_part_common's stages_a/
-    // clock_a asserts above: without it, a silently wrong RATE would just
+    // The self-check, same spirit as setup_instr_part_common's delay-target
+    // asserts above: without it, a silently wrong RATE would just
     // return a plausible-looking float and pass. master_hz() is the readback
     // Task 2's deck_engine_hot row will also take from its own modulator, for
     // a different purpose (deriving a cycle).
@@ -963,7 +862,7 @@ void setup_deck_engine_hot()
             g.engine->process(ol, orr);
         }
 
-    // Self-check, same shape as InstrPartGroup's stages_a/clock_a asserts and
+    // Self-check, same shape as InstrPartGroup's delay-target asserts and
     // DeckModGroup's master_hz assert. What it actually covers is narrower
     // than the original comment here claimed (corrected in review): it
     // confirms only that 4 Env instances are non-Idle
@@ -1068,93 +967,22 @@ float proc_deck_engine_hot()
 void setup_fx_flux_hot()
 {
     auto& g = g_instr_arena.emplace<FxFluxHotGroup>();
-
-    // --- setup_fx(SEL_FLUX) verbatim (bench/workloads_system.cpp:182-203).
-    // Same accessor, same echo buffer index, same order. sel == SEL_FLUX
-    // resolves the three booleans/amounts below; they are written out rather
-    // than parameterised because this row has exactly one selector value.
     const FxMem& m = fx_mem();
-    g.fx.init(kSampleRate, m.echo[0]);
-    g.fx.set_fx_on(FxBlock::Grit, false, true);   // sel != SEL_GRIT
-    g.fx.set_fx_on(FxBlock::Flux, true,  true);   // sel == SEL_FLUX
-    g.fx.set_comp(0.f);                           // sel != SEL_COMP
+    g.fx.init(kSampleRate, m.echo[PART_A][0], m.echo[PART_A][1]);
+    g.fx.set_fx_on(FxBlock::Grit, false, true);
+    g.fx.set_fx_on(FxBlock::Flux, true, true);
+    g.fx.set_comp(0.f);
     g.fx.set_grit_mix(1.f);
     g.fx.set_flux_mix(1.f);
     g.fx.set_bpm(120.f);
+    g.fx.set_flux_rate(kFluxRateCount - 1);
 
-    g.values[FXT_GRIT_INT]  = 0.8f;
+    g.values[FXT_GRIT_INT] = 0.8f;
     g.values[FXT_FLUX_TIME] = 0.5f;
-    g.values[FXT_FX_MIX]    = 1.f;
-    g.values[FXT_REV_SEND]  = 0.5f;
-    g.values[FXT_FLUX_FB]   = 0.7f;
+    g.values[FXT_FX_MIX] = 1.f;
+    g.values[FXT_REV_SEND] = 0.5f;
+    g.values[FXT_FLUX_FB] = 0.9f;
 
-    // --- and now the deck's own operating point, differences 1-4 in
-    // FxFluxHotGroup's comment above, in configure_worst_bbd's own call order
-    // (bench/workloads_instr.cpp:93-112) minus the lines there that do not
-    // address FLUX, i.e. its :108-111.
-    //
-    // DRIVE is one of the four axes, not a footnote left for another row.
-    // There is no other row: bench/workloads_sweep.cpp registers only
-    // sweep_flux_rate_*, sweep_stages_*, sweep_grit_*, sweep_flux_lines_2ch
-    // and sweep_room_* (its table, bench/workloads_sweep.cpp:880-894), so the
-    // sweep family has no DRIVE row at all, and no row anywhere in the bench
-    // VARIES Flux's DRIVE as an axis.
-    //
-    // The narrow claim is the one that holds. This comment used to say "the
-    // only set_drive rows anywhere in the bench are lim_clean/lim_driven",
-    // which is false and was corrected in review: three other call sites push
-    // 0.85 into a Flux -- configure_worst_bbd above
-    // (bench/workloads_instr.cpp:109, which this comment block itself cites a
-    // few lines up), setup_instr_noverb (bench/workloads_instr.cpp:640) and
-    // setup_inst_worst_bbd (bench/workloads_system.cpp:319) -- as does this
-    // row a few lines below. What none of them does is MOVE it: every one
-    // pushes the same 0.85, and the only row that leaves DRIVE at Flux::init's
-    // 0 is fx_flux_sdram, which differs from this row on three further axes as
-    // well, so it is not a DRIVE-isolating partner. There is therefore no
-    // DRIVE-comparison pair for Flux anywhere in the bench. The only rows that
-    // vary a DRIVE as an axis are lim_clean/lim_driven
-    // (bench/workloads_abl.cpp:186-187), and theirs is the master Limiter's
-    // pre-gain (engine/fx/limiter.h:29), which never reaches Flux. The
-    // conclusion is unchanged: DRIVE's cost is this row's question or
-    // nobody's.
-    //
-    // What reading DOES establish is that DRIVE cannot be omitted without
-    // changing the regime, because it is coupled to FEEDBACK and to the
-    // saturator at once: at DRIVE 0 the coefficient handed to the echo is
-    // 0.9 * 1.2 == 1.08 and the saturator sees x * (1 / kSatCeil) == x *
-    // 1.111; at the deck's 0.85 the coefficient is 0.9 * 1.2 / 3.236 ==
-    // 0.334 and the saturator sees x * (3.236 / kSatCeil) == x * 3.596. What
-    // reading does NOT establish is which of the two costs more. The echo's
-    // small-signal loop gain is feedback * g either way -- ~1.08 at both
-    // settings, which is precisely the invariant Flux::apply_feedback's
-    // division exists to hold (engine/fx/flux.cpp:148-182,
-    // engine/fx/bbd.h:531-546) -- so the two differ in where fast_tanh's
-    // magnitude branch falls, not in whether the loop blooms. Design spec
-    // section 6.6 argues a direction for that; this comment deliberately does
-    // not restate it as fact. The row's justification needs neither: a deck
-    // runs 0.85, so this row runs 0.85.
-    //
-    // Ordering. Against the values[] write below, set_drive's position is
-    // immaterial: values[] is this file's array and reaches Flux only through
-    // PartFx::process, which pushes FXT_FLUX_FB into Flux::set_feedback
-    // (engine/fx/part_fx.cpp:38) before calling _flux.process
-    // (engine/fx/part_fx.cpp:60), so nothing in Flux has seen 0.9 until the
-    // settle's first sample -- by which time _fb_scale is already 0.85's.
-    // set_drive's own claim of order-independence (engine/fx/flux.cpp:196-198)
-    // therefore holds on this path, and holds even for the coefficient if
-    // set_drive were moved AFTER the settle, since apply_feedback re-derives
-    // from _fb_norm rather than from the coefficient in force. What would NOT
-    // survive that move is the STATE: 200 blocks of settle would run at
-    // coefficient 1.08 and saturator scale 1.111, i.e. entirely in the regime
-    // this row exists not to measure, and all four asserts below would still
-    // pass. Hence: before the settle.
-    g.fx.set_stages(1.f);                      // -> kMaxStages, 16384
-    g.fx.set_drive(0.85f);                     // the deck's DRIVE, line 109
-    g.fx.set_flux_rate(kFluxRateCount - 1);    // -> "1/32", clock ceiling
-    g.values[FXT_FLUX_FB] = 0.9f;              // overrides setup_fx's 0.7
-
-    // --- difference 5: the settle. See FxFluxHotGroup's comment for why it
-    // is required and why it does not cost comparability.
     const float* in = test_input();
     for (int b = 0; b < kInstrSettleBlocks; ++b)
         for (size_t i = 0; i < kBlock; ++i) {
@@ -1162,100 +990,9 @@ void setup_fx_flux_hot()
             g.fx.process(l, r, sl, sr, g.values);
         }
 
-    // The self-check, one assert per axis, four in all -- these two, then
-    // DRIVE and FEEDBACK below. The failure this pair guards is the one that
-    // produces a plausible, worthless number: set_stages or set_flux_rate
-    // silently not taking, leaving this row measuring fx_flux_sdram a second
-    // time under a new name. The two are complementary and neither is
-    // redundant --
-    //   - stages() is independent of RATE, so the first assert alone would
-    //     pass with the rate stuck at init's index 3;
-    //   - the clock is clamped to kClockMaxHz, so the second assert alone
-    //     would pass with STAGES stuck at 8192: 8192 / (2 * 0.0625) is
-    //     65536 Hz, still over the 32000 Hz ceiling (bbd_clock_hz,
-    //     engine/fx/bbd.h:201-206, bbd_tuning::kClockMaxHz, bbd.h:88).
-    // Values under the mistakes: STAGES stuck -> stages() == 8192 against
-    // kMaxStages 16384, first assert fires. RATE stuck -> _delay_time 0.5 s,
-    // so clock_hz() == 16384 / (2 * 0.5) == 16384 Hz, under the ceiling, and
-    // the second assert fires. Both stuck (the row that IS fx_flux_sdram) ->
-    // 8192 stages and an 8192 Hz clock, and both fire.
-    //
-    // Settled, the clock sits exactly ON its ceiling rather than merely near
-    // it: bbd_clock_hz(0.0625, 16384) is 131072 Hz before the clamp, and
-    // FXT_FLUX_TIME 0.5 contributes _time_mult == 1 exactly (tape_time_mult's
-    // 65-row LUT: the table is built at engine/fx/tape_echo.h with
-    // t[i] == 2^(4*(i/64 - 0.5)), and the indexing and lerp at
-    // engine/fx/tape_echo.h turn 0.5 into p == 32.f exactly, so i == 32,
-    // the fraction is 0 and the return is table[32] == 2^0 untouched by the
-    // interpolation), so >= is an equality test here in every non-broken
-    // case.
-    g.stages   = g.fx.flux().stages();
-    g.clock_hz = g.fx.flux().clock_hz();
-    assert(g.stages   == bbd_tuning::kMaxStages);
-    assert(g.clock_hz >= bbd_tuning::kClockMaxHz);
-
-    // DRIVE's own readback -- difference 4, which neither assert above can
-    // see. It is a genuine readback and not a restated law, because Flux
-    // already exposes one: drive_norm_for_test() at engine/fx/flux.h:74
-    // returns _drive_norm, the value set_drive stored after its own clampf
-    // (engine/fx/flux.cpp:191-193). No getter had to be added to engine/,
-    // which this round has locked. The compare is exact rather than banded on
-    // purpose: clampf(0.85f, 0.f, 1.f) returns its argument bit-for-bit, so
-    // there is no arithmetic between the push and the readback that could
-    // round, and an exact compare is the strongest form available here.
-    // Under the mistake it guards -- set_drive silently not taking, e.g. this
-    // line deleted or moved behind a guard that swallowed it -- it sees
-    // Flux::init's set_drive(0.f) value, 0.f (engine/fx/flux.cpp:81), and
-    // fires.
-    g.drive = g.fx.flux().drive_norm_for_test();
-    assert(g.drive == 0.85f);
-
-    // FEEDBACK's own readback, which none of the three asserts above can see.
-    // This is the ONE check in this row that restates an engine law instead of
-    // reading a derived quantity back, so it is also the one that would need
-    // updating if FLUX's feedback law moved: Flux::apply_feedback hands the
-    // echo _fb_norm * _fb_scale (engine/fx/flux.cpp:180), and _fb_scale is
-    // 1.2 / bbd_drive_gain(_drive_norm), rewritten by set_drive
-    // (engine/fx/flux.cpp:199). This row DOES call set_drive, so _drive_norm
-    // is 0.85 and bbd_drive_gain(0.85f) is 10^(0.85 * 12 * 0.05) == 10^0.51
-    // == 3.2359 (engine/fx/bbd.h:176-177, 188-193): the expected coefficient
-    // is 0.9 * 1.2 / 3.2359 == 0.3337. _fb_norm is exactly 0.9 because
-    // PartFx's 2 ms OnePole was reset() to the first pushed value on the first
-    // process() call (engine/fx/part_fx.cpp:26-29) and then returns it
-    // unchanged (engine/util/onepole.h, the !_smoothing early return).
-    //
-    // Two distinct mistakes reach it, and it fires on both:
-    //   - values[FXT_FLUX_FB] left at setup_fx's 0.7 -> 0.7 * 1.2 / 3.2359
-    //     == 0.2596 against 0.3337, a miss of 0.074;
-    //   - set_drive not taking -> _fb_scale stays init's 1.2 / 1 and the
-    //     coefficient is 0.9 * 1.2 == 1.08 against 0.3337, a miss of 0.746.
-    // The second overlaps the DRIVE assert above deliberately: that one shows
-    // the knob was STORED, this one shows the coupling actually reached the
-    // echo, and only the pair distinguishes a failed FEEDBACK push from a
-    // failed DRIVE push. The 1e-3 tolerance is 74x smaller than the nearer of
-    // the two misses; it is sized to absorb TWO last-bit-scale differences,
-    // neither of which is a disagreement about the law:
-    //   - bbd_drive_gain(0.85f) on this line has a literal argument, so at -O2
-    //     the whole right-hand side is CONSTANT-FOLDED and the emitted code
-    //     loads one literal -- there is no powf call in setup_fx_flux_hot's
-    //     disassembly at all -- whereas Flux::set_drive computes the same
-    //     quantity at RUNTIME, with two `bl powf` calls inside
-    //     .text._ZN4spky4Flux9set_driveEf (bench/build/flux.lst). The host
-    //     compiler's fold and newlib's target powf need not agree to the last
-    //     bit. This is the LARGER of the two terms, and the original version
-    //     of this comment named only the second one (corrected in review).
-    //   - multiply order: the engine's _fb_norm * (1.2 / g) against this
-    //     line's (0.9 * 1.2) / g.
-    // Both are last-bit effects, so 1e-3 remains amply sized rather than
-    // merely adequate.
-    g.fb_coef = g.fx.flux().feedback_coef_for_test();
-    assert(std::fabs(g.fb_coef - 0.9f * 1.2f / bbd_drive_gain(0.85f)) < 1e-3f);
+    g.delay_target_s = g.fx.flux().delay_target_for_test();
+    assert(g.delay_target_s > 0.f);
 }
-
-// proc_fx's shape (bench/workloads_system.cpp:209-220), line for line: the
-// same r = in[i] * 0.9f stereo skew, the same zeroed sends, the same
-// accumulation of all four. The only addition is the readback fold, which
-// keeps setup's four asserted values from being dead stores.
 float proc_fx_flux_hot()
 {
     auto& g = g_instr_arena.get<FxFluxHotGroup>();
@@ -1266,7 +1003,7 @@ float proc_fx_flux_hot()
         g.fx.process(l, r, sl, sr, g.values);
         acc += l + r + sl + sr;
     }
-    acc += static_cast<float>(g.stages) + g.clock_hz + g.drive + g.fb_coef;
+    acc += g.delay_target_s;
     return acc;
 }
 
@@ -1462,16 +1199,17 @@ void setup_deck_shell()
     //     in this round can be measuring different memory
     //     (bench/workloads_instr.cpp's setup_instr_part_common).
     const FxMem& mem = fx_mem();
-    g.part.init(kSampleRate, 0x1234abcdu, mem.echo[PART_A],
+    g.part.init(kSampleRate, 0x1234abcdu,
+                mem.echo[PART_A][0], mem.echo[PART_A][1],
                 mem.sampler_buf[PART_A], mem.sampler_frames);
 
-    // configure_worst_bbd above, line for line, MINUS its seven FX lines --
-    // the two that engage a block, the one that sets COMP, and the four that
-    // voice FLUX (STAGES, DRIVE, rate, FEEDBACK). Those belong to departure 2
-    // below, which replaces the first three with fx_none's values and drops
-    // the last four, because setup_fx(SEL_NONE) calls none of them. Order
+    // configure_worst_tape_flux above, line for line, MINUS its FX lines --
+    // the two that engage a block, the one that sets COMP, and the two that
+    // voice tape FLUX (RATE and FEEDBACK). Those belong to departure 2 below,
+    // which replaces the first three with fx_none's values and drops the last
+    // two, because setup_fx(SEL_NONE) calls none of them. Order
     // preserved so this reads as a checklist against that function.
-    g.part.mod().set_tempo_bpm(120.f);   // configure_worst_bbd line 1
+    g.part.mod().set_tempo_bpm(120.f);   // configure_worst_tape_flux line 1
     g.part.fx().set_bpm(120.f);          // line 2 -- and fx_none's own set_bpm
     g.part.set_color(1.f);               // line 3: 4-note chords, i.e. the
                                          //   chord path this row exists to price
@@ -1485,8 +1223,8 @@ void setup_deck_shell()
     // Lines 7, 8 and 11 (set_fx_on Grit/Flux, set_comp 1.0) are REPLACED by
     // departure 2; lines 9 and 10 (set_grit_mix/set_flux_mix 1.0) are pushed
     // there instead, because fx_none pushes the identical two values and the
-    // mirror reads better in one block; lines 14-16 (set_stages, set_drive,
-    // set_flux_rate) and line 17's FXT_FLUX_FB 0.9 are DROPPED, because
+    // mirror reads better in one block; the hot RATE and FXT_FLUX_FB 0.9 are
+    // DROPPED, because
     // setup_fx(SEL_NONE) calls none of them.
     //
     // Nothing calls set_step(), on this row or on the gate, so both run in
@@ -1509,7 +1247,7 @@ void setup_deck_shell()
     g.part.fx().set_grit_mix(1.f);
     g.part.fx().set_flux_mix(1.f);
     // set_bpm(120.f) is above, with the operating-point block: fx_none and
-    // configure_worst_bbd push the identical value, so it is one line serving
+    // configure_worst_tape_flux pushes the identical value, so it is one line serving
     // both mirrors rather than a difference.
     //
     // fx_none's values[] reach a bare PartFx as a caller-owned array; on a
@@ -1577,7 +1315,7 @@ void setup_deck_shell()
     // engine/fx/flux.h:42, the latter also gated on _buf_ok) and
     // Comp::amount() returns _amount_target (engine/fx/comp.h:18) -- all three
     // already public, so no getter had to be added to engine/, which this
-    // round has locked. Under the mistake they guard -- configure_worst_bbd's
+    // round has locked. Under the mistake they guard -- configure_worst_tape_flux's
     // FX lines copied across with the rest of it -- they see true, true and
     // 1.0 against false, false and 0.0, and all three fire. That mistake is
     // the expensive one: it would leave GRIT, FLUX and COMP inside deck_shell

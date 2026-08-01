@@ -403,10 +403,11 @@ TEST_CASE("part: BODY's own FLUX tape reaches its excitation bus through Part::_
     // regardless of whether Task 9's wiring exists at all, which is exactly
     // what happened the first time this test was written (see the WAVE/
     // SYNTH-style comment above about isolating claims from side effects).
-    static float s_pbody_echo[Flux::kMaxSamples];
+    static std::vector<float> s_pbody_echo_l(Flux::kMaxSamples);
+    static std::vector<float> s_pbody_echo_r(Flux::kMaxSamples);
     auto render = [](bool flux_on, float sub) {
         Part p;
-        p.init(48000.f, 5u, s_pbody_echo);
+        p.init(48000.f, 5u, s_pbody_echo_l.data(), s_pbody_echo_r.data());
         p.set_engine(ENGINE_BODY);
         p.set_voice_sub(sub);
         p.set_fx_target_base(FXT_FX_MIX, 0.f);      // isolate the tap from the send

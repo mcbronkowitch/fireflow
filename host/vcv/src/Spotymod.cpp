@@ -13,7 +13,6 @@
 // The portable engine core -- exactly the same headers the desktop render host
 // and (later) the Daisy firmware use. No hardware type crosses this boundary.
 #include "instrument.h"
-#include "fx/flux.h"
 #include "mod/divisions.h"
 #include "sampler_ui.hpp"
 
@@ -53,16 +52,11 @@ struct FluxFbQuantity : ParamQuantity {
     }
 };
 
-// STAGES tooltip: the physical stage count of the virtual chip. 8192 is a
-// pair of MN3005s, i.e. a Deluxe Memory Man; below that the line gets darker
-// and grainier at the same delay time, above it cleaner and faster.
+// The append-only STAGES parameter is retained for patch compatibility, but
+// now supplies the BBD engine's normalized PITCH lane base.
 struct StagesQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
-        const float n = getValue();
-        const float s = static_cast<float>(spky::Flux::kMinStages)
-            * std::pow(static_cast<float>(spky::Flux::kMaxStages)
-                       / spky::Flux::kMinStages, n);
-        return string::f("%.0f stages", s);
+        return string::f("pitch %.0f%%", getValue() * 100.f);
     }
 };
 
@@ -170,10 +164,9 @@ struct Spotymod : Module {
     spky::Instrument inst;
     spky::FxMem fxmem;
 
-    // FX memory the engine's "no heap" contract requires the host to own.
-    // 64 KB of echo buffer (was 128 KB before the mono-echo collapse) + one
-    // ~130 KB reverb, held per module instance.
-    float echo[spky::PART_COUNT][spky::Flux::kMaxSamples];
+    // The 4 MiB stereo tape arena is heap-backed so each Rack Module remains
+    // small enough for normal stack/value construction.
+    std::vector<float> echoMem[spky::PART_COUNT][2];
     // The BBD part engine's two lines per deck, held by value like the echo
     // buffer above: 32 KB per line, 128 KB per module instance.
     float bbd[spky::PART_COUNT][2][spky::BbdEngine::kCells];
@@ -232,7 +225,6 @@ struct Spotymod : Module {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
         configControls();
         for (int p = 0; p < spky::PART_COUNT; ++p) {
-            fxmem.echo[p] = echo[p];
             fxmem.bbd[p][0] = bbd[p][0];
             fxmem.bbd[p][1] = bbd[p][1];
         }
@@ -361,6 +353,13 @@ struct Spotymod : Module {
 
         const float prevSr = curSr;
         curSr = sr;
+        for (int p = 0; p < spky::PART_COUNT; ++p) {
+            for (int ch = 0; ch < 2; ++ch) {
+                if (echoMem[p][ch].size() != spky::Flux::kMaxSamples)
+                    echoMem[p][ch].resize(spky::Flux::kMaxSamples);
+                fxmem.echo[p][ch] = echoMem[p][ch].data();
+            }
+        }
         const size_t frames = (size_t)(kSamplerBufferSeconds * (double)sr);
         for (int p = 0; p < spky::PART_COUNT; ++p) {
             if (samplerMem[p].size() != frames) samplerMem[p].resize(frames);
@@ -436,7 +435,8 @@ struct Spotymod : Module {
             inst.set_grit_mix(p, pp(GRIT_A, p));
             // Appended params are outside the stride, so pp() would compute the
             // wrong id — the explicit ternary is required (see FLUXRATE/FLUXFB).
-            inst.set_drive(p, params[p ? DRIVE_B : DRIVE_A].getValue());
+            // DRIVE_A/B remains append-only saved patch state, with no FLUX
+            // destination in movement 3.
             inst.set_link(p, params[p ? LINK_B : LINK_A].getValue());
             // STAGES itself is pushed further down, alongside samplerPart's
             // analogous re-point gate -- it needs this tick's dispatched
@@ -545,11 +545,9 @@ struct Spotymod : Module {
             // than re-discovering the rule by breaking it a third time:
             //   - LANE_SIZE:  sampler-only (SUB_A -> GENE SIZE), restored to
             //                 0.5f below when the deck is not the sampler.
-            //   - LANE_PITCH: BBD-only (STAGES_A/B), restored to 0.5f in the
-            //                 else branch immediately below.
-            // The restoring else is not optional for either: a base is part of
-            // Part's persistent state, so an engine that stops being asked for
-            // one keeps whatever the LAST asker left there.
+            //   - LANE_PITCH: BBD-only (STAGES_A/B). Other engines retain
+            //                 their existing base; this movement only rehomes
+            //                 the preserved STAGES state while BBD is active.
             const bool bbdPart = inst.engine_id(p) == spky::ENGINE_BBD;
             // STAGES is orphaned by movement 3 and becomes the LANE_PITCH base
             // on a BBD deck. Re-pointing a knob per engine is not new -- the
@@ -561,20 +559,9 @@ struct Spotymod : Module {
             // params[96], past the end of the 84-entry array. The explicit
             // ternary is required, exactly as for DRIVE/LINK.
             //
-            // The else branch is load-bearing, same as GENE SIZE below: LANE_
-            // PITCH's base is written NOWHERE else in this function, and on a
-            // Synth/Wave/Body deck that base is a real transposition (it feeds
-            // pitch_pre_quant). Flip a deck to BBD, move STAGES, flip back --
-            // without this restore, _base[LANE_PITCH] would keep whatever
-            // STAGES last set it to, forever, on an engine that never touches
-            // LANE_PITCH itself.
             if (bbdPart)
                 inst.set_target_base(p, spky::LANE_PITCH,
                     params[p ? STAGES_B : STAGES_A].getValue());
-            else {
-                inst.set_stages(p, params[p ? STAGES_B : STAGES_A].getValue());
-                inst.set_target_base(p, spky::LANE_PITCH, 0.5f);
-            }
 
             if (bbdEdge[p].tick(bbdPart)) {
                 // Genuine player-driven entry into BBD (see bbd_edge_state.hpp
