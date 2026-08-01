@@ -41,22 +41,47 @@ TEST_CASE("flux tape: synced 1/4 at 120 BPM targets 0.5 seconds") {
 }
 
 TEST_CASE("flux tape: stereo input remains stereo") {
-    FluxTapeMem mem;
-    Flux f;
-    mem.init(f);
-    f.set_on(true, true);
-    f.set_mix(1.f);
-    f.set_feedback(0.f);
-    float energy_l = 0.f, energy_r = 0.f;
-    for (int i = 0; i < 48000; ++i) {
-        float l = i == 0 ? 1.f : 0.f;
-        float r = 0.f;
-        f.process(l, r);
-        energy_l += l * l;
-        energy_r += r * r;
+    SUBCASE("left impulse returns wet only on the left") {
+        FluxTapeMem mem;
+        Flux f;
+        mem.init(f);
+        f.set_on(true, true);
+        f.set_mix(1.f);
+        f.set_feedback(0.f);
+        float delayed_l = 0.f, delayed_r = 0.f;
+        for (int i = 0; i < 48000; ++i) {
+            float l = i == 0 ? 1.f : 0.f;
+            float r = 0.f;
+            f.process(l, r);
+            if (i > 0) {
+                delayed_l += l * l;
+                delayed_r += r * r;
+            }
+        }
+        CHECK(delayed_l > 1e-6f);
+        CHECK(delayed_r == 0.f);
     }
-    CHECK(energy_l > 1e-6f);
-    CHECK(energy_r == 0.f);
+
+    SUBCASE("right impulse returns wet only on the right") {
+        FluxTapeMem mem;
+        Flux f;
+        mem.init(f);
+        f.set_on(true, true);
+        f.set_mix(1.f);
+        f.set_feedback(0.f);
+        float delayed_l = 0.f, delayed_r = 0.f;
+        for (int i = 0; i < 48000; ++i) {
+            float l = 0.f;
+            float r = i == 0 ? 1.f : 0.f;
+            f.process(l, r);
+            if (i > 0) {
+                delayed_l += l * l;
+                delayed_r += r * r;
+            }
+        }
+        CHECK(delayed_l == 0.f);
+        CHECK(delayed_r > 1e-6f);
+    }
 }
 
 TEST_CASE("flux tape: FXT time is x1/4 x1 x4 through the shared slew") {
@@ -201,6 +226,22 @@ TEST_CASE("flux tape: DRAG interpolates geometrically") {
     CHECK(f.drag_time_s() == doctest::Approx(0.353553f).epsilon(0.001));
 }
 
+TEST_CASE("flux tape: RATE still reaches the ladder at intermediate DRAG") {
+    FluxTapeMem mem;
+    Flux f;
+    mem.init(f);
+    f.set_on(true, true);
+    f.set_bpm(120.f);
+    f.set_rhythm(rhythm(12000, 18000));
+    f.set_link(0.5f);
+    f.set_rate(3);  // sqrt(0.5 s * 0.25 s)
+    const float at_quarter = f.drag_time_s();
+    f.set_rate(0);  // sqrt(1.0 s * 0.25 s)
+    const float at_half = f.drag_time_s();
+    CHECK(at_quarter == doctest::Approx(0.353553f).epsilon(0.001));
+    CHECK(at_half == doctest::Approx(0.5f).epsilon(0.001));
+}
+
 static void thin_setup(Flux& f, FluxTapeMem& mem, int32_t g0, int32_t g1) {
     mem.init(f);
     f.set_on(true, true);
@@ -248,6 +289,52 @@ TEST_CASE("flux tape: THIN scheduler works for a DRAG-unusable rhythm") {
         if (f.gate_for_test() < 0.1f) ducked = true;
     }
     CHECK(ducked);
+}
+
+TEST_CASE("flux tape: DRAG usability changes preserve THIN scheduler phase") {
+    FluxTapeMem mem;
+    Flux f;
+    thin_setup(f, mem, 12000, 6000);  // 3000 samples/repeat, n={4,2}
+    f.set_link(-1.f);
+    run_silence(f, 1000);             // partway into the first repeat
+
+    // Cross the DRAG minimum-gap boundary while THIN remains active. The new
+    // n={1,2} pattern must inherit the elapsed 1000 samples: its first duck
+    // settles by global sample 9700. Resetting phase delays it to 10000.
+    f.set_rhythm(rhythm(20, 6000));
+    run_silence(f, 8700);
+    CHECK(f.gate_for_test() == doctest::Approx(0.f).epsilon(0.02));
+}
+
+TEST_CASE("flux tape: crossing THIN directly to DRAG restores the gate") {
+    FluxTapeMem mem;
+    Flux f;
+    thin_setup(f, mem, 12000, 6000);
+    f.set_link(-1.f);
+    run_silence(f, 7500);
+    REQUIRE(f.gate_for_test() == doctest::Approx(0.f).epsilon(0.02));
+
+    f.set_link(1.f);
+    run_silence(f, 2000);
+    CHECK(f.gate_for_test() == 1.f);
+}
+
+TEST_CASE("flux tape: RATE changes re-derive the THIN pattern") {
+    FluxTapeMem mem;
+    Flux f;
+    thin_setup(f, mem, 12000, 6000);
+    CHECK(f.thin_n_for_test(0) == 4);
+    f.set_rate(9);  // 6000 samples/repeat at 120 BPM
+    CHECK(f.thin_n_for_test(0) == 2);
+}
+
+TEST_CASE("flux tape: BPM changes re-derive the THIN pattern") {
+    FluxTapeMem mem;
+    Flux f;
+    thin_setup(f, mem, 12000, 6000);
+    CHECK(f.thin_n_for_test(0) == 4);
+    f.set_bpm(60.f);  // repeat doubles to 6000 samples
+    CHECK(f.thin_n_for_test(0) == 2);
 }
 
 TEST_CASE("flux tape: invalid rhythm leaves DRAG inert and THIN open") {

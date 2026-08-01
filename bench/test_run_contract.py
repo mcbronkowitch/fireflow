@@ -981,7 +981,7 @@ class ProfileContract(unittest.TestCase):
                 resolve_profile("system"),
             )
 
-    def test_o2_verdict_uses_worst_dtcm_bbd_offline_and_callback_repeat(self):
+    def test_o2_verdict_uses_worst_transitional_tape_flux_repeat(self):
         first = self.gate_capture(
             avg_cyc=947087,
             max_cyc=985609,
@@ -1015,11 +1015,13 @@ class ProfileContract(unittest.TestCase):
             report,
         )
         self.assertIn(
-            "**Conclusion: the DTCM+BBD gate does not fit.**",
+            "**Conclusion: the transitional DTCM+tape-FLUX gate does not fit.**",
             report,
         )
+        self.assertIn("hot stereo tape FLUX", report)
+        self.assertIn("Task 7 repoints this legacy-named pair", report)
 
-    def test_o3_verdict_uses_worst_dtcm_bbd_offline_and_callback_repeat(self):
+    def test_o3_verdict_uses_worst_transitional_tape_flux_repeat(self):
         first = self.gate_capture(
             avg_cyc=916310,
             max_cyc=954884,
@@ -1049,7 +1051,7 @@ class ProfileContract(unittest.TestCase):
             report,
         )
         self.assertIn(
-            "**Conclusion: the DTCM+BBD gate fits.**",
+            "**Conclusion: the transitional DTCM+tape-FLUX gate fits.**",
             report,
         )
 

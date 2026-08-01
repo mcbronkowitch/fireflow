@@ -56,3 +56,37 @@ FLUX now owns two caller-backed `TapeEcho<262144>` lines, preserves independent 
 ## Self-review and concerns
 
 Reviewed the public API removal, all echo indexing/positional callers, stereo/null/off behavior, benchmark row set, VCV heap binding and preserved parameter IDs, audition routing, and forbidden FLUX storage/type searches. No Task 5+ behavior was implemented; DRAG remains intentionally transitional. The only non-Task warning observed was the pre-existing VCV compiler warning in `phrase_gen.h`; it did not fail the build.
+
+## Fix Round 1
+
+### Review fixes
+
+- Replaced the vacuous stereo assertion with two delayed-wet observations. The dry impulse at sample zero is excluded; left-to-right and right-to-left isolation are both asserted.
+- Replaced the direct `apply_engine_stages` test with a complete generated-ParamId snapshot dispatched through `apply_init_patch`. A controlled copy selects BBD on A, Sampler on B, and distinct `STAGES_A/B` values, proving engine decoding, saved ID/value selection, BBD-only routing, and the real dispatcher call. The helper is now private to the dispatcher.
+- Restored the `871d98c` scheduler contracts, adapted only for stereo heap tape memory and the retired BBD surface: intermediate-DRAG RATE response, THIN phase preservation across DRAG-usability changes, direct THIN-to-DRAG gate recovery, and RATE/BPM thinning-pattern re-derivation.
+- Rewrote the legacy `instrument_worst_bbd*` comments and generated verdict prose as the truthful transitional hot stereo tape-FLUX setup. Protocol names remain stable; Task 7 still owns repointing both rows to the BBD engine.
+
+### Mutation RED/GREEN evidence
+
+- Stereo RED command: `cmake --build build -j 8; build/spky_tests.exe --test-case="flux tape: stereo input remains stereo"` with `_echo_l.Process(...)` temporarily replaced by `0.f`.
+  - Result: expected failure, 1 case / 4 assertions, `delayed_l` was `0` instead of `> 1e-6`.
+- Stereo GREEN, same focused command after restoring the production return:
+  - Result: PASS, 1 case / 4 assertions.
+- Dispatcher test-first RED: `cmake --build build -j 8` before the complete-snapshot overload existed.
+  - Result: expected compile failure: `apply_init_patch` received two arguments but only the one-argument generated-snapshot wrapper existed.
+- Dispatcher mutation RED command: focused dispatcher test with the internal `apply_engine_stages(...)` call temporarily bypassed.
+  - Result: expected failure, BBD deck A reported pitch `0.5` instead of saved `STAGES_A == 0.8125`.
+- Dispatcher GREEN after restoring the call:
+  - Result: PASS, 1 case / 4 assertions; BBD A receives 0.8125, non-BBD B retains 0.5, and both generated engine IDs land.
+- Verdict-prose RED command: `python -m unittest bench.test_run_contract.ProfileContract.test_o2_verdict_uses_worst_transitional_tape_flux_repeat` before `bench/run.py` was updated.
+  - Result: expected failure because the report still emitted `DTCM+BBD` / `BBD echo` prose.
+- Verdict-prose GREEN command: both transitional verdict tests.
+  - Result: PASS, 2 tests.
+
+### Fresh final verification
+
+- `cmake --build build -j 8` — PASS (`ninja: no work to do`).
+- Focused stereo, generated-snapshot dispatcher, and five scheduler filters — PASS, 7/7 cases; assertion counts `4, 4, 2, 1, 2, 2, 2`.
+- `python -m unittest bench.test_run_contract` — PASS, 74 tests.
+- `ctest --test-dir build --output-on-failure` — PASS, 4/4 tests, 0 failures.
+- `git diff --check` — PASS before staging.

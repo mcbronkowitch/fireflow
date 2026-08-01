@@ -452,19 +452,14 @@ void setup_inst_worst_bbd_dtcm()
 
 // --- 11. the whole instrument, both decks on the BBD PART ENGINE ------------
 // Spec 2026-07-31 bbd-part-engine 8.3 row 1. Distinct from
-// instrument_worst_bbd above, which measures FLUX's own mono BBD at its
-// ceiling behind a SYNTH deck: this row measures the new voiceless engine's
-// STEREO pair, which is a different amount of BBD per deck (two lines, not
-// one) and a different amount of everything else (no voices at all).
+// the legacy-named instrument_worst_bbd pair above, which still measures hot
+// stereo tape FLUX behind SYNTH decks until Task 7 repoints it: this row
+// measures the voiceless BBD engine's stereo pair and no synth voices.
 //
 // Two deliberate departures from a naive "instrument_worst plus set_engine":
 //
-//   * FLUX is switched OFF on both decks. Spec 3's first transitional hazard
-//     is that between movements 2 and 3 a BBD deck runs THREE BBD lines --
-//     the engine's stereo pair plus FLUX's own mono line behind it -- which
-//     is neither the configuration 5.11 describes nor what 2 prices. Leaving
-//     it on would make this row silently keep measuring that transitional
-//     shape after movement 3 lands, which 3 explicitly asks it not to.
+//   * Tape FLUX is switched OFF on both decks so this row isolates the BBD
+//     engine pair instead of adding four large tape lines to the measurement.
 //   * The quantizer is put in Free mode. LANE_PITCH reaches the engine as
 //     _pitch_q (part.cpp:233), so under the boot Dorian scale a lane at 1.0
 //     arrives at the engine as the nearest scale degree BELOW 1.0 and the

@@ -189,9 +189,9 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "inst_worst_deck_bus",
         "instrument_worst_bbd",
         "instrument_worst_bbd_dtcm",
-        # Spec 2026-07-31 bbd-part-engine 8.3 row 1: both decks on the
-        # voiceless BBD PART ENGINE (its stereo pair), as distinct from
-        # instrument_worst_bbd above (FLUX's mono line behind a SYNTH deck).
+        # Both decks on the voiceless BBD PART ENGINE (its stereo pair), as
+        # distinct from the legacy-named pair above, which remains the hot
+        # stereo tape-FLUX transitional setup until Task 7 repoints both rows.
         "inst_bbd_engine_worst",
     ),
     "sweep": (
@@ -692,19 +692,23 @@ def verdict(captures):
         fits = worst_offline < 100.0 and worst_callback < 100.0
         if fits:
             conclusion = (
-                "**Conclusion: the DTCM+BBD gate fits.** Every offline and "
+                "**Conclusion: the transitional DTCM+tape-FLUX gate fits.** "
+                "Every offline and "
                 "real-callback maximum is below 100 % of the block budget."
             )
         else:
             conclusion = (
-                "**Conclusion: the DTCM+BBD gate does not fit.** At least "
+                "**Conclusion: the transitional DTCM+tape-FLUX gate does not fit.** "
+                "At least "
                 "one offline or real-callback maximum is at or above 100 % "
                 "of the block budget."
             )
         out.write(
-            "**DTCM+BBD budget — go/no-go.** The decision workload is "
+            "**Transitional DTCM+tape-FLUX budget — go/no-go.** The decision workload is "
             "`instrument_worst_bbd_dtcm`: the full eight-voice instrument, "
-            "BBD echo and the retained DTCM instrument state. Run maxima "
+            "hot stereo tape FLUX (shortest RATE, feedback 0.9), and the "
+            "retained DTCM instrument state. Task 7 repoints this legacy-named pair "
+            "to the BBD engine before benchmark reporting. Run maxima "
             "(offline / real callback): %s. Across all %d repeats, the worst "
             "maxima are **%.2f %% offline** and **%.2f %% in the real "
             "callback**. %s\n\n"
@@ -718,7 +722,7 @@ def verdict(captures):
         )
     else:
         out.write(
-            "**DTCM+BBD budget — NO RESULT.** "
+            "**Transitional DTCM+tape-FLUX budget — NO RESULT.** "
             "`instrument_worst_bbd_dtcm` did not produce both numeric "
             "offline and callback maxima in every repeat. The go/no-go "
             "question is unanswered.\n\n"

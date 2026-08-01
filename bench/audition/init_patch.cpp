@@ -8,7 +8,7 @@
 #include "../../host/vcv/src/init_patch.hpp"
 
 
-namespace audition {
+namespace {
 
 void apply_engine_stages(spky::Instrument& inst, int deck,
                          spky::EngineId engine, float value)
@@ -17,10 +17,14 @@ void apply_engine_stages(spky::Instrument& inst, int deck,
         inst.set_target_base(deck, spky::LANE_PITCH, value);
 }
 
-void apply_init_patch(spky::Instrument& inst)
+}  // namespace
+
+namespace audition {
+
+void apply_init_patch(spky::Instrument& inst, const float* values)
 {
     using namespace spkyvcv;
-    auto value = [](int id) { return initParamDefault(id); };
+    auto value = [values](int id) { return values[id]; };
     auto part = [&](int base, int deck) {
         return value(base + deck * PART_STRIDE);
     };
@@ -119,6 +123,11 @@ void apply_init_patch(spky::Instrument& inst)
     inst.set_master_drive(value(MASTER_DRIVE));
     inst.set_scale(static_cast<int>(std::lround(value(SCALE))));
     inst.set_tempo_bpm(40.f + value(TEMPO) * 200.f);
+}
+
+void apply_init_patch(spky::Instrument& inst)
+{
+    apply_init_patch(inst, spkyvcv::kInitParamDefaults);
 }
 
 }  // namespace audition

@@ -8,8 +8,7 @@ class Instrument;
 
 namespace audition {
 
-void apply_engine_stages(spky::Instrument& instrument, int deck,
-                         spky::EngineId engine, float value);
+void apply_init_patch(spky::Instrument& instrument, const float* values);
 void apply_init_patch(spky::Instrument& instrument);
 
 }  // namespace audition

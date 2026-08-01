@@ -1,5 +1,8 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
+#include <array>
+
 #include "instrument.h"
 #include "../bench/audition/init_patch.h"
 #include "vcv/src/generated_panel.hpp"
@@ -71,23 +74,31 @@ TEST_CASE("Seed audition boots the same engines the VCV host does")
     CHECK(inst.engine_id(spky::PART_B) == spky::ENGINE_BODY);
 }
 
-TEST_CASE("Seed audition routes saved STAGES only to BBD pitch")
+TEST_CASE("Seed audition dispatcher routes generated STAGES by generated engine")
 {
+    std::array<float, spkyvcv::NUM_PARAMS> snapshot{};
+    std::copy(std::begin(spkyvcv::kInitParamDefaults),
+              std::end(spkyvcv::kInitParamDefaults), snapshot.begin());
+    snapshot[spkyvcv::ENGINE_A] = 4.f;  // BBD
+    snapshot[spkyvcv::ENGINE_B] = 1.f;  // SAMPLER (non-BBD, unquantized pitch)
+    snapshot[spkyvcv::STAGES_A] = 0.8125f;
+    snapshot[spkyvcv::STAGES_B] = 0.9375f;
+    snapshot[spkyvcv::TUNE_A] = 0.5f;
+    snapshot[spkyvcv::TUNE_B] = 0.5f;
+
     spky::Instrument inst;
     inst.init(48000.f);
+    audition::apply_init_patch(inst, snapshot.data());
+
+    // Make pitch_cv expose the dispatched bases without lane modulation.
     inst.set_target_active(spky::PART_A, spky::LANE_PITCH, false);
     inst.set_target_active(spky::PART_B, spky::LANE_PITCH, false);
     float l = 0.f, r = 0.f;
     for(int i = 0; i < 4000; ++i)
         inst.process(nullptr, nullptr, &l, &r, 1);
-    const float before_a = inst.pitch_cv(spky::PART_A);
-    const float before_b = inst.pitch_cv(spky::PART_B);
 
-    audition::apply_engine_stages(inst, spky::PART_A, spky::ENGINE_BBD, 0.8f);
-    audition::apply_engine_stages(inst, spky::PART_B, spky::ENGINE_BODY, 1.f);
-    for(int i = 0; i < 4000; ++i)
-        inst.process(nullptr, nullptr, &l, &r, 1);
-
-    CHECK(inst.pitch_cv(spky::PART_A) != before_a);
-    CHECK(inst.pitch_cv(spky::PART_B) == before_b);
+    CHECK(inst.engine_id(spky::PART_A) == spky::ENGINE_BBD);
+    CHECK(inst.engine_id(spky::PART_B) == spky::ENGINE_SAMPLER);
+    CHECK(inst.pitch_cv(spky::PART_A) == doctest::Approx(0.8125f));
+    CHECK(inst.pitch_cv(spky::PART_B) == doctest::Approx(0.5f));
 }
