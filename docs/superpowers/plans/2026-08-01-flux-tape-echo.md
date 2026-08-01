@@ -960,7 +960,9 @@ TEST_CASE("flux tape: LINK is unipolar THIN over the full travel") {
             f.process(l, r);
         }
     };
-    run(off, 7500); run(half, 7500); run(full, 7500);
+    // RATE 10 at 120 BPM is 4000 samples. The first repeat remains open;
+    // sample beyond the second repeat so the selected THIN step is visible.
+    run(off, 9000); run(half, 9000); run(full, 9000);
     CHECK(off.gate_for_test() == doctest::Approx(1.f));
     CHECK(half.gate_for_test() == doctest::Approx(0.5f).epsilon(0.02));
     CHECK(full.gate_for_test() == doctest::Approx(0.f).epsilon(0.02));
