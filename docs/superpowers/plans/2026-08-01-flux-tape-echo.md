@@ -1072,7 +1072,12 @@ EOF
 
 ## Task 6: Migrate old LINK patches and update the VCV surface
 
-Rack restores ordinary params; `dataFromJson` must then remap the already-restored LINK values before the module resumes. This migration is independent of FORM/SONG and must run even when there is no `sampler` object—the current early return at `Spotymod.cpp:824-825` must not bypass it.
+Rack clamps ordinary parameters to their newly configured range inside
+`Module::fromJson`, before it calls `dataFromJson`. Therefore Spotymod must
+capture legacy LINK's raw bipolar values from the module-level `params` JSON,
+call Rack's base loader exactly once, and apply the migrated unipolar values
+afterward. This migration is independent of FORM/SONG and remains outside the
+sampler-data early return.
 
 **Files:**
 - Create: `host/vcv/src/link_migration.hpp`
@@ -1169,7 +1174,7 @@ configParam<LinkQuantity>(c.id, 0.f, 1.f, init, lbl);
 
 The existing `inst.set_link` push remains, now forwarding 0..1.
 
-- [ ] **Step 4: Persist and apply `linkVersion` before the sampler early return**
+- [ ] **Step 4: Persist `linkVersion` and migrate raw params around Rack's base loader**
 
 `dataToJson` writes both markers:
 
@@ -1178,23 +1183,51 @@ json_object_set_new(root, "formSongVersion", json_integer(1));
 json_object_set_new(root, "linkVersion", json_integer(1));
 ```
 
-In `dataFromJson`, after the FORM/SONG block and before reading `sampler`:
+Override module-level `fromJson(json_t* module_root)`. Before calling the base
+loader, inspect `module_root["data"]["linkVersion"]` and, for a legacy marker,
+capture numeric LINK_A/B values from the raw `module_root["params"]` entries by
+their stable ids. Then call `Module::fromJson(module_root)` exactly once and
+apply the migrated captured values afterward:
 
 ```cpp
-json_t* link_version = json_object_get(root, "linkVersion");
-const bool modern_link = is_modern_link_version(
-    link_version && json_is_integer(link_version),
-    link_version && json_is_integer(link_version)
-        ? json_integer_value(link_version) : 0);
-if (!modern_link) {
-    for (int p = 0; p < spky::PART_COUNT; ++p) {
-        const int id = p ? LINK_B : LINK_A;
-        params[id].setValue(migrate_legacy_link(params[id].getValue()));
+void fromJson(json_t* module_root) override {
+    json_t* data = json_object_get(module_root, "data");
+    json_t* link_version = data ? json_object_get(data, "linkVersion") : nullptr;
+    const bool modern_link = is_modern_link_version(
+        link_version && json_is_integer(link_version),
+        link_version && json_is_integer(link_version)
+            ? json_integer_value(link_version) : 0);
+
+    bool have_raw[spky::PART_COUNT] = {};
+    float migrated[spky::PART_COUNT] = {};
+    if (!modern_link) {
+        json_t* raw_params = json_object_get(module_root, "params");
+        size_t i;
+        json_t* raw_param;
+        json_array_foreach(raw_params, i, raw_param) {
+            json_t* id_json = json_object_get(raw_param, "id");
+            json_t* value_json = json_object_get(raw_param, "value");
+            if (!json_is_integer(id_json) || !json_is_number(value_json)) continue;
+            const int id = (int)json_integer_value(id_json);
+            for (int p = 0; p < spky::PART_COUNT; ++p) {
+                if (id != (p ? LINK_B : LINK_A)) continue;
+                have_raw[p] = true;
+                migrated[p] = migrate_legacy_link((float)json_number_value(value_json));
+            }
+        }
     }
+
+    Module::fromJson(module_root);
+    if (!modern_link)
+        for (int p = 0; p < spky::PART_COUNT; ++p)
+            if (have_raw[p]) params[p ? LINK_B : LINK_A].setValue(migrated[p]);
 }
 ```
 
-FORM/SONG may run before or after this block; keep them adjacent and comment that they touch disjoint parameter ids. Crucially, the LINK block precedes `if (!parts) return;`.
+Do not also migrate LINK from `dataFromJson`: by then Rack has already clamped
+legacy negative values to 0. FORM/SONG remains in `dataFromJson`; the two
+migrations still touch disjoint parameter ids. Missing raw LINK entries leave
+Rack's restored/default values alone.
 
 - [ ] **Step 5: Pin the migration and panel contract**
 
@@ -1203,13 +1236,18 @@ Extend `test_panel.py` to require:
 ```python
 check('json_object_set_new(root, "linkVersion", json_integer(1));' in cpp,
       "new patches do not carry the LINK schema marker")
-check('json_object_get(root, "linkVersion")' in cpp,
+check('json_object_get(data, "linkVersion")' in cpp,
       "LINK migration does not check its independent marker")
-check('migrate_legacy_link(params[id].getValue())' in cpp,
-      "legacy bipolar LINK is not remapped after Rack restores params")
-check(cpp.index('migrate_legacy_link(params[id].getValue())') <
-      cpp.index('if (!parts) return;'),
-      "a patch without sampler data bypasses LINK migration")
+check('void fromJson(json_t* module_root) override' in cpp,
+      "legacy LINK does not capture raw module params before Rack clamps them")
+check(cpp.index('json_object_get(module_root, "params")') <
+      cpp.index('Module::fromJson(module_root);'),
+      "legacy LINK raw params are read after Rack clamps them")
+check(cpp.index('Module::fromJson(module_root);') <
+      cpp.index('params[p ? LINK_B : LINK_A].setValue(migrated[p])'),
+      "legacy LINK migration is not applied after Rack's base restore")
+check('migrate_legacy_link(params[id].getValue())' not in cpp,
+      "LINK migration incorrectly reads Rack-clamped parameter values")
 ```
 
 Update LINK range/display pins from `-1..1` and drag/thin to `0..1` and thin/off. Update `init_patch.hpp`'s note: both LINK defaults remain 0, now the neutral end rather than a bipolar centre.
@@ -1238,9 +1276,14 @@ cd .. && ./build-local.sh
 
 Expected: all tests pass, panel prints `OK`, VCV builds.
 
-- [ ] **Step 8: Prove the no-version case can fail**
+- [ ] **Step 8: Prove the post-clamp migration can fail**
 
-Temporarily move the LINK migration below `if (!parts) return;`, run the no-version helper/source contract and panel test, and confirm RED. Restore and confirm green. Record both outputs in the task report.
+First record the real-Rack RED from the old `dataFromJson` approach: a genuine
+movement-2 patch with LINK_A=-0.63 and no `linkVersion` loads as `off`/0 because
+Rack clamps before calling `dataFromJson`. Then temporarily bypass the
+module-level raw-value capture or post-base application, run the corresponding
+panel/source contract, and confirm RED. Restore and confirm green. Record the
+real-load and source-contract evidence in the task report.
 
 - [ ] **Step 9: Load real legacy patches in Rack**
 
@@ -1268,8 +1311,9 @@ LINK is now unipolar THIN. A separate linkVersion marker keeps FORM/SONG's
 version honest: missing or malformed means legacy bipolar state, negative
 values map to their magnitude, and positive DRAG values map to off.
 
-The migration runs before the sampler-data early return, so a patch with no
-version keys receives both independent migrations and keeps its THIN setting.
+The module-level loader captures legacy LINK before Rack clamps ordinary params,
+then applies the migration after the base restore. A patch with no version keys
+therefore receives both independent migrations and keeps its THIN setting.
 
 Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>
 EOF
