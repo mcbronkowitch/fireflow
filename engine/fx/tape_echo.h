@@ -82,6 +82,8 @@ public:
         const float y = _b0 * in + _s1;
         _s1 = _s2 - _a1 * y;
         _s2 = -_b0 * in - _a2 * y;
+        if (_s1 < 1e-9f && _s1 > -1e-9f) _s1 = 0.f;
+        if (_s2 < 1e-9f && _s2 > -1e-9f) _s2 = 0.f;
         return y;
     }
 

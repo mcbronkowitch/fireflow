@@ -11,6 +11,10 @@ constexpr float kBootStagesNorm = 0.8f;   // 512 * 32^0.8 == 8192, the DMM
 void Flux::init(float sample_rate, float* buf) {
     _sw.init(sample_rate);
     _sr = sample_rate;
+    // Force the tape-time LUT's one-time pow construction before the null
+    // memory return. PartFx can still call set_time_mod on the audio thread
+    // when GRIT is engaged without FLUX memory.
+    _time_mult = tape_time_mult(0.5f);
     _buf_ok = (buf != nullptr);
     if (!_buf_ok) return;
     _echo.Init(sample_rate, buf, kMaxSamples);
@@ -18,7 +22,6 @@ void Flux::init(float sample_rate, float* buf) {
     _dt_coef = daisysp::fmin(1.f / (0.03f * sample_rate), 1.f);
     _rate_idx = 3;               // boot "1/4"
     _bpm = 120.f;
-    _time_mult = tape_time_mult(0.5f);  // construct the LUT before audio
     _drag = 0.f;
     _drag_iv[0] = _drag_iv[1] = 0;
     _drag_i = 0;
