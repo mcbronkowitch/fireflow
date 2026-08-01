@@ -1426,7 +1426,7 @@ Do not delete either symbol requirement:
 FLUX now resolves from tape `flux.o`; `BbdLine::Process` resolves through `bbd_engine.o`/`bbd.o`. Update comments that still say the BBD line is reached from FLUX. Run:
 
 ```bash
-python -m unittest bench.test_itcm_link
+(cd bench && python -m unittest test_itcm_link)
 python bench/itcm_placement.py --help
 ```
 
