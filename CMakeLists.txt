@@ -90,8 +90,6 @@ add_executable(spky_tests
     engine/fx/flux.cpp
     tests/test_flux.cpp
     tests/test_tape_echo.cpp
-    engine/fx/drag.cpp
-    tests/test_drag.cpp
     engine/fx/bbd.cpp
     tests/test_bbd.cpp
     tests/test_bbd_music.cpp
@@ -170,7 +168,6 @@ add_executable(render
     engine/center/center.cpp
     engine/fx/grit.cpp
     engine/fx/flux.cpp
-    engine/fx/drag.cpp
     engine/fx/bbd.cpp
     engine/fx/reverb.cpp
     engine/fx/part_fx.cpp

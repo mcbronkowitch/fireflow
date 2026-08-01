@@ -23,12 +23,8 @@ void Flux::init(float sample_rate, float* left, float* right) {
     _gate_coef = daisysp::fmin(1.f / (link_tuning::kGateRampS * sample_rate), 1.f);
     _rate_idx = 3;
     _bpm = 120.f;
-    _drag = 0.f;
-    _drag_iv[0] = _drag_iv[1] = 0;
-    _drag_i = 0;
     _repeat_phase_samples = 0.f;
     _repeat_period_samples = 0.f;
-    _drag_active = false;
     _link = 0.f;
     _thin = 0.f;
     _rhy_gap[0] = _rhy_gap[1] = 0;
@@ -62,10 +58,6 @@ void Flux::recompute_time(bool immediate) {
     _delay_time = hz > 0.f ? 1.f / hz : 0.5f;
     update_thin_pattern();
     update_time_target(immediate);
-    if (_drag > 0.f && _drag_active) {
-        apply_drag();
-        if (immediate) _dt_current = _dt_target;
-    }
 }
 
 void Flux::update_time_target(bool immediate) {
@@ -97,7 +89,6 @@ void Flux::set_time_mod(float norm) {
     _time_mult = tape_time_mult(n);
     if (!_buf_ok) return;
     update_time_target(false);
-    if (_drag > 0.f && _drag_active) apply_drag();
 }
 
 void Flux::update_thin_pattern() {
@@ -121,32 +112,12 @@ void Flux::advance_gate() {
     }
 }
 
-void Flux::apply_drag() {
-    const bool thinning = _thin > 0.f && _rhy_valid;
-    if (!thinning) {
-        _gate_target = 1.f;
-        _thin_count = 0;
-        _thin_i = 0;
-    }
-    if (_drag <= 0.f || !_drag_active) {
-        update_time_target(false);
-        return;
-    }
-    const float target = static_cast<float>(_drag_iv[_drag_i]) / _sr;
-    _dt_target = std::pow(_delay_time, 1.f - _drag) * std::pow(target, _drag);
-    const float max_s = static_cast<float>(kTapeSamples - 2) / _sr;
-    _dt_target = clampf(_dt_target, 1.f / _sr, max_s);
-    refresh_repeat_scheduler();
-}
-
 void Flux::refresh_repeat_scheduler() {
-    const bool thinning = _thin > 0.f && _rhy_valid;
-    const bool dragging = _drag > 0.f && _drag_active;
-    if (thinning)
+    if (_thin > 0.f && _rhy_valid) {
+        // Stable musical grid: FXT time modulation moves the tape head but does
+        // not reset this counter every sample.
         _repeat_period_samples = _delay_time * _sr;
-    else if (dragging)
-        _repeat_period_samples = _dt_target * _sr;
-    else {
+    } else {
         _repeat_period_samples = 0.f;
         _repeat_phase_samples = 0.f;
     }
@@ -154,12 +125,17 @@ void Flux::refresh_repeat_scheduler() {
 
 void Flux::set_link(float norm) {
     if (!_buf_ok) return;
-    const float n = clampf(norm, -1.f, 1.f);
+    const float n = clampf(norm, 0.f, 1.f);
     if (n == _link) return;
     _link = n;
-    _drag = n > 0.f ? n : 0.f;
-    _thin = n < 0.f ? -n : 0.f;
-    apply_drag();
+    _thin = n;
+    const bool thinning = (_thin > 0.f && _rhy_valid);
+    if (!thinning) {
+        _gate_target = 1.f;
+        _thin_count = 0;
+        _thin_i = 0;
+    }
+    refresh_repeat_scheduler();
 }
 
 void Flux::set_rhythm(const RhythmView& rv) {
@@ -168,19 +144,7 @@ void Flux::set_rhythm(const RhythmView& rv) {
     _rhy_gap[1] = rv.gap[1];
     _rhy_valid = rv.valid;
     update_thin_pattern();
-
-    int32_t iv[2];
-    derive_intervals(rv, iv);
-    const bool active = iv[0] != drag_tuning::kNone && iv[1] != drag_tuning::kNone;
-    if (active == _drag_active && iv[0] == _drag_iv[0] && iv[1] == _drag_iv[1]) {
-        if (_thin > 0.f) apply_drag();
-        return;
-    }
-    _drag_iv[0] = iv[0];
-    _drag_iv[1] = iv[1];
-    _drag_active = active;
-    if (!active) _drag_i = 0;
-    apply_drag();
+    refresh_repeat_scheduler();
 }
 
 void Flux::process(float& l, float& r) {
@@ -189,18 +153,12 @@ void Flux::process(float& l, float& r) {
     if (_sw.is_idle()) return;
 
     const bool thinning = _thin > 0.f && _rhy_valid;
-    const bool dragging = _drag > 0.f && _drag_active;
-    if (thinning || dragging) {
+    if (thinning) {
         _repeat_phase_samples += 1.f;
         if (_repeat_period_samples > 0.f &&
             _repeat_phase_samples >= _repeat_period_samples) {
             _repeat_phase_samples = 0.f;
-            if (dragging) {
-                _drag_i ^= 1;
-                apply_drag();
-            } else {
-                advance_gate();
-            }
+            advance_gate();
         }
     }
 

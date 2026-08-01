@@ -13,11 +13,10 @@ namespace spky {
 // `fx/taps.h` was the fx-side consumer that needed this view (read via
 // `SuperModulator::rhythm()`, engine/instrument.h); it is deleted -- a BBD
 // has no read pointer, docs/superpowers/plans/2026-07-27-flux-bbd-delay.md
-// Task 6. `fx/drag.h` is the current fx-side consumer (spec 2026-07-28
-// flux-rhythm-drag): `derive_intervals(const RhythmView&, int32_t out[2])`
-// reads this struct to turn the sibling deck's published rhythm into FLUX's
-// two candidate delay times. The dependency still runs one way -- fx/drag.h
-// includes this header, never the reverse -- so the layering rule stands.
+    // Task 6. FLUX is the current fx-side consumer: it reads this struct to turn
+    // the sibling deck's published gaps into a THIN repeat pattern. The
+    // dependency still runs one way -- fx/flux.h includes this header, never
+    // the reverse -- so the layering rule stands.
 //
 // `valid` is false until three onsets have been recorded: two gaps need three
 // onsets, and the first onset after init/reset measures from an arbitrary

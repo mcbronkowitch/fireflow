@@ -131,10 +131,6 @@ public:
     // value actually pushed to the engine at the last control tick -- see
     // Part::excitation_eff().
     float excitation_bus(int p) const { return _parts[p].excitation_eff(); }
-    // Observer only, for tests (2026-07-28 flux-rhythm-drag, Task 3): the
-    // delay time DRAG is aiming FLUX at, before the 30 ms slew -- see
-    // Flux::drag_time_s().
-    float drag_time_for_test(int p) const { return _parts[p].fx().flux().drag_time_s(); }
     // Observer only, for tests: deck p's post-FX output from the sample just
     // processed. ch 0 = L, 1 = R. Latency cannot be measured from the summed
     // output, which cannot distinguish 0 samples from 1.
@@ -254,8 +250,8 @@ public:
     float pitch_cv(int p) const { return _parts[p].pitch_cv(); }
     bool  pitch_gate(int p) const { return _parts[p].mod().pitch_gate(); }
     // The bank's own published rhythm (see mod/rhythm_view.h). Read again by
-    // the control tick (spec 2026-07-28 flux-rhythm-drag): each part's FLUX
-    // takes its delay-time targets from the SIBLING's rhythm through this
+    // the control tick: each part's FLUX takes its THIN pattern from the
+    // SIBLING's rhythm through this
     // accessor -- `_parts[PART_A].fx().set_rhythm(rhythm(PART_B))` and the
     // mirror, in instrument.cpp's control tick -- and tests read it directly
     // (tests/test_instrument.cpp).

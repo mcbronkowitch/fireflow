@@ -107,10 +107,9 @@ void Instrument::process(const float* inL, const float* inR,
             // _fx.process() each sample.
             _parts[PART_A].set_other_deck_tap(_dry_tap[PART_B]);
             _parts[PART_B].set_other_deck_tap(_dry_tap[PART_A]);
-            // DRAG (spec 2026-07-28 flux-rhythm-drag): each deck's FLUX takes
-            // its delay-time targets from the SIBLING's PITCH-lane rhythm.
-            // Same cadence and same cross-over as the excitation tap above;
-            // derive_intervals runs here, never per sample.
+            // Each deck's FLUX derives its THIN pattern from the SIBLING's
+            // PITCH-lane rhythm. Publication keeps the same cadence and
+            // cross-over as the excitation tap above.
             _parts[PART_A].fx().set_rhythm(rhythm(PART_B));
             _parts[PART_B].fx().set_rhythm(rhythm(PART_A));
             _ctrl_ctr = Center::kCtrlInterval;

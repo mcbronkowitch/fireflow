@@ -87,8 +87,8 @@ struct InstrPartGroup {
 //   - set_master_drive, which reaches Instrument's own _limiter;
 //   - set_other_deck_tap, supplied at control rate by Instrument;
 //   - fx().set_rhythm(), likewise -- and harmless as well as correct, since
-//     setup_inst_worst_bbd never touches LINK, so _link stays 0 and both
-//     DRAG and THIN are inert on either side of the comparison.
+    //     setup_inst_worst_bbd never touches LINK, so _link stays 0 and THIN
+    //     is inert on either side of the comparison.
 void configure_worst_tape_flux(Part& part)
 {
     part.mod().set_tempo_bpm(120.f);

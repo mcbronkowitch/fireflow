@@ -494,9 +494,9 @@ void BbdEngine::process(float& outL, float& outR) {
     // _f_l/_f_r rather than jumping to them, because pitch tracks the clock
     // RATIO, not its difference -- a linear slew from 500 Hz to 8000 Hz would
     // cross the first octave in a twentieth of the time it spends on the
-    // last one. Flux's DRAG interpolates geometrically for exactly this
-    // reason, and it doubles as the VCO slew of the real circuit: a division
-    // change is click-free AND bends in pitch, like the hardware.
+    // last one. A multiplicative clock step handles this ratio directly and
+    // doubles as the VCO slew of the real circuit: a division change is
+    // click-free AND bends in pitch, like the hardware.
     //
     // CONSTANT RATE, not an exponential approach: a one-pole (even one built
     // from a multiplicative step rather than an additive one) still spends

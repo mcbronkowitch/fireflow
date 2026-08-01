@@ -8,6 +8,7 @@
 #include "fx/fx_util.h"
 #include "fx/tape_echo.h"
 #include "mod/divisions.h"
+#include "mod/rhythm_view.h"
 
 namespace spky {
 
@@ -37,14 +38,12 @@ public:
 
     float delay_target_for_test() const { return _dt_target; }
     float delay_current_for_test() const { return _dt_current; }
-    float drag_time_s() const { return _dt_target; }
     float gate_for_test() const { return _gate; }
     int thin_n_for_test(int i) const { return _thin_n[i]; }
 
 private:
     void recompute_time(bool immediate);
     void update_time_target(bool immediate);
-    void apply_drag();
     void refresh_repeat_scheduler();
     void update_thin_pattern();
     void advance_gate();
@@ -66,12 +65,8 @@ private:
     float _fb_norm = -1.f;
 
     float _link = 0.f;
-    float _drag = 0.f;
-    int32_t _drag_iv[2] = {0, 0};
-    int _drag_i = 0;
     float _repeat_phase_samples = 0.f;
     float _repeat_period_samples = 0.f;
-    bool _drag_active = false;
 
     float _thin = 0.f;
     int32_t _rhy_gap[2] = {0, 0};

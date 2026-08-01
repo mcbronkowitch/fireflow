@@ -35,7 +35,6 @@ CPP_SOURCES = \
 	../../engine/fx/grit.cpp \
 	../../engine/fx/flux.cpp \
 	../../engine/fx/bbd.cpp \
-	../../engine/fx/drag.cpp \
 	../../engine/fx/reverb.cpp \
 	../../engine/fx/part_fx.cpp \
 	../../engine/fx/comp.cpp \
