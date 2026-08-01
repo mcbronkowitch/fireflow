@@ -1,0 +1,33 @@
+{
+  "sample_rate": 48000,
+  "bpm": 110,
+  "duration_s": 30,
+  "init": [
+    {"_comment":"Stereo tape FLUX listening check: rate slew, feedback bloom, and FXT time Doppler."},
+    {"action":"set_sync","ivalue":1},
+    {"action":"set_rate","part":0,"value":0.2},
+    {"action":"set_step","part":0,"flag":true,"ivalue":6},
+    {"action":"set_shape","part":0,"value":1.0},
+    {"action":"set_range","part":0,"value":0.4},
+    {"action":"set_density","part":0,"value":0.4},
+    {"action":"set_voice_attack","part":0,"value":0.0},
+    {"action":"set_voice_decay","part":0,"value":0.1},
+    {"action":"set_target_active","part":1,"slot":4,"flag":false},
+    {"action":"set_target_base","part":1,"slot":4,"value":0.0},
+    {"action":"set_reverb_mix","value":0.1},
+    {"action":"set_fx_on","part":0,"svalue":"flux","flag":true},
+    {"action":"set_flux_mix","part":0,"value":0.8},
+    {"action":"set_flux_rate","part":0,"ivalue":3},
+    {"action":"set_fx_target_base","part":0,"slot":4,"value":0.65},
+    {"action":"set_fx_target_base","part":0,"slot":1,"value":0.5}
+  ],
+  "events": [
+    {"t":6.0,"action":"set_flux_rate","part":0,"ivalue":6},
+    {"t":10.0,"action":"set_flux_rate","part":0,"ivalue":0},
+    {"t":14.0,"action":"set_fx_target_base","part":0,"slot":4,"value":0.9},
+    {"t":18.0,"action":"set_fx_target_base","part":0,"slot":4,"value":0.55},
+    {"t":20.0,"action":"set_fx_target_active","part":0,"slot":1,"flag":true},
+    {"t":20.0,"action":"set_fx_target_depth","part":0,"slot":1,"value":0.35},
+    {"t":26.0,"action":"set_fx_target_depth","part":0,"slot":1,"value":0.0}
+  ]
+}

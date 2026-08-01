@@ -199,6 +199,70 @@ TEST_CASE("scenario: fx actions reach the instrument") {
     CHECK(l == l);
 }
 
+TEST_CASE("FLUX tape listening scenario covers rate, feedback, and time gestures") {
+    Scenario s;
+    std::string err;
+    const std::string path =
+        repo_file("host/render/scenarios/flux_tape_echo.json");
+    REQUIRE_MESSAGE(load_scenario(path, s, err), err);
+
+    CHECK(s.sample_rate == 48000);
+    CHECK(s.bpm == doctest::Approx(110.f));
+    CHECK(s.duration_s == doctest::Approx(30.0));
+
+    const auto has_init = [&](const char* action, int part, int slot,
+                              float value, int ivalue, bool flag) {
+        for (const Event& e : s.init_events) {
+            if (e.action == action && e.part == part && e.slot == slot &&
+                e.value == doctest::Approx(value) && e.ivalue == ivalue &&
+                e.flag == flag)
+                return true;
+        }
+        return false;
+    };
+    const auto has_event = [&](double time_s, const char* action, int slot,
+                               float value, int ivalue, bool flag) {
+        for (const Event& e : s.events) {
+            if (e.time_s == doctest::Approx(time_s) && e.action == action &&
+                e.part == PART_A && e.slot == slot &&
+                e.value == doctest::Approx(value) && e.ivalue == ivalue &&
+                e.flag == flag)
+                return true;
+        }
+        return false;
+    };
+
+    CHECK(has_init("set_fx_on", PART_A, 0, 0.f, 0, true));
+    CHECK(has_init("set_flux_mix", PART_A, 0, 0.8f, 0, false));
+    CHECK(has_init("set_flux_rate", PART_A, 0, 0.f, 3, false));
+    CHECK(has_init("set_fx_target_base", PART_A, FXT_FLUX_FB,
+                   0.65f, 0, false));
+    CHECK(has_init("set_fx_target_base", PART_A, FXT_FLUX_TIME,
+                   0.5f, 0, false));
+
+    CHECK(has_event(6.0, "set_flux_rate", 0, 0.f, 6, false));
+    CHECK(has_event(10.0, "set_flux_rate", 0, 0.f, 0, false));
+    CHECK(has_event(14.0, "set_fx_target_base", FXT_FLUX_FB,
+                    0.9f, 0, false));
+    CHECK(has_event(18.0, "set_fx_target_base", FXT_FLUX_FB,
+                    0.55f, 0, false));
+    CHECK(has_event(20.0, "set_fx_target_active", FXT_FLUX_TIME,
+                    0.f, 0, true));
+    CHECK(has_event(20.0, "set_fx_target_depth", FXT_FLUX_TIME,
+                    0.35f, 0, false));
+    CHECK(has_event(26.0, "set_fx_target_depth", FXT_FLUX_TIME,
+                    0.f, 0, false));
+
+    for (const Event& e : s.init_events) {
+        CHECK(e.action != "set_drive");
+        CHECK(e.action != "set_stages");
+    }
+    for (const Event& e : s.events) {
+        CHECK(e.action != "set_drive");
+        CHECK(e.action != "set_stages");
+    }
+}
+
 // DENSE 0 leaves only the downbeat/anchor slot able to fire, so after the
 // guaranteed first-sample fire (STEP entry: step -1 -> 0) the next natural
 // note is a full cycle away. Settle past that single note's decay before
