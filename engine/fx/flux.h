@@ -97,6 +97,8 @@ private:
     // The ONLY place _dt_target is written. Called from recompute_time,
     // set_link, set_rhythm and the step flip in process().
     void apply_drag();
+    // Arms the shared repeat scheduler for whichever LINK half is active.
+    void refresh_repeat_scheduler();
     // Re-derives _thin_n from the neighbour's raw gaps and the CURRENT ladder
     // time. Called whenever either moves.
     void update_thin_pattern();
@@ -161,18 +163,18 @@ private:
     // see the comment there for why the member default is not relied on.
     float _fb_scale = 1.2f;
 
-    // DRAG state. _drag is now the derived positive half of _link (the
-    // negative half, THIN, is separate and lands in a later step). _drag_iv
+    // DRAG state. _drag is the derived positive half of _link. _drag_iv
     // holds the neighbour's two intervals in samples; _drag_i selects which
-    // one is in force; _drag_phase counts samples into the current step and
-    // _drag_step_len is that step's length in samples, cached so process()
-    // does not multiply per sample.
+    // one is in force.
     float   _link = 0.f;
     float   _drag = 0.f;
     int32_t _drag_iv[2] = { 0, 0 };
     int     _drag_i = 0;
-    float   _drag_phase = 0.f;
-    float   _drag_step_len = 0.f;
+    // Shared repeat scheduler. Its phase counts samples into the active
+    // repeat and its period is cached so process() does not multiply per
+    // sample. THIN and DRAG are mutually exclusive consumers.
+    float   _repeat_phase_samples = 0.f;
+    float   _repeat_period_samples = 0.f;
     bool    _drag_active = false;
 
     // LINK's negative half. _rhy_gap holds the neighbour's RAW gaps -- not

@@ -22,8 +22,8 @@ void Flux::init(float sample_rate, float* buf) {
     _drag = 0.f;
     _drag_iv[0] = _drag_iv[1] = 0;
     _drag_i = 0;
-    _drag_phase = 0.f;
-    _drag_step_len = 0.f;
+    _repeat_phase_samples = 0.f;
+    _repeat_period_samples = 0.f;
     _drag_active = false;
     _gate_coef = daisysp::fmin(1.f / (link_tuning::kGateRampS * sample_rate), 1.f);
     // set_link's guard compares against _link, and this reset also zeroes
@@ -253,10 +253,10 @@ void Flux::advance_gate() {
 // blend would put the perceived midpoint in the wrong place. Same reasoning
 // that gave the modulation lane its x1/4..x4 mapping.
 //
-// _drag_step_len is the step's length in SAMPLES of the interpolated time, not
-// of the neighbour's raw interval -- the echo's repeat interval is what is
-// actually in force, so stepping on it is what makes "one interval per repeat"
-// true at every DRAG setting rather than only at 1.
+// The DRAG branch's repeat period is the interpolated time, not the
+// neighbour's raw interval -- the echo's repeat interval is what is actually
+// in force, so stepping on it makes "one interval per repeat" true at every
+// DRAG setting rather than only at 1.
 void Flux::apply_drag() {
     const bool thinning = (_thin > 0.f && _rhy_valid);
     // Owned by thinning, not by which branch below is taken: the DRAG branch
@@ -275,15 +275,25 @@ void Flux::apply_drag() {
     }
     if (_drag <= 0.f || !_drag_active) {
         _dt_target = _delay_time;
-        // Thinning needs the same accumulator, stepping on the LADDER time --
-        // the clock never moves on that half, which is the entire point.
-        _drag_step_len = thinning ? _delay_time * _sr : 0.f;
-        if (!thinning) _drag_phase = 0.f;
+        refresh_repeat_scheduler();
         return;
     }
     const float target = static_cast<float>(_drag_iv[_drag_i]) / _sr;
     _dt_target = std::pow(_delay_time, 1.f - _drag) * std::pow(target, _drag);
-    _drag_step_len = _dt_target * _sr;
+    refresh_repeat_scheduler();
+}
+
+void Flux::refresh_repeat_scheduler() {
+    const bool thinning = (_thin > 0.f && _rhy_valid);
+    const bool dragging = (_drag > 0.f && _drag_active);
+    if (thinning)
+        _repeat_period_samples = _delay_time * _sr;
+    else if (dragging)
+        _repeat_period_samples = _dt_target * _sr;
+    else {
+        _repeat_period_samples = 0.f;
+        _repeat_phase_samples = 0.f;
+    }
 }
 
 void Flux::set_link(float norm) {
@@ -311,17 +321,18 @@ void Flux::set_rhythm(const RhythmView& rv) {
     const bool active = (iv[0] != drag_tuning::kNone && iv[1] != drag_tuning::kNone);
     if (active == _drag_active && iv[0] == _drag_iv[0] && iv[1] == _drag_iv[1]) {
         // The guard only knows about the DRAG intervals, but _rhy_valid may
-        // have just changed above it, and apply_drag is where the thinning
-        // half arms the shared accumulator. It has to run. It costs nothing:
+        // have just changed above it, and apply_drag reaches the thinning
+        // half's repeat scheduler. It has to run. It costs nothing:
         // thinning implies _drag == 0, which takes apply_drag's inert branch,
-        // and that branch leaves _drag_phase alone while thinning is running.
+        // and that branch leaves the scheduler phase alone while thinning is
+        // running.
         if (_thin > 0.f) apply_drag();
         return;
     }
     _drag_iv[0] = iv[0];
     _drag_iv[1] = iv[1];
     _drag_active = active;
-    if (!active) _drag_i = 0;   // apply_drag() below owns _drag_phase
+    if (!active) _drag_i = 0;   // apply_drag() below refreshes the scheduler
     apply_drag();
 }
 
@@ -330,14 +341,15 @@ void Flux::process(float& l, float& r) {
     float send = _sw.process();
     if (_sw.is_idle()) return;   // fully off: bit-exact dry
 
-    // One accumulator, two consumers. They are mutually exclusive by
+    // One repeat scheduler, two consumers. They are mutually exclusive by
     // construction: _drag and _thin come from opposite signs of one knob.
     const bool thinning = (_thin > 0.f && _rhy_valid);
     const bool dragging = (_drag > 0.f && _drag_active);
     if (thinning || dragging) {
-        _drag_phase += 1.f;
-        if (_drag_step_len > 0.f && _drag_phase >= _drag_step_len) {
-            _drag_phase = 0.f;
+        _repeat_phase_samples += 1.f;
+        if (_repeat_period_samples > 0.f &&
+            _repeat_phase_samples >= _repeat_period_samples) {
+            _repeat_phase_samples = 0.f;
             if (dragging) { _drag_i ^= 1; apply_drag(); }
             else            advance_gate();
         }

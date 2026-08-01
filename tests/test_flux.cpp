@@ -418,7 +418,7 @@ TEST_CASE("flux: DRAG at 1 alternates between the neighbour's two intervals") {
 
     auto run = [&f](int n) { for (int i = 0; i < n; ++i) { float l = 0.f, r = 0.f; f.process(l, r); } };
 
-    // _drag_phase is never reset to 0 by a run() boundary, only by a flip --
+    // The repeat phase is never reset to 0 by a run() boundary, only by a flip --
     // so each leg's margin is measured from wherever the PREVIOUS leg left
     // phase, not from a fresh 0. Step 0 is 12000 samples: run(11990) leaves
     // phase at 11990 (10 short), and the first 10 calls of the next run(20)
@@ -649,7 +649,7 @@ TEST_CASE("flux: no valid neighbour rhythm leaves every repeat sounding") {
     CHECK(f.gate_for_test() == 1.f);
 }
 
-TEST_CASE("flux: a valid but DRAG-unusable rhythm still arms the thinning accumulator") {
+TEST_CASE("flux: a valid but DRAG-unusable rhythm still arms THIN's repeat scheduler") {
     // set_rhythm's early-return guard only tracks the DRAG intervals: a
     // 20-sample gap is legal on RhythmView (gaps clamp at 1, not at
     // drag_tuning::kMinGap == 32) but derive_intervals rejects it, so
@@ -657,9 +657,9 @@ TEST_CASE("flux: a valid but DRAG-unusable rhythm still arms the thinning accumu
     // any rhythm was ever seen (_drag_active starts false, _drag_iv starts
     // {0,0}), active == _drag_active and iv == _drag_iv -- the guard's
     // "nothing changed for DRAG" branch. That branch is also the thinning
-    // half's ONLY arming point for _drag_step_len (apply_drag is the single
-    // writer). Order matters: LINK first, rhythm second, is what leaves the
-    // accumulator unarmed if that branch does not also call apply_drag().
+    // half's ONLY route to the repeat scheduler (apply_drag reaches its
+    // refresh). Order matters: LINK first, rhythm second, is what leaves the
+    // scheduler unarmed if that branch does not also call apply_drag().
     Flux f;
     f.init(48000.f, s_buf);
     f.set_on(true, true);
@@ -679,8 +679,8 @@ TEST_CASE("flux: a valid but DRAG-unusable rhythm still arms the thinning accumu
     // interval0's own first repeat into one continuous dwell at 1 spanning
     // TWO repeat lengths, alternating with interval0's second repeat (a
     // single repeat length) ducked -- sound[0,6000), duck[6000,9000),
-    // sound[9000,15000), duck[15000,18000), ... If the accumulator were
-    // left unarmed (_drag_step_len == 0), advance_gate() would instead fire
+    // sound[9000,15000), duck[15000,18000), ... If the scheduler were
+    // left unarmed (repeat period == 0), advance_gate() would instead fire
     // every SAMPLE (or, with the defensive process() guard alone, never
     // fire at all) -- either way the gate would never track this grid.
     run(1500);  CHECK(f.gate_for_test() == doctest::Approx(1.f).epsilon(0.02));  // mid first sound dwell
@@ -689,9 +689,25 @@ TEST_CASE("flux: a valid but DRAG-unusable rhythm still arms the thinning accumu
     run(4500);  CHECK(f.gate_for_test() == doctest::Approx(0.f).epsilon(0.02));  // t=16500, mid second duck dwell
 }
 
-TEST_CASE("flux: an oscillating DRAG-active flag does not restart the thinning accumulator") {
-    // set_rhythm's `if (!active) { _drag_i = 0; _drag_phase = 0.f; }` used to
-    // reset _drag_phase on every active-flag flip, including into thinning --
+TEST_CASE("flux: THIN owns a repeat scheduler even when DRAG has no intervals") {
+    Flux f;
+    f.init(48000.f, s_buf);
+    f.set_rate(10);                         // short, easy-to-observe repeat
+    f.set_link(-1.f);
+    f.set_rhythm(drag_view(6000, 20));      // valid for THIN, invalid for DRAG
+    f.set_on(true, true);
+    float l = 0.f, r = 0.f;
+    bool ducked = false;
+    for (int i = 0; i < 18000; ++i) {
+        f.process(l, r);
+        if (f.gate_for_test() < 0.1f) ducked = true;
+    }
+    CHECK(ducked);
+}
+
+TEST_CASE("flux: an oscillating DRAG-active flag does not restart THIN's repeat scheduler") {
+    // set_rhythm's `if (!active) { _drag_i = 0; repeat phase = 0; }` used to
+    // reset the repeat phase on every active-flag flip, including into thinning --
     // the one case where it must not (apply_drag, called on the very next
     // line, already owns that reset for the non-thinning case; this line's
     // only REACHABLE effect was to break the one case it should leave alone).
