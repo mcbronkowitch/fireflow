@@ -181,17 +181,19 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "wave_2x4",
         "fx_none",
         "fx_grit",
+        # The stereo tape FLUX price. Its five retained RATE rows in `sweep`
+        # show the same tape path across the delay ladder.
         "fx_flux_sdram",
         "fx_comp",
         "oliverb_solo_sram",
         "instrument_init",
         "instrument_worst",
         "inst_worst_deck_bus",
+        # The harness's checksum-equal AXI/DTCM placement pair. Both names are
+        # historical protocol anchors, but the workload is now the same BBD
+        # part-engine worst/frozen case as the explicit row below.
         "instrument_worst_bbd",
         "instrument_worst_bbd_dtcm",
-        # Both decks on the voiceless BBD PART ENGINE (its stereo pair), as
-        # distinct from the legacy-named pair above, which remains the hot
-        # stereo tape-FLUX transitional setup until Task 7 repoints both rows.
         "inst_bbd_engine_worst",
     ),
     "sweep": (
@@ -692,23 +694,26 @@ def verdict(captures):
         fits = worst_offline < 100.0 and worst_callback < 100.0
         if fits:
             conclusion = (
-                "**Conclusion: the transitional DTCM+tape-FLUX gate fits.** "
+                "**Conclusion: the DTCM BBD-engine gate fits.** "
                 "Every offline and "
                 "real-callback maximum is below 100 % of the block budget."
             )
         else:
             conclusion = (
-                "**Conclusion: the transitional DTCM+tape-FLUX gate does not fit.** "
+                "**Conclusion: the DTCM BBD-engine gate does not fit.** "
                 "At least "
                 "one offline or real-callback maximum is at or above 100 % "
                 "of the block budget."
             )
         out.write(
-            "**Transitional DTCM+tape-FLUX budget — go/no-go.** The decision workload is "
-            "`instrument_worst_bbd_dtcm`: the full eight-voice instrument, "
-            "hot stereo tape FLUX (shortest RATE, feedback 0.9), and the "
-            "retained DTCM instrument state. Task 7 repoints this legacy-named pair "
-            "to the BBD engine before benchmark reporting. Run maxima "
+            "**DTCM BBD-engine budget — go/no-go.** The decision workload is "
+            "`instrument_worst_bbd_dtcm`: the full instrument with both decks "
+            "on the BBD part engine, shortest division, clock ceiling, maximum "
+            "COLOR/feedback/mix, STEP freeze engaged, live inputs, and retained "
+            "DTCM instrument state. `instrument_worst_bbd` is its checksum-equal "
+            "AXI comparison. `fx_flux_sdram` separately prices stereo tape FLUX; "
+            "the five retained `sweep_flux_rate_*` rows carry its delay-time "
+            "cost curve. Run maxima "
             "(offline / real callback): %s. Across all %d repeats, the worst "
             "maxima are **%.2f %% offline** and **%.2f %% in the real "
             "callback**. %s\n\n"
@@ -722,7 +727,7 @@ def verdict(captures):
         )
     else:
         out.write(
-            "**Transitional DTCM+tape-FLUX budget — NO RESULT.** "
+            "**DTCM BBD-engine budget — NO RESULT.** "
             "`instrument_worst_bbd_dtcm` did not produce both numeric "
             "offline and callback maxima in every repeat. The go/no-go "
             "question is unanswered.\n\n"

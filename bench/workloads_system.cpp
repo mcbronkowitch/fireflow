@@ -414,47 +414,10 @@ void setup_inst_worst_deck_bus()
                                   g_instrument_harness.out_r, kBlock);
 }
 
-// --- 10. legacy instrument pair, tape FLUX hot -------------------------------
-// These rows keep their historical protocol names until Task 7 re-points the
-// pair together. For now the tape RATE and feedback are held hot.
-//
-// The setup also performs its historical explicit settle so both stereo tape
-// pairs have filled before measurement; Task 7 will re-point this named pair
-// together before any new benchmark capture is reported.
-void configure_inst_worst_bbd(Instrument& inst)
-{
-    for (int p = 0; p < PART_COUNT; ++p) {
-        inst.set_flux_rate(p, kFluxRateCount - 1);   // shortest tape division
-        inst.set_fx_target_base(p, FXT_FLUX_FB, 0.9f);
-    }
-    // Fill both lines and settle every envelope before the runner measures.
-    const float* in = test_input();
-    for (int b = 0; b < 200; ++b)
-        inst.process(in, in, g_instrument_harness.out_l,
-                     g_instrument_harness.out_r, kBlock);
-}
-
-void setup_inst_worst_bbd()
-{
-    auto& group = construct_axi_instrument_group();
-    configure_inst_common(group.instrument);
-    configure_inst_worst(group.instrument);
-    configure_inst_worst_bbd(group.instrument);
-}
-
-void setup_inst_worst_bbd_dtcm()
-{
-    auto& inst = construct_dtcm_instrument();
-    configure_inst_common(inst);
-    configure_inst_worst(inst);
-    configure_inst_worst_bbd(inst);
-}
-
-// --- 11. the whole instrument, both decks on the BBD PART ENGINE ------------
-// Spec 2026-07-31 bbd-part-engine 8.3 row 1. Distinct from
-// the legacy-named instrument_worst_bbd pair above, which still measures hot
-// stereo tape FLUX behind SYNTH decks until Task 7 repoints it: this row
-// measures the voiceless BBD engine's stereo pair and no synth voices.
+// --- 10. the whole instrument, both decks on the BBD PART ENGINE ------------
+// The legacy-named AXI/DTCM pair and the explicit movement-2 row all use this
+// one setup. That makes them the harness's checksum-equal placement pair while
+// fx_flux_sdram remains the independent stereo tape-FLUX price.
 //
 // Two deliberate departures from a naive "instrument_worst plus set_engine":
 //
@@ -470,6 +433,13 @@ void configure_inst_bbd_engine_worst(Instrument& inst)
 {
     for (int p = 0; p < PART_COUNT; ++p) {
         inst.set_engine(p, ENGINE_BBD);
+        // Freeze is unreachable in FLOW. Enter STEP before any settling so
+        // the freshly swapped-in engine receives STEP through _engine_swap's
+        // state replay, then keep its gate high throughout the settle.
+        inst.set_step(p, true, 16);
+        inst.set_color(p, 1.f);              // maximum stereo clock spread
+        inst.set_voice_attack(p, 0.f);       // 2 ms freeze ramp
+        inst.set_voice_decay(p, 1.f);        // no trim below freeze gain
         // A voiceless engine has nothing of its own to make a sound with:
         // with no source selected the lines see silence and the row measures
         // an idling delay. Both sources on, which is also the mutual routing
@@ -514,13 +484,16 @@ void configure_inst_bbd_engine_worst(Instrument& inst)
         inst.set_voice_detune(p, 0.f);
         inst.set_voice_filt(p, 1.f);
     }
-    // Fill both stereo pairs and settle every envelope, slew and the engine
-    // swap's own SoftSwitch fade before the runner measures. Same 200-block
-    // depth the neighbouring BBD and deck-bus rows use.
+    // Fill both stereo pairs and settle every envelope, slew, freeze ramp and
+    // the engine swap's own SoftSwitch fade before the runner measures. Both
+    // gates are retriggered on every block, exactly like the measured process.
     const float* in = test_input();
-    for (int b = 0; b < 200; ++b)
+    for (int b = 0; b < 200; ++b) {
+        inst.trigger_manual(PART_A);
+        inst.trigger_manual(PART_B);
         inst.process(in, in, g_instrument_harness.out_l,
                      g_instrument_harness.out_r, kBlock);
+    }
 
     // The self-check, and the reason it is here rather than in a comment.
     // Movement 1's Task 5 shipped a row that stayed on ENGINE_SYNTH and
@@ -533,16 +506,29 @@ void configure_inst_bbd_engine_worst(Instrument& inst)
         assert(inst.engine_id(p) == ENGINE_BBD);
         assert(inst.bbd_div(p) == 0);                       // 1/32, the shortest
         assert(inst.bbd_clock_hz(p) >= bbd_tuning::kClockMaxHz);
-        assert(!inst.bbd_frozen(p));                        // the freeze is off
+        assert(inst.bbd_frozen(p));
     }
 }
 
-void setup_inst_bbd_engine_worst()
+void setup_inst_worst_bbd()
 {
     auto& group = construct_axi_instrument_group();
     configure_inst_common(group.instrument);
     configure_inst_worst(group.instrument);
     configure_inst_bbd_engine_worst(group.instrument);
+}
+
+void setup_inst_worst_bbd_dtcm()
+{
+    auto& inst = construct_dtcm_instrument();
+    configure_inst_common(inst);
+    configure_inst_worst(inst);
+    configure_inst_bbd_engine_worst(inst);
+}
+
+void setup_inst_bbd_engine_worst()
+{
+    setup_inst_worst_bbd();
 }
 
 float proc_inst()
@@ -570,6 +556,14 @@ float proc_inst()
     return acc;
 }
 
+float proc_inst_bbd_frozen()
+{
+    auto& inst = *g_active_instrument;
+    inst.trigger_manual(PART_A);
+    inst.trigger_manual(PART_B);
+    return proc_inst();
+}
+
 } // namespace
 
 const Workload kCoreWorkloads[] = {
@@ -588,11 +582,12 @@ const Workload kCoreWorkloads[] = {
     { "system", "instrument_init",    setup_inst_init, proc_inst    },
     { "system", "instrument_worst",   setup_inst_worst,proc_inst    },
     { "system", "inst_worst_deck_bus", setup_inst_worst_deck_bus, proc_inst },
-    { "system", "instrument_worst_bbd", setup_inst_worst_bbd, proc_inst },
+    { "system", "instrument_worst_bbd",
+      setup_inst_worst_bbd, proc_inst_bbd_frozen },
     { "system", "instrument_worst_bbd_dtcm",
-      setup_inst_worst_bbd_dtcm, proc_inst },
+      setup_inst_worst_bbd_dtcm, proc_inst_bbd_frozen },
     { "system", "inst_bbd_engine_worst",
-      setup_inst_bbd_engine_worst, proc_inst },
+      setup_inst_bbd_engine_worst, proc_inst_bbd_frozen },
 };
 const int kCoreCount = sizeof(kCoreWorkloads) / sizeof(kCoreWorkloads[0]);
 

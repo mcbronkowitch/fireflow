@@ -19,10 +19,9 @@ SECTIONS
         build/flux.o(.text .text.*)
         build/bbd.o(.text .text.*)
         /* The BBD part engine (spec 2026-07-31 bbd-part-engine, movement 2).
-           BbdLine::Process's only new user lives here, and its per-sample
-           kernel -- BbdEngine::process/process_in -- is on the audio path of
-           every deck set to ENGINE_BBD, so it belongs in the hotset for the
-           same reason synth_engine.o and voice.o do. */
+           Flux::process resolves independently from flux.o above. The BBD
+           engine reaches BbdLine::Process through bbd_engine.o/bbd.o, and its
+           process/process_in kernel is on every ENGINE_BBD audio path. */
         build/bbd_engine.o(.text .text.*)
         build/grit.o(.text .text.*)
         build/reverb.o(.text .text.*)

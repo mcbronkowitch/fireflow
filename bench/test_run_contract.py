@@ -981,7 +981,20 @@ class ProfileContract(unittest.TestCase):
                 resolve_profile("system"),
             )
 
-    def test_o2_verdict_uses_worst_transitional_tape_flux_repeat(self):
+    def test_bbd_engine_rows_remain_registered_and_anchored(self):
+        system_rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["system"]
+        for name in (
+            "instrument_worst_bbd",
+            "instrument_worst_bbd_dtcm",
+            "inst_bbd_engine_worst",
+        ):
+            self.assertIn(name, system_rows)
+
+        anchors = runner.anchor_names(resolve_profile("system"))
+        self.assertIn("instrument_worst_bbd", anchors)
+        self.assertIn("instrument_worst_bbd_dtcm", anchors)
+
+    def test_o2_verdict_uses_worst_bbd_engine_repeat(self):
         first = self.gate_capture(
             avg_cyc=947087,
             max_cyc=985609,
@@ -1015,13 +1028,16 @@ class ProfileContract(unittest.TestCase):
             report,
         )
         self.assertIn(
-            "**Conclusion: the transitional DTCM+tape-FLUX gate does not fit.**",
+            "**Conclusion: the DTCM BBD-engine gate does not fit.**",
             report,
         )
-        self.assertIn("hot stereo tape FLUX", report)
-        self.assertIn("Task 7 repoints this legacy-named pair", report)
+        self.assertIn("both decks on the BBD part engine", report)
+        self.assertIn("STEP freeze engaged", report)
+        self.assertNotIn("tape-FLUX gate", report)
+        self.assertIn("`fx_flux_sdram`", report)
+        self.assertIn("stereo tape FLUX", report)
 
-    def test_o3_verdict_uses_worst_transitional_tape_flux_repeat(self):
+    def test_o3_verdict_uses_worst_bbd_engine_repeat(self):
         first = self.gate_capture(
             avg_cyc=916310,
             max_cyc=954884,
@@ -1051,7 +1067,7 @@ class ProfileContract(unittest.TestCase):
             report,
         )
         self.assertIn(
-            "**Conclusion: the transitional DTCM+tape-FLUX gate fits.**",
+            "**Conclusion: the DTCM BBD-engine gate fits.**",
             report,
         )
 
@@ -1360,13 +1376,17 @@ class SweepProfileTest(unittest.TestCase):
 
     def test_flux_rate_sweep_rows_are_expected(self):
         rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["sweep"]
-        for index in (0, 3, 6, 8, 11):
-            self.assertIn("sweep_flux_rate_%d" % index, rows)
+        self.assertEqual(
+            tuple(name for name in rows if name.startswith("sweep_flux_rate_")),
+            tuple("sweep_flux_rate_%d" % index for index in (0, 3, 6, 8, 11)),
+        )
 
     def test_retired_stages_sweep_rows_are_rejected(self):
         rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["sweep"]
-        for stages in (512, 2048, 8192, 16384):
-            self.assertNotIn("sweep_stages_%d" % stages, rows)
+        self.assertFalse(
+            any(name.startswith("sweep_stages_") for name in rows),
+            "no FLUX STAGES sweep row may return",
+        )
 
     def test_grit_ablation_rows_are_expected(self):
         rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["sweep"]
