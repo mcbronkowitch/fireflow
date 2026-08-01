@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <vector>
 #include "render/scenario.h"
@@ -261,6 +262,31 @@ TEST_CASE("FLUX tape listening scenario covers rate, feedback, and time gestures
         CHECK(e.action != "set_drive");
         CHECK(e.action != "set_stages");
     }
+}
+
+TEST_CASE("render scenarios expose no retired FLUX actions") {
+    const std::filesystem::path directory =
+        repo_file("host/render/scenarios");
+    size_t scenario_count = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+        if (!entry.is_regular_file() || entry.path().extension() != ".json")
+            continue;
+        ++scenario_count;
+
+        Scenario s;
+        std::string err;
+        const std::string path = entry.path().string();
+        CAPTURE(path);
+        REQUIRE_MESSAGE(load_scenario(path, s, err), err);
+
+        const auto check = [&](const Event& e) {
+            CHECK(e.action != "set_drive");
+            CHECK(e.action != "set_stages");
+        };
+        for (const Event& e : s.init_events) check(e);
+        for (const Event& e : s.events) check(e);
+    }
+    CHECK(scenario_count > 0);
 }
 
 // DENSE 0 leaves only the downbeat/anchor slot able to fire, so after the

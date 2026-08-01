@@ -23,15 +23,10 @@
     {"action":"set_fx_on","part":0,"svalue":"flux","flag":true},
     {"action":"set_flux_mix","part":0,"value":0.8},
     {"action":"set_flux_rate","part":0,"ivalue":3},
-    {"action":"set_fx_target_base","part":0,"slot":4,"value":0.7},
-    {"action":"set_stages","part":0,"value":0.8},
-    {"action":"set_drive","part":0,"value":0.15}
+    {"action":"set_fx_target_base","part":0,"slot":4,"value":0.7}
   ],
   "events": [
     {"_comment":"A long tail at high feedback, so the echo has time to separate from the dry signal and its position becomes obvious.","t":8.0,"action":"set_fx_target_base","part":0,"slot":4,"value":0.85},
-
-    {"_comment":"DRIVE sweep. Not about width: with one line the saturator sees the mono SUM, so it bites earlier than it did with two (spec section 4). This makes that change audible in the same file rather than needing its own render.","t":12.0,"action":"set_drive","part":0,"value":0.85},
-    {"t":18.0,"action":"set_drive","part":0,"value":0.15},
     {"t":20.0,"action":"set_fx_target_base","part":0,"slot":4,"value":0.7}
   ]
 }
