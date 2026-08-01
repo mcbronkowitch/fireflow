@@ -1361,7 +1361,7 @@ TEST_CASE("bbd engine: 60 s of silence at the input costs no denormal stall"
 // engine-level cases share, because two decks running at once must not be
 // writing into the same cells.
 static float s_inst_bbd[PART_COUNT][2][BbdEngine::kCells];
-static float s_inst_echo[PART_COUNT][BbdEngine::kCells];
+static float s_inst_echo[PART_COUNT][Flux::kMaxSamples];
 
 TEST_CASE("bbd engine: the output stays inside its stated bound with BOTH decks blooming") {
     // Spec 5.13: "The engine's output stays within its stated bound with both
