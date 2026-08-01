@@ -192,7 +192,7 @@ struct SweepGritGroup {
 // So a single process() call is enough for the ENGAGED probe's clock to be
 // meaningful; no settling loop is needed on the probe itself.
 //
-// BbdEcho::Init leaves cells_ at its full capacity (Flux::kMaxSamples ==
+// BbdEcho::Init leaves cells_ at its full capacity (BbdEngine::kCells ==
 // 8192 cells, i.e. a 16384-stage buffer) unless SetStages narrows it --
 // DOUBLE the boot-default Flux's actual footprint (8192 stages == 4096
 // cells). Sweep B above exists because stage count is not free on this
@@ -201,13 +201,9 @@ struct SweepGritGroup {
 // explicit SetStages(stages) calls below, using the probe's own achieved
 // stage count, remove it.
 //
-// Two echo buffers, one per part (post-mono-collapse each part owns exactly
-// one, not a stereo pair): the probe takes PART_B's (m.echo[1]) for its one
-// throwaway process() call, group.l takes PART_A's (m.echo[0], the same
-// buffer setup_flux_rate/setup_stages above use for their PartFx), and
-// group.r reuses PART_B's after the probe is done with it -- see the comment
-// on probe.init below for why that reuse cannot leak into the measured
-// window.
+// The throwaway Flux probe takes PART_B's echo buffer (m.echo[1]). The two
+// measured raw BBD lines take PART_A's dedicated BBD pair (m.bbd[PART_A]),
+// so their storage contract stays independent of FLUX.
 //
 // Settle: _rate_idx 3 at bpm 120 is the SAME division Sweep B holds fixed
 // (see the comment on setup_stages above), for the same reason -- the clock
@@ -522,19 +518,9 @@ void setup_flux_lines_2ch()
     // fx_flux_sdram measures -- see the derivation above SweepLineGroup.
     static Flux probe;
     const FxMem& m = fx_mem();
-    // PART_B's buffer (m.echo[1]) for the throwaway probe. Post-mono-collapse
-    // each part owns exactly one buffer, so group.r below reuses this same
-    // buffer for the measured line -- safe because it happens strictly after
-    // the probe's one process() call, and BbdEcho::Init (via BbdLine::Init's
-    // Reset()) memsets the buffer before the measured line ever reads it, so
-    // nothing the probe wrote survives into the measured window. That safety
-    // is a DURABLE invariant, not just a fact about the code as written
-    // today: `probe` is static and keeps a live pointer into m.echo[1] for
-    // the rest of the run, so it must never be process()'d again after this
-    // point -- a later call (a second probe.process() added below, or this
-    // block moved after group.r.Init()) would write through that pointer
-    // and silently corrupt the measured line, the same class of silent
-    // failure the assert below already exists to catch for a stopped clock.
+    // PART_B's echo buffer (m.echo[1]) is reserved for the throwaway Flux
+    // probe. The measured BBD lines below use the dedicated m.bbd arena, so
+    // the temporary probe remains independent of their benchmark window.
     probe.init(kSampleRate, m.echo[1]);
     // MUST engage the probe. Flux::process (flux.cpp) returns before line 320
     // (where _clock_hz is assigned) at TWO guards: `if (!_buf_ok) return;`
@@ -568,8 +554,8 @@ void setup_flux_lines_2ch()
 
     auto& group = g_sweep_arena.emplace<SweepLineGroup>();
     group.clock_hz = hz;
-    group.l.Init(kSampleRate, m.echo[0], Flux::kMaxSamples);
-    group.r.Init(kSampleRate, m.echo[1], Flux::kMaxSamples);
+    group.l.Init(kSampleRate, m.bbd[PART_A][0], BbdEngine::kCells);
+    group.r.Init(kSampleRate, m.bbd[PART_A][1], BbdEngine::kCells);
     // Match the probe's stage count -- see the SweepLineGroup comment on why
     // leaving BbdEcho::Init's full-capacity default in place would confound
     // the subtraction this row exists to keep clean.

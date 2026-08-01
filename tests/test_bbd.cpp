@@ -764,11 +764,12 @@ TEST_CASE("bbd echo: self-oscillation is reachable at DRIVE 0, within FEEDBACK's
 // --- Task 2: the part-engine hooks, neutral by default ----------------------
 
 TEST_CASE("bbd: the new hooks are all neutral at their defaults") {
-    static float bufA[Flux::kMaxSamples];
-    static float bufB[Flux::kMaxSamples];
+    static constexpr size_t kBbdCells = bbd_tuning::kMaxStages / 2;
+    static float bufA[kBbdCells];
+    static float bufB[kBbdCells];
     BbdEcho a, b;
-    a.Init(48000.f, bufA, Flux::kMaxSamples);
-    b.Init(48000.f, bufB, Flux::kMaxSamples);
+    a.Init(48000.f, bufA, kBbdCells);
+    b.Init(48000.f, bufB, kBbdCells);
     // b touches every new setter with its documented neutral value.
     b.SetLossCoef(bbd_tuning::kLossCoef);
     b.SetDither(0.f);
@@ -786,9 +787,10 @@ TEST_CASE("bbd: the new hooks are all neutral at their defaults") {
 }
 
 TEST_CASE("bbd: Reset clears the line, the compander and the feedback state") {
-    static float buf[Flux::kMaxSamples];
+    static constexpr size_t kBbdCells = bbd_tuning::kMaxStages / 2;
+    static float buf[kBbdCells];
     BbdEcho e;
-    e.Init(48000.f, buf, Flux::kMaxSamples);
+    e.Init(48000.f, buf, kBbdCells);
     e.SetFeedback(0.8f);
     e.SetStages(2048);
     for (int i = 0; i < 24000; ++i) e.Process(std::sin(i * 0.05f), 6000.f);
@@ -803,9 +805,10 @@ TEST_CASE("bbd: Reset clears the line, the compander and the feedback state") {
 }
 
 TEST_CASE("bbd: dither makes a silent line audible and stays inaudible itself") {
-    static float buf[Flux::kMaxSamples];
+    static constexpr size_t kBbdCells = bbd_tuning::kMaxStages / 2;
+    static float buf[kBbdCells];
     BbdEcho e;
-    e.Init(48000.f, buf, Flux::kMaxSamples);
+    e.Init(48000.f, buf, kBbdCells);
     e.SeedDither(0x1234u);
     e.SetDither(4e-5f);
     e.SetStages(4096);
@@ -821,8 +824,9 @@ TEST_CASE("bbd: dither makes a silent line audible and stays inaudible itself") 
 }
 
 TEST_CASE("bbd: the loss coefficient moves the darkness") {
-    static float bufD[Flux::kMaxSamples];
-    static float bufB[Flux::kMaxSamples];
+    static constexpr size_t kBbdCells = bbd_tuning::kMaxStages / 2;
+    static float bufD[kBbdCells];
+    static float bufB[kBbdCells];
     auto hi_energy = [](BbdEcho& e) {
         float s = 0.f;
         for (int i = 0; i < 48000; ++i) {
@@ -833,8 +837,8 @@ TEST_CASE("bbd: the loss coefficient moves the darkness") {
         return s;
     };
     BbdEcho dark, bright;
-    dark.Init(48000.f, bufD, Flux::kMaxSamples);
-    bright.Init(48000.f, bufB, Flux::kMaxSamples);
+    dark.Init(48000.f, bufD, kBbdCells);
+    bright.Init(48000.f, bufB, kBbdCells);
     dark.SetStages(4096);   bright.SetStages(4096);
     dark.SetLossCoef(0.2f);
     bright.SetLossCoef(0.95f);
@@ -842,8 +846,9 @@ TEST_CASE("bbd: the loss coefficient moves the darkness") {
 }
 
 TEST_CASE("bbd: the feedback tilt brightens or darkens the repeats") {
-    static float bufN[Flux::kMaxSamples];
-    static float bufU[Flux::kMaxSamples];
+    static constexpr size_t kBbdCells = bbd_tuning::kMaxStages / 2;
+    static float bufN[kBbdCells];
+    static float bufU[kBbdCells];
     auto tail_hi = [](BbdEcho& e) {
         float s = 0.f;
         for (int i = 0; i < 96000; ++i) {
@@ -854,8 +859,8 @@ TEST_CASE("bbd: the feedback tilt brightens or darkens the repeats") {
         return s;
     };
     BbdEcho flat, up;
-    flat.Init(48000.f, bufN, Flux::kMaxSamples);
-    up.Init(48000.f, bufU, Flux::kMaxSamples);
+    flat.Init(48000.f, bufN, kBbdCells);
+    up.Init(48000.f, bufU, kBbdCells);
     flat.SetStages(4096);  up.SetStages(4096);
     flat.SetFeedback(0.7f); up.SetFeedback(0.7f);
     up.SetFeedbackTilt(0.8f, 2000.f);
@@ -863,9 +868,10 @@ TEST_CASE("bbd: the feedback tilt brightens or darkens the repeats") {
 }
 
 TEST_CASE("bbd: the feedback DC blocker stops a frozen loop drifting") {
-    static float buf[Flux::kMaxSamples];
+    static constexpr size_t kBbdCells = bbd_tuning::kMaxStages / 2;
+    static float buf[kBbdCells];
     BbdEcho e;
-    e.Init(48000.f, buf, Flux::kMaxSamples);
+    e.Init(48000.f, buf, kBbdCells);
     e.SetStages(4096);
     e.SetFeedbackDcBlock(true);
     e.SetFeedback(0.999f);

@@ -13,8 +13,8 @@
 
 using namespace spky;
 
-static float s_bbd_l[Flux::kMaxSamples];
-static float s_bbd_r[Flux::kMaxSamples];
+static float s_bbd_l[BbdEngine::kCells];
+static float s_bbd_r[BbdEngine::kCells];
 
 TEST_CASE("bbd engine: the id is appended, never renumbered") {
     CHECK(ENGINE_BBD == 5);
@@ -74,7 +74,7 @@ TEST_CASE("bbd engine: a deck set to BBD reaches the BBD, not the test tone") {
 TEST_CASE("bbd engine: input reaches the output, and MIX decides how much") {
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_cycle(1.0f);
     float t[LANE_COUNT] = { 0.f, 0.5f, 0.5f, 0.f, 0.f };   // SRC SIZE PITCH MOT LEVEL
     auto rms = [&](float mix) {
@@ -100,7 +100,7 @@ TEST_CASE("bbd engine: input reaches the output, and MIX decides how much") {
 TEST_CASE("bbd engine: the delay time follows LANE_SIZE and lands on the grid") {
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_cycle(2.0f);                  // a 2 s phrase
     // Another Task-4 case predating the STEP/FLOW split: it changes SIZE
     // across two set_targets() calls with no fire in between and expects the
@@ -126,7 +126,7 @@ TEST_CASE("bbd engine: the delay time follows LANE_SIZE and lands on the grid") 
 TEST_CASE("bbd engine: LANE_PITCH moves the clock and leaves the delay alone") {
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_cycle(1.0f);
     // This case predates the STEP/FLOW split (Task 5) and is about the
     // continuous-follow property of the clock as PITCH moves -- a FLOW-mode
@@ -156,7 +156,7 @@ TEST_CASE("bbd engine: the output stays inside its stated bound") {
     // this fixture reaches and is not asserted here.
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_cycle(0.5f);
     float t[LANE_COUNT] = { 1.f, 0.5f, 0.5f, 1.f, 1.f };   // DRIVE 1, FEEDBACK 1
     e.set_targets(t, 0.5f);
@@ -212,7 +212,7 @@ TEST_CASE("bbd engine: a mono source through the stereo engine stays mono") {
 TEST_CASE("bbd engine: COLOR 0 with a mono source is bit-identical L to R") {
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_cycle(0.5f);
     e.set_width(0.f);
     float t[LANE_COUNT] = { 0.3f, 1.f, 0.5f, 0.6f, 1.f };
@@ -236,7 +236,7 @@ TEST_CASE("bbd engine: COLOR 0 with a mono source is bit-identical L to R") {
 TEST_CASE("bbd engine: COLOR opened splits the lines and keeps the grid") {
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_cycle(0.5f);
     e.set_width(0.6f);
     float t[LANE_COUNT] = { 0.3f, 1.f, 0.5f, 0.6f, 1.f };
@@ -273,7 +273,7 @@ TEST_CASE("bbd engine: COLOR opened splits the lines and keeps the grid") {
 TEST_CASE("bbd engine: FLOW is free, STEP is on the scale grid") {
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_cycle(1.0f);
     float t[LANE_COUNT] = { 0.f, 1.f, 0.5f, 0.f, 1.f };
     e.set_flow(true);
@@ -298,7 +298,7 @@ TEST_CASE("bbd engine: in FLOW a cycle boundary does not latch the clock") {
     // for would not happen.
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_cycle(1.0f);
     e.set_flow(true);
     float t[LANE_COUNT] = { 0.f, 1.f, 0.2f, 0.f, 1.f };
@@ -323,7 +323,7 @@ TEST_CASE("bbd engine: a fire during FLOW does not leak a latch into a later STE
     // the assertion that actually depends on the guard.
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_cycle(1.0f);
     e.set_flow(true);
     float t[LANE_COUNT] = { 0.f, 1.f, 0.2f, 0.f, 1.f };
@@ -341,7 +341,7 @@ TEST_CASE("bbd engine: a fire during FLOW does not leak a latch into a later STE
 TEST_CASE("bbd engine: in STEP the clock holds between fires") {
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_cycle(1.0f);
     e.set_flow(false);
     float t[LANE_COUNT] = { 0.f, 1.f, 0.2f, 0.f, 1.f };
@@ -365,7 +365,7 @@ TEST_CASE("bbd engine: a freshly constructed STEP deck with no fires still refle
     // -- derives a real clock from whatever PITCH actually is.
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_cycle(1.0f);
     e.set_flow(false);                      // STEP -- the default, made explicit
     float t[LANE_COUNT] = { 0.f, 1.f, 0.8f, 0.f, 1.f };   // PITCH away from 0.5
@@ -429,7 +429,7 @@ TEST_CASE("bbd engine: PITCH is inaudible at FEEDBACK 0, and that is the design"
     auto tail = [](float motion, float pitch_a, float pitch_b, float* out, int n) {
         BbdEngine e;
         e.init(48000.f);
-        e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+        e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
         e.set_cycle(0.5f);
         e.set_flow(true);
         float t[LANE_COUNT] = { 0.f, 1.f, pitch_a, motion, 1.f };
@@ -515,7 +515,7 @@ TEST_CASE("bbd engine: the freeze holds a broadband burst per octave") {
     // per-octave criterion, DRIVE swept during the hold.
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_cycle(1.0f);
     e.set_flow(false);
     e.set_decay(1.f);                      // DECAY max: no trim below k0
@@ -656,7 +656,7 @@ TEST_CASE("bbd engine: the freeze holds a broadband burst per octave") {
 TEST_CASE("bbd engine: a frozen loop shows no DC growth over 60 s") {
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_cycle(1.0f);
     e.set_flow(false);
     e.set_decay(1.f);
@@ -696,7 +696,7 @@ TEST_CASE("bbd engine: DECAY trims below k0, ATTACK sets the ramp") {
     auto tail_after = [](float decay, float seconds) {
         BbdEngine e;
         e.init(48000.f);
-        e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+        e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
         e.set_cycle(1.0f);
         e.set_flow(false);
         e.set_attack(0.f);
@@ -737,7 +737,7 @@ TEST_CASE("bbd engine: DECAY trims below k0, ATTACK sets the ramp") {
     auto tail_with_late_decay = [](float late_decay) {
         BbdEngine e;
         e.init(48000.f);
-        e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+        e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
         e.set_cycle(1.0f);
         e.set_flow(false);
         e.set_attack(0.f);
@@ -786,10 +786,10 @@ TEST_CASE("bbd engine: reset() leaves the lines holding no freeze, not just no c
     // lines behave as though it is on. A reset deck at FEEDBACK 0 must take
     // its input and let it die; one still holding the freeze's loop gain
     // sustains it instead.
-    static float rl[Flux::kMaxSamples], rr[Flux::kMaxSamples];
+    static float rl[BbdEngine::kCells], rr[BbdEngine::kCells];
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(rl, rr, Flux::kMaxSamples);
+    e.init_buffers(rl, rr, BbdEngine::kCells);
     e.set_cycle(1.0f);
     e.set_flow(false);
     e.set_decay(1.f);
@@ -843,7 +843,7 @@ TEST_CASE("bbd engine: ATTACK sets the freeze ramp, and the ramp lands exactly")
     // rests entirely on an arithmetic claim that nothing witnessed. frozen()
     // cannot witness it either: it reports the gate's decision, not the
     // crossfade.
-    static float prime_l[Flux::kMaxSamples], prime_r[Flux::kMaxSamples];
+    static float prime_l[BbdEngine::kCells], prime_r[BbdEngine::kCells];
 
     // 1. The geometric map, 2 ms .. 2 s, read back through the observer.
     {
@@ -864,7 +864,7 @@ TEST_CASE("bbd engine: ATTACK sets the freeze ramp, and the ramp lands exactly")
     auto ramp_after = [](float attack, int n, float* freeze_out) {
         BbdEngine e;
         e.init(48000.f);
-        e.init_buffers(prime_l, prime_r, Flux::kMaxSamples);
+        e.init_buffers(prime_l, prime_r, BbdEngine::kCells);
         e.set_cycle(1.0f);
         e.set_flow(false);
         e.set_attack(attack);
@@ -924,7 +924,7 @@ TEST_CASE("bbd engine: ATTACK sets the freeze ramp, and the ramp lands exactly")
     auto after_landing = [](bool with_input, std::vector<float>* out) {
         BbdEngine e;
         e.init(48000.f);
-        e.init_buffers(prime_l, prime_r, Flux::kMaxSamples);
+        e.init_buffers(prime_l, prime_r, BbdEngine::kCells);
         e.set_cycle(1.0f);
         e.set_flow(false);
         e.set_attack(1.f);                        // the ramp that sticks
@@ -978,7 +978,7 @@ TEST_CASE("bbd engine: FLOW ignores the gate, so the freeze is unreachable there
     // FLOW -- a mode-dependent dead knob, accepted, and it belongs in the manual.
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_flow(true);
     e.set_gate(true);
     CHECK(!e.frozen());
@@ -987,7 +987,7 @@ TEST_CASE("bbd engine: FLOW ignores the gate, so the freeze is unreachable there
 TEST_CASE("bbd engine: CHOKE closes the input and lets the tail run out") {
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_cycle(0.5f);
     e.set_flow(true);
     float t[LANE_COUNT] = { 0.f, 1.f, 0.5f, 0.6f, 1.f };
@@ -1082,7 +1082,7 @@ TEST_CASE("bbd engine: DETUNE's slew decides how far a modulated bend travels") 
     auto travel = [](float detune) {
         BbdEngine e;
         e.init(48000.f);
-        e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+        e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
         e.set_cycle(1.0f);
         e.set_flow(true);
         e.set_detune(detune);
@@ -1118,7 +1118,7 @@ TEST_CASE("bbd engine: DETUNE's glide crosses equal clock RATIOS in equal time")
     // shrunk by the time it gets there).
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.set_cycle(1.0f);
     e.set_flow(true);
     e.set_detune(1.f);                    // the slowest setting, easiest to resolve
@@ -1196,7 +1196,7 @@ TEST_CASE("bbd engine: satisfies the part-engine contract") {
     // for why each of its three blocks is engine-agnostic.
     check_part_engine_contract<BbdEngine>([](BbdEngine& e) {
         e.init(48000.f);
-        e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+        e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
         e.set_cycle(0.5f);
     });
 }
@@ -1216,7 +1216,7 @@ TEST_CASE("bbd engine: with no input and FEEDBACK high it blooms from the dither
     // still passed.
     BbdEngine e;
     e.init(48000.f);
-    e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     e.reset();
     e.set_cycle(0.5f);
     // DRIVE 0.5, SIZE mid, PITCH mid, FEEDBACK 1, MIX 1. The loop gain is
@@ -1252,7 +1252,7 @@ TEST_CASE("bbd engine: with no input and FEEDBACK high it blooms from the dither
     // -- this leg would grow too.
     BbdEngine q;
     q.init(48000.f);
-    q.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+    q.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
     q.reset();
     q.set_cycle(0.5f);
     float t0[LANE_COUNT] = { 0.5f, 0.5f, 0.5f, 0.f, 1.f };   // FEEDBACK 0
@@ -1307,7 +1307,7 @@ TEST_CASE("bbd engine: 60 s of silence at the input costs no denormal stall"
     auto run = [](bool silent, long* subnormals) {
         BbdEngine e;
         e.init(48000.f);
-        e.init_buffers(s_bbd_l, s_bbd_r, Flux::kMaxSamples);
+        e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
         e.reset();
         e.set_cycle(0.5f);
         // FEEDBACK below unity on purpose: a blooming loop never decays, so
@@ -1361,7 +1361,7 @@ TEST_CASE("bbd engine: 60 s of silence at the input costs no denormal stall"
 // engine-level cases share, because two decks running at once must not be
 // writing into the same cells.
 static float s_inst_bbd[PART_COUNT][2][BbdEngine::kCells];
-static float s_inst_echo[PART_COUNT][Flux::kMaxSamples];
+static float s_inst_echo[PART_COUNT][BbdEngine::kCells];
 
 TEST_CASE("bbd engine: the output stays inside its stated bound with BOTH decks blooming") {
     // Spec 5.13: "The engine's output stays within its stated bound with both

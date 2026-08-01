@@ -29,7 +29,7 @@ BbdEcho g_echo;
 
 void setup_bbd_ceiling()
 {
-    g_echo.Init(kSampleRate, sdram_arena(), Flux::kMaxSamples);
+    g_echo.Init(kSampleRate, sdram_arena(), bbd_tuning::kMaxStages / 2);
     g_echo.SetStages(bbd_tuning::kMaxStages);
     g_echo.SetDrive(0.85f);             // deep into the saturator every pass
     g_echo.SetFeedback(1.1f);           // just under the bloom, loop always hot
@@ -63,7 +63,7 @@ BbdLine g_line;
 
 void setup_bbd_line_only()
 {
-    g_line.Init(sdram_arena(), Flux::kMaxSamples, kSampleRate);
+    g_line.Init(sdram_arena(), bbd_tuning::kMaxStages / 2, kSampleRate);
     g_line.SetStages(bbd_tuning::kMaxStages);
     g_line.SetClock(bbd_tuning::kClockMaxHz);
     for (int i = 0; i < 49152; ++i)
