@@ -1329,8 +1329,28 @@ def test_sampler_preset_init_snapshot():
 
     check('json_object_set_new(root, "formSongVersion", json_integer(1));' in cpp,
           "new patches do not carry the FORM/SONG schema marker")
+    check('json_object_set_new(root, "linkVersion", json_integer(1));' in cpp,
+          "new patches do not carry the LINK schema marker")
     check('json_object_get(root, "formSongVersion")' in cpp,
           "FORM/SONG migration does not check the schema marker")
+    check('json_object_get(data, "linkVersion")' in cpp,
+          "LINK migration does not check its independent marker")
+    check('void fromJson(json_t* module_root) override' in cpp,
+          "legacy LINK does not capture raw module params before Rack clamps them")
+    check(cpp.count('Module::fromJson(module_root);') == 1,
+          "module-level loader must call Rack's base loader exactly once")
+    if ('json_object_get(module_root, "params")' in cpp
+            and 'Module::fromJson(module_root);' in cpp):
+        check(cpp.index('json_object_get(module_root, "params")') <
+              cpp.index('Module::fromJson(module_root);'),
+              "legacy LINK raw params are read after Rack clamps them")
+    check('migrate_legacy_link((float)json_number_value(value_json))' in cpp,
+          "legacy LINK migration does not use the raw numeric patch value")
+    if ('Module::fromJson(module_root);' in cpp
+            and 'params[p ? LINK_B : LINK_A].setValue(migrated[p])' in cpp):
+        check(cpp.index('Module::fromJson(module_root);') <
+              cpp.index('params[p ? LINK_B : LINK_A].setValue(migrated[p])'),
+              "legacy LINK migration is not applied after Rack's base restore")
     check('json_object_get(root, "lastBasis")' in cpp,
           "legacy lastBasis state is not read for migration")
     check('json_object_get(root, "principle")' in cpp,
@@ -1346,6 +1366,14 @@ def test_sampler_preset_init_snapshot():
           "legacy FORM value is not migrated into the renamed stable slot")
     check("params[p ? SONG_B : SONG_A].setValue((float)migrated.song);" in cpp,
           "legacy patches do not default SONG to AAAB")
+    check('configParam<LinkQuantity>(c.id, 0.f, 1.f, init, lbl);' in cpp,
+          "LINK is not configured as unipolar THIN")
+    check('return v > 0.005f ? string::f("thin %.0f %%", 100.f * v) : "off";' in cpp,
+          "LINK does not display only thin percentage or off")
+    check('"drag %.0f %%"' not in cpp,
+          "LINK still displays the removed DRAG behavior")
+    check('migrate_legacy_link(params[id].getValue())' not in cpp,
+          "LINK migration incorrectly reads Rack-clamped parameter values")
 
     makefile_path = os.path.join(here, "..", "Makefile")
     with open(makefile_path) as f:

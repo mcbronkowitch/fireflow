@@ -79,10 +79,9 @@ Each part's right-click context menu provides a separate **Detune A** or
 **Detune B** control. Detune is independent of SOURCE: it is a constant
 `0..35 ct` spread and defaults to `6 ct`.
 
-Each part's context menu also carries a **Drive A** / **Drive B** control —
-FLUX's BBD echo saturation, moved off the panel to make room for DRAG (spec
-2026-07-28 flux-rhythm-drag). It behaves exactly as it always did: `0..1`
-maps to `0..+12 dB` of drive inside the delay loop, and it defaults to `0.2`.
+Each part's context menu still carries the append-only **Drive A** / **Drive B**
+patch state. Movement 3 no longer routes it into FLUX; it remains present only
+so saved parameter IDs do not move.
 
 ## Sampler
 
@@ -299,31 +298,16 @@ stale WAV sitting in patch storage.
   imported file is always in tune. The asymmetry is intentional: importing a
   file at the wrong pitch would be a bug, but re-rating material that's
   already sitting in the buffer is varispeed, not a bug.
-- **FLUX self-oscillates above roughly 0.56 on FEEDBACK, at any DRIVE.**
-  That is the intended behaviour, not a fault — but it means DRIVE cannot
-  stop it. If the echo is ringing forever, **turn FEEDBACK down**; turning
-  the context menu's DRIVE control down will not help, because DRIVE was
-  never what was holding it up. Measured: histories that reach the same
-  settings hot or cold converge to the same level, so there is no stuck
-  state to clear. Below ~0.56 the tail always dies, at every DRIVE setting.
-- **LINK (per part) reaches the OTHER deck's rhythm into FLUX's echo**, on
-  the panel knob that used to be DRIVE. Centre is off — bit-identical to a
-  FLUX that never heard a rhythm. The two halves get there in opposite ways:
-  turned **left**, FLUX's clock never moves — the delay stays on its RATE
-  rung, and the neighbour's rhythm just decides which of FLUX's own repeats
-  sound, ducking the rest with a short ramped gain. Turned **right**, FLUX's
-  clock alternates between the sibling deck's two most recent onset gaps
-  instead of tracking RATE, so the echo audibly locks onto whatever the
-  other part is playing and bends pitch doing it; RATE's influence fades out
-  as this half rises. Reach left when you want the neighbour's rhythm without
-  moving FLUX's pitch, right when the pitch bend is the point. The left half
-  needs two things to have anything to say: RATE sets its resolution, since
-  the pattern can only place events on FLUX's own repeat grid — once a rung
-  is coarse enough that the neighbour's gaps round to a single repeat there
-  is nothing left to skip and the control goes quiet, so 1/16 or 1/32 is
-  where it actually articulates — and nothing happens at all until the other
-  deck has published a valid rhythm. DRIVE, which still governs BBD
-  saturation, moved to each part's context menu (see SOURCE and Detune).
+- **FLUX is a stereo tape echo.** TIME sweeps from x1/4 to x4 and reaches each
+  new setting through a 30 ms slew, producing tape/Doppler motion instead of
+  a stepped change.
+- **LINK (per part) is THIN across its full travel.** It lets the other deck's
+  rhythm thin FLUX's repeats without handing over the echo clock. Patches from
+  the bipolar LINK era migrate automatically: old negative THIN settings keep
+  their depth, while old positive DRAG settings load at `off`.
+- **DRIVE and STAGES no longer voice FLUX.** Their append-only parameter IDs
+  remain stable for old patches. STAGES is used only as the PITCH-lane base
+  while a deck is in BBD.
 - **Memory:** each `Spotymod` instance allocates well over its two 42 s
   stereo record buffers up front, whether or not the sampler is ever used on
   either part — closer to **~38.66 MB total**, not the 32 MB the record
@@ -354,12 +338,12 @@ deck — it passes the input through dry, at unity), **PITCH** sets the delay
 clock (subject to the FEEDBACK caveat below), and **SIZE** picks the
 delay-time rung the same way FLUX's own RATE division does.
 
-Two panel controls change meaning:
+One panel control changes meaning:
 - **SOURCE**'s live caption reads `DRIVE` instead of `TIMB`/`ORG`/`FRAME`/`MATL`.
-- **STAGES** (the FX-box control that otherwise sets FLUX's own delay-line
-  stage count) is repointed to the PITCH lane's base — the same
-  "re-point a knob orphaned by the engine switch" pattern the Sampler
-  already uses to turn SUB into grain `LEN`.
+
+The append-only **STAGES** control no longer voices FLUX. It is used only on a
+BBD deck, where it supplies the PITCH lane's base — the same "re-point an
+orphaned knob" pattern the Sampler uses to turn SUB into grain `LEN`.
 
 The **VOICE row**'s six controls take on BBD-specific jobs: **ATTACK** is
 the freeze's engage/release time, **DECAY** trims the tail below unity so a

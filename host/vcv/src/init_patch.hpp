@@ -7,15 +7,9 @@ namespace spkyvcv {
 // It replaced the sampler.vcvm snapshot of 2026-07-24 wholesale: 46 of the 84
 // values moved. Two were NOT taken from the file --
 //
-//   LINK_B  the preset had 0.002664, a bipolar knob left a hair off centre.
-//           Visually that is "off", but any positive LINK engages the DRAG
-//           path, so shipping it would put deck B permanently in a token drag
-//           state. Zeroed. LINK_A was already 0. Both must ship at 0 for the
-//           reason the flux-rhythm-drag spec gives and the flux-link spec
-//           inherited: the instrument must not boot with the neighbouring deck
-//           owning FLUX's delay time. LINK is the bipolar control that
-//           replaced DRAG -- an older note in this file called it by that
-//           name, and no DRAG param exists any more.
+//   LINK_B  the preset had 0.002664 from its former bipolar travel. Zeroed.
+//           LINK_A was already 0. Both remain at 0, now the neutral end of the
+//           unipolar THIN control rather than the centre of a bipolar control.
 //
 //   STAGES_B  the preset's 1.0 IS wanted here (user, 2026-07-28) and was taken.
 //           An earlier note in this file warned against restoring exactly that

@@ -8,6 +8,7 @@
 #include "generated_panel.hpp"   // enums + control table (generated from res/gen_panel.py)
 #include "init_patch.hpp"       // sampler.vcvm snapshot + non-param init state
 #include "form_song_migration.hpp"
+#include "link_migration.hpp"
 #include "bbd_edge_state.hpp"   // ENG->BBD edge detector (dependency-free, unit-tested)
 
 // The portable engine core -- exactly the same headers the desktop render host
@@ -71,14 +72,11 @@ struct DriveQuantity : ParamQuantity {
     }
 };
 
-// LINK tooltip: bipolar. Left thins the echo on the neighbour's rhythm without
-// touching the clock; right hands the delay time over and bends pitch doing it.
+// LINK tooltip: unipolar THIN depth over the full knob travel.
 struct LinkQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
         const float v = getValue();
-        if (v > 0.005f)  return string::f("drag %.0f %%", 100.f * v);
-        if (v < -0.005f) return string::f("thin %.0f %%", -100.f * v);
-        return "off";
+        return v > 0.005f ? string::f("thin %.0f %%", 100.f * v) : "off";
     }
 };
 
@@ -256,7 +254,7 @@ struct Spotymod : Module {
                     else if (c.id == FLUXFB_A || c.id == FLUXFB_B)
                         configParam<FluxFbQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == LINK_A || c.id == LINK_B)
-                        configParam<LinkQuantity>(c.id, -1.f, 1.f, init, lbl);
+                        configParam<LinkQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == STAGES_A || c.id == STAGES_B)
                         configParam<StagesQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == SOURCE_A || c.id == SOURCE_B) {
@@ -754,6 +752,7 @@ struct Spotymod : Module {
     json_t* dataToJson() override {
         json_t* root = json_object();
         json_object_set_new(root, "formSongVersion", json_integer(1));
+        json_object_set_new(root, "linkVersion", json_integer(1));
 
         json_t* parts = json_array();
         for (int p = 0; p < spky::PART_COUNT; ++p) {
@@ -784,6 +783,43 @@ struct Spotymod : Module {
         return root;
     }
 
+    // LINK migration must straddle Rack's base loader: paramsFromJson clamps
+    // the old bipolar values to this build's 0..1 range before dataFromJson.
+    // FORM/SONG stays in dataFromJson; the migrations touch disjoint ids.
+    void fromJson(json_t* module_root) override {
+        json_t* data = json_object_get(module_root, "data");
+        json_t* link_version = data ? json_object_get(data, "linkVersion") : nullptr;
+        const bool modern_link = is_modern_link_version(
+            link_version && json_is_integer(link_version),
+            link_version && json_is_integer(link_version)
+                ? json_integer_value(link_version) : 0);
+
+        bool have_raw[spky::PART_COUNT] = {};
+        float migrated[spky::PART_COUNT] = {};
+        if (!modern_link) {
+            json_t* raw_params = json_object_get(module_root, "params");
+            size_t i;
+            json_t* raw_param;
+            json_array_foreach(raw_params, i, raw_param) {
+                json_t* id_json = json_object_get(raw_param, "id");
+                json_t* value_json = json_object_get(raw_param, "value");
+                if (!json_is_integer(id_json) || !json_is_number(value_json)) continue;
+                const int id = (int)json_integer_value(id_json);
+                for (int p = 0; p < spky::PART_COUNT; ++p) {
+                    if (id != (p ? LINK_B : LINK_A)) continue;
+                    have_raw[p] = true;
+                    migrated[p] = migrate_legacy_link((float)json_number_value(value_json));
+                }
+            }
+        }
+
+        Module::fromJson(module_root);
+        if (!modern_link)
+            for (int p = 0; p < spky::PART_COUNT; ++p)
+                if (have_raw[p])
+                    params[p ? LINK_B : LINK_A].setValue(migrated[p]);
+    }
+
     void dataFromJson(json_t* root) override {
         if (!root) return;
         json_t* version = json_object_get(root, "formSongVersion");
@@ -808,6 +844,7 @@ struct Spotymod : Module {
                 params[p ? SONG_B : SONG_A].setValue((float)migrated.song);
             }
         }
+
         json_t* parts = json_object_get(root, "sampler");
         if (!parts) return;
         for (int p = 0; p < spky::PART_COUNT; ++p) {
