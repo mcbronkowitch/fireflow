@@ -1460,6 +1460,13 @@ python -m unittest bench.test_run_contract bench.test_itcm_link
 
 Expected: all green.
 
+- [ ] **Step 6a: Commit the locally verified harness before hardware**
+
+`bench/run.py` rejects hardware evidence from a dirty worktree. Commit the five
+verified harness/contract/ITCM files now, before programming the Daisy. Record
+that exact commit as the benchmark build identity; do not add a note or claim
+hardware results yet.
+
 - [ ] **Step 7: Measure on the Daisy in one build/session**
 
 Flash and run using `bench/README.md`. Capture `pct_avg` and `pct_max`, but report and compare **`pct_max`** for:
@@ -1489,22 +1496,18 @@ Create `docs/bench/2026-08-01-<sha>-flux-tape.md` in the same structure as the l
 - AXI/DTCM checksum equality;
 - an explicit statement that movement 3 is musical differentiation, not a proven CPU saving.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 9: Commit the hardware evidence**
 
 ```bash
-git add bench/workloads_system.cpp bench/run.py bench/test_run_contract.py \
-        bench/itcm_hot.lds bench/itcm_placement.py docs/bench/
+git add docs/bench/2026-08-01-<sha>-flux-tape.md \
+        docs/bench/2026-08-01-<sha>-sweep-axi-o2.md \
+        docs/bench/2026-08-01-<sha>-sweep-axi-o2.csv
 git commit -F - <<'EOF'
-bench(flux): re-point the DTCM pair at the BBD engine
+docs(bench): record the BBD engine hardware session
 
-The harness's only AXI/DTCM checksum pair keeps its names and gate role, but
-now measures the BBD part engine at the real worst case: shortest division,
-clock ceiling, COLOR open and STEP freeze engaged. The explicit engine row
-shares the same configuration.
-
-fx_flux_sdram now prices the stereo tape echo. Every claimed row was verified
-through its linked map registry and exact ELF row name, and instrument_worst was captured in the same build as the
-pct_max control.
+The exact harness commit completed two Daisy runs. Preserve the accepted raw
+Markdown/CSV capture beside the exact-commit interpretation, ITCM proof,
+checksums, flat RATE observation and explicit CPU-saving non-claim.
 
 Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>
 EOF
