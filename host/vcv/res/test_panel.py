@@ -27,7 +27,7 @@ def approx(a, b, tol=0.02):
 
 
 def ctl(enum):
-    for c in g.PANEL_PARAMS + g.INPUTS + g.OUTPUTS:
+    for c in g.RUNTIME_PANEL_PARAMS + g.INPUTS + g.OUTPUTS:
         if c.enum == enum:
             return c
     raise KeyError(enum)
@@ -50,6 +50,7 @@ PARAM_ORDER = [
     'LINK_A', 'LINK_B', 'STAGES_A', 'STAGES_B',
     'REC_A', 'REC_B', 'REV_MIX_A', 'REV_MIX_B',
     'SHUFFLE', 'DETUNE_A', 'DETUNE_B', 'DRIVE_A', 'DRIVE_B',
+    'FLUXTIME_A', 'FLUXTIME_B',
 ]
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
@@ -61,8 +62,9 @@ PARAM_TIPS = [
     'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'DRIVE',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
     'FILT', 'FILT', 'TIDE', 'FRATE', 'FRATE', 'FFB', 'FFB', 'COLOR',
-    'COLOR', 'LINK', 'LINK', 'STGS', 'STGS', 'REC', 'REC', 'ROOM', 'ROOM',
+    'COLOR', 'LINK', 'LINK', 'BBD Pitch', 'BBD Pitch', 'REC', 'REC', 'ROOM', 'ROOM',
     'SHUFL', 'Detune A', 'Detune B', 'Drive A', 'Drive B',
+    'Tape Time', 'Tape Time',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
@@ -72,9 +74,9 @@ LIGHT_ORDER = ['GATE_A_L', 'GATE_B_L', 'REC_A_L', 'REC_B_L']
 def test_enum_order():
     """Patch compatibility. If this fails, every saved .vcv breaks."""
     check([c.enum for c in g.PARAMS] == PARAM_ORDER, "PARAMS order changed")
-    check([c.enum for c in g.PARAMS[-5:]] ==
-          ['SHUFFLE', 'DETUNE_A', 'DETUNE_B', 'DRIVE_A', 'DRIVE_B'],
-          "hidden params must append after SHUFFLE")
+    check(PARAM_ORDER[-4:] ==
+          ['DRIVE_A', 'DRIVE_B', 'FLUXTIME_A', 'FLUXTIME_B'],
+          "FLUXTIME must be the trailing ParamId pair")
     check([c.enum for c in g.INPUTS] == INPUT_ORDER, "INPUTS order changed")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
@@ -94,13 +96,50 @@ def test_source_and_hidden_detune_partition():
           f"hidden params are {hidden!r}")
     check(not any(e in visible for e in hidden),
           "widgetless detune/drive leaked into panel controls")
-    check([c.enum for c in g.PARAMS] == visible + hidden,
-          "complete ParamId order must end with hidden detune/drive")
+    appended = [c.enum for c in g.APPENDED_PANEL_PARAMS]
+    check([c.enum for c in g.PARAMS] == visible + hidden + appended,
+          "complete ParamId order must preserve declared partitions")
     h = g.header()
     check("{DETUNE_A," not in h and "{DETUNE_B," not in h,
           "widgetless detune leaked into kParamCtls")
     check("{DRIVE_A," not in h and "{DRIVE_B," not in h,
           "widgetless drive leaked into kParamCtls")
+
+
+def test_bbd_pitch_flux_time_collections():
+    """The three generator views keep saved ParamIds, Rack widgets, and the
+    static Synth preview independently intentional."""
+    persistent = [c.enum for c in g.PARAMS]
+    runtime = [c.enum for c in g.RUNTIME_PANEL_PARAMS]
+    static = [c.enum for c in g.STATIC_PANEL_PARAMS]
+    check(persistent[-7:] == [
+        'SHUFFLE', 'DETUNE_A', 'DETUNE_B', 'DRIVE_A', 'DRIVE_B',
+        'FLUXTIME_A', 'FLUXTIME_B'
+    ], "FLUXTIME must follow the old hidden tail")
+    check(persistent[-2:] == ['FLUXTIME_A', 'FLUXTIME_B'],
+          "FLUXTIME ids are not the trailing pair")
+    check(all(e in runtime for e in ('STAGES_A', 'STAGES_B',
+                                      'FLUXTIME_A', 'FLUXTIME_B')),
+          "runtime table lacks PITCH or TIME widgets")
+    check('STAGES_A' not in static and 'STAGES_B' not in static,
+          "static preview contains the BBD-only PITCH widgets")
+    check(all(e in static for e in ('ATTACK_A', 'ATTACK_B',
+                                     'FLUXTIME_A', 'FLUXTIME_B')),
+          "static Synth preview lacks ATK or TIME")
+    check(g.PARAMS == g.PANEL_PARAMS + g.HIDDEN_PARAMS
+                      + g.APPENDED_PANEL_PARAMS,
+          "persistent ParamId order no longer matches the declared partitions")
+    check(not any(c.enum in runtime for c in g.HIDDEN_PARAMS),
+          "menu-only DETUNE/DRIVE leaked into runtime widgets")
+    check(persistent[:-2] == PARAM_ORDER[:-2],
+          "legacy ParamId order changed before FLUXTIME")
+
+    header = g.header()
+    for suffix in ('_A', '_B'):
+        check(header.count(f"{{STAGES{suffix}, WK_SMKNOB,") == 1,
+              f"generated header lacks runtime PITCH{suffix} row")
+        check(header.count(f"{{FLUXTIME{suffix}, WK_SMKNOB,") == 1,
+              f"generated header lacks runtime TIME{suffix} row")
 
 
 def test_source_caption_states_and_static_default():
@@ -176,6 +215,12 @@ def test_param_runtime_tip_contract():
           "parameter runtime tip contract changed: "
           + repr([(c.enum, c.tip, want) for c, want in zip(g.PARAMS, PARAM_TIPS)
                   if c.tip != want]))
+    check(PARAM_TIPS[71:75] == ['LINK', 'LINK', 'BBD Pitch', 'BBD Pitch'],
+          "BBD Pitch runtime tips drifted")
+    check(PARAM_TIPS[-6:] == [
+        'Detune A', 'Detune B', 'Drive A', 'Drive B',
+        'Tape Time', 'Tape Time',
+    ], "Tape Time runtime tips drifted")
     for enum, caption, tip in (
             ("FLUX_A", "MIX", "FLUX"), ("FLUX_B", "MIX", "FLUX"),
             ("FLUXRATE_A", "RATE", "FRATE"), ("FLUXRATE_B", "RATE", "FRATE"),
@@ -259,10 +304,13 @@ def test_reverb_mix_params():
 
 def test_no_overlap():
     """No two glyphs may touch -- Rack widgets would steal each other's clicks."""
-    all_c = g.PANEL_PARAMS + g.INPUTS + g.OUTPUTS
+    all_c = g.RUNTIME_PANEL_PARAMS + g.INPUTS + g.OUTPUTS
     for i, a in enumerate(all_c):
         ra = g.GLYPH_R[a.kind]
         for b in all_c[i + 1:]:
+            if {a.enum, b.enum} in ({'ATTACK_A', 'STAGES_A'},
+                                    {'ATTACK_B', 'STAGES_B'}):
+                continue
             rb = g.GLYPH_R[b.kind]
             d = math.hypot(a.x - b.x, a.y - b.y)
             check(d >= ra + rb - 0.001,
@@ -271,7 +319,7 @@ def test_no_overlap():
 
 def test_on_panel():
     """Every glyph stays 2 mm inside the plate."""
-    for c in g.PANEL_PARAMS + g.INPUTS + g.OUTPUTS + g.LIGHTS:
+    for c in g.RUNTIME_PANEL_PARAMS + g.INPUTS + g.OUTPUTS + g.LIGHTS:
         check(2.0 <= c.x <= g.W - 2.0 and 2.0 <= c.y <= g.Hh - 2.0,
               f"{c.enum} off panel at ({c.x:.2f}, {c.y:.2f})")
 
@@ -282,7 +330,7 @@ def test_panel_size():
 
 def test_label_metadata_exists():
     """Every labelled control resolves to an absolute label placement."""
-    for c in g.PANEL_PARAMS + g.INPUTS + g.OUTPUTS:
+    for c in g.RUNTIME_PANEL_PARAMS + g.INPUTS + g.OUTPUTS:
         if not c.label:
             continue
         x, y, anchor, size, colour = g.label_of(c)
@@ -294,7 +342,7 @@ def test_label_metadata_exists():
 
 def test_label_defaults_match_todays_layout():
     """The default rule must reproduce the pre-redesign placement exactly."""
-    for c in g.PANEL_PARAMS + g.INPUTS + g.OUTPUTS:
+    for c in g.RUNTIME_PANEL_PARAMS + g.INPUTS + g.OUTPUTS:
         if not c.label or c.lbl is not None:
             continue
         x, y, anchor, size, colour = g.label_of(c)
@@ -450,7 +498,7 @@ def test_fx_fields_render_in_explicit_layer():
         for (bx, _lg, _col, well, _items) in g.JACK_GROUPS if well
     ]
     control_svgs = [
-        g.knob_svg(c) for c in g.PANEL_PARAMS
+        g.knob_svg(c) for c in g.STATIC_PANEL_PARAMS
         if c.kind in (g.BIGKNOB, g.KNOBC, g.SMKNOB, g.KNOBI)
     ]
 
@@ -514,7 +562,7 @@ def test_play_mode_fields_are_exact_mirrors():
     play_spans = [(s.index(field_svg), s.index(field_svg) + len(field_svg))
                   for field_svg in rendered if field_svg in s]
     first_control = min(
-        s.index(g.knob_svg(c)) for c in g.PANEL_PARAMS
+        s.index(g.knob_svg(c)) for c in g.STATIC_PANEL_PARAMS
         if c.kind in (g.BIGKNOB, g.KNOBC, g.SMKNOB, g.KNOBI)
     )
     if len(play_spans) == len(fields):
@@ -534,11 +582,12 @@ def test_small_knobs_have_no_collar():
 
 
 LOWER_A = {   # enum -> (x, y)   part A; part B is W - x
-    'ATTACK_A': (9.25, 77.30), 'FILT_A': (19.75, 77.30), 'SUB_A': (30.25, 77.30),
+    'ATTACK_A': (9.25, 77.30), 'STAGES_A': (9.25, 77.30),
+    'FILT_A': (19.75, 77.30), 'SUB_A': (30.25, 77.30),
     'DECAY_A': (9.25, 89.40), 'RES_A': (19.75, 89.40), 'SOURCE_A': (30.25, 89.40),
     'FLUXRATE_A': (44.25, 77.30), 'FLUX_A': (54.75, 77.30),
     'FLUXFB_A': (65.25, 77.30), 'REV_MIX_A': (75.75, 77.30),
-    'LINK_A': (44.25, 89.40), 'STAGES_A': (54.75, 89.40),
+    'LINK_A': (44.25, 89.40), 'FLUXTIME_A': (54.75, 89.40),
     'GRIT_A': (65.25, 89.40), 'COMP_A': (75.75, 89.40),
     'ENGINE_A': (10.00, 103.60), 'GRITMODE_A': (17.50, 103.60),
     'STEPS_A': (37.00, 103.60), 'STEP_A': (46.00, 103.60),
@@ -555,6 +604,27 @@ def test_lower_half_positions():
         b = ctl(enum[:-2] + '_B')
         check(approx(b.x, g.W - x) and approx(b.y, y),
               f"{b.enum} at ({b.x:.2f}, {b.y:.2f}), want ({g.W - x:.2f}, {y})")
+
+    for suffix in ('_A', '_B'):
+        attack, pitch = ctl('ATTACK' + suffix), ctl('STAGES' + suffix)
+        check((attack.x, attack.y) == (pitch.x, pitch.y),
+              f"{suffix}: ATK/PITCH do not share coordinates")
+        time = ctl('FLUXTIME' + suffix)
+        check(time.label == 'TIME' and time.tip == 'Tape Time',
+              f"{suffix}: TIME caption/tooltip drifted")
+
+
+def test_static_synth_preview_excludes_bbd_pitch():
+    """The generated SVG must remain the Synth-only preview when runtime
+    PITCH overlays ATK in Rack."""
+    svg = g.svg()
+    check('>STGS</text>' not in svg, "static SVG still exposes STGS")
+    check(svg.count('>ATK</text>') == 2,
+          "static preview must show two ATK captions")
+    check(svg.count('font-size="1.9">TIME</text>') == 2,
+          "static preview must show two TIME captions")
+    check('font-size="1.9">PITCH</text>' not in svg,
+          "static preview must not overlay PITCH on ATK")
 
 
 def test_form_song_control_contract():
@@ -778,7 +848,7 @@ def test_group_count():
 
 def test_every_label_is_reachable():
     """Nothing may be drawn off-plate or under a neighbouring box edge."""
-    for c in g.PANEL_PARAMS + g.INPUTS + g.OUTPUTS:
+    for c in g.RUNTIME_PANEL_PARAMS + g.INPUTS + g.OUTPUTS:
         if not c.label:
             continue
         lx, ly, _a, size, _col = g.label_of(c)
@@ -1297,12 +1367,17 @@ def test_sampler_preset_init_snapshot():
         0.0, 0.0, 0.422665179,
         0.613332987, 0.0, 0.171428576,
         0.171428576, 0.200000003, 0.200000003,
+        0.5, 0.5,
     ]
     check(len(actual) == len(PARAM_ORDER) == len(expected),
           f"init snapshot has {len(actual)} values, want {len(PARAM_ORDER)}")
     for i, (got, want) in enumerate(zip(actual, expected)):
         check(math.isclose(got, want, rel_tol=0.0, abs_tol=1e-7),
               f"{PARAM_ORDER[i]} init {got}, want {want}")
+    check(PARAM_ORDER[-4:] == ['DRIVE_A', 'DRIVE_B', 'FLUXTIME_A', 'FLUXTIME_B'],
+          "init snapshot tail ids drifted")
+    check(actual[-4:] == [0.200000003, 0.200000003, 0.5, 0.5],
+          "init snapshot tail defaults drifted")
 
     check("kInitLastBasis" not in header,
           "obsolete remembered-form init state remains")
@@ -1529,8 +1604,8 @@ def test_all_deck_local_geometry_is_exactly_mirrored():
     """One property guard covers every deck-local glyph, label, and field."""
     flip = {'start': 'end', 'end': 'start', 'middle': 'middle'}
 
-    params = {c.enum: c for c in g.PANEL_PARAMS}
-    a_params = [c for c in g.PANEL_PARAMS if c.enum.endswith('_A')]
+    params = {c.enum: c for c in g.RUNTIME_PANEL_PARAMS}
+    a_params = [c for c in g.RUNTIME_PANEL_PARAMS if c.enum.endswith('_A')]
     check(len(a_params) > 0, "no deck-A parameters found")
     for a in a_params:
         b_name = a.enum[:-2] + '_B'

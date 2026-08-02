@@ -97,6 +97,8 @@ enum ParamId {
     DETUNE_B,
     DRIVE_A,
     DRIVE_B,
+    FLUXTIME_A,
+    FLUXTIME_B,
     NUM_PARAMS
 };
 enum InputId {
@@ -196,13 +198,15 @@ static const PanelCtl kParamCtls[] = {
     {COLOR_B, WK_BIGKNOB, {190.251f, 14.966f}, "COLOR", {194.236f, 10.216f}, 1, 1.90f, 0x171713, "COLOR"},
     {LINK_A, WK_SMKNOB, {44.250f, 89.400f}, "LINK", {44.250f, 95.000f}, 0, 1.90f, 0x171713, "LINK"},
     {LINK_B, WK_SMKNOB, {169.110f, 89.400f}, "LINK", {169.110f, 95.000f}, 0, 1.90f, 0x171713, "LINK"},
-    {STAGES_A, WK_SMKNOB, {54.750f, 89.400f}, "STGS", {54.750f, 95.000f}, 0, 1.90f, 0x171713, "STGS"},
-    {STAGES_B, WK_SMKNOB, {158.610f, 89.400f}, "STGS", {158.610f, 95.000f}, 0, 1.90f, 0x171713, "STGS"},
+    {STAGES_A, WK_SMKNOB, {9.250f, 77.300f}, "PITCH", {9.250f, 82.900f}, 0, 1.90f, 0x171713, "BBD Pitch"},
+    {STAGES_B, WK_SMKNOB, {204.110f, 77.300f}, "PITCH", {204.110f, 82.900f}, 0, 1.90f, 0x171713, "BBD Pitch"},
     {REC_A, WK_LATCH, {25.000f, 103.600f}, "REC", {25.000f, 109.000f}, 0, 1.90f, 0x171713, "REC"},
     {REC_B, WK_LATCH, {188.360f, 103.600f}, "REC", {188.360f, 109.000f}, 0, 1.90f, 0x171713, "REC"},
     {REV_MIX_A, WK_SMKNOB, {75.750f, 77.300f}, "ROOM", {75.750f, 82.900f}, 0, 1.90f, 0x171713, "ROOM"},
     {REV_MIX_B, WK_SMKNOB, {137.610f, 77.300f}, "ROOM", {137.610f, 82.900f}, 0, 1.90f, 0x171713, "ROOM"},
     {SHUFFLE, WK_SMKNOB, {115.680f, 54.000f}, "SHUFL", {115.680f, 59.600f}, 0, 1.90f, 0x171713, "SHUFL"},
+    {FLUXTIME_A, WK_SMKNOB, {54.750f, 89.400f}, "TIME", {54.750f, 95.000f}, 0, 1.90f, 0x171713, "Tape Time"},
+    {FLUXTIME_B, WK_SMKNOB, {158.610f, 89.400f}, "TIME", {158.610f, 95.000f}, 0, 1.90f, 0x171713, "Tape Time"},
 };
 static const PanelCtl kInputCtls[] = {
     {IN_L, WK_IN, {55.250f, 118.400f}, "L", {55.250f, 124.800f}, 0, 1.80f, 0x171713, "IN L"},

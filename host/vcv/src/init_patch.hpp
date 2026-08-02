@@ -102,6 +102,8 @@ static constexpr float kInitParamDefaults[] = {
      0.171428576f, // DETUNE_B = 6 / 35
      0.200000003f, // DRIVE_A
      0.200000003f, // DRIVE_B
+     0.500000000f, // FLUXTIME_A = neutral x1
+     0.500000000f, // FLUXTIME_B = neutral x1
 };
 
 static_assert(sizeof(kInitParamDefaults) / sizeof(kInitParamDefaults[0])

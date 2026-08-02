@@ -200,9 +200,9 @@ FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # RATE MIX FB | ROOM (per-deck reverb 
 # 2026-07-28 flux-rhythm-drag): DRIVE -> DRAG, DRIVE moving to the menu. And
 # again (spec 2026-07-28 flux-link): DRAG -> LINK, because the control became
 # bipolar and LINK names the axis rather than one of its two ends.
-# Pitch 10.50 mm against a 3.0 mm knob radius, so the 6.0 mm minimum in
-# test_no_overlap still has room to spare.
-FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # LINK STGS | GRIT COMP
+# The BBD-only PITCH widget overlaps ATK at runtime. TIME takes the second
+# FLUX-bottom slot, so the static Synth preview reads LINK TIME | GRIT COMP.
+FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # LINK TIME | GRIT COMP
 PLAY_Y   = 103.6
 # The PLAY row's left block re-spaced to seat REC between GRIT and STEPS
 # (spec 2026-07-18 "VCV layer": REC is the only new panel element). All four
@@ -415,11 +415,12 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     # along); the spec's no-migration decision accepts that. DRIVE itself
     # moved to the menu as
     # patch state and stays there, appended below in HIDDEN_PARAMS with fresh
-    # trailing ids. STAGES is untouched.
+    # trailing ids. STAGES is the BBD-only PITCH widget, so Rack overlays it
+    # on ATTACK while the static Synth preview omits it.
     Ctl("LINK_A",   SMKNOB, FX_BOT[0],     ROW_V2, "LINK"),
     Ctl("LINK_B",   SMKNOB, W - FX_BOT[0], ROW_V2, "LINK"),
-    Ctl("STAGES_A", SMKNOB, FX_BOT[1],     ROW_V2, "STGS"),
-    Ctl("STAGES_B", SMKNOB, W - FX_BOT[1], ROW_V2, "STGS"),
+    Ctl("STAGES_A", SMKNOB, VOICE_X[0],     ROW_V1, "PITCH", "BBD Pitch"),
+    Ctl("STAGES_B", SMKNOB, W - VOICE_X[0], ROW_V1, "PITCH", "BBD Pitch"),
     # M5b: REC, the one new panel element of the texture deck. Appended LAST
     # so REC_A/REC_B take fresh trailing ids and PART_STRIDE stays 23 -- every
     # already-saved .vcv keeps every param id it has.
@@ -450,7 +451,19 @@ HIDDEN_PARAMS = [
     Ctl("DRIVE_B", SMKNOB, 0.0, 0.0, "", "Drive B"),
 ]
 
-PARAMS = PANEL_PARAMS + HIDDEN_PARAMS
+APPENDED_PANEL_PARAMS = [
+    Ctl("FLUXTIME_A", SMKNOB, FX_BOT[1],     ROW_V2, "TIME", "Tape Time"),
+    Ctl("FLUXTIME_B", SMKNOB, W - FX_BOT[1], ROW_V2, "TIME", "Tape Time"),
+]
+
+# Persistent ids retain the legacy visible and hidden sequences exactly; runtime
+# controls may include appended widgets, while the SVG is the Synth-only view.
+RUNTIME_PANEL_PARAMS = PANEL_PARAMS + APPENDED_PANEL_PARAMS
+STATIC_PANEL_PARAMS = [
+    c for c in RUNTIME_PANEL_PARAMS
+    if c.enum not in ("STAGES_A", "STAGES_B")
+]
+PARAMS = PANEL_PARAMS + HIDDEN_PARAMS + APPENDED_PANEL_PARAMS
 
 # --- lights --------------------------------------------------------------------
 # INPUTS/OUTPUTS are built above (see JACK_GROUPS, near CX) -- they had to move
@@ -702,7 +715,7 @@ def svg():
     P.append(f'<circle cx="{mm(CX-15)}" cy="5.9" r="0.9" fill="{GREEN}"/>')
     P.append(f'<circle cx="{mm(CX+15)}" cy="5.9" r="0.9" fill="{COPPER}"/>')
     # glyphs + labels
-    for c in PANEL_PARAMS + INPUTS + OUTPUTS + LIGHTS:
+    for c in STATIC_PANEL_PARAMS + INPUTS + OUTPUTS + LIGHTS:
         if c.kind in (IN, OUT):
             P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="{mm(c.r)}" '
                      f'fill="{GRAPHITE}" stroke="#4a4a40" stroke-width="0.4"/>')
@@ -788,7 +801,7 @@ def header():
                       f'{size:.2f}f, {rgb(colour)}, "{c.tip}"}},')
         L2.append("};")
 
-    emit_table("kParamCtls",  PANEL_PARAMS)
+    emit_table("kParamCtls",  RUNTIME_PANEL_PARAMS)
     emit_table("kInputCtls",  INPUTS)
     emit_table("kOutputCtls", OUTPUTS)
     emit_table("kLightCtls",  LIGHTS)
