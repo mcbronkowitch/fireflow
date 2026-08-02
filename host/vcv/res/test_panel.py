@@ -1239,6 +1239,16 @@ def flux_time_wiring_issues(cpp):
     push = cpp_scope(cpp, "void pushParams()")
     if quantity is None or "spky::tape_time_mult(getValue())" not in quantity:
         issues.append("Tape Time display does not reuse tape_time_mult")
+    # `%g` preserves the intended readable endpoints of the shared geometric
+    # mapping: 0 -> x0.25, 0.5 -> x1, and 1 -> x4. In particular, `%.2f`
+    # would regress the high endpoint to the visibly wrong `x4.00`.
+    expected_display = '''
+std::string getDisplayValueString() override {
+    const float mult = spky::tape_time_mult(getValue());
+    return string::f("x%g", mult);
+}'''
+    if quantity is None or compact_cpp(expected_display) not in compact_cpp(quantity):
+        issues.append("Tape Time display must show 0=x0.25, 0.5=x1, and 1=x4")
     if config is None or config.count("configParam<FluxTimeQuantity>") != 1:
         issues.append("FLUXTIME is not configured through FluxTimeQuantity")
     expected = """
@@ -1388,12 +1398,14 @@ struct EngineExclusiveTrimpot : Trimpot {
     bool bbdOnly = false;
 
     void step() override {
-        visible = isBbdSelected(spotymod, engineId) == bbdOnly;
+        setVisible(isBbdSelected(spotymod, engineId) == bbdOnly);
         Trimpot::step();
     }
 }"""
     if exclusive_n != compact_cpp(expected_exclusive):
-        issues.append("EngineExclusiveTrimpot must toggle Rack visibility from shared ENG state")
+        issues.append("EngineExclusiveTrimpot must call setVisible from shared ENG state")
+    if re.search(r"\bvisible\s*=", exclusive or ""):
+        issues.append("EngineExclusiveTrimpot must not write Widget::visible directly")
 
     widget_n = compact_cpp(widget) if widget else ""
     for required, label in (
@@ -1479,8 +1491,8 @@ def test_attack_pitch_guard_rejects_representative_regressions():
          "        : 0;",
          "static_cast<int>(std::round(module->params[engineId].getValue()))\n"
          "        : 4;", "preview fallback"),
-        ("visible = isBbdSelected(spotymod, engineId) == bbdOnly;",
-         "visible = true;", "overlap visibility"),
+        ("setVisible(isBbdSelected(spotymod, engineId) == bbdOnly);",
+         "visible = true;", "direct overlap visibility"),
         ("t[i].id == SOURCE_A || t[i].id == SOURCE_B",
          "t[i].id == SOURCE_A", "generic caption skip"),
         ("getParamQuantity(ATTACK_B)",

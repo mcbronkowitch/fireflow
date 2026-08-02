@@ -49,9 +49,7 @@ struct FluxRateQuantity : ParamQuantity {
 struct FluxTimeQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
         const float mult = spky::tape_time_mult(getValue());
-        return std::fabs(mult - 1.f) < 0.005f
-            ? "x1"
-            : string::f("x%.2f", mult);
+        return string::f("x%g", mult);
     }
 };
 
@@ -1212,7 +1210,7 @@ struct EngineExclusiveTrimpot : Trimpot {
     bool bbdOnly = false;
 
     void step() override {
-        visible = isBbdSelected(spotymod, engineId) == bbdOnly;
+        setVisible(isBbdSelected(spotymod, engineId) == bbdOnly);
         Trimpot::step();
     }
 };
