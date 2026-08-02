@@ -33,7 +33,7 @@ TEST_CASE("Seed audition applies the VCV init engine and arranger state")
 
 TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
 {
-    CHECK(spkyvcv::NUM_PARAMS == 84);
+    CHECK(spkyvcv::NUM_PARAMS == 86);
     CHECK(spkyvcv::initParamDefault(spkyvcv::ENGINE_A)
           == doctest::Approx(0.f));
     // drone.vcvm boots deck B on BODY (3), not on the sampler. The pin moved
@@ -49,6 +49,10 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
     // centre (0) is the bit-identical path (spec 2026-07-28 flux-link).
     CHECK(spkyvcv::initParamDefault(spkyvcv::LINK_A) == doctest::Approx(0.f));
     CHECK(spkyvcv::initParamDefault(spkyvcv::LINK_B) == doctest::Approx(0.f));
+    CHECK(spkyvcv::initParamDefault(spkyvcv::FLUXTIME_A)
+          == doctest::Approx(0.5f));
+    CHECK(spkyvcv::initParamDefault(spkyvcv::FLUXTIME_B)
+          == doctest::Approx(0.5f));
 }
 
 
