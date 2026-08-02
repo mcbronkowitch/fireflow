@@ -1196,6 +1196,27 @@ static const char* sourceCaption(int state) {
          : state == 3 ? "MATL" : state == 4 ? "DRIVE" : "TIMB";
 }
 
+static int roundedEngineState(Spotymod* module, int engineId) {
+    return module
+        ? static_cast<int>(std::round(module->params[engineId].getValue()))
+        : 0;
+}
+
+static bool isBbdSelected(Spotymod* module, int engineId) {
+    return roundedEngineState(module, engineId) == 4;
+}
+
+struct EngineExclusiveTrimpot : Trimpot {
+    Spotymod* spotymod = nullptr;
+    int engineId = ENGINE_A;
+    bool bbdOnly = false;
+
+    void step() override {
+        visible = isBbdSelected(spotymod, engineId) == bbdOnly;
+        Trimpot::step();
+    }
+};
+
 struct PanelText : Widget {
     Spotymod* module;
     explicit PanelText(Spotymod* m) : module(m) {}
@@ -1222,7 +1243,9 @@ struct PanelText : Widget {
         };
         auto captions = [&](const PanelCtl* t, size_t n) {
             for (size_t i = 0; i < n; ++i) {
-                if (!t[i].label[0] || t[i].id == SOURCE_A || t[i].id == SOURCE_B)
+                if (!t[i].label[0] || t[i].id == SOURCE_A || t[i].id == SOURCE_B
+                        || t[i].id == ATTACK_A || t[i].id == ATTACK_B
+                        || t[i].id == STAGES_A || t[i].id == STAGES_B)
                     continue;
                 nvgTextAlign(args.vg, alignOf(t[i].anchor) | NVG_ALIGN_BASELINE);
                 text(t[i].lbl.x, t[i].lbl.y, t[i].lblSize, col(t[i].lblRgb),
@@ -1243,15 +1266,25 @@ struct PanelText : Widget {
                 }
             }
             if (!source) return;
-            const int state = module
-                ? static_cast<int>(std::round(module->params[engineId].getValue()))
-                : 0;
+            const int state = roundedEngineState(module, engineId);
             nvgTextAlign(args.vg, alignOf(source->anchor) | NVG_ALIGN_BASELINE);
             text(source->lbl.x, source->lbl.y, source->lblSize,
                  col(source->lblRgb), sourceCaption(state));
         };
         sourceCaptionAt(SOURCE_A, ENGINE_A);
         sourceCaptionAt(SOURCE_B, ENGINE_B);
+
+        auto attackPitchCaptionAt = [&](int attackId, int engineId) {
+            const PanelCtl* attack = nullptr;
+            for (const auto& c : kParamCtls)
+                if (c.id == attackId) { attack = &c; break; }
+            if (!attack) return;
+            nvgTextAlign(args.vg, alignOf(attack->anchor) | NVG_ALIGN_BASELINE);
+            text(attack->lbl.x, attack->lbl.y, attack->lblSize,
+                 col(attack->lblRgb), isBbdSelected(module, engineId) ? "PITCH" : "ATK");
+        };
+        attackPitchCaptionAt(ATTACK_A, ENGINE_A);
+        attackPitchCaptionAt(ATTACK_B, ENGINE_B);
 
         // section titles + brand -- the shared TEXTS table from the generator,
         // so runtime lettering matches the SVG preview one-to-one
@@ -1313,7 +1346,20 @@ struct SpotymodWidget : ModuleWidget {
                 case WK_BIGKNOB: case WK_KNOBC:
                     addParam(createParamCentered<RoundBlackKnob>(pos, module, c.id)); break;
                 case WK_SMKNOB: case WK_KNOBI:
-                    addParam(createParamCentered<Trimpot>(pos, module, c.id)); break;
+                    if (c.id == ATTACK_A || c.id == ATTACK_B
+                            || c.id == STAGES_A || c.id == STAGES_B) {
+                        auto* knob = createParamCentered<EngineExclusiveTrimpot>(
+                            pos, module, c.id);
+                        knob->spotymod = module;
+                        knob->engineId = (c.id == ATTACK_B || c.id == STAGES_B)
+                            ? ENGINE_B : ENGINE_A;
+                        knob->bbdOnly = c.id == STAGES_A || c.id == STAGES_B;
+                        addParam(knob);
+                    }
+                    else {
+                        addParam(createParamCentered<Trimpot>(pos, module, c.id));
+                    }
+                    break;
                 case WK_SW2:
                     addParam(createParamCentered<CKSS>(pos, module, c.id)); break;
                 case WK_LATCH:
@@ -1384,6 +1430,17 @@ struct SpotymodWidget : ModuleWidget {
             const int id = p ? DRIVE_B : DRIVE_A;
             menu->addChild(createSubmenuItem(name, "", [m, id](Menu* sub) {
                 sub->addChild(new ParamMenuSlider(m->getParamQuantity(id)));
+            }));
+        }
+
+        if (isBbdSelected(m, ENGINE_A)) {
+            menu->addChild(createSubmenuItem("BBD A — Freeze Attack", "", [m](Menu* sub) {
+                sub->addChild(new ParamMenuSlider(m->getParamQuantity(ATTACK_A)));
+            }));
+        }
+        if (isBbdSelected(m, ENGINE_B)) {
+            menu->addChild(createSubmenuItem("BBD B — Freeze Attack", "", [m](Menu* sub) {
+                sub->addChild(new ParamMenuSlider(m->getParamQuantity(ATTACK_B)));
             }));
         }
 

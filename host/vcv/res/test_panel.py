@@ -1307,16 +1307,8 @@ static const char* sourceCaption(int state) {
     panel_n = compact_cpp(panel)
     if "Spotymod*module;explicitPanelText(Spotymod*m):module(m){}" not in panel_n:
         issues.append("PanelText must retain its Spotymod module pointer")
-    source_skip = (
-        "if(!t[i].label[0]||t[i].id==SOURCE_A||t[i].id==SOURCE_B)continue;")
-    if panel_n.count(source_skip) != 1:
-        issues.append("generic caption loop must skip SOURCE_A/B exactly once")
-    if panel_n.count(
-            "static_cast<int>(std::round(module->params[engineId].getValue()))"
-            ) != 1:
-        issues.append("SOURCE caption state must round the matching ENG parameter")
-    if "?static_cast<int>(std::round(module->params[engineId].getValue())):0;" not in panel_n:
-        issues.append("module browser SOURCE captions must fall back to state 0")
+    if panel_n.count("constintstate=roundedEngineState(module,engineId);") != 1:
+        issues.append("SOURCE caption state must use the shared rounded ENG helper")
     if panel_n.count("text(source->lbl.x,source->lbl.y,source->lblSize,"
                      "col(source->lblRgb),sourceCaption(state));") != 1:
         issues.append("dynamic SOURCE helper must draw one resolved caption")
@@ -1338,6 +1330,152 @@ static const char* sourceCaption(int state) {
     return issues
 
 
+def attack_pitch_wiring_issues(cpp):
+    """Return regressions in the engine-exclusive shared VOICE control."""
+    issues = []
+    rounded = cpp_scope(
+        cpp, "static int roundedEngineState(Spotymod* module, int engineId)")
+    selected = cpp_scope(
+        cpp, "static bool isBbdSelected(Spotymod* module, int engineId)")
+    exclusive = cpp_scope(cpp, "struct EngineExclusiveTrimpot : Trimpot")
+    panel = cpp_scope(cpp, "struct PanelText : Widget")
+    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
+    menu = cpp_scope(cpp, "void appendContextMenu(Menu* menu) override")
+
+    expected_rounded = """
+static int roundedEngineState(Spotymod* module, int engineId) {
+    return module
+        ? static_cast<int>(std::round(module->params[engineId].getValue()))
+        : 0;
+}"""
+    expected_selected = """
+static bool isBbdSelected(Spotymod* module, int engineId) {
+    return roundedEngineState(module, engineId) == 4;
+}"""
+    if rounded is None or compact_cpp(rounded) != compact_cpp(expected_rounded):
+        issues.append("roundedEngineState must round Rack ENG state and preview as Synth")
+    if selected is None or compact_cpp(selected) != compact_cpp(expected_selected):
+        issues.append("isBbdSelected must recognize only rounded BBD state 4")
+
+    for label, scope in (("PanelText", panel),
+                         ("EngineExclusiveTrimpot", exclusive),
+                         ("context menu", menu)):
+        if scope is None:
+            issues.append(f"{label} scope is missing")
+        elif "inst.engine_id(" in scope:
+            issues.append(f"{label} must use Rack ENG state, not inst.engine_id()")
+    exclusive_n = compact_cpp(exclusive) if exclusive else ""
+    expected_exclusive = """
+struct EngineExclusiveTrimpot : Trimpot {
+    Spotymod* spotymod = nullptr;
+    int engineId = ENGINE_A;
+    bool bbdOnly = false;
+
+    void step() override {
+        visible = isBbdSelected(spotymod, engineId) == bbdOnly;
+        Trimpot::step();
+    }
+}"""
+    if exclusive_n != compact_cpp(expected_exclusive):
+        issues.append("EngineExclusiveTrimpot must toggle Rack visibility from shared ENG state")
+
+    widget_n = compact_cpp(widget) if widget else ""
+    for required, label in (
+        ("if(c.id==ATTACK_A||c.id==ATTACK_B||c.id==STAGES_A||c.id==STAGES_B)",
+         "ATTACK/STAGES need the exclusive widget branch"),
+        ("createParamCentered<EngineExclusiveTrimpot>(pos,module,c.id)",
+         "ATTACK/STAGES must use EngineExclusiveTrimpot at their generated position"),
+        ("knob->engineId=(c.id==ATTACK_B||c.id==STAGES_B)?ENGINE_B:ENGINE_A;",
+         "part B overlapping widgets must follow ENGINE_B"),
+        ("knob->bbdOnly=c.id==STAGES_A||c.id==STAGES_B;",
+         "only STAGES widgets may be visible for BBD"),
+    ):
+        if required not in widget_n:
+            issues.append(label)
+    panel_n = compact_cpp(panel) if panel else ""
+    skip = ("if(!t[i].label[0]||t[i].id==SOURCE_A||t[i].id==SOURCE_B||"
+            "t[i].id==ATTACK_A||t[i].id==ATTACK_B||t[i].id==STAGES_A||"
+            "t[i].id==STAGES_B)continue;")
+    if panel_n.count(skip) != 1:
+        issues.append("generic caption loop must skip SOURCE, ATTACK, and STAGES pairs")
+    expected_caption = """
+auto attackPitchCaptionAt = [&](int attackId, int engineId) {
+    const PanelCtl* attack = nullptr;
+    for (const auto& c : kParamCtls)
+        if (c.id == attackId) { attack = &c; break; }
+    if (!attack) return;
+    nvgTextAlign(args.vg, alignOf(attack->anchor) | NVG_ALIGN_BASELINE);
+    text(attack->lbl.x, attack->lbl.y, attack->lblSize,
+         col(attack->lblRgb), isBbdSelected(module, engineId) ? "PITCH" : "ATK");
+};"""
+    if compact_cpp(expected_caption) not in panel_n:
+        issues.append("ATK/PITCH caption must resolve from the shared Rack ENG helper")
+    for attack_id, engine_id in (("ATTACK_A", "ENGINE_A"),
+                                 ("ATTACK_B", "ENGINE_B")):
+        if panel_n.count(f"attackPitchCaptionAt({attack_id},{engine_id});") != 1:
+            issues.append(f"{attack_id} must draw one caption from {engine_id}")
+
+    menu_n = compact_cpp(menu) if menu else ""
+    for part, engine_id, attack_id in (
+            ("A", "ENGINE_A", "ATTACK_A"),
+            ("B", "ENGINE_B", "ATTACK_B")):
+        required = compact_cpp(
+            f'if (isBbdSelected(m, {engine_id})) {{'
+            f'menu->addChild(createSubmenuItem("BBD {part} — Freeze Attack", "", '
+            f'[m](Menu* sub) {{sub->addChild(new ParamMenuSlider('
+            f'm->getParamQuantity({attack_id})));}}));}}')
+        if menu_n.count(required) != 1:
+            issues.append(f"BBD {part} Freeze Attack must bind matching ATTACK state conditionally")
+    return issues
+
+
+def test_attack_pitch_host_wiring():
+    """The shared VOICE slot, caption, and menu follow rounded Rack ENG state."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp"),
+              encoding="utf-8") as f:
+        cpp = f.read()
+    for issue in attack_pitch_wiring_issues(cpp):
+        check(False, issue)
+
+
+def test_attack_pitch_guard_rejects_representative_regressions():
+    """The shared VOICE guard rejects state, deck, visibility, and menu bugs."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp"),
+              encoding="utf-8") as f:
+        cpp = f.read()
+    mutations = [
+        ("static int roundedEngineState(Spotymod* module, int engineId)",
+         "static int roundedEngineState(const Spotymod* module, int engineId)",
+         "Rack Param const incompatibility"),
+        ("static bool isBbdSelected(Spotymod* module, int engineId)",
+         "static bool isBbdSelected(const Spotymod* module, int engineId)",
+         "BBD helper const incompatibility"),
+        ("static_cast<int>(std::round(module->params[engineId].getValue()))",
+         "static_cast<int>(module->params[engineId].getValue())", "ENG rounding"),
+        ("? ENGINE_B : ENGINE_A;", "? ENGINE_A : ENGINE_A;",
+         "part B widget ENG"),
+        ("knob->bbdOnly = c.id == STAGES_A || c.id == STAGES_B;",
+         "knob->bbdOnly = c.id == STAGES_A || c.id == ATTACK_B;",
+         "STAGES B exclusivity"),
+        ("static_cast<int>(std::round(module->params[engineId].getValue()))\n"
+         "        : 0;",
+         "static_cast<int>(std::round(module->params[engineId].getValue()))\n"
+         "        : 4;", "preview fallback"),
+        ("visible = isBbdSelected(spotymod, engineId) == bbdOnly;",
+         "visible = true;", "overlap visibility"),
+        ("t[i].id == SOURCE_A || t[i].id == SOURCE_B",
+         "t[i].id == SOURCE_A", "generic caption skip"),
+        ("getParamQuantity(ATTACK_B)",
+         "getParamQuantity(ATTACK_A)", "part B menu quantity"),
+    ]
+    for before, after, label in mutations:
+        mutated = cpp.replace(before, after, 1)
+        check(attack_pitch_wiring_issues(mutated),
+              f"ATTACK/PITCH guard accepted a {label} regression")
+
+
 def test_source_caption_host_wiring():
     """Rack draws one live caption for each SOURCE from its own rounded ENG."""
     here = os.path.dirname(os.path.abspath(__file__))
@@ -1354,13 +1492,8 @@ def test_source_caption_guard_rejects_representative_regressions():
         cpp = f.read()
     mutations = [
         ('state == 1 ? "ORG"', 'state == 1 ? "FRAME"', "state mapping"),
-        ("t[i].id == SOURCE_A || t[i].id == SOURCE_B",
-         "t[i].id == SOURCE_A", "generic SOURCE skip"),
-        ("std::round(module->params[engineId].getValue())",
-         "module->params[engineId].getValue()", "ENG rounding"),
         ("sourceCaptionAt(SOURCE_B, ENGINE_B)",
          "sourceCaptionAt(SOURCE_B, ENGINE_A)", "part B ENG binding"),
-        (": 0;", ": 2;", "module-browser fallback"),
         ("new PanelText(module)", "new PanelText(nullptr)", "widget module"),
     ]
     for before, after, label in mutations:
