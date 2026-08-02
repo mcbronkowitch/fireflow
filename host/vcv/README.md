@@ -298,7 +298,7 @@ stale WAV sitting in patch storage.
   imported file is always in tune. The asymmetry is intentional: importing a
   file at the wrong pitch would be a bug, but re-rating material that's
   already sitting in the buffer is varispeed, not a bug.
-- **FLUX is a stereo tape echo.** TIME sweeps from x1/4 to x4 and reaches each
+- **FLUX is a stereo tape echo.** TIME sweeps from x0.25 to x4 and reaches each
   new setting through a 30 ms slew, producing tape/Doppler motion instead of
   a stepped change.
 - **LINK (per part) is THIN across its full travel.** It lets the other deck's
@@ -338,6 +338,21 @@ deck — it passes the input through dry, at unity), **PITCH** sets the delay
 clock (subject to the FEEDBACK caveat below), and **SIZE** picks the
 delay-time rung the same way FLUX's own RATE division does.
 
+### BBD PITCH and tape TIME surface
+
+The upper-left **VOICE** slot is engine-aware: **BBD** uses `PITCH` there,
+while Synth, Sampler, Wave, and Body keep `ATK` in the same position. The
+saved `STAGES_A/B` patch state remains the BBD PITCH value; its faceplate
+caption changes with the selected engine. BBD's hidden ATTACK value remains
+available as **BBD A — Freeze Attack** or **BBD B — Freeze Attack** in the
+module context menu.
+
+The FX bottom row is `LINK TIME GRIT COMP`; it contains no BBD control.
+`RATE` selects the synchronized tape division. `TIME` multiplies that division
+from `x0.25`, through neutral `x1`, to `x4`; its intentional 30 ms slew gives
+smooth tape/Doppler motion. At the longest divisions, the existing delay-buffer
+limit still clamps the absolute delay.
+
 One panel control changes meaning:
 - **SOURCE**'s live caption reads `DRIVE` instead of `TIMB`/`ORG`/`FRAME`/`MATL`.
 
@@ -345,8 +360,8 @@ The append-only **STAGES** control no longer voices FLUX. It is used only on a
 BBD deck, where it supplies the PITCH lane's base — the same "re-point an
 orphaned knob" pattern the Sampler uses to turn SUB into grain `LEN`.
 
-The **VOICE row**'s six controls take on BBD-specific jobs: **ATTACK** is
-the freeze's engage/release time, **DECAY** trims the tail below unity so a
+The BBD control mapping gives **ATTACK** the freeze's engage/release time
+(through the **Freeze Attack** context-menu slider), while **DECAY** trims the tail below unity so a
 frozen loop still runs down instead of holding forever, **RES** tilts the
 feedback path's brightness, **SUB** sets how much signal (tape / other deck
 / audio-in) actually reaches the delay line, **FILT** sets the loss-pole

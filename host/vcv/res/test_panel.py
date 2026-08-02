@@ -174,6 +174,18 @@ def test_source_and_detune_user_documentation():
     )
 
 
+def test_bbd_pitch_and_tape_time_user_documentation():
+    """The README must match the BBD/PITCH and FX/TIME faceplate contract."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "README.md"), encoding="utf-8") as f:
+        readme = f.read()
+    check("BBD PITCH" in readme, "README omits the BBD PITCH faceplate slot")
+    check("Freeze Attack" in readme, "README omits menu-only BBD Freeze Attack")
+    check("TIME" in readme and "x0.25" in readme and "x4" in readme,
+          "README omits the tape TIME multiplier")
+    check("STGS" not in readme, "README still presents STGS as a visible control")
+
+
 def test_source_and_detune_documentation_has_no_legacy_surface_contract():
     """The old visible-DTUN and SOURCE-coupled-detune claims must not return."""
     here = os.path.dirname(os.path.abspath(__file__))
