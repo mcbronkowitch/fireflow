@@ -1215,6 +1215,76 @@ def test_source_detune_guard_rejects_representative_regressions():
               f"SOURCE/Detune guard accepted a {label} regression")
 
 
+def flux_time_wiring_issues(cpp):
+    """Return regressions in Tape Time's Rack-to-FX boundary."""
+    issues = []
+    quantity = cpp_scope(cpp, "struct FluxTimeQuantity : ParamQuantity")
+    config = cpp_scope(cpp, "void configControls()")
+    push = cpp_scope(cpp, "void pushParams()")
+    if quantity is None or "spky::tape_time_mult(getValue())" not in quantity:
+        issues.append("Tape Time display does not reuse tape_time_mult")
+    if config is None or config.count("configParam<FluxTimeQuantity>") != 1:
+        issues.append("FLUXTIME is not configured through FluxTimeQuantity")
+    expected = """
+inst.set_fx_target_base(p, spky::FXT_FLUX_TIME,
+    params[p ? FLUXTIME_B : FLUXTIME_A].getValue());
+"""
+    if push is None or compact_cpp(expected) not in compact_cpp(push):
+        issues.append("FLUXTIME does not route to FXT_FLUX_TIME")
+    if push and "pp(FLUXTIME_A, p)" in push:
+        issues.append("trailing FLUXTIME ids are incorrectly read through pp()")
+    pitch = """
+if (bbdPart)
+    inst.set_target_base(p, spky::LANE_PITCH,
+        params[p ? STAGES_B : STAGES_A].getValue());
+"""
+    push_n = compact_cpp(push) if push else ""
+    if push is None or push_n.count(compact_cpp(pitch)) != 1:
+        issues.append("STAGES must route exactly once to BBD LANE_PITCH")
+    if "set_fx_target_base(p,spky::FXT_FLUX_TIME,params[p?STAGES_B:STAGES_A]" in push_n:
+        issues.append("STAGES is coupled to the tape TIME target")
+    if "constboolbbdPart=inst.engine_id(p)==spky::ENGINE_BBD;" not in push_n:
+        issues.append("LANE_PITCH routing lacks the BBD-only gate")
+    if config:
+        flux_time_config = """
+else if (c.id == FLUXTIME_A || c.id == FLUXTIME_B)
+    configParam<FluxTimeQuantity>(c.id, 0.f, 1.f, init, lbl);
+"""
+        if compact_cpp(flux_time_config) not in compact_cpp(config):
+            issues.append("FLUXTIME must use initParamDefault through its A/B configuration branch")
+    return issues
+
+
+def test_flux_time_host_wiring():
+    """Tape Time uses its real tape mapping and routes each appended deck id."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    for issue in flux_time_wiring_issues(cpp):
+        check(False, issue)
+
+
+def test_flux_time_guard_rejects_representative_regressions():
+    """The Tape Time guard rejects realistic deck, target, accessor, and default bugs."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    mutations = [
+        ("params[p ? FLUXTIME_B : FLUXTIME_A].getValue()",
+         "params[p ? FLUXTIME_A : FLUXTIME_A].getValue()", "deck B id"),
+        ("spky::FXT_FLUX_TIME", "spky::FXT_FLUX_FB", "FX target"),
+        ("params[p ? FLUXTIME_B : FLUXTIME_A].getValue()",
+         "pp(FLUXTIME_A, p)", "strided FLUXTIME accessor"),
+        ("configParam<FluxTimeQuantity>(c.id, 0.f, 1.f, init, lbl);",
+         "configParam<FluxTimeQuantity>(c.id, 0.f, 1.f, 0.f, lbl);",
+         "hard-coded default"),
+    ]
+    for before, after, label in mutations:
+        mutated = cpp.replace(before, after, 1)
+        check(flux_time_wiring_issues(mutated),
+              f"Tape Time guard accepted a {label} regression")
+
+
 def source_caption_wiring_issues(cpp):
     """Return regressions in the one-live-SOURCE-caption-per-part contract."""
     issues = []

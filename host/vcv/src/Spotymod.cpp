@@ -46,6 +46,15 @@ struct FluxRateQuantity : ParamQuantity {
     }
 };
 
+struct FluxTimeQuantity : ParamQuantity {
+    std::string getDisplayValueString() override {
+        const float mult = spky::tape_time_mult(getValue());
+        return std::fabs(mult - 1.f) < 0.005f
+            ? "x1"
+            : string::f("x%.2f", mult);
+    }
+};
+
 // FLUX FB tooltip: percent, reaching >100% into the tanh bloom.
 struct FluxFbQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
@@ -251,6 +260,8 @@ struct Spotymod : Module {
                         configParam<TideQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == FLUXRATE_A || c.id == FLUXRATE_B)
                         configParam<FluxRateQuantity>(c.id, 0.f, 1.f, init, lbl);
+                    else if (c.id == FLUXTIME_A || c.id == FLUXTIME_B)
+                        configParam<FluxTimeQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == FLUXFB_A || c.id == FLUXFB_B)
                         configParam<FluxFbQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == LINK_A || c.id == LINK_B)
@@ -430,6 +441,8 @@ struct Spotymod : Module {
                 params[p ? FLUXRATE_B : FLUXRATE_A].getValue()));
             inst.set_fx_target_base(p, spky::FXT_FLUX_FB,
                 params[p ? FLUXFB_B : FLUXFB_A].getValue());
+            inst.set_fx_target_base(p, spky::FXT_FLUX_TIME,
+                params[p ? FLUXTIME_B : FLUXTIME_A].getValue());
             inst.set_grit_mix(p, pp(GRIT_A, p));
             // Appended params are outside the stride, so pp() would compute the
             // wrong id — the explicit ternary is required (see FLUXRATE/FLUXFB).
