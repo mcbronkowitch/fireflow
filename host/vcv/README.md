@@ -342,8 +342,8 @@ delay-time rung the same way FLUX's own RATE division does.
 
 The upper-left **VOICE** slot is engine-aware: **BBD** uses `PITCH` there,
 while Synth, Sampler, Wave, and Body keep `ATK` in the same position. The
-saved `STAGES_A/B` patch state remains the BBD PITCH value; its faceplate
-caption changes with the selected engine. BBD's hidden ATTACK value remains
+saved `STAGES_A/B` patch state remains the BBD PITCH value; the visible `STGS`
+label is gone and its faceplate caption changes with the selected engine. BBD's hidden ATTACK value remains
 available as **BBD A — Freeze Attack** or **BBD B — Freeze Attack** in the
 module context menu.
 

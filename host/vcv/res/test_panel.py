@@ -183,7 +183,11 @@ def test_bbd_pitch_and_tape_time_user_documentation():
     check("Freeze Attack" in readme, "README omits menu-only BBD Freeze Attack")
     check("TIME" in readme and "x0.25" in readme and "x4" in readme,
           "README omits the tape TIME multiplier")
-    check("STGS" not in readme, "README still presents STGS as a visible control")
+    migration = re.compile(r"the visible `STGS`\s+label is gone")
+    check(migration.search(readme) is not None,
+          "README omits the STGS-to-PITCH migration explanation")
+    check("STGS" not in migration.sub("", readme),
+          "README still presents STGS outside the migration explanation")
 
 
 def test_source_and_detune_documentation_has_no_legacy_surface_contract():
