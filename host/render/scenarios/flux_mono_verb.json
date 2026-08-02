@@ -3,7 +3,7 @@
   "bpm": 110,
   "duration_s": 24,
   "init": [
-    {"_comment":"FLUX mono listening pair, VERB half (spec 2026-07-29-flux-mono section 6). Judges what collapsing FLUX to one BBD line costs in echo width, with the reverb running at a normal playing value so its stereo recovery is part of the picture. Its twin flux_mono_dry.json is identical but for the two reverb lines below. A wide chord with several voices is deliberate: per-voice pan drift (voice.cpp) is what puts width into the echo's input, and without it a mono-summed echo would be indistinguishable by construction. 24 s gives the 0.05-0.2 Hz drift at least one full cycle."},
+    {"_comment":"Stereo Tape FLUX listening pair, VERB half. Uses the Stereo Tape FLUX path with reverb enabled; compare with flux_mono_dry.json to hear the effect of the two reverb settings."},
     {"action":"set_sync","ivalue":1},
     {"action":"set_rate","part":0,"value":0.2},
     {"action":"set_step","part":0,"flag":true,"ivalue":6},
