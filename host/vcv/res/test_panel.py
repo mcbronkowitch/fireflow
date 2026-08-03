@@ -1111,11 +1111,19 @@ else if (c.id == ENGINE_A || c.id == ENGINE_B) {
 case WK_LATCH:
     if (c.id == ENGINE_A || c.id == ENGINE_B)
         addParam(createParamCentered<EngineCycleLatch>(pos, module, c.id));
+    else if (c.id == REC_A || c.id == REC_B) {
+        auto* pad = createParamCentered<SlotVisible<VCVLatch>>(
+            pos, module, c.id);
+        pad->spotymod = module;
+        pad->ctlId = c.id;
+        addParam(pad);
+    }
     else
         addParam(createParamCentered<VCVLatch>(pos, module, c.id));
     break;"""
     if compact_cpp(widget).count(compact_cpp(engine_widget)) != 1:
-        issues.append("only ENGINE_A/B may use EngineCycleLatch; other latches use VCVLatch")
+        issues.append("only ENGINE_A/B may use EngineCycleLatch; REC uses a "
+                      "slot-visible VCVLatch; other latches use VCVLatch directly")
     if widget.count("createParamCentered<EngineCycleLatch>") != 1:
         issues.append("widget must create exactly one EngineCycleLatch branch")
 
@@ -1509,7 +1517,8 @@ def attack_pitch_wiring_issues(cpp):
         cpp, "static int roundedEngineState(Spotymod* module, int engineId)")
     selected = cpp_scope(
         cpp, "static bool isBbdSelected(Spotymod* module, int engineId)")
-    exclusive = cpp_scope(cpp, "struct EngineExclusiveTrimpot : Trimpot")
+    visible = cpp_scope(cpp, "static bool ctlVisible(Spotymod* m, int id)")
+    exclusive = cpp_scope(cpp, "struct SlotVisible : W")
     widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
     menu = cpp_scope(cpp, "void appendContextMenu(Menu* menu) override")
 
@@ -1528,7 +1537,22 @@ static bool isBbdSelected(Spotymod* module, int engineId) {
     if selected is None or compact_cpp(selected) != compact_cpp(expected_selected):
         issues.append("isBbdSelected must recognize only rounded BBD state 4")
 
-    for label, scope in (("EngineExclusiveTrimpot", exclusive),
+    # The ATTACK/STAGES exclusivity rule used to live on the widget itself
+    # (engineId/bbdOnly); it now lives in ctlVisible, in the same place the
+    # REC/Sampler rule lives, so pin the arms here instead of the retired
+    # fields.
+    if visible is None:
+        issues.append("ctlVisible scope is missing")
+    else:
+        n = compact_cpp(visible)
+        for arm in ("caseATTACK_A:return!isBbdSelected(m,ENGINE_A);",
+                    "caseATTACK_B:return!isBbdSelected(m,ENGINE_B);",
+                    "caseSTAGES_A:returnisBbdSelected(m,ENGINE_A);",
+                    "caseSTAGES_B:returnisBbdSelected(m,ENGINE_B);"):
+            if arm not in n:
+                issues.append(f"ctlVisible has no ATTACK/STAGES arm: {arm}")
+
+    for label, scope in (("SlotVisible", exclusive),
                          ("context menu", menu)):
         if scope is None:
             issues.append(f"{label} scope is missing")
@@ -1536,31 +1560,28 @@ static bool isBbdSelected(Spotymod* module, int engineId) {
             issues.append(f"{label} must use Rack ENG state, not inst.engine_id()")
     exclusive_n = compact_cpp(exclusive) if exclusive else ""
     expected_exclusive = """
-struct EngineExclusiveTrimpot : Trimpot {
+struct SlotVisible : W {
     Spotymod* spotymod = nullptr;
-    int engineId = ENGINE_A;
-    bool bbdOnly = false;
+    int ctlId = 0;
 
     void step() override {
-        setVisible(isBbdSelected(spotymod, engineId) == bbdOnly);
-        Trimpot::step();
+        this->setVisible(ctlVisible(spotymod, ctlId));
+        W::step();
     }
 }"""
     if exclusive_n != compact_cpp(expected_exclusive):
-        issues.append("EngineExclusiveTrimpot must call setVisible from shared ENG state")
+        issues.append("SlotVisible must call setVisible from ctlVisible")
     if re.search(r"\bvisible\s*=", exclusive or ""):
-        issues.append("EngineExclusiveTrimpot must not write Widget::visible directly")
+        issues.append("SlotVisible must not write Widget::visible directly")
 
     widget_n = compact_cpp(widget) if widget else ""
     for required, label in (
         ("if(c.id==ATTACK_A||c.id==ATTACK_B||c.id==STAGES_A||c.id==STAGES_B)",
          "ATTACK/STAGES need the exclusive widget branch"),
-        ("createParamCentered<EngineExclusiveTrimpot>(pos,module,c.id)",
-         "ATTACK/STAGES must use EngineExclusiveTrimpot at their generated position"),
-        ("knob->engineId=(c.id==ATTACK_B||c.id==STAGES_B)?ENGINE_B:ENGINE_A;",
-         "part B overlapping widgets must follow ENGINE_B"),
-        ("knob->bbdOnly=c.id==STAGES_A||c.id==STAGES_B;",
-         "only STAGES widgets may be visible for BBD"),
+        ("createParamCentered<SlotVisible<Trimpot>>(pos,module,c.id)",
+         "ATTACK/STAGES must use SlotVisible<Trimpot> at their generated position"),
+        ("knob->ctlId=c.id;",
+         "the shared VOICE widget must set ctlId from the control's own id"),
     ):
         if required not in widget_n:
             issues.append(label)
@@ -1604,16 +1625,17 @@ def test_attack_pitch_guard_rejects_representative_regressions():
          "BBD helper const incompatibility"),
         ("static_cast<int>(std::round(module->params[engineId].getValue()))",
          "static_cast<int>(module->params[engineId].getValue())", "ENG rounding"),
-        ("? ENGINE_B : ENGINE_A;", "? ENGINE_A : ENGINE_A;",
+        ("case ATTACK_B: return !isBbdSelected(m, ENGINE_B);",
+         "case ATTACK_B: return !isBbdSelected(m, ENGINE_A);",
          "part B widget ENG"),
-        ("knob->bbdOnly = c.id == STAGES_A || c.id == STAGES_B;",
-         "knob->bbdOnly = c.id == STAGES_A || c.id == ATTACK_B;",
+        ("case STAGES_B: return  isBbdSelected(m, ENGINE_B);",
+         "case STAGES_B: return  isBbdSelected(m, ENGINE_A);",
          "STAGES B exclusivity"),
         ("static_cast<int>(std::round(module->params[engineId].getValue()))\n"
          "        : 0;",
          "static_cast<int>(std::round(module->params[engineId].getValue()))\n"
          "        : 4;", "preview fallback"),
-        ("setVisible(isBbdSelected(spotymod, engineId) == bbdOnly);",
+        ("this->setVisible(ctlVisible(spotymod, ctlId));",
          "visible = true;", "direct overlap visibility"),
         ("getParamQuantity(ATTACK_B)",
          "getParamQuantity(ATTACK_A)", "part B menu quantity"),
@@ -1622,6 +1644,54 @@ def test_attack_pitch_guard_rejects_representative_regressions():
         mutated = cpp.replace(before, after, 1)
         check(attack_pitch_wiring_issues(mutated),
               f"ATTACK/PITCH guard accepted a {label} regression")
+
+
+def rec_visibility_issues(cpp):
+    """REC may not be offered on an engine where pushParams ignores it."""
+    issues = []
+    visible = cpp_scope(cpp, "static bool ctlVisible(Spotymod* m, int id)")
+    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
+    if visible is None:
+        issues.append("ctlVisible scope is missing")
+    else:
+        n = compact_cpp(visible)
+        for arm in ("caseREC_A:returnroundedEngineState(m,ENGINE_A)==1;",
+                    "caseREC_B:returnroundedEngineState(m,ENGINE_B)==1;"):
+            if arm not in n:
+                issues.append(f"ctlVisible has no Sampler arm: {arm}")
+    if widget is None:
+        issues.append("widget scope is missing")
+    else:
+        n = compact_cpp(widget)
+        if "SlotVisible<VCVLatch>" not in n:
+            issues.append("REC is not built as a slot-visible latch")
+        if "SlotVisible<Trimpot>" not in n:
+            issues.append("the ATTACK/STAGES pair must use the same mixin")
+    return issues
+
+
+def test_rec_visibility_host_wiring():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    for issue in rec_visibility_issues(cpp):
+        check(False, issue)
+
+
+def test_rec_visibility_guard_rejects_representative_regressions():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    mutations = [
+        ("case REC_B: return roundedEngineState(m, ENGINE_B) == 1;",
+         "case REC_B: return roundedEngineState(m, ENGINE_A) == 1;",
+         "part B ENG binding"),
+        ("SlotVisible<VCVLatch>", "VCVLatch", "slot-visible latch"),
+    ]
+    for before, after, label in mutations:
+        mutated = cpp.replace(before, after, 1)
+        check(rec_visibility_issues(mutated),
+              f"REC visibility guard accepted a {label} regression")
 
 
 def test_shuffle_host_wiring():

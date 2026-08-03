@@ -1199,27 +1199,35 @@ static bool isBbdSelected(Spotymod* module, int engineId) {
     return roundedEngineState(module, engineId) == 4;
 }
 
-// Two controls share the upper-left VOICE coordinate: ATTACK on four engines,
-// STAGES on the BBD. Only the one whose widget is visible may draw a caption
-// there, or both words land on the same baseline.
+// A control is visible only where it does something. Two share the upper-left
+// VOICE coordinate -- ATTACK on four engines, STAGES on the BBD -- so only one
+// may ever draw there. REC has a coordinate of its own but no job outside the
+// Sampler: pushParams gates it on the exact Sampler engine id, and its LED is
+// already dark elsewhere, so the pad was the last thing still claiming
+// otherwise.
 static bool ctlVisible(Spotymod* m, int id) {
     switch (id) {
         case ATTACK_A: return !isBbdSelected(m, ENGINE_A);
         case ATTACK_B: return !isBbdSelected(m, ENGINE_B);
         case STAGES_A: return  isBbdSelected(m, ENGINE_A);
         case STAGES_B: return  isBbdSelected(m, ENGINE_B);
+        case REC_A: return roundedEngineState(m, ENGINE_A) == 1;
+        case REC_B: return roundedEngineState(m, ENGINE_B) == 1;
         default:       return true;
     }
 }
 
-struct EngineExclusiveTrimpot : Trimpot {
+// Widget half of ctlVisible. The caption loop and the widget must answer the
+// same question from the same place, or a control can be hidden while its
+// word is still drawn.
+template <typename W>
+struct SlotVisible : W {
     Spotymod* spotymod = nullptr;
-    int engineId = ENGINE_A;
-    bool bbdOnly = false;
+    int ctlId = 0;
 
     void step() override {
-        setVisible(isBbdSelected(spotymod, engineId) == bbdOnly);
-        Trimpot::step();
+        this->setVisible(ctlVisible(spotymod, ctlId));
+        W::step();
     }
 };
 
@@ -1338,12 +1346,10 @@ struct SpotymodWidget : ModuleWidget {
                 case WK_SMKNOB: case WK_KNOBI:
                     if (c.id == ATTACK_A || c.id == ATTACK_B
                             || c.id == STAGES_A || c.id == STAGES_B) {
-                        auto* knob = createParamCentered<EngineExclusiveTrimpot>(
+                        auto* knob = createParamCentered<SlotVisible<Trimpot>>(
                             pos, module, c.id);
                         knob->spotymod = module;
-                        knob->engineId = (c.id == ATTACK_B || c.id == STAGES_B)
-                            ? ENGINE_B : ENGINE_A;
-                        knob->bbdOnly = c.id == STAGES_A || c.id == STAGES_B;
+                        knob->ctlId = c.id;
                         addParam(knob);
                     }
                     else {
@@ -1355,6 +1361,13 @@ struct SpotymodWidget : ModuleWidget {
                 case WK_LATCH:
                     if (c.id == ENGINE_A || c.id == ENGINE_B)
                         addParam(createParamCentered<EngineCycleLatch>(pos, module, c.id));
+                    else if (c.id == REC_A || c.id == REC_B) {
+                        auto* pad = createParamCentered<SlotVisible<VCVLatch>>(
+                            pos, module, c.id);
+                        pad->spotymod = module;
+                        pad->ctlId = c.id;
+                        addParam(pad);
+                    }
                     else
                         addParam(createParamCentered<VCVLatch>(pos, module, c.id));
                     break;
