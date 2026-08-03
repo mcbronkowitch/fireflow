@@ -45,6 +45,10 @@
 //    modulation speed); the 4 input diffusers and the 2 static loop APs
 //    read with linear interpolation, Hermite stays on the 2 tail delays and
 //    the 2 wobble-modulated loop APs (the audible pitch-wobble path)
+//  - LFO glide (2026-08-03): the /32 raster above HELD each random LFO flat
+//    between ticks, so the delay read offsets it drives moved in steps -- an
+//    inharmonic 1500 Hz comb that grew with SMEAR. They now glide linearly
+//    between raster values; the fast_sin stays 1-in-32, so the CPU cut holds
 #ifndef CLOUDS_DSP_FX_OLIVERB_H_
 #define CLOUDS_DSP_FX_OLIVERB_H_
 
@@ -80,7 +84,7 @@ class Oliverb {
     lp_decay_1_ = lp_decay_2_ = 0.0f;
     hp_decay_1_ = hp_decay_2_ = 0.0f;
     for (int i = 0; i < 9; ++i) lfo_[i].Init(&rng_);
-    for (int i = 0; i < 9; ++i) lfo_val_[i] = 0.0f;
+    for (int i = 0; i < 9; ++i) lfo_val_[i] = lfo_inc_[i] = 0.0f;
     lfo_tick_ = 0;   // (tick & 31) == 0 on the first sample: values land before use
     Prepare();
   }
@@ -144,8 +148,20 @@ class Oliverb {
 
     // Random line LFOs on the /32 raster (the engine's cosine LFOs already
     // decimate this way in Start()); slopes carry the x32 in Prepare().
+    //
+    // The raster sets how often a NEW value is computed, not how often the
+    // value may change: these drive delay read offsets, so holding one flat
+    // for 32 samples makes every 32nd sample a splice in the read position.
+    // At full SMEAR that step reaches 13 samples on ap1 (113 on ap3) and folds
+    // an inharmonic comb at 48000/32 = 1500 Hz over the whole room -- grit
+    // that sounds like sample-rate reduction. So each LFO glides linearly to
+    // its next raster value instead (one add per LFO per sample; the fast_sin
+    // still runs 1-in-32, which is where the CPU cut actually was). Value-
+    // continuous by construction: 32 increments land exactly on Next().
     if ((lfo_tick_ & (kLfoDecim - 1)) == 0)
-      for (int i = 1; i < 9; ++i) lfo_val_[i] = lfo_[i].Next();
+      for (int i = 1; i < 9; ++i)
+        lfo_inc_[i] = (lfo_[i].Next() - lfo_val_[i]) * (1.0f / (float)kLfoDecim);
+    for (int i = 1; i < 9; ++i) lfo_val_[i] += lfo_inc_[i];
     ++lfo_tick_;
 
 // Hermite read: the audible pitch-wobble path (tail delays + modded loop APs)
@@ -264,7 +280,8 @@ class Oliverb {
   float hp_decay_2_;
 
   RandomOscillator lfo_[9];
-  float lfo_val_[9];     // values held between /32 raster ticks
+  float lfo_val_[9];     // glided between /32 raster ticks (never held flat)
+  float lfo_inc_[9];     // per-sample step toward the next raster value
   int32_t lfo_tick_;
 
   DISALLOW_COPY_AND_ASSIGN(Oliverb);

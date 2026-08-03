@@ -180,6 +180,70 @@ TEST_CASE("reverb: diffusion ride stays bounded without clicks") {
     CHECK(max_step < 1.f);   // density morph yes, discontinuities no
 }
 
+// SMEAR drives the 8 random line LFOs, which advance on a /32 raster
+// (Oliverb::kLfoDecim, the 2026-07-19 CPU cut). If their value is HELD flat
+// between raster ticks instead of glided, the diffuser read offset is a
+// staircase: every 32nd sample splices the delay position, which folds an
+// inharmonic comb at 48000/32 = 1500 Hz around everything in the room. That
+// is the sample-rate-reduction-like grit SMEAR grew at high settings.
+// Measured as sideband energy at 1 kHz +- k*1500 Hz against the 1 kHz signal.
+static double bin_energy(const std::vector<float>& x, const std::vector<double>& win,
+                         double f, double sr) {
+    const size_t n = x.size();
+    double e = 0.0;
+    for (int j = -6; j <= 6; ++j) {                    // +-6 bins of skirt
+        const double ff = f + j * sr / (double)n;
+        if (ff < 20.0 || ff > sr * 0.5 - 20.0) continue;
+        double re = 0.0, im = 0.0;
+        const double a = 2.0 * 3.14159265358979 * ff / sr;
+        for (size_t i = 0; i < n; ++i) {
+            const double v = x[i] * win[i];
+            re += v * std::cos(a * i);
+            im += v * std::sin(a * i);
+        }
+        e += re * re + im * im;
+    }
+    return e;
+}
+
+static double smear_raster_comb_db(float smear) {
+    const double sr = 48000.0;
+    const size_t N = 16384;
+    s_rev.init((float)sr);
+    s_rev.set_size(0.6f);
+    s_rev.set_decay(0.55f);
+    s_rev.set_tone(0.5f);
+    s_rev.set_diffusion(0.7f);
+    s_rev.set_mod_depth(0.f);              // isolate SMEAR from the tail wobble
+    s_rev.set_diffuser_mod_depth(smear);
+    std::vector<float> buf;
+    buf.reserve(N);
+    const int warm = (int)(sr * 3);        // let the room fill
+    for (int i = 0; i < warm + (int)N; ++i) {
+        float in = 0.3f * std::sin(6.2831853f * 1000.f * i / (float)sr);
+        float wl, wr;
+        s_rev.process(in, in, wl, wr);
+        if (i >= warm) buf.push_back(wl);
+    }
+    std::vector<double> win(N);
+    for (size_t i = 0; i < N; ++i)
+        win[i] = 0.5 - 0.5 * std::cos(2.0 * 3.14159265358979 * i / (N - 1));
+    const double sig = bin_energy(buf, win, 1000.0, sr);
+    double comb = 0.0;
+    for (int k = 1; k <= 5; ++k) {         // 1 kHz +- k*1500 Hz: not harmonics
+        comb += bin_energy(buf, win, 1000.0 + k * 1500.0, sr);
+        comb += bin_energy(buf, win, std::fabs(1000.0 - k * 1500.0), sr);
+    }
+    return 10.0 * std::log10(comb / (sig + 1e-30) + 1e-30);
+}
+
+TEST_CASE("reverb: SMEAR glides the diffusers, it does not staircase them") {
+    // held LFO: -47 dB at half smear, -36 dB at full -- audible grit.
+    // glided:   -80 dB           and -55 dB, matching a per-sample LFO to 0.8 dB.
+    CHECK(smear_raster_comb_db(0.5f) < -65.0);
+    CHECK(smear_raster_comb_db(1.0f) < -50.0);
+}
+
 TEST_CASE("reverb: bit-deterministic across instances") {
     static AmbientReverb rvA, rvB;
     rvA.init(48000.f);
