@@ -296,7 +296,12 @@ TEST_CASE("instrument duck: sub-unity DECAY releases the duck even while the roo
     // duck would hold: this line is what makes the red claim honest.
     CHECK(s_ti_reverb.return_level() > 0.30f);
     CHECK(monotone);
-    CHECK(g > g0 + 0.05f);                           // visibly on its way back to 1.0
+    // Snap-stage identity: with arming the target snaps to exactly 1.0 at
+    // the disarm instant. (A "g > g0 + margin" form was measured to be
+    // non-discriminating: draining the tank moves even a level-driven duck
+    // by +0.12..+0.26 in this window.) Task 4 adapts this line to the slew.
+    CHECK(g == 1.f);
+    (void)g0;
 }
 ```
 
@@ -438,14 +443,35 @@ constexpr float kDuckUpS   = 4.0f;
                           * (_duck_target - _duck_gain);
 ```
 
-- [ ] **Step 4: Run every duck test, expect green**
+- [ ] **Step 4: Adapt the Task 3 disarm test to the slew**
+
+The snap-stage identity `CHECK(g == 1.f)` cannot hold under the slew: a
+float one-pole approaches 1.0 asymptotically and stalls below it when the
+per-sample increment rounds under half an ulp. The arming feature keeps its
+red-proof from Task 3 (proven once, against the snap); under the slew the
+test becomes a regression guard. In the Task 3 test, extend the post-disarm
+render from 500 to 2000 blocks (4 s) and replace the identity:
+
+```cpp
+    // Slew-stage form (Task 4): the snap identity g == 1.f is unreachable
+    // under a float one-pole. Arming kept its red-proof against the snap;
+    // this guards the release ride: from any breathing g0 <= ~0.8, four
+    // seconds of the 4 s up-slew rise at least (1-g0)*(1-1/e) > 0.1.
+    CHECK(monotone);
+    CHECK(g > g0 + 0.1f);
+```
+
+(The `REQUIRE(s_ti_reverb.return_level() > 0.30f)` lines and the monotone
+tracking stay as they are; delete the `(void)g0;`.)
+
+- [ ] **Step 5: Run every duck test, expect green**
 
 ```bash
 cmake --build build --target spky_tests && ./build/spky_tests.exe --test-case="instrument duck:*"
 ```
 Expected: all four PASS. The 15 s renders in Tasks 2/3 were sized for the slewed version, so they hold.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add engine/instrument.h engine/instrument.cpp tests/test_instrument.cpp
