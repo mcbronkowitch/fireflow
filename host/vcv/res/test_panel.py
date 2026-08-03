@@ -194,7 +194,7 @@ def test_bbd_pitch_and_tape_time_user_documentation():
           "README omits the tape multiplier")
     migration = re.compile(r"the visible `STGS`\s+label is gone")
     check(migration.search(readme) is not None,
-          "README omits the STGS-to-PITCH migration explanation")
+          "README omits the STGS-to-BEND migration explanation")
     check("STGS" not in migration.sub("", readme),
           "README still presents STGS outside the migration explanation")
 

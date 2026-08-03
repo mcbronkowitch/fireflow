@@ -88,7 +88,7 @@ so saved parameter IDs do not move.
 
 ## Engine-dependent captions
 
-Six controls change their caption with the deck's `ENG`. The words live in
+Seven controls change their caption with the deck's `ENG`. The words live in
 `DYNAMIC_CAPTIONS` in `res/gen_panel.py` and reach both the SVG and Rack from
 there — the C++ holds no caption word at all.
 
