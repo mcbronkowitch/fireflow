@@ -186,12 +186,15 @@ steepest stretch of the curve, carrying the head up to four times real time
 in either direction.
 
 **SCAN springt beim ENG-Flip sofort auf die Knopfposition — offene Frage
-(F-07, Review 2026-07-22).** MELO trägt im Synth VARIATION und im Sampler
+(F-07, Review 2026-07-22).** VARY trägt im Synth VARIATION und im Sampler
 SCAN, und die Init-Werte stehen für VARIATION an den Extremen (−0.728 und
 −1.0). Als SCAN gelesen sind das −0.97× und −4× Realtime rückwärts: der
 erste Flip auf Sampler lädt die Factory-Drone und schickt den Lesekopf im
 selben Control-Tick rückwärts los, praktisch schon bei Realtime, ohne dass
-jemand etwas angefasst hat.
+jemand etwas angefasst hat. (Seit 2026-08-03 parkt die VARIATION-Hälfte
+selbst bei LOOP, sobald ENG auf Sampler steht — SCAN liest aber weiterhin
+direkt dieselbe rohe Knopfposition, unabhängig von diesem Park, also bleibt
+das hier beschriebene Verhalten unverändert.)
 
 Das ist als Fehler gemeldet worden, ist aber genau das Verhalten, das
 "Known limitations" weiter unten bewusst wählt: Knopfposition gilt über den
@@ -366,7 +369,7 @@ FEEDBACK, **LEVEL** sets the wet/dry mix between the deck's input and the
 delay's return (unlike every other engine, LEVEL 0 does not silence a BBD
 deck — it passes the input through dry, at unity), **PITCH** sets the delay
 clock (subject to the FEEDBACK caveat below), and **SIZE** picks the
-delay-time rung the same way FLUX's own RATE division does.
+delay-time rung the same way FLUX's own DIV division does.
 
 ### BBD BEND and the tape multiplier
 

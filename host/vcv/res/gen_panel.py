@@ -223,7 +223,7 @@ def dynamic_words(base):
     return ()
 
 
-# 4-wide, aligned to FX_BOT so the FX box's two rows flush: RATE MIX FB ROOM.
+# 4-wide, aligned to FX_BOT so the FX box's two rows flush: DIV MIX FB SEND.
 FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # DIV MIX FB | SEND (per-deck reverb mix)
 # FX bottom row went from two slots to four (spec 2026-07-18 dust-grain-cloud);
 # the left two were renamed in place when FLUX became a BBD (spec 2026-07-27):
@@ -231,8 +231,8 @@ FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # DIV MIX FB | SEND (per-deck reverb m
 # 2026-07-28 flux-rhythm-drag): DRIVE -> DRAG, DRIVE moving to the menu. And
 # again (spec 2026-07-28 flux-link): DRAG -> LINK, because the control became
 # bipolar and LINK names the axis rather than one of its two ends.
-# The BBD-only PITCH widget overlaps ATK at runtime. TIME takes the second
-# FLUX-bottom slot, so the static Synth preview reads LINK TIME | GRIT COMP.
+# The BBD-only BEND widget overlaps ATK at runtime. MULT takes the second
+# FLUX-bottom slot, so the static Synth preview reads LINK MULT | GRIT COMP.
 FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # LINK MULT | GRIT COMP
 PLAY_Y   = 103.6
 # The PLAY row's left block re-spaced to seat REC between GRIT and STEPS
@@ -277,8 +277,8 @@ def part_controls(mir=False):
                               ("SOURCE", dynamic_words("SOURCE")[0], VOICE_X[2], ROW_V2)]:
         out.append(Ctl(enum, SMKNOB, fx(x), y, lbl,
                        "SOURCE" if enum == "SOURCE" else None))
-    # fx box: the FLUX delay cluster (RATE . MIX . FB) on top, GRIT/COMP below.
-    # FLUX (the delay MIX) is the template member; RATE/FB are appended at the
+    # fx box: the FLUX delay cluster (DIV . MIX . FB) on top, GRIT/COMP below.
+    # FLUX (the delay MIX) is the template member; DIV/FB are appended at the
     # end of PARAMS. STEPS keeps its append slot here but has moved to the PLAY
     # box -- it is a sequencer parameter, not an effect (spec 2026-07-18 §5).
     out.append(Ctl("FLUX", SMKNOB, fx(FX_TOP[1]), ROW_V1, "MIX", "FLUX"))
@@ -429,7 +429,7 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     Ctl("TIDE", SMKNOB, CX + 11.0, ROW_BLEND, "TIDE"),
     # FLUX synced-delay controls (spec 2026-07-17 flux-synced-delay). Per part,
     # appended LAST like FILT/TIDE/CHOKE so existing .vcv patches keep their ids.
-    # They complete the FLUX delay cluster atop the FX box: RATE (FX_TOP[0]),
+    # They complete the FLUX delay cluster atop the FX box: DIV (FX_TOP[0]),
     # MIX (FX_TOP[1], from the template), FB (FX_TOP[2]) sit together;
     # GRIT/COMP fill FX_BOT below.
     Ctl("FLUXRATE_A", SMKNOB, FX_TOP[0],     ROW_V1, "DIV", "FLUX division"),
@@ -453,7 +453,7 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     # along); the spec's no-migration decision accepts that. DRIVE itself
     # moved to the menu as
     # patch state and stays there, appended below in HIDDEN_PARAMS with fresh
-    # trailing ids. STAGES is the BBD-only PITCH widget, so Rack overlays it
+    # trailing ids. STAGES is the BBD-only BEND widget, so Rack overlays it
     # on ATTACK while the static Synth preview omits it.
     Ctl("LINK_A",   SMKNOB, FX_BOT[0],     ROW_V2, "LINK"),
     Ctl("LINK_B",   SMKNOB, W - FX_BOT[0], ROW_V2, "LINK"),
@@ -466,8 +466,8 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     Ctl("REC_B", LATCH, W - REC_X, PLAY_Y, "REC"),
     # Per-deck reverb mix (spec 2026-07-23 per-deck-reverb-mix). Appended LAST
     # like FILT/FLUXRATE/COLOR/LINK/REC so PART_STRIDE stays 23 and no id before
-    # them moves. They fill the FX top row's 4th slot -- RATE.MIX.FB.ROOM --
-    # aligned to the FX bottom row. Label "ROOM" (not "MIX": FLUX beside it is
+    # them moves. They fill the FX top row's 4th slot -- DIV.MIX.FB.SEND --
+    # aligned to the FX bottom row. Label "SEND" (not "MIX": FLUX beside it is
     # already the delay mix). The old shared centre REV_MIX is removed from
     # SHARED; its id and every id after it shift by one (accepted: old .vcv
     # patches load shifted reverb/CHOKE/tail params).
