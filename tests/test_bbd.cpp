@@ -1,5 +1,7 @@
 #include <doctest/doctest.h>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <vector>
 #include <algorithm>
 #include "fx/bbd.h"
@@ -149,6 +151,12 @@ TEST_CASE("bbd filter: the table is built once per sample rate") {
 
 static float s_bbd_mem[8192];
 
+static uint32_t fold_bbd_sample(uint32_t hash, float value) {
+    uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    return (hash ^ bits) * 16777619u;
+}
+
 // Peak-detect the arrival of a short burst, so a single-sample impulse's
 // filtered smear does not decide the answer.
 static int first_arrival(BbdLine& line, int n, int burst_len = 16) {
@@ -171,6 +179,24 @@ static float line_rms(BbdLine& line, float hz, float sr, int settle, int measure
         if (i >= settle) acc += static_cast<double>(y) * y;
     }
     return static_cast<float>(std::sqrt(acc / measure));
+}
+
+TEST_CASE("bbd line: fixed-stage output stays bit-identical") {
+    BbdLine line;
+    line.Init(s_bbd_mem, 8192, 48000.f);
+    line.SetStages(8192);                  // 4096 cells
+    line.SetDither(4e-5f);
+    line.Reset();                          // settle that requested length before audio
+    line.SetClock(16384.f);
+
+    uint32_t hash = 2166136261u;
+    for (int i = 0; i < 48000; ++i) {
+        const float x = 0.25f * std::sin(
+            TWO_PI * 137.f * static_cast<float>(i) / 48000.f)
+            + (i < 16 ? 0.5f : 0.f);
+        hash = fold_bbd_sample(hash, line.Process(x));
+    }
+    CHECK(hash == 0x12156b08u);
 }
 
 TEST_CASE("bbd line: the arrival lands where stages/(2*f_clk) says it does") {

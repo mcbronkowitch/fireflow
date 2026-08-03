@@ -15,7 +15,7 @@
 - Preserve the existing compander, feedback, dither, loss-pole, freeze and output reconstruction-filter paths.
 - Add no line-sized allocation, no heap allocation and no second complete BBD/filter/compander path.
 - Add no audio-rate transcendental calls; the crossfade uses arithmetic and a compile-time reciprocal only.
-- Keep the fixed-stage path bit-identical to the pre-fix FNV-1a digest `0xbfd13a0b`.
+- Keep the fixed-stage path bit-identical to the pre-fix Release-build FNV-1a digest `0x12156b08`.
 - Keep COLOR 0 bit-identical left to right for mono input.
 - The modulated-COLOR regression must keep adjacent-sample deltas below `0.03` on both channels after settling.
 - Do not change host parameters, panel layout, patch migration, COLOR's 30-cent endpoint, DETUNE, FILT, feedback or freeze tuning.
@@ -45,7 +45,7 @@ No new production source file or public engine/host interface is needed.
 
 **Interfaces:**
 - Consumes: `BbdLine::Init(float*, size_t, float)`, `SetStages(int)`, `SetDither(float)`, `Reset()`, `SetClock(float)`, and `Process(float)`.
-- Produces: a deterministic raw-float FNV-1a contract with expected digest `0xbfd13a0b`; Task 2 uses it to prove the settled full-ring path is chronologically identical to the old active ring.
+- Produces: a deterministic Release-build raw-float FNV-1a contract with expected digest `0x12156b08`; Task 2 uses it to prove the settled full-ring path is chronologically identical to the old active ring.
 
 - [ ] **Step 1: Add the raw-float folding helper and fixed-stage digest test**
 
@@ -84,7 +84,7 @@ TEST_CASE("bbd line: fixed-stage output stays bit-identical") {
             + (i < 16 ? 0.5f : 0.f);
         hash = fold_bbd_sample(hash, line.Process(x));
     }
-    CHECK(hash == 0xbfd13a0bu);
+    CHECK(hash == 0x12156b08u);
 }
 ```
 
@@ -97,7 +97,7 @@ cmake --build build --target spky_tests
 build\spky_tests.exe --test-case="bbd line: fixed-stage output stays bit-identical" --no-skip
 ```
 
-Expected: one test case passes and reports zero failed assertions. If the digest is not `0xbfd13a0b`, stop: confirm the build uses the current `main` checkout at commit `0b45892` plus only this test, and do not substitute a new digest.
+Expected: one test case passes and reports zero failed assertions in the repository's Release build. If the digest is not `0x12156b08`, stop: confirm the build uses the current pre-production-change checkout plus only this test, and do not substitute a new digest.
 
 - [ ] **Step 3: Commit the baseline contract**
 
@@ -436,7 +436,7 @@ build\spky_tests.exe --test-case="bbd line: fixed-stage output stays bit-identic
 
 Expected: all selected tests pass. In particular:
 
-- the digest remains exactly `0xbfd13a0b`;
+- the Release-build digest remains exactly `0x12156b08`;
 - shrink and expansion land after sixteen READ ticks;
 - the rapid retarget lands at 3072 cells rather than restarting the first transition;
 - Reset settles at 1024 cells and returns exact zero with dither disabled;
@@ -663,7 +663,7 @@ Expected: `git status --short` is empty; the log contains the baseline-test, DSP
 
 Report all of the following together:
 
-- the fixed-stage digest (`0xbfd13a0b` before and after);
+- the fixed-stage Release-build digest (`0x12156b08` before and after);
 - RED and GREEN maximum deltas for the moving-width regression;
 - zero/fixed/moving stereo non-vacuity results;
 - focused BBD and full CTest counts;
