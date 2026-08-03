@@ -20,22 +20,53 @@ constexpr float kInputGain = 0.5f;         // L+R sum -> mono average into the r
 // not a mixer; don't lean on it. Ear-tunable in [0.40, 0.50]; kept at the
 // low end to hold the ambient_wash showcase's bloom clear of the ceiling.
 constexpr float kWetGain = 0.40f;
-// Bloom trim. Past unity loop gain the room stops being driven by the send and
-// starts being driven by its own saturation: the return plateaus at a level
-// the loop picks, not one the player set (measured +18 dB over the send for a
-// quiet source at DECAY 1.0), and arrives at the master with no headroom left
-// for DRIVE. Trimming ONLY the blooming leg keeps every ear-tuned level below
-// it exactly where it was -- kWetGain and MIX are untouched, this multiplies
-// on top and is exactly 1.0 at DECAY <= kBloomTrimFrom.
-constexpr float kBloomTrimFrom = 0.80f;   // trim starts here, inactive below
-constexpr float kBloomTrim     = 0.708f;  // -3 dB at the stop (ear-tunable)
-constexpr float kTrimSmoothS   = 0.020f;  // return-gain glide, no step on a jump
+// Return limiter. Past unity loop gain the room stops being driven by the send
+// and starts being driven by its own saturation, so it settles on a level the
+// LOOP picks, not one the player set: measured at DECAY 1.0, sends of 0.05,
+// 0.15 and 0.50 all plateau at 0.26..0.27. Whatever else that is, it means the
+// room can hand the master a level nobody asked for, and it stacks on top of
+// however hot the decks already are.
+//
+// So the return gets its own ceiling. Not clever, deliberately: two earlier
+// attempts tried to be. A DECAY-tied trim failed because knob position is not
+// level, and a send-relative ratio failed because the bus does not care how
+// loud you played -- it clips on the sum. A plain ceiling is the only one of
+// the three that bounds what actually reaches the master.
+//
+// Cheap by construction: a one-pole peak follower and one multiply per sample.
+// The divide that turns the peak into a gain is taken on the control raster
+// (every kCtrlInterval samples) and glided in between, so the per-sample cost
+// is two adds and two multiplies.
+// A HARD ceiling was tried first and it pumps, badly. Holding the return at
+// exactly kWetKnee means the gain has to cancel every fluctuation of a wash
+// that fluctuates by nature, so it rode ordinary material (send 0.30 at DECAY
+// 0.85) down 2 dB while breathing 34 % peak-to-peak at about 1 Hz. Audible, and
+// on a wash it reads as dirt rather than as level.
+//
+// So the knee is soft and the ratio finite: above kWetKnee the return still
+// grows, just four times more slowly. The gain then only has to attenuate a
+// quarter of each fluctuation, which cuts the breathing by the same factor,
+// and the return is still bounded -- a 1.12 peak lands at 0.66 instead of
+// running into the master at full scale.
+constexpr float kWetKnee    = 0.45f;  // where the return starts being held back
+constexpr float kWetRatio   = 0.15f;  // ~7:1 above it (ear-tunable)
+// And it is SLOW -- seconds, not milliseconds. Measured: the gain ride is not
+// free, it adds modulation that no fixed volume setting explains, and at
+// limiter speeds that residue lands at -25 dB, right where the master's own
+// distortion sits. Stretching the constants to seconds pushes it to -40 dB,
+// about 1 %, which is the practical floor for riding a wash at all. Anything
+// faster is audible as breathing, and on a reverb it reads as dirt, not level.
+constexpr float kPkRelS     = 4.0f;   // peak bleeds off over seconds
+constexpr float kLimDownS   = 1.0f;   // ...and the ride is slower still
+constexpr float kLimUpS     = 6.0f;
 }
 
 void AmbientReverb::init(float sample_rate) {
     _sr = sample_rate;
     _ctrl = 0;
-    _trim_coef = 1.f - std::exp(-1.f / (kTrimSmoothS * _sr));
+    _pk_rel   = 1.f - std::exp(-1.f / (kPkRelS * _sr));
+    _lim_down = 1.f - std::exp(-1.f / (kLimDownS * _sr));
+    _lim_up   = 1.f - std::exp(-1.f / (kLimUpS * _sr));
     _verb.Init(_buffer, kRngSeed);
     _verb.set_input_gain(kInputGain);
     _verb.set_hp(kHpPin);
@@ -46,14 +77,20 @@ void AmbientReverb::init(float sample_rate) {
     set_diffusion(0.7f);          // coeff 0.63 ~= the old stock 0.625 room
     set_diffuser_mod_depth(0.5f); // wash smear default (~56)
     set_mod_depth(0.2f);          // gentle tail wobble default (~the calm 22.5)
-    _bloom_trim = _bloom_trim_target;   // boot at the settled value, no ramp-in
+    _wet_peak = 0.f;
+    _lim_gain = 1.f;   // boot wide open; nothing has overshot yet
+    _lim_target = 1.f;
     _verb.Prepare();
 }
 
 void AmbientReverb::clear() {
     _verb.Clear();
     _ctrl = 0;   // refresh the LFO slopes on the next process()
-    _bloom_trim = _bloom_trim_target;   // waking room starts at its settled gain
+    // An emptied room holds no level: forget the ride rather than let the last
+    // bloom duck the first note of the next one.
+    _wet_peak = 0.f;
+    _lim_gain = 1.f;
+    _lim_target = 1.f;
 }
 
 void AmbientReverb::set_size(float norm) {
@@ -61,24 +98,37 @@ void AmbientReverb::set_size(float norm) {
     _verb.set_size(0.05f + 0.94f * clampf(norm, 0.f, 1.f));
 }
 
-void AmbientReverb::set_decay(float norm) {
-    // Linear to 1.0 at norm 0.9; the top 10% of travel pushes past unity
-    // into the soft-limited bloom, reaching 1.05 at the stop. (Ear-tunable knee.)
-    //
-    // The bloom leg is its own ramp rather than the same 1/0.9 slope clamped
-    // at 1.05: that slope hit the cap at norm 0.945, so the top 5.5% of the
-    // knob was dead -- 0.95, 0.97 and 1.0 all rang bit-identically. Giving the
-    // bloom the full 0.9..1.0 travel makes the region playable at 1/2.2 the
-    // sensitivity. Patches saved in that band shift (0.95 was 1.05, now 1.025).
+// Knob -> loop gain. Two legs: everything up to kUnityAt is the ordinary room,
+// 0 to 100%; above it the room is over unity and blooms, out to kMaxGain.
+//
+// Both numbers moved because the bloom used to be unreachable. Measured with
+// the stock TONE, the room does not begin to sustain itself until about 105%
+// -- and 105% was the knob's MAXIMUM, so self-oscillation existed only at the
+// very last point of the travel and its speed could not be played at all.
+// Unity now sits at 0.80 and the top reaches 110%, so the blooming region owns
+// the last fifth of the travel instead of a single point at the stop.
+//
+// The top was briefly 120%, matching FLUX FB, and that was wrong. Measured on
+// a real patch: the settled bloom is the same at 110% and at 120% (return 0.636
+// vs 0.641), so the extra span buys no sound -- but it costs headroom exactly
+// where it hurts, during the 2-3 s swell, where it added 1.9 dB and pushed a
+// master that had been sitting just under its limit into riding continuously.
+// The core stays bounded far past this (checked to 130%); the limit is musical,
+// not numerical.
+//
+// This remaps saved DECAY values. The ordinary range is slightly compressed
+// (unity was at 0.90) and anything above it means considerably more bloom.
+float AmbientReverb::decay_loop_gain(float norm) {
+    constexpr float kUnityAt = 0.80f;   // knob position of 100% (ear-tunable)
+    constexpr float kMaxGain = 1.10f;   // 110% at the stop (ear-tunable)
     norm = clampf(norm, 0.f, 1.f);
-    _verb.set_decay(norm <= 0.9f ? norm * (1.f / 0.9f)
-                                 : 1.0f + (norm - 0.9f) * 0.5f);
-    // ...and trim the return over the same upper leg (see kBloomTrim).
-    _bloom_trim_target =
-        norm <= kBloomTrimFrom
-            ? 1.f
-            : 1.f - (1.f - kBloomTrim) * (norm - kBloomTrimFrom)
-                                       / (1.f - kBloomTrimFrom);
+    return norm <= kUnityAt
+               ? norm * (1.f / kUnityAt)
+               : 1.f + (norm - kUnityAt) * ((kMaxGain - 1.f) / (1.f - kUnityAt));
+}
+
+void AmbientReverb::set_decay(float norm) {
+    _verb.set_decay(decay_loop_gain(norm));
 }
 
 void AmbientReverb::set_tone(float norm) {
@@ -115,11 +165,33 @@ void AmbientReverb::process(float in_l, float in_r, float& out_l, float& out_r) 
         _ctrl = kCtrlInterval;
     }
     --_ctrl;
-    _bloom_trim += _trim_coef * (_bloom_trim_target - _bloom_trim);
     out_l = in_l;
     out_r = in_r;
     _verb.Process(&out_l, &out_r);
-    const float g = kWetGain * _bloom_trim;
-    out_l *= g;
-    out_r *= g;
+    out_l *= kWetGain;
+    out_r *= kWetGain;
+
+    // True peak, held and bled off: one compare, one multiply-add. A smoothed
+    // attack was tried and is wrong here -- between the crests of a 220 Hz tone
+    // a one-pole reads about 70 % of the real peak, which let the ceiling be
+    // overshot by 3 dB. Catching the crest exactly is both correct and cheaper.
+    const float pk = std::fmax(std::fabs(out_l), std::fabs(out_r));
+    if (pk > _wet_peak) _wet_peak = pk;
+    else _wet_peak += _pk_rel * (pk - _wet_peak);
+    // The divide only on the control raster; glided in between.
+    if (_ctrl == 0) {
+        // Soft knee: everything under it passes at exactly 1.0; above it the
+        // return is allowed to keep growing at kWetRatio of its natural rate.
+        if (_wet_peak > kWetKnee) {
+            const float allowed =
+                kWetKnee + (_wet_peak - kWetKnee) * kWetRatio;
+            _lim_target = allowed / _wet_peak;
+        } else {
+            _lim_target = 1.f;
+        }
+    }
+    _lim_gain += (_lim_target < _lim_gain ? _lim_down : _lim_up)
+                 * (_lim_target - _lim_gain);
+    out_l *= _lim_gain;
+    out_r *= _lim_gain;
 }

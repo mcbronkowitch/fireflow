@@ -60,6 +60,18 @@ struct FluxFbQuantity : ParamQuantity {
     }
 };
 
+// REVERB DECAY tooltip: the room's loop gain as a percentage, the same way
+// FLUX FB reads. Past 100% the room feeds itself and blooms, so the number
+// tells you exactly where that starts instead of leaving it to be found by
+// ear. The figure comes from the engine's own curve -- never recompute it
+// here, or the panel and the room drift apart.
+struct RevDecayQuantity : ParamQuantity {
+    std::string getDisplayValueString() override {
+        return string::f("%.0f%%",
+                         spky::AmbientReverb::decay_loop_gain(getValue()) * 100.f);
+    }
+};
+
 // The append-only STAGES parameter is retained for patch compatibility, but
 // now supplies the BBD engine's normalized PITCH lane base.
 struct StagesQuantity : ParamQuantity {
@@ -276,6 +288,8 @@ struct Spotymod : Module {
                         configParam<FluxTimeQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == FLUXFB_A || c.id == FLUXFB_B)
                         configParam<FluxFbQuantity>(c.id, 0.f, 1.f, init, lbl);
+                    else if (c.id == REV_DECAY)
+                        configParam<RevDecayQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == LINK_A || c.id == LINK_B)
                         configParam<LinkQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == STAGES_A || c.id == STAGES_B)

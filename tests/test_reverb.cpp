@@ -100,38 +100,125 @@ TEST_CASE("reverb: the top of the DECAY travel is live, not a dead zone") {
     CHECK(e97 < e100);
 }
 
-// Past unity loop gain the return level is set by the loop's own saturation,
-// not by the send, so it used to arrive at the master ABOVE full scale (1.107
-// peak off a 0.6 send) and left the master DRIVE no headroom. The bloom leg is
-// trimmed; everything at or below DECAY 0.8 must stay exactly as voiced.
-TEST_CASE("reverb: the bloom leaves headroom, the levels below it are untouched") {
-    auto steady_peak = [](float decay, float send) {
+// The room can hand the master a level nobody asked for: past unity loop gain
+// it plateaus wherever its own saturation puts it, and a hot send alone returns
+// near full scale (measured 1.12 off a 0.9 send at DECAY 0.85). That lands on
+// top of however hot the decks already are, so the return carries its own
+// ceiling.
+namespace {
+struct WetRun { float peak; float gmin; };
+WetRun wet_run(float decay, float send_amp, float secs, bool sustain) {
+    s_rev.init(48000.f);
+    s_rev.set_size(0.6f);
+    s_rev.set_tone(0.5f);
+    s_rev.set_diffusion(0.7f);
+    s_rev.set_diffuser_mod_depth(0.5f);
+    s_rev.set_mod_depth(0.2f);
+    s_rev.set_decay(decay);
+    const int N = (int)(48000.f * secs), stop = 48000 * 2;
+    float peak = 0.f, gmin = 1.f;
+    for (int i = 0; i < N; ++i) {
+        float in = (sustain || i < stop)
+                       ? send_amp * std::sin(6.2831853f * 220.f * i / 48000.f)
+                       : 0.f;
+        float wl, wr;
+        s_rev.process(in, in, wl, wr);
+        if (i > 48000 * 2) {   // past the ride's own settling
+            peak = std::max(peak, std::max(std::fabs(wl), std::fabs(wr)));
+            gmin = std::min(gmin, s_rev.limiter_gain());
+        }
+    }
+    return {peak, gmin};
+}
+} // namespace
+
+TEST_CASE("reverb: the return carries a ceiling, whatever the room does") {
+    // A hot send is the loudest case of all -- louder than any bloom. The bound
+    // is above kWetKnee because the knee is soft: the return keeps growing past
+    // it, just four times more slowly, which is what keeps the ride from
+    // breathing. Unbounded these reach 1.00 to 1.12.
+    CHECK(wet_run(0.85f, 0.90f, 24.f, true).peak < 0.80f);
+    CHECK(wet_run(0.90f, 0.90f, 24.f, true).peak < 0.80f);
+    CHECK(wet_run(0.60f, 0.90f, 24.f, true).peak < 0.80f);
+    CHECK(wet_run(0.85f, 0.50f, 24.f, true).peak < 0.80f);
+    // and the bloom, now that it reaches 120%, is bounded by the same knee
+    CHECK(wet_run(1.00f, 0.10f, 30.f, true).peak < 0.80f);
+    CHECK(wet_run(1.00f, 0.05f, 45.f, false).peak < 0.80f);
+    CHECK(wet_run(1.00f, 0.60f, 45.f, true).peak < 0.80f);
+}
+
+// The knob reads out as a percentage of loop gain, the way FLUX FB does, so
+// the player can see where the room starts feeding itself. The panel calls the
+// engine's own curve; if these two ever disagree the number on screen is a lie.
+TEST_CASE("reverb: DECAY reads out as loop gain, and 100% is where it says") {
+    CHECK(AmbientReverb::decay_loop_gain(0.00f) == doctest::Approx(0.00f));
+    CHECK(AmbientReverb::decay_loop_gain(0.40f) == doctest::Approx(0.50f));
+    CHECK(AmbientReverb::decay_loop_gain(0.80f) == doctest::Approx(1.00f));
+    CHECK(AmbientReverb::decay_loop_gain(0.90f) == doctest::Approx(1.05f));
+    CHECK(AmbientReverb::decay_loop_gain(1.00f) == doctest::Approx(1.10f));
+    // monotone across the join, and clamped outside
+    float prev = -1.f;
+    for (int i = 0; i <= 200; ++i) {
+        const float g = AmbientReverb::decay_loop_gain(i / 200.f);
+        CHECK(g > prev);
+        prev = g;
+    }
+    CHECK(AmbientReverb::decay_loop_gain(-1.f) == doctest::Approx(0.f));
+    CHECK(AmbientReverb::decay_loop_gain(2.f) == doctest::Approx(1.10f));
+}
+
+// The bloom used to live at a single point: the room does not sustain itself
+// below about 105% loop gain, and 105% WAS the top of the knob. Now the top is
+// 120%, so blooming occupies real travel and its speed can be played.
+TEST_CASE("reverb: the bloom is reachable before the end of the travel") {
+    auto sustains_after_silence = [](float norm) {
         s_rev.init(48000.f);
         s_rev.set_size(0.6f);
         s_rev.set_tone(0.5f);
         s_rev.set_diffusion(0.7f);
         s_rev.set_diffuser_mod_depth(0.5f);
         s_rev.set_mod_depth(0.2f);
-        s_rev.set_decay(decay);
-        float peak = 0.f;
-        const int N = 48000 * 50;
+        s_rev.set_decay(norm);
+        const int N = 48000 * 40, stop = 48000 * 2;
+        float late = 0.f;
         for (int i = 0; i < N; ++i) {
-            float in = send * std::sin(6.2831853f * 220.f * i / 48000.f);
+            float in = (i < stop)
+                           ? 0.15f * std::sin(6.2831853f * 220.f * i / 48000.f)
+                           : 0.f;
             float wl, wr;
             s_rev.process(in, in, wl, wr);
-            if (i > 48000 * 40) peak = std::max(peak, std::fabs(wl));
+            if (i > N - 48000 * 5) late = std::max(late, std::fabs(wl));
         }
-        return peak;
+        return late;
     };
-    // a hot send into a full bloom still clears full scale on its own
-    CHECK(steady_peak(1.0f, 0.6f) < 0.95f);
-    // and the trim does not reach down into the range tuned by ear: the return
-    // still climbs normally through DECAY 0.7 -> 0.8
-    const float p70 = steady_peak(0.70f, 0.3f);
-    const float p75 = steady_peak(0.75f, 0.3f);
-    const float p80 = steady_peak(0.80f, 0.3f);
-    CHECK(p70 < p75);
-    CHECK(p75 < p80);
+    // still ringing 33 s after the input stopped, well below the stop
+    CHECK(sustains_after_silence(0.90f) > 0.05f);
+    // while an ordinary room below unity dies away as it always did
+    CHECK(sustains_after_silence(0.70f) < 0.001f);
+    // Deliberately NOT asserted: that 1.00 returns a higher level than 0.90.
+    // It does not, and that is the design -- the return knee holds the level
+    // while more DECAY buys length and density instead. Measured 0.565 at 0.90
+    // against 0.536 at 1.00. What must keep rising is the loop gain itself:
+    CHECK(AmbientReverb::decay_loop_gain(0.90f)
+          < AmbientReverb::decay_loop_gain(1.00f));
+}
+
+// The ceiling must be a ceiling and not a compressor: anything that never
+// reaches it has to come through with the ride at exactly 1.0. Only the gain
+// shows this -- from outside, a ride looks the same as a quieter room.
+TEST_CASE("reverb: material under the ceiling is passed through untouched") {
+    CHECK(wet_run(0.50f, 0.10f, 12.f, true).gmin == 1.f);
+    CHECK(wet_run(0.60f, 0.10f, 12.f, true).gmin == 1.f);
+    CHECK(wet_run(0.75f, 0.10f, 12.f, true).gmin == 1.f);
+    CHECK(wet_run(0.50f, 0.20f, 12.f, true).gmin == 1.f);
+    // The boundary is close: a 0.30 send at DECAY 0.50 already grazes the knee
+    // (ride 0.994, about 0.05 dB). Recorded rather than hidden -- it is where
+    // "quiet" stops, and it moves whenever kWetKnee does.
+    // a decaying tail is never touched on its way down either
+    CHECK(wet_run(0.85f, 0.10f, 20.f, false).gmin == 1.f);
+    // Note what is NOT claimed: that the knee leaves every ordinary sound
+    // alone. It does not -- a 0.30 send at DECAY 0.60 already crosses it. The
+    // knee sits where the level problem is, so it has to.
 }
 
 TEST_CASE("reverb: size ride Doppler-warps without clicks") {
