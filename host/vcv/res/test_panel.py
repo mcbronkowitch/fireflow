@@ -143,6 +143,28 @@ def test_bbd_pitch_flux_time_collections():
               f"generated header lacks runtime TIME{suffix} row")
 
 
+def test_readme_matches_the_caption_table():
+    """Every word the generator prints must be findable in the manual, and no
+    retired word may still be presented as current."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "README.md"), encoding="utf-8") as f:
+        readme = f.read()
+    for _target, _driver, words in g.DYNAMIC_CAPTIONS:
+        for word in set(words):
+            check(word in readme, f"README never mentions the caption {word!r}")
+    for word in ("BEND", "DIV", "MULT", "SEND", "PUSH"):
+        check(word in readme, f"README never mentions the caption {word!r}")
+    # The STGS-to-BEND migration sentence names the retired `STGS` label on
+    # purpose (test_bbd_pitch_and_tape_time_user_documentation requires it
+    # verbatim) -- it explains STGS is gone, it does not present STGS as a
+    # live caption, so it is excluded here the same way that test excludes it.
+    migration = re.compile(r"the visible `STGS`\s+label is gone")
+    unmigrated = migration.sub("", readme)
+    for stale in ("`STGS`", "`MELO` / `SCAN`", "`SUB` / `LEN`"):
+        check(stale not in unmigrated,
+              f"README still presents the retired {stale}")
+
+
 def test_source_and_detune_user_documentation():
     """The VCV README must explain the contextual SOURCE control and the
     independent constant detune spread users configure from the menu."""
@@ -162,14 +184,14 @@ def test_source_and_detune_user_documentation():
 
 
 def test_bbd_pitch_and_tape_time_user_documentation():
-    """The README must match the BBD/PITCH and FX/TIME faceplate contract."""
+    """The README must match the BBD/BEND and FX/MULT faceplate contract."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "README.md"), encoding="utf-8") as f:
         readme = f.read()
-    check("BBD PITCH" in readme, "README omits the BBD PITCH faceplate slot")
+    check("BBD BEND" in readme, "README omits the BBD BEND faceplate slot")
     check("Freeze Attack" in readme, "README omits menu-only BBD Freeze Attack")
-    check("TIME" in readme and "x0.25" in readme and "x4" in readme,
-          "README omits the tape TIME multiplier")
+    check("MULT" in readme and "x0.25" in readme and "x4" in readme,
+          "README omits the tape multiplier")
     migration = re.compile(r"the visible `STGS`\s+label is gone")
     check(migration.search(readme) is not None,
           "README omits the STGS-to-PITCH migration explanation")
