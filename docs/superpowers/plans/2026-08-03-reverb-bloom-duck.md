@@ -461,8 +461,12 @@ render from 500 to 2000 blocks (4 s) and replace the identity:
     CHECK(g > g0 + 0.1f);
 ```
 
-(The `REQUIRE(s_ti_reverb.return_level() > 0.30f)` lines and the monotone
-tracking stay as they are; delete the `(void)g0;`.)
+(The pre-disarm `REQUIRE(s_ti_reverb.return_level() > 0.30f)` stays; the
+POST-window copy moves its evaluation point to the 1 s mark — measured on
+this rig the env crosses 0.30 on its own by ~3.1 s (0.301 @ 1500 blocks,
+0.261 @ 1999), so at 4 s the honesty check would fail for reasons that
+have nothing to do with the duck. Monotone tracking stays; delete the
+`(void)g0;`.)
 
 - [ ] **Step 5: Run every duck test, expect green**
 
