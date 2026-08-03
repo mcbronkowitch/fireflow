@@ -1223,11 +1223,32 @@ static void duck_render_blocks(Instrument& inst, int blocks) {
 TEST_CASE("instrument duck: a normal patch never ducks -- exactly 1.0") {
     Instrument inst;
     inst.init(48000.f, test_fx_mem());   // boot defaults: MIX 0.25, DECAY 0.55
+    // Hot send + hot MIX, DECAY still at the boot default (sub-unity loop
+    // gain -- no bloom): a loud but ordinary room, not a quiet one, so this
+    // guard cannot pass merely because there was nothing for the duck to see.
+    for (int p = 0; p < PART_COUNT; ++p) inst.set_fx_target_base(p, FXT_REV_SEND, 1.f);
+    inst.set_reverb_mix(0.9f);
     std::vector<float> l(96), r(96);
     for (int i = 0; i < 2500; ++i) {     // 5 s
         inst.process(nullptr, nullptr, l.data(), r.data(), 96);
         CHECK(inst.duck_gain() == 1.f);  // ==, not Approx: bit-transparent
     }
+}
+
+TEST_CASE("instrument duck: a loud sub-unity room never ducks -- exactly 1.0") {
+    Instrument inst;
+    duck_bloom_rig(inst);
+    inst.set_reverb_decay(0.75f);            // loop gain ~0.94: player's regime
+    std::vector<float> l(96), r(96);
+    float env_max = 0.f;
+    for (int i = 0; i < 7500; ++i) {         // 15 s
+        inst.process(nullptr, nullptr, l.data(), r.data(), 96);
+        env_max = std::max(env_max, s_ti_reverb.return_level());
+        CHECK(inst.duck_gain() == 1.f);      // ==: the regime bit, not the level, gates
+    }
+    // Honesty: the guard only means something if the room really crossed the
+    // threshold. If this fails, make the rig louder -- do not delete the line.
+    REQUIRE(env_max > 0.30f);
 }
 
 TEST_CASE("instrument duck: a bloom pulls the dry bus below 0.5") {
@@ -1268,23 +1289,21 @@ TEST_CASE("instrument duck: sub-unity DECAY releases the duck even while the roo
         if (i == 499) return_level_1s = s_ti_reverb.return_level();   // 1 s in, Task 3's own checkpoint
     }
     // The room is STILL over the threshold 1 s into the disarm (the peak
-    // follower's release hasn't caught up there), so a pure level duck still
-    // has plenty of env to work with at that point -- measured on this rig,
-    // the tank's own partial drain alone (no regime bit at all) already
-    // drags a *plain* level duck up by 0.12-0.26 within that same second, so
-    // a small delta cannot be the red line there. (Extending the window to
-    // 4 s for the slew -- Task 4 -- lets the natural release cross the 0.30
-    // threshold on its own by ~3.1 s on this rig, measured: return_level
-    // 0.301 at i=1500, 0.261 at i=1999; so this precondition is only honest
-    // at the 1 s checkpoint Task 3 originally used, not at the extended
-    // window's end.) The regime bit's signature is not "some rise" but a
-    // rise that clears the slew's own 4 s time constant -- so pin that
-    // instead, matching the g bound below.
+    // follower's release hasn't caught up there) -- this test's job is only
+    // to guard the RELEASE RIDE (the gain climbs back, monotonically, once
+    // DECAY drops the loop below unity), not to prove the regime bit itself:
+    // over the full 4 s window the env also drains through kDuckThresh on
+    // its own (measured on this rig: return_level 0.301 at i=1500, 0.261 at
+    // i=1999), so a *plain* level duck would eventually rise here too --
+    // that proof belongs to the steady-state test above ("a loud sub-unity
+    // room never ducks"), which holds DECAY at 0.75 for the room's whole life
+    // and never lets the env's own drain do the work. Pinning only the 1 s
+    // checkpoint keeps this precondition honest without leaning on that
+    // borrowed authority.
     CHECK(return_level_1s > 0.30f);
-    // Slew-stage form (Task 4): the snap identity g == 1.f is unreachable
-    // under a float one-pole. Arming kept its red-proof against the snap;
-    // this guards the release ride: from any breathing g0 <= ~0.8, four
-    // seconds of the 4 s up-slew rise at least (1-g0)*(1-1/e) > 0.1.
+    // This guards the release ride, not the endpoint: from any breathing
+    // g0 <= ~0.8, four seconds of the 4 s up-slew rise at least
+    // (1-g0)*(1-1/e) > 0.1.
     CHECK(monotone);
     CHECK(g > g0 + 0.1f);
 
