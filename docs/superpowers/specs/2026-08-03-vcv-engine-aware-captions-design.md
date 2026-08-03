@@ -88,7 +88,7 @@ unchanged and carry no table entry.
 | Param | Synth | Sampler | Wave | Body | BBD |
 |---|---|---|---|---|---|
 | `ATTACK` | ATK | ATK | ATK | **HIT** | — ¹ |
-| `STAGES` | — ¹ | — ¹ | — ¹ | — ¹ | PITCH |
+| `STAGES` | — ¹ | — ¹ | — ¹ | — ¹ | **BEND** |
 | `FILT` | FILT | FILT | FILT | **BRITE** | **LOSS** |
 | `SUB` | SUB | **LEN** | SUB | **EXCIT** | **FEED** |
 | `DECAY` | DEC | DEC | DEC | **DAMP** | **TAIL** |
@@ -115,6 +115,7 @@ against taste:
 - Sampler `LEN` — `SUB_A/B` is the `LANE_SIZE` base on a Sampler deck.
 - Sampler `SCAN` — `Instrument::sampler_scan`.
 - `VARY` — `Instrument::set_variation`, `-1..+1 RENEW ← LOOP → GROW`.
+- BBD `BEND` — see §3.3; `STAGES` is a static rename, not a table entry.
 
 Wave is `SynthEngineT<VoiceT<WtOsc>>` — the same voice edit layer as Synth with
 a different oscillator, so its column matches Synth except for `SOURCE`.
@@ -128,6 +129,7 @@ a different oscillator, so its column matches Synth except for `SOURCE`.
 | `REV_MIX_A/B` | `ROOM` | **SEND** | `Instrument::set_reverb_mix`'s own comment calls it the deck's SEND. Frees `ROOM` for the centre legend. |
 | `MASTER_DRIVE` | `DRIVE` | **PUSH** | It is `_limiter.set_drive`, not a distortion stage. Frees `DRIVE` for the BBD `SOURCE` caption. |
 | `GRITMODE_A/B` | `GRIT` | **SAT** / **CRSH** | A mode pad should show its mode, not its block's name. Frees `GRIT` for the grit-mix knob beside it. |
+| `STAGES_A/B` | `PITCH` | **BEND** | Collides with the `PITCH` sector eyebrow over the orbit. The README's own account of the control is a bend: a bucket-brigade line's first pass is always at unity pitch, and only recirculating repeats sample the moved clock more than once. Revises spec 2026-08-02, which named this slot `PITCH`. |
 
 `GRITMODE` is the one dynamic caption that does **not** follow `ENG`: it
 follows its own value (`configSwitch` states `{"Drive", "Reduce"}` → `SAT`,
@@ -136,7 +138,17 @@ follows its own value (`configSwitch` states `{"Drive", "Reduce"}` → `SAT`,
 ### 3.4 Uniqueness
 
 After the renames every word printed on the plate is unique across all five
-engine states, all group legends and all jack captions. One near-miss is
+engine states, all group legends and all sector eyebrows. This was verified
+against the current generator before the plan was written, and it is what
+turned up the `PITCH` collision in §3.3 that six months of reading the panel
+had not.
+
+Jack captions are outside the rule on purpose: `PIT`, `GATE`, `L` and `R`
+each appear twice across the five jack groups, and the generator's own comment
+records why — the groups sit on differently coloured wells with their own
+legends, which is what disambiguates them.
+
+One near-miss is
 recorded deliberately rather than hidden: `FB` (FLUX feedback, FX box) and
 `FEED` (BBD input level, VOICE box) are phonetically close. They sit in
 different fieldsets, differ in length, and never appear in the same box; the
@@ -322,3 +334,8 @@ take on a different job" table (MELODY's row becomes exclusive, the `MELO`/`SCAN
 slash notation goes away), the SOURCE section (the caption list moves to the
 generator), and the BBD section's control mapping (which now has panel words
 for `TAIL`, `TILT`, `FEED` and `LOSS` instead of prose).
+
+The BBD section additionally carries a subsection headed "BBD PITCH and tape
+TIME surface" whose two named controls are both renamed here. Both the heading
+and its body need to follow `PITCH` → `BEND` and `TIME` → `MULT`, or the
+README will document a panel that no longer exists.
