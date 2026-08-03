@@ -359,9 +359,12 @@ stale WAV sitting in patch storage.
 
 ENG's fifth position (**BBD**, state 4) selects a stereo bucket-brigade
 delay engine — a self-contained sound source, not to be confused with
-**FLUX**, the unrelated per-part echo effect present on every engine
-(including this one) that is *also* modelled after a bucket-brigade delay
-chip. Old patches only ever stored ENG 0..3, so this is purely additive.
+**FLUX**, the unrelated per-part echo effect present on every engine,
+including this one. FLUX was itself a bucket-brigade model for a while;
+movement 3 returned it to a stereo tape echo (`Flux` holds two
+`TapeEcho`s, `engine/fx/flux.h`), so the two are no longer even the same
+kind of delay — see "FLUX is a stereo tape echo" under Known limitations.
+Old patches only ever stored ENG 0..3, so this is purely additive.
 
 On a BBD deck the five modulation lanes take on the engine's own controls:
 **SOURCE** drives DRIVE (the loop's internal saturation), **MOTION** drives
