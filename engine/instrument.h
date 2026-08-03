@@ -131,6 +131,10 @@ public:
     // value actually pushed to the engine at the last control tick -- see
     // Part::excitation_eff().
     float excitation_bus(int p) const { return _parts[p].excitation_eff(); }
+    // Observer only, for tests: the bloom duck's gain on the dry bus. From
+    // outside a duck is indistinguishable from quieter playing (the same
+    // argument as limiter_gain()), so this is the only honest probe.
+    float duck_gain() const { return _duck_gain; }
     // Observer only, for tests: deck p's post-FX output from the sample just
     // processed. ch 0 = L, 1 = R. Latency cannot be measured from the summed
     // output, which cannot distinguish 0 samples from 1.
@@ -300,6 +304,11 @@ private:
     OnePole _rev_dry[PART_COUNT], _rev_wet[PART_COUNT];  // 10 ms glide per deck
     bool    _rev_primed = false;    // first process() snaps the mix gains
     bool    _rev_asleep = false;    // both decks dry: room cleared, process() skipped
+    // Bloom duck (spec 2026-08-03-reverb-bloom-duck): while the room is over
+    // unity loop gain its return envelope pulls the dry bus back. Exactly
+    // 1.0 whenever it is not ducking -- guarded by a test, like the return
+    // ceiling's limiter_gain().
+    float _duck_gain = 1.f, _duck_target = 1.f;
     Limiter _limiter;
     Center _center;
     // Excitation bus, cross-deck source (spec §6, Task 10): each part's own

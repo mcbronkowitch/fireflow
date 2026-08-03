@@ -1201,3 +1201,48 @@ TEST_CASE("audio-in excitation bus: post-sum DC block decays a sustained offset,
     CHECK(std::fabs(early_mean) > 0.05);                        // the DC genuinely reached the bus
     CHECK(std::fabs(late_mean) < std::fabs(early_mean) * 0.3);  // and the block pulls it toward 0
 }
+
+// ---- bloom duck (spec 2026-08-03-reverb-bloom-duck-design.md) ----
+
+// A patch that reliably blooms: hot per-part sends, hot MIX, DECAY at the
+// stop (110% loop gain). The parts' own generative output seeds the room.
+static void duck_bloom_rig(Instrument& inst) {
+    inst.init(48000.f, test_fx_mem());
+    for (int p = 0; p < PART_COUNT; ++p)
+        inst.set_fx_target_base(p, FXT_REV_SEND, 1.f);
+    inst.set_reverb_mix(0.9f);
+    inst.set_reverb_decay(1.f);
+}
+
+static void duck_render_blocks(Instrument& inst, int blocks) {
+    std::vector<float> l(96), r(96);
+    for (int i = 0; i < blocks; ++i)
+        inst.process(nullptr, nullptr, l.data(), r.data(), 96);
+}
+
+TEST_CASE("instrument duck: a normal patch never ducks -- exactly 1.0") {
+    Instrument inst;
+    inst.init(48000.f, test_fx_mem());   // boot defaults: MIX 0.25, DECAY 0.55
+    std::vector<float> l(96), r(96);
+    for (int i = 0; i < 2500; ++i) {     // 5 s
+        inst.process(nullptr, nullptr, l.data(), r.data(), 96);
+        CHECK(inst.duck_gain() == 1.f);  // ==, not Approx: bit-transparent
+    }
+}
+
+TEST_CASE("instrument duck: a bloom pulls the dry bus below 0.5") {
+    Instrument inst;
+    duck_bloom_rig(inst);
+    std::vector<float> l(96), r(96);
+    float min_gain = 1.f;
+    for (int i = 0; i < 7500; ++i) {     // 15 s: swell + duck both engage
+        inst.process(nullptr, nullptr, l.data(), r.data(), 96);
+        min_gain = std::min(min_gain, inst.duck_gain());
+    }
+    // The rig's return envelope BREATHES (measured on this rig: ~0.39-0.58,
+    // ~10 s period -- generative material; a wash fluctuates by nature), so
+    // the gain at any single checkpoint straddles the line. The spec's
+    // claim is "the gain falls below 0.5"; the render minimum pins exactly
+    // that, and the fixed seeds make it deterministic.
+    CHECK(min_gain < 0.5f);
+}

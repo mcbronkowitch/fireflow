@@ -1,5 +1,6 @@
 #include "instrument.h"
 #include "util/math.h"
+#include <algorithm>
 #include <cmath>
 
 // SPKY_DECK_BUS is defined by parts/part.h (`#ifndef`/`#define`, default 1),
@@ -28,6 +29,13 @@ constexpr float kHalfPi = 1.57079632679489661923f;
 // -3 dB overall). Chosen by ear, 2026-07-14.
 constexpr float kDefaultReverbMix = 0.25f;
 constexpr float kMixSmoothS = 0.010f;    // dry/wet gain glide; ear-tunable
+
+// Bloom duck (spec 2026-08-03-reverb-bloom-duck-design.md). While the room
+// self-drives, its return envelope pulls the dry bus back so the sum the
+// master sees stays at the level the player set. All ear-tunable.
+constexpr float kDuckThresh = 0.30f;  // below: exactly 1.0 even when armed
+constexpr float kDuckFull   = 0.60f;  // env at which the floor is reached
+constexpr float kDuckFloor  = 0.316f; // -10 dB: makes room, does not mute
 }
 
 void Instrument::init(float sample_rate) { init(sample_rate, FxMem{}); }
@@ -112,6 +120,21 @@ void Instrument::process(const float* inL, const float* inR,
             // cross-over as the excitation tap above.
             _parts[PART_A].fx().set_rhythm(rhythm(PART_B));
             _parts[PART_B].fx().set_rhythm(rhythm(PART_A));
+
+            // Bloom duck target (spec 2026-08-03): feedforward from the
+            // room's own return envelope -- seconds-slow by construction,
+            // so it cannot pump the way the dead return-side rides did.
+            if (_reverb) {
+                const float env = _reverb->return_level();
+                _duck_target = env <= kDuckThresh
+                    ? 1.f
+                    : 1.f - (1.f - kDuckFloor)
+                          * std::min(1.f, (env - kDuckThresh)
+                                              / (kDuckFull - kDuckThresh));
+            } else {
+                _duck_target = 1.f;
+            }
+            _duck_gain = _duck_target;   // snap; Task 4 replaces with a slew
             _ctrl_ctr = Center::kCtrlInterval;
         }
         --_ctrl_ctr;
@@ -203,8 +226,11 @@ void Instrument::process(const float* inL, const float* inR,
             const float wgb = _rev_wet[PART_B].process(_rev_wet_target[PART_B]);
             // Per-deck dry: each deck's dry gain rides its own cos before the
             // MORPH sum, so one deck can be wet-only while the other stays dry.
-            l = al * ga * dga + bl * gb * dgb;
-            r = ar * ga * dga + br * gb * dgb;
+            // Duck multiplies the dry SUM only. al/ar/bl/br must stay
+            // untouched: they feed _dry_tap (BODY's excitation) and
+            // _deck_tap, which must not starve when the bloom peaks.
+            l = (al * ga * dga + bl * gb * dgb) * _duck_gain;
+            r = (ar * ga * dga + br * gb * dgb) * _duck_gain;
             if (!_rev_asleep) {
                 // Per-deck send: the equal-power wet curve (sin) rides the SEND
                 // -- one shared room has only one return. MORPH fades the send
