@@ -314,6 +314,7 @@ private:
     // 1.0 whenever it is not ducking -- guarded by a test, like the return
     // ceiling's limiter_gain().
     float _duck_gain = 1.f, _duck_target = 1.f;
+    float _duck_down = 0.f, _duck_up = 0.f;   // asymmetric slew, set in init()
     // Who controls the room: below unity loop gain the player does (never
     // duck, at any level -- an ordinary long room legitimately returns +6 dB
     // over its send, overlapping the bloom's +7.6 dB, so LEVEL cannot tell

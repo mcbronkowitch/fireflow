@@ -1259,22 +1259,50 @@ TEST_CASE("instrument duck: sub-unity DECAY releases the duck even while the roo
     float g = inst.duck_gain();
     const float g0 = g;
     bool monotone = true;
+    float return_level_1s = 0.f;
     std::vector<float> l(96), r(96);
-    for (int i = 0; i < 500; ++i) {                  // 1 s
+    for (int i = 0; i < 2000; ++i) {                 // 4 s
         inst.process(nullptr, nullptr, l.data(), r.data(), 96);
         if (inst.duck_gain() + 1e-9f < g) monotone = false;
         g = inst.duck_gain();
+        if (i == 499) return_level_1s = s_ti_reverb.return_level();   // 1 s in, Task 3's own checkpoint
     }
-    // The room is STILL over the threshold (the peak-follower's 4 s release
-    // hasn't caught up), so a pure level duck still has plenty of env to
-    // work with here -- measured on this rig, the tank's own partial drain
-    // alone (no regime bit at all) already drags a *plain* level duck up by
-    // 0.12-0.26 within this same second, so a small delta cannot be the red
-    // line. The regime bit's signature is not "some rise" but the EXACT
-    // snap the else-branch produces (Task 2: `_duck_target = 1.f` verbatim,
-    // no slew yet) the instant `_duck_armed` goes false -- so pin that
-    // instead, matching the header's own "exactly 1.0" claim.
-    CHECK(s_ti_reverb.return_level() > 0.30f);
+    // The room is STILL over the threshold 1 s into the disarm (the peak
+    // follower's release hasn't caught up there), so a pure level duck still
+    // has plenty of env to work with at that point -- measured on this rig,
+    // the tank's own partial drain alone (no regime bit at all) already
+    // drags a *plain* level duck up by 0.12-0.26 within that same second, so
+    // a small delta cannot be the red line there. (Extending the window to
+    // 4 s for the slew -- Task 4 -- lets the natural release cross the 0.30
+    // threshold on its own by ~3.1 s on this rig, measured: return_level
+    // 0.301 at i=1500, 0.261 at i=1999; so this precondition is only honest
+    // at the 1 s checkpoint Task 3 originally used, not at the extended
+    // window's end.) The regime bit's signature is not "some rise" but a
+    // rise that clears the slew's own 4 s time constant -- so pin that
+    // instead, matching the g bound below.
+    CHECK(return_level_1s > 0.30f);
+    // Slew-stage form (Task 4): the snap identity g == 1.f is unreachable
+    // under a float one-pole. Arming kept its red-proof against the snap;
+    // this guards the release ride: from any breathing g0 <= ~0.8, four
+    // seconds of the 4 s up-slew rise at least (1-g0)*(1-1/e) > 0.1.
     CHECK(monotone);
-    CHECK(g == 1.f);                                 // released, exactly -- not merely "higher"
+    CHECK(g > g0 + 0.1f);
+}
+
+TEST_CASE("instrument duck: the gain never steps -- per-sample delta is slew-bounded") {
+    Instrument inst;
+    duck_bloom_rig(inst);
+    inst.set_reverb_decay(0.5f);            // start sub-unity: duck idle at 1.0
+    duck_render_blocks(inst, 2500);         // 5 s of material into the room
+    inst.set_reverb_decay(1.f);             // jump into the bloom regime
+    std::vector<float> l(1), r(1);
+    float prev = inst.duck_gain(), max_delta = 0.f;
+    for (int i = 0; i < 48000 * 10; ++i) {  // 10 s, per-sample
+        inst.process(nullptr, nullptr, l.data(), r.data(), 1);
+        max_delta = std::max(max_delta, std::fabs(inst.duck_gain() - prev));
+        prev = inst.duck_gain();
+    }
+    REQUIRE(inst.duck_gain() < 0.9f);       // the duck did engage during the window
+    // 1-exp(-1/(1.5 s * 48k)) * (1-0.316) = 9.5e-6; bound leaves 2x slack.
+    CHECK(max_delta < 2e-5f);
 }

@@ -36,6 +36,12 @@ constexpr float kMixSmoothS = 0.010f;    // dry/wet gain glide; ear-tunable
 constexpr float kDuckThresh = 0.30f;  // below: exactly 1.0 even when armed
 constexpr float kDuckFull   = 0.60f;  // env at which the floor is reached
 constexpr float kDuckFloor  = 0.316f; // -10 dB: makes room, does not mute
+
+// SLOW, seconds not milliseconds, both directions: the reverb work measured
+// (twice) that fast gain rides on a wash read as dirt, not level. Down a
+// little faster than the 2-3 s swell it answers; up slower still.
+constexpr float kDuckDownS = 1.5f;
+constexpr float kDuckUpS   = 4.0f;
 }
 
 void Instrument::init(float sample_rate) { init(sample_rate, FxMem{}); }
@@ -60,6 +66,8 @@ void Instrument::init(float sample_rate, const FxMem& mem) {
     _rev_asleep = false;
     set_reverb_mix(kDefaultReverbMix);   // convenience overload -> both decks
     _limiter.init();
+    _duck_down = 1.f - std::exp(-1.f / (kDuckDownS * sample_rate));
+    _duck_up   = 1.f - std::exp(-1.f / (kDuckUpS * sample_rate));
     _center.init(sample_rate, 0x5ce47e12u);
     _ctrl_ctr = 0;
     set_tempo_bpm(_bpm);
@@ -134,7 +142,6 @@ void Instrument::process(const float* inL, const float* inR,
             } else {
                 _duck_target = 1.f;
             }
-            _duck_gain = _duck_target;   // snap; Task 4 replaces with a slew
             _ctrl_ctr = Center::kCtrlInterval;
         }
         --_ctrl_ctr;
@@ -229,6 +236,10 @@ void Instrument::process(const float* inL, const float* inR,
             // Duck multiplies the dry SUM only. al/ar/bl/br must stay
             // untouched: they feed _dry_tap (BODY's excitation) and
             // _deck_tap, which must not starve when the bloom peaks.
+            // Per-sample ride toward the raster target. When idle both are
+            // exactly 1.0 and this is a multiply-add by zero.
+            _duck_gain += (_duck_target < _duck_gain ? _duck_down : _duck_up)
+                          * (_duck_target - _duck_gain);
             l = (al * ga * dga + bl * gb * dgb) * _duck_gain;
             r = (ar * ga * dga + br * gb * dgb) * _duck_gain;
             if (!_rev_asleep) {
