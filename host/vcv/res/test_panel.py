@@ -53,13 +53,13 @@ PARAM_ORDER = [
     'FLUXTIME_A', 'FLUXTIME_B',
 ]
 PARAM_TIPS = [
-    'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
+    'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
     'ENG', 'Grit mode', 'STEP', 'FORM', 'NEW', 'SONG',
-    'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
+    'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
     'ENG', 'Grit mode', 'STEP', 'FORM', 'NEW', 'SONG',
-    'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'DRIVE',
+    'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'Master drive',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
     'FILT', 'FILT', 'TIDE', 'FLUX division', 'FLUX division', 'FFB', 'FFB',
     'COLOR', 'COLOR', 'LINK', 'LINK', 'BBD Bend', 'BBD Bend', 'REC', 'REC',
@@ -141,20 +141,6 @@ def test_bbd_pitch_flux_time_collections():
               f"generated header lacks runtime PITCH{suffix} row")
         check(header.count(f"{{FLUXTIME{suffix}, WK_SMKNOB,") == 1,
               f"generated header lacks runtime TIME{suffix} row")
-
-
-def test_source_caption_states_and_static_default():
-    """The generated preview shows Synth's default caption, while Rack owns
-    the live ENG-dependent choice and must not receive static alias rows."""
-    want = {0: "TIMB", 1: "ORG", 2: "FRAME", 3: "MATL", 4: "DRIVE"}
-    got = getattr(g, "SOURCE_CAPTIONS", None)
-    check(got == want, f"SOURCE caption states are {got!r}, want {want!r}")
-    for suffix in ("_A", "_B"):
-        check(ctl("SOURCE" + suffix).label == want[0],
-              f"SOURCE{suffix} preview caption must be TIMB")
-    panel_words = [t[-1] for t in g.TEXTS]
-    check("ORG" not in panel_words and "FRAME" not in panel_words,
-          "ORG/FRAME must not be generated as static kPanelTexts aliases")
 
 
 def test_source_and_detune_user_documentation():
@@ -906,7 +892,10 @@ def printed_words():
         if not c.label or c.enum.endswith('_B') or c.enum in jacks:
             continue
         base = c.enum[:-2] if c.enum.endswith('_A') else c.enum
-        for word in dynamic_words_for(base) or [c.label]:
+        # A control's own states may repeat a word (e.g. ATTACK is ATK in
+        # four of its five engine states) -- that is one meaning said
+        # several times, not a collision, so dedupe before recording it.
+        for word in set(dynamic_words_for(base) or [c.label]):
             add(word, base)
 
     # Deck B's three mirrored fieldsets repeat deck A's legends verbatim;
@@ -931,6 +920,75 @@ def test_every_printed_word_is_unique():
     for word, origins in sorted(printed_words().items()):
         check(len(origins) == 1,
               f"{word!r} is printed {len(origins)}x: {', '.join(origins)}")
+
+
+def test_dynamic_caption_table_is_well_formed():
+    """Every row targets a real control, is driven by a real control, and
+    carries one word per state of its driver."""
+    table = getattr(g, "DYNAMIC_CAPTIONS", None)
+    check(table is not None, "gen_panel has no DYNAMIC_CAPTIONS table")
+    if table is None:
+        return
+    enums = {c.enum for c in g.RUNTIME_PANEL_PARAMS}
+    driver_states = {"ENGINE": 5, "GRITMODE": 2}
+    for target, driver, words in table:
+        for suffix in ("_A", "_B"):
+            check(target + suffix in enums,
+                  f"DYNAMIC_CAPTIONS targets unknown control {target + suffix}")
+            check(driver + suffix in enums,
+                  f"DYNAMIC_CAPTIONS driven by unknown control {driver + suffix}")
+        check(driver in driver_states,
+              f"{target}: driver {driver!r} has no known state count")
+        check(len(words) == driver_states.get(driver, -1),
+              f"{target}: {len(words)} words for a {driver} driver")
+        check(len(words) <= 5,
+              f"{target}: {len(words)} words exceeds the header's word[5]")
+        check(all(w and w.isupper() for w in words),
+              f"{target}: captions must be non-empty upper case: {words}")
+
+
+def test_static_label_is_the_tables_first_word():
+    """The plate's resting caption and the table's state-0 word are the same
+    thing said twice; they may never disagree."""
+    for target, _driver, words in getattr(g, "DYNAMIC_CAPTIONS", ()):
+        for suffix in ("_A", "_B"):
+            c = ctl(target + suffix)
+            check(c.label == words[0],
+                  f"{c.enum} label {c.label!r} != table word[0] {words[0]!r}")
+
+
+def test_printed_second_words_are_gone():
+    """SCAN and LEN were printed on every engine and true on one. The whole
+    inline-alias machinery goes with them."""
+    words = [t[-1] for t in g.TEXTS]
+    for stale in ("SCAN", "LEN", "ORG", "FRAME", "MATL"):
+        check(stale not in words,
+              f"{stale!r} is still a static kPanelTexts entry")
+    for gone in ("sampler_texts", "SAMPLER_LBL", "SAMPLER_GAP",
+                 "SAMPLER_RADIAL", "MONO_ADV", "text_w", "mirror_label",
+                 "mirror_anchor", "SOURCE_CAPTIONS"):
+        check(not hasattr(g, gone),
+              f"gen_panel still carries the retired {gone}")
+
+
+def test_header_carries_the_dynamic_caption_table():
+    """Rack must read the words, never hold its own copy."""
+    h = g.header()
+    check("struct DynCaption { int id; int driverId; int count; "
+          "const char* words[5]; };" in h,
+          "generated header has no DynCaption struct")
+    check("static const DynCaption kDynCaptions[]" in h,
+          "generated header has no kDynCaptions table")
+    rows = 2 * len(g.DYNAMIC_CAPTIONS)
+    check(h.count("{SUB_A, ENGINE_A, 5, {") == 1,
+          "SUB_A is not bound to its own deck's ENG")
+    check(h.count("{SUB_B, ENGINE_B, 5, {") == 1,
+          "SUB_B is not bound to its own deck's ENG")
+    check(h.count("{GRITMODE_A, GRITMODE_A, 2, {") == 1,
+          "the mode pad must drive its own caption")
+    body = h.split("static const DynCaption kDynCaptions[] = {")[1].split("};")[0]
+    check(body.count("},") == rows,
+          f"kDynCaptions has {body.count('},')} rows, want {rows}")
 
 
 def test_config_wires_tip_not_label():
@@ -1749,133 +1807,20 @@ def test_sampler_preset_init_snapshot():
           "factory.wav is not included in the VCV distribution")
 
 
-# --- 2026-07-21 morphagene-controls: the sampler meanings on the plate --------
-# ENG remaps four knobs. Three get a second caption line; DENSITY deliberately
-# does not -- DENS reads correctly in both engines (groove density / grain
-# density), and the obvious alternative "MRPH" is already the global A/B knob's
-# name, so putting it on a part knob would be an operating error by design.
-SAMPLER_CAPTIONS = [("MELODY", "SCAN"), ("SUB", "LEN")]
+MONO_ADV = 0.6          # advance width of the monospace face, in ems
 
 
-def sampler_text(word, near):
-    """The SCAN/LEN entry nearest to a given control glyph. Picking by
-    distance rather than by exact coordinate keeps this test independent of
-    how the generator derives the position -- it can only pass if the caption
-    really landed next to its knob."""
-    hits = [t for t in g.TEXTS if t[-1] == word]
-    if not hits:
-        return None
-    return min(hits, key=lambda t: math.hypot(t[0] - near.x, t[1] - near.y))
-
-
-def test_sampler_captions_exist():
-    """Every remapped knob carries its sampler meaning on the plate."""
-    txt = [t[-1] for t in g.TEXTS]
-    for _base, word in SAMPLER_CAPTIONS:
-        check(txt.count(word) == 2,
-              f"sampler caption {word!r} appears {txt.count(word)}x, want 2 (A and B)")
-    check("MRPH" not in txt,
-          "DENS must keep its label -- MORPH is the global A/B control")
-    check(ctl('DENSITY_A').label == 'DENS' and ctl('DENSITY_B').label == 'DENS',
-          "DENSITY lost its DENS label")
+def text_w(s, size_mm):
+    return len(s) * MONO_ADV * size_mm
 
 
 def text_span(x, anchor, text, size):
-    width = g.text_w(text, size)
+    width = text_w(text, size)
     if anchor == 'end':
         return x - width, x
     if anchor == 'middle':
         return x - width / 2.0, x + width / 2.0
     return x, x + width
-
-
-# The pair's extent on the caption baseline: (left, right) in mm. Derived
-# from the drawn anchors, not from the generator's intent, so it measures
-# what actually lands on the plate.
-def inline_span(c, word):
-    lx, _ly, anchor, size, _col = g.label_of(c)
-    t = sampler_text(word, c)
-    cap_l, cap_r = text_span(lx, anchor, c.label, size)
-    word_l, word_r = text_span(t[0], t[5], word, t[2])
-    return min(cap_l, word_l), max(cap_r, word_r)
-
-
-def test_sampler_words_sit_inline_behind_their_caption():
-    """Sampler aliases share the primary baseline and mirror as a complete pair."""
-    for suffix in ('_A', '_B'):
-        for base, word in SAMPLER_CAPTIONS:
-            c = ctl(base + suffix)
-            lx, ly, anchor, size, _col = g.label_of(c)
-            t = sampler_text(word, c)
-            check(t is not None, f"{c.enum}: no {word} caption at all")
-            if t is None:
-                continue
-            check(approx(t[1], ly),
-                  f"{c.enum}: {word} baseline {t[1]:.2f} != {c.label}'s {ly:.2f}")
-            check(approx(t[2], 1.5), f"{c.enum}: {word} size {t[2]}, want 1.5")
-            check(t[4] == g.MUTED,
-                  f"{c.enum}: {word} colour {t[4]}, want {g.MUTED}")
-            radial = base in g.SAMPLER_RADIAL
-            if radial:
-                want_anchor = 'end' if suffix == '_A' else 'start'
-            else:
-                want_anchor = 'start' if suffix == '_A' else 'end'
-            check(t[5] == want_anchor,
-                  f"{c.enum}: {word} anchored {t[5]!r}, want {want_anchor!r}")
-            cap_l, cap_r = text_span(lx, anchor, c.label, size)
-            word_l, word_r = text_span(t[0], t[5], word, t[2])
-            if radial:
-                gap = cap_l - word_r if suffix == '_A' else word_l - cap_r
-            else:
-                gap = word_l - cap_r if suffix == '_A' else cap_l - word_r
-            check(approx(gap, g.SAMPLER_GAP),
-                  f"{c.enum}: gap {gap:.2f} mm, want {g.SAMPLER_GAP}")
-            # The word must clear the knob it belongs to -- nearest corner of
-            # its glyph box against the knob's radius, not just its anchor.
-            left, right = text_span(t[0], t[5], word, t[2])
-            near_x = min(max(c.x, left), right)
-            near_y = min(max(c.y, t[1] - 0.7 * t[2]), t[1])
-            # The approved tighter radial MELODY label puts SCAN within 0.10 mm
-            # of this conservative text-bounding-box estimate. Keep a narrow
-            # 0.15 mm allowance without weakening any glyph-overlap guard.
-            check(math.hypot(near_x - c.x, near_y - c.y) >= g.GLYPH_R[c.kind] - 0.15,
-                  f"{c.enum}: {word} overlaps the knob glyph")
-
-
-def test_scan_sits_outward_of_melo_and_clear_of_its_knob():
-    for suffix in ('_A', '_B'):
-        c = ctl('MELODY' + suffix)
-        lx, _ly, anchor, size, _colour = g.label_of(c)
-        scan = sampler_text('SCAN', c)
-        cap_l, cap_r = text_span(lx, anchor, c.label, size)
-        scan_l, scan_r = text_span(scan[0], scan[5], 'SCAN', scan[2])
-        if suffix == '_A':
-            check(scan_r < cap_l and scan_r < c.x,
-                  "SCAN_A is not outward of MELO_A")
-        else:
-            check(scan_l > cap_r and scan_l > c.x,
-                  "SCAN_B is not outward of MELO_B")
-        check(scan_l >= 1.0 and scan_r <= g.W - 1.0,
-              f"{c.enum}: SCAN leaves panel ({scan_l:.2f}..{scan_r:.2f})")
-
-
-def test_sampler_centred_captions_hand_their_centring_to_the_pair():
-    """SUB is centred below its knob, so the PAIR takes over that
-    centring -- otherwise adding a word would shove the caption off its knob.
-    MELODY is excluded: its caption is placed radially and keeps its anchor."""
-    for suffix in ('_A', '_B'):
-        for base, word in SAMPLER_CAPTIONS:
-            if base in g.SAMPLER_RADIAL:
-                continue
-            c = ctl(base + suffix)
-            _lx, _ly, anchor, _size, _col = g.label_of(c)
-            want_anchor = 'end' if suffix == '_A' else 'start'
-            check(anchor == want_anchor,
-                  f"{c.enum}: caption anchored {anchor!r}, want {want_anchor!r}")
-            left, right = inline_span(c, word)
-            check(approx((left + right) / 2.0, c.x),
-                  f"{c.enum}: pair centred at {(left + right) / 2.0:.2f}, "
-                  f"knob at {c.x:.2f}")
 
 
 def wedge_points(svg):
@@ -1927,18 +1872,6 @@ def test_all_deck_local_geometry_is_exactly_mirrored():
             check(a.kind == b.kind and approx(b.x, g.W - a.x) and approx(b.y, a.y),
                   f"{a.enum}/{b.enum}: light coordinates are not mirrored")
 
-    for base, word in SAMPLER_CAPTIONS:
-        a = sampler_text(word, ctl(base + '_A'))
-        b = sampler_text(word, ctl(base + '_B'))
-        check(a is not None and b is not None, f"{base}: missing sampler alias pair")
-        if a is None or b is None:
-            continue
-        check(approx(b[0], g.W - a[0]) and approx(b[1], a[1]),
-              f"{base}: {word} coordinates are not mirrored")
-        check(b[5] == flip[a[5]], f"{base}: {word} anchors are not mirrored")
-        check(a[2:5] == b[2:5] and a[6] == b[6],
-              f"{base}: {word} alias styling differs")
-
     for name, a0, a1, _caption in g.SECTORS:
         a_points = wedge_points(g.wedge_svg(g.RING_CX_A, a0, a1, g.GREEN, False))
         b_points = wedge_points(
@@ -1964,58 +1897,10 @@ def test_all_deck_local_geometry_is_exactly_mirrored():
           "PLAY field records are not mirrored")
 
 
-def test_sampler_radial_caption_did_not_move():
-    """MELODY's caption position is measured, not free -- orbit_label puts it
-    outside the knob so nothing lands between knob and LED ring, and pushing a
-    second line further out ended at the plate edge. Adding SCAN beside it must
-    therefore leave MELO exactly where orbit_label puts it."""
-    for base in g.SAMPLER_RADIAL:
-        for suffix, mir in (('_A', False), ('_B', True)):
-            c = ctl(base + suffix)
-            cx = g.W - g.RING_CX_A if mir else g.RING_CX_A
-            want = g.orbit_label(cx, g.RING_CY, g.ORBIT_ANG[base], mir)
-            got = g.label_of(c)
-            check(all(approx(a, b) if isinstance(a, float) else a == b
-                      for a, b in zip(got, want)),
-                  f"{c.enum}: caption moved to {got}, orbit_label says {want}")
-
-
-def test_sampler_inline_pairs_fit_the_voice_row():
-    """The pair is wider than the caption was, so it has to be shown to still
-    fit: inside the VOICE box on both sides, and clear of the neighbouring
-    VOICE-row captions it grew towards."""
-    voice_a = next(gr for gr in g.GROUPS if gr[4] == 'VOICE' and gr[0] < g.CX)
-    voice_b = next(gr for gr in g.GROUPS if gr[4] == 'VOICE' and gr[0] > g.CX)
-    blocks = []
-    for suffix, box in (('_A', voice_a), ('_B', voice_b)):
-        for base, word in ((b, w) for b, w in SAMPLER_CAPTIONS
-                           if b not in g.SAMPLER_RADIAL):
-            c = ctl(base + suffix)
-            left, right = inline_span(c, word)
-            _lx, ly, _anchor, _size, _colour = g.label_of(c)
-            check(left >= box[0] + 0.5 and right <= box[0] + box[2] - 0.5,
-                  f"{c.enum}: pair {left:.2f}..{right:.2f} leaves the VOICE box "
-                  f"{box[0]:.2f}..{box[0] + box[2]:.2f}")
-            blocks.append((c.enum, ly, left, right))
-    # ...and against every OTHER caption on that row, inline or not.
-    plain = []
-    for enum in ('RES_A', 'RES_B'):
-        c = ctl(enum)
-        lx, ly, _a, size, _col = g.label_of(c)
-        half = g.text_w(c.label, size) / 2.0
-        plain.append((enum, ly, lx - half, lx + half))
-    for name, y0, l0, r0 in blocks:
-        for other, y1, l1, r1 in blocks + plain:
-            if other == name or not approx(y0, y1):
-                continue
-            check(r0 <= l1 - 0.8 or l0 >= r1 + 0.8,
-                  f"{name} ({l0:.2f}..{r0:.2f}) crowds {other} ({l1:.2f}..{r1:.2f})")
-
-
-def test_source_caption_geometry_for_every_engine_state():
-    """TIMB/ORG/FRAME share one generated label box that stays inside VOICE
-    and clear of the neighbouring SUB/RES glyphs and captions on both parts."""
-    captions = getattr(g, "SOURCE_CAPTIONS", {})
+def test_dynamic_caption_geometry_for_every_state():
+    """Every state-dependent word stays inside its fieldset and clear of the
+    neighbouring glyphs and captions, on both decks. A caption that is only
+    correct in one state is not correct."""
     voice_a = next(gr for gr in g.GROUPS if gr[4] == "VOICE" and gr[0] < g.CX)
     voice_b = next(gr for gr in g.GROUPS if gr[4] == "VOICE" and gr[0] > g.CX)
 
@@ -2029,25 +1914,30 @@ def test_source_caption_geometry_for_every_engine_state():
         bl, bt, br, bb = b
         return ar + gap <= bl or br + gap <= al or ab + gap <= bt or bb + gap <= at
 
-    for suffix, box in (("_A", voice_a), ("_B", voice_b)):
-        source = ctl("SOURCE" + suffix)
-        for state, word in captions.items():
-            bounds = label_box(source, word)
-            left, top, right, bottom = bounds
-            check(left >= box[0] + 0.5 and right <= box[0] + box[2] - 0.5
-                  and top >= box[1] + 0.5 and bottom <= box[1] + box[3] - 0.5,
-                  f"SOURCE{suffix} state {state} {word} leaves VOICE: {bounds}")
-            for base in ("SUB", "RES"):
-                other = ctl(base + suffix)
-                # Caption rectangle against the neighbouring circular control.
-                near_x = min(max(other.x, left), right)
-                near_y = min(max(other.y, top), bottom)
-                distance = math.hypot(near_x - other.x, near_y - other.y)
-                check(distance >= g.GLYPH_R[other.kind] + 0.3,
-                      f"SOURCE{suffix} {word} crowds {other.enum} control")
-                other_bounds = label_box(other, other.label)
-                check(boxes_clear(bounds, other_bounds, 0.8),
-                      f"SOURCE{suffix} {word} crowds {other.enum} label")
+    for target in ("SOURCE", "SUB", "DECAY", "RES", "FILT", "ATTACK"):
+        words = g.dynamic_words(target)
+        for suffix, box in (("_A", voice_a), ("_B", voice_b)):
+            source = ctl(target + suffix)
+            for state, word in enumerate(words):
+                bounds = label_box(source, word)
+                left, top, right, bottom = bounds
+                check(left >= box[0] + 0.5 and right <= box[0] + box[2] - 0.5
+                      and top >= box[1] + 0.5 and bottom <= box[1] + box[3] - 0.5,
+                      f"{target}{suffix} state {state} {word} leaves VOICE: {bounds}")
+                for base in ("ATTACK", "DECAY", "RES", "SUB", "FILT", "SOURCE"):
+                    if base == target:
+                        continue
+                    other = ctl(base + suffix)
+                    # Caption rectangle against the neighbouring circular control.
+                    near_x = min(max(other.x, left), right)
+                    near_y = min(max(other.y, top), bottom)
+                    distance = math.hypot(near_x - other.x, near_y - other.y)
+                    check(distance >= g.GLYPH_R[other.kind] + 0.3,
+                          f"{target}{suffix} {word} crowds {other.enum} control")
+                    widest = max(g.dynamic_words(base) or [other.label], key=len)
+                    other_bounds = label_box(other, widest)
+                    check(boxes_clear(bounds, other_bounds, 0.8),
+                          f"{target}{suffix} {word} crowds {other.enum} label")
 
 
 def test_panel_texts_stay_on_the_plate():

@@ -6,6 +6,7 @@ enum WidgetKind { WK_BIGKNOB, WK_KNOBC, WK_SMKNOB, WK_KNOBI, WK_SW2, WK_LATCH, W
 struct PanelCtl { int id; WidgetKind kind; XY mm; const char* label; XY lbl; unsigned char anchor; float lblSize; unsigned lblRgb; const char* tip; };
 // anchor: 0 = middle, 1 = start (left-aligned), 2 = end (right-aligned)
 struct PanelTxt { XY mm; float size; float spacing; unsigned rgb; unsigned char anchor; const char* str; };
+struct DynCaption { int id; int driverId; int count; const char* words[5]; };
 static constexpr int PART_STRIDE = 23;
 static constexpr float kRingR = 16.000f;      // mm, LED-dot orbit
 static constexpr float kRingDotR = 0.95f;   // mm, lit-dot radius
@@ -130,13 +131,13 @@ static const PanelCtl kParamCtls[] = {
     {DENSITY_A, WK_BIGKNOB, {55.891f, 14.966f}, "DENS", {59.876f, 10.216f}, 1, 1.90f, 0x171713, "DENS"},
     {SMOOTH_A, WK_BIGKNOB, {64.613f, 30.072f}, "SMTH", {70.718f, 29.695f}, 1, 1.90f, 0x171713, "SMTH"},
     {RANGE_A, WK_BIGKNOB, {30.778f, 58.462f}, "RANGE", {28.795f, 66.112f}, 0, 1.90f, 0x171713, "RANGE"},
-    {MELODY_A, WK_KNOBC, {17.416f, 47.250f}, "MELO", {12.393f, 52.350f}, 2, 1.90f, 0x171713, "MELO"},
+    {MELODY_A, WK_KNOBC, {17.416f, 47.250f}, "VARY", {12.393f, 52.350f}, 2, 1.90f, 0x171713, "Variation"},
     {MOD_A, WK_BIGKNOB, {48.222f, 58.462f}, "MOD", {50.205f, 66.112f}, 0, 1.90f, 0x171713, "MOD"},
     {TUNE_A, WK_BIGKNOB, {14.387f, 30.072f}, "TUNE", {8.282f, 29.695f}, 2, 1.90f, 0x171713, "TUNE"},
     {ATTACK_A, WK_SMKNOB, {9.250f, 77.300f}, "ATK", {9.250f, 82.900f}, 0, 1.90f, 0x171713, "ATK"},
     {DECAY_A, WK_SMKNOB, {9.250f, 89.400f}, "DEC", {9.250f, 95.000f}, 0, 1.90f, 0x171713, "DEC"},
     {RES_A, WK_SMKNOB, {19.750f, 89.400f}, "RES", {19.750f, 95.000f}, 0, 1.90f, 0x171713, "RES"},
-    {SUB_A, WK_SMKNOB, {30.250f, 77.300f}, "SUB", {30.210f, 82.900f}, 2, 1.90f, 0x171713, "SUB"},
+    {SUB_A, WK_SMKNOB, {30.250f, 77.300f}, "SUB", {30.250f, 82.900f}, 0, 1.90f, 0x171713, "SUB"},
     {SOURCE_A, WK_SMKNOB, {30.250f, 89.400f}, "TIMB", {30.250f, 95.000f}, 0, 1.90f, 0x171713, "SOURCE"},
     {FLUX_A, WK_SMKNOB, {54.750f, 77.300f}, "MIX", {54.750f, 82.900f}, 0, 1.90f, 0x171713, "FLUX"},
     {GRIT_A, WK_SMKNOB, {65.250f, 89.400f}, "GRIT", {65.250f, 95.000f}, 0, 1.90f, 0x171713, "GRIT"},
@@ -153,13 +154,13 @@ static const PanelCtl kParamCtls[] = {
     {DENSITY_B, WK_BIGKNOB, {157.469f, 14.966f}, "DENS", {153.484f, 10.216f}, 2, 1.90f, 0x171713, "DENS"},
     {SMOOTH_B, WK_BIGKNOB, {148.747f, 30.072f}, "SMTH", {142.642f, 29.695f}, 2, 1.90f, 0x171713, "SMTH"},
     {RANGE_B, WK_BIGKNOB, {182.582f, 58.462f}, "RANGE", {184.565f, 66.112f}, 0, 1.90f, 0x171713, "RANGE"},
-    {MELODY_B, WK_KNOBC, {195.944f, 47.250f}, "MELO", {200.967f, 52.350f}, 1, 1.90f, 0x171713, "MELO"},
+    {MELODY_B, WK_KNOBC, {195.944f, 47.250f}, "VARY", {200.967f, 52.350f}, 1, 1.90f, 0x171713, "Variation"},
     {MOD_B, WK_BIGKNOB, {165.138f, 58.462f}, "MOD", {163.155f, 66.112f}, 0, 1.90f, 0x171713, "MOD"},
     {TUNE_B, WK_BIGKNOB, {198.973f, 30.072f}, "TUNE", {205.078f, 29.695f}, 1, 1.90f, 0x171713, "TUNE"},
     {ATTACK_B, WK_SMKNOB, {204.110f, 77.300f}, "ATK", {204.110f, 82.900f}, 0, 1.90f, 0x171713, "ATK"},
     {DECAY_B, WK_SMKNOB, {204.110f, 89.400f}, "DEC", {204.110f, 95.000f}, 0, 1.90f, 0x171713, "DEC"},
     {RES_B, WK_SMKNOB, {193.610f, 89.400f}, "RES", {193.610f, 95.000f}, 0, 1.90f, 0x171713, "RES"},
-    {SUB_B, WK_SMKNOB, {183.110f, 77.300f}, "SUB", {183.150f, 82.900f}, 1, 1.90f, 0x171713, "SUB"},
+    {SUB_B, WK_SMKNOB, {183.110f, 77.300f}, "SUB", {183.110f, 82.900f}, 0, 1.90f, 0x171713, "SUB"},
     {SOURCE_B, WK_SMKNOB, {183.110f, 89.400f}, "TIMB", {183.110f, 95.000f}, 0, 1.90f, 0x171713, "SOURCE"},
     {FLUX_B, WK_SMKNOB, {158.610f, 77.300f}, "MIX", {158.610f, 82.900f}, 0, 1.90f, 0x171713, "FLUX"},
     {GRIT_B, WK_SMKNOB, {148.110f, 89.400f}, "GRIT", {148.110f, 95.000f}, 0, 1.90f, 0x171713, "GRIT"},
@@ -178,7 +179,7 @@ static const PanelCtl kParamCtls[] = {
     {SCALE, WK_KNOBI, {96.180f, 68.000f}, "SCALE", {96.180f, 73.600f}, 0, 1.90f, 0x171713, "SCALE"},
     {DRIFT, WK_SMKNOB, {117.180f, 68.000f}, "DRIFT", {117.180f, 73.600f}, 0, 1.90f, 0x171713, "DRIFT"},
     {SPOT, WK_SMBTN, {96.180f, 78.000f}, "SPOT", {96.180f, 83.400f}, 0, 1.90f, 0x171713, "SPOT"},
-    {MASTER_DRIVE, WK_SMKNOB, {106.680f, 78.000f}, "DRIVE", {106.680f, 83.600f}, 0, 1.90f, 0x171713, "DRIVE"},
+    {MASTER_DRIVE, WK_SMKNOB, {106.680f, 78.000f}, "PUSH", {106.680f, 83.600f}, 0, 1.90f, 0x171713, "Master drive"},
     {SETTLE, WK_SMBTN, {117.180f, 78.000f}, "SETL", {117.180f, 83.400f}, 0, 1.90f, 0x171713, "SETL"},
     {REV_SIZE, WK_SMKNOB, {96.180f, 94.000f}, "SIZE", {96.180f, 99.600f}, 0, 1.90f, 0x171713, "SIZE"},
     {REV_DECAY, WK_SMKNOB, {96.180f, 104.500f}, "DECAY", {96.180f, 110.100f}, 0, 1.90f, 0x171713, "DECAY"},
@@ -228,6 +229,24 @@ static const PanelCtl kLightCtls[] = {
     {REC_A_L, WK_LIGHT, {31.000f, 103.600f}, "", {31.000f, 103.600f}, 0, 1.90f, 0x171713, ""},
     {REC_B_L, WK_LIGHT, {182.360f, 103.600f}, "", {182.360f, 103.600f}, 0, 1.90f, 0x171713, ""},
 };
+static const DynCaption kDynCaptions[] = {
+    {MELODY_A, ENGINE_A, 5, {"VARY", "SCAN", "VARY", "VARY", "VARY"}},
+    {MELODY_B, ENGINE_B, 5, {"VARY", "SCAN", "VARY", "VARY", "VARY"}},
+    {ATTACK_A, ENGINE_A, 5, {"ATK", "ATK", "ATK", "HIT", "ATK"}},
+    {ATTACK_B, ENGINE_B, 5, {"ATK", "ATK", "ATK", "HIT", "ATK"}},
+    {DECAY_A, ENGINE_A, 5, {"DEC", "DEC", "DEC", "DAMP", "TAIL"}},
+    {DECAY_B, ENGINE_B, 5, {"DEC", "DEC", "DEC", "DAMP", "TAIL"}},
+    {RES_A, ENGINE_A, 5, {"RES", "RES", "RES", "CHAR", "TILT"}},
+    {RES_B, ENGINE_B, 5, {"RES", "RES", "RES", "CHAR", "TILT"}},
+    {SUB_A, ENGINE_A, 5, {"SUB", "LEN", "SUB", "EXCIT", "FEED"}},
+    {SUB_B, ENGINE_B, 5, {"SUB", "LEN", "SUB", "EXCIT", "FEED"}},
+    {FILT_A, ENGINE_A, 5, {"FILT", "FILT", "FILT", "BRITE", "LOSS"}},
+    {FILT_B, ENGINE_B, 5, {"FILT", "FILT", "FILT", "BRITE", "LOSS"}},
+    {SOURCE_A, ENGINE_A, 5, {"TIMB", "ORG", "FRAME", "MATL", "DRIVE"}},
+    {SOURCE_B, ENGINE_B, 5, {"TIMB", "ORG", "FRAME", "MATL", "DRIVE"}},
+    {GRITMODE_A, GRITMODE_A, 2, {"SAT", "CRSH", "", "", ""}},
+    {GRITMODE_B, GRITMODE_B, 2, {"SAT", "CRSH", "", "", ""}},
+};
 static const PanelTxt kPanelTexts[] = {
     {{39.500f, 36.100f}, 5.00f, 0.00f, 0x2E6355, 0, "A"},
     {{173.860f, 36.100f}, 5.00f, 0.00f, 0x8A5230, 0, "B"},
@@ -253,9 +272,5 @@ static const PanelTxt kPanelTexts[] = {
     {{100.180f, 113.350f}, 1.80f, 0.35f, 0x656056, 0, "CLOCK"},
     {{145.860f, 113.350f}, 1.80f, 0.35f, 0x656056, 0, "OUT"},
     {{188.160f, 113.350f}, 1.80f, 0.35f, 0xB96532, 0, "CV B"},
-    {{7.033f, 52.350f}, 1.50f, 0.00f, 0x656056, 2, "SCAN"},
-    {{31.010f, 82.900f}, 1.50f, 0.00f, 0x656056, 1, "LEN"},
-    {{206.327f, 52.350f}, 1.50f, 0.00f, 0x656056, 1, "SCAN"},
-    {{182.350f, 82.900f}, 1.50f, 0.00f, 0x656056, 2, "LEN"},
 };
 } // namespace spkyvcv
