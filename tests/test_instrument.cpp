@@ -1352,3 +1352,12 @@ TEST_CASE("instrument duck: excitation and deck taps are bit-identical with and 
     for (size_t i = 0; i < quiet.size(); ++i)
         CHECK(quiet[i] == bloom[i]);       // ==, the decks never saw the duck
 }
+
+TEST_CASE("instrument duck: re-init forgets the duck") {
+    Instrument inst;
+    duck_bloom_rig(inst);
+    duck_render_blocks(inst, 7500);
+    REQUIRE(inst.duck_gain() < 0.9f);       // precondition: visibly ducked
+    duck_bloom_rig(inst);                   // re-init: a new patch starts clean
+    CHECK(inst.duck_gain() == 1.f);         // exactly, before any process()
+}

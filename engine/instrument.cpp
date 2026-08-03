@@ -64,6 +64,9 @@ void Instrument::init(float sample_rate, const FxMem& mem) {
     }
     _rev_primed = false;
     _rev_asleep = false;
+    _duck_gain = 1.f;
+    _duck_target = 1.f;
+    _duck_armed = false;   // set_reverb_decay() re-arms on the next param push
     set_reverb_mix(kDefaultReverbMix);   // convenience overload -> both decks
     _limiter.init();
     _duck_down = 1.f - std::exp(-1.f / (kDuckDownS * sample_rate));
@@ -225,6 +228,8 @@ void Instrument::process(const float* inL, const float* inR,
                 if (_rev_wet_target[PART_A] == 0.f && _rev_wet_target[PART_B] == 0.f) {
                     _reverb->clear(); _rev_asleep = true;
                 }
+                _duck_gain = 1.f;
+                _duck_target = 1.f;
                 _rev_primed = true;
             }
             const float dga = _rev_dry[PART_A].process(_rev_dry_target[PART_A]);
