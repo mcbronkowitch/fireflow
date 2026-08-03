@@ -26,7 +26,20 @@ public:
         _peak = 0.5f;
         _pre = 1.f;
     }
-    void set_drive(float n) { _pre = 1.f + 3.f * std::clamp(n, 0.f, 1.f); }
+    // Square law, not linear. The pre-gain is what decides how deep into the
+    // knee the signal lands, and a linear 1+3n spent the whole knob in its
+    // first fifth: on a blooming master bus (0.79 peak) the added distortion
+    // measured -58 dB at DRIVE 0.10 but -44 dB at 0.15 and -24 dB at 0.25,
+    // then sat pinned at -13 dB from 0.6 upward -- audibly broken by 0.15 and
+    // dead above 0.6. Squaring keeps both endpoints exactly as voiced (0 ->
+    // transparent, 1 -> 4x into the 0.45 knee) and spreads the travel between
+    // them: clean to ~0.25, gentle at 0.4, warm at 0.6. The knee morph below
+    // reads drive back out of _pre, so it follows the same curve untouched.
+    // NOTE: this remaps saved DRIVE values -- 0.5 was 2.5x, it is now 1.75x.
+    void set_drive(float n) {
+        const float c = std::clamp(n, 0.f, 1.f);
+        _pre = 1.f + 3.f * c * c;
+    }
     float pre_gain() const { return _pre; }
 
     void process(float& l, float& r) {

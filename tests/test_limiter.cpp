@@ -85,6 +85,49 @@ TEST_CASE("limiter: DRIVE saturates warmly instead of hard-clipping") {
     CHECK(driven > 0.55f);   // but still hits hard -- warmth, not a brickwall
 }
 
+// DRIVE has to spread its distortion across the whole travel. Under the old
+// linear pre-gain (1+3n) a 0.79-peak bus -- what a blooming reverb hands the
+// master -- was already 1.8% distorted at DRIVE 0.15, so the knob was unusable
+// past its first fifth. Measured as the residual left after the best-fit
+// scalar gain is removed: whatever is not a clean level change is distortion.
+static double drive_distortion_db(float drive, float amp) {
+    Limiter lim;
+    lim.init();
+    lim.set_drive(drive);
+    std::vector<float> in, out;
+    for (int i = 0; i < 48000; ++i) {                 // 220 Hz, 1 s
+        float s = amp * std::sin(6.2831853f * 220.f * i / 48000.f);
+        float l = s, r = s;
+        lim.process(l, r);
+        if (i >= 24000) { in.push_back(s); out.push_back(l); }   // skip the ramp-in
+    }
+    double num = 0, den = 0;
+    for (size_t i = 0; i < in.size(); ++i) { num += (double)in[i] * out[i]; den += (double)in[i] * in[i]; }
+    const double g = num / den;                        // best-fit level change
+    double err = 0, sig = 0;
+    for (size_t i = 0; i < in.size(); ++i) {
+        const double e = out[i] - g * in[i];
+        err += e * e; sig += (double)out[i] * out[i];
+    }
+    return 10.0 * std::log10(err / sig + 1e-30);
+}
+
+TEST_CASE("limiter: DRIVE spreads its dirt over the travel, not over its first fifth") {
+    const float bus = 0.79f;                  // a blooming master bus
+    CHECK(drive_distortion_db(0.15f, bus) < -60.0);   // still clean where it used to break
+    CHECK(drive_distortion_db(0.25f, bus) < -45.0);
+    CHECK(drive_distortion_db(1.00f, bus) > -30.0);   // and the top still saturates
+}
+
+TEST_CASE("limiter: DRIVE endpoints are untouched by the curve") {
+    Limiter lim;
+    lim.init();
+    lim.set_drive(0.f);
+    CHECK(lim.pre_gain() == 1.f);             // exactly transparent
+    lim.set_drive(1.f);
+    CHECK(lim.pre_gain() == doctest::Approx(4.f));
+}
+
 TEST_CASE("limiter: deterministic") {
     auto run = [] {
         Limiter lim;
