@@ -1306,3 +1306,49 @@ TEST_CASE("instrument duck: the gain never steps -- per-sample delta is slew-bou
     // 1-exp(-1/(1.5 s * 48k)) * (1-0.316) = 9.5e-6; bound leaves 2x slack.
     CHECK(max_delta < 2e-5f);
 }
+
+TEST_CASE("instrument duck: wet-solo bloom settles at the plateau, not the floor") {
+    Instrument inst;
+    duck_bloom_rig(inst);
+    inst.set_reverb_mix(1.f);   // exact endpoint: dry gain 0, output is the return
+    std::vector<float> l(96), r(96);
+    float peak = 0.f;
+    for (int i = 0; i < 7500; ++i) {        // 15 s; measure the last 2 s
+        inst.process(nullptr, nullptr, l.data(), r.data(), 96);
+        if (i >= 6500)
+            for (int k = 0; k < 96; ++k)
+                peak = std::max(peak, std::fabs(l[k]));
+    }
+    // The settled return sits ~0.5-0.6 (post ceiling, master transparent at
+    // drive 0). If the duck ever multiplied the send or the return, this
+    // lands near plateau * floor ~= 0.17.
+    CHECK(peak > 0.35f);
+}
+
+static std::vector<float> duck_purity_trace(float decay_norm, float* duck_at_end) {
+    Instrument inst;
+    duck_bloom_rig(inst);
+    inst.set_reverb_decay(decay_norm);
+    std::vector<float> trace;
+    std::vector<float> l(96), r(96);
+    for (int i = 0; i < 7500; ++i) {
+        inst.process(nullptr, nullptr, l.data(), r.data(), 96);
+        trace.push_back(inst.excitation_bus(PART_A));
+        trace.push_back(inst.excitation_bus(PART_B));
+        trace.push_back(inst.deck_tap(PART_A, 0));
+        trace.push_back(inst.deck_tap(PART_B, 1));
+    }
+    if (duck_at_end) *duck_at_end = inst.duck_gain();
+    return trace;
+}
+
+TEST_CASE("instrument duck: excitation and deck taps are bit-identical with and without a duck") {
+    float duck_quiet = 0.f, duck_bloom = 0.f;
+    auto quiet = duck_purity_trace(0.55f, &duck_quiet);
+    auto bloom = duck_purity_trace(1.f, &duck_bloom);
+    REQUIRE(duck_quiet == 1.f);            // control render never ducked
+    REQUIRE(duck_bloom < 0.9f);            // precondition: visibly ducked at the end
+    REQUIRE(quiet.size() == bloom.size());
+    for (size_t i = 0; i < quiet.size(); ++i)
+        CHECK(quiet[i] == bloom[i]);       // ==, the decks never saw the duck
+}
