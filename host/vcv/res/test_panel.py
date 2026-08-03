@@ -1271,8 +1271,9 @@ def test_variation_is_gated_off_the_sampler():
           "set_variation must be pushed exactly once")
     check("inst.set_variation(p,samplerPart?0.f:pp(MELODY_A,p));" in n,
           "set_variation must park at LOOP on a Sampler deck")
-    check(n.index("constboolsamplerPart=") < n.index("inst.set_variation("),
-          "set_variation must run after samplerPart resolves this tick's engine")
+    if "constboolsamplerPart=" in n and "inst.set_variation(" in n:
+        check(n.index("constboolsamplerPart=") < n.index("inst.set_variation("),
+              "set_variation must run after samplerPart resolves this tick's engine")
     check("if(samplerPart)inst.sampler_scan(p,pp(MELODY_A,p));" in n,
           "sampler_scan must stay gated on the same samplerPart")
 
@@ -1482,10 +1483,15 @@ def test_flux_time_guard_rejects_representative_regressions():
               f"Tape Time guard accepted a {label} regression")
 
 
-CAPTION_WORDS = ("TIMB", "ORG", "FRAME", "MATL", "DRIVE", "ATK", "HIT",
-                 "DEC", "DAMP", "TAIL", "RES", "CHAR", "TILT", "SUB", "LEN",
-                 "EXCIT", "FEED", "FILT", "BRITE", "LOSS", "VARY", "SCAN",
-                 "SAT", "CRSH", "BEND")
+# Derived, not hand-copied: the branch's whole point is that caption words
+# live in one place (DYNAMIC_CAPTIONS), so the guard that checks no caption
+# word is typed into the C++ must draw from that same table, not a second
+# transcription of it that a later DYNAMIC_CAPTIONS row can silently outrun.
+# BEND/DIV/MULT/SEND/PUSH are static (never state-dependent) captions with
+# no DYNAMIC_CAPTIONS row of their own, so they're added explicitly.
+CAPTION_WORDS = tuple(sorted(
+    {w for _t, _d, words in g.DYNAMIC_CAPTIONS for w in words}
+    | {"BEND", "DIV", "MULT", "SEND", "PUSH"}))
 
 
 def caption_wiring_issues(cpp):
@@ -1535,6 +1541,80 @@ def test_caption_host_wiring():
         check(False, issue)
 
 
+def dynamic_flag_issues(cpp):
+    """Return regressions in the `dynamic` flag that keeps the caption lookup
+    from crossing id spaces.
+
+    PanelCtl.id is a ParamId in kParamCtls but an Input/OutputId in
+    kInputCtls/kOutputCtls -- three separate enums that all start at 0.
+    MELODY_A (ParamId 5) and GATE_B (OutputId 5) share that number for
+    exactly that reason, and the frozen enum order (test_enum_order) forbids
+    "fixing" it by moving either id -- every saved .vcv keeps its ids. The
+    numbers coinciding is not itself a bug: a guard that only compared the
+    raw numbers (pids[target] not in jack-id-set) would fail on
+    MELODY_A/GATE_B forever, fix or no fix, since nothing in Spotymod.cpp can
+    change what number gen_panel.py assigns either one. What must never
+    happen is the caption lookup treating that coincidence as the same slot
+    -- so this guard pins the `dynamic` flag that keeps it from doing so:
+    kParamCtls resolves dynamic captions, kInputCtls and kOutputCtls never do.
+    """
+    issues = []
+    panel = cpp_scope(cpp, "struct PanelText : Widget")
+    if panel is None:
+        issues.append("PanelText scope is missing")
+        return issues
+    panel_n = compact_cpp(panel)
+    for required, label in (
+        ("captions(kParamCtls,sizeof(kParamCtls)/sizeof(kParamCtls[0]),true);",
+         "kParamCtls must resolve dynamic captions (dynamic=true)"),
+        ("captions(kInputCtls,sizeof(kInputCtls)/sizeof(kInputCtls[0]),false);",
+         "kInputCtls must not resolve captions as ParamIds (dynamic=false)"),
+        ("captions(kOutputCtls,sizeof(kOutputCtls)/sizeof(kOutputCtls[0]),false);",
+         "kOutputCtls must not resolve captions as ParamIds (dynamic=false)"),
+        ("if(dynamic&&!ctlVisible(module,t[i].id))continue;",
+         "ctlVisible must be gated on dynamic, or an Input/OutputId reaches it"),
+        ("dynamic?caption(t[i]):t[i].label",
+         "caption() must be gated on dynamic, or an Input/OutputId reaches it"),
+    ):
+        if required not in panel_n:
+            issues.append(label)
+    return issues
+
+
+def test_dynamic_lookup_stays_inside_the_param_id_space():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    for issue in dynamic_flag_issues(cpp):
+        check(False, issue)
+
+
+def test_dynamic_flag_guard_rejects_representative_regressions():
+    """The dynamic-flag guard rejects reverting to unconditional resolution,
+    not merely recognizing today's source."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    mutations = [
+        ("captions(kInputCtls,  sizeof(kInputCtls)  / sizeof(kInputCtls[0]),  false);",
+         "captions(kInputCtls,  sizeof(kInputCtls)  / sizeof(kInputCtls[0]),  true);",
+         "kInputCtls resolved as dynamic"),
+        ("captions(kOutputCtls, sizeof(kOutputCtls) / sizeof(kOutputCtls[0]), false);",
+         "captions(kOutputCtls, sizeof(kOutputCtls) / sizeof(kOutputCtls[0]), true);",
+         "kOutputCtls resolved as dynamic"),
+        ("if (dynamic && !ctlVisible(module, t[i].id)) continue;",
+         "if (!ctlVisible(module, t[i].id)) continue;",
+         "ctlVisible ungated"),
+        ("dynamic ? caption(t[i]) : t[i].label",
+         "caption(t[i])",
+         "caption() ungated"),
+    ]
+    for before, after, label in mutations:
+        mutated = cpp.replace(before, after, 1)
+        check(dynamic_flag_issues(mutated),
+              f"dynamic-flag guard accepted a {label} regression")
+
+
 def test_caption_guard_rejects_representative_regressions():
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
@@ -1545,7 +1625,7 @@ def test_caption_guard_rejects_representative_regressions():
         ("module->params[d.driverId].getValue()",
          "module->params[ENGINE_A].getValue()", "per-deck driver binding"),
         ("new PanelText(module)", "new PanelText(nullptr)", "widget module"),
-        ("if (!ctlVisible(module, t[i].id)) continue;", "",
+        ("if (dynamic && !ctlVisible(module, t[i].id)) continue;", "",
          "shared-slot caption skip"),
     ]
     for before, after, label in mutations:

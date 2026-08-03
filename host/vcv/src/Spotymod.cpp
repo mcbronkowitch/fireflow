@@ -96,6 +96,20 @@ struct DetuneQuantity : ParamQuantity {
     }
 };
 
+// MELODY tooltip: the job changes with the deck's own ENG (spec 2026-08-03
+// vcv-engine-aware-captions) -- Variation off the Sampler, Scan on it, the
+// same split the faceplate caption (VARY/SCAN) draws. Resolves its own deck
+// from paramId (MELODY_A vs MELODY_B), never a hardcoded one, so A and B
+// report independently and a part never reads the other part's ENG.
+struct MelodyQuantity : ParamQuantity {
+    std::string getLabel() override {
+        if (!module) return "Variation";
+        const int engineId = paramId == MELODY_B ? ENGINE_B : ENGINE_A;
+        const int eng = (int)std::lround(module->params[engineId].getValue());
+        return eng == 1 ? "Scan" : "Variation";
+    }
+};
+
 struct ParamMenuSlider : ui::Slider {
     explicit ParamMenuSlider(ParamQuantity* pq) {
         box.size.x = 180.f;
@@ -276,8 +290,10 @@ struct Spotymod : Module {
                     else
                         configParam(c.id, 0.f, 1.f, init, lbl);
                     break;
-                case WK_KNOBC:  // MELO (bipolar): both decks loop — A drifts a little, B is frozen
-                    configParam(c.id, -1.f, 1.f, init, lbl); break;
+                case WK_KNOBC:  // MELODY (bipolar): both decks loop — A drifts a
+                                // little, B is frozen. Tooltip name follows ENG
+                                // through MelodyQuantity.
+                    configParam<MelodyQuantity>(c.id, -1.f, 1.f, init, lbl); break;
                 case WK_KNOBI:
                     if (c.id == SCALE)  // init patch is Lydian -- the bright end of group A
                         configParam<ScaleQuantity>(c.id, 0.f, (float)(spky::SCALE_LIST_COUNT - 1),
@@ -1280,25 +1296,37 @@ struct PanelText : Widget {
             }
             return c.label;
         };
-        auto captions = [&](const PanelCtl* t, size_t n) {
+        // PanelCtl::id is a different enum per table -- a ParamId in
+        // kParamCtls, an InputId in kInputCtls, an OutputId in kOutputCtls --
+        // and all three start counting at 0. kDynCaptions/ctlVisible only
+        // know about ParamIds, so resolving them against an Input/OutputId
+        // is not "the same id, different table": it is a coincidence that a
+        // jack id happens to equal some param's id, and the caption for that
+        // unrelated param would draw on the jack instead. The `dynamic` flag
+        // keeps that lookup inside the param id-space it was built for; do
+        // not "simplify" it away by calling caption()/ctlVisible() for every
+        // table unconditionally.
+        auto captions = [&](const PanelCtl* t, size_t n, bool dynamic) {
             for (size_t i = 0; i < n; ++i) {
                 if (!t[i].label[0]) continue;
-                if (!ctlVisible(module, t[i].id)) continue;
+                if (dynamic && !ctlVisible(module, t[i].id)) continue;
                 nvgTextAlign(args.vg, alignOf(t[i].anchor) | NVG_ALIGN_BASELINE);
                 text(t[i].lbl.x, t[i].lbl.y, t[i].lblSize, col(t[i].lblRgb),
-                     caption(t[i]));
+                     dynamic ? caption(t[i]) : t[i].label);
             }
             nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_BASELINE);
         };
-        captions(kParamCtls,  sizeof(kParamCtls)  / sizeof(kParamCtls[0]));
-        captions(kInputCtls,  sizeof(kInputCtls)  / sizeof(kInputCtls[0]));
-        captions(kOutputCtls, sizeof(kOutputCtls) / sizeof(kOutputCtls[0]));
+        captions(kParamCtls,  sizeof(kParamCtls)  / sizeof(kParamCtls[0]),  true);
+        captions(kInputCtls,  sizeof(kInputCtls)  / sizeof(kInputCtls[0]),  false);
+        captions(kOutputCtls, sizeof(kOutputCtls) / sizeof(kOutputCtls[0]), false);
 
         // section titles + brand -- the shared TEXTS table from the generator,
-        // so runtime lettering matches the SVG preview one-to-one
-        // ... plus the sampler captions, which inherit the anchor of the
-        // caption they sit under -- MELO/SCAN is right-aligned on part A and
-        // left-aligned on B, so this table carries an anchor like PanelCtl.
+        // so runtime lettering matches the SVG preview one-to-one. PanelTxt
+        // carries the same (x, y, anchor, size, colour) shape as PanelCtl.lbl
+        // for that reason alone: every row here sits middle-anchored. What
+        // actually needs a non-middle anchor is PanelCtl's own lettering --
+        // the radial orbit captions and the white-on-well jack labels --
+        // not anything drawn from this table.
         for (const auto& t : kPanelTexts) {
             nvgTextLetterSpacing(args.vg, mm2px(t.spacing));
             nvgTextAlign(args.vg, alignOf(t.anchor) | NVG_ALIGN_BASELINE);
