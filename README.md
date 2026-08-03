@@ -70,8 +70,9 @@ Each lane can run as a smooth LFO (**FLOW**), a stepped sequence (**STEP**), or
 grow, loop, or erode over time (**ENTROPY**). A center section -- **MORPH / COUPLE / DRIFT / SPOT / SETTLE** -- makes the
 interaction between the two parts playable. One shared **Oliverb**-based
 ambient reverb turns the room into an instrument (Doppler SIZE and a DECAY that
-blooms past 100 %), while each deck has its own **ROOM** dry/send mix into that
-shared room. CV + gate outputs extend the modulation to the rest of the rack.
+blooms past 100 %), while each deck has its own **SEND** dry/send mix into that
+shared room (the centre **ROOM** group holds the reverb itself). CV + gate
+outputs extend the modulation to the rest of the rack.
 
 The full design intent lives in the residency's design spec; this README is a
 self-contained summary of it.
@@ -155,17 +156,17 @@ the desktop clang path); the build, install and I/O details live in
 | **M3** | Capture sequencer (freeze the PITCH lane into a loop) | **done** (engine + host) |
 | **M4** | Center section — MORPH / COUPLE / DRIFT / SPOT / SETTLE | **done** (engine + host) |
 | **M4.5** | Ambient reverb v2 — Oliverb port: Doppler SIZE, DECAY > 100 % bloom, TONE; shimmer & LGPL removed | **done** (engine + host) |
-| **M4.6** | Dynamics — one-knob comp per part + master limiter w/ MASTER DRIVE | **done** (engine + host) |
+| **M4.6** | Dynamics — one-knob comp per part + master limiter w/ master drive (captioned **PUSH** on the panel) | **done** (engine + host) |
 | **M4.8** | Reverb dry/wet — equal-power MIX at the master join + clear-on-sleep CPU bypass | **done** (engine + host) |
 | **M4.9** | Reverb DIFFUSION knob (replaces DEPTH) — room density 0–0.9, weak line-mod coupling | **done** (engine + host) |
 | **M4.10** | Chord layer — COLOR knob, diatonic stacks, voice-leading, live FLOW surface | **done** (engine + hosts; hardware placement deferred) |
 | **M5** | Sampler -- the texture deck: granular cloud, live recording + overdub, WAV load/save, Morphagene-style DENS/SCAN/NEW/LEN/ORG controls, clocked slice-groove, FEEL accents, and FLOW cloud dispersion | **done** (engine + hosts; released through 2.11.0) |
-| **M5h** | Per-deck ROOM mix: independent dry/send mix per deck into one shared Oliverb reverb | **done** (engine + VCV panel; released in 2.11.0) |
+| **M5h** | Per-deck **SEND** mix: independent dry/send mix per deck into one shared Oliverb reverb | **done** (engine + VCV panel; released in 2.11.0) |
 | **CPU** | Three measured rounds on real hardware: `instrument_worst`'s worst block went from ~156 % of the audio-block budget to 94 %, and back up to 102 % when M5j's tape tap landed (measured at 5.4 % of the block). FLUX's bucket-brigade redesign (below) is done; a fresh hardware measurement of the redesigned block (`instrument_worst_bbd`, its row added to the `system` profile by `bench/workloads_system.cpp`, alongside an isolated `bbd` bench family in `bench/workloads_bbd.cpp`) is built but not yet run — outstanding, needs a Daisy Seed + ST-Link. Method and every number in [`bench/`](bench/README.md) and [`docs/bench/`](docs/bench/) | **done** (ongoing as a tool) |
 | **M5i** | WAVE: four-voice PPG-style wavetable part engine | **done** (engine + renderer + VCV; 65,024-byte mapped-QSPI bank; hardware-gated; released in 2.13.0) |
 | **+ FORM/SONG** | Persistent A/B phrase snapshots: five FORM phrase engines plus AAAB, ABAB, ABBB, BUILD, ROTATE, MIRROR, and OFF SONG arrangements; boundary-safe changes and legacy patch migration | **done** (engine + renderer + VCV; released in 2.13.1) |
 | **M5j** | BODY: one-voice-per-deck resonator part engine, morphing string -> metal -> bell, with a sympathetic excitation bus | **done** (engine + renderer + VCV; hardware-gated: `body_2x4` 295078 cycles, 30.7 % of the block, inside the spec's 29-32 % prediction and cheaper than SYNTH) |
-| **FLUX -> BBD** | FLUX's interpolating tape echo replaced by a bucket-brigade delay model: the clock rate *is* the delay time, so RATE bends stored pitch, STAGES is a brightness axis, and `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane | **done** (engine + renderer + VCV; RATE/STAGES/`FXT_FLUX_TIME` confirmed by ear, DRIVE diagnosed and fixed but awaiting re-listening; hardware CPU measurement outstanding) |
+| **FLUX -> BBD** | FLUX's interpolating tape echo replaced by a bucket-brigade delay model: the clock rate *is* the delay time, so RATE bends stored pitch, and `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane (STAGES has since moved off FLUX onto the BBD deck's own pitch lane, captioned **BEND** on the panel) | **done** (engine + renderer + VCV; RATE/STAGES/`FXT_FLUX_TIME` confirmed by ear, DRIVE diagnosed and fixed but awaiting re-listening; hardware CPU measurement outstanding) |
 | **M5k** | ZAP: monophonic percussion part engine | planned (spec ready; not implemented) |
 | **M5l** | PULL: chord gravity between the two decks | planned (spec ready; not implemented) |
 | **M6** | Firmware shell: pads, gestures, panel, LEDs -- runs on real hardware | planned after M5l (spec ready; implementation not started) |
