@@ -110,7 +110,12 @@ public:
     void set_link(int p, float n)   { _parts[p].fx().set_link(n); }
     void set_comp(int p, float n)                  { _parts[p].fx().set_comp(n); }
     void set_reverb_size(float n)  { if (_reverb) _reverb->set_size(n); }
-    void set_reverb_decay(float n) { if (_reverb) _reverb->set_decay(n); }
+    void set_reverb_decay(float n) {
+        if (_reverb) _reverb->set_decay(n);
+        // Same public curve the tooltip reads: one source, no drift. The
+        // seconds-slow slew stands in for hysteresis at the unity point.
+        _duck_armed = AmbientReverb::decay_loop_gain(n) > 1.f;
+    }
     void set_reverb_tone(float n)  { if (_reverb) _reverb->set_tone(n); }
     void set_reverb_diffusion(float n) { if (_reverb) _reverb->set_diffusion(n); }
     void set_reverb_smear(float n) { if (_reverb) _reverb->set_diffuser_mod_depth(n); }
@@ -309,6 +314,13 @@ private:
     // 1.0 whenever it is not ducking -- guarded by a test, like the return
     // ceiling's limiter_gain().
     float _duck_gain = 1.f, _duck_target = 1.f;
+    // Who controls the room: below unity loop gain the player does (never
+    // duck, at any level -- an ordinary long room legitimately returns +6 dB
+    // over its send, overlapping the bloom's +7.6 dB, so LEVEL cannot tell
+    // them apart; 10961a0 measured that). Above unity the loop drives itself
+    // and the duck takes the envelope. Not 02134e3's dead trim: the knob is
+    // read as a regime bit here, never as a level.
+    bool _duck_armed = false;
     Limiter _limiter;
     Center _center;
     // Excitation bus, cross-deck source (spec §6, Task 10): each part's own

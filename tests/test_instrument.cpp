@@ -1246,3 +1246,35 @@ TEST_CASE("instrument duck: a bloom pulls the dry bus below 0.5") {
     // that, and the fixed seeds make it deterministic.
     CHECK(min_gain < 0.5f);
 }
+
+TEST_CASE("instrument duck: sub-unity DECAY releases the duck even while the room is loud") {
+    Instrument inst;
+    duck_bloom_rig(inst);
+    duck_render_blocks(inst, 7500);                  // 15 s: visibly ducked
+    // Precondition only (the env breathes, ~0.39-0.58): any visible duck at
+    // the disarm instant serves; the proof is the monotone rise below.
+    REQUIRE(inst.duck_gain() < 0.9f);
+    REQUIRE(s_ti_reverb.return_level() > 0.30f);     // env above the threshold
+    inst.set_reverb_decay(0.75f);                    // loop gain ~0.94: player takes over
+    float g = inst.duck_gain();
+    const float g0 = g;
+    bool monotone = true;
+    std::vector<float> l(96), r(96);
+    for (int i = 0; i < 500; ++i) {                  // 1 s
+        inst.process(nullptr, nullptr, l.data(), r.data(), 96);
+        if (inst.duck_gain() + 1e-9f < g) monotone = false;
+        g = inst.duck_gain();
+    }
+    // The room is STILL over the threshold (the peak-follower's 4 s release
+    // hasn't caught up), so a pure level duck still has plenty of env to
+    // work with here -- measured on this rig, the tank's own partial drain
+    // alone (no regime bit at all) already drags a *plain* level duck up by
+    // 0.12-0.26 within this same second, so a small delta cannot be the red
+    // line. The regime bit's signature is not "some rise" but the EXACT
+    // snap the else-branch produces (Task 2: `_duck_target = 1.f` verbatim,
+    // no slew yet) the instant `_duck_armed` goes false -- so pin that
+    // instead, matching the header's own "exactly 1.0" claim.
+    CHECK(s_ti_reverb.return_level() > 0.30f);
+    CHECK(monotone);
+    CHECK(g == 1.f);                                 // released, exactly -- not merely "higher"
+}

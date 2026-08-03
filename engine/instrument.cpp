@@ -124,7 +124,7 @@ void Instrument::process(const float* inL, const float* inR,
             // Bloom duck target (spec 2026-08-03): feedforward from the
             // room's own return envelope -- seconds-slow by construction,
             // so it cannot pump the way the dead return-side rides did.
-            if (_reverb) {
+            if (_reverb && _duck_armed) {
                 const float env = _reverb->return_level();
                 _duck_target = env <= kDuckThresh
                     ? 1.f
