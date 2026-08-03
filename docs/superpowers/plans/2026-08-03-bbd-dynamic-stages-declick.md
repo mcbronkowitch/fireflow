@@ -445,6 +445,14 @@ Expected: all selected tests pass. In particular:
 
 - [ ] **Step 10: Run the complete BBD test subset**
 
+The accepted full-ring architecture retains history beyond the current read
+distance. Therefore the existing PITCH/no-feedback fixture contracts from
+`0.7f` to `0.3f`: expanding from `0.3f` to `0.7f` recalls older first-pass
+audio and tests retained-history access rather than feedback separation. Keep
+the test's `100.f` energy-ratio threshold and every other fixture value
+unchanged. The controlled contraction diagnostic passed at
+`3512.93 > 0.0382999`.
+
 ```powershell
 build\spky_tests.exe --test-case="*bbd*" --no-skip
 ```

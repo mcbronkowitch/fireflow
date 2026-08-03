@@ -289,7 +289,11 @@ public:
 
     void Reset() {
         if (mem_ && max_cells_) std::memset(mem_, 0, max_cells_ * sizeof(float));
-        imem_ = 0;
+        write_index_ = 0;
+        read_cells_ = cells_;
+        stage_from_cells_ = cells_;
+        stage_to_cells_ = cells_;
+        stage_xfade_read_ = kStageXfadeReads;
         pclk_ = 0.f;
         ptick_ = 0;
         ybbd_old_ = 0.f;
@@ -307,9 +311,9 @@ public:
         ticks_ = (hz > 0.f && std::isfinite(hz)) ? (2.f * hz / sr_) : 0.f;
     }
 
-    // Physical stage count. The cell array is half of it; content is
-    // deliberately NOT cleared, so a stage change drifts in time and pitch
-    // instead of clicking.
+    // Physical stage count expressed as a requested read distance. The write
+    // history always spans max_cells_; Process crossfades read taps instead
+    // of changing the ring topology or resetting its head.
     void SetStages(int stages) {
         int c = stages / 2;
         const int lo = bbd_tuning::kMinStages / 2;
@@ -317,12 +321,15 @@ public:
         if (c < lo) c = lo;
         if (c > hi) c = hi;
         if (c < 1) c = 1;
-        if (c == cells_) return;
         cells_ = c;
-        if (imem_ >= cells_) imem_ = 0;
     }
 
     int cells() const { return cells_; }
+
+#ifdef SPKY_TESTING
+    int settled_cells() const { return read_cells_; }
+    bool stage_transition_active() const { return _stage_transition_active(); }
+#endif
 
     // FILT. The loss pole is the pole that actually carries the darkness --
     // at 16384 stages the fixed Butterworth chain contributes only -0.93 dB at
@@ -380,16 +387,39 @@ public:
                     // every BbdLine/BbdEcho user including Flux. See spec
                     // §5.9.
                     if (loss_z_ < 1e-9f && loss_z_ > -1e-9f) loss_z_ = 0.f;
-                    mem_[imem_] = dither_ != 0.f
-                                      ? loss_z_ + dither_ * rng_.next_bipolar()
-                                      : loss_z_;
-                    imem_ = (imem_ + 1 < cells_) ? imem_ + 1 : 0;
+                    mem_[write_index_] = dither_ != 0.f
+                                              ? loss_z_ + dither_ * rng_.next_bipolar()
+                                              : loss_z_;
+                    write_index_ = (write_index_ + 1 < static_cast<int>(max_cells_))
+                                         ? write_index_ + 1
+                                         : 0;
                 } else {
-                    // READ phase: imem_ points at the oldest cell. The output
-                    // filter is driven by the STEP between consecutive
-                    // readings, which is what makes the staircase exact.
+                    // READ phase: the output filter is driven by the STEP
+                    // between consecutive readings, which is what makes the
+                    // staircase exact.
                     fout_->interpolate_g(d, g);
-                    const float ybbd = mem_[imem_];
+                    if (!_stage_transition_active() && read_cells_ != cells_) {
+                        stage_from_cells_ = read_cells_;
+                        stage_to_cells_ = cells_;
+                        stage_xfade_read_ = 0;
+                    }
+
+                    float ybbd = 0.f;
+                    if (_stage_transition_active()) {
+                        const float from = _read_tap(stage_from_cells_);
+                        const float to = _read_tap(stage_to_cells_);
+                        const float x = static_cast<float>(stage_xfade_read_)
+                                      * kStageXfadeInv;
+                        const float w = x * x * (3.f - 2.f * x);
+                        ybbd = from + w * (to - from);
+                        ++stage_xfade_read_;
+                        if (stage_xfade_read_ >= kStageXfadeReads) {
+                            read_cells_ = stage_to_cells_;
+                            stage_xfade_read_ = kStageXfadeReads;
+                        }
+                    } else {
+                        ybbd = _read_tap(read_cells_);
+                    }
                     const float delta = ybbd - ybbd_old_;
                     ybbd_old_ = ybbd;
                     // Same denormal floor, same Flux-shared scope -- see the
@@ -422,12 +452,29 @@ public:
     }
 
 private:
+    bool _stage_transition_active() const {
+        return stage_xfade_read_ < kStageXfadeReads;
+    }
+
+    float _read_tap(int delay_cells) const {
+        int index = write_index_ - delay_cells;
+        if (index < 0) index += static_cast<int>(max_cells_);
+        return mem_[index];
+    }
+
     const BbdFilterCoef* fin_ = nullptr;
     const BbdFilterCoef* fout_ = nullptr;
     float*   mem_ = nullptr;
     size_t   max_cells_ = 0;
-    int      cells_ = 1;
-    int      imem_ = 0;
+    static constexpr int   kStageXfadeReads = 16;
+    static constexpr float kStageXfadeInv = 1.f / 15.f;
+
+    int      cells_ = 1;              // latest requested/clamped read distance
+    int      write_index_ = 0;         // physical ring always wraps at max_cells_
+    int      read_cells_ = 1;          // settled read distance
+    int      stage_from_cells_ = 1;
+    int      stage_to_cells_ = 1;
+    int      stage_xfade_read_ = kStageXfadeReads;  // 16 means idle
     float    sr_ = 48000.f;
     float    ticks_ = 0.f;      // ticks per audio sample = 2*f_clk/fs
     float    pclk_ = 0.f;       // fractional tick phase carried between samples

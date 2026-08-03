@@ -336,6 +336,78 @@ TEST_CASE("bbd line: a stage change mid-run drifts, it does not explode") {
     CHECK(line.cells() <= 8192);
 }
 
+TEST_CASE("bbd line: stage tap crossfade shrinks, expands, and coalesces targets") {
+    static float mem[8192];
+    BbdLine line;
+    line.Init(mem, 8192, 48000.f);
+    line.SetStages(8192);                   // requested/settled = 4096 cells
+    line.Reset();
+    line.SetClock(12000.f);                 // one READ tick every four samples
+
+    auto run = [&](int samples) {
+        for (int i = 0; i < samples; ++i)
+            line.Process(0.25f * std::sin(0.011f * static_cast<float>(i)));
+    };
+    run(20000);                             // fill a live history
+    CHECK(line.settled_cells() == 4096);
+    CHECK_FALSE(line.stage_transition_active());
+
+    line.SetStages(4096);                   // shrink to 2048 cells
+    CHECK(line.cells() == 2048);            // public observer is the request
+    CHECK(line.settled_cells() == 4096);
+    run(8);
+    CHECK(line.stage_transition_active());
+    run(72);                                // >16 READ ticks total
+    CHECK_FALSE(line.stage_transition_active());
+    CHECK(line.settled_cells() == 2048);
+
+    line.SetStages(12288);                  // expand to 6144 cells
+    run(80);
+    CHECK_FALSE(line.stage_transition_active());
+    CHECK(line.settled_cells() == 6144);
+
+    line.SetStages(4096);                   // begin 6144 -> 2048
+    run(20);                                // five READ ticks: transition active
+    REQUIRE(line.stage_transition_active());
+    line.SetStages(6144);                   // newest request is 3072, do not restart
+    CHECK(line.cells() == 3072);
+    run(128);                               // finish old transition, then newest one
+    CHECK_FALSE(line.stage_transition_active());
+    CHECK(line.settled_cells() == 3072);
+}
+
+TEST_CASE("bbd line: Reset cancels a stage transition at the latest request") {
+    static float mem[8192];
+    BbdLine line;
+    line.Init(mem, 8192, 48000.f);
+    line.SetStages(8192);
+    line.Reset();
+    line.SetClock(12000.f);
+    for (int i = 0; i < 1000; ++i) line.Process(0.3f);
+
+    line.SetStages(2048);                   // request 1024 cells
+    for (int i = 0; i < 20; ++i) line.Process(0.3f);
+    REQUIRE(line.stage_transition_active());
+    line.Reset();
+    CHECK_FALSE(line.stage_transition_active());
+    CHECK(line.cells() == 1024);
+    CHECK(line.settled_cells() == 1024);
+    for (int i = 0; i < 256; ++i) CHECK(line.Process(0.f) == 0.f);
+}
+
+TEST_CASE("bbd line: null memory can hold a pending stage request safely") {
+    BbdLine line;
+    line.Init(nullptr, 8192, 48000.f);
+    line.SetStages(4096);                   // request 2048, no memory to advance it
+    line.SetClock(12000.f);
+    CHECK(line.cells() == 2048);
+    CHECK(line.settled_cells() == 8192);
+    for (int i = 0; i < 1000; ++i) CHECK(std::isfinite(line.Process(0.5f)));
+    CHECK_FALSE(line.stage_transition_active());
+    line.Reset();
+    CHECK(line.settled_cells() == 2048);
+}
+
 TEST_CASE("bbd line: a zero clock holds instead of crashing") {
     // No floor on the clock means f_clk can be pushed arbitrarily low by a
     // very slow tempo. Zero ticks per sample must be a hold, not a divide by

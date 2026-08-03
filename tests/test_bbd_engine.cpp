@@ -271,6 +271,89 @@ TEST_CASE("bbd engine: COLOR opened splits the lines and keeps the grid") {
           == doctest::Approx(e.clock_hz()).epsilon(0.001));
 }
 
+TEST_CASE("bbd engine: RATE-modulated COLOR does not emit channel clicks") {
+    struct Metrics {
+        float peak = 0.f;
+        float max_delta_l = 0.f;
+        float max_delta_r = 0.f;
+        double stereo_delta = 0.0;
+    };
+
+    auto render = [](int width_mode) {
+        BbdEngine e;
+        e.init(48000.f);
+        e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
+        e.reset();
+        e.set_cycle(0.5f);
+        e.set_flow(true);
+        e.set_detune(0.f);
+        float targets[LANE_COUNT] = { 0.15f, 0.5f, 0.5f, 0.35f, 1.f };
+        e.set_targets(targets, 0.5f);
+
+        Metrics m;
+        float previous_l = 0.f;
+        float previous_r = 0.f;
+        bool have_previous = false;
+        const int total = 48000 * 8;
+        for (int i = 0; i < total; ++i) {
+            if ((i % 96) == 0) {
+                float width = 0.f;
+                if (width_mode == 1) width = 0.2f;
+                if (width_mode == 2) {
+                    width = 0.2f + 0.2f * std::sin(
+                        TWO_PI * 2.f * static_cast<float>(i) / 48000.f);
+                }
+                e.set_width(width);
+            }
+
+            const float in = 0.5f * std::sin(
+                TWO_PI * 110.f * static_cast<float>(i) / 48000.f);
+            float l = 0.f, r = 0.f;
+            e.process_in(in, in);
+            e.process(l, r);
+            REQUIRE(std::isfinite(l));
+            REQUIRE(std::isfinite(r));
+
+            if (i >= 48000) {
+                m.peak = std::max(m.peak, std::max(std::fabs(l), std::fabs(r)));
+                m.stereo_delta += std::fabs(l - r);
+                if (have_previous) {
+                    m.max_delta_l = std::max(m.max_delta_l, std::fabs(l - previous_l));
+                    m.max_delta_r = std::max(m.max_delta_r, std::fabs(r - previous_r));
+                }
+                have_previous = true;
+            }
+            previous_l = l;
+            previous_r = r;
+        }
+        return m;
+    };
+
+    const Metrics zero = render(0);
+    const Metrics fixed = render(1);
+    const Metrics moving = render(2);
+    CAPTURE(zero.max_delta_l);
+    CAPTURE(zero.max_delta_r);
+    CAPTURE(fixed.max_delta_l);
+    CAPTURE(fixed.max_delta_r);
+    CAPTURE(moving.max_delta_l);
+    CAPTURE(moving.max_delta_r);
+    CAPTURE(moving.stereo_delta);
+
+    CHECK(zero.peak > 0.05f);
+    CHECK(fixed.peak > 0.05f);
+    CHECK(moving.peak > 0.05f);
+    CHECK(zero.stereo_delta == 0.0);
+    CHECK(fixed.stereo_delta > 1.0);
+    CHECK(moving.stereo_delta > 1.0);
+    CHECK(zero.max_delta_l < 0.03f);
+    CHECK(zero.max_delta_r < 0.03f);
+    CHECK(fixed.max_delta_l < 0.03f);
+    CHECK(fixed.max_delta_r < 0.03f);
+    CHECK(moving.max_delta_l < 0.03f);
+    CHECK(moving.max_delta_r < 0.03f);
+}
+
 TEST_CASE("bbd engine: FLOW is free, STEP is on the scale grid") {
     BbdEngine e;
     e.init(48000.f);
@@ -450,8 +533,10 @@ TEST_CASE("bbd engine: PITCH is inaudible at FEEDBACK 0, and that is the design"
         }
     };
     static float with_fb[48000], without_fb[48000];
-    tail(0.9f, 0.3f, 0.7f, with_fb, 48000);
-    tail(0.0f, 0.3f, 0.7f, without_fb, 48000);
+    // Contract: expansion recalls retained full-ring history and would test
+    // first-pass history, not feedback separation.
+    tail(0.9f, 0.7f, 0.3f, with_fb, 48000);
+    tail(0.0f, 0.7f, 0.3f, without_fb, 48000);
     auto energy = [](const float* x, int n) {
         float s = 0.f;
         for (int i = n / 2; i < n; ++i) s += x[i] * x[i];
