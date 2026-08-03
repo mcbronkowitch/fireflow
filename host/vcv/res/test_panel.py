@@ -55,14 +55,15 @@ PARAM_ORDER = [
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'GRIT', 'STEP', 'FORM', 'NEW', 'SONG',
+    'ENG', 'Grit mode', 'STEP', 'FORM', 'NEW', 'SONG',
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'GRIT', 'STEP', 'FORM', 'NEW', 'SONG',
+    'ENG', 'Grit mode', 'STEP', 'FORM', 'NEW', 'SONG',
     'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'DRIVE',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
-    'FILT', 'FILT', 'TIDE', 'FRATE', 'FRATE', 'FFB', 'FFB', 'COLOR',
-    'COLOR', 'LINK', 'LINK', 'BBD Pitch', 'BBD Pitch', 'REC', 'REC', 'ROOM', 'ROOM',
+    'FILT', 'FILT', 'TIDE', 'FLUX division', 'FLUX division', 'FFB', 'FFB',
+    'COLOR', 'COLOR', 'LINK', 'LINK', 'BBD Bend', 'BBD Bend', 'REC', 'REC',
+    'Room send', 'Room send',
     'SHUFL', 'Detune A', 'Detune B', 'Drive A', 'Drive B',
     'Tape Time', 'Tape Time',
 ]
@@ -231,15 +232,16 @@ def test_param_runtime_tip_contract():
           "parameter runtime tip contract changed: "
           + repr([(c.enum, c.tip, want) for c, want in zip(g.PARAMS, PARAM_TIPS)
                   if c.tip != want]))
-    check(PARAM_TIPS[71:75] == ['LINK', 'LINK', 'BBD Pitch', 'BBD Pitch'],
-          "BBD Pitch runtime tips drifted")
+    check(PARAM_TIPS[71:75] == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
+          "BBD Bend runtime tips drifted")
     check(PARAM_TIPS[-6:] == [
         'Detune A', 'Detune B', 'Drive A', 'Drive B',
         'Tape Time', 'Tape Time',
     ], "Tape Time runtime tips drifted")
     for enum, caption, tip in (
             ("FLUX_A", "MIX", "FLUX"), ("FLUX_B", "MIX", "FLUX"),
-            ("FLUXRATE_A", "RATE", "FRATE"), ("FLUXRATE_B", "RATE", "FRATE"),
+            ("FLUXRATE_A", "DIV", "FLUX division"),
+            ("FLUXRATE_B", "DIV", "FLUX division"),
             ("FLUXFB_A", "FB", "FFB"), ("FLUXFB_B", "FB", "FFB")):
         c = ctl(enum)
         check(c.label == caption and c.tip == tip,
@@ -303,7 +305,7 @@ def test_rec_params():
 
 def test_reverb_mix_params():
     """REV_MIX_A/B are appended (not templated) so PART_STRIDE stays 23, and
-    they carry the 'ROOM' label as the FX top row's 4th slot -- the shared
+    they carry the 'SEND' label as the FX top row's 4th slot -- the shared
     centre REV_MIX is gone."""
     check(g.PART_STRIDE == 23, "PART_STRIDE must stay 23")
     ids = {c.enum: i for i, c in enumerate(g.PARAMS)}
@@ -311,7 +313,7 @@ def test_reverb_mix_params():
     for e in ("REV_MIX_A", "REV_MIX_B"):
         check(e in ids, f"{e} missing")
         check(ids[e] >= 2 * g.PART_STRIDE, f"{e} must be appended, not templated")
-        check(ctl(e).label == "ROOM", f"{e} label must be 'ROOM'")
+        check(ctl(e).label == "SEND", f"{e} label must be 'SEND'")
     h = g.header()
     for e in ("REV_MIX_A", "REV_MIX_B"):
         check(h.count(f"{{{e}, WK_SMKNOB,") == 1,
@@ -625,9 +627,9 @@ def test_lower_half_positions():
         attack, pitch = ctl('ATTACK' + suffix), ctl('STAGES' + suffix)
         check((attack.x, attack.y) == (pitch.x, pitch.y),
               f"{suffix}: ATK/PITCH do not share coordinates")
-        time = ctl('FLUXTIME' + suffix)
-        check(time.label == 'TIME' and time.tip == 'Tape Time',
-              f"{suffix}: TIME caption/tooltip drifted")
+        mult = ctl('FLUXTIME' + suffix)
+        check(mult.label == 'MULT' and mult.tip == 'Tape Time',
+              f"{suffix}: tape multiplier caption/tooltip drifted")
 
 
 def test_static_synth_preview_excludes_bbd_pitch():
@@ -637,10 +639,10 @@ def test_static_synth_preview_excludes_bbd_pitch():
     check('>STGS</text>' not in svg, "static SVG still exposes STGS")
     check(svg.count('>ATK</text>') == 2,
           "static preview must show two ATK captions")
-    check(svg.count('font-size="1.9">TIME</text>') == 2,
-          "static preview must show two TIME captions")
-    check('font-size="1.9">PITCH</text>' not in svg,
-          "static preview must not overlay PITCH on ATK")
+    check(svg.count('font-size="1.9">MULT</text>') == 2,
+          "static preview must show two MULT captions")
+    check('font-size="1.9">BEND</text>' not in svg,
+          "static preview must not overlay BEND on ATK")
 
 
 def test_form_song_control_contract():
@@ -870,6 +872,65 @@ def test_every_label_is_reachable():
         lx, ly, _a, size, _col = g.label_of(c)
         check(1.0 <= lx <= g.W - 1.0 and 1.0 <= ly <= g.Hh - 1.0,
               f"{c.enum} label off panel at ({lx:.2f}, {ly:.2f})")
+
+
+# --- one word, one meaning ----------------------------------------------------
+# Everything a player reads inside deck A's half plus the shared centre. Deck B
+# is an exact mirror (test_all_deck_local_geometry_is_exactly_mirrored), so it
+# contributes no word deck A does not already have.
+#
+# Jack captions are deliberately OUT of scope: PIT/GATE/L/R each appear twice
+# across the five jack groups, and gen_panel's JACK_GROUPS comment records why
+# that is correct -- the coloured wells and their legends disambiguate them.
+# Their group LEGENDS are in scope, because those are read as ordinary words.
+def dynamic_words_for(base):
+    """State-dependent words for a control base, [] when it has none.
+
+    Tolerates gen_panel having no DYNAMIC_CAPTIONS table yet, so this guard
+    can land before the table it will eventually cover."""
+    for target, _driver, words in getattr(g, "DYNAMIC_CAPTIONS", ()):
+        if target == base:
+            return list(words)
+    return []
+
+
+def printed_words():
+    """word -> list of origins, for everything drawn in deck A + centre."""
+    out = {}
+
+    def add(word, origin):
+        out.setdefault(word, []).append(origin)
+
+    jacks = {c.enum for c in g.INPUTS + g.OUTPUTS}
+    for c in g.RUNTIME_PANEL_PARAMS:
+        if not c.label or c.enum.endswith('_B') or c.enum in jacks:
+            continue
+        base = c.enum[:-2] if c.enum.endswith('_A') else c.enum
+        for word in dynamic_words_for(base) or [c.label]:
+            add(word, base)
+
+    # Deck B's three mirrored fieldsets repeat deck A's legends verbatim;
+    # every other box (centre + jack groups) is its own word.
+    mirrored = {(round(x, 3), round(y, 3))
+                for (x, y, _w, _h, _n, _c) in g.part_groups(True)}
+    for (x, y, _w, _h, name, _col) in g.GROUPS:
+        if (round(x, 3), round(y, 3)) in mirrored:
+            continue
+        add(name, 'group legend')
+
+    for (name, _a0, _a1, _cap) in g.SECTORS:
+        add(name, 'sector eyebrow')
+    return out
+
+
+def test_every_printed_word_is_unique():
+    """No word may name two different things on one plate.
+
+    This is the guard that would have stopped RATE/RATE (orbit macro vs FLUX
+    division) and GRIT/GRIT (mode pad vs mix knob) from ever being written."""
+    for word, origins in sorted(printed_words().items()):
+        check(len(origins) == 1,
+              f"{word!r} is printed {len(origins)}x: {', '.join(origins)}")
 
 
 def test_config_wires_tip_not_label():

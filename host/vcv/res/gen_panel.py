@@ -193,7 +193,7 @@ VOICE_X  = [9.25, 19.75, 30.25]      # ATK FILT SUB / DEC RES TIMB
 ROW_V1, ROW_V2 = 77.3, 89.4
 SOURCE_CAPTIONS = {0: "TIMB", 1: "ORG", 2: "FRAME", 3: "MATL", 4: "DRIVE"}
 # 4-wide, aligned to FX_BOT so the FX box's two rows flush: RATE MIX FB ROOM.
-FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # RATE MIX FB | ROOM (per-deck reverb mix)
+FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # DIV MIX FB | SEND (per-deck reverb mix)
 # FX bottom row went from two slots to four (spec 2026-07-18 dust-grain-cloud);
 # the left two were renamed in place when FLUX became a BBD (spec 2026-07-27):
 # DUST/ROT -> DRIVE/STAGES. The first slot was renamed in place again (spec
@@ -202,7 +202,7 @@ FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # RATE MIX FB | ROOM (per-deck reverb 
 # bipolar and LINK names the axis rather than one of its two ends.
 # The BBD-only PITCH widget overlaps ATK at runtime. TIME takes the second
 # FLUX-bottom slot, so the static Synth preview reads LINK TIME | GRIT COMP.
-FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # LINK TIME | GRIT COMP
+FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # LINK MULT | GRIT COMP
 PLAY_Y   = 103.6
 # The PLAY row's left block re-spaced to seat REC between GRIT and STEPS
 # (spec 2026-07-18 "VCV layer": REC is the only new panel element). All four
@@ -254,10 +254,14 @@ def part_controls(mir=False):
     # ENGINE cycles Synth/Sampler/Wave/Body/BBD (states 0..4); the C++ side
     # (Spotymod.cpp configSwitch/EngineCycleLatch) is the source of truth for
     # the labels, this comment just keeps the panel legend discoverable here.
-    pads = [("ENGINE", LATCH, "ENG"), ("GRITMODE", LATCH, "GRIT"),
-            ("STEP", LATCH, "STEP")]
-    for i, (enum, kind, lbl) in enumerate(pads):
-        out.append(Ctl(enum, kind, fx(PAD_X[i]), PLAY_Y, lbl))
+    # GRITMODE's caption is its MODE, not its block's name -- the block is the
+    # GRIT knob one row up (spec 2026-08-03). Its resting word is SAT; the
+    # runtime swaps in CRSH from DYNAMIC_CAPTIONS.
+    pads = [("ENGINE", LATCH, "ENG", None),
+            ("GRITMODE", LATCH, "SAT", "Grit mode"),
+            ("STEP", LATCH, "STEP", None)]
+    for i, (enum, kind, lbl, tip) in enumerate(pads):
+        out.append(Ctl(enum, kind, fx(PAD_X[i]), PLAY_Y, lbl, tip))
     out.append(Ctl("FORM", KNOBI, fx(PAD_X[3]), PLAY_Y, "FORM"))
     # Keep the frozen ParamId order FORM, NEWPHRASE, SONG while laying the
     # controls out visually as FORM, SONG, NEW.
@@ -394,8 +398,8 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     # They complete the FLUX delay cluster atop the FX box: RATE (FX_TOP[0]),
     # MIX (FX_TOP[1], from the template), FB (FX_TOP[2]) sit together;
     # GRIT/COMP fill FX_BOT below.
-    Ctl("FLUXRATE_A", SMKNOB, FX_TOP[0],     ROW_V1, "RATE", "FRATE"),
-    Ctl("FLUXRATE_B", SMKNOB, W - FX_TOP[0], ROW_V1, "RATE", "FRATE"),
+    Ctl("FLUXRATE_A", SMKNOB, FX_TOP[0],     ROW_V1, "DIV", "FLUX division"),
+    Ctl("FLUXRATE_B", SMKNOB, W - FX_TOP[0], ROW_V1, "DIV", "FLUX division"),
     Ctl("FLUXFB_A",   SMKNOB, FX_TOP[2],     ROW_V1, "FB", "FFB"),
     Ctl("FLUXFB_B",   SMKNOB, W - FX_TOP[2], ROW_V1, "FB", "FFB"),
     # COLOR: chord density/colour per part (spec 2026-07-17 chord-layer), a full
@@ -419,8 +423,8 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     # on ATTACK while the static Synth preview omits it.
     Ctl("LINK_A",   SMKNOB, FX_BOT[0],     ROW_V2, "LINK"),
     Ctl("LINK_B",   SMKNOB, W - FX_BOT[0], ROW_V2, "LINK"),
-    Ctl("STAGES_A", SMKNOB, VOICE_X[0],     ROW_V1, "PITCH", "BBD Pitch"),
-    Ctl("STAGES_B", SMKNOB, W - VOICE_X[0], ROW_V1, "PITCH", "BBD Pitch"),
+    Ctl("STAGES_A", SMKNOB, VOICE_X[0],     ROW_V1, "BEND", "BBD Bend"),
+    Ctl("STAGES_B", SMKNOB, W - VOICE_X[0], ROW_V1, "BEND", "BBD Bend"),
     # M5b: REC, the one new panel element of the texture deck. Appended LAST
     # so REC_A/REC_B take fresh trailing ids and PART_STRIDE stays 23 -- every
     # already-saved .vcv keeps every param id it has.
@@ -433,8 +437,8 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     # already the delay mix). The old shared centre REV_MIX is removed from
     # SHARED; its id and every id after it shift by one (accepted: old .vcv
     # patches load shifted reverb/CHOKE/tail params).
-    Ctl("REV_MIX_A", SMKNOB, FX_TOP[3],     ROW_V1, "ROOM"),
-    Ctl("REV_MIX_B", SMKNOB, W - FX_TOP[3], ROW_V1, "ROOM"),
+    Ctl("REV_MIX_A", SMKNOB, FX_TOP[3],     ROW_V1, "SEND", "Room send"),
+    Ctl("REV_MIX_B", SMKNOB, W - FX_TOP[3], ROW_V1, "SEND", "Room send"),
     # Shared STEP-lane shuffle. Appended after every existing ParamId so saved
     # patches retain all prior ids; the glyph fills TIME's bottom-right slot.
     Ctl("SHUFFLE", SMKNOB, CX + 9.0, ROW_TIME2, "SHUFL"),
@@ -452,8 +456,8 @@ HIDDEN_PARAMS = [
 ]
 
 APPENDED_PANEL_PARAMS = [
-    Ctl("FLUXTIME_A", SMKNOB, FX_BOT[1],     ROW_V2, "TIME", "Tape Time"),
-    Ctl("FLUXTIME_B", SMKNOB, W - FX_BOT[1], ROW_V2, "TIME", "Tape Time"),
+    Ctl("FLUXTIME_A", SMKNOB, FX_BOT[1],     ROW_V2, "MULT", "Tape Time"),
+    Ctl("FLUXTIME_B", SMKNOB, W - FX_BOT[1], ROW_V2, "MULT", "Tape Time"),
 ]
 
 # Persistent ids retain the legacy visible and hidden sequences exactly; runtime
