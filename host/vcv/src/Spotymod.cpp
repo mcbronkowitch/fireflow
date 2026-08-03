@@ -421,7 +421,6 @@ struct Spotymod : Module {
             inst.set_density(p, pp(DENSITY_A, p));
             inst.set_smooth(p, pp(SMOOTH_A, p));
             inst.set_range(p, pp(RANGE_A, p));
-            inst.set_variation(p, pp(MELODY_A, p));          // -1..+1 RENEW<-LOOP->GROW
             inst.set_depth(p, pp(MOD_A, p));
             inst.set_tune(p, pp(TUNE_A, p));
 
@@ -538,13 +537,14 @@ struct Spotymod : Module {
             // job of their own. The param ids do not change, so no saved
             // patch moves; only what the knob means when ENG says Sampler.
             //
-            // set_variation and set_density above keep firing unconditionally
-            // -- the "push to both, let the inactive side ignore it" pattern
-            // the voice row already uses. DENS is the one knob that genuinely
-            // does two things in sampler STEP mode: it still thins the groove
-            // gate AND now sets grain overlap. Both point the same direction
-            // (sparser), so this is left as-is and flagged for the listening
-            // pass rather than special-cased.
+            // set_density above keeps firing unconditionally -- the "push to
+            // both, let the inactive side ignore it" pattern the voice row
+            // already uses. set_variation left that pattern when MELODY became
+            // SCAN-only on a Sampler deck (spec 2026-08-03); it is pushed
+            // below, behind the same samplerPart gate. DENS is the one knob
+            // that genuinely does two things in sampler STEP mode: it still
+            // thins the groove gate AND now sets grain overlap. Both point the
+            // same direction (sparser), so this is left as-is.
             const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;
             inst.sampler_overlap(p, pp(DENSITY_A, p));
             inst.set_target_base(p, spky::LANE_SOURCE, pp(SOURCE_A, p));
@@ -619,6 +619,16 @@ struct Spotymod : Module {
             // dicht zu bekommen verlangt genau das persistente Gedaechtnis,
             // das dort ausgeschlossen ist. Offen fuer den Autor des
             // Instruments, nicht fuer die Engine.
+            //
+            // MELODY is one knob with one meaning per engine (spec 2026-08-03
+            // vcv-engine-aware-captions): VARY off the Sampler, SCAN on it.
+            // Both jobs at once is why SCAN had to be printed permanently
+            // beside MELO. Variation parks at 0 (LOOP) here, the same shape
+            // as the LANE_SIZE gate below, which parks at 0.5f off the
+            // Sampler. The cost is deliberate and recorded in the spec: a
+            // Sampler deck no longer renews its phrases on its own, and NEW
+            // is the gesture that asks for a fresh pair.
+            inst.set_variation(p, samplerPart ? 0.f : pp(MELODY_A, p));
             if (samplerPart) inst.sampler_scan(p, pp(MELODY_A, p));
 
             // GENE SIZE rides the lane base only in the sampler. The else

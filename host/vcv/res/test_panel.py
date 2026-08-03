@@ -1233,6 +1233,28 @@ def test_engine_cycle_guard_rejects_representative_regressions():
               f"ENG guard accepted a {label} regression")
 
 
+def test_variation_is_gated_off_the_sampler():
+    """MELODY is one knob with one meaning per engine: VARY off the Sampler,
+    SCAN on it. Variation parks at LOOP there -- the same shape as the
+    LANE_SIZE gate that parks at 0.5f off the Sampler."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    push = cpp_scope(cpp, "void pushParams()")
+    check(push is not None, "pushParams scope is missing")
+    if push is None:
+        return
+    n = compact_cpp(push)
+    check(n.count("inst.set_variation(") == 1,
+          "set_variation must be pushed exactly once")
+    check("inst.set_variation(p,samplerPart?0.f:pp(MELODY_A,p));" in n,
+          "set_variation must park at LOOP on a Sampler deck")
+    check(n.index("constboolsamplerPart=") < n.index("inst.set_variation("),
+          "set_variation must run after samplerPart resolves this tick's engine")
+    check("if(samplerPart)inst.sampler_scan(p,pp(MELODY_A,p));" in n,
+          "sampler_scan must stay gated on the same samplerPart")
+
+
 def source_detune_wiring_issues(cpp):
     """Return regressions in the stable SOURCE/hidden-Detune host boundary."""
     issues = []
