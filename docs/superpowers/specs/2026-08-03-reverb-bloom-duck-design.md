@@ -89,7 +89,14 @@ In `Instrument::process`, on the existing control raster
 - per-sample one-pole slew toward the target, seconds not milliseconds:
   down over ~1.5 s (the bloom itself swells over 2–3 s), up over ~4 s
   (so a wash fluctuating near the threshold breathes below audibility —
-  the measured lesson of the hard-ceiling dead end).
+  the measured lesson of the hard-ceiling dead end). Implemented as a
+  residual (`_duck_gain − _duck_target`) held in its own persisted float
+  and decayed by a pure multiply each sample, re-based onto the target
+  only when the target itself moves — not `_duck_gain` rebuilt from
+  target every sample, which is algebraically the same update but stalls
+  short of the target (measured ~0.994 after a bloom at 48 kHz) because
+  the addition back into target's scale rounds away the remaining gap
+  before the next sample can act on it.
 
 The duck gain multiplies **only the dry terms** (`al*ga*dga`,
 `ar*ga*dga`, `bl*gb*dgb`, `br*gb*dgb`). The sends into the room are
@@ -141,25 +148,49 @@ The instrument exposes `duck_gain()` for tests, the way the reverb
 exposes `limiter_gain()`: from outside, a duck is indistinguishable
 from quieter playing, so the read-out is the only honest probe.
 
-1. **Transparency guard:** normal patch (DECAY 0.55, MIX 0.25, hot
-   send) → `duck_gain()` reads exactly 1.0 (`==`, not `≈`) over the
-   whole render.
-2. **Loud-but-sub-unity guard (the arming test):** DECAY 0.75
-   (loop gain ~0.94), send loud enough that `return_level()` crosses
-   `kDuckThresh` → `duck_gain()` still exactly 1.0. Red with a pure
-   level threshold; this is the test that forces the arming to exist.
-3. **The duck ducks:** DECAY 1.0, hot send, several seconds →
-   `duck_gain()` falls below 0.5. (Red before implementation: it
+1. **Transparency guard:** boot-default patch (DECAY 0.55) but with a hot
+   send (REV_SEND = 1 both decks) and MIX 0.9, so the room is genuinely
+   loud, not merely quiet → `duck_gain()` reads exactly 1.0 (`==`, not
+   `≈`) over the whole render. A hot send matters: a quiet room passing
+   this guard proves nothing.
+2. **Loud-but-sub-unity guard (the arming test, the steady-state form):**
+   DECAY 0.75 (loop gain ~0.94) held for the room's *whole* life, hot
+   send, 15 s → `duck_gain()` reads exactly 1.0 on every single block,
+   with a `REQUIRE` that `return_level()` actually crossed `kDuckThresh`
+   during the render (measured on this rig: env_max ≈ 0.447). Red with a
+   pure level threshold; this is the test that forces the arming to
+   exist, and it holds the regime fixed for the render's entire span so
+   nothing borrows proof from the env's own drain (see test 4).
+3. **The duck ducks (render-minimum form):** DECAY 1.0, hot send, 15 s →
+   the *minimum* `duck_gain()` seen over the render falls below 0.5. The
+   rig's return envelope breathes (~0.39–0.58, ~10 s period — generative
+   material), so a single checkpoint would straddle the line; the render
+   minimum pins the spec's claim exactly. (Red before implementation: it
    reads 1.0.)
-4. **No stepping:** jump DECAY 0.5 → 1.0 mid-render → the dry gain's
+4. **Regime-release guard (the disarm test):** duck the room first (DECAY
+   1.0, 15 s), then drop DECAY to 0.75 (sub-unity — the player takes the
+   room back) while the tail is still loud, and render 4 s. This does
+   *not* re-prove the regime bit — over the full 4 s window the env also
+   drains through `kDuckThresh` on its own (measured: `return_level` 0.301
+   at 3.0 s, 0.261 at 4.0 s), so a plain level duck would eventually rise
+   here too; that proof is test 2's job. What this guards: the gain rises
+   monotonically, clears a bound derived from the 4 s up-slew
+   (`(1−g0)·(1−1/e) > 0.1`), and the env is honestly still over threshold
+   at the 1 s checkpoint (so the rise isn't free). The same test then
+   kills the sends and drops to DECAY 0.5, renders 90 s more, and checks
+   `duck_gain() == 1.0` exactly — the residual-form slew's eventual exact
+   recovery (see the Architecture slew note above).
+5. **No stepping:** jump DECAY 0.5 → 1.0 mid-render → the dry gain's
    per-sample delta stays below a slew-derived bound.
-5. **Send purity:** wet-solo bloom (MIX = 1, DECAY 1.0) settles at the
+6. **Send purity:** wet-solo bloom (MIX = 1, DECAY 1.0) settles at the
    known return plateau (~0.5–0.6), not at plateau × duck floor — if
    the duck ever multiplied the send or the return, this level drops
    and the test goes red.
-6. **Tap purity:** during a full duck, the excitation bus (read via the
+7. **Tap purity:** during a full duck, the excitation bus (read via the
    existing `excitation_bus()` test observer) carries the unducked deck
    level — red if an implementation scales `al/ar/bl/br` in place.
+8. **Re-init forgets the duck:** re-initialising an instrument that was
+   visibly ducked reads `duck_gain() == 1.0` before any `process()` call.
 
 ## Cleanup audit (the "zerbastelt" question)
 
