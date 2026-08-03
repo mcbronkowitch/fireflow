@@ -346,8 +346,13 @@ charge written at `f₁` is read out at `f₂`. With feedback, the shifted copy 
 re-recorded at the new clock, so a circulating grain tracks
 `f_now / f_at_entry` — which is how §1's melody is possible.
 
-`SetStages` changes `cells_` and nothing else; the buffer is deliberately not
-cleared, "so a stage change drifts in time and pitch instead of clicking."
+`SetStages` stores a requested cell count; it does not change the physical ring
+topology. The line writes continuously through its full injected memory and
+reads at the requested distance behind that write head. When the request moves,
+the old and new read distances are smoothstep-crossfaded over sixteen BBD READ
+ticks before the existing reconstruction filter. This preserves the stored
+history and removes the index reset that previously emitted a short impulse
+during MOTION-modulated COLOR. The settled delay law is unchanged.
 `SetClock(hz)` with `hz ≤ 0` or non-finite means hold: no ticks, and no output.
 
 ### 5.2 The clock is the lane; the stage count is derived
@@ -637,6 +642,12 @@ on the grid for both lines.**
 f_L = f_clk · r        stages_L = round(2·T·f_clk·r)
 f_R = f_clk / r        stages_R = round(2·T·f_clk/r)
 ```
+
+The per-channel stage requests may move every control block because COLOR also
+receives MOTION. They therefore use the click-free read-tap transition described
+in §5.1; neither channel resizes or resets its physical write ring. During the
+short transition both taps read one continuous charge history, and the settled
+endpoints still satisfy the two grid equations above.
 
 Both delays remain `T`. What differs is the **stage count**, hence the bandwidth
 and grain (`f_clk/4`) — a stereo image made of two differently-bright copies of
