@@ -1430,49 +1430,76 @@ def test_flux_time_guard_rejects_representative_regressions():
               f"Tape Time guard accepted a {label} regression")
 
 
-def source_caption_wiring_issues(cpp):
-    """Return regressions in the one-live-SOURCE-caption-per-part contract."""
-    issues = []
-    mapping = cpp_scope(cpp, "static const char* sourceCaption(int state)")
-    panel = cpp_scope(cpp, "struct PanelText : Widget")
-    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
-    expected_mapping = """
-static const char* sourceCaption(int state) {
-    return state == 1 ? "ORG" : state == 2 ? "FRAME"
-         : state == 3 ? "MATL" : state == 4 ? "DRIVE" : "TIMB";
-}"""
-    if mapping is None:
-        issues.append("SOURCE caption mapping scope is missing")
-    elif compact_cpp(mapping) != compact_cpp(expected_mapping):
-        issues.append("SOURCE caption mapping must be 0 TIMB, 1 ORG, 2 FRAME, 3 MATL, 4 DRIVE")
+CAPTION_WORDS = ("TIMB", "ORG", "FRAME", "MATL", "DRIVE", "ATK", "HIT",
+                 "DEC", "DAMP", "TAIL", "RES", "CHAR", "TILT", "SUB", "LEN",
+                 "EXCIT", "FEED", "FILT", "BRITE", "LOSS", "VARY", "SCAN",
+                 "SAT", "CRSH", "BEND")
 
+
+def caption_wiring_issues(cpp):
+    """Return regressions in the one-table-drives-every-caption contract."""
+    issues = []
+    panel = cpp_scope(cpp, "struct PanelText : Widget")
     if panel is None:
-        issues.append("SOURCE caption PanelText scope is missing")
+        issues.append("PanelText scope is missing")
         return issues
     panel_n = compact_cpp(panel)
+
+    for word in CAPTION_WORDS:
+        if f'"{word}"' in cpp:
+            issues.append(f"caption word {word!r} is typed into the C++; "
+                          "every word belongs in gen_panel.py")
+    for gone in ("sourceCaption(", "sourceCaptionAt(", "attackPitchCaptionAt("):
+        if gone in cpp:
+            issues.append(f"the retired per-control helper {gone} is back")
+    if "for(constauto&d:kDynCaptions)" not in panel_n:
+        issues.append("PanelText must resolve captions from kDynCaptions")
+    if "module->params[d.driverId].getValue()" not in panel_n:
+        issues.append("a dynamic caption must read its own driver parameter")
+    if panel_n.count("ctlVisible(module,t[i].id)") != 1:
+        issues.append("the caption loop must skip a control that is not the "
+                      "one occupying its slot")
     if "Spotymod*module;explicitPanelText(Spotymod*m):module(m){}" not in panel_n:
         issues.append("PanelText must retain its Spotymod module pointer")
-    if panel_n.count("constintstate=roundedEngineState(module,engineId);") != 1:
-        issues.append("SOURCE caption state must use the shared rounded ENG helper")
-    if panel_n.count("text(source->lbl.x,source->lbl.y,source->lblSize,"
-                     "col(source->lblRgb),sourceCaption(state));") != 1:
-        issues.append("dynamic SOURCE helper must draw one resolved caption")
-    for source_id, engine_id in (("SOURCE_A", "ENGINE_A"),
-                                 ("SOURCE_B", "ENGINE_B")):
-        call = f"sourceCaptionAt({source_id},{engine_id});"
-        if panel_n.count(call) != 1:
-            issues.append(f"{source_id} must draw once from {engine_id}")
-    if panel_n.find("captions(kOutputCtls") > panel_n.find(
-            "sourceCaptionAt(SOURCE_A,ENGINE_A);"):
-        issues.append("live SOURCE captions must draw after the generic caption loop")
 
+    # Not in the brief's verbatim body, added because the mutation test below
+    # (also verbatim) mutates the construction site, not the struct scope --
+    # without this check that mutation passes uncaught. See task-3 report.
+    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
     if widget is None:
-        issues.append("SOURCE caption widget scope is missing")
-        return issues
-    widget_n = compact_cpp(widget)
-    if widget_n.count("newPanelText(module)") != 1:
-        issues.append("SpotymodWidget must construct PanelText with its module")
+        issues.append("SpotymodWidget scope is missing")
+    else:
+        widget_n = compact_cpp(widget)
+        if widget_n.count("newPanelText(module)") != 1:
+            issues.append("SpotymodWidget must construct PanelText with its module")
     return issues
+
+
+def test_caption_host_wiring():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    for issue in caption_wiring_issues(cpp):
+        check(False, issue)
+
+
+def test_caption_guard_rejects_representative_regressions():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    mutations = [
+        ("for (const auto& d : kDynCaptions)", "for (const auto& d : kParamCtls)",
+         "table binding"),
+        ("module->params[d.driverId].getValue()",
+         "module->params[ENGINE_A].getValue()", "per-deck driver binding"),
+        ("new PanelText(module)", "new PanelText(nullptr)", "widget module"),
+        ("if (!ctlVisible(module, t[i].id)) continue;", "",
+         "shared-slot caption skip"),
+    ]
+    for before, after, label in mutations:
+        mutated = cpp.replace(before, after, 1)
+        check(caption_wiring_issues(mutated),
+              f"caption guard accepted a {label} regression")
 
 
 def attack_pitch_wiring_issues(cpp):
@@ -1483,7 +1510,6 @@ def attack_pitch_wiring_issues(cpp):
     selected = cpp_scope(
         cpp, "static bool isBbdSelected(Spotymod* module, int engineId)")
     exclusive = cpp_scope(cpp, "struct EngineExclusiveTrimpot : Trimpot")
-    panel = cpp_scope(cpp, "struct PanelText : Widget")
     widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
     menu = cpp_scope(cpp, "void appendContextMenu(Menu* menu) override")
 
@@ -1502,8 +1528,7 @@ static bool isBbdSelected(Spotymod* module, int engineId) {
     if selected is None or compact_cpp(selected) != compact_cpp(expected_selected):
         issues.append("isBbdSelected must recognize only rounded BBD state 4")
 
-    for label, scope in (("PanelText", panel),
-                         ("EngineExclusiveTrimpot", exclusive),
+    for label, scope in (("EngineExclusiveTrimpot", exclusive),
                          ("context menu", menu)):
         if scope is None:
             issues.append(f"{label} scope is missing")
@@ -1539,28 +1564,6 @@ struct EngineExclusiveTrimpot : Trimpot {
     ):
         if required not in widget_n:
             issues.append(label)
-    panel_n = compact_cpp(panel) if panel else ""
-    skip = ("if(!t[i].label[0]||t[i].id==SOURCE_A||t[i].id==SOURCE_B||"
-            "t[i].id==ATTACK_A||t[i].id==ATTACK_B||t[i].id==STAGES_A||"
-            "t[i].id==STAGES_B)continue;")
-    if panel_n.count(skip) != 1:
-        issues.append("generic caption loop must skip SOURCE, ATTACK, and STAGES pairs")
-    expected_caption = """
-auto attackPitchCaptionAt = [&](int attackId, int engineId) {
-    const PanelCtl* attack = nullptr;
-    for (const auto& c : kParamCtls)
-        if (c.id == attackId) { attack = &c; break; }
-    if (!attack) return;
-    nvgTextAlign(args.vg, alignOf(attack->anchor) | NVG_ALIGN_BASELINE);
-    text(attack->lbl.x, attack->lbl.y, attack->lblSize,
-         col(attack->lblRgb), isBbdSelected(module, engineId) ? "PITCH" : "ATK");
-};"""
-    if compact_cpp(expected_caption) not in panel_n:
-        issues.append("ATK/PITCH caption must resolve from the shared Rack ENG helper")
-    for attack_id, engine_id in (("ATTACK_A", "ENGINE_A"),
-                                 ("ATTACK_B", "ENGINE_B")):
-        if panel_n.count(f"attackPitchCaptionAt({attack_id},{engine_id});") != 1:
-            issues.append(f"{attack_id} must draw one caption from {engine_id}")
 
     menu_n = compact_cpp(menu) if menu else ""
     for part, engine_id, attack_id in (
@@ -1612,8 +1615,6 @@ def test_attack_pitch_guard_rejects_representative_regressions():
          "        : 4;", "preview fallback"),
         ("setVisible(isBbdSelected(spotymod, engineId) == bbdOnly);",
          "visible = true;", "direct overlap visibility"),
-        ("t[i].id == SOURCE_A || t[i].id == SOURCE_B",
-         "t[i].id == SOURCE_A", "generic caption skip"),
         ("getParamQuantity(ATTACK_B)",
          "getParamQuantity(ATTACK_A)", "part B menu quantity"),
     ]
@@ -1621,32 +1622,6 @@ def test_attack_pitch_guard_rejects_representative_regressions():
         mutated = cpp.replace(before, after, 1)
         check(attack_pitch_wiring_issues(mutated),
               f"ATTACK/PITCH guard accepted a {label} regression")
-
-
-def test_source_caption_host_wiring():
-    """Rack draws one live caption for each SOURCE from its own rounded ENG."""
-    here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
-        cpp = f.read()
-    for issue in source_caption_wiring_issues(cpp):
-        check(False, issue)
-
-
-def test_source_caption_guard_rejects_representative_regressions():
-    """The source guard catches wrong mappings, bindings, fallback and draws."""
-    here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
-        cpp = f.read()
-    mutations = [
-        ('state == 1 ? "ORG"', 'state == 1 ? "FRAME"', "state mapping"),
-        ("sourceCaptionAt(SOURCE_B, ENGINE_B)",
-         "sourceCaptionAt(SOURCE_B, ENGINE_A)", "part B ENG binding"),
-        ("new PanelText(module)", "new PanelText(nullptr)", "widget module"),
-    ]
-    for before, after, label in mutations:
-        mutated = cpp.replace(before, after, 1)
-        check(source_caption_wiring_issues(mutated),
-              f"SOURCE caption guard accepted a {label} regression")
 
 
 def test_shuffle_host_wiring():

@@ -1189,11 +1189,6 @@ struct SpkyRing : Widget {
 // Rack can never drift apart. Font is a stock Rack asset, present in every
 // v2 install -- note it has no bold cut, so the SVG's bold legends render
 // regular here. That is accepted.
-static const char* sourceCaption(int state) {
-    return state == 1 ? "ORG" : state == 2 ? "FRAME"
-         : state == 3 ? "MATL" : state == 4 ? "DRIVE" : "TIMB";
-}
-
 static int roundedEngineState(Spotymod* module, int engineId) {
     return module
         ? static_cast<int>(std::round(module->params[engineId].getValue()))
@@ -1202,6 +1197,19 @@ static int roundedEngineState(Spotymod* module, int engineId) {
 
 static bool isBbdSelected(Spotymod* module, int engineId) {
     return roundedEngineState(module, engineId) == 4;
+}
+
+// Two controls share the upper-left VOICE coordinate: ATTACK on four engines,
+// STAGES on the BBD. Only the one whose widget is visible may draw a caption
+// there, or both words land on the same baseline.
+static bool ctlVisible(Spotymod* m, int id) {
+    switch (id) {
+        case ATTACK_A: return !isBbdSelected(m, ENGINE_A);
+        case ATTACK_B: return !isBbdSelected(m, ENGINE_B);
+        case STAGES_A: return  isBbdSelected(m, ENGINE_A);
+        case STAGES_B: return  isBbdSelected(m, ENGINE_B);
+        default:       return true;
+    }
 }
 
 struct EngineExclusiveTrimpot : Trimpot {
@@ -1239,50 +1247,34 @@ struct PanelText : Widget {
             return a == 1 ? NVG_ALIGN_LEFT : a == 2 ? NVG_ALIGN_RIGHT
                                                     : NVG_ALIGN_CENTER;
         };
+        // Every caption that depends on state resolves here, out of the
+        // generated table. Position, anchor, size and colour still come from
+        // the same PanelCtl, so a dynamic word can never land anywhere its
+        // resting word would not have.
+        auto caption = [&](const PanelCtl& c) -> const char* {
+            for (const auto& d : kDynCaptions) {
+                if (d.id != c.id) continue;
+                if (!module) return d.words[0];   // browser preview = Synth
+                int v = (int)std::round(module->params[d.driverId].getValue());
+                if (v < 0) v = 0;
+                if (v >= d.count) v = d.count - 1;
+                return d.words[v];
+            }
+            return c.label;
+        };
         auto captions = [&](const PanelCtl* t, size_t n) {
             for (size_t i = 0; i < n; ++i) {
-                if (!t[i].label[0] || t[i].id == SOURCE_A || t[i].id == SOURCE_B
-                        || t[i].id == ATTACK_A || t[i].id == ATTACK_B
-                        || t[i].id == STAGES_A || t[i].id == STAGES_B)
-                    continue;
+                if (!t[i].label[0]) continue;
+                if (!ctlVisible(module, t[i].id)) continue;
                 nvgTextAlign(args.vg, alignOf(t[i].anchor) | NVG_ALIGN_BASELINE);
                 text(t[i].lbl.x, t[i].lbl.y, t[i].lblSize, col(t[i].lblRgb),
-                     t[i].label);
+                     caption(t[i]));
             }
             nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_BASELINE);
         };
         captions(kParamCtls,  sizeof(kParamCtls)  / sizeof(kParamCtls[0]));
         captions(kInputCtls,  sizeof(kInputCtls)  / sizeof(kInputCtls[0]));
         captions(kOutputCtls, sizeof(kOutputCtls) / sizeof(kOutputCtls[0]));
-
-        auto sourceCaptionAt = [&](int sourceId, int engineId) {
-            const PanelCtl* source = nullptr;
-            for (const auto& c : kParamCtls) {
-                if (c.id == sourceId) {
-                    source = &c;
-                    break;
-                }
-            }
-            if (!source) return;
-            const int state = roundedEngineState(module, engineId);
-            nvgTextAlign(args.vg, alignOf(source->anchor) | NVG_ALIGN_BASELINE);
-            text(source->lbl.x, source->lbl.y, source->lblSize,
-                 col(source->lblRgb), sourceCaption(state));
-        };
-        sourceCaptionAt(SOURCE_A, ENGINE_A);
-        sourceCaptionAt(SOURCE_B, ENGINE_B);
-
-        auto attackPitchCaptionAt = [&](int attackId, int engineId) {
-            const PanelCtl* attack = nullptr;
-            for (const auto& c : kParamCtls)
-                if (c.id == attackId) { attack = &c; break; }
-            if (!attack) return;
-            nvgTextAlign(args.vg, alignOf(attack->anchor) | NVG_ALIGN_BASELINE);
-            text(attack->lbl.x, attack->lbl.y, attack->lblSize,
-                 col(attack->lblRgb), isBbdSelected(module, engineId) ? "PITCH" : "ATK");
-        };
-        attackPitchCaptionAt(ATTACK_A, ENGINE_A);
-        attackPitchCaptionAt(ATTACK_B, ENGINE_B);
 
         // section titles + brand -- the shared TEXTS table from the generator,
         // so runtime lettering matches the SVG preview one-to-one
