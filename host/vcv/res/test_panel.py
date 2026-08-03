@@ -653,6 +653,60 @@ def test_static_synth_preview_excludes_bbd_pitch():
           "static preview must not overlay BEND on ATK")
 
 
+def test_rec_off_sampler_leaves_no_static_artifacts():
+    """The removed-REC-pad defect (spec 2026-08-03 rec-artifacts): hiding the
+    runtime REC widget at runtime does not erase what the SVG painted
+    underneath it. The static preview must never paint the REC pad's white
+    key bed or the REC LED's dark housing -- those are exactly what a player
+    sees left behind on any non-Sampler deck -- nor print the REC caption.
+    Modeled on test_static_synth_preview_excludes_bbd_pitch, which pins the
+    same "runtime-only control must not leak into the static plate" shape for
+    STAGES/PITCH."""
+    svg = g.svg()
+    check('>REC<' not in svg, "static SVG still prints the REC caption")
+
+    pad_r = g.GLYPH_R[g.LATCH]
+    for x in (g.REC_X, g.W - g.REC_X):
+        bed = (f'<rect x="{g.mm(x - pad_r)}" y="{g.mm(g.PLAY_Y - pad_r)}" '
+               f'width="{g.mm(2 * pad_r)}" height="{g.mm(2 * pad_r)}" '
+               f'rx="1.0" fill="{g.WHITE}"/>')
+        check(bed not in svg, f"REC pad key bed still painted at x={x:.3f}")
+
+    led_r = g.GLYPH_R[g.LIGHT]
+    for x in (g.REC_LED_X, g.W - g.REC_LED_X):
+        housing = (f'<circle cx="{g.mm(x)}" cy="{g.mm(g.PLAY_Y)}" '
+                   f'r="{g.mm(led_r)}" fill="#1a1206" stroke="#3a2c12" '
+                   f'stroke-width="0.25"/>')
+        check(housing not in svg, f"REC LED housing still painted at x={x:.3f}")
+
+
+def test_static_lights_excludes_rec_but_lights_keeps_all_four():
+    """LIGHTS (all four, in the frozen order) still drives kLightCtls in the
+    generated header -- the C++ centres its LED rings on kLightCtls[0..1], so
+    the gate lights must keep indices 0 and 1 (see the comment above LIGHTS).
+    STATIC_LIGHTS is a second, SVG-only view that drops the two REC entries,
+    the same relationship STATIC_PANEL_PARAMS already has to
+    RUNTIME_PANEL_PARAMS for STAGES_A/B."""
+    check([c.enum for c in g.LIGHTS] == LIGHT_ORDER,
+          "LIGHTS must keep all four entries in the frozen order")
+    static_lights = getattr(g, "STATIC_LIGHTS", None)
+    check(static_lights is not None, "gen_panel has no STATIC_LIGHTS list")
+    if static_lights is None:
+        return
+    check([c.enum for c in static_lights] == ['GATE_A_L', 'GATE_B_L'],
+          "STATIC_LIGHTS must contain only the two gate lights, in order")
+
+    h = g.header()
+    check("static const PanelCtl kLightCtls[] = {" in h,
+          "generated header lost kLightCtls")
+    body = h.split("static const PanelCtl kLightCtls[] = {", 1)[1]
+    body = body.split("};", 1)[0]
+    row_ids = [row.strip().lstrip("{").split(",", 1)[0]
+               for row in body.strip().splitlines() if row.strip()]
+    check(row_ids == LIGHT_ORDER,
+          f"kLightCtls row order is {row_ids}, want {LIGHT_ORDER}")
+
+
 def test_form_song_control_contract():
     """The frozen final slots now expose independent FORM and SONG knobs."""
     for suffix in ("_A", "_B"):
@@ -1779,8 +1833,8 @@ def rec_visibility_issues(cpp):
         issues.append("ctlVisible scope is missing")
     else:
         n = compact_cpp(visible)
-        for arm in ("caseREC_A:returnroundedEngineState(m,ENGINE_A)==1;",
-                    "caseREC_B:returnroundedEngineState(m,ENGINE_B)==1;"):
+        for arm in ("caseREC_A:returnsamplerDeck(m,ENGINE_A);",
+                    "caseREC_B:returnsamplerDeck(m,ENGINE_B);"):
             if arm not in n:
                 issues.append(f"ctlVisible has no Sampler arm: {arm}")
     if widget is None:
@@ -1807,8 +1861,8 @@ def test_rec_visibility_guard_rejects_representative_regressions():
     with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
         cpp = f.read()
     mutations = [
-        ("case REC_B: return roundedEngineState(m, ENGINE_B) == 1;",
-         "case REC_B: return roundedEngineState(m, ENGINE_A) == 1;",
+        ("case REC_B: return samplerDeck(m, ENGINE_B);",
+         "case REC_B: return samplerDeck(m, ENGINE_A);",
          "part B ENG binding"),
         ("SlotVisible<VCVLatch>", "VCVLatch", "slot-visible latch"),
     ]
@@ -1816,6 +1870,100 @@ def test_rec_visibility_guard_rejects_representative_regressions():
         mutated = cpp.replace(before, after, 1)
         check(rec_visibility_issues(mutated),
               f"REC visibility guard accepted a {label} regression")
+
+
+def rec_light_visibility_issues(cpp):
+    """The REC LED widgets must hide off-Sampler by asking about the deck's
+    ENGINE param id, never a light id: LightId and ParamId are different
+    enums that both start at 0, and REC_A_L (LightId 2) collides numerically
+    with DENSITY_A (ParamId 2) -- REC_B_L (3) with SMOOTH_A (3). Passing a
+    light id into ctlVisible would silently ask about the wrong control, the
+    same shape of bug the caption lookup shipped last week (see
+    dynamic_flag_issues). samplerDeck is the one shared predicate the pad's
+    ctlVisible arm and the LED's SamplerOnly mixin must both call, so the two
+    rules cannot drift apart the way test_sampler_deck_predicate_is_single_
+    source_of_truth pins separately."""
+    issues = []
+    visible = cpp_scope(cpp, "static bool ctlVisible(Spotymod* m, int id)")
+    mixin = cpp_scope(cpp, "struct SamplerOnly : W")
+    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
+    if visible is None:
+        issues.append("ctlVisible scope is missing")
+    else:
+        n = compact_cpp(visible)
+        for bad in ("REC_A_L", "REC_B_L", "GATE_A_L", "GATE_B_L"):
+            if bad in n:
+                issues.append(f"ctlVisible must never be asked about a light id: {bad}")
+    if mixin is None:
+        issues.append("SamplerOnly<W> scope is missing")
+    else:
+        expected_mixin = compact_cpp("""
+struct SamplerOnly : W {
+    Spotymod* spotymod = nullptr;
+    int engineId = ENGINE_A;
+
+    void step() override {
+        this->setVisible(samplerDeck(spotymod, engineId));
+        W::step();
+    }
+}""")
+        if compact_cpp(mixin) != expected_mixin:
+            issues.append("SamplerOnly<W> must call setVisible from samplerDeck, "
+                          "parallel to SlotVisible/ctlVisible")
+    if widget is None:
+        issues.append("widget scope is missing")
+    else:
+        n = compact_cpp(widget)
+        if "SamplerOnly<SmallLight<RedLight>>" not in n:
+            issues.append("REC lights must be built as SamplerOnly<SmallLight<RedLight>>")
+        if "led->engineId=(c.id==REC_A_L)?ENGINE_A:ENGINE_B;" not in n:
+            issues.append("each deck's REC light must bind its own ENGINE_* id")
+    return issues
+
+
+def test_rec_light_visibility_host_wiring():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    for issue in rec_light_visibility_issues(cpp):
+        check(False, issue)
+
+
+def test_rec_light_visibility_guard_rejects_representative_regressions():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    mutations = [
+        ("led->engineId = (c.id == REC_A_L) ? ENGINE_A : ENGINE_B;",
+         "led->engineId = (c.id == REC_A_L) ? ENGINE_A : ENGINE_A;",
+         "deck-B light bound to the wrong deck's ENGINE"),
+        ("SamplerOnly<SmallLight<RedLight>>", "SmallLight<RedLight>",
+         "REC light built with the bare widget type"),
+    ]
+    for before, after, label in mutations:
+        mutated = cpp.replace(before, after, 1)
+        check(rec_light_visibility_issues(mutated),
+              f"REC light visibility guard accepted a {label} regression")
+
+
+def test_sampler_deck_predicate_is_single_source_of_truth():
+    """'This deck is running the Sampler' must be written exactly once --
+    samplerDeck -- so the REC pad's ctlVisible arm and the REC LED's
+    SamplerOnly mixin read the same rule instead of two copies that a later
+    edit can silently desync (the ablation-verdict-discipline lesson: an
+    unmeasured duplicate is how a residue gets mislabeled)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    check(cpp.count("static bool samplerDeck(Spotymod* m, int engineId)") == 1,
+          "samplerDeck must have exactly one definition")
+    matches = re.findall(r"roundedEngineState\([^)]*\)\s*==\s*1", cpp)
+    check(len(matches) == 1,
+          f"'roundedEngineState(...) == 1' must appear exactly once, found {len(matches)}")
+    scope = cpp_scope(cpp, "static bool samplerDeck(Spotymod* m, int engineId)")
+    if matches and scope is not None:
+        check(matches[0] in scope,
+              "the lone '== 1' Sampler comparison must live inside samplerDeck")
 
 
 def test_shuffle_host_wiring():

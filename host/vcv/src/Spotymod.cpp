@@ -1225,6 +1225,15 @@ static bool isBbdSelected(Spotymod* module, int engineId) {
     return roundedEngineState(module, engineId) == 4;
 }
 
+// One definition of "this deck is running the Sampler", shared by the REC
+// pad's visibility rule (ctlVisible below) and the REC LED's (SamplerOnly
+// below). Duplicating the comparison would let the two drift, and this
+// file's guards match on source text, so a second copy of an expression can
+// also silently redirect a mutation test elsewhere.
+static bool samplerDeck(Spotymod* m, int engineId) {
+    return roundedEngineState(m, engineId) == 1;
+}
+
 // A control is visible only where it does something. Two share the upper-left
 // VOICE coordinate -- ATTACK on four engines, STAGES on the BBD -- so only one
 // may ever draw there. REC has a coordinate of its own but no job outside the
@@ -1237,8 +1246,8 @@ static bool ctlVisible(Spotymod* m, int id) {
         case ATTACK_B: return !isBbdSelected(m, ENGINE_B);
         case STAGES_A: return  isBbdSelected(m, ENGINE_A);
         case STAGES_B: return  isBbdSelected(m, ENGINE_B);
-        case REC_A: return roundedEngineState(m, ENGINE_A) == 1;
-        case REC_B: return roundedEngineState(m, ENGINE_B) == 1;
+        case REC_A: return samplerDeck(m, ENGINE_A);
+        case REC_B: return samplerDeck(m, ENGINE_B);
         default:       return true;
     }
 }
@@ -1253,6 +1262,22 @@ struct SlotVisible : W {
 
     void step() override {
         this->setVisible(ctlVisible(spotymod, ctlId));
+        W::step();
+    }
+};
+
+// The LED half of the Sampler-only rule. It takes the deck's ENGINE PARAM id,
+// not the light's own id: a LightId is a different enum from a ParamId and the
+// two spaces must never meet (REC_A_L == 2 == DENSITY_A). See the captions
+// note further below (PanelText's `dynamic` flag) for what happened the last
+// time an id crossed enum spaces here.
+template <typename W>
+struct SamplerOnly : W {
+    Spotymod* spotymod = nullptr;
+    int engineId = ENGINE_A;
+
+    void step() override {
+        this->setVisible(samplerDeck(spotymod, engineId));
         W::step();
     }
 };
@@ -1420,8 +1445,13 @@ struct SpotymodWidget : ModuleWidget {
             addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
         for (const auto& c : kLightCtls) {
             Vec pos = mm2px(Vec(c.mm.x, c.mm.y));
-            if (c.id == REC_A_L || c.id == REC_B_L)   // record = red, the one
-                addChild(createLightCentered<SmallLight<RedLight>>(pos, module, c.id));
+            if (c.id == REC_A_L || c.id == REC_B_L) {   // record = red, Sampler-only
+                auto* led = createLightCentered<SamplerOnly<SmallLight<RedLight>>>(
+                    pos, module, c.id);
+                led->spotymod = module;
+                led->engineId = (c.id == REC_A_L) ? ENGINE_A : ENGINE_B;
+                addChild(led);
+            }
             else                                       // gate glow = warm signal hue
                 addChild(createLightCentered<MediumLight<YellowLight>>(pos, module, c.id));
         }

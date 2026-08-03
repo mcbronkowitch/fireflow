@@ -495,11 +495,16 @@ APPENDED_PANEL_PARAMS = [
 ]
 
 # Persistent ids retain the legacy visible and hidden sequences exactly; runtime
-# controls may include appended widgets, while the SVG is the Synth-only view.
+# controls may include appended widgets, while the SVG is the Synth-only view
+# minus the controls that appear on no engine's default state. STAGES_A/B is
+# BBD-only and draws itself at runtime when the BBD is selected; REC_A/B joins
+# it for the same reason (spec 2026-08-03 rec-artifacts) -- REC does nothing
+# off the Sampler, its runtime widget already hides there (SlotVisible), and
+# the static preview should not paint a pad that has no job in its own view.
 RUNTIME_PANEL_PARAMS = PANEL_PARAMS + APPENDED_PANEL_PARAMS
 STATIC_PANEL_PARAMS = [
     c for c in RUNTIME_PANEL_PARAMS
-    if c.enum not in ("STAGES_A", "STAGES_B")
+    if c.enum not in ("STAGES_A", "STAGES_B", "REC_A", "REC_B")
 ]
 PARAMS = PANEL_PARAMS + HIDDEN_PARAMS + APPENDED_PANEL_PARAMS
 
@@ -515,6 +520,13 @@ LIGHTS = [
     Ctl("REC_A_L", LIGHT, REC_LED_X,     PLAY_Y, ""),
     Ctl("REC_B_L", LIGHT, W - REC_LED_X, PLAY_Y, ""),
 ]
+
+# SVG-only view: the static preview omits the two REC LED housings the same
+# way STATIC_PANEL_PARAMS omits the REC pad bed above -- REC has no job off
+# the Sampler, and the runtime SamplerOnly<...> widget already hides there.
+# LIGHTS itself (all four, in this order) is unchanged and still drives
+# kLightCtls in the generated header; only the SVG loop reads STATIC_LIGHTS.
+STATIC_LIGHTS = [c for c in LIGHTS if c.enum not in ("REC_A_L", "REC_B_L")]
 
 # --- shared panel lettering (drawn by SVG for preview, by C++ at runtime) -----
 # (x, y baseline, size mm, letter-spacing mm, hex colour, anchor, text)
@@ -658,7 +670,7 @@ def svg():
     P.append(f'<circle cx="{mm(CX-15)}" cy="5.9" r="0.9" fill="{GREEN}"/>')
     P.append(f'<circle cx="{mm(CX+15)}" cy="5.9" r="0.9" fill="{COPPER}"/>')
     # glyphs + labels
-    for c in STATIC_PANEL_PARAMS + INPUTS + OUTPUTS + LIGHTS:
+    for c in STATIC_PANEL_PARAMS + INPUTS + OUTPUTS + STATIC_LIGHTS:
         if c.kind in (IN, OUT):
             P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="{mm(c.r)}" '
                      f'fill="{GRAPHITE}" stroke="#4a4a40" stroke-width="0.4"/>')

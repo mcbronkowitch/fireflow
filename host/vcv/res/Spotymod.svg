@@ -349,10 +349,6 @@
 <circle cx="169.110" cy="89.400" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="169.110" y1="89.400" x2="169.110" y2="87.100" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
 <text x="169.110" y="95.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">LINK</text>
-<rect x="22.300" y="100.900" width="5.400" height="5.400" rx="1.0" fill="#fffdf7"/>
-<text x="25.000" y="109.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">REC</text>
-<rect x="185.660" y="100.900" width="5.400" height="5.400" rx="1.0" fill="#fffdf7"/>
-<text x="188.360" y="109.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">REC</text>
 <circle cx="75.750" cy="77.300" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="75.750" y1="77.300" x2="75.750" y2="75.000" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
 <text x="75.750" y="82.900" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">SEND</text>
@@ -400,8 +396,6 @@
 <text x="188.910" y="124.800" fill="#fffdf7" text-anchor="middle" font-family="monospace" font-size="1.8">GATE</text>
 <circle cx="39.500" cy="34.500" r="1.700" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
 <circle cx="173.860" cy="34.500" r="1.700" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
-<circle cx="31.000" cy="103.600" r="1.700" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
-<circle cx="182.360" cy="103.600" r="1.700" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
 <text x="39.500" y="36.100" fill="#2e6355" text-anchor="middle" font-family="monospace" font-size="5.0" letter-spacing="0.0" font-weight="bold">A</text>
 <text x="173.860" y="36.100" fill="#8a5230" text-anchor="middle" font-family="monospace" font-size="5.0" letter-spacing="0.0" font-weight="bold">B</text>
 <text x="106.680" y="7.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="3.6" letter-spacing="0.9" font-weight="bold">SPOTYMOD</text>
