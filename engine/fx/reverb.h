@@ -34,6 +34,12 @@ private:
     clouds::Oliverb _verb;
     float _sr = 48000.f;
     int _ctrl = 0;   // control-rate divider for the LFO slope refresh
+    // Bloom trim: exactly 1.0 below the bloom leg, so it cannot move any
+    // level that was tuned by ear at normal decays. Smoothed because a jumped
+    // DECAY (scenario event, patch load) would otherwise step the return gain.
+    float _bloom_trim = 1.f;
+    float _bloom_trim_target = 1.f;
+    float _trim_coef = 0.001f;
     float _buffer[clouds::Oliverb::kBufferSize];
 };
 

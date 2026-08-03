@@ -76,6 +76,64 @@ TEST_CASE("reverb: decay past 100% blooms, self-sustains, stays bounded") {
     CHECK(late / 48000.f > 0.0004f);    // still singing 6 s after input stopped
 }
 
+// The bloom leg of DECAY used to be the sub-unity slope (norm/0.9) clamped at
+// 1.05, which the clamp reached at norm 0.945 -- so the top 5.5% of the knob
+// was dead: 0.95, 0.97 and 1.0 rang bit-identically. The whole travel is live.
+TEST_CASE("reverb: the top of the DECAY travel is live, not a dead zone") {
+    auto tail_energy = [](float norm) {
+        s_rev.init(48000.f);
+        s_rev.set_decay(norm);
+        double e = 0.0;
+        const int burst = 48000 * 2, N = 48000 * 14;
+        for (int i = 0; i < N; ++i) {
+            float in = (i < burst) ? 0.3f * std::sin(6.2831853f * 220.f * i / 48000.f) : 0.f;
+            float wl, wr;
+            s_rev.process(in, in, wl, wr);
+            if (i >= N - 48000) e += (double)wl * wl;   // last second, 12 s after input
+        }
+        return e / 48000.0;
+    };
+    const double e94 = tail_energy(0.94f);
+    const double e97 = tail_energy(0.97f);
+    const double e100 = tail_energy(1.00f);
+    CHECK(e94 < e97);      // each step up the bloom leg sustains harder
+    CHECK(e97 < e100);
+}
+
+// Past unity loop gain the return level is set by the loop's own saturation,
+// not by the send, so it used to arrive at the master ABOVE full scale (1.107
+// peak off a 0.6 send) and left the master DRIVE no headroom. The bloom leg is
+// trimmed; everything at or below DECAY 0.8 must stay exactly as voiced.
+TEST_CASE("reverb: the bloom leaves headroom, the levels below it are untouched") {
+    auto steady_peak = [](float decay, float send) {
+        s_rev.init(48000.f);
+        s_rev.set_size(0.6f);
+        s_rev.set_tone(0.5f);
+        s_rev.set_diffusion(0.7f);
+        s_rev.set_diffuser_mod_depth(0.5f);
+        s_rev.set_mod_depth(0.2f);
+        s_rev.set_decay(decay);
+        float peak = 0.f;
+        const int N = 48000 * 50;
+        for (int i = 0; i < N; ++i) {
+            float in = send * std::sin(6.2831853f * 220.f * i / 48000.f);
+            float wl, wr;
+            s_rev.process(in, in, wl, wr);
+            if (i > 48000 * 40) peak = std::max(peak, std::fabs(wl));
+        }
+        return peak;
+    };
+    // a hot send into a full bloom still clears full scale on its own
+    CHECK(steady_peak(1.0f, 0.6f) < 0.95f);
+    // and the trim does not reach down into the range tuned by ear: the return
+    // still climbs normally through DECAY 0.7 -> 0.8
+    const float p70 = steady_peak(0.70f, 0.3f);
+    const float p75 = steady_peak(0.75f, 0.3f);
+    const float p80 = steady_peak(0.80f, 0.3f);
+    CHECK(p70 < p75);
+    CHECK(p75 < p80);
+}
+
 TEST_CASE("reverb: size ride Doppler-warps without clicks") {
     s_rev.init(48000.f);
     s_rev.set_decay(0.9f);
