@@ -348,12 +348,13 @@ public:
     void SeedDither(uint32_t s) { rng_.seed(s); }
 
     float Process(float in) {
+        if (!mem_ || max_cells_ == 0) return 0.f;
+
         Cf Xout[bbd_tuning::kFiltOrder] = {};
 
         const float fclk = ticks_;
-        // mem_ can be null with cells_ still nonzero -- Init(nullptr, 0, sr)
-        // leaves cells_ at 1 (its floor), and SetStages's own floor does the
-        // same. No tick may run while the line has no usable memory.
+        // cells_ remains nonzero even for a degenerate Init. The early return
+        // above keeps every state frozen unless there is a usable ring.
         if (fclk > 0.f && mem_) {
             const float pclk_old = pclk_;
             const float p = pclk_ + fclk;

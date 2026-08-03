@@ -355,9 +355,10 @@ TEST_CASE("bbd line: stage tap crossfade shrinks, expands, and coalesces targets
     line.SetStages(4096);                   // shrink to 2048 cells
     CHECK(line.cells() == 2048);            // public observer is the request
     CHECK(line.settled_cells() == 4096);
-    run(8);
+    run(60);                                // exactly 15 READ completions
     CHECK(line.stage_transition_active());
-    run(72);                                // >16 READ ticks total
+    CHECK(line.settled_cells() == 4096);
+    run(4);                                 // the 16th READ completes the fade
     CHECK_FALSE(line.stage_transition_active());
     CHECK(line.settled_cells() == 2048);
 
@@ -371,9 +372,11 @@ TEST_CASE("bbd line: stage tap crossfade shrinks, expands, and coalesces targets
     REQUIRE(line.stage_transition_active());
     line.SetStages(6144);                   // newest request is 3072, do not restart
     CHECK(line.cells() == 3072);
-    run(128);                               // finish old transition, then newest one
+    line.SetStages(10240);                  // coalesce again: latest request is 5120
+    CHECK(line.cells() == 5120);
+    run(128);                               // finish old transition, then latest one
     CHECK_FALSE(line.stage_transition_active());
-    CHECK(line.settled_cells() == 3072);
+    CHECK(line.settled_cells() == 5120);
 }
 
 TEST_CASE("bbd line: Reset cancels a stage transition at the latest request") {
@@ -431,6 +434,33 @@ TEST_CASE("bbd line: a degenerate Init holds instead of writing through null") {
     line.SetClock(8192.f);                     // well above zero: many ticks
     for (int i = 0; i < 10000; ++i)
         CHECK(std::isfinite(line.Process(0.5f)));
+}
+
+TEST_CASE("bbd line: non-null zero-sized memory is an exact silent hold") {
+    // The line points into the middle so the currently-invalid write at [0]
+    // and read at [-1] remain observable inside this allocation. A usable-ring
+    // check must reject the size before either sentinel can become audio state.
+    float sentinels[] = { -0.75f, 0.25f, 1.5f, -2.f, 0.125f };
+    float before[5];
+    std::memcpy(before, sentinels, sizeof(sentinels));
+
+    BbdLine line;
+    line.Init(&sentinels[2], 0, 48000.f);
+    line.SetStages(4096);                    // latest request clamps to one cell
+    CHECK(line.cells() == 1);
+    line.SetClock(12000.f);                  // force alternating WRITE/READ ticks
+
+    for (int i = 0; i < 64; ++i) {
+        const float y = line.Process(0.5f);
+        REQUIRE(std::isfinite(y));
+        CHECK(y == 0.f);
+        CHECK_FALSE(line.stage_transition_active());
+    }
+    CHECK(std::memcmp(before, sentinels, sizeof(sentinels)) == 0);
+
+    line.Reset();
+    CHECK_FALSE(line.stage_transition_active());
+    CHECK(line.settled_cells() == 1);
 }
 
 // --- Compander --------------------------------------------------------------

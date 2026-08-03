@@ -339,12 +339,15 @@ From `bbd.h`:
 Constants: `kClockMaxHz` = 32 000, `kMinStages` = 512, `kMaxStages` = 16 384,
 `kFilterHz` = 3600, `kSatCeil` = 0.9, `kLossCoef` = √3 − 1.
 
-**Even ticks WRITE, odd ticks READ, through the same index `imem_`.** Content is
-therefore written at `f_clk` and read at `f_clk`: **at a constant clock the line
-transposes nothing.** Pitch moves only while the clock is changing, because
-charge written at `f₁` is read out at `f₂`. With feedback, the shifted copy is
-re-recorded at the new clock, so a circulating grain tracks
-`f_now / f_at_entry` — which is how §1's melody is possible.
+Each channel owns one continuous physical ring and one write head. **Even ticks
+WRITE and advance that channel's write head through the full ring; odd ticks
+READ from a position derived behind that head.** Content is therefore written
+at `f_clk` and read at `f_clk`: **at a constant clock the line transposes
+nothing.** Pitch moves only while the clock is changing, because charge written
+at `f₁` is reconstructed at `f₂`. With feedback, that reconstructed signal is
+re-recorded into the same channel's independent line at the new clock, so a
+circulating grain tracks `f_now / f_at_entry` — which is how §1's melody is
+possible.
 
 `SetStages` stores a requested cell count; it does not change the physical ring
 topology. The line writes continuously through its full injected memory and
@@ -646,8 +649,10 @@ f_R = f_clk / r        stages_R = round(2·T·f_clk/r)
 The per-channel stage requests may move every control block because COLOR also
 receives MOTION. They therefore use the click-free read-tap transition described
 in §5.1; neither channel resizes or resets its physical write ring. During the
-short transition both taps read one continuous charge history, and the settled
-endpoints still satisfy the two grid equations above.
+short transition the old and new taps both read that channel's one continuous
+charge history. The left and right lines never share a ring cell, index, or
+write head, and the settled endpoints still satisfy the two grid equations
+above.
 
 Both delays remain `T`. What differs is the **stage count**, hence the bandwidth
 and grain (`f_clk/4`) — a stereo image made of two differently-bright copies of
@@ -666,7 +671,9 @@ reason from: the stage-count ratio is `r²`, so a few cents of `r` already give 
 audible brightness split without any rhythmic cost.
 
 **Rejected, recorded so they are not re-proposed:** feedback cross-coupling
-(ping-pong — the most recognisable stereo-delay behaviour, but furthest from
+(ping-pong — it would pass reconstructed output signal between the two
+independent lines, never hand a charge packet, ring cell, or index from one line
+to the other; the most recognisable stereo-delay behaviour, but furthest from
 COLOR's "how much sounds at once"), and stage-count offset at a common clock
 (which is the two-tone case above, re-derived).
 
@@ -1457,9 +1464,11 @@ settled, by the `feat/cross-deck-audio-bus` branch that implements movement 1
 
 ## Appendix B — the read-point mechanism, recorded but not proposed
 
-`BbdLine` has no read pointer — *"all charge packets are clocked forward
-together, and the delay is a consequence of the clock, not of an index."* So
-"taps" is the wrong word and a tap-delay reading of COLOR does not fit the model.
+`BbdLine` has no independently advancing read head. It has a continuous physical
+write ring and derives each read position as a tap behind the write head; delay
+remains a consequence of the requested distance and the clock. The former claim
+that the class had no read pointer or tap at all described an older topology and
+does not describe the implemented line.
 
 A different reading does. Reading the same line at cells N, N/2, N/3, N/4 gives
 delays in the ratio 1 : ½ : ⅓ : ¼ — the first four partials, since delay time is
