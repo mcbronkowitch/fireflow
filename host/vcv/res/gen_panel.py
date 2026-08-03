@@ -84,19 +84,11 @@ WKMAP = {BIGKNOB:"WK_BIGKNOB", KNOBC:"WK_KNOBC", SMKNOB:"WK_SMKNOB",
 LBL_DY = {BIGKNOB: 7.2, KNOBC: 7.2, SMKNOB: 5.6, KNOBI: 5.6, SW2: 6.6,
           LATCH: 5.4, SMBTN: 5.4, IN: 6.4, OUT: 6.4, LIGHT: 0.0}
 
-def default_label_of(c):
-    """The centred-below-the-glyph placement, ignoring any override.
-
-    Split out from label_of so a caller that OVERWRITES c.lbl can still ask
-    what the default was -- sampler_texts() derives the inline LEN / ORG pair
-    from it and would otherwise read back its own result on a second call."""
-    return (c.x, c.y + LBL_DY[c.kind], "middle", 1.9, INK)
-
 def label_of(c):
     """(x, y, anchor, size, colour) for a control's caption."""
     if c.lbl is not None:
         return c.lbl
-    return default_label_of(c)
+    return (c.x, c.y + LBL_DY[c.kind], "middle", 1.9, INK)
 
 class Ctl:
     def __init__(self, enum, kind, x, y, label, tip=None):
@@ -191,18 +183,57 @@ def orbit_label(cx, cy, ang_deg, mir):
 # VOICE and FX sit side by side, PLAY spans the full part width below them.
 VOICE_X  = [9.25, 19.75, 30.25]      # ATK FILT SUB / DEC RES TIMB
 ROW_V1, ROW_V2 = 77.3, 89.4
-SOURCE_CAPTIONS = {0: "TIMB", 1: "ORG", 2: "FRAME", 3: "MATL", 4: "DRIVE"}
-# 4-wide, aligned to FX_BOT so the FX box's two rows flush: RATE MIX FB ROOM.
-FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # RATE MIX FB | ROOM (per-deck reverb mix)
+# --- state-dependent captions (spec 2026-08-03) -------------------------------
+# (target param base, driver param base, words indexed by the driver's value)
+#
+# A control whose meaning changes with state carries its words here instead of
+# a second word printed permanently beside it. The DRIVER column is what lets
+# the GRIT mode pad share this table with the engine captions: ENGINE resolves
+# per deck (the _A target reads ENGINE_A), while a self-driving row reads its
+# own value.
+#
+# Engine order is the frozen ENG order: 0 Synth, 1 Sampler, 2 Wave, 3 Body,
+# 4 BBD. Word[0] is also the control's resting label on the static plate --
+# test_static_label_is_the_tables_first_word holds the two together.
+#
+# Sources, so a later reader can check each word against the engine rather
+# than against taste: BodyVoice::set_env_times is "exciter length, damping";
+# set_resonance is "exciter character"; set_sub_level is "excitation bus
+# level"; set_cutoff_hz is "brightness". BbdEngine::set_decay is "a trim BELOW
+# k0"; set_resonance is "the feedback-path tilt"; set_sub is "the input
+# level"; set_filt is "the loss-pole corner". MELODY is set_variation, the
+# bipolar RENEW <- LOOP -> GROW axis -- never a melody control.
+DYNAMIC_CAPTIONS = [
+    ("MELODY",   "ENGINE",   ("VARY", "SCAN", "VARY", "VARY", "VARY")),
+    ("ATTACK",   "ENGINE",   ("ATK",  "ATK",  "ATK",   "HIT",   "ATK")),
+    ("DECAY",    "ENGINE",   ("DEC",  "DEC",  "DEC",   "DAMP",  "TAIL")),
+    ("RES",      "ENGINE",   ("RES",  "RES",  "RES",   "CHAR",  "TILT")),
+    ("SUB",      "ENGINE",   ("SUB",  "LEN",  "SUB",   "EXCIT", "FEED")),
+    ("FILT",     "ENGINE",   ("FILT", "FILT", "FILT",  "BRITE", "LOSS")),
+    ("SOURCE",   "ENGINE",   ("TIMB", "ORG",  "FRAME", "MATL",  "DRIVE")),
+    ("GRITMODE", "GRITMODE", ("SAT",  "CRSH")),
+]
+
+
+def dynamic_words(base):
+    """The state-dependent words for a control base, () when it has none."""
+    for target, _driver, words in DYNAMIC_CAPTIONS:
+        if target == base:
+            return words
+    return ()
+
+
+# 4-wide, aligned to FX_BOT so the FX box's two rows flush: DIV MIX FB SEND.
+FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # DIV MIX FB | SEND (per-deck reverb mix)
 # FX bottom row went from two slots to four (spec 2026-07-18 dust-grain-cloud);
 # the left two were renamed in place when FLUX became a BBD (spec 2026-07-27):
 # DUST/ROT -> DRIVE/STAGES. The first slot was renamed in place again (spec
 # 2026-07-28 flux-rhythm-drag): DRIVE -> DRAG, DRIVE moving to the menu. And
 # again (spec 2026-07-28 flux-link): DRAG -> LINK, because the control became
 # bipolar and LINK names the axis rather than one of its two ends.
-# The BBD-only PITCH widget overlaps ATK at runtime. TIME takes the second
-# FLUX-bottom slot, so the static Synth preview reads LINK TIME | GRIT COMP.
-FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # LINK TIME | GRIT COMP
+# The BBD-only BEND widget overlaps ATK at runtime. MULT takes the second
+# FLUX-bottom slot, so the static Synth preview reads LINK MULT | GRIT COMP.
+FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # LINK MULT | GRIT COMP
 PLAY_Y   = 103.6
 # The PLAY row's left block re-spaced to seat REC between GRIT and STEPS
 # (spec 2026-07-18 "VCV layer": REC is the only new panel element). All four
@@ -225,12 +256,15 @@ def part_controls(mir=False):
     def fx(x): return W - x if mir else x
     out = []
     # 8 of the 9 orbit knobs (COLOR is appended at the end of PARAMS, see below)
-    macros = [("RATE","RATE"),("SHAPE","SHAPE"),("DENSITY","DENS"),("SMOOTH","SMTH"),
-              ("RANGE","RANGE"),("MELODY","MELO"),("MOD","MOD"),("TUNE","TUNE")]
-    for enum, lbl in macros:
+    macros = [("RATE","RATE",None),("SHAPE","SHAPE",None),
+              ("DENSITY","DENS",None),("SMOOTH","SMTH",None),
+              ("RANGE","RANGE",None),
+              ("MELODY", dynamic_words("MELODY")[0], "Variation"),
+              ("MOD","MOD",None),("TUNE","TUNE",None)]
+    for enum, lbl, tip in macros:
         ang = ORBIT_ANG[enum]
         x, y = orbit(cx, RING_CY, KNOB_R, ang, mir)
-        c = Ctl(enum, KNOBC if enum == "MELODY" else BIGKNOB, x, y, lbl)
+        c = Ctl(enum, KNOBC if enum == "MELODY" else BIGKNOB, x, y, lbl, tip)
         c.lbl = orbit_label(cx, RING_CY, ang, mir)
         out.append(c)
     # voice row (small): ATK FILT SUB | DEC RES TIMB. FILT fills slot 2 of the top
@@ -240,11 +274,11 @@ def part_controls(mir=False):
                               ("DECAY",  "DEC",  VOICE_X[0], ROW_V2),
                               ("RES",    "RES",  VOICE_X[1], ROW_V2),
                               ("SUB",    "SUB",  VOICE_X[2], ROW_V1),
-                              ("SOURCE", SOURCE_CAPTIONS[0], VOICE_X[2], ROW_V2)]:
+                              ("SOURCE", dynamic_words("SOURCE")[0], VOICE_X[2], ROW_V2)]:
         out.append(Ctl(enum, SMKNOB, fx(x), y, lbl,
                        "SOURCE" if enum == "SOURCE" else None))
-    # fx box: the FLUX delay cluster (RATE . MIX . FB) on top, GRIT/COMP below.
-    # FLUX (the delay MIX) is the template member; RATE/FB are appended at the
+    # fx box: the FLUX delay cluster (DIV . MIX . FB) on top, GRIT/COMP below.
+    # FLUX (the delay MIX) is the template member; DIV/FB are appended at the
     # end of PARAMS. STEPS keeps its append slot here but has moved to the PLAY
     # box -- it is a sequencer parameter, not an effect (spec 2026-07-18 §5).
     out.append(Ctl("FLUX", SMKNOB, fx(FX_TOP[1]), ROW_V1, "MIX", "FLUX"))
@@ -254,10 +288,14 @@ def part_controls(mir=False):
     # ENGINE cycles Synth/Sampler/Wave/Body/BBD (states 0..4); the C++ side
     # (Spotymod.cpp configSwitch/EngineCycleLatch) is the source of truth for
     # the labels, this comment just keeps the panel legend discoverable here.
-    pads = [("ENGINE", LATCH, "ENG"), ("GRITMODE", LATCH, "GRIT"),
-            ("STEP", LATCH, "STEP")]
-    for i, (enum, kind, lbl) in enumerate(pads):
-        out.append(Ctl(enum, kind, fx(PAD_X[i]), PLAY_Y, lbl))
+    # GRITMODE's caption is its MODE, not its block's name -- the block is the
+    # GRIT knob one row up (spec 2026-08-03). Its resting word is SAT; the
+    # runtime swaps in CRSH from DYNAMIC_CAPTIONS.
+    pads = [("ENGINE", LATCH, "ENG", None),
+            ("GRITMODE", LATCH, dynamic_words("GRITMODE")[0], "Grit mode"),
+            ("STEP", LATCH, "STEP", None)]
+    for i, (enum, kind, lbl, tip) in enumerate(pads):
+        out.append(Ctl(enum, kind, fx(PAD_X[i]), PLAY_Y, lbl, tip))
     out.append(Ctl("FORM", KNOBI, fx(PAD_X[3]), PLAY_Y, "FORM"))
     # Keep the frozen ParamId order FORM, NEWPHRASE, SONG while laying the
     # controls out visually as FORM, SONG, NEW.
@@ -355,7 +393,7 @@ SHARED = [
     Ctl("SCALE",  KNOBI,   L,  ROW_DUO1, "SCALE"),
     Ctl("DRIFT",  SMKNOB,  R,  ROW_DUO1, "DRIFT"),
     Ctl("SPOT",   SMBTN,   L,  ROW_DUO2, "SPOT"),
-    Ctl("MASTER_DRIVE", SMKNOB, CX, ROW_DUO2, "DRIVE"),
+    Ctl("MASTER_DRIVE", SMKNOB, CX, ROW_DUO2, "PUSH", "Master drive"),
     Ctl("SETTLE", SMBTN,   R,  ROW_DUO2, "SETL"),
     # ROOM: three semantic columns, bottom edge flush with the PLAY boxes.
     Ctl("REV_SIZE",  SMKNOB, L,         ROW_ROOM1, "SIZE"),
@@ -382,8 +420,8 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     # FILT: bipolar cutoff trim (spec 2026-07-17). Appended LAST like CHOKE so
     # existing .vcv patches keep their param ids; coordinates put it in the
     # top voice row's middle slot (after ATK).
-    Ctl("FILT_A", SMKNOB, VOICE_X[1],     ROW_V1, "FILT"),
-    Ctl("FILT_B", SMKNOB, W - VOICE_X[1], ROW_V1, "FILT"),
+    Ctl("FILT_A", SMKNOB, VOICE_X[1],     ROW_V1, dynamic_words("FILT")[0]),
+    Ctl("FILT_B", SMKNOB, W - VOICE_X[1], ROW_V1, dynamic_words("FILT")[0]),
     # TIDE: texture-lane rate of both decks (spec 2026-07-17 mod-tide).
     # Appended LAST like CHOKE/FILT so existing .vcv patches keep their ids;
     # the coordinate puts it beside MORPH in the centre's movement column
@@ -391,11 +429,11 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     Ctl("TIDE", SMKNOB, CX + 11.0, ROW_BLEND, "TIDE"),
     # FLUX synced-delay controls (spec 2026-07-17 flux-synced-delay). Per part,
     # appended LAST like FILT/TIDE/CHOKE so existing .vcv patches keep their ids.
-    # They complete the FLUX delay cluster atop the FX box: RATE (FX_TOP[0]),
+    # They complete the FLUX delay cluster atop the FX box: DIV (FX_TOP[0]),
     # MIX (FX_TOP[1], from the template), FB (FX_TOP[2]) sit together;
     # GRIT/COMP fill FX_BOT below.
-    Ctl("FLUXRATE_A", SMKNOB, FX_TOP[0],     ROW_V1, "RATE", "FRATE"),
-    Ctl("FLUXRATE_B", SMKNOB, W - FX_TOP[0], ROW_V1, "RATE", "FRATE"),
+    Ctl("FLUXRATE_A", SMKNOB, FX_TOP[0],     ROW_V1, "DIV", "FLUX division"),
+    Ctl("FLUXRATE_B", SMKNOB, W - FX_TOP[0], ROW_V1, "DIV", "FLUX division"),
     Ctl("FLUXFB_A",   SMKNOB, FX_TOP[2],     ROW_V1, "FB", "FFB"),
     Ctl("FLUXFB_B",   SMKNOB, W - FX_TOP[2], ROW_V1, "FB", "FFB"),
     # COLOR: chord density/colour per part (spec 2026-07-17 chord-layer), a full
@@ -415,12 +453,12 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     # along); the spec's no-migration decision accepts that. DRIVE itself
     # moved to the menu as
     # patch state and stays there, appended below in HIDDEN_PARAMS with fresh
-    # trailing ids. STAGES is the BBD-only PITCH widget, so Rack overlays it
+    # trailing ids. STAGES is the BBD-only BEND widget, so Rack overlays it
     # on ATTACK while the static Synth preview omits it.
     Ctl("LINK_A",   SMKNOB, FX_BOT[0],     ROW_V2, "LINK"),
     Ctl("LINK_B",   SMKNOB, W - FX_BOT[0], ROW_V2, "LINK"),
-    Ctl("STAGES_A", SMKNOB, VOICE_X[0],     ROW_V1, "PITCH", "BBD Pitch"),
-    Ctl("STAGES_B", SMKNOB, W - VOICE_X[0], ROW_V1, "PITCH", "BBD Pitch"),
+    Ctl("STAGES_A", SMKNOB, VOICE_X[0],     ROW_V1, "BEND", "BBD Bend"),
+    Ctl("STAGES_B", SMKNOB, W - VOICE_X[0], ROW_V1, "BEND", "BBD Bend"),
     # M5b: REC, the one new panel element of the texture deck. Appended LAST
     # so REC_A/REC_B take fresh trailing ids and PART_STRIDE stays 23 -- every
     # already-saved .vcv keeps every param id it has.
@@ -428,13 +466,13 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     Ctl("REC_B", LATCH, W - REC_X, PLAY_Y, "REC"),
     # Per-deck reverb mix (spec 2026-07-23 per-deck-reverb-mix). Appended LAST
     # like FILT/FLUXRATE/COLOR/LINK/REC so PART_STRIDE stays 23 and no id before
-    # them moves. They fill the FX top row's 4th slot -- RATE.MIX.FB.ROOM --
-    # aligned to the FX bottom row. Label "ROOM" (not "MIX": FLUX beside it is
+    # them moves. They fill the FX top row's 4th slot -- DIV.MIX.FB.SEND --
+    # aligned to the FX bottom row. Label "SEND" (not "MIX": FLUX beside it is
     # already the delay mix). The old shared centre REV_MIX is removed from
     # SHARED; its id and every id after it shift by one (accepted: old .vcv
     # patches load shifted reverb/CHOKE/tail params).
-    Ctl("REV_MIX_A", SMKNOB, FX_TOP[3],     ROW_V1, "ROOM"),
-    Ctl("REV_MIX_B", SMKNOB, W - FX_TOP[3], ROW_V1, "ROOM"),
+    Ctl("REV_MIX_A", SMKNOB, FX_TOP[3],     ROW_V1, "SEND", "Room send"),
+    Ctl("REV_MIX_B", SMKNOB, W - FX_TOP[3], ROW_V1, "SEND", "Room send"),
     # Shared STEP-lane shuffle. Appended after every existing ParamId so saved
     # patches retain all prior ids; the glyph fills TIME's bottom-right slot.
     Ctl("SHUFFLE", SMKNOB, CX + 9.0, ROW_TIME2, "SHUFL"),
@@ -452,16 +490,21 @@ HIDDEN_PARAMS = [
 ]
 
 APPENDED_PANEL_PARAMS = [
-    Ctl("FLUXTIME_A", SMKNOB, FX_BOT[1],     ROW_V2, "TIME", "Tape Time"),
-    Ctl("FLUXTIME_B", SMKNOB, W - FX_BOT[1], ROW_V2, "TIME", "Tape Time"),
+    Ctl("FLUXTIME_A", SMKNOB, FX_BOT[1],     ROW_V2, "MULT", "Tape Time"),
+    Ctl("FLUXTIME_B", SMKNOB, W - FX_BOT[1], ROW_V2, "MULT", "Tape Time"),
 ]
 
 # Persistent ids retain the legacy visible and hidden sequences exactly; runtime
-# controls may include appended widgets, while the SVG is the Synth-only view.
+# controls may include appended widgets, while the SVG is the Synth-only view
+# minus the controls that appear on no engine's default state. STAGES_A/B is
+# BBD-only and draws itself at runtime when the BBD is selected; REC_A/B joins
+# it for the same reason (spec 2026-08-03 rec-artifacts) -- REC does nothing
+# off the Sampler, its runtime widget already hides there (SlotVisible), and
+# the static preview should not paint a pad that has no job in its own view.
 RUNTIME_PANEL_PARAMS = PANEL_PARAMS + APPENDED_PANEL_PARAMS
 STATIC_PANEL_PARAMS = [
     c for c in RUNTIME_PANEL_PARAMS
-    if c.enum not in ("STAGES_A", "STAGES_B")
+    if c.enum not in ("STAGES_A", "STAGES_B", "REC_A", "REC_B")
 ]
 PARAMS = PANEL_PARAMS + HIDDEN_PARAMS + APPENDED_PANEL_PARAMS
 
@@ -478,103 +521,15 @@ LIGHTS = [
     Ctl("REC_B_L", LIGHT, W - REC_LED_X, PLAY_Y, ""),
 ]
 
-# --- sampler meanings of the remapped knobs (spec 2026-07-21) -----------------
-# ENG turns four knobs into the sampler's own controls, so both meanings belong
-# on the plate. DENS is deliberately absent: the word already fits both engines
-# (groove density / grain density), and MORPH is taken by the global A/B knob --
-# two things called MORPH on one plate would be a built-in operating error.
-SAMPLER_LBL = [("MELODY", "SCAN"), ("SUB", "LEN")]
-SAMPLER_SIZE = 1.5     # mm; the main captions are 1.9
-
-# All three sit INLINE, on the same baseline as the caption they qualify and
-# one gap behind it (2026-07-22, Bastian: "org und len sitzen unguenstig
-# unter der box, da ist noch Platz neben den normalen labels" and then "scan
-# passt auch noch hinter melo im gleichen style"). They used to hang
-# SAMPLER_DY = 3.0 mm below their parent, which read as orphaned -- the words
-# belonged to nothing in particular.
-#
-# Deck A is the source geometry. Deck B mirrors the complete primary/secondary
-# label pair, including flipped anchors, so labels obey the same exact mirror
-# invariant as the controls and background fields.
-SAMPLER_GAP    = 0.8   # mm of air between a caption and its sampler word
-# MELODY's caption is placed radially by orbit_label(); SUB uses the
-# centred default. That difference decides which pair rule applies -- see
-# sampler_texts. Keyed by name rather than by "does c.lbl exist", because this
-# function overwrites c.lbl and such a test would answer differently on a
-# second call.
-SAMPLER_RADIAL = {"MELODY"}
-# Advance width of the monospace face, in ems. Only ever used to CENTRE or to
-# follow, never to butt two texts together -- see the anchor note in
-# sampler_texts() for why an error in this number cannot make them collide.
-MONO_ADV       = 0.6
-
-def text_w(s, size_mm):
-    return len(s) * MONO_ADV * size_mm
-
-def mirror_anchor(anchor):
-    return {"start": "end", "end": "start", "middle": "middle"}[anchor]
-
-def mirror_label(label):
-    x, y, anchor, size, colour = label
-    return (W - x, y, mirror_anchor(anchor), size, colour)
-
-def sampler_texts():
-    """Mirrored sampler aliases derived from Deck A -- never typed out twice.
-
-    Centred Deck-A aliases follow their caption in reading order. The radial
-    SCAN alias grows outward from MELO instead, keeping both words clear of the
-    MELODY knob. Deck B mirrors both the resolved primary caption and alias,
-    including their anchors.
-
-    Where the pair as a whole sits depends on how the parent was placed, and
-    the two rules are NOT interchangeable:
-
-    * Centred captions (SUB) hand their centring to the pair. The
-      caption gives up its "middle" anchor and ends half a gap left of the
-      knob's centre-of-pair, so "SUB LEN" straddles the knob the way "SUB"
-      used to.
-    * The radial caption (MELODY) keeps its anchor point EXACTLY. SCAN sits
-      one gap beyond MELO's outward glyph edge, so the pair reads SCAN MELO on
-      Deck A and mirrors to MELO SCAN on Deck B without crossing the knob.
-
-    NOTE: this MUTATES c.lbl. Deck A reads SAMPLER_RADIAL/default_label_of
-    rather than an already-mutated centred label, then Deck B is derived only
-    from Deck A. A second call therefore reproduces the same geometry.
-    """
-    out = []
-    aliases_a = {}
-    for base, word in SAMPLER_LBL:
-        c = next(c for c in PANEL_PARAMS if c.enum == base + "_A")
-        ws = text_w(word, SAMPLER_SIZE)
-        if base in SAMPLER_RADIAL:
-            lx, ly, anchor, size, col = c.lbl          # set by orbit_label
-            cap_left = lx - text_w(c.label, size) if anchor == "end" else lx
-            alias = (cap_left - SAMPLER_GAP, ly, SAMPLER_SIZE,
-                     0.0, MUTED, "end", word)
-        else:
-            _lx, ly, _anchor, size, col = default_label_of(c)
-            mid = (text_w(c.label, size) - ws) / 2.0
-            cap_end = c.x + mid - SAMPLER_GAP / 2.0
-            c.lbl = (cap_end, ly, "end", size, col)
-            alias = (cap_end + SAMPLER_GAP, ly, SAMPLER_SIZE,
-                     0.0, MUTED, "start", word)
-        aliases_a[base] = alias
-        out.append(alias)
-
-    for base, word in SAMPLER_LBL:
-        a = next(c for c in PANEL_PARAMS if c.enum == base + "_A")
-        b = next(c for c in PANEL_PARAMS if c.enum == base + "_B")
-        b.lbl = mirror_label(label_of(a))
-        x, y, size, spacing, colour, anchor, _word = aliases_a[base]
-        out.append((W - x, y, size, spacing, colour,
-                    mirror_anchor(anchor), word))
-    return out
+# SVG-only view: the static preview omits the two REC LED housings the same
+# way STATIC_PANEL_PARAMS omits the REC pad bed above -- REC has no job off
+# the Sampler, and the runtime SamplerOnly<...> widget already hides there.
+# LIGHTS itself (all four, in this order) is unchanged and still drives
+# kLightCtls in the generated header; only the SVG loop reads STATIC_LIGHTS.
+STATIC_LIGHTS = [c for c in LIGHTS if c.enum not in ("REC_A_L", "REC_B_L")]
 
 # --- shared panel lettering (drawn by SVG for preview, by C++ at runtime) -----
 # (x, y baseline, size mm, letter-spacing mm, hex colour, anchor, text)
-# The anchor column arrived with the sampler captions: they inherit the anchor
-# of the caption they sit under, and the radial orbit captions are start/end
-# aligned, so a middle-only text table would set them beside their parent.
 TEXTS = [
     (RING_CX_A,     RING_CY + 1.6, 5.0, 0.0, GREEN_DIM,  "middle", "A"),
     (W - RING_CX_A, RING_CY + 1.6, 5.0, 0.0, COPPER_DIM, "middle", "B"),
@@ -585,7 +540,7 @@ TEXTS = [
      "middle", name)
     for mir in (False, True)
     for (name, _a0, _a1, (cx, cy)) in SECTORS
-] + legend_texts() + sampler_texts()
+] + legend_texts()
 
 # =============================================================================
 #  SVG
@@ -715,7 +670,7 @@ def svg():
     P.append(f'<circle cx="{mm(CX-15)}" cy="5.9" r="0.9" fill="{GREEN}"/>')
     P.append(f'<circle cx="{mm(CX+15)}" cy="5.9" r="0.9" fill="{COPPER}"/>')
     # glyphs + labels
-    for c in STATIC_PANEL_PARAMS + INPUTS + OUTPUTS + LIGHTS:
+    for c in STATIC_PANEL_PARAMS + INPUTS + OUTPUTS + STATIC_LIGHTS:
         if c.kind in (IN, OUT):
             P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="{mm(c.r)}" '
                      f'fill="{GRAPHITE}" stroke="#4a4a40" stroke-width="0.4"/>')
@@ -770,6 +725,8 @@ def header():
     L2.append("// anchor: 0 = middle, 1 = start (left-aligned), 2 = end (right-aligned)")
     L2.append("struct PanelTxt { XY mm; float size; float spacing; unsigned rgb; "
               "unsigned char anchor; const char* str; };")
+    L2.append("struct DynCaption { int id; int driverId; int count; "
+              "const char* words[5]; };")
     L2.append(f"static constexpr int PART_STRIDE = {PART_STRIDE};")
     L2.append(f"static constexpr float kRingR = {RING_R:.3f}f;      // mm, LED-dot orbit")
     L2.append(f"static constexpr float kRingDotR = 0.95f;   // mm, lit-dot radius")
@@ -805,6 +762,18 @@ def header():
     emit_table("kInputCtls",  INPUTS)
     emit_table("kOutputCtls", OUTPUTS)
     emit_table("kLightCtls",  LIGHTS)
+
+    # State-dependent captions, expanded per deck. The driver id is the
+    # control whose value picks the word -- ENGINE_A for a deck-A target, and
+    # the target itself for a self-driving pad.
+    L2.append("static const DynCaption kDynCaptions[] = {")
+    for target, driver, words in DYNAMIC_CAPTIONS:
+        padded = list(words) + [""] * (5 - len(words))
+        cells = ", ".join(f'"{w}"' for w in padded)
+        for suffix in ("_A", "_B"):
+            L2.append(f"    {{{target}{suffix}, {driver}{suffix}, "
+                      f"{len(words)}, {{{cells}}}}},")
+    L2.append("};")
 
     L2.append("static const PanelTxt kPanelTexts[] = {")
     for (x, y, size, spacing, col, anchor, txt) in TEXTS:

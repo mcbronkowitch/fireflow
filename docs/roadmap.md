@@ -11,8 +11,11 @@ is actually built today, and what is still design-only.
   (`2026-07-12-spotykach-center-section-design.md`) and the ambient-reverb v2
   spec (`2026-07-12-spotykach-ambient-reverb-v2-design.md`), and the FORM/SONG split spec
   (`2026-07-25-spotykach-form-song-split-design.md`).
-- **Last updated:** 2026-07-30 (VCV 2.15.1; BODY is complete, merged and has had
-  its first playability pass — see "BODY playability" below).
+- **Last updated:** 2026-08-03 (VCV 2.17.1; the BBD deck gained its own PITCH/
+  tape-TIME surface and click-free dynamic stage changes, both released, and
+  every state-dependent panel caption now comes from one generator table — see
+  "BBD PITCH / tape TIME surface", "BBD dynamic-stage declick" and "VCV
+  engine-aware captions" below).
 - **CPU status: the selected O3 ITCM-hot benchmark passes; the production-shell
   timing boundary remains pending.** Both O3 DTCM+BBD benchmark repeats are
   below 100 % offline and in the real callback. This is the benchmark stop
@@ -209,7 +212,7 @@ is actually built today, and what is still design-only.
 | **M5a** | Sampler — the texture deck: engine + render host (granular cloud, live resampling) | ✅ **done** (engine + desktop host; VCV wiring is M5b) |
 | **M5a — generous ranges** | SIZE, PITCH, resonance, MOTION scatter and record-feedback ranges opened from M5a's conservative first pass, each ceiling chosen from measurement rather than habit; listening renders produced for the ranges to be judged by ear | ✅ **done** (engine + render host; spec `docs/superpowers/specs/2026-07-21-sampler-generous-ranges-design.md`; merged) |
 | **M5b** | Sampler on the panel — ENG remap, REC pad, WAV load/save, patch persistence, factory sample | ✅ **done** (VCV host; merged) |
-| **M5c** | Morphagene-style control surface — DENS (runtime grain overlap), SCAN (running playhead with a real dead zone), NEW/punch, LEN, and contextual SOURCE (`TIMB` Synth, `FRAME` Wave, `ORG` Sampler); per-part Detune A/B is a constant context-menu spread; SIZE made live downward so turning LEN back shortens what is already sounding | ✅ **done** (engine + VCV host; spec `docs/superpowers/specs/2026-07-21-sampler-morphagene-controls.md`) |
+| **M5c** | Morphagene-style control surface — DENS (runtime grain overlap), SCAN (running playhead with a real dead zone), NEW/punch, LEN, and contextual SOURCE (`TIMB` Synth, `FRAME` Wave, `ORG` Sampler, `MATL` Body, `DRIVE` BBD); per-part Detune A/B is a constant context-menu spread; SIZE made live downward so turning LEN back shortens what is already sounding | ✅ **done** (engine + VCV host; spec `docs/superpowers/specs/2026-07-21-sampler-morphagene-controls.md`; as of "VCV engine-aware captions" below, MELODY drives Sampler SCAN only — `set_variation` no longer also fires on a Sampler deck) |
 | **M5d** | Slice-groove -- recorded/loaded material becomes a live slice map; STEP plays clocked slices, MOTION moves from ordered playback to free traversal, and SIZE sets the slice length | ✅ **done** (engine + render host; released in 2.9.0) |
 | **M5e** | Sampler FEEL -- COLOR becomes material-derived accents in STEP, while preserving the synth COLOR/chord path | ✅ **done** (engine + VCV panel; released in 2.9.0) |
 | **M5f** | Sampler cloud dispersion -- COLOR in FLOW spreads grain pitch through detune and octave layers, with no new control or RNG draw | ✅ **done** (engine + VCV panel; released in 2.10.0) |
@@ -221,8 +224,12 @@ is actually built today, and what is still design-only.
 | **+ FORM/SONG** | Persistent A/B phrase snapshots with independent phrase-engine FORM and seven-mode SONG arrangement | ✅ **done** (engine, renderer, and VCV; released in 2.13.1; stable VCV parameter IDs and legacy patch migration) |
 | **Mod grid lock** | In STEP the four texture lanes stop owning a clock and follow the deck's integer step count; the lane ratios become cycle lengths (4/6/8/12/16 at STEPS = 8), TIDE stretches slot counts, and DRIFT, EVOLVE, SPOT and float drift can no longer push a lane off the grid | ✅ **done** (engine + VCV; released in 2.13.2; spec `docs/superpowers/specs/2026-07-25-mod-lane-step-grid-lock-design.md`) |
 | **M5j** | BODY — one-voice-per-deck resonator part engine, morphing string → metal → bell, with a sympathetic excitation bus | ✅ **done** (engine, renderer and VCV; `body_2x4` 295078 / 295724 cycles, 30.7 % of the block, inside the spec's 29–32 % prediction and below SYNTH; released in 2.14.0) |
-| **FLUX → BBD** | FLUX's interpolating tape echo replaced by a bucket-brigade delay model — the clock rate *is* the delay time, so RATE bends stored pitch, STAGES is a brightness axis, and `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane | ✅ **done** (engine, renderer and VCV; RATE/STAGES/`FXT_FLUX_TIME` confirmed by ear, DRIVE diagnosed and fixed but awaiting re-listening; **over CPU budget** — measured 2026-07-29, `instrument_worst` 120.9 % anchored and `instrument_worst_bbd` 133.2 %, against a 960 000-cycle block; the FX chain is where the increase sits, see below) |
+| **FLUX → BBD** | FLUX's interpolating tape echo replaced by a bucket-brigade delay model — the clock rate *is* the delay time, so **RATE bends stored pitch only transiently, while it moves, and only with feedback up — held steady, a bucket-brigade line's pitch is unity at any clock rate**, and `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane (STAGES has since moved off FLUX entirely — it is the BBD deck's own PITCH-lane base, captioned `BEND` on the panel; see "BBD PITCH / tape TIME surface" below) | ✅ **done** (engine, renderer and VCV; RATE/STAGES/`FXT_FLUX_TIME` confirmed by ear, DRIVE diagnosed and fixed but awaiting re-listening; **over CPU budget** — measured 2026-07-29, `instrument_worst` 120.9 % anchored and `instrument_worst_bbd` 133.2 %, against a 960 000-cycle block; the FX chain is where the increase sits, see below) |
 | **BODY playability** | Three fixes from the first extended ear pass: the bow follows the note instead of droning at a fixed 200 Hz, a continuously driven resonator no longer runs decades above its own struck level, and FILTER's left half fades evenly instead of falling off a cliff | ✅ **done** (engine; released in 2.15.0; two measured items left open — see below) |
+| **BBD part engine** | `ENGINE_BBD` (ENG state 4) is a fifth, voiceless part engine — no synth voices, just a stereo `BbdEcho` pair fed by audio-in and/or the neighbour (via a new audio-rate cross-deck bus), driven through the five modulation lanes (SOURCE→DRIVE, PITCH→clock, SIZE→division, MOTION→FEEDBACK, LEVEL→dry/wet MIX). The same work reverts FLUX — the echo effect on every engine, including this one — from its BBD model back to a plain tape echo, so the "FLUX → BBD" row above no longer describes FLUX's current mechanism; the bucket-brigade device that survives is this engine, on the BBD deck only | ✅ **done** (engine + VCV; spec `docs/superpowers/specs/2026-07-31-bbd-part-engine-design.md`; released in 2.17.0; measured on real hardware at the engine's own worst case, `inst_bbd_engine_worst` 94.16 avg / 98.39–98.56 max % of the 960 000-cycle block at `-O2` — fits, but no `-O3` measurement of this row exists; see below) |
+| **BBD PITCH / tape TIME surface** | `STAGES_A/B` leaves the FX box and takes over the shared VOICE `ATK` slot as the BBD deck's own pitch control, visible only while that deck is BBD (`ATTACK` is hidden there and stays reachable as a `Freeze Attack` context-menu slider); the vacated FX slot gets a new knob driving `FXT_FLUX_TIME` geometrically from ×0.25 through ×1 to ×4, distinct from RATE's tempo-synced division | ✅ **done** (VCV; spec `docs/superpowers/specs/2026-08-02-vcv-bbd-pitch-flux-time-surface-design.md`; released in 2.17.1; the two new captions, `PITCH` and `TIME`, were renamed `BEND` and `MULT` by "VCV engine-aware captions" below) |
+| **BBD dynamic-stage declick** | `BbdLine` keeps one continuous full-ring write history behind every stage-count change and crossfades the old and new read taps over a fixed 16-tick smoothstep, removing the index-reset impulse the previous immediate resize produced when COLOR/MOTION modulates a line's stage count | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-03-bbd-dynamic-stages-declick-design.md`; released in 2.17.1; fixed-stage output stays bit-identical, COLOR = 0 stays bit-identical left/right) |
+| **VCV engine-aware captions** | Every state-dependent panel caption now comes from one `DYNAMIC_CAPTIONS` generator table instead of hand-written special cases: BODY gets honest VOICE words (`HIT`/`DAMP`/`CHAR`/`EXCIT`/`BRITE`) and BBD gets its own (`TAIL`/`TILT`/`FEED`/`LOSS`); the FX-box word collisions are resolved by renaming FLUX `RATE`→`DIV`, FLUX `TIME`→`MULT`, per-deck `ROOM`→`SEND`, `MASTER_DRIVE`→`PUSH` and BBD `PITCH`→`BEND` (collision with the orbit's `PITCH` eyebrow); the GRIT mode pad now shows its own state, `SAT`/`CRSH`, instead of the word `GRIT` it collided with; MELODY drives Sampler `SCAN` only, no longer also `set_variation`; the permanently-printed `SCAN`/`LEN` second words are deleted from the static plate | ✅ **done** (VCV host + generator; spec `docs/superpowers/specs/2026-08-03-vcv-engine-aware-captions-design.md`; branch `vcv-engine-aware-captions`, not yet merged to main or released) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
 | **M6** | Firmware shell: pads, gestures, panel, LEDs — runs on real hardware | ⬜ planned |
@@ -1971,6 +1978,85 @@ execute).
 
 2.15.1 is a separate, non-engine release: the owner's `drone.vcvm` panel became
 the init patch (`host/vcv/src/init_patch.hpp`).
+
+### BBD part engine ✅
+
+`ENGINE_BBD` (`EngineId` = 5; VCV's `ENG` switch state 4) is a fifth
+selectable part engine. Unlike every other engine it carries no synth
+voices at all: `BbdEngine::trigger()` is a no-op, and its
+`consumes_input()`/`process_in()` route the deck's incoming audio straight
+into two independent `BbdEcho` lines, one per channel
+(`engine/parts/bbd_engine.{h,cpp}`).
+
+Three coupled movements, one branch each, landed together for **2.17.0**:
+
+1. **An audio-rate cross-deck bus** — `_deck_tap[PART_COUNT][2]` and
+   `Instrument::deck_tap(p)`, a fixed one-sample latency in both directions,
+   independent of CHOKE. It gives a deck genuine audio-rate access to its
+   neighbour's post-FX output, where the existing `_dry_tap` BODY uses is a
+   96-sample-decimated control-rate bus. As a side effect the sampler now
+   records the neighbouring deck without an external patch cable.
+2. **`ENGINE_BBD = 5`** — the engine itself. Its five modulation lanes
+   become SOURCE → DRIVE, PITCH → the BBD clock, SIZE → the delay division,
+   MOTION → FEEDBACK, LEVEL → dry/wet MIX; the VOICE-row reassignment
+   (RESONANCE → TILT, SUB → FEED, FILT → LOSS, DECAY → TAIL, and
+   `STAGES_A/B` as the PITCH-lane base captioned `BEND`) is covered by
+   "BBD PITCH / tape TIME surface" below and by `host/vcv/README.md`'s BBD
+   section, not repeated here. Switching a deck to BBD defaults FLUX off and
+   "Route: other deck" on, so an unpatched BBD deck still has the sibling's
+   output to feed its line.
+3. **FLUX reverts to a tape echo.** `Flux` no longer wraps `BbdEcho`; it now
+   holds `TapeEcho<kTapeSamples>` (`engine/fx/tape_echo.h`), an interpolating
+   delay line behind an 800 Hz band-pass and feedback saturation — the
+   pre-M1.6 mechanism, restored. **The "FLUX → BBD" entry above therefore
+   describes an interlude, not FLUX's current mechanism**: the echo effect
+   on every engine (including this one) is a tape echo again; the
+   bucket-brigade device that survives is this part engine, reachable only
+   on the BBD deck. `host/vcv/README.md`'s BBD section opens with exactly
+   this warning.
+
+**Two physical facts the design settled by review (rev. 2, after rev. 1 got
+the central mechanism wrong — two reviewers caught it independently), both
+counter-intuitive and load-bearing:**
+
+- **A bucket-brigade line writes and reads on the same clock, so its
+  steady-state pitch is unity at every stage count.** Transposition exists
+  only *while the clock is moving*, and only survives with feedback up —
+  `LANE_PITCH` is multiplicatively gated by `LANE_MOTION`; at FEEDBACK 0,
+  moving PITCH is inaudible.
+- **Each repeat is mostly silence** — measured ~75–100 ms of audible content
+  per 250 ms repeat, shrinking with every upward pitch step. The gappy,
+  duty-cycled character is the engine's most distinctive trait, not an
+  artefact.
+
+**CPU: measured directly at the engine's own worst case, not inferred from
+a mismatched operating point — and it fits, but only proven at `-O2`.** The
+design spec's §2 declined to trust a naive per-line estimate (4.55 points,
+corrected in the same section to 5.9–6.3) because it was taken at
+`Flux::init`'s boot-default operating point, not the roughly 3.9×-faster
+tick rate a deck's clock-ceiling actually runs at. Two real-hardware
+sessions since measure `inst_bbd_engine_worst` — both decks on
+`ENGINE_BBD`, shortest division, clock-ceiling PITCH, maximum
+COLOR/FEEDBACK/MIX, both excitation sources live — directly instead:
+
+| session | freeze | `inst_bbd_engine_worst` avg / max % |
+|---|---|---:|
+| `docs/bench/2026-07-31-b9afe47-bbd-engine.md` | off (a named harness limitation, not the literal worst case) | 82.88 / 86.19 |
+| `docs/bench/2026-08-01-19f7560-flux-tape.md` | on, held across the measured window | 94.16 / 98.39–98.56 |
+
+Both sessions link `-O2`. **No `-O3` measurement of this row exists**, so
+whether it clears the gate with the margin O3 showed elsewhere (see the
+CPU-status note at the top of this document) is not established here.
+Movement 1's cross-deck bus is folded into both rows above (both excitation
+sources are on by default) — its own isolated cost, measured separately at
+~5.75–6.03 points/block in a two-sampler mutual-routing worst case
+(`docs/bench/2026-07-31-20eafed-deck-bus.md`), is itself conditioned on a
+200-block settle and not confirmed as the steady-state figure.
+
+Spec: `docs/superpowers/specs/2026-07-31-bbd-part-engine-design.md` (all
+three movements). Plans: `docs/superpowers/plans/2026-07-31-bbd-part-engine.md`
+(movements 1–2), `docs/superpowers/plans/2026-08-01-flux-tape-echo.md`
+(movement 3).
 
 ## Planned
 

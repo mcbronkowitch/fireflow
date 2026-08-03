@@ -34,6 +34,9 @@ because it bridges the two parts. Each part's
 draws in the light layer and lights a moving dot per modulation lane from
 `Instrument::lane_output()` / `lane_fired()`, so the rings animate with the
 engine (mirroring `src/ui/led.ring.h`). The SVG only provides the dim housing.
+The shared centre column beside MORPH also carries **PUSH**, the master
+drive into the output limiter — one knob for both parts, unlike every
+per-part control above.
 
 ## TIME
 
@@ -71,9 +74,9 @@ immediately.
 ## SOURCE and Detune
 
 Each part has one physical **SOURCE** control. Its live caption follows the
-selected ENG: **Synth** shows `TIMB`, **Wave** shows `FRAME`, **Body** shows
-`MATL`, and **Sampler** shows `ORG`. SOURCE-lane modulation moves the selected source around the
-knob's base value.
+selected ENG — see [Engine-dependent captions](#engine-dependent-captions)
+below for the full table across all five engines. SOURCE-lane modulation
+moves the selected source around the knob's base value.
 
 Each part's right-click context menu provides a separate **Detune A** or
 **Detune B** control. Detune is independent of SOURCE: it is a constant
@@ -82,6 +85,28 @@ Each part's right-click context menu provides a separate **Detune A** or
 Each part's context menu still carries the append-only **Drive A** / **Drive B**
 patch state. Movement 3 no longer routes it into FLUX; it remains present only
 so saved parameter IDs do not move.
+
+## Engine-dependent captions
+
+Seven controls change their caption with the deck's `ENG`. The words live in
+`DYNAMIC_CAPTIONS` in `res/gen_panel.py` and reach both the SVG and Rack from
+there — the C++ holds no caption word at all.
+
+| Control | Synth | Sampler | Wave | Body | BBD |
+|---|---|---|---|---|---|
+| MELODY | `VARY` | `SCAN` | `VARY` | `VARY` | `VARY` |
+| ATTACK | `ATK` | `ATK` | `ATK` | `HIT` | — (`BEND` occupies the slot) |
+| DECAY | `DEC` | `DEC` | `DEC` | `DAMP` | `TAIL` |
+| RES | `RES` | `RES` | `RES` | `CHAR` | `TILT` |
+| SUB | `SUB` | `LEN` | `SUB` | `EXCIT` | `FEED` |
+| FILT | `FILT` | `FILT` | `FILT` | `BRITE` | `LOSS` |
+| SOURCE | `TIMB` | `ORG` | `FRAME` | `MATL` | `DRIVE` |
+
+The GRIT mode pad captions itself the same way, from its own value rather than
+from `ENG`: `SAT` for Drive, `CRSH` for Reduce.
+
+`REC` is drawn only on a Sampler deck; it has never done anything on the other
+four.
 
 ## Sampler
 
@@ -141,12 +166,16 @@ a part away from Sampler doesn't relight it.
 The parameter IDs don't change — for the hardware this is a merge of existing
 controls, not a new set of them — only what turning the knob does:
 
-| Control | Label | Sampler meaning | Range |
+| Control | Sampler caption | Sampler meaning | Range |
 |---|---|---|---|
-| MELODY | `MELO` / `SCAN` | tape-head advance | centre is a true dead zone; linear out to real time at three-quarters of travel, then linear up to 4×; sign is direction |
-| DENSITY | `DENS` | grain overlap | 1…8, continuous; the MOTION lane modulates around it |
-| SUB | `SUB` / `LEN` | grain length | 1 ms…42 s |
-| SOURCE | `TIMB` / `FRAME` / `ORG` | read position in the material | full material length |
+| MELODY | `SCAN` | tape-head advance; the deck's VARY job is parked at LOOP here | centre is a true dead zone; linear out to real time at three-quarters of travel, then linear up to 4×; sign is direction |
+| DENSITY | `DENS` | groove density *and* grain overlap — one word because both mean sparser | 1…8, continuous; the MOTION lane modulates around it |
+| SUB | `LEN` | grain length | 1 ms…42 s |
+| SOURCE | `ORG` | read position in the material | full material length |
+
+MELODY drove variation and scan at once until 2026-08-03. It now drives scan
+alone on a Sampler deck, so the deck's phrases stop renewing by themselves —
+`NEW` is the gesture that asks for a fresh pair.
 
 SCAN's dead zone is exact and deliberate: a frozen tape head has to stay
 frozen even through knob noise, so nothing moves for the first couple of
@@ -157,12 +186,15 @@ steepest stretch of the curve, carrying the head up to four times real time
 in either direction.
 
 **SCAN springt beim ENG-Flip sofort auf die Knopfposition — offene Frage
-(F-07, Review 2026-07-22).** MELO trägt im Synth VARIATION und im Sampler
+(F-07, Review 2026-07-22).** VARY trägt im Synth VARIATION und im Sampler
 SCAN, und die Init-Werte stehen für VARIATION an den Extremen (−0.728 und
 −1.0). Als SCAN gelesen sind das −0.97× und −4× Realtime rückwärts: der
 erste Flip auf Sampler lädt die Factory-Drone und schickt den Lesekopf im
 selben Control-Tick rückwärts los, praktisch schon bei Realtime, ohne dass
-jemand etwas angefasst hat.
+jemand etwas angefasst hat. (Seit 2026-08-03 parkt die VARIATION-Hälfte
+selbst bei LOOP, sobald ENG auf Sampler steht — SCAN liest aber weiterhin
+direkt dieselbe rohe Knopfposition, unabhängig von diesem Park, also bleibt
+das hier beschriebene Verhalten unverändert.)
 
 Das ist als Fehler gemeldet worden, ist aber genau das Verhalten, das
 "Known limitations" weiter unten bewusst wählt: Knopfposition gilt über den
@@ -298,9 +330,10 @@ stale WAV sitting in patch storage.
   imported file is always in tune. The asymmetry is intentional: importing a
   file at the wrong pitch would be a bug, but re-rating material that's
   already sitting in the buffer is varispeed, not a bug.
-- **FLUX is a stereo tape echo.** TIME sweeps from x0.25 to x4 and reaches each
-  new setting through a 30 ms slew, producing tape/Doppler motion instead of
-  a stepped change.
+- **FLUX is a stereo tape echo.** `DIV` selects its synchronized division,
+  `MULT` sweeps from x0.25 to x4 and reaches each new setting through a
+  30 ms slew, producing tape/Doppler motion instead of a stepped change, and
+  `SEND` (per part) sets how much of the result reaches the shared reverb.
 - **LINK (per part) is THIN across its full travel.** It lets the other deck's
   rhythm thin FLUX's repeats without handing over the echo clock. Patches from
   the bipolar LINK era migrate automatically: old negative THIN settings keep
@@ -326,9 +359,12 @@ stale WAV sitting in patch storage.
 
 ENG's fifth position (**BBD**, state 4) selects a stereo bucket-brigade
 delay engine — a self-contained sound source, not to be confused with
-**FLUX**, the unrelated per-part echo effect present on every engine
-(including this one) that is *also* modelled after a bucket-brigade delay
-chip. Old patches only ever stored ENG 0..3, so this is purely additive.
+**FLUX**, the unrelated per-part echo effect present on every engine,
+including this one. FLUX was itself a bucket-brigade model for a while;
+movement 3 returned it to a stereo tape echo (`Flux` holds two
+`TapeEcho`s, `engine/fx/flux.h`), so the two are no longer even the same
+kind of delay — see "FLUX is a stereo tape echo" under Known limitations.
+Old patches only ever stored ENG 0..3, so this is purely additive.
 
 On a BBD deck the five modulation lanes take on the engine's own controls:
 **SOURCE** drives DRIVE (the loop's internal saturation), **MOTION** drives
@@ -336,19 +372,20 @@ FEEDBACK, **LEVEL** sets the wet/dry mix between the deck's input and the
 delay's return (unlike every other engine, LEVEL 0 does not silence a BBD
 deck — it passes the input through dry, at unity), **PITCH** sets the delay
 clock (subject to the FEEDBACK caveat below), and **SIZE** picks the
-delay-time rung the same way FLUX's own RATE division does.
+delay-time rung the same way FLUX's own DIV division does.
 
-### BBD PITCH and tape TIME surface
+### BBD BEND and the tape multiplier
 
-The upper-left **VOICE** slot is engine-aware: **BBD** uses `PITCH` there,
+The upper-left **VOICE** slot is engine-aware: **BBD** uses `BEND` there,
 while Synth, Sampler, Wave, and Body keep `ATK` in the same position. The
-saved `STAGES_A/B` patch state remains the BBD PITCH value; the visible `STGS`
-label is gone and its faceplate caption changes with the selected engine. BBD's hidden ATTACK value remains
+saved `STAGES_A/B` patch state remains the BBD BEND value; the visible `STGS`
+label is gone and its faceplate caption changes with the selected engine,
+reading `BEND` on a BBD deck. BBD's hidden ATTACK value remains
 available as **BBD A — Freeze Attack** or **BBD B — Freeze Attack** in the
 module context menu.
 
-The FX bottom row is `LINK TIME GRIT COMP`; it contains no BBD control.
-`RATE` selects the synchronized tape division. `TIME` multiplies that division
+The FX bottom row is `LINK MULT GRIT COMP`; it contains no BBD control.
+`DIV` selects the synchronized tape division. `MULT` multiplies that division
 from `x0.25`, through neutral `x1`, to `x4`; its intentional 30 ms slew gives
 smooth tape/Doppler motion. At the longest divisions, the existing delay-buffer
 limit still clamps the absolute delay.
@@ -361,12 +398,13 @@ BBD deck, where it supplies the PITCH lane's base — the same "re-point an
 orphaned knob" pattern the Sampler uses to turn SUB into grain `LEN`.
 
 The BBD control mapping gives **ATTACK** the freeze's engage/release time
-(through the **Freeze Attack** context-menu slider), while **DECAY** trims the tail below unity so a
-frozen loop still runs down instead of holding forever, **RES** tilts the
-feedback path's brightness, **SUB** sets how much signal (tape / other deck
-/ audio-in) actually reaches the delay line, **FILT** sets the loss-pole
-corner (the line's own damping/tone), and **SOURCE** (captioned `DRIVE`,
-see above) sets the saturation.
+(through the **Freeze Attack** context-menu slider), while **DECAY**
+(captioned `TAIL`) trims the tail below unity so a frozen loop still runs
+down instead of holding forever, **RES** (captioned `TILT`) tilts the
+feedback path's brightness, **SUB** (captioned `FEED`) sets how much signal
+(tape / other deck / audio-in) actually reaches the delay line, **FILT**
+(captioned `LOSS`) sets the loss-pole corner (the line's own damping/tone),
+and **SOURCE** (captioned `DRIVE`, see above) sets the saturation.
 
 The moment ENG lands on BBD (the switch *edge*, not every control tick, so
 it never fights a player who changes these back): **FLUX defaults off** —

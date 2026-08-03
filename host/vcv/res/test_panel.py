@@ -53,16 +53,17 @@ PARAM_ORDER = [
     'FLUXTIME_A', 'FLUXTIME_B',
 ]
 PARAM_TIPS = [
-    'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
+    'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'GRIT', 'STEP', 'FORM', 'NEW', 'SONG',
-    'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'MELO', 'MOD', 'TUNE',
+    'ENG', 'Grit mode', 'STEP', 'FORM', 'NEW', 'SONG',
+    'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'GRIT', 'STEP', 'FORM', 'NEW', 'SONG',
-    'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'DRIVE',
+    'ENG', 'Grit mode', 'STEP', 'FORM', 'NEW', 'SONG',
+    'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'Master drive',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
-    'FILT', 'FILT', 'TIDE', 'FRATE', 'FRATE', 'FFB', 'FFB', 'COLOR',
-    'COLOR', 'LINK', 'LINK', 'BBD Pitch', 'BBD Pitch', 'REC', 'REC', 'ROOM', 'ROOM',
+    'FILT', 'FILT', 'TIDE', 'FLUX division', 'FLUX division', 'FFB', 'FFB',
+    'COLOR', 'COLOR', 'LINK', 'LINK', 'BBD Bend', 'BBD Bend', 'REC', 'REC',
+    'Room send', 'Room send',
     'SHUFL', 'Detune A', 'Detune B', 'Drive A', 'Drive B',
     'Tape Time', 'Tape Time',
 ]
@@ -142,18 +143,26 @@ def test_bbd_pitch_flux_time_collections():
               f"generated header lacks runtime TIME{suffix} row")
 
 
-def test_source_caption_states_and_static_default():
-    """The generated preview shows Synth's default caption, while Rack owns
-    the live ENG-dependent choice and must not receive static alias rows."""
-    want = {0: "TIMB", 1: "ORG", 2: "FRAME", 3: "MATL", 4: "DRIVE"}
-    got = getattr(g, "SOURCE_CAPTIONS", None)
-    check(got == want, f"SOURCE caption states are {got!r}, want {want!r}")
-    for suffix in ("_A", "_B"):
-        check(ctl("SOURCE" + suffix).label == want[0],
-              f"SOURCE{suffix} preview caption must be TIMB")
-    panel_words = [t[-1] for t in g.TEXTS]
-    check("ORG" not in panel_words and "FRAME" not in panel_words,
-          "ORG/FRAME must not be generated as static kPanelTexts aliases")
+def test_readme_matches_the_caption_table():
+    """Every word the generator prints must be findable in the manual, and no
+    retired word may still be presented as current."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "README.md"), encoding="utf-8") as f:
+        readme = f.read()
+    for _target, _driver, words in g.DYNAMIC_CAPTIONS:
+        for word in set(words):
+            check(word in readme, f"README never mentions the caption {word!r}")
+    for word in ("BEND", "DIV", "MULT", "SEND", "PUSH"):
+        check(word in readme, f"README never mentions the caption {word!r}")
+    # The STGS-to-BEND migration sentence names the retired `STGS` label on
+    # purpose (test_bbd_pitch_and_tape_time_user_documentation requires it
+    # verbatim) -- it explains STGS is gone, it does not present STGS as a
+    # live caption, so it is excluded here the same way that test excludes it.
+    migration = re.compile(r"the visible `STGS`\s+label is gone")
+    unmigrated = migration.sub("", readme)
+    for stale in ("`STGS`", "`MELO` / `SCAN`", "`SUB` / `LEN`"):
+        check(stale not in unmigrated,
+              f"README still presents the retired {stale}")
 
 
 def test_source_and_detune_user_documentation():
@@ -175,17 +184,17 @@ def test_source_and_detune_user_documentation():
 
 
 def test_bbd_pitch_and_tape_time_user_documentation():
-    """The README must match the BBD/PITCH and FX/TIME faceplate contract."""
+    """The README must match the BBD/BEND and FX/MULT faceplate contract."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "README.md"), encoding="utf-8") as f:
         readme = f.read()
-    check("BBD PITCH" in readme, "README omits the BBD PITCH faceplate slot")
+    check("BBD BEND" in readme, "README omits the BBD BEND faceplate slot")
     check("Freeze Attack" in readme, "README omits menu-only BBD Freeze Attack")
-    check("TIME" in readme and "x0.25" in readme and "x4" in readme,
-          "README omits the tape TIME multiplier")
+    check("MULT" in readme and "x0.25" in readme and "x4" in readme,
+          "README omits the tape multiplier")
     migration = re.compile(r"the visible `STGS`\s+label is gone")
     check(migration.search(readme) is not None,
-          "README omits the STGS-to-PITCH migration explanation")
+          "README omits the STGS-to-BEND migration explanation")
     check("STGS" not in migration.sub("", readme),
           "README still presents STGS outside the migration explanation")
 
@@ -231,15 +240,16 @@ def test_param_runtime_tip_contract():
           "parameter runtime tip contract changed: "
           + repr([(c.enum, c.tip, want) for c, want in zip(g.PARAMS, PARAM_TIPS)
                   if c.tip != want]))
-    check(PARAM_TIPS[71:75] == ['LINK', 'LINK', 'BBD Pitch', 'BBD Pitch'],
-          "BBD Pitch runtime tips drifted")
+    check(PARAM_TIPS[71:75] == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
+          "BBD Bend runtime tips drifted")
     check(PARAM_TIPS[-6:] == [
         'Detune A', 'Detune B', 'Drive A', 'Drive B',
         'Tape Time', 'Tape Time',
     ], "Tape Time runtime tips drifted")
     for enum, caption, tip in (
             ("FLUX_A", "MIX", "FLUX"), ("FLUX_B", "MIX", "FLUX"),
-            ("FLUXRATE_A", "RATE", "FRATE"), ("FLUXRATE_B", "RATE", "FRATE"),
+            ("FLUXRATE_A", "DIV", "FLUX division"),
+            ("FLUXRATE_B", "DIV", "FLUX division"),
             ("FLUXFB_A", "FB", "FFB"), ("FLUXFB_B", "FB", "FFB")):
         c = ctl(enum)
         check(c.label == caption and c.tip == tip,
@@ -303,7 +313,7 @@ def test_rec_params():
 
 def test_reverb_mix_params():
     """REV_MIX_A/B are appended (not templated) so PART_STRIDE stays 23, and
-    they carry the 'ROOM' label as the FX top row's 4th slot -- the shared
+    they carry the 'SEND' label as the FX top row's 4th slot -- the shared
     centre REV_MIX is gone."""
     check(g.PART_STRIDE == 23, "PART_STRIDE must stay 23")
     ids = {c.enum: i for i, c in enumerate(g.PARAMS)}
@@ -311,7 +321,7 @@ def test_reverb_mix_params():
     for e in ("REV_MIX_A", "REV_MIX_B"):
         check(e in ids, f"{e} missing")
         check(ids[e] >= 2 * g.PART_STRIDE, f"{e} must be appended, not templated")
-        check(ctl(e).label == "ROOM", f"{e} label must be 'ROOM'")
+        check(ctl(e).label == "SEND", f"{e} label must be 'SEND'")
     h = g.header()
     for e in ("REV_MIX_A", "REV_MIX_B"):
         check(h.count(f"{{{e}, WK_SMKNOB,") == 1,
@@ -625,9 +635,9 @@ def test_lower_half_positions():
         attack, pitch = ctl('ATTACK' + suffix), ctl('STAGES' + suffix)
         check((attack.x, attack.y) == (pitch.x, pitch.y),
               f"{suffix}: ATK/PITCH do not share coordinates")
-        time = ctl('FLUXTIME' + suffix)
-        check(time.label == 'TIME' and time.tip == 'Tape Time',
-              f"{suffix}: TIME caption/tooltip drifted")
+        mult = ctl('FLUXTIME' + suffix)
+        check(mult.label == 'MULT' and mult.tip == 'Tape Time',
+              f"{suffix}: tape multiplier caption/tooltip drifted")
 
 
 def test_static_synth_preview_excludes_bbd_pitch():
@@ -637,10 +647,64 @@ def test_static_synth_preview_excludes_bbd_pitch():
     check('>STGS</text>' not in svg, "static SVG still exposes STGS")
     check(svg.count('>ATK</text>') == 2,
           "static preview must show two ATK captions")
-    check(svg.count('font-size="1.9">TIME</text>') == 2,
-          "static preview must show two TIME captions")
-    check('font-size="1.9">PITCH</text>' not in svg,
-          "static preview must not overlay PITCH on ATK")
+    check(svg.count('font-size="1.9">MULT</text>') == 2,
+          "static preview must show two MULT captions")
+    check('font-size="1.9">BEND</text>' not in svg,
+          "static preview must not overlay BEND on ATK")
+
+
+def test_rec_off_sampler_leaves_no_static_artifacts():
+    """The removed-REC-pad defect (spec 2026-08-03 rec-artifacts): hiding the
+    runtime REC widget at runtime does not erase what the SVG painted
+    underneath it. The static preview must never paint the REC pad's white
+    key bed or the REC LED's dark housing -- those are exactly what a player
+    sees left behind on any non-Sampler deck -- nor print the REC caption.
+    Modeled on test_static_synth_preview_excludes_bbd_pitch, which pins the
+    same "runtime-only control must not leak into the static plate" shape for
+    STAGES/PITCH."""
+    svg = g.svg()
+    check('>REC<' not in svg, "static SVG still prints the REC caption")
+
+    pad_r = g.GLYPH_R[g.LATCH]
+    for x in (g.REC_X, g.W - g.REC_X):
+        bed = (f'<rect x="{g.mm(x - pad_r)}" y="{g.mm(g.PLAY_Y - pad_r)}" '
+               f'width="{g.mm(2 * pad_r)}" height="{g.mm(2 * pad_r)}" '
+               f'rx="1.0" fill="{g.WHITE}"/>')
+        check(bed not in svg, f"REC pad key bed still painted at x={x:.3f}")
+
+    led_r = g.GLYPH_R[g.LIGHT]
+    for x in (g.REC_LED_X, g.W - g.REC_LED_X):
+        housing = (f'<circle cx="{g.mm(x)}" cy="{g.mm(g.PLAY_Y)}" '
+                   f'r="{g.mm(led_r)}" fill="#1a1206" stroke="#3a2c12" '
+                   f'stroke-width="0.25"/>')
+        check(housing not in svg, f"REC LED housing still painted at x={x:.3f}")
+
+
+def test_static_lights_excludes_rec_but_lights_keeps_all_four():
+    """LIGHTS (all four, in the frozen order) still drives kLightCtls in the
+    generated header -- the C++ centres its LED rings on kLightCtls[0..1], so
+    the gate lights must keep indices 0 and 1 (see the comment above LIGHTS).
+    STATIC_LIGHTS is a second, SVG-only view that drops the two REC entries,
+    the same relationship STATIC_PANEL_PARAMS already has to
+    RUNTIME_PANEL_PARAMS for STAGES_A/B."""
+    check([c.enum for c in g.LIGHTS] == LIGHT_ORDER,
+          "LIGHTS must keep all four entries in the frozen order")
+    static_lights = getattr(g, "STATIC_LIGHTS", None)
+    check(static_lights is not None, "gen_panel has no STATIC_LIGHTS list")
+    if static_lights is None:
+        return
+    check([c.enum for c in static_lights] == ['GATE_A_L', 'GATE_B_L'],
+          "STATIC_LIGHTS must contain only the two gate lights, in order")
+
+    h = g.header()
+    check("static const PanelCtl kLightCtls[] = {" in h,
+          "generated header lost kLightCtls")
+    body = h.split("static const PanelCtl kLightCtls[] = {", 1)[1]
+    body = body.split("};", 1)[0]
+    row_ids = [row.strip().lstrip("{").split(",", 1)[0]
+               for row in body.strip().splitlines() if row.strip()]
+    check(row_ids == LIGHT_ORDER,
+          f"kLightCtls row order is {row_ids}, want {LIGHT_ORDER}")
 
 
 def test_form_song_control_contract():
@@ -872,6 +936,137 @@ def test_every_label_is_reachable():
               f"{c.enum} label off panel at ({lx:.2f}, {ly:.2f})")
 
 
+# --- one word, one meaning ----------------------------------------------------
+# Everything a player reads inside deck A's half plus the shared centre. Deck B
+# is an exact mirror (test_all_deck_local_geometry_is_exactly_mirrored), so it
+# contributes no word deck A does not already have.
+#
+# Jack captions are deliberately OUT of scope: PIT/GATE/L/R each appear twice
+# across the five jack groups, and gen_panel's JACK_GROUPS comment records why
+# that is correct -- the coloured wells and their legends disambiguate them.
+# Their group LEGENDS are in scope, because those are read as ordinary words.
+def dynamic_words_for(base):
+    """State-dependent words for a control base, [] when it has none.
+
+    Tolerates gen_panel having no DYNAMIC_CAPTIONS table yet, so this guard
+    can land before the table it will eventually cover."""
+    for target, _driver, words in getattr(g, "DYNAMIC_CAPTIONS", ()):
+        if target == base:
+            return list(words)
+    return []
+
+
+def printed_words():
+    """word -> list of origins, for everything drawn in deck A + centre."""
+    out = {}
+
+    def add(word, origin):
+        out.setdefault(word, []).append(origin)
+
+    jacks = {c.enum for c in g.INPUTS + g.OUTPUTS}
+    for c in g.RUNTIME_PANEL_PARAMS:
+        if not c.label or c.enum.endswith('_B') or c.enum in jacks:
+            continue
+        base = c.enum[:-2] if c.enum.endswith('_A') else c.enum
+        # A control's own states may repeat a word (e.g. ATTACK is ATK in
+        # four of its five engine states) -- that is one meaning said
+        # several times, not a collision, so dedupe before recording it.
+        for word in set(dynamic_words_for(base) or [c.label]):
+            add(word, base)
+
+    # Deck B's three mirrored fieldsets repeat deck A's legends verbatim;
+    # every other box (centre + jack groups) is its own word.
+    mirrored = {(round(x, 3), round(y, 3))
+                for (x, y, _w, _h, _n, _c) in g.part_groups(True)}
+    for (x, y, _w, _h, name, _col) in g.GROUPS:
+        if (round(x, 3), round(y, 3)) in mirrored:
+            continue
+        add(name, 'group legend')
+
+    for (name, _a0, _a1, _cap) in g.SECTORS:
+        add(name, 'sector eyebrow')
+    return out
+
+
+def test_every_printed_word_is_unique():
+    """No word may name two different things on one plate.
+
+    This is the guard that would have stopped RATE/RATE (orbit macro vs FLUX
+    division) and GRIT/GRIT (mode pad vs mix knob) from ever being written."""
+    for word, origins in sorted(printed_words().items()):
+        check(len(origins) == 1,
+              f"{word!r} is printed {len(origins)}x: {', '.join(origins)}")
+
+
+def test_dynamic_caption_table_is_well_formed():
+    """Every row targets a real control, is driven by a real control, and
+    carries one word per state of its driver."""
+    table = getattr(g, "DYNAMIC_CAPTIONS", None)
+    check(table is not None, "gen_panel has no DYNAMIC_CAPTIONS table")
+    if table is None:
+        return
+    enums = {c.enum for c in g.RUNTIME_PANEL_PARAMS}
+    driver_states = {"ENGINE": 5, "GRITMODE": 2}
+    for target, driver, words in table:
+        for suffix in ("_A", "_B"):
+            check(target + suffix in enums,
+                  f"DYNAMIC_CAPTIONS targets unknown control {target + suffix}")
+            check(driver + suffix in enums,
+                  f"DYNAMIC_CAPTIONS driven by unknown control {driver + suffix}")
+        check(driver in driver_states,
+              f"{target}: driver {driver!r} has no known state count")
+        check(len(words) == driver_states.get(driver, -1),
+              f"{target}: {len(words)} words for a {driver} driver")
+        check(len(words) <= 5,
+              f"{target}: {len(words)} words exceeds the header's word[5]")
+        check(all(w and w.isupper() for w in words),
+              f"{target}: captions must be non-empty upper case: {words}")
+
+
+def test_static_label_is_the_tables_first_word():
+    """The plate's resting caption and the table's state-0 word are the same
+    thing said twice; they may never disagree."""
+    for target, _driver, words in getattr(g, "DYNAMIC_CAPTIONS", ()):
+        for suffix in ("_A", "_B"):
+            c = ctl(target + suffix)
+            check(c.label == words[0],
+                  f"{c.enum} label {c.label!r} != table word[0] {words[0]!r}")
+
+
+def test_printed_second_words_are_gone():
+    """SCAN and LEN were printed on every engine and true on one. The whole
+    inline-alias machinery goes with them."""
+    words = [t[-1] for t in g.TEXTS]
+    for stale in ("SCAN", "LEN", "ORG", "FRAME", "MATL"):
+        check(stale not in words,
+              f"{stale!r} is still a static kPanelTexts entry")
+    for gone in ("sampler_texts", "SAMPLER_LBL", "SAMPLER_GAP",
+                 "SAMPLER_RADIAL", "MONO_ADV", "text_w", "mirror_label",
+                 "mirror_anchor", "SOURCE_CAPTIONS"):
+        check(not hasattr(g, gone),
+              f"gen_panel still carries the retired {gone}")
+
+
+def test_header_carries_the_dynamic_caption_table():
+    """Rack must read the words, never hold its own copy."""
+    h = g.header()
+    check("struct DynCaption { int id; int driverId; int count; "
+          "const char* words[5]; };" in h,
+          "generated header has no DynCaption struct")
+    check("static const DynCaption kDynCaptions[]" in h,
+          "generated header has no kDynCaptions table")
+    rows = 2 * len(g.DYNAMIC_CAPTIONS)
+    check(h.count("{SUB_A, ENGINE_A, 5, {") == 1,
+          "SUB_A is not bound to its own deck's ENG")
+    check(h.count("{SUB_B, ENGINE_B, 5, {") == 1,
+          "SUB_B is not bound to its own deck's ENG")
+    check(h.count("{GRITMODE_A, GRITMODE_A, 2, {") == 1,
+          "the mode pad must drive its own caption")
+    body = h.split("static const DynCaption kDynCaptions[] = {")[1].split("};")[0]
+    check(body.count("},") == rows,
+          f"kDynCaptions has {body.count('},')} rows, want {rows}")
+
+
 def test_config_wires_tip_not_label():
     """The generated header carries a real tooltip in `tip` (see
     test_header_carries_tooltips), but a header can be correct while the C++
@@ -992,11 +1187,19 @@ else if (c.id == ENGINE_A || c.id == ENGINE_B) {
 case WK_LATCH:
     if (c.id == ENGINE_A || c.id == ENGINE_B)
         addParam(createParamCentered<EngineCycleLatch>(pos, module, c.id));
+    else if (c.id == REC_A || c.id == REC_B) {
+        auto* pad = createParamCentered<SlotVisible<VCVLatch>>(
+            pos, module, c.id);
+        pad->spotymod = module;
+        pad->ctlId = c.id;
+        addParam(pad);
+    }
     else
         addParam(createParamCentered<VCVLatch>(pos, module, c.id));
     break;"""
     if compact_cpp(widget).count(compact_cpp(engine_widget)) != 1:
-        issues.append("only ENGINE_A/B may use EngineCycleLatch; other latches use VCVLatch")
+        issues.append("only ENGINE_A/B may use EngineCycleLatch; REC uses a "
+                      "slot-visible VCVLatch; other latches use VCVLatch directly")
     if widget.count("createParamCentered<EngineCycleLatch>") != 1:
         issues.append("widget must create exactly one EngineCycleLatch branch")
 
@@ -1104,6 +1307,29 @@ def test_engine_cycle_guard_rejects_representative_regressions():
         mutated = cpp.replace(before, after, 1)
         check(engine_cycle_wiring_issues(mutated, makefile),
               f"ENG guard accepted a {label} regression")
+
+
+def test_variation_is_gated_off_the_sampler():
+    """MELODY is one knob with one meaning per engine: VARY off the Sampler,
+    SCAN on it. Variation parks at LOOP there -- the same shape as the
+    LANE_SIZE gate that parks at 0.5f off the Sampler."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    push = cpp_scope(cpp, "void pushParams()")
+    check(push is not None, "pushParams scope is missing")
+    if push is None:
+        return
+    n = compact_cpp(push)
+    check(n.count("inst.set_variation(") == 1,
+          "set_variation must be pushed exactly once")
+    check("inst.set_variation(p,samplerPart?0.f:pp(MELODY_A,p));" in n,
+          "set_variation must park at LOOP on a Sampler deck")
+    if "constboolsamplerPart=" in n and "inst.set_variation(" in n:
+        check(n.index("constboolsamplerPart=") < n.index("inst.set_variation("),
+              "set_variation must run after samplerPart resolves this tick's engine")
+    check("if(samplerPart)inst.sampler_scan(p,pp(MELODY_A,p));" in n,
+          "sampler_scan must stay gated on the same samplerPart")
 
 
 def source_detune_wiring_issues(cpp):
@@ -1311,49 +1537,155 @@ def test_flux_time_guard_rejects_representative_regressions():
               f"Tape Time guard accepted a {label} regression")
 
 
-def source_caption_wiring_issues(cpp):
-    """Return regressions in the one-live-SOURCE-caption-per-part contract."""
-    issues = []
-    mapping = cpp_scope(cpp, "static const char* sourceCaption(int state)")
-    panel = cpp_scope(cpp, "struct PanelText : Widget")
-    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
-    expected_mapping = """
-static const char* sourceCaption(int state) {
-    return state == 1 ? "ORG" : state == 2 ? "FRAME"
-         : state == 3 ? "MATL" : state == 4 ? "DRIVE" : "TIMB";
-}"""
-    if mapping is None:
-        issues.append("SOURCE caption mapping scope is missing")
-    elif compact_cpp(mapping) != compact_cpp(expected_mapping):
-        issues.append("SOURCE caption mapping must be 0 TIMB, 1 ORG, 2 FRAME, 3 MATL, 4 DRIVE")
+# Derived, not hand-copied: the branch's whole point is that caption words
+# live in one place (DYNAMIC_CAPTIONS), so the guard that checks no caption
+# word is typed into the C++ must draw from that same table, not a second
+# transcription of it that a later DYNAMIC_CAPTIONS row can silently outrun.
+# BEND/DIV/MULT/SEND/PUSH are static (never state-dependent) captions with
+# no DYNAMIC_CAPTIONS row of their own, so they're added explicitly.
+CAPTION_WORDS = tuple(sorted(
+    {w for _t, _d, words in g.DYNAMIC_CAPTIONS for w in words}
+    | {"BEND", "DIV", "MULT", "SEND", "PUSH"}))
 
+
+def caption_wiring_issues(cpp):
+    """Return regressions in the one-table-drives-every-caption contract."""
+    issues = []
+    panel = cpp_scope(cpp, "struct PanelText : Widget")
     if panel is None:
-        issues.append("SOURCE caption PanelText scope is missing")
+        issues.append("PanelText scope is missing")
         return issues
     panel_n = compact_cpp(panel)
+
+    for word in CAPTION_WORDS:
+        if f'"{word}"' in cpp:
+            issues.append(f"caption word {word!r} is typed into the C++; "
+                          "every word belongs in gen_panel.py")
+    for gone in ("sourceCaption(", "sourceCaptionAt(", "attackPitchCaptionAt("):
+        if gone in cpp:
+            issues.append(f"the retired per-control helper {gone} is back")
+    if "for(constauto&d:kDynCaptions)" not in panel_n:
+        issues.append("PanelText must resolve captions from kDynCaptions")
+    if "module->params[d.driverId].getValue()" not in panel_n:
+        issues.append("a dynamic caption must read its own driver parameter")
+    if panel_n.count("ctlVisible(module,t[i].id)") != 1:
+        issues.append("the caption loop must skip a control that is not the "
+                      "one occupying its slot")
     if "Spotymod*module;explicitPanelText(Spotymod*m):module(m){}" not in panel_n:
         issues.append("PanelText must retain its Spotymod module pointer")
-    if panel_n.count("constintstate=roundedEngineState(module,engineId);") != 1:
-        issues.append("SOURCE caption state must use the shared rounded ENG helper")
-    if panel_n.count("text(source->lbl.x,source->lbl.y,source->lblSize,"
-                     "col(source->lblRgb),sourceCaption(state));") != 1:
-        issues.append("dynamic SOURCE helper must draw one resolved caption")
-    for source_id, engine_id in (("SOURCE_A", "ENGINE_A"),
-                                 ("SOURCE_B", "ENGINE_B")):
-        call = f"sourceCaptionAt({source_id},{engine_id});"
-        if panel_n.count(call) != 1:
-            issues.append(f"{source_id} must draw once from {engine_id}")
-    if panel_n.find("captions(kOutputCtls") > panel_n.find(
-            "sourceCaptionAt(SOURCE_A,ENGINE_A);"):
-        issues.append("live SOURCE captions must draw after the generic caption loop")
 
+    # Not in the brief's verbatim body, added because the mutation test below
+    # (also verbatim) mutates the construction site, not the struct scope --
+    # without this check that mutation passes uncaught. See task-3 report.
+    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
     if widget is None:
-        issues.append("SOURCE caption widget scope is missing")
-        return issues
-    widget_n = compact_cpp(widget)
-    if widget_n.count("newPanelText(module)") != 1:
-        issues.append("SpotymodWidget must construct PanelText with its module")
+        issues.append("SpotymodWidget scope is missing")
+    else:
+        widget_n = compact_cpp(widget)
+        if widget_n.count("newPanelText(module)") != 1:
+            issues.append("SpotymodWidget must construct PanelText with its module")
     return issues
+
+
+def test_caption_host_wiring():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    for issue in caption_wiring_issues(cpp):
+        check(False, issue)
+
+
+def dynamic_flag_issues(cpp):
+    """Return regressions in the `dynamic` flag that keeps the caption lookup
+    from crossing id spaces.
+
+    PanelCtl.id is a ParamId in kParamCtls but an Input/OutputId in
+    kInputCtls/kOutputCtls -- three separate enums that all start at 0.
+    MELODY_A (ParamId 5) and GATE_B (OutputId 5) share that number for
+    exactly that reason, and the frozen enum order (test_enum_order) forbids
+    "fixing" it by moving either id -- every saved .vcv keeps its ids. The
+    numbers coinciding is not itself a bug: a guard that only compared the
+    raw numbers (pids[target] not in jack-id-set) would fail on
+    MELODY_A/GATE_B forever, fix or no fix, since nothing in Spotymod.cpp can
+    change what number gen_panel.py assigns either one. What must never
+    happen is the caption lookup treating that coincidence as the same slot
+    -- so this guard pins the `dynamic` flag that keeps it from doing so:
+    kParamCtls resolves dynamic captions, kInputCtls and kOutputCtls never do.
+    """
+    issues = []
+    panel = cpp_scope(cpp, "struct PanelText : Widget")
+    if panel is None:
+        issues.append("PanelText scope is missing")
+        return issues
+    panel_n = compact_cpp(panel)
+    for required, label in (
+        ("captions(kParamCtls,sizeof(kParamCtls)/sizeof(kParamCtls[0]),true);",
+         "kParamCtls must resolve dynamic captions (dynamic=true)"),
+        ("captions(kInputCtls,sizeof(kInputCtls)/sizeof(kInputCtls[0]),false);",
+         "kInputCtls must not resolve captions as ParamIds (dynamic=false)"),
+        ("captions(kOutputCtls,sizeof(kOutputCtls)/sizeof(kOutputCtls[0]),false);",
+         "kOutputCtls must not resolve captions as ParamIds (dynamic=false)"),
+        ("if(dynamic&&!ctlVisible(module,t[i].id))continue;",
+         "ctlVisible must be gated on dynamic, or an Input/OutputId reaches it"),
+        ("dynamic?caption(t[i]):t[i].label",
+         "caption() must be gated on dynamic, or an Input/OutputId reaches it"),
+    ):
+        if required not in panel_n:
+            issues.append(label)
+    return issues
+
+
+def test_dynamic_lookup_stays_inside_the_param_id_space():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    for issue in dynamic_flag_issues(cpp):
+        check(False, issue)
+
+
+def test_dynamic_flag_guard_rejects_representative_regressions():
+    """The dynamic-flag guard rejects reverting to unconditional resolution,
+    not merely recognizing today's source."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    mutations = [
+        ("captions(kInputCtls,  sizeof(kInputCtls)  / sizeof(kInputCtls[0]),  false);",
+         "captions(kInputCtls,  sizeof(kInputCtls)  / sizeof(kInputCtls[0]),  true);",
+         "kInputCtls resolved as dynamic"),
+        ("captions(kOutputCtls, sizeof(kOutputCtls) / sizeof(kOutputCtls[0]), false);",
+         "captions(kOutputCtls, sizeof(kOutputCtls) / sizeof(kOutputCtls[0]), true);",
+         "kOutputCtls resolved as dynamic"),
+        ("if (dynamic && !ctlVisible(module, t[i].id)) continue;",
+         "if (!ctlVisible(module, t[i].id)) continue;",
+         "ctlVisible ungated"),
+        ("dynamic ? caption(t[i]) : t[i].label",
+         "caption(t[i])",
+         "caption() ungated"),
+    ]
+    for before, after, label in mutations:
+        mutated = cpp.replace(before, after, 1)
+        check(dynamic_flag_issues(mutated),
+              f"dynamic-flag guard accepted a {label} regression")
+
+
+def test_caption_guard_rejects_representative_regressions():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    mutations = [
+        ("for (const auto& d : kDynCaptions)", "for (const auto& d : kParamCtls)",
+         "table binding"),
+        ("module->params[d.driverId].getValue()",
+         "module->params[ENGINE_A].getValue()", "per-deck driver binding"),
+        ("new PanelText(module)", "new PanelText(nullptr)", "widget module"),
+        ("if (dynamic && !ctlVisible(module, t[i].id)) continue;", "",
+         "shared-slot caption skip"),
+    ]
+    for before, after, label in mutations:
+        mutated = cpp.replace(before, after, 1)
+        check(caption_wiring_issues(mutated),
+              f"caption guard accepted a {label} regression")
 
 
 def attack_pitch_wiring_issues(cpp):
@@ -1363,8 +1695,8 @@ def attack_pitch_wiring_issues(cpp):
         cpp, "static int roundedEngineState(Spotymod* module, int engineId)")
     selected = cpp_scope(
         cpp, "static bool isBbdSelected(Spotymod* module, int engineId)")
-    exclusive = cpp_scope(cpp, "struct EngineExclusiveTrimpot : Trimpot")
-    panel = cpp_scope(cpp, "struct PanelText : Widget")
+    visible = cpp_scope(cpp, "static bool ctlVisible(Spotymod* m, int id)")
+    exclusive = cpp_scope(cpp, "struct SlotVisible : W")
     widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
     menu = cpp_scope(cpp, "void appendContextMenu(Menu* menu) override")
 
@@ -1383,8 +1715,22 @@ static bool isBbdSelected(Spotymod* module, int engineId) {
     if selected is None or compact_cpp(selected) != compact_cpp(expected_selected):
         issues.append("isBbdSelected must recognize only rounded BBD state 4")
 
-    for label, scope in (("PanelText", panel),
-                         ("EngineExclusiveTrimpot", exclusive),
+    # The ATTACK/STAGES exclusivity rule used to live on the widget itself
+    # (engineId/bbdOnly); it now lives in ctlVisible, in the same place the
+    # REC/Sampler rule lives, so pin the arms here instead of the retired
+    # fields.
+    if visible is None:
+        issues.append("ctlVisible scope is missing")
+    else:
+        n = compact_cpp(visible)
+        for arm in ("caseATTACK_A:return!isBbdSelected(m,ENGINE_A);",
+                    "caseATTACK_B:return!isBbdSelected(m,ENGINE_B);",
+                    "caseSTAGES_A:returnisBbdSelected(m,ENGINE_A);",
+                    "caseSTAGES_B:returnisBbdSelected(m,ENGINE_B);"):
+            if arm not in n:
+                issues.append(f"ctlVisible has no ATTACK/STAGES arm: {arm}")
+
+    for label, scope in (("SlotVisible", exclusive),
                          ("context menu", menu)):
         if scope is None:
             issues.append(f"{label} scope is missing")
@@ -1392,56 +1738,31 @@ static bool isBbdSelected(Spotymod* module, int engineId) {
             issues.append(f"{label} must use Rack ENG state, not inst.engine_id()")
     exclusive_n = compact_cpp(exclusive) if exclusive else ""
     expected_exclusive = """
-struct EngineExclusiveTrimpot : Trimpot {
+struct SlotVisible : W {
     Spotymod* spotymod = nullptr;
-    int engineId = ENGINE_A;
-    bool bbdOnly = false;
+    int ctlId = 0;
 
     void step() override {
-        setVisible(isBbdSelected(spotymod, engineId) == bbdOnly);
-        Trimpot::step();
+        this->setVisible(ctlVisible(spotymod, ctlId));
+        W::step();
     }
 }"""
     if exclusive_n != compact_cpp(expected_exclusive):
-        issues.append("EngineExclusiveTrimpot must call setVisible from shared ENG state")
+        issues.append("SlotVisible must call setVisible from ctlVisible")
     if re.search(r"\bvisible\s*=", exclusive or ""):
-        issues.append("EngineExclusiveTrimpot must not write Widget::visible directly")
+        issues.append("SlotVisible must not write Widget::visible directly")
 
     widget_n = compact_cpp(widget) if widget else ""
     for required, label in (
         ("if(c.id==ATTACK_A||c.id==ATTACK_B||c.id==STAGES_A||c.id==STAGES_B)",
          "ATTACK/STAGES need the exclusive widget branch"),
-        ("createParamCentered<EngineExclusiveTrimpot>(pos,module,c.id)",
-         "ATTACK/STAGES must use EngineExclusiveTrimpot at their generated position"),
-        ("knob->engineId=(c.id==ATTACK_B||c.id==STAGES_B)?ENGINE_B:ENGINE_A;",
-         "part B overlapping widgets must follow ENGINE_B"),
-        ("knob->bbdOnly=c.id==STAGES_A||c.id==STAGES_B;",
-         "only STAGES widgets may be visible for BBD"),
+        ("createParamCentered<SlotVisible<Trimpot>>(pos,module,c.id)",
+         "ATTACK/STAGES must use SlotVisible<Trimpot> at their generated position"),
+        ("knob->ctlId=c.id;",
+         "the shared VOICE widget must set ctlId from the control's own id"),
     ):
         if required not in widget_n:
             issues.append(label)
-    panel_n = compact_cpp(panel) if panel else ""
-    skip = ("if(!t[i].label[0]||t[i].id==SOURCE_A||t[i].id==SOURCE_B||"
-            "t[i].id==ATTACK_A||t[i].id==ATTACK_B||t[i].id==STAGES_A||"
-            "t[i].id==STAGES_B)continue;")
-    if panel_n.count(skip) != 1:
-        issues.append("generic caption loop must skip SOURCE, ATTACK, and STAGES pairs")
-    expected_caption = """
-auto attackPitchCaptionAt = [&](int attackId, int engineId) {
-    const PanelCtl* attack = nullptr;
-    for (const auto& c : kParamCtls)
-        if (c.id == attackId) { attack = &c; break; }
-    if (!attack) return;
-    nvgTextAlign(args.vg, alignOf(attack->anchor) | NVG_ALIGN_BASELINE);
-    text(attack->lbl.x, attack->lbl.y, attack->lblSize,
-         col(attack->lblRgb), isBbdSelected(module, engineId) ? "PITCH" : "ATK");
-};"""
-    if compact_cpp(expected_caption) not in panel_n:
-        issues.append("ATK/PITCH caption must resolve from the shared Rack ENG helper")
-    for attack_id, engine_id in (("ATTACK_A", "ENGINE_A"),
-                                 ("ATTACK_B", "ENGINE_B")):
-        if panel_n.count(f"attackPitchCaptionAt({attack_id},{engine_id});") != 1:
-            issues.append(f"{attack_id} must draw one caption from {engine_id}")
 
     menu_n = compact_cpp(menu) if menu else ""
     for part, engine_id, attack_id in (
@@ -1482,19 +1803,18 @@ def test_attack_pitch_guard_rejects_representative_regressions():
          "BBD helper const incompatibility"),
         ("static_cast<int>(std::round(module->params[engineId].getValue()))",
          "static_cast<int>(module->params[engineId].getValue())", "ENG rounding"),
-        ("? ENGINE_B : ENGINE_A;", "? ENGINE_A : ENGINE_A;",
+        ("case ATTACK_B: return !isBbdSelected(m, ENGINE_B);",
+         "case ATTACK_B: return !isBbdSelected(m, ENGINE_A);",
          "part B widget ENG"),
-        ("knob->bbdOnly = c.id == STAGES_A || c.id == STAGES_B;",
-         "knob->bbdOnly = c.id == STAGES_A || c.id == ATTACK_B;",
+        ("case STAGES_B: return  isBbdSelected(m, ENGINE_B);",
+         "case STAGES_B: return  isBbdSelected(m, ENGINE_A);",
          "STAGES B exclusivity"),
         ("static_cast<int>(std::round(module->params[engineId].getValue()))\n"
          "        : 0;",
          "static_cast<int>(std::round(module->params[engineId].getValue()))\n"
          "        : 4;", "preview fallback"),
-        ("setVisible(isBbdSelected(spotymod, engineId) == bbdOnly);",
+        ("this->setVisible(ctlVisible(spotymod, ctlId));",
          "visible = true;", "direct overlap visibility"),
-        ("t[i].id == SOURCE_A || t[i].id == SOURCE_B",
-         "t[i].id == SOURCE_A", "generic caption skip"),
         ("getParamQuantity(ATTACK_B)",
          "getParamQuantity(ATTACK_A)", "part B menu quantity"),
     ]
@@ -1504,30 +1824,146 @@ def test_attack_pitch_guard_rejects_representative_regressions():
               f"ATTACK/PITCH guard accepted a {label} regression")
 
 
-def test_source_caption_host_wiring():
-    """Rack draws one live caption for each SOURCE from its own rounded ENG."""
+def rec_visibility_issues(cpp):
+    """REC may not be offered on an engine where pushParams ignores it."""
+    issues = []
+    visible = cpp_scope(cpp, "static bool ctlVisible(Spotymod* m, int id)")
+    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
+    if visible is None:
+        issues.append("ctlVisible scope is missing")
+    else:
+        n = compact_cpp(visible)
+        for arm in ("caseREC_A:returnsamplerDeck(m,ENGINE_A);",
+                    "caseREC_B:returnsamplerDeck(m,ENGINE_B);"):
+            if arm not in n:
+                issues.append(f"ctlVisible has no Sampler arm: {arm}")
+    if widget is None:
+        issues.append("widget scope is missing")
+    else:
+        n = compact_cpp(widget)
+        if "SlotVisible<VCVLatch>" not in n:
+            issues.append("REC is not built as a slot-visible latch")
+        if "SlotVisible<Trimpot>" not in n:
+            issues.append("the ATTACK/STAGES pair must use the same mixin")
+    return issues
+
+
+def test_rec_visibility_host_wiring():
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
         cpp = f.read()
-    for issue in source_caption_wiring_issues(cpp):
+    for issue in rec_visibility_issues(cpp):
         check(False, issue)
 
 
-def test_source_caption_guard_rejects_representative_regressions():
-    """The source guard catches wrong mappings, bindings, fallback and draws."""
+def test_rec_visibility_guard_rejects_representative_regressions():
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
         cpp = f.read()
     mutations = [
-        ('state == 1 ? "ORG"', 'state == 1 ? "FRAME"', "state mapping"),
-        ("sourceCaptionAt(SOURCE_B, ENGINE_B)",
-         "sourceCaptionAt(SOURCE_B, ENGINE_A)", "part B ENG binding"),
-        ("new PanelText(module)", "new PanelText(nullptr)", "widget module"),
+        ("case REC_B: return samplerDeck(m, ENGINE_B);",
+         "case REC_B: return samplerDeck(m, ENGINE_A);",
+         "part B ENG binding"),
+        ("SlotVisible<VCVLatch>", "VCVLatch", "slot-visible latch"),
     ]
     for before, after, label in mutations:
         mutated = cpp.replace(before, after, 1)
-        check(source_caption_wiring_issues(mutated),
-              f"SOURCE caption guard accepted a {label} regression")
+        check(rec_visibility_issues(mutated),
+              f"REC visibility guard accepted a {label} regression")
+
+
+def rec_light_visibility_issues(cpp):
+    """The REC LED widgets must hide off-Sampler by asking about the deck's
+    ENGINE param id, never a light id: LightId and ParamId are different
+    enums that both start at 0, and REC_A_L (LightId 2) collides numerically
+    with DENSITY_A (ParamId 2) -- REC_B_L (3) with SMOOTH_A (3). Passing a
+    light id into ctlVisible would silently ask about the wrong control, the
+    same shape of bug the caption lookup shipped last week (see
+    dynamic_flag_issues). samplerDeck is the one shared predicate the pad's
+    ctlVisible arm and the LED's SamplerOnly mixin must both call, so the two
+    rules cannot drift apart the way test_sampler_deck_predicate_is_single_
+    source_of_truth pins separately."""
+    issues = []
+    visible = cpp_scope(cpp, "static bool ctlVisible(Spotymod* m, int id)")
+    mixin = cpp_scope(cpp, "struct SamplerOnly : W")
+    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
+    if visible is None:
+        issues.append("ctlVisible scope is missing")
+    else:
+        n = compact_cpp(visible)
+        for bad in ("REC_A_L", "REC_B_L", "GATE_A_L", "GATE_B_L"):
+            if bad in n:
+                issues.append(f"ctlVisible must never be asked about a light id: {bad}")
+    if mixin is None:
+        issues.append("SamplerOnly<W> scope is missing")
+    else:
+        expected_mixin = compact_cpp("""
+struct SamplerOnly : W {
+    Spotymod* spotymod = nullptr;
+    int engineId = ENGINE_A;
+
+    void step() override {
+        this->setVisible(samplerDeck(spotymod, engineId));
+        W::step();
+    }
+}""")
+        if compact_cpp(mixin) != expected_mixin:
+            issues.append("SamplerOnly<W> must call setVisible from samplerDeck, "
+                          "parallel to SlotVisible/ctlVisible")
+    if widget is None:
+        issues.append("widget scope is missing")
+    else:
+        n = compact_cpp(widget)
+        if "SamplerOnly<SmallLight<RedLight>>" not in n:
+            issues.append("REC lights must be built as SamplerOnly<SmallLight<RedLight>>")
+        if "led->engineId=(c.id==REC_A_L)?ENGINE_A:ENGINE_B;" not in n:
+            issues.append("each deck's REC light must bind its own ENGINE_* id")
+    return issues
+
+
+def test_rec_light_visibility_host_wiring():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    for issue in rec_light_visibility_issues(cpp):
+        check(False, issue)
+
+
+def test_rec_light_visibility_guard_rejects_representative_regressions():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    mutations = [
+        ("led->engineId = (c.id == REC_A_L) ? ENGINE_A : ENGINE_B;",
+         "led->engineId = (c.id == REC_A_L) ? ENGINE_A : ENGINE_A;",
+         "deck-B light bound to the wrong deck's ENGINE"),
+        ("SamplerOnly<SmallLight<RedLight>>", "SmallLight<RedLight>",
+         "REC light built with the bare widget type"),
+    ]
+    for before, after, label in mutations:
+        mutated = cpp.replace(before, after, 1)
+        check(rec_light_visibility_issues(mutated),
+              f"REC light visibility guard accepted a {label} regression")
+
+
+def test_sampler_deck_predicate_is_single_source_of_truth():
+    """'This deck is running the Sampler' must be written exactly once --
+    samplerDeck -- so the REC pad's ctlVisible arm and the REC LED's
+    SamplerOnly mixin read the same rule instead of two copies that a later
+    edit can silently desync (the ablation-verdict-discipline lesson: an
+    unmeasured duplicate is how a residue gets mislabeled)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+        cpp = f.read()
+    check(cpp.count("static bool samplerDeck(Spotymod* m, int engineId)") == 1,
+          "samplerDeck must have exactly one definition")
+    matches = re.findall(r"roundedEngineState\([^)]*\)\s*==\s*1", cpp)
+    check(len(matches) == 1,
+          f"'roundedEngineState(...) == 1' must appear exactly once, found {len(matches)}")
+    scope = cpp_scope(cpp, "static bool samplerDeck(Spotymod* m, int engineId)")
+    if matches and scope is not None:
+        check(matches[0] in scope,
+              "the lone '== 1' Sampler comparison must live inside samplerDeck")
 
 
 def test_shuffle_host_wiring():
@@ -1688,133 +2124,20 @@ def test_sampler_preset_init_snapshot():
           "factory.wav is not included in the VCV distribution")
 
 
-# --- 2026-07-21 morphagene-controls: the sampler meanings on the plate --------
-# ENG remaps four knobs. Three get a second caption line; DENSITY deliberately
-# does not -- DENS reads correctly in both engines (groove density / grain
-# density), and the obvious alternative "MRPH" is already the global A/B knob's
-# name, so putting it on a part knob would be an operating error by design.
-SAMPLER_CAPTIONS = [("MELODY", "SCAN"), ("SUB", "LEN")]
+MONO_ADV = 0.6          # advance width of the monospace face, in ems
 
 
-def sampler_text(word, near):
-    """The SCAN/LEN entry nearest to a given control glyph. Picking by
-    distance rather than by exact coordinate keeps this test independent of
-    how the generator derives the position -- it can only pass if the caption
-    really landed next to its knob."""
-    hits = [t for t in g.TEXTS if t[-1] == word]
-    if not hits:
-        return None
-    return min(hits, key=lambda t: math.hypot(t[0] - near.x, t[1] - near.y))
-
-
-def test_sampler_captions_exist():
-    """Every remapped knob carries its sampler meaning on the plate."""
-    txt = [t[-1] for t in g.TEXTS]
-    for _base, word in SAMPLER_CAPTIONS:
-        check(txt.count(word) == 2,
-              f"sampler caption {word!r} appears {txt.count(word)}x, want 2 (A and B)")
-    check("MRPH" not in txt,
-          "DENS must keep its label -- MORPH is the global A/B control")
-    check(ctl('DENSITY_A').label == 'DENS' and ctl('DENSITY_B').label == 'DENS',
-          "DENSITY lost its DENS label")
+def text_w(s, size_mm):
+    return len(s) * MONO_ADV * size_mm
 
 
 def text_span(x, anchor, text, size):
-    width = g.text_w(text, size)
+    width = text_w(text, size)
     if anchor == 'end':
         return x - width, x
     if anchor == 'middle':
         return x - width / 2.0, x + width / 2.0
     return x, x + width
-
-
-# The pair's extent on the caption baseline: (left, right) in mm. Derived
-# from the drawn anchors, not from the generator's intent, so it measures
-# what actually lands on the plate.
-def inline_span(c, word):
-    lx, _ly, anchor, size, _col = g.label_of(c)
-    t = sampler_text(word, c)
-    cap_l, cap_r = text_span(lx, anchor, c.label, size)
-    word_l, word_r = text_span(t[0], t[5], word, t[2])
-    return min(cap_l, word_l), max(cap_r, word_r)
-
-
-def test_sampler_words_sit_inline_behind_their_caption():
-    """Sampler aliases share the primary baseline and mirror as a complete pair."""
-    for suffix in ('_A', '_B'):
-        for base, word in SAMPLER_CAPTIONS:
-            c = ctl(base + suffix)
-            lx, ly, anchor, size, _col = g.label_of(c)
-            t = sampler_text(word, c)
-            check(t is not None, f"{c.enum}: no {word} caption at all")
-            if t is None:
-                continue
-            check(approx(t[1], ly),
-                  f"{c.enum}: {word} baseline {t[1]:.2f} != {c.label}'s {ly:.2f}")
-            check(approx(t[2], 1.5), f"{c.enum}: {word} size {t[2]}, want 1.5")
-            check(t[4] == g.MUTED,
-                  f"{c.enum}: {word} colour {t[4]}, want {g.MUTED}")
-            radial = base in g.SAMPLER_RADIAL
-            if radial:
-                want_anchor = 'end' if suffix == '_A' else 'start'
-            else:
-                want_anchor = 'start' if suffix == '_A' else 'end'
-            check(t[5] == want_anchor,
-                  f"{c.enum}: {word} anchored {t[5]!r}, want {want_anchor!r}")
-            cap_l, cap_r = text_span(lx, anchor, c.label, size)
-            word_l, word_r = text_span(t[0], t[5], word, t[2])
-            if radial:
-                gap = cap_l - word_r if suffix == '_A' else word_l - cap_r
-            else:
-                gap = word_l - cap_r if suffix == '_A' else cap_l - word_r
-            check(approx(gap, g.SAMPLER_GAP),
-                  f"{c.enum}: gap {gap:.2f} mm, want {g.SAMPLER_GAP}")
-            # The word must clear the knob it belongs to -- nearest corner of
-            # its glyph box against the knob's radius, not just its anchor.
-            left, right = text_span(t[0], t[5], word, t[2])
-            near_x = min(max(c.x, left), right)
-            near_y = min(max(c.y, t[1] - 0.7 * t[2]), t[1])
-            # The approved tighter radial MELODY label puts SCAN within 0.10 mm
-            # of this conservative text-bounding-box estimate. Keep a narrow
-            # 0.15 mm allowance without weakening any glyph-overlap guard.
-            check(math.hypot(near_x - c.x, near_y - c.y) >= g.GLYPH_R[c.kind] - 0.15,
-                  f"{c.enum}: {word} overlaps the knob glyph")
-
-
-def test_scan_sits_outward_of_melo_and_clear_of_its_knob():
-    for suffix in ('_A', '_B'):
-        c = ctl('MELODY' + suffix)
-        lx, _ly, anchor, size, _colour = g.label_of(c)
-        scan = sampler_text('SCAN', c)
-        cap_l, cap_r = text_span(lx, anchor, c.label, size)
-        scan_l, scan_r = text_span(scan[0], scan[5], 'SCAN', scan[2])
-        if suffix == '_A':
-            check(scan_r < cap_l and scan_r < c.x,
-                  "SCAN_A is not outward of MELO_A")
-        else:
-            check(scan_l > cap_r and scan_l > c.x,
-                  "SCAN_B is not outward of MELO_B")
-        check(scan_l >= 1.0 and scan_r <= g.W - 1.0,
-              f"{c.enum}: SCAN leaves panel ({scan_l:.2f}..{scan_r:.2f})")
-
-
-def test_sampler_centred_captions_hand_their_centring_to_the_pair():
-    """SUB is centred below its knob, so the PAIR takes over that
-    centring -- otherwise adding a word would shove the caption off its knob.
-    MELODY is excluded: its caption is placed radially and keeps its anchor."""
-    for suffix in ('_A', '_B'):
-        for base, word in SAMPLER_CAPTIONS:
-            if base in g.SAMPLER_RADIAL:
-                continue
-            c = ctl(base + suffix)
-            _lx, _ly, anchor, _size, _col = g.label_of(c)
-            want_anchor = 'end' if suffix == '_A' else 'start'
-            check(anchor == want_anchor,
-                  f"{c.enum}: caption anchored {anchor!r}, want {want_anchor!r}")
-            left, right = inline_span(c, word)
-            check(approx((left + right) / 2.0, c.x),
-                  f"{c.enum}: pair centred at {(left + right) / 2.0:.2f}, "
-                  f"knob at {c.x:.2f}")
 
 
 def wedge_points(svg):
@@ -1866,18 +2189,6 @@ def test_all_deck_local_geometry_is_exactly_mirrored():
             check(a.kind == b.kind and approx(b.x, g.W - a.x) and approx(b.y, a.y),
                   f"{a.enum}/{b.enum}: light coordinates are not mirrored")
 
-    for base, word in SAMPLER_CAPTIONS:
-        a = sampler_text(word, ctl(base + '_A'))
-        b = sampler_text(word, ctl(base + '_B'))
-        check(a is not None and b is not None, f"{base}: missing sampler alias pair")
-        if a is None or b is None:
-            continue
-        check(approx(b[0], g.W - a[0]) and approx(b[1], a[1]),
-              f"{base}: {word} coordinates are not mirrored")
-        check(b[5] == flip[a[5]], f"{base}: {word} anchors are not mirrored")
-        check(a[2:5] == b[2:5] and a[6] == b[6],
-              f"{base}: {word} alias styling differs")
-
     for name, a0, a1, _caption in g.SECTORS:
         a_points = wedge_points(g.wedge_svg(g.RING_CX_A, a0, a1, g.GREEN, False))
         b_points = wedge_points(
@@ -1903,58 +2214,10 @@ def test_all_deck_local_geometry_is_exactly_mirrored():
           "PLAY field records are not mirrored")
 
 
-def test_sampler_radial_caption_did_not_move():
-    """MELODY's caption position is measured, not free -- orbit_label puts it
-    outside the knob so nothing lands between knob and LED ring, and pushing a
-    second line further out ended at the plate edge. Adding SCAN beside it must
-    therefore leave MELO exactly where orbit_label puts it."""
-    for base in g.SAMPLER_RADIAL:
-        for suffix, mir in (('_A', False), ('_B', True)):
-            c = ctl(base + suffix)
-            cx = g.W - g.RING_CX_A if mir else g.RING_CX_A
-            want = g.orbit_label(cx, g.RING_CY, g.ORBIT_ANG[base], mir)
-            got = g.label_of(c)
-            check(all(approx(a, b) if isinstance(a, float) else a == b
-                      for a, b in zip(got, want)),
-                  f"{c.enum}: caption moved to {got}, orbit_label says {want}")
-
-
-def test_sampler_inline_pairs_fit_the_voice_row():
-    """The pair is wider than the caption was, so it has to be shown to still
-    fit: inside the VOICE box on both sides, and clear of the neighbouring
-    VOICE-row captions it grew towards."""
-    voice_a = next(gr for gr in g.GROUPS if gr[4] == 'VOICE' and gr[0] < g.CX)
-    voice_b = next(gr for gr in g.GROUPS if gr[4] == 'VOICE' and gr[0] > g.CX)
-    blocks = []
-    for suffix, box in (('_A', voice_a), ('_B', voice_b)):
-        for base, word in ((b, w) for b, w in SAMPLER_CAPTIONS
-                           if b not in g.SAMPLER_RADIAL):
-            c = ctl(base + suffix)
-            left, right = inline_span(c, word)
-            _lx, ly, _anchor, _size, _colour = g.label_of(c)
-            check(left >= box[0] + 0.5 and right <= box[0] + box[2] - 0.5,
-                  f"{c.enum}: pair {left:.2f}..{right:.2f} leaves the VOICE box "
-                  f"{box[0]:.2f}..{box[0] + box[2]:.2f}")
-            blocks.append((c.enum, ly, left, right))
-    # ...and against every OTHER caption on that row, inline or not.
-    plain = []
-    for enum in ('RES_A', 'RES_B'):
-        c = ctl(enum)
-        lx, ly, _a, size, _col = g.label_of(c)
-        half = g.text_w(c.label, size) / 2.0
-        plain.append((enum, ly, lx - half, lx + half))
-    for name, y0, l0, r0 in blocks:
-        for other, y1, l1, r1 in blocks + plain:
-            if other == name or not approx(y0, y1):
-                continue
-            check(r0 <= l1 - 0.8 or l0 >= r1 + 0.8,
-                  f"{name} ({l0:.2f}..{r0:.2f}) crowds {other} ({l1:.2f}..{r1:.2f})")
-
-
-def test_source_caption_geometry_for_every_engine_state():
-    """TIMB/ORG/FRAME share one generated label box that stays inside VOICE
-    and clear of the neighbouring SUB/RES glyphs and captions on both parts."""
-    captions = getattr(g, "SOURCE_CAPTIONS", {})
+def test_dynamic_caption_geometry_for_every_state():
+    """Every state-dependent word stays inside its fieldset and clear of the
+    neighbouring glyphs and captions, on both decks. A caption that is only
+    correct in one state is not correct."""
     voice_a = next(gr for gr in g.GROUPS if gr[4] == "VOICE" and gr[0] < g.CX)
     voice_b = next(gr for gr in g.GROUPS if gr[4] == "VOICE" and gr[0] > g.CX)
 
@@ -1968,25 +2231,30 @@ def test_source_caption_geometry_for_every_engine_state():
         bl, bt, br, bb = b
         return ar + gap <= bl or br + gap <= al or ab + gap <= bt or bb + gap <= at
 
-    for suffix, box in (("_A", voice_a), ("_B", voice_b)):
-        source = ctl("SOURCE" + suffix)
-        for state, word in captions.items():
-            bounds = label_box(source, word)
-            left, top, right, bottom = bounds
-            check(left >= box[0] + 0.5 and right <= box[0] + box[2] - 0.5
-                  and top >= box[1] + 0.5 and bottom <= box[1] + box[3] - 0.5,
-                  f"SOURCE{suffix} state {state} {word} leaves VOICE: {bounds}")
-            for base in ("SUB", "RES"):
-                other = ctl(base + suffix)
-                # Caption rectangle against the neighbouring circular control.
-                near_x = min(max(other.x, left), right)
-                near_y = min(max(other.y, top), bottom)
-                distance = math.hypot(near_x - other.x, near_y - other.y)
-                check(distance >= g.GLYPH_R[other.kind] + 0.3,
-                      f"SOURCE{suffix} {word} crowds {other.enum} control")
-                other_bounds = label_box(other, other.label)
-                check(boxes_clear(bounds, other_bounds, 0.8),
-                      f"SOURCE{suffix} {word} crowds {other.enum} label")
+    for target in ("SOURCE", "SUB", "DECAY", "RES", "FILT", "ATTACK"):
+        words = g.dynamic_words(target)
+        for suffix, box in (("_A", voice_a), ("_B", voice_b)):
+            source = ctl(target + suffix)
+            for state, word in enumerate(words):
+                bounds = label_box(source, word)
+                left, top, right, bottom = bounds
+                check(left >= box[0] + 0.5 and right <= box[0] + box[2] - 0.5
+                      and top >= box[1] + 0.5 and bottom <= box[1] + box[3] - 0.5,
+                      f"{target}{suffix} state {state} {word} leaves VOICE: {bounds}")
+                for base in ("ATTACK", "DECAY", "RES", "SUB", "FILT", "SOURCE"):
+                    if base == target:
+                        continue
+                    other = ctl(base + suffix)
+                    # Caption rectangle against the neighbouring circular control.
+                    near_x = min(max(other.x, left), right)
+                    near_y = min(max(other.y, top), bottom)
+                    distance = math.hypot(near_x - other.x, near_y - other.y)
+                    check(distance >= g.GLYPH_R[other.kind] + 0.3,
+                          f"{target}{suffix} {word} crowds {other.enum} control")
+                    widest = max(g.dynamic_words(base) or [other.label], key=len)
+                    other_bounds = label_box(other, widest)
+                    check(boxes_clear(bounds, other_bounds, 0.8),
+                          f"{target}{suffix} {word} crowds {other.enum} label")
 
 
 def test_panel_texts_stay_on_the_plate():

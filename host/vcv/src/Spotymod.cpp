@@ -96,6 +96,20 @@ struct DetuneQuantity : ParamQuantity {
     }
 };
 
+// MELODY tooltip: the job changes with the deck's own ENG (spec 2026-08-03
+// vcv-engine-aware-captions) -- Variation off the Sampler, Scan on it, the
+// same split the faceplate caption (VARY/SCAN) draws. Resolves its own deck
+// from paramId (MELODY_A vs MELODY_B), never a hardcoded one, so A and B
+// report independently and a part never reads the other part's ENG.
+struct MelodyQuantity : ParamQuantity {
+    std::string getLabel() override {
+        if (!module) return "Variation";
+        const int engineId = paramId == MELODY_B ? ENGINE_B : ENGINE_A;
+        const int eng = (int)std::lround(module->params[engineId].getValue());
+        return eng == 1 ? "Scan" : "Variation";
+    }
+};
+
 struct ParamMenuSlider : ui::Slider {
     explicit ParamMenuSlider(ParamQuantity* pq) {
         box.size.x = 180.f;
@@ -276,8 +290,10 @@ struct Spotymod : Module {
                     else
                         configParam(c.id, 0.f, 1.f, init, lbl);
                     break;
-                case WK_KNOBC:  // MELO (bipolar): both decks loop — A drifts a little, B is frozen
-                    configParam(c.id, -1.f, 1.f, init, lbl); break;
+                case WK_KNOBC:  // MELODY (bipolar): both decks loop — A drifts a
+                                // little, B is frozen. Tooltip name follows ENG
+                                // through MelodyQuantity.
+                    configParam<MelodyQuantity>(c.id, -1.f, 1.f, init, lbl); break;
                 case WK_KNOBI:
                     if (c.id == SCALE)  // init patch is Lydian -- the bright end of group A
                         configParam<ScaleQuantity>(c.id, 0.f, (float)(spky::SCALE_LIST_COUNT - 1),
@@ -421,7 +437,6 @@ struct Spotymod : Module {
             inst.set_density(p, pp(DENSITY_A, p));
             inst.set_smooth(p, pp(SMOOTH_A, p));
             inst.set_range(p, pp(RANGE_A, p));
-            inst.set_variation(p, pp(MELODY_A, p));          // -1..+1 RENEW<-LOOP->GROW
             inst.set_depth(p, pp(MOD_A, p));
             inst.set_tune(p, pp(TUNE_A, p));
 
@@ -538,13 +553,14 @@ struct Spotymod : Module {
             // job of their own. The param ids do not change, so no saved
             // patch moves; only what the knob means when ENG says Sampler.
             //
-            // set_variation and set_density above keep firing unconditionally
-            // -- the "push to both, let the inactive side ignore it" pattern
-            // the voice row already uses. DENS is the one knob that genuinely
-            // does two things in sampler STEP mode: it still thins the groove
-            // gate AND now sets grain overlap. Both point the same direction
-            // (sparser), so this is left as-is and flagged for the listening
-            // pass rather than special-cased.
+            // set_density above keeps firing unconditionally -- the "push to
+            // both, let the inactive side ignore it" pattern the voice row
+            // already uses. set_variation left that pattern when MELODY became
+            // SCAN-only on a Sampler deck (spec 2026-08-03); it is pushed
+            // below, behind the same samplerPart gate. DENS is the one knob
+            // that genuinely does two things in sampler STEP mode: it still
+            // thins the groove gate AND now sets grain overlap. Both point the
+            // same direction (sparser), so this is left as-is.
             const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;
             inst.sampler_overlap(p, pp(DENSITY_A, p));
             inst.set_target_base(p, spky::LANE_SOURCE, pp(SOURCE_A, p));
@@ -619,6 +635,16 @@ struct Spotymod : Module {
             // dicht zu bekommen verlangt genau das persistente Gedaechtnis,
             // das dort ausgeschlossen ist. Offen fuer den Autor des
             // Instruments, nicht fuer die Engine.
+            //
+            // MELODY is one knob with one meaning per engine (spec 2026-08-03
+            // vcv-engine-aware-captions): VARY off the Sampler, SCAN on it.
+            // Both jobs at once is why SCAN had to be printed permanently
+            // beside MELO. Variation parks at 0 (LOOP) here, the same shape
+            // as the LANE_SIZE gate below, which parks at 0.5f off the
+            // Sampler. The cost is deliberate and recorded in the spec: a
+            // Sampler deck no longer renews its phrases on its own, and NEW
+            // is the gesture that asks for a fresh pair.
+            inst.set_variation(p, samplerPart ? 0.f : pp(MELODY_A, p));
             if (samplerPart) inst.sampler_scan(p, pp(MELODY_A, p));
 
             // GENE SIZE rides the lane base only in the sampler. The else
@@ -1189,11 +1215,6 @@ struct SpkyRing : Widget {
 // Rack can never drift apart. Font is a stock Rack asset, present in every
 // v2 install -- note it has no bold cut, so the SVG's bold legends render
 // regular here. That is accepted.
-static const char* sourceCaption(int state) {
-    return state == 1 ? "ORG" : state == 2 ? "FRAME"
-         : state == 3 ? "MATL" : state == 4 ? "DRIVE" : "TIMB";
-}
-
 static int roundedEngineState(Spotymod* module, int engineId) {
     return module
         ? static_cast<int>(std::round(module->params[engineId].getValue()))
@@ -1204,14 +1225,60 @@ static bool isBbdSelected(Spotymod* module, int engineId) {
     return roundedEngineState(module, engineId) == 4;
 }
 
-struct EngineExclusiveTrimpot : Trimpot {
+// One definition of "this deck is running the Sampler", shared by the REC
+// pad's visibility rule (ctlVisible below) and the REC LED's (SamplerOnly
+// below). Duplicating the comparison would let the two drift, and this
+// file's guards match on source text, so a second copy of an expression can
+// also silently redirect a mutation test elsewhere.
+static bool samplerDeck(Spotymod* m, int engineId) {
+    return roundedEngineState(m, engineId) == 1;
+}
+
+// A control is visible only where it does something. Two share the upper-left
+// VOICE coordinate -- ATTACK on four engines, STAGES on the BBD -- so only one
+// may ever draw there. REC has a coordinate of its own but no job outside the
+// Sampler: pushParams gates it on the exact Sampler engine id, and its LED is
+// already dark elsewhere, so the pad was the last thing still claiming
+// otherwise.
+static bool ctlVisible(Spotymod* m, int id) {
+    switch (id) {
+        case ATTACK_A: return !isBbdSelected(m, ENGINE_A);
+        case ATTACK_B: return !isBbdSelected(m, ENGINE_B);
+        case STAGES_A: return  isBbdSelected(m, ENGINE_A);
+        case STAGES_B: return  isBbdSelected(m, ENGINE_B);
+        case REC_A: return samplerDeck(m, ENGINE_A);
+        case REC_B: return samplerDeck(m, ENGINE_B);
+        default:       return true;
+    }
+}
+
+// Widget half of ctlVisible. The caption loop and the widget must answer the
+// same question from the same place, or a control can be hidden while its
+// word is still drawn.
+template <typename W>
+struct SlotVisible : W {
     Spotymod* spotymod = nullptr;
-    int engineId = ENGINE_A;
-    bool bbdOnly = false;
+    int ctlId = 0;
 
     void step() override {
-        setVisible(isBbdSelected(spotymod, engineId) == bbdOnly);
-        Trimpot::step();
+        this->setVisible(ctlVisible(spotymod, ctlId));
+        W::step();
+    }
+};
+
+// The LED half of the Sampler-only rule. It takes the deck's ENGINE PARAM id,
+// not the light's own id: a LightId is a different enum from a ParamId and the
+// two spaces must never meet (REC_A_L == 2 == DENSITY_A). See the captions
+// note further below (PanelText's `dynamic` flag) for what happened the last
+// time an id crossed enum spaces here.
+template <typename W>
+struct SamplerOnly : W {
+    Spotymod* spotymod = nullptr;
+    int engineId = ENGINE_A;
+
+    void step() override {
+        this->setVisible(samplerDeck(spotymod, engineId));
+        W::step();
     }
 };
 
@@ -1239,56 +1306,52 @@ struct PanelText : Widget {
             return a == 1 ? NVG_ALIGN_LEFT : a == 2 ? NVG_ALIGN_RIGHT
                                                     : NVG_ALIGN_CENTER;
         };
-        auto captions = [&](const PanelCtl* t, size_t n) {
+        // Every caption that depends on state resolves here, out of the
+        // generated table. Position, anchor, size and colour still come from
+        // the same PanelCtl, so a dynamic word can never land anywhere its
+        // resting word would not have.
+        auto caption = [&](const PanelCtl& c) -> const char* {
+            for (const auto& d : kDynCaptions) {
+                if (d.id != c.id) continue;
+                if (!module) return d.words[0];   // browser preview = Synth
+                int v = (int)std::round(module->params[d.driverId].getValue());
+                if (v < 0) v = 0;
+                if (v >= d.count) v = d.count - 1;
+                return d.words[v];
+            }
+            return c.label;
+        };
+        // PanelCtl::id is a different enum per table -- a ParamId in
+        // kParamCtls, an InputId in kInputCtls, an OutputId in kOutputCtls --
+        // and all three start counting at 0. kDynCaptions/ctlVisible only
+        // know about ParamIds, so resolving them against an Input/OutputId
+        // is not "the same id, different table": it is a coincidence that a
+        // jack id happens to equal some param's id, and the caption for that
+        // unrelated param would draw on the jack instead. The `dynamic` flag
+        // keeps that lookup inside the param id-space it was built for; do
+        // not "simplify" it away by calling caption()/ctlVisible() for every
+        // table unconditionally.
+        auto captions = [&](const PanelCtl* t, size_t n, bool dynamic) {
             for (size_t i = 0; i < n; ++i) {
-                if (!t[i].label[0] || t[i].id == SOURCE_A || t[i].id == SOURCE_B
-                        || t[i].id == ATTACK_A || t[i].id == ATTACK_B
-                        || t[i].id == STAGES_A || t[i].id == STAGES_B)
-                    continue;
+                if (!t[i].label[0]) continue;
+                if (dynamic && !ctlVisible(module, t[i].id)) continue;
                 nvgTextAlign(args.vg, alignOf(t[i].anchor) | NVG_ALIGN_BASELINE);
                 text(t[i].lbl.x, t[i].lbl.y, t[i].lblSize, col(t[i].lblRgb),
-                     t[i].label);
+                     dynamic ? caption(t[i]) : t[i].label);
             }
             nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_BASELINE);
         };
-        captions(kParamCtls,  sizeof(kParamCtls)  / sizeof(kParamCtls[0]));
-        captions(kInputCtls,  sizeof(kInputCtls)  / sizeof(kInputCtls[0]));
-        captions(kOutputCtls, sizeof(kOutputCtls) / sizeof(kOutputCtls[0]));
-
-        auto sourceCaptionAt = [&](int sourceId, int engineId) {
-            const PanelCtl* source = nullptr;
-            for (const auto& c : kParamCtls) {
-                if (c.id == sourceId) {
-                    source = &c;
-                    break;
-                }
-            }
-            if (!source) return;
-            const int state = roundedEngineState(module, engineId);
-            nvgTextAlign(args.vg, alignOf(source->anchor) | NVG_ALIGN_BASELINE);
-            text(source->lbl.x, source->lbl.y, source->lblSize,
-                 col(source->lblRgb), sourceCaption(state));
-        };
-        sourceCaptionAt(SOURCE_A, ENGINE_A);
-        sourceCaptionAt(SOURCE_B, ENGINE_B);
-
-        auto attackPitchCaptionAt = [&](int attackId, int engineId) {
-            const PanelCtl* attack = nullptr;
-            for (const auto& c : kParamCtls)
-                if (c.id == attackId) { attack = &c; break; }
-            if (!attack) return;
-            nvgTextAlign(args.vg, alignOf(attack->anchor) | NVG_ALIGN_BASELINE);
-            text(attack->lbl.x, attack->lbl.y, attack->lblSize,
-                 col(attack->lblRgb), isBbdSelected(module, engineId) ? "PITCH" : "ATK");
-        };
-        attackPitchCaptionAt(ATTACK_A, ENGINE_A);
-        attackPitchCaptionAt(ATTACK_B, ENGINE_B);
+        captions(kParamCtls,  sizeof(kParamCtls)  / sizeof(kParamCtls[0]),  true);
+        captions(kInputCtls,  sizeof(kInputCtls)  / sizeof(kInputCtls[0]),  false);
+        captions(kOutputCtls, sizeof(kOutputCtls) / sizeof(kOutputCtls[0]), false);
 
         // section titles + brand -- the shared TEXTS table from the generator,
-        // so runtime lettering matches the SVG preview one-to-one
-        // ... plus the sampler captions, which inherit the anchor of the
-        // caption they sit under -- MELO/SCAN is right-aligned on part A and
-        // left-aligned on B, so this table carries an anchor like PanelCtl.
+        // so runtime lettering matches the SVG preview one-to-one. PanelTxt
+        // carries the same (x, y, anchor, size, colour) shape as PanelCtl.lbl
+        // for that reason alone: every row here sits middle-anchored. What
+        // actually needs a non-middle anchor is PanelCtl's own lettering --
+        // the radial orbit captions and the white-on-well jack labels --
+        // not anything drawn from this table.
         for (const auto& t : kPanelTexts) {
             nvgTextLetterSpacing(args.vg, mm2px(t.spacing));
             nvgTextAlign(args.vg, alignOf(t.anchor) | NVG_ALIGN_BASELINE);
@@ -1346,12 +1409,10 @@ struct SpotymodWidget : ModuleWidget {
                 case WK_SMKNOB: case WK_KNOBI:
                     if (c.id == ATTACK_A || c.id == ATTACK_B
                             || c.id == STAGES_A || c.id == STAGES_B) {
-                        auto* knob = createParamCentered<EngineExclusiveTrimpot>(
+                        auto* knob = createParamCentered<SlotVisible<Trimpot>>(
                             pos, module, c.id);
                         knob->spotymod = module;
-                        knob->engineId = (c.id == ATTACK_B || c.id == STAGES_B)
-                            ? ENGINE_B : ENGINE_A;
-                        knob->bbdOnly = c.id == STAGES_A || c.id == STAGES_B;
+                        knob->ctlId = c.id;
                         addParam(knob);
                     }
                     else {
@@ -1363,6 +1424,13 @@ struct SpotymodWidget : ModuleWidget {
                 case WK_LATCH:
                     if (c.id == ENGINE_A || c.id == ENGINE_B)
                         addParam(createParamCentered<EngineCycleLatch>(pos, module, c.id));
+                    else if (c.id == REC_A || c.id == REC_B) {
+                        auto* pad = createParamCentered<SlotVisible<VCVLatch>>(
+                            pos, module, c.id);
+                        pad->spotymod = module;
+                        pad->ctlId = c.id;
+                        addParam(pad);
+                    }
                     else
                         addParam(createParamCentered<VCVLatch>(pos, module, c.id));
                     break;
@@ -1377,8 +1445,13 @@ struct SpotymodWidget : ModuleWidget {
             addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
         for (const auto& c : kLightCtls) {
             Vec pos = mm2px(Vec(c.mm.x, c.mm.y));
-            if (c.id == REC_A_L || c.id == REC_B_L)   // record = red, the one
-                addChild(createLightCentered<SmallLight<RedLight>>(pos, module, c.id));
+            if (c.id == REC_A_L || c.id == REC_B_L) {   // record = red, Sampler-only
+                auto* led = createLightCentered<SamplerOnly<SmallLight<RedLight>>>(
+                    pos, module, c.id);
+                led->spotymod = module;
+                led->engineId = (c.id == REC_A_L) ? ENGINE_A : ENGINE_B;
+                addChild(led);
+            }
             else                                       // gate glow = warm signal hue
                 addChild(createLightCentered<MediumLight<YellowLight>>(pos, module, c.id));
         }
