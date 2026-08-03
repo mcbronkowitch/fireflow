@@ -437,3 +437,20 @@ TEST_CASE("reverb: clear() empties the room but keeps the parameter state") {
     for (int i = 0; i < 9600; ++i) { rv.process(0.f, 0.f, l, r); energy2 += l * l + r * r; }
     CHECK(energy2 > 1e-6f);
 }
+
+TEST_CASE("reverb: return_level reads 0 fresh, rises with a bloom, forgets on clear") {
+    s_rev.init(48000.f);
+    CHECK(s_rev.return_level() == 0.f);
+    s_rev.set_decay(1.f);                     // 110% loop gain: self-driving
+    for (int i = 0; i < 48000 * 6; ++i) {
+        float wl = 0.f, wr = 0.f;
+        float in = (i < 4800) ? 0.5f : 0.f;   // 100 ms burst seeds the room
+        s_rev.process(in, in, wl, wr);
+    }
+    // Post-ceiling plateau sits near 0.55 (knee 0.45 + overshoot/7). The
+    // bound is loose on purpose: this pins "well above the duck threshold",
+    // not a render checksum.
+    CHECK(s_rev.return_level() > 0.3f);
+    s_rev.clear();
+    CHECK(s_rev.return_level() == 0.f);       // clear() forgets the ride
+}

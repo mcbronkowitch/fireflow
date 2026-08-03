@@ -38,6 +38,10 @@ public:
     // outside, a ride is indistinguishable from a quieter room, so this is the
     // only way to check that quiet material is passed through untouched.
     float limiter_gain() const { return _lim_gain; }
+    // The level the room is handing the master right now: the seconds-slow
+    // return peak times the ceiling's own ride. The bloom duck (Instrument)
+    // reads this as its envelope. 0.0 on a fresh or cleared room.
+    float return_level() const { return _wet_peak * _lim_gain; }
 
 private:
     clouds::Oliverb _verb;
