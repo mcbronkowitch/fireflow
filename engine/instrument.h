@@ -314,7 +314,23 @@ private:
     // 1.0 whenever it is not ducking -- guarded by a test, like the return
     // ceiling's limiter_gain().
     float _duck_gain = 1.f, _duck_target = 1.f;
-    float _duck_down = 0.f, _duck_up = 0.f;   // asymmetric slew, set in init()
+    // The residual itself (_duck_gain - _duck_target), maintained as its own
+    // float and decayed by a pure multiply each sample: `_duck_residual *=
+    // keep`. This is the state; `_duck_gain` is only ever a read-out
+    // (`_duck_target + _duck_residual`), recomputed fresh and never fed back.
+    // That split matters -- rebuilding the residual every sample by
+    // subtracting target from an already-rounded _duck_gain is algebraically
+    // the same update, but the intervening addition rounds the residual to
+    // target's own ulp (~1.2e-7 near 1.0) before the next sample can act on
+    // it, so it stalls at the exact same point the naive additive form
+    // g += c*(t-g) does (measured and float32-simulated: both park ~0.994
+    // forever after a bloom at 48 kHz). A pure multiply has no such
+    // absorption step, so this one actually reaches the target in finite
+    // time. Re-based onto a moved target in process() -- see there.
+    float _duck_residual = 0.f;
+    // Residual-form one-pole coefficients (the fraction of the gap KEPT each
+    // sample): _duck_residual *= keep. Set in init().
+    float _duck_keep_down = 1.f, _duck_keep_up = 1.f;
     // Who controls the room: below unity loop gain the player does (never
     // duck, at any level -- an ordinary long room legitimately returns +6 dB
     // over its send, overlapping the bloom's +7.6 dB, so LEVEL cannot tell

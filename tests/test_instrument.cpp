@@ -1287,6 +1287,22 @@ TEST_CASE("instrument duck: sub-unity DECAY releases the duck even while the roo
     // seconds of the 4 s up-slew rise at least (1-g0)*(1-1/e) > 0.1.
     CHECK(monotone);
     CHECK(g > g0 + 0.1f);
+
+    // Eventual exact recovery (residual-form slew, _duck_residual persisted
+    // as its own state and decayed by a pure multiply -- see instrument.h/
+    // .cpp): kill the sends and drop into a sub-unity room, then render long
+    // past the up time constant. Unlike the additive form g += c*(t-g) --
+    // and unlike a residual reconstructed from an already-rounded gain each
+    // sample, which is algebraically the same update and stalls the same
+    // way -- the persisted residual has no addition in its per-sample decay,
+    // so it is not bounded by the target's rounding grid: it keeps shrinking
+    // until it underflows below half the target's ulp, at which point the
+    // read-out g = target + residual rounds to exactly the target.
+    for (int p = 0; p < PART_COUNT; ++p) inst.set_fx_target_base(p, FXT_REV_SEND, 0.f);
+    inst.set_reverb_decay(0.5f);
+    for (int i = 0; i < 45000; ++i)                  // 90 s post-disarm
+        inst.process(nullptr, nullptr, l.data(), r.data(), 96);
+    CHECK(inst.duck_gain() == 1.f);
 }
 
 TEST_CASE("instrument duck: the gain never steps -- per-sample delta is slew-bounded") {

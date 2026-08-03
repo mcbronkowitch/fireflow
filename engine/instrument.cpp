@@ -66,11 +66,12 @@ void Instrument::init(float sample_rate, const FxMem& mem) {
     _rev_asleep = false;
     _duck_gain = 1.f;
     _duck_target = 1.f;
+    _duck_residual = 0.f;
     _duck_armed = false;   // set_reverb_decay() re-arms on the next param push
     set_reverb_mix(kDefaultReverbMix);   // convenience overload -> both decks
     _limiter.init();
-    _duck_down = 1.f - std::exp(-1.f / (kDuckDownS * sample_rate));
-    _duck_up   = 1.f - std::exp(-1.f / (kDuckUpS * sample_rate));
+    _duck_keep_down = std::exp(-1.f / (kDuckDownS * sample_rate));
+    _duck_keep_up   = std::exp(-1.f / (kDuckUpS * sample_rate));
     _center.init(sample_rate, 0x5ce47e12u);
     _ctrl_ctr = 0;
     set_tempo_bpm(_bpm);
@@ -135,15 +136,22 @@ void Instrument::process(const float* inL, const float* inR,
             // Bloom duck target (spec 2026-08-03): feedforward from the
             // room's own return envelope -- seconds-slow by construction,
             // so it cannot pump the way the dead return-side rides did.
+            float new_duck_target = 1.f;
             if (_reverb && _duck_armed) {
                 const float env = _reverb->return_level();
-                _duck_target = env <= kDuckThresh
+                new_duck_target = env <= kDuckThresh
                     ? 1.f
                     : 1.f - (1.f - kDuckFloor)
                           * std::min(1.f, (env - kDuckThresh)
                                               / (kDuckFull - kDuckThresh));
-            } else {
-                _duck_target = 1.f;
+            }
+            // Re-base the residual onto the new target when (and only when)
+            // the target actually moves -- see _duck_residual's declaration
+            // in instrument.h for why this, not a per-sample rebuild, is what
+            // keeps the slew from stalling.
+            if (new_duck_target != _duck_target) {
+                _duck_residual += _duck_target - new_duck_target;
+                _duck_target = new_duck_target;
             }
             _ctrl_ctr = Center::kCtrlInterval;
         }
@@ -230,6 +238,7 @@ void Instrument::process(const float* inL, const float* inR,
                 }
                 _duck_gain = 1.f;
                 _duck_target = 1.f;
+                _duck_residual = 0.f;
                 _rev_primed = true;
             }
             const float dga = _rev_dry[PART_A].process(_rev_dry_target[PART_A]);
@@ -243,8 +252,28 @@ void Instrument::process(const float* inL, const float* inR,
             // _deck_tap, which must not starve when the bloom peaks.
             // Per-sample ride toward the raster target. When idle both are
             // exactly 1.0 and this is a multiply-add by zero.
-            _duck_gain += (_duck_target < _duck_gain ? _duck_down : _duck_up)
-                          * (_duck_target - _duck_gain);
+            //
+            // NOT g = target + (g - target) * keep computed from the ROUNDED
+            // g each sample: that reconstructs the residual by re-adding it
+            // to target every sample, and the addition rounds the residual to
+            // target's own precision grid (ulp ~1.2e-7 near 1.0) before the
+            // *next* sample ever sees it -- so it stalls at the exact same
+            // ~0.994 (measured, 48 kHz) as the additive form g += c*(t-g)
+            // it was meant to replace; the two are algebraically identical
+            // and share the same rounding failure (verified both ways with a
+            // float32 simulation before writing this). `_duck_residual`
+            // instead persists as its OWN float, decayed by a pure
+            // multiply -- no addition, so no absorption -- and is only
+            // re-based onto target up above, once per control tick and only
+            // when the target actually moves. `_duck_gain` here is a fresh
+            // read-out, never fed back as state, so it correctly rounds to
+            // exactly `_duck_target` once the residual's magnitude drops
+            // below half its ulp -- which happens in finite time because the
+            // state itself never stalls.
+            const float keep = _duck_target < _duck_gain ? _duck_keep_down
+                                                         : _duck_keep_up;
+            _duck_residual *= keep;
+            _duck_gain = _duck_target + _duck_residual;
             l = (al * ga * dga + bl * gb * dgb) * _duck_gain;
             r = (ar * ga * dga + br * gb * dgb) * _duck_gain;
             if (!_rev_asleep) {
