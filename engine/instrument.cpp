@@ -42,6 +42,8 @@ constexpr float kDuckFloor  = 0.316f; // -10 dB: makes room, does not mute
 // little faster than the 2-3 s swell it answers; up slower still.
 constexpr float kDuckDownS = 1.5f;
 constexpr float kDuckUpS   = 4.0f;
+
+constexpr float kRevReturnFadeS = 0.15f;  // ear-tunable: tail fade-out before the room sleeps
 }
 
 void Instrument::init(float sample_rate) { init(sample_rate, FxMem{}); }
@@ -64,6 +66,8 @@ void Instrument::init(float sample_rate, const FxMem& mem) {
     }
     _rev_primed = false;
     _rev_asleep = false;
+    _rev_return_gain = 1.f;
+    _rev_return_step = 1.f / (kRevReturnFadeS * sample_rate);
     _duck_gain = 1.f;
     _duck_target = 1.f;
     _duck_residual = 0.f;
@@ -239,6 +243,7 @@ void Instrument::process(const float* inL, const float* inR,
                 _duck_gain = 1.f;
                 _duck_target = 1.f;
                 _duck_residual = 0.f;
+                _rev_return_gain = 1.f;
                 _rev_primed = true;
             }
             const float dga = _rev_dry[PART_A].process(_rev_dry_target[PART_A]);
@@ -283,12 +288,21 @@ void Instrument::process(const float* inL, const float* inR,
                 float wl, wr;
                 _reverb->process(asl * ga * wga + bsl * gb * wgb,
                                  asr * ga * wga + bsr * gb * wgb, wl, wr);
-                l += wl;   // wl already carries kWetGain; the return joins at unity
-                r += wr;
-                if (wga == 0.f && wgb == 0.f &&
-                    _rev_wet_target[PART_A] == 0.f && _rev_wet_target[PART_B] == 0.f) {
+                const bool closing = wga == 0.f && wgb == 0.f &&
+                    _rev_wet_target[PART_A] == 0.f && _rev_wet_target[PART_B] == 0.f;
+                if (closing) {
+                    _rev_return_gain -= _rev_return_step;      // linear, exact zero
+                    if (_rev_return_gain < 0.f) _rev_return_gain = 0.f;
+                } else if (_rev_return_gain < 1.f) {
+                    _rev_return_gain += _rev_return_step;      // reopened mid-fade
+                    if (_rev_return_gain > 1.f) _rev_return_gain = 1.f;
+                }
+                l += wl * _rev_return_gain;  // wl already carries kWetGain; the return joins at unity
+                r += wr * _rev_return_gain;
+                if (closing && _rev_return_gain == 0.f) {
                     _reverb->clear();        // clear-on-sleep: waking starts empty
                     _rev_asleep = true;      // Oliverb CPU is off until a MIX reopens
+                    _rev_return_gain = 1.f;  // room is empty; the next wake starts at unity
                 }
             }
             // asleep: dga/dgb have snapped to 1 (both decks mix 0), so l/r stay full dry

@@ -471,8 +471,8 @@ TEST_CASE("instrument M4.8: MIX 0 sleeps the room, any MIX > 0 wakes it") {
     fx.process(nullptr, nullptr, &l, &r, 1);
     CHECK(!fx.reverb_asleep());            // boot mix 0.25: awake
     fx.set_reverb_mix(0.f);                // runtime fade-out -> sleep
-    for (int i = 0; i < 9600; ++i) fx.process(nullptr, nullptr, &l, &r, 1);
-    CHECK(fx.reverb_asleep());             // 0.2 s >> the 10 ms glide + snap
+    for (int i = 0; i < 14400; ++i) fx.process(nullptr, nullptr, &l, &r, 1);
+    CHECK(fx.reverb_asleep());             // 0.3 s >> the 10 ms glide + 150 ms fade
     fx.set_reverb_mix(0.4f);
     CHECK(!fx.reverb_asleep());            // waking is immediate
 }
@@ -1395,4 +1395,37 @@ TEST_CASE("instrument duck: re-init forgets the duck") {
     REQUIRE(inst.duck_gain() < 0.9f);       // precondition: visibly ducked
     duck_bloom_rig(inst);                   // re-init: a new patch starts clean
     CHECK(inst.duck_gain() == 1.f);         // exactly, before any process()
+}
+
+TEST_CASE("instrument: closing REVERB MIX fades the tail instead of cutting it") {
+    Instrument plain;                  // dry twin: same seeds, no FX memory
+    plain.init(48000.f);
+    Instrument fx;
+    fx.init(48000.f, test_fx_mem());
+    fx.set_reverb_mix(0.6f);
+    float pl, pr, fl, fr;
+    for (int i = 0; i < 96000; ++i) {  // 2 s: fill the room
+        plain.process(nullptr, nullptr, &pl, &pr, 1);
+        fx.process(nullptr, nullptr, &fl, &fr, 1);
+    }
+    REQUIRE(!fx.reverb_asleep());
+    fx.set_reverb_mix(0.f);
+    // |fx - plain| is the wet residual: past the 10 ms dry-gain glide the
+    // dry paths are identical (duck disarmed — set_reverb_decay never ran).
+    float win[32] = {};
+    int slept_at = -1;
+    for (int i = 0; i < 96000; ++i) {
+        plain.process(nullptr, nullptr, &pl, &pr, 1);
+        fx.process(nullptr, nullptr, &fl, &fr, 1);
+        win[i % 32] = std::max(std::fabs(fl - pl), std::fabs(fr - pr));
+        if (fx.reverb_asleep()) { slept_at = i; break; }
+    }
+    REQUIRE(slept_at > 0);
+    // 1) the room may only sleep after the ~150 ms return fade has run
+    //    (today the clear lands ~66-76 ms after the knob: FAIL)
+    CHECK(slept_at > static_cast<int>(0.15f * 48000.f));
+    // 2) whatever tail was left at the clear had been faded to nothing
+    float worst = 0.f;
+    for (float v : win) worst = std::max(worst, v);
+    CHECK(worst < 0.005f);
 }

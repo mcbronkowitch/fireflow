@@ -309,6 +309,11 @@ private:
     OnePole _rev_dry[PART_COUNT], _rev_wet[PART_COUNT];  // 10 ms glide per deck
     bool    _rev_primed = false;    // first process() snaps the mix gains
     bool    _rev_asleep = false;    // both decks dry: room cleared, process() skipped
+    // Return fade for clear-on-sleep: the wet gains ride the SEND, so the
+    // moment they hit zero the room still holds a tail seconds long. Fade
+    // the RETURN to zero first, then clear (audit 2026-08-04, finding 3).
+    float _rev_return_gain = 1.f;
+    float _rev_return_step = 0.f;
     // Bloom duck (spec 2026-08-03-reverb-bloom-duck): while the room is over
     // unity loop gain its return envelope pulls the dry bus back. Exactly
     // 1.0 whenever it is not ducking -- guarded by a test, like the return
