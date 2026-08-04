@@ -11,8 +11,17 @@ the real Daisy Seed.
 `bbd`) and one new workload row (`bbd_line_stage_walk`) are added to
 `bench/`. A baseline branch is then constructed as *today's `bench/` with
 `19f7560`'s `engine/`*, so the two trees differ in `engine/` and nothing
-else. Four hardware cycles measure both trees at `-O3` in both execution
-layouts. Nothing under `engine/` changes.
+else. Hardware cycles measure both trees at `-O3`. Nothing under `engine/`
+changes.
+
+**Amended 2026-08-04, mid-execution:** the round was planned as four cycles,
+both trees in both execution layouts. Task 4's link probes and a follow-up
+diagnostic established that `--itcm-hot` cannot be built at all on `main`
+today — `.itcm_audio_hot` overflows the 64 KiB ITCM by 832 bytes — and that
+`-O2` does not rescue it under this profile either. **Tasks 6 and 8 were
+therefore cancelled and the round runs two `axi` cycles.** The layout axis is
+replaced by a measured finding that needed no hardware; see Task 6 for the
+table and Task 9 for where it is reported.
 
 **Tech Stack:** Python 3 (`bench/run.py`, `bench/profiles.py`, `unittest`),
 C++17 (`bench/workloads_bbd.cpp`), `arm-none-eabi-gcc`, OpenOCD +
@@ -26,7 +35,7 @@ ST-Link V3 semihosting, CMake + Ninja + clang for the desktop host.
 - **Row order is execution state.** New rows are **appended** to the end of `kBbdWorkloads[]`, never inserted. Inserting a row ahead of another changes the other row's checksum.
 - **Workload basenames must be unique across the whole bench**, not just within one table — libDaisy's Makefile flattens paths with `notdir`.
 - **Hardware evidence is refused from a dirty working tree** (`bench/qspi_tools.py:require_clean_tree`, `git status --porcelain --untracked-files=all`). Every measurement cycle therefore ends by committing its own captures before the next cycle builds.
-- **Build identity is fixed:** `--optimization o3` on all four cycles. LTO is already rejected and is not measured. Layout is the only variable: `axi` and `--itcm-hot`.
+- **Build identity is fixed:** `--optimization o3`, layout `axi`, on both cycles. LTO is already rejected and is not measured. (`--itcm-hot` was the planned second layout; it does not build at `-O3` — see the amendment above and Task 6.)
 - **`--repeat 2` is the default and the minimum.** Do not lower it.
 - **The full README sequence per cycle is mandatory and does not shorten:** `--build-only`, then `--no-build --program-qspi --build-only`, then `--repeat 2`. Any change under `engine/` invalidates the QSPI receipt even though the bank's 65,024 bytes are untouched.
 - **Read linked facts from `bench/build/bench.map`, never from a memory table.** The bench build can silently relink a stale object and still print a plausible figure for code that was never linked.
@@ -550,15 +559,24 @@ After the last `main` build:
 
 ```bash
 cd bench
-grep -c "bbd_line_stage_walk" build/bench.map
-grep -c "instrument_worst_bbd_dtcm" build/bench.map
-grep -c "inst_bbd_engine_worst" build/bench.map
-grep -c "bbd_line_tap" build/bench.map
+for n in bbd_line_stage_walk instrument_worst_bbd_dtcm instrument_worst_bbd \
+         inst_bbd_engine_worst bbd_line_tap; do
+  printf '%s %s\n' "$n" \
+    "$(arm-none-eabi-strings build/bench.elf | grep -c "^$n\$")"
+done
 ```
 
-Expected: each returns a non-zero count. Read from `bench.map`, not from the
-memory table: the bench build can silently relink a stale object and still
-print a plausible figure for code that was never linked.
+Expected: each returns exactly `1`.
+
+**Read the row names out of the ELF's strings, not out of `bench.map`.**
+`bench.map` lists *symbol* names — `setup_inst_worst_bbd_dtcm`,
+`proc_bbd_line_tap` — while a row's name is a data string in the workload
+table. Grepping the map for a row name matches only by luck: at
+`e7d80d8` two of these five names substring-matched a symbol and two did not,
+and none of that reflected whether the row was linked. The point of reading
+the linked image at all still stands — the bench build can silently relink a
+stale object and print a plausible figure for code that was never linked —
+but the strings check above is the one that actually answers it.
 
 - [ ] **Step 5: Record the preflight result**
 
@@ -637,60 +655,45 @@ EOF
 
 ---
 
-### Task 6: Cycle 2 — baseline, `itcm-hot`
+### Task 6: Cycle 2 — baseline, `itcm-hot` — NOT RUN
 
-Identical to Task 5 with `--itcm-hot` appended to **all three** commands.
-Using the flag inconsistently across build, QSPI binding and measurement is
-what the host's layout check exists to reject; an AXI receipt must not be
-reused for an ITCM run.
+**Status: cancelled before dispatch, 2026-08-04, by the human partner, on
+evidence.** This section is kept rather than deleted because the reason is a
+result of this round.
 
-**Files:**
-- Create: `docs/bench/2026-08-04-<baseline-hash>-regress-itcm-hot-o3.md` and `.csv`
+Task 4's link probes and a follow-up diagnostic established that
+`--itcm-hot` cannot be built at `-O3` on `main`, and that `-O2` does not
+rescue it under the `regress` profile either:
 
-**Interfaces:**
-- Consumes: Task 5 committed, tree clean, still on `bench/baseline-19f7560`.
-- Produces: the second accepted capture.
+| build | `.itcm_audio_hot` | free below 64 KiB |
+|---|---:|---:|
+| baseline, `-O2` | 46,784 B | 18,496 B |
+| `main`, `-O2` | 48,288 B | 16,992 B |
+| baseline, `-O3` | 65,248 B | **32 B** |
+| `main`, `-O3` | 66,112 B | **−832 B (link fails)** |
 
-- [ ] **Step 1: Confirm branch and clean tree**
+The seventeen `engine/` commits add **+864 B** to the `-O3` hot section
+(**+1,504 B** at `-O2`). At `-O2` that is absorbed by 18 KB of headroom; at
+`-O3` the baseline already stood at 32 bytes free, so the same growth spends
+the last sliver and overflows by 832 bytes. Neither factor alone explains it.
 
-```bash
-git rev-parse --abbrev-ref HEAD          # expected: bench/baseline-19f7560
-git status --porcelain --untracked-files=all   # expected: empty
-```
+`-O2` + `--itcm-hot` links but still fails `bench/itcm_placement.py`, for a
+third and independent reason: `spky::BbdLine::Process` is a weak symbol, and
+under the `regress` profile the linker takes the copy in `build/workloads_bbd.o`
+— a bench-harness translation unit `bench/itcm_hot.lds` does not list — so it
+lands outside ITCM. `regress` is the first `itcm-hot` image ever to compile the
+`bbd` family, which is why this has not been seen before. It is the same class
+of failure as the 2026-07-31 one that was fixed by adding `bbd_engine.o` to the
+hotset; adding `workloads_bbd.o` would put harness code in ITCM and distort
+every measurement taken there, so it was **not** done.
 
-- [ ] **Step 2: Build**
+The layout axis is therefore dropped from this round. Task 9 reports the table
+above as a finding in its own right — it says something about M6's placement
+target that a comparison of two hardware runs would not have.
 
-```bash
-cd bench && python run.py --profile regress --optimization o3 --itcm-hot --build-only
-```
-
-- [ ] **Step 3: Bind the QSPI receipt**
-
-```bash
-cd bench && python run.py --profile regress --optimization o3 --itcm-hot --no-build --program-qspi --build-only
-```
-
-- [ ] **Step 4: Measure**
-
-```bash
-cd bench && python run.py --profile regress --optimization o3 --itcm-hot --repeat 2
-```
-
-- [ ] **Step 5: Record the hotset size and commit**
-
-From `bench/build/bench.map`, record the `.itcm_audio_hot` section start, end
-and size, and the bytes free below the hard 64 KiB `ASSERT`. Task 9 reports
-it against the 48,352 bytes recorded on 2026-08-01.
-
-```bash
-git add docs/bench/
-git commit -m "$(cat <<'EOF'
-bench(evidence): baseline tree, regress profile, itcm-hot, -O3
-
-Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>
-EOF
-)"
-```
+Diagnostic evidence:
+`.superpowers/sdd/2026-08-04-signal-path-regression-bench/o3-itcm-diagnostic-report.md`
+(scratch, not committed; its numbers are carried into Task 9's document).
 
 ---
 
@@ -700,14 +703,14 @@ EOF
 - Create: `docs/bench/2026-08-04-<main-hash>-regress-axi-o3.md` and `.csv`
 
 **Interfaces:**
-- Consumes: Tasks 5 and 6 committed on the baseline branch.
-- Produces: the third accepted capture, and the first figure that answers the round's question 1.
+- Consumes: Task 5 committed on the baseline branch. (Task 6 was cancelled; there is one baseline capture pair, not two.)
+- Produces: the second and last accepted capture, and the figure that answers the round's question 1.
 
-- [ ] **Step 1: Bring the baseline captures onto `main`, then check the tree**
+- [ ] **Step 1: Bring the baseline capture onto `main`, then check the tree**
 
-The two capture pairs from Tasks 5 and 6 are committed on the baseline
-branch. Task 9's document lives on `main` and cites all four, so copy them
-across now rather than at the end:
+Task 5's capture pair is committed on the baseline branch. Task 9's document
+lives on `main` and cites both captures, so copy it across now rather than at
+the end:
 
 ```bash
 git checkout main
@@ -764,54 +767,12 @@ EOF
 
 ---
 
-### Task 8: Cycle 4 — `main`, `itcm-hot`
+### Task 8: Cycle 4 — `main`, `itcm-hot` — NOT RUN
 
-**Files:**
-- Create: `docs/bench/2026-08-04-<main-hash>-regress-itcm-hot-o3.md` and `.csv`
-
-**Interfaces:**
-- Consumes: Task 7 committed, tree clean, on `main`.
-- Produces: the fourth accepted capture — the figure the M6 placement target is judged against.
-
-- [ ] **Step 1: Confirm branch and clean tree**
-
-```bash
-git rev-parse --abbrev-ref HEAD                 # expected: main
-git status --porcelain --untracked-files=all    # expected: empty
-```
-
-- [ ] **Step 2: Build**
-
-```bash
-cd bench && python run.py --profile regress --optimization o3 --itcm-hot --build-only
-```
-
-- [ ] **Step 3: Bind the QSPI receipt**
-
-```bash
-cd bench && python run.py --profile regress --optimization o3 --itcm-hot --no-build --program-qspi --build-only
-```
-
-- [ ] **Step 4: Measure**
-
-```bash
-cd bench && python run.py --profile regress --optimization o3 --itcm-hot --repeat 2
-```
-
-- [ ] **Step 5: Record the hotset size and commit**
-
-Record `.itcm_audio_hot` start, end, size and free bytes from
-`bench/build/bench.map`, as in Task 6.
-
-```bash
-git add docs/bench/
-git commit -m "$(cat <<'EOF'
-bench(evidence): main, regress profile, itcm-hot, -O3
-
-Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>
-EOF
-)"
-```
+**Status: cancelled before dispatch, 2026-08-04, together with Task 6 and for
+the same reason.** See Task 6 for the evidence. `main` at `-O3 --itcm-hot`
+does not link at all: `.itcm_audio_hot` reaches 66,112 bytes against a hard
+64 KiB `ASSERT`.
 
 ---
 
@@ -822,7 +783,7 @@ EOF
 - Modify: `docs/roadmap.md` (the CPU-status paragraph near the top)
 
 **Interfaces:**
-- Consumes: all four accepted captures from Tasks 5–8, the map figures from Tasks 6 and 8, and the preflight result from Task 4.
+- Consumes: the two accepted captures from Tasks 5 and 7, the preflight result from Task 4, and the ITCM/`-O3` diagnostic table recorded in Task 6.
 - Produces: the round's answer. Nothing consumes it in this plan.
 
 - [ ] **Step 1: Write the evidence document**
@@ -830,14 +791,14 @@ EOF
 Follow the house style of `docs/bench/2026-08-01-19f7560-flux-tape.md`. It
 must contain, in this order:
 
-1. **What was measured** — the exact commands, both git hashes, the profile, both layouts, `-O3`, `--repeat 2`, the QSPI payload SHA-256 and the hashed device fingerprint each session reported. Never the raw MCU UID; the raw UID stays in `qspi-verified.json` only.
-2. **Row real, not stale** — the `bench.map` counts from Task 4 step 4.
-3. **The gate, both trees, both layouts** — a table of `instrument_worst_bbd_dtcm` `pct_avg` / **`pct_max`** with `pct_max` bold, plus its real-callback anchor maxima, against 100 %. State the verdict in one sentence: it fits, or it is over by N points.
-4. **The A/B delta per row**, computed only within a layout — baseline `axi` against `main` `axi`, baseline `itcm-hot` against `main` `itcm-hot`. Never across layouts.
-5. **The crossfade price** — `bbd_line_stage_walk` against `bbd_line_tap`, same build; and `bbd_line_stage_walk` baseline against `main`, which is click-versus-crossfade.
-6. **The write-ring observation** — what the two `bbd_line_tap` rows did across the A/B, reported as an observation. Do not name a mechanism the round did not measure.
-7. **The ITCM hotset** — size, end address, bytes free, against 48,352 on 2026-08-01.
-8. **What this does not show** — the spec's §1.2 list (no within-FX attribution), plus anything the session itself left open, plus any omission forced by Task 4's fallbacks.
+1. **What was measured** — the exact commands, both git hashes, the profile, the `axi` layout, `-O3`, `--repeat 2`, the QSPI payload SHA-256 and the hashed device fingerprint each session reported. Never the raw MCU UID; the raw UID stays in `qspi-verified.json` only.
+2. **Row real, not stale** — the ELF row-name string counts from Task 4 step 4, with a sentence on why `bench.map` is the wrong place to look for a row name.
+3. **The gate, both trees** — a table of `instrument_worst_bbd_dtcm` `pct_avg` / **`pct_max`** with `pct_max` bold, plus its real-callback anchor maxima, against 100 %. State the verdict in one sentence: it fits, or it is over by N points.
+4. **The A/B delta per row** — baseline `axi` against `main` `axi`. Both captures are the same profile, the same layout and the same optimization, and their bench code is bit-identical; `engine/` is the only difference.
+5. **The crossfade price** — `bbd_line_stage_walk` against `bbd_line_tap`, same build; and `bbd_line_stage_walk` baseline against `main`, which is click-versus-crossfade. **Two caveats must appear with the number, not below it:** (a) the delta also carries the row's own per-sample phase bookkeeping, so it is not pure crossfade; (b) this row's ring is 2,048 cells / 8 KB with the two taps 4 KB apart, while a production `BbdEngine` line is 8,192 cells / 32 KB with taps 16 KB apart — the figure is a cache-friendly **lower bound**, not the production cost.
+6. **The write-ring observation** — what the two `bbd_line_tap` rows did across the A/B, reported as an observation. Do not name a mechanism the round did not measure. Note also that `bbd_walk_sdram`'s `kWalkCells = 4096` now proxies a real written span of 8,192.
+7. **The ITCM finding** — this is a result of the round, not a footnote, and it needed no hardware. Reproduce Task 6's four-row table (baseline/`main` × `-O2`/`-O3`, section size and bytes free), state the `+864 B` (`-O3`) and `+1,504 B` (`-O2`) growth from the seventeen commits, and state the compounding plainly: `-O3` alone had already reduced the baseline to **32 bytes free**, so the growth spends the last sliver and `main` overflows by **832 bytes**. Then state the third, independent failure: under `regress`, `BbdLine::Process`'s weak symbol resolves to `build/workloads_bbd.o`, which `itcm_hot.lds` does not list, so `-O2 --itcm-hot` links but fails placement — and say that putting harness code in the hotset to fix it would distort every measurement taken there. Say what this means for M6: the intended ITCM placement does not currently fit the optimization level that ships.
+8. **What this does not show** — the spec's §1.2 list (no within-FX attribution), the dropped layout axis and why, plus anything the session itself left open.
 
 Two rules the document must not break, both of which this repo has been
 burned by and recorded:
