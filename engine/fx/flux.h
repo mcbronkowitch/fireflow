@@ -22,7 +22,14 @@ public:
     static constexpr size_t kMaxSamples = kTapeSamples;
 
     void init(float sample_rate, float* left, float* right);
-    void set_on(bool on, bool immediate = false) { _sw.set_on(on, immediate); }
+    void set_on(bool on, bool immediate = false) {
+        // Waking a stale line must flush BEFORE the switch mutates its
+        // stage: an immediate off leaves no fall for process() to observe,
+        // and an immediate on lands in hold before process() runs again --
+        // a was_idle check inside process() misses that pair entirely.
+        if (on && _sw.is_idle() && _line_dirty) flush_lines();
+        _sw.set_on(on, immediate);
+    }
     bool is_on() const { return _sw.is_on(); }
     bool engaged() const { return _buf_ok && (_sw.is_on() || !_sw.is_idle()); }
     bool has_buffers() const { return _buf_ok; }

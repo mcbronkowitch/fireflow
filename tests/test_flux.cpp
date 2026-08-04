@@ -401,3 +401,28 @@ TEST_CASE("flux tape: re-enabling does not resurrect a stale take") {
     }
     CHECK(peak < 1e-3f);              // today: first sample already -0.466
 }
+
+TEST_CASE("flux tape: immediate off then immediate on starts clean") {
+    FluxTapeMem mem;
+    Flux f;
+    mem.init(f);
+    f.set_bpm(120.f);
+    f.set_rate(3);
+    f.set_on(true, true);
+    f.set_mix(1.f);
+    f.set_feedback(0.5f);
+    for (int i = 0; i < 48000; ++i) {
+        float s = 0.8f * std::sin(6.2831853f * 200.f * i / 48000.f);
+        float l = s, r = s;
+        f.process(l, r);
+    }
+    f.set_on(false, true);            // immediate off: no fall, no process() calls
+    f.set_on(true, true);             // immediate on: straight to hold
+    float peak = 0.f;
+    for (int i = 0; i < 4000; ++i) {
+        float l = 0.f, r = 0.f;
+        f.process(l, r);
+        peak = std::max(peak, std::max(std::fabs(l), std::fabs(r)));
+    }
+    CHECK(peak < 1e-3f);
+}

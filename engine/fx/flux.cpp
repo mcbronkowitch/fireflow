@@ -172,8 +172,6 @@ void Flux::process(float& l, float& r) {
         if (!was_idle && _line_dirty) flush_lines();
         return;
     }
-    // set_on(false, immediate) skips the fall entirely — catch it on wake.
-    if (was_idle && _line_dirty) flush_lines();
 
     const bool thinning = _thin > 0.f && _rhy_valid;
     if (thinning) {
