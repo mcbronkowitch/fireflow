@@ -3,28 +3,27 @@
        alt="The Spotymod front panel: two mirrored halves — green A on the left, copper B on the right — each with nine macro knobs orbiting an LED ring inside MOTION, TIMBRE and PITCH sectors, above VOICE, FX and PLAY rows. The centre column holds BLEND, a TIME group with SYNC, TEMPO, COUPLE and the SHUFFLE swing control, DUO, and a six-knob ROOM, with the SPOTYMOD wordmark on top and ten jacks in five labelled groups along the bottom.">
 </p>
 
-# spotymod — modulation-first firmware for the Spotykach
+# spotymod — a modulation-first instrument
 
-Alternative firmware for the [Spotykach](https://synthux.academy/store/spotykach)
-hardware, built around a single idea: **modulation is the instrument**. Two
-symmetric parts, each driven by a performable modulation engine, feeding a
-selectable sound source.
+A digital instrument built around a single idea: **modulation is the
+instrument**. Two symmetric parts, each driven by a performable modulation
+engine, feeding a selectable sound source.
 
-**spotymod** is a fork of [Synthux-Academy/Spotykach](https://github.com/Synthux-Academy/Spotykach)
-(the official firmware). It reuses the original hardware drivers, clocking and
-bootloader, and replaces the instrument core with a new modulation-first design.
+It runs today on the desktop and inside VCV Rack. The hardware target is a
+**standalone Daisy Patch Submodule prototype**, brought up in milestone M6.
 
-> **⚠️ Not yet tested on real hardware.** The modulation engine currently exists
+> **⚠️ Not yet running on hardware.** The modulation engine currently exists
 > only as a portable C++ core, verified with the desktop **offline renderer**
-> (unit tests + audio/CV render). The firmware shell that runs it on the Daisy
-> arrives in milestone M6 — until then, nothing here has been flashed to or run
-> on an actual Spotykach device.
+> (unit tests + audio/CV render) and playable through the VCV Rack host.
+> Selected CPU workloads have been measured on a real Daisy Seed; the firmware
+> shell that turns the engine into a playable device is milestone M6, and it has
+> not been built.
 
-## What makes this fork different
+## What makes it different
 
-The stock firmware is a granular sampler you modulate. This fork inverts that:
-the **modulation system is the primary interface**, and the sound engine is
-whatever you point it at.
+The **modulation system is the primary interface**, and the sound engine is
+whatever you point it at — not a sound engine you happen to be able to
+modulate.
 
 Each part currently points at one of five: a **polyphonic synth voice**, a
 **granular texture deck** that granulates live input or a loaded sample,
@@ -80,18 +79,19 @@ blooms past 100 %), while each deck has its own **SEND** dry/send mix into that
 shared room (the centre **ROOM** group holds the reverb itself). CV + gate
 outputs extend the modulation to the rest of the rack.
 
-The full design intent lives in the residency's design spec; this README is a
+The full design intent lives in
+[`docs/superpowers/specs/`](docs/superpowers/specs/); this README is a
 self-contained summary of it.
 
 ## Architecture at a glance
 
 One portable engine core, three hosts. No hardware type ever crosses into
 `engine/`, so the exact same code runs in the desktop renderer, the VCV Rack
-module, and (later) on the Spotykach itself.
+module, and (later) on the hardware prototype.
 
 <p align="center">
   <img src="docs/img/architecture.png" width="900"
-       alt="Architecture diagram: one portable engine/ core (mod, parts, synth, pitch, fx, util behind a single engine/instrument.h API) feeds three hosts — host/render (desktop CLI → WAV + mods.csv, built), host/vcv (VCV Rack module, beta) and the Spotykach hardware (host/daisy firmware shell, M6, planned). No hardware type crosses into engine/; tests/ runs 795 deterministic Doctest cases.">
+       alt="Architecture diagram: one portable engine/ core (mod, parts, synth, pitch, fx, util behind a single engine/instrument.h API) feeds three hosts — host/render (desktop CLI → WAV + mods.csv, built), host/vcv (VCV Rack module, beta) and the Daisy hardware prototype (host/daisy firmware shell, M6, planned). No hardware type crosses into engine/; tests/ runs 795 deterministic Doctest cases.">
 </p>
 
 `Instrument` (`engine/instrument.h`) is the complete public API: `init(sample_rate)`,
@@ -175,61 +175,37 @@ the desktop clang path); the build, install and I/O details live in
 | **FLUX -> BBD** | FLUX's interpolating tape echo replaced by a bucket-brigade delay model: the clock rate *is* the delay time, so RATE bends stored pitch, and `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane (STAGES has since moved off FLUX onto the BBD deck's own pitch lane, captioned **BEND** on the panel) | **done** (engine + renderer + VCV; RATE/STAGES/`FXT_FLUX_TIME` confirmed by ear, DRIVE diagnosed and fixed but awaiting re-listening; hardware CPU measurement outstanding) |
 | **M5k** | ZAP: monophonic percussion part engine | planned (spec ready; not implemented) |
 | **M5l** | PULL: chord gravity between the two decks | planned (spec ready; not implemented) |
-| **M6** | Firmware shell: pads, gestures, panel, LEDs -- runs on real hardware | planned after M5l (spec ready; implementation not started) |
+| **M6** | Hardware prototype: bring-up on a Daisy Patch Submodule — panel, controls, LEDs, CV/gate I/O, preset persistence | planned after M5l (**needs a new hardware/panel spec**; the existing shell spec assumes Spotykach's panel) |
 
 Per-milestone detail and current status live in [`docs/roadmap.md`](docs/roadmap.md).
 
-## Hardware (upstream firmware — arrives in M6)
+## Hardware prototype (M6)
 
-> The build/flash steps below compile and flash the **original upstream
-> firmware**, not the modulation-first engine. The new firmware shell that
-> hosts `engine/` on the Daisy is milestone **M6** and is not wired up yet.
+The instrument's own hardware is a **standalone Daisy Patch Submodule**
+prototype — panel, controls, LEDs, CV/gate I/O and preset persistence — planned
+as milestone **M6**, after the two remaining engine milestones. Nothing of it is
+built yet, and its panel still has to be designed: the existing firmware-shell
+spec was written against a different device and no longer describes the target.
 
-### Setup
+CPU headroom on the target MCU is not guesswork, though. Selected workloads are
+measured on real Daisy hardware (a Daisy Seed, which carries the same STM32H750
+at 480 MHz as the Patch Submodule) — method and every number in
+[`bench/`](bench/README.md) and [`docs/bench/`](docs/bench/).
 
-Clone recursively, or run `git submodule update --init --recursive` to fetch the
-submodules (libDaisy + DaisySP).
-
-Note: the ws2812 driver requires a slight modification to libDaisy, so the
-libDaisy submodule points at a specific branch within the bleeptools fork (based
-on the Infrasonic Audio fork), which also carries a few MIDI and mpr121 changes.
-
-### Compiling
-
-Build the libraries once (a `Makefile` target is provided):
-
-```bash
-make -j8 libs
-```
-
-Then build the firmware:
-
-```bash
-make -j8
-```
-
-On success the binaries land in `build/`: `spotykach.bin` (flashed via DFU) and
-`spotykach.elf` (for debugging).
-
-### Flashing
-
-The bootloader enables USB DFU updating from the **external** USB-C port on the
-rear of the main PCB (not the one on the Seed).
-
-1. Compile the firmware (above).
-2. Connect the main PCB's USB-C port to the computer (a data-capable cable).
-3. Hold `Reset` on the back of the unit for ~3 seconds — the bottom-pad LEDs
-   start to "breathe" in white.
-4. Run `make program-dfu`.
-
-The device then boots the new firmware. A bad flash can temporarily "brick" the
-unit and require reinstalling the bootloader, firmware, or both.
+The original Spotykach firmware this project started from is still in the tree
+and still builds; its setup, compile and DFU-flash instructions live in
+[`docs/upstream-firmware.md`](docs/upstream-firmware.md).
 
 ## License & credits
 
 MIT — see [`LICENSE`](LICENSE) (Copyright © 2026 Synthux Academy, Bastian Tonk).
-Bundled and submodule dependencies are documented in [`THIRD_PARTY.md`](THIRD_PARTY.md).
-Original firmware credits are in [`CREDITS.md`](CREDITS.md).
+
+spotymod began as a fork of
+[Synthux-Academy/Spotykach](https://github.com/Synthux-Academy/Spotykach), the
+official firmware for the Spotykach hardware, and reuses parts of it; it is now
+an independent project with its own hardware target. Bundled and submodule
+dependencies are documented in [`THIRD_PARTY.md`](THIRD_PARTY.md). Original
+firmware credits are in [`CREDITS.md`](CREDITS.md).
 
 Built with AI pair-programming — the **HAL 9000** co-author in the git history
 is [Claude](https://www.anthropic.com/claude) (Anthropic). 🔴

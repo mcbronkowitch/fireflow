@@ -1,17 +1,34 @@
-# Spotykach — Roadmap & Status
+# spotymod — Roadmap & Status
 
-Living status document for the modulation-first firmware fork. The README carries
+Living status document for the modulation-first instrument. The README carries
 the summary table; this file tracks the detail: what each milestone contains, what
 is actually built today, and what is still design-only.
 
-- **Design intent:** the residency design spec
-  (`2026-07-10-spotykach-modulation-first-synth-design.md`), the scale spec
-  (`2026-07-11-spotykach-scales-design.md`), the FX spec
-  (`2026-07-11-spotykach-fx-design.md`), the center-section spec
-  (`2026-07-12-spotykach-center-section-design.md`) and the ambient-reverb v2
-  spec (`2026-07-12-spotykach-ambient-reverb-v2-design.md`), and the FORM/SONG split spec
-  (`2026-07-25-spotykach-form-song-split-design.md`).
-- **Last updated:** 2026-08-03 (VCV 2.17.1; the BBD deck gained its own PITCH/
+- **Project status, 2026-08-04:** spotymod continues as a **standalone
+  project**. It is no longer part of the Synthux residency, and the plan to run
+  the modulation-first engine on **Spotykach hardware is cancelled** — that port
+  is not a milestone any more. The hardware milestone is now an instrument of
+  its own, a **Daisy Patch Submodule prototype** (M6). The original Spotykach
+  firmware tree stays in the repository, buildable, documented in
+  `docs/upstream-firmware.md`; it is history, not a target. The standing rule
+  that the control surface must stay reducible to real hardware **still holds** —
+  what changed is only what it reduces *to*, and that panel has yet to be
+  defined.
+- **Design intent:** the master design spec
+  (`docs/superpowers/specs/2026-07-10-spotykach-modulation-first-synth-design.md`),
+  the scale spec (`docs/superpowers/specs/2026-07-11-spotykach-scales-design.md`),
+  the FX spec (`docs/superpowers/specs/2026-07-11-spotykach-fx-design.md`),
+  the center-section spec
+  (`docs/superpowers/specs/2026-07-12-spotykach-center-section-design.md`) and the
+  ambient-reverb v2 spec
+  (`docs/superpowers/specs/2026-07-12-spotykach-ambient-reverb-v2-design.md`), and
+  the FORM/SONG split spec
+  (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
+  (These specs keep their original filenames, written while the project was
+  still a Spotykach fork.)
+- **Last updated:** 2026-08-04 (the project left the residency and the Spotykach
+  hardware target, per "Project status" above; before that, 2026-08-03: VCV
+  2.17.1; the BBD deck gained its own PITCH/
   tape-TIME surface and click-free dynamic stage changes, both released, and
   every state-dependent panel caption now comes from one generator table — see
   "BBD PITCH / tape TIME surface", "BBD dynamic-stage declick" and "VCV
@@ -123,7 +140,10 @@ is actually built today, and what is still design-only.
   firmware is not affected: `app.cpp:117` already sets `block_size = 96` and
   `ProcessAudio` passes it through, so M6 gets the full saving with nothing
   buffered — on block size the bench models the firmware faithfully, and it is
-  the two development hosts the finding bounds. Third,
+  the two development hosts the finding bounds. (That evidence is the *upstream*
+  `app.cpp`, which is no longer the M6 target; the conclusion carries over only
+  as long as the prototype shell also runs a 96-sample block, which is now this
+  project's own choice rather than an inherited fact.) Third,
   **this bench cannot demonstrate a change smaller than about 0.5 points on the
   gate**, because every comparison it can make is cross-build and cross-build
   layout drift moves rows containing no `Part` by up to 0.49. **No further
@@ -222,8 +242,14 @@ is actually built today, and what is still design-only.
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
-> hardware measurements in `docs/bench/`, but the modulation-first firmware
-> shell that runs the instrument on Spotykach hardware remains milestone M6.
+> hardware measurements in `docs/bench/`, but the firmware shell that turns the
+> engine into a playable device remains milestone M6.
+>
+> **All hardware measurements in `docs/bench/` were taken on a Daisy Seed.** The
+> M6 target, a Daisy Patch Submodule, carries the same STM32H750 at 480 MHz with
+> the same SDRAM and QSPI, so the cycle counts and the ITCM/DTCM placement work
+> carry over — but nothing has been measured on Submodule hardware, and no
+> figure below should be read as if it had.
 
 ## Status at a glance
 
@@ -267,7 +293,7 @@ is actually built today, and what is still design-only.
 | **VCV engine-aware captions** | Every state-dependent panel caption now comes from one `DYNAMIC_CAPTIONS` generator table instead of hand-written special cases: BODY gets honest VOICE words (`HIT`/`DAMP`/`CHAR`/`EXCIT`/`BRITE`) and BBD gets its own (`TAIL`/`TILT`/`FEED`/`LOSS`); the FX-box word collisions are resolved by renaming FLUX `RATE`→`DIV`, FLUX `TIME`→`MULT`, per-deck `ROOM`→`SEND`, `MASTER_DRIVE`→`PUSH` and BBD `PITCH`→`BEND` (collision with the orbit's `PITCH` eyebrow); the GRIT mode pad now shows its own state, `SAT`/`CRSH`, instead of the word `GRIT` it collided with; MELODY drives Sampler `SCAN` only, no longer also `set_variation`; the permanently-printed `SCAN`/`LEN` second words are deleted from the static plate | ✅ **done** (VCV host + generator; spec `docs/superpowers/specs/2026-08-03-vcv-engine-aware-captions-design.md`; branch `vcv-engine-aware-captions`, not yet merged to main or released) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
-| **M6** | Firmware shell: pads, gestures, panel, LEDs — runs on real hardware | ⬜ planned |
+| **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel undefined; the existing shell spec is superseded** — see below) |
 
 Milestone order follows the design spec's build order (audible first, hardware
 last). The scale layer was inserted after M1 because it only touches the PITCH
@@ -277,7 +303,10 @@ instead of rewiring it later; the M1 test tone is enough to hear and verify
 the effects in the renderer. FORM/SONG is a completed cross-cutting melodic STEP
 capability and does not change the M5j → M5k → M5l → M6 order. M5k and M5l are
 the remaining engine-level milestones that can be completed without the target
-hardware; M6 follows them as the hardware bring-up.
+hardware; M6 follows them as the hardware bring-up. What changed with the move
+to a standalone prototype is M6's content, not its position: it is still last,
+and it is now the milestone that has to define its own device rather than fit an
+existing one.
 
 ## Done
 
@@ -468,7 +497,7 @@ rate (one 96-sample block) and wired through narrow `ModLane` /
 ### M4.5 — Ambient reverb v2 (Oliverb port) ✅
 
 The shared room becomes a playable instrument (spec:
-`2026-07-12-spotykach-ambient-reverb-v2-design.md`, residency repo): vendored
+`docs/superpowers/specs/2026-07-12-spotykach-ambient-reverb-v2-design.md`): vendored
 MIT Oliverb core (Clouds Parasite) under `third_party/oliverb/` — float32,
 48 kHz, deterministic. SIZE rescales the delay reads live (Doppler tail
 warp), DECAY crosses 100 % at ~0.9 of its travel into a soft-limited bloom
@@ -491,17 +520,19 @@ dense ~5:1 at two thirds, 10:1 + 350 ms pumping at the top). API:
 `set_comp(part, n)` / `set_master_drive(n)`, boot defaults 0/0. Delivers
 the M6 shell spec's "Engine delta 3" (master soft-clip) early.
 
-The by-ear pass reshaped the gain computer (spec amendment in the
-residency repo): a **post-comp envelope ceiling** (−8 dBFS) stops the
+The by-ear pass reshaped the gain computer (amendment in the same
+spec): a **post-comp envelope ceiling** (−8 dBFS) stops the
 auto-makeup from grinding program peaks into the master limiter,
 downward gain moves act in ~0.5 ms, and the attack tightens with the
 knob (5 ms → 2 ms) — quiet material still gets the full makeup, so the
 loudness intent survives. Showcases: `comp_pump.json` (verification arc)
 and `m7_bloom.json` (dev-diary render — one strummed Am7 into a long
-room, the comp knob resurrects the dying tail). Spec + plan in the
-residency repo (`2026-07-13-spotykach-dynamics-*.md`). M6 knob-map
-suggestions: GRIT layer SMOOTH → COMP (per side), FLUX-layer TUNE
-(ex-shimmer) → MASTER DRIVE.
+room, the comp knob resurrects the dying tail). Spec:
+`docs/superpowers/specs/2026-07-13-spotykach-dynamics-design.md`, plan:
+`docs/superpowers/plans/2026-07-13-spotykach-dynamics.md`. The knob-map
+suggestions recorded here (GRIT layer SMOOTH → COMP per side, FLUX-layer TUNE
+→ MASTER DRIVE) were written for Spotykach's panel and do not carry over to
+the M6 prototype; they stand only as a record of the intent.
 
 ### M4.8 — Reverb dry/wet mix ✅
 
@@ -1421,8 +1452,8 @@ the observation that the dry path's per-voice pan, not the echo, carries the
 image on an FX-layer deck.
 
 Two consequences, both from
-`2026-07-30-bbd-part-engine-design.md` (in the residency repo pending a move
-here): a BBD **part engine** is stereo, because it *is* the signal path and has
+`docs/superpowers/specs/2026-07-31-bbd-part-engine-design.md` (drafted as
+`2026-07-30-…` before it moved here): a BBD **part engine** is stereo, because it *is* the signal path and has
 no dry path to carry an image; and the tape echo that replaces FLUX returns
 **stereo, as it was** (`EchoDelay _echo_l; _echo_r;` at `e004a3d^`), with mono
 still a legitimate outcome — decided by ear on the finished tape echo rather
@@ -2135,15 +2166,39 @@ complete, but implementation has not started.
 
 Spec: `docs/superpowers/specs/2026-07-19-pull-chord-gravity-design.md`
 
-### M6 — Firmware shell ⬜ (after M5l; spec ready)
-Thin Daisy shell hosting `engine/` next to the original `app.cpp` (kept
-buildable). Wires up pads (release-based tap/hold gestures), the three 3-position
-panel switches, LED ring / pad / CYCLE feedback, CV + gate + V/Oct + clock I/O,
-preset persistence, and the deferred scale gestures (ALT-hold inspect, ALT+TUNE
-scale select, ALT+PITCH-pad mode cycle). **First milestone that runs on real
-hardware.**
+### M6 — Hardware prototype ⬜ (after M5l; **needs a new spec**)
 
-The M6 shell specification is complete (`docs/superpowers/specs/2026-07-12-spotykach-firmware-shell-design.md`), but implementation has not started.
+An instrument of its own, built on a **Daisy Patch Submodule**: a thin shell
+hosting `engine/`, plus the physical surface around it — controls, LEDs, CV +
+gate + V/Oct + clock I/O, and preset persistence. **First milestone that runs on
+hardware.** Nothing of it is implemented.
+
+**The existing shell specification is superseded**
+(`docs/superpowers/specs/2026-07-12-spotykach-firmware-shell-design.md`). It was
+written for Spotykach's fixed panel and assumes that device's surface throughout
+— its pads, its three 3-position switches, its LED ring, its CYCLE control. With
+the Spotykach port cancelled, none of that is given any more, and the panel is
+now a design question rather than a constraint to fit.
+
+What survives from it is the interaction logic, and it is worth reading for
+that: release-based tap/hold gestures, the edit-layer model, preset persistence,
+and the deferred scale gestures (ALT-hold inspect, ALT+TUNE scale select,
+ALT+PITCH-pad mode cycle) are all independent of which knobs exist. What does
+not survive is every mapping onto a specific control.
+
+So M6 now decomposes into two pieces, in order:
+
+1. **Panel design** — decide the prototype's control surface. The standing
+   reducibility rule applies unchanged: the VCV panel is the full expression of
+   the instrument, and the hardware must be a defensible reduction of it,
+   preferring merged and removed controls over added ones. Nothing to build here,
+   everything to decide. The parked hardware-placement questions from earlier
+   milestones (M4.10's COLOR placement, the BBD deck's contextual VOICE row, the
+   per-deck SEND) come due in this round.
+2. **Bring-up** — the shell itself, against the panel decided in step 1.
+
+Until step 1 has a spec, M6 has no implementable definition, and the "spec ready"
+status this milestone carried since 2026-07-12 no longer holds.
 
 ## Build & verify
 
@@ -2155,4 +2210,6 @@ ctest --test-dir build --output-on-failure
 ./build/render.exe host/render/scenarios/dorian_vs_drift.json out.wav mods.csv
 ```
 
-See the README for the full desktop and (upstream) hardware build instructions.
+See the README for the full desktop build instructions, and
+`docs/upstream-firmware.md` for the original Spotykach firmware still in the
+tree.
