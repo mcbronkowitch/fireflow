@@ -142,11 +142,19 @@ float proc_bbd_line_tap()
 }
 
 // --- the SDRAM shape --------------------------------------------------------
-// The active window at 8192 stages is 4096 cells = 16 KB per line, walked
-// SEQUENTIALLY (imem advances by exactly one cell per write tick and the read
-// tick reads the cell about to be overwritten). The 3.29x SDRAM penalty
-// measured for streaming walks is EXPECTED to largely disappear here. That is
-// an expectation, not a measurement -- this row is what turns it into one.
+// The walk is SEQUENTIAL: the write index advances by exactly one cell per
+// write tick, and the read tick reads a fixed distance behind it. The 3.29x
+// SDRAM penalty measured for streaming walks is EXPECTED to largely
+// disappear here. That is an expectation, not a measurement -- this row is
+// what turns it into one.
+//
+// Corrected 2026-08-04: this comment used to say "the active window at 8192
+// stages is 4096 cells = 16 KB per line". That stopped being true at
+// a183852, which moved the write wrap from cells_ to max_cells_. The written
+// span is now max_cells_ at EVERY stage count -- kCells = kMaxStages/2 =
+// 8192 floats, 32 KB per line -- and the stage count sets only how far
+// behind the write head the read tap sits. kWalkCells below is this row's
+// own constant and is unaffected; what changed is what it is a proxy FOR.
 
 constexpr int kWalkCells = 4096;
 int g_walk = 0;
@@ -171,6 +179,62 @@ float proc_bbd_walk_sdram()
     return acc;
 }
 
+// --- the stage-transition path ----------------------------------------------
+// Every row above holds its stage count fixed, and a fixed stage count never
+// enters the crossfade branch: _stage_transition_active() is true for
+// kStageXfadeReads = 16 read events after a change and false otherwise. So
+// the tap crossfade (engine/fx/bbd.h, commit a183852) is priced at zero by
+// this whole table.
+//
+// This row is setup_bbd_line_tap with one difference -- the stage count walks
+// -- so the pair is a same-build A/B and the difference IS the crossfade.
+//
+// The period is 24 samples rather than one. At the ceiling clock a line runs
+// 2*32000/48000 = 1.33 ticks per sample, half of them reads, so sixteen reads
+// is about 24 samples. Re-arming every 24 samples keeps a transition active
+// for essentially the whole block while calling SetStages four times per
+// block instead of 96: the crossfade is what this row prices, not the setter.
+// One transition per block would price the crossfade at a quarter and read as
+// repeat noise.
+//
+// Its own BbdLine object, for the reason stated above kTapStages: sharing the
+// arena between rows is safe because the runner calls setup() immediately
+// before each warmup, but sharing the OBJECT would leave this row's walking
+// SetStages fighting a neighbour's settled state.
+
+constexpr int kStageWalkPeriod = 24;
+constexpr int kStageWalkAlt    = kTapStages / 2;   // 2048 stages, 1024 cells
+
+BbdLine g_stagewalk;
+int     g_stagewalk_phase = 0;
+
+void setup_bbd_line_stage_walk()
+{
+    g_stagewalk.Init(sdram_arena(), kTapStages / 2, kSampleRate);
+    g_stagewalk.SetStages(kTapStages);
+    g_stagewalk.SetClock(bbd_tuning::kClockMaxHz);
+    g_stagewalk_phase = 0;
+    // Same settle as settle_tap(), on this row's own object: the line must be
+    // FULL before measuring or the row measures an empty machine.
+    for (int i = 0; i < 32768; ++i)
+        g_stagewalk.Process(0.3f * sinf(static_cast<float>(i) * 0.01f));
+}
+
+float proc_bbd_line_stage_walk()
+{
+    const float* in = test_input();
+    float acc = 0.f;
+    for (size_t s = 0; s < kBlock; ++s) {
+        if (g_stagewalk_phase == 0)
+            g_stagewalk.SetStages(kTapStages);
+        else if (g_stagewalk_phase == kStageWalkPeriod)
+            g_stagewalk.SetStages(kStageWalkAlt);
+        if (++g_stagewalk_phase >= 2 * kStageWalkPeriod) g_stagewalk_phase = 0;
+        acc += g_stagewalk.Process(in[s]);
+    }
+    return acc;
+}
+
 } // namespace
 
 const Workload kBbdWorkloads[] = {
@@ -179,6 +243,8 @@ const Workload kBbdWorkloads[] = {
     { "bbd", "bbd_line_tap",      setup_bbd_line_tap,      proc_bbd_line_tap },
     { "bbd", "bbd_line_tap_half", setup_bbd_line_tap_half, proc_bbd_line_tap },
     { "bbd", "bbd_walk_sdram",  setup_bbd_walk_sdram,  proc_bbd_walk_sdram  },
+    { "bbd", "bbd_line_stage_walk",
+      setup_bbd_line_stage_walk, proc_bbd_line_stage_walk },
 };
 const int kBbdCount = sizeof(kBbdWorkloads) / sizeof(kBbdWorkloads[0]);
 

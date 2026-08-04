@@ -932,6 +932,40 @@ class ProfileContract(unittest.TestCase):
             rows.append(family_row("bbd", name, 100, 101, "%08x" % (0xb0 + i)))
         return rows
 
+    def test_bbd_family_ends_with_the_stage_walk_row(self):
+        """The crossfade row is APPENDED, not inserted: row order is
+        execution state, and inserting ahead of a row changes that row's
+        checksum (bench/README.md, 'Row order is state')."""
+        bbd_rows = runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["bbd"]
+
+        self.assertEqual("bbd_line_stage_walk", bbd_rows[-1])
+        self.assertEqual(
+            (
+                "bbd_ceiling",
+                "bbd_line_only",
+                "bbd_line_tap",
+                "bbd_line_tap_half",
+                "bbd_walk_sdram",
+                "bbd_line_stage_walk",
+            ),
+            bbd_rows,
+        )
+
+    def test_regress_rejects_a_capture_without_the_stage_walk_row(self):
+        """The row-set gate must be able to go red on a missing row, or it
+        proves nothing when it is green."""
+        rows = [
+            row
+            for row in self.regress_rows()
+            if row.split(",")[2] != "bbd_line_stage_walk"
+        ]
+        capture = runner.parse(capture_lines(rows, families="system bbd"))
+
+        with self.assertRaises(runner.BenchValidationError):
+            runner.validate_captures(
+                [capture, capture], resolve_profile("regress")
+            )
+
     def test_regress_profile_carries_system_and_bbd(self):
         """The profile's whole point is that the gate rows and the BBD
         kernel rows are in ONE image, so gate-versus-kernel is a same-build

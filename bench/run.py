@@ -268,6 +268,10 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "bbd_line_tap",
         "bbd_line_tap_half",
         "bbd_walk_sdram",
+        # The crossfade path a183852 added. Every row above holds its stage
+        # count fixed and therefore never enters it. Appended, not inserted:
+        # row order is execution state.
+        "bbd_line_stage_walk",
     ),
     "body": (
         "mode_bank_24",
