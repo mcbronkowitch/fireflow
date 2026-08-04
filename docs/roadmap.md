@@ -184,6 +184,35 @@ is actually built today, and what is still design-only.
   [O3 QSPI receipt](bench/2026-07-30-1aa74ee-system-itcm-hot-o3-qspi-verified.json),
   and the
   [O3+LTO static rejection](bench/2026-07-30-1aa74ee-system-itcm-hot-o3-lto-static-rejection.md).
+  **Update, 2026-08-04 (signal-path regression; the gate holds, the ITCM
+  placement does not):** the seventeen `engine/` commits since `19f7560` are
+  now measured. The gate `instrument_worst_bbd_dtcm` reads **96.43 % `pct_max`
+  offline / 96.69 % in the real callback** — it **fits**, with **3.57 points of
+  margin offline** — at profile `regress`, execution layout `axi`,
+  optimization `-O3`, tree `bd01608` (an ancestor of `main`), against a
+  constructed baseline `6134b4f` (`bench/baseline-19f7560`: today's `bench/`
+  with `engine/` rolled back to `19f7560`), so the two cycles differ in
+  `engine/` and in nothing else. **The sentence at the head of this block —
+  that the selected O3 ITCM-hot benchmark passes — is contradicted by this
+  round and no longer holds:** at `-O3` the `.itcm_audio_hot` section
+  **overflows the 64 KiB region by 832 bytes** on `main` and does not link
+  (`-O3` alone had already left the baseline **32 bytes** free; the seventeen
+  commits add 864 B), and at `-O2`, where it does link,
+  `spky::BbdLine::Process` resolves to the bench-harness TU
+  `build/workloads_bbd.o`, which `itcm_hot.lds` does not list, so placement
+  fails there too. The `itcm-hot` half of the planned matrix therefore did not
+  run; both measured cycles are `axi`, which is also what an M6 firmware would
+  get today. **The intended ITCM placement does not currently fit the
+  optimization level that ships**, and that is an M6 problem this round does
+  not solve. Three rows moved *down* — `instrument_worst` (−0.82),
+  `inst_worst_deck_bus` (−2.38) and `fx_grit` (−0.20, ~10× its own repeat
+  noise, in a subsystem the round did not touch) — and **no mechanism was
+  measured for any of them**; they are stated, not explained. The gate holds,
+  so the attribution round is not forced; it still has no spec. Evidence:
+  [signal-path regression](bench/2026-08-04-2101349-signal-path-regression.md),
+  from captures
+  [baseline](bench/2026-08-04-6134b4f-regress-axi-o3.md) and
+  [main](bench/2026-08-04-bd01608-regress-axi-o3.md).
 
 > **Reminder:** the portable engine is exercised by the desktop offline
 > renderer and the live VCV Rack host. Selected CPU workloads have real Daisy
