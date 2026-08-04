@@ -55,6 +55,19 @@ PROFILES = {
         families=("system", "sweep"),
         gates=frozenset({WAVE_ACCEPTANCE}),
     ),
+    # The 2026-08-04 signal-path regression round (spec
+    # 2026-08-04-signal-path-regression-bench-design). `system` supplies the
+    # decision gate and its anchors; `bbd` supplies the kernel rows the same
+    # round A/Bs against a baseline tree. Two families in ONE image is the
+    # whole point: 2026-07-31-b9afe47-bbd-engine.md left "what would settle
+    # it is a same-build A/B" open, and a cross-image subtraction is not a
+    # measurement -- composition and layout move the gate by points at an
+    # unchanged checksum. `body` and `sweep` are the precedents that a
+    # two-family image links.
+    "regress": Profile(
+        families=("system", "bbd"),
+        gates=frozenset({WAVE_ACCEPTANCE}),
+    ),
     # The complete run, as before profiles existed. Expected to FAIL TO LINK
     # until the engine shrinks or the region grows -- that debt is real and is
     # meant to be visible to whoever runs the bare command.

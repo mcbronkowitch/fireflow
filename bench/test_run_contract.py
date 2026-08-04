@@ -923,6 +923,46 @@ class ProfileContract(unittest.TestCase):
 
         runner.validate_captures([capture, capture], resolve_profile("system"))
 
+    def regress_rows(self):
+        """A complete row set for the regress profile: the system rows a
+        two-family image still emits, plus every bbd row. Checksums are
+        offset from the system block so no two rows collide by accident."""
+        rows = self.system_rows()
+        for i, name in enumerate(runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["bbd"]):
+            rows.append(family_row("bbd", name, 100, 101, "%08x" % (0xb0 + i)))
+        return rows
+
+    def test_regress_profile_carries_system_and_bbd(self):
+        """The profile's whole point is that the gate rows and the BBD
+        kernel rows are in ONE image, so gate-versus-kernel is a same-build
+        comparison rather than a cross-image subtraction."""
+        profile = resolve_profile("regress")
+
+        self.assertEqual(("system", "bbd"), profile.families)
+        self.assertIn(WAVE_ACCEPTANCE, profile.gates)
+
+    def test_regress_capture_validates_against_its_filtered_rowset(self):
+        """A capture holding both families is complete for the profile."""
+        capture = runner.parse(
+            capture_lines(self.regress_rows(), families="system bbd")
+        )
+
+        runner.validate_captures(
+            [capture, capture], resolve_profile("regress")
+        )
+
+    def test_regress_rejects_a_capture_missing_the_bbd_family(self):
+        """A system-only image must not be accepted under this profile --
+        that is exactly the stale-image mix-up the round cannot afford."""
+        capture = runner.parse(
+            capture_lines(self.system_rows(), families="system")
+        )
+
+        with self.assertRaises(runner.BenchValidationError):
+            runner.validate_captures(
+                [capture, capture], resolve_profile("regress")
+            )
+
     def test_capture_validation_rejects_duplicate_anchors(self):
         rows = self.system_rows()
         anchors = anchor_lines(rows)

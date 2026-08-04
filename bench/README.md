@@ -24,6 +24,11 @@ contains.
 | profile | families | purpose |
 |---|---|---|
 | `system` | system | carries the WAVE acceptance gate; fits comfortably |
+| `body` | system, body | the M5j gate: prices the BODY mode bank and KS pair |
+| `bbd` | bbd | the BBD gate, on its own; no system anchor (reports undetermined) |
+| `sweep` | system, sweep | the cost-curve round; system anchor prevents undetermined verdict |
+| `regress` | system, bbd | the 2026-08-04 signal-path regression A/B: gate rows and BBD kernel rows in one image |
+| `ablate` | system, instr | the instrument-level ablation; measures the worst-case instrument build |
 | `full` (default) | system, voice, mem, mod, abl, bbd, body, sampler | the complete run, as before profiles existed |
 
 **`full` currently fails to link, and that is deliberate, not broken.** The
