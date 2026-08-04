@@ -55,15 +55,34 @@ PROFILES = {
         families=("system", "sweep"),
         gates=frozenset({WAVE_ACCEPTANCE}),
     ),
-    # The 2026-08-04 signal-path regression round (spec
-    # 2026-08-04-signal-path-regression-bench-design). `system` supplies the
-    # decision gate and its anchors; `bbd` supplies the kernel rows the same
-    # round A/Bs against a baseline tree. Two families in ONE image is the
-    # whole point: 2026-07-31-b9afe47-bbd-engine.md left "what would settle
-    # it is a same-build A/B" open, and a cross-image subtraction is not a
-    # measurement -- composition and layout move the gate by points at an
-    # unchanged checksum. `body` and `sweep` are the precedents that a
-    # two-family image links.
+    # Gate rows and BBD kernel rows in ONE image. `system` supplies the
+    # decision gate and its anchors; `bbd` supplies the kernel rows. Two
+    # families in one image is the whole point:
+    # 2026-07-31-b9afe47-bbd-engine.md left "what would settle it is a
+    # same-build A/B" open, and a cross-image subtraction is not a measurement
+    # -- composition and layout move the gate by points at an unchanged
+    # checksum. `body` and `sweep` are the precedents that a two-family image
+    # links.
+    #
+    # NOT a one-off: this is the profile for ANY future gate-versus-BBD A/B,
+    # not just the 2026-08-04 signal-path round that introduced it (spec
+    # 2026-08-04-signal-path-regression-bench-design). Reuse it rather than
+    # adding a date-named twin.
+    #
+    # TRAP -- `--profile regress --itcm-hot` cannot pass placement at ANY
+    # optimization level, and the failure looks like a hardware or linker-script
+    # bug if you meet it cold. spky::BbdLine::Process is emitted per TU as a
+    # weak/COMDAT symbol; under this profile the linker keeps the copy in
+    # build/workloads_bbd.o -- a bench-harness TU that bench/itcm_hot.lds does
+    # not list -- and discards the engine objects' copies, so the surviving
+    # symbol lands outside ITCM and itcm_placement.py fail-closes on it. At -O3
+    # there is a second, independent failure on top: the hot section overflows
+    # the 64 KiB region and the link does not complete at all. Do NOT "fix" it
+    # by adding workloads_bbd.o to the hotset -- that puts bench-harness code in
+    # ITCM and distorts every measurement ever taken there. Measured and written
+    # up in docs/bench/2026-08-04-2101349-signal-path-regression.md ("The ITCM
+    # finding"); use `axi` with this profile until the hotset definition is
+    # reworked, which is M6 work.
     "regress": Profile(
         families=("system", "bbd"),
         gates=frozenset({WAVE_ACCEPTANCE}),

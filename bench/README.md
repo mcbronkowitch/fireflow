@@ -27,9 +27,21 @@ contains.
 | `body` | system, body | the M5j gate: prices the BODY mode bank and KS pair |
 | `bbd` | bbd | the BBD gate, on its own; no system anchor (reports undetermined) |
 | `sweep` | system, sweep | the cost-curve round; system anchor prevents undetermined verdict |
-| `regress` | system, bbd | the 2026-08-04 signal-path regression A/B: gate rows and BBD kernel rows in one image |
+| `regress` | system, bbd | gate rows and BBD kernel rows in one image, for any gate-versus-BBD A/B (introduced by the 2026-08-04 signal-path round); **`axi` only — `--itcm-hot` cannot pass placement at any optimization level, see below** |
 | `ablate` | system, instr | the instrument-level ablation; measures the worst-case instrument build |
 | `full` (default) | system, voice, mem, mod, abl, bbd, body, sampler | the complete run, as before profiles existed |
+
+**`regress --itcm-hot` cannot produce a usable image, at any optimization
+level, and the failure is not yours.** `spky::BbdLine::Process` is a weak
+symbol; under `regress` the linker keeps the copy in the bench-harness TU
+`build/workloads_bbd.o`, which `itcm_hot.lds` does not list, so the surviving
+symbol lands outside ITCM and `itcm_placement.py` fail-closes. At `-O3` a
+second, independent failure sits on top: the hot section overflows the 64 KiB
+region and does not link. Do **not** add `workloads_bbd.o` to the hotset —
+that places bench-harness code in ITCM and distorts every measurement ever
+taken there. Run `regress` with `axi` until the hotset definition is reworked
+(M6 work). Measured in
+`../docs/bench/2026-08-04-2101349-signal-path-regression.md`.
 
 **`full` currently fails to link, and that is deliberate, not broken.** The
 engine has outgrown the image; no profile change fixes that on its own (see

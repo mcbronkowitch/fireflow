@@ -187,7 +187,24 @@ float proc_bbd_walk_sdram()
 // this whole table.
 //
 // This row is setup_bbd_line_tap with one difference -- the stage count walks
-// -- so the pair is a same-build A/B and the difference IS the crossfade.
+// -- so the pair is a same-build A/B.
+//
+// What that pair does NOT give you is the crossfade price, and the 2026-08-04
+// signal-path round (docs/bench/2026-08-04-2101349-signal-path-regression.md)
+// measured why. The same-build gap also carries THIS ROW'S OWN per-sample
+// phase bookkeeping, which bbd_line_tap does not run, and that session did not
+// separate the two. And the scale is wrong for production in the flattering
+// direction: this row's ring is 2048 cells / 8 KB with its two taps 4 KB
+// apart (kTapStages/2 cells, walking between kTapStages and kStageWalkAlt),
+// while a production BbdEngine line is 8192 cells / 32 KB with taps 16 KB
+// apart. Any crossfade figure taken from this row is a CACHE-FRIENDLY LOWER
+// BOUND, not the production cost.
+//
+// The cross-tree A/B does not rescue it either: before a183852 there is no
+// crossfade code at all, so that delta compares two designs -- hard cut
+// against crossfade -- rather than pricing an increment on a fixed one.
+// Pricing the crossfade properly needs a same-build partner row with the
+// identical phase bookkeeping and no stage change, on a production-sized ring.
 //
 // The period is 24 samples rather than one. At the ceiling clock a line runs
 // 2*32000/48000 = 1.33 ticks per sample, half of them reads, so sixteen reads
