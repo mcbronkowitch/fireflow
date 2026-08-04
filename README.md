@@ -12,6 +12,8 @@ engine, feeding a selectable sound source.
 It runs today on the desktop and inside VCV Rack. The hardware target is a
 **standalone Daisy Patch Submodule prototype**, brought up in milestone M6.
 
+**Build log, audio demos and photos:** [fireflow.ton-k.de](https://fireflow.ton-k.de/)
+
 > **⚠️ Not yet running on hardware.** The modulation engine currently exists
 > only as a portable C++ core, verified with the desktop **offline renderer**
 > (unit tests + audio/CV render) and playable through the VCV Rack host.
@@ -142,10 +144,14 @@ modulation engine long before the M6 firmware. It's now a **beta**: a real,
 playable Rack module and a permanent part of the workflow, not yet a finished
 instrument.
 
+You can also just listen first: the [build log](https://fireflow.ton-k.de/)
+carries recordings from most milestones, next to the story of how they came
+about.
+
 **[Download the latest release](https://github.com/mcbronkowitch/fireflow/releases/latest)**
-— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.15.1**
-(Synth, Sampler, WAVE and BODY, the independent FORM/SONG phrase arranger, and
-the STEP mod grid lock). Unpack into Rack's user plugin
+— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.19.0**
+(Synth, Sampler, WAVE, BODY and BBD, the independent FORM/SONG phrase arranger,
+and the STEP mod grid lock). Unpack into Rack's user plugin
 directory and restart Rack.
 
 Building it yourself needs its own toolchain (a native MinGW/GCC compiler, not
