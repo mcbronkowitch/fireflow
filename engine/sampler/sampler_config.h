@@ -109,7 +109,7 @@ constexpr float  kSizeFloorS    = 0.001f;   // 1 ms: a pitched buzz, not a textu
 //
 // Die Rechtfertigung ist ratenspezifisch, die Konstante aber eine DAUER und
 // die Kapazitaet folgt ihr: beide Hosts allozieren sekundenbasiert
-// (host/render/main.cpp:23,48 und host/vcv/src/Spotymod.cpp:105,304 rechnen
+// (host/render/main.cpp:23,48 und host/vcv/src/Fireflow.cpp:105,304 rechnen
 // 42.0 * sample_rate). Der Puffer fasst damit bei jeder Rate 42 s, und das
 // "genau einmal unter einem Fenster"-Argument oben bleibt gueltig.
 //

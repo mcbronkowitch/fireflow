@@ -47,7 +47,7 @@ TEST_CASE("BbdEdgeState: already-live restore (preset Load/paste) landing on BBD
 {
     // Models the case Critical 2's SECOND fix round addressed: a module
     // already live and ticking on a non-BBD engine receives dataFromJson()
-    // on an already-live instance (Spotymod's curSr>0.f branch -- right-click
+    // on an already-live instance (Fireflow's curSr>0.f branch -- right-click
     // Load preset / module paste), landing ENG on BBD. Without rearm(), the
     // instance is already seeded from before the restore and the stale
     // wasBbd==false would make this look like a transition and fire.

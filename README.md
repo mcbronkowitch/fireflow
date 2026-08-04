@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="docs/img/spotymod-panel.png" width="820"
-       alt="The Spotymod front panel: two mirrored halves — green A on the left, copper B on the right — each with nine macro knobs orbiting an LED ring inside MOTION, TIMBRE and PITCH sectors, above VOICE, FX and PLAY rows. The centre column holds BLEND, a TIME group with SYNC, TEMPO, COUPLE and the SHUFFLE swing control, DUO, and a six-knob ROOM, with the SPOTYMOD wordmark on top and ten jacks in five labelled groups along the bottom.">
+  <img src="docs/img/fireflow-panel.png" width="820"
+       alt="The FireFlow front panel: two mirrored halves — green A on the left, copper B on the right — each with nine macro knobs orbiting an LED ring inside MOTION, TIMBRE and PITCH sectors, above VOICE, FX and PLAY rows. The centre column holds BLEND, a TIME group with SYNC, TEMPO, COUPLE and the SHUFFLE swing control, DUO, and a six-knob ROOM, with the FIREFLOW wordmark on top and ten jacks in five labelled groups along the bottom.">
 </p>
 
-# spotymod — a modulation-first instrument
+# FireFlow — a modulation-first ambient groovebox
 
 A digital instrument built around a single idea: **modulation is the
 instrument**. Two symmetric parts, each driven by a performable modulation
@@ -142,7 +142,7 @@ modulation engine long before the M6 firmware. It's now a **beta**: a real,
 playable Rack module and a permanent part of the workflow, not yet a finished
 instrument.
 
-**[Download the latest release](https://github.com/mcbronkowitch/spotymod/releases/latest)**
+**[Download the latest release](https://github.com/mcbronkowitch/fireflow/releases/latest)**
 — `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.15.1**
 (Synth, Sampler, WAVE and BODY, the independent FORM/SONG phrase arranger, and
 the STEP mod grid lock). Unpack into Rack's user plugin
@@ -200,12 +200,14 @@ and still builds; its setup, compile and DFU-flash instructions live in
 
 MIT — see [`LICENSE`](LICENSE) (Copyright © 2026 Synthux Academy, Bastian Tonk).
 
-spotymod began as a fork of
+FireFlow began as a fork of
 [Synthux-Academy/Spotykach](https://github.com/Synthux-Academy/Spotykach), the
 official firmware for the Spotykach hardware, and reuses parts of it; it is now
-an independent project with its own hardware target. Bundled and submodule
-dependencies are documented in [`THIRD_PARTY.md`](THIRD_PARTY.md). Original
-firmware credits are in [`CREDITS.md`](CREDITS.md).
+an independent project with its own hardware target. It was called **spotymod**
+until 2026-08-04 — releases up to and including 2.18.x carry that name.
+Bundled and submodule dependencies are documented in
+[`THIRD_PARTY.md`](THIRD_PARTY.md). Original firmware credits are in
+[`CREDITS.md`](CREDITS.md).
 
 Built with AI pair-programming — the **HAL 9000** co-author in the git history
 is [Claude](https://www.anthropic.com/claude) (Anthropic). 🔴

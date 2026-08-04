@@ -398,7 +398,7 @@
 <circle cx="173.860" cy="34.500" r="1.700" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
 <text x="39.500" y="36.100" fill="#2e6355" text-anchor="middle" font-family="monospace" font-size="5.0" letter-spacing="0.0" font-weight="bold">A</text>
 <text x="173.860" y="36.100" fill="#8a5230" text-anchor="middle" font-family="monospace" font-size="5.0" letter-spacing="0.0" font-weight="bold">B</text>
-<text x="106.680" y="7.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="3.6" letter-spacing="0.9" font-weight="bold">SPOTYMOD</text>
+<text x="106.680" y="7.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="3.6" letter-spacing="0.9" font-weight="bold">FIREFLOW</text>
 <text x="70.000" y="8.200" fill="#1d6f5f" text-anchor="middle" font-family="monospace" font-size="1.7" letter-spacing="0.3" font-weight="bold">MOTION</text>
 <text x="70.000" y="67.000" fill="#1d6f5f" text-anchor="middle" font-family="monospace" font-size="1.7" letter-spacing="0.3" font-weight="bold">TIMBRE</text>
 <text x="9.000" y="8.200" fill="#1d6f5f" text-anchor="middle" font-family="monospace" font-size="1.7" letter-spacing="0.3" font-weight="bold">PITCH</text>

@@ -1,4 +1,4 @@
-# spotymod — VCV Rack host
+# FireFlow — VCV Rack host
 
 A third host over the shared portable engine (`engine/`), alongside the desktop
 render host (`host/render/`) and the future Daisy firmware shell (M6). **No
@@ -11,11 +11,11 @@ host/vcv/
 ├── plugin.json           Rack plugin manifest
 ├── src/
 │   ├── plugin.{hpp,cpp}  plugin entry + model registration
-│   ├── Spotymod.cpp      Module: param→engine mapping, process(), widget
+│   ├── Fireflow.cpp      Module: param→engine mapping, process(), widget
 │   └── generated_panel.hpp   GENERATED (enums + control table)
 └── res/
     ├── gen_panel.py      single source of truth for the panel layout
-    └── Spotymod.svg      GENERATED faceplate
+    └── Fireflow.svg      GENERATED faceplate
 ```
 
 ## Design: one control per function (VCV-native)
@@ -30,7 +30,7 @@ The visual language follows the residency devlog ("workbench paper"): a warm
 paper plate with ink lettering, solder-green accents on part A (left) and
 copper-orange on part B (right); MORPH wears a split green/copper collar
 because it bridges the two parts. Each part's
-32-LED ring is a **live** custom widget (`SpkyRing` in `src/Spotymod.cpp`): it
+32-LED ring is a **live** custom widget (`SpkyRing` in `src/Fireflow.cpp`): it
 draws in the light layer and lights a moving dot per modulation lane from
 `Instrument::lane_output()` / `lane_fired()`, so the rings animate with the
 engine (mirroring `src/ui/led.ring.h`). The SVG only provides the dim housing.
@@ -341,7 +341,7 @@ stale WAV sitting in patch storage.
 - **DRIVE and STAGES no longer voice FLUX.** Their append-only parameter IDs
   remain stable for old patches. STAGES is used only as the PITCH-lane base
   while a deck is in BBD.
-- **Memory:** each `Spotymod` instance allocates well over its two 42 s
+- **Memory:** each `Fireflow` instance allocates well over its two 42 s
   stereo record buffers up front, whether or not the sampler is ever used on
   either part — closer to **~38.66 MB total**, not the 32 MB the record
   buffers alone account for:
@@ -458,11 +458,11 @@ make            # -> plugin.dll / .so / .dylib
 make install    # packages a .vcvplugin and copies it into Rack's user plugin dir
 ```
 
-`make install` drops `Spotymod-<version>-<arch>.vcvplugin` into Rack's user dir
+`make install` drops `Fireflow-<version>-<arch>.vcvplugin` into Rack's user dir
 (`%LOCALAPPDATA%\Rack2\plugins-win-x64\` on Windows, `~/.local/share/Rack2/…` /
 `~/Library/Application Support/Rack2/…` elsewhere); Rack unpacks it on launch.
 Restart Rack and the module appears under the **ton-k** brand
-("Spotymod" in the module browser). A self-built plugin is unsigned, so Rack may
+("FireFlow" in the module browser). A self-built plugin is unsigned, so Rack may
 note it isn't from the library — it still loads.
 
 **Windows: check where `install` actually copied to.** The SDK builds the
@@ -507,7 +507,7 @@ From a normal MSYS2 shell you can drop those overrides.
 
 ## Regenerating the panel
 
-`generated_panel.hpp` and `Spotymod.svg` are both produced from one script so
+`generated_panel.hpp` and `Fireflow.svg` are both produced from one script so
 the graphics and the widget positions can never drift:
 
 ```bash

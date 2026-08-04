@@ -20,7 +20,7 @@ int g_ctr = 0;
 // price a single oscillator kernel, so the six Plaits oscillator candidates
 // (which are also bare kernels) have a like-for-like comparison.
 //
-// A real spotymod Voice is ~7.3x this: engine/synth/voice.cpp drives TWO
+// A real fireflow Voice is ~7.3x this: engine/synth/voice.cpp drives TWO
 // MorphOsc instances in unison plus a sub-oscillator, an SVF and an envelope.
 // The decision-relevant anchor is family 1's `synth_1_voice` row, which
 // measures exactly that full pipeline. Ratios that steer engine selection are

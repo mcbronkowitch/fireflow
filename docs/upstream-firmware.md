@@ -5,7 +5,7 @@ the official firmware for the [Spotykach](https://synthux.academy/store/spotykac
 hardware, and the original firmware tree is still here: `main.cpp`, `app.cpp`,
 `src/`, the root `Makefile`, and the libDaisy / DaisySP submodules.
 
-It is **not** what this project builds any more. spotymod's own hardware target
+It is **not** what this project builds any more. FireFlow's own hardware target
 is a standalone Daisy Patch Submodule prototype (milestone M6); porting the
 modulation-first engine onto Spotykach hardware is no longer planned. The tree
 is kept because it still compiles, and because it documents the drivers,

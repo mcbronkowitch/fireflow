@@ -1,11 +1,13 @@
-# spotymod — Roadmap & Status
+# FireFlow — Roadmap & Status
 
 Living status document for the modulation-first instrument. The README carries
 the summary table; this file tracks the detail: what each milestone contains, what
 is actually built today, and what is still design-only.
 
-- **Project status, 2026-08-04:** spotymod continues as a **standalone
-  project**. It is no longer part of the Synthux residency, and the plan to run
+- **Project status, 2026-08-04:** the project continues as a **standalone
+  project** and is now called **FireFlow** — it was `spotymod` until this date,
+  and releases up to and including 2.18.x carry that name. It is no longer part
+  of the Synthux residency, and the plan to run
   the modulation-first engine on **Spotykach hardware is cancelled** — that port
   is not a milestone any more. The hardware milestone is now an instrument of
   its own, a **Daisy Patch Submodule prototype** (M6). The original Spotykach
@@ -133,7 +135,7 @@ is actually built today, and what is still design-only.
   rows. What survives is narrower and still useful: **a row that isolates a
   component need not reproduce *how that component is called*.** Second, the same
   error one level up — **both hosts call `Instrument::process` with `n = 1`**
-  (`host/render/main.cpp:102`, `host/vcv/src/Spotymod.cpp:637`), so the
+  (`host/render/main.cpp:102`, `host/vcv/src/Fireflow.cpp:637`), so the
   per-block amortisation the bench measured at `n = 96` does not exist on them;
   the removal of the two `Part` prologue pairs still does, the register-holding
   candidate does not, and **no figure is claimed for what the hosts see**. The
@@ -1233,7 +1235,7 @@ three of the four design claims above are now heard, not merely computed —
 RATE bending stored pitch, STAGES as a brightness axis, and
 `FXT_FLUX_TIME` as a live modulation lane. DRIVE was reported inaudible at
 any setting; that report was investigated and traced end to end,
-`Spotymod.cpp` → `Instrument::set_drive` → `PartFx::set_drive` →
+`Fireflow.cpp` → `Instrument::set_drive` → `PartFx::set_drive` →
 `Flux::set_drive`, and the leading evidence was a measured inverted-U in
 DRIVE's effect on output delta (peaking near DRIVE ≈ 0.5, collapsing by
 DRIVE = 1.0; see the design spec's errata item 5), together with the
@@ -1852,7 +1854,7 @@ was placed on the row that could not see the change.
 **The same error is one level up, and it bounds what this saving is worth
 today.** `Instrument::process` owns the 96-sample loop
 (`engine/instrument.cpp:76`), and **both hosts that exist call it with `n = 1`** —
-`host/render/main.cpp:102` and `host/vcv/src/Spotymod.cpp:637`. At `n = 1` the
+`host/render/main.cpp:102` and `host/vcv/src/Fireflow.cpp:637`. At `n = 1` the
 loop runs once per call, so `Instrument::process`'s *own* nine-register prologue
 and `vpush {d8-d13}` are paid per sample; only the bench passes 96. What still
 holds there is the removal of the two `Part::process` prologue/epilogue pairs per

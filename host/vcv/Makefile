@@ -1,4 +1,4 @@
-# spotymod -- VCV Rack plugin (third host over the shared engine/ core).
+# fireflow -- VCV Rack plugin (third host over the shared engine/ core).
 #
 #   RACK_DIR=/path/to/Rack-SDK make        # build
 #   RACK_DIR=/path/to/Rack-SDK make install # build + copy to Rack user dir
@@ -84,6 +84,6 @@ SOURCES += \
 # plugin.json is deliberately absent here: plugin.mk:15 already adds it, and
 # naming it again made `cp` warn about a duplicate source on every dist run.
 # That duplication predates this change -- the old `res plugin.json` had it too.
-DISTRIBUTABLES += res/factory.wav res/Spotymod.svg
+DISTRIBUTABLES += res/factory.wav res/Fireflow.svg
 
 include $(RACK_DIR)/plugin.mk

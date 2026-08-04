@@ -1,6 +1,6 @@
 name: build-plugin
 
-# Builds the Spotymod VCV Rack plugin for every platform Rack ships, using the
+# Builds the Fireflow VCV Rack plugin for every platform Rack ships, using the
 # same host/vcv Makefile that builds it locally on Windows. Each job downloads
 # the matching Rack SDK, compiles with the runner's native toolchain (which is
 # what plugin.mk's arch.mk keys off via `$(CC) -dumpmachine`), and uploads the
@@ -90,7 +90,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Spotymod-${{ matrix.sdk }}
+          name: Fireflow-${{ matrix.sdk }}
           path: host/vcv/dist/*.vcvplugin
           if-no-files-found: error
 

@@ -250,7 +250,7 @@ static const DynCaption kDynCaptions[] = {
 static const PanelTxt kPanelTexts[] = {
     {{39.500f, 36.100f}, 5.00f, 0.00f, 0x2E6355, 0, "A"},
     {{173.860f, 36.100f}, 5.00f, 0.00f, 0x8A5230, 0, "B"},
-    {{106.680f, 7.000f}, 3.60f, 0.90f, 0x171713, 0, "SPOTYMOD"},
+    {{106.680f, 7.000f}, 3.60f, 0.90f, 0x171713, 0, "FIREFLOW"},
     {{70.000f, 8.200f}, 1.70f, 0.30f, 0x1D6F5F, 0, "MOTION"},
     {{70.000f, 67.000f}, 1.70f, 0.30f, 0x1D6F5F, 0, "TIMBRE"},
     {{9.000f, 8.200f}, 1.70f, 0.30f, 0x1D6F5F, 0, "PITCH"},

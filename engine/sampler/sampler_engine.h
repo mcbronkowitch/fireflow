@@ -170,7 +170,7 @@ public:
     // control-rate-only caller, never the per-sample audio path: this
     // engine's own control tick is kCtrlInterval = 96 samples (~2 ms @
     // 48 kHz), and the VCV host currently calls this more often than that --
-    // ctrlDiv divides by 16 samples (host/vcv/src/Spotymod.cpp), i.e. every
+    // ctrlDiv divides by 16 samples (host/vcv/src/Fireflow.cpp), i.e. every
     // ~0.33 ms @ 48 kHz. Measured affordable at that rate; a future caller
     // pushing this every audio sample would still be spending clampf/lerpf
     // on the per-sample path for no reason and must not.

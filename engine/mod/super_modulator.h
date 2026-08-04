@@ -195,7 +195,7 @@ private:
     // the worst case is SYNC, not FREE: FREE tops out at kRateFreeMax (30 Hz,
     // divisions.h), but SYNC's fastest division, "1/32", has cpb = 8
     // (divisions.h) and its Hz scales with tempo, and the external-clock path
-    // accepts BPM up to 400 (host/vcv/src/Spotymod.cpp), well past the 240
+    // accepts BPM up to 400 (host/vcv/src/Fireflow.cpp), well past the 240
     // BPM the TEMPO knob alone reaches. That puts the true fastest rate at
     // 8 x (400/60 x 8) ~= 427 steps/s. INT32_MAX / 427 is about 58 days; at a
     // musical 8 steps/s it's still 8.5 years. That is a "practically never"

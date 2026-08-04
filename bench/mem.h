@@ -16,7 +16,7 @@ constexpr size_t kSdramFloats = 2 * 1024 * 1024;   // 8 MB
 
 // The sampler's record buffer at full capacity: kSizeCeilS seconds of stereo
 // frames, the same figure both hosts allocate (host/render/main.cpp,
-// host/vcv/src/Spotymod.cpp compute 42.0 * sample_rate). 2 016 000 frames =
+// host/vcv/src/Fireflow.cpp compute 42.0 * sample_rate). 2 016 000 frames =
 // 16.1 MB per part, two parts, so the sampler rows alone put 32.3 MB in
 // SDRAM. That is the point of the family: MOTION 1 scatters grain reads over
 // the whole of it, and no cache on this part can hold that.

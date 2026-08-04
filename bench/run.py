@@ -737,11 +737,11 @@ def verdict(captures):
             "question is unanswered.\n\n"
         )
 
-    # Ratios are against synth_1_voice -- ONE REAL spotymod voice (two MorphOsc
+    # Ratios are against synth_1_voice -- ONE REAL fireflow voice (two MorphOsc
     # in unison + sub + SVF + envelope). NOT against morph_osc_bare, which is a
     # single oscillator kernel and ~7.3x cheaper; anchoring on that inflates
     # every ratio by that factor and misranks the table.
-    out.write("**Cost per candidate, relative to one real spotymod voice.**\n\n")
+    out.write("**Cost per candidate, relative to one real fireflow voice.**\n\n")
     candidates = [r for r in rows
                   if r["family"] == "voice" and r["name"] != "morph_osc_bare"]
     # An empty body here would read as "no candidates cost anything worth

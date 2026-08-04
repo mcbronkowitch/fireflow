@@ -1009,7 +1009,7 @@ TEST_CASE("part: LEVEL reaches the engine (set_targets push) only on the raster"
 // --- STEP-Einstiegs-Snap: die Flanke (spec 2026-07-23) ---------------------
 //
 // Hosts pushen set_step in JEDEM Control-Tick mit dem Schalterzustand
-// (Spotymod.cpp:503), nicht nur beim Wechsel. Der Snap darf deshalb an der
+// (Fireflow.cpp:503), nicht nur beim Wechsel. Der Snap darf deshalb an der
 // FLANKE haengen und nicht am Zustand, sonst schnappt das Deck jeden Tick neu
 // und stuende dauerhaft still auf dem Raster.
 TEST_CASE("part: the FLOW->STEP edge raises the snap request exactly once") {

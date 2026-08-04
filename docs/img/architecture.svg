@@ -21,7 +21,7 @@
   <rect x="994" y="0" width="6" height="560" fill="#b96532"/>
 
   <!-- title -->
-  <text x="40" y="52" fill="#171713" font-size="22" font-weight="700" letter-spacing="1.5">spotymod &#8212; one core, three hosts</text>
+  <text x="40" y="52" fill="#171713" font-size="22" font-weight="700" letter-spacing="1.5">FireFlow &#8212; one core, three hosts</text>
   <text x="40" y="78" fill="#656056" font-size="13.5" letter-spacing="0.5">No hardware type ever crosses into <tspan fill="#171713" font-weight="700">engine/</tspan> &#8212; the exact same code runs in all three.</text>
 
   <!-- ENGINE CORE card -->

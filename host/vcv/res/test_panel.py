@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard rails for the generated Spotymod panel.
+"""Guard rails for the generated Fireflow panel.
 
 Runs the generator in-process and asserts the things that must never drift:
 the param/input/output enum ORDER (patch compatibility), the panel geometry
@@ -719,7 +719,7 @@ def test_form_song_control_contract():
                   f"{c.enum} caption/tip is {c.label!r}/{c.tip!r}, want {label}")
 
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp"),
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
               encoding="utf-8") as f:
         cpp = f.read()
     form_switch = """
@@ -1076,7 +1076,7 @@ def test_config_wires_tip_not_label():
     guard reads the actual C++ source so that regression fails the suite
     instead of waiting for a human to notice (spec 2026-07-18, Task 6 review)."""
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp_path = os.path.join(here, "..", "src", "Spotymod.cpp")
+    cpp_path = os.path.join(here, "..", "src", "Fireflow.cpp")
     with open(cpp_path) as f:
         cpp = f.read()
     check("const std::string lbl = c.tip;" in cpp,
@@ -1124,7 +1124,7 @@ def engine_cycle_wiring_issues(cpp, makefile):
     push = cpp_scope(cpp, "void pushParams()")
     process = cpp_scope(cpp, "void process(const ProcessArgs& args) override")
     ring = cpp_scope(cpp, "struct SpkyRing : Widget")
-    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
+    widget = cpp_scope(cpp, "FireflowWidget(Fireflow* module)")
 
     for label, block in (("latch", latch), ("shade table", shades),
                          ("config", config),
@@ -1190,7 +1190,7 @@ case WK_LATCH:
     else if (c.id == REC_A || c.id == REC_B) {
         auto* pad = createParamCentered<SlotVisible<VCVLatch>>(
             pos, module, c.id);
-        pad->spotymod = module;
+        pad->fireflow = module;
         pad->ctlId = c.id;
         addParam(pad);
     }
@@ -1267,7 +1267,7 @@ def test_engine_cycle_host_wiring():
     """ENG keeps its saved 0/1 meanings and exposes Wave at 2 without any
     boolean sampler routing that would mistake Wave for Sampler."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     with open(os.path.join(here, "..", "Makefile")) as f:
         makefile = f.read()
@@ -1279,7 +1279,7 @@ def test_engine_cycle_host_wiring():
 def test_engine_cycle_guard_rejects_representative_regressions():
     """The source guard must fail when a scoped ENG behavior regresses."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     with open(os.path.join(here, "..", "Makefile")) as f:
         makefile = f.read()
@@ -1314,7 +1314,7 @@ def test_variation_is_gated_off_the_sampler():
     SCAN on it. Variation parks at LOOP there -- the same shape as the
     LANE_SIZE gate that parks at 0.5f off the Sampler."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     push = cpp_scope(cpp, "void pushParams()")
     check(push is not None, "pushParams scope is missing")
@@ -1422,7 +1422,7 @@ def test_source_detune_host_wiring():
     """SOURCE owns LANE_SOURCE on every engine; hidden detune stays per part
     and persistently controllable in the Rack context menu."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     for issue in source_detune_wiring_issues(cpp):
         check(False, issue)
@@ -1432,7 +1432,7 @@ def test_source_detune_guard_rejects_representative_regressions():
     """The source guard must catch wrong lane routing and independently
     missing A/B detune menu state, not merely recognize today's source."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     mutations = [
         ("pp(SOURCE_A, p)", "pp(DETUNE_A, p)", "SOURCE lane"),
@@ -1510,7 +1510,7 @@ else if (c.id == FLUXTIME_A || c.id == FLUXTIME_B)
 def test_flux_time_host_wiring():
     """Tape Time uses its real tape mapping and routes each appended deck id."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     for issue in flux_time_wiring_issues(cpp):
         check(False, issue)
@@ -1519,7 +1519,7 @@ def test_flux_time_host_wiring():
 def test_flux_time_guard_rejects_representative_regressions():
     """The Tape Time guard rejects realistic deck, target, accessor, and default bugs."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     mutations = [
         ("params[p ? FLUXTIME_B : FLUXTIME_A].getValue()",
@@ -1571,25 +1571,25 @@ def caption_wiring_issues(cpp):
     if panel_n.count("ctlVisible(module,t[i].id)") != 1:
         issues.append("the caption loop must skip a control that is not the "
                       "one occupying its slot")
-    if "Spotymod*module;explicitPanelText(Spotymod*m):module(m){}" not in panel_n:
-        issues.append("PanelText must retain its Spotymod module pointer")
+    if "Fireflow*module;explicitPanelText(Fireflow*m):module(m){}" not in panel_n:
+        issues.append("PanelText must retain its Fireflow module pointer")
 
     # Not in the brief's verbatim body, added because the mutation test below
     # (also verbatim) mutates the construction site, not the struct scope --
     # without this check that mutation passes uncaught. See task-3 report.
-    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
+    widget = cpp_scope(cpp, "FireflowWidget(Fireflow* module)")
     if widget is None:
-        issues.append("SpotymodWidget scope is missing")
+        issues.append("FireflowWidget scope is missing")
     else:
         widget_n = compact_cpp(widget)
         if widget_n.count("newPanelText(module)") != 1:
-            issues.append("SpotymodWidget must construct PanelText with its module")
+            issues.append("FireflowWidget must construct PanelText with its module")
     return issues
 
 
 def test_caption_host_wiring():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     for issue in caption_wiring_issues(cpp):
         check(False, issue)
@@ -1606,7 +1606,7 @@ def dynamic_flag_issues(cpp):
     "fixing" it by moving either id -- every saved .vcv keeps its ids. The
     numbers coinciding is not itself a bug: a guard that only compared the
     raw numbers (pids[target] not in jack-id-set) would fail on
-    MELODY_A/GATE_B forever, fix or no fix, since nothing in Spotymod.cpp can
+    MELODY_A/GATE_B forever, fix or no fix, since nothing in Fireflow.cpp can
     change what number gen_panel.py assigns either one. What must never
     happen is the caption lookup treating that coincidence as the same slot
     -- so this guard pins the `dynamic` flag that keeps it from doing so:
@@ -1637,7 +1637,7 @@ def dynamic_flag_issues(cpp):
 
 def test_dynamic_lookup_stays_inside_the_param_id_space():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     for issue in dynamic_flag_issues(cpp):
         check(False, issue)
@@ -1647,7 +1647,7 @@ def test_dynamic_flag_guard_rejects_representative_regressions():
     """The dynamic-flag guard rejects reverting to unconditional resolution,
     not merely recognizing today's source."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     mutations = [
         ("captions(kInputCtls,  sizeof(kInputCtls)  / sizeof(kInputCtls[0]),  false);",
@@ -1671,7 +1671,7 @@ def test_dynamic_flag_guard_rejects_representative_regressions():
 
 def test_caption_guard_rejects_representative_regressions():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     mutations = [
         ("for (const auto& d : kDynCaptions)", "for (const auto& d : kParamCtls)",
@@ -1692,22 +1692,22 @@ def attack_pitch_wiring_issues(cpp):
     """Return regressions in the engine-exclusive shared VOICE control."""
     issues = []
     rounded = cpp_scope(
-        cpp, "static int roundedEngineState(Spotymod* module, int engineId)")
+        cpp, "static int roundedEngineState(Fireflow* module, int engineId)")
     selected = cpp_scope(
-        cpp, "static bool isBbdSelected(Spotymod* module, int engineId)")
-    visible = cpp_scope(cpp, "static bool ctlVisible(Spotymod* m, int id)")
+        cpp, "static bool isBbdSelected(Fireflow* module, int engineId)")
+    visible = cpp_scope(cpp, "static bool ctlVisible(Fireflow* m, int id)")
     exclusive = cpp_scope(cpp, "struct SlotVisible : W")
-    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
+    widget = cpp_scope(cpp, "FireflowWidget(Fireflow* module)")
     menu = cpp_scope(cpp, "void appendContextMenu(Menu* menu) override")
 
     expected_rounded = """
-static int roundedEngineState(Spotymod* module, int engineId) {
+static int roundedEngineState(Fireflow* module, int engineId) {
     return module
         ? static_cast<int>(std::round(module->params[engineId].getValue()))
         : 0;
 }"""
     expected_selected = """
-static bool isBbdSelected(Spotymod* module, int engineId) {
+static bool isBbdSelected(Fireflow* module, int engineId) {
     return roundedEngineState(module, engineId) == 4;
 }"""
     if rounded is None or compact_cpp(rounded) != compact_cpp(expected_rounded):
@@ -1739,11 +1739,11 @@ static bool isBbdSelected(Spotymod* module, int engineId) {
     exclusive_n = compact_cpp(exclusive) if exclusive else ""
     expected_exclusive = """
 struct SlotVisible : W {
-    Spotymod* spotymod = nullptr;
+    Fireflow* fireflow = nullptr;
     int ctlId = 0;
 
     void step() override {
-        this->setVisible(ctlVisible(spotymod, ctlId));
+        this->setVisible(ctlVisible(fireflow, ctlId));
         W::step();
     }
 }"""
@@ -1781,7 +1781,7 @@ struct SlotVisible : W {
 def test_attack_pitch_host_wiring():
     """The shared VOICE slot, caption, and menu follow rounded Rack ENG state."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp"),
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
               encoding="utf-8") as f:
         cpp = f.read()
     for issue in attack_pitch_wiring_issues(cpp):
@@ -1791,15 +1791,15 @@ def test_attack_pitch_host_wiring():
 def test_attack_pitch_guard_rejects_representative_regressions():
     """The shared VOICE guard rejects state, deck, visibility, and menu bugs."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp"),
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
               encoding="utf-8") as f:
         cpp = f.read()
     mutations = [
-        ("static int roundedEngineState(Spotymod* module, int engineId)",
-         "static int roundedEngineState(const Spotymod* module, int engineId)",
+        ("static int roundedEngineState(Fireflow* module, int engineId)",
+         "static int roundedEngineState(const Fireflow* module, int engineId)",
          "Rack Param const incompatibility"),
-        ("static bool isBbdSelected(Spotymod* module, int engineId)",
-         "static bool isBbdSelected(const Spotymod* module, int engineId)",
+        ("static bool isBbdSelected(Fireflow* module, int engineId)",
+         "static bool isBbdSelected(const Fireflow* module, int engineId)",
          "BBD helper const incompatibility"),
         ("static_cast<int>(std::round(module->params[engineId].getValue()))",
          "static_cast<int>(module->params[engineId].getValue())", "ENG rounding"),
@@ -1813,7 +1813,7 @@ def test_attack_pitch_guard_rejects_representative_regressions():
          "        : 0;",
          "static_cast<int>(std::round(module->params[engineId].getValue()))\n"
          "        : 4;", "preview fallback"),
-        ("this->setVisible(ctlVisible(spotymod, ctlId));",
+        ("this->setVisible(ctlVisible(fireflow, ctlId));",
          "visible = true;", "direct overlap visibility"),
         ("getParamQuantity(ATTACK_B)",
          "getParamQuantity(ATTACK_A)", "part B menu quantity"),
@@ -1827,8 +1827,8 @@ def test_attack_pitch_guard_rejects_representative_regressions():
 def rec_visibility_issues(cpp):
     """REC may not be offered on an engine where pushParams ignores it."""
     issues = []
-    visible = cpp_scope(cpp, "static bool ctlVisible(Spotymod* m, int id)")
-    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
+    visible = cpp_scope(cpp, "static bool ctlVisible(Fireflow* m, int id)")
+    widget = cpp_scope(cpp, "FireflowWidget(Fireflow* module)")
     if visible is None:
         issues.append("ctlVisible scope is missing")
     else:
@@ -1850,7 +1850,7 @@ def rec_visibility_issues(cpp):
 
 def test_rec_visibility_host_wiring():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     for issue in rec_visibility_issues(cpp):
         check(False, issue)
@@ -1858,7 +1858,7 @@ def test_rec_visibility_host_wiring():
 
 def test_rec_visibility_guard_rejects_representative_regressions():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     mutations = [
         ("case REC_B: return samplerDeck(m, ENGINE_B);",
@@ -1884,9 +1884,9 @@ def rec_light_visibility_issues(cpp):
     rules cannot drift apart the way test_sampler_deck_predicate_is_single_
     source_of_truth pins separately."""
     issues = []
-    visible = cpp_scope(cpp, "static bool ctlVisible(Spotymod* m, int id)")
+    visible = cpp_scope(cpp, "static bool ctlVisible(Fireflow* m, int id)")
     mixin = cpp_scope(cpp, "struct SamplerOnly : W")
-    widget = cpp_scope(cpp, "SpotymodWidget(Spotymod* module)")
+    widget = cpp_scope(cpp, "FireflowWidget(Fireflow* module)")
     if visible is None:
         issues.append("ctlVisible scope is missing")
     else:
@@ -1899,11 +1899,11 @@ def rec_light_visibility_issues(cpp):
     else:
         expected_mixin = compact_cpp("""
 struct SamplerOnly : W {
-    Spotymod* spotymod = nullptr;
+    Fireflow* fireflow = nullptr;
     int engineId = ENGINE_A;
 
     void step() override {
-        this->setVisible(samplerDeck(spotymod, engineId));
+        this->setVisible(samplerDeck(fireflow, engineId));
         W::step();
     }
 }""")
@@ -1923,7 +1923,7 @@ struct SamplerOnly : W {
 
 def test_rec_light_visibility_host_wiring():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     for issue in rec_light_visibility_issues(cpp):
         check(False, issue)
@@ -1931,7 +1931,7 @@ def test_rec_light_visibility_host_wiring():
 
 def test_rec_light_visibility_guard_rejects_representative_regressions():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     mutations = [
         ("led->engineId = (c.id == REC_A_L) ? ENGINE_A : ENGINE_B;",
@@ -1953,14 +1953,14 @@ def test_sampler_deck_predicate_is_single_source_of_truth():
     edit can silently desync (the ablation-verdict-discipline lesson: an
     unmeasured duplicate is how a residue gets mislabeled)."""
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
-    check(cpp.count("static bool samplerDeck(Spotymod* m, int engineId)") == 1,
+    check(cpp.count("static bool samplerDeck(Fireflow* m, int engineId)") == 1,
           "samplerDeck must have exactly one definition")
     matches = re.findall(r"roundedEngineState\([^)]*\)\s*==\s*1", cpp)
     check(len(matches) == 1,
           f"'roundedEngineState(...) == 1' must appear exactly once, found {len(matches)}")
-    scope = cpp_scope(cpp, "static bool samplerDeck(Spotymod* m, int engineId)")
+    scope = cpp_scope(cpp, "static bool samplerDeck(Fireflow* m, int engineId)")
     if matches and scope is not None:
         check(matches[0] in scope,
               "the lone '== 1' Sampler comparison must live inside samplerDeck")
@@ -1971,7 +1971,7 @@ def test_shuffle_host_wiring():
     control update, before either deck can enter STEP and latch that
     control-tick's groove value. The init value lives in init_patch.hpp."""
     here = os.path.dirname(os.path.abspath(__file__))
-    cpp_path = os.path.join(here, "..", "src", "Spotymod.cpp")
+    cpp_path = os.path.join(here, "..", "src", "Fireflow.cpp")
     with open(cpp_path) as f:
         cpp = f.read()
     check("inst.set_shuffle(params[SHUFFLE].getValue());" in cpp,
@@ -2049,11 +2049,11 @@ def test_sampler_preset_init_snapshot():
     check("kInitLastBasis" not in header,
           "obsolete remembered-form init state remains")
 
-    cpp_path = os.path.join(here, "..", "src", "Spotymod.cpp")
+    cpp_path = os.path.join(here, "..", "src", "Fireflow.cpp")
     with open(cpp_path) as f:
         cpp = f.read()
     check('#include "init_patch.hpp"' in cpp,
-          "Spotymod.cpp does not include the init snapshot")
+          "Fireflow.cpp does not include the init snapshot")
     check("const float init = initParamDefault(c.id);" in cpp,
           "configControls does not read the indexed init snapshot")
     check("defaultFor(" not in cpp,
@@ -2270,7 +2270,7 @@ def test_header_carries_text_anchor():
     check("unsigned char anchor; const char* str;" in h,
           "PanelTxt has no anchor column")
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     check("alignOf(t.anchor)" in cpp,
           "the kPanelTexts draw loop ignores the anchor column")
@@ -2278,7 +2278,7 @@ def test_header_carries_text_anchor():
 
 def test_vcv_tape_memory_is_heap_backed_stereo_storage():
     here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Spotymod.cpp")) as f:
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     check('std::vector<float> echoMem[spky::PART_COUNT][2];' in cpp,
           "VCV tape memory is not heap-backed stereo storage")

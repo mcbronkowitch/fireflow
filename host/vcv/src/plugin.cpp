@@ -4,5 +4,5 @@ Plugin* pluginInstance;
 
 void init(Plugin* p) {
     pluginInstance = p;
-    p->addModel(modelSpotymod);
+    p->addModel(modelFireflow);
 }

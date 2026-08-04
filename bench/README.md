@@ -3,7 +3,7 @@
 ## What this is
 
 A measurement app that has never shipped and never will. It boots the Daisy
-Seed straight into a cycle-counting harness instead of the spotymod firmware,
+Seed straight into a cycle-counting harness instead of the FireFlow firmware,
 runs a fixed table of workloads, and reports cycle counts and checksums back
 over the debug probe. The shipping firmware is the repo-root `Makefile`,
 `main.cpp`, `app.cpp`/`app.h`, `src/**`, `third_party/**` and `engine/**` —
@@ -293,7 +293,7 @@ code." The checksum is the actual anti-dead-code guarantee — it is
 non-zero, it is reproducible across the two repeat runs, and it is
 data-dependent by construction. Do not read the monitor output as a
 listening test, and do not promise anyone they will hear a reverb, a
-synth voice, or anything resembling spotymod's actual sound in this mode.
+synth voice, or anything resembling FireFlow's actual sound in this mode.
 
 **Anchor mode's final segment sounds broken on purpose.** `instrument_worst`
 runs at roughly 160% of the block budget offline, so inside the real

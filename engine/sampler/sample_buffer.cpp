@@ -230,7 +230,7 @@ void SampleBuffer::clear() {
     // memory holds -- nothing past the write head is reachable either way.
     // This is the fix for I-3: on a 42 s buffer the unconditional memset was
     // ~1.5-3 ms inside one process() call, and the factory-drone autoload
-    // (Spotymod.cpp pushParams) hits exactly this empty-buffer case on the
+    // (Fireflow.cpp pushParams) hits exactly this empty-buffer case on the
     // audio thread. Every other line below stays unconditional -- a buffer
     // that DID hold content (_size != 0) still gets the full memset.
     if (_buffer && _buffer_size && _size != 0)

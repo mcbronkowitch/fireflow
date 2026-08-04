@@ -1204,3 +1204,36 @@ payload digest
 `ac234ac7f7540ed5cd0e8b8496b84fca8084a3b2c05cc513aa4dad8ed811fc27`.
 Evidence: `docs/bench/2026-07-25-8c5f2e1.md` and
 `docs/bench/2026-07-25-8c5f2e1.csv`.
+
+## Renamed spotymod → FireFlow (2026-08-04)
+
+The second public rename of this repository, after `Spotykach` → `spotymod`
+(recorded above). Same day as the two changes that made it necessary: the
+project left the Synthux residency and dropped the Spotykach hardware port, so
+a name built on `Spotykach` no longer described anything.
+
+`Firefly` was the first candidate and was rejected: ZetaCarinae already ships a
+module of that name in the official VCV Library, and it is a phase-coupled
+oscillator — the same conceptual corner as this instrument's Kuramoto COUPLE.
+`FireFlow` keeps the image without the collision; no plugin in the VCV Library
+manifest carries `fire`, `flow` or `fly` in its name. A `mod`-based name was
+considered first and dropped once `MOD` turned out to be a printed panel
+caption of its own.
+
+**Clean slug break, deliberately.** Plugin and module slug both go
+`Spotymod` → `Fireflow` rather than keeping the old slug behind a new display
+name. Existing VCV patches containing the module lose it. Accepted because the
+plugin is not in the official VCV Library, is distributed only through GitHub
+releases, and carrying `Spotymod/` in every install path forever was judged the
+higher cost. Version bumped to 2.19.0; release assets change from
+`Spotymod-*.vcvplugin` to `Fireflow-*.vcvplugin`, and releases up to 2.18.x keep
+the old name.
+
+Mechanical scope: 31 live files, `Spotymod`→`Fireflow`, `spotymod`→`fireflow`,
+`SPOTYMOD`→`FIREFLOW`, plus `git mv` on `host/vcv/src/Spotymod.cpp` and
+`host/vcv/res/Spotymod.svg`. The wordmark is monospace on a centred anchor and
+both names are eight characters, so the faceplate needed no relayout. The 314
+archival files under `docs/bench/`, `docs/superpowers/`, `docs/audits/` and
+`.superpowers/` were left untouched, as were the dated provenance notes in
+`third_party/oliverb/` and the historical release names in this file and in
+`docs/roadmap.md` — at those dates the project really was called that.

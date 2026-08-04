@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Single source of truth for the Spotymod VCV panel.
+"""Single source of truth for the Fireflow VCV panel.
 
 Layout (2026-07-18 redesign): two symmetric halves, each built around a 32-LED
 ring with nine macro knobs orbiting it in three meaning-sorted sectors (MOTION /
@@ -7,7 +7,7 @@ TIMBRE / PITCH) and its secondary functions in three fieldset boxes below
 (VOICE | FX, PLAY). A shared centre column of four boxes (BLEND / TIME / DUO /
 ROOM) sits between them, and the ten jacks form five labelled groups along the
 bottom edge. Identity is loosely inherited from the hardware -- the ring plus
-macro orbit and the mirrored A/B split -- but Spotymod is its own instrument
+macro orbit and the mirrored A/B split -- but Fireflow is its own instrument
 and no longer reducible to the real panel.
 
 Visual identity comes from the residency devlog ("workbench paper"): a warm
@@ -17,7 +17,7 @@ neutral; MORPH, the knob that bridges the two parts, wears a split
 green/copper collar.
 
 Emits (both committed):
-  - res/Spotymod.svg          the faceplate
+  - res/Fireflow.svg          the faceplate
   - src/generated_panel.hpp   enums + PART_STRIDE + control/text tables
 
 Run from host/vcv/:  python3 res/gen_panel.py
@@ -293,7 +293,7 @@ def part_controls(mir=False):
         out.append(Ctl(enum, SMKNOB, fx(FX_BOT[i]), ROW_V2, lbl))
     out.append(Ctl("STEPS", KNOBI, fx(STEPS_X), PLAY_Y, "STPS"))
     # ENGINE cycles Synth/Sampler/Wave/Body/BBD (states 0..4); the C++ side
-    # (Spotymod.cpp configSwitch/EngineCycleLatch) is the source of truth for
+    # (Fireflow.cpp configSwitch/EngineCycleLatch) is the source of truth for
     # the labels, this comment just keeps the panel legend discoverable here.
     # GRITMODE's caption is its MODE, not its block's name -- the block is the
     # GRIT knob one row up (spec 2026-08-03). Its resting word is SAT; the
@@ -540,7 +540,7 @@ STATIC_LIGHTS = [c for c in LIGHTS if c.enum not in ("REC_A_L", "REC_B_L")]
 TEXTS = [
     (RING_CX_A,     RING_CY + 1.6, 5.0, 0.0, GREEN_DIM,  "middle", "A"),
     (W - RING_CX_A, RING_CY + 1.6, 5.0, 0.0, COPPER_DIM, "middle", "B"),
-    (CX,            7.0,           3.6, 0.9, INK,        "middle", "SPOTYMOD"),
+    (CX,            7.0,           3.6, 0.9, INK,        "middle", "FIREFLOW"),
 ] + [
     # sector captions, tucked into the free panel corners (spec §1)
     (W - cx if mir else cx, cy, 1.7, 0.3, COPPER if mir else GREEN,
@@ -673,7 +673,7 @@ def svg():
     # to its right and the two read as a single smudged element rather than a
     # rule and an indicator. The gap between REC and STEPS separates the two
     # blocks on its own, which is what the rest of the row already relies on.
-    # brand flanking dots -- one per colour, flanking the top SPOTYMOD logo
+    # brand flanking dots -- one per colour, flanking the top FIREFLOW logo
     P.append(f'<circle cx="{mm(CX-15)}" cy="5.9" r="0.9" fill="{GREEN}"/>')
     P.append(f'<circle cx="{mm(CX+15)}" cy="5.9" r="0.9" fill="{COPPER}"/>')
     # glyphs + labels
@@ -793,10 +793,10 @@ def header():
 if __name__ == "__main__":
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(here)
-    with open(os.path.join(here, "Spotymod.svg"), "w") as f:
+    with open(os.path.join(here, "Fireflow.svg"), "w") as f:
         f.write(svg())
     with open(os.path.join(root, "src", "generated_panel.hpp"), "w") as f:
         f.write(header())
-    print("wrote res/Spotymod.svg and src/generated_panel.hpp")
+    print("wrote res/Fireflow.svg and src/generated_panel.hpp")
     print(f"params={len(PARAMS)} (stride={PART_STRIDE}) inputs={len(INPUTS)} "
           f"outputs={len(OUTPUTS)} lights={len(LIGHTS)}  panel={HP}HP")

@@ -221,7 +221,7 @@ static_assert(REC_B == REC_A + 1,
 static_assert(REC_A + PART_STRIDE >= NUM_PARAMS,
               "if REC ever moves into the part blocks, revisit the explicit REC reads");
 
-struct Spotymod : Module {
+struct Fireflow : Module {
     spky::Instrument inst;
     spky::FxMem fxmem;
 
@@ -282,7 +282,7 @@ struct Spotymod : Module {
     std::atomic<bool> resyncReq { false };  // menu "Resync to bar" -> audio thread
     bool pendingRestore = false;    // dataFromJson ran before onAdd; content reload deferred
 
-    Spotymod() {
+    Fireflow() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
         configControls();
         for (int p = 0; p < spky::PART_COUNT; ++p) {
@@ -1042,14 +1042,14 @@ struct Spotymod : Module {
                     // stale WAV survive and restoreSamplerContent() reload it
                     // right back on reopen -- the original I-1a bug, with no
                     // diagnostic to explain why.
-                    WARN("Spotymod: could not remove stale sampler %d WAV %s",
+                    WARN("Fireflow: could not remove stale sampler %d WAV %s",
                          p, stored.c_str());
                 }
                 continue;
             }
             std::string err;
             if (!spkyvcv::save_wav_from(inst, p, storedWavPath(p), curSr, err))
-                WARN("Spotymod: could not store sampler %d: %s", p, err.c_str());
+                WARN("Fireflow: could not store sampler %d: %s", p, err.c_str());
         }
     }
 
@@ -1077,7 +1077,7 @@ struct Spotymod : Module {
             if (!smp[p].path.empty()) {
                 if (spkyvcv::load_wav_into(inst, p, smp[p].path, curSr, err))
                     continue;
-                WARN("Spotymod: sampler %d could not reload %s: %s",
+                WARN("Fireflow: sampler %d could not reload %s: %s",
                      p, smp[p].path.c_str(), err.c_str());
                 // Deliberately falls through instead of continue-ing: the
                 // file may have moved, been renamed, or the patch may have
@@ -1104,7 +1104,7 @@ struct Spotymod : Module {
                 if (system::isFile(stored)) {
                     if (spkyvcv::load_wav_into(inst, p, stored, curSr, err))
                         continue;
-                    WARN("Spotymod: sampler %d could not reload stored %s: %s",
+                    WARN("Fireflow: sampler %d could not reload stored %s: %s",
                          p, stored.c_str(), err.c_str());
                 }
             }
@@ -1144,7 +1144,7 @@ struct Spotymod : Module {
         std::string err;
         const std::string fp = asset::plugin(pluginInstance, "res/factory.wav");
         if (!spky::read_wav(fp, factoryNative, err)) {
-            WARN("Spotymod: factory sample unavailable: %s", err.c_str());
+            WARN("Fireflow: factory sample unavailable: %s", err.c_str());
             factoryNative.l.clear();
             factoryNative.r.clear();
         }
@@ -1168,10 +1168,10 @@ struct Spotymod : Module {
 // darkened room). Each of the five lanes lights a moving dot at its position;
 // a lane that just fired flashes. Idle -> dark (no fake motion).
 struct SpkyRing : Widget {
-    Spotymod* module = nullptr;
+    Fireflow* module = nullptr;
     int part = 0;
 
-    SpkyRing(Spotymod* m, int p) : module(m), part(p) {
+    SpkyRing(Fireflow* m, int p) : module(m), part(p) {
         float d = mm2px(2.f * (kRingR + kRingDotR + 0.5f));
         box.size = Vec(d, d);
     }
@@ -1261,13 +1261,13 @@ struct SpkyRing : Widget {
 // Rack can never drift apart. Font is a stock Rack asset, present in every
 // v2 install -- note it has no bold cut, so the SVG's bold legends render
 // regular here. That is accepted.
-static int roundedEngineState(Spotymod* module, int engineId) {
+static int roundedEngineState(Fireflow* module, int engineId) {
     return module
         ? static_cast<int>(std::round(module->params[engineId].getValue()))
         : 0;
 }
 
-static bool isBbdSelected(Spotymod* module, int engineId) {
+static bool isBbdSelected(Fireflow* module, int engineId) {
     return roundedEngineState(module, engineId) == 4;
 }
 
@@ -1276,7 +1276,7 @@ static bool isBbdSelected(Spotymod* module, int engineId) {
 // below). Duplicating the comparison would let the two drift, and this
 // file's guards match on source text, so a second copy of an expression can
 // also silently redirect a mutation test elsewhere.
-static bool samplerDeck(Spotymod* m, int engineId) {
+static bool samplerDeck(Fireflow* m, int engineId) {
     return roundedEngineState(m, engineId) == 1;
 }
 
@@ -1286,7 +1286,7 @@ static bool samplerDeck(Spotymod* m, int engineId) {
 // Sampler: pushParams gates it on the exact Sampler engine id, and its LED is
 // already dark elsewhere, so the pad was the last thing still claiming
 // otherwise.
-static bool ctlVisible(Spotymod* m, int id) {
+static bool ctlVisible(Fireflow* m, int id) {
     switch (id) {
         case ATTACK_A: return !isBbdSelected(m, ENGINE_A);
         case ATTACK_B: return !isBbdSelected(m, ENGINE_B);
@@ -1303,11 +1303,11 @@ static bool ctlVisible(Spotymod* m, int id) {
 // word is still drawn.
 template <typename W>
 struct SlotVisible : W {
-    Spotymod* spotymod = nullptr;
+    Fireflow* fireflow = nullptr;
     int ctlId = 0;
 
     void step() override {
-        this->setVisible(ctlVisible(spotymod, ctlId));
+        this->setVisible(ctlVisible(fireflow, ctlId));
         W::step();
     }
 };
@@ -1319,18 +1319,18 @@ struct SlotVisible : W {
 // time an id crossed enum spaces here.
 template <typename W>
 struct SamplerOnly : W {
-    Spotymod* spotymod = nullptr;
+    Fireflow* fireflow = nullptr;
     int engineId = ENGINE_A;
 
     void step() override {
-        this->setVisible(samplerDeck(spotymod, engineId));
+        this->setVisible(samplerDeck(fireflow, engineId));
         W::step();
     }
 };
 
 struct PanelText : Widget {
-    Spotymod* module;
-    explicit PanelText(Spotymod* m) : module(m) {}
+    Fireflow* module;
+    explicit PanelText(Fireflow* m) : module(m) {}
 
     void draw(const DrawArgs& args) override {
         std::shared_ptr<Font> font =
@@ -1437,10 +1437,10 @@ struct FeedbackSlider : ui::Slider {
 };
 
 // --- widget -------------------------------------------------------------------
-struct SpotymodWidget : ModuleWidget {
-    SpotymodWidget(Spotymod* module) {
+struct FireflowWidget : ModuleWidget {
+    FireflowWidget(Fireflow* module) {
         setModule(module);
-        setPanel(createPanel(asset::plugin(pluginInstance, "res/Spotymod.svg")));
+        setPanel(createPanel(asset::plugin(pluginInstance, "res/Fireflow.svg")));
 
         // panel lettering (NanoSVG can't render the SVG's <text>; see PanelText)
         auto* labels = new PanelText(module);
@@ -1457,7 +1457,7 @@ struct SpotymodWidget : ModuleWidget {
                             || c.id == STAGES_A || c.id == STAGES_B) {
                         auto* knob = createParamCentered<SlotVisible<Trimpot>>(
                             pos, module, c.id);
-                        knob->spotymod = module;
+                        knob->fireflow = module;
                         knob->ctlId = c.id;
                         addParam(knob);
                     }
@@ -1473,7 +1473,7 @@ struct SpotymodWidget : ModuleWidget {
                     else if (c.id == REC_A || c.id == REC_B) {
                         auto* pad = createParamCentered<SlotVisible<VCVLatch>>(
                             pos, module, c.id);
-                        pad->spotymod = module;
+                        pad->fireflow = module;
                         pad->ctlId = c.id;
                         addParam(pad);
                     }
@@ -1494,7 +1494,7 @@ struct SpotymodWidget : ModuleWidget {
             if (c.id == REC_A_L || c.id == REC_B_L) {   // record = red, Sampler-only
                 auto* led = createLightCentered<SamplerOnly<SmallLight<RedLight>>>(
                     pos, module, c.id);
-                led->spotymod = module;
+                led->fireflow = module;
                 led->engineId = (c.id == REC_A_L) ? ENGINE_A : ENGINE_B;
                 addChild(led);
             }
@@ -1517,7 +1517,7 @@ struct SpotymodWidget : ModuleWidget {
     }
 
     void appendContextMenu(Menu* menu) override {
-        auto* m = getModule<Spotymod>();
+        auto* m = getModule<Fireflow>();
         menu->addChild(new MenuSeparator);
         // Same gesture as a pulse into RST: zero the downbeat and restart the
         // loops at the bar start (a live STEPS turn leaves them free-running).
@@ -1645,4 +1645,4 @@ struct SpotymodWidget : ModuleWidget {
     }
 };
 
-Model* modelSpotymod = createModel<Spotymod, SpotymodWidget>("Spotymod");
+Model* modelFireflow = createModel<Fireflow, FireflowWidget>("Fireflow");

@@ -1,18 +1,18 @@
 {
-  "slug": "Spotymod",
-  "name": "spotymod",
-  "version": "2.18.3",
+  "slug": "Fireflow",
+  "name": "FireFlow",
+  "version": "2.19.0",
   "license": "MIT",
   "brand": "ton-k",
   "author": "Bastian Tonk",
   "authorEmail": "synthux@ton-k.de",
   "authorUrl": "https://synthux.ton-k.de/",
-  "sourceUrl": "https://github.com/mcbronkowitch/spotymod",
-  "description": "Modulation-first instrument: the spotymod engine as a VCV Rack module.",
+  "sourceUrl": "https://github.com/mcbronkowitch/fireflow",
+  "description": "Modulation-first ambient groovebox: the FireFlow engine as a VCV Rack module.",
   "modules": [
     {
-      "slug": "Spotymod",
-      "name": "Spotymod",
+      "slug": "Fireflow",
+      "name": "FireFlow",
       "description": "Two SuperModulators (five lanes each), center section, ambient reverb, master drive.",
       "tags": ["Function generator", "LFO", "Random", "Synth voice", "Effect", "Polyphonic"]
     }

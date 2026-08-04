@@ -16,7 +16,7 @@
 //
 //   1. Elf Befunde sind Verhalten und haben einen TEST_CASE, dessen Name mit
 //      der ID beginnt (kIdsNeedingATest).
-//   2. Zwei liegen in host/vcv/src/Spotymod.cpp, das die VCV-Rack-
+//   2. Zwei liegen in host/vcv/src/Fireflow.cpp, das die VCV-Rack-
 //      Abhaengigkeit hat und nicht Teil dieser Suite ist. Fuer sie wird ein
 //      Eintrag in host/vcv/README.md verlangt (kIdsNeedingReadme).
 //   3. Zwei sind Doku- beziehungsweise Szenario-Befunde, fuer die ein
