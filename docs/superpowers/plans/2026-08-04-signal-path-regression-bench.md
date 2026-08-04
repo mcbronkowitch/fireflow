@@ -705,9 +705,14 @@ The layout axis is therefore dropped from this round. Task 9 reports the table
 above as a finding in its own right — it says something about M6's placement
 target that a comparison of two hardware runs would not have.
 
-Diagnostic evidence:
-`.superpowers/sdd/2026-08-04-signal-path-regression-bench/o3-itcm-diagnostic-report.md`
-(scratch, not committed; its numbers are carried into Task 9's document).
+Diagnostic evidence: `docs/bench/2026-08-04-2101349-signal-path-regression.md`,
+its ITCM section. The link probes and the follow-up diagnostic were run from a
+session workspace that is deliberately not committed; every figure they
+produced — the four-row table above, the `+864 B` / `+1,504 B` growth, the
+baseline's 32 bytes of margin, and the weak-symbol resolution to
+`build/workloads_bbd.o` — was carried into that document, which is the durable
+record. What did not survive is the per-build symbol addresses, which nothing
+here concludes from.
 
 ---
 
