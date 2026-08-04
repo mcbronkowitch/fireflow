@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 #include "fx/fx_util.h"
+#include <algorithm>
 using namespace spky;
 
 TEST_CASE("xfade: stage 0 is exactly lhs, stage 1 is exactly rhs") {
@@ -35,4 +36,26 @@ TEST_CASE("softswitch: immediate flag jumps straight to hold") {
     s.init(48000.f);
     s.set_on(true, true);
     CHECK(s.process() == 1.f);
+}
+
+static float max_rise_step(float sr) {
+    SoftSwitch s;
+    s.init(sr);
+    s.process();                     // settle in idle
+    s.set_on(true);
+    float prev = 0.f, worst = 0.f;
+    const int n = static_cast<int>(0.02f * sr);   // 20 ms >> the 4 ms ramp
+    for (int i = 0; i < n; ++i) {
+        const float v = s.process();
+        worst = std::max(worst, v - prev);
+        prev = v;
+    }
+    CHECK(prev == 1.f);              // the ramp must actually arrive at hold
+    return worst;
+}
+
+TEST_CASE("softswitch: the 4 ms ramp is a ramp at 44.1/48/96 kHz") {
+    CHECK(max_rise_step(48000.f) < 0.02f);
+    CHECK(max_rise_step(96000.f) < 0.02f);   // today: 0.508 — ramp dies at 0.492, then snaps
+    CHECK(max_rise_step(44100.f) < 0.02f);   // today: OOB table read, then a >0.27 snap
 }

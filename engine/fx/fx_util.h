@@ -27,10 +27,11 @@ inline const std::array<float, 192>& hann_curve() {
 inline float hann_value_at(float norm_pos) {
     const auto& curve = hann_curve();
     float pos = static_cast<float>(curve.size() - 1) * norm_pos;
+    if (pos < 0.f) pos = 0.f;
     auto ipos = static_cast<size_t>(pos);
+    if (ipos >= curve.size() - 1) return curve[curve.size() - 1];
     float frac = pos - static_cast<float>(ipos);
-    size_t npos = ipos + 1 >= curve.size() ? curve.size() - 1 : ipos + 1;
-    return curve[ipos] + (curve[npos] - curve[ipos]) * frac;
+    return curve[ipos] + (curve[ipos + 1] - curve[ipos]) * frac;
 }
 
 // The square law crossfade
@@ -69,7 +70,14 @@ public:
     SoftSwitch(const SoftSwitch&) = delete;
     SoftSwitch& operator=(const SoftSwitch&) = delete;
 
-    void init(float sample_rate) { _kof = 1.f / (0.004f * sample_rate); }
+    void init(float sample_rate) {
+        _kof = 1.f / (0.004f * sample_rate);
+        // The iterator bound must come from the same 4 ms the step size
+        // comes from — a constant 191 is only right at 48 kHz (the OOB
+        // read / half-ramp of the 2026-08-04 audit, finding 1).
+        _end = static_cast<int32_t>(0.004f * sample_rate) - 1;
+        if (_end < 1) _end = 1;
+    }
 
     void set_on(bool on, bool immediate = false) {
         _on = on;
@@ -89,11 +97,11 @@ public:
             case Stage::rise:
                 if (!_on) _stage = Stage::fall;
                 else _out = hann_value_at(_iterator * _kof);
-                if (++_iterator >= 191) _stage = Stage::hold;
+                if (++_iterator >= _end) _stage = Stage::hold;
                 break;
             case Stage::hold:
                 _out = 1.f;
-                _iterator = 191;
+                _iterator = _end;
                 if (!_on) _stage = Stage::fall;
                 break;
             case Stage::fall:
@@ -109,6 +117,7 @@ private:
     enum class Stage { idle, rise, hold, fall };
 
     int32_t _iterator = 0;
+    int32_t _end = 191;   // pre-init() default matches the old 48 kHz constant
     float _kof = 1.f;
     float _out = 0.f;
     Stage _stage = Stage::idle;
