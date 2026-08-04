@@ -18,6 +18,26 @@ __pycache__/
 /CLAUDE.md
 /.claude/
 
+# Windows shell droppings -- the .DS_Store of this machine.
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Editor and tooling local state. compile_commands.json is emitted into
+# build/ by CMake; the root copy is only ever a convenience symlink for
+# clangd, and CMakeUserPresets.json is per-developer by CMake's own
+# convention (CMakePresets.json is the tracked one).
+.vs/
+.cache/
+/compile_commands.json
+/CMakeUserPresets.json
+
+# Object and dependency files. Both toolchains write these into their own
+# build dirs, so a stray one at any other path is an accident.
+*.o
+*.d
+*.obj
+
 # Sampler source material for the render-host scenarios. Two kinds live here,
 # neither belongs in the repo: the user's own sample library (large, and not
 # ours to redistribute), and material bounced from Spotykach itself by
