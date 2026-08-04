@@ -516,6 +516,24 @@ python3 res/gen_panel.py     # run from host/vcv/
 
 Edit the control table in `res/gen_panel.py`, re-run, rebuild.
 
+### The README hero image
+
+`docs/img/fireflow-panel.png` is a raster of that same SVG, and **nothing
+regenerates it automatically** — it silently went two caption rounds stale once
+already. After a panel change, re-render it. Any browser's headless screenshot
+does the job faithfully, including the knob-cap gradients that pure-Python SVG
+rasterisers drop:
+
+```bash
+# wrapper keeps the exact pixel size; the SVG's own units are mm
+printf '<style>html,body{margin:0;overflow:hidden}img{display:block;width:1640px;height:988px}</style><img src="Fireflow.svg">' > res/_r.html
+<your-browser> --headless=new --hide-scrollbars --window-size=1640,988 \
+  --screenshot=../../docs/img/fireflow-panel.png res/_r.html
+rm res/_r.html
+```
+
+1640 × 988 is twice the 820 px the README displays it at.
+
 ## I/O
 
 | Port | Meaning |
