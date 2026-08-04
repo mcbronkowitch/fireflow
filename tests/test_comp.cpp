@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include <algorithm>
 #include <cmath>
 #include <vector>
 #include "fx/comp.h"
@@ -159,4 +160,42 @@ TEST_CASE("comp: makeup cannot push the envelope past the post-comp ceiling") {
         if (i >= 48000) peak_out = std::max(peak_out, std::fabs(l));
     }
     CHECK(peak_out <= 0.5f);
+}
+
+TEST_CASE("comp: knob 0.001 is transparent, not a -5 dB cliff") {
+    Comp c;
+    c.init(48000.f);
+    c.set_amount(0.001f);
+    float peak = 0.f;
+    for (int i = 0; i < 96000; ++i) {
+        const float s = 0.8f * std::sin(6.2831853f * 220.f * i / 48000.f);
+        float l = s, r = s;
+        c.process(l, r);
+        if (i > 48000) peak = std::max(peak, std::fabs(l));   // steady state only
+    }
+    CHECK(peak > 0.75f);   // today: 0.4505 (-5 dB) — the unscaled env ceiling
+}
+
+TEST_CASE("comp: riding the knob to zero glides out, no gain snap") {
+    Comp c;
+    c.init(48000.f);
+    c.set_amount(0.5f);
+    int n = 0;
+    auto tick = [&]() {
+        const float s = 0.8f * std::sin(6.2831853f * 220.f * n++ / 48000.f);
+        float l = s, r = s;
+        c.process(l, r);
+        return c.gain_db();
+    };
+    float g = 0.f;
+    for (int i = 0; i < 48000; ++i) g = tick();   // settle at 0.5
+    float prev = g, worst = 0.f;
+    for (int i = 0; i < 96000; ++i) {             // ride 0.5 -> 0 over 0.5 s, then hold
+        const float a = 0.5f * std::max(0.f, 1.f - static_cast<float>(i) / 24000.f);
+        c.set_amount(a);
+        g = tick();
+        worst = std::max(worst, std::fabs(g - prev));
+        prev = g;
+    }
+    CHECK(worst < 0.5f);   // dB per sample; today the disengage snap is ~+5.3 dB in one sample
 }

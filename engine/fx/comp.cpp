@@ -12,6 +12,12 @@ constexpr float kMakeupComp = 0.9f;
 // above the envelope is what keeps program peaks near 0 dBFS instead of
 // grinding the master limiter (by-ear finding: the 0:26 clip in comp_pump).
 constexpr float kEnvCeiling = 0.4f;
+// The env ceiling belongs to the compressor, not to knob zero: it fades in
+// over the first kCapEngage of (smoothed) travel, so amount -> 0 ramps to
+// true bypass instead of the -5 dB cliff at 0.001 (audit 2026-08-04,
+// finding 4). At and above kCapEngage the cap law is exactly the old one —
+// the by-ear defaults (0.630 / 0.561) sit far past it, untouched.
+constexpr float kCapEngage = 0.15f;   // ear-tunable
 
 inline float coef_for(float time_s, float sr) {
     return 1.f - std::exp(-1.f / (time_s * sr));
@@ -68,16 +74,28 @@ void Comp::compute_gain() {
     // Never command a gain that lifts the envelope above the post-comp
     // ceiling; quiet material sits far below the cap and keeps its full
     // makeup, so the loudness intent survives.
-    const float cap = kEnvCeiling / std::max(_env, 1e-6f);
-    if (_gain_target > cap) _gain_target = cap;
+    const float relax = std::min(1.f, _curve_amount * (1.f / kCapEngage));
+    if (relax > 0.f) {
+        const float cap = kEnvCeiling / (std::max(_env, 1e-6f) * relax);
+        if (_gain_target > cap) _gain_target = cap;
+    }
 }
 
 void Comp::process(float& l, float& r) {
     if (!engaged()) {
-        if (_gain != 1.f) {                          // re-arm after disengage
-            _gain = _gain_target = 1.f;
-            _env = 0.f;
-            _ctr = 0;
+        if (_gain != 1.f) {                          // glide out, then re-arm
+            _gain += _gain_coef * (1.f - _gain);     // ~2 ms, the recovery coef
+            // fabs, not (1 - gain): makeup can leave _gain ABOVE 1 on quiet
+            // material, and the glide has to converge from both sides
+            if (std::fabs(1.f - _gain) < 1e-4f) {
+                _gain = _gain_target = 1.f;
+                _env = 0.f;
+                _ctr = 0;
+                return;                              // bit-exact from here on
+            }
+            l *= _gain;
+            r *= _gain;
+            return;
         }
         return;                                      // bit-exact bypass
     }
