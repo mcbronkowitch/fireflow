@@ -348,3 +348,56 @@ TEST_CASE("flux tape: re-init resets the FXT time guard") {
     f.set_time_mod(1.f);
     CHECK(f.delay_target_for_test() == doctest::Approx(2.f));
 }
+
+TEST_CASE("flux tape: switching off fades the echo instead of cutting it") {
+    FluxTapeMem mem;
+    Flux f;
+    mem.init(f);
+    f.set_bpm(120.f);
+    f.set_rate(3);                    // 0.5 s line
+    f.set_on(true, true);
+    f.set_mix(1.f);
+    f.set_feedback(0.5f);
+    for (int i = 0; i < 48000; ++i) { // fill the line with a 200 Hz tone
+        float s = 0.8f * std::sin(6.2831853f * 200.f * i / 48000.f);
+        float l = s, r = s;
+        f.process(l, r);
+    }
+    f.set_on(false);                  // ramped off, into silence
+    float prev = 0.f, worst = 0.f;
+    for (int i = 0; i < 400; ++i) {   // 4 ms ramp = 192 samples, plus margin
+        float l = 0.f, r = 0.f;
+        f.process(l, r);
+        if (i > 0) worst = std::max(worst, std::fabs(l - prev));
+        prev = l;
+    }
+    // A 200 Hz tone at 0.8 moves at most ~0.021/sample by itself; the
+    // one-sample cut the audit measured is 0.476.
+    CHECK(worst < 0.1f);
+}
+
+TEST_CASE("flux tape: re-enabling does not resurrect a stale take") {
+    FluxTapeMem mem;
+    Flux f;
+    mem.init(f);
+    f.set_bpm(120.f);
+    f.set_rate(3);
+    f.set_on(true, true);
+    f.set_mix(1.f);
+    f.set_feedback(0.5f);
+    for (int i = 0; i < 48000; ++i) {
+        float s = 0.8f * std::sin(6.2831853f * 200.f * i / 48000.f);
+        float l = s, r = s;
+        f.process(l, r);
+    }
+    f.set_on(false);
+    run_silence(f, 480);              // let the fall finish, land in idle
+    f.set_on(true);                   // wake into silence
+    float peak = 0.f;
+    for (int i = 0; i < 4000; ++i) {
+        float l = 0.f, r = 0.f;
+        f.process(l, r);
+        peak = std::max(peak, std::max(std::fabs(l), std::fabs(r)));
+    }
+    CHECK(peak < 1e-3f);              // today: first sample already -0.466
+}

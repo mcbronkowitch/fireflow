@@ -152,10 +152,28 @@ void Flux::set_rhythm(const RhythmView& rv) {
     refresh_repeat_scheduler();
 }
 
+void Flux::flush_lines() {
+    // One memset per switch-off (2 x 1 MB). Desktop-cheap; the Daisy shell
+    // will need an amortized clear before this engine runs on hardware.
+    _echo_l.Reset();
+    _echo_r.Reset();
+    _line_dirty = false;
+}
+
 void Flux::process(float& l, float& r) {
     if (!_buf_ok) return;
-    const float send = _sw.process();
-    if (_sw.is_idle()) return;
+    const bool was_idle = _sw.is_idle();
+    const float k = _sw.process();
+    if (_sw.is_idle()) {
+        // The fall just completed. PartFx stops calling us the moment
+        // engaged() drops, so this transition sample is the last chance
+        // to flush the stale take (audit finding 2: a frozen line used
+        // to replay, full-level, on the next ON).
+        if (!was_idle && _line_dirty) flush_lines();
+        return;
+    }
+    // set_on(false, immediate) skips the fall entirely — catch it on wake.
+    if (was_idle && _line_dirty) flush_lines();
 
     const bool thinning = _thin > 0.f && _rhy_valid;
     if (thinning) {
@@ -169,14 +187,18 @@ void Flux::process(float& l, float& r) {
 
     daisysp::fonepole(_dt_current, _dt_target, _dt_coef);
     const float samples = _dt_current * _sr;
-    float wet_l = _echo_l.Process(l * send, samples);
-    float wet_r = _echo_r.Process(r * send, samples);
+    // The line always hears the live input; the RAMP rides the return —
+    // the signal that is actually audible (GRIT's pattern, grit.cpp:99).
+    // The old form gated the send, i.e. audio already in the past.
+    float wet_l = _echo_l.Process(l, samples);
+    float wet_r = _echo_r.Process(r, samples);
+    _line_dirty = true;
     if (thinning || _gate != 1.f) {
         daisysp::fonepole(_gate, _gate_target, _gate_coef);
         if (std::fabs(_gate - 1.f) < 1e-4f) _gate = 1.f;
         wet_l *= _gate;
         wet_r *= _gate;
     }
-    l += wet_l * _mix_lin;
-    r += wet_r * _mix_lin;
+    l += wet_l * _mix_lin * k;
+    r += wet_r * _mix_lin * k;
 }

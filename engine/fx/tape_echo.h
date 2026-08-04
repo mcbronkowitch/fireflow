@@ -87,6 +87,8 @@ public:
         return y;
     }
 
+    void Reset() { _s1 = _s2 = 0.f; }
+
 private:
     float _b0 = 0.f, _a1 = 0.f, _a2 = 0.f;
     float _s1 = 0.f, _s2 = 0.f;
@@ -105,6 +107,11 @@ public:
         _line.Init(memory);
         _bpf.Init(sample_rate);
         _feedback = 0.f;
+    }
+
+    void Reset() {
+        _line.Reset();
+        _bpf.Reset();
     }
 
     void SetFeedback(float feedback) { _feedback = feedback; }

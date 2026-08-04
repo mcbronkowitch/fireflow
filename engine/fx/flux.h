@@ -47,6 +47,7 @@ private:
     void refresh_repeat_scheduler();
     void update_thin_pattern();
     void advance_gate();
+    void flush_lines();
 
     TapeEcho<kTapeSamples> _echo_l;
     TapeEcho<kTapeSamples> _echo_r;
@@ -77,6 +78,8 @@ private:
     float _gate = 1.f;
     float _gate_target = 1.f;
     float _gate_coef = 1.f;
+
+    bool _line_dirty = false;
 };
 
 } // namespace spky
