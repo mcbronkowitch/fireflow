@@ -418,12 +418,28 @@ that engine.
 
 - [ ] **Step 1: Verify the premise before relying on it**
 
+The premise is about history *before this round*: nothing between `19f7560`
+and the commit this round started from touched `bench/`. This round's own
+Tasks 1 and 2 deliberately do touch `bench/`, and the baseline branch is
+supposed to carry them — so `HEAD` is the wrong right-hand side. `c54f190` is
+the round's starting commit (the plan amendment, the last commit before Task
+1).
+
 ```bash
-git log --oneline 19f7560..HEAD --name-only -- bench | wc -l
+git log --oneline 19f7560..c54f190 --name-only -- bench | wc -l
 ```
 
 Expected: `0`. If it is not zero, **stop and report** — the whole A/B
 construction in the spec's §3 rests on this and a non-zero answer refutes it.
+
+As a second, positive check, confirm this round's bench work is the only
+bench work on top of it:
+
+```bash
+git log --oneline c54f190..HEAD -- bench
+```
+
+Expected: exactly the Task 1 and Task 2 commits, nothing else.
 
 - [ ] **Step 2: Create the branch and revert the engine**
 
