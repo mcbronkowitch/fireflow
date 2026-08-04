@@ -109,7 +109,7 @@ vendored under `third_party/`, so no test dependencies are fetched.
 # optional: source a local env.sh to put your toolchain on PATH and set CC/CXX
 source env.sh
 
-cmake -S . -B build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
@@ -118,6 +118,11 @@ Run the unit tests:
 ```bash
 ctest --test-dir build --output-on-failure
 ```
+
+Configure with `-DCMAKE_BUILD_TYPE=Release`. Two of the four tests (`spky_tests`
+and `ctrl_identity`) compare rendered audio against stored SHA-256 references,
+and those were generated from an optimised build — a Debug configuration renders
+slightly different floats and fails them with `SYNTH reference moved`.
 
 Render a scenario to audio + a modulation trace. A scenario is a JSON timeline
 of parameter changes (see `host/render/scenarios/`):

@@ -550,8 +550,9 @@ rm res/_r.html
 The engine is unchanged, so its regression suite still applies:
 
 ```bash
-cmake -S . -B build -G Ninja && cmake --build build   # from repo root
-ctest --test-dir build --output-on-failure
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release   # from repo root
+cmake --build build
+ctest --test-dir build --output-on-failure   # Debug fails the render-hash gates
 ```
 
 For an A/B sound check, render a known scenario with the desktop host and

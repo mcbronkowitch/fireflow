@@ -1835,6 +1835,18 @@ the documented `cmake -S . -B build` configuration and fails at `-O3` **on `main
 too**. That is a pre-existing gate defect worth its own fix, not a finding about
 this branch.)
 
+> **Correction, 2026-08-04 — the sense of that parenthetical is now inverted.**
+> On today's `main` the stored constants match a **Release** build and fail under
+> Debug, which is what a bare `cmake -S . -B build` gives you. Measured on one
+> unchanged tree in two independently configured build directories: Debug →
+> `spky_tests` and `ctrl_identity` both report `SYNTH reference moved`; Release →
+> all four tests pass. The references were evidently regenerated from an optimised
+> build at some point after the round above was written. The build commands in
+> `README.md`, this document and `host/vcv/README.md` now pass
+> `-DCMAKE_BUILD_TYPE=Release` explicitly. The underlying gate defect is unchanged
+> and still unfixed: these are byte-identity checks on floating-point renders, so
+> they remain tied to one optimisation level.
+
 **Exactly one row failed to move, and no mechanism explains which one.** The four
 `Instrument`-based rows moved −1.38 to −2.71 `pct_avg`; the two bare-`Part` rows
 `instr_part_1` and `instr_part_2` moved −1.16 and −1.25; and **`deck_shell`, the
@@ -2206,7 +2218,7 @@ status this milestone carried since 2026-07-12 no longer holds.
 
 ```bash
 source env.sh            # optional: toolchain on PATH, CC/CXX
-cmake -S . -B build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release   # Debug fails the render-hash gates
 cmake --build build
 ctest --test-dir build --output-on-failure
 ./build/render.exe host/render/scenarios/dorian_vs_drift.json out.wav mods.csv

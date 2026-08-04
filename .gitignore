@@ -14,6 +14,10 @@ __pycache__/
 .superpowers/
 .worktrees/
 
+# Local agent index -- a map of this working copy, not project documentation.
+/CLAUDE.md
+/.claude/
+
 # Sampler source material for the render-host scenarios. Two kinds live here,
 # neither belongs in the repo: the user's own sample library (large, and not
 # ours to redistribute), and material bounced from Spotykach itself by
