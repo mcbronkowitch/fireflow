@@ -192,22 +192,28 @@ is actually built today, and what is still design-only.
   optimization `-O3`, tree `bd01608` (an ancestor of `main`), against a
   constructed baseline `6134b4f` (`bench/baseline-19f7560`: today's `bench/`
   with `engine/` rolled back to `19f7560`), so the two cycles differ in
-  `engine/` and in nothing else. **The sentence at the head of this block —
-  that the selected O3 ITCM-hot benchmark passes — is contradicted by this
-  round and no longer holds:** at `-O3` the `.itcm_audio_hot` section
-  **overflows the 64 KiB region by 832 bytes** on `main` and does not link
-  (`-O3` alone had already left the baseline **32 bytes** free; the seventeen
-  commits add 864 B), and at `-O2`, where it does link,
-  `spky::BbdLine::Process` resolves to the bench-harness TU
-  `build/workloads_bbd.o`, which `itcm_hot.lds` does not list, so placement
-  fails there too. The `itcm-hot` half of the planned matrix therefore did not
-  run; both measured cycles are `axi`, which is also what an M6 firmware would
-  get today. **The intended ITCM placement does not currently fit the
-  optimization level that ships**, and that is an M6 problem this round does
-  not solve. Three rows moved *down* — `instrument_worst` (−0.82),
-  `inst_worst_deck_bus` (−2.38) and `fx_grit` (−0.20, ~10× its own repeat
-  noise, in a subsystem the round did not touch) — and **no mechanism was
-  measured for any of them**; they are stated, not explained. The gate holds,
+  `engine/` and in nothing else. **The head of this block — that the selected
+  O3 ITCM-hot benchmark passes — no longer holds for the image M6 needs:** on
+  the `regress` profile (`system` + `bbd`, the first `itcm-hot` image ever to
+  compile the `bbd` family) the `.itcm_audio_hot` section **overflows the
+  64 KiB region by 832 bytes** at `-O3` on `main` and does not link (`-O3`
+  alone had already left the baseline **32 bytes** free; the seventeen commits
+  add 864 B), while the baseline links at `-O3` and fails the placement
+  inspector instead, `spky::BbdLine::Process` having been inlined away
+  entirely. At `-O2` both trees link and both still fail placement, because
+  that symbol resolves to the bench-harness TU `build/workloads_bbd.o`, which
+  `itcm_hot.lds` does not list. **The `system`-only `--itcm-hot` image the head
+  claim was measured on (2026-07-30, `0xd8e0` = 55,520-byte hot section) was
+  not rebuilt at today's `main`, so whether *it* still links is unmeasured.**
+  The `itcm-hot` half of the planned matrix therefore did not run; both
+  measured cycles are `axi`, which is also what an M6 firmware would get today.
+  **The intended ITCM placement does not currently fit the optimization level
+  that ships**, and that is an M6 problem this round does not solve. Three rows
+  moved *down* — `inst_worst_deck_bus` (−2.38 against a 0.20 repeat band),
+  `fx_grit` (−0.20 against 0.02, in a subsystem the round did not touch) and,
+  more weakly, `instrument_worst` (−0.82 against a 0.58 band, the widest in the
+  profile) — and **no mechanism was measured for any of them**; they are
+  stated, not explained. The gate holds,
   so the attribution round is not forced; it still has no spec. Evidence:
   [signal-path regression](bench/2026-08-04-2101349-signal-path-regression.md),
   from captures
