@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 #include <cmath>
 #include <vector>
+#include <algorithm>
 #include "fx/limiter.h"
 using namespace spky;
 
@@ -143,4 +144,18 @@ TEST_CASE("limiter: deterministic") {
     };
     auto a = run(), b = run();
     for (size_t i = 0; i < a.size(); ++i) CHECK(a[i] == b[i]);
+}
+
+TEST_CASE("limiter: a DRIVE step glides instead of stepping the master gain") {
+    Limiter lim;
+    lim.init();
+    float worst = 0.f, prevv = 0.5f;
+    for (int i = 0; i < 48000; ++i) {
+        if (i == 4800) lim.set_drive(1.f);   // worst-case knob step: 0 -> 1
+        float l = 0.5f, r = 0.5f;            // DC probe: any output step IS the artefact
+        lim.process(l, r);
+        if (i > 0) worst = std::max(worst, std::fabs(l - prevv));
+        prevv = l;
+    }
+    CHECK(worst < 0.02f);   // today: 0.5 -> ~0.998 in ONE sample at i=4800
 }

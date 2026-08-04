@@ -25,6 +25,7 @@ public:
     void init() {
         _peak = 0.5f;
         _pre = 1.f;
+        _pre_target = 1.f;
     }
     // Square law, not linear. The pre-gain is what decides how deep into the
     // knee the signal lands, and a linear 1+3n spent the whole knob in its
@@ -38,11 +39,20 @@ public:
     // NOTE: this remaps saved DRIVE values -- 0.5 was 2.5x, it is now 1.75x.
     void set_drive(float n) {
         const float c = std::clamp(n, 0.f, 1.f);
-        _pre = 1.f + 3.f * c * c;
+        _pre_target = 1.f + 3.f * c * c;
     }
-    float pre_gain() const { return _pre; }
+    float pre_gain() const { return _pre_target; }
 
     void process(float& l, float& r) {
+        // DRIVE was the one knob reaching the audio path unsmoothed (the
+        // VCV shell pushes it on a 16-sample raster; audit 2026-08-04,
+        // observations). Glide _pre over ~10 ms at 48 kHz — a fixed
+        // coefficient, this is a knob smoother, not a tuning — and snap on
+        // convergence so the drive-0 bit-transparency branch stays exact.
+        if (_pre != _pre_target) {
+            _pre += 0.002f * (_pre_target - _pre);
+            if (std::fabs(_pre_target - _pre) < 1e-4f) _pre = _pre_target;
+        }
         const float pl = l * _pre, pr = r * _pre;
         const float peak = std::max(std::fabs(pl), std::fabs(pr));   // stereo link
         const float e = peak - _peak;
@@ -78,6 +88,7 @@ private:
 
     float _peak = 0.5f;
     float _pre  = 1.f;
+    float _pre_target = 1.f;
 };
 
 } // namespace spky
