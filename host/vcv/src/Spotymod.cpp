@@ -108,6 +108,36 @@ struct DetuneQuantity : ParamQuantity {
     }
 };
 
+// SUB tooltip on a BBD deck only, where the caption reads INPUT. The
+// percentage is the literal quantity, not a knob position: BbdEngine::set_sub
+// stores its argument unmapped as _in_gain and process_in() multiplies the
+// incoming audio by exactly that (bbd_engine.cpp), so 40% means 40% of what
+// arrives -- there is no curve in between to misreport.
+//
+// Every other engine falls through to Rack's default display on purpose. This
+// movement renames one caption and gives that one caption a unit; re-uniting
+// the rest of the panel is a separate decision (2026-08-04) and deliberately
+// not started here.
+//
+// Resolves its own deck from paramId, never a hardcoded one, for the same
+// reason MelodyQuantity does below: a part must never read the other part's
+// ENG.
+struct SubQuantity : ParamQuantity {
+    bool bbd_deck() {
+        if (!module) return false;
+        const int engineId = paramId == SUB_B ? ENGINE_B : ENGINE_A;
+        return (int)std::lround(module->params[engineId].getValue())
+               == spky::ENGINE_BBD;
+    }
+    std::string getLabel() override {
+        return bbd_deck() ? "Input" : ParamQuantity::getLabel();
+    }
+    std::string getDisplayValueString() override {
+        if (!bbd_deck()) return ParamQuantity::getDisplayValueString();
+        return string::f("%.0f %%", getValue() * 100.f);
+    }
+};
+
 // MELODY tooltip: the job changes with the deck's own ENG (spec 2026-08-03
 // vcv-engine-aware-captions) -- Variation off the Sampler, Scan on it, the
 // same split the faceplate caption (VARY/SCAN) draws. Resolves its own deck
@@ -294,6 +324,8 @@ struct Spotymod : Module {
                         configParam<LinkQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == STAGES_A || c.id == STAGES_B)
                         configParam<StagesQuantity>(c.id, 0.f, 1.f, init, lbl);
+                    else if (c.id == SUB_A || c.id == SUB_B)  // INPUT (%) on BBD
+                        configParam<SubQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == SOURCE_A || c.id == SOURCE_B) {
                         auto* source = configParam(
                             c.id, 0.f, 1.f, init,

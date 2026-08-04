@@ -203,12 +203,19 @@ ROW_V1, ROW_V2 = 77.3, 89.4
 # k0"; set_resonance is "the feedback-path tilt"; set_sub is "the input
 # level"; set_filt is "the loss-pole corner". MELODY is set_variation, the
 # bipolar RENEW <- LOOP -> GROW axis -- never a melody control.
+#
+# The BBD's SUB word was FEED until 2026-08-04, and the rename is not taste:
+# this same panel prints FB one fieldset over (FLUXFB, the tape echo's
+# feedback), and the BBD's own strongest control is the MOTION lane read as
+# FEEDBACK. A four-letter FEED between those two reads as a third feedback
+# control -- the one thing this knob is NOT. INPUT is what set_sub does, and
+# five letters is a length EXCIT already carries in this exact slot.
 DYNAMIC_CAPTIONS = [
     ("MELODY",   "ENGINE",   ("VARY", "SCAN", "VARY", "VARY", "VARY")),
     ("ATTACK",   "ENGINE",   ("ATK",  "ATK",  "ATK",   "HIT",   "ATK")),
     ("DECAY",    "ENGINE",   ("DEC",  "DEC",  "DEC",   "DAMP",  "TAIL")),
     ("RES",      "ENGINE",   ("RES",  "RES",  "RES",   "CHAR",  "TILT")),
-    ("SUB",      "ENGINE",   ("SUB",  "LEN",  "SUB",   "EXCIT", "FEED")),
+    ("SUB",      "ENGINE",   ("SUB",  "LEN",  "SUB",   "EXCIT", "INPUT")),
     ("FILT",     "ENGINE",   ("FILT", "FILT", "FILT",  "BRITE", "LOSS")),
     ("SOURCE",   "ENGINE",   ("TIMB", "ORG",  "FRAME", "MATL",  "DRIVE")),
     ("GRITMODE", "GRITMODE", ("SAT",  "CRSH")),

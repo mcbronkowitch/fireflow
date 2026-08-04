@@ -90,7 +90,7 @@ unchanged and carry no table entry.
 | `ATTACK` | ATK | ATK | ATK | **HIT** | — ¹ |
 | `STAGES` | — ¹ | — ¹ | — ¹ | — ¹ | **BEND** |
 | `FILT` | FILT | FILT | FILT | **BRITE** | **LOSS** |
-| `SUB` | SUB | **LEN** | SUB | **EXCIT** | **FEED** |
+| `SUB` | SUB | **LEN** | SUB | **EXCIT** | **INPUT** ² |
 | `DECAY` | DEC | DEC | DEC | **DAMP** | **TAIL** |
 | `RES` | RES | RES | RES | **CHAR** | **TILT** |
 | `SOURCE` | TIMB | ORG | FRAME | MATL | DRIVE |
@@ -99,6 +99,9 @@ unchanged and carry no table entry.
 visibility, not by caption (`EngineExclusiveTrimpot`, spec 2026-08-02). That
 mechanism stays; the difference here is that `ATTACK`'s caption gains a Body
 entry, so the slot's word now comes from whichever widget is visible.
+
+² Shipped as `FEED` and renamed to `INPUT` on 2026-08-04 — see §3's near-miss
+note, which recorded the collision this word had to be pulled out of.
 
 Word sources, so a later reader can check each against the code rather than
 against taste:
@@ -110,7 +113,7 @@ against taste:
 - Body `BRITE` — `BodyVoice::set_cutoff_hz`, *"brightness"*.
 - BBD `TAIL` — `BbdEngine::set_decay`, *"a trim BELOW k0"*.
 - BBD `TILT` — `BbdEngine::set_resonance`, *"the feedback-path tilt"*.
-- BBD `FEED` — `BbdEngine::set_sub`, *"the input level"*.
+- BBD `INPUT` — `BbdEngine::set_sub`, *"the input level"*.
 - BBD `LOSS` — `BbdEngine::set_filt`, *"the loss-pole corner"*.
 - Sampler `LEN` — `SUB_A/B` is the `LANE_SIZE` base on a Sampler deck.
 - Sampler `SCAN` — `Instrument::sampler_scan`.
@@ -148,12 +151,20 @@ each appear twice across the five jack groups, and the generator's own comment
 records why — the groups sit on differently coloured wells with their own
 legends, which is what disambiguates them.
 
-One near-miss is
-recorded deliberately rather than hidden: `FB` (FLUX feedback, FX box) and
-`FEED` (BBD input level, VOICE box) are phonetically close. They sit in
-different fieldsets, differ in length, and never appear in the same box; the
-alternatives (`IN` collides with the jack group legend, `LEVEL` collides with
+One near-miss was recorded here deliberately rather than hidden: `FB` (FLUX
+feedback, FX box) and `FEED` (BBD input level, VOICE box) are phonetically
+close. The argument for keeping them was that they sit in different fieldsets,
+differ in length, and never appear in the same box; the alternatives considered
+at the time (`IN` collides with the jack group legend, `LEVEL` collides with
 the lane name) were worse.
+
+**Overturned 2026-08-04.** That argument undercounted the collision. It is not
+two words but three: the BBD's strongest control is the MOTION lane read as
+FEEDBACK, so a four-letter `FEED` sitting on a panel that also prints `FB`
+reads as a third feedback control — and an input level is the one thing this
+knob is not. `INPUT` was never on the original shortlist. It is five letters,
+a length `EXCIT` already carries in this exact slot, so it costs the layout
+nothing. The word is now `INPUT`.
 
 ## 4. Mechanism
 
@@ -169,7 +180,7 @@ DYNAMIC_CAPTIONS = [
     ("ATTACK", "ENGINE",   ("ATK", "ATK", "ATK", "HIT", "ATK")),
     ("DECAY",  "ENGINE",   ("DEC", "DEC", "DEC", "DAMP", "TAIL")),
     ("RES",    "ENGINE",   ("RES", "RES", "RES", "CHAR", "TILT")),
-    ("SUB",    "ENGINE",   ("SUB", "LEN", "SUB", "EXCIT", "FEED")),
+    ("SUB",    "ENGINE",   ("SUB", "LEN", "SUB", "EXCIT", "INPUT")),
     ("FILT",   "ENGINE",   ("FILT", "FILT", "FILT", "BRITE", "LOSS")),
     ("GRITMODE", "GRITMODE", ("SAT", "CRSH")),
 ]
@@ -333,7 +344,7 @@ centre strip's legends are the panel's coarsest navigation aid.
 take on a different job" table (MELODY's row becomes exclusive, the `MELO`/`SCAN`
 slash notation goes away), the SOURCE section (the caption list moves to the
 generator), and the BBD section's control mapping (which now has panel words
-for `TAIL`, `TILT`, `FEED` and `LOSS` instead of prose).
+for `TAIL`, `TILT`, `INPUT` and `LOSS` instead of prose).
 
 The BBD section additionally carries a subsection headed "BBD PITCH and tape
 TIME surface" whose two named controls are both renamed here. Both the heading

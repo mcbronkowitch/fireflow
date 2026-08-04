@@ -98,7 +98,7 @@ there — the C++ holds no caption word at all.
 | ATTACK | `ATK` | `ATK` | `ATK` | `HIT` | — (`BEND` occupies the slot) |
 | DECAY | `DEC` | `DEC` | `DEC` | `DAMP` | `TAIL` |
 | RES | `RES` | `RES` | `RES` | `CHAR` | `TILT` |
-| SUB | `SUB` | `LEN` | `SUB` | `EXCIT` | `FEED` |
+| SUB | `SUB` | `LEN` | `SUB` | `EXCIT` | `INPUT` |
 | FILT | `FILT` | `FILT` | `FILT` | `BRITE` | `LOSS` |
 | SOURCE | `TIMB` | `ORG` | `FRAME` | `MATL` | `DRIVE` |
 
@@ -401,8 +401,10 @@ The BBD control mapping gives **ATTACK** the freeze's engage/release time
 (through the **Freeze Attack** context-menu slider), while **DECAY**
 (captioned `TAIL`) trims the tail below unity so a frozen loop still runs
 down instead of holding forever, **RES** (captioned `TILT`) tilts the
-feedback path's brightness, **SUB** (captioned `FEED`) sets how much signal
-(tape / other deck / audio-in) actually reaches the delay line, **FILT**
+feedback path's brightness, **SUB** (captioned `INPUT`, and the one BBD
+control whose tooltip reads as a percentage — the knob *is* the gain, so
+40 % means 40 % of what arrives) sets how much signal (tape / other deck /
+audio-in) actually reaches the delay line, **FILT**
 (captioned `LOSS`) sets the loss-pole corner (the line's own damping/tone),
 and **SOURCE** (captioned `DRIVE`, see above) sets the saturation.
 
