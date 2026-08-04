@@ -21,7 +21,8 @@ ST-Link V3 semihosting, CMake + Ninja + clang for the desktop host.
 ## Global Constraints
 
 - **Spec:** `docs/superpowers/specs/2026-08-04-signal-path-regression-bench-design.md`. Every task's requirements implicitly include it.
-- **`engine/` is not modified by this plan.** Not one line. If a task appears to need an engine change, stop and report instead.
+- **`engine/` is not modified on `main`, and the round produces no engine change.** Not one line. If a task appears to need an engine change, stop and report instead. **The single exception is Task 3**, whose entire purpose is to revert `engine/` to `19f7560` **on the branch `bench/baseline-19f7560` only** — that revert is the baseline, not a change to the product. No engine content from that branch is ever merged back.
+- **Work happens on `main`** and on the baseline branch it creates. This is the repo's own convention for bench rounds, and it is deliberate here: `bench/build`, the QSPI receipt binding and the branch construction all assume one working copy on this desk.
 - **Row order is execution state.** New rows are **appended** to the end of `kBbdWorkloads[]`, never inserted. Inserting a row ahead of another changes the other row's checksum.
 - **Workload basenames must be unique across the whole bench**, not just within one table — libDaisy's Makefile flattens paths with `notdir`.
 - **Hardware evidence is refused from a dirty working tree** (`bench/qspi_tools.py:require_clean_tree`, `git status --porcelain --untracked-files=all`). Every measurement cycle therefore ends by committing its own captures before the next cycle builds.
