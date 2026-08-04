@@ -163,7 +163,13 @@ optimization, same desk, same session, same probe. `git diff 6134b4f bd01608
 -- bench/` is **empty**: the two images were built from byte-identical bench
 sources. The only difference that reaches the binary is `engine/` — 11 files —
 and the only other difference between the two trees at all is under `docs/`.
-Each figure is the worse `pct_max` of that tree's two repeats.
+Each figure is the worse `pct_max` of that tree's two repeats, and the
+`pct_avg` printed beside it is the one from that same repeat.
+
+**All 24 rows in the profile are listed.** A partial table would hide the
+checksum-identical pattern reported further down, which is only visible across
+the whole set. The rows are ordered by interest, not by execution order; the
+profile's execution order is `system` then `bbd`, as the captures record.
 
 | row | main `pct_avg` / **`pct_max`** | baseline `pct_avg` / **`pct_max`** | **`pct_max`** delta | own repeat band |
 |---|---:|---:|---:|---:|
@@ -172,6 +178,7 @@ Each figure is the worse `pct_max` of that tree's two repeats.
 | `inst_bbd_engine_worst` | 92.65 / **96.91** | 88.89 / **92.91** | **+4.00** | 0.19 |
 | `instrument_worst` | 101.32 / **107.23** | 102.38 / **108.05** | **−0.82** | 0.58 |
 | `inst_worst_deck_bus` | 77.03 / **82.23** | 79.17 / **84.61** | **−2.38** | 0.20 |
+| `instrument_init` | 66.17 / **77.38** | 64.73 / **74.94** | **+2.44** | 0.16 |
 | `bbd_line_tap` | 3.40 / **3.44** | 2.94 / **2.95** | **+0.49** | 0.01 |
 | `bbd_line_tap_half` | 2.50 / **2.51** | 2.16 / **2.17** | **+0.34** | 0.00 |
 | `bbd_line_only` | 3.50 / **3.57** | 3.04 / **3.10** | **+0.47** | 0.02 |
@@ -183,9 +190,27 @@ Each figure is the worse `pct_max` of that tree's two repeats.
 | `fx_comp` | 3.02 / **3.03** | 3.01 / **3.02** | **+0.01** | 0.00 |
 | `fx_grit` | 4.75 / **4.77** | 4.92 / **4.97** | **−0.20** | 0.02 |
 | `oliverb_solo_sram` | 9.94 / **10.04** | 9.49 / **9.60** | **+0.44** | 0.01 |
+| `mod_plane_2x_center` | 6.95 / **7.16** | 6.88 / **7.12** | **+0.04** | 0.02 |
+| `synth_1_voice` | 5.41 / **5.52** | 5.40 / **5.50** | **+0.02** | 0.01 |
+| `synth_2_voices` | 9.46 / **9.62** | 9.46 / **9.60** | **+0.02** | 0.01 |
+| `synth_2x4` | 34.26 / **34.81** | 34.23 / **34.79** | **+0.02** | 0.00 |
+| `wave_2x4` | 29.79 / **30.63** | 29.76 / **30.09** | **+0.54** | 0.45 |
+| `fx_none` | 2.25 / **2.25** | 2.25 / **2.25** | **0.00** | 0.00 |
+| `empty_callback` | 0.00 / **0.00** | 0.00 / **0.00** | **0.00** | 0.00 |
 
 The delta column is `pct_max` only. `pct_avg` is reported per tree and is not
 subtracted here; no `pct_avg` delta is claimed.
+
+**`instrument_init` is the second-largest absolute mover in the table.** It
+went **74.94 → 77.38 = +2.44 against a 0.16 band**, about fifteen times its
+own repeat noise, and its checksum changed with it (`96eeadec` → `8e9a0dbf`).
+It is one of the eleven rows the seventeen commits reach, so the movement is
+where the round would expect to find one. What the row runs is the **init
+patch — "the typical load"** (`bench/workloads_system.cpp`), the same
+`process()` loop as the worst-case rows at the default configuration rather
+than at the ceiling, which is why it is worth reading beside them. **No
+mechanism is measured for the +2.44**; it is stated, like the others, and left
+open to an attribution round.
 
 **"Own repeat band" is the larger of that row's two within-cycle `pct_max`
 spreads**, computed per row from the two committed CSVs rather than quoted as
@@ -227,20 +252,66 @@ three are facts without a measured mechanism.** No cause is named for any of
 them here, because none was measured. They are open, and they are the kind of
 thing an attribution round would take up.
 
-**Two of the movements happen at unchanged checksums.** Eleven of the 24 rows
-change checksum between the trees, and they are the eleven the seventeen
-commits reach: the three BBD-engine gate rows, `instrument_worst`,
-`inst_worst_deck_bus`, `instrument_init`, `oliverb_solo_sram`, and the four
-`bbd_line_*` rows. The other thirteen are checksum-identical across trees —
-including `bbd_ceiling`, which moved **+0.52**, and `fx_grit`, which moved
-**−0.20**. Those two rows therefore moved while computing exactly the same
-output. Stated as measured; no mechanism is offered for either.
+**Nine rows move at bit-identical checksums, and that is a pattern, not two
+curiosities.** Eleven of the 24 rows change checksum between the trees, and
+they are the eleven the seventeen commits reach: the three BBD-engine gate
+rows, `instrument_worst`, `inst_worst_deck_bus`, `instrument_init`,
+`oliverb_solo_sram`, and the four `bbd_line_*` rows. The other **thirteen are
+checksum-identical across the trees** — they compute exactly the same output
+on both — and **nine of the thirteen still exceed their own repeat band**:
+
+| row (checksum identical on both trees) | checksum | delta | own band |
+|---|---|---:|---:|
+| `wave_2x4` | `6f28f4ea` | **+0.54** | 0.45 |
+| `bbd_ceiling` | `7f70a86d` | **+0.52** | 0.01 |
+| `fx_flux_sdram` | `9ca91007` | **+0.27** | 0.24 |
+| `fx_grit` | `74f9b9f5` | **−0.20** | 0.02 |
+| `mod_plane_2x_center` | `61d42d20` | **+0.04** | 0.02 |
+| `synth_1_voice` | `1816acc1` | **+0.02** | 0.01 |
+| `synth_2_voices` | `4dc805b7` | **+0.02** | 0.01 |
+| `synth_2x4` | `0d15b5eb` | **+0.02** | 0.00 |
+| `fx_comp` | `47a4392b` | **+0.01** | 0.00 |
+
+The remaining four checksum-identical rows do **not** clear their bands:
+`synth_4_voices` (+0.01 against 0.01), `bbd_walk_sdram` (+0.04 against 0.04),
+and `fx_none` and `empty_callback`, both flat at **0.00**.
+
+**Twelve of the thirteen move non-negatively** — ten strictly up, two exactly
+flat — and only `fx_grit` moves down. Five of the nine band-clearing
+movements sit at **0.01 to 0.04 points**. Of the four larger ones, `wave_2x4`
+and `fx_flux_sdram` clear their own (wide) bands by only 0.09 and 0.03, while
+`bbd_ceiling` (+0.52 against 0.01) and `fx_grit` (−0.20 against 0.02) clear
+theirs by more than an order of magnitude and are the real tail.
+
+Seen whole, `bbd_ceiling` is the large end of a distribution rather than an
+isolated oddity, and the same reframing is what makes the headline safe: this
+offset is hundredths to half a point across code that did not change, while
+the gate moved **4.18**.
+
+**No mechanism is asserted for any of it**, because none was measured. What
+*would* settle the obvious hypothesis costs **no hardware**: both trees still
+build, `--build-only` produces a `bench/build/bench.map` for each, and
+comparing the link addresses and section placement of these rows' setup and
+process symbols across the two maps would test whether code layout moved
+under bit-identical code. It is a desk experiment, offered as what would
+settle it — **not** as the cause. (Note the constraint from "Row real, not
+stale": the map answers questions about *symbols*, which is exactly what this
+experiment asks, and not about row *names*, which is what it cannot answer.)
 
 **Component rows do not sum.** No figure in this table may be subtracted from
 another to derive a component's cost. This repo's own recorded example is a
 set of component rows summing to ~120 % of budget against a measured ~159 % —
 a 39-point gap with no named owner. The rows above price what each row runs,
 and nothing else.
+
+**That rule and the spec's §5 are in direct conflict, and the rule wins.**
+The design spec instructed: "Read against `bbd_line_tap`, same build, same
+session: the difference **is** the crossfade price" — which is precisely the
+row-minus-row subtraction the paragraph above forbids. This document does not
+perform it. "The crossfade price" below prints **3.72** and **3.44** side by
+side and names what sits between them instead of publishing a difference, and
+that is deliberate, not an oversight in the presentation. The spec has been
+annotated accordingly.
 
 ## The crossfade price
 
@@ -359,6 +430,30 @@ which is the image M6 would need.
 
 ## What this does not show
 
+- **The round's own question 3 is not answered — neither half of it.** The
+  design spec's §1.1 asked "what does the BBD crossfade cost, and what does
+  the full-span write ring cost?". A reader who checks §1.1 against the
+  section headings above ("The crossfade price", "The write-ring
+  observation") would conclude both were priced. They were not.
+  - *The crossfade.* Two candidate figures exist and this document retracts
+    both. The same-build gap (3.72 versus 3.44 on `main`) is **not pure
+    crossfade** — it also carries the walk row's own per-sample phase
+    bookkeeping, which this session did not separate — and it is a
+    **cache-friendly lower bound**, taken on a ring a quarter of a production
+    line's. The cross-tree gap (+0.85) **compares two designs**, hard cut
+    against crossfade, rather than pricing an increment on a fixed one.
+    Neither is "the crossfade price", and no third figure was taken. What
+    would answer it is a same-build, same-object A/B against a row with the
+    identical phase bookkeeping and no stage change, on a production-sized
+    ring — a row that does not exist yet.
+  - *The write ring.* **Nothing in this matrix could have isolated it**, and
+    that was true from the moment the matrix was designed, not a failure in
+    execution. The baseline lacks the ring change, the crossfade, and
+    everything else in `a183852`/`28fda8d` simultaneously, so the A/B cannot
+    attribute a movement to one of them; and no row in the profile varies
+    written span alone while holding the rest fixed. The two `bbd_line_tap`
+    rows moved up together (+0.49, +0.34) and that observation stands, but it
+    is an observation about `BbdLine::Process` as a whole.
 - **No within-FX attribution.** Nothing here separates reverb bloom from the
   dry-bus duck from the DRIVE shaper from the COMP ceiling. No row isolates
   any of them today and this round did not build one. The gate holds, so the

@@ -261,7 +261,7 @@ is actually built today, and what is still design-only.
 | **M5j** | BODY — one-voice-per-deck resonator part engine, morphing string → metal → bell, with a sympathetic excitation bus | ✅ **done** (engine, renderer and VCV; `body_2x4` 295078 / 295724 cycles, 30.7 % of the block, inside the spec's 29–32 % prediction and below SYNTH; released in 2.14.0) |
 | **FLUX → BBD** | FLUX's interpolating tape echo replaced by a bucket-brigade delay model — the clock rate *is* the delay time, so **RATE bends stored pitch only transiently, while it moves, and only with feedback up — held steady, a bucket-brigade line's pitch is unity at any clock rate**, and `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane (STAGES has since moved off FLUX entirely — it is the BBD deck's own PITCH-lane base, captioned `BEND` on the panel; see "BBD PITCH / tape TIME surface" below) | ✅ **done** (engine, renderer and VCV; RATE/STAGES/`FXT_FLUX_TIME` confirmed by ear, DRIVE diagnosed and fixed but awaiting re-listening; **over CPU budget** — measured 2026-07-29, `instrument_worst` 120.9 % anchored and `instrument_worst_bbd` 133.2 %, against a 960 000-cycle block; the FX chain is where the increase sits, see below) |
 | **BODY playability** | Three fixes from the first extended ear pass: the bow follows the note instead of droning at a fixed 200 Hz, a continuously driven resonator no longer runs decades above its own struck level, and FILTER's left half fades evenly instead of falling off a cliff | ✅ **done** (engine; released in 2.15.0; two measured items left open — see below) |
-| **BBD part engine** | `ENGINE_BBD` (ENG state 4) is a fifth, voiceless part engine — no synth voices, just a stereo `BbdEcho` pair fed by audio-in and/or the neighbour (via a new audio-rate cross-deck bus), driven through the five modulation lanes (SOURCE→DRIVE, PITCH→clock, SIZE→division, MOTION→FEEDBACK, LEVEL→dry/wet MIX). The same work reverts FLUX — the echo effect on every engine, including this one — from its BBD model back to a plain tape echo, so the "FLUX → BBD" row above no longer describes FLUX's current mechanism; the bucket-brigade device that survives is this engine, on the BBD deck only | ✅ **done** (engine + VCV; spec `docs/superpowers/specs/2026-07-31-bbd-part-engine-design.md`; released in 2.17.0; measured on real hardware at the engine's own worst case, `inst_bbd_engine_worst` 94.16 avg / 98.39–98.56 max % of the 960 000-cycle block at `-O2` — fits, but no `-O3` measurement of this row exists; see below) |
+| **BBD part engine** | `ENGINE_BBD` (ENG state 4) is a fifth, voiceless part engine — no synth voices, just a stereo `BbdEcho` pair fed by audio-in and/or the neighbour (via a new audio-rate cross-deck bus), driven through the five modulation lanes (SOURCE→DRIVE, PITCH→clock, SIZE→division, MOTION→FEEDBACK, LEVEL→dry/wet MIX). The same work reverts FLUX — the echo effect on every engine, including this one — from its BBD model back to a plain tape echo, so the "FLUX → BBD" row above no longer describes FLUX's current mechanism; the bucket-brigade device that survives is this engine, on the BBD deck only | ✅ **done** (engine + VCV; spec `docs/superpowers/specs/2026-07-31-bbd-part-engine-design.md`; released in 2.17.0; measured on real hardware at the engine's own worst case, `inst_bbd_engine_worst` 94.16 avg / 98.39–98.56 max % of the 960 000-cycle block at `-O2` — fits, but no `-O3` measurement of this row exists; see below — **superseded 2026-08-04: the `-O3` measurement now exists.** On the `regress` profile, layout `axi`, `-O3`, this row reads **92.91 % `pct_max`** on the constructed `19f7560` baseline and **96.91 %** on `main` (+4.00 against a 0.19 repeat band). Evidence: [signal-path regression](bench/2026-08-04-2101349-signal-path-regression.md)) |
 | **BBD PITCH / tape TIME surface** | `STAGES_A/B` leaves the FX box and takes over the shared VOICE `ATK` slot as the BBD deck's own pitch control, visible only while that deck is BBD (`ATTACK` is hidden there and stays reachable as a `Freeze Attack` context-menu slider); the vacated FX slot gets a new knob driving `FXT_FLUX_TIME` geometrically from ×0.25 through ×1 to ×4, distinct from RATE's tempo-synced division | ✅ **done** (VCV; spec `docs/superpowers/specs/2026-08-02-vcv-bbd-pitch-flux-time-surface-design.md`; released in 2.17.1; the two new captions, `PITCH` and `TIME`, were renamed `BEND` and `MULT` by "VCV engine-aware captions" below) |
 | **BBD dynamic-stage declick** | `BbdLine` keeps one continuous full-ring write history behind every stage-count change and crossfades the old and new read taps over a fixed 16-tick smoothstep, removing the index-reset impulse the previous immediate resize produced when COLOR/MOTION modulates a line's stage count | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-03-bbd-dynamic-stages-declick-design.md`; released in 2.17.1; fixed-stage output stays bit-identical, COLOR = 0 stays bit-identical left/right) |
 | **VCV engine-aware captions** | Every state-dependent panel caption now comes from one `DYNAMIC_CAPTIONS` generator table instead of hand-written special cases: BODY gets honest VOICE words (`HIT`/`DAMP`/`CHAR`/`EXCIT`/`BRITE`) and BBD gets its own (`TAIL`/`TILT`/`FEED`/`LOSS`); the FX-box word collisions are resolved by renaming FLUX `RATE`→`DIV`, FLUX `TIME`→`MULT`, per-deck `ROOM`→`SEND`, `MASTER_DRIVE`→`PUSH` and BBD `PITCH`→`BEND` (collision with the orbit's `PITCH` eyebrow); the GRIT mode pad now shows its own state, `SAT`/`CRSH`, instead of the word `GRIT` it collided with; MELODY drives Sampler `SCAN` only, no longer also `set_variation`; the permanently-printed `SCAN`/`LEN` second words are deleted from the static plate | ✅ **done** (VCV host + generator; spec `docs/superpowers/specs/2026-08-03-vcv-engine-aware-captions-design.md`; branch `vcv-engine-aware-captions`, not yet merged to main or released) |
@@ -2082,6 +2082,30 @@ COLOR/FEEDBACK/MIX, both excitation sources live — directly instead:
 Both sessions link `-O2`. **No `-O3` measurement of this row exists**, so
 whether it clears the gate with the margin O3 showed elsewhere (see the
 CPU-status note at the top of this document) is not established here.
+
+**Update, 2026-08-04 (signal-path regression): the sentence above is
+superseded — the `-O3` measurement now exists.** Closing this exact gap was a
+named scope item of that round. `inst_bbd_engine_worst` was measured at
+`-O3`, layout `axi`, profile `regress` (`system` + `bbd` in one image), on the
+Daisy Seed, in both trees of a same-session A/B:
+
+| tree | `inst_bbd_engine_worst` avg / **max** % |
+|---|---:|
+| constructed baseline `6134b4f` (`engine/` at `19f7560`) | 88.89 / **92.91** |
+| `bd01608` (ancestor of `main`) | 92.65 / **96.91** |
+
+So the row **fits at `-O3` on `main`** with about 3 points of margin, and the
+measured difference between the two trees is **+4.00 points** against that
+row's own repeat band of **0.19** — twenty-one times it. The decision gate
+`instrument_worst_bbd_dtcm` in the same captures reads **96.43 %** offline /
+96.69 % in the real callback. Note the identity difference against the two
+`-O2` rows in the table above: different profile, different optimization,
+different image — those figures are **not** subtracted from these, which is
+why the round constructed a baseline instead of reusing a capture. Evidence:
+[signal-path regression](bench/2026-08-04-2101349-signal-path-regression.md),
+from captures [baseline](bench/2026-08-04-6134b4f-regress-axi-o3.md) and
+[main](bench/2026-08-04-bd01608-regress-axi-o3.md).
+
 Movement 1's cross-deck bus is folded into both rows above (both excitation
 sources are on by default) — its own isolated cost, measured separately at
 ~5.75–6.03 points/block in a two-sampler mutual-routing worst case

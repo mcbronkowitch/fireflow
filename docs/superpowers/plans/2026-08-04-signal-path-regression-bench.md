@@ -412,10 +412,24 @@ EOF
 The delta this round reports is a difference between two trees. Checking out
 `19f7560` would not work — that tree has neither the `regress` profile nor
 the new row, and its `run.py` row expectations do not contain it. The
-baseline is therefore **today's `bench/` with `19f7560`'s `engine/`**, which
-is only sound because **no commit between `19f7560` and `HEAD` touched
-`bench/`**: today's bench code has, by construction, already compiled against
-that engine.
+baseline is therefore **today's `bench/` with `19f7560`'s `engine/`**.
+
+**Amended (same amendment as Step 1's command, `e7d80d8`).** This preamble
+used to say the construction "is only sound because no commit between
+`19f7560` and `HEAD` touched `bench/`: today's bench code has, by
+construction, already compiled against that engine." That is wrong twice, and
+it disagreed with the Step 1 command three lines below it. The premise holds
+over `c54f190`, this round's starting commit, not over `HEAD` — Tasks 1 and 2
+deliberately touch `bench/`. And today's bench code has **not** already
+compiled against the old engine: `bbd_line_stage_walk` is written in Task 2,
+after `a183852`, and this round is the first thing that ever builds it against
+`engine/`@`19f7560`.
+
+What actually makes the construction sound is that **the engine API `bench/`
+calls is unchanged across the seventeen commits**, which this round
+demonstrates rather than assumes: the identical `bench/` sources must compile,
+link and run against both `engine/` trees with no bench-side edit between the
+two cycles. If they do not, that is the stop condition, not a workaround.
 
 **Files:**
 - Create: branch `bench/baseline-19f7560`

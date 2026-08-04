@@ -1,7 +1,18 @@
 # Signal-path regression bench — design
 
 **Date:** 2026-08-04
-**Status:** design, not yet planned or executed
+**Status:** **executed 2026-08-04.** Two of the four planned cycles ran, both
+`axi`; the `itcm-hot` half produced no usable image on either tree and that is
+itself a result of the round. **The gate fits:**
+`instrument_worst_bbd_dtcm` reads **96.43 % `pct_max`** offline / 96.69 % in
+the real callback, 3.57 points of margin. Question 1 answered, question 2
+answered per row over all 24 rows, **question 3 not answered** (see the
+annotation on §5). Evidence:
+`docs/bench/2026-08-04-2101349-signal-path-regression.md`. Plan:
+`docs/superpowers/plans/2026-08-04-signal-path-regression-bench.md`.
+**This document is annotated in place, not rewritten** — the four-cycle matrix
+below is the record of what was *planned*, and the annotations mark where
+execution departed from it.
 **Kind:** measurement round. It changes `bench/`, and it does not change
 `engine/`.
 
@@ -120,6 +131,30 @@ A same-session A/B is available here only because of an accident of history:
 **no commit between `19f7560` and `HEAD` touched `bench/`.** Today's bench
 code has, by construction, already compiled against the old engine.
 
+> **Annotation, 2026-08-04 (post-execution) — the two sentences above are
+> refuted, and the construction they justify is sound anyway.** They are the
+> justification for the entire baseline, so the correction matters.
+>
+> The premise holds over the commit this round **started from**, not over
+> `HEAD`: `git log --oneline 19f7560..c54f190 -- bench/` returns **0**, while
+> over `HEAD` it returns **two** — `d2a57cd` (the `regress` profile) and
+> `d975039` (the `bbd_line_stage_walk` row), both this round's own work. The
+> plan's premise check was amended to name `c54f190` for exactly this reason
+> (`e7d80d8`).
+>
+> The second sentence is false outright: `bbd_line_stage_walk` was written
+> after `a183852` landed and had **never** been compiled against
+> `engine/`@`19f7560` until this round did it. What actually licenses swapping
+> `engine/` under a fixed `bench/` is that **the engine API the bench calls is
+> unchanged across the seventeen commits** — demonstrated rather than assumed,
+> since the identical `bench/` sources compiled, linked and ran against both
+> `engine/` trees in one session with no bench-side edit between the cycles.
+> That the *behaviour* behind an unchanged entry point differs between the
+> trees is a separate matter, and it is what §5's annotation and the evidence
+> document's "does not price the same thing on both trees" caveat are about.
+> Evidence document, lines 30–50:
+> `docs/bench/2026-08-04-2101349-signal-path-regression.md`.
+
 So the baseline is a commit on a branch, not a checkout of `19f7560`:
 
 ```
@@ -151,6 +186,18 @@ two-family image links.
 Family execution order is `system` then `bbd`, which is the order `full`
 already declared, so the SDRAM-arena hazard documented in `bench/README.md`
 is unchanged: `bbd` setups refill the arena they read.
+
+> **Annotation, 2026-08-04 (post-execution): rows 2 and 4 did not run.**
+> `--profile regress --itcm-hot` produces **no usable image at either
+> optimization level, on either tree**, and the two cells fail by *different*
+> mechanisms: at `-O3` `main` overflows the 64 KiB ITCM region by 832 B and
+> does not link, while the baseline links with 32 B free and then fails
+> placement because `spky::BbdLine::Process` is inlined away entirely. At
+> `-O2` both link and both still fail placement, because that symbol is weak
+> and the linker keeps the copy in the bench-harness TU `build/workloads_bbd.o`,
+> which `bench/itcm_hot.lds` does not list. Rows 1 and 3 ran, so the round is
+> two `axi` cycles and the layout axis is **absent by measurement, not by
+> omission**. See "The ITCM finding" in the evidence document.
 
 | # | tree | profile | optimization | layout |
 |---|---|---|---|---|
@@ -201,6 +248,33 @@ old `SetStages`, which returns early on an unchanged value and resets the
 ring index on a changed one. Its A/B is therefore, directly, "click versus
 crossfade, in cycles".
 
+> **Annotation, 2026-08-04 (post-execution): both claims in the two paragraphs
+> above are refuted, and §1.1's question 3 is therefore unanswered.** The row
+> ran, in both trees, and priced neither thing cleanly.
+>
+> - "the difference **is** the crossfade price" is wrong twice. The same-build
+>   gap (3.72 against `bbd_line_tap`'s 3.44 on `main`) also carries this row's
+>   own per-sample phase bookkeeping, which `bbd_line_tap` does not run and
+>   this session did not separate; and this row's ring is **2,048 cells / 8 KB
+>   with its taps 4 KB apart** against a production `BbdEngine` line's **8,192
+>   cells / 32 KB, taps 16 KB apart**, so any crossfade figure from it is a
+>   **cache-friendly lower bound**. It is also a subtraction between two
+>   component rows, which the evidence document's own "component rows do not
+>   sum" rule forbids — the document prints the two figures side by side
+>   rather than a difference, deliberately.
+> - "directly, click versus crossfade" is the honest description of what the
+>   **+0.85** cross-tree movement compares — two *designs*, not an increment
+>   added to a fixed one — and that is exactly why it is not a crossfade
+>   price either. The baseline tree contains no crossfade code at all.
+>
+> The write-ring half of question 3 was **unanswerable from the moment this
+> matrix was designed**: the baseline lacks the ring change, the crossfade and
+> the rest of `a183852`/`28fda8d` simultaneously, and no row varies written
+> span alone. A future crossfade round must start here and not from the
+> refuted sentences above: what it needs is a same-build A/B against a row
+> with identical phase bookkeeping and no stage change, on a production-sized
+> ring.
+
 Files this touches: `bench/workloads_bbd.cpp` (the row and the stale-comment
 correction), `bench/run.py` (`BENCH_PROTOCOL_ROWS_BY_FAMILY["bbd"]`),
 `bench/profiles.py` (the `regress` profile), `bench/README.md` (the profile
@@ -236,6 +310,12 @@ Four cycles in matrix order. Monitors connected and **quiet** first: each
 cycle produces two anchor bursts (eight in total), and the `instrument_worst`
 segment inside each is underrun garbage on purpose, because that row is over
 budget offline.
+
+> **Annotation, 2026-08-04 (post-execution): read "two cycles, four anchor
+> bursts".** Only matrix rows 1 and 3 ran (see §4's annotation). The
+> arithmetic above is the *planned* count; a reader who checks the evidence
+> directory against it will conclude two captures are missing when nothing
+> is.
 
 ## 7. Gates, and what stops the round
 
@@ -273,6 +353,16 @@ gate-versus-kernel arithmetic is performed.
 
 Eight raw captures (four cycles × `.md`/`.csv`) land in `docs/bench/`
 automatically, named by date, git hash, profile, layout and optimization.
+
+> **Annotation, 2026-08-04 (post-execution): four raw captures, not eight.**
+> Two cycles ran (§4's annotation), so the accepted evidence is
+> `docs/bench/2026-08-04-6134b4f-regress-axi-o3.{md,csv}` (baseline) and
+> `docs/bench/2026-08-04-bd01608-regress-axi-o3.{md,csv}` (main). The four
+> `itcm-hot` captures do not exist because those two cycles produced no image
+> to measure. Also note the hand-written document landed as
+> `docs/bench/2026-08-04-2101349-signal-path-regression.md`, named for the
+> commit that wrote it rather than for the measured tree `bd01608`; both
+> hashes are disambiguated inside it.
 
 One hand-written document is added in the house style,
 `docs/bench/2026-08-04-<hash>-signal-path-regression.md`:
