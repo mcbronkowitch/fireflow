@@ -201,7 +201,7 @@ profile's execution order is `system` then `bbd`, as the captures record.
 The delta column is `pct_max` only. `pct_avg` is reported per tree and is not
 subtracted here; no `pct_avg` delta is claimed.
 
-**`instrument_init` is the second-largest absolute mover in the table.** It
+**`instrument_init` is the fourth-largest absolute mover in the table.** It
 went **74.94 → 77.38 = +2.44 against a 0.16 band**, about fifteen times its
 own repeat noise, and its checksum changed with it (`96eeadec` → `8e9a0dbf`).
 It is one of the eleven rows the seventeen commits reach, so the movement is

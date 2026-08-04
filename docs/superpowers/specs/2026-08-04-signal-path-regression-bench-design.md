@@ -304,6 +304,8 @@ Everything that can fail here fails before a cable is touched.
    stale object and still print a plausible figure for code that was never
    linked.
 
+> **Annotation, 2026-08-04 (post-execution): `bench.map` is the wrong artifact for this check.** The map lists *symbol* names (setup function identifiers), while a row *name* is a runtime data literal that bears no required relation to its setup function's symbol; two of the four names it checks return zero occurrences even though all four rows ran. Use instead: `arm-none-eabi-strings build/bench.elf | grep -c '^<row name>$'`
+
 ### 6.2 Hardware
 
 Four cycles in matrix order. Monitors connected and **quiet** first: each
