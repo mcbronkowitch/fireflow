@@ -1,7 +1,7 @@
 # Signal-path bug round — 2026-08-04
 
 **Date:** 2026-08-04
-**Status:** findings 1-4 + the DRIVE-smoothing observation fixed on branch `signal-path-declick` (plan `docs/superpowers/plans/2026-08-04-signal-path-declick.md`); listening sign-off pending
+**Status:** findings 1-4 + the DRIVE-smoothing observation fixed, merged to main, released as v2.18.2 (plan `docs/superpowers/plans/2026-08-04-signal-path-declick.md`); listening sign-off given 2026-08-04
 **Scope:** the audio path from `Part::process` through `PartFx`
 (GRIT → FLUX → FX MIX → COMP → send tap) into `Instrument::process`
 (MORPH → bloom duck → reverb send/return → master limiter).
