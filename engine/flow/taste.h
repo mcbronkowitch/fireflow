@@ -40,6 +40,73 @@ constexpr float kMarkDelta = 0.01f;
 constexpr float kRefuseFlashS = 0.25f;              // gesture.h REFUSED blink
 constexpr float kDistanceMin = 0.18f;               // NEW rejection threshold
 constexpr float kCalmCornerRmsMax = 0.06f;          // §7.8 ceiling, lin FS
+// §7.8 floor -- Task 10. This is a SILENCE DETECTOR, not the musical
+// target: measurements at the reference terrain/seed put the calm corner
+// at RMS ~= 0.00092 (-61 dBFS), about 1.5% of kCalmCornerRmsMax and, in
+// practice, inaudible; a spread of terrains sampled for this task's own
+// gate ranged from ~0.00006 to ~0.0035 (macros parked at 0, so archetype
+// and per-terrain draws are the only source of the spread -- a sparse
+// drone terrain legitimately sits much quieter than a busier one even at
+// the calm corner). Whether any of these levels is the right background
+// for "receding but present" (spec §3) is an open listening-loop
+// question -- this constant does not answer it and must never be retuned
+// to try. It exists only to catch a calm corner that has gone MUTE (a
+// future taste-table or runtime change that accidentally zeroes the quiet
+// decks), set here at a value comfortably below the quietest terrain this
+// task measured but still well clear of digital silence (exact-zero
+// output, which is what an accidental mute actually produces).
+constexpr float kCalmCornerRmsMin = 1e-5f;          // -100 dBFS, silence floor
+// §7.8 NEW-blend level gate -- Task 10, round 2. The original design (a raw
+// window-to-window RMS ratio inside ONE render) conflated the instrument's
+// own note-envelope/retrigger dynamics with anything the blend itself did,
+// and failed on every seed tested (up to 136 dB on one). The fix is
+// DIFFERENTIAL: render a no-press control alongside the press run on the
+// same terrain/macros, and compare the two at the same window index --
+// native dynamics appear in both and cancel, so what survives is what the
+// blend actually changed.
+constexpr float kBlendLevelFloorDb = -80.f;         // dBFS floor before the
+// press-vs-control comparison: a windowed RMS is converted to dBFS and
+// clamped at this floor first, so a recovery from near-silence produces a
+// bounded, comparable dB delta instead of a ratio that blows up toward
+// infinity (an unfloored ratio hit 136 dB on one seed purely from dividing
+// by a nearly-zero window).
+constexpr float kBlendSpikeDb = 6.f;                // press vs. control,
+// spike ceiling: a NEW blend is specified (spec §5) as a crossfade -- the
+// instrument changes WHAT it is playing, not how loud -- so the press run
+// should never read more than this many dB LOUDER than the no-press
+// control at the same instant.
+constexpr float kBlendDropDb = 10.f;                // press vs. control,
+// drop floor: symmetric case -- more than this many dB QUIETER than the
+// control is the deck audibly leaving the mix, which a crossfade must not
+// do either. Not the same magnitude as the spike ceiling: a NEW blend
+// legitimately ducks the outgoing deck's dry leg by design (kDuckDepth),
+// so some asymmetric headroom on the downside is expected even in a
+// healthy blend.
+// §7.8 NEW-blend level gate -- Task 10, round 3. The differential design
+// (kBlendSpikeDb/kBlendDropDb above) stayed red past round 2 even on seeds
+// with no engine switch, and the reason turned out to be the REFERENCE,
+// not the blend: the no-press control keeps playing the OUTGOING terrain
+// for the full 6 s while the press run settles onto a completely different,
+// independently-drawn terrain, so comparing the two once the blend is
+// mostly or fully settled compares two terrains' natural loudness, not
+// anything the blend did. During the ramp the continuous parameters are
+// `(1-p)*old + p*new` (flow.cpp recompute_and_push), so at blend phase p
+// the two runs may LEGITIMATELY differ by up to roughly `p *` the
+// terrain-to-terrain gap -- and this codebase already measured that gap at
+// up to ~15.9 dB (tests/test_flow_audio.cpp's fixed-seed RMS case: 0.0158
+// to 0.0983 across 8 terrains at the same macro setting, no blend
+// involved). kBlendGateWindowS narrows WHAT THE GATE CLAIMS (not how much
+// it tolerates -- kBlendSpikeDb/kBlendDropDb are unchanged) to the window
+// where that legitimate divergence stays small: at 1.0 s of the 6 s blend,
+// p = 1.0/6 =~ 0.17, so legitimate drift is ~0.17 * 15.9 =~ 2.7 dB --
+// comfortably inside the 6 dB spike bound. Anything the gate catches
+// inside this window is therefore a STEP the blend logic introduced (a
+// bare discrete switch, a bad retarget, an over-attenuating duck), not the
+// destination terrain being a different loudness, which is exactly the
+// property this gate exists to guarantee.
+constexpr float kBlendGateWindowS = 1.0f;           // seconds after the
+                                                     // press the differential
+                                                     // gate actually asserts on
 constexpr float kBodyFiltFloor = -0.3f;             // BODY FILT cliff margin
 constexpr float kSpaceSlewS = 2.5f;                 // lazy SIZE/DECAY follower
 constexpr float kHysteresisFrac = 0.5f;             // half a discrete step

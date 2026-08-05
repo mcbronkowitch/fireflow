@@ -799,3 +799,71 @@ TEST_CASE("scenario: flow actions no-op with a null Flow*, legacy actions still 
     apply_event(inst, nullptr, couple);
     CHECK(inst.couple() == doctest::Approx(0.7f));
 }
+
+// Task 10: scenario.cpp's flow_new_partial/flow_undo/flow_lock dispatch arms
+// had zero test coverage (a Task 9 gap the task-10 brief asked to close).
+// Same idiom as "scenario: flow actions parse and drive the flow layer"
+// above -- dispatch through apply_event(inst, &fl, e) and assert real STATE
+// effects (reroll counters, blend_phase(), can_undo(), locked()), not just
+// that nothing crashed.
+TEST_CASE("scenario: flow_new_partial, flow_undo and flow_lock dispatch and change state") {
+    Instrument inst;
+    inst.init(48000.f);
+    Flow fl;
+    fl.init(&inst, 500.f);
+    TerrainState st;
+    st.master = 0x1234u;
+    fl.wake(st);
+    const uint32_t master0 = fl.state().master;
+    REQUIRE(fl.blend_phase() == doctest::Approx(1.f));
+    REQUIRE_FALSE(fl.can_undo());   // wake() itself never arms undo
+
+    // flow_new_partial: bumps the marked macro's reroll counter and starts
+    // a blend (flow.cpp Flow::new_partial -> begin_blend).
+    Event partial;
+    partial.action = "flow_new_partial";
+    partial.ivalue = int(1u << M_BRIGHT);
+    apply_event(inst, &fl, partial);
+    CHECK(fl.state().reroll[M_BRIGHT] == 1);
+    CHECK(fl.state().master == master0);   // a partial reroll keeps the master
+    CHECK(fl.blend_phase() == doctest::Approx(0.f));
+    CHECK(fl.can_undo());
+
+    // Settle the blend before undo -- undo() itself works mid-blend too
+    // (flow.cpp begin_blend handles a re-press), but this case's assertions
+    // are about STATE, not blend timing, so settle first to keep them
+    // independent of it.
+    for (int i = 0; i < 4000; ++i) fl.tick();
+
+    // flow_undo: the one slot swaps state() back to what it was before the
+    // partial reroll, and starts its own blend back.
+    Event undo_e;
+    undo_e.action = "flow_undo";
+    apply_event(inst, &fl, undo_e);
+    CHECK(fl.state().reroll[M_BRIGHT] == 0);
+    CHECK(fl.state().master == master0);
+    CHECK(fl.blend_phase() == doctest::Approx(0.f));
+    for (int i = 0; i < 4000; ++i) fl.tick();
+
+    // flow_lock(true): further NEW-family gestures refuse -- state() does
+    // not move -- until unlocked (Flow::locked() itself never blocks
+    // set_lock, per flow.h).
+    Event lock_on;
+    lock_on.action = "flow_lock";
+    lock_on.flag = true;
+    apply_event(inst, &fl, lock_on);
+    CHECK(fl.locked());
+    const uint32_t reroll_before_locked = fl.state().reroll[M_BRIGHT];
+    apply_event(inst, &fl, partial);   // flow_new_partial again: refused while locked
+    CHECK(fl.state().reroll[M_BRIGHT] == reroll_before_locked);
+    CHECK(fl.blend_phase() == doctest::Approx(1.f));   // no blend started
+
+    // flow_lock(false): unlocks, and the very same gesture now works again.
+    Event lock_off;
+    lock_off.action = "flow_lock";
+    lock_off.flag = false;
+    apply_event(inst, &fl, lock_off);
+    CHECK_FALSE(fl.locked());
+    apply_event(inst, &fl, partial);
+    CHECK(fl.state().reroll[M_BRIGHT] == reroll_before_locked + 1);
+}
