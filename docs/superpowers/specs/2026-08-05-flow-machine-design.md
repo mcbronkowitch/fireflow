@@ -40,6 +40,12 @@ Decisions fixed during brainstorming:
   stage 5), the house seed (§5), the reworked NEW gesture family (§5),
   RST cut in favor of CV SPACE (§6), terrain lock as a panel gesture (§5),
   and the rename VARY → WANDER.
+- A third round (2026-08-05, owner-driven) generalized the macro math:
+  mappings became quadrant **story curves** with a curated story library,
+  and the **calm corner** became a named, tested guarantee — the module can
+  always be ridden down into polite background behind other instruments
+  (§3). The former ad-hoc rules (risk zones, the MASTER_DRIVE threshold
+  stage, the calm floor) are now ordinary cells of the story table.
 
 ## 2. Architecture
 
@@ -96,20 +102,52 @@ Notes on individual macros:
   SIZE/DECAY follow through a lazy slew, so fast rides throw the sends
   without lurching the room.
 
-**Macro math — replace, not add.** For every mapped parameter:
-`value = lerp(lo, hi, curve(macro))` with terrain-chosen `lo/hi` inside the
-taste limits. Unmapped parameters sit at their terrain base value. Every knob
-position is therefore inside the allowed region by construction — the
-"always pleasant" guarantee is arithmetic, not hope.
+**Macro math — replace, not add, and every knob tells a story.** A macro's
+mapping is a set of target parameters, each with a **story curve**: a
+piecewise-linear curve over a shared quadrant grid (breakpoints at 0, ¼, ½,
+¾, 1, with soft crossfade overlap at the seams — overlap widths are
+tuning-phase data). Per target the curve is monotone and stays inside the
+taste limits at every breakpoint; unmapped parameters sit at their terrain
+base value. Every knob position is therefore inside the allowed region by
+construction — the "always pleasant" guarantee is arithmetic, not hope.
 
-Two amendments from the creative review, because "always pleasant" and "fun
-to play" conflict and the design has to say which wins where:
+What the quadrants buy: different targets *enter and leave* in different
+quarters of the travel, so a knob does something recognizably different at
+its bottom than at its top without any parameter ever reversing direction.
+BRIGHT's bottom quarter can dip the level and bloom the reverb decay while
+the filters darken — the instrument recedes into a wash — and none of that
+leaks into the upper three quarters of the sweep.
 
-- **Edges.** The top ~10 % of DIRT's and MOTION's travel may exceed the
-  taste-range centers into a bounded risk zone — still clamped, still safe
-  from genuine breakage. "Always pleasant" becomes "always recoverable";
-  the tension of pulling back from almost-too-much is where ambient play
-  lives. The zone widths are tuning-phase data.
+**Story library, not free-form dice.** The terrain generator does not invent
+quadrant compositions; it picks per macro from 2–3 hand-written story
+variants in `taste.h` and varies only intensities. That keeps the tuning
+load tractable and the knobs learnable — "down is always calmer" is true on
+every terrain. The starting library:
+
+| Knob | Q1 "background" | Q2 | Q3 | Q4 "edge" |
+|---|---|---|---|---|
+| **BRIGHT** | ember: dark, level dips, decay blooms — recede into wash | classic cutoff sweep | open | air: SUB/timbre sheen joins |
+| **DENSITY** | held drone only, long gaps | pad thickens | events/steps wake | chord density, overflow |
+| **MOTION** | still photo: weather becalmed, LFOs near-frozen | slow breathing | audible wobble | risk zone: seasick edge |
+| **DIRT** | clinically clean, COMP as glue | warmth/saturation | grit | risk zone + the MASTER_DRIVE threshold |
+| **WANDER** | pattern frozen, exact loop | fine variation | melody wanders in scale | FORM/SONG churn: the sequence reinvents itself |
+| **SPACE** | intimate, near-dry | room | hall | dissolve: SIZE/DECAY bloom, dry ducks slightly |
+
+Three rules that used to be ad-hoc are now just cells of this table:
+
+- **The calm corner (named constraint, tested).** All six knobs at full CCW
+  — the Q1 column combined — is a defined background state on *every*
+  terrain: quiet, dark, sparse, near-static. The generator must choose all
+  mapping floors so the CCW corner lands there; §7 pins it with an RMS
+  ceiling in the render smoke. This is the "gas pedal": the instrument is
+  polite company for other instruments at the bottom of any subset of
+  knobs, and every knob upward adds a specific kind of energy. (Externally,
+  one CV fanned into CV DEN + CV BRT rides the same pedal under voltage.)
+- **Edges are Q4 behavior.** The top quarter of DIRT's and MOTION's travel
+  may exceed the taste-range centers into a bounded risk zone — still
+  clamped, still safe from genuine breakage. "Always pleasant" becomes
+  "always recoverable"; pulling back from almost-too-much is where ambient
+  play lives. Zone widths are tuning-phase data.
 - **Depth mandate.** Every macro keeps its minimum audible span, but the
   terrain must map at least one or two macros *deep* (wide spans, many
   parameters). Six uniformly shallow knobs are the samey-nice failure in
@@ -121,8 +159,8 @@ Guard rails inherited from project memory:
   resonance cap, reverb gains and CHOKE states define the safe zones the
   terrain and macros move inside.
 - **DIRT respects that MASTER_DRIVE is a threshold:** the macro primarily
-  rides the deck GRITs; MASTER_DRIVE only joins in the top third of the
-  macro's travel, because beyond the limiter's knee it stops controlling
+  rides the deck GRITs; MASTER_DRIVE only joins in DIRT's top quarter (its
+  Q4 story cell), because beyond the limiter's knee it stops controlling
   dirt.
 - **BRIGHT never walks a BODY deck off the FILT cliff:** BODY dies below
   FILT −0.5, so a BODY deck's BRIGHT mapping floor sits clearly *above* the
@@ -158,10 +196,12 @@ Generation order:
    FILT cliff; the resonance cap; no double high density on both decks).
    Tempo base is drawn here too — pace belongs to the terrain, not to a
    knob; the CLK input overrides it.
-4. **Macro mappings.** Per macro one variant from its target pool: which
-   params, which `lo/hi` spans, which curve. Two rules: every macro must be
-   audible — a minimum span per mapping, so no knob is ever dead — and at
-   least one or two macros per terrain are mapped deep (§3 depth mandate).
+4. **Macro mappings.** Per macro one story variant from the §3 library plus
+   its intensities: which targets participate, and the breakpoint values of
+   each target's story curve. Three rules: every macro must be audible — a
+   minimum span per mapping, so no knob is ever dead; at least one or two
+   macros per terrain are mapped deep (§3 depth mandate); and the mapping
+   floors must jointly satisfy the calm corner (§3).
 5. **Weather.** The polisher review's one-hour finding: LFO-class motion at
    constant depth is how ambient becomes wallpaper — after fifteen minutes
    the ear has mapped the orbit and files it under air conditioning. So each
@@ -259,11 +299,11 @@ doctest units in `tests/`, render host for audio smoke. Project convention:
 sanity checks, no byte-identity gates. Every test proves RED once before it
 counts.
 
-1. **Property tests over many seeds** (~10 000): every generated parameter
-   inside the taste limits (risk zones included in the limits they widen);
-   all named constraints hold; every macro mapping meets the minimum span
-   and each terrain meets the depth mandate; determinism (same seed twice →
-   identical terrain).
+1. **Property tests over many seeds** (~10 000): every story curve inside
+   the taste limits at every breakpoint (risk zones included in the limits
+   they widen); all named constraints hold; every macro mapping meets the
+   minimum span and each terrain meets the depth mandate; determinism (same
+   seed twice → identical terrain).
 2. **Monotonicity:** riding a macro 0→1 moves every mapped parameter
    monotonically in its declared direction.
 3. **Partial reroll:** rerolling one macro's domain changes only that
@@ -279,7 +319,8 @@ counts.
    stage 3.
 7. **Render smoke:** a handful of fixed seeds through `render.exe` — no NaN,
    RMS inside plausible bounds, a NEW transition without a level jump beyond
-   a fixed dB threshold.
+   a fixed dB threshold, and the **calm corner** (all macros at 0) under a
+   fixed RMS ceiling on every rendered seed.
 
 ## 8. Out of scope
 
