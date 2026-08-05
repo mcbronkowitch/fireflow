@@ -1,0 +1,99 @@
+// tests/test_flow_terrain.cpp
+#include "doctest/doctest.h"
+#include "flow/terrain.h"
+#include "flow/taste.h"
+using namespace spky::flow;
+
+static TerrainState st(uint32_t m) { TerrainState s; s.master = m; return s; }
+
+TEST_CASE("flow terrain: 10k seeds stay inside taste limits (spec 7.1)") {
+    for (uint32_t k = 1; k <= 10000; ++k) {
+        Terrain t = generate(st(k * 2654435761u));
+        for (int p = 0; p < P_COUNT; ++p) {
+            CAPTURE(k); CAPTURE(kParams[p].name);
+            CHECK(t.base[p] >= kParams[p].lo);
+            CHECK(t.base[p] <= kParams[p].hi);
+        }
+        for (int m = 0; m < MACRO_COUNT; ++m) {
+            const auto& mm = t.map[m];
+            CHECK(mm.n_targets >= 1);
+            float span_max = 0.f;
+            for (int i = 0; i < mm.n_targets; ++i) {
+                const auto& c = mm.targets[i];
+                bool up = c.bp[4] >= c.bp[0];
+                for (int b = 0; b < 5; ++b) {
+                    CHECK(c.bp[b] >= kParams[c.param].lo);
+                    CHECK(c.bp[b] <= kParams[c.param].hi);
+                    if (b) { if (up) CHECK(c.bp[b] >= c.bp[b-1]);
+                             else    CHECK(c.bp[b] <= c.bp[b-1]); }
+                }
+                float norm = (kParams[c.param].hi - kParams[c.param].lo);
+                float sp = (c.bp[4] > c.bp[0] ? c.bp[4]-c.bp[0]
+                                              : c.bp[0]-c.bp[4]) / norm;
+                if (sp > span_max) span_max = sp;
+            }
+            CHECK(span_max >= kMinSpan);       // no dead knob (spec 7.1)
+        }
+        // Named constraints (spec 7.1).
+        if (int(t.base[P_ENGINE_A] + .5f) == ENGINE_BODY)
+            CHECK(t.base[P_FILT_A] >= kBodyFiltFloor);
+        if (int(t.base[P_ENGINE_B] + .5f) == ENGINE_BODY)
+            CHECK(t.base[P_FILT_B] >= kBodyFiltFloor);
+        // Ledger watch item: the FILT floor must ALSO hold on every story
+        // curve breakpoint that drives a BODY deck's FILT. taste.h's BRIGHT
+        // dawn story deliberately draws FILT bp0 down to -0.55 (below the
+        // floor); the generator's curve clamp is what keeps a BODY deck off
+        // the cliff, and this walk is the assertion that goes red if that
+        // clamp disappears while the base clamp above stays.
+        {
+            bool bodyA = int(t.base[P_ENGINE_A] + .5f) == ENGINE_BODY;
+            bool bodyB = int(t.base[P_ENGINE_B] + .5f) == ENGINE_BODY;
+            for (int m = 0; m < MACRO_COUNT; ++m)
+                for (int i = 0; i < t.map[m].n_targets; ++i) {
+                    const auto& c = t.map[m].targets[i];
+                    if ((c.param == P_FILT_A && bodyA) ||
+                        (c.param == P_FILT_B && bodyB)) {
+                        CAPTURE(k); CAPTURE(m);
+                        for (int b = 0; b < 5; ++b)
+                            CHECK(c.bp[b] >= kBodyFiltFloor);
+                    }
+                }
+        }
+        bool both_hot = t.base[P_DENSITY_A] > 0.5f && t.base[P_DENSITY_B] > 0.5f;
+        CHECK(!both_hot);
+        CHECK(t.weather_n >= kWeatherOscMin);
+        CHECK(t.weather_n <= kWeatherOscMax);
+    }
+}
+
+TEST_CASE("flow terrain: determinism - same state twice, identical terrain") {
+    Terrain a = generate(st(0xC0FFEE)), b = generate(st(0xC0FFEE));
+    CHECK(a.arch == b.arch);
+    for (int p = 0; p < P_COUNT; ++p) CHECK(a.base[p] == b.base[p]);
+    for (int m = 0; m < MACRO_COUNT; ++m) {
+        CHECK(a.map[m].story == b.map[m].story);
+        for (int i = 0; i < a.map[m].n_targets; ++i)
+            for (int b5 = 0; b5 < 5; ++b5)
+                CHECK(a.map[m].targets[i].bp[b5] == b.map[m].targets[i].bp[b5]);
+    }
+}
+
+TEST_CASE("flow terrain: archetypes reach the data (spec 7.7, fixed seeds)") {
+    // Generous-margin statistical assertion over a FIXED seed set.
+    //
+    // SUBSTITUTION vs the task brief: the brief sampled base[P_DENSITY_A],
+    // but DENSITY_A is story-owned -- its base is the DENSITY story's bp0
+    // draw (the calm floor), whose span in taste.h does not depend on the
+    // archetype, so the brief's drone-vs-pulse inequality could never
+    // separate them (the test would be vacuous at best). P_ATTACK_A is a
+    // genuinely archetype-conditioned base rule (drone .5-.95, pulse 0-.15
+    // per taste.h), so it proves the same claim the brief was after: the
+    // stage-0 archetype pick actually reaches the stage-3 draws.
+    double sum[ARCH_COUNT] = {}; int n[ARCH_COUNT] = {};
+    for (uint32_t k = 1; k <= 4000; ++k) {
+        Terrain t = generate(st(k * 40503u + 7u));
+        sum[t.arch] += t.base[P_ATTACK_A]; n[t.arch]++;
+    }
+    REQUIRE(n[ARCH_DRONE] > 100); REQUIRE(n[ARCH_PULSE] > 100);
+    CHECK(sum[ARCH_DRONE]/n[ARCH_DRONE] > sum[ARCH_PULSE]/n[ARCH_PULSE] + 0.05);
+}
