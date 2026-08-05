@@ -8,6 +8,7 @@
 // tested by the desktop suite. Every coordinate and label comes from
 // generated_flow_panel.hpp. Nothing here is hand-placed.
 #include <cmath>
+#include <cstdio>
 #include <string>
 #include <vector>
 #include "plugin.hpp"
@@ -73,6 +74,12 @@ struct Glow : Module {
                                                  // terrain's own tempo
     bool woken = false;
 
+    // dataFromJson() can run before onAdd() (patch load), when flow has no
+    // Instrument yet -- stash the payload here and apply it from onAdd()
+    // instead of pushing into a null Instrument.
+    spkyvcv::GlowSave pending;
+    bool havePending = false;
+
     Glow() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
         for (const auto& c : kParamCtls) {
@@ -91,6 +98,70 @@ struct Glow : Module {
         ctrlDiv.setDivision(kCtrlDiv);
     }
 
+    // --- persistence (spec 5) --------------------------------------------
+    // A live set built around a locked terrain has to survive a restart, so
+    // a patch carries the whole state: the terrain code, the lock and the
+    // one undo slot. Preset *systems* -- banks, slots, favourites -- are out
+    // of scope (spec 8); this is the baseline.
+    json_t* dataToJson() override {
+        const spkyvcv::GlowSave s = spkyvcv::glow_capture(flow);
+        json_t* root = json_object();
+        json_object_set_new(root, "terrain", json_string(s.code));
+        json_object_set_new(root, "lock", json_boolean(s.lock));
+        if (s.have_undo) json_object_set_new(root, "undo", json_string(s.undo));
+        return root;
+    }
+
+    void dataFromJson(json_t* root) override {
+        if (!root) return;
+        spkyvcv::GlowSave s;
+        json_t* code = json_object_get(root, "terrain");
+        if (!json_is_string(code)) return;              // nothing to restore
+        std::snprintf(s.code, sizeof s.code, "%s", json_string_value(code));
+        if (json_t* u = json_object_get(root, "undo")) {
+            if (json_is_string(u)) {
+                std::snprintf(s.undo, sizeof s.undo, "%s", json_string_value(u));
+                s.have_undo = true;
+            }
+        }
+        if (json_t* l = json_object_get(root, "lock"))
+            s.lock = json_boolean_value(l);
+        // A malformed code leaves everything alone -- a corrupt patch must
+        // not silently move the player to some other instrument.
+        if (curSr <= 0.f) {          // dataFromJson ran before onAdd
+            // Do NOT set `woken` here. reinit() reads `woken` as `hadFlow` to
+            // decide whether flow.init(&inst, ...) still needs to run; init()
+            // is the only place that sets Flow::_inst, and apply_param() is a
+            // no-op while _inst is null. Marking `woken` true before onAdd's
+            // first reinit() would make that reinit() skip flow.init()
+            // forever, so glow_restore()'s pushed values would never reach
+            // the Instrument -- a loaded patch would show the right terrain
+            // code and stay permanently silent. `havePending` alone already
+            // stops onAdd's `else if (!woken) wakeHouse();` from running (see
+            // onAdd below), so `woken` doesn't need to move yet.
+            pending = s;
+            havePending = true;
+            return;
+        }
+        if (spkyvcv::glow_restore(flow, s)) { woken = true; knobs.primed = false; }
+    }
+
+    // Enter a terrain code by hand (context menu). Returns false and changes
+    // nothing if the string is not a valid code.
+    bool setTerrainCode(const std::string& text) {
+        spky::flow::TerrainState st;
+        if (!spky::flow::decode_code(text.c_str(), st)) return false;
+        flow.wake(st);
+        woken = true;
+        return true;
+    }
+
+    std::string terrainCode() {
+        char buf[spky::flow::kTerrainCodeLen + 1] = {};
+        spky::flow::encode_code(flow.state(), buf, int(sizeof buf));
+        return std::string(buf);
+    }
+
     // Read res/factory.wav off disk once per module instance, on the main
     // thread, before process() can run. Same split the big module uses: the
     // audio thread only ever memcpys the already-decoded, already-resampled
@@ -104,7 +175,24 @@ struct Glow : Module {
                            factoryNative, err);
         }
         reinit(curSr > 0.f ? curSr : 48000.f);
-        if (!woken) wakeHouse();
+        if (havePending) {
+            havePending = false;
+            // reinit() just ran with `woken` still false (dataFromJson left
+            // it that way on purpose -- see the comment there), so
+            // flow.init(&inst, ...) really did run above and Flow::_inst is
+            // live. Mark `woken` true only now that the restore has actually
+            // reached the Instrument, so a later onSampleRateChange()'s
+            // reinit() takes the incremental branch instead of re-running
+            // init() and wiping this restore out.
+            if (spkyvcv::glow_restore(flow, pending)) {
+                woken = true;
+            } else {
+                wakeHouse();          // malformed payload: fall back, same as a fresh insert
+            }
+            knobs.primed = false;
+        } else if (!woken) {
+            wakeHouse();
+        }
     }
 
     void wakeHouse() {
@@ -318,6 +406,23 @@ struct GlowText : Widget {
     }
 };
 
+// A menu text field that hands its contents to the module on Enter and
+// closes the menu. ui::TextField itself has no commit behaviour.
+struct TerrainCodeField : ui::TextField {
+    Glow* module = nullptr;
+    void onSelectKey(const SelectKeyEvent& e) override {
+        if (module && e.action == GLFW_PRESS
+            && (e.key == GLFW_KEY_ENTER || e.key == GLFW_KEY_KP_ENTER)) {
+            module->setTerrainCode(text);
+            e.consume(this);
+            if (MenuOverlay* overlay = getAncestorOfType<MenuOverlay>())
+                overlay->requestDelete();
+            return;
+        }
+        ui::TextField::onSelectKey(e);
+    }
+};
+
 struct GlowWidget : ModuleWidget {
     GlowWidget(Glow* module) {
         setModule(module);
@@ -350,6 +455,35 @@ struct GlowWidget : ModuleWidget {
         addChild(createWidget<ScrewSilver>(
             Vec(box.size.x - 2 * RACK_GRID_WIDTH,
                 RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+    }
+
+    void appendContextMenu(Menu* menu) override {
+        auto* m = getModule<Glow>();
+        if (!m) return;
+        menu->addChild(new MenuSeparator);
+        menu->addChild(createMenuLabel("Terrain " + m->terrainCode()));
+
+        // Share a terrain: the code is the whole state (spec 4), so copying
+        // it out and pasting it in is the entire sharing story.
+        menu->addChild(createMenuItem("Copy terrain code", "", [m]() {
+            glfwSetClipboardString(APP->window->win, m->terrainCode().c_str());
+        }));
+        menu->addChild(createMenuItem("Paste terrain code", "", [m]() {
+            const char* s = glfwGetClipboardString(APP->window->win);
+            if (s) m->setTerrainCode(s);
+        }));
+
+        auto* field = new TerrainCodeField;
+        field->module = m;
+        field->box.size.x = 180.f;
+        field->placeholder = "F1-XXXXXXXX-000000000000";
+        field->setText(m->terrainCode());
+        menu->addChild(field);
+
+        menu->addChild(createBoolMenuItem(
+            "Terrain lock", "",
+            [m]() { return m->flow.locked(); },
+            [m](bool on) { m->flow.set_lock(on); }));
     }
 };
 
