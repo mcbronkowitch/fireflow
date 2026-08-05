@@ -264,6 +264,54 @@ TEST_CASE("flow NEW: a mid-blend re-press never bare-switches a discrete") {
                                // "never twice" above is not vacuous
 }
 
+TEST_CASE("flow NEW: the BODY FILT floor holds at every tick of a blend") {
+    // The named hard constraint (§4) that terrain.cpp's apply_constraints can
+    // only half enforce: it clamps each terrain's FILT curve under THAT
+    // terrain's engine assignment, but the blend interpolates P_FILT_A/B
+    // between two terrains clamped under DIFFERENT assignments. A deck pushed
+    // as ENGINE_BODY therefore rode the outgoing terrain's legally un-floored
+    // FILT (taste.h's BRIGHT "dawn" story draws bp0 to -0.55 on purpose) for
+    // up to the whole 6 s ramp -- measured -0.5485 at worst, which costs a
+    // BODY deck -13.77 dB against the -0.3 floor. The guard that makes this
+    // true at every tick lives in Flow::recompute_and_push and is keyed on
+    // the deck's CURRENTLY PUSHED engine.
+    //
+    // Macros stay at 0 (the calm/ember corner: BRIGHT's FILT curve is at its
+    // bp0, the lowest it ever draws) and the Instrument is null -- the whole
+    // property is about the value Flow pushes, which param_now() reports, so
+    // no audio is needed and 40 masters stay cheap.
+    float worst = 0.f; int worst_master = 0;
+    int body_blend_ticks = 0, blends_with_body = 0;
+    for (uint32_t k = 1; k <= 40; ++k) {
+        Flow f; f.init(nullptr, 100.f);
+        TerrainState s; s.master = k; f.wake(s);
+        f.new_full();
+        bool body_here = false;
+        for (int i = 0; i < 620; ++i) {   // 6.2 s: the ramp plus a settled tail
+            f.tick();
+            const bool blending = f.blend_phase() < 1.f;
+            for (int d = 0; d < 2; ++d) {
+                const int ep = d ? P_ENGINE_B : P_ENGINE_A;
+                const int fp = d ? P_FILT_B   : P_FILT_A;
+                if (int(f.param_now(ep) + 0.5f) != ENGINE_BODY) continue;
+                if (blending) { ++body_blend_ticks; body_here = true; }
+                const float v = f.param_now(fp);
+                if (v < worst) { worst = v; worst_master = int(k); }
+            }
+        }
+        if (body_here) ++blends_with_body;
+    }
+    CAPTURE(worst_master); CAPTURE(worst);
+    CHECK(worst >= kBodyFiltFloor);
+    // ...and the seed range really does sample the window the bug lived in:
+    // a deck pushed as BODY *while a blend is running*. Without these the
+    // CHECK above could pass by never reaching BODY at all. (They are not the
+    // falsifiability proof -- the CHECK is: removing the runtime clamp takes
+    // `worst` to -0.4770 on this very seed range.)
+    REQUIRE(body_blend_ticks > 1000);
+    REQUIRE(blends_with_body >= 10);
+}
+
 TEST_CASE("flow NEW: param_now never leaves the parameter's range") {
     // The continuity offset is a CONSTANT correction held across a blend, so
     // a macro moving during one can push the combined value past a

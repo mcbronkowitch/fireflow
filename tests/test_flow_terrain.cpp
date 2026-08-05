@@ -42,9 +42,18 @@ TEST_CASE("flow terrain: 10k seeds stay inside taste limits (spec 7.1)") {
         // Ledger watch item: the FILT floor must ALSO hold on every story
         // curve breakpoint that drives a BODY deck's FILT. taste.h's BRIGHT
         // dawn story deliberately draws FILT bp0 down to -0.55 (below the
-        // floor); the generator's curve clamp is what keeps a BODY deck off
-        // the cliff, and this walk is the assertion that goes red if that
-        // clamp disappears while the base clamp above stays.
+        // floor), and this walk is the assertion that goes red if the
+        // generator's curve clamp disappears while the base clamp above
+        // stays.
+        //
+        // SCOPE, stated because an earlier version of this comment overclaimed
+        // it: this proves the floor for ONE terrain evaluated on its own, and
+        // nothing more. It says nothing about a NEW blend, which interpolates
+        // FILT between two terrains clamped under different engine
+        // assignments and left a BODY deck below the floor for nearly a whole
+        // ramp until the runtime guard was added. The blend-time floor is
+        // asserted in tests/test_flow_new.cpp ("the BODY FILT floor holds at
+        // every tick of a blend"); this case cannot see it.
         {
             bool bodyA = int(t.base[P_ENGINE_A] + .5f) == ENGINE_BODY;
             bool bodyB = int(t.base[P_ENGINE_B] + .5f) == ENGINE_BODY;

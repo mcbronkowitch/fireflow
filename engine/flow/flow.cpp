@@ -47,6 +47,12 @@ inline int deck_of(int p) {
 
 } // namespace
 
+// The BODY FILT runtime floor in recompute_and_push() reads this tick's
+// already-pushed engine for the deck it is guarding, which only works while
+// ENGINE_A/B precede FILT_A/B in the parameter table.
+static_assert(P_ENGINE_A < P_FILT_A && P_ENGINE_B < P_FILT_B,
+              "ENGINE_A/B must be pushed before FILT_A/B");
+
 void Flow::init(Instrument* inst, float ctrl_hz) {
     _inst = inst;
     _ctrl_hz = ctrl_hz;
@@ -375,6 +381,28 @@ void Flow::recompute_and_push(bool force) {
         else if (p == P_REVMIX_B)      v = duck(1, v);
         if (p == P_REV_SIZE)           v = space_slew(0, v, force);
         else if (p == P_REV_DECAY)     v = space_slew(1, v, force);
+        // The BODY FILT floor, enforced HERE, at runtime -- §4's named hard
+        // constraint (terrain.cpp's apply_constraints only makes it true of
+        // each terrain in isolation). The blend interpolates P_FILT_A/B
+        // between two terrains whose floors were computed under DIFFERENT
+        // engine assignments, so a deck currently pushed as ENGINE_BODY can
+        // sit on the outgoing terrain's legally un-floored FILT (taste.h's
+        // BRIGHT "dawn" story draws bp0 down to -0.55 on purpose: engines
+        // other than BODY may dive) for very nearly the whole ramp. Measured
+        // without this guard: 188 of 800 deck-blends, worst FILT -0.5485,
+        // worst duration 5.99 s of a 6.00 s blend -- and -0.55 costs a BODY
+        // deck -13.77 dB against the -0.3 floor.
+        //
+        // The key is the engine the deck is CURRENTLY PUSHED as, not either
+        // terrain's assignment: that is well defined at every tick, including
+        // mid-stagger, so the guard is too. Reading _pushed[P_ENGINE_*] gives
+        // THIS tick's engine because ENGINE_A/B lead the parameter table and
+        // have already been through the loop (static_assert above).
+        else if (p == P_FILT_A || p == P_FILT_B) {
+            const int ep = (p == P_FILT_A) ? P_ENGINE_A : P_ENGINE_B;
+            if (int(_pushed[ep] + 0.5f) == ENGINE_BODY && v < kBodyFiltFloor)
+                v = kBodyFiltFloor;
+        }
 
         // Setter spam guard: push only real changes -- exact compare for
         // discrete (already snapped to the step grid), epsilon for

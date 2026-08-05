@@ -68,9 +68,19 @@ void apply_constraints(Terrain& t) {
     // just dies. The floor must hold on BOTH the base value AND every
     // story-curve breakpoint that targets a BODY deck's FILT: taste.h's
     // BRIGHT dawn story deliberately draws FILT bp0 down to -0.55 (other
-    // engines may dive), so this clamp is the only thing keeping a BODY
-    // deck off the cliff. max(bp, floor) preserves the curve's monotone
+    // engines may dive). max(bp, floor) preserves the curve's monotone
     // order in either direction.
+    //
+    // THIS CLAMP ALONE IS NOT ENOUGH, and an earlier version of this comment
+    // wrongly said it was. It is keyed on THIS terrain's engine assignment,
+    // so it only makes the floor true of one terrain evaluated on its own --
+    // and a NEW blend interpolates FILT between two terrains clamped under
+    // DIFFERENT assignments, which put a BODY deck as far as -0.5485 for up
+    // to 5.99 s of a 6 s ramp. The floor that actually holds at every tick is
+    // the runtime one in Flow::recompute_and_push (engine/flow/flow.cpp),
+    // keyed on the deck's currently-pushed engine. Keep both: this one keeps
+    // a settled terrain honest at generation time (where the runtime guard
+    // would silently rewrite curve data instead of catching a bad table).
     const bool body[2] = {
         int(t.base[P_ENGINE_A] + 0.5f) == ENGINE_BODY,
         int(t.base[P_ENGINE_B] + 0.5f) == ENGINE_BODY,
