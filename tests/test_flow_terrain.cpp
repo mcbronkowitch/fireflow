@@ -68,22 +68,30 @@ TEST_CASE("flow terrain: 10k seeds stay inside taste limits (spec 7.1)") {
                     }
                 }
         }
-        // WHY THIS ONE CANNOT GO RED, said out loud because this project
-        // discards tests that cannot: both DENSITY bases are the DENSITY
-        // "rate" story's bp0 draw (taste.h, spans {.02,.08} and {.02,.08} --
-        // and an UNPICKED variant's targets still take their own bp0 as a
-        // base, so there is no path where they come from anywhere else).
-        // Every reachable draw is at most 0.08, so `both_hot` is false by
-        // construction and the no-double-density clamp in terrain.cpp's
-        // apply_constraints never fires either.
+        // The no-double-density constraint, stated the way apply_constraints
+        // actually enforces it: min(base A, base B) <= 0.5.
         //
-        // It stays because what it asserts is the INVARIANT, not the clamp:
-        // the day a taste-table edit lifts a DENSITY bp0 span above 0.5 this
-        // line goes red on the first seed that draws two hot decks, which is
-        // exactly when someone needs to be told the clamp has woken up. Read
-        // it as a tripwire on the table, not as coverage of the guard.
-        bool both_hot = t.base[P_DENSITY_A] > 0.5f && t.base[P_DENSITY_B] > 0.5f;
-        CHECK(!both_hot);
+        // NOT "never both strictly above 0.5", which is what this line used
+        // to say. The clamp pulls the LOWER deck down to EXACTLY 0.5f, so
+        // `A > .5 && B > .5` is false by construction under every possible
+        // taste table -- it could not fail, and the comment that claimed it
+        // was a tripwire on the table was simply wrong. Measured: lifting
+        // both DENSITY bp0 spans to {.85,.95} left that version green.
+        //
+        // This version does fail, and here is exactly when. With today's
+        // spans both DENSITY bases are the DENSITY "rate" story's bp0 draw
+        // ({.02,.08} and {.02,.08}; an unpicked variant's targets still take
+        // their own bp0 as a base, so there is no other path), so the
+        // measured max of min(A,B) over these 10 000 seeds is 0.0798 and the
+        // stock table clears the bound with or without the clamp. Remove the
+        // clamp under a table that CAN reach two hot decks and it goes red at
+        // once: with those {.85,.95} spans, max min(A,B) is 0.5000 exactly
+        // while the clamp holds and 0.9496 with it gone -- all 10 000 seeds
+        // failing. So this asserts the guard's postcondition, and nothing
+        // about how likely today's tables are to need it.
+        const float lower = t.base[P_DENSITY_A] < t.base[P_DENSITY_B]
+                          ? t.base[P_DENSITY_A] : t.base[P_DENSITY_B];
+        CHECK(lower <= 0.5f);
         CHECK(t.weather_n >= kWeatherOscMin);
         CHECK(t.weather_n <= kWeatherOscMax);
     }
