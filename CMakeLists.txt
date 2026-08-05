@@ -160,6 +160,7 @@ add_executable(spky_tests
     engine/flow/flow.cpp
     tests/test_flow_runtime.cpp
     tests/test_flow_new.cpp
+    tests/test_flow_gesture.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
 target_include_directories(spky_tests PRIVATE host)

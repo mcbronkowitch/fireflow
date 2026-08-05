@@ -37,6 +37,7 @@ constexpr int   kWeatherOscMin = 2, kWeatherOscMax = 4;
 constexpr float kBlendS = 6.f, kMinSpan = 0.08f;
 constexpr float kTapMaxS = 0.4f, kUndoArmS = 1.5f, kLockS = 5.f;
 constexpr float kMarkDelta = 0.01f;
+constexpr float kRefuseFlashS = 0.25f;              // gesture.h REFUSED blink
 constexpr float kDistanceMin = 0.18f;               // NEW rejection threshold
 constexpr float kCalmCornerRmsMax = 0.06f;          // §7.8 ceiling, lin FS
 constexpr float kBodyFiltFloor = -0.3f;             // BODY FILT cliff margin
