@@ -90,14 +90,16 @@ inline const StoryVariant kStories[] = {
   { P_DRIVE,     {{0.f,0.f},{0.f,0.f},{0.f,0.f},{0.f,.05f},{.3f,.7f}} } } },
 // WANDER "frozen -> fine variation -> melodic wander -> FORM/SONG churn"
 // (§3 row 5). FORM/SONG are discrete: flat until Q4, hysteresis in Task 7.
-// Q4 hi extended vs the plan (which stopped at 3) to the REAL maxima --
-// FORM 4 (Ostinato), SONG 6 (Off) -- so the knob can reach the whole space
-// under the corrected kParams ranges.
+// Q4 hi extended vs the plan (which stopped at 3) toward the corrected
+// kParams maxima: FORM reaches 4 (Ostinato -- still generates material, not
+// a disable state). SONG stops at 5 (Mirror): SongMode 6 is Off
+// (song_form.h -- song_symbol_at returns constant 0, no alternation), and a
+// wander knob must never disable wandering, so Off is deliberately excluded.
 { M_WANDER, "path", 4, {
   { P_VARIATION_A, {{0.f,0.f},{.05f,.15f},{.25f,.45f},{.5f,.7f},{.75f,1.f}} },
   { P_VARIATION_B, {{0.f,0.f},{.05f,.15f},{.25f,.45f},{.5f,.7f},{.75f,1.f}} },
   { P_FORM_A,    {{0.f,0.f},{0.f,0.f},{0.f,1.f},{1.f,2.f},{2.f,4.f}} },
-  { P_SONG_A,    {{0.f,0.f},{0.f,0.f},{0.f,1.f},{1.f,2.f},{2.f,6.f}} } } },
+  { P_SONG_A,    {{0.f,0.f},{0.f,0.f},{0.f,1.f},{1.f,2.f},{2.f,5.f}} } } },
 // SPACE "intimate -> room -> hall -> dissolve" (§3 row 6). SIZE/DECAY get
 // the lazy follower in the runtime (kSpaceSlewS); dry duck at Q4 comes from
 // REVMIX riding high (equal-power: wet up = dry down).
