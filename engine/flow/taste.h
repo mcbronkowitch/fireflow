@@ -38,6 +38,15 @@ constexpr float kBlendS = 6.f, kMinSpan = 0.08f;
 constexpr float kTapMaxS = 0.4f, kUndoArmS = 1.5f, kLockS = 5.f;
 constexpr float kMarkDelta = 0.01f;
 constexpr float kRefuseFlashS = 0.25f;              // gesture.h REFUSED blink
+// Spec 5, the house seed: the terrain the instrument wakes on, so the first
+// sound after power-on is a decision rather than a draw. PLACEHOLDER, not a
+// curated choice -- the render-based listening pass was stopped on
+// 2026-08-05 (docs/superpowers/specs/2026-08-05-flow-listening-notes.md)
+// because a bounced file can only judge level. This is the one opener that
+// pass did measure as reasonable: its first note lands at 1.25 s, where the
+// previous candidate opened with 11.4 s of silence. Re-choose it by ear once
+// FireFlow Glow can actually be played.
+inline constexpr char kHouseCode[] = "F1-00000020-000000000000";
 constexpr float kDistanceMin = 0.18f;               // NEW rejection threshold
 constexpr float kCalmCornerRmsMax = 0.06f;          // §7.8 ceiling, lin FS
 // §7.8 floor -- Task 10. This is a SILENCE DETECTOR, not the musical
