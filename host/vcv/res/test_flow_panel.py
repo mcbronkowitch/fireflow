@@ -137,6 +137,20 @@ def test_silkscreen_copy():
           "ton-k is the brand and must not appear on the panel (spec 6)")
 
 
+def test_logo_font_weights():
+    fireflow = next((t for t in g.TEXTS if t.str == "FireFlow"), None)
+    glow = next((t for t in g.TEXTS if t.str == "GLOW"), None)
+    check(fireflow is not None, "FireFlow text entry not found")
+    check(glow is not None, "GLOW text entry not found")
+    check(fireflow.weight is not None, "FireFlow must have a weight (spec 6)")
+    check(glow.weight is not None, "GLOW must have a weight (spec 6)")
+    check(fireflow.weight != glow.weight,
+          "FireFlow and GLOW must have different weights (spec 6)")
+    check(fireflow.weight < glow.weight,
+          "FireFlow (%.0f) must be lighter than GLOW (%.0f) (spec 6)"
+          % (fireflow.weight, glow.weight))
+
+
 def test_committed_files_match_the_generator():
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(here)

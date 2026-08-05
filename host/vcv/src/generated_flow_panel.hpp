@@ -5,7 +5,7 @@ struct XY { float x, y; };
 enum WidgetKind { WK_MACRO, WK_BTN, WK_IN, WK_OUT };
 struct PanelCtl { int id; WidgetKind kind; XY mm; const char* label; XY lbl; unsigned char anchor; float lblSize; unsigned lblRgb; const char* tip; };
 // anchor: 0 = middle, 1 = start (left-aligned), 2 = end (right-aligned)
-struct PanelTxt { XY mm; float size; unsigned rgb; unsigned char anchor; const char* str; };
+struct PanelTxt { XY mm; float size; unsigned rgb; unsigned char anchor; int weight; const char* str; };
 enum ParamId {
     MOTION,
     DENSITY,
@@ -61,7 +61,7 @@ static const PanelCtl kOutputCtls[] = {
     { OUT_R, WK_OUT, {51.480f, 117.000f}, "OUT R", {51.480f, 111.400f}, 0, 2.200f, 0x171713, "Main out, right" },
 };
 static const PanelTxt kTexts[] = {
-    { {29.900f, 10.000f}, 5.000f, 0x656056, 2, "FireFlow" },
-    { {31.100f, 10.000f}, 5.000f, 0x171713, 1, "GLOW" },
+    { {29.900f, 10.000f}, 5.000f, 0x656056, 2, 300, "FireFlow" },
+    { {31.100f, 10.000f}, 5.000f, 0x171713, 1, 700, "GLOW" },
 };
 } } // namespace spkyvcv::glow

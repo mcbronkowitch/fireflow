@@ -60,9 +60,10 @@ class Ctl(object):
 
 
 class Txt(object):
-    def __init__(self, x, y, size, rgb, anchor, s):
+    def __init__(self, x, y, size, rgb, anchor, s, weight=None):
         self.x, self.y, self.size = x, y, size
         self.rgb, self.anchor, self.str = rgb, anchor, s
+        self.weight = weight
 
 
 def radius_of(c):
@@ -99,8 +100,8 @@ OUTPUTS = [
     Ctl("OUT_R", OUT, JACK_X[3], JACK_Y[1], "OUT R", "Main out, right"),
 ]
 TEXTS = [
-    Txt(29.9, LOGO_Y, 5.0, base.MUTED, 2, "FireFlow"),
-    Txt(31.1, LOGO_Y, 5.0, base.INK,   1, "GLOW"),
+    Txt(29.9, LOGO_Y, 5.0, base.MUTED, 2, "FireFlow", 300),
+    Txt(31.1, LOGO_Y, 5.0, base.INK,   1, "GLOW", 700),
 ]
 
 
@@ -139,10 +140,15 @@ def jack_svg(c):
            mm(c.x), mm(c.y), mm(JACK_R * 0.38), base.WELL))
 
 
-def text_svg(x, y, size, rgb, anchor, s):
-    return ('  <text x="%s" y="%s" font-family="Inter, Helvetica, sans-serif" '
-            'font-size="%s" fill="%s" text-anchor="%s">%s</text>\n'
-            % (mm(x), mm(y), mm(size), rgb, ANCHOR_SVG[anchor], s))
+def text_svg(x, y, size, rgb, anchor, s, weight=None):
+    if weight is None:
+        return ('  <text x="%s" y="%s" font-family="Inter, Helvetica, sans-serif" '
+                'font-size="%s" fill="%s" text-anchor="%s">%s</text>\n'
+                % (mm(x), mm(y), mm(size), rgb, ANCHOR_SVG[anchor], s))
+    else:
+        return ('  <text x="%s" y="%s" font-family="Inter, Helvetica, sans-serif" '
+                'font-size="%s" fill="%s" text-anchor="%s" font-weight="%d">%s</text>\n'
+                % (mm(x), mm(y), mm(size), rgb, ANCHOR_SVG[anchor], weight, s))
 
 
 def svg():
@@ -166,7 +172,7 @@ def svg():
     for c in INPUTS + OUTPUTS:
         out.append(jack_svg(c))
     for t in TEXTS:
-        out.append(text_svg(t.x, t.y, t.size, t.rgb, t.anchor, t.str))
+        out.append(text_svg(t.x, t.y, t.size, t.rgb, t.anchor, t.str, t.weight))
     for c in PARAMS + INPUTS + OUTPUTS:
         lx, ly = label_xy(c)
         out.append(text_svg(lx, ly, LBL_SZ[c.kind], base.INK, 0, c.label))
@@ -203,7 +209,7 @@ def header():
                " const char* tip; };\n")
     out.append("// anchor: 0 = middle, 1 = start (left-aligned), 2 = end (right-aligned)\n")
     out.append("struct PanelTxt { XY mm; float size; unsigned rgb;"
-               " unsigned char anchor; const char* str; };\n")
+               " unsigned char anchor; int weight; const char* str; };\n")
     out.append(enum_block("ParamId", PARAMS, "NUM_PARAMS"))
     out.append(enum_block("InputId", INPUTS, "NUM_INPUTS"))
     out.append(enum_block("OutputId", OUTPUTS, "NUM_OUTPUTS"))
@@ -221,8 +227,8 @@ def header():
         out.append("};\n")
     out.append("static const PanelTxt kTexts[] = {\n")
     for t in TEXTS:
-        out.append('    { {%sf, %sf}, %sf, %s, %d, "%s" },\n'
-                   % (mm(t.x), mm(t.y), mm(t.size), rgb(t.rgb), t.anchor, t.str))
+        out.append('    { {%sf, %sf}, %sf, %s, %d, %d, "%s" },\n'
+                   % (mm(t.x), mm(t.y), mm(t.size), rgb(t.rgb), t.anchor, t.weight, t.str))
     out.append("};\n")
     out.append("} } // namespace spkyvcv::glow\n")
     return "".join(out)
