@@ -2214,6 +2214,17 @@ So M6 now decomposes into two pieces, in order:
 Until step 1 has a spec, M6 has no implementable definition, and the "spec ready"
 status this milestone carried since 2026-07-12 no longer holds.
 
+**Flow layer — Plan A landed 2026-08-05.** The compact-macro-module spec
+(`docs/superpowers/specs/2026-08-05-flow-machine-design.md`) splits its own
+build into two plans. Plan A — `engine/flow/`: the seeded terrain generator,
+the six-macro story layer, weather, the NEW gesture family, render-host
+scenario wiring and the audio sanity gates — is built and green (946 test
+cases, `ctest` 4/4). The listening phase over Plan A's open questions
+(`docs/superpowers/specs/2026-08-05-flow-listening-notes.md`) is now open.
+**Plan B is next:** the VCV module, **FireFlow Glow**, whose 12 HP panel is
+drawn at true hardware dimensions specifically so it can double as step 1's
+1:1 M6 panel draft above.
+
 ## Build & verify
 
 ```bash

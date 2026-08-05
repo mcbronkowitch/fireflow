@@ -3,8 +3,8 @@
 **Date:** 2026-08-05
 **Status:** approved design, pre-plan
 **Scope:** a portable macro/terrain layer over the engine plus a new compact
-VCV module "Flow". The hardware expander and the M6 panel itself are out of
-scope (doors kept open, nothing more).
+VCV module, FireFlow Glow. The hardware expansion, FireFlow Forge, and the M6
+panel itself are out of scope (doors kept open, nothing more).
 
 ## 1. Idea
 
@@ -12,8 +12,9 @@ A "flow machine": endless, always-evolving drones and pads from a module with
 six knobs and one button. Every knob position sounds pleasantly ambient by
 construction. **NEW** rolls a fresh "terrain" — a new generated instrument to
 explore — while the knobs keep their fixed meanings. The existing full
-Spotymod panel remains untouched as the full-control view; the later hardware
-expander is a future product, not part of this design.
+Spotymod panel remains untouched as the full-control view — FireFlow Forge's
+ancestor; the later hardware expansion is a future product, not part of this
+design.
 
 Decisions fixed during brainstorming:
 
@@ -73,14 +74,15 @@ engine/flow/
 
 Consumers:
 
-- **VCV module "Flow"** — second module in the Spotymod plugin. Embeds the
-  same `Instrument`, talks only to `flow.h`.
+- **VCV module FireFlow Glow** — second module in the Spotymod plugin. Embeds
+  the same `Instrument`, talks only to `flow.h`.
 - **Render host** — drives the flow layer from `scenario.json` (seed + macro
   rides), so terrains are testable and auditionable without Rack.
 - **M6 firmware (later)** — reads 6 pots + 1 button, calls the same `flow.h`.
 
 The flow layer encapsulates nothing away: it calls the same public setters as
-any host. A full-control expander later just sets parameters directly.
+any host. A full-control expansion (FireFlow Forge) later just sets
+parameters directly.
 
 **Implementation split (final-review recommendation): one spec, two plans,
 strict order.** Plan A builds `engine/flow/` + render-host integration + the
@@ -366,14 +368,16 @@ State-machine rules that close the corners (final-review fix):
 current terrain code, enter a code manually (share terrains), and the same
 terrain lock as a convenience mirror of the panel gesture.
 
-## 6. VCV module "Flow" — panel
+## 6. VCV module FireFlow Glow — panel
 
 Own compact module in the Spotymod plugin, **12 HP (61 mm)**, drawn at true
 hardware dimensions so the faceplate doubles as the 1:1 M6 panel draft.
 Generated like the big panel: an own `gen_flow_panel.py` emits the SVG + a
 generated header; neither is ever hand-edited.
 
-- Logo on top.
+- Logo on top: silkscreen "FireFlow" in a light weight, "GLOW" bold, set on
+  one line (12 HP is 61 mm — three text lines do not fit; `ton-k` is the
+  brand but does not appear on the panel).
 - Six **16 mm** macro knobs in two rows of three (~20 mm pitch):
   row 1 MOTION · DENSITY · BRIGHT, row 2 DIRT · WANDER · SPACE.
 - Large **NEW** button below, with the LED signatures of §5's gesture table.
@@ -386,7 +390,7 @@ generated header; neither is ever hand-edited.
   out to matter for the pulse/arp archetypes, that argument can earn the
   jack back.
 - WANDER deliberately has no CV: the jack budget stays at eight, and CV
-  over it is an expander candidate, not a loss here.
+  over it is a Forge candidate, not a loss here.
 
 The contrast to the big panel is intentional: there the "big" knobs render at
 8.4 mm because ~56 controls had to fit; here six knobs render at real 16 mm.
@@ -429,12 +433,12 @@ counts.
 
 ## 8. Out of scope
 
-- The full-control hardware expander (mentioned as future option only; §2
-  keeps it architecturally trivial).
+- The full-control hardware expansion, FireFlow Forge (mentioned as future
+  option only; §2 keeps it architecturally trivial).
 - The M6 panel itself (though §6 is its 1:1 draft).
 - Preset *systems* (banks, slots, favorites). Baseline persistence is in
   scope: the house seed, the single undo slot, and the patch-persisted
   current terrain state + lock (§5).
-- CV over WANDER (expander candidate).
+- CV over WANDER (Forge candidate).
 - A PACE knob: tempo is terrain state plus CLK override, by review decision.
 - An RST jack: cut by the polisher review (see §6 for the earn-back rule).
