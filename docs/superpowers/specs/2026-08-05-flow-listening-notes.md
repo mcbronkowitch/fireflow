@@ -136,6 +136,26 @@ above are what a listening session should try to move.
 
 ## Log
 
+**Correction, 2026-08-05: "digital zero" was my render pipeline, not the
+engine.** `host/shared/wav_writer.h` writes 16-bit PCM and *truncates*
+(`static_cast<int16_t>(v * 32767.f)`), so every sample under 3.05e-5 —
+−90.3 dBFS — lands on exactly 0. The zero runs reported below are therefore
+"below −90 dBFS", a floor of the tooling; what the engine actually produces
+there is unmeasured. Inaudible either way, so no verdict changes, but the
+evidence was overstated in three commit messages and in the rows below.
+
+**And the mechanism is not the one those rows assume.** Read from the CSV
+across the silent stretch at 75–82 s of `01-calm`: both decks hold four and
+two voices the whole time, and the level lanes sit at −0.5 and +0.1, i.e.
+nowhere near minimum. What falls is the per-voice envelope — `a_v0` decays
+0.0655 → 0.0079 over six seconds, `a_v1` 0.2489 → 0.0300 — and the next
+note does not arrive until 79.5 s. So the calm corner does not stop
+producing notes and does not duck its level: **its notes decay below
+audibility before the next one arrives, and at SPACE = 0 the room is too
+small to bridge the gap.** The knobs that bear on it are `P_DENSITY_A/B`
+at bp[0] (`{.02,.08}` — spacing ~3.8 s on deck A) against the drone
+archetype's `P_DECAY_A/B` base span (`{.6,.95}`), which is already long.
+
 **How to read the numbers in this log.** The dBFS figures beside an ear
 verdict are what the file measured, not a threshold the ear resolved. Every
 verdict below came from a single pass, on one playback chain, at a monitor
