@@ -53,6 +53,12 @@ struct MacroMap { int story; int n_targets; Curve targets[6]; };
 
 struct Terrain {
     Archetype arch;
+    // Stage-1 role, published because the runtime needs it: NEW switches the
+    // two decks' discrete params staggered (texture first, carrier a quarter
+    // of the blend later, spec §5), and "which deck is the carrier" is not
+    // recoverable from base[P_ENGINE_*] alone -- both decks can hold the
+    // same engine id. Written by generate(); costs no RNG draw.
+    bool      a_carries;                  // true -> deck A carries, B textures
     float     base[P_COUNT];              // engine units; storied params too
     bool      storied[P_COUNT];           // owned by some macro's curve
     MacroMap  map[MACRO_COUNT];

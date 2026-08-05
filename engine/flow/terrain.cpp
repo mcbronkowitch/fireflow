@@ -119,6 +119,7 @@ Terrain generate(const TerrainState& st) {
     {
         Rng r = make_stream(st.master, kStreamRoles, 0);
         const bool a_carries = r.next_unipolar() < 0.5f;
+        t.a_carries = a_carries;          // published for §5's staggered switch
         const int carrier = kCarrierEngine[pick_weighted(r, kCarrierW[t.arch], 3)];
         const int texture = kTextureEngine[pick_weighted(r, kTextureW[t.arch], 5)];
         engine_a = a_carries ? carrier : texture;

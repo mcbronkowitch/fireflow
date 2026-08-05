@@ -43,6 +43,21 @@ constexpr float kBodyFiltFloor = -0.3f;             // BODY FILT cliff margin
 constexpr float kSpaceSlewS = 2.5f;                 // lazy SIZE/DECAY follower
 constexpr float kHysteresisFrac = 0.5f;             // half a discrete step
 
+// NEW gesture (spec §5). The two decks' discrete params (engine, and the
+// deck-scoped FORM/SONG/STEPS) never switch together: the texture deck goes
+// at the start of the blend, the carrier deck this far into it. Global
+// discretes (SCALE/ROOT) ride with the carrier, so the tonality lands with
+// the lead voice rather than ahead of it.
+constexpr float kCarrierStaggerFrac = 0.25f;        // fraction of kBlendS
+// Each switch happens under a duck of that deck's reverb send: a
+// raised-cosine hump of this total width, centred on the switch instant
+// (the texture deck's rising half falls before the press and is simply
+// clipped, so its duck opens at full and returns smoothly). The duck is a
+// MAXIMUM against the macro-computed send -- it may only add wetness.
+constexpr float kDuckWindowS   = 0.5f;              // total hump width
+constexpr float kDuckWetTarget = 0.95f;             // send value it aims at
+constexpr float kDuckDepth     = 0.8f;              // how far it gets there
+
 // ---------------------------------------------------------------------------
 // Archetype draw weights (drone-heavy per the spec: this is an ambient box).
 // Order: {ARCH_DRONE, ARCH_PULSE, ARCH_ARP, ARCH_FRAGMENT}.

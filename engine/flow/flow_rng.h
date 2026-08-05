@@ -14,6 +14,7 @@ enum : uint32_t {
     kStreamTonality  = 2002,
     kStreamWeather   = 2003,
     kStreamDistance  = 2004,
+    kStreamNewSeq    = 2005,       // Flow's NEW press-chain sequence Rng
 };
 
 // splitmix32-style avalanche of the (master, stream, counter) triple.
