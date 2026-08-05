@@ -6,6 +6,7 @@
 // texture-then-carrier under a duck).
 #include "doctest/doctest.h"
 #include "flow/flow.h"
+#include "flow/gesture.h"
 #include "flow/taste.h"
 #include <algorithm>
 #include <cmath>
@@ -532,4 +533,60 @@ TEST_CASE("flow NEW: the undo slot survives a save and restore (spec §5)") {
     CHECK(g.undo());
     for (int i = 0; i < 1000; ++i) g.tick();
     CHECK(g.state().master == saved_undo.master);
+}
+
+TEST_CASE("flow NEW: a two-knob mark rerolls exactly two domains, end to end") {
+    // The marked-mask -> partial-reroll path is the one interface between the
+    // two components this branch built: Gesture produces the mask, Flow
+    // consumes it. Every other call site in the suite passes a single bit, so
+    // a mask that dropped, duplicated or shifted a bit somewhere along the
+    // way would be invisible -- and the spec's own "hold NEW and turn BRIGHT"
+    // example generalises to as many knobs as the player can reach.
+    Gesture g;
+    g.button(true, 0.0, false);
+    g.knob_delta(M_BRIGHT, 0.02f, 0.1);          // one clear turn
+    g.knob_delta(M_SPACE, -0.006f, 0.2);         // and one that only marks
+    g.knob_delta(M_SPACE,  0.006f, 0.3);         // once its travel sums
+    g.tick(0.4, /*can_undo=*/false);
+    g.button(false, 0.5, false);
+    const GestureOut out = g.poll();
+    REQUIRE(out.op == GestureOut::NEW_PARTIAL);
+    const uint8_t expect = uint8_t((1u << M_BRIGHT) | (1u << M_SPACE));
+    REQUIRE(out.mask == expect);
+
+    Instrument in; in.init(48000.f);
+    Flow f; f.init(&in, 100.f);
+    TerrainState s; s.master = 0x2B17; f.wake(s);
+    const Terrain before = terrain_of(f);
+    REQUIRE(f.new_partial(out.mask));
+    for (int i = 0; i < 1000; ++i) f.tick();
+    const Terrain after = terrain_of(f);
+
+    // Every marked domain's counter moved, and no other did.
+    for (int m = 0; m < MACRO_COUNT; ++m) {
+        CAPTURE(m);
+        CHECK(f.state().reroll[m] == ((expect >> m) & 1u ? 1 : 0));
+    }
+    // Both marked domains really redrew -- otherwise "only these two moved"
+    // would be satisfied by a mask that did nothing at all.
+    for (int m : { int(M_BRIGHT), int(M_SPACE) }) {
+        bool moved = false;
+        for (int i = 0; i < after.map[m].n_targets; ++i)
+            for (int b = 0; b < 5; ++b)
+                if (after.map[m].targets[i].bp[b]
+                        != before.map[m].targets[i].bp[b]) moved = true;
+        CAPTURE(m); CHECK(moved);
+    }
+    // ...and nothing outside the union of the two domains did (per-stream
+    // isolation still holds when two counters move at once).
+    bool in_domain[P_COUNT] = {};
+    for (int m : { int(M_BRIGHT), int(M_SPACE) }) {
+        for (int i = 0; i < after.map[m].n_targets; ++i)
+            in_domain[after.map[m].targets[i].param] = true;
+        for (int i = 0; i < before.map[m].n_targets; ++i)
+            in_domain[before.map[m].targets[i].param] = true;
+    }
+    for (int p = 0; p < P_COUNT; ++p)
+        if (!in_domain[p]) { CAPTURE(kParams[p].name);
+                             CHECK(after.base[p] == before.base[p]); }
 }

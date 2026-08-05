@@ -7,13 +7,14 @@
 seed have survived a listening pass"). Plan A itself
 (`engine/flow/` — terrain generator, six-macro story layer, weather, NEW
 gestures, render-host scenario wiring, audio sanity gates) is built and green
-(946 test cases, `ctest` 4/4). Nothing below changes that; every item here is
+(954 test cases, `ctest` 4/4). Nothing below changes that; every item here is
 an ear decision, not a bug.
 
 ## Open questions on arrival
 
-Seeded from what Tasks 9 and 10 measured while building the audio gates —
-found because they can't be settled without ears.
+Seeded from what Tasks 9 and 10 measured while building the audio gates, plus
+item 8 from the final whole-branch review — found because they can't be
+settled without ears.
 
 1. **Calm corner may be too quiet.** Renders and an independent
    re-measurement both put it at RMS ≈ 0.00092, about −61 dBFS — roughly
@@ -64,6 +65,24 @@ found because they can't be settled without ears.
    hysteresis chatter, not a NEW-op effect. The committed gate bounds churn
    with macros held *static*; the hysteresis width itself is a listening
    number.
+
+8. **Pressing NEW always changes archetype.** `draw_new` accepts a candidate
+   when `distance() >= kDistanceMin`, but `distance()` adds a flat **+0.25**
+   whenever the two archetypes differ while `kDistanceMin` is **0.18** — the
+   bonus alone clears the bar, so the base patch almost never gets a say.
+   Measured over 20 000 random terrain pairs: the base-patch term spans
+   0.0711 / 0.1509 / 0.2491 (min / mean / max), and **6 775 of the 6 777
+   same-archetype pairs fell below the threshold**; across 3 000 `draw_new`
+   calls the result had the same archetype as its origin **0 times**. So from
+   a drone you never get another drone, on an instrument whose archetype
+   weights are 50 % drone — and the retry loop's 16th try and the
+   farthest-candidate fallback are unreachable in practice. This may be
+   exactly right for a gesture that means "show me somewhere else", or it may
+   be why a drone never persists. The two knobs are `kDistanceMin` (`taste.h`)
+   and the flat archetype bonus in `distance()` (`terrain.cpp`): raise the
+   first above 0.25, or shrink the second, and the base patch decides again.
+   Depends on item 2 — either change alters the reachable set of NEW targets,
+   so the ~15.9 dB loudness spread wants re-measuring afterwards.
 
 The audio gates in `tests/test_flow_audio.cpp` are sanity bounds, not
 musical judgements — no NaN, no clipping, RMS inside plausible ranges, a

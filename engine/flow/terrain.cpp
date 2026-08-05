@@ -233,10 +233,28 @@ Terrain generate(const TerrainState& st) {
 
 // Distance (spec 7.4): mean of |Δbase[p]| normalized by that param's
 // kParams span, averaged over every P_COUNT param, plus a flat 0.25f if
-// the archetypes differ. The archetype bonus matters because two terrains
-// can land close in every base value yet still read as structurally
-// different places (different carrier/texture roles, different weights) --
-// the flat add is a cheap proxy for that without re-deriving stage 1.
+// the archetypes differ. The archetype term exists because two terrains can
+// land close in every base value yet still read as structurally different
+// places (different carrier/texture roles, different weights), which the
+// base-patch mean alone cannot see.
+//
+// WHAT THIS ACTUALLY DECIDES, measured rather than assumed: the flat 0.25
+// is not a tie-breaker on top of the base-patch term, it OUTWEIGHS it
+// outright. Over 20 000 random terrain pairs the base-patch mean spans
+// 0.0711 (min) / 0.1509 (mean) / 0.2491 (max), while the acceptance
+// threshold draw_new tests against is kDistanceMin = 0.18 (taste.h). So
+// 0.25 alone clears the bar with room to spare, and the base term clears it
+// on its own only rarely: of 6 777 same-archetype pairs in that sample,
+// 6 775 fell short. In practice, therefore, "far enough away" == "a
+// different archetype" -- draw_new returned a same-archetype terrain 0
+// times in 3 000 calls.
+//
+// That may be exactly right for an explore-the-instrument gesture, or it
+// may be why a drone never persists across a NEW press on an instrument
+// weighted 0.5 toward drone. It is an ear question, logged as an open one
+// in docs/superpowers/specs/2026-08-05-flow-listening-notes.md; the two
+// knobs that would change it are kDistanceMin and this 0.25. Do not "fix"
+// either from the code side.
 float distance(const Terrain& a, const Terrain& b) {
     float sum = 0.f;
     for (int p = 0; p < P_COUNT; ++p) {

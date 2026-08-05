@@ -68,6 +68,20 @@ TEST_CASE("flow terrain: 10k seeds stay inside taste limits (spec 7.1)") {
                     }
                 }
         }
+        // WHY THIS ONE CANNOT GO RED, said out loud because this project
+        // discards tests that cannot: both DENSITY bases are the DENSITY
+        // "rate" story's bp0 draw (taste.h, spans {.02,.08} and {.02,.08} --
+        // and an UNPICKED variant's targets still take their own bp0 as a
+        // base, so there is no path where they come from anywhere else).
+        // Every reachable draw is at most 0.08, so `both_hot` is false by
+        // construction and the no-double-density clamp in terrain.cpp's
+        // apply_constraints never fires either.
+        //
+        // It stays because what it asserts is the INVARIANT, not the clamp:
+        // the day a taste-table edit lifts a DENSITY bp0 span above 0.5 this
+        // line goes red on the first seed that draws two hot decks, which is
+        // exactly when someone needs to be told the clamp has woken up. Read
+        // it as a tripwire on the table, not as coverage of the guard.
         bool both_hot = t.base[P_DENSITY_A] > 0.5f && t.base[P_DENSITY_B] > 0.5f;
         CHECK(!both_hot);
         CHECK(t.weather_n >= kWeatherOscMin);

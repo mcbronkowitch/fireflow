@@ -23,6 +23,26 @@ TEST_CASE("flow code: decode rejects truncated and wrong-prefix codes") {
     CHECK(!decode_code("F2-DEADBEEF-000000000000", out));
 }
 
+TEST_CASE("flow code: decode rejects non-hex digits at the right length") {
+    // The spec (§5) invites a user to paste a terrain code into the VCV
+    // context menu, so a correct-LENGTH, correct-PREFIX string full of the
+    // wrong characters is a real input, not a hypothetical one -- and it is
+    // the only thing decode_code's two is_hex loops exist for. Without these
+    // two lines both loops could be deleted with the whole suite still green,
+    // and a pasted typo would decode to a silently different terrain
+    // (hex_val('G') == 16, which shifts straight into the master).
+    TerrainState out;
+    CHECK(!decode_code("F1-DEADBEEG-000000000000", out));   // master field
+    CHECK(!decode_code("F1-DEADBEEF-00000000000G", out));   // counter field
+    CHECK(!decode_code("F1-DEADBEEF-0000000000 0", out));   // and whitespace
+    // ...and the loops are not simply rejecting everything: lowercase hex is
+    // legal input and must still decode (is_hex/hex_val both accept a-f).
+    TerrainState lower;
+    REQUIRE(decode_code("F1-deadbeef-0000000000ff", lower));
+    CHECK(lower.master == 0xDEADBEEFu);
+    CHECK(lower.reroll[MACRO_COUNT - 1] == 0xFFu);
+}
+
 TEST_CASE("flow distance: NEW lands elsewhere, deterministically (spec 7.4)") {
     TerrainState cur; cur.master = 0xC0FFEE;
     Terrain here = generate(cur);
