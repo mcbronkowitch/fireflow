@@ -110,6 +110,34 @@ settled without ears.
    Depends on item 2 — either change alters the reachable set of NEW targets,
    so the ~15.9 dB loudness spread wants re-measuring afterwards.
 
+   *Corrected 2026-08-05 (round-3 prep): both of those knobs are wrong.*
+   Raising `kDistanceMin` to 0.30 renders **byte-for-byte the same** eight
+   NEW landings as 0.18, and so does shrinking the archetype bonus from 0.25
+   to 0.06. Same-archetype rate over 400 origins, sweeping both:
+
+   | bonus \ `kDistanceMin` | 0.18 | 0.14 | 0.10 | 0.06 |
+   |---|---|---|---|---|
+   | 0.25 | 0 % | 4.2 % | 32.8 % | 34.8 % |
+   | 0.12 | 0 % | 4.2 % | 32.8 % | 34.8 % |
+   | 0.06 | 0 % | 4.2 % | 32.8 % | 34.8 % |
+   | 0.00 | 0 % | 5.0 % | 33.2 % | 34.8 % |
+
+   The bonus column does nothing at all — because at a threshold of 0.18 the
+   base-patch term (mean 0.1509) almost never clears the bar by itself, with
+   or without a bonus, and below 0.10 nearly every candidate clears it
+   whatever the archetype. **The only lever is lowering `kDistanceMin`,** and
+   the earlier advice to raise it had the sign backwards.
+
+   The lowering is not free. At 0.10 the mean number of retries inside
+   `draw_new` falls to 1.03 — the first candidate is simply accepted, so the
+   distance rule stops constraining anything and NEW may land somewhere
+   nearly identical to where it started. 0.14 buys 4.2 % at a mean of 1.54
+   tries; that is the setting that keeps the rule meaningful, and it is rare
+   enough that eight presses from one origin produced no audible difference
+   at all. So the real choice is between *a rule that works and almost never
+   lets you stay* and *staying often, with no rule* — not a dial between
+   them.
+
 9. **A woken terrain can open with many seconds of digital silence.** Found
    while preparing round 1, not by ear. Time from `flow_wake` to the first
    audible sample, all six macros at a mid setting, measured over 17
