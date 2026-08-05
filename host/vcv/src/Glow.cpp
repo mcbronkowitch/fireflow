@@ -60,6 +60,7 @@ struct Glow : Module {
     spky::flow::Flow flow;
     spky::flow::Gesture gest;
     spkyvcv::KnobTracker knobs;
+    spkyvcv::GestureBridge newBtn;
 
     float curSr = 0.f;
     static constexpr int kCtrlDiv = 16;          // flow ticks at sr / 16
@@ -110,6 +111,7 @@ struct Glow : Module {
         if (!spky::flow::decode_code(spky::flow::kHouseCode, st)) st = {};
         flow.wake(st);
         woken = true;
+        knobs.primed = false;
     }
 
     void reinit(float sr) {
@@ -197,6 +199,42 @@ struct Glow : Module {
                                          : 0.f);
         }
 
+        // --- the NEW gesture family (spec 5) ----------------------------
+        // The decoder's clock is Flow's own, which advances one dt per
+        // tick(); reading it before the tick means every event this pass
+        // carries the same timestamp, which is exactly what a control tick
+        // is.
+        const double t = flow.now_s();
+        float d[spky::flow::MACRO_COUNT];
+        if (knobs.deltas(k, d))
+            for (int m = 0; m < spky::flow::MACRO_COUNT; ++m)
+                if (d[m] > 0.f) gest.knob_delta(m, d[m], t);
+
+        const bool down = params[NEW_BTN].getValue() > 0.5f;
+        if (newBtn.edge(down)) gest.button(down, t, flow.locked());
+        gest.tick(t, flow.can_undo());
+
+        bool refused = false;
+        const spky::flow::GestureOut op = gest.poll();
+        switch (op.op) {
+            case spky::flow::GestureOut::NEW_FULL:
+                refused = !flow.new_full(); break;
+            case spky::flow::GestureOut::NEW_PARTIAL:
+                refused = !flow.new_partial(op.mask); break;
+            case spky::flow::GestureOut::UNDO:
+                refused = !flow.undo(); break;
+            case spky::flow::GestureOut::LOCK_TOGGLE:
+                flow.set_lock(!flow.locked()); break;
+            case spky::flow::GestureOut::REFUSED:
+                refused = true; break;
+            default: break;
+        }
+        // A press the decoder let through but Flow turned down (nothing to
+        // undo, an empty macro mask) must still light the refusal, or the
+        // panel would silently swallow a gesture. gesture.h's own REFUSED
+        // only covers the locked case, which is why Flow's verbs return bool.
+        if (refused) gest.button(false, t, /*locked=*/true);
+
         flow.tick();
 
         // Tempo: the terrain owns it and Flow pushes it, but an external
@@ -209,6 +247,10 @@ struct Glow : Module {
             if (measured >= 20.f && measured <= 400.f) bpm = measured;
         }
         inst.set_tempo_bpm(bpm);
+
+        lights[NEW_L].setBrightness(
+            spkyvcv::led_level(gest.led(flow.blend_phase(), flow.locked()),
+                               flow.blend_phase(), flow.now_s()));
     }
 
     void process(const ProcessArgs& args) override {

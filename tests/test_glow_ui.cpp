@@ -148,9 +148,38 @@ TEST_CASE("glow: a malformed saved code changes nothing") {
     fl.wake(house);
 
     GlowSave bad;
-    std::strcpy(bad.code, "F1-NOTHEX00-000000000000");
+    std::strncpy(bad.code, "F1-NOTHEX00-000000000000", sizeof bad.code - 1);
+    bad.code[sizeof bad.code - 1] = '\0';
     bad.lock = true;
     CHECK_FALSE(glow_restore(fl, bad));
     CHECK(fl.state().master == house.master);
     CHECK_FALSE(fl.locked());
+}
+
+TEST_CASE("glow: the button bridge reports each edge exactly once") {
+    GestureBridge b;
+    CHECK_FALSE(b.edge(false));         // still up
+    CHECK(b.edge(true));                // press
+    CHECK_FALSE(b.edge(true));          // held: NOT an edge
+    CHECK_FALSE(b.edge(true));
+    CHECK(b.edge(false));               // release
+    CHECK_FALSE(b.edge(false));
+}
+
+TEST_CASE("glow: a held button reaches the lock threshold through the bridge") {
+    // The regression this guards: feeding button(true) every tick instead of
+    // only on the edge restarts the hold timer forever, so the 5 s lock
+    // gesture can never fire and the module has no way to be locked.
+    Gesture g;
+    GestureBridge b;
+    bool locked = false;
+    double t = 0.0;
+    const double dt = 1.0 / 100.0;
+    for (int i = 0; i < 800; ++i, t += dt) {   // eight seconds held down
+        if (b.edge(true)) g.button(true, t, locked);
+        g.tick(t, /*can_undo=*/false);
+        const GestureOut op = g.poll();
+        if (op.op == GestureOut::LOCK_TOGGLE) locked = !locked;
+    }
+    CHECK(locked);
 }

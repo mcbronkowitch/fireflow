@@ -9,7 +9,6 @@
 // knows what a Module is.
 #pragma once
 #include <cmath>
-#include <cstring>
 #include "flow/flow.h"
 #include "flow/flow_ids.h"
 #include "flow/gesture.h"
@@ -53,6 +52,18 @@ struct KnobTracker {
         }
         primed = true;
         return any;
+    }
+};
+
+// Press/release edges for the NEW button. flow::Gesture wants button(down)
+// exactly once per transition: telling it "down" on every control tick would
+// restart the hold timer forever, and undo and lock could never fire.
+struct GestureBridge {
+    bool prevDown = false;
+    bool edge(bool down) {
+        const bool changed = down != prevDown;
+        prevDown = down;
+        return changed;
     }
 };
 
