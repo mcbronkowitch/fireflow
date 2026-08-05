@@ -23,6 +23,17 @@ settled without ears.
    deliberately only a **silence detector**, not a musical target — the
    musical question is open.
 
+   *Amended 2026-08-05 (round-1 prep).* Two corrections to that number.
+   First, it is partly an artifact of item 9: `flow_calm_corner.json` runs
+   master `0xBEEF`, whose first note does not land until 14.1 s of a 20 s
+   render, so 70 % of the measured window is digital silence. Measured from
+   the first note onward the same render is **−55.4 dBFS**. Still very
+   quiet, so the question stands — but the figure to argue about is −55,
+   not −61. Second, the calm corner is **terrain-dependent**: at master
+   `0x20` the same all-zero setting measures −41.9 dBFS over 90 s, ~13 dB
+   above `0xBEEF`. So "how loud is the calm corner" has no single answer
+   until item 2 is settled; the two questions are one question.
+
 2. **Terrain loudness spread ≈ 15.9 dB** at identical macro settings, no
    blend involved: min RMS 0.0158 (master `0x707`), max 0.0983 (master
    `0x101`). A NEW press can therefore land the player substantially louder
@@ -83,6 +94,25 @@ settled without ears.
    first above 0.25, or shrink the second, and the base patch decides again.
    Depends on item 2 — either change alters the reachable set of NEW targets,
    so the ~15.9 dB loudness spread wants re-measuring afterwards.
+
+9. **A woken terrain can open with many seconds of digital silence.** Found
+   while preparing round 1, not by ear. Time from `flow_wake` to the first
+   audible sample, all six macros at a mid setting, measured over 17
+   terrains: **0.008 s at best, 18.4 s at worst**, with roughly half the
+   drone terrains above 4 s. It is flow-specific, not a host artifact — the
+   non-flow `ambient_wash.json` renders its first sample at 0.004 s. It is
+   also not a stuck level: the level lanes modulate normally throughout, the
+   part simply has no voice yet.
+
+   Musically a slow entrance may be exactly right for a drone. The problem
+   is elsewhere: on a module whose promise is that something pleasant is
+   always playing, **power-on and every NEW press can be followed by ten
+   seconds of nothing**, with no way for the player to tell a slow terrain
+   from a broken one. That makes it a Glow-panel question as much as a
+   `taste.h` one — the cheapest fixes are a first-note-now nudge at wake, or
+   an LED that shows the machine is alive before it is audible. Bears on
+   item 3: the engine-switch dropout and this share a symptom, and a
+   listener will not distinguish them.
 
 The audio gates in `tests/test_flow_audio.cpp` are sanity bounds, not
 musical judgements — no NaN, no clipping, RMS inside plausible ranges, a
