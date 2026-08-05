@@ -184,6 +184,37 @@ TEST_CASE("glow: a refuse flash is active only within its window after mark") {
     CHECK_FALSE(rf.active(t + spky::flow::kRefuseFlashS + 1.0));
 }
 
+TEST_CASE("glow: clock_bpm falls back to the terrain's own tempo with no clock connected") {
+    // period 0 == "no edge has ever arrived" (Glow.cpp's clkPeriod default).
+    CHECK(clock_bpm(120.f, /*clkPeriod=*/0.f, /*clkSamples=*/0.f,
+                     /*sr=*/48000.f, /*timeoutS=*/2.f) == doctest::Approx(120.f));
+}
+
+TEST_CASE("glow: clock_bpm reports the measured tempo for a valid clock") {
+    // 120 BPM at 48 kHz -> 24000 samples/beat.
+    const float sr = 48000.f, period = 24000.f;
+    const float bpm = clock_bpm(90.f, period, /*clkSamples=*/100.f, sr, 2.f);
+    CHECK(bpm == doctest::Approx(120.f));
+}
+
+TEST_CASE("glow: clock_bpm falls back once the clock has timed out") {
+    const float sr = 48000.f, period = 24000.f;      // a real, valid period...
+    // ...but clkSamples has already passed sr * timeoutS since the last edge.
+    const float bpm = clock_bpm(90.f, period, /*clkSamples=*/sr * 2.f + 1.f, sr, 2.f);
+    CHECK(bpm == doctest::Approx(90.f));
+}
+
+TEST_CASE("glow: clock_bpm falls back for a measurement outside 20..400 BPM") {
+    const float sr = 48000.f;
+    // Too slow: 10 BPM -> period = 60*sr/10 = 288000 samples.
+    CHECK(clock_bpm(90.f, 288000.f, 100.f, sr, 2.f) == doctest::Approx(90.f));
+    // Too fast: 500 BPM -> period = 60*sr/500 = 5760 samples.
+    CHECK(clock_bpm(90.f, 5760.f, 100.f, sr, 2.f) == doctest::Approx(90.f));
+    // Just inside the window at both ends stays measured.
+    CHECK(clock_bpm(90.f, 60.f * sr / 20.f, 100.f, sr, 2.f) == doctest::Approx(20.f));
+    CHECK(clock_bpm(90.f, 60.f * sr / 400.f, 100.f, sr, 2.f) == doctest::Approx(400.f));
+}
+
 TEST_CASE("glow: a held button reaches the lock threshold through the bridge") {
     // The regression this guards: feeding button(true) every tick instead of
     // only on the edge restarts the hold timer forever, so the 5 s lock

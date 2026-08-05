@@ -113,6 +113,23 @@ inline float led_level(int led, float blend_phase, double t) {
     }
 }
 
+// Spec 4's clock-override rule: an external clock overrides the terrain's
+// own tempo while pulses keep arriving; the terrain's tempo returns once the
+// clock has been silent for `timeoutS` (falls back "after about two
+// seconds", per host/vcv/README.md). `fallback` is whatever the terrain
+// itself is pushing this tick (Flow::param_now(P_TEMPO_BPM)); `clkPeriod` is
+// samples between the last two edges (0 = never seen one); `clkSamples` is
+// samples since the last edge. A measured tempo outside 20..400 BPM is
+// treated as a mis-read, not a real tempo, and falls back too.
+inline float clock_bpm(float fallback, float clkPeriod, float clkSamples,
+                        float sr, float timeoutS) {
+    if (clkPeriod > 1.f && sr > 0.f && clkSamples < sr * timeoutS) {
+        const float measured = 60.f * sr / clkPeriod;
+        if (measured >= 20.f && measured <= 400.f) return measured;
+    }
+    return fallback;
+}
+
 // Exactly what a patch stores (spec 5: current terrain code, lock, undo slot).
 struct GlowSave {
     char code[spky::flow::kTerrainCodeLen + 1] = {};
@@ -130,18 +147,43 @@ inline GlowSave glow_capture(const spky::flow::Flow& fl) {
     return s;
 }
 
+// The decoded, ready-to-apply half of a saved payload -- everything
+// glow_restore() needs to hand to a live Flow, minus the actual Flow calls.
+// Split out (fix round 3) so a caller that must NOT write to Flow directly
+// -- Glow.cpp's UI-thread menu/JSON handlers, which stage a payload for the
+// audio thread instead -- can still get the same validated, decoded POD.
+struct GlowRestorePlan {
+    spky::flow::TerrainState state;
+    spky::flow::TerrainState undo;
+    bool have_undo = false;
+    bool lock = false;
+};
+
+// Decodes and validates a saved payload into `out`. Returns false and
+// touches `out` not at all if the terrain code is malformed -- same
+// contract as glow_restore() below, which is now built on top of this.
+inline bool glow_restore_plan(const GlowSave& s, GlowRestorePlan& out) {
+    spky::flow::TerrainState st;
+    if (!spky::flow::decode_code(s.code, st)) return false;
+    spky::flow::TerrainState un = st;
+    const bool have = s.have_undo && spky::flow::decode_code(s.undo, un);
+    out.state = st;
+    out.undo = un;
+    out.have_undo = have;
+    out.lock = s.lock;
+    return true;
+}
+
 // Applies a saved payload. Returns false and touches NOTHING if the terrain
 // code is malformed -- a corrupt patch must not silently move the player to
 // some other instrument. The order is the one flow.h documents: wake clears
 // the undo slot, so restoring it comes last.
 inline bool glow_restore(spky::flow::Flow& fl, const GlowSave& s) {
-    spky::flow::TerrainState st;
-    if (!spky::flow::decode_code(s.code, st)) return false;
-    spky::flow::TerrainState un = st;
-    const bool have = s.have_undo && spky::flow::decode_code(s.undo, un);
-    fl.wake(st);
-    fl.set_lock(s.lock);
-    fl.restore_undo(un, have);
+    GlowRestorePlan plan;
+    if (!glow_restore_plan(s, plan)) return false;
+    fl.wake(plan.state);
+    fl.set_lock(plan.lock);
+    fl.restore_undo(plan.undo, plan.have_undo);
     return true;
 }
 

@@ -7,6 +7,7 @@
 // Everything that does not need a Rack type lives in glow_ui.hpp and is
 // tested by the desktop suite. Every coordinate and label comes from
 // generated_flow_panel.hpp. Nothing here is hand-placed.
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -99,6 +100,31 @@ struct Glow : Module {
     spkyvcv::GlowSave pending;
     bool havePending = false;
 
+    // --- UI-thread -> audio-thread staging (fix round 3) ------------------
+    // appendContextMenu's "Paste terrain code", TerrainCodeField's Enter
+    // commit and the "Terrain lock" toggle all run on Rack's UI thread, but
+    // Flow is otherwise only ever touched from controlTick() on the audio
+    // thread. Flow::wake() is not a small write (see flow.cpp): it rewrites
+    // _terrain, _prev_terrain, re-seeds the sequencer and force-pushes every
+    // parameter, so a direct write here could hand the audio thread a
+    // half-written terrain mid-tick. dataFromJson()'s LIVE-module branch
+    // (curSr > 0, reached via right-click preset load / module paste, which
+    // hold no engine lock) has the same problem and is staged the same way.
+    //
+    // Follow Fireflow.cpp's resyncReq shape: the UI thread fills a payload
+    // and sets an atomic flag LAST; controlTick() takes the flag FIRST (via
+    // exchange(), so at most one op survives to be applied) and only then
+    // reads the payload. Both sides use the atomic's default sequential
+    // consistency -- no relaxed/acquire-release hand-rolling -- so a flag
+    // the audio thread observes as non-NONE is guaranteed to happen-after
+    // the UI thread's payload write.
+    enum class UiOp { NONE, SET_TERRAIN, SET_LOCK, RESTORE };
+    std::atomic<UiOp> uiOp { UiOp::NONE };
+    spky::flow::TerrainState uiState;   // SET_TERRAIN, RESTORE
+    spky::flow::TerrainState uiUndo;    // RESTORE
+    bool uiHaveUndo = false;            // RESTORE
+    bool uiLock = false;                // SET_LOCK, RESTORE
+
     Glow() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
         for (const auto& c : kParamCtls) {
@@ -167,16 +193,30 @@ struct Glow : Module {
             havePending = true;
             return;
         }
-        if (spkyvcv::glow_restore(flow, s)) { woken = true; knobs.primed = false; }
+        // LIVE-module branch: this call can run on the UI thread (right-click
+        // preset load / module paste go through ModuleWidget::loadAction /
+        // pasteJsonAction, not addModule, so no engine lock is held), while
+        // process()/controlTick() may be reading Flow on the audio thread
+        // right now. Validate here (pure, touches nothing) but stage the
+        // apply for controlTick() -- see the UiOp block above.
+        spkyvcv::GlowRestorePlan plan;
+        if (spkyvcv::glow_restore_plan(s, plan)) {
+            uiState = plan.state;
+            uiUndo = plan.undo;
+            uiHaveUndo = plan.have_undo;
+            uiLock = plan.lock;
+            uiOp = UiOp::RESTORE;      // payload written above, flag written last
+        }
     }
 
     // Enter a terrain code by hand (context menu). Returns false and changes
-    // nothing if the string is not a valid code.
+    // nothing if the string is not a valid code. Stages the write for
+    // controlTick() to apply on the audio thread -- see the UiOp block above.
     bool setTerrainCode(const std::string& text) {
         spky::flow::TerrainState st;
         if (!spky::flow::decode_code(text.c_str(), st)) return false;
-        flow.wake(st);
-        woken = true;
+        uiState = st;
+        uiOp = UiOp::SET_TERRAIN;      // payload written above, flag written last
         return true;
     }
 
@@ -318,6 +358,27 @@ struct Glow : Module {
     }
 
     void controlTick(float sr) {
+        // Apply whatever the UI thread staged (fix round 3): flag read FIRST
+        // via exchange() -- so at most one op survives even if two menu
+        // actions landed in the same UI frame -- payload read only after.
+        switch (uiOp.exchange(UiOp::NONE)) {
+            case UiOp::SET_TERRAIN:
+                flow.wake(uiState);
+                woken = true;
+                break;
+            case UiOp::SET_LOCK:
+                flow.set_lock(uiLock);
+                break;
+            case UiOp::RESTORE:
+                flow.wake(uiState);
+                flow.set_lock(uiLock);
+                flow.restore_undo(uiUndo, uiHaveUndo);
+                woken = true;
+                knobs.primed = false;
+                break;
+            case UiOp::NONE: default: break;
+        }
+
         float k[spky::flow::MACRO_COUNT];
         for (int m = 0; m < spky::flow::MACRO_COUNT; ++m) {
             k[m] = params[MOTION + m].getValue();
@@ -375,12 +436,13 @@ struct Glow : Module {
         // Tempo: the terrain owns it and Flow pushes it, but an external
         // clock overrides (spec 4). Set it unconditionally every tick --
         // Flow caches what it last pushed, so it would NOT restore the
-        // terrain's own tempo by itself once the cable is pulled.
-        float bpm = flow.param_now(spky::flow::P_TEMPO_BPM);
-        if (clkPeriod > 1.f && sr > 0.f && clkSamples < sr * kClockTimeoutS) {
-            const float measured = 60.f * sr / clkPeriod;
-            if (measured >= 20.f && measured <= 400.f) bpm = measured;
-        }
+        // terrain's own tempo by itself once the cable is pulled. The
+        // override rule itself is pure logic (fix round 4) and lives in
+        // glow_ui.hpp, covered by tests/test_glow_ui.cpp -- this is just the
+        // call site.
+        const float bpm = spkyvcv::clock_bpm(flow.param_now(spky::flow::P_TEMPO_BPM),
+                                              clkPeriod, clkSamples, sr,
+                                              kClockTimeoutS);
         inst.set_tempo_bpm(bpm);
 
         // The module's own refusal flash takes precedence over the
@@ -525,7 +587,15 @@ struct GlowWidget : ModuleWidget {
         menu->addChild(createBoolMenuItem(
             "Terrain lock", "",
             [m]() { return m->flow.locked(); },
-            [m](bool on) { m->flow.set_lock(on); }));
+            [m](bool on) {
+                // Stage for controlTick() to apply -- set_lock() itself is a
+                // single bool write with no crash risk, but going through
+                // the same staging path as the other two writers (fix round
+                // 3) keeps every Flow mutation on the audio thread, with one
+                // ordering rule instead of a special case for this one.
+                m->uiLock = on;
+                m->uiOp = Glow::UiOp::SET_LOCK;
+            }));
     }
 };
 
