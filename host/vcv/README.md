@@ -442,6 +442,113 @@ Three consequences that would otherwise read as bugs:
   between fires: the clock only re-derives on a fire, so SIZE moves the
   rhythm there and leaves the pitch alone.
 
+## FireFlow Glow — the second module
+
+The plugin ships a second module alongside the one described above: **Glow**,
+12 HP, six knobs and one button over a generated terrain, driving the same
+portable engine through `engine/flow/` instead of through `Fireflow.cpp`'s
+one-control-per-parameter mapping. Where the big module is the full-control
+view — every engine setter on its own knob — Glow is the flow-machine view:
+one seed generates an entire patch (both decks, every FX send, the tempo),
+and the six knobs ride curated macro curves over it rather than individual
+engine parameters. Both modules embed the exact same `Instrument`; nothing in
+`engine/` is duplicated a second time for Glow, and the two never share
+state — they are two independent instances of the same engine core.
+
+### The six macros
+
+| Knob | Meaning |
+|---|---|
+| **MOTION** | how much everything moves |
+| **DENSITY** | how much happens |
+| **BRIGHT** | spectral centre |
+| **DIRT** | clean ↔ driven |
+| **WANDER** | predictable ↔ wandering |
+| **SPACE** | close ↔ vast |
+
+Each knob's exact targets are the current terrain's choice — a fresh NEW
+press can rewire what MOTION touches — but the one-word meaning above always
+holds, and every knob is monotone: more knob is always more of that thing.
+
+**The calm corner.** All six knobs fully counter-clockwise is a defined quiet
+background on every terrain, not an accident of wherever the mapping curves
+happen to bottom out — the generator is required to land there. It is the
+module's gas pedal: pulling any subset of knobs down recedes the instrument
+toward that corner, and turning any of them up adds a specific kind of energy
+on top of it.
+
+### NEW — one button, four gestures
+
+All timing thresholds below are `engine/flow/taste.h` constants, not
+approximations:
+
+| Gesture | Action | LED |
+|---|---|---|
+| tap (release before 0.4 s, no knob turned) | full NEW — rolls a fresh terrain and blends into it over ~6 s | breathes through the blend |
+| hold + turn a macro knob | marks that macro's domain; release fires a partial reroll of the marked domain(s), leaving everything else (tonality, roles, pace) untouched | flickers |
+| hold past 1.5 s, no knob turned | arms undo; release blends back to the one remembered previous terrain | double-pulse, reversed feel |
+| hold past 5 s, no knob turned | toggles terrain lock — tap/hold gestures refuse until unlocked the same way | solid while locked |
+
+Turning a knob during a hold always wins: it cancels a still-arming undo or
+lock timer and turns the hold into a partial-reroll gesture from that instant
+on, however long it continues to hold. Any gesture the decoder allows but
+`Flow` itself declines — an undo with no previous terrain to return to, a
+partial reroll with an empty marked mask — still lights the module's own
+short refusal flash; the decoder's own refusal LED covers only the
+locked-press case; this is a separate flash the module runs itself when the
+decoder let a press through and the engine layer turned it down anyway.
+
+Rack's own **Initialize** (right-click → Initialize, or Ctrl+I) returns Glow
+to the house terrain and clears the lock, the same state a fresh insert
+starts in.
+
+### Jacks
+
+| Port | Meaning |
+|---|---|
+| CV MOT / DEN / BRT / DRT / SPC | 0–10 V, additive onto the matching knob, clamped into range after summing |
+| CLK | one pulse per beat; overrides the terrain's own tempo while pulses keep arriving, and falls back to the terrain's tempo after about two seconds of silence on the input |
+| OUT L / R | main mix |
+
+WANDER has no CV jack and there is no RST jack — both by design, not
+oversights. WANDER's CV was left for a future full-control expansion; RST's
+slot went to CV SPACE instead, because a generative drone box has no obvious
+meaning for "reset" and the jack existed on the big module mostly by
+Eurorack convention.
+
+### Terrain codes
+
+A terrain's whole state — the master seed plus, once any partial rerolls
+have happened, one small counter per macro — is a short string like
+`F1-00000020-000000000000`. The code *is* the state: nothing about a
+terrain lives anywhere else, so copying the string out and pasting it back
+in later (or into another instance) reproduces the exact same patch. The
+right-click context menu shows the live code, offers **Copy terrain code**
+and **Paste terrain code**, and carries an editable text field for typing one
+in by hand. Pasting or typing a malformed code is a no-op — it changes
+nothing, rather than moving the player somewhere arbitrary; the same rule
+protects a saved patch whose stored code is corrupt, which falls back to the
+house terrain instead.
+
+### Generated panel
+
+`res/Glow.svg` and `src/generated_flow_panel.hpp` are both produced by
+`host/vcv/res/gen_flow_panel.py` — the same one-script-drives-both approach
+`gen_panel.py` uses for the big module's panel — and guarded by
+`res/test_flow_panel.py`. Neither generated file is ever hand-edited; change
+the control table in the script and regenerate.
+
+### The house seed
+
+The terrain Glow wakes on at first insert (and after Initialize) is
+`kHouseCode` in `engine/flow/taste.h`. It is currently a **measured
+placeholder, not a curated choice** — the render-based listening pass meant
+to choose it by ear was stopped, because a bounced file can only judge
+level, not whether a terrain is worth arriving on, and answering that
+question properly needs the very module this section documents. Its code
+comment says the same thing; re-choosing it by ear on the finished module is
+still open.
+
 ## Build
 
 Requires the [VCV Rack SDK](https://vcvrack.com/manual/Building#Setting-up-the-Rack-SDK)
