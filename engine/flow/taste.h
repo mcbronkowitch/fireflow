@@ -14,6 +14,10 @@
 #pragma once
 #include "flow/flow_ids.h"
 #include "flow/flow_params.h"
+// For the EngineId names in the stage-1 role tables below. Already
+// transitively visible via flow_params.h -> instrument.h, so this adds no
+// new edge to the include graph -- it only makes the dependency explicit.
+#include "parts/engine_iface.h"
 
 namespace spky { namespace flow {
 
@@ -43,6 +47,32 @@ constexpr float kHysteresisFrac = 0.5f;             // half a discrete step
 // Archetype draw weights (drone-heavy per the spec: this is an ambient box).
 // Order: {ARCH_DRONE, ARCH_PULSE, ARCH_ARP, ARCH_FRAGMENT}.
 inline const float kArchWeight[ARCH_COUNT] = { 0.5f, 0.2f, 0.15f, 0.15f };
+
+// ---------------------------------------------------------------------------
+// Stage-1 role tables (spec §4 stage 1). Carrier may only be a pitched
+// sustaining engine {SYNTH, WAVE, BODY}; texture may be any of the five
+// real engines. ENGINE_TEST_TONE is in neither list -- the generator must
+// never roll it -- and with one carrier deck plus one texture deck the
+// "loud pair" rule (never Sampler+BBD together) is structural: both loud
+// engines are excluded from the carrier list. Weights are per-archetype
+// listening-phase first guesses.
+inline constexpr int kCarrierEngine[3] = { ENGINE_SYNTH, ENGINE_WAVE,
+                                           ENGINE_BODY };
+inline constexpr float kCarrierW[ARCH_COUNT][3] = {
+    { 0.30f, 0.40f, 0.30f },   // drone: wavetables and bowed bodies sustain
+    { 0.50f, 0.25f, 0.25f },   // pulse: the synth's envelopes pulse best
+    { 0.55f, 0.30f, 0.15f },   // arp: fast retriggers favor the synth
+    { 0.35f, 0.35f, 0.30f },   // fragment: anything broken works
+};
+inline constexpr int kTextureEngine[5] = { ENGINE_SYNTH, ENGINE_SAMPLER,
+                                           ENGINE_WAVE, ENGINE_BODY,
+                                           ENGINE_BBD };
+inline constexpr float kTextureW[ARCH_COUNT][5] = {
+    { 0.20f, 0.20f, 0.25f, 0.20f, 0.15f },   // drone
+    { 0.25f, 0.20f, 0.20f, 0.15f, 0.20f },   // pulse
+    { 0.30f, 0.15f, 0.25f, 0.15f, 0.15f },   // arp
+    { 0.20f, 0.30f, 0.15f, 0.15f, 0.20f },   // fragment: grains and echoes
+};
 
 // ---------------------------------------------------------------------------
 // Story library, one variant per macro (DENSITY gets two). Implements §3's

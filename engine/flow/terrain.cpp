@@ -35,34 +35,6 @@ int pick_index(Rng& r, int n) {
     return i < n ? i : n - 1;
 }
 
-// ---------------------------------------------------------------------------
-// Stage-1 role tables. Carrier may only be a pitched sustaining engine
-// {SYNTH, WAVE, BODY}; texture may be any of the five real engines. The
-// "loud pair" rule (never Sampler+BBD together) is structural here: with
-// one carrier deck and one texture deck, and SAMPLER/BBD both excluded
-// from the carrier list, the pair cannot occur. ENGINE_TEST_TONE is in
-// neither list -- the generator must never roll it.
-//
-// Weights are listening-phase first guesses, per archetype (spec §4 stage
-// 1: "archetype-conditioned weights"). They are candidates for promotion
-// into taste.h once the listening loop starts caring about them; they sit
-// here for now because taste.h is reviewed and frozen for this task.
-constexpr int kCarrierEngine[3] = { ENGINE_SYNTH, ENGINE_WAVE, ENGINE_BODY };
-constexpr float kCarrierW[ARCH_COUNT][3] = {
-    { 0.30f, 0.40f, 0.30f },   // drone: wavetables and bowed bodies sustain
-    { 0.50f, 0.25f, 0.25f },   // pulse: the synth's envelopes pulse best
-    { 0.55f, 0.30f, 0.15f },   // arp: fast retriggers favor the synth
-    { 0.35f, 0.35f, 0.30f },   // fragment: anything broken works
-};
-constexpr int kTextureEngine[5] = { ENGINE_SYNTH, ENGINE_SAMPLER,
-                                    ENGINE_WAVE, ENGINE_BODY, ENGINE_BBD };
-constexpr float kTextureW[ARCH_COUNT][5] = {
-    { 0.20f, 0.20f, 0.25f, 0.20f, 0.15f },   // drone
-    { 0.25f, 0.20f, 0.20f, 0.15f, 0.20f },   // pulse
-    { 0.30f, 0.15f, 0.25f, 0.15f, 0.15f },   // arp
-    { 0.20f, 0.30f, 0.15f, 0.15f, 0.20f },   // fragment: grains and echoes
-};
-
 // Draw one story-curve target: each breakpoint uniform inside ITS OWN span,
 // then the five values sorted monotone in the story's direction. Direction
 // = sign of (bp4 span lo - bp0 span lo); a flat story counts as ascending.
