@@ -157,6 +157,8 @@ add_executable(spky_tests
     engine/flow/terrain.cpp
     tests/test_flow_terrain.cpp
     tests/test_flow_terrain_code.cpp
+    engine/flow/flow.cpp
+    tests/test_flow_runtime.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
 target_include_directories(spky_tests PRIVATE host)
@@ -189,6 +191,7 @@ add_executable(render
     engine/body/ks_string.cpp
     engine/body/body_voice.cpp
     engine/flow/terrain.cpp
+    engine/flow/flow.cpp
 )
 target_include_directories(render PRIVATE host engine third_party)
 target_link_libraries(render PRIVATE nlohmann_json daisysp_min)
