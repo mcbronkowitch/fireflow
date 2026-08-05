@@ -330,15 +330,40 @@ void Flow::recompute_and_push(bool force) {
         bool fdisc = force;
         float v;
         if (discrete && !_disc_done[p]) {
-            // Discretes never lerp. They hold the outgoing terrain's value
-            // until their scheduled phase, then take one step -- forced
-            // through the hysteresis guard so the new step lands now rather
-            // than after a further half-step of macro travel.
+            // Discretes never lerp. Until its scheduled phase a pending
+            // discrete HOLDS the value it is already showing, then takes one
+            // step -- forced through the hysteresis guard so the new step
+            // lands now rather than after a further half-step of macro
+            // travel.
+            //
+            // "The value it is already showing" is _pushed[p], and reading it
+            // rather than prv[p] is the whole point. On a mid-blend re-press
+            // prv[p] becomes the terrain we just walked AWAY from, which a
+            // pending discrete never reached: feeding it here would yank the
+            // carrier deck's engine/scale to a place the instrument was never
+            // going to play, outside any duck, and park it there until the
+            // new 0.25 switch. Holding instead means a discrete changes at
+            // most once per blend, always at its scheduled phase, always
+            // under that deck's duck -- so mashing NEW churns the texture
+            // while the lead voice simply waits for you to stop. (Feeding
+            // _pushed[p] back is a fixed point of quantize_hyst: x lands
+            // exactly on _step_now, so the guard holds and the value does not
+            // drift. That also makes the hold survive a carrier/texture role
+            // swap between presses, which a per-terrain snapshot would not.)
             const bool due = !blending || ph >= switch_phase_for(p);
-            v = due ? cur[p] : prv[p];
+            v = due ? cur[p] : _pushed[p];
             if (due) { _disc_done[p] = true; fdisc = true; }
         } else if (blending && !discrete) {
-            v = prv[p] + (cur[p] - prv[p]) * ph + _resid[p] * (1.f - ph);
+            // Clamped: _resid is a constant correction, so a macro moving
+            // during the blend can push the sum past the parameter's range
+            // even though both terrains' candidates are inside it.
+            // param_now() is a public observer (Plan B's display reads it),
+            // and the change guard below compares against it -- neither may
+            // ever see an out-of-range value just because apply_param would
+            // have clamped it later.
+            v = clamp_to(kParams[p],
+                         prv[p] + (cur[p] - prv[p]) * ph
+                                + _resid[p] * (1.f - ph));
         } else {
             v = cur[p];
         }

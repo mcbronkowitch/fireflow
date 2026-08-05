@@ -47,6 +47,26 @@ TEST_CASE("flow NEW: undo returns, lock refuses") {
     f.set_lock(true);
     f.new_full(); f.tick();
     CHECK(f.state().master == m0);               // refused
+
+    // All THREE verbs are refused, not just new_full -- and a refused press
+    // changes nothing at all, so no blend even starts.
+    CHECK(f.locked());
+    f.new_partial(1u << M_BRIGHT); f.tick();
+    CHECK(f.state().master == m0);
+    CHECK(f.state().reroll[M_BRIGHT] == 0);
+    f.undo(); f.tick();
+    CHECK(f.state().master == m0);
+    CHECK(f.blend_phase() == doctest::Approx(1.f));
+
+    // set_lock() ITSELF is never refused -- an `if (_locked) return;` at the
+    // top of it would leave a locked terrain locked forever, which is the
+    // single most plausible way to get this wrong.
+    f.set_lock(false);
+    CHECK_FALSE(f.locked());
+    f.new_full(); for (int i = 0; i < 1000; ++i) f.tick();
+    CHECK(f.state().master != m0);
+    f.new_partial(1u << M_DIRT); for (int i = 0; i < 1000; ++i) f.tick();
+    CHECK(f.state().reroll[M_DIRT] == 1);
 }
 
 TEST_CASE("flow NEW: re-press retargets from the interpolated state") {
@@ -153,6 +173,175 @@ TEST_CASE("flow NEW: discrete decks switch staggered, under a duck") {
 
     for (int i = 0; i < 1000; ++i) f.tick();
     CHECK(f.blend_phase() == doctest::Approx(1.f));
+}
+
+// Nearest step index for a discrete param's value, on kParams' own grid.
+static int step_of(int p, float v) {
+    const float size = (kParams[p].hi - kParams[p].lo)
+                     / float(kParams[p].steps - 1);
+    return int(std::floor((v - kParams[p].lo) / size + 0.5f));
+}
+
+TEST_CASE("flow NEW: a mid-blend re-press never bare-switches a discrete") {
+    // Resolution 4 for the DISCRETE half. A discrete that has not yet reached
+    // its switch point must never be handed the value of the terrain the
+    // player just walked away from -- least of all outside a duck, and least
+    // of all to sit there for the 1.5 s until the new switch point. It holds
+    // what it is showing and changes exactly once, at the new blend's own
+    // scheduled phase.
+    Instrument in; in.init(48000.f);
+    Flow f; f.init(&in, 100.f);
+    TerrainState s; s.master = 0xC0FFEE; f.wake(s);
+
+    // Every macro stays at 0 for the whole case, so each terrain's candidate
+    // for a discrete is exactly its base -- which lets us predict what the
+    // abandoned terrain WOULD have pushed.
+    const int c0 = terrain_of(f).a_carries ? 0 : 1;
+    const int cp[6] = { c0 ? P_ENGINE_B : P_ENGINE_A,
+                        c0 ? P_FORM_B   : P_FORM_A,
+                        c0 ? P_SONG_B   : P_SONG_A,
+                        c0 ? P_STEPS_B  : P_STEPS_A,
+                        P_SCALE, P_ROOT };   // globals ride the carrier slot
+    float orig[6];
+    for (int i = 0; i < 6; ++i) orig[i] = f.param_now(cp[i]);
+
+    f.new_full();                                 // press 1
+    // Hold the seed to a stable carrier role across the two presses: if the
+    // decks swapped roles the pending set would change and "one change" would
+    // stop being the right assertion for these six params.
+    REQUIRE((terrain_of(f).a_carries ? 0 : 1) == c0);
+    // ...and to a genuinely observable bug: the old, wrong behaviour pushed
+    // prv[p] through quantize_hyst, which only moves when the value is more
+    // than a full step away. At least one of the six must be that far.
+    int far = 0;
+    for (int i = 0; i < 6; ++i)
+        if (std::abs(step_of(cp[i], terrain_of(f).base[cp[i]])
+                   - step_of(cp[i], orig[i])) >= 2) ++far;
+    CAPTURE(far);
+    REQUIRE(far > 0);
+
+    for (int k = 0; k < 60; ++k) f.tick();        // phase 0.1: still pending
+    REQUIRE(f.blend_phase() < kCarrierStaggerFrac);
+    for (int i = 0; i < 6; ++i) {
+        CAPTURE(kParams[cp[i]].name);
+        REQUIRE(f.param_now(cp[i]) == doctest::Approx(orig[i]));
+    }
+
+    f.new_full();                                 // press 2, mid-stagger
+    REQUIRE((terrain_of(f).a_carries ? 0 : 1) == c0);
+    f.tick();                                     // THE tick the bug fired on
+    for (int i = 0; i < 6; ++i) {
+        CAPTURE(kParams[cp[i]].name);
+        CHECK(f.param_now(cp[i]) == doctest::Approx(orig[i]));
+    }
+    // ...and it stays held right up to the new blend's own switch point.
+    int changes[6] = {};
+    float last[6];
+    for (int i = 0; i < 6; ++i) last[i] = f.param_now(cp[i]);
+    for (int k = 0; k < 140; ++k) {               // phase 141/600 = 0.235
+        f.tick();
+        for (int i = 0; i < 6; ++i)
+            if (f.param_now(cp[i]) != last[i])
+                { ++changes[i]; last[i] = f.param_now(cp[i]); }
+    }
+    CHECK(f.blend_phase() < kCarrierStaggerFrac);
+    for (int i = 0; i < 6; ++i) { CAPTURE(kParams[cp[i]].name);
+                                  CHECK(changes[i] == 0); }
+    // Past the switch point the whole slot lands, once, and stays.
+    for (int k = 0; k < 1000; ++k) {
+        f.tick();
+        for (int i = 0; i < 6; ++i)
+            if (f.param_now(cp[i]) != last[i])
+                { ++changes[i]; last[i] = f.param_now(cp[i]); }
+    }
+    int moved = 0;
+    for (int i = 0; i < 6; ++i) {
+        CAPTURE(kParams[cp[i]].name); CAPTURE(changes[i]);
+        CHECK(changes[i] <= 1);                   // never twice
+        if (changes[i]) ++moved;
+    }
+    CHECK(moved > 0);          // ...and the slot did do something, so the
+                               // "never twice" above is not vacuous
+}
+
+TEST_CASE("flow NEW: param_now never leaves the parameter's range") {
+    // The continuity offset is a CONSTANT correction held across a blend, so
+    // a macro moving during one can push the combined value past a
+    // parameter's range even though both terrains' candidates sit inside it.
+    // apply_param clamps at the engine boundary, but param_now() is a public
+    // observer -- Plan B's display reads it and the change guard compares
+    // against it -- so it must never report a value the engine would have
+    // clamped. Presses land every 50 ticks, deep inside the 600-tick ramp, so
+    // the residual is essentially always live.
+    Instrument in; in.init(48000.f);
+    Flow f; f.init(&in, 100.f);
+    TerrainState s; s.master = 0x5A17; f.wake(s);
+    Rng r; r.seed(0xBADC0DE);
+    float worst = 0.f, worst_v = 0.f; int worst_p = 0;
+    for (int i = 0; i < 8000; ++i) {
+        if ((i % 50) == 0) f.new_full();
+        for (int m = 0; m < MACRO_COUNT; ++m) f.set_macro(m, r.next_unipolar());
+        f.tick();
+        for (int p = 0; p < P_COUNT; ++p) {
+            const float v = f.param_now(p);
+            const float over = kParams[p].lo - v > v - kParams[p].hi
+                             ? kParams[p].lo - v : v - kParams[p].hi;
+            if (over > worst) { worst = over; worst_v = v; worst_p = p; }
+        }
+    }
+    CAPTURE(kParams[worst_p].name); CAPTURE(worst_v); CAPTURE(worst);
+    CHECK(worst <= 1e-6f);
+}
+
+TEST_CASE("flow NEW: knobs stay live through the blend (resolution 3)") {
+    // The blend is between two TERRAINS, not two frozen value vectors. Early
+    // in a blend the outgoing terrain still owns ~97 % of the output, so an
+    // implementation that evaluated it at the macro values frozen at press
+    // time would leave the knobs very nearly dead for six seconds.
+    //
+    // Reference: a second Flow on the same terrain that never presses NEW and
+    // receives the same sweep. Early in the blend the two must agree to
+    // within the blend phase's worth of the distance between the terrains.
+    int tested_macros = 0;
+    for (int m = 0; m < MACRO_COUNT; ++m) {
+        Instrument i1; i1.init(48000.f);
+        Instrument i2; i2.init(48000.f);
+        Flow f; f.init(&i1, 100.f);
+        Flow g; g.init(&i2, 100.f);
+        TerrainState s; s.master = 0xA11CE; f.wake(s); g.wake(s);
+        float base_v[P_COUNT];
+        for (int p = 0; p < P_COUNT; ++p) base_v[p] = g.param_now(p);
+
+        f.new_full();                             // only f blends
+        for (int k = 1; k <= 20; ++k) {           // sweep this macro 0 -> 1
+            const float v = float(k) / 20.f;
+            f.set_macro(m, v); g.set_macro(m, v);
+            f.tick(); g.tick();
+        }
+        REQUIRE(f.blend_phase() < 0.05f);         // outgoing still dominant
+
+        int checked = 0;
+        const MacroMap& mm = terrain_of(g).map[m];
+        for (int t = 0; t < mm.n_targets; ++t) {
+            const int p = mm.targets[t].param;
+            // Discretes step; SIZE/DECAY lag behind the sweep on the SPACE
+            // slew; REVMIX_A/B are under the blend's duck. What is left is a
+            // clean read of "did the outgoing terrain follow the knob".
+            if (kParams[p].steps > 0) continue;
+            if (p == P_REV_SIZE || p == P_REV_DECAY) continue;
+            if (p == P_REVMIX_A || p == P_REVMIX_B) continue;
+            const float span = kParams[p].hi - kParams[p].lo;
+            const float moved = std::fabs(g.param_now(p) - base_v[p]) / span;
+            if (moved < 0.20f) continue;          // this target barely sweeps
+            ++checked;
+            CAPTURE(m); CAPTURE(kParams[p].name); CAPTURE(moved);
+            CHECK(std::fabs(f.param_now(p) - g.param_now(p)) / span < 0.10f);
+        }
+        if (checked) ++tested_macros;
+    }
+    // SPACE's whole target set is slewed or ducked, so it is legitimately not
+    // readable this way; every other macro must have contributed.
+    CHECK(tested_macros >= MACRO_COUNT - 1);
 }
 
 TEST_CASE("flow NEW: a finished blend lands where a wake on the target would") {
