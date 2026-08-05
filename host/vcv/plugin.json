@@ -15,6 +15,12 @@
       "name": "FireFlow",
       "description": "Two SuperModulators (five lanes each), center section, ambient reverb, master drive.",
       "tags": ["Function generator", "LFO", "Random", "Synth voice", "Effect", "Polyphonic"]
+    },
+    {
+      "slug": "Glow",
+      "name": "FireFlow Glow",
+      "description": "Flow machine: six macro knobs and a NEW button over a generative ambient terrain.",
+      "tags": ["Generator", "Random", "Synth voice", "Drone", "Polyphonic"]
     }
   ]
 }
