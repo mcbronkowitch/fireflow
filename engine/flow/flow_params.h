@@ -6,7 +6,7 @@
 namespace spky { namespace flow {
 
 // Every parameter the flow layer owns. Ranges are ENGINE units (§2: the
-// surface is not uniformly 0..1 -- FILT/VARIATION/LINK/CHOKE are bipolar,
+// surface is not uniformly 0..1 -- FILT/VARIATION/CHOKE are bipolar,
 // ENGINE/SCALE/ROOT/FORM/SONG/STEPS are discrete). steps==0 -> continuous.
 // The RES ceiling 0.75 encodes the by-ear resonance cap as a hard limit.
 //
@@ -29,6 +29,12 @@ namespace spky { namespace flow {
 // - STEPS: host/vcv/src/Fireflow.cpp configures STEPS_A/B as
 //   configParam(c.id, 2.f, 16.f, ...) -- matches the brief's 2..16, 15 steps
 //   exactly, no change needed.
+// - LINK: NOT unipolar's brief placeholder (-1..1). Flux::set_link()
+//   (engine/fx/flux.cpp:128) clamps to [0,1], and Fireflow.cpp's own
+//   LINK_A/B configParam is 0..1 (Fireflow.cpp:323-324) -- the bipolar
+//   surface was retired in a deliberate migration (see the legacy-LINK
+//   patch-load remap around Fireflow.cpp:869-903). So 0..1 continuous,
+//   not -1..1.
 #define SPKY_FLOW_PARAMS(X) \
   X(P_ENGINE_A,   0.f, 5.f,  6)  X(P_ENGINE_B,   0.f, 5.f,  6) \
   X(P_SCALE,      0.f, 12.f, 13) X(P_ROOT,       0.f, 11.f, 12) \
@@ -52,7 +58,7 @@ namespace spky { namespace flow {
   X(P_FLUXMIX_A,  0.f, 1.f, 0)   X(P_FLUXMIX_B,  0.f, 1.f, 0) \
   X(P_GRIT_A,     0.f, 1.f, 0)   X(P_GRIT_B,     0.f, 1.f, 0) \
   X(P_COMP_A,     0.f, 1.f, 0)   X(P_COMP_B,     0.f, 1.f, 0) \
-  X(P_LINK_A,    -1.f, 1.f, 0)   X(P_LINK_B,    -1.f, 1.f, 0) \
+  X(P_LINK_A,     0.f, 1.f, 0)   X(P_LINK_B,     0.f, 1.f, 0) \
   X(P_REVMIX_A,   0.f, 1.f, 0)   X(P_REVMIX_B,   0.f, 1.f, 0) \
   X(P_MORPH,      0.f, 1.f, 0)   X(P_COUPLE,     0.f, 1.f, 0) \
   X(P_DRIFT,      0.f, 1.f, 0)   X(P_TIDE,       0.f, 1.f, 0) \

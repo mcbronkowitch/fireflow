@@ -27,8 +27,16 @@ TEST_CASE("flow params: apply routes to the engine (spot checks via observers)")
     for (int i = 0; i < 1000; ++i) inst.process(nullptr, nullptr, &l, &r, 1);
     CHECK(inst.engine_id(PART_A) == ENGINE_BODY);
 
-    apply_param(inst, P_FORM_A, 2.f);
-    CHECK(inst.form(PART_A) == 2);
+    // Non-default value (Principle::Hierarchical == 2 is SongForm's own
+    // default -- see engine/mod/song_form.h:52 -- so checking form() == 2
+    // would pass even with a broken/missing P_FORM_A case). form_pending
+    // is the same deferred mechanism as song_pending (ModLane::set_form(),
+    // lane.cpp:107-114, applied by the same _apply_pending_song_work() as
+    // SONG), so it needs the same STEP-entry preroll push described below.
+    apply_param(inst, P_FORM_A, 1.f);              // OneMotif, not the default
+    inst.set_step(PART_A, true, 4);
+    inst.process(nullptr, nullptr, &l, &r, 1);
+    CHECK(inst.form(PART_A) == 1);
 
     // SONG is boundary-safe by design (tests/test_song_lane.cpp: "SONG-only
     // change is boundary-safe"), so song() only picks up a pending value at
@@ -42,8 +50,15 @@ TEST_CASE("flow params: apply routes to the engine (spot checks via observers)")
     inst.process(nullptr, nullptr, &l, &r, 1);
     CHECK(inst.song(PART_B) == 1);
 
-    // Discrete params clamp, never wrap: over-range engine id stays legal.
+    // Discrete params clamp, never wrap: over-range engine id stays legal
+    // AND actually lands on the clamped top of the range (99 clamps to
+    // hi=5 == ENGINE_BBD). Needs the same crossfade-settling process()
+    // loop as the P_ENGINE_A check above -- reading engine_id() right after
+    // apply_param() would silently read the pre-change boot default and
+    // pass even with a deleted/broken P_ENGINE_B case.
     apply_param(inst, P_ENGINE_B, 99.f);
+    for (int i = 0; i < 1000; ++i) inst.process(nullptr, nullptr, &l, &r, 1);
+    CHECK(inst.engine_id(PART_B) == ENGINE_BBD);
     CHECK(inst.engine_id(PART_B) >= 0);
     CHECK(inst.engine_id(PART_B) < ENGINE_COUNT);
 }
