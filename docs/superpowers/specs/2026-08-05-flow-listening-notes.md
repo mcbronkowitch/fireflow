@@ -162,6 +162,42 @@ musical judgements — no NaN, no clipping, RMS inside plausible ranges, a
 silence floor. They do not say any of the above sounds right. The numbers
 above are what a listening session should try to move.
 
+## Stopped 2026-08-05 — the renders were the wrong instrument
+
+Bastian called it off after round 3: the rendered files were not earning
+their keep, and the remaining questions need a thing you can turn a knob on,
+not a file you can play back. He is right, and the reason is visible in the
+log below. Every verdict that came out of this session is about *level* —
+the one property a static render can carry. Nothing here could answer
+whether a knob feels alive under the hand, whether NEW arrives at the right
+moment, or whether a terrain is worth staying in, because those are
+questions about playing, and the material offered no playing.
+
+What the session did produce is worth keeping, and it is mostly corrections
+to this file rather than answers from it:
+
+- Item 8's two named knobs do nothing; only lowering `kDistanceMin` moves
+  the same-archetype rate, and it costs the distance rule (see the table).
+- Item 1's −61 dBFS was mostly startup silence, and the calm corner has no
+  single level at all — 37 dB across eight terrains.
+- The "digital zero" evidence was a 16-bit truncating WAV writer.
+- The calm corner's holes are decaying envelopes between sparse notes, not
+  a ducked level and not missing notes — and raising density makes it
+  *quieter*, because the drone archetype's attack is 0.5–0.95 and faster
+  retriggers never let a note bloom.
+- Item 9 (a woken terrain can be silent for up to 18 s) was found here.
+
+Two ear verdicts survive as directions: the calm corner belongs roughly
+25 dB under a mid setting, and of six terrains at one setting the two
+quietest wanted lifting. Both are recorded in the log with their caveats.
+
+**Nothing in `taste.h` was changed.** Every experiment above was reverted;
+the tree is green. The open items stay open, to be answered on hardware or
+in the VCV module — which makes Plan B (FireFlow Glow) the prerequisite for
+finishing this file, not something that waits on it. The spec's original
+"Plan B does not start until Plan A's calm corner has survived a listening
+pass" is hereby the wrong order, and this is the evidence.
+
 ## Log
 
 **Correction, 2026-08-05: "digital zero" was my render pipeline, not the
