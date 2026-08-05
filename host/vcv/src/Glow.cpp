@@ -61,6 +61,7 @@ struct Glow : Module {
     spky::flow::Gesture gest;
     spkyvcv::KnobTracker knobs;
     spkyvcv::GestureBridge newBtn;
+    spkyvcv::RefuseFlash refuse;
 
     float curSr = 0.f;
     static constexpr int kCtrlDiv = 16;          // flow ticks at sr / 16
@@ -232,8 +233,12 @@ struct Glow : Module {
         // A press the decoder let through but Flow turned down (nothing to
         // undo, an empty macro mask) must still light the refusal, or the
         // panel would silently swallow a gesture. gesture.h's own REFUSED
-        // only covers the locked case, which is why Flow's verbs return bool.
-        if (refused) gest.button(false, t, /*locked=*/true);
+        // only covers the locked case, which is why Flow's verbs return
+        // bool. gesture.h's own _refuse_t is only reachable from a real
+        // release edge, so it can never be set from here (fix round 1) --
+        // this flash is the module's own, since only the module knows Flow
+        // declined.
+        if (refused) refuse.mark(t);
 
         flow.tick();
 
@@ -248,9 +253,15 @@ struct Glow : Module {
         }
         inst.set_tempo_bpm(bpm);
 
+        // The module's own refusal flash takes precedence over the
+        // decoder's own LED state -- gest.led()'s own precedence (REFUSE >
+        // UNDO_ARMED > MARKED > BLEND > LOCKED > IDLE) stays intact for
+        // every other case; this only substitutes the top of it.
+        const int led = refuse.active(flow.now_s())
+                             ? spky::flow::Gesture::LED_REFUSE
+                             : gest.led(flow.blend_phase(), flow.locked());
         lights[NEW_L].setBrightness(
-            spkyvcv::led_level(gest.led(flow.blend_phase(), flow.locked()),
-                               flow.blend_phase(), flow.now_s()));
+            spkyvcv::led_level(led, flow.blend_phase(), flow.now_s()));
     }
 
     void process(const ProcessArgs& args) override {

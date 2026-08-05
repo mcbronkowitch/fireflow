@@ -67,6 +67,24 @@ struct GestureBridge {
     }
 };
 
+// The module's own refusal flash. gesture.h's own LED_REFUSE window
+// (_refuse_t) is only reachable from a real button(down=false, ...) release
+// -- see the guard at the top of that function -- so it can never be set
+// from the corrective path Glow.cpp takes when Flow declines an op the
+// decoder already let through (nothing to undo, an empty macro mask). Only
+// the module knows that happened, so the module owns this flash too.
+struct RefuseFlash {
+    // Kept far enough in the past that a fresh instance does NOT read as
+    // "just refused" -- same reasoning gesture.h gives at _refuse_t's
+    // initialiser: _now and this timestamp must never start close enough
+    // together for active() to read true before mark() is ever called.
+    double at = -1e18;
+    void mark(double now_s) { at = now_s; }
+    bool active(double now_s) const {
+        return now_s - at < spky::flow::kRefuseFlashS;
+    }
+};
+
 // The LED signatures of spec 5's gesture table, as brightness in 0..1.
 // A pure function of (state, blend phase, flow clock) so it can be tested
 // without a running module.

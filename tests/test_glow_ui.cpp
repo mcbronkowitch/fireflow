@@ -1,6 +1,7 @@
 // tests/test_glow_ui.cpp
 #include <doctest/doctest.h>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include "vcv/src/glow_ui.hpp"
 #include "flow/taste.h"
@@ -148,8 +149,7 @@ TEST_CASE("glow: a malformed saved code changes nothing") {
     fl.wake(house);
 
     GlowSave bad;
-    std::strncpy(bad.code, "F1-NOTHEX00-000000000000", sizeof bad.code - 1);
-    bad.code[sizeof bad.code - 1] = '\0';
+    std::snprintf(bad.code, sizeof bad.code, "%s", "F1-NOTHEX00-000000000000");
     bad.lock = true;
     CHECK_FALSE(glow_restore(fl, bad));
     CHECK(fl.state().master == house.master);
@@ -164,6 +164,24 @@ TEST_CASE("glow: the button bridge reports each edge exactly once") {
     CHECK_FALSE(b.edge(true));
     CHECK(b.edge(false));               // release
     CHECK_FALSE(b.edge(false));
+}
+
+TEST_CASE("glow: a refuse flash is active only within its window after mark") {
+    // The module's own refusal signal: Flow can decline an op the decoder
+    // let through (nothing to undo, an empty macro mask), and gesture.h's
+    // own _refuse_t cannot be reached from outside a real release -- see
+    // the fix-round-1 note above RefuseFlash's definition. This is that
+    // signal's headless coverage.
+    RefuseFlash rf;
+    const double t = 12.5;                 // plausible mid-session timestamp
+    CHECK_FALSE(rf.active(t));             // fresh: not "just refused"
+    CHECK_FALSE(rf.active(0.0));
+
+    rf.mark(t);
+    CHECK(rf.active(t));
+    CHECK(rf.active(t + spky::flow::kRefuseFlashS - 1e-6));
+    CHECK_FALSE(rf.active(t + spky::flow::kRefuseFlashS));
+    CHECK_FALSE(rf.active(t + spky::flow::kRefuseFlashS + 1.0));
 }
 
 TEST_CASE("glow: a held button reaches the lock threshold through the bridge") {
