@@ -23,21 +23,45 @@ namespace spky { namespace flow {
 class Flow {
 public:
     void init(Instrument* inst, float ctrl_hz);       // ctrl_hz = tick rate
+    // Change the control rate on a LIVE instrument (VCV calls
+    // onSampleRateChange at runtime). Recomputes only what the rate feeds --
+    // the tick period and the SPACE slew coefficient -- and touches no other
+    // state: lock, undo slot, a blend in flight, both macro arrays, the
+    // weather clock and every pushed value survive. init() is the only verb
+    // that resets those, and it now routes its own rate work through here so
+    // the two can never drift apart.
+    void set_ctrl_hz(float ctrl_hz);
     void wake(const TerrainState& s);                 // instant, no blend
     void set_macro(int m, float v);                   // knob, 0..1
     void set_cv(int m, float v);                      // additive, any range
     void tick();                                      // one control tick
-    // The NEW gesture family (§5). All three are no-ops while locked or
-    // before the first wake(); an ACCEPTED press moves state() to the new
-    // terrain immediately and drops blend_phase() to 0, from where it ramps
-    // back to 1 over kBlendS.
-    void new_full();                                  // a whole new place
-    void new_partial(uint8_t macro_mask);             // reroll marked domains
-    void undo();                                      // one slot; re-undo = redo
+    // The NEW gesture family (§5). All three refuse (return false, change
+    // nothing) while locked or before the first wake(); an ACCEPTED press
+    // returns true, moves state() to the new terrain immediately and drops
+    // blend_phase() to 0, from where it ramps back to 1 over kBlendS.
+    //
+    // The bool is what lets a host tell an accepted press from a refused one:
+    // the gesture decoder knows a press was refused only for the locked case
+    // it was told about, so without a return here a refusal blink would be
+    // unrenderable for the other reasons (not woken, empty undo slot, empty
+    // macro mask).
+    bool new_full();                                  // a whole new place
+    bool new_partial(uint8_t macro_mask);             // reroll marked domains
+    bool undo();                                      // one slot; re-undo = redo
     void set_lock(bool on);                           // always works itself
     bool locked() const { return _locked; }
     bool can_undo() const { return _have_undo; }
     const TerrainState& state() const { return _state; }
+    // The undo slot, for persistence (§5: "Patch reload ... and later hardware
+    // boots restore the full saved state -- current terrain code, lock, AND
+    // the undo slot"). wake() deliberately clears the slot, so a host restores
+    // in that order: wake(saved state), set_lock(saved lock),
+    // restore_undo(saved undo, saved can_undo). Restoring a slot is
+    // bookkeeping, not a gesture -- it starts no blend and moves no parameter,
+    // so a reloaded patch sounds exactly as it did when saved and the first
+    // undo press behaves as if the session had never ended.
+    const TerrainState& undo_state() const { return _undo; }
+    void restore_undo(const TerrainState& s, bool have_undo);
     float blend_phase() const { return _blend_phase; }  // 1.f when settled
     float eff_macro(int m) const { return _eff[m]; }  // clamp(knob+cv+weather)
     float param_now(int p) const { return _pushed[p]; }  // last pushed value

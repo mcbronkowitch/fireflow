@@ -9,10 +9,10 @@ using namespace spky::flow;
 
 static GestureOut run_press(Gesture& g, double t0, double dt,
                             int mark_macro = -1, double mark_at = 0.0,
-                            bool locked = false) {
+                            bool locked = false, bool can_undo = true) {
     g.button(true, t0, locked);
     if (mark_macro >= 0) g.knob_delta(mark_macro, 0.05f, t0 + mark_at);
-    g.tick(t0 + dt);
+    g.tick(t0 + dt, can_undo);
     g.button(false, t0 + dt, locked);
     return g.poll();
 }
@@ -29,7 +29,7 @@ TEST_CASE("flow gesture: the §5 table") {
     CHECK(late.op == GestureOut::NEW_PARTIAL);
     // Clean 5 s hold: LOCK fires during the hold, release adds nothing.
     g.button(true, 40.0, false);
-    g.tick(40.0 + kLockS + 0.1);
+    g.tick(40.0 + kLockS + 0.1, true);
     CHECK(g.poll().op == GestureOut::LOCK_TOGGLE);
     g.button(false, 46.0, true);
     CHECK(g.poll().op == GestureOut::NONE);
@@ -69,13 +69,13 @@ TEST_CASE("flow gesture: a mark AFTER undo is already armed (via tick) still can
     // says the mark must still cancel it, however long the hold runs after.
     Gesture g;
     g.button(true, 0.0, false);
-    g.tick(kUndoArmS + 0.1);              // undo arms
+    g.tick(kUndoArmS + 0.1, true);        // undo arms
     CHECK(g.led(1.f, false) == Gesture::LED_UNDO_ARMED);
     g.knob_delta(M_WANDER, 0.05f, kUndoArmS + 0.2);   // then it gets marked
     // The cancellation is not just about the eventual op -- the LED must
     // stop claiming undo is armed the instant the mark lands, still mid-hold.
     CHECK(g.led(1.f, false) == Gesture::LED_MARKED);
-    g.tick(kUndoArmS + 0.3);
+    g.tick(kUndoArmS + 0.3, true);
     g.button(false, kUndoArmS + 0.3, false);
     auto out = g.poll();
     CHECK(out.op == GestureOut::NEW_PARTIAL);
@@ -113,7 +113,7 @@ TEST_CASE("flow gesture: led() covers every value it can produce") {
     SUBCASE("undo_armed: held past kUndoArmS clean, before release") {
         Gesture g;
         g.button(true, 0.0, false);
-        g.tick(kUndoArmS + 0.1);
+        g.tick(kUndoArmS + 0.1, true);
         CHECK(g.led(1.f, false) == Gesture::LED_UNDO_ARMED);
     }
     SUBCASE("refuse: right after a REFUSED release, then it expires") {
@@ -122,7 +122,7 @@ TEST_CASE("flow gesture: led() covers every value it can produce") {
         g.button(false, 0.1, true);
         CHECK(g.poll().op == GestureOut::REFUSED);
         CHECK(g.led(1.f, true) == Gesture::LED_REFUSE);
-        g.tick(0.1 + kRefuseFlashS + 0.01);
+        g.tick(0.1 + kRefuseFlashS + 0.01, true);
         CHECK(g.led(1.f, true) == Gesture::LED_LOCKED);
     }
 }
@@ -139,7 +139,34 @@ TEST_CASE("flow gesture: LED precedence -- refuse and undo_armed beat blend/lock
 
     Gesture h;
     h.button(true, 0.0, false);
-    h.tick(kUndoArmS + 0.1);
+    h.tick(kUndoArmS + 0.1, true);
     // undo_armed must beat a concurrently-running blend.
     CHECK(h.led(0.3f, false) == Gesture::LED_UNDO_ARMED);
+}
+
+TEST_CASE("flow gesture: undo does not arm when there is nothing to undo") {
+    // The LED must not promise an op that Flow would refuse. On a freshly
+    // woken instrument the single undo slot is empty, so a hold past
+    // kUndoArmS used to light LED_UNDO_ARMED and then do nothing at all on
+    // release -- with no refusal blink either, because the decoder had no way
+    // to know. can_undo is handed to tick() the way `locked` is handed to
+    // button(): the decoder stays pure and never learns what a Flow is.
+    Gesture g;
+    g.button(true, 0.0, false);
+    g.tick(kUndoArmS + 0.1, /*can_undo=*/false);
+    CHECK(g.led(1.f, false) == Gesture::LED_IDLE);   // NOT LED_UNDO_ARMED
+    g.tick(kUndoArmS + 0.2, false);
+    g.button(false, kUndoArmS + 0.2, false);
+    CHECK(g.poll().op == GestureOut::NONE);          // dead band, not UNDO
+
+    // ...and the identical press with a slot to return to still arms and
+    // still delivers UNDO, so the two CHECKs above are the flag doing the
+    // work, not the timing.
+    Gesture h;
+    h.button(true, 0.0, false);
+    h.tick(kUndoArmS + 0.1, /*can_undo=*/true);
+    CHECK(h.led(1.f, false) == Gesture::LED_UNDO_ARMED);
+    h.tick(kUndoArmS + 0.2, true);
+    h.button(false, kUndoArmS + 0.2, false);
+    CHECK(h.poll().op == GestureOut::UNDO);
 }

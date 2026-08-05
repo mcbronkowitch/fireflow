@@ -185,3 +185,85 @@ TEST_CASE("flow runtime: shared target takes the candidate farther from base") {
         prev = v;
     }
 }
+
+TEST_CASE("flow runtime: set_ctrl_hz retimes the tick and leaves live state alone") {
+    // VCV changes sample rate at runtime, and the render host already derives
+    // ctrl_hz from the scenario's rate. Before this verb the only way to
+    // change it was init(), which also wipes lock, undo, blend, both macro
+    // arrays and the clock -- i.e. a host could not follow a rate change
+    // without rebuilding the instrument around it.
+    Instrument in; in.init(48000.f);
+    Flow f; f.init(&in, 100.f);
+    TerrainState s; s.master = 0x5E7C; f.wake(s);
+    f.set_macro(M_BRIGHT, 0.7f); f.set_cv(M_SPACE, 0.2f);
+    f.new_full();
+    for (int i = 0; i < 60; ++i) f.tick();       // mid-blend
+    f.set_lock(true);
+
+    const TerrainState before_state = f.state();
+    const float  before_phase = f.blend_phase();
+    const double before_t     = f.now_s();
+    const float  before_eff[MACRO_COUNT] = { f.eff_macro(0), f.eff_macro(1),
+                                             f.eff_macro(2), f.eff_macro(3),
+                                             f.eff_macro(4), f.eff_macro(5) };
+    float before_p[P_COUNT];
+    for (int p = 0; p < P_COUNT; ++p) before_p[p] = f.param_now(p);
+
+    f.set_ctrl_hz(400.f);
+
+    // Nothing moved: the call is bookkeeping, not a reset and not a push.
+    CHECK(f.state().master == before_state.master);
+    CHECK(f.blend_phase() == doctest::Approx(before_phase));
+    CHECK(f.now_s() == doctest::Approx(before_t));
+    CHECK(f.locked());
+    CHECK(f.can_undo());
+    for (int m = 0; m < MACRO_COUNT; ++m) {
+        CAPTURE(m); CHECK(f.eff_macro(m) == doctest::Approx(before_eff[m]));
+    }
+    for (int p = 0; p < P_COUNT; ++p) {
+        CAPTURE(kParams[p].name);
+        CHECK(f.param_now(p) == doctest::Approx(before_p[p]));
+    }
+    // ...and the state it preserved was worth preserving: a blend really was
+    // in flight and the macros really were somewhere other than their
+    // defaults, so the four CHECKs above are not comparing zeroes.
+    REQUIRE(before_phase > 0.f);
+    REQUIRE(before_phase < 1.f);
+    REQUIRE(before_eff[M_BRIGHT] > 0.5f);
+
+    // The tick period followed the new rate.
+    f.set_lock(false);
+    const double t0 = f.now_s();
+    for (int i = 0; i < 400; ++i) f.tick();
+    CHECK(f.now_s() - t0 == doctest::Approx(1.0).epsilon(1e-9));
+}
+
+TEST_CASE("flow runtime: the SPACE slew keeps its wall-clock time constant across a rate change") {
+    // kSpaceSlewS is a duration in SECONDS, so the one-pole coefficient is a
+    // function of the tick period -- a set_ctrl_hz that forgot to re-derive
+    // it would make the room drift four times too fast at 4x the rate, which
+    // is the whole reason the verb exists rather than a bare `_ctrl_hz = hz`.
+    //
+    // Reference: an identical Flow that ran at 400 Hz from init(). Both are
+    // driven for the same WALL-CLOCK second after the same target step, so
+    // they must land in the same place.
+    Instrument i1; i1.init(48000.f);
+    Instrument i2; i2.init(48000.f);
+    Flow f; f.init(&i1, 100.f);      // then switched to 400 Hz below
+    Flow g; g.init(&i2, 400.f);      // 400 Hz all along
+    TerrainState s; s.master = 0x5175; f.wake(s); g.wake(s);
+    f.set_macro(M_SPACE, 0.f); g.set_macro(M_SPACE, 0.f);
+    f.tick(); g.tick();
+    const float start = f.param_now(P_REV_SIZE);
+    REQUIRE(g.param_now(P_REV_SIZE) == doctest::Approx(start));
+
+    f.set_ctrl_hz(400.f);
+    f.set_macro(M_SPACE, 1.f); g.set_macro(M_SPACE, 1.f);
+    for (int i = 0; i < 400; ++i) { f.tick(); g.tick(); }   // 1.0 s of travel
+
+    const float moved = f.param_now(P_REV_SIZE) - start;
+    CAPTURE(start); CAPTURE(moved);
+    REQUIRE(moved > 0.05f);                       // the slew really is moving
+    CHECK(f.param_now(P_REV_SIZE)
+          == doctest::Approx(g.param_now(P_REV_SIZE)).epsilon(0.002));
+}

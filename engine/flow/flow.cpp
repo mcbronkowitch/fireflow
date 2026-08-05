@@ -53,11 +53,22 @@ inline int deck_of(int p) {
 static_assert(P_ENGINE_A < P_FILT_A && P_ENGINE_B < P_FILT_B,
               "ENGINE_A/B must be pushed before FILT_A/B");
 
-void Flow::init(Instrument* inst, float ctrl_hz) {
-    _inst = inst;
+// Everything the control rate feeds, and nothing else. Split out of init()
+// so a live host can follow a sample-rate change without rebuilding the
+// instrument's whole state around it (see flow.h).
+void Flow::set_ctrl_hz(float ctrl_hz) {
     _ctrl_hz = ctrl_hz;
     _dt = 1.0 / double(ctrl_hz);
+    // The one-pole SPACE follower is defined in SECONDS (kSpaceSlewS), so its
+    // per-tick coefficient has to be re-derived or the room would drift at
+    // the wrong speed after a rate change -- audibly, at the 2x and 4x jumps
+    // a host actually makes.
     _slew_a = 1.f - std::exp(-float(_dt) / kSpaceSlewS);
+}
+
+void Flow::init(Instrument* inst, float ctrl_hz) {
+    _inst = inst;
+    set_ctrl_hz(ctrl_hz);
     _t = 0.0;
     _woken = false;
     _locked = false;
@@ -146,9 +157,10 @@ void Flow::begin_blend(const TerrainState& target) {
     _duck_t[_carrier_deck] = _t + double(kCarrierStaggerFrac * kBlendS);
 }
 
-void Flow::new_full() {
-    if (!_woken || _locked) return;
+bool Flow::new_full() {
+    if (!_woken || _locked) return false;
     begin_blend(draw_new(_state, _seq));
+    return true;
 }
 
 // Partial reroll: bump the marked macros' override counters and regenerate.
@@ -156,23 +168,35 @@ void Flow::new_full() {
 // counter, so it is bit-identical -- that is the whole point of the
 // (master, stream, counter) triple. The weather DOES refresh: its counter is
 // the sum of all six (terrain.h), by design.
-void Flow::new_partial(uint8_t macro_mask) {
-    if (!_woken || _locked) return;
+bool Flow::new_partial(uint8_t macro_mask) {
+    if (!_woken || _locked) return false;
     const uint8_t valid = uint8_t((1u << MACRO_COUNT) - 1u);
-    if (!(macro_mask & valid)) return;            // nothing marked, nothing to do
+    if (!(macro_mask & valid)) return false;      // nothing marked, nothing to do
     TerrainState t = _state;
     for (int m = 0; m < MACRO_COUNT; ++m)
         if (macro_mask & (1u << m)) ++t.reroll[m];
     begin_blend(t);
+    return true;
 }
 
-void Flow::undo() {
-    if (!_woken || _locked || !_have_undo) return;
+bool Flow::undo() {
+    if (!_woken || _locked || !_have_undo) return false;
     const TerrainState back = _undo;   // copy first: begin_blend overwrites
     begin_blend(back);                 // _undo with the state we are leaving
+    return true;
 }
 
 void Flow::set_lock(bool on) { _locked = on; }
+
+// Persistence only (§5's power-on paragraph). Deliberately NOT a gesture:
+// no begin_blend, no _state change, no push -- restoring the slot a patch
+// was saved with must be inaudible, or reloading a patch would move the
+// instrument. It is legal before wake() too; wake() then clears it again,
+// which is why the documented restore order puts this last.
+void Flow::restore_undo(const TerrainState& s, bool have_undo) {
+    _undo = s;
+    _have_undo = have_undo;
+}
 
 // Discrete step with hysteresis (§4). Without the guard, a macro parked on
 // a step seam re-quantizes every tick and the engine gets a new FORM/SONG

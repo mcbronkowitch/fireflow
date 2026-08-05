@@ -458,3 +458,78 @@ TEST_CASE("flow NEW: the press chain is deterministic from the woken state") {
     // Consecutive presses land somewhere else every time.
     for (int i = 1; i < 4; ++i) CHECK(seen[i] != seen[i - 1]);
 }
+
+TEST_CASE("flow NEW: the verbs report whether they acted") {
+    // Without a return value a host cannot tell an accepted press from a
+    // refused one, and only ONE of the four refusal reasons (locked) is
+    // visible to the gesture decoder -- so a refusal blink would be
+    // unrenderable for the other three.
+    Instrument in; in.init(48000.f);
+    Flow f; f.init(&in, 100.f);
+    CHECK_FALSE(f.new_full());                    // refused: not woken
+    CHECK_FALSE(f.new_partial(1u << M_BRIGHT));
+    CHECK_FALSE(f.undo());
+
+    TerrainState s; s.master = 0xB001; f.wake(s);
+    CHECK_FALSE(f.undo());                        // refused: slot still empty
+    CHECK_FALSE(f.new_partial(0));                // refused: nothing marked
+    CHECK_FALSE(f.new_partial(uint8_t(1u << MACRO_COUNT)));  // no valid bit
+
+    CHECK(f.new_full());                          // accepted
+    for (int i = 0; i < 1000; ++i) f.tick();
+    CHECK(f.undo());                              // accepted: slot is full now
+    for (int i = 0; i < 1000; ++i) f.tick();
+    CHECK(f.new_partial(1u << M_DIRT));
+    for (int i = 0; i < 1000; ++i) f.tick();
+
+    f.set_lock(true);
+    CHECK_FALSE(f.new_full());                    // refused: locked
+    CHECK_FALSE(f.new_partial(1u << M_DIRT));
+    CHECK_FALSE(f.undo());
+    f.set_lock(false);
+    CHECK(f.new_full());                          // and accepted again after
+}
+
+TEST_CASE("flow NEW: the undo slot survives a save and restore (spec §5)") {
+    // §5's power-on paragraph: "Patch reload (VCV dataFromJson) and later
+    // hardware boots restore the full saved state -- current terrain code,
+    // lock, AND the undo slot; a live set built around a locked terrain must
+    // survive a restart." wake() clears the slot by design, so the host needs
+    // to be able to read it and put it back afterwards.
+    Instrument in; in.init(48000.f);
+    Flow f; f.init(&in, 100.f);
+    TerrainState s; s.master = 0x5A7E; f.wake(s);
+    f.new_full();
+    for (int i = 0; i < 1000; ++i) f.tick();
+    const TerrainState saved_state = f.state();
+    const TerrainState saved_undo  = f.undo_state();
+    const bool saved_can_undo = f.can_undo();
+    REQUIRE(saved_can_undo);
+    REQUIRE(saved_undo.master == 0x5A7Eu);        // where undo would go back to
+    REQUIRE(saved_state.master != saved_undo.master);
+
+    // The reload: a fresh Flow restored in the documented order.
+    Instrument in2; in2.init(48000.f);
+    Flow g; g.init(&in2, 100.f);
+    g.wake(saved_state);
+    CHECK_FALSE(g.can_undo());                    // wake() alone loses the slot
+    float before[P_COUNT];
+    for (int p = 0; p < P_COUNT; ++p) before[p] = g.param_now(p);
+
+    g.restore_undo(saved_undo, saved_can_undo);
+    CHECK(g.can_undo());
+    CHECK(g.undo_state().master == saved_undo.master);
+    // Restoring a slot is bookkeeping, not a gesture: no blend starts and not
+    // one parameter moves, so a reloaded patch sounds exactly as it was saved.
+    CHECK(g.blend_phase() == doctest::Approx(1.f));
+    CHECK(g.state().master == saved_state.master);
+    for (int p = 0; p < P_COUNT; ++p) {
+        CAPTURE(kParams[p].name);
+        CHECK(g.param_now(p) == doctest::Approx(before[p]));
+    }
+    // ...and the restored slot is live: the first undo press of the new
+    // session behaves as if the old one had never ended.
+    CHECK(g.undo());
+    for (int i = 0; i < 1000; ++i) g.tick();
+    CHECK(g.state().master == saved_undo.master);
+}

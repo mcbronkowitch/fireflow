@@ -85,7 +85,12 @@ public:
     }
 
     // For LED state only; also advances the undo-arm/lock-fire timers.
-    void tick(double now_s) {
+    //
+    // can_undo is Flow::can_undo(), handed in the same way `locked` is -- the
+    // decoder stays pure and never learns what a Flow is. It is a parameter
+    // rather than something this class could infer because only Flow knows
+    // whether the one undo slot is occupied.
+    void tick(double now_s, bool can_undo) {
         _now = now_s;
         if (!_held || _marked || _lock_fired) return;
         const double dur = now_s - _press_t;
@@ -95,10 +100,17 @@ public:
             _lock_fired = true;
             _pending.op = GestureOut::LOCK_TOGGLE;
             _pending.mask = 0;
-        } else if (dur >= kUndoArmS && !_press_locked) {
+        } else if (dur >= kUndoArmS && !_press_locked && can_undo) {
             // Undo never arms under a locked press: that hold can only ever
             // end in LOCK_TOGGLE (if it reaches kLockS) or REFUSED, so an
             // "armed" state here would just be a misleading LED.
+            //
+            // Same reasoning for can_undo, which is why it is a condition and
+            // not just an LED filter: on a freshly-woken instrument there is
+            // nothing to undo, so a hold past kUndoArmS used to double-pulse
+            // "undo armed" and then do nothing at all on release. Now it never
+            // arms, the LED never claims it did, and the release falls into
+            // the dead band (NONE) exactly like a hold that ended too early.
             _undo_armed = true;
         }
     }
@@ -117,6 +129,8 @@ public:
         // Precedence, highest first: REFUSE (transient feedback) >
         // UNDO_ARMED > MARKED (mutually exclusive with UNDO_ARMED by rule 5,
         // ordered anyway so the function is total) > BLEND > LOCKED > IDLE.
+        // LED_UNDO_ARMED is reachable only when tick() was told an undo
+        // exists, so the light cannot promise an op that would be refused.
         if (_now - _refuse_t < kRefuseFlashS) return LED_REFUSE;
         if (_held && _undo_armed) return LED_UNDO_ARMED;
         if (_held && _marked) return LED_MARKED;
