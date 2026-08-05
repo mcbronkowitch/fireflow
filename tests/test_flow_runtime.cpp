@@ -147,4 +147,41 @@ TEST_CASE("flow runtime: shared target takes the candidate farther from base") {
     CHECK(std::fabs(vb - base) > std::fabs(vs - base));
     const float expect = std::fabs(vb - base) > std::fabs(vs - base) ? vb : vs;
     CHECK(f.param_now(P_REVMIX_A) == doctest::Approx(expect));
+
+    // The check above does NOT discriminate: at both knobs 0, SPACE's
+    // candidate IS the base (stage 4 wrote SPACE's bp[0] there last), so
+    // its distance is 0, and BRIGHT is also the lower macro index -- the
+    // assertion passes identically under "farthest from base", "lowest
+    // index wins" and "first writer wins". This second position is the
+    // discriminating one. With BRIGHT at 0 and SPACE at 1, SPACE's
+    // candidate (0.938530, d=0.890415) beats BRIGHT's ember (0.858469,
+    // d=0.810354), so the HIGHER macro index must win: under either
+    // index-priority rule this line reads 0.858469 and goes red.
+    f.set_macro(M_BRIGHT, 0.f); f.set_macro(M_SPACE, 1.f); f.tick();
+    float vb1 = 0.f, vs1 = 0.f;
+    for (int i = 0; i < t.map[M_BRIGHT].n_targets; ++i)
+        if (t.map[M_BRIGHT].targets[i].param == P_REVMIX_A)
+            vb1 = t.map[M_BRIGHT].targets[i].bp[0];   // BRIGHT still at eff 0
+    for (int i = 0; i < t.map[M_SPACE].n_targets; ++i)
+        if (t.map[M_SPACE].targets[i].param == P_REVMIX_A)
+            vs1 = t.map[M_SPACE].targets[i].bp[4];    // SPACE at eff 1
+    CHECK(std::fabs(vs1 - base) > std::fabs(vb1 - base));   // SPACE farther
+    CHECK(vs1 > vb1);                    // and it is NOT the lower-index one
+    CHECK(f.param_now(P_REVMIX_A) == doctest::Approx(vs1));
+
+    // Shared-target monotonicity (the macro sweep test skips these params
+    // because the rule is not a per-macro blend). Both candidates sit
+    // ABOVE the base here, so "farthest from base" reduces to max(vb, vs)
+    // -- a max of a constant and a rising curve, which is non-decreasing
+    // AND continuous through the winner flip near the top of the sweep.
+    // (That is a property of this configuration, not of the rule: if the
+    // two candidates straddled the base, the flip would be a jump.)
+    f.set_macro(M_BRIGHT, 0.f);
+    float prev = 0.f;
+    for (int k = 0; k <= 32; ++k) {
+        f.set_macro(M_SPACE, k / 32.f); f.tick();
+        const float v = f.param_now(P_REVMIX_A);
+        if (k) { CAPTURE(k); CHECK(v >= prev - 1e-6f); }
+        prev = v;
+    }
 }

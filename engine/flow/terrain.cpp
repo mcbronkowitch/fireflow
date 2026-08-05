@@ -166,8 +166,9 @@ Terrain generate(const TerrainState& st) {
     // coverage test allows story-only coverage), so they too take their
     // drawn bp[0] as a calm-floor base, just without a mapping. When two
     // macros share a target (BRIGHT and SPACE both curve REVMIX_A), the
-    // later macro's bp[0] wins the base; both curves stay mapped -- the
-    // runtime sums their offsets.
+    // later macro's bp[0] wins the base; both curves stay mapped, and the
+    // runtime pushes whichever candidate lands FARTHEST from that base
+    // (the rule lives in Flow::recompute_and_push, engine/flow/flow.cpp).
     for (int m = 0; m < MACRO_COUNT; ++m) {
         Rng r = make_stream(st.master, kStreamMacroBase + uint32_t(m),
                             st.reroll[m]);

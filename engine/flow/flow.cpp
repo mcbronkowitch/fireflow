@@ -22,8 +22,11 @@ float eval_curve(const Curve& c, float x) {
     return c.bp[i] + (c.bp[i + 1] - c.bp[i]) * (g - float(i));
 }
 
+// Width of one discrete step. The callers key off steps > 0, so a future
+// single-valued param (steps == 1) would divide by zero here; it gets a
+// harmless width of 1 instead and quantizes to its single step 0 = lo.
 inline float step_size(const ParamInfo& pi) {
-    return (pi.hi - pi.lo) / float(pi.steps - 1);
+    return pi.steps > 1 ? (pi.hi - pi.lo) / float(pi.steps - 1) : 1.f;
 }
 
 } // namespace
@@ -32,6 +35,7 @@ void Flow::init(Instrument* inst, float ctrl_hz) {
     _inst = inst;
     _ctrl_hz = ctrl_hz;
     _dt = 1.0 / double(ctrl_hz);
+    _slew_a = 1.f - std::exp(-float(_dt) / kSpaceSlewS);
     _t = 0.0;
     _woken = false;
     for (int m = 0; m < MACRO_COUNT; ++m) {
@@ -91,8 +95,9 @@ float Flow::quantize_hyst(int p, float v, bool force) {
 // drifts toward its new size instead of jumping. force (wake) lands it.
 float Flow::space_slew(int slot, float target, bool force) {
     if (force) { _slew_v[slot] = target; return target; }
-    const float a = 1.f - std::exp(-float(_dt) / kSpaceSlewS);
-    _slew_v[slot] += (target - _slew_v[slot]) * a;
+    // _slew_a is a function of _dt and kSpaceSlewS only -- computed once in
+    // init(), not twice per tick (this runs at control rate on the M7).
+    _slew_v[slot] += (target - _slew_v[slot]) * _slew_a;
     return _slew_v[slot];
 }
 

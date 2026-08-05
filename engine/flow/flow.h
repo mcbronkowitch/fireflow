@@ -60,6 +60,7 @@ private:
     float _pushed[P_COUNT]   = {};  // last value handed to apply_param
     int   _step_now[P_COUNT] = {};  // discrete hysteresis state (step index)
     float _slew_v[2]         = {};  // one-pole state: [0]=REV_SIZE [1]=REV_DECAY
+    float _slew_a = 0.f;            // its coefficient, from _dt / kSpaceSlewS
 };
 
 #ifdef SPKY_TESTING
