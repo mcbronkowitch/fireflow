@@ -116,12 +116,20 @@ bool terrain_has_sampler(const Terrain& t) {
 }
 
 // Candidate master seeds -- the brief's own {0x101, 0x202, 0x303, 0x404}
-// plus four more so a filtered-out master never leaves the tested set
-// empty. Verified (test-start filter below, not by hand): none of the
-// brief's four actually rolls a Sampler deck, but the filter stays in place
-// so that fact is provable at test time, not merely asserted in a comment.
+// plus six more so a filtered-out master never leaves the tested set
+// empty. Verified (test-start filter below, not by hand): none of these
+// ten actually rolls a Sampler deck, but the filter stays in place so that
+// fact is provable at test time, not merely asserted in a comment.
+// 0xD0Du/0xC0C0u (review I-4): the NEW-blend gate needs seeds whose
+// new_full() does NOT switch a deck's engine, and the original eight
+// candidates yielded only two (0x404, 0x808) -- a bare-step mutation was
+// caught by only one of them (0x808; see task-10-report.md round 5). These
+// two were added after scanning wider master ranges specifically to find
+// more non-switching, non-Sampler seeds -- see task-10-report.md for the
+// scan and the resulting per-seed mutation results.
 constexpr uint32_t kCandidateMasters[] = {
     0x101u, 0x202u, 0x303u, 0x404u, 0x505u, 0x606u, 0x707u, 0x808u,
+    0xD0Du, 0xC0C0u,
 };
 constexpr int kMaxKept = int(sizeof(kCandidateMasters) / sizeof(uint32_t));
 
@@ -186,8 +194,8 @@ TEST_CASE("flow audio: fixed seeds render clean and inside RMS bounds (7.8)") {
 
         const RenderStats rs = render_flow(fl, inst, 10.0);
         CHECK_FALSE(rs.has_nan);
-        CHECK(rs.rms > 0.001);
-        CHECK(rs.rms < 0.5);
+        CHECK(rs.rms > kFixedSeedRmsMin);
+        CHECK(rs.rms < kFixedSeedRmsMax);
     }
 }
 
@@ -218,8 +226,11 @@ TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence
     }
 }
 
-// NEW blend vs. no-press control (spec §5/§7.8) -- Task 10, round 3. The
-// original single-run window-to-window ratio design conflated the
+// NEW blend vs. no-press control (spec §5/§7.8) -- Task 10, round 5 (review
+// round 1 found the round-3/4 comment materially overstated what this gate
+// covers; corrected here -- see task-10-report.md for the full history).
+//
+// The original single-run window-to-window ratio design conflated the
 // instrument's own note-envelope/retrigger dynamics with anything the
 // blend itself did, and failed on every seed tested (see task-10-report.md
 // §4). Round 2 fixed that with a DIFFERENTIAL design: run a CONTROL
@@ -231,16 +242,26 @@ TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence
 // found why: the control keeps playing the OUTGOING terrain for the full
 // 6 s while the press run settles onto a completely different terrain, so
 // comparing them once the blend is mostly/fully settled compares two
-// terrains' natural loudness, not anything the blend did (taste.h's
-// kBlendGateWindowS comment has the full phase-math argument and the
-// measured ~15.9 dB terrain-to-terrain spread that justifies it). The gate
-// now asserts ONLY inside the first kBlendGateWindowS seconds after the
-// press, where legitimate terrain-to-terrain divergence stays small
-// (~2.7 dB at 1.0 s) -- kBlendSpikeDb/kBlendDropDb themselves are
-// unchanged; this narrows WHAT THE GATE CLAIMS, not how much it tolerates.
+// terrains' natural loudness, not anything the blend did.
+//
+// The gate now asserts ONLY inside the first kBlendGateWindowS seconds
+// after the press -- kBlendSpikeDb/kBlendDropDb themselves are unchanged;
+// this narrows WHAT THE GATE CLAIMS, not how much it tolerates. taste.h's
+// kBlendGateWindowS comment has the full, corrected accounting: 1.0 s is a
+// CONSERVATIVE CHOICE (checked green out to 1.75 s, red at 2.0 s), not a
+// derivation; real measured in-window headroom is ~1.14 dB against the
+// 6 dB spike bound, not the ~4.3 dB an earlier (wrong) phase-math argument
+// implied; and THE GATE'S BLIND SPOT IS STRUCTURAL, NOT INCIDENTAL -- the
+// carrier deck's discrete switch (at kCarrierStaggerFrac * kBlendS = 1.5 s)
+// and its duck (~1.25-1.75 s) sit entirely outside kBlendGateWindowS =
+// 1.0 s, for every seed, permanently. This gate covers the TEXTURE deck's
+// switch and the initial retarget. It does NOT cover the carrier deck's
+// switch or duck -- read taste.h before assuming it does.
+//
 // The full 6 s is still RENDERED and MEASURED for every seed (see
 // task-10-report.md's plain-measurement table) -- only the CHECK()s are
-// scoped.
+// scoped, and (review Minor 3) ONLY the level CHECK()s: NaN is still
+// asserted for every window of every seed, including excluded ones, below.
 //
 // EXCLUSION (measured, not carved around -- see task-10-report.md round 2
 // for the full per-seed numbers): seeds whose new_full() switches a deck's
@@ -251,11 +272,18 @@ TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence
 // near-silence when a NEW press switches engines is not being called a
 // defect here, and the fix direction is not obvious for free -- an
 // engine-switch crossfade would mean running two part engines at once,
-// which is expensive on the Daisy target. So this gate is scoped to seeds
-// new_full() does NOT switch an engine on, honestly (no clause inside the
-// gate pretends to cover the switch case), and the exclusion is itself
-// asserted non-vacuous (REQUIRE(tested > 0)) so it cannot silently come to
-// cover nothing.
+// which is expensive on the Daisy target. So the LEVEL comparison is
+// scoped to seeds new_full() does NOT switch an engine on, honestly (no
+// clause inside the gate pretends to cover the switch case); NaN checks
+// still run on excluded seeds too (they have nothing to do with the level
+// comparison). The exclusion is asserted non-vacuous, and (review I-4)
+// asserted to leave at least kMinNoSwitchSeeds qualifying seeds, not just
+// a non-empty set: under the RED-proof bare-step mutation only ONE of the
+// original two candidates (0x808) actually caught it (0x404 stayed within
+// ±1.6 dB) -- REQUIRE(tested > 0) cannot detect that kind of degradation,
+// only REQUIRE(tested >= N) can.
+constexpr int kMinNoSwitchSeeds = 3;
+
 TEST_CASE("flow audio: a NEW blend never jumps the level vs. a no-press control (7.8)") {
     uint32_t kept[kMaxKept];
     const int n = filtered_masters(kept);
@@ -268,9 +296,10 @@ TEST_CASE("flow audio: a NEW blend never jumps the level vs. a no-press control 
     int tested = 0;
     for (int i = 0; i < n; ++i) {
         const uint32_t master = kept[i];
-        if (new_full_switches_engine(master)) continue;   // excluded: see EXCLUSION above
-        ++tested;
+        const bool excluded = new_full_switches_engine(master);   // see EXCLUSION above
+        if (!excluded) ++tested;
         CAPTURE(master);
+        CAPTURE(excluded);
 
         TerrainState seed_state; seed_state.master = master;
 
@@ -298,16 +327,18 @@ TEST_CASE("flow audio: a NEW blend never jumps the level vs. a no-press control 
         p_fl.new_full();
         REQUIRE(p_fl.blend_phase() < 1.f);
 
-        // The FULL 6 s blend is still rendered here -- kept as a plain
+        // The FULL 6 s blend is rendered and NaN-checked here for EVERY
+        // seed, excluded or not (review Minor 3) -- kept as a plain
         // measurement (task-10-report.md), not asserted on past
         // gated_windows. Only the first kBlendGateWindowS seconds (see the
-        // comment above and taste.h) get the spike/drop CHECK()s.
+        // comment above and taste.h) get the spike/drop CHECK()s, and only
+        // for non-excluded seeds.
         for (int w = 0; w < windows; ++w) {
             const RenderStats cs = render_flow(c_fl, c_inst, kWindowS);
             const RenderStats ps = render_flow(p_fl, p_inst, kWindowS);
             CHECK_FALSE(cs.has_nan);
             CHECK_FALSE(ps.has_nan);
-            if (w >= gated_windows) continue;   // measured, not asserted -- see comment above
+            if (excluded || w >= gated_windows) continue;   // measured, not asserted
             const double c_db = level_db(cs.rms);
             const double p_db = level_db(ps.rms);
             const double diff_db = p_db - c_db;
@@ -318,7 +349,10 @@ TEST_CASE("flow audio: a NEW blend never jumps the level vs. a no-press control 
             CHECK(diff_db >= -double(kBlendDropDb));
         }
     }
-    REQUIRE(tested > 0);   // the engine-switch exclusion must not cover everything
+    // review I-4: REQUIRE(tested > 0) alone cannot detect the gate quietly
+    // degrading to a single seed that happens not to catch anything --
+    // require the qualifying set stays at least kMinNoSwitchSeeds wide.
+    REQUIRE(tested >= kMinNoSwitchSeeds);
 }
 
 // ---------------------------------------------------------------------------
@@ -355,16 +389,16 @@ TEST_CASE("flow audio: a NEW blend never jumps the level vs. a no-press control 
 //    forward, never back-and-forth ("chatter"); the worst-case swing this
 //    analysis allows (~0.05 macro-units of weather offset at MOTION=0.5,
 //    against curve slopes up to ~12 units/macro-unit for the steepest
-//    table row) is under two step widths. The bound is set at 2 changes
-//    per storied discrete param over 60 s -- comfortably inside that
-//    analysis, nowhere near Task 7's 256-with-macros-moving figure, and
-//    still a real, falsifiable bound (see the RED proof in the report).
+//    table row) is under two step widths. The bound (taste.h
+//    kDiscreteChurnMax) is set at 2 changes per storied discrete param
+//    over 60 s -- comfortably inside that analysis, nowhere near Task 7's
+//    256-with-macros-moving figure, and still a real, falsifiable bound
+//    (see the RED proof in the report).
 TEST_CASE("flow audio: discrete params stay stable under static macros (Task 10 churn gate)") {
     uint32_t kept[kMaxKept];
     const int n = filtered_masters(kept);
     REQUIRE(n > 0);
 
-    constexpr int kStoriedChurnMax = 2;
     constexpr double kWindowS = 60.0;
     const int ticks = int(kWindowS * kCtrlHz + 0.5);   // 30000 @ 500 Hz
 
@@ -395,7 +429,7 @@ TEST_CASE("flow audio: discrete params stay stable under static macros (Task 10 
             if (kParams[p].steps <= 0) continue;
             CAPTURE(kParams[p].name);
             CAPTURE(changes[p]);
-            if (t.storied[p]) CHECK(changes[p] <= kStoriedChurnMax);
+            if (t.storied[p]) CHECK(changes[p] <= kDiscreteChurnMax);
             else               CHECK(changes[p] == 0);
         }
     }

@@ -82,31 +82,71 @@ constexpr float kBlendDropDb = 10.f;                // press vs. control,
 // legitimately ducks the outgoing deck's dry leg by design (kDuckDepth),
 // so some asymmetric headroom on the downside is expected even in a
 // healthy blend.
-// §7.8 NEW-blend level gate -- Task 10, round 3. The differential design
-// (kBlendSpikeDb/kBlendDropDb above) stayed red past round 2 even on seeds
-// with no engine switch, and the reason turned out to be the REFERENCE,
-// not the blend: the no-press control keeps playing the OUTGOING terrain
-// for the full 6 s while the press run settles onto a completely different,
-// independently-drawn terrain, so comparing the two once the blend is
-// mostly or fully settled compares two terrains' natural loudness, not
-// anything the blend did. During the ramp the continuous parameters are
-// `(1-p)*old + p*new` (flow.cpp recompute_and_push), so at blend phase p
-// the two runs may LEGITIMATELY differ by up to roughly `p *` the
-// terrain-to-terrain gap -- and this codebase already measured that gap at
-// up to ~15.9 dB (tests/test_flow_audio.cpp's fixed-seed RMS case: 0.0158
+// §7.8 NEW-blend level gate -- Task 10, round 4 (review round 1 found the
+// round-3 comment below quantitatively wrong; this is the corrected
+// version -- see task-10-report.md rounds 3-5 for the full history).
+//
+// The differential design (kBlendSpikeDb/kBlendDropDb above) stayed red
+// past round 2 even on seeds with no engine switch, and the reason turned
+// out to be the REFERENCE, not the blend: the no-press control keeps
+// playing the OUTGOING terrain for the full 6 s while the press run
+// settles onto a completely different, independently-drawn terrain, so
+// comparing the two once the blend is mostly or fully settled compares two
+// terrains' natural loudness, not anything the blend did (measured up to
+// ~15.9 dB apart -- tests/test_flow_audio.cpp's fixed-seed RMS case: 0.0158
 // to 0.0983 across 8 terrains at the same macro setting, no blend
-// involved). kBlendGateWindowS narrows WHAT THE GATE CLAIMS (not how much
-// it tolerates -- kBlendSpikeDb/kBlendDropDb are unchanged) to the window
-// where that legitimate divergence stays small: at 1.0 s of the 6 s blend,
-// p = 1.0/6 =~ 0.17, so legitimate drift is ~0.17 * 15.9 =~ 2.7 dB --
-// comfortably inside the 6 dB spike bound. Anything the gate catches
-// inside this window is therefore a STEP the blend logic introduced (a
-// bare discrete switch, a bad retarget, an over-attenuating duck), not the
-// destination terrain being a different loudness, which is exactly the
-// property this gate exists to guarantee.
+// involved).
+//
+// kBlendGateWindowS = 1.0 s IS NOT A DERIVATION. It is a conservative
+// CHOICE, checked (not fitted) against the failure boundary: the gate
+// stays green, unmutated, out to 1.75 s, and only goes red at 2.0 s (a
+// bare-step mutation at that scope catches +9.58 dB on an otherwise
+// untouched engine, master 0x404, window 7). 1.0 s sits 0.75 s inside that
+// boundary on purpose.
+//
+// A phase-math argument was tried here first ("continuous params are
+// (1-p)*old + p*new, so legitimate divergence is roughly p * the terrain
+// gap, ~2.7 dB at p=1/6") and IT IS WRONG -- it omits discretes, which
+// never lerp (flow.cpp: `_resid[p] = kParams[p].steps > 0 ? 0.f : ...`,
+// `v = due ? cur[p] : _pushed[p]`) and switch 100% at their scheduled
+// phase, not p*100%. Measured in-window divergence is therefore several
+// times the phase-math prediction: at w=2 (~0.6 s) the model predicts
+// ~1.6 dB, the actual measured value (master 0x808) is +4.86 dB. Real
+// spike headroom against kBlendSpikeDb=6 is therefore ~1.14 dB, not the
+// ~4.3 dB the old comment implied -- a legitimate ~1.2 dB taste change to
+// the texture deck's first-window level could turn this gate red.
+//
+// THE GATE'S BLIND SPOT, STATED PLAINLY: the texture deck's discrete
+// switch happens at the press (phase 0), inside this window -- but the
+// CARRIER deck's discrete switch happens at kCarrierStaggerFrac * kBlendS
+// = 0.25 * 6 = 1.5 s, and its duck (kDuckWindowS = 0.5 s) spans roughly
+// 1.25-1.75 s -- BOTH ENTIRELY OUTSIDE kBlendGateWindowS = 1.0 s, for
+// every seed, by construction, permanently. Proven: deferring the same
+// bare-step mutation to the carrier-stagger instant (t = 1.5 s instead of
+// t = 0) passes this gate completely while the unasserted windows read as
+// low as -24.04 dB. So: this gate covers the TEXTURE deck's switch and the
+// initial retarget. It does NOT cover the carrier deck's switch or duck --
+// do not describe it as catching "an over-attenuating duck" in general;
+// for the carrier deck it structurally cannot.
 constexpr float kBlendGateWindowS = 1.0f;           // seconds after the
                                                      // press the differential
                                                      // gate actually asserts on
+// §7.8 fixed-seed RMS bounds (Task 10, review I-3: was inline in the test).
+// 0.001 is two orders of magnitude below kCalmCornerRmsMax, so it only
+// fires if the "busy" (all macros 0.5) setting is somehow quieter than the
+// calm corner; 0.5 sits below full scale. Both are the brief's own
+// numbers; measured band across 8 terrains is 0.0158-0.0983, ~24 dB and
+// ~14 dB of margin either side -- not fitted to today's output.
+constexpr float kFixedSeedRmsMin = 0.001f;
+constexpr float kFixedSeedRmsMax = 0.5f;
+// §7.8 discrete-churn gate storied-param bound (Task 10, review I-3: was
+// inline in the test as kStoriedChurnMax). Reasoning lives with the gate
+// in tests/test_flow_audio.cpp (the quarter-cycle weather-monotonicity
+// argument): non-storied discretes are bound at exactly 0 (structural, not
+// here); storied discretes are bound at this many changes per 60 s static-
+// macro window, decided before measuring and confirmed non-vacuous in both
+// directions (max observed: 1).
+constexpr int kDiscreteChurnMax = 2;
 constexpr float kBodyFiltFloor = -0.3f;             // BODY FILT cliff margin
 constexpr float kSpaceSlewS = 2.5f;                 // lazy SIZE/DECAY follower
 constexpr float kHysteresisFrac = 0.5f;             // half a discrete step
