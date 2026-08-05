@@ -520,7 +520,7 @@ Eurorack convention.
 
 A terrain's whole state — the master seed plus, once any partial rerolls
 have happened, one small counter per macro — is a short string like
-`F1-00000020-000000000000`. The code *is* the state: nothing about a
+`F1-DEADBEEF-000100020000`. The code *is* the state: nothing about a
 terrain lives anywhere else, so copying the string out and pasting it back
 in later (or into another instance) reproduces the exact same patch. The
 right-click context menu shows the live code, offers **Copy terrain code**
