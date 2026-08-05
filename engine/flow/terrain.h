@@ -12,6 +12,7 @@
 #include <cstdint>
 #include "flow/flow_ids.h"
 #include "flow/flow_params.h"
+#include "mod/rng.h"
 
 namespace spky { namespace flow {
 
@@ -27,6 +28,10 @@ using spky::ENGINE_WAVE;
 using spky::ENGINE_BODY;
 using spky::ENGINE_BBD;
 using spky::ENGINE_COUNT;
+// Same re-export reasoning for Rng (mod/rng.h): it lives in the enclosing
+// spky namespace, and draw_new()'s signature below needs flow:: callers
+// (and the tests, which open only spky::flow) to be able to name it.
+using spky::Rng;
 
 struct TerrainState {
     uint32_t master = 1;
@@ -57,5 +62,19 @@ struct Terrain {
 };
 
 Terrain generate(const TerrainState& st);
+
+// Distance between two terrains (spec 7.4): mean |Δ normalized base| over
+// every P_COUNT param (normalized by that param's kParams span), plus a
+// flat 0.25f if the archetypes differ. Implemented in terrain.cpp.
+float distance(const Terrain& a, const Terrain& b);
+
+// Draw a new terrain state that reads as a different place from cur (spec
+// 7.4's NEW gesture): a fresh master with every reroll counter zero, at
+// least kDistanceMin away from cur by distance() above. seq is the
+// caller-held sequence Rng -- passing the same seeded Rng twice reproduces
+// the same draw chain, so NEW is deterministic given a fixed seed even
+// though it never repeats cur.master. See terrain.cpp for the retry
+// policy (up to 16 tries, falls back to the farthest candidate seen).
+TerrainState draw_new(const TerrainState& cur, Rng& seq);
 
 } } // namespace spky::flow

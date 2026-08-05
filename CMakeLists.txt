@@ -156,6 +156,7 @@ add_executable(spky_tests
     tests/test_flow_taste.cpp
     engine/flow/terrain.cpp
     tests/test_flow_terrain.cpp
+    tests/test_flow_terrain_code.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
 target_include_directories(spky_tests PRIVATE host)

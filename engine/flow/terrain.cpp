@@ -9,6 +9,7 @@
 #include "flow/terrain.h"
 #include "flow/taste.h"
 #include "flow/flow_rng.h"
+#include <cmath>
 
 namespace spky { namespace flow {
 namespace {
@@ -216,6 +217,55 @@ Terrain generate(const TerrainState& st) {
 
     apply_constraints(t);
     return t;
+}
+
+// Distance (spec 7.4): mean of |Δbase[p]| normalized by that param's
+// kParams span, averaged over every P_COUNT param, plus a flat 0.25f if
+// the archetypes differ. The archetype bonus matters because two terrains
+// can land close in every base value yet still read as structurally
+// different places (different carrier/texture roles, different weights) --
+// the flat add is a cheap proxy for that without re-deriving stage 1.
+float distance(const Terrain& a, const Terrain& b) {
+    float sum = 0.f;
+    for (int p = 0; p < P_COUNT; ++p) {
+        const float span = kParams[p].hi - kParams[p].lo;
+        sum += std::fabs(a.base[p] - b.base[p]) / span;
+    }
+    float d = sum / float(P_COUNT);
+    if (a.arch != b.arch) d += 0.25f;
+    return d;
+}
+
+// NEW draw (spec 7.4): retry fresh masters off the caller-held sequence
+// Rng until a candidate clears kDistanceMin against cur, or give up after
+// 16 tries and take the farthest-seen candidate -- NEW must always
+// terminate even if the taste tables happen to make kDistanceMin hard to
+// clear from some cur. Every candidate is a bare master with ALL reroll
+// counters zero (NEW replaces the whole terrain; partial reroll is a
+// separate gesture that owns the counter vector). generate(cur) is
+// computed once and reused for every candidate's distance check.
+//
+// A drawn master equal to cur.master is skipped (redrawn) but still
+// spends one of the 16 tries, so draw_new can never trivially return cur
+// unchanged. (If, by a chance short of 1 in 2^32 per try, all 16 draws
+// hit cur.master, best stays its default-constructed TerrainState --
+// master 1, every reroll 0 -- which is a real but unreachable-in-practice
+// edge left uncorrected rather than adding retry-count-inflating logic
+// for it.)
+TerrainState draw_new(const TerrainState& cur, Rng& seq) {
+    const Terrain cur_terrain = generate(cur);
+    TerrainState best;
+    float best_dist = -1.f;
+    for (int try_i = 0; try_i < 16; ++try_i) {
+        const uint32_t master = seq.next_u32();
+        if (master == cur.master) continue;        // redraw, still a spent try
+        TerrainState cand;
+        cand.master = master;                       // reroll[] already zero
+        const float d = distance(cur_terrain, generate(cand));
+        if (d >= kDistanceMin) return cand;
+        if (d > best_dist) { best_dist = d; best = cand; }
+    }
+    return best;
 }
 
 } } // namespace spky::flow
