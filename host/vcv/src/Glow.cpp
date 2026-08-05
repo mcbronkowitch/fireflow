@@ -199,6 +199,14 @@ struct Glow : Module {
         spky::flow::TerrainState st;
         if (!spky::flow::decode_code(spky::flow::kHouseCode, st)) st = {};
         flow.wake(st);
+        // wake() itself never touches the lock (it only clears the undo
+        // slot), so without this a locked module would land on the house
+        // terrain still locked at all three call sites: a fresh onAdd (a
+        // no-op there, already unlocked), onReset() (spec 5's own
+        // requirement -- Initialize must return unlocked), and the
+        // pending-restore fallback in onAdd when a saved code is malformed
+        // (a corrupt patch must not strand the player locked on top of it).
+        flow.set_lock(false);
         woken = true;
         knobs.primed = false;
     }
