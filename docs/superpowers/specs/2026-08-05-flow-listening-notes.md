@@ -34,6 +34,21 @@ settled without ears.
    above `0xBEEF`. So "how loud is the calm corner" has no single answer
    until item 2 is settled; the two questions are one question.
 
+   *Answered by ear 2026-08-05 (round 1): inaudible.* See the log. The
+   mechanism is worth writing down, because it constrains the fix: **the
+   flow layer has no level parameter.** There is no `P_LEVEL_*` in
+   `flow_params.h`, and `LANE_LEVEL` is never pushed — the ~30 dB between
+   the calm corner and the mid setting is emergent, mostly from three
+   bp[0] cells: `P_FILT_A/B` at −0.55…−0.4 (near-closed), `P_REVMIX_A` at
+   0.75…0.9 (nearly all wet), and `P_DENSITY_A/B` at 0.02…0.08. So the two
+   available fixes are not equivalent: lifting those cells makes the calm
+   corner louder *and* brighter and drier, while a real level parameter
+   (a new `P_LEVEL_A/B` → `set_target_base(part, LANE_LEVEL, v)`) raises it
+   with its character intact. Round 2 finds the target level first, by ear,
+   with plain gain on the rendered file — no engine change is needed to
+   answer "how loud", and picking the mechanism is cheaper once the number
+   is known.
+
 2. **Terrain loudness spread ≈ 15.9 dB** at identical macro settings, no
    blend involved: min RMS 0.0158 (master `0x707`), max 0.0983 (master
    `0x101`). A NEW press can therefore land the player substantially louder
@@ -123,4 +138,5 @@ above are what a listening session should try to move.
 
 | Date | Seed / terrain code | Verdict | `taste.h` change |
 |---|---|---|---|
-| | | | |
+| 2026-08-05 | `F1-00000020-000000000000` | **Round 1.** Calm corner (all six macros at 0): inaudible over the full 90 s even at high monitor gain — item 1 is answered, and the answer is *silence*, not *quiet*. Mid, fully open and the per-macro ride: levels fine, no complaint. | none yet — see below |
+| 2026-08-05 | `F1-00000020-000000000000` | Follow-up measurement on that verdict: the calm corner is **not empty**. 24 note starts on deck A and 6 on deck B in 90 s, a voice sounding 95.7 % / 90.0 % of all ticks, energy sitting in 160–640 Hz. Typical 10 s windows run −63 to −84 dBFS; the −41.9 dBFS whole-file figure is one isolated event near 34 s carrying the average. So it is a bed at roughly the right pitch and continuity, ~25–30 dB below audibility. | pending: target level to be found by ear (round 2) |
