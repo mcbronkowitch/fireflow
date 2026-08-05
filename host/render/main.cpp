@@ -6,6 +6,7 @@
 #include "render/scenario.h"
 #include "shared/wav_reader.h"
 #include "shared/wav_writer.h"
+#include "flow/flow.h"
 
 using namespace spky;
 
@@ -62,7 +63,25 @@ int main(int argc, char** argv) {
 
     inst.init(static_cast<float>(scen.sample_rate), fx_mem);
     inst.set_tempo_bpm(scen.bpm);
-    for (const auto& e : scen.init_events) apply_event(inst, e);
+
+    // Task 9: the flow layer's control rate rides the same raster the rest
+    // of the engine already ticks on (Center::kCtrlInterval == 96 samples --
+    // see center.h, synth_engine.h, sampler_config.h, fx/reverb.cpp, all the
+    // same constant), not an independently-chosen number. At the scenario's
+    // sample rate that is ctrl_hz = sample_rate / 96 (500 Hz at 48 kHz). A
+    // scenario with no flow_* action anywhere (Scenario::has_flow, computed
+    // by load_scenario) gets no Flow at all, so its render is byte-for-byte
+    // identical to before this task.
+    flow::Flow flow_obj;
+    flow::Flow* flow_ptr = nullptr;
+    const float ctrl_hz =
+        static_cast<float>(scen.sample_rate) / static_cast<float>(Center::kCtrlInterval);
+    if (scen.has_flow) {
+        flow_obj.init(&inst, ctrl_hz);
+        flow_ptr = &flow_obj;
+    }
+
+    for (const auto& e : scen.init_events) apply_event(inst, flow_ptr, e);
 
     WavData in_wav;
     if (!scen.input_wav.empty()) {
@@ -102,9 +121,18 @@ int main(int argc, char** argv) {
     for (size_t i = 0; i < total; ++i) {
         double t = static_cast<double>(i) / scen.sample_rate;
         while (next_event < scen.events.size() && scen.events[next_event].time_s <= t) {
-            apply_event(inst, scen.events[next_event]);
+            apply_event(inst, flow_ptr, scen.events[next_event]);
             ++next_event;
         }
+
+        // One flow tick per control block, before that block is processed
+        // (Instrument::process's own control raster runs on the same 96-
+        // sample period internally regardless of how many frames are passed
+        // per call -- see Instrument::process's _ctrl_ctr -- so ticking flow
+        // here at the block boundary, ahead of this sample's process() call,
+        // lines flow's control-rate push up with the engine's).
+        if (flow_ptr && (i % static_cast<size_t>(Center::kCtrlInterval)) == 0)
+            flow_ptr->tick();
 
         const float in_l = i < in_wav.l.size() ? in_wav.l[i] : 0.f;
         const float in_r = i < in_wav.r.size() ? in_wav.r[i] : 0.f;

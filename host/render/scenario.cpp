@@ -1,10 +1,13 @@
 #include "render/scenario.h"
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <exception>
 #include "nlohmann/json.hpp"
 #include "shared/wav_reader.h"
+#include "flow/flow.h"
+#include "flow/terrain_code.h"
 
 using namespace spky;
 using json = nlohmann::json;
@@ -35,13 +38,21 @@ static Event parse_event(const json& j, bool timed) {
             e.action.c_str(), e.part, clamped);
         e.part = clamped;
     }
-    const int max_slot = std::min(int(LANE_COUNT), int(FXT_COUNT)) - 1;
-    if (e.slot < 0 || e.slot > max_slot) {
-        const int clamped = std::max(0, std::min(e.slot, max_slot));
-        std::fprintf(stderr,
-            "scenario: event '%s' has out-of-range slot %d, clamping to %d\n",
-            e.action.c_str(), e.slot, clamped);
-        e.slot = clamped;
+    // "slot" means a different thing for flow_macro/flow_cv (a 0..MACRO_COUNT-1
+    // macro index, MACRO_COUNT == 6) than it does for every action above
+    // (a LANE_COUNT/FXT_COUNT index, both 5) -- clamping a flow slot against
+    // LANE_COUNT/FXT_COUNT would silently fold macro 5 (SPACE) onto macro 4
+    // (WANDER). Flow actions get their own MACRO_COUNT-ranged clamp in
+    // apply_event(Instrument&, flow::Flow*, const Event&) instead.
+    if (e.action.rfind("flow_", 0) != 0) {
+        const int max_slot = std::min(int(LANE_COUNT), int(FXT_COUNT)) - 1;
+        if (e.slot < 0 || e.slot > max_slot) {
+            const int clamped = std::max(0, std::min(e.slot, max_slot));
+            std::fprintf(stderr,
+                "scenario: event '%s' has out-of-range slot %d, clamping to %d\n",
+                e.action.c_str(), e.slot, clamped);
+            e.slot = clamped;
+        }
     }
     return e;
 }
@@ -65,6 +76,20 @@ bool spky::load_scenario(const std::string& path, Scenario& out, std::string& er
 
     std::stable_sort(out.events.begin(), out.events.end(),
                      [](const Event& a, const Event& b) { return a.time_s < b.time_s; });
+
+    // Task 9: has_flow / flow_code. init before timeline, in that order, so
+    // "the first flow_wake found" reads as the scenario author would expect.
+    const auto scan = [&](const std::vector<Event>& evs) {
+        for (const Event& e : evs) {
+            if (e.action.rfind("flow_", 0) != 0) continue;
+            out.has_flow = true;
+            if (e.action == "flow_wake" && out.flow_code.empty())
+                out.flow_code = e.svalue;
+        }
+    };
+    scan(out.init_events);
+    scan(out.events);
+
     return true;
 }
 
@@ -192,4 +217,64 @@ void spky::apply_event(Instrument& inst, const Event& e) {
             std::fprintf(stderr, "load_wav: %s\n", err.c_str());
     }
     // unknown actions are ignored on purpose (forward-compatible scenarios)
+}
+
+void spky::apply_event(Instrument& inst, flow::Flow* fl, const Event& e) {
+    const std::string& a = e.action;
+    if (a.rfind("flow_", 0) != 0) {
+        apply_event(inst, e);   // not a flow action: fall through unchanged
+        return;
+    }
+    if (!fl) {
+        // A scenario with no flow_* action never gets a Flow instance
+        // (Scenario::has_flow), so this only fires if a flow_* action is
+        // dispatched some other way. Warn, don't crash, don't silently
+        // pretend it worked.
+        std::fprintf(stderr,
+            "scenario: '%s' needs the flow layer, but none is active; ignoring\n",
+            a.c_str());
+        return;
+    }
+    if (a == "flow_wake") {
+        flow::TerrainState st;
+        // decode_code is strict by design (Task 5): a malformed or missing
+        // code is a hard error here, never a silent fallback seed -- a
+        // silently different terrain would make an audition file lie about
+        // what it demonstrates (task-9 resolution #5).
+        if (!flow::decode_code(e.svalue.c_str(), st)) {
+            std::fprintf(stderr,
+                "scenario: flow_wake has a malformed terrain code '%s'\n",
+                e.svalue.c_str());
+            return;
+        }
+        fl->wake(st);
+    } else if (a == "flow_macro" || a == "flow_cv") {
+        // Flow::set_macro/set_cv index a fixed MACRO_COUNT-sized array with
+        // no bounds check of their own (same "Fix 6" reasoning as the
+        // part/slot clamp above, just a different-sized array: MACRO_COUNT
+        // == 6, not LANE_COUNT/FXT_COUNT's 5).
+        if (e.slot < 0 || e.slot >= flow::MACRO_COUNT) {
+            const int clamped =
+                std::max(0, std::min(e.slot, int(flow::MACRO_COUNT) - 1));
+            std::fprintf(stderr,
+                "scenario: event '%s' has out-of-range macro slot %d, clamping to %d\n",
+                a.c_str(), e.slot, clamped);
+            if (a == "flow_macro") fl->set_macro(clamped, e.value);
+            else                   fl->set_cv(clamped, e.value);
+        } else if (a == "flow_macro") {
+            fl->set_macro(e.slot, e.value);
+        } else {
+            fl->set_cv(e.slot, e.value);
+        }
+    } else if (a == "flow_new") {
+        fl->new_full();
+    } else if (a == "flow_new_partial") {
+        fl->new_partial(static_cast<uint8_t>(e.ivalue));
+    } else if (a == "flow_undo") {
+        fl->undo();
+    } else if (a == "flow_lock") {
+        fl->set_lock(e.flag);
+    }
+    // unknown flow_* actions are ignored on purpose too (forward-compat,
+    // same policy as the legacy dispatch above)
 }

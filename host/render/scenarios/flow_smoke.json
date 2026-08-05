@@ -1,0 +1,25 @@
+{
+  "sample_rate": 48000,
+  "bpm": 120,
+  "duration_s": 30,
+  "init": [
+    {"_comment":"Task 9 smoke test: wake a fixed terrain, park all six macros at a moderate baseline, then ride BRIGHT and reroll once. First evidence the flow layer makes sound at all -- see task-9-report.md for the render's measurements."},
+    {"action":"flow_wake","value":"F1-0000C0DE-000000000000"},
+    {"action":"flow_macro","slot":0,"value":0.3},
+    {"action":"flow_macro","slot":1,"value":0.5},
+    {"action":"flow_macro","slot":2,"value":0.4},
+    {"action":"flow_macro","slot":3,"value":0.2},
+    {"action":"flow_macro","slot":4,"value":0.3},
+    {"action":"flow_macro","slot":5,"value":0.5}
+  ],
+  "events": [
+    {"_comment":"BRIGHT ride (slot 2), 2s-8s."},
+    {"t":2, "action":"flow_macro","slot":2,"value":0.6},
+    {"t":5, "action":"flow_macro","slot":2,"value":0.8},
+    {"t":8, "action":"flow_macro","slot":2,"value":1.0},
+    {"_comment":"12s: NEW -- a full reroll, blended over kBlendS = 6s."},
+    {"t":12,"action":"flow_new"},
+    {"t":20,"action":"flow_macro","slot":2,"value":0.3},
+    {"t":25,"action":"flow_macro","slot":1,"value":0.7}
+  ]
+}

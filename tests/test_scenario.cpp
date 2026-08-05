@@ -4,7 +4,10 @@
 #include <fstream>
 #include <vector>
 #include "render/scenario.h"
+#include "flow/flow.h"
+#include "flow/terrain_code.h"
 using namespace spky;
+using namespace spky::flow;
 
 static std::string repo_file(const char* relative) {
     std::string file = __FILE__;
@@ -696,4 +699,103 @@ TEST_CASE("scenario: set_choke dispatches the priority knob") {
         if (vl != ul || vr != ur) diverged_from_untouched = true;
     }
     CHECK(diverged_from_untouched);
+}
+
+// Task 9 (2026-08-05 flow-engine-layer): the render host learns to drive the
+// Flow layer from a scenario. "value":"F1-..." is a JSON STRING, so
+// parse_event's existing string/float sniff (scenario.cpp parse_event) already
+// routes it into Event::svalue -- the same convention set_engine's "value":
+// "body" already uses. No slip to work around; see the task-9 report for the
+// reasoning.
+//
+// eff_macro(M_MOTION) is used as the observable because MOTION is never
+// weathered (flow.cpp Flow::weather_of skips M_MOTION on purpose), so
+// eff_macro(M_MOTION) after a tick is EXACTLY the knob value with no
+// terrain-dependent wobble to account for -- a strong, not-vacuously-passable
+// assertion.
+TEST_CASE("scenario: flow actions parse and drive the flow layer") {
+    const char* path = "test_scenario_flow.json";
+    {
+        std::ofstream o(path);
+        o << R"({
+          "duration_s": 0.1,
+          "init": [
+            {"action":"flow_wake","value":"F1-0000002A-010203040506"},
+            {"action":"flow_macro","slot":0,"value":0.75}
+          ]
+        })";
+    }
+    Scenario s;
+    std::string err;
+    REQUIRE_MESSAGE(load_scenario(path, s, err), err);
+    CHECK(s.has_flow);
+    REQUIRE(s.init_events.size() == 2);
+    CHECK(s.init_events[0].action == "flow_wake");
+    CHECK(s.init_events[0].svalue == "F1-0000002A-010203040506");
+    CHECK(s.init_events[1].action == "flow_macro");
+    CHECK(s.init_events[1].slot == 0);
+    CHECK(s.init_events[1].value == doctest::Approx(0.75f));
+
+    TerrainState expected;
+    REQUIRE(decode_code(s.init_events[0].svalue.c_str(), expected));
+
+    Instrument inst;
+    inst.init(48000.f);
+    Flow fl;
+    fl.init(&inst, 500.f);
+
+    for (const auto& e : s.init_events) apply_event(inst, &fl, e);
+    fl.tick();   // the render loop's next control-block tick; eff_macro only
+                 // updates on wake()/tick(), not on set_macro() itself.
+
+    CHECK(fl.state().master == expected.master);
+    for (int m = 0; m < MACRO_COUNT; ++m)
+        CHECK(fl.state().reroll[m] == expected.reroll[m]);
+    CHECK(fl.eff_macro(M_MOTION) == doctest::Approx(0.75f));
+
+    std::remove(path);
+}
+
+// A malformed/missing code must not silently fall back to a default terrain
+// (task-9 resolution #5) -- decode_code() itself is already strict (Task 5),
+// this proves the scenario dispatch path honours that refusal instead of
+// papering over it.
+TEST_CASE("scenario: flow_wake with a malformed code refuses to wake") {
+    Instrument inst;
+    inst.init(48000.f);
+    Flow fl;
+    fl.init(&inst, 500.f);
+
+    Event bad;
+    bad.action = "flow_wake";
+    bad.svalue = "not-a-terrain-code";
+    apply_event(inst, &fl, bad);
+
+    // wake() was never called: state() sits at the boot-default TerrainState.
+    TerrainState boot;
+    CHECK(fl.state().master == boot.master);
+    for (int m = 0; m < MACRO_COUNT; ++m)
+        CHECK(fl.state().reroll[m] == boot.reroll[m]);
+}
+
+// Flow actions with a null Flow* must no-op rather than crash (task-9
+// brief), and must not disturb the Instrument either. Also proves the new
+// three-argument overload still dispatches ordinary (non-"flow_") actions
+// through to the Instrument, i.e. it is a superset of the old overload, not
+// a parallel path that silently drops legacy actions.
+TEST_CASE("scenario: flow actions no-op with a null Flow*, legacy actions still dispatch") {
+    Instrument inst;
+    inst.init(48000.f);
+
+    Event fm;
+    fm.action = "flow_macro";
+    fm.slot = 0;
+    fm.value = 0.5f;
+    apply_event(inst, nullptr, fm);   // must not crash
+
+    Event couple;
+    couple.action = "set_couple";
+    couple.value = 0.7f;
+    apply_event(inst, nullptr, couple);
+    CHECK(inst.couple() == doctest::Approx(0.7f));
 }
