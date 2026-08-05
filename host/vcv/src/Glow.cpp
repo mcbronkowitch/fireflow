@@ -22,19 +22,29 @@
 #include "flow/gesture.h"
 #include "flow/taste.h"
 #include "flow/terrain_code.h"
+#include "center/center.h"
 
 using namespace spkyvcv::glow;
 
 // The module indexes params[MOTION + m] with m a spky::flow::Macro, so the
 // panel's first six params must BE the macro enum. res/test_flow_panel.py
-// guards the panel side; this guards the C++ side.
-static_assert(MOTION == spky::flow::M_MOTION, "panel macro order drifted");
-static_assert(DENSITY == spky::flow::M_DENSITY, "panel macro order drifted");
-static_assert(BRIGHT == spky::flow::M_BRIGHT, "panel macro order drifted");
-static_assert(DIRT == spky::flow::M_DIRT, "panel macro order drifted");
-static_assert(WANDER == spky::flow::M_WANDER, "panel macro order drifted");
-static_assert(SPACE == spky::flow::M_SPACE, "panel macro order drifted");
-static_assert(CV_DEN == CV_MOT + 1 && CV_DRT == CV_MOT + 3,
+// guards the panel side; this guards the C++ side. static_cast<int> on both
+// sides silences -Wenum-compare (ParamId and spky::flow::Macro are two
+// distinct enum types) without weakening the check.
+static_assert(static_cast<int>(MOTION) == static_cast<int>(spky::flow::M_MOTION),
+              "panel macro order drifted");
+static_assert(static_cast<int>(DENSITY) == static_cast<int>(spky::flow::M_DENSITY),
+              "panel macro order drifted");
+static_assert(static_cast<int>(BRIGHT) == static_cast<int>(spky::flow::M_BRIGHT),
+              "panel macro order drifted");
+static_assert(static_cast<int>(DIRT) == static_cast<int>(spky::flow::M_DIRT),
+              "panel macro order drifted");
+static_assert(static_cast<int>(WANDER) == static_cast<int>(spky::flow::M_WANDER),
+              "panel macro order drifted");
+static_assert(static_cast<int>(SPACE) == static_cast<int>(spky::flow::M_SPACE),
+              "panel macro order drifted");
+static_assert(CV_DEN == CV_MOT + 1 && CV_BRT == CV_MOT + 2 &&
+              CV_DRT == CV_MOT + 3 && CV_SPC == CV_MOT + 4,
               "CV jacks must stay contiguous -- controlTick indexes CV_MOT + i");
 
 struct Glow : Module {
@@ -65,7 +75,16 @@ struct Glow : Module {
     spkyvcv::RefuseFlash refuse;
 
     float curSr = 0.f;
-    static constexpr int kCtrlDiv = 16;          // flow ticks at sr / 16
+    // The flow layer's control rate rides the same raster the rest of the
+    // engine already ticks on -- spky::Center::kCtrlInterval, not an
+    // independently-chosen number (see host/render/main.cpp's Task 9
+    // comment, which made this same choice for the same reason). Tying it
+    // to the constant rather than a bare literal means the two hosts can
+    // never drift apart again. A finer rate would just be discarded: Center
+    // only reads its setters at the 96-sample raster, so any push faster
+    // than that is wasted work the audio thread does for nothing -- Center
+    // overwrites it before it is ever read.
+    static constexpr int kCtrlDiv = spky::Center::kCtrlInterval;
     dsp::ClockDivider ctrlDiv;
     dsp::SchmittTrigger clockTrig;
     float clkSamples = 0.f;                      // samples since the last edge
@@ -84,9 +103,14 @@ struct Glow : Module {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
         for (const auto& c : kParamCtls) {
             if (c.kind == WK_MACRO)
+                // The six macro knobs stay on c.label, matching Fireflow.cpp
+                // -- deliberate, not an oversight.
                 configParam(c.id, 0.f, 1.f, 0.5f, c.label);
             else
-                configButton(c.id, c.label);
+                // The NEW button's whole interaction model lives in one
+                // control, so its Rack tooltip should be the panel's full
+                // gesture-table string (c.tip), not just "NEW" (c.label).
+                configButton(c.id, c.tip);
         }
         for (const auto& c : kInputCtls)  configInput(c.id, c.tip);
         for (const auto& c : kOutputCtls) configOutput(c.id, c.tip);
@@ -171,8 +195,18 @@ struct Glow : Module {
         if (!factoryNativeTried) {
             factoryNativeTried = true;
             std::string err;
-            spky::read_wav(asset::plugin(pluginInstance, "res/factory.wav"),
-                           factoryNative, err);
+            if (!spky::read_wav(asset::plugin(pluginInstance, "res/factory.wav"),
+                                factoryNative, err)) {
+                WARN("Glow: factory sample unavailable: %s", err.c_str());
+                // wav_reader.h resizes both channel vectors to the full frame
+                // count BEFORE the fread that can fail, so a truncated file
+                // leaves them non-empty and full of zeros -- the
+                // !factoryNative.l.empty() guard below would pass and load
+                // silence into both decks with no diagnostic. Clear them so
+                // that guard means what it says.
+                factoryNative.l.clear();
+                factoryNative.r.clear();
+            }
         }
         reinit(curSr > 0.f ? curSr : 48000.f);
         if (havePending) {
