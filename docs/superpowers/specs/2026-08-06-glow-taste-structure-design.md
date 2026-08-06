@@ -105,12 +105,32 @@ v = clamp_to(kParams[p], prv[p] + (cur[p] - prv[p]) * ph + _resid[p] * (1.f - ph
 
 — clamped to the **kParams** range, not the veto band, and the comment directly
 above states that the sum can exceed a parameter's range even when both
-terrains' candidates sit inside it. `prv` re-evaluates live while `_resid` is
-frozen at press time, so a macro moved *during* a blend can push REVMIX under
-0.08 with both terrains legal. The clamp is applied after this line, at the end
-of `recompute_and_push`, before the change guard and before `_pushed` is
-written — `param_now()` is a public observer and must never show a vetoed
+terrains' candidates sit inside it. The clamp is applied after this line, at
+the end of `recompute_and_push`, before the change guard and before `_pushed`
+is written — `param_now()` is a public observer and must never show a vetoed
 value.
+
+> **Corrected 2026-08-06, during task 2 implementation.** This section
+> originally said a macro moved *during a blend* can push REVMIX under 0.08
+> with both terrains legal, full stop. That is false as a general claim, and
+> the task 2 build proved it two ways before writing the clamp's test: on a
+> fresh press from a settled terrain, `_resid` is computed as
+> `_cont_now[p] - _cand_cur[p]`, and both are the *same value from the same
+> tick* — so `_resid` is exactly zero, and the combine line above reduces to
+> `prv[p] + (cur[p] - prv[p]) * ph`, a plain convex combination of `prv[p]`
+> and `cur[p]`. Both are always inside the veto band (that is what test 1
+> enforces at build time), and a convex combination of two in-band points
+> cannot leave the band — so a *single* press, however fast or extreme the
+> macro sweep, cannot breach a veto. This was checked empirically too: 300
+> masters, a full 6 s sweep of every macro at full travel, zero breaches.
+> `_resid` only goes nonzero when NEW is pressed **again mid-flight** — "a
+> re-press lands mid-flight" is `begin_blend`'s own description of the case.
+> With a nonzero residual, a macro moved during that second ramp *can* push
+> the sum outside the veto band even though both terrains are legal, because
+> the residual term is clamped to `kParams` only. That re-press is the one
+> and only mechanism the runtime clamp exists for; a plan or reviewer that
+> reaches for a single-press repro to justify simplifying the clamp away is
+> working from the error this note replaces.
 
 **Four curves are redrawn rather than clipped**, so no macro loses live travel:
 

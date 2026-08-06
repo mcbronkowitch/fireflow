@@ -489,12 +489,19 @@ void Flow::recompute_and_push(bool force) {
 
         // The veto band (taste.h kVetos, spec §3), enforced HERE and only
         // here at runtime. The build-time test already proves no table span
-        // leaves the band, so a settled terrain cannot breach one. What can:
-        // the blend line above clamps to kParams, not to the veto band, and
-        // _resid is frozen at press time while prv[] keeps re-evaluating --
-        // so a macro moved DURING a ramp can push the sum outside even though
-        // both terrains are legal. This runs before the change guard because
-        // param_now() is a public observer and must never show a vetoed value.
+        // leaves the band, so a settled terrain cannot breach one, and a
+        // SINGLE press cannot either: _resid is frozen at press time, and on
+        // a fresh press from a settled terrain it is exactly zero (cont_now
+        // and cand_cur are the same value, same tick), which makes the blend
+        // line above a plain convex combination of prv[p] and cur[p] -- both
+        // always in-band, so their combination is too. What breaches: _resid
+        // goes nonzero only when NEW is pressed again mid-flight (a re-press
+        // lands mid-flight, see begin_blend()), and with a nonzero residual a
+        // macro moved DURING that second ramp can push the sum outside even
+        // though both terrains are legal, because the blend line clamps to
+        // kParams, not to the veto band. This runs before the change guard
+        // because param_now() is a public observer and must never show a
+        // vetoed value.
         for (int vi = 0; vi < kVetoCount; ++vi) {
             if (kVetos[vi].param != p) continue;
             if (v < kVetos[vi].lo) v = kVetos[vi].lo;

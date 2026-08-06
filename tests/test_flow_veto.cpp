@@ -2,9 +2,16 @@
 #include "doctest/doctest.h"
 #include "flow/taste.h"
 #include "flow/flow_params.h"
+#include "flow/flow.h"
+#include "instrument.h"
+#include <string>
 using namespace spky::flow;
 
 namespace {
+// CAPTURE streams a bare const char* as a pointer, not the text -- wrap it so
+// a failure's CAPTURE dump names the param instead of printing an address.
+std::string pname(int p) { return kParams[p].name; }
+
 const Veto* veto_for(int param) {
     for (int i = 0; i < kVetoCount; ++i)
         if (kVetos[i].param == param) return &kVetos[i];
@@ -19,7 +26,7 @@ TEST_CASE("flow veto: no table span may leave a veto band") {
         const Veto* v = veto_for(kBaseRules[i].param);
         if (!v) continue;
         for (int a = 0; a < ARCH_COUNT; ++a) {
-            CAPTURE(kParams[kBaseRules[i].param].name); CAPTURE(a);
+            CAPTURE(pname(kBaseRules[i].param)); CAPTURE(a);
             CHECK(kBaseRules[i].per_arch[a].lo >= v->lo);
             CHECK(kBaseRules[i].per_arch[a].hi <= v->hi);
         }
@@ -30,7 +37,7 @@ TEST_CASE("flow veto: no table span may leave a veto band") {
             const Veto* v = veto_for(c.param);
             if (!v) continue;
             for (int b = 0; b < 5; ++b) {
-                CAPTURE(kStories[s].name); CAPTURE(kParams[c.param].name);
+                CAPTURE(kStories[s].name); CAPTURE(pname(c.param));
                 CAPTURE(b);
                 CHECK(c.bp[b].lo >= v->lo);
                 CHECK(c.bp[b].hi <= v->hi);
@@ -40,22 +47,28 @@ TEST_CASE("flow veto: no table span may leave a veto band") {
 
 TEST_CASE("flow veto: the table is well formed and inside kParams") {
     for (int i = 0; i < kVetoCount; ++i) {
-        CAPTURE(kParams[kVetos[i].param].name);
+        CAPTURE(pname(kVetos[i].param));
         CHECK(kVetos[i].lo < kVetos[i].hi);
         CHECK(kVetos[i].lo >= kParams[kVetos[i].param].lo);
         CHECK(kVetos[i].hi <= kParams[kVetos[i].param].hi);
+        // The runtime clamp (flow.cpp, recompute_and_push) runs AFTER
+        // quantize_hyst -- it clamps the already-quantized value, not the
+        // pre-quantize continuous one. A veto on a discrete param would
+        // therefore push the pushed value off that param's step grid
+        // whenever it clamped, which is a different (and worse) bug than a
+        // veto miss. All six current entries are continuous; pin it so a
+        // future discrete veto is caught here instead of surfacing as an
+        // off-grid discrete value at runtime.
+        CHECK(kParams[kVetos[i].param].steps == 0);
     }
 }
 
-#include "flow/flow.h"
-#include "instrument.h"
-
 TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto") {
     // The mechanism this guards, and the ONLY one the clamp is for:
-    // flow.cpp's blend line clamps to kParams, not to the veto band, and its
-    // own comment says the sum can exceed a param's range even when both
-    // terrains are inside it. _resid is frozen at press time while prv[]
-    // re-evaluates live, so moving a knob DURING the ramp is what breaks it.
+    // flow.cpp's blend line clamps to kParams, not to the veto band. _resid
+    // is frozen at press time and is nonzero only when NEW is pressed again
+    // mid-flight; with a nonzero residual a macro moved during that second
+    // ramp can push the sum outside even though both terrains are legal.
     //
     // A single press with a smooth macro sweep provably CANNOT reach this:
     // _resid is exactly zero on a fresh press from a settled terrain (cont_now
@@ -76,6 +89,23 @@ TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto") {
     inst.init(48000.f);
     Flow f;
     f.init(&inst, 100.f);
+
+    // The clamp saturates at the band edge, so an exact float equality on
+    // kVetos[v].lo/.hi is near-certain evidence the clamp actually fired
+    // rather than the sweep merely staying inside the band by luck -- EXCEPT
+    // for P_DRIVE, whose DIRT "heat" story holds it at a literal, degenerate
+    // {0.f, 0.f} span for bp0-bp2 (taste.h): most of its curve is
+    // deterministically exactly 0.0, which is also kVetos' P_DRIVE lo, with
+    // no clamp involved. Verified by sabotage: disabling the re-press below
+    // still gives edge hits on P_DRIVE alone (got == 0.0 from the flat
+    // span), while every other veto param's bp draws are continuous within
+    // their span and essentially never land exactly on a bound by chance. So
+    // P_DRIVE is excluded here and the other five are the signal. If a
+    // future change (begin_blend, the stagger, kBlendS, the tick rate, the
+    // "% 30" re-press cadence) stops the residual from re-forming mid-ramp,
+    // this count drops to 0 and the CHECK below turns the test red instead
+    // of it staying green while exercising nothing.
+    long edge_hits = 0;
 
     for (uint32_t master = 1; master <= 60; ++master) {
         TerrainState st; st.master = master;
@@ -98,10 +128,15 @@ TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto") {
             for (int v = 0; v < kVetoCount; ++v) {
                 const float got = f.param_now(kVetos[v].param);
                 CAPTURE(master); CAPTURE(i);
-                CAPTURE(kParams[kVetos[v].param].name); CAPTURE(got);
+                CAPTURE(pname(kVetos[v].param)); CAPTURE(got);
                 CHECK(got >= kVetos[v].lo - 1e-5f);
                 CHECK(got <= kVetos[v].hi + 1e-5f);
+                if (kVetos[v].param != P_DRIVE &&
+                    (got == kVetos[v].lo || got == kVetos[v].hi))
+                    ++edge_hits;
             }
         }
     }
+
+    CHECK(edge_hits > 0);
 }
