@@ -2228,6 +2228,15 @@ panel draft above; see `host/vcv/README.md`'s "FireFlow Glow" section for the
 macro table, the NEW gesture family and its LED signatures, the CV/clock
 jacks, and terrain codes.
 
+**Verified in Rack 2026-08-06.** The branch merged with its three hand-check
+lists still unrun — no agent has a Rack — and Bastian ran them on the built
+plugin before the merge: the module wakes on the house seed and sounds, the
+six macros and five CVs move it, the clock overrides tempo; the whole NEW
+gesture family reads correctly, including the refusal flash the plan's own
+code could not light; and a terrain survives copy, paste, save/reload and
+Ctrl+I. All three confirmed. The lists themselves are in
+`.superpowers/sdd/2026-08-05-flow-glow-vcv-module/task-{3,4,5}-report.md`.
+
 With Glow built, the open items in
 `docs/superpowers/specs/2026-08-05-flow-listening-notes.md` are reachable
 for the first time: that file's own listening rounds were called off because
