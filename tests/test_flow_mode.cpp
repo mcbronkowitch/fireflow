@@ -32,7 +32,7 @@ TEST_CASE("flow mode: steps never run without a grid") {
     // The failure this guards: STEP mode on with SYNC off is a step sequencer
     // at a free-running rate, which is what Glow shipped with. No reachable
     // tick may show that combination.
-    bool saw_step = false;
+    bool saw_step = false, saw_flow = false;
     for (uint32_t master = 1; master <= 200; ++master) {
         spky::Instrument inst;
         inst.init(48000.f);
@@ -45,11 +45,82 @@ TEST_CASE("flow mode: steps never run without a grid") {
         CHECK(inst.step_on(spky::PART_A) == inst.synced(spky::PART_A));
         CHECK(inst.step_on(spky::PART_B) == inst.synced(spky::PART_B));
         if (inst.step_on(spky::PART_A) || inst.step_on(spky::PART_B)) saw_step = true;
+        if (!inst.step_on(spky::PART_A) || !inst.step_on(spky::PART_B)) saw_flow = true;
     }
     // A guard that only ever sees false == false is vacuous -- it would also
     // pass an implementation that never turns STEP on at all. Prove some
     // master in this range actually reaches STEP mode.
+    //
+    // saw_flow is the twin of that, and specifically it is the SHIPPED BUG'S
+    // twin: an implementation that drew STEP for every terrain would satisfy
+    // saw_step AND the equality above (it would merely be synced), so without
+    // this the case would pass the very thing P_MODE exists to end.
     CHECK(saw_step);
+    CHECK(saw_flow);
+
+    // The equality above only samples SETTLED state, after wake(). The claim
+    // is "no reachable tick", and a blend is 600 more reachable ticks in which
+    // the clocking flip and the step push could in principle be issued apart.
+    // Walk a full kBlendS ramp across a mode-CHANGING press and assert on
+    // every one of them.
+    {
+        TerrainState flow_t, step_t;
+        bool have_flow = false, have_step = false;
+        for (uint32_t master = 1; master < 500; ++master) {
+            TerrainState s; s.master = master;
+            if (generate(s).base[P_MODE] > 0.5f) {
+                if (!have_step) { step_t = s; have_step = true; }
+            } else if (!have_flow) { flow_t = s; have_flow = true; }
+            if (have_flow && have_step) break;
+        }
+        REQUIRE(have_flow);
+        REQUIRE(have_step);
+
+        spky::Instrument inst;
+        inst.init(48000.f);
+        Flow f;
+        f.init(&inst, 100.f);
+        f.wake(flow_t);
+        f.restore_undo(step_t, true);
+        REQUIRE(f.undo());                     // blends flow_t -> step_t
+        const int ticks = int(kBlendS * 100.f) + 20;   // a full ramp, and past it
+        for (int i = 0; i < ticks; ++i) {
+            f.tick();
+            CAPTURE(i);
+            CHECK(inst.step_on(spky::PART_A) == inst.synced(spky::PART_A));
+            CHECK(inst.step_on(spky::PART_B) == inst.synced(spky::PART_B));
+        }
+        CHECK(inst.step_on(spky::PART_A));     // the press really moved the mode
+    }
+}
+
+TEST_CASE("flow mode: the drawn step counts reach the instrument, per deck") {
+    // push_mode_and_steps is now the ONLY path by which P_STEPS_A/B reach the
+    // engine -- apply_param drops them on the floor (flow_params.h). Nothing
+    // else in the suite observes a step count on the INSTRUMENT side of that
+    // boundary: test_flow_new and test_flow_audio read param_now(P_STEPS_*),
+    // which is the FLOW side. So swapping sa and sb in push_mode_and_steps, or
+    // pushing a constant, would leave the whole suite green.
+    bool saw_differing = false;
+    for (uint32_t master = 1; master <= 200; ++master) {
+        spky::Instrument inst;
+        inst.init(48000.f);
+        Flow f;
+        f.init(&inst, 100.f);
+        TerrainState st; st.master = master;
+        f.wake(st);
+        for (int i = 0; i < 50; ++i) f.tick();
+        const int want_a = int(f.param_now(P_STEPS_A) + 0.5f);
+        const int want_b = int(f.param_now(P_STEPS_B) + 0.5f);
+        CAPTURE(master); CAPTURE(want_a); CAPTURE(want_b);
+        CHECK(inst.deck_steps(spky::PART_A) == want_a);
+        CHECK(inst.deck_steps(spky::PART_B) == want_b);
+        if (want_a != want_b) saw_differing = true;
+    }
+    // Load-bearing: if every terrain in the range drew the SAME count on both
+    // decks, the two CHECKs above would hold just as well against a push that
+    // had sa and sb the wrong way round.
+    CHECK(saw_differing);
 }
 
 TEST_CASE("flow mode: the draw follows kModeW per archetype") {
@@ -62,13 +133,20 @@ TEST_CASE("flow mode: the draw follows kModeW per archetype") {
         n[t.arch]++;
         if (t.base[P_MODE] > 0.5f) step[t.arch]++;
     }
+    int judged = 0;
     for (int a = 0; a < ARCH_COUNT; ++a) {
         if (n[a] < 100) continue;              // too few to judge
+        ++judged;
         const float got = float(step[a]) / float(n[a]);
         CAPTURE(a); CAPTURE(got); CAPTURE(kModeW[a]);
         CHECK(got > kModeW[a] - 0.08f);
         CHECK(got < kModeW[a] + 0.08f);
     }
+    // Without this the skip above is silent: an archetype that stopped being
+    // drawn at all (a kArchWeight edit, a stage-0 regression) would take its
+    // whole tolerance check out of the suite and the case would stay green.
+    // Every archetype must have been sampled often enough to judge.
+    CHECK(judged == ARCH_COUNT);
 }
 
 TEST_CASE("flow mode: P_MODE is scheduled with the texture deck, not the carrier") {

@@ -65,10 +65,11 @@ public:
     int song(int p) const {
         return static_cast<int>(_parts[p].mod().song());
     }
-    // Observers for the mode invariant (spec 2026-08-06 §5): steps and grid
-    // are one decision, and a test must be able to see both halves of it.
-    bool step_on(int p) const { return _parts[p].mod().step_on(); }
+    // Observers for the mode invariant (spec 2026-08-06 §5): steps, count and
+    // grid are one decision, and a test must be able to see all three parts.
+    bool step_on(int p) const { return _parts[p].mod().step_mode(); }
     bool synced(int p) const  { return _parts[p].mod().synced(); }
+    int  deck_steps(int p) const { return _parts[p].mod().deck_steps(); }
     void set_principle(int p, int pr) {
         set_form(p, pr);
     }
