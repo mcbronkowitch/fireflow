@@ -2,6 +2,7 @@
 #include "doctest/doctest.h"
 #include "flow/taste.h"
 #include "flow/flow_params.h"
+#include <cstring>
 using namespace spky::flow;
 
 TEST_CASE("flow taste: static data is internally consistent") {
@@ -68,4 +69,72 @@ TEST_CASE("flow taste: static data is internally consistent") {
         CAPTURE(kParams[p].name);
         CHECK((storied[p] || based[p]));
     }
+}
+
+TEST_CASE("flow taste: drones get round LFOs only") {
+    // waveforms.h shape_value morphs sine(0) -> triangle(.25) -> ramp(.5) ->
+    // pulse(.75) -> S&H(1). From the ramp up the lane emits a discontinuity
+    // per cycle, and that is what makes a drone read as rhythmic. So a drone
+    // may only draw the sine..triangle quarter. This is mechanical, not taste.
+    const int shape[2] = { P_SHAPE_A, P_SHAPE_B };
+    int checked = 0;
+    for (int i = 0; i < kBaseRuleCount; ++i)
+        for (int k = 0; k < 2; ++k)
+            if (kBaseRules[i].param == shape[k]) {
+                CAPTURE(kParams[shape[k]].name);
+                CHECK(kBaseRules[i].per_arch[ARCH_DRONE].hi <= 0.25f);
+                // The other archetypes stay wildcards: nothing collected says
+                // an arp may not have an angular LFO.
+                CHECK(kBaseRules[i].per_arch[ARCH_ARP].hi > 0.25f);
+                ++checked;
+            }
+    // A silently-empty scan reads green while asserting nothing -- this
+    // branch was burned by exactly that shape twice already (see
+    // "the crooked-rung bound was measuring a mixture" and the adventure
+    // filter's own found-counter in test_flow_veto.cpp). Both P_SHAPE_A and
+    // P_SHAPE_B must have a kBaseRules row for the CHECKs above to mean
+    // anything.
+    REQUIRE(checked == 2);
+}
+
+TEST_CASE("flow taste: story windows default to the whole curve") {
+    for (int s = 0; s < kStoryCount; ++s)
+        for (int a = 0; a < ARCH_COUNT; ++a) {
+            CAPTURE(kStories[s].name); CAPTURE(a);
+            CHECK(kStories[s].arch_window[a].lo >= 0.f);
+            CHECK(kStories[s].arch_window[a].hi <= 1.f);
+            CHECK(kStories[s].arch_window[a].lo < kStories[s].arch_window[a].hi);
+            // Only DENSITY "rate" narrows, and only for drone. Tied to the
+            // exact story by name (not just macro == M_DENSITY), so a future
+            // accidental narrowing of "thick" -- DENSITY's other variant,
+            // which is supposed to stay default -- cannot slip through this
+            // exemption unnoticed.
+            const bool narrows = std::strcmp(kStories[s].name, "rate") == 0
+                              && a == ARCH_DRONE;
+            if (!narrows) {
+                CHECK(kStories[s].arch_window[a].lo == 0.f);
+                CHECK(kStories[s].arch_window[a].hi == 1.f);
+            }
+        }
+}
+
+TEST_CASE("flow taste: a drone's density knob stays in the sparse half") {
+    // DEVIATION FROM THE BRIEF: the brief's version of this loop checked
+    // EVERY M_DENSITY story unconditionally, but the task narrows only the
+    // "rate" story (Context: "Only one window narrows in this task: DENSITY
+    // 'rate' for drones... Everything else stays on the default {0,1}"),
+    // and "thick" stays default per that same rule -- so an unscoped loop
+    // would assert 1.0 <= 0.5 against "thick" and fail by construction, not
+    // by a real defect. Scoped to "rate" by name to match the stated scope.
+    int checked = 0;
+    for (int s = 0; s < kStoryCount; ++s) {
+        if (kStories[s].macro != M_DENSITY) continue;
+        if (std::strcmp(kStories[s].name, "rate") != 0) continue;
+        CHECK(kStories[s].arch_window[ARCH_DRONE].hi <= 0.5f);
+        ++checked;
+    }
+    // The name+macro filter above is exactly the shape of scan that has gone
+    // silently empty on this branch before -- pin that "rate" was actually
+    // found and checked, not that the filter matched nothing.
+    REQUIRE(checked == 1);
 }

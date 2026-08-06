@@ -292,9 +292,14 @@ void Flow::eval_terrain(const Terrain& t, const float* eff, float* out) const {
     for (int p = 0; p < P_COUNT; ++p) out[p] = t.base[p];
     for (int m = 0; m < MACRO_COUNT; ++m) {
         const MacroMap& mm = t.map[m];
+        // The archetype window (spec §4). eff already carries knob + CV +
+        // weather and is clamped 0..1, so CV and weather ride inside the
+        // window exactly like the knob rather than bypassing it.
+        const Span& w = t.window[m];
+        const float pos = w.lo + eff[m] * (w.hi - w.lo);
         for (int i = 0; i < mm.n_targets; ++i) {
             const Curve& c = mm.targets[i];
-            const float v = eval_curve(c, eff[m]);
+            const float v = eval_curve(c, pos);
             const float d = std::fabs(v - t.base[c.param]);
             if (!has[c.param] || d > dist[c.param]) {
                 out[c.param] = v; dist[c.param] = d; has[c.param] = true;
@@ -485,6 +490,28 @@ void Flow::recompute_and_push(bool force) {
             const int ep = (p == P_FILT_A) ? P_ENGINE_A : P_ENGINE_B;
             if (int(_pushed[ep] + 0.5f) == ENGINE_BODY && v < kBodyFiltFloor)
                 v = kBodyFiltFloor;
+        }
+
+        // The veto band (taste.h kVetos, spec §3), enforced HERE and only
+        // here at runtime. The build-time test already proves no table span
+        // leaves the band, so a settled terrain cannot breach one, and a
+        // SINGLE press cannot either: _resid is frozen at press time, and on
+        // a fresh press from a settled terrain it is exactly zero (cont_now
+        // and cand_cur are the same value, same tick), which makes the blend
+        // line above a plain convex combination of prv[p] and cur[p] -- both
+        // always in-band, so their combination is too. What breaches: _resid
+        // goes nonzero only when NEW is pressed again mid-flight (a re-press
+        // lands mid-flight, see begin_blend()), and with a nonzero residual a
+        // macro moved DURING that second ramp can push the sum outside even
+        // though both terrains are legal, because the blend line clamps to
+        // kParams, not to the veto band. This runs before the change guard
+        // because param_now() is a public observer and must never show a
+        // vetoed value.
+        for (int vi = 0; vi < kVetoCount; ++vi) {
+            if (kVetos[vi].param != p) continue;
+            if (v < kVetos[vi].lo) v = kVetos[vi].lo;
+            else if (v > kVetos[vi].hi) v = kVetos[vi].hi;
+            break;
         }
 
         // Setter spam guard: push only real changes -- exact compare for

@@ -5,6 +5,16 @@
 
 namespace spky { namespace flow {
 
+// A draw range, engine units. Lives here rather than in taste.h (where it was
+// originally declared) because it is a two-float struct with no tuning
+// content of its own -- taste.h's kBaseRules/kStories build ON it, but
+// terrain.h only needs the TYPE (for Terrain::window[]), and taste.h is the
+// whole tuning table plus its transitive includes (mod/divisions.h,
+// parts/engine_iface.h). Moved 2026-08-06 (final review) so a consumer that
+// only needs to name a Span -- terrain.h chief among them -- no longer drags
+// in every tuning constant in the file to get it.
+struct Span { float lo, hi; };
+
 // Every parameter the flow layer owns. Ranges are ENGINE units (§2: the
 // surface is not uniformly 0..1 -- FILT/VARIATION/CHOKE are bipolar,
 // ENGINE/SCALE/ROOT/FORM/SONG/STEPS are discrete). steps==0 -> continuous.

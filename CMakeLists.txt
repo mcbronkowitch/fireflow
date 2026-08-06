@@ -155,6 +155,7 @@ add_executable(spky_tests
     tests/test_flow_params.cpp
     tests/test_flow_rng.cpp
     tests/test_flow_taste.cpp
+    tests/test_flow_veto.cpp
     tests/test_flow_mode.cpp
     engine/flow/terrain.cpp
     tests/test_flow_terrain.cpp

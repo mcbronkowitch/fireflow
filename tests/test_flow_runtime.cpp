@@ -7,6 +7,7 @@
 #include "flow/taste.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 using namespace spky;
 using namespace spky::flow;
 
@@ -184,6 +185,62 @@ TEST_CASE("flow runtime: shared target takes the candidate farther from base") {
         if (k) { CAPTURE(k); CHECK(v >= prev - 1e-6f); }
         prev = v;
     }
+}
+
+TEST_CASE("flow runtime: a drone's DENSITY knob at max samples the archetype "
+          "window, not the raw knob position") {
+    // Pins the APPLICATION half of the archetype-window mechanism (spec
+    // 2026-08-06 §4). test_flow_terrain.cpp proves the table value reaches
+    // Terrain::window; this proves Flow::eval_terrain (flow.cpp) actually
+    // REMAPS eff[m] through that window before sampling the story curve,
+    // rather than the window sitting on the Terrain unused. eval_curve is
+    // private to flow.cpp (an anonymous-namespace function, not declared in
+    // any header), so the expected value is recomputed here with the same
+    // piecewise-linear formula on the quadrant grid {0,.25,.5,.75,1} that
+    // flow.cpp's eval_curve implements.
+    auto eval_curve_ref = [](const Curve& c, float x) {
+        float g = x * 4.f;
+        int i = int(g);
+        if (i > 3) i = 3;
+        return c.bp[i] + (c.bp[i + 1] - c.bp[i]) * (g - float(i));
+    };
+
+    uint32_t found_master = 0;
+    for (uint32_t master = 1; master <= 20000 && !found_master; ++master) {
+        TerrainState s; s.master = master;
+        const Terrain t = generate(s);
+        if (t.arch != ARCH_DRONE) continue;
+        if (std::strcmp(kStories[t.map[M_DENSITY].story].name, "rate") != 0)
+            continue;
+        found_master = master;
+    }
+    REQUIRE(found_master != 0);   // see test_flow_terrain.cpp for the same
+                                   // scan; report rather than weaken if empty
+
+    Instrument in; in.init(48000.f);
+    Flow f = make(in, found_master);
+    for (int m = 0; m < MACRO_COUNT; ++m) f.set_macro(m, 0.f);
+    f.set_macro(M_DENSITY, 1.f);
+    for (int i = 0; i < 5; ++i) f.tick();       // settle; not blending, so one
+                                                 // tick would already do it
+
+    const auto& mm = terrain_of(f).map[M_DENSITY];
+    const Curve* c = nullptr;
+    for (int i = 0; i < mm.n_targets; ++i)
+        if (mm.targets[i].param == P_DENSITY_A) c = &mm.targets[i];
+    REQUIRE(c != nullptr);
+
+    // The window is {0,.45} for a drone's "rate" story (taste.h), so knob
+    // 1.0 must sample the curve at x = 0.45, not x = 1.0.
+    const float expect_windowed = eval_curve_ref(*c, 0.45f);
+    const float raw_knob        = eval_curve_ref(*c, 1.f);
+    CAPTURE(found_master);
+    CHECK(f.param_now(P_DENSITY_A) == doctest::Approx(expect_windowed));
+    // And provably NOT the unwindowed reading -- the two differ here (the
+    // "rate" curve's Q4 rises further than its Q2/Q3 lift), so this is a
+    // real discriminator, not a coincidence of two equal numbers.
+    CHECK(raw_knob != doctest::Approx(expect_windowed));
+    CHECK(f.param_now(P_DENSITY_A) != doctest::Approx(raw_knob));
 }
 
 TEST_CASE("flow runtime: set_ctrl_hz retimes the tick and leaves live state alone") {

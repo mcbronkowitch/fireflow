@@ -5,13 +5,15 @@
 // partial reroll replaces parts of it: every drawn value gets its RNG
 // stream from (master, stream id, override counter), so bumping one
 // macro's counter rerolls only that macro's domain and never shifts a
-// neighboring stream. generate() is pure table arithmetic over taste.h --
+// neighboring stream. That holds for VALUES too, and the adventure levels
+// (spec §7) are per domain precisely so it keeps holding -- see
+// Terrain::adventure below. generate() is pure table arithmetic over taste.h --
 // no audio, no heap, cheap enough to call from anywhere except the audio
 // callback's inner loop.
 #pragma once
 #include <cstdint>
 #include "flow/flow_ids.h"
-#include "flow/flow_params.h"
+#include "flow/flow_params.h"       // Span lives here, not taste.h
 #include "mod/rng.h"
 
 namespace spky { namespace flow {
@@ -62,12 +64,51 @@ struct Terrain {
     float     base[P_COUNT];              // engine units; storied params too
     bool      storied[P_COUNT];           // owned by some macro's curve
     MacroMap  map[MACRO_COUNT];
+    // The picked variant's window for THIS terrain's archetype, per macro.
+    // Copied at generate() time so the runtime never re-reads kStories. Has
+    // NO default member initialiser (unlike StoryVariant::arch_window), so
+    // a `Terrain t{}` zero-inits every entry to {0,0}, not the {0,1}
+    // identity every other macro relies on -- if generate() ever left a
+    // macro's window uncopied, that macro's story would silently sample
+    // only x=0 (its bp[0] floor) at every knob position. Currently
+    // unreachable: "every macro has at least one story"
+    // (test_flow_taste.cpp) guarantees stage 4's `if (picked)` branch fires
+    // for every m. Worth knowing at this site if that invariant ever moves.
+    Span      window[MACRO_COUNT];
     int       weather_n;                  // 2..4
     float     weather_period_s[4], weather_depth[4];
     Macro     weather_target[4];
+    // Risk levels, 0..1 (spec §7). SEVEN of them, not one, and the split is
+    // what lets §7 and 7.3 both hold:
+    //
+    //   adventure[m]    drawn from that macro's OWN reroll counter, and used
+    //                   for every curve that macro's stories draw. Rerolling
+    //                   DENSITY redraws DENSITY's nerve -- a wild DENSITY does
+    //                   not survive the player asking for a new one (§7) --
+    //                   and touches no other domain's (7.3).
+    //   adventure_base  drawn from the master ALONE, counter fixed at 0, and
+    //                   used for the base patch and the mode coin. Keyed on
+    //                   nothing a partial reroll can move, so a partial reroll
+    //                   cannot shift a base parameter at all.
+    //
+    // A single per-terrain level keyed on reroll_weather_counter() was built
+    // first and does NOT work: unlike the weather, which is an additive layer
+    // over a finished terrain, the level is an INPUT to every span draw, so
+    // rerolling one macro re-narrowed the spans every other value came from
+    // and moved the whole terrain. Measured, then replaced by the owner's
+    // ruling. Do not collapse these back into one.
+    float     adventure[MACRO_COUNT];
+    float     adventure_base;
 };
 
 Terrain generate(const TerrainState& st);
+
+// One value inside a span, narrowed toward the middle by the terrain's
+// adventure level: full span at adv == 1, the middle kAdventureNarrow at 0.
+// Declared here rather than left in terrain.cpp's anonymous namespace so the
+// tests can assert the narrowing directly instead of inferring it from the
+// terrains it produces.
+float draw_span(Rng& r, const Span& s, float adv);
 
 // Distance between two terrains (spec 7.4): mean |Δ normalized base| over
 // every P_COUNT param (normalized by that param's kParams span), plus a

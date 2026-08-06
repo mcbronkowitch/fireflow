@@ -34,7 +34,7 @@ Collected in session. Three kinds, and the distinction is load-bearing:
 |---|---|---|
 | WOBBLE never above 0.25 | veto | `P_REV_MOD` (panel label "WOBL") |
 | PUSH never above 0.4 | veto | `P_DRIVE` (= `MASTER_DRIVE`, panel label "PUSH") |
-| COMP never 0, stays 0.1–0.5 | veto | `P_COMP_A/B` |
+| COMP never 0, stays 0.40–0.60 (revised by ear, see §3 correction) | veto | `P_COMP_A/B` |
 | Reverb never fully dry | veto | `P_REVMIX_A/B` |
 | Drone LFOs round, never angular | span | `P_SHAPE_A/B` |
 | Drone density low | span (via window) | `P_DENSITY_A/B` (storied) |
@@ -74,8 +74,8 @@ struct Veto { int param; float lo, hi; };
 inline const Veto kVetos[] = {
     { P_REV_MOD,  0.00f, 0.25f },
     { P_DRIVE,    0.00f, 0.40f },
-    { P_COMP_A,   0.10f, 0.50f },
-    { P_COMP_B,   0.10f, 0.50f },
+    { P_COMP_A,   0.40f, 0.60f },
+    { P_COMP_B,   0.40f, 0.60f },
     { P_REVMIX_A, 0.08f, 1.00f },
     { P_REVMIX_B, 0.08f, 1.00f },
 };
@@ -105,12 +105,32 @@ v = clamp_to(kParams[p], prv[p] + (cur[p] - prv[p]) * ph + _resid[p] * (1.f - ph
 
 — clamped to the **kParams** range, not the veto band, and the comment directly
 above states that the sum can exceed a parameter's range even when both
-terrains' candidates sit inside it. `prv` re-evaluates live while `_resid` is
-frozen at press time, so a macro moved *during* a blend can push REVMIX under
-0.08 with both terrains legal. The clamp is applied after this line, at the end
-of `recompute_and_push`, before the change guard and before `_pushed` is
-written — `param_now()` is a public observer and must never show a vetoed
+terrains' candidates sit inside it. The clamp is applied after this line, at
+the end of `recompute_and_push`, before the change guard and before `_pushed`
+is written — `param_now()` is a public observer and must never show a vetoed
 value.
+
+> **Corrected 2026-08-06, during task 2 implementation.** This section
+> originally said a macro moved *during a blend* can push REVMIX under 0.08
+> with both terrains legal, full stop. That is false as a general claim, and
+> the task 2 build proved it two ways before writing the clamp's test: on a
+> fresh press from a settled terrain, `_resid` is computed as
+> `_cont_now[p] - _cand_cur[p]`, and both are the *same value from the same
+> tick* — so `_resid` is exactly zero, and the combine line above reduces to
+> `prv[p] + (cur[p] - prv[p]) * ph`, a plain convex combination of `prv[p]`
+> and `cur[p]`. Both are always inside the veto band (that is what test 1
+> enforces at build time), and a convex combination of two in-band points
+> cannot leave the band — so a *single* press, however fast or extreme the
+> macro sweep, cannot breach a veto. This was checked empirically too: 300
+> masters, a full 6 s sweep of every macro at full travel, zero breaches.
+> `_resid` only goes nonzero when NEW is pressed **again mid-flight** — "a
+> re-press lands mid-flight" is `begin_blend`'s own description of the case.
+> With a nonzero residual, a macro moved during that second ramp *can* push
+> the sum outside the veto band even though both terrains are legal, because
+> the residual term is clamped to `kParams` only. That re-press is the one
+> and only mechanism the runtime clamp exists for; a plan or reviewer that
+> reaches for a single-press repro to justify simplifying the clamp away is
+> working from the error this note replaces.
 
 **Four curves are redrawn rather than clipped**, so no macro loses live travel:
 
@@ -119,15 +139,32 @@ value.
 | MOTION "orbit" | `P_REV_MOD` | bp3 `.25–.45`, bp4 `.45–.85` | flattens out at `.10–.25`; the seasick end is carried by `P_TIDE` and `P_REV_SMEAR` instead |
 | MOTION "orbit" | `P_REV_SMEAR` | bp4 `.5–.8` | raised — smear washes the reverb rather than tearing it |
 | DIRT "heat" | `P_DRIVE` | bp4 `.3–.7` | `.25–.40` |
-| DIRT "heat" | `P_COMP_A` | bp2 `.35–.55`, bp3 `.4–.6`, bp4 `.5–.75` | all three pulled under `.50`, relative shape kept |
+| DIRT "heat" | `P_COMP_A` | bp2 `.35–.55`, bp3 `.4–.6`, bp4 `.5–.75` | rescaled into the 0.40–0.60 band (see correction below), relative shape kept |
 | SPACE "bloom" | `P_REVMIX_A/B` | bp0 `.02–.1` | `.08–.15` — intimate means small room, not dry |
+
+> **Corrected 2026-08-06 (owner request, by ear).** The COMP veto above shipped
+> at `0.40–0.60`, not the `0.10–0.50` this section originally specified and the
+> table above once repeated. History, so a later session does not "restore
+> spec compliance" against `taste.h`'s own warning not to: the rule was first
+> stated as "between 0.1 and 0.5". Bastian then found Glow reading
+> systematically quiet and identified that he plays per-deck COMP at **at
+> least** 0.5 by ear — so 0.5 was always his *floor*, never his ceiling, and
+> the old band's 0.50 top undershot where he actually sets the knob, which is
+> why COMP was never carrying its makeup gain. The band first moved to
+> `0.40–0.70` (same width discipline: never uncompressed, never squashed).
+> He then listened to 0.70 and ruled it back down: `0.40–0.60` ("Ja passt eher
+> 0.6") — 0.70 read as over-compressed by ear. **0.60 is not a re-derivation
+> of the original band; it is where 0.70 stopped sounding right**, so do not
+> raise it to claw back level lost by the pull-back — that level has to come
+> from somewhere else in the table, not by re-widening this veto past where
+> the owner capped it.
 
 ### 3.1 Base rule edits
 
 | Param | Was | Becomes | Why |
 |---|---|---|---|
 | `P_SHAPE_A/B` drone | `{0, 1}` | `{0, .25}` | sine…triangle only. Pulse/arp/fragment keep `{0, 1}` — nothing collected says otherwise |
-| `P_COMP_B` | `{.3, .6}` | `{.3, .5}` | breaches the COMP veto at the top |
+| `P_COMP_B` | `{.3, .6}` | `{.50, .60}` | breaches the COMP veto; rescaled into the 0.40–0.60 band the owner ruled (see the correction note above) |
 | `P_REV_DIFF` (all four) | `{.4, .8}` | `{.6, .8}` | span narrowing, 0.4–0.6 not wanted |
 | `P_STEPS_B` drone | `{2, 6}` | `{2, 16}` | so the 8/16 weight of §6 has something to bite on |
 
@@ -350,11 +387,38 @@ wrote `u³` alongside these percentages; that is a different variable — `u³`
 exceeds 0.5 in 20.6% of draws. The formula above is the one that matches.) The
 `(1-x)³` shape is a first guess, tunable later.
 
-**Stream and reroll.** `a` is drawn per terrain from a stream keyed by
-`reroll_weather_counter()` — the sum of all six macro counters — exactly as the
-weather already is (`terrain.h:44`). Any partial reroll therefore redraws the
-adventure level along with the weather, so a terrain that drew wild does not
-stay wild in a domain the player explicitly asked to be redone.
+> **Corrected 2026-08-06, after implementation.** This section originally said
+> `a` was drawn **once per terrain**, from a stream keyed by
+> `reroll_weather_counter()` — the sum of all six macro counters — "exactly as
+> the weather already is". That was built, and it is wrong: it contradicts the
+> per-domain isolation the terrain-state design guarantees (spec 7.3 of
+> `2026-08-05-flow-machine-design.md`, and `terrain.h`'s own opening comment),
+> and the two cannot both hold under a single level. The analogy to the weather
+> is what misled: the weather is an **additive layer over** a finished terrain,
+> so rerolling it moves only the weather, whereas a risk level is an **input
+> to** every span draw and every tempered weight. Keyed on the counter sum, a
+> partial reroll re-narrowed the spans that every *other* value had been drawn
+> from and moved the whole terrain — measured, ~87 assertions red across
+> `test_flow_new.cpp`'s two isolation cases. Keying it on nothing instead made
+> those green and made this section's own reroll promise false. The project
+> owner ruled on the split below; do not restore the single-level version.
+
+**Stream and reroll.** A terrain draws **seven** adventure levels, not one.
+
+- `adventure[m]`, one per macro domain, from that macro's own stream keyed on
+  **that macro's own reroll counter**. It applies to every curve that macro's
+  stories draw. Rerolling DENSITY therefore redraws DENSITY's nerve — a wild
+  DENSITY does not stay wild in the domain the player explicitly asked to be
+  redone — and redraws no other domain's.
+- `adventure_base`, from the master **alone** with a fixed counter, applying to
+  the base patch and the mode coin. Base parameters belong to no macro domain,
+  so nothing a partial reroll can bump is allowed to move them at all.
+
+Both properties then hold at once: §7's "a reroll refreshes that domain's
+nerve", and 7.3's "a partial reroll touches only its domain". The per-macro
+levels take their own stream id block rather than reusing `kStreamMacroBase +
+m`, which is already the domain's story stream — sharing it would make the
+nerve a function of how many values the curves happened to draw.
 
 **Scope.** `a` applies to base-rule spans and story breakpoint spans (§7.1) and
 to every weight table of §6 (§7.2). It does **not** apply to the archetype
@@ -365,12 +429,89 @@ window of §4, which is a musical range statement rather than a risk setting.
 At `a = 0` a span is sampled only in its middle 40%; at `a = 1` in full. Table
 edges are the outermost permitted value rather than the normal case.
 
+> **Exception, undocumented until 2026-08-06 (final review): five weighted
+> params never see the narrowed span.** `terrain.cpp` computes `draw_span()`
+> for every `kBaseRules` row, including these five, and then **discards** that
+> result for them, re-drawing from the table's raw, unnarrowed `s.lo`/`s.hi`
+> through `snap_rate` / `snap_steps` / the shuffle skew instead:
+> `P_RATE_A`, `P_RATE_B` (synced only — free-mode RATE is the continuous
+> `free_hz` curve and takes the narrowed draw normally), `P_STEPS_A` (inside
+> `draw_curve`, DENSITY's "rate" story), `P_STEPS_B`, and `P_SHUFFLE`. So for
+> these five, adventure still reaches the **weights** of §7.2 (the tempered
+> rung/step/shuffle weighting), but it never reaches the **span** itself — a
+> brave terrain gets a flatter preference curve over the same full-width table
+> span, not a wider span to draw from.
+>
+> This is the plan's own gap, not an implementation slip, but two things make
+> it easy to misread: `draw_span()`'s result is computed and silently thrown
+> away for exactly these rows, so a reader assumes the narrowing survived; and
+> the SHUFFLE distribution test asserts its mean position over the *full*
+> span, so it would not catch this either way.
+>
+> For the four discrete sets (`P_RATE_A/B`, `P_STEPS_A/B`) this is defensible
+> and is not being changed: narrowing a rung or step-count set toward its
+> centre is close to meaningless once every rung already carries its own
+> per-rung weight — the weight table *is* the narrowing mechanism for a
+> discrete set.
+>
+> For `P_SHUFFLE` it is **not** defensible on the same grounds — SHUFFLE is
+> continuous (spans `{0,.1}` / `{0,.35}` / `{0,.3}` / `{.1,.5}` per archetype),
+> and a calm terrain is supposed to draw from the middle 40% of its span like
+> every other continuous param, but currently always draws from the full span
+> with only the skew tempered. **Left as shipped for this fix wave — changing
+> what a calm terrain's SHUFFLE sounds like is the owner's call, not a
+> documentation pass's.** Open item for the owner: should `P_SHUFFLE` route
+> through the narrowed span like every other continuous base rule, or is the
+> full-span-plus-tempered-skew behaviour actually preferred?
+
 ### 7.2 Weights flatten
 
-Rung, step, shuffle and mode weights are tempered as `w^(1−a)`: as written at
-`a = 0`, uniform at `a = 1`. An adventurous terrain may draw a triplet, or a
-drone in rhythm mode — chaos from places where chaos means something musically,
-rather than parameter noise.
+> **Corrected 2026-08-06, after implementation.** This section originally
+> specified `w^(1−a)`. That was built and measured, and it flattens far too
+> eagerly to mean what §6 says: `E[a]` is 0.25, so the *typical* terrain already
+> draws at `w^0.75`, which lifts a 0.15 triplet weight to 0.24 and took the
+> crooked-rung share from 0.189 to **0.255** — past §6's "straight rungs win
+> more than four draws out of five", and past the test that encodes it. The
+> owner ruled for `w^(1−a²)`: the flattening should bite only on genuinely
+> brave terrains, which is what "chaos when you press NEW, aber eben seltener"
+> asked for in the first place.
+
+Rung, step, shuffle and mode weights are tempered as `w^(1−a²)`: as written at
+`a = 0`, uniform at `a = 1`, and — because of the square — still essentially as
+written for the median terrain, which sits at `w^0.96`. The flattening arrives
+with the rare brave draw: `a = 0.5` gives `w^0.75`, `a = 0.9` gives `w^0.19`. An
+adventurous terrain may draw a triplet, or a drone in rhythm mode — chaos from
+places where chaos means something musically, rather than parameter noise.
+
+The shuffle skew tempers on the same schedule, `kShuffleSkew^(1−a²)`, reaching
+1.0 (a uniform draw across the span) at full adventure. It is written out rather
+than routed through the weight helper: the skew is an exponent on the draw, not
+a weight in a table, and the two agree only because `w^(1−a²)` happens to suit
+both.
+
+**Measured after the correction:** step counts on 8/16 **0.475**, shuffle mean
+position **0.303** (4000 masters), both inside their gates.
+
+**The crooked-rung gate was measuring a mixture, and is now two gates.** Task 5
+set a single `< 0.20` bound over all terrains, before this section existed.
+Once tempering landed, that aggregate read **0.213** — a number no terrain
+actually plays, because it averages two populations the design deliberately
+separates. Split by adventure over 20 000 masters:
+
+| population | rate draws | crooked share |
+|---|---|---|
+| calm, `a_base < 0.15` | 8 076 | **0.198** |
+| brave, `a_base > 0.50` | 2 558 | **0.300** |
+
+So the tables hold for the calm majority exactly as §6 claims, and the brave
+tail genuinely takes the risk — which is the feature, and which the aggregate
+bound could not express in either direction. The gate is now `calm < 0.20` (the
+original bound, applied to the population it was always meant for, holding with
+~1 % of margin) plus `brave > 0.25`. The owner ruled the split; the exponent
+stays `a²`. This is not a widened bound — for the record, the alternatives that
+would have fitted the *aggregate* under 0.20 were measured and rejected: `a³`
+gives 0.203, `a⁴` gives 0.196, both of which buy the aggregate by flattening
+the brave tail back toward the calm one, i.e. by deleting the feature.
 
 **`a` never touches the vetos.** The wildest terrain still gets no WOBBLE above
 0.25.
@@ -395,9 +536,14 @@ cannot fail gets fixed).
    §7.1 narrows every span.)
 5. **Weights** — fixed-seed distribution test with generous bounds (crooked
    rungs below a stated share at `a = 0`), shown non-vacuous in both directions.
-6. **Adventure** — at `a = 0` all draws fall in the middle 40%; the drawn
+6. **Adventure** — at `a = 0` all draws fall in the middle 40%, and at `a = 1`
+   the whole span (the no-op), asserted from *both* sides so "narrowed to the
+   middle 40%" is distinguishable from "narrowed to nothing"; the drawn
    distribution meets `P(a > 0.5) ≈ 12.5%` and `P(a > 0.8) ≈ 0.8%` within
-   tolerance.
+   tolerance, measured on a macro domain's level as well as the base level so a
+   per-domain level that was never drawn cannot pass. Plus the reroll rule of
+   §7 in both directions: rerolling a domain changes that domain's level and
+   leaves every other level, including `adventure_base`, bit-identical.
 7. **Enum tail** — `P_MODE` is the last entry of `SPKY_FLOW_PARAMS`, asserted
    statically, with the stream-key reason in the message (§5.1).
 8. **Completeness** — `test_flow_taste.cpp`'s existing "every param is owned"

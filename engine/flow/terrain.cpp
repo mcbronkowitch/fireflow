@@ -6,12 +6,48 @@
 // (flow_rng.h) so a partial reroll bumps exactly one domain's counters and
 // every other draw stays bit-identical. All tuning data lives in taste.h;
 // this file is only the plumbing that walks those tables.
+//
+// THE ADVENTURE LEVELS ARE PER DOMAIN FOR EXACTLY THAT REASON (spec §7,
+// corrected 2026-08-06). A first version drew ONE level per terrain keyed on
+// reroll_weather_counter(), copying the weather. That broke the guarantee
+// above and it was measured breaking it: the weather is an additive layer over
+// a finished terrain, but a risk level is an INPUT to every span draw, so
+// rerolling one macro re-narrowed the spans every other value came from and
+// moved the entire terrain (test_flow_new.cpp's two isolation cases, ~87
+// assertions red). Keying it on 0 instead made those green and made "a reroll
+// redraws the domain's nerve" false -- the two properties are mutually
+// exclusive under a single level. The owner's ruling: one level per macro
+// domain keyed on that domain's counter, plus one for the base patch keyed on
+// the master alone. Both properties then hold. See Terrain::adventure.
 #include "flow/terrain.h"
 #include "flow/taste.h"
 #include "flow/flow_rng.h"
+#include "mod/divisions.h"
 #include <cmath>
 
 namespace spky { namespace flow {
+
+// One value inside a span, narrowed toward the middle by the terrain's
+// adventure level (spec 2026-08-06 §7). At adv == 1 this is the IDENTITY --
+// the whole span, uniform, which is what the taste tables mean on their own --
+// and it only ever narrows from there, symmetrically about the span's centre.
+//
+// That one-sidedness is the load-bearing property, not an implementation
+// detail: taste.h's spans are proven at build time to sit inside every veto
+// band (tests/test_flow_veto.cpp), so a draw that can never leave its span can
+// never breach a veto either, at any adventure level. If this ever grows a
+// branch that widens past s, the vetoes lose their build-time proof and need a
+// runtime clamp instead.
+//
+// Consumes exactly one next_unipolar(), like the plain uniform draw it
+// replaced, so routing a call site through it shifts no other stream.
+float draw_span(Rng& r, const Span& s, float adv) {
+    const float w = kAdventureNarrow + (1.f - kAdventureNarrow) * adv;
+    const float c = 0.5f * (s.lo + s.hi);
+    const float half = 0.5f * (s.hi - s.lo) * w;
+    return (c - half) + r.next_unipolar() * (2.f * half);
+}
+
 namespace {
 
 // Cumulative-weight scan: r.next_unipolar()*total walked against the
@@ -36,17 +72,110 @@ int pick_index(Rng& r, int n) {
     return i < n ? i : n - 1;
 }
 
+// w^(1 - a^kAdventureExp): the taste table's weights as written at a = 0,
+// uniform at a = 1. This is what lets an adventurous terrain draw the rung the
+// tables call unlikely -- a triplet rate, an 11-step phrase -- without any
+// weight ever becoming a veto. Weights only; the SHUFFLE skew is NOT one (see
+// stage 3).
+//
+// The exponent itself is a tuning value and lives in taste.h as
+// kAdventureExp, with the owner's ruling and the measured alternatives
+// (exponents 1, 3 and 4) recorded there. It used to be an `adv * adv` literal
+// here, which put a lever outside the taste tables; moved 2026-08-06 (Task 7).
+//
+// DISCONTINUOUS AT w == 0 (comment, not a clamp -- flagged in final review,
+// left as-is): std::pow(0.f, e) is 0 for any e > 0 but 1 for e == 0, and the
+// exponent here is exactly 0 only when adv == 1 (full adventure, the no-op
+// case). No current table entry is 0 or 1 -- kModeW's four values and every
+// weight table sit strictly inside (0, 1) -- so this is unreachable today. It
+// is a live trap for a FUTURE table edit, though: the mode coin computes
+// temper(1.f - kModeW[arch], adv), so a hypothetical kModeW of 1.0 would make
+// temper(0.f, adv) return 1.0 at adv == 1 instead of 0.0, turning a
+// fully-adventurous terrain's mode coin into a 50/50 draw instead of the
+// deterministic STEP the table intends. Not clamped here because no value in
+// the tables triggers it and a clamp added for an unreached case is an
+// untested behavior change; if a future kModeW (or any other temper() input)
+// ever reaches 0 or 1, this is where to look first.
+float temper(float w, float adv) {
+    return std::pow(w, 1.f - std::pow(adv, kAdventureExp));
+}
+
+// One adventure level: a = 1 - u^(1/kAdventureShape), so P(a > x) =
+// (1-x)^kAdventureShape (spec §7). Consumes exactly one next_unipolar(), like
+// the two inline draws it replaces, so factoring this out shifts no stream.
+//
+// The shape itself is a tuning value and lives in taste.h as
+// kAdventureShape (spec §7: "a first guess, tunable later"), the same
+// reasoning that moved kAdventureExp there. This helper replaces two
+// identical `1.f - std::pow(r.next_unipolar(), 1.f / 3.f)` literals (the base
+// patch's draw, and each macro domain's), which is the bare-literal
+// duplication the same rule catches -- a future tuning edit to one site could
+// otherwise miss the other.
+float draw_adventure(Rng& r) {
+    return 1.f - std::pow(r.next_unipolar(), 1.f / kAdventureShape);
+}
+
+// Snap a normalized rate to a weighted rung of the divisions.h ladder, chosen
+// among the rungs that fall inside the drawn span. Free-mode terrains skip
+// this entirely -- there is no ladder to snap to.
+float snap_rate(Rng& r, float lo, float hi, float adv) {
+    int idx[kDivisionCount], n = 0;
+    float w[kDivisionCount];
+    for (int i = 0; i < kDivisionCount; ++i) {
+        const float norm = float(i) / float(kDivisionCount - 1);
+        if (norm < lo || norm > hi) continue;
+        idx[n] = i; w[n] = temper(kRateRungW[i], adv); ++n;
+    }
+    if (n == 0) return lo;                  // span narrower than one rung
+    return float(idx[pick_weighted(r, w, n)]) / float(kDivisionCount - 1);
+}
+
+// Weighted integer step count inside a span. The 1e-4 slack lets a span
+// whose endpoint is an integer written as a float still include it.
+float snap_steps(Rng& r, float lo, float hi, float adv) {
+    int val[kStepsWCount], n = 0;
+    float w[kStepsWCount];
+    for (int i = 0; i < kStepsWCount; ++i) {
+        const int s = i + 2;                        // kStepsW indexes 2..16
+        if (float(s) < lo - 1e-4f || float(s) > hi + 1e-4f) continue;
+        val[n] = s; w[n] = temper(kStepsW[i], adv); ++n;
+    }
+    // Span narrower than one step, the mirror of snap_rate's fallback. This
+    // hands back a possibly NON-INTEGER lo into a discrete param, which is
+    // sane only because apply_param() rounds at the engine boundary (every
+    // other discrete base draw relies on that too) -- it is not a step count
+    // until it gets there.
+    if (n == 0) return lo;
+    return float(val[pick_weighted(r, w, n)]);
+}
+
 // Draw one story-curve target: each breakpoint uniform inside ITS OWN span,
 // then the five values sorted monotone in the story's direction. Direction
 // = sign of (bp4 span lo - bp0 span lo); a flat story counts as ascending.
 // Sorting (not rejection) enforces monotonicity because neighboring spans
 // in taste.h may overlap -- an inversion there is a draw artifact, not a
 // story feature.
-Curve draw_curve(Rng& r, const CurveRule& cr) {
+Curve draw_curve(Rng& r, const CurveRule& cr, float adv) {
     Curve c;
     c.param = cr.param;
-    for (int b = 0; b < 5; ++b)
-        c.bp[b] = cr.bp[b].lo + r.next_unipolar() * (cr.bp[b].hi - cr.bp[b].lo);
+    for (int b = 0; b < 5; ++b) {
+        c.bp[b] = draw_span(r, cr.bp[b], adv);
+        // STEPS is storied (DENSITY owns it), so the weight can only reach the
+        // five drawn breakpoints, and only as far as each breakpoint's own
+        // span allows: the TOP endpoint prefers 16 and the CENTRE prefers 8,
+        // while the bottom endpoint prefers 4 -- the best its {2,4} span
+        // holds, not a bug. A knob position between two breakpoints still
+        // interpolates between them and can land anywhere. That is the honest
+        // limit of weighting a storied discrete; snapping at runtime instead
+        // would fight the hysteresis.
+        //
+        // Same span-narrowing exception as the base-rule redraws (spec §7.1):
+        // snap_steps here is handed cr.bp[b].lo/.hi, the RAW breakpoint span,
+        // not the draw_span() result computed just above -- adventure reaches
+        // the step-count weighting, never the breakpoint span itself.
+        if (cr.param == P_STEPS_A)
+            c.bp[b] = snap_steps(r, cr.bp[b].lo, cr.bp[b].hi, adv);
+    }
     const bool descending = cr.bp[4].lo < cr.bp[0].lo;
     for (int i = 1; i < 5; ++i) {              // insertion sort, n=5
         float v = c.bp[i];
@@ -148,6 +277,42 @@ Terrain generate(const TerrainState& st) {
         root  = pick_index(r, kParams[P_ROOT].steps);    // 0..11
     }
 
+    // The base patch's adventure level (spec 2026-08-06 §7). Keyed on the
+    // master ALONE, counter fixed at 0: base parameters belong to no macro
+    // domain, so nothing a partial reroll can bump may move them. Each macro
+    // domain draws its own level in stage 4, from its own counter.
+    //
+    // a = 1 - u^(1/kAdventureShape) gives P(a > x) = (1-x)^kAdventureShape:
+    // above 0.5 in 12.5% of draws, above 0.8 in 0.8% at the shipped shape
+    // (3). draw_adventure() holds the arithmetic; the tunables it needs
+    // (kAdventureShape, kAdventureNarrow) live in taste.h with the rest.
+    //
+    // Drawn HERE, before stage 3a, because every base draw from 3a onward
+    // reads it: the mode coin's weights are tempered, and so is every base
+    // span. Its own stream means the position costs no other stage a value.
+    {
+        Rng r = make_stream(st.master, kStreamAdventure, 0);
+        t.adventure_base = draw_adventure(r);
+    }
+
+    // Stage 3a: operating mode (spec 2026-08-06 §5). Its base-rule row is a
+    // placeholder like the ENGINE rows -- the real draw is this weighted coin,
+    // taken from the param's OWN stream so it rerolls exactly when a full
+    // terrain does. Written as a clean 0/1 so nothing downstream has to guess
+    // where the rounding boundary is.
+    //
+    // Drawn BEFORE the stage-3 loop, not after, because the loop's RATE weight
+    // reads it: in free mode there is no ladder to snap to. Its own stream is
+    // kStreamParamBase + P_MODE, which the loop never touches (each row seeds
+    // its own stream from the master), so the move consumes nothing the loop
+    // wanted and leaves every other draw bit-identical.
+    {
+        Rng r = make_stream(st.master, kStreamParamBase + uint32_t(P_MODE), 0);
+        const float w[2] = { temper(1.f - kModeW[t.arch], t.adventure_base),
+                             temper(kModeW[t.arch], t.adventure_base) };
+        t.base[P_MODE] = float(pick_weighted(r, w, 2));
+    }
+
     // Stage 3: base patch. Every kBaseRules row from its OWN param stream,
     // uniform inside the archetype's span. Counter is 0 for all of them:
     // "owned by a macro" means "targeted by a story", and taste.h's
@@ -157,26 +322,64 @@ Terrain generate(const TerrainState& st) {
     // engine boundary.
     for (int i = 0; i < kBaseRuleCount; ++i) {
         const BaseRule& br = kBaseRules[i];
+        // P_MODE's placeholder row would overwrite the stage-3a coin, which
+        // used to be safe only because stage 3a ran after this loop. It draws
+        // from its own stream, so skipping it consumes nothing.
+        if (br.param == P_MODE) continue;
         Rng r = make_stream(st.master, kStreamParamBase + uint32_t(br.param), 0);
         const Span& s = br.per_arch[t.arch];
-        t.base[br.param] = s.lo + r.next_unipolar() * (s.hi - s.lo);
+        t.base[br.param] = draw_span(r, s, t.adventure_base);
+        // Weighted redraws (taste.h §6). The uniform draw above stands for
+        // every other row; these three have a preferred SET, not a range.
+        //
+        // NONE OF THE THREE BELOW SEE THE ADVENTURE-NARROWED SPAN (spec §7.1's
+        // exception, documented there): draw_span() above still runs and its
+        // result is thrown away for P_RATE_A/B, P_STEPS_B and P_SHUFFLE --
+        // snap_rate/snap_steps and the shuffle skew draw are handed s.lo/s.hi,
+        // the table's RAW span, not a narrowed one. So for these three (plus
+        // P_STEPS_A below, via draw_curve for DENSITY's "rate" story --
+        // five params in total) adventure still reaches the WEIGHT tempering,
+        // never the span itself. Defensible for the two discrete sets
+        // (RATE/STEPS): a per-rung weight already does what narrowing would.
+        // NOT defensible for P_SHUFFLE, which is continuous and gets no
+        // narrowing at all -- left unchanged pending the owner's ruling (spec
+        // §7.1).
+        if (br.param == P_RATE_A || br.param == P_RATE_B) {
+            // Only meaningful synced: in free mode RATE is free_hz's continuous
+            // curve and there is no ladder. base[P_MODE] is already drawn.
+            if (t.base[P_MODE] > 0.5f)
+                t.base[br.param] = snap_rate(r, s.lo, s.hi, t.adventure_base);
+        } else if (br.param == P_STEPS_B) {
+            t.base[br.param] = snap_steps(r, s.lo, s.hi, t.adventure_base);
+        } else if (br.param == P_SHUFFLE) {
+            // The skew tempers too: kShuffleSkew^(1 - a^kAdventureExp) is the
+            // table's skew at a = 0 and decays to 1.0 -- a uniform draw across
+            // the span -- at full adventure, which is the same "tables as
+            // written, then flat" arc the weights follow. (An earlier version
+            // of this comment and the one below still named the SUPERSEDED law
+            // kShuffleSkew^(1-a); the code has implemented the squared form
+            // since 4624822/3e7944f. Corrected 2026-08-06, Task 7.)
+            //
+            // Written out rather than as temper(kShuffleSkew, adv), which
+            // computes the IDENTICAL number today. The two are not the same
+            // claim: temper() is defined on a WEIGHT in a table of weights,
+            // and kShuffleSkew is an exponent on the draw itself. They agree
+            // only because w^(1 - a^kAdventureExp) happens to be the right law
+            // for both, and the moment temper() adopts any other flattening law
+            // (a lerp toward the mean weight, a floor under the small ones) it
+            // would silently take the skew somewhere meaningless with it.
+            const float u = r.next_unipolar();
+            const float a = t.adventure_base;
+            const float skew = std::pow(kShuffleSkew,
+                                        1.f - std::pow(a, kAdventureExp));
+            t.base[br.param] = s.lo + (s.hi - s.lo) * std::pow(u, skew);
+        }
     }
     // Stages 1-2 override their placeholder rows.
     t.base[P_ENGINE_A] = float(engine_a);
     t.base[P_ENGINE_B] = float(engine_b);
     t.base[P_SCALE]    = float(scale);
     t.base[P_ROOT]     = float(root);
-
-    // Stage 3b: operating mode (spec 2026-08-06 §5). Its base-rule row is a
-    // placeholder like the ENGINE rows -- the real draw is this weighted coin,
-    // taken from the param's OWN stream so it rerolls exactly when a full
-    // terrain does. Written as a clean 0/1 so nothing downstream has to guess
-    // where the rounding boundary is.
-    {
-        Rng r = make_stream(st.master, kStreamParamBase + uint32_t(P_MODE), 0);
-        const float w[2] = { 1.f - kModeW[t.arch], kModeW[t.arch] };
-        t.base[P_MODE] = float(pick_weighted(r, w, 2));
-    }
 
     // Stage 4: macro mappings. One stream per macro, keyed by that macro's
     // own reroll counter. The variant pick is uniform among this macro's
@@ -192,6 +395,18 @@ Terrain generate(const TerrainState& st) {
     // runtime pushes whichever candidate lands FARTHEST from that base
     // (the rule lives in Flow::recompute_and_push, engine/flow/flow.cpp).
     for (int m = 0; m < MACRO_COUNT; ++m) {
+        // This domain's adventure level, from its OWN stream and its OWN
+        // counter (spec §7). Rerolling DENSITY redraws DENSITY's nerve and
+        // nothing else's; the base patch's level (drawn above, master-keyed)
+        // cannot move at all. Its own stream id block, not this macro's story
+        // stream, so the nerve does not depend on how many values the curves
+        // below happen to draw.
+        {
+            Rng ra = make_stream(st.master,
+                                 kStreamAdventureMacro + uint32_t(m),
+                                 st.reroll[m]);
+            t.adventure[m] = draw_adventure(ra);
+        }
         Rng r = make_stream(st.master, kStreamMacroBase + uint32_t(m),
                             st.reroll[m]);
         int n_var = 0;
@@ -206,9 +421,12 @@ Terrain generate(const TerrainState& st) {
             if (kStories[s].macro != m) continue;
             const StoryVariant& sv = kStories[s];
             const bool picked = (vi == pick);
-            if (picked) mm.story = s;            // global kStories index
+            if (picked) {
+                mm.story = s;                    // global kStories index
+                t.window[m] = sv.arch_window[t.arch];
+            }
             for (int tg = 0; tg < sv.n_targets; ++tg) {
-                Curve c = draw_curve(r, sv.targets[tg]);
+                Curve c = draw_curve(r, sv.targets[tg], t.adventure[m]);
                 if (picked) {
                     mm.targets[mm.n_targets++] = c;
                     t.base[c.param]    = c.bp[0];
@@ -300,6 +518,45 @@ Terrain generate(const TerrainState& st) {
 // 2 of 6 777 as the "before". Those figures predate the pre-mode baseline --
 // they cannot be a valid before, since the pair count is master-determined
 // and provably 6 603 at 651ee2c. They are superseded by the table above.)
+//
+// RE-MEASURED AGAIN 2026-08-06 (Task 7), after the taste tables. Same harness,
+// same 20 000 pairs and 3 000 chained draw_new() calls, built and run at EVERY
+// commit of the glow-taste-tables branch from a worktree at its branch point
+// 4ec5be0 -- so this before/after is a measurement pair, not a remembered
+// number:
+//
+//                    4ec5be0 (branch pt)   89eb461 (HEAD)
+//   P_COUNT                  63                 63
+//   base-patch min       0.0588             0.0352
+//   base-patch mean      0.1569             0.1229
+//   base-patch max       0.2582             0.2193
+//   same-arch pairs       6 603              6 603
+//   ...of which clear         2                  0
+//   draw_new same-arch   0/3 000            0/3 000
+//
+// THE BASE-PATCH TERM SHRANK BY ROUGHLY A FIFTH, and the per-commit sweep says
+// where all of it came from: the mean sits at 0.1541-0.1569 at every commit
+// from 4ec5be0 through 46cd3e8 (no single table edit moves it by more than
+// 0.003) and drops to 0.1230 at c945866 -- THE PER-DOMAIN ADVENTURE DRAW. That
+// is what draw_span() does by construction: at adventure a a span is sampled
+// only over the fraction kAdventureNarrow + (1-kAdventureNarrow)*a of its
+// width, so both draws in a pair are pulled toward their spans' centres and
+// |delta| shrinks with them. E[a] is 0.25.
+//
+// The same-archetype pair count is 6 603 at every one of the thirteen commits,
+// as it must be: arch is make_stream(master, kStreamArch, 0), a pure function
+// of the master, and no commit on this branch touched kArchWeight. Any table
+// measurement that moves this number is wrong before it is interesting.
+//
+// THE CONCLUSION DID NOT MOVE -- IT GOT STRONGER. Same-archetype pairs
+// clearing kDistanceMin went 2 -> 1 at 4624822 (the musical weights) -> 0 at
+// 46cd3e8 (the COMP ceiling). NO same-archetype pair in 6 603 now reaches
+// kDistanceMin on its base patch alone, so "far enough away" does not merely
+// mostly mean "a different archetype", it means exactly that: the flat 0.25
+// is the whole decision. Note what this is NOT a claim about -- the base-patch
+// distribution still runs to 0.2193, well past kDistanceMin's 0.18, so the
+// threshold is comfortably reachable in principle. What was measured is that
+// no SAME-ARCHETYPE pair happens to reach it, not that none could.
 //
 // That may be exactly right for an explore-the-instrument gesture, or it
 // may be why a drone never persists across a NEW press on an instrument

@@ -2247,6 +2247,49 @@ The house seed in `engine/flow/taste.h` remains the one open item Task 6
 called out explicitly: a measured placeholder, not the by-ear choice the
 design spec asks for, now answerable on the module that exists to answer it.
 
+**Taste tables (`glow-taste-tables`, 2026-08-06) — two open findings, both
+left for the owner's ear.** The branch encoded Bastian's by-ear rules into
+`engine/flow/taste.h` (vetoes, redrawn curves, an archetype window, musical
+weights, the COMP band move, a per-domain adventure draw) and its final
+review found no Critical issues, but two gates carry findings that a code fix
+cannot close — both currently live only in `taste.h`'s own header comments,
+which is not where this project looks for open questions, so they are
+recorded here too:
+
+- **`kBlendSpikeDb` (the NEW-blend level gate, §7.8) is RED and stays red.**
+  Two of the four asserted seeds breach it (0xD0D at +6.49 dB, 0xC0C0 at
+  +6.36 dB, both in the gate's window 3). Measured on the population the gate
+  actually asserts over (masters 1..2000, the 85 non-Sampler/no-engine-switch
+  terrains), the worst in-gate spike exceeds the 6 dB bound on 24/85 (28.2 %)
+  at HEAD and 31/85 (36.5 %) at the branch point — the branch made the rate
+  BETTER, not worse; the gate reads red only because the taste tables moved
+  two of the ten fixed candidate seeds into the breaching third that was
+  always there. **The honest resolution is a spec tolerance in §7.8 of
+  `docs/superpowers/specs/2026-08-06-glow-taste-structure-design.md`** — either
+  the blend genuinely has to hold level (and the generator changes until it
+  does) or §7.8 states the fraction it tolerates and the gate becomes a
+  distribution check — **not a code fix**, and not raising `kBlendSpikeDb` to
+  cover the two seeds.
+- **The calm-corner floor (`kCalmCornerRmsMin`, §7.8) — a mute finding, green
+  only by seed-set luck.** Over the same 1 566-terrain calm-corner scan, 103
+  terrains (6.6 %) now render functionally mute at their calm corner (rms at
+  or below the silence floor), down from 193 (12.3 %) at the branch point —
+  still roughly one drawn terrain in fifteen. Awaiting the owner's ruling
+  (same shape of question as the spike gate: does the generator guarantee an
+  audible calm corner, or does §7.8 state a tolerated fraction).
+- **The coupling between them, so a partial fix does not reopen the other
+  half:** both findings trace to the SAME one span. The drone SHAPE cap
+  (`P_SHAPE_A/B` drone span `{0,1}` → `{0,.25}`) is what retired the earlier
+  `kCalmCornerRmsMax` ceiling breach at master 0x707 (reverting it alone puts
+  0x707 back over the ceiling; reverting either of the other two candidate
+  edits at that commit does not) — and reverting that same cap is also what
+  un-mutes master 0x404 (1.35e-03 reverted vs. 7.00e-08/6.93e-08 for the other
+  two). So if the ruling on the mute finding is "the calm corner must stay
+  audible," the drone SHAPE cap is the first place to look — and the ceiling
+  breach it retired comes back with it. See `kCalmCornerRmsMax`'s and
+  `kCalmCornerRmsMin`'s comments in `engine/flow/taste.h` for the full
+  per-commit isolation.
+
 ## Build & verify
 
 ```bash
