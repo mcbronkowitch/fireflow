@@ -48,7 +48,35 @@ constexpr float kRefuseFlashS = 0.25f;              // gesture.h REFUSED blink
 // FireFlow Glow can actually be played.
 inline constexpr char kHouseCode[] = "F1-00000020-000000000000";
 constexpr float kDistanceMin = 0.18f;               // NEW rejection threshold
-constexpr float kCalmCornerRmsMax = 0.06f;          // §7.8 ceiling, lin FS
+// §7.8 ceiling, lin FS. A SPEC NUMBER, not a measured one: it says how loud
+// the calm corner is allowed to be, so it is never fitted to what the
+// generator happens to produce.
+//
+// RE-MEASURED 2026-08-06 (mode work). tests/test_flow_audio.cpp's calm-corner
+// case is RED on master 0x707 at rms 0.0824, and it is left red on purpose --
+// raising this ceiling to cover it would be retuning a spec bound to fit a
+// generator defect. What the measurement found:
+//
+//  - It is not a transient the gate's 3 s skip misses. Rendered out to 120 s,
+//    0x707's calm corner converges on rms 0.0789, with a swell recurring
+//    roughly every 30 s that peaks at rms 0.15 / sample peak 0.73.
+//  - P_MODE is causal FOR THIS SEED: forcing kModeW to all-zero (FLOW) drops
+//    0x707 to a steady rms 0.056; forcing all-one (STEP) reproduces 0.0824.
+//  - But the mode work did not CREATE the problem, it reshuffled which seeds
+//    hit it. Scanning masters 1..2000 (1 566 non-Sampler terrains) at the calm
+//    corner: 21 breach this ceiling, 1.34 % -- 1.7 % of FLOW terrains and
+//    1.0 % of STEP terrains, every one of them a drone, worst rms 0.180. The
+//    SAME scan at the pre-mode commit 651ee2c breaches on 19 of 1 566, 1.2 %.
+//    The rate is unchanged; only the membership moved, and 0x707 moved in.
+//
+// So the real finding is about the gate, not the constant: this ceiling
+// samples a property the generator holds only ~98.7 % of the time, and it
+// read green before purely because none of the ten fixed candidate seeds sat
+// in the breaching 1.3 %. Either the generator has to guarantee a quiet calm
+// corner for drone terrains, or §7.8 has to say what fraction it tolerates.
+// That is an ear-and-spec decision, not a code-side one. Do not "fix" it by
+// moving this number or by dropping 0x707 from the seed set.
+constexpr float kCalmCornerRmsMax = 0.06f;
 // §7.8 floor -- Task 10. This is a SILENCE DETECTOR, not the musical
 // target: measurements at the reference terrain/seed put the calm corner
 // at RMS ~= 0.00092 (-61 dBFS), about 1.5% of kCalmCornerRmsMax and, in
@@ -84,6 +112,17 @@ constexpr float kBlendSpikeDb = 6.f;                // press vs. control,
 // instrument changes WHAT it is playing, not how loud -- so the press run
 // should never read more than this many dB LOUDER than the no-press
 // control at the same instant.
+//
+// RE-MEASURED 2026-08-06 (mode work), by the differential press-vs-control
+// comparison this bound is asserted with. Worst in-gate spike across the four
+// no-switch seeds is now +3.02 dB (master 0x404, window 3), leaving 2.98 dB
+// of headroom -- BETTER than the 1.14 dB the pre-mode measurement left, and
+// the previous worst case (+4.86 dB, master 0x808 window 2) is now -1.68 dB.
+// THE CONCERN RAISED WHEN THE SECOND DUCK LANDED DID NOT MATERIALIZE: a
+// mode-changing press puts the carrier's clocking-flip duck inside the gate
+// window for the first time, and the measured spike went DOWN, not up. Two of
+// the four asserted seeds (0x404, 0x808) do change mode on their press, so
+// the path is covered non-vacuously. Bound holds unchanged.
 constexpr float kBlendDropDb = 10.f;                // press vs. control,
 // drop floor: symmetric case -- more than this many dB QUIETER than the
 // control is the deck audibly leaving the mix, which a crossfade must not
@@ -91,6 +130,10 @@ constexpr float kBlendDropDb = 10.f;                // press vs. control,
 // legitimately ducks the outgoing deck's dry leg by design (kDuckDepth),
 // so some asymmetric headroom on the downside is expected even in a
 // healthy blend.
+//
+// RE-MEASURED 2026-08-06 (mode work), same run as kBlendSpikeDb above: worst
+// in-gate drop is -5.94 dB (master 0x808, window 0), 4.06 dB of headroom.
+// Bound holds unchanged.
 // §7.8 NEW-blend level gate -- Task 10, round 4 (review round 1 found the
 // round-3 comment below quantitatively wrong; this is the corrected
 // version -- see task-10-report.md rounds 3-5 for the full history).
@@ -107,11 +150,19 @@ constexpr float kBlendDropDb = 10.f;                // press vs. control,
 // involved).
 //
 // kBlendGateWindowS = 1.0 s IS NOT A DERIVATION. It is a conservative
-// CHOICE, checked (not fitted) against the failure boundary: the gate
-// stays green, unmutated, out to 1.75 s, and only goes red at 2.0 s (a
-// bare-step mutation at that scope catches +9.58 dB on an otherwise
-// untouched engine, master 0x404, window 7). 1.0 s sits 0.75 s inside that
-// boundary on purpose.
+// CHOICE, checked (not fitted) against the failure boundary. Pre-mode, the
+// gate stayed green unmutated out to 1.75 s and went red at 2.0 s, so 1.0 s
+// sat 0.75 s inside the boundary.
+//
+// RE-MEASURED 2026-08-06 (mode work): THE BOUNDARY MOVED IN. Widening the
+// gate's scope window by window against the current generator, the worst
+// spike/drop over the no-switch seeds reads 1.00 s: +3.02/-5.94 (green),
+// 1.25 s: +4.16/-7.00 (green), 1.50 s: +13.34/-10.03 (RED). It goes red
+// exactly at kCarrierStaggerFrac * kBlendS = 1.5 s -- the carrier deck's own
+// engine/scale switch, which is where the excursion lives. So 1.0 s now sits
+// 0.50 s inside the boundary, not 0.75 s. The WINDOW IS NOT WIDENED to
+// recover the old margin, and it is not narrowed either: it is still green
+// where it stands, and moving it to chase a margin would be fitting.
 //
 // A phase-math argument was tried here first ("continuous params are
 // (1-p)*old + p*new, so legitimate divergence is roughly p * the terrain
@@ -120,32 +171,51 @@ constexpr float kBlendDropDb = 10.f;                // press vs. control,
 // `v = due ? cur[p] : _pushed[p]`) and switch 100% at their scheduled
 // phase, not p*100%. Measured in-window divergence is therefore several
 // times the phase-math prediction: at w=2 (~0.6 s) the model predicts
-// ~1.6 dB, the actual measured value (master 0x808) is +4.86 dB. Real
-// spike headroom against kBlendSpikeDb=6 is therefore ~1.14 dB, not the
-// ~4.3 dB the old comment implied -- a legitimate ~1.2 dB taste change to
-// the texture deck's first-window level could turn this gate red.
+// ~1.6 dB, the pre-mode measured value (master 0x808) was +4.86 dB. (The
+// argument is still the point; the number is superseded -- re-measured
+// 2026-08-06, the worst in-gate spike is +3.02 dB and 0x808 w=2 now reads
+// -1.68 dB. See kBlendSpikeDb above for the current headroom, 2.98 dB.)
 //
-// THE GATE'S BLIND SPOT, STATED PLAINLY: the texture deck's discrete
-// switch happens at the press (phase 0), inside this window -- but the
-// CARRIER deck's discrete switch happens at kCarrierStaggerFrac * kBlendS
-// = 0.25 * 6 = 1.5 s, and its duck (kDuckWindowS = 0.5 s) spans roughly
-// 1.25-1.75 s -- BOTH ENTIRELY OUTSIDE kBlendGateWindowS = 1.0 s, for
-// every seed, by construction, permanently. Proven: deferring the same
-// bare-step mutation to the carrier-stagger instant (t = 1.5 s instead of
-// t = 0) passes this gate completely while the unasserted windows read as
-// low as -24.04 dB. So: this gate covers the TEXTURE deck's switch and the
-// initial retarget. It does NOT cover the carrier deck's switch or duck --
-// do not describe it as catching "an over-attenuating duck" in general;
-// for the carrier deck it structurally cannot.
+// THE GATE'S BLIND SPOT, STATED PLAINLY -- and NARROWED on 2026-08-06 by the
+// second carrier duck (spec 2026-08-06 §5, flow.cpp begin_blend):
+//
+//  - The texture deck's discrete switch happens at the press (phase 0),
+//    inside this window. Covered, as before.
+//  - On a MODE-CHANGING press the carrier deck now gets a duck AT THE PRESS
+//    too, because set_sync is global and the clocking flip lands at phase 0.
+//    That duck is inside this window, so for the first time the gate sees a
+//    carrier-deck event. Two of the four asserted seeds (0x404, 0x808) take
+//    this path, and it measures clean (see kBlendSpikeDb).
+//  - The carrier deck's OWN engine/scale switch still happens at
+//    kCarrierStaggerFrac * kBlendS = 0.25 * 6 = 1.5 s, and its stagger duck
+//    (kDuckWindowS = 0.5 s) still spans roughly 1.25-1.75 s -- STILL
+//    ENTIRELY OUTSIDE kBlendGateWindowS = 1.0 s, for every seed, by
+//    construction. That is where the +13.34 dB in the scope check above
+//    lives, and pre-mode it was proven by deferring a bare-step mutation to
+//    t = 1.5 s: it passes this gate completely while the unasserted windows
+//    read as low as -24.04 dB.
+//
+// So: this gate covers the texture deck's switch, the initial retarget, and
+// (new) the carrier's clocking flip on a mode change. It does NOT cover the
+// carrier deck's engine switch or its stagger duck -- do not describe it as
+// catching "an over-attenuating duck" in general; for that event it
+// structurally cannot.
 constexpr float kBlendGateWindowS = 1.0f;           // seconds after the
                                                      // press the differential
                                                      // gate actually asserts on
 // §7.8 fixed-seed RMS bounds (Task 10, review I-3: was inline in the test).
 // 0.001 is two orders of magnitude below kCalmCornerRmsMax, so it only
 // fires if the "busy" (all macros 0.5) setting is somehow quieter than the
-// calm corner; 0.5 sits below full scale. Both are the brief's own
-// numbers; measured band across 8 terrains is 0.0158-0.0983, ~24 dB and
-// ~14 dB of margin either side -- not fitted to today's output.
+// calm corner; 0.5 sits below full scale. Both are the brief's own numbers,
+// deliberately not fitted to today's output.
+//
+// RE-MEASURED 2026-08-06 (mode work), by the measurement the old comment
+// names: windowed RMS over a 10 s render at all macros 0.5, across the
+// candidate terrains. Band is now 0.0181..0.1011 (was 0.0158..0.0983 across
+// 8 terrains; 10 terrains now). BOTH CONSTANTS HOLD UNCHANGED, with the same
+// margins the old comment describes: 25.2 dB below the quietest terrain,
+// 13.9 dB above the loudest (was ~24 dB and ~14 dB). The mode draw moved the
+// band by under 1 dB at either end -- it did not move these bounds.
 constexpr float kFixedSeedRmsMin = 0.001f;
 constexpr float kFixedSeedRmsMax = 0.5f;
 // §7.8 discrete-churn gate storied-param bound (Task 10, review I-3: was
@@ -155,6 +225,14 @@ constexpr float kFixedSeedRmsMax = 0.5f;
 // here); storied discretes are bound at this many changes per 60 s static-
 // macro window, decided before measuring and confirmed non-vacuous in both
 // directions (max observed: 1).
+//
+// RE-MEASURED 2026-08-06 (mode work), because P_MODE is a new discrete that
+// could in principle churn. It cannot: P_MODE has no story owner (its
+// kBaseRules row is the placeholder below), so it is bound at exactly 0 by
+// the same structural argument as every other non-storied discrete --
+// measured 0 changes on all 10 candidate terrains, in both FLOW and STEP.
+// Worst storied churn over 60 s is still 1 (P_STEPS_A), worst non-storied
+// still 0. BOUND HOLDS UNCHANGED and is still non-vacuous.
 constexpr int kDiscreteChurnMax = 2;
 constexpr float kBodyFiltFloor = -0.3f;             // BODY FILT cliff margin
 constexpr float kSpaceSlewS = 2.5f;                 // lazy SIZE/DECAY follower

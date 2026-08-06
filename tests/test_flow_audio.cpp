@@ -199,6 +199,21 @@ TEST_CASE("flow audio: fixed seeds render clean and inside RMS bounds (7.8)") {
     }
 }
 
+// KNOWN RED as of 2026-08-06, on master 0x707 only: rms 0.0824 against
+// kCalmCornerRmsMax = 0.06. This assertion is deliberately left failing.
+//
+// The ceiling is a §7.8 SPEC bound, so it is not raised to fit the output,
+// and 0x707 is not dropped from the seed set -- either move would convert a
+// real finding into a green tick. What was measured (full numbers in taste.h
+// beside kCalmCornerRmsMax): the level is steady, not a transient the 3 s
+// skip misses (rms 0.0789 out to 120 s); P_MODE is causal for this seed
+// (forcing FLOW gives 0.056, forcing STEP reproduces 0.0824); but the mode
+// work did not create the problem. Scanning masters 1..2000, 1.34 % of
+// terrains breach this ceiling at the calm corner, against 1.2 % at the
+// pre-mode commit 651ee2c -- an unchanged rate. The gate has always sampled
+// a property the generator holds only ~98.7 % of the time, and read green
+// only because none of these ten fixed seeds sat in the breaching fraction.
+// It needs a generator fix or a spec decision, not a constant nudge.
 TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence floor (7.8)") {
     uint32_t kept[kMaxKept];
     const int n = filtered_masters(kept);
@@ -246,17 +261,30 @@ TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence
 //
 // The gate now asserts ONLY inside the first kBlendGateWindowS seconds
 // after the press -- kBlendSpikeDb/kBlendDropDb themselves are unchanged;
-// this narrows WHAT THE GATE CLAIMS, not how much it tolerates. taste.h's
-// kBlendGateWindowS comment has the full, corrected accounting: 1.0 s is a
-// CONSERVATIVE CHOICE (checked green out to 1.75 s, red at 2.0 s), not a
-// derivation; real measured in-window headroom is ~1.14 dB against the
-// 6 dB spike bound, not the ~4.3 dB an earlier (wrong) phase-math argument
-// implied; and THE GATE'S BLIND SPOT IS STRUCTURAL, NOT INCIDENTAL -- the
-// carrier deck's discrete switch (at kCarrierStaggerFrac * kBlendS = 1.5 s)
-// and its duck (~1.25-1.75 s) sit entirely outside kBlendGateWindowS =
-// 1.0 s, for every seed, permanently. This gate covers the TEXTURE deck's
-// switch and the initial retarget. It does NOT cover the carrier deck's
-// switch or duck -- read taste.h before assuming it does.
+// this narrows WHAT THE GATE CLAIMS, not how much it tolerates.
+//
+// RE-MEASURED 2026-08-06 after the operating-mode work (spec 2026-08-06 §5).
+// taste.h's kBlendGateWindowS / kBlendSpikeDb comments carry the full current
+// accounting; the headlines:
+//
+//  - 1.0 s is still a CONSERVATIVE CHOICE, not a derivation, but the failure
+//    boundary MOVED IN: green out to 1.25 s, red at 1.50 s (was green to
+//    1.75 s, red at 2.0 s). 1.0 s now sits 0.50 s inside it, not 0.75 s.
+//  - In-window headroom is now 2.98 dB against the 6 dB spike bound (worst
+//    in-gate spike +3.02 dB, master 0x404 window 3), not the 1.14 dB the
+//    pre-mode measurement left.
+//  - THE BLIND SPOT NARROWED but did not close. On a mode-changing press the
+//    carrier deck is now ducked AT THE PRESS as well (set_sync is global, so
+//    the clocking flip lands at phase 0), and that duck IS inside this
+//    window -- two of the four asserted seeds take that path. The carrier's
+//    own engine/scale switch at kCarrierStaggerFrac * kBlendS = 1.5 s and its
+//    stagger duck (~1.25-1.75 s) are still entirely outside, for every seed,
+//    by construction.
+//
+// So this gate covers the texture deck's switch, the initial retarget, and
+// (new) the carrier's clocking flip on a mode change. It does NOT cover the
+// carrier deck's engine switch or stagger duck -- read taste.h before
+// assuming it does.
 //
 // The full 6 s is still RENDERED and MEASURED for every seed (see
 // task-10-report.md's plain-measurement table) -- only the CHECK()s are
@@ -265,9 +293,14 @@ TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence
 //
 // EXCLUSION (measured, not carved around -- see task-10-report.md round 2
 // for the full per-seed numbers): seeds whose new_full() switches a deck's
-// engine mid-blend dip well below this bound -- worst measured case
-// (master 0x101) is 65.16 dB below the no-press control, 4.00 s of the 6 s
-// blend spent more than 20 dB below it. This is KNOWN AND ACCEPTED FOR NOW,
+// engine mid-blend dip well below this bound. RE-MEASURED 2026-08-06: worst
+// case is now master 0x303 at 31.73 dB below the no-press control with 1.50 s
+// of the 6 s blend spent more than 20 dB below it (0x101, the pre-mode worst,
+// is 31.58 dB / 1.50 s). The dip got markedly shallower and shorter than the
+// pre-mode figures this paragraph used to quote (65.16 dB, 4.00 s) -- the
+// mode routing fix and the second carrier duck both land here -- but it is
+// still far outside the bound, so the exclusion stands. This is KNOWN AND
+// ACCEPTED FOR NOW,
 // pending a listening-loop decision (Bastian, 2026-08-05): a brief
 // near-silence when a NEW press switches engines is not being called a
 // defect here, and the fix direction is not obvious for free -- an

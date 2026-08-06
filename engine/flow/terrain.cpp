@@ -251,14 +251,30 @@ Terrain generate(const TerrainState& st) {
 //
 // WHAT THIS ACTUALLY DECIDES, measured rather than assumed: the flat 0.25
 // is not a tie-breaker on top of the base-patch term, it OUTWEIGHS it
-// outright. Over 20 000 random terrain pairs the base-patch mean spans
-// 0.0711 (min) / 0.1509 (mean) / 0.2491 (max), while the acceptance
-// threshold draw_new tests against is kDistanceMin = 0.18 (taste.h). So
-// 0.25 alone clears the bar with room to spare, and the base term clears it
-// on its own only rarely: of 6 777 same-archetype pairs in that sample,
-// 6 775 fell short. In practice, therefore, "far enough away" == "a
-// different archetype" -- draw_new returned a same-archetype terrain 0
-// times in 3 000 calls.
+// outright.
+//
+// RE-MEASURED 2026-08-06, after P_MODE joined the parameter table (spec
+// 2026-08-06 §5.1). The mean is taken over P_COUNT params, so one more param
+// changes the denominator (P_COUNT is now 63), and a mode mismatch
+// contributes a full 1.0/P_COUNT of its own -- both terms had to be measured
+// again rather than carried over. Same measurement as before: 20 000 random
+// terrain pairs, and 3 000 chained draw_new() calls off a fixed sequence Rng.
+//
+// Over 20 000 random terrain pairs the base-patch mean spans 0.0588 (min) /
+// 0.1569 (mean) / 0.2582 (max), while the acceptance threshold draw_new
+// tests against is kDistanceMin = 0.18 (taste.h). So 0.25 alone clears the
+// bar with room to spare, and the base term clears it on its own only
+// rarely: of 6 603 same-archetype pairs in that sample, 6 601 fell short.
+// In practice, therefore, "far enough away" == "a different archetype" --
+// draw_new returned a same-archetype terrain 0 times in 3 000 calls.
+//
+// The shape of the answer did not move: the previous measurement (before
+// P_MODE) read 0.0711 / 0.1509 / 0.2491 with 2 of 6 777 same-archetype pairs
+// clearing, and 0 same-archetype draws in 3 000. P_MODE disagrees on 50.1 %
+// of those 20 000 pairs (measured, same run), so it adds 1/63 = 0.0159 to
+// the mean on about half of them: that widened the spread at both ends and
+// lifted the mean by ~0.006, but it did not come close to carrying the base
+// term over kDistanceMin, and the archetype term still decides.
 //
 // That may be exactly right for an explore-the-instrument gesture, or it
 // may be why a drone never persists across a NEW press on an instrument
