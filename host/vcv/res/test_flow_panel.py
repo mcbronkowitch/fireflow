@@ -9,6 +9,7 @@ No pytest in this environment -- plain asserts, exit code says it all.
 Run from host/vcv/:  python res/test_flow_panel.py
 """
 import os, sys
+import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_flow_panel as g
@@ -149,6 +150,58 @@ def test_logo_font_weights():
     check(fireflow.weight < glow.weight,
           "FireFlow (%.0f) must be lighter than GLOW (%.0f) (spec 6)"
           % (fireflow.weight, glow.weight))
+
+
+def test_wordmark_is_visually_centred():
+    """The two differently sized words must centre as one visible mark."""
+    fireflow = next(t for t in g.TEXTS if t.str == "FireFlow")
+    glow = next(t for t in g.TEXTS if t.str == "GLOW")
+    # Rack renders these through Share Tech Mono. Its advance is 0.60 em, so
+    # derive the visible outer bounds independently from the two text anchors.
+    left = fireflow.x - len(fireflow.str) * fireflow.size * 0.60
+    right = glow.x + len(glow.str) * glow.size * 0.60
+    visual_centre = (left + right) / 2.0
+    check(abs(visual_centre - g.W / 2.0) <= 0.5,
+          "wordmark is %.2f mm off panel centre" %
+          (visual_centre - g.W / 2.0))
+
+
+def test_patch_field_has_no_second_horizontal_rule():
+    """The patch-field border is sufficient; a second rule reads as a scar."""
+    root = ET.fromstring(g.svg())
+    ns = "{http://www.w3.org/2000/svg}"
+    extra = []
+    for line in root.findall(".//%sline" % ns):
+        y1 = float(line.get("y1", "-1"))
+        y2 = float(line.get("y2", "-2"))
+        if abs(y1 - y2) < 0.001 and 88.0 <= y1 <= 92.0:
+            extra.append(y1)
+    check(not extra,
+          "patch field has an extra horizontal rule at %s mm" % extra)
+
+
+def test_mockup_style_is_present_on_the_rendered_glow_panel():
+    """Catch a regression back to the plain draft faceplate.
+
+    The approved product mockup has four visible signatures: a ruled/dotted
+    masthead, coloured macro collars, a copper NEW collar, and the small alpha
+    pennant.  Assert on the generated SVG/header payload that Rack consumes,
+    not on implementation helpers inside the generator.
+    """
+    panel = g.svg()
+    check('id="glowBrandRuleLeft"' in panel and
+          'id="glowBrandRuleRight"' in panel,
+          "Glow masthead is missing the ruled mockup signature")
+    check(panel.count('class="macroAccent"') == 6,
+          "each of the six macro knobs needs one visible accent collar")
+    check('id="newCopperCollar"' in panel,
+          "NEW is missing its copper mockup collar")
+    check('id="alphaPennant"' in panel,
+          "the early-alpha faceplate needs its subtle pennant")
+
+    words = [t.str for t in g.TEXTS]
+    check('ALPHA' in words,
+          "the alpha pennant label must reach Rack's runtime text overlay")
 
 
 def test_committed_files_match_the_generator():

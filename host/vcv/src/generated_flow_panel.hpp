@@ -40,13 +40,13 @@ static constexpr float kKnobR = 8.000f;
 static constexpr float kBtnR  = 4.500f;
 static constexpr float kJackR = 4.200f;
 static const PanelCtl kParamCtls[] = {
-    { MOTION, WK_MACRO, {10.480f, 32.000f}, "MOTION", {10.480f, 42.500f}, 0, 2.600f, 0x171713, "MOTION -- how much everything moves" },
-    { DENSITY, WK_MACRO, {30.480f, 32.000f}, "DENSITY", {30.480f, 42.500f}, 0, 2.600f, 0x171713, "DENSITY -- how much happens" },
-    { BRIGHT, WK_MACRO, {50.480f, 32.000f}, "BRIGHT", {50.480f, 42.500f}, 0, 2.600f, 0x171713, "BRIGHT -- spectral centre" },
-    { DIRT, WK_MACRO, {10.480f, 54.000f}, "DIRT", {10.480f, 64.500f}, 0, 2.600f, 0x171713, "DIRT -- clean to driven" },
-    { WANDER, WK_MACRO, {30.480f, 54.000f}, "WANDER", {30.480f, 64.500f}, 0, 2.600f, 0x171713, "WANDER -- predictable to wandering" },
-    { SPACE, WK_MACRO, {50.480f, 54.000f}, "SPACE", {50.480f, 64.500f}, 0, 2.600f, 0x171713, "SPACE -- close to vast" },
-    { NEW_BTN, WK_BTN, {30.480f, 78.000f}, "NEW", {30.480f, 84.500f}, 0, 2.900f, 0x171713, "NEW -- tap: new terrain. Hold + turn a knob: reroll that macro. Hold 1.5 s: undo. Hold 5 s: lock." },
+    { MOTION, WK_MACRO, {10.480f, 32.000f}, "MOTION", {10.480f, 43.400f}, 0, 2.200f, 0x171713, "MOTION -- how much everything moves" },
+    { DENSITY, WK_MACRO, {30.480f, 32.000f}, "DENSITY", {30.480f, 43.400f}, 0, 2.200f, 0x171713, "DENSITY -- how much happens" },
+    { BRIGHT, WK_MACRO, {50.480f, 32.000f}, "BRIGHT", {50.480f, 43.400f}, 0, 2.200f, 0x171713, "BRIGHT -- spectral centre" },
+    { DIRT, WK_MACRO, {10.480f, 54.000f}, "DIRT", {10.480f, 65.400f}, 0, 2.200f, 0x171713, "DIRT -- clean to driven" },
+    { WANDER, WK_MACRO, {30.480f, 54.000f}, "WANDER", {30.480f, 65.400f}, 0, 2.200f, 0x171713, "WANDER -- predictable to wandering" },
+    { SPACE, WK_MACRO, {50.480f, 54.000f}, "SPACE", {50.480f, 65.400f}, 0, 2.200f, 0x171713, "SPACE -- close to vast" },
+    { NEW_BTN, WK_BTN, {30.480f, 78.000f}, "NEW", {30.480f, 85.300f}, 0, 2.200f, 0x171713, "NEW -- tap: new terrain. Hold + turn a knob: reroll that macro. Hold 1.5 s: undo. Hold 5 s: lock." },
 };
 static const PanelCtl kInputCtls[] = {
     { CV_MOT, WK_IN, {9.480f, 100.000f}, "CV MOT", {9.480f, 94.400f}, 0, 2.200f, 0x171713, "CV into MOTION (0..10 V, adds to the knob)" },
@@ -61,7 +61,8 @@ static const PanelCtl kOutputCtls[] = {
     { OUT_R, WK_OUT, {51.480f, 117.000f}, "OUT R", {51.480f, 111.400f}, 0, 2.200f, 0x171713, "Main out, right" },
 };
 static const PanelTxt kTexts[] = {
-    { {29.900f, 10.000f}, 5.000f, 0x656056, 2, 300, "FireFlow" },
-    { {31.100f, 10.000f}, 5.000f, 0x171713, 1, 700, "GLOW" },
+    { {34.970f, 10.000f}, 4.200f, 0x656056, 2, 300, "FireFlow" },
+    { {36.070f, 10.000f}, 4.200f, 0x171713, 1, 700, "GLOW" },
+    { {58.200f, 16.750f}, 1.150f, 0xFFFDF7, 0, 700, "ALPHA" },
 };
 } } // namespace spkyvcv::glow
