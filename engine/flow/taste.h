@@ -61,30 +61,36 @@ constexpr float kDistanceMin = 0.18f;               // NEW rejection threshold
 // the calm corner is allowed to be, so it is never fitted to what the
 // generator happens to produce.
 //
-// RE-MEASURED 2026-08-06 (mode work). tests/test_flow_audio.cpp's calm-corner
-// case is RED on master 0x707 at rms 0.0824, and it is left red on purpose --
-// raising this ceiling to cover it would be retuning a spec bound to fit a
-// generator defect. What the measurement found:
+// RE-MEASURED 2026-08-06 (Task 7, the taste tables). THE 0x707 BREACH THAT
+// MADE THIS GATE RED IS GONE, and the constant did not move to make that
+// happen. 0x707's calm corner now renders at rms 4.25e-04, 45.6 dB under this
+// ceiling, against 8.24e-02 before the branch.
 //
-//  - It is not a transient the gate's 3 s skip misses. Rendered out to 120 s,
-//    0x707's calm corner converges on rms 0.0789, with a swell recurring
-//    roughly every 30 s that peaks at rms 0.15 / sample peak 0.73.
-//  - P_MODE is causal FOR THIS SEED: forcing kModeW to all-zero (FLOW) drops
-//    0x707 to a steady rms 0.056; forcing all-one (STEP) reproduces 0.0824.
-//  - But the mode work did not CREATE the problem, it reshuffled which seeds
-//    hit it. Scanning masters 1..2000 (1 566 non-Sampler terrains) at the calm
-//    corner: 21 breach this ceiling, 1.34 % -- 1.7 % of FLOW terrains and
-//    1.0 % of STEP terrains, every one of them a drone, worst rms 0.180. The
-//    SAME scan at the pre-mode commit 651ee2c breaches on 19 of 1 566, 1.2 %.
-//    The rate is unchanged; only the membership moved, and 0x707 moved in.
+// WHICH CHANGE RETIRED IT, measured rather than guessed. The calm-corner
+// render (macros 0, 10 s, first 3 s skipped -- the gate's own shape) was run
+// at every commit of this branch from a worktree at the branch point 4ec5be0:
 //
-// So the real finding is about the gate, not the constant: this ceiling
-// samples a property the generator holds only ~98.7 % of the time, and it
-// read green before purely because none of the ten fixed candidate seeds sat
-// in the breaching 1.3 %. Either the generator has to guarantee a quiet calm
-// corner for drone terrains, or §7.8 has to say what fraction it tolerates.
-// That is an ear-and-spec decision, not a code-side one. Do not "fix" it by
-// moving this number or by dropping 0x707 from the seed set.
+//   4ec5be0 .. ab76a97   0x707 rms 0.0824 -> 0.0787   OVER
+//   3435c31 (base rules) 0x707 rms 0.00665            under
+//   ...
+//   89eb461 (HEAD)       0x707 rms 4.25e-04           under
+//
+// So the ceiling breach stopped reproducing at 3435c31. Inside that commit it
+// is specifically the DRONE SHAPE CAP (P_SHAPE_A/B drone span {0,1} ->
+// {0,.25}, below): reverting that one span at 3435c31 and leaving the other
+// two edits in place puts 0x707 back at rms 0.0992, OVER, while reverting the
+// DIFF narrowing gives 0.00669 and reverting the drone STEPS_B widening gives
+// 0.0256 -- both still under. One span, isolated by reversion.
+//
+// THE §7.8 FINDING FROM THE MODE WORK STILL STANDS, and it got smaller. The
+// same masters 1..2000 scan (1 566 non-Sampler terrains) now breaches on 8,
+// 0.51 %, worst rms 0.139; at 4ec5be0 the same scan breaches on 21, 1.34 %,
+// worst 0.180. This ceiling is still a property the generator does not
+// GUARANTEE -- it holds for ~99.5 % of terrains, not all of them -- and the
+// gate is green only because none of the ten fixed candidate seeds sits in
+// the breaching half-percent. Either the generator guarantees a quiet calm
+// corner, or §7.8 says what fraction it tolerates. Unchanged as a spec
+// question; do not "fix" it by moving this number.
 constexpr float kCalmCornerRmsMax = 0.06f;
 // §7.8 floor -- Task 10. This is a SILENCE DETECTOR, not the musical
 // target: measurements at the reference terrain/seed put the calm corner
@@ -101,6 +107,39 @@ constexpr float kCalmCornerRmsMax = 0.06f;
 // decks), set here at a value comfortably below the quietest terrain this
 // task measured but still well clear of digital silence (exact-zero
 // output, which is what an accidental mute actually produces).
+//
+// RE-MEASURED 2026-08-06 (Task 7), and THE FLOOR SIDE IS THE WORSE FINDING OF
+// THE TWO -- worse than the ceiling above, by an order of magnitude, and it
+// predates this branch. Same masters 1..2000 calm-corner scan, 1 566
+// non-Sampler terrains:
+//
+//                            at or below this floor    also below 1e-4
+//   4ec5be0 (branch point)      193  (12.3 %)               53
+//   89eb461 (HEAD)              103  ( 6.6 %)               70
+//
+// So roughly one drawn terrain in fifteen currently renders FUNCTIONALLY MUTE
+// at its calm corner, and one in eight did before this branch. That is a NEW
+// press producing silence -- arguably a worse defect than one that is too
+// loud -- and this gate reads green purely because none of the ten fixed
+// candidate seeds happens to sit in that fraction. The quietest terrain in
+// the HEAD scan is master 0x704 at rms 1.5e-10; at 4ec5be0 it was 0x2B7 at
+// 9.9e-12.
+//
+// The branch nearly halved the rate rather than causing it, but it did move
+// individual seeds through it, and that movement is measured: master 1028
+// (0x404) rendered 1.60e-03 at 4ec5be0, fell to 7.00e-08 at 3435c31 -- the
+// same drone SHAPE cap named in kCalmCornerRmsMax's comment above, isolated
+// the same way -- stayed mute through 46cd3e8, and was pulled back to
+// 8.03e-05 by the per-domain adventure draw at c945866. It renders 1.16e-04
+// at HEAD: above this floor, but still about -78.7 dBFS. It is a survivor of
+// the mute population, not a terrain that is comfortably audible.
+//
+// THIS IS A FINDING FOR THE OWNER, NOT SOMETHING TO CLAMP AWAY, and it is
+// the same shape of question as the ceiling: either the generator guarantees
+// an audible calm corner, or §7.8 states the fraction it tolerates and this
+// gate asserts a rate over many seeds instead of all-of-ten-fixed-seeds. Do
+// not lower this floor to cover a mute terrain -- the floor is a silence
+// detector, and a terrain that trips it is exactly what it is for.
 constexpr float kCalmCornerRmsMin = 1e-5f;          // -100 dBFS, silence floor
 // §7.8 NEW-blend level gate -- Task 10, round 2. The original design (a raw
 // window-to-window RMS ratio inside ONE render) conflated the instrument's
@@ -122,16 +161,46 @@ constexpr float kBlendSpikeDb = 6.f;                // press vs. control,
 // should never read more than this many dB LOUDER than the no-press
 // control at the same instant.
 //
-// RE-MEASURED 2026-08-06 (mode work), by the differential press-vs-control
-// comparison this bound is asserted with. Worst in-gate spike across the four
-// no-switch seeds is now +3.02 dB (master 0x404, window 3), leaving 2.98 dB
-// of headroom -- BETTER than the 1.14 dB the pre-mode measurement left, and
-// the previous worst case (+4.86 dB, master 0x808 window 2) is now -1.68 dB.
-// THE CONCERN RAISED WHEN THE SECOND DUCK LANDED DID NOT MATERIALIZE: a
-// mode-changing press puts the carrier's clocking-flip duck inside the gate
-// window for the first time, and the measured spike went DOWN, not up. Two of
-// the four asserted seeds (0x404, 0x808) do change mode on their press, so
-// the path is covered non-vacuously. Bound holds unchanged.
+// RE-MEASURED 2026-08-06 (Task 7, the taste tables). THIS GATE IS RED AND IT
+// IS LEFT RED: two of the four asserted seeds breach, 0xD0D at +6.49 dB and
+// 0xC0C0 at +6.36 dB, both in window 3 (0.75-1.00 s). Pre-branch the worst
+// was +3.02 dB. The bound was NOT raised to cover them, for the reason the
+// distribution below makes plain.
+//
+// RULED ON A DISTRIBUTION, NOT ON A SEED, because every earlier report of
+// this gate quoted one seed's before/after and the gate kept changing
+// character (a -11.68 dB drop, then a +12.68 dB spike, now a +6.5 dB spike).
+// The differential press-vs-control comparison was run over masters 1..2000,
+// keeping the 85 that are non-Sampler AND whose new_full() switches no
+// engine -- exactly the population this gate asserts on -- and the per-seed
+// worst in-gate spike distributes like this:
+//
+//                       min    p50    p90    p95    p99    max   over 6 dB
+//   4ec5be0            -6.71  +2.91 +18.73 +33.74 +58.86 +59.53  31/85 (36.5%)
+//   89eb461 (HEAD)     -5.90  +2.18 +23.29 +34.98 +58.62 +59.40  24/85 (28.2%)
+//
+// SO THE 6 dB CEILING IS NOT A PROPERTY THE GENERATOR HAS, AND NEVER WAS.
+// More than a quarter of eligible terrains breach it, before and after this
+// branch -- the branch made it slightly BETTER (36.5 % -> 28.2 %), not worse.
+// The gate read green until now purely because none of the four asserted
+// fixed seeds sat in the breaching third; the taste tables moved two of them
+// into it, which is a sampling change, not a regression in the blend.
+//
+// THIS GATE CANNOT BE MADE GREEN BY AN HONEST MEASUREMENT. kBlendSpikeDb is a
+// SPEC bound (§5: a NEW blend is a crossfade -- the instrument changes what it
+// is playing, not how loud), so there is no measurement to repeat that could
+// legitimately move it, exactly like kCalmCornerRmsMax above. Raising it to
+// cover 6.49 would be retuning a spec number to fit the generator; raising it
+// to cover the population would mean roughly +60 dB, which asserts nothing.
+// Dropping 0xD0D/0xC0C0 from kCandidateMasters would be carving around the
+// failure -- and they are not special, they are two of ~28 %. It needs the
+// same ruling the calm corner needs: either the blend genuinely holds the
+// level and the generator has to make that true, or §7.8 states the fraction
+// it tolerates and this becomes a distribution check.
+//
+// (Still true from the mode work, and re-confirmed: two asserted seeds change
+// mode on their press, so the carrier's clocking-flip duck path inside the
+// window is covered non-vacuously.)
 constexpr float kBlendDropDb = 10.f;                // press vs. control,
 // drop floor: symmetric case -- more than this many dB QUIETER than the
 // control is the deck audibly leaving the mix, which a crossfade must not
@@ -140,9 +209,15 @@ constexpr float kBlendDropDb = 10.f;                // press vs. control,
 // so some asymmetric headroom on the downside is expected even in a
 // healthy blend.
 //
-// RE-MEASURED 2026-08-06 (mode work), same run as kBlendSpikeDb above: worst
-// in-gate drop is -5.94 dB (master 0x808, window 0), 4.06 dB of headroom.
-// Bound holds unchanged.
+// RE-MEASURED 2026-08-06 (Task 7), same run as kBlendSpikeDb above. STILL
+// GREEN, BUT THE HEADROOM IS NEARLY GONE: worst in-gate drop is now -9.20 dB
+// (master 0x404, window 3) against this 10 dB floor, i.e. 0.80 dB of room,
+// where the mode work left 4.06 dB (-5.94 dB, master 0x808 window 0). Bound
+// holds unchanged and is NOT widened -- but it is now the closest of the four
+// audio constants to falling over, and the same 85-seed scan puts 6 of 85
+// (7.1 %) of eligible terrains past it (5 of 85 at 4ec5be0). Read that
+// alongside kBlendSpikeDb's finding: the drop side is heading the same way,
+// just more slowly.
 // §7.8 NEW-blend level gate -- Task 10, round 4 (review round 1 found the
 // round-3 comment below quantitatively wrong; this is the corrected
 // version -- see task-10-report.md rounds 3-5 for the full history).
@@ -164,12 +239,24 @@ constexpr float kBlendDropDb = 10.f;                // press vs. control,
 // sat 0.75 s inside the boundary.
 //
 // RE-MEASURED 2026-08-06 (mode work): THE BOUNDARY MOVED IN. Widening the
-// gate's scope window by window against the current generator, the worst
-// spike/drop over the no-switch seeds reads 1.00 s: +3.02/-5.94 (green),
-// 1.25 s: +4.16/-7.00 (green), 1.50 s: +13.34/-10.03 (RED). It goes red on
+// gate's scope window by window against the generator at that time, the worst
+// spike/drop over the no-switch seeds read 1.00 s: +3.02/-5.94 (green),
+// 1.25 s: +4.16/-7.00 (green), 1.50 s: +13.34/-10.03 (RED). It went red on
 // the window that CONTAINS kCarrierStaggerFrac * kBlendS = 1.5 s -- the
 // carrier deck's own engine/scale switch, which is where the excursion
-// lives. So 1.0 s now sits 0.50 s inside the boundary, not 0.75 s.
+// lives. So 1.0 s sat 0.50 s inside the boundary, not 0.75 s.
+//
+// RE-MEASURED AGAIN 2026-08-06 (Task 7, the taste tables): THE BOUNDARY HAS
+// REACHED THE WINDOW. Same scope sweep against the current generator reads
+// 0.75 s: +0.62/-5.78 (green), 1.00 s: +6.49/-9.20 (RED), 1.25 s:
+// +7.39/-10.30 (RED). The gate is now red AT its own window rather than
+// inside a margin -- and it goes red on the spike, in window 3, not on the
+// carrier's 1.5 s stagger duck that used to be the boundary. See
+// kBlendSpikeDb: the 6 dB ceiling is not a property the generator holds, so
+// this is not a margin that can be recovered by moving this window. THE
+// WINDOW IS STILL NOT MOVED -- narrowing it to 0.75 s would make the gate
+// green by shrinking what it claims, which is fitting, and is exactly the
+// move this constant's own text has refused twice already.
 //
 // (Why 1.25 s is still green even though the stagger duck's leading edge
 // starts at ~1.25 s: the scope moves in whole 0.25 s RMS windows, so a
@@ -242,6 +329,58 @@ constexpr float kBlendGateWindowS = 1.0f;           // seconds after the
 // all ten clear the Sampler filter in both. Attributing any part of the band
 // shift to the mode draw would need a per-seed before/after, which was not
 // run -- these bounds hold on the measured band either way.
+//
+// RE-MEASURED 2026-08-06 (Task 7, the taste tables), by the same measurement,
+// with a PER-SEED before/after this time: the same 10 s / macros-0.5 render
+// was run at every commit of this branch out of a worktree seeded at the
+// branch point 4ec5be0. Band is now 0.0306..0.1211. BOTH CONSTANTS HOLD
+// UNCHANGED, margins 29.7 dB below the quietest terrain and 12.3 dB above
+// the loudest (were 25.2 dB and 13.9 dB).
+//
+// THE OWNER'S +6 dB, WHAT ACTUALLY REACHES HIM. Mean per-seed change across
+// the whole branch is +2.58 dB, range -0.45 to +6.21 dB -- NOT the +4.78 dB
+// the COMP band work reported. Both numbers are right and they measure
+// different things: the COMP report's baseline was the commit COMP landed on
+// (3e7944f), which was already 3.67 dB BELOW the branch point. COMP itself is
+// worth +4.77 dB (+6.38 at the 0.70 round, -1.61 pulling back to 0.60); three
+// earlier table commits had spent most of that before it arrived. Mean
+// per-commit, in dB against the previous commit:
+//
+//   9f6daf6 veto table + four redrawn curves     -2.12
+//   3435c31 base rule edits                      +0.16
+//   50ad085 DENSITY archetype window             -0.11
+//   4624822 musical weights (rungs/steps/skew)   -1.60
+//   d1a9416 COMP 0.10-0.50 -> 0.40-0.70          +6.38
+//   46cd3e8 COMP ceiling -> 0.60 (by ear)        -1.61
+//   c945866 the per-domain adventure draw        +1.46
+//   019901c adventure per domain, corrected      +0.01
+//                                          NET   +2.58
+//
+// THE SPREAD, and what could and could not be established about it. The four
+// seeds that gain least across the branch are 0x303 (-0.45 dB), 0x606
+// (+1.10), 0x101 (+1.57) and 0x505 (+1.85). They do not share an archetype
+// (drone, arp, drone, fragment). Two mechanisms were measured:
+//
+//  - COMP's own lift is smallest on the seed that was already loudest. Across
+//    the ten, correlation between a seed's pre-COMP level in dBFS and the dB
+//    it gained from the COMP move is -0.66; 0x101, 6 dB louder than any other
+//    seed at -19.6 dBFS, gained only +1.50 dB where the other nine gained
+//    +3.55 to +5.78. That is a correlation over ten points. THE COMPRESSOR
+//    MECHANISM BEHIND IT WAS NOT MEASURED and is deliberately not named here.
+//  - 0x303, 0x606 and 0x505 are not COMP cases at all -- their COMP gains
+//    (+5.39/+5.13/+3.55) sit near the mean. What they lost was the musical
+//    weights commit 4624822: -1.80, -1.62 and -1.19 dB, against its own
+//    -1.60 dB mean but a per-seed range of -0.06 to -9.56 dB. That commit
+//    changes WHICH rung and step count a terrain draws, so a seed's level
+//    after it is a different terrain's level, not the same terrain turned
+//    down. No further mechanism is claimed.
+//
+// WHAT REMAINS OPEN: about 3.4 dB of the owner's reported +6 dB is still
+// unaccounted for on the average seed, and the per-seed range is wide enough
+// that some terrains gained essentially nothing. Do NOT chase it by raising
+// the COMP ceiling back to 0.70 -- the owner heard 0.70 and ruled it
+// over-compressed (see kVetos). It is a by-ear question about where else in
+// the tables the level should come from.
 constexpr float kFixedSeedRmsMin = 0.001f;
 constexpr float kFixedSeedRmsMax = 0.5f;
 // §7.8 discrete-churn gate storied-param bound (Task 10, review I-3: was
@@ -259,6 +398,17 @@ constexpr float kFixedSeedRmsMax = 0.5f;
 // measured 0 changes on all 10 candidate terrains, in both FLOW and STEP.
 // Worst storied churn over 60 s is still 1 (P_STEPS_A), worst non-storied
 // still 0. BOUND HOLDS UNCHANGED and is still non-vacuous.
+//
+// RE-MEASURED 2026-08-06 (Task 7), because the weighted discretes (P_STEPS_B
+// and the rate rungs) and P_MODE can now change independently of each other.
+// They do not churn. Same 60 s static-macro window at 500 Hz: worst storied
+// churn 1 (P_STEPS_A), worst non-storied 0, P_MODE 0, on all ten candidates.
+// Widened past the ten for the first time -- masters 1..600, 477 non-Sampler
+// terrains -- the per-terrain maximum storied churn is 0 on 308 and 1 on 169,
+// and NEVER 2 or more. So the bound has never been reached at any sample size
+// measured; it holds with a full change of headroom and stays non-vacuous
+// only through its RED proof (see the gate in tests/test_flow_audio.cpp), not
+// through observed churn.
 constexpr int kDiscreteChurnMax = 2;
 constexpr float kBodyFiltFloor = -0.3f;             // BODY FILT cliff margin
 constexpr float kSpaceSlewS = 2.5f;                 // lazy SIZE/DECAY follower
@@ -354,11 +504,11 @@ inline constexpr float kModeW[ARCH_COUNT] = { 0.15f, 0.90f, 0.95f, 0.75f };
 // Musical weights (spec 2026-08-06 §6). These are WEIGHTS, not vetoes: the
 // unlikely values stay reachable and simply come up rarely. Spec §7's
 // adventure draw flattens them per domain: terrain.cpp raises every weight
-// below to the power (1 - a^2), so these numbers are the shape at adventure 0
-// and the table reads uniform at adventure 1. SQUARED, so the median terrain
-// (a = 0.25) sits at w^0.96 and these numbers are what it actually plays --
-// plain w^(1-a) put the typical draw at w^0.75 and broke §6's own "straight
-// rungs win four draws out of five".
+// below to the power (1 - a^kAdventureExp), so these numbers are the shape at
+// adventure 0 and the table reads uniform at adventure 1. With kAdventureExp
+// at 2 the median terrain (a = 0.25) sits at w^0.96 and these numbers are what
+// it actually plays -- exponent 1 put the typical draw at w^0.75 and broke §6's
+// own "straight rungs win four draws out of five". See kAdventureExp above.
 //
 // Rung preference on kDivisions (mod/divisions.h), which is speed-sorted, so
 // the dotted and triplet rungs sit between the straight ones. Straight rungs
@@ -393,6 +543,33 @@ inline constexpr float kShuffleSkew = 2.5f;
 // is the no-op. The (1-x)^3 shape of the draw itself lives in terrain.cpp, as
 // does the per-domain split of WHICH a applies where (Terrain::adventure).
 constexpr float kAdventureNarrow = 0.40f;
+// How hard the adventure level flattens the musical weights and the SHUFFLE
+// skew: both are raised to the power (1 - a^kAdventureExp). MOVED HERE
+// 2026-08-06 (Task 7) from terrain.cpp, where it was an `adv * adv` literal --
+// it is a tuning value, and this file is where those live. It is also a LEVER
+// the owner has already been asked to rule on once, so it needs a name.
+//
+// 2 rather than 1 is the owner's ruling (2026-08-06). E[a] is 0.25, so a plain
+// w^(1-a) puts the TYPICAL terrain at w^0.75, which lifts a 0.15 triplet weight
+// to 0.24; squaring puts the median terrain at w^0.96 -- essentially the tables
+// as written -- and lets the flattening bite only on the rare brave draw
+// (a=0.5 gives w^0.75, a=0.9 gives w^0.19). "Chaos when NEW is pressed, aber
+// eben seltener."
+//
+// THE MEASURED ALTERNATIVES, on the crooked synced-rate share over 4 000
+// masters (tests/test_flow_terrain.cpp's own quantity, aggregated over all
+// adventure levels), so a later session does not have to re-derive them:
+//
+//   no tempering at all  0.1891      exponent 2 (shipped)  0.2134
+//   exponent 1           0.2549      exponent 3            0.2032
+//                                    exponent 4            0.1961
+//
+// Higher exponents temper less. Anything above ~2 buys crooked-rung share back
+// at the cost of the feature the draw exists for -- the brave/calm separation
+// that tests/test_flow_terrain.cpp now asserts on the two populations
+// separately. Do not raise it to make an aggregate bound fit; that bound was
+// retired for measuring a mixture.
+constexpr float kAdventureExp = 2.f;
 
 // ---------------------------------------------------------------------------
 // Story library, one variant per macro (DENSITY gets two). Implements §3's

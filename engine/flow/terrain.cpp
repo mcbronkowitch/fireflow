@@ -72,21 +72,19 @@ int pick_index(Rng& r, int n) {
     return i < n ? i : n - 1;
 }
 
-// w^(1-a^2): the taste table's weights as written at a = 0, uniform at a = 1.
-// This is what lets an adventurous terrain draw the rung the tables call
-// unlikely -- a triplet rate, an 11-step phrase -- without any weight ever
-// becoming a veto. Weights only; the SHUFFLE skew is NOT one (see stage 3).
+// w^(1 - a^kAdventureExp): the taste table's weights as written at a = 0,
+// uniform at a = 1. This is what lets an adventurous terrain draw the rung the
+// tables call unlikely -- a triplet rate, an 11-step phrase -- without any
+// weight ever becoming a veto. Weights only; the SHUFFLE skew is NOT one (see
+// stage 3).
 //
-// SQUARED, and that is the whole point of the exponent (owner's ruling,
-// 2026-08-06). Plain w^(1-a) flattens far too eagerly: E[a] is 0.25, so the
-// TYPICAL terrain already draws at w^0.75, which lifts a 0.15 triplet weight
-// to 0.24 and took the crooked-rung share from 0.189 to 0.255 -- past §6's
-// "straight rungs win four draws out of five" and past the Task 5 bound that
-// encodes it. Squaring keeps the median terrain at w^0.96, i.e. essentially
-// the table as written, and lets the flattening bite only on the rare brave
-// draw: a = 0.5 gives w^0.75, a = 0.9 gives w^0.19. Chaos when NEW is pressed,
-// "aber eben seltener", which is what was asked for.
-float temper(float w, float adv) { return std::pow(w, 1.f - adv * adv); }
+// The exponent itself is a tuning value and lives in taste.h as
+// kAdventureExp, with the owner's ruling and the measured alternatives
+// (exponents 1, 3 and 4) recorded there. It used to be an `adv * adv` literal
+// here, which put a lever outside the taste tables; moved 2026-08-06 (Task 7).
+float temper(float w, float adv) {
+    return std::pow(w, 1.f - std::pow(adv, kAdventureExp));
+}
 
 // Snap a normalized rate to a weighted rung of the divisions.h ladder, chosen
 // among the rungs that fall inside the drawn span. Free-mode terrains skip
@@ -306,22 +304,26 @@ Terrain generate(const TerrainState& st) {
         } else if (br.param == P_STEPS_B) {
             t.base[br.param] = snap_steps(r, s.lo, s.hi, t.adventure_base);
         } else if (br.param == P_SHUFFLE) {
-            // The skew tempers too: kShuffleSkew^(1-a) is the table's skew at
-            // a = 0 and decays to 1.0 -- a uniform draw across the span -- at
-            // full adventure, which is the same "tables as written, then flat"
-            // arc the weights follow.
+            // The skew tempers too: kShuffleSkew^(1 - a^kAdventureExp) is the
+            // table's skew at a = 0 and decays to 1.0 -- a uniform draw across
+            // the span -- at full adventure, which is the same "tables as
+            // written, then flat" arc the weights follow. (An earlier version
+            // of this comment and the one below still named the SUPERSEDED law
+            // kShuffleSkew^(1-a); the code has implemented the squared form
+            // since 4624822/3e7944f. Corrected 2026-08-06, Task 7.)
             //
             // Written out rather than as temper(kShuffleSkew, adv), which
             // computes the IDENTICAL number today. The two are not the same
             // claim: temper() is defined on a WEIGHT in a table of weights,
             // and kShuffleSkew is an exponent on the draw itself. They agree
-            // only because w^(1-a) happens to be the right law for both, and
-            // the moment temper() adopts any other flattening law (a lerp
-            // toward the mean weight, a floor under the small ones) it would
-            // silently take the skew somewhere meaningless with it.
+            // only because w^(1 - a^kAdventureExp) happens to be the right law
+            // for both, and the moment temper() adopts any other flattening law
+            // (a lerp toward the mean weight, a floor under the small ones) it
+            // would silently take the skew somewhere meaningless with it.
             const float u = r.next_unipolar();
             const float a = t.adventure_base;
-            const float skew = std::pow(kShuffleSkew, 1.f - a * a);
+            const float skew = std::pow(kShuffleSkew,
+                                        1.f - std::pow(a, kAdventureExp));
             t.base[br.param] = s.lo + (s.hi - s.lo) * std::pow(u, skew);
         }
     }
@@ -468,6 +470,45 @@ Terrain generate(const TerrainState& st) {
 // 2 of 6 777 as the "before". Those figures predate the pre-mode baseline --
 // they cannot be a valid before, since the pair count is master-determined
 // and provably 6 603 at 651ee2c. They are superseded by the table above.)
+//
+// RE-MEASURED AGAIN 2026-08-06 (Task 7), after the taste tables. Same harness,
+// same 20 000 pairs and 3 000 chained draw_new() calls, built and run at EVERY
+// commit of the glow-taste-tables branch from a worktree at its branch point
+// 4ec5be0 -- so this before/after is a measurement pair, not a remembered
+// number:
+//
+//                    4ec5be0 (branch pt)   89eb461 (HEAD)
+//   P_COUNT                  63                 63
+//   base-patch min       0.0588             0.0352
+//   base-patch mean      0.1569             0.1229
+//   base-patch max       0.2582             0.2193
+//   same-arch pairs       6 603              6 603
+//   ...of which clear         2                  0
+//   draw_new same-arch   0/3 000            0/3 000
+//
+// THE BASE-PATCH TERM SHRANK BY ROUGHLY A FIFTH, and the per-commit sweep says
+// where all of it came from: the mean sits at 0.1541-0.1569 at every commit
+// from 4ec5be0 through 46cd3e8 (no single table edit moves it by more than
+// 0.003) and drops to 0.1230 at c945866 -- THE PER-DOMAIN ADVENTURE DRAW. That
+// is what draw_span() does by construction: at adventure a a span is sampled
+// only over the fraction kAdventureNarrow + (1-kAdventureNarrow)*a of its
+// width, so both draws in a pair are pulled toward their spans' centres and
+// |delta| shrinks with them. E[a] is 0.25.
+//
+// The same-archetype pair count is 6 603 at every one of the thirteen commits,
+// as it must be: arch is make_stream(master, kStreamArch, 0), a pure function
+// of the master, and no commit on this branch touched kArchWeight. Any table
+// measurement that moves this number is wrong before it is interesting.
+//
+// THE CONCLUSION DID NOT MOVE -- IT GOT STRONGER. Same-archetype pairs
+// clearing kDistanceMin went 2 -> 1 at 4624822 (the musical weights) -> 0 at
+// 46cd3e8 (the COMP ceiling). NO same-archetype pair in 6 603 now clears the
+// threshold on its base patch alone, so "far enough away" does not merely
+// mostly mean "a different archetype", it means exactly that: the flat 0.25
+// is the whole decision, and kDistanceMin now sits above the entire
+// base-patch distribution's reach for a same-archetype pair (max 0.2193 for
+// ANY pair, against kDistanceMin 0.18 -- clearing it needs a pair in the top
+// of the distribution, and none of the same-archetype ones is).
 //
 // That may be exactly right for an explore-the-instrument gesture, or it
 // may be why a drone never persists across a NEW press on an instrument

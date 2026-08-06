@@ -199,41 +199,36 @@ TEST_CASE("flow audio: fixed seeds render clean and inside RMS bounds (7.8)") {
     }
 }
 
-// KNOWN RED as of 2026-08-06, on master 0x707 only, against
-// kCalmCornerRmsMax. This assertion is deliberately left failing.
+// THE doctest::should_fail() MARKER THIS CASE CARRIED FROM 2026-08-05 IS
+// RETIRED (2026-08-06, Task 7). It was self-expiring by design -- should_fail
+// turns a case red the moment it starts PASSING -- and it fired, so it came
+// off. Every assertion here now passes on all ten seeds, with no constant
+// moved and no seed dropped.
 //
-// The ceiling is a §7.8 SPEC bound, so it is not raised to fit the output,
-// and 0x707 is not dropped from the seed set -- either move would convert a
-// real finding into a green tick. In outline: the level is steady rather
-// than a transient the 3 s skip misses; the drawn P_MODE is causal for this
-// seed; but the mode work did not create the problem, because a wide master
-// scan puts the breach rate at the same value here as at the pre-mode commit
-// 651ee2c. The gate has always sampled a property the generator does not
-// guarantee, and read green only because none of these ten fixed seeds sat
-// in the breaching fraction. It needs a generator fix or a spec decision,
-// not a constant nudge.
+// WHAT CHANGED, measured commit by commit out of a worktree at the branch
+// point 4ec5be0 rather than reasoned about (the figures live in taste.h,
+// beside kCalmCornerRmsMax, so the two copies of this finding cannot drift):
+// the 0x707 ceiling breach the marker was written for stopped reproducing at
+// 3435c31, and inside that commit it is the drone SHAPE cap alone, isolated
+// by reverting that one span while leaving the other two edits standing.
 //
-// EVERY NUMBER BEHIND THAT LIVES IN ONE PLACE -- taste.h, beside
-// kCalmCornerRmsMax. Deliberately not restated here, so the two copies of
-// this finding cannot drift apart; the failing values themselves are printed
-// by the CHECK below when it fires.
+// THE TRAP THE MARKER CREATED, RECORDED BECAUSE IT SPRUNG: should_fail is
+// satisfied by ANY failing assertion, so while it was on, this case was free
+// to fail for a reason its own prose did not describe -- and for eight commits
+// it did. From 3435c31 the ceiling breach was gone and the case was failing on
+// the SILENCE FLOOR instead (master 0x404 at rms 7.0e-08, later 0x707 too),
+// which nobody would have seen from the suite. A marker that declares one
+// failure and accepts any is a marker that hides the next one; if this case
+// ever needs declaring again, declare the specific assertion, not the case.
 //
-// WHY should_fail AND NOT may_fail, A SKIP, OR A DELETED SEED: a permanently
-// red suite destroys the signal every later branch depends on, so the failure
-// has to be declared -- but it must not be allowed to go quiet. should_fail is
-// the only marker that ALSO turns the case red the moment it starts PASSING.
-// So whoever fixes the generator, or writes the tolerance into §7.8, is handed
-// a failing test that points straight back at this comment instead of a green
-// tick they can walk past. may_fail would swallow both outcomes; a skip would
-// stop rendering the seed at all and the finding would rot.
-//
-// THIS MARKER IS EXPECTED TO BE REMOVED, not maintained. It comes off when the
-// project owner rules on the tolerance -- either the generator guarantees a
-// quiet calm corner for drone terrains, or §7.8 states the fraction it
-// tolerates and this gate asserts that instead. Do not remove it by moving
-// kCalmCornerRmsMax.
-TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence floor (7.8)"
-          * doctest::should_fail()) {
+// NEITHER SIDE OF THIS GATE IS A GUARANTEE THE GENERATOR MAKES, and that is
+// still the open finding -- unchanged in kind by the marker coming off. Over
+// masters 1..2000 (1 566 non-Sampler terrains) 0.5 % breach the ceiling and
+// 6.6 % render at or below the silence floor. This case is green because none
+// of these ten fixed seeds sits in either fraction. See taste.h's
+// kCalmCornerRmsMax and kCalmCornerRmsMin for the numbers and for what the
+// spec has to decide.
+TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence floor (7.8)") {
     uint32_t kept[kMaxKept];
     const int n = filtered_masters(kept);
     REQUIRE(n > 0);
@@ -282,15 +277,34 @@ TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence
 // after the press -- kBlendSpikeDb/kBlendDropDb themselves are unchanged;
 // this narrows WHAT THE GATE CLAIMS, not how much it tolerates.
 //
+// KNOWN RED as of 2026-08-06 (Task 7), on the SPIKE side, at masters 0xD0D
+// and 0xC0C0, both in window 3. This is deliberately left failing, and no
+// bound, window or seed was moved to avoid it.
+//
+// The reason is not that two seeds are marginal. kBlendSpikeDb was ruled on a
+// DISTRIBUTION this time rather than on one seed's before/after -- 85
+// non-Sampler, non-switching masters out of 1..2000 -- and more than a
+// quarter of them breach 6 dB, at the branch point as well as here. The
+// ceiling is a §5 spec claim about what a crossfade may do, not a measured
+// property of the generator, so there is no honest measurement that makes
+// this green. THE FIGURES AND THE FULL ARGUMENT LIVE IN ONE PLACE, taste.h's
+// kBlendSpikeDb comment, and are deliberately not restated here so the two
+// copies cannot drift; the failing values are printed by the CHECK itself.
+//
+// A should_fail() MARKER WAS NOT ADDED. The calm-corner case above carried
+// one and it is being retired in the same commit for having become a
+// catch-all: it accepted any failing assertion and so hid a different defect
+// for eight commits. Declaring this case the same way would repeat that
+// exactly -- the drop side (kBlendDropDb) is separately down to 0.80 dB of
+// headroom and would vanish behind the same marker.
+//
 // RE-MEASURED 2026-08-06 after the operating-mode work (spec 2026-08-06 §5).
 // The headlines, qualitatively -- THE FIGURES BEHIND THEM LIVE IN ONE PLACE,
 // taste.h's kBlendGateWindowS / kBlendSpikeDb / kBlendDropDb comments, and
 // are deliberately not restated here so the two copies cannot drift:
 //
 //  - kBlendGateWindowS is still a CONSERVATIVE CHOICE, not a derivation, but
-//    the failure boundary MOVED IN, so it has less room than it used to.
-//  - In-window spike headroom went UP, not down: putting the carrier's
-//    clocking flip inside the window made the worst measured spike smaller.
+//    the failure boundary has now reached the window itself.
 //  - THE BLIND SPOT NARROWED but did not close. On a mode-changing press the
 //    carrier deck is now ducked AT THE PRESS as well (set_sync is global, so
 //    the clocking flip lands at phase 0), and that duck IS inside this
