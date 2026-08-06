@@ -95,9 +95,12 @@ TEST_CASE("flow taste: story windows default to the whole curve") {
             CHECK(kStories[s].arch_window[a].lo >= 0.f);
             CHECK(kStories[s].arch_window[a].hi <= 1.f);
             CHECK(kStories[s].arch_window[a].lo < kStories[s].arch_window[a].hi);
-            // Only DENSITY "rate" narrows, and only for drone. Everything else
-            // must stay on the default or today's sound changes for no reason.
-            const bool narrows = kStories[s].macro == M_DENSITY
+            // Only DENSITY "rate" narrows, and only for drone. Tied to the
+            // exact story by name (not just macro == M_DENSITY), so a future
+            // accidental narrowing of "thick" -- DENSITY's other variant,
+            // which is supposed to stay default -- cannot slip through this
+            // exemption unnoticed.
+            const bool narrows = std::strcmp(kStories[s].name, "rate") == 0
                               && a == ARCH_DRONE;
             if (!narrows) {
                 CHECK(kStories[s].arch_window[a].lo == 0.f);

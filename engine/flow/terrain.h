@@ -64,7 +64,15 @@ struct Terrain {
     bool      storied[P_COUNT];           // owned by some macro's curve
     MacroMap  map[MACRO_COUNT];
     // The picked variant's window for THIS terrain's archetype, per macro.
-    // Copied at generate() time so the runtime never re-reads kStories.
+    // Copied at generate() time so the runtime never re-reads kStories. Has
+    // NO default member initialiser (unlike StoryVariant::arch_window), so
+    // a `Terrain t{}` zero-inits every entry to {0,0}, not the {0,1}
+    // identity every other macro relies on -- if generate() ever left a
+    // macro's window uncopied, that macro's story would silently sample
+    // only x=0 (its bp[0] floor) at every knob position. Currently
+    // unreachable: "every macro has at least one story"
+    // (test_flow_taste.cpp) guarantees stage 4's `if (picked)` branch fires
+    // for every m. Worth knowing at this site if that invariant ever moves.
     Span      window[MACRO_COUNT];
     int       weather_n;                  // 2..4
     float     weather_period_s[4], weather_depth[4];

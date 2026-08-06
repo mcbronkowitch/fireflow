@@ -2,6 +2,7 @@
 #include "doctest/doctest.h"
 #include "flow/terrain.h"
 #include "flow/taste.h"
+#include <cstring>
 using namespace spky::flow;
 
 static TerrainState st(uint32_t m) { TerrainState s; s.master = m; return s; }
@@ -127,4 +128,44 @@ TEST_CASE("flow terrain: archetypes reach the data (spec 7.7, fixed seeds)") {
     }
     REQUIRE(n[ARCH_DRONE] > 100); REQUIRE(n[ARCH_PULSE] > 100);
     CHECK(sum[ARCH_DRONE]/n[ARCH_DRONE] > sum[ARCH_PULSE]/n[ARCH_PULSE] + 0.05);
+}
+
+TEST_CASE("flow terrain: a drone's picked DENSITY 'rate' story carries its "
+          "window into the Terrain") {
+    // The archetype window (spec 2026-08-06 §4) lives in taste.h's static
+    // kStories table (StoryVariant::arch_window); every test_flow_taste.cpp
+    // case only reads THAT table. This proves the window actually gets
+    // COPIED into Terrain::window at generate() time (terrain.cpp stage 4's
+    // `if (picked) { ... t.window[m] = sv.arch_window[t.arch]; }`), not just
+    // tabulated -- a regression that stopped doing the copy would leave
+    // kStories correct and every taste test green while the terrain the
+    // runtime actually uses silently reverted to the unwindowed {0,1}.
+    //
+    // Checked by EQUALITY against the table entry, not a loose "hi <= 0.5"
+    // bound: Terrain::window has no default member initialiser, so an
+    // uncopied window zero-inits to {0,0} along with the rest of the
+    // struct -- and 0.0 <= 0.5 passes a loose bound just as well as the real
+    // 0.45 does, so that version of this test cannot actually go red when
+    // the copy is missing (measured: proving this test RED by deleting the
+    // copy left it green under the loose bound). Equality against the
+    // source table catches both a missing copy (0 != .45) and any future
+    // drift between the two.
+    bool found = false;
+    for (uint32_t master = 1; master <= 20000 && !found; ++master) {
+        Terrain t = generate(st(master));
+        if (t.arch != ARCH_DRONE) continue;
+        const int story = t.map[M_DENSITY].story;
+        if (std::strcmp(kStories[story].name, "rate") != 0) continue;
+        found = true;
+        CAPTURE(master);
+        const Span& want = kStories[story].arch_window[ARCH_DRONE];
+        CHECK(t.window[M_DENSITY].lo == want.lo);
+        CHECK(t.window[M_DENSITY].hi == want.hi);
+        CHECK(t.window[M_DENSITY].hi <= 0.5f);   // the rule itself, spot-checked
+    }
+    // Not "assume one exists" -- if 20 000 masters never draw a drone that
+    // picks "rate" (drone is the heaviest weight, kArchWeight, and DENSITY
+    // has only two variants, so this should be common), that is itself a
+    // finding worth reporting, not something to route around.
+    REQUIRE(found);
 }
