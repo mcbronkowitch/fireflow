@@ -271,6 +271,28 @@ constexpr float kDuckWetTarget = 0.95f;             // send value it aims at
 constexpr float kDuckDepth     = 0.8f;              // how far it gets there
 
 // ---------------------------------------------------------------------------
+// Hard by-ear limits (spec 2026-08-06 §3). These hold under EVERY archetype,
+// every macro position, every weather offset and every adventure level. A row
+// here is a claim that no music in this box ever wants that value.
+//
+// THIS IS NOT THE COMPLETE LIST OF HARD LIMITS. Two live elsewhere on purpose:
+//   - P_RES's 0.75 ceiling is in kParams (flow_params.h) because that range
+//     also normalises the terrain distance metric in terrain.cpp.
+//   - kBodyFiltFloor is a runtime clamp in flow.cpp because it is conditional
+//     on a deck's engine, and this table is engine-independent.
+struct Veto { int param; float lo, hi; };
+inline const Veto kVetos[] = {
+    { P_REV_MOD,  0.00f, 0.25f },  // above: the reverb tail comes apart
+    { P_DRIVE,    0.00f, 0.40f },  // above: the limiter rides and DRIVE stops
+                                   // controlling dirt (it only gets louder)
+    { P_COMP_A,   0.10f, 0.50f },  // never uncompressed, never squashed
+    { P_COMP_B,   0.10f, 0.50f },
+    { P_REVMIX_A, 0.08f, 1.00f },  // never fully dry
+    { P_REVMIX_B, 0.08f, 1.00f },
+};
+inline const int kVetoCount = int(sizeof(kVetos) / sizeof(kVetos[0]));
+
+// ---------------------------------------------------------------------------
 // Archetype draw weights (drone-heavy per the spec: this is an ambient box).
 // Order: {ARCH_DRONE, ARCH_PULSE, ARCH_ARP, ARCH_FRAGMENT}.
 inline const float kArchWeight[ARCH_COUNT] = { 0.5f, 0.2f, 0.15f, 0.15f };
@@ -318,8 +340,15 @@ inline const StoryVariant kStories[] = {
 { M_MOTION, "orbit", 4, {
   { P_TIDE,      {{0.f,.05f},{.1f,.2f},{.25f,.4f},{.45f,.6f},{.7f,1.f}} },
   { P_DRIFT,     {{0.f,.05f},{.05f,.15f},{.2f,.35f},{.4f,.55f},{.6f,.9f}} },
-  { P_REV_SMEAR, {{0.f,.05f},{.05f,.15f},{.15f,.3f},{.3f,.5f},{.5f,.8f}} },
-  { P_REV_MOD,   {{0.f,.05f},{.05f,.1f},{.1f,.25f},{.25f,.45f},{.45f,.85f}} } } },
+  // SMEAR is the diffuser LFO (the wash). It carries the seasick end now that
+  // WOBL is capped: smear washes the reverb where MOD tears it.
+  { P_REV_SMEAR, {{0.f,.05f},{.05f,.2f},{.2f,.4f},{.4f,.65f},{.65f,.95f}} },
+  // WOBL, capped at the veto (kVetos: P_REV_MOD 0.00-0.25). Flattens out
+  // rather than stopping dead, so the top of the knob still moves it -- just
+  // inside the band that survives. bp4 lo is .20, not the ".10" a naive
+  // rescale would give: test_flow_taste.cpp holds every curve's lo bounds
+  // monotone ascending, and .10 sits below bp3's lo of .14.
+  { P_REV_MOD,   {{0.f,.03f},{.03f,.08f},{.08f,.14f},{.14f,.20f},{.20f,.25f}} } } },
 // DENSITY rate-led (§3 row 2a): events carry the sweep.
 { M_DENSITY, "rate", 3, {
   { P_DENSITY_A, {{.02f,.08f},{.1f,.2f},{.3f,.5f},{.5f,.7f},{.7f,.95f}} },
@@ -333,7 +362,9 @@ inline const StoryVariant kStories[] = {
 // BRIGHT "ember -> sweep -> open -> air" (§3 row 1). Q1 dips the dry leg
 // via REVMIX (the spec-named level mechanism) and blooms REV_DECAY --
 // REV_DECAY's curve here runs HIGH at bp0 and settles by bp1: monotone
-// falling, active only in Q1. REVMIX likewise falls Q1-only.
+// falling, active only in Q1. REVMIX likewise falls Q1-only -- bottoming at
+// the veto floor (kVetos: P_REVMIX_A/B >= 0.08), not toward dry silence,
+// because the reverb send is never allowed fully dry.
 // FILT bp0 lo (-0.55) is below kBodyFiltFloor on purpose: the BODY margin
 // is a runtime clamp (Task 7), not a table limit -- other engines may dive.
 { M_BRIGHT, "dawn", 5, {
@@ -349,8 +380,10 @@ inline const StoryVariant kStories[] = {
 { M_DIRT, "heat", 4, {
   { P_GRIT_A,    {{0.f,0.f},{.05f,.15f},{.2f,.4f},{.45f,.65f},{.7f,1.f}} },
   { P_GRIT_B,    {{0.f,0.f},{.05f,.12f},{.15f,.35f},{.4f,.6f},{.65f,.95f}} },
-  { P_COMP_A,    {{.3f,.5f},{.3f,.5f},{.35f,.55f},{.4f,.6f},{.5f,.75f}} },
-  { P_DRIVE,     {{0.f,0.f},{0.f,0.f},{0.f,0.f},{0.f,.05f},{.3f,.7f}} } } },
+  // COMP rescaled into 0.10-0.50, relative shape kept.
+  { P_COMP_A,    {{.25f,.38f},{.25f,.38f},{.28f,.42f},{.32f,.46f},{.35f,.50f}} },
+  // PUSH joins in Q4 only (the threshold rule), inside the veto band.
+  { P_DRIVE,     {{0.f,0.f},{0.f,0.f},{0.f,0.f},{0.f,.05f},{.25f,.40f}} } } },
 // WANDER "frozen -> fine variation -> melodic wander -> FORM/SONG churn"
 // (§3 row 5). FORM/SONG are discrete: flat until Q4, hysteresis in Task 7.
 // Q4 hi extended vs the plan (which stopped at 3) toward the corrected
@@ -367,8 +400,8 @@ inline const StoryVariant kStories[] = {
 // the lazy follower in the runtime (kSpaceSlewS); dry duck at Q4 comes from
 // REVMIX riding high (equal-power: wet up = dry down).
 { M_SPACE, "bloom", 4, {
-  { P_REVMIX_A,  {{.02f,.1f},{.15f,.3f},{.35f,.5f},{.5f,.7f},{.75f,.95f}} },
-  { P_REVMIX_B,  {{.02f,.1f},{.15f,.3f},{.35f,.5f},{.5f,.7f},{.75f,.95f}} },
+  { P_REVMIX_A,  {{.08f,.15f},{.15f,.3f},{.35f,.5f},{.5f,.7f},{.75f,.95f}} },
+  { P_REVMIX_B,  {{.08f,.15f},{.15f,.3f},{.35f,.5f},{.5f,.7f},{.75f,.95f}} },
   { P_REV_SIZE,  {{.2f,.35f},{.35f,.5f},{.5f,.65f},{.65f,.8f},{.8f,.95f}} },
   { P_REV_DECAY, {{.3f,.4f},{.4f,.5f},{.5f,.65f},{.65f,.8f},{.8f,.92f}} } } },
 };
@@ -427,7 +460,7 @@ inline const BaseRule kBaseRules[] = {
 // -- fx sends -------------------------------------------------------------
 { P_FLUXMIX_A, {{0.f,.5f},{0.f,.5f},{0.f,.5f},{0.f,.5f}} },    // neutral
 { P_FLUXMIX_B, {{0.f,.5f},{0.f,.5f},{0.f,.5f},{0.f,.5f}} },    // neutral
-{ P_COMP_B,   {{.3f,.6f},{.3f,.6f},{.3f,.6f},{.3f,.6f}} },     // gentle glue
+{ P_COMP_B,   {{.3f,.5f},{.3f,.5f},{.3f,.5f},{.3f,.5f}} },     // gentle glue
 { P_LINK_A,   {{0.f,.6f},{0.f,.6f},{0.f,.6f},{0.f,.6f}} },     // unipolar 0..1
 { P_LINK_B,   {{0.f,.6f},{0.f,.6f},{0.f,.6f},{0.f,.6f}} },     // unipolar 0..1
 // -- global modulation / mix ---------------------------------------------
