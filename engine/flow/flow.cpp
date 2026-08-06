@@ -487,6 +487,21 @@ void Flow::recompute_and_push(bool force) {
                 v = kBodyFiltFloor;
         }
 
+        // The veto band (taste.h kVetos, spec §3), enforced HERE and only
+        // here at runtime. The build-time test already proves no table span
+        // leaves the band, so a settled terrain cannot breach one. What can:
+        // the blend line above clamps to kParams, not to the veto band, and
+        // _resid is frozen at press time while prv[] keeps re-evaluating --
+        // so a macro moved DURING a ramp can push the sum outside even though
+        // both terrains are legal. This runs before the change guard because
+        // param_now() is a public observer and must never show a vetoed value.
+        for (int vi = 0; vi < kVetoCount; ++vi) {
+            if (kVetos[vi].param != p) continue;
+            if (v < kVetos[vi].lo) v = kVetos[vi].lo;
+            else if (v > kVetos[vi].hi) v = kVetos[vi].hi;
+            break;
+        }
+
         // Setter spam guard: push only real changes -- exact compare for
         // discrete (already snapped to the step grid), epsilon for
         // continuous.
