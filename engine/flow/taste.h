@@ -294,8 +294,14 @@ inline const Veto kVetos[] = {
     { P_REV_MOD,  0.00f, 0.25f },  // above: the reverb tail comes apart
     { P_DRIVE,    0.00f, 0.40f },  // above: the limiter rides and DRIVE stops
                                    // controlling dirt (it only gets louder)
-    { P_COMP_A,   0.10f, 0.50f },  // never uncompressed, never squashed
-    { P_COMP_B,   0.10f, 0.50f },
+    // RE-DRAWN 2026-08-06 (owner request): the owner always plays per-deck
+    // COMP at >= 0.5 by ear, and Glow's old 0.10-0.50 band never let it draw
+    // that high -- COMP carries the makeup gain, and a table that undershoots
+    // where the owner actually sets the knob is why Glow read quiet. Moved to
+    // 0.40-0.70, same width discipline as before (never uncompressed, never
+    // squashed), just centred on where it is actually played.
+    { P_COMP_A,   0.40f, 0.70f },
+    { P_COMP_B,   0.40f, 0.70f },
     { P_REVMIX_A, 0.08f, 1.00f },  // never fully dry
     { P_REVMIX_B, 0.08f, 1.00f },
 };
@@ -425,8 +431,11 @@ inline const StoryVariant kStories[] = {
 { M_DIRT, "heat", 4, {
   { P_GRIT_A,    {{0.f,0.f},{.05f,.15f},{.2f,.4f},{.45f,.65f},{.7f,1.f}} },
   { P_GRIT_B,    {{0.f,0.f},{.05f,.12f},{.15f,.35f},{.4f,.6f},{.65f,.95f}} },
-  // COMP rescaled into 0.10-0.50, relative shape kept.
-  { P_COMP_A,    {{.25f,.38f},{.25f,.38f},{.28f,.42f},{.32f,.46f},{.35f,.50f}} },
+  // COMP rescaled into 0.40-0.70 (2026-08-06 owner request), relative shape
+  // kept: each old breakpoint's position inside the old 0.10-0.50 veto band
+  // maps linearly to the same position inside the new 0.40-0.70 band, so
+  // "half compressed" still means the same fraction of the way up the knob.
+  { P_COMP_A,    {{.51f,.61f},{.51f,.61f},{.54f,.64f},{.57f,.67f},{.59f,.70f}} },
   // PUSH joins in Q4 only (the threshold rule), inside the veto band. bp4 hi
   // lands exactly on the veto ceiling (0.40) on purpose: the loudest quarter
   // sits right at the limit, not a rounding accident.
@@ -514,7 +523,10 @@ inline const BaseRule kBaseRules[] = {
 // -- fx sends -------------------------------------------------------------
 { P_FLUXMIX_A, {{0.f,.5f},{0.f,.5f},{0.f,.5f},{0.f,.5f}} },    // neutral
 { P_FLUXMIX_B, {{0.f,.5f},{0.f,.5f},{0.f,.5f},{0.f,.5f}} },    // neutral
-{ P_COMP_B,   {{.3f,.5f},{.3f,.5f},{.3f,.5f},{.3f,.5f}} },     // gentle glue
+// Rescaled into 0.40-0.70 (2026-08-06 owner request), same linear map as
+// DIRT "heat"'s P_COMP_A above (old 0.10-0.50 position -> same position in
+// the new 0.40-0.70 band): old {.3f,.5f} -> {.55f,.70f}.
+{ P_COMP_B,   {{.55f,.70f},{.55f,.70f},{.55f,.70f},{.55f,.70f}} },     // gentle glue
 { P_LINK_A,   {{0.f,.6f},{0.f,.6f},{0.f,.6f},{0.f,.6f}} },     // unipolar 0..1
 { P_LINK_B,   {{0.f,.6f},{0.f,.6f},{0.f,.6f},{0.f,.6f}} },     // unipolar 0..1
 // -- global modulation / mix ---------------------------------------------
