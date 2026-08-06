@@ -318,6 +318,23 @@ float Flow::duck(int deck, float revmix) const {
     return wet > revmix ? wet : revmix;
 }
 
+// P_MODE + P_STEPS_A/B, pushed as one unit (spec 2026-08-06 §5.3).
+// apply_param cannot express this: set_step takes mode and count together, and
+// set_sync is global across both parts (instrument.h:274). Issuing them here,
+// from _pushed[], means no tick can ever observe steps without a grid.
+void Flow::push_mode_and_steps(bool force) {
+    if (!_inst) return;
+    const bool step = _pushed[P_MODE] > 0.5f;
+    const int  sa = int(clamp_to(kParams[P_STEPS_A], _pushed[P_STEPS_A]) + 0.5f);
+    const int  sb = int(clamp_to(kParams[P_STEPS_B], _pushed[P_STEPS_B]) + 0.5f);
+    if (!force && step == _mode_now && sa == _steps_now[0] && sb == _steps_now[1])
+        return;
+    _mode_now = step; _steps_now[0] = sa; _steps_now[1] = sb;
+    _inst->set_sync(step);
+    _inst->set_step(PART_A, step, sa);
+    _inst->set_step(PART_B, step, sb);
+}
+
 void Flow::recompute_and_push(bool force) {
     const bool  blending = _blend_phase < 1.f;
     const float ph = _blend_phase;
@@ -439,6 +456,8 @@ void Flow::recompute_and_push(bool force) {
             if (_inst) apply_param(*_inst, p, v);
         }
     }
+    // All three of this unit's values are now in _pushed[]; route them as one.
+    push_mode_and_steps(force);
 }
 
 } } // namespace spky::flow

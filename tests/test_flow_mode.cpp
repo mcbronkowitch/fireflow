@@ -2,6 +2,8 @@
 #include "doctest/doctest.h"
 #include "flow/taste.h"
 #include "flow/flow_params.h"
+#include "flow/flow.h"
+#include "instrument.h"
 using namespace spky::flow;
 
 TEST_CASE("flow mode: P_MODE is the last parameter") {
@@ -23,4 +25,22 @@ TEST_CASE("flow mode: archetype weights are probabilities, drone lowest") {
     // A drone is the archetype that normally wants no step sequencer.
     for (int a = 0; a < ARCH_COUNT; ++a)
         if (a != ARCH_DRONE) CHECK(kModeW[ARCH_DRONE] < kModeW[a]);
+}
+
+TEST_CASE("flow mode: steps never run without a grid") {
+    // The failure this guards: STEP mode on with SYNC off is a step sequencer
+    // at a free-running rate, which is what Glow shipped with. No reachable
+    // tick may show that combination.
+    for (uint32_t master = 1; master <= 200; ++master) {
+        spky::Instrument inst;
+        inst.init(48000.f);
+        Flow f;
+        f.init(&inst, 100.f);
+        TerrainState st; st.master = master;
+        f.wake(st);
+        for (int i = 0; i < 50; ++i) f.tick();
+        CAPTURE(master);
+        CHECK(inst.step_on(spky::PART_A) == inst.synced(spky::PART_A));
+        CHECK(inst.step_on(spky::PART_B) == inst.synced(spky::PART_B));
+    }
 }

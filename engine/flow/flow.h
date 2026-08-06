@@ -73,6 +73,7 @@ public:
 
 private:
     void recompute_and_push(bool force);
+    void push_mode_and_steps(bool force);
     float quantize_hyst(int p, float v, bool force);
     float space_slew(int slot, float target, bool force);
     // Gesture helpers (flow.cpp).
@@ -105,6 +106,8 @@ private:
 
     float _pushed[P_COUNT]   = {};  // last value handed to apply_param
     int   _step_now[P_COUNT] = {};  // discrete hysteresis state (step index)
+    bool _mode_now = false;         // last pushed mode, for the change guard
+    int  _steps_now[2] = { -1, -1 }; // last pushed step counts
     float _slew_v[2]         = {};  // one-pole state: [0]=REV_SIZE [1]=REV_DECAY
     float _slew_a = 0.f;            // its coefficient, from _dt / kSpaceSlewS
 
