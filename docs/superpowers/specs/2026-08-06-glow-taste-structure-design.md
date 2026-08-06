@@ -1,7 +1,7 @@
 # Glow taste structure — hard rules before listening data
 
 **Date:** 2026-08-06
-**Status:** design, approved for planning
+**Status:** design, approved for planning (revised after independent review)
 **Scope:** `engine/flow/taste.h`, `engine/flow/flow_params.h`, `engine/flow/terrain.cpp`,
 `engine/flow/flow.cpp`, `tests/test_flow_taste.cpp`, `tests/test_flow_audio.cpp`
 
@@ -17,40 +17,48 @@ are already known and stateable.
 This spec covers only the stateable part: the by-ear rules Bastian can name,
 plus the table mechanisms needed to express them. Learning the correlations he
 *cannot* name — the genre presets — is deliberately deferred to a second spec
-(§8).
+(§9).
 
 ## 2. Rules being encoded
 
-Collected in session, with the veto/bias distinction applied to each. A **veto**
-holds under every archetype, every macro position, every weather offset. A
-**bias** shifts probability and leaves the value reachable.
+Collected in session. Three kinds, and the distinction is load-bearing:
+
+- **Veto** — holds under every archetype, every macro position, every weather
+  offset, every adventure level. Lives in `kVetos` (§3), enforced by test.
+- **Weight** — shifts probability, leaves the value reachable (§6).
+- **Span** — an archetype's draw range. Narrowing one makes values
+  *unreachable*; it is a veto in everything but name, so it is labelled as a
+  span here and never as a "bias".
 
 | Rule | Kind | Param |
 |---|---|---|
-| WOBBLE never above 0.25 | veto | `P_REV_MOD` |
+| WOBBLE never above 0.25 | veto | `P_REV_MOD` (panel label "WOBL") |
 | PUSH never above 0.4 | veto | `P_DRIVE` (= `MASTER_DRIVE`, panel label "PUSH") |
 | COMP never 0, stays 0.1–0.5 | veto | `P_COMP_A/B` |
 | Reverb never fully dry | veto | `P_REVMIX_A/B` |
-| Drone LFOs round, never angular | archetype | `P_SHAPE_A/B` |
-| Drone density low | archetype | `P_DENSITY_A/B` (storied) |
-| Ambient attack/decay long | archetype | already correct in table |
-| DIFF mostly 0.6–0.8 | bias | `P_REV_DIFF` |
-| SHUFFLE mostly low | bias | `P_SHUFFLE` |
-| RATE prefers straight rungs | bias | `P_RATE_A/B` |
-| STEPS mostly 8 or 16 | bias | `P_STEPS_A/B` |
-| Drones normally have STEP off | archetype | new `P_MODE` |
+| Drone LFOs round, never angular | span | `P_SHAPE_A/B` |
+| Drone density low | span (via window) | `P_DENSITY_A/B` (storied) |
+| Ambient attack/decay long | — | already correct in table |
+| DIFF mostly 0.6–0.8 | span | `P_REV_DIFF` |
+| SHUFFLE mostly low | weight | `P_SHUFFLE` |
+| RATE prefers straight rungs | weight | `P_RATE_A/B` |
+| STEPS mostly 8 or 16 | weight | `P_STEPS_A/B` |
+| Drones normally have STEP off | weight | new `P_MODE` |
 
-Two findings changed the shape of the work:
+SHUFFLE takes the weight treatment rather than a narrowed span: a fragment with
+heavy shuffle is plausibly chaos worth keeping, so it stays reachable and
+becomes rare. DIFF is a plain span narrowing — 0.4–0.6 is simply not wanted.
+
+Two findings reshaped the work:
 
 **SHAPE is engine-independent.** `Instrument::set_shape` routes to `ModLane`,
 not to any engine. The axis is a waveform morph (`mod/waveforms.h:22`):
 sine 0.0 → triangle 0.25 → ramp 0.5 → pulse 0.75 → S&H 1.0. "Round, not
-angular" is therefore exactly `0 … 0.25`, and it is mechanical, not taste:
-from the ramp upward the lane emits a discontinuity per cycle, which is the
-rhythmisation being heard. The table currently draws `{0 … 1}` for all four
+angular" is therefore exactly `0 … 0.25`, and it is mechanical rather than
+taste: from the ramp upward the lane emits a discontinuity per cycle, which is
+the rhythmisation being heard. The table currently draws `{0 … 1}` for all four
 archetypes and calls it a wildcard, so three quarters of every drone draw gets
-an angular LFO. This is likely the single largest dud source and costs one line
-to fix.
+an angular LFO. This is likely the single largest dud source and costs one line.
 
 Because no collected rule needs it, **no per-engine span layer is specified
 here.** It remains a hypothesis for spec 2 to confirm or drop.
@@ -76,15 +84,33 @@ inline const Veto kVetos[] = {
 This table is **not** the complete list of hard by-ear limits, and its comment
 must say so: `P_RES`'s 0.75 ceiling stays in `kParams` because it also
 normalises the terrain distance metric, and `kBodyFiltFloor` stays a runtime
-clamp because it is engine-conditional and this table is engine-independent.
+clamp because it is engine-conditional while this table is engine-independent.
 Both get a cross-reference.
 
-**Enforcement is a build-time test, not a runtime clamp** (§7 test 1). A table
-that violates a veto goes red; it is not silently corrected. A runtime clamp
-stays in place at the end of `recompute_and_push`, after stories, base draws,
-weather and blend, but only as the net for what no single table row can show:
-`P_REVMIX_A` is targeted by two stories (BRIGHT "dawn" and SPACE "bloom") and
-the weather offset moves macros by up to ±0.10.
+**Enforcement is a build-time test** (§8 test 1). A table that violates a veto
+goes red; it is not silently corrected.
+
+**The runtime clamp exists for exactly one mechanism**, and the earlier draft
+named the wrong one. Shared story targets do **not** sum: `Flow::eval_terrain`
+(`flow.cpp:266–280`) picks the single candidate farthest from the terrain base,
+winner-takes-all. Weather only shifts `_eff`, which is clamped to 0..1
+(`flow.cpp:343–344`) before curve evaluation, so it still samples inside the
+drawn spans. Neither can breach a veto if test 1 passes.
+
+The blend residual can. `flow.cpp:394–396` computes
+
+```cpp
+v = clamp_to(kParams[p], prv[p] + (cur[p] - prv[p]) * ph + _resid[p] * (1.f - ph));
+```
+
+— clamped to the **kParams** range, not the veto band, and the comment directly
+above states that the sum can exceed a parameter's range even when both
+terrains' candidates sit inside it. `prv` re-evaluates live while `_resid` is
+frozen at press time, so a macro moved *during* a blend can push REVMIX under
+0.08 with both terrains legal. The clamp is applied after this line, at the end
+of `recompute_and_push`, before the change guard and before `_pushed` is
+written — `param_now()` is a public observer and must never show a vetoed
+value.
 
 **Four curves are redrawn rather than clipped**, so no macro loses live travel:
 
@@ -93,23 +119,16 @@ the weather offset moves macros by up to ±0.10.
 | MOTION "orbit" | `P_REV_MOD` | bp3 `.25–.45`, bp4 `.45–.85` | flattens out at `.10–.25`; the seasick end is carried by `P_TIDE` and `P_REV_SMEAR` instead |
 | MOTION "orbit" | `P_REV_SMEAR` | bp4 `.5–.8` | raised — smear washes the reverb rather than tearing it |
 | DIRT "heat" | `P_DRIVE` | bp4 `.3–.7` | `.25–.40` |
-| DIRT "heat" | `P_COMP_A` | bp4 `.5–.75` | `.35–.50` |
+| DIRT "heat" | `P_COMP_A` | bp2 `.35–.55`, bp3 `.4–.6`, bp4 `.5–.75` | all three pulled under `.50`, relative shape kept |
 | SPACE "bloom" | `P_REVMIX_A/B` | bp0 `.02–.1` | `.08–.15` — intimate means small room, not dry |
-
-`DIRT "heat"`'s `P_COMP_A` breaches the COMP veto at bp2 (`.35–.55`) and bp3
-(`.4–.6`) as well, not only bp4; all three are pulled under 0.50 keeping their
-relative shape.
 
 ### 3.1 Base rule edits
 
-Rules from §2 that are plain span changes, no new mechanism:
-
 | Param | Was | Becomes | Why |
 |---|---|---|---|
-| `P_SHAPE_A/B` drone | `{0, 1}` | `{0, .25}` | sine…triangle only; from the ramp up the lane emits a per-cycle discontinuity, which is the rhythmisation. Pulse/arp/fragment keep `{0, 1}` — nothing collected says otherwise |
+| `P_SHAPE_A/B` drone | `{0, 1}` | `{0, .25}` | sine…triangle only. Pulse/arp/fragment keep `{0, 1}` — nothing collected says otherwise |
 | `P_COMP_B` | `{.3, .6}` | `{.3, .5}` | breaches the COMP veto at the top |
-| `P_REV_DIFF` (all four) | `{.4, .8}` | `{.6, .8}` | bias, stated directly |
-| `P_SHUFFLE` fragment | `{.1, .5}` | `{.05, .35}` | "mostly low" was given globally; fragment was the only span reaching 0.5. First guess, to confirm by ear |
+| `P_REV_DIFF` (all four) | `{.4, .8}` | `{.6, .8}` | span narrowing, 0.4–0.6 not wanted |
 | `P_STEPS_B` drone | `{2, 6}` | `{2, 16}` | so the 8/16 weight of §6 has something to bite on |
 
 ## 4. Archetype window on story curves
@@ -123,28 +142,40 @@ Instead each archetype gets a **window onto the story**, not its own curves:
 ```cpp
 struct StoryVariant {
     Macro macro; const char* name;
-    Span arch_window[ARCH_COUNT];   // default {0,1} = the whole curve
     int n_targets; CurveRule targets[6];
+    // Where each archetype reads this story. Default = the whole curve.
+    Span arch_window[ARCH_COUNT] = {{0.f,1.f},{0.f,1.f},{0.f,1.f},{0.f,1.f}};
 };
 ```
 
-The knob still sweeps its full physical travel; only the sampling position is
-remapped, `pos = lo + knob * (hi - lo)`.
+The new member goes **last, with a default initialiser**, so every existing
+positional entry in `kStories` keeps compiling untouched and only the rows that
+need a window state one.
 
-Initial data: DENSITY "rate" gets drone `{0.0, 0.45}`, every other entry stays
-`{0.0, 1.0}`. A drone at full DENSITY lands where an arp sits at half, and
+The knob still sweeps its full physical travel; only the sampling position is
+remapped. The runtime samples `_eff[m]` (knob + CV + weather, clamped 0..1 at
+`flow.cpp:343–344`), so the mapping is
+
+```
+pos = lo + eff * (hi - lo)
+```
+
+— CV and weather ride inside the window like the knob, rather than bypassing it.
+
+Initial data: DENSITY "rate" gets drone `{0.0, 0.45}`, every other entry keeps
+the default. A drone at full DENSITY lands where an arp sits at half, and
 `P_STEPS_A` follows down with it because it lives in the same story — sparse
 and fewer steps, which is the musically correct coupling.
 
-Chosen over scaling the output value for two reasons: a window can only produce
-values that already appear in the curve's breakpoint spans, so the veto test of
-§7 stays valid unchanged (an output scaler above 1.0 could push past a veto and
-would have to be folded into that test); and every story except DENSITY keeps
-its default, so nothing else changes audibly.
+Chosen over scaling the output value because a window can only produce values
+that already appear in the curve's breakpoint spans (the breakpoints are walked
+in ascending order in `draw_curve`), so the veto test of §8 stays valid
+unchanged. An output scaler above 1.0 could push past a veto and would have to
+be folded into that test.
 
 **Accepted consequence:** under drone the DENSITY knob can no longer reach the
 story's Q4 risk zone. Dense chaos on a drone can then only come from the
-adventure draw (§6), never from the knob. That is intended — the knob should be
+adventure draw (§7), never from the knob. That is intended — the knob should be
 dependable, the dice should surprise.
 
 ## 5. Operating mode
@@ -173,8 +204,7 @@ deck's only clock and the texture lanes are followers.
 
 Glow thus gets the one combination neither side wants: **a step sequencer with
 no grid** — two decks stepping stubbornly at unrelated free-running rates that
-never meet. This explains the reported restlessness far better than a few
-excess triplets.
+never meet.
 
 **Design: one drawn mode per terrain**, two coupled states.
 
@@ -200,15 +230,58 @@ rather than free-running lanes — similar, not identical, since its texture
 lanes become followers. The escape hatch, if this proves wrong by ear, is
 per-deck STEP with global SYNC, which is three states instead of two.
 
+### 5.1 Where P_MODE sits in the enum — load-bearing
+
+Base draws are keyed `kStreamParamBase + uint32_t(param)` (`terrain.cpp:160`).
+`P_MODE` must therefore be **appended at the tail** of `SPKY_FLOW_PARAMS`.
+Inserting it anywhere else shifts the RNG stream of every parameter after it,
+and every existing terrain code — including `kHouseCode` and every saved
+patch — resolves to a different draw.
+
 `P_MODE` is a probability, not a range, so it cannot be a normal base rule. It
 gets a full-range placeholder row carrying the same comment `P_ENGINE_A/B`
 already carries — the row exists so the completeness test has no hole, the real
 numbers live in `kModeW` beside it.
 
-## 6. Rung and step weights, and the adventure draw
+### 5.2 P_MODE during a blend
 
-**Weights, not new value sets.** Once synced, biasing RATE toward straight rungs
-needs one weight per ladder rung, archetype-independent:
+`P_MODE` belongs to no deck, so the existing stagger (`flow.cpp:288–292`,
+texture at phase 0, carrier at `kCarrierStaggerFrac`) does not describe it: a
+global `set_sync` flips **both** decks' rate mapping at whatever instant it
+fires. Riding the carrier would mean the texture deck's entire clocking jumps
+1.5 s after its own duck had closed — precisely what the stagger exists to
+prevent.
+
+A mode change is a whole-terrain event, not a per-deck one, so it deliberately
+collapses the stagger for that press:
+
+- `P_MODE` switches at **phase 0**, with the texture deck.
+- When it switches, **both decks duck together** at phase 0, instead of the
+  carrier's duck firing later. A mode-changing NEW is therefore a harder cut
+  than a same-mode NEW — which is honest, since the terrain is changing from
+  ambient to rhythm or back.
+- Both ducks then fall inside `kBlendGateWindowS` (1.0 s), so the level gate
+  actually covers this transition rather than structurally missing it.
+
+`ModLane::set_step` on entering step mode can set `_song.new_pending`
+(`lane.cpp:156–158`), so a mode flip regenerates phrase material. That happens
+under the double duck by design, and the plan must confirm it by ear.
+
+### 5.3 Routing — apply_param cannot express this
+
+`apply_param` (`flow_params.h:95`) is stateless per parameter. `P_MODE` needs
+the current step counts (`set_step` takes mode *and* count) and `P_STEPS_A/B`
+need the current mode, so neither can stay a generic case.
+
+The three move out of `apply_param` into a small helper owned by `Flow`, which
+holds `_pushed[]` and therefore has all three values at once. It pushes
+`set_sync` and both `set_step` calls together, so no tick can ever observe
+"steps without grid". `apply_param` keeps handling everything else unchanged.
+
+## 6. Rung, step, shuffle and mode weights
+
+Once synced, biasing RATE toward straight rungs needs one weight per ladder
+rung, archetype-independent:
 
 ```cpp
 inline const float kRateRungW[kDivisionCount] = {
@@ -220,8 +293,9 @@ inline const float kRateRungW[kDivisionCount] = {
 ```
 
 Drawing stays inside the archetype's span; it is weighted rather than uniform,
-so crooked rungs stay reachable and become rare. The same pattern applies to
-STEPS as a weight vector over 2..16 with 8 and 16 heavy.
+so crooked rungs stay reachable and become rare. The same pattern covers STEPS
+(weights over 2..16, 8 and 16 heavy), SHUFFLE (weights favouring the low end,
+so a heavy-shuffle fragment stays possible) and `P_MODE` (`kModeW`).
 
 For reference, what the current spans hit once synced:
 
@@ -232,74 +306,108 @@ For reference, what the current spans hit once synced:
 | arp | `{.55, .9}` | 1/8., 1/4T, 1/8, 1/16., 1/8T, 1/16 | 4 of 6 |
 | fragment | `{.3, .7}` | 1/2 … 1/8 | 4 of 7 |
 
-Drone's `P_STEPS_B {2 … 6}` widens to reach 8 and 16: drones normally have STEP
-off, but a drone that does draw the step mode gets the same preferred counts as
-everything else.
+## 7. The adventure draw
 
-**The adventure draw is not a control.** It is a property of the draw, not of
-the panel — which also keeps the faceplate reducible to hardware. Each terrain
-rolls its own from its own RNG stream:
+Not a control. It is a property of the draw, not of the panel — which also
+keeps the faceplate reducible to hardware. Each terrain rolls its own:
 
 ```
-a = u³        // u uniform 0..1
+a = 1 - u^(1/3)        // u uniform 0..1
 ```
 
-so `a` sits near 0 most of the time, above 0.5 in roughly 12% of draws and
-above 0.8 in under 1%. It comes from the master seed, so it rides inside the
-terrain code and adds no state. `u³` is a first guess, tunable later.
+`P(a > x) = (1 - x)³`, so `a` sits above 0.5 in 12.5% of draws and above 0.8 in
+0.8%. Braver terrain is the rule, outliers the exception. (The earlier draft
+wrote `u³` alongside these percentages; that is a different variable — `u³`
+exceeds 0.5 in 20.6% of draws. The formula above is the one that matches.) The
+`(1-x)³` shape is a first guess, tunable later.
 
-`a` acts in two places, neither of which needs new table data:
+**Stream and reroll.** `a` is drawn per terrain from a stream keyed by
+`reroll_weather_counter()` — the sum of all six macro counters — exactly as the
+weather already is (`terrain.h:44`). Any partial reroll therefore redraws the
+adventure level along with the weather, so a terrain that drew wild does not
+stay wild in a domain the player explicitly asked to be redone.
 
-- **Spans widen.** At `a = 0` only the middle 40% of a span is drawn from; at
-  `a = 1` the whole span. Table edges become the outermost permitted value
-  rather than the normal case.
-- **Weights flatten.** Rung and mode weights are tempered as `w^(1−a)`: as
-  written at `a = 0`, uniform at `a = 1`. An adventurous terrain may draw a
-  triplet, or a drone in rhythm mode — chaos from places where chaos means
-  something musically, not from parameter noise.
+**Scope.** `a` applies to base-rule spans and story breakpoint spans (§7.1) and
+to every weight table of §6 (§7.2). It does **not** apply to the archetype
+window of §4, which is a musical range statement rather than a risk setting.
+
+### 7.1 Spans narrow
+
+At `a = 0` a span is sampled only in its middle 40%; at `a = 1` in full. Table
+edges are the outermost permitted value rather than the normal case.
+
+### 7.2 Weights flatten
+
+Rung, step, shuffle and mode weights are tempered as `w^(1−a)`: as written at
+`a = 0`, uniform at `a = 1`. An adventurous terrain may draw a triplet, or a
+drone in rhythm mode — chaos from places where chaos means something musically,
+rather than parameter noise.
 
 **`a` never touches the vetos.** The wildest terrain still gets no WOBBLE above
 0.25.
 
-## 7. Tests
+## 8. Tests
 
 Each must be proven RED once before being accepted (project rule: a test that
 cannot fail gets fixed).
 
 1. **Veto vs. table** — every base span (all four archetypes) and every story
    breakpoint lies inside `kVetos`.
-2. **Veto at runtime** — macro grid × N seeds × weather phases; every pushed
-   value inside. This is the one that catches two stories summing on
-   `P_REVMIX_A`.
-3. **Mode invariant** — no reachable state is "steps without grid";
-   `P_MODE` drives both `set_step` and `set_sync` from one value.
+2. **Veto at runtime, through a blend** — the recipe must include what the
+   clamp is actually for: press NEW, then move macros *during* the ramp, across
+   seeds and weather phases, asserting every `param_now()` inside the veto band.
+   A static macro grid alone would never exercise the residual path of §3 and
+   would be a test that cannot fail.
+3. **Mode invariant** — no observable tick has steps without grid; `P_MODE`
+   drives `set_sync` and both `set_step` calls from one push (§5.3).
 4. **Archetype window** — drone DENSITY draws never exceed the story's bp2
-   value; every story left at default `{0,1}` draws exactly as today.
+   value; with `a` forced to its no-op value, every story left at the default
+   window draws exactly as today. (Without that clamp the statement is false —
+   §7.1 narrows every span.)
 5. **Weights** — fixed-seed distribution test with generous bounds (crooked
-   rungs below a stated share at `a = 0`), shown non-vacuous in both
-   directions.
-6. **Adventure** — at `a = 0` all draws fall in the middle 40%; `P(a > 0.5)`
-   meets ~12.5% within tolerance.
-7. **Completeness** — `test_flow_taste.cpp`'s existing "every param is owned"
+   rungs below a stated share at `a = 0`), shown non-vacuous in both directions.
+6. **Adventure** — at `a = 0` all draws fall in the middle 40%; the drawn
+   distribution meets `P(a > 0.5) ≈ 12.5%` and `P(a > 0.8) ≈ 0.8%` within
+   tolerance.
+7. **Enum tail** — `P_MODE` is the last entry of `SPKY_FLOW_PARAMS`, asserted
+   statically, with the stream-key reason in the message (§5.1).
+8. **Completeness** — `test_flow_taste.cpp`'s existing "every param is owned"
    check still passes with `P_MODE` added.
 
 **Gates that will legitimately move**, and must be *re-measured* rather than
 nudged until green — this is a real part of the work, not a side effect:
 
 - `test_flow_audio.cpp`'s fixed-seed RMS band (`kFixedSeedRmsMin/Max`), the
-  differential NEW-blend level gate (`kBlendSpikeDb`, whose comment records
-  only ~1.14 dB of real headroom) and the discrete-churn gate were all measured
+  differential NEW-blend level gate (`kBlendSpikeDb`, whose comment records only
+  ~1.14 dB of real headroom) and the discrete-churn gate were all measured
   against today's terrain distribution. The mode change alone alters what a
-  terrain plays. Their comments state which measurement backed each number;
-  the replacements need the same treatment.
+  terrain plays. Their comments state which measurement backed each number; the
+  replacements need the same treatment.
+- `distance()` and `kDistanceMin`. Adding `P_MODE` changes the mean's
+  denominator, a mode mismatch contributes its own term, and §7.1's narrowing
+  shrinks the typical base spread. The measured commentary at
+  `terrain.cpp:241–257` (base-patch mean 0.1509; "same-archetype accepted 0
+  times in 3000") goes stale and must be re-measured, or NEW's rejection
+  behaviour changes silently.
 - `kHouseCode` is already flagged in-source as a placeholder to be re-chosen by
   ear once Glow could be played. After these changes the current code sounds
   different. It gets re-chosen — by ear, which is now possible.
 
-`tests/check_render_hash.cmake` is unaffected: those gates hang off the engine
-core, not the flow layer.
+`tests/check_render_hash.cmake` is unaffected: those gates drive the render host
+over engine scenarios, not the flow layer.
 
-## 8. Out of scope — the second spec
+### 8.1 Saved patches change — not a constraint
+
+Every saved Glow patch, locked ones included, plays a different piece after this
+work: `Glow::dataToJson` persists a terrain code, and the sound exists only
+through the tables. FireFlow is in dev alpha and patch compatibility is
+explicitly not a concern yet, so this needs no migration, no versioning and no
+further design attention.
+
+What *does* still matter is determinism within a version — hence the enum-tail
+rule of §5.1.
+
+## 9. Out of scope — the second spec
 
 Genre correlations ("ambient drone" vs "dub rhythm" as coupled parameter sets)
 are **not** hand-written here. Hand-writing them is exactly where an author's
@@ -307,8 +415,8 @@ own habits would narrow the instrument to music already imagined.
 
 They come from a tuning log, specified separately:
 
-- Gestures are the labels, no rating UI. `new_partial(macro_mask)` already
-  means "this domain was wrong"; LOCK already means "keeping this".
+- Gestures are the labels, no rating UI. `new_partial(macro_mask)` already means
+  "this domain was wrong"; LOCK already means "keeping this".
 - Macro adjustments after a NEW are logged as deltas — direction and amount,
   which a thumbs-down cannot give.
 - Dwell time before the next NEW is the continuous positive signal, capped
@@ -317,9 +425,8 @@ They come from a tuning log, specified separately:
 - An explicit keeper lives in the VCV **right-click menu**, never on the panel —
   host-side tooling, invisible to firmware, and no violation of the
   reducible-to-hardware constraint.
-- The log must store **resolved parameter values, not terrain codes.** A code is
-  `(master seed, reroll counters)`; the sound only exists through the tables, so
-  every code captured today means something else after any table edit.
+- The log must store **resolved parameter values, not terrain codes**, for the
+  same reason §8.1 breaks saved patches.
 
-`P_MODE` is the natural root for those genres: a terrain is an ambient flow or
-a rhythm piece, and most other correlations hang off that choice.
+`P_MODE` is the natural root for those genres: a terrain is an ambient flow or a
+rhythm piece, and most other correlations hang off that choice.
