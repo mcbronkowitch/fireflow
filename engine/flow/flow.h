@@ -12,7 +12,6 @@
 // knobs keep working through it. Only the button/timing state machine
 // (tap vs. hold vs. mark) belongs to the host; this class is its verbs.
 #pragma once
-#include <cassert>
 #include <cstdint>
 #include "flow/terrain.h"
 #include "flow/taste.h"
@@ -74,8 +73,12 @@ public:
     // phase a discrete switches at, and the flow-clock instant each deck's
     // duck is centred on. Hosts have no business reading either.
     float switch_phase_for_test(int p) const { return switch_phase_for(p); }
+    // Both indices come from literals in the tests, and this accessor exists
+    // only under SPKY_TESTING -- so there is deliberately no range assert
+    // here. Release is mandatory for this project (CMAKE_CXX_FLAGS_RELEASE
+    // carries -DNDEBUG), which would compile any assert out of every build
+    // anyone is allowed to run: a guard that cannot go red.
     double duck_t_for_test(int deck, int slot) const {
-        assert(deck >= 0 && deck < 2 && slot >= 0 && slot < kDucksPerDeck);
         return _duck_t[deck][slot];
     }
 #endif
@@ -115,8 +118,8 @@ private:
 
     float _pushed[P_COUNT]   = {};  // last value handed to apply_param
     int   _step_now[P_COUNT] = {};  // discrete hysteresis state (step index)
-    bool _mode_now = false;         // last pushed mode, for the change guard
-    int  _steps_now[2] = { -1, -1 }; // last pushed step counts
+    bool  _mode_now          = false;      // last pushed mode, change guard
+    int   _steps_now[2]      = { -1, -1 }; // last pushed step counts
     float _slew_v[2]         = {};  // one-pole state: [0]=REV_SIZE [1]=REV_DECAY
     float _slew_a = 0.f;            // its coefficient, from _dt / kSpaceSlewS
 

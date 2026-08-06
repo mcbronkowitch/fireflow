@@ -305,7 +305,7 @@ inline constexpr float kTextureW[ARCH_COUNT][5] = {
 // archetype comes out STEP/synced rather than FLOW/free. A drone normally has
 // no step sequencer at all; an arp is one almost by definition.
 // Order: {ARCH_DRONE, ARCH_PULSE, ARCH_ARP, ARCH_FRAGMENT}.
-inline const float kModeW[ARCH_COUNT] = { 0.15f, 0.90f, 0.95f, 0.75f };
+inline constexpr float kModeW[ARCH_COUNT] = { 0.15f, 0.90f, 0.95f, 0.75f };
 
 // ---------------------------------------------------------------------------
 // Story library, one variant per macro (DENSITY gets two). Implements §3's
