@@ -297,11 +297,17 @@ inline const Veto kVetos[] = {
     // RE-DRAWN 2026-08-06 (owner request): the owner always plays per-deck
     // COMP at >= 0.5 by ear, and Glow's old 0.10-0.50 band never let it draw
     // that high -- COMP carries the makeup gain, and a table that undershoots
-    // where the owner actually sets the knob is why Glow read quiet. Moved to
-    // 0.40-0.70, same width discipline as before (never uncompressed, never
-    // squashed), just centred on where it is actually played.
-    { P_COMP_A,   0.40f, 0.70f },
-    { P_COMP_B,   0.40f, 0.70f },
+    // where the owner actually sets the knob is why Glow read quiet. First
+    // moved to 0.40-0.70 (same width discipline as before: never
+    // uncompressed, never squashed), then the owner LISTENED to 0.70 and
+    // ruled it back down to 0.60 ("Ja passt eher 0.6"): 0.70 read as
+    // over-compressed by ear. That is a by-ear ceiling, not a correction of
+    // the band's location -- 0.40 lo and the "COMP carries makeup gain"
+    // rationale both still hold. Do NOT "restore" 0.70 to claw back level;
+    // the level gap left at 0.60 has to be found somewhere else in the
+    // table, not by re-widening this band past where the owner capped it.
+    { P_COMP_A,   0.40f, 0.60f },
+    { P_COMP_B,   0.40f, 0.60f },
     { P_REVMIX_A, 0.08f, 1.00f },  // never fully dry
     { P_REVMIX_B, 0.08f, 1.00f },
 };
@@ -431,11 +437,11 @@ inline const StoryVariant kStories[] = {
 { M_DIRT, "heat", 4, {
   { P_GRIT_A,    {{0.f,0.f},{.05f,.15f},{.2f,.4f},{.45f,.65f},{.7f,1.f}} },
   { P_GRIT_B,    {{0.f,0.f},{.05f,.12f},{.15f,.35f},{.4f,.6f},{.65f,.95f}} },
-  // COMP rescaled into 0.40-0.70 (2026-08-06 owner request), relative shape
-  // kept: each old breakpoint's position inside the old 0.10-0.50 veto band
-  // maps linearly to the same position inside the new 0.40-0.70 band, so
-  // "half compressed" still means the same fraction of the way up the knob.
-  { P_COMP_A,    {{.51f,.61f},{.51f,.61f},{.54f,.64f},{.57f,.67f},{.59f,.70f}} },
+  // COMP rescaled into 0.40-0.60 (2026-08-06, owner heard 0.70 and ruled it
+  // over-compressed -- "Ja passt eher 0.6"), relative shape kept: each
+  // breakpoint's position inside the 0.40-0.70 band maps linearly to the
+  // same position inside the narrower 0.40-0.60 band.
+  { P_COMP_A,    {{.47f,.54f},{.47f,.54f},{.49f,.56f},{.51f,.58f},{.53f,.60f}} },
   // PUSH joins in Q4 only (the threshold rule), inside the veto band. bp4 hi
   // lands exactly on the veto ceiling (0.40) on purpose: the loudest quarter
   // sits right at the limit, not a rounding accident.
@@ -523,10 +529,10 @@ inline const BaseRule kBaseRules[] = {
 // -- fx sends -------------------------------------------------------------
 { P_FLUXMIX_A, {{0.f,.5f},{0.f,.5f},{0.f,.5f},{0.f,.5f}} },    // neutral
 { P_FLUXMIX_B, {{0.f,.5f},{0.f,.5f},{0.f,.5f},{0.f,.5f}} },    // neutral
-// Rescaled into 0.40-0.70 (2026-08-06 owner request), same linear map as
-// DIRT "heat"'s P_COMP_A above (old 0.10-0.50 position -> same position in
-// the new 0.40-0.70 band): old {.3f,.5f} -> {.55f,.70f}.
-{ P_COMP_B,   {{.55f,.70f},{.55f,.70f},{.55f,.70f},{.55f,.70f}} },     // gentle glue
+// Rescaled into 0.40-0.60 (2026-08-06, owner ruled 0.70 over-compressed),
+// same linear map as DIRT "heat"'s P_COMP_A above (0.40-0.70 position ->
+// same position in the narrower 0.40-0.60 band): old {.55f,.70f} -> {.50f,.60f}.
+{ P_COMP_B,   {{.50f,.60f},{.50f,.60f},{.50f,.60f},{.50f,.60f}} },     // gentle glue
 { P_LINK_A,   {{0.f,.6f},{0.f,.6f},{0.f,.6f},{0.f,.6f}} },     // unipolar 0..1
 { P_LINK_B,   {{0.f,.6f},{0.f,.6f},{0.f,.6f},{0.f,.6f}} },     // unipolar 0..1
 // -- global modulation / mix ---------------------------------------------
