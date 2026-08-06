@@ -34,7 +34,7 @@ Collected in session. Three kinds, and the distinction is load-bearing:
 |---|---|---|
 | WOBBLE never above 0.25 | veto | `P_REV_MOD` (panel label "WOBL") |
 | PUSH never above 0.4 | veto | `P_DRIVE` (= `MASTER_DRIVE`, panel label "PUSH") |
-| COMP never 0, stays 0.1–0.5 | veto | `P_COMP_A/B` |
+| COMP never 0, stays 0.40–0.60 (revised by ear, see §3 correction) | veto | `P_COMP_A/B` |
 | Reverb never fully dry | veto | `P_REVMIX_A/B` |
 | Drone LFOs round, never angular | span | `P_SHAPE_A/B` |
 | Drone density low | span (via window) | `P_DENSITY_A/B` (storied) |
@@ -74,8 +74,8 @@ struct Veto { int param; float lo, hi; };
 inline const Veto kVetos[] = {
     { P_REV_MOD,  0.00f, 0.25f },
     { P_DRIVE,    0.00f, 0.40f },
-    { P_COMP_A,   0.10f, 0.50f },
-    { P_COMP_B,   0.10f, 0.50f },
+    { P_COMP_A,   0.40f, 0.60f },
+    { P_COMP_B,   0.40f, 0.60f },
     { P_REVMIX_A, 0.08f, 1.00f },
     { P_REVMIX_B, 0.08f, 1.00f },
 };
@@ -139,15 +139,32 @@ value.
 | MOTION "orbit" | `P_REV_MOD` | bp3 `.25–.45`, bp4 `.45–.85` | flattens out at `.10–.25`; the seasick end is carried by `P_TIDE` and `P_REV_SMEAR` instead |
 | MOTION "orbit" | `P_REV_SMEAR` | bp4 `.5–.8` | raised — smear washes the reverb rather than tearing it |
 | DIRT "heat" | `P_DRIVE` | bp4 `.3–.7` | `.25–.40` |
-| DIRT "heat" | `P_COMP_A` | bp2 `.35–.55`, bp3 `.4–.6`, bp4 `.5–.75` | all three pulled under `.50`, relative shape kept |
+| DIRT "heat" | `P_COMP_A` | bp2 `.35–.55`, bp3 `.4–.6`, bp4 `.5–.75` | rescaled into the 0.40–0.60 band (see correction below), relative shape kept |
 | SPACE "bloom" | `P_REVMIX_A/B` | bp0 `.02–.1` | `.08–.15` — intimate means small room, not dry |
+
+> **Corrected 2026-08-06 (owner request, by ear).** The COMP veto above shipped
+> at `0.40–0.60`, not the `0.10–0.50` this section originally specified and the
+> table above once repeated. History, so a later session does not "restore
+> spec compliance" against `taste.h`'s own warning not to: the rule was first
+> stated as "between 0.1 and 0.5". Bastian then found Glow reading
+> systematically quiet and identified that he plays per-deck COMP at **at
+> least** 0.5 by ear — so 0.5 was always his *floor*, never his ceiling, and
+> the old band's 0.50 top undershot where he actually sets the knob, which is
+> why COMP was never carrying its makeup gain. The band first moved to
+> `0.40–0.70` (same width discipline: never uncompressed, never squashed).
+> He then listened to 0.70 and ruled it back down: `0.40–0.60` ("Ja passt eher
+> 0.6") — 0.70 read as over-compressed by ear. **0.60 is not a re-derivation
+> of the original band; it is where 0.70 stopped sounding right**, so do not
+> raise it to claw back level lost by the pull-back — that level has to come
+> from somewhere else in the table, not by re-widening this veto past where
+> the owner capped it.
 
 ### 3.1 Base rule edits
 
 | Param | Was | Becomes | Why |
 |---|---|---|---|
 | `P_SHAPE_A/B` drone | `{0, 1}` | `{0, .25}` | sine…triangle only. Pulse/arp/fragment keep `{0, 1}` — nothing collected says otherwise |
-| `P_COMP_B` | `{.3, .6}` | `{.3, .5}` | breaches the COMP veto at the top |
+| `P_COMP_B` | `{.3, .6}` | `{.50, .60}` | breaches the COMP veto; rescaled into the 0.40–0.60 band the owner ruled (see the correction note above) |
 | `P_REV_DIFF` (all four) | `{.4, .8}` | `{.6, .8}` | span narrowing, 0.4–0.6 not wanted |
 | `P_STEPS_B` drone | `{2, 6}` | `{2, 16}` | so the 8/16 weight of §6 has something to bite on |
 
@@ -411,6 +428,41 @@ window of §4, which is a musical range statement rather than a risk setting.
 
 At `a = 0` a span is sampled only in its middle 40%; at `a = 1` in full. Table
 edges are the outermost permitted value rather than the normal case.
+
+> **Exception, undocumented until 2026-08-06 (final review): five weighted
+> params never see the narrowed span.** `terrain.cpp` computes `draw_span()`
+> for every `kBaseRules` row, including these five, and then **discards** that
+> result for them, re-drawing from the table's raw, unnarrowed `s.lo`/`s.hi`
+> through `snap_rate` / `snap_steps` / the shuffle skew instead:
+> `P_RATE_A`, `P_RATE_B` (synced only — free-mode RATE is the continuous
+> `free_hz` curve and takes the narrowed draw normally), `P_STEPS_A` (inside
+> `draw_curve`, DENSITY's "rate" story), `P_STEPS_B`, and `P_SHUFFLE`. So for
+> these five, adventure still reaches the **weights** of §7.2 (the tempered
+> rung/step/shuffle weighting), but it never reaches the **span** itself — a
+> brave terrain gets a flatter preference curve over the same full-width table
+> span, not a wider span to draw from.
+>
+> This is the plan's own gap, not an implementation slip, but two things make
+> it easy to misread: `draw_span()`'s result is computed and silently thrown
+> away for exactly these rows, so a reader assumes the narrowing survived; and
+> the SHUFFLE distribution test asserts its mean position over the *full*
+> span, so it would not catch this either way.
+>
+> For the four discrete sets (`P_RATE_A/B`, `P_STEPS_A/B`) this is defensible
+> and is not being changed: narrowing a rung or step-count set toward its
+> centre is close to meaningless once every rung already carries its own
+> per-rung weight — the weight table *is* the narrowing mechanism for a
+> discrete set.
+>
+> For `P_SHUFFLE` it is **not** defensible on the same grounds — SHUFFLE is
+> continuous (spans `{0,.1}` / `{0,.35}` / `{0,.3}` / `{.1,.5}` per archetype),
+> and a calm terrain is supposed to draw from the middle 40% of its span like
+> every other continuous param, but currently always draws from the full span
+> with only the skew tempered. **Left as shipped for this fix wave — changing
+> what a calm terrain's SHUFFLE sounds like is the owner's call, not a
+> documentation pass's.** Open item for the owner: should `P_SHUFFLE` route
+> through the narrowed span like every other continuous base rule, or is the
+> full-span-plus-tempered-skew behaviour actually preferred?
 
 ### 7.2 Weights flatten
 
