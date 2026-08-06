@@ -502,13 +502,13 @@ Terrain generate(const TerrainState& st) {
 //
 // THE CONCLUSION DID NOT MOVE -- IT GOT STRONGER. Same-archetype pairs
 // clearing kDistanceMin went 2 -> 1 at 4624822 (the musical weights) -> 0 at
-// 46cd3e8 (the COMP ceiling). NO same-archetype pair in 6 603 now clears the
-// threshold on its base patch alone, so "far enough away" does not merely
+// 46cd3e8 (the COMP ceiling). NO same-archetype pair in 6 603 now reaches
+// kDistanceMin on its base patch alone, so "far enough away" does not merely
 // mostly mean "a different archetype", it means exactly that: the flat 0.25
-// is the whole decision, and kDistanceMin now sits above the entire
-// base-patch distribution's reach for a same-archetype pair (max 0.2193 for
-// ANY pair, against kDistanceMin 0.18 -- clearing it needs a pair in the top
-// of the distribution, and none of the same-archetype ones is).
+// is the whole decision. Note what this is NOT a claim about -- the base-patch
+// distribution still runs to 0.2193, well past kDistanceMin's 0.18, so the
+// threshold is comfortably reachable in principle. What was measured is that
+// no SAME-ARCHETYPE pair happens to reach it, not that none could.
 //
 // That may be exactly right for an explore-the-instrument gesture, or it
 // may be why a drone never persists across a NEW press on an instrument

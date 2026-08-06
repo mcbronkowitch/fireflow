@@ -63,8 +63,9 @@ constexpr float kDistanceMin = 0.18f;               // NEW rejection threshold
 //
 // RE-MEASURED 2026-08-06 (Task 7, the taste tables). THE 0x707 BREACH THAT
 // MADE THIS GATE RED IS GONE, and the constant did not move to make that
-// happen. 0x707's calm corner now renders at rms 4.25e-04, 45.6 dB under this
-// ceiling, against 8.24e-02 before the branch.
+// happen. 0x707's calm corner now renders at rms 4.25e-04, 43.0 dB under this
+// ceiling; that is a 45.6 dB REDUCTION from the 8.24e-02 it rendered before
+// the branch, which is a different quantity from the margin.
 //
 // WHICH CHANGE RETIRED IT, measured rather than guessed. The calm-corner
 // render (macros 0, 10 s, first 3 s skipped -- the gate's own shape) was run
@@ -77,10 +78,18 @@ constexpr float kDistanceMin = 0.18f;               // NEW rejection threshold
 //
 // So the ceiling breach stopped reproducing at 3435c31. Inside that commit it
 // is specifically the DRONE SHAPE CAP (P_SHAPE_A/B drone span {0,1} ->
-// {0,.25}, below): reverting that one span at 3435c31 and leaving the other
-// two edits in place puts 0x707 back at rms 0.0992, OVER, while reverting the
-// DIFF narrowing gives 0.00669 and reverting the drone STEPS_B widening gives
-// 0.0256 -- both still under. One span, isolated by reversion.
+// {0,.25}, below). Isolated by reverting each of that commit's three table
+// edits in turn, at that commit, and re-rendering -- 0x404 is carried in the
+// same run because kCalmCornerRmsMin's comment below rests on it:
+//
+//   3435c31 as shipped            0x707 6.645e-03  0x404 7.00e-08
+//   drone SHAPE cap reverted      0x707 9.920e-02  0x404 1.35e-03
+//   DIFF narrowing reverted       0x707 6.689e-03  0x404 6.93e-08
+//   drone STEPS_B widening rev.   0x707 2.561e-02  0x404 7.00e-08
+//
+// Reverting the SHAPE cap alone puts 0x707 back OVER this ceiling; reverting
+// either other edit leaves it well under. One span, isolated by reversion --
+// and the same one span is what silences 0x404.
 //
 // THE §7.8 FINDING FROM THE MODE WORK STILL STANDS, and it got smaller. The
 // same masters 1..2000 scan (1 566 non-Sampler terrains) now breaches on 8,
@@ -127,12 +136,26 @@ constexpr float kCalmCornerRmsMax = 0.06f;
 //
 // The branch nearly halved the rate rather than causing it, but it did move
 // individual seeds through it, and that movement is measured: master 1028
-// (0x404) rendered 1.60e-03 at 4ec5be0, fell to 7.00e-08 at 3435c31 -- the
-// same drone SHAPE cap named in kCalmCornerRmsMax's comment above, isolated
-// the same way -- stayed mute through 46cd3e8, and was pulled back to
-// 8.03e-05 by the per-domain adventure draw at c945866. It renders 1.16e-04
-// at HEAD: above this floor, but still about -78.7 dBFS. It is a survivor of
-// the mute population, not a terrain that is comfortably audible.
+// (0x404) rendered 1.60e-03 at 4ec5be0 and fell to 7.00e-08 at 3435c31.
+//
+// THE ONSET IS ISOLATED TO ONE SPAN, THE CURE ONLY TO A COMMIT, and the two
+// claims are not equally strong -- read them as stated:
+//
+//  - ONSET, isolated WITHIN its commit by reversion (the three-way table in
+//    kCalmCornerRmsMax's comment above carries 0x404's own rows): reverting
+//    the drone SHAPE cap alone at 3435c31 puts 0x404 back at 1.35e-03, while
+//    reverting the DIFF narrowing (6.93e-08) or the drone STEPS_B widening
+//    (7.00e-08) leaves it mute. Same one span that retired the 0x707 breach.
+//  - CURE, COMMIT-GRANULARITY ONLY: 0x404 stayed mute through 46cd3e8 and
+//    reads 8.03e-05 at c945866, the commit that introduced the per-domain
+//    adventure draw. That is a per-commit bisect, not a within-commit
+//    isolation, and c945866 was followed by 019901c ("the nerve goes per
+//    domain") correcting the same mechanism -- so "the adventure draw did it"
+//    is the commit's headline, not a measured attribution to a single edit.
+//
+// It renders 1.16e-04 at HEAD: above this floor, but still about -78.7 dBFS.
+// It is a survivor of the mute population, not a terrain that is comfortably
+// audible.
 //
 // THIS IS A FINDING FOR THE OWNER, NOT SOMETHING TO CLAMP AWAY, and it is
 // the same shape of question as the ceiling: either the generator guarantees
@@ -506,8 +529,9 @@ inline constexpr float kModeW[ARCH_COUNT] = { 0.15f, 0.90f, 0.95f, 0.75f };
 // adventure draw flattens them per domain: terrain.cpp raises every weight
 // below to the power (1 - a^kAdventureExp), so these numbers are the shape at
 // adventure 0 and the table reads uniform at adventure 1. With kAdventureExp
-// at 2 the median terrain (a = 0.25) sits at w^0.96 and these numbers are what
-// it actually plays -- exponent 1 put the typical draw at w^0.75 and broke §6's
+// at 2 the mean terrain (a = 0.25) sits at w^0.94 and the median one
+// (a = 0.21) at w^0.96, so these numbers are essentially what a terrain
+// actually plays -- exponent 1 put the typical draw at w^0.75 and broke §6's
 // own "straight rungs win four draws out of five". See kAdventureExp above.
 //
 // Rung preference on kDivisions (mod/divisions.h), which is speed-sorted, so
@@ -551,10 +575,13 @@ constexpr float kAdventureNarrow = 0.40f;
 //
 // 2 rather than 1 is the owner's ruling (2026-08-06). E[a] is 0.25, so a plain
 // w^(1-a) puts the TYPICAL terrain at w^0.75, which lifts a 0.15 triplet weight
-// to 0.24; squaring puts the median terrain at w^0.96 -- essentially the tables
-// as written -- and lets the flattening bite only on the rare brave draw
-// (a=0.5 gives w^0.75, a=0.9 gives w^0.19). "Chaos when NEW is pressed, aber
-// eben seltener."
+// to 0.24; squaring puts the MEAN terrain (a = 0.25) at w^0.94 and the MEDIAN
+// terrain (a = 1 - 0.5^(1/3) = 0.21) at w^0.96 -- essentially the tables as
+// written -- and lets the flattening bite only on the rare brave draw (a=0.5
+// gives w^0.75, a=0.9 gives w^0.19). "Chaos when NEW is pressed, aber eben
+// seltener." (Mean and median are not the same terrain here: a = 1 - u^(1/3)
+// is skewed. An earlier version of this line called a = 0.25 the median and
+// attached the median's w^0.96 to it; corrected 2026-08-06, review round 1.)
 //
 // THE MEASURED ALTERNATIVES, on the crooked synced-rate share over 4 000
 // masters (tests/test_flow_terrain.cpp's own quantity, aggregated over all
