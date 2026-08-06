@@ -183,28 +183,85 @@ TEST_CASE("flow terrain: synced rates prefer the straight rungs") {
         for (const char* c = n; *c; ++c) if (*c == '.' || *c == 'T') return true;
         return false;
     };
-    int total = 0, odd = 0;
-    for (uint32_t master = 1; master <= 4000; ++master) {
+    // SPLIT BY ADVENTURE, 2026-08-06. This case used to assert one aggregate
+    // share under 0.20 over all terrains. That bound was written in task 5,
+    // BEFORE the adventure draw existed, and since the draw landed it has been
+    // measuring the wrong quantity: it averages the calm majority together
+    // with the rare wild tail, when the entire design intent of spec §7 is
+    // that those two DIFFER. Measured, they do -- 0.198 calm against 0.300
+    // brave -- so the aggregate 0.213 is a number no terrain actually plays,
+    // and a bound on it says nothing true about either population.
+    //
+    // THIS IS NOT A WIDENED BOUND. The calm assertion below is the SAME 0.20
+    // the aggregate carried, applied to the population it was always meant
+    // for; it holds today at 0.1981, with about 1 % of margin. The second
+    // assertion is new work the old one could not do at all: it pins that
+    // brave terrains genuinely go crooked, which is the feature. Nothing was
+    // relaxed to fit -- the old assertion was replaced because it measured a
+    // mixture. (Task 5's margin note on the aggregate is gone with it; the
+    // archetype-mix caveat it recorded is preserved below, since it still
+    // governs the calm figure.)
+    //
+    // 20 000 masters, not task 5's 4 000: the brave bucket is ~13 % of
+    // terrains and needs a real sample, not a handful. Both counts are pinned
+    // for exactly that reason -- a filtered share over an empty bucket is a
+    // test that cannot fail, which this branch has now produced seven times.
+    //
+    // Both buckets filter on adventure_base, and that is the right level
+    // rather than a convenient one: P_RATE_A/B are base rules, so their rungs
+    // are drawn under the base patch's nerve (terrain.cpp stage 3). A macro
+    // domain's level does not reach them.
+    long calm_n = 0, calm_odd = 0, brave_n = 0, brave_odd = 0;
+    for (uint32_t master = 1; master <= 20000; ++master) {
         TerrainState st; st.master = master;
         const Terrain t = generate(st);
         if (t.base[P_MODE] < 0.5f) continue;            // free mode has no ladder
+        // Thresholds chosen from the measured distribution, not by taste.
+        // CALM at 0.15: the tightest of the candidates (0.1981 at <0.15,
+        // 0.1997 at <0.20, 0.2013 at <0.30), so it keeps the most margin under
+        // the 0.20 bound while still covering 39 % of all terrains. BRAVE at
+        // 0.50: spec §7's own headline threshold, P(a > 0.5) = 12.5 %, which
+        // leaves 2 558 rate draws -- a real sample, unlike a > 0.8, which has
+        // only 164 and whose 0.43 share is too thin to assert on.
+        const bool calm  = t.adventure_base < 0.15f;
+        const bool brave = t.adventure_base > 0.50f;
+        if (!calm && !brave) continue;
         for (int p : { P_RATE_A, P_RATE_B }) {
-            ++total;
-            if (crooked(division_index(t.base[p]))) ++odd;
+            const bool c = crooked(division_index(t.base[p]));
+            if (calm) { ++calm_n;  if (c) ++calm_odd; }
+            else      { ++brave_n; if (c) ++brave_odd; }
         }
     }
-    REQUIRE(total > 500);
-    const float share = float(odd) / float(total);
-    CAPTURE(share);
-    // MARGIN, if you are reading this because it went red: measured 0.189
-    // against 0.20, only 5.5 % of headroom, and that is by construction rather
+    // Sample sizes, pinned. Measured 8 076 and 2 558; the floors sit well
+    // under those so seed-set jitter cannot trip them, while a filter that
+    // stopped matching does.
+    CAPTURE(calm_n); CAPTURE(brave_n);
+    REQUIRE(calm_n  > 6000);
+    REQUIRE(brave_n > 2000);
+    const float calm_share  = float(calm_odd)  / float(calm_n);
+    const float brave_share = float(brave_odd) / float(brave_n);
+    CAPTURE(calm_share); CAPTURE(brave_share);
+
+    // A calm terrain plays the tables as written: straight rungs win more than
+    // four draws out of five (spec §6).
+    //
+    // MARGIN, if you are reading this because it went red: measured 0.1981
+    // against 0.20, about 1 % of headroom, and that is by construction rather
     // than by luck. The crooked rungs cluster in the middle of the ladder,
     // which is exactly where arp's P_RATE span {.55,.9} and pulse's {.3,.6}
     // sit -- alone they contribute 0.259 and 0.216. Re-weighting the archetype
     // mix toward arp, or widening those spans, trips this bound without
     // anything being wrong. Re-derive from the taste tables before touching it.
-    CHECK(share < 0.20f);      // was roughly 0.5 with a uniform draw
-    CHECK(share > 0.01f);      // still reachable -- a weight, not a veto
+    CHECK(calm_share < 0.20f);      // was roughly 0.5 with a uniform draw
+    CHECK(calm_share > 0.01f);      // still reachable -- a weight, not a veto
+
+    // ...and a brave one actually takes the risk. Measured 0.3002 against a
+    // 0.25 floor: 17 % of headroom below the measurement, and half again the
+    // calm share, so the two populations are separated by more than noise.
+    // Without tempering this collapses to the calm figure and goes red, which
+    // is the point -- this is the assertion that says w^(1-a^2) does anything
+    // at all.
+    CHECK(brave_share > 0.25f);
 }
 
 TEST_CASE("flow terrain: step counts prefer 8 and 16") {

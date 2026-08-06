@@ -240,6 +240,16 @@ features reference:
   variant pick. A target shared between macros (STEPS sits under both
   DENSITY and WANDER) belongs, for the reroll, to the macro being turned;
   the other macro's curve simply applies to the new base afterwards.
+- **That macro's adventure level** (`2026-08-06-glow-taste-structure-design.md`
+  §7), added 2026-08-06. It is part of the domain, not a terrain-wide value:
+  each macro draws its own risk level from its own reroll counter, and the base
+  patch draws one from the master alone. Written down here because the
+  isolation guarantee above is what forced it — a single per-terrain level
+  keyed on the sum of the counters was built first and broke this section, since
+  a risk level is an *input to* every span draw rather than a layer over the
+  finished terrain, so rerolling one macro re-narrowed the spans every other
+  value came from. Anything later that reads "per terrain" must not become a
+  draw input without re-checking this rule.
 
 Fully deterministic; same state → same terrain on every host (see §2's
 owned-PRNG rule). Generation order:
@@ -411,7 +421,10 @@ counts.
 3. **Partial reroll:** rerolling one macro's domain (§4 definition,
    shared-target rule included) changes only that domain — every parameter
    outside it is identical to before, proving the per-parameter RNG streams
-   don't shift.
+   don't shift. Since 2026-08-06 this also covers the adventure levels, in
+   both directions: the rerolled domain's level must change, and every other
+   level — including the base patch's — must be bit-identical. Asserting only
+   the "unchanged" half would pass for a level that was never drawn at all.
 4. **Terrain distance:** the NEW rejection rule is deterministic for a given
    seed sequence, and every accepted terrain clears the distance threshold.
 5. **Weather:** offsets stay inside their declared bounds at every sampled

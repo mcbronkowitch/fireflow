@@ -437,15 +437,29 @@ than routed through the weight helper: the skew is an exponent on the draw, not
 a weight in a table, and the two agree only because `w^(1−a²)` happens to suit
 both.
 
-**Measured after the correction** (4000 masters, the Task 5 fixed-seed sets):
-crooked-rung share **0.213**, step counts on 8/16 **0.475**, shuffle mean
-position **0.303**. The step and shuffle gates hold. The crooked-rung gate at
-`< 0.20` does **not**, and it is a genuine tension rather than a weak exponent:
-the untempered tables already sit at 0.189, so that bound leaves any tempering
-at all only +0.011 of room, while `a²` costs +0.024. Measured alternatives —
-`a³` gives 0.203, `a⁴` gives 0.196 — so nothing short of a fourth power fits
-under it. Whether the bound moves or the exponent does is an ear question and is
-open; it is recorded here rather than settled by widening the test.
+**Measured after the correction:** step counts on 8/16 **0.475**, shuffle mean
+position **0.303** (4000 masters), both inside their gates.
+
+**The crooked-rung gate was measuring a mixture, and is now two gates.** Task 5
+set a single `< 0.20` bound over all terrains, before this section existed.
+Once tempering landed, that aggregate read **0.213** — a number no terrain
+actually plays, because it averages two populations the design deliberately
+separates. Split by adventure over 20 000 masters:
+
+| population | rate draws | crooked share |
+|---|---|---|
+| calm, `a_base < 0.15` | 8 076 | **0.198** |
+| brave, `a_base > 0.50` | 2 558 | **0.300** |
+
+So the tables hold for the calm majority exactly as §6 claims, and the brave
+tail genuinely takes the risk — which is the feature, and which the aggregate
+bound could not express in either direction. The gate is now `calm < 0.20` (the
+original bound, applied to the population it was always meant for, holding with
+~1 % of margin) plus `brave > 0.25`. The owner ruled the split; the exponent
+stays `a²`. This is not a widened bound — for the record, the alternatives that
+would have fitted the *aggregate* under 0.20 were measured and rejected: `a³`
+gives 0.203, `a⁴` gives 0.196, both of which buy the aggregate by flattening
+the brave tail back toward the calm one, i.e. by deleting the feature.
 
 **`a` never touches the vetos.** The wildest terrain still gets no WOBBLE above
 0.25.
