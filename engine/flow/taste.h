@@ -362,9 +362,10 @@ inline const StoryVariant kStories[] = {
 // BRIGHT "ember -> sweep -> open -> air" (§3 row 1). Q1 dips the dry leg
 // via REVMIX (the spec-named level mechanism) and blooms REV_DECAY --
 // REV_DECAY's curve here runs HIGH at bp0 and settles by bp1: monotone
-// falling, active only in Q1. REVMIX likewise falls Q1-only -- bottoming at
-// the veto floor (kVetos: P_REVMIX_A/B >= 0.08), not toward dry silence,
-// because the reverb send is never allowed fully dry.
+// falling, active only in Q1. REVMIX likewise falls Q1-only -- settling at
+// bp1-bp4 well above dry silence, never toward the veto floor itself (kVetos:
+// P_REVMIX_A/B >= 0.08) but bounded by the same principle -- the reverb send
+// is never allowed fully dry.
 // FILT bp0 lo (-0.55) is below kBodyFiltFloor on purpose: the BODY margin
 // is a runtime clamp (Task 7), not a table limit -- other engines may dive.
 { M_BRIGHT, "dawn", 5, {
@@ -382,7 +383,9 @@ inline const StoryVariant kStories[] = {
   { P_GRIT_B,    {{0.f,0.f},{.05f,.12f},{.15f,.35f},{.4f,.6f},{.65f,.95f}} },
   // COMP rescaled into 0.10-0.50, relative shape kept.
   { P_COMP_A,    {{.25f,.38f},{.25f,.38f},{.28f,.42f},{.32f,.46f},{.35f,.50f}} },
-  // PUSH joins in Q4 only (the threshold rule), inside the veto band.
+  // PUSH joins in Q4 only (the threshold rule), inside the veto band. bp4 hi
+  // lands exactly on the veto ceiling (0.40) on purpose: the loudest quarter
+  // sits right at the limit, not a rounding accident.
   { P_DRIVE,     {{0.f,0.f},{0.f,0.f},{0.f,0.f},{0.f,.05f},{.25f,.40f}} } } },
 // WANDER "frozen -> fine variation -> melodic wander -> FORM/SONG churn"
 // (§3 row 5). FORM/SONG are discrete: flat until Q4, hysteresis in Task 7.
@@ -433,7 +436,10 @@ inline const BaseRule kBaseRules[] = {
 { P_FORM_B,   {{0.f,4.f},{0.f,4.f},{0.f,4.f},{0.f,4.f}} },   // any principle
 { P_SONG_B,   {{0.f,6.f},{0.f,6.f},{0.f,6.f},{0.f,6.f}} },   // any song mode
 // -- event rate / step count ---------------------------------------------
-{ P_STEPS_B,  {{2.f,6.f},{4.f,10.f},{8.f,16.f},{4.f,12.f}} },  // arp = many
+// Drones normally have STEP off entirely (kModeW), but a drone that does draw
+// the step mode gets the same preferred counts as everything else, so the
+// 8/16 weight has something to bite on.
+{ P_STEPS_B,  {{2.f,16.f},{4.f,10.f},{8.f,16.f},{4.f,12.f}} }, // arp = many
 { P_RATE_A,   {{0.f,.25f},{.3f,.6f},{.55f,.9f},{.3f,.7f}} },   // drone = slow
 { P_RATE_B,   {{0.f,.25f},{.3f,.6f},{.55f,.9f},{.3f,.7f}} },   // drone = slow
 // -- pitch ----------------------------------------------------------------
@@ -442,8 +448,12 @@ inline const BaseRule kBaseRules[] = {
 { P_RANGE_A,  {{.1f,.4f},{.2f,.5f},{.4f,.8f},{.3f,.7f}} },     // arp = wide
 { P_RANGE_B,  {{.1f,.4f},{.2f,.5f},{.4f,.8f},{.3f,.7f}} },     // arp = wide
 // -- timbre wildcards -----------------------------------------------------
-{ P_SHAPE_A,  {{0.f,1.f},{0.f,1.f},{0.f,1.f},{0.f,1.f}} },     // wildcard
-{ P_SHAPE_B,  {{0.f,1.f},{0.f,1.f},{0.f,1.f},{0.f,1.f}} },     // wildcard
+// SHAPE morphs sine(0) -> tri(.25) -> ramp(.5) -> pulse(.75) -> S&H(1)
+// (mod/waveforms.h). A drone gets the round quarter only: from the ramp up the
+// lane emits a per-cycle discontinuity and the drone reads as rhythmic. The
+// other archetypes keep the full wildcard.
+{ P_SHAPE_A,  {{0.f,.25f},{0.f,1.f},{0.f,1.f},{0.f,1.f}} },
+{ P_SHAPE_B,  {{0.f,.25f},{0.f,1.f},{0.f,1.f},{0.f,1.f}} },
 { P_SMOOTH_A, {{.5f,.9f},{.2f,.5f},{.2f,.5f},{.1f,.4f}} },     // drone = glassy
 { P_SMOOTH_B, {{.5f,.9f},{.2f,.5f},{.2f,.5f},{.1f,.4f}} },     // drone = glassy
 { P_DEPTH_A,  {{.2f,.7f},{.2f,.7f},{.2f,.7f},{.2f,.7f}} },     // neutral
@@ -469,7 +479,9 @@ inline const BaseRule kBaseRules[] = {
 { P_CHOKE,    {{-.25f,.25f},{-.25f,.25f},{-.25f,.25f},{-.25f,.25f}} }, // near center (by-ear states)
 { P_SHUFFLE,  {{0.f,.1f},{0.f,.35f},{0.f,.3f},{.1f,.5f}} },    // fragment = loose
 // -- reverb character (DIFF = density, per the reverb mod split) ----------
-{ P_REV_DIFF, {{.4f,.8f},{.4f,.8f},{.4f,.8f},{.4f,.8f}} },     // dense-ish
+// DIFF: 0.4-0.6 is simply not wanted, so this is a span narrowing rather than
+// a weight -- the value is meant to be unreachable.
+{ P_REV_DIFF, {{.6f,.8f},{.6f,.8f},{.6f,.8f},{.6f,.8f}} },
 // -- clock ----------------------------------------------------------------
 { P_TEMPO_BPM, {{55.f,75.f},{80.f,110.f},{90.f,130.f},{70.f,110.f}} }, // drone = slow
 };

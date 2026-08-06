@@ -69,3 +69,20 @@ TEST_CASE("flow taste: static data is internally consistent") {
         CHECK((storied[p] || based[p]));
     }
 }
+
+TEST_CASE("flow taste: drones get round LFOs only") {
+    // waveforms.h shape_value morphs sine(0) -> triangle(.25) -> ramp(.5) ->
+    // pulse(.75) -> S&H(1). From the ramp up the lane emits a discontinuity
+    // per cycle, and that is what makes a drone read as rhythmic. So a drone
+    // may only draw the sine..triangle quarter. This is mechanical, not taste.
+    const int shape[2] = { P_SHAPE_A, P_SHAPE_B };
+    for (int i = 0; i < kBaseRuleCount; ++i)
+        for (int k = 0; k < 2; ++k)
+            if (kBaseRules[i].param == shape[k]) {
+                CAPTURE(kParams[shape[k]].name);
+                CHECK(kBaseRules[i].per_arch[ARCH_DRONE].hi <= 0.25f);
+                // The other archetypes stay wildcards: nothing collected says
+                // an arp may not have an angular LFO.
+                CHECK(kBaseRules[i].per_arch[ARCH_ARP].hi > 0.25f);
+            }
+}
