@@ -167,6 +167,17 @@ Terrain generate(const TerrainState& st) {
     t.base[P_SCALE]    = float(scale);
     t.base[P_ROOT]     = float(root);
 
+    // Stage 3b: operating mode (spec 2026-08-06 §5). Its base-rule row is a
+    // placeholder like the ENGINE rows -- the real draw is this weighted coin,
+    // taken from the param's OWN stream so it rerolls exactly when a full
+    // terrain does. Written as a clean 0/1 so nothing downstream has to guess
+    // where the rounding boundary is.
+    {
+        Rng r = make_stream(st.master, kStreamParamBase + uint32_t(P_MODE), 0);
+        const float w[2] = { 1.f - kModeW[t.arch], kModeW[t.arch] };
+        t.base[P_MODE] = float(pick_weighted(r, w, 2));
+    }
+
     // Stage 4: macro mappings. One stream per macro, keyed by that macro's
     // own reroll counter. The variant pick is uniform among this macro's
     // kStories entries; then EVERY variant's curves are drawn in table
