@@ -155,6 +155,18 @@ void Flow::begin_blend(const TerrainState& target) {
         if (kParams[p].steps > 0) _disc_done[p] = false;
     _duck_t[texture_deck]  = _t;
     _duck_t[_carrier_deck] = _t + double(kCarrierStaggerFrac * kBlendS);
+
+    // A mode change collapses the stagger on purpose: switch_phase_for() puts
+    // P_MODE at phase 0 because set_sync is global, so BOTH decks' clocking
+    // flips at the press and both ducks have to open there too -- otherwise
+    // the carrier's flip would happen in the open, 1.5 s before its own duck.
+    // A mode-changing NEW is a harder cut than a same-mode one, which is
+    // honest: the terrain is going from ambient to rhythm or back. Both ducks
+    // then fall inside kBlendGateWindowS, so the level gate actually covers
+    // this transition.
+    const bool mode_moves =
+        (_terrain.base[P_MODE] > 0.5f) != (_prev_terrain.base[P_MODE] > 0.5f);
+    if (mode_moves) _duck_t[0] = _duck_t[1] = _t;
 }
 
 bool Flow::new_full() {
@@ -286,6 +298,14 @@ void Flow::eval_terrain(const Terrain& t, const float* eff, float* out) const {
 // neither deck (SCALE, ROOT) ride with the CARRIER, so the tonality change
 // lands with the lead voice rather than ahead of it.
 float Flow::switch_phase_for(int p) const {
+    // P_MODE is the exception: it is a whole-terrain event, not a per-deck
+    // one. set_sync is global (instrument.h), so its switch flips BOTH decks'
+    // rate mapping at once, and the deckless fall-through below would ride it
+    // with the carrier -- jumping the texture deck's clocking 1.5 s after that
+    // deck's own duck had closed, which is exactly what the stagger prevents.
+    // So it goes at the press, with the texture deck, and begin_blend() opens
+    // both ducks for it.
+    if (p == P_MODE) return 0.f;
     int d = deck_of(p);
     if (d < 0) d = _carrier_deck;
     return d == _carrier_deck ? kCarrierStaggerFrac : 0.f;

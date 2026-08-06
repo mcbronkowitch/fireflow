@@ -69,6 +69,11 @@ public:
 
 #ifdef SPKY_TESTING
     const Terrain& terrain_for_test() const { return _terrain; }
+    // The two halves of the NEW schedule, for the tests that pin it: the blend
+    // phase a discrete switches at, and the flow-clock instant each deck's
+    // duck is centred on. Hosts have no business reading either.
+    float switch_phase_for_test(int p) const { return switch_phase_for(p); }
+    double duck_t_for_test(int deck) const { return _duck_t[deck]; }
 #endif
 
 private:
