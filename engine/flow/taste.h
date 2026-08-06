@@ -27,6 +27,13 @@ struct CurveRule { int param; Span bp[5]; };         // per-breakpoint draw span
 struct StoryVariant {
     Macro macro; const char* name;
     int n_targets; CurveRule targets[6];             // max 6 targets per macro
+    // Where each archetype reads this story (spec 2026-08-06 §4). The knob
+    // still sweeps its full physical travel; only the sampling position is
+    // remapped, so a narrower window means the macro covers a smaller part of
+    // the story and never reaches the rest. Default is the whole curve, and
+    // this member is LAST with a default initialiser so the existing
+    // positional entries in kStories need no edit.
+    Span arch_window[ARCH_COUNT] = {{0.f,1.f},{0.f,1.f},{0.f,1.f},{0.f,1.f}};
 };
 
 // ---------------------------------------------------------------------------
@@ -349,11 +356,14 @@ inline const StoryVariant kStories[] = {
   // rescale would give: test_flow_taste.cpp holds every curve's lo bounds
   // monotone ascending, and .10 sits below bp3's lo of .14.
   { P_REV_MOD,   {{0.f,.03f},{.03f,.08f},{.08f,.14f},{.14f,.20f},{.20f,.25f}} } } },
-// DENSITY rate-led (§3 row 2a): events carry the sweep.
+// DENSITY rate-led (§3 row 2a): events carry the sweep. Drone reads only the
+// sparse part of it -- a drone at full DENSITY lands where an arp sits at
+// half, and STEPS_A comes down with it because it lives in the same story.
 { M_DENSITY, "rate", 3, {
   { P_DENSITY_A, {{.02f,.08f},{.1f,.2f},{.3f,.5f},{.5f,.7f},{.7f,.95f}} },
   { P_DENSITY_B, {{.02f,.08f},{.08f,.18f},{.25f,.45f},{.45f,.65f},{.65f,.9f}} },
-  { P_STEPS_A,   {{2.f,4.f},{4.f,6.f},{6.f,10.f},{10.f,13.f},{13.f,16.f}} } } },
+  { P_STEPS_A,   {{2.f,4.f},{4.f,6.f},{6.f,10.f},{10.f,13.f},{13.f,16.f}} } },
+  {{0.f,.45f},{0.f,1.f},{0.f,1.f},{0.f,1.f}} },
 // DENSITY thickness-led (§3 row 2b): chords/pad carry it.
 { M_DENSITY, "thick", 3, {
   { P_COLOR_A,   {{0.f,.1f},{.15f,.3f},{.35f,.55f},{.55f,.75f},{.75f,1.f}} },

@@ -2,6 +2,7 @@
 #include "doctest/doctest.h"
 #include "flow/taste.h"
 #include "flow/flow_params.h"
+#include <cstring>
 using namespace spky::flow;
 
 TEST_CASE("flow taste: static data is internally consistent") {
@@ -85,4 +86,37 @@ TEST_CASE("flow taste: drones get round LFOs only") {
                 // an arp may not have an angular LFO.
                 CHECK(kBaseRules[i].per_arch[ARCH_ARP].hi > 0.25f);
             }
+}
+
+TEST_CASE("flow taste: story windows default to the whole curve") {
+    for (int s = 0; s < kStoryCount; ++s)
+        for (int a = 0; a < ARCH_COUNT; ++a) {
+            CAPTURE(kStories[s].name); CAPTURE(a);
+            CHECK(kStories[s].arch_window[a].lo >= 0.f);
+            CHECK(kStories[s].arch_window[a].hi <= 1.f);
+            CHECK(kStories[s].arch_window[a].lo < kStories[s].arch_window[a].hi);
+            // Only DENSITY "rate" narrows, and only for drone. Everything else
+            // must stay on the default or today's sound changes for no reason.
+            const bool narrows = kStories[s].macro == M_DENSITY
+                              && a == ARCH_DRONE;
+            if (!narrows) {
+                CHECK(kStories[s].arch_window[a].lo == 0.f);
+                CHECK(kStories[s].arch_window[a].hi == 1.f);
+            }
+        }
+}
+
+TEST_CASE("flow taste: a drone's density knob stays in the sparse half") {
+    // DEVIATION FROM THE BRIEF: the brief's version of this loop checked
+    // EVERY M_DENSITY story unconditionally, but the task narrows only the
+    // "rate" story (Context: "Only one window narrows in this task: DENSITY
+    // 'rate' for drones... Everything else stays on the default {0,1}"),
+    // and "thick" stays default per that same rule -- so an unscoped loop
+    // would assert 1.0 <= 0.5 against "thick" and fail by construction, not
+    // by a real defect. Scoped to "rate" by name to match the stated scope.
+    for (int s = 0; s < kStoryCount; ++s) {
+        if (kStories[s].macro != M_DENSITY) continue;
+        if (std::strcmp(kStories[s].name, "rate") != 0) continue;
+        CHECK(kStories[s].arch_window[ARCH_DRONE].hi <= 0.5f);
+    }
 }

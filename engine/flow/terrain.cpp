@@ -206,7 +206,10 @@ Terrain generate(const TerrainState& st) {
             if (kStories[s].macro != m) continue;
             const StoryVariant& sv = kStories[s];
             const bool picked = (vi == pick);
-            if (picked) mm.story = s;            // global kStories index
+            if (picked) {
+                mm.story = s;                    // global kStories index
+                t.window[m] = sv.arch_window[t.arch];
+            }
             for (int tg = 0; tg < sv.n_targets; ++tg) {
                 Curve c = draw_curve(r, sv.targets[tg]);
                 if (picked) {

@@ -292,9 +292,14 @@ void Flow::eval_terrain(const Terrain& t, const float* eff, float* out) const {
     for (int p = 0; p < P_COUNT; ++p) out[p] = t.base[p];
     for (int m = 0; m < MACRO_COUNT; ++m) {
         const MacroMap& mm = t.map[m];
+        // The archetype window (spec §4). eff already carries knob + CV +
+        // weather and is clamped 0..1, so CV and weather ride inside the
+        // window exactly like the knob rather than bypassing it.
+        const Span& w = t.window[m];
+        const float pos = w.lo + eff[m] * (w.hi - w.lo);
         for (int i = 0; i < mm.n_targets; ++i) {
             const Curve& c = mm.targets[i];
-            const float v = eval_curve(c, eff[m]);
+            const float v = eval_curve(c, pos);
             const float d = std::fabs(v - t.base[c.param]);
             if (!has[c.param] || d > dist[c.param]) {
                 out[c.param] = v; dist[c.param] = d; has[c.param] = true;

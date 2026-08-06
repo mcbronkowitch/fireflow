@@ -12,6 +12,7 @@
 #include <cstdint>
 #include "flow/flow_ids.h"
 #include "flow/flow_params.h"
+#include "flow/taste.h"
 #include "mod/rng.h"
 
 namespace spky { namespace flow {
@@ -62,6 +63,9 @@ struct Terrain {
     float     base[P_COUNT];              // engine units; storied params too
     bool      storied[P_COUNT];           // owned by some macro's curve
     MacroMap  map[MACRO_COUNT];
+    // The picked variant's window for THIS terrain's archetype, per macro.
+    // Copied at generate() time so the runtime never re-reads kStories.
+    Span      window[MACRO_COUNT];
     int       weather_n;                  // 2..4
     float     weather_period_s[4], weather_depth[4];
     Macro     weather_target[4];
