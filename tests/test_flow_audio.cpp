@@ -199,21 +199,24 @@ TEST_CASE("flow audio: fixed seeds render clean and inside RMS bounds (7.8)") {
     }
 }
 
-// KNOWN RED as of 2026-08-06, on master 0x707 only: rms 0.0824 against
-// kCalmCornerRmsMax = 0.06. This assertion is deliberately left failing.
+// KNOWN RED as of 2026-08-06, on master 0x707 only, against
+// kCalmCornerRmsMax. This assertion is deliberately left failing.
 //
 // The ceiling is a §7.8 SPEC bound, so it is not raised to fit the output,
 // and 0x707 is not dropped from the seed set -- either move would convert a
-// real finding into a green tick. What was measured (full numbers in taste.h
-// beside kCalmCornerRmsMax): the level is steady, not a transient the 3 s
-// skip misses (rms 0.0789 out to 120 s); P_MODE is causal for this seed
-// (forcing FLOW gives 0.056, forcing STEP reproduces 0.0824); but the mode
-// work did not create the problem. Scanning masters 1..2000, 1.34 % of
-// terrains breach this ceiling at the calm corner, against 1.2 % at the
-// pre-mode commit 651ee2c -- an unchanged rate. The gate has always sampled
-// a property the generator holds only ~98.7 % of the time, and read green
-// only because none of these ten fixed seeds sat in the breaching fraction.
-// It needs a generator fix or a spec decision, not a constant nudge.
+// real finding into a green tick. In outline: the level is steady rather
+// than a transient the 3 s skip misses; the drawn P_MODE is causal for this
+// seed; but the mode work did not create the problem, because a wide master
+// scan puts the breach rate at the same value here as at the pre-mode commit
+// 651ee2c. The gate has always sampled a property the generator does not
+// guarantee, and read green only because none of these ten fixed seeds sat
+// in the breaching fraction. It needs a generator fix or a spec decision,
+// not a constant nudge.
+//
+// EVERY NUMBER BEHIND THAT LIVES IN ONE PLACE -- taste.h, beside
+// kCalmCornerRmsMax. Deliberately not restated here, so the two copies of
+// this finding cannot drift apart; the failing values themselves are printed
+// by the CHECK below when it fires.
 TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence floor (7.8)") {
     uint32_t kept[kMaxKept];
     const int n = filtered_masters(kept);
@@ -264,22 +267,20 @@ TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence
 // this narrows WHAT THE GATE CLAIMS, not how much it tolerates.
 //
 // RE-MEASURED 2026-08-06 after the operating-mode work (spec 2026-08-06 §5).
-// taste.h's kBlendGateWindowS / kBlendSpikeDb comments carry the full current
-// accounting; the headlines:
+// The headlines, qualitatively -- THE FIGURES BEHIND THEM LIVE IN ONE PLACE,
+// taste.h's kBlendGateWindowS / kBlendSpikeDb / kBlendDropDb comments, and
+// are deliberately not restated here so the two copies cannot drift:
 //
-//  - 1.0 s is still a CONSERVATIVE CHOICE, not a derivation, but the failure
-//    boundary MOVED IN: green out to 1.25 s, red at 1.50 s (was green to
-//    1.75 s, red at 2.0 s). 1.0 s now sits 0.50 s inside it, not 0.75 s.
-//  - In-window headroom is now 2.98 dB against the 6 dB spike bound (worst
-//    in-gate spike +3.02 dB, master 0x404 window 3), not the 1.14 dB the
-//    pre-mode measurement left.
+//  - kBlendGateWindowS is still a CONSERVATIVE CHOICE, not a derivation, but
+//    the failure boundary MOVED IN, so it has less room than it used to.
+//  - In-window spike headroom went UP, not down: putting the carrier's
+//    clocking flip inside the window made the worst measured spike smaller.
 //  - THE BLIND SPOT NARROWED but did not close. On a mode-changing press the
 //    carrier deck is now ducked AT THE PRESS as well (set_sync is global, so
 //    the clocking flip lands at phase 0), and that duck IS inside this
 //    window -- two of the four asserted seeds take that path. The carrier's
-//    own engine/scale switch at kCarrierStaggerFrac * kBlendS = 1.5 s and its
-//    stagger duck (~1.25-1.75 s) are still entirely outside, for every seed,
-//    by construction.
+//    own engine/scale switch at kCarrierStaggerFrac * kBlendS and its stagger
+//    duck are still entirely outside it, for every seed, by construction.
 //
 // So this gate covers the texture deck's switch, the initial retarget, and
 // (new) the carrier's clocking flip on a mode change. It does NOT cover the

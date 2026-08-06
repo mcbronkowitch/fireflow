@@ -257,24 +257,49 @@ Terrain generate(const TerrainState& st) {
 // 2026-08-06 §5.1). The mean is taken over P_COUNT params, so one more param
 // changes the denominator (P_COUNT is now 63), and a mode mismatch
 // contributes a full 1.0/P_COUNT of its own -- both terms had to be measured
-// again rather than carried over. Same measurement as before: 20 000 random
-// terrain pairs, and 3 000 chained draw_new() calls off a fixed sequence Rng.
+// again rather than carried over. Measurement: 20 000 random terrain pairs
+// (masters 2i-1 vs 2i), and 3 000 chained draw_new() calls off an Rng seeded
+// 12345. The SAME harness was built and run in a worktree at 651ee2c, the
+// commit before P_MODE existed, so the before/after below is one measurement
+// pair rather than a comparison against a remembered number:
 //
-// Over 20 000 random terrain pairs the base-patch mean spans 0.0588 (min) /
-// 0.1569 (mean) / 0.2582 (max), while the acceptance threshold draw_new
-// tests against is kDistanceMin = 0.18 (taste.h). So 0.25 alone clears the
-// bar with room to spare, and the base term clears it on its own only
-// rarely: of 6 603 same-archetype pairs in that sample, 6 601 fell short.
-// In practice, therefore, "far enough away" == "a different archetype" --
-// draw_new returned a same-archetype terrain 0 times in 3 000 calls.
+//                     pre-mode 651ee2c     HEAD (with P_MODE)
+//   P_COUNT                   62                   63
+//   base-patch min        0.0597               0.0588
+//   base-patch mean       0.1514               0.1569
+//   base-patch max        0.2462               0.2582
+//   same-arch pairs        6 603                6 603
+//   ...of which clear          1                    2
+//   draw_new same-arch    0/3 000              0/3 000
 //
-// The shape of the answer did not move: the previous measurement (before
-// P_MODE) read 0.0711 / 0.1509 / 0.2491 with 2 of 6 777 same-archetype pairs
-// clearing, and 0 same-archetype draws in 3 000. P_MODE disagrees on 50.1 %
-// of those 20 000 pairs (measured, same run), so it adds 1/63 = 0.0159 to
-// the mean on about half of them: that widened the spread at both ends and
-// lifted the mean by ~0.006, but it did not come close to carrying the base
-// term over kDistanceMin, and the archetype term still decides.
+// Every one of those movements is arithmetic, and the constants that did NOT
+// move are the load-bearing check:
+//
+//  - The same-archetype pair count is IDENTICAL, and had to be: arch comes
+//    from make_stream(master, kStreamArch, 0), a pure function of the master,
+//    which appending a param cannot touch. If this number had moved, the
+//    measurement would have been wrong.
+//  - base[0..61] are likewise untouched -- each param draws from its own
+//    kStreamParamBase + id stream (flow_params.h), so appending P_MODE LAST
+//    re-seeds nothing earlier. Hence every pair's new value is
+//    (sum_62 + mode_term)/63 with mode_term in {0, 1}, and each end of the
+//    spread lands exactly where that predicts: min 0.0597*62/63 = 0.0588
+//    (the closest pair agrees on mode, so it only felt the denominator),
+//    max (0.2462*62 + 1)/63 = 0.2582 (the farthest pair disagrees, so it
+//    took the full 1/63).
+//  - P_MODE disagrees on 50.1 % of the 20 000 pairs (measured, same run),
+//    predicting a mean of (0.1514*62 + 0.501)/63 = 0.1570 against 0.1569
+//    measured.
+//
+// So P_MODE moved the mean by +0.0055 and pushed exactly ONE more
+// same-archetype pair over kDistanceMin (1 -> 2 out of 6 603). It did not
+// come close to making the base term decide anything, and the archetype term
+// still does.
+//
+// (An earlier version of this comment quoted 0.0711 / 0.1509 / 0.2491 and
+// 2 of 6 777 as the "before". Those figures predate the pre-mode baseline --
+// they cannot be a valid before, since the pair count is master-determined
+// and provably 6 603 at 651ee2c. They are superseded by the table above.)
 //
 // That may be exactly right for an explore-the-instrument gesture, or it
 // may be why a drone never persists across a NEW press on an instrument

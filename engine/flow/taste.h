@@ -157,10 +157,17 @@ constexpr float kBlendDropDb = 10.f;                // press vs. control,
 // RE-MEASURED 2026-08-06 (mode work): THE BOUNDARY MOVED IN. Widening the
 // gate's scope window by window against the current generator, the worst
 // spike/drop over the no-switch seeds reads 1.00 s: +3.02/-5.94 (green),
-// 1.25 s: +4.16/-7.00 (green), 1.50 s: +13.34/-10.03 (RED). It goes red
-// exactly at kCarrierStaggerFrac * kBlendS = 1.5 s -- the carrier deck's own
-// engine/scale switch, which is where the excursion lives. So 1.0 s now sits
-// 0.50 s inside the boundary, not 0.75 s. The WINDOW IS NOT WIDENED to
+// 1.25 s: +4.16/-7.00 (green), 1.50 s: +13.34/-10.03 (RED). It goes red on
+// the window that CONTAINS kCarrierStaggerFrac * kBlendS = 1.5 s -- the
+// carrier deck's own engine/scale switch, which is where the excursion
+// lives. So 1.0 s now sits 0.50 s inside the boundary, not 0.75 s.
+//
+// (Why 1.25 s is still green even though the stagger duck's leading edge
+// starts at ~1.25 s: the scope moves in whole 0.25 s RMS windows, so a
+// "1.25 s" scope asserts on windows 0-4, i.e. everything BEFORE t = 1.25 s.
+// The duck's leading edge and the switch itself both land in window 5
+// (1.25-1.50 s), which is the first window a 1.50 s scope adds. The two
+// figures agree; the granularity is the whole story.) The WINDOW IS NOT WIDENED to
 // recover the old margin, and it is not narrowed either: it is still green
 // where it stands, and moving it to chase a margin would be fitting.
 //
@@ -211,11 +218,21 @@ constexpr float kBlendGateWindowS = 1.0f;           // seconds after the
 //
 // RE-MEASURED 2026-08-06 (mode work), by the measurement the old comment
 // names: windowed RMS over a 10 s render at all macros 0.5, across the
-// candidate terrains. Band is now 0.0181..0.1011 (was 0.0158..0.0983 across
-// 8 terrains; 10 terrains now). BOTH CONSTANTS HOLD UNCHANGED, with the same
-// margins the old comment describes: 25.2 dB below the quietest terrain,
-// 13.9 dB above the loudest (was ~24 dB and ~14 dB). The mode draw moved the
-// band by under 1 dB at either end -- it did not move these bounds.
+// candidate terrains. Band is now 0.0181..0.1011. BOTH CONSTANTS HOLD
+// UNCHANGED, with the same margins the old comment describes: 25.2 dB below
+// the quietest terrain, 13.9 dB above the loudest (was ~24 dB and ~14 dB).
+//
+// THE TWO BANDS ARE OVER DIFFERENT TERRAIN SETS, so do not read the change
+// as the mode draw's doing. The old band (0.0158..0.0983) covered 8
+// terrains; this one covers 10, because review I-4 later added 0xD0D and
+// 0xC0C0 to kCandidateMasters (tests/test_flow_audio.cpp) without restating
+// this comment. The new low end, 0.0181, IS 0xC0C0 -- one of the two added
+// seeds. What the mode work did NOT change is the seed set's composition:
+// engine draws come from per-param streams, so all ten masters draw exactly
+// the same engine pair at 651ee2c as at HEAD (checked in a worktree), and
+// all ten clear the Sampler filter in both. Attributing any part of the band
+// shift to the mode draw would need a per-seed before/after, which was not
+// run -- these bounds hold on the measured band either way.
 constexpr float kFixedSeedRmsMin = 0.001f;
 constexpr float kFixedSeedRmsMax = 0.5f;
 // §7.8 discrete-churn gate storied-param bound (Task 10, review I-3: was
