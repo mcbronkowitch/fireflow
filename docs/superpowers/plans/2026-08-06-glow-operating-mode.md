@@ -6,6 +6,8 @@
 
 **Architecture:** One new global parameter `P_MODE` (2 steps) appended at the tail of `SPKY_FLOW_PARAMS`, drawn per terrain from archetype weights. Because `Instrument::set_sync` is global and `set_step` takes mode *and* count together, the three parameters `P_MODE`/`P_STEPS_A`/`P_STEPS_B` move out of the stateless `apply_param` into a helper owned by `Flow`, which holds all three values in `_pushed[]`. During a blend `P_MODE` switches at phase 0 and ducks both decks together, deliberately collapsing the per-deck stagger for that one press.
 
+> **CORRECTION 2026-08-06, post-implementation — the last sentence above is WRONG; do not re-execute it.** Collapsing the stagger was built, escalated as **Critical** in review, and replaced. It leaves the carrier deck's `P_ENGINE` switch — which stays at `kCarrierStaggerFrac`, the stagger being a by-ear decision the project owner re-affirmed — unducked in the open at `press + 1.5 s`, where `duck()` computes `u = 6` and returns the send unchanged. What shipped: the carrier gets a **second** duck at the press for the global `set_sync` flip, and **keeps** its stagger duck. Authority is `engine/flow/flow.cpp` `begin_blend()` and the corrected spec §5.2.
+
 **Tech Stack:** C++17, clang + Ninja, doctest (vendored in `third_party/`), CTest.
 
 **Spec:** `docs/superpowers/specs/2026-08-06-glow-taste-structure-design.md` §5, §5.1–5.3, §8.
@@ -386,6 +388,16 @@ weight.
 Temporarily change `kModeW[ARCH_DRONE]` to `0.90f`, rebuild, confirm the case
 goes RED with the drone row out of tolerance, then revert.
 
+> **CORRECTION 2026-08-06, post-implementation — this perturbation cannot work.**
+> It is self-referential: `kModeW` feeds **both** the draw in `terrain.cpp` and
+> the tolerance window the test asserts against (`got > kModeW[a] - 0.08f`).
+> Moving the weight moves the target and the goalposts by the same amount, so
+> the case stays green by construction. To redden it, perturb only one side —
+> e.g. hard-code a literal probability in the generator's `P_MODE` draw, or
+> assert against a literal in the test. A genuine RED was obtained instead on
+> that case's other new assertion (`judged == ARCH_COUNT`) by raising the
+> `n[a] < 100` skip threshold.
+
 - [ ] **Step 6: Commit**
 
 ```bash
@@ -408,6 +420,17 @@ git commit -m "feat(flow): drones stop drawing a step sequencer they never wante
   `_duck_t[0]` and `_duck_t[1]` are set to the press instant.
 
 - [ ] **Step 1: Write the failing test**
+
+> **CORRECTION 2026-08-06, post-implementation — the sentinel in this snippet is
+> vacuous.** `if (a.master && b.master) break;` is meant to stop once both a FLOW
+> and a STEP terrain have been found, but `TerrainState::master` **defaults to 1,
+> not 0** (`engine/flow/terrain.h`), so both sides are already truthy on entry and
+> the loop breaks on its first iteration with `a` and `b` possibly unset. The
+> `REQUIRE(a.master != 0)` guards below are vacuous for the same reason. Use
+> explicit `have_flow` / `have_step` bools instead — which is what the shipped
+> cases in `tests/test_flow_mode.cpp` do. Note also that this case's premise
+> (both decks ducked *instead of* the stagger) is superseded; see the Task 4
+> Step 4 correction below.
 
 Append to `tests/test_flow_mode.cpp`:
 
@@ -504,6 +527,22 @@ float Flow::switch_phase_for(int p) const {
 ```
 
 - [ ] **Step 4: Duck both decks when the mode moves**
+
+> **CORRECTION 2026-08-06, post-implementation — DO NOT RE-EXECUTE THIS STEP AS
+> WRITTEN.** The `if (mode_moves) _duck_t[0] = _duck_t[1] = _t;` line below (and
+> the comment block above it, which repeats the collapse and the gate-coverage
+> claim) was built and then escalated as **Critical** in review. Overwriting the
+> carrier's slot moves its duck off `kCarrierStaggerFrac`, leaving the carrier
+> deck's own `P_ENGINE` switch — which stays at 1.5 s, the stagger being a by-ear
+> decision the project owner re-affirmed — in the open, where `duck()` computes
+> `u = 6` and returns the send unchanged. The shipped design instead makes
+> `_duck_t` a **two-slot-per-deck** schedule and *adds* a duck:
+> `if (mode_moves) _duck_t[_carrier_deck][1] = _t;`, with `duck()` combining a
+> deck's slots by maximum. The gate-coverage claim in the snippet's comment is
+> also wrong: only the press-instant duck lands inside `kBlendGateWindowS`; the
+> stagger duck is still structurally outside it. Authority: `engine/flow/flow.cpp`
+> `begin_blend()`, the corrected spec §5.2, and the `kBlendGateWindowS` comment
+> in `engine/flow/taste.h`.
 
 In `begin_blend`, where `_duck_t` is scheduled, add the mode case. The existing
 code sets the texture deck's duck at `_t` and the carrier's at
