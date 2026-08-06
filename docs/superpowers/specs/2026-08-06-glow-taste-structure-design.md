@@ -252,20 +252,49 @@ fires. Riding the carrier would mean the texture deck's entire clocking jumps
 1.5 s after its own duck had closed — precisely what the stagger exists to
 prevent.
 
-A mode change is a whole-terrain event, not a per-deck one, so it deliberately
-collapses the stagger for that press:
+> **Corrected 2026-08-06, after implementation.** The bullets below originally
+> said a mode change *collapses* the stagger — that both decks duck together at
+> phase 0 "instead of the carrier's duck firing later", and that both ducks then
+> sit inside `kBlendGateWindowS`. That design was built, escalated as **Critical**
+> during review, and replaced: collapsing the stagger leaves the carrier deck's
+> `P_ENGINE` switch — which stays at `kCarrierStaggerFrac`, because the stagger is
+> a by-ear decision the project owner re-affirmed — unducked in the open at
+> `press + 1.5 s`, where `duck()` computes `u = 6` and hands the send back
+> untouched. What ships is a *second* carrier duck, not a moved one. The gate
+> claim was wrong in the same breath and is corrected below. This section now
+> describes `flow.cpp`'s `begin_blend`; do not "restore spec compliance" from an
+> older copy.
+
+A mode change is a whole-terrain event, not a per-deck one — but it is **two**
+events on two different schedules, so it adds a duck rather than moving one:
 
 - `P_MODE` switches at **phase 0**, with the texture deck.
-- When it switches, **both decks duck together** at phase 0, instead of the
-  carrier's duck firing later. A mode-changing NEW is therefore a harder cut
-  than a same-mode NEW — which is honest, since the terrain is changing from
-  ambient to rhythm or back.
-- Both ducks then fall inside `kBlendGateWindowS` (1.0 s), so the level gate
-  actually covers this transition rather than structurally missing it.
+- The clocking flip is global. `set_sync` hits both decks at the press, and the
+  texture deck's only duck is already there — so the **carrier deck gets a
+  second duck at the press** to cover it. Its first duck stays where it was.
+- The **stagger survives**. The carrier's own engine/scale switch still lands at
+  `kCarrierStaggerFrac * kBlendS` = 1.5 s, still under the duck already
+  scheduled there. Collapsing the stagger would trade the clocking flip's
+  exposure for the carrier's *engine* change happening in the open, which is the
+  louder of the two.
+- So a mode-changing press schedules three ducks in total: one on the texture
+  deck, two on the carrier. Two per deck is therefore the exact maximum, not a
+  guess (`kDucksPerDeck`).
+- `duck()` combines a deck's slots by **maximum**. Overlapping ducks can never
+  dig deeper than a single duck, so the depth `kDuckDepth` was tuned to still
+  bounds the gesture. (Today the two carrier windows are 0.5 s wide and 1.5 s
+  apart and do not in fact overlap; the maximum is the guarantee, not the
+  observation.)
+- **Gate coverage, precisely:** the carrier's *press-instant* duck falls inside
+  `kBlendGateWindowS` (1.0 s), so for the first time the level gate sees a
+  carrier-deck event on this path. The carrier's *stagger* duck does not — it
+  spans roughly 1.25–1.75 s and is still structurally outside the window, for
+  every seed. The authority on that, with the measurements, is the
+  `kBlendGateWindowS` comment in `engine/flow/taste.h`.
 
 `ModLane::set_step` on entering step mode can set `_song.new_pending`
 (`lane.cpp:156–158`), so a mode flip regenerates phrase material. That happens
-under the double duck by design, and the plan must confirm it by ear.
+under the press-instant ducks by design, and the plan must confirm it by ear.
 
 ### 5.3 Routing — apply_param cannot express this
 

@@ -69,10 +69,23 @@ public:
 
 #ifdef SPKY_TESTING
     const Terrain& terrain_for_test() const { return _terrain; }
+    // The two halves of the NEW schedule, for the tests that pin it: the blend
+    // phase a discrete switches at, and the flow-clock instant each deck's
+    // duck is centred on. Hosts have no business reading either.
+    float switch_phase_for_test(int p) const { return switch_phase_for(p); }
+    // Both indices come from literals in the tests, and this accessor exists
+    // only under SPKY_TESTING -- so there is deliberately no range assert
+    // here. Release is mandatory for this project (CMAKE_CXX_FLAGS_RELEASE
+    // carries -DNDEBUG), which would compile any assert out of every build
+    // anyone is allowed to run: a guard that cannot go red.
+    double duck_t_for_test(int deck, int slot) const {
+        return _duck_t[deck][slot];
+    }
 #endif
 
 private:
     void recompute_and_push(bool force);
+    void push_mode_and_steps(bool force);
     float quantize_hyst(int p, float v, bool force);
     float space_slew(int slot, float target, bool force);
     // Gesture helpers (flow.cpp).
@@ -105,6 +118,8 @@ private:
 
     float _pushed[P_COUNT]   = {};  // last value handed to apply_param
     int   _step_now[P_COUNT] = {};  // discrete hysteresis state (step index)
+    bool  _mode_now          = false;      // last pushed mode, change guard
+    int   _steps_now[2]      = { -1, -1 }; // last pushed step counts
     float _slew_v[2]         = {};  // one-pole state: [0]=REV_SIZE [1]=REV_DECAY
     float _slew_a = 0.f;            // its coefficient, from _dt / kSpaceSlewS
 
@@ -119,7 +134,15 @@ private:
     float _resid[P_COUNT]    = {};
     bool  _disc_done[P_COUNT] = {};  // has this discrete taken its one switch?
     int   _carrier_deck = 0;         // 0 = A, 1 = B (incoming terrain's role)
-    double _duck_t[2] = { -1e9, -1e9 };  // per-deck switch instants, flow clock
+
+    // Per-deck duck schedule: the flow-clock instants each deck's reverb-send
+    // hump is centred on, -1e9 meaning "no duck in that slot". A deck normally
+    // needs one, but the CARRIER deck needs two on a mode-changing press: the
+    // global set_sync clocking flip lands at the press (slot 1) while its own
+    // engine/scale switch still lands at kCarrierStaggerFrac (slot 0). Two is
+    // therefore the exact maximum, not a guess -- see begin_blend().
+    static constexpr int kDucksPerDeck = 2;
+    double _duck_t[2][kDucksPerDeck] = {{ -1e9, -1e9 }, { -1e9, -1e9 }};
 };
 
 #ifdef SPKY_TESTING

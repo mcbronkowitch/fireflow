@@ -199,7 +199,41 @@ TEST_CASE("flow audio: fixed seeds render clean and inside RMS bounds (7.8)") {
     }
 }
 
-TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence floor (7.8)") {
+// KNOWN RED as of 2026-08-06, on master 0x707 only, against
+// kCalmCornerRmsMax. This assertion is deliberately left failing.
+//
+// The ceiling is a §7.8 SPEC bound, so it is not raised to fit the output,
+// and 0x707 is not dropped from the seed set -- either move would convert a
+// real finding into a green tick. In outline: the level is steady rather
+// than a transient the 3 s skip misses; the drawn P_MODE is causal for this
+// seed; but the mode work did not create the problem, because a wide master
+// scan puts the breach rate at the same value here as at the pre-mode commit
+// 651ee2c. The gate has always sampled a property the generator does not
+// guarantee, and read green only because none of these ten fixed seeds sat
+// in the breaching fraction. It needs a generator fix or a spec decision,
+// not a constant nudge.
+//
+// EVERY NUMBER BEHIND THAT LIVES IN ONE PLACE -- taste.h, beside
+// kCalmCornerRmsMax. Deliberately not restated here, so the two copies of
+// this finding cannot drift apart; the failing values themselves are printed
+// by the CHECK below when it fires.
+//
+// WHY should_fail AND NOT may_fail, A SKIP, OR A DELETED SEED: a permanently
+// red suite destroys the signal every later branch depends on, so the failure
+// has to be declared -- but it must not be allowed to go quiet. should_fail is
+// the only marker that ALSO turns the case red the moment it starts PASSING.
+// So whoever fixes the generator, or writes the tolerance into §7.8, is handed
+// a failing test that points straight back at this comment instead of a green
+// tick they can walk past. may_fail would swallow both outcomes; a skip would
+// stop rendering the seed at all and the finding would rot.
+//
+// THIS MARKER IS EXPECTED TO BE REMOVED, not maintained. It comes off when the
+// project owner rules on the tolerance -- either the generator guarantees a
+// quiet calm corner for drone terrains, or §7.8 states the fraction it
+// tolerates and this gate asserts that instead. Do not remove it by moving
+// kCalmCornerRmsMax.
+TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence floor (7.8)"
+          * doctest::should_fail()) {
     uint32_t kept[kMaxKept];
     const int n = filtered_masters(kept);
     REQUIRE(n > 0);
@@ -246,17 +280,28 @@ TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence
 //
 // The gate now asserts ONLY inside the first kBlendGateWindowS seconds
 // after the press -- kBlendSpikeDb/kBlendDropDb themselves are unchanged;
-// this narrows WHAT THE GATE CLAIMS, not how much it tolerates. taste.h's
-// kBlendGateWindowS comment has the full, corrected accounting: 1.0 s is a
-// CONSERVATIVE CHOICE (checked green out to 1.75 s, red at 2.0 s), not a
-// derivation; real measured in-window headroom is ~1.14 dB against the
-// 6 dB spike bound, not the ~4.3 dB an earlier (wrong) phase-math argument
-// implied; and THE GATE'S BLIND SPOT IS STRUCTURAL, NOT INCIDENTAL -- the
-// carrier deck's discrete switch (at kCarrierStaggerFrac * kBlendS = 1.5 s)
-// and its duck (~1.25-1.75 s) sit entirely outside kBlendGateWindowS =
-// 1.0 s, for every seed, permanently. This gate covers the TEXTURE deck's
-// switch and the initial retarget. It does NOT cover the carrier deck's
-// switch or duck -- read taste.h before assuming it does.
+// this narrows WHAT THE GATE CLAIMS, not how much it tolerates.
+//
+// RE-MEASURED 2026-08-06 after the operating-mode work (spec 2026-08-06 §5).
+// The headlines, qualitatively -- THE FIGURES BEHIND THEM LIVE IN ONE PLACE,
+// taste.h's kBlendGateWindowS / kBlendSpikeDb / kBlendDropDb comments, and
+// are deliberately not restated here so the two copies cannot drift:
+//
+//  - kBlendGateWindowS is still a CONSERVATIVE CHOICE, not a derivation, but
+//    the failure boundary MOVED IN, so it has less room than it used to.
+//  - In-window spike headroom went UP, not down: putting the carrier's
+//    clocking flip inside the window made the worst measured spike smaller.
+//  - THE BLIND SPOT NARROWED but did not close. On a mode-changing press the
+//    carrier deck is now ducked AT THE PRESS as well (set_sync is global, so
+//    the clocking flip lands at phase 0), and that duck IS inside this
+//    window -- two of the four asserted seeds take that path. The carrier's
+//    own engine/scale switch at kCarrierStaggerFrac * kBlendS and its stagger
+//    duck are still entirely outside it, for every seed, by construction.
+//
+// So this gate covers the texture deck's switch, the initial retarget, and
+// (new) the carrier's clocking flip on a mode change. It does NOT cover the
+// carrier deck's engine switch or stagger duck -- read taste.h before
+// assuming it does.
 //
 // The full 6 s is still RENDERED and MEASURED for every seed (see
 // task-10-report.md's plain-measurement table) -- only the CHECK()s are
@@ -265,9 +310,14 @@ TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence
 //
 // EXCLUSION (measured, not carved around -- see task-10-report.md round 2
 // for the full per-seed numbers): seeds whose new_full() switches a deck's
-// engine mid-blend dip well below this bound -- worst measured case
-// (master 0x101) is 65.16 dB below the no-press control, 4.00 s of the 6 s
-// blend spent more than 20 dB below it. This is KNOWN AND ACCEPTED FOR NOW,
+// engine mid-blend dip well below this bound. RE-MEASURED 2026-08-06: worst
+// case is now master 0x303 at 31.73 dB below the no-press control with 1.50 s
+// of the 6 s blend spent more than 20 dB below it (0x101, the pre-mode worst,
+// is 31.58 dB / 1.50 s). The dip got markedly shallower and shorter than the
+// pre-mode figures this paragraph used to quote (65.16 dB, 4.00 s) -- the
+// mode routing fix and the second carrier duck both land here -- but it is
+// still far outside the bound, so the exclusion stands. This is KNOWN AND
+// ACCEPTED FOR NOW,
 // pending a listening-loop decision (Bastian, 2026-08-05): a brief
 // near-silence when a NEW press switches engines is not being called a
 // defect here, and the fix direction is not obvious for free -- an

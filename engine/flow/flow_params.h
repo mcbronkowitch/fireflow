@@ -67,7 +67,16 @@ namespace spky { namespace flow {
   X(P_REV_SIZE,   0.f, 1.f, 0)   X(P_REV_DECAY,  0.f, 1.f, 0) \
   X(P_REV_TONE,   0.f, 1.f, 0)   X(P_REV_DIFF,   0.f, 1.f, 0) \
   X(P_REV_SMEAR,  0.f, 1.f, 0)   X(P_REV_MOD,    0.f, 1.f, 0) \
-  X(P_TEMPO_BPM, 50.f, 140.f, 0)
+  X(P_TEMPO_BPM, 50.f, 140.f, 0) \
+  /* The terrain's operating mode, spec 2026-08-06 §5. 0 = FLOW/free (lanes
+     breathe in their own kLaneRatio relationships, no grid), 1 = STEP/synced
+     (step sequencer on the divisions.h ladder). ONE global value, not one per
+     deck: Instrument::set_sync is global (instrument.h:274), so a per-deck
+     mode would need SYNC on and off at once.
+     MUST STAY LAST. Base draws are keyed kStreamParamBase + param
+     (terrain.cpp:160) -- inserting a param before this one re-seeds every
+     later stream and re-resolves every terrain code. */ \
+  X(P_MODE,       0.f, 1.f,  2)
 
 enum ParamId {
 #define SPKY_FLOW_ENUM(id, lo, hi, st) id,
@@ -104,8 +113,6 @@ inline void apply_param(Instrument& in, int param, float v) {
     case P_FORM_B:     in.set_form(PART_B, i); break;
     case P_SONG_A:     in.set_song(PART_A, i); break;
     case P_SONG_B:     in.set_song(PART_B, i); break;
-    case P_STEPS_A:    in.set_step(PART_A, true, i); break;
-    case P_STEPS_B:    in.set_step(PART_B, true, i); break;
     case P_TUNE_A:     in.set_tune(PART_A, v); break;
     case P_TUNE_B:     in.set_tune(PART_B, v); break;
     case P_RATE_A:     in.set_rate(PART_A, v); break;
@@ -158,6 +165,11 @@ inline void apply_param(Instrument& in, int param, float v) {
     case P_REV_SMEAR:  in.set_reverb_smear(v); break;
     case P_REV_MOD:    in.set_reverb_mod(v); break;
     case P_TEMPO_BPM:  in.set_tempo_bpm(v); break;
+    // P_MODE, P_STEPS_A and P_STEPS_B are deliberately NOT handled here.
+    // set_step() takes mode AND count together and set_sync() is global, so
+    // routing them needs all three values at once -- which this per-param,
+    // stateless function cannot see. Flow::push_mode_and_steps() owns them.
+    case P_MODE: case P_STEPS_A: case P_STEPS_B: break;
     default: break;
     }
 }
