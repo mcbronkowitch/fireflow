@@ -353,9 +353,12 @@ inline constexpr float kModeW[ARCH_COUNT] = { 0.15f, 0.90f, 0.95f, 0.75f };
 // ---------------------------------------------------------------------------
 // Musical weights (spec 2026-08-06 §6). These are WEIGHTS, not vetoes: the
 // unlikely values stay reachable and simply come up rarely. Spec §7's
-// adventure draw flattens them per terrain: terrain.cpp raises every weight
-// below to the power (1 - adventure), so these numbers are the shape at
-// adventure 0 and the table reads uniform at adventure 1.
+// adventure draw flattens them per domain: terrain.cpp raises every weight
+// below to the power (1 - a^2), so these numbers are the shape at adventure 0
+// and the table reads uniform at adventure 1. SQUARED, so the median terrain
+// (a = 0.25) sits at w^0.96 and these numbers are what it actually plays --
+// plain w^(1-a) put the typical draw at w^0.75 and broke §6's own "straight
+// rungs win four draws out of five".
 //
 // Rung preference on kDivisions (mod/divisions.h), which is speed-sorted, so
 // the dotted and triplet rungs sit between the straight ones. Straight rungs
@@ -387,7 +390,8 @@ inline constexpr float kShuffleSkew = 2.5f;
 // The adventure draw (spec 2026-08-06 §7). Not a control -- a property of the
 // DRAW, so NEW occasionally surprises and the panel gains no knob. At a=0 a
 // span is sampled only in its middle kAdventureNarrow; at a=1 in full, which
-// is the no-op. The (1-x)^3 shape of the draw itself lives in terrain.cpp.
+// is the no-op. The (1-x)^3 shape of the draw itself lives in terrain.cpp, as
+// does the per-domain split of WHICH a applies where (Terrain::adventure).
 constexpr float kAdventureNarrow = 0.40f;
 
 // ---------------------------------------------------------------------------

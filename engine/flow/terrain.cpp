@@ -4,20 +4,21 @@
 // tonality -> base patch -> macro mappings, then the weather layer and the
 // named hard constraints. Everything is drawn from per-purpose RNG streams
 // (flow_rng.h) so a partial reroll bumps exactly one domain's counters and
-// every other STREAM stays bit-identical. All tuning data lives in taste.h;
+// every other draw stays bit-identical. All tuning data lives in taste.h;
 // this file is only the plumbing that walks those tables.
 //
-// THAT NO LONGER MEANS EVERY OTHER VALUE STAYS BIT-IDENTICAL, and the
-// sentence above used to say it did. The adventure level (spec 2026-08-06 §7)
-// is keyed on reroll_weather_counter() so ANY partial reroll redraws it, and
-// unlike the weather -- which is an additive layer over the finished terrain
-// -- adventure is an INPUT to every span draw and every tempered weight. So a
-// partial reroll still touches exactly one domain's streams, but it shifts
-// every drawn value in the terrain by re-narrowing the spans they came from.
-// Spec 7.3's per-domain isolation and §7's "a reroll must not leave a wild
-// terrain wild" cannot both hold under one per-terrain adventure level;
-// tests/test_flow_new.cpp's two isolation cases are red on that conflict and
-// it is the owner's call, not a bug to route around here.
+// THE ADVENTURE LEVELS ARE PER DOMAIN FOR EXACTLY THAT REASON (spec §7,
+// corrected 2026-08-06). A first version drew ONE level per terrain keyed on
+// reroll_weather_counter(), copying the weather. That broke the guarantee
+// above and it was measured breaking it: the weather is an additive layer over
+// a finished terrain, but a risk level is an INPUT to every span draw, so
+// rerolling one macro re-narrowed the spans every other value came from and
+// moved the entire terrain (test_flow_new.cpp's two isolation cases, ~87
+// assertions red). Keying it on 0 instead made those green and made "a reroll
+// redraws the domain's nerve" false -- the two properties are mutually
+// exclusive under a single level. The owner's ruling: one level per macro
+// domain keyed on that domain's counter, plus one for the base patch keyed on
+// the master alone. Both properties then hold. See Terrain::adventure.
 #include "flow/terrain.h"
 #include "flow/taste.h"
 #include "flow/flow_rng.h"
@@ -71,11 +72,21 @@ int pick_index(Rng& r, int n) {
     return i < n ? i : n - 1;
 }
 
-// w^(1-a): the taste table's weights as written at a = 0, uniform at a = 1.
+// w^(1-a^2): the taste table's weights as written at a = 0, uniform at a = 1.
 // This is what lets an adventurous terrain draw the rung the tables call
 // unlikely -- a triplet rate, an 11-step phrase -- without any weight ever
 // becoming a veto. Weights only; the SHUFFLE skew is NOT one (see stage 3).
-float temper(float w, float adv) { return std::pow(w, 1.f - adv); }
+//
+// SQUARED, and that is the whole point of the exponent (owner's ruling,
+// 2026-08-06). Plain w^(1-a) flattens far too eagerly: E[a] is 0.25, so the
+// TYPICAL terrain already draws at w^0.75, which lifts a 0.15 triplet weight
+// to 0.24 and took the crooked-rung share from 0.189 to 0.255 -- past §6's
+// "straight rungs win four draws out of five" and past the Task 5 bound that
+// encodes it. Squaring keeps the median terrain at w^0.96, i.e. essentially
+// the table as written, and lets the flattening bite only on the rare brave
+// draw: a = 0.5 gives w^0.75, a = 0.9 gives w^0.19. Chaos when NEW is pressed,
+// "aber eben seltener", which is what was asked for.
+float temper(float w, float adv) { return std::pow(w, 1.f - adv * adv); }
 
 // Snap a normalized rate to a weighted rung of the divisions.h ladder, chosen
 // among the rungs that fall inside the drawn span. Free-mode terrains skip
@@ -234,22 +245,21 @@ Terrain generate(const TerrainState& st) {
         root  = pick_index(r, kParams[P_ROOT].steps);    // 0..11
     }
 
-    // Adventure level (spec 2026-08-06 §7). Keyed on reroll_weather_counter()
-    // -- the sum of all six macro counters -- exactly as the weather is, so ANY
-    // partial reroll redraws it. Without that, a terrain that drew wild would
-    // stay wild in the very domain the player just asked to be redone.
+    // The base patch's adventure level (spec 2026-08-06 §7). Keyed on the
+    // master ALONE, counter fixed at 0: base parameters belong to no macro
+    // domain, so nothing a partial reroll can bump may move them. Each macro
+    // domain draws its own level in stage 4, from its own counter.
+    //
     // a = 1 - u^(1/3) gives P(a > x) = (1-x)^3: above 0.5 in 12.5% of draws,
     // above 0.8 in 0.8%. The shape is arithmetic and lives here; the one
     // tunable it needs (kAdventureNarrow) lives in taste.h with the rest.
     //
-    // Drawn HERE, before stage 3a, because every draw from 3a onward reads it:
-    // the mode coin's weights are tempered, and so is every span from the base
-    // patch to the story curves. Its own stream means the position costs no
-    // other stage a single value.
+    // Drawn HERE, before stage 3a, because every base draw from 3a onward
+    // reads it: the mode coin's weights are tempered, and so is every base
+    // span. Its own stream means the position costs no other stage a value.
     {
-        Rng r = make_stream(st.master, kStreamAdventure,
-                            st.reroll_weather_counter());
-        t.adventure = 1.f - std::pow(r.next_unipolar(), 1.f / 3.f);
+        Rng r = make_stream(st.master, kStreamAdventure, 0);
+        t.adventure_base = 1.f - std::pow(r.next_unipolar(), 1.f / 3.f);
     }
 
     // Stage 3a: operating mode (spec 2026-08-06 §5). Its base-rule row is a
@@ -265,8 +275,8 @@ Terrain generate(const TerrainState& st) {
     // wanted and leaves every other draw bit-identical.
     {
         Rng r = make_stream(st.master, kStreamParamBase + uint32_t(P_MODE), 0);
-        const float w[2] = { temper(1.f - kModeW[t.arch], t.adventure),
-                             temper(kModeW[t.arch], t.adventure) };
+        const float w[2] = { temper(1.f - kModeW[t.arch], t.adventure_base),
+                             temper(kModeW[t.arch], t.adventure_base) };
         t.base[P_MODE] = float(pick_weighted(r, w, 2));
     }
 
@@ -285,16 +295,16 @@ Terrain generate(const TerrainState& st) {
         if (br.param == P_MODE) continue;
         Rng r = make_stream(st.master, kStreamParamBase + uint32_t(br.param), 0);
         const Span& s = br.per_arch[t.arch];
-        t.base[br.param] = draw_span(r, s, t.adventure);
+        t.base[br.param] = draw_span(r, s, t.adventure_base);
         // Weighted redraws (taste.h §6). The uniform draw above stands for
         // every other row; these three have a preferred SET, not a range.
         if (br.param == P_RATE_A || br.param == P_RATE_B) {
             // Only meaningful synced: in free mode RATE is free_hz's continuous
             // curve and there is no ladder. base[P_MODE] is already drawn.
             if (t.base[P_MODE] > 0.5f)
-                t.base[br.param] = snap_rate(r, s.lo, s.hi, t.adventure);
+                t.base[br.param] = snap_rate(r, s.lo, s.hi, t.adventure_base);
         } else if (br.param == P_STEPS_B) {
-            t.base[br.param] = snap_steps(r, s.lo, s.hi, t.adventure);
+            t.base[br.param] = snap_steps(r, s.lo, s.hi, t.adventure_base);
         } else if (br.param == P_SHUFFLE) {
             // The skew tempers too: kShuffleSkew^(1-a) is the table's skew at
             // a = 0 and decays to 1.0 -- a uniform draw across the span -- at
@@ -310,7 +320,8 @@ Terrain generate(const TerrainState& st) {
             // toward the mean weight, a floor under the small ones) it would
             // silently take the skew somewhere meaningless with it.
             const float u = r.next_unipolar();
-            const float skew = std::pow(kShuffleSkew, 1.f - t.adventure);
+            const float a = t.adventure_base;
+            const float skew = std::pow(kShuffleSkew, 1.f - a * a);
             t.base[br.param] = s.lo + (s.hi - s.lo) * std::pow(u, skew);
         }
     }
@@ -334,6 +345,18 @@ Terrain generate(const TerrainState& st) {
     // runtime pushes whichever candidate lands FARTHEST from that base
     // (the rule lives in Flow::recompute_and_push, engine/flow/flow.cpp).
     for (int m = 0; m < MACRO_COUNT; ++m) {
+        // This domain's adventure level, from its OWN stream and its OWN
+        // counter (spec §7). Rerolling DENSITY redraws DENSITY's nerve and
+        // nothing else's; the base patch's level (drawn above, master-keyed)
+        // cannot move at all. Its own stream id block, not this macro's story
+        // stream, so the nerve does not depend on how many values the curves
+        // below happen to draw.
+        {
+            Rng ra = make_stream(st.master,
+                                 kStreamAdventureMacro + uint32_t(m),
+                                 st.reroll[m]);
+            t.adventure[m] = 1.f - std::pow(ra.next_unipolar(), 1.f / 3.f);
+        }
         Rng r = make_stream(st.master, kStreamMacroBase + uint32_t(m),
                             st.reroll[m]);
         int n_var = 0;
@@ -353,7 +376,7 @@ Terrain generate(const TerrainState& st) {
                 t.window[m] = sv.arch_window[t.arch];
             }
             for (int tg = 0; tg < sv.n_targets; ++tg) {
-                Curve c = draw_curve(r, sv.targets[tg], t.adventure);
+                Curve c = draw_curve(r, sv.targets[tg], t.adventure[m]);
                 if (picked) {
                     mm.targets[mm.n_targets++] = c;
                     t.base[c.param]    = c.bp[0];

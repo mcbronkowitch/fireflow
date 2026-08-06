@@ -146,18 +146,27 @@ TEST_CASE("flow veto: adventure never reaches past a veto") {
     // red, the adventure widening has been applied somewhere it must not be.
     //
     // The filter is what makes this case worth having, and also what could
-    // make it worthless: P(adventure > 0.9) is 0.1%, so a scan that forgot to
-    // count would report green having tested nothing at all -- the
-    // silently-empty scan that has already been caught twice on this branch.
-    // 20 000 masters predict ~20 qualifying terrains; the REQUIRE below pins
-    // that the sample is real. It is deliberately far under 20 so ordinary
-    // seed-set jitter cannot trip it while a filter that stopped matching
-    // (adventure gone, or clamped to zero) still does.
+    // make it worthless: P(a > 0.9) is 0.1% for any single level, so a scan
+    // that forgot to count would report green having tested nothing at all --
+    // the silently-empty scan that has already been caught twice on this
+    // branch. The REQUIRE below pins that the sample is real.
+    //
+    // The filter takes the MAXIMUM over all seven of a terrain's levels (spec
+    // §7, corrected 2026-08-06: one per macro domain plus one for the base
+    // patch). Every veto param is reachable from both sides -- P_DRIVE and
+    // P_REV_MOD are story-owned, so their bases are curve bp0 draws made under
+    // a MACRO's level, while a base-rule veto param draws under the base
+    // level -- and filtering on the base level alone would leave the storied
+    // ones tested only at whatever nerve they happened to have. Seven chances
+    // at 0.1% each also gives ~140 qualifying terrains instead of ~20.
     int high = 0;
     for (uint32_t master = 1; master <= 20000; ++master) {
         TerrainState st; st.master = master;
         const Terrain t = generate(st);
-        if (t.adventure < 0.9f) continue;
+        float a = t.adventure_base;
+        for (int m = 0; m < MACRO_COUNT; ++m)
+            if (t.adventure[m] > a) a = t.adventure[m];
+        if (a < 0.9f) continue;
         ++high;
         for (int v = 0; v < kVetoCount; ++v) {
             CAPTURE(master); CAPTURE(pname(kVetos[v].param));
@@ -166,5 +175,5 @@ TEST_CASE("flow veto: adventure never reaches past a veto") {
         }
     }
     CAPTURE(high);
-    REQUIRE(high >= 5);
+    REQUIRE(high >= 40);
 }

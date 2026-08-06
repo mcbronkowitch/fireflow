@@ -266,32 +266,65 @@ TEST_CASE("flow terrain: SHUFFLE leans to the low end of its span") {
     CHECK(heavy > 100);
 }
 
-TEST_CASE("flow terrain: adventure is rare and rerolls with the weather") {
+TEST_CASE("flow terrain: adventure is rare, per domain, and rerolls with it") {
     // a = 1 - u^(1/3), so P(a > x) = (1-x)^3: above 0.5 in 12.5% of draws and
     // above 0.8 in 0.8%. Brave terrain is the rule, outliers the exception.
+    //
+    // A terrain carries SEVEN of these (spec §7, corrected 2026-08-06): one per
+    // macro domain keyed on that macro's own reroll counter, plus one for the
+    // base patch keyed on the master alone. Both are measured here, because a
+    // per-domain level that was never drawn -- left at zero, or copied from the
+    // base level -- would satisfy the range checks and the isolation cases
+    // below without being a draw at all.
     int over_half = 0, over_eighty = 0;
+    int over_half_bright = 0, over_eighty_bright = 0;
     const int n = 20000;
     for (uint32_t master = 1; master <= uint32_t(n); ++master) {
         TerrainState st; st.master = master;
         const Terrain t = generate(st);
-        CHECK(t.adventure >= 0.f);
-        CHECK(t.adventure <= 1.f);
-        if (t.adventure > 0.5f) ++over_half;
-        if (t.adventure > 0.8f) ++over_eighty;
+        CHECK(t.adventure_base >= 0.f);
+        CHECK(t.adventure_base <= 1.f);
+        for (int m = 0; m < MACRO_COUNT; ++m) {
+            CHECK(t.adventure[m] >= 0.f);
+            CHECK(t.adventure[m] <= 1.f);
+        }
+        if (t.adventure_base > 0.5f) ++over_half;
+        if (t.adventure_base > 0.8f) ++over_eighty;
+        if (t.adventure[M_BRIGHT] > 0.5f) ++over_half_bright;
+        if (t.adventure[M_BRIGHT] > 0.8f) ++over_eighty_bright;
     }
     const float p50 = float(over_half) / float(n);
     const float p80 = float(over_eighty) / float(n);
     CAPTURE(p50); CAPTURE(p80);
     CHECK(p50 > 0.105f); CHECK(p50 < 0.145f);      // 0.125 expected
     CHECK(p80 > 0.004f); CHECK(p80 < 0.014f);      // 0.008 expected
+    // The same shape from a macro domain's own stream. A level that was never
+    // drawn gives 0 here and fails the lower bounds.
+    const float p50b = float(over_half_bright) / float(n);
+    const float p80b = float(over_eighty_bright) / float(n);
+    CAPTURE(p50b); CAPTURE(p80b);
+    CHECK(p50b > 0.105f); CHECK(p50b < 0.145f);
+    CHECK(p80b > 0.004f); CHECK(p80b < 0.014f);
 
-    // A partial reroll must redraw it, exactly as the weather does: otherwise
-    // a terrain that drew wild stays wild in the very domain the player asked
-    // to be redone.
+    // The reroll rule, which is the whole reason these are per domain.
+    //
+    // §7's intent: rerolling a domain redraws THAT domain's nerve, so a wild
+    // DENSITY does not stay wild when the player asks for a new DENSITY.
+    // Spec 7.3's isolation: it redraws nothing else -- not another macro's
+    // nerve, and not the base patch's, which is keyed on the master alone and
+    // so cannot move under any counter at all.
+    //
+    // Both halves are load-bearing and each fails a different wrong design:
+    // one per-terrain level keyed on the counter sum (what shipped first) fails
+    // the two "unchanged" lines, and a level keyed on nothing -- or dropped
+    // entirely -- fails the "changed" line.
     TerrainState st; st.master = 7;
-    const float before = generate(st).adventure;
+    const Terrain before = generate(st);
     st.reroll[M_DENSITY] = 1;
-    CHECK(generate(st).adventure != before);
+    const Terrain after = generate(st);
+    CHECK(after.adventure[M_DENSITY] != before.adventure[M_DENSITY]);
+    CHECK(after.adventure[M_BRIGHT] == before.adventure[M_BRIGHT]);
+    CHECK(after.adventure_base     == before.adventure_base);
 }
 
 TEST_CASE("flow terrain: at full adventure a span is drawn in full") {

@@ -9,13 +9,19 @@ namespace spky { namespace flow {
 enum : uint32_t {
     kStreamParamBase = 0,          // + ParamId
     kStreamMacroBase = 1000,       // + Macro
+    // + Macro: that domain's adventure level, keyed on that macro's OWN reroll
+    // counter so it rerolls with the domain and with nothing else. Its own
+    // block rather than kStreamMacroBase + m, which is already the domain's
+    // story/curve stream -- sharing it would make the nerve a function of how
+    // many values the curves happened to draw.
+    kStreamAdventureMacro = 3000,
     kStreamArch      = 2000,
     kStreamRoles     = 2001,
     kStreamTonality  = 2002,
     kStreamWeather   = 2003,
     kStreamDistance  = 2004,
     kStreamNewSeq    = 2005,       // Flow's NEW press-chain sequence Rng
-    kStreamAdventure = 2006,       // per-terrain risk level
+    kStreamAdventure = 2006,       // the BASE PATCH's risk level; master-keyed
 };
 
 // splitmix32-style avalanche of the (master, stream, counter) triple.

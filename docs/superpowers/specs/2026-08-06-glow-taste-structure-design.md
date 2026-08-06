@@ -370,11 +370,38 @@ wrote `u³` alongside these percentages; that is a different variable — `u³`
 exceeds 0.5 in 20.6% of draws. The formula above is the one that matches.) The
 `(1-x)³` shape is a first guess, tunable later.
 
-**Stream and reroll.** `a` is drawn per terrain from a stream keyed by
-`reroll_weather_counter()` — the sum of all six macro counters — exactly as the
-weather already is (`terrain.h:44`). Any partial reroll therefore redraws the
-adventure level along with the weather, so a terrain that drew wild does not
-stay wild in a domain the player explicitly asked to be redone.
+> **Corrected 2026-08-06, after implementation.** This section originally said
+> `a` was drawn **once per terrain**, from a stream keyed by
+> `reroll_weather_counter()` — the sum of all six macro counters — "exactly as
+> the weather already is". That was built, and it is wrong: it contradicts the
+> per-domain isolation the terrain-state design guarantees (spec 7.3 of
+> `2026-08-05-flow-machine-design.md`, and `terrain.h`'s own opening comment),
+> and the two cannot both hold under a single level. The analogy to the weather
+> is what misled: the weather is an **additive layer over** a finished terrain,
+> so rerolling it moves only the weather, whereas a risk level is an **input
+> to** every span draw and every tempered weight. Keyed on the counter sum, a
+> partial reroll re-narrowed the spans that every *other* value had been drawn
+> from and moved the whole terrain — measured, ~87 assertions red across
+> `test_flow_new.cpp`'s two isolation cases. Keying it on nothing instead made
+> those green and made this section's own reroll promise false. The project
+> owner ruled on the split below; do not restore the single-level version.
+
+**Stream and reroll.** A terrain draws **seven** adventure levels, not one.
+
+- `adventure[m]`, one per macro domain, from that macro's own stream keyed on
+  **that macro's own reroll counter**. It applies to every curve that macro's
+  stories draw. Rerolling DENSITY therefore redraws DENSITY's nerve — a wild
+  DENSITY does not stay wild in the domain the player explicitly asked to be
+  redone — and redraws no other domain's.
+- `adventure_base`, from the master **alone** with a fixed counter, applying to
+  the base patch and the mode coin. Base parameters belong to no macro domain,
+  so nothing a partial reroll can bump is allowed to move them at all.
+
+Both properties then hold at once: §7's "a reroll refreshes that domain's
+nerve", and 7.3's "a partial reroll touches only its domain". The per-macro
+levels take their own stream id block rather than reusing `kStreamMacroBase +
+m`, which is already the domain's story stream — sharing it would make the
+nerve a function of how many values the curves happened to draw.
 
 **Scope.** `a` applies to base-rule spans and story breakpoint spans (§7.1) and
 to every weight table of §6 (§7.2). It does **not** apply to the archetype
@@ -387,10 +414,38 @@ edges are the outermost permitted value rather than the normal case.
 
 ### 7.2 Weights flatten
 
-Rung, step, shuffle and mode weights are tempered as `w^(1−a)`: as written at
-`a = 0`, uniform at `a = 1`. An adventurous terrain may draw a triplet, or a
-drone in rhythm mode — chaos from places where chaos means something musically,
-rather than parameter noise.
+> **Corrected 2026-08-06, after implementation.** This section originally
+> specified `w^(1−a)`. That was built and measured, and it flattens far too
+> eagerly to mean what §6 says: `E[a]` is 0.25, so the *typical* terrain already
+> draws at `w^0.75`, which lifts a 0.15 triplet weight to 0.24 and took the
+> crooked-rung share from 0.189 to **0.255** — past §6's "straight rungs win
+> more than four draws out of five", and past the test that encodes it. The
+> owner ruled for `w^(1−a²)`: the flattening should bite only on genuinely
+> brave terrains, which is what "chaos when you press NEW, aber eben seltener"
+> asked for in the first place.
+
+Rung, step, shuffle and mode weights are tempered as `w^(1−a²)`: as written at
+`a = 0`, uniform at `a = 1`, and — because of the square — still essentially as
+written for the median terrain, which sits at `w^0.96`. The flattening arrives
+with the rare brave draw: `a = 0.5` gives `w^0.75`, `a = 0.9` gives `w^0.19`. An
+adventurous terrain may draw a triplet, or a drone in rhythm mode — chaos from
+places where chaos means something musically, rather than parameter noise.
+
+The shuffle skew tempers on the same schedule, `kShuffleSkew^(1−a²)`, reaching
+1.0 (a uniform draw across the span) at full adventure. It is written out rather
+than routed through the weight helper: the skew is an exponent on the draw, not
+a weight in a table, and the two agree only because `w^(1−a²)` happens to suit
+both.
+
+**Measured after the correction** (4000 masters, the Task 5 fixed-seed sets):
+crooked-rung share **0.213**, step counts on 8/16 **0.475**, shuffle mean
+position **0.303**. The step and shuffle gates hold. The crooked-rung gate at
+`< 0.20` does **not**, and it is a genuine tension rather than a weak exponent:
+the untempered tables already sit at 0.189, so that bound leaves any tempering
+at all only +0.011 of room, while `a²` costs +0.024. Measured alternatives —
+`a³` gives 0.203, `a⁴` gives 0.196 — so nothing short of a fourth power fits
+under it. Whether the bound moves or the exponent does is an ear question and is
+open; it is recorded here rather than settled by widening the test.
 
 **`a` never touches the vetos.** The wildest terrain still gets no WOBBLE above
 0.25.
@@ -415,9 +470,14 @@ cannot fail gets fixed).
    §7.1 narrows every span.)
 5. **Weights** — fixed-seed distribution test with generous bounds (crooked
    rungs below a stated share at `a = 0`), shown non-vacuous in both directions.
-6. **Adventure** — at `a = 0` all draws fall in the middle 40%; the drawn
+6. **Adventure** — at `a = 0` all draws fall in the middle 40%, and at `a = 1`
+   the whole span (the no-op), asserted from *both* sides so "narrowed to the
+   middle 40%" is distinguishable from "narrowed to nothing"; the drawn
    distribution meets `P(a > 0.5) ≈ 12.5%` and `P(a > 0.8) ≈ 0.8%` within
-   tolerance.
+   tolerance, measured on a macro domain's level as well as the base level so a
+   per-domain level that was never drawn cannot pass. Plus the reroll rule of
+   §7 in both directions: rerolling a domain changes that domain's level and
+   leaves every other level, including `adventure_base`, bit-identical.
 7. **Enum tail** — `P_MODE` is the last entry of `SPKY_FLOW_PARAMS`, asserted
    statically, with the stream-key reason in the message (§5.1).
 8. **Completeness** — `test_flow_taste.cpp`'s existing "every param is owned"

@@ -5,10 +5,9 @@
 // partial reroll replaces parts of it: every drawn value gets its RNG
 // stream from (master, stream id, override counter), so bumping one
 // macro's counter rerolls only that macro's domain and never shifts a
-// neighboring stream. (Streams, not values: Terrain::adventure rerolls with
-// ANY counter and feeds every draw, so a partial reroll does move values
-// outside its domain -- see terrain.cpp's header for the conflict that
-// creates.) generate() is pure table arithmetic over taste.h --
+// neighboring stream. That holds for VALUES too, and the adventure levels
+// (spec §7) are per domain precisely so it keeps holding -- see
+// Terrain::adventure below. generate() is pure table arithmetic over taste.h --
 // no audio, no heap, cheap enough to call from anywhere except the audio
 // callback's inner loop.
 #pragma once
@@ -80,7 +79,27 @@ struct Terrain {
     int       weather_n;                  // 2..4
     float     weather_period_s[4], weather_depth[4];
     Macro     weather_target[4];
-    float     adventure;                  // 0..1, this terrain's risk level
+    // Risk levels, 0..1 (spec §7). SEVEN of them, not one, and the split is
+    // what lets §7 and 7.3 both hold:
+    //
+    //   adventure[m]    drawn from that macro's OWN reroll counter, and used
+    //                   for every curve that macro's stories draw. Rerolling
+    //                   DENSITY redraws DENSITY's nerve -- a wild DENSITY does
+    //                   not survive the player asking for a new one (§7) --
+    //                   and touches no other domain's (7.3).
+    //   adventure_base  drawn from the master ALONE, counter fixed at 0, and
+    //                   used for the base patch and the mode coin. Keyed on
+    //                   nothing a partial reroll can move, so a partial reroll
+    //                   cannot shift a base parameter at all.
+    //
+    // A single per-terrain level keyed on reroll_weather_counter() was built
+    // first and does NOT work: unlike the weather, which is an additive layer
+    // over a finished terrain, the level is an INPUT to every span draw, so
+    // rerolling one macro re-narrowed the spans every other value came from
+    // and moved the whole terrain. Measured, then replaced by the owner's
+    // ruling. Do not collapse these back into one.
+    float     adventure[MACRO_COUNT];
+    float     adventure_base;
 };
 
 Terrain generate(const TerrainState& st);
