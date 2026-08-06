@@ -2214,16 +2214,29 @@ So M6 now decomposes into two pieces, in order:
 Until step 1 has a spec, M6 has no implementable definition, and the "spec ready"
 status this milestone carried since 2026-07-12 no longer holds.
 
-**Flow layer — Plan A landed 2026-08-05.** The compact-macro-module spec
-(`docs/superpowers/specs/2026-08-05-flow-machine-design.md`) splits its own
-build into two plans. Plan A — `engine/flow/`: the seeded terrain generator,
-the six-macro story layer, weather, the NEW gesture family, render-host
-scenario wiring and the audio sanity gates — is built and green (946 test
-cases, `ctest` 4/4). The listening phase over Plan A's open questions
-(`docs/superpowers/specs/2026-08-05-flow-listening-notes.md`) is now open.
-**Plan B is next:** the VCV module, **FireFlow Glow**, whose 12 HP panel is
-drawn at true hardware dimensions specifically so it can double as step 1's
-1:1 M6 panel draft above.
+**Flow layer — Plan A and Plan B both landed 2026-08-05.** The compact-macro-
+module spec (`docs/superpowers/specs/2026-08-05-flow-machine-design.md`)
+splits its own build into two plans. Plan A — `engine/flow/`: the seeded
+terrain generator, the six-macro story layer, weather, the NEW gesture
+family, render-host scenario wiring and the audio sanity gates — is built
+and green. Plan B — the VCV module **FireFlow Glow**, a second module in the
+`Fireflow` plugin: 12 HP, six macro knobs and one NEW button over a
+generated terrain, driving `engine/flow/` instead of `Fireflow.cpp`'s
+one-control-per-parameter surface — is also built. Its panel is drawn at
+true hardware dimensions specifically so it can double as step 1's 1:1 M6
+panel draft above; see `host/vcv/README.md`'s "FireFlow Glow" section for the
+macro table, the NEW gesture family and its LED signatures, the CV/clock
+jacks, and terrain codes.
+
+With Glow built, the open items in
+`docs/superpowers/specs/2026-08-05-flow-listening-notes.md` are reachable
+for the first time: that file's own listening rounds were called off because
+a rendered file can only judge level, never whether a knob feels alive under
+the hand or a terrain is worth staying in, and answering that needed an
+instrument to play rather than a file to play back. Glow is that instrument.
+The house seed in `engine/flow/taste.h` remains the one open item Task 6
+called out explicitly: a measured placeholder, not the by-ear choice the
+design spec asks for, now answerable on the module that exists to answer it.
 
 ## Build & verify
 
