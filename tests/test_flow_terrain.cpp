@@ -246,8 +246,15 @@ TEST_CASE("flow terrain: synced rates prefer the straight rungs") {
     // four draws out of five (spec §6).
     //
     // MARGIN, if you are reading this because it went red: measured 0.1981
-    // against 0.20, about 1 % of headroom, and that is by construction rather
-    // than by luck. The crooked rungs cluster in the middle of the ladder,
+    // against 0.20. STATED AS A STANDARD DEVIATION, because "about 1 % of
+    // headroom" (what this said before 2026-08-06, Task 7) reads far safer
+    // than it is: at n = 8 076 and share 0.1981 the binomial sd is 0.0044, and
+    // the 0.0019 gap to the bound is 0.42 sd. This band is under half a
+    // standard deviation wide. Re-seeding or re-ranging the master loop can
+    // trip it on sampling noise alone, without anything in the tables moving.
+    //
+    // It is by construction rather than by luck. The crooked rungs cluster in
+    // the middle of the ladder,
     // which is exactly where arp's P_RATE span {.55,.9} and pulse's {.3,.6}
     // sit -- alone they contribute 0.259 and 0.216. Re-weighting the archetype
     // mix toward arp, or widening those spans, trips this bound without
@@ -329,10 +336,17 @@ TEST_CASE("flow terrain: adventure is rare, per domain, and rerolls with it") {
     //
     // A terrain carries SEVEN of these (spec §7, corrected 2026-08-06): one per
     // macro domain keyed on that macro's own reroll counter, plus one for the
-    // base patch keyed on the master alone. Both are measured here, because a
-    // per-domain level that was never drawn -- left at zero, or copied from the
-    // base level -- would satisfy the range checks and the isolation cases
-    // below without being a draw at all.
+    // base patch keyed on the master alone.
+    //
+    // WHY adventure[M_BRIGHT]'s DISTRIBUTION is measured and not just its
+    // range, restated 2026-08-06 (Task 7) because the old wording justified it
+    // by failure modes the isolation case at the bottom of this test already
+    // catches (a level left at zero, or copied from the base level). What this
+    // actually adds is narrower and is the thing nothing else here sees: A
+    // PER-DOMAIN LEVEL DRAWN WITH THE WRONG SHAPE. A macro level that came from
+    // its own stream, moved under its own counter, and differed from the base
+    // level -- passing every isolation assertion -- but was drawn uniform, or
+    // through a different power, would land here and nowhere else.
     int over_half = 0, over_eighty = 0;
     int over_half_bright = 0, over_eighty_bright = 0;
     const int n = 20000;

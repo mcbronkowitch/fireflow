@@ -9,12 +9,6 @@ namespace spky { namespace flow {
 enum : uint32_t {
     kStreamParamBase = 0,          // + ParamId
     kStreamMacroBase = 1000,       // + Macro
-    // + Macro: that domain's adventure level, keyed on that macro's OWN reroll
-    // counter so it rerolls with the domain and with nothing else. Its own
-    // block rather than kStreamMacroBase + m, which is already the domain's
-    // story/curve stream -- sharing it would make the nerve a function of how
-    // many values the curves happened to draw.
-    kStreamAdventureMacro = 3000,
     kStreamArch      = 2000,
     kStreamRoles     = 2001,
     kStreamTonality  = 2002,
@@ -22,6 +16,19 @@ enum : uint32_t {
     kStreamDistance  = 2004,
     kStreamNewSeq    = 2005,       // Flow's NEW press-chain sequence Rng
     kStreamAdventure = 2006,       // the BASE PATCH's risk level; master-keyed
+    // + Macro: that domain's adventure level, keyed on that macro's OWN reroll
+    // counter so it rerolls with the domain and with nothing else. Its own
+    // block rather than kStreamMacroBase + m, which is already the domain's
+    // story/curve stream -- sharing it would make the nerve a function of how
+    // many values the curves happened to draw.
+    //
+    // It is a PER-MACRO block, so by the ordering above it belongs beside
+    // kStreamMacroBase -- but its value stays 3000 and is not renumbered into
+    // the 1000s: stream ids are inputs to stream_seed(), so changing this
+    // number redraws every terrain's per-domain nerve and silently moves the
+    // whole generator. Only the DECLARATION moved, 2026-08-06 (Task 7), so the
+    // enum reads in numeric order; the id itself is frozen.
+    kStreamAdventureMacro = 3000,
 };
 
 // splitmix32-style avalanche of the (master, stream, counter) triple.

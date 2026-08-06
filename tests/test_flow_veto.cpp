@@ -175,5 +175,16 @@ TEST_CASE("flow veto: adventure never reaches past a veto") {
         }
     }
     CAPTURE(high);
+    // WHAT `high` COUNTS, said plainly here because the number is easy to
+    // read as stronger than it is (stated 2026-08-06, Task 7): it is the
+    // number of TERRAINS in which at least one of the seven levels reached
+    // 0.9, measured at 128 of these 20 000 masters. It is NOT 128 terrains per
+    // veto'd param, and it is not 128 chances at any one of them. The filter
+    // is a union over seven levels, and which level did the qualifying is
+    // spread across all seven -- measured 13 base-patch and 9 to 25 per macro
+    // domain, about 18 apiece. So a veto param whose base is drawn under ONE
+    // particular level is exercised at high adventure roughly 18 times here,
+    // not 128. The floor is set well under the total so seed-set jitter cannot
+    // trip it while a filter that stopped matching does.
     REQUIRE(high >= 40);
 }
