@@ -74,7 +74,8 @@ void Flow::init(Instrument* inst, float ctrl_hz) {
     _locked = false;
     _have_undo = false;
     _blend_phase = 1.f;
-    _duck_t[0] = _duck_t[1] = -1e9;
+    for (int d = 0; d < 2; ++d)
+        for (int i = 0; i < kDucksPerDeck; ++i) _duck_t[d][i] = -1e9;
     for (int m = 0; m < MACRO_COUNT; ++m) {
         _knob[m] = 0.f; _cv[m] = 0.f; _eff[m] = 0.f;
     }
@@ -98,7 +99,8 @@ void Flow::wake(const TerrainState& s) {
         _resid[p] = 0.f;
         _disc_done[p] = true;  // no switch pending
     }
-    _duck_t[0] = _duck_t[1] = -1e9;   // no duck in flight
+    for (int d = 0; d < 2; ++d)      // no duck in flight
+        for (int i = 0; i < kDucksPerDeck; ++i) _duck_t[d][i] = -1e9;
     // Force: land hysteresis and slew states on their computed values and
     // push EVERY param once -- non-storied at base, storied at their curve
     // value under the current eff.
@@ -153,20 +155,29 @@ void Flow::begin_blend(const TerrainState& target) {
     const int texture_deck = 1 - _carrier_deck;
     for (int p = 0; p < P_COUNT; ++p)
         if (kParams[p].steps > 0) _disc_done[p] = false;
-    _duck_t[texture_deck]  = _t;
-    _duck_t[_carrier_deck] = _t + double(kCarrierStaggerFrac * kBlendS);
+    for (int d = 0; d < 2; ++d)
+        for (int i = 0; i < kDucksPerDeck; ++i) _duck_t[d][i] = -1e9;
+    _duck_t[texture_deck][0]  = _t;
+    _duck_t[_carrier_deck][0] = _t + double(kCarrierStaggerFrac * kBlendS);
 
-    // A mode change collapses the stagger on purpose: switch_phase_for() puts
-    // P_MODE at phase 0 because set_sync is global, so BOTH decks' clocking
-    // flips at the press and both ducks have to open there too -- otherwise
-    // the carrier's flip would happen in the open, 1.5 s before its own duck.
-    // A mode-changing NEW is a harder cut than a same-mode one, which is
-    // honest: the terrain is going from ambient to rhythm or back. Both ducks
-    // then fall inside kBlendGateWindowS, so the level gate actually covers
-    // this transition.
+    // A mode change is the one press that needs THREE ducks, because it is two
+    // events on two different schedules:
+    //
+    //  - the clocking flip. switch_phase_for() puts P_MODE at phase 0, and
+    //    set_sync is global, so this hits BOTH decks at the press. The texture
+    //    deck's duck is already there; the carrier's is not -- its slot 0 sits
+    //    1.5 s away, where duck() computes u = 6 and returns the send
+    //    untouched. Hence the second carrier slot, at the press.
+    //  - the carrier's own engine/scale switch, still at kCarrierStaggerFrac.
+    //    The stagger is a by-ear decision and stays: collapsing it would move
+    //    the carrier's engine change into the open, which is louder than the
+    //    clocking flip it would have been traded for.
+    //
+    // So the carrier is ducked twice and the texture deck once, and no switch
+    // of either kind ever happens outside a wash.
     const bool mode_moves =
         (_terrain.base[P_MODE] > 0.5f) != (_prev_terrain.base[P_MODE] > 0.5f);
-    if (mode_moves) _duck_t[0] = _duck_t[1] = _t;
+    if (mode_moves) _duck_t[_carrier_deck][1] = _t;
 }
 
 bool Flow::new_full() {
@@ -329,13 +340,24 @@ float Flow::switch_phase_for(int p) const {
 // texture deck would rather have its switch delayed by half a window so the
 // duck can ramp in is a listening-loop question, not a correctness one.)
 // cos(pi*u) == sin(2*pi*(u/2 + 1/4)), and fast_sin takes normalized phase.
+//
+// A deck can have more than one duck pending (begin_blend: the carrier gets a
+// second one at the press when the mode moves). Their windows are 0.5 s wide
+// and 1.5 s apart so today they never overlap -- but the combine is a MAXIMUM
+// anyway, not a product or a sum: two overlapping ducks must never dig a
+// deeper hole than one duck ever makes, or the gesture would exceed the depth
+// kDuckDepth was tuned to.
 float Flow::duck(int deck, float revmix) const {
     const float half = kDuckWindowS * 0.5f;
-    const float u = float(_t - _duck_t[deck]) / half;
-    if (u <= -1.f || u >= 1.f) return revmix;
-    const float env = 0.5f * (1.f + fast_sin(u * 0.5f + 0.25f));
-    const float wet = revmix + (kDuckWetTarget - revmix) * env * kDuckDepth;
-    return wet > revmix ? wet : revmix;
+    float out = revmix;
+    for (int i = 0; i < kDucksPerDeck; ++i) {
+        const float u = float(_t - _duck_t[deck][i]) / half;
+        if (u <= -1.f || u >= 1.f) continue;
+        const float env = 0.5f * (1.f + fast_sin(u * 0.5f + 0.25f));
+        const float wet = revmix + (kDuckWetTarget - revmix) * env * kDuckDepth;
+        if (wet > out) out = wet;
+    }
+    return out;
 }
 
 // P_MODE + P_STEPS_A/B, pushed as one unit (spec 2026-08-06 §5.3).

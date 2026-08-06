@@ -12,6 +12,7 @@
 // knobs keep working through it. Only the button/timing state machine
 // (tap vs. hold vs. mark) belongs to the host; this class is its verbs.
 #pragma once
+#include <cassert>
 #include <cstdint>
 #include "flow/terrain.h"
 #include "flow/taste.h"
@@ -73,7 +74,10 @@ public:
     // phase a discrete switches at, and the flow-clock instant each deck's
     // duck is centred on. Hosts have no business reading either.
     float switch_phase_for_test(int p) const { return switch_phase_for(p); }
-    double duck_t_for_test(int deck) const { return _duck_t[deck]; }
+    double duck_t_for_test(int deck, int slot) const {
+        assert(deck >= 0 && deck < 2 && slot >= 0 && slot < kDucksPerDeck);
+        return _duck_t[deck][slot];
+    }
 #endif
 
 private:
@@ -127,7 +131,15 @@ private:
     float _resid[P_COUNT]    = {};
     bool  _disc_done[P_COUNT] = {};  // has this discrete taken its one switch?
     int   _carrier_deck = 0;         // 0 = A, 1 = B (incoming terrain's role)
-    double _duck_t[2] = { -1e9, -1e9 };  // per-deck switch instants, flow clock
+
+    // Per-deck duck schedule: the flow-clock instants each deck's reverb-send
+    // hump is centred on, -1e9 meaning "no duck in that slot". A deck normally
+    // needs one, but the CARRIER deck needs two on a mode-changing press: the
+    // global set_sync clocking flip lands at the press (slot 1) while its own
+    // engine/scale switch still lands at kCarrierStaggerFrac (slot 0). Two is
+    // therefore the exact maximum, not a guess -- see begin_blend().
+    static constexpr int kDucksPerDeck = 2;
+    double _duck_t[2][kDucksPerDeck] = {{ -1e9, -1e9 }, { -1e9, -1e9 }};
 };
 
 #ifdef SPKY_TESTING

@@ -134,16 +134,12 @@ TEST_CASE("flow NEW: discrete decks switch staggered, under a duck") {
     Flow f; f.init(&in, 100.f);
     // Seed picked so BOTH decks change engine across the press -- otherwise
     // "deck X has not switched yet" is unobservable and the stagger checks
-    // would pass vacuously -- and so the press does NOT move P_MODE. A mode
-    // change deliberately collapses the stagger (flow.cpp begin_blend: set_sync
-    // is global, so both ducks open at the press), which is a different case
-    // from this one. The REQUIREs below hold the seed to both properties.
-    TerrainState s; s.master = 0xC0FFE3; f.wake(s);
+    // would pass vacuously. The REQUIREs below hold the seed to that.
+    TerrainState s; s.master = 0xC0FFEE; f.wake(s);
     const int eng_p[2] = { P_ENGINE_A, P_ENGINE_B };
     const int mix_p[2] = { P_REVMIX_A, P_REVMIX_B };
     const float eng0[2] = { f.param_now(P_ENGINE_A), f.param_now(P_ENGINE_B) };
     const float mix0[2] = { f.param_now(P_REVMIX_A), f.param_now(P_REVMIX_B) };
-    const bool  mode0   = f.param_now(P_MODE) > 0.5f;
 
     f.new_full();
     // The stagger is scheduled off the INCOMING terrain's roles.
@@ -153,7 +149,6 @@ TEST_CASE("flow NEW: discrete decks switch staggered, under a duck") {
     const float eng1[2] = { nt.base[P_ENGINE_A], nt.base[P_ENGINE_B] };
     REQUIRE(eng1[texture] != eng0[texture]);
     REQUIRE(eng1[carrier] != eng0[carrier]);
-    REQUIRE((nt.base[P_MODE] > 0.5f) == mode0);
 
     f.tick();                                    // phase 1/600
     CHECK(f.param_now(eng_p[texture]) == doctest::Approx(eng1[texture]));

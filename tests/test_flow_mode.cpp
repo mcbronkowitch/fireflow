@@ -102,10 +102,11 @@ TEST_CASE("flow mode: P_MODE is scheduled with the texture deck, not the carrier
     CHECK(saw_b_carries);
 }
 
-TEST_CASE("flow mode: a mode change ducks both decks at the press") {
-    // A mode change is a whole-terrain event, not a per-deck one: it goes at
-    // phase 0 and BOTH ducks open there, so neither deck's clocking flips in
-    // the open.
+TEST_CASE("flow mode: the clocking flip lands at the press, ducked on both decks") {
+    // A mode change is a whole-terrain event, not a per-deck one: set_sync is
+    // global, so it goes at phase 0 and BOTH decks are ducked there. The
+    // stagger itself survives -- the carrier keeps its own duck at
+    // kCarrierStaggerFrac for its engine switch, and simply gets a second one.
     spky::Instrument inst;
     inst.init(48000.f);
     Flow f;
@@ -149,19 +150,79 @@ TEST_CASE("flow mode: a mode change ducks both decks at the press") {
     CHECK(inst.step_on(spky::PART_A));
     CHECK(inst.synced(spky::PART_A));
     CHECK(inst.step_on(spky::PART_B));
-    // Both ducks are centred on the press instant, so the switch happens
-    // inside a wash on both decks.
-    CHECK(f.duck_t_for_test(0) == press);
-    CHECK(f.duck_t_for_test(1) == press);
 
-    // Contrast: a press that does NOT move the mode keeps the stagger, so the
-    // collapse above is the mode's doing and not a deleted stagger.
+    // The clocking flip hits both decks at the press, so both are ducked
+    // THERE -- the texture deck by its only duck, the carrier by its second
+    // one. The carrier's first duck stays at the stagger, where its own engine
+    // switch still is. (Exact == is safe: begin_blend assigns _t and
+    // _t + kCarrierStaggerFrac * kBlendS verbatim, with no arithmetic in
+    // between, so these are the same doubles -- not a tolerance question.)
+    const int carrier = terrain_of(f).a_carries ? 0 : 1;
+    const int texture = 1 - carrier;
+    CHECK(f.duck_t_for_test(texture, 0) == press);
+    CHECK(f.duck_t_for_test(texture, 1) < 0.0);          // slot unused
+    CHECK(f.duck_t_for_test(carrier, 1) == press);
+    CHECK(f.duck_t_for_test(carrier, 0)
+          == press + double(kCarrierStaggerFrac * kBlendS));
+
+    // Contrast: a press that does NOT move the mode leaves the carrier's
+    // second slot empty, so the extra duck above is the mode's doing and not
+    // something every press now gets.
     f.wake(flow_a);
     for (int i = 0; i < 20; ++i) f.tick();
     f.restore_undo(flow_b, true);
     const double press2 = f.now_s();
     REQUIRE(f.undo());
-    CHECK(f.duck_t_for_test(0) != f.duck_t_for_test(1));
-    CHECK((f.duck_t_for_test(0) == press2 || f.duck_t_for_test(1) == press2));
+    const int carrier2 = terrain_of(f).a_carries ? 0 : 1;
+    CHECK(f.duck_t_for_test(carrier2, 1) < 0.0);
+    CHECK(f.duck_t_for_test(1 - carrier2, 0) == press2);
+    CHECK(f.duck_t_for_test(carrier2, 0)
+          == press2 + double(kCarrierStaggerFrac * kBlendS));
 }
 
+TEST_CASE("flow mode: a mode-changing press ducks the carrier at BOTH its events") {
+    // The defect this guards: giving P_MODE phase 0 without giving the carrier
+    // deck a duck there. The carrier's only duck sits at kCarrierStaggerFrac,
+    // 1.5 s away, where duck() computes u = 1.5 / 0.25 = 6 and returns the
+    // send untouched -- so the global set_sync clocking flip would land in the
+    // open. Collapsing the stagger instead is worse: it moves the carrier's
+    // ENGINE change into the open, which is louder. Both events get a duck.
+    spky::Instrument in;
+    in.init(48000.f);
+    Flow f;
+    f.init(&in, 100.f);
+    // Seed picked so the press MOVES the mode and the carrier changes engine:
+    // without both, neither half of this case is observable.
+    TerrainState s; s.master = 0xC0FFEE; f.wake(s);
+    const int eng_p[2] = { P_ENGINE_A, P_ENGINE_B };
+    const int mix_p[2] = { P_REVMIX_A, P_REVMIX_B };
+    const float eng0[2] = { f.param_now(P_ENGINE_A), f.param_now(P_ENGINE_B) };
+    const float mix0[2] = { f.param_now(P_REVMIX_A), f.param_now(P_REVMIX_B) };
+    const bool  mode0   = f.param_now(P_MODE) > 0.5f;
+
+    f.new_full();
+    const Terrain& nt = terrain_of(f);
+    const int carrier = nt.a_carries ? 0 : 1;
+    REQUIRE((nt.base[P_MODE] > 0.5f) != mode0);          // the mode moves
+    REQUIRE(nt.base[eng_p[carrier]] != eng0[carrier]);   // and so does ENGINE
+
+    // t = 0.01 s: the clocking flip is already live (P_MODE switches at phase
+    // 0) and the CARRIER's send is ducked for it, even though its own engine
+    // has not switched yet.
+    f.tick();
+    CHECK(in.step_on(spky::PART_A) == (nt.base[P_MODE] > 0.5f));
+    CHECK(f.param_now(eng_p[carrier]) == doctest::Approx(eng0[carrier]));
+    CHECK(f.param_now(mix_p[carrier]) > mix0[carrier] + 1e-3f);
+
+    // t = 1.00 s: between the two windows (press duck spans -0.25..0.25, the
+    // stagger duck 1.25..1.75), so this sample is duck-free -- the baseline.
+    for (int i = 0; i < 99; ++i) f.tick();
+    const float carrier_mix_pre = f.param_now(mix_p[carrier]);
+
+    // t = 1.52 s: the carrier's own engine switch, still staggered, still
+    // under its own duck. The stagger is a by-ear decision and survives.
+    for (int i = 0; i < 52; ++i) f.tick();
+    CHECK(f.blend_phase() > kCarrierStaggerFrac);
+    CHECK(f.param_now(eng_p[carrier]) == doctest::Approx(nt.base[eng_p[carrier]]));
+    CHECK(f.param_now(mix_p[carrier]) > carrier_mix_pre + 1e-3f);
+}
