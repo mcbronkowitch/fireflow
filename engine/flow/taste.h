@@ -23,7 +23,9 @@
 
 namespace spky { namespace flow {
 
-struct Span   { float lo, hi; };                     // draw range, engine units
+// Span itself lives in flow_params.h now (moved 2026-08-06, final review) --
+// see that header for why. Still visible here unqualified via the
+// flow_params.h include above.
 struct BaseRule { int param; Span per_arch[ARCH_COUNT]; };
 struct CurveRule { int param; Span bp[5]; };         // per-breakpoint draw spans
 struct StoryVariant {
@@ -64,7 +66,7 @@ constexpr float kDistanceMin = 0.18f;               // NEW rejection threshold
 // RE-MEASURED 2026-08-06 (Task 7, the taste tables). THE 0x707 BREACH THAT
 // MADE THIS GATE RED IS GONE, and the constant did not move to make that
 // happen. 0x707's calm corner now renders at rms 4.25e-04, 43.0 dB under this
-// ceiling; that is a 45.6 dB REDUCTION from the 8.24e-02 it rendered before
+// ceiling; that is a 45.75 dB REDUCTION from the 8.24e-02 it rendered before
 // the branch, which is a different quantity from the margin.
 //
 // WHICH CHANGE RETIRED IT, measured rather than guessed. The calm-corner
@@ -74,7 +76,7 @@ constexpr float kDistanceMin = 0.18f;               // NEW rejection threshold
 //   4ec5be0 .. ab76a97   0x707 rms 0.0824 -> 0.0787   OVER
 //   3435c31 (base rules) 0x707 rms 0.00665            under
 //   ...
-//   89eb461 (HEAD)       0x707 rms 4.25e-04           under
+//   89eb461 (Task 7 measurement point)       0x707 rms 4.25e-04           under
 //
 // So the ceiling breach stopped reproducing at 3435c31. Inside that commit it
 // is specifically the DRONE SHAPE CAP (P_SHAPE_A/B drone span {0,1} ->
@@ -124,7 +126,7 @@ constexpr float kCalmCornerRmsMax = 0.06f;
 //
 //                            at or below this floor    also below 1e-4
 //   4ec5be0 (branch point)      193  (12.3 %)               53
-//   89eb461 (HEAD)              103  ( 6.6 %)               70
+//   89eb461 (Task 7 measurement point)              103  ( 6.6 %)               70
 //
 // So roughly one drawn terrain in fifteen currently renders FUNCTIONALLY MUTE
 // at its calm corner, and one in eight did before this branch. That is a NEW
@@ -200,7 +202,7 @@ constexpr float kBlendSpikeDb = 6.f;                // press vs. control,
 //
 //                       min    p50    p90    p95    p99    max   over 6 dB
 //   4ec5be0            -6.71  +2.91 +18.73 +33.74 +58.86 +59.53  31/85 (36.5%)
-//   89eb461 (HEAD)     -5.90  +2.18 +23.29 +34.98 +58.62 +59.40  24/85 (28.2%)
+//   89eb461 (Task 7 measurement point)     -5.90  +2.18 +23.29 +34.98 +58.62 +59.40  24/85 (28.2%)
 //
 // SO THE 6 dB CEILING IS NOT A PROPERTY THE GENERATOR HAS, AND NEVER WAS.
 // More than a quarter of eligible terrains breach it, before and after this
@@ -597,6 +599,18 @@ constexpr float kAdventureNarrow = 0.40f;
 // separately. Do not raise it to make an aggregate bound fit; that bound was
 // retired for measuring a mixture.
 constexpr float kAdventureExp = 2.f;
+
+// The adventure draw's own SHAPE (spec §7: "a = 1 - u^(1/3) ... the (1-x)^3
+// shape is a first guess, tunable later"). MOVED HERE 2026-08-06 (final
+// review) from terrain.cpp, where it was a bare `1.f / 3.f` literal at both
+// draw sites (t.adventure_base and t.adventure[m]) -- the same argument
+// Task 7 used to move kAdventureExp off an `adv * adv` literal applies here:
+// it is a tuning lever the spec itself calls tunable, so it belongs in this
+// file, not duplicated in terrain.cpp. a = 1 - u^(1/kAdventureShape) gives
+// P(a > x) = (1 - x)^kAdventureShape. Value unchanged at 3 -- this is a
+// relocation, not a retune; terrain.cpp's draw_adventure() is now the one
+// place that reads it.
+constexpr float kAdventureShape = 3.f;
 
 // ---------------------------------------------------------------------------
 // Story library, one variant per macro (DENSITY gets two). Implements §3's

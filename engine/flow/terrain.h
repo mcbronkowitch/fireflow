@@ -13,8 +13,7 @@
 #pragma once
 #include <cstdint>
 #include "flow/flow_ids.h"
-#include "flow/flow_params.h"
-#include "flow/taste.h"
+#include "flow/flow_params.h"       // Span lives here, not taste.h
 #include "mod/rng.h"
 
 namespace spky { namespace flow {

@@ -22,6 +22,14 @@ const Veto* veto_for(int param) {
 TEST_CASE("flow veto: no table span may leave a veto band") {
     // This is the enforcement. A veto that only held at runtime would let a
     // broken table ship silently; here a bad span is a red build.
+    //
+    // `checked` counts SPANS actually compared against a veto (the
+    // veto_for()-found rows), not rows scanned -- a veto table that stopped
+    // matching any param would leave both loops below iterating happily and
+    // asserting nothing, the same silently-empty-scan shape this branch was
+    // burned by elsewhere. kVetoCount is 6 params; every one of them appears
+    // in kBaseRules and/or kStories, so the floor below is non-vacuous today.
+    int checked = 0;
     for (int i = 0; i < kBaseRuleCount; ++i) {
         const Veto* v = veto_for(kBaseRules[i].param);
         if (!v) continue;
@@ -29,6 +37,7 @@ TEST_CASE("flow veto: no table span may leave a veto band") {
             CAPTURE(pname(kBaseRules[i].param)); CAPTURE(a);
             CHECK(kBaseRules[i].per_arch[a].lo >= v->lo);
             CHECK(kBaseRules[i].per_arch[a].hi <= v->hi);
+            ++checked;
         }
     }
     for (int s = 0; s < kStoryCount; ++s)
@@ -41,8 +50,10 @@ TEST_CASE("flow veto: no table span may leave a veto band") {
                 CAPTURE(b);
                 CHECK(c.bp[b].lo >= v->lo);
                 CHECK(c.bp[b].hi <= v->hi);
+                ++checked;
             }
         }
+    REQUIRE(checked > 0);
 }
 
 TEST_CASE("flow veto: the table is well formed and inside kParams") {
@@ -105,7 +116,41 @@ TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto") {
     // "% 30" re-press cadence) stops the residual from re-forming mid-ramp,
     // this count drops to 0 and the CHECK below turns the test red instead
     // of it staying green while exercising nothing.
-    long edge_hits = 0;
+    //
+    // CORRECTED 2026-08-06 (final review): a bare edge_hits count over ALL
+    // five non-DRIVE params is a weaker exercise-proof than it looks, because
+    // the same coincidence excluding P_DRIVE also applies, less obviously, to
+    // P_REV_MOD's lo (0.00) and P_REVMIX_A/B's hi (1.00): kParams for all
+    // three of those params is a plain 0..1, so clamp_to(kParams, ...) alone
+    // -- the ordinary range clamp every param gets, nothing veto-specific --
+    // produces exactly those values whenever a draw or the blend saturates
+    // the physical range, with the veto clamp never in the loop. A hit there
+    // still proves the RESIDUAL formed (the mechanism the test exists to
+    // exercise), so it is not worthless -- but only a hit on a bound that
+    // sits STRICTLY INSIDE the param's own kParams range proves the VETO
+    // clamp itself fired, because kParams' own clamp cannot produce that
+    // value on its own.
+    //
+    // WHICH PARAMS ACTUALLY DO THAT, MEASURED rather than assumed from the
+    // band positions alone: of the five interior bounds available (COMP_A
+    // 0.40/0.60, COMP_B 0.40/0.60, REV_MOD's 0.25, REVMIX_A/B's 0.08), this
+    // sweep (60 masters, the same run rechecked at 400) lands an interior hit
+    // on P_COMP_A only. COMP_B, REV_MOD and REVMIX_A/B never do, at either
+    // sample size -- their pre-veto values apparently never overshoot far
+    // enough for THIS sweep to push them past their interior bound, though
+    // their edge_hits (the loose overall counter above) are still nonzero.
+    // No mechanism for the difference is claimed here -- COMP_A alone gets a
+    // story curve with more range than COMP_B's near-constant base rule,
+    // which is a plausible candidate, but it was not isolated. Do not tighten
+    // this to require all five without re-measuring first.
+    long edge_hits = 0;                          // kept: loose overall sanity
+    bool interior_hit[kVetoCount] = {};           // per-param, strictly-inside bound
+    bool lo_interior[kVetoCount], hi_interior[kVetoCount];
+    for (int v = 0; v < kVetoCount; ++v) {
+        const auto& pi = kParams[kVetos[v].param];
+        lo_interior[v] = kVetos[v].lo > pi.lo + 1e-6f;
+        hi_interior[v] = kVetos[v].hi < pi.hi - 1e-6f;
+    }
 
     for (uint32_t master = 1; master <= 60; ++master) {
         TerrainState st; st.master = master;
@@ -132,13 +177,33 @@ TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto") {
                 CHECK(got >= kVetos[v].lo - 1e-5f);
                 CHECK(got <= kVetos[v].hi + 1e-5f);
                 if (kVetos[v].param != P_DRIVE &&
-                    (got == kVetos[v].lo || got == kVetos[v].hi))
+                    (got == kVetos[v].lo || got == kVetos[v].hi)) {
                     ++edge_hits;
+                    if ((got == kVetos[v].lo && lo_interior[v]) ||
+                        (got == kVetos[v].hi && hi_interior[v]))
+                        interior_hit[v] = true;
+                }
             }
         }
     }
 
     CHECK(edge_hits > 0);
+    // What this actually proves, per param: a hit on a bound that sits
+    // strictly inside kParams' own range cannot come from the ordinary
+    // clamp_to(kParams, ...) every param already gets, so it is specific
+    // evidence the veto clamp itself fired mid-blend, not just the range
+    // clamp every param has anyway. Required only for P_COMP_A -- the sole
+    // param this sweep measurably drives past an interior bound (see the
+    // comment above edge_hits' declaration). The other four non-DRIVE params
+    // stay covered by edge_hits > 0 above, which is real but weaker: it shows
+    // the residual formed and the value landed on SOME veto bound, without
+    // this test being able to say the veto clamp (rather than kParams' own
+    // clamp) is what put it there.
+    for (int v = 0; v < kVetoCount; ++v) {
+        if (kVetos[v].param != P_COMP_A) continue;
+        CAPTURE(pname(kVetos[v].param));
+        CHECK(interior_hit[v]);
+    }
 }
 
 TEST_CASE("flow veto: adventure never reaches past a veto") {

@@ -5,7 +5,8 @@
 namespace spky { namespace flow {
 
 // Stream id blocks. Params and macros get one id each; the stage-level
-// draws get fixed ids above both blocks.
+// draws get fixed ids above both blocks, and the per-macro adventure levels
+// get a third block (kStreamAdventureMacro, 3000) above the fixed ids.
 enum : uint32_t {
     kStreamParamBase = 0,          // + ParamId
     kStreamMacroBase = 1000,       // + Macro

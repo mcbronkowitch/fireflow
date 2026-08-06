@@ -77,6 +77,7 @@ TEST_CASE("flow taste: drones get round LFOs only") {
     // per cycle, and that is what makes a drone read as rhythmic. So a drone
     // may only draw the sine..triangle quarter. This is mechanical, not taste.
     const int shape[2] = { P_SHAPE_A, P_SHAPE_B };
+    int checked = 0;
     for (int i = 0; i < kBaseRuleCount; ++i)
         for (int k = 0; k < 2; ++k)
             if (kBaseRules[i].param == shape[k]) {
@@ -85,7 +86,15 @@ TEST_CASE("flow taste: drones get round LFOs only") {
                 // The other archetypes stay wildcards: nothing collected says
                 // an arp may not have an angular LFO.
                 CHECK(kBaseRules[i].per_arch[ARCH_ARP].hi > 0.25f);
+                ++checked;
             }
+    // A silently-empty scan reads green while asserting nothing -- this
+    // branch was burned by exactly that shape twice already (see
+    // "the crooked-rung bound was measuring a mixture" and the adventure
+    // filter's own found-counter in test_flow_veto.cpp). Both P_SHAPE_A and
+    // P_SHAPE_B must have a kBaseRules row for the CHECKs above to mean
+    // anything.
+    REQUIRE(checked == 2);
 }
 
 TEST_CASE("flow taste: story windows default to the whole curve") {
@@ -117,9 +126,15 @@ TEST_CASE("flow taste: a drone's density knob stays in the sparse half") {
     // and "thick" stays default per that same rule -- so an unscoped loop
     // would assert 1.0 <= 0.5 against "thick" and fail by construction, not
     // by a real defect. Scoped to "rate" by name to match the stated scope.
+    int checked = 0;
     for (int s = 0; s < kStoryCount; ++s) {
         if (kStories[s].macro != M_DENSITY) continue;
         if (std::strcmp(kStories[s].name, "rate") != 0) continue;
         CHECK(kStories[s].arch_window[ARCH_DRONE].hi <= 0.5f);
+        ++checked;
     }
+    // The name+macro filter above is exactly the shape of scan that has gone
+    // silently empty on this branch before -- pin that "rate" was actually
+    // found and checked, not that the filter matched nothing.
+    REQUIRE(checked == 1);
 }

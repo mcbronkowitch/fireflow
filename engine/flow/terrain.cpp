@@ -82,8 +82,37 @@ int pick_index(Rng& r, int n) {
 // kAdventureExp, with the owner's ruling and the measured alternatives
 // (exponents 1, 3 and 4) recorded there. It used to be an `adv * adv` literal
 // here, which put a lever outside the taste tables; moved 2026-08-06 (Task 7).
+//
+// DISCONTINUOUS AT w == 0 (comment, not a clamp -- flagged in final review,
+// left as-is): std::pow(0.f, e) is 0 for any e > 0 but 1 for e == 0, and the
+// exponent here is exactly 0 only when adv == 1 (full adventure, the no-op
+// case). No current table entry is 0 or 1 -- kModeW's four values and every
+// weight table sit strictly inside (0, 1) -- so this is unreachable today. It
+// is a live trap for a FUTURE table edit, though: the mode coin computes
+// temper(1.f - kModeW[arch], adv), so a hypothetical kModeW of 1.0 would make
+// temper(0.f, adv) return 1.0 at adv == 1 instead of 0.0, turning a
+// fully-adventurous terrain's mode coin into a 50/50 draw instead of the
+// deterministic STEP the table intends. Not clamped here because no value in
+// the tables triggers it and a clamp added for an unreached case is an
+// untested behavior change; if a future kModeW (or any other temper() input)
+// ever reaches 0 or 1, this is where to look first.
 float temper(float w, float adv) {
     return std::pow(w, 1.f - std::pow(adv, kAdventureExp));
+}
+
+// One adventure level: a = 1 - u^(1/kAdventureShape), so P(a > x) =
+// (1-x)^kAdventureShape (spec §7). Consumes exactly one next_unipolar(), like
+// the two inline draws it replaces, so factoring this out shifts no stream.
+//
+// The shape itself is a tuning value and lives in taste.h as
+// kAdventureShape (spec §7: "a first guess, tunable later"), the same
+// reasoning that moved kAdventureExp there. This helper replaces two
+// identical `1.f - std::pow(r.next_unipolar(), 1.f / 3.f)` literals (the base
+// patch's draw, and each macro domain's), which is the bare-literal
+// duplication the same rule catches -- a future tuning edit to one site could
+// otherwise miss the other.
+float draw_adventure(Rng& r) {
+    return 1.f - std::pow(r.next_unipolar(), 1.f / kAdventureShape);
 }
 
 // Snap a normalized rate to a weighted rung of the divisions.h ladder, chosen
@@ -139,6 +168,11 @@ Curve draw_curve(Rng& r, const CurveRule& cr, float adv) {
         // interpolates between them and can land anywhere. That is the honest
         // limit of weighting a storied discrete; snapping at runtime instead
         // would fight the hysteresis.
+        //
+        // Same span-narrowing exception as the base-rule redraws (spec §7.1):
+        // snap_steps here is handed cr.bp[b].lo/.hi, the RAW breakpoint span,
+        // not the draw_span() result computed just above -- adventure reaches
+        // the step-count weighting, never the breakpoint span itself.
         if (cr.param == P_STEPS_A)
             c.bp[b] = snap_steps(r, cr.bp[b].lo, cr.bp[b].hi, adv);
     }
@@ -248,16 +282,17 @@ Terrain generate(const TerrainState& st) {
     // domain, so nothing a partial reroll can bump may move them. Each macro
     // domain draws its own level in stage 4, from its own counter.
     //
-    // a = 1 - u^(1/3) gives P(a > x) = (1-x)^3: above 0.5 in 12.5% of draws,
-    // above 0.8 in 0.8%. The shape is arithmetic and lives here; the one
-    // tunable it needs (kAdventureNarrow) lives in taste.h with the rest.
+    // a = 1 - u^(1/kAdventureShape) gives P(a > x) = (1-x)^kAdventureShape:
+    // above 0.5 in 12.5% of draws, above 0.8 in 0.8% at the shipped shape
+    // (3). draw_adventure() holds the arithmetic; the tunables it needs
+    // (kAdventureShape, kAdventureNarrow) live in taste.h with the rest.
     //
     // Drawn HERE, before stage 3a, because every base draw from 3a onward
     // reads it: the mode coin's weights are tempered, and so is every base
     // span. Its own stream means the position costs no other stage a value.
     {
         Rng r = make_stream(st.master, kStreamAdventure, 0);
-        t.adventure_base = 1.f - std::pow(r.next_unipolar(), 1.f / 3.f);
+        t.adventure_base = draw_adventure(r);
     }
 
     // Stage 3a: operating mode (spec 2026-08-06 §5). Its base-rule row is a
@@ -296,6 +331,19 @@ Terrain generate(const TerrainState& st) {
         t.base[br.param] = draw_span(r, s, t.adventure_base);
         // Weighted redraws (taste.h §6). The uniform draw above stands for
         // every other row; these three have a preferred SET, not a range.
+        //
+        // NONE OF THE THREE BELOW SEE THE ADVENTURE-NARROWED SPAN (spec §7.1's
+        // exception, documented there): draw_span() above still runs and its
+        // result is thrown away for P_RATE_A/B, P_STEPS_B and P_SHUFFLE --
+        // snap_rate/snap_steps and the shuffle skew draw are handed s.lo/s.hi,
+        // the table's RAW span, not a narrowed one. So for these three (plus
+        // P_STEPS_A below, via draw_curve for DENSITY's "rate" story --
+        // five params in total) adventure still reaches the WEIGHT tempering,
+        // never the span itself. Defensible for the two discrete sets
+        // (RATE/STEPS): a per-rung weight already does what narrowing would.
+        // NOT defensible for P_SHUFFLE, which is continuous and gets no
+        // narrowing at all -- left unchanged pending the owner's ruling (spec
+        // §7.1).
         if (br.param == P_RATE_A || br.param == P_RATE_B) {
             // Only meaningful synced: in free mode RATE is free_hz's continuous
             // curve and there is no ladder. base[P_MODE] is already drawn.
@@ -357,7 +405,7 @@ Terrain generate(const TerrainState& st) {
             Rng ra = make_stream(st.master,
                                  kStreamAdventureMacro + uint32_t(m),
                                  st.reroll[m]);
-            t.adventure[m] = 1.f - std::pow(ra.next_unipolar(), 1.f / 3.f);
+            t.adventure[m] = draw_adventure(ra);
         }
         Rng r = make_stream(st.master, kStreamMacroBase + uint32_t(m),
                             st.reroll[m]);
