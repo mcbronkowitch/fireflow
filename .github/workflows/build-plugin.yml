@@ -102,6 +102,16 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Release text comes from the tagged commit, not from a hand-edit after the
+      # fact, so it is reviewable in the diff before the tag is pushed. Only that
+      # one file is fetched (no cone mode = literal path), and it must be checked
+      # out BEFORE the artifacts: actions/checkout cleans the workspace and would
+      # otherwise wipe the downloaded dist/.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: docs/release-notes.md
+          sparse-checkout-cone-mode: false
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -111,3 +121,4 @@ jobs:
         with:
           files: dist/*.vcvplugin
           fail_on_unmatched_files: true
+          body_path: docs/release-notes.md

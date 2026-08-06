@@ -1,0 +1,39 @@
+<!--
+  Body of the CURRENT release. `.github/workflows/build-plugin.yml` feeds this
+  file to the GitHub Release via softprops/action-gh-release's `body_path`, so
+  whatever stands here when a `v*` tag is pushed becomes that release's text.
+
+  It describes one release, not a changelog: rewrite it in the same commit that
+  bumps `host/vcv/plugin.json`, before tagging. Past texts stay in git history.
+  Everything below the comment is public.
+-->
+
+## New: FireFlow Glow 0.1
+
+The plugin now ships **two modules over the same engine core**.
+
+**FireFlow Glow** is the flow-machine view of the instrument: 12 HP, six macro
+knobs and one NEW button over a seeded generative terrain. Where the FireFlow
+module gives every engine setter its own control, Glow drives `engine/flow/` —
+MOTION, DENSITY, BRIGHT, DIRT, WANDER and SPACE move the whole terrain at once,
+and NEW rolls a fresh one. Terrains are codes: they survive copy, paste,
+save/reload and Initialize, and can be typed in or passed around. Five CV inputs
+and a clock input put the macros and the tempo under patch control.
+
+Glow is at **0.1** — its panel says `ALPHA`, and it is a first playable version,
+not a finished instrument. The house seed it wakes on is still a measured
+placeholder rather than a by-ear choice.
+
+The **FireFlow** module is unchanged in this release.
+
+## Why 3.0.0
+
+The jump from 2.19 marks the plugin becoming two instruments rather than one.
+It does **not** mean Rack 3: this is a **Rack 2** plugin, built against Rack SDK
+2.6.6, and it installs into Rack 2 like every release before it.
+
+## Install
+
+Download the `.vcvplugin` for your platform, unpack it into Rack's user plugin
+directory and restart Rack. Built against Rack SDK 2.6.6 for Windows x64, Apple
+Silicon (mac-arm64) and Linux x64.
