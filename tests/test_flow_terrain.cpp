@@ -2,7 +2,9 @@
 #include "doctest/doctest.h"
 #include "flow/terrain.h"
 #include "flow/taste.h"
+#include "mod/divisions.h"
 #include <cstring>
+using namespace spky;                  // kDivisions / division_index
 using namespace spky::flow;
 
 static TerrainState st(uint32_t m) { TerrainState s; s.master = m; return s; }
@@ -168,4 +170,77 @@ TEST_CASE("flow terrain: a drone's picked DENSITY 'rate' story carries its "
     // has only two variants, so this should be common), that is itself a
     // finding worth reporting, not something to route around.
     REQUIRE(found);
+}
+
+TEST_CASE("flow terrain: synced rates prefer the straight rungs") {
+    // divisions.h's ladder is speed-sorted, so dotted and triplet rungs sit
+    // BETWEEN the straight ones -- a uniform draw hits them roughly half the
+    // time in the middle of the range. They stay reachable (this is a weight,
+    // not a veto), they just get rare.
+    auto crooked = [](int idx) {
+        const char* n = kDivisions[idx].name;
+        for (const char* c = n; *c; ++c) if (*c == '.' || *c == 'T') return true;
+        return false;
+    };
+    int total = 0, odd = 0;
+    for (uint32_t master = 1; master <= 4000; ++master) {
+        TerrainState st; st.master = master;
+        const Terrain t = generate(st);
+        if (t.base[P_MODE] < 0.5f) continue;            // free mode has no ladder
+        for (int p : { P_RATE_A, P_RATE_B }) {
+            ++total;
+            if (crooked(division_index(t.base[p]))) ++odd;
+        }
+    }
+    REQUIRE(total > 500);
+    const float share = float(odd) / float(total);
+    CAPTURE(share);
+    CHECK(share < 0.20f);      // was roughly 0.5 with a uniform draw
+    CHECK(share > 0.01f);      // still reachable -- a weight, not a veto
+}
+
+TEST_CASE("flow terrain: step counts prefer 8 and 16") {
+    int total = 0, preferred = 0;
+    for (uint32_t master = 1; master <= 4000; ++master) {
+        TerrainState st; st.master = master;
+        const Terrain t = generate(st);
+        const int s = int(t.base[P_STEPS_B] + 0.5f);
+        ++total;
+        if (s == 8 || s == 16) ++preferred;
+    }
+    const float share = float(preferred) / float(total);
+    CAPTURE(share);
+    CHECK(share > 0.45f);
+    CHECK(share < 0.95f);      // other counts still happen
+}
+
+TEST_CASE("flow terrain: SHUFFLE leans to the low end of its span") {
+    // ADDED beyond the task brief, which shipped kShuffleSkew with no
+    // assertion at all. SHUFFLE has no rungs to weight, so its bias is a skew
+    // inside the drawn span (taste.h) -- measured here as the mean position
+    // INSIDE that span, which is what the skew actually moves. u^kShuffleSkew
+    // with the table's 2.5 predicts 1/3.5 = 0.286 against a uniform draw's
+    // 0.5. The lower bound is the half that matters: it is a skew, not a
+    // narrowing, so heavy shuffle must stay reachable.
+    const BaseRule* shuffle = nullptr;
+    for (int i = 0; i < kBaseRuleCount; ++i)
+        if (kBaseRules[i].param == P_SHUFFLE) shuffle = &kBaseRules[i];
+    REQUIRE(shuffle != nullptr);
+
+    double sum = 0.0; int n = 0; float top = 0.f;
+    for (uint32_t master = 1; master <= 4000; ++master) {
+        TerrainState s; s.master = master;
+        const Terrain t = generate(s);
+        const Span& sp = shuffle->per_arch[t.arch];
+        const float pos = (t.base[P_SHUFFLE] - sp.lo) / (sp.hi - sp.lo);
+        sum += pos; ++n;
+        if (pos > top) top = pos;
+    }
+    REQUIRE(n == 4000);
+    const float mean = float(sum / n);
+    CAPTURE(mean);
+    CHECK(mean < 0.36f);       // was 0.5 with a uniform draw
+    CHECK(mean > 0.20f);       // a skew, not a collapse onto lo
+    CAPTURE(top);
+    CHECK(top > 0.95f);        // the heavy-shuffle end stays reachable
 }

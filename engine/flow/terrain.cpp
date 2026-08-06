@@ -9,6 +9,7 @@
 #include "flow/terrain.h"
 #include "flow/taste.h"
 #include "flow/flow_rng.h"
+#include "mod/divisions.h"
 #include <cmath>
 
 namespace spky { namespace flow {
@@ -36,6 +37,33 @@ int pick_index(Rng& r, int n) {
     return i < n ? i : n - 1;
 }
 
+// Snap a normalized rate to a weighted rung of the divisions.h ladder, chosen
+// among the rungs that fall inside the drawn span. Free-mode terrains skip
+// this entirely -- there is no ladder to snap to.
+float snap_rate(Rng& r, float lo, float hi) {
+    int idx[kDivisionCount], n = 0;
+    float w[kDivisionCount];
+    for (int i = 0; i < kDivisionCount; ++i) {
+        const float norm = float(i) / float(kDivisionCount - 1);
+        if (norm < lo || norm > hi) continue;
+        idx[n] = i; w[n] = kRateRungW[i]; ++n;
+    }
+    if (n == 0) return lo;                  // span narrower than one rung
+    return float(idx[pick_weighted(r, w, n)]) / float(kDivisionCount - 1);
+}
+
+// Weighted integer step count inside a span.
+float snap_steps(Rng& r, float lo, float hi) {
+    int val[15], n = 0;
+    float w[15];
+    for (int s = 2; s <= 16; ++s) {
+        if (float(s) < lo - 1e-4f || float(s) > hi + 1e-4f) continue;
+        val[n] = s; w[n] = kStepsW[s - 2]; ++n;
+    }
+    if (n == 0) return lo;
+    return float(val[pick_weighted(r, w, n)]);
+}
+
 // Draw one story-curve target: each breakpoint uniform inside ITS OWN span,
 // then the five values sorted monotone in the story's direction. Direction
 // = sign of (bp4 span lo - bp0 span lo); a flat story counts as ascending.
@@ -45,8 +73,16 @@ int pick_index(Rng& r, int n) {
 Curve draw_curve(Rng& r, const CurveRule& cr) {
     Curve c;
     c.param = cr.param;
-    for (int b = 0; b < 5; ++b)
+    for (int b = 0; b < 5; ++b) {
         c.bp[b] = cr.bp[b].lo + r.next_unipolar() * (cr.bp[b].hi - cr.bp[b].lo);
+        // STEPS is storied (DENSITY owns it), so the weight can only reach the
+        // five drawn breakpoints -- the DENSITY knob's ENDPOINTS prefer 8 and
+        // 16, and a knob position between two breakpoints still interpolates
+        // between them. That is the honest limit of weighting a storied
+        // discrete; snapping at runtime instead would fight the hysteresis.
+        if (cr.param == P_STEPS_A)
+            c.bp[b] = snap_steps(r, cr.bp[b].lo, cr.bp[b].hi);
+    }
     const bool descending = cr.bp[4].lo < cr.bp[0].lo;
     for (int i = 1; i < 5; ++i) {              // insertion sort, n=5
         float v = c.bp[i];
@@ -148,6 +184,23 @@ Terrain generate(const TerrainState& st) {
         root  = pick_index(r, kParams[P_ROOT].steps);    // 0..11
     }
 
+    // Stage 3a: operating mode (spec 2026-08-06 §5). Its base-rule row is a
+    // placeholder like the ENGINE rows -- the real draw is this weighted coin,
+    // taken from the param's OWN stream so it rerolls exactly when a full
+    // terrain does. Written as a clean 0/1 so nothing downstream has to guess
+    // where the rounding boundary is.
+    //
+    // Drawn BEFORE the stage-3 loop, not after, because the loop's RATE weight
+    // reads it: in free mode there is no ladder to snap to. Its own stream is
+    // kStreamParamBase + P_MODE, which the loop never touches (each row seeds
+    // its own stream from the master), so the move consumes nothing the loop
+    // wanted and leaves every other draw bit-identical.
+    {
+        Rng r = make_stream(st.master, kStreamParamBase + uint32_t(P_MODE), 0);
+        const float w[2] = { 1.f - kModeW[t.arch], kModeW[t.arch] };
+        t.base[P_MODE] = float(pick_weighted(r, w, 2));
+    }
+
     // Stage 3: base patch. Every kBaseRules row from its OWN param stream,
     // uniform inside the archetype's span. Counter is 0 for all of them:
     // "owned by a macro" means "targeted by a story", and taste.h's
@@ -157,26 +210,33 @@ Terrain generate(const TerrainState& st) {
     // engine boundary.
     for (int i = 0; i < kBaseRuleCount; ++i) {
         const BaseRule& br = kBaseRules[i];
+        // P_MODE's placeholder row would overwrite the stage-3a coin, which
+        // used to be safe only because stage 3a ran after this loop. It draws
+        // from its own stream, so skipping it consumes nothing.
+        if (br.param == P_MODE) continue;
         Rng r = make_stream(st.master, kStreamParamBase + uint32_t(br.param), 0);
         const Span& s = br.per_arch[t.arch];
         t.base[br.param] = s.lo + r.next_unipolar() * (s.hi - s.lo);
+        // Weighted redraws (taste.h §6). The uniform draw above stands for
+        // every other row; these three have a preferred SET, not a range.
+        if (br.param == P_RATE_A || br.param == P_RATE_B) {
+            // Only meaningful synced: in free mode RATE is free_hz's continuous
+            // curve and there is no ladder. base[P_MODE] is already drawn.
+            if (t.base[P_MODE] > 0.5f)
+                t.base[br.param] = snap_rate(r, s.lo, s.hi);
+        } else if (br.param == P_STEPS_B) {
+            t.base[br.param] = snap_steps(r, s.lo, s.hi);
+        } else if (br.param == P_SHUFFLE) {
+            const float u = r.next_unipolar();
+            t.base[br.param] = s.lo + (s.hi - s.lo)
+                             * std::pow(u, kShuffleSkew);
+        }
     }
     // Stages 1-2 override their placeholder rows.
     t.base[P_ENGINE_A] = float(engine_a);
     t.base[P_ENGINE_B] = float(engine_b);
     t.base[P_SCALE]    = float(scale);
     t.base[P_ROOT]     = float(root);
-
-    // Stage 3b: operating mode (spec 2026-08-06 §5). Its base-rule row is a
-    // placeholder like the ENGINE rows -- the real draw is this weighted coin,
-    // taken from the param's OWN stream so it rerolls exactly when a full
-    // terrain does. Written as a clean 0/1 so nothing downstream has to guess
-    // where the rounding boundary is.
-    {
-        Rng r = make_stream(st.master, kStreamParamBase + uint32_t(P_MODE), 0);
-        const float w[2] = { 1.f - kModeW[t.arch], kModeW[t.arch] };
-        t.base[P_MODE] = float(pick_weighted(r, w, 2));
-    }
 
     // Stage 4: macro mappings. One stream per macro, keyed by that macro's
     // own reroll counter. The variant pick is uniform among this macro's
