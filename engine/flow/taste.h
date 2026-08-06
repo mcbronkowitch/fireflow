@@ -206,6 +206,12 @@ inline constexpr float kTextureW[ARCH_COUNT][5] = {
     { 0.20f, 0.30f, 0.15f, 0.15f, 0.20f },   // fragment: grains and echoes
 };
 
+// P_MODE draw weights (spec 2026-08-06 §5): probability that a terrain of this
+// archetype comes out STEP/synced rather than FLOW/free. A drone normally has
+// no step sequencer at all; an arp is one almost by definition.
+// Order: {ARCH_DRONE, ARCH_PULSE, ARCH_ARP, ARCH_FRAGMENT}.
+inline const float kModeW[ARCH_COUNT] = { 0.15f, 0.90f, 0.95f, 0.75f };
+
 // ---------------------------------------------------------------------------
 // Story library, one variant per macro (DENSITY gets two). Implements §3's
 // table: each target is a 5-breakpoint curve of draw spans; the macro knob
@@ -290,6 +296,10 @@ inline const BaseRule kBaseRules[] = {
 // table has no hole; do not tune them expecting audible effect.
 { P_ENGINE_A, {{0.f,5.f},{0.f,5.f},{0.f,5.f},{0.f,5.f}} },   // stage 1 overrides
 { P_ENGINE_B, {{0.f,5.f},{0.f,5.f},{0.f,5.f},{0.f,5.f}} },   // stage 1 overrides
+// P_MODE: drawn from kModeW, NOT from this span. The row exists only so the
+// coverage test has no hole -- exactly like the P_ENGINE_A/B rows above. Do
+// not tune it expecting audible effect.
+{ P_MODE,     {{0.f,1.f},{0.f,1.f},{0.f,1.f},{0.f,1.f}} },
 { P_SCALE,    {{0.f,12.f},{0.f,12.f},{0.f,12.f},{0.f,12.f}} }, // any scale
 { P_ROOT,     {{0.f,11.f},{0.f,11.f},{0.f,11.f},{0.f,11.f}} }, // any root
 { P_FORM_B,   {{0.f,4.f},{0.f,4.f},{0.f,4.f},{0.f,4.f}} },   // any principle

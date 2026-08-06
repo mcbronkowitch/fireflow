@@ -67,7 +67,16 @@ namespace spky { namespace flow {
   X(P_REV_SIZE,   0.f, 1.f, 0)   X(P_REV_DECAY,  0.f, 1.f, 0) \
   X(P_REV_TONE,   0.f, 1.f, 0)   X(P_REV_DIFF,   0.f, 1.f, 0) \
   X(P_REV_SMEAR,  0.f, 1.f, 0)   X(P_REV_MOD,    0.f, 1.f, 0) \
-  X(P_TEMPO_BPM, 50.f, 140.f, 0)
+  X(P_TEMPO_BPM, 50.f, 140.f, 0) \
+  /* The terrain's operating mode, spec 2026-08-06 §5. 0 = FLOW/free (lanes
+     breathe in their own kLaneRatio relationships, no grid), 1 = STEP/synced
+     (step sequencer on the divisions.h ladder). ONE global value, not one per
+     deck: Instrument::set_sync is global (instrument.h:274), so a per-deck
+     mode would need SYNC on and off at once.
+     MUST STAY LAST. Base draws are keyed kStreamParamBase + param
+     (terrain.cpp:160) -- inserting a param before this one re-seeds every
+     later stream and re-resolves every terrain code. */ \
+  X(P_MODE,       0.f, 1.f,  2)
 
 enum ParamId {
 #define SPKY_FLOW_ENUM(id, lo, hi, st) id,
