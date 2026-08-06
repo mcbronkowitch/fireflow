@@ -5,7 +5,10 @@
 // partial reroll replaces parts of it: every drawn value gets its RNG
 // stream from (master, stream id, override counter), so bumping one
 // macro's counter rerolls only that macro's domain and never shifts a
-// neighboring stream. generate() is pure table arithmetic over taste.h --
+// neighboring stream. (Streams, not values: Terrain::adventure rerolls with
+// ANY counter and feeds every draw, so a partial reroll does move values
+// outside its domain -- see terrain.cpp's header for the conflict that
+// creates.) generate() is pure table arithmetic over taste.h --
 // no audio, no heap, cheap enough to call from anywhere except the audio
 // callback's inner loop.
 #pragma once
@@ -77,9 +80,17 @@ struct Terrain {
     int       weather_n;                  // 2..4
     float     weather_period_s[4], weather_depth[4];
     Macro     weather_target[4];
+    float     adventure;                  // 0..1, this terrain's risk level
 };
 
 Terrain generate(const TerrainState& st);
+
+// One value inside a span, narrowed toward the middle by the terrain's
+// adventure level: full span at adv == 1, the middle kAdventureNarrow at 0.
+// Declared here rather than left in terrain.cpp's anonymous namespace so the
+// tests can assert the narrowing directly instead of inferring it from the
+// terrains it produces.
+float draw_span(Rng& r, const Span& s, float adv);
 
 // Distance between two terrains (spec 7.4): mean |Δ normalized base| over
 // every P_COUNT param (normalized by that param's kParams span), plus a

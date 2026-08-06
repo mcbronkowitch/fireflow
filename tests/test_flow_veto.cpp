@@ -140,3 +140,31 @@ TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto") {
 
     CHECK(edge_hits > 0);
 }
+
+TEST_CASE("flow veto: adventure never reaches past a veto") {
+    // The wildest terrain still gets no WOBBLE above 0.25. If this ever goes
+    // red, the adventure widening has been applied somewhere it must not be.
+    //
+    // The filter is what makes this case worth having, and also what could
+    // make it worthless: P(adventure > 0.9) is 0.1%, so a scan that forgot to
+    // count would report green having tested nothing at all -- the
+    // silently-empty scan that has already been caught twice on this branch.
+    // 20 000 masters predict ~20 qualifying terrains; the REQUIRE below pins
+    // that the sample is real. It is deliberately far under 20 so ordinary
+    // seed-set jitter cannot trip it while a filter that stopped matching
+    // (adventure gone, or clamped to zero) still does.
+    int high = 0;
+    for (uint32_t master = 1; master <= 20000; ++master) {
+        TerrainState st; st.master = master;
+        const Terrain t = generate(st);
+        if (t.adventure < 0.9f) continue;
+        ++high;
+        for (int v = 0; v < kVetoCount; ++v) {
+            CAPTURE(master); CAPTURE(pname(kVetos[v].param));
+            CHECK(t.base[kVetos[v].param] >= kVetos[v].lo - 1e-5f);
+            CHECK(t.base[kVetos[v].param] <= kVetos[v].hi + 1e-5f);
+        }
+    }
+    CAPTURE(high);
+    REQUIRE(high >= 5);
+}

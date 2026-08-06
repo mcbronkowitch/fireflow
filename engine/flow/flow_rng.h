@@ -15,6 +15,7 @@ enum : uint32_t {
     kStreamWeather   = 2003,
     kStreamDistance  = 2004,
     kStreamNewSeq    = 2005,       // Flow's NEW press-chain sequence Rng
+    kStreamAdventure = 2006,       // per-terrain risk level
 };
 
 // splitmix32-style avalanche of the (master, stream, counter) triple.

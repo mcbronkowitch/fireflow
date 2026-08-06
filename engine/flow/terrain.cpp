@@ -4,8 +4,20 @@
 // tonality -> base patch -> macro mappings, then the weather layer and the
 // named hard constraints. Everything is drawn from per-purpose RNG streams
 // (flow_rng.h) so a partial reroll bumps exactly one domain's counters and
-// every other draw stays bit-identical. All tuning data lives in taste.h;
+// every other STREAM stays bit-identical. All tuning data lives in taste.h;
 // this file is only the plumbing that walks those tables.
+//
+// THAT NO LONGER MEANS EVERY OTHER VALUE STAYS BIT-IDENTICAL, and the
+// sentence above used to say it did. The adventure level (spec 2026-08-06 §7)
+// is keyed on reroll_weather_counter() so ANY partial reroll redraws it, and
+// unlike the weather -- which is an additive layer over the finished terrain
+// -- adventure is an INPUT to every span draw and every tempered weight. So a
+// partial reroll still touches exactly one domain's streams, but it shifts
+// every drawn value in the terrain by re-narrowing the spans they came from.
+// Spec 7.3's per-domain isolation and §7's "a reroll must not leave a wild
+// terrain wild" cannot both hold under one per-terrain adventure level;
+// tests/test_flow_new.cpp's two isolation cases are red on that conflict and
+// it is the owner's call, not a bug to route around here.
 #include "flow/terrain.h"
 #include "flow/taste.h"
 #include "flow/flow_rng.h"
@@ -13,6 +25,28 @@
 #include <cmath>
 
 namespace spky { namespace flow {
+
+// One value inside a span, narrowed toward the middle by the terrain's
+// adventure level (spec 2026-08-06 §7). At adv == 1 this is the IDENTITY --
+// the whole span, uniform, which is what the taste tables mean on their own --
+// and it only ever narrows from there, symmetrically about the span's centre.
+//
+// That one-sidedness is the load-bearing property, not an implementation
+// detail: taste.h's spans are proven at build time to sit inside every veto
+// band (tests/test_flow_veto.cpp), so a draw that can never leave its span can
+// never breach a veto either, at any adventure level. If this ever grows a
+// branch that widens past s, the vetoes lose their build-time proof and need a
+// runtime clamp instead.
+//
+// Consumes exactly one next_unipolar(), like the plain uniform draw it
+// replaced, so routing a call site through it shifts no other stream.
+float draw_span(Rng& r, const Span& s, float adv) {
+    const float w = kAdventureNarrow + (1.f - kAdventureNarrow) * adv;
+    const float c = 0.5f * (s.lo + s.hi);
+    const float half = 0.5f * (s.hi - s.lo) * w;
+    return (c - half) + r.next_unipolar() * (2.f * half);
+}
+
 namespace {
 
 // Cumulative-weight scan: r.next_unipolar()*total walked against the
@@ -37,16 +71,22 @@ int pick_index(Rng& r, int n) {
     return i < n ? i : n - 1;
 }
 
+// w^(1-a): the taste table's weights as written at a = 0, uniform at a = 1.
+// This is what lets an adventurous terrain draw the rung the tables call
+// unlikely -- a triplet rate, an 11-step phrase -- without any weight ever
+// becoming a veto. Weights only; the SHUFFLE skew is NOT one (see stage 3).
+float temper(float w, float adv) { return std::pow(w, 1.f - adv); }
+
 // Snap a normalized rate to a weighted rung of the divisions.h ladder, chosen
 // among the rungs that fall inside the drawn span. Free-mode terrains skip
 // this entirely -- there is no ladder to snap to.
-float snap_rate(Rng& r, float lo, float hi) {
+float snap_rate(Rng& r, float lo, float hi, float adv) {
     int idx[kDivisionCount], n = 0;
     float w[kDivisionCount];
     for (int i = 0; i < kDivisionCount; ++i) {
         const float norm = float(i) / float(kDivisionCount - 1);
         if (norm < lo || norm > hi) continue;
-        idx[n] = i; w[n] = kRateRungW[i]; ++n;
+        idx[n] = i; w[n] = temper(kRateRungW[i], adv); ++n;
     }
     if (n == 0) return lo;                  // span narrower than one rung
     return float(idx[pick_weighted(r, w, n)]) / float(kDivisionCount - 1);
@@ -54,13 +94,13 @@ float snap_rate(Rng& r, float lo, float hi) {
 
 // Weighted integer step count inside a span. The 1e-4 slack lets a span
 // whose endpoint is an integer written as a float still include it.
-float snap_steps(Rng& r, float lo, float hi) {
+float snap_steps(Rng& r, float lo, float hi, float adv) {
     int val[kStepsWCount], n = 0;
     float w[kStepsWCount];
     for (int i = 0; i < kStepsWCount; ++i) {
         const int s = i + 2;                        // kStepsW indexes 2..16
         if (float(s) < lo - 1e-4f || float(s) > hi + 1e-4f) continue;
-        val[n] = s; w[n] = kStepsW[i]; ++n;
+        val[n] = s; w[n] = temper(kStepsW[i], adv); ++n;
     }
     // Span narrower than one step, the mirror of snap_rate's fallback. This
     // hands back a possibly NON-INTEGER lo into a discrete param, which is
@@ -77,11 +117,11 @@ float snap_steps(Rng& r, float lo, float hi) {
 // Sorting (not rejection) enforces monotonicity because neighboring spans
 // in taste.h may overlap -- an inversion there is a draw artifact, not a
 // story feature.
-Curve draw_curve(Rng& r, const CurveRule& cr) {
+Curve draw_curve(Rng& r, const CurveRule& cr, float adv) {
     Curve c;
     c.param = cr.param;
     for (int b = 0; b < 5; ++b) {
-        c.bp[b] = cr.bp[b].lo + r.next_unipolar() * (cr.bp[b].hi - cr.bp[b].lo);
+        c.bp[b] = draw_span(r, cr.bp[b], adv);
         // STEPS is storied (DENSITY owns it), so the weight can only reach the
         // five drawn breakpoints, and only as far as each breakpoint's own
         // span allows: the TOP endpoint prefers 16 and the CENTRE prefers 8,
@@ -91,7 +131,7 @@ Curve draw_curve(Rng& r, const CurveRule& cr) {
         // limit of weighting a storied discrete; snapping at runtime instead
         // would fight the hysteresis.
         if (cr.param == P_STEPS_A)
-            c.bp[b] = snap_steps(r, cr.bp[b].lo, cr.bp[b].hi);
+            c.bp[b] = snap_steps(r, cr.bp[b].lo, cr.bp[b].hi, adv);
     }
     const bool descending = cr.bp[4].lo < cr.bp[0].lo;
     for (int i = 1; i < 5; ++i) {              // insertion sort, n=5
@@ -194,6 +234,24 @@ Terrain generate(const TerrainState& st) {
         root  = pick_index(r, kParams[P_ROOT].steps);    // 0..11
     }
 
+    // Adventure level (spec 2026-08-06 §7). Keyed on reroll_weather_counter()
+    // -- the sum of all six macro counters -- exactly as the weather is, so ANY
+    // partial reroll redraws it. Without that, a terrain that drew wild would
+    // stay wild in the very domain the player just asked to be redone.
+    // a = 1 - u^(1/3) gives P(a > x) = (1-x)^3: above 0.5 in 12.5% of draws,
+    // above 0.8 in 0.8%. The shape is arithmetic and lives here; the one
+    // tunable it needs (kAdventureNarrow) lives in taste.h with the rest.
+    //
+    // Drawn HERE, before stage 3a, because every draw from 3a onward reads it:
+    // the mode coin's weights are tempered, and so is every span from the base
+    // patch to the story curves. Its own stream means the position costs no
+    // other stage a single value.
+    {
+        Rng r = make_stream(st.master, kStreamAdventure,
+                            st.reroll_weather_counter());
+        t.adventure = 1.f - std::pow(r.next_unipolar(), 1.f / 3.f);
+    }
+
     // Stage 3a: operating mode (spec 2026-08-06 §5). Its base-rule row is a
     // placeholder like the ENGINE rows -- the real draw is this weighted coin,
     // taken from the param's OWN stream so it rerolls exactly when a full
@@ -207,7 +265,8 @@ Terrain generate(const TerrainState& st) {
     // wanted and leaves every other draw bit-identical.
     {
         Rng r = make_stream(st.master, kStreamParamBase + uint32_t(P_MODE), 0);
-        const float w[2] = { 1.f - kModeW[t.arch], kModeW[t.arch] };
+        const float w[2] = { temper(1.f - kModeW[t.arch], t.adventure),
+                             temper(kModeW[t.arch], t.adventure) };
         t.base[P_MODE] = float(pick_weighted(r, w, 2));
     }
 
@@ -226,20 +285,33 @@ Terrain generate(const TerrainState& st) {
         if (br.param == P_MODE) continue;
         Rng r = make_stream(st.master, kStreamParamBase + uint32_t(br.param), 0);
         const Span& s = br.per_arch[t.arch];
-        t.base[br.param] = s.lo + r.next_unipolar() * (s.hi - s.lo);
+        t.base[br.param] = draw_span(r, s, t.adventure);
         // Weighted redraws (taste.h §6). The uniform draw above stands for
         // every other row; these three have a preferred SET, not a range.
         if (br.param == P_RATE_A || br.param == P_RATE_B) {
             // Only meaningful synced: in free mode RATE is free_hz's continuous
             // curve and there is no ladder. base[P_MODE] is already drawn.
             if (t.base[P_MODE] > 0.5f)
-                t.base[br.param] = snap_rate(r, s.lo, s.hi);
+                t.base[br.param] = snap_rate(r, s.lo, s.hi, t.adventure);
         } else if (br.param == P_STEPS_B) {
-            t.base[br.param] = snap_steps(r, s.lo, s.hi);
+            t.base[br.param] = snap_steps(r, s.lo, s.hi, t.adventure);
         } else if (br.param == P_SHUFFLE) {
+            // The skew tempers too: kShuffleSkew^(1-a) is the table's skew at
+            // a = 0 and decays to 1.0 -- a uniform draw across the span -- at
+            // full adventure, which is the same "tables as written, then flat"
+            // arc the weights follow.
+            //
+            // Written out rather than as temper(kShuffleSkew, adv), which
+            // computes the IDENTICAL number today. The two are not the same
+            // claim: temper() is defined on a WEIGHT in a table of weights,
+            // and kShuffleSkew is an exponent on the draw itself. They agree
+            // only because w^(1-a) happens to be the right law for both, and
+            // the moment temper() adopts any other flattening law (a lerp
+            // toward the mean weight, a floor under the small ones) it would
+            // silently take the skew somewhere meaningless with it.
             const float u = r.next_unipolar();
-            t.base[br.param] = s.lo + (s.hi - s.lo)
-                             * std::pow(u, kShuffleSkew);
+            const float skew = std::pow(kShuffleSkew, 1.f - t.adventure);
+            t.base[br.param] = s.lo + (s.hi - s.lo) * std::pow(u, skew);
         }
     }
     // Stages 1-2 override their placeholder rows.
@@ -281,7 +353,7 @@ Terrain generate(const TerrainState& st) {
                 t.window[m] = sv.arch_window[t.arch];
             }
             for (int tg = 0; tg < sv.n_targets; ++tg) {
-                Curve c = draw_curve(r, sv.targets[tg]);
+                Curve c = draw_curve(r, sv.targets[tg], t.adventure);
                 if (picked) {
                     mm.targets[mm.n_targets++] = c;
                     t.base[c.param]    = c.bp[0];

@@ -353,7 +353,9 @@ inline constexpr float kModeW[ARCH_COUNT] = { 0.15f, 0.90f, 0.95f, 0.75f };
 // ---------------------------------------------------------------------------
 // Musical weights (spec 2026-08-06 §6). These are WEIGHTS, not vetoes: the
 // unlikely values stay reachable and simply come up rarely. Spec §7's
-// adventure draw should flatten these when it lands; nothing does today.
+// adventure draw flattens them per terrain: terrain.cpp raises every weight
+// below to the power (1 - adventure), so these numbers are the shape at
+// adventure 0 and the table reads uniform at adventure 1.
 //
 // Rung preference on kDivisions (mod/divisions.h), which is speed-sorted, so
 // the dotted and triplet rungs sit between the straight ones. Straight rungs
@@ -381,6 +383,12 @@ inline constexpr float kStepsW[kStepsWCount] = {
 // v = lo + (hi-lo) * u^kShuffleSkew. Above 1 pulls toward the low end; a heavy
 // -shuffle fragment stays reachable, which a narrowed span would have killed.
 inline constexpr float kShuffleSkew = 2.5f;
+
+// The adventure draw (spec 2026-08-06 §7). Not a control -- a property of the
+// DRAW, so NEW occasionally surprises and the panel gains no knob. At a=0 a
+// span is sampled only in its middle kAdventureNarrow; at a=1 in full, which
+// is the no-op. The (1-x)^3 shape of the draw itself lives in terrain.cpp.
+constexpr float kAdventureNarrow = 0.40f;
 
 // ---------------------------------------------------------------------------
 // Story library, one variant per macro (DENSITY gets two). Implements §3's

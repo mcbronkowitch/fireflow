@@ -3,6 +3,7 @@
 #include "flow/terrain.h"
 #include "flow/taste.h"
 #include "mod/divisions.h"
+#include <algorithm>
 #include <cstring>
 using namespace spky;                  // kDivisions / division_index
 using namespace spky::flow;
@@ -263,4 +264,65 @@ TEST_CASE("flow terrain: SHUFFLE leans to the low end of its span") {
     // the discarded max-based version still passed (measured at s = 40; s = 12
     // is the weaker skew, so its max is higher still).
     CHECK(heavy > 100);
+}
+
+TEST_CASE("flow terrain: adventure is rare and rerolls with the weather") {
+    // a = 1 - u^(1/3), so P(a > x) = (1-x)^3: above 0.5 in 12.5% of draws and
+    // above 0.8 in 0.8%. Brave terrain is the rule, outliers the exception.
+    int over_half = 0, over_eighty = 0;
+    const int n = 20000;
+    for (uint32_t master = 1; master <= uint32_t(n); ++master) {
+        TerrainState st; st.master = master;
+        const Terrain t = generate(st);
+        CHECK(t.adventure >= 0.f);
+        CHECK(t.adventure <= 1.f);
+        if (t.adventure > 0.5f) ++over_half;
+        if (t.adventure > 0.8f) ++over_eighty;
+    }
+    const float p50 = float(over_half) / float(n);
+    const float p80 = float(over_eighty) / float(n);
+    CAPTURE(p50); CAPTURE(p80);
+    CHECK(p50 > 0.105f); CHECK(p50 < 0.145f);      // 0.125 expected
+    CHECK(p80 > 0.004f); CHECK(p80 < 0.014f);      // 0.008 expected
+
+    // A partial reroll must redraw it, exactly as the weather does: otherwise
+    // a terrain that drew wild stays wild in the very domain the player asked
+    // to be redone.
+    TerrainState st; st.master = 7;
+    const float before = generate(st).adventure;
+    st.reroll[M_DENSITY] = 1;
+    CHECK(generate(st).adventure != before);
+}
+
+TEST_CASE("flow terrain: at full adventure a span is drawn in full") {
+    // a = 1 is the no-op: the whole span, which is how the tables read on
+    // their own. Anything less narrows toward the middle.
+    Rng r; r.seed(99);
+    const Span s{ 0.f, 1.f };
+    float lo = 1.f, hi = 0.f;
+    for (int i = 0; i < 5000; ++i) {
+        const float v = draw_span(r, s, 1.f);
+        lo = std::min(lo, v); hi = std::max(hi, v);
+    }
+    CHECK(lo < 0.02f);
+    CHECK(hi > 0.98f);
+
+    float lo0 = 1.f, hi0 = 0.f;
+    for (int i = 0; i < 5000; ++i) {
+        const float v = draw_span(r, s, 0.f);
+        lo0 = std::min(lo0, v); hi0 = std::max(hi0, v);
+    }
+    CHECK(lo0 > 0.29f);        // middle 40% of 0..1 is 0.30..0.70
+    CHECK(hi0 < 0.71f);
+    // ADDED beyond the task brief, which asserted only the two bounds above.
+    // Those are one-sided: they catch a calm draw that is too WIDE, but a
+    // kAdventureNarrow of 0.20 -- or 0.001, or a draw collapsed onto the
+    // centre entirely -- satisfies them just as well, so on their own they
+    // cannot tell "narrowed to the middle 40%" from "narrowed to nothing".
+    // Pinning the other side makes the pair say what kAdventureNarrow is
+    // rather than only what it is under. 5000 draws leave the outermost 0.4%
+    // of a 0.30..0.70 range unreached with probability (1-0.01)^5000, about
+    // e^-50, so the slack here is float noise, not sampling luck.
+    CHECK(lo0 < 0.31f);
+    CHECK(hi0 > 0.69f);
 }
