@@ -52,14 +52,21 @@ float snap_rate(Rng& r, float lo, float hi) {
     return float(idx[pick_weighted(r, w, n)]) / float(kDivisionCount - 1);
 }
 
-// Weighted integer step count inside a span.
+// Weighted integer step count inside a span. The 1e-4 slack lets a span
+// whose endpoint is an integer written as a float still include it.
 float snap_steps(Rng& r, float lo, float hi) {
-    int val[15], n = 0;
-    float w[15];
-    for (int s = 2; s <= 16; ++s) {
+    int val[kStepsWCount], n = 0;
+    float w[kStepsWCount];
+    for (int i = 0; i < kStepsWCount; ++i) {
+        const int s = i + 2;                        // kStepsW indexes 2..16
         if (float(s) < lo - 1e-4f || float(s) > hi + 1e-4f) continue;
-        val[n] = s; w[n] = kStepsW[s - 2]; ++n;
+        val[n] = s; w[n] = kStepsW[i]; ++n;
     }
+    // Span narrower than one step, the mirror of snap_rate's fallback. This
+    // hands back a possibly NON-INTEGER lo into a discrete param, which is
+    // sane only because apply_param() rounds at the engine boundary (every
+    // other discrete base draw relies on that too) -- it is not a step count
+    // until it gets there.
     if (n == 0) return lo;
     return float(val[pick_weighted(r, w, n)]);
 }
@@ -76,10 +83,13 @@ Curve draw_curve(Rng& r, const CurveRule& cr) {
     for (int b = 0; b < 5; ++b) {
         c.bp[b] = cr.bp[b].lo + r.next_unipolar() * (cr.bp[b].hi - cr.bp[b].lo);
         // STEPS is storied (DENSITY owns it), so the weight can only reach the
-        // five drawn breakpoints -- the DENSITY knob's ENDPOINTS prefer 8 and
-        // 16, and a knob position between two breakpoints still interpolates
-        // between them. That is the honest limit of weighting a storied
-        // discrete; snapping at runtime instead would fight the hysteresis.
+        // five drawn breakpoints, and only as far as each breakpoint's own
+        // span allows: the TOP endpoint prefers 16 and the CENTRE prefers 8,
+        // while the bottom endpoint prefers 4 -- the best its {2,4} span
+        // holds, not a bug. A knob position between two breakpoints still
+        // interpolates between them and can land anywhere. That is the honest
+        // limit of weighting a storied discrete; snapping at runtime instead
+        // would fight the hysteresis.
         if (cr.param == P_STEPS_A)
             c.bp[b] = snap_steps(r, cr.bp[b].lo, cr.bp[b].hi);
     }

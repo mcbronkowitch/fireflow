@@ -195,6 +195,13 @@ TEST_CASE("flow terrain: synced rates prefer the straight rungs") {
     REQUIRE(total > 500);
     const float share = float(odd) / float(total);
     CAPTURE(share);
+    // MARGIN, if you are reading this because it went red: measured 0.189
+    // against 0.20, only 5.5 % of headroom, and that is by construction rather
+    // than by luck. The crooked rungs cluster in the middle of the ladder,
+    // which is exactly where arp's P_RATE span {.55,.9} and pulse's {.3,.6}
+    // sit -- alone they contribute 0.259 and 0.216. Re-weighting the archetype
+    // mix toward arp, or widening those spans, trips this bound without
+    // anything being wrong. Re-derive from the taste tables before touching it.
     CHECK(share < 0.20f);      // was roughly 0.5 with a uniform draw
     CHECK(share > 0.01f);      // still reachable -- a weight, not a veto
 }
@@ -222,25 +229,38 @@ TEST_CASE("flow terrain: SHUFFLE leans to the low end of its span") {
     // with the table's 2.5 predicts 1/3.5 = 0.286 against a uniform draw's
     // 0.5. The lower bound is the half that matters: it is a skew, not a
     // narrowing, so heavy shuffle must stay reachable.
+    //
+    // Reachability is asserted as a RATE, not as a maximum. An earlier version
+    // checked max(pos) > 0.95 over these 4000 masters, which cannot fail:
+    // P(max <= 0.95) = (0.95^(1/s))^4000, about e^-82 at s = 2.5, and it stays
+    // negligible until s is in the low thousands -- a skew of 40, which
+    // collapses the mean to 0.02, still hits 0.95 easily. Counting the draws
+    // above 0.8 instead goes red as soon as the top of the span thins out.
     const BaseRule* shuffle = nullptr;
     for (int i = 0; i < kBaseRuleCount; ++i)
         if (kBaseRules[i].param == P_SHUFFLE) shuffle = &kBaseRules[i];
     REQUIRE(shuffle != nullptr);
 
-    double sum = 0.0; int n = 0; float top = 0.f;
+    double sum = 0.0; int n = 0, heavy = 0;
     for (uint32_t master = 1; master <= 4000; ++master) {
         TerrainState s; s.master = master;
         const Terrain t = generate(s);
         const Span& sp = shuffle->per_arch[t.arch];
         const float pos = (t.base[P_SHUFFLE] - sp.lo) / (sp.hi - sp.lo);
         sum += pos; ++n;
-        if (pos > top) top = pos;
+        if (pos > 0.8f) ++heavy;
     }
     REQUIRE(n == 4000);
     const float mean = float(sum / n);
     CAPTURE(mean);
     CHECK(mean < 0.36f);       // was 0.5 with a uniform draw
     CHECK(mean > 0.20f);       // a skew, not a collapse onto lo
-    CAPTURE(top);
-    CHECK(top > 0.95f);        // the heavy-shuffle end stays reachable
+    CAPTURE(heavy);
+    // The heavy-shuffle end stays reachable: 1 - 0.8^(1/2.5) predicts about
+    // 9 % of 4000, i.e. ~360, and 346 is measured. The floor sits well under
+    // that so ordinary seed-set jitter cannot trip it, but a skew that thins
+    // the top of the span does -- measured 60 at s = 12, 18 at s = 40, where
+    // the discarded max-based version still passed (measured at s = 40; s = 12
+    // is the weaker skew, so its max is higher still).
+    CHECK(heavy > 100);
 }

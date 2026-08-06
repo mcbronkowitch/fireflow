@@ -340,16 +340,13 @@ inline constexpr float kModeW[ARCH_COUNT] = { 0.15f, 0.90f, 0.95f, 0.75f };
 
 // ---------------------------------------------------------------------------
 // Musical weights (spec 2026-08-06 §6). These are WEIGHTS, not vetoes: the
-// unlikely values stay reachable and simply come up rarely. (The brief's
-// wording here said the adventure draw "flattens them further, terrain.cpp",
-// present tense -- corrected, because spec §7's adventure draw is not built
-// yet and terrain.cpp has no such code. Flattening these tables is what it
-// SHOULD do when it lands; nothing does it today.)
+// unlikely values stay reachable and simply come up rarely. Spec §7's
+// adventure draw should flatten these when it lands; nothing does today.
 //
 // Rung preference on kDivisions (mod/divisions.h), which is speed-sorted, so
 // the dotted and triplet rungs sit between the straight ones. Straight rungs
 // weigh 1, dotted 0.20, triplet 0.15.
-inline const float kRateRungW[kDivisionCount] = {
+inline constexpr float kRateRungW[kDivisionCount] = {
 //  8bar 4bar 2bar 1bar  1/2.  1/2  1/4.  1/2T  1/4  1/8.  1/4T  1/8
     1.0f,1.0f,1.0f,1.0f, .20f,1.0f, .20f, .15f,1.0f, .20f, .15f,1.0f,
 //  1/16. 1/8T 1/16  1/16T 1/32
@@ -357,14 +354,21 @@ inline const float kRateRungW[kDivisionCount] = {
 };
 // Step counts 2..16 (index = count - 2). 8 and 16 are the counts actually
 // played; 4 and 12 are usable; the rest exist for the rare terrain.
-inline const float kStepsW[15] = {
+//
+// A SECOND rule is encoded in the same row and would otherwise go unnamed:
+// EVEN counts beat odd ones across the board. Every odd count weighs .05,
+// while the even leftovers 2/6/10/14 weigh .15/.20/.15/.10 -- a 2-4x
+// preference. A phrase whose length does not halve reads as a mistake against
+// everything else on the clock, so odd counts stay reachable but rare.
+inline constexpr int kStepsWCount = 15;             // step counts 2..16
+inline constexpr float kStepsW[kStepsWCount] = {
 //  2    3    4    5    6    7    8    9   10   11   12   13   14   15   16
    .15f,.05f,.50f,.05f,.20f,.05f,1.0f,.05f,.15f,.05f,.50f,.05f,.10f,.05f,1.0f,
 };
 // SHUFFLE has no rungs to weight, so its bias is a skew inside the drawn span:
 // v = lo + (hi-lo) * u^kShuffleSkew. Above 1 pulls toward the low end; a heavy
 // -shuffle fragment stays reachable, which a narrowed span would have killed.
-constexpr float kShuffleSkew = 2.5f;
+inline constexpr float kShuffleSkew = 2.5f;
 
 // ---------------------------------------------------------------------------
 // Story library, one variant per macro (DENSITY gets two). Implements §3's
