@@ -572,6 +572,14 @@ Restart Rack and the module appears under the **ton-k** brand
 ("FireFlow" in the module browser). A self-built plugin is unsigned, so Rack may
 note it isn't from the library — it still loads.
 
+**The version in `plugin.json` must start with `2`.** Rack reads that first
+component as the plugin's ABI version and refuses anything that isn't its own,
+so a `3.x.y` plugin is skipped at startup with no dialog and no module in the
+browser — only a `warn` line in `log.txt` saying the version "does not match Rack
+ABI version 2". This bit us for real: v3.0.0 was tagged and published as an
+unloadable release. The major number belongs to Rack, not to us; mark our own
+milestones in the minor (`2.19` → `2.20`).
+
 **Windows: check where `install` actually copied to.** The SDK builds the
 target path from `$(LOCALAPPDATA)`, and MSYS2/Git-Bash don't export that name
 into the make environment — the variable expands empty and the package lands in

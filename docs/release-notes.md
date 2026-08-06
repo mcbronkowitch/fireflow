@@ -26,11 +26,22 @@ placeholder rather than a by-ear choice.
 
 The **FireFlow** module is unchanged in this release.
 
-## Why 3.0.0
+## If you downloaded 3.0.0, replace it
 
-The jump from 2.19 marks the plugin becoming two instruments rather than one.
-It does **not** mean Rack 3: this is a **Rack 2** plugin, built against Rack SDK
-2.6.6, and it installs into Rack 2 like every release before it.
+**v3.0.0 does not load, on any platform.** Rack reads the first component of a
+plugin's version as its ABI version, so `3.0.0` announces "Rack 3" — a Rack that
+does not exist. Rack skips the plugin silently at startup; the only trace is one
+line in `log.txt`:
+
+```
+Could not load plugin .../Fireflow: Plugin version 3.0.0 does not match Rack ABI version 2
+```
+
+Nothing was wrong with the build itself. 3.0.0 had been chosen to mark the plugin
+becoming two instruments rather than one, not to claim Rack 3 — but that first
+number is not ours to spend. This release is the same code under a version Rack
+accepts. Delete the old `Fireflow` folder and `.vcvplugin` from your user plugin
+directory before installing, so nothing stale is left behind.
 
 ## Install
 
