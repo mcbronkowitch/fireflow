@@ -190,30 +190,39 @@ The no-shared-scale count halved, and the scale-group shares land close to
 0.301, exotic 0.106) — the weighted scale draw (§3) is doing what it was built
 to do.
 
-The off-grid deck count did not move. The composition is the same as §1: 7
-silent SAMPLER decks (`fill=0`, no input material, `part.cpp:211-225` — TUNE
+The off-grid deck count did not move, and the reason is that **off-grid was
+the wrong yardstick for this change** — it measures grid alignment, not motion.
+An unquantized deck sits between the semitones by definition, however still it
+stands, so the count could not have fallen. The composition is the same as §1:
+7 silent SAMPLER decks (`fill=0`, no input material, `part.cpp:211-225` — TUNE
 there transposes a recording as a whole, and snapping that to the instrument's
-scale is meaningless) and the same 2 audible BBD decks. This was checked
-against a stale-binary explanation and ruled out: `engine/flow/flow.cpp` and
-`engine/flow/terrain.cpp` were touched and the whole tree rebuilt immediately
-before this render, and `ctest` was green (4/4) both before and after.
+scale is meaningless) and the same 2 audible BBD decks.
 
-It was also checked against the clamp not firing, and that is not what is
-happening either. Temporary instrumentation at the `P_RANGE_A/B` guard
-(`flow.cpp:518-523`, reverted before commit) confirmed, for both remaining
-off-grid BBD decks, `is_bbd=1`, `mode_now=0` (FLOW) for the entire 20 s render,
-and `v` clamped from a candidate 0.286 down to exactly `kBbdFlowRangeMax`
-(0.00833) on every tick — the guard fires continuously, exactly as designed.
+The quantity the guard actually bounds is **pitch travel while the deck is a
+BBD**, and that is where the change shows up. Measured on the two BBD decks
+(`4540215F` deck a, `D5336898` deck a), 20 s each, macros parked at 0.5,
+splitting the samples by `a_fclk > 0` so only ticks where the deck really is a
+BBD are counted:
 
-What still moves these two decks several semitones (measured: 3.97 and 2.35
-semitones of `a_pcv` travel over the render) is not RANGE. §2's own "accepted
-consequence" says the quiet part out loud: with RANGE capped, "movement has to
-come from DRIFT/MOTION/FLUX instead" — those macros were parked at 0.5, not 0,
-in both this measurement and §1's, and they drive the BBD's delay clock (hence
-its pitch) through a path this spec's guard does not touch. The guard bounds
-exactly the lever it names (RANGE) and bounds it correctly; it was never going
-to zero out pitch motion that arrives by a different lane. The off-grid metric
-in §1/§3 was not built to distinguish RANGE-driven bend from DRIFT/MOTION/FLUX-
-driven bend, so it does not credit the fix for the part it actually fixed.
-Whether DRIFT/MOTION/FLUX's contribution to BBD pitch under Glow needs its own
-bound is open and unmeasured here.
+| `kBbdFlowSemis` | `4540215F` | `D5336898` |
+|---|---|---|
+| effectively off (3600) | 10.634 semitones | 10.498 semitones |
+| **1 (shipped)** | **0.342** | **0.385** |
+| 0 (lane fully off) | 0.000 | 0.000 |
+
+So the guard takes a BBD texture deck from nearly an octave of continuous glide
+against a scale-locked carrier down to about a third of a semitone — inside the
+one-semitone budget, with room to spare. Setting `kBbdFlowSemis` to 0 buys the
+remaining 0.35 semitones and costs the lane entirely; it is not worth it, and
+the shipped value stays at 1.
+
+**A trap this measurement walked into first, recorded so the next one does
+not.** Taken as a plain min/max over the whole render, the same two decks
+measure 3.97 and 2.35 semitones of travel even with the lane fully off — which
+looks like proof of a second, unbounded path into `LANE_PITCH`. It is not.
+Those figures come from **3 samples out of 15 000**, in the wake transient
+before the deck's engine has switched to BBD; `Instrument::bbd_clock_hz`
+returns 0 whenever the deck is not currently a BBD, which is what makes them
+separable. A min/max over a whole file is maximally sensitive to a transient,
+exactly as a tolerance tighter than 0.01 semitones is maximally sensitive to
+the CSV's `%.4f` rounding (§1). Split the samples first, then take the range.
