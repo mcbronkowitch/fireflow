@@ -47,6 +47,11 @@ static_assert(static_cast<int>(SPACE) == static_cast<int>(spky::flow::M_SPACE),
 static_assert(CV_DEN == CV_MOT + 1 && CV_BRT == CV_MOT + 2 &&
               CV_DRT == CV_MOT + 3 && CV_SPC == CV_MOT + 4,
               "CV jacks must stay contiguous -- controlTick indexes CV_MOT + i");
+// GENRE position 0 is ANY and 1..4 are the archetypes in enum order, so
+// controlTick's `pos - 1` is only correct while ARCH_DRONE is 0. The six
+// macro asserts above set the precedent for pinning arithmetic like this.
+static_assert(spky::flow::ARCH_DRONE == 0,
+              "GENRE's knob position -> archetype mapping assumes ARCH_DRONE == 0");
 
 struct Glow : Module {
     spky::Instrument inst;
@@ -125,18 +130,45 @@ struct Glow : Module {
     bool uiHaveUndo = false;            // RESTORE
     bool uiLock = false;                // SET_LOCK, RESTORE
 
+    // GENRE / SCALE. Both are snapped switches whose FIRST position is the
+    // random one -- ANY draws the archetype at random, AUTO takes whatever
+    // the terrain drew -- so the player selects randomness at the control.
+    // That is exactly why neither joins Rack's Randomize: configSwitch leaves
+    // randomizeEnabled at its default true (configButton is the one that
+    // clears it), and letting Randomize pin the instrument to Whole tone
+    // would remove a choice rather than add one.
+    void configSel(const PanelCtl& c) {
+        std::vector<std::string> labels;
+        if (c.id == GENRE) {
+            labels = { "Any", "Drone", "Pulse", "Arp", "Fragment" };
+        } else {
+            labels.push_back("Auto");
+            for (int i = 0; i < spky::SCALE_LIST_COUNT; ++i)
+                labels.push_back(spky::SCALE_NAMES[spkyvcv::kScaleKnobOrder[i]]);
+        }
+        configSwitch(c.id, 0.f, float(labels.size() - 1), 0.f, c.tip, labels);
+        if (auto* pq = paramQuantities[c.id]) pq->randomizeEnabled = false;
+    }
+
     Glow() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
         for (const auto& c : kParamCtls) {
-            if (c.kind == WK_MACRO)
-                // The six macro knobs stay on c.label, matching Fireflow.cpp
-                // -- deliberate, not an oversight.
-                configParam(c.id, 0.f, 1.f, 0.5f, c.label);
-            else
-                // The NEW button's whole interaction model lives in one
-                // control, so its Rack tooltip should be the panel's full
-                // gesture-table string (c.tip), not just "NEW" (c.label).
-                configButton(c.id, c.tip);
+            switch (c.kind) {
+                case WK_MACRO:
+                    // The six macro knobs stay on c.label, matching
+                    // Fireflow.cpp -- deliberate, not an oversight.
+                    configParam(c.id, 0.f, 1.f, 0.5f, c.label);
+                    break;
+                case WK_BTN:
+                    // The NEW button's whole interaction model lives in one
+                    // control, so its Rack tooltip should be the panel's full
+                    // gesture-table string (c.tip), not just "NEW" (c.label).
+                    configButton(c.id, c.tip);
+                    break;
+                case WK_SEL:
+                    configSel(c);
+                    break;
+            }
         }
         for (const auto& c : kInputCtls)  configInput(c.id, c.tip);
         for (const auto& c : kOutputCtls) configOutput(c.id, c.tip);
@@ -358,6 +390,14 @@ struct Glow : Module {
     }
 
     void controlTick(float sr) {
+        // Host-owned settings first: wake() below force-pushes every
+        // parameter, so an override applied after it would miss that push and
+        // let one tick out on the terrain's own tonality.
+        const int gpos = int(params[GENRE].getValue() + 0.5f);
+        flow.set_genre(gpos <= 0 ? spky::flow::ARCH_ANY : gpos - 1);
+        flow.set_scale_override(
+            spkyvcv::scale_of_knob(int(params[SCALE].getValue() + 0.5f)));
+
         // Apply whatever the UI thread staged (fix round 3): flag read FIRST
         // via exchange() -- so at most one op survives even if two menu
         // actions landed in the same UI frame -- payload read only after.
@@ -538,15 +578,28 @@ struct GlowWidget : ModuleWidget {
 
         for (const auto& c : kParamCtls) {
             const Vec pos = mm2px(Vec(c.mm.x, c.mm.y));
-            if (c.kind == WK_MACRO)
-                // Rack's stock knobs come in fixed sizes; RoundLargeBlackKnob
-                // is 46 px ~ 15.6 mm, the nearest to the panel's 16 mm.
-                // RoundBigBlackKnob (54 px ~ 18.3 mm) would overhang the
-                // printed footprint by more than a millimetre a side.
-                addParam(createParamCentered<RoundLargeBlackKnob>(pos, module, c.id));
-            else
-                addParam(createLightParamCentered<VCVLightBezel<GreenLight>>(
-                    pos, module, c.id, NEW_L));
+            switch (c.kind) {
+                case WK_MACRO:
+                    // Rack's stock knobs come in fixed sizes;
+                    // RoundLargeBlackKnob is 46 px ~ 15.6 mm, the nearest to
+                    // the panel's 16 mm. RoundBigBlackKnob (54 px ~ 18.3 mm)
+                    // would overhang the printed footprint by more than a
+                    // millimetre a side.
+                    addParam(createParamCentered<RoundLargeBlackKnob>(
+                        pos, module, c.id));
+                    break;
+                case WK_BTN:
+                    addParam(createLightParamCentered<VCVLightBezel<GreenLight>>(
+                        pos, module, c.id, NEW_L));
+                    break;
+                case WK_SEL:
+                    // 11 mm printed footprint; RoundBlackKnob is 38 px ~ 12.9
+                    // mm, RoundSmallBlackKnob 28 px ~ 9.5 mm -- the smaller
+                    // one stays inside the print.
+                    addParam(createParamCentered<RoundSmallBlackKnob>(
+                        pos, module, c.id));
+                    break;
+            }
         }
         for (const auto& c : kInputCtls)
             addInput(createInputCentered<PJ301MPort>(mm2px(Vec(c.mm.x, c.mm.y)),
