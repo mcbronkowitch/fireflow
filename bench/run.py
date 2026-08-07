@@ -28,6 +28,7 @@ from qspi_tools import (
     require_live_digest,
     require_verified_payload,
     validate_helper_elf,
+    verify_qspi_over_dfu,
 )
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -1165,6 +1166,15 @@ def main():
                         "the probe, or usb over CDC for a board with no debug "
                         "pins (needs --port and the Daisy bootloader)"
                     ))
+    ap.add_argument(
+        "--verify-qspi-dfu",
+        action="store_true",
+        help=(
+            "prove the installed bank by reading it back over DFU and "
+            "comparing on the host, instead of through the probe; the only "
+            "option on a board with no SWD pins"
+        ),
+    )
     ap.add_argument("--port", default="auto",
                     help="serial port for --transport usb, e.g. COM7; "
                          "'auto' takes whichever port appears after loading")
@@ -1261,6 +1271,15 @@ def main():
                 config=PROGRAMMER_CFG,
                 readelf=READELF,
             )
+        if args.verify_qspi_dfu:
+            # Reads the bank back and binds a receipt to it. Needed whenever
+            # the ELF changes, because the receipt is bound to the ELF and
+            # not merely to the payload -- and the payload is transport-
+            # independent, so switching transports invalidates the receipt
+            # without touching a single byte of the bank.
+            device = verify_qspi_over_dfu(QSPI_PAYLOAD, active_receipt, identity)
+            print("# qspi verified over dfu on device %s" % device,
+                  file=sys.stderr)
         verified_receipt = None
         if not args.build_only:
             verified_receipt = require_verified_payload(

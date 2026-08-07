@@ -59,6 +59,80 @@ Idx Name                Size      VMA       LMA       File off  Algn
         tools = self.require_module()
         self.assertGreaterEqual(tools.QSPI_ADDRESS, 0x90100000)
 
+    def test_a_dfu_readback_receipt_is_accepted_alongside_the_probe_one(self) -> None:
+        # The submodule has no probe pins, so the only available proof that
+        # the bank on the chip is the bank that was linked is reading it
+        # back out over DFU. That evidence is weaker in one specific way --
+        # it names the DFU serial, not the MCU UID read through SWD -- and
+        # the receipt records which of the two it is.
+        tools = self.require_module()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            payload = root / "bench-qspi.bin"
+            receipt = root / "qspi-verified.json"
+            payload.write_bytes(bytes(range(256)) * 254)
+            identity = {"elf_sha256": "e" * 64}
+
+            tools.write_verified_receipt(
+                payload,
+                receipt,
+                device_id="335139723230",
+                artifact_identity=identity,
+                observed_sha256=tools.payload_sha256(payload),
+                mode=tools.DFU_RECEIPT_MODE,
+            )
+            record = tools.require_verified_payload(payload, receipt, identity)
+            self.assertEqual(record["verification"], tools.DFU_RECEIPT_MODE)
+
+    def test_a_receipt_with_an_unknown_verification_mode_is_refused(self) -> None:
+        tools = self.require_module()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            payload = root / "bench-qspi.bin"
+            receipt = root / "qspi-verified.json"
+            payload.write_bytes(bytes(range(256)) * 254)
+            identity = {"elf_sha256": "e" * 64}
+            tools.write_verified_receipt(
+                payload, receipt, device_id="335139723230",
+                artifact_identity=identity,
+                observed_sha256=tools.payload_sha256(payload),
+                mode=tools.DFU_RECEIPT_MODE,
+            )
+            record = json.loads(receipt.read_text(encoding="utf-8"))
+            record["verification"] = "i-had-a-look-and-it-seemed-fine"
+            receipt.write_text(json.dumps(record), encoding="utf-8")
+            with self.assertRaises(tools.QspiGuardError):
+                tools.require_verified_payload(payload, receipt, identity)
+
+    def test_dfu_readback_refuses_a_bank_that_differs(self) -> None:
+        # The whole point: a chip holding something else must not produce a
+        # receipt. The readback file is written by dfu-util, so the fake
+        # here writes it in dfu-util's place.
+        tools = self.require_module()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            payload = root / "bench-qspi.bin"
+            receipt = root / "qspi-verified.json"
+            payload.write_bytes(bytes(range(256)) * 254)
+
+            def fake_run(command, **kwargs):
+                if "-U" in command:
+                    target = Path(command[command.index("-U") + 1])
+                    target.write_bytes(bytes(tools.QSPI_SIZE))
+                return subprocess.CompletedProcess(
+                    command, 0,
+                    stdout='Found DFU: [0483:df11] serial="335139723230"\n',
+                    stderr="",
+                )
+
+            with self.assertRaises(tools.QspiGuardError):
+                tools.verify_qspi_over_dfu(
+                    payload, receipt,
+                    artifact_identity={"elf_sha256": "e" * 64},
+                    run=fake_run,
+                )
+            self.assertFalse(receipt.exists())
+
     def test_receipt_accepts_only_byte_verified_current_payload(self) -> None:
         tools = self.require_module()
         with tempfile.TemporaryDirectory() as temp:
