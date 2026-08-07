@@ -558,6 +558,26 @@ void Flow::recompute_and_push(bool force) {
             break;
         }
 
+        // Explicit tonality (spec 2026-08-07 §3.3), the last word on these two
+        // params -- and deliberately AFTER quantize_hyst rather than instead
+        // of it. kHysteresisFrac is 0.5 and quantize_hyst compares strictly,
+        // so for P_SCALE and P_ROOT (step size exactly 1, every candidate an
+        // integer) an un-forced ONE-step move never passes its guard: forcing
+        // at the switch phase is the only thing that ever moves them. Skipping
+        // quantize_hyst here would freeze _step_now, and a NEW press onto a
+        // terrain one step away would then be unreachable on release -- the
+        // instrument would sit on the stale scale until some later terrain
+        // moved it two steps or more. Running it and overwriting its result
+        // keeps _step_now and _disc_done tracking the terrain underneath.
+        //
+        // Clamped for the same reason the blend line is: param_now() is a
+        // public observer and must never publish an out-of-range value, and
+        // an override can arrive from a hand-edited patch.
+        if (p == P_SCALE && _scale_ovr >= 0)
+            v = clamp_to(kParams[p], float(_scale_ovr));
+        else if (p == P_ROOT && _root_ovr >= 0)
+            v = clamp_to(kParams[p], float(_root_ovr));
+
         // Setter spam guard: push only real changes -- exact compare for
         // discrete (already snapped to the step grid), epsilon for
         // continuous.

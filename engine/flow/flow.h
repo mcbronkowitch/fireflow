@@ -61,6 +61,17 @@ public:
     // re-pushes it every control tick.
     void set_genre(int arch) { _genre = arch; }
     int  genre() const { return _genre; }
+    // Explicit tonality (spec 2026-08-07 §3). -1 means AUTO: the terrain's own
+    // drawn value, i.e. exactly today's behaviour. Any other value replaces
+    // what this Flow pushes for that parameter, immediately, without touching
+    // the terrain -- so AUTO gives the terrain's value back intact.
+    //
+    // Like _genre, these are host-owned settings and not part of TerrainState;
+    // wake()/init() do not reset them.
+    void set_scale_override(int scale) { _scale_ovr = scale; }
+    void set_root_override(int root)   { _root_ovr = root; }
+    int  scale_override() const { return _scale_ovr; }
+    int  root_override() const  { return _root_ovr; }
     bool can_undo() const { return _have_undo; }
     const TerrainState& state() const { return _state; }
     // The undo slot, for persistence (§5: "Patch reload ... and later hardware
@@ -123,6 +134,8 @@ private:
     bool  _have_undo = false;
     Rng   _seq;                   // NEW's press-chain Rng, re-seeded by wake()
     int   _genre = ARCH_ANY;      // draw constraint for new_full(), not state
+    int   _scale_ovr = -1;        // -1 = AUTO (use the terrain's P_SCALE)
+    int   _root_ovr  = -1;        // -1 = AUTO (use the terrain's P_ROOT)
 
     float _knob[MACRO_COUNT] = {};
     float _cv[MACRO_COUNT]   = {};
