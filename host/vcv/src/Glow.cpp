@@ -130,6 +130,13 @@ struct Glow : Module {
     bool uiHaveUndo = false;            // RESTORE
     bool uiLock = false;                // SET_LOCK, RESTORE
 
+    // The ROOT override (spec 2026-08-07 §3.1), set from appendContextMenu on
+    // the UI thread and read every controlTick on the audio thread. Atomic
+    // rather than a plain int, and NOT a UiOp: UiOp is a one-shot exchange for
+    // an operation, this is a standing value. Default sequential consistency,
+    // matching uiOp -- no relaxed/acquire-release hand-rolling.
+    std::atomic<int> rootOverride { -1 };     // -1 = AUTO
+
     // GENRE / SCALE. Both are snapped switches whose FIRST position is the
     // random one -- ANY draws the archetype at random, AUTO takes whatever
     // the terrain drew -- so the player selects randomness at the control.
@@ -192,11 +199,19 @@ struct Glow : Module {
         json_object_set_new(root, "terrain", json_string(s.code));
         json_object_set_new(root, "lock", json_boolean(s.lock));
         if (s.have_undo) json_object_set_new(root, "undo", json_string(s.undo));
+        json_object_set_new(root, "root", json_integer(rootOverride.load()));
         return root;
     }
 
     void dataFromJson(json_t* root) override {
         if (!root) return;
+        // Read BEFORE the terrain's early return below: the override is
+        // independent of the terrain, and a patch whose code is missing or
+        // malformed must not lose it as collateral.
+        if (json_t* r = json_object_get(root, "root")) {
+            const int v = int(json_integer_value(r));
+            rootOverride = (v >= 0 && v <= 11) ? v : -1;
+        }
         spkyvcv::GlowSave s;
         json_t* code = json_object_get(root, "terrain");
         if (!json_is_string(code)) return;              // nothing to restore
@@ -388,6 +403,10 @@ struct Glow : Module {
         reinit(curSr > 0.f ? curSr : 48000.f);
         wakeHouse();
         knobs.primed = false;
+        // Params are reset for us by Rack's default ResetEvent handler before
+        // this runs, which covers GENRE and SCALE. rootOverride is not a
+        // param, so Initialize would otherwise leave it stale.
+        rootOverride = -1;
     }
 
     void controlTick(float sr) {
@@ -398,6 +417,7 @@ struct Glow : Module {
         flow.set_genre(gpos <= 0 ? spky::flow::ARCH_ANY : gpos - 1);
         flow.set_scale_override(
             spkyvcv::scale_of_knob(int(params[SCALE].getValue() + 0.5f)));
+        flow.set_root_override(rootOverride.load());
 
         // Apply whatever the UI thread staged (fix round 3): flag read FIRST
         // via exchange() -- so at most one op survives even if two menu
@@ -622,8 +642,27 @@ struct GlowWidget : ModuleWidget {
         menu->addChild(new MenuSeparator);
         menu->addChild(createMenuLabel("Terrain " + m->terrainCode()));
 
-        // Share a terrain: the code is the whole state (spec 4), so copying
-        // it out and pasting it in is the entire sharing story.
+        // Which genre the CURRENT terrain is. Free now that arch_of exists,
+        // and the point of the GENRE control is auditioning one archetype at
+        // a time -- without this the player cannot see which one they are in.
+        static const char* kArchNames[] = { "Drone", "Pulse", "Arp", "Fragment" };
+        menu->addChild(createMenuLabel(
+            std::string("Genre ") +
+            kArchNames[spky::flow::arch_of(m->flow.state().master)]));
+
+        menu->addChild(createIndexSubmenuItem(
+            "Root",
+            { "Auto", "C", "C#", "D", "D#", "E", "F",
+              "F#", "G", "G#", "A", "A#", "B" },
+            [m]() { return m->rootOverride.load() + 1; },
+            [m](int i) { m->rootOverride = i - 1; }));
+
+        // Share a terrain: the code is the terrain's whole identity, so
+        // copying it out and pasting it in carries the place itself. It is no
+        // longer the instrument's whole STATE -- an explicit SCALE or ROOT
+        // override (spec 2026-08-07 §3) rides on top of it and travels in the
+        // patch, not in the code -- so a pasted code reproduces the sharer's
+        // terrain, not necessarily their tonality.
         menu->addChild(createMenuItem("Copy terrain code", "", [m]() {
             glfwSetClipboardString(APP->window->win, m->terrainCode().c_str());
         }));

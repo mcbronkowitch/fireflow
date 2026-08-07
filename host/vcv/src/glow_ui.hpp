@@ -159,7 +159,9 @@ inline float clock_bpm(float fallback, float clkPeriod, float clkSamples,
     return fallback;
 }
 
-// Exactly what a patch stores (spec 5: current terrain code, lock, undo slot).
+// Exactly what a patch stores OF THE TERRAIN: current code, lock, undo slot.
+// The tonality overrides (spec 2026-08-07 §3) are module settings rather than
+// terrain state and are saved by Glow.cpp directly, not through here.
 struct GlowSave {
     char code[spky::flow::kTerrainCodeLen + 1] = {};
     char undo[spky::flow::kTerrainCodeLen + 1] = {};
