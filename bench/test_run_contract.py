@@ -1898,5 +1898,55 @@ class ProfileAwareEvidenceContract(unittest.TestCase):
         self.assertNotIn("PASS", artifacts[".md"])
 
 
+class FakeSerial:
+    """A serial line that yields a fixed sequence and then goes quiet.
+
+    readline() returning b"" is exactly what pyserial does when its own
+    read timeout expires -- so the empty tail here is a silent line, not
+    end-of-file, and run_once_usb has to keep waiting on the host deadline
+    rather than treating it as the end of the run.
+    """
+
+    def __init__(self, lines):
+        self._lines = list(lines)
+        self.closed = False
+
+    def readline(self):
+        if self._lines:
+            return (self._lines.pop(0) + "\r\n").encode()
+        return b""
+
+    def close(self):
+        self.closed = True
+
+
+class UsbRunContract(unittest.TestCase):
+    def test_run_once_usb_stops_at_bench_end(self):
+        port = FakeSerial(["BENCH_BEGIN,families=system", "BENCH,a,b,1", "BENCH_END"])
+        lines = runner.run_once_usb(port, timeout=5.0)
+        self.assertEqual(lines[-1], "BENCH_END")
+        self.assertEqual(len(lines), 3)
+        self.assertTrue(port.closed)
+
+    def test_run_once_usb_returns_none_on_timeout(self):
+        # A line that never says BENCH_END must yield None. A hang may not
+        # produce half a capture that reads like a result.
+        port = FakeSerial(["BENCH_BEGIN,families=system"])
+        self.assertIsNone(runner.run_once_usb(port, timeout=0.2))
+        self.assertTrue(port.closed)
+
+    def test_load_dfu_targets_the_app_address_and_leaves(self):
+        # :leave is what replaces openocd's reset-halt-resume: dfu-util
+        # hands control to the freshly written image itself.
+        calls = []
+        with mock.patch.object(runner.subprocess, "run",
+                               side_effect=lambda cmd, **kw: calls.append(cmd)):
+            runner.load_dfu("bench-sram.bin", 0x90040000)
+        self.assertEqual(len(calls), 1)
+        self.assertIn("dfu-util", calls[0][0])
+        self.assertIn("0x90040000:leave", calls[0])
+        self.assertIn("bench-sram.bin", calls[0])
+
+
 if __name__ == "__main__":
     unittest.main()

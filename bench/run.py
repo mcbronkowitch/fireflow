@@ -57,7 +57,7 @@ OPTIMIZATION_FLAGS = {
 }
 
 
-def build(families, itcm_hot=False, optimization="o2"):
+def build(families, itcm_hot=False, optimization="o2", transport="semihost"):
     # Do not ask libDaisy's default `all` target for bench.bin: one flat
     # binary spanning SRAM (0x24000000) and QSPI (0x90040000) would encode the
     # address gap. Build the ELF, then extract two explicit artifacts.
@@ -70,6 +70,7 @@ def build(families, itcm_hot=False, optimization="o2"):
         ["make", "-j8", "BENCH_FAMILIES=%s" % " ".join(families),
          "BENCH_ITCM_HOT=%d" % int(itcm_hot),
          "BENCH_OPTIMIZATION=%s" % optimization,
+         "BENCH_TRANSPORT=%s" % transport,
          "build/bench.elf"],
         cwd=HERE,
         check=True,
@@ -162,6 +163,77 @@ def run_once(interface, timeout):
                         "OpenOCD did not exit after kill"
                     ) from error
     return lines if done else None
+
+
+# Where the Daisy bootloader expects a BOOT_SRAM app image (libDaisy
+# core/Makefile: FLASH_ADDRESS = QSPI_ADDRESS, default 0x90040000). NOT the
+# wave bank's address -- the bank moved to 0x90100000 precisely so these two
+# stopped being the same number. See bench/README.md, "Two transports".
+APP_DFU_ADDRESS = 0x90040000
+SRAM_BIN = os.path.join(HERE, "build", "bench-sram.bin")
+
+
+def prepare_dfu_image():
+    """Flatten the SRAM ELF into the image dfu-util writes.
+
+    bench-sram.elf, not bench.elf: the full ELF still carries
+    .qspiflash_data at 0x90100000, and a flat binary spanning that gap would
+    be 17 MB of mostly padding aimed at the wrong address. Everything that
+    remains loads into SRAM_EXEC (.data is placed AT > SRAM_EXEC), so the
+    flattened image is contiguous.
+    """
+    subprocess.run(
+        [OBJCOPY, "-O", "binary", "-S", SRAM_ELF, SRAM_BIN],
+        check=True,
+    )
+    return SRAM_BIN
+
+
+def load_dfu(binary, address):
+    """Write the image to its address and let it start.
+
+    :leave exits DFU and runs the app, which is what replaces the
+    reset/halt/resume three-step of the openocd script. Unlike openocd,
+    dfu-util exits the moment it has written -- nothing stays alive to be
+    both loader and transport, which is why reading is a separate step.
+    """
+    subprocess.run(
+        ["dfu-util", "-a", "0", "-s", "%s:leave" % hex(address),
+         "-D", binary, "-d", ",0483:df11"],
+        check=True,
+    )
+
+
+def run_once_usb(port, timeout):
+    """Read a capture off an already-open serial line until BENCH_END.
+
+    Same contract as run_once: the captured lines, or None on timeout -- a
+    hang writes nothing. An empty read is pyserial's read timeout expiring,
+    NOT end of stream, so it costs a lap of the loop and nothing more; only
+    the host deadline ends the wait.
+    """
+    deadline = time.monotonic() + timeout
+    lines, done = [], False
+    try:
+        while time.monotonic() < deadline:
+            raw = port.readline()
+            if not raw:
+                continue
+            line = raw.decode("utf-8", "replace").rstrip("\r\n")
+            print(line)
+            lines.append(line)
+            if line.startswith("BENCH_END"):
+                done = True
+                break
+    finally:
+        port.close()
+    return lines if done else None
+
+
+def open_serial(port_name, read_timeout=1.0):
+    """Open the CDC port. Imported here so the host tests need no pyserial."""
+    import serial                                # noqa: PLC0415
+    return serial.Serial(port_name, timeout=read_timeout)
 
 
 BUDGET_CYCLES = 960000
@@ -893,7 +965,8 @@ def wave_gate_not_applicable_reason(profile):
     return "this profile's manifest does not declare it"
 
 
-def write_results(out_dir, captures, profile, profile_name):
+def write_results(out_dir, captures, profile, profile_name,
+                  transport="semihost"):
     # The gate ledger below claims every universal gate ran and passed,
     # including "at least two runs". Checking that here makes the claim
     # true by construction rather than by trusting the caller got the
@@ -912,15 +985,20 @@ def write_results(out_dir, captures, profile, profile_name):
     header, rows, anchors = captures[0]
     os.makedirs(out_dir, exist_ok=True)
     stamp = datetime.date.today().isoformat()
+    # The transport enters the name only when it is not the historical one.
+    # Every capture in docs/bench/ predating this switch was taken over
+    # semihosting, so suffixing those too would rename history for no gain
+    # and break every cross-reference into it.
     base = os.path.join(
         out_dir,
-        "%s-%s-%s-%s-%s"
+        "%s-%s-%s-%s-%s%s"
         % (
             stamp,
             header["githash"],
             profile_name,
             header["layout"],
             header["optimization"],
+            "" if transport == "semihost" else "-%s" % transport,
         ),
     )
     fingerprint = device_fingerprint(header["device_id"])
@@ -1045,8 +1123,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--interface", default="stlink-dap.cfg",
                     help="openocd interface cfg; this desk's probe is an ST-Link V3")
-    ap.add_argument("--transport", default="semihost", choices=["semihost"],
-                    help="capture transport (USB-CDC fallback: see bench/README.md)")
+    ap.add_argument("--transport", default="semihost",
+                    choices=["semihost", "usb"],
+                    help=(
+                        "how the capture leaves the board: semihost through "
+                        "the probe, or usb over CDC for a board with no debug "
+                        "pins (needs --port and the Daisy bootloader)"
+                    ))
+    ap.add_argument("--port", default=None,
+                    help="serial port for --transport usb, e.g. COM7")
     ap.add_argument("--timeout", type=float, default=600.0,
                     help="seconds to wait for BENCH_END")
     ap.add_argument("--build-only", action="store_true")
@@ -1088,6 +1173,10 @@ def main():
         print("ERROR: hardware evidence requires at least two runs",
               file=sys.stderr)
         return 2
+    if args.transport == "usb" and not args.build_only and not args.port:
+        print("ERROR: --transport usb needs --port (e.g. --port COM7)",
+              file=sys.stderr)
+        return 2
 
     receipt_context = None
     active_receipt = QSPI_RECEIPT
@@ -1114,6 +1203,7 @@ def main():
                 profile.families,
                 itcm_hot=args.itcm_hot,
                 optimization=args.optimization,
+                transport=args.transport,
             )
             if not args.no_build
             else prepare_existing_artifacts()
@@ -1157,10 +1247,19 @@ def main():
     captures = []
     for i in range(max(1, args.repeat)):
         print("# run %d/%d" % (i + 1, args.repeat), file=sys.stderr)
-        lines = run_once(args.interface, args.timeout)
+        if args.transport == "usb":
+            # dfu-util writes and exits; the line is opened afterwards. The
+            # firmware waits for it (StartLog(true)), so the header cannot be
+            # lost to enumeration timing -- and after BENCH_END it drops back
+            # into the bootloader by itself, which is what makes repeat 2
+            # possible without a hand at the board.
+            load_dfu(prepare_dfu_image(), APP_DFU_ADDRESS)
+            lines = run_once_usb(open_serial(args.port), args.timeout)
+        else:
+            lines = run_once(args.interface, args.timeout)
         if lines is None:
-            print("ERROR: BENCH_END never arrived (timeout or openocd exited)",
-                  file=sys.stderr)
+            print("ERROR: BENCH_END never arrived (timeout, or the loader "
+                  "exited)", file=sys.stderr)
             return finish(2)
         parsed = parse(lines)
         if parsed is None:
@@ -1189,7 +1288,8 @@ def main():
         print("ERROR: %s" % error, file=sys.stderr)
         return finish(2)
 
-    base = write_results(args.out_dir, captures, profile, args.profile)
+    base = write_results(args.out_dir, captures, profile, args.profile,
+                         transport=args.transport)
     if persist_program_receipt:
         os.replace(active_receipt, QSPI_RECEIPT)
     print("# wrote %s.md and %s.csv" % (base, base), file=sys.stderr)

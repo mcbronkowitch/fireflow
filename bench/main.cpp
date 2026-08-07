@@ -6,6 +6,7 @@
 #include "qspi_digest.h"
 #include "rand_shim.h"
 #include "synth/wt_bank.h"
+#include "bench_transport.h"
 
 namespace bench { void run_anchors(daisy::DaisySeed& hw); }
 
@@ -85,6 +86,24 @@ int main(void)
     bench::run_anchors(hw);
 
     bench::report_end();
+
+#if defined(BENCH_TRANSPORT_USB)
+    // Without this jump every second repeat needs a hand at the board:
+    // dfu-util wants a device already in DFU mode, and there is no probe
+    // here to reset one into it. Far outside any measured window --
+    // BENCH_END is already out.
+    //
+    // DAISY_INFINITE_TIMEOUT, not DAISY: the plain mode gives the
+    // bootloader its normal few-second window and then boots the app
+    // again, which turns a slow host into a lost run. Infinite waits for
+    // dfu-util however long it takes. The consequence is deliberate and
+    // worth stating: the board then stays in the bootloader until
+    // something programs it. That is recoverable with dfu-util and
+    // nothing else is needed.
+    daisy::System::Delay(100);          // let the line drain
+    daisy::System::ResetToBootloader(
+        daisy::System::BootloaderMode::DAISY_INFINITE_TIMEOUT);
+#endif
 
     while (1) { hw.DelayMs(1000); }
 }
