@@ -20,6 +20,10 @@
 #include "parts/engine_iface.h"
 // For kDivisionCount, the length of the rate-rung weight table below.
 #include "mod/divisions.h"
+// For SCALE_LIST_COUNT and the ScaleId names in the scale weight table below.
+// Already transitively visible via flow_params.h -> instrument.h; this only
+// makes the dependency explicit, exactly as the engine_iface.h include does.
+#include "pitch/quantizer.h"
 
 namespace spky { namespace flow {
 
@@ -553,6 +557,28 @@ constexpr float kFixedSeedRmsMax = 0.5f;
 // through observed churn.
 constexpr int kDiscreteChurnMax = 2;
 constexpr float kBodyFiltFloor = -0.3f;             // BODY FILT cliff margin
+
+// The BBD bend budget under Glow (spec 2026-08-07 §2). In FLOW the BBD's
+// PITCH lane is not a note, it is the delay clock, spread geometrically
+// across the whole reachable window (bbd_music.h's clock_flow, "a bend, not a
+// keyboard"), so a full lane travel is kMaxStages/kMinStages = 32 = 5 octaves
+// = 60 semitones against a scale-locked second deck. The flow layer bounds
+// that travel by capping P_RANGE_A/B on a deck currently pushed as BBD --
+// RANGE is the only lever available, because SuperModulator::set_range
+// touches LANE_PITCH and nothing else.
+//
+// The 60 is that window in semitones. The 2 is apply_range: at r <= 0.5 the
+// lane output is unipolar 0..2r (engine/mod/range.h), so the travel is
+// one-sided. Written as a semitone budget rather than a raw RANGE value
+// because semitones are the quantity the ear judges.
+//
+// At 1 semitone the cap is 0.0083 and the BBD deck's PITCH lane is
+// effectively static: the clock stands still, and the wobble that lane used
+// to contribute has to come from DRIFT/MOTION/FLUX instead. That trade was
+// stated and the owner ruled for it (2026-08-07). Raising kBbdFlowSemis buys
+// the motion back at a proportional cost in off-key travel.
+constexpr float kBbdFlowSemis    = 1.f;
+constexpr float kBbdFlowRangeMax = kBbdFlowSemis / (2.f * 60.f);
 constexpr float kSpaceSlewS = 2.5f;                 // lazy SIZE/DECAY follower
 constexpr float kHysteresisFrac = 0.5f;             // half a discrete step
 
@@ -581,6 +607,9 @@ constexpr float kDuckDepth     = 0.8f;              // how far it gets there
 //     also normalises the terrain distance metric in terrain.cpp.
 //   - kBodyFiltFloor is a runtime clamp in flow.cpp because it is conditional
 //     on a deck's engine, and this table is engine-independent.
+//   - kBbdFlowRangeMax is a runtime clamp in flow.cpp for the same reason as
+//     kBodyFiltFloor: it is conditional on a deck's engine AND on the
+//     operating mode, and this table is independent of both.
 struct Veto { int param; float lo, hi; };
 inline const Veto kVetos[] = {
     { P_REV_MOD,  0.00f, 0.25f },  // above: the reverb tail comes apart
@@ -641,6 +670,52 @@ inline constexpr float kTextureW[ARCH_COUNT][5] = {
 // no step sequencer at all; an arp is one almost by definition.
 // Order: {ARCH_DRONE, ARCH_PULSE, ARCH_ARP, ARCH_FRAGMENT}.
 inline constexpr float kModeW[ARCH_COUNT] = { 0.15f, 0.90f, 0.95f, 0.75f };
+
+// Scale draw weights (spec 2026-08-07 §3). A uniform draw over all thirteen
+// put whole tone, hijaz, phrygian and harmonic minor together at 31% of
+// terrains, which is most of why Glow read dissonant.
+//
+// The first two groups are graded by friction -- how much a scale can
+// produce when two sustained voices land on it at once, read off SCALE_MASKS
+// rather than by feel: minor and major pentatonic contain neither a minor
+// second nor a tritone; EVERY seven-note mode contains both, which is a
+// property of seven notes in twelve and not a choice among the modes; whole
+// tone has no minor second and three tritones. The third group below is a
+// WEIGHT BUCKET, not a friction class -- its members do not share a friction
+// property. Of hirajoshi/pygmy/kumoi, only pygmy (0x048D, {0,2,3,7,10}) is
+// tritone-free; hirajoshi (0x018D, {0,2,3,7,8}) and kumoi (0x028D,
+// {0,2,3,7,9}) both contain one (2<->8 and 3<->9, six semitones each), so the
+// group carries more friction than an earlier version of this comment
+// claimed. The weights are unchanged because of that, not despite it -- they
+// already sit in the low bucket.
+//
+// These rows are WEIGHTS, not shares: they sum to 1.10, and pick_weighted
+// (terrain.cpp) normalises by the running total, so a constant scale factor
+// on the whole table cancels and the table need not sum to 1. The written
+// group sums (0.45/0.35/0.20/0.10) therefore normalise to TRUE shares of
+// 0.409/0.318/0.182/0.0909 -- modes, clean pentatonic, the pygmy/hirajoshi/
+// kumoi bucket, exotic, in that order. Kept exactly as shipped rather than
+// renormalised (owner's ruling, 2026-08-07): dividing every weight by 1.10 is
+// a behavioural no-op, since (k*w)^e / sum((k*w)^e) = w^e / sum(w^e) both in
+// pick_weighted and again after temper(), so there was nothing to gain by
+// moving the numbers. §6's after-measurement in test_flow_terrain.cpp (clean
+// 0.2965, exotic 0.1056) is the adventure-tempered mixture of 0.318/0.0909,
+// not of 0.35/0.10 -- read it against the true shares, not the written sums.
+//
+// Order is ScaleId (engine/pitch/quantizer.h), so this indexes with
+// SCALE_MASKS. Tempered by the terrain's adventure level at the draw site, so
+// these are the shape at adventure 0 and the table reads uniform at adventure
+// 1 -- an adventurous terrain can still reach whole tone, it just rarely does.
+inline constexpr float kScaleW[SCALE_LIST_COUNT] = {
+    // modes -- weight sum 0.45, true share 0.409
+    0.1125f, 0.1125f, 0.1125f, 0.1125f,
+    // pygmy/hirajoshi/kumoi weight bucket -- sum 0.20 across the three (true
+    // share 0.182); 0.35 (0.318) across minor+major pentatonic, the only two
+    // that are actually free of both a minor second and a tritone
+    0.0667f, 0.0667f, 0.1750f, 0.0667f, 0.1750f,
+    // exotic / handpan -- weight sum 0.10, true share 0.0909
+    0.0250f, 0.0250f, 0.0250f, 0.0250f,
+};
 
 // ---------------------------------------------------------------------------
 // Musical weights (spec 2026-08-06 §6). These are WEIGHTS, not vetoes: the

@@ -72,14 +72,20 @@ Reading `_pushed[ep]` for the engine works because `ENGINE_A/B` lead the
 parameter table (the `static_assert` at `flow.cpp:53` already pins that for the
 FILT floor); the guard needs the same ordering and should be covered by it.
 
-The mode is read from `_mode_now`, not `_pushed[P_MODE]`, because `P_MODE` must
-stay **last** in the table (stream seeding, `flow_params.h:86-88`) and has not
-been through the loop yet this tick. `_mode_now` is "the mode the instrument is
-currently running", which is the question the guard actually asks. It lags a
-mode change by one control tick; a mode change happens only on NEW or wake, and
-one tick at 100–500 Hz is inaudible. On the first forced tick after wake
-`_mode_now` is `false` (FLOW), so the clamp applies and is released a tick later
-if the terrain is STEP — harmless in the conservative direction.
+The mode is read as `_mode_now`, which at this point in the loop is equal to
+`_pushed[P_MODE]`: `P_MODE` stays **last** in the table (stream seeding,
+`flow_params.h:86-88`), so neither has been touched by this tick's push yet, and
+`_mode_now` was set from exactly that field at the end of the *previous* tick
+(`push_mode_and_steps`). `_mode_now` is read rather than the field because it
+names the question the guard actually asks: "the mode the instrument is
+currently running".
+
+What actually matters is the property this equality carries: both readings lag
+this tick's candidate mode by one control tick. A mode change happens only on
+NEW or wake, and one tick at 100–500 Hz is inaudible. On the first forced tick
+after wake both are `false` (FLOW, zero-initialised), so the clamp applies and
+is released a tick later if the terrain is STEP — harmless in the conservative
+direction.
 
 **The constant** lives in `taste.h` as a semitone budget, not a raw RANGE
 value, so it stays tunable by ear:
@@ -123,21 +129,37 @@ Two properties make this surgical:
 Together: **the ROOT draw stays bit-identical; only the scale changes.**
 
 `kScaleW[SCALE_LIST_COUNT]` in `taste.h`, written in `ScaleId` order so it
-indexes with the mask table. The rows below are grouped by friction instead —
-how much a scale can rub when two sustained voices land on it at once,
-computed from `SCALE_MASKS` (`quantizer.h:36-50`), not by feel:
+indexes with the mask table. The rows below are **weights**, not shares — they
+sum to 1.10, not 1.0, because `pick_weighted` (`terrain.cpp:56-66`) normalises
+by the running total, so a common scale factor cancels and the table need not
+sum to 1. The first two groups are graded by friction — how much a scale can
+rub when two sustained voices land on it at once, computed from `SCALE_MASKS`
+(`quantizer.h:36-50`), not by feel. The third group is a **weight bucket, not
+a friction class**: its members differ (see below).
 
-| Scales | contains m2 | contains tritone | weight each | group |
-|---|---|---|---|---|
-| Minor pent, Major pent | no | no | 0.175 | 0.35 |
-| Aeolian, Dorian, Mixolydian, Lydian | yes | yes | 0.1125 | 0.45 |
-| Hirajoshi, Pygmy, Kumoi | yes | no | 0.0667 | 0.20 |
-| Phrygian, Hijaz, Harmonic minor, Whole tone | see below | see below | 0.025 | 0.10 |
+| Scales | contains m2 | contains tritone | weight each | weight sum | true share |
+|---|---|---|---|---|---|
+| Minor pent, Major pent | no | no | 0.175 | 0.35 | 0.318 |
+| Aeolian, Dorian, Mixolydian, Lydian | yes | yes | 0.1125 | 0.45 | 0.409 |
+| Hirajoshi, Pygmy, Kumoi | mixed — see below | mixed — see below | 0.0667 | 0.20 | 0.182 |
+| Phrygian, Hijaz, Harmonic minor, Whole tone | see below | see below | 0.025 | 0.10 | 0.0909 |
+
+"True share" is the weight sum normalised by the table's actual total of 1.10
+— the untempered probability `pick_weighted` actually produces for that group.
+§6's after-measurement (clean pentatonic 0.2965, exotic 0.1056) is the
+adventure-tempered mixture of 0.318/0.0909, not of the raw 0.35/0.10 — that is
+why those figures land where they do.
 
 Any 7-note mode contains both a minor second and a tritone — that is a property
 of 7 notes in 12, not of the choice of mode, so the modes cannot be made
 clash-free by picking differently among them. Only minor and major pentatonic
-are free of both. Whole tone has no minor second but three tritones.
+are free of both. Whole tone has no minor second but three tritones. Of
+hirajoshi/pygmy/kumoi, only pygmy (`0x048D` = {0,2,3,7,10}) is actually
+tritone-free; hirajoshi (`0x018D` = {0,2,3,7,8}, 2↔8) and kumoi (`0x028D` =
+{0,2,3,7,9}, 3↔9) both contain one. They are grouped here because `kScaleW`
+weighs them together, not because they share a friction property — the group
+carries more friction than the old text claimed, and the weights are
+unchanged because of it, not despite it.
 
 Tempering means the weights are the table as written at adventure 0 and flatten
 toward uniform at adventure 1, so an adventurous terrain can still reach whole
@@ -168,3 +190,55 @@ not flow scenarios.
 `test_flow_new.cpp:217-222` runs on a fixed seed and aggregates over six
 parameters, so it should be unaffected; that is to be verified by running it,
 not assumed.
+
+## 6. After
+
+Same population, same method as §1, measured after both changes landed:
+
+- decks mostly off-grid: **9/48** (was 9/48)
+- terrains whose two decks share no scale: **2/24** (was 4/24)
+- scale-group shares over 10 000 masters: clean pentatonic **0.2965**, modes
+  **0.4088**, mild pentatonic **0.1891**, exotic **0.1056** (was 0.154 / 0.308 /
+  0.231 / 0.308 uniform)
+
+The no-shared-scale count halved, and the scale-group shares land close to
+`kScaleW`'s post-temper mixture (`test_flow_terrain.cpp`'s own comment: clean
+0.301, exotic 0.106) — the weighted scale draw (§3) is doing what it was built
+to do.
+
+The off-grid deck count did not move, and the reason is that **off-grid was
+the wrong yardstick for this change** — it measures grid alignment, not motion.
+An unquantized deck sits between the semitones by definition, however still it
+stands, so the count could not have fallen. The composition is the same as §1:
+7 silent SAMPLER decks (`fill=0`, no input material, `part.cpp:211-225` — TUNE
+there transposes a recording as a whole, and snapping that to the instrument's
+scale is meaningless) and the same 2 audible BBD decks.
+
+The quantity the guard actually bounds is **pitch travel while the deck is a
+BBD**, and that is where the change shows up. Measured on the two BBD decks
+(`4540215F` deck a, `D5336898` deck a), 20 s each, macros parked at 0.5,
+splitting the samples by `a_fclk > 0` so only ticks where the deck really is a
+BBD are counted:
+
+| `kBbdFlowSemis` | `4540215F` | `D5336898` |
+|---|---|---|
+| effectively off (3600) | 10.634 semitones | 10.498 semitones |
+| **1 (shipped)** | **0.342** | **0.385** |
+| 0 (lane fully off) | 0.000 | 0.000 |
+
+So the guard takes a BBD texture deck from nearly an octave of continuous glide
+against a scale-locked carrier down to about a third of a semitone — inside the
+one-semitone budget, with room to spare. Setting `kBbdFlowSemis` to 0 buys the
+remaining 0.35 semitones and costs the lane entirely; it is not worth it, and
+the shipped value stays at 1.
+
+**A trap this measurement walked into first, recorded so the next one does
+not.** Taken as a plain min/max over the whole render, the same two decks
+measure 3.97 and 2.35 semitones of travel even with the lane fully off — which
+looks like proof of a second, unbounded path into `LANE_PITCH`. It is not.
+Those figures come from **3 samples out of 15 000**, in the wake transient
+before the deck's engine has switched to BBD; `Instrument::bbd_clock_hz`
+returns 0 whenever the deck is not currently a BBD, which is what makes them
+separable. A min/max over a whole file is maximally sensitive to a transient,
+exactly as a tolerance tighter than 0.01 semitones is maximally sensitive to
+the CSV's `%.4f` rounding (§1). Split the samples first, then take the range.

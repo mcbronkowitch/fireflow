@@ -47,11 +47,13 @@ inline int deck_of(int p) {
 
 } // namespace
 
-// The BODY FILT runtime floor in recompute_and_push() reads this tick's
-// already-pushed engine for the deck it is guarding, which only works while
-// ENGINE_A/B precede FILT_A/B in the parameter table.
+// The BODY FILT floor and the BBD RANGE cap in recompute_and_push() both read
+// this tick's already-pushed engine for the deck they guard, which only works
+// while ENGINE_A/B precede FILT_A/B and RANGE_A/B in the parameter table.
 static_assert(P_ENGINE_A < P_FILT_A && P_ENGINE_B < P_FILT_B,
               "ENGINE_A/B must be pushed before FILT_A/B");
+static_assert(P_ENGINE_A < P_RANGE_A && P_ENGINE_B < P_RANGE_B,
+              "ENGINE_A/B must be pushed before RANGE_A/B");
 
 // Everything the control rate feeds, and nothing else. Split out of init()
 // so a live host can follow a sample-rate change without rebuilding the
@@ -490,6 +492,48 @@ void Flow::recompute_and_push(bool force) {
             const int ep = (p == P_FILT_A) ? P_ENGINE_A : P_ENGINE_B;
             if (int(_pushed[ep] + 0.5f) == ENGINE_BODY && v < kBodyFiltFloor)
                 v = kBodyFiltFloor;
+        }
+        // The BBD bend cap (spec 2026-08-07 §2), the FILT floor's twin: also
+        // conditional on the deck's engine, so also runtime rather than a
+        // terrain constraint -- the blend interpolates RANGE between two
+        // terrains whose engine assignments differ, so a deck can run as BBD
+        // for nearly the whole ramp on a RANGE value drawn by a terrain that
+        // never put a BBD there.
+        //
+        // The mode is read as _mode_now, which at this point in the loop is
+        // equal to _pushed[P_MODE]: P_MODE is LAST in the parameter table
+        // (stream seeding, flow_params.h), so neither has been touched by
+        // this tick's push yet, and _mode_now was set from exactly this
+        // field at the END of the PREVIOUS tick (push_mode_and_steps). The
+        // name is read here rather than the field because it names the
+        // question this guard actually asks: the mode the instrument is
+        // currently RUNNING.
+        //
+        // What that buys is asymmetric -- "the conservative direction", what
+        // an earlier version of this comment called it, is only half true.
+        // Both readings lag this tick's candidate mode by one control tick.
+        // On WAKE, both start FLOW (zero-init), so the cap applies from the
+        // first forced tick and is released a tick later if the terrain
+        // turns out to be STEP: conservative, no deck ever gets an
+        // unclamped tick it shouldn't. On a NEW press that moves a STEP
+        // terrain to a FLOW one, the other direction holds: P_MODE is LAST
+        // in the parameter table, so this iteration (P_RANGE_*) runs before
+        // that tick's own P_MODE row is pushed, and _mode_now -- set from
+        // the PREVIOUS tick -- still reads STEP for the whole of this one.
+        // If the deck is already ENGINE_BBD (its engine did not have to
+        // change for this to bite), this guard is skipped and RANGE goes
+        // out unclamped for exactly this one tick. push_mode_and_steps(),
+        // called once the loop finishes, then flips _mode_now to FLOW off
+        // this same tick's P_MODE push, so the very next tick sees it true
+        // and the cap engages. One control period (2-10 ms) of an audible
+        // BBD deck running FLOW with a full-window RANGE, inside the same
+        // NEW blend that caused the mode change, is accepted rather than
+        // chased with a second, look-ahead read of the candidate mode.
+        else if (p == P_RANGE_A || p == P_RANGE_B) {
+            const int ep = (p == P_RANGE_A) ? P_ENGINE_A : P_ENGINE_B;
+            if (int(_pushed[ep] + 0.5f) == ENGINE_BBD && !_mode_now
+                && v > kBbdFlowRangeMax)
+                v = kBbdFlowRangeMax;
         }
 
         // The veto band (taste.h kVetos, spec §3), enforced HERE and only

@@ -430,3 +430,66 @@ TEST_CASE("flow terrain: at full adventure a span is drawn in full") {
     CHECK(lo0 < 0.31f);
     CHECK(hi0 > 0.69f);
 }
+
+// Scale groups, by ScaleId (engine/pitch/quantizer.h). The first two groups
+// are graded by friction, read off SCALE_MASKS: minor and major pentatonic
+// contain neither a minor second nor a tritone; every seven-note mode
+// contains both, which is a property of seven notes in twelve rather than a
+// choice among the modes. The third group is a WEIGHT BUCKET, not a friction
+// class -- of hirajoshi/pygmy/kumoi, only pygmy (0x048D) is tritone-free;
+// hirajoshi (0x018D) and kumoi (0x028D) both contain one. They are grouped
+// here because kScaleW (taste.h) weighs them together, not because they
+// share a friction property.
+static int scale_group(int s) {   // 0 clean pent, 1 mode, 2 pygmy/hirajoshi/kumoi bucket, 3 exotic
+    switch (s) {
+    case SCALE_MIN_PENT: case SCALE_MAJ_PENT:                 return 0;
+    case SCALE_AEOLIAN:  case SCALE_DORIAN:
+    case SCALE_MIXO:     case SCALE_LYDIAN:                   return 1;
+    case SCALE_HIRAJOSHI: case SCALE_PYGMY: case SCALE_KUMOI: return 2;
+    default:                                                  return 3;
+    }
+}
+
+TEST_CASE("flow terrain: the scale draw is weighted away from friction") {
+    const int N = 10000;
+    int n[4] = {};
+    for (uint32_t k = 1; k <= uint32_t(N); ++k) {
+        Terrain t = generate(st(k * 2654435761u));
+        ++n[scale_group(int(t.base[P_SCALE] + .5f))];
+    }
+    const float clean  = float(n[0]) / float(N);
+    const float exotic = float(n[3]) / float(N);
+    CAPTURE(clean); CAPTURE(exotic);
+    // A uniform draw over thirteen gives clean = 2/13 = 0.154 and
+    // exotic = 4/13 = 0.308, so both bounds fail against the old code -- that
+    // is this case's RED. kScaleW's raw weights sum to 0.35 / 0.10 per group,
+    // but pick_weighted normalises by the table's running total of 1.10, so
+    // the true untempered ask is 0.318 / 0.0909; adventure tempering pulls
+    // both toward uniform and the resulting mixture is 0.301 / 0.106.
+    CHECK(clean  > 0.26f);
+    CHECK(clean  < 0.34f);
+    CHECK(exotic > 0.08f);
+    CHECK(exotic < 0.14f);
+}
+
+TEST_CASE("flow terrain: adventure reopens the exotic scales") {
+    const int N = 20000;
+    int lo_n = 0, lo_ex = 0, hi_n = 0, hi_ex = 0;
+    for (uint32_t k = 1; k <= uint32_t(N); ++k) {
+        Terrain t = generate(st(k * 2654435761u));
+        const bool ex = scale_group(int(t.base[P_SCALE] + .5f)) == 3;
+        if (t.adventure_base < 0.2f)      { ++lo_n; lo_ex += ex ? 1 : 0; }
+        else if (t.adventure_base > 0.5f) { ++hi_n; hi_ex += ex ? 1 : 0; }
+    }
+    // P(a > 0.5) is 12.5% at kAdventureShape 3, so the high bucket is the
+    // small one; both must be big enough for the comparison to mean anything.
+    REQUIRE(lo_n > 1000);
+    REQUIRE(hi_n > 1000);
+    const float lo = float(lo_ex) / float(lo_n);
+    const float hi = float(hi_ex) / float(hi_n);
+    CAPTURE(lo); CAPTURE(hi);
+    // Untempered weights would make these two equal, so this is the case that
+    // pins temper() into the draw rather than just the weights. Measured
+    // 0.092 low against 0.157 high.
+    CHECK(hi > lo + 0.02f);
+}
