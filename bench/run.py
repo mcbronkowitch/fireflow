@@ -189,6 +189,28 @@ def prepare_dfu_image():
     return SRAM_BIN
 
 
+def dfu_present(run=subprocess.run):
+    listing = run(["dfu-util", "-l"], capture_output=True, text=True)
+    return "Found DFU" in (getattr(listing, "stdout", "") or "")
+
+
+def wait_for_dfu(timeout=20.0, probe=None):
+    """Wait for a board to be back in DFU before writing to it.
+
+    Between repeats the board reaches BENCH_END, jumps into the bootloader
+    and re-enumerates, which takes a second or two of USB. dfu-util called
+    into that gap fails with status 74 and the whole run dies one repeat
+    short of evidence.
+    """
+    probe = probe or dfu_present
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if probe():
+            return True
+        time.sleep(0.5)
+    return False
+
+
 def load_dfu(binary, address):
     """Write the image to its address and let it start.
 
@@ -1310,6 +1332,12 @@ def main():
             # into the bootloader by itself, which is what makes repeat 2
             # possible without a hand at the board.
             image = prepare_dfu_image()
+            if not wait_for_dfu():
+                print("ERROR: no board in DFU mode. On the first run, tap "
+                      "RESET and then BOOT during the bootloader's 2 s "
+                      "window; after that the bench returns there by itself",
+                      file=sys.stderr)
+                return finish(2)
             before = list_ports() if args.port == "auto" else set()
             load_dfu(image, APP_DFU_ADDRESS)
             port_name = args.port

@@ -1960,6 +1960,20 @@ class UsbRunContract(unittest.TestCase):
         lines = runner.run_once_usb(port, timeout=5.0, on_header=lambda _: None)
         self.assertEqual(lines[-1], "BENCH_END")
 
+    def test_waits_for_the_board_to_come_back_between_repeats(self):
+        # After BENCH_END the board jumps into the bootloader and
+        # re-enumerates. dfu-util called into that gap exits 74 and the run
+        # dies one repeat short of the two it needs to be evidence.
+        answers = [False, False, True]
+        self.assertTrue(
+            runner.wait_for_dfu(timeout=5.0, probe=lambda: answers.pop(0))
+        )
+
+    def test_a_board_that_never_returns_is_not_written_to(self):
+        self.assertFalse(
+            runner.wait_for_dfu(timeout=0.6, probe=lambda: False)
+        )
+
     def test_new_port_is_the_one_that_was_not_there_before(self):
         # COM5 is already on this desk and is not the board. Identifying it
         # as "the only port" or "the lowest port" would grab the wrong one.
