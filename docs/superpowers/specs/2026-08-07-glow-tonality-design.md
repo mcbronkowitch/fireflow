@@ -174,3 +174,46 @@ not flow scenarios.
 `test_flow_new.cpp:217-222` runs on a fixed seed and aggregates over six
 parameters, so it should be unaffected; that is to be verified by running it,
 not assumed.
+
+## 6. After
+
+Same population, same method as §1, measured after both changes landed:
+
+- decks mostly off-grid: **9/48** (was 9/48)
+- terrains whose two decks share no scale: **2/24** (was 4/24)
+- scale-group shares over 10 000 masters: clean pentatonic **0.2965**, modes
+  **0.4088**, mild pentatonic **0.1891**, exotic **0.1056** (was 0.154 / 0.308 /
+  0.231 / 0.308 uniform)
+
+The no-shared-scale count halved, and the scale-group shares land close to
+`kScaleW`'s post-temper mixture (`test_flow_terrain.cpp`'s own comment: clean
+0.301, exotic 0.106) — the weighted scale draw (§3) is doing what it was built
+to do.
+
+The off-grid deck count did not move. The composition is the same as §1: 7
+silent SAMPLER decks (`fill=0`, no input material, `part.cpp:211-225` — TUNE
+there transposes a recording as a whole, and snapping that to the instrument's
+scale is meaningless) and the same 2 audible BBD decks. This was checked
+against a stale-binary explanation and ruled out: `engine/flow/flow.cpp` and
+`engine/flow/terrain.cpp` were touched and the whole tree rebuilt immediately
+before this render, and `ctest` was green (4/4) both before and after.
+
+It was also checked against the clamp not firing, and that is not what is
+happening either. Temporary instrumentation at the `P_RANGE_A/B` guard
+(`flow.cpp:518-523`, reverted before commit) confirmed, for both remaining
+off-grid BBD decks, `is_bbd=1`, `mode_now=0` (FLOW) for the entire 20 s render,
+and `v` clamped from a candidate 0.286 down to exactly `kBbdFlowRangeMax`
+(0.00833) on every tick — the guard fires continuously, exactly as designed.
+
+What still moves these two decks several semitones (measured: 3.97 and 2.35
+semitones of `a_pcv` travel over the render) is not RANGE. §2's own "accepted
+consequence" says the quiet part out loud: with RANGE capped, "movement has to
+come from DRIFT/MOTION/FLUX instead" — those macros were parked at 0.5, not 0,
+in both this measurement and §1's, and they drive the BBD's delay clock (hence
+its pitch) through a path this spec's guard does not touch. The guard bounds
+exactly the lever it names (RANGE) and bounds it correctly; it was never going
+to zero out pitch motion that arrives by a different lane. The off-grid metric
+in §1/§3 was not built to distinguish RANGE-driven bend from DRIFT/MOTION/FLUX-
+driven bend, so it does not credit the fix for the part it actually fixed.
+Whether DRIFT/MOTION/FLUX's contribution to BBD pitch under Glow needs its own
+bound is open and unmeasured here.
