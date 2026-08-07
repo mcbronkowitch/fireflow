@@ -178,7 +178,13 @@ def button_svg(c):
 
 
 def sel_svg(c):
-    """GENRE / SCALE: a small graphite cap, no accent collar, no id."""
+    """GENRE / SCALE: a small graphite cap, no accent collar, no id.
+
+    The pointer uses the same light ink as knob_svg: the cap is the dark
+    knobCap gradient, so INK would print black-on-black. Rack hides the mark
+    under RoundSmallBlackKnob, but the panel has to stay legible as a real
+    printed panel.
+    """
     return (
         '  <circle cx="%s" cy="%s" r="%s" fill="url(#knobCap)" stroke="%s" '
         'stroke-width="0.28"/>\n'
@@ -186,7 +192,7 @@ def sel_svg(c):
         'stroke-width="0.45" stroke-linecap="round"/>\n'
         % (mm(c.x), mm(c.y), mm(SEL_R), base.GRAPHITE,
            mm(c.x), mm(c.y - SEL_R * 0.40), mm(c.x), mm(c.y - SEL_R * 0.82),
-           base.INK)
+           base.WHITE)
     )
 
 

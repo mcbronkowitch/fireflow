@@ -49,9 +49,9 @@
   <circle cx="30.480" cy="78.000" r="4.500" fill="#1d1f1a" stroke="#d7cdbb" stroke-width="0.35"/>
   <circle cx="30.480" cy="78.000" r="2.475" fill="#1d6f5f" opacity="0.85"/>
   <circle cx="10.480" cy="78.000" r="5.500" fill="url(#knobCap)" stroke="#252721" stroke-width="0.28"/>
-  <line x1="10.480" y1="75.800" x2="10.480" y2="73.490" stroke="#171713" stroke-width="0.45" stroke-linecap="round"/>
+  <line x1="10.480" y1="75.800" x2="10.480" y2="73.490" stroke="#fffdf7" stroke-width="0.45" stroke-linecap="round"/>
   <circle cx="50.480" cy="78.000" r="5.500" fill="url(#knobCap)" stroke="#252721" stroke-width="0.28"/>
-  <line x1="50.480" y1="75.800" x2="50.480" y2="73.490" stroke="#171713" stroke-width="0.45" stroke-linecap="round"/>
+  <line x1="50.480" y1="75.800" x2="50.480" y2="73.490" stroke="#fffdf7" stroke-width="0.45" stroke-linecap="round"/>
   <circle cx="9.480" cy="100.000" r="4.200" fill="#252721" stroke="#d7cdbb" stroke-width="0.30"/>
   <circle cx="9.480" cy="100.000" r="1.596" fill="#1d1f1a"/>
   <circle cx="23.480" cy="100.000" r="4.200" fill="#252721" stroke="#d7cdbb" stroke-width="0.30"/>
