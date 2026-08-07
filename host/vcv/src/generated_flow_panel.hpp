@@ -2,7 +2,7 @@
 #pragma once
 namespace spkyvcv { namespace glow {
 struct XY { float x, y; };
-enum WidgetKind { WK_MACRO, WK_BTN, WK_IN, WK_OUT };
+enum WidgetKind { WK_MACRO, WK_BTN, WK_SEL, WK_IN, WK_OUT };
 struct PanelCtl { int id; WidgetKind kind; XY mm; const char* label; XY lbl; unsigned char anchor; float lblSize; unsigned lblRgb; const char* tip; };
 // anchor: 0 = middle, 1 = start (left-aligned), 2 = end (right-aligned)
 struct PanelTxt { XY mm; float size; unsigned rgb; unsigned char anchor; int weight; const char* str; };
@@ -14,6 +14,8 @@ enum ParamId {
     WANDER,
     SPACE,
     NEW_BTN,
+    GENRE,
+    SCALE,
     NUM_PARAMS
 };
 enum InputId {
@@ -47,6 +49,8 @@ static const PanelCtl kParamCtls[] = {
     { WANDER, WK_MACRO, {30.480f, 54.000f}, "WANDER", {30.480f, 65.400f}, 0, 2.200f, 0x171713, "WANDER -- predictable to wandering" },
     { SPACE, WK_MACRO, {50.480f, 54.000f}, "SPACE", {50.480f, 65.400f}, 0, 2.200f, 0x171713, "SPACE -- close to vast" },
     { NEW_BTN, WK_BTN, {30.480f, 78.000f}, "NEW", {30.480f, 85.300f}, 0, 2.200f, 0x171713, "NEW -- tap: new terrain. Hold + turn a knob: reroll that macro. Hold 1.5 s: undo. Hold 5 s: lock." },
+    { GENRE, WK_SEL, {10.480f, 78.000f}, "GENRE", {10.480f, 85.300f}, 0, 2.200f, 0x171713, "GENRE -- which archetype NEW may draw. ANY: the weighted draw. Changes nothing until the next NEW press." },
+    { SCALE, WK_SEL, {50.480f, 78.000f}, "SCALE", {50.480f, 85.300f}, 0, 2.200f, 0x171713, "SCALE -- fixes the scale. AUTO: whatever the terrain drew. Takes effect at once; the terrain's own scale returns on AUTO." },
 };
 static const PanelCtl kInputCtls[] = {
     { CV_MOT, WK_IN, {9.480f, 100.000f}, "CV MOT", {9.480f, 94.400f}, 0, 2.200f, 0x171713, "CV into MOTION (0..10 V, adds to the knob)" },

@@ -35,6 +35,11 @@ ROW_Y  = (32.0, 54.0)
 KNOB_LBL_DY = 11.4
 NEW_XY = (30.48, 78.0)
 NEW_LBL_DY = 7.3
+SEL_R  = 5.5                      # GENRE / SCALE -- NEW's visual weight, not
+                                  # the macros': at KNOB_R the captions would
+                                  # land at y=89.4, on top of the patch field's
+                                  # top border at y=89.0.
+SEL_LBL_DY = 7.3                  # shares NEW's caption baseline at y=85.3
 JACK_X = (9.48, 23.48, 37.48, 51.48)   # 14 mm pitch, centred on W/2
 JACK_Y = (100.0, 117.0)
 JACK_LBL_DY = -5.6
@@ -58,13 +63,16 @@ ALPHA_FLAG_H = 3.8
 # --- control kinds ------------------------------------------------------------
 MACRO = "MACRO"
 BTN   = "BTN"
+SEL   = "SEL"
 IN    = "IN"
 OUT   = "OUT"
 
-RADIUS = {MACRO: KNOB_R, BTN: BTN_R, IN: JACK_R, OUT: JACK_R}
-LBL_DY = {MACRO: KNOB_LBL_DY, BTN: NEW_LBL_DY, IN: JACK_LBL_DY, OUT: JACK_LBL_DY}
-LBL_SZ = {MACRO: 2.2, BTN: 2.2, IN: 2.2, OUT: 2.2}
-WKMAP  = {MACRO: "WK_MACRO", BTN: "WK_BTN", IN: "WK_IN", OUT: "WK_OUT"}
+RADIUS = {MACRO: KNOB_R, BTN: BTN_R, SEL: SEL_R, IN: JACK_R, OUT: JACK_R}
+LBL_DY = {MACRO: KNOB_LBL_DY, BTN: NEW_LBL_DY, SEL: SEL_LBL_DY,
+          IN: JACK_LBL_DY, OUT: JACK_LBL_DY}
+LBL_SZ = {MACRO: 2.2, BTN: 2.2, SEL: 2.2, IN: 2.2, OUT: 2.2}
+WKMAP  = {MACRO: "WK_MACRO", BTN: "WK_BTN", SEL: "WK_SEL",
+          IN: "WK_IN", OUT: "WK_OUT"}
 
 
 class Ctl(object):
@@ -101,6 +109,12 @@ PARAMS = [
     Ctl("NEW_BTN", BTN,   NEW_XY[0], NEW_XY[1], "NEW",
         "NEW -- tap: new terrain. Hold + turn a knob: reroll that macro. "
         "Hold 1.5 s: undo. Hold 5 s: lock."),
+    Ctl("GENRE", SEL, COL_X[0], NEW_XY[1], "GENRE",
+        "GENRE -- which archetype NEW may draw. ANY: the weighted draw. "
+        "Changes nothing until the next NEW press."),
+    Ctl("SCALE", SEL, COL_X[2], NEW_XY[1], "SCALE",
+        "SCALE -- fixes the scale. AUTO: whatever the terrain drew. "
+        "Takes effect at once; the terrain's own scale returns on AUTO."),
 ]
 INPUTS = [
     Ctl("CV_MOT", IN, JACK_X[0], JACK_Y[0], "CV MOT", "CV into MOTION (0..10 V, adds to the knob)"),
@@ -161,6 +175,19 @@ def button_svg(c):
            mm(c.x), mm(c.y), base.COPPER,
            mm(c.x), mm(c.y), mm(BTN_R), base.WELL, base.LINE,
            mm(c.x), mm(c.y), mm(BTN_R * 0.55), base.GREEN))
+
+
+def sel_svg(c):
+    """GENRE / SCALE: a small graphite cap, no accent collar, no id."""
+    return (
+        '  <circle cx="%s" cy="%s" r="%s" fill="url(#knobCap)" stroke="%s" '
+        'stroke-width="0.28"/>\n'
+        '  <line x1="%s" y1="%s" x2="%s" y2="%s" stroke="%s" '
+        'stroke-width="0.45" stroke-linecap="round"/>\n'
+        % (mm(c.x), mm(c.y), mm(SEL_R), base.GRAPHITE,
+           mm(c.x), mm(c.y - SEL_R * 0.40), mm(c.x), mm(c.y - SEL_R * 0.82),
+           base.INK)
+    )
 
 
 def jack_svg(c):
@@ -229,7 +256,12 @@ def svg():
                'rx="1.5" fill="%s" fill-opacity="0.28" stroke="%s" '
                'stroke-width="0.24"/>\n' % (base.PAPER_DEEP, base.LINE))
     for c in PARAMS:
-        out.append(knob_svg(c) if c.kind == MACRO else button_svg(c))
+        if c.kind == MACRO:
+            out.append(knob_svg(c))
+        elif c.kind == SEL:
+            out.append(sel_svg(c))
+        else:
+            out.append(button_svg(c))
     for c in INPUTS + OUTPUTS:
         out.append(jack_svg(c))
     for t in TEXTS:
@@ -264,7 +296,7 @@ def header():
     out.append("#pragma once\n")
     out.append("namespace spkyvcv { namespace glow {\n")
     out.append("struct XY { float x, y; };\n")
-    out.append("enum WidgetKind { WK_MACRO, WK_BTN, WK_IN, WK_OUT };\n")
+    out.append("enum WidgetKind { WK_MACRO, WK_BTN, WK_SEL, WK_IN, WK_OUT };\n")
     out.append("struct PanelCtl { int id; WidgetKind kind; XY mm; const char* label;"
                " XY lbl; unsigned char anchor; float lblSize; unsigned lblRgb;"
                " const char* tip; };\n")
