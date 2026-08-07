@@ -324,3 +324,34 @@ TEST_CASE("flow runtime: the SPACE slew keeps its wall-clock time constant acros
     CHECK(f.param_now(P_REV_SIZE)
           == doctest::Approx(g.param_now(P_REV_SIZE)).epsilon(0.002));
 }
+
+TEST_CASE("flow runtime: a BBD deck in FLOW keeps its bend inside the budget") {
+    Instrument in; in.init(48000.f);
+    int seen_bbd_flow = 0, seen_free_deck = 0;
+    for (uint32_t k = 1; k <= 400; ++k) {
+        Flow f = make(in, k * 2654435761u);
+        const bool step = terrain_of(f).base[P_MODE] > 0.5f;
+        for (int m = 0; m < MACRO_COUNT; ++m) f.set_macro(m, 0.5f);
+        for (int i = 0; i < 200; ++i) f.tick();   // past the wake transient
+        for (int d = 0; d < 2; ++d) {
+            const int ep = d ? P_ENGINE_B : P_ENGINE_A;
+            const int rp = d ? P_RANGE_B  : P_RANGE_A;
+            const bool bbd = int(f.param_now(ep) + .5f) == ENGINE_BBD;
+            CAPTURE(k); CAPTURE(d); CAPTURE(f.param_now(rp));
+            if (bbd && !step) {
+                ++seen_bbd_flow;
+                CHECK(f.param_now(rp) <= kBbdFlowRangeMax);
+            } else if (f.param_now(rp) > kBbdFlowRangeMax) {
+                ++seen_free_deck;
+            }
+        }
+    }
+    // Non-vacuous in BOTH directions. The clamped case has to actually occur
+    // -- otherwise the CHECK above never runs -- and a deck that is not a BBD
+    // in FLOW has to be seen ABOVE the cap, without which this case would
+    // also pass against an implementation that clamped RANGE on every deck
+    // unconditionally and killed the pitch lane everywhere.
+    CAPTURE(seen_bbd_flow); CAPTURE(seen_free_deck);
+    CHECK(seen_bbd_flow > 0);
+    CHECK(seen_free_deck > 0);
+}

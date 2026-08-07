@@ -557,6 +557,28 @@ constexpr float kFixedSeedRmsMax = 0.5f;
 // through observed churn.
 constexpr int kDiscreteChurnMax = 2;
 constexpr float kBodyFiltFloor = -0.3f;             // BODY FILT cliff margin
+
+// The BBD bend budget under Glow (spec 2026-08-07 §2). In FLOW the BBD's
+// PITCH lane is not a note, it is the delay clock, spread geometrically
+// across the whole reachable window (bbd_music.h's clock_flow, "a bend, not a
+// keyboard"), so a full lane travel is kMaxStages/kMinStages = 32 = 5 octaves
+// = 60 semitones against a scale-locked second deck. The flow layer bounds
+// that travel by capping P_RANGE_A/B on a deck currently pushed as BBD --
+// RANGE is the only lever available, because SuperModulator::set_range
+// touches LANE_PITCH and nothing else.
+//
+// The 60 is that window in semitones. The 2 is apply_range: at r <= 0.5 the
+// lane output is unipolar 0..2r (engine/mod/range.h), so the travel is
+// one-sided. Written as a semitone budget rather than a raw RANGE value
+// because semitones are the quantity the ear judges.
+//
+// At 1 semitone the cap is 0.0083 and the BBD deck's PITCH lane is
+// effectively static: the clock stands still, and the wobble that lane used
+// to contribute has to come from DRIFT/MOTION/FLUX instead. That trade was
+// stated and the owner ruled for it (2026-08-07). Raising kBbdFlowSemis buys
+// the motion back at a proportional cost in off-key travel.
+constexpr float kBbdFlowSemis    = 1.f;
+constexpr float kBbdFlowRangeMax = kBbdFlowSemis / (2.f * 60.f);
 constexpr float kSpaceSlewS = 2.5f;                 // lazy SIZE/DECAY follower
 constexpr float kHysteresisFrac = 0.5f;             // half a discrete step
 
@@ -585,6 +607,9 @@ constexpr float kDuckDepth     = 0.8f;              // how far it gets there
 //     also normalises the terrain distance metric in terrain.cpp.
 //   - kBodyFiltFloor is a runtime clamp in flow.cpp because it is conditional
 //     on a deck's engine, and this table is engine-independent.
+//   - kBbdFlowRangeMax is a runtime clamp in flow.cpp for the same reason as
+//     kBodyFiltFloor: it is conditional on a deck's engine AND on the
+//     operating mode, and this table is independent of both.
 struct Veto { int param; float lo, hi; };
 inline const Veto kVetos[] = {
     { P_REV_MOD,  0.00f, 0.25f },  // above: the reverb tail comes apart

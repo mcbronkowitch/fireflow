@@ -47,11 +47,13 @@ inline int deck_of(int p) {
 
 } // namespace
 
-// The BODY FILT runtime floor in recompute_and_push() reads this tick's
-// already-pushed engine for the deck it is guarding, which only works while
-// ENGINE_A/B precede FILT_A/B in the parameter table.
+// The BODY FILT floor and the BBD RANGE cap in recompute_and_push() both read
+// this tick's already-pushed engine for the deck they guard, which only works
+// while ENGINE_A/B precede FILT_A/B and RANGE_A/B in the parameter table.
 static_assert(P_ENGINE_A < P_FILT_A && P_ENGINE_B < P_FILT_B,
               "ENGINE_A/B must be pushed before FILT_A/B");
+static_assert(P_ENGINE_A < P_RANGE_A && P_ENGINE_B < P_RANGE_B,
+              "ENGINE_A/B must be pushed before RANGE_A/B");
 
 // Everything the control rate feeds, and nothing else. Split out of init()
 // so a live host can follow a sample-rate change without rebuilding the
@@ -490,6 +492,29 @@ void Flow::recompute_and_push(bool force) {
             const int ep = (p == P_FILT_A) ? P_ENGINE_A : P_ENGINE_B;
             if (int(_pushed[ep] + 0.5f) == ENGINE_BODY && v < kBodyFiltFloor)
                 v = kBodyFiltFloor;
+        }
+        // The BBD bend cap (spec 2026-08-07 §2), the FILT floor's twin: also
+        // conditional on the deck's engine, so also runtime rather than a
+        // terrain constraint -- the blend interpolates RANGE between two
+        // terrains whose engine assignments differ, so a deck can run as BBD
+        // for nearly the whole ramp on a RANGE value drawn by a terrain that
+        // never put a BBD there.
+        //
+        // The mode comes from _mode_now, NOT _pushed[P_MODE]: P_MODE must
+        // stay LAST in the parameter table (stream seeding, flow_params.h)
+        // and has therefore not been through this loop yet on this tick.
+        // _mode_now is the mode the instrument is currently RUNNING, which is
+        // the question this guard actually asks. It lags a mode change by one
+        // control tick; a mode change happens only on NEW or wake, and one
+        // tick at 100-500 Hz is inaudible. On the first forced tick after
+        // wake _mode_now is still false (FLOW), so the cap applies and is
+        // released a tick later if the terrain turns out to be STEP -- the
+        // conservative direction.
+        else if (p == P_RANGE_A || p == P_RANGE_B) {
+            const int ep = (p == P_RANGE_A) ? P_ENGINE_A : P_ENGINE_B;
+            if (int(_pushed[ep] + 0.5f) == ENGINE_BBD && !_mode_now
+                && v > kBbdFlowRangeMax)
+                v = kBbdFlowRangeMax;
         }
 
         // The veto band (taste.h kVetos, spec §3), enforced HERE and only
