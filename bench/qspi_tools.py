@@ -5,7 +5,6 @@ import hashlib
 import json
 import re
 import subprocess
-import tempfile
 
 
 QSPI_ADDRESS = 0x90100000
@@ -16,18 +15,7 @@ STAGING_ADDRESS = 0x24040000
 AXI_SRAM_END = 0x24080000
 INTERNAL_FLASH_RANGE = (0x08000000, 0x08200000)
 MAPPED_QSPI_RANGE = (0x90000000, 0x90800000)
-# How a receipt's evidence was obtained. The two are NOT equally strong and
-# the receipt says which one it is, so a later reader is never left guessing.
-#
-#   swd-sram-target-byte-identity -- an SRAM helper wrote the bank through
-#       the probe, compared it byte for byte on the target, and reported the
-#       MCU UID read out of the silicon.
-#   dfu-qspi-readback-identity -- the bank was read back out over DFU and
-#       compared on the host. No probe needed, which is the entire point, but
-#       the device is named by its DFU serial rather than its MCU UID.
 RECEIPT_MODE = "swd-sram-target-byte-identity"
-DFU_RECEIPT_MODE = "dfu-qspi-readback-identity"
-ACCEPTED_RECEIPT_MODES = (RECEIPT_MODE, DFU_RECEIPT_MODE)
 
 
 class QspiGuardError(RuntimeError):
@@ -166,7 +154,6 @@ def write_verified_receipt(
     device_id,
     artifact_identity,
     observed_sha256,
-    mode=RECEIPT_MODE,
 ):
     payload_path = Path(payload_path)
     receipt_path = Path(receipt_path)
@@ -179,19 +166,14 @@ def write_verified_receipt(
         raise QspiGuardError(
             "target QSPI byte-compare digest does not match the payload"
         )
-    if mode not in ACCEPTED_RECEIPT_MODES:
-        raise QspiGuardError("unknown QSPI verification mode: %s" % mode)
-    # 24 hex digits is the MCU UID the SWD path reads; the DFU path can only
-    # offer the shorter serial the bootloader advertises. Both are hex and
-    # both identify one board, so the shape is widened rather than dropped.
-    if not re.fullmatch(r"[0-9a-f]{12,24}", device_id or ""):
-        raise QspiGuardError("target device id is not 12-24 lowercase hex digits")
+    if not re.fullmatch(r"[0-9a-f]{24}", device_id or ""):
+        raise QspiGuardError("target MCU UID is not 24 lowercase hex digits")
     receipt = {
         "address": QSPI_ADDRESS,
         "size": QSPI_SIZE,
         "sha256": expected_sha256,
         "device_id": device_id,
-        "verification": mode,
+        "verification": RECEIPT_MODE,
         "artifacts": artifact_identity,
     }
     temporary = receipt_path.with_name(receipt_path.name + ".tmp")
@@ -200,64 +182,6 @@ def write_verified_receipt(
         encoding="utf-8",
     )
     temporary.replace(receipt_path)
-
-
-def dfu_serial(text):
-    """The DFU serial from a `dfu-util -l` listing, lowercased."""
-    match = re.search(r'serial="([0-9a-fA-F]{12,24})"', text or "")
-    if not match:
-        raise QspiGuardError("no DFU device with a usable serial is connected")
-    return match.group(1).lower()
-
-
-def verify_qspi_over_dfu(
-    payload_path,
-    receipt_path,
-    artifact_identity,
-    *,
-    dfu_util="dfu-util",
-    run=subprocess.run,
-):
-    """Read the installed bank back over DFU and bind a receipt to it.
-
-    This reads; it does not write. The bank is already on the chip -- what
-    is missing without a probe is PROOF that the bytes there are the bytes
-    that were linked, and an upload plus a host-side compare is exactly
-    that proof. Nothing is erased, so a bad compare costs nothing but the
-    refusal it produces.
-    """
-    payload_path = Path(payload_path)
-    if not payload_path.is_file() or payload_path.stat().st_size != QSPI_SIZE:
-        raise QspiGuardError("QSPI payload must be exactly %d bytes" % QSPI_SIZE)
-
-    listing = _checked_run(
-        run, [dfu_util, "-l"], capture_output=True, text=True
-    )
-    device_id = dfu_serial(getattr(listing, "stdout", ""))
-
-    with tempfile.TemporaryDirectory(prefix="bench-qspi-readback-") as temp:
-        readback = Path(temp) / "readback.bin"
-        _checked_run(
-            run,
-            [dfu_util, "-a", "0",
-             "-s", "%s:%d" % (hex(QSPI_ADDRESS), QSPI_SIZE),
-             "-U", str(readback), "-d", ",0483:df11"],
-        )
-        if not readback.is_file() or readback.stat().st_size != QSPI_SIZE:
-            raise QspiGuardError(
-                "DFU readback did not return exactly %d bytes" % QSPI_SIZE
-            )
-        observed = payload_sha256(readback)
-
-    write_verified_receipt(
-        payload_path,
-        receipt_path,
-        device_id=device_id,
-        artifact_identity=artifact_identity,
-        observed_sha256=observed,
-        mode=DFU_RECEIPT_MODE,
-    )
-    return device_id
 
 
 def require_verified_payload(payload_path, receipt_path, current_identity):
@@ -276,17 +200,13 @@ def require_verified_payload(payload_path, receipt_path, current_identity):
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
         raise QspiGuardError("QSPI verification receipt is unreadable") from error
-    if not re.fullmatch(r"[0-9a-f]{12,24}", receipt.get("device_id", "")):
-        raise QspiGuardError("QSPI verification receipt has an invalid device id")
-    if receipt.get("verification") not in ACCEPTED_RECEIPT_MODES:
-        raise QspiGuardError(
-            "QSPI verification receipt names an unknown mode: %r"
-            % receipt.get("verification")
-        )
+    if not re.fullmatch(r"[0-9a-f]{24}", receipt.get("device_id", "")):
+        raise QspiGuardError("QSPI verification receipt has an invalid device UID")
     expected = {
         "address": QSPI_ADDRESS,
         "size": QSPI_SIZE,
         "sha256": payload_sha256(payload_path),
+        "verification": RECEIPT_MODE,
         "artifacts": current_identity,
     }
     for key, value in expected.items():
