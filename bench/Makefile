@@ -18,7 +18,10 @@ LDSCRIPT = ../alt_sram.lds
 
 # The engine includes DaisySP headers relative to Source/ ("Effects/overdrive.h",
 # "Filters/svf.h", "Utility/dsp.h"), so that directory has to be on the path.
-C_INCLUDES = -I. -I../engine/ -I../third_party/ -I../lib/DaisySP/Source/
+# ../src/ is on the path for exactly one header: hw/board.h. That header is
+# shared with the shipping firmware on purpose (see its own comment); nothing
+# else from src/ is compiled in here.
+C_INCLUDES = -I. -I../src/ -I../engine/ -I../third_party/ -I../lib/DaisySP/Source/
 C_USR_FLAGS = -ffast-math -funroll-loops
 
 GIT_HASH = $(shell git -C .. rev-parse --short HEAD)
@@ -66,6 +69,19 @@ BENCH_TRANSPORT ?= semihost
 
 ifneq ($(filter $(BENCH_TRANSPORT),semihost usb),$(BENCH_TRANSPORT))
 $(error BENCH_TRANSPORT must be semihost or usb)
+endif
+
+# Which board the image initializes. See src/hw/board.h.
+#
+#   seed     -- Daisy Seed. The default, and the board every historical
+#               number in docs/bench/ was measured on.
+#   patch_sm -- Daisy Patch Submodule, the M6 target. Same STM32H750, same
+#               SDRAM and QSPI; whether the numbers travel is a measurement,
+#               not an assumption (docs/bench/2026-08-08-seed-vs-patch-sm.md).
+BENCH_BOARD ?= seed
+
+ifneq ($(filter $(BENCH_BOARD),seed patch_sm),$(BENCH_BOARD))
+$(error BENCH_BOARD must be seed or patch_sm)
 endif
 
 ifneq ($(filter $(BENCH_ITCM_HOT),0 1),$(BENCH_ITCM_HOT))
@@ -231,6 +247,24 @@ $(BUILD_DIR)/bench_transport.h: FORCE | $(BUILD_DIR)
 
 $(BUILD_DIR)/report.o: $(BUILD_DIR)/bench_transport.h
 $(BUILD_DIR)/main.o: $(BUILD_DIR)/bench_transport.h
+
+# --- board header -------------------------------------------------------
+# Same shape and the same reason as the transport header above, and the
+# consequence here is the worst of the set: a bare -DBENCH_BOARD_PATCH_SM is
+# invisible to Make, so switching boards in an existing build directory would
+# relink a stale main.o or anchor.o carrying the OTHER board's init -- an
+# image that runs, reports, and is labelled patch_sm while having brought up
+# the Seed's clocks. That is a wrong number wearing a right label, which is
+# exactly what this whole day exists to avoid.
+#
+# Two objects read it, both through src/hw/board.h: main.cpp for the board
+# object and its init, anchor.cpp for the reference in run_anchors's
+# signature.
+$(BUILD_DIR)/bench_board.h: FORCE | $(BUILD_DIR)
+	@python write_bench_board.py $@ $(BENCH_BOARD)
+
+$(BUILD_DIR)/main.o: $(BUILD_DIR)/bench_board.h
+$(BUILD_DIR)/anchor.o: $(BUILD_DIR)/bench_board.h
 
 # --- cross-deck bus header -----------------------------------------------
 # Same shape again: SPKY_DECK_BUS is read (transitively, via

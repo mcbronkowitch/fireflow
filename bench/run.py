@@ -57,7 +57,8 @@ OPTIMIZATION_FLAGS = {
 }
 
 
-def build(families, itcm_hot=False, optimization="o2", transport="semihost"):
+def build(families, itcm_hot=False, optimization="o2", transport="semihost",
+          board="seed"):
     # Do not ask libDaisy's default `all` target for bench.bin: one flat
     # binary spanning SRAM (0x24000000) and QSPI (0x90040000) would encode the
     # address gap. Build the ELF, then extract two explicit artifacts.
@@ -71,6 +72,7 @@ def build(families, itcm_hot=False, optimization="o2", transport="semihost"):
          "BENCH_ITCM_HOT=%d" % int(itcm_hot),
          "BENCH_OPTIMIZATION=%s" % optimization,
          "BENCH_TRANSPORT=%s" % transport,
+         "BENCH_BOARD=%s" % board,
          "build/bench.elf"],
         cwd=HERE,
         check=True,
@@ -1031,8 +1033,17 @@ def wave_gate_not_applicable_reason(profile):
     return "this profile's manifest does not declare it"
 
 
+# How each board is named in prose. The bench's own short names ("seed",
+# "patch_sm") go into filenames and CSV cells, where they have to be stable
+# and greppable; this is what a reader sees in the evidence document.
+BOARD_PROSE = {
+    "seed": "Daisy Seed",
+    "patch_sm": "Daisy Patch Submodule",
+}
+
+
 def write_results(out_dir, captures, profile, profile_name,
-                  transport="semihost"):
+                  transport="semihost", board="seed"):
     # The gate ledger below claims every universal gate ran and passed,
     # including "at least two runs". Checking that here makes the claim
     # true by construction rather than by trusting the caller got the
@@ -1055,15 +1066,22 @@ def write_results(out_dir, captures, profile, profile_name,
     # Every capture in docs/bench/ predating this switch was taken over
     # semihosting, so suffixing those too would rename history for no gain
     # and break every cross-reference into it.
+    #
+    # The board follows the same rule for the same reason: every capture in
+    # docs/bench/ was measured on a Seed, so a Seed capture keeps the name the
+    # history uses and only the submodule announces itself. Board before
+    # transport, because which chip ran the code outranks which wire the
+    # numbers came down.
     base = os.path.join(
         out_dir,
-        "%s-%s-%s-%s-%s%s"
+        "%s-%s-%s-%s-%s%s%s"
         % (
             stamp,
             header["githash"],
             profile_name,
             header["layout"],
             header["optimization"],
+            "" if board == "seed" else "-%s" % board,
             "" if transport == "semihost" else "-%s" % transport,
         ),
     )
@@ -1071,15 +1089,20 @@ def write_results(out_dir, captures, profile, profile_name,
 
     with open(base + ".csv", "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
-        w.writerow(["run", "profile", "layout", "optimization", "qspi_sha256",
-                    "device_fingerprint", "family", "name", "avg_cyc", "max_cyc",
-                    "pct_avg", "pct_max", "checksum"])
+        # `board` sits with the identity columns, not at the end: a reader who
+        # opens the CSV without its filename must be able to tell a Seed row
+        # from a submodule row, and the columns that answer "which run of what,
+        # on what" belong together.
+        w.writerow(["run", "profile", "board", "layout", "optimization",
+                    "qspi_sha256", "device_fingerprint", "family", "name",
+                    "avg_cyc", "max_cyc", "pct_avg", "pct_max", "checksum"])
         for run_index, (run_header, run_rows, _) in enumerate(captures, start=1):
             run_fingerprint = device_fingerprint(run_header["device_id"])
             for r in run_rows:
                 w.writerow([
                     run_index,
                     profile_name,
+                    board,
                     run_header["layout"],
                     run_header["optimization"],
                     run_header["qspi_sha256"],
@@ -1137,11 +1160,16 @@ def write_results(out_dir, captures, profile, profile_name,
         else:
             fh.write("- none\n")
         fh.write("\n")
-        fh.write("Measured on a Daisy Seed (STM32H750). %s Hz core clock, "
+        # NOT a constant. This line said "Measured on a Daisy Seed" for every
+        # capture the bench ever wrote, which was true until the submodule
+        # existed -- and the very first submodule capture would otherwise have
+        # claimed, inside its own evidence document, that it came off the
+        # board it exists to be compared against.
+        fh.write("Measured on a %s (STM32H750). %s Hz core clock, "
                  "block size %s, %s. "
                  "Block budget %d cycles.\n\n"
-                 % (header["clock"], header["block"], header["cache"],
-                    BUDGET_CYCLES))
+                 % (BOARD_PROSE[board], header["clock"], header["block"],
+                    header["cache"], BUDGET_CYCLES))
         fh.write(
             "All %d runs report QSPI payload SHA-256 `%s` and device "
             "fingerprint `%s` (SHA-256 of the MCU UID).\n\n"
@@ -1195,6 +1223,13 @@ def main():
                         "how the capture leaves the board: semihost through "
                         "the probe, or usb over CDC for a board with no debug "
                         "pins (needs --port and the Daisy bootloader)"
+                    ))
+    ap.add_argument("--board", default="seed",
+                    choices=["seed", "patch_sm"],
+                    help=(
+                        "which board the image initializes: the Daisy Seed "
+                        "that carries the whole docs/bench/ history, or the "
+                        "Patch Submodule that is the M6 target"
                     ))
     ap.add_argument("--port", default="auto",
                     help="serial port for --transport usb, e.g. COM7; "
@@ -1267,6 +1302,7 @@ def main():
                 itcm_hot=args.itcm_hot,
                 optimization=args.optimization,
                 transport=args.transport,
+                board=args.board,
             )
             if not args.no_build
             else prepare_existing_artifacts()
@@ -1390,7 +1426,7 @@ def main():
         return finish(2)
 
     base = write_results(args.out_dir, captures, profile, args.profile,
-                         transport=args.transport)
+                         transport=args.transport, board=args.board)
     if persist_program_receipt:
         os.replace(active_receipt, QSPI_RECEIPT)
     print("# wrote %s.md and %s.csv" % (base, base), file=sys.stderr)

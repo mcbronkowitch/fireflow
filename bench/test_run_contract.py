@@ -793,7 +793,7 @@ class RunContract(unittest.TestCase):
         self.assertEqual(csv_text.count("\n1,"), 68)
         self.assertEqual(csv_text.count("\n2,"), 68)
         self.assertIn(
-            "run,profile,layout,optimization,qspi_sha256,device_fingerprint",
+            "run,profile,board,layout,optimization,qspi_sha256,device_fingerprint",
             csv_text,
         )
         self.assertIn(QSPI_SHA256, csv_text)
@@ -1336,7 +1336,7 @@ class ProfileContract(unittest.TestCase):
                 md_text = stream.read()
         self.assertTrue(base.endswith("-system-itcm-hot-o3"))
         self.assertIn(
-            "run,profile,layout,optimization,qspi_sha256,device_fingerprint",
+            "run,profile,board,layout,optimization,qspi_sha256,device_fingerprint",
             csv_text,
         )
         self.assertIn("Optimization: `o3` (`-O3`).", md_text)
@@ -2003,6 +2003,106 @@ class UsbRunContract(unittest.TestCase):
         self.assertIn("dfu-util", calls[0][0])
         self.assertIn("0x90040000:leave", calls[0])
         self.assertIn("bench-sram.bin", calls[0])
+
+
+class BoardContract(unittest.TestCase):
+    """Every historical number in docs/bench/ was measured on a Daisy Seed.
+    The Patch Submodule is the M6 target and a different board, so a capture
+    that does not say which one it came from is not evidence -- it is a
+    number that can be quoted for the wrong board a month from now, when
+    nobody remembers which one was on the desk today.
+    """
+
+    def system_rows(self):
+        rows = []
+        for i, name in enumerate(runner.BENCH_PROTOCOL_ROWS_BY_FAMILY["system"]):
+            avg = 400 if name == "synth_2x4" else 100
+            checksum = (
+                "aabbccdd"
+                if name in {"instrument_worst_bbd", "instrument_worst_bbd_dtcm"}
+                else "%08x" % i
+            )
+            rows.append(bench_row(name, avg, avg + 1, checksum))
+        return rows
+
+    def capture(self):
+        return runner.parse(capture_lines(self.system_rows(), families="system"))
+
+    def write(self, **kwargs):
+        capture = self.capture()
+        with tempfile.TemporaryDirectory() as temp:
+            base = runner.write_results(
+                temp,
+                [capture, capture],
+                resolve_profile("system"),
+                "system",
+                **kwargs,
+            )
+            return (
+                base,
+                Path(base + ".md").read_text(encoding="utf-8"),
+                Path(base + ".csv").read_text(encoding="utf-8"),
+            )
+
+    def test_build_requests_the_board_make_mode(self):
+        with (
+            mock.patch.object(runner.subprocess, "run") as run,
+            mock.patch.object(
+                runner, "prepare_existing_artifacts", return_value={}
+            ),
+        ):
+            runner.build(("system",), board="patch_sm")
+
+        self.assertIn("BENCH_BOARD=patch_sm", run.call_args_list[1].args[0])
+
+    def test_build_defaults_to_the_board_the_history_was_taken_on(self):
+        with (
+            mock.patch.object(runner.subprocess, "run") as run,
+            mock.patch.object(
+                runner, "prepare_existing_artifacts", return_value={}
+            ),
+        ):
+            runner.build(("system",))
+
+        self.assertIn("BENCH_BOARD=seed", run.call_args_list[1].args[0])
+
+    def test_a_seed_capture_keeps_the_name_the_history_uses(self):
+        """Same reasoning as the transport suffix in write_results: every
+        capture in docs/bench/ predating this switch came off a Seed, so
+        naming the Seed explicitly would rename history for no gain and
+        break every cross-reference into it."""
+        base, _md, _csv = self.write(board="seed", transport="usb")
+
+        self.assertTrue(base.endswith("-system-axi-o2-usb"), base)
+
+    def test_a_submodule_capture_carries_the_board_in_its_name(self):
+        base, _md, _csv = self.write(board="patch_sm", transport="usb")
+
+        self.assertTrue(base.endswith("-system-axi-o2-patch_sm-usb"), base)
+
+    def test_every_csv_row_carries_the_board(self):
+        """A reader who opens the CSV alone, without the filename, must still
+        be able to tell the two boards apart -- that is the whole point of a
+        machine-readable row."""
+        _base, _md, csv_text = self.write(board="patch_sm", transport="usb")
+
+        header = csv_text.splitlines()[0]
+        self.assertIn("board", header.split(","))
+        for line in csv_text.splitlines()[1:]:
+            self.assertIn("patch_sm", line.split(","))
+
+    def test_the_report_names_the_board_it_was_measured_on(self):
+        """write_results used to state 'Measured on a Daisy Seed' as a
+        constant. Left alone, the very first submodule capture would have
+        said, in its own evidence document, that it came off the board it
+        exists to be compared against."""
+        _base, seed_md, _csv = self.write(board="seed")
+        _base, patch_md, _csv = self.write(board="patch_sm")
+
+        self.assertIn("Daisy Seed", seed_md)
+        self.assertNotIn("Patch Submodule", seed_md)
+        self.assertIn("Daisy Patch Submodule", patch_md)
+        self.assertNotIn("Daisy Seed", patch_md)
 
 
 if __name__ == "__main__":

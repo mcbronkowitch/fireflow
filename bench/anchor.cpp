@@ -1,6 +1,8 @@
 #include "workload.h"
 #include "report.h"
-#include <daisy_seed.h>
+// See main.cpp: the generated header carries the define board.h switches on.
+#include "bench_board.h"
+#include "hw/board.h"
 
 namespace bench {
 namespace {
@@ -68,7 +70,9 @@ void AnchorCallback(AudioHandle::InputBuffer,
 
 } // namespace
 
-void run_anchors(DaisySeed& hw)
+// Board, not DaisySeed: StartAudio/StopAudio exist on both boards with the
+// same signature (daisy_patch_sm.h:71, :87), so nothing else in here moves.
+void run_anchors(Board& hw)
 {
     g_meter.Init(kSampleRate, kBlock);
 
