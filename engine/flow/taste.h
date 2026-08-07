@@ -675,25 +675,45 @@ inline constexpr float kModeW[ARCH_COUNT] = { 0.15f, 0.90f, 0.95f, 0.75f };
 // put whole tone, hijaz, phrygian and harmonic minor together at 31% of
 // terrains, which is most of why Glow read dissonant.
 //
-// Staggered by how much friction a scale can produce when two sustained
-// voices land on it at once, read off SCALE_MASKS rather than by feel:
-// minor and major pentatonic contain neither a minor second nor a tritone;
-// hirajoshi, pygmy and kumoi contain a minor second but no tritone; EVERY
-// seven-note mode contains both, which is a property of seven notes in twelve
-// and not a choice among the modes; whole tone has no minor second and three
-// tritones.
+// The first two groups are graded by friction -- how much a scale can
+// produce when two sustained voices land on it at once, read off SCALE_MASKS
+// rather than by feel: minor and major pentatonic contain neither a minor
+// second nor a tritone; EVERY seven-note mode contains both, which is a
+// property of seven notes in twelve and not a choice among the modes; whole
+// tone has no minor second and three tritones. The third group below is a
+// WEIGHT BUCKET, not a friction class -- its members do not share a friction
+// property. Of hirajoshi/pygmy/kumoi, only pygmy (0x048D, {0,2,3,7,10}) is
+// tritone-free; hirajoshi (0x018D, {0,2,3,7,8}) and kumoi (0x028D,
+// {0,2,3,7,9}) both contain one (2<->8 and 3<->9, six semitones each), so the
+// group carries more friction than an earlier version of this comment
+// claimed. The weights are unchanged because of that, not despite it -- they
+// already sit in the low bucket.
+//
+// These rows are WEIGHTS, not shares: they sum to 1.10, and pick_weighted
+// (terrain.cpp) normalises by the running total, so a constant scale factor
+// on the whole table cancels and the table need not sum to 1. The written
+// group sums (0.45/0.35/0.20/0.10) therefore normalise to TRUE shares of
+// 0.409/0.318/0.182/0.0909 -- modes, clean pentatonic, the pygmy/hirajoshi/
+// kumoi bucket, exotic, in that order. Kept exactly as shipped rather than
+// renormalised (owner's ruling, 2026-08-07): dividing every weight by 1.10 is
+// a behavioural no-op, since (k*w)^e / sum((k*w)^e) = w^e / sum(w^e) both in
+// pick_weighted and again after temper(), so there was nothing to gain by
+// moving the numbers. §6's after-measurement in test_flow_terrain.cpp (clean
+// 0.2965, exotic 0.1056) is the adventure-tempered mixture of 0.318/0.0909,
+// not of 0.35/0.10 -- read it against the true shares, not the written sums.
 //
 // Order is ScaleId (engine/pitch/quantizer.h), so this indexes with
 // SCALE_MASKS. Tempered by the terrain's adventure level at the draw site, so
 // these are the shape at adventure 0 and the table reads uniform at adventure
 // 1 -- an adventurous terrain can still reach whole tone, it just rarely does.
 inline constexpr float kScaleW[SCALE_LIST_COUNT] = {
-    // modes -- 0.45
+    // modes -- weight sum 0.45, true share 0.409
     0.1125f, 0.1125f, 0.1125f, 0.1125f,
-    // pentatonics -- 0.20 across hirajoshi/pygmy/kumoi, 0.35 across the two
-    // that cannot produce a minor second or a tritone
+    // pygmy/hirajoshi/kumoi weight bucket -- sum 0.20 across the three (true
+    // share 0.182); 0.35 (0.318) across minor+major pentatonic, the only two
+    // that are actually free of both a minor second and a tritone
     0.0667f, 0.0667f, 0.1750f, 0.0667f, 0.1750f,
-    // exotic / handpan -- 0.10
+    // exotic / handpan -- weight sum 0.10, true share 0.0909
     0.0250f, 0.0250f, 0.0250f, 0.0250f,
 };
 

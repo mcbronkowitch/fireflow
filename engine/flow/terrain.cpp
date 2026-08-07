@@ -292,8 +292,9 @@ Terrain generate(const TerrainState& st) {
     // archetype-conditioned base rules (stage 3, their own streams): kParams
     // gives them no tonality coupling to draw here, and inventing one is
     // listening-loop work, not plumbing.
-    static_assert(SCALE_LIST_COUNT == 13,
-                  "kScaleW and kParams[P_SCALE].steps must cover the same list");
+    static_assert(kParams[P_SCALE].steps == SCALE_LIST_COUNT,
+                  "kParams[P_SCALE].steps and kScaleW/SCALE_MASKS must cover "
+                  "the same list");
     int scale, root;
     {
         Rng r = make_stream(st.master, kStreamTonality, 0);

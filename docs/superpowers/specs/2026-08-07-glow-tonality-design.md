@@ -129,21 +129,37 @@ Two properties make this surgical:
 Together: **the ROOT draw stays bit-identical; only the scale changes.**
 
 `kScaleW[SCALE_LIST_COUNT]` in `taste.h`, written in `ScaleId` order so it
-indexes with the mask table. The rows below are grouped by friction instead —
-how much a scale can rub when two sustained voices land on it at once,
-computed from `SCALE_MASKS` (`quantizer.h:36-50`), not by feel:
+indexes with the mask table. The rows below are **weights**, not shares — they
+sum to 1.10, not 1.0, because `pick_weighted` (`terrain.cpp:56-66`) normalises
+by the running total, so a common scale factor cancels and the table need not
+sum to 1. The first two groups are graded by friction — how much a scale can
+rub when two sustained voices land on it at once, computed from `SCALE_MASKS`
+(`quantizer.h:36-50`), not by feel. The third group is a **weight bucket, not
+a friction class**: its members differ (see below).
 
-| Scales | contains m2 | contains tritone | weight each | group |
-|---|---|---|---|---|
-| Minor pent, Major pent | no | no | 0.175 | 0.35 |
-| Aeolian, Dorian, Mixolydian, Lydian | yes | yes | 0.1125 | 0.45 |
-| Hirajoshi, Pygmy, Kumoi | yes | no | 0.0667 | 0.20 |
-| Phrygian, Hijaz, Harmonic minor, Whole tone | see below | see below | 0.025 | 0.10 |
+| Scales | contains m2 | contains tritone | weight each | weight sum | true share |
+|---|---|---|---|---|---|
+| Minor pent, Major pent | no | no | 0.175 | 0.35 | 0.318 |
+| Aeolian, Dorian, Mixolydian, Lydian | yes | yes | 0.1125 | 0.45 | 0.409 |
+| Hirajoshi, Pygmy, Kumoi | mixed — see below | mixed — see below | 0.0667 | 0.20 | 0.182 |
+| Phrygian, Hijaz, Harmonic minor, Whole tone | see below | see below | 0.025 | 0.10 | 0.0909 |
+
+"True share" is the weight sum normalised by the table's actual total of 1.10
+— the untempered probability `pick_weighted` actually produces for that group.
+§6's after-measurement (clean pentatonic 0.2965, exotic 0.1056) is the
+adventure-tempered mixture of 0.318/0.0909, not of the raw 0.35/0.10 — that is
+why those figures land where they do.
 
 Any 7-note mode contains both a minor second and a tritone — that is a property
 of 7 notes in 12, not of the choice of mode, so the modes cannot be made
 clash-free by picking differently among them. Only minor and major pentatonic
-are free of both. Whole tone has no minor second but three tritones.
+are free of both. Whole tone has no minor second but three tritones. Of
+hirajoshi/pygmy/kumoi, only pygmy (`0x048D` = {0,2,3,7,10}) is actually
+tritone-free; hirajoshi (`0x018D` = {0,2,3,7,8}, 2↔8) and kumoi (`0x028D` =
+{0,2,3,7,9}, 3↔9) both contain one. They are grouped here because `kScaleW`
+weighs them together, not because they share a friction property — the group
+carries more friction than the old text claimed, and the weights are
+unchanged because of it, not despite it.
 
 Tempering means the weights are the table as written at adventure 0 and flatten
 toward uniform at adventure 1, so an adventurous terrain can still reach whole

@@ -364,3 +364,64 @@ TEST_CASE("flow runtime: a BBD deck in FLOW keeps its bend inside the budget") {
     CHECK(seen_free_deck > 0);
     CHECK(seen_bbd_step_free > 0);
 }
+
+TEST_CASE("flow runtime: the BBD bend budget holds mid-blend too, not just settled") {
+    // Companion to the settled-state case above, which ticks 200 times off
+    // wake() and never presses NEW -- so it only pins the clamp once a
+    // terrain has stopped moving. The guard's own comment in flow.cpp
+    // (beside kBodyFiltFloor's) gives the reason this is a separate case:
+    // a NEW blend interpolates P_RANGE_A/B between two terrains whose
+    // engine assignments differ, so a deck can run as BBD for nearly the
+    // whole ramp on a RANGE value drawn by a terrain that never put a BBD
+    // there. An implementation that guarded on `!blending` instead of the
+    // real per-deck engine-and-mode condition would still pass the settled
+    // case above; nothing else in this file would catch it.
+    //
+    // Mirrors tests/test_flow_new.cpp's "the BODY FILT floor holds at every
+    // tick of a blend": press NEW, tick through the ramp and a settled
+    // tail, and gate on a counter that proves the window was genuinely
+    // sampled (BBD-in-FLOW ticks while blending), so this cannot pass
+    // vacuously against a change that never actually reaches that state.
+    Instrument in; in.init(48000.f);
+    int bbd_flow_blend_ticks = 0, blends_with_bbd_flow = 0;
+    for (uint32_t k = 1; k <= 400; ++k) {
+        Flow f = make(in, k * 2654435761u);
+        for (int m = 0; m < MACRO_COUNT; ++m) f.set_macro(m, 0.5f);
+        for (int i = 0; i < 50; ++i) f.tick();     // past the wake transient
+        f.new_full();
+        bool seen_here = false;
+        for (int i = 0; i < 620; ++i) {            // 6.2 s: the ramp + a tail
+            f.tick();
+            if (f.blend_phase() >= 1.f) continue;  // settled: the other case
+            // i == 0 is the one tick the guard's own comment (flow.cpp,
+            // beside this clamp) names as accepted rather than a bug: on a
+            // STEP -> FLOW press, P_MODE switches at blend phase 0 (the
+            // press itself), but P_MODE is LAST in the parameter table, so
+            // THIS tick's P_RANGE_* row is pushed before THIS tick's P_MODE
+            // row updates _mode_now -- the clamp still reads last tick's
+            // STEP and is skipped for exactly one control period. Measured:
+            // every k in this loop that presses into a BBD-in-FLOW deck
+            // hits it at i == 0 and nowhere else, so skipping i == 0 keeps
+            // this case testing the guard's real invariant (holds from the
+            // second tick of the blend onward) instead of re-asserting the
+            // one tick the design doc already excuses.
+            if (i == 0) continue;
+            for (int d = 0; d < 2; ++d) {
+                const int ep = d ? P_ENGINE_B : P_ENGINE_A;
+                const int rp = d ? P_RANGE_B  : P_RANGE_A;
+                if (int(f.param_now(ep) + .5f) != ENGINE_BBD) continue;
+                if (f.param_now(P_MODE) > 0.5f) continue;   // STEP: no cap
+                ++bbd_flow_blend_ticks; seen_here = true;
+                CAPTURE(k); CAPTURE(d); CAPTURE(i);
+                CHECK(f.param_now(rp) <= kBbdFlowRangeMax);
+            }
+        }
+        if (seen_here) ++blends_with_bbd_flow;
+    }
+    CAPTURE(bbd_flow_blend_ticks); CAPTURE(blends_with_bbd_flow);
+    // Non-vacuity floors, the same role as test_flow_new.cpp's
+    // body_blend_ticks/blends_with_body: a deck really did run BBD-in-FLOW
+    // *while blending* across a real spread of seeds, not just once.
+    REQUIRE(bbd_flow_blend_ticks > 1000);
+    REQUIRE(blends_with_bbd_flow >= 10);
+}

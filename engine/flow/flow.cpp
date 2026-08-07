@@ -509,12 +509,26 @@ void Flow::recompute_and_push(bool force) {
         // question this guard actually asks: the mode the instrument is
         // currently RUNNING.
         //
-        // What that buys, and what actually matters: both readings lag this
-        // tick's candidate mode by one control tick. A mode change happens
-        // only on NEW or wake, and one tick at 100-500 Hz is inaudible. On
-        // the first forced tick after wake both are still FLOW (zero-init),
-        // so the cap applies and is released a tick later if the terrain
-        // turns out to be STEP -- the conservative direction.
+        // What that buys is asymmetric -- "the conservative direction", what
+        // an earlier version of this comment called it, is only half true.
+        // Both readings lag this tick's candidate mode by one control tick.
+        // On WAKE, both start FLOW (zero-init), so the cap applies from the
+        // first forced tick and is released a tick later if the terrain
+        // turns out to be STEP: conservative, no deck ever gets an
+        // unclamped tick it shouldn't. On a NEW press that moves a STEP
+        // terrain to a FLOW one, the other direction holds: P_MODE is LAST
+        // in the parameter table, so this iteration (P_RANGE_*) runs before
+        // that tick's own P_MODE row is pushed, and _mode_now -- set from
+        // the PREVIOUS tick -- still reads STEP for the whole of this one.
+        // If the deck is already ENGINE_BBD (its engine did not have to
+        // change for this to bite), this guard is skipped and RANGE goes
+        // out unclamped for exactly this one tick. push_mode_and_steps(),
+        // called once the loop finishes, then flips _mode_now to FLOW off
+        // this same tick's P_MODE push, so the very next tick sees it true
+        // and the cap engages. One control period (2-10 ms) of an audible
+        // BBD deck running FLOW with a full-window RANGE, inside the same
+        // NEW blend that caused the mode change, is accepted rather than
+        // chased with a second, look-ahead read of the candidate mode.
         else if (p == P_RANGE_A || p == P_RANGE_B) {
             const int ep = (p == P_RANGE_A) ? P_ENGINE_A : P_ENGINE_B;
             if (int(_pushed[ep] + 0.5f) == ENGINE_BBD && !_mode_now
