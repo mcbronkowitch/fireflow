@@ -114,10 +114,21 @@ constexpr float kCalmCornerRmsMax = 0.06f;
 // gate ranged from ~0.00006 to ~0.0035 (macros parked at 0, so archetype
 // and per-terrain draws are the only source of the spread -- a sparse
 // drone terrain legitimately sits much quieter than a busier one even at
-// the calm corner). Whether any of these levels is the right background
-// for "receding but present" (spec §3) is an open listening-loop
-// question -- this constant does not answer it and must never be retuned
-// to try. It exists only to catch a calm corner that has gone MUTE (a
+// the calm corner).
+//
+// THE LEVEL IS SIGNED OFF (owner, 2026-08-07). Whether these levels are the
+// right background for "receding but present" (spec §3) was the last open
+// listening-loop question on this gate, and it is answered: YES, AS THEY ARE.
+// The decision that carries is the one behind it -- THE CALM CORNER IS NOT A
+// LEVEL THE GENERATOR NORMALISES TO. The ~74 dB spread between the 5th and
+// 95th percentile (-105 to -31 dBFS, median -57) comes from archetype and
+// per-terrain draws and is CHARACTER, not error: a sparse drone terrain
+// legitimately recedes further than a busy one. So no normalisation stage is
+// coming, and a future round must not add one on the grounds that the corner
+// is "inconsistent" -- that inconsistency is the signed-off behaviour.
+//
+// This constant still does not answer the musical question and must never be
+// retuned to try. It exists only to catch a calm corner that has gone MUTE (a
 // future taste-table or runtime change that accidentally zeroes the quiet
 // decks), set here at a value comfortably below the quietest terrain this
 // task measured but still well clear of digital silence (exact-zero

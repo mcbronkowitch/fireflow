@@ -483,6 +483,15 @@ counts.
    the mute fraction is accepted a fixed seed drifting into it is the accepted
    event occurring, and a red test for it would be noise.
 
+   **The calm-corner LEVEL is signed off as it stands** (owner, 2026-08-07),
+   which settles the last listening question on this gate and carries one
+   design consequence worth stating explicitly: **the calm corner is not a
+   level the generator normalises to.** Measured across the population it
+   spans roughly 74 dB between the 5th and 95th percentile (−105 to −31 dBFS,
+   median −57), and that spread is character — a sparse drone terrain
+   legitimately recedes further than a busy one. No normalisation stage is
+   planned, and the spread is not to be treated as an inconsistency to fix.
+
    **A NEW press that switches a deck's engine may go briefly near-silent**,
    and that too is accepted (owner, 2026-08-07) rather than pending a listen.
    Such terrains are outside the level population by definition; an
