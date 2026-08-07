@@ -13,6 +13,7 @@
 - **Zieltermin Phase 0: 21. August 2026.** Danach beginnt Phase 1 (KiCad, Testcoupon).
 - **Formfaktor: Eurorack 42 HP**, nutzbare Panelfläche rund 213 × 115 mm.
 - **Zielhardware: Daisy Patch Submodule.** Vorhanden, noch nie geflasht.
+- **Multiplexer für Task 6: ein `74HC4051` (8 Kanäle), vorhanden.** Nichts zu bestellen, Phase 0 ist bauteilseitig vollständig. Task 6 misst **Kosten pro Kanal**, nicht Kosten pro Chip — acht Kanäle genügen, die Hochrechnung auf die reale Kanalzahl aus Task 2 ist Teil des Ergebnisses. Die Layoutfrage *wenige 16:1 gegen mehrere 8:1* gehört nicht in Phase 0; sie entscheidet sich an JLCPCB-Verfügbarkeit und Bestückungspreis vor dem 11. September.
 - **Kein Heap in der Engine.** `engine/instrument.h` fordert injizierten Speicher über `FxMem`; auf Daisy kommt der aus SDRAM.
 - **Zwei getrennte Toolchains, niemals mischen.** Engine/Tests/Render-Host: clang + Ninja, `source env.sh`, `-DCMAKE_BUILD_TYPE=Release` ist **nicht optional**. Firmware/Bench: ARM GCC über `make`.
 - **VCV-Host immer über `host/vcv/build-local.sh`**, nie von Hand — das System-`g++` ist der ARM-Cross-Compiler.
@@ -569,7 +570,30 @@ Erwartet: 2 passed. Danach RED einmal beweisen: `PART_A` im Mapping auf `PART_B`
 
 - [ ] **Schritt 5: Den Mux physisch anschließen**
 
-Ein Poti an einen Kanal eines 74HC-Multiplexers, dessen Signalausgang an einen ADC-Pin des Submodule, die Adressleitungen an GPIO. **`74HC4051` oder `CD74HC4067`, kein `CD4051B`** — das Submodule läuft auf 3,3 V, und der klassische CMOS-Typ hat dort einen deutlich höheren Durchlasswiderstand, was die Einschwingzeit beim Kanalwechsel verschleppt und zappelige ADC-Werte erzeugt. Für diesen Test genügt ein fertiges Breakout-Board.
+Verwendet wird der vorhandene **`74HC4051`**, 8 Kanäle. Der Aufbau steht auf dem Breadboard, es wird nichts bestellt.
+
+| Pin | geht an |
+|---|---|
+| `VCC` | 3V3 des Submodule |
+| `GND`, `VEE`, `INH` | GND (`VEE` auf GND, weil nur unipolare Signale 0–3,3 V geschaltet werden; `INH` low hält den Chip dauerhaft freigegeben) |
+| `A`, `B`, `C` | drei GPIO — das sind die Adressleitungen, die sich später **alle** Muxe teilen |
+| `COM` | ein ADC-Pin des Submodule |
+| `Y0` | Schleifer eines 10-k-Potis, dessen Enden an 3V3 und GND |
+| `Y1`…`Y7` | vorerst über je 10 k gegen GND oder 3V3, abwechselnd |
+
+Die abwechselnd auf die Extreme gezogenen Nachbarkanäle sind kein Beiwerk, sondern der Prüfaufbau für Schritt 5b: nur wenn links und rechts vom gemessenen Kanal das Gegenteil anliegt, wird ein zu kurzes Settling überhaupt sichtbar.
+
+Dazu **100 nF** direkt zwischen `VCC` und `GND` am Chip, und **10 nF** von `COM` gegen GND als Puffer für das Sample-and-Hold des ADC.
+
+Nicht verwenden: **`CD4051B`** oder andere klassische CMOS-Typen. Das Submodule läuft auf 3,3 V, wo diese Typen einen deutlich höheren Durchlasswiderstand haben — das verschleppt die Einschwingzeit beim Kanalwechsel und erzeugt zappelige ADC-Werte, die man dann für einen Software-Fehler hält. Das `HC` im Namen ist der Unterschied; der Aufdruck auf dem Chip zählt, nicht die Artikelbeschreibung.
+
+- [ ] **Schritt 5b: Die Einschwingzeit messen**
+
+Das ist die zweite Zahl, die Phase 0 liefern muss, und sie ist mehr wert als die CPU-Prozente: **wie lange muss nach dem Adresswechsel gewartet werden, bevor der Wert stabil ist.** Sie multipliziert sich mit der Kanalzahl des gesamten Instruments.
+
+Vorgehen: Adresse auf Kanal 0 setzen, definiert warten, lesen — die Wartezeit von großzügig (z. B. 50 µs) in Schritten halbieren und beobachten, ab wann der gelesene Wert vom Nachbarkanal beeinflusst wird. Das Poti dabei auf eine Mittelstellung, weil ein Übersprechen dort am deutlichsten auffällt.
+
+Festgehalten wird die kürzeste Wartezeit, bei der über 1000 Messungen die Streuung unter einem LSB-Rauschband bleibt, plus 50 % Sicherheit. Diese Zahl geht in `docs/hardware/io-budget.md` und ist ab dann die Konstante, mit der jede Panelgröße gegengerechnet wird.
 
 - [ ] **Schritt 6: Scan in den Shell einbauen und hören**
 
@@ -581,14 +605,14 @@ Das ist der Kern. Die CPU-Last mit und ohne Shell-Arbeit im selben Bild vergleic
 
 1. Zykluszähler um den Audio-Callback legen (`bench/cycles.h` liefert das Verfahren).
 2. Messen mit reinem `process()`.
-3. Messen mit zusätzlich laufendem Mux-Scan.
+3. Messen mit zusätzlich laufendem Mux-Scan über alle 8 Kanäle. Daraus **Kosten pro Kanal** bilden und auf die Kanalzahl aus Task 2 hochrechnen. Zusätzlich mit 4 statt 8 Kanälen messen: skaliert die Zeit linear, ist die Hochrechnung tragfähig; bleibt ein Fixanteil stehen, gehört der separat ausgewiesen, weil er sich bei mehreren Chips **nicht** vervielfacht.
 4. Messen mit zusätzlich getriebener WS2812-Kette in voller geplanter LED-Zahl aus Task 2 — **WS2812 ist der teure Posten und der wahrscheinlichste Grund, warum 3,57 Punkte nicht reichen.**
 
 Ergebnis als Tabelle nach `docs/bench/`, mit derselben Sorgfalt wie ein Bench-Capture: Board, Git-Hash, Optimierung, zwei Wiederholungen.
 
 - [ ] **Schritt 8: Das Urteil in die Roadmap schreiben**
 
-`docs/roadmap.md` bekommt einen Phase-0-Abschnitt mit vier Zeilen: Seed-gegen-Submodule-Verdikt aus Task 4, Shell-Aufschlag in Prozentpunkten, verbleibende Reserve, und — falls die Reserve aufgebraucht ist — welche Engine-Auswahl oder Sample-Rate-Entscheidung ansteht. **Diese Entscheidung fällt im August und nicht im Januar**, weil sie jetzt nichts kostet und nach dem PCB-Layout alles.
+`docs/roadmap.md` bekommt einen Phase-0-Abschnitt mit fünf Zeilen: Seed-gegen-Submodule-Verdikt aus Task 4, Einschwingzeit pro Kanal aus Schritt 5b, Shell-Aufschlag in Prozentpunkten hochgerechnet auf die reale Kanalzahl, verbleibende Reserve, und — falls die Reserve aufgebraucht ist — welche Engine-Auswahl oder Sample-Rate-Entscheidung ansteht. **Diese Entscheidung fällt im August und nicht im Januar**, weil sie jetzt nichts kostet und nach dem PCB-Layout alles.
 
 - [ ] **Schritt 9: Commit**
 
@@ -612,5 +636,6 @@ Task 1 → 2 ist der Papier-Strang und entsperrt die PCB-Arbeit. Task 3 → 4 �
 - [ ] `docs/hardware/io-budget.md` existiert, die Klassifikation summiert sich auf 82, und die Pin-Rechnung geht mit 20 % Reserve auf
 - [ ] Ein Bench-Capture mit `board=patch_sm` liegt in `docs/bench/`
 - [ ] `shell/` baut, flasht und macht auf dem Submodule Ton
-- [ ] Ein Poti verändert über einen Multiplexer hörbar einen Engine-Parameter
-- [ ] Der Shell-Aufschlag steht als Zahl in `docs/roadmap.md`, mit Urteil über die verbleibende Reserve
+- [ ] Ein Poti verändert über den `74HC4051` hörbar einen Engine-Parameter
+- [ ] Die Einschwingzeit pro Kanal ist gemessen und steht in `docs/hardware/io-budget.md`
+- [ ] Der Shell-Aufschlag steht als Zahl in `docs/roadmap.md`, hochgerechnet auf die reale Kanalzahl, mit Urteil über die verbleibende Reserve

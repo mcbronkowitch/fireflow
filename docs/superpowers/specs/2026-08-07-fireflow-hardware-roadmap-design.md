@@ -59,6 +59,7 @@ Bezeichnung H1–H3, um Verwechslung mit den Firmware-Meilensteinen (M1–M6) zu
 Alle Termine auf Freitag, Wochenende als Puffer.
 
 - [ ] **21. Aug 2026** — Phase 0 abgeschlossen: Firmware läuft auf Patch SM, CPU neu gemessen, I/O-Inventar steht
+- [ ] **4. Sep 2026** — **Glow-Entscheidung** (siehe *Die Glow-Frage*): trägt Glow das Instrument, oder bleibt es ein VCV-Modul
 - [ ] **11. Sep 2026** — Testcoupon-Bestellung raus, ICs mitbestellt
 - [ ] **25. Sep 2026** — Coupon Runde 1 im Haus
 - [ ] **9. Okt 2026** — Coupon Runde 1 ausgewertet, ggf. Runde 2 bestellt
@@ -138,6 +139,56 @@ Drei Wochen Korrektur-Layout, Bestellung am 5. März — bewusst **nach Chinese 
 
 Boards am 26. März, zwei Wochen Aufbau. **H3 am 9. April.** Danach nur noch Firmware-Feinschliff, Demo-Material und Reisevorbereitung.
 
+## Die Glow-Frage
+
+Seit dem 5./6. August existiert **Glow**: 12 HP, sechs Macro-Knöpfe und ein
+NEW-Taster über `engine/flow/`, gebaut, gemerged und am 6. August in Rack
+handverifiziert. Sein Panel ist auf echte Hardwaremaße gezeichnet — 61 × 128,5 mm
+— ausdrücklich, damit es als 1:1-Entwurf für M6 Schritt 1 dienen kann.
+
+Damit steht eine Frage im Raum, die der Rest dieser Spec nicht beantwortet:
+**welches der beiden Instrumente wird zum 23. April fertig.**
+
+**Was für Glow spricht.** Der Plan hat genau eine unspezifizierte Stelle, und
+`docs/roadmap.md` benennt sie selbst: *„Until step 1 has a spec, M6 has no
+implementable definition."* 82 Runtime-Controls auf 42 HP zu reduzieren ist
+Designarbeit unbekannter Größe. Glow beantwortet diese Frage nicht — es stellt
+sie nicht. Sechs Potis, ein Taster, Panel gezeichnet. Ein Viertel der
+Boardfläche, kein Multiplexer, eine kleine BOM.
+
+**Was Glow nicht löst, damit die Rechnung ehrlich bleibt:**
+
+1. **Es entschärft das 42-HP-Board kaum.** Sechs Potis brauchen keinen
+   Multiplexer — das Patch SM hat genug ADC-Eingänge direkt. Ein Glow-Board
+   validiert Power, Audio-I/O, Panelfertigung, Firmware-Shell und Mechanik, aber
+   **nicht** die Mux-Kette und **nicht** die LED-Skalierung: genau die Teile, die
+   am großen Board wehtun.
+2. **Die CPU-Lage ist identisch.** Gleiche Engine, gleiche 96,43 %, gleiche 3,57
+   Punkte Reserve. 12 HP macht das nicht billiger.
+3. **Das offene Risiko ist musikalisch.** Der House-Seed in
+   `engine/flow/taste.h` ist ein gemessener Platzhalter, keine Ohr-Entscheidung;
+   die Listening-Runden aus `docs/superpowers/specs/2026-08-05-flow-listening-notes.md`
+   stehen aus. Ob ein Macro-Instrument unter der Hand lebt, ist unbeantwortet.
+
+**Die Frist: 4. September 2026.** Nicht später, weil die Testcoupon-Bestellung am
+11. September rausgeht und ein Coupon nur für das 42-HP-Panel Sinn ergibt — bei
+sechs Potis gibt es keine Mux-Kette zu validieren. Zwischen dem 21. August und
+dem 4. September wird Glow gespielt und die ausstehende House-Seed-Runde nach
+Gehör gemacht. Die Entscheidung fällt am Instrument, nicht am Zeitplan, und
+beantwortet eine einzige Frage: **würde ich das selbst besitzen wollen.**
+
+**Die drei Ausgänge:**
+
+| | Ausgang | Konsequenz für diesen Plan |
+|---|---|---|
+| **A** | Glow trägt es | Glow wird das Instrument zum 23. April, FireFlow 42 HP wird Produkt zwei. Kein Testcoupon nötig — das erste eigene PCB ist das Glow-Board. Phase 1 verkürzt sich, die Reserve wächst deutlich. |
+| **B** | Glow trägt es nicht | Glow bleibt ein VCV-Modul. Dieser Plan gilt unverändert, Coupon-Bestellung am 11. September wie geplant. |
+| **C** | Unentschieden | **Wird wie B behandelt.** Ein Plan kann nicht auf ein Vielleicht warten, und im Zweifel gewinnt der Kern. |
+
+Ausgang C ist die eigentliche Regel dieses Abschnitts: die Unentschiedenheit hat
+selbst ein Verfallsdatum. Wer am 4. September nicht Ja sagen kann, hat Nein
+gesagt.
+
 ## Bauteilbeschaffung
 
 **Multiplexer.** KiCad-Verfügbarkeit ist kein Auswahlkriterium — Symbole für die 4000er- und 74xx-Familie (`CD4051`, `74HC4051`, `CD74HC4067`) sind mitgeliefert, die Footprints sind Standardgehäuse. Das echte Kriterium ist die **JLCPCB-Bauteilbibliothek**, weil Rev A bestückt bestellt werden soll. SMT von Hand ist keine Lernkurve, die im Januar Platz hat.
@@ -174,17 +225,19 @@ Drei, bewusst gestaffelt:
 
 ## Risiken
 
-**CPU-Budget.** 94 % Blockbudget wurden vor dem Hardware-I/O und vor drei Engines gemessen. Klärt sich in Phase 0, sonst wird es im Januar teuer.
+**CPU-Budget.** 96,43 % sind gemessen, aber auf dem Seed und ohne den Firmware-Shell. Beides klärt sich in Phase 0, sonst wird es im Januar teuer.
 
 **Bauteilbeschaffung.** Rev-A-Bauteile im November prüfen, im Dezember bestellen. Rev-B-BOM Ende Januar raus, vor CNY.
 
 **Scope-Kriechen in der Firmware.** Die Firmware läuft und ist gut. Ab November ist jede neue Engine eine Woche, die dem Layout fehlt. **Feature-Freeze für alles außer Hardware-Anbindung ab 9. Nov 2026.**
 
+**Zwei Instrumente gleichzeitig.** Das größte Risiko an Glow ist nicht Glow, sondern Glow *und* FireFlow parallel: zwei Panels, zwei BOMs, zwei Layouts, zwei Bring-ups bei 10–15 h die Woche. Die Frist am 4. September existiert, um genau das zu verhindern. Nach ihr wird eines von beiden gebaut, nicht beides.
+
 ## Abbruchkriterien
 
 Wenn der Plan in Verzug gerät, wird **der Umfang reduziert, nicht der Termin verschoben.**
 
-- **CPU-Last in Phase 0 deutlich über 94 %:** Engine-Auswahl begrenzen oder Sample-Rate-Entscheidung treffen. Beides ist billig, solange kein Kupfer geflossen ist.
+- **Reserve nach dem Shell-Aufschlag aufgebraucht:** Engine-Auswahl begrenzen oder Sample-Rate-Entscheidung treffen. Beides ist billig, solange kein Kupfer geflossen ist.
 - **Im Oktober absehbar zu wenig Zeit:** Panel verkleinern — 42 HP auf 34 HP, zwei Lanes weniger auf dem Panel bei gleicher Firmware.
 - **Rev A hat mehr Fehler als eine Runde tragen kann:** Reserve-Runde ziehen und den Endpuffer opfern, aber H3 nicht nach hinten schieben.
 
