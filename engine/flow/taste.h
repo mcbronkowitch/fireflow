@@ -20,6 +20,10 @@
 #include "parts/engine_iface.h"
 // For kDivisionCount, the length of the rate-rung weight table below.
 #include "mod/divisions.h"
+// For SCALE_LIST_COUNT and the ScaleId names in the scale weight table below.
+// Already transitively visible via flow_params.h -> instrument.h; this only
+// makes the dependency explicit, exactly as the engine_iface.h include does.
+#include "pitch/quantizer.h"
 
 namespace spky { namespace flow {
 
@@ -641,6 +645,32 @@ inline constexpr float kTextureW[ARCH_COUNT][5] = {
 // no step sequencer at all; an arp is one almost by definition.
 // Order: {ARCH_DRONE, ARCH_PULSE, ARCH_ARP, ARCH_FRAGMENT}.
 inline constexpr float kModeW[ARCH_COUNT] = { 0.15f, 0.90f, 0.95f, 0.75f };
+
+// Scale draw weights (spec 2026-08-07 §3). A uniform draw over all thirteen
+// put whole tone, hijaz, phrygian and harmonic minor together at 31% of
+// terrains, which is most of why Glow read dissonant.
+//
+// Staggered by how much friction a scale can produce when two sustained
+// voices land on it at once, read off SCALE_MASKS rather than by feel:
+// minor and major pentatonic contain neither a minor second nor a tritone;
+// hirajoshi, pygmy and kumoi contain a minor second but no tritone; EVERY
+// seven-note mode contains both, which is a property of seven notes in twelve
+// and not a choice among the modes; whole tone has no minor second and three
+// tritones.
+//
+// Order is ScaleId (engine/pitch/quantizer.h), so this indexes with
+// SCALE_MASKS. Tempered by the terrain's adventure level at the draw site, so
+// these are the shape at adventure 0 and the table reads uniform at adventure
+// 1 -- an adventurous terrain can still reach whole tone, it just rarely does.
+inline constexpr float kScaleW[SCALE_LIST_COUNT] = {
+    // modes -- 0.45
+    0.1125f, 0.1125f, 0.1125f, 0.1125f,
+    // pentatonics -- 0.20 across hirajoshi/pygmy/kumoi, 0.35 across the two
+    // that cannot produce a minor second or a tritone
+    0.0667f, 0.0667f, 0.1750f, 0.0667f, 0.1750f,
+    // exotic / handpan -- 0.10
+    0.0250f, 0.0250f, 0.0250f, 0.0250f,
+};
 
 // ---------------------------------------------------------------------------
 // Musical weights (spec 2026-08-06 §6). These are WEIGHTS, not vetoes: the

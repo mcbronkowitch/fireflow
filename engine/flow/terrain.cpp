@@ -265,18 +265,6 @@ Terrain generate(const TerrainState& st) {
         engine_b = a_carries ? texture : carrier;
     }
 
-    // Stage 2: tonality. Scale and root are one draw each -- both decks
-    // share the single P_SCALE/P_ROOT, so "one scale for both decks" is
-    // structural. TUNE/RANGE stay ordinary archetype-conditioned base rules
-    // (stage 3, their own streams): kParams gives them no tonality coupling
-    // to draw here, and inventing one is listening-loop work, not plumbing.
-    int scale, root;
-    {
-        Rng r = make_stream(st.master, kStreamTonality, 0);
-        scale = pick_index(r, kParams[P_SCALE].steps);   // 0..12
-        root  = pick_index(r, kParams[P_ROOT].steps);    // 0..11
-    }
-
     // The base patch's adventure level (spec 2026-08-06 §7). Keyed on the
     // master ALONE, counter fixed at 0: base parameters belong to no macro
     // domain, so nothing a partial reroll can bump may move them. Each macro
@@ -287,12 +275,37 @@ Terrain generate(const TerrainState& st) {
     // (3). draw_adventure() holds the arithmetic; the tunables it needs
     // (kAdventureShape, kAdventureNarrow) live in taste.h with the rest.
     //
-    // Drawn HERE, before stage 3a, because every base draw from 3a onward
-    // reads it: the mode coin's weights are tempered, and so is every base
-    // span. Its own stream means the position costs no other stage a value.
+    // Drawn HERE, before stage 2, because every draw from stage 2 onward reads
+    // it: the scale weights are tempered, the mode coin's weights are tempered,
+    // and so is every base span. Its own stream means the position costs no
+    // other stage a value -- moving it up past stage 2 (2026-08-07) left every
+    // other draw bit-identical for that reason.
     {
         Rng r = make_stream(st.master, kStreamAdventure, 0);
         t.adventure_base = draw_adventure(r);
+    }
+
+    // Stage 2: tonality. Scale and root are one draw each -- the scale
+    // weighted by kScaleW and tempered by adventure, the root still
+    // uniform -- both decks share the single P_SCALE/P_ROOT, so "one scale
+    // for both decks" is structural. TUNE/RANGE stay ordinary
+    // archetype-conditioned base rules (stage 3, their own streams): kParams
+    // gives them no tonality coupling to draw here, and inventing one is
+    // listening-loop work, not plumbing.
+    static_assert(SCALE_LIST_COUNT == 13,
+                  "kScaleW and kParams[P_SCALE].steps must cover the same list");
+    int scale, root;
+    {
+        Rng r = make_stream(st.master, kStreamTonality, 0);
+        // Weighted, not uniform (spec 2026-08-07 §3). pick_weighted and
+        // pick_index each consume exactly ONE next_unipolar(), so the stream
+        // position after this line is unchanged and the ROOT draw below stays
+        // bit-identical to the uniform version.
+        float w[SCALE_LIST_COUNT];
+        for (int i = 0; i < SCALE_LIST_COUNT; ++i)
+            w[i] = temper(kScaleW[i], t.adventure_base);
+        scale = pick_weighted(r, w, SCALE_LIST_COUNT);   // 0..12
+        root  = pick_index(r, kParams[P_ROOT].steps);    // 0..11
     }
 
     // Stage 3a: operating mode (spec 2026-08-06 §5). Its base-rule row is a
