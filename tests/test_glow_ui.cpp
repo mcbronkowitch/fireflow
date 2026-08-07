@@ -260,3 +260,17 @@ TEST_CASE("glow: knob position 0 is AUTO, the rest are scales") {
     CHECK(spkyvcv::scale_of_knob(-3) == -1);
     CHECK(spkyvcv::scale_of_knob(99) == -1);
 }
+
+TEST_CASE("glow: a saved root override outside 0..11 reads as AUTO") {
+    // Spec 5 asks for the root override's JSON round-trip under test, and the
+    // non-obvious half of it is the validation, not the jansson call: Rack's
+    // Param::setValue does not clamp and paramsFromJson writes straight
+    // through, so a hand-edited patch reaches this with anything at all.
+    // Glow.cpp keeps only the json_is_integer type check and hands the number
+    // here, which is why this is testable without rack.hpp.
+    for (int r = 0; r <= 11; ++r) CHECK(spkyvcv::clamp_root_override(r) == r);
+    CHECK(spkyvcv::clamp_root_override(12) == -1);
+    CHECK(spkyvcv::clamp_root_override(99) == -1);
+    CHECK(spkyvcv::clamp_root_override(-1) == -1);      // the AUTO sentinel
+    CHECK(spkyvcv::clamp_root_override(-7) == -1);
+}

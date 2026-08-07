@@ -51,6 +51,15 @@ inline int scale_of_knob(int pos) {
     return kScaleKnobOrder[pos - 1];
 }
 
+// A saved ROOT override -> what Flow::set_root_override wants. -1 is AUTO,
+// and so is anything outside 0..11: the same rule scale_of_knob applies, for
+// the same reason -- a corrupt patch must not silently transpose the
+// instrument to C. Lives here rather than in Glow.cpp so the desktop suite can
+// test it; Glow.cpp passes a plain int, keeping jansson out of the signature.
+inline int clamp_root_override(int raw) {
+    return (raw >= 0 && raw <= 11) ? raw : -1;
+}
+
 // Unipolar Eurorack convention: 0..10 V spans the macro's whole travel.
 // Deliberately NOT clamped -- Flow::set_cv clamps the knob+CV+weather sum,
 // and clamping here as well would just hide how hot an input is running.

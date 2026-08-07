@@ -175,7 +175,11 @@ struct Glow : Module {
                 case WK_SEL:
                     configSel(c);
                     break;
-                default: break;
+                // Named rather than defaulted: WK_IN/WK_OUT share the enum
+                // but never appear in kParamCtls, and naming them keeps
+                // -Wswitch live, so a future kind is a compile error here
+                // instead of a param that silently gets no config.
+                case WK_IN: case WK_OUT: break;
             }
         }
         for (const auto& c : kInputCtls)  configInput(c.id, c.tip);
@@ -208,9 +212,15 @@ struct Glow : Module {
         // Read BEFORE the terrain's early return below: the override is
         // independent of the terrain, and a patch whose code is missing or
         // malformed must not lose it as collateral.
+        // The type check matters as much as the range one: json_integer_value
+        // on a non-integer returns 0, so a corrupt `"root": "F#"` would
+        // otherwise transpose the patch to C instead of falling back to AUTO.
+        // The sibling `undo` read below checks its type for the same reason.
+        // glow_ui.hpp owns the range rule so the desktop suite can test it.
         if (json_t* r = json_object_get(root, "root")) {
-            const int v = int(json_integer_value(r));
-            rootOverride = (v >= 0 && v <= 11) ? v : -1;
+            rootOverride = json_is_integer(r)
+                ? spkyvcv::clamp_root_override(int(json_integer_value(r)))
+                : -1;
         }
         spkyvcv::GlowSave s;
         json_t* code = json_object_get(root, "terrain");
@@ -400,21 +410,36 @@ struct Glow : Module {
     }
 
     void onReset() override {
+        // Tonality FIRST, before reinit/wakeHouse. Params are reset for us by
+        // Rack's default ResetEvent handler before this runs, which covers
+        // GENRE and SCALE -- but they do not reach Flow until the next
+        // controlTick, and rootOverride is not a param at all. reinit() and
+        // wakeHouse() force-push every parameter through recompute_and_push,
+        // so clearing afterwards would push the PREVIOUS tonality once and
+        // self-correct a control period later. That is the same one-tick
+        // artefact spec §4.1 rules out in the other direction.
+        rootOverride = -1;
+        flow.set_genre(spky::flow::ARCH_ANY);
+        flow.set_scale_override(-1);
+        flow.set_root_override(-1);
         reinit(curSr > 0.f ? curSr : 48000.f);
         wakeHouse();
         knobs.primed = false;
-        // Params are reset for us by Rack's default ResetEvent handler before
-        // this runs, which covers GENRE and SCALE. rootOverride is not a
-        // param, so Initialize would otherwise leave it stale.
-        rootOverride = -1;
     }
 
     void controlTick(float sr) {
         // Host-owned settings first: wake() below force-pushes every
         // parameter, so an override applied after it would miss that push and
         // let one tick out on the terrain's own tonality.
+        // Range-guarded here, not inside set_genre: Rack's Param::setValue
+        // does NOT clamp, and paramsFromJson writes straight through it, so a
+        // hand-edited patch can hand this a nonsense position. An out-of-range
+        // archetype would match nothing in kGenreDrawCap draws and leave NEW
+        // permanently dead with no diagnostic. Anything not a real position
+        // reads as ANY -- the same rule scale_of_knob applies to SCALE.
         const int gpos = int(params[GENRE].getValue() + 0.5f);
-        flow.set_genre(gpos <= 0 ? spky::flow::ARCH_ANY : gpos - 1);
+        flow.set_genre(gpos >= 1 && gpos <= spky::flow::ARCH_COUNT
+                       ? gpos - 1 : spky::flow::ARCH_ANY);
         flow.set_scale_override(
             spkyvcv::scale_of_knob(int(params[SCALE].getValue() + 0.5f)));
         flow.set_root_override(rootOverride.load());
@@ -620,7 +645,10 @@ struct GlowWidget : ModuleWidget {
                     addParam(createParamCentered<RoundSmallBlackKnob>(
                         pos, module, c.id));
                     break;
-                default: break;
+                // Named rather than defaulted, for the same reason as the
+                // switch in Glow(): a new WidgetKind must not fall silently
+                // through to nothing here either.
+                case WK_IN: case WK_OUT: break;
             }
         }
         for (const auto& c : kInputCtls)
