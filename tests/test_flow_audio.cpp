@@ -222,14 +222,28 @@ TEST_CASE("flow audio: fixed seeds render clean and inside RMS bounds (7.8)") {
 // failure and accepts any is a marker that hides the next one; if this case
 // ever needs declaring again, declare the specific assertion, not the case.
 //
-// NEITHER SIDE OF THIS GATE IS A GUARANTEE THE GENERATOR MAKES, and that is
-// still the open finding -- unchanged in kind by the marker coming off. Over
-// masters 1..2000 (1 566 non-Sampler terrains) 0.5 % breach the ceiling and
-// 6.6 % render at or below the silence floor. This case is green because none
-// of these ten fixed seeds sits in either fraction. See taste.h's
-// kCalmCornerRmsMax and kCalmCornerRmsMin for the numbers and for what the
-// spec has to decide.
-TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence floor (7.8)") {
+// NEITHER SIDE OF THIS GATE IS A GUARANTEE THE GENERATOR MAKES. Over masters
+// 1..2000 (1 566 non-Sampler terrains) 0.51 % breach the ceiling and 6.58 %
+// render at or below the silence floor, and this case was green only because
+// none of the ten fixed seeds sat in either fraction -- the identical trap the
+// NEW-blend level gate fell into when the taste tables moved two of its seeds.
+//
+// RULED 2026-08-07 (owner), BOTH FRACTIONS ACCEPTED, and §7.8 now states them.
+// The population case below asserts the rates; what remains HERE is the
+// asymmetric half of that ruling, and the asymmetry is the point:
+//
+//  - THE CEILING CHECK STAYS PER SEED, as a canary. A fixed seed crossing
+//    0.06 is worth a look even under an accepted 0.51 % rate, and the rate
+//    check alone cannot see it (at ~131 sampled terrains, 0.51 % is under one
+//    expected breach -- see kCalmLoudFracMax).
+//  - THE FLOOR CHECK IS GONE from this case. Once the mute fraction is
+//    accepted, a fixed seed drifting into it is the accepted event occurring,
+//    not news; a red test for it would be noise, and noise is what makes a
+//    suite stop being read. The floor's whole claim is now the rate.
+//
+// See taste.h's kCalmCornerRmsMax / kCalmCornerRmsMin for the ruling and every
+// number behind it, which is why none of them are restated here.
+TEST_CASE("flow audio: calm corner sits under the ceiling on every fixed seed (7.8)") {
     uint32_t kept[kMaxKept];
     const int n = filtered_masters(kept);
     REQUIRE(n > 0);
@@ -249,11 +263,98 @@ TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence
         const RenderStats rs = render_flow(fl, inst, 10.0, 3.0);
         CHECK_FALSE(rs.has_nan);
         CHECK(rs.rms <= kCalmCornerRmsMax);
-        // kCalmCornerRmsMin is a silence detector, not a musical target --
-        // see its comment in taste.h. It catches a calm corner that went
-        // mute, nothing more.
-        CHECK(rs.rms > kCalmCornerRmsMin);
     }
+}
+
+// ---------------------------------------------------------------------------
+// §7.8 calm corner as a rate over a population (owner ruling, 2026-08-07 --
+// taste.h's kCalmMuteFracMax / kCalmLoudFracMax carry the ruling and every
+// number behind it).
+//
+// Same two-claims-of-different-kind shape as the NEW-blend level gate:
+//
+//  - THE MEDIAN TERRAIN'S CALM CORNER IS AUDIBLE AND QUIET -- strictly inside
+//    both bounds. This is where "receding but present" (§3) is enforced as a
+//    property rather than tolerated as a rate, and it goes red if the typical
+//    terrain drifts either way, whatever the tails do.
+//  - THE TWO TAILS DO NOT GROW past the accepted fractions.
+//
+// THE POPULATION IS A STRIDE SUBSAMPLE and that is a real compromise, recorded
+// rather than hidden: rendering all 1 566 the way this measures takes 115 s.
+// The accepted fractions were set from that FULL measurement (taste.h), and
+// the case reports both its own rate and what the full population read, so a
+// subsample that stops representing it is visible in the log rather than
+// silently reassuring.
+//
+// RED PROVEN, ALL FOUR CHECKS, 2026-08-07 (repo rule). The mute rate is shown
+// red BY A MECHANISM, not only by walking bounds: reverting the drone SHAPE
+// cap (P_SHAPE_A/B drone span {0,.25} -> {0,1}) -- the one edit taste.h
+// isolates as what moved the mute population in the first place --
+//
+//   as shipped                 median 1.51e-03  mute  5.84 %  loud 1.46 %
+//   drone SHAPE cap reverted   median 1.37e-03  mute 18.98 % RED  loud 2.92 %
+//
+// so the mute check catches the exact change that created the finding it now
+// tolerates. The loud rate moved with it (1.46 -> 2.92 %) without crossing
+// 5 %, which is the looseness kCalmLoudFracMax documents rather than a gap.
+// The two MEDIAN checks track the mechanism (1.51e-03 -> 1.37e-03) without
+// crossing bounds two orders of magnitude away, so they were separately shown
+// live by walking the bounds inward to 2e-03 / 1e-03 against unmutated audio:
+// both went red on the real median. Everything was restored; only this table
+// and the numbers in taste.h survive.
+TEST_CASE("flow audio: calm corner holds as a rate over the population (7.8)") {
+    constexpr int kPopCap = 512;
+    static double rms[kPopCap];
+    int pop = 0;
+
+    for (uint32_t master = 1; master <= kBlendPopScanMax && pop < kPopCap; ++master) {
+        if ((master - 1u) % kCalmPopStride != 0u) continue;      // even subsample
+        TerrainState st; st.master = master;
+        if (terrain_has_sampler(generate(st))) continue;         // see file header
+
+        Instrument inst;
+        FxMem mem = flow_audio_fx_mem();
+        inst.init(kSr, mem);
+        Flow fl; fl.init(&inst, kCtrlHz);
+        fl.wake(st);
+        for (int m = 0; m < MACRO_COUNT; ++m) fl.set_macro(m, 0.f);
+
+        // Identical render shape to the per-seed case above -- 10 s, first 3 s
+        // skipped -- so the rate and the canary measure the same quantity.
+        const RenderStats rs = render_flow(fl, inst, 10.0, 3.0);
+        CHECK_FALSE(rs.has_nan);
+        rms[pop++] = rs.rms;
+    }
+
+    REQUIRE(pop >= kCalmPopMin);
+    REQUIRE(pop < kPopCap);
+
+    int mute = 0, loud = 0;
+    for (int i = 0; i < pop; ++i) {
+        if (rms[i] <= double(kCalmCornerRmsMin)) ++mute;
+        if (rms[i] >= double(kCalmCornerRmsMax)) ++loud;
+    }
+    const double mute_frac = double(mute) / double(pop);
+    const double loud_frac = double(loud) / double(pop);
+
+    static double sorted[kPopCap];
+    for (int i = 0; i < pop; ++i) sorted[i] = rms[i];
+    std::sort(sorted, sorted + pop);
+    const double median = (pop & 1) ? sorted[pop / 2]
+                                    : 0.5 * (sorted[pop / 2 - 1] + sorted[pop / 2]);
+
+    MESSAGE("calm corner population: n=" << pop << " (stride " << kCalmPopStride
+            << ") median=" << median
+            << " mute=" << mute << " (" << 100.0 * mute_frac << "%)"
+            << " loud=" << loud << " (" << 100.0 * loud_frac << "%)"
+            << " -- full population at HEAD reads 6.58% mute, 0.51% loud");
+
+    // The typical terrain, held to both bounds as a property.
+    CHECK(median > double(kCalmCornerRmsMin));
+    CHECK(median < double(kCalmCornerRmsMax));
+    // The accepted tails, held as regression bounds.
+    CHECK(mute_frac <= double(kCalmMuteFracMax));
+    CHECK(loud_frac <= double(kCalmLoudFracMax));
 }
 
 // NEW blend vs. no-press control (spec §5/§7.8) -- Task 10, round 5 (review
@@ -340,13 +441,19 @@ TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence
 // is 31.58 dB / 1.50 s). The dip got markedly shallower and shorter than the
 // pre-mode figures this paragraph used to quote (65.16 dB, 4.00 s) -- the
 // mode routing fix and the second carrier duck both land here -- but it is
-// still far outside the bound, so the exclusion stands. This is KNOWN AND
-// ACCEPTED FOR NOW,
-// pending a listening-loop decision (Bastian, 2026-08-05): a brief
-// near-silence when a NEW press switches engines is not being called a
-// defect here, and the fix direction is not obvious for free -- an
-// engine-switch crossfade would mean running two part engines at once,
-// which is expensive on the Daisy target. So the LEVEL comparison is
+// still far outside the bound, so the exclusion stands.
+//
+// RULED 2026-08-07 (owner): ACCEPTED, not pending. This carried "KNOWN AND
+// ACCEPTED FOR NOW, pending a listening-loop decision (Bastian, 2026-08-05)"
+// for two days; the decision is made and the qualifier is gone. A brief
+// near-silence when a NEW press switches engines is a PROPERTY of the
+// instrument, not a defect on a list -- the fix direction was never obvious
+// for free, since an engine-switch crossfade means running two part engines
+// at once, which is expensive on the Daisy target, and the measured dip has
+// been getting shallower and shorter on its own (65.16 dB / 4.00 s before the
+// mode work, 31.73 dB / 1.50 s now). Nothing here is waiting on a listen.
+//
+// So the LEVEL comparison is
 // scoped to terrains new_full() does NOT switch an engine on, honestly (no
 // clause inside the gate pretends to cover the switch case); NaN checks
 // still run on excluded seeds too (they have nothing to do with the level

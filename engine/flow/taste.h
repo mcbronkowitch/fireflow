@@ -96,12 +96,16 @@ constexpr float kDistanceMin = 0.18f;               // NEW rejection threshold
 // THE §7.8 FINDING FROM THE MODE WORK STILL STANDS, and it got smaller. The
 // same masters 1..2000 scan (1 566 non-Sampler terrains) now breaches on 8,
 // 0.51 %, worst rms 0.139; at 4ec5be0 the same scan breaches on 21, 1.34 %,
-// worst 0.180. This ceiling is still a property the generator does not
-// GUARANTEE -- it holds for ~99.5 % of terrains, not all of them -- and the
-// gate is green only because none of the ten fixed candidate seeds sits in
-// the breaching half-percent. Either the generator guarantees a quiet calm
-// corner, or §7.8 says what fraction it tolerates. Unchanged as a spec
-// question; do not "fix" it by moving this number.
+// worst 0.180. This ceiling is a property the generator does not GUARANTEE --
+// it holds for ~99.5 % of terrains, not all of them.
+//
+// RULED BY THE OWNER 2026-08-07, THE SAME RULING THE BLEND GATE TOOK: the
+// fraction is ACCEPTED, §7.8 states it (kCalmLoudFracMax below), and the gate
+// asserts a rate over a population instead of resting on ten fixed seeds that
+// happened to miss the breaching half-percent. THIS CONSTANT IS UNCHANGED and
+// still means what it always meant -- do not "fix" it by moving the number.
+// The per-seed ceiling check stays as well, as a canary on the ten: a fixed
+// seed crossing 0.06 is worth a look even under an accepted rate.
 constexpr float kCalmCornerRmsMax = 0.06f;
 // §7.8 floor -- Task 10. This is a SILENCE DETECTOR, not the musical
 // target: measurements at the reference terrain/seed put the calm corner
@@ -159,13 +163,65 @@ constexpr float kCalmCornerRmsMax = 0.06f;
 // It is a survivor of the mute population, not a terrain that is comfortably
 // audible.
 //
-// THIS IS A FINDING FOR THE OWNER, NOT SOMETHING TO CLAMP AWAY, and it is
-// the same shape of question as the ceiling: either the generator guarantees
-// an audible calm corner, or §7.8 states the fraction it tolerates and this
-// gate asserts a rate over many seeds instead of all-of-ten-fixed-seeds. Do
-// not lower this floor to cover a mute terrain -- the floor is a silence
-// detector, and a terrain that trips it is exactly what it is for.
+// RULED BY THE OWNER 2026-08-07: THE MUTE FRACTION IS ACCEPTED, DELIBERATELY,
+// and §7.8 now states it (kCalmMuteFracMax below). This closes the question,
+// it does not answer it favourably -- roughly one drawn terrain in fifteen
+// waking functionally mute at its calm corner is a KNOWN AND ACCEPTED
+// PROPERTY of this generator, not a defect being tracked. Whether that is the
+// right instrument is a listening judgement the owner has made; whether it
+// stays true is what the gate now measures.
+//
+// TWO THINGS THAT DID NOT CHANGE WITH THE RULING. This constant is unchanged
+// at 1e-5, and must still never be lowered to cover a mute terrain -- it is a
+// silence detector, and a terrain that trips it is exactly what it is for.
+// And the PER-SEED floor check is GONE, unlike the ceiling's: once the mute
+// fraction is accepted, a fixed seed drifting into it is the accepted event
+// happening, not news, and a red test for it would be noise. The rate is the
+// whole claim on this side.
 constexpr float kCalmCornerRmsMin = 1e-5f;          // -100 dBFS, silence floor
+
+// Population for the calm-corner rate checks (spec §7.8 as ruled 2026-08-07).
+// SAME SHAPE AS THE BLEND POPULATION BELOW, ONE DIFFERENCE: no engine-switch
+// filter, because nothing is pressed here -- the calm corner is a static
+// render, so the only terrain that has to be excluded is one with a Sampler
+// deck, which this rig renders silent by construction (see the test file's
+// header) and which would trip the floor for a reason that is not the flow
+// layer's.
+//
+// WHY A STRIDE AND NOT THE WHOLE RANGE, stated plainly because it is the one
+// compromise in this gate: the full population is 1 566 terrains and rendering
+// it the way the gate measures (10 s each, first 3 s skipped) takes 115 s,
+// which is more than the entire rest of the suite. The stride samples that
+// same range evenly -- evenly rather than a 1..N prefix, so no locality in
+// master space can bias it -- and the tolerated fractions below were set from
+// the FULL 1 566-terrain measurement, not from the subsample. The subsample's
+// own rate is asserted; the full population's rate is what the bound was
+// chosen against, and the two are recorded together in the test.
+constexpr uint32_t kCalmPopStride = 12u;            // every Nth master of
+// 1..kBlendPopScanMax. 12 yields 137 terrains and ~10 s (measured), chosen as
+// the coarsest stride that still leaves the mute check real teeth: it reads 8
+// mute (5.84 %) against the full population's 103 (6.58 %), so a doubling is
+// unmistakable. Median 1.51e-03 against the full population's 1.49e-03 -- the
+// subsample tracks the whole on the quantity the median check asserts.
+constexpr int kCalmPopMin = 90;                     // non-vacuity floor, same
+// role as kBlendPopMin: a filter change that starved the set would otherwise
+// make both rate checks trivially green.
+constexpr float kCalmMuteFracMax = 0.10f;           // ACCEPTED mute fraction.
+// THE NUMBER THE OWNER RULED. Full population measures 6.58 % (103/1566) at
+// HEAD and 12.3 % at the branch point 4ec5be0, so 0.10 sits above today and
+// below the rate the taste tables inherited -- it accepts what the generator
+// does now and still goes red if the mute population drifts back toward where
+// it came from. It is an acceptance and a regression bound at once; it is NOT
+// a claim that 10 % would be fine musically.
+constexpr float kCalmLoudFracMax = 0.05f;           // ACCEPTED loud fraction.
+// Full population measures 0.51 % (8/1566) at HEAD, 1.34 % at 4ec5be0. The
+// bound is deliberately loose relative to that, and the subsample shows why:
+// on 137 terrains an 0.51 % rate is well under one expected breach, and the
+// stride happens to catch 2 (1.46 %) -- nearly triple the population rate,
+// purely from which terrains the stride lands on. A tight fraction here would
+// be asserting on that accident. The SENSITIVE ceiling check on this side is
+// the per-seed one, which stays; this rate exists to catch the ceiling
+// becoming a COMMON event, which is the failure a per-seed canary cannot see.
 // §7.8 NEW-blend level gate -- Task 10, round 2. The original design (a raw
 // window-to-window RMS ratio inside ONE render) conflated the instrument's
 // own note-envelope/retrigger dynamics with anything the blend itself did,
