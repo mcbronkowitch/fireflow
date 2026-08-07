@@ -204,13 +204,20 @@ def load_dfu(binary, address):
     )
 
 
-def run_once_usb(port, timeout):
+def run_once_usb(port, timeout, on_header=None):
     """Read a capture off an already-open serial line until BENCH_END.
 
     Same contract as run_once: the captured lines, or None on timeout -- a
     hang writes nothing. An empty read is pyserial's read timeout expiring,
     NOT end of stream, so it costs a lap of the loop and nothing more; only
     the host deadline ends the wait.
+
+    on_header, if given, is called with the BENCH_BEGIN line the moment it
+    arrives and may raise to abandon the run. That is where the probe-free
+    path checks the bank: the firmware reports the digest of the bytes it
+    actually read, in line one, and a run started against the wrong bank is
+    void from that line onward. Checking it here costs seconds; checking it
+    after BENCH_END costs the whole run.
     """
     deadline = time.monotonic() + timeout
     lines, done = [], False
@@ -222,6 +229,8 @@ def run_once_usb(port, timeout):
             line = raw.decode("utf-8", "replace").rstrip("\r\n")
             print(line)
             lines.append(line)
+            if on_header is not None and line.startswith("BENCH_BEGIN"):
+                on_header(line)
             if line.startswith("BENCH_END"):
                 done = True
                 break
@@ -1262,7 +1271,7 @@ def main():
                 readelf=READELF,
             )
         verified_receipt = None
-        if not args.build_only:
+        if not args.build_only and args.transport != "usb":
             verified_receipt = require_verified_payload(
                 QSPI_PAYLOAD, active_receipt, identity
             )
@@ -1275,6 +1284,21 @@ def main():
         return finish(2)
     if args.build_only:
         return finish(0)
+
+    def check_live_bank(header_line):
+        """The probe-free stand-in for the pre-run programming receipt.
+
+        There is no probe to write a receipt with, and the bootloader's DFU
+        upload cannot read QSPI back (it returns one 4 KB block, repeated).
+        What is left is better than either: the firmware hashes the bank in
+        place and reports it in BENCH_BEGIN, so this is the digest of the
+        bytes the measured code actually read -- not of a file on the host,
+        and not of a readback taken at some other time.
+        """
+        fields = header_line.split(",")
+        if len(fields) < 6:
+            raise QspiGuardError("BENCH_BEGIN is too short to carry a digest")
+        require_live_digest(fields[5], QSPI_PAYLOAD)
 
     captures = []
     for i in range(max(1, args.repeat)):
@@ -1297,7 +1321,12 @@ def main():
                           "would look exactly like this)", file=sys.stderr)
                     return finish(2)
                 print("# port %s" % port_name, file=sys.stderr)
-            lines = run_once_usb(open_serial(port_name), args.timeout)
+            try:
+                lines = run_once_usb(open_serial(port_name), args.timeout,
+                                     on_header=check_live_bank)
+            except QspiGuardError as error:
+                print("ERROR: %s" % error, file=sys.stderr)
+                return finish(2)
         else:
             lines = run_once(args.interface, args.timeout)
         if lines is None:
@@ -1312,7 +1341,8 @@ def main():
         header, _rows, _anchors = parsed
         try:
             require_live_digest(header["qspi_sha256"], QSPI_PAYLOAD)
-            require_live_device(header["device_id"], verified_receipt)
+            if verified_receipt is not None:
+                require_live_device(header["device_id"], verified_receipt)
         except QspiGuardError as error:
             print("ERROR: %s" % error, file=sys.stderr)
             return finish(2)

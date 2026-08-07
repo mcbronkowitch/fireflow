@@ -1935,6 +1935,31 @@ class UsbRunContract(unittest.TestCase):
         self.assertIsNone(runner.run_once_usb(port, timeout=0.2))
         self.assertTrue(port.closed)
 
+    def test_a_rejected_header_ends_the_run_at_the_first_line(self):
+        # Without a probe there is no pre-run receipt, so the proof that the
+        # bank on the chip is the linked bank is the digest the measuring
+        # firmware itself reports -- and it reports it in line one. Acting on
+        # it there costs seconds; acting on it after BENCH_END costs twenty
+        # minutes for a capture that was void from the start.
+        port = FakeSerial(["BENCH_BEGIN,abc,480000000,96,dc,deadbeef,uid",
+                           "BENCH,a,b,1", "BENCH_END"])
+        seen = []
+
+        def reject(line):
+            seen.append(line)
+            raise runner.QspiGuardError("bank on the chip is not the linked bank")
+
+        with self.assertRaises(runner.QspiGuardError):
+            runner.run_once_usb(port, timeout=5.0, on_header=reject)
+        self.assertEqual(len(seen), 1)
+        self.assertTrue(port.closed)
+
+    def test_an_accepted_header_does_not_interrupt_the_run(self):
+        port = FakeSerial(["BENCH_BEGIN,abc,480000000,96,dc,deadbeef,uid",
+                           "BENCH,a,b,1", "BENCH_END"])
+        lines = runner.run_once_usb(port, timeout=5.0, on_header=lambda _: None)
+        self.assertEqual(lines[-1], "BENCH_END")
+
     def test_new_port_is_the_one_that_was_not_there_before(self):
         # COM5 is already on this desk and is not the board. Identifying it
         # as "the only port" or "the lowest port" would grab the wrong one.
