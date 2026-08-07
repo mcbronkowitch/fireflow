@@ -50,6 +50,24 @@ BENCH_OPTIMIZATION ?= o2
 # bench_deck_bus.h below).
 BENCH_DECK_BUS ?= 1
 
+# How a measured number leaves the board.
+#
+#   semihost -- ARM SYS_WRITE0 through an attached debug probe. The default,
+#               and the transport every historical number in docs/bench/ was
+#               taken over.
+#   usb      -- USB-CDC via daisy::Logger<LOGGER_INTERNAL>, for a board with
+#               no debug pins soldered on. Needs the Daisy bootloader in
+#               QSPI and dfu-util on the host; run.py --transport usb.
+#
+# Numbers from the two transports are comparable only because
+# docs/bench/2026-08-XX-transport-semihost-vs-usb.md shows they are on one
+# board. Do not assume it without that document.
+BENCH_TRANSPORT ?= semihost
+
+ifneq ($(filter $(BENCH_TRANSPORT),semihost usb),$(BENCH_TRANSPORT))
+$(error BENCH_TRANSPORT must be semihost or usb)
+endif
+
 ifneq ($(filter $(BENCH_ITCM_HOT),0 1),$(BENCH_ITCM_HOT))
 $(error BENCH_ITCM_HOT must be 0 or 1)
 endif
@@ -200,6 +218,19 @@ $(BUILD_DIR)/bench_optimization.h: FORCE | $(BUILD_DIR)
 	@python write_bench_optimization.py $@ $(BENCH_OPTIMIZATION)
 
 $(BUILD_DIR)/report.o: $(BUILD_DIR)/bench_optimization.h
+
+# --- transport header ---------------------------------------------------
+# Same shape as the headers above, for the same reason: a bare
+# `-DBENCH_TRANSPORT_USB` is invisible to Make, so switching transports
+# would relink a stale report.o that still writes to a bkpt no debugger is
+# there to service -- a board that runs, says nothing, and looks dead.
+# Two objects read it: report.cpp for the write path, main.cpp for opening
+# the line and for the jump back into the bootloader after BENCH_END.
+$(BUILD_DIR)/bench_transport.h: FORCE | $(BUILD_DIR)
+	@python write_bench_transport.py $@ $(BENCH_TRANSPORT)
+
+$(BUILD_DIR)/report.o: $(BUILD_DIR)/bench_transport.h
+$(BUILD_DIR)/main.o: $(BUILD_DIR)/bench_transport.h
 
 # --- cross-deck bus header -----------------------------------------------
 # Same shape again: SPKY_DECK_BUS is read (transitively, via

@@ -4,13 +4,21 @@
 
 namespace bench {
 
-// Output leaves over the SWD link the probe already owns (ARM semihosting),
-// not over a second USB cable -- see the plan's deviation note 1. openocd
-// services the breakpoint and prints the string on its own stdout.
+// Two transports, chosen at compile time by BENCH_TRANSPORT (bench/Makefile);
+// report.cpp holds both and nothing else in the bench knows which is linked.
 //
-// DELIBERATE CONSEQUENCE: this binary requires an attached openocd. Without
-// one, the first bkpt 0xAB halts the core forever. Fine here -- the bench is
-// never shipped and runs by definition under the probe.
+//   semihost -- output leaves over the SWD link the probe already owns (ARM
+//               semihosting). openocd services the breakpoint and prints the
+//               string on its own stdout. DELIBERATE CONSEQUENCE: this binary
+//               requires an attached openocd; without one the first bkpt 0xAB
+//               halts the core forever.
+//   usb      -- output leaves over USB-CDC. No probe, no SWD pins, and the
+//               board is reachable with nothing but the cable that powers it.
+//
+// Call transport_open() once before the first line, from main(). It blocks on
+// the USB branch until the host opens the port, and does nothing on the
+// semihosting branch.
+void transport_open();
 void log_line(const char* s);
 void logf(const char* fmt, ...);
 

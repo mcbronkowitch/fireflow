@@ -50,8 +50,13 @@ int main(void)
     // before any DaisySP workload so retained RAM cannot affect the run.
     ::srand(1u);
 
-    // No logger start and no host handshake: semihosting writes are synchronous
-    // through the probe, so the first line cannot be lost to enumeration timing.
+    // On the semihosting branch this does nothing, for the reason it always
+    // did: those writes are synchronous through the probe, so the first line
+    // cannot be lost to enumeration timing. On the USB branch it blocks until
+    // the host opens the port -- which is exactly the handshake semihosting
+    // never needed.
+    bench::transport_open();
+
     bench::cycles_init();
 
     char qspi_sha256[65];
