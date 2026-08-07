@@ -230,10 +230,45 @@ def run_once_usb(port, timeout):
     return lines if done else None
 
 
-def open_serial(port_name, read_timeout=1.0):
-    """Open the CDC port. Imported here so the host tests need no pyserial."""
+def list_ports():
+    """Port names present right now. Imported late: tests need no pyserial."""
+    from serial.tools import list_ports as tools  # noqa: PLC0415
+    return {p.device for p in tools.comports()}
+
+
+def wait_for_new_port(before, timeout=20.0, lister=None):
+    """The port that appeared after the image started, or None.
+
+    The board is in DFU while it is being written and only enumerates as
+    CDC once the freshly loaded image runs, so the port cannot be named in
+    advance -- and on a desk with other USB serial devices attached, the
+    only reliable identification is that it was not there a moment ago.
+    """
+    lister = lister or list_ports
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        fresh = lister() - before
+        if fresh:
+            return sorted(fresh)[0]
+        time.sleep(0.25)
+    return None
+
+
+def open_serial(port_name, read_timeout=1.0, settle=10.0):
+    """Open the CDC port, waiting for Windows to finish enumerating it.
+
+    A port can be listed a moment before it can be opened. Retrying beats
+    a fixed sleep: it costs nothing when the driver is quick.
+    """
     import serial                                # noqa: PLC0415
-    return serial.Serial(port_name, timeout=read_timeout)
+    deadline = time.monotonic() + settle
+    while True:
+        try:
+            return serial.Serial(port_name, timeout=read_timeout)
+        except (OSError, serial.SerialException):
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.25)
 
 
 BUDGET_CYCLES = 960000
@@ -1130,8 +1165,9 @@ def main():
                         "the probe, or usb over CDC for a board with no debug "
                         "pins (needs --port and the Daisy bootloader)"
                     ))
-    ap.add_argument("--port", default=None,
-                    help="serial port for --transport usb, e.g. COM7")
+    ap.add_argument("--port", default="auto",
+                    help="serial port for --transport usb, e.g. COM7; "
+                         "'auto' takes whichever port appears after loading")
     ap.add_argument("--timeout", type=float, default=600.0,
                     help="seconds to wait for BENCH_END")
     ap.add_argument("--build-only", action="store_true")
@@ -1171,10 +1207,6 @@ def main():
         return 2
     if not args.build_only and args.repeat < 2:
         print("ERROR: hardware evidence requires at least two runs",
-              file=sys.stderr)
-        return 2
-    if args.transport == "usb" and not args.build_only and not args.port:
-        print("ERROR: --transport usb needs --port (e.g. --port COM7)",
               file=sys.stderr)
         return 2
 
@@ -1253,8 +1285,19 @@ def main():
             # lost to enumeration timing -- and after BENCH_END it drops back
             # into the bootloader by itself, which is what makes repeat 2
             # possible without a hand at the board.
-            load_dfu(prepare_dfu_image(), APP_DFU_ADDRESS)
-            lines = run_once_usb(open_serial(args.port), args.timeout)
+            image = prepare_dfu_image()
+            before = list_ports() if args.port == "auto" else set()
+            load_dfu(image, APP_DFU_ADDRESS)
+            port_name = args.port
+            if port_name == "auto":
+                port_name = wait_for_new_port(before)
+                if port_name is None:
+                    print("ERROR: no new serial port appeared after loading; "
+                          "the image did not enumerate (a CDC buffer in DTCM "
+                          "would look exactly like this)", file=sys.stderr)
+                    return finish(2)
+                print("# port %s" % port_name, file=sys.stderr)
+            lines = run_once_usb(open_serial(port_name), args.timeout)
         else:
             lines = run_once(args.interface, args.timeout)
         if lines is None:

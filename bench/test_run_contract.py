@@ -1935,6 +1935,24 @@ class UsbRunContract(unittest.TestCase):
         self.assertIsNone(runner.run_once_usb(port, timeout=0.2))
         self.assertTrue(port.closed)
 
+    def test_new_port_is_the_one_that_was_not_there_before(self):
+        # COM5 is already on this desk and is not the board. Identifying it
+        # as "the only port" or "the lowest port" would grab the wrong one.
+        steps = [{"COM5"}, {"COM5"}, {"COM5", "COM9"}]
+        self.assertEqual(
+            runner.wait_for_new_port({"COM5"}, timeout=5.0,
+                                     lister=lambda: steps.pop(0)),
+            "COM9",
+        )
+
+    def test_no_new_port_within_the_window_is_reported_as_none(self):
+        # Silence here is the DTCM/DMA failure mode: the image loaded, ran,
+        # and never enumerated. It must not read as a port to open.
+        self.assertIsNone(
+            runner.wait_for_new_port({"COM5"}, timeout=0.4,
+                                     lister=lambda: {"COM5"})
+        )
+
     def test_load_dfu_targets_the_app_address_and_leaves(self):
         # :leave is what replaces openocd's reset-halt-resume: dfu-util
         # hands control to the freshly written image itself.
