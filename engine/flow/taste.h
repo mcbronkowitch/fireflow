@@ -186,11 +186,21 @@ constexpr float kBlendSpikeDb = 6.f;                // press vs. control,
 // should never read more than this many dB LOUDER than the no-press
 // control at the same instant.
 //
-// RE-MEASURED 2026-08-06 (Task 7, the taste tables). THIS GATE IS RED AND IT
-// IS LEFT RED: two of the four asserted seeds breach, 0xD0D at +6.49 dB and
-// 0xC0C0 at +6.36 dB, both in window 3 (0.75-1.00 s). Pre-branch the worst
-// was +3.02 dB. The bound was NOT raised to cover them, for the reason the
-// distribution below makes plain.
+// RULED BY THE OWNER 2026-08-07: THE SECOND OPTION. This ceiling is NOT a
+// property the generator has (the distribution below), and it is not being
+// made into one. §7.8 now states the fraction it tolerates, and the gate
+// asserts a RATE OVER A POPULATION instead of all-of-four-fixed-seeds -- see
+// kBlendSpikeBreachFracMax below. THIS CONSTANT IS UNCHANGED at 6 dB and
+// keeps its original meaning: it is the spec's claim about what a crossfade
+// may do, and it is what the median terrain is still held to.
+//
+// The red that prompted the ruling (Task 7, the taste tables): two of the
+// four asserted seeds breached, 0xD0D at +6.49 dB and 0xC0C0 at +6.36 dB,
+// both in window 3 (0.75-1.00 s). Pre-branch the worst was +3.02 dB. The
+// bound was NOT raised to cover them, and they were NOT dropped from
+// kCandidateMasters -- both of those would have been fitting the gate to the
+// failure. What changed is what the gate claims, not what it tolerates
+// per seed.
 //
 // RULED ON A DISTRIBUTION, NOT ON A SEED, because every earlier report of
 // this gate quoted one seed's before/after and the gate kept changing
@@ -211,17 +221,19 @@ constexpr float kBlendSpikeDb = 6.f;                // press vs. control,
 // fixed seeds sat in the breaching third; the taste tables moved two of them
 // into it, which is a sampling change, not a regression in the blend.
 //
-// THIS GATE CANNOT BE MADE GREEN BY AN HONEST MEASUREMENT. kBlendSpikeDb is a
-// SPEC bound (§5: a NEW blend is a crossfade -- the instrument changes what it
-// is playing, not how loud), so there is no measurement to repeat that could
-// legitimately move it, exactly like kCalmCornerRmsMax above. Raising it to
-// cover 6.49 would be retuning a spec number to fit the generator; raising it
-// to cover the population would mean roughly +60 dB, which asserts nothing.
-// Dropping 0xD0D/0xC0C0 from kCandidateMasters would be carving around the
-// failure -- and they are not special, they are two of ~28 %. It needs the
-// same ruling the calm corner needs: either the blend genuinely holds the
-// level and the generator has to make that true, or §7.8 states the fraction
-// it tolerates and this becomes a distribution check.
+// RE-MEASURED AT HEAD 2026-08-07, before the ruling was implemented, so the
+// number encoded below is HEAD's and not a figure inherited from four commits
+// back: n=85, min -5.90, p50 +2.18, p75 +7.32, p90 +23.29, p95 +34.98,
+// max +59.40, 24/85 (28.2 %) over 6 dB. Identical to the 89eb461 row above --
+// the four commits since did not move this metric at all.
+//
+// WHY THE OTHER THREE EXITS WERE REFUSED, recorded so nobody re-proposes one:
+// raising this to cover 6.49 would be retuning a SPEC number (§5) to fit the
+// generator; raising it to cover the population would mean roughly +60 dB,
+// which asserts nothing; dropping 0xD0D/0xC0C0 from kCandidateMasters would be
+// carving around the failure, and they are not special, they are two of ~28 %.
+// The ruling took the remaining exit, the one this comment has asked for since
+// Task 7 -- and it is the same exit kCalmCornerRmsMax still needs.
 //
 // (Still true from the mode work, and re-confirmed: two asserted seeds change
 // mode on their press, so the carrier's clocking-flip duck path inside the
@@ -243,6 +255,44 @@ constexpr float kBlendDropDb = 10.f;                // press vs. control,
 // (7.1 %) of eligible terrains past it (5 of 85 at 4ec5be0). Read that
 // alongside kBlendSpikeDb's finding: the drop side is heading the same way,
 // just more slowly.
+//
+// SO IT MOVES TO THE SAME DISTRIBUTION RULING (owner, 2026-08-07), even though
+// it is not the side that went red. Leaving the drop side as an all-of-four-
+// fixed-seeds check while the spike side asserts a rate would mean the two
+// halves of one gate claim different things about the same population -- and
+// with 0.80 dB of headroom the per-seed form was going to fail on the next
+// taste-table change anyway, for exactly the sampling reason the spike side
+// just failed for. Re-measured at HEAD 2026-08-07: p50 2.06 dB, p90 7.57 dB,
+// max 14.44 dB, 6/85 (7.1 %) past the floor. Bound UNCHANGED at 10 dB.
+
+// Population for the two rate checks below (spec §7.8 as ruled 2026-08-07).
+// The population is DEFINED, not enumerated: every master in 1..kBlendPopScanMax
+// whose terrain rolls no Sampler deck and whose new_full() switches no engine --
+// the exact set the level comparison is meaningful on. It is computed at test
+// time, so it cannot be quietly trimmed to dodge a failure the way a hardcoded
+// seed list can; kBlendPopMin asserts it did not collapse.
+constexpr uint32_t kBlendPopScanMax = 2000u;        // scan 1..this for the
+// population. 2000 is the range every distribution figure in this file was
+// measured over, kept identical so the encoded rates and the gate's own
+// measurement describe the same set. It yields 85 eligible masters at HEAD.
+constexpr int kBlendPopMin = 60;                    // non-vacuity floor on the
+// population size: a filter change that starved the set would otherwise make
+// both rate checks trivially green (0 of 3 breaching passes any fraction).
+// Set well below today's 85 so ordinary generator drift does not trip it, and
+// well above the handful that would make a rate meaningless.
+constexpr float kBlendSpikeBreachFracMax = 0.33f;   // tolerated fraction of the
+// population allowed past kBlendSpikeDb. THIS IS THE NUMBER THE OWNER RULED,
+// and it is a REGRESSION bound, not a quality target: HEAD sits at 28.2 %
+// (24/85) and the branch point 4ec5be0 sat at 36.5 %, so 0.33 admits four more
+// breaching terrains than today and still goes red before the blend drifts back
+// to where the taste tables found it. It does NOT say 28 % is acceptable
+// musically -- kBlendSpikeDb still says what a crossfade should do, and the
+// median check enforces it on the typical terrain. This bound only says the
+// tail must not grow.
+constexpr float kBlendDropBreachFracMax = 0.12f;    // same, for kBlendDropDb.
+// HEAD sits at 7.1 % (6/85), 4ec5be0 at 5.9 % (5/85); 0.12 admits four more,
+// the same four-terrain margin the spike side gets, chosen for that symmetry
+// rather than measured separately.
 // §7.8 NEW-blend level gate -- Task 10, round 4 (review round 1 found the
 // round-3 comment below quantitatively wrong; this is the corrected
 // version -- see task-10-report.md rounds 3-5 for the full history).

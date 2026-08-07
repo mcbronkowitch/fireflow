@@ -29,6 +29,7 @@
 #include "center/center.h"
 #include "fx/flux.h"
 #include "parts/bbd_engine.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -277,31 +278,40 @@ TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence
 // after the press -- kBlendSpikeDb/kBlendDropDb themselves are unchanged;
 // this narrows WHAT THE GATE CLAIMS, not how much it tolerates.
 //
-// KNOWN RED as of 2026-08-06 (Task 7), on the SPIKE side, at masters 0xD0D
-// and 0xC0C0, both in window 3. This is deliberately left failing, and no
-// bound, window or seed was moved to avoid it.
+// THE PER-SEED LEVEL GATE THAT LIVED HERE IS GONE (owner ruling, 2026-08-07).
+// It went red at Task 7 on masters 0xD0D and 0xC0C0 and could not be made
+// green by any honest measurement: the 6 dB ceiling is a §5 spec claim about
+// what a crossfade may do, not a property the generator has -- more than a
+// quarter of eligible terrains breach it, at the branch point as well as at
+// HEAD. Four fixed seeds cannot assert a claim like that; they only sample it,
+// and the taste tables moved two of them into the breaching third.
 //
-// The reason is not that two seeds are marginal. kBlendSpikeDb was ruled on a
-// DISTRIBUTION this time rather than on one seed's before/after -- 85
-// non-Sampler, non-switching masters out of 1..2000 -- and more than a
-// quarter of them breach 6 dB, at the branch point as well as here. The
-// ceiling is a §5 spec claim about what a crossfade may do, not a measured
-// property of the generator, so there is no honest measurement that makes
-// this green. THE FIGURES AND THE FULL ARGUMENT LIVE IN ONE PLACE, taste.h's
-// kBlendSpikeDb comment, and are deliberately not restated here so the two
-// copies cannot drift; the failing values are printed by the CHECK itself.
+// So §7.8's level comparison is now a DISTRIBUTION check over a computed
+// population (the case below this one), exactly the second of the two exits
+// taste.h's kBlendSpikeDb comment has named since Task 7. No bound, no window
+// and no seed was moved to get there: kBlendSpikeDb and kBlendDropDb are
+// unchanged at 6 and 10 dB, and 0xD0D/0xC0C0 are still in kCandidateMasters,
+// still measured, still breaching -- they are simply no longer mistaken for
+// the population. THE FIGURES AND THE FULL ARGUMENT LIVE IN ONE PLACE,
+// taste.h, and are deliberately not restated here so the two copies cannot
+// drift.
 //
-// A should_fail() MARKER WAS NOT ADDED. The calm-corner case above carried
-// one and it is being retired in the same commit for having become a
-// catch-all: it accepted any failing assertion and so hid a different defect
-// for eight commits. Declaring this case the same way would repeat that
-// exactly -- the drop side (kBlendDropDb) is separately down to 0.80 dB of
-// headroom and would vanish behind the same marker.
+// WHAT STAYS PER-SEED, AND WHY, is this case: NaN over the FULL 6 s blend, on
+// every candidate seed including the Sampler-filtered and engine-switching
+// ones. NaN is not a distribution question -- one is a defect -- and the
+// exclusion that scoped the level comparison never applied to it.
 //
-// RE-MEASURED 2026-08-06 after the operating-mode work (spec 2026-08-06 §5).
-// The headlines, qualitatively -- THE FIGURES BEHIND THEM LIVE IN ONE PLACE,
-// taste.h's kBlendGateWindowS / kBlendSpikeDb / kBlendDropDb comments, and
-// are deliberately not restated here so the two copies cannot drift:
+// A should_fail() MARKER WAS NOT ADDED, then or now. The calm-corner case
+// above carried one and it was retired for having become a catch-all: it
+// accepted any failing assertion and so hid a different defect for eight
+// commits. Declaring this case that way would have repeated it exactly.
+//
+// THE GATE WINDOW, unchanged and still the scope of the level comparison in
+// the distribution case below. RE-MEASURED 2026-08-06 after the operating-mode
+// work (spec 2026-08-06 §5). The headlines, qualitatively -- THE FIGURES
+// BEHIND THEM LIVE IN ONE PLACE, taste.h's kBlendGateWindowS / kBlendSpikeDb /
+// kBlendDropDb comments, and are deliberately not restated here so the two
+// copies cannot drift:
 //
 //  - kBlendGateWindowS is still a CONSERVATIVE CHOICE, not a derivation, but
 //    the failure boundary has now reached the window itself.
@@ -317,10 +327,10 @@ TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence
 // carrier deck's engine switch or stagger duck -- read taste.h before
 // assuming it does.
 //
-// The full 6 s is still RENDERED and MEASURED for every seed (see
-// task-10-report.md's plain-measurement table) -- only the CHECK()s are
-// scoped, and (review Minor 3) ONLY the level CHECK()s: NaN is still
-// asserted for every window of every seed, including excluded ones, below.
+// The full 6 s is still RENDERED and NaN-checked for every seed by the case
+// immediately below, including the Sampler-filtered and engine-switching
+// ones; the level comparison, scoped to this window, moved to the population
+// case after it.
 //
 // EXCLUSION (measured, not carved around -- see task-10-report.md round 2
 // for the full per-seed numbers): seeds whose new_full() switches a deck's
@@ -337,48 +347,137 @@ TEST_CASE("flow audio: calm corner sits under the ceiling, and above the silence
 // defect here, and the fix direction is not obvious for free -- an
 // engine-switch crossfade would mean running two part engines at once,
 // which is expensive on the Daisy target. So the LEVEL comparison is
-// scoped to seeds new_full() does NOT switch an engine on, honestly (no
+// scoped to terrains new_full() does NOT switch an engine on, honestly (no
 // clause inside the gate pretends to cover the switch case); NaN checks
 // still run on excluded seeds too (they have nothing to do with the level
-// comparison). The exclusion is asserted non-vacuous, and (review I-4)
-// asserted to leave at least kMinNoSwitchSeeds qualifying seeds, not just
-// a non-empty set: under the RED-proof bare-step mutation only ONE of the
-// original two candidates (0x808) actually caught it (0x404 stayed within
-// ±1.6 dB) -- REQUIRE(tested > 0) cannot detect that kind of degradation,
-// only REQUIRE(tested >= N) can.
-constexpr int kMinNoSwitchSeeds = 3;
-
-TEST_CASE("flow audio: a NEW blend never jumps the level vs. a no-press control (7.8)") {
+// comparison).
+//
+// UNDER THE DISTRIBUTION RULING THIS EXCLUSION BECAME THE POPULATION
+// DEFINITION rather than a per-seed skip, and that is a strict improvement in
+// honesty: it is now applied to every master in 1..kBlendPopScanMax by the
+// same rule, instead of thinning a hand-picked list of ten down to whichever
+// four survived. kMinNoSwitchSeeds and its review-I-4 argument retired with
+// the per-seed case -- kBlendPopMin is the same guard at population scale, and
+// a stronger one, because a filter that starved the set trips it long before
+// the set gets small enough to assert nothing.
+TEST_CASE("flow audio: a NEW blend renders without NaN, every candidate seed (7.8)") {
     uint32_t kept[kMaxKept];
     const int n = filtered_masters(kept);
     REQUIRE(n > 0);
 
     constexpr double kWindowS = 0.25;
     const int windows = int(kBlendS / kWindowS + 0.5);   // 24, full blend
-    const int gated_windows = int(double(kBlendGateWindowS) / kWindowS + 0.5); // 4
 
-    int tested = 0;
     for (int i = 0; i < n; ++i) {
         const uint32_t master = kept[i];
-        const bool excluded = new_full_switches_engine(master);   // see EXCLUSION above
-        if (!excluded) ++tested;
         CAPTURE(master);
-        CAPTURE(excluded);
-
+        // No exclusion here: NaN is not a distribution question, and the
+        // engine-switch exclusion was only ever about the level comparison.
         TerrainState seed_state; seed_state.master = master;
+
+        // The no-press control run is NOT rendered here. It exists to cancel
+        // native dynamics out of a LEVEL comparison, and there is none in this
+        // case; as a NaN subject it is a plain settled render with macros at
+        // 0.5, which the fixed-seed case above already covers on these same
+        // ten seeds. Rendering it again would double this case's cost to
+        // re-assert that.
+        Instrument p_inst;
+        FxMem p_mem = flow_audio_fx_mem(1);
+        p_inst.init(kSr, p_mem);
+        Flow p_fl; p_fl.init(&p_inst, kCtrlHz);
+        p_fl.wake(seed_state);
+        for (int m = 0; m < MACRO_COUNT; ++m) p_fl.set_macro(m, 0.5f);
+
+        const RenderStats settle = render_flow(p_fl, p_inst, 6.0, 6.0);
+        CHECK_FALSE(settle.has_nan);
+
+        p_fl.new_full();
+        REQUIRE(p_fl.blend_phase() < 1.f);
+
+        for (int w = 0; w < windows; ++w) {
+            const RenderStats ps = render_flow(p_fl, p_inst, kWindowS);
+            CAPTURE(w);
+            CHECK_FALSE(ps.has_nan);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// §7.8 NEW-blend LEVEL gate, as a rate over a population (owner ruling,
+// 2026-08-07 -- see taste.h's kBlendSpikeBreachFracMax for the ruling itself
+// and every number behind it, which is why none of them are restated here).
+//
+// TWO CLAIMS, DELIBERATELY DIFFERENT IN KIND, because one distribution figure
+// alone would hide the other's failure:
+//
+//  - THE MEDIAN TERRAIN STILL HOLDS THE SPEC BOUND. kBlendSpikeDb /
+//    kBlendDropDb are unchanged and still mean what §5 says a crossfade may
+//    do; the median is where that claim is enforced. If the typical press
+//    starts jumping the level, this goes red even while the breaching
+//    fraction sits still.
+//  - THE TAIL MUST NOT GROW. The fraction past each bound is compared to the
+//    tolerated fraction. If the tail widens without moving the median -- which
+//    is exactly what the taste tables did to the old fixed seeds -- this goes
+//    red even while the median sits still.
+//
+// The population is COMPUTED, not enumerated (kBlendPopScanMax, the same range
+// every figure in taste.h was measured over), so it cannot be trimmed to dodge
+// a failure the way a seed list can, and REQUIRE(pop >= kBlendPopMin) plus the
+// cap assertion below make a starved or truncated population a failure rather
+// than a trivially green rate.
+//
+// COST: this renders ~85 terrains twice through a 6 s settle plus the gate
+// window, about 10 s -- the most expensive case in the suite by a wide margin,
+// and knowingly so. A rate is the thing being asserted; four seeds could not
+// assert it, which is how the gate came to be wrong in the first place.
+//
+// RED PROVEN, ALL FOUR CHECKS, 2026-08-07 (repo rule: a test that cannot go
+// red gets fixed). Measured, not argued:
+//
+//   mutation                       spike med / frac    drop med / frac
+//   (none, HEAD)                     2.18 / 28.2 %       2.06 /  7.1 %
+//   kBlendS 6 -> 0.4  (near-instant) 4.05 / 37.6 % RED   4.82 / 16.5 % RED
+//   kBlendS 6 -> 0.02                3.49 / 37.6 % RED   5.07 / 27.1 % RED
+//   kDuckDepth 0.8 -> 0              2.14 / 28.2 %       0.90 /  5.9 %
+//
+// THE TWO RATE CHECKS CATCH A MECHANISM CHANGE; the two MEDIAN checks moved
+// under it (2.18 -> 4.05, 2.06 -> 4.82: they track the mechanism, they are not
+// dead reads) but did not cross their bounds, so they were separately shown to
+// fire by walking the bounds down to 2 dB / 1 dB against unmutated audio --
+// both went red on the real medians. Bounds and kDuckDepth were restored; only
+// this table survives.
+//
+// kDuckDepth -> 0 is recorded because it made the gate GREENER (drops 7.1 % ->
+// 5.9 %), which is the expected direction -- the duck is what digs the drops --
+// and is exactly why the drop side alone would be a poor mutation target.
+TEST_CASE("flow audio: NEW-blend level holds as a rate over the population (7.8)") {
+    constexpr double kWindowS = 0.25;
+    const int gated_windows = int(double(kBlendGateWindowS) / kWindowS + 0.5); // 4
+
+    // Rig detail, not a tuning number: storage for the per-terrain extremes.
+    // Asserted below to have NOT been reached, so a population that outgrows
+    // it fails loudly instead of silently measuring a truncated prefix.
+    constexpr int kPopCap = 256;
+    static double spikes[kPopCap], drops[kPopCap];
+    int pop = 0;
+
+    for (uint32_t master = 1; master <= kBlendPopScanMax && pop < kPopCap; ++master) {
+        TerrainState st; st.master = master;
+        if (terrain_has_sampler(generate(st))) continue;      // silent deck, see header
+        if (new_full_switches_engine(master)) continue;       // see EXCLUSION above
 
         Instrument c_inst;
         FxMem c_mem = flow_audio_fx_mem(0);
         c_inst.init(kSr, c_mem);
         Flow c_fl; c_fl.init(&c_inst, kCtrlHz);
-        c_fl.wake(seed_state);
+        c_fl.wake(st);
         for (int m = 0; m < MACRO_COUNT; ++m) c_fl.set_macro(m, 0.5f);
 
         Instrument p_inst;
         FxMem p_mem = flow_audio_fx_mem(1);
         p_inst.init(kSr, p_mem);
         Flow p_fl; p_fl.init(&p_inst, kCtrlHz);
-        p_fl.wake(seed_state);
+        p_fl.wake(st);
         for (int m = 0; m < MACRO_COUNT; ++m) p_fl.set_macro(m, 0.5f);
 
         // 6 s identical settle: both instances share identical inputs up to
@@ -391,32 +490,54 @@ TEST_CASE("flow audio: a NEW blend never jumps the level vs. a no-press control 
         p_fl.new_full();
         REQUIRE(p_fl.blend_phase() < 1.f);
 
-        // The FULL 6 s blend is rendered and NaN-checked here for EVERY
-        // seed, excluded or not (review Minor 3) -- kept as a plain
-        // measurement (task-10-report.md), not asserted on past
-        // gated_windows. Only the first kBlendGateWindowS seconds (see the
-        // comment above and taste.h) get the spike/drop CHECK()s, and only
-        // for non-excluded seeds.
-        for (int w = 0; w < windows; ++w) {
+        double worst_spike = -1e9, worst_drop = -1e9;
+        for (int w = 0; w < gated_windows; ++w) {
             const RenderStats cs = render_flow(c_fl, c_inst, kWindowS);
             const RenderStats ps = render_flow(p_fl, p_inst, kWindowS);
-            CHECK_FALSE(cs.has_nan);
-            CHECK_FALSE(ps.has_nan);
-            if (excluded || w >= gated_windows) continue;   // measured, not asserted
-            const double c_db = level_db(cs.rms);
-            const double p_db = level_db(ps.rms);
-            const double diff_db = p_db - c_db;
-            CAPTURE(w);
-            CAPTURE(c_db);
-            CAPTURE(p_db);
-            CHECK(diff_db <= double(kBlendSpikeDb));
-            CHECK(diff_db >= -double(kBlendDropDb));
+            const double diff_db = level_db(ps.rms) - level_db(cs.rms);
+            if (diff_db  > worst_spike) worst_spike = diff_db;
+            if (-diff_db > worst_drop)  worst_drop  = -diff_db;
         }
+        spikes[pop] = worst_spike;
+        drops[pop]  = worst_drop;
+        ++pop;
     }
-    // review I-4: REQUIRE(tested > 0) alone cannot detect the gate quietly
-    // degrading to a single seed that happens not to catch anything --
-    // require the qualifying set stays at least kMinNoSwitchSeeds wide.
-    REQUIRE(tested >= kMinNoSwitchSeeds);
+
+    // Non-vacuity, both directions: the population must be wide enough for a
+    // rate to mean anything, and must not have been truncated by the rig.
+    REQUIRE(pop >= kBlendPopMin);
+    REQUIRE(pop < kPopCap);
+
+    int spike_breach = 0, drop_breach = 0;
+    for (int i = 0; i < pop; ++i) {
+        if (spikes[i] > double(kBlendSpikeDb)) ++spike_breach;
+        if (drops[i]  > double(kBlendDropDb))  ++drop_breach;
+    }
+    const double spike_frac = double(spike_breach) / double(pop);
+    const double drop_frac  = double(drop_breach)  / double(pop);
+
+    static double sorted[kPopCap];
+    auto median_of = [&](const double* src) {
+        for (int i = 0; i < pop; ++i) sorted[i] = src[i];
+        std::sort(sorted, sorted + pop);
+        return (pop & 1) ? sorted[pop / 2]
+                         : 0.5 * (sorted[pop / 2 - 1] + sorted[pop / 2]);
+    };
+    const double spike_median = median_of(spikes);
+    const double drop_median  = median_of(drops);
+
+    MESSAGE("blend level population: n=" << pop
+            << " spike median=" << spike_median << " breach=" << spike_breach
+            << " (" << 100.0 * spike_frac << "%)"
+            << " drop median=" << drop_median << " breach=" << drop_breach
+            << " (" << 100.0 * drop_frac << "%)");
+
+    // The spec bound, enforced where it is a true claim.
+    CHECK(spike_median <= double(kBlendSpikeDb));
+    CHECK(drop_median  <= double(kBlendDropDb));
+    // The tolerated tail, enforced as a regression bound.
+    CHECK(spike_frac <= double(kBlendSpikeBreachFracMax));
+    CHECK(drop_frac  <= double(kBlendDropBreachFracMax));
 }
 
 // ---------------------------------------------------------------------------

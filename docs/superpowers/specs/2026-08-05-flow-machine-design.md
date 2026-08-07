@@ -440,9 +440,31 @@ counts.
    stage 3. A fixed-seed-set statistical assertion with generous margins,
    not a fresh-draw hypothesis test — no flaky CI.
 8. **Render smoke:** a handful of fixed seeds through `render.exe` — no NaN,
-   RMS inside plausible bounds, a NEW transition without a level jump beyond
-   a fixed dB threshold, and the **calm corner** (all macros at 0) under a
-   fixed RMS ceiling on every rendered seed.
+   RMS inside plausible bounds, and the **calm corner** (all macros at 0)
+   under a fixed RMS ceiling on every rendered seed.
+
+   **The NEW-transition level check is a RATE, not a per-seed claim**
+   (owner ruling, 2026-08-07). A NEW blend is a crossfade (§5), and the dB
+   threshold says what a crossfade may do — but holding it is not a property
+   the generator has: measured over every master in 1..2000 whose terrain
+   rolls no Sampler deck and whose `new_full()` switches no engine (85
+   terrains), more than a quarter exceed the spike threshold, at the
+   generator's current state and before the taste tables landed alike. The
+   gate therefore asserts two things over that computed population, and the
+   population is recomputed by the test rather than enumerated:
+
+   - the **median** terrain holds the spike and drop thresholds — this is
+     where the §5 crossfade claim is enforced;
+   - the **fraction** past each threshold does not exceed a stated tolerated
+     fraction — a regression bound on the tail, set above today's rate and
+     below the rate measured at the pre-taste-tables branch point.
+
+   Neither threshold moved to reach this, and no seed was dropped. The
+   tolerated fractions are not a statement that the tail is musically
+   acceptable; that remains an open listening question, alongside the
+   identically-shaped one still open for the calm corner's silence floor.
+   Exact values live in `engine/flow/taste.h` beside the constants, which is
+   the single authority for all of these numbers.
 
 ## 8. Out of scope
 
