@@ -1,6 +1,7 @@
 #include "report.h"
 #include <cstdio>
 #include <cstdarg>
+#include <cstring>
 #include <daisy_seed.h>   // daisy::System::GetSysClkFreq(), CMSIS SCB/SCB_CCR_*_Msk
 
 #include "bench_layout.h"
@@ -41,6 +42,34 @@ namespace {
 
 #if defined(BENCH_TRANSPORT_USB)
 
+// Logger::PrintLine formats into a 128-byte static buffer -- LOGGER_BUFFER in
+// hid/logger.h, an unconditional #define with no override. The BENCH_BEGIN
+// header is about 135 bytes, and it showed: the line arrived cut at the UID
+// and welded onto the next record.
+//
+// report.cpp has always formatted its own line into g_buf[256] before handing
+// it to the transport, so the formatting buffer is not needed at all here --
+// only the bytes are. TransmitSync is protected, which is what this subclass
+// is for.
+struct BenchLine : public daisy::Logger<daisy::LOGGER_INTERNAL>
+{
+    static void Write(const char* s)
+    {
+        // 48 at a time: comfortably under the 64-byte CDC packet, so no
+        // chunk ever fills a packet exactly and needs a zero-length packet
+        // behind it to be delivered.
+        constexpr std::size_t kChunk = 48;
+        std::size_t           left   = std::strlen(s);
+        while(left > 0)
+        {
+            const std::size_t n = left < kChunk ? left : kChunk;
+            TransmitSync(s, n);
+            s += n;
+            left -= n;
+        }
+    }
+};
+
 using BenchLogger = daisy::Logger<daisy::LOGGER_INTERNAL>;
 
 // USB-CDC instead of semihosting. Semihosting stopped the core outright --
@@ -50,7 +79,7 @@ using BenchLogger = daisy::Logger<daisy::LOGGER_INTERNAL>;
 // and becomes a correctness condition.
 inline void transport_write0(const char* s)
 {
-    BenchLogger::PrintLine("%s", s);
+    BenchLine::Write(s);
 }
 
 inline void open_line()
@@ -71,7 +100,7 @@ inline void open_line()
     // on the wire.
     for(int i = 0; i < 12; ++i)
     {
-        BenchLogger::PrintLine("BENCH_WAKE,%d", i);
+        BenchLine::Write("BENCH_WAKE\r\n");
         daisy::System::Delay(250);
     }
 }
