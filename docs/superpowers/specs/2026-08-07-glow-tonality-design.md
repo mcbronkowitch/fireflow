@@ -72,14 +72,20 @@ Reading `_pushed[ep]` for the engine works because `ENGINE_A/B` lead the
 parameter table (the `static_assert` at `flow.cpp:53` already pins that for the
 FILT floor); the guard needs the same ordering and should be covered by it.
 
-The mode is read from `_mode_now`, not `_pushed[P_MODE]`, because `P_MODE` must
-stay **last** in the table (stream seeding, `flow_params.h:86-88`) and has not
-been through the loop yet this tick. `_mode_now` is "the mode the instrument is
-currently running", which is the question the guard actually asks. It lags a
-mode change by one control tick; a mode change happens only on NEW or wake, and
-one tick at 100–500 Hz is inaudible. On the first forced tick after wake
-`_mode_now` is `false` (FLOW), so the clamp applies and is released a tick later
-if the terrain is STEP — harmless in the conservative direction.
+The mode is read as `_mode_now`, which at this point in the loop is equal to
+`_pushed[P_MODE]`: `P_MODE` stays **last** in the table (stream seeding,
+`flow_params.h:86-88`), so neither has been touched by this tick's push yet, and
+`_mode_now` was set from exactly that field at the end of the *previous* tick
+(`push_mode_and_steps`). `_mode_now` is read rather than the field because it
+names the question the guard actually asks: "the mode the instrument is
+currently running".
+
+What actually matters is the property this equality carries: both readings lag
+this tick's candidate mode by one control tick. A mode change happens only on
+NEW or wake, and one tick at 100–500 Hz is inaudible. On the first forced tick
+after wake both are `false` (FLOW, zero-initialised), so the clamp applies and
+is released a tick later if the terrain is STEP — harmless in the conservative
+direction.
 
 **The constant** lives in `taste.h` as a semitone budget, not a raw RANGE
 value, so it stays tunable by ear:

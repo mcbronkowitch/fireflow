@@ -327,7 +327,7 @@ TEST_CASE("flow runtime: the SPACE slew keeps its wall-clock time constant acros
 
 TEST_CASE("flow runtime: a BBD deck in FLOW keeps its bend inside the budget") {
     Instrument in; in.init(48000.f);
-    int seen_bbd_flow = 0, seen_free_deck = 0;
+    int seen_bbd_flow = 0, seen_free_deck = 0, seen_bbd_step_free = 0;
     for (uint32_t k = 1; k <= 400; ++k) {
         Flow f = make(in, k * 2654435761u);
         const bool step = terrain_of(f).base[P_MODE] > 0.5f;
@@ -343,15 +343,24 @@ TEST_CASE("flow runtime: a BBD deck in FLOW keeps its bend inside the budget") {
                 CHECK(f.param_now(rp) <= kBbdFlowRangeMax);
             } else if (f.param_now(rp) > kBbdFlowRangeMax) {
                 ++seen_free_deck;
+                if (bbd && step) ++seen_bbd_step_free;
             }
         }
     }
-    // Non-vacuous in BOTH directions. The clamped case has to actually occur
-    // -- otherwise the CHECK above never runs -- and a deck that is not a BBD
-    // in FLOW has to be seen ABOVE the cap, without which this case would
-    // also pass against an implementation that clamped RANGE on every deck
-    // unconditionally and killed the pitch lane everywhere.
-    CAPTURE(seen_bbd_flow); CAPTURE(seen_free_deck);
+    // Non-vacuous in THREE directions, one per condition the clamp branches
+    // on. seen_bbd_flow pins the clamp itself: a BBD deck in FLOW has to
+    // actually occur, or the CHECK above never runs. seen_free_deck pins the
+    // engine gate: SOME deck (of any engine, in either mode) has to be seen
+    // above the cap, without which this case would also pass against an
+    // implementation that clamped RANGE on every deck unconditionally and
+    // killed the pitch lane everywhere. seen_bbd_step_free pins the mode gate
+    // specifically: a BBD deck in STEP has to be seen above the cap, without
+    // which this case would also pass against an implementation that dropped
+    // the !_mode_now condition and clamped BBD decks in STEP too -- the
+    // 772-odd non-BBD decks alone would keep seen_free_deck positive even
+    // then.
+    CAPTURE(seen_bbd_flow); CAPTURE(seen_free_deck); CAPTURE(seen_bbd_step_free);
     CHECK(seen_bbd_flow > 0);
     CHECK(seen_free_deck > 0);
+    CHECK(seen_bbd_step_free > 0);
 }

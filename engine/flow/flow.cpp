@@ -500,16 +500,21 @@ void Flow::recompute_and_push(bool force) {
         // for nearly the whole ramp on a RANGE value drawn by a terrain that
         // never put a BBD there.
         //
-        // The mode comes from _mode_now, NOT _pushed[P_MODE]: P_MODE must
-        // stay LAST in the parameter table (stream seeding, flow_params.h)
-        // and has therefore not been through this loop yet on this tick.
-        // _mode_now is the mode the instrument is currently RUNNING, which is
-        // the question this guard actually asks. It lags a mode change by one
-        // control tick; a mode change happens only on NEW or wake, and one
-        // tick at 100-500 Hz is inaudible. On the first forced tick after
-        // wake _mode_now is still false (FLOW), so the cap applies and is
-        // released a tick later if the terrain turns out to be STEP -- the
-        // conservative direction.
+        // The mode is read as _mode_now, which at this point in the loop is
+        // equal to _pushed[P_MODE]: P_MODE is LAST in the parameter table
+        // (stream seeding, flow_params.h), so neither has been touched by
+        // this tick's push yet, and _mode_now was set from exactly this
+        // field at the END of the PREVIOUS tick (push_mode_and_steps). The
+        // name is read here rather than the field because it names the
+        // question this guard actually asks: the mode the instrument is
+        // currently RUNNING.
+        //
+        // What that buys, and what actually matters: both readings lag this
+        // tick's candidate mode by one control tick. A mode change happens
+        // only on NEW or wake, and one tick at 100-500 Hz is inaudible. On
+        // the first forced tick after wake both are still FLOW (zero-init),
+        // so the cap applies and is released a tick later if the terrain
+        // turns out to be STEP -- the conservative direction.
         else if (p == P_RANGE_A || p == P_RANGE_B) {
             const int ep = (p == P_RANGE_A) ? P_ENGINE_A : P_ENGINE_B;
             if (int(_pushed[ep] + 0.5f) == ENGINE_BBD && !_mode_now
