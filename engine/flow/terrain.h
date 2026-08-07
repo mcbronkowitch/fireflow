@@ -101,6 +101,14 @@ struct Terrain {
     float     adventure_base;
 };
 
+// The archetype alone, without building a terrain. Stage 0 is a pure function
+// of the master -- make_stream(master, kStreamArch, 0), counter pinned at 0,
+// no dependence on adventure, roles or anything drawn later -- and draw_new's
+// genre filter needs to reject candidates before paying for a full generate()
+// on the audio thread. generate() itself now calls this, so the two cannot
+// drift apart; test_flow_terrain.cpp pins that they agree anyway.
+Archetype arch_of(uint32_t master);
+
 Terrain generate(const TerrainState& st);
 
 // One value inside a span, narrowed toward the middle by the terrain's

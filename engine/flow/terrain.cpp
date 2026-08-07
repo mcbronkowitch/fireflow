@@ -239,15 +239,18 @@ void apply_constraints(Terrain& t) {
 
 } // namespace
 
+Archetype arch_of(uint32_t master) {
+    Rng r = make_stream(master, kStreamArch, 0);
+    return Archetype(pick_weighted(r, kArchWeight, ARCH_COUNT));
+}
+
 Terrain generate(const TerrainState& st) {
     Terrain t{};
 
     // Stage 0: archetype -- the correlation structure that keeps terrains
-    // from converging on mid-density mush. Everything downstream reads it.
-    {
-        Rng r = make_stream(st.master, kStreamArch, 0);
-        t.arch = Archetype(pick_weighted(r, kArchWeight, ARCH_COUNT));
-    }
+    // from being noise. (Body moved to arch_of() so draw_new's genre filter
+    // and generate() cannot draw it differently.)
+    t.arch = arch_of(st.master);
 
     // Stage 1: roles. A coin picks which deck carries; each role then draws
     // its engine from the archetype's weights. Held in locals and written

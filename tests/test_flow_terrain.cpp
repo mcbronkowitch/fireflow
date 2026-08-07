@@ -493,3 +493,19 @@ TEST_CASE("flow terrain: adventure reopens the exotic scales") {
     // 0.092 low against 0.157 high.
     CHECK(hi > lo + 0.02f);
 }
+
+TEST_CASE("flow terrain: arch_of is the archetype generate() draws") {
+    // The cheap stage-0-only path exists so draw_new can filter candidates
+    // without paying for a full generate() on the audio thread. It is only
+    // sound if it never disagrees with the real thing.
+    for (uint32_t m = 1; m <= 5000; ++m) {
+        spky::flow::TerrainState st;
+        st.master = m;
+        CHECK(spky::flow::arch_of(m) == spky::flow::generate(st).arch);
+    }
+    // A partial reroll must not move it: reroll[] never reaches kStreamArch.
+    spky::flow::TerrainState st;
+    st.master = 0xBEEF;
+    for (int i = 0; i < spky::flow::MACRO_COUNT; ++i) st.reroll[i] = 7;
+    CHECK(spky::flow::generate(st).arch == spky::flow::arch_of(0xBEEF));
+}
