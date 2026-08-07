@@ -232,3 +232,31 @@ TEST_CASE("glow: a held button reaches the lock threshold through the bridge") {
     }
     CHECK(locked);
 }
+
+TEST_CASE("glow: the scale knob travels from least to most friction") {
+    // A permutation check alone would test the table, not the feature. The
+    // monotonicity check is what catches a kScaleW retune that reorders the
+    // groups and silently leaves the knob travel no longer running calm to
+    // sharp.
+    bool seen[spky::SCALE_LIST_COUNT] = {};
+    for (int i = 0; i < spky::SCALE_LIST_COUNT; ++i) {
+        const int s = spkyvcv::kScaleKnobOrder[i];
+        REQUIRE(s >= 0);
+        REQUIRE(s < spky::SCALE_LIST_COUNT);
+        CHECK(!seen[s]);
+        seen[s] = true;
+    }
+    for (int i = 1; i < spky::SCALE_LIST_COUNT; ++i)
+        CHECK(spky::flow::kScaleW[spkyvcv::kScaleKnobOrder[i]] <=
+              spky::flow::kScaleW[spkyvcv::kScaleKnobOrder[i - 1]]);
+}
+
+TEST_CASE("glow: knob position 0 is AUTO, the rest are scales") {
+    CHECK(spkyvcv::scale_of_knob(0) == -1);
+    for (int p = 1; p <= spky::SCALE_LIST_COUNT; ++p)
+        CHECK(spkyvcv::scale_of_knob(p) == spkyvcv::kScaleKnobOrder[p - 1]);
+    // Out of range reads as AUTO rather than as scale 0 -- a corrupt patch
+    // must not silently retune the instrument to Aeolian.
+    CHECK(spkyvcv::scale_of_knob(-3) == -1);
+    CHECK(spkyvcv::scale_of_knob(99) == -1);
+}
