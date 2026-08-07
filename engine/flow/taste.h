@@ -96,12 +96,16 @@ constexpr float kDistanceMin = 0.18f;               // NEW rejection threshold
 // THE §7.8 FINDING FROM THE MODE WORK STILL STANDS, and it got smaller. The
 // same masters 1..2000 scan (1 566 non-Sampler terrains) now breaches on 8,
 // 0.51 %, worst rms 0.139; at 4ec5be0 the same scan breaches on 21, 1.34 %,
-// worst 0.180. This ceiling is still a property the generator does not
-// GUARANTEE -- it holds for ~99.5 % of terrains, not all of them -- and the
-// gate is green only because none of the ten fixed candidate seeds sits in
-// the breaching half-percent. Either the generator guarantees a quiet calm
-// corner, or §7.8 says what fraction it tolerates. Unchanged as a spec
-// question; do not "fix" it by moving this number.
+// worst 0.180. This ceiling is a property the generator does not GUARANTEE --
+// it holds for ~99.5 % of terrains, not all of them.
+//
+// RULED BY THE OWNER 2026-08-07, THE SAME RULING THE BLEND GATE TOOK: the
+// fraction is ACCEPTED, §7.8 states it (kCalmLoudFracMax below), and the gate
+// asserts a rate over a population instead of resting on ten fixed seeds that
+// happened to miss the breaching half-percent. THIS CONSTANT IS UNCHANGED and
+// still means what it always meant -- do not "fix" it by moving the number.
+// The per-seed ceiling check stays as well, as a canary on the ten: a fixed
+// seed crossing 0.06 is worth a look even under an accepted rate.
 constexpr float kCalmCornerRmsMax = 0.06f;
 // §7.8 floor -- Task 10. This is a SILENCE DETECTOR, not the musical
 // target: measurements at the reference terrain/seed put the calm corner
@@ -159,13 +163,65 @@ constexpr float kCalmCornerRmsMax = 0.06f;
 // It is a survivor of the mute population, not a terrain that is comfortably
 // audible.
 //
-// THIS IS A FINDING FOR THE OWNER, NOT SOMETHING TO CLAMP AWAY, and it is
-// the same shape of question as the ceiling: either the generator guarantees
-// an audible calm corner, or §7.8 states the fraction it tolerates and this
-// gate asserts a rate over many seeds instead of all-of-ten-fixed-seeds. Do
-// not lower this floor to cover a mute terrain -- the floor is a silence
-// detector, and a terrain that trips it is exactly what it is for.
+// RULED BY THE OWNER 2026-08-07: THE MUTE FRACTION IS ACCEPTED, DELIBERATELY,
+// and §7.8 now states it (kCalmMuteFracMax below). This closes the question,
+// it does not answer it favourably -- roughly one drawn terrain in fifteen
+// waking functionally mute at its calm corner is a KNOWN AND ACCEPTED
+// PROPERTY of this generator, not a defect being tracked. Whether that is the
+// right instrument is a listening judgement the owner has made; whether it
+// stays true is what the gate now measures.
+//
+// TWO THINGS THAT DID NOT CHANGE WITH THE RULING. This constant is unchanged
+// at 1e-5, and must still never be lowered to cover a mute terrain -- it is a
+// silence detector, and a terrain that trips it is exactly what it is for.
+// And the PER-SEED floor check is GONE, unlike the ceiling's: once the mute
+// fraction is accepted, a fixed seed drifting into it is the accepted event
+// happening, not news, and a red test for it would be noise. The rate is the
+// whole claim on this side.
 constexpr float kCalmCornerRmsMin = 1e-5f;          // -100 dBFS, silence floor
+
+// Population for the calm-corner rate checks (spec §7.8 as ruled 2026-08-07).
+// SAME SHAPE AS THE BLEND POPULATION BELOW, ONE DIFFERENCE: no engine-switch
+// filter, because nothing is pressed here -- the calm corner is a static
+// render, so the only terrain that has to be excluded is one with a Sampler
+// deck, which this rig renders silent by construction (see the test file's
+// header) and which would trip the floor for a reason that is not the flow
+// layer's.
+//
+// WHY A STRIDE AND NOT THE WHOLE RANGE, stated plainly because it is the one
+// compromise in this gate: the full population is 1 566 terrains and rendering
+// it the way the gate measures (10 s each, first 3 s skipped) takes 115 s,
+// which is more than the entire rest of the suite. The stride samples that
+// same range evenly -- evenly rather than a 1..N prefix, so no locality in
+// master space can bias it -- and the tolerated fractions below were set from
+// the FULL 1 566-terrain measurement, not from the subsample. The subsample's
+// own rate is asserted; the full population's rate is what the bound was
+// chosen against, and the two are recorded together in the test.
+constexpr uint32_t kCalmPopStride = 12u;            // every Nth master of
+// 1..kBlendPopScanMax. 12 yields 137 terrains and ~10 s (measured), chosen as
+// the coarsest stride that still leaves the mute check real teeth: it reads 8
+// mute (5.84 %) against the full population's 103 (6.58 %), so a doubling is
+// unmistakable. Median 1.51e-03 against the full population's 1.49e-03 -- the
+// subsample tracks the whole on the quantity the median check asserts.
+constexpr int kCalmPopMin = 90;                     // non-vacuity floor, same
+// role as kBlendPopMin: a filter change that starved the set would otherwise
+// make both rate checks trivially green.
+constexpr float kCalmMuteFracMax = 0.10f;           // ACCEPTED mute fraction.
+// THE NUMBER THE OWNER RULED. Full population measures 6.58 % (103/1566) at
+// HEAD and 12.3 % at the branch point 4ec5be0, so 0.10 sits above today and
+// below the rate the taste tables inherited -- it accepts what the generator
+// does now and still goes red if the mute population drifts back toward where
+// it came from. It is an acceptance and a regression bound at once; it is NOT
+// a claim that 10 % would be fine musically.
+constexpr float kCalmLoudFracMax = 0.05f;           // ACCEPTED loud fraction.
+// Full population measures 0.51 % (8/1566) at HEAD, 1.34 % at 4ec5be0. The
+// bound is deliberately loose relative to that, and the subsample shows why:
+// on 137 terrains an 0.51 % rate is well under one expected breach, and the
+// stride happens to catch 2 (1.46 %) -- nearly triple the population rate,
+// purely from which terrains the stride lands on. A tight fraction here would
+// be asserting on that accident. The SENSITIVE ceiling check on this side is
+// the per-seed one, which stays; this rate exists to catch the ceiling
+// becoming a COMMON event, which is the failure a per-seed canary cannot see.
 // §7.8 NEW-blend level gate -- Task 10, round 2. The original design (a raw
 // window-to-window RMS ratio inside ONE render) conflated the instrument's
 // own note-envelope/retrigger dynamics with anything the blend itself did,
@@ -186,11 +242,21 @@ constexpr float kBlendSpikeDb = 6.f;                // press vs. control,
 // should never read more than this many dB LOUDER than the no-press
 // control at the same instant.
 //
-// RE-MEASURED 2026-08-06 (Task 7, the taste tables). THIS GATE IS RED AND IT
-// IS LEFT RED: two of the four asserted seeds breach, 0xD0D at +6.49 dB and
-// 0xC0C0 at +6.36 dB, both in window 3 (0.75-1.00 s). Pre-branch the worst
-// was +3.02 dB. The bound was NOT raised to cover them, for the reason the
-// distribution below makes plain.
+// RULED BY THE OWNER 2026-08-07: THE SECOND OPTION. This ceiling is NOT a
+// property the generator has (the distribution below), and it is not being
+// made into one. §7.8 now states the fraction it tolerates, and the gate
+// asserts a RATE OVER A POPULATION instead of all-of-four-fixed-seeds -- see
+// kBlendSpikeBreachFracMax below. THIS CONSTANT IS UNCHANGED at 6 dB and
+// keeps its original meaning: it is the spec's claim about what a crossfade
+// may do, and it is what the median terrain is still held to.
+//
+// The red that prompted the ruling (Task 7, the taste tables): two of the
+// four asserted seeds breached, 0xD0D at +6.49 dB and 0xC0C0 at +6.36 dB,
+// both in window 3 (0.75-1.00 s). Pre-branch the worst was +3.02 dB. The
+// bound was NOT raised to cover them, and they were NOT dropped from
+// kCandidateMasters -- both of those would have been fitting the gate to the
+// failure. What changed is what the gate claims, not what it tolerates
+// per seed.
 //
 // RULED ON A DISTRIBUTION, NOT ON A SEED, because every earlier report of
 // this gate quoted one seed's before/after and the gate kept changing
@@ -211,17 +277,19 @@ constexpr float kBlendSpikeDb = 6.f;                // press vs. control,
 // fixed seeds sat in the breaching third; the taste tables moved two of them
 // into it, which is a sampling change, not a regression in the blend.
 //
-// THIS GATE CANNOT BE MADE GREEN BY AN HONEST MEASUREMENT. kBlendSpikeDb is a
-// SPEC bound (§5: a NEW blend is a crossfade -- the instrument changes what it
-// is playing, not how loud), so there is no measurement to repeat that could
-// legitimately move it, exactly like kCalmCornerRmsMax above. Raising it to
-// cover 6.49 would be retuning a spec number to fit the generator; raising it
-// to cover the population would mean roughly +60 dB, which asserts nothing.
-// Dropping 0xD0D/0xC0C0 from kCandidateMasters would be carving around the
-// failure -- and they are not special, they are two of ~28 %. It needs the
-// same ruling the calm corner needs: either the blend genuinely holds the
-// level and the generator has to make that true, or §7.8 states the fraction
-// it tolerates and this becomes a distribution check.
+// RE-MEASURED AT HEAD 2026-08-07, before the ruling was implemented, so the
+// number encoded below is HEAD's and not a figure inherited from four commits
+// back: n=85, min -5.90, p50 +2.18, p75 +7.32, p90 +23.29, p95 +34.98,
+// max +59.40, 24/85 (28.2 %) over 6 dB. Identical to the 89eb461 row above --
+// the four commits since did not move this metric at all.
+//
+// WHY THE OTHER THREE EXITS WERE REFUSED, recorded so nobody re-proposes one:
+// raising this to cover 6.49 would be retuning a SPEC number (§5) to fit the
+// generator; raising it to cover the population would mean roughly +60 dB,
+// which asserts nothing; dropping 0xD0D/0xC0C0 from kCandidateMasters would be
+// carving around the failure, and they are not special, they are two of ~28 %.
+// The ruling took the remaining exit, the one this comment has asked for since
+// Task 7 -- and it is the same exit kCalmCornerRmsMax still needs.
 //
 // (Still true from the mode work, and re-confirmed: two asserted seeds change
 // mode on their press, so the carrier's clocking-flip duck path inside the
@@ -243,6 +311,44 @@ constexpr float kBlendDropDb = 10.f;                // press vs. control,
 // (7.1 %) of eligible terrains past it (5 of 85 at 4ec5be0). Read that
 // alongside kBlendSpikeDb's finding: the drop side is heading the same way,
 // just more slowly.
+//
+// SO IT MOVES TO THE SAME DISTRIBUTION RULING (owner, 2026-08-07), even though
+// it is not the side that went red. Leaving the drop side as an all-of-four-
+// fixed-seeds check while the spike side asserts a rate would mean the two
+// halves of one gate claim different things about the same population -- and
+// with 0.80 dB of headroom the per-seed form was going to fail on the next
+// taste-table change anyway, for exactly the sampling reason the spike side
+// just failed for. Re-measured at HEAD 2026-08-07: p50 2.06 dB, p90 7.57 dB,
+// max 14.44 dB, 6/85 (7.1 %) past the floor. Bound UNCHANGED at 10 dB.
+
+// Population for the two rate checks below (spec §7.8 as ruled 2026-08-07).
+// The population is DEFINED, not enumerated: every master in 1..kBlendPopScanMax
+// whose terrain rolls no Sampler deck and whose new_full() switches no engine --
+// the exact set the level comparison is meaningful on. It is computed at test
+// time, so it cannot be quietly trimmed to dodge a failure the way a hardcoded
+// seed list can; kBlendPopMin asserts it did not collapse.
+constexpr uint32_t kBlendPopScanMax = 2000u;        // scan 1..this for the
+// population. 2000 is the range every distribution figure in this file was
+// measured over, kept identical so the encoded rates and the gate's own
+// measurement describe the same set. It yields 85 eligible masters at HEAD.
+constexpr int kBlendPopMin = 60;                    // non-vacuity floor on the
+// population size: a filter change that starved the set would otherwise make
+// both rate checks trivially green (0 of 3 breaching passes any fraction).
+// Set well below today's 85 so ordinary generator drift does not trip it, and
+// well above the handful that would make a rate meaningless.
+constexpr float kBlendSpikeBreachFracMax = 0.33f;   // tolerated fraction of the
+// population allowed past kBlendSpikeDb. THIS IS THE NUMBER THE OWNER RULED,
+// and it is a REGRESSION bound, not a quality target: HEAD sits at 28.2 %
+// (24/85) and the branch point 4ec5be0 sat at 36.5 %, so 0.33 admits four more
+// breaching terrains than today and still goes red before the blend drifts back
+// to where the taste tables found it. It does NOT say 28 % is acceptable
+// musically -- kBlendSpikeDb still says what a crossfade should do, and the
+// median check enforces it on the typical terrain. This bound only says the
+// tail must not grow.
+constexpr float kBlendDropBreachFracMax = 0.12f;    // same, for kBlendDropDb.
+// HEAD sits at 7.1 % (6/85), 4ec5be0 at 5.9 % (5/85); 0.12 admits four more,
+// the same four-terrain margin the spike side gets, chosen for that symmetry
+// rather than measured separately.
 // §7.8 NEW-blend level gate -- Task 10, round 4 (review round 1 found the
 // round-3 comment below quantitatively wrong; this is the corrected
 // version -- see task-10-report.md rounds 3-5 for the full history).

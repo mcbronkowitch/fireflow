@@ -440,9 +440,57 @@ counts.
    stage 3. A fixed-seed-set statistical assertion with generous margins,
    not a fresh-draw hypothesis test — no flaky CI.
 8. **Render smoke:** a handful of fixed seeds through `render.exe` — no NaN,
-   RMS inside plausible bounds, a NEW transition without a level jump beyond
-   a fixed dB threshold, and the **calm corner** (all macros at 0) under a
-   fixed RMS ceiling on every rendered seed.
+   RMS inside plausible bounds, and the **calm corner** (all macros at 0)
+   under a fixed RMS ceiling on every rendered seed.
+
+   **The NEW-transition level check is a RATE, not a per-seed claim**
+   (owner ruling, 2026-08-07). A NEW blend is a crossfade (§5), and the dB
+   threshold says what a crossfade may do — but holding it is not a property
+   the generator has: measured over every master in 1..2000 whose terrain
+   rolls no Sampler deck and whose `new_full()` switches no engine (85
+   terrains), more than a quarter exceed the spike threshold, at the
+   generator's current state and before the taste tables landed alike. The
+   gate therefore asserts two things over that computed population, and the
+   population is recomputed by the test rather than enumerated:
+
+   - the **median** terrain holds the spike and drop thresholds — this is
+     where the §5 crossfade claim is enforced;
+   - the **fraction** past each threshold does not exceed a stated tolerated
+     fraction — a regression bound on the tail, set above today's rate and
+     below the rate measured at the pre-taste-tables branch point.
+
+   Neither threshold moved to reach this, and no seed was dropped. The
+   tolerated fractions are not a statement that the tail is musically ideal —
+   they are what the instrument does, accepted deliberately.
+
+   **The calm corner is ruled the same way, and both its fractions are
+   accepted** (owner, 2026-08-07). Measured over all 1 566 non-Sampler
+   terrains in 1..2000: 6.58 % wake functionally mute at the calm corner and
+   0.51 % exceed the RMS ceiling. Neither is a defect being tracked; both are
+   accepted properties of this generator, and §7.8 states the fractions it
+   tolerates. The gate asserts, over an evenly-strided subsample of that
+   population (the full set takes 115 s to render, which the suite cannot
+   carry):
+
+   - the **median** terrain's calm corner is strictly inside both bounds —
+     audible and quiet, which is where §3's "receding but present" is enforced
+     as a property;
+   - the **mute** and **loud** fractions stay under their accepted fractions.
+
+   Asymmetric on purpose: the ceiling keeps its per-seed check on the fixed
+   seeds as a canary, because at subsample size a 0.51 % rate is under one
+   expected breach; the floor's per-seed check is **removed**, because once
+   the mute fraction is accepted a fixed seed drifting into it is the accepted
+   event occurring, and a red test for it would be noise.
+
+   **A NEW press that switches a deck's engine may go briefly near-silent**,
+   and that too is accepted (owner, 2026-08-07) rather than pending a listen.
+   Such terrains are outside the level population by definition; an
+   engine-switch crossfade would mean running two part engines at once, which
+   the Daisy target cannot afford. NaN is still asserted on them.
+
+   Exact values live in `engine/flow/taste.h` beside the constants, which is
+   the single authority for all of these numbers.
 
 ## 8. Out of scope
 
