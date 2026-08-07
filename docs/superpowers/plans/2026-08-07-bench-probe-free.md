@@ -111,12 +111,14 @@ Erwartet: alle grün. `test_task8_contract.py` liest `alt_sram.lds` mit und ist 
 Die geteilte Datei verlangt drei Beweise, nicht einen:
 
 ```bash
-make -C bench build/bench.elf
-make                          # die ausgelieferte Firmware, Root-Makefile
-make -C bench/audition
+make -C bench -j8 BENCH_FAMILIES="system bbd" BENCH_OPTIMIZATION=o3 build/bench.elf
+make -j8                      # die ausgelieferte Firmware, Root-Makefile
+make -C bench/audition -j8
 ```
 
 Erwartet: alle drei übersetzen und linken. Bricht die ausgelieferte Firmware, ist der Umzug zu weit gegangen — dann ist die Länge zu prüfen, nicht der Origin.
+
+> **Nicht `make -C bench build/bench.elf` ohne `BENCH_FAMILIES`.** Das baut das volle Profil, und das linkt seit Langem nicht — `bench/profiles.py` sagt es ausdrücklich: *„Expected to FAIL TO LINK until the engine shrinks or the region grows."* Der Überlauf sieht aus wie ein Schaden dieser Aufgabe und ist keiner. Wer ihn trotzdem sieht, vergleicht gegen den Stand vor der Änderung, bevor er etwas repariert.
 
 - [ ] **Schritt 6: Commit**
 
@@ -474,6 +476,25 @@ Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 ```
 
 ---
+
+## Wie es ausging (2026-08-07)
+
+**Tasks 1 bis 6 sind erledigt, Stufe 3 steht aus.** Sie wartet nicht auf diesen Plan, sondern auf Task 1 des anderen: die Bench ist ein Seed-Programm, und auf dem Submodule würde `DaisySeed::Init()` den falschen Codec hochfahren.
+
+Sechs Fehlschläge auf dem Weg, jeder ein echter Defekt:
+
+| Symptom | Ursache | Commit |
+|---|---|---|
+| Beleg passt nicht | Beleg an den ELF gebunden, USB-Zweig ist ein anderes Binary | — |
+| Rücklese-Digest falsch | **Bootloader kann keinen QSPI-Upload** — Entscheidung 3 der Spec ist halb tot | `981c7f3`, `addebf7` |
+| `last page not writeable` | **67-MB-Image**: `.dtcmram_code` ohne `AT`-Klausel | `4aed1bf` |
+| Kein `BENCH_BEGIN` | `StartLog(true)` kehrt zurück, bevor der Host liest | `f0ed3c0` |
+| Kopfzeile abgeschnitten | **128-Byte-Loggerpuffer** gegen eine 135-Byte-Zeile | `9cc0c2d` |
+| Wiederholung 2 stirbt sofort | Board enumeriert nach dem Rücksprung neu | `a74c876` |
+
+**Zwei davon betrafen die ausgelieferte Firmware**, nicht nur das Messwerkzeug — die Bankadresse und der DTCM-Code. Beide waren unsichtbar, solange immer ein Probe dranhing.
+
+**Das Ergebnis von Stufe 2 ist nicht „kein Unterschied", sondern eine Zahl:** USB-CDC kostet 6 370 Zyklen pro Block, 0,66 % des Budgets, verursacht vom Start-of-Frame-Interrupt und nicht von der Speicherkarte. `docs/bench/2026-08-07-transport-semihost-vs-usb.md`.
 
 ## Reihenfolge
 
