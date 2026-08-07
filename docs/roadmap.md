@@ -35,6 +35,19 @@ is actually built today, and what is still design-only.
   every state-dependent panel caption now comes from one generator table — see
   "BBD PITCH / tape TIME surface", "BBD dynamic-stage declick" and "VCV
   engine-aware captions" below).
+- **Every CPU number below was measured on a Daisy Seed, and Seed numbers do
+  not travel to the M6 target board.** Measured 2026-08-07 on a Daisy Patch
+  Submodule, same profile/layout/optimization/transport: every one of the 24
+  workloads is more expensive there, the decision workload
+  `instrument_worst_bbd_dtcm` by **+0.53 to +0.80 percentage points** — more
+  than either board's repeat band, so this is reproducible and not noise. Both
+  boards still fit; the reserve falls from 2.97 to **2.17 points**, and the AXI
+  neighbours `instrument_worst_bbd` (99.25 %) and `inst_bbd_engine_worst`
+  (99.67 %) sit less than half a point under the block budget. **Do not quote a
+  Seed figure for a submodule claim** — not with an asterisk, not as an
+  approximation. See
+  [Seed vs Patch Submodule](bench/2026-08-07-seed-vs-patch-sm.md); the cause is
+  not measured and is deliberately not named there.
 - **CPU status: the selected O3 ITCM-hot benchmark passes; the production-shell
   timing boundary remains pending.** Both O3 DTCM+BBD benchmark repeats are
   below 100 % offline and in the real callback. This is the benchmark stop
