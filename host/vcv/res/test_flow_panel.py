@@ -28,7 +28,7 @@ def approx(a, b, tol=0.01):
 
 # --- the frozen contract: enum ORDER defines ids in every saved patch --------
 PARAM_ORDER = ['MOTION', 'DENSITY', 'BRIGHT', 'DIRT', 'WANDER', 'SPACE',
-               'NEW_BTN']
+               'NEW_BTN', 'GENRE', 'SCALE']
 INPUT_ORDER = ['CV_MOT', 'CV_DEN', 'CV_BRT', 'CV_DRT', 'CV_SPC', 'CLK']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R']
 

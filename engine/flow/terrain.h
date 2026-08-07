@@ -101,6 +101,14 @@ struct Terrain {
     float     adventure_base;
 };
 
+// The archetype alone, without building a terrain. Stage 0 is a pure function
+// of the master -- make_stream(master, kStreamArch, 0), counter pinned at 0,
+// no dependence on adventure, roles or anything drawn later -- and draw_new's
+// genre filter needs to reject candidates before paying for a full generate()
+// on the audio thread. generate() itself now calls this, so the two cannot
+// drift apart; test_flow_terrain.cpp pins that they agree anyway.
+Archetype arch_of(uint32_t master);
+
 Terrain generate(const TerrainState& st);
 
 // One value inside a span, narrowed toward the middle by the terrain's
@@ -116,12 +124,21 @@ float draw_span(Rng& r, const Span& s, float adv);
 float distance(const Terrain& a, const Terrain& b);
 
 // Draw a new terrain state that reads as a different place from cur (spec
-// 7.4's NEW gesture): a fresh master with every reroll counter zero, at
-// least kDistanceMin away from cur by distance() above. seq is the
-// caller-held sequence Rng -- passing the same seeded Rng twice reproduces
-// the same draw chain, so NEW is deterministic given a fixed seed even
-// though it never repeats cur.master. See terrain.cpp for the retry
-// policy (up to 16 tries, falls back to the farthest candidate seen).
-TerrainState draw_new(const TerrainState& cur, Rng& seq);
+// 7.4's NEW gesture, extended by spec 2026-08-07 §2.2). Every candidate is a
+// fresh master with all reroll counters zero. seq is the caller-held sequence
+// Rng -- passing the same seeded Rng twice reproduces the same draw chain --
+// and cur.master is never returned.
+//
+// TWO BRANCHES, and they use different rules on purpose:
+//
+//   want == ARCH_ANY   the original: retry until a candidate clears
+//                      kDistanceMin, or give up after 16 tries and take the
+//                      farthest seen. Unchanged, down to the RNG draw count.
+//   want == archetype  candidates whose arch_of() does not match are skipped
+//                      without being generated; once kGenreCandidates of them
+//                      match, the farthest by distance() wins. NO threshold --
+//                      see taste.h at kGenreCandidates for why one would be
+//                      decorative here. Bounded by kGenreDrawCap draws.
+TerrainState draw_new(const TerrainState& cur, Rng& seq, int want = ARCH_ANY);
 
 } } // namespace spky::flow

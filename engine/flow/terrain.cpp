@@ -239,15 +239,18 @@ void apply_constraints(Terrain& t) {
 
 } // namespace
 
+Archetype arch_of(uint32_t master) {
+    Rng r = make_stream(master, kStreamArch, 0);
+    return Archetype(pick_weighted(r, kArchWeight, ARCH_COUNT));
+}
+
 Terrain generate(const TerrainState& st) {
     Terrain t{};
 
     // Stage 0: archetype -- the correlation structure that keeps terrains
-    // from converging on mid-density mush. Everything downstream reads it.
-    {
-        Rng r = make_stream(st.master, kStreamArch, 0);
-        t.arch = Archetype(pick_weighted(r, kArchWeight, ARCH_COUNT));
-    }
+    // from being noise. (Body moved to arch_of() so draw_new's genre filter
+    // and generate() cannot draw it differently.)
+    t.arch = arch_of(st.master);
 
     // Stage 1: roles. A coin picks which deck carries; each role then draws
     // its engine from the archetype's weights. Held in locals and written
@@ -605,17 +608,52 @@ float distance(const Terrain& a, const Terrain& b) {
 // master 1, every reroll 0 -- which is a real but unreachable-in-practice
 // edge left uncorrected rather than adding retry-count-inflating logic
 // for it.)
-TerrainState draw_new(const TerrainState& cur, Rng& seq) {
+//
+// The genre branch (spec 2026-08-07 §2.2) is separate below rather than folded
+// into the loop above, because it answers a different question: not "is this
+// far enough away" but "which of these eight is farthest". Only genre-matching
+// candidates ever enter `best` -- taking the farthest of ALL candidates would
+// break the lock precisely because of the +0.25 archetype term, which across
+// archetypes dominates the base patch outright.
+TerrainState draw_new(const TerrainState& cur, Rng& seq, int want) {
     const Terrain cur_terrain = generate(cur);
+    if (want == ARCH_ANY) {
+        TerrainState best;
+        float best_dist = -1.f;
+        for (int try_i = 0; try_i < 16; ++try_i) {
+            const uint32_t master = seq.next_u32();
+            if (master == cur.master) continue;    // redraw, still a spent try
+            TerrainState cand;
+            cand.master = master;                  // reroll[] already zero
+            const float d = distance(cur_terrain, generate(cand));
+            if (d >= kDistanceMin) return cand;
+            if (d > best_dist) { best_dist = d; best = cand; }
+        }
+        return best;
+    }
+
+    // Genre-locked: collect kGenreCandidates matching masters, keep the
+    // farthest. arch_of() rejects a non-matching master for the price of one
+    // stream seed, so the expensive generate() runs only on the eight that
+    // survive -- fewer than the ANY branch's sixteen.
+    //
+    // If the cap is somehow exhausted with no match at all, `best` is still a
+    // default-constructed TerrainState (master 1, every counter zero), whose
+    // archetype need not match `want`. That is a real but unreachable edge --
+    // ~1e-18 at the rarest weight -- left uncorrected rather than given
+    // logic that could never be tested, exactly as the ANY branch leaves its
+    // own all-16-draws-hit-cur.master edge.
     TerrainState best;
     float best_dist = -1.f;
-    for (int try_i = 0; try_i < 16; ++try_i) {
+    int matched = 0;
+    for (int i = 0; i < kGenreDrawCap && matched < kGenreCandidates; ++i) {
         const uint32_t master = seq.next_u32();
-        if (master == cur.master) continue;        // redraw, still a spent try
+        if (master == cur.master) continue;
+        if (arch_of(master) != want) continue;
+        ++matched;
         TerrainState cand;
-        cand.master = master;                       // reroll[] already zero
+        cand.master = master;
         const float d = distance(cur_terrain, generate(cand));
-        if (d >= kDistanceMin) return cand;
         if (d > best_dist) { best_dist = d; best = cand; }
     }
     return best;

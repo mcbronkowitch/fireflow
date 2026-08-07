@@ -63,6 +63,19 @@ constexpr float kRefuseFlashS = 0.25f;              // gesture.h REFUSED blink
 // FireFlow Glow can actually be played.
 inline constexpr char kHouseCode[] = "F1-00000020-000000000000";
 constexpr float kDistanceMin = 0.18f;               // NEW rejection threshold
+// The genre-locked NEW draw (spec 2026-08-07 §2.2). kDistanceMin does NOT
+// apply in that branch: under a lock every candidate shares cur's archetype,
+// so distance()'s flat +0.25 is a constant on all of them and cancels in the
+// argmax -- and terrain.cpp's own measurement (2026-08-06, at 89eb461) found
+// NO same-archetype pair of 6 603 clearing kDistanceMin on its base patch, so
+// a threshold there would reject every candidate and let the fallback decide
+// every press. Best-of-N is the rule instead, and kGenreCandidates is the one
+// number that tunes it: larger means NEW works harder for contrast.
+constexpr int kGenreCandidates = 8;
+// Termination guard, not a tuning knob. At the rarest archetype weight (0.15)
+// 256 draws yield a mean of 38.4 matches, sd ~5.7 -- fewer than 8 is past 5
+// sigma and zero matches is ~1e-18, so this cap is unreachable in practice.
+constexpr int kGenreDrawCap = 256;
 // §7.8 ceiling, lin FS. A SPEC NUMBER, not a measured one: it says how loud
 // the calm corner is allowed to be, so it is never fitted to what the
 // generator happens to produce.

@@ -47,6 +47,11 @@ static_assert(static_cast<int>(SPACE) == static_cast<int>(spky::flow::M_SPACE),
 static_assert(CV_DEN == CV_MOT + 1 && CV_BRT == CV_MOT + 2 &&
               CV_DRT == CV_MOT + 3 && CV_SPC == CV_MOT + 4,
               "CV jacks must stay contiguous -- controlTick indexes CV_MOT + i");
+// GENRE position 0 is ANY and 1..4 are the archetypes in enum order, so
+// controlTick's `pos - 1` is only correct while ARCH_DRONE is 0. The six
+// macro asserts above set the precedent for pinning arithmetic like this.
+static_assert(spky::flow::ARCH_DRONE == 0,
+              "GENRE's knob position -> archetype mapping assumes ARCH_DRONE == 0");
 
 struct Glow : Module {
     spky::Instrument inst;
@@ -125,18 +130,57 @@ struct Glow : Module {
     bool uiHaveUndo = false;            // RESTORE
     bool uiLock = false;                // SET_LOCK, RESTORE
 
+    // The ROOT override (spec 2026-08-07 §3.1), set from appendContextMenu on
+    // the UI thread and read every controlTick on the audio thread. Atomic
+    // rather than a plain int, and NOT a UiOp: UiOp is a one-shot exchange for
+    // an operation, this is a standing value. Default sequential consistency,
+    // matching uiOp -- no relaxed/acquire-release hand-rolling.
+    std::atomic<int> rootOverride { -1 };     // -1 = AUTO
+
+    // GENRE / SCALE. Both are snapped switches whose FIRST position is the
+    // random one -- ANY draws the archetype at random, AUTO takes whatever
+    // the terrain drew -- so the player selects randomness at the control.
+    // That is exactly why neither joins Rack's Randomize: configSwitch leaves
+    // randomizeEnabled at its default true (configButton is the one that
+    // clears it), and letting Randomize pin the instrument to Whole tone
+    // would remove a choice rather than add one.
+    void configSel(const PanelCtl& c) {
+        std::vector<std::string> labels;
+        if (c.id == GENRE) {
+            labels = { "Any", "Drone", "Pulse", "Arp", "Fragment" };
+        } else {
+            labels.push_back("Auto");
+            for (int i = 0; i < spky::SCALE_LIST_COUNT; ++i)
+                labels.push_back(spky::SCALE_NAMES[spkyvcv::kScaleKnobOrder[i]]);
+        }
+        configSwitch(c.id, 0.f, float(labels.size() - 1), 0.f, c.tip, labels);
+        if (auto* pq = paramQuantities[c.id]) pq->randomizeEnabled = false;
+    }
+
     Glow() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
         for (const auto& c : kParamCtls) {
-            if (c.kind == WK_MACRO)
-                // The six macro knobs stay on c.label, matching Fireflow.cpp
-                // -- deliberate, not an oversight.
-                configParam(c.id, 0.f, 1.f, 0.5f, c.label);
-            else
-                // The NEW button's whole interaction model lives in one
-                // control, so its Rack tooltip should be the panel's full
-                // gesture-table string (c.tip), not just "NEW" (c.label).
-                configButton(c.id, c.tip);
+            switch (c.kind) {
+                case WK_MACRO:
+                    // The six macro knobs stay on c.label, matching
+                    // Fireflow.cpp -- deliberate, not an oversight.
+                    configParam(c.id, 0.f, 1.f, 0.5f, c.label);
+                    break;
+                case WK_BTN:
+                    // The NEW button's whole interaction model lives in one
+                    // control, so its Rack tooltip should be the panel's full
+                    // gesture-table string (c.tip), not just "NEW" (c.label).
+                    configButton(c.id, c.tip);
+                    break;
+                case WK_SEL:
+                    configSel(c);
+                    break;
+                // Named rather than defaulted: WK_IN/WK_OUT share the enum
+                // but never appear in kParamCtls, and naming them keeps
+                // -Wswitch live, so a future kind is a compile error here
+                // instead of a param that silently gets no config.
+                case WK_IN: case WK_OUT: break;
+            }
         }
         for (const auto& c : kInputCtls)  configInput(c.id, c.tip);
         for (const auto& c : kOutputCtls) configOutput(c.id, c.tip);
@@ -159,11 +203,25 @@ struct Glow : Module {
         json_object_set_new(root, "terrain", json_string(s.code));
         json_object_set_new(root, "lock", json_boolean(s.lock));
         if (s.have_undo) json_object_set_new(root, "undo", json_string(s.undo));
+        json_object_set_new(root, "root", json_integer(rootOverride.load()));
         return root;
     }
 
     void dataFromJson(json_t* root) override {
         if (!root) return;
+        // Read BEFORE the terrain's early return below: the override is
+        // independent of the terrain, and a patch whose code is missing or
+        // malformed must not lose it as collateral.
+        // The type check matters as much as the range one: json_integer_value
+        // on a non-integer returns 0, so a corrupt `"root": "F#"` would
+        // otherwise transpose the patch to C instead of falling back to AUTO.
+        // The sibling `undo` read below checks its type for the same reason.
+        // glow_ui.hpp owns the range rule so the desktop suite can test it.
+        if (json_t* r = json_object_get(root, "root")) {
+            rootOverride = json_is_integer(r)
+                ? spkyvcv::clamp_root_override(int(json_integer_value(r)))
+                : -1;
+        }
         spkyvcv::GlowSave s;
         json_t* code = json_object_get(root, "terrain");
         if (!json_is_string(code)) return;              // nothing to restore
@@ -352,12 +410,40 @@ struct Glow : Module {
     }
 
     void onReset() override {
+        // Tonality FIRST, before reinit/wakeHouse. Params are reset for us by
+        // Rack's default ResetEvent handler before this runs, which covers
+        // GENRE and SCALE -- but they do not reach Flow until the next
+        // controlTick, and rootOverride is not a param at all. reinit() and
+        // wakeHouse() force-push every parameter through recompute_and_push,
+        // so clearing afterwards would push the PREVIOUS tonality once and
+        // self-correct a control period later. That is the same one-tick
+        // artefact spec §4.1 rules out in the other direction.
+        rootOverride = -1;
+        flow.set_genre(spky::flow::ARCH_ANY);
+        flow.set_scale_override(-1);
+        flow.set_root_override(-1);
         reinit(curSr > 0.f ? curSr : 48000.f);
         wakeHouse();
         knobs.primed = false;
     }
 
     void controlTick(float sr) {
+        // Host-owned settings first: wake() below force-pushes every
+        // parameter, so an override applied after it would miss that push and
+        // let one tick out on the terrain's own tonality.
+        // Range-guarded here, not inside set_genre: Rack's Param::setValue
+        // does NOT clamp, and paramsFromJson writes straight through it, so a
+        // hand-edited patch can hand this a nonsense position. An out-of-range
+        // archetype would match nothing in kGenreDrawCap draws and leave NEW
+        // permanently dead with no diagnostic. Anything not a real position
+        // reads as ANY -- the same rule scale_of_knob applies to SCALE.
+        const int gpos = int(params[GENRE].getValue() + 0.5f);
+        flow.set_genre(gpos >= 1 && gpos <= spky::flow::ARCH_COUNT
+                       ? gpos - 1 : spky::flow::ARCH_ANY);
+        flow.set_scale_override(
+            spkyvcv::scale_of_knob(int(params[SCALE].getValue() + 0.5f)));
+        flow.set_root_override(rootOverride.load());
+
         // Apply whatever the UI thread staged (fix round 3): flag read FIRST
         // via exchange() -- so at most one op survives even if two menu
         // actions landed in the same UI frame -- payload read only after.
@@ -538,15 +624,32 @@ struct GlowWidget : ModuleWidget {
 
         for (const auto& c : kParamCtls) {
             const Vec pos = mm2px(Vec(c.mm.x, c.mm.y));
-            if (c.kind == WK_MACRO)
-                // Rack's stock knobs come in fixed sizes; RoundLargeBlackKnob
-                // is 46 px ~ 15.6 mm, the nearest to the panel's 16 mm.
-                // RoundBigBlackKnob (54 px ~ 18.3 mm) would overhang the
-                // printed footprint by more than a millimetre a side.
-                addParam(createParamCentered<RoundLargeBlackKnob>(pos, module, c.id));
-            else
-                addParam(createLightParamCentered<VCVLightBezel<GreenLight>>(
-                    pos, module, c.id, NEW_L));
+            switch (c.kind) {
+                case WK_MACRO:
+                    // Rack's stock knobs come in fixed sizes;
+                    // RoundLargeBlackKnob is 46 px ~ 15.6 mm, the nearest to
+                    // the panel's 16 mm. RoundBigBlackKnob (54 px ~ 18.3 mm)
+                    // would overhang the printed footprint by more than a
+                    // millimetre a side.
+                    addParam(createParamCentered<RoundLargeBlackKnob>(
+                        pos, module, c.id));
+                    break;
+                case WK_BTN:
+                    addParam(createLightParamCentered<VCVLightBezel<GreenLight>>(
+                        pos, module, c.id, NEW_L));
+                    break;
+                case WK_SEL:
+                    // 11 mm printed footprint; RoundBlackKnob is 38 px ~ 12.9
+                    // mm, RoundSmallBlackKnob 28 px ~ 9.5 mm -- the smaller
+                    // one stays inside the print.
+                    addParam(createParamCentered<RoundSmallBlackKnob>(
+                        pos, module, c.id));
+                    break;
+                // Named rather than defaulted, for the same reason as the
+                // switch in Glow(): a new WidgetKind must not fall silently
+                // through to nothing here either.
+                case WK_IN: case WK_OUT: break;
+            }
         }
         for (const auto& c : kInputCtls)
             addInput(createInputCentered<PJ301MPort>(mm2px(Vec(c.mm.x, c.mm.y)),
@@ -567,8 +670,27 @@ struct GlowWidget : ModuleWidget {
         menu->addChild(new MenuSeparator);
         menu->addChild(createMenuLabel("Terrain " + m->terrainCode()));
 
-        // Share a terrain: the code is the whole state (spec 4), so copying
-        // it out and pasting it in is the entire sharing story.
+        // Which genre the CURRENT terrain is. Free now that arch_of exists,
+        // and the point of the GENRE control is auditioning one archetype at
+        // a time -- without this the player cannot see which one they are in.
+        static const char* kArchNames[] = { "Drone", "Pulse", "Arp", "Fragment" };
+        menu->addChild(createMenuLabel(
+            std::string("Genre ") +
+            kArchNames[spky::flow::arch_of(m->flow.state().master)]));
+
+        menu->addChild(createIndexSubmenuItem(
+            "Root",
+            { "Auto", "C", "C#", "D", "D#", "E", "F",
+              "F#", "G", "G#", "A", "A#", "B" },
+            [m]() { return m->rootOverride.load() + 1; },
+            [m](int i) { m->rootOverride = i - 1; }));
+
+        // Share a terrain: the code is the terrain's whole identity, so
+        // copying it out and pasting it in carries the place itself. It is no
+        // longer the instrument's whole STATE -- an explicit SCALE or ROOT
+        // override (spec 2026-08-07 §3) rides on top of it and travels in the
+        // patch, not in the code -- so a pasted code reproduces the sharer's
+        // terrain, not necessarily their tonality.
         menu->addChild(createMenuItem("Copy terrain code", "", [m]() {
             glfwSetClipboardString(APP->window->win, m->terrainCode().c_str());
         }));

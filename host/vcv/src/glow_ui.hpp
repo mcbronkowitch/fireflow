@@ -12,7 +12,9 @@
 #include "flow/flow.h"
 #include "flow/flow_ids.h"
 #include "flow/gesture.h"
+#include "flow/taste.h"
 #include "flow/terrain_code.h"
+#include "pitch/quantizer.h"
 
 namespace spkyvcv {
 
@@ -21,6 +23,42 @@ inline constexpr int kCvMacro[5] = {
     spky::flow::M_MOTION, spky::flow::M_DENSITY, spky::flow::M_BRIGHT,
     spky::flow::M_DIRT,   spky::flow::M_SPACE
 };
+
+// Knob position -> ScaleId for Glow's SCALE switch (spec 2026-08-07 §3.1).
+// ScaleId is ordered by provenance (modes, pentatonics, exotic); the knob is
+// ordered by FRICTION, so the travel runs calm -> sharp: the two scales with
+// neither a minor second nor a tritone first, then the seven-note modes (which
+// all contain both, a property of seven notes in twelve), then the
+// hirajoshi/pygmy/kumoi bucket, then the exotics.
+//
+// That ordering is not re-derived by feel -- it is kScaleW (taste.h) read
+// descending, and test_glow_ui.cpp pins the two together so a retune of the
+// weights cannot leave this table quietly stale.
+inline constexpr int kScaleKnobOrder[spky::SCALE_LIST_COUNT] = {
+    spky::SCALE_MIN_PENT, spky::SCALE_MAJ_PENT,                   // 0.1750
+    spky::SCALE_AEOLIAN,  spky::SCALE_DORIAN,
+    spky::SCALE_MIXO,     spky::SCALE_LYDIAN,                     // 0.1125
+    spky::SCALE_HIRAJOSHI, spky::SCALE_PYGMY, spky::SCALE_KUMOI,  // 0.0667
+    spky::SCALE_PHRYGIAN, spky::SCALE_HIJAZ,
+    spky::SCALE_HARM_MIN, spky::SCALE_WHOLE,                      // 0.0250
+};
+
+// Switch position -> what Flow::set_scale_override wants. Position 0 is AUTO,
+// and so is anything out of range: a corrupt patch must not retune the
+// instrument to whatever scale happens to sit at index 0.
+inline int scale_of_knob(int pos) {
+    if (pos < 1 || pos > spky::SCALE_LIST_COUNT) return -1;
+    return kScaleKnobOrder[pos - 1];
+}
+
+// A saved ROOT override -> what Flow::set_root_override wants. -1 is AUTO,
+// and so is anything outside 0..11: the same rule scale_of_knob applies, for
+// the same reason -- a corrupt patch must not silently transpose the
+// instrument to C. Lives here rather than in Glow.cpp so the desktop suite can
+// test it; Glow.cpp passes a plain int, keeping jansson out of the signature.
+inline int clamp_root_override(int raw) {
+    return (raw >= 0 && raw <= 11) ? raw : -1;
+}
 
 // Unipolar Eurorack convention: 0..10 V spans the macro's whole travel.
 // Deliberately NOT clamped -- Flow::set_cv clamps the knob+CV+weather sum,
@@ -130,7 +168,9 @@ inline float clock_bpm(float fallback, float clkPeriod, float clkSamples,
     return fallback;
 }
 
-// Exactly what a patch stores (spec 5: current terrain code, lock, undo slot).
+// Exactly what a patch stores OF THE TERRAIN: current code, lock, undo slot.
+// The tonality overrides (spec 2026-08-07 §3) are module settings rather than
+// terrain state and are saved by Glow.cpp directly, not through here.
 struct GlowSave {
     char code[spky::flow::kTerrainCodeLen + 1] = {};
     char undo[spky::flow::kTerrainCodeLen + 1] = {};

@@ -493,3 +493,153 @@ TEST_CASE("flow terrain: adventure reopens the exotic scales") {
     // 0.092 low against 0.157 high.
     CHECK(hi > lo + 0.02f);
 }
+
+TEST_CASE("flow terrain: arch_of is the archetype generate() draws") {
+    // The cheap stage-0-only path exists so draw_new can filter candidates
+    // without paying for a full generate() on the audio thread. It is only
+    // sound if it never disagrees with the real thing.
+    for (uint32_t m = 1; m <= 5000; ++m) {
+        spky::flow::TerrainState st;
+        st.master = m;
+        CHECK(spky::flow::arch_of(m) == spky::flow::generate(st).arch);
+    }
+    // A partial reroll must not move it: reroll[] never reaches kStreamArch.
+    spky::flow::TerrainState st;
+    st.master = 0xBEEF;
+    for (int i = 0; i < spky::flow::MACRO_COUNT; ++i) st.reroll[i] = 7;
+    CHECK(spky::flow::generate(st).arch == spky::flow::arch_of(0xBEEF));
+}
+
+TEST_CASE("flow terrain: a genre-locked draw_new never leaves the genre") {
+    // Today this fails by construction: distance()'s flat +0.25 archetype
+    // bonus alone clears kDistanceMin, so NEW leaves the archetype every
+    // time (listening notes item 8: 0 same-archetype results in 3 000 calls).
+    for (int a = 0; a < spky::flow::ARCH_COUNT; ++a) {
+        spky::Rng seq;
+        seq.seed(9876u + uint32_t(a));
+        spky::flow::TerrainState cur;
+        cur.master = 0x101;
+        for (int i = 0; i < 200; ++i) {
+            cur = spky::flow::draw_new(cur, seq, a);
+            REQUIRE(spky::flow::arch_of(cur.master) == spky::flow::Archetype(a));
+            CHECK(cur.reroll[0] == 0);          // NEW replaces the whole terrain
+        }
+    }
+}
+
+TEST_CASE("flow terrain: a genre-locked draw_new returns the farthest candidate") {
+    // Best-of-N is the whole rule in this branch -- there is no threshold --
+    // so "the result is the maximum" is the only thing that makes it a rule.
+    // Replay the same seed by hand and confirm nothing nearer was passed over.
+    spky::Rng seq;
+    seq.seed(4242u);
+    spky::flow::TerrainState cur;
+    cur.master = 0x707;
+    const spky::flow::Terrain cur_t = spky::flow::generate(cur);
+    const spky::flow::TerrainState got =
+        spky::flow::draw_new(cur, seq, spky::flow::ARCH_DRONE);
+
+    spky::Rng replay;
+    replay.seed(4242u);
+    float best = -1.f;
+    int matched = 0;
+    uint32_t best_master = 0;
+    for (int i = 0; i < spky::flow::kGenreDrawCap &&
+                    matched < spky::flow::kGenreCandidates; ++i) {
+        const uint32_t m = replay.next_u32();
+        if (m == cur.master) continue;
+        if (spky::flow::arch_of(m) != spky::flow::ARCH_DRONE) continue;
+        ++matched;
+        spky::flow::TerrainState cand;
+        cand.master = m;
+        const float d = spky::flow::distance(cur_t, spky::flow::generate(cand));
+        if (d > best) { best = d; best_master = m; }
+    }
+    CHECK(matched == spky::flow::kGenreCandidates);
+    CHECK(got.master == best_master);
+}
+
+TEST_CASE("flow terrain: a genre-locked draw_new skips the master it started on") {
+    // The ANY branch guarantees this (terrain.cpp's `continue` on a repeat)
+    // and test_flow_terrain_code.cpp asserts it there; the new branch needs
+    // its own assertion, since it has its own skip.
+    //
+    // "next.master != cur.master" ALONE cannot pin that skip, and the first
+    // version of this case was therefore vacuous: delete the `continue` and
+    // cur.master merely joins the candidate set with distance(cur_t, cur_t)
+    // == 0, which loses to every distinct terrain, so the result still
+    // differs from cur.master. What the skip actually decides is membership
+    // of the candidate set -- it frees the slot cur.master would occupy for
+    // the next matching master, which can be the farthest one.
+    //
+    // So: pick a seed whose stream really does draw cur.master (searched for,
+    // not invented -- seed 1 draws it 14th, inside the matched window, and it
+    // is the case where the freed slot changes the winner), then replay the
+    // selection by hand WITH the skip and require draw_new to agree. Delete
+    // the `continue` in terrain.cpp and this goes red.
+    const uint32_t kSeed = 1u;
+    const uint32_t kCurMaster = 82049198u;      // the 14th draw off kSeed
+    spky::flow::TerrainState cur;
+    cur.master = kCurMaster;
+    const int want = spky::flow::arch_of(cur.master);
+    {
+        spky::Rng probe;
+        probe.seed(kSeed);
+        bool drawn = false;
+        for (int i = 0; i < 24; ++i) drawn = drawn || probe.next_u32() == kCurMaster;
+        REQUIRE(drawn);                         // the skip is reachable at all
+    }
+    const spky::flow::Terrain cur_t = spky::flow::generate(cur);
+    spky::Rng replay;
+    replay.seed(kSeed);
+    float best = -1.f;
+    uint32_t best_master = 1u;
+    int matched = 0;
+    for (int i = 0; i < spky::flow::kGenreDrawCap &&
+                    matched < spky::flow::kGenreCandidates; ++i) {
+        const uint32_t m = replay.next_u32();
+        if (m == cur.master) continue;          // the skip under test
+        if (spky::flow::arch_of(m) != want) continue;
+        ++matched;
+        spky::flow::TerrainState cand;
+        cand.master = m;
+        const float d = spky::flow::distance(cur_t, spky::flow::generate(cand));
+        if (d > best) { best = d; best_master = m; }
+    }
+    REQUIRE(matched == spky::flow::kGenreCandidates);
+    spky::Rng seq;
+    seq.seed(kSeed);
+    const spky::flow::TerrainState got = spky::flow::draw_new(cur, seq, want);
+    CHECK(got.master == best_master);
+    CHECK(got.master != cur.master);
+
+    // Breadth, on top of the constructed case: a long genre-locked chain never
+    // lands back where it started.
+    spky::Rng chain;
+    chain.seed(31337u);
+    spky::flow::TerrainState walk;
+    walk.master = 0x20;
+    for (int i = 0; i < 300; ++i) {
+        const spky::flow::TerrainState next =
+            spky::flow::draw_new(walk, chain, spky::flow::arch_of(walk.master));
+        CHECK(next.master != walk.master);
+        walk = next;
+    }
+}
+
+TEST_CASE("flow terrain: the unconstrained draw_new chain is unchanged") {
+    // NOT draw_new(cur, seq) vs draw_new(cur, seq, ARCH_ANY): those are the
+    // same call through the default argument and could never disagree. Pin
+    // the actual chain instead, so a change to the ANY branch shows up here.
+    // The four literals below are captured from the CURRENT implementation
+    // in step 2 -- do not invent them.
+    spky::Rng seq;
+    seq.seed(12345u);
+    spky::flow::TerrainState cur;
+    cur.master = 1;
+    const uint32_t want[4] = { 1697253807u, 718842323u, 3283620450u, 3680911160u };
+    for (int i = 0; i < 4; ++i) {
+        cur = spky::flow::draw_new(cur, seq);
+        CHECK(cur.master == want[i]);
+    }
+}

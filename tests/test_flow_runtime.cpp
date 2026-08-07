@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <cstdlib>
 using namespace spky;
 using namespace spky::flow;
 
@@ -424,4 +425,180 @@ TEST_CASE("flow runtime: the BBD bend budget holds mid-blend too, not just settl
     // *while blending* across a real spread of seeds, not just once.
     REQUIRE(bbd_flow_blend_ticks > 1000);
     REQUIRE(blends_with_bbd_flow >= 10);
+}
+
+TEST_CASE("flow runtime: the genre setting changes no sound by itself") {
+    // The design's central safety claim: GENRE constrains the next NEW draw
+    // and nothing else. Two identical instruments, one locked to DRONE, no
+    // press: every pushed parameter must agree, tick for tick.
+    spky::Instrument ia, ib;
+    ia.init(48000.f);
+    ib.init(48000.f);
+    spky::flow::Flow fa, fb;
+    fa.init(&ia, 100.f);
+    fb.init(&ib, 100.f);
+    spky::flow::TerrainState st;
+    st.master = 0xC0FFEE;
+    fa.wake(st);
+    fb.wake(st);
+    fb.set_genre(spky::flow::ARCH_DRONE);
+    for (int t = 0; t < 400; ++t) {
+        const float x = float(t) / 400.f;
+        for (int m = 0; m < spky::flow::MACRO_COUNT; ++m) {
+            fa.set_macro(m, x);
+            fb.set_macro(m, x);
+        }
+        fa.tick();
+        fb.tick();
+        for (int p = 0; p < spky::flow::P_COUNT; ++p)
+            REQUIRE(fa.param_now(p) == fb.param_now(p));
+    }
+}
+
+TEST_CASE("flow runtime: a genre-locked NEW press lands in that genre") {
+    spky::Instrument inst;
+    inst.init(48000.f);
+    spky::flow::Flow fl;
+    fl.init(&inst, 100.f);
+    spky::flow::TerrainState st;
+    st.master = 0x101;
+    fl.wake(st);
+    fl.set_genre(spky::flow::ARCH_FRAGMENT);
+    CHECK(fl.genre() == spky::flow::ARCH_FRAGMENT);
+    for (int i = 0; i < 40; ++i) {
+        REQUIRE(fl.new_full());
+        CHECK(spky::flow::arch_of(fl.state().master) ==
+              spky::flow::ARCH_FRAGMENT);
+        for (int t = 0; t < 700; ++t) fl.tick();   // let the blend settle
+    }
+}
+
+TEST_CASE("flow runtime: a scale override holds, and AUTO gives the terrain back") {
+    spky::Instrument inst;
+    inst.init(48000.f);
+    spky::flow::Flow fl;
+    fl.init(&inst, 100.f);
+    spky::flow::TerrainState st;
+    st.master = 0x334;
+    fl.wake(st);
+    for (int t = 0; t < 50; ++t) fl.tick();
+    const float terrain_scale = fl.param_now(spky::flow::P_SCALE);
+    // The seed is picked so the terrain does NOT already sit on the overridden
+    // scale -- otherwise every assertion below holds with no override at all
+    // and the case cannot go red. (0x333, the seed this was first written
+    // with, draws SCALE_MIN_PENT itself and passed against an empty stub.)
+    REQUIRE(terrain_scale != float(spky::SCALE_MIN_PENT));
+
+    fl.set_scale_override(spky::SCALE_MIN_PENT);
+    for (int t = 0; t < 50; ++t) {
+        for (int m = 0; m < spky::flow::MACRO_COUNT; ++m)
+            fl.set_macro(m, float(t) / 50.f);       // macros must not shake it
+        fl.tick();
+        REQUIRE(fl.param_now(spky::flow::P_SCALE) == float(spky::SCALE_MIN_PENT));
+    }
+    fl.set_scale_override(-1);
+    fl.tick();
+    CHECK(fl.param_now(spky::flow::P_SCALE) == terrain_scale);
+}
+
+TEST_CASE("flow runtime: an override released after NEW lands on the new scale") {
+    // THE test for spec 3.3. quantize_hyst compares strictly at
+    // kHysteresisFrac 0.5, so an un-forced ONE-STEP move never passes its
+    // guard. If the override skipped quantize_hyst, _step_now would freeze
+    // while the override was held, and a terrain one step away would be
+    // unreachable forever after release. Search the seeds for exactly that
+    // pairing rather than hoping for it.
+    spky::Instrument inst;
+    inst.init(48000.f);
+    spky::flow::Flow fl;
+    fl.init(&inst, 100.f);
+
+    bool tested = false;
+    for (uint32_t m = 1; m < 400 && !tested; ++m) {
+        spky::flow::TerrainState a;
+        a.master = m;
+        const int sa = int(spky::flow::generate(a).base[spky::flow::P_SCALE]);
+        for (uint32_t n = 1; n < 400 && !tested; ++n) {
+            spky::flow::TerrainState b;
+            b.master = n;
+            const int sb = int(spky::flow::generate(b).base[spky::flow::P_SCALE]);
+            if (std::abs(sa - sb) != 1) continue;      // need a ONE-step move
+            tested = true;
+
+            fl.wake(a);
+            for (int t = 0; t < 50; ++t) fl.tick();
+            REQUIRE(fl.param_now(spky::flow::P_SCALE) == float(sa));
+
+            fl.set_scale_override(spky::SCALE_WHOLE);
+            for (int t = 0; t < 50; ++t) fl.tick();
+            fl.wake(b);                                // stands in for a NEW press
+            for (int t = 0; t < 800; ++t) fl.tick();
+            REQUIRE(fl.param_now(spky::flow::P_SCALE) == float(spky::SCALE_WHOLE));
+
+            fl.set_scale_override(-1);
+            fl.tick();
+            CHECK(fl.param_now(spky::flow::P_SCALE) == float(sb));
+        }
+    }
+    REQUIRE(tested);      // the search must actually have found a pair
+}
+
+TEST_CASE("flow runtime: an override survives a blend and can be released inside one") {
+    spky::Instrument inst;
+    inst.init(48000.f);
+    spky::flow::Flow fl;
+    fl.init(&inst, 100.f);
+    spky::flow::TerrainState st;
+    st.master = 0x55;
+    fl.wake(st);
+    for (int t = 0; t < 50; ++t) fl.tick();
+    // Precondition, or the case passes against an empty stub: the override is
+    // only observable while it differs from what the terrain itself draws.
+    // Needed twice -- NEW moves to a second terrain mid-case, and that one has
+    // to differ too. A taste.h retune that makes either draw KUMOI must fail
+    // here loudly rather than turn the assertions below into tautologies.
+    REQUIRE(int(spky::flow::terrain_of(fl).base[spky::flow::P_SCALE])
+            != int(spky::SCALE_KUMOI));
+    fl.set_scale_override(spky::SCALE_KUMOI);
+    REQUIRE(fl.new_full());
+    REQUIRE(int(spky::flow::terrain_of(fl).base[spky::flow::P_SCALE])
+            != int(spky::SCALE_KUMOI));
+    for (int t = 0; t < 300; ++t) {                    // mid-blend
+        fl.tick();
+        REQUIRE(fl.param_now(spky::flow::P_SCALE) == float(spky::SCALE_KUMOI));
+    }
+    fl.set_scale_override(-1);                         // release INSIDE the blend
+    for (int t = 0; t < 400; ++t) fl.tick();
+    CHECK(fl.param_now(spky::flow::P_SCALE) ==
+          float(int(spky::flow::terrain_of(fl).base[spky::flow::P_SCALE])));
+}
+
+TEST_CASE("flow runtime: a root override replaces the terrain's root and stays "
+          "in range") {
+    spky::Instrument inst;
+    inst.init(48000.f);
+    spky::flow::Flow fl;
+    fl.init(&inst, 100.f);
+    spky::flow::TerrainState st;
+    st.master = 0x9;
+    fl.wake(st);
+    // Precondition: without it the case would pass against an empty stub if a
+    // taste.h retune ever made this master draw root 7 by itself.
+    REQUIRE(int(spky::flow::terrain_of(fl).base[spky::flow::P_ROOT]) != 7);
+    fl.set_root_override(7);
+    fl.tick();
+    CHECK(fl.param_now(spky::flow::P_ROOT) == 7.f);
+    // The fan-out to both parts is apply_param's job (flow_params.h: P_ROOT
+    // calls set_root on PART_A and PART_B from one value) and is true by
+    // construction, not observed here: Instrument::_parts is private with no
+    // read-back path. Rather than add an accessor to the engine for a test's
+    // convenience, this pins the ONE value the override publishes -- which is
+    // the only thing this task can get wrong. Hence the case's name.
+    //
+    // Out of range must be clamped, not published: param_now is a public
+    // observer and flow.cpp says it must never show an out-of-range value.
+    fl.set_root_override(99);
+    fl.tick();
+    CHECK(fl.param_now(spky::flow::P_ROOT) <= spky::flow::kParams[spky::flow::P_ROOT].hi);
+    CHECK(fl.param_now(spky::flow::P_ROOT) >= spky::flow::kParams[spky::flow::P_ROOT].lo);
 }

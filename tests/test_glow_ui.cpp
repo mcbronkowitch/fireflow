@@ -232,3 +232,45 @@ TEST_CASE("glow: a held button reaches the lock threshold through the bridge") {
     }
     CHECK(locked);
 }
+
+TEST_CASE("glow: the scale knob travels from least to most friction") {
+    // A permutation check alone would test the table, not the feature. The
+    // monotonicity check is what catches a kScaleW retune that reorders the
+    // groups and silently leaves the knob travel no longer running calm to
+    // sharp.
+    bool seen[spky::SCALE_LIST_COUNT] = {};
+    for (int i = 0; i < spky::SCALE_LIST_COUNT; ++i) {
+        const int s = spkyvcv::kScaleKnobOrder[i];
+        REQUIRE(s >= 0);
+        REQUIRE(s < spky::SCALE_LIST_COUNT);
+        CHECK(!seen[s]);
+        seen[s] = true;
+    }
+    for (int i = 1; i < spky::SCALE_LIST_COUNT; ++i)
+        CHECK(spky::flow::kScaleW[spkyvcv::kScaleKnobOrder[i]] <=
+              spky::flow::kScaleW[spkyvcv::kScaleKnobOrder[i - 1]]);
+}
+
+TEST_CASE("glow: knob position 0 is AUTO, the rest are scales") {
+    CHECK(spkyvcv::scale_of_knob(0) == -1);
+    for (int p = 1; p <= spky::SCALE_LIST_COUNT; ++p)
+        CHECK(spkyvcv::scale_of_knob(p) == spkyvcv::kScaleKnobOrder[p - 1]);
+    // Out of range reads as AUTO rather than as scale 0 -- a corrupt patch
+    // must not silently retune the instrument to Aeolian.
+    CHECK(spkyvcv::scale_of_knob(-3) == -1);
+    CHECK(spkyvcv::scale_of_knob(99) == -1);
+}
+
+TEST_CASE("glow: a saved root override outside 0..11 reads as AUTO") {
+    // Spec 5 asks for the root override's JSON round-trip under test, and the
+    // non-obvious half of it is the validation, not the jansson call: Rack's
+    // Param::setValue does not clamp and paramsFromJson writes straight
+    // through, so a hand-edited patch reaches this with anything at all.
+    // Glow.cpp keeps only the json_is_integer type check and hands the number
+    // here, which is why this is testable without rack.hpp.
+    for (int r = 0; r <= 11; ++r) CHECK(spkyvcv::clamp_root_override(r) == r);
+    CHECK(spkyvcv::clamp_root_override(12) == -1);
+    CHECK(spkyvcv::clamp_root_override(99) == -1);
+    CHECK(spkyvcv::clamp_root_override(-1) == -1);      // the AUTO sentinel
+    CHECK(spkyvcv::clamp_root_override(-7) == -1);
+}
