@@ -55,10 +55,25 @@ inline void transport_write0(const char* s)
 
 inline void open_line()
 {
-    // true: block until the host opens the port. Without it the firmware
-    // runs ahead of anyone listening and the BENCH_BEGIN header is simply
-    // gone -- a run that happened and is worthless anyway.
+    // true: block until the CDC endpoint is configured.
     BenchLogger::StartLog(true);
+
+    // That is not the same as "the host is reading", and the difference is
+    // measurable: the first capture over this transport arrived with 28
+    // rows, no BENCH_BEGIN, and the protocol starting in the middle at
+    // mod_plane_2x_center. Everything written between enumeration and the
+    // host process opening the port goes nowhere.
+    //
+    // So say something disposable first. run.py ignores every line before
+    // BENCH_BEGIN, which makes these three seconds free -- they are spent
+    // once per run, outside every measured window, and they buy the
+    // guarantee that the marker the parser needs is never the first thing
+    // on the wire.
+    for(int i = 0; i < 12; ++i)
+    {
+        BenchLogger::PrintLine("BENCH_WAKE,%d", i);
+        daisy::System::Delay(250);
+    }
 }
 
 #else
