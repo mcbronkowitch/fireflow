@@ -425,3 +425,49 @@ TEST_CASE("flow runtime: the BBD bend budget holds mid-blend too, not just settl
     REQUIRE(bbd_flow_blend_ticks > 1000);
     REQUIRE(blends_with_bbd_flow >= 10);
 }
+
+TEST_CASE("flow runtime: the genre setting changes no sound by itself") {
+    // The design's central safety claim: GENRE constrains the next NEW draw
+    // and nothing else. Two identical instruments, one locked to DRONE, no
+    // press: every pushed parameter must agree, tick for tick.
+    spky::Instrument ia, ib;
+    ia.init(48000.f);
+    ib.init(48000.f);
+    spky::flow::Flow fa, fb;
+    fa.init(&ia, 100.f);
+    fb.init(&ib, 100.f);
+    spky::flow::TerrainState st;
+    st.master = 0xC0FFEE;
+    fa.wake(st);
+    fb.wake(st);
+    fb.set_genre(spky::flow::ARCH_DRONE);
+    for (int t = 0; t < 400; ++t) {
+        const float x = float(t) / 400.f;
+        for (int m = 0; m < spky::flow::MACRO_COUNT; ++m) {
+            fa.set_macro(m, x);
+            fb.set_macro(m, x);
+        }
+        fa.tick();
+        fb.tick();
+        for (int p = 0; p < spky::flow::P_COUNT; ++p)
+            REQUIRE(fa.param_now(p) == fb.param_now(p));
+    }
+}
+
+TEST_CASE("flow runtime: a genre-locked NEW press lands in that genre") {
+    spky::Instrument inst;
+    inst.init(48000.f);
+    spky::flow::Flow fl;
+    fl.init(&inst, 100.f);
+    spky::flow::TerrainState st;
+    st.master = 0x101;
+    fl.wake(st);
+    fl.set_genre(spky::flow::ARCH_FRAGMENT);
+    CHECK(fl.genre() == spky::flow::ARCH_FRAGMENT);
+    for (int i = 0; i < 40; ++i) {
+        REQUIRE(fl.new_full());
+        CHECK(spky::flow::arch_of(fl.state().master) ==
+              spky::flow::ARCH_FRAGMENT);
+        for (int t = 0; t < 700; ++t) fl.tick();   // let the blend settle
+    }
+}

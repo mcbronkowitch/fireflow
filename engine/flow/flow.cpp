@@ -184,7 +184,7 @@ void Flow::begin_blend(const TerrainState& target) {
 
 bool Flow::new_full() {
     if (!_woken || _locked) return false;
-    begin_blend(draw_new(_state, _seq));
+    begin_blend(draw_new(_state, _seq, _genre));
     return true;
 }
 

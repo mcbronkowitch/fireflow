@@ -50,6 +50,17 @@ public:
     bool undo();                                      // one slot; re-undo = redo
     void set_lock(bool on);                           // always works itself
     bool locked() const { return _locked; }
+    // The genre lock (spec 2026-08-07 §2). Constrains which archetype
+    // new_full() may draw and NOTHING else -- no parameter moves when this
+    // changes, which test_flow_runtime.cpp pins. ARCH_ANY (flow_ids.h) is the
+    // unconstrained default.
+    //
+    // Note what this is: state that lives in neither TerrainState nor the
+    // terrain code, and that wake()/init() do NOT reset. Flow therefore stops
+    // being a pure function of (TerrainState, macros). The host owns it and
+    // re-pushes it every control tick.
+    void set_genre(int arch) { _genre = arch; }
+    int  genre() const { return _genre; }
     bool can_undo() const { return _have_undo; }
     const TerrainState& state() const { return _state; }
     // The undo slot, for persistence (§5: "Patch reload ... and later hardware
@@ -111,6 +122,7 @@ private:
     TerrainState _undo;           // the one slot; undo() swaps it with _state
     bool  _have_undo = false;
     Rng   _seq;                   // NEW's press-chain Rng, re-seeded by wake()
+    int   _genre = ARCH_ANY;      // draw constraint for new_full(), not state
 
     float _knob[MACRO_COUNT] = {};
     float _cv[MACRO_COUNT]   = {};
