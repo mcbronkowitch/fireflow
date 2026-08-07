@@ -7,7 +7,7 @@ import re
 import subprocess
 
 
-QSPI_ADDRESS = 0x90040000
+QSPI_ADDRESS = 0x90100000
 QSPI_SIZE = 65024
 QSPI_SECTION = ".qspiflash_data"
 SRAM_BASE = 0x24000000
@@ -340,8 +340,8 @@ def parse_programmer_result(output):
             "QSPI SRAM programmer failed at stage: %s" % error.group(1)
         )
     success = re.fullmatch(
-        r"QSPI_PROGRAM_OK,90040000,65024,"
-        r"([0-9a-f]{64}),([0-9a-fA-F]{24})",
+        r"QSPI_PROGRAM_OK,%08x,%d," % (QSPI_ADDRESS, QSPI_SIZE)
+        + r"([0-9a-f]{64}),([0-9a-fA-F]{24})",
         records[0],
     )
     if not success:

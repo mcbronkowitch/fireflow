@@ -228,7 +228,7 @@ class Task8Contract(unittest.TestCase):
             linker,
         )
         self.assertIn(
-            "QSPIFLASH (RX) : ORIGIN = 0x90040000, LENGTH = 7936K",
+            "QSPIFLASH (RX) : ORIGIN = 0x90100000, LENGTH = 7168K",
             linker,
         )
         runner = RUNNER.read_text(encoding="utf-8")
@@ -258,10 +258,10 @@ class Task8Contract(unittest.TestCase):
         self.assertIn("APP_TYPE = BOOT_SRAM", makefile)
         self.assertIn("program_core.h", source)
         self.assertIn("EraseBlock(offset, false)", source)
-        self.assertIn("kQspiPayloadOffset = 0x00040000u", core)
+        self.assertIn("kQspiPayloadOffset = 0x00100000u", core)
         self.assertIn("0x24040000u", source)
-        self.assertIn("0x90040000u", source)
-        self.assertIn("QSPI_PROGRAM_OK,90040000,65024,", source)
+        self.assertIn("0x90100000u", source)
+        self.assertIn("QSPI_PROGRAM_OK,90100000,65024,", source)
         self.assertIn("load_image $HELPER", cfg)
         self.assertIn("load_image $PAYLOAD 0x24040000 bin", cfg)
         self.assertNotIn("reset run", cfg)

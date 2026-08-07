@@ -21,8 +21,13 @@ MEMORY
 	BACKUP_SRAM	(RWX) : ORIGIN = 0x38800000, LENGTH = 4K
 	ITCMRAM		(RWX) : ORIGIN = 0x00000000, LENGTH = 64K
 	SDRAM		(RWX) : ORIGIN = 0xc0000000, LENGTH = 64M
-	/* Daisy bootloader reserves the first four 64K QSPI sectors. */
-	QSPIFLASH	(RX)  : ORIGIN = 0x90040000, LENGTH = 7936K
+	/* Der Daisy-Bootloader belegt die ersten vier 64K-Sektoren, und die
+	   768K dahinter gehoeren dem App-Image.
+	   Nicht auf 0x90040000 zurueckziehen: das ist die DFU-Zieladresse,
+	   die der Daisy-Bootloader fuer ein BOOT_SRAM-Image erwartet
+	   (libDaisy core/Makefile, FLASH_ADDRESS = QSPI_ADDRESS). Eine Bank
+	   dort wird vom naechsten dfu-util-Aufruf ueberschrieben. */
+	QSPIFLASH	(RX)  : ORIGIN = 0x90100000, LENGTH = 7168K
 }
 
 _estack = 0x20020000;

@@ -42,14 +42,22 @@ class QspiGuardContract(unittest.TestCase):
         tools = self.require_module()
         table = """
 Idx Name                Size      VMA       LMA       File off  Algn
-  4 .qspiflash_data     0000fe00  90040000  90040000  00040000  2**2
+  4 .qspiflash_data     0000fe00  90100000  90100000  00040000  2**2
 """
         self.assertEqual(
             tools.parse_qspi_section(table),
-            (0x90040000, 0xFE00),
+            (0x90100000, 0xFE00),
         )
         with self.assertRaises(tools.QspiGuardError):
-            tools.parse_qspi_section(table.replace("90040000", "90000000"))
+            tools.parse_qspi_section(table.replace("90100000", "90000000"))
+
+    def test_bank_must_not_sit_in_the_bootloader_app_window(self) -> None:
+        # 0x90040000 ist die DFU-Zieladresse des Daisy-Bootloaders fuer
+        # APP_TYPE=BOOT_SRAM (libDaisy core/Makefile: FLASH_ADDRESS =
+        # QSPI_ADDRESS). Eine Bank dort kollidiert mit dem App-Image und
+        # macht das Board ohne Probe unbespielbar.
+        tools = self.require_module()
+        self.assertGreaterEqual(tools.QSPI_ADDRESS, 0x90100000)
 
     def test_receipt_accepts_only_byte_verified_current_payload(self) -> None:
         tools = self.require_module()
@@ -247,7 +255,7 @@ Idx Name                Size      VMA       LMA       File off  Algn
         tools = self.require_module()
         digest = "a" * 64
         uid = "0123456789abcdefABCDEF01"
-        record = "QSPI_PROGRAM_OK,90040000,65024,%s,%s" % (digest, uid)
+        record = "QSPI_PROGRAM_OK,90100000,65024,%s,%s" % (digest, uid)
         self.assertEqual(
             tools.parse_programmer_result("debug noise\n" + record + "\n"),
             (digest, uid.lower()),
@@ -286,7 +294,7 @@ Idx Name                Size      VMA       LMA       File off  Algn
                     0,
                     stdout=(
                         "Info : target halted\n"
-                        "QSPI_PROGRAM_OK,90040000,65024,%s,00112233445566778899aabb\n"
+                        "QSPI_PROGRAM_OK,90100000,65024,%s,00112233445566778899aabb\n"
                         % digest
                     ),
                     stderr="",

@@ -17,7 +17,7 @@ class LaunchContractTests(unittest.TestCase):
         sections = parse_objdump_sections(
             """
   0 .isr_vector   00000298  24000000  24000000  00010000  2**2
- 18 .qspiflash_data 0000fe00  90040000  90040000  00050000  2**2
+ 18 .qspiflash_data 0000fe00  90100000  90100000  00050000  2**2
 """
         )
         symbols = parse_nm_symbols(
@@ -30,13 +30,13 @@ c0a8473c B g_factory_upload
 
     def test_rejects_any_qspi_payload_outside_the_read_only_wave_bank(self):
         sections = parse_objdump_sections(
-            "18 .qspiflash_data 0000fe00 90050000 90050000 00050000 2**2"
+            "18 .qspiflash_data 0000fe00 90110000 90110000 00050000 2**2"
         )
         symbols = {
             "g_audition_state": 0x20000004,
             "g_factory_upload": 0xC0A8473C,
         }
-        with self.assertRaisesRegex(LayoutError, "0x90040000"):
+        with self.assertRaisesRegex(LayoutError, "0x90100000"):
             validate_layout(sections, symbols)
 
     def test_openocd_command_passes_only_load_and_verify_inputs(self):

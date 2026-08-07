@@ -5,7 +5,7 @@
 
 namespace bench {
 
-constexpr uint32_t kQspiPayloadOffset = 0x00040000u;
+constexpr uint32_t kQspiPayloadOffset = 0x00100000u;
 constexpr std::size_t kQspiPayloadSize = 0x0000fe00u;
 
 enum class QspiProgramResult {

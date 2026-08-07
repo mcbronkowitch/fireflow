@@ -25,7 +25,7 @@ OBJDUMP = TOOLCHAIN / "arm-none-eabi-objdump.exe"
 NM = TOOLCHAIN / "arm-none-eabi-nm.exe"
 GIT_BASH = Path(r"C:\Program Files\Git\bin\bash.exe")
 
-QSPI_ADDRESS = 0x90040000
+QSPI_ADDRESS = 0x90100000
 QSPI_SIZE = 65024
 
 
@@ -65,7 +65,7 @@ def validate_layout(
     if qspi != (QSPI_SIZE, QSPI_ADDRESS, QSPI_ADDRESS):
         raise LayoutError(
             "expected the read-only QSPI payload to be exactly "
-            "65024 bytes at VMA/LMA 0x90040000"
+            "%d bytes at VMA/LMA 0x%08x" % (QSPI_SIZE, QSPI_ADDRESS)
         )
     state = symbols.get("g_audition_state")
     upload = symbols.get("g_factory_upload")

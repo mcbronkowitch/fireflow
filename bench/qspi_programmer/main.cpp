@@ -10,7 +10,7 @@
 namespace {
 
 constexpr uintptr_t kStagingAddress = 0x24040000u;
-constexpr uintptr_t kMappedAddress = 0x90040000u;
+constexpr uintptr_t kMappedAddress = 0x90100000u;
 
 daisy::DaisySeed g_hw;
 char g_message[160];
@@ -94,7 +94,7 @@ int main()
     std::snprintf(
         g_message,
         sizeof(g_message),
-        "QSPI_PROGRAM_OK,90040000,65024,%s,%08lx%08lx%08lx\n",
+        "QSPI_PROGRAM_OK,90100000,65024,%s,%08lx%08lx%08lx\n",
         digest,
         static_cast<unsigned long>(uid[0]),
         static_cast<unsigned long>(uid[1]),
