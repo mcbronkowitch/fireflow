@@ -445,7 +445,8 @@ Three consequences that would otherwise read as bugs:
 ## FireFlow Glow — the second module
 
 The plugin ships a second module alongside the one described above: **Glow**,
-12 HP, six knobs and one button over a generated terrain, driving the same
+12 HP, six macro knobs, one button and two small switches over a generated
+terrain, driving the same
 portable engine through `engine/flow/` instead of through `Fireflow.cpp`'s
 one-control-per-parameter mapping. Where the big module is the full-control
 view — every engine setter on its own knob — Glow is the flow-machine view:
@@ -498,9 +499,38 @@ short refusal flash; the decoder's own refusal LED covers only the
 locked-press case; this is a separate flash the module runs itself when the
 decoder let a press through and the engine layer turned it down anyway.
 
+### GENRE and SCALE — the two switches flanking NEW
+
+NEW is a slot machine, and these two switches are what let you stop it
+spinning in one direction at a time. Both sit either side of the button:
+GENRE to its left, SCALE to its right.
+
+**GENRE** constrains which archetype the *next* NEW press may land in — ANY,
+DRONE, PULSE, ARP or FRAGMENT. Off ANY, NEW keeps rolling until it finds a
+terrain of that kind, and hands you the most different one it saw. It changes
+nothing about the terrain you are on: turning GENRE moves no parameter and
+makes no sound, which is the point — it is a constraint on the draw, not on
+the instrument. Auditioning ten drones one after another is what it exists
+for, and without it you cannot: the draw's own rules push every press into a
+*different* archetype. Which archetype you are currently in is shown in the
+right-click menu, next to the terrain code.
+
+**SCALE** is the opposite kind of control: it takes effect at once. AUTO
+leaves the terrain's own drawn scale alone; any other position pins the scale
+outright and holds it across NEW presses, partial rerolls and blends, until
+you return to AUTO — at which point the current terrain's own scale comes
+back. The travel runs calm → sharp: the two pentatonics first, then the
+seven-note modes, then the hirajoshi group, then the exotics. **ROOT** is the
+same idea for the key and lives in the right-click menu rather than on the
+panel — Auto, or one of the twelve.
+
+Neither switch joins Rack's **Randomize**, because the leftmost position
+already *is* the random setting: ANY draws the archetype at random and AUTO
+takes whatever the terrain drew.
+
 Rack's own **Initialize** (right-click → Initialize, or Ctrl+I) returns Glow
-to the house terrain and clears the lock, the same state a fresh insert
-starts in.
+to the house terrain, clears the lock, and puts GENRE, SCALE and ROOT back to
+Any / Auto / Auto — the same state a fresh insert starts in.
 
 ### Jacks
 
@@ -520,9 +550,14 @@ Eurorack convention.
 
 A terrain's whole state — the master seed plus, once any partial rerolls
 have happened, one small counter per macro — is a short string like
-`F1-DEADBEEF-000100020000`. The code *is* the state: nothing about a
-terrain lives anywhere else, so copying the string out and pasting it back
-in later (or into another instance) reproduces the exact same patch. The
+`F1-DEADBEEF-000100020000`. The code is the terrain's whole identity —
+nothing about the *place* lives anywhere else — so copying the string out and
+pasting it back in later (or into another instance) puts you back on the same
+terrain. It is not quite the whole patch any more: a SCALE or ROOT override
+rides on top of the terrain and travels in the saved patch rather than in the
+code, so someone you send a code to lands on your terrain but hears it in the
+key the terrain itself drew. Say which override you were on, or send the
+patch. The
 right-click context menu shows the live code, offers **Copy terrain code**
 and **Paste terrain code**, and carries an editable text field for typing one
 in by hand. Pasting or typing a malformed code is a no-op — it changes
