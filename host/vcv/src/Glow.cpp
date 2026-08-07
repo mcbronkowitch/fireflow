@@ -168,6 +168,7 @@ struct Glow : Module {
                 case WK_SEL:
                     configSel(c);
                     break;
+                default: break;
             }
         }
         for (const auto& c : kInputCtls)  configInput(c.id, c.tip);
@@ -599,6 +600,7 @@ struct GlowWidget : ModuleWidget {
                     addParam(createParamCentered<RoundSmallBlackKnob>(
                         pos, module, c.id));
                     break;
+                default: break;
             }
         }
         for (const auto& c : kInputCtls)
