@@ -102,7 +102,9 @@ identity; the measured winner is `o3`, the production root makefile now uses
 ## Programming the WAVE bank
 
 The 65,024-byte bank is a loadable `.qspiflash_data` section at
-`0x90040000`, after the four 64 KiB sectors reserved by the Daisy bootloader.
+`0x90100000`. It sat at `0x90040000` until 2026-08-07, which is the Daisy
+bootloader's own target address for a `BOOT_SRAM` app image — see
+*Two transports* below for the map and why that address is off limits.
 It is deliberately not part of the debug probe's SRAM load. The build creates
 four distinct artifacts:
 
@@ -148,9 +150,9 @@ checked before any evidence is accepted.
 
 The programming command uses OpenOCD to load the helper below `0x24040000`
 and the raw payload at `0x24040000`; it never programs internal flash. The
-helper erases one 64 KiB external-QSPI block at offset `0x40000`, writes
+helper erases one 64 KiB external-QSPI block at offset `0x100000`, writes
 exactly 65,024 bytes, invalidates the mapped cache, compares every byte at
-`0x90040000`, and reports the live SHA-256 plus the MCU UID over semihosting.
+`0x90100000`, and reports the live SHA-256 plus the MCU UID over semihosting.
 Only an exact success record writes `build/qspi-verified.json`. The receipt
 binds that target-verified digest and UID to `bench.elf`,
 `bench-sram.elf`, `bench-qspi.bin`, and the helper ELF.
@@ -246,31 +248,103 @@ are untested against this bench.
 
 ## Fallbacks
 
-**(a) If the SRAM load ever stops working**, stop and design a complete
-bootloader image path for the custom SRAM+QSPI layout. The old
-`make program-dfu` suggestion is not valid for this split image: libDaisy's
-generic BOOT_SRAM rule programs one flat BIN at `0x90040000`, while this
-bench has an SRAM executable plus a separate QSPI bank. Do not substitute
-that rule silently.
+**(a) If the SRAM load ever stops working**, use `--transport usb`, which
+is that bootloader image path and now exists. Still do not reach for
+libDaisy's generic `make program-dfu`: it programs one flat
+`build/bench.bin` covering SRAM *and* QSPI, which is not this layout.
+`run.py` writes `build/bench-sram.bin` — the ELF with `.qspiflash_data`
+removed, flattened — and the bank is a separate write.
 
-**(b) If semihosting itself proves inadequate** (too slow, or the probe
-setup won't cooperate), the escape hatch is USB-CDC: swap `report.cpp`'s
-`sh_write0` calls for `daisy::Logger<daisy::LOGGER_INTERNAL>`, call
-`StartLog(true)` early in `main()`, connect the Seed's micro-USB as a
-*second* cable alongside the SWD probe, and read the resulting COM port
-from the host with `pyserial` instead of parsing openocd's stdout. This
-path is **untested** — it is written down as the next thing to try, not as
-something that has been made to work.
+**(b) If semihosting itself is not available** — a board with no debug pins
+soldered on, for instance — use the USB transport. It is no longer a
+fallback sketch; it is built, measured, and described in *Two transports*
+below. It was written here as untested for a long time; it is not untested
+any more, and what it costs is known to the cycle.
 
-## The one hard rule
+## Two transports
 
-The bench binary requires an attached, running openocd session. Its
-`report.cpp` talks to the host by executing `bkpt 0xAB` (the semihosting
-breakpoint) and blocking for a response; without a debugger serving that
-breakpoint, the very first one halts the core forever. From the outside
-that looks exactly like a hang — no crash, no error, just a Seed that never
-gets anywhere near `BENCH_END`. If a run seems stuck, check that openocd is
-actually attached before assuming the firmware is broken.
+`BENCH_TRANSPORT` picks how a number leaves the board. `semihost` is the
+default and the transport every capture in `docs/bench/` before 2026-08-07
+was taken over.
+
+| | `semihost` | `usb` |
+|---|---|---|
+| Wire | SWD, ARM `bkpt 0xAB` serviced by openocd | USB-CDC |
+| Loader | openocd writes the SRAM image directly | `dfu-util` via the Daisy bootloader |
+| Needs | an ST-Link on the SWD header | the bootloader in internal flash, and the cable that already powers the board |
+| Repeats | openocd resets between them | the bench returns to the bootloader itself |
+| Costs | nothing | **+0.66 % of the block budget** |
+
+Run it with `python run.py --profile regress --transport usb`. `--port`
+defaults to `auto`, which takes whichever serial port appears after the
+image is loaded — the board is in DFU while being written and only
+enumerates as CDC once the new image runs, so it cannot be named in
+advance.
+
+**The first run of a session needs two button presses**: tap RESET, then
+BOOT during the bootloader's 2-second window. After that the bench jumps
+back with `DAISY_INFINITE_TIMEOUT` after `BENCH_END` and waits there, so
+every following repeat is unattended. If the Daisy bootloader is not on the
+board at all, install it first: hold BOOT, tap RESET, release, then
+`make program-boot`.
+
+### Numbers from the two transports are not interchangeable
+
+USB-CDC costs **6,370 cycles per block, 0.66 % of the budget**, measured on
+one Seed with everything else held constant. The cause is not the memory
+map — `g_axi_layout_guard` holds every measurement object at an identical
+address in both branches — it is the peripheral: the host sends a
+start-of-frame every 1 ms, a block is 2 ms, and two interrupts land inside
+every measured window.
+
+The full comparison is `docs/bench/2026-08-07-transport-semihost-vs-usb.md`.
+Compare like with like: a submodule capture belongs against a Seed capture
+over the *same* transport, where the surcharge cancels. USB captures carry
+a `-usb` suffix in their filename for exactly this reason.
+
+### The QSPI map
+
+| Region | From | To | What |
+|---|---|---|---|
+| Bootloader | `0x90000000` | `0x90040000` | four 64 KiB sectors, reserved |
+| App image | `0x90040000` | `0x90100000` | where `dfu-util` writes a `BOOT_SRAM` image |
+| WAVE bank | `0x90100000` | +65,024 B | `.qspiflash_data` |
+| Free | | `0x90800000` | |
+
+**Do not put anything back at `0x90040000`.** libDaisy's
+`core/Makefile` sets `FLASH_ADDRESS = QSPI_ADDRESS` for `APP_TYPE =
+BOOT_SRAM`, so that is the address the next `dfu-util` invocation
+overwrites. The bank lived there until 2026-08-07 and it was never
+noticeable, because with a probe attached openocd loads SRAM directly and
+QSPI belongs to the bank alone. Without a probe the two collide. The
+shipping firmware links the same `alt_sram.lds` and had the same defect.
+
+The bank can be written over DFU (`dfu-util -a 0 -s 0x90100000 -D
+build/bench-qspi.bin -d ,0483:df11`) on a board with no probe. It cannot be
+read back: the Daisy bootloader answers a QSPI *upload* with a single 4 KiB
+block repeated across the whole range, identical at every address, so an
+upload is not weaker evidence than a probe readback — it is none. The
+probe-free proof is the firmware's own: it hashes the bank in place and
+reports the digest in `BENCH_BEGIN`, which `run.py` checks as line one
+arrives.
+
+## The one hard rule, and which transport it belongs to
+
+**On `semihost`,** the bench binary requires an attached, running openocd
+session. Its `report.cpp` talks to the host by executing `bkpt 0xAB` (the
+semihosting breakpoint) and blocking for a response; without a debugger
+serving that breakpoint, the very first one halts the core forever. From
+the outside that looks exactly like a hang — no crash, no error, just a
+Seed that never gets anywhere near `BENCH_END`. If a run seems stuck, check
+that openocd is actually attached before assuming the firmware is broken.
+
+**On `usb`,** the equivalent trap is silence. `StartLog(true)` returns when
+the CDC endpoint is configured, which is not when the host has opened the
+port and started reading, and everything written in between is lost. This
+already happened once: a capture arrived with 28 rows, no `BENCH_BEGIN`,
+and the protocol starting in the middle. `transport_open()` therefore
+spends three seconds sending throwaway lines before anything that counts —
+`run.py` ignores every line before `BENCH_BEGIN`, so they are free.
 
 ## What anchor mode's audio actually proves, and what it does not
 

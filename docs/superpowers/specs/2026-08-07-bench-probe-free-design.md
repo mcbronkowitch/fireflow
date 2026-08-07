@@ -71,6 +71,16 @@ Betroffen sind `alt_sram.lds`, `bench/qspi_tools.py`, `bench/qspi_programmer/`, 
 
 Der Programmer bleibt für den Probe-Weg liegen. Er wird nicht gelöscht und nicht gepflegt.
 
+> **Nachtrag 2026-08-07, nach der Umsetzung: die zweite Hälfte dieser Entscheidung ist falsch.**
+>
+> **Schreiben geht.** `dfu-util -a 0 -s 0x90100000 -D build/bench-qspi.bin` hat die Bank auf ein Patch Submodule geschrieben, das nie einen Probe gesehen hat. Dieser Teil steht.
+>
+> **Zurücklesen geht nicht.** Der Daisy-Bootloader beantwortet einen QSPI-Upload mit einem einzigen 4-KiB-Block, über den gesamten Bereich wiederholt — dieselben Bytes an `0x90000000`, `0x90040000` und `0x90100000`, nachgemessen an allen dreien. Das ist kein ungenauer Beleg, das ist gar keiner. `dfu-qspi-readback-identity` wurde implementiert und wieder zurückgenommen (`d5a1cfa`, `981c7f3`), weil Code, der wie ein Beweis aussieht und keiner ist, schlimmer ist als kein Code.
+>
+> **Was stattdessen den Beweis trägt, war die ganze Zeit schon da und ist stärker:** die Firmware hasht die Bank an Ort und Stelle und meldet den Digest in `BENCH_BEGIN`. Das ist der Digest der Bytes, die der vermessene Code tatsächlich gelesen hat — nicht der einer Hostdatei und nicht der eines Rücklesevorgangs zu einem anderen Zeitpunkt. `run_once_usb` prüft ihn beim Eintreffen der ersten Zeile, ein Lauf gegen die falsche Bank endet also in Sekunden statt nach zwanzig Minuten.
+>
+> Der Vor-Lauf-Beleg (`require_verified_payload`) bleibt auf dem Probe-Weg unverändert und entfällt auf dem USB-Weg, wo ihn nichts schreiben kann.
+
 ## Entscheidung 4: Die Bench setzt sich selbst in den Bootloader zurück
 
 Ohne diesen Punkt bricht die Automatisierung: `--repeat 2` bedeutet zwei Ladevorgänge, und DFU verlangt ein Gerät im DFU-Modus. Von Hand wäre das ein Knopfdruck zwischen zwei Wiederholungen.
@@ -102,6 +112,18 @@ In dieser Reihenfolge, und keine Stufe wird übersprungen:
 3. **Submodule, USB-CDC.** Erst jetzt. Jede Abweichung ist ab hier eine Board-Aussage, und genau die soll sie sein.
 
 Stufe 2 ist der Kern dieser ganzen Spec. Ohne sie hat man später eine Zahl vom Submodule und zwei mögliche Erklärungen.
+
+> **Nachtrag 2026-08-07: Stufe 1 und 2 sind gelaufen. Stufe 2 fällt anders aus als hier erwartet, und das ist ihr Wert.**
+>
+> Die Formulierung oben — „dieselbe Zahl im selben Band" — unterstellte ein Ergebnis. Gemessen ist: **USB-CDC kostet 6 370 Zyklen pro Block, 0,79 Prozentpunkte.** Die Streuung innerhalb eines Transports beträgt 3 Zyklen, zwischen ihnen das Zweihundertfache, in beiden Wiederholungen gleich. Checksummen über alle vier Läufe identisch und identisch mit dem 4. August.
+>
+> **Die Ursache ist nicht die Speicherkarte.** Entscheidung 5 hat gehalten: alle sechs Messobjekt-Symbole liegen in beiden Zweigen auf identischen Adressen, obwohl der USB-Zweig 7 224 Byte mehr SRAM_EXEC belegt. `g_axi_layout_guard` tut genau das, wofür er gebaut wurde. Es ist die Peripherie: Start-of-Frame alle 1 ms, ein Block dauert 2 ms, zwei Interrupts pro Messfenster à rund 3 185 Zyklen.
+>
+> Die Abnahmeregel wird dadurch nicht schwächer, sondern schärfer: **Stufe 3 vergleicht Submodule/USB gegen Seed/USB**, nicht gegen Semihosting. Beide Seiten tragen denselben Aufschlag, er kürzt sich weg. Der Aufschlag gehört dem Messwerkzeug, nicht dem Instrument — die ausgelieferte Firmware fährt keinen USB-Device-Stack.
+>
+> Belege: `docs/bench/2026-08-07-transport-semihost-vs-usb.md`.
+>
+> **Zwei Defekte kamen auf dem Weg dazu, beide in der ausgelieferten Firmware und nicht nur im Messwerkzeug.** Der erste war die Bankadresse aus Entscheidung 2. Der zweite stand in keiner Zeile dieser Spec: `.dtcmram_code` hatte keine `AT`-Klausel, seine Ladeadresse war also das DTCM selbst. Ein Probe kommt damit zurecht, der Bootloader kopiert einen zusammenhängenden Block — das flache Image war **67 352 108 Byte** groß und `dfu-util` hat es abgelehnt. Behoben, indem die Sektion an dieselbe Kopierkette gehängt wurde, in der `.data` längst hing. Beide Defekte waren nur unsichtbar, weil immer ein Probe dranhing.
 
 ## Risiken
 

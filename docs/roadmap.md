@@ -2187,6 +2187,19 @@ hosting `engine/`, plus the physical surface around it — controls, LEDs, CV +
 gate + V/Oct + clock I/O, and preset persistence. **First milestone that runs on
 hardware.** Nothing of it is implemented.
 
+**2026-08-07 — the submodule is measurable without a debug probe.** The bench
+has a second transport (`--transport usb`): `dfu-util` loads it through the
+Daisy bootloader and it reports over USB-CDC, so a board with no SWD pins
+soldered on can be measured with nothing but the cable that powers it. Proven
+on the Seed against its own known number; the submodule run itself still waits
+on a board switch in the bench. Two defects surfaced on the way, and both were
+in the **shipping** firmware rather than only in the measuring tools: the WAVE
+bank sat on the bootloader's app address, and DTCM-resident code had no load
+address in SRAM. Neither was visible while a probe was always attached.
+USB-CDC costs 0.66 % of the block budget — measured, explained, and it cancels
+when like is compared with like. See `bench/README.md` ("Two transports") and
+`docs/bench/2026-08-07-transport-semihost-vs-usb.md`.
+
 **The existing shell specification is superseded**
 (`docs/superpowers/specs/2026-07-12-spotykach-firmware-shell-design.md`). It was
 written for Spotykach's fixed panel and assumes that device's surface throughout
