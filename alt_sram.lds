@@ -107,22 +107,37 @@ SECTIONS
 	/* Reporting runs outside every measured window. Keep its expanded
 	 * BENCH_BEGIN identity record in roomy DTCM so adding evidence fields
 	 * cannot displace the cycle-sensitive AXI objects that follow .text. */
+	/* AT > SRAM_EXEC, and bracketed by _sdata together with .data below.
+	 *
+	 * Without the AT, this section's LOAD address is the DTCM itself. A
+	 * debug probe copes -- openocd writes each segment to its own address --
+	 * but the Daisy bootloader copies ONE contiguous block out of QSPI into
+	 * SRAM, and a flat binary covering both 0x20000000 and 0x24000000 is
+	 * 64 MB of padding that dfu-util refuses ("last page is not writeable").
+	 * So an image with DTCM-resident code was never loadable without a
+	 * probe. The mechanism to fix it already existed one section down:
+	 * .data lives in DTCM too and is loaded from SRAM_EXEC, then copied by
+	 * the startup handler. This section simply joins that copy.
+	 *
+	 * Both sections are DTCMRAM AT > SRAM_EXEC and adjacent, so they are
+	 * contiguous in both views and one copy loop covers them -- which is
+	 * why _sdata moved up here and _sidata now names this section. */
 	.dtcmram_code :
-	{
-		. = ALIGN(4);
-		*(.dtcmram_text)
-		*(.dtcmram_text*)
-		*(.dtcmram_rodata)
-		*(.dtcmram_rodata*)
-		. = ALIGN(4);
-	} > DTCMRAM
-
-	.data :
 	{
 		. = ALIGN(4);
 		_sdata = .;
 
 		PROVIDE(__data_start__ = _sdata);
+		*(.dtcmram_text)
+		*(.dtcmram_text*)
+		*(.dtcmram_rodata)
+		*(.dtcmram_rodata*)
+		. = ALIGN(4);
+	} > DTCMRAM AT > SRAM_EXEC
+
+	.data :
+	{
+		. = ALIGN(4);
 		*(.data)
 		*(.data*)
 		. = ALIGN(4);
@@ -131,7 +146,7 @@ SECTIONS
 		PROVIDE(__data_end__ = _edata);
 	} > DTCMRAM AT > SRAM_EXEC
 
-	_sidata = LOADADDR(.data);
+	_sidata = LOADADDR(.dtcmram_code);
 
 	/* Additive, and empty in the shipping firmware: nothing in main.cpp /
 	 * app.cpp / src/** emits into .sram_exec_bss, so this section has zero
