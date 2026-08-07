@@ -59,6 +59,15 @@ public:
     // terrain code, and that wake()/init() do NOT reset. Flow therefore stops
     // being a pure function of (TerrainState, macros). The host owns it and
     // re-pushes it every control tick.
+    //
+    // CONTRACT: callers must pass a valid Archetype (0..ARCH_COUNT-1) or
+    // ARCH_ANY. This is deliberately NOT validated here, so exactly one place
+    // decides -- the caller, which is the only one that knows what an invalid
+    // value means for its own control. Pass anything else and draw_new's genre
+    // branch matches no master in kGenreDrawCap draws: new_full() then returns
+    // the default TerrainState every press, which from the second press on
+    // equals the current one, so NEW goes silently dead. Glow.cpp's
+    // controlTick guards its switch position for that reason.
     void set_genre(int arch) { _genre = arch; }
     int  genre() const { return _genre; }
     // Explicit tonality (spec 2026-08-07 §3). -1 means AUTO: the terrain's own

@@ -552,8 +552,17 @@ TEST_CASE("flow runtime: an override survives a blend and can be released inside
     st.master = 0x55;
     fl.wake(st);
     for (int t = 0; t < 50; ++t) fl.tick();
+    // Precondition, or the case passes against an empty stub: the override is
+    // only observable while it differs from what the terrain itself draws.
+    // Needed twice -- NEW moves to a second terrain mid-case, and that one has
+    // to differ too. A taste.h retune that makes either draw KUMOI must fail
+    // here loudly rather than turn the assertions below into tautologies.
+    REQUIRE(int(spky::flow::terrain_of(fl).base[spky::flow::P_SCALE])
+            != int(spky::SCALE_KUMOI));
     fl.set_scale_override(spky::SCALE_KUMOI);
     REQUIRE(fl.new_full());
+    REQUIRE(int(spky::flow::terrain_of(fl).base[spky::flow::P_SCALE])
+            != int(spky::SCALE_KUMOI));
     for (int t = 0; t < 300; ++t) {                    // mid-blend
         fl.tick();
         REQUIRE(fl.param_now(spky::flow::P_SCALE) == float(spky::SCALE_KUMOI));
@@ -564,7 +573,8 @@ TEST_CASE("flow runtime: an override survives a blend and can be released inside
           float(int(spky::flow::terrain_of(fl).base[spky::flow::P_SCALE])));
 }
 
-TEST_CASE("flow runtime: a root override reaches both parts and stays in range") {
+TEST_CASE("flow runtime: a root override replaces the terrain's root and stays "
+          "in range") {
     spky::Instrument inst;
     inst.init(48000.f);
     spky::flow::Flow fl;
@@ -572,18 +582,23 @@ TEST_CASE("flow runtime: a root override reaches both parts and stays in range")
     spky::flow::TerrainState st;
     st.master = 0x9;
     fl.wake(st);
+    // Precondition: without it the case would pass against an empty stub if a
+    // taste.h retune ever made this master draw root 7 by itself.
+    REQUIRE(int(spky::flow::terrain_of(fl).base[spky::flow::P_ROOT]) != 7);
     fl.set_root_override(7);
     fl.tick();
     CHECK(fl.param_now(spky::flow::P_ROOT) == 7.f);
-    // "Reaches both parts" is apply_param's job (flow_params.h: P_ROOT calls
-    // set_root on PART_A and PART_B from one value), and Instrument exposes no
-    // way to read a part's root back. Rather than add an accessor to the engine
-    // for a test's convenience, this pins the ONE value the override publishes
-    // -- which is the only thing this task can get wrong.
+    // The fan-out to both parts is apply_param's job (flow_params.h: P_ROOT
+    // calls set_root on PART_A and PART_B from one value) and is true by
+    // construction, not observed here: Instrument::_parts is private with no
+    // read-back path. Rather than add an accessor to the engine for a test's
+    // convenience, this pins the ONE value the override publishes -- which is
+    // the only thing this task can get wrong. Hence the case's name.
     //
     // Out of range must be clamped, not published: param_now is a public
     // observer and flow.cpp says it must never show an out-of-range value.
     fl.set_root_override(99);
     fl.tick();
     CHECK(fl.param_now(spky::flow::P_ROOT) <= spky::flow::kParams[spky::flow::P_ROOT].hi);
+    CHECK(fl.param_now(spky::flow::P_ROOT) >= spky::flow::kParams[spky::flow::P_ROOT].lo);
 }

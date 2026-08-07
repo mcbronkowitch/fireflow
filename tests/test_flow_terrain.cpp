@@ -559,19 +559,71 @@ TEST_CASE("flow terrain: a genre-locked draw_new returns the farthest candidate"
     CHECK(got.master == best_master);
 }
 
-TEST_CASE("flow terrain: a genre-locked draw_new never returns where it started") {
+TEST_CASE("flow terrain: a genre-locked draw_new skips the master it started on") {
     // The ANY branch guarantees this (terrain.cpp's `continue` on a repeat)
     // and test_flow_terrain_code.cpp asserts it there; the new branch needs
     // its own assertion, since it has its own skip.
-    spky::Rng seq;
-    seq.seed(31337u);
+    //
+    // "next.master != cur.master" ALONE cannot pin that skip, and the first
+    // version of this case was therefore vacuous: delete the `continue` and
+    // cur.master merely joins the candidate set with distance(cur_t, cur_t)
+    // == 0, which loses to every distinct terrain, so the result still
+    // differs from cur.master. What the skip actually decides is membership
+    // of the candidate set -- it frees the slot cur.master would occupy for
+    // the next matching master, which can be the farthest one.
+    //
+    // So: pick a seed whose stream really does draw cur.master (searched for,
+    // not invented -- seed 1 draws it 14th, inside the matched window, and it
+    // is the case where the freed slot changes the winner), then replay the
+    // selection by hand WITH the skip and require draw_new to agree. Delete
+    // the `continue` in terrain.cpp and this goes red.
+    const uint32_t kSeed = 1u;
+    const uint32_t kCurMaster = 82049198u;      // the 14th draw off kSeed
     spky::flow::TerrainState cur;
-    cur.master = 0x20;
+    cur.master = kCurMaster;
+    const int want = spky::flow::arch_of(cur.master);
+    {
+        spky::Rng probe;
+        probe.seed(kSeed);
+        bool drawn = false;
+        for (int i = 0; i < 24; ++i) drawn = drawn || probe.next_u32() == kCurMaster;
+        REQUIRE(drawn);                         // the skip is reachable at all
+    }
+    const spky::flow::Terrain cur_t = spky::flow::generate(cur);
+    spky::Rng replay;
+    replay.seed(kSeed);
+    float best = -1.f;
+    uint32_t best_master = 1u;
+    int matched = 0;
+    for (int i = 0; i < spky::flow::kGenreDrawCap &&
+                    matched < spky::flow::kGenreCandidates; ++i) {
+        const uint32_t m = replay.next_u32();
+        if (m == cur.master) continue;          // the skip under test
+        if (spky::flow::arch_of(m) != want) continue;
+        ++matched;
+        spky::flow::TerrainState cand;
+        cand.master = m;
+        const float d = spky::flow::distance(cur_t, spky::flow::generate(cand));
+        if (d > best) { best = d; best_master = m; }
+    }
+    REQUIRE(matched == spky::flow::kGenreCandidates);
+    spky::Rng seq;
+    seq.seed(kSeed);
+    const spky::flow::TerrainState got = spky::flow::draw_new(cur, seq, want);
+    CHECK(got.master == best_master);
+    CHECK(got.master != cur.master);
+
+    // Breadth, on top of the constructed case: a long genre-locked chain never
+    // lands back where it started.
+    spky::Rng chain;
+    chain.seed(31337u);
+    spky::flow::TerrainState walk;
+    walk.master = 0x20;
     for (int i = 0; i < 300; ++i) {
         const spky::flow::TerrainState next =
-            spky::flow::draw_new(cur, seq, spky::flow::arch_of(cur.master));
-        CHECK(next.master != cur.master);
-        cur = next;
+            spky::flow::draw_new(walk, chain, spky::flow::arch_of(walk.master));
+        CHECK(next.master != walk.master);
+        walk = next;
     }
 }
 
