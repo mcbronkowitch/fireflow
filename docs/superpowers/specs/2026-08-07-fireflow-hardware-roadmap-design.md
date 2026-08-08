@@ -3,6 +3,13 @@
 **Stand:** 7. August 2026
 **Ziel:** ein spielbares FireFlow-Einzelgerät, 42 HP Eurorack, fertig am 23. April 2027.
 
+> **In Teilen übersteuert (8. Aug 2026):** Formfaktor, Bedienelement-Budget,
+> Glow-Frage, Terminbindung und die „Halbierungs"-Aufgabe regelt jetzt
+> [`2026-08-08-fireflow-hardware-envelope-design.md`](2026-08-08-fireflow-hardware-envelope-design.md)
+> — 60 HP, voller Bedienelementsatz, Termine als Korridor. Was dort nicht
+> genannt ist (Zwei-Board-Architektur, Coupon-Idee, CNY-Regel, Bezugsquellen,
+> Superbooth-Stufen), gilt hier unverändert.
+
 Das Datum ist selbst gesetzt und hängt an der Superbooth 27 (6.–8. Mai 2027, FEZ Berlin). Ein Stand ist nicht gebucht und nicht Voraussetzung — siehe *Der Stand*. Superbooth ist der Termin, nicht der Auftrag.
 
 ## Ausgangslage

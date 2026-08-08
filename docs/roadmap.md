@@ -2259,13 +2259,17 @@ not survive is every mapping onto a specific control.
 
 So M6 now decomposes into two pieces, in order:
 
-1. **Panel design** — decide the prototype's control surface. The standing
-   reducibility rule applies unchanged: the VCV panel is the full expression of
-   the instrument, and the hardware must be a defensible reduction of it,
-   preferring merged and removed controls over added ones. Nothing to build here,
-   everything to decide. The parked hardware-placement questions from earlier
-   milestones (M4.10's COLOR placement, the BBD deck's contextual VOICE row, the
-   per-deck SEND) come due in this round.
+1. **Panel design** — decide the prototype's control surface. The reduction
+   round is **cancelled**: the envelope spec
+   (`docs/superpowers/specs/2026-08-08-fireflow-hardware-envelope-design.md`)
+   fixes the hardware at **60 HP with the full control set** (82 runtime
+   params on 80 physical positions, BEND sharing ATTACK's knob). What remains
+   is a **regrouping** pass — bounded, tested in Rack via the hardware-mode
+   panel generator (`host/vcv/res/gen_hw_panel.py`), max. 3 rounds, static
+   labels enforced from round 1. The parked hardware-placement questions from
+   earlier milestones (M4.10's COLOR placement, the BBD deck's contextual
+   VOICE row, the per-deck SEND) come due in this round — as placement, not
+   as cuts.
 2. **Bring-up** — the shell itself, against the panel decided in step 1.
 
 Until step 1 has a spec, M6 has no implementable definition, and the "spec ready"
