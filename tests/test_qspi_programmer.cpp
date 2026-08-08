@@ -64,8 +64,21 @@ TEST_CASE("QSPI programmer erases writes and compares the exact payload")
         reinterpret_cast<const volatile uint8_t*>(device.mapped.data()));
 
     CHECK(result == bench::QspiProgramResult::ok);
-    CHECK(device.erased_offset == 0x00040000u);
-    CHECK(device.written_offset == 0x00040000u);
+    // Der Offset wird gegen die KONSTANTE geprueft, nicht gegen eine Zahl:
+    // dieser Test stand seit c905971 ("the bank stops squatting on the
+    // bootloader's app address") auf 0x00040000 und war rot, weil der Wert
+    // an zwei Stellen gepflegt werden musste und eine davon vergessen wurde.
+    //
+    // Damit ein blosser Spiegel der Konstante nicht jede Aenderung
+    // durchwinkt, ist der Wert selbst hier einmal festgenagelt -- MIT
+    // Begruendung, denn er ist eine Entscheidung und kein Detail: 0x90040000
+    // ist die App-Adresse, an die der Daisy-Bootloader das Programm laedt.
+    // Laege die Bank dort, ueberschriebe jedes Flashen sie.
+    static_assert(bench::kQspiPayloadOffset == 0x00100000u,
+                  "QSPI bank offset is a decision: 0x90100000, clear of the "
+                  "bootloader's app address at 0x90040000");
+    CHECK(device.erased_offset == bench::kQspiPayloadOffset);
+    CHECK(device.written_offset == bench::kQspiPayloadOffset);
     CHECK(device.written_size == 0xfe00);
     CHECK(device.invalidated_size == 0xfe00);
     CHECK(std::equal(source.begin(), source.end(), device.mapped.begin()));
