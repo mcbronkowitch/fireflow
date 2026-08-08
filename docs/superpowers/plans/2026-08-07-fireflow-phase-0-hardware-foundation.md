@@ -13,7 +13,22 @@
 > Signal. Schritt 5 („Hören") ist dabei durch einen LED-Selbsttest ersetzt
 > worden, weil das Submodule keine Klinkenbuchse hat — Begründung und
 > Gegenbeweis stehen unten am Schritt.
-> **Offen: Task 2 (Vorrang — entsperrt den September-Testcoupon), Task 6.**
+> **Stand 2026-08-08, abends.** Task 6 Schritte 1–4 sind ausgeführt
+> (`shell/controls.{h,cpp}`, `tests/test_controls_map.cpp`, RED für jeden der
+> drei Tests einzeln bewiesen). Schritt 7 Punkt 2 („Messen mit reinem
+> `process()`") ist ebenfalls erledigt: **62,78 % avg / 65,30 % max** über
+> `SHELL_CPU_PROBE=1`. Offen bleiben die Schritte, die Hardware am Tisch
+> brauchen — 5 (Mux aufs Breadboard), 5b (Einschwingzeit), 6 (hören), 7
+> Punkte 3–4 (Kosten pro Kanal, WS2812) und 8 (Urteil).
+>
+> **Ein Befund, der Schritt 8 betrifft und heute entstanden ist:** die
+> Firmware erzeugt auf dem Trägerboard einen Störton auf der Audio-Blockrate,
+> der **nicht in den Samples steht** — bei erzwungener Stille am Ausgang
+> liegt er unverändert hoch. Das ist eine Einkopplung und ein Befund über den
+> Aufbau, nicht über `engine/` (`shell/README.md`, „Offener Befund"). Er
+> fließt in den Shell-Aufschlag **nicht** ein, blockiert Task 6 also nicht —
+> gehört aber in Phase 1 an die PCB-Entwurfsregeln.
+> **Offen: Task 2 (Vorrang — entsperrt den September-Testcoupon), Task 6 ab Schritt 5.**
 
 **Goal:** Bis zum 21. August 2026 steht fest, wie viele Bedienelemente das FireFlow-Panel auf 42 HP trägt, ob das I/O auf ein Daisy Patch Submodule passt, und was die Firmware-Shell an CPU kostet — gemessen auf echtem Submodule-Silizium, nicht geschätzt.
 
@@ -604,7 +619,7 @@ Die Zahl, für die Phase 0 existiert: was kosten Mux-Scan und LED-Ausgabe auf di
 - Consumes: `shell::sdram_fx_mem()`, `spky::Instrument`, `infrasonic::ShiftRegister165` aus `src/hw/sr_165.h`, `infrasonic::Ws2812` aus `src/hw/ws2812.h`
 - Produces: `shell::Controls::scan()` (blockierend, außerhalb des Audio-Callbacks), `shell::Controls::value(int idx) -> float` normalisiert 0..1, `shell::map_control(int idx, float v, spky::Instrument&)`
 
-- [ ] **Schritt 1: Den Test für die Zuordnungstabelle schreiben**
+- [x] **Schritt 1: Den Test für die Zuordnungstabelle schreiben**
 
 Die Abbildung Kanal → Engine-Setter ist reine Datenlogik und gehört auf den Host getestet, bevor Hardware im Spiel ist. Vorbild sind die bestehenden doctest-Tests in `tests/`.
 
@@ -632,7 +647,7 @@ TEST_CASE("an out-of-range channel changes nothing") {
 
 > Falls `Instrument` keinen Lese-Zugriff auf `rate` hat, wird der Test über einen vorhandenen Observer geführt oder ein `const`-Getter analog zu `form(int)` und `song(int)` ergänzt — **nicht** über `SPKY_TESTING`-Sonderpfade, und nicht durch Aufweichen des Tests.
 
-- [ ] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
+- [x] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
 
 ```bash
 source env.sh
@@ -643,11 +658,11 @@ ctest --test-dir build --output-on-failure -R controls
 
 Erwartet: FAIL — `shell/controls.h` existiert nicht.
 
-- [ ] **Schritt 3: Die Zuordnung minimal implementieren**
+- [x] **Schritt 3: Die Zuordnung minimal implementieren**
 
 `shell/controls.h` deklariert `map_control(int idx, float v, spky::Instrument& inst)`; `controls.cpp` implementiert sie als `switch` über den Kanalindex, zunächst mit genau einem belegten Kanal (0 → `set_rate(PART_A, v)`) und einem `default:`, der nichts tut. Die vollständige Tabelle folgt erst, wenn Task 2 entschieden hat, welche Kanäle es überhaupt gibt.
 
-- [ ] **Schritt 4: Test laufen lassen, GRÜN bestätigen**
+- [x] **Schritt 4: Test laufen lassen, GRÜN bestätigen**
 
 ```bash
 ctest --test-dir build --output-on-failure -R controls
