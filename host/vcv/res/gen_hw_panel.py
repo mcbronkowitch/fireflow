@@ -99,8 +99,21 @@ ALL_HW = HW_PARAMS + HW_INPUTS + HW_OUTPUTS + HW_LIGHTS
 
 TEXTS = [(CX, 6.0, 3.2, 0.9, gp.INK, "middle", "FIREFLOW HW DRAFT 60HP")]
 
+# STAGES shares ATTACK's knob (deliberate dual assignment, spec §1). A
+# screen widget can gate one caption away by engine state; an aluminium
+# plate can't -- it prints both words, so BEND's label drops one line below
+# ATK's rather than sitting on top of it. Slightly smaller so the pair
+# reads as a stacked pair, not a collision.
+STAGES_EXTRA_DY = 2.6
+STAGES_LBL_SIZE = 1.8
+
 def hw_label(c):
-    return (c.x, c.y + LBL_DY_HW[c.kind], "middle", 2.2, gp.INK)
+    dy = LBL_DY_HW[c.kind]
+    size = 2.2
+    if c.enum.startswith("STAGES_"):
+        dy += STAGES_EXTRA_DY
+        size = STAGES_LBL_SIZE
+    return (c.x, c.y + dy, "middle", size, gp.INK)
 
 # =============================================================================
 #  SVG

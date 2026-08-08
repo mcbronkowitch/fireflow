@@ -81,3 +81,12 @@ def test_header_contract():
 def test_svg_exists_and_is_60hp():
     svg = open(os.path.join(HERE, "FireflowHW.svg")).read()
     assert f'width="{hw.W:.3f}mm"' in svg and 'height="128.500mm"' in svg
+
+def test_shared_knob_labels_do_not_coincide():
+    # BEND shares ATTACK's knob; an aluminium plate prints both words
+    # stacked, never superimposed.
+    by_enum = {c.enum: c for c in hw.HW_PARAMS}
+    for side in ("_A", "_B"):
+        atk, bend = by_enum["ATTACK" + side], by_enum["STAGES" + side]
+        la, lb = hw.hw_label(atk), hw.hw_label(bend)
+        assert abs(la[1] - lb[1]) >= 2.0, side

@@ -150,9 +150,9 @@
 <circle cx="242.800" cy="71.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="242.800" y="79.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">LINK</text>
 <circle cx="12.000" cy="56.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="12.000" y="64.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">BEND</text>
+<text x="12.000" y="66.600" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.8">BEND</text>
 <circle cx="292.800" cy="56.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="292.800" y="64.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">BEND</text>
+<text x="292.800" y="66.600" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.8">BEND</text>
 <rect x="113.000" y="82.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="117.000" y="92.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">REC</text>
 <rect x="183.800" y="82.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>
