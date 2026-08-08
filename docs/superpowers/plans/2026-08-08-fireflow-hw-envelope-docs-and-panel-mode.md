@@ -728,6 +728,49 @@ Als Abschluss-Notiz im Task-Report festhalten — nicht committen:
 
 ---
 
+### Task 6: Website — Roadmap-Sektion und Eckpunkte nachziehen
+
+**Achtung: anderes Repo.** Arbeitsverzeichnis ist `C:\Users\bernd\Documents\AI\FireFlow_Website` (Branch `master`, kein Remote, kein Push). Commit-Stil dort: knappe englische `docs:`-Zeilen im Stil des bestehenden Logs, gleicher HAL-9000-Trailer.
+
+**Files:**
+- Modify: `index.html` — Roadmap-Sektion (`<section class="roadmap" id="roadmap">`, ab ca. Zeile 208): SVG-Chart, `roadmap-marks`, `roadmap-gate` (Entscheidungs-Kasten „Decision · 4 Sep 2026", ca. Zeile 379–421)
+- Prüfen (grep `42 HP`, `42hp`, `reduction`, `4 Sep`): `instrument.html`, `prototypes.html` — Treffer, die den alten Stand behaupten, mitziehen
+
+**Interfaces:**
+- Consumes: die Fakten der Envelope-Spec — **nur** diese; keine erfundenen Zahlen
+- Produces: nichts Programmatisches; Task 7 setzt auf dem aktualisierten Stand auf (gleiche Datei, deshalb strikt nacheinander)
+
+**Fakten, die die Sektion danach erzählt:**
+1. Die Entscheidung vom 4. September ist **vorzeitig am 8. August gefallen**: der Macro-Weg (Glow als Hardware) ist raus — zu random, das Tuning griff nicht. Glow bleibt ein VCV-Modul. Die Hardware wird das **volle Instrument: beide Decks, 60 HP, jede Funktion mit eigenem Bedienelement** (82 Runtime-Parameter auf 80 Positionen). Der Gate-Kasten wird von „offene Entscheidung mit zwei Ausgängen" zu „entschieden, so ging es aus" umgebaut — die beiden Ausgangs-Karten werden durch das Ergebnis ersetzt.
+2. Die LED-Kränze sind gestrichen (Strom, BOM, libDaisy-Fork — ausdrücklich nicht CPU).
+3. Der Zeitplan wird ehrlich: H1/H2/H3 bleiben als Kette samt Logik (CNY-Regel), aber die Daten werden nach dem Panel-Freeze neu verankert; der 23. April ist **Zielkorridor**, kein Termin. Die SVG-Marke „4 SEP 2026" wird zu einer „DECIDED 8 AUG"-Marke; das `aria-label` des Charts zieht mit (kein visueller Umbau des Charts nötig — Balken bleiben, nur die Gate-Beschriftung und der Fließtext ändern sich).
+
+- [ ] **Step 1:** Gate-Kasten, Chart-Beschriftung und `aria-label` umbauen; Fließtexte der Roadmap-Sektion auf 60 HP/Korridor umstellen
+- [ ] **Step 2:** `grep -n "42 HP\|42hp\|4 Sep\|4 September\|reduction" index.html instrument.html prototypes.html` — jeden Treffer entscheiden: nachziehen oder er beschreibt Historie (Diary-Einträge sind Historie und bleiben unangetastet)
+- [ ] **Step 3:** `bash tools/check-links.sh` und `bash tools/check-words.sh` falls lauffähig; sonst HTML-Sichtprüfung der geänderten Abschnitte
+- [ ] **Step 4:** Commit im Website-Repo: `docs: the gate closed early and the instrument stays whole` + HAL-Trailer
+
+### Task 7: Dev-Diary-Eintrag „Tofu is dead"
+
+**Gleiche Datei, gleiches Repo wie Task 6 — strikt danach ausführen.**
+
+**Files:**
+- Modify: `index.html` — neuer Diary-Eintrag ZUOBERST der Einträge (das `id="diary-latest"`-Anker-Muster des bisherigen neuesten Eintrags übernehmen und den Anker auf den neuen Eintrag verschieben), `diary-stats` (Entry-Zähler +1), `diary-meta-note` „Latest: …", `hero-status-note` (ca. Zeile 182), `nav-latest` (Zeile 34)
+
+**Interfaces:**
+- Consumes: Envelope-Spec-Fakten + der bestehende Eintrag „Glow, alpha 0.1 — it makes sound, and sometimes it makes tofu" (der Aufhänger knüpft daran an)
+- Produces: den Abschluss der Website-Arbeit
+
+**Inhaltsvorgabe (vom Auftraggeber):** Titel-Hook **„Tofu is dead"**. So knapp wie möglich, mit Humor: **max. ~250 Wörter, max. 3 Absätze** (Diary-Regel), Englisch wie die übrigen Einträge, `diary-stamp` im Muster der Nachbarn (z. B. `envelope spec · 60 HP · 8 Aug 2026`). Der Eintrag trägt diese Fakten und keine anderen:
+- Drei Panelgrößen wurden durchprobiert (12, 18, 42 HP) und alle waren Kompromisse; die Entscheidung ist das volle Instrument auf 60 HP — Tofu (der Macro-Hardware-Traum) ist tot, Glow lebt als VCV-Modul weiter.
+- Zwei unabhängige adversariale Reviews haben den ersten Entwurf zerlegt: nur 4 rohe ADC-Pins statt 6, 56 HP war schöngerechnet, und die WS2812-CPU-Angst war ein Mythos (der Treiber war immer DMA) — die Kränze sterben trotzdem, für Strom, BOM und den libDaisy-Fork.
+- Der SD-Slot muss 4-bit verdrahtet werden, weil der Daisy-Bootloader dann Firmware per Drag & Drop flasht — ein Gerät ohne SWD-Pins bekommt Updates von der Karte.
+- Der 23. April ist jetzt ein Korridor, kein Termin: das richtige Instrument schlägt die Messe.
+
+- [ ] **Step 1:** Eintrag schreiben und einbauen (Anker, Zähler, Latest-Zeilen, Nav)
+- [ ] **Step 2:** Wortzahl prüfen (≤ ~250), Zähler-Konsistenz prüfen (`data-diary-count-entries` = reale Eintragszahl)
+- [ ] **Step 3:** Commit im Website-Repo: `docs: tofu is dead, long live the whole instrument` + HAL-Trailer
+
 ## Self-Review (ausgefüllt)
 
 1. **Spec-Abdeckung:** Alle fünf Zeilen der Nachzieh-Tabelle der Envelope-Spec sind abgedeckt (Roadmap-M6 → Task 1; Phase-0 Task 2 + Schritt 5 → Task 2; Memory → Task 3; Kopfvermerk → Task 1). §4-Hardware-Modus → Tasks 4+5. Die Coupon-/Notausgang-/Kosten-Punkte der Spec sind Hardware-Phasen-Inhalte ohne Code-Anteil und bleiben absichtlich außerhalb dieses Plans.
