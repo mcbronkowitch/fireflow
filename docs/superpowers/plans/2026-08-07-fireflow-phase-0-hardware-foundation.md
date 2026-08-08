@@ -2,17 +2,31 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Stand 2026-08-08.** Task 3 und Task 4 sind ausgeführt (Commits `d0b3c08`,
+> `55c33f8`, `97e2465`), Task 1 am 8. August. Alle drei sind unten abgehakt.
+> Der Plan wurde am 8. August gegen
+> [`docs/bench/2026-08-07-seed-vs-patch-sm.md`](../../bench/2026-08-07-seed-vs-patch-sm.md)
+> abgeglichen; jede Stelle, die die Messung falsch gemacht hat, ist an Ort und
+> Stelle korrigiert und als ~~durchgestrichen~~ kenntlich gemacht.
+> **Offen: Task 2 (Vorrang — entsperrt den September-Testcoupon), Task 5, Task 6.**
+
 **Goal:** Bis zum 21. August 2026 steht fest, wie viele Bedienelemente das FireFlow-Panel auf 42 HP trägt, ob das I/O auf ein Daisy Patch Submodule passt, und was die Firmware-Shell an CPU kostet — gemessen auf echtem Submodule-Silizium, nicht geschätzt.
 
-**Architecture:** Vier voneinander weitgehend unabhängige Stränge. Der Papier-Strang (Task 1–2) entscheidet die Panel-Reduktion und das Pin-Budget und braucht keine Hardware; er entsperrt die gesamte PCB-Arbeit ab September. Der Mess-Strang (Task 3–6) bringt zum ersten Mal Engine-Code auf ein Submodule und beziffert den Shell-Aufschlag auf die 3,57 Punkte CPU-Reserve. Task 1 und 3 können am selben Tag beginnen.
+**Architecture:** Vier voneinander weitgehend unabhängige Stränge. Der Papier-Strang (Task 1–2) entscheidet die Panel-Reduktion und das Pin-Budget und braucht keine Hardware; er entsperrt die gesamte PCB-Arbeit ab September. Der Mess-Strang (Task 3–6) bringt zum ersten Mal Engine-Code auf ein Submodule und beziffert den Shell-Aufschlag auf die CPU-Reserve. Task 1 und 3 können am selben Tag beginnen.
 
-**Tech Stack:** C++17, libDaisy (bleeptools-Fork), DaisySP, ARM GCC via `make`, Python 3 für Bench-Runner und Panelgenerator, doctest für Host-Tests, OpenOCD + Debug-Probe für Semihosting.
+> **Korrektur 2026-08-08:** Hier stand „die 3,57 Punkte CPU-Reserve". Diese Zahl
+> stammte vom Seed (`bd01608`, 4. Aug, 96,43 %). Auf dem Submodule gemessen
+> liegt `instrument_worst_bbd_dtcm` bei 97,83 %, die Reserve also bei
+> **2,17 Punkten**. Der Shell-Aufschlag wird gegen 2,17 gerechnet, nicht gegen
+> 3,57 und nicht gegen die zwischenzeitlichen 2,97 (Seed, 7. Aug).
+
+**Tech Stack:** C++17, libDaisy (bleeptools-Fork), DaisySP, ARM GCC via `make`, Python 3 für Bench-Runner und Panelgenerator, doctest für Host-Tests, ~~OpenOCD + Debug-Probe für Semihosting~~ **DFU zum Flashen und USB-CDC als Bench-Transport** (das Submodule hat keine SWD-Pins; siehe [`docs/bench/2026-08-07-transport-semihost-vs-usb.md`](../../bench/2026-08-07-transport-semihost-vs-usb.md)).
 
 ## Global Constraints
 
 - **Zieltermin Phase 0: 21. August 2026.** Danach beginnt Phase 1 (KiCad, Testcoupon).
 - **Formfaktor: Eurorack 42 HP**, nutzbare Panelfläche rund 213 × 115 mm.
-- **Zielhardware: Daisy Patch Submodule.** Vorhanden, noch nie geflasht.
+- **Zielhardware: Daisy Patch Submodule.** Vorhanden; seit 7. Aug 2026 geflasht und gemessen. Es hat **keine SWD-Pins** — alles geht über DFU (USB), Debug-Probe und Semihosting stehen auf diesem Board nicht zur Verfügung. Transport der Bench ist USB-CDC.
 - **Multiplexer für Task 6: ein `74HC4051` (8 Kanäle), vorhanden.** Nichts zu bestellen, Phase 0 ist bauteilseitig vollständig. Task 6 misst **Kosten pro Kanal**, nicht Kosten pro Chip — acht Kanäle genügen, die Hochrechnung auf die reale Kanalzahl aus Task 2 ist Teil des Ergebnisses. Die Layoutfrage *wenige 16:1 gegen mehrere 8:1* gehört nicht in Phase 0; sie entscheidet sich an JLCPCB-Verfügbarkeit und Bestückungspreis vor dem 11. September.
 - **Kein Heap in der Engine.** `engine/instrument.h` fordert injizierten Speicher über `FxMem`; auf Daisy kommt der aus SDRAM.
 - **Zwei getrennte Toolchains, niemals mischen.** Engine/Tests/Render-Host: clang + Ninja, `source env.sh`, `-DCMAKE_BUILD_TYPE=Release` ist **nicht optional**. Firmware/Bench: ARM GCC über `make`.
@@ -21,7 +35,8 @@
 - **Ein Test, der nicht rot werden kann, wird umgeschrieben.** RED einmal beweisen, immer.
 - **Die Bench kann still ein veraltetes Objekt relinken.** Neue Zeilen über `build/bench.map` verifizieren, nie über die Memory-Tabelle.
 - **`bench/` fasst die Produktions-Firmware nicht an** und umgekehrt. Getrennte Makefiles, getrennte `main.cpp`.
-- **Alle bisherigen Bench-Zahlen stammen vom Daisy Seed.** Keine Zahl aus `docs/bench/` darf als Submodule-Messung zitiert werden, bis Task 4 sie dort reproduziert hat.
+- **Seed-Zahlen übertragen nicht — entschieden, nicht mehr offen.** Task 4 ist gefahren (7. Aug 2026): jeder der 24 Workloads ist auf dem Submodule teurer, der Entscheidungs-Workload um +0,53 bis +0,80 Punkte, und die Wiederholbänder beider Boards berühren sich nicht. Ab hier darf **keine Seed-Zahl** für eine Submodule-Aussage zitiert werden — auch nicht als Näherung. Siehe [`docs/bench/2026-08-07-seed-vs-patch-sm.md`](../../bench/2026-08-07-seed-vs-patch-sm.md).
+- **Der Mechanismus des Aufschlags ist nicht gemessen** und wird deshalb nicht benannt. Insbesondere trennt die Messung nicht, wie viel auf das Board und wie viel auf die veränderte Codeplatzierung entfällt (der `patch_sm`-Build linkt ~8000 B mehr nach SRAM_EXEC). Wer das trennen will, misst es — er behauptet es nicht.
 
 ## File Structure
 
@@ -56,7 +71,23 @@ Bevor irgendetwas reduziert wird, muss die Ausgangszahl belastbar und wiederholb
 - Consumes: `host/vcv/res/gen_panel.py` — die Listen `PANEL_PARAMS`, `APPENDED_PANEL_PARAMS`, `HIDDEN_PARAMS`, `PART_A`, `PART_B`, `SHARED`, `INPUTS`, `OUTPUTS`, `LIGHTS`
 - Produces: `count_controls() -> dict[str, int]` mit den Schlüsseln `panel`, `appended`, `hidden`, `runtime`, `part_a`, `part_b`, `shared`, `inputs`, `outputs`, `lights`
 
-- [ ] **Schritt 1: Den fehlschlagenden Test schreiben**
+> **Korrektur 2026-08-08 — kein pytest in dieser Umgebung.** Dieser Task war
+> mit `python -m pytest` geschrieben; das Modul ist hier nicht installiert.
+> Das Repo hat dafür längst eine Konvention: `host/vcv/res/test_flow_panel.py`
+> sagt es wörtlich — *„No pytest in this environment — plain asserts, exit code
+> says it all."* Der Test ist in genau dieser Form gebaut (`check()`-Sammler,
+> `test_*`-Funktionen, Exit-Code am Ende), aufgerufen wird er mit
+> `python test_count_panel_controls.py`. Die Assertions unten sind
+> inhaltlich unverändert übernommen.
+>
+> **Zweite Falle, beim RED-Beweis aufgetreten und notiert:** mehrere Mutationen
+> kurz hintereinander werden von Pythons `__pycache__` verschluckt — bei
+> gleichbleibender Dateigröße galt die `.pyc` noch als gültig, und Lauf 2 und 3
+> zeigten stur das Ergebnis von Lauf 1. Wer hier mutiert, setzt
+> `PYTHONDONTWRITEBYTECODE=1` und löscht `__pycache__` zwischen den Läufen,
+> sonst beweist er nichts. Dieselbe Familie wie die stale-Objekt-Falle der Bench.
+
+- [x] **Schritt 1: Den fehlschlagenden Test schreiben**
 
 ```python
 # tools/test_count_panel_controls.py
@@ -83,15 +114,15 @@ def test_known_baseline_2026_08_07():
     assert counts["shared"] == 16
 ```
 
-- [ ] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
+- [x] **Schritt 2: Test laufen lassen, Fehlschlag bestätigen**
 
 ```bash
-cd tools && python -m pytest test_count_panel_controls.py -v
+cd tools && python test_count_panel_controls.py
 ```
 
 Erwartet: FAIL mit `ModuleNotFoundError: No module named 'count_panel_controls'`
 
-- [ ] **Schritt 3: Den Zähler schreiben**
+- [x] **Schritt 3: Den Zähler schreiben**
 
 ```python
 # tools/count_panel_controls.py
@@ -139,19 +170,19 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Schritt 4: Test laufen lassen, GRÜN bestätigen**
+- [x] **Schritt 4: Test laufen lassen, GRÜN bestätigen**
 
 ```bash
-cd tools && python -m pytest test_count_panel_controls.py -v
+cd tools && python test_count_panel_controls.py
 ```
 
-Erwartet: 3 passed
+Erwartet: `control count OK`, Exit-Code 0
 
-- [ ] **Schritt 5: RED einmal beweisen**
+- [x] **Schritt 5: RED einmal beweisen**
 
-`test_known_baseline_2026_08_07` muss rot werden können. Kurz `82` auf `83` ändern, Test laufen lassen (erwartet: FAIL), zurückändern, Test laufen lassen (erwartet: PASS).
+Alle drei Tests müssen rot werden können, nicht nur die Baseline — je eine Mutation im Zähler (`runtime + 1`, `part_b - 1`, `shared + 7`), jeweils mit geleertem `__pycache__`. Ausgeführt am 8. Aug 2026: alle drei gehen einzeln rot, danach wieder grün. (Ursprünglich stand hier: kurz `82` auf `83` ändern, Test laufen lassen (erwartet: FAIL), zurückändern, Test laufen lassen — das hätte nur einen der drei bewiesen.)
 
-- [ ] **Schritt 6: Commit**
+- [x] **Schritt 6: Commit**
 
 ```bash
 git add tools/count_panel_controls.py tools/test_count_panel_controls.py
@@ -258,7 +289,7 @@ Die Bench kennt heute nur `daisy::DaisySeed`. Bevor auf dem Submodule gemessen w
 - Consumes: libDaisy — `daisy::DaisySeed` und `daisy::patch_sm::DaisyPatchSM`
 - Produces: `bench::Board` (Typ-Alias), `bench::board_init()` (bringt Takt, Caches, SDRAM hoch), `bench::board_name()` → `"seed"` oder `"patch_sm"`
 
-- [ ] **Schritt 1: Die Board-Abstraktion schreiben**
+- [x] **Schritt 1: Die Board-Abstraktion schreiben**
 
 Der bestehende `main.cpp` enthält einen kommentierten Sonderfall, der **erhalten bleiben muss**: `System::InitBackupSram()` plus das Stempeln von `boot_info.version` auf `v6_1`, damit `Init()` Takt und SDRAM wirklich hochbringt statt sie als „vom Bootloader erledigt" zu überspringen. Ohne das gibt es einen HardFault, sobald der erste Workload SDRAM anfasst. Dieser Block wandert unverändert in `src/hw/board.h`.
 
@@ -313,15 +344,15 @@ inline void board_init(Board& hw)
 
 > **Untersuchungsschritt, nicht überspringen:** `DaisyPatchSM::Init()` nimmt kein Boost-Argument und konfiguriert Takt und SDRAM selbst. Vor dem Übersetzen in `lib/libDaisy/src/daisy_patch_sm.cpp` nachlesen, ob es tatsächlich auf 480 MHz geht und ob `SetAudioBlockSize`/`SetAudioSampleRate` mit derselben Signatur existieren. Falls nicht: die Abweichung in `src/hw/board.h` kommentieren, nicht stillschweigend anpassen — jede Abweichung im Takt macht den Vergleich mit den Seed-Zahlen ungültig.
 
-- [ ] **Schritt 2: `main.cpp` auf die Abstraktion umstellen**
+- [x] **Schritt 2: `main.cpp` auf die Abstraktion umstellen**
 
 In `bench/main.cpp` ersetzen: `#include <daisy_seed.h>` durch `#include "hw/board.h"`, `static daisy::DaisySeed hw;` durch `static bench::Board hw;`, und die sechs Zeilen von `InitBackupSram()` bis `SetAudioSampleRate(...)` durch `bench::board_init(hw);`. Die Signatur `void run_anchors(daisy::DaisySeed& hw)` in `bench/anchor.cpp` wird zu `void run_anchors(bench::Board& hw)`.
 
-- [ ] **Schritt 3: Den Board-Schalter in Makefile und Runner**
+- [x] **Schritt 3: Den Board-Schalter in Makefile und Runner**
 
 `bench/Makefile`: Variable `BENCH_BOARD ?= seed`, und bei `patch_sm` sowohl `-DBENCH_BOARD_PATCH_SM` in `C_DEFS` als auch die Patch-SM-Quellen von libDaisy in den Build. `bench/run.py`: `--board {seed,patch_sm}` mit Default `seed`, durchgereicht an `make`, aufgenommen in den Dateinamen (`YYYY-MM-DD-<hash>-<profile>-<board>-<layout>-<optimization>.md`) und als Spalte in jede CSV-Zeile.
 
-- [ ] **Schritt 4: Regression auf dem Seed prüfen — das ist der eigentliche Test**
+- [x] **Schritt 4: Regression auf dem Seed prüfen — das ist der eigentliche Test**
 
 Vor jeder Submodule-Messung muss bewiesen sein, dass der Umbau die bestehende Messkette nicht verändert hat.
 
@@ -331,7 +362,7 @@ cd bench && python run.py --profile regress --optimization o3
 
 Erwartet: Der Lauf gelingt, und `instrument_worst_bbd_dtcm` liegt innerhalb des Wiederholbands der Referenz aus `docs/bench/2026-08-04-bd01608-regress-axi-o3.md` (96,43 % offline). **Weicht die Zahl ab, ist der Umbau schuld, nicht das Board.** Dann zurück zu Schritt 1, nicht weiter.
 
-- [ ] **Schritt 5: Frisches Objekt verifizieren**
+- [x] **Schritt 5: Frisches Objekt verifizieren**
 
 Die Bench kann still ein veraltetes Objekt relinken. Nicht der Memory-Tabelle glauben:
 
@@ -341,7 +372,7 @@ grep -n "board" bench/build/bench.map | head
 
 Erwartet: die neue Übersetzungseinheit taucht auf.
 
-- [ ] **Schritt 6: Commit**
+- [x] **Schritt 6: Commit**
 
 ```bash
 git add src/hw/board.h bench/main.cpp bench/anchor.cpp bench/Makefile bench/run.py
@@ -364,11 +395,17 @@ Der Moment, in dem aus „sollte übertragen" eine Zahl wird.
 - Consumes: `bench::Board`, `bench::board_init()`, `--board` aus Task 3
 - Produces: die Antwort auf „übertragen die Seed-Zahlen?" — Eingang für Task 6
 
-- [ ] **Schritt 1: Den QSPI-Wavetable-Bank auf das Submodule programmieren**
+- [x] **Schritt 1: Den QSPI-Wavetable-Bank auf das Submodule programmieren**
 
-Die Bench prüft beim Start den SHA-256 des QSPI-Payloads gegen das gelinkte Image. Ein frisches Board hat einen leeren QSPI, und der Lauf schlägt an dieser Prüfung fehl — das ist gewollt, kein Fehler. Vorgehen nach `bench/qspi_programmer/`.
+Die Bench prüft beim Start den SHA-256 des QSPI-Payloads gegen das gelinkte Image. Ein frisches Board hat einen leeren QSPI, und der Lauf schlägt an dieser Prüfung fehl — das ist gewollt, kein Fehler. ~~Vorgehen nach `bench/qspi_programmer/`~~ **über den Debug-Probe**.
 
-- [ ] **Schritt 2: Den Lauf ausführen**
+> **Korrektur 2026-08-08 — so ist es tatsächlich gelaufen.** Der geplante Weg
+> setzte einen Debug-Probe voraus. **Das Submodule hat keine SWD-Pins**, also
+> ging es nicht darüber, sondern **über DFU (USB)**. Die Bank liegt seit dem
+> 7. August auf dem Board und muss nicht erneut geschrieben werden. Wer diesen
+> Schritt auf einem weiteren Submodule wiederholt, nimmt DFU — nicht den Probe.
+
+- [x] **Schritt 2: Den Lauf ausführen**
 
 ```bash
 cd bench && python run.py --profile regress --board patch_sm --optimization o3
@@ -376,20 +413,29 @@ cd bench && python run.py --profile regress --board patch_sm --optimization o3
 
 Erwartet: zwei Wiederholungen, übereinstimmende Zeilenmengen und Checksummen, Capture in `../docs/bench/`.
 
-- [ ] **Schritt 3: Bei Fehlschlag — die drei bekannten Fallen zuerst**
+- [x] **Schritt 3: Bei Fehlschlag — die drei bekannten Fallen zuerst**
 
 Nicht ins Blaue debuggen. In dieser Reihenfolge prüfen:
-1. **HardFault beim ersten SDRAM-Zugriff** → der `boot_info`-Stempel greift auf diesem Board nicht; `bench::board_init()` prüfen.
-2. **QSPI-Digest-Mismatch** → Schritt 1 nicht oder mit falschem Bank-Stand ausgeführt.
-3. **OpenOCD verbindet nicht** → `bench/openocd/` erwartet eine Seed-Konfiguration; das Submodule braucht möglicherweise eine eigene `.cfg`.
+1. **HardFault beim ersten SDRAM-Zugriff** → der `boot_info`-Stempel greift auf diesem Board nicht; `bench::board_init()` prüfen. — **Gilt weiterhin.**
+2. ~~**QSPI-Digest-Mismatch** → Schritt 1 nicht oder mit falschem Bank-Stand ausgeführt.~~
+3. ~~**OpenOCD verbindet nicht** → `bench/openocd/` erwartet eine Seed-Konfiguration; das Submodule braucht möglicherweise eine eigene `.cfg`.~~
+
+> **Korrektur 2026-08-08 — zwei der drei Fallen sind erledigt.** Falle 3 gibt es
+> nicht: das Submodule braucht **keine eigene OpenOCD-Konfiguration**, weil
+> `target/stm32h7x.cfg` auf MCU-Ebene arbeitet — und ohnehin läuft nichts über
+> OpenOCD, das Board hat keine SWD-Pins. Falle 2 ist einmalig gewesen und
+> abgehakt (Bank liegt per DFU auf dem Board). Eine dritte, die tatsächlich
+> auftrat und in der Liste fehlte: **`daisy_patch_sm` war bereits in
+> `libdaisy.a`** — es musste nichts zusätzlich in den Build gezogen werden.
+> Es bleibt genau **eine** offene Falle, nämlich Nummer 1.
 
 Jede Abweichung, die eine Änderung an `src/hw/board.h` erzwingt, wird dort kommentiert und Task 3 Schritt 4 wird erneut gefahren.
 
-- [ ] **Schritt 4: Den Vergleich schreiben**
+- [x] **Schritt 4: Den Vergleich schreiben**
 
 `docs/bench/2026-08-XX-seed-vs-patch-sm.md`: Zeile für Zeile Seed gegen Patch SM, dieselbe Profil-, Layout- und Optimierungsidentität, Differenz in Prozentpunkten. Die Kopfzeile beantwortet genau eine Frage: **übertragen die Zahlen, ja oder nein.** Bewegt sich `instrument_worst_bbd_dtcm` um mehr als das Wiederholband, gilt: **keine Seed-Zahl darf mehr für Submodule-Aussagen zitiert werden**, und `docs/roadmap.md` bekommt eine entsprechende Warnung.
 
-- [ ] **Schritt 5: Commit**
+- [x] **Schritt 5: Commit**
 
 ```bash
 git add docs/bench/
@@ -505,7 +551,21 @@ Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 
 ### Task 6: Ein Poti über den Mux, und der Shell-Aufschlag in Zahlen
 
-Die Zahl, für die Phase 0 existiert: was kosten Mux-Scan und LED-Ausgabe auf die 3,57 Punkte Reserve.
+Die Zahl, für die Phase 0 existiert: was kosten Mux-Scan und LED-Ausgabe auf die ~~3,57~~ **2,17** Punkte Reserve.
+
+> **Korrektur 2026-08-08 — zwei Änderungen an diesem Task.**
+> **(a) Die Reserve ist 2,17 Punkte, nicht 3,57.** 3,57 war der Seed-Stand vom
+> 4. August; auf dem Submodule liegt `instrument_worst_bbd_dtcm` bei 97,83 %.
+> Der Keil, in den Shell-Aufschlag und LED-Ausgabe hineinpassen müssen, ist
+> also um **39 % kleiner**, als dieser Task ursprünglich annahm.
+> **(b) Die Messung läuft auf dem Submodule, oder sie ist keine Aussage über
+> das Submodule.** Ein Shell-Aufschlag, auf dem Seed gemessen und auf das
+> Submodule übertragen, ist nach Task 4 unzulässig — auch als Näherung.
+> Zusätzlich beachten: die AXI-Nachbarn `instrument_worst_bbd` (99,25 %) und
+> `inst_bbd_engine_worst` (99,67 %) liegen auf dem Submodule **unter einem
+> halben Punkt** unter dem Blockbudget. Für die gilt: jeder Shell-Aufschlag
+> überzieht sie. Ob das zählt, hängt daran, ob sie erreichbare Betriebspunkte
+> sind — diese Frage gehört in Schritt 8.
 
 **Files:**
 - Create: `shell/controls.h`, `shell/controls.cpp`
@@ -608,7 +668,7 @@ Das ist der Kern. Die CPU-Last mit und ohne Shell-Arbeit im selben Bild vergleic
 3. Messen mit zusätzlich laufendem Mux-Scan über alle 8 Kanäle. Daraus **Kosten pro Kanal** bilden und auf die Kanalzahl aus Task 2 hochrechnen. Zusätzlich mit 4 statt 8 Kanälen messen: skaliert die Zeit linear, ist die Hochrechnung tragfähig; bleibt ein Fixanteil stehen, gehört der separat ausgewiesen, weil er sich bei mehreren Chips **nicht** vervielfacht.
 4. Messen mit zusätzlich getriebener WS2812-Kette in voller geplanter LED-Zahl aus Task 2 — **WS2812 ist der teure Posten und der wahrscheinlichste Grund, warum 3,57 Punkte nicht reichen.**
 
-Ergebnis als Tabelle nach `docs/bench/`, mit derselben Sorgfalt wie ein Bench-Capture: Board, Git-Hash, Optimierung, zwei Wiederholungen.
+Ergebnis als Tabelle nach `docs/bench/`, mit derselben Sorgfalt wie ein Bench-Capture: Board (**`patch_sm`, nicht `seed`**), Git-Hash, Optimierung, Transport, zwei Wiederholungen. Der Aufschlag wird gegen **2,17 Punkte** gerechnet.
 
 - [ ] **Schritt 8: Das Urteil in die Roadmap schreiben**
 
@@ -634,7 +694,7 @@ Task 1 → 2 ist der Papier-Strang und entsperrt die PCB-Arbeit. Task 3 → 4 �
 ## Definition of Done für Phase 0
 
 - [ ] `docs/hardware/io-budget.md` existiert, die Klassifikation summiert sich auf 82, und die Pin-Rechnung geht mit 20 % Reserve auf
-- [ ] Ein Bench-Capture mit `board=patch_sm` liegt in `docs/bench/`
+- [x] Ein Bench-Capture mit `board=patch_sm` liegt in `docs/bench/` — `2026-08-07-d0b3c08-regress-axi-o3-patch_sm-usb.{md,csv}`
 - [ ] `shell/` baut, flasht und macht auf dem Submodule Ton
 - [ ] Ein Poti verändert über den `74HC4051` hörbar einen Engine-Parameter
 - [ ] Die Einschwingzeit pro Kanal ist gemessen und steht in `docs/hardware/io-budget.md`
