@@ -213,80 +213,63 @@ Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 
 ---
 
-### Task 2: Die Panel-Reduktion entscheiden und das Pin-Budget rechnen
+### Task 2: Das Pin-Budget gegen die Envelope-Spec rechnen
 
-**Das ist der inhaltliche Kern von Phase 0 und eine Design-Entscheidung, keine Implementierung.** 82 Runtime-Parameter müssen auf die 45–55 Bedienelemente, die 42 HP tragen. Diese Aufgabe erzeugt ein Dokument, keinen Code.
-
-> **Vor diesem Task: eigene Brainstorming-Runde.** Die Reduktionsmechanismen (Lane-Select statt fünf Lane-Reihen, Hold-Layer, ALT-Gesten, geteilte Reihen zwischen Parts) sind Instrumentendesign, und die Entscheidung gehört Bastian. Ein Implementierer soll sie **nicht** allein treffen. Was hier steht, ist die Struktur des Ergebnisdokuments und die Rechnung, die es enthalten muss.
+**Die Reduktionsentscheidung ist gefallen — durch Wegfall.** Die Envelope-Spec
+(`docs/superpowers/specs/2026-08-08-fireflow-hardware-envelope-design.md`)
+fixiert: volles Instrument, 60 HP, 82 Runtime-Parameter auf 80 physischen
+Positionen. Dieser Task ist damit **reine Rechnung, keine Design-Entscheidung
+mehr**: die konkrete Pin-Map der Spec-§2-Topologie, als Update von
+`docs/hardware/io-budget.md`.
 
 **Files:**
-- Create: `docs/hardware/io-budget.md`
+- Modify: `docs/hardware/io-budget.md`
 
 **Interfaces:**
-- Consumes: `tools/count_panel_controls.py` aus Task 1, die Patch-SM-Pinbelegung aus `lib/libDaisy/src/daisy_patch_sm.h`
-- Produces: die Zahlen `n_pots`, `n_pads`, `n_leds`, `n_encoders`, `n_jacks`, `n_mux_chips` — Task 5 und die gesamte PCB-Arbeit ab September hängen daran
+- Consumes: `tools/count_panel_controls.py` (Task 1), `lib/libDaisy/src/daisy_patch_sm.h`, Envelope-Spec §1/§2
+- Produces: die Pin-Map (welcher Patch-SM-Pin trägt was), `n_mux_chips`, die Ketten-Topologie — Task 5/6 und die Coupon-Bestellung im September hängen daran
 
-- [ ] **Schritt 1: Die Ausgangslage in das Dokument schreiben**
+- [ ] **Schritt 1: Die Klassifikation auf den vollen Satz umstellen**
 
-```bash
-cd tools && python count_panel_controls.py
-```
+Die 82er-Tabelle bleibt als Prüfsumme, aber die Einstufungen kollabieren:
+`KNOB` (eigener Mux-Kanal), `PAD` (Bit auf der 74HC165-Kette), `LAYER`
+(die vier HIDDEN_PARAMS: ALT-Zugang oder Default, Entscheidung laut Spec in
+der Neugruppierung), `SHARED` (STAGES_A/B teilt ATTACKs Knopf). `CUT`,
+`SELECT`, `ENCODER`, `FADER` kommen nicht mehr vor — steht eine solche Zeile
+noch da, widerspricht das Dokument der Spec und der Task ist nicht fertig.
+Summe muss 82 ergeben.
 
-Die Ausgabe kommt wörtlich als erste Tabelle nach `docs/hardware/io-budget.md`, mit Datum und Git-Hash.
-
-- [ ] **Schritt 2: Jeden der 82 Parameter klassifizieren**
-
-Eine Tabelle mit einer Zeile pro Parameter und genau einer Einstufung:
-
-| Einstufung | Bedeutung | Hardware-Konsequenz |
-|---|---|---|
-| `KNOB` | eigener Poti auf dem Panel | 1 Mux-Kanal |
-| `FADER` | eigener Fader | 1 Mux-Kanal |
-| `PAD` | Taster oder Touch-Pad | 1 Mux-Kanal oder MPR121-Kanal |
-| `ENCODER` | Endlosgeber | 2 GPIO + 1 Taster |
-| `LAYER` | erreichbar nur über Hold/ALT-Geste | 0 zusätzliche Kanäle |
-| `SELECT` | über Lane-/Deck-Auswahl geteilt | teilt sich einen Kanal mit n anderen |
-| `MENU` | nur über Settings/Preset erreichbar | 0 Kanäle |
-| `CUT` | auf Hardware nicht vorhanden | 0 Kanäle, Firmware-Default |
-
-**Regel:** Jeder Parameter bekommt genau eine Einstufung. Die Summe der Zeilen muss 82 ergeben — das ist die Prüfsumme, die verhindert, dass etwas stillschweigend verschwindet.
-
-- [ ] **Schritt 3: Die Bedienelemente zählen und gegen die Fläche prüfen**
+- [ ] **Schritt 2: Die Topologie-Rechnung**
 
 ```
-n_pots     = Anzahl KNOB
-n_faders   = Anzahl FADER
-n_pads     = Anzahl PAD
-n_encoders = Anzahl ENCODER
-n_bedien   = n_pots + n_faders + n_pads + n_encoders
+Sense-Pins        = 4 (A2, A3, D9, D8 — die einzigen rohen ADC-Pins)
+Poti-Mux-Chips    = aufgerundet(n_KNOB / 16) 74HC4067, je zwei teilen sich
+                    einen Sense-Pin; Adress- UND Enable-Leitungen kommen aus
+                    der 595-Kette, nicht aus GPIOs
+Taster            = aufgerundet(n_PAD / 8) × 74HC165
+LEDs              = 3 × 74HC595 (24 Ausgänge, LED-Belegungstabelle der Spec §1)
+Ketten-GPIOs      = 4 (Daten-Out, Takt, Latch/Load, Daten-In — bit-bang,
+                    SPI2 ist tabu: D8/D9 sind Sense-Pins)
+SDMMC 4-bit       = D2–D7 (fix — 1-bit verliert das Bootloader-SD-Update)
+CV-In-Buchsen     = 4 von CV_1..8 (bipolar konditioniert, genau richtig für CV)
+Gate/CV-Out/Audio = B9/B10, B5/B6, C1/C10, B1–B4 (fest)
 ```
 
-Gegenrechnung, die im Dokument stehen muss: nutzbare Fläche 213 × 115 mm, gewähltes Raster in mm, daraus die geometrische Kapazität. **`n_bedien` muss darunter liegen, mit Rand für Buchsen und Beschriftung.** Liegt es darüber, ist die Reduktion nicht fertig — zurück zu Schritt 2.
+Ergebniszeile im Dokument: „X GPIOs nötig, Y verfügbar, Reserve steckt in
+den Ketten (Spec §2), nicht in Pins." Die alte 20-%-Pin-Reserve-Regel gilt
+auf Ketten-Ebene: jede Erweiterung kostet ein Schieberegister, keinen GPIO.
 
-- [ ] **Schritt 4: Das Pin-Budget gegen das Patch Submodule rechnen**
+- [ ] **Schritt 3: Die Buchsen festlegen**
 
-```
-Mux-Kanäle nötig     = n_pots + n_faders + (PADs auf Mux)
-Mux-Chips            = aufgerundet(Mux-Kanäle / 8)   bei 74HC4051
-                     = aufgerundet(Mux-Kanäle / 16)  bei CD74HC4067
-ADC-Pins             = Anzahl Mux-Chips (1 Signal-Pin je Chip)
-Adress-GPIO          = 3 bei 4051, 4 bei 4067  (chipübergreifend geteilt)
-LED-Pins             = 1 bei WS2812-Kette (src/hw/ws2812.cpp existiert)
-Encoder-GPIO         = n_encoders * 3
-Gate/Clock-GPIO      = Anzahl digitaler Buchsen
-```
+Unverändert zur alten Fassung: je Buchse eine Zeile (Audio/CV/Gate, Richtung,
+Patch-SM-Anschluss) — jetzt inklusive SD-Slot als eigener Zeile und mit dem
+Spec-§2-Vorbehalt an den CV-Outs (0–5 V unipolar, dokumentiert akzeptiert).
 
-Die Verfügbarkeit gegenprüfen an `lib/libDaisy/src/daisy_patch_sm.h` — dort stehen die tatsächlich herausgeführten Pins. **Ergebniszeile im Dokument: „X ADC-Pins nötig, Y verfügbar, Z Reserve."** Auf `n_bedien` sind **20 % Reserve** aufzuschlagen, bevor die Rechnung als bestanden gilt; im Layout kommt erfahrungsgemäß noch ein Taster dazu.
-
-- [ ] **Schritt 5: Die Buchsen festlegen**
-
-Aus `gen_panel.py`: 4 Inputs (`IN_L`, `IN_R`, `CLOCK`, `RESET`), 6 Outputs (`OUT_L`, `OUT_R`, `PITCH_A`, `GATE_A`, …). Für jede Buchse eine Zeile: Audio oder CV oder Gate, Richtung, und auf welchen Patch-SM-Anschluss sie geht. Audio-I/O und CV-Wandler sind auf dem Submodule bereits vorhanden — das ist der Grund, dieses Modul zu nehmen, und muss in der Rechnung auftauchen.
-
-- [ ] **Schritt 6: Commit**
+- [ ] **Schritt 4: Commit**
 
 ```bash
 git add docs/hardware/io-budget.md
-git commit -m "docs(hardware): eighty-two controls meet forty-two horizontal pitch
+git commit -m "docs(hardware): the pin budget stops arguing and starts counting
 
 Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 ```
@@ -685,7 +668,7 @@ Verwendet wird der vorhandene **`74HC4051`**, 8 Kanäle. Der Aufbau steht auf de
 
 Die abwechselnd auf die Extreme gezogenen Nachbarkanäle sind kein Beiwerk, sondern der Prüfaufbau für Schritt 5b: nur wenn links und rechts vom gemessenen Kanal das Gegenteil anliegt, wird ein zu kurzes Settling überhaupt sichtbar.
 
-Dazu **100 nF** direkt zwischen `VCC` und `GND` am Chip, und **10 nF** von `COM` gegen GND als Puffer für das Sample-and-Hold des ADC.
+Dazu **100 nF** direkt zwischen `VCC` und `GND` am Chip. An `COM` **höchstens 1 nF** gegen GND — die früher hier empfohlenen 10 nF machen τ ≈ 26 µs und drücken den Vollscan auf ~270 Hz, haarscharf ans Ziel (Envelope-Spec §5); Schritt 5b misst, ob es auch ganz ohne Kondensator ruhig ist.
 
 Nicht verwenden: **`CD4051B`** oder andere klassische CMOS-Typen. Das Submodule läuft auf 3,3 V, wo diese Typen einen deutlich höheren Durchlasswiderstand haben — das verschleppt die Einschwingzeit beim Kanalwechsel und erzeugt zappelige ADC-Werte, die man dann für einen Software-Fehler hält. Das `HC` im Namen ist der Unterschied; der Aufdruck auf dem Chip zählt, nicht die Artikelbeschreibung.
 
@@ -708,7 +691,7 @@ Das ist der Kern. Die CPU-Last mit und ohne Shell-Arbeit im selben Bild vergleic
 1. Zykluszähler um den Audio-Callback legen (`bench/cycles.h` liefert das Verfahren).
 2. Messen mit reinem `process()`.
 3. Messen mit zusätzlich laufendem Mux-Scan über alle 8 Kanäle. Daraus **Kosten pro Kanal** bilden und auf die Kanalzahl aus Task 2 hochrechnen. Zusätzlich mit 4 statt 8 Kanälen messen: skaliert die Zeit linear, ist die Hochrechnung tragfähig; bleibt ein Fixanteil stehen, gehört der separat ausgewiesen, weil er sich bei mehreren Chips **nicht** vervielfacht.
-4. Messen mit zusätzlich getriebener WS2812-Kette in voller geplanter LED-Zahl aus Task 2 — **WS2812 ist der teure Posten und der wahrscheinlichste Grund, warum 3,57 Punkte nicht reichen.**
+4. Messen mit zusätzlich getriebener 595/165-Kette in voller geplanter Länge aus Task 2. Die WS2812-Kränze sind gestrichen (Envelope-Spec §3) — und zwar wegen Strom, BOM und libDaisy-Fork, nicht wegen CPU: der alte Treiber war DMA-getrieben und fast gratis. Der teure Posten ist damit unbekannt; genau deshalb wird gemessen, gegen die reale Reserve von 2,17 Punkten (patch_sm), nicht 3,57 (Seed).
 
 Ergebnis als Tabelle nach `docs/bench/`, mit derselben Sorgfalt wie ein Bench-Capture: Board (**`patch_sm`, nicht `seed`**), Git-Hash, Optimierung, Transport, zwei Wiederholungen. Der Aufschlag wird gegen **2,17 Punkte** gerechnet.
 
