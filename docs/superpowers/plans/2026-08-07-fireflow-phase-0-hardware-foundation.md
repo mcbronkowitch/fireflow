@@ -19,7 +19,7 @@
 > `process()`") ist ebenfalls erledigt: **62,78 % avg / 65,30 % max** über
 > `SHELL_CPU_PROBE=1`. Offen bleiben die Schritte, die Hardware am Tisch
 > brauchen — 5 (Mux aufs Breadboard), 5b (Einschwingzeit), 6 (hören), 7
-> Punkte 3–4 (Kosten pro Kanal, WS2812) und 8 (Urteil).
+> Punkte 3–4 (Kosten pro Kanal, 595/165-Kette) und 8 (Urteil).
 >
 > **Ein Befund, der Schritt 8 betrifft und heute entstanden ist:** die
 > Firmware erzeugt auf dem Trägerboard einen Störton auf der Audio-Blockrate,
@@ -29,10 +29,15 @@
 > fließt in den Shell-Aufschlag **nicht** ein, blockiert Task 6 also nicht —
 > gehört aber in Phase 1 an die PCB-Entwurfsregeln.
 > **Offen: Task 2 (Vorrang — entsperrt den September-Testcoupon), Task 6 ab Schritt 5.**
+>
+> **Korrektur 8. Aug 2026:** 42 HP und Panel-Reduktion sind durch die
+> Envelope-Spec ersetzt (60 HP, voller Satz); Task 2 wurde entsprechend
+> umgeschrieben, die übrigen 42-HP-Reste in Goal/Constraints/Architecture
+> wurden nachgezogen.
 
-**Goal:** Bis zum 21. August 2026 steht fest, wie viele Bedienelemente das FireFlow-Panel auf 42 HP trägt, ob das I/O auf ein Daisy Patch Submodule passt, und was die Firmware-Shell an CPU kostet — gemessen auf echtem Submodule-Silizium, nicht geschätzt.
+**Goal:** Bis zum 21. August 2026 steht fest, wie viele Bedienelemente das FireFlow-Panel auf 60 HP trägt (Envelope-Spec `docs/superpowers/specs/2026-08-08-fireflow-hardware-envelope-design.md`), ob das I/O auf ein Daisy Patch Submodule passt, und was die Firmware-Shell an CPU kostet — gemessen auf echtem Submodule-Silizium, nicht geschätzt.
 
-**Architecture:** Vier voneinander weitgehend unabhängige Stränge. Der Papier-Strang (Task 1–2) entscheidet die Panel-Reduktion und das Pin-Budget und braucht keine Hardware; er entsperrt die gesamte PCB-Arbeit ab September. Der Mess-Strang (Task 3–6) bringt zum ersten Mal Engine-Code auf ein Submodule und beziffert den Shell-Aufschlag auf die CPU-Reserve. Task 1 und 3 können am selben Tag beginnen.
+**Architecture:** Vier voneinander weitgehend unabhängige Stränge. Der Papier-Strang (Task 1–2) rechnet das Pin-Budget gegen die Envelope-Spec und braucht keine Hardware; er entsperrt die gesamte PCB-Arbeit ab September. Der Mess-Strang (Task 3–6) bringt zum ersten Mal Engine-Code auf ein Submodule und beziffert den Shell-Aufschlag auf die CPU-Reserve. Task 1 und 3 können am selben Tag beginnen.
 
 > **Korrektur 2026-08-08:** Hier stand „die 3,57 Punkte CPU-Reserve". Diese Zahl
 > stammte vom Seed (`bd01608`, 4. Aug, 96,43 %). Auf dem Submodule gemessen
@@ -45,7 +50,7 @@
 ## Global Constraints
 
 - **Zieltermin Phase 0: 21. August 2026.** Danach beginnt Phase 1 (KiCad, Testcoupon).
-- **Formfaktor: Eurorack 42 HP**, nutzbare Panelfläche rund 213 × 115 mm.
+- **Formfaktor: Eurorack 60 HP (Envelope-Spec 2026-08-08)**, nutzbare Panelfläche rund 300 × 105–112 mm.
 - **Zielhardware: Daisy Patch Submodule.** Vorhanden; seit 7. Aug 2026 geflasht und gemessen. Es hat **keine SWD-Pins** — alles geht über DFU (USB), Debug-Probe und Semihosting stehen auf diesem Board nicht zur Verfügung. Transport der Bench ist USB-CDC.
 - **Multiplexer für Task 6: ein `74HC4051` (8 Kanäle), vorhanden.** Nichts zu bestellen, Phase 0 ist bauteilseitig vollständig. Task 6 misst **Kosten pro Kanal**, nicht Kosten pro Chip — acht Kanäle genügen, die Hochrechnung auf die reale Kanalzahl aus Task 2 ist Teil des Ergebnisses. Die Layoutfrage *wenige 16:1 gegen mehrere 8:1* gehört nicht in Phase 0; sie entscheidet sich an JLCPCB-Verfügbarkeit und Bestückungspreis vor dem 11. September.
 - **Kein Heap in der Engine.** `engine/instrument.h` fordert injizierten Speicher über `FxMem`; auf Daisy kommt der aus SDRAM.
@@ -62,7 +67,7 @@
 
 | Datei | Verantwortung | Status |
 |---|---|---|
-| `docs/hardware/io-budget.md` | Das Ergebnis von Task 1–2: Control-Inventar, Reduktionsentscheidung, Pin-Rechnung | neu |
+| `docs/hardware/io-budget.md` | Das Ergebnis von Task 1–2: Control-Inventar, Pin-Budget-Rechnung, Pin-Rechnung | neu |
 | `tools/count_panel_controls.py` | Zählt und klassifiziert die Panel-Parameter aus `gen_panel.py`, reproduzierbar | neu |
 | `tools/test_count_panel_controls.py` | Test für den Zähler | neu |
 | `src/hw/board.h` | Board-Abstraktion: Seed vs. Patch SM hinter einem Typ-Alias und einer `init()`. Neutraler Ort, den Bench **und** Shell einbinden dürfen | neu |
@@ -599,7 +604,7 @@ Die Zahl, für die Phase 0 existiert: was kosten Mux-Scan und LED-Ausgabe auf di
 - Modify: `docs/roadmap.md`
 
 **Interfaces:**
-- Consumes: `shell::sdram_fx_mem()`, `spky::Instrument`, `infrasonic::ShiftRegister165` aus `src/hw/sr_165.h`, `infrasonic::Ws2812` aus `src/hw/ws2812.h`
+- Consumes: `shell::sdram_fx_mem()`, `spky::Instrument`, `infrasonic::ShiftRegister165` aus `src/hw/sr_165.h`, 74HC595-Kette (Treiber entsteht in Task 6; Envelope-Spec §3 — kein WS2812-Kranz mehr)
 - Produces: `shell::Controls::scan()` (blockierend, außerhalb des Audio-Callbacks), `shell::Controls::value(int idx) -> float` normalisiert 0..1, `shell::map_control(int idx, float v, spky::Instrument&)`
 
 - [x] **Schritt 1: Den Test für die Zuordnungstabelle schreiben**

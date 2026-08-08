@@ -12,10 +12,12 @@ is actually built today, and what is still design-only.
   is not a milestone any more. The hardware milestone is now an instrument of
   its own, a **Daisy Patch Submodule prototype** (M6). The original Spotykach
   firmware tree stays in the repository, buildable, documented in
-  `docs/upstream-firmware.md`; it is history, not a target. The standing rule
-  that the control surface must stay reducible to real hardware **still holds** —
-  what changed is only what it reduces *to*, and that panel has yet to be
-  defined.
+  `docs/upstream-firmware.md`; it is history, not a target.
+  **2026-08-08:** the reducibility rule is retired — the hardware target is
+  defined (60 HP, the full control set; envelope spec
+  `docs/superpowers/specs/2026-08-08-fireflow-hardware-envelope-design.md`).
+  The live rule is one-in-one-out: a panel change that adds a control names
+  the control it removes.
 - **Design intent:** the master design spec
   (`docs/superpowers/specs/2026-07-10-spotykach-modulation-first-synth-design.md`),
   the scale spec (`docs/superpowers/specs/2026-07-11-spotykach-scales-design.md`),
@@ -313,7 +315,7 @@ is actually built today, and what is still design-only.
 | **M4.8** | Reverb dry/wet — equal-power MIX at the master join + clear-on-sleep CPU bypass | ✅ **done** (engine + host; UI wiring deferred to M6) |
 | **M4.9** | Reverb DIFFUSION knob (replaces DEPTH) — room density 0–0.9, weak line-mod coupling, full-wash first pass | ✅ **done** (engine + host; UI wiring deferred to M6) |
 | **SYNC/COUPLE redesign** | One global SYNC switch (replaces per-part sync toggles), transport phase + rate ladder, zoned COUPLE (texture-only in grid world, grid-gravity zone in free world), VCV panel layout A, CLK/RST wired | ✅ **done** (engine + VCV host; spec `docs/superpowers/specs/2026-07-16-sync-couple-redesign-design.md`) |
-| **M4.10** | Chord layer — COLOR knob, diatonic stacks, voice-leading, live FLOW surface | ✅ done (engine + hosts; hardware placement deferred to the reduction round) |
+| **M4.10** | Chord layer — COLOR knob, diatonic stacks, voice-leading, live FLOW surface | ✅ done (engine + hosts; hardware placement deferred to the reduction round — now the regrouping round, envelope spec 2026-08-08) |
 | **+ COLOR-MOTION** | MOTION becomes COLOR's third destination — bipolar additive with a zero-gate, density varies per note | ✅ **done** (engine only; no new surface) |
 | **Bench** | Bench firmware — DWT cycle measurement of the engine, nine DaisySP candidates and SRAM-vs-SDRAM buffer access on real hardware | ✅ **done** (`bench/`, results in `docs/bench/`) |
 | **M5a** | Sampler — the texture deck: engine + render host (granular cloud, live resampling) | ✅ **done** (engine + desktop host; VCV wiring is M5b) |
@@ -672,7 +674,8 @@ edge.
   `chord_bloom.json` renders deterministically. VCV Rack play test and
   audio listening pass deferred to a human. Hardware panel placement is
   explicitly deferred to the upcoming reduction/macro round (per the
-  standing hardware-reducibility constraint).
+  standing hardware-reducibility constraint; now the regrouping round —
+  envelope spec 2026-08-08).
 
 ### COLOR as a MOTION target ✅ (extends M4.10)
 
