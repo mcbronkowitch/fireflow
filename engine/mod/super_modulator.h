@@ -20,6 +20,12 @@ public:
     void set_synced(bool on)       { _synced = on; _update_tide(); _update_rate(); }
     void set_tide(float norm);     // 0..1 texture-lane rate scale; 0.5 = neutral
     float tide_mult() const { return _tide_mult; }
+    // Der zuletzt gesetzte RATE-Knopfwert, 0..1. Kein Testsonderweg, sondern
+    // ein echter Observer wie tide_mult() darueber: die Firmware-Shell bildet
+    // Mux-Kanaele auf Setter ab (shell/controls.cpp), und diese Abbildung
+    // gehoert auf dem Host geprueft, bevor ein Poti daran haengt. Ohne
+    // Lese-Zugriff waere sie nur auf der Hardware nachweisbar.
+    float rate() const { return _rate_norm; }
     void set_shape(float s);
     void set_density(float d) { _lanes[LANE_PITCH].set_density(d); }
     void set_smooth(float s);

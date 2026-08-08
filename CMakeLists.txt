@@ -76,6 +76,8 @@ add_executable(spky_tests
     bench/audition/protocol.cpp
     tests/test_instrument.cpp
     tests/test_block_size_invariance.cpp
+    shell/controls.cpp
+    tests/test_controls_map.cpp
     tests/test_seed_audition_init.cpp
     tests/test_seed_audition_protocol.cpp
     tests/test_bbd_edge_state.cpp

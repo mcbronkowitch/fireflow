@@ -65,6 +65,10 @@ public:
     int song(int p) const {
         return static_cast<int>(_parts[p].mod().song());
     }
+    // Wie form()/song() ein gewoehnlicher Observer, kein Testsonderweg.
+    // tests/test_controls_map.cpp braucht ihn, um die Abbildung Mux-Kanal ->
+    // Setter der Firmware-Shell auf dem Host pruefen zu koennen.
+    float rate(int p) const { return _parts[p].mod().rate(); }
     // Observers for the mode invariant (spec 2026-08-06 §5): steps, count and
     // grid are one decision, and a test must be able to see all three parts.
     bool step_on(int p) const { return _parts[p].mod().step_mode(); }
