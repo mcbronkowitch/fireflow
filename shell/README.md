@@ -119,6 +119,52 @@ Image mit `kSilenceFloor` künstlich auf `1.0f` (über dem erwarteten Peak von
 sondern eine Zusicherung. Was damit **nicht** gezeigt ist: wie es klingt.
 Der Ausgang ist nicht verdrahtet, das Hören steht aus.
 
+## Offener Befund: ein Störton auf der Blockrate
+
+**Der Shell klingt, aber er klingt nicht sauber.** Am 8. August 2026 auf dem
+zweiten Submodule (Seriennummer `385138563330`, Audio auf 3,5-mm-Buchsen)
+gehört und gemessen: ein Störton mit konstanter Amplitude auf der
+Audio-Blockrate, dazu hörbares Zerren des Synths. **Der Shell ist damit
+nicht fertig, sondern gerade so weit, dass man den Fehler sehen kann.**
+
+Was gemessen ist — Aufnahme über ein Audiointerface, FFT, Vergleich gegen
+den Desktop-Render desselben Betriebspunkts:
+
+| Beobachtung | Zahl |
+|---|---|
+| Störton relativ zum Gesamt-RMS, Board | 4,9 dB darunter |
+| dieselbe Größe, Desktop-Render | 33,0 dB darunter |
+| **Überschuss** | **28 dB** |
+
+Was dadurch **ausgeschlossen** ist, jeweils durch eine eigene Messung:
+
+- **Die Hardware.** Ein intern erzeugter Sinus und ein reiner Durchleiter
+  laufen durch denselben Codec, dieselbe DMA, dieselbe Analogstufe, dieselbe
+  Masse und dasselbe USB — und sind sauber (Störton −90 dBFS statt
+  −59 dBFS). Kein Lötfehler, kein Brummen, keine Versorgungsfrage.
+- **Der Audioeingang.** Der Durchleiter zeigt ihn als praktisch still
+  (RMS −73,8 dBFS, kein Anteil auf der Blockrate).
+- **Die Optimierung.** Der Ton überlebt den Wechsel von `-O2` auf `-O3`
+  unverändert (−58,5 → −59,5 dBFS). `-O2` war trotzdem ein echter Fehler in
+  diesem Makefile und ist korrigiert.
+- **Das Steuerraster der Engine.** `Center::kCtrlInterval` steht fest auf 96
+  Samples und hängt nicht an der Blockgröße. Bei Blockgröße 192 **wandert**
+  der Ton von 500 Hz auf 250 Hz mit. Er gehört also zur **Blockgrenze**,
+  nicht zum Steuerraster.
+
+Was **nicht** gemessen ist und deshalb hier auch nicht behauptet wird: der
+Mechanismus. Naheliegend ist, dass der Callback seine Frist nicht hält — die
+Bench stützt das, denn `instrument_worst` liegt auf diesem Board schon bei
+`-O3` über dem Blockbudget (102,27 % avg, 108,62 % max,
+`docs/bench/2026-08-07-d0b3c08-regress-axi-o3-patch_sm-usb.csv`). Aber die
+Last **dieses** Betriebspunkts in **dieser** Firmware ist nicht gemessen,
+und ein Verdacht ist keine Ursache.
+
+**Nächster Schritt:** `CpuLoadMeter` um den Callback legen — das Verfahren
+steht in `bench/cycles.h` und `bench/anchor.cpp` — und die tatsächliche Last
+ausgeben. Erst diese Zahl entscheidet, ob hier eine Überlast repariert
+werden muss oder etwas anderes.
+
 ## Wo die nächste Arbeit hingeht
 
 `shell/controls.{h,cpp}` (Task 6 des Phase-0-Plans) bringt den ersten Poti

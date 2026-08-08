@@ -94,6 +94,19 @@ CPP_SOURCES = \
 	../engine/synth/synth_engine.cpp \
 	../engine/synth/wt_bank.cpp
 
+# -O3, und das ist nicht optional. libDaisys core/Makefile setzt `OPT ?= -O2`,
+# und mit dem Default lief dieser Shell am 8. August hoerbar in den Ueberlauf:
+# ein Stoerton mit konstanter Amplitude auf 48000/96 = 500 Hz, dazu Zerren.
+# JEDE Zahl in docs/bench/ ist mit -O3 gemessen (bench/Makefile, o3), also ist
+# -O2 hier nicht "etwas langsamer", sondern eine Firmware, ueber deren CPU-Last
+# nichts bekannt ist. Wer das aendert, macht die gesamte Messhistorie fuer
+# diese Firmware ungueltig.
+#
+# `override`, weil OPT aus dem eingebundenen Makefile mit ?= kommt und eine
+# Kommandozeilen-Zuweisung sonst gewinnen wuerde -- dieselbe Form, die
+# bench/Makefile fuer seinen Optimierungsschalter benutzt.
+override OPT := -O3
+
 SYSTEM_FILES_DIR = $(LIBDAISY_DIR)/core
 include $(SYSTEM_FILES_DIR)/Makefile
 
