@@ -8,7 +8,12 @@
 > [`docs/bench/2026-08-07-seed-vs-patch-sm.md`](../../bench/2026-08-07-seed-vs-patch-sm.md)
 > abgeglichen; jede Stelle, die die Messung falsch gemacht hat, ist an Ort und
 > Stelle korrigiert und als ~~durchgestrichen~~ kenntlich gemacht.
-> **Offen: Task 2 (Vorrang — entsperrt den September-Testcoupon), Task 5, Task 6.**
+> **Stand 2026-08-08, nachmittags.** Task 5 ist ausgeführt: `shell/` baut,
+> ist per DFU geflasht, und die Engine liefert auf dem Submodule messbar
+> Signal. Schritt 5 („Hören") ist dabei durch einen LED-Selbsttest ersetzt
+> worden, weil das Submodule keine Klinkenbuchse hat — Begründung und
+> Gegenbeweis stehen unten am Schritt.
+> **Offen: Task 2 (Vorrang — entsperrt den September-Testcoupon), Task 6.**
 
 **Goal:** Bis zum 21. August 2026 steht fest, wie viele Bedienelemente das FireFlow-Panel auf 42 HP trägt, ob das I/O auf ein Daisy Patch Submodule passt, und was die Firmware-Shell an CPU kostet — gemessen auf echtem Submodule-Silizium, nicht geschätzt.
 
@@ -460,7 +465,7 @@ Das Root-`Makefile` baut die Upstream-Spotykach-Firmware; `engine/**` steht nich
 - Consumes: `spky::Instrument` aus `engine/instrument.h` — `init(float sample_rate, const FxMem& mem)`, `set_tempo_bpm(float)`, `set_rate(int, float)` und die übrigen normalisierten Setter, `process(const float* inL, const float* inR, float* outL, float* outR, size_t n)`
 - Produces: ein flashbares `shell.bin`, das auf dem Submodule Ton macht — Basis für Task 6
 
-- [ ] **Schritt 1: Die SDRAM-Allokation an einen Ort legen**
+- [x] **Schritt 1: Die SDRAM-Allokation an einen Ort legen**
 
 `FxMem` verlangt laut `engine/instrument.h` pro Part zwei Echo-Puffer, einen Sampler-Puffer von rund 42 s bei 48 kHz (≈ 16 MB pro Part) und zwei BBD-Leitungen à `BbdEngine::kCells` Floats (32 KB je Leitung, 128 KB fürs Instrument), dazu die Reverb-Instanz.
 
@@ -486,7 +491,7 @@ spky::FxMem& sdram_fx_mem();   // einmalig gebaut, lebt bis zum Reset
 
 Die Definition legt jeden Puffer als `DSY_SDRAM_BSS`-Array an und verdrahtet die Zeiger in ein statisches `FxMem`. Die Reverb-Instanz kommt ebenfalls nach SDRAM.
 
-- [ ] **Schritt 2: Den Shell schreiben**
+- [x] **Schritt 2: Den Shell schreiben**
 
 ```cpp
 // shell/main.cpp
@@ -518,11 +523,11 @@ int main(void)
 }
 ```
 
-- [ ] **Schritt 3: Das Makefile schreiben**
+- [x] **Schritt 3: Das Makefile schreiben**
 
 Vorlage ist `bench/Makefile`, nicht das Root-`Makefile`: gleiche `APP_TYPE = BOOT_SRAM`, gleiches `LDSCRIPT = ../alt_sram.lds`, gleiche Include-Pfade auf `../engine/`, `../third_party/`, `../lib/DaisySP/Source/`, gleiche `C_USR_FLAGS = -ffast-math -funroll-loops`, `BENCH_BOARD_PATCH_SM` gesetzt. **`USE_DAISYSP_LGPL` bleibt aus** — anders als die Bench ist das hier auslieferbare Firmware.
 
-- [ ] **Schritt 4: Bauen und flashen**
+- [x] **Schritt 4: Bauen und flashen**
 
 ```bash
 cd shell && make -j8
@@ -530,15 +535,37 @@ cd shell && make -j8
 
 Erwartet: `build/shell.bin` entsteht. Ein Link-Fehler mit SRAM- oder SDRAM-Region-Overflow ist an dieser Stelle plausibel — die Bench kennt dasselbe Problem beim `full`-Profil. Dann **nicht** Puffergrößen raten, sondern `build/shell.map` lesen und den Posten benennen, der überläuft.
 
-- [ ] **Schritt 5: Hören**
+- [x] **Schritt 5: ~~Hören~~ Signal nachweisen**
 
-Board flashen, Kopfhörer oder Monitor an den Audioausgang. Erwartet: ein hörbares, sich bewegendes Signal. Das ist der Beweis, dass die Engine auf dem Submodule läuft — der erste in diesem Projekt.
+~~Board flashen, Kopfhörer oder Monitor an den Audioausgang. Erwartet: ein hörbares, sich bewegendes Signal.~~ Das ist der Beweis, dass die Engine auf dem Submodule läuft — der erste in diesem Projekt.
 
-- [ ] **Schritt 6: `shell/README.md` schreiben**
+> **Korrektur 2026-08-08 — so ist es tatsächlich gelaufen.** Am Board hängt
+> nur das nackte Submodule; **es hat keine Klinkenbuchse**, und ein Breakout
+> war nicht greifbar. Statt den Schritt ungeprüft abzuhaken, ist er durch
+> einen Selbsttest ersetzt worden, der dieselbe Aussage misst statt sie zu
+> hören: der Shell führt seinen eigenen Ausgang eine Sekunde lang (500
+> Blöcke) über einen Peak-Detektor und legt das Urteil auf die User-LED des
+> Submodule (`SHELL_SELFTEST=1`, per Default aus, damit Task 6 den Detektor
+> nicht mitmisst). Vier LED-Zustände, weil „dunkel" sonst gleichzeitig
+> *still* und *hängt beim Booten* hieße — die Tabelle steht in
+> `shell/README.md`.
+>
+> **Ergebnis: Dauerlicht**, Submodule `3859386B3330`, 8. Aug 2026. Vorher
+> wurde die Gegenrichtung bewiesen, wie es die Konvention verlangt: dasselbe
+> Image mit `kSilenceFloor` künstlich auf `1.0f` (über dem erwarteten Peak
+> von 0,42) blinkt langsam. Ohne diesen RED-Beweis wäre Dauerlicht keine
+> Messung, sondern eine Zusicherung.
+>
+> **Was damit nicht gezeigt ist: wie es klingt.** Der Ausgang ist nicht
+> verdrahtet. Das Hören bleibt offen und gehört nachgeholt, sobald zwei
+> Drähte an den Audio-Out-Pins hängen — es ist ein anderer Beweis als
+> „liefert Signal", und er wird hier nicht stillschweigend mit abgehakt.
+
+- [x] **Schritt 6: `shell/README.md` schreiben**
 
 Drei Absätze: was der Shell ist (die erste Firmware mit `engine/`), was er ausdrücklich nicht ist (kein UI, kein Preset, kein Panel), und wie man ihn baut und flasht. Dazu die Abgrenzung gegen `bench/` und gegen die Upstream-Firmware im Root, damit der nächste Leser die drei nicht verwechselt.
 
-- [ ] **Schritt 7: Commit**
+- [x] **Schritt 7: Commit**
 
 ```bash
 git add shell/
@@ -695,7 +722,8 @@ Task 1 → 2 ist der Papier-Strang und entsperrt die PCB-Arbeit. Task 3 → 4 �
 
 - [ ] `docs/hardware/io-budget.md` existiert, die Klassifikation summiert sich auf 82, und die Pin-Rechnung geht mit 20 % Reserve auf
 - [x] Ein Bench-Capture mit `board=patch_sm` liegt in `docs/bench/` — `2026-08-07-d0b3c08-regress-axi-o3-patch_sm-usb.{md,csv}`
-- [ ] `shell/` baut, flasht und macht auf dem Submodule Ton
+- [x] `shell/` baut, flasht und liefert auf dem Submodule messbar Signal (LED-Selbsttest, 8. Aug 2026)
+- [ ] …und ist auch **gehört** worden — offen, solange kein Audioausgang verdrahtet ist
 - [ ] Ein Poti verändert über den `74HC4051` hörbar einen Engine-Parameter
 - [ ] Die Einschwingzeit pro Kanal ist gemessen und steht in `docs/hardware/io-budget.md`
 - [ ] Der Shell-Aufschlag steht als Zahl in `docs/roadmap.md`, hochgerechnet auf die reale Kanalzahl, mit Urteil über die verbleibende Reserve
