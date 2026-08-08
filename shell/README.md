@@ -152,18 +152,28 @@ Was dadurch **ausgeschlossen** ist, jeweils durch eine eigene Messung:
   der Ton von 500 Hz auf 250 Hz mit. Er gehört also zur **Blockgrenze**,
   nicht zum Steuerraster.
 
-Was **nicht** gemessen ist und deshalb hier auch nicht behauptet wird: der
-Mechanismus. Naheliegend ist, dass der Callback seine Frist nicht hält — die
-Bench stützt das, denn `instrument_worst` liegt auf diesem Board schon bei
-`-O3` über dem Blockbudget (102,27 % avg, 108,62 % max,
-`docs/bench/2026-08-07-d0b3c08-regress-axi-o3-patch_sm-usb.csv`). Aber die
-Last **dieses** Betriebspunkts in **dieser** Firmware ist nicht gemessen,
-und ein Verdacht ist keine Ursache.
+- **Eine CPU-Überlast.** Das war die naheliegende Erklärung, und sie ist
+  **widerlegt**. `SHELL_CPU_PROBE=1` misst an diesem Betriebspunkt
+  **62,78 % avg, 65,30 % max, 48,42 % min** (5 000 Blöcke, `sr=48000`,
+  `block=96`, vom Board selbst gemeldet). Das sind 35 Punkte Luft. Zur
+  Einordnung: die Bench-Zeile `instrument_init` liegt bei 66,58 / 77,96 %,
+  die Messung ist also plausibel. Der Callback hält seine Frist.
 
-**Nächster Schritt:** `CpuLoadMeter` um den Callback legen — das Verfahren
-steht in `bench/cycles.h` und `bench/anchor.cpp` — und die tatsächliche Last
-ausgeben. Erst diese Zahl entscheidet, ob hier eine Überlast repariert
-werden muss oder etwas anderes.
+Die Sonde hat nebenbei eine falsche Annahme korrigiert: die Blockgröße ist
+**96**, nicht 48. Eine frühere Schätzung aus Phasendauern eines
+Diagnose-Images war falsch — deshalb meldet die Sonde `sr` und `block` jetzt
+selbst mit, denn eine Last in Prozent ist ohne die Blockgröße, gegen die sie
+gerechnet wurde, bedeutungslos.
+
+Was **nicht** gemessen ist und deshalb hier auch nicht behauptet wird: der
+Mechanismus. Nach dem Wegfall der Überlast bleibt offen, ob der Störton in
+den Sample-**Werten** steht, die die Engine liefert, oder durch ihr
+**Ausführen** entsteht (Busverkehr gegen die Audio-DMA, Interrupt-Jitter) —
+zwei völlig verschiedene Reparaturen.
+
+**Nächster Schritt:** ein Bau, in dem die Engine voll läuft, ihr Ergebnis
+aber verworfen wird und der Ausgang Stille bekommt. Bleibt der Ton, steht er
+nicht in den Zahlen.
 
 ## Wo die nächste Arbeit hingeht
 

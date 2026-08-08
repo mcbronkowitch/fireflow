@@ -69,6 +69,22 @@ ifneq ($(filter $(SHELL_SELFTEST),0 1),$(SHELL_SELFTEST))
 $(error SHELL_SELFTEST must be 0 or 1)
 endif
 
+# --- CPU-Sonde -----------------------------------------------------------
+# Legt einen CpuLoadMeter um process() und meldet die Last ueber USB-CDC.
+# Das ist das Verfahren, das Task 6 Schritt 7 ohnehin verlangt, hier schon
+# gebaut, weil ein Stoerton auf der Blockrate ohne diese Zahl nicht zu
+# beurteilen ist (shell/README.md, "Offener Befund").
+#
+# Default AUS, aus zwei Gruenden: der Meter kostet im Callback Zyklen, und
+# USB-CDC kostet auf diesem Board zusaetzlich 6370 Zyklen pro Block (0,66 %,
+# docs/bench/2026-08-07-transport-semihost-vs-usb.md) -- eine Firmware, die
+# beides mitschleppt, misst sich selbst.
+SHELL_CPU_PROBE ?= 0
+
+ifneq ($(filter $(SHELL_CPU_PROBE),0 1),$(SHELL_CPU_PROBE))
+$(error SHELL_CPU_PROBE must be 0 or 1)
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	sdram_mem.cpp \
@@ -123,6 +139,11 @@ $(BUILD_DIR)/shell_selftest.h: FORCE | $(BUILD_DIR)
 	@python write_shell_selftest.py $@ $(SHELL_SELFTEST)
 
 $(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h
+
+$(BUILD_DIR)/shell_cpu_probe.h: FORCE | $(BUILD_DIR)
+	@python write_shell_cpu_probe.py $@ $(SHELL_CPU_PROBE)
+
+$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_cpu_probe.h
 
 # --- die zwei physischen Images -----------------------------------------
 # libDaisys `all` wuerde ein flaches shell.bin ueber SRAM (0x24000000) UND
