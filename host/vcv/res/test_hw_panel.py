@@ -90,3 +90,16 @@ def test_shared_knob_labels_do_not_coincide():
         atk, bend = by_enum["ATTACK" + side], by_enum["STAGES" + side]
         la, lb = hw.hw_label(atk), hw.hw_label(bend)
         assert abs(la[1] - lb[1]) >= 2.0, side
+
+def test_labels_stay_off_neighbour_footprints():
+    # A caption may sit near its own control, but its anchor must never
+    # land inside ANOTHER control's clearance circle.
+    for c in hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS:
+        if not c.label:
+            continue
+        lx, ly = hw.hw_label(c)[0], hw.hw_label(c)[1]
+        for other in hw.ALL_HW:
+            if other is c:
+                continue
+            d = ((lx - other.x) ** 2 + (ly - other.y) ** 2) ** 0.5
+            assert d >= other.r - 1e-6, (c.enum, other.enum, round(d, 2))

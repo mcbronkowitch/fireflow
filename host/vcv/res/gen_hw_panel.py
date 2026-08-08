@@ -101,19 +101,21 @@ TEXTS = [(CX, 6.0, 3.2, 0.9, gp.INK, "middle", "FIREFLOW HW DRAFT 60HP")]
 
 # STAGES shares ATTACK's knob (deliberate dual assignment, spec §1). A
 # screen widget can gate one caption away by engine state; an aluminium
-# plate can't -- it prints both words, so BEND's label drops one line below
-# ATK's rather than sitting on top of it. Slightly smaller so the pair
-# reads as a stacked pair, not a collision.
-STAGES_EXTRA_DY = 2.6
+# plate can't -- it prints both words. A row below ATK's own caption lands
+# inside the next row's DECAY knob (15 mm grid leaves no room for a second
+# line under the knob) -- verified by test_labels_stay_off_neighbour_footprints
+# on that placement, which failed with a 4.4 mm gap against DECAY's 5.5 mm
+# clearance radius. Above the knob is clear (nothing else occupies the
+# second big-knob row over x=12), so BEND's label sits there instead: the
+# plate reads BEND above the shared knob, ATK below it. Slightly smaller so
+# the pair reads as a stacked pair, not a collision.
+STAGES_LBL_Y_OFFSET = -7.0
 STAGES_LBL_SIZE = 1.8
 
 def hw_label(c):
-    dy = LBL_DY_HW[c.kind]
-    size = 2.2
     if c.enum.startswith("STAGES_"):
-        dy += STAGES_EXTRA_DY
-        size = STAGES_LBL_SIZE
-    return (c.x, c.y + dy, "middle", size, gp.INK)
+        return (c.x, c.y + STAGES_LBL_Y_OFFSET, "middle", STAGES_LBL_SIZE, gp.INK)
+    return (c.x, c.y + LBL_DY_HW[c.kind], "middle", 2.2, gp.INK)
 
 # =============================================================================
 #  SVG
