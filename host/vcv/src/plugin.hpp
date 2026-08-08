@@ -7,3 +7,4 @@ using namespace rack;
 extern Plugin* pluginInstance;
 extern Model* modelFireflow;
 extern Model* modelGlow;
+extern Model* modelFireflowHW;

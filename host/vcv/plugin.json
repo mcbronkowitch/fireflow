@@ -21,6 +21,12 @@
       "name": "FireFlow Glow",
       "description": "Flow machine: six macro knobs and a NEW button over a generative ambient terrain.",
       "tags": ["Generator", "Random", "Synth voice", "Drone", "Polyphonic"]
+    },
+    {
+      "slug": "FireflowHW",
+      "name": "FireFlow HW Draft",
+      "description": "60 HP hardware-envelope draft of the full instrument: static labels, real knob clearances, no LED rings. The regrouping workbench, not a release module.",
+      "tags": ["Function generator", "LFO", "Random", "Synth voice", "Effect", "Polyphonic"]
     }
   ]
 }

@@ -1436,6 +1436,138 @@ struct FeedbackSlider : ui::Slider {
     ~FeedbackSlider() override { delete quantity; }
 };
 
+// --- shared context menu --------------------------------------------------
+// Lifted out of FireflowWidget::appendContextMenu verbatim (refactor only,
+// no behaviour change) so the HW draft widget can share it: both widgets
+// wrap the same Fireflow module, so the menu content is identical, just the
+// panel around it differs.
+static void appendFireflowMenu(Menu* menu, Fireflow* m) {
+    menu->addChild(new MenuSeparator);
+    // Same gesture as a pulse into RST: zero the downbeat and restart the
+    // loops at the bar start (a live STEPS turn leaves them free-running).
+    menu->addChild(createMenuItem("Resync loops to bar", "",
+                                  [m]() { m->resyncReq = true; }));
+
+    menu->addChild(new MenuSeparator);
+    menu->addChild(createSubmenuItem("Detune A", "", [m](Menu* sub) {
+        auto* quantity = m->getParamQuantity(DETUNE_A);
+        sub->addChild(new ParamMenuSlider(quantity));
+        sub->addChild(createMenuItem("Reset to 6.0 ct", "", [m]() {
+            m->params[DETUNE_A].setValue(kDefaultDetune);
+        }));
+    }));
+    menu->addChild(createSubmenuItem("Detune B", "", [m](Menu* sub) {
+        auto* quantity = m->getParamQuantity(DETUNE_B);
+        sub->addChild(new ParamMenuSlider(quantity));
+        sub->addChild(createMenuItem("Reset to 6.0 ct", "", [m]() {
+            m->params[DETUNE_B].setValue(kDefaultDetune);
+        }));
+    }));
+
+    // DRIVE lost its panel slot to DRAG (spec 2026-07-28 flux-rhythm-drag)
+    // and lives here now, same menu-only shape as Detune A/B above.
+    for (int p = 0; p < spky::PART_COUNT; ++p) {
+        const std::string name = p ? "Drive B" : "Drive A";
+        const int id = p ? DRIVE_B : DRIVE_A;
+        menu->addChild(createSubmenuItem(name, "", [m, id](Menu* sub) {
+            sub->addChild(new ParamMenuSlider(m->getParamQuantity(id)));
+        }));
+    }
+
+    if (isBbdSelected(m, ENGINE_A)) {
+        menu->addChild(createSubmenuItem("BBD A — Freeze Attack", "", [m](Menu* sub) {
+            sub->addChild(new ParamMenuSlider(m->getParamQuantity(ATTACK_A)));
+        }));
+    }
+    if (isBbdSelected(m, ENGINE_B)) {
+        menu->addChild(createSubmenuItem("BBD B — Freeze Attack", "", [m](Menu* sub) {
+            sub->addChild(new ParamMenuSlider(m->getParamQuantity(ATTACK_B)));
+        }));
+    }
+
+    // BODY's excitation bus (design spec §6) plus, since the
+    // cross-deck-audio-bus branch (spec 2026-07-31 bbd-part-engine §4.4),
+    // the audio-rate cross-deck tap: patch state, not a performance
+    // control -- there is no panel knob for any of this, so it lives
+    // here, same shape as Detune A/B above. Defaults: tape on, other
+    // deck / audio in off.
+    //
+    // "Excite: FLUX tape" and "Excite: audio in" are still exactly what
+    // they say: BODY-only, inert everywhere else. "Excite: other deck"
+    // is NOT -- exciteOtherDeck feeds Part::_src_deck, which now gates
+    // THREE paths: BODY's control-rate excitation bus (unchanged), the
+    // audio-rate cross-deck bus SAMPLER consumes (process_in()), and now
+    // the same bus BBD consumes to feed its delay line (spec 5.12's
+    // silence-trap fix -- a BBD deck with no external cabling still has
+    // something to echo). So on a SAMPLER or BBD deck this flag went
+    // from inert to live: it audibly routes (and, for SAMPLER, records)
+    // the neighbouring deck, and -- because the bound is
+    // fast_tanh(engine_in + neighbour) rather than a separate path -- it
+    // also puts the deck's own external audio-in through fast_tanh for
+    // the first time even when the neighbour is silent (tanh(1) ~ 0.76),
+    // measurably attenuating audio-in monitoring/recording on that deck.
+    // A patch saved with this flag on for a SAMPLER or BBD deck
+    // therefore behaves differently after upgrading to this branch.
+    // Neither consequence is a bug -- see the spec sections above -- but
+    // the label has to say so, because the old name promised BODY-only
+    // and nothing here enforces that anymore.
+    for (int p = 0; p < spky::PART_COUNT; ++p) {
+        const std::string name = p ? "Excite B" : "Excite A";
+        menu->addChild(createSubmenuItem(name, "", [m, p](Menu* sub) {
+            sub->addChild(createBoolPtrMenuItem("Excite: FLUX tape", "",
+                                                &m->smp[p].exciteTape));
+            sub->addChild(createBoolPtrMenuItem(
+                "Route: other deck (BODY excite, SAMPLER feed+rec, "
+                "BBD feed)", "",
+                &m->smp[p].exciteOtherDeck));
+            sub->addChild(createBoolPtrMenuItem("Excite: audio in", "",
+                                                &m->smp[p].exciteAudioIn));
+        }));
+    }
+
+    menu->addChild(new MenuSeparator);
+    for (int p = 0; p < spky::PART_COUNT; ++p) {
+        const std::string name = p ? "Sampler B" : "Sampler A";
+        menu->addChild(createSubmenuItem(name, "", [m, p](Menu* sub) {
+            sub->addChild(createMenuItem("Load sample...", "", [m, p]() {
+                char* path = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, nullptr);
+                if (!path) return;
+                std::string err;
+                if (spkyvcv::load_wav_into(m->inst, p, path, m->curSr, err)) {
+                    m->smp[p].path = path;
+                    m->smp[p].factoryLoaded = false;
+                } else {
+                    osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, err.c_str());
+                }
+                std::free(path);
+            }));
+            sub->addChild(createMenuItem("Save sample...", "", [m, p]() {
+                char* path = osdialog_file(OSDIALOG_SAVE, nullptr, "sample.wav", nullptr);
+                if (!path) return;
+                std::string err;
+                if (!spkyvcv::save_wav_from(m->inst, p, path, m->curSr, err))
+                    osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, err.c_str());
+                std::free(path);
+            }));
+            sub->addChild(createMenuItem("Clear sample", "", [m, p]() {
+                m->inst.sampler_clear(p);
+                m->smp[p].path.clear();
+                m->smp[p].factoryLoaded = false;
+            }));
+            sub->addChild(new MenuSeparator);
+            sub->addChild(createIndexPtrSubmenuItem(
+                "Speed mode", {"Digital", "Tape"}, &m->smp[p].tapeIdx));
+            sub->addChild(createBoolPtrMenuItem("Reverse", "", &m->smp[p].reverse));
+            sub->addChild(createSubmenuItem("Overdub feedback", "", [m, p](Menu* fb) {
+                fb->addChild(new FeedbackSlider(&m->smp[p].feedback));
+            }));
+            sub->addChild(new MenuSeparator);
+            sub->addChild(createBoolPtrMenuItem("Engine: test tone (dev)", "",
+                                                &m->smp[p].testTone));
+        }));
+    }
+}
+
 // --- widget -------------------------------------------------------------------
 struct FireflowWidget : ModuleWidget {
     FireflowWidget(Fireflow* module) {
@@ -1517,132 +1649,118 @@ struct FireflowWidget : ModuleWidget {
     }
 
     void appendContextMenu(Menu* menu) override {
-        auto* m = getModule<Fireflow>();
-        menu->addChild(new MenuSeparator);
-        // Same gesture as a pulse into RST: zero the downbeat and restart the
-        // loops at the bar start (a live STEPS turn leaves them free-running).
-        menu->addChild(createMenuItem("Resync loops to bar", "",
-                                      [m]() { m->resyncReq = true; }));
-
-        menu->addChild(new MenuSeparator);
-        menu->addChild(createSubmenuItem("Detune A", "", [m](Menu* sub) {
-            auto* quantity = m->getParamQuantity(DETUNE_A);
-            sub->addChild(new ParamMenuSlider(quantity));
-            sub->addChild(createMenuItem("Reset to 6.0 ct", "", [m]() {
-                m->params[DETUNE_A].setValue(kDefaultDetune);
-            }));
-        }));
-        menu->addChild(createSubmenuItem("Detune B", "", [m](Menu* sub) {
-            auto* quantity = m->getParamQuantity(DETUNE_B);
-            sub->addChild(new ParamMenuSlider(quantity));
-            sub->addChild(createMenuItem("Reset to 6.0 ct", "", [m]() {
-                m->params[DETUNE_B].setValue(kDefaultDetune);
-            }));
-        }));
-
-        // DRIVE lost its panel slot to DRAG (spec 2026-07-28 flux-rhythm-drag)
-        // and lives here now, same menu-only shape as Detune A/B above.
-        for (int p = 0; p < spky::PART_COUNT; ++p) {
-            const std::string name = p ? "Drive B" : "Drive A";
-            const int id = p ? DRIVE_B : DRIVE_A;
-            menu->addChild(createSubmenuItem(name, "", [m, id](Menu* sub) {
-                sub->addChild(new ParamMenuSlider(m->getParamQuantity(id)));
-            }));
-        }
-
-        if (isBbdSelected(m, ENGINE_A)) {
-            menu->addChild(createSubmenuItem("BBD A — Freeze Attack", "", [m](Menu* sub) {
-                sub->addChild(new ParamMenuSlider(m->getParamQuantity(ATTACK_A)));
-            }));
-        }
-        if (isBbdSelected(m, ENGINE_B)) {
-            menu->addChild(createSubmenuItem("BBD B — Freeze Attack", "", [m](Menu* sub) {
-                sub->addChild(new ParamMenuSlider(m->getParamQuantity(ATTACK_B)));
-            }));
-        }
-
-        // BODY's excitation bus (design spec §6) plus, since the
-        // cross-deck-audio-bus branch (spec 2026-07-31 bbd-part-engine §4.4),
-        // the audio-rate cross-deck tap: patch state, not a performance
-        // control -- there is no panel knob for any of this, so it lives
-        // here, same shape as Detune A/B above. Defaults: tape on, other
-        // deck / audio in off.
-        //
-        // "Excite: FLUX tape" and "Excite: audio in" are still exactly what
-        // they say: BODY-only, inert everywhere else. "Excite: other deck"
-        // is NOT -- exciteOtherDeck feeds Part::_src_deck, which now gates
-        // THREE paths: BODY's control-rate excitation bus (unchanged), the
-        // audio-rate cross-deck bus SAMPLER consumes (process_in()), and now
-        // the same bus BBD consumes to feed its delay line (spec 5.12's
-        // silence-trap fix -- a BBD deck with no external cabling still has
-        // something to echo). So on a SAMPLER or BBD deck this flag went
-        // from inert to live: it audibly routes (and, for SAMPLER, records)
-        // the neighbouring deck, and -- because the bound is
-        // fast_tanh(engine_in + neighbour) rather than a separate path -- it
-        // also puts the deck's own external audio-in through fast_tanh for
-        // the first time even when the neighbour is silent (tanh(1) ~ 0.76),
-        // measurably attenuating audio-in monitoring/recording on that deck.
-        // A patch saved with this flag on for a SAMPLER or BBD deck
-        // therefore behaves differently after upgrading to this branch.
-        // Neither consequence is a bug -- see the spec sections above -- but
-        // the label has to say so, because the old name promised BODY-only
-        // and nothing here enforces that anymore.
-        for (int p = 0; p < spky::PART_COUNT; ++p) {
-            const std::string name = p ? "Excite B" : "Excite A";
-            menu->addChild(createSubmenuItem(name, "", [m, p](Menu* sub) {
-                sub->addChild(createBoolPtrMenuItem("Excite: FLUX tape", "",
-                                                    &m->smp[p].exciteTape));
-                sub->addChild(createBoolPtrMenuItem(
-                    "Route: other deck (BODY excite, SAMPLER feed+rec, "
-                    "BBD feed)", "",
-                    &m->smp[p].exciteOtherDeck));
-                sub->addChild(createBoolPtrMenuItem("Excite: audio in", "",
-                                                    &m->smp[p].exciteAudioIn));
-            }));
-        }
-
-        menu->addChild(new MenuSeparator);
-        for (int p = 0; p < spky::PART_COUNT; ++p) {
-            const std::string name = p ? "Sampler B" : "Sampler A";
-            menu->addChild(createSubmenuItem(name, "", [m, p](Menu* sub) {
-                sub->addChild(createMenuItem("Load sample...", "", [m, p]() {
-                    char* path = osdialog_file(OSDIALOG_OPEN, nullptr, nullptr, nullptr);
-                    if (!path) return;
-                    std::string err;
-                    if (spkyvcv::load_wav_into(m->inst, p, path, m->curSr, err)) {
-                        m->smp[p].path = path;
-                        m->smp[p].factoryLoaded = false;
-                    } else {
-                        osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, err.c_str());
-                    }
-                    std::free(path);
-                }));
-                sub->addChild(createMenuItem("Save sample...", "", [m, p]() {
-                    char* path = osdialog_file(OSDIALOG_SAVE, nullptr, "sample.wav", nullptr);
-                    if (!path) return;
-                    std::string err;
-                    if (!spkyvcv::save_wav_from(m->inst, p, path, m->curSr, err))
-                        osdialog_message(OSDIALOG_ERROR, OSDIALOG_OK, err.c_str());
-                    std::free(path);
-                }));
-                sub->addChild(createMenuItem("Clear sample", "", [m, p]() {
-                    m->inst.sampler_clear(p);
-                    m->smp[p].path.clear();
-                    m->smp[p].factoryLoaded = false;
-                }));
-                sub->addChild(new MenuSeparator);
-                sub->addChild(createIndexPtrSubmenuItem(
-                    "Speed mode", {"Digital", "Tape"}, &m->smp[p].tapeIdx));
-                sub->addChild(createBoolPtrMenuItem("Reverse", "", &m->smp[p].reverse));
-                sub->addChild(createSubmenuItem("Overdub feedback", "", [m, p](Menu* fb) {
-                    fb->addChild(new FeedbackSlider(&m->smp[p].feedback));
-                }));
-                sub->addChild(new MenuSeparator);
-                sub->addChild(createBoolPtrMenuItem("Engine: test tone (dev)", "",
-                                                    &m->smp[p].testTone));
-            }));
-        }
+        appendFireflowMenu(menu, getModule<Fireflow>());
     }
 };
 
 Model* modelFireflow = createModel<Fireflow, FireflowWidget>("Fireflow");
+
+#include "generated_hw_panel.hpp"
+
+// The 60 HP hardware-envelope draft (envelope spec 2026-08-08 §4): same
+// Module, same param ids, different sheet metal. Deliberately dumb -- no LED
+// rings, no dynamic captions, no engine-aware hiding beyond the shared
+// ATTACK/BEND knob and the sampler-only REC pads. An aluminium panel can do
+// none of those tricks, so neither does its rehearsal.
+//
+// Font handling follows PanelText's proven idiom (loadFont from the shared
+// system asset, not APP->window->uiFont) rather than the brief's sketch --
+// uiFont is the Rack UI's own font, not the panel's ShareTechMono, and would
+// have drawn every label in the wrong face.
+struct HwPanelText : Widget {
+    void draw(const DrawArgs& args) override {
+        std::shared_ptr<Font> font =
+            APP->window->loadFont(asset::system("res/fonts/ShareTechMono-Regular.ttf"));
+        if (!font) return;
+        nvgFontFaceId(args.vg, font->handle);
+
+        auto text = [&](float x, float y, float size, float spacing,
+                        unsigned rgb, unsigned char anchor, const char* s) {
+            nvgFontSize(args.vg, mm2px(size));
+            nvgTextLetterSpacing(args.vg, mm2px(spacing));
+            nvgFillColor(args.vg, nvgRGB((rgb >> 16) & 0xFF,
+                                         (rgb >> 8) & 0xFF, rgb & 0xFF));
+            nvgTextAlign(args.vg, (anchor == 1 ? NVG_ALIGN_LEFT :
+                                   anchor == 2 ? NVG_ALIGN_RIGHT :
+                                   NVG_ALIGN_CENTER) | NVG_ALIGN_BASELINE);
+            Vec p = mm2px(Vec(x, y));
+            nvgText(args.vg, p.x, p.y, s, nullptr);
+        };
+        for (const auto& c : spkyhw::kParamCtls)
+            if (c.label[0])
+                text(c.lbl.x, c.lbl.y, c.lblSize, 0.f, c.lblRgb, c.anchor, c.label);
+        for (const auto& c : spkyhw::kInputCtls)
+            text(c.lbl.x, c.lbl.y, c.lblSize, 0.f, c.lblRgb, c.anchor, c.label);
+        for (const auto& c : spkyhw::kOutputCtls)
+            text(c.lbl.x, c.lbl.y, c.lblSize, 0.f, c.lblRgb, c.anchor, c.label);
+        for (const auto& t : spkyhw::kPanelTexts)
+            text(t.mm.x, t.mm.y, t.size, t.spacing, t.rgb, t.anchor, t.str);
+    }
+};
+
+struct FireflowHWWidget : ModuleWidget {
+    FireflowHWWidget(Fireflow* module) {
+        setModule(module);
+        setPanel(createPanel(asset::plugin(pluginInstance, "res/FireflowHW.svg")));
+        auto* labels = new HwPanelText();
+        labels->box.size = box.size;
+        addChild(labels);
+        for (const auto& c : spkyhw::kParamCtls) {
+            Vec pos = mm2px(Vec(c.mm.x, c.mm.y));
+            switch (c.kind) {
+                case WK_BIGKNOB: case WK_KNOBC:
+                    addParam(createParamCentered<RoundBlackKnob>(pos, module, c.id)); break;
+                case WK_SMKNOB: case WK_KNOBI:
+                    if (c.id == ATTACK_A || c.id == ATTACK_B
+                            || c.id == STAGES_A || c.id == STAGES_B) {
+                        auto* knob = createParamCentered<SlotVisible<Trimpot>>(pos, module, c.id);
+                        knob->fireflow = module;
+                        knob->ctlId = c.id;
+                        addParam(knob);
+                    } else {
+                        addParam(createParamCentered<Trimpot>(pos, module, c.id));
+                    }
+                    break;
+                case WK_SW2:
+                    addParam(createParamCentered<CKSS>(pos, module, c.id)); break;
+                case WK_LATCH:
+                    if (c.id == ENGINE_A || c.id == ENGINE_B)
+                        addParam(createParamCentered<EngineCycleLatch>(pos, module, c.id));
+                    else if (c.id == REC_A || c.id == REC_B) {
+                        auto* pad = createParamCentered<SlotVisible<VCVLatch>>(pos, module, c.id);
+                        pad->fireflow = module;
+                        pad->ctlId = c.id;
+                        addParam(pad);
+                    } else
+                        addParam(createParamCentered<VCVLatch>(pos, module, c.id));
+                    break;
+                case WK_SMBTN:
+                    addParam(createParamCentered<VCVButton>(pos, module, c.id)); break;
+                default: break;
+            }
+        }
+        for (const auto& c : spkyhw::kInputCtls)
+            addInput(createInputCentered<PJ301MPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
+        for (const auto& c : spkyhw::kOutputCtls)
+            addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
+        for (const auto& c : spkyhw::kLightCtls) {
+            Vec pos = mm2px(Vec(c.mm.x, c.mm.y));
+            if (c.id == REC_A_L || c.id == REC_B_L) {
+                auto* led = createLightCentered<SamplerOnly<SmallLight<RedLight>>>(pos, module, c.id);
+                led->fireflow = module;
+                led->engineId = (c.id == REC_A_L) ? ENGINE_A : ENGINE_B;
+                addChild(led);
+            } else
+                addChild(createLightCentered<MediumLight<YellowLight>>(pos, module, c.id));
+        }
+        addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
+        addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
+        addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+        addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+    }
+    void appendContextMenu(Menu* menu) override {
+        appendFireflowMenu(menu, getModule<Fireflow>());
+    }
+};
+
+Model* modelFireflowHW = createModel<Fireflow, FireflowHWWidget>("FireflowHW");
