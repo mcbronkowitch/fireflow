@@ -61,9 +61,19 @@ is actually built today, and what is still design-only.
   own measurement — hardware, the audio input, `-O2` vs `-O3`, and the
   engine's 96-sample control raster (the artifact *moves* with block size, so
   it belongs to the block boundary). **A fifth, CPU overrun, is ruled out by
-  the number above.** The mechanism is not measured and is deliberately not
-  named. Until it is, no shell overhead figure means anything, so Phase 0
-  Task 6 is blocked behind it.
+  the number above**, and a sixth — the engine's block arithmetic — by
+  `tests/test_block_size_invariance.cpp`, which is green.
+  **What it is instead: not the samples.** Forcing the callback to write
+  nothing but zeros while the engine still runs leaves the artifact at
+  *exactly* the same level (−59.5 dBFS both ways); filling the idle gap in
+  each block with a `nop` loop drops it 7.5 dB. So it reaches the output
+  without using the signal path, and it tracks how compute activity is
+  distributed inside the block. **This is a finding about the carrier board,
+  not about `engine/`** — nothing here argues for changing the engine, and
+  Phase 1's own PCB should design decoupling and analog/digital supply
+  separation deliberately rather than hope. Supply ripple, ground coupling
+  and radiation are *not* separated; the clean next measurement is the same
+  operating point on a Daisy Seed with its own audio output.
 - **The engine's worst case does not fit on the target board.** Same capture:
   `instrument_worst` reads **102.27 % avg / 108.62 % max** on the submodule at
   O3, against the 960 000-cycle block. Whether that matters depends on whether

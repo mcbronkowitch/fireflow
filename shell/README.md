@@ -165,15 +165,51 @@ Diagnose-Images war falsch — deshalb meldet die Sonde `sr` und `block` jetzt
 selbst mit, denn eine Last in Prozent ist ohne die Blockgröße, gegen die sie
 gerechnet wurde, bedeutungslos.
 
-Was **nicht** gemessen ist und deshalb hier auch nicht behauptet wird: der
-Mechanismus. Nach dem Wegfall der Überlast bleibt offen, ob der Störton in
-den Sample-**Werten** steht, die die Engine liefert, oder durch ihr
-**Ausführen** entsteht (Busverkehr gegen die Audio-DMA, Interrupt-Jitter) —
-zwei völlig verschiedene Reparaturen.
+- **Die Blockarithmetik der Engine.** `tests/test_block_size_invariance.cpp`
+  rendert denselben Betriebspunkt mit `n=1` und mit `n=96` und verlangt
+  Übereinstimmung besser als −60 dB relativ zum Signal. Der Test ist grün.
+  (Er hat eine echte Lücke geschlossen: `host/render/main.cpp` ruft
+  `process(..., 1)` auf — **ein** Sample pro Aufruf, die gesamte
+  Desktop-Historie ist mit `n=1` entstanden, die Firmware ruft mit `n=96`
+  auf.)
 
-**Nächster Schritt:** ein Bau, in dem die Engine voll läuft, ihr Ergebnis
-aber verworfen wird und der Ausgang Stille bekommt. Bleibt der Ton, steht er
-nicht in den Zahlen.
+### Und was es stattdessen ist
+
+**Der Störton steht nicht in den Samples.** Ein Bau, in dem die Engine voll
+läuft, ihr Ergebnis aber verworfen wird und der Callback nur Nullen
+schreibt, liefert den Ton bei **exakt demselben Pegel**:
+
+| Bau | RMS | 500 Hz |
+|---|---|---|
+| Engine, Ausgang normal | −54,6 dBFS | −59,5 dBFS |
+| Engine läuft, Ausgang auf Stille gezwungen | −59,7 dBFS | **−59,5 dBFS** |
+| Engine läuft, Stille, **Blockzeit leergedreht** | −63,9 dBFS | **−67,0 dBFS** |
+| Engine aus, Durchleiter (Referenz) | −73,8 dBFS | −90,1 dBFS |
+
+Er erreicht den Ausgang also, **ohne den Signalweg zu benutzen** — eine
+Einkopplung, kein Rechenfehler. Und er hängt daran, wie die Rechenaktivität
+innerhalb des Blocks verteilt ist: wird die Leerlauflücke mit einer
+`nop`-Schleife gefüllt, fällt er um **7,5 dB**.
+
+Nicht um mehr, und das ist die ehrliche Einschränkung dieses Versuchs: die
+Füllschleife ist nur *zeitlich* konstant, nicht *inhaltlich*. Der
+Engine-Anteil rechnet mit SDRAM und FPU, der Füllanteil dreht `nop` — das
+Stromprofil bleibt im Blocktakt moduliert, nur schwächer. Der Versuch stützt
+die Erklärung „block-periodisches Aktivitätsprofil", er beweist sie nicht,
+und **zwischen Versorgungsrippel, Masseeinkopplung und Abstrahlung trennt er
+gar nicht.**
+
+**Konsequenz, und sie ist wichtiger als die Ursache:** das ist ein Befund
+über den **Aufbau**, nicht über die Engine. Kein Grund, an `engine/` etwas
+zu ändern. Für Phase 1 heißt es dagegen sehr wohl etwas — Entkopplung,
+Trennung von analoger und digitaler Versorgung und der Abstand zwischen
+Codec-Analogteil und den Schaltströmen des MCU gehören auf dem eigenen PCB
+bewusst entworfen und nicht gehofft.
+
+**Der nächste Schritt, wenn jemand die Ursache wirklich will:** denselben
+Betriebspunkt auf einem Daisy Seed mit dessen eigenem Audioausgang messen.
+Zeigt der es auch, steckt es im Modul; zeigt er es nicht, im Trägerboard.
+Das ist eine Messung und keine Vermutung, und sie kostet einen Boardwechsel.
 
 ## Wo die nächste Arbeit hingeht
 
