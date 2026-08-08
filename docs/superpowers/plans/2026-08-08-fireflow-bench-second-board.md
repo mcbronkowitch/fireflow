@@ -44,7 +44,7 @@ Der `boot_info`-Sonderfall gilt auf dem Submodule **gleichermaßen**: `Init()` f
 | `bench/run.py` | `--board` durchreichen, Board in Dateiname und CSV-Zeile | ändern |
 | `bench/test_run_contract.py` | Test für den neuen Dateinamen und die neue Spalte | ändern |
 | `docs/bench/2026-08-08-<hash>-regress-patch_sm-axi-o3.md` / `.csv` | Das erste Capture vom Zielboard | neu, vom Runner |
-| `docs/bench/2026-08-08-seed-vs-patch-sm.md` | Der Vergleich, von Hand | neu |
+| `docs/bench/2026-08-07-seed-vs-patch-sm.md` | Der Vergleich, von Hand | neu |
 
 **Warum `src/hw/` und nicht `bench/`:** Die Produktions-Firmware braucht dieselbe Board-Initialisierung. Läge sie unter `bench/`, würde ausgelieferte Firmware auf das Messwerkzeug zeigen — genau die Trennung, die `bench/README.md` zieht. Eine Kopie in beiden Bäumen wäre schlimmer: der `boot_info`-Sonderfall darunter ist eine Falle, die man kein zweites Mal pflegen will.
 
@@ -291,7 +291,7 @@ Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 Ein Capture ist kein Urteil. Das Urteil ist eine Seite, die genau eine Frage beantwortet.
 
 **Files:**
-- Create: `docs/bench/2026-08-08-seed-vs-patch-sm.md`
+- Create: `docs/bench/2026-08-07-seed-vs-patch-sm.md`
 - Modify: `docs/roadmap.md` (nur bei negativem Ausgang)
 
 **Interfaces:**
@@ -322,7 +322,7 @@ Bewegt sie sich innerhalb des Bands, wird das ebenso ausdrücklich hingeschriebe
 - [ ] **Schritt 3: Commit**
 
 ```bash
-git add docs/bench/2026-08-08-seed-vs-patch-sm.md
+git add docs/bench/2026-08-07-seed-vs-patch-sm.md
 git commit -m "bench: the verdict on whether seed numbers travel
 
 Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
@@ -340,7 +340,7 @@ Streng seriell. Task 2 Schritt 5 ist das Tor: davor wird das Submodule nicht ang
 - [ ] Ein Seed-Lauf nach dem Umbau liegt innerhalb des Wiederholbands von 96,43 %
 - [ ] `bench/test_run_contract.py` ist grün und hat den neuen Namen und die neue Spalte einmal rot gesehen
 - [ ] Ein Capture mit `board=patch_sm` liegt in `docs/bench/`
-- [ ] `docs/bench/2026-08-08-seed-vs-patch-sm.md` existiert und trägt das Verdikt in der ersten Zeile
+- [ ] `docs/bench/2026-08-07-seed-vs-patch-sm.md` existiert und trägt das Verdikt in der ersten Zeile
 - [ ] Bei negativem Verdikt: `docs/roadmap.md` warnt vor der Zitierung von Seed-Zahlen
 
 ## Was dieser Tag ausdrücklich nicht tut

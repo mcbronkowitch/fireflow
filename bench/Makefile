@@ -77,7 +77,7 @@ endif
 #               number in docs/bench/ was measured on.
 #   patch_sm -- Daisy Patch Submodule, the M6 target. Same STM32H750, same
 #               SDRAM and QSPI; whether the numbers travel is a measurement,
-#               not an assumption (docs/bench/2026-08-08-seed-vs-patch-sm.md).
+#               not an assumption (docs/bench/2026-08-07-seed-vs-patch-sm.md).
 BENCH_BOARD ?= seed
 
 ifneq ($(filter $(BENCH_BOARD),seed patch_sm),$(BENCH_BOARD))
