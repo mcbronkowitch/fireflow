@@ -48,6 +48,27 @@ is actually built today, and what is still design-only.
   approximation. See
   [Seed vs Patch Submodule](bench/2026-08-07-seed-vs-patch-sm.md); the cause is
   not measured and is deliberately not named there.
+- **`engine/` runs on the target board — and it does not sound clean yet.**
+  Measured 2026-08-08. `shell/` is the first firmware that compiles `engine/`
+  ([its README](../shell/README.md) draws the line against `bench/` and the
+  root firmware). On a Patch Submodule with audio on 3.5 mm jacks it makes
+  sound, and `SHELL_CPU_PROBE=1` puts the operating point at **62.78 % avg /
+  65.30 % max** (`sr=48000`, `block=96`, self-reported) — 35 points of room,
+  consistent with the bench row `instrument_init` (66.58 / 77.96 %). But the
+  output carries a constant-amplitude artifact **on the audio block rate**,
+  28 dB above what the desktop render of the identical operating point has
+  there, plus audible tearing. Four explanations are each ruled out by their
+  own measurement — hardware, the audio input, `-O2` vs `-O3`, and the
+  engine's 96-sample control raster (the artifact *moves* with block size, so
+  it belongs to the block boundary). **A fifth, CPU overrun, is ruled out by
+  the number above.** The mechanism is not measured and is deliberately not
+  named. Until it is, no shell overhead figure means anything, so Phase 0
+  Task 6 is blocked behind it.
+- **The engine's worst case does not fit on the target board.** Same capture:
+  `instrument_worst` reads **102.27 % avg / 108.62 % max** on the submodule at
+  O3, against the 960 000-cycle block. Whether that matters depends on whether
+  it is a reachable operating point — the question Phase 0 Task 6 Schritt 8
+  was written to answer, and it is still open.
 - **CPU status: the selected O3 ITCM-hot benchmark passes; the production-shell
   timing boundary remains pending.** Both O3 DTCM+BBD benchmark repeats are
   below 100 % offline and in the real callback. This is the benchmark stop
