@@ -37,19 +37,21 @@ DECK_POS = {
     "MELODY":  (25.0, BIG_ROW2_Y), "MOD":    (47.0, BIG_ROW2_Y),
     "TUNE":    (69.0, BIG_ROW2_Y), "COLOR":  (91.0, BIG_ROW2_Y),
     # small rows, 15 mm grid; voice cluster | fx cluster
-    # x=77 (row1) and x=27/72 (play row) are deliberate gaps: FLUX(RATE)/FORM/
-    # GRITMODE were retired controls (spec 2026-08-09 hw-control-reduction
-    # tasks 2-10); iteration 0 leaves the hole rather than reflowing the grid
-    # (that is a regrouping session, not this one).
+    # (77, 71) is now a deliberate gap: FLUXTIME (the old MULT knob) was
+    # retired in task 6, folded into FLUX itself (still at (77, 56), one row
+    # up). Iteration 0 leaves the hole rather than reflowing the grid (that
+    # is a regrouping session, not this one).
     "ATTACK":   (12.0, 56.0), "FILT":    (27.0, 56.0), "SUB":     (42.0, 56.0),
     "FLUXRATE": (62.0, 56.0), "FLUX":    (77.0, 56.0), "FLUXFB":  (92.0, 56.0),
     "REV_MIX": (107.0, 56.0),
     "DECAY":    (12.0, 71.0), "RES":     (27.0, 71.0), "SOURCE":  (42.0, 71.0),
     "LINK":     (62.0, 71.0), "GRIT":    (92.0, 71.0),
     "COMP":    (107.0, 71.0),
-    # play row: seq knobs + pads. DETUNE (spec 2026-08-09 hw-control-reduction
-    # task 10) takes the STEP pad's old slot here, same freed-position reuse
-    # as gen_panel.py's PAD_X[2] -- STEP itself retired in task 2.
+    # play row: seq knobs + pads. (27, 86) FORM, (72, 86) GRITMODE and
+    # (102, 86) NEWPHRASE are now gaps too -- all three retired (tasks 2-4).
+    # DETUNE (spec 2026-08-09 hw-control-reduction task 10) took the STEP
+    # pad's old slot here, same freed-position reuse as gen_panel.py's
+    # PAD_X[2] -- STEP itself retired in task 2.
     "STEPS":    (12.0, 86.0), "SONG":    (42.0, 86.0),
     "ENGINE":   (57.0, 86.0), "DETUNE":  (87.0, 86.0),
     "REC":    (117.0, 86.0),
