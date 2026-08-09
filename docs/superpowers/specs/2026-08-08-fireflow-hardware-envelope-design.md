@@ -51,7 +51,9 @@ ist zurück auf dem Panel (Task 10, `PLAY`-Reihe, freigewordener `STEP`-Slot);
 `DRIVE_A/B` ist ersatzlos gelöscht (BBD-Drive kommt aus `bbd_engine.cpp`, nie
 aus einem Panel-Wert — Task 9). Die frühere `HIDDEN_PARAMS`-Frage („ALT-Layer
 oder feste Defaults, Entscheidung fällt in der Neugruppierungsrunde") ist
-damit erledigt: `HIDDEN_PARAMS` ist leer, es gibt kein Kontextmenü mehr.
+damit erledigt: `HIDDEN_PARAMS` ist leer, d.h. es gibt keine menü-only
+*Parameter* mehr. Das Kontextmenü selbst bleibt (Resync to bar, BBD Freeze
+Attack, Sampler-Untermenüs, Excitation-Flags, Copy terrain code).
 
 **LED-Belegung (gehört hierher, nicht in H1):** pro Part Gate, REC, FLOW/STEP,
 Capture-Replay (= 8; die GRIT-Modus-LED entfällt — GRIT ist seit Task 4 ein

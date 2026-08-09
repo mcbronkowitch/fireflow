@@ -34,9 +34,11 @@ because it bridges the two parts. Each part's
 draws in the light layer and lights a moving dot per modulation lane from
 `Instrument::lane_output()` / `lane_fired()`, so the rings animate with the
 engine (mirroring `src/ui/led.ring.h`). The SVG only provides the dim housing.
-The shared centre column beside MORPH also carries **PUSH**, the master
-drive into the output limiter — one knob for both parts, unlike every
-per-part control above.
+The shared centre column beside MORPH used to also carry **PUSH**, the
+master drive into the output limiter; PUSH is gone (spec 2026-08-09
+hw-control-reduction task 9, "push steht immer auf 0.4") and the drive is
+now a fixed-by-ear constant — see [COUPLE, DRIFT, and
+LVL/COMP](#couple-drift-and-lvlcomp) below for it and its two siblings.
 
 ## TIMING
 
@@ -66,7 +68,9 @@ B are heard:
 - **OFF** disables arrangement by playing A continuously; A still evolves,
   while the stored B phrase is retained for returning to another rung.
 
-The factory SONG setting is the ladder's first rung. SONG changes wait for
+The factory SONG setting is rung **6** (`{0, 6}`, "no alternation, two
+generators"), not the ladder's first rung — chosen to preserve the approved
+HIERARCHICAL/AAAB boot sound (`song_ladder_at(6)`). SONG changes wait for
 the next STEP phrase boundary, and every rung change queues a fresh A/B pair
 and restarts the arrangement at its first phrase — the gesture the retired
 NEW pad used to fire on demand. On a Sampler it also jumps the tape head back
@@ -79,13 +83,51 @@ selected ENG — see [Engine-dependent captions](#engine-dependent-captions)
 below for the full table across all five engines. SOURCE-lane modulation
 moves the selected source around the knob's base value.
 
-Each part's right-click context menu provides a separate **Detune A** or
-**Detune B** control. Detune is independent of SOURCE: it is a constant
-`0..35 ct` spread and defaults to `6 ct`.
+Each part also has one physical **DETUNE** knob, independent of SOURCE
+(spec 2026-08-09 hw-control-reduction task 10) and no longer a
+context-menu spread — it is a panel control now, applying a quadratic
+taper: the first ~20 ct of travel is where the fine beating lives, so a
+linear map would squeeze it into a fifth of the knob. The ceiling is
+`105 ct` on Synth/Wave; on Body the engine's own `kDetuneScale` (4/3)
+stretches the same 0..105 spread to a 0..140 ct rail. Deck A boots on
+Synth and defaults to `6 ct`; deck B boots on Body and defaults to
+`24 ct` (the same by-ear spread the old shared knob produced there).
 
-Each part's context menu still carries the append-only **Drive A** / **Drive B**
-patch state. Movement 3 no longer routes it into FLUX; it remains present only
-so saved parameter IDs do not move.
+The **Drive A** / **Drive B** context-menu sliders are gone (task 9):
+they never reached the engine (BBD's drive target has always been a mod
+lane, not a panel/menu control — see `bbd_engine.cpp`), so the dead
+menu-only patch state was retired along with its `DriveQuantity`.
+
+## COUPLE, DRIFT, and LVL/COMP
+
+**COUPLE** swallowed the old SYNC switch (task 7): SYNC was the right-hand
+end of COUPLE's own axis. Below the knob's midpoint (`kCoupleZoneSplit =
+0.5`) is the **FREE** world — SYNC off, COUPLE drives the Kuramoto phase
+lock between the two parts. At or above the midpoint is the **GRID**
+world — SYNC on, COUPLE instead sets how tightly the texture lanes follow
+the shared grid. Each zone sweeps its own 0..1 range across its half of
+the knob's travel, so both worlds keep their full spread.
+
+**DRIFT**'s left stop (the bottom `kDriftSettleZone = 0.02` of travel, not
+just the literal zero) is the old **SETL** panic pad: parking the knob
+there fires `Instrument::settle()` once, on the edge into the zone, not
+continuously while held — a knob is not a momentary button, so this is
+edge-triggered (`DriftSettleState`/`driftSettled` in `Fireflow.cpp`) rather
+than re-firing on every control tick the knob spends parked there. Above
+the zone, DRIFT's own 0..1 range is rescaled to fill the remaining travel.
+
+**LVL/COMP** is one physical knob (`COMP_A`/`COMP_B`, printed `LVL`): the
+lower four-fifths (`kLvlCompSplit = 0.8`) is pure per-part output level —
+the engines are quiet by design, so this knob was always used as a volume
+control in practice. The top fifth instead engages the compressor with
+make-up gain, topping out at `kCompTop = 0.7` — the old knob's working
+compression amount — so full compressor drive is no longer reachable from
+the panel (deliberate: task 5/9's factory patches never asked for more).
+
+Three controls are fixed-by-ear constants with no panel control at all
+(task 9): the shared centre column's old **PUSH** master-drive knob is
+pinned to `0.40`, and the reverb's **REV_SMEAR** (diffuser-LFO wash) and
+**REV_MOD** (tail-delay wobble) are pinned to `0.30` and `0.15`.
 
 ## Engine-dependent captions
 
@@ -255,8 +297,9 @@ step boundaries, it just stops moving pitch while it does.
 
 **SUB stays a sub-level control; SOURCE carries the contextual source job.**
 On a Sampler, SOURCE reads `ORG` and selects position in the material; on
-Synth and Wave it reads `TIMB` and `FRAME`. Detune A/B stays an independent
-per-part context-menu spread for Synth and Wave, not a visible `DTUN` knob.
+Synth and Wave it reads `TIMB` and `FRAME`. DETUNE stays an independent
+physical knob throughout — see [SOURCE and Detune](#source-and-detune)
+above.
 
 The right-click context menu carries a **Sampler A / Sampler B** submenu per
 part:
@@ -314,9 +357,8 @@ stale WAV sitting in patch storage.
   soft-takeover to fall back on. The price is that an ENG switch can't be
   prepared in advance: SOURCE keeps its knob base, so a `TIMB`/`FRAME` setting
   becomes the initial `ORG` setting after the switch. SUB remains sub-level,
-  while Detune A/B stays independent in the context menu; neither is
-  repurposed by SOURCE. Fine for a staged transition on stage; not for a
-  seamless one.
+  and DETUNE stays its own independent physical knob; neither is repurposed
+  by SOURCE. Fine for a staged transition on stage; not for a seamless one.
 - **There are no parameter CV inputs.** The jacks are IN L/R, CLOCK and
   RESET; PIT and GAT are outputs. External modulation of these controls only
   reaches VCV through third-party mapping modules.
@@ -395,7 +437,9 @@ reading `BEND` on a BBD deck. BBD's hidden ATTACK value remains
 available as **BBD A — Freeze Attack** or **BBD B — Freeze Attack** in the
 module context menu.
 
-The FX bottom row is `LINK · GRIT COMP`; it contains no BBD control and, as
+The FX bottom row is `LINK · GRIT · LVL/COMP` (printed `LVL` — see
+[COUPLE, DRIFT, and LVL/COMP](#couple-drift-and-lvlcomp) above); it
+contains no BBD control and, as
 of task 6 (spec 2026-08-09 hw-control-reduction), no MULT either — that slot
 is now empty. `TIME` selects the synchronized tape division. The engine still
 carries a MULT-shaped modulation sink underneath it (`FXT_FLUX_TIME`):

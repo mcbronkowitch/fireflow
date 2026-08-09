@@ -1008,6 +1008,6 @@ if __name__ == "__main__":
         f.write(header())
     with open(os.path.join(root, "src", "init_patch.hpp"), "w") as f:
         f.write(init_patch_header())
-    print("wrote res/Fireflow.svg and src/generated_panel.hpp")
+    print("wrote res/Fireflow.svg, src/generated_panel.hpp and src/init_patch.hpp")
     print(f"params={len(PARAMS)} (stride={PART_STRIDE}) inputs={len(INPUTS)} "
           f"outputs={len(OUTPUTS)} lights={len(LIGHTS)}  panel={HP}HP")

@@ -1,3 +1,4 @@
+#include <cassert>
 #include <cmath>
 #include <algorithm>
 #include <atomic>
@@ -404,8 +405,19 @@ struct Fireflow : Module {
                         configParam(c.id, 0.f, 16.f, init, "Steps");
                     getParamQuantity(c.id)->snapEnabled = true;
                     break;
-                case WK_SW2:  // init patch runs the instrument on the grid
-                    configSwitch(c.id, 0.f, 1.f, init, "Sync", {"Free", "Synced"});
+                case WK_SW2:
+                    // Unreachable: no control in kParamCtls carries WK_SW2 any
+                    // more (it was SYNC's kind; COUPLE absorbed SYNC as the
+                    // right-hand end of its own axis, task 7, spec 2026-08-09
+                    // hw-control-reduction). The enum entry stays alive only
+                    // because the HW draft widget's own switch (below) still
+                    // handles it. This branch used to silently configure
+                    // WHATEVER lands here next as a switch named "Sync" with
+                    // "Free"/"Synced" labels -- a loud stop instead: do not
+                    // resurrect that call for a future WK_SW2 control, write
+                    // fresh labels for whatever it actually is.
+                    assert(false &&
+                           "WK_SW2: no live control uses this kind in configControls()");
                     break;
                 case WK_LATCH:
                     if (c.id == REC_A || c.id == REC_B)
@@ -416,10 +428,25 @@ struct Fireflow : Module {
                                      {"Synth", "Sampler", "Wave", "Body", "BBD"});
                         getParamQuantity(c.id)->snapEnabled = true;
                     }
-                    else  // STEP (on for the init patch's stepped sequences)
-                        configSwitch(c.id, 0.f, 1.f, init, lbl, {"Off", "On"});
+                    else {
+                        // Unreachable: the old STEP pad's boolean latch merged
+                        // into STEPS_A/STEPS_B (a WK_KNOBI knob) long before
+                        // this branch, so no LATCH-kind control besides
+                        // REC_A/B and ENGINE_A/B reaches here today. Loud stop
+                        // instead of silently configuring a future third
+                        // LATCH control as an "Off"/"On" STEP switch it may
+                        // not be.
+                        assert(false &&
+                               "WK_LATCH: control is neither REC_A/B nor ENGINE_A/B");
+                    }
                     break;
-                case WK_SMBTN: configButton(c.id, lbl); break;
+                case WK_SMBTN:
+                    // Unreachable: no control in kParamCtls carries WK_SMBTN
+                    // any more. The enum entry stays alive only because the HW
+                    // draft widget's own switch (below) still handles it.
+                    assert(false &&
+                           "WK_SMBTN: no live control uses this kind in configControls()");
+                    break;
                 default: break;
             }
         }

@@ -28,9 +28,11 @@ werden **nicht** wieder aufgefüllt. Sie sind das Ergebnis, nicht ein Budget.
 
 ### 1.1 `STEPS` ×2 schluckt den `STEP`-Taster
 
-Ein Rastknopf mit 16 Positionen: **0 = FLOW**, **2…16 = STEP**. Die 1 ist
-nicht erreichbar, weil sie es heute auch nicht ist (`configParam(STEPS_A,
-2.f, 16.f, …)`).
+Ein Rastknopf mit 17 Positionen: **0 = FLOW**, **1…16 = STEP**. Die 1 IST
+erreichbar (`configParam(STEPS_A, 0.f, 16.f, …)`, Implementierung, nicht der
+ursprüngliche Plan hier) -- harmlos, weil `ModLane::set_step` jeden Wert
+`< 1` ohnehin auf 1 klemmt, ein STEP-Deck mit einer einzigen Schrittzahl
+also dasselbe Verhalten hätte wie eine explizite 1.
 
 Die Engine-API bleibt unverändert; der Host ruft
 `set_step(p, steps > 0, steps)`. Den Modus zeigt die pro Part ohnehin
@@ -270,6 +272,11 @@ Damit sie dokumentiert sind und nicht später als Fehler gemeldet werden:
    `COUPL` (Zonengrenze), `LVL/COMP` (0.8), `DRIFT` (linker Anschlag),
    `STEPS` (0). Auf 9-mm-Potis am ADC ist das ein Coupon-Thema, kein
    Panel-Thema.
+7. **`LVL/COMP`s oberes Fünftel deckelt die Kompressor-Menge.** Die obere
+   Zone (ab 0.8) mappt linear auf 0..`kCompTop` (0.7), nicht auf 0..1 --
+   Kompressor-Beträge über 0.7 sind vom Panel aus nicht mehr erreichbar.
+   Beabsichtigt (0.7 war die Arbeits-Obergrenze des alten Knopfs), aber bis
+   jetzt hier nicht aufgeführt.
 
 Patch-Kompatibilität ist ausdrücklich **kein** Thema
 (Memory `fireflow-dev-alpha-no-patch-compat`).

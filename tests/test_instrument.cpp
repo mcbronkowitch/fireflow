@@ -191,10 +191,18 @@ TEST_CASE("instrument: set_step tolerates a zero step count") {
     // gate, though -- it divides by _steps whenever _phase_inc > 0, on or
     // off STEP -- so it is the one real hazard, and it is read only on a
     // Sampler deck (Part::_control_tick, `if (_engine_id == ENGINE_SAMPLER)
-    // _sampler.set_step_clock(_mod.pitch_step_samples());`). This test
-    // exercises exactly that combination -- Sampler engine, steps=0 -- to
-    // pin the clamp's guarantee on the one path that actually needs it,
-    // rather than trusting the reading.
+    // _sampler.set_step_clock(_mod.pitch_step_samples());`).
+    //
+    // This test exercises that combination -- Sampler engine, steps=0 --
+    // but does NOT pin the clamp itself: with no sample loaded, SamplerEngine
+    // ::set_step_clock() early-returns on an empty buffer before the value
+    // this passes it is ever read, so this only proves an Instrument-level
+    // Sampler with steps=0 stays NaN-free and in range end to end (still a
+    // real regression net -- it just isn't exercising the divide). The
+    // clamp's actual guarantee -- step_samples() itself, with _steps forced
+    // to 0, never dividing by zero -- is pinned directly by
+    // tests/test_lane.cpp's "lane: step_samples() tolerates a zero step
+    // count", which is the load-bearing case.
     Instrument inst;
     inst.init(48000.f);
     inst.set_engine(PART_A, ENGINE_SAMPLER);

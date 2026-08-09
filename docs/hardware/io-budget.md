@@ -49,11 +49,14 @@ Nach Bauform der 68 Runtime-Parameter:
 | Kippschalter (`SW2`) | 0 |
 | **Summe** | **68** |
 
-`HIDDEN_PARAMS` ist seit Task 10 **leer** — es gibt kein Kontextmenü mehr.
-`DETUNE_A/B` ist zurück auf dem Panel (`PLAY`-Reihe); `DRIVE_A/B` ist
-ersatzlos gelöscht (BBD-Drive kommt aus `bbd_engine.cpp`, nie aus einem
-Panel-Wert). Die ursprüngliche Fußnote hier betraf 4 `HIDDEN_PARAMS`, die es
-so nicht mehr gibt.
+`HIDDEN_PARAMS` ist seit Task 10 **leer** — es gibt keine menü-only
+*Parameter* mehr. Das Kontextmenü selbst existiert weiterhin (Resync to
+bar, BBD Freeze Attack, die Sampler-Untermenüs, Excitation-Flags, Copy
+terrain code) — es trägt nur keinen einzigen Parameterwert mehr, der nicht
+auch auf dem Panel sitzt. `DETUNE_A/B` ist zurück auf dem Panel
+(`PLAY`-Reihe); `DRIVE_A/B` ist ersatzlos gelöscht (BBD-Drive kommt aus
+`bbd_engine.cpp`, nie aus einem Panel-Wert). Die ursprüngliche Fußnote hier
+betraf 4 `HIDDEN_PARAMS`, die es so nicht mehr gibt.
 
 ## 2. Die 68 Parameter
 
