@@ -48,7 +48,16 @@ TEST_CASE("Seed audition applies the VCV init engine and arranger state")
 
 TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
 {
-    CHECK(spkyvcv::NUM_PARAMS == 86);
+    // This literal is expected to move whenever the panel inventory changes
+    // -- most of the remaining tasks in the 2026-08-09 hw-control-reduction
+    // plan remove more parameters. Update it to the new true count (and
+    // nothing else) when that happens; do not carry a mismatch forward as a
+    // "pre-existing failure" (spec 2026-08-09 hw-control-reduction task 3
+    // review, Finding 5 -- this exact mistake shipped once already).
+    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 80,
+                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 80 -- "
+                  "if the panel inventory genuinely changed, update this "
+                  "literal to match");
     CHECK(spkyvcv::initParamDefault(spkyvcv::ENGINE_A)
           == doctest::Approx(0.f));
     // drone.vcvm boots deck B on BODY (3), not on the sampler. The pin moved
@@ -118,6 +127,22 @@ TEST_CASE("Seed audition dispatcher routes generated STAGES by generated engine"
 
     CHECK(inst.engine_id(spky::PART_A) == spky::ENGINE_BBD);
     CHECK(inst.engine_id(spky::PART_B) == spky::ENGINE_SAMPLER);
-    CHECK(inst.pitch_cv(spky::PART_A) == doctest::Approx(0.8125f));
+    // PART_A's pitch is quantized, not the raw STAGES_A=0.8125 dispatched
+    // above: this snapshot only overrides ENGINE/STAGES/TUNE and inherits
+    // STEPS_A's real default (16) from kInitParamDefaults, and
+    // part.cpp's _pitch_q rule quantizes a BBD deck's pitch whenever
+    // _step_on is true ("STEP puts the clock on scale steps... FLOW leaves
+    // it continuous"). bench/audition/init_patch.cpp derives _step_on as
+    // `steps > 0` (spec 2026-08-09 hw-control-reduction task 3 review,
+    // fixing a build break -- STEP's own pad was retired by an earlier
+    // task in this plan and this bench file was never updated to match
+    // Fireflow.cpp's `inst.set_step(p, steps > 0, steps)`, so it had never
+    // actually compiled, let alone run, since). STEPS_A=16 > 0, so STEP is
+    // on by default and 0.8125 (29.25 of 36 semitones, quantizer.h's
+    // SPAN_SEMIS) snaps to the nearest Lydian-scale step, 31/36 -- verified
+    // by temporarily forcing _step_on false, which restores the raw
+    // 0.8125 exactly. This is correct production behavior, not a defect:
+    // a real BBD deck boots with STEP on, same as here.
+    CHECK(inst.pitch_cv(spky::PART_A) == doctest::Approx(31.f / 36.f));
     CHECK(inst.pitch_cv(spky::PART_B) == doctest::Approx(0.5f));
 }
