@@ -66,7 +66,11 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
         inst.set_voice_filt(deck, value(deck ? FILT_B : FILT_A));
         inst.set_color(deck, value(deck ? COLOR_B : COLOR_A));
         inst.set_voice_sub(deck, part(SUB_A, deck));
-        inst.set_voice_detune(deck, value(deck ? DETUNE_B : DETUNE_A));
+        // Quadratic taper: the first ~20 ct is where the fine beating lives,
+        // and a linear map would squeeze it into a fifth of the travel now
+        // that the ceiling is 105 ct. Mirrors Fireflow.cpp pushParams.
+        const float detKnob = part(DETUNE_A, deck);
+        inst.set_voice_detune(deck, detKnob * detKnob);
 
         inst.set_flux_mix(deck, part(FLUX_A, deck));
         // TIME's knob value IS the raw division index now (task 6, spec

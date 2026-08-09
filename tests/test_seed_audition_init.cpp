@@ -70,8 +70,16 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
           == doctest::Approx(3.f));
     CHECK(spkyvcv::initParamDefault(spkyvcv::TEMPO)
           == doctest::Approx(0.169333577f));
+    // DETUNE_A/B used to share one raw value, 6.f / 35.f (a linear knob into
+    // the old 35 ct ceiling). Task 10 (spec 2026-08-09 hw-control-reduction)
+    // squared the taper and tripled the synth-family ceiling to 105 ct, with
+    // BODY's compensating kDetuneScale shrinking from 4 to 4/3 to hold its
+    // own 140 ct rail -- but that compensation only agrees with the OLD
+    // shared raw value at full knob travel, not at this init position. Deck
+    // B boots on BODY, so its raw value is solved to keep BODY's own 24 ct
+    // (what the old shared value produced there): sqrt(24 / 140).
     CHECK(spkyvcv::initParamDefault(spkyvcv::DETUNE_B)
-          == doctest::Approx(6.f / 35.f));
+          == doctest::Approx(std::sqrt(24.f / 140.f)));
     // LINK's default is the branch's one load-bearing product invariant:
     // centre (0) is the bit-identical path (spec 2026-07-28 flux-link).
     CHECK(spkyvcv::initParamDefault(spkyvcv::LINK_A) == doctest::Approx(0.f));

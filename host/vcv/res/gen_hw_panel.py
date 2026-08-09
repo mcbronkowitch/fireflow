@@ -43,9 +43,11 @@ DECK_POS = {
     "DECAY":    (12.0, 71.0), "RES":     (27.0, 71.0), "SOURCE":  (42.0, 71.0),
     "LINK":     (62.0, 71.0), "FLUXTIME":(77.0, 71.0), "GRIT":    (92.0, 71.0),
     "COMP":    (107.0, 71.0),
-    # play row: seq knobs + pads
+    # play row: seq knobs + pads. DETUNE (spec 2026-08-09 hw-control-reduction
+    # task 10) takes the STEP pad's old slot here, same freed-position reuse
+    # as gen_panel.py's PAD_X[2] -- STEP itself retired in task 2.
     "STEPS":    (12.0, 86.0), "FORM":    (27.0, 86.0), "SONG":    (42.0, 86.0),
-    "ENGINE":   (57.0, 86.0), "GRITMODE":(72.0, 86.0), "STEP":    (87.0, 86.0),
+    "ENGINE":   (57.0, 86.0), "GRITMODE":(72.0, 86.0), "DETUNE":  (87.0, 86.0),
     "NEWPHRASE":(102.0, 86.0), "REC":    (117.0, 86.0),
     # deliberate dual assignment: BEND rides ATTACK's knob (spec §1)
     "STAGES":   (12.0, 56.0),

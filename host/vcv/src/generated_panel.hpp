@@ -7,7 +7,7 @@ struct PanelCtl { int id; WidgetKind kind; XY mm; const char* label; XY lbl; uns
 // anchor: 0 = middle, 1 = start (left-aligned), 2 = end (right-aligned)
 struct PanelTxt { XY mm; float size; float spacing; unsigned rgb; unsigned char anchor; const char* str; };
 struct DynCaption { int id; int driverId; int count; const char* words[5]; };
-static constexpr int PART_STRIDE = 19;
+static constexpr int PART_STRIDE = 20;
 static constexpr float kRingR = 16.000f;      // mm, LED-dot orbit
 static constexpr float kRingDotR = 0.95f;   // mm, lit-dot radius
 static constexpr int kRingDots = 32;
@@ -32,6 +32,7 @@ enum ParamId {
     COMP_A,
     STEPS_A,
     ENGINE_A,
+    DETUNE_A,
     SONG_A,
     RATE_B,
     SHAPE_B,
@@ -51,6 +52,7 @@ enum ParamId {
     COMP_B,
     STEPS_B,
     ENGINE_B,
+    DETUNE_B,
     SONG_B,
     MORPH,
     TEMPO,
@@ -84,8 +86,6 @@ enum ParamId {
     REV_MIX_A,
     REV_MIX_B,
     SHUFFLE,
-    DETUNE_A,
-    DETUNE_B,
     DRIVE_A,
     DRIVE_B,
     NUM_PARAMS
@@ -132,6 +132,7 @@ static const PanelCtl kParamCtls[] = {
     {COMP_A, WK_SMKNOB, {75.750f, 89.400f}, "LVL", {75.750f, 95.000f}, 0, 1.90f, 0x171713, "Level / Comp"},
     {STEPS_A, WK_KNOBI, {37.000f, 103.600f}, "STPS", {37.000f, 109.200f}, 0, 1.90f, 0x171713, "STPS"},
     {ENGINE_A, WK_LATCH, {10.000f, 103.600f}, "ENG", {10.000f, 109.000f}, 0, 1.90f, 0x171713, "ENG"},
+    {DETUNE_A, WK_SMKNOB, {46.000f, 103.600f}, "DTUN", {46.000f, 109.200f}, 0, 1.90f, 0x171713, "Detune"},
     {SONG_A, WK_KNOBI, {67.000f, 103.600f}, "SONG", {67.000f, 109.200f}, 0, 1.90f, 0x171713, "SONG"},
     {RATE_B, WK_BIGKNOB, {173.860f, 9.000f}, "RATE", {173.860f, 3.000f}, 0, 1.90f, 0x171713, "RATE"},
     {SHAPE_B, WK_BIGKNOB, {151.776f, 47.250f}, "SHAPE", {146.753f, 52.350f}, 2, 1.90f, 0x171713, "SHAPE"},
@@ -151,6 +152,7 @@ static const PanelCtl kParamCtls[] = {
     {COMP_B, WK_SMKNOB, {137.610f, 89.400f}, "LVL", {137.610f, 95.000f}, 0, 1.90f, 0x171713, "Level / Comp"},
     {STEPS_B, WK_KNOBI, {176.360f, 103.600f}, "STPS", {176.360f, 109.200f}, 0, 1.90f, 0x171713, "STPS"},
     {ENGINE_B, WK_LATCH, {203.360f, 103.600f}, "ENG", {203.360f, 109.000f}, 0, 1.90f, 0x171713, "ENG"},
+    {DETUNE_B, WK_SMKNOB, {167.360f, 103.600f}, "DTUN", {167.360f, 109.200f}, 0, 1.90f, 0x171713, "Detune"},
     {SONG_B, WK_KNOBI, {146.360f, 103.600f}, "SONG", {146.360f, 109.200f}, 0, 1.90f, 0x171713, "SONG"},
     {MORPH, WK_BIGKNOB, {99.680f, 21.500f}, "MORPH", {99.680f, 28.700f}, 0, 1.90f, 0x171713, "MORPH"},
     {TEMPO, WK_SMKNOB, {115.680f, 42.000f}, "TEMPO", {115.680f, 47.600f}, 0, 1.90f, 0x171713, "TEMPO"},

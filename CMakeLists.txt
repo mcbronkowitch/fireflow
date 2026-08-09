@@ -223,7 +223,14 @@ add_test(
     COMMAND ${CMAKE_COMMAND}
         -DRENDER=$<TARGET_FILE:render>
         -DSCENARIO=${CMAKE_SOURCE_DIR}/host/render/scenarios/wave_formant_sweep.json
-        -DEXPECTED=82aac4d6d818d205711b90a68a6b562e5d2fc435cf5f2f88e6df2ba3694706b5
+        # Reference moved (spec 2026-08-09 hw-control-reduction task 10):
+        # the scenario pushes set_voice_detune(part=0, value=0.22) onto the
+        # WAVE engine, and WaveEngine shares SynthEngineT::kDetuneCeilCt
+        # (35 -> 105 ct) with SynthEngine/BodyEngine, so the same 0.22 knob
+        # now reaches 23.1 ct instead of 7.7 ct. No bit-exactness gates --
+        # this is a sanity render, not a checksum (CLAUDE.md); the move is
+        # the expected, unavoidable consequence of the ceiling change.
+        -DEXPECTED=eb43dde7ed9bbf41075ff6dcd0d284e9e66cdbc17c79244cab6cf944bb2b99ea
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -DGATE_STEM=wave_formant_sweep
         -DREFERENCE=WAVE

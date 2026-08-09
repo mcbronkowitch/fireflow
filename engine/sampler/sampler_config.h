@@ -313,7 +313,7 @@ constexpr float  kFiltFadeRange = 0.25f;
 // grain length to brightness and left the cloud behind a ~916 Hz lowpass at
 // the boot base. Ear-tunable: 0.75 -> ~3.6 kHz.
 constexpr float  kFiltNeutral = 0.75f;
-constexpr float  kDetuneCeilCt  = 35.f;      // DTUN spread ceiling, matches the synth
+constexpr float  kDetuneCeilCt  = 35.f;      // DTUN spread ceiling, deliberately NOT the synth's ceiling any more (spec 2026-08-09 §4)
 constexpr float  kSubMaxShare   = 1.f;       // SUB 1 = every grain an octave down
 
 // Overlap-normalization (1/sqrt(active)) smoothing time constant. Ear-tunable,

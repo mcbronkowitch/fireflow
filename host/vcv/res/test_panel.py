@@ -34,14 +34,20 @@ def ctl(enum):
 
 
 # --- the frozen contract: enum ORDER defines param ids in every saved patch ---
+# DETUNE_A/B moved from the trailing hidden pair into the templated per-part
+# block (spec 2026-08-09 hw-control-reduction task 10: DETUNE returns to the
+# panel, filling the STEP pad's freed PAD_X[2] slot) -- patch compatibility is
+# a non-goal for this plan, so every id from DETUNE_A onward shifted, and
+# PART_STRIDE grew from 19 to 20 (the templated block gained one control; the
+# total param COUNT is unchanged, only its position within PARAMS moved).
 PARAM_ORDER = [
     'RATE_A', 'SHAPE_A', 'DENSITY_A', 'SMOOTH_A', 'RANGE_A', 'MELODY_A',
     'MOD_A', 'TUNE_A', 'ATTACK_A', 'DECAY_A', 'RES_A', 'SUB_A', 'SOURCE_A',
-    'FLUX_A', 'GRIT_A', 'COMP_A', 'STEPS_A', 'ENGINE_A',
+    'FLUX_A', 'GRIT_A', 'COMP_A', 'STEPS_A', 'ENGINE_A', 'DETUNE_A',
     'SONG_A',
     'RATE_B', 'SHAPE_B', 'DENSITY_B', 'SMOOTH_B', 'RANGE_B', 'MELODY_B',
     'MOD_B', 'TUNE_B', 'ATTACK_B', 'DECAY_B', 'RES_B', 'SUB_B', 'SOURCE_B',
-    'FLUX_B', 'GRIT_B', 'COMP_B', 'STEPS_B', 'ENGINE_B',
+    'FLUX_B', 'GRIT_B', 'COMP_B', 'STEPS_B', 'ENGINE_B', 'DETUNE_B',
     'SONG_B',
     'MORPH', 'TEMPO', 'COUPLE', 'SCALE', 'DRIFT', 'SPOT',
     'MASTER_DRIVE', 'REV_SIZE', 'REV_DECAY', 'REV_TONE',
@@ -49,21 +55,21 @@ PARAM_ORDER = [
     'FLUXRATE_A', 'FLUXRATE_B', 'FLUXFB_A', 'FLUXFB_B', 'COLOR_A', 'COLOR_B',
     'LINK_A', 'LINK_B', 'STAGES_A', 'STAGES_B',
     'REC_A', 'REC_B', 'REV_MIX_A', 'REV_MIX_B',
-    'SHUFFLE', 'DETUNE_A', 'DETUNE_B', 'DRIVE_A', 'DRIVE_B',
+    'SHUFFLE', 'DRIVE_A', 'DRIVE_B',
 ]
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'Level / Comp', 'STPS',
-    'ENG', 'SONG',
+    'ENG', 'Detune', 'SONG',
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'Level / Comp', 'STPS',
-    'ENG', 'SONG',
+    'ENG', 'Detune', 'SONG',
     'MORPH', 'TEMPO', 'FREE|GRID', 'SCALE', 'DRIFT', 'SPOT', 'Master drive',
     'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
     'FILT', 'FILT', 'TIDE', 'FLUX time', 'FLUX time', 'FFB', 'FFB',
     'COLOR', 'COLOR', 'LINK', 'LINK', 'BBD Bend', 'BBD Bend', 'REC', 'REC',
     'Room send', 'Room send',
-    'SHUFL', 'Detune A', 'Detune B', 'Drive A', 'Drive B',
+    'SHUFL', 'Drive A', 'Drive B',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
@@ -79,28 +85,36 @@ def test_enum_order():
     check([c.enum for c in g.INPUTS] == INPUT_ORDER, "INPUTS order changed")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
-    check(g.PART_STRIDE == 19, f"PART_STRIDE is {g.PART_STRIDE}, must be 19")
+    # 19 -> 20 (task 10, spec 2026-08-09 hw-control-reduction): DETUNE_A/B
+    # moved from the trailing hidden pair into the templated per-part block,
+    # one extra control per deck. The total param COUNT is unchanged (they
+    # were already counted, in HIDDEN_PARAMS) -- only their stride position.
+    check(g.PART_STRIDE == 20, f"PART_STRIDE is {g.PART_STRIDE}, must be 20")
 
 
 def test_source_and_hidden_detune_partition():
-    """SOURCE owns the former DTUN widgets; detune remains parameter-only.
-    DRIVE joined the hidden set the same way (spec 2026-07-28
-    flux-rhythm-drag): DRAG took its panel slot, and DRIVE became menu-only
-    patch state with the identical widgetless shape DETUNE_A/B already have."""
+    """SOURCE owns the former DTUN widgets; DETUNE is a real panel knob again
+    (spec 2026-08-09 hw-control-reduction task 10 -- out of HIDDEN_PARAMS and
+    into the templated per-part block, "bei drones ist das sehr stark").
+    DRIVE is still menu-only patch state (spec 2026-07-28 flux-rhythm-drag):
+    DRAG took its panel slot, and DRIVE became widgetless, the shape
+    DETUNE_A/B used to share with it."""
     visible = [c.enum for c in g.PANEL_PARAMS]
     hidden = [c.enum for c in g.HIDDEN_PARAMS]
     check("SOURCE_A" in visible and "SOURCE_B" in visible,
           "SOURCE controls must stay visible")
-    check(hidden == ["DETUNE_A", "DETUNE_B", "DRIVE_A", "DRIVE_B"],
-          f"hidden params are {hidden!r}")
+    check("DETUNE_A" in visible and "DETUNE_B" in visible,
+          "DETUNE must be a visible panel control")
+    check(hidden == ["DRIVE_A", "DRIVE_B"], f"hidden params are {hidden!r}")
     check(not any(e in visible for e in hidden),
-          "widgetless detune/drive leaked into panel controls")
+          "widgetless drive leaked into panel controls")
     appended = [c.enum for c in g.APPENDED_PANEL_PARAMS]
     check([c.enum for c in g.PARAMS] == visible + hidden + appended,
           "complete ParamId order must preserve declared partitions")
     h = g.header()
-    check("{DETUNE_A," not in h and "{DETUNE_B," not in h,
-          "widgetless detune leaked into kParamCtls")
+    check(h.count("{DETUNE_A, WK_SMKNOB,") == 1
+          and h.count("{DETUNE_B, WK_SMKNOB,") == 1,
+          "DETUNE must be a real widget in kParamCtls")
     check("{DRIVE_A," not in h and "{DRIVE_B," not in h,
           "widgetless drive leaked into kParamCtls")
 
@@ -148,7 +162,7 @@ def test_bbd_pitch_flux_time_collections():
                       + g.APPENDED_PANEL_PARAMS,
           "persistent ParamId order no longer matches the declared partitions")
     check(not any(c.enum in runtime for c in g.HIDDEN_PARAMS),
-          "menu-only DETUNE/DRIVE leaked into runtime widgets")
+          "menu-only DRIVE leaked into runtime widgets")
     check(persistent == PARAM_ORDER, "legacy ParamId order changed")
 
     header = g.header()
@@ -264,9 +278,9 @@ def test_param_runtime_tip_contract():
     check(PARAM_TIPS[ids["LINK_A"]:ids["STAGES_B"] + 1]
           == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
           "BBD Bend runtime tips drifted")
-    check(PARAM_TIPS[-4:] == [
-        'Detune A', 'Detune B', 'Drive A', 'Drive B',
-    ], "runtime tips drifted at the trailing DETUNE/DRIVE pair")
+    check(PARAM_TIPS[-2:] == [
+        'Drive A', 'Drive B',
+    ], "runtime tips drifted at the trailing DRIVE pair")
     for enum, caption, tip in (
             ("FLUX_A", "MIX", "FLUX"), ("FLUX_B", "MIX", "FLUX"),
             ("FLUXRATE_A", "TIME", "FLUX time"),
@@ -1245,6 +1259,52 @@ def test_grit_dead_zone_and_mix_formula_agree_across_host_and_bench():
               f"{label}, found {bench_n.count(needle)} matching {needle!r}")
 
 
+def test_detune_is_a_panel_control_with_a_square_taper():
+    """DETUNE leaves the context menu. The taper keeps the first ~20 cents
+    usable instead of squeezing them into a fifth of the travel."""
+    import gen_panel as gp
+    names = {c.enum for c in gp.PARAMS}
+    check("DETUNE_A" in names and "DETUNE_B" in names, "DETUNE is missing")
+    det = [c for c in gp.PARAMS if c.enum == "DETUNE_A"][0]
+    check(det.label != "", "DETUNE_A still has the menu-only empty label")
+    check((det.x, det.y) != (0.0, 0.0), "DETUNE_A still sits at the menu origin")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("detKnob * detKnob" in cpp, "the detune taper is not quadratic")
+
+
+def test_detune_taper_agrees_across_host_and_bench():
+    """The quadratic DETUNE taper (v*v feeding set_voice_detune, spec
+    2026-08-09 hw-control-reduction task 10) exists in two places:
+    Fireflow.cpp (what Rack actually runs) and bench/audition/init_patch.cpp
+    (the only copy a doctest can reach -- Fireflow.cpp lives inside a Rack
+    Module, unreachable from the engine test suite). Same house pattern as
+    test_grit_dead_zone_and_mix_formula_agree_across_host_and_bench: scrape
+    both files' source text with a len(matches) == 1 guard so a hand-edit to
+    only one copy fails loudly, without consolidating the duplication away.
+
+    The needle is the compacted multiplication itself, which does not appear
+    in either file's prose comments (checked so this cannot false-match a
+    comment describing the taper rather than implementing it)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
+              encoding="utf-8") as f:
+        host_cpp = f.read()
+    bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
+                               "init_patch.cpp")
+    with open(bench_path, encoding="utf-8") as f:
+        bench_cpp = f.read()
+
+    needle = "detKnob*detKnob"
+    host_n, bench_n = compact_cpp(host_cpp), compact_cpp(bench_cpp)
+    check(host_n.count(needle) == 1,
+          f"Fireflow.cpp: expected exactly one quadratic detune taper, "
+          f"found {host_n.count(needle)} matching {needle!r}")
+    check(bench_n.count(needle) == 1,
+          f"bench/audition/init_patch.cpp: expected exactly one quadratic "
+          f"detune taper, found {bench_n.count(needle)} matching {needle!r}")
+
+
 def cpp_scope(source, anchor):
     """Return the braced C++ declaration beginning at *anchor*.
 
@@ -1493,42 +1553,42 @@ def test_variation_is_gated_off_the_sampler():
 
 
 def source_detune_wiring_issues(cpp):
-    """Return regressions in the stable SOURCE/hidden-Detune host boundary."""
+    """Return regressions in the stable SOURCE/panel-DETUNE host boundary.
+
+    DETUNE moved out of the context menu and onto the panel (spec 2026-08-09
+    hw-control-reduction task 10): it is a normal templated kParamCtls
+    control now, read with the strided pp() accessor like every other
+    per-part knob, squared before it reaches the engine. SOURCE's own
+    routing is untouched by that move -- this function still polices both
+    boundaries in one place because a wrong-lane mutation historically
+    touched either side."""
     issues = []
     config = cpp_scope(cpp, "void configControls()")
     push = cpp_scope(cpp, "void pushParams()")
     menu = cpp_scope(cpp, "void appendContextMenu(Menu* menu) override")
-    slider = cpp_scope(cpp, "struct ParamMenuSlider : ui::Slider")
     detune_quantity = cpp_scope(cpp, "struct DetuneQuantity : ParamQuantity")
-    for label, block in (("configuration", config), ("parameter push", push),
-                         ("context menu", menu)):
+    for label, block in (("configuration", config), ("parameter push", push)):
         if block is None:
             issues.append(f"SOURCE/Detune {label} scope is missing")
     if issues:
         return issues
 
-    cpp_n = compact_cpp(cpp)
-    default_detune = (
-        "staticconstexprfloatkDefaultDetune=6.f/spky::SynthEngine::kDetuneCeilCt;")
-    if cpp_n.count(default_detune) != 1:
-        issues.append("Detune reset default must be exactly 6 ct normalized by kDetuneCeilCt")
     if detune_quantity is None:
         issues.append("DetuneQuantity scope is missing")
     else:
         expected_quantity = (
             "structDetuneQuantity:ParamQuantity{std::stringgetDisplayValueString()override{"
-            "returnstring::f(\"%.1fct\",getValue()*spky::SynthEngine::kDetuneCeilCt);}}")
+            "constfloatv=getValue();returnstring::f(\"%.1fct\","
+            "v*v*spky::SynthEngine::kDetuneCeilCt);}}")
         if compact_cpp(detune_quantity) != expected_quantity:
-            issues.append("DetuneQuantity must display normalized values as one-decimal cents")
+            issues.append("DetuneQuantity must display the squared taper's cents")
 
     config_n = compact_cpp(config)
     for required, label in (
-        (compact_cpp('configParam<DetuneQuantity>(DETUNE_A, 0.f, 1.f, '
-                     'initParamDefault(DETUNE_A), "Detune A");'),
-         "Detune A must be a normalized persistent Rack parameter"),
-        (compact_cpp('configParam<DetuneQuantity>(DETUNE_B, 0.f, 1.f, '
-                     'initParamDefault(DETUNE_B), "Detune B");'),
-         "Detune B must be a normalized persistent Rack parameter"),
+        ("elseif(c.id==DETUNE_A||c.id==DETUNE_B)",
+         "DETUNE_A/B need their own configControls branch"),
+        ("configParam<DetuneQuantity>(c.id,0.f,1.f,init,lbl);",
+         "DETUNE must be configured as a normalized persistent Rack parameter"),
         ("if(c.id==SOURCE_A||c.id==SOURCE_B)",
          "SOURCE controls need their own stable Rack names"),
         (compact_cpp(
@@ -1543,44 +1603,35 @@ def source_detune_wiring_issues(cpp):
 
     push_n = compact_cpp(push)
     source_base = "inst.set_target_base(p,spky::LANE_SOURCE,pp(SOURCE_A,p));"
-    detune = "inst.set_voice_detune(p,params[p?DETUNE_B:DETUNE_A].getValue());"
+    detune_read = "constfloatdetKnob=pp(DETUNE_A,p);"
+    detune_push = "inst.set_voice_detune(p,detKnob*detKnob);"
     if push_n.count(source_base) != 1:
         issues.append("SOURCE must set LANE_SOURCE once for every engine")
-    if push_n.count(detune) != 1:
-        issues.append("hidden Detune A/B must independently feed voice detune")
+    if push_n.count(detune_read) != 1:
+        issues.append("DETUNE must be read once per deck with the strided pp() accessor")
+    if push_n.count(detune_push) != 1:
+        issues.append("DETUNE must feed voice detune through the squared taper")
+    if "set_voice_detune(p,pp(DETUNE_A,p))" in push_n:
+        issues.append("DETUNE must not reach the engine linearly -- the taper is squared")
     if "set_voice_detune(p,pp(SOURCE_A,p))" in push_n:
         issues.append("SOURCE must not feed voice detune")
-    if "set_voice_detune(p,pp(DETUNE_A,p))" in push_n:
-        issues.append("part B detune must not use the strided accessor")
     if "if(samplerPart){inst.set_target_base(p,spky::LANE_SOURCE," in push_n:
         issues.append("SOURCE base must not be gated on samplerPart")
 
-    if slider is None:
-        issues.append("SOURCE/Detune menu slider scope is missing")
-        return issues
-    slider_n = compact_cpp(slider)
-    expected_slider = (
-        "structParamMenuSlider:ui::Slider{explicitParamMenuSlider(ParamQuantity*pq)"
-        "{box.size.x=180.f;quantity=pq;}}")
-    if slider_n != expected_slider:
-        issues.append("Detune menu slider must non-owningly bind the existing ParamQuantity")
-
-    menu_n = compact_cpp(menu)
-    for part, enum in (("A", "DETUNE_A"), ("B", "DETUNE_B")):
-        required = compact_cpp(
-            f'createSubmenuItem("Detune {part}","",[m](Menu*sub){{'
-            f'auto*quantity=m->getParamQuantity({enum});'
-            f'sub->addChild(newParamMenuSlider(quantity));'
-            f'sub->addChild(createMenuItem("Reset to 6.0 ct","",[m](){{'
-            f'm->params[{enum}].setValue(kDefaultDetune);}}));}}));')
-        if required not in menu_n:
-            issues.append(f"Detune {part} menu needs its own slider and exact reset")
+    # DETUNE's context-menu submenu is gone with the menu-only shape it used
+    # to share with DRIVE; a well-meaning revert re-adding it would silently
+    # bring back a second, disagreeing way to set the same parameter.
+    menu_n = compact_cpp(menu) if menu is not None else ""
+    if 'createSubmenuItem("DetuneA"' in menu_n or \
+       'createSubmenuItem("DetuneB"' in menu_n:
+        issues.append("DETUNE must not still have a context-menu submenu "
+                       "now that it is a panel control")
     return issues
 
 
 def test_source_detune_host_wiring():
-    """SOURCE owns LANE_SOURCE on every engine; hidden detune stays per part
-    and persistently controllable in the Rack context menu."""
+    """SOURCE owns LANE_SOURCE on every engine; DETUNE is a strided panel
+    control that reaches the engine through the squared taper."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
@@ -1589,29 +1640,28 @@ def test_source_detune_host_wiring():
 
 
 def test_source_detune_guard_rejects_representative_regressions():
-    """The source guard must catch wrong lane routing and independently
-    missing A/B detune menu state, not merely recognize today's source."""
+    """The source guard must catch wrong lane routing and independently a
+    detune taper that regressed to linear or to the old menu-only shape, not
+    merely recognize today's source."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     mutations = [
         ("pp(SOURCE_A, p)", "pp(DETUNE_A, p)", "SOURCE lane"),
-        ("params[p ? DETUNE_B : DETUNE_A].getValue()",
-         "pp(SOURCE_A, p)", "voice detune"),
-        ("DETUNE_B, 0.f, 1.f, initParamDefault(DETUNE_B), \"Detune B\"",
-         "DETUNE_A, 0.f, 1.f, initParamDefault(DETUNE_A), \"Detune A\"",
-         "Detune B quantity"),
-        ("\"Detune B\"", "\"Detune\"", "Detune B name"),
+        ("const float detKnob = pp(DETUNE_A, p);\n"
+         "            inst.set_voice_detune(p, detKnob * detKnob);",
+         "inst.set_voice_detune(p, pp(DETUNE_A, p));", "linear detune taper"),
+        ("c.id == DETUNE_A || c.id == DETUNE_B",
+         "c.id == DETUNE_A", "Detune B configControls branch"),
         ("Synth TIMB, Sampler ORG, Wave FRAME, or Body MATL",
          "Synth COLOR, Sampler POSITION, Wave START, or Body SHAPE",
          "SOURCE description"),
-        ("\"Reset to 6.0 ct\"", "\"Reset\"", "menu reset"),
-        ("string::f(\"%.1f ct\"", "string::f(\"%.0f ct\"",
-         "Detune cents precision"),
-        ("6.f / spky::SynthEngine::kDetuneCeilCt",
-         "5.f / spky::SynthEngine::kDetuneCeilCt", "Detune reset default"),
+        ("string::f(\"%.1f ct\",\n            v * v * spky::SynthEngine::kDetuneCeilCt);",
+         "string::f(\"%.1f ct\",\n            v * spky::SynthEngine::kDetuneCeilCt);",
+         "Detune display taper"),
     ]
     for before, after, label in mutations:
+        check(before in cpp, f"fixture drifted: {label!r} needle not found")
         mutated = cpp.replace(before, after, 1)
         check(source_detune_wiring_issues(mutated),
               f"SOURCE/Detune guard accepted a {label} regression")
@@ -2287,8 +2337,20 @@ def test_sampler_preset_init_snapshot():
         "REV_MIX_A": 0.422665179,
         "REV_MIX_B": 0.613332987,
         "SHUFFLE": 0.0,
-        "DETUNE_A": 0.171428576,
-        "DETUNE_B": 0.171428576,
+        # DETUNE_A/B used to share one raw value, 0.171428576 ("= 6 / 35"): a
+        # linear knob into the old 35 ct ceiling landed both decks at 6 ct.
+        # Task 10 (spec 2026-08-09 hw-control-reduction) squared the taper
+        # and tripled the synth-family ceiling to 105 ct; BODY's compensating
+        # kDetuneScale shrank from 4 to 4/3 to hold its own 140 ct rail
+        # exactly where it was, but that compensation only agrees with the
+        # OLD shared value at full knob travel, not at this init position.
+        # The approved patch boots ENGINE_A = SYNTH, ENGINE_B = BODY, so each
+        # deck's init value is solved to preserve the cents ITS OWN engine
+        # actually produces: DETUNE_A = sqrt(6 / 105) (6.000 ct on SYNTH),
+        # DETUNE_B = sqrt(24 / 140) (24.000 ct on BODY -- 24 ct is what the
+        # old shared value produced there: 0.171428576 * 35 * 4).
+        "DETUNE_A": 0.239045722,
+        "DETUNE_B": 0.414039341,
         "DRIVE_A": 0.200000003,
         "DRIVE_B": 0.200000003,
         # FLUXTIME_A/B (MULT) retired here (task 6, spec 2026-08-09

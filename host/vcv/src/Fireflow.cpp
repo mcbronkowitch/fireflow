@@ -108,12 +108,17 @@ struct LinkQuantity : ParamQuantity {
     }
 };
 
-static constexpr float kDefaultDetune = 6.f / spky::SynthEngine::kDetuneCeilCt;
-
+// DETUNE is a panel SMKNOB now (spec 2026-08-09 hw-control-reduction task
+// 10, out of the context menu). pushParams squares the knob before it
+// reaches the engine (the first ~20 ct is where the fine beating lives, and
+// a linear map would squeeze it into a fifth of the travel now that the
+// ceiling is 105 ct) -- this display mirrors that same taper so the tooltip
+// reads the cents the engine actually applies, not the raw knob position.
 struct DetuneQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
+        const float v = getValue();
         return string::f("%.1f ct",
-            getValue() * spky::SynthEngine::kDetuneCeilCt);
+            v * v * spky::SynthEngine::kDetuneCeilCt);
     }
 };
 
@@ -350,6 +355,12 @@ struct Fireflow : Module {
                         source->description =
                             "Controls Synth TIMB, Sampler ORG, Wave FRAME, or Body MATL according to the selected engine.";
                     }
+                    else if (c.id == DETUNE_A || c.id == DETUNE_B)
+                        // DETUNE is a real panel control now (kParamCtls),
+                        // same as every other control in this loop -- only
+                        // the display quantity is still bespoke, for the
+                        // squared-cents tooltip (see DetuneQuantity above).
+                        configParam<DetuneQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else
                         configParam(c.id, 0.f, 1.f, init, lbl);
                     break;
@@ -424,13 +435,12 @@ struct Fireflow : Module {
                 default: break;
             }
         }
-        configParam<DetuneQuantity>(
-            DETUNE_A, 0.f, 1.f, initParamDefault(DETUNE_A), "Detune A");
-        configParam<DetuneQuantity>(
-            DETUNE_B, 0.f, 1.f, initParamDefault(DETUNE_B), "Detune B");
         // DRIVE moved to HIDDEN_PARAMS (spec 2026-07-28 flux-rhythm-drag) and so
-        // is no longer in kParamCtls; configured explicitly here, same as Detune
-        // above, so the menu-only quantity exists for the submenu slider.
+        // is no longer in kParamCtls; configured explicitly here so the
+        // menu-only quantity exists for the submenu slider. DETUNE (spec
+        // 2026-08-09 hw-control-reduction task 10) rejoined kParamCtls and no
+        // longer needs an explicit call of its own -- see the DETUNE_A/B
+        // branch inside the loop above.
         configParam<DriveQuantity>(
             DRIVE_A, 0.f, 1.f, initParamDefault(DRIVE_A), "Drive A");
         configParam<DriveQuantity>(
@@ -546,8 +556,11 @@ struct Fireflow : Module {
             inst.set_voice_filt(p, params[p ? FILT_B : FILT_A].getValue());
             inst.set_color(p, params[p ? COLOR_B : COLOR_A].getValue());
             inst.set_voice_sub(p, pp(SUB_A, p));
-            inst.set_voice_detune(
-                p, params[p ? DETUNE_B : DETUNE_A].getValue());
+            // Quadratic taper: the first ~20 ct is where the fine beating
+            // lives, and a linear map would squeeze it into a fifth of the
+            // travel now that the ceiling is 105 ct.
+            const float detKnob = pp(DETUNE_A, p);
+            inst.set_voice_detune(p, detKnob * detKnob);
 
             inst.set_flux_mix(p, pp(FLUX_A, p));
             inst.set_flux_rate(p, (int)std::lround(
@@ -1596,23 +1609,11 @@ static void appendFireflowMenu(Menu* menu, Fireflow* m) {
                                   [m]() { m->resyncReq = true; }));
 
     menu->addChild(new MenuSeparator);
-    menu->addChild(createSubmenuItem("Detune A", "", [m](Menu* sub) {
-        auto* quantity = m->getParamQuantity(DETUNE_A);
-        sub->addChild(new ParamMenuSlider(quantity));
-        sub->addChild(createMenuItem("Reset to 6.0 ct", "", [m]() {
-            m->params[DETUNE_A].setValue(kDefaultDetune);
-        }));
-    }));
-    menu->addChild(createSubmenuItem("Detune B", "", [m](Menu* sub) {
-        auto* quantity = m->getParamQuantity(DETUNE_B);
-        sub->addChild(new ParamMenuSlider(quantity));
-        sub->addChild(createMenuItem("Reset to 6.0 ct", "", [m]() {
-            m->params[DETUNE_B].setValue(kDefaultDetune);
-        }));
-    }));
-
     // DRIVE lost its panel slot to DRAG (spec 2026-07-28 flux-rhythm-drag)
-    // and lives here now, same menu-only shape as Detune A/B above.
+    // and lives here now, menu-only patch state. DETUNE used to have the
+    // same shape, but task 10 (spec 2026-08-09 hw-control-reduction) moved
+    // it back onto the panel as a real performance control -- its slider
+    // lives there now (kParamCtls/DetuneQuantity), not in this menu.
     for (int p = 0; p < spky::PART_COUNT; ++p) {
         const std::string name = p ? "Drive B" : "Drive A";
         const int id = p ? DRIVE_B : DRIVE_A;

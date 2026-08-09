@@ -37,7 +37,13 @@ public:
     static constexpr float kAttackFloorS = 0.002f;
     static constexpr float kDecayMinS    = 0.05f;
     static constexpr float kDecayMaxS    = 20.f;
-    static constexpr float kDetuneCeilCt = 35.f;
+    // Raised from 35 ct (spec 2026-08-09 §4): DETUNE came back onto the panel
+    // as a performance control and drones want the reach. SynthEngine and
+    // WaveEngine are the intended beneficiaries; BodyEngine is the same
+    // template and pays it back at BodyVoice::kDetuneScale, so its own
+    // 140 ct rail is unchanged. BbdEngine and the sampler have their own
+    // paths and keep 35 ct.
+    static constexpr float kDetuneCeilCt = 105.f;
     static constexpr int   kMaxChord     = 4;
     static constexpr float kStabSpreadS  = 0.008f;   // stab humanization (ear-tunable)
 

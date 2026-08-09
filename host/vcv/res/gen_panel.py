@@ -314,6 +314,14 @@ def part_controls(mir=False):
     pads = [("ENGINE", LATCH, "ENG", None)]
     for i, (enum, kind, lbl, tip) in enumerate(pads):
         out.append(Ctl(enum, kind, fx(PAD_X[i]), PLAY_Y, lbl, tip))
+    # DETUNE returns to the panel from the context menu (spec 2026-08-09
+    # hw-control-reduction task 10): a real performance control now, not
+    # patch-only state -- "bei drones ist das sehr stark". It fills PAD_X[2],
+    # the STEP pad's slot freed in task 2, the only position this plan permits
+    # filling with something new. A plain SMKNOB, like every other secondary
+    # knob; the quadratic taper (kept the first ~20 ct usable) lives in
+    # pushParams, not here -- see Fireflow.cpp/bench/audition/init_patch.cpp.
+    out.append(Ctl("DETUNE", SMKNOB, fx(PAD_X[2]), PLAY_Y, "DTUN", "Detune"))
     # FORM and NEWPHRASE are gone (spec 2026-08-09 hw-control-reduction task 3):
     # SONG alone now walks a curated 14-rung (Principle, SongMode) ladder and
     # re-rolls the phrase on every rung change. PAD_X[3] and PAD_X[5], its old
@@ -518,12 +526,12 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
 ]
 
 HIDDEN_PARAMS = [
-    Ctl("DETUNE_A", SMKNOB, 0.0, 0.0, "", "Detune A"),
-    Ctl("DETUNE_B", SMKNOB, 0.0, 0.0, "", "Detune B"),
     # DRIVE loses its panel slot to DRAG (spec 2026-07-28 flux-rhythm-drag) and
-    # becomes patch state, same menu-only shape as DETUNE_A/B above: position
-    # 0,0 and an empty label mean no panel widget is emitted. Appended LAST so
-    # every id before it stays put and PART_STRIDE remains 23.
+    # becomes patch state, same menu-only widgetless shape DETUNE_A/B used to
+    # have before task 10 (spec 2026-08-09 hw-control-reduction) moved DETUNE
+    # onto the panel and out of this list: position 0,0 and an empty label
+    # mean no panel widget is emitted. Appended LAST so every id before it
+    # stays put and PART_STRIDE remains 23.
     Ctl("DRIVE_A", SMKNOB, 0.0, 0.0, "", "Drive A"),
     Ctl("DRIVE_B", SMKNOB, 0.0, 0.0, "", "Drive B"),
 ]
@@ -664,8 +672,23 @@ INIT_DEFAULTS = {
     "REV_MIX_A": 0.422665179,
     "REV_MIX_B": 0.613332987,
     "SHUFFLE": 0.000000000,
-    "DETUNE_A": 0.171428576,
-    "DETUNE_B": 0.171428576,
+    # DETUNE_A/B used to share one raw value, 0.171428576 ("= 6 / 35"): a
+    # linear knob feeding the old 35 ct ceiling landed both decks at 6 ct.
+    # Task 10 (spec 2026-08-09 hw-control-reduction) squared the taper and
+    # tripled the synth-family ceiling to 105 ct, and BODY's compensating
+    # kDetuneScale shrank from 4 to 4/3 to hold its own 140 ct rail exactly
+    # where it was -- but that compensation only agrees with the OLD single
+    # raw value at full knob travel (v == 1), not at this init position. The
+    # approved patch boots ENGINE_A = SYNTH, ENGINE_B = BODY (pinned in
+    # tests/test_seed_audition_init.cpp), so each deck's init value is solved
+    # to preserve the cents ITS OWN engine actually produces:
+    #   DETUNE_A (SYNTH): v = sqrt(6 / 105)  -> 0.239045722^2 * 105 = 6.000 ct
+    #   DETUNE_B (BODY):  v = sqrt(24 / 140) -> 0.414039341^2 * 140 = 24.000 ct
+    # (24 ct is what the old shared raw value produced on BODY: 0.171428576 *
+    # 35 * 4 = 24.) Swapping deck B to SYNTH would now read 18 ct where it
+    # used to read 6 -- a consequence of the taper change, not of this split.
+    "DETUNE_A": 0.239045722,
+    "DETUNE_B": 0.414039341,
     "DRIVE_A": 0.200000003,
     "DRIVE_B": 0.200000003,
 }

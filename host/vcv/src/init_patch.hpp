@@ -22,6 +22,7 @@ static constexpr float kInitParamDefaults[] = {
     0.8f, // COMP_A
     0.0f, // STEPS_A
     0.0f, // ENGINE_A
+    0.239045722f, // DETUNE_A
     6.0f, // SONG_A
     0.202409565f, // RATE_B
     0.899999678f, // SHAPE_B
@@ -41,6 +42,7 @@ static constexpr float kInitParamDefaults[] = {
     0.8f, // COMP_B
     0.0f, // STEPS_B
     3.0f, // ENGINE_B
+    0.414039341f, // DETUNE_B
     6.0f, // SONG_B
     0.785541892f, // MORPH
     0.169333577f, // TEMPO
@@ -74,8 +76,6 @@ static constexpr float kInitParamDefaults[] = {
     0.422665179f, // REV_MIX_A
     0.613332987f, // REV_MIX_B
     0.0f, // SHUFFLE
-    0.171428576f, // DETUNE_A
-    0.171428576f, // DETUNE_B
     0.200000003f, // DRIVE_A
     0.200000003f, // DRIVE_B
 };
