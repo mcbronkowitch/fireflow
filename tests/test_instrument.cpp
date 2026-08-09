@@ -916,6 +916,23 @@ TEST_CASE("cross-deck excitation is symmetric and off by default") {
         inst->set_engine(PART_A, ENGINE_SYNTH);
         inst->set_engine(PART_B, ENGINE_BODY);
         inst->set_voice_sub(PART_B, 1.f);
+        // Explicit, not incidental: this test is about cross-deck coupling,
+        // not about detune, but BODY's own resonant character (how far
+        // body_voice.cpp's kDetuneScale bends its mode bank) still shapes
+        // how visibly a coupling energy shows up over background
+        // self-oscillation -- so its detune must be a known, fixed point,
+        // not whatever SynthEngineT::_detune_spread_ct's un-pushed boot
+        // default (18 ct, a SYNTH-oriented number that was never chosen to
+        // serve BODY -- see synth_engine.h) happens to produce on BODY today.
+        // 72 ct is exactly what that 18 ct default DID produce on BODY
+        // before the ceiling grew (kDetuneCeilCt 35 -> 105, kDetuneScale
+        // 4 -> 4/3, spec 2026-08-09 hw-control-reduction task 10:
+        // 18 * 4 = 72 old, 18 * 4/3 = 24 new) -- i.e. the BODY character
+        // this test's margins were always, if incidentally, measured
+        // against. Pinning it here (identically on both instruments, so it
+        // stays a controlled variable) makes the dependency honest instead
+        // of quietly re-deriving new thresholds around a moved default.
+        inst->set_voice_detune(PART_B, 72.f / 140.f);
     }
     coupled.set_excitation_sources(PART_B, false, true, false);
 

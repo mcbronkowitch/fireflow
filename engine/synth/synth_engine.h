@@ -88,7 +88,7 @@ public:
     void set_decay(float n);       // ratio = 0.1 * 80^n     (0.1x..8x cycle)
     void set_resonance(float n);
     void set_sub(float n);
-    void set_detune(float n);      // independent symmetric spread = n * 35 ct
+    void set_detune(float n);      // independent symmetric spread = n * 105 ct
     void set_filt(float n);        // -1..+1 cutoff trim; left end fades to silence
 
     int   active_voices() const;
@@ -163,6 +163,19 @@ private:
     float _decay_ratio  = 1.5f;    // boot: 1.5 x cycle (spec)
     float _resonance = 0.15f;      // boot (spec)
     float _sub_level = 0.3f;       // boot (spec)
+    // Boot default (spec). An ABSOLUTE cents value, not derived from
+    // kDetuneCeilCt -- unlike set_detune(n), which always computes
+    // n * kDetuneCeilCt, so raising the ceiling (spec 2026-08-09 task 10,
+    // 35 -> 105 ct) does not move this number. It is a SYNTH-oriented
+    // constant (18 ct is a tasteful pre-push default for that family); BODY
+    // reads it too before anything ever calls set_voice_detune (only
+    // BodyVoice's own kDetuneScale sits between this and BODY's spread), so
+    // BODY's own untouched-knob default moved when kDetuneScale did
+    // (18 * 4 = 72 ct before, 18 * 4/3 = 24 ct after) -- deliberate, not a
+    // bug: this default was never chosen to serve BODY, and nothing
+    // preserves it for both engines when only one ceiling exists to derive
+    // from at all (same shared-constant/two-engine conflict as the panel's
+    // own DETUNE_A/B init split).
     float _detune_spread_ct = 18.f;
     float _filt_amt  = 0.f;        // FILT knob -1..+1 (boot: neutral)
     float _filt_gain = 1.f;        // silence fade below the 60 Hz rail (control-rate)
