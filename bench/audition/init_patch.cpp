@@ -18,6 +18,12 @@ void apply_engine_stages(spky::Instrument& inst, int deck,
         inst.set_target_base(deck, spky::LANE_PITCH, value);
 }
 
+// GRIT is one bipolar knob (spec 2026-08-09 hw-control-reduction task 4):
+// sign picks the mode, magnitude is the mix. The dead zone exists because a
+// 9 mm pot on an ADC cannot hit an exact zero -- without it "off" would be
+// unreachable on hardware. Mirrors Fireflow.cpp's kGritDead/pushParams.
+constexpr float kGritDead = 0.03f;
+
 }  // namespace
 
 namespace audition {
@@ -69,14 +75,17 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
             deck,
             spky::FXT_FLUX_FB,
             value(deck ? FLUXFB_B : FLUXFB_A));
-        inst.set_grit_mix(deck, part(GRIT_A, deck));
         apply_engine_stages(
             inst, deck, engine, value(deck ? STAGES_B : STAGES_A));
         inst.set_link(deck, value(deck ? LINK_B : LINK_A));
         inst.set_fx_on(
             deck, spky::FxBlock::Flux, part(FLUX_A, deck) > 1e-4f);
+        // Bipolar: engaged whenever the magnitude clears the dead zone in
+        // either direction -- the raw value alone would silently mute the
+        // whole CRSH (negative) side.
         inst.set_fx_on(
-            deck, spky::FxBlock::Grit, part(GRIT_A, deck) > 1e-4f);
+            deck, spky::FxBlock::Grit,
+            std::fabs(part(GRIT_A, deck)) > kGritDead);
         inst.set_comp(deck, part(COMP_A, deck));
 
         inst.sampler_speed_mode(deck, true);
@@ -93,10 +102,20 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
             sampler ? part(SUB_A, deck) : 0.5f);
         inst.set_target_active(deck, spky::LANE_PITCH, !sampler);
 
-        inst.set_grit_mode(
-            deck,
-            part(GRITMODE_A, deck) > 0.5f ? spky::GritMode::Reduce
-                                          : spky::GritMode::Drive);
+        // GRIT is one bipolar knob: sign is the mode, magnitude the mix.
+        {
+            const float gritKnob = part(GRIT_A, deck);
+            inst.set_grit_mode(
+                deck,
+                gritKnob < 0.f ? spky::GritMode::Reduce
+                               : spky::GritMode::Drive);
+            const float gritMag = std::fabs(gritKnob);
+            inst.set_grit_mix(
+                deck,
+                gritMag <= kGritDead
+                    ? 0.f
+                    : (gritMag - kGritDead) / (1.f - kGritDead));
+        }
         {
             const int steps = static_cast<int>(std::lround(part(STEPS_A, deck)));
             inst.set_step(deck, steps > 0, steps);

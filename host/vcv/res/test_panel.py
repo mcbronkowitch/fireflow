@@ -37,11 +37,11 @@ def ctl(enum):
 PARAM_ORDER = [
     'RATE_A', 'SHAPE_A', 'DENSITY_A', 'SMOOTH_A', 'RANGE_A', 'MELODY_A',
     'MOD_A', 'TUNE_A', 'ATTACK_A', 'DECAY_A', 'RES_A', 'SUB_A', 'SOURCE_A',
-    'FLUX_A', 'GRIT_A', 'COMP_A', 'STEPS_A', 'ENGINE_A', 'GRITMODE_A',
+    'FLUX_A', 'GRIT_A', 'COMP_A', 'STEPS_A', 'ENGINE_A',
     'SONG_A',
     'RATE_B', 'SHAPE_B', 'DENSITY_B', 'SMOOTH_B', 'RANGE_B', 'MELODY_B',
     'MOD_B', 'TUNE_B', 'ATTACK_B', 'DECAY_B', 'RES_B', 'SUB_B', 'SOURCE_B',
-    'FLUX_B', 'GRIT_B', 'COMP_B', 'STEPS_B', 'ENGINE_B', 'GRITMODE_B',
+    'FLUX_B', 'GRIT_B', 'COMP_B', 'STEPS_B', 'ENGINE_B',
     'SONG_B',
     'MORPH', 'SYNC', 'TEMPO', 'COUPLE', 'SCALE', 'DRIFT', 'SPOT',
     'MASTER_DRIVE', 'SETTLE', 'REV_SIZE', 'REV_DECAY', 'REV_TONE',
@@ -55,10 +55,10 @@ PARAM_ORDER = [
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'Grit mode', 'SONG',
+    'ENG', 'SONG',
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'Grit mode', 'SONG',
+    'ENG', 'SONG',
     'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'Master drive',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
     'FILT', 'FILT', 'TIDE', 'FLUX division', 'FLUX division', 'FFB', 'FFB',
@@ -81,7 +81,7 @@ def test_enum_order():
     check([c.enum for c in g.INPUTS] == INPUT_ORDER, "INPUTS order changed")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
-    check(g.PART_STRIDE == 20, f"PART_STRIDE is {g.PART_STRIDE}, must be 20")
+    check(g.PART_STRIDE == 19, f"PART_STRIDE is {g.PART_STRIDE}, must be 19")
 
 
 def test_source_and_hidden_detune_partition():
@@ -618,7 +618,7 @@ LOWER_A = {   # enum -> (x, y)   part A; part B is W - x
     'FLUXFB_A': (65.25, 77.30), 'REV_MIX_A': (75.75, 77.30),
     'LINK_A': (44.25, 89.40), 'FLUXTIME_A': (54.75, 89.40),
     'GRIT_A': (65.25, 89.40), 'COMP_A': (75.75, 89.40),
-    'ENGINE_A': (10.00, 103.60), 'GRITMODE_A': (17.50, 103.60),
+    'ENGINE_A': (10.00, 103.60),
     'STEPS_A': (37.00, 103.60),
     'SONG_A': (67.00, 103.60),
 }
@@ -1050,7 +1050,7 @@ def test_dynamic_caption_table_is_well_formed():
     if table is None:
         return
     enums = {c.enum for c in g.RUNTIME_PANEL_PARAMS}
-    driver_states = {"ENGINE": 5, "GRITMODE": 2}
+    driver_states = {"ENGINE": 5}
     for target, driver, words in table:
         for suffix in ("_A", "_B"):
             check(target + suffix in enums,
@@ -1104,8 +1104,6 @@ def test_header_carries_the_dynamic_caption_table():
           "SUB_A is not bound to its own deck's ENG")
     check(h.count("{SUB_B, ENGINE_B, 5, {") == 1,
           "SUB_B is not bound to its own deck's ENG")
-    check(h.count("{GRITMODE_A, GRITMODE_A, 2, {") == 1,
-          "the mode pad must drive its own caption")
     body = h.split("static const DynCaption kDynCaptions[] = {")[1].split("};")[0]
     check(body.count("},") == rows,
           f"kDynCaptions has {body.count('},')} rows, want {rows}")
@@ -1129,6 +1127,25 @@ def test_config_wires_tip_not_label():
           "configInput is not wired to c.tip -- jack tooltips will show panel labels")
     check("configOutput(c.id, c.tip)" in cpp,
           "configOutput is not wired to c.tip -- jack tooltips will show panel labels")
+
+
+def test_grit_is_one_bipolar_knob():
+    """The SAT pad is gone: sign picks the mode, magnitude is the mix, and
+    a dead zone around zero makes 'off' reachable on a real pot."""
+    import gen_panel as gp
+    names = {c.enum for c in gp.PARAMS}
+    check("GRITMODE_A" not in names and "GRITMODE_B" not in names,
+          "GRITMODE pads still exist")
+    grit = [c for c in gp.PARAMS if c.enum == "GRIT_A"][0]
+    check(grit.kind == gp.KNOBC, "GRIT_A is not a bipolar knob")
+    check(all(row[0] != "GRITMODE" for row in gp.DYNAMIC_CAPTIONS),
+          "GRITMODE still has a dynamic caption")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("spky::GritMode::Reduce" in cpp and "spky::GritMode::Drive" in cpp,
+          "the host no longer names both grit modes")
+    check("kGritDead" in cpp, "no dead zone around grit zero")
+    check("GRITMODE_A" not in cpp, "Fireflow.cpp still references GRITMODE_A")
 
 
 def cpp_scope(source, anchor):

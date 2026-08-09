@@ -7,7 +7,7 @@ struct PanelCtl { int id; WidgetKind kind; XY mm; const char* label; XY lbl; uns
 // anchor: 0 = middle, 1 = start (left-aligned), 2 = end (right-aligned)
 struct PanelTxt { XY mm; float size; float spacing; unsigned rgb; unsigned char anchor; const char* str; };
 struct DynCaption { int id; int driverId; int count; const char* words[5]; };
-static constexpr int PART_STRIDE = 20;
+static constexpr int PART_STRIDE = 19;
 static constexpr float kRingR = 16.000f;      // mm, LED-dot orbit
 static constexpr float kRingDotR = 0.95f;   // mm, lit-dot radius
 static constexpr int kRingDots = 32;
@@ -32,7 +32,6 @@ enum ParamId {
     COMP_A,
     STEPS_A,
     ENGINE_A,
-    GRITMODE_A,
     SONG_A,
     RATE_B,
     SHAPE_B,
@@ -52,7 +51,6 @@ enum ParamId {
     COMP_B,
     STEPS_B,
     ENGINE_B,
-    GRITMODE_B,
     SONG_B,
     MORPH,
     SYNC,
@@ -134,11 +132,10 @@ static const PanelCtl kParamCtls[] = {
     {SUB_A, WK_SMKNOB, {30.250f, 77.300f}, "SUB", {30.250f, 82.900f}, 0, 1.90f, 0x171713, "SUB"},
     {SOURCE_A, WK_SMKNOB, {30.250f, 89.400f}, "TIMB", {30.250f, 95.000f}, 0, 1.90f, 0x171713, "SOURCE"},
     {FLUX_A, WK_SMKNOB, {54.750f, 77.300f}, "MIX", {54.750f, 82.900f}, 0, 1.90f, 0x171713, "FLUX"},
-    {GRIT_A, WK_SMKNOB, {65.250f, 89.400f}, "GRIT", {65.250f, 95.000f}, 0, 1.90f, 0x171713, "GRIT"},
+    {GRIT_A, WK_KNOBC, {65.250f, 89.400f}, "GRIT", {65.250f, 96.600f}, 0, 1.90f, 0x171713, "GRIT"},
     {COMP_A, WK_SMKNOB, {75.750f, 89.400f}, "COMP", {75.750f, 95.000f}, 0, 1.90f, 0x171713, "COMP"},
     {STEPS_A, WK_KNOBI, {37.000f, 103.600f}, "STPS", {37.000f, 109.200f}, 0, 1.90f, 0x171713, "STPS"},
     {ENGINE_A, WK_LATCH, {10.000f, 103.600f}, "ENG", {10.000f, 109.000f}, 0, 1.90f, 0x171713, "ENG"},
-    {GRITMODE_A, WK_LATCH, {17.500f, 103.600f}, "SAT", {17.500f, 109.000f}, 0, 1.90f, 0x171713, "Grit mode"},
     {SONG_A, WK_KNOBI, {67.000f, 103.600f}, "SONG", {67.000f, 109.200f}, 0, 1.90f, 0x171713, "SONG"},
     {RATE_B, WK_BIGKNOB, {173.860f, 9.000f}, "RATE", {173.860f, 3.000f}, 0, 1.90f, 0x171713, "RATE"},
     {SHAPE_B, WK_BIGKNOB, {151.776f, 47.250f}, "SHAPE", {146.753f, 52.350f}, 2, 1.90f, 0x171713, "SHAPE"},
@@ -154,11 +151,10 @@ static const PanelCtl kParamCtls[] = {
     {SUB_B, WK_SMKNOB, {183.110f, 77.300f}, "SUB", {183.110f, 82.900f}, 0, 1.90f, 0x171713, "SUB"},
     {SOURCE_B, WK_SMKNOB, {183.110f, 89.400f}, "TIMB", {183.110f, 95.000f}, 0, 1.90f, 0x171713, "SOURCE"},
     {FLUX_B, WK_SMKNOB, {158.610f, 77.300f}, "MIX", {158.610f, 82.900f}, 0, 1.90f, 0x171713, "FLUX"},
-    {GRIT_B, WK_SMKNOB, {148.110f, 89.400f}, "GRIT", {148.110f, 95.000f}, 0, 1.90f, 0x171713, "GRIT"},
+    {GRIT_B, WK_KNOBC, {148.110f, 89.400f}, "GRIT", {148.110f, 96.600f}, 0, 1.90f, 0x171713, "GRIT"},
     {COMP_B, WK_SMKNOB, {137.610f, 89.400f}, "COMP", {137.610f, 95.000f}, 0, 1.90f, 0x171713, "COMP"},
     {STEPS_B, WK_KNOBI, {176.360f, 103.600f}, "STPS", {176.360f, 109.200f}, 0, 1.90f, 0x171713, "STPS"},
     {ENGINE_B, WK_LATCH, {203.360f, 103.600f}, "ENG", {203.360f, 109.000f}, 0, 1.90f, 0x171713, "ENG"},
-    {GRITMODE_B, WK_LATCH, {195.860f, 103.600f}, "SAT", {195.860f, 109.000f}, 0, 1.90f, 0x171713, "Grit mode"},
     {SONG_B, WK_KNOBI, {146.360f, 103.600f}, "SONG", {146.360f, 109.200f}, 0, 1.90f, 0x171713, "SONG"},
     {MORPH, WK_BIGKNOB, {99.680f, 21.500f}, "MORPH", {99.680f, 28.700f}, 0, 1.90f, 0x171713, "MORPH"},
     {SYNC, WK_SW2, {97.680f, 42.000f}, "SYNC", {97.680f, 48.600f}, 0, 1.90f, 0x171713, "SYNC"},
@@ -232,8 +228,6 @@ static const DynCaption kDynCaptions[] = {
     {FILT_B, ENGINE_B, 5, {"FILT", "FILT", "FILT", "BRITE", "LOSS"}},
     {SOURCE_A, ENGINE_A, 5, {"TIMB", "ORG", "FRAME", "MATL", "DRIVE"}},
     {SOURCE_B, ENGINE_B, 5, {"TIMB", "ORG", "FRAME", "MATL", "DRIVE"}},
-    {GRITMODE_A, GRITMODE_A, 2, {"SAT", "CRSH", "", "", ""}},
-    {GRITMODE_B, GRITMODE_B, 2, {"SAT", "CRSH", "", "", ""}},
 };
 static const PanelTxt kPanelTexts[] = {
     {{39.500f, 36.100f}, 5.00f, 0.00f, 0x2E6355, 0, "A"},

@@ -103,8 +103,11 @@ there — the C++ holds no caption word at all.
 | FILT | `FILT` | `FILT` | `FILT` | `BRITE` | `LOSS` |
 | SOURCE | `TIMB` | `ORG` | `FRAME` | `MATL` | `DRIVE` |
 
-The GRIT mode pad captions itself the same way, from its own value rather than
-from `ENG`: `SAT` for Drive, `CRSH` for Reduce.
+GRIT itself is bipolar (spec 2026-08-09 hw-control-reduction task 4): there is
+no separate mode pad any more. The knob's sign picks the mode -- left of
+centre is Reduce (bit-crush), right of centre is Drive (saturation) -- and its
+magnitude is the mix. A small dead zone around centre gives "off" a reachable
+resting spot on a real pot.
 
 `REC` is drawn only on a Sampler deck; it has never done anything on the other
 four.

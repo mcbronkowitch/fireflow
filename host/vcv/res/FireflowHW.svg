@@ -31,16 +31,14 @@
 <text x="42.000" y="79.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
 <circle cx="77.000" cy="56.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="77.000" y="64.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">MIX</text>
-<circle cx="92.000" cy="71.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="92.000" y="79.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">GRIT</text>
+<circle cx="92.000" cy="71.000" r="8.000" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
+<text x="92.000" y="81.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">GRIT</text>
 <circle cx="107.000" cy="71.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="107.000" y="79.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">COMP</text>
 <circle cx="12.000" cy="86.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="12.000" y="94.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">STPS</text>
 <rect x="53.000" y="82.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="57.000" y="92.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">ENG</text>
-<rect x="68.000" y="82.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="72.000" y="92.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SAT</text>
 <circle cx="42.000" cy="86.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="42.000" y="94.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SONG</text>
 <circle cx="290.800" cy="18.000" r="8.000" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
@@ -71,16 +69,14 @@
 <text x="262.800" y="79.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
 <circle cx="227.800" cy="56.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="227.800" y="64.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">MIX</text>
-<circle cx="212.800" cy="71.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="212.800" y="79.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">GRIT</text>
+<circle cx="212.800" cy="71.000" r="8.000" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
+<text x="212.800" y="81.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">GRIT</text>
 <circle cx="197.800" cy="71.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="197.800" y="79.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">COMP</text>
 <circle cx="292.800" cy="86.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="292.800" y="94.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">STPS</text>
 <rect x="243.800" y="82.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="247.800" y="92.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">ENG</text>
-<rect x="228.800" y="82.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="232.800" y="92.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SAT</text>
 <circle cx="262.800" cy="86.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="262.800" y="94.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SONG</text>
 <circle cx="152.400" cy="18.000" r="8.000" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>

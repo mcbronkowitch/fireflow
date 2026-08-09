@@ -218,7 +218,6 @@ DYNAMIC_CAPTIONS = [
     ("SUB",      "ENGINE",   ("SUB",  "LEN",  "SUB",   "EXCIT", "INPUT")),
     ("FILT",     "ENGINE",   ("FILT", "FILT", "FILT",  "BRITE", "LOSS")),
     ("SOURCE",   "ENGINE",   ("TIMB", "ORG",  "FRAME", "MATL",  "DRIVE")),
-    ("GRITMODE", "GRITMODE", ("SAT",  "CRSH")),
 ]
 
 
@@ -289,17 +288,20 @@ def part_controls(mir=False):
     # end of PARAMS. STEPS keeps its append slot here but has moved to the PLAY
     # box -- it is a sequencer parameter, not an effect (spec 2026-07-18 §5).
     out.append(Ctl("FLUX", SMKNOB, fx(FX_TOP[1]), ROW_V1, "MIX", "FLUX"))
-    for enum, lbl, i in (("GRIT", "GRIT", 2), ("COMP", "COMP", 3)):
-        out.append(Ctl(enum, SMKNOB, fx(FX_BOT[i]), ROW_V2, lbl))
+    # GRIT is bipolar now (spec 2026-08-09 hw-control-reduction task 4): the
+    # GRITMODE pad is gone, and GRIT's own sign picks Drive/Reduce while its
+    # magnitude is the mix (see Fireflow.cpp pushParams). COMP stays a plain
+    # unipolar SMKNOB, so the two can no longer share one templated loop.
+    out.append(Ctl("GRIT", KNOBC, fx(FX_BOT[2]), ROW_V2, "GRIT"))
+    out.append(Ctl("COMP", SMKNOB, fx(FX_BOT[3]), ROW_V2, "COMP"))
     out.append(Ctl("STEPS", KNOBI, fx(STEPS_X), PLAY_Y, "STPS"))
     # ENGINE cycles Synth/Sampler/Wave/Body/BBD (states 0..4); the C++ side
     # (Fireflow.cpp configSwitch/EngineCycleLatch) is the source of truth for
     # the labels, this comment just keeps the panel legend discoverable here.
-    # GRITMODE's caption is its MODE, not its block's name -- the block is the
-    # GRIT knob one row up (spec 2026-08-03). Its resting word is SAT; the
-    # runtime swaps in CRSH from DYNAMIC_CAPTIONS.
-    pads = [("ENGINE", LATCH, "ENG", None),
-            ("GRITMODE", LATCH, dynamic_words("GRITMODE")[0], "Grit mode")]
+    # The GRITMODE pad is gone (spec 2026-08-09 hw-control-reduction task 4):
+    # GRIT above is bipolar now and its own sign picks Drive/Reduce, so
+    # PAD_X[1] -- its old slot -- stays empty rather than being reclaimed.
+    pads = [("ENGINE", LATCH, "ENG", None)]
     for i, (enum, kind, lbl, tip) in enumerate(pads):
         out.append(Ctl(enum, kind, fx(PAD_X[i]), PLAY_Y, lbl, tip))
     # FORM and NEWPHRASE are gone (spec 2026-08-09 hw-control-reduction task 3):
@@ -545,7 +547,6 @@ INIT_DEFAULTS = {
     # parked 16. Accepted cost of the merge, not something to work around.
     "STEPS_A": 0.000000000,
     "ENGINE_A": 0.000000000,
-    "GRITMODE_A": 1.000000000,
     # Rung 6 (song_ladder.h) is {form: Hierarchical, song: AAAB} -- the exact
     # pair the old independent FORM_A=2/SONG_A=0 defaults held. Preserves the
     # approved init sound; it is not a factory-default retune.
@@ -568,7 +569,6 @@ INIT_DEFAULTS = {
     "COMP_B": 0.561333418,
     "STEPS_B": 0.000000000,  # same flow-mode boot restoration as STEPS_A, see above
     "ENGINE_B": 3.000000000,
-    "GRITMODE_B": 0.000000000,
     "SONG_B": 6.000000000,  # same rung-6 preservation as SONG_A, see above
     "MORPH": 0.785541892,
     "SYNC": 1.000000000,

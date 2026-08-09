@@ -343,10 +343,18 @@ struct Fireflow : Module {
                     else
                         configParam(c.id, 0.f, 1.f, init, lbl);
                     break;
-                case WK_KNOBC:  // MELODY (bipolar): both decks loop — A drifts a
-                                // little, B is frozen. Tooltip name follows ENG
-                                // through MelodyQuantity.
-                    configParam<MelodyQuantity>(c.id, -1.f, 1.f, init, lbl); break;
+                case WK_KNOBC:
+                    if (c.id == MELODY_A || c.id == MELODY_B)
+                        // MELODY (bipolar): both decks loop — A drifts a
+                        // little, B is frozen. Tooltip name follows ENG
+                        // through MelodyQuantity.
+                        configParam<MelodyQuantity>(c.id, -1.f, 1.f, init, lbl);
+                    else
+                        // GRIT (bipolar): sign picks Drive/Reduce, magnitude
+                        // is the mix (spec 2026-08-09 hw-control-reduction
+                        // task 4; see pushParams for the dead-zone math).
+                        configParam(c.id, -1.f, 1.f, init, lbl);
+                    break;
                 case WK_KNOBI:
                     if (c.id == SCALE)  // init patch is Lydian -- the bright end of group A
                         configParam<ScaleQuantity>(c.id, 0.f, (float)(spky::SCALE_LIST_COUNT - 1),
@@ -389,9 +397,6 @@ struct Fireflow : Module {
                                      {"Synth", "Sampler", "Wave", "Body", "BBD"});
                         getParamQuantity(c.id)->snapEnabled = true;
                     }
-                    else if (c.id == GRITMODE_A || c.id == GRITMODE_B)
-                        configSwitch(c.id, 0.f, 1.f, init,
-                                     "Grit mode", {"Drive", "Reduce"});   // init: A=Reduce
                     else  // STEP (on for the init patch's stepped sequences)
                         configSwitch(c.id, 0.f, 1.f, init, lbl, {"Off", "On"});
                     break;
@@ -493,6 +498,14 @@ struct Fireflow : Module {
     }
     inline bool ppb(int baseA, int part) { return pp(baseA, part) > 0.5f; }
 
+    // GRIT is one bipolar knob (spec 2026-08-09 hw-control-reduction task
+    // 4): sign picks the mode, magnitude is the mix. The dead zone exists
+    // because a 9 mm pot on an ADC cannot hit an exact zero -- without it
+    // "off" would be unreachable on hardware. Shared between the fx_on gate
+    // below and the mode/mix push further down so both agree on what
+    // "engaged" means.
+    static constexpr float kGritDead = 0.03f;
+
     void pushParams() {
         // STEP entry latches the groove target immediately. Push the shared
         // amount before either deck sees its FLOW->STEP transition so both
@@ -523,7 +536,6 @@ struct Fireflow : Module {
                 params[p ? FLUXFB_B : FLUXFB_A].getValue());
             inst.set_fx_target_base(p, spky::FXT_FLUX_TIME,
                 params[p ? FLUXTIME_B : FLUXTIME_A].getValue());
-            inst.set_grit_mix(p, pp(GRIT_A, p));
             // Appended params are outside the stride, so pp() would compute the
             // wrong id — the explicit ternary is required (see FLUXRATE/FLUXFB).
             // DRIVE_A/B remains append-only saved patch state, with no FLUX
@@ -537,7 +549,12 @@ struct Fireflow : Module {
             // knob doubles as the on switch: knob up == engaged. At 0 the block
             // stays idle and the whole chain is skipped (bit-exact bypass).
             inst.set_fx_on(p, spky::FxBlock::Flux, pp(FLUX_A, p) > 1e-4f);
-            inst.set_fx_on(p, spky::FxBlock::Grit, pp(GRIT_A, p) > 1e-4f);
+            // GRIT is bipolar now: "engaged" means the knob has cleared the
+            // dead zone in either direction, not just a positive value --
+            // the raw value alone would silently mute the whole CRSH
+            // (negative) side (see kGritDead and pushParams' grit block).
+            inst.set_fx_on(p, spky::FxBlock::Grit,
+                            std::fabs(pp(GRIT_A, p)) > kGritDead);
             inst.set_comp(p, pp(COMP_A, p));
 
             // Saved ENG meanings remain 0 = Synth and 1 = Sampler; 2 adds
@@ -730,8 +747,15 @@ struct Fireflow : Module {
             // Sample material and a synth deck can then sit in the same key.
             inst.set_target_active(p, spky::LANE_PITCH, !samplerPart);
 
-            inst.set_grit_mode(p, ppb(GRITMODE_A, p) ? spky::GritMode::Reduce
-                                                     : spky::GritMode::Drive);
+            // GRIT is one bipolar knob: sign is the mode, magnitude the mix.
+            // The dead zone exists because a 9 mm pot on an ADC cannot hit an
+            // exact zero -- without it "off" would be unreachable on hardware.
+            const float gritKnob = params[p ? GRIT_B : GRIT_A].getValue();
+            inst.set_grit_mode(p, gritKnob < 0.f ? spky::GritMode::Reduce
+                                                 : spky::GritMode::Drive);
+            const float gritMag = std::fabs(gritKnob);
+            inst.set_grit_mix(p, gritMag <= kGritDead ? 0.f
+                                 : (gritMag - kGritDead) / (1.f - kGritDead));
             const int steps = (int)std::round(pp(STEPS_A, p));
             inst.set_step(p, steps > 0, steps);
 
