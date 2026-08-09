@@ -4,73 +4,73 @@
 namespace spkyvcv {
 
 static constexpr float kInitParamDefaults[] = {
-    0.116716892f, // RATE_A
+    0.0f, // RATE_A
     0.0f, // SHAPE_A
-    0.695181072f, // DENSITY_A
-    0.995180666f, // SMOOTH_A
+    0.534939826f, // DENSITY_A
+    0.836144507f, // SMOOTH_A
     0.0f, // RANGE_A
-    0.0f, // MELODY_A
-    0.612047195f, // MOD_A
-    0.0f, // TUNE_A
-    0.185333401f, // ATTACK_A
-    0.322666585f, // DECAY_A
-    0.319000006f, // RES_A
-    0.458666444f, // SUB_A
-    0.438666672f, // SOURCE_A
-    0.86400038f, // FLUX_A
-    0.0f, // GRIT_A
-    0.6f, // COMP_A
+    0.768674195f, // MELODY_A
+    0.403613269f, // MOD_A
+    0.001204819f, // TUNE_A
+    0.637333274f, // ATTACK_A
+    0.705333531f, // DECAY_A
+    0.0f, // RES_A
+    0.738666236f, // SUB_A
+    0.453333825f, // SOURCE_A
+    0.353333473f, // FLUX_A
+    0.173493922f, // GRIT_A
+    0.761333168f, // COMP_A
     0.0f, // STEPS_A
-    0.0f, // ENGINE_A
-    0.239045722f, // DETUNE_A
-    6.0f, // SONG_A
-    0.202409565f, // RATE_B
-    0.899999678f, // SHAPE_B
-    0.64457792f, // DENSITY_B
-    0.613253355f, // SMOOTH_B
+    2.0f, // ENGINE_A
+    0.377333373f, // DETUNE_A
+    0.0f, // SONG_A
+    0.053012036f, // RATE_B
+    0.0f, // SHAPE_B
+    0.0f, // DENSITY_B
+    1.0f, // SMOOTH_B
     0.0f, // RANGE_B
-    -1.0f, // MELODY_B
-    0.35783118f, // MOD_B
-    0.0f, // TUNE_B
-    0.093333311f, // ATTACK_B
-    0.450666398f, // DECAY_B
-    0.217333555f, // RES_B
-    0.319999605f, // SUB_B
-    0.177333504f, // SOURCE_B
-    1.0f, // FLUX_B
+    0.671083927f, // MELODY_B
+    0.681928277f, // MOD_B
+    0.321686625f, // TUNE_B
+    1.0f, // ATTACK_B
+    1.0f, // DECAY_B
+    0.220000312f, // RES_B
+    0.0f, // SUB_B
+    0.0f, // SOURCE_B
+    0.650667071f, // FLUX_B
     0.0f, // GRIT_B
-    0.6f, // COMP_B
+    0.848000109f, // COMP_B
     0.0f, // STEPS_B
-    3.0f, // ENGINE_B
-    0.414039341f, // DETUNE_B
-    6.0f, // SONG_B
-    0.785541892f, // MORPH
-    0.169333577f, // TEMPO
+    0.0f, // ENGINE_B
+    0.455999434f, // DETUNE_B
+    13.0f, // SONG_B
+    0.495180398f, // MORPH
+    0.0f, // TEMPO
     1.0f, // COUPLE
-    5.0f, // SCALE
-    0.959493291f, // DRIFT
-    0.869332671f, // REV_SIZE
-    0.790665507f, // REV_DECAY
-    0.761333108f, // REV_TONE
-    0.862999976f, // REV_DIFF
+    2.0f, // SCALE
+    0.791999996f, // DRIFT
+    1.0f, // REV_SIZE
+    0.800755024f, // REV_DECAY
+    0.905333221f, // REV_TONE
+    0.768000245f, // REV_DIFF
     0.0f, // CHOKE
-    -0.172999933f, // FILT_A
-    -0.19999963f, // FILT_B
+    -0.199999928f, // FILT_A
+    -0.292000026f, // FILT_B
     0.0f, // TIDE
-    4.0f, // FLUXRATE_A
-    3.0f, // FLUXRATE_B
-    0.285667986f, // FLUXFB_A
-    0.555337131f, // FLUXFB_B
-    0.0f, // COLOR_A
-    0.469879329f, // COLOR_B
+    1.0f, // FLUXRATE_A
+    1.0f, // FLUXRATE_B
+    0.643999279f, // FLUXFB_A
+    0.790665507f, // FLUXFB_B
+    0.001204819f, // COLOR_A
+    0.862999976f, // COLOR_B
     0.0f, // LINK_A
     0.0f, // LINK_B
-    0.800000012f, // STAGES_A
-    1.0f, // STAGES_B
+    0.0f, // STAGES_A
+    0.0f, // STAGES_B
     0.0f, // REC_A
     0.0f, // REC_B
-    0.422665179f, // REV_MIX_A
-    0.613332987f, // REV_MIX_B
+    0.343394309f, // REV_MIX_A
+    0.805333197f, // REV_MIX_B
     0.0f, // SHUFFLE
 };
 static_assert(sizeof(kInitParamDefaults) / sizeof(kInitParamDefaults[0])

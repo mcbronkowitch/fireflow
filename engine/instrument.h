@@ -156,12 +156,25 @@ public:
     // scales this by its own kDetuneScale (4/3) at the audio callsite
     // (body_voice.cpp), which this deliberately does NOT include, because
     // that scale is BODY's own private implementation detail, not part of
-    // the shared VOICE contract this observer exposes. 0 on any other
-    // engine (WAVE/BBD/SAMPLER also receive set_voice_detune, but the panel
-    // guard's DETUNE contract only pins SYNTH/BODY).
+    // the shared VOICE contract this observer exposes.
+    //
+    // WAVE is here because the factory patch moved onto it (FF_hw_Init.vcvm,
+    // 2026-08-09: deck A boots WAVE, deck B SYNTH). This used to answer 0 for
+    // anything but SYNTH/BODY, on the stated grounds that the DETUNE contract
+    // only pinned those two -- which stopped being true the moment a deck
+    // booted WAVE with DETUNE at 0.377. The golden test would have pinned that
+    // 0 and reported it as coverage. WAVE is SynthEngineT<VoiceT<WtOsc>>, the
+    // same template with the same units, so there was nothing to model.
+    //
+    // Still 0 on BBD and SAMPLER: they receive set_voice_detune but neither
+    // reaches a VoiceT, so there is no spread to report. A test pinning 0
+    // there is pinning "this engine has no detuned voice pair", which is true
+    // -- but do not read it as a pinned DETUNE value.
     float applied_detune_ct_for_test(int p) const {
         if (_parts[p].engine_id() == ENGINE_SYNTH)
             return _parts[p].synth().applied_detune_ct();
+        if (_parts[p].engine_id() == ENGINE_WAVE)
+            return _parts[p].wave().applied_detune_ct();
         if (_parts[p].engine_id() == ENGINE_BODY)
             return _parts[p].body().applied_detune_ct();
         return 0.f;
