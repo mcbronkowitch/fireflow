@@ -34,11 +34,13 @@ because it bridges the two parts. Each part's
 draws in the light layer and lights a moving dot per modulation lane from
 `Instrument::lane_output()` / `lane_fired()`, so the rings animate with the
 engine (mirroring `src/ui/led.ring.h`). The SVG only provides the dim housing.
-The shared centre column beside MORPH also carries **PUSH**, the master
-drive into the output limiter — one knob for both parts, unlike every
-per-part control above.
+The shared centre column beside MORPH used to also carry **PUSH**, the
+master drive into the output limiter; PUSH is gone (spec 2026-08-09
+hw-control-reduction task 9, "push steht immer auf 0.4") and the drive is
+now a fixed-by-ear constant — see [COUPLE, DRIFT, and
+LVL/COMP](#couple-drift-and-lvlcomp) below for it and its two siblings.
 
-## TIME
+## TIMING
 
 **SHUFFLE** is one shared control for both parts: `0` is a straight grid and
 full travel gives a classic `2:1` long/short pair. It warps only STEP timing;
@@ -46,30 +48,33 @@ FLOW stays straight. Live changes latch at each lane's next pair boundary so
 the active pair finishes intact, while external CLOCK pulses, resets, phrase
 downbeats, and the transport's raw-phase anchors stay straight.
 
-## FORM, SONG, and NEW
+## SONG
 
-Each Part's PLAY row reads **STEP · FORM · SONG · NEW**. FORM and SONG are
-independent: FORM creates the musical material, while SONG decides when the
-two persistent phrase snapshots A and B are heard.
+Each Part's PLAY row reads **STEP · SONG**. FORM and the NEW pad are gone
+(spec 2026-08-09 hw-control-reduction): SONG alone walks a curated 14-rung
+ladder through the (Principle, SongMode) grid and re-rolls the phrase on
+every rung change — turn the knob, the melody develops differently.
 
-**FORM** has five phrase engines: **TWO MOTIFS**, **ONE + VAR**,
-**HIERARCHICAL**, **CALL / RESPONSE**, and **OSTINATO**. The factory setting
-is HIERARCHICAL.
-
-**SONG** has seven arrangements:
+Every rung pairs one of five phrase engines with one of seven arrangements.
+The five phrase engines are **TWO MOTIFS**, **ONE + VAR**, **HIERARCHICAL**,
+**CALL / RESPONSE**, and **OSTINATO** — they create the musical material.
+The seven arrangements decide when the two persistent phrase snapshots A and
+B are heard:
 
 - **AAAB**, **ABAB**, and **ABBB** repeat their named four-phrase sequence.
 - **BUILD** follows `AAAB · AABB · ABBB · AABB`.
 - **ROTATE** follows `AAAB · AABA · ABAA · BAAA`.
 - **MIRROR** follows the deterministic, non-repeating Thue–Morse A/B stream.
 - **OFF** disables arrangement by playing A continuously; A still evolves,
-  while the stored B phrase is retained for returning to another SONG mode.
+  while the stored B phrase is retained for returning to another rung.
 
-The factory SONG setting is AAAB. FORM and SONG changes wait for the next STEP
-phrase boundary. SONG changes preserve A and B; FORM changes rebuild them.
-**NEW always queues a fresh A/B pair and restarts SONG at its first phrase.**
-On a Sampler it also jumps the tape head back to ORGANIZE and spawns a grain
-immediately.
+The factory SONG setting is rung **6** (`{0, 6}`, "no alternation, two
+generators"), not the ladder's first rung — chosen to preserve the approved
+HIERARCHICAL/AAAB boot sound (`song_ladder_at(6)`). SONG changes wait for
+the next STEP phrase boundary, and every rung change queues a fresh A/B pair
+and restarts the arrangement at its first phrase — the gesture the retired
+NEW pad used to fire on demand. On a Sampler it also jumps the tape head back
+to ORGANIZE and spawns a grain immediately.
 
 ## SOURCE and Detune
 
@@ -78,13 +83,51 @@ selected ENG — see [Engine-dependent captions](#engine-dependent-captions)
 below for the full table across all five engines. SOURCE-lane modulation
 moves the selected source around the knob's base value.
 
-Each part's right-click context menu provides a separate **Detune A** or
-**Detune B** control. Detune is independent of SOURCE: it is a constant
-`0..35 ct` spread and defaults to `6 ct`.
+Each part also has one physical **DETUNE** knob, independent of SOURCE
+(spec 2026-08-09 hw-control-reduction task 10) and no longer a
+context-menu spread — it is a panel control now, applying a quadratic
+taper: the first ~20 ct of travel is where the fine beating lives, so a
+linear map would squeeze it into a fifth of the knob. The ceiling is
+`105 ct` on Synth/Wave; on Body the engine's own `kDetuneScale` (4/3)
+stretches the same 0..105 spread to a 0..140 ct rail. Deck A boots on
+Synth and defaults to `6 ct`; deck B boots on Body and defaults to
+`24 ct` (the same by-ear spread the old shared knob produced there).
 
-Each part's context menu still carries the append-only **Drive A** / **Drive B**
-patch state. Movement 3 no longer routes it into FLUX; it remains present only
-so saved parameter IDs do not move.
+The **Drive A** / **Drive B** context-menu sliders are gone (task 9):
+they never reached the engine (BBD's drive target has always been a mod
+lane, not a panel/menu control — see `bbd_engine.cpp`), so the dead
+menu-only patch state was retired along with its `DriveQuantity`.
+
+## COUPLE, DRIFT, and LVL/COMP
+
+**COUPLE** swallowed the old SYNC switch (task 7): SYNC was the right-hand
+end of COUPLE's own axis. Below the knob's midpoint (`kCoupleZoneSplit =
+0.5`) is the **FREE** world — SYNC off, COUPLE drives the Kuramoto phase
+lock between the two parts. At or above the midpoint is the **GRID**
+world — SYNC on, COUPLE instead sets how tightly the texture lanes follow
+the shared grid. Each zone sweeps its own 0..1 range across its half of
+the knob's travel, so both worlds keep their full spread.
+
+**DRIFT**'s left stop (the bottom `kDriftSettleZone = 0.02` of travel, not
+just the literal zero) is the old **SETL** panic pad: parking the knob
+there fires `Instrument::settle()` once, on the edge into the zone, not
+continuously while held — a knob is not a momentary button, so this is
+edge-triggered (`DriftSettleState`/`driftSettled` in `Fireflow.cpp`) rather
+than re-firing on every control tick the knob spends parked there. Above
+the zone, DRIFT's own 0..1 range is rescaled to fill the remaining travel.
+
+**LVL/COMP** is one physical knob (`COMP_A`/`COMP_B`, printed `LVL`): the
+lower four-fifths (`kLvlCompSplit = 0.8`) is pure per-part output level —
+the engines are quiet by design, so this knob was always used as a volume
+control in practice. The top fifth instead engages the compressor with
+make-up gain, topping out at `kCompTop = 0.7` — the old knob's working
+compression amount — so full compressor drive is no longer reachable from
+the panel (deliberate: task 5/9's factory patches never asked for more).
+
+Three controls are fixed-by-ear constants with no panel control at all
+(task 9): the shared centre column's old **PUSH** master-drive knob is
+pinned to `0.40`, and the reverb's **REV_SMEAR** (diffuser-LFO wash) and
+**REV_MOD** (tail-delay wobble) are pinned to `0.30` and `0.15`.
 
 ## Engine-dependent captions
 
@@ -102,8 +145,11 @@ there — the C++ holds no caption word at all.
 | FILT | `FILT` | `FILT` | `FILT` | `BRITE` | `LOSS` |
 | SOURCE | `TIMB` | `ORG` | `FRAME` | `MATL` | `DRIVE` |
 
-The GRIT mode pad captions itself the same way, from its own value rather than
-from `ENG`: `SAT` for Drive, `CRSH` for Reduce.
+GRIT itself is bipolar (spec 2026-08-09 hw-control-reduction task 4): there is
+no separate mode pad any more. The knob's sign picks the mode -- left of
+centre is Reduce (bit-crush), right of centre is Drive (saturation) -- and its
+magnitude is the mix. A small dead zone around centre gives "off" a reachable
+resting spot on a real pot.
 
 `REC` is drawn only on a Sampler deck; it has never done anything on the other
 four.
@@ -175,7 +221,7 @@ controls, not a new set of them — only what turning the knob does:
 
 MELODY drove variation and scan at once until 2026-08-03. It now drives scan
 alone on a Sampler deck, so the deck's phrases stop renewing by themselves —
-`NEW` is the gesture that asks for a fresh pair.
+a `SONG` rung change is the gesture that asks for a fresh pair.
 
 SCAN's dead zone is exact and deliberate: a frozen tape head has to stay
 frozen even through knob noise, so nothing moves for the first couple of
@@ -215,20 +261,21 @@ es dieses `pow` gar nicht mehr — das Gate bleibt trotzdem: außerhalb des
 Sampler-Decks wird `_scan_rate` nie gelesen, und hineinzuschreiben wäre nur
 Arbeit ohne Wirkung.
 
-**NEW also fires "new grain now" in the Sampler:** the tape head snaps back to
-ORGANIZE's position and a fresh grain spawns immediately, in addition to the
-fresh phrase-pair request described above. This exists because a grain's
-position, pitch and length are frozen the instant it's spawned, and the next
-chance to change any of them is the next scheduled spawn — at overlap 1 and a
-long LEN that's up to ten seconds away. Without this gesture, the long end of
-LEN wouldn't be a playable state at all; the deck would just stop answering
-every knob for that stretch.
+**A SONG rung change also fires "new grain now" in the Sampler:** the tape
+head snaps back to ORGANIZE's position and a fresh grain spawns immediately,
+in addition to the fresh phrase-pair request described above. This exists
+because a grain's position, pitch and length are frozen the instant it's
+spawned, and the next chance to change any of them is the next scheduled
+spawn — at overlap 1 and a long LEN that's up to ten seconds away. Without
+this gesture, the long end of LEN wouldn't be a playable state at all; the
+deck would just stop answering every knob for that stretch.
 
 **LEN is live downward, latched upward.** Turning LEN *down* immediately
 rescales every grain that's already sounding to the length it would have got
 at the new setting, fading it out click-free; turning LEN *up* leaves running
 grains exactly as they are. The asymmetry is the point. Length is latched at
-spawn (see NEW above), and that used to apply in both directions: a grain
+spawn (see the SONG rung change above), and that used to apply in both
+directions: a grain
 spawned at the top of LEN sounded for its full 42 s however far the knob came
 back down — 84 s in Tape with a pitch an octave under — and nothing on the
 deck could stop it, since the only thing that releases a running grain is the
@@ -250,8 +297,9 @@ step boundaries, it just stops moving pitch while it does.
 
 **SUB stays a sub-level control; SOURCE carries the contextual source job.**
 On a Sampler, SOURCE reads `ORG` and selects position in the material; on
-Synth and Wave it reads `TIMB` and `FRAME`. Detune A/B stays an independent
-per-part context-menu spread for Synth and Wave, not a visible `DTUN` knob.
+Synth and Wave it reads `TIMB` and `FRAME`. DETUNE stays an independent
+physical knob throughout — see [SOURCE and Detune](#source-and-detune)
+above.
 
 The right-click context menu carries a **Sampler A / Sampler B** submenu per
 part:
@@ -309,9 +357,8 @@ stale WAV sitting in patch storage.
   soft-takeover to fall back on. The price is that an ENG switch can't be
   prepared in advance: SOURCE keeps its knob base, so a `TIMB`/`FRAME` setting
   becomes the initial `ORG` setting after the switch. SUB remains sub-level,
-  while Detune A/B stays independent in the context menu; neither is
-  repurposed by SOURCE. Fine for a staged transition on stage; not for a
-  seamless one.
+  and DETUNE stays its own independent physical knob; neither is repurposed
+  by SOURCE. Fine for a staged transition on stage; not for a seamless one.
 - **There are no parameter CV inputs.** The jacks are IN L/R, CLOCK and
   RESET; PIT and GAT are outputs. External modulation of these controls only
   reaches VCV through third-party mapping modules.
@@ -330,10 +377,16 @@ stale WAV sitting in patch storage.
   imported file is always in tune. The asymmetry is intentional: importing a
   file at the wrong pitch would be a bug, but re-rating material that's
   already sitting in the buffer is varispeed, not a bug.
-- **FLUX is a stereo tape echo.** `DIV` selects its synchronized division,
-  `MULT` sweeps from x0.25 to x4 and reaches each new setting through a
-  30 ms slew, producing tape/Doppler motion instead of a stepped change, and
-  `SEND` (per part) sets how much of the result reaches the shared reverb.
+- **FLUX is a stereo tape echo.** `TIME` is a 12-detent knob over its
+  synchronized division; `SEND` (per part) sets how much of the result
+  reaches the shared reverb. `TIME` used to sit beside a free `MULT`
+  multiplier (spec 2026-08-09 hw-control-reduction task 6: DIV and MULT
+  described one quantity, so one notched knob now does it). MULT's
+  modulation sink, a x0.25-to-x4 tape-time multiplier that reaches each new
+  setting through a 30 ms slew for tape/Doppler motion instead of a stepped
+  change, still exists in the engine at a pinned neutral base (`x1`) — CV
+  and the mod lanes can still bend the tape, just not from a second panel
+  knob.
 - **LINK (per part) is THIN across its full travel.** It lets the other deck's
   rhythm thin FLUX's repeats without handing over the echo clock. Patches from
   the bipolar LINK era migrate automatically: old negative THIN settings keep
@@ -372,7 +425,7 @@ FEEDBACK, **LEVEL** sets the wet/dry mix between the deck's input and the
 delay's return (unlike every other engine, LEVEL 0 does not silence a BBD
 deck — it passes the input through dry, at unity), **PITCH** sets the delay
 clock (subject to the FEEDBACK caveat below), and **SIZE** picks the
-delay-time rung the same way FLUX's own DIV division does.
+delay-time rung the same way FLUX's own TIME division does.
 
 ### BBD BEND and the tape multiplier
 
@@ -384,11 +437,17 @@ reading `BEND` on a BBD deck. BBD's hidden ATTACK value remains
 available as **BBD A — Freeze Attack** or **BBD B — Freeze Attack** in the
 module context menu.
 
-The FX bottom row is `LINK MULT GRIT COMP`; it contains no BBD control.
-`DIV` selects the synchronized tape division. `MULT` multiplies that division
-from `x0.25`, through neutral `x1`, to `x4`; its intentional 30 ms slew gives
-smooth tape/Doppler motion. At the longest divisions, the existing delay-buffer
-limit still clamps the absolute delay.
+The FX bottom row is `LINK · GRIT · LVL/COMP` (printed `LVL` — see
+[COUPLE, DRIFT, and LVL/COMP](#couple-drift-and-lvlcomp) above); it
+contains no BBD control and, as
+of task 6 (spec 2026-08-09 hw-control-reduction), no MULT either — that slot
+is now empty. `TIME` selects the synchronized tape division. The engine still
+carries a MULT-shaped modulation sink underneath it (`FXT_FLUX_TIME`):
+multiplying that division from `x0.25`, through neutral `x1`, to `x4`, its
+intentional 30 ms slew gives smooth tape/Doppler motion, but the panel now
+pins its base to `x1` and only CV/mod lanes can move it — there is no longer
+a knob for it. At the longest divisions, the existing delay-buffer limit
+still clamps the absolute delay.
 
 One panel control changes meaning:
 - **SOURCE**'s live caption reads `DRIVE` instead of `TIMB`/`ORG`/`FRAME`/`MATL`.

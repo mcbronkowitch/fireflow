@@ -102,4 +102,8 @@ private:
 #endif
 };
 
+// The 140 ct rail, readable so a test can pin it. Not a test-only path: it
+// reports a constant of the public behaviour, the same way detune_cents() does.
+float body_detune_max_ct();
+
 } // namespace spky

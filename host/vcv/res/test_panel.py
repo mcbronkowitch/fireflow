@@ -34,38 +34,47 @@ def ctl(enum):
 
 
 # --- the frozen contract: enum ORDER defines param ids in every saved patch ---
+# DETUNE_A/B moved from the trailing hidden pair into the templated per-part
+# block (spec 2026-08-09 hw-control-reduction task 10: DETUNE returns to the
+# panel, filling the STEP pad's freed PAD_X[2] slot) -- patch compatibility is
+# a non-goal for this plan, so every id from DETUNE_A onward shifted, and
+# PART_STRIDE grew from 19 to 20 (the templated block gained one control; the
+# total param COUNT is unchanged, only its position within PARAMS moved).
+# SPOT, MASTER_DRIVE, REV_SMEAR, REV_MOD and DRIVE_A/B are gone entirely
+# (task 9): the first four became fixed-by-ear constants in pushParams, SPOT
+# is a genuine feature loss, and DRIVE_A/B was dead menu-only patch state
+# that never reached the engine. HIDDEN_PARAMS is now empty, so DRIVE_A/B's
+# old trailing pair is simply gone, not replaced.
 PARAM_ORDER = [
     'RATE_A', 'SHAPE_A', 'DENSITY_A', 'SMOOTH_A', 'RANGE_A', 'MELODY_A',
     'MOD_A', 'TUNE_A', 'ATTACK_A', 'DECAY_A', 'RES_A', 'SUB_A', 'SOURCE_A',
-    'FLUX_A', 'GRIT_A', 'COMP_A', 'STEPS_A', 'ENGINE_A', 'GRITMODE_A',
-    'STEP_A', 'FORM_A', 'NEWPHRASE_A', 'SONG_A',
+    'FLUX_A', 'GRIT_A', 'COMP_A', 'STEPS_A', 'ENGINE_A', 'DETUNE_A',
+    'SONG_A',
     'RATE_B', 'SHAPE_B', 'DENSITY_B', 'SMOOTH_B', 'RANGE_B', 'MELODY_B',
     'MOD_B', 'TUNE_B', 'ATTACK_B', 'DECAY_B', 'RES_B', 'SUB_B', 'SOURCE_B',
-    'FLUX_B', 'GRIT_B', 'COMP_B', 'STEPS_B', 'ENGINE_B', 'GRITMODE_B',
-    'STEP_B', 'FORM_B', 'NEWPHRASE_B', 'SONG_B',
-    'MORPH', 'SYNC', 'TEMPO', 'COUPLE', 'SCALE', 'DRIFT', 'SPOT',
-    'MASTER_DRIVE', 'SETTLE', 'REV_SIZE', 'REV_DECAY', 'REV_TONE',
-    'REV_DIFF', 'REV_SMEAR', 'REV_MOD', 'CHOKE', 'FILT_A', 'FILT_B', 'TIDE',
+    'FLUX_B', 'GRIT_B', 'COMP_B', 'STEPS_B', 'ENGINE_B', 'DETUNE_B',
+    'SONG_B',
+    'MORPH', 'TEMPO', 'COUPLE', 'SCALE', 'DRIFT',
+    'REV_SIZE', 'REV_DECAY', 'REV_TONE',
+    'REV_DIFF', 'CHOKE', 'FILT_A', 'FILT_B', 'TIDE',
     'FLUXRATE_A', 'FLUXRATE_B', 'FLUXFB_A', 'FLUXFB_B', 'COLOR_A', 'COLOR_B',
     'LINK_A', 'LINK_B', 'STAGES_A', 'STAGES_B',
     'REC_A', 'REC_B', 'REV_MIX_A', 'REV_MIX_B',
-    'SHUFFLE', 'DETUNE_A', 'DETUNE_B', 'DRIVE_A', 'DRIVE_B',
-    'FLUXTIME_A', 'FLUXTIME_B',
+    'SHUFFLE',
 ]
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
-    'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'Grit mode', 'STEP', 'FORM', 'NEW', 'SONG',
+    'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'Level / Comp', 'STPS',
+    'ENG', 'Detune', 'SONG',
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
-    'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'Grit mode', 'STEP', 'FORM', 'NEW', 'SONG',
-    'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'Master drive',
-    'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
-    'FILT', 'FILT', 'TIDE', 'FLUX division', 'FLUX division', 'FFB', 'FFB',
+    'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'Level / Comp', 'STPS',
+    'ENG', 'Detune', 'SONG',
+    'MORPH', 'TEMPO', 'FREE|GRID', 'SCALE', 'DRIFT',
+    'SIZE', 'DECAY', 'TONE', 'DIFF', 'CHOKE',
+    'FILT', 'FILT', 'TIDE', 'FLUX time', 'FLUX time', 'FFB', 'FFB',
     'COLOR', 'COLOR', 'LINK', 'LINK', 'BBD Bend', 'BBD Bend', 'REC', 'REC',
     'Room send', 'Room send',
-    'SHUFL', 'Detune A', 'Detune B', 'Drive A', 'Drive B',
-    'Tape Time', 'Tape Time',
+    'SHUFL',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
@@ -75,72 +84,102 @@ LIGHT_ORDER = ['GATE_A_L', 'GATE_B_L', 'REC_A_L', 'REC_B_L']
 def test_enum_order():
     """Patch compatibility. If this fails, every saved .vcv breaks."""
     check([c.enum for c in g.PARAMS] == PARAM_ORDER, "PARAMS order changed")
-    check(PARAM_ORDER[-4:] ==
-          ['DRIVE_A', 'DRIVE_B', 'FLUXTIME_A', 'FLUXTIME_B'],
-          "FLUXTIME must be the trailing ParamId pair")
+    check(PARAM_ORDER[-1] == 'SHUFFLE',
+          "SHUFFLE must be the trailing ParamId now that DRIVE_A/B "
+          "(task 9, spec 2026-08-09 hw-control-reduction) is retired and "
+          "HIDDEN_PARAMS is empty")
     check([c.enum for c in g.INPUTS] == INPUT_ORDER, "INPUTS order changed")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
-    check(g.PART_STRIDE == 23, f"PART_STRIDE is {g.PART_STRIDE}, must be 23")
+    # 19 -> 20 (task 10, spec 2026-08-09 hw-control-reduction): DETUNE_A/B
+    # moved from the trailing hidden pair into the templated per-part block,
+    # one extra control per deck. The total param COUNT is unchanged (they
+    # were already counted, in HIDDEN_PARAMS) -- only their stride position.
+    check(g.PART_STRIDE == 20, f"PART_STRIDE is {g.PART_STRIDE}, must be 20")
 
 
 def test_source_and_hidden_detune_partition():
-    """SOURCE owns the former DTUN widgets; detune remains parameter-only.
-    DRIVE joined the hidden set the same way (spec 2026-07-28
-    flux-rhythm-drag): DRAG took its panel slot, and DRIVE became menu-only
-    patch state with the identical widgetless shape DETUNE_A/B already have."""
+    """SOURCE owns the former DTUN widgets; DETUNE is a real panel knob again
+    (spec 2026-08-09 hw-control-reduction task 10 -- out of HIDDEN_PARAMS and
+    into the templated per-part block, "bei drones ist das sehr stark").
+    DRIVE_A/B, the last HIDDEN_PARAMS resident, is retired outright (task 9):
+    it was menu-only patch state that never reached the engine, so
+    HIDDEN_PARAMS is now empty -- no widgetless patch state survives at all."""
     visible = [c.enum for c in g.PANEL_PARAMS]
     hidden = [c.enum for c in g.HIDDEN_PARAMS]
     check("SOURCE_A" in visible and "SOURCE_B" in visible,
           "SOURCE controls must stay visible")
-    check(hidden == ["DETUNE_A", "DETUNE_B", "DRIVE_A", "DRIVE_B"],
-          f"hidden params are {hidden!r}")
-    check(not any(e in visible for e in hidden),
-          "widgetless detune/drive leaked into panel controls")
+    check("DETUNE_A" in visible and "DETUNE_B" in visible,
+          "DETUNE must be a visible panel control")
+    check(hidden == [], f"HIDDEN_PARAMS is not empty: {hidden!r}")
+    check("DRIVE_A" not in visible and "DRIVE_B" not in visible,
+          "dead DRIVE_A/B leaked into panel controls")
     appended = [c.enum for c in g.APPENDED_PANEL_PARAMS]
     check([c.enum for c in g.PARAMS] == visible + hidden + appended,
           "complete ParamId order must preserve declared partitions")
     h = g.header()
-    check("{DETUNE_A," not in h and "{DETUNE_B," not in h,
-          "widgetless detune leaked into kParamCtls")
+    check(h.count("{DETUNE_A, WK_SMKNOB,") == 1
+          and h.count("{DETUNE_B, WK_SMKNOB,") == 1,
+          "DETUNE must be a real widget in kParamCtls")
     check("{DRIVE_A," not in h and "{DRIVE_B," not in h,
-          "widgetless drive leaked into kParamCtls")
+          "dead DRIVE_A/B leaked into kParamCtls")
+
+
+def test_time_knob_replaces_div_and_mult():
+    """DIV and MULT described one quantity. One notched knob does it, and the
+    modulation sink keeps a neutral base so CV can still bend the tape."""
+    import gen_panel as gp
+    names = {c.enum for c in gp.PARAMS}
+    check("FLUXTIME_A" not in names and "FLUXTIME_B" not in names,
+          "the MULT knobs still exist")
+    rate = [c for c in gp.PARAMS if c.enum == "FLUXRATE_A"][0]
+    check(rate.label == "TIME", f"FLUXRATE_A still prints {rate.label!r}")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("spky::FXT_FLUX_TIME, 0.5f" in cpp,
+          "the flux-time modulation base is not pinned to neutral")
+    check("FLUXTIME_A" not in cpp, "Fireflow.cpp still references FLUXTIME_A")
 
 
 def test_bbd_pitch_flux_time_collections():
     """The three generator views keep saved ParamIds, Rack widgets, and the
-    static Synth preview independently intentional."""
+    static Synth preview independently intentional. FLUXTIME_A/B (MULT) is
+    retired (task 6, spec 2026-08-09 hw-control-reduction), so
+    APPENDED_PANEL_PARAMS is now empty and TIME (FLUXRATE_A/B, unchanged
+    ParamId) is the only surviving delay-time widget."""
     persistent = [c.enum for c in g.PARAMS]
     runtime = [c.enum for c in g.RUNTIME_PANEL_PARAMS]
     static = [c.enum for c in g.STATIC_PANEL_PARAMS]
-    check(persistent[-7:] == [
-        'SHUFFLE', 'DETUNE_A', 'DETUNE_B', 'DRIVE_A', 'DRIVE_B',
-        'FLUXTIME_A', 'FLUXTIME_B'
-    ], "FLUXTIME must follow the old hidden tail")
-    check(persistent[-2:] == ['FLUXTIME_A', 'FLUXTIME_B'],
-          "FLUXTIME ids are not the trailing pair")
+    check(g.APPENDED_PANEL_PARAMS == [],
+          "APPENDED_PANEL_PARAMS must stay empty -- MULT was its only member")
+    check("FLUXTIME_A" not in persistent and "FLUXTIME_B" not in persistent,
+          "FLUXTIME must not survive as a saved ParamId")
+    check(persistent[-1] == 'SHUFFLE',
+          "SHUFFLE must be the trailing ParamId now that DRIVE_A/B "
+          "(task 9) is retired")
     check(all(e in runtime for e in ('STAGES_A', 'STAGES_B',
-                                      'FLUXTIME_A', 'FLUXTIME_B')),
+                                      'FLUXRATE_A', 'FLUXRATE_B')),
           "runtime table lacks PITCH or TIME widgets")
     check('STAGES_A' not in static and 'STAGES_B' not in static,
           "static preview contains the BBD-only PITCH widgets")
     check(all(e in static for e in ('ATTACK_A', 'ATTACK_B',
-                                     'FLUXTIME_A', 'FLUXTIME_B')),
+                                     'FLUXRATE_A', 'FLUXRATE_B')),
           "static Synth preview lacks ATK or TIME")
     check(g.PARAMS == g.PANEL_PARAMS + g.HIDDEN_PARAMS
                       + g.APPENDED_PANEL_PARAMS,
           "persistent ParamId order no longer matches the declared partitions")
     check(not any(c.enum in runtime for c in g.HIDDEN_PARAMS),
-          "menu-only DETUNE/DRIVE leaked into runtime widgets")
-    check(persistent[:-2] == PARAM_ORDER[:-2],
-          "legacy ParamId order changed before FLUXTIME")
+          "menu-only DRIVE leaked into runtime widgets")
+    check(persistent == PARAM_ORDER, "legacy ParamId order changed")
 
     header = g.header()
     for suffix in ('_A', '_B'):
         check(header.count(f"{{STAGES{suffix}, WK_SMKNOB,") == 1,
               f"generated header lacks runtime PITCH{suffix} row")
-        check(header.count(f"{{FLUXTIME{suffix}, WK_SMKNOB,") == 1,
+        check(header.count(f"{{FLUXRATE{suffix}, WK_KNOBI,") == 1,
               f"generated header lacks runtime TIME{suffix} row")
+    check("FLUXTIME" not in header,
+          "generated header still carries FLUXTIME")
 
 
 def test_readme_matches_the_caption_table():
@@ -152,7 +191,7 @@ def test_readme_matches_the_caption_table():
     for _target, _driver, words in g.DYNAMIC_CAPTIONS:
         for word in set(words):
             check(word in readme, f"README never mentions the caption {word!r}")
-    for word in ("BEND", "DIV", "MULT", "SEND", "PUSH"):
+    for word in ("BEND", "TIME", "SEND", "PUSH"):
         check(word in readme, f"README never mentions the caption {word!r}")
     # The STGS-to-BEND migration sentence names the retired `STGS` label on
     # purpose (test_bbd_pitch_and_tape_time_user_documentation requires it
@@ -184,14 +223,16 @@ def test_source_and_detune_user_documentation():
 
 
 def test_bbd_pitch_and_tape_time_user_documentation():
-    """The README must match the BBD/BEND and FX/MULT faceplate contract."""
+    """The README must match the BBD/BEND faceplate contract and still
+    explain the retired MULT knob's surviving modulation sink (task 6,
+    spec 2026-08-09 hw-control-reduction)."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "README.md"), encoding="utf-8") as f:
         readme = f.read()
     check("BBD BEND" in readme, "README omits the BBD BEND faceplate slot")
     check("Freeze Attack" in readme, "README omits menu-only BBD Freeze Attack")
     check("MULT" in readme and "x0.25" in readme and "x4" in readme,
-          "README omits the tape multiplier")
+          "README omits the retired tape multiplier's surviving mod sink")
     migration = re.compile(r"the visible `STGS`\s+label is gone")
     check(migration.search(readme) is not None,
           "README omits the STGS-to-BEND migration explanation")
@@ -240,16 +281,17 @@ def test_param_runtime_tip_contract():
           "parameter runtime tip contract changed: "
           + repr([(c.enum, c.tip, want) for c, want in zip(g.PARAMS, PARAM_TIPS)
                   if c.tip != want]))
-    check(PARAM_TIPS[71:75] == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
+    ids = {c.enum: i for i, c in enumerate(g.PARAMS)}
+    check(PARAM_TIPS[ids["LINK_A"]:ids["STAGES_B"] + 1]
+          == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
           "BBD Bend runtime tips drifted")
-    check(PARAM_TIPS[-6:] == [
-        'Detune A', 'Detune B', 'Drive A', 'Drive B',
-        'Tape Time', 'Tape Time',
-    ], "Tape Time runtime tips drifted")
+    check(PARAM_TIPS[-1] == 'SHUFL',
+          "SHUFFLE must be the trailing runtime tip now that the DRIVE "
+          "pair (task 9) is retired")
     for enum, caption, tip in (
             ("FLUX_A", "MIX", "FLUX"), ("FLUX_B", "MIX", "FLUX"),
-            ("FLUXRATE_A", "DIV", "FLUX division"),
-            ("FLUXRATE_B", "DIV", "FLUX division"),
+            ("FLUXRATE_A", "TIME", "FLUX time"),
+            ("FLUXRATE_B", "TIME", "FLUX time"),
             ("FLUXFB_A", "FB", "FFB"), ("FLUXFB_B", "FB", "FFB")):
         c = ctl(enum)
         check(c.label == caption and c.tip == tip,
@@ -267,8 +309,10 @@ def test_link_stages_params():
     on 2026-07-27, which is itself where STAGES came from (DUST/ROT,
     spec 2026-07-27 flux-bbd-delay): the POSITIONS are what saved patches
     depend on, and they did not move. DRIVE itself became hidden patch state
-    -- see test_source_and_hidden_detune_partition for that half."""
-    check(g.PART_STRIDE == 23, "PART_STRIDE must stay 23")
+    -- see test_source_and_hidden_detune_partition for that half. The literal
+    PART_STRIDE number is pinned once, in test_enum_order -- this test only
+    needs the live value to prove LINK/STAGES sit past both templated part
+    blocks."""
     ids = {c.enum: i for i, c in enumerate(g.PARAMS)}
     for e in ("LINK_A", "LINK_B", "STAGES_A", "STAGES_B"):
         check(e in ids, f"{e} missing")
@@ -293,13 +337,12 @@ def test_link_stages_kind():
 
 
 def test_rec_params():
-    """REC is appended, not templated -- appending keeps PART_STRIDE at 23 so
-    every saved .vcv keeps its param ids. Same guard shape as
-    test_link_stages_params, and the kind is pinned the same way
-    test_link_stages_kind pins LINK/STAGES: a LATCH that silently became an
-    SMBTN would still clear test_no_overlap (identical radius), so the kind
-    needs its own check."""
-    check(g.PART_STRIDE == 23, "PART_STRIDE must stay 23")
+    """REC is appended, not templated -- appending keeps PART_STRIDE unchanged
+    so every saved .vcv keeps its param ids (the literal number is pinned once,
+    in test_enum_order). Same guard shape as test_link_stages_params, and the
+    kind is pinned the same way test_link_stages_kind pins LINK/STAGES: a LATCH
+    that silently became an SMBTN would still clear test_no_overlap (identical
+    radius), so the kind needs its own check."""
     ids = {c.enum: i for i, c in enumerate(g.PARAMS)}
     for e in ("REC_A", "REC_B"):
         check(e in ids, f"{e} missing")
@@ -312,10 +355,10 @@ def test_rec_params():
 
 
 def test_reverb_mix_params():
-    """REV_MIX_A/B are appended (not templated) so PART_STRIDE stays 23, and
-    they carry the 'SEND' label as the FX top row's 4th slot -- the shared
-    centre REV_MIX is gone."""
-    check(g.PART_STRIDE == 23, "PART_STRIDE must stay 23")
+    """REV_MIX_A/B are appended (not templated) so PART_STRIDE stays unchanged
+    (the literal number is pinned once, in test_enum_order), and they carry
+    the 'SEND' label as the FX top row's 4th slot -- the shared centre
+    REV_MIX is gone."""
     ids = {c.enum: i for i, c in enumerate(g.PARAMS)}
     check('REV_MIX' not in ids, "the shared centre REV_MIX must be removed")
     for e in ("REV_MIX_A", "REV_MIX_B"):
@@ -613,12 +656,11 @@ LOWER_A = {   # enum -> (x, y)   part A; part B is W - x
     'DECAY_A': (9.25, 89.40), 'RES_A': (19.75, 89.40), 'SOURCE_A': (30.25, 89.40),
     'FLUXRATE_A': (44.25, 77.30), 'FLUX_A': (54.75, 77.30),
     'FLUXFB_A': (65.25, 77.30), 'REV_MIX_A': (75.75, 77.30),
-    'LINK_A': (44.25, 89.40), 'FLUXTIME_A': (54.75, 89.40),
+    'LINK_A': (44.25, 89.40),
     'GRIT_A': (65.25, 89.40), 'COMP_A': (75.75, 89.40),
-    'ENGINE_A': (10.00, 103.60), 'GRITMODE_A': (17.50, 103.60),
-    'STEPS_A': (37.00, 103.60), 'STEP_A': (46.00, 103.60),
-    'FORM_A': (56.50, 103.60), 'SONG_A': (67.00, 103.60),
-    'NEWPHRASE_A': (77.50, 103.60),
+    'ENGINE_A': (10.00, 103.60),
+    'STEPS_A': (37.00, 103.60),
+    'SONG_A': (67.00, 103.60),
 }
 
 
@@ -635,9 +677,6 @@ def test_lower_half_positions():
         attack, pitch = ctl('ATTACK' + suffix), ctl('STAGES' + suffix)
         check((attack.x, attack.y) == (pitch.x, pitch.y),
               f"{suffix}: ATK/PITCH do not share coordinates")
-        mult = ctl('FLUXTIME' + suffix)
-        check(mult.label == 'MULT' and mult.tip == 'Tape Time',
-              f"{suffix}: tape multiplier caption/tooltip drifted")
 
 
 def test_static_synth_preview_excludes_bbd_pitch():
@@ -647,8 +686,8 @@ def test_static_synth_preview_excludes_bbd_pitch():
     check('>STGS</text>' not in svg, "static SVG still exposes STGS")
     check(svg.count('>ATK</text>') == 2,
           "static preview must show two ATK captions")
-    check(svg.count('font-size="1.9">MULT</text>') == 2,
-          "static preview must show two MULT captions")
+    check(svg.count('font-size="1.9">TIME</text>') == 2,
+          "static preview must show two TIME captions")
     check('font-size="1.9">BEND</text>' not in svg,
           "static preview must not overlay BEND on ATK")
 
@@ -707,40 +746,60 @@ def test_static_lights_excludes_rec_but_lights_keeps_all_four():
           f"kLightCtls row order is {row_ids}, want {LIGHT_ORDER}")
 
 
-def test_form_song_control_contract():
-    """The frozen final slots now expose independent FORM and SONG knobs."""
+def test_song_control_contract():
+    """SONG swallowed FORM and the NEW pad (spec 2026-08-09
+    hw-control-reduction task 3): the frozen final slot exposes one integer
+    knob that walks a 14-rung ladder through (Principle, SongMode) and
+    re-rolls the phrase on every rung change. The ladder's own ORDER is
+    taste, pinned by test_song_ladder.cpp's structural checks, not here --
+    this only pins the mechanism: composed labels, forwarded set_form/
+    set_song, and that FORM no longer has its own switch."""
     for suffix in ("_A", "_B"):
-        form = ctl("FORM" + suffix)
         song = ctl("SONG" + suffix)
-        for c, label in ((form, "FORM"), (song, "SONG")):
-            check(c.kind == g.KNOBI,
-                  f"{c.enum} kind is {c.kind}, want snapped integer knob")
-            check(c.label == label and c.tip == label,
-                  f"{c.enum} caption/tip is {c.label!r}/{c.tip!r}, want {label}")
+        check(song.kind == g.KNOBI,
+              f"{song.enum} kind is {song.kind}, want snapped integer knob")
+        check(song.label == "SONG" and song.tip == "SONG",
+              f"{song.enum} caption/tip is {song.label!r}/{song.tip!r}, want SONG")
 
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
               encoding="utf-8") as f:
         cpp = f.read()
-    form_switch = """
-configSwitch(c.id, 0.f, 4.f, init, "Form",
-             {"TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
-              "CALL / RESPONSE", "OSTINATO"});"""
+    check('configSwitch(c.id, 0.f, 4.f, init, "Form",' not in cpp,
+          "FORM must no longer be its own Rack switch")
+    song_words = """
+static const char* kFormWords[] = {
+    "TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
+    "CALL / RESPONSE", "OSTINATO"};
+static const char* kSongWords[] = {
+    "AAAB", "ABAB", "ABBB", "BUILD",
+    "ROTATE", "MIRROR", "OFF"};"""
+    check(compact_cpp(song_words) in compact_cpp(cpp),
+          "SONG's composed labels must keep the five Form and seven Song words")
+    compose_loop = """
+for (int i = 0; i < spky::kSongLadderCount; ++i) {
+    const spky::SongRung& r = spky::song_ladder_at(i);
+    rungs.push_back(std::string(kFormWords[r.form]) +
+                    " / " + kSongWords[r.song]);
+}"""
+    check(compact_cpp(compose_loop) in compact_cpp(cpp),
+          "SONG labels must be composed from the ladder table itself, "
+          "not written out by hand beside it")
     song_switch = """
-configSwitch(c.id, 0.f, 6.f, init, "Song",
-             {"AAAB", "ABAB", "ABBB", "BUILD", "ROTATE", "MIRROR", "OFF"});"""
-    check(compact_cpp(form_switch) in compact_cpp(cpp),
-          "FORM must be a snapped five-state Rack switch with named choices")
+configSwitch(c.id, 0.f,
+             float(spky::kSongLadderCount - 1),
+             init, "Song", rungs);"""
     check(compact_cpp(song_switch) in compact_cpp(cpp),
-          "SONG must be a snapped seven-state Rack switch with named choices")
-    check("inst.set_form(p, form);" in cpp,
-          "Rack FORM parameter is not forwarded to Instrument::set_form")
-    check("inst.set_song(p, song);" in cpp,
+          "SONG must be a snapped Rack switch spanning the whole ladder")
+    check("inst.set_form(p, r.form);" in cpp,
+          "Rack SONG parameter is not forwarded to Instrument::set_form")
+    check("inst.set_song(p, r.song);" in cpp,
           "Rack SONG parameter is not forwarded to Instrument::set_song")
 
 
-def test_form_song_user_documentation():
-    """The host README describes the independent phrase and arrangement axes."""
+def test_song_user_documentation():
+    """The host README describes the SONG ladder that replaced the
+    independent FORM/SONG/NEW controls."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "README.md"), encoding="utf-8") as f:
         readme = f.read()
@@ -748,13 +807,35 @@ def test_form_song_user_documentation():
                  "CALL / RESPONSE", "OSTINATO", "AAAB", "ABAB", "ABBB",
                  "BUILD", "ROTATE", "MIRROR", "OFF"):
         check(term in readme, f"VCV README does not document {term}")
-    check("STEP · FORM · SONG · NEW" in readme,
+    check("STEP · SONG" in readme,
           "VCV README does not document the PLAY-row order")
-    check("NEW always" in readme and "fresh A/B" in readme,
-          "VCV README does not document NEW's cross-engine phrase rebuild")
     check(re.search(r"\bTRIG\b[^.\n]*(?:button|control|pad)", readme,
                     flags=re.IGNORECASE) is None,
           "VCV README still presents TRIG as an available control")
+    check("## FORM, SONG, and NEW" not in readme,
+          "VCV README still titles a section after the retired FORM/NEW controls")
+    check("NEW always queues a fresh A/B pair" not in readme,
+          "VCV README still describes NEW as its own gesture")
+
+
+def test_song_knob_swallows_form_and_new():
+    """FORM and the NEW pad are gone; SONG walks the curated ladder and
+    re-rolls the phrase on every rung change."""
+    import gen_panel as gp
+    names = {c.enum for c in gp.PARAMS}
+    for dead in ("FORM_A", "FORM_B", "NEWPHRASE_A", "NEWPHRASE_B"):
+        check(dead not in names, f"{dead} still exists")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("song_ladder.h" in cpp, "the host does not include the ladder")
+    # Debouncing itself lives in song_rung_state.hpp (spky::hyst_step under
+    # the hood, dependency-free, unit-tested by test_song_rung_state.cpp) --
+    # the review fix that also stops a RESTORED rung from firing a re-roll.
+    check("song_rung_state.hpp" in cpp,
+          "the host does not include the rung tracker")
+    check("songRung[p].tick(" in cpp, "the host does not debounce the SONG pot")
+    check("inst.new_phrase(p)" in cpp, "the host never re-rolls")
+    check("FORM_A" not in cpp, "Fireflow.cpp still references FORM_A")
 
 
 def test_steps_left_the_fx_row():
@@ -797,12 +878,17 @@ def test_pad_backplates_are_gone():
 
 CENTER = {   # enum -> (x offset from CX, y)
     'MORPH': (-7.0, 21.5), 'TIDE': (11.0, 21.5),
-    'SYNC': (-9.0, 42.0), 'TEMPO': (9.0, 42.0),
+    'TEMPO': (9.0, 42.0),
     'COUPLE': (-9.0, 54.0), 'SHUFFLE': (9.0, 54.0),
     'SCALE': (-10.5, 68.0), 'CHOKE': (0.0, 68.0), 'DRIFT': (10.5, 68.0),
-    'SPOT': (-10.5, 78.0), 'MASTER_DRIVE': (0.0, 78.0), 'SETTLE': (10.5, 78.0),
-    'REV_SIZE': (-10.5, 94.0), 'REV_TONE': (0.0, 94.0), 'REV_SMEAR': (10.5, 94.0),
-    'REV_DECAY': (-10.5, 104.5), 'REV_DIFF': (0.0, 104.5), 'REV_MOD': (10.5, 104.5),
+    # SETTLE retired (task 8, spec 2026-08-09 hw-control-reduction): the
+    # pad's job moved to DRIFT's own left stop. SPOT and MASTER_DRIVE
+    # retired (task 9): the whole ROW_DUO2 row (78.0) is now empty -- no
+    # regrouping.
+    'REV_SIZE': (-10.5, 94.0), 'REV_TONE': (0.0, 94.0),
+    # REV_SMEAR and REV_MOD retired (task 9); their R-column slots at
+    # (10.5, 94.0)/(10.5, 104.5) stay empty -- no regrouping.
+    'REV_DECAY': (-10.5, 104.5), 'REV_DIFF': (0.0, 104.5),
 }
 
 
@@ -819,7 +905,7 @@ def test_center_positions():
 
 
 def test_center_group_boxes():
-    want = [(13.0, 19.5, 'BLEND'), (35.0, 25.0, 'TIME'),
+    want = [(13.0, 19.5, 'BLEND'), (35.0, 25.0, 'TIMING'),
             (62.5, 22.5, 'DUO'), (87.5, 23.7, 'ROOM')]
     for (y, h, name) in want:
         check(any(approx(gx, g.CX - 20.5) and approx(gy, y) and approx(gw, 41.0)
@@ -834,9 +920,9 @@ def test_center_card_is_gone():
 
 
 def test_old_eyebrow_texts_are_gone():
-    """TIME/ROOM are group legends now, not free-floating eyebrows."""
+    """TIMING/ROOM are group legends now, not free-floating eyebrows."""
     for (x, y, sz, sp, col, an, t) in g.TEXTS:
-        if t in ('TIME', 'ROOM'):
+        if t in ('TIMING', 'ROOM'):
             check(approx(sz, 1.8) and approx(x, g.CX - 20.5 + 5.0),
                   f"{t} is still the old eyebrow (size {sz} at x {x:.2f})")
 
@@ -921,7 +1007,7 @@ def test_group_count():
     check(len(g.GROUPS) == 15, f"{len(g.GROUPS)} groups, want 15")
     names = sorted(n for (_x, _y, _w, _h, n, _c) in g.GROUPS)
     check(names == sorted(['VOICE', 'FX', 'PLAY'] * 2 +
-                          ['BLEND', 'TIME', 'DUO', 'ROOM'] +
+                          ['BLEND', 'TIMING', 'DUO', 'ROOM'] +
                           ['CV A', 'IN', 'CLOCK', 'OUT', 'CV B']),
           f"unexpected group set: {names}")
 
@@ -1006,7 +1092,7 @@ def test_dynamic_caption_table_is_well_formed():
     if table is None:
         return
     enums = {c.enum for c in g.RUNTIME_PANEL_PARAMS}
-    driver_states = {"ENGINE": 5, "GRITMODE": 2}
+    driver_states = {"ENGINE": 5}
     for target, driver, words in table:
         for suffix in ("_A", "_B"):
             check(target + suffix in enums,
@@ -1060,8 +1146,6 @@ def test_header_carries_the_dynamic_caption_table():
           "SUB_A is not bound to its own deck's ENG")
     check(h.count("{SUB_B, ENGINE_B, 5, {") == 1,
           "SUB_B is not bound to its own deck's ENG")
-    check(h.count("{GRITMODE_A, GRITMODE_A, 2, {") == 1,
-          "the mode pad must drive its own caption")
     body = h.split("static const DynCaption kDynCaptions[] = {")[1].split("};")[0]
     check(body.count("},") == rows,
           f"kDynCaptions has {body.count('},')} rows, want {rows}")
@@ -1085,6 +1169,149 @@ def test_config_wires_tip_not_label():
           "configInput is not wired to c.tip -- jack tooltips will show panel labels")
     check("configOutput(c.id, c.tip)" in cpp,
           "configOutput is not wired to c.tip -- jack tooltips will show panel labels")
+
+
+def test_grit_is_one_bipolar_knob():
+    """The SAT pad is gone: sign picks the mode, magnitude is the mix, and
+    a dead zone around zero makes 'off' reachable on a real pot."""
+    import gen_panel as gp
+    names = {c.enum for c in gp.PARAMS}
+    check("GRITMODE_A" not in names and "GRITMODE_B" not in names,
+          "GRITMODE pads still exist")
+    grit_a = [c for c in gp.PARAMS if c.enum == "GRIT_A"][0]
+    check(grit_a.kind == gp.KNOBC, "GRIT_A is not a bipolar knob")
+    grit_b = [c for c in gp.PARAMS if c.enum == "GRIT_B"][0]
+    check(grit_b.kind == gp.KNOBC, "GRIT_B is not a bipolar knob")
+    check(all(row[0] != "GRITMODE" for row in gp.DYNAMIC_CAPTIONS),
+          "GRITMODE still has a dynamic caption")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("spky::GritMode::Reduce" in cpp and "spky::GritMode::Drive" in cpp,
+          "the host no longer names both grit modes")
+    check("kGritDead" in cpp, "no dead zone around grit zero")
+    check("GRITMODE_A" not in cpp, "Fireflow.cpp still references GRITMODE_A")
+
+
+def test_couple_knob_carries_both_worlds():
+    """SYNC was the right-hand end of COUPLE's own axis. Two zones, each
+    sweeping couple 0..1, so neither world loses its spread."""
+    import gen_panel as gp
+    names = {c.enum for c in gp.PARAMS}
+    check("SYNC" not in names, "the SYNC switch still exists")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("kCoupleZoneSplit" in cpp, "no zone split constant in the host")
+    check("inst.set_sync(" in cpp, "the host never sets sync any more")
+    check("params[SYNC]" not in cpp, "Fireflow.cpp still reads a SYNC param")
+
+
+def test_grit_dead_zone_and_mix_formula_agree_across_host_and_bench():
+    """The bipolar-GRIT dead zone and its sign/magnitude mapping exist in
+    two places: Fireflow.cpp (what Rack actually runs) and
+    bench/audition/init_patch.cpp (the only copy a doctest can reach --
+    Fireflow.cpp lives inside a Rack Module, unreachable from the engine
+    test suite). tests/test_seed_audition_init.cpp exercises the mapping,
+    but it can only ever prove the BENCH copy is right; nothing stops the
+    Fireflow.cpp copy from silently drifting away from it. This scrapes
+    both files' source text and requires the dead-zone constant's value and
+    the mix formula to match exactly, so a hand-edit to only one copy fails
+    loudly here instead of shipping a Rack build that disagrees with its
+    own test coverage.
+
+    Each extraction below is asserted to find exactly one match per file --
+    zero matches (the extraction quietly finding nothing) is treated as a
+    failure, not a pass, per the review that asked for this test: a
+    scraper that matches nothing must not report success.
+
+    Deliberately NOT a call to consolidate the two copies into a shared
+    helper: FLUX's per-param push is duplicated between these same two
+    files the same way, on purpose (spec 2026-08-09 hw-control-reduction
+    task 4 review) -- this test polices the duplication, it does not
+    remove it.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
+              encoding="utf-8") as f:
+        host_cpp = f.read()
+    bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
+                               "init_patch.cpp")
+    with open(bench_path, encoding="utf-8") as f:
+        bench_cpp = f.read()
+
+    def dead_zone_value(source, label):
+        matches = re.findall(r"kGritDead\s*=\s*([\d.]+f?)", source)
+        check(len(matches) == 1,
+              f"{label}: expected exactly one kGritDead declaration, "
+              f"found {len(matches)} ({matches!r})")
+        return matches[0].rstrip("f") if len(matches) == 1 else None
+
+    host_dead = dead_zone_value(host_cpp, "Fireflow.cpp")
+    bench_dead = dead_zone_value(bench_cpp, "bench/audition/init_patch.cpp")
+    if host_dead is not None and bench_dead is not None:
+        check(float(host_dead) == float(bench_dead),
+              f"kGritDead disagrees: Fireflow.cpp={host_dead} "
+              f"bench/audition/init_patch.cpp={bench_dead}")
+
+    needles = {
+        "sign-picks-mode ternary": compact_cpp(
+            "gritKnob<0.f?spky::GritMode::Reduce:spky::GritMode::Drive"),
+        "dead-zone mix formula": compact_cpp(
+            "gritMag<=kGritDead?0.f:(gritMag-kGritDead)/(1.f-kGritDead)"),
+    }
+    host_n, bench_n = compact_cpp(host_cpp), compact_cpp(bench_cpp)
+    for label, needle in needles.items():
+        check(host_n.count(needle) == 1,
+              f"Fireflow.cpp: expected exactly one {label}, found "
+              f"{host_n.count(needle)} matching {needle!r}")
+        check(bench_n.count(needle) == 1,
+              f"bench/audition/init_patch.cpp: expected exactly one "
+              f"{label}, found {bench_n.count(needle)} matching {needle!r}")
+
+
+def test_detune_is_a_panel_control_with_a_square_taper():
+    """DETUNE leaves the context menu. The taper keeps the first ~20 cents
+    usable instead of squeezing them into a fifth of the travel."""
+    import gen_panel as gp
+    names = {c.enum for c in gp.PARAMS}
+    check("DETUNE_A" in names and "DETUNE_B" in names, "DETUNE is missing")
+    det = [c for c in gp.PARAMS if c.enum == "DETUNE_A"][0]
+    check(det.label != "", "DETUNE_A still has the menu-only empty label")
+    check((det.x, det.y) != (0.0, 0.0), "DETUNE_A still sits at the menu origin")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("detKnob * detKnob" in cpp, "the detune taper is not quadratic")
+
+
+def test_detune_taper_agrees_across_host_and_bench():
+    """The quadratic DETUNE taper (v*v feeding set_voice_detune, spec
+    2026-08-09 hw-control-reduction task 10) exists in two places:
+    Fireflow.cpp (what Rack actually runs) and bench/audition/init_patch.cpp
+    (the only copy a doctest can reach -- Fireflow.cpp lives inside a Rack
+    Module, unreachable from the engine test suite). Same house pattern as
+    test_grit_dead_zone_and_mix_formula_agree_across_host_and_bench: scrape
+    both files' source text with a len(matches) == 1 guard so a hand-edit to
+    only one copy fails loudly, without consolidating the duplication away.
+
+    The needle is the compacted multiplication itself, which does not appear
+    in either file's prose comments (checked so this cannot false-match a
+    comment describing the taper rather than implementing it)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
+              encoding="utf-8") as f:
+        host_cpp = f.read()
+    bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
+                               "init_patch.cpp")
+    with open(bench_path, encoding="utf-8") as f:
+        bench_cpp = f.read()
+
+    needle = "detKnob*detKnob"
+    host_n, bench_n = compact_cpp(host_cpp), compact_cpp(bench_cpp)
+    check(host_n.count(needle) == 1,
+          f"Fireflow.cpp: expected exactly one quadratic detune taper, "
+          f"found {host_n.count(needle)} matching {needle!r}")
+    check(bench_n.count(needle) == 1,
+          f"bench/audition/init_patch.cpp: expected exactly one quadratic "
+          f"detune taper, found {bench_n.count(needle)} matching {needle!r}")
 
 
 def cpp_scope(source, anchor):
@@ -1234,12 +1461,16 @@ inst.set_engine(p, id);"""
             issues.append("a sampler-only pushParams control escaped samplerPart gating")
             break
     new_punch = """
-if (newPhraseTrig[p].process(ppb(NEWPHRASE_A, p))) {
-    inst.new_phrase(p);
+if (songRung[p].tick(songNorm, spky::kSongLadderCount)) {
+    inst.new_phrase(p);          // turn the knob, get a new melody
+    // Fires once per rung detent; inherited the retired NEW
+    // pad's Sampler punch. Whether every detent should punch, or
+    // only some, is still an open by-ear question -- on this
+    // plan's listening checklist.
     if (samplerPart) inst.sampler_punch(p);
 }"""
     if push_n.count(compact_cpp(new_punch)) != 1:
-        issues.append("NEW must rebuild A/B and additionally punch the Sampler")
+        issues.append("SONG's rung change must rebuild A/B and additionally punch the Sampler")
     if "triggerTrig" in push or "trigger_manual" in push:
         issues.append("removed TRIG behavior remains in pushParams")
     if any(bad in push_n for bad in ("eng>0", "eng!=0", "eng>=1", "eng==1||eng==2")):
@@ -1296,12 +1527,10 @@ def test_engine_cycle_guard_rejects_representative_regressions():
         ("const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;",
          "const bool samplerPart = eng > 0;", "sampler"),
         ("if (samplerPart) inst.sampler_punch(p);",
-         "inst.sampler_punch(p);", "NEW sampler punch"),
-        ("inst.new_phrase(p);\n"
-         "                if (samplerPart) inst.sampler_punch(p);",
-         "if (!samplerPart) inst.new_phrase(p);\n"
-         "                if (samplerPart) inst.sampler_punch(p);",
-         "NEW phrase rebuild"),
+         "inst.sampler_punch(p);", "SONG sampler punch"),
+        ("inst.new_phrase(p);          // turn the knob, get a new melody",
+         "if (!samplerPart) inst.new_phrase(p);          // turn the knob, get a new melody",
+         "SONG phrase rebuild"),
     ]
     for before, after, label in mutations:
         mutated = cpp.replace(before, after, 1)
@@ -1333,42 +1562,47 @@ def test_variation_is_gated_off_the_sampler():
 
 
 def source_detune_wiring_issues(cpp):
-    """Return regressions in the stable SOURCE/hidden-Detune host boundary."""
+    """Return regressions in the stable SOURCE/panel-DETUNE host boundary.
+
+    DETUNE moved out of the context menu and onto the panel (spec 2026-08-09
+    hw-control-reduction task 10): it is a normal templated kParamCtls
+    control now, read with the strided pp() accessor like every other
+    per-part knob, squared before it reaches the engine. SOURCE's own
+    routing is untouched by that move -- this function still polices both
+    boundaries in one place because a wrong-lane mutation historically
+    touched either side."""
     issues = []
     config = cpp_scope(cpp, "void configControls()")
     push = cpp_scope(cpp, "void pushParams()")
-    menu = cpp_scope(cpp, "void appendContextMenu(Menu* menu) override")
-    slider = cpp_scope(cpp, "struct ParamMenuSlider : ui::Slider")
+    # appendContextMenu is a two-line delegator now (the menu body was
+    # lifted into the free function appendFireflowMenu so both widgets can
+    # share it) -- anchor on the function that actually holds the content,
+    # not the delegator, or this scope is an almost-empty string and every
+    # check below it is vacuous (review finding IMPORTANT 2).
+    menu = cpp_scope(cpp, "static void appendFireflowMenu(Menu* menu, Fireflow* m)")
     detune_quantity = cpp_scope(cpp, "struct DetuneQuantity : ParamQuantity")
-    for label, block in (("configuration", config), ("parameter push", push),
-                         ("context menu", menu)):
+    for label, block in (("configuration", config), ("parameter push", push)):
         if block is None:
             issues.append(f"SOURCE/Detune {label} scope is missing")
     if issues:
         return issues
 
-    cpp_n = compact_cpp(cpp)
-    default_detune = (
-        "staticconstexprfloatkDefaultDetune=6.f/spky::SynthEngine::kDetuneCeilCt;")
-    if cpp_n.count(default_detune) != 1:
-        issues.append("Detune reset default must be exactly 6 ct normalized by kDetuneCeilCt")
     if detune_quantity is None:
         issues.append("DetuneQuantity scope is missing")
     else:
         expected_quantity = (
             "structDetuneQuantity:ParamQuantity{std::stringgetDisplayValueString()override{"
-            "returnstring::f(\"%.1fct\",getValue()*spky::SynthEngine::kDetuneCeilCt);}}")
+            "constfloatv=getValue();returnstring::f(\"%.1fct\","
+            "v*v*spky::SynthEngine::kDetuneCeilCt);}}")
         if compact_cpp(detune_quantity) != expected_quantity:
-            issues.append("DetuneQuantity must display normalized values as one-decimal cents")
+            issues.append("DetuneQuantity must display the squared taper's cents")
 
     config_n = compact_cpp(config)
     for required, label in (
-        (compact_cpp('configParam<DetuneQuantity>(DETUNE_A, 0.f, 1.f, '
-                     'initParamDefault(DETUNE_A), "Detune A");'),
-         "Detune A must be a normalized persistent Rack parameter"),
-        (compact_cpp('configParam<DetuneQuantity>(DETUNE_B, 0.f, 1.f, '
-                     'initParamDefault(DETUNE_B), "Detune B");'),
-         "Detune B must be a normalized persistent Rack parameter"),
+        ("elseif(c.id==DETUNE_A||c.id==DETUNE_B)",
+         "DETUNE_A/B need their own configControls branch"),
+        ("configParam<DetuneQuantity>(c.id,0.f,1.f,init,lbl);",
+         "DETUNE must be configured as a normalized persistent Rack parameter"),
         ("if(c.id==SOURCE_A||c.id==SOURCE_B)",
          "SOURCE controls need their own stable Rack names"),
         (compact_cpp(
@@ -1383,44 +1617,35 @@ def source_detune_wiring_issues(cpp):
 
     push_n = compact_cpp(push)
     source_base = "inst.set_target_base(p,spky::LANE_SOURCE,pp(SOURCE_A,p));"
-    detune = "inst.set_voice_detune(p,params[p?DETUNE_B:DETUNE_A].getValue());"
+    detune_read = "constfloatdetKnob=pp(DETUNE_A,p);"
+    detune_push = "inst.set_voice_detune(p,detKnob*detKnob);"
     if push_n.count(source_base) != 1:
         issues.append("SOURCE must set LANE_SOURCE once for every engine")
-    if push_n.count(detune) != 1:
-        issues.append("hidden Detune A/B must independently feed voice detune")
+    if push_n.count(detune_read) != 1:
+        issues.append("DETUNE must be read once per deck with the strided pp() accessor")
+    if push_n.count(detune_push) != 1:
+        issues.append("DETUNE must feed voice detune through the squared taper")
+    if "set_voice_detune(p,pp(DETUNE_A,p))" in push_n:
+        issues.append("DETUNE must not reach the engine linearly -- the taper is squared")
     if "set_voice_detune(p,pp(SOURCE_A,p))" in push_n:
         issues.append("SOURCE must not feed voice detune")
-    if "set_voice_detune(p,pp(DETUNE_A,p))" in push_n:
-        issues.append("part B detune must not use the strided accessor")
     if "if(samplerPart){inst.set_target_base(p,spky::LANE_SOURCE," in push_n:
         issues.append("SOURCE base must not be gated on samplerPart")
 
-    if slider is None:
-        issues.append("SOURCE/Detune menu slider scope is missing")
-        return issues
-    slider_n = compact_cpp(slider)
-    expected_slider = (
-        "structParamMenuSlider:ui::Slider{explicitParamMenuSlider(ParamQuantity*pq)"
-        "{box.size.x=180.f;quantity=pq;}}")
-    if slider_n != expected_slider:
-        issues.append("Detune menu slider must non-owningly bind the existing ParamQuantity")
-
-    menu_n = compact_cpp(menu)
-    for part, enum in (("A", "DETUNE_A"), ("B", "DETUNE_B")):
-        required = compact_cpp(
-            f'createSubmenuItem("Detune {part}","",[m](Menu*sub){{'
-            f'auto*quantity=m->getParamQuantity({enum});'
-            f'sub->addChild(newParamMenuSlider(quantity));'
-            f'sub->addChild(createMenuItem("Reset to 6.0 ct","",[m](){{'
-            f'm->params[{enum}].setValue(kDefaultDetune);}}));}}));')
-        if required not in menu_n:
-            issues.append(f"Detune {part} menu needs its own slider and exact reset")
+    # DETUNE's context-menu submenu is gone with the menu-only shape it used
+    # to share with DRIVE; a well-meaning revert re-adding it would silently
+    # bring back a second, disagreeing way to set the same parameter.
+    menu_n = compact_cpp(menu) if menu is not None else ""
+    if 'createSubmenuItem("DetuneA"' in menu_n or \
+       'createSubmenuItem("DetuneB"' in menu_n:
+        issues.append("DETUNE must not still have a context-menu submenu "
+                       "now that it is a panel control")
     return issues
 
 
 def test_source_detune_host_wiring():
-    """SOURCE owns LANE_SOURCE on every engine; hidden detune stays per part
-    and persistently controllable in the Rack context menu."""
+    """SOURCE owns LANE_SOURCE on every engine; DETUNE is a strided panel
+    control that reaches the engine through the squared taper."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
@@ -1429,62 +1654,84 @@ def test_source_detune_host_wiring():
 
 
 def test_source_detune_guard_rejects_representative_regressions():
-    """The source guard must catch wrong lane routing and independently
-    missing A/B detune menu state, not merely recognize today's source."""
+    """The source guard must catch wrong lane routing and independently a
+    detune taper that regressed to linear or to the old menu-only shape, not
+    merely recognize today's source."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     mutations = [
         ("pp(SOURCE_A, p)", "pp(DETUNE_A, p)", "SOURCE lane"),
-        ("params[p ? DETUNE_B : DETUNE_A].getValue()",
-         "pp(SOURCE_A, p)", "voice detune"),
-        ("DETUNE_B, 0.f, 1.f, initParamDefault(DETUNE_B), \"Detune B\"",
-         "DETUNE_A, 0.f, 1.f, initParamDefault(DETUNE_A), \"Detune A\"",
-         "Detune B quantity"),
-        ("\"Detune B\"", "\"Detune\"", "Detune B name"),
+        ("const float detKnob = pp(DETUNE_A, p);\n"
+         "            inst.set_voice_detune(p, detKnob * detKnob);",
+         "inst.set_voice_detune(p, pp(DETUNE_A, p));", "linear detune taper"),
+        ("c.id == DETUNE_A || c.id == DETUNE_B",
+         "c.id == DETUNE_A", "Detune B configControls branch"),
         ("Synth TIMB, Sampler ORG, Wave FRAME, or Body MATL",
          "Synth COLOR, Sampler POSITION, Wave START, or Body SHAPE",
          "SOURCE description"),
-        ("\"Reset to 6.0 ct\"", "\"Reset\"", "menu reset"),
-        ("string::f(\"%.1f ct\"", "string::f(\"%.0f ct\"",
-         "Detune cents precision"),
-        ("6.f / spky::SynthEngine::kDetuneCeilCt",
-         "5.f / spky::SynthEngine::kDetuneCeilCt", "Detune reset default"),
+        ("string::f(\"%.1f ct\",\n            v * v * spky::SynthEngine::kDetuneCeilCt);",
+         "string::f(\"%.1f ct\",\n            v * spky::SynthEngine::kDetuneCeilCt);",
+         "Detune display taper"),
     ]
     for before, after, label in mutations:
+        check(before in cpp, f"fixture drifted: {label!r} needle not found")
         mutated = cpp.replace(before, after, 1)
         check(source_detune_wiring_issues(mutated),
               f"SOURCE/Detune guard accepted a {label} regression")
 
 
 def flux_time_wiring_issues(cpp):
-    """Return regressions in Tape Time's Rack-to-FX boundary."""
+    """Return regressions in FLUX TIME's Rack-to-FX boundary.
+
+    FLUXTIME_A/B (MULT) is retired (task 6, spec 2026-08-09
+    hw-control-reduction): FLUXRATE_A/B, renamed TIME, is now the only
+    panel path to the tape's delay time, reading its raw 0..11 detent index
+    directly instead of round-tripping through flux_division_index(). The
+    modulation sink MULT used to feed, FXT_FLUX_TIME, survives pinned to a
+    hard-coded neutral base so CV and the mod lanes can still bend the tape.
+    """
     issues = []
-    quantity = cpp_scope(cpp, "struct FluxTimeQuantity : ParamQuantity")
+    quantity = cpp_scope(cpp, "struct FluxRateQuantity : ParamQuantity")
     config = cpp_scope(cpp, "void configControls()")
     push = cpp_scope(cpp, "void pushParams()")
-    if quantity is None or "spky::tape_time_mult(getValue())" not in quantity:
-        issues.append("Tape Time display does not reuse tape_time_mult")
-    # `%g` preserves the intended readable endpoints of the shared geometric
-    # mapping: 0 -> x0.25, 0.5 -> x1, and 1 -> x4. In particular, `%.2f`
-    # would regress the high endpoint to the visibly wrong `x4.00`.
+    if "struct FluxTimeQuantity" in cpp:
+        issues.append("FluxTimeQuantity must be retired along with the MULT knob")
+    if "FLUXTIME_A" in cpp or "FLUXTIME_B" in cpp:
+        issues.append("Fireflow.cpp still references a retired FLUXTIME id")
     expected_display = '''
 std::string getDisplayValueString() override {
-    const float mult = spky::tape_time_mult(getValue());
-    return string::f("x%g", mult);
+    int k = spky::kFluxRateOffset + (int)std::lround(getValue());
+    return spky::kDivisions[k].name;
 }'''
     if quantity is None or compact_cpp(expected_display) not in compact_cpp(quantity):
-        issues.append("Tape Time display must show 0=x0.25, 0.5=x1, and 1=x4")
-    if config is None or config.count("configParam<FluxTimeQuantity>") != 1:
-        issues.append("FLUXTIME is not configured through FluxTimeQuantity")
-    expected = """
-inst.set_fx_target_base(p, spky::FXT_FLUX_TIME,
-    params[p ? FLUXTIME_B : FLUXTIME_A].getValue());
+        issues.append("FluxRateQuantity must read the raw detent index directly")
+    if quantity and "flux_division_index" in quantity:
+        issues.append("FluxRateQuantity still round-trips through flux_division_index")
+    if config is None or config.count("configParam<FluxRateQuantity>") != 1:
+        issues.append("FLUXRATE is not configured through FluxRateQuantity")
+    if config and "configParam<FluxTimeQuantity>" in config:
+        issues.append("configControls still configures a retired FluxTimeQuantity")
+    expected_config = """
+else if (c.id == FLUXRATE_A || c.id == FLUXRATE_B)
+    configParam<FluxRateQuantity>(
+        c.id, 0.f, (float)(spky::kFluxRateCount - 1),
+        init, lbl);
 """
-    if push is None or compact_cpp(expected) not in compact_cpp(push):
-        issues.append("FLUXTIME does not route to FXT_FLUX_TIME")
-    if push and "pp(FLUXTIME_A, p)" in push:
-        issues.append("trailing FLUXTIME ids are incorrectly read through pp()")
+    if config is None or compact_cpp(expected_config) not in compact_cpp(config):
+        issues.append("TIME's configParam<FluxRateQuantity> call drifted "
+                      "(range, initParamDefault-sourced default, or lbl)")
+    expected_rate_push = """
+inst.set_flux_rate(p, (int)std::lround(
+    params[p ? FLUXRATE_B : FLUXRATE_A].getValue()));
+"""
+    if push is None or compact_cpp(expected_rate_push) not in compact_cpp(push):
+        issues.append("TIME does not push its raw index to set_flux_rate")
+    expected_base = """
+inst.set_fx_target_base(p, spky::FXT_FLUX_TIME, 0.5f);
+"""
+    if push is None or compact_cpp(expected_base) not in compact_cpp(push):
+        issues.append("FXT_FLUX_TIME must be pinned to the neutral 0.5 base")
     pitch = """
 if (bbdPart)
     inst.set_target_base(p, spky::LANE_PITCH,
@@ -1497,18 +1744,11 @@ if (bbdPart)
         issues.append("STAGES is coupled to the tape TIME target")
     if "constboolbbdPart=inst.engine_id(p)==spky::ENGINE_BBD;" not in push_n:
         issues.append("LANE_PITCH routing lacks the BBD-only gate")
-    if config:
-        flux_time_config = """
-else if (c.id == FLUXTIME_A || c.id == FLUXTIME_B)
-    configParam<FluxTimeQuantity>(c.id, 0.f, 1.f, init, lbl);
-"""
-        if compact_cpp(flux_time_config) not in compact_cpp(config):
-            issues.append("FLUXTIME must use initParamDefault through its A/B configuration branch")
     return issues
 
 
 def test_flux_time_host_wiring():
-    """Tape Time uses its real tape mapping and routes each appended deck id."""
+    """TIME reads its raw detent index and FXT_FLUX_TIME stays pinned neutral."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
@@ -1517,35 +1757,43 @@ def test_flux_time_host_wiring():
 
 
 def test_flux_time_guard_rejects_representative_regressions():
-    """The Tape Time guard rejects realistic deck, target, accessor, and default bugs."""
+    """The TIME guard rejects realistic deck, target, index, and default bugs."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     mutations = [
-        ("params[p ? FLUXTIME_B : FLUXTIME_A].getValue()",
-         "params[p ? FLUXTIME_A : FLUXTIME_A].getValue()", "deck B id"),
-        ("spky::FXT_FLUX_TIME", "spky::FXT_FLUX_FB", "FX target"),
-        ("params[p ? FLUXTIME_B : FLUXTIME_A].getValue()",
-         "pp(FLUXTIME_A, p)", "strided FLUXTIME accessor"),
-        ("configParam<FluxTimeQuantity>(c.id, 0.f, 1.f, init, lbl);",
-         "configParam<FluxTimeQuantity>(c.id, 0.f, 1.f, 0.f, lbl);",
+        ("params[p ? FLUXRATE_B : FLUXRATE_A].getValue()",
+         "params[p ? FLUXRATE_A : FLUXRATE_A].getValue()", "deck B id"),
+        ("spky::FXT_FLUX_TIME, 0.5f", "spky::FXT_FLUX_FB, 0.5f", "FX target"),
+        ("int k = spky::kFluxRateOffset + (int)std::lround(getValue());",
+         "int k = spky::kFluxRateOffset + spky::flux_division_index(getValue());",
+         "reintroduced flux_division_index round-trip"),
+        ("configParam<FluxRateQuantity>(\n"
+         "                            c.id, 0.f, (float)(spky::kFluxRateCount - 1),\n"
+         "                            init, lbl);",
+         "configParam<FluxRateQuantity>(\n"
+         "                            c.id, 0.f, (float)(spky::kFluxRateCount - 1),\n"
+         "                            0.f, lbl);",
          "hard-coded default"),
     ]
     for before, after, label in mutations:
+        check(before in cpp, f"fixture for {label!r} did not match current source")
         mutated = cpp.replace(before, after, 1)
         check(flux_time_wiring_issues(mutated),
-              f"Tape Time guard accepted a {label} regression")
+              f"TIME guard accepted a {label} regression")
 
 
 # Derived, not hand-copied: the branch's whole point is that caption words
 # live in one place (DYNAMIC_CAPTIONS), so the guard that checks no caption
 # word is typed into the C++ must draw from that same table, not a second
 # transcription of it that a later DYNAMIC_CAPTIONS row can silently outrun.
-# BEND/DIV/MULT/SEND/PUSH are static (never state-dependent) captions with
-# no DYNAMIC_CAPTIONS row of their own, so they're added explicitly.
+# BEND/TIME/SEND/PUSH are static (never state-dependent) captions with no
+# DYNAMIC_CAPTIONS row of their own, so they're added explicitly. DIV/MULT
+# retired with FLUXRATE_A/B's rename to TIME (task 6, spec 2026-08-09
+# hw-control-reduction).
 CAPTION_WORDS = tuple(sorted(
     {w for _t, _d, words in g.DYNAMIC_CAPTIONS for w in words}
-    | {"BEND", "DIV", "MULT", "SEND", "PUSH"}))
+    | {"BEND", "TIME", "SEND", "PUSH"}))
 
 
 def caption_wiring_issues(cpp):
@@ -1698,7 +1946,10 @@ def attack_pitch_wiring_issues(cpp):
     visible = cpp_scope(cpp, "static bool ctlVisible(Fireflow* m, int id)")
     exclusive = cpp_scope(cpp, "struct SlotVisible : W")
     widget = cpp_scope(cpp, "FireflowWidget(Fireflow* module)")
-    menu = cpp_scope(cpp, "void appendContextMenu(Menu* menu) override")
+    # Same re-anchor as source_detune_wiring_issues above: appendContextMenu
+    # is now a two-line delegator, the Freeze Attack submenu lives in
+    # appendFireflowMenu (review finding IMPORTANT 2).
+    menu = cpp_scope(cpp, "static void appendFireflowMenu(Menu* menu, Fireflow* m)")
 
     expected_rounded = """
 static int roundedEngineState(Fireflow* module, int engineId) {
@@ -1983,9 +2234,12 @@ def test_shuffle_host_wiring():
 
 
 def test_sampler_preset_init_snapshot():
-    """The init patch is the approved sampler.vcvm snapshot, while its sample
-    comes from the bundled factory asset instead of the preset's absolute
-    machine-specific path."""
+    """The approved init values, pinned by NAME. A control that leaves the
+    panel takes its entry with it; nothing below it moves. Also covers the
+    init-snapshot header's other invariants: no obsolete remembered-form
+    state, Fireflow.cpp wiring, and the schema-migration/factory-asset
+    contract, none of which the name-based refactor should touch."""
+    import gen_panel as gp
     here = os.path.dirname(os.path.abspath(__file__))
     header_path = os.path.join(here, "..", "src", "init_patch.hpp")
     if not os.path.isfile(header_path):
@@ -1993,58 +2247,140 @@ def test_sampler_preset_init_snapshot():
         return
     with open(header_path) as f:
         header = f.read()
-
-    match = re.search(
-        r"kInitParamDefaults\[\]\s*=\s*\{(.*?)\};", header, re.DOTALL)
-    check(match is not None, "kInitParamDefaults array missing")
-    if match is None:
-        return
-    actual = []
-    for raw in match.group(1).splitlines():
-        value = raw.split("//", 1)[0].strip().rstrip(",")
-        if value:
-            actual.append(float(value.removesuffix("f")))
-
-    expected = [
-        0.116716892, 0.0, 0.695181072,
-        0.995180666, 0.0, 0.0,
-        0.612047195, 0.0, 0.185333401,
-        0.322666585, 0.319000006, 0.458666444,
-        0.438666672, 0.86400038, 0.0,
-        0.629666805, 16.0, 0.0,
-        1.0, 0.0, 2.0,
-        0.0, 0.0, 0.202409565,
-        0.899999678, 0.64457792, 0.613253355,
-        0.0, -1.0, 0.35783118,
-        0.0, 0.093333311, 0.450666398,
-        0.217333555, 0.319999605, 0.177333504,
-        1.0, 0.0, 0.561333418,
-        16.0, 3.0, 0.0,
-        0.0, 2.0, 0.0,
-        0.0, 0.785541892, 1.0,
-        0.169333577, 1.0, 5.0,
-        0.958666623, 0.0, 0.482666761,
-        0.0, 0.869332671, 0.790665507,
-        0.761333108, 0.862999976, 0.484000504,
-        0.237000003, 0.0, -0.172999933,
-        -0.19999963, 0.0, 0.392727494,
-        0.25466612, 0.285667986, 0.555337131,
-        0.0, 0.469879329, 0.0,
-        0.0, 0.800000012, 1.0,
-        0.0, 0.0, 0.422665179,
-        0.613332987, 0.0, 0.171428576,
-        0.171428576, 0.200000003, 0.200000003,
-        0.5, 0.5,
-    ]
-    check(len(actual) == len(PARAM_ORDER) == len(expected),
-          f"init snapshot has {len(actual)} values, want {len(PARAM_ORDER)}")
-    for i, (got, want) in enumerate(zip(actual, expected)):
-        check(math.isclose(got, want, rel_tol=0.0, abs_tol=1e-7),
-              f"{PARAM_ORDER[i]} init {got}, want {want}")
-    check(PARAM_ORDER[-4:] == ['DRIVE_A', 'DRIVE_B', 'FLUXTIME_A', 'FLUXTIME_B'],
-          "init snapshot tail ids drifted")
-    check(actual[-4:] == [0.200000003, 0.200000003, 0.5, 0.5],
-          "init snapshot tail defaults drifted")
+    approved = {
+        # generated once by the command in the plan's Step 6; a second,
+        # independent copy of the same numbers -- that is what makes this a test
+        "RATE_A": 0.116716892,
+        "SHAPE_A": 0.0,
+        "DENSITY_A": 0.695181072,
+        "SMOOTH_A": 0.995180666,
+        "RANGE_A": 0.0,
+        "MELODY_A": 0.0,
+        "MOD_A": 0.612047195,
+        "TUNE_A": 0.0,
+        "ATTACK_A": 0.185333401,
+        "DECAY_A": 0.322666585,
+        "RES_A": 0.319000006,
+        "SUB_A": 0.458666444,
+        "SOURCE_A": 0.438666672,
+        "FLUX_A": 0.86400038,
+        "GRIT_A": 0.0,
+        # COMP_A/COMP_B deliberately changed (spec 2026-08-09
+        # hw-control-reduction task 5): the knob's meaning changed from
+        # "compressor amount" to "LVL/COMP", so the old value cannot be
+        # preserved -- 0.8 is full output level, no compressor.
+        "COMP_A": 0.8,
+        # STEPS_A now carries the retired STEP_A pad's boolean too (spec
+        # 2026-08-09 hw-control-reduction task 3 review, Finding 7): the
+        # approved boot was STEP_A=0 (off) / STEPS_A=16 (parked); the merge
+        # restores the "off" half as 0 and cannot keep the parked count.
+        "STEPS_A": 0.0,
+        "ENGINE_A": 0.0,
+        "GRITMODE_A": 1.0,
+        "STEP_A": 0.0,
+        "FORM_A": 2.0,
+        "NEWPHRASE_A": 0.0,
+        # SONG_A is a ladder rung index now, not a raw SongMode (spec
+        # 2026-08-09 hw-control-reduction task 3 review). Rung 6 is
+        # {form: Hierarchical, song: AAAB} -- the exact pair the retired
+        # FORM_A=2.0/old SONG_A=0.0 held, so the approved init sound is
+        # unchanged even though the number that encodes it is not.
+        "SONG_A": 6.0,
+        "RATE_B": 0.202409565,
+        "SHAPE_B": 0.899999678,
+        "DENSITY_B": 0.64457792,
+        "SMOOTH_B": 0.613253355,
+        "RANGE_B": 0.0,
+        "MELODY_B": -1.0,
+        "MOD_B": 0.35783118,
+        "TUNE_B": 0.0,
+        "ATTACK_B": 0.093333311,
+        "DECAY_B": 0.450666398,
+        "RES_B": 0.217333555,
+        "SUB_B": 0.319999605,
+        "SOURCE_B": 0.177333504,
+        "FLUX_B": 1.0,
+        "GRIT_B": 0.0,
+        "COMP_B": 0.8,   # see COMP_A above
+        "STEPS_B": 0.0,  # same flow-mode boot restoration as STEPS_A, see above
+        "ENGINE_B": 3.0,
+        "GRITMODE_B": 0.0,
+        "STEP_B": 0.0,
+        "FORM_B": 2.0,
+        "NEWPHRASE_B": 0.0,
+        "SONG_B": 6.0,  # same rung-6 preservation as SONG_A, see above
+        "MORPH": 0.785541892,
+        "TEMPO": 0.169333577,
+        "COUPLE": 1.0,
+        "SCALE": 5.0,
+        # 0.958666623 is what set_drift() must receive; under the new zone
+        # mapping (task 8, spec 2026-08-09 hw-control-reduction) the raw
+        # knob position that reproduces it is 0.958666623 * 0.98 + 0.02 =
+        # 0.959493291, not the old raw value -- see gen_panel.py's
+        # INIT_DEFAULTS["DRIFT"] comment for the full derivation.
+        "DRIFT": 0.959493291,
+        "SETTLE": 0.0,
+        # SPOT and MASTER_DRIVE retired (task 9, spec 2026-08-09
+        # hw-control-reduction) -- their entries leave with them, per this
+        # test's own docstring. MASTER_DRIVE's approved 0.482666761 is
+        # superseded by the brief's by-ear pin, 0.40 -- not carried forward.
+        "REV_SIZE": 0.869332671,
+        "REV_DECAY": 0.790665507,
+        "REV_TONE": 0.761333108,
+        "REV_DIFF": 0.862999976,
+        # REV_SMEAR and REV_MOD retired (task 9); their entries leave too.
+        # Approved 0.484000504/0.237000003 are superseded by the brief's
+        # by-ear pins, 0.30/0.15 -- not carried forward.
+        "CHOKE": 0.0,
+        "FILT_A": -0.172999933,
+        "FILT_B": -0.19999963,
+        "TIDE": 0.0,
+        # FLUXRATE_A/B used to be normalized 0..1 floats run through
+        # flux_division_index(); task 6 (spec 2026-08-09
+        # hw-control-reduction) made the knob a 12-detent KNOBI whose value
+        # IS the index, so the approved snapshot carries the converted
+        # indices the old floats used to round to (0.392727494 -> 4,
+        # 0.25466612 -> 3), not the old floats -- the factory delay time is
+        # unchanged, only the number that encodes it.
+        "FLUXRATE_A": 4.0,
+        "FLUXRATE_B": 3.0,
+        "FLUXFB_A": 0.285667986,
+        "FLUXFB_B": 0.555337131,
+        "COLOR_A": 0.0,
+        "COLOR_B": 0.469879329,
+        "LINK_A": 0.0,
+        "LINK_B": 0.0,
+        "STAGES_A": 0.800000012,
+        "STAGES_B": 1.0,
+        "REC_A": 0.0,
+        "REC_B": 0.0,
+        "REV_MIX_A": 0.422665179,
+        "REV_MIX_B": 0.613332987,
+        "SHUFFLE": 0.0,
+        # DETUNE_A/B used to share one raw value, 0.171428576 ("= 6 / 35"): a
+        # linear knob into the old 35 ct ceiling landed both decks at 6 ct.
+        # Task 10 (spec 2026-08-09 hw-control-reduction) squared the taper
+        # and tripled the synth-family ceiling to 105 ct; BODY's compensating
+        # kDetuneScale shrank from 4 to 4/3 to hold its own 140 ct rail
+        # exactly where it was, but that compensation only agrees with the
+        # OLD shared value at full knob travel, not at this init position.
+        # The approved patch boots ENGINE_A = SYNTH, ENGINE_B = BODY, so each
+        # deck's init value is solved to preserve the cents ITS OWN engine
+        # actually produces: DETUNE_A = sqrt(6 / 105) (6.000 ct on SYNTH),
+        # DETUNE_B = sqrt(24 / 140) (24.000 ct on BODY -- 24 ct is what the
+        # old shared value produced there: 0.171428576 * 35 * 4).
+        "DETUNE_A": 0.239045722,
+        "DETUNE_B": 0.414039341,
+        # DRIVE_A/B retired here (task 9, spec 2026-08-09
+        # hw-control-reduction) -- dead menu-only patch state, its entry
+        # leaves with it. FLUXTIME_A/B (MULT) retired earlier (task 6) --
+        # its entry left with it too, per this test's own docstring.
+    }
+    for name, want in approved.items():
+        if name not in gp.INIT_DEFAULTS:
+            continue          # control retired by a later task -- see the plan
+        check(abs(gp.INIT_DEFAULTS[name] - want) < 1e-6,
+              f"{name} init default drifted: {gp.INIT_DEFAULTS[name]} != {want}")
 
     check("kInitLastBasis" not in header,
           "obsolete remembered-form init state remains")
@@ -2104,10 +2440,10 @@ def test_sampler_preset_init_snapshot():
           and "json_is_integer(basis)" in cpp
           and "json_is_integer(principle)" in cpp,
           "legacy arrays and values are not type-checked")
-    check("params[p ? FORM_B : FORM_A].setValue((float)migrated.form);" in cpp,
-          "legacy FORM value is not migrated into the renamed stable slot")
-    check("params[p ? SONG_B : SONG_A].setValue((float)migrated.song);" in cpp,
-          "legacy patches do not default SONG to AAAB")
+    check("params[p ? SONG_B : SONG_A].setValue((float)rung);" in cpp,
+          "legacy FORM value is not migrated onto a matching SONG ladder rung")
+    check("spky::song_ladder_at(i).form == migrated.form" in cpp,
+          "legacy FORM migration no longer searches the ladder for a match")
     check('configParam<LinkQuantity>(c.id, 0.f, 1.f, init, lbl);' in cpp,
           "LINK is not configured as unipolar THIN")
     check('return v > 0.005f ? string::f("thin %.0f %%", 100.f * v) : "off";' in cpp,
@@ -2284,6 +2620,370 @@ def test_vcv_tape_memory_is_heap_backed_stereo_storage():
           "VCV tape memory is not heap-backed stereo storage")
     check('float echo[spky::PART_COUNT][spky::Flux::kMaxSamples]' not in cpp,
           "VCV still embeds the tape arena by value in every Module")
+
+
+def test_steps_knob_carries_the_mode():
+    """STEP's pad is gone: 0 on the STEPS knob IS flow mode, and the host
+    derives the boolean from the count instead of reading a second control."""
+    import gen_panel as gp
+    names = {c.enum for c in gp.PARAMS}
+    check("STEP_A" not in names and "STEP_B" not in names,
+          "STEP pads still exist")
+    steps = [c for c in gp.PARAMS if c.enum == "STEPS_A"]
+    check(len(steps) == 1 and steps[0].kind == gp.KNOBI,
+          "STEPS_A missing or no longer an integer knob")
+    cpp = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "..", "src", "Fireflow.cpp")).read()
+    check("configParam(c.id, 0.f, 16.f" in cpp or
+          "0.f, 16.f, initParamDefault" in cpp,
+          "STEPS is not configured over 0..16")
+    check("inst.set_step(p, steps > 0, steps)" in cpp,
+          "set_step no longer derives its mode from the count")
+    check("STEP_A" not in cpp, "Fireflow.cpp still references STEP_A")
+
+
+def test_init_defaults_are_generated_from_names():
+    """init_patch.hpp is emitted from INIT_DEFAULTS, keyed by param name, so
+    removing a param cannot leave a stale positional value behind."""
+    import gen_panel as gp
+    here = os.path.dirname(os.path.abspath(__file__))
+    header = open(os.path.join(here, "..", "src", "init_patch.hpp")).read()
+    check("GENERATED by res/gen_panel.py" in header,
+          "init_patch.hpp is not marked generated")
+    missing = [c.enum for c in gp.PARAMS if c.enum not in gp.INIT_DEFAULTS]
+    check(not missing, f"params without an INIT_DEFAULTS entry: {missing}")
+    extra = [k for k in gp.INIT_DEFAULTS if k not in {c.enum for c in gp.PARAMS}]
+    check(not extra, f"INIT_DEFAULTS entries for params that do not exist: {extra}")
+    for c in gp.PARAMS:
+        check(f"// {c.enum}\n" in header or f"// {c.enum}" in header,
+              f"{c.enum} missing from the emitted table")
+
+    # The checks above only look for the NAME comments and the marker string
+    # -- none of them read the numbers the emitter actually wrote. Parse the
+    # real kInitParamDefaults[] out of the header (the array the firmware
+    # indexes by ParamId) and check both its values AND its order against
+    # INIT_DEFAULTS/PARAMS, so an emitter bug (bad lookup, transposed line,
+    # precision loss) can't silently ship a wrong array while every check
+    # above still passes.
+    match = re.search(r"kInitParamDefaults\[\]\s*=\s*\{(.*?)\};", header, re.DOTALL)
+    check(match is not None, "kInitParamDefaults array missing from init_patch.hpp")
+    if match is not None:
+        entries = []
+        for line in match.group(1).splitlines():
+            m = re.match(r"\s*([-0-9.eE]+)f?,\s*//\s*(\w+)", line)
+            if m:
+                entries.append((m.group(2), float(m.group(1))))
+        want_order = [c.enum for c in gp.PARAMS]
+        got_order = [name for name, _ in entries]
+        check(got_order == want_order,
+              f"kInitParamDefaults order drifted from PARAMS order: "
+              f"{got_order} != {want_order}")
+        for name, value in entries:
+            if name in gp.INIT_DEFAULTS:
+                check(abs(value - gp.INIT_DEFAULTS[name]) < 1e-6,
+                      f"kInitParamDefaults[{name}] emitted {value}, "
+                      f"INIT_DEFAULTS has {gp.INIT_DEFAULTS[name]}")
+
+
+def test_comp_knob_is_level_then_compressor():
+    """COMP was a volume control in practice. The knob says so now, and the
+    compressor lives in its top fifth with make-up."""
+    import gen_panel as gp
+    comp = [c for c in gp.PARAMS if c.enum == "COMP_A"][0]
+    check(comp.label == "LVL", f"COMP_A still prints {comp.label!r}")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("kLvlCompSplit" in cpp, "no zone split constant in the host")
+    check("inst.set_part_level(" in cpp, "the host never sets a part level")
+
+
+def test_lvl_comp_split_and_formulas_agree_across_host_and_bench():
+    """LVL/COMP's zone split (kLvlCompSplit/kCompTop) and its level/comp
+    formulas exist in two places: Fireflow.cpp (what Rack actually runs) and
+    bench/audition/init_patch.cpp (the only copy a doctest can reach --
+    Fireflow.cpp lives inside a Rack Module, unreachable from the engine test
+    suite). This scrapes both files' source text and requires the split
+    constants' values and both formulas to match exactly, so a hand-edit to
+    only one copy fails loudly here instead of shipping a Rack build that
+    disagrees with its own test coverage.
+
+    Each extraction below is asserted to find exactly one match per file --
+    zero matches (the extraction quietly finding nothing) is treated as a
+    failure, not a pass: a scraper that matches nothing must not report
+    success.
+
+    Deliberately NOT a call to consolidate the two copies into a shared
+    helper -- the codebase mirrors this logic on purpose (see the GRIT
+    dead-zone guard above, same pattern).
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
+              encoding="utf-8") as f:
+        host_cpp = f.read()
+    bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
+                               "init_patch.cpp")
+    with open(bench_path, encoding="utf-8") as f:
+        bench_cpp = f.read()
+
+    def const_value(source, name, label):
+        matches = re.findall(name + r"\s*=\s*([\d.]+f?)", source)
+        check(len(matches) == 1,
+              f"{label}: expected exactly one {name} declaration, "
+              f"found {len(matches)} ({matches!r})")
+        return matches[0].rstrip("f") if len(matches) == 1 else None
+
+    for const in ("kLvlCompSplit", "kCompTop"):
+        host_v = const_value(host_cpp, const, "Fireflow.cpp")
+        bench_v = const_value(bench_cpp, const, "bench/audition/init_patch.cpp")
+        if host_v is not None and bench_v is not None:
+            check(float(host_v) == float(bench_v),
+                  f"{const} disagrees: Fireflow.cpp={host_v} "
+                  f"bench/audition/init_patch.cpp={bench_v}")
+
+    needles = {
+        "level formula": compact_cpp(
+            "std::min(1.f,lvlKnob/kLvlCompSplit)"),
+        "comp formula": compact_cpp(
+            "lvlKnob<=kLvlCompSplit?0.f:(lvlKnob-kLvlCompSplit)/"
+            "(1.f-kLvlCompSplit)*kCompTop"),
+    }
+    host_n, bench_n = compact_cpp(host_cpp), compact_cpp(bench_cpp)
+    for label, needle in needles.items():
+        check(host_n.count(needle) == 1,
+              f"Fireflow.cpp: expected exactly one {label}, found "
+              f"{host_n.count(needle)} matching {needle!r}")
+        check(bench_n.count(needle) == 1,
+              f"bench/audition/init_patch.cpp: expected exactly one "
+              f"{label}, found {bench_n.count(needle)} matching {needle!r}")
+
+
+def test_couple_zone_split_and_formula_agree_across_host_and_bench():
+    """COUPLE's zone split (kCoupleZoneSplit) and its two-zone formula --
+    below the split SYNC is off and couple sweeps 0..1 in the FREE world,
+    above it SYNC is on and couple sweeps 0..1 in the GRID world -- exist in
+    two places: Fireflow.cpp (what Rack actually runs) and
+    bench/audition/init_patch.cpp (the only copy a doctest can reach --
+    Fireflow.cpp lives inside a Rack Module, unreachable from the engine test
+    suite). This scrapes both files' source text and requires the split
+    constant's value and the formula to match exactly, so a hand-edit to only
+    one copy fails loudly here instead of shipping a Rack build that
+    disagrees with its own test coverage.
+
+    Each extraction below is asserted to find exactly one match per file --
+    zero matches (the extraction quietly finding nothing) is treated as a
+    failure, not a pass: a scraper that matches nothing must not report
+    success.
+
+    Deliberately NOT a call to consolidate the two copies into a shared
+    helper -- the codebase mirrors this logic on purpose (see the GRIT
+    dead-zone and LVL/COMP guards above, same pattern).
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
+              encoding="utf-8") as f:
+        host_cpp = f.read()
+    bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
+                               "init_patch.cpp")
+    with open(bench_path, encoding="utf-8") as f:
+        bench_cpp = f.read()
+
+    def const_value(source, name, label):
+        matches = re.findall(name + r"\s*=\s*([\d.]+f?)", source)
+        check(len(matches) == 1,
+              f"{label}: expected exactly one {name} declaration, "
+              f"found {len(matches)} ({matches!r})")
+        return matches[0].rstrip("f") if len(matches) == 1 else None
+
+    host_v = const_value(host_cpp, "kCoupleZoneSplit", "Fireflow.cpp")
+    bench_v = const_value(bench_cpp, "kCoupleZoneSplit",
+                           "bench/audition/init_patch.cpp")
+    if host_v is not None and bench_v is not None:
+        check(float(host_v) == float(bench_v),
+              f"kCoupleZoneSplit disagrees: Fireflow.cpp={host_v} "
+              f"bench/audition/init_patch.cpp={bench_v}")
+
+    needles = {
+        "zone test": compact_cpp("grid=coupleKnob>=kCoupleZoneSplit"),
+        "two-zone formula": compact_cpp(
+            "grid?(coupleKnob-kCoupleZoneSplit)/(1.f-kCoupleZoneSplit)"
+            ":coupleKnob/kCoupleZoneSplit"),
+    }
+    host_n, bench_n = compact_cpp(host_cpp), compact_cpp(bench_cpp)
+    for label, needle in needles.items():
+        check(host_n.count(needle) == 1,
+              f"Fireflow.cpp: expected exactly one {label}, found "
+              f"{host_n.count(needle)} matching {needle!r}")
+        check(bench_n.count(needle) == 1,
+              f"bench/audition/init_patch.cpp: expected exactly one "
+              f"{label}, found {bench_n.count(needle)} matching {needle!r}")
+
+
+def test_drift_knob_settles_at_its_left_stop():
+    """SETL was drift-to-zero plus a glide. It lives at the end of the axis
+    it always belonged to, and fires once on entry, not every tick."""
+    import gen_panel as gp
+    check("SETTLE" not in {c.enum for c in gp.PARAMS},
+          "the SETL pad still exists")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("kDriftSettleZone" in cpp, "no settle zone constant in the host")
+    check("driftSettled" in cpp, "settle is not edge-triggered")
+    check("params[SETTLE]" not in cpp, "Fireflow.cpp still reads a SETTLE param")
+
+
+def test_drift_settle_zone_and_formula_agree_across_host_and_bench():
+    """DRIFT's settle zone (kDriftSettleZone) and its zone-mapped formula --
+    at or below the zone the knob is the old SETL pad's left stop and drift
+    is pinned to 0, above it drift sweeps 0..1 across the rest of the axis --
+    exist in two places: Fireflow.cpp (what Rack actually runs) and
+    bench/audition/init_patch.cpp (the only copy a doctest can reach --
+    Fireflow.cpp lives inside a Rack Module, unreachable from the engine test
+    suite). This scrapes both files' source text and requires the zone
+    constant's value and the formula to match exactly, so a hand-edit to only
+    one copy fails loudly here instead of shipping a Rack build that
+    disagrees with its own test coverage.
+
+    Each extraction below is asserted to find exactly one match per file --
+    zero matches (the extraction quietly finding nothing) is treated as a
+    failure, not a pass: a scraper that matches nothing must not report
+    success.
+
+    Deliberately NOT a call to consolidate the two copies into a shared
+    helper -- the codebase mirrors this logic on purpose (see the GRIT
+    dead-zone, LVL/COMP and COUPLE guards above, same pattern). The bench
+    copy deliberately does NOT call inst.settle(): apply_init_patch() applies
+    a snapshot once, so there is no "edge" to detect (see
+    bench/audition/init_patch.cpp's comment at the DRIFT block).
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
+              encoding="utf-8") as f:
+        host_cpp = f.read()
+    bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
+                               "init_patch.cpp")
+    with open(bench_path, encoding="utf-8") as f:
+        bench_cpp = f.read()
+
+    def const_value(source, name, label):
+        matches = re.findall(name + r"\s*=\s*([\d.]+f?)", source)
+        check(len(matches) == 1,
+              f"{label}: expected exactly one {name} declaration, "
+              f"found {len(matches)} ({matches!r})")
+        return matches[0].rstrip("f") if len(matches) == 1 else None
+
+    host_v = const_value(host_cpp, "kDriftSettleZone", "Fireflow.cpp")
+    bench_v = const_value(bench_cpp, "kDriftSettleZone",
+                           "bench/audition/init_patch.cpp")
+    if host_v is not None and bench_v is not None:
+        check(float(host_v) == float(bench_v),
+              f"kDriftSettleZone disagrees: Fireflow.cpp={host_v} "
+              f"bench/audition/init_patch.cpp={bench_v}")
+
+    needles = {
+        "zone-mapped formula": compact_cpp(
+            "(driftKnob-kDriftSettleZone)/(1.f-kDriftSettleZone)"),
+    }
+    host_n, bench_n = compact_cpp(host_cpp), compact_cpp(bench_cpp)
+    for label, needle in needles.items():
+        check(host_n.count(needle) == 1,
+              f"Fireflow.cpp: expected exactly one {label}, found "
+              f"{host_n.count(needle)} matching {needle!r}")
+        check(bench_n.count(needle) == 1,
+              f"bench/audition/init_patch.cpp: expected exactly one "
+              f"{label}, found {bench_n.count(needle)} matching {needle!r}")
+
+
+def test_fixed_values_and_dead_controls():
+    """PUSH, WOBL and SMEAR become constants; SPOT dies; DRIVE_A/B was never
+    wired to anything and leaves with its menu entry."""
+    import gen_panel as gp
+    names = {c.enum for c in gp.PARAMS}
+    for dead in ("MASTER_DRIVE", "SPOT", "REV_MOD", "REV_SMEAR",
+                 "DRIVE_A", "DRIVE_B"):
+        check(dead not in names, f"{dead} still exists")
+    check(gp.HIDDEN_PARAMS == [], "HIDDEN_PARAMS is not empty")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("set_master_drive(0.40f)" in cpp, "PUSH is not pinned to 0.40")
+    check("DriveQuantity" not in cpp, "the dead Drive quantity is still here")
+    check("inst.spot()" not in cpp, "SPOT is still wired in the host")
+
+
+def test_fixed_values_agree_across_host_and_bench():
+    """PUSH/SMEAR/WOBL lost their knobs (spec 2026-08-09 hw-control-reduction
+    task 9, "push steht immer auf 0.4", "smear ... 0.3 sowas", "wobbel fest
+    auf .1 - .2") and became literal constants at the two call sites that used
+    to read a param: Fireflow.cpp (what Rack actually runs) and
+    bench/audition/init_patch.cpp (the only copy a doctest can reach --
+    Fireflow.cpp lives inside a Rack Module, unreachable from the engine test
+    suite). This scrapes both files' source text and requires the three
+    literals to match exactly, so a hand-edit to only one copy fails loudly
+    here instead of shipping a Rack build that disagrees with its own test
+    coverage.
+
+    Each extraction below is asserted to find exactly one match per file --
+    zero matches (the extraction quietly finding nothing) is treated as a
+    failure, not a pass: a scraper that matches nothing must not report
+    success.
+
+    Deliberately NOT a call to consolidate the two copies into a shared
+    helper -- the codebase mirrors this logic on purpose (see the GRIT
+    dead-zone, LVL/COMP, COUPLE and DRIFT guards above, same pattern).
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
+              encoding="utf-8") as f:
+        host_cpp = f.read()
+    bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
+                               "init_patch.cpp")
+    with open(bench_path, encoding="utf-8") as f:
+        bench_cpp = f.read()
+
+    def call_value(source, fn, label):
+        matches = re.findall(re.escape(fn) + r"\(([\d.]+)f?\)", source)
+        check(len(matches) == 1,
+              f"{label}: expected exactly one {fn}(...) call with a literal "
+              f"argument, found {len(matches)} ({matches!r})")
+        return matches[0] if len(matches) == 1 else None
+
+    for fn, want in (("set_master_drive", 0.40),
+                      ("set_reverb_smear", 0.30),
+                      ("set_reverb_mod", 0.15)):
+        host_v = call_value(host_cpp, fn, "Fireflow.cpp")
+        bench_v = call_value(bench_cpp, fn, "bench/audition/init_patch.cpp")
+        if host_v is not None and bench_v is not None:
+            check(float(host_v) == float(bench_v),
+                  f"{fn} disagrees: Fireflow.cpp={host_v} "
+                  f"bench/audition/init_patch.cpp={bench_v}")
+            check(float(host_v) == want,
+                  f"{fn} is {host_v}, want {want} (spec 2026-08-09 "
+                  f"hw-control-reduction task 9)")
+
+
+def test_committed_files_match_the_generator():
+    """Every assertion above runs g.svg()/g.header() IN MEMORY -- none of
+    them would notice gen_panel.py being edited without being re-run, which
+    would leave the plugin compiling against a stale header while every
+    guard here still passes (review finding IMPORTANT 5). Mirror
+    test_flow_panel.py's test_committed_files_match_the_generator: compare
+    the committed artifacts byte-for-byte against a fresh generator run.
+    init_patch.hpp already gets an equivalent (if differently-shaped) check
+    in test_init_defaults_are_generated_from_names above, so it is included
+    here too for the same reason, not left out."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(here)
+    for path, produced in (
+            (os.path.join(here, "Fireflow.svg"), g.svg()),
+            (os.path.join(root, "src", "generated_panel.hpp"), g.header()),
+            (os.path.join(root, "src", "init_patch.hpp"), g.init_patch_header())):
+        if not os.path.exists(path):
+            FAILS.append("%s is missing -- run res/gen_panel.py" % path)
+            continue
+        with open(path) as f:
+            on_disk = f.read()
+        check(on_disk == produced,
+              "%s differs from the generator's output -- it was hand-edited, "
+              "or the generator was changed without re-running it" % path)
 
 
 def main():

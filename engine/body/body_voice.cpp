@@ -43,20 +43,25 @@ constexpr float kLn10Over20      = 0.11512925f;   // dB -> natural log
 // drove the bank): that would leave COLOR able to subtract only.
 constexpr float kBaseStretch = 0.3f;
 
-// BODY reads DETUNE four times as wide as SYNTH does: spec §5, "inharmonicity
-// amount: string spread x ~4 (up to ~140 ct) AND mode-bank stretch -- one
-// 'how broken is this material' axis". SynthEngineT hands every engine the
-// same 0..kDetuneCeilCt = 0..35 ct spread; this is where BODY's own rail
-// comes from, and it is what makes the /kDetuneMaxCt divisor below reach 1.0
-// instead of topping out at a quarter of its range.
+// BODY reads DETUNE at the same 140 ct rail SYNTH always meant it to reach:
+// spec §5, "inharmonicity amount: string spread x ~4 (up to ~140 ct) AND
+// mode-bank stretch -- one 'how broken is this material' axis". SynthEngineT
+// hands every engine the same 0..kDetuneCeilCt spread; when that ceiling was
+// 35 ct the scale here was 4 to reach 140. It grew to 105 ct (spec 2026-08-09
+// hw-control-reduction task 10, DETUNE back on the panel with more reach for
+// the synths), so the scale shrank to 4/3 in exact compensation -- BODY's own
+// rail is unchanged, and it is what makes the /kDetuneMaxCt divisor below
+// reach 1.0 instead of topping out short of its range.
 //
 // It is applied here rather than in set_detune_cents() so that
 // detune_cents() -- which SynthEngineT::applied_detune_ct() and the shared
 // part-engine contract read -- keeps reporting the spread the ENGINE pushed,
 // the same number on every engine.
-constexpr float kDetuneScale = 4.f;
-constexpr float kDetuneMaxCt = 140.f;   // = kDetuneCeilCt * kDetuneScale
+constexpr float kDetuneScale = 4.f / 3.f;   // 105 * 4/3 == the same 140 ct
+constexpr float kDetuneMaxCt = 140.f;
 } // namespace
+
+float body_detune_max_ct() { return kDetuneMaxCt; }
 
 void BodyVoice::init(float sample_rate, uint32_t seed) {
     _sr = sample_rate;

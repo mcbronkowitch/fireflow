@@ -1,3 +1,4 @@
+#include <cassert>
 #include <cmath>
 #include <algorithm>
 #include <atomic>
@@ -10,46 +11,55 @@
 #include "form_song_migration.hpp"
 #include "link_migration.hpp"
 #include "bbd_edge_state.hpp"   // ENG->BBD edge detector (dependency-free, unit-tested)
+#include "song_rung_state.hpp"  // SONG rung tracker (dependency-free, unit-tested)
+#include "drift_settle_state.hpp"  // DRIFT left-stop edge detector (dependency-free, unit-tested)
 
 // The portable engine core -- exactly the same headers the desktop render host
 // and (later) the Daisy firmware use. No hardware type crosses this boundary.
 #include "instrument.h"
 #include "mod/divisions.h"
+#include "mod/song_ladder.h"
 #include "sampler_ui.hpp"
 
 using namespace spkyvcv;
 
-// RATE tooltip: the division name while SYNC is on, free Hz otherwise.
+// COUPLE swallowed the SYNC switch (task 7, spec 2026-08-09
+// hw-control-reduction): SYNC was the right-hand end of COUPLE's own axis.
+// Below the split the knob is the FREE world (couple drives the Kuramoto
+// lock); at or above it the GRID world (couple sets how tightly the texture
+// lanes follow). Each half sweeps 0..1, so the grid world keeps its full
+// spread -- "on the grid but breathing" stays reachable. Shared by the
+// RATE/TIDE tooltips below and pushParams; mirrored (not shared -- see
+// res/test_panel.py) in bench/audition/init_patch.cpp.
+static constexpr float kCoupleZoneSplit = 0.5f;
+
+// RATE tooltip: the division name while grid (COUPLE >= split) is on, free
+// Hz otherwise.
 struct RateQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
-        if (module && module->params[SYNC].getValue() > 0.5f)
+        if (module && module->params[COUPLE].getValue() >= kCoupleZoneSplit)
             return spky::kDivisions[spky::division_index(getValue())].name;
         return string::f("%.3f Hz", spky::free_hz(getValue()));
     }
 };
 
-// TIDE tooltip: the ratio-ladder rung while SYNC is on, the free multiplier
+// TIDE tooltip: the ratio-ladder rung while grid is on, the free multiplier
 // otherwise (same table the engine snaps to, mod/divisions.h).
 struct TideQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
-        if (module && module->params[SYNC].getValue() > 0.5f)
+        if (module && module->params[COUPLE].getValue() >= kCoupleZoneSplit)
             return spky::kTideNames[spky::tide_index(getValue())];
         return string::f("x%.2f", spky::tide_free(getValue()));
     }
 };
 
-// FLUX RATE tooltip: the synced division name (always synced).
+// FLUX RATE tooltip: the synced division name (always synced). The knob IS
+// the index now (task 6, spec 2026-08-09 hw-control-reduction) -- no more
+// flux_division_index() round-trip through a 0..1 float.
 struct FluxRateQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
-        int k = spky::kFluxRateOffset + spky::flux_division_index(getValue());
+        int k = spky::kFluxRateOffset + (int)std::lround(getValue());
         return spky::kDivisions[k].name;
-    }
-};
-
-struct FluxTimeQuantity : ParamQuantity {
-    std::string getDisplayValueString() override {
-        const float mult = spky::tape_time_mult(getValue());
-        return string::f("x%g", mult);
     }
 };
 
@@ -80,17 +90,6 @@ struct StagesQuantity : ParamQuantity {
     }
 };
 
-// DRIVE tooltip: gain into a fixed saturation threshold, INSIDE the feedback
-// loop -- so each repeat saturates again. Not redundant with GRIT, which runs
-// before FLUX and dirties the input once.
-struct DriveQuantity : ParamQuantity {
-    std::string getDisplayValueString() override {
-        const float db = spky::bbd_tuning::kDriveLoDb
-            + getValue() * (spky::bbd_tuning::kDriveHiDb - spky::bbd_tuning::kDriveLoDb);
-        return string::f("%+.1f dB", db);
-    }
-};
-
 // LINK tooltip: unipolar THIN depth over the full knob travel.
 struct LinkQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
@@ -99,12 +98,17 @@ struct LinkQuantity : ParamQuantity {
     }
 };
 
-static constexpr float kDefaultDetune = 6.f / spky::SynthEngine::kDetuneCeilCt;
-
+// DETUNE is a panel SMKNOB now (spec 2026-08-09 hw-control-reduction task
+// 10, out of the context menu). pushParams squares the knob before it
+// reaches the engine (the first ~20 ct is where the fine beating lives, and
+// a linear map would squeeze it into a fifth of the travel now that the
+// ceiling is 105 ct) -- this display mirrors that same taper so the tooltip
+// reads the cents the engine actually applies, not the raw knob position.
 struct DetuneQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
+        const float v = getValue();
         return string::f("%.1f ct",
-            getValue() * spky::SynthEngine::kDetuneCeilCt);
+            v * v * spky::SynthEngine::kDetuneCeilCt);
     }
 };
 
@@ -274,8 +278,19 @@ struct Fireflow : Module {
     float curSr = 0.f;
     dsp::ClockDivider ctrlDiv;              // throttle param push to control rate
     dsp::SchmittTrigger clockTrig, resetTrig;
-    dsp::BooleanTrigger spotTrig, settleTrig;
-    dsp::BooleanTrigger newPhraseTrig[2];
+    // Tracks the SONG knob's current rung so pushParams can detect a genuine
+    // rung change and re-roll the phrase -- SONG swallowed FORM and the NEW
+    // pad (spec 2026-08-09 hw-control-reduction task 3). Seeded/rearm shape
+    // (song_rung_state.hpp) so a RESTORED rung -- patch load, preset load,
+    // module add, or Initialize -- adopts as a baseline instead of firing.
+    spkyvcv::SongRungState songRung[spky::PART_COUNT];
+    // Edge-detects DRIFT parking at its own left stop -- the old SETL pad's
+    // job, folded into the knob's lower kDriftSettleZone (spec 2026-08-09
+    // hw-control-reduction task 8). Same seeded/rearm shape as bbdEdge/
+    // songRung above, for the same reason: a RESTORED DRIFT already in the
+    // zone must adopt as a baseline instead of firing settle() on load. See
+    // drift_settle_state.hpp.
+    spkyvcv::DriftSettleState driftSettled;
     float clkSamples = 0.f;                 // samples since last external clock edge
     float gateFilt[2] = {0.f, 0.f};
     float recPhase[2] = {0.f, 0.f};        // REC LED pulse while recording
@@ -310,12 +325,8 @@ struct Fireflow : Module {
                     }
                     else if (c.id == FILT_A || c.id == FILT_B)  // bipolar cutoff trim
                         configParam(c.id, -1.f, 1.f, init, lbl);
-                    else if (c.id == TIDE)  // texture-lane rate, snaps under SYNC
+                    else if (c.id == TIDE)  // texture-lane rate, snaps in the GRID zone
                         configParam<TideQuantity>(c.id, 0.f, 1.f, init, lbl);
-                    else if (c.id == FLUXRATE_A || c.id == FLUXRATE_B)
-                        configParam<FluxRateQuantity>(c.id, 0.f, 1.f, init, lbl);
-                    else if (c.id == FLUXTIME_A || c.id == FLUXTIME_B)
-                        configParam<FluxTimeQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == FLUXFB_A || c.id == FLUXFB_B)
                         configParam<FluxFbQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == REV_DECAY)
@@ -333,31 +344,80 @@ struct Fireflow : Module {
                         source->description =
                             "Controls Synth TIMB, Sampler ORG, Wave FRAME, or Body MATL according to the selected engine.";
                     }
+                    else if (c.id == DETUNE_A || c.id == DETUNE_B)
+                        // DETUNE is a real panel control now (kParamCtls),
+                        // same as every other control in this loop -- only
+                        // the display quantity is still bespoke, for the
+                        // squared-cents tooltip (see DetuneQuantity above).
+                        configParam<DetuneQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else
                         configParam(c.id, 0.f, 1.f, init, lbl);
                     break;
-                case WK_KNOBC:  // MELODY (bipolar): both decks loop — A drifts a
-                                // little, B is frozen. Tooltip name follows ENG
-                                // through MelodyQuantity.
-                    configParam<MelodyQuantity>(c.id, -1.f, 1.f, init, lbl); break;
+                case WK_KNOBC:
+                    if (c.id == MELODY_A || c.id == MELODY_B)
+                        // MELODY (bipolar): both decks loop — A drifts a
+                        // little, B is frozen. Tooltip name follows ENG
+                        // through MelodyQuantity.
+                        configParam<MelodyQuantity>(c.id, -1.f, 1.f, init, lbl);
+                    else
+                        // GRIT (bipolar): sign picks Drive/Reduce, magnitude
+                        // is the mix (spec 2026-08-09 hw-control-reduction
+                        // task 4; see pushParams for the dead-zone math).
+                        configParam(c.id, -1.f, 1.f, init, lbl);
+                    break;
                 case WK_KNOBI:
                     if (c.id == SCALE)  // init patch is Lydian -- the bright end of group A
                         configParam<ScaleQuantity>(c.id, 0.f, (float)(spky::SCALE_LIST_COUNT - 1),
                                                    (float)spky::SCALE_LYDIAN, "Scale");
-                    else if (c.id == FORM_A || c.id == FORM_B)
-                        configSwitch(c.id, 0.f, 4.f, init, "Form",
-                                     {"TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
-                                      "CALL / RESPONSE", "OSTINATO"});
-                    else if (c.id == SONG_A || c.id == SONG_B)
-                        configSwitch(c.id, 0.f, 6.f, init, "Song",
-                                     {"AAAB", "ABAB", "ABBB", "BUILD",
-                                      "ROTATE", "MIRROR", "OFF"});
+                    else if (c.id == SONG_A || c.id == SONG_B) {
+                        // SONG walks a curated 14-rung ladder through the
+                        // (Principle, SongMode) grid (engine/mod/song_ladder.h)
+                        // -- FORM is gone, absorbed into this one knob. Labels
+                        // are composed from the ladder itself, one source, so
+                        // the table and its labels can never drift apart.
+                        static const char* kFormWords[] = {
+                            "TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
+                            "CALL / RESPONSE", "OSTINATO"};
+                        static const char* kSongWords[] = {
+                            "AAAB", "ABAB", "ABBB", "BUILD",
+                            "ROTATE", "MIRROR", "OFF"};
+                        std::vector<std::string> rungs;
+                        for (int i = 0; i < spky::kSongLadderCount; ++i) {
+                            const spky::SongRung& r = spky::song_ladder_at(i);
+                            rungs.push_back(std::string(kFormWords[r.form]) +
+                                            " / " + kSongWords[r.song]);
+                        }
+                        configSwitch(c.id, 0.f,
+                                     float(spky::kSongLadderCount - 1),
+                                     init, "Song", rungs);
+                    }
+                    // TIME: 12-detent knob over the synced FLUX divisions
+                    // (task 6, spec 2026-08-09 hw-control-reduction). The
+                    // knob value IS the index now -- 0..kFluxRateCount - 1,
+                    // spky::kFluxRateCount reachable positions (0..11) --
+                    // replacing the old 0..1 SMKNOB that ran through
+                    // flux_division_index().
+                    else if (c.id == FLUXRATE_A || c.id == FLUXRATE_B)
+                        configParam<FluxRateQuantity>(
+                            c.id, 0.f, (float)(spky::kFluxRateCount - 1),
+                            init, lbl);
                     else  // STEPS_A / STEPS_B
-                        configParam(c.id, 2.f, 16.f, init, "Steps");
+                        configParam(c.id, 0.f, 16.f, init, "Steps");
                     getParamQuantity(c.id)->snapEnabled = true;
                     break;
-                case WK_SW2:  // init patch runs the instrument on the grid
-                    configSwitch(c.id, 0.f, 1.f, init, "Sync", {"Free", "Synced"});
+                case WK_SW2:
+                    // Unreachable: no control in kParamCtls carries WK_SW2 any
+                    // more (it was SYNC's kind; COUPLE absorbed SYNC as the
+                    // right-hand end of its own axis, task 7, spec 2026-08-09
+                    // hw-control-reduction). The enum entry stays alive only
+                    // because the HW draft widget's own switch (below) still
+                    // handles it. This branch used to silently configure
+                    // WHATEVER lands here next as a switch named "Sync" with
+                    // "Free"/"Synced" labels -- a loud stop instead: do not
+                    // resurrect that call for a future WK_SW2 control, write
+                    // fresh labels for whatever it actually is.
+                    assert(false &&
+                           "WK_SW2: no live control uses this kind in configControls()");
                     break;
                 case WK_LATCH:
                     if (c.id == REC_A || c.id == REC_B)
@@ -368,27 +428,34 @@ struct Fireflow : Module {
                                      {"Synth", "Sampler", "Wave", "Body", "BBD"});
                         getParamQuantity(c.id)->snapEnabled = true;
                     }
-                    else if (c.id == GRITMODE_A || c.id == GRITMODE_B)
-                        configSwitch(c.id, 0.f, 1.f, init,
-                                     "Grit mode", {"Drive", "Reduce"});   // init: A=Reduce
-                    else  // STEP (on for the init patch's stepped sequences)
-                        configSwitch(c.id, 0.f, 1.f, init, lbl, {"Off", "On"});
+                    else {
+                        // Unreachable: the old STEP pad's boolean latch merged
+                        // into STEPS_A/STEPS_B (a WK_KNOBI knob) long before
+                        // this branch, so no LATCH-kind control besides
+                        // REC_A/B and ENGINE_A/B reaches here today. Loud stop
+                        // instead of silently configuring a future third
+                        // LATCH control as an "Off"/"On" STEP switch it may
+                        // not be.
+                        assert(false &&
+                               "WK_LATCH: control is neither REC_A/B nor ENGINE_A/B");
+                    }
                     break;
-                case WK_SMBTN: configButton(c.id, lbl); break;
+                case WK_SMBTN:
+                    // Unreachable: no control in kParamCtls carries WK_SMBTN
+                    // any more. The enum entry stays alive only because the HW
+                    // draft widget's own switch (below) still handles it.
+                    assert(false &&
+                           "WK_SMBTN: no live control uses this kind in configControls()");
+                    break;
                 default: break;
             }
         }
-        configParam<DetuneQuantity>(
-            DETUNE_A, 0.f, 1.f, initParamDefault(DETUNE_A), "Detune A");
-        configParam<DetuneQuantity>(
-            DETUNE_B, 0.f, 1.f, initParamDefault(DETUNE_B), "Detune B");
-        // DRIVE moved to HIDDEN_PARAMS (spec 2026-07-28 flux-rhythm-drag) and so
-        // is no longer in kParamCtls; configured explicitly here, same as Detune
-        // above, so the menu-only quantity exists for the submenu slider.
-        configParam<DriveQuantity>(
-            DRIVE_A, 0.f, 1.f, initParamDefault(DRIVE_A), "Drive A");
-        configParam<DriveQuantity>(
-            DRIVE_B, 0.f, 1.f, initParamDefault(DRIVE_B), "Drive B");
+        // DRIVE_A/B retired (spec 2026-08-09 hw-control-reduction task 9): the
+        // menu-only quantity and its submenu slider are gone -- the value
+        // never reached the engine (see the pushParams comment below where
+        // its old id used to be read). DETUNE (task 10) rejoined kParamCtls
+        // earlier and no longer needs an explicit call of its own -- see the
+        // DETUNE_A/B branch inside the loop above.
         // panel labels are short ("L", "PIT"); the group legend carries the rest,
         // so tooltips use the control table's spelled-out tip instead
         for (const auto& c : kInputCtls)  configInput(c.id, c.tip);
@@ -472,6 +539,14 @@ struct Fireflow : Module {
     }
     inline bool ppb(int baseA, int part) { return pp(baseA, part) > 0.5f; }
 
+    // GRIT is one bipolar knob (spec 2026-08-09 hw-control-reduction task
+    // 4): sign picks the mode, magnitude is the mix. The dead zone exists
+    // because a 9 mm pot on an ADC cannot hit an exact zero -- without it
+    // "off" would be unreachable on hardware. Shared between the fx_on gate
+    // below and the mode/mix push further down so both agree on what
+    // "engaged" means.
+    static constexpr float kGritDead = 0.03f;
+
     void pushParams() {
         // STEP entry latches the groove target immediately. Push the shared
         // amount before either deck sees its FLOW->STEP transition so both
@@ -492,21 +567,23 @@ struct Fireflow : Module {
             inst.set_voice_filt(p, params[p ? FILT_B : FILT_A].getValue());
             inst.set_color(p, params[p ? COLOR_B : COLOR_A].getValue());
             inst.set_voice_sub(p, pp(SUB_A, p));
-            inst.set_voice_detune(
-                p, params[p ? DETUNE_B : DETUNE_A].getValue());
+            // Quadratic taper: the first ~20 ct is where the fine beating
+            // lives, and a linear map would squeeze it into a fifth of the
+            // travel now that the ceiling is 105 ct.
+            const float detKnob = pp(DETUNE_A, p);
+            inst.set_voice_detune(p, detKnob * detKnob);
 
             inst.set_flux_mix(p, pp(FLUX_A, p));
-            inst.set_flux_rate(p, spky::flux_division_index(
+            inst.set_flux_rate(p, (int)std::lround(
                 params[p ? FLUXRATE_B : FLUXRATE_A].getValue()));
             inst.set_fx_target_base(p, spky::FXT_FLUX_FB,
                 params[p ? FLUXFB_B : FLUXFB_A].getValue());
-            inst.set_fx_target_base(p, spky::FXT_FLUX_TIME,
-                params[p ? FLUXTIME_B : FLUXTIME_A].getValue());
-            inst.set_grit_mix(p, pp(GRIT_A, p));
+            // The tape multiplier keeps its modulation sink but loses its knob:
+            // 0.5 is the neutral multiplier (tape_time_mult(0.5) == 1), so CV
+            // and the mod lanes still bend the tape while the panel does not.
+            inst.set_fx_target_base(p, spky::FXT_FLUX_TIME, 0.5f);
             // Appended params are outside the stride, so pp() would compute the
             // wrong id — the explicit ternary is required (see FLUXRATE/FLUXFB).
-            // DRIVE_A/B remains append-only saved patch state, with no FLUX
-            // destination in movement 3.
             inst.set_link(p, params[p ? LINK_B : LINK_A].getValue());
             // STAGES itself is pushed further down, alongside samplerPart's
             // analogous re-point gate -- it needs this tick's dispatched
@@ -516,8 +593,23 @@ struct Fireflow : Module {
             // knob doubles as the on switch: knob up == engaged. At 0 the block
             // stays idle and the whole chain is skipped (bit-exact bypass).
             inst.set_fx_on(p, spky::FxBlock::Flux, pp(FLUX_A, p) > 1e-4f);
-            inst.set_fx_on(p, spky::FxBlock::Grit, pp(GRIT_A, p) > 1e-4f);
-            inst.set_comp(p, pp(COMP_A, p));
+            // GRIT is bipolar now: "engaged" means the knob has cleared the
+            // dead zone in either direction, not just a positive value --
+            // the raw value alone would silently mute the whole CRSH
+            // (negative) side (see kGritDead and pushParams' grit block).
+            inst.set_fx_on(p, spky::FxBlock::Grit,
+                            std::fabs(pp(GRIT_A, p)) > kGritDead);
+            // LVL/COMP: the lower zone is pure output gain (Comp::set_amount(0)
+            // is a bit-exact bypass, so it costs no compressor CPU); the top
+            // fifth engages the compressor with make-up, ending at the 0.7 that
+            // used to be the knob's working value.
+            static constexpr float kLvlCompSplit = 0.8f;
+            static constexpr float kCompTop      = 0.7f;
+            const float lvlKnob = pp(COMP_A, p);
+            inst.set_part_level(p, std::min(1.f, lvlKnob / kLvlCompSplit));
+            inst.set_comp(p, lvlKnob <= kLvlCompSplit ? 0.f
+                             : (lvlKnob - kLvlCompSplit) /
+                               (1.f - kLvlCompSplit) * kCompTop);
 
             // Saved ENG meanings remain 0 = Synth and 1 = Sampler; 2 adds
             // Wave, 3 Body, 4 the BBD. Each new engine needs its own explicit
@@ -709,29 +801,71 @@ struct Fireflow : Module {
             // Sample material and a synth deck can then sit in the same key.
             inst.set_target_active(p, spky::LANE_PITCH, !samplerPart);
 
-            inst.set_grit_mode(p, ppb(GRITMODE_A, p) ? spky::GritMode::Reduce
-                                                     : spky::GritMode::Drive);
-            inst.set_step(p, ppb(STEP_A, p), (int)std::round(pp(STEPS_A, p)));
+            // GRIT is one bipolar knob: sign is the mode, magnitude the mix.
+            // The dead zone exists because a 9 mm pot on an ADC cannot hit an
+            // exact zero -- without it "off" would be unreachable on hardware.
+            const float gritKnob = params[p ? GRIT_B : GRIT_A].getValue();
+            inst.set_grit_mode(p, gritKnob < 0.f ? spky::GritMode::Reduce
+                                                 : spky::GritMode::Drive);
+            const float gritMag = std::fabs(gritKnob);
+            inst.set_grit_mix(p, gritMag <= kGritDead ? 0.f
+                                 : (gritMag - kGritDead) / (1.f - kGritDead));
+            const int steps = (int)std::round(pp(STEPS_A, p));
+            inst.set_step(p, steps > 0, steps);
 
-            const int form = static_cast<int>(std::lround(pp(FORM_A, p)));
-            const int song = static_cast<int>(std::lround(pp(SONG_A, p)));
-            inst.set_form(p, form);
-            inst.set_song(p, song);
-            // NEW is "new gene now" in the sampler: the playhead returns to
-            // ORGANIZE and a grain spawns immediately. Without it the long
-            // end of GENE SIZE is unplayable -- every knob stays dead until
-            // the next scheduled spawn, tens of seconds away at overlap 1.
-            if (newPhraseTrig[p].process(ppb(NEWPHRASE_A, p))) {
-                inst.new_phrase(p);
+            // SONG walks a curated 14-rung ladder through (Principle, SongMode)
+            // (spec 2026-08-09 hw-control-reduction task 3) -- FORM and the NEW
+            // pad are gone. songRung[p].tick() debounces the pot (so a value
+            // parked on a seam does not re-quantise every tick) AND absorbs a
+            // RESTORED rung as a baseline rather than a turn (song_rung_state.hpp)
+            // -- see rearm() call sites in dataFromJson()/onReset() below. A
+            // rung change re-rolls the phrase exactly as the retired NEW pad
+            // used to, and in the sampler additionally punches a fresh grain
+            // -- the playhead returns to ORGANIZE and a grain spawns
+            // immediately, without which the long end of GENE SIZE is
+            // unplayable.
+            const float songNorm = pp(SONG_A, p) /
+                                   float(spky::kSongLadderCount - 1);
+            if (songRung[p].tick(songNorm, spky::kSongLadderCount)) {
+                inst.new_phrase(p);          // turn the knob, get a new melody
+                // Fires once per rung detent; inherited the retired NEW
+                // pad's Sampler punch. Whether every detent should punch, or
+                // only some, is still an open by-ear question -- on this
+                // plan's listening checklist.
                 if (samplerPart) inst.sampler_punch(p);
             }
+            const spky::SongRung& r = spky::song_ladder_at(songRung[p].rung);
+            inst.set_form(p, r.form);
+            inst.set_song(p, r.song);
         }
 
         inst.set_morph(params[MORPH].getValue());
-        inst.set_couple(params[COUPLE].getValue());
-        inst.set_drift(params[DRIFT].getValue());
+        // COUPLE runs both worlds on one axis (kCoupleZoneSplit, declared
+        // above). Below the split SYNC is off and couple drives the
+        // Kuramoto lock; at or above it SYNC is on and couple sets how
+        // tightly the texture lanes follow. Each half sweeps 0..1, so the
+        // grid world keeps its full spread -- "on the grid but breathing"
+        // is a real state and must stay reachable.
+        const float coupleKnob = params[COUPLE].getValue();
+        const bool  grid = coupleKnob >= kCoupleZoneSplit;
+        inst.set_sync(grid);
+        inst.set_couple(grid
+            ? (coupleKnob - kCoupleZoneSplit) / (1.f - kCoupleZoneSplit)
+            : coupleKnob / kCoupleZoneSplit);
+        // The left stop IS the old SETL pad: Center::settle() is drift_target = 0
+        // plus a ~1 s glide of EVOLVE and kick, so the button always lived at
+        // the end of this axis. Edge-triggered via driftSettled -- a knob
+        // parked at the stop must not re-fire the glide on every control
+        // tick, and a patch that RESTORES with DRIFT already parked there
+        // must not panic on the very first tick either (drift_settle_state.hpp).
+        static constexpr float kDriftSettleZone = 0.02f;
+        const float driftKnob = params[DRIFT].getValue();
+        const bool  driftInZone = driftKnob <= kDriftSettleZone;
+        if (driftSettled.tick(driftInZone)) inst.settle();
+        inst.set_drift(driftInZone
+            ? 0.f
+            : (driftKnob - kDriftSettleZone) / (1.f - kDriftSettleZone));
         inst.set_tide(params[TIDE].getValue());
-        inst.set_sync(params[SYNC].getValue() > 0.5f);
         inst.set_choke(params[CHOKE].getValue() * 0.5f);   // snap -2..+2 -> zones
         inst.set_reverb_size(params[REV_SIZE].getValue());
         inst.set_reverb_decay(params[REV_DECAY].getValue());
@@ -739,13 +873,17 @@ struct Fireflow : Module {
         inst.set_reverb_diffusion(params[REV_DIFF].getValue());
         inst.set_reverb_mix(spky::PART_A, params[REV_MIX_A].getValue());
         inst.set_reverb_mix(spky::PART_B, params[REV_MIX_B].getValue());
-        inst.set_reverb_smear(params[REV_SMEAR].getValue());
-        inst.set_reverb_mod(params[REV_MOD].getValue());
-        inst.set_master_drive(params[MASTER_DRIVE].getValue());
+        // Fixed by ear (spec 2026-08-09 hw-control-reduction task 9): PUSH
+        // sat at 0.40 in every patch, and once the limiter rides, DRIVE
+        // stops controlling dirt anyway. SMEAR ("smear ... 0.3 sowas") and
+        // WOBL/MOD ("wobbel fest auf .1 - .2") are the same kind of decision
+        // -- the owner never moved them either. The engine API (set_master_
+        // drive/set_reverb_smear/set_reverb_mod) is unchanged so the render
+        // host and its scenarios can still drive them.
+        inst.set_master_drive(0.40f);
+        inst.set_reverb_smear(0.30f);
+        inst.set_reverb_mod(0.15f);
         inst.set_scale((int)std::round(params[SCALE].getValue()));
-
-        if (spotTrig.process(params[SPOT].getValue() > 0.5f))     inst.spot();
-        if (settleTrig.process(params[SETTLE].getValue() > 0.5f)) inst.settle();
 
         // Tempo: an external clock (one pulse per beat) overrides the knob.
         float bpm = 40.f + params[TEMPO].getValue() * 200.f;
@@ -824,7 +962,20 @@ struct Fireflow : Module {
             smp[p] = SamplerPartState{};
             inst.sampler_clear(p);
             factoryTried[p] = false;
+            // Rack resets params (including SONG_A/B) to their default
+            // BEFORE calling onReset(). Without this re-arm, an
+            // already-ticking module's stale pre-Initialize rung would make
+            // the reset-to-default SONG value look like a giant turn of the
+            // knob and fire a re-roll on the very next control tick
+            // (song_rung_state.hpp).
+            songRung[p].rearm();
         }
+        // Rack resets DRIFT to its default BEFORE calling onReset() too --
+        // without this re-arm, an already-ticking module whose DRIFT was off
+        // the stop would see the reset-to-default value and, if that default
+        // sits in the settle zone, treat it as a genuine entry and fire
+        // settle() on the very next control tick (drift_settle_state.hpp).
+        driftSettled.rearm();
         reinit(curSr > 0.f ? curSr : 48000.f);
     }
 
@@ -923,8 +1074,18 @@ struct Fireflow : Module {
                     principle && json_is_integer(principle),
                     principle && json_is_integer(principle)
                         ? json_integer_value(principle) : 0);
-                params[p ? FORM_B : FORM_A].setValue((float)migrated.form);
-                params[p ? SONG_B : SONG_A].setValue((float)migrated.song);
+                // The old FORM ParamIds no longer exist -- SONG absorbed them
+                // (spec 2026-08-09 hw-control-reduction task 3). Land on the first
+                // ladder rung that carries the migrated Principle; every
+                // Principle appears in the ladder, so this always finds one.
+                int rung = 0;
+                for (int i = 0; i < spky::kSongLadderCount; ++i) {
+                    if (spky::song_ladder_at(i).form == migrated.form) {
+                        rung = i;
+                        break;
+                    }
+                }
+                params[p ? SONG_B : SONG_A].setValue((float)rung);
             }
         }
 
@@ -984,9 +1145,22 @@ struct Fireflow : Module {
             // fresh-add path (curSr == 0.f, the else branch below) needs no
             // such re-arm: no tick has run yet, so bbdEdge[p] is still at its
             // construction-time unseeded state and the ordinary first-tick
-            // baseline in tick() already applies.
-            for (int p = 0; p < spky::PART_COUNT; ++p)
+            // baseline in tick() already applies. songRung[p] needs the same
+            // re-arm for the same reason (song_rung_state.hpp) -- otherwise a
+            // preset saved on a rung other than the module's current one
+            // would look like a giant turn of the SONG knob and fire a
+            // re-roll the instant the module ticks again. driftSettled needs
+            // the identical re-arm for the identical reason (SHARED, not
+            // per-part, so one call outside the loop): a preset saved with
+            // DRIFT off the stop, loaded onto a module currently parked at
+            // the stop, must not have the restore itself read as a genuine
+            // entry and fire settle() on the very next tick
+            // (drift_settle_state.hpp).
+            for (int p = 0; p < spky::PART_COUNT; ++p) {
                 bbdEdge[p].rearm();
+                songRung[p].rearm();
+            }
+            driftSettled.rearm();
         } else {
             pendingRestore = true;
         }
@@ -1448,31 +1622,13 @@ static void appendFireflowMenu(Menu* menu, Fireflow* m) {
     menu->addChild(createMenuItem("Resync loops to bar", "",
                                   [m]() { m->resyncReq = true; }));
 
-    menu->addChild(new MenuSeparator);
-    menu->addChild(createSubmenuItem("Detune A", "", [m](Menu* sub) {
-        auto* quantity = m->getParamQuantity(DETUNE_A);
-        sub->addChild(new ParamMenuSlider(quantity));
-        sub->addChild(createMenuItem("Reset to 6.0 ct", "", [m]() {
-            m->params[DETUNE_A].setValue(kDefaultDetune);
-        }));
-    }));
-    menu->addChild(createSubmenuItem("Detune B", "", [m](Menu* sub) {
-        auto* quantity = m->getParamQuantity(DETUNE_B);
-        sub->addChild(new ParamMenuSlider(quantity));
-        sub->addChild(createMenuItem("Reset to 6.0 ct", "", [m]() {
-            m->params[DETUNE_B].setValue(kDefaultDetune);
-        }));
-    }));
-
-    // DRIVE lost its panel slot to DRAG (spec 2026-07-28 flux-rhythm-drag)
-    // and lives here now, same menu-only shape as Detune A/B above.
-    for (int p = 0; p < spky::PART_COUNT; ++p) {
-        const std::string name = p ? "Drive B" : "Drive A";
-        const int id = p ? DRIVE_B : DRIVE_A;
-        menu->addChild(createSubmenuItem(name, "", [m, id](Menu* sub) {
-            sub->addChild(new ParamMenuSlider(m->getParamQuantity(id)));
-        }));
-    }
+    // DRIVE_A/B retired (spec 2026-08-09 hw-control-reduction task 9): the
+    // menu-only slider never reached the engine (its BBD drive target is a
+    // mod lane, not a panel/menu control -- see bbd_engine.cpp's
+    // set_targets()), so it leaves with no replacement. DETUNE used to have
+    // the same widgetless shape, but task 10 moved it back onto the panel as
+    // a real performance control -- its slider lives there now
+    // (kParamCtls/DetuneQuantity), not in this menu.
 
     if (isBbdSelected(m, ENGINE_A)) {
         menu->addChild(createSubmenuItem("BBD A — Freeze Attack", "", [m](Menu* sub) {

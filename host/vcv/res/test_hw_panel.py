@@ -1,11 +1,22 @@
 """Contract tests for the hardware-mode panel (envelope spec 2026-08-08 §4).
 These test CONSTRAINTS, not taste: regrouping iterations may move anything,
-but can never violate size, keep-outs, footprints, or static lettering."""
-import os, re
+but can never violate size, keep-outs, footprints, or static lettering.
+
+No pytest in this environment -- plain asserts (and check() for the slot-map
+guard below), exit code says it all. Run from host/vcv/: python res/test_hw_panel.py
+"""
+import os, re, sys
 import gen_panel as gp
 import gen_hw_panel as hw
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+FAILS = []
+
+
+def check(cond, msg):
+    if not cond:
+        FAILS.append(msg)
 
 def test_panel_is_60hp():
     assert hw.HP == 60
@@ -91,6 +102,18 @@ def test_shared_knob_labels_do_not_coincide():
         la, lb = hw.hw_label(atk), hw.hw_label(bend)
         assert abs(la[1] - lb[1]) >= 2.0, side
 
+def test_hw_slot_map_matches_the_reduced_inventory():
+    """Every runtime param has a hardware slot and no slot is left pointing
+    at a control that no longer exists."""
+    live = {c.enum for c in gp.RUNTIME_PANEL_PARAMS}
+    stems = set(hw.DECK_POS) | set(hw.CENTER_POS)
+    dead = [s for s in stems
+            if s not in live and f"{s}_A" not in live and s not in hw.JACK_POS]
+    check(not dead, f"hw slots for controls that no longer exist: {dead}")
+    check(len(hw.HW_PARAMS) == len(gp.RUNTIME_PANEL_PARAMS),
+          "hw param count drifted from the shared inventory")
+
+
 def test_labels_stay_off_neighbour_footprints():
     # A caption may sit near its own control, but its anchor must never
     # land inside ANOTHER control's clearance circle.
@@ -103,3 +126,39 @@ def test_labels_stay_off_neighbour_footprints():
                 continue
             d = ((lx - other.x) ** 2 + (ly - other.y) ** 2) ** 0.5
             assert d >= other.r - 1e-6, (c.enum, other.enum, round(d, 2))
+
+
+def test_committed_files_match_the_generator():
+    """test_header_contract/test_svg_exists_and_is_60hp above read the
+    committed files but only grep for substrings -- they would not notice
+    gen_hw_panel.py being edited without being re-run (review finding
+    IMPORTANT 5, same gap as the big panel and already closed there and in
+    test_flow_panel.py). Compare byte-for-byte against a fresh generator run."""
+    for path, produced in (
+            (os.path.join(HERE, "FireflowHW.svg"), hw.svg()),
+            (os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"), hw.header())):
+        if not os.path.exists(path):
+            FAILS.append(f"{path} is missing -- run res/gen_hw_panel.py")
+            continue
+        with open(path) as f:
+            on_disk = f.read()
+        check(on_disk == produced,
+              f"{path} differs from the generator's output -- it was "
+              "hand-edited, or the generator was changed without re-running it")
+
+
+def main():
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            fn()
+    if FAILS:
+        print(f"FAIL ({len(FAILS)}):")
+        for f in FAILS:
+            print("  -", f)
+        return 1
+    print("PASS -- hw panel guards ok")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

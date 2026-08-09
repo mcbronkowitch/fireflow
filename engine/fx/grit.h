@@ -66,6 +66,10 @@ public:
     float intensity() const;
     void set_mix(float norm);         // single GRIT MIX layer param -> both modes
     void process(float& l, float& r);
+    // Observer only, for tests: the raw MIX layer norm set_mix() last
+    // received (both GritDrive/GritReduce apply the same value; there is no
+    // per-mode split to read back).
+    float mix_for_test() const { return _mix_norm; }
 
 private:
     GritDrive _drive;

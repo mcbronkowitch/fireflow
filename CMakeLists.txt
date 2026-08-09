@@ -81,6 +81,7 @@ add_executable(spky_tests
     tests/test_seed_audition_init.cpp
     tests/test_seed_audition_protocol.cpp
     tests/test_bbd_edge_state.cpp
+    tests/test_drift_settle_state.cpp
     engine/center/center.cpp
     tests/test_center.cpp
     tests/test_wav.cpp
@@ -127,6 +128,8 @@ add_executable(spky_tests
     tests/test_synth_engine_voice_count.cpp
     tests/test_phrase_gen.cpp
     tests/test_song_form.cpp
+    tests/test_song_ladder.cpp
+    tests/test_song_rung_state.cpp
     tests/test_song_lane.cpp
     tests/test_vcv_form_song_migration.cpp
     tests/test_vcv_link_migration.cpp
@@ -220,7 +223,14 @@ add_test(
     COMMAND ${CMAKE_COMMAND}
         -DRENDER=$<TARGET_FILE:render>
         -DSCENARIO=${CMAKE_SOURCE_DIR}/host/render/scenarios/wave_formant_sweep.json
-        -DEXPECTED=82aac4d6d818d205711b90a68a6b562e5d2fc435cf5f2f88e6df2ba3694706b5
+        # Reference moved (spec 2026-08-09 hw-control-reduction task 10):
+        # the scenario pushes set_voice_detune(part=0, value=0.22) onto the
+        # WAVE engine, and WaveEngine shares SynthEngineT::kDetuneCeilCt
+        # (35 -> 105 ct) with SynthEngine/BodyEngine, so the same 0.22 knob
+        # now reaches 23.1 ct instead of 7.7 ct. No bit-exactness gates --
+        # this is a sanity render, not a checksum (CLAUDE.md); the move is
+        # the expected, unavoidable consequence of the ceiling change.
+        -DEXPECTED=eb43dde7ed9bbf41075ff6dcd0d284e9e66cdbc17c79244cab6cf944bb2b99ea
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -DGATE_STEM=wave_formant_sweep
         -DREFERENCE=WAVE
@@ -232,4 +242,35 @@ add_test(
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/bake_wavetables.py
         --check
+)
+
+# --- panel guards (host/vcv/res/test_*.py) ---------------------------------
+# res/test_panel.py (97 tests -- the authority on the whole generated-artifact
+# contract), res/test_hw_panel.py and res/test_flow_panel.py were manual-only:
+# nothing in CI or ctest ran them, and during the 2026-08-09
+# hw-control-reduction plan one of them briefly had no runner at all while
+# task reports cited it as a passing gate (review finding IMPORTANT 4). Each
+# script resolves its own paths relative to host/vcv/, hence WORKING_DIRECTORY
+# below -- running them from the repo root fails to find generated_panel.hpp.
+#
+# find_package(Python3) above is REQUIRED, so a machine without Python 3 fails
+# to configure at all rather than silently skipping these -- consistent with
+# wavetable_bank_fresh just above, which already depends on the same
+# ${Python3_EXECUTABLE} unconditionally.
+add_test(
+    NAME panel_guard
+    COMMAND ${Python3_EXECUTABLE} res/test_panel.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
+)
+
+add_test(
+    NAME hw_panel_guard
+    COMMAND ${Python3_EXECUTABLE} res/test_hw_panel.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
+)
+
+add_test(
+    NAME flow_panel_guard
+    COMMAND ${Python3_EXECUTABLE} res/test_flow_panel.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
 )

@@ -428,6 +428,9 @@ mapping, `engine/fx/part_fx.h`).
 - **Host** — 10 new scenario actions, 5 FX columns per part in `mods.csv`,
   demo scenarios `dub_delay.json` / `ambient_wash.json`.
 - **UI (M6)** — FLUX/GRIT pads, hold-layers, ALT gestures per the FX spec.
+  Overtaken: this describes the 42-HP fader world. FLUX is now a single
+  notched knob and GRIT a bipolar knob, both with dedicated panel controls —
+  no ALT gesture or hold-layer (`2026-08-09-hw-control-reduction-design.md`).
 
 ### M2 — Polyphonic synth voice ✅
 
@@ -467,7 +470,9 @@ reference).
 
 Per-part freeze of the PITCH lane's last cycle into a replayable loop
 (`capture_now` / `set_replay` in scenarios; `ALT + SEQ` on hardware, M6).
-Capture swaps the lane's *source*, not the system.
+Capture swaps the lane's *source*, not the system. Overtaken: this describes
+the 42-HP fader world; there is no ALT layer on the reduced panel
+(`2026-08-09-hw-control-reduction-design.md`).
 
 - **CaptureLoop** (`engine/mod/capture.h`) — header-only double buffer
   (2 × 192 slots): the lane rolls its pre-smooth target + trigger pattern
@@ -484,6 +489,8 @@ Capture swaps the lane's *source*, not the system.
   CSV columns, demos `capture_loop.json` + `capture_pentatonic.json` /
   `capture_duet.json`.
 - **UI (M6)** — ALT+SEQ gesture, ring step-pattern display with playhead.
+  Overtaken: this describes the 42-HP fader world; there is no ALT layer on
+  the reduced panel (`2026-08-09-hw-control-reduction-design.md`).
 
 ### Entropy sequencer ✅ (reworks the lane core, post-M3)
 
@@ -522,6 +529,9 @@ rate (one 96-sample block) and wired through narrow `ModLane` /
   quiet at low couple. Superseded by the SYNC/COUPLE redesign below: the
   per-part `sync_mode` anchor is gone, replaced by a single global SYNC
   switch and zoned grid gravity / hard lock against the transport.
+  Overtaken again: "ALT + fader" is the 42-HP fader world. On the reduced
+  panel SYNC folded into COUPLE itself — one knob, labelled `FREE|GRID`, no
+  ALT layer (`2026-08-09-hw-control-reduction-design.md`).
 - **DRIFT** — SPOT-hold + fader, one shared Ornstein-Uhlenbeck "weather"
   walk (τ ≈ 45 s, bounded) feeding six hardcoded taps (rate ± ½ octave,
   shape ± 0.15, detune ± 25 cents, per lane); `set_drift` is smoothed.
@@ -541,6 +551,10 @@ rate (one 96-sample block) and wired through narrow `ModLane` /
   convergence/anchor) + `weather_spot.json` (DRIFT weather + SPOT + SETTLE).
 - **UI (M6)** — MORPH fader, ALT + fader for COUPLE, SPOT-hold + fader for
   DRIFT, SPOT tap gesture.
+  Overtaken: this describes the 42-HP fader world. On the reduced panel
+  COUPLE is one zoned knob (no ALT), DRIFT is a plain knob whose left stop
+  is the panic/settle state, and SPOT is deleted entirely
+  (`2026-08-09-hw-control-reduction-design.md`).
 
 ### M4.5 — Ambient reverb v2 (Oliverb port) ✅
 

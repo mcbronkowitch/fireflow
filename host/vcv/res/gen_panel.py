@@ -64,7 +64,9 @@ BIGKNOB = "BIGKNOB"   # macro pot (0..1)
 KNOBC   = "KNOBC"     # bipolar macro (-1..1)  (MELODY)
 SMKNOB  = "SMKNOB"    # small secondary pot (0..1)
 KNOBI   = "KNOBI"     # small integer pot (snap)
-SW2     = "SW2"       # 2-pos switch (global SYNC)
+SW2     = "SW2"       # 2-pos switch kind; unused since SYNC (its only user,
+                      # spec 2026-08-09 hw-control-reduction task 7) folded
+                      # into COUPLE -- kept for a future 2-pos control
 LATCH   = "LATCH"     # on/off pad button (binary)
 SMBTN   = "SMBTN"     # momentary pad button
 IN      = "IN"
@@ -218,7 +220,6 @@ DYNAMIC_CAPTIONS = [
     ("SUB",      "ENGINE",   ("SUB",  "LEN",  "SUB",   "EXCIT", "INPUT")),
     ("FILT",     "ENGINE",   ("FILT", "FILT", "FILT",  "BRITE", "LOSS")),
     ("SOURCE",   "ENGINE",   ("TIMB", "ORG",  "FRAME", "MATL",  "DRIVE")),
-    ("GRITMODE", "GRITMODE", ("SAT",  "CRSH")),
 ]
 
 
@@ -230,23 +231,25 @@ def dynamic_words(base):
     return ()
 
 
-# 4-wide, aligned to FX_BOT so the FX box's two rows flush: DIV MIX FB SEND.
-FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # DIV MIX FB | SEND (per-deck reverb mix)
+# 4-wide, aligned to FX_BOT so the FX box's two rows flush: TIME MIX FB SEND.
+FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # TIME MIX FB | SEND (per-deck reverb mix)
 # FX bottom row went from two slots to four (spec 2026-07-18 dust-grain-cloud);
 # the left two were renamed in place when FLUX became a BBD (spec 2026-07-27):
 # DUST/ROT -> DRIVE/STAGES. The first slot was renamed in place again (spec
 # 2026-07-28 flux-rhythm-drag): DRIVE -> DRAG, DRIVE moving to the menu. And
 # again (spec 2026-07-28 flux-link): DRAG -> LINK, because the control became
 # bipolar and LINK names the axis rather than one of its two ends.
-# The BBD-only BEND widget overlaps ATK at runtime. MULT takes the second
-# FLUX-bottom slot, so the static Synth preview reads LINK MULT | GRIT COMP.
-FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # LINK MULT | GRIT COMP
+# The BBD-only BEND widget overlaps ATK at runtime. FX_BOT[1] held MULT until
+# task 6 (spec 2026-08-09 hw-control-reduction) retired it; the slot stays
+# empty (freed slots are not regrouped), so the static Synth preview now
+# reads LINK . | GRIT COMP.
+FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # LINK . | GRIT COMP (FX_BOT[1] empty)
 PLAY_Y   = 103.6
 # The PLAY row's left block re-spaced to seat REC between GRIT and STEPS
 # (spec 2026-07-18 "VCV layer": REC is the only new panel element). All four
-# left-block glyphs are LATCH r=2.7 except STEPS and FORM (KNOBI r=3.0); the pitches
+# left-block glyphs are LATCH r=2.7 except STEPS and SONG (KNOBI r=3.0); the pitches
 # below clear test_no_overlap's radius-sum minimum with >=1.8 mm to spare.
-PAD_X    = [10.0, 17.5, 46.0, 56.5, 67.0, 77.5]   # ENG GRIT | STEP FORM SONG NEW
+PAD_X    = [10.0, 17.5, 46.0, 56.5, 67.0, 77.5]   # ENG GRIT | (STEP, FORM, NEW retired) SONG
 STEPS_X  = 37.0                     # sequencer knob, between the two pad blocks
 REC_X    = 25.0                     # REC pad (appended param, not templated)
 # Its state LED, centred in the gap between the REC pad and the STEPS knob.
@@ -289,24 +292,40 @@ def part_controls(mir=False):
     # end of PARAMS. STEPS keeps its append slot here but has moved to the PLAY
     # box -- it is a sequencer parameter, not an effect (spec 2026-07-18 §5).
     out.append(Ctl("FLUX", SMKNOB, fx(FX_TOP[1]), ROW_V1, "MIX", "FLUX"))
-    for enum, lbl, i in (("GRIT", "GRIT", 2), ("COMP", "COMP", 3)):
-        out.append(Ctl(enum, SMKNOB, fx(FX_BOT[i]), ROW_V2, lbl))
+    # GRIT is bipolar now (spec 2026-08-09 hw-control-reduction task 4): the
+    # GRITMODE pad is gone, and GRIT's own sign picks Drive/Reduce while its
+    # magnitude is the mix (see Fireflow.cpp pushParams). COMP stays a plain
+    # unipolar SMKNOB, so the two can no longer share one templated loop.
+    out.append(Ctl("GRIT", KNOBC, fx(FX_BOT[2]), ROW_V2, "GRIT"))
+    # COMP prints LVL now (spec 2026-08-09 hw-control-reduction task 5): it was
+    # always used as a volume control in practice (the engines are quiet, so
+    # it sat at 0.5-0.7 in every patch, and what read as "louder" was the
+    # compressor's make-up gain). The lower four fifths are now pure output
+    # level; the compressor lives in the top fifth with make-up (see
+    # Fireflow.cpp pushParams' kLvlCompSplit/kCompTop).
+    out.append(Ctl("COMP", SMKNOB, fx(FX_BOT[3]), ROW_V2, "LVL", "Level / Comp"))
     out.append(Ctl("STEPS", KNOBI, fx(STEPS_X), PLAY_Y, "STPS"))
     # ENGINE cycles Synth/Sampler/Wave/Body/BBD (states 0..4); the C++ side
     # (Fireflow.cpp configSwitch/EngineCycleLatch) is the source of truth for
     # the labels, this comment just keeps the panel legend discoverable here.
-    # GRITMODE's caption is its MODE, not its block's name -- the block is the
-    # GRIT knob one row up (spec 2026-08-03). Its resting word is SAT; the
-    # runtime swaps in CRSH from DYNAMIC_CAPTIONS.
-    pads = [("ENGINE", LATCH, "ENG", None),
-            ("GRITMODE", LATCH, dynamic_words("GRITMODE")[0], "Grit mode"),
-            ("STEP", LATCH, "STEP", None)]
+    # The GRITMODE pad is gone (spec 2026-08-09 hw-control-reduction task 4):
+    # GRIT above is bipolar now and its own sign picks Drive/Reduce, so
+    # PAD_X[1] -- its old slot -- stays empty rather than being reclaimed.
+    pads = [("ENGINE", LATCH, "ENG", None)]
     for i, (enum, kind, lbl, tip) in enumerate(pads):
         out.append(Ctl(enum, kind, fx(PAD_X[i]), PLAY_Y, lbl, tip))
-    out.append(Ctl("FORM", KNOBI, fx(PAD_X[3]), PLAY_Y, "FORM"))
-    # Keep the frozen ParamId order FORM, NEWPHRASE, SONG while laying the
-    # controls out visually as FORM, SONG, NEW.
-    out.append(Ctl("NEWPHRASE", SMBTN, fx(PAD_X[5]), PLAY_Y, "NEW"))
+    # DETUNE returns to the panel from the context menu (spec 2026-08-09
+    # hw-control-reduction task 10): a real performance control now, not
+    # patch-only state -- "bei drones ist das sehr stark". It fills PAD_X[2],
+    # the STEP pad's slot freed in task 2, the only position this plan permits
+    # filling with something new. A plain SMKNOB, like every other secondary
+    # knob; the quadratic taper (kept the first ~20 ct usable) lives in
+    # pushParams, not here -- see Fireflow.cpp/bench/audition/init_patch.cpp.
+    out.append(Ctl("DETUNE", SMKNOB, fx(PAD_X[2]), PLAY_Y, "DTUN", "Detune"))
+    # FORM and NEWPHRASE are gone (spec 2026-08-09 hw-control-reduction task 3):
+    # SONG alone now walks a curated 14-rung (Principle, SongMode) ladder and
+    # re-rolls the phrase on every rung change. PAD_X[3] and PAD_X[5], its old
+    # neighbours, stay empty -- SONG keeps its own PAD_X[4] slot.
     out.append(Ctl("SONG", KNOBI, fx(PAD_X[4]), PLAY_Y, "SONG"))
     return out
 
@@ -384,31 +403,49 @@ ROW_ROOM1, ROW_ROOM2 = 94.0, 104.5
 # The four free-standing centre boxes (spec 2026-07-18 §6); GROUPS is assigned
 # here, not alongside part_groups() above, because these entries need CX.
 GROUPS = part_groups(False) + part_groups(True) + [
-    (CX - 20.5, 13.0, 41.0, 19.5, "BLEND", MUTED),
-    (CX - 20.5, 35.0, 41.0, 25.0, "TIME",  MUTED),
-    (CX - 20.5, 62.5, 41.0, 22.5, "DUO",   MUTED),
-    (CX - 20.5, 87.5, 41.0, 23.7, "ROOM",  MUTED),
+    (CX - 20.5, 13.0, 41.0, 19.5, "BLEND",  MUTED),
+    # Renamed from "TIME" (spec 2026-08-09 hw-control-reduction task 6):
+    # FLUXRATE_A/B's knob took the word TIME on the FX box, and
+    # test_every_printed_word_is_unique means the plate can't say the same
+    # word in two different places for two different things. This box is
+    # still the sync/tempo/couple/shuffle clock story -- TIMING keeps the
+    # sense of the old legend without colliding with the FLUX knob.
+    (CX - 20.5, 35.0, 41.0, 25.0, "TIMING", MUTED),
+    (CX - 20.5, 62.5, 41.0, 22.5, "DUO",    MUTED),
+    (CX - 20.5, 87.5, 41.0, 23.7, "ROOM",   MUTED),
 ] + [(bx, JACK_BOX_Y, JACK_BOX_W, JACK_BOX_H, lg, col)
      for (bx, lg, col, _well, _items) in JACK_GROUPS]
 SHARED = [
     Ctl("MORPH",  BIGKNOB, CX - 7.0, ROW_BLEND, "MORPH"),
-    # TIME: a 2x2 clock story -- sync/tempo above, couple/shuffle below.
-    # SHUFFLE's control is appended to PARAMS after every existing id.
-    Ctl("SYNC",   SW2,     CX - 9.0, ROW_TIME1, "SYNC"),
+    # TIMING: a 2x2 clock story -- sync/tempo above, couple/shuffle below
+    # (box legend renamed from TIME, spec 2026-08-09 hw-control-reduction
+    # task 6 -- see GROUPS above). SHUFFLE's control is appended to PARAMS
+    # after every existing id.
     Ctl("TEMPO",  SMKNOB,  CX + 9.0, ROW_TIME1, "TEMPO"),
-    Ctl("COUPLE", SMKNOB,  CX - 9.0, ROW_TIME2, "COUPL"),
+    # COUPLE swallowed the SYNC switch (spec 2026-08-09 hw-control-reduction
+    # task 7): SYNC was the right-hand end of COUPLE's own axis. Below the
+    # zone split (Fireflow.cpp kCoupleZoneSplit) the knob is the FREE world,
+    # above it the GRID world -- each zone sweeps couple across its own full
+    # 0..1 range, so "on the grid but breathing" stays reachable. The freed
+    # ROW_TIME1 slot beside TEMPO stays empty; regrouping is a later session.
+    Ctl("COUPLE", SMKNOB,  CX - 9.0, ROW_TIME2, "FREE|GRID"),
     Ctl("SCALE",  KNOBI,   L,  ROW_DUO1, "SCALE"),
     Ctl("DRIFT",  SMKNOB,  R,  ROW_DUO1, "DRIFT"),
-    Ctl("SPOT",   SMBTN,   L,  ROW_DUO2, "SPOT"),
-    Ctl("MASTER_DRIVE", SMKNOB, CX, ROW_DUO2, "PUSH", "Master drive"),
-    Ctl("SETTLE", SMBTN,   R,  ROW_DUO2, "SETL"),
+    # SETTLE/SETL retired (spec 2026-08-09 hw-control-reduction task 8): the
+    # pad was drift-to-zero plus a glide, which is just DRIFT's own left
+    # stop. SPOT and MASTER_DRIVE (PUSH) retired here (task 9): SPOT is a
+    # genuine feature loss (the owner never uses it), PUSH is fixed by ear
+    # at 0.40 in Fireflow.cpp's pushParams -- "push steht immer auf 0.4".
+    # The entire freed ROW_DUO2 row stays empty; regrouping is a later
+    # session.
     # ROOM: three semantic columns, bottom edge flush with the PLAY boxes.
+    # SMEAR (task 9, "smear ... 0.3 sowas") and MOD/WOBL ("wobbel fest auf
+    # .1 - .2") are fixed by ear too, in the same pushParams block. Their
+    # freed R-column slots stay empty; regrouping is a later session.
     Ctl("REV_SIZE",  SMKNOB, L,         ROW_ROOM1, "SIZE"),
     Ctl("REV_DECAY", SMKNOB, L,         ROW_ROOM2, "DECAY"),
     Ctl("REV_TONE",  SMKNOB, CX,        ROW_ROOM1, "TONE"),
     Ctl("REV_DIFF",  SMKNOB, CX,        ROW_ROOM2, "DIFF"),
-    Ctl("REV_SMEAR", SMKNOB, R,         ROW_ROOM1, "SMEAR"),
-    Ctl("REV_MOD",   SMKNOB, R,         ROW_ROOM2, "WOBL"),
     # CHOKE: bipolar event-priority between the decks (spec 2026-07-16
     # choke-priority). Appended LAST on purpose: existing .vcv patches keep
     # their param ids.
@@ -432,15 +469,20 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     # TIDE: texture-lane rate of both decks (spec 2026-07-17 mod-tide).
     # Appended LAST like CHOKE/FILT so existing .vcv patches keep their ids;
     # the coordinate puts it beside MORPH in the centre's movement column
-    # (COUPLE/DRIFT/SETL).
+    # (COUPLE/DRIFT -- SETL retired into DRIFT's own left stop, task 8).
     Ctl("TIDE", SMKNOB, CX + 11.0, ROW_BLEND, "TIDE"),
     # FLUX synced-delay controls (spec 2026-07-17 flux-synced-delay). Per part,
     # appended LAST like FILT/TIDE/CHOKE so existing .vcv patches keep their ids.
-    # They complete the FLUX delay cluster atop the FX box: DIV (FX_TOP[0]),
+    # They complete the FLUX delay cluster atop the FX box: TIME (FX_TOP[0]),
     # MIX (FX_TOP[1], from the template), FB (FX_TOP[2]) sit together;
-    # GRIT/COMP fill FX_BOT below.
-    Ctl("FLUXRATE_A", SMKNOB, FX_TOP[0],     ROW_V1, "DIV", "FLUX division"),
-    Ctl("FLUXRATE_B", SMKNOB, W - FX_TOP[0], ROW_V1, "DIV", "FLUX division"),
+    # GRIT/COMP fill FX_BOT below. TIME used to be DIV beside a free MULT
+    # multiplier (FX_BOT[1]); task 6 (spec 2026-08-09 hw-control-reduction)
+    # retired MULT -- one notched knob over the 12 synced divisions is TIME
+    # now, and FX_BOT[1] stays empty. FXT_FLUX_TIME, the modulation sink
+    # MULT used to feed, survives at a pinned neutral base so CV and the mod
+    # lanes can still bend the tape (Fireflow.cpp pushParams).
+    Ctl("FLUXRATE_A", KNOBI, FX_TOP[0],     ROW_V1, "TIME", "FLUX time"),
+    Ctl("FLUXRATE_B", KNOBI, W - FX_TOP[0], ROW_V1, "TIME", "FLUX time"),
     Ctl("FLUXFB_A",   SMKNOB, FX_TOP[2],     ROW_V1, "FB", "FFB"),
     Ctl("FLUXFB_B",   SMKNOB, W - FX_TOP[2], ROW_V1, "FB", "FFB"),
     # COLOR: chord density/colour per part (spec 2026-07-17 chord-layer), a full
@@ -473,7 +515,7 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     Ctl("REC_B", LATCH, W - REC_X, PLAY_Y, "REC"),
     # Per-deck reverb mix (spec 2026-07-23 per-deck-reverb-mix). Appended LAST
     # like FILT/FLUXRATE/COLOR/LINK/REC so PART_STRIDE stays 23 and no id before
-    # them moves. They fill the FX top row's 4th slot -- DIV.MIX.FB.SEND --
+    # them moves. They fill the FX top row's 4th slot -- TIME.MIX.FB.SEND --
     # aligned to the FX bottom row. Label "SEND" (not "MIX": FLUX beside it is
     # already the delay mix). The old shared centre REV_MIX is removed from
     # SHARED; its id and every id after it shift by one (accepted: old .vcv
@@ -485,21 +527,22 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     Ctl("SHUFFLE", SMKNOB, CX + 9.0, ROW_TIME2, "SHUFL"),
 ]
 
-HIDDEN_PARAMS = [
-    Ctl("DETUNE_A", SMKNOB, 0.0, 0.0, "", "Detune A"),
-    Ctl("DETUNE_B", SMKNOB, 0.0, 0.0, "", "Detune B"),
-    # DRIVE loses its panel slot to DRAG (spec 2026-07-28 flux-rhythm-drag) and
-    # becomes patch state, same menu-only shape as DETUNE_A/B above: position
-    # 0,0 and an empty label mean no panel widget is emitted. Appended LAST so
-    # every id before it stays put and PART_STRIDE remains 23.
-    Ctl("DRIVE_A", SMKNOB, 0.0, 0.0, "", "Drive A"),
-    Ctl("DRIVE_B", SMKNOB, 0.0, 0.0, "", "Drive B"),
-]
+# DRIVE_A/B retired here (spec 2026-08-09 hw-control-reduction task 9): the
+# menu-only slider never reached the engine (its BBD drive target is a mod
+# lane, spky::LANE_SOURCE -- see bbd_engine.cpp's set_targets()), so it was
+# append-only saved patch state with no destination at all. DETUNE_A/B left
+# this list before it (task 10, back onto the panel), so HIDDEN_PARAMS is now
+# genuinely empty -- no more menu-only widgetless patch state survives.
+HIDDEN_PARAMS = []
 
-APPENDED_PANEL_PARAMS = [
-    Ctl("FLUXTIME_A", SMKNOB, FX_BOT[1],     ROW_V2, "MULT", "Tape Time"),
-    Ctl("FLUXTIME_B", SMKNOB, W - FX_BOT[1], ROW_V2, "MULT", "Tape Time"),
-]
+# FLUXTIME_A/B (the MULT knob) retired here (spec 2026-08-09
+# hw-control-reduction task 6): DIV and MULT described one quantity, and
+# FLUXRATE_A/B -- renamed TIME, now a 12-detent knob -- is that quantity.
+# The modulation sink it fed, FXT_FLUX_TIME, survives at a pinned neutral
+# base (Fireflow.cpp pushParams) so CV and the mod lanes can still bend the
+# tape; only the panel's second way to set it is gone. FX_BOT[1], MULT's old
+# slot, stays empty -- freed slots are not regrouped.
+APPENDED_PANEL_PARAMS = []
 
 # Persistent ids retain the legacy visible and hidden sequences exactly; runtime
 # controls may include appended widgets, while the SVG is the Synth-only view
@@ -514,6 +557,142 @@ STATIC_PANEL_PARAMS = [
     if c.enum not in ("STAGES_A", "STAGES_B", "REC_A", "REC_B")
 ]
 PARAMS = PANEL_PARAMS + HIDDEN_PARAMS + APPENDED_PANEL_PARAMS
+
+# Approved init snapshot, keyed by param NAME rather than by position: adding
+# or removing a control must not be able to shift somebody else's default.
+# Provenance unchanged -- drone.vcvm (2026-07-28), with LINK_B zeroed and
+# STAGES_B's 1.0 deliberately kept (see the notes that used to live in
+# src/init_patch.hpp).
+INIT_DEFAULTS = {
+    "RATE_A": 0.116716892,
+    "SHAPE_A": 0.000000000,
+    "DENSITY_A": 0.695181072,
+    "SMOOTH_A": 0.995180666,
+    "RANGE_A": 0.000000000,
+    "MELODY_A": 0.000000000,
+    "MOD_A": 0.612047195,
+    "TUNE_A": 0.000000000,
+    "ATTACK_A": 0.185333401,
+    "DECAY_A": 0.322666585,
+    "RES_A": 0.319000006,
+    "SUB_A": 0.458666444,
+    "SOURCE_A": 0.438666672,
+    "FLUX_A": 0.864000380,
+    "GRIT_A": 0.000000000,
+    # COMP_A/COMP_B were the compressor amount under the old meaning; that
+    # value's factory loudness leaned on make-up gain. Under the new LVL/COMP
+    # split, 0.8 is full output level with the compressor off -- it cannot
+    # reproduce the old sound (the control's meaning genuinely changed, spec
+    # 2026-08-09 hw-control-reduction task 5), it is the plan's starting point
+    # for a later listening pass.
+    "COMP_A": 0.800000000,
+    # 0 IS flow mode now that Task 2 merged the separate STEP pad into this
+    # count (spec 2026-08-09 hw-control-reduction task 3 review, Finding 7).
+    # The approved boot state was step mode OFF with the count parked at 16
+    # (old STEP_A=0/STEPS_A=16); the merge cannot express "off with a parked
+    # count" any more -- the count IS the mode -- so restoring the approved
+    # boot behavior (a free-running deck) means landing on 0, losing the
+    # parked 16. Accepted cost of the merge, not something to work around.
+    "STEPS_A": 0.000000000,
+    "ENGINE_A": 0.000000000,
+    # Rung 6 (song_ladder.h) is {form: Hierarchical, song: AAAB} -- the exact
+    # pair the old independent FORM_A=2/SONG_A=0 defaults held. Preserves the
+    # approved init sound; it is not a factory-default retune.
+    "SONG_A": 6.000000000,
+    "RATE_B": 0.202409565,
+    "SHAPE_B": 0.899999678,
+    "DENSITY_B": 0.644577920,
+    "SMOOTH_B": 0.613253355,
+    "RANGE_B": 0.000000000,
+    "MELODY_B": -1.000000000,
+    "MOD_B": 0.357831180,
+    "TUNE_B": 0.000000000,
+    "ATTACK_B": 0.093333311,
+    "DECAY_B": 0.450666398,
+    "RES_B": 0.217333555,
+    "SUB_B": 0.319999605,
+    "SOURCE_B": 0.177333504,
+    "FLUX_B": 1.000000000,
+    "GRIT_B": 0.000000000,
+    "COMP_B": 0.800000000,   # see COMP_A above
+    "STEPS_B": 0.000000000,  # same flow-mode boot restoration as STEPS_A, see above
+    "ENGINE_B": 3.000000000,
+    "SONG_B": 6.000000000,  # same rung-6 preservation as SONG_A, see above
+    "MORPH": 0.785541892,
+    "TEMPO": 0.169333577,
+    # 1.0 lands in the GRID zone (v >= kCoupleZoneSplit) and maps to
+    # couple = (1.0 - 0.5) / 0.5 = 1.0 -- "sync on, fully coupled", the
+    # approved factory state (spec 2026-08-09 hw-control-reduction task 7
+    # correction). NOT 0.5 -- that would ship an uncoupled factory patch.
+    "COUPLE": 1.000000000,
+    "SCALE": 5.000000000,
+    # The approved factory drift is 0.958666623 (what set_drift() must
+    # receive). Under the new zone mapping (kDriftSettleZone = 0.02,
+    # drift = (v - 0.02) / 0.98 -- spec 2026-08-09 hw-control-reduction task
+    # 8) the raw knob position that reproduces it exactly is
+    # 0.958666623 * 0.98 + 0.02 = 0.959493291, NOT the old raw value --
+    # carrying 0.958666623 forward unchanged would land drift at ~0.957823,
+    # a silent factory-sound drift of the kind this plan has already shipped
+    # by accident twice.
+    "DRIFT": 0.959493291,
+    # SETTLE retired (task 8): the pad's job moved to DRIFT's own left stop.
+    # SPOT/MASTER_DRIVE/REV_SMEAR/REV_MOD retired (task 9): fixed by ear now,
+    # see pushParams' PUSH/SMEAR/WOBL constants and Fireflow.cpp's dead SPOT
+    # trigger removal -- their approved-snapshot values (SPOT 0.0,
+    # MASTER_DRIVE 0.482666761, REV_SMEAR 0.484000504, REV_MOD 0.237000003)
+    # are superseded by the brief's by-ear pins (0.40/0.30/0.15), not carried
+    # forward.
+    "REV_SIZE": 0.869332671,
+    "REV_DECAY": 0.790665507,
+    "REV_TONE": 0.761333108,
+    "REV_DIFF": 0.862999976,
+    "CHOKE": 0.000000000,
+    "FILT_A": -0.172999933,
+    "FILT_B": -0.199999630,
+    "TIDE": 0.000000000,
+    # FLUXRATE_A/B used to be normalized 0..1 values run through
+    # flux_division_index() (engine/mod/divisions.h); task 6
+    # (spec 2026-08-09 hw-control-reduction) made the knob a 12-detent
+    # KNOBI whose value IS the index, so the old floats -- 0.392727494 and
+    # 0.254666120 -- are replaced with the indices they used to round to:
+    # 0.392727494 * 11 + 0.5 = 4.82 -> 4; 0.254666120 * 11 + 0.5 = 3.30 -> 3.
+    # Carrying the old floats forward would have rounded both decks to
+    # index 0, silently changing the factory delay time.
+    "FLUXRATE_A": 4.0,
+    "FLUXRATE_B": 3.0,
+    "FLUXFB_A": 0.285667986,
+    "FLUXFB_B": 0.555337131,
+    "COLOR_A": 0.000000000,
+    "COLOR_B": 0.469879329,
+    "LINK_A": 0.000000000,
+    "LINK_B": 0.000000000,
+    "STAGES_A": 0.800000012,
+    "STAGES_B": 1.000000000,
+    "REC_A": 0.000000000,
+    "REC_B": 0.000000000,
+    "REV_MIX_A": 0.422665179,
+    "REV_MIX_B": 0.613332987,
+    "SHUFFLE": 0.000000000,
+    # DETUNE_A/B used to share one raw value, 0.171428576 ("= 6 / 35"): a
+    # linear knob feeding the old 35 ct ceiling landed both decks at 6 ct.
+    # Task 10 (spec 2026-08-09 hw-control-reduction) squared the taper and
+    # tripled the synth-family ceiling to 105 ct, and BODY's compensating
+    # kDetuneScale shrank from 4 to 4/3 to hold its own 140 ct rail exactly
+    # where it was -- but that compensation only agrees with the OLD single
+    # raw value at full knob travel (v == 1), not at this init position. The
+    # approved patch boots ENGINE_A = SYNTH, ENGINE_B = BODY (pinned in
+    # tests/test_seed_audition_init.cpp), so each deck's init value is solved
+    # to preserve the cents ITS OWN engine actually produces:
+    #   DETUNE_A (SYNTH): v = sqrt(6 / 105)  -> 0.239045722^2 * 105 = 6.000 ct
+    #   DETUNE_B (BODY):  v = sqrt(24 / 140) -> 0.414039341^2 * 140 = 24.000 ct
+    # (24 ct is what the old shared raw value produced on BODY: 0.171428576 *
+    # 35 * 4 = 24.) Swapping deck B to SYNTH would now read 18 ct where it
+    # used to read 6 -- a consequence of the taper change, not of this split.
+    "DETUNE_A": 0.239045722,
+    "DETUNE_B": 0.414039341,
+    # DRIVE_A/B retired here (task 9): dead menu-only patch state, see
+    # HIDDEN_PARAMS above -- its 0.200000003 approved value leaves with it.
+}
 
 # --- lights --------------------------------------------------------------------
 # INPUTS/OUTPUTS are built above (see JACK_GROUPS, near CX) -- they had to move
@@ -790,6 +969,36 @@ def header():
     L2.append("} // namespace spkyvcv")
     return "\n".join(L2) + "\n"
 
+def _float_literal(v):
+    """9-sig-fig text for a C++ float literal. %g strips the decimal point
+    off whole numbers (16 -> "16"), and "16f" is not a valid C++ floating
+    literal -- GCC parses it as an integer with an unknown suffix and dies
+    looking for operator""f. Force the point back on so every entry parses
+    as float, matching the (unformatted) values already in INIT_DEFAULTS."""
+    s = f"{v:.9g}"
+    if "." not in s and "e" not in s and "E" not in s:
+        s += ".0"
+    return s
+
+def init_patch_header():
+    L = ["// GENERATED by res/gen_panel.py -- do not edit by hand.",
+         "#pragma once", "", "namespace spkyvcv {", "",
+         "static constexpr float kInitParamDefaults[] = {"]
+    for c in PARAMS:
+        L.append(f"    {_float_literal(INIT_DEFAULTS[c.enum])}f, // {c.enum}")
+    L.append("};")
+    L.append("static_assert(sizeof(kInitParamDefaults) / "
+             "sizeof(kInitParamDefaults[0])")
+    L.append("              == NUM_PARAMS, "
+             '"init snapshot must cover every ParamId");')
+    L.append("")
+    L.append("inline float initParamDefault(int id) {")
+    L.append("    return kInitParamDefaults[id];")
+    L.append("}")
+    L.append("")
+    L.append("} // namespace spkyvcv")
+    return "\n".join(L) + "\n"
+
 if __name__ == "__main__":
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(here)
@@ -797,6 +1006,8 @@ if __name__ == "__main__":
         f.write(svg())
     with open(os.path.join(root, "src", "generated_panel.hpp"), "w") as f:
         f.write(header())
-    print("wrote res/Fireflow.svg and src/generated_panel.hpp")
+    with open(os.path.join(root, "src", "init_patch.hpp"), "w") as f:
+        f.write(init_patch_header())
+    print("wrote res/Fireflow.svg, src/generated_panel.hpp and src/init_patch.hpp")
     print(f"params={len(PARAMS)} (stride={PART_STRIDE}) inputs={len(INPUTS)} "
           f"outputs={len(OUTPUTS)} lights={len(LIGHTS)}  panel={HP}HP")

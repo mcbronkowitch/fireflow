@@ -42,6 +42,14 @@ public:
     // return peak times the ceiling's own ride. The bloom duck (Instrument)
     // reads this as its envelope. 0.0 on a fresh or cleared room.
     float return_level() const { return _wet_peak * _lim_gain; }
+    // Observers only, for tests (review finding IMPORTANT 6, 2026-08-09
+    // hw-control-reduction final review): the last norm SMEAR/MOD were set
+    // to, so a test can pin what the engine actually received rather than
+    // trusting the host source text calls the right function with the right
+    // literal. Both knobs feed the vendored Oliverb write-only (no getter
+    // there), so this file keeps its own copy of the norm it was given.
+    float diffuser_mod_depth_for_test() const { return _diffuser_mod_norm; }
+    float mod_depth_for_test() const { return _mod_norm; }
 
 private:
     clouds::Oliverb _verb;
@@ -56,6 +64,10 @@ private:
     float _lim_target = 1.f;  // recomputed on the control raster
     float _pk_rel = 0.f, _lim_down = 0.f, _lim_up = 0.f;
     float _buffer[clouds::Oliverb::kBufferSize];
+    // Last norm handed to set_diffuser_mod_depth()/set_mod_depth() -- see the
+    // _for_test getters above.
+    float _diffuser_mod_norm = 0.f;
+    float _mod_norm = 0.f;
 };
 
 } // namespace spky

@@ -118,6 +118,54 @@ public:
     void set_grit_mix(int p, float n)              { _parts[p].fx().set_grit_mix(n); }
     void set_link(int p, float n)   { _parts[p].fx().set_link(n); }
     void set_comp(int p, float n)                  { _parts[p].fx().set_comp(n); }
+    // Observer only, for tests (spec 2026-08-09 hw-control-reduction task 4
+    // review): whether a host's bipolar-GRIT sign/mix mapping actually
+    // reached the engine the way it claims to, not just whether the host
+    // source text contains the right substrings.
+    GritMode grit_mode_for_test(int p) const {
+        return _parts[p].fx().grit().mode();
+    }
+    bool grit_engaged_for_test(int p) const {
+        return _parts[p].fx().grit().engaged();
+    }
+    float grit_mix_for_test(int p) const {
+        return _parts[p].fx().grit().mix_for_test();
+    }
+    // Observer only, for tests (task 6, spec 2026-08-09
+    // hw-control-reduction): the FLUX tape delay's target time, so a test
+    // can prove a TIME knob's raw detent index (and the pinned-neutral
+    // FXT_FLUX_TIME base) actually reach the tape's delay time, not just
+    // that the host source text claims to route them there.
+    float flux_delay_target_for_test(int p) const {
+        return _parts[p].fx().flux().delay_target_for_test();
+    }
+    // Observer only, for tests (review finding IMPORTANT 6, 2026-08-09
+    // hw-control-reduction final review): the compressor's own applied
+    // amount, so a future LVL/COMP split change has to move a pinned number
+    // instead of drifting unnoticed. Comp::amount() is already a plain
+    // public getter -- this just reaches it through the same part/fx path
+    // as comp_mix_for_test's siblings above.
+    float comp_amount_for_test(int p) const {
+        return _parts[p].fx().comp().amount();
+    }
+    // Observer only, for tests: the spread actually reaching voice 0's
+    // oscillators (VoiceT<>::detune_cents() / BodyVoice::detune_cents()),
+    // i.e. set_voice_detune(p, n)'s result AFTER SynthEngineT::set_detune
+    // multiplies by kDetuneCeilCt -- not the raw panel knob. Both engines
+    // share the same 0..kDetuneCeilCt (105 ct) units; BODY additionally
+    // scales this by its own kDetuneScale (4/3) at the audio callsite
+    // (body_voice.cpp), which this deliberately does NOT include, because
+    // that scale is BODY's own private implementation detail, not part of
+    // the shared VOICE contract this observer exposes. 0 on any other
+    // engine (WAVE/BBD/SAMPLER also receive set_voice_detune, but the panel
+    // guard's DETUNE contract only pins SYNTH/BODY).
+    float applied_detune_ct_for_test(int p) const {
+        if (_parts[p].engine_id() == ENGINE_SYNTH)
+            return _parts[p].synth().applied_detune_ct();
+        if (_parts[p].engine_id() == ENGINE_BODY)
+            return _parts[p].body().applied_detune_ct();
+        return 0.f;
+    }
     void set_reverb_size(float n)  { if (_reverb) _reverb->set_size(n); }
     void set_reverb_decay(float n) {
         if (_reverb) _reverb->set_decay(n);
@@ -134,6 +182,23 @@ public:
     void set_reverb_mix(int part, float n);   // 0..1, exact endpoints
     void set_reverb_mix(float n);             // convenience: both decks
     void set_master_drive(float n) { _limiter.set_drive(n); }
+    // Observer only, for tests (review finding IMPORTANT 6): the limiter's
+    // actual pre-gain (Limiter::set_drive's `1 + 3*n*n`), so a pinned test
+    // can catch PUSH's fixed-by-ear constant drifting without depending on
+    // a source-text grep for "0.40f".
+    float master_drive_pre_gain_for_test() const { return _limiter.pre_gain(); }
+    // Observer only, for tests: LVL's smoothed per-deck level, read after a
+    // control tick (see Center::level()'s comment for why).
+    float part_level_for_test(int p) const { return _center.level(p); }
+    // Observers only, for tests: SMEAR/WOBL's fixed-by-ear constants, as
+    // actually stored on the shared room (see AmbientReverb's _for_test
+    // getters). 0.f with no reverb attached (engine-only init(sample_rate)).
+    float reverb_smear_for_test() const {
+        return _reverb ? _reverb->diffuser_mod_depth_for_test() : 0.f;
+    }
+    float reverb_mod_for_test() const {
+        return _reverb ? _reverb->mod_depth_for_test() : 0.f;
+    }
     float fx_target_value(int p, int i) const { return _parts[p].fx_target_value(i); }
     // Observer only, for tests (Task 10): the part's own FLUX tape tap, so a
     // test claiming "the excitation bus's tape source is hot" can assert it
@@ -277,6 +342,7 @@ public:
 
     // --- M4 center section ---
     void set_morph(float m)  { _center.set_morph(m); }
+    void set_part_level(int p, float lvl) { _center.set_level(p, lvl); }
     void set_couple(float c) { _center.set_couple(c); }
     void set_drift(float d)  { _center.set_drift(d); }
     void set_tide(float n)   { for (auto& p : _parts) p.mod().set_tide(n); }

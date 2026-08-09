@@ -173,6 +173,62 @@ TEST_CASE("instrument: voice setters and manual trigger reach the part") {
     CHECK(peak > 0.f);
 }
 
+TEST_CASE("instrument: set_step tolerates a zero step count") {
+    // The panel merged the retired STEP pad's boolean into the STEPS knob's
+    // own count (spec 2026-08-09 hw-control-reduction task 2/3; see task
+    // 3's review, Finding 8): turning STEPS to its left stop now reaches
+    // inst.set_step(p, false, 0) as a live, player-reachable runtime state,
+    // not just a snapshot value nobody could dial in -- before the merge
+    // the count passed alongside on=false was always >= 2.
+    //
+    // Walking the path from set_step: SuperModulator::set_step clamps
+    // `_deck_steps = n < 1 ? 1 : n` and ModLane::set_step independently
+    // clamps `steps < 1 ? 1 : steps` before storing `_steps` -- both guard
+    // clock_scale() (8.f / _steps) and step_samples()'s reciprocal
+    // (1.f / (... * _steps)), lane.h. clock_scale() only divides while
+    // _step_mode is true, so a genuinely reachable FLOW-mode zero (on=false)
+    // never reaches it regardless of the clamp. step_samples() has NO such
+    // gate, though -- it divides by _steps whenever _phase_inc > 0, on or
+    // off STEP -- so it is the one real hazard, and it is read only on a
+    // Sampler deck (Part::_control_tick, `if (_engine_id == ENGINE_SAMPLER)
+    // _sampler.set_step_clock(_mod.pitch_step_samples());`).
+    //
+    // This test exercises that combination -- Sampler engine, steps=0 --
+    // but does NOT pin the clamp itself: with no sample loaded, SamplerEngine
+    // ::set_step_clock() early-returns on an empty buffer before the value
+    // this passes it is ever read, so this only proves an Instrument-level
+    // Sampler with steps=0 stays NaN-free and in range end to end (still a
+    // real regression net -- it just isn't exercising the divide). The
+    // clamp's actual guarantee -- step_samples() itself, with _steps forced
+    // to 0, never dividing by zero -- is pinned directly by
+    // tests/test_lane.cpp's "lane: step_samples() tolerates a zero step
+    // count", which is the load-bearing case.
+    Instrument inst;
+    inst.init(48000.f);
+    inst.set_engine(PART_A, ENGINE_SAMPLER);
+    inst.set_engine(PART_B, ENGINE_SAMPLER);
+    inst.set_step(PART_A, false, 0);
+    inst.set_step(PART_B, false, 0);
+
+    std::vector<float> l(96), r(96);
+    // Run long enough for the click-free engine swap (part.cpp) to land on
+    // Sampler before checking output.
+    for (int block = 0; block < 20; ++block)
+        inst.process(nullptr, nullptr, l.data(), r.data(), 96);
+    CHECK(inst.engine_id(PART_A) == ENGINE_SAMPLER);
+    CHECK(inst.engine_id(PART_B) == ENGINE_SAMPLER);
+
+    inst.process(nullptr, nullptr, l.data(), r.data(), 96);
+    for (int i = 0; i < 96; ++i) {
+        CHECK(l[i] == l[i]);            // not NaN
+        CHECK(r[i] == r[i]);            // not NaN
+        CHECK(l[i] >= -1.5f);
+        CHECK(l[i] <=  1.5f);
+        CHECK(r[i] >= -1.5f);
+        CHECK(r[i] <=  1.5f);
+    }
+}
+
 TEST_CASE("instrument: set_engine switches to the test tone and back") {
     Instrument inst;
     inst.init(48000.f);
@@ -868,6 +924,23 @@ TEST_CASE("cross-deck excitation is symmetric and off by default") {
         inst->set_engine(PART_A, ENGINE_SYNTH);
         inst->set_engine(PART_B, ENGINE_BODY);
         inst->set_voice_sub(PART_B, 1.f);
+        // Explicit, not incidental: this test is about cross-deck coupling,
+        // not about detune, but BODY's own resonant character (how far
+        // body_voice.cpp's kDetuneScale bends its mode bank) still shapes
+        // how visibly a coupling energy shows up over background
+        // self-oscillation -- so its detune must be a known, fixed point,
+        // not whatever SynthEngineT::_detune_spread_ct's un-pushed boot
+        // default (18 ct, a SYNTH-oriented number that was never chosen to
+        // serve BODY -- see synth_engine.h) happens to produce on BODY today.
+        // 72 ct is exactly what that 18 ct default DID produce on BODY
+        // before the ceiling grew (kDetuneCeilCt 35 -> 105, kDetuneScale
+        // 4 -> 4/3, spec 2026-08-09 hw-control-reduction task 10:
+        // 18 * 4 = 72 old, 18 * 4/3 = 24 new) -- i.e. the BODY character
+        // this test's margins were always, if incidentally, measured
+        // against. Pinning it here (identically on both instruments, so it
+        // stays a controlled variable) makes the dependency honest instead
+        // of quietly re-deriving new thresholds around a moved default.
+        inst->set_voice_detune(PART_B, 72.f / 140.f);
     }
     coupled.set_excitation_sources(PART_B, false, true, false);
 

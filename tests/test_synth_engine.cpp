@@ -96,3 +96,19 @@ TEST_CASE("synth engine satisfies the AD-envelope voice contract") {
     voicet_cycle_scaled_ad_envelope<SynthEngine>();
     voicet_flow_plateau_and_handover<SynthEngine>();
 }
+
+TEST_CASE("detune reaches 105 cents at full for the synth engines") {
+    SynthEngine e;
+    fresh(e);
+    // set_detune() only writes the raw _detune_spread_ct; applied_detune_ct()
+    // reads the VOICE's cached copy, which _update_control() refreshes once
+    // per kCtrlInterval samples (see contract_detune_is_independent_of_source
+    // in synth_engine_contract.h). A render past one control tick is required
+    // for the new ceiling to actually reach the voice.
+    e.set_detune(1.f);
+    render_l(e, SynthEngine::kCtrlInterval + 1);
+    CHECK(e.applied_detune_ct() == doctest::Approx(105.f).epsilon(0.001));
+    e.set_detune(0.f);
+    render_l(e, SynthEngine::kCtrlInterval + 1);
+    CHECK(e.applied_detune_ct() == doctest::Approx(0.f).epsilon(0.001));
+}

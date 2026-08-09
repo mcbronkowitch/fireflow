@@ -716,9 +716,19 @@ TEST_CASE("BodyVoice at RESO 1's energy is pitch-dependent") {
     CHECK(e_low != e_high);
 }
 
+TEST_CASE("body keeps its 140 cent rail after the shared ceiling moved") {
+    // BODY reads DETUNE wider than the synths do (spec §5, "how broken is this
+    // material"). The ceiling below it grew from 35 to 105, so the scale here
+    // shrank from 4 to 4/3 -- the rail must be exactly where it was.
+    CHECK(spky::body_detune_max_ct() == doctest::Approx(140.f).epsilon(0.001));
+}
+
 TEST_CASE("BodyVoice: DETUNE's ceiling is exactly the bank's ceiling") {
-    // SynthEngineT::kDetuneCeilCt -- the most any engine ever pushes.
-    constexpr float kEngineCeilCt = 35.f;
+    // SynthEngineT::kDetuneCeilCt -- the most any engine ever pushes. Raised
+    // from 35 to 105 ct (spec 2026-08-09 hw-control-reduction task 10);
+    // BodyVoice::kDetuneScale shrank from 4 to 4/3 in exact compensation, so
+    // this ceiling moved with it and the bank's rail (140 ct) did not.
+    constexpr float kEngineCeilCt = 105.f;
 
     // At the ceiling the amount has saturated: pushing past it changes nothing
     // in the bank, so no bank range is left stranded above the knob.
