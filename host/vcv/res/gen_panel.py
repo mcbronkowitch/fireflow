@@ -539,7 +539,10 @@ INIT_DEFAULTS = {
     "STEPS_A": 16.000000000,
     "ENGINE_A": 0.000000000,
     "GRITMODE_A": 1.000000000,
-    "SONG_A": 0.000000000,
+    # Rung 6 (song_ladder.h) is {form: Hierarchical, song: AAAB} -- the exact
+    # pair the old independent FORM_A=2/SONG_A=0 defaults held. Preserves the
+    # approved init sound; it is not a factory-default retune.
+    "SONG_A": 6.000000000,
     "RATE_B": 0.202409565,
     "SHAPE_B": 0.899999678,
     "DENSITY_B": 0.644577920,
@@ -559,7 +562,7 @@ INIT_DEFAULTS = {
     "STEPS_B": 16.000000000,
     "ENGINE_B": 3.000000000,
     "GRITMODE_B": 0.000000000,
-    "SONG_B": 0.000000000,
+    "SONG_B": 6.000000000,  # same rung-6 preservation as SONG_A, see above
     "MORPH": 0.785541892,
     "SYNC": 1.000000000,
     "TEMPO": 0.169333577,

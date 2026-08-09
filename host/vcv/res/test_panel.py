@@ -791,7 +791,12 @@ def test_song_knob_swallows_form_and_new():
     here = os.path.dirname(os.path.abspath(__file__))
     cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
     check("song_ladder.h" in cpp, "the host does not include the ladder")
-    check("spky::hyst_step(" in cpp, "the host does not debounce the SONG pot")
+    # Debouncing itself lives in song_rung_state.hpp (spky::hyst_step under
+    # the hood, dependency-free, unit-tested by test_song_rung_state.cpp) --
+    # the review fix that also stops a RESTORED rung from firing a re-roll.
+    check("song_rung_state.hpp" in cpp,
+          "the host does not include the rung tracker")
+    check("songRung[p].tick(" in cpp, "the host does not debounce the SONG pot")
     check("inst.new_phrase(p)" in cpp, "the host never re-rolls")
     check("FORM_A" not in cpp, "Fireflow.cpp still references FORM_A")
 
@@ -1273,9 +1278,12 @@ inst.set_engine(p, id);"""
             issues.append("a sampler-only pushParams control escaped samplerPart gating")
             break
     new_punch = """
-if (rung != songRung[p]) {
-    songRung[p] = rung;
+if (songRung[p].tick(songNorm, spky::kSongLadderCount)) {
     inst.new_phrase(p);          // turn the knob, get a new melody
+    // Fires once per rung detent; inherited the retired NEW
+    // pad's Sampler punch. Whether every detent should punch, or
+    // only some, is still an open by-ear question -- on this
+    // plan's listening checklist.
     if (samplerPart) inst.sampler_punch(p);
 }"""
     if push_n.count(compact_cpp(new_punch)) != 1:
@@ -1337,10 +1345,8 @@ def test_engine_cycle_guard_rejects_representative_regressions():
          "const bool samplerPart = eng > 0;", "sampler"),
         ("if (samplerPart) inst.sampler_punch(p);",
          "inst.sampler_punch(p);", "SONG sampler punch"),
-        ("inst.new_phrase(p);          // turn the knob, get a new melody\n"
-         "                if (samplerPart) inst.sampler_punch(p);",
-         "if (!samplerPart) inst.new_phrase(p);          // turn the knob, get a new melody\n"
-         "                if (samplerPart) inst.sampler_punch(p);",
+        ("inst.new_phrase(p);          // turn the knob, get a new melody",
+         "if (!samplerPart) inst.new_phrase(p);          // turn the knob, get a new melody",
          "SONG phrase rebuild"),
     ]
     for before, after, label in mutations:
@@ -2061,7 +2067,12 @@ def test_sampler_preset_init_snapshot():
         "STEP_A": 0.0,
         "FORM_A": 2.0,
         "NEWPHRASE_A": 0.0,
-        "SONG_A": 0.0,
+        # SONG_A is a ladder rung index now, not a raw SongMode (spec
+        # 2026-08-09 hw-control-reduction task 3 review). Rung 6 is
+        # {form: Hierarchical, song: AAAB} -- the exact pair the retired
+        # FORM_A=2.0/old SONG_A=0.0 held, so the approved init sound is
+        # unchanged even though the number that encodes it is not.
+        "SONG_A": 6.0,
         "RATE_B": 0.202409565,
         "SHAPE_B": 0.899999678,
         "DENSITY_B": 0.64457792,
@@ -2084,7 +2095,7 @@ def test_sampler_preset_init_snapshot():
         "STEP_B": 0.0,
         "FORM_B": 2.0,
         "NEWPHRASE_B": 0.0,
-        "SONG_B": 0.0,
+        "SONG_B": 6.0,  # same rung-6 preservation as SONG_A, see above
         "MORPH": 0.785541892,
         "SYNC": 1.0,
         "TEMPO": 0.169333577,

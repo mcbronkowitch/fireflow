@@ -10,6 +10,7 @@
 #include "form_song_migration.hpp"
 #include "link_migration.hpp"
 #include "bbd_edge_state.hpp"   // ENG->BBD edge detector (dependency-free, unit-tested)
+#include "song_rung_state.hpp"  // SONG rung tracker (dependency-free, unit-tested)
 
 // The portable engine core -- exactly the same headers the desktop render host
 // and (later) the Daisy firmware use. No hardware type crosses this boundary.
@@ -276,10 +277,12 @@ struct Fireflow : Module {
     dsp::ClockDivider ctrlDiv;              // throttle param push to control rate
     dsp::SchmittTrigger clockTrig, resetTrig;
     dsp::BooleanTrigger spotTrig, settleTrig;
-    // Latches the SONG knob's current rung so pushParams can detect a rung
-    // change and re-roll the phrase -- SONG swallowed FORM and the NEW pad
-    // (spec 2026-08-09 hw-control-reduction task 3).
-    int songRung[spky::PART_COUNT] = {0, 0};
+    // Tracks the SONG knob's current rung so pushParams can detect a genuine
+    // rung change and re-roll the phrase -- SONG swallowed FORM and the NEW
+    // pad (spec 2026-08-09 hw-control-reduction task 3). Seeded/rearm shape
+    // (song_rung_state.hpp) so a RESTORED rung -- patch load, preset load,
+    // module add, or Initialize -- adopts as a baseline instead of firing.
+    spkyvcv::SongRungState songRung[spky::PART_COUNT];
     float clkSamples = 0.f;                 // samples since last external clock edge
     float gateFilt[2] = {0.f, 0.f};
     float recPhase[2] = {0.f, 0.f};        // REC LED pulse while recording
@@ -734,22 +737,26 @@ struct Fireflow : Module {
 
             // SONG walks a curated 14-rung ladder through (Principle, SongMode)
             // (spec 2026-08-09 hw-control-reduction task 3) -- FORM and the NEW
-            // pad are gone. hyst_step debounces the pot so a value parked on a
-            // seam does not re-quantise every tick; a rung change re-rolls the
-            // phrase exactly as NEW used to, and in the sampler additionally
-            // punches a fresh grain -- the playhead returns to ORGANIZE and a
-            // grain spawns immediately, without which the long end of GENE
-            // SIZE is unplayable.
+            // pad are gone. songRung[p].tick() debounces the pot (so a value
+            // parked on a seam does not re-quantise every tick) AND absorbs a
+            // RESTORED rung as a baseline rather than a turn (song_rung_state.hpp)
+            // -- see rearm() call sites in dataFromJson()/onReset() below. A
+            // rung change re-rolls the phrase exactly as the retired NEW pad
+            // used to, and in the sampler additionally punches a fresh grain
+            // -- the playhead returns to ORGANIZE and a grain spawns
+            // immediately, without which the long end of GENE SIZE is
+            // unplayable.
             const float songNorm = pp(SONG_A, p) /
                                    float(spky::kSongLadderCount - 1);
-            const int rung = spky::hyst_step(songRung[p], songNorm,
-                                             spky::kSongLadderCount);
-            if (rung != songRung[p]) {
-                songRung[p] = rung;
+            if (songRung[p].tick(songNorm, spky::kSongLadderCount)) {
                 inst.new_phrase(p);          // turn the knob, get a new melody
+                // Fires once per rung detent; inherited the retired NEW
+                // pad's Sampler punch. Whether every detent should punch, or
+                // only some, is still an open by-ear question -- on this
+                // plan's listening checklist.
                 if (samplerPart) inst.sampler_punch(p);
             }
-            const spky::SongRung& r = spky::song_ladder_at(rung);
+            const spky::SongRung& r = spky::song_ladder_at(songRung[p].rung);
             inst.set_form(p, r.form);
             inst.set_song(p, r.song);
         }
@@ -851,6 +858,13 @@ struct Fireflow : Module {
             smp[p] = SamplerPartState{};
             inst.sampler_clear(p);
             factoryTried[p] = false;
+            // Rack resets params (including SONG_A/B) to their default
+            // BEFORE calling onReset(). Without this re-arm, an
+            // already-ticking module's stale pre-Initialize rung would make
+            // the reset-to-default SONG value look like a giant turn of the
+            // knob and fire a re-roll on the very next control tick
+            // (song_rung_state.hpp).
+            songRung[p].rearm();
         }
         reinit(curSr > 0.f ? curSr : 48000.f);
     }
@@ -1021,9 +1035,15 @@ struct Fireflow : Module {
             // fresh-add path (curSr == 0.f, the else branch below) needs no
             // such re-arm: no tick has run yet, so bbdEdge[p] is still at its
             // construction-time unseeded state and the ordinary first-tick
-            // baseline in tick() already applies.
-            for (int p = 0; p < spky::PART_COUNT; ++p)
+            // baseline in tick() already applies. songRung[p] needs the same
+            // re-arm for the same reason (song_rung_state.hpp) -- otherwise a
+            // preset saved on a rung other than the module's current one
+            // would look like a giant turn of the SONG knob and fire a
+            // re-roll the instant the module ticks again.
+            for (int p = 0; p < spky::PART_COUNT; ++p) {
                 bbdEdge[p].rearm();
+                songRung[p].rearm();
+            }
         } else {
             pendingRestore = true;
         }

@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 #include "instrument.h"
+#include "mod/song_ladder.h"
 #include "../bench/audition/init_patch.h"
 #include "vcv/src/generated_panel.hpp"
 #include "vcv/src/init_patch.hpp"
@@ -24,12 +26,23 @@ TEST_CASE("Seed audition applies the VCV init engine and arranger state")
 
     CHECK(inst.engine_id(spky::PART_A) == spky::ENGINE_SYNTH);
     CHECK(inst.engine_id(spky::PART_B) == spky::ENGINE_BODY);
-    // SONG_A/B default to ladder rung 0 (spec 2026-08-09
-    // hw-control-reduction task 3): song_ladder_at(0) == {form=0, song=6}.
-    CHECK(inst.form(spky::PART_A) == 0);
-    CHECK(inst.form(spky::PART_B) == 0);
-    CHECK(inst.song(spky::PART_A) == 6);
-    CHECK(inst.song(spky::PART_B) == 6);
+
+    // SONG_A/B's init default is a ladder rung index, not a raw Principle/
+    // SongMode pair (spec 2026-08-09 hw-control-reduction task 3). Derive
+    // the expectation from the same generated snapshot and the same ladder
+    // the host reads, rather than restating the rung's contents as
+    // literals -- the ladder is TASTE (song_ladder.h) and retuning it must
+    // not break this wiring check.
+    const int rung_a = static_cast<int>(
+        std::lround(spkyvcv::initParamDefault(spkyvcv::SONG_A)));
+    const int rung_b = static_cast<int>(
+        std::lround(spkyvcv::initParamDefault(spkyvcv::SONG_B)));
+    const spky::SongRung& song_a = spky::song_ladder_at(rung_a);
+    const spky::SongRung& song_b = spky::song_ladder_at(rung_b);
+    CHECK(inst.form(spky::PART_A) == song_a.form);
+    CHECK(inst.form(spky::PART_B) == song_b.form);
+    CHECK(inst.song(spky::PART_A) == song_a.song);
+    CHECK(inst.song(spky::PART_B) == song_b.song);
 }
 
 
