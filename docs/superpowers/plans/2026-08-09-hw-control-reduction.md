@@ -1477,6 +1477,41 @@ Rack neu starten, `Fireflow` und `FireflowHW` einfügen. Prüfen:
 Was sich falsch anfühlt, ist ein Tuning-Befund für die nächste Runde, kein
 Implementierungsfehler — die Zahlen in der Spec sind Startwerte.
 
+**By-Ear-Checkliste — was sich über die neun Implementierungs-Tasks hörbar
+geändert hat, gesammelt an einer Stelle statt verstreut in gitignored
+Reports:**
+
+1. **LVL/COMP-Init.** `COMP_A = 0.629666805`, `COMP_B = 0.561333418` steuerten
+   den Kompressor, dessen Makeup-Gain Teil der Werkslautstärke war. Beide
+   sind jetzt `0.8` — volle Lautstärke, Kompressor aus. Das Werkspatch kann
+   dadurch **leiser** wirken als vorher, und die relative Balance der beiden
+   Decks hat sich geändert (früher unterschiedlich, jetzt gleich).
+2. **BODYs unangetastetes Detune.** `SynthEngineT`s Boot-Default
+   `_detune_spread_ct = 18.f` ist ein absoluter Cent-Wert, der nicht mit der
+   Ceiling skaliert. Mit `BodyVoice::kDetuneScale` kompensiert von 4 auf 4/3
+   bootet ein BODY-Deck, dessen DETUNE-Knopf nie angefasst wurde, jetzt bei
+   **24 ct statt 72 ct** — weniger inharmonisch ab Werk.
+3. **DETUNE-Init unterscheidet sich jetzt pro Deck** — `DETUNE_A =
+   0.239045722`, `DETUNE_B = 0.414039341` — gewählt, damit jedes Deck genau
+   das Detune reproduziert, das seine eigene Engine vorher erzeugte (Deck A
+   bootet SYNTH, Deck B bootet BODY). Konsequenz: Deck B auf SYNTH umgestellt
+   gibt jetzt 18 ct, wo es früher 6 ct waren.
+4. **Drei feste Werte weichen vom gespeicherten Patch ab.** `MASTER_DRIVE`
+   0.482666761 → 0.40, `REV_SMEAR` 0.484000504 → **0.30 (fast halbiert)**,
+   `REV_MOD` 0.237000003 → 0.15. Diese kommen aus Bastians geäußerter
+   Spielpraxis, nicht aus dem Snapshot. SMEAR ist der Wert, der zuerst
+   angehört werden sollte.
+5. **`sampler_punch` feuert jetzt pro SONG-Rastpunkt**, geerbt vom
+   retirierten NEW-Pad. Das Durchdrehen des Knopfes überstreicht viele
+   Rastpunkte. Die Feuerrate ist eine offene By-Ear-Frage.
+6. **Panel-Beschriftung:** die Mitte-Gruppen-Legende wurde von `TIME` zu
+   `TIMING` umbenannt, damit der FLUX-Knopf das Wort `TIME` bekommen konnte.
+   Reversibel; die Alternative wäre gewesen, den Knopf anders zu nennen.
+7. **`COUPLE`s Label ist `FREE|GRID`** — neun Zeichen, wo das bisherige
+   Maximum auf dem Panel fünf war. Gemessen passend (ca. 10 mm Abstand zu
+   `SHUFL`, 6.4 mm innerhalb der Gruppenbox), aber es ist das längste Label
+   am Instrument. Der kürzere Fallback wäre schlicht `GRID` gewesen.
+
 - [ ] **Step 8: Commit**
 
 ```bash
