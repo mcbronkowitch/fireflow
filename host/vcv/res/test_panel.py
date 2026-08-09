@@ -2348,6 +2348,32 @@ def test_init_defaults_are_generated_from_names():
         check(f"// {c.enum}\n" in header or f"// {c.enum}" in header,
               f"{c.enum} missing from the emitted table")
 
+    # The checks above only look for the NAME comments and the marker string
+    # -- none of them read the numbers the emitter actually wrote. Parse the
+    # real kInitParamDefaults[] out of the header (the array the firmware
+    # indexes by ParamId) and check both its values AND its order against
+    # INIT_DEFAULTS/PARAMS, so an emitter bug (bad lookup, transposed line,
+    # precision loss) can't silently ship a wrong array while every check
+    # above still passes.
+    match = re.search(r"kInitParamDefaults\[\]\s*=\s*\{(.*?)\};", header, re.DOTALL)
+    check(match is not None, "kInitParamDefaults array missing from init_patch.hpp")
+    if match is not None:
+        entries = []
+        for line in match.group(1).splitlines():
+            m = re.match(r"\s*([-0-9.eE]+)f?,\s*//\s*(\w+)", line)
+            if m:
+                entries.append((m.group(2), float(m.group(1))))
+        want_order = [c.enum for c in gp.PARAMS]
+        got_order = [name for name, _ in entries]
+        check(got_order == want_order,
+              f"kInitParamDefaults order drifted from PARAMS order: "
+              f"{got_order} != {want_order}")
+        for name, value in entries:
+            if name in gp.INIT_DEFAULTS:
+                check(abs(value - gp.INIT_DEFAULTS[name]) < 1e-6,
+                      f"kInitParamDefaults[{name}] emitted {value}, "
+                      f"INIT_DEFAULTS has {gp.INIT_DEFAULTS[name]}")
+
 
 def main():
     for name, fn in sorted(globals().items()):
