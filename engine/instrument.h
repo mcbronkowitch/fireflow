@@ -118,6 +118,19 @@ public:
     void set_grit_mix(int p, float n)              { _parts[p].fx().set_grit_mix(n); }
     void set_link(int p, float n)   { _parts[p].fx().set_link(n); }
     void set_comp(int p, float n)                  { _parts[p].fx().set_comp(n); }
+    // Observer only, for tests (spec 2026-08-09 hw-control-reduction task 4
+    // review): whether a host's bipolar-GRIT sign/mix mapping actually
+    // reached the engine the way it claims to, not just whether the host
+    // source text contains the right substrings.
+    GritMode grit_mode_for_test(int p) const {
+        return _parts[p].fx().grit().mode();
+    }
+    bool grit_engaged_for_test(int p) const {
+        return _parts[p].fx().grit().engaged();
+    }
+    float grit_mix_for_test(int p) const {
+        return _parts[p].fx().grit().mix_for_test();
+    }
     void set_reverb_size(float n)  { if (_reverb) _reverb->set_size(n); }
     void set_reverb_decay(float n) {
         if (_reverb) _reverb->set_decay(n);

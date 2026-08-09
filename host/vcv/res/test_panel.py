@@ -1136,8 +1136,10 @@ def test_grit_is_one_bipolar_knob():
     names = {c.enum for c in gp.PARAMS}
     check("GRITMODE_A" not in names and "GRITMODE_B" not in names,
           "GRITMODE pads still exist")
-    grit = [c for c in gp.PARAMS if c.enum == "GRIT_A"][0]
-    check(grit.kind == gp.KNOBC, "GRIT_A is not a bipolar knob")
+    grit_a = [c for c in gp.PARAMS if c.enum == "GRIT_A"][0]
+    check(grit_a.kind == gp.KNOBC, "GRIT_A is not a bipolar knob")
+    grit_b = [c for c in gp.PARAMS if c.enum == "GRIT_B"][0]
+    check(grit_b.kind == gp.KNOBC, "GRIT_B is not a bipolar knob")
     check(all(row[0] != "GRITMODE" for row in gp.DYNAMIC_CAPTIONS),
           "GRITMODE still has a dynamic caption")
     here = os.path.dirname(os.path.abspath(__file__))
@@ -1146,6 +1148,69 @@ def test_grit_is_one_bipolar_knob():
           "the host no longer names both grit modes")
     check("kGritDead" in cpp, "no dead zone around grit zero")
     check("GRITMODE_A" not in cpp, "Fireflow.cpp still references GRITMODE_A")
+
+
+def test_grit_dead_zone_and_mix_formula_agree_across_host_and_bench():
+    """The bipolar-GRIT dead zone and its sign/magnitude mapping exist in
+    two places: Fireflow.cpp (what Rack actually runs) and
+    bench/audition/init_patch.cpp (the only copy a doctest can reach --
+    Fireflow.cpp lives inside a Rack Module, unreachable from the engine
+    test suite). tests/test_seed_audition_init.cpp exercises the mapping,
+    but it can only ever prove the BENCH copy is right; nothing stops the
+    Fireflow.cpp copy from silently drifting away from it. This scrapes
+    both files' source text and requires the dead-zone constant's value and
+    the mix formula to match exactly, so a hand-edit to only one copy fails
+    loudly here instead of shipping a Rack build that disagrees with its
+    own test coverage.
+
+    Each extraction below is asserted to find exactly one match per file --
+    zero matches (the extraction quietly finding nothing) is treated as a
+    failure, not a pass, per the review that asked for this test: a
+    scraper that matches nothing must not report success.
+
+    Deliberately NOT a call to consolidate the two copies into a shared
+    helper: FLUX's per-param push is duplicated between these same two
+    files the same way, on purpose (spec 2026-08-09 hw-control-reduction
+    task 4 review) -- this test polices the duplication, it does not
+    remove it.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
+              encoding="utf-8") as f:
+        host_cpp = f.read()
+    bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
+                               "init_patch.cpp")
+    with open(bench_path, encoding="utf-8") as f:
+        bench_cpp = f.read()
+
+    def dead_zone_value(source, label):
+        matches = re.findall(r"kGritDead\s*=\s*([\d.]+f?)", source)
+        check(len(matches) == 1,
+              f"{label}: expected exactly one kGritDead declaration, "
+              f"found {len(matches)} ({matches!r})")
+        return matches[0].rstrip("f") if len(matches) == 1 else None
+
+    host_dead = dead_zone_value(host_cpp, "Fireflow.cpp")
+    bench_dead = dead_zone_value(bench_cpp, "bench/audition/init_patch.cpp")
+    if host_dead is not None and bench_dead is not None:
+        check(float(host_dead) == float(bench_dead),
+              f"kGritDead disagrees: Fireflow.cpp={host_dead} "
+              f"bench/audition/init_patch.cpp={bench_dead}")
+
+    needles = {
+        "sign-picks-mode ternary": compact_cpp(
+            "gritKnob<0.f?spky::GritMode::Reduce:spky::GritMode::Drive"),
+        "dead-zone mix formula": compact_cpp(
+            "gritMag<=kGritDead?0.f:(gritMag-kGritDead)/(1.f-kGritDead)"),
+    }
+    host_n, bench_n = compact_cpp(host_cpp), compact_cpp(bench_cpp)
+    for label, needle in needles.items():
+        check(host_n.count(needle) == 1,
+              f"Fireflow.cpp: expected exactly one {label}, found "
+              f"{host_n.count(needle)} matching {needle!r}")
+        check(bench_n.count(needle) == 1,
+              f"bench/audition/init_patch.cpp: expected exactly one "
+              f"{label}, found {bench_n.count(needle)} matching {needle!r}")
 
 
 def cpp_scope(source, anchor):

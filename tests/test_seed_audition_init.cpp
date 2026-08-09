@@ -138,3 +138,93 @@ TEST_CASE("Seed audition dispatcher routes generated STAGES by generated engine"
     CHECK(inst.pitch_cv(spky::PART_A) == doctest::Approx(0.8125f));
     CHECK(inst.pitch_cv(spky::PART_B) == doctest::Approx(0.5f));
 }
+
+// GRIT is one bipolar knob (spec 2026-08-09 hw-control-reduction task 4):
+// sign picks Reduce/Drive, magnitude (past a 0.03 dead zone) is the mix.
+// Task 4's review flagged that nothing exercised this mapping end to end --
+// the panel guard only substring-checks Fireflow.cpp's source text, so a
+// regression that declares kGritDead but stops wiring it into the fx_on
+// gate (exactly the bug task 4 fixed) would still pass every existing
+// check. These cases drive bench/audition/init_patch.cpp's
+// apply_init_patch -- the same sign/magnitude/dead-zone mapping
+// Fireflow.cpp's pushParams performs, reachable here from a doctest -- and
+// read the engine back through the grit_*_for_test() observers
+// (engine/instrument.h), not through source text.
+namespace {
+// Mirrors Fireflow.cpp's kGritDead / bench/audition/init_patch.cpp's
+// kGritDead. res/test_panel.py's test_grit_dead_zone_constant_agrees
+// keeps those two -- and only those two -- in sync; this local copy is a
+// third, independent expectation, not a fourth source of truth to sync.
+constexpr float kGritDeadForTest = 0.03f;
+}  // namespace
+
+TEST_CASE("Seed audition: negative GRIT engages Reduce and leaves the effect on")
+{
+    std::array<float, spkyvcv::NUM_PARAMS> snapshot{};
+    std::copy(std::begin(spkyvcv::kInitParamDefaults),
+              std::end(spkyvcv::kInitParamDefaults), snapshot.begin());
+    snapshot[spkyvcv::GRIT_A] = -0.5f;
+
+    spky::Instrument inst;
+    inst.init(48000.f);
+    audition::apply_init_patch(inst, snapshot.data());
+
+    // This is the exact case the task-4 fix rescued: set_fx_on's old
+    // `pp(GRIT_A, p) > 1e-4f` gate tested the RAW (now signed) value, so
+    // every negative GRIT value failed it and Reduce/CRSH was silently
+    // muted no matter how far left the knob turned. If that regresses,
+    // this CHECK goes red.
+    CHECK(static_cast<int>(inst.grit_mode_for_test(spky::PART_A))
+          == static_cast<int>(spky::GritMode::Reduce));
+    CHECK(inst.grit_engaged_for_test(spky::PART_A));
+}
+
+TEST_CASE("Seed audition: positive GRIT engages Drive and leaves the effect on")
+{
+    std::array<float, spkyvcv::NUM_PARAMS> snapshot{};
+    std::copy(std::begin(spkyvcv::kInitParamDefaults),
+              std::end(spkyvcv::kInitParamDefaults), snapshot.begin());
+    snapshot[spkyvcv::GRIT_B] = 0.5f;
+
+    spky::Instrument inst;
+    inst.init(48000.f);
+    audition::apply_init_patch(inst, snapshot.data());
+
+    CHECK(static_cast<int>(inst.grit_mode_for_test(spky::PART_B))
+          == static_cast<int>(spky::GritMode::Drive));
+    CHECK(inst.grit_engaged_for_test(spky::PART_B));
+}
+
+TEST_CASE("Seed audition: GRIT at the dead-zone boundary is off with zero mix, both signs")
+{
+    std::array<float, spkyvcv::NUM_PARAMS> snapshot{};
+    std::copy(std::begin(spkyvcv::kInitParamDefaults),
+              std::end(spkyvcv::kInitParamDefaults), snapshot.begin());
+    snapshot[spkyvcv::GRIT_A] = -kGritDeadForTest;
+    snapshot[spkyvcv::GRIT_B] = kGritDeadForTest;
+
+    spky::Instrument inst;
+    inst.init(48000.f);
+    audition::apply_init_patch(inst, snapshot.data());
+
+    CHECK_FALSE(inst.grit_engaged_for_test(spky::PART_A));
+    CHECK(inst.grit_mix_for_test(spky::PART_A) == doctest::Approx(0.f));
+    CHECK_FALSE(inst.grit_engaged_for_test(spky::PART_B));
+    CHECK(inst.grit_mix_for_test(spky::PART_B) == doctest::Approx(0.f));
+}
+
+TEST_CASE("Seed audition: full-deflection GRIT reaches mix 1.0, both signs")
+{
+    std::array<float, spkyvcv::NUM_PARAMS> snapshot{};
+    std::copy(std::begin(spkyvcv::kInitParamDefaults),
+              std::end(spkyvcv::kInitParamDefaults), snapshot.begin());
+    snapshot[spkyvcv::GRIT_A] = -1.f;
+    snapshot[spkyvcv::GRIT_B] = 1.f;
+
+    spky::Instrument inst;
+    inst.init(48000.f);
+    audition::apply_init_patch(inst, snapshot.data());
+
+    CHECK(inst.grit_mix_for_test(spky::PART_A) == doctest::Approx(1.f));
+    CHECK(inst.grit_mix_for_test(spky::PART_B) == doctest::Approx(1.f));
+}
