@@ -31,11 +31,25 @@ public:
     }
 
     void set_detune_cents(float ct) {                    // control rate
-        // Voice::_apply_freq pushes this twice per voice per control tick, i.e.
-        // 32 libm powf per 96-sample block on the two-part instrument. The
-        // argument only moves when TIMBRE moves or when the per-voice drift LFO
-        // is running (DRIFT/MOTION width > 0), so on a still patch every one of
-        // those recomputed the ratio it already had. Exact guard, no approximation.
+        // Voice::_apply_freq pushes this twice per voice, and SynthEngineT
+        // reaches _apply_freq twice per control tick: once through
+        // update_control, then again through set_pitch_hz for every sustaining
+        // voice (synth_engine.cpp's chord-slot loop). At kVoices == 4 that is
+        // up to 32 CALLS per 96-sample block on the two-part instrument -- but
+        // never 32 recomputes. The second pass of a tick always carries the
+        // argument the first pass just stored, so the guard below absorbs it,
+        // and at most 16 powf per block survive.
+        //
+        // The argument moves when DETUNE moves or when the per-voice drift LFO
+        // is running (MOTION width > 0, Voice::_drift_ct_cur) -- NOT with
+        // TIMBRE, which goes to set_morph. On a still patch every one of these
+        // calls would recompute the ratio it already had.
+        //
+        // What the guard is worth, measured: docs/bench's `micro_powf` row puts
+        // std::pow(2, x) at 197 cycles on the Seed (18942 for 96 calls), so the
+        // surviving 16 cost ~3.2k of the 960k-cycle block budget -- 0.33 % with
+        // drift running, and zero on a still patch. Exact compare, no
+        // approximation: the ratio has to be bit-identical either way.
         if (ct == _ct) return;
         _ct = ct;
         _ratio = std::pow(2.f, ct * (1.f / 1200.f));

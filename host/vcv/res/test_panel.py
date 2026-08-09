@@ -2268,8 +2268,9 @@ def test_sampler_preset_init_snapshot():
         # COMP_A/COMP_B deliberately changed (spec 2026-08-09
         # hw-control-reduction task 5): the knob's meaning changed from
         # "compressor amount" to "LVL/COMP", so the old value cannot be
-        # preserved -- 0.8 is full output level, no compressor.
-        "COMP_A": 0.8,
+        # preserved. The value IS kLvlCompSplit -- full output level with the
+        # compressor off -- and tracks it whenever the zone split moves.
+        "COMP_A": 0.6,
         # STEPS_A now carries the retired STEP_A pad's boolean too (spec
         # 2026-08-09 hw-control-reduction task 3 review, Finding 7): the
         # approved boot was STEP_A=0 (off) / STEPS_A=16 (parked); the merge
@@ -2301,7 +2302,7 @@ def test_sampler_preset_init_snapshot():
         "SOURCE_B": 0.177333504,
         "FLUX_B": 1.0,
         "GRIT_B": 0.0,
-        "COMP_B": 0.8,   # see COMP_A above
+        "COMP_B": 0.6,   # see COMP_A above
         "STEPS_B": 0.0,  # same flow-mode boot restoration as STEPS_A, see above
         "ENGINE_B": 3.0,
         "GRITMODE_B": 0.0,
@@ -2687,7 +2688,7 @@ def test_init_defaults_are_generated_from_names():
 
 def test_comp_knob_is_level_then_compressor():
     """COMP was a volume control in practice. The knob says so now, and the
-    compressor lives in its top fifth with make-up."""
+    compressor lives in its top two fifths with make-up."""
     import gen_panel as gp
     comp = [c for c in gp.PARAMS if c.enum == "COMP_A"][0]
     check(comp.label == "LVL", f"COMP_A still prints {comp.label!r}")
@@ -2732,7 +2733,7 @@ def test_lvl_comp_split_and_formulas_agree_across_host_and_bench():
               f"found {len(matches)} ({matches!r})")
         return matches[0].rstrip("f") if len(matches) == 1 else None
 
-    for const in ("kLvlCompSplit", "kCompTop"):
+    for const in ("kLvlCompSplit", "kCompTop", "kCompShape"):
         host_v = const_value(host_cpp, const, "Fireflow.cpp")
         bench_v = const_value(bench_cpp, const, "bench/audition/init_patch.cpp")
         if host_v is not None and bench_v is not None:
@@ -2744,8 +2745,8 @@ def test_lvl_comp_split_and_formulas_agree_across_host_and_bench():
         "level formula": compact_cpp(
             "std::min(1.f,lvlKnob/kLvlCompSplit)"),
         "comp formula": compact_cpp(
-            "lvlKnob<=kLvlCompSplit?0.f:(lvlKnob-kLvlCompSplit)/"
-            "(1.f-kLvlCompSplit)*kCompTop"),
+            "lvlKnob<=kLvlCompSplit?0.f:kCompTop*std::pow("
+            "(lvlKnob-kLvlCompSplit)/(1.f-kLvlCompSplit),kCompShape)"),
     }
     host_n, bench_n = compact_cpp(host_cpp), compact_cpp(bench_cpp)
     for label, needle in needles.items():
@@ -2755,6 +2756,75 @@ def test_lvl_comp_split_and_formulas_agree_across_host_and_bench():
         check(bench_n.count(needle) == 1,
               f"bench/audition/init_patch.cpp: expected exactly one "
               f"{label}, found {bench_n.count(needle)} matching {needle!r}")
+
+
+def test_comp_zone_makeup_rises_evenly_across_its_travel():
+    """The LVL/COMP knob's top zone must not dump its loudness into the last
+    few degrees of travel.
+
+    Comp::update_curve makes make-up gain strongly superlinear in the amount,
+    so mapping the zone linearly concentrates the gain at the top: at the
+    original 0.8 split with a linear ramp, one twentieth of knob travel was
+    worth 1.1 dB at the bottom of the zone and 5.7 dB at the very top, which
+    is why the knob felt like it pulled away at the end.
+
+    This recomputes the actual curve from BOTH sides -- the zone constants
+    scraped from Fireflow.cpp and the make-up law's coefficients scraped from
+    engine/fx/comp.cpp -- and requires the per-step loudness to stay in a
+    narrow band. It therefore fails if either the host mapping or the engine's
+    compressor law drifts away from the other, which a formula-text scrape
+    alone cannot see. Every extraction asserts exactly one match: a scraper
+    that finds nothing must not report success.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+
+    def one(path, pattern, label):
+        with open(path, encoding="utf-8") as f:
+            matches = re.findall(pattern, f.read())
+        check(len(matches) == 1,
+              f"{label}: expected exactly one match for {pattern!r}, "
+              f"found {len(matches)} ({matches!r})")
+        return float(matches[0].rstrip("f")) if len(matches) == 1 else None
+
+    host = os.path.join(here, "..", "src", "Fireflow.cpp")
+    comp = os.path.join(here, "..", "..", "..", "engine", "fx", "comp.cpp")
+
+    split = one(host, r"kLvlCompSplit\s*=\s*([\d.]+f?)", "Fireflow.cpp")
+    top = one(host, r"kCompTop\s*=\s*([\d.]+f?)", "Fireflow.cpp")
+    shape = one(host, r"kCompShape\s*=\s*([\d.]+f?)", "Fireflow.cpp")
+    # comp.cpp's make-up law: _thr_db = -32 * a, ratio = 1 + 9 * a * a,
+    # _makeup_db = -_thr_db * (1 - 1/ratio) * kMakeupComp.
+    thr = one(comp, r"_thr_db\s*=\s*-([\d.]+f?)\s*\*\s*a;", "comp.cpp")
+    rat = one(comp, r"ratio\s*=\s*1\.f\s*\+\s*([\d.]+f?)\s*\*\s*a\s*\*\s*a;",
+              "comp.cpp")
+    mk = one(comp, r"kMakeupComp\s*=\s*([\d.]+f?)", "comp.cpp")
+    if None in (split, top, shape, thr, rat, mk):
+        return
+
+    def makeup_db(a):
+        return thr * a * (1.0 - 1.0 / (1.0 + rat * a * a)) * mk
+
+    # Walk the zone in steps of 1/20th of the FULL knob travel -- the unit the
+    # hand feels, not a fraction of the zone, so a narrower zone is correctly
+    # punished for being steeper.
+    kStep = 0.05
+    steps = int(round((1.0 - split) / kStep))
+    check(steps >= 4,
+          f"the comp zone is only {1.0 - split:.2f} of travel ({steps} steps "
+          f"of {kStep}) -- too narrow to distribute make-up evenly")
+    if steps < 2:
+        return
+    db = [makeup_db(top * (i / steps) ** shape) for i in range(steps + 1)]
+    deltas = [db[i + 1] - db[i] for i in range(steps)]
+
+    check(max(deltas) <= 3.0,
+          f"the steepest 1/20th of LVL/COMP travel is worth "
+          f"{max(deltas):.2f} dB of make-up (limit 3.0) -- the top of the "
+          f"knob jumps in loudness")
+    check(max(deltas) / min(deltas) <= 2.0,
+          f"make-up is unevenly distributed across the comp zone: steepest "
+          f"step {max(deltas):.2f} dB vs shallowest {min(deltas):.2f} dB, "
+          f"ratio {max(deltas) / min(deltas):.2f} (limit 2.0)")
 
 
 def test_couple_zone_split_and_formula_agree_across_host_and_bench():

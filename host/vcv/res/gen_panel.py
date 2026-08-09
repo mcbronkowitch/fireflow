@@ -581,11 +581,18 @@ INIT_DEFAULTS = {
     "GRIT_A": 0.000000000,
     # COMP_A/COMP_B were the compressor amount under the old meaning; that
     # value's factory loudness leaned on make-up gain. Under the new LVL/COMP
-    # split, 0.8 is full output level with the compressor off -- it cannot
+    # split this is full output level with the compressor off -- it cannot
     # reproduce the old sound (the control's meaning genuinely changed, spec
     # 2026-08-09 hw-control-reduction task 5), it is the plan's starting point
     # for a later listening pass.
-    "COMP_A": 0.800000000,
+    #
+    # The number IS kLvlCompSplit and has to track it. When the split moved
+    # 0.8 -> 0.6 to give the compressor zone twice the travel, leaving 0.8 here
+    # would have booted both decks a third of the way into the comp zone --
+    # about +8.7 dB of make-up on a patch that is meant to start with the
+    # compressor disengaged. Same trap as SONG/STEPS/FLUXRATE/COUPLE before it:
+    # an old number surviving under a new meaning.
+    "COMP_A": 0.600000000,
     # 0 IS flow mode now that Task 2 merged the separate STEP pad into this
     # count (spec 2026-08-09 hw-control-reduction task 3 review, Finding 7).
     # The approved boot state was step mode OFF with the count parked at 16
@@ -614,7 +621,7 @@ INIT_DEFAULTS = {
     "SOURCE_B": 0.177333504,
     "FLUX_B": 1.000000000,
     "GRIT_B": 0.000000000,
-    "COMP_B": 0.800000000,   # see COMP_A above
+    "COMP_B": 0.600000000,   # see COMP_A above
     "STEPS_B": 0.000000000,  # same flow-mode boot restoration as STEPS_A, see above
     "ENGINE_B": 3.000000000,
     "SONG_B": 6.000000000,  # same rung-6 preservation as SONG_A, see above

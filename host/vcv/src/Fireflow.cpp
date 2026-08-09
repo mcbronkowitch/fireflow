@@ -601,15 +601,38 @@ struct Fireflow : Module {
                             std::fabs(pp(GRIT_A, p)) > kGritDead);
             // LVL/COMP: the lower zone is pure output gain (Comp::set_amount(0)
             // is a bit-exact bypass, so it costs no compressor CPU); the top
-            // fifth engages the compressor with make-up, ending at the 0.7 that
-            // used to be the knob's working value.
-            static constexpr float kLvlCompSplit = 0.8f;
+            // two fifths engage the compressor with make-up, ending at the 0.7
+            // that used to be the knob's working value.
+            //
+            // Both the split and the shape are about loudness per degree of
+            // travel. Comp::update_curve makes make-up strongly superlinear in
+            // the amount (_makeup_db = -_thr_db * (1 - 1/ratio) * 0.9, with
+            // ratio = 1 + 9a^2), so a LINEAR ramp across a narrow zone dumps
+            // most of its gain into the last few degrees: at the old 0.8 split
+            // the final tenth of the knob was worth +11.2 dB while the tenth
+            // just below the seam was worth +1.2 dB. A tenfold step change in
+            // sensitivity exactly where the hand crosses over reads as the
+            // volume pulling away at the top, which is what it was doing.
+            //
+            // Widening the zone alone does not fix that -- the a^2 term simply
+            // moves the same cliff to the right. kCompShape is the other half:
+            // raising the zone position to 0.6 front-loads the amount so
+            // make-up grows nearly LINEARLY IN dB across the zone (3.6..4.8 dB
+            // per tenth of travel, against 5.3 then 11.2 before). The exponent
+            // is fitted to update_curve's law above; change one and the other
+            // stops being right.
+            //
+            // kCompTop stays 0.7: full travel still reaches the compressor
+            // character the old knob was habitually parked at.
+            static constexpr float kLvlCompSplit = 0.6f;
             static constexpr float kCompTop      = 0.7f;
+            static constexpr float kCompShape    = 0.6f;
             const float lvlKnob = pp(COMP_A, p);
             inst.set_part_level(p, std::min(1.f, lvlKnob / kLvlCompSplit));
             inst.set_comp(p, lvlKnob <= kLvlCompSplit ? 0.f
-                             : (lvlKnob - kLvlCompSplit) /
-                               (1.f - kLvlCompSplit) * kCompTop);
+                             : kCompTop * std::pow(
+                                   (lvlKnob - kLvlCompSplit) /
+                                   (1.f - kLvlCompSplit), kCompShape));
 
             // Saved ENG meanings remain 0 = Synth and 1 = Sampler; 2 adds
             // Wave, 3 Body, 4 the BBD. Each new engine needs its own explicit

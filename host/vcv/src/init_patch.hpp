@@ -19,7 +19,7 @@ static constexpr float kInitParamDefaults[] = {
     0.438666672f, // SOURCE_A
     0.86400038f, // FLUX_A
     0.0f, // GRIT_A
-    0.8f, // COMP_A
+    0.6f, // COMP_A
     0.0f, // STEPS_A
     0.0f, // ENGINE_A
     0.239045722f, // DETUNE_A
@@ -39,7 +39,7 @@ static constexpr float kInitParamDefaults[] = {
     0.177333504f, // SOURCE_B
     1.0f, // FLUX_B
     0.0f, // GRIT_B
-    0.8f, // COMP_B
+    0.6f, // COMP_B
     0.0f, // STEPS_B
     3.0f, // ENGINE_B
     0.414039341f, // DETUNE_B

@@ -96,17 +96,22 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
             deck, spky::FxBlock::Grit,
             std::fabs(part(GRIT_A, deck)) > kGritDead);
         // LVL/COMP: the lower zone is pure output gain (Comp::set_amount(0)
-        // is a bit-exact bypass, so it costs no compressor CPU); the top
-        // fifth engages the compressor with make-up, ending at the 0.7 that
-        // used to be the knob's working value. Mirrors Fireflow.cpp's
-        // kLvlCompSplit/kCompTop/pushParams LVL/COMP block.
-        static constexpr float kLvlCompSplit = 0.8f;
+        // is a bit-exact bypass, so it costs no compressor CPU); the top two
+        // fifths engage the compressor with make-up, ending at the 0.7 that
+        // used to be the knob's working value. kCompShape front-loads the
+        // amount so make-up rises evenly in dB instead of dumping half its
+        // range into the last tenth of travel -- Fireflow.cpp's copy carries
+        // the full derivation. Mirrors Fireflow.cpp's
+        // kLvlCompSplit/kCompTop/kCompShape/pushParams LVL/COMP block.
+        static constexpr float kLvlCompSplit = 0.6f;
         static constexpr float kCompTop      = 0.7f;
+        static constexpr float kCompShape    = 0.6f;
         const float lvlKnob = part(COMP_A, deck);
         inst.set_part_level(deck, std::min(1.f, lvlKnob / kLvlCompSplit));
         inst.set_comp(deck, lvlKnob <= kLvlCompSplit ? 0.f
-                             : (lvlKnob - kLvlCompSplit) /
-                               (1.f - kLvlCompSplit) * kCompTop);
+                             : kCompTop * std::pow(
+                                   (lvlKnob - kLvlCompSplit) /
+                                   (1.f - kLvlCompSplit), kCompShape));
 
         inst.sampler_speed_mode(deck, true);
         inst.sampler_reverse(deck, false);
