@@ -3,8 +3,11 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <vector>
 
 #include "instrument.h"
+#include "fx/flux.h"
+#include "mod/divisions.h"
 #include "mod/song_ladder.h"
 #include "../bench/audition/init_patch.h"
 #include "vcv/src/generated_panel.hpp"
@@ -54,8 +57,8 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
     // nothing else) when that happens; do not carry a mismatch forward as a
     // "pre-existing failure" (spec 2026-08-09 hw-control-reduction task 3
     // review, Finding 5 -- this exact mistake shipped once already).
-    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 78,
-                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 78 -- "
+    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 76,
+                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 76 -- "
                   "if the panel inventory genuinely changed, update this "
                   "literal to match");
     CHECK(spkyvcv::initParamDefault(spkyvcv::ENGINE_A)
@@ -73,10 +76,86 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
     // centre (0) is the bit-identical path (spec 2026-07-28 flux-link).
     CHECK(spkyvcv::initParamDefault(spkyvcv::LINK_A) == doctest::Approx(0.f));
     CHECK(spkyvcv::initParamDefault(spkyvcv::LINK_B) == doctest::Approx(0.f));
-    CHECK(spkyvcv::initParamDefault(spkyvcv::FLUXTIME_A)
-          == doctest::Approx(0.5f));
-    CHECK(spkyvcv::initParamDefault(spkyvcv::FLUXTIME_B)
-          == doctest::Approx(0.5f));
+    // FLUXRATE_A/B used to be normalized 0..1 floats run through
+    // flux_division_index() (engine/mod/divisions.h); task 6 (spec
+    // 2026-08-09 hw-control-reduction) turned the knob into a 12-detent
+    // KNOBI whose value IS the index, so the snapshot now carries the
+    // converted indices the old floats used to round to. FLUXTIME_A/B
+    // (MULT) is retired along with its ParamId -- there is nothing left to
+    // check here for it.
+    CHECK(spky::flux_division_index(0.392727494f) == 4);
+    CHECK(spky::flux_division_index(0.254666120f) == 3);
+    CHECK(spkyvcv::initParamDefault(spkyvcv::FLUXRATE_A)
+          == doctest::Approx(4.f));
+    CHECK(spkyvcv::initParamDefault(spkyvcv::FLUXRATE_B)
+          == doctest::Approx(3.f));
+}
+
+
+TEST_CASE("Seed audition's converted FLUXRATE index reproduces the "
+          "pre-task-6 factory delay time")
+{
+    // Task 6 (spec 2026-08-09 hw-control-reduction) turned FLUXRATE_A/B
+    // from a 0..1 knob run through flux_division_index() into the raw
+    // division index itself, and retired FLUXTIME_A/B (MULT), pinning its
+    // modulation sink FXT_FLUX_TIME to a hard-coded neutral base (0.5,
+    // tape_time_mult(0.5) == 1). This proves the conversion didn't move the
+    // factory delay time: an instrument built by hand off the OLD formula
+    // (flux_division_index of the OLD normalized default) must land on
+    // exactly the same tape delay target as one built by apply_init_patch
+    // off the NEW converted snapshot. Flux::delay_target_for_test() is a
+    // no-op until FLUX has real echo memory (Instrument::init(sr) alone is
+    // "engine only, no FX chain"), so both instruments need an FxMem.
+    struct TapeMem {
+        std::vector<float> echo[spky::PART_COUNT][2];
+        TapeMem() {
+            for (int p = 0; p < spky::PART_COUNT; ++p)
+                for (int ch = 0; ch < 2; ++ch)
+                    echo[p][ch].resize(spky::Flux::kMaxSamples);
+        }
+        spky::FxMem mem() {
+            spky::FxMem m;
+            for (int p = 0; p < spky::PART_COUNT; ++p)
+                for (int ch = 0; ch < 2; ++ch)
+                    m.echo[p][ch] = echo[p][ch].data();
+            return m;
+        }
+    };
+    static TapeMem old_tape, new_tape;
+
+    const float bpm = 40.f + spkyvcv::initParamDefault(spkyvcv::TEMPO) * 200.f;
+
+    spky::Instrument old_inst;
+    old_inst.init(48000.f, old_tape.mem());
+    old_inst.set_tempo_bpm(bpm);
+    old_inst.set_flux_rate(spky::PART_A,
+                            spky::flux_division_index(0.392727494f));
+    old_inst.set_flux_rate(spky::PART_B,
+                            spky::flux_division_index(0.254666120f));
+    old_inst.set_fx_target_base(spky::PART_A, spky::FXT_FLUX_TIME, 0.5f);
+    old_inst.set_fx_target_base(spky::PART_B, spky::FXT_FLUX_TIME, 0.5f);
+
+    spky::Instrument new_inst;
+    new_inst.init(48000.f, new_tape.mem());
+    audition::apply_init_patch(new_inst);
+
+    float in[96] = {};
+    float out_l[96] = {};
+    float out_r[96] = {};
+    for(int block = 0; block < 8; ++block) {
+        old_inst.process(in, in, out_l, out_r, 96);
+        new_inst.process(in, in, out_l, out_r, 96);
+    }
+
+    MESSAGE("bpm=" << bpm
+        << " old_A=" << old_inst.flux_delay_target_for_test(spky::PART_A) << "s"
+        << " new_A=" << new_inst.flux_delay_target_for_test(spky::PART_A) << "s"
+        << " old_B=" << old_inst.flux_delay_target_for_test(spky::PART_B) << "s"
+        << " new_B=" << new_inst.flux_delay_target_for_test(spky::PART_B) << "s");
+    CHECK(new_inst.flux_delay_target_for_test(spky::PART_A)
+          == doctest::Approx(old_inst.flux_delay_target_for_test(spky::PART_A)));
+    CHECK(new_inst.flux_delay_target_for_test(spky::PART_B)
+          == doctest::Approx(old_inst.flux_delay_target_for_test(spky::PART_B)));
 }
 
 

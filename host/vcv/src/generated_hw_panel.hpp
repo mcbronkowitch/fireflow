@@ -62,8 +62,8 @@ static const PanelCtl kParamCtls[] = {
     {FILT_A, WK_SMKNOB, {27.000f, 56.000f}, "FILT", {27.000f, 64.000f}, 0, 2.20f, 0x171713, "FILT"},
     {FILT_B, WK_SMKNOB, {277.800f, 56.000f}, "FILT", {277.800f, 64.000f}, 0, 2.20f, 0x171713, "FILT"},
     {TIDE, WK_SMKNOB, {168.400f, 18.000f}, "TIDE", {168.400f, 26.000f}, 0, 2.20f, 0x171713, "TIDE"},
-    {FLUXRATE_A, WK_SMKNOB, {62.000f, 56.000f}, "DIV", {62.000f, 64.000f}, 0, 2.20f, 0x171713, "FLUX division"},
-    {FLUXRATE_B, WK_SMKNOB, {242.800f, 56.000f}, "DIV", {242.800f, 64.000f}, 0, 2.20f, 0x171713, "FLUX division"},
+    {FLUXRATE_A, WK_KNOBI, {62.000f, 56.000f}, "TIME", {62.000f, 64.000f}, 0, 2.20f, 0x171713, "FLUX time"},
+    {FLUXRATE_B, WK_KNOBI, {242.800f, 56.000f}, "TIME", {242.800f, 64.000f}, 0, 2.20f, 0x171713, "FLUX time"},
     {FLUXFB_A, WK_SMKNOB, {92.000f, 56.000f}, "FB", {92.000f, 64.000f}, 0, 2.20f, 0x171713, "FFB"},
     {FLUXFB_B, WK_SMKNOB, {212.800f, 56.000f}, "FB", {212.800f, 64.000f}, 0, 2.20f, 0x171713, "FFB"},
     {COLOR_A, WK_BIGKNOB, {91.000f, 40.000f}, "COLOR", {91.000f, 50.500f}, 0, 2.20f, 0x171713, "COLOR"},
@@ -77,8 +77,6 @@ static const PanelCtl kParamCtls[] = {
     {REV_MIX_A, WK_SMKNOB, {107.000f, 56.000f}, "SEND", {107.000f, 64.000f}, 0, 2.20f, 0x171713, "Room send"},
     {REV_MIX_B, WK_SMKNOB, {197.800f, 56.000f}, "SEND", {197.800f, 64.000f}, 0, 2.20f, 0x171713, "Room send"},
     {SHUFFLE, WK_SMKNOB, {168.400f, 36.000f}, "SHUFL", {168.400f, 44.000f}, 0, 2.20f, 0x171713, "SHUFL"},
-    {FLUXTIME_A, WK_SMKNOB, {77.000f, 71.000f}, "MULT", {77.000f, 79.000f}, 0, 2.20f, 0x171713, "Tape Time"},
-    {FLUXTIME_B, WK_SMKNOB, {227.800f, 71.000f}, "MULT", {227.800f, 79.000f}, 0, 2.20f, 0x171713, "Tape Time"},
 };
 static const PanelCtl kInputCtls[] = {
     {IN_L, WK_IN, {60.000f, 113.000f}, "L", {60.000f, 107.000f}, 0, 2.20f, 0x171713, "IN L"},

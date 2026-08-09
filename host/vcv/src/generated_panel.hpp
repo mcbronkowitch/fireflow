@@ -90,8 +90,6 @@ enum ParamId {
     DETUNE_B,
     DRIVE_A,
     DRIVE_B,
-    FLUXTIME_A,
-    FLUXTIME_B,
     NUM_PARAMS
 };
 enum InputId {
@@ -175,8 +173,8 @@ static const PanelCtl kParamCtls[] = {
     {FILT_A, WK_SMKNOB, {19.750f, 77.300f}, "FILT", {19.750f, 82.900f}, 0, 1.90f, 0x171713, "FILT"},
     {FILT_B, WK_SMKNOB, {193.610f, 77.300f}, "FILT", {193.610f, 82.900f}, 0, 1.90f, 0x171713, "FILT"},
     {TIDE, WK_SMKNOB, {117.680f, 21.500f}, "TIDE", {117.680f, 27.100f}, 0, 1.90f, 0x171713, "TIDE"},
-    {FLUXRATE_A, WK_SMKNOB, {44.250f, 77.300f}, "DIV", {44.250f, 82.900f}, 0, 1.90f, 0x171713, "FLUX division"},
-    {FLUXRATE_B, WK_SMKNOB, {169.110f, 77.300f}, "DIV", {169.110f, 82.900f}, 0, 1.90f, 0x171713, "FLUX division"},
+    {FLUXRATE_A, WK_KNOBI, {44.250f, 77.300f}, "TIME", {44.250f, 82.900f}, 0, 1.90f, 0x171713, "FLUX time"},
+    {FLUXRATE_B, WK_KNOBI, {169.110f, 77.300f}, "TIME", {169.110f, 82.900f}, 0, 1.90f, 0x171713, "FLUX time"},
     {FLUXFB_A, WK_SMKNOB, {65.250f, 77.300f}, "FB", {65.250f, 82.900f}, 0, 1.90f, 0x171713, "FFB"},
     {FLUXFB_B, WK_SMKNOB, {148.110f, 77.300f}, "FB", {148.110f, 82.900f}, 0, 1.90f, 0x171713, "FFB"},
     {COLOR_A, WK_BIGKNOB, {23.109f, 14.966f}, "COLOR", {19.124f, 10.216f}, 2, 1.90f, 0x171713, "COLOR"},
@@ -190,8 +188,6 @@ static const PanelCtl kParamCtls[] = {
     {REV_MIX_A, WK_SMKNOB, {75.750f, 77.300f}, "SEND", {75.750f, 82.900f}, 0, 1.90f, 0x171713, "Room send"},
     {REV_MIX_B, WK_SMKNOB, {137.610f, 77.300f}, "SEND", {137.610f, 82.900f}, 0, 1.90f, 0x171713, "Room send"},
     {SHUFFLE, WK_SMKNOB, {115.680f, 54.000f}, "SHUFL", {115.680f, 59.600f}, 0, 1.90f, 0x171713, "SHUFL"},
-    {FLUXTIME_A, WK_SMKNOB, {54.750f, 89.400f}, "MULT", {54.750f, 95.000f}, 0, 1.90f, 0x171713, "Tape Time"},
-    {FLUXTIME_B, WK_SMKNOB, {158.610f, 89.400f}, "MULT", {158.610f, 95.000f}, 0, 1.90f, 0x171713, "Tape Time"},
 };
 static const PanelCtl kInputCtls[] = {
     {IN_L, WK_IN, {55.250f, 118.400f}, "L", {55.250f, 124.800f}, 0, 1.80f, 0x171713, "IN L"},
@@ -246,7 +242,7 @@ static const PanelTxt kPanelTexts[] = {
     {{136.360f, 73.150f}, 1.80f, 0.35f, 0x656056, 0, "FX"},
     {{136.360f, 99.350f}, 1.80f, 0.35f, 0x656056, 0, "PLAY"},
     {{91.180f, 13.750f}, 1.80f, 0.35f, 0x656056, 0, "BLEND"},
-    {{91.180f, 35.750f}, 1.80f, 0.35f, 0x656056, 0, "TIME"},
+    {{91.180f, 35.750f}, 1.80f, 0.35f, 0x656056, 0, "TIMING"},
     {{91.180f, 63.250f}, 1.80f, 0.35f, 0x656056, 0, "DUO"},
     {{91.180f, 88.250f}, 1.80f, 0.35f, 0x656056, 0, "ROOM"},
     {{12.200f, 113.350f}, 1.80f, 0.35f, 0x1D6F5F, 0, "CV A"},

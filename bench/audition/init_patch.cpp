@@ -69,9 +69,13 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
         inst.set_voice_detune(deck, value(deck ? DETUNE_B : DETUNE_A));
 
         inst.set_flux_mix(deck, part(FLUX_A, deck));
+        // TIME's knob value IS the raw division index now (task 6, spec
+        // 2026-08-09 hw-control-reduction) -- no more flux_division_index()
+        // round-trip through a 0..1 float, mirroring Fireflow.cpp pushParams.
         inst.set_flux_rate(
             deck,
-            spky::flux_division_index(value(deck ? FLUXRATE_B : FLUXRATE_A)));
+            static_cast<int>(
+                std::lround(value(deck ? FLUXRATE_B : FLUXRATE_A))));
         inst.set_fx_target_base(
             deck,
             spky::FXT_FLUX_FB,

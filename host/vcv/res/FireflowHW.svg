@@ -118,9 +118,9 @@
 <circle cx="168.400" cy="18.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="168.400" y="26.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIDE</text>
 <circle cx="62.000" cy="56.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="62.000" y="64.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">DIV</text>
+<text x="62.000" y="64.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIME</text>
 <circle cx="242.800" cy="56.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="242.800" y="64.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">DIV</text>
+<text x="242.800" y="64.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIME</text>
 <circle cx="92.000" cy="56.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="92.000" y="64.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FB</text>
 <circle cx="212.800" cy="56.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
@@ -147,10 +147,6 @@
 <text x="197.800" y="64.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SEND</text>
 <circle cx="168.400" cy="36.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="168.400" y="44.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SHUFL</text>
-<circle cx="77.000" cy="71.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="77.000" y="79.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">MULT</text>
-<circle cx="227.800" cy="71.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="227.800" y="79.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">MULT</text>
 <circle cx="60.000" cy="113.000" r="4.000" fill="#252721" stroke="#d7cdbb" stroke-width="0.35"/>
 <text x="60.000" y="107.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">L</text>
 <circle cx="75.000" cy="113.000" r="4.000" fill="#252721" stroke="#d7cdbb" stroke-width="0.35"/>

@@ -40,18 +40,13 @@ struct TideQuantity : ParamQuantity {
     }
 };
 
-// FLUX RATE tooltip: the synced division name (always synced).
+// FLUX RATE tooltip: the synced division name (always synced). The knob IS
+// the index now (task 6, spec 2026-08-09 hw-control-reduction) -- no more
+// flux_division_index() round-trip through a 0..1 float.
 struct FluxRateQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
-        int k = spky::kFluxRateOffset + spky::flux_division_index(getValue());
+        int k = spky::kFluxRateOffset + (int)std::lround(getValue());
         return spky::kDivisions[k].name;
-    }
-};
-
-struct FluxTimeQuantity : ParamQuantity {
-    std::string getDisplayValueString() override {
-        const float mult = spky::tape_time_mult(getValue());
-        return string::f("x%g", mult);
     }
 };
 
@@ -319,10 +314,6 @@ struct Fireflow : Module {
                         configParam(c.id, -1.f, 1.f, init, lbl);
                     else if (c.id == TIDE)  // texture-lane rate, snaps under SYNC
                         configParam<TideQuantity>(c.id, 0.f, 1.f, init, lbl);
-                    else if (c.id == FLUXRATE_A || c.id == FLUXRATE_B)
-                        configParam<FluxRateQuantity>(c.id, 0.f, 1.f, init, lbl);
-                    else if (c.id == FLUXTIME_A || c.id == FLUXTIME_B)
-                        configParam<FluxTimeQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == FLUXFB_A || c.id == FLUXFB_B)
                         configParam<FluxFbQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == REV_DECAY)
@@ -381,6 +372,16 @@ struct Fireflow : Module {
                                      float(spky::kSongLadderCount - 1),
                                      init, "Song", rungs);
                     }
+                    // TIME: 12-detent knob over the synced FLUX divisions
+                    // (task 6, spec 2026-08-09 hw-control-reduction). The
+                    // knob value IS the index now -- 0..kFluxRateCount - 1,
+                    // spky::kFluxRateCount reachable positions (0..11) --
+                    // replacing the old 0..1 SMKNOB that ran through
+                    // flux_division_index().
+                    else if (c.id == FLUXRATE_A || c.id == FLUXRATE_B)
+                        configParam<FluxRateQuantity>(
+                            c.id, 0.f, (float)(spky::kFluxRateCount - 1),
+                            init, lbl);
                     else  // STEPS_A / STEPS_B
                         configParam(c.id, 0.f, 16.f, init, "Steps");
                     getParamQuantity(c.id)->snapEnabled = true;
@@ -530,12 +531,14 @@ struct Fireflow : Module {
                 p, params[p ? DETUNE_B : DETUNE_A].getValue());
 
             inst.set_flux_mix(p, pp(FLUX_A, p));
-            inst.set_flux_rate(p, spky::flux_division_index(
+            inst.set_flux_rate(p, (int)std::lround(
                 params[p ? FLUXRATE_B : FLUXRATE_A].getValue()));
             inst.set_fx_target_base(p, spky::FXT_FLUX_FB,
                 params[p ? FLUXFB_B : FLUXFB_A].getValue());
-            inst.set_fx_target_base(p, spky::FXT_FLUX_TIME,
-                params[p ? FLUXTIME_B : FLUXTIME_A].getValue());
+            // The tape multiplier keeps its modulation sink but loses its knob:
+            // 0.5 is the neutral multiplier (tape_time_mult(0.5) == 1), so CV
+            // and the mod lanes still bend the tape while the panel does not.
+            inst.set_fx_target_base(p, spky::FXT_FLUX_TIME, 0.5f);
             // Appended params are outside the stride, so pp() would compute the
             // wrong id — the explicit ternary is required (see FLUXRATE/FLUXFB).
             // DRIVE_A/B remains append-only saved patch state, with no FLUX

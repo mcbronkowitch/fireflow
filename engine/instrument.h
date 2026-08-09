@@ -131,6 +131,14 @@ public:
     float grit_mix_for_test(int p) const {
         return _parts[p].fx().grit().mix_for_test();
     }
+    // Observer only, for tests (task 6, spec 2026-08-09
+    // hw-control-reduction): the FLUX tape delay's target time, so a test
+    // can prove a TIME knob's raw detent index (and the pinned-neutral
+    // FXT_FLUX_TIME base) actually reach the tape's delay time, not just
+    // that the host source text claims to route them there.
+    float flux_delay_target_for_test(int p) const {
+        return _parts[p].fx().flux().delay_target_for_test();
+    }
     void set_reverb_size(float n)  { if (_reverb) _reverb->set_size(n); }
     void set_reverb_decay(float n) {
         if (_reverb) _reverb->set_decay(n);

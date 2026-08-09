@@ -229,17 +229,19 @@ def dynamic_words(base):
     return ()
 
 
-# 4-wide, aligned to FX_BOT so the FX box's two rows flush: DIV MIX FB SEND.
-FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # DIV MIX FB | SEND (per-deck reverb mix)
+# 4-wide, aligned to FX_BOT so the FX box's two rows flush: TIME MIX FB SEND.
+FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # TIME MIX FB | SEND (per-deck reverb mix)
 # FX bottom row went from two slots to four (spec 2026-07-18 dust-grain-cloud);
 # the left two were renamed in place when FLUX became a BBD (spec 2026-07-27):
 # DUST/ROT -> DRIVE/STAGES. The first slot was renamed in place again (spec
 # 2026-07-28 flux-rhythm-drag): DRIVE -> DRAG, DRIVE moving to the menu. And
 # again (spec 2026-07-28 flux-link): DRAG -> LINK, because the control became
 # bipolar and LINK names the axis rather than one of its two ends.
-# The BBD-only BEND widget overlaps ATK at runtime. MULT takes the second
-# FLUX-bottom slot, so the static Synth preview reads LINK MULT | GRIT COMP.
-FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # LINK MULT | GRIT COMP
+# The BBD-only BEND widget overlaps ATK at runtime. FX_BOT[1] held MULT until
+# task 6 (spec 2026-08-09 hw-control-reduction) retired it; the slot stays
+# empty (freed slots are not regrouped), so the static Synth preview now
+# reads LINK . | GRIT COMP.
+FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # LINK . | GRIT COMP (FX_BOT[1] empty)
 PLAY_Y   = 103.6
 # The PLAY row's left block re-spaced to seat REC between GRIT and STEPS
 # (spec 2026-07-18 "VCV layer": REC is the only new panel element). All four
@@ -391,16 +393,24 @@ ROW_ROOM1, ROW_ROOM2 = 94.0, 104.5
 # The four free-standing centre boxes (spec 2026-07-18 §6); GROUPS is assigned
 # here, not alongside part_groups() above, because these entries need CX.
 GROUPS = part_groups(False) + part_groups(True) + [
-    (CX - 20.5, 13.0, 41.0, 19.5, "BLEND", MUTED),
-    (CX - 20.5, 35.0, 41.0, 25.0, "TIME",  MUTED),
-    (CX - 20.5, 62.5, 41.0, 22.5, "DUO",   MUTED),
-    (CX - 20.5, 87.5, 41.0, 23.7, "ROOM",  MUTED),
+    (CX - 20.5, 13.0, 41.0, 19.5, "BLEND",  MUTED),
+    # Renamed from "TIME" (spec 2026-08-09 hw-control-reduction task 6):
+    # FLUXRATE_A/B's knob took the word TIME on the FX box, and
+    # test_every_printed_word_is_unique means the plate can't say the same
+    # word in two different places for two different things. This box is
+    # still the sync/tempo/couple/shuffle clock story -- TIMING keeps the
+    # sense of the old legend without colliding with the FLUX knob.
+    (CX - 20.5, 35.0, 41.0, 25.0, "TIMING", MUTED),
+    (CX - 20.5, 62.5, 41.0, 22.5, "DUO",    MUTED),
+    (CX - 20.5, 87.5, 41.0, 23.7, "ROOM",   MUTED),
 ] + [(bx, JACK_BOX_Y, JACK_BOX_W, JACK_BOX_H, lg, col)
      for (bx, lg, col, _well, _items) in JACK_GROUPS]
 SHARED = [
     Ctl("MORPH",  BIGKNOB, CX - 7.0, ROW_BLEND, "MORPH"),
-    # TIME: a 2x2 clock story -- sync/tempo above, couple/shuffle below.
-    # SHUFFLE's control is appended to PARAMS after every existing id.
+    # TIMING: a 2x2 clock story -- sync/tempo above, couple/shuffle below
+    # (box legend renamed from TIME, spec 2026-08-09 hw-control-reduction
+    # task 6 -- see GROUPS above). SHUFFLE's control is appended to PARAMS
+    # after every existing id.
     Ctl("SYNC",   SW2,     CX - 9.0, ROW_TIME1, "SYNC"),
     Ctl("TEMPO",  SMKNOB,  CX + 9.0, ROW_TIME1, "TEMPO"),
     Ctl("COUPLE", SMKNOB,  CX - 9.0, ROW_TIME2, "COUPL"),
@@ -443,11 +453,16 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     Ctl("TIDE", SMKNOB, CX + 11.0, ROW_BLEND, "TIDE"),
     # FLUX synced-delay controls (spec 2026-07-17 flux-synced-delay). Per part,
     # appended LAST like FILT/TIDE/CHOKE so existing .vcv patches keep their ids.
-    # They complete the FLUX delay cluster atop the FX box: DIV (FX_TOP[0]),
+    # They complete the FLUX delay cluster atop the FX box: TIME (FX_TOP[0]),
     # MIX (FX_TOP[1], from the template), FB (FX_TOP[2]) sit together;
-    # GRIT/COMP fill FX_BOT below.
-    Ctl("FLUXRATE_A", SMKNOB, FX_TOP[0],     ROW_V1, "DIV", "FLUX division"),
-    Ctl("FLUXRATE_B", SMKNOB, W - FX_TOP[0], ROW_V1, "DIV", "FLUX division"),
+    # GRIT/COMP fill FX_BOT below. TIME used to be DIV beside a free MULT
+    # multiplier (FX_BOT[1]); task 6 (spec 2026-08-09 hw-control-reduction)
+    # retired MULT -- one notched knob over the 12 synced divisions is TIME
+    # now, and FX_BOT[1] stays empty. FXT_FLUX_TIME, the modulation sink
+    # MULT used to feed, survives at a pinned neutral base so CV and the mod
+    # lanes can still bend the tape (Fireflow.cpp pushParams).
+    Ctl("FLUXRATE_A", KNOBI, FX_TOP[0],     ROW_V1, "TIME", "FLUX time"),
+    Ctl("FLUXRATE_B", KNOBI, W - FX_TOP[0], ROW_V1, "TIME", "FLUX time"),
     Ctl("FLUXFB_A",   SMKNOB, FX_TOP[2],     ROW_V1, "FB", "FFB"),
     Ctl("FLUXFB_B",   SMKNOB, W - FX_TOP[2], ROW_V1, "FB", "FFB"),
     # COLOR: chord density/colour per part (spec 2026-07-17 chord-layer), a full
@@ -480,7 +495,7 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     Ctl("REC_B", LATCH, W - REC_X, PLAY_Y, "REC"),
     # Per-deck reverb mix (spec 2026-07-23 per-deck-reverb-mix). Appended LAST
     # like FILT/FLUXRATE/COLOR/LINK/REC so PART_STRIDE stays 23 and no id before
-    # them moves. They fill the FX top row's 4th slot -- DIV.MIX.FB.SEND --
+    # them moves. They fill the FX top row's 4th slot -- TIME.MIX.FB.SEND --
     # aligned to the FX bottom row. Label "SEND" (not "MIX": FLUX beside it is
     # already the delay mix). The old shared centre REV_MIX is removed from
     # SHARED; its id and every id after it shift by one (accepted: old .vcv
@@ -503,10 +518,14 @@ HIDDEN_PARAMS = [
     Ctl("DRIVE_B", SMKNOB, 0.0, 0.0, "", "Drive B"),
 ]
 
-APPENDED_PANEL_PARAMS = [
-    Ctl("FLUXTIME_A", SMKNOB, FX_BOT[1],     ROW_V2, "MULT", "Tape Time"),
-    Ctl("FLUXTIME_B", SMKNOB, W - FX_BOT[1], ROW_V2, "MULT", "Tape Time"),
-]
+# FLUXTIME_A/B (the MULT knob) retired here (spec 2026-08-09
+# hw-control-reduction task 6): DIV and MULT described one quantity, and
+# FLUXRATE_A/B -- renamed TIME, now a 12-detent knob -- is that quantity.
+# The modulation sink it fed, FXT_FLUX_TIME, survives at a pinned neutral
+# base (Fireflow.cpp pushParams) so CV and the mod lanes can still bend the
+# tape; only the panel's second way to set it is gone. FX_BOT[1], MULT's old
+# slot, stays empty -- freed slots are not regrouped.
+APPENDED_PANEL_PARAMS = []
 
 # Persistent ids retain the legacy visible and hidden sequences exactly; runtime
 # controls may include appended widgets, while the SVG is the Synth-only view
@@ -601,8 +620,16 @@ INIT_DEFAULTS = {
     "FILT_A": -0.172999933,
     "FILT_B": -0.199999630,
     "TIDE": 0.000000000,
-    "FLUXRATE_A": 0.392727494,
-    "FLUXRATE_B": 0.254666120,
+    # FLUXRATE_A/B used to be normalized 0..1 values run through
+    # flux_division_index() (engine/mod/divisions.h); task 6
+    # (spec 2026-08-09 hw-control-reduction) made the knob a 12-detent
+    # KNOBI whose value IS the index, so the old floats -- 0.392727494 and
+    # 0.254666120 -- are replaced with the indices they used to round to:
+    # 0.392727494 * 11 + 0.5 = 4.82 -> 4; 0.254666120 * 11 + 0.5 = 3.30 -> 3.
+    # Carrying the old floats forward would have rounded both decks to
+    # index 0, silently changing the factory delay time.
+    "FLUXRATE_A": 4.0,
+    "FLUXRATE_B": 3.0,
     "FLUXFB_A": 0.285667986,
     "FLUXFB_B": 0.555337131,
     "COLOR_A": 0.000000000,
@@ -620,8 +647,6 @@ INIT_DEFAULTS = {
     "DETUNE_B": 0.171428576,
     "DRIVE_A": 0.200000003,
     "DRIVE_B": 0.200000003,
-    "FLUXTIME_A": 0.500000000,
-    "FLUXTIME_B": 0.500000000,
 }
 
 # --- lights --------------------------------------------------------------------

@@ -38,7 +38,7 @@ The shared centre column beside MORPH also carries **PUSH**, the master
 drive into the output limiter — one knob for both parts, unlike every
 per-part control above.
 
-## TIME
+## TIMING
 
 **SHUFFLE** is one shared control for both parts: `0` is a straight grid and
 full travel gives a classic `2:1` long/short pair. It warps only STEP timing;
@@ -335,10 +335,16 @@ stale WAV sitting in patch storage.
   imported file is always in tune. The asymmetry is intentional: importing a
   file at the wrong pitch would be a bug, but re-rating material that's
   already sitting in the buffer is varispeed, not a bug.
-- **FLUX is a stereo tape echo.** `DIV` selects its synchronized division,
-  `MULT` sweeps from x0.25 to x4 and reaches each new setting through a
-  30 ms slew, producing tape/Doppler motion instead of a stepped change, and
-  `SEND` (per part) sets how much of the result reaches the shared reverb.
+- **FLUX is a stereo tape echo.** `TIME` is a 12-detent knob over its
+  synchronized division; `SEND` (per part) sets how much of the result
+  reaches the shared reverb. `TIME` used to sit beside a free `MULT`
+  multiplier (spec 2026-08-09 hw-control-reduction task 6: DIV and MULT
+  described one quantity, so one notched knob now does it). MULT's
+  modulation sink, a x0.25-to-x4 tape-time multiplier that reaches each new
+  setting through a 30 ms slew for tape/Doppler motion instead of a stepped
+  change, still exists in the engine at a pinned neutral base (`x1`) — CV
+  and the mod lanes can still bend the tape, just not from a second panel
+  knob.
 - **LINK (per part) is THIN across its full travel.** It lets the other deck's
   rhythm thin FLUX's repeats without handing over the echo clock. Patches from
   the bipolar LINK era migrate automatically: old negative THIN settings keep
@@ -377,7 +383,7 @@ FEEDBACK, **LEVEL** sets the wet/dry mix between the deck's input and the
 delay's return (unlike every other engine, LEVEL 0 does not silence a BBD
 deck — it passes the input through dry, at unity), **PITCH** sets the delay
 clock (subject to the FEEDBACK caveat below), and **SIZE** picks the
-delay-time rung the same way FLUX's own DIV division does.
+delay-time rung the same way FLUX's own TIME division does.
 
 ### BBD BEND and the tape multiplier
 
@@ -389,11 +395,15 @@ reading `BEND` on a BBD deck. BBD's hidden ATTACK value remains
 available as **BBD A — Freeze Attack** or **BBD B — Freeze Attack** in the
 module context menu.
 
-The FX bottom row is `LINK MULT GRIT COMP`; it contains no BBD control.
-`DIV` selects the synchronized tape division. `MULT` multiplies that division
-from `x0.25`, through neutral `x1`, to `x4`; its intentional 30 ms slew gives
-smooth tape/Doppler motion. At the longest divisions, the existing delay-buffer
-limit still clamps the absolute delay.
+The FX bottom row is `LINK · GRIT COMP`; it contains no BBD control and, as
+of task 6 (spec 2026-08-09 hw-control-reduction), no MULT either — that slot
+is now empty. `TIME` selects the synchronized tape division. The engine still
+carries a MULT-shaped modulation sink underneath it (`FXT_FLUX_TIME`):
+multiplying that division from `x0.25`, through neutral `x1`, to `x4`, its
+intentional 30 ms slew gives smooth tape/Doppler motion, but the panel now
+pins its base to `x1` and only CV/mod lanes can move it — there is no longer
+a knob for it. At the longest divisions, the existing delay-buffer limit
+still clamps the absolute delay.
 
 One panel control changes meaning:
 - **SOURCE**'s live caption reads `DRIVE` instead of `TIMB`/`ORG`/`FRAME`/`MATL`.

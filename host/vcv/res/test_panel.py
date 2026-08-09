@@ -50,7 +50,6 @@ PARAM_ORDER = [
     'LINK_A', 'LINK_B', 'STAGES_A', 'STAGES_B',
     'REC_A', 'REC_B', 'REV_MIX_A', 'REV_MIX_B',
     'SHUFFLE', 'DETUNE_A', 'DETUNE_B', 'DRIVE_A', 'DRIVE_B',
-    'FLUXTIME_A', 'FLUXTIME_B',
 ]
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
@@ -61,11 +60,10 @@ PARAM_TIPS = [
     'ENG', 'SONG',
     'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'Master drive',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
-    'FILT', 'FILT', 'TIDE', 'FLUX division', 'FLUX division', 'FFB', 'FFB',
+    'FILT', 'FILT', 'TIDE', 'FLUX time', 'FLUX time', 'FFB', 'FFB',
     'COLOR', 'COLOR', 'LINK', 'LINK', 'BBD Bend', 'BBD Bend', 'REC', 'REC',
     'Room send', 'Room send',
     'SHUFL', 'Detune A', 'Detune B', 'Drive A', 'Drive B',
-    'Tape Time', 'Tape Time',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
@@ -75,9 +73,9 @@ LIGHT_ORDER = ['GATE_A_L', 'GATE_B_L', 'REC_A_L', 'REC_B_L']
 def test_enum_order():
     """Patch compatibility. If this fails, every saved .vcv breaks."""
     check([c.enum for c in g.PARAMS] == PARAM_ORDER, "PARAMS order changed")
-    check(PARAM_ORDER[-4:] ==
-          ['DRIVE_A', 'DRIVE_B', 'FLUXTIME_A', 'FLUXTIME_B'],
-          "FLUXTIME must be the trailing ParamId pair")
+    check(PARAM_ORDER[-2:] == ['DRIVE_A', 'DRIVE_B'],
+          "DRIVE_A/B must be the trailing ParamId pair now that FLUXTIME "
+          "(task 6, spec 2026-08-09 hw-control-reduction) is retired")
     check([c.enum for c in g.INPUTS] == INPUT_ORDER, "INPUTS order changed")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
@@ -107,40 +105,60 @@ def test_source_and_hidden_detune_partition():
           "widgetless drive leaked into kParamCtls")
 
 
+def test_time_knob_replaces_div_and_mult():
+    """DIV and MULT described one quantity. One notched knob does it, and the
+    modulation sink keeps a neutral base so CV can still bend the tape."""
+    import gen_panel as gp
+    names = {c.enum for c in gp.PARAMS}
+    check("FLUXTIME_A" not in names and "FLUXTIME_B" not in names,
+          "the MULT knobs still exist")
+    rate = [c for c in gp.PARAMS if c.enum == "FLUXRATE_A"][0]
+    check(rate.label == "TIME", f"FLUXRATE_A still prints {rate.label!r}")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("spky::FXT_FLUX_TIME, 0.5f" in cpp,
+          "the flux-time modulation base is not pinned to neutral")
+    check("FLUXTIME_A" not in cpp, "Fireflow.cpp still references FLUXTIME_A")
+
+
 def test_bbd_pitch_flux_time_collections():
     """The three generator views keep saved ParamIds, Rack widgets, and the
-    static Synth preview independently intentional."""
+    static Synth preview independently intentional. FLUXTIME_A/B (MULT) is
+    retired (task 6, spec 2026-08-09 hw-control-reduction), so
+    APPENDED_PANEL_PARAMS is now empty and TIME (FLUXRATE_A/B, unchanged
+    ParamId) is the only surviving delay-time widget."""
     persistent = [c.enum for c in g.PARAMS]
     runtime = [c.enum for c in g.RUNTIME_PANEL_PARAMS]
     static = [c.enum for c in g.STATIC_PANEL_PARAMS]
-    check(persistent[-7:] == [
-        'SHUFFLE', 'DETUNE_A', 'DETUNE_B', 'DRIVE_A', 'DRIVE_B',
-        'FLUXTIME_A', 'FLUXTIME_B'
-    ], "FLUXTIME must follow the old hidden tail")
-    check(persistent[-2:] == ['FLUXTIME_A', 'FLUXTIME_B'],
-          "FLUXTIME ids are not the trailing pair")
+    check(g.APPENDED_PANEL_PARAMS == [],
+          "APPENDED_PANEL_PARAMS must stay empty -- MULT was its only member")
+    check("FLUXTIME_A" not in persistent and "FLUXTIME_B" not in persistent,
+          "FLUXTIME must not survive as a saved ParamId")
+    check(persistent[-2:] == ['DRIVE_A', 'DRIVE_B'],
+          "DRIVE_A/B must be the trailing ParamId pair")
     check(all(e in runtime for e in ('STAGES_A', 'STAGES_B',
-                                      'FLUXTIME_A', 'FLUXTIME_B')),
+                                      'FLUXRATE_A', 'FLUXRATE_B')),
           "runtime table lacks PITCH or TIME widgets")
     check('STAGES_A' not in static and 'STAGES_B' not in static,
           "static preview contains the BBD-only PITCH widgets")
     check(all(e in static for e in ('ATTACK_A', 'ATTACK_B',
-                                     'FLUXTIME_A', 'FLUXTIME_B')),
+                                     'FLUXRATE_A', 'FLUXRATE_B')),
           "static Synth preview lacks ATK or TIME")
     check(g.PARAMS == g.PANEL_PARAMS + g.HIDDEN_PARAMS
                       + g.APPENDED_PANEL_PARAMS,
           "persistent ParamId order no longer matches the declared partitions")
     check(not any(c.enum in runtime for c in g.HIDDEN_PARAMS),
           "menu-only DETUNE/DRIVE leaked into runtime widgets")
-    check(persistent[:-2] == PARAM_ORDER[:-2],
-          "legacy ParamId order changed before FLUXTIME")
+    check(persistent == PARAM_ORDER, "legacy ParamId order changed")
 
     header = g.header()
     for suffix in ('_A', '_B'):
         check(header.count(f"{{STAGES{suffix}, WK_SMKNOB,") == 1,
               f"generated header lacks runtime PITCH{suffix} row")
-        check(header.count(f"{{FLUXTIME{suffix}, WK_SMKNOB,") == 1,
+        check(header.count(f"{{FLUXRATE{suffix}, WK_KNOBI,") == 1,
               f"generated header lacks runtime TIME{suffix} row")
+    check("FLUXTIME" not in header,
+          "generated header still carries FLUXTIME")
 
 
 def test_readme_matches_the_caption_table():
@@ -152,7 +170,7 @@ def test_readme_matches_the_caption_table():
     for _target, _driver, words in g.DYNAMIC_CAPTIONS:
         for word in set(words):
             check(word in readme, f"README never mentions the caption {word!r}")
-    for word in ("BEND", "DIV", "MULT", "SEND", "PUSH"):
+    for word in ("BEND", "TIME", "SEND", "PUSH"):
         check(word in readme, f"README never mentions the caption {word!r}")
     # The STGS-to-BEND migration sentence names the retired `STGS` label on
     # purpose (test_bbd_pitch_and_tape_time_user_documentation requires it
@@ -184,14 +202,16 @@ def test_source_and_detune_user_documentation():
 
 
 def test_bbd_pitch_and_tape_time_user_documentation():
-    """The README must match the BBD/BEND and FX/MULT faceplate contract."""
+    """The README must match the BBD/BEND faceplate contract and still
+    explain the retired MULT knob's surviving modulation sink (task 6,
+    spec 2026-08-09 hw-control-reduction)."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "README.md"), encoding="utf-8") as f:
         readme = f.read()
     check("BBD BEND" in readme, "README omits the BBD BEND faceplate slot")
     check("Freeze Attack" in readme, "README omits menu-only BBD Freeze Attack")
     check("MULT" in readme and "x0.25" in readme and "x4" in readme,
-          "README omits the tape multiplier")
+          "README omits the retired tape multiplier's surviving mod sink")
     migration = re.compile(r"the visible `STGS`\s+label is gone")
     check(migration.search(readme) is not None,
           "README omits the STGS-to-BEND migration explanation")
@@ -244,14 +264,13 @@ def test_param_runtime_tip_contract():
     check(PARAM_TIPS[ids["LINK_A"]:ids["STAGES_B"] + 1]
           == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
           "BBD Bend runtime tips drifted")
-    check(PARAM_TIPS[-6:] == [
+    check(PARAM_TIPS[-4:] == [
         'Detune A', 'Detune B', 'Drive A', 'Drive B',
-        'Tape Time', 'Tape Time',
-    ], "Tape Time runtime tips drifted")
+    ], "runtime tips drifted at the trailing DETUNE/DRIVE pair")
     for enum, caption, tip in (
             ("FLUX_A", "MIX", "FLUX"), ("FLUX_B", "MIX", "FLUX"),
-            ("FLUXRATE_A", "DIV", "FLUX division"),
-            ("FLUXRATE_B", "DIV", "FLUX division"),
+            ("FLUXRATE_A", "TIME", "FLUX time"),
+            ("FLUXRATE_B", "TIME", "FLUX time"),
             ("FLUXFB_A", "FB", "FFB"), ("FLUXFB_B", "FB", "FFB")):
         c = ctl(enum)
         check(c.label == caption and c.tip == tip,
@@ -616,7 +635,7 @@ LOWER_A = {   # enum -> (x, y)   part A; part B is W - x
     'DECAY_A': (9.25, 89.40), 'RES_A': (19.75, 89.40), 'SOURCE_A': (30.25, 89.40),
     'FLUXRATE_A': (44.25, 77.30), 'FLUX_A': (54.75, 77.30),
     'FLUXFB_A': (65.25, 77.30), 'REV_MIX_A': (75.75, 77.30),
-    'LINK_A': (44.25, 89.40), 'FLUXTIME_A': (54.75, 89.40),
+    'LINK_A': (44.25, 89.40),
     'GRIT_A': (65.25, 89.40), 'COMP_A': (75.75, 89.40),
     'ENGINE_A': (10.00, 103.60),
     'STEPS_A': (37.00, 103.60),
@@ -637,9 +656,6 @@ def test_lower_half_positions():
         attack, pitch = ctl('ATTACK' + suffix), ctl('STAGES' + suffix)
         check((attack.x, attack.y) == (pitch.x, pitch.y),
               f"{suffix}: ATK/PITCH do not share coordinates")
-        mult = ctl('FLUXTIME' + suffix)
-        check(mult.label == 'MULT' and mult.tip == 'Tape Time',
-              f"{suffix}: tape multiplier caption/tooltip drifted")
 
 
 def test_static_synth_preview_excludes_bbd_pitch():
@@ -649,8 +665,8 @@ def test_static_synth_preview_excludes_bbd_pitch():
     check('>STGS</text>' not in svg, "static SVG still exposes STGS")
     check(svg.count('>ATK</text>') == 2,
           "static preview must show two ATK captions")
-    check(svg.count('font-size="1.9">MULT</text>') == 2,
-          "static preview must show two MULT captions")
+    check(svg.count('font-size="1.9">TIME</text>') == 2,
+          "static preview must show two TIME captions")
     check('font-size="1.9">BEND</text>' not in svg,
           "static preview must not overlay BEND on ATK")
 
@@ -863,7 +879,7 @@ def test_center_positions():
 
 
 def test_center_group_boxes():
-    want = [(13.0, 19.5, 'BLEND'), (35.0, 25.0, 'TIME'),
+    want = [(13.0, 19.5, 'BLEND'), (35.0, 25.0, 'TIMING'),
             (62.5, 22.5, 'DUO'), (87.5, 23.7, 'ROOM')]
     for (y, h, name) in want:
         check(any(approx(gx, g.CX - 20.5) and approx(gy, y) and approx(gw, 41.0)
@@ -878,9 +894,9 @@ def test_center_card_is_gone():
 
 
 def test_old_eyebrow_texts_are_gone():
-    """TIME/ROOM are group legends now, not free-floating eyebrows."""
+    """TIMING/ROOM are group legends now, not free-floating eyebrows."""
     for (x, y, sz, sp, col, an, t) in g.TEXTS:
-        if t in ('TIME', 'ROOM'):
+        if t in ('TIMING', 'ROOM'):
             check(approx(sz, 1.8) and approx(x, g.CX - 20.5 + 5.0),
                   f"{t} is still the old eyebrow (size {sz} at x {x:.2f})")
 
@@ -965,7 +981,7 @@ def test_group_count():
     check(len(g.GROUPS) == 15, f"{len(g.GROUPS)} groups, want 15")
     names = sorted(n for (_x, _y, _w, _h, n, _c) in g.GROUPS)
     check(names == sorted(['VOICE', 'FX', 'PLAY'] * 2 +
-                          ['BLEND', 'TIME', 'DUO', 'ROOM'] +
+                          ['BLEND', 'TIMING', 'DUO', 'ROOM'] +
                           ['CV A', 'IN', 'CLOCK', 'OUT', 'CV B']),
           f"unexpected group set: {names}")
 
@@ -1586,33 +1602,56 @@ def test_source_detune_guard_rejects_representative_regressions():
 
 
 def flux_time_wiring_issues(cpp):
-    """Return regressions in Tape Time's Rack-to-FX boundary."""
+    """Return regressions in FLUX TIME's Rack-to-FX boundary.
+
+    FLUXTIME_A/B (MULT) is retired (task 6, spec 2026-08-09
+    hw-control-reduction): FLUXRATE_A/B, renamed TIME, is now the only
+    panel path to the tape's delay time, reading its raw 0..11 detent index
+    directly instead of round-tripping through flux_division_index(). The
+    modulation sink MULT used to feed, FXT_FLUX_TIME, survives pinned to a
+    hard-coded neutral base so CV and the mod lanes can still bend the tape.
+    """
     issues = []
-    quantity = cpp_scope(cpp, "struct FluxTimeQuantity : ParamQuantity")
+    quantity = cpp_scope(cpp, "struct FluxRateQuantity : ParamQuantity")
     config = cpp_scope(cpp, "void configControls()")
     push = cpp_scope(cpp, "void pushParams()")
-    if quantity is None or "spky::tape_time_mult(getValue())" not in quantity:
-        issues.append("Tape Time display does not reuse tape_time_mult")
-    # `%g` preserves the intended readable endpoints of the shared geometric
-    # mapping: 0 -> x0.25, 0.5 -> x1, and 1 -> x4. In particular, `%.2f`
-    # would regress the high endpoint to the visibly wrong `x4.00`.
+    if "struct FluxTimeQuantity" in cpp:
+        issues.append("FluxTimeQuantity must be retired along with the MULT knob")
+    if "FLUXTIME_A" in cpp or "FLUXTIME_B" in cpp:
+        issues.append("Fireflow.cpp still references a retired FLUXTIME id")
     expected_display = '''
 std::string getDisplayValueString() override {
-    const float mult = spky::tape_time_mult(getValue());
-    return string::f("x%g", mult);
+    int k = spky::kFluxRateOffset + (int)std::lround(getValue());
+    return spky::kDivisions[k].name;
 }'''
     if quantity is None or compact_cpp(expected_display) not in compact_cpp(quantity):
-        issues.append("Tape Time display must show 0=x0.25, 0.5=x1, and 1=x4")
-    if config is None or config.count("configParam<FluxTimeQuantity>") != 1:
-        issues.append("FLUXTIME is not configured through FluxTimeQuantity")
-    expected = """
-inst.set_fx_target_base(p, spky::FXT_FLUX_TIME,
-    params[p ? FLUXTIME_B : FLUXTIME_A].getValue());
+        issues.append("FluxRateQuantity must read the raw detent index directly")
+    if quantity and "flux_division_index" in quantity:
+        issues.append("FluxRateQuantity still round-trips through flux_division_index")
+    if config is None or config.count("configParam<FluxRateQuantity>") != 1:
+        issues.append("FLUXRATE is not configured through FluxRateQuantity")
+    if config and "configParam<FluxTimeQuantity>" in config:
+        issues.append("configControls still configures a retired FluxTimeQuantity")
+    expected_config = """
+else if (c.id == FLUXRATE_A || c.id == FLUXRATE_B)
+    configParam<FluxRateQuantity>(
+        c.id, 0.f, (float)(spky::kFluxRateCount - 1),
+        init, lbl);
 """
-    if push is None or compact_cpp(expected) not in compact_cpp(push):
-        issues.append("FLUXTIME does not route to FXT_FLUX_TIME")
-    if push and "pp(FLUXTIME_A, p)" in push:
-        issues.append("trailing FLUXTIME ids are incorrectly read through pp()")
+    if config is None or compact_cpp(expected_config) not in compact_cpp(config):
+        issues.append("TIME's configParam<FluxRateQuantity> call drifted "
+                      "(range, initParamDefault-sourced default, or lbl)")
+    expected_rate_push = """
+inst.set_flux_rate(p, (int)std::lround(
+    params[p ? FLUXRATE_B : FLUXRATE_A].getValue()));
+"""
+    if push is None or compact_cpp(expected_rate_push) not in compact_cpp(push):
+        issues.append("TIME does not push its raw index to set_flux_rate")
+    expected_base = """
+inst.set_fx_target_base(p, spky::FXT_FLUX_TIME, 0.5f);
+"""
+    if push is None or compact_cpp(expected_base) not in compact_cpp(push):
+        issues.append("FXT_FLUX_TIME must be pinned to the neutral 0.5 base")
     pitch = """
 if (bbdPart)
     inst.set_target_base(p, spky::LANE_PITCH,
@@ -1625,18 +1664,11 @@ if (bbdPart)
         issues.append("STAGES is coupled to the tape TIME target")
     if "constboolbbdPart=inst.engine_id(p)==spky::ENGINE_BBD;" not in push_n:
         issues.append("LANE_PITCH routing lacks the BBD-only gate")
-    if config:
-        flux_time_config = """
-else if (c.id == FLUXTIME_A || c.id == FLUXTIME_B)
-    configParam<FluxTimeQuantity>(c.id, 0.f, 1.f, init, lbl);
-"""
-        if compact_cpp(flux_time_config) not in compact_cpp(config):
-            issues.append("FLUXTIME must use initParamDefault through its A/B configuration branch")
     return issues
 
 
 def test_flux_time_host_wiring():
-    """Tape Time uses its real tape mapping and routes each appended deck id."""
+    """TIME reads its raw detent index and FXT_FLUX_TIME stays pinned neutral."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
@@ -1645,35 +1677,43 @@ def test_flux_time_host_wiring():
 
 
 def test_flux_time_guard_rejects_representative_regressions():
-    """The Tape Time guard rejects realistic deck, target, accessor, and default bugs."""
+    """The TIME guard rejects realistic deck, target, index, and default bugs."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
     mutations = [
-        ("params[p ? FLUXTIME_B : FLUXTIME_A].getValue()",
-         "params[p ? FLUXTIME_A : FLUXTIME_A].getValue()", "deck B id"),
-        ("spky::FXT_FLUX_TIME", "spky::FXT_FLUX_FB", "FX target"),
-        ("params[p ? FLUXTIME_B : FLUXTIME_A].getValue()",
-         "pp(FLUXTIME_A, p)", "strided FLUXTIME accessor"),
-        ("configParam<FluxTimeQuantity>(c.id, 0.f, 1.f, init, lbl);",
-         "configParam<FluxTimeQuantity>(c.id, 0.f, 1.f, 0.f, lbl);",
+        ("params[p ? FLUXRATE_B : FLUXRATE_A].getValue()",
+         "params[p ? FLUXRATE_A : FLUXRATE_A].getValue()", "deck B id"),
+        ("spky::FXT_FLUX_TIME, 0.5f", "spky::FXT_FLUX_FB, 0.5f", "FX target"),
+        ("int k = spky::kFluxRateOffset + (int)std::lround(getValue());",
+         "int k = spky::kFluxRateOffset + spky::flux_division_index(getValue());",
+         "reintroduced flux_division_index round-trip"),
+        ("configParam<FluxRateQuantity>(\n"
+         "                            c.id, 0.f, (float)(spky::kFluxRateCount - 1),\n"
+         "                            init, lbl);",
+         "configParam<FluxRateQuantity>(\n"
+         "                            c.id, 0.f, (float)(spky::kFluxRateCount - 1),\n"
+         "                            0.f, lbl);",
          "hard-coded default"),
     ]
     for before, after, label in mutations:
+        check(before in cpp, f"fixture for {label!r} did not match current source")
         mutated = cpp.replace(before, after, 1)
         check(flux_time_wiring_issues(mutated),
-              f"Tape Time guard accepted a {label} regression")
+              f"TIME guard accepted a {label} regression")
 
 
 # Derived, not hand-copied: the branch's whole point is that caption words
 # live in one place (DYNAMIC_CAPTIONS), so the guard that checks no caption
 # word is typed into the C++ must draw from that same table, not a second
 # transcription of it that a later DYNAMIC_CAPTIONS row can silently outrun.
-# BEND/DIV/MULT/SEND/PUSH are static (never state-dependent) captions with
-# no DYNAMIC_CAPTIONS row of their own, so they're added explicitly.
+# BEND/TIME/SEND/PUSH are static (never state-dependent) captions with no
+# DYNAMIC_CAPTIONS row of their own, so they're added explicitly. DIV/MULT
+# retired with FLUXRATE_A/B's rename to TIME (task 6, spec 2026-08-09
+# hw-control-reduction).
 CAPTION_WORDS = tuple(sorted(
     {w for _t, _d, words in g.DYNAMIC_CAPTIONS for w in words}
-    | {"BEND", "DIV", "MULT", "SEND", "PUSH"}))
+    | {"BEND", "TIME", "SEND", "PUSH"}))
 
 
 def caption_wiring_issues(cpp):
@@ -2205,8 +2245,15 @@ def test_sampler_preset_init_snapshot():
         "FILT_A": -0.172999933,
         "FILT_B": -0.19999963,
         "TIDE": 0.0,
-        "FLUXRATE_A": 0.392727494,
-        "FLUXRATE_B": 0.25466612,
+        # FLUXRATE_A/B used to be normalized 0..1 floats run through
+        # flux_division_index(); task 6 (spec 2026-08-09
+        # hw-control-reduction) made the knob a 12-detent KNOBI whose value
+        # IS the index, so the approved snapshot carries the converted
+        # indices the old floats used to round to (0.392727494 -> 4,
+        # 0.25466612 -> 3), not the old floats -- the factory delay time is
+        # unchanged, only the number that encodes it.
+        "FLUXRATE_A": 4.0,
+        "FLUXRATE_B": 3.0,
         "FLUXFB_A": 0.285667986,
         "FLUXFB_B": 0.555337131,
         "COLOR_A": 0.0,
@@ -2224,8 +2271,9 @@ def test_sampler_preset_init_snapshot():
         "DETUNE_B": 0.171428576,
         "DRIVE_A": 0.200000003,
         "DRIVE_B": 0.200000003,
-        "FLUXTIME_A": 0.5,
-        "FLUXTIME_B": 0.5,
+        # FLUXTIME_A/B (MULT) retired here (task 6, spec 2026-08-09
+        # hw-control-reduction) -- its entry leaves with it, per this test's
+        # own docstring.
     }
     for name, want in approved.items():
         if name not in gp.INIT_DEFAULTS:

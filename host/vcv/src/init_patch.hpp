@@ -61,8 +61,8 @@ static constexpr float kInitParamDefaults[] = {
     -0.172999933f, // FILT_A
     -0.19999963f, // FILT_B
     0.0f, // TIDE
-    0.392727494f, // FLUXRATE_A
-    0.25466612f, // FLUXRATE_B
+    4.0f, // FLUXRATE_A
+    3.0f, // FLUXRATE_B
     0.285667986f, // FLUXFB_A
     0.555337131f, // FLUXFB_B
     0.0f, // COLOR_A
@@ -80,8 +80,6 @@ static constexpr float kInitParamDefaults[] = {
     0.171428576f, // DETUNE_B
     0.200000003f, // DRIVE_A
     0.200000003f, // DRIVE_B
-    0.5f, // FLUXTIME_A
-    0.5f, // FLUXTIME_B
 };
 static_assert(sizeof(kInitParamDefaults) / sizeof(kInitParamDefaults[0])
               == NUM_PARAMS, "init snapshot must cover every ParamId");
