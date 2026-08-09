@@ -555,7 +555,17 @@ struct Fireflow : Module {
             // (negative) side (see kGritDead and pushParams' grit block).
             inst.set_fx_on(p, spky::FxBlock::Grit,
                             std::fabs(pp(GRIT_A, p)) > kGritDead);
-            inst.set_comp(p, pp(COMP_A, p));
+            // LVL/COMP: the lower zone is pure output gain (Comp::set_amount(0)
+            // is a bit-exact bypass, so it costs no compressor CPU); the top
+            // fifth engages the compressor with make-up, ending at the 0.7 that
+            // used to be the knob's working value.
+            static constexpr float kLvlCompSplit = 0.8f;
+            static constexpr float kCompTop      = 0.7f;
+            const float lvlKnob = pp(COMP_A, p);
+            inst.set_part_level(p, std::min(1.f, lvlKnob / kLvlCompSplit));
+            inst.set_comp(p, lvlKnob <= kLvlCompSplit ? 0.f
+                             : (lvlKnob - kLvlCompSplit) /
+                               (1.f - kLvlCompSplit) * kCompTop);
 
             // Saved ENG meanings remain 0 = Synth and 1 = Sampler; 2 adds
             // Wave, 3 Body, 4 the BBD. Each new engine needs its own explicit

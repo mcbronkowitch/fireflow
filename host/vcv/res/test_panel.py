@@ -54,10 +54,10 @@ PARAM_ORDER = [
 ]
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
-    'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
+    'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'Level / Comp', 'STPS',
     'ENG', 'SONG',
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
-    'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
+    'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'Level / Comp', 'STPS',
     'ENG', 'SONG',
     'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'Master drive',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
@@ -2142,7 +2142,11 @@ def test_sampler_preset_init_snapshot():
         "SOURCE_A": 0.438666672,
         "FLUX_A": 0.86400038,
         "GRIT_A": 0.0,
-        "COMP_A": 0.629666805,
+        # COMP_A/COMP_B deliberately changed (spec 2026-08-09
+        # hw-control-reduction task 5): the knob's meaning changed from
+        # "compressor amount" to "LVL/COMP", so the old value cannot be
+        # preserved -- 0.8 is full output level, no compressor.
+        "COMP_A": 0.8,
         # STEPS_A now carries the retired STEP_A pad's boolean too (spec
         # 2026-08-09 hw-control-reduction task 3 review, Finding 7): the
         # approved boot was STEP_A=0 (off) / STEPS_A=16 (parked); the merge
@@ -2174,7 +2178,7 @@ def test_sampler_preset_init_snapshot():
         "SOURCE_B": 0.177333504,
         "FLUX_B": 1.0,
         "GRIT_B": 0.0,
-        "COMP_B": 0.561333418,
+        "COMP_B": 0.8,   # see COMP_A above
         "STEPS_B": 0.0,  # same flow-mode boot restoration as STEPS_A, see above
         "ENGINE_B": 3.0,
         "GRITMODE_B": 0.0,
@@ -2530,6 +2534,78 @@ def test_init_defaults_are_generated_from_names():
                 check(abs(value - gp.INIT_DEFAULTS[name]) < 1e-6,
                       f"kInitParamDefaults[{name}] emitted {value}, "
                       f"INIT_DEFAULTS has {gp.INIT_DEFAULTS[name]}")
+
+
+def test_comp_knob_is_level_then_compressor():
+    """COMP was a volume control in practice. The knob says so now, and the
+    compressor lives in its top fifth with make-up."""
+    import gen_panel as gp
+    comp = [c for c in gp.PARAMS if c.enum == "COMP_A"][0]
+    check(comp.label == "LVL", f"COMP_A still prints {comp.label!r}")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("kLvlCompSplit" in cpp, "no zone split constant in the host")
+    check("inst.set_part_level(" in cpp, "the host never sets a part level")
+
+
+def test_lvl_comp_split_and_formulas_agree_across_host_and_bench():
+    """LVL/COMP's zone split (kLvlCompSplit/kCompTop) and its level/comp
+    formulas exist in two places: Fireflow.cpp (what Rack actually runs) and
+    bench/audition/init_patch.cpp (the only copy a doctest can reach --
+    Fireflow.cpp lives inside a Rack Module, unreachable from the engine test
+    suite). This scrapes both files' source text and requires the split
+    constants' values and both formulas to match exactly, so a hand-edit to
+    only one copy fails loudly here instead of shipping a Rack build that
+    disagrees with its own test coverage.
+
+    Each extraction below is asserted to find exactly one match per file --
+    zero matches (the extraction quietly finding nothing) is treated as a
+    failure, not a pass: a scraper that matches nothing must not report
+    success.
+
+    Deliberately NOT a call to consolidate the two copies into a shared
+    helper -- the codebase mirrors this logic on purpose (see the GRIT
+    dead-zone guard above, same pattern).
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
+              encoding="utf-8") as f:
+        host_cpp = f.read()
+    bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
+                               "init_patch.cpp")
+    with open(bench_path, encoding="utf-8") as f:
+        bench_cpp = f.read()
+
+    def const_value(source, name, label):
+        matches = re.findall(name + r"\s*=\s*([\d.]+f?)", source)
+        check(len(matches) == 1,
+              f"{label}: expected exactly one {name} declaration, "
+              f"found {len(matches)} ({matches!r})")
+        return matches[0].rstrip("f") if len(matches) == 1 else None
+
+    for const in ("kLvlCompSplit", "kCompTop"):
+        host_v = const_value(host_cpp, const, "Fireflow.cpp")
+        bench_v = const_value(bench_cpp, const, "bench/audition/init_patch.cpp")
+        if host_v is not None and bench_v is not None:
+            check(float(host_v) == float(bench_v),
+                  f"{const} disagrees: Fireflow.cpp={host_v} "
+                  f"bench/audition/init_patch.cpp={bench_v}")
+
+    needles = {
+        "level formula": compact_cpp(
+            "std::min(1.f,lvlKnob/kLvlCompSplit)"),
+        "comp formula": compact_cpp(
+            "lvlKnob<=kLvlCompSplit?0.f:(lvlKnob-kLvlCompSplit)/"
+            "(1.f-kLvlCompSplit)*kCompTop"),
+    }
+    host_n, bench_n = compact_cpp(host_cpp), compact_cpp(bench_cpp)
+    for label, needle in needles.items():
+        check(host_n.count(needle) == 1,
+              f"Fireflow.cpp: expected exactly one {label}, found "
+              f"{host_n.count(needle)} matching {needle!r}")
+        check(bench_n.count(needle) == 1,
+              f"bench/audition/init_patch.cpp: expected exactly one "
+              f"{label}, found {bench_n.count(needle)} matching {needle!r}")
 
 
 def main():

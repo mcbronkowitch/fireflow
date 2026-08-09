@@ -176,7 +176,7 @@
 <text x="65.250" y="96.600" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">GRIT</text>
 <circle cx="75.750" cy="89.400" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="75.750" y1="89.400" x2="75.750" y2="87.100" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
-<text x="75.750" y="95.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">COMP</text>
+<text x="75.750" y="95.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">LVL</text>
 <circle cx="37.000" cy="103.600" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="37.000" y1="103.600" x2="37.000" y2="101.300" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
 <text x="37.000" y="109.200" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">STPS</text>
@@ -241,7 +241,7 @@
 <text x="148.110" y="96.600" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">GRIT</text>
 <circle cx="137.610" cy="89.400" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="137.610" y1="89.400" x2="137.610" y2="87.100" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
-<text x="137.610" y="95.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">COMP</text>
+<text x="137.610" y="95.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">LVL</text>
 <circle cx="176.360" cy="103.600" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="176.360" y1="103.600" x2="176.360" y2="101.300" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
 <text x="176.360" y="109.200" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">STPS</text>

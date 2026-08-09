@@ -290,6 +290,7 @@ public:
 
     // --- M4 center section ---
     void set_morph(float m)  { _center.set_morph(m); }
+    void set_part_level(int p, float lvl) { _center.set_level(p, lvl); }
     void set_couple(float c) { _center.set_couple(c); }
     void set_drift(float d)  { _center.set_drift(d); }
     void set_tide(float n)   { for (auto& p : _parts) p.mod().set_tide(n); }

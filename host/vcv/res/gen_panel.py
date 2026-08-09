@@ -293,7 +293,13 @@ def part_controls(mir=False):
     # magnitude is the mix (see Fireflow.cpp pushParams). COMP stays a plain
     # unipolar SMKNOB, so the two can no longer share one templated loop.
     out.append(Ctl("GRIT", KNOBC, fx(FX_BOT[2]), ROW_V2, "GRIT"))
-    out.append(Ctl("COMP", SMKNOB, fx(FX_BOT[3]), ROW_V2, "COMP"))
+    # COMP prints LVL now (spec 2026-08-09 hw-control-reduction task 5): it was
+    # always used as a volume control in practice (the engines are quiet, so
+    # it sat at 0.5-0.7 in every patch, and what read as "louder" was the
+    # compressor's make-up gain). The lower four fifths are now pure output
+    # level; the compressor lives in the top fifth with make-up (see
+    # Fireflow.cpp pushParams' kLvlCompSplit/kCompTop).
+    out.append(Ctl("COMP", SMKNOB, fx(FX_BOT[3]), ROW_V2, "LVL", "Level / Comp"))
     out.append(Ctl("STEPS", KNOBI, fx(STEPS_X), PLAY_Y, "STPS"))
     # ENGINE cycles Synth/Sampler/Wave/Body/BBD (states 0..4); the C++ side
     # (Fireflow.cpp configSwitch/EngineCycleLatch) is the source of truth for
@@ -537,7 +543,13 @@ INIT_DEFAULTS = {
     "SOURCE_A": 0.438666672,
     "FLUX_A": 0.864000380,
     "GRIT_A": 0.000000000,
-    "COMP_A": 0.629666805,
+    # COMP_A/COMP_B were the compressor amount under the old meaning; that
+    # value's factory loudness leaned on make-up gain. Under the new LVL/COMP
+    # split, 0.8 is full output level with the compressor off -- it cannot
+    # reproduce the old sound (the control's meaning genuinely changed, spec
+    # 2026-08-09 hw-control-reduction task 5), it is the plan's starting point
+    # for a later listening pass.
+    "COMP_A": 0.800000000,
     # 0 IS flow mode now that Task 2 merged the separate STEP pad into this
     # count (spec 2026-08-09 hw-control-reduction task 3 review, Finding 7).
     # The approved boot state was step mode OFF with the count parked at 16
@@ -566,7 +578,7 @@ INIT_DEFAULTS = {
     "SOURCE_B": 0.177333504,
     "FLUX_B": 1.000000000,
     "GRIT_B": 0.000000000,
-    "COMP_B": 0.561333418,
+    "COMP_B": 0.800000000,   # see COMP_A above
     "STEPS_B": 0.000000000,  # same flow-mode boot restoration as STEPS_A, see above
     "ENGINE_B": 3.000000000,
     "SONG_B": 6.000000000,  # same rung-6 preservation as SONG_A, see above

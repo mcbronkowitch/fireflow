@@ -683,6 +683,27 @@ TEST_CASE("center: FLOW->STEP snap with steps=12 makes clock_scale genuinely mov
     CHECK(std::fabs(err2) < 0.05f);   // still locked onto the offset the turn rebased to
 }
 
+TEST_CASE("part level scales the morph gain without touching the other deck") {
+    Rig r; r.init();
+    r.c.set_morph(0.5f);
+    r.c.set_level(0, 1.f);
+    r.c.set_level(1, 1.f);
+    for (int i = 0; i < 4000; ++i) r.c.update(r.a, r.b, r.pa, r.pb);
+    const float full_a = r.c.gain_a();
+    const float full_b = r.c.gain_b();
+    r.c.set_level(0, 0.5f);
+    for (int i = 0; i < 4000; ++i) r.c.update(r.a, r.b, r.pa, r.pb);
+    CHECK(r.c.gain_a() == doctest::Approx(full_a * 0.5f).epsilon(0.01));
+    CHECK(r.c.gain_b() == doctest::Approx(full_b).epsilon(0.01));
+}
+
+TEST_CASE("level zero is silence") {
+    Rig r; r.init();
+    r.c.set_level(0, 0.f);
+    for (int i = 0; i < 4000; ++i) r.c.update(r.a, r.b, r.pa, r.pb);
+    CHECK(r.c.gain_a() == doctest::Approx(0.f).epsilon(0.001));
+}
+
 // The Rig's parts default to ENGINE_SYNTH, where snap_sampler_cursor is a
 // no-op -- so nothing in the suite pins the Center->Part->sampler wiring.
 // ENGINE_SAMPLER selected here so the snap actually reaches the cursor.

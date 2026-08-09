@@ -34,7 +34,7 @@
 <circle cx="92.000" cy="71.000" r="8.000" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="92.000" y="81.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">GRIT</text>
 <circle cx="107.000" cy="71.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="107.000" y="79.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">COMP</text>
+<text x="107.000" y="79.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">LVL</text>
 <circle cx="12.000" cy="86.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="12.000" y="94.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">STPS</text>
 <rect x="53.000" y="82.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>
@@ -72,7 +72,7 @@
 <circle cx="212.800" cy="71.000" r="8.000" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="212.800" y="81.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">GRIT</text>
 <circle cx="197.800" cy="71.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="197.800" y="79.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">COMP</text>
+<text x="197.800" y="79.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">LVL</text>
 <circle cx="292.800" cy="86.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="292.800" y="94.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">STPS</text>
 <rect x="243.800" y="82.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>

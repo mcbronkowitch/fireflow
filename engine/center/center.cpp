@@ -56,6 +56,12 @@ void Center::init(float sample_rate, uint32_t seed) {
     _g_a = std::cos(_morph * kQuarter);
     _g_b = std::sin(_morph * kQuarter);
 
+    for (int i = 0; i < 2; ++i) {
+        _lvl_target[i] = 1.f;
+        _lvl_smooth[i].init(_cr, 0.03f);
+        _lvl_smooth[i].reset(1.f);
+    }
+
     _couple = 0.f; _phase_err = 0.f;
 
     _drift_target = 0.f; _drift = 0.f;
@@ -124,8 +130,8 @@ void Center::update(SuperModulator& a, SuperModulator& b, Part& pa, Part& pb) {
 
     // --- MORPH (equal-power, smoothed at control rate) ---
     _morph = _morph_smooth.process(_morph_target);
-    _g_a = std::cos(_morph * kQuarter);
-    _g_b = std::sin(_morph * kQuarter);
+    _g_a = std::cos(_morph * kQuarter) * _lvl_smooth[0].process(_lvl_target[0]);
+    _g_b = std::sin(_morph * kQuarter) * _lvl_smooth[1].process(_lvl_target[1]);
 
     // --- DRIFT amount (smoothed) + weather step ---
     _drift = _drift_smooth.process(_drift_target);

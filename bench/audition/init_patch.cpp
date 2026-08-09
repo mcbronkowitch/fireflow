@@ -1,5 +1,6 @@
 #include "init_patch.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "instrument.h"
@@ -86,7 +87,18 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
         inst.set_fx_on(
             deck, spky::FxBlock::Grit,
             std::fabs(part(GRIT_A, deck)) > kGritDead);
-        inst.set_comp(deck, part(COMP_A, deck));
+        // LVL/COMP: the lower zone is pure output gain (Comp::set_amount(0)
+        // is a bit-exact bypass, so it costs no compressor CPU); the top
+        // fifth engages the compressor with make-up, ending at the 0.7 that
+        // used to be the knob's working value. Mirrors Fireflow.cpp's
+        // kLvlCompSplit/kCompTop/pushParams LVL/COMP block.
+        static constexpr float kLvlCompSplit = 0.8f;
+        static constexpr float kCompTop      = 0.7f;
+        const float lvlKnob = part(COMP_A, deck);
+        inst.set_part_level(deck, std::min(1.f, lvlKnob / kLvlCompSplit));
+        inst.set_comp(deck, lvlKnob <= kLvlCompSplit ? 0.f
+                             : (lvlKnob - kLvlCompSplit) /
+                               (1.f - kLvlCompSplit) * kCompTop);
 
         inst.sampler_speed_mode(deck, true);
         inst.sampler_reverse(deck, false);
