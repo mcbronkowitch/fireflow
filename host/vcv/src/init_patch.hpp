@@ -49,14 +49,10 @@ static constexpr float kInitParamDefaults[] = {
     1.0f, // COUPLE
     5.0f, // SCALE
     0.959493291f, // DRIFT
-    0.0f, // SPOT
-    0.482666761f, // MASTER_DRIVE
     0.869332671f, // REV_SIZE
     0.790665507f, // REV_DECAY
     0.761333108f, // REV_TONE
     0.862999976f, // REV_DIFF
-    0.484000504f, // REV_SMEAR
-    0.237000003f, // REV_MOD
     0.0f, // CHOKE
     -0.172999933f, // FILT_A
     -0.19999963f, // FILT_B
@@ -76,8 +72,6 @@ static constexpr float kInitParamDefaults[] = {
     0.422665179f, // REV_MIX_A
     0.613332987f, // REV_MIX_B
     0.0f, // SHUFFLE
-    0.200000003f, // DRIVE_A
-    0.200000003f, // DRIVE_B
 };
 static_assert(sizeof(kInitParamDefaults) / sizeof(kInitParamDefaults[0])
               == NUM_PARAMS, "init snapshot must cover every ParamId");

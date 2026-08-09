@@ -187,9 +187,11 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
     inst.set_reverb_diffusion(value(REV_DIFF));
     inst.set_reverb_mix(spky::PART_A, value(REV_MIX_A));
     inst.set_reverb_mix(spky::PART_B, value(REV_MIX_B));
-    inst.set_reverb_smear(value(REV_SMEAR));
-    inst.set_reverb_mod(value(REV_MOD));
-    inst.set_master_drive(value(MASTER_DRIVE));
+    // Fixed by ear (spec 2026-08-09 hw-control-reduction task 9); mirrors
+    // Fireflow.cpp pushParams' PUSH/SMEAR/WOBL constants.
+    inst.set_master_drive(0.40f);
+    inst.set_reverb_smear(0.30f);
+    inst.set_reverb_mod(0.15f);
     inst.set_scale(static_cast<int>(std::lround(value(SCALE))));
     inst.set_tempo_bpm(40.f + value(TEMPO) * 200.f);
 }

@@ -93,10 +93,6 @@
 <text x="136.400" y="59.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SCALE</text>
 <circle cx="152.400" cy="51.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="152.400" y="59.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">DRIFT</text>
-<rect x="132.400" y="62.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="136.400" y="72.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SPOT</text>
-<circle cx="152.400" cy="66.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="152.400" y="74.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">PUSH</text>
 <circle cx="136.400" cy="81.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="136.400" y="89.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SIZE</text>
 <circle cx="136.400" cy="96.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
@@ -105,10 +101,6 @@
 <text x="152.400" y="89.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TONE</text>
 <circle cx="152.400" cy="96.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="152.400" y="104.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">DIFF</text>
-<circle cx="168.400" cy="81.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="168.400" y="89.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SMEAR</text>
-<circle cx="168.400" cy="96.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="168.400" y="104.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">WOBL</text>
 <circle cx="168.400" cy="51.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="168.400" y="59.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">CHOKE</text>
 <circle cx="27.000" cy="56.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>

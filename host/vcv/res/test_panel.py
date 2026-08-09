@@ -40,6 +40,11 @@ def ctl(enum):
 # a non-goal for this plan, so every id from DETUNE_A onward shifted, and
 # PART_STRIDE grew from 19 to 20 (the templated block gained one control; the
 # total param COUNT is unchanged, only its position within PARAMS moved).
+# SPOT, MASTER_DRIVE, REV_SMEAR, REV_MOD and DRIVE_A/B are gone entirely
+# (task 9): the first four became fixed-by-ear constants in pushParams, SPOT
+# is a genuine feature loss, and DRIVE_A/B was dead menu-only patch state
+# that never reached the engine. HIDDEN_PARAMS is now empty, so DRIVE_A/B's
+# old trailing pair is simply gone, not replaced.
 PARAM_ORDER = [
     'RATE_A', 'SHAPE_A', 'DENSITY_A', 'SMOOTH_A', 'RANGE_A', 'MELODY_A',
     'MOD_A', 'TUNE_A', 'ATTACK_A', 'DECAY_A', 'RES_A', 'SUB_A', 'SOURCE_A',
@@ -49,13 +54,13 @@ PARAM_ORDER = [
     'MOD_B', 'TUNE_B', 'ATTACK_B', 'DECAY_B', 'RES_B', 'SUB_B', 'SOURCE_B',
     'FLUX_B', 'GRIT_B', 'COMP_B', 'STEPS_B', 'ENGINE_B', 'DETUNE_B',
     'SONG_B',
-    'MORPH', 'TEMPO', 'COUPLE', 'SCALE', 'DRIFT', 'SPOT',
-    'MASTER_DRIVE', 'REV_SIZE', 'REV_DECAY', 'REV_TONE',
-    'REV_DIFF', 'REV_SMEAR', 'REV_MOD', 'CHOKE', 'FILT_A', 'FILT_B', 'TIDE',
+    'MORPH', 'TEMPO', 'COUPLE', 'SCALE', 'DRIFT',
+    'REV_SIZE', 'REV_DECAY', 'REV_TONE',
+    'REV_DIFF', 'CHOKE', 'FILT_A', 'FILT_B', 'TIDE',
     'FLUXRATE_A', 'FLUXRATE_B', 'FLUXFB_A', 'FLUXFB_B', 'COLOR_A', 'COLOR_B',
     'LINK_A', 'LINK_B', 'STAGES_A', 'STAGES_B',
     'REC_A', 'REC_B', 'REV_MIX_A', 'REV_MIX_B',
-    'SHUFFLE', 'DRIVE_A', 'DRIVE_B',
+    'SHUFFLE',
 ]
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
@@ -64,12 +69,12 @@ PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'Level / Comp', 'STPS',
     'ENG', 'Detune', 'SONG',
-    'MORPH', 'TEMPO', 'FREE|GRID', 'SCALE', 'DRIFT', 'SPOT', 'Master drive',
-    'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
+    'MORPH', 'TEMPO', 'FREE|GRID', 'SCALE', 'DRIFT',
+    'SIZE', 'DECAY', 'TONE', 'DIFF', 'CHOKE',
     'FILT', 'FILT', 'TIDE', 'FLUX time', 'FLUX time', 'FFB', 'FFB',
     'COLOR', 'COLOR', 'LINK', 'LINK', 'BBD Bend', 'BBD Bend', 'REC', 'REC',
     'Room send', 'Room send',
-    'SHUFL', 'Drive A', 'Drive B',
+    'SHUFL',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
@@ -79,9 +84,10 @@ LIGHT_ORDER = ['GATE_A_L', 'GATE_B_L', 'REC_A_L', 'REC_B_L']
 def test_enum_order():
     """Patch compatibility. If this fails, every saved .vcv breaks."""
     check([c.enum for c in g.PARAMS] == PARAM_ORDER, "PARAMS order changed")
-    check(PARAM_ORDER[-2:] == ['DRIVE_A', 'DRIVE_B'],
-          "DRIVE_A/B must be the trailing ParamId pair now that FLUXTIME "
-          "(task 6, spec 2026-08-09 hw-control-reduction) is retired")
+    check(PARAM_ORDER[-1] == 'SHUFFLE',
+          "SHUFFLE must be the trailing ParamId now that DRIVE_A/B "
+          "(task 9, spec 2026-08-09 hw-control-reduction) is retired and "
+          "HIDDEN_PARAMS is empty")
     check([c.enum for c in g.INPUTS] == INPUT_ORDER, "INPUTS order changed")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
@@ -96,18 +102,18 @@ def test_source_and_hidden_detune_partition():
     """SOURCE owns the former DTUN widgets; DETUNE is a real panel knob again
     (spec 2026-08-09 hw-control-reduction task 10 -- out of HIDDEN_PARAMS and
     into the templated per-part block, "bei drones ist das sehr stark").
-    DRIVE is still menu-only patch state (spec 2026-07-28 flux-rhythm-drag):
-    DRAG took its panel slot, and DRIVE became widgetless, the shape
-    DETUNE_A/B used to share with it."""
+    DRIVE_A/B, the last HIDDEN_PARAMS resident, is retired outright (task 9):
+    it was menu-only patch state that never reached the engine, so
+    HIDDEN_PARAMS is now empty -- no widgetless patch state survives at all."""
     visible = [c.enum for c in g.PANEL_PARAMS]
     hidden = [c.enum for c in g.HIDDEN_PARAMS]
     check("SOURCE_A" in visible and "SOURCE_B" in visible,
           "SOURCE controls must stay visible")
     check("DETUNE_A" in visible and "DETUNE_B" in visible,
           "DETUNE must be a visible panel control")
-    check(hidden == ["DRIVE_A", "DRIVE_B"], f"hidden params are {hidden!r}")
-    check(not any(e in visible for e in hidden),
-          "widgetless drive leaked into panel controls")
+    check(hidden == [], f"HIDDEN_PARAMS is not empty: {hidden!r}")
+    check("DRIVE_A" not in visible and "DRIVE_B" not in visible,
+          "dead DRIVE_A/B leaked into panel controls")
     appended = [c.enum for c in g.APPENDED_PANEL_PARAMS]
     check([c.enum for c in g.PARAMS] == visible + hidden + appended,
           "complete ParamId order must preserve declared partitions")
@@ -116,7 +122,7 @@ def test_source_and_hidden_detune_partition():
           and h.count("{DETUNE_B, WK_SMKNOB,") == 1,
           "DETUNE must be a real widget in kParamCtls")
     check("{DRIVE_A," not in h and "{DRIVE_B," not in h,
-          "widgetless drive leaked into kParamCtls")
+          "dead DRIVE_A/B leaked into kParamCtls")
 
 
 def test_time_knob_replaces_div_and_mult():
@@ -148,8 +154,9 @@ def test_bbd_pitch_flux_time_collections():
           "APPENDED_PANEL_PARAMS must stay empty -- MULT was its only member")
     check("FLUXTIME_A" not in persistent and "FLUXTIME_B" not in persistent,
           "FLUXTIME must not survive as a saved ParamId")
-    check(persistent[-2:] == ['DRIVE_A', 'DRIVE_B'],
-          "DRIVE_A/B must be the trailing ParamId pair")
+    check(persistent[-1] == 'SHUFFLE',
+          "SHUFFLE must be the trailing ParamId now that DRIVE_A/B "
+          "(task 9) is retired")
     check(all(e in runtime for e in ('STAGES_A', 'STAGES_B',
                                       'FLUXRATE_A', 'FLUXRATE_B')),
           "runtime table lacks PITCH or TIME widgets")
@@ -278,9 +285,9 @@ def test_param_runtime_tip_contract():
     check(PARAM_TIPS[ids["LINK_A"]:ids["STAGES_B"] + 1]
           == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
           "BBD Bend runtime tips drifted")
-    check(PARAM_TIPS[-2:] == [
-        'Drive A', 'Drive B',
-    ], "runtime tips drifted at the trailing DRIVE pair")
+    check(PARAM_TIPS[-1] == 'SHUFL',
+          "SHUFFLE must be the trailing runtime tip now that the DRIVE "
+          "pair (task 9) is retired")
     for enum, caption, tip in (
             ("FLUX_A", "MIX", "FLUX"), ("FLUX_B", "MIX", "FLUX"),
             ("FLUXRATE_A", "TIME", "FLUX time"),
@@ -875,11 +882,13 @@ CENTER = {   # enum -> (x offset from CX, y)
     'COUPLE': (-9.0, 54.0), 'SHUFFLE': (9.0, 54.0),
     'SCALE': (-10.5, 68.0), 'CHOKE': (0.0, 68.0), 'DRIFT': (10.5, 68.0),
     # SETTLE retired (task 8, spec 2026-08-09 hw-control-reduction): the
-    # pad's job moved to DRIFT's own left stop. The freed slot at
-    # (10.5, 78.0) beside MASTER_DRIVE stays empty -- no regrouping.
-    'SPOT': (-10.5, 78.0), 'MASTER_DRIVE': (0.0, 78.0),
-    'REV_SIZE': (-10.5, 94.0), 'REV_TONE': (0.0, 94.0), 'REV_SMEAR': (10.5, 94.0),
-    'REV_DECAY': (-10.5, 104.5), 'REV_DIFF': (0.0, 104.5), 'REV_MOD': (10.5, 104.5),
+    # pad's job moved to DRIFT's own left stop. SPOT and MASTER_DRIVE
+    # retired (task 9): the whole ROW_DUO2 row (78.0) is now empty -- no
+    # regrouping.
+    'REV_SIZE': (-10.5, 94.0), 'REV_TONE': (0.0, 94.0),
+    # REV_SMEAR and REV_MOD retired (task 9); their R-column slots at
+    # (10.5, 94.0)/(10.5, 104.5) stay empty -- no regrouping.
+    'REV_DECAY': (-10.5, 104.5), 'REV_DIFF': (0.0, 104.5),
 }
 
 
@@ -2302,15 +2311,18 @@ def test_sampler_preset_init_snapshot():
         # 0.959493291, not the old raw value -- see gen_panel.py's
         # INIT_DEFAULTS["DRIFT"] comment for the full derivation.
         "DRIFT": 0.959493291,
-        "SPOT": 0.0,
-        "MASTER_DRIVE": 0.482666761,
         "SETTLE": 0.0,
+        # SPOT and MASTER_DRIVE retired (task 9, spec 2026-08-09
+        # hw-control-reduction) -- their entries leave with them, per this
+        # test's own docstring. MASTER_DRIVE's approved 0.482666761 is
+        # superseded by the brief's by-ear pin, 0.40 -- not carried forward.
         "REV_SIZE": 0.869332671,
         "REV_DECAY": 0.790665507,
         "REV_TONE": 0.761333108,
         "REV_DIFF": 0.862999976,
-        "REV_SMEAR": 0.484000504,
-        "REV_MOD": 0.237000003,
+        # REV_SMEAR and REV_MOD retired (task 9); their entries leave too.
+        # Approved 0.484000504/0.237000003 are superseded by the brief's
+        # by-ear pins, 0.30/0.15 -- not carried forward.
         "CHOKE": 0.0,
         "FILT_A": -0.172999933,
         "FILT_B": -0.19999963,
@@ -2351,11 +2363,10 @@ def test_sampler_preset_init_snapshot():
         # old shared value produced there: 0.171428576 * 35 * 4).
         "DETUNE_A": 0.239045722,
         "DETUNE_B": 0.414039341,
-        "DRIVE_A": 0.200000003,
-        "DRIVE_B": 0.200000003,
-        # FLUXTIME_A/B (MULT) retired here (task 6, spec 2026-08-09
-        # hw-control-reduction) -- its entry leaves with it, per this test's
-        # own docstring.
+        # DRIVE_A/B retired here (task 9, spec 2026-08-09
+        # hw-control-reduction) -- dead menu-only patch state, its entry
+        # leaves with it. FLUXTIME_A/B (MULT) retired earlier (task 6) --
+        # its entry left with it too, per this test's own docstring.
     }
     for name, want in approved.items():
         if name not in gp.INIT_DEFAULTS:
@@ -2872,6 +2883,73 @@ def test_drift_settle_zone_and_formula_agree_across_host_and_bench():
         check(bench_n.count(needle) == 1,
               f"bench/audition/init_patch.cpp: expected exactly one "
               f"{label}, found {bench_n.count(needle)} matching {needle!r}")
+
+
+def test_fixed_values_and_dead_controls():
+    """PUSH, WOBL and SMEAR become constants; SPOT dies; DRIVE_A/B was never
+    wired to anything and leaves with its menu entry."""
+    import gen_panel as gp
+    names = {c.enum for c in gp.PARAMS}
+    for dead in ("MASTER_DRIVE", "SPOT", "REV_MOD", "REV_SMEAR",
+                 "DRIVE_A", "DRIVE_B"):
+        check(dead not in names, f"{dead} still exists")
+    check(gp.HIDDEN_PARAMS == [], "HIDDEN_PARAMS is not empty")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("set_master_drive(0.40f)" in cpp, "PUSH is not pinned to 0.40")
+    check("DriveQuantity" not in cpp, "the dead Drive quantity is still here")
+    check("inst.spot()" not in cpp, "SPOT is still wired in the host")
+
+
+def test_fixed_values_agree_across_host_and_bench():
+    """PUSH/SMEAR/WOBL lost their knobs (spec 2026-08-09 hw-control-reduction
+    task 9, "push steht immer auf 0.4", "smear ... 0.3 sowas", "wobbel fest
+    auf .1 - .2") and became literal constants at the two call sites that used
+    to read a param: Fireflow.cpp (what Rack actually runs) and
+    bench/audition/init_patch.cpp (the only copy a doctest can reach --
+    Fireflow.cpp lives inside a Rack Module, unreachable from the engine test
+    suite). This scrapes both files' source text and requires the three
+    literals to match exactly, so a hand-edit to only one copy fails loudly
+    here instead of shipping a Rack build that disagrees with its own test
+    coverage.
+
+    Each extraction below is asserted to find exactly one match per file --
+    zero matches (the extraction quietly finding nothing) is treated as a
+    failure, not a pass: a scraper that matches nothing must not report
+    success.
+
+    Deliberately NOT a call to consolidate the two copies into a shared
+    helper -- the codebase mirrors this logic on purpose (see the GRIT
+    dead-zone, LVL/COMP, COUPLE and DRIFT guards above, same pattern).
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
+              encoding="utf-8") as f:
+        host_cpp = f.read()
+    bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
+                               "init_patch.cpp")
+    with open(bench_path, encoding="utf-8") as f:
+        bench_cpp = f.read()
+
+    def call_value(source, fn, label):
+        matches = re.findall(re.escape(fn) + r"\(([\d.]+)f?\)", source)
+        check(len(matches) == 1,
+              f"{label}: expected exactly one {fn}(...) call with a literal "
+              f"argument, found {len(matches)} ({matches!r})")
+        return matches[0] if len(matches) == 1 else None
+
+    for fn, want in (("set_master_drive", 0.40),
+                      ("set_reverb_smear", 0.30),
+                      ("set_reverb_mod", 0.15)):
+        host_v = call_value(host_cpp, fn, "Fireflow.cpp")
+        bench_v = call_value(bench_cpp, fn, "bench/audition/init_patch.cpp")
+        if host_v is not None and bench_v is not None:
+            check(float(host_v) == float(bench_v),
+                  f"{fn} disagrees: Fireflow.cpp={host_v} "
+                  f"bench/audition/init_patch.cpp={bench_v}")
+            check(float(host_v) == want,
+                  f"{fn} is {host_v}, want {want} (spec 2026-08-09 "
+                  f"hw-control-reduction task 9)")
 
 
 def main():

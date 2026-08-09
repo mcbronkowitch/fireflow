@@ -89,17 +89,6 @@ struct StagesQuantity : ParamQuantity {
     }
 };
 
-// DRIVE tooltip: gain into a fixed saturation threshold, INSIDE the feedback
-// loop -- so each repeat saturates again. Not redundant with GRIT, which runs
-// before FLUX and dirties the input once.
-struct DriveQuantity : ParamQuantity {
-    std::string getDisplayValueString() override {
-        const float db = spky::bbd_tuning::kDriveLoDb
-            + getValue() * (spky::bbd_tuning::kDriveHiDb - spky::bbd_tuning::kDriveLoDb);
-        return string::f("%+.1f dB", db);
-    }
-};
-
 // LINK tooltip: unipolar THIN depth over the full knob travel.
 struct LinkQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
@@ -288,7 +277,6 @@ struct Fireflow : Module {
     float curSr = 0.f;
     dsp::ClockDivider ctrlDiv;              // throttle param push to control rate
     dsp::SchmittTrigger clockTrig, resetTrig;
-    dsp::BooleanTrigger spotTrig;
     // Tracks the SONG knob's current rung so pushParams can detect a genuine
     // rung change and re-roll the phrase -- SONG swallowed FORM and the NEW
     // pad (spec 2026-08-09 hw-control-reduction task 3). Seeded/rearm shape
@@ -435,16 +423,12 @@ struct Fireflow : Module {
                 default: break;
             }
         }
-        // DRIVE moved to HIDDEN_PARAMS (spec 2026-07-28 flux-rhythm-drag) and so
-        // is no longer in kParamCtls; configured explicitly here so the
-        // menu-only quantity exists for the submenu slider. DETUNE (spec
-        // 2026-08-09 hw-control-reduction task 10) rejoined kParamCtls and no
-        // longer needs an explicit call of its own -- see the DETUNE_A/B
-        // branch inside the loop above.
-        configParam<DriveQuantity>(
-            DRIVE_A, 0.f, 1.f, initParamDefault(DRIVE_A), "Drive A");
-        configParam<DriveQuantity>(
-            DRIVE_B, 0.f, 1.f, initParamDefault(DRIVE_B), "Drive B");
+        // DRIVE_A/B retired (spec 2026-08-09 hw-control-reduction task 9): the
+        // menu-only quantity and its submenu slider are gone -- the value
+        // never reached the engine (see the pushParams comment below where
+        // its old id used to be read). DETUNE (task 10) rejoined kParamCtls
+        // earlier and no longer needs an explicit call of its own -- see the
+        // DETUNE_A/B branch inside the loop above.
         // panel labels are short ("L", "PIT"); the group legend carries the rest,
         // so tooltips use the control table's spelled-out tip instead
         for (const auto& c : kInputCtls)  configInput(c.id, c.tip);
@@ -573,8 +557,6 @@ struct Fireflow : Module {
             inst.set_fx_target_base(p, spky::FXT_FLUX_TIME, 0.5f);
             // Appended params are outside the stride, so pp() would compute the
             // wrong id — the explicit ternary is required (see FLUXRATE/FLUXFB).
-            // DRIVE_A/B remains append-only saved patch state, with no FLUX
-            // destination in movement 3.
             inst.set_link(p, params[p ? LINK_B : LINK_A].getValue());
             // STAGES itself is pushed further down, alongside samplerPart's
             // analogous re-point gate -- it needs this tick's dispatched
@@ -864,12 +846,17 @@ struct Fireflow : Module {
         inst.set_reverb_diffusion(params[REV_DIFF].getValue());
         inst.set_reverb_mix(spky::PART_A, params[REV_MIX_A].getValue());
         inst.set_reverb_mix(spky::PART_B, params[REV_MIX_B].getValue());
-        inst.set_reverb_smear(params[REV_SMEAR].getValue());
-        inst.set_reverb_mod(params[REV_MOD].getValue());
-        inst.set_master_drive(params[MASTER_DRIVE].getValue());
+        // Fixed by ear (spec 2026-08-09 hw-control-reduction task 9): PUSH
+        // sat at 0.40 in every patch, and once the limiter rides, DRIVE
+        // stops controlling dirt anyway. SMEAR ("smear ... 0.3 sowas") and
+        // WOBL/MOD ("wobbel fest auf .1 - .2") are the same kind of decision
+        // -- the owner never moved them either. The engine API (set_master_
+        // drive/set_reverb_smear/set_reverb_mod) is unchanged so the render
+        // host and its scenarios can still drive them.
+        inst.set_master_drive(0.40f);
+        inst.set_reverb_smear(0.30f);
+        inst.set_reverb_mod(0.15f);
         inst.set_scale((int)std::round(params[SCALE].getValue()));
-
-        if (spotTrig.process(params[SPOT].getValue() > 0.5f)) inst.spot();
 
         // Tempo: an external clock (one pulse per beat) overrides the knob.
         float bpm = 40.f + params[TEMPO].getValue() * 200.f;
@@ -1608,19 +1595,13 @@ static void appendFireflowMenu(Menu* menu, Fireflow* m) {
     menu->addChild(createMenuItem("Resync loops to bar", "",
                                   [m]() { m->resyncReq = true; }));
 
-    menu->addChild(new MenuSeparator);
-    // DRIVE lost its panel slot to DRAG (spec 2026-07-28 flux-rhythm-drag)
-    // and lives here now, menu-only patch state. DETUNE used to have the
-    // same shape, but task 10 (spec 2026-08-09 hw-control-reduction) moved
-    // it back onto the panel as a real performance control -- its slider
-    // lives there now (kParamCtls/DetuneQuantity), not in this menu.
-    for (int p = 0; p < spky::PART_COUNT; ++p) {
-        const std::string name = p ? "Drive B" : "Drive A";
-        const int id = p ? DRIVE_B : DRIVE_A;
-        menu->addChild(createSubmenuItem(name, "", [m, id](Menu* sub) {
-            sub->addChild(new ParamMenuSlider(m->getParamQuantity(id)));
-        }));
-    }
+    // DRIVE_A/B retired (spec 2026-08-09 hw-control-reduction task 9): the
+    // menu-only slider never reached the engine (its BBD drive target is a
+    // mod lane, not a panel/menu control -- see bbd_engine.cpp's
+    // set_targets()), so it leaves with no replacement. DETUNE used to have
+    // the same widgetless shape, but task 10 moved it back onto the panel as
+    // a real performance control -- its slider lives there now
+    // (kParamCtls/DetuneQuantity), not in this menu.
 
     if (isBbdSelected(m, ENGINE_A)) {
         menu->addChild(createSubmenuItem("BBD A — Freeze Attack", "", [m](Menu* sub) {

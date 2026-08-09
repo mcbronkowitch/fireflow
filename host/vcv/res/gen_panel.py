@@ -431,19 +431,21 @@ SHARED = [
     Ctl("COUPLE", SMKNOB,  CX - 9.0, ROW_TIME2, "FREE|GRID"),
     Ctl("SCALE",  KNOBI,   L,  ROW_DUO1, "SCALE"),
     Ctl("DRIFT",  SMKNOB,  R,  ROW_DUO1, "DRIFT"),
-    Ctl("SPOT",   SMBTN,   L,  ROW_DUO2, "SPOT"),
-    Ctl("MASTER_DRIVE", SMKNOB, CX, ROW_DUO2, "PUSH", "Master drive"),
     # SETTLE/SETL retired (spec 2026-08-09 hw-control-reduction task 8): the
     # pad was drift-to-zero plus a glide, which is just DRIFT's own left
-    # stop. The freed ROW_DUO2 slot beside MASTER_DRIVE stays empty;
-    # regrouping is a later session.
+    # stop. SPOT and MASTER_DRIVE (PUSH) retired here (task 9): SPOT is a
+    # genuine feature loss (the owner never uses it), PUSH is fixed by ear
+    # at 0.40 in Fireflow.cpp's pushParams -- "push steht immer auf 0.4".
+    # The entire freed ROW_DUO2 row stays empty; regrouping is a later
+    # session.
     # ROOM: three semantic columns, bottom edge flush with the PLAY boxes.
+    # SMEAR (task 9, "smear ... 0.3 sowas") and MOD/WOBL ("wobbel fest auf
+    # .1 - .2") are fixed by ear too, in the same pushParams block. Their
+    # freed R-column slots stay empty; regrouping is a later session.
     Ctl("REV_SIZE",  SMKNOB, L,         ROW_ROOM1, "SIZE"),
     Ctl("REV_DECAY", SMKNOB, L,         ROW_ROOM2, "DECAY"),
     Ctl("REV_TONE",  SMKNOB, CX,        ROW_ROOM1, "TONE"),
     Ctl("REV_DIFF",  SMKNOB, CX,        ROW_ROOM2, "DIFF"),
-    Ctl("REV_SMEAR", SMKNOB, R,         ROW_ROOM1, "SMEAR"),
-    Ctl("REV_MOD",   SMKNOB, R,         ROW_ROOM2, "WOBL"),
     # CHOKE: bipolar event-priority between the decks (spec 2026-07-16
     # choke-priority). Appended LAST on purpose: existing .vcv patches keep
     # their param ids.
@@ -525,16 +527,13 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     Ctl("SHUFFLE", SMKNOB, CX + 9.0, ROW_TIME2, "SHUFL"),
 ]
 
-HIDDEN_PARAMS = [
-    # DRIVE loses its panel slot to DRAG (spec 2026-07-28 flux-rhythm-drag) and
-    # becomes patch state, same menu-only widgetless shape DETUNE_A/B used to
-    # have before task 10 (spec 2026-08-09 hw-control-reduction) moved DETUNE
-    # onto the panel and out of this list: position 0,0 and an empty label
-    # mean no panel widget is emitted. Appended LAST so every id before it
-    # stays put and PART_STRIDE remains 23.
-    Ctl("DRIVE_A", SMKNOB, 0.0, 0.0, "", "Drive A"),
-    Ctl("DRIVE_B", SMKNOB, 0.0, 0.0, "", "Drive B"),
-]
+# DRIVE_A/B retired here (spec 2026-08-09 hw-control-reduction task 9): the
+# menu-only slider never reached the engine (its BBD drive target is a mod
+# lane, spky::LANE_SOURCE -- see bbd_engine.cpp's set_targets()), so it was
+# append-only saved patch state with no destination at all. DETUNE_A/B left
+# this list before it (task 10, back onto the panel), so HIDDEN_PARAMS is now
+# genuinely empty -- no more menu-only widgetless patch state survives.
+HIDDEN_PARAMS = []
 
 # FLUXTIME_A/B (the MULT knob) retired here (spec 2026-08-09
 # hw-control-reduction task 6): DIV and MULT described one quantity, and
@@ -636,15 +635,17 @@ INIT_DEFAULTS = {
     # a silent factory-sound drift of the kind this plan has already shipped
     # by accident twice.
     "DRIFT": 0.959493291,
-    "SPOT": 0.000000000,
-    "MASTER_DRIVE": 0.482666761,
     # SETTLE retired (task 8): the pad's job moved to DRIFT's own left stop.
+    # SPOT/MASTER_DRIVE/REV_SMEAR/REV_MOD retired (task 9): fixed by ear now,
+    # see pushParams' PUSH/SMEAR/WOBL constants and Fireflow.cpp's dead SPOT
+    # trigger removal -- their approved-snapshot values (SPOT 0.0,
+    # MASTER_DRIVE 0.482666761, REV_SMEAR 0.484000504, REV_MOD 0.237000003)
+    # are superseded by the brief's by-ear pins (0.40/0.30/0.15), not carried
+    # forward.
     "REV_SIZE": 0.869332671,
     "REV_DECAY": 0.790665507,
     "REV_TONE": 0.761333108,
     "REV_DIFF": 0.862999976,
-    "REV_SMEAR": 0.484000504,
-    "REV_MOD": 0.237000003,
     "CHOKE": 0.000000000,
     "FILT_A": -0.172999933,
     "FILT_B": -0.199999630,
@@ -689,8 +690,8 @@ INIT_DEFAULTS = {
     # used to read 6 -- a consequence of the taper change, not of this split.
     "DETUNE_A": 0.239045722,
     "DETUNE_B": 0.414039341,
-    "DRIVE_A": 0.200000003,
-    "DRIVE_B": 0.200000003,
+    # DRIVE_A/B retired here (task 9): dead menu-only patch state, see
+    # HIDDEN_PARAMS above -- its 0.200000003 approved value leaves with it.
 }
 
 # --- lights --------------------------------------------------------------------
