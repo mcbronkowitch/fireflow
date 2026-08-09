@@ -150,13 +150,17 @@ void AmbientReverb::set_diffusion(float norm) {
 void AmbientReverb::set_diffuser_mod_depth(float norm) {
     // SMEAR knob: the input-diffuser LFO (ap1..ap4). This is what melts
     // discrete slap-echoes into a dense wet wash. 0 = static diffusers.
-    _verb.set_diffuser_mod_amount(clampf(norm, 0.f, 1.f) * 0.25f * 450.f);
+    norm = clampf(norm, 0.f, 1.f);
+    _diffuser_mod_norm = norm;
+    _verb.set_diffuser_mod_amount(norm * 0.25f * 450.f);
 }
 
 void AmbientReverb::set_mod_depth(float norm) {
     // MOD knob: the tail-delay LFO wobble (del1/del2 + loop APs). 0 = a still
     // tail (no pitch-vibrato); 1 = the old maximum. Ear-tuned in Rack.
-    _verb.set_mod_amount(clampf(norm, 0.f, 1.f) * 0.25f * 450.f);
+    norm = clampf(norm, 0.f, 1.f);
+    _mod_norm = norm;
+    _verb.set_mod_amount(norm * 0.25f * 450.f);
 }
 
 void AmbientReverb::process(float in_l, float in_r, float& out_l, float& out_r) {

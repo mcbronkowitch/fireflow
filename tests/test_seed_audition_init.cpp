@@ -315,3 +315,129 @@ TEST_CASE("Seed audition: full-deflection GRIT reaches mix 1.0, both signs")
     CHECK(inst.grit_mix_for_test(spky::PART_A) == doctest::Approx(1.f));
     CHECK(inst.grit_mix_for_test(spky::PART_B) == doctest::Approx(1.f));
 }
+
+// Review finding IMPORTANT 6 (2026-08-09 hw-control-reduction final review):
+// four times in this branch a control changed meaning while its stored init
+// value stayed put, silently changing how the factory patch sounds --
+// caught each time only because a human reasoned it through. The FLUXRATE
+// case above is the one exception: a bespoke test compares the old
+// formula's delay time against the new one. This generalises that idea into
+// one golden test that pins every engine-side observable the owner would
+// actually hear, applying the SAME snapshot apply_init_patch() gives the
+// real host. Every expected number below is a LITERAL, computed by hand
+// from the formulas in bench/audition/init_patch.cpp / Fireflow.cpp's
+// pushParams as they stand today, NOT re-derived from the same constants
+// the production code uses -- if it referenced e.g. spky::SynthEngine::
+// kDetuneCeilCt directly, a ceiling change would move both sides together
+// and this test could never catch it. A future control merge that changes
+// what the factory patch sounds like must change a number here and justify
+// why, instead of depending on somebody noticing by ear.
+TEST_CASE("Seed audition's factory init pins every engine-side observable "
+          "a future control merge could silently move")
+{
+    // FLUX needs real echo memory to report a delay target (Flux::
+    // delay_target_for_test() is a no-op otherwise -- see the FLUXRATE case
+    // above). The reverb, sampler and BBD buffers are left null: this test
+    // does not touch any of them, and FxMem documents null as "that part
+    // runs silent," not a crash.
+    struct TapeMem {
+        std::vector<float> echo[spky::PART_COUNT][2];
+        TapeMem() {
+            for (int p = 0; p < spky::PART_COUNT; ++p)
+                for (int ch = 0; ch < 2; ++ch)
+                    echo[p][ch].resize(spky::Flux::kMaxSamples);
+        }
+        spky::FxMem mem() {
+            spky::FxMem m;
+            for (int p = 0; p < spky::PART_COUNT; ++p)
+                for (int ch = 0; ch < 2; ++ch)
+                    m.echo[p][ch] = echo[p][ch].data();
+            return m;
+        }
+    };
+    static TapeMem tape;
+    static spky::AmbientReverb reverb;
+
+    spky::Instrument inst;
+    spky::FxMem mem = tape.mem();
+    mem.reverb = &reverb;
+    inst.init(48000.f, mem);
+    audition::apply_init_patch(inst);
+
+    float in[96] = {};
+    float out_l[96] = {};
+    float out_r[96] = {};
+    // DRIFT glides through a 0.3 s OnePole (Center::init), unlike the
+    // instantaneous controls checked below -- run several time constants'
+    // worth of blocks (2500 * 96 samples == 5 s) so drift() has actually
+    // converged, the same wait test_center.cpp uses for the same reason.
+    for (int block = 0; block < 2500; ++block)
+        inst.process(in, in, out_l, out_r, 96);
+
+    // --- per-deck grit mode and mix: both decks boot GRIT_A/B == 0.0, ---
+    // inside the 0.03 dead zone -- CRSH/DRV is present but silent.
+    CHECK(static_cast<int>(inst.grit_mode_for_test(spky::PART_A))
+          == static_cast<int>(spky::GritMode::Drive));
+    CHECK(static_cast<int>(inst.grit_mode_for_test(spky::PART_B))
+          == static_cast<int>(spky::GritMode::Drive));
+    CHECK(inst.grit_mix_for_test(spky::PART_A) == doctest::Approx(0.f));
+    CHECK(inst.grit_mix_for_test(spky::PART_B) == doctest::Approx(0.f));
+
+    // --- flux delay target: the tape echo time TIME/FLUXRATE resolves to. ---
+    // Same numbers the FLUXRATE-index test case above independently derives
+    // from the pre-task-6 formula (bpm 73.8667): deck A's division index 4,
+    // deck B's index 3, at the factory tempo.
+    CHECK(inst.flux_delay_target_for_test(spky::PART_A)
+          == doctest::Approx(0.609205f).epsilon(0.001));
+    CHECK(inst.flux_delay_target_for_test(spky::PART_B)
+          == doctest::Approx(0.812274f).epsilon(0.001));
+
+    // --- form and song per deck: rung 6 on both decks -- the "no ---
+    // alternation, two generators" rung that keeps the approved
+    // HIERARCHICAL/AAAB boot sound (song_ladder.h rung 6 == {2, 0}).
+    CHECK(inst.form(spky::PART_A) == 2);   // Principle::Hierarchical
+    CHECK(inst.form(spky::PART_B) == 2);
+    CHECK(inst.song(spky::PART_A) == 0);   // SongMode::AAAB
+    CHECK(inst.song(spky::PART_B) == 0);
+
+    // --- per-part level and compressor amount: COMP_A/B == 0.8 sits ---
+    // exactly on kLvlCompSplit (0.8) -- both decks boot at unity output
+    // gain with the compressor fully disengaged (its top fifth never
+    // opens at this knob position).
+    CHECK(inst.part_level_for_test(spky::PART_A) == doctest::Approx(1.f));
+    CHECK(inst.part_level_for_test(spky::PART_B) == doctest::Approx(1.f));
+    CHECK(inst.comp_amount_for_test(spky::PART_A) == doctest::Approx(0.f));
+    CHECK(inst.comp_amount_for_test(spky::PART_B) == doctest::Approx(0.f));
+
+    // --- applied detune cents per deck: deck A boots SYNTH, deck B boots ---
+    // BODY -- they differ by design, both by knob position and by engine.
+    // This is the pre-kDetuneScale spread SynthEngineT::set_detune stores
+    // (0..105 ct units shared by both engine families); BODY additionally
+    // scales this by its own kDetuneScale (4/3) at the audio callsite, so
+    // deck B's actual partial spread is 18 * 4/3 == 24 ct -- the by-ear
+    // BODY default this branch's move preserved (see the DETUNE_B comment
+    // on the snapshot test above).
+    CHECK(inst.applied_detune_ct_for_test(spky::PART_A)
+          == doctest::Approx(6.f).epsilon(0.0001));    // deck A (SYNTH): ~6 ct, the old shared default
+    CHECK(inst.applied_detune_ct_for_test(spky::PART_B)
+          == doctest::Approx(18.f).epsilon(0.0001));   // deck B (BODY): pre-scale; *4/3 == 24 ct final
+
+    // --- drift, couple, sync ---
+    // COUPLE == 1.0 (top of travel): grid zone, SYNC on, couple == 1.0 (the
+    // texture lanes lock fully to the grid).
+    CHECK(inst.synced(spky::PART_A) == true);
+    CHECK(inst.synced(spky::PART_B) == true);
+    CHECK(inst.couple() == doctest::Approx(1.f));
+    // DRIFT == 0.959493291, past the 0.02 SETL zone: (0.959493291 - 0.02) /
+    // (1 - 0.02) -- a lively but not maxed-out weather walk.
+    CHECK(inst.drift() == doctest::Approx(0.958667f).epsilon(0.0001));
+
+    // --- master drive, reverb smear, reverb mod: fixed-by-ear constants ---
+    // (spec 2026-08-09 hw-control-reduction task 9). PUSH == 0.40 ->
+    // Limiter's pre-gain 1 + 3*0.4*0.4 == 1.48 (a warm, not transparent,
+    // ceiling). SMEAR == 0.30 (a moderate wash), WOBL/MOD == 0.15 (gentle
+    // tail wobble).
+    CHECK(inst.master_drive_pre_gain_for_test() == doctest::Approx(1.48f));
+    CHECK(inst.reverb_smear_for_test() == doctest::Approx(0.30f));
+    CHECK(inst.reverb_mod_for_test() == doctest::Approx(0.15f));
+}

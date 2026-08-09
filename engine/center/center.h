@@ -54,6 +54,12 @@ public:
     float drift()     const { return _drift; }
     float weather()   const { return _weather; }
     float phase_err() const { return _phase_err; }
+    // Observer only, for tests (review finding IMPORTANT 6, 2026-08-09
+    // hw-control-reduction final review): LVL's smoothed per-deck output
+    // gain, the same value gain_a()/gain_b() multiply by MORPH. Reads the
+    // OnePole's current value, not the target -- a test must run a few
+    // control ticks (process() blocks) first, exactly like couple()/drift().
+    float level(int part) const { return _lvl_smooth[part & 1].value(); }
 
 private:
     void _step_weather();
