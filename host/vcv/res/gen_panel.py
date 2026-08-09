@@ -560,145 +560,112 @@ PARAMS = PANEL_PARAMS + HIDDEN_PARAMS + APPENDED_PANEL_PARAMS
 
 # Approved init snapshot, keyed by param NAME rather than by position: adding
 # or removing a control must not be able to shift somebody else's default.
-# Provenance unchanged -- drone.vcvm (2026-07-28), with LINK_B zeroed and
-# STAGES_B's 1.0 deliberately kept (see the notes that used to live in
-# src/init_patch.hpp).
+#
+# Provenance: FF_hw_Init.vcvm, a FireflowHW preset Bastian played and approved
+# on 2026-08-09, replacing the drone.vcvm (2026-07-28) lineage wholesale. 54 of
+# the 68 values moved, including both ENG selections -- this is a different
+# instrument at boot, not a retune of the old one, and the per-value notes that
+# used to justify individual numbers by what they preserved from drone.vcvm are
+# gone with it. The preset's module data (sampler paths, excitation checkboxes)
+# is NOT carried: only params reach this table, and nothing in that blob is
+# audible for these engines anyway (Part::set_excitation is a no-op outside
+# BODY, and no deck boots BODY now).
 INIT_DEFAULTS = {
-    "RATE_A": 0.116716892,
+    "RATE_A": 0.000000000,
     "SHAPE_A": 0.000000000,
-    "DENSITY_A": 0.695181072,
-    "SMOOTH_A": 0.995180666,
+    "DENSITY_A": 0.534939826,
+    "SMOOTH_A": 0.836144507,
     "RANGE_A": 0.000000000,
-    "MELODY_A": 0.000000000,
-    "MOD_A": 0.612047195,
-    "TUNE_A": 0.000000000,
-    "ATTACK_A": 0.185333401,
-    "DECAY_A": 0.322666585,
-    "RES_A": 0.319000006,
-    "SUB_A": 0.458666444,
-    "SOURCE_A": 0.438666672,
-    "FLUX_A": 0.864000380,
-    "GRIT_A": 0.000000000,
-    # COMP_A/COMP_B were the compressor amount under the old meaning; that
-    # value's factory loudness leaned on make-up gain. Under the new LVL/COMP
-    # split this is full output level with the compressor off -- it cannot
-    # reproduce the old sound (the control's meaning genuinely changed, spec
-    # 2026-08-09 hw-control-reduction task 5), it is the plan's starting point
-    # for a later listening pass.
-    #
-    # The number IS kLvlCompSplit and has to track it. When the split moved
-    # 0.8 -> 0.6 to give the compressor zone twice the travel, leaving 0.8 here
-    # would have booted both decks a third of the way into the comp zone --
-    # about +8.7 dB of make-up on a patch that is meant to start with the
-    # compressor disengaged. Same trap as SONG/STEPS/FLUXRATE/COUPLE before it:
-    # an old number surviving under a new meaning.
-    "COMP_A": 0.600000000,
-    # 0 IS flow mode now that Task 2 merged the separate STEP pad into this
-    # count (spec 2026-08-09 hw-control-reduction task 3 review, Finding 7).
-    # The approved boot state was step mode OFF with the count parked at 16
-    # (old STEP_A=0/STEPS_A=16); the merge cannot express "off with a parked
-    # count" any more -- the count IS the mode -- so restoring the approved
-    # boot behavior (a free-running deck) means landing on 0, losing the
-    # parked 16. Accepted cost of the merge, not something to work around.
+    "MELODY_A": 0.768674195,
+    "MOD_A": 0.403613269,
+    "TUNE_A": 0.001204819,
+    "ATTACK_A": 0.637333274,
+    "DECAY_A": 0.705333531,
+    "RES_A": 0.000000000,
+    "SUB_A": 0.738666236,
+    "SOURCE_A": 0.453333825,
+    "FLUX_A": 0.353333473,
+    "GRIT_A": 0.173493922,
+    # LVL/COMP: both decks now boot INSIDE the compressor zone, above
+    # kLvlCompSplit (0.6). That is a change of kind from the previous snapshot,
+    # where the value sat exactly on the split and the compressor was
+    # disengaged at boot. Deck A lands at amount 0.406 (~7.1 dB of make-up),
+    # deck B at 0.525 (~10.9 dB) -- set by ear on the reshaped taper
+    # (kCompShape), so the numbers only mean what they mean WITH that taper.
+    # If kLvlCompSplit or kCompShape ever move again, these two do not follow
+    # mechanically any more: they have to be re-heard.
+    "COMP_A": 0.761333168,
+    # 0 IS flow mode: the count is the mode (the separate STEP pad was merged
+    # into this knob, spec 2026-08-09 hw-control-reduction task 3). Both decks
+    # free-running, unchanged from the previous snapshot.
     "STEPS_A": 0.000000000,
-    "ENGINE_A": 0.000000000,
-    # Rung 6 (song_ladder.h) is {form: Hierarchical, song: AAAB} -- the exact
-    # pair the old independent FORM_A=2/SONG_A=0 defaults held. Preserves the
-    # approved init sound; it is not a factory-default retune.
-    "SONG_A": 6.000000000,
-    "RATE_B": 0.202409565,
-    "SHAPE_B": 0.899999678,
-    "DENSITY_B": 0.644577920,
-    "SMOOTH_B": 0.613253355,
+    # 2 == Wave. The previous snapshot booted Synth here and BODY on deck B;
+    # this patch runs Wave against Synth and boots no BODY deck at all. Two
+    # consequences worth knowing: BodyVoice::kDetuneScale no longer touches
+    # anything at boot, and the excitation bus is inert (Part::set_excitation
+    # is a no-op outside BODY).
+    "ENGINE_A": 2.000000000,
+    # DETUNE is pushed SQUARED (Fireflow.cpp: set_voice_detune(knob*knob)) and
+    # the ceiling is 105 ct, so this is 0.377^2 * 105 == 14.95 ct on deck A and
+    # 0.456^2 * 105 == 21.83 ct on deck B. Both decks read the same law now
+    # that neither runs BODY -- the per-deck split the previous snapshot needed
+    # (SYNTH and BODY only agreeing at full scale) no longer applies.
+    "DETUNE_A": 0.377333373,
+    # Rung 0 of the ladder (song_ladder.h) == {form 0, song 6}: no alternation,
+    # two generators. The previous snapshot sat on rung 6 ({2, 0},
+    # Hierarchical/AAAB) because that rung reproduced the even older
+    # FORM/SONG pair -- that lineage ends here, this is a fresh choice.
+    "SONG_A": 0.000000000,
+    "RATE_B": 0.053012036,
+    "SHAPE_B": 0.000000000,
+    "DENSITY_B": 0.000000000,
+    "SMOOTH_B": 1.000000000,
     "RANGE_B": 0.000000000,
-    "MELODY_B": -1.000000000,
-    "MOD_B": 0.357831180,
-    "TUNE_B": 0.000000000,
-    "ATTACK_B": 0.093333311,
-    "DECAY_B": 0.450666398,
-    "RES_B": 0.217333555,
-    "SUB_B": 0.319999605,
-    "SOURCE_B": 0.177333504,
-    "FLUX_B": 1.000000000,
+    "MELODY_B": 0.671083927,
+    "MOD_B": 0.681928277,
+    "TUNE_B": 0.321686625,
+    "ATTACK_B": 1.000000000,
+    "DECAY_B": 1.000000000,
+    "RES_B": 0.220000312,
+    "SUB_B": 0.000000000,
+    "SOURCE_B": 0.000000000,
+    "FLUX_B": 0.650667071,
     "GRIT_B": 0.000000000,
-    "COMP_B": 0.600000000,   # see COMP_A above
-    "STEPS_B": 0.000000000,  # same flow-mode boot restoration as STEPS_A, see above
-    "ENGINE_B": 3.000000000,
-    "SONG_B": 6.000000000,  # same rung-6 preservation as SONG_A, see above
-    "MORPH": 0.785541892,
-    "TEMPO": 0.169333577,
-    # 1.0 lands in the GRID zone (v >= kCoupleZoneSplit) and maps to
-    # couple = (1.0 - 0.5) / 0.5 = 1.0 -- "sync on, fully coupled", the
-    # approved factory state (spec 2026-08-09 hw-control-reduction task 7
-    # correction). NOT 0.5 -- that would ship an uncoupled factory patch.
+    "COMP_B": 0.848000109,
+    "STEPS_B": 0.000000000,
+    "ENGINE_B": 0.000000000,
+    "DETUNE_B": 0.455999434,
+    # Rung 13 == {form 4, song 5}: Ostinato against Mirror, the top of the
+    # ladder. The two decks deliberately sit at opposite ends now.
+    "SONG_B": 13.000000000,
+    "MORPH": 0.495180398,
+    "TEMPO": 0.000000000,
     "COUPLE": 1.000000000,
-    "SCALE": 5.000000000,
-    # The approved factory drift is 0.958666623 (what set_drift() must
-    # receive). Under the new zone mapping (kDriftSettleZone = 0.02,
-    # drift = (v - 0.02) / 0.98 -- spec 2026-08-09 hw-control-reduction task
-    # 8) the raw knob position that reproduces it exactly is
-    # 0.958666623 * 0.98 + 0.02 = 0.959493291, NOT the old raw value --
-    # carrying 0.958666623 forward unchanged would land drift at ~0.957823,
-    # a silent factory-sound drift of the kind this plan has already shipped
-    # by accident twice.
-    "DRIFT": 0.959493291,
-    # SETTLE retired (task 8): the pad's job moved to DRIFT's own left stop.
-    # SPOT/MASTER_DRIVE/REV_SMEAR/REV_MOD retired (task 9): fixed by ear now,
-    # see pushParams' PUSH/SMEAR/WOBL constants and Fireflow.cpp's dead SPOT
-    # trigger removal -- their approved-snapshot values (SPOT 0.0,
-    # MASTER_DRIVE 0.482666761, REV_SMEAR 0.484000504, REV_MOD 0.237000003)
-    # are superseded by the brief's by-ear pins (0.40/0.30/0.15), not carried
-    # forward.
-    "REV_SIZE": 0.869332671,
-    "REV_DECAY": 0.790665507,
-    "REV_TONE": 0.761333108,
-    "REV_DIFF": 0.862999976,
+    "SCALE": 2.000000000,
+    "DRIFT": 0.791999996,
+    "REV_SIZE": 1.000000000,
+    "REV_DECAY": 0.800755024,
+    "REV_TONE": 0.905333221,
+    "REV_DIFF": 0.768000245,
     "CHOKE": 0.000000000,
-    "FILT_A": -0.172999933,
-    "FILT_B": -0.199999630,
+    "FILT_A": -0.199999928,
+    "FILT_B": -0.292000026,
     "TIDE": 0.000000000,
-    # FLUXRATE_A/B used to be normalized 0..1 values run through
-    # flux_division_index() (engine/mod/divisions.h); task 6
-    # (spec 2026-08-09 hw-control-reduction) made the knob a 12-detent
-    # KNOBI whose value IS the index, so the old floats -- 0.392727494 and
-    # 0.254666120 -- are replaced with the indices they used to round to:
-    # 0.392727494 * 11 + 0.5 = 4.82 -> 4; 0.254666120 * 11 + 0.5 = 3.30 -> 3.
-    # Carrying the old floats forward would have rounded both decks to
-    # index 0, silently changing the factory delay time.
-    "FLUXRATE_A": 4.0,
-    "FLUXRATE_B": 3.0,
-    "FLUXFB_A": 0.285667986,
-    "FLUXFB_B": 0.555337131,
-    "COLOR_A": 0.000000000,
-    "COLOR_B": 0.469879329,
+    "FLUXRATE_A": 1.000000000,
+    "FLUXRATE_B": 1.000000000,
+    "FLUXFB_A": 0.643999279,
+    "FLUXFB_B": 0.790665507,
+    "COLOR_A": 0.001204819,
+    "COLOR_B": 0.862999976,
     "LINK_A": 0.000000000,
     "LINK_B": 0.000000000,
-    "STAGES_A": 0.800000012,
-    "STAGES_B": 1.000000000,
+    "STAGES_A": 0.000000000,
+    "STAGES_B": 0.000000000,
     "REC_A": 0.000000000,
     "REC_B": 0.000000000,
-    "REV_MIX_A": 0.422665179,
-    "REV_MIX_B": 0.613332987,
+    "REV_MIX_A": 0.343394309,
+    "REV_MIX_B": 0.805333197,
     "SHUFFLE": 0.000000000,
-    # DETUNE_A/B used to share one raw value, 0.171428576 ("= 6 / 35"): a
-    # linear knob feeding the old 35 ct ceiling landed both decks at 6 ct.
-    # Task 10 (spec 2026-08-09 hw-control-reduction) squared the taper and
-    # tripled the synth-family ceiling to 105 ct, and BODY's compensating
-    # kDetuneScale shrank from 4 to 4/3 to hold its own 140 ct rail exactly
-    # where it was -- but that compensation only agrees with the OLD single
-    # raw value at full knob travel (v == 1), not at this init position. The
-    # approved patch boots ENGINE_A = SYNTH, ENGINE_B = BODY (pinned in
-    # tests/test_seed_audition_init.cpp), so each deck's init value is solved
-    # to preserve the cents ITS OWN engine actually produces:
-    #   DETUNE_A (SYNTH): v = sqrt(6 / 105)  -> 0.239045722^2 * 105 = 6.000 ct
-    #   DETUNE_B (BODY):  v = sqrt(24 / 140) -> 0.414039341^2 * 140 = 24.000 ct
-    # (24 ct is what the old shared raw value produced on BODY: 0.171428576 *
-    # 35 * 4 = 24.) Swapping deck B to SYNTH would now read 18 ct where it
-    # used to read 6 -- a consequence of the taper change, not of this split.
-    "DETUNE_A": 0.239045722,
-    "DETUNE_B": 0.414039341,
-    # DRIVE_A/B retired here (task 9): dead menu-only patch state, see
-    # HIDDEN_PARAMS above -- its 0.200000003 approved value leaves with it.
 }
 
 # --- lights --------------------------------------------------------------------

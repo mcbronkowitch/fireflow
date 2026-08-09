@@ -2248,134 +2248,82 @@ def test_sampler_preset_init_snapshot():
     with open(header_path) as f:
         header = f.read()
     approved = {
-        # generated once by the command in the plan's Step 6; a second,
-        # independent copy of the same numbers -- that is what makes this a test
-        "RATE_A": 0.116716892,
+        # Transcribed from FF_hw_Init.vcvm (2026-08-09), the preset Bastian
+        # approved. A second, independent copy of the numbers in gen_panel's
+        # INIT_DEFAULTS -- that is what makes this a test: a later hand-edit to
+        # either table, or to the generated header, has to disagree with this one.
+        "RATE_A": 0.0,
         "SHAPE_A": 0.0,
-        "DENSITY_A": 0.695181072,
-        "SMOOTH_A": 0.995180666,
+        "DENSITY_A": 0.534939826,
+        "SMOOTH_A": 0.836144507,
         "RANGE_A": 0.0,
-        "MELODY_A": 0.0,
-        "MOD_A": 0.612047195,
-        "TUNE_A": 0.0,
-        "ATTACK_A": 0.185333401,
-        "DECAY_A": 0.322666585,
-        "RES_A": 0.319000006,
-        "SUB_A": 0.458666444,
-        "SOURCE_A": 0.438666672,
-        "FLUX_A": 0.86400038,
-        "GRIT_A": 0.0,
-        # COMP_A/COMP_B deliberately changed (spec 2026-08-09
-        # hw-control-reduction task 5): the knob's meaning changed from
-        # "compressor amount" to "LVL/COMP", so the old value cannot be
-        # preserved. The value IS kLvlCompSplit -- full output level with the
-        # compressor off -- and tracks it whenever the zone split moves.
-        "COMP_A": 0.6,
-        # STEPS_A now carries the retired STEP_A pad's boolean too (spec
-        # 2026-08-09 hw-control-reduction task 3 review, Finding 7): the
-        # approved boot was STEP_A=0 (off) / STEPS_A=16 (parked); the merge
-        # restores the "off" half as 0 and cannot keep the parked count.
+        "MELODY_A": 0.768674195,
+        "MOD_A": 0.403613269,
+        "TUNE_A": 0.001204819,
+        "ATTACK_A": 0.637333274,
+        "DECAY_A": 0.705333531,
+        "RES_A": 0.0,
+        "SUB_A": 0.738666236,
+        "SOURCE_A": 0.453333825,
+        "FLUX_A": 0.353333473,
+        "GRIT_A": 0.173493922,
+        # Both decks boot INSIDE the comp zone now (above kLvlCompSplit 0.6),
+        # unlike every earlier snapshot. Set by ear on the kCompShape taper.
+        "COMP_A": 0.761333168,
         "STEPS_A": 0.0,
-        "ENGINE_A": 0.0,
-        "GRITMODE_A": 1.0,
-        "STEP_A": 0.0,
-        "FORM_A": 2.0,
-        "NEWPHRASE_A": 0.0,
-        # SONG_A is a ladder rung index now, not a raw SongMode (spec
-        # 2026-08-09 hw-control-reduction task 3 review). Rung 6 is
-        # {form: Hierarchical, song: AAAB} -- the exact pair the retired
-        # FORM_A=2.0/old SONG_A=0.0 held, so the approved init sound is
-        # unchanged even though the number that encodes it is not.
-        "SONG_A": 6.0,
-        "RATE_B": 0.202409565,
-        "SHAPE_B": 0.899999678,
-        "DENSITY_B": 0.64457792,
-        "SMOOTH_B": 0.613253355,
+        # 2 == Wave. Deck B is Synth (0). No BODY deck boots in this patch.
+        "ENGINE_A": 2.0,
+        "DETUNE_A": 0.377333373,
+        # Ladder rung 0 == {form 0, song 6}; deck B sits at rung 13 == {4, 5}.
+        "SONG_A": 0.0,
+        "RATE_B": 0.053012036,
+        "SHAPE_B": 0.0,
+        "DENSITY_B": 0.0,
+        "SMOOTH_B": 1.0,
         "RANGE_B": 0.0,
-        "MELODY_B": -1.0,
-        "MOD_B": 0.35783118,
-        "TUNE_B": 0.0,
-        "ATTACK_B": 0.093333311,
-        "DECAY_B": 0.450666398,
-        "RES_B": 0.217333555,
-        "SUB_B": 0.319999605,
-        "SOURCE_B": 0.177333504,
-        "FLUX_B": 1.0,
+        "MELODY_B": 0.671083927,
+        "MOD_B": 0.681928277,
+        "TUNE_B": 0.321686625,
+        "ATTACK_B": 1.0,
+        "DECAY_B": 1.0,
+        "RES_B": 0.220000312,
+        "SUB_B": 0.0,
+        "SOURCE_B": 0.0,
+        "FLUX_B": 0.650667071,
         "GRIT_B": 0.0,
-        "COMP_B": 0.6,   # see COMP_A above
-        "STEPS_B": 0.0,  # same flow-mode boot restoration as STEPS_A, see above
-        "ENGINE_B": 3.0,
-        "GRITMODE_B": 0.0,
-        "STEP_B": 0.0,
-        "FORM_B": 2.0,
-        "NEWPHRASE_B": 0.0,
-        "SONG_B": 6.0,  # same rung-6 preservation as SONG_A, see above
-        "MORPH": 0.785541892,
-        "TEMPO": 0.169333577,
+        "COMP_B": 0.848000109,
+        "STEPS_B": 0.0,
+        "ENGINE_B": 0.0,
+        "DETUNE_B": 0.455999434,
+        "SONG_B": 13.0,
+        "MORPH": 0.495180398,
+        "TEMPO": 0.0,
         "COUPLE": 1.0,
-        "SCALE": 5.0,
-        # 0.958666623 is what set_drift() must receive; under the new zone
-        # mapping (task 8, spec 2026-08-09 hw-control-reduction) the raw
-        # knob position that reproduces it is 0.958666623 * 0.98 + 0.02 =
-        # 0.959493291, not the old raw value -- see gen_panel.py's
-        # INIT_DEFAULTS["DRIFT"] comment for the full derivation.
-        "DRIFT": 0.959493291,
-        "SETTLE": 0.0,
-        # SPOT and MASTER_DRIVE retired (task 9, spec 2026-08-09
-        # hw-control-reduction) -- their entries leave with them, per this
-        # test's own docstring. MASTER_DRIVE's approved 0.482666761 is
-        # superseded by the brief's by-ear pin, 0.40 -- not carried forward.
-        "REV_SIZE": 0.869332671,
-        "REV_DECAY": 0.790665507,
-        "REV_TONE": 0.761333108,
-        "REV_DIFF": 0.862999976,
-        # REV_SMEAR and REV_MOD retired (task 9); their entries leave too.
-        # Approved 0.484000504/0.237000003 are superseded by the brief's
-        # by-ear pins, 0.30/0.15 -- not carried forward.
+        "SCALE": 2.0,
+        "DRIFT": 0.791999996,
+        "REV_SIZE": 1.0,
+        "REV_DECAY": 0.800755024,
+        "REV_TONE": 0.905333221,
+        "REV_DIFF": 0.768000245,
         "CHOKE": 0.0,
-        "FILT_A": -0.172999933,
-        "FILT_B": -0.19999963,
+        "FILT_A": -0.199999928,
+        "FILT_B": -0.292000026,
         "TIDE": 0.0,
-        # FLUXRATE_A/B used to be normalized 0..1 floats run through
-        # flux_division_index(); task 6 (spec 2026-08-09
-        # hw-control-reduction) made the knob a 12-detent KNOBI whose value
-        # IS the index, so the approved snapshot carries the converted
-        # indices the old floats used to round to (0.392727494 -> 4,
-        # 0.25466612 -> 3), not the old floats -- the factory delay time is
-        # unchanged, only the number that encodes it.
-        "FLUXRATE_A": 4.0,
-        "FLUXRATE_B": 3.0,
-        "FLUXFB_A": 0.285667986,
-        "FLUXFB_B": 0.555337131,
-        "COLOR_A": 0.0,
-        "COLOR_B": 0.469879329,
+        "FLUXRATE_A": 1.0,
+        "FLUXRATE_B": 1.0,
+        "FLUXFB_A": 0.643999279,
+        "FLUXFB_B": 0.790665507,
+        "COLOR_A": 0.001204819,
+        "COLOR_B": 0.862999976,
         "LINK_A": 0.0,
         "LINK_B": 0.0,
-        "STAGES_A": 0.800000012,
-        "STAGES_B": 1.0,
+        "STAGES_A": 0.0,
+        "STAGES_B": 0.0,
         "REC_A": 0.0,
         "REC_B": 0.0,
-        "REV_MIX_A": 0.422665179,
-        "REV_MIX_B": 0.613332987,
+        "REV_MIX_A": 0.343394309,
+        "REV_MIX_B": 0.805333197,
         "SHUFFLE": 0.0,
-        # DETUNE_A/B used to share one raw value, 0.171428576 ("= 6 / 35"): a
-        # linear knob into the old 35 ct ceiling landed both decks at 6 ct.
-        # Task 10 (spec 2026-08-09 hw-control-reduction) squared the taper
-        # and tripled the synth-family ceiling to 105 ct; BODY's compensating
-        # kDetuneScale shrank from 4 to 4/3 to hold its own 140 ct rail
-        # exactly where it was, but that compensation only agrees with the
-        # OLD shared value at full knob travel, not at this init position.
-        # The approved patch boots ENGINE_A = SYNTH, ENGINE_B = BODY, so each
-        # deck's init value is solved to preserve the cents ITS OWN engine
-        # actually produces: DETUNE_A = sqrt(6 / 105) (6.000 ct on SYNTH),
-        # DETUNE_B = sqrt(24 / 140) (24.000 ct on BODY -- 24 ct is what the
-        # old shared value produced there: 0.171428576 * 35 * 4).
-        "DETUNE_A": 0.239045722,
-        "DETUNE_B": 0.414039341,
-        # DRIVE_A/B retired here (task 9, spec 2026-08-09
-        # hw-control-reduction) -- dead menu-only patch state, its entry
-        # leaves with it. FLUXTIME_A/B (MULT) retired earlier (task 6) --
-        # its entry left with it too, per this test's own docstring.
     }
     for name, want in approved.items():
         if name not in gp.INIT_DEFAULTS:
