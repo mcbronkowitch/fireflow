@@ -72,3 +72,27 @@ TEST_CASE("SongRungState: already-live restore (rearm) does not fire, but a "
     CHECK(state.tick(3.f / 13.f, n) == true);    // player turns to rung 3
     CHECK(state.rung == 3);
 }
+
+TEST_CASE("SongRungState: a single-detent click fires, walking the whole "
+          "ladder one rung at a time")
+{
+    // CRITICAL 1 (2026-08-09 hw-control-reduction final review): SONG is a
+    // Rack configSwitch, so every real turn this state ever sees is exactly
+    // one detent away from the last -- never the multi-rung jumps the other
+    // cases above exercise. hyst_step's own boundary math is pinned in
+    // tests/test_song_ladder.cpp; this walks it through the actual host
+    // entry point (tick(), with the host's norm = rung / (count - 1)) to
+    // prove a click-by-click player gesture is never swallowed.
+    spkyvcv::SongRungState state;
+    const int n = 14;
+
+    CHECK(state.tick(0.f, n) == false);   // baseline
+    for (int rung = 1; rung < n; ++rung) {
+        CHECK(state.tick(float(rung) / 13.f, n) == true);
+        CHECK(state.rung == rung);
+    }
+    for (int rung = n - 2; rung >= 0; --rung) {
+        CHECK(state.tick(float(rung) / 13.f, n) == true);
+        CHECK(state.rung == rung);
+    }
+}

@@ -44,3 +44,22 @@ TEST_CASE("hysteresis holds a rung until the value clears the seam") {
 TEST_CASE("a large jump lands in one move, not one rung at a time") {
     CHECK(hyst_step(0, 1.f, kSongLadderCount) == kSongLadderCount - 1);
 }
+
+TEST_CASE("every single-detent turn moves the rung, both directions") {
+    // Rack's SONG knob is a configSwitch: params[SONG_A].getValue() is
+    // always an exact integer rung, and Fireflow.cpp divides by
+    // (kSongLadderCount - 1) before calling hyst_step -- the same
+    // normalisation used here. A one-click turn from rung n must land
+    // exactly on n+1 (or n-1), so the value sits exactly on the seam
+    // guard, not past it. hyst_step must treat that as "moved".
+    const int   n = kSongLadderCount;
+    const float d = 1.f / float(n - 1);
+    for (int r = 0; r < n - 1; ++r) {
+        CAPTURE(r);
+        CHECK(hyst_step(r, float(r + 1) * d, n) == r + 1);
+    }
+    for (int r = n - 1; r > 0; --r) {
+        CAPTURE(r);
+        CHECK(hyst_step(r, float(r - 1) * d, n) == r - 1);
+    }
+}

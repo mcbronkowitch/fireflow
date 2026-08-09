@@ -43,6 +43,16 @@ inline const SongRung& song_ladder_at(int idx) {
 // times a minute -- flow.cpp's own comment measured 14 flips over one hover
 // sweep. Hold `cur` until the value passes the seam by a further half step,
 // then snap to whatever step is nearest, so a big turn still lands in one move.
+//
+// >= / <= , not > / < : in Rack, SONG is a configSwitch with snapping, so
+// params[SONG_A].getValue() is always an exact integer rung, and the host
+// divides by (count - 1) before calling this -- the same normalisation
+// re-multiplies back to an exact integer here. A single-detent turn from
+// rung n therefore lands x EXACTLY on n + 1.0f, one full step past the seam
+// at n + 0.5f, which is a real move, not chatter held for hysteresis. A
+// strict `>` guard silently ate 25 of 26 adjacent single-detent turns on
+// this branch's flagship control (tests/test_song_ladder.cpp, review
+// finding CRITICAL 1).
 inline int hyst_step(int cur, float norm, int count) {
     if (count < 2) return 0;
     if (norm < 0.f) norm = 0.f;
@@ -52,7 +62,14 @@ inline int hyst_step(int cur, float norm, int count) {
     if (nearest < 0) nearest = 0;
     if (nearest > count - 1) nearest = count - 1;
     const float n = static_cast<float>(cur);
-    if (x > n + 1.0f || x < n - 1.0f) return nearest;
+    // kEps absorbs the float rounding a caller's own normalise-then-scale
+    // round trip introduces (Fireflow.cpp divides SONG's integer rung by
+    // (count - 1), this file multiplies it back) -- a single detent should
+    // land x on n +/- 1.0f exactly, but round trip error can leave it a few
+    // ULPs to either side of the seam, which a bare >= / <= would treat as
+    // still-inside for roughly half of all rungs.
+    constexpr float kEps = 1e-4f;
+    if (x >= n + 1.0f - kEps || x <= n - 1.0f + kEps) return nearest;
     return cur;
 }
 
