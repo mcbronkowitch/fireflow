@@ -243,3 +243,34 @@ add_test(
         ${CMAKE_SOURCE_DIR}/tools/bake_wavetables.py
         --check
 )
+
+# --- panel guards (host/vcv/res/test_*.py) ---------------------------------
+# res/test_panel.py (97 tests -- the authority on the whole generated-artifact
+# contract), res/test_hw_panel.py and res/test_flow_panel.py were manual-only:
+# nothing in CI or ctest ran them, and during the 2026-08-09
+# hw-control-reduction plan one of them briefly had no runner at all while
+# task reports cited it as a passing gate (review finding IMPORTANT 4). Each
+# script resolves its own paths relative to host/vcv/, hence WORKING_DIRECTORY
+# below -- running them from the repo root fails to find generated_panel.hpp.
+#
+# find_package(Python3) above is REQUIRED, so a machine without Python 3 fails
+# to configure at all rather than silently skipping these -- consistent with
+# wavetable_bank_fresh just above, which already depends on the same
+# ${Python3_EXECUTABLE} unconditionally.
+add_test(
+    NAME panel_guard
+    COMMAND ${Python3_EXECUTABLE} res/test_panel.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
+)
+
+add_test(
+    NAME hw_panel_guard
+    COMMAND ${Python3_EXECUTABLE} res/test_hw_panel.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
+)
+
+add_test(
+    NAME flow_panel_guard
+    COMMAND ${Python3_EXECUTABLE} res/test_flow_panel.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
+)

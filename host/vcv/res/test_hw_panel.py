@@ -128,6 +128,25 @@ def test_labels_stay_off_neighbour_footprints():
             assert d >= other.r - 1e-6, (c.enum, other.enum, round(d, 2))
 
 
+def test_committed_files_match_the_generator():
+    """test_header_contract/test_svg_exists_and_is_60hp above read the
+    committed files but only grep for substrings -- they would not notice
+    gen_hw_panel.py being edited without being re-run (review finding
+    IMPORTANT 5, same gap as the big panel and already closed there and in
+    test_flow_panel.py). Compare byte-for-byte against a fresh generator run."""
+    for path, produced in (
+            (os.path.join(HERE, "FireflowHW.svg"), hw.svg()),
+            (os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"), hw.header())):
+        if not os.path.exists(path):
+            FAILS.append(f"{path} is missing -- run res/gen_hw_panel.py")
+            continue
+        with open(path) as f:
+            on_disk = f.read()
+        check(on_disk == produced,
+              f"{path} differs from the generator's output -- it was "
+              "hand-edited, or the generator was changed without re-running it")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

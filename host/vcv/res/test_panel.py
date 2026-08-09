@@ -1574,7 +1574,12 @@ def source_detune_wiring_issues(cpp):
     issues = []
     config = cpp_scope(cpp, "void configControls()")
     push = cpp_scope(cpp, "void pushParams()")
-    menu = cpp_scope(cpp, "void appendContextMenu(Menu* menu) override")
+    # appendContextMenu is a two-line delegator now (the menu body was
+    # lifted into the free function appendFireflowMenu so both widgets can
+    # share it) -- anchor on the function that actually holds the content,
+    # not the delegator, or this scope is an almost-empty string and every
+    # check below it is vacuous (review finding IMPORTANT 2).
+    menu = cpp_scope(cpp, "static void appendFireflowMenu(Menu* menu, Fireflow* m)")
     detune_quantity = cpp_scope(cpp, "struct DetuneQuantity : ParamQuantity")
     for label, block in (("configuration", config), ("parameter push", push)):
         if block is None:
@@ -1941,7 +1946,10 @@ def attack_pitch_wiring_issues(cpp):
     visible = cpp_scope(cpp, "static bool ctlVisible(Fireflow* m, int id)")
     exclusive = cpp_scope(cpp, "struct SlotVisible : W")
     widget = cpp_scope(cpp, "FireflowWidget(Fireflow* module)")
-    menu = cpp_scope(cpp, "void appendContextMenu(Menu* menu) override")
+    # Same re-anchor as source_detune_wiring_issues above: appendContextMenu
+    # is now a two-line delegator, the Freeze Attack submenu lives in
+    # appendFireflowMenu (review finding IMPORTANT 2).
+    menu = cpp_scope(cpp, "static void appendFireflowMenu(Menu* menu, Fireflow* m)")
 
     expected_rounded = """
 static int roundedEngineState(Fireflow* module, int engineId) {
@@ -2950,6 +2958,32 @@ def test_fixed_values_agree_across_host_and_bench():
             check(float(host_v) == want,
                   f"{fn} is {host_v}, want {want} (spec 2026-08-09 "
                   f"hw-control-reduction task 9)")
+
+
+def test_committed_files_match_the_generator():
+    """Every assertion above runs g.svg()/g.header() IN MEMORY -- none of
+    them would notice gen_panel.py being edited without being re-run, which
+    would leave the plugin compiling against a stale header while every
+    guard here still passes (review finding IMPORTANT 5). Mirror
+    test_flow_panel.py's test_committed_files_match_the_generator: compare
+    the committed artifacts byte-for-byte against a fresh generator run.
+    init_patch.hpp already gets an equivalent (if differently-shaped) check
+    in test_init_defaults_are_generated_from_names above, so it is included
+    here too for the same reason, not left out."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(here)
+    for path, produced in (
+            (os.path.join(here, "Fireflow.svg"), g.svg()),
+            (os.path.join(root, "src", "generated_panel.hpp"), g.header()),
+            (os.path.join(root, "src", "init_patch.hpp"), g.init_patch_header())):
+        if not os.path.exists(path):
+            FAILS.append("%s is missing -- run res/gen_panel.py" % path)
+            continue
+        with open(path) as f:
+            on_disk = f.read()
+        check(on_disk == produced,
+              "%s differs from the generator's output -- it was hand-edited, "
+              "or the generator was changed without re-running it" % path)
 
 
 def main():
