@@ -24,10 +24,12 @@ TEST_CASE("Seed audition applies the VCV init engine and arranger state")
 
     CHECK(inst.engine_id(spky::PART_A) == spky::ENGINE_SYNTH);
     CHECK(inst.engine_id(spky::PART_B) == spky::ENGINE_BODY);
-    CHECK(inst.form(spky::PART_A) == 2);
-    CHECK(inst.form(spky::PART_B) == 2);
-    CHECK(inst.song(spky::PART_A) == 0);
-    CHECK(inst.song(spky::PART_B) == 0);
+    // SONG_A/B default to ladder rung 0 (spec 2026-08-09
+    // hw-control-reduction task 3): song_ladder_at(0) == {form=0, song=6}.
+    CHECK(inst.form(spky::PART_A) == 0);
+    CHECK(inst.form(spky::PART_B) == 0);
+    CHECK(inst.song(spky::PART_A) == 6);
+    CHECK(inst.song(spky::PART_B) == 6);
 }
 
 

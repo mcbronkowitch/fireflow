@@ -127,6 +127,7 @@ add_executable(spky_tests
     tests/test_synth_engine_voice_count.cpp
     tests/test_phrase_gen.cpp
     tests/test_song_form.cpp
+    tests/test_song_ladder.cpp
     tests/test_song_lane.cpp
     tests/test_vcv_form_song_migration.cpp
     tests/test_vcv_link_migration.cpp

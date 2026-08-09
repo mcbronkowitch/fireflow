@@ -46,30 +46,31 @@ FLOW stays straight. Live changes latch at each lane's next pair boundary so
 the active pair finishes intact, while external CLOCK pulses, resets, phrase
 downbeats, and the transport's raw-phase anchors stay straight.
 
-## FORM, SONG, and NEW
+## SONG
 
-Each Part's PLAY row reads **STEP · FORM · SONG · NEW**. FORM and SONG are
-independent: FORM creates the musical material, while SONG decides when the
-two persistent phrase snapshots A and B are heard.
+Each Part's PLAY row reads **STEP · SONG**. FORM and the NEW pad are gone
+(spec 2026-08-09 hw-control-reduction): SONG alone walks a curated 14-rung
+ladder through the (Principle, SongMode) grid and re-rolls the phrase on
+every rung change — turn the knob, the melody develops differently.
 
-**FORM** has five phrase engines: **TWO MOTIFS**, **ONE + VAR**,
-**HIERARCHICAL**, **CALL / RESPONSE**, and **OSTINATO**. The factory setting
-is HIERARCHICAL.
-
-**SONG** has seven arrangements:
+Every rung pairs one of five phrase engines with one of seven arrangements.
+The five phrase engines are **TWO MOTIFS**, **ONE + VAR**, **HIERARCHICAL**,
+**CALL / RESPONSE**, and **OSTINATO** — they create the musical material.
+The seven arrangements decide when the two persistent phrase snapshots A and
+B are heard:
 
 - **AAAB**, **ABAB**, and **ABBB** repeat their named four-phrase sequence.
 - **BUILD** follows `AAAB · AABB · ABBB · AABB`.
 - **ROTATE** follows `AAAB · AABA · ABAA · BAAA`.
 - **MIRROR** follows the deterministic, non-repeating Thue–Morse A/B stream.
 - **OFF** disables arrangement by playing A continuously; A still evolves,
-  while the stored B phrase is retained for returning to another SONG mode.
+  while the stored B phrase is retained for returning to another rung.
 
-The factory SONG setting is AAAB. FORM and SONG changes wait for the next STEP
-phrase boundary. SONG changes preserve A and B; FORM changes rebuild them.
-**NEW always queues a fresh A/B pair and restarts SONG at its first phrase.**
-On a Sampler it also jumps the tape head back to ORGANIZE and spawns a grain
-immediately.
+The factory SONG setting is the ladder's first rung. SONG changes wait for
+the next STEP phrase boundary, and every rung change queues a fresh A/B pair
+and restarts the arrangement at its first phrase — the gesture the retired
+NEW pad used to fire on demand. On a Sampler it also jumps the tape head back
+to ORGANIZE and spawns a grain immediately.
 
 ## SOURCE and Detune
 
@@ -175,7 +176,7 @@ controls, not a new set of them — only what turning the knob does:
 
 MELODY drove variation and scan at once until 2026-08-03. It now drives scan
 alone on a Sampler deck, so the deck's phrases stop renewing by themselves —
-`NEW` is the gesture that asks for a fresh pair.
+a `SONG` rung change is the gesture that asks for a fresh pair.
 
 SCAN's dead zone is exact and deliberate: a frozen tape head has to stay
 frozen even through knob noise, so nothing moves for the first couple of
@@ -215,20 +216,21 @@ es dieses `pow` gar nicht mehr — das Gate bleibt trotzdem: außerhalb des
 Sampler-Decks wird `_scan_rate` nie gelesen, und hineinzuschreiben wäre nur
 Arbeit ohne Wirkung.
 
-**NEW also fires "new grain now" in the Sampler:** the tape head snaps back to
-ORGANIZE's position and a fresh grain spawns immediately, in addition to the
-fresh phrase-pair request described above. This exists because a grain's
-position, pitch and length are frozen the instant it's spawned, and the next
-chance to change any of them is the next scheduled spawn — at overlap 1 and a
-long LEN that's up to ten seconds away. Without this gesture, the long end of
-LEN wouldn't be a playable state at all; the deck would just stop answering
-every knob for that stretch.
+**A SONG rung change also fires "new grain now" in the Sampler:** the tape
+head snaps back to ORGANIZE's position and a fresh grain spawns immediately,
+in addition to the fresh phrase-pair request described above. This exists
+because a grain's position, pitch and length are frozen the instant it's
+spawned, and the next chance to change any of them is the next scheduled
+spawn — at overlap 1 and a long LEN that's up to ten seconds away. Without
+this gesture, the long end of LEN wouldn't be a playable state at all; the
+deck would just stop answering every knob for that stretch.
 
 **LEN is live downward, latched upward.** Turning LEN *down* immediately
 rescales every grain that's already sounding to the length it would have got
 at the new setting, fading it out click-free; turning LEN *up* leaves running
 grains exactly as they are. The asymmetry is the point. Length is latched at
-spawn (see NEW above), and that used to apply in both directions: a grain
+spawn (see the SONG rung change above), and that used to apply in both
+directions: a grain
 spawned at the top of LEN sounded for its full 42 s however far the knob came
 back down — 84 s in Tape with a pitch an octave under — and nothing on the
 deck could stop it, since the only thing that releases a running grain is the

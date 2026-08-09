@@ -15,6 +15,7 @@
 // and (later) the Daisy firmware use. No hardware type crosses this boundary.
 #include "instrument.h"
 #include "mod/divisions.h"
+#include "mod/song_ladder.h"
 #include "sampler_ui.hpp"
 
 using namespace spkyvcv;
@@ -275,7 +276,10 @@ struct Fireflow : Module {
     dsp::ClockDivider ctrlDiv;              // throttle param push to control rate
     dsp::SchmittTrigger clockTrig, resetTrig;
     dsp::BooleanTrigger spotTrig, settleTrig;
-    dsp::BooleanTrigger newPhraseTrig[2];
+    // Latches the SONG knob's current rung so pushParams can detect a rung
+    // change and re-roll the phrase -- SONG swallowed FORM and the NEW pad
+    // (spec 2026-08-09 hw-control-reduction task 3).
+    int songRung[spky::PART_COUNT] = {0, 0};
     float clkSamples = 0.f;                 // samples since last external clock edge
     float gateFilt[2] = {0.f, 0.f};
     float recPhase[2] = {0.f, 0.f};        // REC LED pulse while recording
@@ -344,14 +348,28 @@ struct Fireflow : Module {
                     if (c.id == SCALE)  // init patch is Lydian -- the bright end of group A
                         configParam<ScaleQuantity>(c.id, 0.f, (float)(spky::SCALE_LIST_COUNT - 1),
                                                    (float)spky::SCALE_LYDIAN, "Scale");
-                    else if (c.id == FORM_A || c.id == FORM_B)
-                        configSwitch(c.id, 0.f, 4.f, init, "Form",
-                                     {"TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
-                                      "CALL / RESPONSE", "OSTINATO"});
-                    else if (c.id == SONG_A || c.id == SONG_B)
-                        configSwitch(c.id, 0.f, 6.f, init, "Song",
-                                     {"AAAB", "ABAB", "ABBB", "BUILD",
-                                      "ROTATE", "MIRROR", "OFF"});
+                    else if (c.id == SONG_A || c.id == SONG_B) {
+                        // SONG walks a curated 14-rung ladder through the
+                        // (Principle, SongMode) grid (engine/mod/song_ladder.h)
+                        // -- FORM is gone, absorbed into this one knob. Labels
+                        // are composed from the ladder itself, one source, so
+                        // the table and its labels can never drift apart.
+                        static const char* kFormWords[] = {
+                            "TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
+                            "CALL / RESPONSE", "OSTINATO"};
+                        static const char* kSongWords[] = {
+                            "AAAB", "ABAB", "ABBB", "BUILD",
+                            "ROTATE", "MIRROR", "OFF"};
+                        std::vector<std::string> rungs;
+                        for (int i = 0; i < spky::kSongLadderCount; ++i) {
+                            const spky::SongRung& r = spky::song_ladder_at(i);
+                            rungs.push_back(std::string(kFormWords[r.form]) +
+                                            " / " + kSongWords[r.song]);
+                        }
+                        configSwitch(c.id, 0.f,
+                                     float(spky::kSongLadderCount - 1),
+                                     init, "Song", rungs);
+                    }
                     else  // STEPS_A / STEPS_B
                         configParam(c.id, 0.f, 16.f, init, "Steps");
                     getParamQuantity(c.id)->snapEnabled = true;
@@ -714,18 +732,26 @@ struct Fireflow : Module {
             const int steps = (int)std::round(pp(STEPS_A, p));
             inst.set_step(p, steps > 0, steps);
 
-            const int form = static_cast<int>(std::lround(pp(FORM_A, p)));
-            const int song = static_cast<int>(std::lround(pp(SONG_A, p)));
-            inst.set_form(p, form);
-            inst.set_song(p, song);
-            // NEW is "new gene now" in the sampler: the playhead returns to
-            // ORGANIZE and a grain spawns immediately. Without it the long
-            // end of GENE SIZE is unplayable -- every knob stays dead until
-            // the next scheduled spawn, tens of seconds away at overlap 1.
-            if (newPhraseTrig[p].process(ppb(NEWPHRASE_A, p))) {
-                inst.new_phrase(p);
+            // SONG walks a curated 14-rung ladder through (Principle, SongMode)
+            // (spec 2026-08-09 hw-control-reduction task 3) -- FORM and the NEW
+            // pad are gone. hyst_step debounces the pot so a value parked on a
+            // seam does not re-quantise every tick; a rung change re-rolls the
+            // phrase exactly as NEW used to, and in the sampler additionally
+            // punches a fresh grain -- the playhead returns to ORGANIZE and a
+            // grain spawns immediately, without which the long end of GENE
+            // SIZE is unplayable.
+            const float songNorm = pp(SONG_A, p) /
+                                   float(spky::kSongLadderCount - 1);
+            const int rung = spky::hyst_step(songRung[p], songNorm,
+                                             spky::kSongLadderCount);
+            if (rung != songRung[p]) {
+                songRung[p] = rung;
+                inst.new_phrase(p);          // turn the knob, get a new melody
                 if (samplerPart) inst.sampler_punch(p);
             }
+            const spky::SongRung& r = spky::song_ladder_at(rung);
+            inst.set_form(p, r.form);
+            inst.set_song(p, r.song);
         }
 
         inst.set_morph(params[MORPH].getValue());
@@ -924,8 +950,18 @@ struct Fireflow : Module {
                     principle && json_is_integer(principle),
                     principle && json_is_integer(principle)
                         ? json_integer_value(principle) : 0);
-                params[p ? FORM_B : FORM_A].setValue((float)migrated.form);
-                params[p ? SONG_B : SONG_A].setValue((float)migrated.song);
+                // The old FORM ParamIds no longer exist -- SONG absorbed them
+                // (spec 2026-08-09 hw-control-reduction task 3). Land on the first
+                // ladder rung that carries the migrated Principle; every
+                // Principle appears in the ladder, so this always finds one.
+                int rung = 0;
+                for (int i = 0; i < spky::kSongLadderCount; ++i) {
+                    if (spky::song_ladder_at(i).form == migrated.form) {
+                        rung = i;
+                        break;
+                    }
+                }
+                params[p ? SONG_B : SONG_A].setValue((float)rung);
             }
         }
 

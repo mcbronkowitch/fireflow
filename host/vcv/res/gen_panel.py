@@ -244,9 +244,9 @@ FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # LINK MULT | GRIT COMP
 PLAY_Y   = 103.6
 # The PLAY row's left block re-spaced to seat REC between GRIT and STEPS
 # (spec 2026-07-18 "VCV layer": REC is the only new panel element). All four
-# left-block glyphs are LATCH r=2.7 except STEPS and FORM (KNOBI r=3.0); the pitches
+# left-block glyphs are LATCH r=2.7 except STEPS and SONG (KNOBI r=3.0); the pitches
 # below clear test_no_overlap's radius-sum minimum with >=1.8 mm to spare.
-PAD_X    = [10.0, 17.5, 46.0, 56.5, 67.0, 77.5]   # ENG GRIT | (STEP retired) FORM SONG NEW
+PAD_X    = [10.0, 17.5, 46.0, 56.5, 67.0, 77.5]   # ENG GRIT | (STEP, FORM, NEW retired) SONG
 STEPS_X  = 37.0                     # sequencer knob, between the two pad blocks
 REC_X    = 25.0                     # REC pad (appended param, not templated)
 # Its state LED, centred in the gap between the REC pad and the STEPS knob.
@@ -302,10 +302,10 @@ def part_controls(mir=False):
             ("GRITMODE", LATCH, dynamic_words("GRITMODE")[0], "Grit mode")]
     for i, (enum, kind, lbl, tip) in enumerate(pads):
         out.append(Ctl(enum, kind, fx(PAD_X[i]), PLAY_Y, lbl, tip))
-    out.append(Ctl("FORM", KNOBI, fx(PAD_X[3]), PLAY_Y, "FORM"))
-    # Keep the frozen ParamId order FORM, NEWPHRASE, SONG while laying the
-    # controls out visually as FORM, SONG, NEW.
-    out.append(Ctl("NEWPHRASE", SMBTN, fx(PAD_X[5]), PLAY_Y, "NEW"))
+    # FORM and NEWPHRASE are gone (spec 2026-08-09 hw-control-reduction task 3):
+    # SONG alone now walks a curated 14-rung (Principle, SongMode) ladder and
+    # re-rolls the phrase on every rung change. PAD_X[3] and PAD_X[5], its old
+    # neighbours, stay empty -- SONG keeps its own PAD_X[4] slot.
     out.append(Ctl("SONG", KNOBI, fx(PAD_X[4]), PLAY_Y, "SONG"))
     return out
 
@@ -539,8 +539,6 @@ INIT_DEFAULTS = {
     "STEPS_A": 16.000000000,
     "ENGINE_A": 0.000000000,
     "GRITMODE_A": 1.000000000,
-    "FORM_A": 2.000000000,
-    "NEWPHRASE_A": 0.000000000,
     "SONG_A": 0.000000000,
     "RATE_B": 0.202409565,
     "SHAPE_B": 0.899999678,
@@ -561,8 +559,6 @@ INIT_DEFAULTS = {
     "STEPS_B": 16.000000000,
     "ENGINE_B": 3.000000000,
     "GRITMODE_B": 0.000000000,
-    "FORM_B": 2.000000000,
-    "NEWPHRASE_B": 0.000000000,
     "SONG_B": 0.000000000,
     "MORPH": 0.785541892,
     "SYNC": 1.000000000,

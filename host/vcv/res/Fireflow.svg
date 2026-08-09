@@ -183,11 +183,6 @@
 <text x="10.000" y="109.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">ENG</text>
 <rect x="14.800" y="100.900" width="5.400" height="5.400" rx="1.0" fill="#fffdf7"/>
 <text x="17.500" y="109.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">SAT</text>
-<circle cx="56.500" cy="103.600" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
-<line x1="56.500" y1="103.600" x2="56.500" y2="101.300" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
-<text x="56.500" y="109.200" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">FORM</text>
-<rect x="74.800" y="100.900" width="5.400" height="5.400" rx="1.0" fill="#fffdf7"/>
-<text x="77.500" y="109.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">NEW</text>
 <circle cx="67.000" cy="103.600" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="67.000" y1="103.600" x2="67.000" y2="101.300" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
 <text x="67.000" y="109.200" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">SONG</text>
@@ -254,11 +249,6 @@
 <text x="203.360" y="109.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">ENG</text>
 <rect x="193.160" y="100.900" width="5.400" height="5.400" rx="1.0" fill="#fffdf7"/>
 <text x="195.860" y="109.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">SAT</text>
-<circle cx="156.860" cy="103.600" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
-<line x1="156.860" y1="103.600" x2="156.860" y2="101.300" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
-<text x="156.860" y="109.200" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">FORM</text>
-<rect x="133.160" y="100.900" width="5.400" height="5.400" rx="1.0" fill="#fffdf7"/>
-<text x="135.860" y="109.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">NEW</text>
 <circle cx="146.360" cy="103.600" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="146.360" y1="103.600" x2="146.360" y2="101.300" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
 <text x="146.360" y="109.200" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">SONG</text>

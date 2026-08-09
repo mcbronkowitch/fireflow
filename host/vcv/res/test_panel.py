@@ -38,11 +38,11 @@ PARAM_ORDER = [
     'RATE_A', 'SHAPE_A', 'DENSITY_A', 'SMOOTH_A', 'RANGE_A', 'MELODY_A',
     'MOD_A', 'TUNE_A', 'ATTACK_A', 'DECAY_A', 'RES_A', 'SUB_A', 'SOURCE_A',
     'FLUX_A', 'GRIT_A', 'COMP_A', 'STEPS_A', 'ENGINE_A', 'GRITMODE_A',
-    'FORM_A', 'NEWPHRASE_A', 'SONG_A',
+    'SONG_A',
     'RATE_B', 'SHAPE_B', 'DENSITY_B', 'SMOOTH_B', 'RANGE_B', 'MELODY_B',
     'MOD_B', 'TUNE_B', 'ATTACK_B', 'DECAY_B', 'RES_B', 'SUB_B', 'SOURCE_B',
     'FLUX_B', 'GRIT_B', 'COMP_B', 'STEPS_B', 'ENGINE_B', 'GRITMODE_B',
-    'FORM_B', 'NEWPHRASE_B', 'SONG_B',
+    'SONG_B',
     'MORPH', 'SYNC', 'TEMPO', 'COUPLE', 'SCALE', 'DRIFT', 'SPOT',
     'MASTER_DRIVE', 'SETTLE', 'REV_SIZE', 'REV_DECAY', 'REV_TONE',
     'REV_DIFF', 'REV_SMEAR', 'REV_MOD', 'CHOKE', 'FILT_A', 'FILT_B', 'TIDE',
@@ -55,10 +55,10 @@ PARAM_ORDER = [
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'Grit mode', 'FORM', 'NEW', 'SONG',
+    'ENG', 'Grit mode', 'SONG',
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'Grit mode', 'FORM', 'NEW', 'SONG',
+    'ENG', 'Grit mode', 'SONG',
     'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'Master drive',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
     'FILT', 'FILT', 'TIDE', 'FLUX division', 'FLUX division', 'FFB', 'FFB',
@@ -81,7 +81,7 @@ def test_enum_order():
     check([c.enum for c in g.INPUTS] == INPUT_ORDER, "INPUTS order changed")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
-    check(g.PART_STRIDE == 22, f"PART_STRIDE is {g.PART_STRIDE}, must be 22")
+    check(g.PART_STRIDE == 20, f"PART_STRIDE is {g.PART_STRIDE}, must be 20")
 
 
 def test_source_and_hidden_detune_partition():
@@ -620,8 +620,7 @@ LOWER_A = {   # enum -> (x, y)   part A; part B is W - x
     'GRIT_A': (65.25, 89.40), 'COMP_A': (75.75, 89.40),
     'ENGINE_A': (10.00, 103.60), 'GRITMODE_A': (17.50, 103.60),
     'STEPS_A': (37.00, 103.60),
-    'FORM_A': (56.50, 103.60), 'SONG_A': (67.00, 103.60),
-    'NEWPHRASE_A': (77.50, 103.60),
+    'SONG_A': (67.00, 103.60),
 }
 
 
@@ -710,40 +709,60 @@ def test_static_lights_excludes_rec_but_lights_keeps_all_four():
           f"kLightCtls row order is {row_ids}, want {LIGHT_ORDER}")
 
 
-def test_form_song_control_contract():
-    """The frozen final slots now expose independent FORM and SONG knobs."""
+def test_song_control_contract():
+    """SONG swallowed FORM and the NEW pad (spec 2026-08-09
+    hw-control-reduction task 3): the frozen final slot exposes one integer
+    knob that walks a 14-rung ladder through (Principle, SongMode) and
+    re-rolls the phrase on every rung change. The ladder's own ORDER is
+    taste, pinned by test_song_ladder.cpp's structural checks, not here --
+    this only pins the mechanism: composed labels, forwarded set_form/
+    set_song, and that FORM no longer has its own switch."""
     for suffix in ("_A", "_B"):
-        form = ctl("FORM" + suffix)
         song = ctl("SONG" + suffix)
-        for c, label in ((form, "FORM"), (song, "SONG")):
-            check(c.kind == g.KNOBI,
-                  f"{c.enum} kind is {c.kind}, want snapped integer knob")
-            check(c.label == label and c.tip == label,
-                  f"{c.enum} caption/tip is {c.label!r}/{c.tip!r}, want {label}")
+        check(song.kind == g.KNOBI,
+              f"{song.enum} kind is {song.kind}, want snapped integer knob")
+        check(song.label == "SONG" and song.tip == "SONG",
+              f"{song.enum} caption/tip is {song.label!r}/{song.tip!r}, want SONG")
 
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
               encoding="utf-8") as f:
         cpp = f.read()
-    form_switch = """
-configSwitch(c.id, 0.f, 4.f, init, "Form",
-             {"TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
-              "CALL / RESPONSE", "OSTINATO"});"""
+    check('configSwitch(c.id, 0.f, 4.f, init, "Form",' not in cpp,
+          "FORM must no longer be its own Rack switch")
+    song_words = """
+static const char* kFormWords[] = {
+    "TWO MOTIFS", "ONE + VAR", "HIERARCHICAL",
+    "CALL / RESPONSE", "OSTINATO"};
+static const char* kSongWords[] = {
+    "AAAB", "ABAB", "ABBB", "BUILD",
+    "ROTATE", "MIRROR", "OFF"};"""
+    check(compact_cpp(song_words) in compact_cpp(cpp),
+          "SONG's composed labels must keep the five Form and seven Song words")
+    compose_loop = """
+for (int i = 0; i < spky::kSongLadderCount; ++i) {
+    const spky::SongRung& r = spky::song_ladder_at(i);
+    rungs.push_back(std::string(kFormWords[r.form]) +
+                    " / " + kSongWords[r.song]);
+}"""
+    check(compact_cpp(compose_loop) in compact_cpp(cpp),
+          "SONG labels must be composed from the ladder table itself, "
+          "not written out by hand beside it")
     song_switch = """
-configSwitch(c.id, 0.f, 6.f, init, "Song",
-             {"AAAB", "ABAB", "ABBB", "BUILD", "ROTATE", "MIRROR", "OFF"});"""
-    check(compact_cpp(form_switch) in compact_cpp(cpp),
-          "FORM must be a snapped five-state Rack switch with named choices")
+configSwitch(c.id, 0.f,
+             float(spky::kSongLadderCount - 1),
+             init, "Song", rungs);"""
     check(compact_cpp(song_switch) in compact_cpp(cpp),
-          "SONG must be a snapped seven-state Rack switch with named choices")
-    check("inst.set_form(p, form);" in cpp,
-          "Rack FORM parameter is not forwarded to Instrument::set_form")
-    check("inst.set_song(p, song);" in cpp,
+          "SONG must be a snapped Rack switch spanning the whole ladder")
+    check("inst.set_form(p, r.form);" in cpp,
+          "Rack SONG parameter is not forwarded to Instrument::set_form")
+    check("inst.set_song(p, r.song);" in cpp,
           "Rack SONG parameter is not forwarded to Instrument::set_song")
 
 
-def test_form_song_user_documentation():
-    """The host README describes the independent phrase and arrangement axes."""
+def test_song_user_documentation():
+    """The host README describes the SONG ladder that replaced the
+    independent FORM/SONG/NEW controls."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "README.md"), encoding="utf-8") as f:
         readme = f.read()
@@ -751,13 +770,30 @@ def test_form_song_user_documentation():
                  "CALL / RESPONSE", "OSTINATO", "AAAB", "ABAB", "ABBB",
                  "BUILD", "ROTATE", "MIRROR", "OFF"):
         check(term in readme, f"VCV README does not document {term}")
-    check("STEP · FORM · SONG · NEW" in readme,
+    check("STEP · SONG" in readme,
           "VCV README does not document the PLAY-row order")
-    check("NEW always" in readme and "fresh A/B" in readme,
-          "VCV README does not document NEW's cross-engine phrase rebuild")
     check(re.search(r"\bTRIG\b[^.\n]*(?:button|control|pad)", readme,
                     flags=re.IGNORECASE) is None,
           "VCV README still presents TRIG as an available control")
+    check("## FORM, SONG, and NEW" not in readme,
+          "VCV README still titles a section after the retired FORM/NEW controls")
+    check("NEW always queues a fresh A/B pair" not in readme,
+          "VCV README still describes NEW as its own gesture")
+
+
+def test_song_knob_swallows_form_and_new():
+    """FORM and the NEW pad are gone; SONG walks the curated ladder and
+    re-rolls the phrase on every rung change."""
+    import gen_panel as gp
+    names = {c.enum for c in gp.PARAMS}
+    for dead in ("FORM_A", "FORM_B", "NEWPHRASE_A", "NEWPHRASE_B"):
+        check(dead not in names, f"{dead} still exists")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("song_ladder.h" in cpp, "the host does not include the ladder")
+    check("spky::hyst_step(" in cpp, "the host does not debounce the SONG pot")
+    check("inst.new_phrase(p)" in cpp, "the host never re-rolls")
+    check("FORM_A" not in cpp, "Fireflow.cpp still references FORM_A")
 
 
 def test_steps_left_the_fx_row():
@@ -1237,12 +1273,13 @@ inst.set_engine(p, id);"""
             issues.append("a sampler-only pushParams control escaped samplerPart gating")
             break
     new_punch = """
-if (newPhraseTrig[p].process(ppb(NEWPHRASE_A, p))) {
-    inst.new_phrase(p);
+if (rung != songRung[p]) {
+    songRung[p] = rung;
+    inst.new_phrase(p);          // turn the knob, get a new melody
     if (samplerPart) inst.sampler_punch(p);
 }"""
     if push_n.count(compact_cpp(new_punch)) != 1:
-        issues.append("NEW must rebuild A/B and additionally punch the Sampler")
+        issues.append("SONG's rung change must rebuild A/B and additionally punch the Sampler")
     if "triggerTrig" in push or "trigger_manual" in push:
         issues.append("removed TRIG behavior remains in pushParams")
     if any(bad in push_n for bad in ("eng>0", "eng!=0", "eng>=1", "eng==1||eng==2")):
@@ -1299,12 +1336,12 @@ def test_engine_cycle_guard_rejects_representative_regressions():
         ("const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;",
          "const bool samplerPart = eng > 0;", "sampler"),
         ("if (samplerPart) inst.sampler_punch(p);",
-         "inst.sampler_punch(p);", "NEW sampler punch"),
-        ("inst.new_phrase(p);\n"
+         "inst.sampler_punch(p);", "SONG sampler punch"),
+        ("inst.new_phrase(p);          // turn the knob, get a new melody\n"
          "                if (samplerPart) inst.sampler_punch(p);",
-         "if (!samplerPart) inst.new_phrase(p);\n"
+         "if (!samplerPart) inst.new_phrase(p);          // turn the knob, get a new melody\n"
          "                if (samplerPart) inst.sampler_punch(p);",
-         "NEW phrase rebuild"),
+         "SONG phrase rebuild"),
     ]
     for before, after, label in mutations:
         mutated = cpp.replace(before, after, 1)
@@ -2153,10 +2190,10 @@ def test_sampler_preset_init_snapshot():
           and "json_is_integer(basis)" in cpp
           and "json_is_integer(principle)" in cpp,
           "legacy arrays and values are not type-checked")
-    check("params[p ? FORM_B : FORM_A].setValue((float)migrated.form);" in cpp,
-          "legacy FORM value is not migrated into the renamed stable slot")
-    check("params[p ? SONG_B : SONG_A].setValue((float)migrated.song);" in cpp,
-          "legacy patches do not default SONG to AAAB")
+    check("params[p ? SONG_B : SONG_A].setValue((float)rung);" in cpp,
+          "legacy FORM value is not migrated onto a matching SONG ladder rung")
+    check("spky::song_ladder_at(i).form == migrated.form" in cpp,
+          "legacy FORM migration no longer searches the ladder for a match")
     check('configParam<LinkQuantity>(c.id, 0.f, 1.f, init, lbl);' in cpp,
           "LINK is not configured as unipolar THIN")
     check('return v > 0.005f ? string::f("thin %.0f %%", 100.f * v) : "off";' in cpp,

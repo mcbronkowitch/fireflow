@@ -7,7 +7,7 @@ struct PanelCtl { int id; WidgetKind kind; XY mm; const char* label; XY lbl; uns
 // anchor: 0 = middle, 1 = start (left-aligned), 2 = end (right-aligned)
 struct PanelTxt { XY mm; float size; float spacing; unsigned rgb; unsigned char anchor; const char* str; };
 struct DynCaption { int id; int driverId; int count; const char* words[5]; };
-static constexpr int PART_STRIDE = 22;
+static constexpr int PART_STRIDE = 20;
 static constexpr float kRingR = 16.000f;      // mm, LED-dot orbit
 static constexpr float kRingDotR = 0.95f;   // mm, lit-dot radius
 static constexpr int kRingDots = 32;
@@ -33,8 +33,6 @@ enum ParamId {
     STEPS_A,
     ENGINE_A,
     GRITMODE_A,
-    FORM_A,
-    NEWPHRASE_A,
     SONG_A,
     RATE_B,
     SHAPE_B,
@@ -55,8 +53,6 @@ enum ParamId {
     STEPS_B,
     ENGINE_B,
     GRITMODE_B,
-    FORM_B,
-    NEWPHRASE_B,
     SONG_B,
     MORPH,
     SYNC,
@@ -143,8 +139,6 @@ static const PanelCtl kParamCtls[] = {
     {STEPS_A, WK_KNOBI, {37.000f, 103.600f}, "STPS", {37.000f, 109.200f}, 0, 1.90f, 0x171713, "STPS"},
     {ENGINE_A, WK_LATCH, {10.000f, 103.600f}, "ENG", {10.000f, 109.000f}, 0, 1.90f, 0x171713, "ENG"},
     {GRITMODE_A, WK_LATCH, {17.500f, 103.600f}, "SAT", {17.500f, 109.000f}, 0, 1.90f, 0x171713, "Grit mode"},
-    {FORM_A, WK_KNOBI, {56.500f, 103.600f}, "FORM", {56.500f, 109.200f}, 0, 1.90f, 0x171713, "FORM"},
-    {NEWPHRASE_A, WK_SMBTN, {77.500f, 103.600f}, "NEW", {77.500f, 109.000f}, 0, 1.90f, 0x171713, "NEW"},
     {SONG_A, WK_KNOBI, {67.000f, 103.600f}, "SONG", {67.000f, 109.200f}, 0, 1.90f, 0x171713, "SONG"},
     {RATE_B, WK_BIGKNOB, {173.860f, 9.000f}, "RATE", {173.860f, 3.000f}, 0, 1.90f, 0x171713, "RATE"},
     {SHAPE_B, WK_BIGKNOB, {151.776f, 47.250f}, "SHAPE", {146.753f, 52.350f}, 2, 1.90f, 0x171713, "SHAPE"},
@@ -165,8 +159,6 @@ static const PanelCtl kParamCtls[] = {
     {STEPS_B, WK_KNOBI, {176.360f, 103.600f}, "STPS", {176.360f, 109.200f}, 0, 1.90f, 0x171713, "STPS"},
     {ENGINE_B, WK_LATCH, {203.360f, 103.600f}, "ENG", {203.360f, 109.000f}, 0, 1.90f, 0x171713, "ENG"},
     {GRITMODE_B, WK_LATCH, {195.860f, 103.600f}, "SAT", {195.860f, 109.000f}, 0, 1.90f, 0x171713, "Grit mode"},
-    {FORM_B, WK_KNOBI, {156.860f, 103.600f}, "FORM", {156.860f, 109.200f}, 0, 1.90f, 0x171713, "FORM"},
-    {NEWPHRASE_B, WK_SMBTN, {135.860f, 103.600f}, "NEW", {135.860f, 109.000f}, 0, 1.90f, 0x171713, "NEW"},
     {SONG_B, WK_KNOBI, {146.360f, 103.600f}, "SONG", {146.360f, 109.200f}, 0, 1.90f, 0x171713, "SONG"},
     {MORPH, WK_BIGKNOB, {99.680f, 21.500f}, "MORPH", {99.680f, 28.700f}, 0, 1.90f, 0x171713, "MORPH"},
     {SYNC, WK_SW2, {97.680f, 42.000f}, "SYNC", {97.680f, 48.600f}, 0, 1.90f, 0x171713, "SYNC"},

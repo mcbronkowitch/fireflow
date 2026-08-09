@@ -1,0 +1,59 @@
+#pragma once
+
+#include <cstdint>
+#include "mod/phrase_gen.h"
+#include "mod/song_form.h"
+
+namespace spky {
+
+// The hardware SONG knob is one axis through the 5x7 (Principle, SongMode)
+// grid -- 35 combinations do not fit on a 9 mm pot and nobody learns them.
+// The path runs tame -> churning, modelled on M_WANDER (engine/flow/taste.h:891),
+// which already sweeps FORM and SONG together and is tuned in Glow.
+//
+// One deliberate difference from M_WANDER: it excludes SongMode::Off because a
+// WANDER macro must never disable wandering. This knob is a structure SELECTOR,
+// not a wander amount, so "no alternation at all" is a legitimate destination
+// and owns rung 0.
+//
+// This table is TASTE. The tests below pin its structure (legal values, no
+// duplicates, Off at rung 0) and deliberately do NOT pin the order -- retune it
+// by ear without fighting a test.
+struct SongRung { uint8_t form; uint8_t song; };
+
+inline constexpr int kSongLadderCount = 14;
+
+inline const SongRung& song_ladder_at(int idx) {
+    static constexpr SongRung kLadder[kSongLadderCount] = {
+        {0, 6}, {1, 6},                  // no alternation, two generators
+        {0, 0}, {1, 0},                  // AAAB: the sparsest alternation
+        {0, 1}, {1, 1},                  // ABAB
+        {2, 0}, {2, 1}, {2, 2},          // hierarchical, opening up
+        {3, 1}, {3, 3}, {3, 4},          // call/response, then Build, Rotate
+        {4, 4}, {4, 5},                  // ostinato against Rotate, then Mirror
+    };
+    if (idx < 0) idx = 0;
+    if (idx >= kSongLadderCount) idx = kSongLadderCount - 1;
+    return kLadder[idx];
+}
+
+// Free-standing twin of Flow::quantize_hyst (engine/flow/flow.cpp:234) for
+// controls that do not run through the flow layer. Without it a pot parked on
+// a seam re-quantises every tick and the engine gets a new FORM/SONG dozens of
+// times a minute -- flow.cpp's own comment measured 14 flips over one hover
+// sweep. Hold `cur` until the value passes the seam by a further half step,
+// then snap to whatever step is nearest, so a big turn still lands in one move.
+inline int hyst_step(int cur, float norm, int count) {
+    if (count < 2) return 0;
+    if (norm < 0.f) norm = 0.f;
+    if (norm > 1.f) norm = 1.f;
+    const float x = norm * static_cast<float>(count - 1);
+    int nearest = static_cast<int>(x + 0.5f);
+    if (nearest < 0) nearest = 0;
+    if (nearest > count - 1) nearest = count - 1;
+    const float n = static_cast<float>(cur);
+    if (x > n + 1.0f || x < n - 1.0f) return nearest;
+    return cur;
+}
+
+} // namespace spky

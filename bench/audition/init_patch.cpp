@@ -4,6 +4,7 @@
 
 #include "instrument.h"
 #include "mod/divisions.h"
+#include "mod/song_ladder.h"
 #include "../../host/vcv/src/generated_panel.hpp"
 #include "../../host/vcv/src/init_patch.hpp"
 
@@ -96,14 +97,19 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
             deck,
             part(GRITMODE_A, deck) > 0.5f ? spky::GritMode::Reduce
                                           : spky::GritMode::Drive);
-        inst.set_step(
-            deck,
-            part(STEP_A, deck) > 0.5f,
-            static_cast<int>(std::lround(part(STEPS_A, deck))));
-        inst.set_form(
-            deck, static_cast<int>(std::lround(part(FORM_A, deck))));
-        inst.set_song(
-            deck, static_cast<int>(std::lround(part(SONG_A, deck))));
+        {
+            const int steps = static_cast<int>(std::lround(part(STEPS_A, deck)));
+            inst.set_step(deck, steps > 0, steps);
+        }
+        {
+            // SONG absorbed FORM (spec 2026-08-09 hw-control-reduction task
+            // 3): the snapshot's SONG_A/B value is now a ladder rung index,
+            // not a raw SongMode.
+            const int rung = static_cast<int>(std::lround(part(SONG_A, deck)));
+            const spky::SongRung& r = spky::song_ladder_at(rung);
+            inst.set_form(deck, r.form);
+            inst.set_song(deck, r.song);
+        }
     }
 
     inst.set_morph(value(MORPH));

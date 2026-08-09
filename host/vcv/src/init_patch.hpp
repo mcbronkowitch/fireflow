@@ -23,8 +23,6 @@ static constexpr float kInitParamDefaults[] = {
     16.0f, // STEPS_A
     0.0f, // ENGINE_A
     1.0f, // GRITMODE_A
-    2.0f, // FORM_A
-    0.0f, // NEWPHRASE_A
     0.0f, // SONG_A
     0.202409565f, // RATE_B
     0.899999678f, // SHAPE_B
@@ -45,8 +43,6 @@ static constexpr float kInitParamDefaults[] = {
     16.0f, // STEPS_B
     3.0f, // ENGINE_B
     0.0f, // GRITMODE_B
-    2.0f, // FORM_B
-    0.0f, // NEWPHRASE_B
     0.0f, // SONG_B
     0.785541892f, // MORPH
     1.0f, // SYNC
