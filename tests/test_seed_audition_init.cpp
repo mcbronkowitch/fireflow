@@ -400,10 +400,11 @@ TEST_CASE("Seed audition's factory init pins every engine-side observable "
     CHECK(inst.song(spky::PART_A) == 0);   // SongMode::AAAB
     CHECK(inst.song(spky::PART_B) == 0);
 
-    // --- per-part level and compressor amount: COMP_A/B == 0.8 sits ---
-    // exactly on kLvlCompSplit (0.8) -- both decks boot at unity output
-    // gain with the compressor fully disengaged (its top fifth never
-    // opens at this knob position).
+    // --- per-part level and compressor amount: COMP_A/B == 0.6 sits ---
+    // exactly on kLvlCompSplit (0.6) -- both decks boot at unity output
+    // gain with the compressor fully disengaged (its top two fifths never
+    // open at this knob position). The init value tracks the split: move
+    // one without the other and the factory patch boots into make-up gain.
     CHECK(inst.part_level_for_test(spky::PART_A) == doctest::Approx(1.f));
     CHECK(inst.part_level_for_test(spky::PART_B) == doctest::Approx(1.f));
     CHECK(inst.comp_amount_for_test(spky::PART_A) == doctest::Approx(0.f));
