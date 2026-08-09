@@ -41,8 +41,6 @@
 <text x="57.000" y="92.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">ENG</text>
 <rect x="68.000" y="82.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="72.000" y="92.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SAT</text>
-<rect x="83.000" y="82.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="87.000" y="92.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">STEP</text>
 <circle cx="27.000" cy="86.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="27.000" y="94.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FORM</text>
 <rect x="98.000" y="82.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>
@@ -87,8 +85,6 @@
 <text x="247.800" y="92.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">ENG</text>
 <rect x="228.800" y="82.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="232.800" y="92.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SAT</text>
-<rect x="213.800" y="82.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="217.800" y="92.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">STEP</text>
 <circle cx="277.800" cy="86.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="277.800" y="94.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FORM</text>
 <rect x="198.800" y="82.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>

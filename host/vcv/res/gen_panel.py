@@ -246,7 +246,7 @@ PLAY_Y   = 103.6
 # (spec 2026-07-18 "VCV layer": REC is the only new panel element). All four
 # left-block glyphs are LATCH r=2.7 except STEPS and FORM (KNOBI r=3.0); the pitches
 # below clear test_no_overlap's radius-sum minimum with >=1.8 mm to spare.
-PAD_X    = [10.0, 17.5, 46.0, 56.5, 67.0, 77.5]   # ENG GRIT | STEP FORM SONG NEW
+PAD_X    = [10.0, 17.5, 46.0, 56.5, 67.0, 77.5]   # ENG GRIT | (STEP retired) FORM SONG NEW
 STEPS_X  = 37.0                     # sequencer knob, between the two pad blocks
 REC_X    = 25.0                     # REC pad (appended param, not templated)
 # Its state LED, centred in the gap between the REC pad and the STEPS knob.
@@ -299,8 +299,7 @@ def part_controls(mir=False):
     # GRIT knob one row up (spec 2026-08-03). Its resting word is SAT; the
     # runtime swaps in CRSH from DYNAMIC_CAPTIONS.
     pads = [("ENGINE", LATCH, "ENG", None),
-            ("GRITMODE", LATCH, dynamic_words("GRITMODE")[0], "Grit mode"),
-            ("STEP", LATCH, "STEP", None)]
+            ("GRITMODE", LATCH, dynamic_words("GRITMODE")[0], "Grit mode")]
     for i, (enum, kind, lbl, tip) in enumerate(pads):
         out.append(Ctl(enum, kind, fx(PAD_X[i]), PLAY_Y, lbl, tip))
     out.append(Ctl("FORM", KNOBI, fx(PAD_X[3]), PLAY_Y, "FORM"))
@@ -540,7 +539,6 @@ INIT_DEFAULTS = {
     "STEPS_A": 16.000000000,
     "ENGINE_A": 0.000000000,
     "GRITMODE_A": 1.000000000,
-    "STEP_A": 0.000000000,
     "FORM_A": 2.000000000,
     "NEWPHRASE_A": 0.000000000,
     "SONG_A": 0.000000000,
@@ -563,7 +561,6 @@ INIT_DEFAULTS = {
     "STEPS_B": 16.000000000,
     "ENGINE_B": 3.000000000,
     "GRITMODE_B": 0.000000000,
-    "STEP_B": 0.000000000,
     "FORM_B": 2.000000000,
     "NEWPHRASE_B": 0.000000000,
     "SONG_B": 0.000000000,

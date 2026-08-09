@@ -353,7 +353,7 @@ struct Fireflow : Module {
                                      {"AAAB", "ABAB", "ABBB", "BUILD",
                                       "ROTATE", "MIRROR", "OFF"});
                     else  // STEPS_A / STEPS_B
-                        configParam(c.id, 2.f, 16.f, init, "Steps");
+                        configParam(c.id, 0.f, 16.f, init, "Steps");
                     getParamQuantity(c.id)->snapEnabled = true;
                     break;
                 case WK_SW2:  // init patch runs the instrument on the grid
@@ -711,7 +711,8 @@ struct Fireflow : Module {
 
             inst.set_grit_mode(p, ppb(GRITMODE_A, p) ? spky::GritMode::Reduce
                                                      : spky::GritMode::Drive);
-            inst.set_step(p, ppb(STEP_A, p), (int)std::round(pp(STEPS_A, p)));
+            const int steps = (int)std::round(pp(STEPS_A, p));
+            inst.set_step(p, steps > 0, steps);
 
             const int form = static_cast<int>(std::lround(pp(FORM_A, p)));
             const int song = static_cast<int>(std::lround(pp(SONG_A, p)));

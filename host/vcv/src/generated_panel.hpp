@@ -7,7 +7,7 @@ struct PanelCtl { int id; WidgetKind kind; XY mm; const char* label; XY lbl; uns
 // anchor: 0 = middle, 1 = start (left-aligned), 2 = end (right-aligned)
 struct PanelTxt { XY mm; float size; float spacing; unsigned rgb; unsigned char anchor; const char* str; };
 struct DynCaption { int id; int driverId; int count; const char* words[5]; };
-static constexpr int PART_STRIDE = 23;
+static constexpr int PART_STRIDE = 22;
 static constexpr float kRingR = 16.000f;      // mm, LED-dot orbit
 static constexpr float kRingDotR = 0.95f;   // mm, lit-dot radius
 static constexpr int kRingDots = 32;
@@ -33,7 +33,6 @@ enum ParamId {
     STEPS_A,
     ENGINE_A,
     GRITMODE_A,
-    STEP_A,
     FORM_A,
     NEWPHRASE_A,
     SONG_A,
@@ -56,7 +55,6 @@ enum ParamId {
     STEPS_B,
     ENGINE_B,
     GRITMODE_B,
-    STEP_B,
     FORM_B,
     NEWPHRASE_B,
     SONG_B,
@@ -145,7 +143,6 @@ static const PanelCtl kParamCtls[] = {
     {STEPS_A, WK_KNOBI, {37.000f, 103.600f}, "STPS", {37.000f, 109.200f}, 0, 1.90f, 0x171713, "STPS"},
     {ENGINE_A, WK_LATCH, {10.000f, 103.600f}, "ENG", {10.000f, 109.000f}, 0, 1.90f, 0x171713, "ENG"},
     {GRITMODE_A, WK_LATCH, {17.500f, 103.600f}, "SAT", {17.500f, 109.000f}, 0, 1.90f, 0x171713, "Grit mode"},
-    {STEP_A, WK_LATCH, {46.000f, 103.600f}, "STEP", {46.000f, 109.000f}, 0, 1.90f, 0x171713, "STEP"},
     {FORM_A, WK_KNOBI, {56.500f, 103.600f}, "FORM", {56.500f, 109.200f}, 0, 1.90f, 0x171713, "FORM"},
     {NEWPHRASE_A, WK_SMBTN, {77.500f, 103.600f}, "NEW", {77.500f, 109.000f}, 0, 1.90f, 0x171713, "NEW"},
     {SONG_A, WK_KNOBI, {67.000f, 103.600f}, "SONG", {67.000f, 109.200f}, 0, 1.90f, 0x171713, "SONG"},
@@ -168,7 +165,6 @@ static const PanelCtl kParamCtls[] = {
     {STEPS_B, WK_KNOBI, {176.360f, 103.600f}, "STPS", {176.360f, 109.200f}, 0, 1.90f, 0x171713, "STPS"},
     {ENGINE_B, WK_LATCH, {203.360f, 103.600f}, "ENG", {203.360f, 109.000f}, 0, 1.90f, 0x171713, "ENG"},
     {GRITMODE_B, WK_LATCH, {195.860f, 103.600f}, "SAT", {195.860f, 109.000f}, 0, 1.90f, 0x171713, "Grit mode"},
-    {STEP_B, WK_LATCH, {167.360f, 103.600f}, "STEP", {167.360f, 109.000f}, 0, 1.90f, 0x171713, "STEP"},
     {FORM_B, WK_KNOBI, {156.860f, 103.600f}, "FORM", {156.860f, 109.200f}, 0, 1.90f, 0x171713, "FORM"},
     {NEWPHRASE_B, WK_SMBTN, {135.860f, 103.600f}, "NEW", {135.860f, 109.000f}, 0, 1.90f, 0x171713, "NEW"},
     {SONG_B, WK_KNOBI, {146.360f, 103.600f}, "SONG", {146.360f, 109.200f}, 0, 1.90f, 0x171713, "SONG"},

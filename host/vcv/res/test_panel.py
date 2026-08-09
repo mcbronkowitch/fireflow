@@ -38,11 +38,11 @@ PARAM_ORDER = [
     'RATE_A', 'SHAPE_A', 'DENSITY_A', 'SMOOTH_A', 'RANGE_A', 'MELODY_A',
     'MOD_A', 'TUNE_A', 'ATTACK_A', 'DECAY_A', 'RES_A', 'SUB_A', 'SOURCE_A',
     'FLUX_A', 'GRIT_A', 'COMP_A', 'STEPS_A', 'ENGINE_A', 'GRITMODE_A',
-    'STEP_A', 'FORM_A', 'NEWPHRASE_A', 'SONG_A',
+    'FORM_A', 'NEWPHRASE_A', 'SONG_A',
     'RATE_B', 'SHAPE_B', 'DENSITY_B', 'SMOOTH_B', 'RANGE_B', 'MELODY_B',
     'MOD_B', 'TUNE_B', 'ATTACK_B', 'DECAY_B', 'RES_B', 'SUB_B', 'SOURCE_B',
     'FLUX_B', 'GRIT_B', 'COMP_B', 'STEPS_B', 'ENGINE_B', 'GRITMODE_B',
-    'STEP_B', 'FORM_B', 'NEWPHRASE_B', 'SONG_B',
+    'FORM_B', 'NEWPHRASE_B', 'SONG_B',
     'MORPH', 'SYNC', 'TEMPO', 'COUPLE', 'SCALE', 'DRIFT', 'SPOT',
     'MASTER_DRIVE', 'SETTLE', 'REV_SIZE', 'REV_DECAY', 'REV_TONE',
     'REV_DIFF', 'REV_SMEAR', 'REV_MOD', 'CHOKE', 'FILT_A', 'FILT_B', 'TIDE',
@@ -55,10 +55,10 @@ PARAM_ORDER = [
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'Grit mode', 'STEP', 'FORM', 'NEW', 'SONG',
+    'ENG', 'Grit mode', 'FORM', 'NEW', 'SONG',
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'COMP', 'STPS',
-    'ENG', 'Grit mode', 'STEP', 'FORM', 'NEW', 'SONG',
+    'ENG', 'Grit mode', 'FORM', 'NEW', 'SONG',
     'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'Master drive',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
     'FILT', 'FILT', 'TIDE', 'FLUX division', 'FLUX division', 'FFB', 'FFB',
@@ -81,7 +81,7 @@ def test_enum_order():
     check([c.enum for c in g.INPUTS] == INPUT_ORDER, "INPUTS order changed")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
-    check(g.PART_STRIDE == 23, f"PART_STRIDE is {g.PART_STRIDE}, must be 23")
+    check(g.PART_STRIDE == 22, f"PART_STRIDE is {g.PART_STRIDE}, must be 22")
 
 
 def test_source_and_hidden_detune_partition():
@@ -240,7 +240,7 @@ def test_param_runtime_tip_contract():
           "parameter runtime tip contract changed: "
           + repr([(c.enum, c.tip, want) for c, want in zip(g.PARAMS, PARAM_TIPS)
                   if c.tip != want]))
-    check(PARAM_TIPS[71:75] == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
+    check(PARAM_TIPS[69:73] == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
           "BBD Bend runtime tips drifted")
     check(PARAM_TIPS[-6:] == [
         'Detune A', 'Detune B', 'Drive A', 'Drive B',
@@ -268,7 +268,7 @@ def test_link_stages_params():
     spec 2026-07-27 flux-bbd-delay): the POSITIONS are what saved patches
     depend on, and they did not move. DRIVE itself became hidden patch state
     -- see test_source_and_hidden_detune_partition for that half."""
-    check(g.PART_STRIDE == 23, "PART_STRIDE must stay 23")
+    check(g.PART_STRIDE == 22, "PART_STRIDE must stay 22")
     ids = {c.enum: i for i, c in enumerate(g.PARAMS)}
     for e in ("LINK_A", "LINK_B", "STAGES_A", "STAGES_B"):
         check(e in ids, f"{e} missing")
@@ -293,13 +293,13 @@ def test_link_stages_kind():
 
 
 def test_rec_params():
-    """REC is appended, not templated -- appending keeps PART_STRIDE at 23 so
+    """REC is appended, not templated -- appending keeps PART_STRIDE at 22 so
     every saved .vcv keeps its param ids. Same guard shape as
     test_link_stages_params, and the kind is pinned the same way
     test_link_stages_kind pins LINK/STAGES: a LATCH that silently became an
     SMBTN would still clear test_no_overlap (identical radius), so the kind
     needs its own check."""
-    check(g.PART_STRIDE == 23, "PART_STRIDE must stay 23")
+    check(g.PART_STRIDE == 22, "PART_STRIDE must stay 22")
     ids = {c.enum: i for i, c in enumerate(g.PARAMS)}
     for e in ("REC_A", "REC_B"):
         check(e in ids, f"{e} missing")
@@ -312,10 +312,10 @@ def test_rec_params():
 
 
 def test_reverb_mix_params():
-    """REV_MIX_A/B are appended (not templated) so PART_STRIDE stays 23, and
+    """REV_MIX_A/B are appended (not templated) so PART_STRIDE stays 22, and
     they carry the 'SEND' label as the FX top row's 4th slot -- the shared
     centre REV_MIX is gone."""
-    check(g.PART_STRIDE == 23, "PART_STRIDE must stay 23")
+    check(g.PART_STRIDE == 22, "PART_STRIDE must stay 22")
     ids = {c.enum: i for i, c in enumerate(g.PARAMS)}
     check('REV_MIX' not in ids, "the shared centre REV_MIX must be removed")
     for e in ("REV_MIX_A", "REV_MIX_B"):
@@ -616,7 +616,7 @@ LOWER_A = {   # enum -> (x, y)   part A; part B is W - x
     'LINK_A': (44.25, 89.40), 'FLUXTIME_A': (54.75, 89.40),
     'GRIT_A': (65.25, 89.40), 'COMP_A': (75.75, 89.40),
     'ENGINE_A': (10.00, 103.60), 'GRITMODE_A': (17.50, 103.60),
-    'STEPS_A': (37.00, 103.60), 'STEP_A': (46.00, 103.60),
+    'STEPS_A': (37.00, 103.60),
     'FORM_A': (56.50, 103.60), 'SONG_A': (67.00, 103.60),
     'NEWPHRASE_A': (77.50, 103.60),
 }
@@ -2330,6 +2330,26 @@ def test_vcv_tape_memory_is_heap_backed_stereo_storage():
           "VCV tape memory is not heap-backed stereo storage")
     check('float echo[spky::PART_COUNT][spky::Flux::kMaxSamples]' not in cpp,
           "VCV still embeds the tape arena by value in every Module")
+
+
+def test_steps_knob_carries_the_mode():
+    """STEP's pad is gone: 0 on the STEPS knob IS flow mode, and the host
+    derives the boolean from the count instead of reading a second control."""
+    import gen_panel as gp
+    names = {c.enum for c in gp.PARAMS}
+    check("STEP_A" not in names and "STEP_B" not in names,
+          "STEP pads still exist")
+    steps = [c for c in gp.PARAMS if c.enum == "STEPS_A"]
+    check(len(steps) == 1 and steps[0].kind == gp.KNOBI,
+          "STEPS_A missing or no longer an integer knob")
+    cpp = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "..", "src", "Fireflow.cpp")).read()
+    check("configParam(c.id, 0.f, 16.f" in cpp or
+          "0.f, 16.f, initParamDefault" in cpp,
+          "STEPS is not configured over 0..16")
+    check("inst.set_step(p, steps > 0, steps)" in cpp,
+          "set_step no longer derives its mode from the count")
+    check("STEP_A" not in cpp, "Fireflow.cpp still references STEP_A")
 
 
 def test_init_defaults_are_generated_from_names():
