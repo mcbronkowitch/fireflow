@@ -50,7 +50,6 @@ static const PanelCtl kParamCtls[] = {
     {DRIFT, WK_SMKNOB, {152.400f, 51.000f}, "DRIFT", {152.400f, 59.000f}, 0, 2.20f, 0x171713, "DRIFT"},
     {SPOT, WK_SMBTN, {136.400f, 66.000f}, "SPOT", {136.400f, 72.500f}, 0, 2.20f, 0x171713, "SPOT"},
     {MASTER_DRIVE, WK_SMKNOB, {152.400f, 66.000f}, "PUSH", {152.400f, 74.000f}, 0, 2.20f, 0x171713, "Master drive"},
-    {SETTLE, WK_SMBTN, {168.400f, 66.000f}, "SETL", {168.400f, 72.500f}, 0, 2.20f, 0x171713, "SETL"},
     {REV_SIZE, WK_SMKNOB, {136.400f, 81.000f}, "SIZE", {136.400f, 89.000f}, 0, 2.20f, 0x171713, "SIZE"},
     {REV_DECAY, WK_SMKNOB, {136.400f, 96.000f}, "DECAY", {136.400f, 104.000f}, 0, 2.20f, 0x171713, "DECAY"},
     {REV_TONE, WK_SMKNOB, {152.400f, 81.000f}, "TONE", {152.400f, 89.000f}, 0, 2.20f, 0x171713, "TONE"},

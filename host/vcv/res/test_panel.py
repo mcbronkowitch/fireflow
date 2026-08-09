@@ -44,7 +44,7 @@ PARAM_ORDER = [
     'FLUX_B', 'GRIT_B', 'COMP_B', 'STEPS_B', 'ENGINE_B',
     'SONG_B',
     'MORPH', 'TEMPO', 'COUPLE', 'SCALE', 'DRIFT', 'SPOT',
-    'MASTER_DRIVE', 'SETTLE', 'REV_SIZE', 'REV_DECAY', 'REV_TONE',
+    'MASTER_DRIVE', 'REV_SIZE', 'REV_DECAY', 'REV_TONE',
     'REV_DIFF', 'REV_SMEAR', 'REV_MOD', 'CHOKE', 'FILT_A', 'FILT_B', 'TIDE',
     'FLUXRATE_A', 'FLUXRATE_B', 'FLUXFB_A', 'FLUXFB_B', 'COLOR_A', 'COLOR_B',
     'LINK_A', 'LINK_B', 'STAGES_A', 'STAGES_B',
@@ -59,7 +59,7 @@ PARAM_TIPS = [
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'Level / Comp', 'STPS',
     'ENG', 'SONG',
     'MORPH', 'TEMPO', 'FREE|GRID', 'SCALE', 'DRIFT', 'SPOT', 'Master drive',
-    'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
+    'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
     'FILT', 'FILT', 'TIDE', 'FLUX time', 'FLUX time', 'FFB', 'FFB',
     'COLOR', 'COLOR', 'LINK', 'LINK', 'BBD Bend', 'BBD Bend', 'REC', 'REC',
     'Room send', 'Room send',
@@ -860,7 +860,10 @@ CENTER = {   # enum -> (x offset from CX, y)
     'TEMPO': (9.0, 42.0),
     'COUPLE': (-9.0, 54.0), 'SHUFFLE': (9.0, 54.0),
     'SCALE': (-10.5, 68.0), 'CHOKE': (0.0, 68.0), 'DRIFT': (10.5, 68.0),
-    'SPOT': (-10.5, 78.0), 'MASTER_DRIVE': (0.0, 78.0), 'SETTLE': (10.5, 78.0),
+    # SETTLE retired (task 8, spec 2026-08-09 hw-control-reduction): the
+    # pad's job moved to DRIFT's own left stop. The freed slot at
+    # (10.5, 78.0) beside MASTER_DRIVE stays empty -- no regrouping.
+    'SPOT': (-10.5, 78.0), 'MASTER_DRIVE': (0.0, 78.0),
     'REV_SIZE': (-10.5, 94.0), 'REV_TONE': (0.0, 94.0), 'REV_SMEAR': (10.5, 94.0),
     'REV_DECAY': (-10.5, 104.5), 'REV_DIFF': (0.0, 104.5), 'REV_MOD': (10.5, 104.5),
 }
@@ -2243,7 +2246,12 @@ def test_sampler_preset_init_snapshot():
         "TEMPO": 0.169333577,
         "COUPLE": 1.0,
         "SCALE": 5.0,
-        "DRIFT": 0.958666623,
+        # 0.958666623 is what set_drift() must receive; under the new zone
+        # mapping (task 8, spec 2026-08-09 hw-control-reduction) the raw
+        # knob position that reproduces it is 0.958666623 * 0.98 + 0.02 =
+        # 0.959493291, not the old raw value -- see gen_panel.py's
+        # INIT_DEFAULTS["DRIFT"] comment for the full derivation.
+        "DRIFT": 0.959493291,
         "SPOT": 0.0,
         "MASTER_DRIVE": 0.482666761,
         "SETTLE": 0.0,
@@ -2718,6 +2726,81 @@ def test_couple_zone_split_and_formula_agree_across_host_and_bench():
         "two-zone formula": compact_cpp(
             "grid?(coupleKnob-kCoupleZoneSplit)/(1.f-kCoupleZoneSplit)"
             ":coupleKnob/kCoupleZoneSplit"),
+    }
+    host_n, bench_n = compact_cpp(host_cpp), compact_cpp(bench_cpp)
+    for label, needle in needles.items():
+        check(host_n.count(needle) == 1,
+              f"Fireflow.cpp: expected exactly one {label}, found "
+              f"{host_n.count(needle)} matching {needle!r}")
+        check(bench_n.count(needle) == 1,
+              f"bench/audition/init_patch.cpp: expected exactly one "
+              f"{label}, found {bench_n.count(needle)} matching {needle!r}")
+
+
+def test_drift_knob_settles_at_its_left_stop():
+    """SETL was drift-to-zero plus a glide. It lives at the end of the axis
+    it always belonged to, and fires once on entry, not every tick."""
+    import gen_panel as gp
+    check("SETTLE" not in {c.enum for c in gp.PARAMS},
+          "the SETL pad still exists")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("kDriftSettleZone" in cpp, "no settle zone constant in the host")
+    check("driftSettled" in cpp, "settle is not edge-triggered")
+    check("params[SETTLE]" not in cpp, "Fireflow.cpp still reads a SETTLE param")
+
+
+def test_drift_settle_zone_and_formula_agree_across_host_and_bench():
+    """DRIFT's settle zone (kDriftSettleZone) and its zone-mapped formula --
+    at or below the zone the knob is the old SETL pad's left stop and drift
+    is pinned to 0, above it drift sweeps 0..1 across the rest of the axis --
+    exist in two places: Fireflow.cpp (what Rack actually runs) and
+    bench/audition/init_patch.cpp (the only copy a doctest can reach --
+    Fireflow.cpp lives inside a Rack Module, unreachable from the engine test
+    suite). This scrapes both files' source text and requires the zone
+    constant's value and the formula to match exactly, so a hand-edit to only
+    one copy fails loudly here instead of shipping a Rack build that
+    disagrees with its own test coverage.
+
+    Each extraction below is asserted to find exactly one match per file --
+    zero matches (the extraction quietly finding nothing) is treated as a
+    failure, not a pass: a scraper that matches nothing must not report
+    success.
+
+    Deliberately NOT a call to consolidate the two copies into a shared
+    helper -- the codebase mirrors this logic on purpose (see the GRIT
+    dead-zone, LVL/COMP and COUPLE guards above, same pattern). The bench
+    copy deliberately does NOT call inst.settle(): apply_init_patch() applies
+    a snapshot once, so there is no "edge" to detect (see
+    bench/audition/init_patch.cpp's comment at the DRIFT block).
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
+              encoding="utf-8") as f:
+        host_cpp = f.read()
+    bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
+                               "init_patch.cpp")
+    with open(bench_path, encoding="utf-8") as f:
+        bench_cpp = f.read()
+
+    def const_value(source, name, label):
+        matches = re.findall(name + r"\s*=\s*([\d.]+f?)", source)
+        check(len(matches) == 1,
+              f"{label}: expected exactly one {name} declaration, "
+              f"found {len(matches)} ({matches!r})")
+        return matches[0].rstrip("f") if len(matches) == 1 else None
+
+    host_v = const_value(host_cpp, "kDriftSettleZone", "Fireflow.cpp")
+    bench_v = const_value(bench_cpp, "kDriftSettleZone",
+                           "bench/audition/init_patch.cpp")
+    if host_v is not None and bench_v is not None:
+        check(float(host_v) == float(bench_v),
+              f"kDriftSettleZone disagrees: Fireflow.cpp={host_v} "
+              f"bench/audition/init_patch.cpp={bench_v}")
+
+    needles = {
+        "zone-mapped formula": compact_cpp(
+            "(driftKnob-kDriftSettleZone)/(1.f-kDriftSettleZone)"),
     }
     host_n, bench_n = compact_cpp(host_cpp), compact_cpp(bench_cpp)
     for label, needle in needles.items():

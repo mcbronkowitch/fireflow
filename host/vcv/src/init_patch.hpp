@@ -46,10 +46,9 @@ static constexpr float kInitParamDefaults[] = {
     0.169333577f, // TEMPO
     1.0f, // COUPLE
     5.0f, // SCALE
-    0.958666623f, // DRIFT
+    0.959493291f, // DRIFT
     0.0f, // SPOT
     0.482666761f, // MASTER_DRIVE
-    0.0f, // SETTLE
     0.869332671f, // REV_SIZE
     0.790665507f, // REV_DECAY
     0.761333108f, // REV_TONE

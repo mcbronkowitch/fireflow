@@ -159,7 +159,22 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
     inst.set_couple(grid
         ? (coupleKnob - kCoupleZoneSplit) / (1.f - kCoupleZoneSplit)
         : coupleKnob / kCoupleZoneSplit);
-    inst.set_drift(value(DRIFT));
+    // DRIFT's left stop is the old SETL pad (kDriftSettleZone, task 8, spec
+    // 2026-08-09 hw-control-reduction); mirrors Fireflow.cpp pushParams'
+    // zone mapping. Deliberately does NOT call inst.settle(): this function
+    // applies a snapshot once, with no previous tick to compare against, so
+    // there is no edge to detect -- Fireflow.cpp's driftSettled exists
+    // specifically to suppress settle() on a one-shot restore that lands in
+    // the zone (drift_settle_state.hpp), which is exactly the situation
+    // every call here already is. Firing settle() unconditionally would be
+    // the bug that type exists to prevent, not a mirror of correct host
+    // behavior; SPOT/SETTLE were never one-shot-fired here either, for the
+    // same reason.
+    static constexpr float kDriftSettleZone = 0.02f;
+    const float driftKnob = value(DRIFT);
+    inst.set_drift(driftKnob <= kDriftSettleZone
+        ? 0.f
+        : (driftKnob - kDriftSettleZone) / (1.f - kDriftSettleZone));
     inst.set_tide(value(TIDE));
     inst.set_choke(value(CHOKE) * 0.5f);
     inst.set_reverb_size(value(REV_SIZE));

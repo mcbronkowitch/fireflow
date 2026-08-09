@@ -11,6 +11,7 @@
 #include "link_migration.hpp"
 #include "bbd_edge_state.hpp"   // ENG->BBD edge detector (dependency-free, unit-tested)
 #include "song_rung_state.hpp"  // SONG rung tracker (dependency-free, unit-tested)
+#include "drift_settle_state.hpp"  // DRIFT left-stop edge detector (dependency-free, unit-tested)
 
 // The portable engine core -- exactly the same headers the desktop render host
 // and (later) the Daisy firmware use. No hardware type crosses this boundary.
@@ -282,13 +283,20 @@ struct Fireflow : Module {
     float curSr = 0.f;
     dsp::ClockDivider ctrlDiv;              // throttle param push to control rate
     dsp::SchmittTrigger clockTrig, resetTrig;
-    dsp::BooleanTrigger spotTrig, settleTrig;
+    dsp::BooleanTrigger spotTrig;
     // Tracks the SONG knob's current rung so pushParams can detect a genuine
     // rung change and re-roll the phrase -- SONG swallowed FORM and the NEW
     // pad (spec 2026-08-09 hw-control-reduction task 3). Seeded/rearm shape
     // (song_rung_state.hpp) so a RESTORED rung -- patch load, preset load,
     // module add, or Initialize -- adopts as a baseline instead of firing.
     spkyvcv::SongRungState songRung[spky::PART_COUNT];
+    // Edge-detects DRIFT parking at its own left stop -- the old SETL pad's
+    // job, folded into the knob's lower kDriftSettleZone (spec 2026-08-09
+    // hw-control-reduction task 8). Same seeded/rearm shape as bbdEdge/
+    // songRung above, for the same reason: a RESTORED DRIFT already in the
+    // zone must adopt as a baseline instead of firing settle() on load. See
+    // drift_settle_state.hpp.
+    spkyvcv::DriftSettleState driftSettled;
     float clkSamples = 0.f;                 // samples since last external clock edge
     float gateFilt[2] = {0.f, 0.f};
     float recPhase[2] = {0.f, 0.f};        // REC LED pulse while recording
@@ -822,7 +830,19 @@ struct Fireflow : Module {
         inst.set_couple(grid
             ? (coupleKnob - kCoupleZoneSplit) / (1.f - kCoupleZoneSplit)
             : coupleKnob / kCoupleZoneSplit);
-        inst.set_drift(params[DRIFT].getValue());
+        // The left stop IS the old SETL pad: Center::settle() is drift_target = 0
+        // plus a ~1 s glide of EVOLVE and kick, so the button always lived at
+        // the end of this axis. Edge-triggered via driftSettled -- a knob
+        // parked at the stop must not re-fire the glide on every control
+        // tick, and a patch that RESTORES with DRIFT already parked there
+        // must not panic on the very first tick either (drift_settle_state.hpp).
+        static constexpr float kDriftSettleZone = 0.02f;
+        const float driftKnob = params[DRIFT].getValue();
+        const bool  driftInZone = driftKnob <= kDriftSettleZone;
+        if (driftSettled.tick(driftInZone)) inst.settle();
+        inst.set_drift(driftInZone
+            ? 0.f
+            : (driftKnob - kDriftSettleZone) / (1.f - kDriftSettleZone));
         inst.set_tide(params[TIDE].getValue());
         inst.set_choke(params[CHOKE].getValue() * 0.5f);   // snap -2..+2 -> zones
         inst.set_reverb_size(params[REV_SIZE].getValue());
@@ -836,8 +856,7 @@ struct Fireflow : Module {
         inst.set_master_drive(params[MASTER_DRIVE].getValue());
         inst.set_scale((int)std::round(params[SCALE].getValue()));
 
-        if (spotTrig.process(params[SPOT].getValue() > 0.5f))     inst.spot();
-        if (settleTrig.process(params[SETTLE].getValue() > 0.5f)) inst.settle();
+        if (spotTrig.process(params[SPOT].getValue() > 0.5f)) inst.spot();
 
         // Tempo: an external clock (one pulse per beat) overrides the knob.
         float bpm = 40.f + params[TEMPO].getValue() * 200.f;
@@ -924,6 +943,12 @@ struct Fireflow : Module {
             // (song_rung_state.hpp).
             songRung[p].rearm();
         }
+        // Rack resets DRIFT to its default BEFORE calling onReset() too --
+        // without this re-arm, an already-ticking module whose DRIFT was off
+        // the stop would see the reset-to-default value and, if that default
+        // sits in the settle zone, treat it as a genuine entry and fire
+        // settle() on the very next control tick (drift_settle_state.hpp).
+        driftSettled.rearm();
         reinit(curSr > 0.f ? curSr : 48000.f);
     }
 
@@ -1097,11 +1122,18 @@ struct Fireflow : Module {
             // re-arm for the same reason (song_rung_state.hpp) -- otherwise a
             // preset saved on a rung other than the module's current one
             // would look like a giant turn of the SONG knob and fire a
-            // re-roll the instant the module ticks again.
+            // re-roll the instant the module ticks again. driftSettled needs
+            // the identical re-arm for the identical reason (SHARED, not
+            // per-part, so one call outside the loop): a preset saved with
+            // DRIFT off the stop, loaded onto a module currently parked at
+            // the stop, must not have the restore itself read as a genuine
+            // entry and fire settle() on the very next tick
+            // (drift_settle_state.hpp).
             for (int p = 0; p < spky::PART_COUNT; ++p) {
                 bbdEdge[p].rearm();
                 songRung[p].rearm();
             }
+            driftSettled.rearm();
         } else {
             pendingRestore = true;
         }

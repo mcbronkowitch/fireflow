@@ -57,8 +57,8 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
     // nothing else) when that happens; do not carry a mismatch forward as a
     // "pre-existing failure" (spec 2026-08-09 hw-control-reduction task 3
     // review, Finding 5 -- this exact mistake shipped once already).
-    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 75,
-                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 75 -- "
+    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 74,
+                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 74 -- "
                   "if the panel inventory genuinely changed, update this "
                   "literal to match");
     CHECK(spkyvcv::initParamDefault(spkyvcv::ENGINE_A)

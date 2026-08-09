@@ -425,7 +425,10 @@ SHARED = [
     Ctl("DRIFT",  SMKNOB,  R,  ROW_DUO1, "DRIFT"),
     Ctl("SPOT",   SMBTN,   L,  ROW_DUO2, "SPOT"),
     Ctl("MASTER_DRIVE", SMKNOB, CX, ROW_DUO2, "PUSH", "Master drive"),
-    Ctl("SETTLE", SMBTN,   R,  ROW_DUO2, "SETL"),
+    # SETTLE/SETL retired (spec 2026-08-09 hw-control-reduction task 8): the
+    # pad was drift-to-zero plus a glide, which is just DRIFT's own left
+    # stop. The freed ROW_DUO2 slot beside MASTER_DRIVE stays empty;
+    # regrouping is a later session.
     # ROOM: three semantic columns, bottom edge flush with the PLAY boxes.
     Ctl("REV_SIZE",  SMKNOB, L,         ROW_ROOM1, "SIZE"),
     Ctl("REV_DECAY", SMKNOB, L,         ROW_ROOM2, "DECAY"),
@@ -456,7 +459,7 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     # TIDE: texture-lane rate of both decks (spec 2026-07-17 mod-tide).
     # Appended LAST like CHOKE/FILT so existing .vcv patches keep their ids;
     # the coordinate puts it beside MORPH in the centre's movement column
-    # (COUPLE/DRIFT/SETL).
+    # (COUPLE/DRIFT -- SETL retired into DRIFT's own left stop, task 8).
     Ctl("TIDE", SMKNOB, CX + 11.0, ROW_BLEND, "TIDE"),
     # FLUX synced-delay controls (spec 2026-07-17 flux-synced-delay). Per part,
     # appended LAST like FILT/TIDE/CHOKE so existing .vcv patches keep their ids.
@@ -616,10 +619,18 @@ INIT_DEFAULTS = {
     # correction). NOT 0.5 -- that would ship an uncoupled factory patch.
     "COUPLE": 1.000000000,
     "SCALE": 5.000000000,
-    "DRIFT": 0.958666623,
+    # The approved factory drift is 0.958666623 (what set_drift() must
+    # receive). Under the new zone mapping (kDriftSettleZone = 0.02,
+    # drift = (v - 0.02) / 0.98 -- spec 2026-08-09 hw-control-reduction task
+    # 8) the raw knob position that reproduces it exactly is
+    # 0.958666623 * 0.98 + 0.02 = 0.959493291, NOT the old raw value --
+    # carrying 0.958666623 forward unchanged would land drift at ~0.957823,
+    # a silent factory-sound drift of the kind this plan has already shipped
+    # by accident twice.
+    "DRIFT": 0.959493291,
     "SPOT": 0.000000000,
     "MASTER_DRIVE": 0.482666761,
-    "SETTLE": 0.000000000,
+    # SETTLE retired (task 8): the pad's job moved to DRIFT's own left stop.
     "REV_SIZE": 0.869332671,
     "REV_DECAY": 0.790665507,
     "REV_TONE": 0.761333108,

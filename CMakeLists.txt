@@ -81,6 +81,7 @@ add_executable(spky_tests
     tests/test_seed_audition_init.cpp
     tests/test_seed_audition_protocol.cpp
     tests/test_bbd_edge_state.cpp
+    tests/test_drift_settle_state.cpp
     engine/center/center.cpp
     tests/test_center.cpp
     tests/test_wav.cpp
