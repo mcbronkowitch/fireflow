@@ -1983,9 +1983,12 @@ def test_shuffle_host_wiring():
 
 
 def test_sampler_preset_init_snapshot():
-    """The init patch is the approved sampler.vcvm snapshot, while its sample
-    comes from the bundled factory asset instead of the preset's absolute
-    machine-specific path."""
+    """The approved init values, pinned by NAME. A control that leaves the
+    panel takes its entry with it; nothing below it moves. Also covers the
+    init-snapshot header's other invariants: no obsolete remembered-form
+    state, Fireflow.cpp wiring, and the schema-migration/factory-asset
+    contract, none of which the name-based refactor should touch."""
+    import gen_panel as gp
     here = os.path.dirname(os.path.abspath(__file__))
     header_path = os.path.join(here, "..", "src", "init_patch.hpp")
     if not os.path.isfile(header_path):
@@ -1993,58 +1996,101 @@ def test_sampler_preset_init_snapshot():
         return
     with open(header_path) as f:
         header = f.read()
-
-    match = re.search(
-        r"kInitParamDefaults\[\]\s*=\s*\{(.*?)\};", header, re.DOTALL)
-    check(match is not None, "kInitParamDefaults array missing")
-    if match is None:
-        return
-    actual = []
-    for raw in match.group(1).splitlines():
-        value = raw.split("//", 1)[0].strip().rstrip(",")
-        if value:
-            actual.append(float(value.removesuffix("f")))
-
-    expected = [
-        0.116716892, 0.0, 0.695181072,
-        0.995180666, 0.0, 0.0,
-        0.612047195, 0.0, 0.185333401,
-        0.322666585, 0.319000006, 0.458666444,
-        0.438666672, 0.86400038, 0.0,
-        0.629666805, 16.0, 0.0,
-        1.0, 0.0, 2.0,
-        0.0, 0.0, 0.202409565,
-        0.899999678, 0.64457792, 0.613253355,
-        0.0, -1.0, 0.35783118,
-        0.0, 0.093333311, 0.450666398,
-        0.217333555, 0.319999605, 0.177333504,
-        1.0, 0.0, 0.561333418,
-        16.0, 3.0, 0.0,
-        0.0, 2.0, 0.0,
-        0.0, 0.785541892, 1.0,
-        0.169333577, 1.0, 5.0,
-        0.958666623, 0.0, 0.482666761,
-        0.0, 0.869332671, 0.790665507,
-        0.761333108, 0.862999976, 0.484000504,
-        0.237000003, 0.0, -0.172999933,
-        -0.19999963, 0.0, 0.392727494,
-        0.25466612, 0.285667986, 0.555337131,
-        0.0, 0.469879329, 0.0,
-        0.0, 0.800000012, 1.0,
-        0.0, 0.0, 0.422665179,
-        0.613332987, 0.0, 0.171428576,
-        0.171428576, 0.200000003, 0.200000003,
-        0.5, 0.5,
-    ]
-    check(len(actual) == len(PARAM_ORDER) == len(expected),
-          f"init snapshot has {len(actual)} values, want {len(PARAM_ORDER)}")
-    for i, (got, want) in enumerate(zip(actual, expected)):
-        check(math.isclose(got, want, rel_tol=0.0, abs_tol=1e-7),
-              f"{PARAM_ORDER[i]} init {got}, want {want}")
-    check(PARAM_ORDER[-4:] == ['DRIVE_A', 'DRIVE_B', 'FLUXTIME_A', 'FLUXTIME_B'],
-          "init snapshot tail ids drifted")
-    check(actual[-4:] == [0.200000003, 0.200000003, 0.5, 0.5],
-          "init snapshot tail defaults drifted")
+    approved = {
+        # generated once by the command in the plan's Step 6; a second,
+        # independent copy of the same numbers -- that is what makes this a test
+        "RATE_A": 0.116716892,
+        "SHAPE_A": 0.0,
+        "DENSITY_A": 0.695181072,
+        "SMOOTH_A": 0.995180666,
+        "RANGE_A": 0.0,
+        "MELODY_A": 0.0,
+        "MOD_A": 0.612047195,
+        "TUNE_A": 0.0,
+        "ATTACK_A": 0.185333401,
+        "DECAY_A": 0.322666585,
+        "RES_A": 0.319000006,
+        "SUB_A": 0.458666444,
+        "SOURCE_A": 0.438666672,
+        "FLUX_A": 0.86400038,
+        "GRIT_A": 0.0,
+        "COMP_A": 0.629666805,
+        "STEPS_A": 16.0,
+        "ENGINE_A": 0.0,
+        "GRITMODE_A": 1.0,
+        "STEP_A": 0.0,
+        "FORM_A": 2.0,
+        "NEWPHRASE_A": 0.0,
+        "SONG_A": 0.0,
+        "RATE_B": 0.202409565,
+        "SHAPE_B": 0.899999678,
+        "DENSITY_B": 0.64457792,
+        "SMOOTH_B": 0.613253355,
+        "RANGE_B": 0.0,
+        "MELODY_B": -1.0,
+        "MOD_B": 0.35783118,
+        "TUNE_B": 0.0,
+        "ATTACK_B": 0.093333311,
+        "DECAY_B": 0.450666398,
+        "RES_B": 0.217333555,
+        "SUB_B": 0.319999605,
+        "SOURCE_B": 0.177333504,
+        "FLUX_B": 1.0,
+        "GRIT_B": 0.0,
+        "COMP_B": 0.561333418,
+        "STEPS_B": 16.0,
+        "ENGINE_B": 3.0,
+        "GRITMODE_B": 0.0,
+        "STEP_B": 0.0,
+        "FORM_B": 2.0,
+        "NEWPHRASE_B": 0.0,
+        "SONG_B": 0.0,
+        "MORPH": 0.785541892,
+        "SYNC": 1.0,
+        "TEMPO": 0.169333577,
+        "COUPLE": 1.0,
+        "SCALE": 5.0,
+        "DRIFT": 0.958666623,
+        "SPOT": 0.0,
+        "MASTER_DRIVE": 0.482666761,
+        "SETTLE": 0.0,
+        "REV_SIZE": 0.869332671,
+        "REV_DECAY": 0.790665507,
+        "REV_TONE": 0.761333108,
+        "REV_DIFF": 0.862999976,
+        "REV_SMEAR": 0.484000504,
+        "REV_MOD": 0.237000003,
+        "CHOKE": 0.0,
+        "FILT_A": -0.172999933,
+        "FILT_B": -0.19999963,
+        "TIDE": 0.0,
+        "FLUXRATE_A": 0.392727494,
+        "FLUXRATE_B": 0.25466612,
+        "FLUXFB_A": 0.285667986,
+        "FLUXFB_B": 0.555337131,
+        "COLOR_A": 0.0,
+        "COLOR_B": 0.469879329,
+        "LINK_A": 0.0,
+        "LINK_B": 0.0,
+        "STAGES_A": 0.800000012,
+        "STAGES_B": 1.0,
+        "REC_A": 0.0,
+        "REC_B": 0.0,
+        "REV_MIX_A": 0.422665179,
+        "REV_MIX_B": 0.613332987,
+        "SHUFFLE": 0.0,
+        "DETUNE_A": 0.171428576,
+        "DETUNE_B": 0.171428576,
+        "DRIVE_A": 0.200000003,
+        "DRIVE_B": 0.200000003,
+        "FLUXTIME_A": 0.5,
+        "FLUXTIME_B": 0.5,
+    }
+    for name, want in approved.items():
+        if name not in gp.INIT_DEFAULTS:
+            continue          # control retired by a later task -- see the plan
+        check(abs(gp.INIT_DEFAULTS[name] - want) < 1e-6,
+              f"{name} init default drifted: {gp.INIT_DEFAULTS[name]} != {want}")
 
     check("kInitLastBasis" not in header,
           "obsolete remembered-form init state remains")
@@ -2284,6 +2330,23 @@ def test_vcv_tape_memory_is_heap_backed_stereo_storage():
           "VCV tape memory is not heap-backed stereo storage")
     check('float echo[spky::PART_COUNT][spky::Flux::kMaxSamples]' not in cpp,
           "VCV still embeds the tape arena by value in every Module")
+
+
+def test_init_defaults_are_generated_from_names():
+    """init_patch.hpp is emitted from INIT_DEFAULTS, keyed by param name, so
+    removing a param cannot leave a stale positional value behind."""
+    import gen_panel as gp
+    here = os.path.dirname(os.path.abspath(__file__))
+    header = open(os.path.join(here, "..", "src", "init_patch.hpp")).read()
+    check("GENERATED by res/gen_panel.py" in header,
+          "init_patch.hpp is not marked generated")
+    missing = [c.enum for c in gp.PARAMS if c.enum not in gp.INIT_DEFAULTS]
+    check(not missing, f"params without an INIT_DEFAULTS entry: {missing}")
+    extra = [k for k in gp.INIT_DEFAULTS if k not in {c.enum for c in gp.PARAMS}]
+    check(not extra, f"INIT_DEFAULTS entries for params that do not exist: {extra}")
+    for c in gp.PARAMS:
+        check(f"// {c.enum}\n" in header or f"// {c.enum}" in header,
+              f"{c.enum} missing from the emitted table")
 
 
 def main():
