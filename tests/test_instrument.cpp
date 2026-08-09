@@ -173,6 +173,54 @@ TEST_CASE("instrument: voice setters and manual trigger reach the part") {
     CHECK(peak > 0.f);
 }
 
+TEST_CASE("instrument: set_step tolerates a zero step count") {
+    // The panel merged the retired STEP pad's boolean into the STEPS knob's
+    // own count (spec 2026-08-09 hw-control-reduction task 2/3; see task
+    // 3's review, Finding 8): turning STEPS to its left stop now reaches
+    // inst.set_step(p, false, 0) as a live, player-reachable runtime state,
+    // not just a snapshot value nobody could dial in -- before the merge
+    // the count passed alongside on=false was always >= 2.
+    //
+    // Walking the path from set_step: SuperModulator::set_step clamps
+    // `_deck_steps = n < 1 ? 1 : n` and ModLane::set_step independently
+    // clamps `steps < 1 ? 1 : steps` before storing `_steps` -- both guard
+    // clock_scale() (8.f / _steps) and step_samples()'s reciprocal
+    // (1.f / (... * _steps)), lane.h. clock_scale() only divides while
+    // _step_mode is true, so a genuinely reachable FLOW-mode zero (on=false)
+    // never reaches it regardless of the clamp. step_samples() has NO such
+    // gate, though -- it divides by _steps whenever _phase_inc > 0, on or
+    // off STEP -- so it is the one real hazard, and it is read only on a
+    // Sampler deck (Part::_control_tick, `if (_engine_id == ENGINE_SAMPLER)
+    // _sampler.set_step_clock(_mod.pitch_step_samples());`). This test
+    // exercises exactly that combination -- Sampler engine, steps=0 -- to
+    // pin the clamp's guarantee on the one path that actually needs it,
+    // rather than trusting the reading.
+    Instrument inst;
+    inst.init(48000.f);
+    inst.set_engine(PART_A, ENGINE_SAMPLER);
+    inst.set_engine(PART_B, ENGINE_SAMPLER);
+    inst.set_step(PART_A, false, 0);
+    inst.set_step(PART_B, false, 0);
+
+    std::vector<float> l(96), r(96);
+    // Run long enough for the click-free engine swap (part.cpp) to land on
+    // Sampler before checking output.
+    for (int block = 0; block < 20; ++block)
+        inst.process(nullptr, nullptr, l.data(), r.data(), 96);
+    CHECK(inst.engine_id(PART_A) == ENGINE_SAMPLER);
+    CHECK(inst.engine_id(PART_B) == ENGINE_SAMPLER);
+
+    inst.process(nullptr, nullptr, l.data(), r.data(), 96);
+    for (int i = 0; i < 96; ++i) {
+        CHECK(l[i] == l[i]);            // not NaN
+        CHECK(r[i] == r[i]);            // not NaN
+        CHECK(l[i] >= -1.5f);
+        CHECK(l[i] <=  1.5f);
+        CHECK(r[i] >= -1.5f);
+        CHECK(r[i] <=  1.5f);
+    }
+}
+
 TEST_CASE("instrument: set_engine switches to the test tone and back") {
     Instrument inst;
     inst.init(48000.f);

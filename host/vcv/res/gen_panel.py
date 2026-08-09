@@ -536,7 +536,14 @@ INIT_DEFAULTS = {
     "FLUX_A": 0.864000380,
     "GRIT_A": 0.000000000,
     "COMP_A": 0.629666805,
-    "STEPS_A": 16.000000000,
+    # 0 IS flow mode now that Task 2 merged the separate STEP pad into this
+    # count (spec 2026-08-09 hw-control-reduction task 3 review, Finding 7).
+    # The approved boot state was step mode OFF with the count parked at 16
+    # (old STEP_A=0/STEPS_A=16); the merge cannot express "off with a parked
+    # count" any more -- the count IS the mode -- so restoring the approved
+    # boot behavior (a free-running deck) means landing on 0, losing the
+    # parked 16. Accepted cost of the merge, not something to work around.
+    "STEPS_A": 0.000000000,
     "ENGINE_A": 0.000000000,
     "GRITMODE_A": 1.000000000,
     # Rung 6 (song_ladder.h) is {form: Hierarchical, song: AAAB} -- the exact
@@ -559,7 +566,7 @@ INIT_DEFAULTS = {
     "FLUX_B": 1.000000000,
     "GRIT_B": 0.000000000,
     "COMP_B": 0.561333418,
-    "STEPS_B": 16.000000000,
+    "STEPS_B": 0.000000000,  # same flow-mode boot restoration as STEPS_A, see above
     "ENGINE_B": 3.000000000,
     "GRITMODE_B": 0.000000000,
     "SONG_B": 6.000000000,  # same rung-6 preservation as SONG_A, see above

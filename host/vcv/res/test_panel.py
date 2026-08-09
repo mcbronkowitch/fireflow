@@ -2061,7 +2061,11 @@ def test_sampler_preset_init_snapshot():
         "FLUX_A": 0.86400038,
         "GRIT_A": 0.0,
         "COMP_A": 0.629666805,
-        "STEPS_A": 16.0,
+        # STEPS_A now carries the retired STEP_A pad's boolean too (spec
+        # 2026-08-09 hw-control-reduction task 3 review, Finding 7): the
+        # approved boot was STEP_A=0 (off) / STEPS_A=16 (parked); the merge
+        # restores the "off" half as 0 and cannot keep the parked count.
+        "STEPS_A": 0.0,
         "ENGINE_A": 0.0,
         "GRITMODE_A": 1.0,
         "STEP_A": 0.0,
@@ -2089,7 +2093,7 @@ def test_sampler_preset_init_snapshot():
         "FLUX_B": 1.0,
         "GRIT_B": 0.0,
         "COMP_B": 0.561333418,
-        "STEPS_B": 16.0,
+        "STEPS_B": 0.0,  # same flow-mode boot restoration as STEPS_A, see above
         "ENGINE_B": 3.0,
         "GRITMODE_B": 0.0,
         "STEP_B": 0.0,

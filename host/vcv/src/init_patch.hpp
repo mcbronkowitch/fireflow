@@ -20,7 +20,7 @@ static constexpr float kInitParamDefaults[] = {
     0.86400038f, // FLUX_A
     0.0f, // GRIT_A
     0.629666805f, // COMP_A
-    16.0f, // STEPS_A
+    0.0f, // STEPS_A
     0.0f, // ENGINE_A
     1.0f, // GRITMODE_A
     6.0f, // SONG_A
@@ -40,7 +40,7 @@ static constexpr float kInitParamDefaults[] = {
     1.0f, // FLUX_B
     0.0f, // GRIT_B
     0.561333418f, // COMP_B
-    16.0f, // STEPS_B
+    0.0f, // STEPS_B
     3.0f, // ENGINE_B
     0.0f, // GRITMODE_B
     6.0f, // SONG_B

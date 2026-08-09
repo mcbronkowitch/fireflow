@@ -97,6 +97,29 @@ TEST_CASE("lane: step clock accessors expose slot and step duration") {
     CHECK(l.cur_step() < 8);
 }
 
+// Task 3 review, Finding 8 (spec 2026-08-09 hw-control-reduction task 2/3):
+// the panel merged the retired STEP pad's boolean into the STEPS knob's own
+// count, so set_step(false, 0) is now a live, player-reachable runtime
+// state -- turning STEPS to its left stop reaches this exact call, where
+// before the merge the count passed alongside on=false was always >= 2.
+// clock_scale() (8.f / _steps, above) only divides while _step_mode is
+// true, so a genuine zero in FLOW never reaches it regardless of the clamp
+// on _steps -- but step_samples() has no such gate: it divides by _steps
+// whenever _phase_inc > 0, on or off STEP. That reciprocal reaches a
+// Sampler deck's grain clock every control tick (Part::_control_tick,
+// `_sampler.set_step_clock(_mod.pitch_step_samples())`), so this is the one
+// path that actually needs the clamp `steps < 1 ? 1 : steps` above to hold.
+TEST_CASE("lane: step_samples() tolerates a zero step count") {
+    ModLane l;
+    l.init(48000.f, 99);
+    l.set_rate_hz(1.f);      // _phase_inc > 0 -- the condition step_samples() checks
+    l.set_step(false, 0);
+    CHECK(l.steps() == 1);   // clamped, not the raw 0 passed in
+    const float s = l.step_samples();
+    CHECK(s == s);           // not NaN
+    CHECK(std::isfinite(s)); // not +/-Inf
+}
+
 // F4 (whole-branch review): step_samples() must account for the EVOLVE rate
 // walk. The lane advances its phase by _phase_inc * (1 + _ev_rate) -- both in
 // process() and in tick()'s dp1 -- and _ev_rate is clamped to +-0.2, so a
