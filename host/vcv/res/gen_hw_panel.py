@@ -37,30 +37,33 @@ DECK_POS = {
     "MELODY":  (25.0, BIG_ROW2_Y), "MOD":    (47.0, BIG_ROW2_Y),
     "TUNE":    (69.0, BIG_ROW2_Y), "COLOR":  (91.0, BIG_ROW2_Y),
     # small rows, 15 mm grid; voice cluster | fx cluster
+    # x=77 (row1) and x=27/72 (play row) are deliberate gaps: FLUX(RATE)/FORM/
+    # GRITMODE were retired controls (spec 2026-08-09 hw-control-reduction
+    # tasks 2-10); iteration 0 leaves the hole rather than reflowing the grid
+    # (that is a regrouping session, not this one).
     "ATTACK":   (12.0, 56.0), "FILT":    (27.0, 56.0), "SUB":     (42.0, 56.0),
     "FLUXRATE": (62.0, 56.0), "FLUX":    (77.0, 56.0), "FLUXFB":  (92.0, 56.0),
     "REV_MIX": (107.0, 56.0),
     "DECAY":    (12.0, 71.0), "RES":     (27.0, 71.0), "SOURCE":  (42.0, 71.0),
-    "LINK":     (62.0, 71.0), "FLUXTIME":(77.0, 71.0), "GRIT":    (92.0, 71.0),
+    "LINK":     (62.0, 71.0), "GRIT":    (92.0, 71.0),
     "COMP":    (107.0, 71.0),
     # play row: seq knobs + pads. DETUNE (spec 2026-08-09 hw-control-reduction
     # task 10) takes the STEP pad's old slot here, same freed-position reuse
     # as gen_panel.py's PAD_X[2] -- STEP itself retired in task 2.
-    "STEPS":    (12.0, 86.0), "FORM":    (27.0, 86.0), "SONG":    (42.0, 86.0),
-    "ENGINE":   (57.0, 86.0), "GRITMODE":(72.0, 86.0), "DETUNE":  (87.0, 86.0),
-    "NEWPHRASE":(102.0, 86.0), "REC":    (117.0, 86.0),
+    "STEPS":    (12.0, 86.0), "SONG":    (42.0, 86.0),
+    "ENGINE":   (57.0, 86.0), "DETUNE":  (87.0, 86.0),
+    "REC":    (117.0, 86.0),
     # deliberate dual assignment: BEND rides ATTACK's knob (spec §1)
     "STAGES":   (12.0, 56.0),
 }
 # --- shared centre strip, 15 mm grid, three columns -------------------------
 CL, CC, CR = CX - 16.0, CX, CX + 16.0
 CENTER_POS = {
-    "SYNC":   (CL, 18.0), "MORPH": (CC, 18.0), "TIDE":  (CR, 18.0),
+    "MORPH": (CC, 18.0), "TIDE":  (CR, 18.0),
     "TEMPO":  (CL, 36.0), "COUPLE":(CC, 36.0), "SHUFFLE":(CR, 36.0),
     "SCALE":  (CL, 51.0), "DRIFT": (CC, 51.0), "CHOKE": (CR, 51.0),
-    "SPOT":   (CL, 66.0), "MASTER_DRIVE": (CC, 66.0), "SETTLE": (CR, 66.0),
-    "REV_SIZE":(CL, 81.0), "REV_TONE": (CC, 81.0), "REV_SMEAR": (CR, 81.0),
-    "REV_DECAY":(CL, 96.0), "REV_DIFF": (CC, 96.0), "REV_MOD":  (CR, 96.0),
+    "REV_SIZE":(CL, 81.0), "REV_TONE": (CC, 81.0),
+    "REV_DECAY":(CL, 96.0), "REV_DIFF": (CC, 96.0),
 }
 JACK_Y = 113.0
 JACK_POS = {"PITCH_A": 14.0, "GATE_A": 29.0, "IN_L": 60.0, "IN_R": 75.0,
@@ -114,9 +117,20 @@ TEXTS = [(CX, 6.0, 3.2, 0.9, gp.INK, "middle", "FIREFLOW HW DRAFT 60HP")]
 STAGES_LBL_Y_OFFSET = -7.0
 STAGES_LBL_SIZE = 1.8
 
+# FLUXFB's label sits directly above GRIT on the 15 mm small-knob grid.
+# GRIT went bipolar in task 4 (SMKNOB -> KNOBC), and KNOBC's real clearance
+# radius (8.0 mm) is bigger than SMKNOB's (5.5 mm) -- the default SMKNOB
+# label offset (8.0 mm) then lands the caption 1.0 mm inside GRIT's footprint.
+# Nobody caught it because test_hw_panel.py had no runner until this task
+# (spec 2026-08-09 hw-control-reduction task 11) wired one up. Tightening
+# just this label (not moving either knob) restores clearance with margin.
+FLUXFB_LBL_Y_OFFSET = 6.0
+
 def hw_label(c):
     if c.enum.startswith("STAGES_"):
         return (c.x, c.y + STAGES_LBL_Y_OFFSET, "middle", STAGES_LBL_SIZE, gp.INK)
+    if c.enum.startswith("FLUXFB_"):
+        return (c.x, c.y + FLUXFB_LBL_Y_OFFSET, "middle", 2.2, gp.INK)
     return (c.x, c.y + LBL_DY_HW[c.kind], "middle", 2.2, gp.INK)
 
 # =============================================================================

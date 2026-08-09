@@ -114,9 +114,9 @@
 <circle cx="242.800" cy="56.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="242.800" y="64.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIME</text>
 <circle cx="92.000" cy="56.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="92.000" y="64.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FB</text>
+<text x="92.000" y="62.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FB</text>
 <circle cx="212.800" cy="56.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
-<text x="212.800" y="64.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FB</text>
+<text x="212.800" y="62.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FB</text>
 <circle cx="91.000" cy="40.000" r="8.000" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="91.000" y="50.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">COLOR</text>
 <circle cx="213.800" cy="40.000" r="8.000" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>

@@ -7,6 +7,16 @@
 > Ausgangszahlen, die tatsächlich vorhandenen Pins, die geometrische
 > Kapazität und die Buchsen. Die Spalte **Einstufung** ist leer und bleibt
 > leer, bis sie in einer eigenen Sitzung ausgefüllt wird.
+>
+> **Nachtrag 2026-08-09** (`2026-08-09-hw-control-reduction-design.md`, Tasks
+> 1–10): die Ausgangszahl von 82 Runtime-Parametern, auf der §1/§2 unten
+> aufbauen, existiert nicht mehr — das Instrument ist auf **68** gesunken.
+> §1/§2 sind unten auf den aktuellen Stand nachgezogen; §3–§6 (Pins,
+> geometrische Kapazität, Buchsen) sind von der Parameterzahl nicht direkt
+> abhängig und bleiben unverändert. Die 60-HP-Entscheidung
+> (`2026-08-08-fireflow-hardware-envelope-design.md`) hat die 42-HP-Prämisse
+> dieses Dokuments ohnehin bereits überholt; das ist weiterhin Task-2-Vorarbeit
+> für die Neurechnung, keine Behauptung, dass 42 HP noch das Ziel ist.
 
 ## 1. Die Ausgangslage
 
@@ -14,40 +24,42 @@ Ausgabe von `tools/count_panel_controls.py`, das `host/vcv/res/gen_panel.py`
 als Autorität liest — eine Handzählung veraltet beim nächsten Panel-Commit.
 
 ```
-panel        80
-appended      2
-hidden        4
-runtime      82
-part_a       23
-part_b       23
-shared       16
+panel        68
+appended      0
+hidden        0
+runtime      68
+part_a       20
+part_b       20
+shared       10
 inputs        4
 outputs       6
 lights        4
 ```
 
-Nach Bauform der 82 Runtime-Parameter:
+Nach Bauform der 68 Runtime-Parameter:
 
 | Glyph im VCV-Panel | Anzahl |
 |---|---:|
-| kleiner Poti (`SMKNOB`) | 43 |
+| kleiner Poti (`SMKNOB`) | 36 |
 | grosser Poti (`BIGKNOB`) | 17 |
-| Rastschalter (`LATCH`) | 8 |
+| Rastschalter (`LATCH`) | 4 |
 | Rastpoti, ganzzahlig (`KNOBI`) | 7 |
-| Taster (`SMBTN`) | 4 |
-| Poti bipolar (`KNOBC`) | 2 |
-| Kippschalter (`SW2`) | 1 |
-| **Summe** | **82** |
+| Taster (`SMBTN`) | 0 |
+| Poti bipolar (`KNOBC`) | 4 |
+| Kippschalter (`SW2`) | 0 |
+| **Summe** | **68** |
 
-Die 4 `HIDDEN_PARAMS` (`DETUNE_A/B`, `DRIVE_A/B`) sind **nicht** Teil der 82
-und brauchen kein Bedienelement — sie stehen hier nur, damit niemand sie
-später für vergessen hält.
+`HIDDEN_PARAMS` ist seit Task 10 **leer** — es gibt kein Kontextmenü mehr.
+`DETUNE_A/B` ist zurück auf dem Panel (`PLAY`-Reihe); `DRIVE_A/B` ist
+ersatzlos gelöscht (BBD-Drive kommt aus `bbd_engine.cpp`, nie aus einem
+Panel-Wert). Die ursprüngliche Fußnote hier betraf 4 `HIDDEN_PARAMS`, die es
+so nicht mehr gibt.
 
-## 2. Die 82 Parameter
+## 2. Die 68 Parameter
 
 **Regel aus dem Plan:** jeder Parameter bekommt genau eine Einstufung aus
 `KNOB` / `FADER` / `PAD` / `ENCODER` / `LAYER` / `SELECT` / `MENU` / `CUT`.
-Die Summe der Zeilen muss 82 ergeben — das ist die Prüfsumme, die verhindert,
+Die Summe der Zeilen muss 68 ergeben — das ist die Prüfsumme, die verhindert,
 dass etwas stillschweigend verschwindet.
 
 | # | Parameter | Glyph im VCV-Panel | Gruppe | Einstufung |
@@ -66,74 +78,68 @@ dass etwas stillschweigend verschwindet.
 | 12 | `SUB_A` | kleiner Poti | PART_A | |
 | 13 | `SOURCE_A` | kleiner Poti | PART_A | |
 | 14 | `FLUX_A` | kleiner Poti | PART_A | |
-| 15 | `GRIT_A` | kleiner Poti | PART_A | |
+| 15 | `GRIT_A` | Poti bipolar | PART_A | |
 | 16 | `COMP_A` | kleiner Poti | PART_A | |
 | 17 | `STEPS_A` | Rastpoti (int) | PART_A | |
 | 18 | `ENGINE_A` | Rastschalter | PART_A | |
-| 19 | `GRITMODE_A` | Rastschalter | PART_A | |
-| 20 | `STEP_A` | Rastschalter | PART_A | |
-| 21 | `FORM_A` | Rastpoti (int) | PART_A | |
-| 22 | `NEWPHRASE_A` | Taster | PART_A | |
-| 23 | `SONG_A` | Rastpoti (int) | PART_A | |
-| 24 | `RATE_B` | grosser Poti | PART_B | |
-| 25 | `SHAPE_B` | grosser Poti | PART_B | |
-| 26 | `DENSITY_B` | grosser Poti | PART_B | |
-| 27 | `SMOOTH_B` | grosser Poti | PART_B | |
-| 28 | `RANGE_B` | grosser Poti | PART_B | |
-| 29 | `MELODY_B` | Poti bipolar | PART_B | |
-| 30 | `MOD_B` | grosser Poti | PART_B | |
-| 31 | `TUNE_B` | grosser Poti | PART_B | |
-| 32 | `ATTACK_B` | kleiner Poti | PART_B | |
-| 33 | `DECAY_B` | kleiner Poti | PART_B | |
-| 34 | `RES_B` | kleiner Poti | PART_B | |
-| 35 | `SUB_B` | kleiner Poti | PART_B | |
-| 36 | `SOURCE_B` | kleiner Poti | PART_B | |
-| 37 | `FLUX_B` | kleiner Poti | PART_B | |
-| 38 | `GRIT_B` | kleiner Poti | PART_B | |
-| 39 | `COMP_B` | kleiner Poti | PART_B | |
-| 40 | `STEPS_B` | Rastpoti (int) | PART_B | |
-| 41 | `ENGINE_B` | Rastschalter | PART_B | |
-| 42 | `GRITMODE_B` | Rastschalter | PART_B | |
-| 43 | `STEP_B` | Rastschalter | PART_B | |
-| 44 | `FORM_B` | Rastpoti (int) | PART_B | |
-| 45 | `NEWPHRASE_B` | Taster | PART_B | |
-| 46 | `SONG_B` | Rastpoti (int) | PART_B | |
-| 47 | `MORPH` | grosser Poti | SHARED | |
-| 48 | `SYNC` | Kippschalter | SHARED | |
-| 49 | `TEMPO` | kleiner Poti | SHARED | |
-| 50 | `COUPLE` | kleiner Poti | SHARED | |
-| 51 | `SCALE` | Rastpoti (int) | SHARED | |
-| 52 | `DRIFT` | kleiner Poti | SHARED | |
-| 53 | `SPOT` | Taster | SHARED | |
-| 54 | `MASTER_DRIVE` | kleiner Poti | SHARED | |
-| 55 | `SETTLE` | Taster | SHARED | |
-| 56 | `REV_SIZE` | kleiner Poti | SHARED | |
-| 57 | `REV_DECAY` | kleiner Poti | SHARED | |
-| 58 | `REV_TONE` | kleiner Poti | SHARED | |
-| 59 | `REV_DIFF` | kleiner Poti | SHARED | |
-| 60 | `REV_SMEAR` | kleiner Poti | SHARED | |
-| 61 | `REV_MOD` | kleiner Poti | SHARED | |
-| 62 | `CHOKE` | kleiner Poti | SHARED | |
-| 63 | `FILT_A` | kleiner Poti | — | |
-| 64 | `FILT_B` | kleiner Poti | — | |
-| 65 | `TIDE` | kleiner Poti | — | |
-| 66 | `FLUXRATE_A` | kleiner Poti | — | |
-| 67 | `FLUXRATE_B` | kleiner Poti | — | |
-| 68 | `FLUXFB_A` | kleiner Poti | — | |
-| 69 | `FLUXFB_B` | kleiner Poti | — | |
-| 70 | `COLOR_A` | grosser Poti | — | |
-| 71 | `COLOR_B` | grosser Poti | — | |
-| 72 | `LINK_A` | kleiner Poti | — | |
-| 73 | `LINK_B` | kleiner Poti | — | |
-| 74 | `STAGES_A` | kleiner Poti | — | |
-| 75 | `STAGES_B` | kleiner Poti | — | |
-| 76 | `REC_A` | Rastschalter | — | |
-| 77 | `REC_B` | Rastschalter | — | |
-| 78 | `REV_MIX_A` | kleiner Poti | — | |
-| 79 | `REV_MIX_B` | kleiner Poti | — | |
-| 80 | `SHUFFLE` | kleiner Poti | — | |
-| 81 | `FLUXTIME_A` | kleiner Poti | — | |
-| 82 | `FLUXTIME_B` | kleiner Poti | — | |
+| 19 | `DETUNE_A` | kleiner Poti | PART_A | |
+| 20 | `SONG_A` | Rastpoti (int) | PART_A | |
+| 21 | `RATE_B` | grosser Poti | PART_B | |
+| 22 | `SHAPE_B` | grosser Poti | PART_B | |
+| 23 | `DENSITY_B` | grosser Poti | PART_B | |
+| 24 | `SMOOTH_B` | grosser Poti | PART_B | |
+| 25 | `RANGE_B` | grosser Poti | PART_B | |
+| 26 | `MELODY_B` | Poti bipolar | PART_B | |
+| 27 | `MOD_B` | grosser Poti | PART_B | |
+| 28 | `TUNE_B` | grosser Poti | PART_B | |
+| 29 | `ATTACK_B` | kleiner Poti | PART_B | |
+| 30 | `DECAY_B` | kleiner Poti | PART_B | |
+| 31 | `RES_B` | kleiner Poti | PART_B | |
+| 32 | `SUB_B` | kleiner Poti | PART_B | |
+| 33 | `SOURCE_B` | kleiner Poti | PART_B | |
+| 34 | `FLUX_B` | kleiner Poti | PART_B | |
+| 35 | `GRIT_B` | Poti bipolar | PART_B | |
+| 36 | `COMP_B` | kleiner Poti | PART_B | |
+| 37 | `STEPS_B` | Rastpoti (int) | PART_B | |
+| 38 | `ENGINE_B` | Rastschalter | PART_B | |
+| 39 | `DETUNE_B` | kleiner Poti | PART_B | |
+| 40 | `SONG_B` | Rastpoti (int) | PART_B | |
+| 41 | `MORPH` | grosser Poti | SHARED | |
+| 42 | `TEMPO` | kleiner Poti | SHARED | |
+| 43 | `COUPLE` | kleiner Poti | SHARED | |
+| 44 | `SCALE` | Rastpoti (int) | SHARED | |
+| 45 | `DRIFT` | kleiner Poti | SHARED | |
+| 46 | `REV_SIZE` | kleiner Poti | SHARED | |
+| 47 | `REV_DECAY` | kleiner Poti | SHARED | |
+| 48 | `REV_TONE` | kleiner Poti | SHARED | |
+| 49 | `REV_DIFF` | kleiner Poti | SHARED | |
+| 50 | `CHOKE` | kleiner Poti | SHARED | |
+| 51 | `FILT_A` | kleiner Poti | — | |
+| 52 | `FILT_B` | kleiner Poti | — | |
+| 53 | `TIDE` | kleiner Poti | — | |
+| 54 | `FLUXRATE_A` | Rastpoti (int) | — | |
+| 55 | `FLUXRATE_B` | Rastpoti (int) | — | |
+| 56 | `FLUXFB_A` | kleiner Poti | — | |
+| 57 | `FLUXFB_B` | kleiner Poti | — | |
+| 58 | `COLOR_A` | grosser Poti | — | |
+| 59 | `COLOR_B` | grosser Poti | — | |
+| 60 | `LINK_A` | kleiner Poti | — | |
+| 61 | `LINK_B` | kleiner Poti | — | |
+| 62 | `STAGES_A` | kleiner Poti | — | |
+| 63 | `STAGES_B` | kleiner Poti | — | |
+| 64 | `REC_A` | Rastschalter | — | |
+| 65 | `REC_B` | Rastschalter | — | |
+| 66 | `REV_MIX_A` | kleiner Poti | — | |
+| 67 | `REV_MIX_B` | kleiner Poti | — | |
+| 68 | `SHUFFLE` | kleiner Poti | — | |
+
+Retiriert seit Stand 2026-08-08 (nicht mehr Teil der 68, Begründung siehe
+`2026-08-09-hw-control-reduction-design.md`): `GRITMODE_A/B`, `STEP_A/B`,
+`FORM_A/B`, `NEWPHRASE_A/B` (PART_A/B); `SYNC`, `SPOT`, `MASTER_DRIVE`,
+`SETTLE`, `REV_SMEAR`, `REV_MOD` (SHARED); `FLUXTIME_A/B` (in FLUX
+aufgegangen); `DRIVE_A/B` (war `HIDDEN_PARAMS`, ersatzlos gelöscht).
+`DETUNE_A/B` war `HIDDEN_PARAMS` und ist jetzt Zeile 19/39 oben — kein
+Verlust, ein Umzug.
 
 ## 3. Was das Patch Submodule wirklich hergibt
 

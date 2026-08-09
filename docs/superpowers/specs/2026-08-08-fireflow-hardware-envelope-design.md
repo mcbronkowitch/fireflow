@@ -3,7 +3,9 @@
 **Stand:** 8. August 2026
 **Status:** beschlossen. Übersteuert die Hardware-Roadmap vom 7. August
 (`2026-08-07-fireflow-hardware-roadmap-design.md`) in den unten genannten
-Punkten; alles dort nicht Genannte gilt weiter.
+Punkten; alles dort nicht Genannte gilt weiter. In Teilen übersteuert durch
+`2026-08-09-hw-control-reduction-design.md` (§1: Zählbasis, Budget, „one in,
+one out" — siehe dortiges §1 und die Korrekturen unten).
 
 ## Entscheidung
 
@@ -26,39 +28,46 @@ CHALLENGED-Punkte sind eingearbeitet.
 
 ## §1 Zählbasis und Budget
 
-Grundlage ist `RUNTIME_PANEL_PARAMS` aus `host/vcv/res/gen_panel.py`:
-**82 Runtime-Parameter auf 80 physischen Positionen**. Die zwei MULT-Knobs
-(`FLUXTIME_A/B`) zählen mit; **BEND (`STAGES_A/B`) teilt sich seinen Knopf mit
-ATTACK** — das bleibt auf Hardware so und ist eine bewusste Doppelbelegung mit
-Engine-abhängigem Moduswechsel, keine Kollision. Kanallisten werden aus
+Grundlage ist `RUNTIME_PANEL_PARAMS` aus `host/vcv/res/gen_panel.py`, seit der
+Bedienelement-Reduktion (`2026-08-09-hw-control-reduction-design.md`, Tasks
+1–10): **68 Runtime-Parameter auf 66 physischen Positionen**. **BEND
+(`STAGES_A/B`) teilt sich seinen Knopf mit ATTACK** — das bleibt auf Hardware
+so und ist eine bewusste Doppelbelegung mit Engine-abhängigem Moduswechsel,
+keine Kollision. Die MULT-Knobs (`FLUXTIME_A/B`) existieren nicht mehr — FLUX
+ist seit Task 6 ein einzelner gerasteter Knopf. Kanallisten werden aus
 `RUNTIME_PANEL_PARAMS` generiert (`tools/count_panel_controls.py`), nie aus
 `PANEL_PARAMS`.
 
 | Klasse | Bedarf heute | Kapazität | landet auf |
 |---|---|---|---|
-| Potis (69 kontinuierlich: 17 groß, 52 klein) | 80 Positionen | bis 128 Kanäle | 4067-Kette, 4 Sense-Pins (§2) |
-| Taster | 13 + ALT + 2 PLAY-Pads = 16 | 24 | 74HC165-Kette (`src/hw/sr_165.h`) |
+| Potis (64 kontinuierlich: 17 groß, 47 klein) | 62 Positionen (2× Doppelbelegung: BEND teilt sich ATTACKs Knopf) | bis 128 Kanäle | 4067-Kette, 4 Sense-Pins (§2) |
+| Taster | 4 (`ENGINE` ×2, `REC` ×2) | 24 | 74HC165-Kette (`src/hw/sr_165.h`) |
 | Status-LEDs | ~20 (siehe LED-Tabelle unten) | 24 | 3× 74HC595 |
 | Buchsen | 10 | 12 | Main-PCB |
 | SD-Slot | 1 | 1 | SDMMC 4-bit, Main-PCB, frontzugänglich |
 
-**Encoder: gestrichen** — als Entscheidung, nicht als Auslassung. Die vier
-`HIDDEN_PARAMS` (`DETUNE_A/B`, `DRIVE_A/B`, heute Kontextmenü) bekommen
-entweder einen definierten **ALT-Layer-Zugang** oder feste Defaults; die
-Entscheidung fällt in der Neugruppierungsrunde (§4) und wird dort
-protokolliert.
+**Encoder: gestrichen** — als Entscheidung, nicht als Auslassung. `DETUNE_A/B`
+ist zurück auf dem Panel (Task 10, `PLAY`-Reihe, freigewordener `STEP`-Slot);
+`DRIVE_A/B` ist ersatzlos gelöscht (BBD-Drive kommt aus `bbd_engine.cpp`, nie
+aus einem Panel-Wert — Task 9). Die frühere `HIDDEN_PARAMS`-Frage („ALT-Layer
+oder feste Defaults, Entscheidung fällt in der Neugruppierungsrunde") ist
+damit erledigt: `HIDDEN_PARAMS` ist leer, es gibt kein Kontextmenü mehr.
 
 **LED-Belegung (gehört hierher, nicht in H1):** pro Part Gate, REC, FLOW/STEP,
-GRIT-Modus, Capture-Replay (= 10), Engine-Anzeige (1 LED + Blinkcode pro Part
-oder je 5 diskret = 2–10), global Tempo/Sync (1–2). Macht 13–22. Zwei
+Capture-Replay (= 8; die GRIT-Modus-LED entfällt — GRIT ist seit Task 4 ein
+bipolarer Knopf und zeigt Crush/Sat/Silence selbst, keine separate LED
+nötig), Engine-Anzeige (1 LED + Blinkcode pro Part oder je 5 diskret = 2–10),
+global Tempo/Sync (1–2). Macht 11–20. Zwei
 Anzeigen der alten Kränze sterben dabei: **Capture-Playhead** und
 **Sampler-Lesekopf**. Ob sie eine Minimal-Form bekommen (je 1 Aktivitäts-LED)
 oder ersatzlos fallen, entscheidet die Neugruppierung — so oder so wird es
 hier als bewusste Streichung nachgetragen, nicht stillschweigend.
 
-**Budget-Regel: one in, one out.** 60 HP trägt den vollen Satz nur am unteren
-Inventarrand (Rechnung in §4). Jede Gruppierungs-Iteration, die ein
-Bedienelement erfindet, muss eines opfern.
+**Budget-Regel: „one in, one out" ist tot.** Die Bedienelement-Reduktion
+(`2026-08-09-hw-control-reduction-design.md`) hat das Inventar von 82 auf 68
+Parameter gebracht — das Panel hat jetzt **14 Positionen Luft** gegenüber dem
+Stand, für den §4 ursprünglich gerechnet wurde. Die Neugruppierung (§4) darf
+aus diesem Polster schöpfen; sie muss nicht mehr Eins-für-eins tauschen.
 
 ## §2 Elektrik
 
