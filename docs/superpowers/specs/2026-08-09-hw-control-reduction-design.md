@@ -218,22 +218,28 @@ führt einen Modus in eine Oberfläche ein, deren Punkt es ist, keine zu haben.
 `DETUNE_A/B` verlässt das Kontextmenü und wird ein echtes Performance-Element
 — bei Drones ist eine größere Reichweite stark. Damit ist `HIDDEN_PARAMS` leer.
 
-Die Reichweite wächst **nur für Synth und Wave**. Die gemeinsame Decke bleibt
-unangetastet:
+Die Reichweite wächst **nur für Synth und Wave**. Der Mechanismus folgt aus der
+Typstruktur: `SynthEngine`, `WaveEngine` **und** `BodyEngine` sind drei
+Instanzen desselben `SynthEngineT` (`engine/synth/synth_engine.h:167-179`) und
+teilen sich damit `SynthEngineT::kDetuneCeilCt`. Diese Decke ist also bereits
+der Faktor von Synth und Wave — sie wird angehoben, und BODY wird an seiner
+eigenen Stelle gegenkompensiert:
 
 ```c
-kDetuneCeilCt = 35.f    // sampler_config.h:316 — bleibt
-kDetuneScale  =  4.f    // body_voice.cpp:57  — bleibt, BODY bleibt bei 140 ct
+SynthEngineT::kDetuneCeilCt   35.f -> 105.f   // synth_engine.h:40
+BodyVoice::kDetuneScale        4.f ->   4/3   // body_voice.cpp:57
+BodyVoice::kDetuneMaxCt      140.f -> 140.f   // unverändert: 105 * 4/3
 ```
 
-Synth und Wave bekommen **ihren eigenen Skalenfaktor (×3, also ~105 ct)**, an
-derselben Stelle und nach demselben Muster, mit dem BODY seinen ×4 schon
-anwendet. Der Kommentar in `body_voice.cpp:53` begründet dieses Muster
-ausdrücklich: der Faktor gehört an die Verwendungsstelle und nicht in
-`set_detune_cents()`, damit `detune_cents()` auf jeder Engine dieselbe Zahl
-meldet — den Spread, den die Engine gepusht hat.
+`BodyVoice` wendet seinen Faktor an der Verwendungsstelle an und nicht in
+`set_detune_cents()` — begründet in `body_voice.cpp:53`, damit
+`detune_cents()` auf jeder Engine dieselbe Zahl meldet. Genau deshalb ist die
+Gegenkompensation dort eine Ein-Konstanten-Änderung.
 
-**BBD bleibt bei 35 ct.** Das ist eine Entscheidung, keine Auslassung: die
+**BBD und Sampler bleiben bei 35 ct.** Beide haben ihre eigenen Wege —
+`BbdEngine::set_detune()` und `sampler_config.h:316` — und werden nicht
+angefasst. Der dortige Kommentar „matches the synth" wird dabei falsch und
+muss mitgeändert werden. Das ist eine Entscheidung, keine Auslassung: die
 größere Reichweite ist für die beiden Synth-Engines gedacht.
 
 Der Panel-Knob bekommt eine **quadratische Kennlinie**, damit die ersten
