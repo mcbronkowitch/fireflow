@@ -43,7 +43,7 @@ PARAM_ORDER = [
     'MOD_B', 'TUNE_B', 'ATTACK_B', 'DECAY_B', 'RES_B', 'SUB_B', 'SOURCE_B',
     'FLUX_B', 'GRIT_B', 'COMP_B', 'STEPS_B', 'ENGINE_B',
     'SONG_B',
-    'MORPH', 'SYNC', 'TEMPO', 'COUPLE', 'SCALE', 'DRIFT', 'SPOT',
+    'MORPH', 'TEMPO', 'COUPLE', 'SCALE', 'DRIFT', 'SPOT',
     'MASTER_DRIVE', 'SETTLE', 'REV_SIZE', 'REV_DECAY', 'REV_TONE',
     'REV_DIFF', 'REV_SMEAR', 'REV_MOD', 'CHOKE', 'FILT_A', 'FILT_B', 'TIDE',
     'FLUXRATE_A', 'FLUXRATE_B', 'FLUXFB_A', 'FLUXFB_B', 'COLOR_A', 'COLOR_B',
@@ -58,7 +58,7 @@ PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
     'ATK', 'DEC', 'RES', 'SUB', 'SOURCE', 'FLUX', 'GRIT', 'Level / Comp', 'STPS',
     'ENG', 'SONG',
-    'MORPH', 'SYNC', 'TEMPO', 'COUPL', 'SCALE', 'DRIFT', 'SPOT', 'Master drive',
+    'MORPH', 'TEMPO', 'FREE|GRID', 'SCALE', 'DRIFT', 'SPOT', 'Master drive',
     'SETL', 'SIZE', 'DECAY', 'TONE', 'DIFF', 'SMEAR', 'WOBL', 'CHOKE',
     'FILT', 'FILT', 'TIDE', 'FLUX time', 'FLUX time', 'FFB', 'FFB',
     'COLOR', 'COLOR', 'LINK', 'LINK', 'BBD Bend', 'BBD Bend', 'REC', 'REC',
@@ -857,7 +857,7 @@ def test_pad_backplates_are_gone():
 
 CENTER = {   # enum -> (x offset from CX, y)
     'MORPH': (-7.0, 21.5), 'TIDE': (11.0, 21.5),
-    'SYNC': (-9.0, 42.0), 'TEMPO': (9.0, 42.0),
+    'TEMPO': (9.0, 42.0),
     'COUPLE': (-9.0, 54.0), 'SHUFFLE': (9.0, 54.0),
     'SCALE': (-10.5, 68.0), 'CHOKE': (0.0, 68.0), 'DRIFT': (10.5, 68.0),
     'SPOT': (-10.5, 78.0), 'MASTER_DRIVE': (0.0, 78.0), 'SETTLE': (10.5, 78.0),
@@ -1164,6 +1164,19 @@ def test_grit_is_one_bipolar_knob():
           "the host no longer names both grit modes")
     check("kGritDead" in cpp, "no dead zone around grit zero")
     check("GRITMODE_A" not in cpp, "Fireflow.cpp still references GRITMODE_A")
+
+
+def test_couple_knob_carries_both_worlds():
+    """SYNC was the right-hand end of COUPLE's own axis. Two zones, each
+    sweeping couple 0..1, so neither world loses its spread."""
+    import gen_panel as gp
+    names = {c.enum for c in gp.PARAMS}
+    check("SYNC" not in names, "the SYNC switch still exists")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp")).read()
+    check("kCoupleZoneSplit" in cpp, "no zone split constant in the host")
+    check("inst.set_sync(" in cpp, "the host never sets sync any more")
+    check("params[SYNC]" not in cpp, "Fireflow.cpp still reads a SYNC param")
 
 
 def test_grit_dead_zone_and_mix_formula_agree_across_host_and_bench():
@@ -2227,7 +2240,6 @@ def test_sampler_preset_init_snapshot():
         "NEWPHRASE_B": 0.0,
         "SONG_B": 6.0,  # same rung-6 preservation as SONG_A, see above
         "MORPH": 0.785541892,
-        "SYNC": 1.0,
         "TEMPO": 0.169333577,
         "COUPLE": 1.0,
         "SCALE": 5.0,
@@ -2645,6 +2657,67 @@ def test_lvl_comp_split_and_formulas_agree_across_host_and_bench():
         "comp formula": compact_cpp(
             "lvlKnob<=kLvlCompSplit?0.f:(lvlKnob-kLvlCompSplit)/"
             "(1.f-kLvlCompSplit)*kCompTop"),
+    }
+    host_n, bench_n = compact_cpp(host_cpp), compact_cpp(bench_cpp)
+    for label, needle in needles.items():
+        check(host_n.count(needle) == 1,
+              f"Fireflow.cpp: expected exactly one {label}, found "
+              f"{host_n.count(needle)} matching {needle!r}")
+        check(bench_n.count(needle) == 1,
+              f"bench/audition/init_patch.cpp: expected exactly one "
+              f"{label}, found {bench_n.count(needle)} matching {needle!r}")
+
+
+def test_couple_zone_split_and_formula_agree_across_host_and_bench():
+    """COUPLE's zone split (kCoupleZoneSplit) and its two-zone formula --
+    below the split SYNC is off and couple sweeps 0..1 in the FREE world,
+    above it SYNC is on and couple sweeps 0..1 in the GRID world -- exist in
+    two places: Fireflow.cpp (what Rack actually runs) and
+    bench/audition/init_patch.cpp (the only copy a doctest can reach --
+    Fireflow.cpp lives inside a Rack Module, unreachable from the engine test
+    suite). This scrapes both files' source text and requires the split
+    constant's value and the formula to match exactly, so a hand-edit to only
+    one copy fails loudly here instead of shipping a Rack build that
+    disagrees with its own test coverage.
+
+    Each extraction below is asserted to find exactly one match per file --
+    zero matches (the extraction quietly finding nothing) is treated as a
+    failure, not a pass: a scraper that matches nothing must not report
+    success.
+
+    Deliberately NOT a call to consolidate the two copies into a shared
+    helper -- the codebase mirrors this logic on purpose (see the GRIT
+    dead-zone and LVL/COMP guards above, same pattern).
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp"),
+              encoding="utf-8") as f:
+        host_cpp = f.read()
+    bench_path = os.path.join(here, "..", "..", "..", "bench", "audition",
+                               "init_patch.cpp")
+    with open(bench_path, encoding="utf-8") as f:
+        bench_cpp = f.read()
+
+    def const_value(source, name, label):
+        matches = re.findall(name + r"\s*=\s*([\d.]+f?)", source)
+        check(len(matches) == 1,
+              f"{label}: expected exactly one {name} declaration, "
+              f"found {len(matches)} ({matches!r})")
+        return matches[0].rstrip("f") if len(matches) == 1 else None
+
+    host_v = const_value(host_cpp, "kCoupleZoneSplit", "Fireflow.cpp")
+    bench_v = const_value(bench_cpp, "kCoupleZoneSplit",
+                           "bench/audition/init_patch.cpp")
+    if host_v is not None and bench_v is not None:
+        check(float(host_v) == float(bench_v),
+              f"kCoupleZoneSplit disagrees: Fireflow.cpp={host_v} "
+              f"bench/audition/init_patch.cpp={bench_v}")
+
+    needles = {
+        "zone test": compact_cpp("grid=coupleKnob>=kCoupleZoneSplit"),
+        "two-zone formula": compact_cpp(
+            "grid?(coupleKnob-kCoupleZoneSplit)/(1.f-kCoupleZoneSplit)"
+            ":coupleKnob/kCoupleZoneSplit"),
     }
     host_n, bench_n = compact_cpp(host_cpp), compact_cpp(bench_cpp)
     for label, needle in needles.items():

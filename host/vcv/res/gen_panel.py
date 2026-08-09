@@ -64,7 +64,9 @@ BIGKNOB = "BIGKNOB"   # macro pot (0..1)
 KNOBC   = "KNOBC"     # bipolar macro (-1..1)  (MELODY)
 SMKNOB  = "SMKNOB"    # small secondary pot (0..1)
 KNOBI   = "KNOBI"     # small integer pot (snap)
-SW2     = "SW2"       # 2-pos switch (global SYNC)
+SW2     = "SW2"       # 2-pos switch kind; unused since SYNC (its only user,
+                      # spec 2026-08-09 hw-control-reduction task 7) folded
+                      # into COUPLE -- kept for a future 2-pos control
 LATCH   = "LATCH"     # on/off pad button (binary)
 SMBTN   = "SMBTN"     # momentary pad button
 IN      = "IN"
@@ -411,9 +413,14 @@ SHARED = [
     # (box legend renamed from TIME, spec 2026-08-09 hw-control-reduction
     # task 6 -- see GROUPS above). SHUFFLE's control is appended to PARAMS
     # after every existing id.
-    Ctl("SYNC",   SW2,     CX - 9.0, ROW_TIME1, "SYNC"),
     Ctl("TEMPO",  SMKNOB,  CX + 9.0, ROW_TIME1, "TEMPO"),
-    Ctl("COUPLE", SMKNOB,  CX - 9.0, ROW_TIME2, "COUPL"),
+    # COUPLE swallowed the SYNC switch (spec 2026-08-09 hw-control-reduction
+    # task 7): SYNC was the right-hand end of COUPLE's own axis. Below the
+    # zone split (Fireflow.cpp kCoupleZoneSplit) the knob is the FREE world,
+    # above it the GRID world -- each zone sweeps couple across its own full
+    # 0..1 range, so "on the grid but breathing" stays reachable. The freed
+    # ROW_TIME1 slot beside TEMPO stays empty; regrouping is a later session.
+    Ctl("COUPLE", SMKNOB,  CX - 9.0, ROW_TIME2, "FREE|GRID"),
     Ctl("SCALE",  KNOBI,   L,  ROW_DUO1, "SCALE"),
     Ctl("DRIFT",  SMKNOB,  R,  ROW_DUO1, "DRIFT"),
     Ctl("SPOT",   SMBTN,   L,  ROW_DUO2, "SPOT"),
@@ -602,8 +609,11 @@ INIT_DEFAULTS = {
     "ENGINE_B": 3.000000000,
     "SONG_B": 6.000000000,  # same rung-6 preservation as SONG_A, see above
     "MORPH": 0.785541892,
-    "SYNC": 1.000000000,
     "TEMPO": 0.169333577,
+    # 1.0 lands in the GRID zone (v >= kCoupleZoneSplit) and maps to
+    # couple = (1.0 - 0.5) / 0.5 = 1.0 -- "sync on, fully coupled", the
+    # approved factory state (spec 2026-08-09 hw-control-reduction task 7
+    # correction). NOT 0.5 -- that would ship an uncoupled factory patch.
     "COUPLE": 1.000000000,
     "SCALE": 5.000000000,
     "DRIFT": 0.958666623,

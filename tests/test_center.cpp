@@ -244,6 +244,31 @@ TEST_CASE("center grid: COUPLE 0 lets DRIFT breathe the textures apart") {
     CHECK(r.a.master_hz() == doctest::Approx(r.a.base_hz()).epsilon(0.05));
 }
 
+TEST_CASE("center couple: FREE full couple and GRID zero couple are two different worlds") {
+    // COUPLE swallowed the SYNC switch (task 7, spec 2026-08-09
+    // hw-control-reduction): SYNC off is now the host's low COUPLE zone,
+    // SYNC on the high zone. Prove the two zones are genuinely different
+    // mechanisms, not the same axis relabelled: SYNC off + full COUPLE
+    // (FREE world -- geometric-mean convergence pulls two far-apart free
+    // rates toward each other) and SYNC on + zero COUPLE (GRID world --
+    // each bank independently locked to its own transport division, no
+    // pairwise pull at all) must land on DIFFERENT rate_scale (pitch_scale)
+    // results for the identical rate setup.
+    Rig rFree; rFree.init(5u);
+    rFree.a.set_rate(0.3f); rFree.b.set_rate(0.7f);   // far-apart free Hz
+    rFree.c.set_sync(false); rFree.c.set_couple(1.f); rFree.c.set_drift(0.f);
+    rFree.ticks(1);
+
+    Rig rGrid; rGrid.init(5u);
+    rGrid.a.set_tempo_bpm(120.f); rGrid.b.set_tempo_bpm(120.f); rGrid.c.set_tempo_bpm(120.f);
+    rGrid.a.set_synced(true); rGrid.b.set_synced(true); rGrid.c.set_sync(true);
+    rGrid.a.set_rate(0.3f); rGrid.b.set_rate(0.7f);   // same rate knobs, now grid divisions
+    rGrid.c.set_couple(0.f); rGrid.c.set_drift(0.f);
+    rGrid.ticks(1);
+
+    CHECK(rFree.a.pitch_scale() != doctest::Approx(rGrid.a.pitch_scale()));
+}
+
 TEST_CASE("center spot: shape kick decays back within ~5 s (lane level)") {
     // Base shape 0.2 keeps base+kick inside the gentle sine->triangle->ramp
     // region, so the output difference tracks the (decaying) shape offset rather

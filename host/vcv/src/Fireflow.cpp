@@ -21,20 +21,31 @@
 
 using namespace spkyvcv;
 
-// RATE tooltip: the division name while SYNC is on, free Hz otherwise.
+// COUPLE swallowed the SYNC switch (task 7, spec 2026-08-09
+// hw-control-reduction): SYNC was the right-hand end of COUPLE's own axis.
+// Below the split the knob is the FREE world (couple drives the Kuramoto
+// lock); at or above it the GRID world (couple sets how tightly the texture
+// lanes follow). Each half sweeps 0..1, so the grid world keeps its full
+// spread -- "on the grid but breathing" stays reachable. Shared by the
+// RATE/TIDE tooltips below and pushParams; mirrored (not shared -- see
+// res/test_panel.py) in bench/audition/init_patch.cpp.
+static constexpr float kCoupleZoneSplit = 0.5f;
+
+// RATE tooltip: the division name while grid (COUPLE >= split) is on, free
+// Hz otherwise.
 struct RateQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
-        if (module && module->params[SYNC].getValue() > 0.5f)
+        if (module && module->params[COUPLE].getValue() >= kCoupleZoneSplit)
             return spky::kDivisions[spky::division_index(getValue())].name;
         return string::f("%.3f Hz", spky::free_hz(getValue()));
     }
 };
 
-// TIDE tooltip: the ratio-ladder rung while SYNC is on, the free multiplier
+// TIDE tooltip: the ratio-ladder rung while grid is on, the free multiplier
 // otherwise (same table the engine snaps to, mod/divisions.h).
 struct TideQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
-        if (module && module->params[SYNC].getValue() > 0.5f)
+        if (module && module->params[COUPLE].getValue() >= kCoupleZoneSplit)
             return spky::kTideNames[spky::tide_index(getValue())];
         return string::f("x%.2f", spky::tide_free(getValue()));
     }
@@ -312,7 +323,7 @@ struct Fireflow : Module {
                     }
                     else if (c.id == FILT_A || c.id == FILT_B)  // bipolar cutoff trim
                         configParam(c.id, -1.f, 1.f, init, lbl);
-                    else if (c.id == TIDE)  // texture-lane rate, snaps under SYNC
+                    else if (c.id == TIDE)  // texture-lane rate, snaps in the GRID zone
                         configParam<TideQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == FLUXFB_A || c.id == FLUXFB_B)
                         configParam<FluxFbQuantity>(c.id, 0.f, 1.f, init, lbl);
@@ -799,10 +810,20 @@ struct Fireflow : Module {
         }
 
         inst.set_morph(params[MORPH].getValue());
-        inst.set_couple(params[COUPLE].getValue());
+        // COUPLE runs both worlds on one axis (kCoupleZoneSplit, declared
+        // above). Below the split SYNC is off and couple drives the
+        // Kuramoto lock; at or above it SYNC is on and couple sets how
+        // tightly the texture lanes follow. Each half sweeps 0..1, so the
+        // grid world keeps its full spread -- "on the grid but breathing"
+        // is a real state and must stay reachable.
+        const float coupleKnob = params[COUPLE].getValue();
+        const bool  grid = coupleKnob >= kCoupleZoneSplit;
+        inst.set_sync(grid);
+        inst.set_couple(grid
+            ? (coupleKnob - kCoupleZoneSplit) / (1.f - kCoupleZoneSplit)
+            : coupleKnob / kCoupleZoneSplit);
         inst.set_drift(params[DRIFT].getValue());
         inst.set_tide(params[TIDE].getValue());
-        inst.set_sync(params[SYNC].getValue() > 0.5f);
         inst.set_choke(params[CHOKE].getValue() * 0.5f);   // snap -2..+2 -> zones
         inst.set_reverb_size(params[REV_SIZE].getValue());
         inst.set_reverb_decay(params[REV_DECAY].getValue());

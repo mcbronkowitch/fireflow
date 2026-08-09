@@ -43,7 +43,6 @@ static constexpr float kInitParamDefaults[] = {
     3.0f, // ENGINE_B
     6.0f, // SONG_B
     0.785541892f, // MORPH
-    1.0f, // SYNC
     0.169333577f, // TEMPO
     1.0f, // COUPLE
     5.0f, // SCALE

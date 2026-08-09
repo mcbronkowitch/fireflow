@@ -148,10 +148,19 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
     }
 
     inst.set_morph(value(MORPH));
-    inst.set_couple(value(COUPLE));
+    // COUPLE runs both worlds on one axis; mirrors Fireflow.cpp pushParams
+    // (spec 2026-08-09 hw-control-reduction task 7). Below the split SYNC
+    // is off and couple drives the Kuramoto lock; at or above it SYNC is on
+    // and couple sets how tightly the texture lanes follow.
+    static constexpr float kCoupleZoneSplit = 0.5f;
+    const float coupleKnob = value(COUPLE);
+    const bool  grid = coupleKnob >= kCoupleZoneSplit;
+    inst.set_sync(grid);
+    inst.set_couple(grid
+        ? (coupleKnob - kCoupleZoneSplit) / (1.f - kCoupleZoneSplit)
+        : coupleKnob / kCoupleZoneSplit);
     inst.set_drift(value(DRIFT));
     inst.set_tide(value(TIDE));
-    inst.set_sync(value(SYNC) > 0.5f);
     inst.set_choke(value(CHOKE) * 0.5f);
     inst.set_reverb_size(value(REV_SIZE));
     inst.set_reverb_decay(value(REV_DECAY));

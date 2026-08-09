@@ -255,15 +255,12 @@
 <circle cx="99.680" cy="21.500" r="4.200" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="99.680" y1="21.500" x2="99.680" y2="18.000" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
 <text x="99.680" y="28.700" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">MORPH</text>
-<rect x="95.980" y="39.000" width="3.4" height="6.0" rx="0.8" fill="#fffdf7" stroke="#171713" stroke-width="0.35"/>
-<rect x="96.580" y="39.600" width="2.2" height="2.4" rx="0.5" fill="#252721"/>
-<text x="97.680" y="48.600" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">SYNC</text>
 <circle cx="115.680" cy="42.000" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="115.680" y1="42.000" x2="115.680" y2="39.700" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
 <text x="115.680" y="47.600" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">TEMPO</text>
 <circle cx="97.680" cy="54.000" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="97.680" y1="54.000" x2="97.680" y2="51.700" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
-<text x="97.680" y="59.600" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">COUPL</text>
+<text x="97.680" y="59.600" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">FREE|GRID</text>
 <circle cx="96.180" cy="68.000" r="3.000" fill="url(#knobCap)" stroke="#252721" stroke-width="0.3"/>
 <line x1="96.180" y1="68.000" x2="96.180" y2="65.700" stroke="#fffdf7" stroke-width="0.5" stroke-linecap="round"/>
 <text x="96.180" y="73.600" fill="#171713" text-anchor="middle" font-family="monospace" font-size="1.9">SCALE</text>
