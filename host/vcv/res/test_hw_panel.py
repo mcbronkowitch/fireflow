@@ -78,6 +78,32 @@ def test_mirror_symmetry():
         xb, yb = pos_b[k]
         assert abs((hw.W - xa) - xb) < 1e-6 and abs(ya - yb) < 1e-6, k
 
+_MIRROR_ANCHOR = {"middle": "middle", "start": "end", "end": "start"}
+
+
+def test_caption_mirror_symmetry():
+    # test_mirror_symmetry above only compares CONTROL positions. Candidate 3
+    # of hw_label's step-aside rule must itself mirror, or a mirrored _A/_B
+    # pair landing there would have one twin step toward the axis and the
+    # other step off the panel edge, with nothing catching it (spec
+    # 2026-08-10 §6 fix-2).
+    by_enum = {c.enum: c for c in hw.HW_PARAMS}
+    stems = ({c.enum[:-2] for c in hw.HW_PARAMS if c.enum.endswith("_A")} &
+             {c.enum[:-2] for c in hw.HW_PARAMS if c.enum.endswith("_B")})
+    for stem in stems:
+        a, b = by_enum[stem + "_A"], by_enum[stem + "_B"]
+        if not a.label:
+            continue
+        lxa, lya, anchor_a = hw.hw_label(a)[:3]
+        lxb, lyb, anchor_b = hw.hw_label(b)[:3]
+        check(abs((hw.W - lxa) - lxb) < 1e-6,
+              f"{stem}: caption x does not mirror ({lxa:.2f} vs {lxb:.2f})")
+        check(abs(lya - lyb) < 1e-6,
+              f"{stem}: caption y does not match ({lya:.2f} vs {lyb:.2f})")
+        check(_MIRROR_ANCHOR[anchor_a] == anchor_b,
+              f"{stem}: anchors do not mirror ({anchor_a!r} vs {anchor_b!r})")
+
+
 def test_header_contract():
     src = open(os.path.join(HERE, "..", "src", "generated_hw_panel.hpp")).read()
     assert "namespace spkyhw" in src

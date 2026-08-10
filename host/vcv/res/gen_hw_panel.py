@@ -204,9 +204,15 @@ def hw_label(c):
     if c.enum.startswith("STAGES_"):
         return (c.x, c.y + STAGES_LBL_Y_OFFSET, "middle", STAGES_LBL_SIZE, gp.INK)
     dy = CLASS_LBL_DY[hw_class(c.enum)]
+    # Candidate 3 steps away from the mirror axis, not always toward +x: on
+    # the right half a mirrored _A/_B pair must produce mirrored captions,
+    # so the step direction AND the anchor flip together (spec 2026-08-10
+    # §6 fix-2). c.x == CX (a centre control) keeps the left-half behaviour.
+    third = ((c.x + c.r + 1.0, c.y + 1.0, "start") if c.x <= CX else
+             (c.x - c.r - 1.0, c.y + 1.0, "end"))
     for lx, ly, anchor in ((c.x, c.y + dy, "middle"),
                            (c.x, c.y - dy, "middle"),
-                           (c.x + c.r + 1.0, c.y + 1.0, "start")):
+                           third):
         if _caption_is_clear(c, lx, ly):
             return (lx, ly, anchor, 2.2, gp.INK)
     raise ValueError(f"no clear caption position for {c.enum} -- the geometry "
