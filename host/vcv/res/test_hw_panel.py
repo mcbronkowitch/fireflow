@@ -149,7 +149,7 @@ def test_labels_stay_off_neighbour_footprints():
     # OTHER control's footprint by LBL_MARGIN. Bare non-overlap is not a
     # margin: at 16 mm row spacing the default offset lands 8.1 mm from an
     # 8.0 mm knob and would pass a zero-margin test with 0.1 mm to spare.
-    for c in hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS:
+    for c in hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_ONLY:
         if not c.label:
             continue
         lx, ly = hw.hw_label(c)[0], hw.hw_label(c)[1]
@@ -166,7 +166,7 @@ def test_captions_stay_off_their_own_knob():
     # The reason a shortened offset cannot be the answer: a control's own
     # radius is the floor. A caption inside its own footprint is printed ON
     # the knob (spec 2026-08-10 §6, corrected).
-    for c in hw.HW_PARAMS:
+    for c in hw.HW_PARAMS + hw.HW_ONLY:
         if not c.label:
             continue
         lx, ly = hw.hw_label(c)[0], hw.hw_label(c)[1]
