@@ -3,6 +3,9 @@
 #include "generated_panel.hpp"
 namespace spkyhw {
 using namespace spkyvcv;
+struct HwOnlyCtl { WidgetKind kind; XY mm; const char* label;
+                   XY lbl; unsigned char anchor; float lblSize;
+                   unsigned lblRgb; };
 static constexpr int kHwHP = 60;
 static const PanelCtl kParamCtls[] = {
     {RATE_A, WK_BIGKNOB, {14.000f, 30.000f}, "RATE", {14.000f, 38.000f}, 0, 2.20f, 0x171713, "RATE"},
@@ -93,6 +96,36 @@ static const PanelCtl kLightCtls[] = {
     {GATE_B_L, WK_LIGHT, {223.800f, 15.000f}, "", {223.800f, 15.000f}, 0, 2.20f, 0x171713, ""},
     {REC_A_L, WK_LIGHT, {77.000f, 15.000f}, "", {77.000f, 15.000f}, 0, 2.20f, 0x171713, ""},
     {REC_B_L, WK_LIGHT, {227.800f, 15.000f}, "", {227.800f, 15.000f}, 0, 2.20f, 0x171713, ""},
+};
+// Hardware-only: no VCV id. Rack does not render SVG text,
+// so these captions must come from here (spec 2026-08-10 §5).
+static const HwOnlyCtl kHwOnlyCtls[] = {
+    {WK_LATCH, {140.400f, 15.000f}, "MOD", {140.400f, 21.500f}, 0, 2.20f, 0x171713},
+    {WK_LATCH, {164.400f, 15.000f}, "SHIFT", {164.400f, 21.500f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {149.400f, 15.000f}, "", {149.400f, 15.000f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {155.400f, 15.000f}, "", {155.400f, 15.000f}, 0, 2.20f, 0x171713},
+    {WK_IN, {23.000f, 107.000f}, "FILT", {23.000f, 101.000f}, 0, 2.20f, 0x171713},
+    {WK_IN, {42.500f, 107.000f}, "TIMB", {42.500f, 101.000f}, 0, 2.20f, 0x171713},
+    {WK_IN, {76.250f, 107.000f}, "COLOR", {76.250f, 101.000f}, 0, 2.20f, 0x171713},
+    {WK_IN, {100.000f, 107.000f}, "LVL", {100.000f, 101.000f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {45.500f, 15.000f}, "", {45.500f, 15.000f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {49.500f, 15.000f}, "", {49.500f, 15.000f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {53.500f, 15.000f}, "", {53.500f, 15.000f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {57.500f, 15.000f}, "", {57.500f, 15.000f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {61.500f, 15.000f}, "", {61.500f, 15.000f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {85.000f, 15.000f}, "", {85.000f, 15.000f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {89.000f, 15.000f}, "", {89.000f, 15.000f}, 0, 2.20f, 0x171713},
+    {WK_IN, {281.800f, 107.000f}, "FILT", {281.800f, 101.000f}, 0, 2.20f, 0x171713},
+    {WK_IN, {262.300f, 107.000f}, "TIMB", {262.300f, 101.000f}, 0, 2.20f, 0x171713},
+    {WK_IN, {228.550f, 107.000f}, "COLOR", {228.550f, 101.000f}, 0, 2.20f, 0x171713},
+    {WK_IN, {204.800f, 107.000f}, "LVL", {204.800f, 101.000f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {259.300f, 15.000f}, "", {259.300f, 15.000f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {255.300f, 15.000f}, "", {255.300f, 15.000f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {251.300f, 15.000f}, "", {251.300f, 15.000f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {247.300f, 15.000f}, "", {247.300f, 15.000f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {243.300f, 15.000f}, "", {243.300f, 15.000f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {219.800f, 15.000f}, "", {219.800f, 15.000f}, 0, 2.20f, 0x171713},
+    {WK_LIGHT, {215.800f, 15.000f}, "", {215.800f, 15.000f}, 0, 2.20f, 0x171713},
 };
 static const PanelTxt kPanelTexts[] = {
     {{152.400f, 6.000f}, 3.20f, 0.90f, 0x171713, 0, "FIREFLOW HW DRAFT 60HP"},

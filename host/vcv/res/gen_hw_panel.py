@@ -61,9 +61,15 @@ def hw_class(enum):
     """Size class for a full enum name. Jacks and LEDs come from the shared
     inventory's kind (they have no hardware choice to make); everything a
     finger turns or presses comes from HW_SIZE."""
+    if enum.startswith("CV_"):
+        return "J"
+    if enum in ("MODBTN", "SHIFTBTN"):
+        return "P"
     if enum in _JACK_ENUMS:
         return "J"
     if enum in _LIGHT_ENUMS:
+        return "L"
+    if enum.endswith("_L"):
         return "L"
     base = enum[:-2] if enum.endswith(("_A", "_B")) else enum
     return HW_SIZE[base]
@@ -156,7 +162,50 @@ HW_PARAMS  = [place(c) for c in gp.RUNTIME_PANEL_PARAMS]
 HW_INPUTS  = [place(c) for c in gp.INPUTS]
 HW_OUTPUTS = [place(c) for c in gp.OUTPUTS]
 HW_LIGHTS  = [place(c) for c in gp.LIGHTS]
-ALL_HW = HW_PARAMS + HW_INPUTS + HW_OUTPUTS + HW_LIGHTS
+
+# --- hardware-only inventory (spec 2026-08-10 §4/§5) ------------------------
+# Elements that exist on sheet metal and have no VCV id: two reserved pads,
+# eight CV inputs, sixteen further LEDs. They must NOT enter HW_PARAMS --
+# test_same_runtime_params_same_order holds that list against the shared
+# inventory. They DO need a C++ table: Rack does not render the SVG's text
+# (NanoSVG), so every caption meant to be readable in the rehearsal goes
+# through HwPanelText.
+class HwOnly:
+    __slots__ = ("enum", "kind", "x", "y", "r", "label", "tip")
+
+    def __init__(self, enum, cls, x, y, label, tip):
+        self.enum, self.x, self.y, self.label, self.tip = enum, x, y, label, tip
+        self.kind = {"P": gp.LATCH, "J": gp.IN, "L": gp.LIGHT}[cls]
+        self.r = CLASS_R[cls]
+
+
+_CV = (("FILT", X_FILT), ("TIMB", X_TIMB), ("COLOR", X_COLOR), ("LVL", X_LVL))
+# The four targets are read off engine/mod/lane_id.h, not chosen: LANE_SIZE,
+# LANE_SOURCE, LANE_PITCH and LANE_LEVEL are slots the internal modulator
+# already drives, and each has a big knob. LANE_MOTION (SHAPE) gets no jack --
+# SHAPE is small and sits in band 1, where a cable would cross the playing
+# surface. Deliberate deletion, spec §4.
+_ENGINE_LED_X = [45.5, 49.5, 53.5, 57.5, 61.5]
+_STATUS_LED_X = [85.0, 89.0]          # FLOW/STEP, CAPTURE (REC and GATE are shared)
+
+HW_ONLY = [
+    HwOnly("MODBTN", "P", 140.4, Y_TOP, "MOD", "reserved, no function"),
+    HwOnly("SHIFTBTN", "P", 164.4, Y_TOP, "SHIFT", "reserved, no function"),
+    HwOnly("TEMPO_L", "L", 149.4, Y_TOP, "", "tempo"),
+    HwOnly("SYNC_L", "L", 155.4, Y_TOP, "", "sync"),
+]
+for _side, _sx in (("A", lambda v: v), ("B", lambda v: W - v)):
+    for _name, _x in _CV:
+        HW_ONLY.append(HwOnly(f"CV_{_name}_{_side}", "J", _sx(_x), JACK_Y,
+                              _name, f"CV in -> {_name}"))
+    for _i, _x in enumerate(_ENGINE_LED_X):
+        HW_ONLY.append(HwOnly(f"ENG{_i}_{_side}_L", "L", _sx(_x), Y_TOP, "",
+                              "engine"))
+    for _name, _x in zip(("FLOW", "CAP"), _STATUS_LED_X):
+        HW_ONLY.append(HwOnly(f"{_name}_{_side}_L", "L", _sx(_x), Y_TOP, "",
+                              _name.lower()))
+
+ALL_HW = HW_PARAMS + HW_INPUTS + HW_OUTPUTS + HW_LIGHTS + HW_ONLY
 
 TEXTS = [(CX, 6.0, 3.2, 0.9, gp.INK, "middle", "FIREFLOW HW DRAFT 60HP")]
 
@@ -237,8 +286,9 @@ def svg():
     # one glyph per control, by kind
     for c in ALL_HW:
         if c.kind in (gp.IN, gp.OUT):
+            fill = "#1f4d44" if c.enum.startswith("CV_") else gp.GRAPHITE
             P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="{mm(c.r)}" '
-                      f'fill="{gp.GRAPHITE}" stroke="{gp.LINE}" stroke-width="0.35"/>')
+                      f'fill="{fill}" stroke="{gp.LINE}" stroke-width="0.35"/>')
         elif c.kind == gp.LIGHT:
             P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="{mm(c.r)}" '
                       f'fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>')
@@ -285,11 +335,24 @@ def header():
     L2.append('#include "generated_panel.hpp"')
     L2.append("namespace spkyhw {")
     L2.append("using namespace spkyvcv;")
+    L2.append("struct HwOnlyCtl { WidgetKind kind; XY mm; const char* label;")
+    L2.append("                   XY lbl; unsigned char anchor; float lblSize;")
+    L2.append("                   unsigned lblRgb; };")
     L2.append("static constexpr int kHwHP = 60;")
     L2.extend(emit_table("kParamCtls", HW_PARAMS))
     L2.extend(emit_table("kInputCtls", HW_INPUTS))
     L2.extend(emit_table("kOutputCtls", HW_OUTPUTS))
     L2.extend(emit_table("kLightCtls", HW_LIGHTS))
+    L2.append("// Hardware-only: no VCV id. Rack does not render SVG text,")
+    L2.append("// so these captions must come from here (spec 2026-08-10 §5).")
+    L2.append("static const HwOnlyCtl kHwOnlyCtls[] = {")
+    for c in HW_ONLY:
+        lx, ly, anchor, size, colour = hw_label(c) if c.label else (
+            c.x, c.y, "middle", 2.2, gp.INK)
+        L2.append(f'    {{{gp.WKMAP[c.kind]}, {{{c.x:.3f}f, {c.y:.3f}f}}, '
+                  f'"{c.label}", {{{lx:.3f}f, {ly:.3f}f}}, {ANCHOR_ID[anchor]}, '
+                  f'{size:.2f}f, {rgb(colour)}}},')
+    L2.append("};")
     L2.append("static const PanelTxt kPanelTexts[] = {")
     for (x, y, size, spacing, col, anchor, txt) in TEXTS:
         L2.append(f'    {{{{{x:.3f}f, {y:.3f}f}}, {size:.2f}f, {spacing:.2f}f, '
@@ -301,9 +364,9 @@ def header():
 if __name__ == "__main__":
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(here)
-    with open(os.path.join(here, "FireflowHW.svg"), "w") as f:
+    with open(os.path.join(here, "FireflowHW.svg"), "w", encoding="utf-8") as f:
         f.write(svg())
-    with open(os.path.join(root, "src", "generated_hw_panel.hpp"), "w") as f:
+    with open(os.path.join(root, "src", "generated_hw_panel.hpp"), "w", encoding="utf-8") as f:
         f.write(header())
     print("wrote res/FireflowHW.svg and src/generated_hw_panel.hpp")
     print(f"params={len(HW_PARAMS)} inputs={len(HW_INPUTS)} "

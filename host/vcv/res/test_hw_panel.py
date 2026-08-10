@@ -37,7 +37,8 @@ def test_static_captions_only():
         words = gp.dynamic_words(c.enum.rsplit("_", 1)[0])
         if words:
             assert c.label == words[0], c.enum
-    src = open(os.path.join(HERE, "..", "src", "generated_hw_panel.hpp")).read()
+    src = open(os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"),
+               encoding="utf-8").read()
     assert "DynCaption" not in src
 
 def test_hardware_footprints():
@@ -105,7 +106,8 @@ def test_caption_mirror_symmetry():
 
 
 def test_header_contract():
-    src = open(os.path.join(HERE, "..", "src", "generated_hw_panel.hpp")).read()
+    src = open(os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"),
+               encoding="utf-8").read()
     assert "namespace spkyhw" in src
     assert "kHwHP = 60" in src
     for tbl in ("kParamCtls", "kInputCtls", "kOutputCtls", "kLightCtls",
@@ -115,7 +117,7 @@ def test_header_contract():
     assert re.search(r"\{\s*RATE_A\s*,", src)
 
 def test_svg_exists_and_is_60hp():
-    svg = open(os.path.join(HERE, "FireflowHW.svg")).read()
+    svg = open(os.path.join(HERE, "FireflowHW.svg"), encoding="utf-8").read()
     assert f'width="{hw.W:.3f}mm"' in svg and 'height="128.500mm"' in svg
 
 def test_shared_knob_labels_do_not_coincide():
@@ -185,7 +187,7 @@ def test_committed_files_match_the_generator():
         if not os.path.exists(path):
             FAILS.append(f"{path} is missing -- run res/gen_hw_panel.py")
             continue
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             on_disk = f.read()
         check(on_disk == produced,
               f"{path} differs from the generator's output -- it was "
@@ -215,6 +217,44 @@ def test_size_classes_match_the_spec():
     check(len(big_positions) == 18, f"expected 18 big positions, got {len(big_positions)}")
     small = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "S"]
     check(len(small) == 46, f"expected 46 small params, got {len(small)}")
+
+
+def test_hw_only_inventory():
+    """Was es auf Blech gibt, aber nicht im VCV-Modul: 2 Taster, 8 CV-Buchsen,
+    16 zusätzliche LEDs (spec 2026-08-10 §5)."""
+    kinds = {}
+    for c in hw.HW_ONLY:
+        kinds[hw.hw_class(c.enum)] = kinds.get(hw.hw_class(c.enum), 0) + 1
+    check(kinds.get("P") == 2, f"expected 2 hw-only pads, got {kinds.get('P')}")
+    check(kinds.get("J") == 8, f"expected 8 CV jacks, got {kinds.get('J')}")
+    check(kinds.get("L") == 16, f"expected 16 hw-only LEDs, got {kinds.get('L')}")
+    # and they must NOT have leaked into the shared param inventory
+    assert [c.enum for c in hw.HW_PARAMS] == [c.enum for c in gp.RUNTIME_PANEL_PARAMS]
+    total_leds = len([c for c in hw.ALL_HW if hw.hw_class(c.enum) == "L"])
+    check(total_leds == 20, f"expected 20 LEDs on the panel, got {total_leds}")
+
+
+def test_cv_sits_under_its_target():
+    """Jede CV-Buchse trägt den Namen ihres Ziels, teilt dessen x exakt und
+    liegt darunter (spec 2026-08-10 §4). Ohne diese Prüfung wandert eine
+    Buchse in der nächsten Runde weg und die Beschriftung lügt."""
+    by_label = {}
+    for c in hw.HW_PARAMS:
+        base = c.enum[:-2] if c.enum.endswith(("_A", "_B")) else c.enum
+        by_label[(c.label, c.x > hw.CX)] = c
+    cvs = [c for c in hw.HW_ONLY if c.enum.startswith("CV_")]
+    check(len(cvs) == 8, f"expected 8 CV jacks, got {len(cvs)}")
+    for j in cvs:
+        target = by_label.get((j.label, j.x > hw.CX))
+        check(target is not None, f"{j.enum} names {j.label!r}, which is not a knob")
+        if target is None:
+            continue
+        check(abs(target.x - j.x) < 1e-6,
+              f"{j.enum} at x={j.x} does not share x with {target.enum} "
+              f"at x={target.x}")
+        check(j.y > target.y, f"{j.enum} is not below {target.enum}")
+        check(hw.hw_class(target.enum) == "G",
+              f"{j.enum} points at {target.enum}, which is not a big knob")
 
 
 def main():

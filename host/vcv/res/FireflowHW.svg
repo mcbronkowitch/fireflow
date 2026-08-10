@@ -163,5 +163,41 @@
 <circle cx="223.800" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
 <circle cx="77.000" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
 <circle cx="227.800" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<rect x="136.400" y="11.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>
+<text x="140.400" y="21.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">MOD</text>
+<rect x="160.400" y="11.000" width="8.000" height="8.000" rx="1.0" fill="#fffdf7" stroke="#d7cdbb" stroke-width="0.3"/>
+<text x="164.400" y="21.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SHIFT</text>
+<circle cx="149.400" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<circle cx="155.400" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<circle cx="23.000" cy="107.000" r="4.000" fill="#1f4d44" stroke="#d7cdbb" stroke-width="0.35"/>
+<text x="23.000" y="101.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FILT</text>
+<circle cx="42.500" cy="107.000" r="4.000" fill="#1f4d44" stroke="#d7cdbb" stroke-width="0.35"/>
+<text x="42.500" y="101.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
+<circle cx="76.250" cy="107.000" r="4.000" fill="#1f4d44" stroke="#d7cdbb" stroke-width="0.35"/>
+<text x="76.250" y="101.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">COLOR</text>
+<circle cx="100.000" cy="107.000" r="4.000" fill="#1f4d44" stroke="#d7cdbb" stroke-width="0.35"/>
+<text x="100.000" y="101.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">LVL</text>
+<circle cx="45.500" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<circle cx="49.500" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<circle cx="53.500" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<circle cx="57.500" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<circle cx="61.500" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<circle cx="85.000" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<circle cx="89.000" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<circle cx="281.800" cy="107.000" r="4.000" fill="#1f4d44" stroke="#d7cdbb" stroke-width="0.35"/>
+<text x="281.800" y="101.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FILT</text>
+<circle cx="262.300" cy="107.000" r="4.000" fill="#1f4d44" stroke="#d7cdbb" stroke-width="0.35"/>
+<text x="262.300" y="101.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
+<circle cx="228.550" cy="107.000" r="4.000" fill="#1f4d44" stroke="#d7cdbb" stroke-width="0.35"/>
+<text x="228.550" y="101.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">COLOR</text>
+<circle cx="204.800" cy="107.000" r="4.000" fill="#1f4d44" stroke="#d7cdbb" stroke-width="0.35"/>
+<text x="204.800" y="101.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">LVL</text>
+<circle cx="259.300" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<circle cx="255.300" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<circle cx="251.300" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<circle cx="247.300" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<circle cx="243.300" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<circle cx="219.800" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
+<circle cx="215.800" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
 <text x="152.400" y="6.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="3.2" letter-spacing="0.9" font-weight="bold">FIREFLOW HW DRAFT 60HP</text>
 </svg>
