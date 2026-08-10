@@ -56,6 +56,19 @@ def test_rail_keepout():
         assert c.y - c.r >= hw.KEEP_TOP - 1e-9, (c.enum, "top")
         assert c.y + c.r <= hw.KEEP_BOT + 1e-9, (c.enum, "bottom")
         assert c.x - c.r >= 2.0 and c.x + c.r <= hw.W - 2.0, (c.enum, "side")
+    # Static lettering (hw.TEXTS) used to be invisible to this guard: nothing
+    # stopped a title or legend from being placed inside a keep-out rail.
+    # Text has no radius, so it is checked as a bare point.
+    for (x, y, size, spacing, col, anchor, txt) in hw.TEXTS:
+        if txt == hw.TITLE_TEXT:
+            # Named exemption, not a silent skip: see the TITLE_TEXT comment
+            # in gen_hw_panel.py -- the mounting screws are at the panel's
+            # left/right edges, not near x=CX where the title sits, so this
+            # particular overlap with KEEP_TOP is mechanically harmless.
+            continue
+        check(y >= hw.KEEP_TOP - 1e-9, f"text {txt!r} at y={y} crosses the top rail")
+        check(y <= hw.KEEP_BOT + 1e-9, f"text {txt!r} at y={y} crosses the bottom rail")
+        check(x >= 2.0 and x <= hw.W - 2.0, f"text {txt!r} at x={x} crosses the side keepout")
 
 def test_no_overlap_with_hw_radii():
     # Radius-sum clearance with REAL footprints. Exactly one legal overlap:
@@ -70,39 +83,84 @@ def test_no_overlap_with_hw_radii():
             d = ((a.x - b.x) ** 2 + (a.y - b.y) ** 2) ** 0.5
             assert d >= a.r + b.r - 1e-6, (a.enum, b.enum, round(d, 2))
 
+def _twin_enum(enum):
+    """Name-declared mirror partner, or None if the name declares none.
+
+    Two shapes occur in this inventory: a trailing _A/_B (RATE_A, PITCH_B)
+    and an embedded _A_/_B_ segment for names that end in something else
+    (ENG0_A_L, REC_A_L, CV_FILT_A is caught by the suffix rule already).
+    Names carrying neither marker (centre controls, MODBTN/SHIFTBTN,
+    IN_L/IN_R, CLOCK, RESET, ...) have no naming-declared twin and are left
+    alone -- pairing them would be a guess, not a check."""
+    if enum.endswith("_A"):
+        return enum[:-2] + "_B"
+    if enum.endswith("_B"):
+        return enum[:-2] + "_A"
+    if "_A_" in enum:
+        return enum.replace("_A_", "_B_", 1)
+    if "_B_" in enum:
+        return enum.replace("_B_", "_A_", 1)
+    return None
+
+
+def _mirror_pairs(items):
+    """Yield (enum_a, a, enum_b, b) once per name-declared mirror pair found
+    in items (a list of objects with .enum, .x, .y)."""
+    by_enum = {c.enum: c for c in items}
+    seen = set()
+    for enum, a in by_enum.items():
+        twin = _twin_enum(enum)
+        if twin is None or twin not in by_enum:
+            continue
+        key = frozenset((enum, twin))
+        if key in seen:
+            continue
+        seen.add(key)
+        yield enum, a, twin, by_enum[twin]
+
+
 def test_mirror_symmetry():
-    # Deck B is deck A mirrored — the instrument's identity, kept by machine.
-    pos_a = {c.enum[:-2]: (c.x, c.y) for c in hw.HW_PARAMS if c.enum.endswith("_A")}
-    pos_b = {c.enum[:-2]: (c.x, c.y) for c in hw.HW_PARAMS if c.enum.endswith("_B")}
-    assert pos_a.keys() == pos_b.keys()
-    for k, (xa, ya) in pos_a.items():
-        xb, yb = pos_b[k]
-        assert abs((hw.W - xa) - xb) < 1e-6 and abs(ya - yb) < 1e-6, k
+    # Deck B is deck A mirrored -- the instrument's identity, kept by
+    # machine. Covers every hand-written mirror (JACK_POS, LIGHT_POS, the
+    # HW_ONLY loop), not only the DECK_POS-derived HW_PARAMS: those are
+    # equally "the instrument's identity" and were equally unchecked.
+    items = hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_LIGHTS + hw.HW_ONLY
+    pairs = 0
+    for enum, a, twin, b in _mirror_pairs(items):
+        check(abs((hw.W - a.x) - b.x) < 1e-6,
+              f"{enum}/{twin}: x does not mirror ({a.x:.2f} vs {b.x:.2f})")
+        check(abs(a.y - b.y) < 1e-6,
+              f"{enum}/{twin}: y does not match ({a.y:.2f} vs {b.y:.2f})")
+        pairs += 1
+    check(pairs > 0, "test_mirror_symmetry found no mirror pairs -- vacuous")
+    test_mirror_symmetry.pairs_checked = pairs
 
 _MIRROR_ANCHOR = {"middle": "middle", "start": "end", "end": "start"}
 
 
 def test_caption_mirror_symmetry():
     # test_mirror_symmetry above only compares CONTROL positions. Candidate 3
-    # of hw_label's step-aside rule must itself mirror, or a mirrored _A/_B
-    # pair landing there would have one twin step toward the axis and the
+    # of hw_label's step-aside rule must itself mirror, or a mirrored twin
+    # landing there would have one twin step toward the axis and the
     # other step off the panel edge, with nothing catching it (spec
-    # 2026-08-10 §6 fix-2).
-    by_enum = {c.enum: c for c in hw.HW_PARAMS}
-    stems = ({c.enum[:-2] for c in hw.HW_PARAMS if c.enum.endswith("_A")} &
-             {c.enum[:-2] for c in hw.HW_PARAMS if c.enum.endswith("_B")})
-    for stem in stems:
-        a, b = by_enum[stem + "_A"], by_enum[stem + "_B"]
+    # 2026-08-10 §6 fix-2). Covers every hand-written mirror, not only
+    # HW_PARAMS -- same widening as test_mirror_symmetry above.
+    items = hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_LIGHTS + hw.HW_ONLY
+    pairs = 0
+    for enum, a, twin, b in _mirror_pairs(items):
         if not a.label:
             continue
         lxa, lya, anchor_a = hw.hw_label(a)[:3]
         lxb, lyb, anchor_b = hw.hw_label(b)[:3]
         check(abs((hw.W - lxa) - lxb) < 1e-6,
-              f"{stem}: caption x does not mirror ({lxa:.2f} vs {lxb:.2f})")
+              f"{enum}/{twin}: caption x does not mirror ({lxa:.2f} vs {lxb:.2f})")
         check(abs(lya - lyb) < 1e-6,
-              f"{stem}: caption y does not match ({lya:.2f} vs {lyb:.2f})")
+              f"{enum}/{twin}: caption y does not match ({lya:.2f} vs {lyb:.2f})")
         check(_MIRROR_ANCHOR[anchor_a] == anchor_b,
-              f"{stem}: anchors do not mirror ({anchor_a!r} vs {anchor_b!r})")
+              f"{enum}/{twin}: anchors do not mirror ({anchor_a!r} vs {anchor_b!r})")
+        pairs += 1
+    check(pairs > 0, "test_caption_mirror_symmetry found no mirror pairs -- vacuous")
+    test_caption_mirror_symmetry.pairs_checked = pairs
 
 
 def test_header_contract():
@@ -250,7 +308,6 @@ def test_cv_sits_under_its_target():
     Buchse in der nächsten Runde weg und die Beschriftung lügt."""
     by_label = {}
     for c in hw.HW_PARAMS:
-        base = c.enum[:-2] if c.enum.endswith(("_A", "_B")) else c.enum
         by_label[(c.label, c.x > hw.CX)] = c
     cvs = [c for c in hw.HW_ONLY if c.enum.startswith("CV_")]
     check(len(cvs) == 8, f"expected 8 CV jacks, got {len(cvs)}")
@@ -288,6 +345,11 @@ def test_sd_cutout_is_clear():
         lx, ly = hw.hw_label(c)[0], hw.hw_label(c)[1]
         check(dist_to_rect(lx, ly) > 1e-6,
               f"caption {c.enum} at ({lx:.1f},{ly:.1f}) is inside the SD cutout")
+    # Static lettering (hw.TEXTS) used to be invisible to this guard too --
+    # nothing stopped a title or legend from being centred in the cutout.
+    for (x, y, size, spacing, col, anchor, txt) in hw.TEXTS:
+        check(dist_to_rect(x, y) > 1e-6,
+              f"text {txt!r} at ({x:.1f},{y:.1f}) is inside the SD cutout")
     check(y1 <= hw.KEEP_BOT + 1e-9, "SD cutout crosses the bottom rail")
 
 
@@ -301,6 +363,10 @@ def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
             fn()
+    for fn in (test_mirror_symmetry, test_caption_mirror_symmetry):
+        n = getattr(fn, "pairs_checked", None)
+        if n is not None:
+            print(f"{fn.__name__}: checked {n} mirror pairs")
     if FAILS:
         print(f"FAIL ({len(FAILS)}):")
         for f in FAILS:

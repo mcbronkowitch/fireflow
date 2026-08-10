@@ -69,6 +69,11 @@ def hw_class(enum):
         return "J"
     if enum in _LIGHT_ENUMS:
         return "L"
+    # Load-bearing order: this endswith("_L") heuristic is what catches the
+    # HW_ONLY LEDs (ENG0_A_L, REC_A_L, ...), which have no entry in
+    # _LIGHT_ENUMS. It must stay BELOW the _JACK_ENUMS check above, or
+    # IN_L/OUT_L (real jacks, not lights) would be misread as LEDs -- this
+    # already happened once, in Task 4.
     if enum.endswith("_L"):
         return "L"
     base = enum[:-2] if enum.endswith(("_A", "_B")) else enum
@@ -207,8 +212,15 @@ for _side, _sx in (("A", lambda v: v), ("B", lambda v: W - v)):
 
 ALL_HW = HW_PARAMS + HW_INPUTS + HW_OUTPUTS + HW_LIGHTS + HW_ONLY
 
-TEXTS = [(CX, 6.0, 3.2, 0.9, gp.INK, "middle", "FIREFLOW HW DRAFT 60HP"),
-         (SD_X, SD_Y + 1.0, 2.6, 0.0, gp.INK, "middle", "SD")]
+# Static lettering that isn't a control's own caption. TITLE_TEXT is named
+# rather than inlined because test_hw_panel.py's rail-keepout guard exempts
+# it by name: the title sits at y=6.0, inside KEEP_TOP=9.0, but the M3
+# mounting screws live at the panel's left/right edges (x near 0 and W), not
+# near x=CX where the title is centred, so nothing mechanical collides with
+# it. Every other entry in TEXTS is expected to clear the rails for real.
+TITLE_TEXT = "FIREFLOW HW DRAFT 60HP"
+
+TEXTS = [(CX, 6.0, 3.2, 0.9, gp.INK, "middle", TITLE_TEXT)]
 
 # BEND shares ATTACK's knob (deliberate dual assignment, spec §6). A screen
 # widget can gate one caption away by engine state; an aluminium plate can't
@@ -290,10 +302,11 @@ def svg():
     P.append(f'<rect x="{mm(SD_X - SD_W / 2)}" y="{mm(SD_Y - SD_H / 2)}" '
               f'width="{mm(SD_W)}" height="{mm(SD_H)}" rx="1" fill="none" '
               f'stroke="{gp.INK}" stroke-width="0.5" stroke-dasharray="1.5,1"/>')
-    # the "SD" label is emitted below via the TEXTS table -- routing it
-    # through TEXTS (not a hand-rolled <text>) is what gets it into
-    # kPanelTexts too; Rack's NanoSVG renderer does not draw SVG text, so a
-    # caption that only exists in the SVG never reaches the screen.
+    # No legend: the dashed outline reads as a cutout on its own, and a word
+    # centred over a milled hole is a word the hole cuts away. (An earlier
+    # draft put "SD" here via the TEXTS table; it sat inside the cutout on a
+    # real plate and was removed rather than relocated -- see the whole-
+    # branch review, fix wave 2026-08-10.)
     # one glyph per control, by kind
     for c in ALL_HW:
         if c.kind in (gp.IN, gp.OUT):

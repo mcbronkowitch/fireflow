@@ -135,6 +135,5 @@ static const HwOnlyCtl kHwOnlyCtls[] = {
 };
 static const PanelTxt kPanelTexts[] = {
     {{152.400f, 6.000f}, 3.20f, 0.90f, 0x171713, 0, "FIREFLOW HW DRAFT 60HP"},
-    {{152.400f, 111.000f}, 2.60f, 0.00f, 0x171713, 0, "SD"},
 };
 } // namespace spkyhw

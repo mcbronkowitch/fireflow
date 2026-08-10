@@ -110,6 +110,9 @@ CLASS_R = {"G": 8.0, "S": 5.5, "P": 4.0, "J": 4.0, "L": 1.5}
 # Baseline offset from the glyph centre to the caption, per class. Jacks read
 # ABOVE their glyph (negative), everything else below.
 CLASS_LBL_DY = {"G": 10.4, "S": 7.9, "P": 6.5, "J": -6.0, "L": 0.0}
+# Note (fix wave, 2026-08-10): this plan records intent at planning time and
+# is not rewritten after the fact. As built, the values are 10.5 / 8.0 (G/S)
+# -- see gen_hw_panel.py and docs/superpowers/specs/2026-08-10-hw-panel-regroup-design.md.
 
 
 def hw_class(enum):

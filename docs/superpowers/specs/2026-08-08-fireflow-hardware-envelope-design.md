@@ -43,7 +43,7 @@ ist seit Task 6 ein einzelner gerasteter Knopf. Kanallisten werden aus
 | Potis (64 kontinuierlich: 18 groß, 46 klein) | 62 Positionen (2× Doppelbelegung: BEND teilt sich ATTACKs Knopf) | bis 128 Kanäle | 4067-Kette, 4 Sense-Pins (§2) |
 | Taster | 6 (`ENGINE` ×2, `REC` ×2, `MOD`, `SHIFT` — die letzten zwei ohne Funktion) | 24 | 74HC165-Kette (`src/hw/sr_165.h`) |
 | Status-LEDs | 20 (festgelegt, oberes Ende des Korridors) | 24 | 3× 74HC595 |
-| Buchsen | 18 (10 + 8 CV-Eingänge auf `CV_1..8`) | Main-PCB | Main-PCB |
+| Buchsen | 18 (10 + 8 CV-Eingänge auf `CV_1..8`) | begrenzt durch Panelfläche, nicht durch die Main-PCB | Main-PCB |
 | SD-Slot | 1 | 1 | SDMMC 4-bit, Main-PCB, frontzugänglich |
 
 > **Nachtrag 10. August 2026:** Zählbasis, Buchsenzahl und LED-Zahl kommen aus
