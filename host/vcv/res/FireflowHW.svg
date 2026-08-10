@@ -4,7 +4,6 @@
 <line x1="0" y1="9.000" x2="304.800" y2="9.000" stroke="#d7cdbb" stroke-width="0.3" stroke-dasharray="2,1.5"/>
 <line x1="0" y1="119.500" x2="304.800" y2="119.500" stroke="#d7cdbb" stroke-width="0.3" stroke-dasharray="2,1.5"/>
 <rect x="144.900" y="104.000" width="15.000" height="12.000" rx="1" fill="none" stroke="#171713" stroke-width="0.5" stroke-dasharray="1.5,1"/>
-<text x="152.400" y="111.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.6">SD</text>
 <circle cx="14.000" cy="30.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="14.000" y="38.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">RATE</text>
 <circle cx="26.500" cy="30.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
@@ -202,4 +201,5 @@
 <circle cx="219.800" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
 <circle cx="215.800" cy="15.000" r="1.500" fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>
 <text x="152.400" y="6.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="3.2" letter-spacing="0.9" font-weight="bold">FIREFLOW HW DRAFT 60HP</text>
+<text x="152.400" y="111.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.6" letter-spacing="0.0" font-weight="bold">SD</text>
 </svg>

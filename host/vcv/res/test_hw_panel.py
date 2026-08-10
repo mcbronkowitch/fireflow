@@ -272,7 +272,7 @@ def test_sd_cutout_is_clear():
     for c in hw.ALL_HW:
         check(dist_to_rect(c.x, c.y) >= c.r - 1e-6,
               f"{c.enum} overlaps the SD cutout")
-    for c in hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS:
+    for c in hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_ONLY:
         if not c.label:
             continue
         lx, ly = hw.hw_label(c)[0], hw.hw_label(c)[1]

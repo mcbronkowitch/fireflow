@@ -207,7 +207,8 @@ for _side, _sx in (("A", lambda v: v), ("B", lambda v: W - v)):
 
 ALL_HW = HW_PARAMS + HW_INPUTS + HW_OUTPUTS + HW_LIGHTS + HW_ONLY
 
-TEXTS = [(CX, 6.0, 3.2, 0.9, gp.INK, "middle", "FIREFLOW HW DRAFT 60HP")]
+TEXTS = [(CX, 6.0, 3.2, 0.9, gp.INK, "middle", "FIREFLOW HW DRAFT 60HP"),
+         (SD_X, SD_Y + 1.0, 2.6, 0.0, gp.INK, "middle", "SD")]
 
 # BEND shares ATTACK's knob (deliberate dual assignment, spec §6). A screen
 # widget can gate one caption away by engine state; an aluminium plate can't
@@ -289,9 +290,10 @@ def svg():
     P.append(f'<rect x="{mm(SD_X - SD_W / 2)}" y="{mm(SD_Y - SD_H / 2)}" '
               f'width="{mm(SD_W)}" height="{mm(SD_H)}" rx="1" fill="none" '
               f'stroke="{gp.INK}" stroke-width="0.5" stroke-dasharray="1.5,1"/>')
-    P.append(f'<text x="{mm(SD_X)}" y="{mm(SD_Y + 1.0)}" fill="{gp.INK}" '
-              f'text-anchor="middle" font-family="monospace" '
-              f'font-size="2.6">SD</text>')
+    # the "SD" label is emitted below via the TEXTS table -- routing it
+    # through TEXTS (not a hand-rolled <text>) is what gets it into
+    # kPanelTexts too; Rack's NanoSVG renderer does not draw SVG text, so a
+    # caption that only exists in the SVG never reaches the screen.
     # one glyph per control, by kind
     for c in ALL_HW:
         if c.kind in (gp.IN, gp.OUT):
