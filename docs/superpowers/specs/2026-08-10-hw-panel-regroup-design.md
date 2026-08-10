@@ -267,8 +267,9 @@ frontzugänglich) und fehlte nur im Panel. Er bekommt hier seine Position.
 
 ## §6 Was im Code passiert
 
-Nur `host/vcv/res/gen_hw_panel.py`, `host/vcv/res/test_hw_panel.py` und die
-beiden generierten Dateien. Kein Engine-Code, kein `gen_panel.py`.
+Nur `host/vcv/res/gen_hw_panel.py`, `host/vcv/res/test_hw_panel.py`, die
+beiden generierten Dateien und `host/vcv/src/Fireflow.cpp`. Kein
+Engine-Code, kein `gen_panel.py`.
 
 1. **`HW_R` und `LBL_DY_HW` werden nicht mehr über `c.kind` indiziert.** Eine
    explizite `HW_SIZE`-Tabelle bildet Parameter-Basisnamen auf `"G"`/`"S"` ab;
@@ -281,18 +282,37 @@ beiden generierten Dateien. Kein Engine-Code, kein `gen_panel.py`.
    SD-Ausschnitt. Sie darf **nicht** in `HW_PARAMS` laufen —
    `test_same_runtime_params_same_order` hält Enum-Menge und -Reihenfolge
    gegen `gp.RUNTIME_PANEL_PARAMS`, und dieser Vertrag bleibt. Der Header
-   bekommt dafür eigene Tabellen (`kHwOnlyCtls`, `kHwCutouts`).
+   bekommt dafür eine eigene Tabelle (`kHwOnlyCtls`). Der SD-Ausschnitt
+   bekommt **keine** C++-Tabelle: er ist eine SVG-Form, und Rack rendert
+   Formen (nur Text nicht). Eine Tabelle ohne Verbraucher wäre toter Code.
 4. **Beschriftungsregel statt Einzelfall-Konstanten.** Der heutige
    `FLUXFB_LBL_Y_OFFSET`-Hack existiert, weil GRIT bipolar wurde und
    `KNOBC` die größere Sperrfläche erbte. Die Ursache ist mit §1 weg, das
    Muster nicht: ein kleiner Knopf **direkt über** einem großen (16 mm
-   Zeilenabstand) landet mit dem Vorgabeabstand 7,9 mm nur 8,1 mm vom
-   Mittelpunkt des großen entfernt — 0,1 mm Luft. Betroffen sind pro Deck
-   SHAPE, RANGE und FB. Für diesen Fall gilt **6,0 mm**, als Regel im
-   Generator, nicht als drei benannte Konstanten.
+   Zeilenabstand) landet mit dem Vorgabeabstand 8,0 mm exakt auf der
+   Sperrflächenkante des großen — 0 mm Luft. Betroffen sind pro Deck
+   SHAPE, RANGE und FB.
+
+   Eine Verkürzung trägt allerdings nicht: bei MORPH (152,4 / 62) und DECAY
+   (152,4 / 79) sind beide groß und 17 mm auseinander, und jeder Abstand, der
+   den Nachbarn freihält, liegt innerhalb der **eigenen** Sperrfläche — die
+   Beschriftung stünde auf dem Knopf. Die Regel ist deshalb **Ausweichen statt
+   Kürzen**: unten, sonst oben, sonst rechts (Anker `start`); die erste
+   Position, die jede fremde Sperrfläche um 1,5 mm freihält und außerhalb der
+   eigenen liegt, gewinnt. Der Generator wirft, wenn keine passt — er druckt
+   kein Wort auf einen Knopf. Betroffen sind pro Deck SHAPE, RANGE und FB
+   (weichen nach oben aus), in der Mitte MORPH (oben) und DECAY (rechts).
 5. **`STAGES_A/B` (BEND) bleibt Doppelbelegung auf ATTACKs Knopf.** ATK sitzt
-   bei (14, 66); BEND schreibt 7,0 mm darüber, ATK 7,9 mm darunter. Die
+   bei (14, 66); BEND schreibt 7,0 mm darüber, ATK 8,0 mm darunter. Die
    Ausnahme in `test_no_overlap_with_hw_radii` bleibt genau eine.
+6. **Das VCV-Rehearsal-Widget muss mit.** `FireflowHWWidget` in
+   `host/vcv/src/Fireflow.cpp` wählt den Knopf bisher über `c.kind`
+   (`WK_BIGKNOB`/`WK_KNOBC` → `RoundBlackKnob`, sonst `Trimpot`) und hätte
+   nach der Neuvergabe ein großes RATE gezeigt, während das Blech ein
+   kleines druckt. Ein Probelauf, der beim Thema Griffweite vom Blech
+   abweicht, ist wertlos. Der Header trägt dafür `kParamSize[]` parallel zu
+   `kParamCtls`. `HwPanelText` zeichnet zusätzlich `kHwOnlyCtls` — Rack
+   rendert den Text des SVG nicht, CV/MOD/SHIFT wären sonst namenlose Kreise.
 
 ## §7 Testvertrag
 
