@@ -283,6 +283,15 @@ def svg():
     for y in (KEEP_TOP, KEEP_BOT):
         P.append(f'<line x1="0" y1="{mm(y)}" x2="{mm(W)}" y2="{mm(y)}" '
                   f'stroke="{gp.LINE}" stroke-width="0.3" stroke-dasharray="2,1.5"/>')
+    # SD slot: a cutout, not a control. Drawn as an outline because it is a
+    # hole in the plate, and 3 mm below the jack centres because TONE's
+    # caption needs the room (spec 2026-08-10 §3).
+    P.append(f'<rect x="{mm(SD_X - SD_W / 2)}" y="{mm(SD_Y - SD_H / 2)}" '
+              f'width="{mm(SD_W)}" height="{mm(SD_H)}" rx="1" fill="none" '
+              f'stroke="{gp.INK}" stroke-width="0.5" stroke-dasharray="1.5,1"/>')
+    P.append(f'<text x="{mm(SD_X)}" y="{mm(SD_Y + 1.0)}" fill="{gp.INK}" '
+              f'text-anchor="middle" font-family="monospace" '
+              f'font-size="2.6">SD</text>')
     # one glyph per control, by kind
     for c in ALL_HW:
         if c.kind in (gp.IN, gp.OUT):

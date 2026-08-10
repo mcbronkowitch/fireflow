@@ -257,6 +257,36 @@ def test_cv_sits_under_its_target():
               f"{j.enum} points at {target.enum}, which is not a big knob")
 
 
+def test_sd_cutout_is_clear():
+    """Kein Bedienelement, keine Buchse, keine LED und kein Beschriftungsanker
+    liegt im SD-Ausschnitt (spec 2026-08-10 §3/§5). Der Ausschnitt sitzt 3 mm
+    tiefer als die Buchsenmitten, weil TONEs Beschriftung sonst darin läge."""
+    x0, x1 = hw.SD_X - hw.SD_W / 2, hw.SD_X + hw.SD_W / 2
+    y0, y1 = hw.SD_Y - hw.SD_H / 2, hw.SD_Y + hw.SD_H / 2
+
+    def dist_to_rect(px, py):
+        dx = max(x0 - px, 0.0, px - x1)
+        dy = max(y0 - py, 0.0, py - y1)
+        return (dx * dx + dy * dy) ** 0.5
+
+    for c in hw.ALL_HW:
+        check(dist_to_rect(c.x, c.y) >= c.r - 1e-6,
+              f"{c.enum} overlaps the SD cutout")
+    for c in hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS:
+        if not c.label:
+            continue
+        lx, ly = hw.hw_label(c)[0], hw.hw_label(c)[1]
+        check(dist_to_rect(lx, ly) > 1e-6,
+              f"caption {c.enum} at ({lx:.1f},{ly:.1f}) is inside the SD cutout")
+    check(y1 <= hw.KEEP_BOT + 1e-9, "SD cutout crosses the bottom rail")
+
+
+def test_sd_cutout_is_drawn():
+    svg = open(os.path.join(HERE, "FireflowHW.svg")).read()
+    check(f'width="{hw.SD_W:.3f}"' in svg and f'height="{hw.SD_H:.3f}"' in svg,
+          "the SD cutout is not in the SVG")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
