@@ -341,7 +341,7 @@ is actually built today, and what is still design-only.
 | **VCV engine-aware captions** | Every state-dependent panel caption now comes from one `DYNAMIC_CAPTIONS` generator table instead of hand-written special cases: BODY gets honest VOICE words (`HIT`/`DAMP`/`CHAR`/`EXCIT`/`BRITE`) and BBD gets its own (`TAIL`/`TILT`/`FEED`/`LOSS`); the FX-box word collisions are resolved by renaming FLUX `RATE`→`DIV`, FLUX `TIME`→`MULT`, per-deck `ROOM`→`SEND`, `MASTER_DRIVE`→`PUSH` and BBD `PITCH`→`BEND` (collision with the orbit's `PITCH` eyebrow); the GRIT mode pad now shows its own state, `SAT`/`CRSH`, instead of the word `GRIT` it collided with; MELODY drives Sampler `SCAN` only, no longer also `set_variation`; the permanently-printed `SCAN`/`LEN` second words are deleted from the static plate | ✅ **done** (VCV host + generator; spec `docs/superpowers/specs/2026-08-03-vcv-engine-aware-captions-design.md`; branch `vcv-engine-aware-captions`, not yet merged to main or released) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
-| **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel undefined; the existing shell spec is superseded** — see below) |
+| **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel design done — regrouping round built on branch `hw-panel-regroup` 2026-08-10; bring-up not started**; the existing shell spec is superseded — see below) |
 
 Milestone order follows the design spec's build order (audible first, hardware
 last). The scale layer was inserted after M1 because it only touches the PITCH
@@ -2289,8 +2289,17 @@ So M6 now decomposes into two pieces, in order:
    as cuts.
 2. **Bring-up** — the shell itself, against the panel decided in step 1.
 
-Until step 1 has a spec, M6 has no implementable definition, and the "spec ready"
-status this milestone carried since 2026-07-12 no longer holds.
+**2026-08-10 — round 1 done, and the only one it took.** The regrouping spec
+(`docs/superpowers/specs/2026-08-10-hw-panel-regroup-design.md`, plan
+`docs/superpowers/plans/2026-08-10-hw-panel-regroup.md`) is built on branch
+`hw-panel-regroup`, not yet merged to main or released: hardware size
+classes decoupled from the VCV widget kind (18 big / 46 small), the seven
+engine-grounded groups from §2 replace the old orbit cut, eight CV inputs
+land under the four big knobs they drive, MOD/SHIFT are reserved pads, the
+LED field is fixed at 20, and the SD cutout has its position.
+`hw_panel_guard` proves the generated panel and header against the spec's
+coordinates and keep-outs. Step 1 is closed; step 2 (bring-up) still has no
+spec and is next.
 
 **Flow layer — Plan A and Plan B both landed 2026-08-05.** The compact-macro-
 module spec (`docs/superpowers/specs/2026-08-05-flow-machine-design.md`)

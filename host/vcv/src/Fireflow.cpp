@@ -1878,6 +1878,9 @@ struct HwPanelText : Widget {
             text(c.lbl.x, c.lbl.y, c.lblSize, 0.f, c.lblRgb, c.anchor, c.label);
         for (const auto& c : spkyhw::kOutputCtls)
             text(c.lbl.x, c.lbl.y, c.lblSize, 0.f, c.lblRgb, c.anchor, c.label);
+        for (const auto& c : spkyhw::kHwOnlyCtls)
+            if (c.label[0])
+                text(c.lbl.x, c.lbl.y, c.lblSize, 0.f, c.lblRgb, c.anchor, c.label);
         for (const auto& t : spkyhw::kPanelTexts)
             text(t.mm.x, t.mm.y, t.size, t.spacing, t.rgb, t.anchor, t.str);
     }
@@ -1890,12 +1893,21 @@ struct FireflowHWWidget : ModuleWidget {
         auto* labels = new HwPanelText();
         labels->box.size = box.size;
         addChild(labels);
-        for (const auto& c : spkyhw::kParamCtls) {
+        for (size_t i = 0; i < sizeof(spkyhw::kParamCtls) / sizeof(spkyhw::kParamCtls[0]); ++i) {
+            const auto& c = spkyhw::kParamCtls[i];
             Vec pos = mm2px(Vec(c.mm.x, c.mm.y));
+            // Knob size comes from the hardware class, never from c.kind:
+            // KNOBC is bipolar and KNOBI is detented, and a centre-detent pot
+            // ships in every size (spec 2026-08-10 §1). A rehearsal that
+            // shows a big RATE while the plate prints a small one cannot be
+            // used to judge grip.
+            const bool big = spkyhw::kParamSize[i] != 0;
             switch (c.kind) {
-                case WK_BIGKNOB: case WK_KNOBC:
-                    addParam(createParamCentered<RoundBlackKnob>(pos, module, c.id)); break;
-                case WK_SMKNOB: case WK_KNOBI:
+                case WK_BIGKNOB: case WK_KNOBC: case WK_SMKNOB: case WK_KNOBI:
+                    if (big) {
+                        addParam(createParamCentered<RoundBlackKnob>(pos, module, c.id));
+                        break;
+                    }
                     if (c.id == ATTACK_A || c.id == ATTACK_B
                             || c.id == STAGES_A || c.id == STAGES_B) {
                         auto* knob = createParamCentered<SlotVisible<Trimpot>>(pos, module, c.id);

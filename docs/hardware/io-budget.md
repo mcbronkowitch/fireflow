@@ -222,7 +222,8 @@ bestanden gilt.
 
 ## 5. Die Buchsen
 
-Aus `gen_panel.py`, 4 Eingänge und 6 Ausgänge:
+Aus `gen_panel.py` 4 Eingänge und 6 Ausgänge, plus 8 CV-Eingänge, die nur auf
+dem Hardware-Panel existieren (Spec 2026-08-10 §4):
 
 | Buchse | Art | Anmerkung |
 |---|---|---|
@@ -231,6 +232,7 @@ Aus `gen_panel.py`, 4 Eingänge und 6 Ausgänge:
 | `OUT_L`, `OUT_R` | Audio out | direkt an B2/B1 |
 | `PITCH_A`, `PITCH_B` | CV out | **hier klemmt es** |
 | `GATE_A`, `GATE_B` | Gate out | B5/B6 (Gate Out 1/2) |
+| `CV_FILT/TIMB/COLOR/LVL` ×2 | CV in | `CV_1..8`, bipolar konditioniert (`InitBipolarCv`) — genau deshalb als Poti-Sense verworfen und hier richtig |
 
 Audio-I/O und die CV-Wandler sind auf dem Submodule bereits vorhanden — das
 ist der Grund, dieses Modul zu nehmen, und muss in der Rechnung auftauchen.

@@ -40,11 +40,18 @@ ist seit Task 6 ein einzelner gerasteter Knopf. Kanallisten werden aus
 
 | Klasse | Bedarf heute | Kapazität | landet auf |
 |---|---|---|---|
-| Potis (64 kontinuierlich: 17 groß, 47 klein) | 62 Positionen (2× Doppelbelegung: BEND teilt sich ATTACKs Knopf) | bis 128 Kanäle | 4067-Kette, 4 Sense-Pins (§2) |
-| Taster | 4 (`ENGINE` ×2, `REC` ×2) | 24 | 74HC165-Kette (`src/hw/sr_165.h`) |
-| Status-LEDs | ~20 (siehe LED-Tabelle unten) | 24 | 3× 74HC595 |
-| Buchsen | 10 | 12 | Main-PCB |
+| Potis (64 kontinuierlich: 18 groß, 46 klein) | 62 Positionen (2× Doppelbelegung: BEND teilt sich ATTACKs Knopf) | bis 128 Kanäle | 4067-Kette, 4 Sense-Pins (§2) |
+| Taster | 6 (`ENGINE` ×2, `REC` ×2, `MOD`, `SHIFT` — die letzten zwei ohne Funktion) | 24 | 74HC165-Kette (`src/hw/sr_165.h`) |
+| Status-LEDs | 20 (festgelegt, oberes Ende des Korridors) | 24 | 3× 74HC595 |
+| Buchsen | 18 (10 + 8 CV-Eingänge auf `CV_1..8`) | begrenzt durch Panelfläche, nicht durch die Main-PCB | Main-PCB |
 | SD-Slot | 1 | 1 | SDMMC 4-bit, Main-PCB, frontzugänglich |
+
+> **Nachtrag 10. August 2026:** Zählbasis, Buchsenzahl und LED-Zahl kommen aus
+> `2026-08-10-hw-panel-regroup-design.md`. Die dort beschlossenen acht
+> CV-Eingänge liegen auf `CV_1..8` — genau den Pins, die §2 unten als
+> Poti-Sense verwirft, weil sie bipolar konditioniert sind. Als CV-Eingänge
+> sind sie richtig und bereits vorhanden; die frühere Kapazitätsangabe „12"
+> war eine Schätzung des Buchsenfelds, keine elektrische Grenze.
 
 **Encoder: gestrichen** — als Entscheidung, nicht als Auslassung. `DETUNE_A/B`
 ist zurück auf dem Panel (Task 10, `PLAY`-Reihe, freigewordener `STEP`-Slot);
@@ -144,8 +151,10 @@ Voice-Cut kauft gemessene ~7,9 Punkte) — nie Panel-Änderung.
 
 **60 HP fest** (304,8 mm × 3U). Nutzhöhe ehrlich: **~105–112 mm** (Rails und
 Schrauben fressen oben/unten je ~8 mm; „120 mm nutzbar" existiert in 3U
-nicht). Zweistufiges Raster: große Knobs ~22 mm, kleine (9-mm-Potis,
-Mini-Kappen) ~15 mm. Reihenrechnung am unteren Inventarrand: 2 Reihen große
+nicht). Zweistufiges Raster: große Knobs (Sperrfläche r = 8,0 mm), kleine
+(9-mm-Potis, Mini-Kappen, r = 5,5 mm). Der ausgeführte Zeilenrhythmus steht
+in `2026-08-10-hw-panel-regroup-design.md` §3; die dortige Runde ist die
+erste der hier gedeckelten drei. Reihenrechnung am unteren Inventarrand: 2 Reihen große
 (44 mm) + 3 Reihen kleine (45 mm, Taster und LEDs in freie Plätze
 eingefaltet) + Buchsenreihe (15 mm) = 104 mm. Das passt — knapp, und es wird
 ein **dichtes** Panel (WMD-Performance-Mixer-Klasse, keine Luft-Ästhetik).

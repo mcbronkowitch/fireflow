@@ -37,18 +37,18 @@ def test_static_captions_only():
         words = gp.dynamic_words(c.enum.rsplit("_", 1)[0])
         if words:
             assert c.label == words[0], c.enum
-    src = open(os.path.join(HERE, "..", "src", "generated_hw_panel.hpp")).read()
+    src = open(os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"),
+               encoding="utf-8").read()
     assert "DynCaption" not in src
 
 def test_hardware_footprints():
-    # Screen-widget radii are meaningless on sheet metal. Minimum clearance
-    # radii per kind (mm): big cap 8.0, 9mm pot + mini cap 5.5, pad 4.0,
-    # jack 4.0, LED 1.5.
-    minima = {gp.BIGKNOB: 8.0, gp.KNOBC: 8.0, gp.SMKNOB: 5.5, gp.KNOBI: 5.5,
-              gp.SW2: 4.0, gp.LATCH: 4.0, gp.SMBTN: 4.0,
-              gp.IN: 4.0, gp.OUT: 4.0, gp.LIGHT: 1.5}
+    # Screen-widget radii are meaningless on sheet metal, and so is the
+    # screen widget's KIND: it says bipolar/detented, not big/small. The
+    # minimum clearance radius comes from the hardware size class
+    # (spec 2026-08-10 §1).
     for c in hw.ALL_HW:
-        assert c.r >= minima[c.kind] - 1e-9, (c.enum, c.r)
+        want = hw.CLASS_R[hw.hw_class(c.enum)]
+        assert c.r >= want - 1e-9, (c.enum, c.r, want)
 
 def test_rail_keepout():
     # Rails and screws own the top/bottom ~9 mm; VCV's 2 mm rule is not enough.
@@ -56,6 +56,19 @@ def test_rail_keepout():
         assert c.y - c.r >= hw.KEEP_TOP - 1e-9, (c.enum, "top")
         assert c.y + c.r <= hw.KEEP_BOT + 1e-9, (c.enum, "bottom")
         assert c.x - c.r >= 2.0 and c.x + c.r <= hw.W - 2.0, (c.enum, "side")
+    # Static lettering (hw.TEXTS) used to be invisible to this guard: nothing
+    # stopped a title or legend from being placed inside a keep-out rail.
+    # Text has no radius, so it is checked as a bare point.
+    for (x, y, size, spacing, col, anchor, txt) in hw.TEXTS:
+        if txt == hw.TITLE_TEXT:
+            # Named exemption, not a silent skip: see the TITLE_TEXT comment
+            # in gen_hw_panel.py -- the mounting screws are at the panel's
+            # left/right edges, not near x=CX where the title sits, so this
+            # particular overlap with KEEP_TOP is mechanically harmless.
+            continue
+        check(y >= hw.KEEP_TOP - 1e-9, f"text {txt!r} at y={y} crosses the top rail")
+        check(y <= hw.KEEP_BOT + 1e-9, f"text {txt!r} at y={y} crosses the bottom rail")
+        check(x >= 2.0 and x <= hw.W - 2.0, f"text {txt!r} at x={x} crosses the side keepout")
 
 def test_no_overlap_with_hw_radii():
     # Radius-sum clearance with REAL footprints. Exactly one legal overlap:
@@ -70,17 +83,89 @@ def test_no_overlap_with_hw_radii():
             d = ((a.x - b.x) ** 2 + (a.y - b.y) ** 2) ** 0.5
             assert d >= a.r + b.r - 1e-6, (a.enum, b.enum, round(d, 2))
 
+def _twin_enum(enum):
+    """Name-declared mirror partner, or None if the name declares none.
+
+    Two shapes occur in this inventory: a trailing _A/_B (RATE_A, PITCH_B)
+    and an embedded _A_/_B_ segment for names that end in something else
+    (ENG0_A_L, REC_A_L, CV_FILT_A is caught by the suffix rule already).
+    Names carrying neither marker (centre controls, MODBTN/SHIFTBTN,
+    IN_L/IN_R, CLOCK, RESET, ...) have no naming-declared twin and are left
+    alone -- pairing them would be a guess, not a check."""
+    if enum.endswith("_A"):
+        return enum[:-2] + "_B"
+    if enum.endswith("_B"):
+        return enum[:-2] + "_A"
+    if "_A_" in enum:
+        return enum.replace("_A_", "_B_", 1)
+    if "_B_" in enum:
+        return enum.replace("_B_", "_A_", 1)
+    return None
+
+
+def _mirror_pairs(items):
+    """Yield (enum_a, a, enum_b, b) once per name-declared mirror pair found
+    in items (a list of objects with .enum, .x, .y)."""
+    by_enum = {c.enum: c for c in items}
+    seen = set()
+    for enum, a in by_enum.items():
+        twin = _twin_enum(enum)
+        if twin is None or twin not in by_enum:
+            continue
+        key = frozenset((enum, twin))
+        if key in seen:
+            continue
+        seen.add(key)
+        yield enum, a, twin, by_enum[twin]
+
+
 def test_mirror_symmetry():
-    # Deck B is deck A mirrored — the instrument's identity, kept by machine.
-    pos_a = {c.enum[:-2]: (c.x, c.y) for c in hw.HW_PARAMS if c.enum.endswith("_A")}
-    pos_b = {c.enum[:-2]: (c.x, c.y) for c in hw.HW_PARAMS if c.enum.endswith("_B")}
-    assert pos_a.keys() == pos_b.keys()
-    for k, (xa, ya) in pos_a.items():
-        xb, yb = pos_b[k]
-        assert abs((hw.W - xa) - xb) < 1e-6 and abs(ya - yb) < 1e-6, k
+    # Deck B is deck A mirrored -- the instrument's identity, kept by
+    # machine. Covers every hand-written mirror (JACK_POS, LIGHT_POS, the
+    # HW_ONLY loop), not only the DECK_POS-derived HW_PARAMS: those are
+    # equally "the instrument's identity" and were equally unchecked.
+    items = hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_LIGHTS + hw.HW_ONLY
+    pairs = 0
+    for enum, a, twin, b in _mirror_pairs(items):
+        check(abs((hw.W - a.x) - b.x) < 1e-6,
+              f"{enum}/{twin}: x does not mirror ({a.x:.2f} vs {b.x:.2f})")
+        check(abs(a.y - b.y) < 1e-6,
+              f"{enum}/{twin}: y does not match ({a.y:.2f} vs {b.y:.2f})")
+        pairs += 1
+    check(pairs > 0, "test_mirror_symmetry found no mirror pairs -- vacuous")
+    test_mirror_symmetry.pairs_checked = pairs
+
+_MIRROR_ANCHOR = {"middle": "middle", "start": "end", "end": "start"}
+
+
+def test_caption_mirror_symmetry():
+    # test_mirror_symmetry above only compares CONTROL positions. Candidate 3
+    # of hw_label's step-aside rule must itself mirror, or a mirrored twin
+    # landing there would have one twin step toward the axis and the
+    # other step off the panel edge, with nothing catching it (spec
+    # 2026-08-10 §6 fix-2). Covers every hand-written mirror, not only
+    # HW_PARAMS -- same widening as test_mirror_symmetry above.
+    items = hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_LIGHTS + hw.HW_ONLY
+    pairs = 0
+    for enum, a, twin, b in _mirror_pairs(items):
+        if not a.label:
+            continue
+        lxa, lya, anchor_a = hw.hw_label(a)[:3]
+        lxb, lyb, anchor_b = hw.hw_label(b)[:3]
+        check(abs((hw.W - lxa) - lxb) < 1e-6,
+              f"{enum}/{twin}: caption x does not mirror ({lxa:.2f} vs {lxb:.2f})")
+        check(abs(lya - lyb) < 1e-6,
+              f"{enum}/{twin}: caption y does not match ({lya:.2f} vs {lyb:.2f})")
+        check(_MIRROR_ANCHOR[anchor_a] == anchor_b,
+              f"{enum}/{twin}: anchors do not mirror ({anchor_a!r} vs {anchor_b!r})")
+        pairs += 1
+    check(pairs > 0, "test_caption_mirror_symmetry found no mirror pairs -- vacuous")
+    test_caption_mirror_symmetry.pairs_checked = pairs
+
 
 def test_header_contract():
-    src = open(os.path.join(HERE, "..", "src", "generated_hw_panel.hpp")).read()
+    src = open(os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"),
+               encoding="utf-8").read()
     assert "namespace spkyhw" in src
     assert "kHwHP = 60" in src
     for tbl in ("kParamCtls", "kInputCtls", "kOutputCtls", "kLightCtls",
@@ -88,9 +173,19 @@ def test_header_contract():
         assert tbl in src, tbl
     # Ids are the MAIN module's enum values — one id space, two layouts.
     assert re.search(r"\{\s*RATE_A\s*,", src)
+    # The rehearsal widget must pick knob size from the HARDWARE class, not
+    # from c.kind -- otherwise Rack shows a big RATE while the plate prints a
+    # small one (spec 2026-08-10 §1).
+    assert "kParamSize" in src, "kParamSize missing from the hw header"
+    body = src.split("kParamSize[] = {")[1].split("};")[0]
+    vals = [v.strip() for v in body.replace("\n", "").split(",") if v.strip()]
+    assert len(vals) == len(hw.HW_PARAMS), (len(vals), len(hw.HW_PARAMS))
+    want = ["1" if hw.hw_class(c.enum) == "G" else "0" for c in hw.HW_PARAMS]
+    assert vals == want, "kParamSize disagrees with HW_SIZE"
+    assert "kHwOnlyCtls" in src
 
 def test_svg_exists_and_is_60hp():
-    svg = open(os.path.join(HERE, "FireflowHW.svg")).read()
+    svg = open(os.path.join(HERE, "FireflowHW.svg"), encoding="utf-8").read()
     assert f'width="{hw.W:.3f}mm"' in svg and 'height="128.500mm"' in svg
 
 def test_shared_knob_labels_do_not_coincide():
@@ -114,10 +209,15 @@ def test_hw_slot_map_matches_the_reduced_inventory():
           "hw param count drifted from the shared inventory")
 
 
+LBL_MARGIN = 1.5
+
+
 def test_labels_stay_off_neighbour_footprints():
-    # A caption may sit near its own control, but its anchor must never
-    # land inside ANOTHER control's clearance circle.
-    for c in hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS:
+    # A caption may sit near its own control, but its anchor must clear every
+    # OTHER control's footprint by LBL_MARGIN. Bare non-overlap is not a
+    # margin: at 16 mm row spacing the default offset lands 8.1 mm from an
+    # 8.0 mm knob and would pass a zero-margin test with 0.1 mm to spare.
+    for c in hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_ONLY:
         if not c.label:
             continue
         lx, ly = hw.hw_label(c)[0], hw.hw_label(c)[1]
@@ -125,7 +225,22 @@ def test_labels_stay_off_neighbour_footprints():
             if other is c:
                 continue
             d = ((lx - other.x) ** 2 + (ly - other.y) ** 2) ** 0.5
-            assert d >= other.r - 1e-6, (c.enum, other.enum, round(d, 2))
+            check(d >= other.r + LBL_MARGIN - 1e-6,
+                  f"caption {c.enum} at ({lx:.1f},{ly:.1f}) is {d:.2f} from "
+                  f"{other.enum} (needs {other.r + LBL_MARGIN:.2f})")
+
+
+def test_captions_stay_off_their_own_knob():
+    # The reason a shortened offset cannot be the answer: a control's own
+    # radius is the floor. A caption inside its own footprint is printed ON
+    # the knob (spec 2026-08-10 §6, corrected).
+    for c in hw.HW_PARAMS + hw.HW_ONLY:
+        if not c.label:
+            continue
+        lx, ly = hw.hw_label(c)[0], hw.hw_label(c)[1]
+        d = ((lx - c.x) ** 2 + (ly - c.y) ** 2) ** 0.5
+        check(d >= c.r - 1e-6,
+              f"caption {c.enum} at ({lx:.1f},{ly:.1f}) sits on its own knob")
 
 
 def test_committed_files_match_the_generator():
@@ -133,24 +248,140 @@ def test_committed_files_match_the_generator():
     committed files but only grep for substrings -- they would not notice
     gen_hw_panel.py being edited without being re-run (review finding
     IMPORTANT 5, same gap as the big panel and already closed there and in
-    test_flow_panel.py). Compare byte-for-byte against a fresh generator run."""
-    for path, produced in (
-            (os.path.join(HERE, "FireflowHW.svg"), hw.svg()),
-            (os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"), hw.header())):
+    test_flow_panel.py). Compare byte-for-byte against a fresh generator run.
+
+    hw_label() raises ValueError by design when geometry gets too tight for
+    some control's caption. Calling hw.svg()/hw.header() unguarded would let
+    that exception escape main()'s test loop as a traceback instead of a
+    named check() failure -- diagnose the traceback, don't guard against it,
+    was the old failure mode here."""
+    produced = {}
+    for name, fn in (("FireflowHW.svg", hw.svg), ("generated_hw_panel.hpp", hw.header)):
+        try:
+            produced[name] = fn()
+        except ValueError as e:
+            FAILS.append(f"res/gen_hw_panel.py could not build {name}: {e}")
+            produced[name] = None
+    for name, path in (("FireflowHW.svg", os.path.join(HERE, "FireflowHW.svg")),
+                        ("generated_hw_panel.hpp",
+                         os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"))):
+        if produced[name] is None:
+            continue
         if not os.path.exists(path):
             FAILS.append(f"{path} is missing -- run res/gen_hw_panel.py")
             continue
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             on_disk = f.read()
-        check(on_disk == produced,
+        check(on_disk == produced[name],
               f"{path} differs from the generator's output -- it was "
               "hand-edited, or the generator was changed without re-running it")
+
+
+def test_every_control_has_a_size_class():
+    """Die Größe eines Bedienelements ist eine Hardware-Aussage und steht in
+    HW_SIZE -- nicht in c.kind. KNOBC heißt bipolar, KNOBI heißt gerastert;
+    beides sagt nichts über einen Durchmesser (spec 2026-08-10 §1)."""
+    for c in gp.RUNTIME_PANEL_PARAMS:
+        base = c.enum[:-2] if c.enum.endswith(("_A", "_B")) else c.enum
+        check(base in hw.HW_SIZE, f"no hardware size class for {base}")
+    for c in hw.ALL_HW:
+        assert hw.hw_class(c.enum) in ("G", "S", "P", "J", "L"), c.enum
+        assert abs(c.r - hw.CLASS_R[hw.hw_class(c.enum)]) < 1e-9, (c.enum, c.r)
+
+
+def test_size_classes_match_the_spec():
+    """Die 18 großen sind namentlich beschlossen (spec 2026-08-10 §1).
+    Ohne diese Prüfung wandert die Vergabe beim nächsten Umbau lautlos."""
+    BIG = {"DENSITY", "MOD", "COLOR", "FILT", "SOURCE", "FLUX", "REV_MIX",
+           "COMP", "MORPH", "REV_DECAY"}
+    got = {b for b, cls in hw.HW_SIZE.items() if cls == "G"}
+    check(got == BIG, f"big-knob set drifted: extra={got-BIG} missing={BIG-got}")
+    big_positions = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "G"]
+    check(len(big_positions) == 18, f"expected 18 big positions, got {len(big_positions)}")
+    small = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "S"]
+    check(len(small) == 46, f"expected 46 small params, got {len(small)}")
+
+
+def test_hw_only_inventory():
+    """Was es auf Blech gibt, aber nicht im VCV-Modul: 2 Taster, 8 CV-Buchsen,
+    16 zusätzliche LEDs (spec 2026-08-10 §5)."""
+    kinds = {}
+    for c in hw.HW_ONLY:
+        kinds[hw.hw_class(c.enum)] = kinds.get(hw.hw_class(c.enum), 0) + 1
+    check(kinds.get("P") == 2, f"expected 2 hw-only pads, got {kinds.get('P')}")
+    check(kinds.get("J") == 8, f"expected 8 CV jacks, got {kinds.get('J')}")
+    check(kinds.get("L") == 16, f"expected 16 hw-only LEDs, got {kinds.get('L')}")
+    # and they must NOT have leaked into the shared param inventory
+    assert [c.enum for c in hw.HW_PARAMS] == [c.enum for c in gp.RUNTIME_PANEL_PARAMS]
+    total_leds = len([c for c in hw.ALL_HW if hw.hw_class(c.enum) == "L"])
+    check(total_leds == 20, f"expected 20 LEDs on the panel, got {total_leds}")
+
+
+def test_cv_sits_under_its_target():
+    """Jede CV-Buchse trägt den Namen ihres Ziels, teilt dessen x exakt und
+    liegt darunter (spec 2026-08-10 §4). Ohne diese Prüfung wandert eine
+    Buchse in der nächsten Runde weg und die Beschriftung lügt."""
+    by_label = {}
+    for c in hw.HW_PARAMS:
+        by_label[(c.label, c.x > hw.CX)] = c
+    cvs = [c for c in hw.HW_ONLY if c.enum.startswith("CV_")]
+    check(len(cvs) == 8, f"expected 8 CV jacks, got {len(cvs)}")
+    for j in cvs:
+        target = by_label.get((j.label, j.x > hw.CX))
+        check(target is not None, f"{j.enum} names {j.label!r}, which is not a knob")
+        if target is None:
+            continue
+        check(abs(target.x - j.x) < 1e-6,
+              f"{j.enum} at x={j.x} does not share x with {target.enum} "
+              f"at x={target.x}")
+        check(j.y > target.y, f"{j.enum} is not below {target.enum}")
+        check(hw.hw_class(target.enum) == "G",
+              f"{j.enum} points at {target.enum}, which is not a big knob")
+
+
+def test_sd_cutout_is_clear():
+    """Kein Bedienelement, keine Buchse, keine LED und kein Beschriftungsanker
+    liegt im SD-Ausschnitt (spec 2026-08-10 §3/§5). Der Ausschnitt sitzt 3 mm
+    tiefer als die Buchsenmitten, weil TONEs Beschriftung sonst darin läge."""
+    x0, x1 = hw.SD_X - hw.SD_W / 2, hw.SD_X + hw.SD_W / 2
+    y0, y1 = hw.SD_Y - hw.SD_H / 2, hw.SD_Y + hw.SD_H / 2
+
+    def dist_to_rect(px, py):
+        dx = max(x0 - px, 0.0, px - x1)
+        dy = max(y0 - py, 0.0, py - y1)
+        return (dx * dx + dy * dy) ** 0.5
+
+    for c in hw.ALL_HW:
+        check(dist_to_rect(c.x, c.y) >= c.r - 1e-6,
+              f"{c.enum} overlaps the SD cutout")
+    for c in hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_ONLY:
+        if not c.label:
+            continue
+        lx, ly = hw.hw_label(c)[0], hw.hw_label(c)[1]
+        check(dist_to_rect(lx, ly) > 1e-6,
+              f"caption {c.enum} at ({lx:.1f},{ly:.1f}) is inside the SD cutout")
+    # Static lettering (hw.TEXTS) used to be invisible to this guard too --
+    # nothing stopped a title or legend from being centred in the cutout.
+    for (x, y, size, spacing, col, anchor, txt) in hw.TEXTS:
+        check(dist_to_rect(x, y) > 1e-6,
+              f"text {txt!r} at ({x:.1f},{y:.1f}) is inside the SD cutout")
+    check(y1 <= hw.KEEP_BOT + 1e-9, "SD cutout crosses the bottom rail")
+
+
+def test_sd_cutout_is_drawn():
+    svg = open(os.path.join(HERE, "FireflowHW.svg")).read()
+    check(f'width="{hw.SD_W:.3f}"' in svg and f'height="{hw.SD_H:.3f}"' in svg,
+          "the SD cutout is not in the SVG")
 
 
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
             fn()
+    for fn in (test_mirror_symmetry, test_caption_mirror_symmetry):
+        n = getattr(fn, "pairs_checked", None)
+        if n is not None:
+            print(f"{fn.__name__}: checked {n} mirror pairs")
     if FAILS:
         print(f"FAIL ({len(FAILS)}):")
         for f in FAILS:
