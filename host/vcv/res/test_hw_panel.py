@@ -158,6 +158,19 @@ def test_every_control_has_a_size_class():
         assert abs(c.r - hw.CLASS_R[hw.hw_class(c.enum)]) < 1e-9, (c.enum, c.r)
 
 
+def test_size_classes_match_the_spec():
+    """Die 18 großen sind namentlich beschlossen (spec 2026-08-10 §1).
+    Ohne diese Prüfung wandert die Vergabe beim nächsten Umbau lautlos."""
+    BIG = {"DENSITY", "MOD", "COLOR", "FILT", "SOURCE", "FLUX", "REV_MIX",
+           "COMP", "MORPH", "REV_DECAY"}
+    got = {b for b, cls in hw.HW_SIZE.items() if cls == "G"}
+    check(got == BIG, f"big-knob set drifted: extra={got-BIG} missing={BIG-got}")
+    big_positions = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "G"]
+    check(len(big_positions) == 18, f"expected 18 big positions, got {len(big_positions)}")
+    small = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "S"]
+    check(len(small) == 46, f"expected 46 small params, got {len(small)}")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

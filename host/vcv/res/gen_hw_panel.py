@@ -27,18 +27,24 @@ KEEP_TOP, KEEP_BOT = 9.0, 119.5   # rails + M3 screws own the rest
 # compare in test_committed_files_match_the_generator proves the refactor is
 # inert. Task 2 is what actually changes it.
 HW_SIZE = {
-    # --- deck ---
-    "RATE": "G", "SHAPE": "G", "DENSITY": "G", "SMOOTH": "G", "RANGE": "G",
-    "MELODY": "G", "MOD": "G", "TUNE": "G", "COLOR": "G",
-    "ATTACK": "S", "DECAY": "S", "RES": "S", "SUB": "S", "SOURCE": "S",
-    "FLUX": "S", "GRIT": "G", "COMP": "S", "STEPS": "S", "DETUNE": "S",
-    "SONG": "S", "FILT": "S", "FLUXRATE": "S", "FLUXFB": "S", "LINK": "S",
-    "STAGES": "S", "REV_MIX": "S",
+    # --- deck: one head per group (spec 2026-08-10 §1/§2) ---
+    "MOD": "G", "DENSITY": "G",                       # MOD group
+    "RATE": "S", "SHAPE": "S", "SMOOTH": "S", "RANGE": "S", "MELODY": "S",
+    "COLOR": "G",                                     # PITCH group
+    "TUNE": "S", "DETUNE": "S",
+    "FILT": "G", "SOURCE": "G",                       # VOICE group
+    "ATTACK": "S", "DECAY": "S", "RES": "S", "SUB": "S", "STAGES": "S",
+    "FLUX": "G",                                      # FLUX group
+    "FLUXRATE": "S", "FLUXFB": "S", "LINK": "S",
+    "REV_MIX": "G",                                   # ROOM send
+    "COMP": "G", "GRIT": "S",                         # OUT group
+    "STEPS": "S", "SONG": "S",                        # PLAY group
     "ENGINE": "P", "REC": "P",
     # --- centre ---
-    "MORPH": "G", "TEMPO": "S", "COUPLE": "S", "SCALE": "S", "DRIFT": "S",
-    "REV_SIZE": "S", "REV_DECAY": "S", "REV_TONE": "S", "REV_DIFF": "S",
-    "CHOKE": "S", "TIDE": "S", "SHUFFLE": "S",
+    "MORPH": "G", "TIDE": "S", "CHOKE": "S",          # BLEND
+    "TEMPO": "S", "COUPLE": "S", "SHUFFLE": "S",      # CLOCK
+    "SCALE": "S", "DRIFT": "S",                       # TONALITY
+    "REV_DECAY": "G", "REV_SIZE": "S", "REV_TONE": "S", "REV_DIFF": "S",
 }
 
 CLASS_R = {"G": 8.0, "S": 5.5, "P": 4.0, "J": 4.0, "L": 1.5}
@@ -66,53 +72,62 @@ def hw_class(enum):
 _JACK_ENUMS = {c.enum for c in gp.INPUTS} | {c.enum for c in gp.OUTPUTS}
 _LIGHT_ENUMS = {c.enum for c in gp.LIGHTS}
 
-# --- iteration-0 slot map: deck-A coordinates per param BASE name -----------
-# Big knobs, 22 mm grid, two rows (5 + 4).
-BIG_ROW1_Y, BIG_ROW2_Y = 18.0, 40.0
+# --- slot map (spec 2026-08-10 §3) ------------------------------------------
+# Row rhythm, top to bottom: a status/transport strip, two two-row bands, the
+# jack row. The four CV targets sit in the LOWEST knob row so their jacks are
+# adjacent, not merely aligned (spec §4).
+Y_TOP = 15.0                      # transport + the whole LED field
+Y_B1K, Y_B1G = 30.0, 46.0         # band 1: MOD, FLUX, ROOM send
+Y_B2K, Y_B2G = 66.0, 86.0         # band 2: VOICE, PITCH, OUT -- the CV targets
+JACK_Y = 107.0
+SD_X, SD_Y, SD_W, SD_H = 152.4, 110.0, 15.0, 12.0
+
+# The four CV columns. A jack and its target share this x exactly; the guard
+# test_cv_sits_under_its_target holds them together.
+X_FILT, X_TIMB, X_COLOR, X_LVL = 23.0, 42.5, 76.25, 100.0
+
 DECK_POS = {
-    "RATE":    (14.0, BIG_ROW1_Y), "SHAPE":  (36.0, BIG_ROW1_Y),
-    "DENSITY": (58.0, BIG_ROW1_Y), "SMOOTH": (80.0, BIG_ROW1_Y),
-    "RANGE":  (102.0, BIG_ROW1_Y),
-    "MELODY":  (25.0, BIG_ROW2_Y), "MOD":    (47.0, BIG_ROW2_Y),
-    "TUNE":    (69.0, BIG_ROW2_Y), "COLOR":  (91.0, BIG_ROW2_Y),
-    # small rows, 15 mm grid; voice cluster | fx cluster
-    # (77, 71) is now a deliberate gap: FLUXTIME (the old MULT knob) was
-    # retired in task 6, folded into FLUX itself (still at (77, 56), one row
-    # up). Iteration 0 leaves the hole rather than reflowing the grid (that
-    # is a regrouping session, not this one).
-    "ATTACK":   (12.0, 56.0), "FILT":    (27.0, 56.0), "SUB":     (42.0, 56.0),
-    "FLUXRATE": (62.0, 56.0), "FLUX":    (77.0, 56.0), "FLUXFB":  (92.0, 56.0),
-    "REV_MIX": (107.0, 56.0),
-    "DECAY":    (12.0, 71.0), "RES":     (27.0, 71.0), "SOURCE":  (42.0, 71.0),
-    "LINK":     (62.0, 71.0), "GRIT":    (92.0, 71.0),
-    "COMP":    (107.0, 71.0),
-    # play row: seq knobs + pads. (27, 86) FORM, (72, 86) GRITMODE and
-    # (102, 86) NEWPHRASE are now gaps too -- all three retired (tasks 2-4).
-    # DETUNE (spec 2026-08-09 hw-control-reduction task 10) took the STEP
-    # pad's old slot here, same freed-position reuse as gen_panel.py's
-    # PAD_X[2] -- STEP itself retired in task 2.
-    "STEPS":    (12.0, 86.0), "SONG":    (42.0, 86.0),
-    "ENGINE":   (57.0, 86.0), "DETUNE":  (87.0, 86.0),
-    "REC":    (117.0, 86.0),
-    # deliberate dual assignment: BEND rides ATTACK's knob (spec §1)
-    "STAGES":   (12.0, 56.0),
+    # status + transport strip
+    "STEPS":  (14.0, Y_TOP), "SONG":   (26.5, Y_TOP),
+    "ENGINE": (38.5, Y_TOP), "REC":    (69.5, Y_TOP),
+    # band 1 -- MOD is ONE engine object (_parts[p].mod()); MOD is its depth
+    "RATE":   (14.0, Y_B1K), "SHAPE":  (26.5, Y_B1K), "SMOOTH": (39.0, Y_B1K),
+    "RANGE":  (51.5, Y_B1K), "MELODY": (64.0, Y_B1K),
+    "MOD":    (26.5, Y_B1G), "DENSITY": (51.5, Y_B1G),
+    # band 1 -- FLUX, then the deck's way into the shared room
+    "FLUXRATE": (76.0, Y_B1K), "FLUXFB": (88.5, Y_B1K), "LINK": (101.0, Y_B1K),
+    "FLUX":     (88.5, Y_B1G), "REV_MIX": (110.0, Y_B1G),
+    # band 2 -- the CV targets and their satellites
+    "ATTACK": (14.0, Y_B2K), "DECAY": (26.5, Y_B2K),
+    "RES":    (39.0, Y_B2K), "SUB":   (51.5, Y_B2K),
+    "FILT":   (X_FILT, Y_B2G), "SOURCE": (X_TIMB, Y_B2G),
+    "TUNE":   (70.0, Y_B2K), "DETUNE": (82.5, Y_B2K),
+    "COLOR":  (X_COLOR, Y_B2G),
+    "GRIT":   (100.0, Y_B2K), "COMP": (X_LVL, Y_B2G),
+    # deliberate dual assignment: BEND rides ATTACK's knob (spec §6)
+    "STAGES": (14.0, Y_B2K),
 }
-# --- shared centre strip, 15 mm grid, three columns -------------------------
-CL, CC, CR = CX - 16.0, CX, CX + 16.0
+
 CENTER_POS = {
-    "MORPH": (CC, 18.0), "TIDE":  (CR, 18.0),
-    "TEMPO":  (CL, 36.0), "COUPLE":(CC, 36.0), "SHUFFLE":(CR, 36.0),
-    "SCALE":  (CL, 51.0), "DRIFT": (CC, 51.0), "CHOKE": (CR, 51.0),
-    "REV_SIZE":(CL, 81.0), "REV_TONE": (CC, 81.0),
-    "REV_DECAY":(CL, 96.0), "REV_DIFF": (CC, 96.0),
+    "TEMPO":  (127.4, Y_B1K), "COUPLE": (139.9, Y_B1K),
+    "SHUFFLE": (152.4, Y_B1K), "SCALE": (164.9, Y_B1K),
+    "DRIFT":  (177.4, Y_B1K),
+    "TIDE":   (140.4, Y_B1G), "CHOKE":  (164.4, Y_B1G),
+    "MORPH":  (152.4, 62.0),
+    "REV_DECAY": (152.4, 79.0),
+    "REV_SIZE": (134.4, 94.0), "REV_TONE": (152.4, 94.0),
+    "REV_DIFF": (170.4, 94.0),
 }
-JACK_Y = 113.0
-JACK_POS = {"PITCH_A": 14.0, "GATE_A": 29.0, "IN_L": 60.0, "IN_R": 75.0,
-            "CLOCK": CX - 7.5, "RESET": CX + 7.5,
-            "OUT_L": W - 75.0, "OUT_R": W - 60.0,
-            "GATE_B": W - 29.0, "PITCH_B": W - 14.0}
-LIGHT_POS = {"GATE_A_L": (7.0, 30.0), "GATE_B_L": (W - 7.0, 30.0),
-             "REC_A_L": (124.5, 86.0), "REC_B_L": (W - 124.5, 86.0)}
+
+JACK_POS = {"PITCH_A": 54.0, "GATE_A": 65.0,
+            "IN_L": 112.0, "IN_R": 126.0, "CLOCK": 140.0,
+            "RESET": 164.8, "OUT_L": 178.8, "OUT_R": 192.8,
+            "GATE_B": W - 65.0, "PITCH_B": W - 54.0}
+
+# The two LEDs the shared inventory already knows about sit at the right end
+# of each deck's status strip; the other 14 arrive with HW_ONLY in task 4.
+LIGHT_POS = {"REC_A_L": (77.0, Y_TOP), "GATE_A_L": (81.0, Y_TOP),
+             "REC_B_L": (W - 77.0, Y_TOP), "GATE_B_L": (W - 81.0, Y_TOP)}
 
 def place(c):
     """Clone a gen_panel control onto the hardware grid."""
