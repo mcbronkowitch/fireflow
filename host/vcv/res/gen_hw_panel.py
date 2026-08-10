@@ -160,34 +160,57 @@ ALL_HW = HW_PARAMS + HW_INPUTS + HW_OUTPUTS + HW_LIGHTS
 
 TEXTS = [(CX, 6.0, 3.2, 0.9, gp.INK, "middle", "FIREFLOW HW DRAFT 60HP")]
 
-# STAGES shares ATTACK's knob (deliberate dual assignment, spec §1). A
-# screen widget can gate one caption away by engine state; an aluminium
-# plate can't -- it prints both words. A row below ATK's own caption lands
-# inside the next row's DECAY knob (15 mm grid leaves no room for a second
-# line under the knob) -- verified by test_labels_stay_off_neighbour_footprints
-# on that placement, which failed with a 4.4 mm gap against DECAY's 5.5 mm
-# clearance radius. Above the knob is clear (nothing else occupies the
-# second big-knob row over x=12), so BEND's label sits there instead: the
-# plate reads BEND above the shared knob, ATK below it. Slightly smaller so
-# the pair reads as a stacked pair, not a collision.
+# BEND shares ATTACK's knob (deliberate dual assignment, spec §6). A screen
+# widget can gate one caption away by engine state; an aluminium plate can't
+# -- it prints both words. The plate reads BEND above the shared knob, ATK
+# below it, slightly smaller so the pair reads as a stack, not a collision.
 STAGES_LBL_Y_OFFSET = -7.0
 STAGES_LBL_SIZE = 1.8
 
-# FLUXFB's label sits directly above GRIT on the 15 mm small-knob grid.
-# GRIT went bipolar in task 4 (SMKNOB -> KNOBC), and KNOBC's real clearance
-# radius (8.0 mm) is bigger than SMKNOB's (5.5 mm) -- the default SMKNOB
-# label offset (8.0 mm) then lands the caption 1.0 mm inside GRIT's footprint.
-# Nobody caught it because test_hw_panel.py had no runner until this task
-# (spec 2026-08-09 hw-control-reduction task 11) wired one up. Tightening
-# just this label (not moving either knob) restores clearance with margin.
-FLUXFB_LBL_Y_OFFSET = 6.0
+LBL_MARGIN = 1.5   # a caption anchor clears every FOREIGN footprint by this
+
+
+def _caption_is_clear(c, lx, ly):
+    """True when (lx, ly) sits outside c's own footprint and clears every
+    other control's clearance circle by LBL_MARGIN."""
+    if ((lx - c.x) ** 2 + (ly - c.y) ** 2) ** 0.5 < c.r - 1e-9:
+        return False
+    for o in ALL_HW:
+        if o is c:
+            continue
+        if ((lx - o.x) ** 2 + (ly - o.y) ** 2) ** 0.5 < o.r + LBL_MARGIN - 1e-9:
+            return False
+    return True
+
 
 def hw_label(c):
+    """Caption placement, by rule rather than by named exception.
+
+    The old code carried FLUXFB_LBL_Y_OFFSET because GRIT went bipolar and
+    inherited KNOBC's larger clearance. That cause is gone with the size
+    classes, the pattern is not: at 16 mm row spacing a small knob's default
+    caption lands 8.1 mm from the 8.0 mm knob below it. Shortening the offset
+    cannot fix the general case -- for two big knobs 17 mm apart, any offset
+    short enough to clear the neighbour is inside the control's OWN footprint.
+    So the caption steps aside instead: below, then above, then to the right.
+    """
+    if not c.label:
+        # Nothing is drawn, so nothing needs a clear position. The header
+        # table still carries the fields, so keep the old default rather
+        # than sending an invisible caption on a search it cannot win:
+        # a LIGHT's dy is 0.0, which collapses "below" and "above" onto the
+        # control itself and leaves only "right", inside its neighbour.
+        return (c.x, c.y, "middle", 2.2, gp.INK)
     if c.enum.startswith("STAGES_"):
         return (c.x, c.y + STAGES_LBL_Y_OFFSET, "middle", STAGES_LBL_SIZE, gp.INK)
-    if c.enum.startswith("FLUXFB_"):
-        return (c.x, c.y + FLUXFB_LBL_Y_OFFSET, "middle", 2.2, gp.INK)
-    return (c.x, c.y + CLASS_LBL_DY[hw_class(c.enum)], "middle", 2.2, gp.INK)
+    dy = CLASS_LBL_DY[hw_class(c.enum)]
+    for lx, ly, anchor in ((c.x, c.y + dy, "middle"),
+                           (c.x, c.y - dy, "middle"),
+                           (c.x + c.r + 1.0, c.y + 1.0, "start")):
+        if _caption_is_clear(c, lx, ly):
+            return (lx, ly, anchor, 2.2, gp.INK)
+    raise ValueError(f"no clear caption position for {c.enum} -- the geometry "
+                     f"is too tight, move a control (spec 2026-08-10 §3)")
 
 # =============================================================================
 #  SVG

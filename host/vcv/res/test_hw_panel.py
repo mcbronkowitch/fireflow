@@ -113,9 +113,14 @@ def test_hw_slot_map_matches_the_reduced_inventory():
           "hw param count drifted from the shared inventory")
 
 
+LBL_MARGIN = 1.5
+
+
 def test_labels_stay_off_neighbour_footprints():
-    # A caption may sit near its own control, but its anchor must never
-    # land inside ANOTHER control's clearance circle.
+    # A caption may sit near its own control, but its anchor must clear every
+    # OTHER control's footprint by LBL_MARGIN. Bare non-overlap is not a
+    # margin: at 16 mm row spacing the default offset lands 8.1 mm from an
+    # 8.0 mm knob and would pass a zero-margin test with 0.1 mm to spare.
     for c in hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS:
         if not c.label:
             continue
@@ -124,7 +129,22 @@ def test_labels_stay_off_neighbour_footprints():
             if other is c:
                 continue
             d = ((lx - other.x) ** 2 + (ly - other.y) ** 2) ** 0.5
-            assert d >= other.r - 1e-6, (c.enum, other.enum, round(d, 2))
+            check(d >= other.r + LBL_MARGIN - 1e-6,
+                  f"caption {c.enum} at ({lx:.1f},{ly:.1f}) is {d:.2f} from "
+                  f"{other.enum} (needs {other.r + LBL_MARGIN:.2f})")
+
+
+def test_captions_stay_off_their_own_knob():
+    # The reason a shortened offset cannot be the answer: a control's own
+    # radius is the floor. A caption inside its own footprint is printed ON
+    # the knob (spec 2026-08-10 §6, corrected).
+    for c in hw.HW_PARAMS:
+        if not c.label:
+            continue
+        lx, ly = hw.hw_label(c)[0], hw.hw_label(c)[1]
+        d = ((lx - c.x) ** 2 + (ly - c.y) ** 2) ** 0.5
+        check(d >= c.r - 1e-6,
+              f"caption {c.enum} at ({lx:.1f},{ly:.1f}) sits on its own knob")
 
 
 def test_committed_files_match_the_generator():
