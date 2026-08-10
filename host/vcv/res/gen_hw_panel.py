@@ -88,7 +88,7 @@ _LIGHT_ENUMS = {c.enum for c in gp.LIGHTS}
 # jack row. The four CV targets sit in the LOWEST knob row so their jacks are
 # adjacent, not merely aligned (spec §4).
 Y_TOP = 15.0                      # transport + the whole LED field
-Y_B1K, Y_B1G = 30.0, 46.0         # band 1: MOD, FLUX, ROOM send
+Y_B1K, Y_B1G = 30.0, 48.0         # band 1: MOD, FLUX, ROOM send
 Y_B2K, Y_B2G = 66.0, 86.0         # band 2: VOICE, PITCH, OUT -- the CV targets
 JACK_Y = 107.0
 SD_X, SD_Y, SD_W, SD_H = 152.4, 110.0, 15.0, 12.0
