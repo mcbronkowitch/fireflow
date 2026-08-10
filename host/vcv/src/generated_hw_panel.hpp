@@ -83,6 +83,7 @@ static const PanelCtl kParamCtls[] = {
 static const unsigned char kParamSize[] = {
     0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0,
 };
+static_assert(sizeof(kParamSize) == sizeof(kParamCtls) / sizeof(kParamCtls[0]), "kParamSize desynced");
 static const PanelCtl kInputCtls[] = {
     {IN_L, WK_IN, {112.000f, 107.000f}, "L", {112.000f, 101.000f}, 0, 2.20f, 0x171713, "IN L"},
     {IN_R, WK_IN, {126.000f, 107.000f}, "R", {126.000f, 101.000f}, 0, 2.20f, 0x171713, "IN R"},

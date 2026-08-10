@@ -248,16 +248,31 @@ def test_committed_files_match_the_generator():
     committed files but only grep for substrings -- they would not notice
     gen_hw_panel.py being edited without being re-run (review finding
     IMPORTANT 5, same gap as the big panel and already closed there and in
-    test_flow_panel.py). Compare byte-for-byte against a fresh generator run."""
-    for path, produced in (
-            (os.path.join(HERE, "FireflowHW.svg"), hw.svg()),
-            (os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"), hw.header())):
+    test_flow_panel.py). Compare byte-for-byte against a fresh generator run.
+
+    hw_label() raises ValueError by design when geometry gets too tight for
+    some control's caption. Calling hw.svg()/hw.header() unguarded would let
+    that exception escape main()'s test loop as a traceback instead of a
+    named check() failure -- diagnose the traceback, don't guard against it,
+    was the old failure mode here."""
+    produced = {}
+    for name, fn in (("FireflowHW.svg", hw.svg), ("generated_hw_panel.hpp", hw.header)):
+        try:
+            produced[name] = fn()
+        except ValueError as e:
+            FAILS.append(f"res/gen_hw_panel.py could not build {name}: {e}")
+            produced[name] = None
+    for name, path in (("FireflowHW.svg", os.path.join(HERE, "FireflowHW.svg")),
+                        ("generated_hw_panel.hpp",
+                         os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"))):
+        if produced[name] is None:
+            continue
         if not os.path.exists(path):
             FAILS.append(f"{path} is missing -- run res/gen_hw_panel.py")
             continue
         with open(path, encoding="utf-8") as f:
             on_disk = f.read()
-        check(on_disk == produced,
+        check(on_disk == produced[name],
               f"{path} differs from the generator's output -- it was "
               "hand-edited, or the generator was changed without re-running it")
 

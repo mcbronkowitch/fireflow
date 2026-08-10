@@ -371,6 +371,8 @@ def header():
     L2.append("    " + ", ".join("1" if hw_class(c.enum) == "G" else "0"
                                  for c in HW_PARAMS) + ",")
     L2.append("};")
+    L2.append("static_assert(sizeof(kParamSize) == sizeof(kParamCtls) / "
+               "sizeof(kParamCtls[0]), \"kParamSize desynced\");")
     L2.extend(emit_table("kInputCtls", HW_INPUTS))
     L2.extend(emit_table("kOutputCtls", HW_OUTPUTS))
     L2.extend(emit_table("kLightCtls", HW_LIGHTS))
@@ -392,13 +394,29 @@ def header():
     L2.append("} // namespace spkyhw")
     return "\n".join(L2) + "\n"
 
+def _write_atomic(path, text):
+    """Write beside the target and os.replace() onto it, so a crash after
+    the target is already open for writing can never leave a truncated
+    file. hw_label() raises ValueError by design whenever geometry gets too
+    tight (a control that cannot find a clear caption spot) -- that must not
+    be allowed to zero out res/FireflowHW.svg or, worse,
+    src/generated_hw_panel.hpp, which the VCV build then #includes."""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
 if __name__ == "__main__":
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(here)
-    with open(os.path.join(here, "FireflowHW.svg"), "w", encoding="utf-8") as f:
-        f.write(svg())
-    with open(os.path.join(root, "src", "generated_hw_panel.hpp"), "w", encoding="utf-8") as f:
-        f.write(header())
+    # Build both strings fully BEFORE opening either output file: if svg()
+    # or header() raises (hw_label's ValueError), nothing on disk is
+    # touched, committed or otherwise.
+    svg_text = svg()
+    header_text = header()
+    _write_atomic(os.path.join(here, "FireflowHW.svg"), svg_text)
+    _write_atomic(os.path.join(root, "src", "generated_hw_panel.hpp"), header_text)
     print("wrote res/FireflowHW.svg and src/generated_hw_panel.hpp")
     print(f"params={len(HW_PARAMS)} inputs={len(HW_INPUTS)} "
           f"outputs={len(HW_OUTPUTS)} lights={len(HW_LIGHTS)}  panel={HP}HP")
