@@ -2248,11 +2248,12 @@ def test_sampler_preset_init_snapshot():
     with open(header_path) as f:
         header = f.read()
     approved = {
-        # Transcribed from FF_hw_Init.vcvm (2026-08-09), the preset Bastian
-        # approved. A second, independent copy of the numbers in gen_panel's
-        # INIT_DEFAULTS -- that is what makes this a test: a later hand-edit to
-        # either table, or to the generated header, has to disagree with this one.
-        "RATE_A": 0.0,
+        # Transcribed from FF_hw_Init.vcvm (2026-08-10 revision), the preset
+        # Bastian approved. A second, independent copy of the numbers in
+        # gen_panel's INIT_DEFAULTS -- that is what makes this a test: a later
+        # hand-edit to either table, or to the generated header, has to
+        # disagree with this one.
+        "RATE_A": 0.184337318,
         "SHAPE_A": 0.0,
         "DENSITY_A": 0.534939826,
         "SMOOTH_A": 0.836144507,
@@ -2260,8 +2261,8 @@ def test_sampler_preset_init_snapshot():
         "MELODY_A": 0.768674195,
         "MOD_A": 0.403613269,
         "TUNE_A": 0.001204819,
-        "ATTACK_A": 0.637333274,
-        "DECAY_A": 0.705333531,
+        "ATTACK_A": 1.0,
+        "DECAY_A": 1.0,
         "RES_A": 0.0,
         "SUB_A": 0.738666236,
         "SOURCE_A": 0.453333825,
@@ -2276,7 +2277,7 @@ def test_sampler_preset_init_snapshot():
         "DETUNE_A": 0.377333373,
         # Ladder rung 0 == {form 0, song 6}; deck B sits at rung 13 == {4, 5}.
         "SONG_A": 0.0,
-        "RATE_B": 0.053012036,
+        "RATE_B": 0.163855359,
         "SHAPE_B": 0.0,
         "DENSITY_B": 0.0,
         "SMOOTH_B": 1.0,
@@ -2299,7 +2300,11 @@ def test_sampler_preset_init_snapshot():
         "MORPH": 0.495180398,
         "TEMPO": 0.0,
         "COUPLE": 1.0,
-        "SCALE": 2.0,
+        # 3 == Lydian. Fireflow.cpp's WK_KNOBI branch used to hard-code
+        # SCALE_LYDIAN here instead of reading the snapshot, so the module
+        # booted Lydian while this table said Mixolydian (2); the preset was
+        # saved from the module, which is why the two agree again.
+        "SCALE": 3.0,
         "DRIFT": 0.791999996,
         "REV_SIZE": 1.0,
         "REV_DECAY": 0.800755024,
@@ -2341,6 +2346,18 @@ def test_sampler_preset_init_snapshot():
           "Fireflow.cpp does not include the init snapshot")
     check("const float init = initParamDefault(c.id);" in cpp,
           "configControls does not read the indexed init snapshot")
+    # SCALE was the one control whose configParam ignored `init` and passed a
+    # scale constant, so the module's boot scale and the snapshot could
+    # disagree -- and did, for as long as INIT_DEFAULTS said 2 (Mixolydian)
+    # while the panel booted Lydian. Read the branch's CODE only: the comment
+    # above it names the old constant on purpose.
+    scale_branch = cpp.split("configParam<ScaleQuantity>", 1)[1].split(";", 1)[0]
+    scale_code = "\n".join(ln for ln in scale_branch.splitlines()
+                           if not ln.strip().startswith("//"))
+    check("SCALE_LYDIAN" not in scale_code,
+          "SCALE's default is hard-coded again instead of read from the snapshot")
+    check("init," in scale_code,
+          "SCALE's configParam no longer passes the snapshot default")
     check("defaultFor(" not in cpp,
           "legacy split defaultFor table still exists")
 

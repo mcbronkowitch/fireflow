@@ -561,17 +561,18 @@ PARAMS = PANEL_PARAMS + HIDDEN_PARAMS + APPENDED_PANEL_PARAMS
 # Approved init snapshot, keyed by param NAME rather than by position: adding
 # or removing a control must not be able to shift somebody else's default.
 #
-# Provenance: FF_hw_Init.vcvm, a FireflowHW preset Bastian played and approved
-# on 2026-08-09, replacing the drone.vcvm (2026-07-28) lineage wholesale. 54 of
-# the 68 values moved, including both ENG selections -- this is a different
-# instrument at boot, not a retune of the old one, and the per-value notes that
-# used to justify individual numbers by what they preserved from drone.vcvm are
-# gone with it. The preset's module data (sampler paths, excitation checkboxes)
-# is NOT carried: only params reach this table, and nothing in that blob is
-# audible for these engines anyway (Part::set_excitation is a no-op outside
-# BODY, and no deck boots BODY now).
+# Provenance: FF_hw_Init.vcvm, a FireflowHW preset Bastian played and approved.
+# The 2026-08-09 revision replaced the drone.vcvm (2026-07-28) lineage wholesale
+# -- a different instrument at boot, not a retune, which is why no per-value
+# note here justifies a number by what it preserved from drone.vcvm any more.
+# The 2026-08-10 revision keeps that instrument and moves five values: both
+# lane RATEs off their floors, ATTACK_A/DECAY_A to full, and SCALE from
+# Mixolydian to Lydian. The preset's module data (sampler paths, excitation
+# checkboxes) is NOT carried: only params reach this table, and nothing in that
+# blob is audible for these engines anyway (Part::set_excitation is a no-op
+# outside BODY, and no deck boots BODY now).
 INIT_DEFAULTS = {
-    "RATE_A": 0.000000000,
+    "RATE_A": 0.184337318,
     "SHAPE_A": 0.000000000,
     "DENSITY_A": 0.534939826,
     "SMOOTH_A": 0.836144507,
@@ -579,8 +580,8 @@ INIT_DEFAULTS = {
     "MELODY_A": 0.768674195,
     "MOD_A": 0.403613269,
     "TUNE_A": 0.001204819,
-    "ATTACK_A": 0.637333274,
-    "DECAY_A": 0.705333531,
+    "ATTACK_A": 1.000000000,
+    "DECAY_A": 1.000000000,
     "RES_A": 0.000000000,
     "SUB_A": 0.738666236,
     "SOURCE_A": 0.453333825,
@@ -616,7 +617,7 @@ INIT_DEFAULTS = {
     # Hierarchical/AAAB) because that rung reproduced the even older
     # FORM/SONG pair -- that lineage ends here, this is a fresh choice.
     "SONG_A": 0.000000000,
-    "RATE_B": 0.053012036,
+    "RATE_B": 0.163855359,
     "SHAPE_B": 0.000000000,
     "DENSITY_B": 0.000000000,
     "SMOOTH_B": 1.000000000,
@@ -641,7 +642,13 @@ INIT_DEFAULTS = {
     "MORPH": 0.495180398,
     "TEMPO": 0.000000000,
     "COUPLE": 1.000000000,
-    "SCALE": 2.000000000,
+    # 3 == SCALE_LYDIAN (quantizer.h), the bright end of the modes group.
+    # Until this revision the table said 2 (Mixolydian) while the module booted
+    # Lydian: Fireflow.cpp's WK_KNOBI branch passed spky::SCALE_LYDIAN instead
+    # of the snapshot value, so this entry only reached the bench audition.
+    # That branch reads `init` now, and the preset -- saved from the module --
+    # agrees with it.
+    "SCALE": 3.000000000,
     "DRIFT": 0.791999996,
     "REV_SIZE": 1.000000000,
     "REV_DECAY": 0.800755024,

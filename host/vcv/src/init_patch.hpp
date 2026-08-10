@@ -4,7 +4,7 @@
 namespace spkyvcv {
 
 static constexpr float kInitParamDefaults[] = {
-    0.0f, // RATE_A
+    0.184337318f, // RATE_A
     0.0f, // SHAPE_A
     0.534939826f, // DENSITY_A
     0.836144507f, // SMOOTH_A
@@ -12,8 +12,8 @@ static constexpr float kInitParamDefaults[] = {
     0.768674195f, // MELODY_A
     0.403613269f, // MOD_A
     0.001204819f, // TUNE_A
-    0.637333274f, // ATTACK_A
-    0.705333531f, // DECAY_A
+    1.0f, // ATTACK_A
+    1.0f, // DECAY_A
     0.0f, // RES_A
     0.738666236f, // SUB_A
     0.453333825f, // SOURCE_A
@@ -24,7 +24,7 @@ static constexpr float kInitParamDefaults[] = {
     2.0f, // ENGINE_A
     0.377333373f, // DETUNE_A
     0.0f, // SONG_A
-    0.053012036f, // RATE_B
+    0.163855359f, // RATE_B
     0.0f, // SHAPE_B
     0.0f, // DENSITY_B
     1.0f, // SMOOTH_B
@@ -47,7 +47,7 @@ static constexpr float kInitParamDefaults[] = {
     0.495180398f, // MORPH
     0.0f, // TEMPO
     1.0f, // COUPLE
-    2.0f, // SCALE
+    3.0f, // SCALE
     0.791999996f, // DRIFT
     1.0f, // REV_SIZE
     0.800755024f, // REV_DECAY

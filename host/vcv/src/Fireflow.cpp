@@ -366,9 +366,15 @@ struct Fireflow : Module {
                         configParam(c.id, -1.f, 1.f, init, lbl);
                     break;
                 case WK_KNOBI:
-                    if (c.id == SCALE)  // init patch is Lydian -- the bright end of group A
+                    if (c.id == SCALE)
+                        // The default comes from the snapshot like every other
+                        // control's. It used to be hard-coded to
+                        // spky::SCALE_LYDIAN here, which is how the module
+                        // could boot Lydian while INIT_DEFAULTS said
+                        // Mixolydian -- the bench audition read the table, the
+                        // panel did not, and nothing compared them.
                         configParam<ScaleQuantity>(c.id, 0.f, (float)(spky::SCALE_LIST_COUNT - 1),
-                                                   (float)spky::SCALE_LYDIAN, "Scale");
+                                                   init, "Scale");
                     else if (c.id == SONG_A || c.id == SONG_B) {
                         // SONG walks a curated 14-rung ladder through the
                         // (Principle, SongMode) grid (engine/mod/song_ladder.h)

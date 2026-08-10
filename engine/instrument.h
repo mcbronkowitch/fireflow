@@ -101,6 +101,15 @@ public:
     }
     void set_quant_mode(int p, QuantMode m) { _parts[p].quant().set_mode(m); }
     void set_root(int p, int semis)         { _parts[p].quant().set_root(semis); }
+    // Observer only, for tests: the semitone mask a deck is quantizing to.
+    // set_scale() is index-in, mask-out and nothing read the mask back, so a
+    // host pushing the wrong scale index was invisible from the engine side --
+    // which is exactly how the VCV panel came to boot Lydian while the init
+    // snapshot said Mixolydian (Fireflow.cpp's SCALE branch ignored the
+    // snapshot for as long as it hard-coded SCALE_LYDIAN).
+    uint16_t scale_mask_for_test(int p) const {
+        return _parts[p].quant().scale_mask();
+    }
 
     // Excitation bus source selection (spec 2026-07-26 body-resonator §6,
     // Task 10): patch state, not a performance control. Default (tape on,

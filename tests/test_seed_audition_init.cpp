@@ -414,6 +414,19 @@ TEST_CASE("Seed audition's factory init pins every engine-side observable "
     CHECK(inst.applied_detune_ct_for_test(spky::PART_B)
           == doctest::Approx(21.8332f).epsilon(0.0001));   // deck B (SYNTH)
 
+    // --- scale: SCALE == 3 is SCALE_LYDIAN, mask 0x0AD5 (0 2 4 6 7 9 11). ---
+    // The mask is the literal, not SCALE_MASKS[SCALE_LYDIAN]: reading the same
+    // table set_scale() reads would let a retuned mask move both sides at once.
+    //
+    // This pin exists because SCALE is the control that already got away. Its
+    // configParam hard-coded spky::SCALE_LYDIAN instead of the snapshot value,
+    // so the panel booted Lydian while INIT_DEFAULTS said 2 (Mixolydian) --
+    // two boot scales for one instrument, and nothing here noticed, because
+    // nothing read a mask back. res/test_panel.py guards the host branch;
+    // this guards the engine state it produces.
+    CHECK(inst.scale_mask_for_test(spky::PART_A) == 0x0AD5);
+    CHECK(inst.scale_mask_for_test(spky::PART_B) == 0x0AD5);
+
     // --- drift, couple, sync ---
     // COUPLE == 1.0 (top of travel): grid zone, SYNC on, couple == 1.0 (the
     // texture lanes lock fully to the grid).

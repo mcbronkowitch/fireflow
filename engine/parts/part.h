@@ -38,6 +38,7 @@ public:
     SuperModulator& mod() { return _mod; }
     const SuperModulator& mod() const { return _mod; }
     Quantizer& quant() { return _quant; }
+    const Quantizer& quant() const { return _quant; }
     PartFx& fx() { return _fx; }
     const PartFx& fx() const { return _fx; }
 
