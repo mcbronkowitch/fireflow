@@ -19,13 +19,52 @@ Hh = 128.5
 CX = W / 2.0
 KEEP_TOP, KEEP_BOT = 9.0, 119.5   # rails + M3 screws own the rest
 
-# Real clearance radii (mm): what a finger and a nut need, not a pixel.
-HW_R = {gp.BIGKNOB: 8.0, gp.KNOBC: 8.0, gp.SMKNOB: 5.5, gp.KNOBI: 5.5,
-        gp.SW2: 4.0, gp.LATCH: 4.0, gp.SMBTN: 4.0,
-        gp.IN: 4.0, gp.OUT: 4.0, gp.LIGHT: 1.5}
-LBL_DY_HW = {gp.BIGKNOB: 10.5, gp.KNOBC: 10.5, gp.SMKNOB: 8.0, gp.KNOBI: 8.0,
-             gp.SW2: 6.5, gp.LATCH: 6.5, gp.SMBTN: 6.5,
-             gp.IN: -6.0, gp.OUT: -6.0, gp.LIGHT: 0.0}   # jack labels ABOVE
+# Hardware size class per parameter BASE name (spec 2026-08-10 §1). This is
+# deliberately NOT derived from c.kind: KNOBC means bipolar and KNOBI means
+# detented -- statements about the screen widget's behaviour, not about a
+# diameter. A centre-detent pot ships in every size.
+# Task 1 reproduces today's kind-derived assignment exactly, so the byte
+# compare in test_committed_files_match_the_generator proves the refactor is
+# inert. Task 2 is what actually changes it.
+HW_SIZE = {
+    # --- deck ---
+    "RATE": "G", "SHAPE": "G", "DENSITY": "G", "SMOOTH": "G", "RANGE": "G",
+    "MELODY": "G", "MOD": "G", "TUNE": "G", "COLOR": "G",
+    "ATTACK": "S", "DECAY": "S", "RES": "S", "SUB": "S", "SOURCE": "S",
+    "FLUX": "S", "GRIT": "G", "COMP": "S", "STEPS": "S", "DETUNE": "S",
+    "SONG": "S", "FILT": "S", "FLUXRATE": "S", "FLUXFB": "S", "LINK": "S",
+    "STAGES": "S", "REV_MIX": "S",
+    "ENGINE": "P", "REC": "P",
+    # --- centre ---
+    "MORPH": "G", "TEMPO": "S", "COUPLE": "S", "SCALE": "S", "DRIFT": "S",
+    "REV_SIZE": "S", "REV_DECAY": "S", "REV_TONE": "S", "REV_DIFF": "S",
+    "CHOKE": "S", "TIDE": "S", "SHUFFLE": "S",
+}
+
+CLASS_R = {"G": 8.0, "S": 5.5, "P": 4.0, "J": 4.0, "L": 1.5}
+
+# Baseline offset from the glyph centre to the caption, per class. Jacks read
+# ABOVE their glyph (negative), everything else below. Numerically identical
+# to the old kind-keyed LBL_DY_HW (10.5/8.0/6.5/-6.0/0.0 for
+# BIGKNOB+KNOBC/SMKNOB+KNOBI/SW2+LATCH+SMBTN/IN+OUT/LIGHT) -- Task 1 changes
+# only how the offset is looked up, not its value.
+CLASS_LBL_DY = {"G": 10.5, "S": 8.0, "P": 6.5, "J": -6.0, "L": 0.0}
+
+
+def hw_class(enum):
+    """Size class for a full enum name. Jacks and LEDs come from the shared
+    inventory's kind (they have no hardware choice to make); everything a
+    finger turns or presses comes from HW_SIZE."""
+    if enum in _JACK_ENUMS:
+        return "J"
+    if enum in _LIGHT_ENUMS:
+        return "L"
+    base = enum[:-2] if enum.endswith(("_A", "_B")) else enum
+    return HW_SIZE[base]
+
+
+_JACK_ENUMS = {c.enum for c in gp.INPUTS} | {c.enum for c in gp.OUTPUTS}
+_LIGHT_ENUMS = {c.enum for c in gp.LIGHTS}
 
 # --- iteration-0 slot map: deck-A coordinates per param BASE name -----------
 # Big knobs, 22 mm grid, two rows (5 + 4).
@@ -78,7 +117,7 @@ LIGHT_POS = {"GATE_A_L": (7.0, 30.0), "GATE_B_L": (W - 7.0, 30.0),
 def place(c):
     """Clone a gen_panel control onto the hardware grid."""
     n = copy.copy(c)
-    n.r = HW_R[c.kind]
+    n.r = CLASS_R[hw_class(c.enum)]
     n.lbl = None                    # no radial orbit labels on the hw grid
     base, x = c.enum, None
     if base.endswith("_A") or base.endswith("_B"):
@@ -133,7 +172,7 @@ def hw_label(c):
         return (c.x, c.y + STAGES_LBL_Y_OFFSET, "middle", STAGES_LBL_SIZE, gp.INK)
     if c.enum.startswith("FLUXFB_"):
         return (c.x, c.y + FLUXFB_LBL_Y_OFFSET, "middle", 2.2, gp.INK)
-    return (c.x, c.y + LBL_DY_HW[c.kind], "middle", 2.2, gp.INK)
+    return (c.x, c.y + CLASS_LBL_DY[hw_class(c.enum)], "middle", 2.2, gp.INK)
 
 # =============================================================================
 #  SVG

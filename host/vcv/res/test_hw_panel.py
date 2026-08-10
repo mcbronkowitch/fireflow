@@ -41,14 +41,13 @@ def test_static_captions_only():
     assert "DynCaption" not in src
 
 def test_hardware_footprints():
-    # Screen-widget radii are meaningless on sheet metal. Minimum clearance
-    # radii per kind (mm): big cap 8.0, 9mm pot + mini cap 5.5, pad 4.0,
-    # jack 4.0, LED 1.5.
-    minima = {gp.BIGKNOB: 8.0, gp.KNOBC: 8.0, gp.SMKNOB: 5.5, gp.KNOBI: 5.5,
-              gp.SW2: 4.0, gp.LATCH: 4.0, gp.SMBTN: 4.0,
-              gp.IN: 4.0, gp.OUT: 4.0, gp.LIGHT: 1.5}
+    # Screen-widget radii are meaningless on sheet metal, and so is the
+    # screen widget's KIND: it says bipolar/detented, not big/small. The
+    # minimum clearance radius comes from the hardware size class
+    # (spec 2026-08-10 §1).
     for c in hw.ALL_HW:
-        assert c.r >= minima[c.kind] - 1e-9, (c.enum, c.r)
+        want = hw.CLASS_R[hw.hw_class(c.enum)]
+        assert c.r >= want - 1e-9, (c.enum, c.r, want)
 
 def test_rail_keepout():
     # Rails and screws own the top/bottom ~9 mm; VCV's 2 mm rule is not enough.
@@ -145,6 +144,18 @@ def test_committed_files_match_the_generator():
         check(on_disk == produced,
               f"{path} differs from the generator's output -- it was "
               "hand-edited, or the generator was changed without re-running it")
+
+
+def test_every_control_has_a_size_class():
+    """Die Größe eines Bedienelements ist eine Hardware-Aussage und steht in
+    HW_SIZE -- nicht in c.kind. KNOBC heißt bipolar, KNOBI heißt gerastert;
+    beides sagt nichts über einen Durchmesser (spec 2026-08-10 §1)."""
+    for c in gp.RUNTIME_PANEL_PARAMS:
+        base = c.enum[:-2] if c.enum.endswith(("_A", "_B")) else c.enum
+        check(base in hw.HW_SIZE, f"no hardware size class for {base}")
+    for c in hw.ALL_HW:
+        assert hw.hw_class(c.enum) in ("G", "S", "P", "J", "L"), c.enum
+        assert abs(c.r - hw.CLASS_R[hw.hw_class(c.enum)]) < 1e-9, (c.enum, c.r)
 
 
 def main():
