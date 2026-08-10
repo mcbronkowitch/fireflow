@@ -115,6 +115,16 @@ def test_header_contract():
         assert tbl in src, tbl
     # Ids are the MAIN module's enum values — one id space, two layouts.
     assert re.search(r"\{\s*RATE_A\s*,", src)
+    # The rehearsal widget must pick knob size from the HARDWARE class, not
+    # from c.kind -- otherwise Rack shows a big RATE while the plate prints a
+    # small one (spec 2026-08-10 §1).
+    assert "kParamSize" in src, "kParamSize missing from the hw header"
+    body = src.split("kParamSize[] = {")[1].split("};")[0]
+    vals = [v.strip() for v in body.replace("\n", "").split(",") if v.strip()]
+    assert len(vals) == len(hw.HW_PARAMS), (len(vals), len(hw.HW_PARAMS))
+    want = ["1" if hw.hw_class(c.enum) == "G" else "0" for c in hw.HW_PARAMS]
+    assert vals == want, "kParamSize disagrees with HW_SIZE"
+    assert "kHwOnlyCtls" in src
 
 def test_svg_exists_and_is_60hp():
     svg = open(os.path.join(HERE, "FireflowHW.svg"), encoding="utf-8").read()

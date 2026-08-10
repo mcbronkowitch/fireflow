@@ -351,6 +351,13 @@ def header():
     L2.append("                   unsigned lblRgb; };")
     L2.append("static constexpr int kHwHP = 60;")
     L2.extend(emit_table("kParamCtls", HW_PARAMS))
+    L2.append("// 1 = big cap, 0 = small. Parallel to kParamCtls, same order.")
+    L2.append("// The rehearsal widget reads THIS, not c.kind -- kind says")
+    L2.append("// bipolar/detented, which is not a diameter.")
+    L2.append("static const unsigned char kParamSize[] = {")
+    L2.append("    " + ", ".join("1" if hw_class(c.enum) == "G" else "0"
+                                 for c in HW_PARAMS) + ",")
+    L2.append("};")
     L2.extend(emit_table("kInputCtls", HW_INPUTS))
     L2.extend(emit_table("kOutputCtls", HW_OUTPUTS))
     L2.extend(emit_table("kLightCtls", HW_LIGHTS))

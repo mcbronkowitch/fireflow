@@ -77,6 +77,12 @@ static const PanelCtl kParamCtls[] = {
     {REV_MIX_B, WK_SMKNOB, {194.800f, 46.000f}, "SEND", {194.800f, 56.500f}, 0, 2.20f, 0x171713, "Room send"},
     {SHUFFLE, WK_SMKNOB, {152.400f, 30.000f}, "SHUFL", {152.400f, 38.000f}, 0, 2.20f, 0x171713, "SHUFL"},
 };
+// 1 = big cap, 0 = small. Parallel to kParamCtls, same order.
+// The rehearsal widget reads THIS, not c.kind -- kind says
+// bipolar/detented, which is not a diameter.
+static const unsigned char kParamSize[] = {
+    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0,
+};
 static const PanelCtl kInputCtls[] = {
     {IN_L, WK_IN, {112.000f, 107.000f}, "L", {112.000f, 101.000f}, 0, 2.20f, 0x171713, "IN L"},
     {IN_R, WK_IN, {126.000f, 107.000f}, "R", {126.000f, 101.000f}, 0, 2.20f, 0x171713, "IN R"},
