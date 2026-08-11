@@ -2307,13 +2307,10 @@ splits its own build into two plans. Plan A — `engine/flow/`: the seeded
 terrain generator, the six-macro story layer, weather, the NEW gesture
 family, render-host scenario wiring and the audio sanity gates — is built
 and green. Plan B — the VCV module **FireFlow Glow**, a second module in the
-`Fireflow` plugin: 12 HP, six macro knobs and one NEW button over a
-generated terrain, driving `engine/flow/` instead of `Fireflow.cpp`'s
-one-control-per-parameter surface — is also built. Its panel is drawn at
-true hardware dimensions specifically so it can double as step 1's 1:1 M6
-panel draft above; see `host/vcv/README.md`'s "FireFlow Glow" section for the
-macro table, the NEW gesture family and its LED signatures, the CV/clock
-jacks, and terrain codes.
+`Fireflow` plugin, driving `engine/flow/` instead of `Fireflow.cpp`'s
+one-control-per-parameter surface — is also built. At this point its panel
+was 12 HP with six macro knobs, five CV jacks, one NEW button and one clock
+input; that surface did not survive (see the 2026-08-11 entry below).
 
 **Verified in Rack 2026-08-06.** The branch merged with its three hand-check
 lists still unrun — no agent has a Rack — and Bastian ran them on the built
@@ -2321,8 +2318,22 @@ plugin before the merge: the module wakes on the house seed and sounds, the
 six macros and five CVs move it, the clock overrides tempo; the whole NEW
 gesture family reads correctly, including the refusal flash the plan's own
 code could not light; and a terrain survives copy, paste, save/reload and
-Ctrl+I. All three confirmed. The lists themselves are in
+Ctrl+I. All three confirmed against the 12 HP surface described above, not
+the one Glow ships today. The lists themselves are in
 `.superpowers/sdd/2026-08-05-flow-glow-vcv-module/task-{3,4,5}-report.md`.
+
+**Rebuilt onto the Synthux Touch 2 surface, 2026-08-11.** Glow's control
+surface is replaced, not extended: a true-size, 16 HP replica of the Touch 2
+board — twelve touch pads (twelve curated places), six trim knobs, two
+assignable faders, two assignable centre-off switches, one stereo out. The
+five CV jacks and the clock input are gone; the module takes no CV and no
+external clock at all. NEW, GENRE and the old lock toggle move to the
+right-click "Workshop" menu — the board is the stage, Rack is the workshop,
+and the menu never ships to the Touch. Full rationale, the measured geometry
+and the pad gesture are in
+`docs/superpowers/specs/2026-08-11-glow-touch-2-panel-design.md`; the current
+control surface is documented in `host/vcv/README.md`'s "FireFlow Glow"
+section.
 
 With Glow built, the open items in
 `docs/superpowers/specs/2026-08-05-flow-listening-notes.md` are reachable

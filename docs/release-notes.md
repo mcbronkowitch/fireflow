@@ -8,38 +8,44 @@
   Everything below the comment is public.
 -->
 
-## FireFlow HW Draft is regrouped
+## FireFlow Glow is now a Synthux Touch 2 replica
 
-This release touches one module. **FireFlow** and **FireFlow Glow** are unchanged,
-and no patch you have saved will sound different.
+This release touches one module. **FireFlow** and **FireFlow HW Draft** are
+unchanged.
 
-FireFlow HW Draft is not an instrument — it is the 60 HP aluminium panel being
-designed in public, drawn at true size so the layout can be argued with before
-anything is milled. Until now it was the screen layout moved onto a hardware grid
-with no opinion about it. It has one now.
+FireFlow Glow's control surface is replaced, not extended: a true-size,
+16 HP panel replicating the Synthux Simple Touch 2 — twelve touch pads, six
+trim knobs, two assignable faders, two assignable centre-off switches, one
+stereo out. There are no CV inputs and no clock input any more — the board
+has none, so neither does the module — and the old NEW button, its five CV
+jacks and its two flanking GENRE/SCALE knobs are gone with them.
 
-**Knob sizes say something.** A control's size is set by its rank inside its
-group, not by what kind of widget the screen happens to draw. Eighteen large
-knobs — DENS, MOD, COLOR, FILT, TIMB, MIX, SEND and LVL on each deck, plus MORPH
-and reverb DECAY in the centre — and everything else small. Large means you reach
-for it while the music runs.
+**Twelve pads, twelve curated places.** Each pad holds one terrain code, an
+optional name and an optional note. Tap a pad and it wakes immediately; hold
+it for about 0.4 s and it rerolls all six macro domains at once while
+keeping the ground — tonality, roles, pace — intact; tap the same pad again
+and it returns to the curated state. Under LOCK, pads still change place —
+only the reroll is refused, because LOCK guards the generator, not the
+recall.
 
-**Groups follow the engine.** RATE, SHAPE, DENS, SMTH, RANGE, VARY and MOD are a
-single object in the code, and the old screen sectors cut that modulator into
-three pieces; the plate keeps it whole. COLOR turned out to be chord size rather
-than tone colour, so it sits with TUNE now.
+**Faders and switches are assignable**, from the right-click menu, and every
+save remembers the assignment. A fader can be Off, Tempo (overriding the
+terrain's own tempo across 50–140 BPM, every control tick) or Master
+(linear output gain, unity by default). A switch can be Off, Lock or Scale.
+Lock is now a pure function of switch position — there is no separate
+stored lock any more, so a physical switch and a menu toggle can no longer
+disagree about it.
 
-**Eight CV inputs, printed where they belong.** Each one sits in the jack row
-directly under the large knob it drives and carries that knob's name, so the
-assignment reads without a legend. They are hardware, not Rack ports — on screen
-they are drawn, not patchable, and the same goes for the MOD and SHIFT buttons.
+**Everything the board cannot do moved to a Workshop menu**: drawing a new
+terrain, rerolling one macro, undo, the Genre/Root/Scale constraints, and
+naming, noting, pinning and exporting the twelve places as `pool.tsv`. The
+board is the stage; Rack is the workshop, and none of this ships to the
+Touch.
 
-**Captions place themselves.** Below the control, else above, else to the side,
-whichever position clears every neighbour first — mirrored correctly on the right
-deck. The first look at the finished plate in Rack found three of them pushed up
-into the status strip on both decks, which turned out to be 1.5 mm of missing
-room rather than a bad rule. One row moved down two millimetres and they came
-home. The panel is no taller for it.
+The full rationale, the measured geometry and the pad state machine are in
+`docs/superpowers/specs/2026-08-11-glow-touch-2-panel-design.md`; the
+control surface itself is documented in `host/vcv/README.md`'s "FireFlow
+Glow" section.
 
 ## Install
 
@@ -47,6 +53,7 @@ Download the `.vcvplugin` for your platform, unpack it into Rack's user plugin
 directory and restart Rack. Built against Rack SDK 2.6.6 for Windows x64, Apple
 Silicon (mac-arm64) and Linux x64.
 
-FireFlow Glow remains at **0.1** — its panel says `ALPHA`, and it is a first
-playable version, not a finished instrument. FireFlow HW Draft is a design study
-and says `DRAFT` for the same reason.
+FireFlow Glow's panel still says `ALPHA`: this is a rehearsal rig for a board
+that has not arrived yet, not a finished instrument, and its twelve default
+places are drawn, not curated. FireFlow HW Draft is a design study and says
+`DRAFT` for the same reason.

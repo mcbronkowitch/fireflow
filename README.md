@@ -149,11 +149,12 @@ long before the M6 firmware. It's now a **beta**: real, playable Rack modules an
 a permanent part of the workflow, not yet a finished instrument.
 
 The plugin ships **two modules over the one engine core**. **FireFlow** is the
-full surface: every engine setter on its own knob. **FireFlow Glow** (new in
-2.20.0, itself at **0.1**) is the flow-machine view — 12 HP, six macro knobs and
-one NEW button over a seeded generative terrain, driving `engine/flow/` instead
-of the one-control-per-parameter panel. Same core, two ways to play it; details
-in [`host/vcv/README.md`](host/vcv/README.md).
+full surface: every engine setter on its own knob. **FireFlow Glow** is the
+flow-machine view — a true-size, 16 HP replica of the Synthux Simple Touch 2's
+control surface (twelve touch pads, six trim knobs, two assignable faders, two
+assignable switches, no CV or clock inputs), driving `engine/flow/` instead of
+the one-control-per-parameter panel. Same core, two ways to play it; details in
+[`host/vcv/README.md`](host/vcv/README.md).
 
 You can also just listen first: the [build log](https://fireflow.ton-k.de/)
 carries recordings from most milestones, next to the story of how they came

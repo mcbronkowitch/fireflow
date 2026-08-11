@@ -426,8 +426,11 @@ restored.
 
 ### §6.3 Names
 
-A place's name is runtime state: `std::string`, capped at **32 characters**,
-with tab and newline **rejected on input** (they would break the TSV of §6.4).
+A place's name is runtime state: a fixed `char name[kNameCap + 1]` buffer
+capped at **32 characters** (`touch_pads.hpp`; `Place` is made trivially
+copyable so the audio thread can copy the whole array without allocating),
+with tab and newline **rejected on input** (they would break the TSV of
+§6.4).
 
 Names are editable from the context menu and appear as the pad's tooltip. A live
 tooltip is the one place §3.1's "everything from the generated header" cannot
@@ -504,7 +507,7 @@ of tests another host still needs. Per item:
 | `led_level()`, `NEW_L` | **deleted**. Pad feedback is drawn by the widget, not by a `Light`. |
 | `KnobTracker`, `GestureBridge` | `GestureBridge`'s rising-edge rule is **kept** and reused for pads (§6.2). `KnobTracker` exists for the hold-and-turn gesture; it follows that gesture into the menu or dies with it — decided in the plan, not guessed here. |
 | `engine/flow/gesture.h` decoder | **untouched.** It is engine code and the Seed firmware will want it. Only Glow's *use* of it changes. |
-| `tests/test_glow_ui.cpp` | shrinks; `kCvMacro` / `cv_to_macro` / `clock_bpm` / `led_level` tests go with their subjects. `scale_of_knob` **stays** (§4.3 keeps the scale list, in the menu). |
+| `tests/test_glow_ui.cpp` | shrinks; `kCvMacro` / `cv_to_macro` / `clock_bpm` / `led_level` tests go with their subjects. `scale_of_knob` **was deleted**, not kept — it converted a knob position into a `ScaleId`, and the Touch 2 surface has no scale knob; its range-clamping rule now lives in `clamp_menu_scale` (`glow_ui.hpp`), with test coverage it did not have before. |
 | `tests/test_flow_gesture.cpp` | **untouched** — it tests engine code. |
 
 ## §8 Tests
