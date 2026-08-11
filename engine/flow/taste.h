@@ -662,6 +662,7 @@ inline const float kArchWeight[ARCH_COUNT] = { 0.5f, 0.2f, 0.15f, 0.15f };
 // listening-phase first guesses.
 inline constexpr int kCarrierEngine[3] = { ENGINE_SYNTH, ENGINE_WAVE,
                                            ENGINE_BODY };
+inline const int kCarrierEngineCount = int(sizeof(kCarrierEngine) / sizeof(kCarrierEngine[0]));
 inline constexpr float kCarrierW[ARCH_COUNT][3] = {
     { 0.30f, 0.40f, 0.30f },   // drone: wavetables and bowed bodies sustain
     { 0.50f, 0.25f, 0.25f },   // pulse: the synth's envelopes pulse best

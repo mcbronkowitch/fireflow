@@ -125,6 +125,36 @@ TEST_CASE("a_carries follows the overlaid engines") {
     CHECK(int(t.base[P_ENGINE_B] + 0.5f) == ENGINE_SYNTH);
 }
 
+// Same search as master_with_a_carrying, but also requires the drawn
+// TEXTURE engine to be carrier-eligible, so overlaying only P_ENGINE_A with
+// a texture-only engine still has somewhere for the carrier to land -- the
+// case below never touches P_ENGINE_B at all.
+static uint32_t master_with_a_carrying_and_texture_carrier_eligible() {
+    for (uint32_t m = 1; m < 4000u; ++m) {
+        const Terrain t = generate(TerrainState{ m, {} });
+        if (t.a_carries && is_carrier_engine(int(t.base[P_ENGINE_B] + 0.5f))) return m;
+    }
+    FAIL("no master found -- deck B's drawn engine is never carrier-eligible while A carries");
+    return 1u;
+}
+
+TEST_CASE("a single-slot overlay still recomputes the carrier") {
+    // Finding 1 (Task 2 review): gating the recompute on "both engine slots
+    // set" left this path unguarded -- decode_base (Tasks 7-8) can produce a
+    // single-slot overlay from decoded text. Only P_ENGINE_A is overlaid,
+    // to a texture-only engine, on a master where deck A started as the
+    // carrier; deck B's UNTOUCHED drawn engine happens to be carrier-eligible
+    // too (search above), so the carrier must move to B and the overlay must
+    // NOT be rejected.
+    TerrainState st; st.master = master_with_a_carrying_and_texture_carrier_eligible();
+    BaseOverlay ov;
+    ov.v[P_ENGINE_A] = float(ENGINE_SAMPLER); ov.has[P_ENGINE_A] = true;
+
+    const Terrain t = generate(st, &ov);
+    CHECK(t.a_carries == false);
+    CHECK(int(t.base[P_ENGINE_A] + 0.5f) == ENGINE_SAMPLER);   // overlay applied, not rejected
+}
+
 TEST_CASE("two carrier engines keep the drawn coin") {
     for (bool want : { true, false }) {
         TerrainState st; st.master = master_with_a_carrying(want);
