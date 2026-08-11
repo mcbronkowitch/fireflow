@@ -602,8 +602,8 @@ tempo curation is for.
 travel. Off is unity too, never silence — a module that boots at half gain
 is a bug report.
 
-**Lock.** A pure function of switch position — down and up are the two
-locked/unlocked ends, centre reads as unlocked. There is no separate stored
+**Lock.** A pure function of switch position — up is the locked end, and down
+and centre both read unlocked. There is no separate stored
 lock any more: the old context-menu lock toggle is gone, and nothing else can
 set the state. If no switch is assigned to Lock, the module reads as
 unlocked, full stop — including on loading a patch that was saved locked.

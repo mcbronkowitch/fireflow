@@ -163,7 +163,7 @@ about.
 **[Download the latest release](https://github.com/mcbronkowitch/fireflow/releases/latest)**
 — `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.20.0**
 (both modules: Synth, Sampler, WAVE, BODY and BBD, the independent FORM/SONG
-phrase arranger and the STEP mod grid lock — plus Glow 0.1). Unpack into Rack's
+phrase arranger, and the STEP mod grid lock). Unpack into Rack's
 user plugin directory and restart Rack.
 
 Building it yourself needs its own toolchain (a native MinGW/GCC compiler, not
