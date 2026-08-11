@@ -211,18 +211,19 @@ struct Glow : Module {
     // is audio-thread property, so the menu stages the PAD NUMBER and the
     // audio thread does both the read and the write.
     //
-    // There is no SET_LOCK. The switch owns the lock now (spec §4.3, "one
-    // control, one truth") and controlTick pushes it every tick, so a one-shot
-    // lock op would be overwritten a control period later -- it had no
-    // producer left after Task 4 removed the menu's lock toggle, and adding
-    // one back would just be that synchronisation bug with extra steps.
+    // There is no SET_LOCK, and no staged lock value either. The switch owns
+    // the lock now (spec §4.3, "one control, one truth") and controlTick
+    // pushes it every tick, BEFORE this switch runs -- so a one-shot lock op,
+    // or a `uiLock` carried by RESTORE, would be overwritten a control period
+    // later. It had no producer left after Task 4 removed the menu's lock
+    // toggle, and adding one back would just be that synchronisation bug with
+    // extra steps. glow_ui.hpp's GlowSave note has the whole reasoning.
     enum class UiOp { NONE, SET_TERRAIN, RESTORE,
                       NEW_FULL, NEW_PARTIAL, UNDO, SET_PLACES, PIN };
     std::atomic<UiOp> uiOp { UiOp::NONE };
     spky::flow::TerrainState uiState;   // SET_TERRAIN, RESTORE
     spky::flow::TerrainState uiUndo;    // RESTORE
     bool uiHaveUndo = false;            // RESTORE
-    bool uiLock = false;                // RESTORE
     uint8_t uiMask = 0x3F;              // NEW_PARTIAL
     spkyvcv::Place uiPlaces[spkyvcv::kPadCount];   // SET_PLACES, RESTORE
     bool uiForget = false;              // SET_PLACES: the live pad is gone too
@@ -370,7 +371,15 @@ struct Glow : Module {
     // Hand over whatever is already sitting in uiPlaces. Direct while the
     // module is not running yet (dataFromJson before onAdd: nothing can be
     // reading places[]), staged once it is.
+    //
+    // uiForget is set HERE rather than left to the caller: it is the other half
+    // of the SET_PLACES payload, and applyPlaces() reads it. Every caller of
+    // this function is a restore, and a restore does not disown the live pad --
+    // a redraw does, and that path goes through stagePlaces(edit, true) with
+    // its own flag. Written before uiOp for the same reason the array is:
+    // payload first, flag last.
     void commitPlaces() {
+        uiForget = false;
         if (curSr <= 0.f) applyPlaces();
         else uiOp = UiOp::SET_PLACES;
     }
@@ -385,15 +394,20 @@ struct Glow : Module {
     }
 
     // --- persistence (spec 5) --------------------------------------------
-    // A live set built around a locked terrain has to survive a restart, so
-    // a patch carries the whole state: the terrain code, the lock, the one
-    // undo slot, the assignments and the twelve places. Preset *systems* --
-    // banks, slots, favourites -- are out of scope (spec 8).
+    // A live set built around one terrain has to survive a restart, so a patch
+    // carries the whole state: the terrain code, the one undo slot, the
+    // standing menu values, the assignments and the twelve places. Preset
+    // *systems* -- banks, slots, favourites -- are out of scope (spec 8).
+    //
+    // There is no "lock" key. It was written until this round, but the LOCK
+    // switch has owned that state since Task 5, and controlTick pushes the
+    // switch's answer every tick -- so a restored lock lived about two
+    // milliseconds and nothing could observe it. Dropping the key rather than
+    // keeping unobservable state (dev alpha: no migration, no fallback).
     json_t* dataToJson() override {
         const spkyvcv::GlowSave s = spkyvcv::glow_capture(flow);
         json_t* root = json_object();
         json_object_set_new(root, "terrain", json_string(s.code));
-        json_object_set_new(root, "lock", json_boolean(s.lock));
         if (s.have_undo) json_object_set_new(root, "undo", json_string(s.undo));
         json_object_set_new(root, "root", json_integer(rootOverride.load()));
         json_object_set_new(root, "menuScale", json_integer(menuScale.load()));
@@ -500,7 +514,10 @@ struct Glow : Module {
         // key existed -- leaves the rest of them alone rather than blanking
         // them.
         for (int i = 0; i < spkyvcv::kPadCount; ++i) uiPlaces[i] = places[i];
-        uiForget = false;               // a restore does not disown the live pad
+        // A restore does not disown the live pad. commitPlaces() sets this too,
+        // but the RESTORE path below applies the staged places without going
+        // through it, and applyPlaces() reads the flag on both routes.
+        uiForget = false;
         if (json_t* a = json_object_get(root, "places")) {
             if (json_is_array(a)) {
                 for (int i = 0; i < spkyvcv::kPadCount
@@ -536,8 +553,9 @@ struct Glow : Module {
                 s.have_undo = true;
             }
         }
-        if (json_t* l = json_object_get(root, "lock"))
-            s.lock = json_boolean_value(l);
+        // A patch written before this round may still carry a "lock" key. It
+        // is ignored on purpose: the LOCK switch is the only thing that can
+        // set that state, and Rack restores the switch param itself.
         // A malformed code leaves everything alone -- a corrupt patch must
         // not silently move the player to some other instrument.
         if (curSr <= 0.f) {          // dataFromJson ran before onAdd
@@ -572,7 +590,6 @@ struct Glow : Module {
             uiState = plan.state;
             uiUndo = plan.undo;
             uiHaveUndo = plan.have_undo;
-            uiLock = plan.lock;
             // RESTORE applies the staged places too, rather than raising a
             // second op: uiOp is one slot, so a SET_PLACES here would be
             // overwritten by this line and the loaded twelve would vanish.
@@ -657,8 +674,9 @@ struct Glow : Module {
             flow.wake(st);
             woken = true;
         }
-        // wake() itself never touches the lock, so without this a locked
-        // module would land on pad 1 still locked.
+        // wake() itself never touches the lock, and a house wake is a fresh
+        // start. Belt and braces only: controlTick re-decides the lock from the
+        // assigned switch on the next tick regardless (glow_ui.hpp, GlowSave).
         flow.set_lock(false);
         pads.live = 0;
         pads.excursion = false;
@@ -671,7 +689,7 @@ struct Glow : Module {
         const bool hadFlow = woken;
         const spky::flow::TerrainState st = flow.state();
         const spky::flow::TerrainState un = flow.undo_state();
-        const bool lock = flow.locked(), haveUndo = flow.can_undo();
+        const bool haveUndo = flow.can_undo();
 
         const float prevSr = curSr;
         curSr = sr;
@@ -715,14 +733,19 @@ struct Glow : Module {
         // may run at most once per module instance. Every later rate change
         // goes through set_ctrl_hz(), which touches only the tick period and
         // the SPACE slew coefficient.
+        //
+        // Nothing re-applies the lock here. On this branch Flow::init() did not
+        // run, and it is the only thing besides set_lock() that writes
+        // Flow::_locked (flow.cpp) -- so the lock was never lost to restore.
+        // controlTick pushes the switch's answer a control period later in any
+        // case; see glow_ui.hpp's GlowSave note.
         const float ctrlHz = sr / float(kCtrlDiv);
         if (!hadFlow) {
             flow.init(&inst, ctrlHz);
         } else {
             flow.set_ctrl_hz(ctrlHz);
             flow.wake(st);            // force-pushes every setter into the
-            flow.set_lock(lock);      // freshly initialised Instrument
-            flow.restore_undo(un, haveUndo);
+            flow.restore_undo(un, haveUndo);   // freshly initialised Instrument
         }
     }
 
@@ -803,7 +826,8 @@ struct Glow : Module {
             case UiOp::RESTORE:
                 applyPlaces();
                 flow.wake(uiState);
-                flow.set_lock(uiLock);
+                // No set_lock here: the push above already ran this tick, and
+                // it is the switch's answer. See glow_ui.hpp's GlowSave note.
                 flow.restore_undo(uiUndo, uiHaveUndo);
                 woken = true;
                 break;
@@ -925,20 +949,22 @@ struct TerrainCodeField : ui::TextField {
     }
 };
 
-// A menu text field that hands a sanitized string to a callback on Enter and
-// closes the menu -- TerrainCodeField's sibling, for the two strings a place
-// carries. ui::TextField itself has no commit behaviour.
+// A menu text field that hands its contents to a callback on Enter and closes
+// the menu -- TerrainCodeField's sibling, for the two strings a place carries.
+// ui::TextField itself has no commit behaviour.
 //
-// It sanitizes on the way OUT rather than trusting the caller, because both
-// callers write into a fixed buffer and the cap is the buffer's: a tab pasted
-// into the name field would otherwise split a pool.tsv column.
+// It does NOT sanitize or truncate. spkyvcv::set_label does both, it is the
+// only way to write those fixed buffers, and it has to hold that contract for
+// dataFromJson too -- a hand-edited patch reaches the same fields with no text
+// field anywhere in sight. Doing it here as well was idempotent but left this
+// widget carrying a `cap` whose only job was to redo the buffer owner's work,
+// which is the kind of second copy that drifts.
 struct LabelField : ui::TextField {
     std::function<void(const std::string&)> commit;
-    std::size_t cap = spkyvcv::kNameCap;
     void onSelectKey(const SelectKeyEvent& e) override {
         if (commit && e.action == GLFW_PRESS
             && (e.key == GLFW_KEY_ENTER || e.key == GLFW_KEY_KP_ENTER)) {
-            commit(spkyvcv::sanitize_label(text, cap));
+            commit(text);
             e.consume(this);
             if (MenuOverlay* overlay = getAncestorOfType<MenuOverlay>())
                 overlay->requestDelete();
@@ -1235,7 +1261,6 @@ struct GlowWidget : ModuleWidget {
                     pm->addChild(createMenuLabel("Name"));
                     auto* nf = new LabelField;
                     nf->box.size.x = 180.f;
-                    nf->cap = spkyvcv::kNameCap;
                     nf->setText(m->places[i].name);
                     nf->commit = [m, i](const std::string& s) {
                         m->stagePlaces([&](spkyvcv::Place* p) {
@@ -1246,7 +1271,6 @@ struct GlowWidget : ModuleWidget {
                     pm->addChild(createMenuLabel("Note -- why it was kept"));
                     auto* tf = new LabelField;
                     tf->box.size.x = 180.f;
-                    tf->cap = spkyvcv::kNoteCap;
                     tf->setText(m->places[i].note);
                     tf->commit = [m, i](const std::string& s) {
                         m->stagePlaces([&](spkyvcv::Place* p) {
@@ -1269,11 +1293,18 @@ struct GlowWidget : ModuleWidget {
             glfwSetClipboardString(APP->window->win, tsv.c_str());
         }));
 
-        // Redraws into the staging array on THIS thread and hands the result
-        // over -- Glow::drawTwelve() would write places[] and reset the
-        // gesture from under the audio thread. `true` forgets the live pad:
-        // after a redraw the sounding terrain is no longer any of the twelve.
-        menu->addChild(createMenuItem("Redraw all twelve places", "", [m]() {
+        // "Reset", not "Redraw": the seed is the fixed kPoolSeed, so this draws
+        // the SAME twelve every time. Its only observable effect is that every
+        // pinned code, name and note is discarded and the factory twelve come
+        // back -- one click, no confirmation, right under the export. The label
+        // has to say that; a "redraw" promises something new.
+        //
+        // Draws into the staging array on THIS thread and hands the result over
+        // -- Glow::drawTwelve() would write places[] and reset the gesture from
+        // under the audio thread. `true` forgets the live pad: afterwards the
+        // sounding terrain is no longer any of the twelve.
+        menu->addChild(createMenuItem("Reset all twelve places (discards names "
+                                      "and notes)", "", [m]() {
             m->stagePlaces([](spkyvcv::Place* p) {
                 Glow::drawTwelveInto(p, Glow::kPoolSeed);
             }, true);

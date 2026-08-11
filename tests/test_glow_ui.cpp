@@ -15,7 +15,11 @@ TEST_CASE("glow: the house code is a decodable terrain code") {
     CHECK(decode_code(kHouseCode, st));
 }
 
-TEST_CASE("glow: a saved payload restores the terrain, the lock and the undo slot") {
+TEST_CASE("glow: a saved payload restores the terrain and the undo slot") {
+    // The lock is deliberately NOT part of this payload -- Glow.cpp's
+    // controlTick pushes the LOCK switch's answer into Flow every tick, so a
+    // saved lock could only survive one control period. See glow_ui.hpp's note
+    // on GlowSave.
     Instrument inst;
     inst.init(48000.f);
     Flow fl;
@@ -25,10 +29,8 @@ TEST_CASE("glow: a saved payload restores the terrain, the lock and the undo slo
     REQUIRE(decode_code(kHouseCode, house));
     fl.wake(house);
     REQUIRE(fl.new_full());                  // fills the undo slot
-    fl.set_lock(true);
 
     const GlowSave s = glow_capture(fl);
-    CHECK(s.lock);
     CHECK(s.have_undo);
     CHECK(std::strlen(s.code) == size_t(kTerrainCodeLen));
 
@@ -36,11 +38,16 @@ TEST_CASE("glow: a saved payload restores the terrain, the lock and the undo slo
     inst2.init(48000.f);
     Flow fl2;
     fl2.init(&inst2, 100.f);
+    // Locked BEFORE the restore, and still locked after: a restore must not
+    // write the lock at all. Glow.cpp's controlTick is that state's only
+    // writer, and it decides from the switch. If a saved lock ever comes back
+    // into GlowSave, this is the assertion that says so.
+    fl2.set_lock(true);
     CHECK(glow_restore(fl2, s));
+    CHECK(fl2.locked());
     CHECK(fl2.state().master == fl.state().master);
     for (int m = 0; m < MACRO_COUNT; ++m)
         CHECK(fl2.state().reroll[m] == fl.state().reroll[m]);
-    CHECK(fl2.locked() == fl.locked());
     CHECK(fl2.can_undo());
     CHECK(fl2.undo_state().master == fl.undo_state().master);
     // A restore is bookkeeping, not a gesture: no blend may be in flight.
@@ -58,10 +65,16 @@ TEST_CASE("glow: a malformed saved code changes nothing") {
 
     GlowSave bad;
     std::snprintf(bad.code, sizeof bad.code, "%s", "F1-NOTHEX00-000000000000");
-    bad.lock = true;
+    // The undo half of the payload is deliberately VALID. A malformed current
+    // code has to abort the whole restore, not just its own half -- otherwise
+    // a corrupt patch loads with an undo slot pointing somewhere the player
+    // never was. wake() cleared the slot above, so any undo here came from
+    // this call.
+    encode_code(house, bad.undo, int(sizeof bad.undo));
+    bad.have_undo = true;
     CHECK_FALSE(glow_restore(fl, bad));
     CHECK(fl.state().master == house.master);
-    CHECK_FALSE(fl.locked());
+    CHECK_FALSE(fl.can_undo());
 }
 
 TEST_CASE("glow: a refuse flash is active only within its window after mark") {

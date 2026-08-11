@@ -123,7 +123,9 @@ TEST_CASE("switches: SCALE gates the menu's values and never invents one") {
     CHECK(scale_switch(1, S, R).root_ovr == -1);
     CHECK(scale_switch(2, S, R).scale_ovr == S);
     CHECK(scale_switch(2, S, R).root_ovr == R);
-    // Out of range is AUTO, the rule scale_of_knob already applies.
+    // Out of range is AUTO -- the same rule glow_ui.hpp's clamp_* helpers
+    // apply. (scale_of_knob, which used to carry it, is gone: the Touch 2
+    // surface has no scale knob.)
     CHECK(scale_switch(7, S, R).scale_ovr == -1);
     CHECK(scale_switch(-3, S, R).root_ovr == -1);
 }

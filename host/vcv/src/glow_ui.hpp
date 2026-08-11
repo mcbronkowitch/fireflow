@@ -101,13 +101,24 @@ struct RefuseFlash {
     }
 };
 
-// Exactly what a patch stores OF THE TERRAIN: current code, lock, undo slot.
+// Exactly what a patch stores OF THE TERRAIN: current code and undo slot.
 // The tonality overrides (spec 2026-08-07 §3) are module settings rather than
 // terrain state and are saved by Glow.cpp directly, not through here.
+//
+// The LOCK is NOT here, and its absence is a decision rather than an omission.
+// Since the Simple Touch 2 surface the lock is a pure function of the assigned
+// switch's position: Glow.cpp's controlTick pushes
+// `swLockPos >= 0 && lock_switch(swLockPos)` into Flow on EVERY tick, before
+// it applies anything staged. So a saved lock could only survive one control
+// period -- about two milliseconds -- before the switch's answer overwrote it,
+// in every configuration, whether or not a switch is assigned to LOCK. Storing
+// it would be a second, invisible source of truth for a state that already has
+// exactly one control (spec §4.3, "one control, one truth"), and a restore path
+// that reads as though it applied. Flow::locked()/set_lock() stay -- they are
+// the engine's, and controlTick is their caller.
 struct GlowSave {
     char code[spky::flow::kTerrainCodeLen + 1] = {};
     char undo[spky::flow::kTerrainCodeLen + 1] = {};
-    bool lock = false;
     bool have_undo = false;
 };
 
@@ -115,7 +126,6 @@ inline GlowSave glow_capture(const spky::flow::Flow& fl) {
     GlowSave s;
     spky::flow::encode_code(fl.state(), s.code, int(sizeof s.code));
     spky::flow::encode_code(fl.undo_state(), s.undo, int(sizeof s.undo));
-    s.lock = fl.locked();
     s.have_undo = fl.can_undo();
     return s;
 }
@@ -129,7 +139,6 @@ struct GlowRestorePlan {
     spky::flow::TerrainState state;
     spky::flow::TerrainState undo;
     bool have_undo = false;
-    bool lock = false;
 };
 
 // Decodes and validates a saved payload into `out`. Returns false and
@@ -143,19 +152,18 @@ inline bool glow_restore_plan(const GlowSave& s, GlowRestorePlan& out) {
     out.state = st;
     out.undo = un;
     out.have_undo = have;
-    out.lock = s.lock;
     return true;
 }
 
 // Applies a saved payload. Returns false and touches NOTHING if the terrain
 // code is malformed -- a corrupt patch must not silently move the player to
 // some other instrument. The order is the one flow.h documents: wake clears
-// the undo slot, so restoring it comes last.
+// the undo slot, so restoring it comes last. The lock is not applied here --
+// see the note on GlowSave; controlTick owns it.
 inline bool glow_restore(spky::flow::Flow& fl, const GlowSave& s) {
     GlowRestorePlan plan;
     if (!glow_restore_plan(s, plan)) return false;
     fl.wake(plan.state);
-    fl.set_lock(plan.lock);
     fl.restore_undo(plan.undo, plan.have_undo);
     return true;
 }
