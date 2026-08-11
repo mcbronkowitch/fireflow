@@ -119,6 +119,13 @@ def test_geometry_comes_from_the_measured_table():
     jacks = [(c.x, c.y) for c in g.OUTPUTS]
     check(jacks == [(x, y) for x, y in geo.JACKS],
           "jack centres drifted from touch2_geometry.JACKS")
+    # Sizes are ours, with one exception: the knob cap is printed at the board's
+    # measured silkscreen collar radius, so it is a measurement like the centres
+    # and must not be re-typed either. It used to read a round 4.5.
+    check(g.KNOB_R == geo.KNOB_COLLAR_R,
+          "the printed knob cap radius is %.3f mm, not the measured collar "
+          "radius %.3f -- a round number was typed into the generator"
+          % (g.KNOB_R, geo.KNOB_COLLAR_R))
 
 
 def test_the_measured_pad_list_is_not_reading_order():

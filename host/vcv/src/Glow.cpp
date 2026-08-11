@@ -58,6 +58,27 @@ static_assert(FADER_R == FADER_L + 1,
 static_assert(SW_R == SW_L + 1,
               "switchPos() indexes params[SW_L + i]");
 
+// How many places drawTwelve() draws per archetype. Named so the loop and the
+// assert below cannot say different threes.
+static constexpr int kPlacesPerArch = 3;
+
+// The only assert in this file that guards a memory WRITE, not just an index
+// convention. drawTwelve() fills ARCH_COUNT * kPlacesPerArch entries of
+// places[kPadCount], and those two counts have separate owners that have never
+// been told about each other: ARCH_COUNT is the engine's (engine/flow/
+// flow_ids.h), kPadCount is the board's (touch_pads.hpp). 4 * 3 == 12 is a
+// coincidence between an archetype list and an MPR121, not a relationship.
+// Add a fifth archetype and the loop writes places[12..14] straight through the
+// Module object, over std::string members, with no bounds check anywhere on the
+// path. If this fires: change how many places each archetype gets in
+// drawTwelve() -- do NOT enlarge places[], which is sized by the pads and by
+// nothing else.
+static_assert(spky::flow::ARCH_COUNT * kPlacesPerArch
+                  == static_cast<int>(spkyvcv::kPadCount),
+              "drawTwelve() writes ARCH_COUNT * kPlacesPerArch places into "
+              "places[kPadCount]; give each archetype a different share of the "
+              "pads, do not widen the array");
+
 // The macro knobs keep c.label empty on the plate (spec 3.3: a printed caption
 // would freeze an assignment the rehearsal is allowed to move), so their Rack
 // names come from here rather than from the generated table.
@@ -219,6 +240,14 @@ struct Glow : Module {
                         pq->randomizeEnabled = false;
                     break;
                 case WK_SWITCH:
+                    // The three position names are RUNTIME TOOLTIP strings, not
+                    // panel captions: Rack shows them in the hover readout and
+                    // the context menu, and nothing here reaches the plate --
+                    // which prints no switch caption at all, as
+                    // test_only_the_pads_carry_printed_captions enforces. Same
+                    // carve-out from "the panel table is the only source" that
+                    // PadQuantity documents above, and for the same reason: a
+                    // caption a generator could print would have to be printed.
                     configSwitch(c.id, 0.f, 2.f, 0.f, c.tip,
                                  { "Down", "Centre", "Up" });
                     if (auto* pq = paramQuantities[c.id])
@@ -253,7 +282,7 @@ struct Glow : Module {
         spky::flow::TerrainState cur = {};
         int i = 0;
         for (int arch = 0; arch < spky::flow::ARCH_COUNT; ++arch) {
-            for (int k = 0; k < 3; ++k) {
+            for (int k = 0; k < kPlacesPerArch; ++k) {
                 spky::flow::TerrainState st = cur;
                 for (int tries = 0; tries < 8; ++tries) {
                     st = spky::flow::draw_new(cur, seq, arch);
@@ -323,6 +352,25 @@ struct Glow : Module {
 
     void dataFromJson(json_t* root) override {
         if (!root) return;
+        // The same momentary-pad remedy onAdd runs, because onAdd is not on
+        // every path that gets here. Module::fromJson calls paramsFromJson and
+        // then dataFromJson, and that pair is the WHOLE of a right-click preset
+        // load or a module paste -- the module is already live, so onAdd never
+        // runs again and its version of this never fires. A preset stored with
+        // a pad held therefore comes back with that param at 1.0, and the next
+        // controlTick reads a rising edge, wakes, and rerolls 400 ms later on
+        // top of the terrain this call is in the middle of restoring.
+        //
+        // Unconditional rather than guarded on `curSr > 0.f`: on the patch-load
+        // path onAdd will do it again a moment later, and running it twice
+        // costs twelve stores, while a missed path costs a silent reroll.
+        // Placed before every early return below for the same reason -- the
+        // pads are not part of the terrain payload and must not depend on it
+        // parsing.
+        for (int i = 0; i < spkyvcv::kPadCount; ++i)
+            params[PAD_1 + i].setValue(0.f);
+        bool padsQuiet[spkyvcv::kPadCount] = {};
+        pads.prime(padsQuiet);
         // Read BEFORE the terrain's early return below: the override is
         // independent of the terrain, and a patch whose code is missing or
         // malformed must not lose it as collateral.
@@ -778,7 +826,22 @@ struct TouchPlate : app::Switch {
         const bool flash = mod && mod->refuse.active(mod->flow.now_s());
 
         NVGcolor collar;
-        if (flash && live)    collar = nvgRGB(0xb9, 0x65, 0x32);
+        // Copper (#b96532, the panel's part-B accent) is reserved for "that
+        // worked" -- a hold that actually rerolled. A refusal gets its own
+        // colour, because telling the player "I refused you" is the only thing
+        // RefuseFlash exists for, and both ways a PAD can earn one -- a hold
+        // that LOCK turned down, and a pad whose stored code will not decode --
+        // are exactly the moments where a copper collar would read as the
+        // reroll that just did not happen.
+        //
+        // #8f4a45 is a muted, greyish red: same value range as COPPER (L ~42 %
+        // against ~46 %) so it does not shout louder than the accent it sits
+        // beside, but a third of its saturation and 20 degrees round the wheel,
+        // which is what makes it read as dull brick rather than as warm metal.
+        // It belongs with MUTED (#656056) in gen_panel's palette, not above
+        // COPPER. Both live here rather than in the generated table for the
+        // reason the whole widget does: this is runtime state, not panel state.
+        if (flash && live)    collar = nvgRGB(0x8f, 0x4a, 0x45);
         else if (exc)         collar = nvgRGB(0xb9, 0x65, 0x32);
         else if (live)        collar = nvgRGB(0x1d, 0x6f, 0x5f);
         else                  collar = nvgRGBA(0xd7, 0xcd, 0xbb, 0xff);
@@ -806,10 +869,19 @@ struct GlowWidget : ModuleWidget {
             const Vec pos = mm2px(Vec(c.mm.x, c.mm.y));
             switch (c.kind) {
                 case WK_MACRO:
-                    // Trimpot is Rack's only small knob; the plate prints 9 mm
-                    // and Trimpot is the nearest stock size. Same reckoning
-                    // the old panel made for RoundLargeBlackKnob.
-                    addParam(createParamCentered<Trimpot>(pos, module, c.id));
+                    // The plate prints the cap at the board's own measured
+                    // silkscreen collar (touch2_geometry.KNOB_COLLAR_R = 3.885,
+                    // so 7.77 mm across), and the widget is picked against
+                    // that, not against a round number. Measured off
+                    // res/ComponentLibrary at Rack's 75 DPI: RoundSmallBlackKnob
+                    // 7.68 mm, Trimpot 6.05 mm, RoundBlackKnob 9.60 mm. The
+                    // small black knob misses the print by 0.09 mm; Trimpot
+                    // would leave a 0.9 mm ring of printed cap showing all
+                    // round, which is what a knob that has fallen off looks
+                    // like. (Trimpot is also not "Rack's only small knob", as
+                    // this comment used to claim.)
+                    addParam(createParamCentered<RoundSmallBlackKnob>(pos, module,
+                                                                      c.id));
                     break;
                 case WK_PAD: {
                     auto* p = createParamCentered<TouchPlate>(pos, module, c.id);
@@ -826,10 +898,25 @@ struct GlowWidget : ModuleWidget {
                     addParam(createParamCentered<VCVSlider>(pos, module, c.id));
                     break;
                 case WK_SWITCH:
-                    // NKK is the three-position toggle. The board's switches
-                    // are centre-off (two digital pins each), so three
-                    // positions is the hardware, not a choice.
-                    addParam(createParamCentered<NKK>(pos, module, c.id));
+                    // CKSSThree, not NKK. Both have three positions, so "the
+                    // board's switches are centre-off, two digital pins each"
+                    // -- true, and the reason this is a three-position widget
+                    // at all -- does not choose between them. Size does.
+                    // Measured off res/ComponentLibrary at Rack's 75 DPI:
+                    // NKK_0.svg is 10.84 x 14.86 mm against the 5.00 x 9.00 mm
+                    // this plate prints, i.e. 2.2x the printed footprint, while
+                    // CKSSThree_0.svg is 4.56 x 9.60 and fits it.
+                    //
+                    // The overlap is not cosmetic. At NKK's size SW_L covers
+                    // 1.90 x 8.16 mm of PAD_2, and SW_R reaches into PAD_3 and
+                    // PAD_8. Switches come after pads in kParamCtls and Rack
+                    // hit-tests children in reverse order, so the switch takes
+                    // the press and those three pads lose 10-23 % of their
+                    // clickable area. Enlarging the printed footprint to match
+                    // NKK is not the alternative: both switches are mounted
+                    // THROUGH the pad field on the real board and there is no
+                    // room there (see "the pad field" in gen_flow_panel.py).
+                    addParam(createParamCentered<CKSSThree>(pos, module, c.id));
                     break;
                 case WK_OUT: break;
             }

@@ -52,7 +52,7 @@ enum LightId {
 };
 static constexpr float kPanelW = 81.280f;
 static constexpr float kPanelH = 128.500f;
-static constexpr float kKnobR   = 4.500f;
+static constexpr float kKnobR   = 3.885f;
 static constexpr float kPadW    = 7.600f;
 static constexpr float kPadH    = 9.000f;
 static constexpr float kPadR    = 2.000f;

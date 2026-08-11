@@ -69,9 +69,10 @@ below are its whole output) did this:
 
    | class    | how it was found                          | residual        |
    |----------|-------------------------------------------|-----------------|
-   | KNOBS    | gold silkscreen collar, ring score        | +/- 0.2 mm      |
-   | JACKS    | metal nut ring, ring score                | +/- 0.2 mm      |
-   | SWITCHES | knurled nut ring, ring score              | +/- 0.3 mm      |
+   | KNOBS    | gold silkscreen collar, ring score,       | +/- 0.2 mm      |
+   |          |   r searched over [15, 24] px             |                 |
+   | JACKS    | metal nut ring, ring score, r [8, 20] px  | +/- 0.2 mm      |
+   | SWITCHES | knurled nut ring, ring score, r [8, 15]px | +/- 0.3 mm      |
    | FADERS   | midpoint of the two mounting screws       | +/- 0.2 mm      |
    | PADS     | see below -- NOT a clean measurement      | +/- 2 mm, and   |
    |          |                                           | partly derived  |
@@ -188,6 +189,21 @@ KNOBS = [
     (16.90, 45.42), (32.73, 45.48), (48.63, 45.34), (64.47, 45.50),
     (16.89, 62.82), (64.46, 62.83),
 ]
+
+# The gold silkscreen collar around a knob, as a RADIUS. It falls out of the
+# same ring-score search that found the six centres above -- the score is
+# maximised over (cx, cy, r) together, so the radius is an answer, not an
+# assumption -- and the six answers span 3.87-3.90 mm. This is their midpoint:
+# a collar about 7.8 mm across.
+#
+# Exported because gen_flow_panel.py draws the printed knob cap at this radius.
+# It used to type a round 4.5 there, which printed a 9 mm cap on a board whose
+# own collar is 7.8, and then Glow.cpp chose a Rack widget against the round
+# number rather than against the board. Both now hang off this line. The
+# +/- 0.2 mm class residual and the ~0.6 % systematic scale apply here as well;
+# res/test_touch2_geometry.py checks it against the detector's own search band
+# rather than re-asserting the value.
+KNOB_COLLAR_R = 3.885
 
 # S36 (left), S37 (right). FADER_TRAVEL is the drawn slot outline, outer edge
 # to outer edge (128 px on both faders). The electrical travel is shorter --

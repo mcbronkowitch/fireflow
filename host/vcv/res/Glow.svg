@@ -19,18 +19,18 @@
   <line id="glowBrandRuleRight" x1="72.180" y1="8.650" x2="75.080" y2="8.650" stroke="#b96532" stroke-width="0.35"/>
   <circle cx="76.980" cy="8.650" r="0.650" fill="#b96532"/>
   <polygon id="alphaPennant" points="81.280,14.200 74.380,14.200 76.080,16.100 74.380,18.000 81.280,18.000" fill="#b96532"/>
-  <circle cx="16.900" cy="45.420" r="4.500" fill="url(#knobCap)" stroke="#252721" stroke-width="0.28"/>
-  <line x1="16.900" y1="43.620" x2="16.900" y2="41.730" stroke="#fffdf7" stroke-width="0.45" stroke-linecap="round"/>
-  <circle cx="32.730" cy="45.480" r="4.500" fill="url(#knobCap)" stroke="#252721" stroke-width="0.28"/>
-  <line x1="32.730" y1="43.680" x2="32.730" y2="41.790" stroke="#fffdf7" stroke-width="0.45" stroke-linecap="round"/>
-  <circle cx="48.630" cy="45.340" r="4.500" fill="url(#knobCap)" stroke="#252721" stroke-width="0.28"/>
-  <line x1="48.630" y1="43.540" x2="48.630" y2="41.650" stroke="#fffdf7" stroke-width="0.45" stroke-linecap="round"/>
-  <circle cx="64.470" cy="45.500" r="4.500" fill="url(#knobCap)" stroke="#252721" stroke-width="0.28"/>
-  <line x1="64.470" y1="43.700" x2="64.470" y2="41.810" stroke="#fffdf7" stroke-width="0.45" stroke-linecap="round"/>
-  <circle cx="16.890" cy="62.820" r="4.500" fill="url(#knobCap)" stroke="#252721" stroke-width="0.28"/>
-  <line x1="16.890" y1="61.020" x2="16.890" y2="59.130" stroke="#fffdf7" stroke-width="0.45" stroke-linecap="round"/>
-  <circle cx="64.460" cy="62.830" r="4.500" fill="url(#knobCap)" stroke="#252721" stroke-width="0.28"/>
-  <line x1="64.460" y1="61.030" x2="64.460" y2="59.140" stroke="#fffdf7" stroke-width="0.45" stroke-linecap="round"/>
+  <circle cx="16.900" cy="45.420" r="3.885" fill="url(#knobCap)" stroke="#252721" stroke-width="0.28"/>
+  <line x1="16.900" y1="43.866" x2="16.900" y2="42.234" stroke="#fffdf7" stroke-width="0.45" stroke-linecap="round"/>
+  <circle cx="32.730" cy="45.480" r="3.885" fill="url(#knobCap)" stroke="#252721" stroke-width="0.28"/>
+  <line x1="32.730" y1="43.926" x2="32.730" y2="42.294" stroke="#fffdf7" stroke-width="0.45" stroke-linecap="round"/>
+  <circle cx="48.630" cy="45.340" r="3.885" fill="url(#knobCap)" stroke="#252721" stroke-width="0.28"/>
+  <line x1="48.630" y1="43.786" x2="48.630" y2="42.154" stroke="#fffdf7" stroke-width="0.45" stroke-linecap="round"/>
+  <circle cx="64.470" cy="45.500" r="3.885" fill="url(#knobCap)" stroke="#252721" stroke-width="0.28"/>
+  <line x1="64.470" y1="43.946" x2="64.470" y2="42.314" stroke="#fffdf7" stroke-width="0.45" stroke-linecap="round"/>
+  <circle cx="16.890" cy="62.820" r="3.885" fill="url(#knobCap)" stroke="#252721" stroke-width="0.28"/>
+  <line x1="16.890" y1="61.266" x2="16.890" y2="59.634" stroke="#fffdf7" stroke-width="0.45" stroke-linecap="round"/>
+  <circle cx="64.460" cy="62.830" r="3.885" fill="url(#knobCap)" stroke="#252721" stroke-width="0.28"/>
+  <line x1="64.460" y1="61.276" x2="64.460" y2="59.644" stroke="#fffdf7" stroke-width="0.45" stroke-linecap="round"/>
   <rect class="touchPlate" x="1.600" y="78.100" width="7.600" height="9.000" rx="2.000" fill="#ede5d6" fill-opacity="0.55" stroke="#d7cdbb" stroke-width="0.28"/>
   <rect class="touchPlate" x="19.220" y="78.100" width="7.600" height="9.000" rx="2.000" fill="#ede5d6" fill-opacity="0.55" stroke="#d7cdbb" stroke-width="0.28"/>
   <rect class="touchPlate" x="36.840" y="78.100" width="7.600" height="9.000" rx="2.000" fill="#ede5d6" fill-opacity="0.55" stroke="#d7cdbb" stroke-width="0.28"/>

@@ -49,13 +49,20 @@ Hh = geo.PLATE_H                  # 128.5 mm
 # that gap (the outer columns are pinned by COL_MARGIN, so the pitch shrinks
 # with the tile). PAD_H is capped the same way by SW_R, which the top row
 # passes 1.28 mm above and the middle row 0.92 mm below.
-KNOB_R    = 4.5                   # 9 mm trim knobs
+#
+# KNOB_R is the one footprint that is NOT ours: the board prints a gold collar
+# around each knob and Task 2 measured it, so the plate prints that and not a
+# round number. It used to read 4.5 -- a 9 mm cap on a board whose own collar
+# is 7.8 mm across -- and Glow.cpp then chose its widget against the 9. Both
+# now follow geo.KNOB_COLLAR_R: 3.885 mm radius, and Rack's RoundSmallBlackKnob
+# (7.68 mm) is the stock cap nearest to it.
+KNOB_R    = geo.KNOB_COLLAR_R     # measured silkscreen collar, 7.77 mm across
 PAD_W     = 7.6
 PAD_H     = 9.0
 PAD_R     = 2.0                   # corner radius
 FADER_W   = 6.8                   # VCVSlider is 6.72 mm wide
 FADER_H   = geo.FADER_TRAVEL
-SWITCH_W  = 5.0                   # CKSSThree is 4.6 x 9.4 mm
+SWITCH_W  = 5.0                   # CKSSThree is 4.56 x 9.60 mm
 SWITCH_H  = 9.0
 JACK_R    = 4.2
 

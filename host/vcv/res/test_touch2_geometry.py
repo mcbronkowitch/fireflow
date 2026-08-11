@@ -44,6 +44,32 @@ def test_px_per_mm_is_plausible():
           "point" % (geo.PX_PER_MM, geo.PLATE_W))
 
 
+# The radius band the collar detector actually searched, in PIXELS (see the
+# per-class detection table in touch2_geometry). Stated HERE and not read from
+# that file on purpose: a guard that takes its threshold from the file it
+# polices can be disarmed by editing that file -- the same rule EDGE_KEEPOUT
+# follows in test_flow_panel.py.
+COLLAR_SEARCH_PX = (15.0, 24.0)
+
+
+def test_knob_collar_radius_survives_the_trip_back_to_pixels():
+    """KNOB_COLLAR_R is a RADIUS in millimetres, and gen_flow_panel prints the
+    knob cap at it -- so a wrong one is a wrong plate, and nothing about the
+    number itself would show it. Pushing it back through PX_PER_MM must land
+    inside the band the ring score searched. That catches the two errors this
+    export invites and the value cannot reveal: a diameter written where a
+    radius belongs (7.77 mm -> 39 px, off the top of the band) and a slipped
+    decimal (0.3885 mm -> 2 px, off the bottom).
+    """
+    lo, hi = COLLAR_SEARCH_PX
+    px = geo.KNOB_COLLAR_R * geo.PX_PER_MM
+    check(lo <= px <= hi,
+          "KNOB_COLLAR_R %.4f mm is %.1f px at %.3f px/mm, outside the "
+          "[%.0f, %.0f] px band the collar detector searched -- a "
+          "radius/diameter mix-up or a slipped decimal point"
+          % (geo.KNOB_COLLAR_R, px, geo.PX_PER_MM, lo, hi))
+
+
 def test_counts():
     for name, want in (("PADS", 12), ("KNOBS", 6), ("FADERS", 2),
                        ("SWITCHES", 2), ("JACKS", 2)):
