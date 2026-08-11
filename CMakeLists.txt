@@ -134,6 +134,7 @@ add_executable(spky_tests
     tests/test_vcv_form_song_migration.cpp
     tests/test_vcv_link_migration.cpp
     tests/test_glow_ui.cpp
+    tests/test_touch_pads.cpp
     tests/test_choke.cpp
     tests/test_filt.cpp
     tests/test_mod_tide.cpp
