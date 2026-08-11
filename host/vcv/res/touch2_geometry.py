@@ -165,9 +165,12 @@ Channel names are the board's own, from the TouchFX sketch's ASCII drawing
                     o S08
 """
 
-# Outside the repo on purpose -- see "WHERE THE PIXELS LIVE" above.
-SRC_IMAGE = (r"C:\Users\bernd\Documents\AI\FireFlow_Website"
-             r"\docs\reference\touch2-fx-2026-08-11.png")
+# Outside the repo on purpose -- see "WHERE THE PIXELS LIVE" above. Written
+# relative to this repository's parent directory, not as an absolute path: the
+# string is committed here AND pasted into the generated header, and an
+# absolute path would publish the owner's user name twice over. The website
+# repo is a sibling of this one, so this locates the file just as well.
+SRC_IMAGE = "FireFlow_Website/docs/reference/touch2-fx-2026-08-11.png"
 
 PLATE_W = 81.28          # 16 HP
 PLATE_H = 128.5          # Eurorack 3U
@@ -198,10 +201,23 @@ SWITCHES = [(30.34, 86.37), (45.25, 92.88)]
 # Upper, lower.
 JACKS = [(4.31, 15.15), (4.33, 30.60)]
 
+# The pad FIELD, as opposed to the places inside it. This one number is the
+# solid part of the segmentation: copper runs from y = 77.1 mm to the plate's
+# bottom edge, full width, at every setting in the sweep above. It is exported
+# because gen_flow_panel.py lays its twelve places out inside this extent, and
+# a consumer that re-typed 77.1 would be re-typing a measurement.
+PAD_FIELD_TOP = 77.1
+
 # Left to right within three bands (five, five, two) -- the board's own
 # grouping, not a grid and NOT reading order: the bands overlap vertically, so
 # e.g. PADS[1] sits 7.90 mm ABOVE PADS[0]. See "THE PADS ARE THE WEAK ROW"
 # above before trusting any single entry to better than a couple of millimetres.
+#
+# These stay the MEASURED centres. gen_flow_panel.py does not print them: it
+# takes the field extent, the band structure and the left-to-right order from
+# here and computes twelve tidy places, because the field does not decompose
+# into twelve comparable plates (see above) and printing the raw centres reads
+# as accidental. When the 600 dpi scan replaces this table, the layout follows.
 PADS = [
     (12.25, 87.29), (25.79, 79.39), (39.99, 82.82), (54.77, 83.16),
     (70.23, 87.61),

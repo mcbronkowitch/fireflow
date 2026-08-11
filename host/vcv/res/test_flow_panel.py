@@ -7,6 +7,12 @@ that the committed SVG/header still match what the generator emits.
 
 No pytest in this environment -- plain asserts, exit code says it all.
 Run from host/vcv/:  python res/test_flow_panel.py
+
+Proving one of these red by hand: delete res/__pycache__ first. Python's .pyc
+invalidation keys on mtime AND size, and several natural perturbations here are
+byte-length neutral (swapping two names, 12.0 -> 17.0, [0, 1, ...] -> [1, 0,
+...]), so a size-neutral edit inside one mtime tick re-runs the OLD module and
+prints a clean pass. Four false greens were collected that way once.
 """
 import os, sys
 
@@ -42,14 +48,22 @@ OUTPUT_ORDER = ['OUT_L', 'OUT_R']
 KNOB_LAYOUT = ['MOTION', 'DENSITY', 'BRIGHT', 'DIRT', 'WANDER', 'SPACE']
 KNOB_CHAN = ['S31', 'S32', 'S33', 'S34', 'S30', 'S35']
 
-# The one pair the collision guard tolerates, and the reason it exists.
-# Both three-position switches are mounted THROUGH the pad field on the real
-# board -- touch2_geometry's own test_switches_sit_inside_the_pad_field asserts
-# that, and the TouchFX sketch draws it. No pad tile bigger than 12.0 x 4.95 mm
-# clears SW_L, and a field of 5 mm dashes would misdescribe the board worse
-# than a shared corner does. So the overlap is allowed, but it is PINNED: a new
-# one, or the loss of this one, is a failure.
-EXPECTED_OVERLAPS = {('PAD_2', 'SW_L')}
+# Everything printed must lie ON the plate. Not 2 mm inside it: the board's own
+# left column -- both jacks at x = 4.3 and the left fader at x = 4.6 -- sits
+# closer to the edge than that, and the plate, not our taste, decides. With a
+# 2 mm keep-out and real PJ301M / VCVSlider footprints, OUT_L spans 0.11 mm from
+# the edge, OUT_R 0.13, FADER_L 1.21 and FADER_R 1.14, and there is no remedy
+# short of moving measured centres. A gate whose red has no remedy is not a
+# gate. This lives HERE and not in the generator on purpose: a guard that takes
+# its threshold from the file it polices can be disarmed by editing that file.
+EDGE_KEEPOUT = 0.0
+
+# Both switches are mounted THROUGH the pad field on the real board, so the
+# twelve places are laid out around them (gen_flow_panel's "the pad field").
+# This is the margin that layout must keep -- not zero, because a tile that
+# merely fails to intersect a switch by 0.05 mm is a collision waiting for the
+# next re-measure. The tightest pair today is the middle row against SW_R.
+SWITCH_CLEARANCE = 0.5
 
 
 def test_enum_order():
@@ -90,10 +104,12 @@ def test_control_complement_matches_the_board():
 
 
 def test_geometry_comes_from_the_measured_table():
-    """Positions must not be re-typed into the generator by hand."""
-    pads = [(c.x, c.y) for c in g.PARAMS if c.kind == g.PAD]
-    check(pads == [(x, y) for x, y in geo.PADS],
-          "pad centres drifted from touch2_geometry.PADS")
+    """Positions must not be re-typed into the generator by hand.
+
+    The pads are the exception and have their own tests below: their centres
+    are computed from the measured field, not printed from the measured
+    centres. Everything else is the measurement, verbatim.
+    """
     faders = [(c.x, c.y) for c in g.PARAMS if c.kind == g.FADER]
     check(faders == [(x, y) for x, y in geo.FADERS],
           "fader centres drifted from touch2_geometry.FADERS")
@@ -105,14 +121,97 @@ def test_geometry_comes_from_the_measured_table():
           "jack centres drifted from touch2_geometry.JACKS")
 
 
-def test_pad_order_is_the_board_order_not_reading_order():
+def test_the_measured_pad_list_is_not_reading_order():
     """geo.PADS is left-to-right within three overlapping bands, and index i is
     MPR121 place i. Tidying it into reading order would silently renumber every
-    electrode, and a y-sorted list is exactly what a tidy-up produces."""
-    ys = [c.y for c in g.PARAMS if c.kind == g.PAD]
+    electrode, and a y-sorted list is exactly what a tidy-up produces. The
+    laid-out places ARE in reading order now, so this has to be asserted on the
+    measured table -- which is the record, and stays one."""
+    ys = [y for _, y in geo.PADS]
     check(ys != sorted(ys),
-          "the pad list is sorted top-to-bottom -- it was tidied into reading "
-          "order, which renumbers the MPR121 channels")
+          "the measured pad list is sorted top-to-bottom -- it was tidied into "
+          "reading order, which renumbers the MPR121 channels")
+
+
+def test_the_measured_field_top_is_a_field_top():
+    """PAD_FIELD_TOP is the one solid number in the pad segmentation and the
+    layout hangs off it. It must sit below the knob row and above every
+    measured pad centre, or it is not the top of the field."""
+    check(max(y for _, y in geo.KNOBS) < geo.PAD_FIELD_TOP,
+          "PAD_FIELD_TOP %.2f is not below the knob row (%.2f)"
+          % (geo.PAD_FIELD_TOP, max(y for _, y in geo.KNOBS)))
+    check(geo.PAD_FIELD_TOP <= min(y for _, y in geo.PADS),
+          "PAD_FIELD_TOP %.2f sits below the topmost measured pad (%.2f)"
+          % (geo.PAD_FIELD_TOP, min(y for _, y in geo.PADS)))
+    check(geo.PAD_FIELD_TOP < geo.PLATE_H,
+          "PAD_FIELD_TOP %.2f is off the plate" % geo.PAD_FIELD_TOP)
+
+
+def test_the_bands_come_out_of_the_measurement():
+    """Five, five and two, split out of the measured y positions. The sizes are
+    stated here, not read from the generator: they are a fact about the board.
+    """
+    check([len(b) for b in g.PAD_BANDS] == [5, 5, 2],
+          "the pad bands are %s, want [5, 5, 2]"
+          % [len(b) for b in g.PAD_BANDS])
+    check([i for b in g.PAD_BANDS for i in b] == list(range(12)),
+          "the bands no longer read as places 1..12 in order: %s"
+          % [i for b in g.PAD_BANDS for i in b])
+
+
+def test_each_place_stays_where_it_was_measured():
+    """The layout is tidy, not a reshuffle: of the twelve laid-out places, the
+    one nearest measured centre i must BE place i. Stated globally on purpose,
+    so it is not the generator's band/column arithmetic restated -- a swapped
+    pair or a mixed-up band moves a place past its neighbour and fails here."""
+    places = [(c.x, c.y) for c in g.PARAMS if c.kind == g.PAD]
+    check(len(places) == len(geo.PADS), "place count differs from measured")
+    if len(places) != len(geo.PADS):
+        return
+    for i, (mx, my) in enumerate(geo.PADS):
+        d = [((px - mx) ** 2 + (py - my) ** 2) ** 0.5 for px, py in places]
+        nearest = min(range(len(d)), key=lambda k: d[k])
+        check(nearest == i,
+              "measured place %d (%.2f, %.2f) is nearest laid-out place %d, "
+              "not its own" % (i + 1, mx, my, nearest + 1))
+
+
+def test_the_places_stay_inside_the_measured_field():
+    """The field is measured; the places inside it are not. A tile that leaves
+    the field is drawing over the knob row or off the plate."""
+    for c in g.PARAMS:
+        if c.kind != g.PAD:
+            continue
+        x0, y0, x1, y1 = _rect(c)
+        check(y0 >= geo.PAD_FIELD_TOP,
+              "%s starts at y = %.2f, above the measured field top (%.2f)"
+              % (c.enum, y0, geo.PAD_FIELD_TOP))
+        check(y1 <= geo.PLATE_H,
+              "%s ends at y = %.2f, below the plate (%.2f)"
+              % (c.enum, y1, geo.PLATE_H))
+        check(x0 >= 0.0 and x1 <= geo.PLATE_W,
+              "%s spans %.2f .. %.2f, outside the full-width field"
+              % (c.enum, x0, x1))
+
+
+def test_no_pad_comes_near_a_switch():
+    """Both switches stand IN the pad field, so the places are laid out around
+    them. test_no_overlap already forbids an intersection; this one keeps a
+    real margin, because a tile that clears a switch by 0.05 mm has not been
+    laid out around it, it has got away with it."""
+    switches = [c for c in g.PARAMS if c.kind == g.SWITCH]
+    for c in g.PARAMS:
+        if c.kind != g.PAD:
+            continue
+        ax0, ay0, ax1, ay1 = _rect(c)
+        for s in switches:
+            bx0, by0, bx1, by1 = _rect(s)
+            dx = max(0.0, bx0 - ax1, ax0 - bx1)
+            dy = max(0.0, by0 - ay1, ay0 - by1)
+            d = (dx * dx + dy * dy) ** 0.5
+            check(d >= SWITCH_CLEARANCE,
+                  "%s clears %s by only %.2f mm (want %.2f)"
+                  % (c.enum, s.enum, d, SWITCH_CLEARANCE))
 
 
 def test_which_macro_sits_on_which_knob():
@@ -140,23 +239,20 @@ def _rect(c):
 
 
 def test_no_overlap():
+    """No exceptions. There used to be one -- SW_L stood on PAD_2 while the
+    pads were printed at their measured centres -- and laying the field out
+    around the switches retired it."""
     all_ctls = g.PARAMS + g.OUTPUTS
-    hits = set()
     for i, a in enumerate(all_ctls):
         ax0, ay0, ax1, ay1 = _rect(a)
         for b in all_ctls[i + 1:]:
             bx0, by0, bx1, by1 = _rect(b)
-            if ax0 < bx1 and bx0 < ax1 and ay0 < by1 and by0 < ay1:
-                hits.add((a.enum, b.enum))
-    for pair in sorted(hits - EXPECTED_OVERLAPS):
-        check(False, "%s and %s overlap" % pair)
-    for pair in sorted(EXPECTED_OVERLAPS - hits):
-        check(False, "%s and %s no longer overlap -- delete the exception in "
-                     "EXPECTED_OVERLAPS instead of carrying a dead one" % pair)
+            check(not (ax0 < bx1 and bx0 < ax1 and ay0 < by1 and by0 < ay1),
+                  "%s and %s overlap" % (a.enum, b.enum))
 
 
 def test_on_panel():
-    m = g.EDGE_KEEPOUT
+    m = EDGE_KEEPOUT
     for c in g.PARAMS + g.OUTPUTS:
         x0, y0, x1, y1 = _rect(c)
         check(x0 >= m and x1 <= g.W - m,
@@ -170,6 +266,8 @@ def test_on_panel():
 def test_labels_clear_every_glyph():
     all_ctls = g.PARAMS + g.OUTPUTS
     for c in all_ctls:
+        if not c.label:
+            continue        # svg() prints nothing for these; there is no glyph
         lx, ly = g.label_xy(c)
         for other in all_ctls:
             if other is c:

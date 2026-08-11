@@ -5,6 +5,10 @@
 (res/touch2_geometry.py): twelve touch pads, six trim knobs, two faders, two
 switches and one stereo out. No CV inputs -- the board has none.
 
+Every centre is the measured one except the twelve pad places, which are
+computed from the measured field: see "the pad field" below for why, and for
+what is still measurement in them.
+
 This is a VCV panel. It is NOT the faceplate draft -- see touch2_geometry.py
 for why the millimetres here are good enough for Rack and not for a router.
 
@@ -34,15 +38,20 @@ Hh = geo.PLATE_H                  # 128.5 mm
 # what the collision guard measures. Glow.cpp documents each widget against the
 # figure here, the way it already does for the macro knobs.
 #
-# Only the footprints are ours. Every CENTRE comes from touch2_geometry, and a
-# footprint that will not fit between two measured centres gets smaller -- the
-# centres never move. That is why PAD_W/PAD_H are 12.0 x 10.0 and not the
-# 17 x 13 a tiled field would want: at 12.0 x 10.0 the tightest pad pair
-# (PAD_1 / PAD_2) still clears by 1.54 mm, and at 13.0 wide PAD_10 runs off the
-# right edge of the plate.
+# Only the footprints are ours. Every CENTRE outside the pad field comes from
+# touch2_geometry, and a footprint that will not fit between two measured
+# centres gets smaller -- those centres never move.
+#
+# PAD_W is the one footprint set by a collision rather than by taste. The pad
+# grid is five columns wide and SW_L's measured centre (x = 30.34) falls in the
+# gap between columns 1 and 2; at 7.6 mm the column-1 tile stops 1.02 mm short
+# of the switch, and every millimetre added to the tile eats one and a half off
+# that gap (the outer columns are pinned by COL_MARGIN, so the pitch shrinks
+# with the tile). PAD_H is capped the same way by SW_R, which the top row
+# passes 1.28 mm above and the middle row 0.92 mm below.
 KNOB_R    = 4.5                   # 9 mm trim knobs
-PAD_W     = 12.0
-PAD_H     = 10.0
+PAD_W     = 7.6
+PAD_H     = 9.0
 PAD_R     = 2.0                   # corner radius
 FADER_W   = 6.8                   # VCVSlider is 6.72 mm wide
 FADER_H   = geo.FADER_TRAVEL
@@ -57,11 +66,6 @@ GLYPH_ADV = 0.60                  # Share Tech Mono advance, in em
 ALPHA_FLAG_X = W - 6.9
 ALPHA_FLAG_Y = 14.2
 ALPHA_FLAG_H = 3.8
-
-# Everything printed must lie ON the plate. Not 2 mm inside it: the board's own
-# left column -- both jacks at x = 4.3 and the left fader at x = 4.6 -- sits
-# closer to the edge than that, and the plate, not our taste, decides.
-EDGE_KEEPOUT = 0.0
 
 # --- control kinds ------------------------------------------------------------
 MACRO  = "MACRO"
@@ -119,6 +123,79 @@ def label_xy(c):
     return (c.x, c.y + LBL_DY[c.kind])
 
 
+# --- the pad field: measured structure, computed places -----------------------
+# touch2_geometry.PADS is a measurement and stays one. It is also the weakest
+# row in that file: the photograph resolves TEN copper cells, not twelve, and
+# two of the twelve centres come from a 2-means split of the two oversized edge
+# cells. Printed straight, that field reads as accidental -- ragged rows, two
+# lonely tiles at the bottom, and SW_L standing on PAD_2 over a quarter of the
+# switch's area.
+#
+# So the STRUCTURE is taken from the measurement and the PLACES are computed
+# from it. What is still measured:
+#   * the field runs from geo.PAD_FIELD_TOP to the plate's bottom edge, full
+#     width -- the solid part of the segmentation;
+#   * the twelve places fall into three bands of five, five and two, split out
+#     of the measured y positions at the two large gaps (below);
+#   * inside a band, each place keeps its measured left-to-right order and
+#     takes the grid column nearest its own measured x.
+# What is not: the even column pitch and the even row pitch. Nothing here is a
+# new measurement, and no measured number is re-typed -- when the 600 dpi scan
+# replaces geo.PADS, this layout follows it.
+
+# The largest y step INSIDE a measured band is 4.13 mm; the smallest step
+# BETWEEN two bands is 10.85 mm. 8.0 sits in the middle of that gap, so the
+# split is not sensitive to the +/- 2 mm the pad row carries.
+BAND_GAP     = 8.0
+FIELD_MARGIN = 1.0                # inside the field top and the plate bottom
+COL_MARGIN   = 1.6                # inside the plate's side edges; the inner
+                                  # border rule sits at 0.65 + 0.28 stroke, and
+                                  # a tile flush against it reads as a mistake
+
+
+def _bands_of(pads, gap):
+    """Group measured pad centres into bands, splitting at the large y gaps.
+
+    Returns lists of INDICES into `pads`, top band first, each band sorted by
+    measured x. The indices are the MPR121 places and must survive the trip.
+    """
+    by_y = sorted(range(len(pads)), key=lambda i: pads[i][1])
+    bands, cur = [], [by_y[0]]
+    for prev, i in zip(by_y, by_y[1:]):
+        if pads[i][1] - pads[prev][1] > gap:
+            bands.append(cur)
+            cur = []
+        cur.append(i)
+    bands.append(cur)
+    return [sorted(b, key=lambda i: pads[i][0]) for b in bands]
+
+
+def _lay_out(pads, bands):
+    """Place one tile per measured pad on an even grid inside the field."""
+    cols = max(len(b) for b in bands)
+    step_x = (W - 2 * COL_MARGIN - PAD_W) / float(cols - 1)
+    grid_x = [COL_MARGIN + PAD_W / 2.0 + k * step_x for k in range(cols)]
+    top_y = geo.PAD_FIELD_TOP + FIELD_MARGIN + PAD_H / 2.0
+    bot_y = Hh - FIELD_MARGIN - PAD_H / 2.0
+    step_y = (bot_y - top_y) / float(len(bands) - 1)
+    places = [None] * len(pads)
+    for row, band in enumerate(bands):
+        y = top_y + row * step_y
+        free = list(range(cols))
+        for i in band:                      # ascending measured x
+            k = min(free, key=lambda k: abs(grid_x[k] - pads[i][0]))
+            free.remove(k)
+            places[i] = (grid_x[k], y)
+    return places
+
+
+PAD_BANDS = _bands_of(geo.PADS, BAND_GAP)
+assert sorted(i for b in PAD_BANDS for i in b) == list(range(len(geo.PADS))), \
+    "every measured pad must land in exactly one band"
+PAD_PLACES = _lay_out(geo.PADS, PAD_BANDS)
+assert None not in PAD_PLACES, "a measured pad got no place on the grid"
+
+
 # --- the tables ---------------------------------------------------------------
 _MACRO_NAMES = ["MOTION", "DENSITY", "BRIGHT", "DIRT", "WANDER", "SPACE"]
 _MACRO_TIPS = [
@@ -141,10 +218,9 @@ for _pos, _macro in enumerate(KNOB_MACRO):
     PARAMS[_macro] = Ctl(_MACRO_NAMES[_macro], MACRO, _x, _y, "",
                          "%s  [%s]" % (_MACRO_TIPS[_macro], _KNOB_CHAN[_pos]))
 
-# geo.PADS is left-to-right within three bands (five, five, two) -- the board's
-# own grouping. Index i is MPR121 place i, so the order is load-bearing and
-# must not be tidied into reading order.
-for _i, (_x, _y) in enumerate(geo.PADS):
+# PAD_PLACES is indexed exactly like geo.PADS: index i is MPR121 place i, so
+# the order is load-bearing and must not be tidied into reading order.
+for _i, (_x, _y) in enumerate(PAD_PLACES):
     PARAMS.append(Ctl("PAD_%d" % (_i + 1), PAD, _x, _y, str(_i + 1),
                       "Place %d -- tap: go there. Hold: reroll all six macro "
                       "domains, the ground stays. Tap again: back." % (_i + 1)))
@@ -329,9 +405,13 @@ def header():
     out = []
     out.append("// GENERATED by res/gen_flow_panel.py -- do not edit by hand.\n")
     out.append("// Geometry comes from res/touch2_geometry.py, which was measured\n")
-    out.append("// off %s. Those numbers are photo-derived and\n" % geo.SRC_IMAGE)
+    out.append("// off %s\n" % geo.SRC_IMAGE)
+    out.append("// (a sibling repo). Those numbers are photo-derived and\n")
     out.append("// provisional; they get corrected against the board when it\n")
-    out.append("// arrives. This panel is a VCV panel, NOT a faceplate draft.\n")
+    out.append("// arrives. The twelve pad places are laid out on the measured\n")
+    out.append("// field rather than printed from the measured centres -- see\n")
+    out.append("// \"the pad field\" in the generator. This panel is a VCV panel,\n")
+    out.append("// NOT a faceplate draft.\n")
     out.append("#pragma once\n")
     out.append("namespace spkyvcv { namespace glow {\n")
     out.append("struct XY { float x, y; };\n")
