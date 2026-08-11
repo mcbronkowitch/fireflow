@@ -135,6 +135,35 @@ TEST_CASE("labels: TSV-hostile characters are stripped, not escaped") {
     CHECK(sanitize_label("", 32).empty());
 }
 
+TEST_CASE("labels: set_label fills a Place's fixed buffer without overrunning "
+          "it") {
+    // Place stopped holding std::string so the twelve can be copied onto the
+    // audio thread without allocating (see touch_pads.hpp). The cost of that
+    // is a buffer, and this is the guard on it: the byte at dst[cap] is the
+    // terminator and must always be written, whatever came in.
+    char buf[8];                       // cap 7 plus the terminator
+    std::memset(buf, 'Z', sizeof buf);
+    set_label(buf, 7, "a\tb\nc");
+    CHECK(std::string(buf) == "abc");
+
+    std::memset(buf, 'Z', sizeof buf);
+    set_label(buf, 7, "abcdefghijkl");
+    CHECK(std::string(buf) == "abcdefg");
+    CHECK(buf[7] == '\0');
+
+    std::memset(buf, 'Z', sizeof buf);
+    set_label(buf, 7, "");
+    CHECK(buf[0] == '\0');
+
+    // The two caps really are the two field widths -- a name that fits by the
+    // cap must fit by sizeof, or the memcpy above writes past the array.
+    Place p;
+    CHECK(sizeof p.name == kNameCap + 1);
+    CHECK(sizeof p.note == kNoteCap + 1);
+    set_label(p.note, kNoteCap, std::string(kNoteCap + 40, 'x'));
+    CHECK(std::strlen(p.note) == kNoteCap);
+}
+
 TEST_CASE("export: the header row and column order match pool.tsv") {
     Place p[kPadCount];
     const std::string tsv = export_pool_tsv(p, kPadCount);
@@ -146,8 +175,8 @@ TEST_CASE("export: every pad emits a row, and the empty interior columns "
     Place p[kPadCount];
     for (int i = 0; i < kPadCount; ++i)
         std::snprintf(p[i].code, sizeof p[i].code, "%s", kHouseCode);
-    p[0].name = "First light";
-    p[0].note = "It carries at 0.2";
+    set_label(p[0].name, kNameCap, "First light");
+    set_label(p[0].note, kNoteCap, "It carries at 0.2");
 
     const std::string tsv = export_pool_tsv(p, kPadCount);
     int lines = 0;

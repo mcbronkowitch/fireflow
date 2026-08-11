@@ -99,14 +99,28 @@ TEST_CASE("glow: the scale knob travels from least to most friction") {
               spky::flow::kScaleW[spkyvcv::kScaleKnobOrder[i - 1]]);
 }
 
-TEST_CASE("glow: knob position 0 is AUTO, the rest are scales") {
-    CHECK(spkyvcv::scale_of_knob(0) == -1);
-    for (int p = 1; p <= spky::SCALE_LIST_COUNT; ++p)
-        CHECK(spkyvcv::scale_of_knob(p) == spkyvcv::kScaleKnobOrder[p - 1]);
-    // Out of range reads as AUTO rather than as scale 0 -- a corrupt patch
-    // must not silently retune the instrument to Aeolian.
-    CHECK(spkyvcv::scale_of_knob(-3) == -1);
-    CHECK(spkyvcv::scale_of_knob(99) == -1);
+TEST_CASE("glow: a saved scale outside the list reads as the boot default") {
+    // The successor to the old scale_of_knob test. There is no scale knob on
+    // the Touch 2 surface -- the switch gates the menu's value -- so what is
+    // left to guard is the saved value: paramsFromJson and a hand-edited patch
+    // both reach menuScale with anything at all, and Flow::set_scale_override
+    // indexes SCALE_MASKS with it.
+    for (int s = 0; s < spky::SCALE_LIST_COUNT; ++s)
+        CHECK(spkyvcv::clamp_menu_scale(s) == s);
+    CHECK(spkyvcv::clamp_menu_scale(-1) == spky::SCALE_AEOLIAN);
+    CHECK(spkyvcv::clamp_menu_scale(spky::SCALE_LIST_COUNT) == spky::SCALE_AEOLIAN);
+    CHECK(spkyvcv::clamp_menu_scale(9999) == spky::SCALE_AEOLIAN);
+}
+
+TEST_CASE("glow: a saved genre outside the archetypes reads as ANY") {
+    // An unmatchable genre is not an out-of-bounds read -- draw_new filters
+    // with arch_of and never matches -- it is worse to diagnose: every draw
+    // returns the same default terrain and the generator looks dead.
+    for (int a = 0; a < spky::flow::ARCH_COUNT; ++a)
+        CHECK(spkyvcv::clamp_genre(a) == a);
+    CHECK(spkyvcv::clamp_genre(spky::flow::ARCH_ANY) == spky::flow::ARCH_ANY);
+    CHECK(spkyvcv::clamp_genre(spky::flow::ARCH_COUNT) == spky::flow::ARCH_ANY);
+    CHECK(spkyvcv::clamp_genre(-7) == spky::flow::ARCH_ANY);
 }
 
 TEST_CASE("glow: a saved root override outside 0..11 reads as AUTO") {

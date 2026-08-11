@@ -10,7 +10,9 @@
 #pragma once
 #include <cstddef>
 #include <cstdio>
+#include <cstring>
 #include <string>
+#include <type_traits>
 #include "flow/flow_ids.h"
 #include "flow/terrain.h"
 #include "flow/terrain_code.h"
@@ -98,13 +100,27 @@ private:
     bool   _fired = false;
 };
 
+inline constexpr std::size_t kNameCap = 32;
+inline constexpr std::size_t kNoteCap = 120;
+
 // One curated place as the module holds it. The code is the identity; name and
 // note are the human half and travel into the export (spec §6.3, §6.4).
+//
+// Fixed buffers rather than std::string, and the static_assert below is the
+// reason: Glow.cpp hands the whole twelve from the UI thread to the AUDIO
+// thread as one staged copy (UiOp::SET_PLACES), because the audio thread is
+// the only writer of the live array. A std::string member would put a malloc
+// in that copy -- on the audio thread, for a name somebody typed. The caps are
+// the buffer sizes, so a truncation rule cannot disagree with an array bound.
 struct Place {
     char code[spky::flow::kTerrainCodeLen + 1] = {};
-    std::string name;
-    std::string note;
+    char name[kNameCap + 1] = {};
+    char note[kNoteCap + 1] = {};
 };
+
+static_assert(std::is_trivially_copyable<Place>::value,
+              "Place is copied on the audio thread (Glow.cpp, UiOp::SET_PLACES); "
+              "it must not own heap memory");
 
 enum class FaderTarget  { OFF, TEMPO, MASTER };
 enum class SwitchTarget { OFF, LOCK, SCALE };
@@ -120,8 +136,8 @@ inline float fader_master_gain(float knob01) { return knob01; }
 
 // A three-position switch driving a two-valued target uses the end positions;
 // the centre reads as the lower one. Anything out of range reads as off, the
-// rule scale_of_knob already applies -- a corrupt patch must not lock the
-// generator.
+// same rule glow_ui.hpp's clamp_* helpers apply -- a corrupt patch must not
+// lock the generator.
 inline bool lock_switch(int pos) { return pos == 2; }
 
 struct TonalityGate {
@@ -129,8 +145,9 @@ struct TonalityGate {
     int root_ovr  = -1;   // -1 = AUTO
 };
 
-// The SCALE switch GATES the menu's values; it never selects one. Position 0
-// is AUTO, and so is anything out of range.
+// The SCALE switch GATES the menu's values (glow_ui.hpp's clamp_menu_scale
+// keeps those in range); it never selects one. Position 0 is AUTO, and so is
+// anything out of range.
 inline TonalityGate scale_switch(int pos, int menu_scale, int menu_root) {
     TonalityGate g;
     if (pos == 1) {
@@ -156,8 +173,13 @@ inline std::string sanitize_label(const std::string& in, std::size_t cap) {
     return out;
 }
 
-inline constexpr std::size_t kNameCap = 32;
-inline constexpr std::size_t kNoteCap = 120;
+// Sanitize `in` into a Place's fixed buffer. `cap` is the character cap, and
+// `dst` must hold cap + 1 bytes -- the two Place fields are sized by exactly
+// the two caps above, so pass the matching one. Always terminates.
+inline void set_label(char* dst, std::size_t cap, const std::string& in) {
+    const std::string s = sanitize_label(in, cap);
+    std::memcpy(dst, s.c_str(), s.size() + 1);
+}
 
 inline const char* arch_name(int arch) {
     switch (arch) {

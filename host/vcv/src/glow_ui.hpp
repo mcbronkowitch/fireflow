@@ -42,21 +42,46 @@ inline constexpr int kScaleKnobOrder[spky::SCALE_LIST_COUNT] = {
     spky::SCALE_HARM_MIN, spky::SCALE_WHOLE,                      // 0.0250
 };
 
-// Switch position -> what Flow::set_scale_override wants. Position 0 is AUTO,
-// and so is anything out of range: a corrupt patch must not retune the
-// instrument to whatever scale happens to sit at index 0.
-inline int scale_of_knob(int pos) {
-    if (pos < 1 || pos > spky::SCALE_LIST_COUNT) return -1;
-    return kScaleKnobOrder[pos - 1];
-}
+// The three standing values a patch carries -- ROOT, SCALE and GENRE -- reach
+// this file as a plain int out of jansson, so each gets the same shape of
+// validation: a total function, tested by the desktop suite, that turns
+// anything a hand-edited patch can hold into something the engine accepts.
+// (Glow.cpp keeps only the json_is_integer type check; jansson stays out of
+// these signatures so the tests need no Rack and no JSON.)
+//
+// There is no scale_of_knob() any more. It converted a KNOB POSITION into a
+// ScaleId, and the Simple Touch 2 surface has no scale knob: the switch gates
+// the menu's value instead of selecting one, and the menu indexes
+// kScaleKnobOrder directly. What survived it is the rule below -- out of range
+// is a fallback, never index 0 by accident.
 
 // A saved ROOT override -> what Flow::set_root_override wants. -1 is AUTO,
-// and so is anything outside 0..11: the same rule scale_of_knob applies, for
-// the same reason -- a corrupt patch must not silently transpose the
-// instrument to C. Lives here rather than in Glow.cpp so the desktop suite can
-// test it; Glow.cpp passes a plain int, keeping jansson out of the signature.
+// and so is anything outside 0..11 -- a corrupt patch must not silently
+// transpose the instrument to C.
 inline int clamp_root_override(int raw) {
     return (raw >= 0 && raw <= 11) ? raw : -1;
+}
+
+// A saved SCALE -- the value the SCALE switch gates (spec §4.3) -- into a
+// ScaleId. Out of range falls back to the module's own default rather than
+// leaving the switch gating a scale that does not exist. That the default
+// happens to BE index 0 is a coincidence of the ScaleId order, not the rule:
+// the rule is "the boot value", and the fallback is spelled that way.
+inline int clamp_menu_scale(int raw) {
+    return (raw >= 0 && raw < spky::SCALE_LIST_COUNT) ? raw : spky::SCALE_AEOLIAN;
+}
+
+// A saved GENRE constraint -> what Flow::set_genre wants. ARCH_ANY is "draw
+// from everything", and so is anything outside 0..ARCH_COUNT-1.
+//
+// Not a memory hazard: draw_new()'s genre branch filters candidates through
+// arch_of() and simply never matches (terrain.cpp). That is exactly why it
+// needs clamping -- an unmatchable constraint makes every draw fall out of the
+// loop and return the same default TerrainState, which reads as a broken
+// generator rather than as a corrupt patch.
+inline int clamp_genre(int raw) {
+    return (raw >= 0 && raw < spky::flow::ARCH_COUNT) ? raw
+                                                      : spky::flow::ARCH_ANY;
 }
 
 // The module's own refusal flash. Flow's verbs return bool, and a refusal is
