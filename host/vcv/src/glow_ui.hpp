@@ -1,28 +1,27 @@
 // host/vcv/src/glow_ui.hpp
 //
-// FireFlow Glow's module logic that needs no Rack type: CV scaling, knob
-// travel, LED signatures and the persistence payload. Kept out of Glow.cpp
+// FireFlow Glow's tonality tables, the refusal flash and the persistence
+// payload -- the module logic that needs no Rack type. Kept out of Glow.cpp
 // so the desktop doctest suite can test it headlessly -- the same split
-// form_song_migration.hpp and bbd_edge_state.hpp already use.
+// form_song_migration.hpp, touch_pads.hpp and bbd_edge_state.hpp already use.
+//
+// The Simple Touch 2 surface (2026-08-11) removed this file's other half: the
+// CV jacks, the external clock and the NEW button's LED are not on the board,
+// so kCvMacro, cv_to_macro, clock_bpm and led_level went with them. KnobTracker
+// and GestureBridge went too -- the hold-and-turn gesture became a menu item
+// with nothing to track, and the rising-edge rule now lives once, as
+// PadGesture::prime in touch_pads.hpp, where it is tested.
 //
 // No <rack.hpp>, no jansson, no widgets. Glow.cpp is the only file that
 // knows what a Module is.
 #pragma once
-#include <cmath>
 #include "flow/flow.h"
 #include "flow/flow_ids.h"
-#include "flow/gesture.h"
 #include "flow/taste.h"
 #include "flow/terrain_code.h"
 #include "pitch/quantizer.h"
 
 namespace spkyvcv {
-
-// Panel jack order -> macro (spec 6: five CV jacks, WANDER has none).
-inline constexpr int kCvMacro[5] = {
-    spky::flow::M_MOTION, spky::flow::M_DENSITY, spky::flow::M_BRIGHT,
-    spky::flow::M_DIRT,   spky::flow::M_SPACE
-};
 
 // Knob position -> ScaleId for Glow's SCALE switch (spec 2026-08-07 §3.1).
 // ScaleId is ordered by provenance (modes, pentatonics, exotic); the knob is
@@ -43,74 +42,53 @@ inline constexpr int kScaleKnobOrder[spky::SCALE_LIST_COUNT] = {
     spky::SCALE_HARM_MIN, spky::SCALE_WHOLE,                      // 0.0250
 };
 
-// Switch position -> what Flow::set_scale_override wants. Position 0 is AUTO,
-// and so is anything out of range: a corrupt patch must not retune the
-// instrument to whatever scale happens to sit at index 0.
-inline int scale_of_knob(int pos) {
-    if (pos < 1 || pos > spky::SCALE_LIST_COUNT) return -1;
-    return kScaleKnobOrder[pos - 1];
-}
+// The three standing values a patch carries -- ROOT, SCALE and GENRE -- reach
+// this file as a plain int out of jansson, so each gets the same shape of
+// validation: a total function, tested by the desktop suite, that turns
+// anything a hand-edited patch can hold into something the engine accepts.
+// (Glow.cpp keeps only the json_is_integer type check; jansson stays out of
+// these signatures so the tests need no Rack and no JSON.)
+//
+// There is no scale_of_knob() any more. It converted a KNOB POSITION into a
+// ScaleId, and the Simple Touch 2 surface has no scale knob: the switch gates
+// the menu's value instead of selecting one, and the menu indexes
+// kScaleKnobOrder directly. What survived it is the rule below -- out of range
+// is a fallback, never index 0 by accident.
 
 // A saved ROOT override -> what Flow::set_root_override wants. -1 is AUTO,
-// and so is anything outside 0..11: the same rule scale_of_knob applies, for
-// the same reason -- a corrupt patch must not silently transpose the
-// instrument to C. Lives here rather than in Glow.cpp so the desktop suite can
-// test it; Glow.cpp passes a plain int, keeping jansson out of the signature.
+// and so is anything outside 0..11 -- a corrupt patch must not silently
+// transpose the instrument to C.
 inline int clamp_root_override(int raw) {
     return (raw >= 0 && raw <= 11) ? raw : -1;
 }
 
-// Unipolar Eurorack convention: 0..10 V spans the macro's whole travel.
-// Deliberately NOT clamped -- Flow::set_cv clamps the knob+CV+weather sum,
-// and clamping here as well would just hide how hot an input is running.
-inline float cv_to_macro(float volts) { return volts * 0.1f; }
+// A saved SCALE -- the value the SCALE switch gates (spec §4.3) -- into a
+// ScaleId. Out of range falls back to the module's own default rather than
+// leaving the switch gating a scale that does not exist. That the default
+// happens to BE index 0 is a coincidence of the ScaleId order, not the rule:
+// the rule is "the boot value", and the fallback is spelled that way.
+inline int clamp_menu_scale(int raw) {
+    return (raw >= 0 && raw < spky::SCALE_LIST_COUNT) ? raw : spky::SCALE_AEOLIAN;
+}
 
-// Physical knob travel between control ticks, for the NEW gesture decoder's
-// "hold and turn a knob to mark it" (spec 5). Absolute travel: which way the
-// player turned is not part of the gesture.
-struct KnobTracker {
-    float last[spky::flow::MACRO_COUNT] = {};
-    bool  primed = false;
+// A saved GENRE constraint -> what Flow::set_genre wants. ARCH_ANY is "draw
+// from everything", and so is anything outside 0..ARCH_COUNT-1.
+//
+// Not a memory hazard: draw_new()'s genre branch filters candidates through
+// arch_of() and simply never matches (terrain.cpp). That is exactly why it
+// needs clamping -- an unmatchable constraint makes every draw fall out of the
+// loop and return the same default TerrainState, which reads as a broken
+// generator rather than as a corrupt patch.
+inline int clamp_genre(int raw) {
+    return (raw >= 0 && raw < spky::flow::ARCH_COUNT) ? raw
+                                                      : spky::flow::ARCH_ANY;
+}
 
-    void prime(const float* v) {
-        for (int m = 0; m < spky::flow::MACRO_COUNT; ++m) last[m] = v[m];
-        primed = true;
-    }
-
-    // Writes |travel| per macro into out[]; returns true if anything moved.
-    // The first look at an unprimed tracker reports nothing: a freshly added
-    // module must not hand the decoder six phantom deltas.
-    bool deltas(const float* v, float* out) {
-        bool any = false;
-        for (int m = 0; m < spky::flow::MACRO_COUNT; ++m) {
-            const float d = primed ? std::fabs(v[m] - last[m]) : 0.f;
-            out[m] = d;
-            if (d > 0.f) any = true;
-            last[m] = v[m];
-        }
-        primed = true;
-        return any;
-    }
-};
-
-// Press/release edges for the NEW button. flow::Gesture wants button(down)
-// exactly once per transition: telling it "down" on every control tick would
-// restart the hold timer forever, and undo and lock could never fire.
-struct GestureBridge {
-    bool prevDown = false;
-    bool edge(bool down) {
-        const bool changed = down != prevDown;
-        prevDown = down;
-        return changed;
-    }
-};
-
-// The module's own refusal flash. gesture.h's own LED_REFUSE window
-// (_refuse_t) is only reachable from a real button(down=false, ...) release
-// -- see the guard at the top of that function -- so it can never be set
-// from the corrective path Glow.cpp takes when Flow declines an op the
-// decoder already let through (nothing to undo, an empty macro mask). Only
-// the module knows that happened, so the module owns this flash too.
+// The module's own refusal flash. Flow's verbs return bool, and a refusal is
+// the only thing the player can see when Flow declines: a locked generator, an
+// empty undo slot, a pad whose place does not decode. Nothing else knows that
+// happened, so the module owns this flash -- Glow.cpp paints it onto the live
+// pad's collar.
 struct RefuseFlash {
     // Kept far enough in the past that a fresh instance does NOT read as
     // "just refused" -- same reasoning gesture.h gives at _refuse_t's
@@ -123,58 +101,24 @@ struct RefuseFlash {
     }
 };
 
-// The LED signatures of spec 5's gesture table, as brightness in 0..1.
-// A pure function of (state, blend phase, flow clock) so it can be tested
-// without a running module.
-inline float led_level(int led, float blend_phase, double t) {
-    using G = spky::flow::Gesture;
-    const double kTwoPi = 6.283185307179586;
-    switch (led) {
-        case G::LED_LOCKED:
-            return 1.f;                                   // solid while locked
-        case G::LED_REFUSE:                               // fast hard blink
-            return std::fmod(t, 0.1) < 0.05 ? 1.f : 0.f;
-        case G::LED_MARKED:                               // faster, dimmer flicker
-            return std::fmod(t, 0.05) < 0.025 ? 0.85f : 0.15f;
-        case G::LED_UNDO_ARMED: {                         // two short pulses, then rest
-            const double p = std::fmod(t, 1.0);
-            return (p < 0.09 || (p >= 0.18 && p < 0.27)) ? 1.f : 0.05f;
-        }
-        case G::LED_BLEND: {                              // breathes through the blend
-            const float depth = 1.f - blend_phase;        // widest at press, closing
-            const float breath =
-                0.5f - 0.5f * float(std::cos(kTwoPi * 0.8 * t));
-            return 0.12f + 0.88f * breath * (0.35f + 0.65f * depth);
-        }
-        default:
-            return 0.06f;                                 // idle: a dim ember
-    }
-}
-
-// Spec 4's clock-override rule: an external clock overrides the terrain's
-// own tempo while pulses keep arriving; the terrain's tempo returns once the
-// clock has been silent for `timeoutS` (falls back "after about two
-// seconds", per host/vcv/README.md). `fallback` is whatever the terrain
-// itself is pushing this tick (Flow::param_now(P_TEMPO_BPM)); `clkPeriod` is
-// samples between the last two edges (0 = never seen one); `clkSamples` is
-// samples since the last edge. A measured tempo outside 20..400 BPM is
-// treated as a mis-read, not a real tempo, and falls back too.
-inline float clock_bpm(float fallback, float clkPeriod, float clkSamples,
-                        float sr, float timeoutS) {
-    if (clkPeriod > 1.f && sr > 0.f && clkSamples < sr * timeoutS) {
-        const float measured = 60.f * sr / clkPeriod;
-        if (measured >= 20.f && measured <= 400.f) return measured;
-    }
-    return fallback;
-}
-
-// Exactly what a patch stores OF THE TERRAIN: current code, lock, undo slot.
+// Exactly what a patch stores OF THE TERRAIN: current code and undo slot.
 // The tonality overrides (spec 2026-08-07 §3) are module settings rather than
 // terrain state and are saved by Glow.cpp directly, not through here.
+//
+// The LOCK is NOT here, and its absence is a decision rather than an omission.
+// Since the Simple Touch 2 surface the lock is a pure function of the assigned
+// switch's position: Glow.cpp's controlTick pushes
+// `swLockPos >= 0 && lock_switch(swLockPos)` into Flow on EVERY tick, before
+// it applies anything staged. So a saved lock could only survive one control
+// period -- about two milliseconds -- before the switch's answer overwrote it,
+// in every configuration, whether or not a switch is assigned to LOCK. Storing
+// it would be a second, invisible source of truth for a state that already has
+// exactly one control (spec §4.3, "one control, one truth"), and a restore path
+// that reads as though it applied. Flow::locked()/set_lock() stay -- they are
+// the engine's, and controlTick is their caller.
 struct GlowSave {
     char code[spky::flow::kTerrainCodeLen + 1] = {};
     char undo[spky::flow::kTerrainCodeLen + 1] = {};
-    bool lock = false;
     bool have_undo = false;
 };
 
@@ -182,7 +126,6 @@ inline GlowSave glow_capture(const spky::flow::Flow& fl) {
     GlowSave s;
     spky::flow::encode_code(fl.state(), s.code, int(sizeof s.code));
     spky::flow::encode_code(fl.undo_state(), s.undo, int(sizeof s.undo));
-    s.lock = fl.locked();
     s.have_undo = fl.can_undo();
     return s;
 }
@@ -196,7 +139,6 @@ struct GlowRestorePlan {
     spky::flow::TerrainState state;
     spky::flow::TerrainState undo;
     bool have_undo = false;
-    bool lock = false;
 };
 
 // Decodes and validates a saved payload into `out`. Returns false and
@@ -210,19 +152,18 @@ inline bool glow_restore_plan(const GlowSave& s, GlowRestorePlan& out) {
     out.state = st;
     out.undo = un;
     out.have_undo = have;
-    out.lock = s.lock;
     return true;
 }
 
 // Applies a saved payload. Returns false and touches NOTHING if the terrain
 // code is malformed -- a corrupt patch must not silently move the player to
 // some other instrument. The order is the one flow.h documents: wake clears
-// the undo slot, so restoring it comes last.
+// the undo slot, so restoring it comes last. The lock is not applied here --
+// see the note on GlowSave; controlTick owns it.
 inline bool glow_restore(spky::flow::Flow& fl, const GlowSave& s) {
     GlowRestorePlan plan;
     if (!glow_restore_plan(s, plan)) return false;
     fl.wake(plan.state);
-    fl.set_lock(plan.lock);
     fl.restore_undo(plan.undo, plan.have_undo);
     return true;
 }

@@ -134,6 +134,7 @@ add_executable(spky_tests
     tests/test_vcv_form_song_migration.cpp
     tests/test_vcv_link_migration.cpp
     tests/test_glow_ui.cpp
+    tests/test_touch_pads.cpp
     tests/test_choke.cpp
     tests/test_filt.cpp
     tests/test_mod_tide.cpp
@@ -266,6 +267,12 @@ add_test(
 add_test(
     NAME hw_panel_guard
     COMMAND ${Python3_EXECUTABLE} res/test_hw_panel.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
+)
+
+add_test(
+    NAME touch2_geometry_guard
+    COMMAND ${Python3_EXECUTABLE} res/test_touch2_geometry.py
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
 )
 

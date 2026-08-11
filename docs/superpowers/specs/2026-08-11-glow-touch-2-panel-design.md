@@ -1,7 +1,8 @@
 # Glow becomes Touch 2: the VCV rehearsal rig — design
 
 **Date:** 11 August 2026
-**Status:** Draft, approved. None of it is implemented.
+**Status:** Implemented on branch `glow-touch-2-panel` (11 August 2026), six
+tasks, reviewed task by task and once whole. §11 is still open.
 **Revision:** second draft. The first was reviewed on three axes (fact-check,
 completeness, adversarial design) and rewritten. §13 records what the review
 changed and what was overruled, so the reasoning is not lost.
@@ -153,10 +154,24 @@ both of which survive any error a photograph can introduce.
 
 So geometry is one task with one output, and no error budget:
 
-1. **Pin the source.** The reference photo is committed to
-   `host/vcv/res/ref/touch2-fx-2026-08-11.png` and cited by path in the
-   generator header. A source that can be deleted by tidying a Screenshots
-   folder is not a source.
+1. **Pin the source — outside this repository.** A source that can be deleted
+   by tidying a Screenshots folder is not a source, so the reference photo gets
+   a permanent home and is cited by path in `touch2_geometry.py` and in the
+   generated header. That home is **not** `host/vcv/res/ref/`. It is a
+   photograph of a Synthux product and `mcbronkowitch/fireflow` is public, so
+   the image lives in the owner's private website repo — currently
+   `FireFlow_Website/docs/reference/touch2-fx-2026-08-11.png`, written relative
+   to this repository's parent so the committed string does not publish a user
+   name either. Only the path travels with the code. Nothing downstream reads
+   the image, so nothing breaks when it is absent; the provenance is simply
+   weaker than a committed file would be, and that is the trade made
+   deliberately.
+
+   *(An earlier draft of this spec said the photo was committed to
+   `host/vcv/res/ref/`. The owner reversed that for privacy before
+   implementation began. It is written down here because §11's re-measure will
+   be run from this spec, and the old instruction would walk the next measurer
+   straight into the mistake the decision was made to avoid.)*
 2. **Measure.** Calibrated to 81.28 mm plate width (≈ 0.195 mm/px): 12 pad
    centres, 6 knob centres, 2 fader centres plus travel length, 2 switch
    centres, 2 jack centres — a table in mm, committed as the generator's input
@@ -426,8 +441,11 @@ restored.
 
 ### §6.3 Names
 
-A place's name is runtime state: `std::string`, capped at **32 characters**,
-with tab and newline **rejected on input** (they would break the TSV of §6.4).
+A place's name is runtime state: a fixed `char name[kNameCap + 1]` buffer
+capped at **32 characters** (`touch_pads.hpp`; `Place` is made trivially
+copyable so the audio thread can copy the whole array without allocating),
+with tab and newline **rejected on input** (they would break the TSV of
+§6.4).
 
 Names are editable from the context menu and appear as the pad's tooltip. A live
 tooltip is the one place §3.1's "everything from the generated header" cannot
@@ -504,7 +522,7 @@ of tests another host still needs. Per item:
 | `led_level()`, `NEW_L` | **deleted**. Pad feedback is drawn by the widget, not by a `Light`. |
 | `KnobTracker`, `GestureBridge` | `GestureBridge`'s rising-edge rule is **kept** and reused for pads (§6.2). `KnobTracker` exists for the hold-and-turn gesture; it follows that gesture into the menu or dies with it — decided in the plan, not guessed here. |
 | `engine/flow/gesture.h` decoder | **untouched.** It is engine code and the Seed firmware will want it. Only Glow's *use* of it changes. |
-| `tests/test_glow_ui.cpp` | shrinks; `kCvMacro` / `cv_to_macro` / `clock_bpm` / `led_level` tests go with their subjects. `scale_of_knob` **stays** (§4.3 keeps the scale list, in the menu). |
+| `tests/test_glow_ui.cpp` | shrinks; `kCvMacro` / `cv_to_macro` / `clock_bpm` / `led_level` tests go with their subjects. `scale_of_knob` **was deleted**, not kept — it converted a knob position into a `ScaleId`, and the Touch 2 surface has no scale knob; its range-clamping rule now lives in `clamp_menu_scale` (`glow_ui.hpp`), with test coverage it did not have before. |
 | `tests/test_flow_gesture.cpp` | **untouched** — it tests engine code. |
 
 ## §8 Tests
@@ -602,7 +620,7 @@ byte-compares both artifacts against a fresh generation.
 | `host/vcv/res/Glow.svg` | regenerated |
 | `host/vcv/src/generated_flow_panel.hpp` | regenerated |
 | `host/vcv/res/test_flow_panel.py` | largely rewritten (§8.1) |
-| `host/vcv/res/ref/touch2-fx-2026-08-11.png` | new — the pinned source (§3.2) |
+| *(no file)* | the pinned source photo stays **out of this repo** — private sibling repo, path only (§3.2) |
 | `host/vcv/src/Glow.cpp` | control surface, pad machine wiring, menu |
 | `host/vcv/src/glow_ui.hpp` | shrinks (§7) |
 | `host/vcv/src/touch_pads.hpp` | new (§8.2) |

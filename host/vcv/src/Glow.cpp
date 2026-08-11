@@ -1,26 +1,30 @@
 // host/vcv/src/Glow.cpp
 //
-// FireFlow Glow (spec 6): six macro knobs, one NEW button and eight jacks
-// over the portable engine/flow/ layer. The big Fireflow module is the
-// full-control view of the same engine; this one is the flow machine.
+// FireFlow Glow, on the Synthux Simple Touch 2 surface (spec 2026-08-11):
+// twelve touch pads, six macro trim knobs, two assignable faders, two
+// assignable centre-off switches and a stereo out. No CV inputs, no clock
+// input, no NEW button -- the board has none, so neither does the module.
+// The big Fireflow module is the full-control view of the same engine; this
+// one is the flow machine.
 //
-// Everything that does not need a Rack type lives in glow_ui.hpp and is
-// tested by the desktop suite. Every coordinate and label comes from
-// generated_flow_panel.hpp. Nothing here is hand-placed.
+// Everything that does not need a Rack type lives in glow_ui.hpp and
+// touch_pads.hpp and is tested by the desktop suite. Every coordinate and
+// label comes from generated_flow_panel.hpp. Nothing here is hand-placed.
 #include <atomic>
-#include <cmath>
 #include <cstdio>
+#include <functional>
 #include <string>
 #include <vector>
 #include "plugin.hpp"
 #include "generated_flow_panel.hpp"
 #include "glow_ui.hpp"
+#include "touch_pads.hpp"
 #include "sampler_ui.hpp"
 
 // The portable engine core -- the same headers the render host uses.
 #include "instrument.h"
 #include "flow/flow.h"
-#include "flow/gesture.h"
+#include "flow/flow_rng.h"      // spky::Rng for drawTwelve()'s seeded sequence
 #include "flow/taste.h"
 #include "flow/terrain_code.h"
 #include "center/center.h"
@@ -44,14 +48,45 @@ static_assert(static_cast<int>(WANDER) == static_cast<int>(spky::flow::M_WANDER)
               "panel macro order drifted");
 static_assert(static_cast<int>(SPACE) == static_cast<int>(spky::flow::M_SPACE),
               "panel macro order drifted");
-static_assert(CV_DEN == CV_MOT + 1 && CV_BRT == CV_MOT + 2 &&
-              CV_DRT == CV_MOT + 3 && CV_SPC == CV_MOT + 4,
-              "CV jacks must stay contiguous -- controlTick indexes CV_MOT + i");
-// GENRE position 0 is ANY and 1..4 are the archetypes in enum order, so
-// controlTick's `pos - 1` is only correct while ARCH_DRONE is 0. The six
-// macro asserts above set the precedent for pinning arithmetic like this.
-static_assert(spky::flow::ARCH_DRONE == 0,
-              "GENRE's knob position -> archetype mapping assumes ARCH_DRONE == 0");
+
+static_assert(static_cast<int>(spkyvcv::kPadCount) == PAD_12 - PAD_1 + 1,
+              "the panel's pad count must match touch_pads.hpp");
+static_assert(PAD_1 == SPACE + 1,
+              "controlTick indexes params[PAD_1 + i]; the pads must be "
+              "contiguous and follow the six macros");
+static_assert(FADER_R == FADER_L + 1,
+              "faderPos() indexes params[FADER_L + i]");
+static_assert(SW_R == SW_L + 1,
+              "switchPos() indexes params[SW_L + i]");
+
+// How many places drawTwelve() draws per archetype, and the assert that stops
+// the loop writing past places[kPadCount], both in touch_pads.hpp -- ctest
+// compiles that header, and nothing in the desktop build compiles this file.
+// The asserts that DO live here all guard index conventions, and every one of
+// them is double-covered by PARAM_ORDER in res/test_flow_panel.py.
+using spkyvcv::kPlacesPerArch;
+
+// The macro knobs keep c.label empty on the plate (spec 3.3: a printed caption
+// would freeze an assignment the rehearsal is allowed to move), so their Rack
+// names come from here rather than from the generated table.
+static const char* kMacroNames[spky::flow::MACRO_COUNT] = {
+    "MOTION", "DENSITY", "BRIGHT", "DIRT", "WANDER", "SPACE"
+};
+
+// A pad's NAME is runtime data (spec 6.3), so it cannot come from the
+// generated header the way every other caption does -- configButton fixes its
+// string at construction. This is the one deliberate carve-out from "the panel
+// table is the only source": the tooltip label is computed live from the
+// module's Place array, while the plate itself still prints only the number.
+struct PadQuantity : SwitchQuantity {
+    const spkyvcv::Place* place = nullptr;
+    int pad = 0;
+    std::string getLabel() override {
+        if (place && place->name[0] != '\0')
+            return string::f("Pad %d  %s", pad + 1, place->name);
+        return string::f("Pad %d", pad + 1);
+    }
+};
 
 struct Glow : Module {
     spky::Instrument inst;
@@ -75,10 +110,39 @@ struct Glow : Module {
     std::vector<float> factoryL, factoryR;
 
     spky::flow::Flow flow;
-    spky::flow::Gesture gest;
-    spkyvcv::KnobTracker knobs;
-    spkyvcv::GestureBridge newBtn;
+    spkyvcv::PadGesture pads;
+    spkyvcv::Place places[spkyvcv::kPadCount];
     spkyvcv::RefuseFlash refuse;
+
+    // Which target each assignable control drives (spec 4.3). Module state,
+    // saved in dataToJson. Atomic because appendContextMenu writes them on the
+    // UI thread while controlTick reads them on the audio thread -- the same
+    // standing-value shape rootOverride already uses, not a UiOp (UiOp is a
+    // one-shot exchange for an operation).
+    std::atomic<int> faderTarget[2] {
+        int(spkyvcv::FaderTarget::TEMPO), int(spkyvcv::FaderTarget::MASTER) };
+    std::atomic<int> switchTarget[2] {
+        int(spkyvcv::SwitchTarget::LOCK), int(spkyvcv::SwitchTarget::SCALE) };
+
+    // The values the SCALE switch GATES. The switch never selects one.
+    std::atomic<int> menuScale { spky::SCALE_AEOLIAN };
+    std::atomic<int> menuRoot  { 0 };
+
+    // GENRE is a draw constraint, and it moved from a knob to a menu item --
+    // so it is now written on the UI thread. Atomic and pushed from
+    // controlTick, exactly like rootOverride: this file's standing rule is
+    // that every Flow mutation happens on the audio thread, and a menu item
+    // calling flow.set_genre() directly would be the first exception.
+    std::atomic<int> menuGenre { spky::flow::ARCH_ANY };
+
+    // Every fresh module draws the same twelve places, so "pad 7" means the
+    // same thing in a note, a video and somebody else's rack. A drawn place is
+    // NOT curated -- parent spec 2 calls the draw a slot machine -- so these
+    // twelve make the module playable, and nothing more. Pin curated terrain
+    // onto a pad before treating a session as evidence.
+    static constexpr uint32_t kPoolSeed = 0xF10Cu;
+
+    float masterGain = 1.f;
 
     float curSr = 0.f;
     // The flow layer's control rate rides the same raster the rest of the
@@ -92,11 +156,6 @@ struct Glow : Module {
     // overwrites it before it is ever read.
     static constexpr int kCtrlDiv = spky::Center::kCtrlInterval;
     dsp::ClockDivider ctrlDiv;
-    dsp::SchmittTrigger clockTrig;
-    float clkSamples = 0.f;                      // samples since the last edge
-    float clkPeriod = 0.f;                       // samples between the last two
-    static constexpr float kClockTimeoutS = 2.f; // spec 4: fall back to the
-                                                 // terrain's own tempo
     bool woken = false;
 
     // dataFromJson() can run before onAdd() (patch load), when flow has no
@@ -106,15 +165,15 @@ struct Glow : Module {
     bool havePending = false;
 
     // --- UI-thread -> audio-thread staging (fix round 3) ------------------
-    // appendContextMenu's "Paste terrain code", TerrainCodeField's Enter
-    // commit and the "Terrain lock" toggle all run on Rack's UI thread, but
-    // Flow is otherwise only ever touched from controlTick() on the audio
-    // thread. Flow::wake() is not a small write (see flow.cpp): it rewrites
-    // _terrain, _prev_terrain, re-seeds the sequencer and force-pushes every
-    // parameter, so a direct write here could hand the audio thread a
-    // half-written terrain mid-tick. dataFromJson()'s LIVE-module branch
-    // (curSr > 0, reached via right-click preset load / module paste, which
-    // hold no engine lock) has the same problem and is staged the same way.
+    // appendContextMenu's "Paste terrain code" and TerrainCodeField's Enter
+    // commit run on Rack's UI thread, but Flow is otherwise only ever touched
+    // from controlTick() on the audio thread. Flow::wake() is not a small
+    // write (see flow.cpp): it rewrites _terrain, _prev_terrain, re-seeds the
+    // sequencer and force-pushes every parameter, so a direct write here could
+    // hand the audio thread a half-written terrain mid-tick. dataFromJson()'s
+    // LIVE-module branch (curSr > 0, reached via right-click preset load /
+    // module paste, which hold no engine lock) has the same problem and is
+    // staged the same way.
     //
     // Follow Fireflow.cpp's resyncReq shape: the UI thread fills a payload
     // and sets an atomic flag LAST; controlTick() takes the flag FIRST (via
@@ -123,12 +182,47 @@ struct Glow : Module {
     // consistency -- no relaxed/acquire-release hand-rolling -- so a flag
     // the audio thread observes as non-NONE is guaranteed to happen-after
     // the UI thread's payload write.
-    enum class UiOp { NONE, SET_TERRAIN, SET_LOCK, RESTORE };
+    //
+    // The twelve places are staged the same way, and for the same reason: the
+    // workshop menu names them, notes them, pins terrain onto them and redraws
+    // all twelve, while wakePad() reads places[pad].code from controlTick. So
+    // places[] has ONE WRITER -- the audio thread -- and SEVERAL TOLERANT
+    // READERS: the UI thread hands over a whole replacement array (SET_PLACES)
+    // instead of reaching into it, but it also READS places[] unsynchronised in
+    // four spots (PadQuantity::getLabel, the Places submenu title, and both
+    // LabelField::setText calls), and the copy loop in stagePlaces makes a
+    // fifth. All five are benign, and here is why, so nobody has to re-derive
+    // it: a torn read can only ever show a stale or half-updated STRING, never
+    // run off the buffer, because set_label is the only writer of those fields
+    // and it always terminates within `cap` -- the buffers are sized cap + 1
+    // (touch_pads.hpp), so a NUL is present at every byte offset a reader can
+    // reach. Worst case a menu opens showing the previous name. Whole array
+    // rather than one field because a place is only meaningful as a set: a
+    // partial write is a place whose name belongs to some other code. Place is
+    // trivially copyable (touch_pads.hpp asserts it), so applying one costs a
+    // memcpy and allocates nothing.
+    //
+    // PIN is the exception that proves it: pinning reads flow.state(), which
+    // is audio-thread property, so the menu stages the PAD NUMBER and the
+    // audio thread does both the read and the write.
+    //
+    // There is no SET_LOCK, and no staged lock value either. The switch owns
+    // the lock now (spec §4.3, "one control, one truth") and controlTick
+    // pushes it every tick, BEFORE this switch runs -- so a one-shot lock op,
+    // or a `uiLock` carried by RESTORE, would be overwritten a control period
+    // later. It had no producer left after Task 4 removed the menu's lock
+    // toggle, and adding one back would just be that synchronisation bug with
+    // extra steps. glow_ui.hpp's GlowSave note has the whole reasoning.
+    enum class UiOp { NONE, SET_TERRAIN, RESTORE,
+                      NEW_FULL, NEW_PARTIAL, UNDO, SET_PLACES, PIN };
     std::atomic<UiOp> uiOp { UiOp::NONE };
     spky::flow::TerrainState uiState;   // SET_TERRAIN, RESTORE
     spky::flow::TerrainState uiUndo;    // RESTORE
     bool uiHaveUndo = false;            // RESTORE
-    bool uiLock = false;                // SET_LOCK, RESTORE
+    uint8_t uiMask = 0x3F;              // NEW_PARTIAL
+    spkyvcv::Place uiPlaces[spkyvcv::kPadCount];   // SET_PLACES, RESTORE
+    bool uiForget = false;              // SET_PLACES: the live pad is gone too
+    int uiPin = -1;                     // PIN
 
     // The ROOT override (spec 2026-08-07 §3.1), set from appendContextMenu on
     // the UI thread and read every controlTick on the audio thread. Atomic
@@ -137,52 +231,55 @@ struct Glow : Module {
     // matching uiOp -- no relaxed/acquire-release hand-rolling.
     std::atomic<int> rootOverride { -1 };     // -1 = AUTO
 
-    // GENRE / SCALE. Both are snapped switches whose FIRST position is the
-    // random one -- ANY draws the archetype at random, AUTO takes whatever
-    // the terrain drew -- so the player selects randomness at the control.
-    // That is exactly why neither joins Rack's Randomize: configSwitch leaves
-    // randomizeEnabled at its default true (configButton is the one that
-    // clears it), and letting Randomize pin the instrument to Whole tone
-    // would remove a choice rather than add one.
-    void configSel(const PanelCtl& c) {
-        std::vector<std::string> labels;
-        if (c.id == GENRE) {
-            labels = { "Any", "Drone", "Pulse", "Arp", "Fragment" };
-        } else {
-            labels.push_back("Auto");
-            for (int i = 0; i < spky::SCALE_LIST_COUNT; ++i)
-                labels.push_back(spky::SCALE_NAMES[spkyvcv::kScaleKnobOrder[i]]);
-        }
-        configSwitch(c.id, 0.f, float(labels.size() - 1), 0.f, c.tip, labels);
-        if (auto* pq = paramQuantities[c.id]) pq->randomizeEnabled = false;
-    }
-
     Glow() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
         for (const auto& c : kParamCtls) {
             switch (c.kind) {
                 case WK_MACRO:
-                    // The six macro knobs stay on c.label, matching
-                    // Fireflow.cpp -- deliberate, not an oversight.
-                    configParam(c.id, 0.f, 1.f, 0.5f, c.label);
+                    configParam(c.id, 0.f, 1.f, 0.5f,
+                                kMacroNames[c.id - MOTION]);
                     break;
-                case WK_BTN:
-                    // The NEW button's whole interaction model lives in one
-                    // control, so its Rack tooltip should be the panel's full
-                    // gesture-table string (c.tip), not just "NEW" (c.label).
-                    configButton(c.id, c.tip);
+                case WK_PAD: {
+                    // configButton clears randomizeEnabled for us (Module.hpp:169),
+                    // which is what we want: a Randomize that pokes twelve
+                    // momentary pads is a fault, not a dice roll.
+                    const int i = c.id - PAD_1;
+                    auto* pq = configButton<PadQuantity>(c.id, c.label);
+                    pq->place = &places[i];
+                    pq->pad = i;
+                    pq->description = c.tip;
                     break;
-                case WK_SEL:
-                    configSel(c);
+                }
+                case WK_FADER:
+                    // TEMPO's default sits mid-travel (95 BPM); MASTER's sits
+                    // at unity, because a module that boots at half gain is a
+                    // bug report.
+                    configParam(c.id, 0.f, 1.f,
+                                c.id == FADER_R ? 1.f : 0.5f, c.tip);
+                    if (auto* pq = paramQuantities[c.id])
+                        pq->randomizeEnabled = false;
                     break;
-                // Named rather than defaulted: WK_IN/WK_OUT share the enum
-                // but never appear in kParamCtls, and naming them keeps
-                // -Wswitch live, so a future kind is a compile error here
-                // instead of a param that silently gets no config.
-                case WK_IN: case WK_OUT: break;
+                case WK_SWITCH:
+                    // The three position names are RUNTIME TOOLTIP strings, not
+                    // panel captions: Rack shows them in the hover readout and
+                    // the context menu, and nothing here reaches the plate --
+                    // which prints no switch caption at all, as
+                    // test_only_the_pads_carry_printed_captions enforces. Same
+                    // carve-out from "the panel table is the only source" that
+                    // PadQuantity documents above, and for the same reason: a
+                    // caption a generator could print would have to be printed.
+                    configSwitch(c.id, 0.f, 2.f, 0.f, c.tip,
+                                 { "Down", "Centre", "Up" });
+                    if (auto* pq = paramQuantities[c.id])
+                        pq->randomizeEnabled = false;
+                    break;
+                // Named rather than defaulted so a future kind is a compile
+                // error here instead of a param that silently gets no config.
+                case WK_OUT: break;
             }
         }
-        for (const auto& c : kInputCtls)  configInput(c.id, c.tip);
+        // No configInput loop: the board has no inputs, and the generator
+        // emits no kInputCtls table for an empty list.
         for (const auto& c : kOutputCtls) configOutput(c.id, c.tip);
         for (int p = 0; p < spky::PART_COUNT; ++p) {
             fxmem.bbd[p][0] = bbd[p][0];
@@ -192,23 +289,173 @@ struct Glow : Module {
         ctrlDiv.setDivision(kCtrlDiv);
     }
 
+    // --- the twelve places (spec 6) --------------------------------------
+    // Twelve places, three per archetype, from a fixed seed. draw_new's
+    // genre branch can in principle exhaust kGenreDrawCap and return a
+    // default TerrainState whose archetype does not match -- terrain.cpp
+    // calls that edge ~1e-18 and leaves it uncorrected. Verifying with
+    // arch_of costs one stream seed, so verify rather than inherit the
+    // assumption twelve times over.
+    //
+    // Static and writing through a pointer, so the UI thread can draw into the
+    // staging array without touching module state: the menu's "Redraw all
+    // twelve" runs here, on Rack's UI thread, and hands the result over as a
+    // SET_PLACES. Nothing in this function reads or writes the module.
+    static void drawTwelveInto(spkyvcv::Place* dst, uint32_t seed) {
+        spky::Rng seq;
+        seq.seed(seed);
+        spky::flow::TerrainState cur = {};
+        int i = 0;
+        for (int arch = 0; arch < spky::flow::ARCH_COUNT; ++arch) {
+            for (int k = 0; k < kPlacesPerArch; ++k) {
+                spky::flow::TerrainState st = cur;
+                for (int tries = 0; tries < 8; ++tries) {
+                    st = spky::flow::draw_new(cur, seq, arch);
+                    if (spky::flow::arch_of(st.master) == arch) break;
+                }
+                cur = st;
+                spky::flow::encode_code(st, dst[i].code,
+                                        int(sizeof dst[i].code));
+                dst[i].name[0] = '\0';
+                dst[i].note[0] = '\0';
+                ++i;
+            }
+        }
+    }
+
+    // The engine-stopped version: onAdd() and onReset() both run with the
+    // engine held, so they write places[] outright and reset the gesture with
+    // it. The menu must NOT call this -- see stagePlaces() below.
+    void drawTwelve(uint32_t seed = kPoolSeed) {
+        drawTwelveInto(places, seed);
+        pads.reset();
+    }
+
+    // AUDIO THREAD ONLY (UiOp::PIN). It reads flow.state() and writes
+    // places[], and both of those belong to this thread.
+    void pinCurrent(int pad) {
+        if (pad < 0 || pad >= spkyvcv::kPadCount) return;
+        spky::flow::encode_code(flow.state(), places[pad].code,
+                                int(sizeof places[pad].code));
+    }
+
+    // Audio thread, or a stopped engine (onAdd's patch-load path). A memcpy
+    // per place -- Place is trivially copyable, so nothing here allocates.
+    void applyPlaces() {
+        for (int i = 0; i < spkyvcv::kPadCount; ++i) places[i] = uiPlaces[i];
+        if (uiForget) {                 // a fresh draw: no pad holds a place
+            pads.live = -1;
+            pads.excursion = false;
+        }
+    }
+
+    // UI THREAD. Copy the twelve the menu is showing, let `edit` change them,
+    // hand the whole array over. Reading places[] here is a plain read of
+    // trivially copyable bytes the audio thread only rewrites on an op this
+    // same thread staged, so the worst it can show is a place from a moment
+    // ago -- the same window every other UiOp in this file has, and the reason
+    // the payload is written before the flag.
+    template <class Edit>
+    void stagePlaces(Edit&& edit, bool forget = false) {
+        for (int i = 0; i < spkyvcv::kPadCount; ++i) uiPlaces[i] = places[i];
+        edit(uiPlaces);
+        uiForget = forget;
+        uiOp = UiOp::SET_PLACES;       // payload written above, flag written last
+    }
+
+    // Hand over whatever is already sitting in uiPlaces. Direct while the
+    // module is not running yet (dataFromJson before onAdd: nothing can be
+    // reading places[]), staged once it is.
+    //
+    // uiForget is set HERE rather than left to the caller: it is the other half
+    // of the SET_PLACES payload, and applyPlaces() reads it. Every caller of
+    // this function is a restore, and a restore does not disown the live pad --
+    // a redraw does, and that path goes through stagePlaces(edit, true) with
+    // its own flag. Written before uiOp for the same reason the array is:
+    // payload first, flag last.
+    void commitPlaces() {
+        uiForget = false;
+        if (curSr <= 0.f) applyPlaces();
+        else uiOp = UiOp::SET_PLACES;
+    }
+
+    bool wakePad(int pad) {
+        spky::flow::TerrainState st;
+        if (pad < 0 || pad >= spkyvcv::kPadCount) return false;
+        if (!spky::flow::decode_code(places[pad].code, st)) return false;
+        flow.wake(st);
+        woken = true;
+        return true;
+    }
+
     // --- persistence (spec 5) --------------------------------------------
-    // A live set built around a locked terrain has to survive a restart, so
-    // a patch carries the whole state: the terrain code, the lock and the
-    // one undo slot. Preset *systems* -- banks, slots, favourites -- are out
-    // of scope (spec 8); this is the baseline.
+    // A live set built around one terrain has to survive a restart, so a patch
+    // carries the whole state: the terrain code, the one undo slot, the
+    // standing menu values, the assignments and the twelve places. Preset
+    // *systems* -- banks, slots, favourites -- are out of scope (spec 8).
+    //
+    // There is no "lock" key. It was written until this round, but the LOCK
+    // switch has owned that state since Task 5, and controlTick pushes the
+    // switch's answer every tick -- so a restored lock lived about two
+    // milliseconds and nothing could observe it. Dropping the key rather than
+    // keeping unobservable state (dev alpha: no migration, no fallback).
     json_t* dataToJson() override {
         const spkyvcv::GlowSave s = spkyvcv::glow_capture(flow);
         json_t* root = json_object();
         json_object_set_new(root, "terrain", json_string(s.code));
-        json_object_set_new(root, "lock", json_boolean(s.lock));
         if (s.have_undo) json_object_set_new(root, "undo", json_string(s.undo));
         json_object_set_new(root, "root", json_integer(rootOverride.load()));
+        json_object_set_new(root, "menuScale", json_integer(menuScale.load()));
+        json_object_set_new(root, "menuRoot", json_integer(menuRoot.load()));
+        // GENRE travels with the other two standing values. It was left out
+        // while it was a knob (Rack saves params for you) and stayed out one
+        // task too long after it became a menu item: a rehearsal that
+        // auditions one archetype for an evening should not lose the
+        // constraint on reload while ROOT and SCALE survive.
+        json_object_set_new(root, "genre", json_integer(menuGenre.load()));
+
+        json_t* fa = json_array();
+        json_t* sw = json_array();
+        for (int i = 0; i < 2; ++i) {
+            json_array_append_new(fa, json_integer(faderTarget[i].load()));
+            json_array_append_new(sw, json_integer(switchTarget[i].load()));
+        }
+        json_object_set_new(root, "faders", fa);
+        json_object_set_new(root, "switches", sw);
+
+        json_t* pl = json_array();
+        for (const auto& p : places) {
+            json_t* o = json_object();
+            json_object_set_new(o, "code", json_string(p.code));
+            json_object_set_new(o, "name", json_string(p.name));
+            json_object_set_new(o, "note", json_string(p.note));
+            json_array_append_new(pl, o);
+        }
+        json_object_set_new(root, "places", pl);
         return root;
     }
 
     void dataFromJson(json_t* root) override {
         if (!root) return;
+        // The same momentary-pad remedy onAdd runs, because onAdd is not on
+        // every path that gets here. Module::fromJson calls paramsFromJson and
+        // then dataFromJson, and that pair is the WHOLE of a right-click preset
+        // load or a module paste -- the module is already live, so onAdd never
+        // runs again and its version of this never fires. A preset stored with
+        // a pad held therefore comes back with that param at 1.0, and the next
+        // controlTick reads a rising edge, wakes, and rerolls 400 ms later on
+        // top of the terrain this call is in the middle of restoring.
+        //
+        // Unconditional rather than guarded on `curSr > 0.f`: on the patch-load
+        // path onAdd will do it again a moment later, and running it twice
+        // costs twelve stores, while a missed path costs a silent reroll.
+        // Placed before every early return below for the same reason -- the
+        // pads are not part of the terrain payload and must not depend on it
+        // parsing.
+        for (int i = 0; i < spkyvcv::kPadCount; ++i)
+            params[PAD_1 + i].setValue(0.f);
+        bool padsQuiet[spkyvcv::kPadCount] = {};
+        pads.prime(padsQuiet);
         // Read BEFORE the terrain's early return below: the override is
         // independent of the terrain, and a patch whose code is missing or
         // malformed must not lose it as collateral.
@@ -222,9 +469,78 @@ struct Glow : Module {
                 ? spkyvcv::clamp_root_override(int(json_integer_value(r)))
                 : -1;
         }
+        // The other two standing values take the same route, and their range
+        // rules live in glow_ui.hpp for the same reason the root's does -- so
+        // the desktop suite can test them without Rack.
+        if (json_t* v = json_object_get(root, "menuScale"))
+            if (json_is_integer(v))
+                menuScale = spkyvcv::clamp_menu_scale(int(json_integer_value(v)));
+        if (json_t* v = json_object_get(root, "menuRoot")) {
+            // menuRoot is the SCALE switch's up-position root, which has no
+            // AUTO: an out-of-range save falls back to C, not to -1.
+            if (json_is_integer(v)) {
+                const int r = spkyvcv::clamp_root_override(
+                    int(json_integer_value(v)));
+                menuRoot = r < 0 ? 0 : r;
+            }
+        }
+        if (json_t* v = json_object_get(root, "genre"))
+            if (json_is_integer(v))
+                menuGenre = spkyvcv::clamp_genre(int(json_integer_value(v)));
+        auto readTargets = [&](const char* key, std::atomic<int>* dst,
+                               int lo, int hi) {
+            json_t* a = json_object_get(root, key);
+            if (!json_is_array(a)) return;
+            for (int i = 0; i < 2 && i < int(json_array_size(a)); ++i) {
+                json_t* e = json_array_get(a, i);
+                if (!json_is_integer(e)) continue;
+                const int v = int(json_integer_value(e));
+                if (v >= lo && v <= hi) dst[i] = v;
+            }
+        };
+        readTargets("faders", faderTarget, 0, int(spkyvcv::FaderTarget::MASTER));
+        readTargets("switches", switchTarget, 0, int(spkyvcv::SwitchTarget::SCALE));
+
+        // The places are parsed into the STAGING array, never into places[]:
+        // this call can run on the UI thread (see the LIVE-module note below)
+        // while controlTick reads places[pad].code through wakePad(). Seeded
+        // from the live twelve first, so a patch carrying fewer than twelve --
+        // or no "places" key at all, which is every patch written before this
+        // key existed -- leaves the rest of them alone rather than blanking
+        // them.
+        for (int i = 0; i < spkyvcv::kPadCount; ++i) uiPlaces[i] = places[i];
+        // A restore does not disown the live pad. commitPlaces() sets this too,
+        // but the RESTORE path below applies the staged places without going
+        // through it, and applyPlaces() reads the flag on both routes.
+        uiForget = false;
+        if (json_t* a = json_object_get(root, "places")) {
+            if (json_is_array(a)) {
+                for (int i = 0; i < spkyvcv::kPadCount
+                                && i < int(json_array_size(a)); ++i) {
+                    json_t* o = json_array_get(a, i);
+                    if (!json_is_object(o)) continue;
+                    json_t* c = json_object_get(o, "code");
+                    if (json_is_string(c))
+                        std::snprintf(uiPlaces[i].code, sizeof uiPlaces[i].code,
+                                      "%s", json_string_value(c));
+                    json_t* n = json_object_get(o, "name");
+                    if (json_is_string(n))
+                        spkyvcv::set_label(uiPlaces[i].name, spkyvcv::kNameCap,
+                                           json_string_value(n));
+                    json_t* t = json_object_get(o, "note");
+                    if (json_is_string(t))
+                        spkyvcv::set_label(uiPlaces[i].note, spkyvcv::kNoteCap,
+                                           json_string_value(t));
+                }
+            }
+        }
+
         spkyvcv::GlowSave s;
         json_t* code = json_object_get(root, "terrain");
-        if (!json_is_string(code)) return;              // nothing to restore
+        if (!json_is_string(code)) {                    // nothing to restore
+            commitPlaces();             // ...but the twelve still land
+            return;
+        }
         std::snprintf(s.code, sizeof s.code, "%s", json_string_value(code));
         if (json_t* u = json_object_get(root, "undo")) {
             if (json_is_string(u)) {
@@ -232,8 +548,9 @@ struct Glow : Module {
                 s.have_undo = true;
             }
         }
-        if (json_t* l = json_object_get(root, "lock"))
-            s.lock = json_boolean_value(l);
+        // A patch written before this round may still carry a "lock" key. It
+        // is ignored on purpose: the LOCK switch is the only thing that can
+        // set that state, and Rack restores the switch param itself.
         // A malformed code leaves everything alone -- a corrupt patch must
         // not silently move the player to some other instrument.
         if (curSr <= 0.f) {          // dataFromJson ran before onAdd
@@ -247,6 +564,12 @@ struct Glow : Module {
             // code and stay permanently silent. `havePending` alone already
             // stops onAdd's `else if (!woken) wakeHouse();` from running (see
             // onAdd below), so `woken` doesn't need to move yet.
+            //
+            // The places go in outright here: nothing is running, and
+            // onAdd()'s wakeHouse() fallback reads places[0].code a moment
+            // later -- a staged handover would still be pending then and the
+            // module would wake the house terrain instead of pad 1.
+            commitPlaces();
             pending = s;
             havePending = true;
             return;
@@ -262,8 +585,12 @@ struct Glow : Module {
             uiState = plan.state;
             uiUndo = plan.undo;
             uiHaveUndo = plan.have_undo;
-            uiLock = plan.lock;
+            // RESTORE applies the staged places too, rather than raising a
+            // second op: uiOp is one slot, so a SET_PLACES here would be
+            // overwritten by this line and the loaded twelve would vanish.
             uiOp = UiOp::RESTORE;      // payload written above, flag written last
+        } else {
+            commitPlaces();            // malformed terrain: the twelve still land
         }
     }
 
@@ -321,26 +648,33 @@ struct Glow : Module {
             } else {
                 wakeHouse();          // malformed payload: fall back, same as a fresh insert
             }
-            knobs.primed = false;
         } else if (!woken) {
             wakeHouse();
         }
+        // Rack saves momentary params, so a patch stored mid-hold comes back
+        // with a pad pressed. Zero them and prime the gesture with what it
+        // sees, or the first controlTick reads a rising edge, wakes, and
+        // rerolls 400 ms later on top of the terrain just restored.
+        for (int i = 0; i < spkyvcv::kPadCount; ++i)
+            params[PAD_1 + i].setValue(0.f);
+        bool downNow[spkyvcv::kPadCount] = {};
+        pads.prime(downNow);
     }
 
     void wakeHouse() {
-        spky::flow::TerrainState st;
-        if (!spky::flow::decode_code(spky::flow::kHouseCode, st)) st = {};
-        flow.wake(st);
-        // wake() itself never touches the lock (it only clears the undo
-        // slot), so without this a locked module would land on the house
-        // terrain still locked at all three call sites: a fresh onAdd (a
-        // no-op there, already unlocked), onReset() (spec 5's own
-        // requirement -- Initialize must return unlocked), and the
-        // pending-restore fallback in onAdd when a saved code is malformed
-        // (a corrupt patch must not strand the player locked on top of it).
+        if (places[0].code[0] == '\0') drawTwelve();
+        if (!wakePad(0)) {
+            spky::flow::TerrainState st;
+            if (!spky::flow::decode_code(spky::flow::kHouseCode, st)) st = {};
+            flow.wake(st);
+            woken = true;
+        }
+        // wake() itself never touches the lock, and a house wake is a fresh
+        // start. Belt and braces only: controlTick re-decides the lock from the
+        // assigned switch on the next tick regardless (glow_ui.hpp, GlowSave).
         flow.set_lock(false);
-        woken = true;
-        knobs.primed = false;
+        pads.live = 0;
+        pads.excursion = false;
     }
 
     void reinit(float sr) {
@@ -350,7 +684,7 @@ struct Glow : Module {
         const bool hadFlow = woken;
         const spky::flow::TerrainState st = flow.state();
         const spky::flow::TerrainState un = flow.undo_state();
-        const bool lock = flow.locked(), haveUndo = flow.can_undo();
+        const bool haveUndo = flow.can_undo();
 
         const float prevSr = curSr;
         curSr = sr;
@@ -372,7 +706,7 @@ struct Glow : Module {
 
         // Rebuild the factory audio for this rate, then load it into BOTH
         // decks: a terrain can hand either deck to the SAMPLER engine at any
-        // NEW press, and there is no player gesture that could load it later.
+        // reroll, and there is no player gesture that could load it later.
         if (!factoryNative.l.empty() && (sr != prevSr || factoryL.empty())) {
             factoryL = factoryNative.l;
             factoryR = factoryNative.r;
@@ -394,14 +728,19 @@ struct Glow : Module {
         // may run at most once per module instance. Every later rate change
         // goes through set_ctrl_hz(), which touches only the tick period and
         // the SPACE slew coefficient.
+        //
+        // Nothing re-applies the lock here. On this branch Flow::init() did not
+        // run, and it is the only thing besides set_lock() that writes
+        // Flow::_locked (flow.cpp) -- so the lock was never lost to restore.
+        // controlTick pushes the switch's answer a control period later in any
+        // case; see glow_ui.hpp's GlowSave note.
         const float ctrlHz = sr / float(kCtrlDiv);
         if (!hadFlow) {
             flow.init(&inst, ctrlHz);
         } else {
             flow.set_ctrl_hz(ctrlHz);
             flow.wake(st);            // force-pushes every setter into the
-            flow.set_lock(lock);      // freshly initialised Instrument
-            flow.restore_undo(un, haveUndo);
+            flow.restore_undo(un, haveUndo);   // freshly initialised Instrument
         }
     }
 
@@ -410,160 +749,179 @@ struct Glow : Module {
     }
 
     void onReset() override {
-        // Tonality FIRST, before reinit/wakeHouse. Params are reset for us by
-        // Rack's default ResetEvent handler before this runs, which covers
-        // GENRE and SCALE -- but they do not reach Flow until the next
-        // controlTick, and rootOverride is not a param at all. reinit() and
-        // wakeHouse() force-push every parameter through recompute_and_push,
-        // so clearing afterwards would push the PREVIOUS tonality once and
-        // self-correct a control period later. That is the same one-tick
-        // artefact spec §4.1 rules out in the other direction.
+        // Anything the UI thread staged and the audio thread has not applied
+        // yet dies here: Initialize throws the state away, and a redraw or a
+        // pin left in the slot would land on top of the fresh module a control
+        // period later. Safe to write directly -- Initialize runs with the
+        // engine held, so no controlTick is in flight.
+        uiOp = UiOp::NONE;
+        // Tonality FIRST, before reinit/wakeHouse -- reinit() and wakeHouse()
+        // force-push every parameter, so clearing afterwards would push the
+        // PREVIOUS tonality once and self-correct a control period later.
         rootOverride = -1;
+        menuScale = spky::SCALE_AEOLIAN;
+        menuRoot = 0;
+        // menuGenre too, and not only flow.set_genre(): controlTick pushes
+        // menuGenre into Flow every tick, so clearing Flow alone would be
+        // undone a control period later and Initialize would silently keep
+        // the previous genre constraint.
+        menuGenre = spky::flow::ARCH_ANY;
+        faderTarget[0] = int(spkyvcv::FaderTarget::TEMPO);
+        faderTarget[1] = int(spkyvcv::FaderTarget::MASTER);
+        switchTarget[0] = int(spkyvcv::SwitchTarget::LOCK);
+        switchTarget[1] = int(spkyvcv::SwitchTarget::SCALE);
         flow.set_genre(spky::flow::ARCH_ANY);
         flow.set_scale_override(-1);
         flow.set_root_override(-1);
+        drawTwelve();                 // the SAME twelve: the seed is fixed
         reinit(curSr > 0.f ? curSr : 48000.f);
         wakeHouse();
-        knobs.primed = false;
     }
 
     void controlTick(float sr) {
         // Host-owned settings first: wake() below force-pushes every
-        // parameter, so an override applied after it would miss that push and
-        // let one tick out on the terrain's own tonality.
-        // Range-guarded here, not inside set_genre: Rack's Param::setValue
-        // does NOT clamp, and paramsFromJson writes straight through it, so a
-        // hand-edited patch can hand this a nonsense position. An out-of-range
-        // archetype would match nothing in kGenreDrawCap draws and leave NEW
-        // permanently dead with no diagnostic. Anything not a real position
-        // reads as ANY -- the same rule scale_of_knob applies to SCALE.
-        const int gpos = int(params[GENRE].getValue() + 0.5f);
-        flow.set_genre(gpos >= 1 && gpos <= spky::flow::ARCH_COUNT
-                       ? gpos - 1 : spky::flow::ARCH_ANY);
-        flow.set_scale_override(
-            spkyvcv::scale_of_knob(int(params[SCALE].getValue() + 0.5f)));
-        flow.set_root_override(rootOverride.load());
+        // parameter, so an override applied after it would miss that push.
+        const int swScalePos = switchPos(spkyvcv::SwitchTarget::SCALE);
+        const spkyvcv::TonalityGate ton =
+            swScalePos < 0 ? spkyvcv::TonalityGate{}
+                           : spkyvcv::scale_switch(swScalePos,
+                                                   menuScale.load(),
+                                                   menuRoot.load());
+        flow.set_scale_override(ton.scale_ovr);
+        flow.set_root_override(ton.root_ovr >= 0 ? ton.root_ovr
+                                                 : rootOverride.load());
+
+        // The lock is exactly what the assigned switch says, and NOBODY owns
+        // it when no switch is assigned -- so unassigned means unlocked, not
+        // "keep whatever it was".
+        //
+        // Not a tidiness rule. The workshop menu can move both switches off
+        // LOCK, and the menu's own lock toggle is deliberately gone (spec
+        // §4.3: one control, one truth). Leaving the lock standing would leave
+        // a locked generator with no control left that can clear it -- every
+        // draw, every hold and every reroll refused, with Initialize as the
+        // only way out. The cost is that a patch saved locked with no LOCK
+        // switch assigned comes back unlocked; that state is the trap itself,
+        // and restoring somebody into it is not a feature.
+        const int swLockPos = switchPos(spkyvcv::SwitchTarget::LOCK);
+        flow.set_lock(swLockPos >= 0 && spkyvcv::lock_switch(swLockPos));
+
+        flow.set_genre(menuGenre.load());
 
         // Apply whatever the UI thread staged (fix round 3): flag read FIRST
         // via exchange() -- so at most one op survives even if two menu
         // actions landed in the same UI frame -- payload read only after.
         switch (uiOp.exchange(UiOp::NONE)) {
-            case UiOp::SET_TERRAIN:
-                flow.wake(uiState);
-                woken = true;
-                break;
-            case UiOp::SET_LOCK:
-                flow.set_lock(uiLock);
-                break;
+            case UiOp::SET_TERRAIN: flow.wake(uiState); woken = true; break;
+            case UiOp::NEW_FULL:    if (!flow.new_full()) refuse.mark(flow.now_s()); break;
+            case UiOp::NEW_PARTIAL: if (!flow.new_partial(uiMask)) refuse.mark(flow.now_s()); break;
+            case UiOp::UNDO:        if (!flow.undo()) refuse.mark(flow.now_s()); break;
+            case UiOp::SET_PLACES:  applyPlaces(); break;
+            case UiOp::PIN:         pinCurrent(uiPin); break;
             case UiOp::RESTORE:
+                applyPlaces();
                 flow.wake(uiState);
-                flow.set_lock(uiLock);
+                // No set_lock here: the push above already ran this tick, and
+                // it is the switch's answer. See glow_ui.hpp's GlowSave note.
                 flow.restore_undo(uiUndo, uiHaveUndo);
                 woken = true;
-                knobs.primed = false;
                 break;
             case UiOp::NONE: default: break;
         }
 
-        float k[spky::flow::MACRO_COUNT];
-        for (int m = 0; m < spky::flow::MACRO_COUNT; ++m) {
-            k[m] = params[MOTION + m].getValue();
-            flow.set_macro(m, k[m]);
-        }
-        for (int i = 0; i < 5; ++i) {
-            Input& in = inputs[CV_MOT + i];
-            flow.set_cv(spkyvcv::kCvMacro[i],
-                        in.isConnected() ? spkyvcv::cv_to_macro(in.getVoltage())
-                                         : 0.f);
-        }
+        for (int m = 0; m < spky::flow::MACRO_COUNT; ++m)
+            flow.set_macro(m, params[MOTION + m].getValue());
 
-        // --- the NEW gesture family (spec 5) ----------------------------
-        // The decoder's clock is Flow's own, which advances one dt per
+        // --- the pads (spec 5.3) -----------------------------------------
+        // The gesture's clock is Flow's own, which advances one dt per
         // tick(); reading it before the tick means every event this pass
-        // carries the same timestamp, which is exactly what a control tick
-        // is.
+        // carries the same timestamp, which is exactly what a control tick is.
         const double t = flow.now_s();
-        float d[spky::flow::MACRO_COUNT];
-        if (knobs.deltas(k, d))
-            for (int m = 0; m < spky::flow::MACRO_COUNT; ++m)
-                if (d[m] > 0.f) gest.knob_delta(m, d[m], t);
-
-        const bool down = params[NEW_BTN].getValue() > 0.5f;
-        if (newBtn.edge(down)) gest.button(down, t, flow.locked());
-        gest.tick(t, flow.can_undo());
-
-        bool refused = false;
-        const spky::flow::GestureOut op = gest.poll();
-        switch (op.op) {
-            case spky::flow::GestureOut::NEW_FULL:
-                refused = !flow.new_full(); break;
-            case spky::flow::GestureOut::NEW_PARTIAL:
-                refused = !flow.new_partial(op.mask); break;
-            case spky::flow::GestureOut::UNDO:
-                refused = !flow.undo(); break;
-            case spky::flow::GestureOut::LOCK_TOGGLE:
-                flow.set_lock(!flow.locked()); break;
-            case spky::flow::GestureOut::REFUSED:
-                refused = true; break;
-            default: break;
+        bool down[spkyvcv::kPadCount];
+        for (int i = 0; i < spkyvcv::kPadCount; ++i)
+            down[i] = params[PAD_1 + i].getValue() > 0.5f;
+        // pads.update() moves `live` onto the pressed pad before we can know
+        // whether that pad's code decodes, so a REFUSED wake has to put it
+        // back. Rolled back, not cleared: live = -1 would be the honest reading
+        // of "no pad's place is playing", but the red refusal collar is painted
+        // on the live pad and on no other, so clearing it would refuse the
+        // player in silence -- and nothing stopped, so the previously live pad
+        // is still exactly the pad the module is on. Without this, the collar
+        // went teal on a pad holding nothing the moment the flash expired,
+        // while the old terrain kept sounding. wakeHouse() answers the same
+        // question from the other end: when ITS wake fails it falls back to the
+        // house terrain and leaves pad 0 live, because something is playing
+        // there too.
+        const int  prevLive = pads.live;
+        const bool prevExcursion = pads.excursion;
+        const spkyvcv::PadEvent ev = pads.update(down, t);
+        if (ev.action == spkyvcv::PadAction::WAKE) {
+            if (!wakePad(ev.pad)) {
+                refuse.mark(t);
+                pads.live = prevLive;
+                pads.excursion = prevExcursion;
+            }
+        } else if (ev.action == spkyvcv::PadAction::REROLL) {
+            // Under LOCK, wake() is not a gesture and is not refused, but
+            // new_partial IS (flow.h). So pads still change place while holds
+            // do nothing -- LOCK guards the generator, not the recall.
+            const bool ok = flow.new_partial(0x3F);
+            pads.excursion = ok;
+            if (!ok) refuse.mark(t);
         }
-        // A press the decoder let through but Flow turned down (nothing to
-        // undo, an empty macro mask) must still light the refusal, or the
-        // panel would silently swallow a gesture. gesture.h's own REFUSED
-        // only covers the locked case, which is why Flow's verbs return
-        // bool. gesture.h's own _refuse_t is only reachable from a real
-        // release edge, so it can never be set from here (fix round 1) --
-        // this flash is the module's own, since only the module knows Flow
-        // declined.
-        if (refused) refuse.mark(t);
 
         flow.tick();
 
-        // Tempo: the terrain owns it and Flow pushes it, but an external
-        // clock overrides (spec 4). Set it unconditionally every tick --
-        // Flow caches what it last pushed, so it would NOT restore the
-        // terrain's own tempo by itself once the cable is pulled. The
-        // override rule itself is pure logic (fix round 4) and lives in
-        // glow_ui.hpp, covered by tests/test_glow_ui.cpp -- this is just the
-        // call site.
-        const float bpm = spkyvcv::clock_bpm(flow.param_now(spky::flow::P_TEMPO_BPM),
-                                              clkPeriod, clkSamples, sr,
-                                              kClockTimeoutS);
-        inst.set_tempo_bpm(bpm);
+        // Tempo: the terrain owns it and Flow re-pushes it on EVERY terrain
+        // change, so a host-side fader has to be re-applied every tick or one
+        // wake would silently hand the place its own tempo back. `off` is how
+        // you ask for exactly that.
+        const int fTempo = faderPos(spkyvcv::FaderTarget::TEMPO);
+        if (fTempo >= 0)
+            inst.set_tempo_bpm(spkyvcv::fader_tempo_bpm(
+                params[FADER_L + fTempo].getValue()));
 
-        // The module's own refusal flash takes precedence over the
-        // decoder's own LED state -- gest.led()'s own precedence (REFUSE >
-        // UNDO_ARMED > MARKED > BLEND > LOCKED > IDLE) stays intact for
-        // every other case; this only substitutes the top of it.
-        const int led = refuse.active(flow.now_s())
-                             ? spky::flow::Gesture::LED_REFUSE
-                             : gest.led(flow.blend_phase(), flow.locked());
-        lights[NEW_L].setBrightness(
-            spkyvcv::led_level(led, flow.blend_phase(), flow.now_s()));
+        const int fMaster = faderPos(spkyvcv::FaderTarget::MASTER);
+        masterGain = fMaster >= 0
+            ? spkyvcv::fader_master_gain(params[FADER_L + fMaster].getValue())
+            : 1.f;
+    }
+
+    // Which physical control (0 = left, 1 = right) is assigned to `want`,
+    // or -1 if neither is. Assigning both to the same target is allowed and
+    // the left one wins -- a rehearsal rig should not refuse a knob setting.
+    int faderPos(spkyvcv::FaderTarget want) const {
+        for (int i = 0; i < 2; ++i)
+            if (faderTarget[i].load() == int(want)) return i;
+        return -1;
+    }
+    // NOT const, unlike faderPos: engine::Param::getValue() is a non-const
+    // member (Param.hpp), so reading a param position out of a const Module
+    // does not compile.
+    int switchPos(spkyvcv::SwitchTarget want) {
+        for (int i = 0; i < 2; ++i)
+            if (switchTarget[i].load() == int(want))
+                return int(params[SW_L + i].getValue() + 0.5f);
+        return -1;
     }
 
     void process(const ProcessArgs& args) override {
         if (args.sampleRate != curSr) reinit(args.sampleRate);
-
-        if (inputs[CLK].isConnected()) {
-            clkSamples += 1.f;
-            if (clockTrig.process(inputs[CLK].getVoltage(), 0.1f, 1.f)) {
-                if (clkSamples > 1.f) clkPeriod = clkSamples;
-                clkSamples = 0.f;
-                inst.clock_pulse();
-            }
-        } else {
-            clkPeriod = 0.f;
-        }
-
         if (ctrlDiv.process()) controlTick(args.sampleRate);
 
         float outl = 0.f, outr = 0.f;
         inst.process(nullptr, nullptr, &outl, &outr, 1);
-        outputs[OUT_L].setVoltage(clamp(outl, -1.f, 1.f) * 5.f);
-        outputs[OUT_R].setVoltage(clamp(outr, -1.f, 1.f) * 5.f);
+        outputs[OUT_L].setVoltage(clamp(outl * masterGain, -1.f, 1.f) * 5.f);
+        outputs[OUT_R].setVoltage(clamp(outr * masterGain, -1.f, 1.f) * 5.f);
     }
 };
+
+// The generated tables pack every colour as 0xRRGGBB -- lettering (lblRgb,
+// kTexts) and the pad collar (kCollar*) alike. One unpacker, so a widget can
+// never disagree with the header about what a channel is.
+static NVGcolor panelRGB(unsigned c) {
+    return nvgRGB((c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff);
+}
 
 // The SVG's <text> is invisible to NanoSVG, so the lettering is redrawn here
 // from the generated tables -- the same reason the big module has PanelText.
@@ -576,7 +934,7 @@ struct GlowText : Widget {
         auto put = [&](float xmm, float ymm, float szmm, unsigned c,
                        unsigned char anchor, const char* s) {
             nvgFontSize(args.vg, mm2px(szmm));
-            nvgFillColor(args.vg, nvgRGB((c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff));
+            nvgFillColor(args.vg, panelRGB(c));
             nvgTextAlign(args.vg,
                          (anchor == 1 ? NVG_ALIGN_LEFT
                                       : anchor == 2 ? NVG_ALIGN_RIGHT
@@ -588,8 +946,6 @@ struct GlowText : Widget {
         for (const auto& t : kTexts)
             put(t.mm.x, t.mm.y, t.size, t.rgb, t.anchor, t.str);
         for (const auto& c : kParamCtls)
-            put(c.lbl.x, c.lbl.y, c.lblSize, c.lblRgb, c.anchor, c.label);
-        for (const auto& c : kInputCtls)
             put(c.lbl.x, c.lbl.y, c.lblSize, c.lblRgb, c.anchor, c.label);
         for (const auto& c : kOutputCtls)
             put(c.lbl.x, c.lbl.y, c.lblSize, c.lblRgb, c.anchor, c.label);
@@ -613,6 +969,86 @@ struct TerrainCodeField : ui::TextField {
     }
 };
 
+// A menu text field that hands its contents to a callback on Enter and closes
+// the menu -- TerrainCodeField's sibling, for the two strings a place carries.
+// ui::TextField itself has no commit behaviour.
+//
+// It does NOT sanitize or truncate. spkyvcv::set_label does both, it is the
+// only way to write those fixed buffers, and it has to hold that contract for
+// dataFromJson too -- a hand-edited patch reaches the same fields with no text
+// field anywhere in sight. Doing it here as well was idempotent but left this
+// widget carrying a `cap` whose only job was to redo the buffer owner's work,
+// which is the kind of second copy that drifts.
+struct LabelField : ui::TextField {
+    std::function<void(const std::string&)> commit;
+    void onSelectKey(const SelectKeyEvent& e) override {
+        if (commit && e.action == GLFW_PRESS
+            && (e.key == GLFW_KEY_ENTER || e.key == GLFW_KEY_KP_ENTER)) {
+            commit(text);
+            e.consume(this);
+            if (MenuOverlay* overlay = getAncestorOfType<MenuOverlay>())
+                overlay->requestDelete();
+            return;
+        }
+        ui::TextField::onSelectKey(e);
+    }
+};
+
+// The one control Rack does not ship. app::Switch is ALREADY "a ParamWidget
+// which, in momentary mode, sets the value to maxValue when the mouse is held
+// and minValue when released" (app/Switch.hpp) -- deriving from ParamWidget
+// instead would mean re-implementing onDragStart/onDragEnd by hand.
+// app::SvgSwitch is the subclass that adds frames; Switch itself has no
+// artwork, which is exactly the custom-drawn case.
+//
+// The widget stays stupid: tap-versus-hold is decided by the module in
+// controlTick, never here. One place owns the gesture.
+struct TouchPlate : app::Switch {
+    Glow* mod = nullptr;
+    int pad = 0;
+
+    TouchPlate() {
+        momentary = true;
+        box.size = mm2px(Vec(kPadW, kPadH));
+    }
+
+    void draw(const DrawArgs& args) override {
+        // Runtime state, not panel state -- which is why there are no
+        // LightIds for the pads. Twelve lights in the generated header would
+        // put runtime state into a panel table.
+        const bool live = mod && mod->pads.live == pad;
+        const bool exc = live && mod->pads.excursion;
+        const bool flash = mod && mod->refuse.active(mod->flow.now_s());
+
+        // WHICH colour a state gets is decided here and only here, because
+        // that is runtime state -- which is also why there are no LightIds for
+        // the pads. WHAT the four colours are belongs to the panel: copper (the
+        // part-B accent) is reserved for "that worked", a hold that actually
+        // rerolled, and a refusal gets a colour of its own, because telling the
+        // player "I refused you" is the only thing RefuseFlash exists for, and
+        // both ways a PAD can earn one -- a hold that LOCK turned down, and a
+        // pad whose stored code will not decode -- are exactly the moments
+        // where a copper collar would read as the reroll that just did not
+        // happen. The refusal red sits with MUTED in gen_panel's palette
+        // (base.BRICK), not above COPPER; the other three ARE palette entries.
+        // All four, and both stroke widths, come from the generated header, so
+        // a palette retune moves the printed tiles and these collars together.
+        NVGcolor collar;
+        if (flash && live)    collar = panelRGB(kCollarRefused);
+        else if (exc)         collar = panelRGB(kCollarExcursed);
+        else if (live)        collar = panelRGB(kCollarLive);
+        else                  collar = panelRGB(kCollarIdle);
+
+        nvgBeginPath(args.vg);
+        nvgRoundedRect(args.vg, 0.5f, 0.5f, box.size.x - 1.f,
+                       box.size.y - 1.f, mm2px(kPadR));
+        nvgStrokeColor(args.vg, collar);
+        nvgStrokeWidth(args.vg, mm2px(live ? kCollarWLive : kCollarWIdle));
+        nvgStroke(args.vg);
+        app::Switch::draw(args);
+    }
+};
+
 struct GlowWidget : ModuleWidget {
     GlowWidget(Glow* module) {
         setModule(module);
@@ -626,34 +1062,58 @@ struct GlowWidget : ModuleWidget {
             const Vec pos = mm2px(Vec(c.mm.x, c.mm.y));
             switch (c.kind) {
                 case WK_MACRO:
-                    // Rack's stock knobs come in fixed sizes;
-                    // RoundLargeBlackKnob is 46 px ~ 15.6 mm, the nearest to
-                    // the panel's 16 mm. RoundBigBlackKnob (54 px ~ 18.3 mm)
-                    // would overhang the printed footprint by more than a
-                    // millimetre a side.
-                    addParam(createParamCentered<RoundLargeBlackKnob>(
-                        pos, module, c.id));
+                    // The plate prints the cap at the board's own measured
+                    // silkscreen collar (touch2_geometry.KNOB_COLLAR_R = 3.885,
+                    // so 7.77 mm across), and the widget is picked against
+                    // that, not against a round number. Measured off
+                    // res/ComponentLibrary at Rack's 75 DPI: RoundSmallBlackKnob
+                    // 7.68 mm, Trimpot 6.05 mm, RoundBlackKnob 9.60 mm. The
+                    // small black knob misses the print by 0.09 mm; Trimpot
+                    // would leave a 0.9 mm ring of printed cap showing all
+                    // round, which is what a knob that has fallen off looks
+                    // like. (Trimpot is also not "Rack's only small knob", as
+                    // this comment used to claim.)
+                    addParam(createParamCentered<RoundSmallBlackKnob>(pos, module,
+                                                                      c.id));
                     break;
-                case WK_BTN:
-                    addParam(createLightParamCentered<VCVLightBezel<GreenLight>>(
-                        pos, module, c.id, NEW_L));
+                case WK_PAD: {
+                    auto* p = createParamCentered<TouchPlate>(pos, module, c.id);
+                    p->mod = module;
+                    p->pad = c.id - PAD_1;
+                    addParam(p);
                     break;
-                case WK_SEL:
-                    // 11 mm printed footprint; RoundBlackKnob is 38 px ~ 12.9
-                    // mm, RoundSmallBlackKnob 28 px ~ 9.5 mm -- the smaller
-                    // one stays inside the print.
-                    addParam(createParamCentered<RoundSmallBlackKnob>(
-                        pos, module, c.id));
+                }
+                case WK_FADER:
+                    // VCVSlider is 19.843 x 76.535 px at 75 DPI = 6.72 x 25.92
+                    // mm, handle 3.98 mm. The board's fader measures about
+                    // 24 mm, so the stock widget fits unmodified -- a lucky
+                    // fit, recorded so nobody re-derives it.
+                    addParam(createParamCentered<VCVSlider>(pos, module, c.id));
                     break;
-                // Named rather than defaulted, for the same reason as the
-                // switch in Glow(): a new WidgetKind must not fall silently
-                // through to nothing here either.
-                case WK_IN: case WK_OUT: break;
+                case WK_SWITCH:
+                    // CKSSThree, not NKK. Both have three positions, so "the
+                    // board's switches are centre-off, two digital pins each"
+                    // -- true, and the reason this is a three-position widget
+                    // at all -- does not choose between them. Size does.
+                    // Measured off res/ComponentLibrary at Rack's 75 DPI:
+                    // NKK_0.svg is 10.84 x 14.86 mm against the 5.00 x 9.00 mm
+                    // this plate prints, i.e. 2.2x the printed footprint, while
+                    // CKSSThree_0.svg is 4.56 x 9.60 and fits it.
+                    //
+                    // The overlap is not cosmetic. At NKK's size SW_L covers
+                    // 1.90 x 8.16 mm of PAD_2, and SW_R reaches into PAD_3 and
+                    // PAD_8. Switches come after pads in kParamCtls and Rack
+                    // hit-tests children in reverse order, so the switch takes
+                    // the press and those three pads lose 10-23 % of their
+                    // clickable area. Enlarging the printed footprint to match
+                    // NKK is not the alternative: both switches are mounted
+                    // THROUGH the pad field on the real board and there is no
+                    // room there (see "the pad field" in gen_flow_panel.py).
+                    addParam(createParamCentered<CKSSThree>(pos, module, c.id));
+                    break;
+                case WK_OUT: break;
             }
         }
-        for (const auto& c : kInputCtls)
-            addInput(createInputCentered<PJ301MPort>(mm2px(Vec(c.mm.x, c.mm.y)),
-                                                     module, c.id));
         for (const auto& c : kOutputCtls)
             addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(c.mm.x, c.mm.y)),
                                                        module, c.id));
@@ -671,9 +1131,17 @@ struct GlowWidget : ModuleWidget {
         menu->addChild(createMenuLabel("Terrain " + m->terrainCode()));
 
         // Which genre the CURRENT terrain is. Free now that arch_of exists,
-        // and the point of the GENRE control is auditioning one archetype at
-        // a time -- without this the player cannot see which one they are in.
+        // and the point of the GENRE constraint is auditioning one archetype
+        // at a time -- without this the player cannot see which one they
+        // are in.
         static const char* kArchNames[] = { "Drone", "Pulse", "Arp", "Fragment" };
+        // The line below indexes this table with arch_of(), and the Genre
+        // submenu further down builds its list from it. Neither knows how many
+        // archetypes the engine has.
+        static_assert(sizeof kArchNames / sizeof *kArchNames
+                          == spky::flow::ARCH_COUNT,
+                      "kArchNames is indexed by arch_of(); give the new "
+                      "archetype a name here");
         menu->addChild(createMenuLabel(
             std::string("Genre ") +
             kArchNames[spky::flow::arch_of(m->flow.state().master)]));
@@ -705,19 +1173,160 @@ struct GlowWidget : ModuleWidget {
         field->placeholder = "F1-XXXXXXXX-000000000000";
         field->setText(m->terrainCode());
         menu->addChild(field);
+        // No "Terrain lock" item: the LOCK switch owns that state now, and a
+        // physical switch plus a menu item for one state is a synchronisation
+        // bug waiting to be filed. controlTick pushes the switch's answer
+        // every tick, including "unlocked" when no switch is assigned, so
+        // there is no state here for a menu item to get out of step with.
 
-        menu->addChild(createBoolMenuItem(
-            "Terrain lock", "",
-            [m]() { return m->flow.locked(); },
-            [m](bool on) {
-                // Stage for controlTick() to apply -- set_lock() itself is a
-                // single bool write with no crash risk, but going through
-                // the same staging path as the other two writers (fix round
-                // 3) keeps every Flow mutation on the audio thread, with one
-                // ordering rule instead of a special case for this one.
-                m->uiLock = on;
-                m->uiOp = Glow::UiOp::SET_LOCK;
+        // --- the workshop (spec §6) --------------------------------------
+        // Everything the board cannot do lives below this line. The board is
+        // the stage; Rack is the workshop, and none of this ships to the
+        // Touch. Every entry stages an op -- no handler here touches Flow or
+        // places[] directly.
+        menu->addChild(new MenuSeparator);
+        menu->addChild(createMenuLabel("Workshop"));
+
+        menu->addChild(createMenuItem("Draw a new terrain", "", [m]() {
+            m->uiOp = Glow::UiOp::NEW_FULL;
+        }));
+
+        // Kept rather than dropped with the NEW button: the pads only ever
+        // call new_partial(0x3F), so without a caller for a real partial mask
+        // that half of the Flow API would have no user left and would rot.
+        menu->addChild(createSubmenuItem("Reroll one macro", "",
+            [m](Menu* sub) {
+                for (int i = 0; i < spky::flow::MACRO_COUNT; ++i) {
+                    sub->addChild(createMenuItem(kMacroNames[i], "", [m, i]() {
+                        m->uiMask = uint8_t(1u << i);
+                        m->uiOp = Glow::UiOp::NEW_PARTIAL;
+                    }));
+                }
             }));
+
+        menu->addChild(createMenuItem("Undo terrain", "", [m]() {
+            m->uiOp = Glow::UiOp::UNDO;
+        }));
+
+        // Index 0 is ARCH_ANY, hence the +1/-1: the constraint is "no
+        // constraint" plus one entry per archetype, taken from the same table
+        // the label above reads so the two cannot come to disagree.
+        std::vector<std::string> genres = { "Any" };
+        for (const char* n : kArchNames) genres.push_back(n);
+        menu->addChild(createIndexSubmenuItem(
+            "Genre (what a draw may pick)", genres,
+            [m]() { return m->menuGenre.load() + 1; },
+            [m](int i) { m->menuGenre = i - 1; }));
+
+        // --- assignments (spec §4.3) --------------------------------------
+        // The S-numbers are the board's own designators and match the tooltips
+        // in the generated panel table; "left" and "right" are what the player
+        // actually reaches for.
+        menu->addChild(new MenuSeparator);
+        menu->addChild(createMenuLabel("Assignments"));
+        static const std::vector<std::string> kFaderNames =
+            { "Off", "Tempo", "Master" };
+        static const std::vector<std::string> kSwitchNames =
+            { "Off", "Lock", "Scale" };
+        for (int i = 0; i < 2; ++i) {
+            menu->addChild(createIndexSubmenuItem(
+                i == 0 ? "Left fader (S36)" : "Right fader (S37)",
+                kFaderNames,
+                [m, i]() { return m->faderTarget[i].load(); },
+                [m, i](int v) { m->faderTarget[i] = v; }));
+        }
+        for (int i = 0; i < 2; ++i) {
+            menu->addChild(createIndexSubmenuItem(
+                i == 0 ? "Left switch (S09/S10)" : "Right switch (S07/S08)",
+                kSwitchNames,
+                [m, i]() { return m->switchTarget[i].load(); },
+                [m, i](int v) { m->switchTarget[i] = v; }));
+        }
+
+        // The scale list is the SWITCH's value, not a selector: the menu picks
+        // what gets frozen, the switch decides whether anything is. Ordered by
+        // kScaleKnobOrder so the list still runs calm to sharp.
+        std::vector<std::string> scales;
+        for (int i = 0; i < spky::SCALE_LIST_COUNT; ++i)
+            scales.push_back(spky::SCALE_NAMES[spkyvcv::kScaleKnobOrder[i]]);
+        menu->addChild(createIndexSubmenuItem(
+            "Scale (what the SCALE switch fixes)", scales,
+            [m]() {
+                for (int i = 0; i < spky::SCALE_LIST_COUNT; ++i)
+                    if (spkyvcv::kScaleKnobOrder[i] == m->menuScale.load())
+                        return i;
+                return 0;
+            },
+            [m](int i) { m->menuScale = spkyvcv::kScaleKnobOrder[i]; }));
+
+        // --- the twelve places (spec §6.3) --------------------------------
+        menu->addChild(new MenuSeparator);
+        menu->addChild(createSubmenuItem("Places", "", [m](Menu* sub) {
+            for (int i = 0; i < spkyvcv::kPadCount; ++i) {
+                const std::string title =
+                    string::f("Pad %d", i + 1) +
+                    (m->places[i].name[0] == '\0'
+                         ? std::string() : "  " + std::string(m->places[i].name));
+                sub->addChild(createSubmenuItem(title, "", [m, i](Menu* pm) {
+                    // The pad number, not flow.state(): the encode happens on
+                    // the audio thread, which owns both the terrain it reads
+                    // and the place it writes.
+                    pm->addChild(createMenuItem("Pin current terrain here", "",
+                        [m, i]() {
+                            m->uiPin = i;
+                            m->uiOp = Glow::UiOp::PIN;
+                        }));
+                    pm->addChild(createMenuLabel("Name"));
+                    auto* nf = new LabelField;
+                    nf->box.size.x = 180.f;
+                    nf->setText(m->places[i].name);
+                    nf->commit = [m, i](const std::string& s) {
+                        m->stagePlaces([&](spkyvcv::Place* p) {
+                            spkyvcv::set_label(p[i].name, spkyvcv::kNameCap, s);
+                        });
+                    };
+                    pm->addChild(nf);
+                    pm->addChild(createMenuLabel("Note -- why it was kept"));
+                    auto* tf = new LabelField;
+                    tf->box.size.x = 180.f;
+                    tf->setText(m->places[i].note);
+                    tf->commit = [m, i](const std::string& s) {
+                        m->stagePlaces([&](spkyvcv::Place* p) {
+                            spkyvcv::set_label(p[i].note, spkyvcv::kNoteCap, s);
+                        });
+                    };
+                    pm->addChild(tf);
+                }));
+            }
+        }));
+
+        // The note is the perishable one: parent spec §4.3 defines it as "one
+        // sentence: why it was kept", and that sentence exists only in the
+        // seconds after the judgement. A later pass over a TSV does not write
+        // it, which is why it is stored at all -- and exporting it here is the
+        // whole point of storing it.
+        menu->addChild(createMenuItem("Copy all twelve as pool.tsv", "", [m]() {
+            const std::string tsv =
+                spkyvcv::export_pool_tsv(m->places, spkyvcv::kPadCount);
+            glfwSetClipboardString(APP->window->win, tsv.c_str());
+        }));
+
+        // "Reset", not "Redraw": the seed is the fixed kPoolSeed, so this draws
+        // the SAME twelve every time. Its only observable effect is that every
+        // pinned code, name and note is discarded and the factory twelve come
+        // back -- one click, no confirmation, right under the export. The label
+        // has to say that; a "redraw" promises something new.
+        //
+        // Draws into the staging array on THIS thread and hands the result over
+        // -- Glow::drawTwelve() would write places[] and reset the gesture from
+        // under the audio thread. `true` forgets the live pad: afterwards the
+        // sounding terrain is no longer any of the twelve.
+        menu->addChild(createMenuItem("Reset all twelve places (discards names "
+                                      "and notes)", "", [m]() {
+            m->stagePlaces([](spkyvcv::Place* p) {
+                Glow::drawTwelveInto(p, Glow::kPoolSeed);
+            }, true);
+        }));
     }
 };
 

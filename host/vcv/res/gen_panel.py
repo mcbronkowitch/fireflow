@@ -42,6 +42,14 @@ FX_ROOM    = "#e8e0d4"   # per-deck ROOM fields
 LINE       = "#d7cdbb"   # hairlines
 INK        = "#171713"   # lettering
 MUTED      = "#656056"   # eyebrows / neutral collars
+BRICK      = "#8f4a45"   # "I refused you" -- a muted, greyish red. Same value
+                         # range as COPPER (L ~42 % against ~46 %) so it does
+                         # not shout louder than the accent it sits beside, but
+                         # a third of its saturation and 20 degrees round the
+                         # wheel, which is what makes it read as dull brick
+                         # rather than as warm metal. Sits with MUTED, not
+                         # above COPPER. Used by Glow's live pad collar
+                         # (gen_flow_panel.py emits it into the header).
 GRAPHITE   = "#252721"   # knob caps, jack wells
 WELL       = "#1d1f1a"   # LED-ring well (dark, so the glow reads)
 WHITE      = "#fffdf7"   # pad keys / knob ticks
