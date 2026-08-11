@@ -70,6 +70,60 @@ def test_knob_collar_radius_survives_the_trip_back_to_pixels():
           % (geo.KNOB_COLLAR_R, px, geo.PX_PER_MM, lo, hi))
 
 
+# The knob row's own numbers, stated HERE and not read from touch2_geometry --
+# same rule COLLAR_SEARCH_PX follows. touch2_geometry's header says it twice:
+# "the four upper knobs sit on one row to within 0.16 mm at a column pitch of
+# 15.83 / 15.90 / 15.84 mm", and the TouchFX ASCII drawing puts S31..S34 across
+# the top with S30 and S35 below them, left and right. The tiny slack on the
+# spread is binary floating point, not measurement slack: the four y values
+# differ by exactly 0.16 and 45.50 - 45.34 evaluates to 0.16000000000000014.
+KNOB_ROW_SPREAD = 0.16
+KNOB_ROW_N = 4
+
+
+def test_the_knob_field_is_two_rows_in_board_order():
+    """Four across, two below -- a claim about the BOARD, checked here.
+
+    This is the gate the panel side cannot be: res/test_flow_panel.py asserts
+    the drawn knobs against geo.KNOBS, and geo.KNOBS is the table the generator
+    read to place them, so a transposition INSIDE this list moves subject and
+    expectation together and passes. It was proved: swapping KNOBS[0] and
+    KNOBS[1], regenerating, and re-running both panel guards printed OK while
+    the emitted header had MOTION drawn at the second knob's coordinates with a
+    tooltip still claiming board channel S31.
+
+    So the structure gets asserted against the record instead. KNOBS[0..3] are
+    S31 S32 S33 S34 left to right on one row; KNOBS[4] is S30 and KNOBS[5] is
+    S35, below that row, S30 to the left. Any two-element swap breaks one of
+    those three statements. This survives the 600 dpi re-measure spec 11
+    schedules -- it says nothing about where the row IS.
+    """
+    if len(geo.KNOBS) != 6:
+        return          # test_counts already reports it; do not index into it
+    top = geo.KNOBS[:KNOB_ROW_N]
+    xs = [x for x, _ in top]
+    for i in range(len(xs) - 1):
+        check(xs[i] < xs[i + 1],
+              "KNOBS[%d] x=%.2f is not left of KNOBS[%d] x=%.2f -- the upper "
+              "row must read S31 S32 S33 S34 left to right"
+              % (i, xs[i], i + 1, xs[i + 1]))
+    ys = [y for _, y in top]
+    spread = max(ys) - min(ys)
+    check(spread <= KNOB_ROW_SPREAD + 1e-9,
+          "the four upper knobs span %.3f mm in y, want one row to within "
+          "%.2f mm -- a knob from the lower row was transposed into the upper "
+          "one" % (spread, KNOB_ROW_SPREAD))
+
+    lo_l, lo_r = geo.KNOBS[4], geo.KNOBS[5]
+    for i, (_, y) in ((4, lo_l), (5, lo_r)):
+        check(y > max(ys),
+              "KNOBS[%d] y=%.2f is not below the upper row (%.2f) -- S30 and "
+              "S35 sit under S31..S34" % (i, y, max(ys)))
+    check(lo_l[0] < lo_r[0],
+          "KNOBS[4] x=%.2f is not left of KNOBS[5] x=%.2f -- S30 is the left "
+          "of the two lower knobs, S35 the right" % (lo_l[0], lo_r[0]))
+
+
 def test_counts():
     for name, want in (("PADS", 12), ("KNOBS", 6), ("FADERS", 2),
                        ("SWITCHES", 2), ("JACKS", 2)):

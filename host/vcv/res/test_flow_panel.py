@@ -229,6 +229,17 @@ def test_which_macro_sits_on_which_knob():
     permutation satisfies it, including the inverse of the intended one. So the
     layout is written out by knob POSITION (S31 S32 S33 S34, then S30 S35), and
     re-sorting the panel means changing KNOB_MACRO *and* this list together.
+
+    It decouples from KNOB_MACRO and NOT from geo.KNOBS, which is the table the
+    generator read to produce c.x and c.y: a transposition inside geo.KNOBS
+    moves subject and expectation together and passes here. That is the
+    geometry record's own business, and test_the_knob_field_is_two_rows_in_
+    board_order in res/test_touch2_geometry.py is the gate for it.
+
+    The channel column is asserted too, not just quoted in a failure message.
+    It reaches the player as the knob's runtime tooltip, and it is a separate
+    claim from the position: permuting the generator's _KNOB_CHAN would move
+    every printed S-number without moving a single knob.
     """
     for pos, name in enumerate(KNOB_LAYOUT):
         c = next((c for c in g.PARAMS if c.enum == name), None)
@@ -238,6 +249,9 @@ def test_which_macro_sits_on_which_knob():
         check((c.x, c.y) == geo.KNOBS[pos],
               "%s must sit on knob position %d (%s), it sits at (%.2f, %.2f)"
               % (name, pos, KNOB_CHAN[pos], c.x, c.y))
+        check(c.tip.endswith("[%s]" % KNOB_CHAN[pos]),
+              "%s sits on knob position %d, whose board channel is %s, but its "
+              "tooltip reads %r" % (name, pos, KNOB_CHAN[pos], c.tip))
 
 
 def _rect(c):
@@ -342,6 +356,21 @@ def test_alpha_pennant_survives():
           "the early-alpha faceplate needs its pennant")
     check('ALPHA' in [t.str for t in g.TEXTS],
           "the pennant label must reach Rack's runtime text overlay")
+
+
+def test_the_masthead_rules_survive():
+    """The two brand rules flanking the wordmark, by id.
+
+    They are what is left of the four mockup signatures the old gate checked.
+    Two of those four -- the macro accent and the NEW collar -- went out with
+    the surface they belonged to and are correctly gone. These two did not:
+    the generator still emits them, and until this they were the only drawn
+    elements on the plate with an id and no gate.
+    """
+    panel = g.svg()
+    for rule in ("glowBrandRuleLeft", "glowBrandRuleRight"):
+        check('id="%s"' % rule in panel,
+              "the masthead lost %s -- the wordmark reads unflanked" % rule)
 
 
 def test_the_header_emits_no_zero_length_input_table():
