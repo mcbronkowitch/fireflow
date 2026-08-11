@@ -17,7 +17,7 @@ list is §10. Not: `engine/`, not `shell/`, not the big Fireflow panel, not
 
 ## §1 What this is
 
-Glow's VCV panel is redrawn as a 1:1 Touch 2 faceplate, and its control surface
+Glow's VCV panel is redrawn at the Touch 2's true size, and its control surface
 is **replaced** by the board's: 12 touch pads, 6 trim knobs, 2 faders,
 2 switches, one stereo out. The module keeps its slug, its name and its `Module`
 class; only the widget, the panel and the parameter set change.
@@ -109,11 +109,12 @@ Template` is a 635 × 400 landscape panel for a different board. Synthux publish
 no Touch 2 outline, no drill pattern, no faceplate SVG in any of its public
 repositories.
 
-**Before implementation, ask them for one.** Touch 2 ships with five swappable
-faceplates, so the plate outline, the pad windows and the drill pattern exist as
-vector files in somebody's hands — and phase 1's deliverable is a faceplate of
-our own, so that template is needed regardless. One email is cheaper than the
-whole of §3.2. If it arrives, §3.2 is deleted and the geometry is exact.
+**Worth asking them for one, but it blocks nothing here.** Touch 2 ships with
+five swappable faceplates, so the plate outline, the pad windows and the drill
+pattern exist as vector files in somebody's hands — and phase 1's deliverable is
+a faceplate of our own, so that template is needed eventually regardless. If it
+arrives, §3.2's measuring step is skipped and the geometry is exact for free.
+That is an errand for the faceplate job, not a precondition for this one.
 
 ## §3 The panel
 
@@ -136,35 +137,34 @@ The board's channel names — `S30`–`S37`, `S07`–`S10` — travel into the g
 as a comment on every control, so panel, Rack module and the later Seed firmware
 argue about `S36`, not about "the left fader".
 
-### §3.2 Geometry: a task, not an assumption
+### §3.2 Geometry: measured off the photo, and that is enough
 
-The first draft asserted photo-derived positions and supplied none. It could not
-be implemented. Geometry is therefore **Task 0** of the plan, and it produces a
-reviewable artifact before any SVG work begins:
+**This panel is a VCV panel. It is not the faceplate draft.** Dropping that
+second role is what makes the precision question go away, and it has to be
+dropped explicitly, because today's `gen_flow_panel.py` header claims it — "drawn
+at true hardware dimensions so the faceplate doubles as the 1:1 draft for the M6
+panel". That claim does not survive the rewrite.
+
+Nothing in Rack can see a half-millimetre. Rack draws at 75 DPI ≈ 2.95 px/mm
+against a typical display's ~3.78 px/mm, and the user zooms freely, so the plate
+is not life-size under the hands at any zoom anyway. Dimensions are here so the
+pads sit right *relative* to the knobs and so the module reads as the board —
+both of which survive any error a photograph can introduce.
+
+So geometry is one task with one output, and no error budget:
 
 1. **Pin the source.** The reference photo is committed to
    `host/vcv/res/ref/touch2-fx-2026-08-11.png` and cited by path in the
    generator header. A source that can be deleted by tidying a Screenshots
-   folder is not a source. (If §2.4's email lands first, the vendor template
-   replaces it and steps 2–3 are skipped.)
+   folder is not a source.
 2. **Measure.** Calibrated to 81.28 mm plate width (≈ 0.195 mm/px): 12 pad
    centres, 6 knob centres, 2 fader centres plus travel length, 2 switch
    centres, 2 jack centres — a table in mm, committed as the generator's input
    constants.
-3. **State the error.** A photograph is not a drawing; perspective and lens are
-   in it. Expected fidelity **±0.5 mm**, written into the generator header
-   together with the consequence: when the board arrives it is re-measured — a
-   600 dpi flatbed scan gives ±0.1 mm for one hour's work — and the generator
-   corrected.
 
-Until then the plate is visually true, not manufacturably true. Any later claim
-of manufacturing fidelity has to point at a measurement, not at this spec.
-
-**A note on what "1:1" buys.** Rack draws at 75 DPI ≈ 2.95 px/mm; a typical
-display is ~3.78 px/mm, and the user can zoom freely. The plate is therefore
-*not* life-size under the hands at any particular zoom. True dimensions are for
-the faceplate draft and for the pad spacing being right relative to the knobs —
-not for a tactile illusion that Rack cannot deliver.
+The numbers are provisional and the generator header says so in one line: they
+come from a photograph and get corrected against the board when it arrives. That
+is a later, separate job (§11) and it blocks nothing here.
 
 ### §3.3 Look and lettering
 
@@ -623,7 +623,7 @@ the filename is kept.
 |---|---|
 | Pads binary or continuous | A measurement on the arrived board. §2.3 narrows it, nothing more. |
 | The final fader and switch assignment | The rehearsal — from pads pinned with curated terrain, not from the default draw (§6.1). |
-| The true pad centres | The arrived board, by scan. The photo gives ±0.5 mm (§3.2). |
+| The true pad centres | **Later, and deliberately.** A 600 dpi scan of the arrived board takes an hour and belongs to the faceplate job. Nothing in Rack can see the difference (§3.2). |
 | Macro-to-knob order | The rehearsal. §4.1 gives it a mechanism. |
 | Whether SCALE stays three-valued on the board | Parent §8.2. The centre position is not engravable; the rig keeps it, the plate may not. |
 | `KnobTracker`'s fate | The plan, once the menu's reroll entry is written (§7). |
@@ -645,10 +645,13 @@ one of them can be resolved with a right-click. A session meant to produce a §7
 answer must therefore be played *without* the menu; that is a discipline, not a
 mechanism, and it is the weakest link in the argument.
 
-**Photo geometry has the shortest half-life in the plan.** Every coordinate is
-provisional until the board is scanned. §3.2 makes it a task with a stated error
-rather than an assumption, and §2.4 offers the cheap way out, but it is not
-removed until hardware is on the desk.
+**Photo geometry is provisional — and, here, cheap.** Every coordinate is
+provisional until the board is scanned. This is *not* a real risk for the VCV
+module, because nothing Rack renders can resolve the error (§3.2) and the tile
+sizes that could actually collide are ours, not the board's. It becomes a real
+risk only if the panel is later reused as a faceplate draft without re-measuring
+first — which is exactly why §3.2 removes that claim from the generator header
+instead of leaving it there with a caveat.
 
 **Touch 2 versus Simple Touch v1.** The published sketch and pin map come from
 the v1 instrument repo. The control complement is identical — 12 pads, 6 knobs,
