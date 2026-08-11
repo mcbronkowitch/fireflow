@@ -73,6 +73,9 @@ static_assert(std::is_trivially_copyable<BaseOverlay>::value,
 // owns this partition and moves it.
 bool is_base_rule(int param);
 
+// Whether `engine` may lead a terrain (taste.h's kCarrierEngine table).
+bool is_carrier_engine(int engine);
+
 struct Curve { int param; float bp[5]; };          // drawn story curve
 struct MacroMap { int story; int n_targets; Curve targets[6]; };
 

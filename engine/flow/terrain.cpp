@@ -33,6 +33,14 @@ bool is_base_rule(int param) {
     return false;
 }
 
+// Whether `engine` may lead a terrain. kCarrierEngine is taste.h's stage-1
+// role table {SYNTH, WAVE, BODY}; the exclusion of SAMPLER and BBD from it is
+// what makes taste.h's "loud pair" rule structural rather than a check.
+bool is_carrier_engine(int engine) {
+    for (int i = 0; i < 3; ++i) if (kCarrierEngine[i] == engine) return true;
+    return false;
+}
+
 // One value inside a span, narrowed toward the middle by the terrain's
 // adventure level (spec 2026-08-06 §7). At adv == 1 this is the IDENTITY --
 // the whole span, uniform, which is what the taste tables mean on their own --
@@ -430,9 +438,30 @@ Terrain generate(const TerrainState& st, const BaseOverlay* ov) {
     // difference before generate() returns, so this test alone cannot tell
     // the two loop bounds apart.
     if (ov) {
-        for (int i = 0; i < kBaseRuleCount; ++i) {
-            const int p = kBaseRules[i].param;
-            if (ov->has[p]) t.base[p] = clamp_to(kParams[p], ov->v[p]);
+        // §4.3: an overlay that sets the engines can contradict the roles coin.
+        // Decide the carrier from the engines themselves before applying
+        // anything, because a terrain with no carrier has no role structure at
+        // all -- switch_phase_for() would ride SCALE and ROOT with a deck
+        // holding a texture-only engine, and the duck schedule would protect
+        // the wrong one. Nothing crashes; it just quietly staggers wrong.
+        const bool sets_engines = ov->has[P_ENGINE_A] && ov->has[P_ENGINE_B];
+        bool ok = true;
+        bool carries_a = t.a_carries;
+        if (sets_engines) {
+            const int ea = int(clamp_to(kParams[P_ENGINE_A], ov->v[P_ENGINE_A]) + 0.5f);
+            const int eb = int(clamp_to(kParams[P_ENGINE_B], ov->v[P_ENGINE_B]) + 0.5f);
+            const bool ca = is_carrier_engine(ea), cb = is_carrier_engine(eb);
+            if (ca && cb)      carries_a = t.a_carries;   // both eligible: keep the coin
+            else if (ca)       carries_a = true;
+            else if (cb)       carries_a = false;
+            else               ok = false;                // the "loud pair": no carrier
+        }
+        if (ok) {
+            for (int i = 0; i < kBaseRuleCount; ++i) {
+                const int p = kBaseRules[i].param;
+                if (ov->has[p]) t.base[p] = clamp_to(kParams[p], ov->v[p]);
+            }
+            t.a_carries = carries_a;
         }
     }
 

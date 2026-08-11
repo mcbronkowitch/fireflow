@@ -97,3 +97,59 @@ TEST_CASE("an out-of-range overlay value is clamped on the way in") {
     CHECK(t.base[P_TUNE_A] <= kParams[P_TUNE_A].hi);
     CHECK(t.base[P_TUNE_A] >= kParams[P_TUNE_A].lo);
 }
+
+using spky::flow::is_carrier_engine;
+
+// Find a master whose drawn roles put the carrier on the deck we do NOT want,
+// so the test is about the recomputation and not about a lucky coin.
+static uint32_t master_with_a_carrying(bool want_a) {
+    for (uint32_t m = 1; m < 4000u; ++m) {
+        const Terrain t = generate(TerrainState{ m, {} });
+        if (t.a_carries == want_a) return m;
+    }
+    FAIL("no master found -- the roles coin cannot be this skewed");
+    return 1u;
+}
+
+TEST_CASE("a_carries follows the overlaid engines") {
+    // Deck A gets a texture-only engine, deck B a carrier engine. Whatever the
+    // coin said, B must carry.
+    TerrainState st; st.master = master_with_a_carrying(true);
+    BaseOverlay ov;
+    ov.v[P_ENGINE_A] = float(ENGINE_SAMPLER); ov.has[P_ENGINE_A] = true;
+    ov.v[P_ENGINE_B] = float(ENGINE_SYNTH);   ov.has[P_ENGINE_B] = true;
+
+    const Terrain t = generate(st, &ov);
+    CHECK(t.a_carries == false);
+    CHECK(int(t.base[P_ENGINE_A] + 0.5f) == ENGINE_SAMPLER);
+    CHECK(int(t.base[P_ENGINE_B] + 0.5f) == ENGINE_SYNTH);
+}
+
+TEST_CASE("two carrier engines keep the drawn coin") {
+    for (bool want : { true, false }) {
+        TerrainState st; st.master = master_with_a_carrying(want);
+        BaseOverlay ov;
+        ov.v[P_ENGINE_A] = float(ENGINE_SYNTH); ov.has[P_ENGINE_A] = true;
+        ov.v[P_ENGINE_B] = float(ENGINE_WAVE);  ov.has[P_ENGINE_B] = true;
+        CHECK(generate(st, &ov).a_carries == want);
+    }
+}
+
+TEST_CASE("an overlay with no carrier is rejected whole") {
+    TerrainState st; st.master = 0x10AD5u;
+    const Terrain plain = generate(st);
+
+    BaseOverlay ov;
+    ov.v[P_ENGINE_A] = float(ENGINE_SAMPLER); ov.has[P_ENGINE_A] = true;
+    ov.v[P_ENGINE_B] = float(ENGINE_BBD);     ov.has[P_ENGINE_B] = true;
+    ov.v[P_TUNE_A]   = 0.9f;                  ov.has[P_TUNE_A]   = true;
+
+    const Terrain t = generate(st, &ov);
+    // WHOLE, not just the engines: a terrain with no carrier has no defined
+    // role structure, so half-applying it would be worse than not applying it.
+    CHECK(t.base[P_TUNE_A] == doctest::Approx(plain.base[P_TUNE_A]));
+    CHECK(int(t.base[P_ENGINE_A] + 0.5f) == int(plain.base[P_ENGINE_A] + 0.5f));
+    CHECK(t.a_carries == plain.a_carries);
+    CHECK_FALSE(is_carrier_engine(ENGINE_SAMPLER));   // the premise, pinned
+    CHECK_FALSE(is_carrier_engine(ENGINE_BBD));
+}
