@@ -92,7 +92,7 @@ WKMAP  = {MACRO: "WK_MACRO", PAD: "WK_PAD", FADER: "WK_FADER",
 # Knob POSITION -> index into PARAMS, i.e. which macro sits on which knob.
 # The six macros keep flow_ids.h's enum order in PARAMS (Glow.cpp indexes
 # params[MOTION + m] and six static_asserts pin it); re-sorting the panel is a
-# change to this table alone. Same shape as glow_ui.hpp's kCvMacro.
+# change to this table alone.
 KNOB_MACRO = [0, 1, 2, 3, 4, 5]   # S31 S32 S33 S34, then S30, S35
 assert sorted(KNOB_MACRO) == list(range(6)), \
     "KNOB_MACRO must be a permutation of the six macros; a duplicate would "\
