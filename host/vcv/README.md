@@ -556,8 +556,8 @@ on top of it.
 ### The twelve pads
 
 Each pad is one curated place — a terrain code, an optional name and an
-optional note. The gesture, timed against `engine/flow/taste.h`'s
-`kPadHoldS`:
+optional note. The gesture, timed against `host/vcv/src/touch_pads.hpp`'s
+`kPadHoldS` — a host-side value set by ear, not an engine constant:
 
 | Event | Effect |
 |---|---|

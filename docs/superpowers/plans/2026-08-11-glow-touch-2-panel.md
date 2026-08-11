@@ -55,6 +55,13 @@ Section references below (§4.3, §5.3, …) point into it.
 
 ## File Structure
 
+> **Superseded, 11 Aug 2026 (historical record, not rewritten):** every mention
+> below of committing the reference photo to `host/vcv/res/ref/` was reversed by
+> the owner for privacy before implementation began — this repo is public and
+> the photo is of a Synthux product. It lives in the private website repo and
+> only its path is committed (`FireFlow_Website/docs/reference/touch2-fx-2026-08-11.png`).
+> The design spec §3.2 carries the current rule.
+
 | File | Responsibility |
 |---|---|
 | `host/vcv/res/ref/touch2-fx-2026-08-11.png` | **new** — the pinned geometry source |
