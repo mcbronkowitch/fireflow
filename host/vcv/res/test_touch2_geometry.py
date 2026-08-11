@@ -30,6 +30,20 @@ def test_plate_is_16hp():
           "plate height is %.3f, want 128.5" % geo.PLATE_H)
 
 
+def test_px_per_mm_is_plausible():
+    """PX_PER_MM is the calibration every other number here was pushed through,
+    and it is the one export where a slipped decimal point would go unnoticed:
+    the mm tables below are already in mm, so nothing else in this file would
+    change. The band is deliberately wide -- it is a decimal-point gate, not a
+    re-measurement. The source frame is 417 px across an 81.28 mm plate, so any
+    honest value sits near 5; 0.5036 or 50.36 do not.
+    """
+    check(4.0 < geo.PX_PER_MM < 7.0,
+          "PX_PER_MM is %.4f -- a photograph that resolves an %.2f mm plate in "
+          "a few hundred pixels lands between 4 and 7 px/mm; check the decimal "
+          "point" % (geo.PX_PER_MM, geo.PLATE_W))
+
+
 def test_counts():
     for name, want in (("PADS", 12), ("KNOBS", 6), ("FADERS", 2),
                        ("SWITCHES", 2), ("JACKS", 2)):

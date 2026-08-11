@@ -32,12 +32,33 @@ below are its whole output) did this:
    px 12.9 at the top and px 10.2 at the bottom). Every centre below is a pixel
    position pushed through that homography.
 
-2. THE CALIBRATION WAS CHECKED AGAINST A SECOND RULER. The Daisy Seed's
-   0.1-inch header is visible in the photo. An FFT of its pad row gives a pitch
-   of 12.86 px, i.e. 5.065 px/mm against 2.54 mm. The homography's own local
-   scale at plate centre is 5.036 px/mm (x) and 5.064 px/mm (y). The two rulers
-   agree to 0.6 %, which is what confirms both the 16 HP width and the assumed
-   hole insets -- neither was taken on faith.
+2. THE CALIBRATION WAS CROSS-CHECKED TWICE, AND ONLY THE SECOND CHECK CARRIES
+   THE 16 HP WIDTH. The homography fits all four holes exactly by construction,
+   so it cannot check itself; something outside it has to.
+
+   (a) The Daisy Seed's 0.1-inch header. An FFT of its pad row gives a pitch of
+   12.84-12.94 px across a range of row bands, i.e. 5.05-5.09 px/mm against
+   2.54 mm. Read that carefully before leaning on it. Those pads run left to
+   right, so it is an X-direction ruler -- and it agrees with the homography's
+   Y scale (5.064, within 0.1-0.2 %) while disagreeing with its X scale (5.036)
+   by 0.4-0.8 %, on the very axis it measures. It is also biased in a known
+   direction: the Daisy is mounted on the FRONT of the panel, a few millimetres
+   nearer the camera than the plate, so it images slightly large. A 0.6 %
+   excess is what a standoff of 0.6 % of the camera distance produces -- a
+   couple of millimetres at product-photo range, which is exactly where the
+   board sits. So this check rules out a GROSS error and nothing finer: an
+   eyeballed reading of the same header suggested ~4 px/mm, which would have
+   made the plate 20 HP, and the FFT killed that. It does NOT confirm the
+   assumed hole insets, and it is not evidence for 16 HP over 15.5 or 16.5.
+
+   (b) The hole rectangle's aspect. The four centres span 333.75 px x 620.27 px.
+   Assume only that the photo's scale is isotropic -- no homography involved,
+   nothing fitted -- and that the vertical inset is the Doepfer 3.0 mm: the
+   620.27 px cover 128.5 - 2*3.0 = 122.5 mm, i.e. 5.0635 px/mm, which puts the
+   horizontal hole span at 65.91 mm and, with the 7.5 mm side inset, the plate
+   at 80.91 mm = 15.93 HP. That is 16 HP to 0.5 %, and it is the argument that
+   actually supports the width. It still assumes both insets; if Synthux used
+   different ones, every number in this file moves by a common factor.
 
    Two more consistency checks fell out and were not used to fit anything:
    the knob field's centre lands 0.05 mm off the plate centre line, the two
@@ -56,15 +77,20 @@ below are its whole output) did this:
    |          |                                           | partly derived  |
 
    On top of every residual sits a systematic scale uncertainty of about
-   0.6 % (~0.5 mm across the plate) from the two rulers' disagreement.
+   0.6 % (~0.5 mm across the plate): that is the spread between the
+   homography's own x and y scales at plate centre and the header ruler.
 
 THE PADS ARE THE WEAK ROW, AND HERE IS EXACTLY WHY
 --------------------------------------------------
 The Touch 2's lower third is an engraved gold "map" on black. Segmenting it
-(Gaussian blur, threshold, 8-connected labelling; then again with grey-scale
-morphological closing, which erases the artwork's 1-3 px hatching while keeping
-the 5-15 px channels between plates) resolves the field into TEN copper cells,
-not twelve, whatever the threshold:
+resolves the field into TEN copper cells, not twelve. The table below is the
+run these numbers came from, and it reproduces at exactly these settings and
+not at "any threshold": mean-RGB grey, Gaussian blur sigma 1.0, grey-scale
+morphological closing (MaxFilter(3) then MinFilter(3), which erases the
+artwork's 1-3 px hatching while keeping the 5-15 px channels between plates),
+threshold 102/255, 4-connected labelling, minimum cell area 400 px, field taken
+from y >= 77.1 mm downwards. Re-running that produces ten cells whose centroids
+sit 0.39 mm from the ones below on average and 0.87 mm at worst.
 
     px area  centroid mm       what it is
      19265   ( 9.86,  97.08)   left column, incl. the silver "ice" wedge
@@ -78,17 +104,42 @@ not twelve, whatever the threshold:
       1503   (39.99,  82.82)   top strip, centre
        629   (25.79,  79.39)   top strip, left of centre (a sliver)
 
-The two edge cells are ~2.7x the median area, and the silver wedges are
-continuous with the gold beside them -- there is no channel between them at any
-threshold. So twelve electrodes (the MPR121 has exactly twelve, spec 2.3) do not
-appear as twelve islands in this photograph.
+TEN IS NOT AN INVARIANT. Sweeping the same pipeline over blur in {0, 1.0},
+closing k in {3,5,7,9}, threshold 60..198, 4- and 8-connectivity and minimum
+area in {300, 500, 629} px, the count runs from 1 to 15 over 3360 settings; ten
+comes up in 142 of them. Six to ten covers the settings where the field still
+reads as plates. Counts above ten appear only above threshold ~160, where the
+field is disintegrating rather than resolving: total copper falls from ~72 000
+px to 30-50 000 px and the extra cells are 300-1000 px crumbs lying beside two
+edge cells still measuring 12-17 000 px.
+
+What IS invariant across that whole sweep is the part that matters. The two
+edge cells stay the two largest and never split, and the silver "ice" wedges
+never separate from the gold beside them -- there is no channel between them at
+any setting. The larger edge cell is 3.06x the median cell area (19265 / 6293)
+and the smaller 2.70x. No setting resolves this photograph into twelve
+comparable plates, so the MPR121's twelve electrodes (spec 2.3) are not visible
+as twelve islands here at all.
 
 PADS below is therefore MEASURED IN ITS STRUCTURE AND DERIVED IN ITS COUNT: one
-place per detected cell, and the two remaining places go to the two oversized
-edge cells, split by a 2-means partition of their own pixels. Every centre lands
-on real copper -- that was checked by drawing the twelve crosses back onto the
-photo -- but the twelfth-order split is imposed, not observed. The field itself
-is solid: copper runs from y = 77.1 mm to the plate's bottom edge, full width.
+place per detected cell, and the two remaining places come from splitting each
+of the two oversized edge cells by a 2-means partition of its own pixels
+(PADS[0]/PADS[5] from the left cell, PADS[4]/PADS[9] from the right). Every
+centre lands on bright plate material -- that was checked by drawing the twelve
+crosses back onto the photo -- but not on gold in every case: PADS[0] and
+PADS[4], the upper halves of the two 2-means splits, sit on the silver wedges
+(sampled RGB (179,192,199) and (207,226,234), against (110,88,34)..(216,188,134)
+for the ten gold ones), and whether those wedges are electrodes at all is
+unknown -- see the swappable-art-plate caveat below. The twelfth-order split is
+imposed, not observed. The field itself is solid: copper runs from y = 77.1 mm
+to the plate's bottom edge, full width.
+
+One hypothesis nobody has closed: the lower third may be one of Touch 2's five
+SWAPPABLE art plates (spec 2.4). If it is, the visible gold is decoration and
+the MPR121 electrodes sit underneath it, unphotographable -- which is why the
+silver wedges' status above is "unknown" rather than "probably not a pad".
+There is no evidence either way in this image. It would not change what Task 3
+draws; it would change what "the true pad centres" means.
 
 Spec 11 already schedules a 600 dpi scan of the arrived board to replace this
 table. This row is the reason that job exists.
@@ -124,7 +175,9 @@ PLATE_H = 128.5          # Eurorack 3U
 # Local scale of the homography at plate centre, x axis. NOT image_width /
 # PLATE_W: the photo is not edge to edge. The plate's own corners land at
 # px (12.9, 14.6) and (421.5, 15.1) -- the right edge is cropped off the
-# 417 px frame -- so the naive ratio would be wrong by 1.6 %.
+# 417 px frame -- so the naive 417 / 81.28 = 5.130 sits 1.89 % above this
+# x scale (2.06 % if you put the frame's 417 px against the 408.6 px the
+# plate actually occupies across the top edge).
 PX_PER_MM = 5.036        # y axis measures 5.064; the two differ by 0.6 %
 
 # Upper row S31 S32 S33 S34 (left to right), then lower row S30, S35.
@@ -145,9 +198,10 @@ SWITCHES = [(30.34, 86.37), (45.25, 92.88)]
 # Upper, lower.
 JACKS = [(4.31, 15.15), (4.33, 30.60)]
 
-# Reading order, top-left to bottom-right. Five, five, two -- the board's own
-# grouping, not a grid. See "THE PADS ARE THE WEAK ROW" above before trusting
-# any single entry to better than a couple of millimetres.
+# Left to right within three bands (five, five, two) -- the board's own
+# grouping, not a grid and NOT reading order: the bands overlap vertically, so
+# e.g. PADS[1] sits 7.90 mm ABOVE PADS[0]. See "THE PADS ARE THE WEAK ROW"
+# above before trusting any single entry to better than a couple of millimetres.
 PADS = [
     (12.25, 87.29), (25.79, 79.39), (39.99, 82.82), (54.77, 83.16),
     (70.23, 87.61),
