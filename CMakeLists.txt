@@ -271,6 +271,12 @@ add_test(
 )
 
 add_test(
+    NAME touch2_geometry_guard
+    COMMAND ${Python3_EXECUTABLE} res/test_touch2_geometry.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
+)
+
+add_test(
     NAME flow_panel_guard
     COMMAND ${Python3_EXECUTABLE} res/test_flow_panel.py
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
