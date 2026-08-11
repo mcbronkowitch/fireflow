@@ -27,6 +27,12 @@
 
 namespace spky { namespace flow {
 
+bool is_base_rule(int param) {
+    for (int i = 0; i < kBaseRuleCount; ++i)
+        if (kBaseRules[i].param == param) return true;
+    return false;
+}
+
 // One value inside a span, narrowed toward the middle by the terrain's
 // adventure level (spec 2026-08-06 §7). At adv == 1 this is the IDENTITY --
 // the whole span, uniform, which is what the taste tables mean on their own --
@@ -244,7 +250,7 @@ Archetype arch_of(uint32_t master) {
     return Archetype(pick_weighted(r, kArchWeight, ARCH_COUNT));
 }
 
-Terrain generate(const TerrainState& st) {
+Terrain generate(const TerrainState& st, const BaseOverlay* ov) {
     Terrain t{};
 
     // Stage 0: archetype -- the correlation structure that keeps terrains
@@ -397,6 +403,38 @@ Terrain generate(const TerrainState& st) {
     t.base[P_ENGINE_B] = float(engine_b);
     t.base[P_SCALE]    = float(scale);
     t.base[P_ROOT]     = float(root);
+
+    // The hand-authored base overlay (spec 2026-08-11 §4.2). Applied HERE and
+    // nowhere else, and iterating kBaseRules rather than P_COUNT, which buys
+    // three properties the design leans on:
+    //
+    //   - Story-owned parameters are unreachable BY CONSTRUCTION. Stage 4
+    //     below writes base[c.param] = c.bp[0] for every curve target, so an
+    //     overlay entry there would be erased anyway -- but erased silently.
+    //     Never reading it makes the ruling testable instead of emergent.
+    //   - apply_constraints() still gets the last word: it runs after stage 4
+    //     and sees the overlaid engines and values.
+    //   - kParams clamping happens on the way IN, so a host with a wider knob
+    //     cannot put an out-of-range value into a terrain at all.
+    //
+    // What tests/test_flow_overlay.cpp's "reaches no story-owned parameter"
+    // case actually pins is PLACEMENT, not the loop bound: move this block to
+    // after the stage-4 loop below (and widen it to P_COUNT so a story-owned
+    // entry is even read) and the case reddens on ~25 params, because stage 4
+    // no longer runs afterward to erase what was just written. The kBaseRules
+    // bound here is not redundant with that -- it is what makes "story-owned
+    // params are unreachable" a structural property of THIS block rather than
+    // an accident of stage 4 happening to run later -- but that bound alone
+    // is not what the test observes from outside generate(): swap it for a
+    // P_COUNT loop with the placement unchanged and stage 4 erases the
+    // difference before generate() returns, so this test alone cannot tell
+    // the two loop bounds apart.
+    if (ov) {
+        for (int i = 0; i < kBaseRuleCount; ++i) {
+            const int p = kBaseRules[i].param;
+            if (ov->has[p]) t.base[p] = clamp_to(kParams[p], ov->v[p]);
+        }
+    }
 
     // Stage 4: macro mappings. One stream per macro, keyed by that macro's
     // own reroll counter. The variant pick is uniform among this macro's

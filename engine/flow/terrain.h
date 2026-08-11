@@ -12,6 +12,7 @@
 // callback's inner loop.
 #pragma once
 #include <cstdint>
+#include <type_traits>
 #include "flow/flow_ids.h"
 #include "flow/flow_params.h"       // Span lives here, not taste.h
 #include "mod/rng.h"
@@ -49,6 +50,28 @@ struct TerrainState {
         return s;
     }
 };
+
+// A hand-authored base patch riding alongside a seed (spec 2026-08-11 §4.1).
+// Indexed by ParamId rather than packed to the 38 base-rule slots: a packed
+// form needs a second index table that can drift from kBaseRules, and 315
+// bytes is not worth that risk.
+//
+// Trivially copyable on purpose -- host/vcv/src/touch_pads.hpp's Place holds
+// one, and Glow.cpp copies the whole Place array to the AUDIO thread as one
+// staged handover. A heap-owning member would put a malloc in that copy.
+struct BaseOverlay {
+    float v[P_COUNT]   = {};
+    bool  has[P_COUNT] = {};
+};
+
+static_assert(std::is_trivially_copyable<BaseOverlay>::value,
+              "BaseOverlay is copied on the audio thread (Glow.cpp, "
+              "UiOp::SET_PLACES); it must not own heap memory");
+
+// True if `param` is set by a kBaseRules row -- i.e. if an overlay entry for
+// it is honoured. Reads the table; never a transcribed list, because taste.h
+// owns this partition and moves it.
+bool is_base_rule(int param);
 
 struct Curve { int param; float bp[5]; };          // drawn story curve
 struct MacroMap { int story; int n_targets; Curve targets[6]; };
@@ -109,7 +132,7 @@ struct Terrain {
 // drift apart; test_flow_terrain.cpp pins that they agree anyway.
 Archetype arch_of(uint32_t master);
 
-Terrain generate(const TerrainState& st);
+Terrain generate(const TerrainState& st, const BaseOverlay* ov = nullptr);
 
 // One value inside a span, narrowed toward the middle by the terrain's
 // adventure level: full span at adv == 1, the middle kAdventureNarrow at 0.

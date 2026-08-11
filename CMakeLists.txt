@@ -167,6 +167,7 @@ add_executable(spky_tests
     engine/flow/terrain.cpp
     tests/test_flow_terrain.cpp
     tests/test_flow_terrain_code.cpp
+    tests/test_flow_overlay.cpp
     engine/flow/flow.cpp
     tests/test_flow_runtime.cpp
     tests/test_flow_new.cpp
