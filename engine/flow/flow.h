@@ -31,7 +31,11 @@ public:
     // that resets those, and it now routes its own rate work through here so
     // the two can never drift apart.
     void set_ctrl_hz(float ctrl_hz);
-    void wake(const TerrainState& s);                 // instant, no blend
+    // Wake onto `s`, optionally over a hand-authored base (spec 2026-08-11 §4).
+    // ov == nullptr CLEARS any stored overlay: a pad with no patch must play
+    // the drawn terrain, not the last pad's base.
+    void wake(const TerrainState& s, const BaseOverlay* ov = nullptr);
+    const BaseOverlay* overlay() const { return _have_overlay ? &_overlay : nullptr; }
     void set_macro(int m, float v);                   // knob, 0..1
     void set_cv(int m, float v);                      // additive, any range
     void tick();                                      // one control tick
@@ -92,7 +96,7 @@ public:
     // so a reloaded patch sounds exactly as it did when saved and the first
     // undo press behaves as if the session had never ended.
     const TerrainState& undo_state() const { return _undo; }
-    void restore_undo(const TerrainState& s, bool have_undo);
+    void restore_undo(const TerrainState& s, bool have_undo, const BaseOverlay* ov = nullptr);
     float blend_phase() const { return _blend_phase; }  // 1.f when settled
     float eff_macro(int m) const { return _eff[m]; }  // clamp(knob+cv+weather)
     float param_now(int p) const { return _pushed[p]; }  // last pushed value
@@ -121,6 +125,12 @@ private:
     float space_slew(int slot, float target, bool force);
     // Gesture helpers (flow.cpp).
     void begin_blend(const TerrainState& target);
+    // Both generate() call sites go through here. There are exactly two
+    // (wake and begin_blend), and routing them through one wrapper is what
+    // lets reroll, undo and the blend inherit the overlay for free.
+    Terrain gen(const TerrainState& s) const {
+        return generate(s, _have_overlay ? &_overlay : nullptr);
+    }
     void weather_of(const Terrain& t, double ts, float* off) const;
     void eval_terrain(const Terrain& t, const float* eff, float* out) const;
     float switch_phase_for(int p) const;
@@ -141,6 +151,10 @@ private:
     Terrain      _prev_terrain{}; // outgoing terrain, alive while blending
     TerrainState _undo;           // the one slot; undo() swaps it with _state
     bool  _have_undo = false;
+    BaseOverlay _overlay;                 // the live place's hand-authored base
+    bool        _have_overlay = false;
+    BaseOverlay _undo_overlay;            // the undo slot's -- see undo() below
+    bool        _have_undo_overlay = false;
     Rng   _seq;                   // NEW's press-chain Rng, re-seeded by wake()
     int   _genre = ARCH_ANY;      // draw constraint for new_full(), not state
     int   _scale_ovr = -1;        // -1 = AUTO (use the terrain's P_SCALE)

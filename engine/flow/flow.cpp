@@ -83,14 +83,18 @@ void Flow::init(Instrument* inst, float ctrl_hz) {
     }
 }
 
-void Flow::wake(const TerrainState& s) {
+void Flow::wake(const TerrainState& s, const BaseOverlay* ov) {
+    _have_overlay = ov != nullptr;
+    if (ov) _overlay = *ov;
     _state = s;
-    _terrain = generate(s);
+    _terrain = gen(s);
     _prev_terrain = _terrain;  // no blend in flight; nothing to fade from
     _terrain_t0 = _t;          // weather time origin = wake
     _woken = true;
     _blend_phase = 1.f;        // instant, no blend
     _undo = s;
+    _undo_overlay = _overlay;
+    _have_undo_overlay = _have_overlay;
     _have_undo = false;        // undo before any accepted press is a no-op
     // The NEW press chain is a pure function of the woken master: a fixed
     // start reproduces the whole chain, and because _seq keeps running,
@@ -145,8 +149,10 @@ void Flow::begin_blend(const TerrainState& target) {
                                          : _cont_now[p] - _cand_cur[p];
     _prev_terrain = _terrain;
     _undo  = _state;            // one slot; undo() feeds it back in, so the
+    _undo_overlay = _overlay;   // the slot carries the pair, not the seed
+    _have_undo_overlay = _have_overlay;
     _state = target;            // pair swaps and undo-after-undo is a redo
-    _terrain = generate(target);
+    _terrain = gen(target);
     _have_undo = true;
     _blend_phase = 0.f;
 
@@ -206,8 +212,14 @@ bool Flow::new_partial(uint8_t macro_mask) {
 
 bool Flow::undo() {
     if (!_woken || _locked || !_have_undo) return false;
-    const TerrainState back = _undo;   // copy first: begin_blend overwrites
-    begin_blend(back);                 // _undo with the state we are leaving
+    // Copy all three first: begin_blend overwrites _undo/_undo_overlay with
+    // the state and overlay we are leaving.
+    const TerrainState back     = _undo;
+    const BaseOverlay  back_ov  = _undo_overlay;
+    const bool         back_has = _have_undo_overlay;
+    _have_overlay = back_has;          // set BEFORE begin_blend: gen() reads it
+    if (back_has) _overlay = back_ov;
+    begin_blend(back);
     return true;
 }
 
@@ -218,9 +230,11 @@ void Flow::set_lock(bool on) { _locked = on; }
 // was saved with must be inaudible, or reloading a patch would move the
 // instrument. It is legal before wake() too; wake() then clears it again,
 // which is why the documented restore order puts this last.
-void Flow::restore_undo(const TerrainState& s, bool have_undo) {
+void Flow::restore_undo(const TerrainState& s, bool have_undo, const BaseOverlay* ov) {
     _undo = s;
     _have_undo = have_undo;
+    _have_undo_overlay = ov != nullptr;
+    if (ov) _undo_overlay = *ov;
 }
 
 // Discrete step with hysteresis (§4). Without the guard, a macro parked on

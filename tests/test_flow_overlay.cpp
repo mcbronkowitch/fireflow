@@ -183,3 +183,69 @@ TEST_CASE("an overlay with no carrier is rejected whole") {
     CHECK_FALSE(is_carrier_engine(ENGINE_SAMPLER));   // the premise, pinned
     CHECK_FALSE(is_carrier_engine(ENGINE_BBD));
 }
+
+#include "flow/flow.h"
+#include "instrument.h"
+
+// A minimal harness: Flow needs an Instrument to push into, and the tests here
+// only read Flow's own view of the terrain, never the audio.
+struct FlowFixture {
+    spky::Instrument inst;
+    Flow             flow;
+    FlowFixture() { inst.init(48000.f); flow.init(&inst, 100.f); }
+};
+
+static BaseOverlay tune_overlay(float tune_a) {
+    BaseOverlay ov;
+    ov.v[P_TUNE_A] = tune_a; ov.has[P_TUNE_A] = true;
+    return ov;
+}
+
+TEST_CASE("wake applies the overlay") {
+    FlowFixture f;
+    const BaseOverlay ov = tune_overlay(0.87f);
+    TerrainState st; st.master = 0x515Eu;
+    f.flow.wake(st, &ov);
+    CHECK(f.flow.terrain_for_test().base[P_TUNE_A] == doctest::Approx(0.87f));
+}
+
+TEST_CASE("a hold-reroll keeps the overlay") {
+    FlowFixture f;
+    const BaseOverlay ov = tune_overlay(0.87f);
+    TerrainState st; st.master = 0x515Eu;
+    f.flow.wake(st, &ov);
+    REQUIRE(f.flow.new_partial(0x3F));
+    CHECK(f.flow.terrain_for_test().base[P_TUNE_A] == doctest::Approx(0.87f));
+}
+
+TEST_CASE("undo restores the overlay that belongs to the terrain it restores") {
+    FlowFixture f;
+    const BaseOverlay a = tune_overlay(0.10f);
+    const BaseOverlay b = tune_overlay(0.90f);
+
+    TerrainState sa; sa.master = 0xAAA1u;
+    TerrainState sb; sb.master = 0xBBB2u;
+    f.flow.wake(sa, &a);
+    REQUIRE(f.flow.new_full());            // accepted press: arms the undo slot
+    f.flow.wake(sb, &b);
+    f.flow.wake(sa, &a);
+    REQUIRE(f.flow.new_full());
+    REQUIRE(f.flow.undo());
+
+    // The failure this catches: the seed goes back and the overlay does not,
+    // so the restored terrain is one place's base under another's stories.
+    CHECK(f.flow.terrain_for_test().base[P_TUNE_A] == doctest::Approx(0.10f));
+}
+
+TEST_CASE("waking without an overlay clears the previous one") {
+    FlowFixture f;
+    const BaseOverlay ov = tune_overlay(0.87f);
+    TerrainState st; st.master = 0x515Eu;
+    f.flow.wake(st, &ov);
+    const float overlaid = f.flow.terrain_for_test().base[P_TUNE_A];
+
+    f.flow.wake(st, nullptr);
+    // A pad with no overlay must play the drawn terrain, not the last pad's
+    // base. Same rule Glow.cpp already applies to a place with no code.
+    CHECK(f.flow.terrain_for_test().base[P_TUNE_A] != doctest::Approx(overlaid));
+}
