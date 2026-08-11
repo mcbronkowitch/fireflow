@@ -1274,7 +1274,7 @@ menu->addChild(createMenuItem("Copy patch as flow base", "", [m]() {
     fp.test_tone[0] = m->smp[0].testTone;
     fp.test_tone[1] = m->smp[1].testTone;
     const spkyvcv::TransferReport r = spkyvcv::to_flow_base(fp);
-    glfwSetClipboardString(APP->window->win, spkyvcv::encode_base_clipboard(r).c_str());
+    glfwSetClipboardString(APP->window->win, spkyvcv::encode_base(r.overlay).c_str());
 }));
 ```
 
