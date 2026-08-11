@@ -59,26 +59,12 @@ static_assert(FADER_R == FADER_L + 1,
 static_assert(SW_R == SW_L + 1,
               "switchPos() indexes params[SW_L + i]");
 
-// How many places drawTwelve() draws per archetype. Named so the loop and the
-// assert below cannot say different threes.
-static constexpr int kPlacesPerArch = 3;
-
-// The only assert in this file that guards a memory WRITE, not just an index
-// convention. drawTwelve() fills ARCH_COUNT * kPlacesPerArch entries of
-// places[kPadCount], and those two counts have separate owners that have never
-// been told about each other: ARCH_COUNT is the engine's (engine/flow/
-// flow_ids.h), kPadCount is the board's (touch_pads.hpp). 4 * 3 == 12 is a
-// coincidence between an archetype list and an MPR121, not a relationship.
-// Add a fifth archetype and the loop writes places[12..14] straight through the
-// Module object, over std::string members, with no bounds check anywhere on the
-// path. If this fires: change how many places each archetype gets in
-// drawTwelve() -- do NOT enlarge places[], which is sized by the pads and by
-// nothing else.
-static_assert(spky::flow::ARCH_COUNT * kPlacesPerArch
-                  == static_cast<int>(spkyvcv::kPadCount),
-              "drawTwelve() writes ARCH_COUNT * kPlacesPerArch places into "
-              "places[kPadCount]; give each archetype a different share of the "
-              "pads, do not widen the array");
+// How many places drawTwelve() draws per archetype, and the assert that stops
+// the loop writing past places[kPadCount], both in touch_pads.hpp -- ctest
+// compiles that header, and nothing in the desktop build compiles this file.
+// The asserts that DO live here all guard index conventions, and every one of
+// them is double-covered by PARAM_ORDER in res/test_flow_panel.py.
+using spkyvcv::kPlacesPerArch;
 
 // The macro knobs keep c.label empty on the plate (spec 3.3: a printed caption
 // would freeze an assignment the rehearsal is allowed to move), so their Rack

@@ -206,6 +206,22 @@ TEST_CASE("export: the arch column is spelled with the enum's short name") {
     CHECK(std::strcmp(arch_name(ARCH_COUNT), "") == 0);
 }
 
+TEST_CASE("export: every archetype the engine has is spelled, not just the "
+          "four that were there when this was written") {
+    // arch_name() has no coupling to ARCH_COUNT -- it is a switch with a
+    // default, so a fifth archetype falls through it and export_pool_tsv emits
+    // an empty arch column for one twelfth of the pool, silently. The four
+    // CHECKs above cannot see that (they name the four that exist), and
+    // arch_name(ARCH_COUNT) == "" cannot either: "out of range" and "in range
+    // but unnamed" are the same answer there. kMacroNames in Glow.cpp is sized
+    // by MACRO_COUNT and gets this coupling from the compiler; arch_name only
+    // gets it here.
+    for (int a = 0; a < ARCH_COUNT; ++a) {
+        INFO("archetype ", a);
+        CHECK(std::strcmp(arch_name(a), "") != 0);
+    }
+}
+
 TEST_CASE("export: an undecodable code leaves arch empty rather than "
           "dropping the row") {
     Place p[1];

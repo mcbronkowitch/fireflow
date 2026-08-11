@@ -21,6 +21,29 @@ namespace spkyvcv {
 
 inline constexpr int kPadCount = 12;
 
+// How many places Glow.cpp's drawTwelve() draws per archetype. It lives HERE,
+// beside the count it has to multiply into, and not next to its own loop, for
+// one reason: no ctest target compiles Glow.cpp -- the desktop build has no
+// Rack headers and is not getting any -- so an assert stated there is checked
+// only when somebody builds the plugin. This one guards a memory WRITE rather
+// than an index convention, and it needs neither a Rack type nor a Module:
+// drawTwelve() fills ARCH_COUNT * kPlacesPerArch entries of places[kPadCount],
+// and those two counts have separate owners that have never been told about
+// each other. ARCH_COUNT is the engine's (engine/flow/flow_ids.h), kPadCount is
+// the board's MPR121. 4 * 3 == 12 is a coincidence between an archetype list
+// and a touch chip, not a relationship. Add a fifth archetype and the loop
+// writes places[12..14] straight through the Module object, over its
+// std::string-adjacent members, with no bounds check anywhere on the path.
+//
+// If this fires: change how many places each archetype gets in drawTwelve() --
+// do NOT enlarge places[], which is sized by the pads and by nothing else.
+inline constexpr int kPlacesPerArch = 3;
+
+static_assert(spky::flow::ARCH_COUNT * kPlacesPerArch == kPadCount,
+              "drawTwelve() writes ARCH_COUNT * kPlacesPerArch places into "
+              "places[kPadCount]; give each archetype a different share of the "
+              "pads, do not widen the array");
+
 // Hold threshold for "lean on a pad to reroll it" (spec §5.3). A STARTING
 // VALUE tuned by ear, not a measurement: NEW's 1.5 s is far too sluggish for a
 // pad, and a mouse button is not a capacitive plate anyway. Whoever retunes it
@@ -194,10 +217,14 @@ inline const char* arch_name(int arch) {
 // The pool.tsv rows for the twelve pads (parent spec §4.3), column order
 // code / arch / date / fp / pad / name / note.
 //
-// date, fp and note-if-unwritten stay EMPTY on purpose: the fingerprint is
-// computed by the gate in tests/, and a second producer of it in a second
-// language is exactly the silent divergence that gate exists to catch.
-// They are interior columns, so their tabs are still emitted.
+// date, fp and note-if-unwritten stay EMPTY on purpose. The fingerprint WILL be
+// computed by a gate under tests/ -- that gate is an unbuilt deliverable of the
+// parent spec (engine/flow/places/ does not exist yet), so today nothing
+// computes it at all, and this column is empty because there is no producer,
+// not because a checked one lives elsewhere. Adding one here anyway would put a
+// second producer in a second language, which is the silent divergence that
+// gate is meant to catch. They are interior columns, so their tabs are still
+// emitted.
 //
 // Line ending is \n, not \r\n: the destination is a repo file.
 inline std::string export_pool_tsv(const Place* places, int n) {
