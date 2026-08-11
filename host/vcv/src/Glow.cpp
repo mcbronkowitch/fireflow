@@ -186,12 +186,21 @@ struct Glow : Module {
     // The twelve places are staged the same way, and for the same reason: the
     // workshop menu names them, notes them, pins terrain onto them and redraws
     // all twelve, while wakePad() reads places[pad].code from controlTick. So
-    // places[] has exactly ONE writer -- the audio thread -- and the UI thread
-    // hands over a whole replacement array (SET_PLACES) instead of reaching
-    // into it. Whole array rather than one field because a place is only
-    // meaningful as a set: a partial write is a place whose name belongs to
-    // some other code. Place is trivially copyable (touch_pads.hpp asserts
-    // it), so applying one costs a memcpy and allocates nothing.
+    // places[] has ONE WRITER -- the audio thread -- and SEVERAL TOLERANT
+    // READERS: the UI thread hands over a whole replacement array (SET_PLACES)
+    // instead of reaching into it, but it also READS places[] unsynchronised in
+    // four spots (PadQuantity::getLabel, the Places submenu title, and both
+    // LabelField::setText calls), and the copy loop in stagePlaces makes a
+    // fifth. All five are benign, and here is why, so nobody has to re-derive
+    // it: a torn read can only ever show a stale or half-updated STRING, never
+    // run off the buffer, because set_label is the only writer of those fields
+    // and it always terminates within `cap` -- the buffers are sized cap + 1
+    // (touch_pads.hpp), so a NUL is present at every byte offset a reader can
+    // reach. Worst case a menu opens showing the previous name. Whole array
+    // rather than one field because a place is only meaningful as a set: a
+    // partial write is a place whose name belongs to some other code. Place is
+    // trivially copyable (touch_pads.hpp asserts it), so applying one costs a
+    // memcpy and allocates nothing.
     //
     // PIN is the exception that proves it: pinning reads flow.state(), which
     // is audio-thread property, so the menu stages the PAD NUMBER and the
@@ -831,9 +840,27 @@ struct Glow : Module {
         bool down[spkyvcv::kPadCount];
         for (int i = 0; i < spkyvcv::kPadCount; ++i)
             down[i] = params[PAD_1 + i].getValue() > 0.5f;
+        // pads.update() moves `live` onto the pressed pad before we can know
+        // whether that pad's code decodes, so a REFUSED wake has to put it
+        // back. Rolled back, not cleared: live = -1 would be the honest reading
+        // of "no pad's place is playing", but the red refusal collar is painted
+        // on the live pad and on no other, so clearing it would refuse the
+        // player in silence -- and nothing stopped, so the previously live pad
+        // is still exactly the pad the module is on. Without this, the collar
+        // went teal on a pad holding nothing the moment the flash expired,
+        // while the old terrain kept sounding. wakeHouse() answers the same
+        // question from the other end: when ITS wake fails it falls back to the
+        // house terrain and leaves pad 0 live, because something is playing
+        // there too.
+        const int  prevLive = pads.live;
+        const bool prevExcursion = pads.excursion;
         const spkyvcv::PadEvent ev = pads.update(down, t);
         if (ev.action == spkyvcv::PadAction::WAKE) {
-            if (!wakePad(ev.pad)) refuse.mark(t);
+            if (!wakePad(ev.pad)) {
+                refuse.mark(t);
+                pads.live = prevLive;
+                pads.excursion = prevExcursion;
+            }
         } else if (ev.action == spkyvcv::PadAction::REROLL) {
             // Under LOCK, wake() is not a gesture and is not refused, but
             // new_partial IS (flow.h). So pads still change place while holds
