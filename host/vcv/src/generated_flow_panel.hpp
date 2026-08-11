@@ -61,6 +61,12 @@ static constexpr float kFaderH  = 25.290f;
 static constexpr float kSwitchW = 5.000f;
 static constexpr float kSwitchH = 9.000f;
 static constexpr float kJackR   = 4.200f;
+static constexpr unsigned kCollarRefused  = 0x8F4A45u;
+static constexpr unsigned kCollarExcursed = 0xB96532u;
+static constexpr unsigned kCollarLive     = 0x1D6F5Fu;
+static constexpr unsigned kCollarIdle     = 0xD7CDBBu;
+static constexpr float kCollarWLive = 0.550f;
+static constexpr float kCollarWIdle = 0.280f;
 static const PanelCtl kParamCtls[] = {
     { MOTION, WK_MACRO, {16.900f, 45.420f}, "", {16.900f, 45.420f}, 0, 2.200f, 0x171713, "MOTION -- how much everything moves  [S31]" },
     { DENSITY, WK_MACRO, {32.730f, 45.480f}, "", {32.730f, 45.480f}, 0, 2.200f, 0x171713, "DENSITY -- how much happens  [S32]" },

@@ -903,6 +903,13 @@ struct Glow : Module {
     }
 };
 
+// The generated tables pack every colour as 0xRRGGBB -- lettering (lblRgb,
+// kTexts) and the pad collar (kCollar*) alike. One unpacker, so a widget can
+// never disagree with the header about what a channel is.
+static NVGcolor panelRGB(unsigned c) {
+    return nvgRGB((c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff);
+}
+
 // The SVG's <text> is invisible to NanoSVG, so the lettering is redrawn here
 // from the generated tables -- the same reason the big module has PanelText.
 struct GlowText : Widget {
@@ -914,7 +921,7 @@ struct GlowText : Widget {
         auto put = [&](float xmm, float ymm, float szmm, unsigned c,
                        unsigned char anchor, const char* s) {
             nvgFontSize(args.vg, mm2px(szmm));
-            nvgFillColor(args.vg, nvgRGB((c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff));
+            nvgFillColor(args.vg, panelRGB(c));
             nvgTextAlign(args.vg,
                          (anchor == 1 ? NVG_ALIGN_LEFT
                                       : anchor == 2 ? NVG_ALIGN_RIGHT
@@ -1000,32 +1007,30 @@ struct TouchPlate : app::Switch {
         const bool exc = live && mod->pads.excursion;
         const bool flash = mod && mod->refuse.active(mod->flow.now_s());
 
+        // WHICH colour a state gets is decided here and only here, because
+        // that is runtime state -- which is also why there are no LightIds for
+        // the pads. WHAT the four colours are belongs to the panel: copper (the
+        // part-B accent) is reserved for "that worked", a hold that actually
+        // rerolled, and a refusal gets a colour of its own, because telling the
+        // player "I refused you" is the only thing RefuseFlash exists for, and
+        // both ways a PAD can earn one -- a hold that LOCK turned down, and a
+        // pad whose stored code will not decode -- are exactly the moments
+        // where a copper collar would read as the reroll that just did not
+        // happen. The refusal red sits with MUTED in gen_panel's palette
+        // (base.BRICK), not above COPPER; the other three ARE palette entries.
+        // All four, and both stroke widths, come from the generated header, so
+        // a palette retune moves the printed tiles and these collars together.
         NVGcolor collar;
-        // Copper (#b96532, the panel's part-B accent) is reserved for "that
-        // worked" -- a hold that actually rerolled. A refusal gets its own
-        // colour, because telling the player "I refused you" is the only thing
-        // RefuseFlash exists for, and both ways a PAD can earn one -- a hold
-        // that LOCK turned down, and a pad whose stored code will not decode --
-        // are exactly the moments where a copper collar would read as the
-        // reroll that just did not happen.
-        //
-        // #8f4a45 is a muted, greyish red: same value range as COPPER (L ~42 %
-        // against ~46 %) so it does not shout louder than the accent it sits
-        // beside, but a third of its saturation and 20 degrees round the wheel,
-        // which is what makes it read as dull brick rather than as warm metal.
-        // It belongs with MUTED (#656056) in gen_panel's palette, not above
-        // COPPER. Both live here rather than in the generated table for the
-        // reason the whole widget does: this is runtime state, not panel state.
-        if (flash && live)    collar = nvgRGB(0x8f, 0x4a, 0x45);
-        else if (exc)         collar = nvgRGB(0xb9, 0x65, 0x32);
-        else if (live)        collar = nvgRGB(0x1d, 0x6f, 0x5f);
-        else                  collar = nvgRGBA(0xd7, 0xcd, 0xbb, 0xff);
+        if (flash && live)    collar = panelRGB(kCollarRefused);
+        else if (exc)         collar = panelRGB(kCollarExcursed);
+        else if (live)        collar = panelRGB(kCollarLive);
+        else                  collar = panelRGB(kCollarIdle);
 
         nvgBeginPath(args.vg);
         nvgRoundedRect(args.vg, 0.5f, 0.5f, box.size.x - 1.f,
                        box.size.y - 1.f, mm2px(kPadR));
         nvgStrokeColor(args.vg, collar);
-        nvgStrokeWidth(args.vg, live ? mm2px(0.55f) : mm2px(0.28f));
+        nvgStrokeWidth(args.vg, mm2px(live ? kCollarWLive : kCollarWIdle));
         nvgStroke(args.vg);
         app::Switch::draw(args);
     }

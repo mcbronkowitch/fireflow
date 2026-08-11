@@ -66,6 +66,32 @@ SWITCH_W  = 5.0                   # CKSSThree is 4.56 x 9.60 mm
 SWITCH_H  = 9.0
 JACK_R    = 4.2
 
+# --- strokes and the runtime pad collar ---------------------------------------
+# HAIRLINE_W is the stroke the plate prints around every printed shape. It is a
+# constant rather than five typed literals because Glow.cpp's TouchPlate draws
+# ITS collar over the printed pad tile and has to match it exactly.
+#
+# COLLAR_* are the four colours that same widget strokes the live pad with, and
+# the heavier width it uses while a pad is live. They are emitted for one
+# reason: three of the four ARE gen_panel palette entries, and typed into
+# Glow.cpp they were a second copy -- retune the palette and the printed tiles
+# move while the live / excursed / refused collars silently keep the old
+# colours, with nothing gating it. Spec 3.1 grants exactly one carve-out from
+# "no colour is written into Glow.cpp", and it is PadQuantity's runtime label,
+# not this.
+#
+# What stays the widget's is WHICH colour a state gets and when -- that is
+# runtime state, and it is why the pads have no LightIds. This file only owns
+# what the four colours ARE.
+HAIRLINE_W    = 0.28
+COLLAR_LIVE_W = 0.55
+COLLAR_REFUSED  = base.BRICK    # a hold LOCK turned down, or a code that will
+                                # not decode. Copper here would read as the
+                                # reroll that just did not happen.
+COLLAR_EXCURSED = base.COPPER   # part-B accent: "that worked"
+COLLAR_LIVE     = base.GREEN    # part-A accent: this pad's place is playing
+COLLAR_IDLE     = base.LINE     # the printed hairline, redrawn
+
 LOGO_Y = 10.0
 LOGO_SZ = 4.2
 LOGO_GAP = 1.1                    # between the two anchors, see TEXTS
@@ -271,16 +297,21 @@ def mm(v):
     return "%.3f" % v
 
 
+def sw(v):
+    """A stroke width, printed as typed (0.28, not 0.280)."""
+    return "%g" % v
+
+
 ANCHOR_SVG = {0: "middle", 1: "start", 2: "end"}
 
 
 def knob_svg(c):
     return (
         '  <circle cx="%s" cy="%s" r="%s" fill="url(#knobCap)" stroke="%s" '
-        'stroke-width="0.28"/>\n'
+        'stroke-width="%s"/>\n'
         '  <line x1="%s" y1="%s" x2="%s" y2="%s" stroke="%s" '
         'stroke-width="0.45" stroke-linecap="round"/>\n'
-        % (mm(c.x), mm(c.y), mm(KNOB_R), base.GRAPHITE,
+        % (mm(c.x), mm(c.y), mm(KNOB_R), base.GRAPHITE, sw(HAIRLINE_W),
            mm(c.x), mm(c.y - KNOB_R * 0.40), mm(c.x), mm(c.y - KNOB_R * 0.82),
            base.WHITE))
 
@@ -291,19 +322,20 @@ def pad_svg(c):
     return (
         '  <rect class="touchPlate" x="%s" y="%s" width="%s" height="%s" '
         'rx="%s" fill="%s" fill-opacity="0.55" stroke="%s" '
-        'stroke-width="0.28"/>\n'
+        'stroke-width="%s"/>\n'
         % (mm(c.x - PAD_W / 2.0), mm(c.y - PAD_H / 2.0), mm(PAD_W), mm(PAD_H),
-           mm(PAD_R), base.PAPER_DEEP, base.LINE))
+           mm(PAD_R), base.PAPER_DEEP, base.LINE, sw(HAIRLINE_W)))
 
 
 def fader_svg(c):
     return (
         '  <rect x="%s" y="%s" width="%s" height="%s" rx="%s" fill="%s" '
-        'stroke="%s" stroke-width="0.28"/>\n'
+        'stroke="%s" stroke-width="%s"/>\n'
         '  <line x1="%s" y1="%s" x2="%s" y2="%s" stroke="%s" '
         'stroke-width="0.6" stroke-linecap="round"/>\n'
         % (mm(c.x - FADER_W / 2.0), mm(c.y - FADER_H / 2.0), mm(FADER_W),
            mm(FADER_H), mm(FADER_W / 2.0), base.PAPER_DEEP, base.LINE,
+           sw(HAIRLINE_W),
            mm(c.x), mm(c.y - FADER_H / 2.0 + 1.2),
            mm(c.x), mm(c.y + FADER_H / 2.0 - 1.2), base.WELL))
 
@@ -311,9 +343,9 @@ def fader_svg(c):
 def switch_svg(c):
     return (
         '  <rect x="%s" y="%s" width="%s" height="%s" rx="1.0" fill="%s" '
-        'stroke="%s" stroke-width="0.28"/>\n'
+        'stroke="%s" stroke-width="%s"/>\n'
         % (mm(c.x - SWITCH_W / 2.0), mm(c.y - SWITCH_H / 2.0), mm(SWITCH_W),
-           mm(SWITCH_H), base.GRAPHITE, base.LINE))
+           mm(SWITCH_H), base.GRAPHITE, base.LINE, sw(HAIRLINE_W)))
 
 
 def jack_svg(c):
@@ -359,8 +391,8 @@ def svg():
                % (mm(W), mm(Hh)))
     out.append('  <rect id="glowPanelInnerBorder" x="0.650" y="0.650" '
                'width="%s" height="%s" rx="1.2" fill="none" stroke="%s" '
-               'stroke-width="0.28"/>\n'
-               % (mm(W - 1.3), mm(Hh - 1.3), base.LINE))
+               'stroke-width="%s"/>\n'
+               % (mm(W - 1.3), mm(Hh - 1.3), base.LINE, sw(HAIRLINE_W)))
     # The product mockup's masthead: quiet rules, one solder-green dot and one
     # copper dot around the compact FireFlow Glow wordmark.
     out.append('  <circle cx="4.000" cy="8.650" r="0.650" fill="%s"/>\n' % base.GREEN)
@@ -448,6 +480,23 @@ def header():
     out.append("static constexpr float kSwitchW = %sf;\n" % mm(SWITCH_W))
     out.append("static constexpr float kSwitchH = %sf;\n" % mm(SWITCH_H))
     out.append("static constexpr float kJackR   = %sf;\n" % mm(JACK_R))
+    # The pad collar Glow.cpp's TouchPlate strokes at runtime. The WIDGET picks
+    # which of these a state gets -- that is runtime state, not panel state, and
+    # it is why the pads have no LightIds. What the colours ARE is the panel's,
+    # and three of the four are gen_panel palette entries: typed into Glow.cpp
+    # they were a second copy that a palette retune would have left behind.
+    out.append("static constexpr unsigned kCollarRefused  = %su;\n"
+               % rgb(COLLAR_REFUSED))
+    out.append("static constexpr unsigned kCollarExcursed = %su;\n"
+               % rgb(COLLAR_EXCURSED))
+    out.append("static constexpr unsigned kCollarLive     = %su;\n"
+               % rgb(COLLAR_LIVE))
+    out.append("static constexpr unsigned kCollarIdle     = %su;\n"
+               % rgb(COLLAR_IDLE))
+    out.append("static constexpr float kCollarWLive = %sf;\n"
+               % mm(COLLAR_LIVE_W))
+    out.append("static constexpr float kCollarWIdle = %sf;\n"
+               % mm(HAIRLINE_W))
     for name, ctls in (("kParamCtls", PARAMS), ("kOutputCtls", OUTPUTS)):
         out.append("static const PanelCtl %s[] = {\n" % name)
         for c in ctls:
