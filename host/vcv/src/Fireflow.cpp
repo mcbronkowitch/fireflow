@@ -41,6 +41,16 @@ static constexpr float kCoupleZoneSplit = 0.5f;
 // promises this tooltip shows exactly the Hz the engine runs -- so leaving
 // PACE out here would make that promise false the moment PACE moves off
 // centre.
+//
+// The grid branch does NOT multiply PACE in, on purpose: it prints a
+// division NAME, not a Hz number, and that name states a ratio to the
+// transport's own beat. _update_rate scales this lane's _base_hz by _pace
+// (super_modulator.cpp:28) and Instrument::_apply_tempo scales the
+// transport's bpm by the same _pace, so the lane still runs at exactly
+// division d of the paced transport's beat whatever PACE is doing -- the
+// ratio, and so the name, stays true without any PACE term of its own.
+// Multiplying PACE into this branch would make the printed name wrong, not
+// right.
 struct RateQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
         if (module && module->params[COUPLE].getValue() >= kCoupleZoneSplit)
@@ -89,9 +99,11 @@ struct PaceQuantity : ParamQuantity {
 // flux_division_index() round-trip through a 0..1 float. PACE (spec
 // 2026-08-12 modulation-pace) does not reach here: FLUX's own delay stays in
 // real time and never sees PACE's paced BPM (engine/fx/flux.h:44), so this
-// division name still means what it always meant. That is no longer true of
-// RATE's grid-mode name above it in this file -- PACE now stretches the Hz
-// that name describes, even though the label text is unchanged.
+// division name still means what it always meant -- the same is true, for a
+// different reason, of RATE's grid-mode name above it in this file: PACE
+// stretches the Hz a grid lane runs at, but stretches the transport's beat
+// by the same factor, so that name is still an accurate ratio too. Neither
+// tooltip needs a PACE term; only the free-Hz branches (both files) do.
 struct FluxRateQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
         int k = spky::kFluxRateOffset + (int)std::lround(getValue());

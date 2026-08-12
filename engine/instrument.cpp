@@ -1,4 +1,12 @@
 #include "instrument.h"
+#include "mod/divisions.h"   // pace_mult(), used below -- arrives transitively
+                              // through instrument.h -> parts/part.h ->
+                              // mod/super_modulator.h too, but this file reads
+                              // it directly, so it names its own dependency
+                              // instead of leaning on that chain (see the
+                              // SPKY_DECK_BUS #error just below for what an
+                              // unnamed transitive dependency costs when the
+                              // chain ever changes).
 #include "util/math.h"
 #include <algorithm>
 #include <cmath>

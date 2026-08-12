@@ -440,10 +440,15 @@ public:
 
 private:
     // The single door, shared by both set_tempo_bpm and set_pace. PACE reaches
-    // the transport and the mod lanes; FLUX gets the RAW bpm here and, as of
-    // this commit, stays mis-tracked at PACE != 1 -- Task 6 (spec §3.3) is
-    // what will repair that, in FLUX's own rhythm reader
-    // (update_thin_pattern), not here.
+    // the transport (_center.set_tempo_bpm(_bpm * _pace)) and the mod lanes
+    // (SuperModulator::set_pace) as a tempo multiplier. FLUX's own delay
+    // deliberately stays in real time -- it gets the RAW bpm
+    // (p.fx().set_bpm(_bpm), no _pace) -- but its rhythm READER is corrected
+    // for pace via set_rhythm_pace() below: Flux::update_thin_pattern
+    // (engine/fx/flux.cpp) multiplies the already-paced gap it counts against
+    // by that factor before comparing it to the delay's own real-time period,
+    // so the thinning ratio means what it meant before PACE existed (spec
+    // 2026-08-12 §3.3).
     void _apply_tempo();
 
     std::array<Part, PART_COUNT> _parts;

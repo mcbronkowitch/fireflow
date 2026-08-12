@@ -40,6 +40,7 @@
       "value": 0.5
     },
     {
+      "_comment": "This sweep's per-event set_pace calls below (Instrument::set_pace, called directly by scenario.cpp -- never through Flow) survive for the whole 120s only because Flow never re-pushes P_PACE on top of them. P_PACE's own base rule is degenerate ({.5f,.5f} at every macro quartile, taste.h:1085) and the M_PACE macro sits at its neutral 0.5 the whole run (this file's own flow_macro slot 3, and no event ever moves it), so flow.cpp's guard chain (flow.cpp:590-591) computes v = 0.5 + (0.5 - 0.5) = 0.5 on every tick, exactly matching _pushed[P_PACE]'s value from the initial flow_wake draw -- the change guard at flow.cpp:638-640 (`fabs(v - _pushed[p]) > 1e-6f`) therefore never fires again, and Flow stops touching the instrument's PACE after wake. Moving the M_PACE macro (slot 3) off 0.5, or adding a flow_new verb (or any host that redraws the terrain, or pushes macros with a non-degenerate P_PACE span) would make v differ from _pushed[P_PACE] on some later tick and silently overwrite this sweep's own pace curve.",
       "action": "set_pace",
       "value": 0.5
     },

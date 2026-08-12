@@ -41,8 +41,10 @@ HW_SIZE = {
     "STEPS": "S", "SONG": "S",                        # PLAY group
     "ENGINE": "P", "REC": "P",
     # --- centre ---
-    "MORPH": "G", "TIDE": "S", "CHOKE": "S",          # BLEND
-    "TEMPO": "S", "COUPLE": "S", "SHUFFLE": "S", "PACE": "S",  # CLOCK
+    "MORPH": "G", "TIDE": "S", "CHOKE": "S", "PACE": "S",  # BLEND (PACE sits
+                                                       # on TIDE/CHOKE's row,
+                                                       # CENTER_POS Y_B1G below)
+    "TEMPO": "S", "COUPLE": "S", "SHUFFLE": "S",      # CLOCK
     "SCALE": "S", "DRIFT": "S",                       # TONALITY
     "REV_DECAY": "G", "REV_SIZE": "S", "REV_TONE": "S", "REV_DIFF": "S",
 }
