@@ -4,8 +4,11 @@
 // deliverable: what could NOT be carried matters more than what could.
 #include "doctest/doctest.h"
 #include <algorithm>
+#include <cstddef>
 #include <cstdio>
+#include <string>
 #include <type_traits>
+#include <vector>
 #include "vcv/src/flow_patch_bridge.hpp"
 #include "vcv/src/glow_ui.hpp"
 #include "vcv/src/touch_pads.hpp"
@@ -191,6 +194,104 @@ TEST_CASE("format_report names every note") {
         CHECK(s.find(label) != std::string::npos);
         CHECK(s.find(r.notes[i].reason) != std::string::npos);
     }
+}
+
+// ---------------------------------------------------------------------------
+// report_lines -- the report as Fireflow's context menu shows it (Task 8)
+// ---------------------------------------------------------------------------
+//
+// The two menu items themselves are Rack widget code and no doctest compiles
+// them. This is the one part of the copy gesture that is not: turning
+// format_report's block of text into the lines a menu can hold. It is here
+// rather than in Fireflow.cpp precisely so these three cases exist.
+
+static std::vector<std::string> words_of(const std::string& s) {
+    std::vector<std::string> w;
+    std::size_t i = 0;
+    while (i < s.size()) {
+        while (i < s.size() && s[i] == ' ') ++i;
+        const std::size_t start = i;
+        while (i < s.size() && s[i] != ' ' && s[i] != '\n') ++i;
+        if (i > start) w.push_back(s.substr(start, i - start));
+        while (i < s.size() && s[i] == '\n') ++i;
+    }
+    return w;
+}
+
+TEST_CASE("the menu report carries every word of the report") {
+    FireflowPatch fp{};
+    const TransferReport r = to_flow_base(fp);
+    const std::vector<std::string> lines = report_lines(r, 64);
+
+    std::vector<std::string> joined;
+    for (const std::string& l : lines)
+        for (const std::string& w : words_of(l)) joined.push_back(w);
+    // Nothing dropped, nothing reordered, nothing cut in half. A wrapper that
+    // truncates the long notes would look tidy in the menu and would be lying
+    // about the transfer, which is the one thing this whole file exists against.
+    CHECK(joined == words_of(format_report(r)));
+}
+
+TEST_CASE("the menu report has no empty lines") {
+    // format_report terminates EVERY line with '\n', so the obvious split
+    // leaves a trailing empty piece -- and an empty MenuLabel at the bottom of
+    // the menu, which draws as a blank row nobody can explain.
+    FireflowPatch fp{};
+    const TransferReport r = to_flow_base(fp);
+    const std::vector<std::string> lines = report_lines(r, 64);
+    REQUIRE_FALSE(lines.empty());
+    for (std::size_t i = 0; i < lines.size(); ++i) {
+        CAPTURE(i);
+        CHECK_FALSE(lines[i].empty());
+        CHECK(lines[i].find_first_not_of(' ') != std::string::npos);
+    }
+}
+
+TEST_CASE("the menu report wraps to the column width it was given") {
+    // Rack's MenuLabel::step() widens the menu to fit its text, so ONE 300-char
+    // note would drag the context menu off the screen. The only lines allowed
+    // over the limit are the ones holding a single word longer than it -- those
+    // get to overflow rather than be cut (see the word test above).
+    FireflowPatch fp{};
+    const TransferReport r = to_flow_base(fp);
+    for (int columns : { 40, 64, 100 }) {
+        CAPTURE(columns);
+        const std::vector<std::string> lines = report_lines(r, columns);
+        bool any_long_input = false;
+        for (const std::string& l : lines) {
+            if (int(l.size()) <= columns) continue;
+            const std::vector<std::string> w = words_of(l);
+            CAPTURE(l);
+            REQUIRE(w.size() == 1u);
+            CHECK(int(w[0].size()) > columns);
+            any_long_input = true;
+        }
+        (void)any_long_input;
+    }
+    // ...and the wrapping really happens: at 40 columns the report cannot
+    // possibly be as few lines as at 100.
+    CHECK(report_lines(r, 40).size() > report_lines(r, 100).size());
+}
+
+TEST_CASE("a rejected transfer says so in its first menu line") {
+    // The one report a player most needs to see before pasting, and the one
+    // case where the clipboard string is empty.
+    FireflowPatch fp{};
+    fp.p[kFfEngineA] = 1.f;   // SAMPLER
+    fp.p[kFfEngineB] = 1.f;   // SAMPLER -- no carrier on either deck
+    const TransferReport r = to_flow_base(fp);
+    REQUIRE(r.overlay_rejected);
+    const std::vector<std::string> lines = report_lines(r, 64);
+    REQUIRE_FALSE(lines.empty());
+    CHECK(lines[0].find("REJECTED") != std::string::npos);
+    // ...and the string such a transfer copies is the empty one, which
+    // decode_base reads as "this place has no hand-authored base" rather than
+    // as a zeroed patch. Glow's paste turns that into has_base = false.
+    const std::string payload = encode_base(r.overlay);
+    CHECK(payload.empty());
+    spky::flow::BaseOverlay out;
+    CHECK(decode_base(payload.c_str(), out));
+    for (int p = 0; p < P_COUNT; ++p) CHECK_FALSE(out.has[p]);
 }
 
 // ---------------------------------------------------------------------------

@@ -38,6 +38,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 #include "flow/flow_params.h"
 #include "flow/taste.h"
 #include "flow/terrain.h"
@@ -551,6 +552,73 @@ inline std::string format_report(const TransferReport& r) {
         s += "\n";
     }
     return s;
+}
+
+// ---------------------------------------------------------------------------
+// report_lines -- the report as a menu can show it
+// ---------------------------------------------------------------------------
+//
+// Fireflow's "Copy patch as flow base" prints the report into the context menu
+// itself, one MenuLabel per line, so that seeing the losses costs no second
+// click. Two things stop format_report's raw output from being that list, and
+// neither is a Rack question:
+//
+//   * it terminates EVERY line with '\n', so the obvious split leaves a
+//     trailing empty piece -- a blank menu row with no explanation;
+//   * Rack's MenuLabel widens the menu to fit its text, and the notes here run
+//     to three hundred characters. Unwrapped, one of them drags the context
+//     menu off the screen and the report is unreadable precisely when it
+//     matters.
+//
+// Pure string work with no Rack type in sight, so it lives here where the
+// desktop suite gates it rather than in Fireflow.cpp where only the plugin
+// build would ever see it.
+//
+// NOTHING IS DROPPED. A word longer than `columns` gets its own over-long line
+// instead of being cut: this report may be ugly, it may not be incomplete.
+// Continuation lines are indented past their note's own indent, so a wrapped
+// note reads as one note and not as two.
+inline std::vector<std::string> report_lines(const TransferReport& r,
+                                             int columns = 64) {
+    // Narrower than this and even a bare parameter name plus its indent would
+    // wrap, which turns the guarantee above into a column of single words.
+    if (columns < 24) columns = 24;
+    const std::string text = format_report(r);
+    std::vector<std::string> out;
+
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        std::size_t nl = text.find('\n', start);
+        if (nl == std::string::npos) nl = text.size();
+        const std::string line = text.substr(start, nl - start);
+        start = nl + 1;
+
+        const std::size_t lead = line.find_first_not_of(' ');
+        if (lead == std::string::npos) continue;   // blank, and the trailing ''
+        const std::string cont(lead + 2, ' ');
+
+        std::string cur(lead, ' ');
+        bool empty = true;
+        std::size_t w = lead;
+        while (w < line.size()) {
+            std::size_t e = line.find(' ', w);
+            if (e == std::string::npos) e = line.size();
+            const std::string word = line.substr(w, e - w);
+            w = e;
+            while (w < line.size() && line[w] == ' ') ++w;
+            if (word.empty()) continue;
+            if (!empty && cur.size() + 1 + word.size() > std::size_t(columns)) {
+                out.push_back(cur);
+                cur   = cont;
+                empty = true;
+            }
+            if (!empty) cur += ' ';
+            cur += word;
+            empty = false;
+        }
+        if (!empty) out.push_back(cur);
+    }
+    return out;
 }
 
 // ---------------------------------------------------------------------------

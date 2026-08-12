@@ -7,6 +7,7 @@
 #include <osdialog.h>
 #include "plugin.hpp"
 #include "generated_panel.hpp"   // enums + control table (generated from res/gen_panel.py)
+#include "flow_patch_bridge.hpp" // to_flow_base/encode_base: the patch -> Glow pad carrier
 #include "init_patch.hpp"       // sampler.vcvm snapshot + non-param init state
 #include "form_song_migration.hpp"
 #include "link_migration.hpp"
@@ -1650,6 +1651,48 @@ static void appendFireflowMenu(Menu* menu, Fireflow* m) {
     // loops at the bar start (a live STEPS turn leaves them free-running).
     menu->addChild(createMenuItem("Resync loops to bar", "",
                                   [m]() { m->resyncReq = true; }));
+
+    // --- carry this patch onto a Glow pad (spec 2026-08-11) ----------------
+    // The clipboard string is spkyvcv::encode_base's, the same one pool.tsv's
+    // base column and Glow's JSON already use; Glow's "Paste patch onto pad" is
+    // the other end. One encoding, one round-trip test -- a third format for the
+    // clipboard is exactly what that test exists to prevent.
+    //
+    // The report is printed UNDER the item rather than behind a second click.
+    // Only a third of flow's parameters are base rules, Fireflow has no ROOT
+    // control at all, and several values that do travel get rewritten by
+    // taste.h's vetoes on arrival: a converter that carries what it can and
+    // says nothing about the rest looks correct while losing the tonality. See
+    // flow_patch_bridge.hpp's header -- the report is the deliverable.
+    {
+        // Built HERE, at menu-open time, and the resulting string is captured
+        // BY VALUE rather than recomputed inside the handler. Rack blocks knob
+        // gestures while a context menu is open, so the two could not actually
+        // disagree today -- but a report describing one patch above an item
+        // that copies another is a failure nobody would ever see, and the copy
+        // costs a few hundred bytes to make impossible.
+        spkyvcv::FireflowPatch fp{};
+        for (int i = 0; i < spkyvcv::kFireflowParamCount; ++i)
+            fp.p[i] = m->params[i].getValue();
+        // Not a param, and it still changes what the engine was: testTone
+        // re-points a Sampler deck at ENGINE_TEST_TONE. The converter reports
+        // it as lost; it cannot see it unless it is handed over.
+        fp.test_tone[0] = m->smp[0].testTone;
+        fp.test_tone[1] = m->smp[1].testTone;
+        const spkyvcv::TransferReport rep = spkyvcv::to_flow_base(fp);
+        const std::string payload = spkyvcv::encode_base(rep.overlay);
+
+        menu->addChild(createMenuItem("Copy patch as flow base", "",
+            [payload]() {
+                glfwSetClipboardString(APP->window->win, payload.c_str());
+            }));
+        // A rejected transfer copies the EMPTY string, which is valid and reads
+        // as "this place has no hand-authored base" -- so pasting it onto a pad
+        // leaves that pad playing its drawn terrain rather than a zeroed patch.
+        // The first report line below says REJECTED in that case.
+        for (const std::string& line : spkyvcv::report_lines(rep))
+            menu->addChild(createMenuLabel(line));
+    }
 
     // DRIVE_A/B retired (spec 2026-08-09 hw-control-reduction task 9): the
     // menu-only slider never reached the engine (its BBD drive target is a

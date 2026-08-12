@@ -326,6 +326,14 @@ struct Glow : Module {
                                         int(sizeof dst[i].code));
                 dst[i].name[0] = '\0';
                 dst[i].note[0] = '\0';
+                // ...and the base, which is the one field a redraw could
+                // otherwise carry over. This function draws INTO an array that
+                // already holds twelve places (the menu's reset stages a copy
+                // of the live ones), so leaving it alone would give a
+                // brand-new terrain the previous place's hand-authored patch
+                // -- and the item promises to discard exactly that.
+                dst[i].base = {};
+                dst[i].has_base = false;
                 ++i;
             }
         }
@@ -345,6 +353,14 @@ struct Glow : Module {
         if (pad < 0 || pad >= spkyvcv::kPadCount) return;
         spky::flow::encode_code(flow.state(), places[pad].code,
                                 int(sizeof places[pad].code));
+        // The code stopped being the whole of a place when places grew a base.
+        // A terrain woken from a hand-authored base is still playing that base,
+        // and the code cannot hold it -- so pinning without this would quietly
+        // degrade a pasted patch to the bare seed underneath it, and the loss
+        // would only surface the next time that pad was pressed.
+        const spky::flow::BaseOverlay* ov = flow.overlay();
+        places[pad].has_base = ov != nullptr;
+        if (ov) places[pad].base = *ov;
     }
 
     // Audio thread, or a stopped engine (onAdd's patch-load path). A memcpy
@@ -391,7 +407,12 @@ struct Glow : Module {
         spky::flow::TerrainState st;
         if (pad < 0 || pad >= spkyvcv::kPadCount) return false;
         if (!spky::flow::decode_code(places[pad].code, st)) return false;
-        flow.wake(st);
+        // The place's hand-authored base, if it has one. nullptr and NOT an
+        // empty overlay when it has not: wake(s, nullptr) plays the terrain as
+        // drawn, and it is also what clears a base the PREVIOUS pad set -- so
+        // pressing a bare pad after a hand-authored one really does leave the
+        // hand-authored patch behind (flow.h, wake()).
+        flow.wake(st, places[pad].has_base ? &places[pad].base : nullptr);
         woken = true;
         return true;
     }
@@ -1391,6 +1412,49 @@ struct GlowWidget : ModuleWidget {
                 }));
             }
         }));
+
+        // The other end of Fireflow's "Copy patch as flow base" (spec
+        // 2026-08-11 §6). The clipboard holds an encode_base string -- the same
+        // format as pool.tsv's base column and this module's JSON -- and the
+        // pad it lands on recalls that patch's skeleton while the terrain keeps
+        // supplying the story layer the six macros move.
+        //
+        // Staged through stagePlaces like every other UI-thread edit. Writing
+        // places[] from here would race the audio thread, which owns that
+        // array; the staged copy is a memcpy of trivially copyable bytes and
+        // allocates nothing.
+        //
+        // A clipboard holding something else -- a terrain code, a shopping list
+        // -- leaves the pad exactly as it was. decode_base is all-or-nothing by
+        // design, and half a patch on a pad is worse than no patch.
+        menu->addChild(createSubmenuItem("Paste patch onto pad", "",
+            [m](Menu* sub) {
+                for (int i = 0; i < spkyvcv::kPadCount; ++i) {
+                    const std::string title =
+                        string::f("Pad %d", i + 1) +
+                        (m->places[i].name[0] == '\0'
+                             ? std::string()
+                             : "  " + std::string(m->places[i].name));
+                    sub->addChild(createMenuItem(title, "", [m, i]() {
+                        spky::flow::BaseOverlay ov;
+                        const char* clip = glfwGetClipboardString(APP->window->win);
+                        if (!clip || !spkyvcv::decode_base(clip, ov)) return;
+                        // The EMPTY string decodes cleanly and means "no
+                        // hand-authored base" -- it is also what a rejected
+                        // transfer copies (flow_patch_bridge.hpp). Recording
+                        // that as has_base would hand wakePad a pointer to an
+                        // overlay with nothing in it and let the place claim a
+                        // patch it has not got, so it clears the pad instead.
+                        bool any = false;
+                        for (int p = 0; p < spky::flow::P_COUNT; ++p)
+                            any = any || ov.has[p];
+                        m->stagePlaces([&](spkyvcv::Place* p) {
+                            p[i].base     = ov;
+                            p[i].has_base = any;
+                        });
+                    }));
+                }
+            }));
 
         // The note is the perishable one: parent spec §4.3 defines it as "one
         // sentence: why it was kept", and that sentence exists only in the
