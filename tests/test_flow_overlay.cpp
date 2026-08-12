@@ -6,6 +6,8 @@
 #include "doctest/doctest.h"
 #include "flow/terrain.h"
 #include "flow/taste.h"
+#include "flow/flow.h"
+#include "instrument.h"
 
 using namespace spky::flow;
 
@@ -184,9 +186,6 @@ TEST_CASE("an overlay with no carrier is rejected whole") {
     CHECK_FALSE(is_carrier_engine(ENGINE_BBD));
 }
 
-#include "flow/flow.h"
-#include "instrument.h"
-
 // A minimal harness: Flow needs an Instrument to push into, and the tests here
 // only read Flow's own view of the terrain, never the audio.
 struct FlowFixture {
@@ -248,4 +247,31 @@ TEST_CASE("waking without an overlay clears the previous one") {
     // A pad with no overlay must play the drawn terrain, not the last pad's
     // base. Same rule Glow.cpp already applies to a place with no code.
     CHECK(f.flow.terrain_for_test().base[P_TUNE_A] != doctest::Approx(overlaid));
+}
+
+TEST_CASE("undo then redo keeps each state paired with its own overlay") {
+    // A patch-load shape: wake onto the live place (overlay A), then
+    // restore_undo() seeds the slot from a DIFFERENT place with a different
+    // overlay (B) -- exactly what Tasks 7/8's restore order does. The first
+    // undo() plays the slot (B); the second undo() is a redo, and must play
+    // the place we left under ITS OWN overlay (A), not under B.
+    FlowFixture f;
+    const BaseOverlay a = tune_overlay(0.15f);
+    const BaseOverlay b = tune_overlay(0.85f);
+
+    TerrainState s1; s1.master = 0xC0DE1u;
+    TerrainState s2; s2.master = 0xC0DE2u;
+    f.flow.wake(s1, &a);
+    f.flow.restore_undo(s2, true, &b);
+
+    REQUIRE(f.flow.undo());
+    CHECK(f.flow.terrain_for_test().base[P_TUNE_A] == doctest::Approx(0.85f));
+
+    REQUIRE(f.flow.undo());
+    // The failure this catches: begin_blend() re-derives the fresh slot from
+    // whatever _overlay undo() just set for RENDERING `back` (B) instead of
+    // the overlay of the state actually being left (A), so a redo would play
+    // s1 under B -- one place's base under another's stories, on the second
+    // press instead of the first.
+    CHECK(f.flow.terrain_for_test().base[P_TUNE_A] == doctest::Approx(0.15f));
 }

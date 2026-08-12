@@ -217,9 +217,18 @@ bool Flow::undo() {
     const TerrainState back     = _undo;
     const BaseOverlay  back_ov  = _undo_overlay;
     const bool         back_has = _have_undo_overlay;
+    // The pair we are LEAVING. begin_blend records _undo = _state but reads
+    // _overlay for the slot's overlay -- and we must overwrite _overlay
+    // first, or gen() renders `back` under the wrong base. So re-pair the
+    // slot afterwards; otherwise a redo would play the outgoing state under
+    // the incoming overlay, which is the bug this whole task closes.
+    const BaseOverlay out_ov  = _overlay;
+    const bool        out_has = _have_overlay;
     _have_overlay = back_has;          // set BEFORE begin_blend: gen() reads it
     if (back_has) _overlay = back_ov;
     begin_blend(back);
+    _undo_overlay      = out_ov;
+    _have_undo_overlay = out_has;
     return true;
 }
 

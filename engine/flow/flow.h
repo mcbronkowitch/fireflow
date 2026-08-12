@@ -90,11 +90,14 @@ public:
     // The undo slot, for persistence (§5: "Patch reload ... and later hardware
     // boots restore the full saved state -- current terrain code, lock, AND
     // the undo slot"). wake() deliberately clears the slot, so a host restores
-    // in that order: wake(saved state), set_lock(saved lock),
-    // restore_undo(saved undo, saved can_undo). Restoring a slot is
-    // bookkeeping, not a gesture -- it starts no blend and moves no parameter,
-    // so a reloaded patch sounds exactly as it did when saved and the first
-    // undo press behaves as if the session had never ended.
+    // in that order: wake(saved state, saved overlay), set_lock(saved lock),
+    // restore_undo(saved undo, saved can_undo, saved undo's overlay). The
+    // slot's `ov` is the overlay that belongs to the SLOT's state `s`, not to
+    // whatever wake() just set as the live one -- a place with no saved
+    // overlay of its own passes nullptr, exactly like wake(). Restoring a
+    // slot is bookkeeping, not a gesture -- it starts no blend and moves no
+    // parameter, so a reloaded patch sounds exactly as it did when saved and
+    // the first undo press behaves as if the session had never ended.
     const TerrainState& undo_state() const { return _undo; }
     void restore_undo(const TerrainState& s, bool have_undo, const BaseOverlay* ov = nullptr);
     float blend_phase() const { return _blend_phase; }  // 1.f when settled
