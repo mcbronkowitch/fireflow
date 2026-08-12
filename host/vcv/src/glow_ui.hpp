@@ -155,7 +155,7 @@ inline GlowSave glow_capture(const spky::flow::Flow& fl) {
     // that breaks it (flow.cpp:242-246), and glow_restore() below is a caller:
     // it wakes with the live base and then hands the SLOT's own base to
     // restore_undo. A divergent pair is therefore a state a loaded Flow is
-    // routinely in, and deriving this field from `base` would collapse it on
+    // conceivably in, and deriving this field from `base` would collapse it on
     // the next save -- a pair that survives exactly one load.
     if (const spky::flow::BaseOverlay* uov = fl.undo_overlay()) {
         s.undo_base = *uov;

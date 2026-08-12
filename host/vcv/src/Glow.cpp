@@ -79,13 +79,23 @@ static const char* kMacroNames[spky::flow::MACRO_COUNT] = {
 // string at construction. This is the one deliberate carve-out from "the panel
 // table is the only source": the tooltip label is computed live from the
 // module's Place array, while the plate itself still prints only the number.
+//
+// The `[base]` marker is the other half of the same rule (spec 2026-08-11
+// §6): a place with a hand-authored overlay is NOT fully described by its
+// code, and a UI that prints only the code implies it is. Every place where a
+// pad is named carries the marker -- this tooltip, the Places submenu and the
+// paste submenu -- so the fact cannot be seen in one list and missed in
+// another. It says only THAT there is a base, not what is in it; the base
+// itself is a 38-row overlay and belongs in the clipboard, not in a title.
 struct PadQuantity : SwitchQuantity {
     const spkyvcv::Place* place = nullptr;
     int pad = 0;
     std::string getLabel() override {
-        if (place && place->name[0] != '\0')
-            return string::f("Pad %d  %s", pad + 1, place->name);
-        return string::f("Pad %d", pad + 1);
+        std::string s = string::f("Pad %d", pad + 1);
+        if (!place) return s;
+        if (place->name[0] != '\0') { s += "  "; s += place->name; }
+        if (place->has_base) s += "  [base]";
+        return s;
     }
 };
 
@@ -208,9 +218,16 @@ struct Glow : Module {
     //     torn read to get wrong the way a string has -- the bound is a
     //     compile-time constant and a reader cannot run off it. pinCurrent is
     //     the only writer that is not a whole-array handover, and it writes the
-    //     overlay BEFORE the has_base flag that publishes it, so a place that
-    //     had no base can never be read as claiming one. What a torn read CAN
-    //     still show is a pad that already had a base being re-pinned: the
+    //     overlay BEFORE the has_base flag that publishes it, so the SOURCE
+    //     never asks for a place to claim a base it has not been given. That
+    //     is a convention, not a guarantee: both fields are plain non-atomic
+    //     stores, so nothing in the memory model forbids the flag being
+    //     published first. A fence here would not close it either -- the
+    //     readers are plain non-atomic reads with no acquire side, and
+    //     std::atomic on the fields is ruled out because Place must stay
+    //     trivially copyable (two static_asserts depend on it, and SET_PLACES
+    //     is a memcpy). What a torn read CAN still show is a pad that already
+    //     had a base being re-pinned: the
     //     reader may see a mixture of the old overlay and the new one under
     //     has_base = true. Bounded, never unsafe, and exactly the same shape as
     //     the torn `code` string this paragraph already accepts -- the place is
@@ -383,9 +400,11 @@ struct Glow : Module {
         // and this is the audio thread writing underneath them. Setting
         // has_base first would publish "there is a base here" over the base
         // this pad had a moment ago, and stagePlaces would hand that pair
-        // straight back as authoritative. In this order a pad that had no base
-        // can never be seen claiming one. See the tearing note above
-        // applyPlaces() for what a torn read of the overlay itself can cost.
+        // straight back as authoritative. This order is what the source ASKS
+        // for; it is a convention rather than a guarantee, because both stores
+        // are plain and non-atomic. See the tearing note above applyPlaces()
+        // for why it is not promoted to one, and for what a torn read of the
+        // overlay itself can cost.
         const spky::flow::BaseOverlay* ov = flow.overlay();
         if (ov) places[pad].base = *ov;
         places[pad].has_base = ov != nullptr;
@@ -1404,10 +1423,17 @@ struct GlowWidget : ModuleWidget {
         menu->addChild(new MenuSeparator);
         menu->addChild(createSubmenuItem("Places", "", [m](Menu* sub) {
             for (int i = 0; i < spkyvcv::kPadCount; ++i) {
+                // "  [base]" for a pad carrying a hand-authored overlay -- see
+                // PadQuantity, which prints the same marker for the same
+                // reason. places[] is read unsynchronised here exactly as the
+                // name is; the worst a torn read can do is show the previous
+                // pin, and the tearing note above applyPlaces() says why that
+                // is the accepted cost.
                 const std::string title =
                     string::f("Pad %d", i + 1) +
                     (m->places[i].name[0] == '\0'
-                         ? std::string() : "  " + std::string(m->places[i].name));
+                         ? std::string() : "  " + std::string(m->places[i].name)) +
+                    (m->places[i].has_base ? "  [base]" : "");
                 sub->addChild(createSubmenuItem(title, "", [m, i](Menu* pm) {
                     // The pad number, not flow.state(): the encode happens on
                     // the audio thread, which owns both the terrain it reads
@@ -1493,11 +1519,16 @@ struct GlowWidget : ModuleWidget {
             menu->addChild(createSubmenuItem("Paste patch onto pad", "",
                 [m, clipBase, clipHas](Menu* sub) {
                     for (int i = 0; i < spkyvcv::kPadCount; ++i) {
+                        // The marker earns the most here: this list is where a
+                        // base gets overwritten, and "[base]" is the only
+                        // warning that the pad about to be clicked is already
+                        // carrying one.
                         const std::string title =
                             string::f("Pad %d", i + 1) +
                             (m->places[i].name[0] == '\0'
                                  ? std::string()
-                                 : "  " + std::string(m->places[i].name));
+                                 : "  " + std::string(m->places[i].name)) +
+                            (m->places[i].has_base ? "  [base]" : "");
                         sub->addChild(createMenuItem(title, "",
                             [m, i, clipBase, clipHas]() {
                                 m->stagePlaces([&](spkyvcv::Place* p) {

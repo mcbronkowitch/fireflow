@@ -759,6 +759,21 @@ inline bool decode_into(const char* text, spky::flow::BaseOverlay& out) {
         // changed is only that some strings which used to be refused for
         // holding trailing prose are now read, and the prose is required to
         // announce itself with a '#'.
+        //
+        // THE CONSEQUENCE, stated because it is load-bearing rather than
+        // incidental: a string made ONLY of whitespace and '#' lines -- "   ",
+        // "\n", a pasted Markdown document -- now decodes SUCCESSFULLY, as the
+        // EMPTY base. That is not a slip. A rejected transfer's clipboard is
+        // exactly that shape (its overlay half is the empty string and the
+        // whole payload is the report, commented out), and "a rejected
+        // transfer's clipboard string pastes as an empty base" in
+        // tests/test_flow_patch_bridge.cpp requires it. On the Glow side an
+        // empty base is a real answer that CLEARS the pad's overlay, so this
+        // reaches a destructive path: base_for_pad returns true with has =
+        // false, and the paste menu announces it ("Clipboard: an EMPTY flow
+        // base -- pasting CLEARS the pad") before the pad is clicked. Anything
+        // that tightened this -- refusing comment-only strings -- would have to
+        // give a rejected transfer a different clipboard shape first.
         if (*q == ' ' || *q == '\t' || *q == '\r' || *q == '\n') { ++q; continue; }
         if (*q == '#') {
             while (*q && *q != '\n') ++q;

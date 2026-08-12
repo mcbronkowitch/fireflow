@@ -78,12 +78,24 @@ TEST_CASE("a loud pair is rejected whole and said so") {
 }
 
 TEST_CASE("an out-of-range tempo is clamped AND reported") {
-    FireflowPatch fp{};
-    fp.p[kFfEngineB] = 0.f;
-    fp.p[kFfTempo]   = 180.f;                // flow's ceiling is 140
-    const TransferReport r = to_flow_base(fp);
-    CHECK(r.overlay.v[P_TEMPO_BPM] == doctest::Approx(kParams[P_TEMPO_BPM].hi));
-    CHECK(has_note_for(r, P_TEMPO_BPM));
+    // TEMPO is a 0..1 KNOB, not a BPM: Fireflow computes bpm = 40 + knob * 200
+    // (Fireflow.cpp:919), so the knob's travel is 40..240 against flow's
+    // 50..140 and BOTH ends run off the range. Writing a BPM into p[kFfTempo]
+    // here would still pass -- and would be the exact units confusion this
+    // file's whole thesis is written against.
+    FireflowPatch top{};
+    top.p[kFfEngineB] = 0.f;
+    top.p[kFfTempo]   = 1.f;                 // knob fully up = 240 BPM
+    const TransferReport rt = to_flow_base(top);
+    CHECK(rt.overlay.v[P_TEMPO_BPM] == doctest::Approx(kParams[P_TEMPO_BPM].hi));
+    CHECK(has_note_for(rt, P_TEMPO_BPM));
+
+    FireflowPatch bottom{};
+    bottom.p[kFfEngineB] = 0.f;
+    bottom.p[kFfTempo]   = 0.f;              // knob fully down = 40 BPM
+    const TransferReport rb = to_flow_base(bottom);
+    CHECK(rb.overlay.v[P_TEMPO_BPM] == doctest::Approx(kParams[P_TEMPO_BPM].lo));
+    CHECK(has_note_for(rb, P_TEMPO_BPM));
 }
 
 TEST_CASE("a value the runtime veto will rewrite is reported before it is heard") {
@@ -361,6 +373,26 @@ TEST_CASE("the summary names the losses by hand, not by its own rule") {
     const std::string mflat =
         join_lines(report_summary_lines(to_flow_base(mixed), 200));
     CHECK(mflat.find("MODE: LOSSY") != std::string::npos);
+
+    // The last two tags in kSevereTags, and the two no case above reaches. Both
+    // were deletable from the table with the whole suite still green: the
+    // "rejected says so in its first menu line" case below reads lines[0],
+    // which comes from report_head and not from the tag table, and REPORT FULL
+    // has no input that produces it at all. Both notes are kNoteGeneral, so the
+    // label is "(patch)".
+    FireflowPatch loud{};
+    loud.p[kFfEngineA] = 1.f;   // SAMPLER on both decks: no carrier anywhere
+    loud.p[kFfEngineB] = 1.f;
+    const std::string lflat =
+        join_lines(report_summary_lines(to_flow_base(loud), 200));
+    CHECK(lflat.find("(patch): REJECTED WHOLE") != std::string::npos);
+
+    TransferReport full;        // REPORT FULL: only an overflowing sink writes it
+    spkyvcv::detail::NoteSink sink(full);
+    for (int i = 0; i < kMaxNotes + 5; ++i) sink.note(i, "filler");
+    sink.finish();
+    const std::string fflat = join_lines(report_summary_lines(full, 200));
+    CHECK(fflat.find("(patch): REPORT FULL") != std::string::npos);
 }
 
 TEST_CASE("every severity tag is one the converter actually writes") {

@@ -256,18 +256,26 @@ this repo has been bitten four times by exactly this class of change):
 |---|---|---|
 | ENGINE knob, 0..4 | `P_ENGINE_A/B`, `EngineId` 0..5 | renumber: 0→SYNTH, 2→WAVE, 3→BODY, 4→BBD, everything else→SAMPLER. Position 1 becomes TEST_TONE only when the part's separate `testTone` flag is set, so it is not a knob position and does not transfer |
 | CHOKE | `P_CHOKE` | ×0.5 |
-| DRIFT | `P_DRIFT` | settle-zone rescale |
+| DRIFT | — | **does not transfer.** `P_DRIFT` is story-owned (no `kBaseRules` entry), so an overlay entry for it would be read by nothing. The "settle-zone rescale" this row used to describe was never buildable; report it as dropped |
 | COUPLE | `P_COUPLE` | grid-zone split; also the only source of `set_sync` |
 | TEMPO, 40..240 | `P_TEMPO_BPM`, 50..140 | clamp, and report anything outside |
-| COMP knob (is LVL) | `P_COMP_A/B` | drives `set_part_level`, which flow never calls |
-| GRIT, bipolar | `P_GRIT_A/B`, unipolar | magnitude only; the mode is lost |
-| SONG rung | `P_FORM_*`, `P_SONG_*` | 14 curated rungs of 35 combinations |
+| COMP knob (is LVL) | `P_COMP_B` **only** | the knob is not the comp amount: store what Fireflow pushes, `P_COMP_B = lvl <= 0.6 ? 0 : 0.7·((lvl−0.6)/0.4)^0.6` (`Fireflow.cpp:633-641`). Its lower zone is deck balance via `set_part_level`, which flow never calls, so that half is lost. `P_COMP_A` is story-owned and does not transfer |
+| GRIT, bipolar | — | **does not transfer.** `P_GRIT_A/B` are both story-owned; neither the magnitude nor the mode has a destination |
+| SONG rung | `P_FORM_B`, `P_SONG_B` | 14 curated rungs of 35 combinations. The `_A` halves (`P_FORM_A`, `P_SONG_A`) are story-owned and do not transfer, so the rung reaches deck B only |
+
+Four of these rows were corrected on 2026-08-12 (DRIFT, GRIT, COMP, SONG), after
+`docs/flow-fireflow-param-map.md` was written against the code and disagreed with
+them. **That map is the authority for every row above**; where the two differ the
+map wins, and this table is a summary of it.
 
 And the parameters with no path at all, which the report must name every time:
 
 - **`P_ROOT`** — Fireflow has no ROOT control; `set_root` does not appear in
   `Fireflow.cpp` at all.
-- **`P_FORM_A/B`** — no FORM control since the 2026-08-09 control reduction.
+- **`P_FORM_A` and `P_SONG_A`** — story-owned, so deck A's form and song mode
+  have no destination. `P_FORM_B`/`P_SONG_B` **do** transfer, off the SONG
+  ladder: there is no FORM control since the 2026-08-09 reduction, but the SONG
+  knob's rung supplies both.
 - **`P_MODE`** — not independent; it rides COUPLE's zone split.
 - **`P_DRIVE`, `P_REV_SMEAR`, `P_REV_MOD`** — hardcoded in `Fireflow.cpp`.
 - **the 25 story parameters** — dropped by §3's ruling.

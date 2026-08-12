@@ -46,7 +46,7 @@ TEST_CASE("an overlay reaches every base-rule parameter") {
             // assert against a rejected overlay. Pick a carrier that differs
             // from the drawn value instead; the claim is unchanged.
             const int drawn = int(plain.base[p] + 0.5f);
-            for (int k = 0; k < 3; ++k)
+            for (int k = 0; k < kCarrierEngineCount; ++k)
                 if (kCarrierEngine[k] != drawn) { ov.v[p] = float(kCarrierEngine[k]); break; }
         } else {
             const float mid = 0.5f * (kParams[p].lo + kParams[p].hi);
@@ -283,6 +283,13 @@ TEST_CASE("undo then redo keeps each state paired with its own overlay") {
 // directly), so a bug inside one of them moves both sides of every CHECK
 // below equally. See "roles_of puts a carrier on the deck a_carries names"
 // for a property that lives on one side only.
+//
+// RED recipe (it is not the obvious one): mutate the CALL SITE where
+// generate() consumes roles_of's output -- e.g. swap the two engine ids as
+// they are written into the terrain in terrain.cpp -- and this test reddens
+// immediately. Mutating roles_of ITSELF cannot redden it, for the reason
+// above. That is the whole reason the invariant assertion in the other test
+// exists.
 TEST_CASE("the wish filters agree with generate, over many masters") {
     for (uint32_t m = 1; m < 600u; ++m) {
         const Terrain t = generate(TerrainState{ m, {} });
