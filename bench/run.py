@@ -354,6 +354,7 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "instr_part_2",
         "instr_noverb",
         "deck_mod_hot",
+        "mod_lane_hot",
         "deck_engine_hot",
         "fx_flux_hot",
         "tone_solo",

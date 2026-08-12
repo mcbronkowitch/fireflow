@@ -12,6 +12,7 @@
 #include "synth/synth_engine.h"
 #include "mod/super_modulator.h"
 #include "mod/lane_id.h"
+#include "mod/lane.h"
 #include "mod/divisions.h"
 
 using namespace spky;
@@ -151,6 +152,25 @@ struct DeckModGroup {
     // and folded into the returned checksum so it is not a dead store -- same
     // shape as InstrPartGroup's delay-target readback above.
     float master_hz = 0.f;
+};
+
+// One bare ModLane, driven exactly as SuperModulator drives LANE_PITCH.
+//
+// Task 12 (spec 2026-08-12-modulation-pace): lane.h:196-205 moved _phase and
+// _phase_inc from float to double, because a float increment below half an
+// ulp of the current binade rounds away entirely and the lane freezes --
+// measured stalls at PACE's slow end, where free_hz's floor divided by 32
+// leaves as little as ~0.000625 Hz. -mfpu=fpv5-d16 makes that double add a
+// real hardware instruction, not a software-emulated one, but it is still
+// roughly twice float's latency, and ModLane::process() pays it once per
+// sample on the PITCH lane regardless of rate. deck_mod_hot above prices a
+// whole SuperModulator, but only LANE_PITCH calls process() per sample there
+// (super_modulator.cpp:109); the other four lanes call tick() once per
+// 96-sample raster instead, so the per-sample double add's cost is diluted
+// across deck_mod_hot's row. This row calls process() alone, every sample,
+// so that cost is visible on its own line rather than averaged down.
+struct ModLaneGroup {
+    ModLane lane;
 };
 
 // One SynthEngine, driven exactly as Part::process drives it.
@@ -508,8 +528,9 @@ struct DeckShellGroup {
     float peak      = 0.f;
 };
 
-SerialArena<InstrNoVerbGroup, InstrPartGroup, DeckModGroup, DeckEngineGroup,
-            FxFluxHotGroup, ToneSoloGroup, DeckShellGroup> g_instr_arena;
+SerialArena<InstrNoVerbGroup, InstrPartGroup, DeckModGroup, ModLaneGroup,
+            DeckEngineGroup, FxFluxHotGroup, ToneSoloGroup, DeckShellGroup>
+    g_instr_arena;
 
 void setup_instr_noverb()
 {
@@ -737,6 +758,32 @@ float proc_deck_mod_hot()
         acc += g.mod.lane_output(LANE_PITCH);
     }
     acc += g.master_hz;
+    return acc;
+}
+
+// PART_A's seed base and RATE 0.8 -- the same operating point
+// setup_deck_mod_hot uses above, for the same reason: faithfulness to
+// setup_inst_worst's gate. set_melodic(true) is LANE_PITCH's own setting
+// (super_modulator.cpp:14, `_lanes[i].set_melodic(i == LANE_PITCH)`), which
+// is what the double phase accumulator's comment (lane.h:196-205) calls "the
+// melodic lane" -- the lane driven by process() every sample rather than by
+// tick() once per raster.
+void setup_mod_lane_hot()
+{
+    auto& g = g_instr_arena.emplace<ModLaneGroup>();
+    g.lane.init(kSampleRate, 0x1234abcdu);
+    g.lane.set_melodic(true);
+    g.lane.set_rate_hz(free_hz(0.8f));
+
+    for (int b = 0; b < kInstrSettleBlocks; ++b)
+        for (size_t i = 0; i < kBlock; ++i) g.lane.process();
+}
+
+float proc_mod_lane_hot()
+{
+    auto& g = g_instr_arena.get<ModLaneGroup>();
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i) acc += g.lane.process();
     return acc;
 }
 
@@ -1436,6 +1483,7 @@ const Workload kInstrWorkloads[] = {
     { "instr", "instr_part_2", setup_instr_part_2, proc_instr_part_2 },
     { "instr", "instr_noverb", setup_instr_noverb, proc_instr_noverb },
     { "instr", "deck_mod_hot", setup_deck_mod_hot, proc_deck_mod_hot },
+    { "instr", "mod_lane_hot", setup_mod_lane_hot, proc_mod_lane_hot },
     { "instr", "deck_engine_hot", setup_deck_engine_hot, proc_deck_engine_hot },
     { "instr", "fx_flux_hot", setup_fx_flux_hot, proc_fx_flux_hot },
     { "instr", "tone_solo", setup_tone_solo, proc_tone_solo },
