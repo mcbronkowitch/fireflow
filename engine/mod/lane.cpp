@@ -665,12 +665,12 @@ float ModLane::tick() {
     // This same check also absorbs kick()'s phase jumps (a kick can land
     // _phase past the current step's boundary without _cur_step having
     // moved), FLOW->STEP re-entry (_cur_step is stale from before FLOW was
-    // engaged), and float overshoot of the final partial-interval phase
-    // advance (rounding can nudge _phase a hair past a step edge the walk
-    // below already accounted for). Do not simplify this to an init/reset-
-    // only check -- all four cases share the same "phase says a different
-    // step than _cur_step remembers" symptom and this one branch catches
-    // them all.
+    // engaged), and accumulator-rounding overshoot of the final partial-
+    // interval phase advance (rounding can nudge _phase a hair past a step
+    // edge the walk below already accounted for). Do not simplify this to an
+    // init/reset-only check -- all four cases share the same "phase says a
+    // different step than _cur_step remembers" symptom and this one branch
+    // catches them all.
     if (_step_mode) {
         const int step = shuffle_step_index(
             static_cast<float>(_phase), _steps, _shuffle_latched);

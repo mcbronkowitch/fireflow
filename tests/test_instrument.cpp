@@ -697,18 +697,33 @@ TEST_CASE("instrument: shared shuffle leaves FLOW exact beside an active STEP si
         if (gap < straight_short) straight_short = gap;
         if (gap > straight_long) straight_long = gap;
     }
-    // The nominal step here is exactly 200 samples, but the per-sample
-    // increment is 1/1600 of a cycle and no binary float represents that, so
-    // the accumulated phase crosses a boundary up to one sample early or late.
-    // Widened from 1 to 2 on 2026-08-12 (spec modulation-pace): with the
-    // accumulator in float the residue was one-sided and gaps ran 200/201;
-    // in double it is centred and they run 199/200/201 -- same one-sample
-    // quantization, now symmetric about the nominal boundary instead of
-    // biased late. Measured: short 199, long 201. Straight timing still has
-    // no groove-sized spread, which is what this bound is for -- full shuffle
-    // below moves a boundary by ~66 samples, more than an order of magnitude
-    // beyond this.
-    CHECK(straight_long - straight_short <= 2);
+    // The nominal step is exactly 200 samples (8 steps of a 1600-sample cycle)
+    // and process() adds the increment BEFORE testing the step index, so
+    // boundary k is due at sample 200k-1. Measured fire samples:
+    //   float   0, 200, 400, 599, 799, 999, 1199, 1399, 1599   (gaps 199..200)
+    //   double  0, 199, 399, 599, 799, 999, 1199, 1399, 1600   (gaps 199..201)
+    // The two accumulators miss in OPPOSITE places, which is why the window
+    // widened on 2026-08-12 (spec modulation-pace) while timing got no worse.
+    //
+    // Interior boundaries: shuffle_step_index() is fed
+    // static_cast<float>(_phase) (lane.cpp), and at SHUFFLE 0 the boundaries
+    // are exactly k/8, so a phase within half a float-ulp of k/8 snaps onto it.
+    // Double lands all seven on time that way -- it sits ~1e-14 short and the
+    // cast absorbs that. Float sat 9.7e-8 short at k=1 and 2.1e-7 at k=2, some
+    // 26x and 28x the snap window, so both fired a sample LATE; from k=3 on its
+    // accumulation noise had drifted positive and it landed on time.
+    //
+    // The wrap goes the other way: `while (_phase >= 1.0)` reads the raw
+    // accumulator, with no cast and therefore no snap, and 1600 rounded double
+    // adds finish ~83 ulps below 1.0 -- so the cycle now closes at 1600, where
+    // float's coarser drift had already carried it past 1.0 by 1599.
+    //
+    // Every boundary is still within one sample of nominal, which is all this
+    // check is for: full shuffle below moves one by ~66 samples. The bound is
+    // stated against nominal rather than as a spread, so a window that drifted
+    // away from 200 as a block cannot satisfy it.
+    CHECK(straight_short >= 199);
+    CHECK(straight_long <= 201);
     CHECK(straight_long == doctest::Approx(200.f).epsilon(0.01));
 
     int shuffled_short = step_fires_shuffled[1] - step_fires_shuffled[0];
