@@ -197,13 +197,14 @@ TEST_CASE("format_report names every note") {
 }
 
 // ---------------------------------------------------------------------------
-// report_lines -- the report as Fireflow's context menu shows it (Task 8)
+// What the menu shows, what the clipboard carries, what a paste decides (Task 8)
 // ---------------------------------------------------------------------------
 //
 // The two menu items themselves are Rack widget code and no doctest compiles
-// them. This is the one part of the copy gesture that is not: turning
-// format_report's block of text into the lines a menu can hold. It is here
-// rather than in Fireflow.cpp precisely so these three cases exist.
+// them. Everything about them that is NOT a Rack question lives in
+// flow_patch_bridge.hpp so that it can be gated here: the line wrapping, the
+// choice of which notes a menu is short enough to show, the clipboard string
+// that has to carry a report and still paste, and the paste decision itself.
 
 static std::vector<std::string> words_of(const std::string& s) {
     std::vector<std::string> w;
@@ -218,10 +219,17 @@ static std::vector<std::string> words_of(const std::string& s) {
     return w;
 }
 
-TEST_CASE("the menu report carries every word of the report") {
+static std::string join_lines(const std::vector<std::string>& lines) {
+    std::string s;
+    for (const std::string& l : lines) { s += l; s += "\n"; }
+    return s;
+}
+
+TEST_CASE("wrapping carries every word of the report") {
     FireflowPatch fp{};
     const TransferReport r = to_flow_base(fp);
-    const std::vector<std::string> lines = report_lines(r, 64);
+    const std::string text = format_report(r);
+    const std::vector<std::string> lines = spkyvcv::detail::wrap_lines(text, 64);
 
     std::vector<std::string> joined;
     for (const std::string& l : lines)
@@ -229,16 +237,17 @@ TEST_CASE("the menu report carries every word of the report") {
     // Nothing dropped, nothing reordered, nothing cut in half. A wrapper that
     // truncates the long notes would look tidy in the menu and would be lying
     // about the transfer, which is the one thing this whole file exists against.
-    CHECK(joined == words_of(format_report(r)));
+    CHECK(joined == words_of(text));
 }
 
-TEST_CASE("the menu report has no empty lines") {
+TEST_CASE("wrapping leaves no empty lines") {
     // format_report terminates EVERY line with '\n', so the obvious split
     // leaves a trailing empty piece -- and an empty MenuLabel at the bottom of
     // the menu, which draws as a blank row nobody can explain.
     FireflowPatch fp{};
     const TransferReport r = to_flow_base(fp);
-    const std::vector<std::string> lines = report_lines(r, 64);
+    const std::vector<std::string> lines =
+        spkyvcv::detail::wrap_lines(format_report(r), 64);
     REQUIRE_FALSE(lines.empty());
     for (std::size_t i = 0; i < lines.size(); ++i) {
         CAPTURE(i);
@@ -247,51 +256,278 @@ TEST_CASE("the menu report has no empty lines") {
     }
 }
 
-TEST_CASE("the menu report wraps to the column width it was given") {
+TEST_CASE("wrapping respects the column width it was given") {
     // Rack's MenuLabel::step() widens the menu to fit its text, so ONE 300-char
-    // note would drag the context menu off the screen. The only lines allowed
-    // over the limit are the ones holding a single word longer than it -- those
-    // get to overflow rather than be cut (see the word test above).
+    // note would drag the context menu off the screen. A line may only exceed
+    // the limit when it holds a SINGLE word -- a word that did not fit gets to
+    // overflow rather than be cut (see the word test above). Note that such a
+    // word need not itself be longer than `columns`: it also overflows when the
+    // continuation indent plus the word is what does not fit.
     FireflowPatch fp{};
     const TransferReport r = to_flow_base(fp);
+    const std::string text = format_report(r);
     for (int columns : { 40, 64, 100 }) {
         CAPTURE(columns);
-        const std::vector<std::string> lines = report_lines(r, columns);
-        bool any_long_input = false;
+        const std::vector<std::string> lines =
+            spkyvcv::detail::wrap_lines(text, columns);
         for (const std::string& l : lines) {
             if (int(l.size()) <= columns) continue;
-            const std::vector<std::string> w = words_of(l);
             CAPTURE(l);
-            REQUIRE(w.size() == 1u);
-            CHECK(int(w[0].size()) > columns);
-            any_long_input = true;
+            CHECK(words_of(l).size() == 1u);
         }
-        (void)any_long_input;
     }
     // ...and the wrapping really happens: at 40 columns the report cannot
     // possibly be as few lines as at 100.
-    CHECK(report_lines(r, 40).size() > report_lines(r, 100).size());
+    CHECK(spkyvcv::detail::wrap_lines(text, 40).size() >
+          spkyvcv::detail::wrap_lines(text, 100).size());
+}
+
+TEST_CASE("the wrapper clamps a silly width, and the menu's default is 64") {
+    FireflowPatch fp{};
+    const TransferReport r = to_flow_base(fp);
+    const std::string text = format_report(r);
+    // Below the clamp every width behaves as 24. A column of single words is
+    // not a report, so the wrapper refuses to go narrower rather than obeying.
+    CHECK(spkyvcv::detail::wrap_lines(text, 24) ==
+          spkyvcv::detail::wrap_lines(text, 23));
+    CHECK(spkyvcv::detail::wrap_lines(text, 24) ==
+          spkyvcv::detail::wrap_lines(text, 1));
+    CHECK(spkyvcv::detail::wrap_lines(text, 24) ==
+          spkyvcv::detail::wrap_lines(text, -5));
+    // The default argument, which is the only width Fireflow.cpp ever passes:
+    // nothing else in this suite would notice if it changed.
+    CHECK(report_summary_lines(r) == report_summary_lines(r, 64));
+}
+
+// --- the summary: which notes are short enough to put in a menu -------------
+
+TEST_CASE("the menu summary shows the heavy notes and counts the rest") {
+    FireflowPatch fp{};
+    fp.p[kFfStepsA] = 4.f;   // deck A stepped while COUPLE is free -> LOSSY
+    const TransferReport r = to_flow_base(fp);
+
+    int severe = 0;
+    for (int i = 0; i < r.note_count; ++i)
+        if (severe_tag(r.notes[i].reason)) ++severe;
+    REQUIRE(severe > 0);
+    REQUIRE(severe < r.note_count);   // ...so it really is a SELECTION
+
+    // Short enough to sit in a context menu at all, which is the entire point
+    // of having a summary: the full report runs to about a hundred rows.
+    const std::vector<std::string> shown = report_summary_lines(r, 64);
+    CHECK(shown.size() <= 16u);
+    CHECK(shown.size() <
+          spkyvcv::detail::wrap_lines(format_report(r), 64).size());
+
+    // Read unwrapped, so these substring checks cannot be defeated by a line
+    // break landing in the middle of one.
+    const std::string flat = join_lines(report_summary_lines(r, 200));
+    for (int i = 0; i < r.note_count; ++i) {
+        const char* tag = severe_tag(r.notes[i].reason);
+        if (!tag) continue;
+        CAPTURE(i);
+        CHECK(flat.find(spkyvcv::detail::note_label(r.notes[i].param) + ": " + tag)
+              != std::string::npos);
+    }
+    // The count is the safety net: a tag renamed in to_flow_base without being
+    // renamed in kSevereTags cannot hide a loss, because the note it stops
+    // matching moves into this number instead of vanishing.
+    char expect[64];
+    std::snprintf(expect, sizeof expect, "%d of %d notes shown",
+                  severe, r.note_count);
+    CHECK(flat.find(expect) != std::string::npos);
+    CHECK(flat.find("clipboard") != std::string::npos);
+}
+
+TEST_CASE("the summary names the losses by hand, not by its own rule") {
+    // The test above computes what it expects THROUGH severe_tag, so it agrees
+    // with kSevereTags however that table is edited -- deleting an entry keeps
+    // it green while the menu quietly stops mentioning that loss. These are the
+    // notes a plain patch really has, spelled out, so the table cannot shrink
+    // without something going red.
+    FireflowPatch plain{};
+    const std::string flat = join_lines(report_summary_lines(to_flow_base(plain), 200));
+    CHECK(flat.find("ROOT: UNREACHABLE") != std::string::npos);
+    CHECK(flat.find("TEMPO_BPM: CLAMPED") != std::string::npos);
+    CHECK(flat.find("COMP_B: REWRITTEN AT RUNTIME") != std::string::npos);
+    // ...and the structural notes stay OUT of the menu: they say flow has no
+    // slot for a control and never had, which is a fact about the two
+    // instruments rather than about the patch in hand.
+    CHECK(flat.find("NO DESTINATION") == std::string::npos);
+    CHECK(flat.find("NOT TRANSFERABLE") == std::string::npos);
+
+    FireflowPatch mixed{};
+    mixed.p[kFfStepsA] = 4.f;
+    const std::string mflat =
+        join_lines(report_summary_lines(to_flow_base(mixed), 200));
+    CHECK(mflat.find("MODE: LOSSY") != std::string::npos);
+}
+
+TEST_CASE("every severity tag is one the converter actually writes") {
+    // kSevereTags is a table of string prefixes matched against prose written
+    // somewhere else in the same header. Renaming a tag at the write site and
+    // not here would quietly empty the menu summary out; this is what notices.
+    std::vector<std::string> reasons;
+    const auto collect = [&reasons](const TransferReport& rep) {
+        for (int i = 0; i < rep.note_count; ++i)
+            if (rep.notes[i].reason) reasons.push_back(rep.notes[i].reason);
+    };
+
+    FireflowPatch plain{};
+    collect(to_flow_base(plain));   // UNREACHABLE, CLAMPED, REWRITTEN AT RUNTIME
+
+    FireflowPatch mixed{};
+    mixed.p[kFfStepsA] = 4.f;
+    collect(to_flow_base(mixed));   // LOSSY
+
+    FireflowPatch loud{};
+    loud.p[kFfEngineA] = 1.f;
+    loud.p[kFfEngineB] = 1.f;
+    collect(to_flow_base(loud));    // REJECTED WHOLE
+
+    TransferReport full;            // REPORT FULL: no input can reach it
+    spkyvcv::detail::NoteSink sink(full);
+    for (int i = 0; i < kMaxNotes + 5; ++i) sink.note(i, "filler");
+    sink.finish();
+    collect(full);
+
+    for (int t = 0; t < kSevereTagCount; ++t) {
+        CAPTURE(kSevereTags[t]);
+        bool found = false;
+        for (const std::string& why : reasons)
+            if (why.rfind(kSevereTags[t], 0) == 0) { found = true; break; }
+        CHECK(found);
+    }
 }
 
 TEST_CASE("a rejected transfer says so in its first menu line") {
-    // The one report a player most needs to see before pasting, and the one
-    // case where the clipboard string is empty.
+    // The one report a player most needs to see before pasting.
     FireflowPatch fp{};
     fp.p[kFfEngineA] = 1.f;   // SAMPLER
     fp.p[kFfEngineB] = 1.f;   // SAMPLER -- no carrier on either deck
     const TransferReport r = to_flow_base(fp);
     REQUIRE(r.overlay_rejected);
-    const std::vector<std::string> lines = report_lines(r, 64);
+    const std::vector<std::string> lines = report_summary_lines(r, 64);
     REQUIRE_FALSE(lines.empty());
     CHECK(lines[0].find("REJECTED") != std::string::npos);
-    // ...and the string such a transfer copies is the empty one, which
-    // decode_base reads as "this place has no hand-authored base" rather than
-    // as a zeroed patch. Glow's paste turns that into has_base = false.
-    const std::string payload = encode_base(r.overlay);
-    CHECK(payload.empty());
+}
+
+// --- the clipboard: an overlay and a report in one string -------------------
+
+TEST_CASE("the complete clipboard string pastes back") {
+    // THE gate for carrying the report in the clipboard at all. Round-tripping
+    // encode_base's half would prove nothing -- the question is whether the
+    // string a user actually copies, comment block and all, still decodes.
+    FireflowPatch fp{};
+    fp.p[kFfTuneA] = 0.25f;
+    fp.p[kFfEngineA] = 0.f;   // SYNTH: a carrier, so nothing is rejected
+    const TransferReport r = to_flow_base(fp);
+    REQUIRE_FALSE(r.overlay_rejected);
+
+    const std::string clip = clipboard_base(r);
+    CHECK(clip.find('#') != std::string::npos);            // it has both halves
+    CHECK(clip.find("UNREACHABLE") != std::string::npos);
+
     spky::flow::BaseOverlay out;
-    CHECK(decode_base(payload.c_str(), out));
+    REQUIRE(decode_base(clip.c_str(), out));
+    for (int p = 0; p < P_COUNT; ++p) {
+        CAPTURE(p);
+        CHECK(out.has[p] == r.overlay.has[p]);
+        if (out.has[p]) CHECK(out.v[p] == doctest::Approx(r.overlay.v[p]));
+    }
+    // ...and through the decision that actually consumes it on the Glow side.
+    spky::flow::BaseOverlay pad;
+    bool has = false;
+    REQUIRE(base_for_pad(clip.c_str(), pad, has));
+    CHECK(has);
+}
+
+TEST_CASE("the clipboard carries every note, not just the heavy ones") {
+    // The summary is a selection; this is where the notes it left out have to
+    // still be, or moving the report out of the menu lost them.
+    FireflowPatch fp{};
+    const TransferReport r = to_flow_base(fp);
+    const std::string clip = clipboard_base(r);
+    REQUIRE(r.note_count > 1);
+    for (int i = 0; i < r.note_count; ++i) {
+        CAPTURE(i);
+        CHECK(clip.find(r.notes[i].reason) != std::string::npos);
+    }
+}
+
+TEST_CASE("a rejected transfer's clipboard string pastes as an empty base") {
+    // Its overlay half is the empty string, so the whole payload is nothing but
+    // comments -- the one case where the '#' skipping has to carry the entire
+    // parse rather than just a tail.
+    FireflowPatch fp{};
+    fp.p[kFfEngineA] = 1.f;
+    fp.p[kFfEngineB] = 1.f;
+    const TransferReport r = to_flow_base(fp);
+    REQUIRE(r.overlay_rejected);
+    const std::string clip = clipboard_base(r);
+    CHECK(clip.find("REJECTED") != std::string::npos);
+
+    spky::flow::BaseOverlay out;
+    bool has = true;
+    REQUIRE(base_for_pad(clip.c_str(), out, has));
+    CHECK_FALSE(has);        // the pad is cleared, not left claiming a patch
+}
+
+TEST_CASE("a comment does not make a malformed base decode") {
+    // The extension may not become a loophole: '#' skipping must not let a
+    // broken token through by swallowing the evidence.
+    spky::flow::BaseOverlay out;
+    CHECK_FALSE(decode_base("P_TUNE_A0.5;\n# a note: with; punctuation\n", out));
+    CHECK_FALSE(decode_base("# only a comment\nP_TUNE_A:zzz;\n", out));
+    // ...while the same string with the token intact does decode.
+    CHECK(decode_base("# a note: with; punctuation\nP_TUNE_A:0.5;\n", out));
+    CHECK(out.has[P_TUNE_A]);
+}
+
+// --- the paste decision -----------------------------------------------------
+
+TEST_CASE("base_for_pad: no clipboard at all leaves the pad alone") {
+    spky::flow::BaseOverlay out;
+    bool has = true;
+    CHECK_FALSE(base_for_pad(nullptr, out, has));
+}
+
+TEST_CASE("base_for_pad: a terrain code leaves the pad alone") {
+    // The likeliest wrong clipboard by far: the same menu offers "Copy terrain
+    // code" a few rows up, and both are strings a player pastes onto pads.
+    spky::flow::BaseOverlay out;
+    bool has = true;
+    CHECK_FALSE(base_for_pad(kHouseCode, out, has));
+    CHECK_FALSE(base_for_pad("not a base at all", out, has));
+}
+
+TEST_CASE("base_for_pad: the empty base is accepted, and clears the pad") {
+    // The subtle one, and the reason this function exists rather than an
+    // inline decode. "" decodes CLEANLY -- it means "no hand-authored patch" --
+    // so the honest answer is accept-and-clear. Recording it as has = true
+    // would hand wakePad a pointer to an overlay with nothing in it.
+    spky::flow::BaseOverlay out;
+    bool has = true;
+    CHECK(base_for_pad("", out, has));
+    CHECK_FALSE(has);
     for (int p = 0; p < P_COUNT; ++p) CHECK_FALSE(out.has[p]);
+}
+
+TEST_CASE("base_for_pad: a real base is accepted whole") {
+    spky::flow::BaseOverlay ov;
+    ov.v[P_TUNE_A] = 0.25f;  ov.has[P_TUNE_A] = true;
+    ov.v[P_RES_B]  = 0.5f;   ov.has[P_RES_B]  = true;
+    REQUIRE(is_base_rule(P_TUNE_A));
+    REQUIRE(is_base_rule(P_RES_B));
+
+    spky::flow::BaseOverlay out;
+    bool has = false;
+    REQUIRE(base_for_pad(encode_base(ov).c_str(), out, has));
+    CHECK(has);
+    CHECK(out.has[P_TUNE_A]);
+    CHECK(out.v[P_TUNE_A] == doctest::Approx(0.25f));
+    CHECK(out.has[P_RES_B]);
+    CHECK(out.v[P_RES_B] == doctest::Approx(0.5f));
 }
 
 // ---------------------------------------------------------------------------

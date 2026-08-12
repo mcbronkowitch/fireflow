@@ -519,34 +519,45 @@ inline TransferReport to_flow_base(const FireflowPatch& fp) {
 // format_report
 // ---------------------------------------------------------------------------
 
-inline std::string format_report(const TransferReport& r) {
+namespace detail {
+
+// The one head line, so the full report and the menu summary cannot come to
+// disagree about how much was carried.
+inline std::string report_head(const TransferReport& r) {
     using namespace spky::flow;
-    std::string s;
     int carried = 0;
     for (int p = 0; p < P_COUNT; ++p) if (r.overlay.has[p]) ++carried;
 
     char head[128];
     if (r.overlay_rejected)
         std::snprintf(head, sizeof head,
-                      "Fireflow -> flow: TRANSFER REJECTED, nothing carried\n");
+                      "Fireflow -> flow: TRANSFER REJECTED, nothing carried");
     else
         std::snprintf(head, sizeof head,
-                      "Fireflow -> flow: %d of %d base parameters carried\n",
+                      "Fireflow -> flow: %d of %d base parameters carried",
                       carried, kBaseRuleCount);
-    s += head;
+    return std::string(head);
+}
 
+// kParams[p].name already holds the P_* spelling; strip the prefix so a report
+// reads in panel language rather than in enum language.
+inline std::string note_label(int param) {
+    using namespace spky::flow;
+    if (param < 0 || param >= P_COUNT) return "(patch)";
+    const char* nm = kParams[param].name;
+    if (std::strncmp(nm, "P_", 2) == 0) nm += 2;
+    return std::string(nm);
+}
+
+} // namespace detail
+
+inline std::string format_report(const TransferReport& r) {
+    std::string s = detail::report_head(r);
+    s += "\n";
     for (int i = 0; i < r.note_count; ++i) {
         const TransferNote& n = r.notes[i];
         s += "  ";
-        // kParams[p].name already holds the P_* spelling; strip the prefix so
-        // the report reads in panel language rather than in enum language.
-        if (n.param >= 0 && n.param < P_COUNT) {
-            const char* nm = kParams[n.param].name;
-            if (std::strncmp(nm, "P_", 2) == 0) nm += 2;
-            s += nm;
-        } else {
-            s += "(patch)";
-        }
+        s += detail::note_label(n.param);
         s += ": ";
         s += n.reason ? n.reason : "";
         s += "\n";
@@ -555,13 +566,12 @@ inline std::string format_report(const TransferReport& r) {
 }
 
 // ---------------------------------------------------------------------------
-// report_lines -- the report as a menu can show it
+// wrap_lines -- report text as a menu can hold it
 // ---------------------------------------------------------------------------
 //
-// Fireflow's "Copy patch as flow base" prints the report into the context menu
-// itself, one MenuLabel per line, so that seeing the losses costs no second
-// click. Two things stop format_report's raw output from being that list, and
-// neither is a Rack question:
+// A block of report text as a menu can hold it: one entry per line, no blanks,
+// wrapped. Two things stop raw report text from being that list, and neither is
+// a Rack question:
 //
 //   * it terminates EVERY line with '\n', so the obvious split leaves a
 //     trailing empty piece -- a blank menu row with no explanation;
@@ -576,14 +586,15 @@ inline std::string format_report(const TransferReport& r) {
 //
 // NOTHING IS DROPPED. A word longer than `columns` gets its own over-long line
 // instead of being cut: this report may be ugly, it may not be incomplete.
-// Continuation lines are indented past their note's own indent, so a wrapped
+// Continuation lines are indented past their line's own indent, so a wrapped
 // note reads as one note and not as two.
-inline std::vector<std::string> report_lines(const TransferReport& r,
-                                             int columns = 64) {
+namespace detail {
+
+inline std::vector<std::string> wrap_lines(const std::string& text,
+                                           int columns) {
     // Narrower than this and even a bare parameter name plus its indent would
     // wrap, which turns the guarantee above into a column of single words.
     if (columns < 24) columns = 24;
-    const std::string text = format_report(r);
     std::vector<std::string> out;
 
     std::size_t start = 0;
@@ -619,6 +630,78 @@ inline std::vector<std::string> report_lines(const TransferReport& r,
         if (!empty) out.push_back(cur);
     }
     return out;
+}
+
+} // namespace detail
+
+// ---------------------------------------------------------------------------
+// The menu summary
+// ---------------------------------------------------------------------------
+//
+// The full report is a dozen notes of paragraph-length prose, which comes to
+// about fifty menu rows once wrapped (measured: 48 for a plain patch at 64
+// columns). That buries every item under it and is unreadable exactly where it
+// needs to be read. The menu gets the heaviest losses only -- six rows for the
+// same patch -- and the whole thing travels on the clipboard, where a text
+// editor can hold it.
+//
+// "Heaviest" is these tags, and the table is the selection rule: a note whose
+// reason opens with one of them says the patch will not sound the way it looks
+// -- it was refused, it has no Fireflow source at all, it was moved to fit, or
+// the runtime will overwrite it. The tags a note can carry that are NOT here
+// ("NO DESTINATION", "NOT CARRIED", "NOT TRANSFERABLE AT ALL") all say the same
+// structural thing -- flow has no slot for that control and never did -- which
+// is a property of the two instruments and not of the patch in hand.
+//
+// The tail line counts what it left out, so a tag renamed in to_flow_base
+// without being renamed here cannot hide a loss: it moves into the count.
+inline constexpr const char* kSevereTags[] = {
+    "REJECTED WHOLE",
+    "UNREACHABLE",
+    "CLAMPED",
+    "REWRITTEN AT RUNTIME",
+    "LOSSY",
+    "REPORT FULL",
+};
+inline constexpr int kSevereTagCount =
+    int(sizeof kSevereTags / sizeof *kSevereTags);
+
+// The tag this reason opens with, or nullptr if it is not one of the heavy
+// ones. Exported rather than kept in detail:: so the suite can check the table
+// against the reasons to_flow_base actually writes.
+inline const char* severe_tag(const char* reason) {
+    if (!reason) return nullptr;
+    for (int i = 0; i < kSevereTagCount; ++i)
+        if (std::strncmp(reason, kSevereTags[i],
+                         std::strlen(kSevereTags[i])) == 0)
+            return kSevereTags[i];
+    return nullptr;
+}
+
+inline std::vector<std::string> report_summary_lines(const TransferReport& r,
+                                                     int columns = 64) {
+    std::string s = detail::report_head(r);
+    s += "\n";
+    int shown = 0;
+    for (int i = 0; i < r.note_count; ++i) {
+        const char* tag = severe_tag(r.notes[i].reason);
+        if (!tag) continue;
+        // The tag, not the reason. The reason is three sentences of why, which
+        // is what the clipboard copy is for; here the point is WHICH parameter
+        // and HOW badly, in one glance.
+        s += "  ";
+        s += detail::note_label(r.notes[i].param);
+        s += ": ";
+        s += tag;
+        s += "\n";
+        ++shown;
+    }
+    char tail[128];
+    std::snprintf(tail, sizeof tail,
+                  "%d of %d notes shown -- the whole report is on the "
+                  "clipboard\n", shown, r.note_count);
+    s += tail;
+    return detail::wrap_lines(s, columns);
 }
 
 // ---------------------------------------------------------------------------
@@ -663,6 +746,24 @@ inline bool decode_into(const char* text, spky::flow::BaseOverlay& out) {
     using namespace spky::flow;
     if (!text) return false;
     for (const char* q = text; *q; ) {
+        // Whitespace between tokens, and whole '#' lines, are skipped. This is
+        // what lets ONE clipboard string carry both the overlay and the report
+        // that says what it lost (clipboard_base below) -- the encoded pairs on
+        // the first line, the report commented out under them, readable in any
+        // text editor and still pasteable onto a pad.
+        //
+        // An EXTENSION, not a loosening. Every string that decoded before still
+        // decodes to the same overlay, and the all-or-nothing contract is
+        // untouched: a malformed token still returns false and still leaves the
+        // caller with an empty overlay rather than a plausible half. What
+        // changed is only that some strings which used to be refused for
+        // holding trailing prose are now read, and the prose is required to
+        // announce itself with a '#'.
+        if (*q == ' ' || *q == '\t' || *q == '\r' || *q == '\n') { ++q; continue; }
+        if (*q == '#') {
+            while (*q && *q != '\n') ++q;
+            continue;
+        }
         const char* colon = std::strchr(q, ':');
         const char* semi  = std::strchr(q, ';');
         if (!semi || !colon || colon > semi) return false;
@@ -718,6 +819,70 @@ inline bool decode_base(const char* text, spky::flow::BaseOverlay& out) {
     const bool ok = detail::decode_into(text, tmp);
     out = ok ? tmp : spky::flow::BaseOverlay{};
     return ok;
+}
+
+// ---------------------------------------------------------------------------
+// The clipboard, both halves of it
+// ---------------------------------------------------------------------------
+//
+// What Fireflow's "Copy patch as flow base" puts on the clipboard: the encoded
+// overlay on the first line, then the WHOLE report commented out beneath it.
+// The menu shows only the heavy notes (report_summary_lines); this is where the
+// rest of them live, and it is plain text, so reading it costs opening an
+// editor rather than scrolling a context menu.
+//
+// The result must still paste. decode_base skips '#' lines and inter-token
+// whitespace precisely so that it does, and the round trip of this complete
+// string -- not merely of its first line -- is what the suite gates.
+inline std::string clipboard_base(const TransferReport& r) {
+    std::string s = encode_base(r.overlay);
+    s += "\n";
+    const std::string rep = format_report(r);
+    std::size_t start = 0;
+    while (start < rep.size()) {
+        std::size_t nl = rep.find('\n', start);
+        if (nl == std::string::npos) nl = rep.size();
+        s += "# ";
+        s.append(rep, start, nl - start);
+        s += "\n";
+        start = nl + 1;
+    }
+    return s;
+}
+
+// The paste decision, whole: what a pad should become given whatever text the
+// clipboard is holding. Three answers, and the middle one is the subtle one.
+//
+//   * false            -- nothing usable (no clipboard at all, or a string that
+//                         is not a flow base: a terrain code, a shopping list).
+//                         The caller must leave the pad exactly as it was;
+//                         `out` and `has` are not to be read.
+//   * true, has=false  -- the EMPTY base, which decodes cleanly and means "no
+//                         hand-authored patch". It is also what a REJECTED
+//                         transfer copies, and it is a real answer rather than
+//                         a failure: the pad is cleared back to playing its
+//                         drawn terrain. Recording it as has=true instead would
+//                         hand wakePad a pointer to an overlay with nothing in
+//                         it and let the place claim a patch it has not got.
+//   * true, has=true   -- a real base. The pad takes it.
+//
+// Note that the middle answer is DESTRUCTIVE if the pad already carried a base:
+// pasting a rejected transfer onto a good place discards it. That is deliberate
+// -- "paste this patch here" should leave the pad holding what the clipboard
+// holds, and a paste that silently declined to clear would be the same lie in
+// the other direction -- but it is exactly why Glow.cpp names the clipboard's
+// state in the menu ABOVE the pad list, so the clearing is announced before it
+// is clicked rather than discovered afterwards.
+inline bool base_for_pad(const char* clip, spky::flow::BaseOverlay& out,
+                         bool& has) {
+    using namespace spky::flow;
+    BaseOverlay tmp;
+    if (!clip || !decode_base(clip, tmp)) return false;
+    bool any = false;
+    for (int p = 0; p < P_COUNT; ++p) any = any || tmp.has[p];
+    out = tmp;
+    has = any;
+    return true;
 }
 
 } // namespace spkyvcv

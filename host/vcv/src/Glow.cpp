@@ -190,18 +190,36 @@ struct Glow : Module {
     // places[] has ONE WRITER -- the audio thread -- and SEVERAL TOLERANT
     // READERS: the UI thread hands over a whole replacement array (SET_PLACES)
     // instead of reaching into it, but it also READS places[] unsynchronised in
-    // four spots (PadQuantity::getLabel, the Places submenu title, and both
-    // LabelField::setText calls), and the copy loop in stagePlaces makes a
-    // fifth. All five are benign, and here is why, so nobody has to re-derive
-    // it: a torn read can only ever show a stale or half-updated STRING, never
-    // run off the buffer, because set_label is the only writer of those fields
-    // and it always terminates within `cap` -- the buffers are sized cap + 1
-    // (touch_pads.hpp), so a NUL is present at every byte offset a reader can
-    // reach. Worst case a menu opens showing the previous name. Whole array
-    // rather than one field because a place is only meaningful as a set: a
-    // partial write is a place whose name belongs to some other code. Place is
-    // trivially copyable (touch_pads.hpp asserts it), so applying one costs a
-    // memcpy and allocates nothing.
+    // several spots (PadQuantity::getLabel, both submenu titles, both
+    // LabelField::setText calls, the copy loop in stagePlaces, and dataToJson,
+    // which Rack's autosave can run at any moment). All of them are benign, and
+    // here is why, so nobody has to re-derive it. Two kinds of field now, and
+    // two arguments:
+    //
+    //   * THE STRINGS (code, name, note). A torn read can only ever show a
+    //     stale or half-updated string, never run off the buffer, because
+    //     set_label and encode_code are the only writers and both terminate
+    //     within `cap` -- the buffers are sized cap + 1 (touch_pads.hpp), so a
+    //     NUL is present at every byte offset a reader can reach. Worst case a
+    //     menu opens showing the previous name.
+    //
+    //   * THE BASE (float[P_COUNT] + bool[P_COUNT], since the 2026-08-11
+    //     transfer round). Fixed arrays of PODs, so there is no length for a
+    //     torn read to get wrong the way a string has -- the bound is a
+    //     compile-time constant and a reader cannot run off it. pinCurrent is
+    //     the only writer that is not a whole-array handover, and it writes the
+    //     overlay BEFORE the has_base flag that publishes it, so a place that
+    //     had no base can never be read as claiming one. What a torn read CAN
+    //     still show is a pad that already had a base being re-pinned: the
+    //     reader may see a mixture of the old overlay and the new one under
+    //     has_base = true. Bounded, never unsafe, and exactly the same shape as
+    //     the torn `code` string this paragraph already accepts -- the place is
+    //     one pin behind. Neither is worth a lock on the audio thread.
+    //
+    // Whole array rather than one field because a place is only meaningful as a
+    // set: a partial write is a place whose name belongs to some other code.
+    // Place is trivially copyable (touch_pads.hpp asserts it), so applying one
+    // costs a memcpy and allocates nothing.
     //
     // PIN is the exception that proves it: pinning reads flow.state(), which
     // is audio-thread property, so the menu stages the PAD NUMBER and the
@@ -358,9 +376,19 @@ struct Glow : Module {
         // and the code cannot hold it -- so pinning without this would quietly
         // degrade a pasted patch to the bare seed underneath it, and the loss
         // would only surface the next time that pad was pressed.
+        //
+        // PAYLOAD FIRST, FLAG LAST, like every other handover in this file.
+        // places[] has unsynchronised UI-thread readers -- stagePlaces' copy
+        // loop, and dataToJson, which Rack's autosave can run at any moment --
+        // and this is the audio thread writing underneath them. Setting
+        // has_base first would publish "there is a base here" over the base
+        // this pad had a moment ago, and stagePlaces would hand that pair
+        // straight back as authoritative. In this order a pad that had no base
+        // can never be seen claiming one. See the tearing note above
+        // applyPlaces() for what a torn read of the overlay itself can cost.
         const spky::flow::BaseOverlay* ov = flow.overlay();
-        places[pad].has_base = ov != nullptr;
         if (ov) places[pad].base = *ov;
+        places[pad].has_base = ov != nullptr;
     }
 
     // Audio thread, or a stopped engine (onAdd's patch-load path). A memcpy
@@ -1424,37 +1452,63 @@ struct GlowWidget : ModuleWidget {
         // array; the staged copy is a memcpy of trivially copyable bytes and
         // allocates nothing.
         //
-        // A clipboard holding something else -- a terrain code, a shopping list
-        // -- leaves the pad exactly as it was. decode_base is all-or-nothing by
-        // design, and half a patch on a pad is worse than no patch.
-        menu->addChild(createSubmenuItem("Paste patch onto pad", "",
-            [m](Menu* sub) {
-                for (int i = 0; i < spkyvcv::kPadCount; ++i) {
-                    const std::string title =
-                        string::f("Pad %d", i + 1) +
-                        (m->places[i].name[0] == '\0'
-                             ? std::string()
-                             : "  " + std::string(m->places[i].name));
-                    sub->addChild(createMenuItem(title, "", [m, i]() {
-                        spky::flow::BaseOverlay ov;
-                        const char* clip = glfwGetClipboardString(APP->window->win);
-                        if (!clip || !spkyvcv::decode_base(clip, ov)) return;
-                        // The EMPTY string decodes cleanly and means "no
-                        // hand-authored base" -- it is also what a rejected
-                        // transfer copies (flow_patch_bridge.hpp). Recording
-                        // that as has_base would hand wakePad a pointer to an
-                        // overlay with nothing in it and let the place claim a
-                        // patch it has not got, so it clears the pad instead.
-                        bool any = false;
-                        for (int p = 0; p < spky::flow::P_COUNT; ++p)
-                            any = any || ov.has[p];
-                        m->stagePlaces([&](spkyvcv::Place* p) {
-                            p[i].base     = ov;
-                            p[i].has_base = any;
-                        });
-                    }));
-                }
-            }));
+        // The DECISION -- what a pad should become given whatever text is on
+        // the clipboard -- is base_for_pad(), in flow_patch_bridge.hpp, where
+        // the desktop suite gates all four of its answers. What is left here is
+        // the Rack half: read the clipboard, say what is on it, stage the
+        // result.
+        //
+        // Read ONCE, at menu-open time, and captured by value. It is what the
+        // label below reports, so it had better be what the items paste; and it
+        // keeps a GLFW call out of twelve handlers.
+        {
+            spky::flow::BaseOverlay clipBase{};
+            bool clipHas = false;
+            const bool usable = spkyvcv::base_for_pad(
+                glfwGetClipboardString(APP->window->win), clipBase, clipHas);
+
+            // A refused paste used to be silent, which in a modular rack is
+            // indistinguishable from a broken one. The clipboard's state is
+            // named here, above the pad list, and when there is nothing usable
+            // on it the submenu is disabled rather than offering twelve pads
+            // that would each do nothing.
+            //
+            // The middle case earns its warning: an empty base is a REAL answer
+            // -- it is what a rejected transfer copies -- and pasting it CLEARS
+            // whatever base the pad was carrying. That is the right behaviour
+            // ("paste this patch here" should leave the pad holding what the
+            // clipboard holds), but it is destructive, so it is announced
+            // before it is clicked rather than discovered afterwards.
+            int carried = 0;
+            for (int p = 0; p < spky::flow::P_COUNT; ++p)
+                if (clipBase.has[p]) ++carried;
+            menu->addChild(createMenuLabel(
+                !usable ? std::string("Clipboard: no flow base -- copy one from "
+                                      "Fireflow's menu")
+                : clipHas ? string::f("Clipboard: a flow base, %d parameters",
+                                      carried)
+                          : std::string("Clipboard: an EMPTY flow base -- "
+                                        "pasting CLEARS the pad")));
+
+            menu->addChild(createSubmenuItem("Paste patch onto pad", "",
+                [m, clipBase, clipHas](Menu* sub) {
+                    for (int i = 0; i < spkyvcv::kPadCount; ++i) {
+                        const std::string title =
+                            string::f("Pad %d", i + 1) +
+                            (m->places[i].name[0] == '\0'
+                                 ? std::string()
+                                 : "  " + std::string(m->places[i].name));
+                        sub->addChild(createMenuItem(title, "",
+                            [m, i, clipBase, clipHas]() {
+                                m->stagePlaces([&](spkyvcv::Place* p) {
+                                    p[i].base     = clipBase;
+                                    p[i].has_base = clipHas;
+                                });
+                            }));
+                    }
+                },
+                !usable));
+        }
 
         // The note is the perishable one: parent spec §4.3 defines it as "one
         // sentence: why it was kept", and that sentence exists only in the
