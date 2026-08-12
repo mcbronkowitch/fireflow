@@ -101,6 +101,14 @@ struct RefuseFlash {
     }
 };
 
+enum class PadVisualState { IDLE, LIVE, EXCURSION, REFUSED };
+inline PadVisualState pad_visual_state(bool live, bool excursion, bool refused) {
+    if (!live) return PadVisualState::IDLE;
+    if (refused) return PadVisualState::REFUSED;
+    if (excursion) return PadVisualState::EXCURSION;
+    return PadVisualState::LIVE;
+}
+
 // Exactly what a patch stores OF THE TERRAIN: current code and undo slot.
 // The tonality overrides (spec 2026-08-07 §3) are module settings rather than
 // terrain state and are saved by Glow.cpp directly, not through here.

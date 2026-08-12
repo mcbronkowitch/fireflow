@@ -1003,11 +1003,11 @@ struct Glow : Module {
         // pads.update() moves `live` onto the pressed pad before we can know
         // whether that pad's code decodes, so a REFUSED wake has to put it
         // back. Rolled back, not cleared: live = -1 would be the honest reading
-        // of "no pad's place is playing", but the red refusal collar is painted
+        // of "no pad's place is playing", but the red refusal contour is painted
         // on the live pad and on no other, so clearing it would refuse the
         // player in silence -- and nothing stopped, so the previously live pad
-        // is still exactly the pad the module is on. Without this, the collar
-        // went teal on a pad holding nothing the moment the flash expired,
+        // is still exactly the pad the module is on. Without this, the contour
+        // went copper on a pad holding nothing the moment the flash expired,
         // while the old terrain kept sounding. wakeHouse() answers the same
         // question from the other end: when ITS wake fails it falls back to the
         // house terrain and leaves pad 0 live, because something is playing
@@ -1076,9 +1076,8 @@ struct Glow : Module {
     }
 };
 
-// The generated tables pack every colour as 0xRRGGBB -- lettering (lblRgb,
-// kTexts) and the pad collar (kCollar*) alike. One unpacker, so a widget can
-// never disagree with the header about what a channel is.
+// The generated tables pack every colour as 0xRRGGBB. One unpacker, so a
+// widget can never disagree with the header about what a channel is.
 static NVGcolor panelRGB(unsigned c) {
     return nvgRGB((c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff);
 }
@@ -1166,10 +1165,42 @@ struct LabelField : ui::TextField {
 struct TouchPlate : app::Switch {
     Glow* mod = nullptr;
     int pad = 0;
+    const spkyvcv::glow::PadShape* shape = nullptr;
 
     TouchPlate() {
         momentary = true;
-        box.size = mm2px(Vec(kPadW, kPadH));
+    }
+
+    void configure(Glow* module, int padIndex) {
+        mod = module;
+        pad = padIndex;
+        shape = &kPadShapes[padIndex];
+        box.size = mm2px(Vec(shape->max.x - shape->min.x,
+                             shape->max.y - shape->min.y));
+    }
+
+    Vec localPoint(const spkyvcv::glow::XY& q, float scale) const {
+        const float x = shape->centre.x + (q.x - shape->centre.x) * scale;
+        const float y = shape->centre.y + (q.y - shape->centre.y) * scale;
+        return mm2px(Vec(x - shape->min.x, y - shape->min.y));
+    }
+
+    void beginPadPath(NVGcontext* vg, float scale) const {
+        auto pt = [&](int i) {
+            const auto& q = shape->points[(i + kPadPointCount) % kPadPointCount];
+            return localPoint(q, scale);
+        };
+        Vec p1 = pt(0);
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, p1.x, p1.y);
+        for (int i = 0; i < kPadPointCount; ++i) {
+            Vec p0 = pt(i - 1), p2 = pt(i + 1), p3 = pt(i + 2);
+            Vec c1(p1.x + (p2.x - p0.x) / 6.f, p1.y + (p2.y - p0.y) / 6.f);
+            Vec c2(p2.x - (p3.x - p1.x) / 6.f, p2.y - (p3.y - p1.y) / 6.f);
+            nvgBezierTo(vg, c1.x, c1.y, c2.x, c2.y, p2.x, p2.y);
+            p1 = p2;
+        }
+        nvgClosePath(vg);
     }
 
     void draw(const DrawArgs& args) override {
@@ -1177,34 +1208,32 @@ struct TouchPlate : app::Switch {
         // LightIds for the pads. Twelve lights in the generated header would
         // put runtime state into a panel table.
         const bool live = mod && mod->pads.live == pad;
-        const bool exc = live && mod->pads.excursion;
-        const bool flash = mod && mod->refuse.active(mod->flow.now_s());
+        const bool excursion = live && mod->pads.excursion;
+        const bool refused = mod && mod->refuse.active(mod->flow.now_s());
+        const spkyvcv::PadVisualState state =
+            spkyvcv::pad_visual_state(live, excursion, refused);
+        if (state != spkyvcv::PadVisualState::IDLE) {
+            const unsigned outer = state == spkyvcv::PadVisualState::REFUSED
+                                 ? kPadRefused : kPadCopper;
+            beginPadPath(args.vg, 1.f);
+            NVGcolor halo = panelRGB(outer);
+            halo.a = 0.18f;
+            nvgStrokeColor(args.vg, halo);
+            nvgStrokeWidth(args.vg, mm2px(kPadGlowWidth));
+            nvgStroke(args.vg);
 
-        // WHICH colour a state gets is decided here and only here, because
-        // that is runtime state -- which is also why there are no LightIds for
-        // the pads. WHAT the four colours are belongs to the panel: copper (the
-        // part-B accent) is reserved for "that worked", a hold that actually
-        // rerolled, and a refusal gets a colour of its own, because telling the
-        // player "I refused you" is the only thing RefuseFlash exists for, and
-        // both ways a PAD can earn one -- a hold that LOCK turned down, and a
-        // pad whose stored code will not decode -- are exactly the moments
-        // where a copper collar would read as the reroll that just did not
-        // happen. The refusal red sits with MUTED in gen_panel's palette
-        // (base.BRICK), not above COPPER; the other three ARE palette entries.
-        // All four, and both stroke widths, come from the generated header, so
-        // a palette retune moves the printed tiles and these collars together.
-        NVGcolor collar;
-        if (flash && live)    collar = panelRGB(kCollarRefused);
-        else if (exc)         collar = panelRGB(kCollarExcursed);
-        else if (live)        collar = panelRGB(kCollarLive);
-        else                  collar = panelRGB(kCollarIdle);
+            beginPadPath(args.vg, 1.f);
+            nvgStrokeColor(args.vg, panelRGB(outer));
+            nvgStrokeWidth(args.vg, mm2px(kPadStrokeWidth));
+            nvgStroke(args.vg);
 
-        nvgBeginPath(args.vg);
-        nvgRoundedRect(args.vg, 0.5f, 0.5f, box.size.x - 1.f,
-                       box.size.y - 1.f, mm2px(kPadR));
-        nvgStrokeColor(args.vg, collar);
-        nvgStrokeWidth(args.vg, mm2px(live ? kCollarWLive : kCollarWIdle));
-        nvgStroke(args.vg);
+            if (state == spkyvcv::PadVisualState::EXCURSION) {
+                beginPadPath(args.vg, kPadInnerScale);
+                nvgStrokeColor(args.vg, panelRGB(kPadGreen));
+                nvgStrokeWidth(args.vg, mm2px(kPadStrokeWidth));
+                nvgStroke(args.vg);
+            }
+        }
         app::Switch::draw(args);
     }
 };
@@ -1237,9 +1266,11 @@ struct GlowWidget : ModuleWidget {
                                                                       c.id));
                     break;
                 case WK_PAD: {
-                    auto* p = createParamCentered<TouchPlate>(pos, module, c.id);
-                    p->mod = module;
-                    p->pad = c.id - PAD_1;
+                    const int i = c.id - PAD_1;
+                    const auto& s = kPadShapes[i];
+                    auto* p = createParam<TouchPlate>(mm2px(Vec(s.min.x, s.min.y)),
+                                                       module, c.id);
+                    p->configure(module, i);
                     addParam(p);
                     break;
                 }

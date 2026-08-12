@@ -383,8 +383,15 @@ def test_generated_header_exports_pad_geometry():
     h = g.header()
     check("static constexpr int kPadPointCount = 8;" in h,
           "header lacks point count")
-    check("struct PadShape" in h and "kPadShapes[12]" in h,
+    check("struct PadShape" in h and "XY min; XY max;" in h and
+          "kPadShapes[12]" in h,
           "header lacks pad geometry")
+    for alias in ("static constexpr float kPadW",
+                  "static constexpr float kPadH",
+                  "static constexpr float kPadR",
+                  "kCollar"):
+        check(alias not in h,
+              "header retains obsolete rectangular-pad alias %s" % alias)
 
 
 def test_the_masthead_rules_survive():

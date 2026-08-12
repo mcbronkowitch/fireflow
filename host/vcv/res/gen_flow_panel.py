@@ -85,31 +85,8 @@ SWITCH_W  = 5.0                   # CKSSThree is 4.56 x 9.60 mm
 SWITCH_H  = 9.0
 JACK_R    = 4.2
 
-# --- strokes and the runtime pad collar ---------------------------------------
-# HAIRLINE_W is the stroke the plate prints around every printed shape. It is a
-# constant rather than five typed literals because Glow.cpp's TouchPlate draws
-# ITS collar over the printed pad tile and has to match it exactly.
-#
-# COLLAR_* are the four colours that same widget strokes the live pad with, and
-# the heavier width it uses while a pad is live. They are emitted for one
-# reason: three of the four ARE gen_panel palette entries, and typed into
-# Glow.cpp they were a second copy -- retune the palette and the printed tiles
-# move while the live / excursed / refused collars silently keep the old
-# colours, with nothing gating it. Spec 3.1 grants exactly one carve-out from
-# "no colour is written into Glow.cpp", and it is PadQuantity's runtime label,
-# not this.
-#
-# What stays the widget's is WHICH colour a state gets and when -- that is
-# runtime state, and it is why the pads have no LightIds. This file only owns
-# what the four colours ARE.
-HAIRLINE_W    = 0.28
-COLLAR_LIVE_W = 0.55
-COLLAR_REFUSED  = base.BRICK    # a hold LOCK turned down, or a code that will
-                                # not decode. Copper here would read as the
-                                # reroll that just did not happen.
-COLLAR_EXCURSED = base.COPPER   # part-B accent: "that worked"
-COLLAR_LIVE     = base.GREEN    # part-A accent: this pad's place is playing
-COLLAR_IDLE     = base.LINE     # the printed hairline, redrawn
+# Printed panel-outline width.
+HAIRLINE_W = 0.28
 
 LOGO_Y = 10.0
 LOGO_SZ = 4.2
@@ -558,8 +535,10 @@ def pad_shape_row(shape):
                        for x, y in shape.points)
     lx, ly = shape.label
     cx, cy = shape.centre
-    return ("    { { %s }, { %sf, %sf }, { %sf, %sf } },\n" %
-            (points, mm(lx), mm(ly), mm(cx), mm(cy)))
+    x0, y0, x1, y1 = shape.bounds
+    return ("    { { %s }, { %sf, %sf }, { %sf, %sf }, { %sf, %sf }, { %sf, %sf } },\n" %
+            (points, mm(lx), mm(ly), mm(cx), mm(cy), mm(x0), mm(y0),
+             mm(x1), mm(y1)))
 
 
 def header():
@@ -577,7 +556,7 @@ def header():
     out.append("namespace spkyvcv { namespace glow {\n")
     out.append("struct XY { float x, y; };\n")
     out.append("static constexpr int kPadPointCount = %d;\n" % PAD_POINT_COUNT)
-    out.append("struct PadShape { XY points[kPadPointCount]; XY label; XY centre; };\n")
+    out.append("struct PadShape { XY points[kPadPointCount]; XY label; XY centre; XY min; XY max; };\n")
     out.append("enum WidgetKind { WK_MACRO, WK_PAD, WK_FADER, WK_SWITCH, WK_OUT };\n")
     out.append("struct PanelCtl { int id; WidgetKind kind; XY mm; const char* label;"
                " XY lbl; unsigned char anchor; float lblSize; unsigned lblRgb;"
@@ -596,9 +575,6 @@ def header():
     out.append("static constexpr float kPanelW = %sf;\n" % mm(W))
     out.append("static constexpr float kPanelH = %sf;\n" % mm(Hh))
     out.append("static constexpr float kKnobR   = %sf;\n" % mm(KNOB_R))
-    out.append("static constexpr float kPadW    = %sf;\n" % mm(PAD_W))
-    out.append("static constexpr float kPadH    = %sf;\n" % mm(PAD_H))
-    out.append("static constexpr float kPadR    = %sf;\n" % mm(PAD_R))
     out.append("static constexpr unsigned kPadCopper    = %su;\n" % rgb(PAD_COPPER))
     out.append("static constexpr unsigned kPadCopperDim = %su;\n" % rgb(PAD_COPPER_DIM))
     out.append("static constexpr unsigned kPadGreen     = %su;\n" % rgb(PAD_GREEN))
@@ -615,23 +591,6 @@ def header():
     out.append("static constexpr float kSwitchW = %sf;\n" % mm(SWITCH_W))
     out.append("static constexpr float kSwitchH = %sf;\n" % mm(SWITCH_H))
     out.append("static constexpr float kJackR   = %sf;\n" % mm(JACK_R))
-    # The pad collar Glow.cpp's TouchPlate strokes at runtime. The WIDGET picks
-    # which of these a state gets -- that is runtime state, not panel state, and
-    # it is why the pads have no LightIds. What the colours ARE is the panel's,
-    # and three of the four are gen_panel palette entries: typed into Glow.cpp
-    # they were a second copy that a palette retune would have left behind.
-    out.append("static constexpr unsigned kCollarRefused  = %su;\n"
-               % rgb(COLLAR_REFUSED))
-    out.append("static constexpr unsigned kCollarExcursed = %su;\n"
-               % rgb(COLLAR_EXCURSED))
-    out.append("static constexpr unsigned kCollarLive     = %su;\n"
-               % rgb(COLLAR_LIVE))
-    out.append("static constexpr unsigned kCollarIdle     = %su;\n"
-               % rgb(COLLAR_IDLE))
-    out.append("static constexpr float kCollarWLive = %sf;\n"
-               % mm(COLLAR_LIVE_W))
-    out.append("static constexpr float kCollarWIdle = %sf;\n"
-               % mm(HAIRLINE_W))
     for name, ctls in (("kParamCtls", PARAMS), ("kOutputCtls", OUTPUTS)):
         out.append("static const PanelCtl %s[] = {\n" % name)
         for c in ctls:
