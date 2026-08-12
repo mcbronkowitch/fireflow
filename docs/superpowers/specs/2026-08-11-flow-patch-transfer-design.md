@@ -276,8 +276,13 @@ Finally, the report must state the **veto rewrites** before the owner signs a
 place off, because they are by-ear rulings the memory index says not to "fix":
 `P_COMP_A/B` forced into 0.40–0.60, `P_REVMIX_A/B` floored at 0.08, `P_DRIVE`
 capped at 0.40, `P_REV_MOD` capped at 0.25, `P_RES` capped at 0.75 by `kParams`.
-`P_COMP_B` is on the base side, so a COMP dialled to 0.85 transfers perfectly
-and is heard at 0.60.
+`P_COMP_B` is on the base side, so it transfers — but not by copying the knob.
+The COMP knob is LVL, and Fireflow runs it through a split/power curve before
+`set_comp` (`Fireflow.cpp:633-641`), so an LVL dialled to 0.85 is a comp amount
+of ~0.528, which is what transfers and what is heard: in band, and what the
+Fireflow patch genuinely sounded like. `docs/flow-fireflow-param-map.md` is the
+authority for this and every other conversion; the converter implements that
+table and invents nothing.
 
 **`flow_params.h`'s "verified against Fireflow.cpp's configParam" comment is
 stale** — it cites a `FORM_A/B configSwitch` that no longer exists. Correcting
