@@ -531,18 +531,55 @@ The parameter is appended at the end of `PARAMS`;
 `tests/test_seed_audition_init.cpp:74` asserts `NUM_PARAMS == 68` and becomes
 69.
 
-**OPEN — PACE needs a physical slot on the 68 HP board, and this is a hard
-gate.** `gen_hw_panel.py:166` runs `HW_PARAMS = [place(c) for c in
-gp.RUNTIME_PANEL_PARAMS]` at *module scope* and `place()` ends in
-`raise KeyError` (`:164`). `CENTER_POS` has no `PACE` key and the `Y_B1K` row
-already carries five knobs at 12.5 mm pitch. The instant PACE enters `PARAMS`,
-`import gen_hw_panel` throws, `res/test_hw_panel.py` dies at import and takes
-the `hw_panel_guard` ctest with it — so the `PARAMS` edit and the `CENTER_POS`
-entry are **one atomic commit**, and this decision blocks the entire Fireflow
-half. The position must also clear `test_hw_slot_map_matches_the_reduced_inventory`
-and `test_labels_stay_off_neighbour_footprints` (`LBL_MARGIN` at
-`test_hw_panel.py:213`). **This is the one decision this design does not make.**
-It belongs with `hw-panel-regroup-open-decisions`.
+**Hardware panel (60 HP — `gen_hw_panel.py:16`, `HP = 60`; the 68 that appears
+in older notes is the parameter count, not the width).**
+
+```python
+CENTER_POS["PACE"] = (127.4, Y_B1G)     # HW_SIZE["PACE"] = "S"
+```
+
+Directly under TEMPO, immediately left of TIDE. Two reasons:
+
+- It follows the panel's own grammar. The G row is already used for a second
+  control hanging under its K-row column head — `MOD` under `SHAPE` (both
+  26.5), `DENSITY` under `RANGE` (both 51.5). `PACE` under `TEMPO` (both 127.4)
+  is the same construction, and it mirrors the VCV decision of putting PACE in
+  the TIMING box beside TEMPO.
+- It puts PACE next to TIDE. Those two are the confusion pair this whole design
+  came out of; adjacency is what makes the distinction learnable — TIDE is a
+  ratio, PACE is the speed.
+
+Clearances, computed against the real geometry rather than estimated:
+
+| check | worst case | slack |
+|---|---|---|
+| glyph vs glyph | TIDE, 13.0 mm centre distance | **2.00 mm** |
+| PACE's caption vs other footprints | TIDE | 8.26 mm |
+| other captions vs PACE's footprint | TEMPO | 3.00 mm (needs 1.5) |
+
+13.0 mm to TIDE is *more* generous than the row above, which runs a 12.5 mm
+pitch at the same radii. Inside `KEEP_TOP`/`KEEP_BOT`. The position must still
+clear `test_hw_slot_map_matches_the_reduced_inventory` and
+`test_labels_stay_off_neighbour_footprints` (`LBL_MARGIN` at
+`test_hw_panel.py:213`) when the generator actually runs.
+
+Two consequences named rather than discovered:
+
+- **The row loses its symmetry.** TIDE and CHOKE sit at exactly ±12 mm about
+  the panel centre today; the row becomes −25 / −12 / +12. The centre is a set
+  of centred clusters rather than one axis, so this is defensible — but it is a
+  change to the layout's grain, not a pure addition.
+- **PACE cannot be a large knob here.** A `G` glyph (r = 8.0) needs 13.5 mm to
+  TIDE and gets 13.0. Making PACE a primary-sized control means moving TIDE,
+  which is a regrouping decision, not a placement one — and belongs with
+  `hw-panel-regroup-open-decisions`, not with this work.
+
+The hard gate remains, and it sets the commit boundary: `gen_hw_panel.py:166`
+runs `HW_PARAMS = [place(c) for c in gp.RUNTIME_PANEL_PARAMS]` at *module
+scope* and `place()` ends in `raise KeyError` (`:164`), so the instant PACE
+enters `PARAMS` without a `CENTER_POS` entry, `import gen_hw_panel` throws,
+`res/test_hw_panel.py` dies at import and takes the `hw_panel_guard` ctest with
+it. The `PARAMS` edit and the `CENTER_POS` entry are **one commit** (§9).
 
 **Glow.** `M_DIRT` → `M_PACE`. The panel is generated and byte-gated
 (`test_flow_panel.py:385`), and `res/Glow.svg` needs no edit because the macro
