@@ -115,11 +115,16 @@ TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto") {
     // of its curve was deterministically exactly 0.0 -- which is also kVetos'
     // P_DRIVE lo, with no clamp involved. That story is deleted and P_DRIVE
     // is now an ordinary base rule drawn continuously inside {0,.10}..{.10,.30}
-    // per archetype, so it can no longer manufacture an exact 0.0 by itself.
-    // Its 0.40 hi is a strictly-interior bound, so keeping the exclusion would
-    // now be discarding real evidence rather than filtering a coincidence.
-    // Its 0.00 lo remains non-interior (kParams[P_DRIVE].lo is 0 too), which
-    // the interior/edge split below already handles for everybody.
+    // per archetype, so no DRAW lands on an exact 0.0 any more. It can still
+    // reach one the ordinary way -- clamp_to(kParams[P_DRIVE], ...) saturating
+    // at its 0.0 lo mid-blend -- which is exactly the coincidence the next
+    // paragraph documents for P_REV_MOD's 0.00 and P_REVMIX_A/B's 1.00, so it
+    // is now in that class rather than in a class of its own. That costs the
+    // loose edge_hits count precisely that much and costs the interior
+    // requirement nothing: lo_interior[] correctly classes P_DRIVE's 0.00 as
+    // non-interior. Its 0.40 hi, by contrast, IS strictly interior, so keeping
+    // the exclusion would have discarded real evidence rather than filtering a
+    // coincidence -- which is why it went.
     //
     // CORRECTED 2026-08-06 (final review): a bare edge_hits count over ALL
     // five non-DRIVE params is a weaker exercise-proof than it looks, because

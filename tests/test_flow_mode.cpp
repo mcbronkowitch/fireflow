@@ -18,12 +18,19 @@ TEST_CASE("flow mode: nothing may be inserted before P_MODE") {
     // state it, and on 2026-08-12 P_PACE was APPENDED BEHIND P_MODE precisely
     // because appending is free: a later param re-seeds nothing earlier. So
     // the position is pinned by INDEX now, against the enum as it stood when
-    // the terrain codes in circulation were drawn. Anything appended after
-    // P_PACE is free too and needs no edit here; anything that moves P_MODE
+    // the terrain codes in circulation were drawn. Anything that moves P_MODE
     // down re-renders every terrain code and must go red.
+    //
+    // The first two CHECKs are the invariant. The third is NOT -- it is a
+    // deliberate INVENTORY MARKER, and appending a parameter WILL redden it.
+    // That is the intent: appending is free for the streams but it is not free
+    // for the reader, and the one edit it should cost is bumping this line
+    // while re-reading the paragraph above. Bump it; do not delete it, and do
+    // not read its failure as a stream problem -- if P_MODE == 62 and
+    // P_PACE == 63 still hold alongside it, nothing re-seeded.
     CHECK(P_MODE == 62);
     CHECK(P_PACE == P_MODE + 1);
-    CHECK(P_PACE == P_COUNT - 1);      // nothing appended after it yet
+    CHECK(P_PACE == P_COUNT - 1);      // inventory marker: bump on append
     // The two facts flow.cpp's static_asserts turn into a compile error, kept
     // here as a readable statement of the ordering they enforce.
     CHECK(P_RANGE_A < P_MODE);

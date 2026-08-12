@@ -119,13 +119,20 @@ RenderStats render_flow(Flow& fl, Instrument& inst,
 //
 // Parking it at 0 with the other five is not a quieter instrument, it is a
 // DIFFERENT one, and it moved this gate's own subject when PACE took DIRT's
-// slot on 2026-08-12: the population's mute fraction read 32.8% (45 of 137)
-// against a 6.6%-at-the-time bound, because a lane clocked 32x slow emits
-// almost nothing inside a 7 s measurement window. Nothing about the level
-// mechanism had changed. Neither kCalmMuteFracMax nor kCalmCornerRmsMin was
-// touched to accommodate it -- the parking was corrected instead, which is the
-// only move here that does not amount to fitting a gate to a knob position it
-// was never measuring.
+// slot on 2026-08-12: the subsample's mute fraction read 32.8% (45 of 137)
+// against kCalmMuteFracMax = 0.10 -- more than three times the bound, and
+// roughly five times the 6.58% the FULL population measured at the time
+// (taste.h states both; the 6.58% is a measured rate, not the bound). A lane
+// clocked 32x slow emits almost nothing inside a 7 s measurement window.
+// Nothing about the level mechanism had changed. Neither kCalmMuteFracMax nor
+// kCalmCornerRmsMin was touched to accommodate it -- the parking was corrected
+// instead, which is the only move here that does not amount to fitting a gate
+// to a knob position it was never measuring.
+//
+// WHAT THIS PARKING COSTS, stated so it is not silently lost: no calm-corner
+// render now exercises PACE anywhere but neutral. The x1/32 and x4 ends are
+// covered by "flow audio: an extreme PACE still renders finite audio" below,
+// which asserts FINITENESS ONLY -- see the reasoning there.
 void park_calm(Flow& fl) {
     for (int m = 0; m < MACRO_COUNT; ++m)
         fl.set_macro(m, m == M_PACE ? 0.5f : 0.f);
@@ -284,6 +291,92 @@ TEST_CASE("flow audio: calm corner sits under the ceiling on every fixed seed (7
         CHECK_FALSE(rs.has_nan);
         CHECK(rs.rms <= kCalmCornerRmsMax);
     }
+}
+
+// ---------------------------------------------------------------------------
+// The coverage park_calm() costs back (2026-08-12). Parking M_PACE on its
+// neutral is right for every gate above -- they measure LEVEL, and a
+// time-stretch has no calm end -- but the consequence is that no audio case
+// renders PACE anywhere except x1. The two ends of pace_mult are five octaves
+// of tempo apart and the slow one is where the arithmetic is uncomfortable: at
+// x1/32 a lane's base_hz falls to ~1.4e-3 Hz, which is the exact reason Task 3
+// moved the phase accumulator to double, and the transport's grid servo is
+// aiming at a target 32x away from where it started.
+//
+// THIS ASSERTS FINITENESS AND NOTHING ELSE, deliberately. A level or mute bound
+// on one fixed seed at the slowest setting in the range would be a number
+// fitted to that seed, and the first taste-table edit that moved it would be
+// answered by widening the bound -- the shape this file has already refused
+// three times (kBlendSpikeDb, kCalmCornerRmsMax, kBlendGateWindowS all carry
+// the refusal). "The audio is finite" is a claim that is true or false, never
+// nearly true, so it can never be tuned.
+//
+// The reference render is what keeps it from being vacuous: finiteness passes
+// trivially on an all-zero buffer, so the same terrain at the same macros with
+// PACE neutral must first be shown to make sound at all. Macros sit at 0.5,
+// not 0 -- that is the "busy" setting kFixedSeedRmsMin/Max bound to
+// 0.0306..0.1211 across these candidates, so the reference is audible by a
+// measurement this file already carries, not by luck.
+//
+// WHERE THIS GATE'S TEETH ACTUALLY ARE, established by sabotage rather than
+// assumed, because the answer was not the expected one. It was PROVEN RED --
+// a NaN injected into the master limiter on the slow half of the curve trips
+// `has_nan` and `isfinite(rms)` on the x1/32 render alone, leaving x1 and x4
+// clean, so the wiring observes what it claims and is scoped to the extreme.
+// But three sabotages that looked like plausible pace regressions did NOT
+// redden it, and that is worth knowing:
+//
+//   - an unguarded reciprocal in the pace curve (inf `_pace`)      -> finite
+//   - a rate/period inversion in ModLane::_update_inc (inf phase)  -> finite
+//   - a NaN `_bpm` pushed from set_pace                            -> finite
+//
+// Three guards absorb all three: Instrument::set_pace rejects non-finite
+// input, Transport::clock_pulse rejects a non-positive or non-finite pace, and
+// ModLane::set_rate_hz maps anything not > 0 (NaN included) to 0. The third
+// one also explains the last row -- that terrain runs FLOW, where free_hz is
+// the clock and BPM never reaches a lane at all. So this case is not really
+// asserting that the pace arithmetic is safe; it is asserting that those
+// guards are still standing. Read a failure here as "one of them went",
+// not as "the curve is wrong".
+TEST_CASE("flow audio: an extreme PACE still renders finite audio") {
+    uint32_t kept[kMaxKept];
+    const int n = filtered_masters(kept);
+    REQUIRE(n > 0);
+    const uint32_t master = kept[0];
+    CAPTURE(master);
+
+    // skip_s = 0: NaN is checked over the whole render anyway, but peak and rms
+    // are wanted over all of it too -- at x1/32 the interesting part may well
+    // be the first seconds, before anything has had time to move.
+    auto render_at = [&](float pace) {
+        Instrument inst;
+        FxMem mem = flow_audio_fx_mem();
+        inst.init(kSr, mem);
+        Flow fl; fl.init(&inst, kCtrlHz);
+        TerrainState st; st.master = master;
+        fl.wake(st);
+        for (int m = 0; m < MACRO_COUNT; ++m)
+            fl.set_macro(m, m == M_PACE ? pace : 0.5f);
+        return render_flow(fl, inst, 10.0);
+    };
+
+    const RenderStats ref = render_at(0.5f);          // x1, the reference
+    REQUIRE(std::isfinite(ref.peak));
+    REQUIRE(ref.peak > 0.f);                          // non-vacuity, see above
+
+    const RenderStats slow = render_at(0.f);          // x1/32
+    const RenderStats fast = render_at(1.f);          // x4
+    MESSAGE("extreme PACE, master " << master
+            << ": x1 peak=" << ref.peak << " rms=" << ref.rms
+            << " | x1/32 peak=" << slow.peak << " rms=" << slow.rms
+            << " | x4 peak=" << fast.peak << " rms=" << fast.rms);
+
+    CHECK_FALSE(slow.has_nan);
+    CHECK(std::isfinite(slow.peak));
+    CHECK(std::isfinite(slow.rms));
+    CHECK_FALSE(fast.has_nan);
+    CHECK(std::isfinite(fast.peak));
+    CHECK(std::isfinite(fast.rms));
 }
 
 // ---------------------------------------------------------------------------

@@ -43,7 +43,15 @@ static_assert(static_cast<int>(DENSITY) == static_cast<int>(spky::flow::M_DENSIT
               "panel macro order drifted");
 static_assert(static_cast<int>(BRIGHT) == static_cast<int>(spky::flow::M_BRIGHT),
               "panel macro order drifted");
-static_assert(static_cast<int>(DIRT) == static_cast<int>(spky::flow::M_DIRT),
+// The engine enumerator became M_PACE on 2026-08-12 (flow_ids.h), so this
+// assert had to move with it or nothing in host/vcv would compile. The PANEL
+// side is still called DIRT here: that enumerator, its caption and the
+// "Reroll one macro" submenu entry are host-local names with their own rename
+// in the PACE plan's Glow task, which also regenerates res/Glow.svg and
+// src/generated_flow_panel.hpp. Slot 3 is what this line asserts, and slot 3
+// has not moved -- so a half-renamed file here is expected until that task
+// lands, not a leftover.
+static_assert(static_cast<int>(DIRT) == static_cast<int>(spky::flow::M_PACE),
               "panel macro order drifted");
 static_assert(static_cast<int>(WANDER) == static_cast<int>(spky::flow::M_WANDER),
               "panel macro order drifted");
