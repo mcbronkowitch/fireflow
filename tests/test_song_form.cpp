@@ -282,7 +282,11 @@ TEST_CASE("phrase engines remain deterministic after FORM SONG split") {
         }
     }
 
-    CHECK(hash == 0x3f816108ebe77c77ull);
+    // Re-baselined 2026-08-12 (spec modulation-pace): ModLane::_phase and its
+    // increment moved from float to double, so every process() output fed into
+    // this digest changed in its low bits. The digest is a determinism gate --
+    // same inputs, same stream -- not a claim about which bits are correct.
+    CHECK(hash == 0x44372ca9f933a818ull);
 }
 
 TEST_CASE("normal FORM selection becomes observable only at a STEP wrap") {

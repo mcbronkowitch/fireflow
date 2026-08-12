@@ -218,7 +218,13 @@ add_test(
     COMMAND ${CMAKE_COMMAND}
         -DRENDER=$<TARGET_FILE:render>
         -DSCENARIO=${CMAKE_SOURCE_DIR}/host/render/scenarios/ctrl_identity.json
-        -DEXPECTED=2b73f2483dc4a85b7c967c5820815829055de4e98e685d031a096d57abb699cd
+        # Reference moved (spec 2026-08-12 modulation-pace task 3):
+        # ModLane::_phase and its increment moved from float to double, so
+        # every modulated sample in this scenario changed in its low bits.
+        # No bit-exactness gates -- this is a sanity render, not a checksum
+        # (CLAUDE.md); the move is the unavoidable consequence of accumulating
+        # the lane phase in double.
+        -DEXPECTED=328f8c8a33ec64d6108246649b75271b48a5a0aea72761acfa16dba000e3720f
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -P ${CMAKE_SOURCE_DIR}/tests/check_render_hash.cmake
 )
@@ -235,7 +241,10 @@ add_test(
         # now reaches 23.1 ct instead of 7.7 ct. No bit-exactness gates --
         # this is a sanity render, not a checksum (CLAUDE.md); the move is
         # the expected, unavoidable consequence of the ceiling change.
-        -DEXPECTED=eb43dde7ed9bbf41075ff6dcd0d284e9e66cdbc17c79244cab6cf944bb2b99ea
+        # Moved again (spec 2026-08-12 modulation-pace task 3): the lane phase
+        # accumulator is double, and this scenario's formant sweep is
+        # modulated. Same reasoning as above -- sanity render, not a checksum.
+        -DEXPECTED=62274db50a3ed4af21fda658450b17664bbcc026a3cd59bde213aa3f5fdcad5f
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -DGATE_STEM=wave_formant_sweep
         -DREFERENCE=WAVE

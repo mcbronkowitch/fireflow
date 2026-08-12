@@ -64,7 +64,7 @@ public:
     // Unlike gate_state() this is false in FLOW and non-melodic lanes, so it
     // is safe to OR into a pulse-based gate without forcing it permanently high.
     bool  note_sustain() const { return _step_mode && _melodic && _note_age < _note_hold; }
-    float phase()  const { return _phase; }
+    float phase()  const { return static_cast<float>(_phase); }
     // Step-clock factor on the cycle rate (spec 2026-07-17): 8/steps in STEP,
     // 1 in FLOW. The grid servo scales its transport target by this so a
     // synced bank locks its S-step cycle across S/8 divisions.
@@ -100,8 +100,9 @@ public:
     // pushed here via set_step_clock and sliced on directly by the STEP grid
     // fallback, inherits the error straight from here. 0 when stopped.
     float step_samples() const {
-        return _phase_inc > 0.f
-            ? 1.f / (_phase_inc * (1.f + _ev_rate) * static_cast<float>(_steps))
+        return _phase_inc > 0.0
+            ? static_cast<float>(1.0 / (_phase_inc * (1.0 + double(_ev_rate))
+                                        * double(_steps)))
             : 0.f;
     }
     float phase_eff() const;                  // audible phase = (_phase + EVOLVE offset), wrapped
@@ -187,8 +188,17 @@ private:
                                  // fights the per-sample instance
 
     float _sr = 48000.f;
-    float _phase = 0.f;
-    float _phase_inc = 0.f;
+    // The phase accumulator is double, and so is its increment (spec
+    // 2026-08-12 modulation-pace). LANE_PITCH adds _phase_inc once per sample:
+    // in float, an increment below half an ulp of the current binade rounds
+    // away entirely and the lane FREEZES -- measured stalls at phase 0.50 for
+    // 0.00125 Hz and 0.25 for 0.000625 Hz, with a band just above where every
+    // add rounds up to a full ulp and the lane runs fast (0.0025 Hz was 7%
+    // fast). kRateFreeMin is 0.02 Hz, so float left only ~14x of margin and
+    // PACE x1/32 spends all of it. tick()'s process_window_end shadow is part
+    // of this accumulator and moves with it -- see lane.cpp.
+    double _phase = 0.0;
+    double _phase_inc = 0.0;
     float _rate_hz = 0.f;
     float _shape = 0.f;
     float _range = 1.f;

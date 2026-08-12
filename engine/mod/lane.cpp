@@ -11,21 +11,27 @@ static constexpr float kGravity  = 0.10f;  // GROW: mild pull toward 0 (the root
 static constexpr float kEndpointSampleEpsilon = 0.001f;
 
 struct ProcessWindowEnd {
-    float phase;
+    double phase;
     int wraps;
 };
 
-// Rare endpoint fallback for tick(): replay only process()'s raw float phase
+// Rare endpoint fallback for tick(): replay only process()'s raw phase
 // additions for the whole control window. Per-wrap rates come from the real
 // tick traversal, so this shadow performs no events and consumes no RNG.
+//
+// This is a MODEL of process(), so its arithmetic must match process()'s
+// exactly -- it moved from float to double together with _phase on 2026-08-12
+// (PACE). If the two ever diverge again, tick()'s endpoint decision is made
+// against a path the lane does not run, and the line "_phase =
+// shadow_end.phase" below silently re-quantizes the accumulator.
 static ProcessWindowEnd process_window_end(
-    float phase, const float* phase_per_sample_by_wrap, int rate_count) {
+    double phase, const double* phase_per_sample_by_wrap, int rate_count) {
     int wraps = 0;
     for (int sample = 0; sample < ModLane::kTickInterval; ++sample) {
         const int rate_index = wraps < rate_count ? wraps : rate_count - 1;
         phase += phase_per_sample_by_wrap[rate_index];
-        while (phase >= 1.f) {
-            phase -= 1.f;
+        while (phase >= 1.0) {
+            phase -= 1.0;
             ++wraps;
         }
     }
@@ -43,7 +49,7 @@ static int slot_of(int32_t pos, int slots) {
 void ModLane::init(float sample_rate, uint32_t seed) {
     _sr = sample_rate;
     _rng.seed(seed);
-    _phase = 0.f;
+    _phase = 0.0;
     _cur_step = -1;
     _shuffle_target = 0.f;
     _shuffle_latched = 0.f;
@@ -97,7 +103,10 @@ void ModLane::init(float sample_rate, uint32_t seed) {
     _slew_tick.reset(0.f);
 }
 
-float ModLane::phase_eff() const { float p = _phase + _ev_phase; return p - std::floor(p); }
+float ModLane::phase_eff() const {
+    const double p = _phase + double(_ev_phase);
+    return static_cast<float>(p - std::floor(p));
+}
 
 void ModLane::set_rate_hz(float hz)   { _rate_hz = hz > 0.f ? hz : 0.f; _update_inc(); }
 void ModLane::set_shape(float s)      { _shape = clampf(s, 0.f, 1.f); }
@@ -142,14 +151,16 @@ void ModLane::set_step(bool on, int steps) {
         // _cur_step is derived from the stored _phase (assigned first) using
         // the same warped lookup as process(), so a same-tick SPOT kick() +
         // STEPS turn is absorbed into this rescale (accepted trade).
-        int old_step = shuffle_step_index(_phase, _steps, _shuffle_latched);
+        int old_step = shuffle_step_index(
+            static_cast<float>(_phase), _steps, _shuffle_latched);
         float old_frac = shuffle_step_fraction(
-            _phase, old_step, _steps, _shuffle_latched);
+            static_cast<float>(_phase), old_step, _steps, _shuffle_latched);
         float pos = std::fmod(
             static_cast<float>(old_step) + old_frac,
             static_cast<float>(new_steps));
         _phase = shuffle_phase_for_position(pos, new_steps, _shuffle_latched);
-        _cur_step = shuffle_step_index(_phase, new_steps, _shuffle_latched);
+        _cur_step = shuffle_step_index(
+            static_cast<float>(_phase), new_steps, _shuffle_latched);
     }
     _step_mode = on;
     _steps = new_steps;
@@ -164,7 +175,7 @@ void ModLane::set_step(bool on, int steps) {
 // exactly 1.0f, so the panel default stays bit-identical to the old
 // pattern-clock behavior.
 void ModLane::_update_inc() {
-    _phase_inc = (_rate_hz / _sr) * clock_scale();
+    _phase_inc = (double(_rate_hz) / double(_sr)) * double(clock_scale());
 }
 
 void ModLane::new_phrase() {
@@ -277,7 +288,7 @@ void ModLane::_update_slew() {
 }
 
 void ModLane::kick(float dphase, float dshape) {
-    _phase += dphase;
+    _phase += double(dphase);
     _phase -= std::floor(_phase);          // permanent wrap into [0,1)
     _kick_shape += dshape;                 // decays back to 0 over ~1.5 s
 }
@@ -401,8 +412,8 @@ void ModLane::reset(float phase) {
 }
 
 float ModLane::_compute_raw() const {
-    float ph = _phase + _ev_phase;
-    ph -= std::floor(ph);
+    const double phd = _phase + double(_ev_phase);
+    float ph = static_cast<float>(phd - std::floor(phd));
     float sh = clampf(_shape + _ev_shape + _shape_offset + _kick_shape, 0.f, 1.f);
     return shape_value(ph, sh, _active_pattern().pitch[_sh_slot()]);
 }
@@ -582,15 +593,16 @@ float ModLane::process() {
         _ev_rate    *= _settle_coef;
         _kick_shape *= _settle_coef;
     }
-    _phase += _phase_inc * (1.f + _ev_rate);
+    _phase += _phase_inc * (1.0 + double(_ev_rate));
     bool wrapped = false;
-    while (_phase >= 1.f) { _phase -= 1.f; wrapped = true; }
+    while (_phase >= 1.0) { _phase -= 1.0; wrapped = true; }
     _wrapped = wrapped;
 
     if (wrapped) _wrap_events();
 
     if (_step_mode) {
-        const int step = shuffle_step_index(_phase, _steps, _shuffle_latched);
+        const int step = shuffle_step_index(
+            static_cast<float>(_phase), _steps, _shuffle_latched);
         if (step != _cur_step) _enter_step(step);
     } else {
         if (wrapped) _on_boundary();
@@ -642,11 +654,11 @@ float ModLane::tick() {
         _kick_shape *= _settle_coef_tick;
     }
 
-    const float window_start_phase = _phase;
-    float window_dp[2 * kSeqSlots + 1];
+    const double window_start_phase = _phase;
+    double window_dp[2 * kSeqSlots + 1];
     int window_dp_count = 1;
     int window_wraps = 0;
-    window_dp[0] = _phase_inc * (1.f + _ev_rate);
+    window_dp[0] = _phase_inc * (1.0 + double(_ev_rate));
 
     // Pending step mismatch first: init/reset leave _cur_step = -1 and the
     // per-sample path fires step 0 on its very first sample the same way.
@@ -660,24 +672,26 @@ float ModLane::tick() {
     // step than _cur_step remembers" symptom and this one branch catches
     // them all.
     if (_step_mode) {
-        const int step = shuffle_step_index(_phase, _steps, _shuffle_latched);
+        const int step = shuffle_step_index(
+            static_cast<float>(_phase), _steps, _shuffle_latched);
         if (step != _cur_step) _enter_step(step);
     }
 
     // Walk every edge inside the interval, in order. Panel-reachable worst
     // case is ~8 edges (480 Hz effective STEP rate, ~12.5 samples/step); the
     // cap is a safety bound, unreachable from the panel (spec: 2*kSeqSlots).
-    float samples_left = static_cast<float>(kTickInterval);
+    double samples_left = static_cast<double>(kTickInterval);
     int guard = 2 * kSeqSlots;
     while (guard-- > 0) {
         // _ev_rate can change at a wrap (GROW walk), so the per-sample rate
         // is re-derived per edge -- the per-sample path does the same.
-        const float dp1 = _phase_inc * (1.f + _ev_rate);
-        const float next_edge = _step_mode
-            ? shuffle_boundary_phase(_cur_step + 1, _steps, _shuffle_latched)
-            : 1.f;
-        const float dist = next_edge - _phase;
-        const float to_edge = dp1 > 0.f ? dist / dp1 : 1e30f;
+        const double dp1 = _phase_inc * (1.0 + double(_ev_rate));
+        const double next_edge = _step_mode
+            ? double(shuffle_boundary_phase(
+                  _cur_step + 1, _steps, _shuffle_latched))
+            : 1.0;
+        const double dist = next_edge - _phase;
+        const double to_edge = dp1 > 0.0 ? dist / dp1 : 1e30;
         const bool near_endpoint =
             std::fabs(to_edge - samples_left) <= kEndpointSampleEpsilon;
         bool reached = to_edge <= samples_left;
@@ -688,10 +702,11 @@ float ModLane::tick() {
                 process_window_end(window_start_phase, window_dp, window_dp_count);
             have_shadow_end = true;
             if (_step_mode) {
-                const int end_step =
-                    shuffle_step_index(shadow_end.phase, _steps, _shuffle_latched);
+                const int end_step = shuffle_step_index(
+                    static_cast<float>(shadow_end.phase), _steps,
+                    _shuffle_latched);
                 const int end_position = shadow_end.wraps * _steps + end_step;
-                const int edge_position = next_edge >= 1.f
+                const int edge_position = next_edge >= 1.0
                     ? (window_wraps + 1) * _steps
                     : window_wraps * _steps + _cur_step + 1;
                 reached = end_position >= edge_position;
@@ -706,15 +721,15 @@ float ModLane::tick() {
             break;
         }
         samples_left -= to_edge;
-        if (samples_left < 0.f) samples_left = 0.f; // numerical endpoint only
-        if (next_edge >= 1.f) {
-            _phase = 0.f;
+        if (samples_left < 0.0) samples_left = 0.0; // numerical endpoint only
+        if (next_edge >= 1.0) {
+            _phase = 0.0;
             _wrapped = true;
             _wrap_events();
             ++window_wraps;
             if (window_dp_count < 2 * kSeqSlots + 1)
                 window_dp[window_dp_count++] =
-                    _phase_inc * (1.f + _ev_rate);
+                    _phase_inc * (1.0 + double(_ev_rate));
             if (_step_mode) _enter_step(0);
             else _on_boundary();         // FLOW fires per wrap; STEP fires step 0
         } else {

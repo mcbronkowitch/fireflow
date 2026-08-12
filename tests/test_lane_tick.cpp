@@ -64,13 +64,18 @@ TEST_CASE("tick: STEP S&H targets and fires match the per-sample path exactly") 
         l.set_range(1.f); l.set_shape(1.f); l.set_smooth(0.f);
         l.set_step(true, 8); l.set_rate_hz(2.3f);   // boundary every ~2609 smp
     });
-    // One caveat: the two paths accumulate phase differently (96 rounded
-    // adds vs one fused product), so a boundary landing within float-eps of
-    // a tick edge can be detected one tick apart. That skew self-corrects on
-    // the next tick and skips no RNG draw; the guard below tolerates exactly
-    // that -- a real RNG desync would never re-converge and still fails.
-    // Each straddle shows as TWO adjacent parity mismatches (early window +
-    // missing next window), hence the doubled skew_events budget.
+    // The two paths still accumulate phase differently (96 rounded adds vs one
+    // fused product), but both now accumulate in DOUBLE (spec 2026-08-12
+    // modulation-pace), so the window in which a boundary can land on
+    // different sides of a tick edge for the two paths shrank by about eight
+    // orders of magnitude. Measured over these 400 ticks: 0 straddles, where
+    // the float accumulator produced 0 here and 2 in the GROW case below.
+    //
+    // The guard is kept, not the budget: if a straddle ever returns it is
+    // reported as one number instead of an avalanche of target mismatches, and
+    // it self-corrects on the next tick without skipping an RNG draw. But the
+    // gate asserts the measured value, which is zero -- a real RNG desync
+    // never re-converges and would blow this instantly.
     int skew = 0, skew_events = 0;
     for (int t = 0; t < 400; ++t) {
         tp.advance_one_tick();
@@ -79,7 +84,7 @@ TEST_CASE("tick: STEP S&H targets and fires match the per-sample path exactly") 
         CHECK(tp.dut.target() == tp.ref.target());
         CHECK(tp.dut_out == tp.ref_out);            // smooth 0 = passthrough
     }
-    CHECK(skew_events <= 4);   // isolated float coincidences, never systematic
+    CHECK(skew_events == 0);   // measured, double accumulation (was <= 4)
 }
 
 TEST_CASE("tick: GROW mutation dice stay on the same RNG stream") {
@@ -91,9 +96,11 @@ TEST_CASE("tick: GROW mutation dice stay on the same RNG stream") {
         l.set_step(true, 8); l.set_rate_hz(3.7f);
         l.set_variation(0.7f);
     });
-    // Same tick-edge skew guard as the S&H case: seed 7 / 3.7 Hz hits one
-    // straddle (~tick 250). The draw is delayed one tick, never skipped;
-    // exact equality must resume immediately after.
+    // Same tick-edge skew guard as the S&H case. In float, seed 7 / 3.7 Hz was
+    // the one case in this file that actually straddled: 2 skew events around
+    // tick 250. Double accumulation removes them -- measured 0 -- so this case
+    // is now the direct evidence that the straddles were the accumulator's
+    // rounding and not a boundary the tick path handles differently.
     int skew = 0, skew_events = 0;
     for (int t = 0; t < 300; ++t) {
         tp.advance_one_tick();
@@ -101,7 +108,7 @@ TEST_CASE("tick: GROW mutation dice stay on the same RNG stream") {
         if (skew > 0) { --skew; continue; }
         CHECK(tp.dut.target() == tp.ref.target());
     }
-    CHECK(skew_events <= 4);
+    CHECK(skew_events == 0);   // measured: 2 in float, 0 in double
 }
 
 TEST_CASE("tick: RENEW walk regen stays on the same RNG stream") {
@@ -118,13 +125,13 @@ TEST_CASE("tick: RENEW walk regen stays on the same RNG stream") {
         if (skew > 0) { --skew; continue; }
         CHECK(tp.dut.target() == tp.ref.target());
     }
-    CHECK(skew_events <= 4);
+    CHECK(skew_events == 0);   // measured, double accumulation (was <= 4)
 }
 
 TEST_CASE("tick: FLOW output tracks the per-sample path") {
-    // Continuous FLOW: same end phase modulo float accumulation -- the tick
+    // Continuous FLOW: same end phase modulo accumulation order -- the tick
     // path adds one fused product where the reference adds 96 rounded
-    // increments. Loose epsilon, wrap-fire parity exact.
+    // increments, both in double. Loose epsilon, wrap-fire parity exact.
     TickPair tp;
     tp.boot(3u, [](ModLane& l) {
         l.set_range(1.f); l.set_shape(0.3f); l.set_smooth(0.f);
@@ -167,7 +174,7 @@ TEST_CASE("tick: multiple boundaries inside one interval are replayed in order")
         l.set_step(true, 8); l.set_rate_hz(500.f);
         l.set_variation(0.6f);
     });
-    // A boundary landing within float-eps of a tick edge shifts that one
+    // A boundary landing within accumulator-eps of a tick edge shifts that one
     // boundary into the neighbouring window: the straddle tick compares
     // different "last boundary" targets, then equality resumes. Tolerate
     // isolated straddle ticks, never sustained divergence -- a skipped or
@@ -208,7 +215,7 @@ TEST_CASE("tick: shuffled high-rate wraps replay every intermediate boundary") {
         CHECK(tp.dut_fired);
         CHECK(tp.dut.cur_step() == tp.ref.cur_step());
         // GROW also walks phase/shape at each wrap. The reference samples a
-        // boundary after per-sample float accumulation while tick() samples
+        // boundary after per-sample accumulation while tick() samples
         // its exact grid phase, so matching RNG state can differ by a tiny
         // waveform-evaluation epsilon. A skipped RNG mutation is orders of
         // magnitude larger and persists across later windows.
@@ -241,7 +248,7 @@ TEST_CASE("tick: wrap events land before the new cycle's step 0") {
         if (skew > 0) { --skew; continue; }
         CHECK(tp.dut.target() == tp.ref.target());
     }
-    CHECK(skew_events <= 4);
+    CHECK(skew_events == 0);   // measured, double accumulation (was <= 4)
 }
 
 TEST_CASE("tick: SPOT kick equivalence at tick granularity") {
@@ -354,28 +361,35 @@ TEST_CASE("tick: exact-endpoint live shuffle latches the same even-step pair") {
         l.set_shuffle(0.f);
     });
 
-    // Step 2 is mathematically at sample 96, but repeated float addition lands
-    // a hair below phase 0.4. Both paths therefore still report odd step 1
-    // when the control update is applied at that observation boundary.
+    // Step 2 is mathematically at sample 96, and since the accumulator moved to
+    // double (spec 2026-08-12 modulation-pace) both paths LAND on it: phase
+    // 0.4, step 2, entered on the observation boundary itself. In float the
+    // reference's 96 rounded adds finished a hair below 0.4 and both paths
+    // still reported odd step 1 here -- that is what changed, and it is the
+    // point of the case: the endpoint is now decided by the grid, not by which
+    // side of it the rounding happened to fall.
     tp.advance_one_tick();
-    REQUIRE(tp.ref.cur_step() == 1);
-    REQUIRE(tp.dut.cur_step() == 1);
+    REQUIRE(tp.ref.cur_step() == 2);
+    REQUIRE(tp.dut.cur_step() == 2);
 
     tp.ref.set_shuffle(1.f);
     tp.dut.set_shuffle(1.f);
 
-    // Both enter even step 2 with the new target. Probe phase 0.63 proves
-    // that both paths latched full shuffle (step 2 rather than straight 3).
+    // The next even step is 4, again exactly at a tick endpoint (0.8), and
+    // entering it is what latches the new amount. Probe phase 0.63 proves both
+    // paths latched full shuffle: its odd boundary sits at 0.6667, so 0.63 is
+    // step 2 under full shuffle and step 3 on the straight grid.
     tp.advance_one_tick();
     CHECK((tp.ref_fires > 0) == tp.dut_fired);
-    CHECK(tp.ref.cur_step() == 3);
-    CHECK(tp.dut.cur_step() == 3);
+    CHECK(tp.ref.cur_step() == 4);
+    CHECK(tp.dut.cur_step() == 4);
     CHECK(tp.ref.step_at_phase(0.63f) == 2);
     CHECK(tp.dut.step_at_phase(0.63f) == 2);
     CHECK(tp.dut.target() == tp.ref.target());
     CHECK(tp.dut_out == tp.ref_out);
 
-    // Both then traverse the same odd boundary, final straight step and wrap.
+    // Both then traverse the same wrap and land inside the long shuffled
+    // step 0 (its odd boundary moved out to 0.2667).
     tp.advance_one_tick();
     CHECK((tp.ref_fires > 0) == tp.dut_fired);
     CHECK(tp.ref.cur_step() == 0);
@@ -428,37 +442,42 @@ TEST_CASE("tick: warped multi-edge wrap endpoint keeps live shuffle pair aligned
     });
 
     // One tick is mathematically two cycles. The warped odd edges occur at
-    // fractional sample 25.6 in each cycle, and repeated process additions
-    // finish just below the second wrap on step 1.
+    // fractional sample 25.6 in each cycle, and since the accumulator moved to
+    // double (spec 2026-08-12 modulation-pace) the reference COMPLETES the
+    // second wrap inside the window instead of finishing a hair below it: both
+    // paths sit on the wrap, on step 0. In float the reference stopped at
+    // ~0.9999 on step 1 and carried a pending wrap into the next tick -- the
+    // very off-by-one-edge this case exists to pin down.
     tp.advance_one_tick();
-    REQUIRE(tp.ref.phase() < 1.f);
-    REQUIRE(tp.ref.phase() > 0.999f);
+    REQUIRE(tp.ref.phase() >= 0.f);
+    REQUIRE(tp.ref.phase() < 0.01f);
     REQUIRE(tp.dut.phase() >= 0.f);
-    REQUIRE(tp.dut.phase() < 1.f);
-    REQUIRE(tp.dut.phase() > 0.999f);
+    REQUIRE(tp.dut.phase() < 0.01f);
     CHECK(std::fabs(tp.dut.phase() - tp.ref.phase()) < 0.01f);
-    REQUIRE(tp.ref.cur_step() == 1);
-    REQUIRE(tp.dut.cur_step() == 1);
+    REQUIRE(tp.ref.cur_step() == 0);
+    REQUIRE(tp.dut.cur_step() == 0);
 
     tp.ref.set_shuffle(1.f);
     tp.dut.set_shuffle(1.f);
 
-    // Both enter the pending wrap after the update and latch the same full
-    // shuffle value for step 0. Repeated whole-window comparisons prove the
-    // step/RNG/target sequence remains aligned across subsequent wraps.
+    // Both cross the next wrap into step 0 and latch the same full shuffle
+    // value there. Probe phase 0.6 proves the latch: full shuffle puts the odd
+    // boundary at 0.6667 (step 0), amount 0.2 put it at 0.5333 (step 1).
+    // Repeated whole-window comparisons prove the step/RNG/target sequence
+    // remains aligned across subsequent wraps.
     for (int t = 0; t < 3; ++t) {
         tp.advance_one_tick();
         INFO("t=", t, " ref_step=", tp.ref.cur_step(),
              " dut_step=", tp.dut.cur_step(),
              " ref_phase=", tp.ref.phase(), " dut_phase=", tp.dut.phase());
         CHECK((tp.ref_fires > 0) == tp.dut_fired);
+        CHECK(tp.ref.phase() >= 0.f);
+        CHECK(tp.ref.phase() < 0.01f);
         CHECK(tp.dut.phase() >= 0.f);
-        CHECK(tp.dut.phase() < 1.f);
-        CHECK(tp.ref.phase() > 0.999f);
-        CHECK(tp.dut.phase() > 0.999f);
+        CHECK(tp.dut.phase() < 0.01f);
         CHECK(std::fabs(tp.dut.phase() - tp.ref.phase()) < 0.01f);
-        CHECK(tp.ref.cur_step() == 1);
-        CHECK(tp.dut.cur_step() == 1);
+        CHECK(tp.ref.cur_step() == 0);
+        CHECK(tp.dut.cur_step() == 0);
         CHECK(tp.ref.step_at_phase(0.6f) == 0);
         CHECK(tp.dut.step_at_phase(0.6f) == 0);
         CHECK(tp.dut.target() == tp.ref.target());

@@ -697,10 +697,18 @@ TEST_CASE("instrument: shared shuffle leaves FLOW exact beside an active STEP si
         if (gap < straight_short) straight_short = gap;
         if (gap > straight_long) straight_long = gap;
     }
-    // Repeated float phase additions can quantize a nominal boundary to
-    // either adjacent integer sample; straight timing still has no groove-
-    // sized spread.
-    CHECK(straight_long - straight_short <= 1);
+    // The nominal step here is exactly 200 samples, but the per-sample
+    // increment is 1/1600 of a cycle and no binary float represents that, so
+    // the accumulated phase crosses a boundary up to one sample early or late.
+    // Widened from 1 to 2 on 2026-08-12 (spec modulation-pace): with the
+    // accumulator in float the residue was one-sided and gaps ran 200/201;
+    // in double it is centred and they run 199/200/201 -- same one-sample
+    // quantization, now symmetric about the nominal boundary instead of
+    // biased late. Measured: short 199, long 201. Straight timing still has
+    // no groove-sized spread, which is what this bound is for -- full shuffle
+    // below moves a boundary by ~66 samples, more than an order of magnitude
+    // beyond this.
+    CHECK(straight_long - straight_short <= 2);
     CHECK(straight_long == doctest::Approx(200.f).epsilon(0.01));
 
     int shuffled_short = step_fires_shuffled[1] - step_fires_shuffled[0];

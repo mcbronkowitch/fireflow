@@ -17,7 +17,7 @@ TEST_CASE("lane FLOW: rate accuracy — ~2 fires per second") {
     const int seconds = 5;
     int fires = 0;
     for (int i = 0; i < 48000 * seconds; ++i) { l.process(); if (l.fired()) ++fires; }
-    // A free-running float phasor never closes a cycle in EXACTLY N samples, so
+    // A free-running phasor never closes a cycle in EXACTLY N samples, so
     // assert the fire RATE over a multi-second window (+/-1), not exact closure.
     CHECK(fires >= 2 * seconds - 1);   // ~10
     CHECK(fires <= 2 * seconds + 1);
@@ -201,4 +201,47 @@ TEST_CASE("mod: snap_pitch_phase moves the pitch lane alone") {
     CHECK(m.lane_phase(LANE_MOTION) == doctest::Approx(tex_before).epsilon(1e-6));
     CHECK(m.rhythm().gap[0] == 0);
     CHECK(m.rhythm().gap[1] == 0);
+}
+
+TEST_CASE("lane: phase still advances at PACE-reachable slow rates") {
+    // The float accumulator stalls once _phase_inc drops below half an ulp of
+    // the current binade: measured freezes at phase 0.50 for 0.00125 Hz and at
+    // 0.25 for 0.000625 Hz. 0.000625 Hz is RATE 0 (0.02 Hz) at PACE x1/32,
+    // i.e. the slowest setting the design advertises. Just above the stall the
+    // adds round UP instead: 0.0025 Hz measured 7% fast in float.
+    //
+    // This gate counts WRAPS, not Hz. Every rate observer in the engine reports
+    // the COMMANDED rate, which stays perfectly correct while the lane is
+    // frozen solid -- which is exactly how a float accumulator would have
+    // shipped this green (spec 2026-08-12 modulation-pace, §2.1 and §8).
+    //
+    // It counts total turns (wraps + end phase), not the displacement of the
+    // wrapped phase, and it runs 1600 s. Displacement over 400 s does not
+    // separate the two states at all: 0.00125 Hz owes exactly half a turn
+    // there, and the frozen lane parks on exactly that phase -- a broken lane
+    // and a working one produce the same number. 1600 s makes each rate owe
+    // more turns than its stall phase can fake.
+    for (float hz : {0.02f, 0.0025f, 0.00125f, 0.000625f}) {
+        spky::ModLane lane;
+        lane.init(48000.f, 12345u);
+        lane.set_rate_hz(hz);
+        const float start = lane.phase();
+        const int   secs  = 1600;
+        int wraps = 0;
+        for (int i = 0; i < 48000 * secs; ++i) {
+            lane.process();
+            if (lane.wrapped()) ++wraps;
+        }
+        const double turns     = wraps + double(lane.phase() - start);
+        const double commanded = double(hz) * secs;
+        CAPTURE(hz);
+        CAPTURE(turns);
+        CAPTURE(commanded);
+        // +-2%: double accumulation lands within 1e-9 of commanded at every
+        // rate here, so the band is wide enough to be about the mechanism and
+        // not about the last bits. Float missed it by 7% (0.0025 Hz) and by
+        // 75% (both stalled rates).
+        CHECK(turns > commanded * 0.98);
+        CHECK(turns < commanded * 1.02);
+    }
 }
