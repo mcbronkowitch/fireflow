@@ -113,6 +113,14 @@ public:
     float lane_rate_hz_for_test(int p, int lane) const {
         return _parts[p].mod().lane_rate_hz_for_test(lane);
     }
+    // Real motion through the WHOLE stack -- see ModLane::wrap_count_for_test.
+    uint32_t lane_wraps_for_test(int p, int lane) const {
+        return _parts[p].mod().lane_wraps_for_test(lane);
+    }
+    // Fractional remainder, paired with lane_wraps_for_test into "turns".
+    float lane_phase_for_test(int p, int lane) const {
+        return _parts[p].mod().lane_phase_for_test(lane);
+    }
     bool step_mode_for_test(int p)  const { return _parts[p].mod().step_mode(); }
     int  deck_steps_for_test(int p) const { return _parts[p].mod().deck_steps(); }
     float pace_for_test() const { return _pace; }

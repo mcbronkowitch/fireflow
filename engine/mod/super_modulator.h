@@ -54,6 +54,14 @@ public:
         return _lanes[LANE_PITCH].active_pattern();
     }
     float   lane_rate_hz_for_test(int i) const { return _lanes[i].rate_hz_for_test(); }
+    // Real motion, not the commanded rate -- see ModLane::wrap_count_for_test.
+    uint32_t lane_wraps_for_test(int i)  const { return _lanes[i].wrap_count_for_test(); }
+    // The fractional remainder of the current cycle. phase() is already
+    // public and unguarded on ModLane (used outside SPKY_TESTING too); this
+    // just extends the existing lane_rate_hz_for_test-style pass-through so
+    // a caller outside the engine can fold it together with
+    // lane_wraps_for_test into a continuous "turns" count.
+    float   lane_phase_for_test(int i)   const { return _lanes[i].phase(); }
     int     lane_slots_for_test(int i)   const { return _lanes[i].steps(); }
     int32_t deck_step_for_test()         const { return _deck_step; }
     // The amount PITCH's own phase (and so the deck's follow fraction) was

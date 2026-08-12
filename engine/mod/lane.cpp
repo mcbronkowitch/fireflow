@@ -595,7 +595,13 @@ float ModLane::process() {
     }
     _phase += _phase_inc * (1.0 + double(_ev_rate));
     bool wrapped = false;
-    while (_phase >= 1.0) { _phase -= 1.0; wrapped = true; }
+    while (_phase >= 1.0) {
+        _phase -= 1.0;
+        wrapped = true;
+#ifdef SPKY_TESTING
+        ++_wraps;
+#endif
+    }
     _wrapped = wrapped;
 
     if (wrapped) _wrap_events();

@@ -1628,3 +1628,63 @@ TEST_CASE("pace: set_tempo_bpm does not compound the pace factor") {
     in.set_tempo_bpm(100.f);   // same raw bpm again: must still be 400, not 1600
     CHECK(in.transport_bpm_for_test() == doctest::Approx(400.f));
 }
+
+TEST_CASE("pace: wraps per unit time follow the commanded rate, through the whole stack") {
+    // Every rate observer in this engine (lane_rate_hz_for_test included)
+    // reports the COMMANDED rate, which stays perfectly correct while the
+    // phase accumulator is frozen solid (lane.h's _phase comment on the
+    // measured float stalls) -- so a gate built on Hz alone would pass a
+    // stalled lane green. This one counts real motion, and drives it
+    // through Instrument::process() rather than a bare ModLane (Task 3's
+    // gate, tests/test_lane.cpp), so a missing set_pace fan-out or a
+    // grid-servo fight shows up too, not just a lane exercised in isolation.
+    //
+    // It counts TURNS (wraps + the still-fractional remainder of phase at
+    // the end of the window), not raw wraps. Raw wraps are integers, and at
+    // the low end of PACE that loses too much resolution to mean anything:
+    // knob 0.f puts the pitch lane at ~0.008 Hz, so even this window owes
+    // well under one full wrap (0.008 * 60 =~ 0.48), and a stalled lane
+    // would report the same "0 wraps" a slow-but-healthy lane does. A wider
+    // window does not fix this on wraps alone either -- knob 0.25 already
+    // owes ~2.7 wraps here, so a 5% relative tolerance on wraps needs the
+    // count near 20+ before +-1 wrap (the coarsest error rounding a
+    // continuous quantity to an integer can produce) fits inside it, which
+    // for knob 0.f alone needs a several-hundred-second window. Folding the
+    // fractional phase back in turns wraps from an integer into a continuous
+    // quantity -- exactly how Task 3's lane-level gate solved the identical
+    // problem -- so one uniform 60 s window resolves every knob position,
+    // including the slowest.
+    for (float knob : {0.f, 0.25f, 0.5f, 0.75f, 1.f}) {
+        spky::Instrument in;
+        in.init(48000.f);
+        in.set_sync(false);
+        in.set_tempo_bpm(120.f);
+        in.set_rate(0, 0.35f);
+        in.set_pace(knob);
+        const float hz = in.lane_rate_hz_for_test(0, spky::LANE_PITCH);
+        const int secs = 60;
+        const uint32_t w0 = in.lane_wraps_for_test(0, spky::LANE_PITCH);
+        const double phase_start = double(in.lane_phase_for_test(0, spky::LANE_PITCH));
+
+        // drive the engine, not the lane, so the whole fan-out is exercised
+        std::vector<float> l(256), r(256);
+        for (int i = 0; i < 48000 * secs / 256; ++i)
+            in.process(nullptr, nullptr, l.data(), r.data(), 256);
+
+        const uint32_t wraps = in.lane_wraps_for_test(0, spky::LANE_PITCH) - w0;
+        const double phase_end = double(in.lane_phase_for_test(0, spky::LANE_PITCH));
+        const double turns     = double(wraps) + (phase_end - phase_start);
+        const double commanded = double(hz) * double(secs);
+        CAPTURE(knob); CAPTURE(hz); CAPTURE(commanded); CAPTURE(turns);
+        // +-0.1%: measured double accumulation lands within ~2e-8 relative
+        // of commanded at every knob here (tighter than Task 3's already
+        // generous +-2%, since this gate's window is far shorter than Task
+        // 3's 1600 s and has less room to let a real bug hide inside a wide
+        // band). Reverting _phase to float (lane.h) misses by 0.05%-2.5%
+        // depending on knob, worst at the slowest -- so 0.1% is five orders
+        // of magnitude above the healthy noise floor and still well under
+        // every measured broken knob at 0.f, 0.25f and 0.5f.
+        CHECK(turns > commanded * 0.999);
+        CHECK(turns < commanded * 1.001);
+    }
+}

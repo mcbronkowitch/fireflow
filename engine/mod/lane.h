@@ -44,6 +44,12 @@ public:
     uint8_t cadence_slot_for_test() const { return _song.cadence_slot; }
     float bound_a_opening_for_test() const { return _song.bound_a_opening; }
     float rate_hz_for_test() const { return _rate_hz; }
+    // Real motion, not the commanded rate: every Hz observer above stays
+    // correct even while the phase accumulator is frozen solid, so only a
+    // count of actual wraps can tell a stalled lane from a healthy one
+    // (spec 2026-08-12 modulation-pace, Task 7). Incremented in process()'s
+    // wrap loop, lane.cpp.
+    uint32_t wrap_count_for_test() const { return _wraps; }
 #endif
 
     float process();                  // advance one sample, return post-range value
@@ -221,6 +227,9 @@ private:
     bool  _fired = false;
     bool  _wrapped = false;
     bool  _frozen = false;
+#ifdef SPKY_TESTING
+    uint32_t _wraps = 0;   // real wrap count; see wrap_count_for_test() above
+#endif
     int   _note_age  = 0;    // steps since the current note fired
     int   _note_hold = 0;    // composed note length (capped at the next note)
 
