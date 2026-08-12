@@ -172,6 +172,56 @@ TEST_CASE("the four transforming conversions store what Fireflow pushed") {
     CHECK(r.overlay.v[P_DEPTH_B] == doctest::Approx(0.17f));
 }
 
+TEST_CASE("bridge: a patch carries its own pace and its deck-A compression") {
+    FireflowPatch fp{};
+    fp.p[kFfEngineB] = 0.f;    // SYNTH: a carrier, so nothing is rejected
+    fp.p[kFfPace]    = 0.25f;
+    fp.p[kFfCompA]   = 0.55f;  // below the 0.6 split -> comp 0, outside the band
+    const TransferReport r = to_flow_base(fp);
+    REQUIRE_FALSE(r.overlay_rejected);
+
+    CHECK(r.overlay.has[P_PACE]);
+    CHECK(r.overlay.v[P_PACE] == doctest::Approx(0.25f));
+
+    CHECK(r.overlay.has[P_COMP_A]);
+    // COMP_A is veto-confined to 0.40-0.60, so a carried value the runtime
+    // moves must be tagged, exactly as COMP_B's row already is.
+    CHECK(note_for_has(r, P_COMP_A, "REWRITTEN AT RUNTIME"));
+}
+
+TEST_CASE("bridge: GRIT carries the magnitude Fireflow pushed, and says what is lost") {
+    // These two are the same trap as the four-conversion case above, plus a
+    // loss the formula itself cannot carry at all: the sign.
+    FireflowPatch fp{};
+    fp.p[kFfEngineB] = 0.f;
+    fp.p[kFfGritA]   = 0.5f;    // positive: Drive, and the magnitude transfers
+    fp.p[kFfGritB]   = -0.5f;   // negative: Reduce, and only the sign is lost
+    const TransferReport r = to_flow_base(fp);
+    REQUIRE_FALSE(r.overlay_rejected);
+
+    // (0.5 - 0.03) / (1 - 0.03), Fireflow.cpp's own dead-zone formula
+    // (kGritDead = 0.03). NOT 0.5: copying the knob is the trap every
+    // formula row in this file exists against.
+    CHECK(r.overlay.v[P_GRIT_A] == doctest::Approx(0.48453608f));
+    // Same magnitude, sign discarded -- GRIT_B's knob is negative.
+    CHECK(r.overlay.v[P_GRIT_B] == doctest::Approx(0.48453608f));
+
+    CHECK(note_for_has(r, P_GRIT_A, "inaudible under Glow"));
+    CHECK(note_for_has(r, P_GRIT_B, "inaudible under Glow"));
+    CHECK_FALSE(note_for_has(r, P_GRIT_A, "NOT CARRIED"));   // A's sign was positive
+    CHECK(note_for_has(r, P_GRIT_B, "NOT CARRIED"));         // B's sign is lost
+}
+
+TEST_CASE("bridge: a plain patch still names the deck BALANCE it cannot carry") {
+    // The fact the old, single "P_COMP_A is story-owned" note used to carry
+    // alongside its own loss -- now that COMP_A has a destination and a note
+    // of its own, this must not have quietly vanished with it.
+    FireflowPatch fp{};
+    const TransferReport r = to_flow_base(fp);
+    REQUIRE_FALSE(r.overlay_rejected);
+    CHECK(note_for_has(r, kNoteGeneral, "BALANCE"));
+}
+
 TEST_CASE("the report is never silently truncated") {
     FireflowPatch fp{};
     const TransferReport r = to_flow_base(fp);

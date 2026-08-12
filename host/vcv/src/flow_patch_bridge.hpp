@@ -144,6 +144,7 @@ inline constexpr int kFfRecB      = REC_B;
 inline constexpr int kFfRevMixA   = REV_MIX_A;
 inline constexpr int kFfRevMixB   = REV_MIX_B;
 inline constexpr int kFfShuffle   = SHUFFLE;
+inline constexpr int kFfPace      = PACE;
 
 inline constexpr int kFireflowParamCount = NUM_PARAMS;
 
@@ -248,6 +249,18 @@ inline float comp_from_lvl(float lvl) {
     if (lvl <= kLvlCompSplit) return 0.f;
     return kCompTop * std::pow((lvl - kLvlCompSplit) / (1.f - kLvlCompSplit),
                                kCompShape);
+}
+
+// Fireflow.cpp:877-879. GRIT is one bipolar knob: the sign picks the mode
+// (Reduce below zero, Drive above -- set_grit_mode, not carried, see the map),
+// the magnitude past a dead zone is the mix flow actually has a slot for.
+// kGritDead matches Fireflow.cpp's own constant (:592) exactly -- it exists so
+// a 9 mm pot that cannot hit an exact zero still reaches "off".
+inline float grit_from_knob(float knob) {
+    static constexpr float kGritDead = 0.03f;
+    const float mag = std::fabs(knob);
+    if (mag <= kGritDead) return 0.f;
+    return (mag - kGritDead) / (1.f - kGritDead);
 }
 
 // taste.h's kVetos, read rather than transcribed -- the COMP band is a by-ear
@@ -413,6 +426,28 @@ inline TransferReport to_flow_base(const FireflowPatch& fp) {
                 "the FLUX block with set_fx_on(), which nothing in engine/flow/ "
                 "ever calls, and SoftSwitch defaults off. A pre-existing gap in "
                 "the flow layer, not a conversion loss");
+
+        // GRIT_A/B joined the base rules on 2026-08-12, from the deleted DIRT
+        // story. Store what Fireflow pushes to set_grit_mix, not the knob --
+        // the dead-zone formula is the exact shape of the four conversion
+        // changes this file's header warns about.
+        const int grit = p ? P_GRIT_B : P_GRIT_A;
+        const float gritKnob = detail::pp(fp, kFfGritA, p);
+        detail::set_base(r, grit, detail::grit_from_knob(gritKnob));
+        if (std::fabs(gritKnob) > 1e-4f)
+            sink.note(grit,
+                "carried, but currently inaudible under Glow: Fireflow gates "
+                "the GRIT block with set_fx_on(), which nothing in engine/flow/ "
+                "ever calls, and SoftSwitch defaults off. A pre-existing gap in "
+                "the flow layer, not a conversion loss");
+        // The sign is the OTHER half of this knob -- it picks Reduce vs Drive
+        // (set_grit_mode) -- and flow has no P_GRIT_MODE at all, so it cannot
+        // travel with the magnitude that does.
+        if (gritKnob < 0.f)
+            sink.note(grit,
+                "NOT CARRIED: the knob's sign chose Reduce mode (set_grit_mode); "
+                "flow has no P_GRIT_MODE, so only the magnitude travels and it "
+                "is heard, if the block is ever switched on, as Drive instead");
     }
 
     // SUB is strided (Fireflow.cpp:576 pushes it with pp(SUB_A, p)), unlike
@@ -462,10 +497,44 @@ inline TransferReport to_flow_base(const FireflowPatch& fp) {
                 "both decks sit at 1.0. taste.h's veto band (0.40..0.60) has "
                 "the last word on what remains");
     }
-    sink.note(P_COMP_A,
-        "NO DESTINATION: Fireflow's deck-A LVL knob has nowhere to go -- "
-        "P_COMP_A is story-owned, not a base rule. With it goes the deck "
-        "BALANCE, which flow has no control over on either deck");
+    // P_COMP_A joined P_COMP_B's veto band on 2026-08-12, when it left the
+    // DIRT story -- identical formula, identical band, read off deck A's own
+    // LVL knob. Modelled on the P_COMP_B block above rather than duplicated
+    // by hand, so the two cannot drift apart the way the four merged-control
+    // conversions once did.
+    {
+        const float lvl  = fp.p[kFfCompA];
+        const float comp = detail::comp_from_lvl(lvl);
+        detail::set_base(r, P_COMP_A, comp);
+        float lo = 0.f, hi = 1.f;
+        const bool vetoed = detail::veto_band(P_COMP_A, lo, hi);
+        if (vetoed && (comp < lo || comp > hi))
+            sink.note(P_COMP_A,
+                "REWRITTEN AT RUNTIME: the LVL knob's compressor half converts "
+                "cleanly, but taste.h's veto band confines P_COMP_A to "
+                "0.40..0.60 (a by-ear ruling), so this value will not be heard "
+                "as stored. LVL's other half -- the deck's output level -- has "
+                "no flow destination at all");
+        else
+            sink.note(P_COMP_A,
+                "carried as the compressor amount Fireflow pushed, not as the "
+                "knob position: LVL is a split control whose lower zone is "
+                "deck output level, and flow never calls set_part_level, so "
+                "both decks sit at 1.0. taste.h's veto band (0.40..0.60) has "
+                "the last word on what remains");
+    }
+    // The second fact the old "P_COMP_A is story-owned" note also carried,
+    // kept on its own now that COMP_A has a destination and a note of its own
+    // above: LVL's lower zone is output level on EITHER deck, and flow never
+    // calls set_part_level at all (see both notes above), so the deck
+    // BALANCE a Fireflow patch was built with -- which deck sits louder
+    // against the other -- never transfers, independent of whatever the
+    // compressor half does.
+    sink.note(kNoteGeneral,
+        "NOT CARRIED: the deck BALANCE Fireflow's LVL knobs set (their lower "
+        "zone, output level) has no flow destination on either deck -- flow "
+        "never calls set_part_level, so both decks always sit at output level "
+        "1.0 regardless of where LVL was set");
 
     // Appended params: the explicit index, never the stride (Fireflow.cpp:593
     // carries the same warning at its own push site).
@@ -492,6 +561,14 @@ inline TransferReport to_flow_base(const FireflowPatch& fp) {
     detail::set_base(r, P_CHOKE, fp.p[kFfChoke] * 0.5f);
     detail::set_base(r, P_SHUFFLE, fp.p[kFfShuffle]);
     detail::set_base(r, P_REV_DIFF, fp.p[kFfRevDiff]);
+
+    // PACE is a new row, added the same day the PACE work deleted the DIRT
+    // story. The knob is already the normalized 0..1 position set_pace
+    // wants -- direct, nothing to transform -- and it is deliberately a base
+    // rule rather than a story target: a story-owned parameter is
+    // unreachable from a BaseOverlay by construction, which would throw away
+    // a transferred patch's own speed the same way TIDE once did.
+    detail::set_base(r, P_PACE, fp.p[kFfPace]);
 
     const float bpm = 40.f + fp.p[kFfTempo] * 200.f;
     detail::set_base(r, P_TEMPO_BPM, bpm);
@@ -537,26 +614,29 @@ inline TransferReport to_flow_base(const FireflowPatch& fp) {
         "both) has nowhere to go -- P_FORM_A and P_SONG_A are story-owned in "
         "flow, not base rules. Only deck B's structure transfers");
 
-    // flow has 63 parameters and 42 base rules, so 21 are story-owned. Four of
-    // those (FORM_A, SONG_A, STEPS_A, COMP_A) have a Fireflow control of their
-    // own and are named individually above, because a knob the owner actually
-    // turned deserves better than a bucket. These are the other 17 -- and the
-    // list is the whole 17, per deck where the parameter is per deck.
+    // flow has 64 parameters and 47 base rules, so 17 are story-owned. Three
+    // of those (FORM_A, SONG_A, STEPS_A) have a Fireflow control of their own
+    // and are named individually above, because a knob the owner actually
+    // turned deserves better than a bucket. These are the other 14 -- and the
+    // list is the whole 14, per deck where the parameter is per deck.
     //
-    // The count moved from 20 on 2026-08-12, when TIDE, COLOR_A/B and SUB_A
-    // became base rules. They were the three loudest names on this list: TIDE
-    // set the texture lanes' speed and COLOR set the chord size, so a patch
-    // that transferred "correctly" still arrived at the wrong tempo of motion
-    // and with its chords flattened to single notes.
+    // The count moved from 21 on 2026-08-12, when the PACE work deleted the
+    // DIRT story outright and all four of its targets left this list: GRIT_A
+    // and GRIT_B are now carried with their own note above (beside FLUXMIX's,
+    // in the per-deck block), and COMP_A moved in beside COMP_B. DRIVE also
+    // became a base rule that day, but Fireflow still has no control for it
+    // at all -- unlike P_ROOT's row, its map entry names no report
+    // obligation, so a transferred patch's DRIVE stays exactly what it always
+    // was: the terrain's own draw, unmentioned here as before.
     sink.note(kNoteGeneral,
         "NOT TRANSFERABLE AT ALL (no slot, not \"transferred with loss\"): the "
-        "17 remaining story-owned parameters -- DENSITY, VARY, FILT, GRIT (its "
-        "mode as well as its mix) and REVMIX, each on both decks, plus DRIFT, "
-        "DRIVE and the reverb shape (SIZE, DECAY, TONE, SMEAR, MOD). The other "
-        "four story-owned parameters have Fireflow controls of their own and "
-        "are named above. Outside flow's parameter set entirely, and equally "
-        "lost: sample content, SOURCE, FLUX RATE and FEEDBACK, DETUNE, STAGES, "
-        "REC and the excitation bus");
+        "14 remaining story-owned parameters -- DENSITY, VARY, FILT and "
+        "REVMIX, each on both decks, plus DRIFT and the reverb shape (SIZE, "
+        "DECAY, TONE, SMEAR, MOD). The other three story-owned parameters "
+        "have Fireflow controls of their own and are named above. Outside "
+        "flow's parameter set entirely, and equally lost: sample content, "
+        "SOURCE, FLUX RATE and FEEDBACK, DETUNE, STAGES, REC and the "
+        "excitation bus");
 
     sink.finish();
     return r;

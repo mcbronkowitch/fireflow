@@ -66,6 +66,10 @@ FireflowPatch ambient_patch() {
     fp.p[kFfDecayA]  = 0.90f;
     fp.p[kFfScale]   = 5.f;
     fp.p[kFfTempo]   = 0.20f;    // 80 BPM, inside flow's 50..140
+    fp.p[kFfPace]    = 0.5f;     // x1, neutral -- PACE is new, and an
+                                 // unset (zero) knob is its slowest end, not
+                                 // its centre, which would silently divide
+                                 // every lane rate below by up to 32
     return fp;
 }
 

@@ -90,7 +90,7 @@ static const char* kMacroNames[spky::flow::MACRO_COUNT] = {
 // pad is named carries the marker -- this tooltip, the Places submenu and the
 // paste submenu -- so the fact cannot be seen in one list and missed in
 // another. It says only THAT there is a base, not what is in it; the base
-// itself is a 38-row overlay and belongs in the clipboard, not in a title.
+// itself is a 47-row overlay and belongs in the clipboard, not in a title.
 struct PadQuantity : SwitchQuantity {
     const spkyvcv::Place* place = nullptr;
     int pad = 0;
