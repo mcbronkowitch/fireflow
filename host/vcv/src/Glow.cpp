@@ -734,10 +734,26 @@ struct Glow : Module {
         // Capture whatever the flow layer is holding: inst.init() below wipes
         // every setter, and Flow only re-pushes on wake(), which is the last
         // thing this function does.
+        //
+        // That includes the OVERLAY. This is the one other path besides
+        // dataFromJson that reconstructs a live Flow, and the live place's
+        // hand-authored base is in neither places[] nor the terrain code -- so
+        // nothing else could put it back. Waking without it (wake(st) defaults
+        // ov to nullptr, flow.cpp:87) strips a loaded patch back to the drawn
+        // terrain the first time somebody changes Rack's sample rate, in
+        // silence. The undo slot's copy goes the same way twice over: wake()
+        // clears it too (flow.cpp:96-97) and restore_undo re-clears it
+        // (flow.cpp:245), so both calls below need their own argument.
         const bool hadFlow = woken;
         const spky::flow::TerrainState st = flow.state();
         const spky::flow::TerrainState un = flow.undo_state();
         const bool haveUndo = flow.can_undo();
+        spky::flow::BaseOverlay ov;      // by value: `flow` is about to be rewoken
+        bool haveOv = false;
+        if (const spky::flow::BaseOverlay* p = flow.overlay()) {
+            ov = *p;
+            haveOv = true;
+        }
 
         const float prevSr = curSr;
         curSr = sr;
@@ -792,8 +808,12 @@ struct Glow : Module {
             flow.init(&inst, ctrlHz);
         } else {
             flow.set_ctrl_hz(ctrlHz);
-            flow.wake(st);            // force-pushes every setter into the
-            flow.restore_undo(un, haveUndo);   // freshly initialised Instrument
+            // force-pushes every setter into the freshly initialised
+            // Instrument, base and all. The slot's overlay is the live one --
+            // glow_ui.hpp's glow_capture has the reading of Flow that says why
+            // the two cannot diverge.
+            flow.wake(st, haveOv ? &ov : nullptr);
+            flow.restore_undo(un, haveUndo, haveOv ? &ov : nullptr);
         }
     }
 

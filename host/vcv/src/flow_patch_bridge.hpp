@@ -561,6 +561,11 @@ inline std::string format_report(const TransferReport& r) {
 // Glow's JSON and the clipboard alike (Tasks 7-8). One format, one round-trip
 // test; a second encoding in a second language is what its gate exists to
 // catch.
+//
+// Both halves ask taste.h's is_base_rule(): the encoder skips a story-owned
+// entry, the decoder REFUSES one. The asymmetry is deliberate -- the encoder's
+// input is an in-memory overlay this code built, the decoder's is text somebody
+// typed, and only one of those can be wrong on purpose.
 
 inline std::string encode_base(const spky::flow::BaseOverlay& ov) {
     using namespace spky::flow;
@@ -568,6 +573,13 @@ inline std::string encode_base(const spky::flow::BaseOverlay& ov) {
     char buf[96];
     for (int p = 0; p < P_COUNT; ++p) {
         if (!ov.has[p]) continue;
+        // The same is_base_rule() question set_base() and decode_into() ask, so
+        // the partition is enforced in all three directions and this encoder can
+        // never emit a string its own decoder refuses. Unreachable today --
+        // every overlay that reaches here came from to_flow_base or from a
+        // decode, and both filter already -- which is exactly why it is a
+        // `continue` and not an assert: nothing may depend on it firing.
+        if (!is_base_rule(p)) continue;
         // %.9g is the round-trip width for a float: fewer digits and a decoded
         // overlay is a DIFFERENT patch from the encoded one, silently.
         std::snprintf(buf, sizeof buf, "%s:%.9g;", kParams[p].name,

@@ -323,7 +323,12 @@ TEST_CASE("the live base and the slot's survive a capture and a restore") {
     REQUIRE(s.have_base);
     CHECK(s.base.has[P_TUNE_A]);
     CHECK(s.base.v[P_TUNE_A] == doctest::Approx(0.25f));
-    REQUIRE(s.have_undo_base);               // the slot carries the pair
+    // Nothing is asserted about s.have_undo_base here on purpose. glow_capture
+    // assigns it from have_base two lines above its own return, so a check
+    // would restate the assignment and read as coverage it is not. The slot's
+    // overlay is gated by the case below, which is the only one that can see
+    // it: restore_undo writes _undo_overlay, and Flow exposes that through no
+    // accessor -- only an undo() can bring it back out.
 
     spky::Instrument inst2;
     inst2.init(48000.f);
@@ -360,4 +365,77 @@ TEST_CASE("a payload with no base restores NO overlay, not an empty one") {
     REQUIRE_FALSE(bare.have_base);
     REQUIRE(glow_restore(fl, bare));
     CHECK(fl.overlay() == nullptr);
+}
+
+TEST_CASE("the slot's own base is restored, not the live one") {
+    // The discriminating gate for glow_restore's THIRD argument to
+    // restore_undo. Every other case here passes the same overlay on both
+    // sides -- glow_capture cannot produce a divergent pair -- so dropping
+    // that argument leaves them all green while the undo slot silently
+    // inherits whatever wake() just set. A saved patch CAN hold two different
+    // strings, so the pair is hand-built here.
+    //
+    // restore_undo writes _undo_overlay and nothing else, and Flow exposes it
+    // through no accessor. undo() is what brings it back out: it is legal
+    // after the restore (_woken from wake, _have_undo from restore_undo), and
+    // it swaps the slot's pair into the live one.
+    spky::Instrument inst;
+    inst.init(48000.f);
+    spky::flow::Flow fl;
+    fl.init(&inst, 100.f);
+
+    TerrainState house;
+    REQUIRE(decode_code(kHouseCode, house));
+
+    GlowSave s;
+    encode_code(house, s.code, int(sizeof s.code));
+    TerrainState other = house;
+    ++other.reroll[0];                       // a different place for the slot
+    encode_code(other, s.undo, int(sizeof s.undo));
+    s.have_undo = true;
+    s.base.v[P_TUNE_A] = 0.25f;  s.base.has[P_TUNE_A] = true;       // A
+    s.have_base = true;
+    s.undo_base.v[P_TUNE_B] = 0.75f; s.undo_base.has[P_TUNE_B] = true;  // B
+    s.have_undo_base = true;
+
+    REQUIRE(glow_restore(fl, s));
+    REQUIRE(fl.overlay() != nullptr);
+    REQUIRE(fl.overlay()->has[P_TUNE_A]);    // the live one is A
+    REQUIRE_FALSE(fl.overlay()->has[P_TUNE_B]);
+
+    REQUIRE(fl.can_undo());
+    REQUIRE(fl.undo());
+    REQUIRE(fl.overlay() != nullptr);
+    // ...and undoing lands on B, the pair the SLOT was saved with. Without the
+    // third argument the slot would have inherited A from the wake above and
+    // this is where the wrong base shows up -- one gesture after the reload,
+    // which is exactly how Task 3's bug presented.
+    CHECK(fl.overlay()->has[P_TUNE_B]);
+    CHECK(fl.overlay()->v[P_TUNE_B] == doctest::Approx(0.75f));
+    CHECK_FALSE(fl.overlay()->has[P_TUNE_A]);
+}
+
+TEST_CASE("the encoder cannot emit a string its own decoder refuses") {
+    // Symmetry with the is_base_rule guard in decode_into. Unreachable today:
+    // every overlay that reaches encode_base came from to_flow_base or from a
+    // decode, and both already filter. It exists so the "one encoding"
+    // contract cannot acquire a producer the consumer rejects.
+    int story = -1;
+    for (int p = 0; p < P_COUNT && story < 0; ++p) if (!is_base_rule(p)) story = p;
+    REQUIRE(story >= 0);
+    CAPTURE(std::string(kParams[story].name));
+
+    spky::flow::BaseOverlay ov;
+    ov.v[story] = 0.5f;  ov.has[story] = true;
+    int base = -1;
+    for (int p = 0; p < P_COUNT && base < 0; ++p) if (is_base_rule(p)) base = p;
+    REQUIRE(base >= 0);
+    ov.v[base] = 0.5f;   ov.has[base] = true;
+
+    const std::string s = encode_base(ov);
+    CHECK(s.find(kParams[base].name) != std::string::npos);   // the base rule travels
+    CHECK(s.find(kParams[story].name) == std::string::npos);  // the story one does not
+    // ...and the whole point: the result decodes.
+    spky::flow::BaseOverlay out;
+    CHECK(decode_base(s.c_str(), out));
 }
