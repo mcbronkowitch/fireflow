@@ -1612,3 +1612,19 @@ TEST_CASE("pace: a non-finite request is dropped, not propagated") {
     // both decks go silent with no error at all.
     CHECK(in.lane_rate_hz_for_test(0, spky::LANE_PITCH) == ok);
 }
+
+TEST_CASE("pace: set_tempo_bpm does not compound the pace factor") {
+    // _bpm must stay RAW. An implementation that folds pace into _bpm inside
+    // set_tempo_bpm (e.g. `_bpm = bpm * _pace;`) can still land on the right
+    // transport BPM on a single call by coincidence -- the invariant this
+    // pins is that a SECOND call at the SAME raw bpm must not drift, which a
+    // compounding implementation cannot satisfy no matter what the first call
+    // happened to produce.
+    spky::Instrument in;
+    in.init(48000.f);
+    in.set_pace(1.f);   // x4
+    in.set_tempo_bpm(100.f);
+    CHECK(in.transport_bpm_for_test() == doctest::Approx(400.f));
+    in.set_tempo_bpm(100.f);   // same raw bpm again: must still be 400, not 1600
+    CHECK(in.transport_bpm_for_test() == doctest::Approx(400.f));
+}

@@ -42,11 +42,16 @@ public:
     void init(float sample_rate);                    // engine only, no FX chain
     void init(float sample_rate, const FxMem& mem);  // full FX chain
     void set_tempo_bpm(float bpm);
-    // PACE (spec 2026-08-12 modulation-pace). Same guard as set_tempo_bpm and for
-    // the same stated reason: host/render/scenario.cpp forwards scenario-file
-    // values unvalidated. A NaN pace is worse than a NaN BPM -- Transport::set_bpm
-    // catches the latter, but a NaN _base_hz is mapped to 0 by set_rate_hz and both
-    // decks go silent with no error.
+    // PACE (spec 2026-08-12 modulation-pace). Guards ONLY non-finite input --
+    // NOT positivity, unlike set_tempo_bpm's guard on `bpm`. norm == 0.f is
+    // itself the lowest legal knob position (pace_mult(0.f) == x1/32,
+    // divisions.h), not bad input the way a non-positive bpm would be: do NOT
+    // add a `norm > 0.f` check here, it would silently drop every push at or
+    // below the knob's own minimum and freeze PACE wherever it last was.
+    // host/render/scenario.cpp forwards scenario-file values unvalidated, the
+    // same reason set_tempo_bpm needs its own guard; a NaN pace is worse than
+    // a NaN BPM -- Transport::set_bpm catches the latter, but a NaN _base_hz
+    // is mapped to 0 by set_rate_hz and both decks go silent with no error.
     void set_pace(float norm);
 
     void set_rate(int p, float n)            { _parts[p].mod().set_rate(n); }
@@ -427,8 +432,10 @@ public:
 
 private:
     // The single door, shared by both set_tempo_bpm and set_pace. PACE reaches
-    // the transport and the mod lanes; FLUX gets the RAW bpm and is corrected
-    // in its own rhythm reader instead (spec §3.3).
+    // the transport and the mod lanes; FLUX gets the RAW bpm here and, as of
+    // this commit, stays mis-tracked at PACE != 1 -- Task 6 (spec §3.3) is
+    // what will repair that, in FLUX's own rhythm reader
+    // (update_thin_pattern), not here.
     void _apply_tempo();
 
     std::array<Part, PART_COUNT> _parts;
