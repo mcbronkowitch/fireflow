@@ -439,3 +439,54 @@ TEST_CASE("the encoder cannot emit a string its own decoder refuses") {
     spky::flow::BaseOverlay out;
     CHECK(decode_base(s.c_str(), out));
 }
+
+TEST_CASE("a divergent pair survives capture as well as restore") {
+    // The other half of the case above, and the one that closes the loop.
+    // restore_undo is the ONE setter that assigns _undo_overlay independently
+    // of _overlay (flow.cpp:242-246), and glow_restore uses exactly it -- so a
+    // live Flow really can hold a divergent pair, and a capture that derives
+    // the slot's overlay from the live one collapses that pair on the next
+    // save. It would then survive precisely one load, which is the shape of
+    // bug that looks fixed until somebody saves twice.
+    spky::Instrument inst;
+    inst.init(48000.f);
+    spky::flow::Flow fl;
+    fl.init(&inst, 100.f);
+
+    TerrainState house;
+    REQUIRE(decode_code(kHouseCode, house));
+    TerrainState other = house;
+    ++other.reroll[0];
+
+    spky::flow::BaseOverlay a, b;
+    a.v[P_TUNE_A] = 0.25f; a.has[P_TUNE_A] = true;
+    b.v[P_TUNE_B] = 0.75f; b.has[P_TUNE_B] = true;
+    fl.wake(house, &a);
+    fl.restore_undo(other, true, &b);        // the divergent state, as a load leaves it
+    REQUIRE(fl.overlay() != nullptr);
+    REQUIRE(fl.overlay()->has[P_TUNE_A]);
+    REQUIRE(fl.undo_overlay() != nullptr);
+    REQUIRE(fl.undo_overlay()->has[P_TUNE_B]);
+
+    const GlowSave s = glow_capture(fl);
+    CHECK(s.have_base);
+    CHECK(s.base.has[P_TUNE_A]);
+    CHECK(s.have_undo_base);
+    // The slot's own base, not a second copy of the live one.
+    CHECK(s.undo_base.has[P_TUNE_B]);
+    CHECK_FALSE(s.undo_base.has[P_TUNE_A]);
+
+    spky::Instrument inst2;
+    inst2.init(48000.f);
+    spky::flow::Flow fl2;
+    fl2.init(&inst2, 100.f);
+    REQUIRE(glow_restore(fl2, s));
+    REQUIRE(fl2.undo_overlay() != nullptr);
+    CHECK(fl2.undo_overlay()->has[P_TUNE_B]);
+    CHECK(fl2.undo_overlay()->v[P_TUNE_B] == doctest::Approx(0.75f));
+    // ...and the gesture agrees with the accessor: undoing lands on B.
+    REQUIRE(fl2.undo());
+    REQUIRE(fl2.overlay() != nullptr);
+    CHECK(fl2.overlay()->has[P_TUNE_B]);
+    CHECK_FALSE(fl2.overlay()->has[P_TUNE_A]);
+}

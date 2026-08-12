@@ -99,6 +99,17 @@ public:
     // parameter, so a reloaded patch sounds exactly as it did when saved and
     // the first undo press behaves as if the session had never ended.
     const TerrainState& undo_state() const { return _undo; }
+    // The slot's overlay, and it is NOT derivable from overlay(). wake() and
+    // begin_blend() do set the slot's from the live one, and undo() swaps two
+    // values that descend from the same wake() -- but restore_undo() below
+    // assigns _undo_overlay on its own, and a host that restores a saved
+    // payload uses exactly that: wake(state, live base) then
+    // restore_undo(slot, have, SLOT's base). So a live Flow can hold a
+    // divergent pair, and a host that captures one value for both collapses
+    // it silently. Same reason undo_state() is separate from state().
+    const BaseOverlay* undo_overlay() const {
+        return _have_undo_overlay ? &_undo_overlay : nullptr;
+    }
     void restore_undo(const TerrainState& s, bool have_undo, const BaseOverlay* ov = nullptr);
     float blend_phase() const { return _blend_phase; }  // 1.f when settled
     float eff_macro(int m) const { return _eff[m]; }  // clamp(knob+cv+weather)

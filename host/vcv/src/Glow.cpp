@@ -735,24 +735,38 @@ struct Glow : Module {
         // every setter, and Flow only re-pushes on wake(), which is the last
         // thing this function does.
         //
-        // That includes the OVERLAY. This is the one other path besides
+        // That includes both OVERLAYS. This is the one other path besides
         // dataFromJson that reconstructs a live Flow, and the live place's
         // hand-authored base is in neither places[] nor the terrain code -- so
         // nothing else could put it back. Waking without it (wake(st) defaults
         // ov to nullptr, flow.cpp:87) strips a loaded patch back to the drawn
         // terrain the first time somebody changes Rack's sample rate, in
-        // silence. The undo slot's copy goes the same way twice over: wake()
-        // clears it too (flow.cpp:96-97) and restore_undo re-clears it
-        // (flow.cpp:245), so both calls below need their own argument.
+        // silence. The undo slot's goes the same way twice over: wake() clears
+        // it too (flow.cpp:96-97) and restore_undo re-clears it (flow.cpp:245).
+        //
+        // TWO captures, not one duplicated -- the same shape as `st` and `un`
+        // above, which are two values for the same reason. The pair is one
+        // value across wake/begin_blend/undo, but restore_undo assigns the
+        // slot's on its own, and a loaded patch reaches this function having
+        // gone through exactly that. Handing one captured overlay to both
+        // calls below would overwrite the slot's with the live one: the same
+        // silent loss this block exists to stop, moved one field over.
+        //
+        // By value, and copied BEFORE inst.init(): flow.overlay() hands back a
+        // pointer into `flow`, which wake() is about to rewrite.
         const bool hadFlow = woken;
         const spky::flow::TerrainState st = flow.state();
         const spky::flow::TerrainState un = flow.undo_state();
         const bool haveUndo = flow.can_undo();
-        spky::flow::BaseOverlay ov;      // by value: `flow` is about to be rewoken
-        bool haveOv = false;
+        spky::flow::BaseOverlay ov, unOv;
+        bool haveOv = false, haveUnOv = false;
         if (const spky::flow::BaseOverlay* p = flow.overlay()) {
             ov = *p;
             haveOv = true;
+        }
+        if (const spky::flow::BaseOverlay* p = flow.undo_overlay()) {
+            unOv = *p;
+            haveUnOv = true;
         }
 
         const float prevSr = curSr;
@@ -809,11 +823,10 @@ struct Glow : Module {
         } else {
             flow.set_ctrl_hz(ctrlHz);
             // force-pushes every setter into the freshly initialised
-            // Instrument, base and all. The slot's overlay is the live one --
-            // glow_ui.hpp's glow_capture has the reading of Flow that says why
-            // the two cannot diverge.
+            // Instrument, base and all. Each overlay goes back to the verb it
+            // came from, in flow.h's documented order.
             flow.wake(st, haveOv ? &ov : nullptr);
-            flow.restore_undo(un, haveUndo, haveOv ? &ov : nullptr);
+            flow.restore_undo(un, haveUndo, haveUnOv ? &unOv : nullptr);
         }
     }
 

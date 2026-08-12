@@ -147,17 +147,20 @@ inline GlowSave glow_capture(const spky::flow::Flow& fl) {
         s.base = *ov;
         s.have_base = true;
     }
-    // The SLOT's overlay comes from the same accessor, and that is a reading of
-    // Flow rather than a shortcut. Flow exposes no undo_overlay() because the
-    // slot has never had one of its own to expose: wake() and begin_blend()
-    // both set _undo_overlay FROM _overlay, and undo() swaps two values that
-    // both descend from the same wake(). wake() is the only injector of a
-    // different overlay and it writes both. So the pair cannot diverge, and if
-    // some future path ever makes it -- an accessor here, not a second rule in
-    // the restore path below, is the fix. The restore side already honours a
-    // divergence, because a patch can hold two different strings.
-    s.undo_base = s.base;
-    s.have_undo_base = s.have_base;
+    // The SLOT's overlay is asked for SEPARATELY, exactly as undo_state() is
+    // asked for separately from state(), and for the same reason: the two can
+    // differ. wake() and begin_blend() do set _undo_overlay from _overlay, and
+    // undo() swaps two values that descend from the same wake() -- so across
+    // the gesture verbs the pair really is one value. It is restore_undo()
+    // that breaks it (flow.cpp:242-246), and glow_restore() below is a caller:
+    // it wakes with the live base and then hands the SLOT's own base to
+    // restore_undo. A divergent pair is therefore a state a loaded Flow is
+    // routinely in, and deriving this field from `base` would collapse it on
+    // the next save -- a pair that survives exactly one load.
+    if (const spky::flow::BaseOverlay* uov = fl.undo_overlay()) {
+        s.undo_base = *uov;
+        s.have_undo_base = true;
+    }
     return s;
 }
 
