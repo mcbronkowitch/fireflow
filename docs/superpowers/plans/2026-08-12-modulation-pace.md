@@ -273,7 +273,22 @@ Below ~1.4e-3 Hz the `float` increment is under half an ulp and the melodic lane
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `tests/test_lane.cpp`:
+> **CORRECTION, 2026-08-12 — the test code below is inverted and must not be
+> used.** It was written into this plan and rejected during execution, then
+> independently confirmed broken by review. At 0.02 Hz, 400 s is exactly 8
+> whole turns, so a *healthy* lane returns to its start phase and
+> `fabs(phase - start) > 0.05` **fails on the one working rate**. At 0.00125 Hz
+> the lane owes exactly 0.5 turns and the documented stall parks at exactly
+> 0.50; at 0.000625 Hz it owes 0.25 and stalls at 0.25. The frozen lane
+> produces the very number the healthy lane owes, so the gate **passes on the
+> bug it was written to catch** — inverted on all four rates.
+>
+> What shipped instead (`tests/test_lane.cpp`, commit `e449bf4`) counts *turns
+> over 1600 s against a ±2% band*, which is what spec §8 asked for in the first
+> place: gate on wraps per unit time, never on displacement and never on Hz.
+> It goes red on 0.00125 Hz, 0.000625 Hz **and** 0.0025 Hz — the last one
+> running 7% fast in the round-up band above the stall, which the original
+> formulation could not have seen at all.
 
 ```cpp
 TEST_CASE("lane: phase still advances at PACE-reachable slow rates") {
@@ -393,7 +408,13 @@ If it fails, **measure the new worst case** — add a temporary `MESSAGE` report
 ctest --test-dir build --output-on-failure
 ```
 
-`ctrl_identity` and the `spky_tests` render hashes will fail. Regenerate the reference hashes in `tests/check_render_hash.cmake` per the procedure documented there, in this commit, and say why in the message. Nothing else in this task may change a hash — verify by re-running the full suite after the update.
+`ctrl_identity` and the `spky_tests` render hashes will fail. Regenerate the reference hashes in this commit and say why in the message. Nothing else in this task may change a hash — verify by re-running the full suite after the update.
+
+> **CORRECTION, 2026-08-12:** the `EXPECTED=` hashes do **not** live in
+> `tests/check_render_hash.cmake` as this plan and the Files list above both
+> claimed — that file carried no hash at all. They are in `CMakeLists.txt:33`
+> and `:57`. A third baseline also moves: the FNV phrase-determinism digest in
+> `tests/test_song_form.cpp:284-288`. All three moved in `e449bf4`.
 
 - [ ] **Step 7: Commit**
 
