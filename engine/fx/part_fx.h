@@ -45,6 +45,9 @@ public:
     void set_grit_mix(float n) { _grit.set_mix(n); }
     void set_bpm(float bpm)           { _flux.set_bpm(bpm); }
     void set_flux_rate(int slice_idx) { _flux.set_rate(slice_idx); }
+    // PACE forwarding for FLUX's THIN reader only (spec 2026-08-12 §3.3) --
+    // the delay line itself stays on the raw bpm above.
+    void set_rhythm_pace(float p)     { _flux.set_rhythm_pace(p); }
     void set_link(float n)   { _flux.set_link(n); }
     void set_rhythm(const RhythmView& rv) { _flux.set_rhythm(rv); }
 

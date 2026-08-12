@@ -125,6 +125,7 @@ void Instrument::_apply_tempo() {
     for (auto& p : _parts) p.mod().set_pace(_pace);
     for (auto& p : _parts) p.mod().set_tempo_bpm(_bpm);
     for (auto& p : _parts) p.fx().set_bpm(_bpm);
+    for (auto& p : _parts) p.fx().set_rhythm_pace(_pace);
 }
 
 void Instrument::process(const float* inL, const float* inR,

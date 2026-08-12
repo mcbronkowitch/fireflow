@@ -296,6 +296,36 @@ TEST_CASE("flux tape: BPM changes re-derive the THIN pattern") {
     CHECK(f.thin_n_for_test(0) == 2);
 }
 
+TEST_CASE("flux: THIN reads the rhythm in the delay's own time frame") {
+    // _rhy_gap is measured in samples between PITCH-lane onsets and is fully
+    // paced (the lanes that generate it are paced); rep comes from the RAW
+    // bpm because FLUX's own delay stays in real time. Below x1 that mismatch
+    // pins the ratio at kMaxSkip and any LINK above zero turns into a
+    // near-permanent mute of the return. Multiplying the gap by the pace
+    // puts both sides back in the same frame.
+    FluxTapeMem mem;
+    Flux fx;
+    mem.init(fx);
+    fx.set_bpm(120.f);
+    fx.set_rate(3);              // 0.5 s line -> rep = 24000 samples at 48 kHz
+    const int gap = 96000;       // 4 repeats between onsets at x1
+
+    fx.set_rhythm_pace(1.f);
+    fx.set_rhythm_gap_for_test(0, gap);
+    const int n_at_x1 = fx.thin_n_for_test(0);
+    // Must land in the interior of [1, kMaxSkip] or the check below would
+    // pass trivially even with the bug still in place.
+    REQUIRE(n_at_x1 > 1);
+    REQUIRE(n_at_x1 < link_tuning::kMaxSkip);
+
+    // The same music at x1/32: the PITCH lanes are paced, so onsets land 32x
+    // further apart in samples even though nothing about the delay itself
+    // changed.
+    fx.set_rhythm_pace(1.f / 32.f);
+    fx.set_rhythm_gap_for_test(0, gap * 32);
+    CHECK(fx.thin_n_for_test(0) == n_at_x1);
+}
+
 TEST_CASE("flux tape: invalid rhythm leaves THIN open") {
     FluxTapeMem mem;
     Flux f;

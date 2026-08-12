@@ -41,12 +41,23 @@ public:
     void set_time_mod(float norm);
     void set_link(float norm);
     void set_rhythm(const RhythmView& rv);
+    // FLUX's own delay stays in real time and never sees PACE's paced BPM
+    // (set_bpm above always gets the raw _bpm). But _rhy_gap arrives already
+    // paced -- it counts samples between PITCH-lane onsets, and the lanes
+    // themselves are paced -- so update_thin_pattern needs the factor back to
+    // put both sides of its ratio in the same time frame (spec 2026-08-12
+    // §3.3). Instrument::_apply_tempo forwards PACE here on every change.
+    void set_rhythm_pace(float p) { _rhythm_pace = p; update_thin_pattern(); }
     void process(float& l, float& r);
 
     float delay_target_for_test() const { return _dt_target; }
     float delay_current_for_test() const { return _dt_current; }
     float gate_for_test() const { return _gate; }
     int thin_n_for_test(int i) const { return _thin_n[i]; }
+    void set_rhythm_gap_for_test(int i, int32_t gap) {
+        _rhy_gap[i] = gap;
+        update_thin_pattern();
+    }
 
 private:
     void recompute_time(bool immediate);
@@ -77,6 +88,7 @@ private:
     float _repeat_period_samples = 0.f;
 
     float _thin = 0.f;
+    float _rhythm_pace = 1.f;
     int32_t _rhy_gap[2] = {0, 0};
     bool _rhy_valid = false;
     int _thin_n[2] = {1, 1};

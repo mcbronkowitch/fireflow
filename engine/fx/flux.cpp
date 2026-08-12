@@ -95,8 +95,15 @@ void Flux::update_thin_pattern() {
     const float rep = _delay_time * _sr;
     for (int i = 0; i < 2; ++i) {
         int n = 1;
-        if (rep > 0.f)
-            n = static_cast<int>(static_cast<float>(_rhy_gap[i]) / rep + 0.5f);
+        if (rep > 0.f) {
+            // _rhy_gap is paced (it counts samples between PITCH-lane onsets);
+            // rep comes from the raw bpm because FLUX itself stays in real
+            // time. Multiplying by the pace puts the gap back into real time,
+            // so the ratio means what it meant before PACE existed (spec
+            // 2026-08-12 §3.3).
+            const float gap = static_cast<float>(_rhy_gap[i]) * _rhythm_pace;
+            n = static_cast<int>(gap / rep + 0.5f);
+        }
         if (n < 1) n = 1;
         if (n > link_tuning::kMaxSkip) n = link_tuning::kMaxSkip;
         _thin_n[i] = n;
