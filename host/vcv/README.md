@@ -525,7 +525,7 @@ gets `nullptr, nullptr`). The full design behind the rebuilt surface is
 
 | Board | Count | Default |
 |---|---|---|
-| Trim knobs | 6 | MOTION, DENSITY, BRIGHT, DIRT (upper row), WANDER, SPACE |
+| Trim knobs | 6 | MOTION, DENSITY, BRIGHT, PACE (upper row), WANDER, SPACE |
 | Faders | 2 | left = Tempo, right = Master |
 | Switches (centre-off) | 2 | left = Lock, right = Scale |
 | Touch pads | 12 | places 1–12 |
@@ -538,7 +538,7 @@ gets `nullptr, nullptr`). The full design behind the rebuilt surface is
 | **MOTION** | how much everything moves |
 | **DENSITY** | how much happens |
 | **BRIGHT** | spectral centre |
-| **DIRT** | clean ↔ driven |
+| **PACE** | stretched ↔ rhythmic |
 | **WANDER** | predictable ↔ wandering |
 | **SPACE** | close ↔ vast |
 

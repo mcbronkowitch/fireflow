@@ -230,12 +230,12 @@ assert None not in PAD_PLACES, "a measured pad got no place on the grid"
 
 
 # --- the tables ---------------------------------------------------------------
-_MACRO_NAMES = ["MOTION", "DENSITY", "BRIGHT", "DIRT", "WANDER", "SPACE"]
+_MACRO_NAMES = ["MOTION", "DENSITY", "BRIGHT", "PACE", "WANDER", "SPACE"]
 _MACRO_TIPS = [
     "MOTION -- how much everything moves",
     "DENSITY -- how much happens",
     "BRIGHT -- spectral centre",
-    "DIRT -- clean to driven",
+    "PACE -- stretched to rhythmic",
     "WANDER -- predictable to wandering",
     "SPACE -- close to vast",
 ]

@@ -209,7 +209,7 @@ re-placed for a head zone that is now short and wide instead of 12 HP tall.
 
 | Board | Count | Rack widget | Default assignment |
 |---|---|---|---|
-| Trim knobs `S31`–`S34`, `S30`, `S35` | 6 | `Trimpot` | MOTION, DENSITY, BRIGHT, DIRT (upper row, left to right); WANDER (`S30`), SPACE (`S35`) |
+| Trim knobs `S31`–`S34`, `S30`, `S35` | 6 | `Trimpot` | MOTION, DENSITY, BRIGHT, PACE (upper row, left to right); WANDER (`S30`), SPACE (`S35`) |
 | Fader `S36` (left) | 1 | `VCVSlider` | TEMPO |
 | Fader `S37` (right) | 1 | `VCVSlider` | MASTER |
 | Switch `S09`/`S10` (left) | 1 | `NKK` | LOCK |

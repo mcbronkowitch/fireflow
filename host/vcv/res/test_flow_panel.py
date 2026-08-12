@@ -37,7 +37,7 @@ def approx(a, b, tol=0.01):
 # once, on purpose, when the panel became the Touch 2. From here on it is the
 # contract again: a param's id is its index, and nothing may be inserted into
 # the middle of this list.
-PARAM_ORDER = (['MOTION', 'DENSITY', 'BRIGHT', 'DIRT', 'WANDER', 'SPACE'] +
+PARAM_ORDER = (['MOTION', 'DENSITY', 'BRIGHT', 'PACE', 'WANDER', 'SPACE'] +
                ['PAD_%d' % (i + 1) for i in range(12)] +
                ['FADER_L', 'FADER_R', 'SW_L', 'SW_R'])
 OUTPUT_ORDER = ['OUT_L', 'OUT_R']
@@ -45,7 +45,7 @@ OUTPUT_ORDER = ['OUT_L', 'OUT_R']
 # Which macro is printed on which KNOB POSITION, in geo.KNOBS order. This is a
 # statement about the finished panel, not a copy of g.KNOB_MACRO -- see
 # test_which_macro_sits_on_which_knob.
-KNOB_LAYOUT = ['MOTION', 'DENSITY', 'BRIGHT', 'DIRT', 'WANDER', 'SPACE']
+KNOB_LAYOUT = ['MOTION', 'DENSITY', 'BRIGHT', 'PACE', 'WANDER', 'SPACE']
 KNOB_CHAN = ['S31', 'S32', 'S33', 'S34', 'S30', 'S35']
 
 # Everything printed must lie ON the plate. Not 2 mm inside it: the board's own
@@ -76,12 +76,12 @@ def test_enum_order():
 
 
 def test_macro_params_match_flow_macro_order():
-    # engine/flow/flow_ids.h: M_MOTION, M_DENSITY, M_BRIGHT, M_DIRT,
+    # engine/flow/flow_ids.h: M_MOTION, M_DENSITY, M_BRIGHT, M_PACE,
     # M_WANDER, M_SPACE. Glow.cpp indexes params[MOTION + m] directly, so the
     # first six params MUST be the six macros in that order -- which is why
     # re-sorting the KNOBS is done with KNOB_MACRO and not by moving enums.
     check([c.enum for c in g.PARAMS][:6] ==
-          ['MOTION', 'DENSITY', 'BRIGHT', 'DIRT', 'WANDER', 'SPACE'],
+          ['MOTION', 'DENSITY', 'BRIGHT', 'PACE', 'WANDER', 'SPACE'],
           "the first six params must mirror flow_ids.h's Macro order")
 
 

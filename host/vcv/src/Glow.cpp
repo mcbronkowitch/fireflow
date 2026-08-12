@@ -43,15 +43,11 @@ static_assert(static_cast<int>(DENSITY) == static_cast<int>(spky::flow::M_DENSIT
               "panel macro order drifted");
 static_assert(static_cast<int>(BRIGHT) == static_cast<int>(spky::flow::M_BRIGHT),
               "panel macro order drifted");
-// The engine enumerator became M_PACE on 2026-08-12 (flow_ids.h), so this
-// assert had to move with it or nothing in host/vcv would compile. The PANEL
-// side is still called DIRT here: that enumerator, its caption and the
-// "Reroll one macro" submenu entry are host-local names with their own rename
-// in the PACE plan's Glow task, which also regenerates res/Glow.svg and
-// src/generated_flow_panel.hpp. Slot 3 is what this line asserts, and slot 3
-// has not moved -- so a half-renamed file here is expected until that task
-// lands, not a leftover.
-static_assert(static_cast<int>(DIRT) == static_cast<int>(spky::flow::M_PACE),
+// The engine enumerator became M_PACE on 2026-08-12 (flow_ids.h); the panel
+// enum, its caption and the "Reroll one macro" submenu entry followed in the
+// same task (PACE plan, Glow task). Slot 3 is what this line asserts, and
+// slot 3 has not moved.
+static_assert(static_cast<int>(PACE) == static_cast<int>(spky::flow::M_PACE),
               "panel macro order drifted");
 static_assert(static_cast<int>(WANDER) == static_cast<int>(spky::flow::M_WANDER),
               "panel macro order drifted");
@@ -79,7 +75,7 @@ using spkyvcv::kPlacesPerArch;
 // would freeze an assignment the rehearsal is allowed to move), so their Rack
 // names come from here rather than from the generated table.
 static const char* kMacroNames[spky::flow::MACRO_COUNT] = {
-    "MOTION", "DENSITY", "BRIGHT", "DIRT", "WANDER", "SPACE"
+    "MOTION", "DENSITY", "BRIGHT", "PACE", "WANDER", "SPACE"
 };
 
 // A pad's NAME is runtime data (spec 6.3), so it cannot come from the
@@ -1365,6 +1361,12 @@ struct GlowWidget : ModuleWidget {
         menu->addChild(createSubmenuItem("Reroll one macro", "",
             [m](Menu* sub) {
                 for (int i = 0; i < spky::flow::MACRO_COUNT; ++i) {
+                    // PACE owns no story -- rerolling it cannot change PACE,
+                    // and would only redraw every other macro's weather (the
+                    // weather counter is the sum of all six). A menu entry
+                    // that does something other than its label says is worse
+                    // than a missing one. Spec 2026-08-12 §4.4.
+                    if (i == spky::flow::M_PACE) continue;
                     sub->addChild(createMenuItem(kMacroNames[i], "", [m, i]() {
                         m->uiMask = uint8_t(1u << i);
                         m->uiOp = Glow::UiOp::NEW_PARTIAL;
