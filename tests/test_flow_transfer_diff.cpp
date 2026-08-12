@@ -66,10 +66,14 @@ FireflowPatch ambient_patch() {
     fp.p[kFfDecayA]  = 0.90f;
     fp.p[kFfScale]   = 5.f;
     fp.p[kFfTempo]   = 0.20f;    // 80 BPM, inside flow's 50..140
-    fp.p[kFfPace]    = 0.5f;     // x1, neutral -- PACE is new, and an
-                                 // unset (zero) knob is its slowest end, not
-                                 // its centre, which would silently divide
-                                 // every lane rate below by up to 32
+    // 0.75 -> x2 (pace_mult, mod/divisions.h): well away from 0.5's neutral
+    // no-op, so a rig that forgot to apply PACE cannot pass by coincidence,
+    // and still a position a real patch could sit at -- not the extreme
+    // x1/32 or x4 ends. PACE is new, and an UNSET (zero) knob would have been
+    // its slowest end, not its centre, silently dividing every lane rate
+    // below by up to 32; a non-neutral value is what makes that mistake
+    // visible instead of merely avoiding it.
+    fp.p[kFfPace]    = 0.75f;
     return fp;
 }
 
@@ -171,6 +175,12 @@ TEST_CASE("transfer rig: the mod lanes clock at the patch's own speed") {
     const bool synced = fp.p[kFfCouple] >= 0.5f;
     ref.set_sync(synced);
     ref.set_tide(fp.p[kFfTide]);
+    // set_pace THE WAY FIREFLOW DRIVES IT (Fireflow.cpp:962), straight off the
+    // knob -- PACE is a direct conversion, but this reference has to prove
+    // that, not assume it. Without this line _pace defaults to 1.f and the
+    // gate agrees with the transferred instrument by coincidence at 0.5; the
+    // fixture above is pinned away from 0.5 for exactly this reason.
+    ref.set_pace(fp.p[kFfPace]);
     ref.set_rate(PART_A, fp.p[kFfRateA]);
     ref.set_rate(PART_B, fp.p[kFfRateB]);
     ref.set_step(PART_A, synced, 8);

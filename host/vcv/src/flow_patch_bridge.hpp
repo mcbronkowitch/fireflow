@@ -430,24 +430,32 @@ inline TransferReport to_flow_base(const FireflowPatch& fp) {
         // GRIT_A/B joined the base rules on 2026-08-12, from the deleted DIRT
         // story. Store what Fireflow pushes to set_grit_mix, not the knob --
         // the dead-zone formula is the exact shape of the four conversion
-        // changes this file's header warns about.
+        // changes this file's header warns about. Both notes below gate on
+        // the STORED value, not the raw knob -- a knob inside the dead zone
+        // (e.g. 0.02, or -0.02) carries exactly 0.0, same as Fireflow's own
+        // set_fx_on gate (`> kGritDead`), so neither note's premise holds for
+        // it: nothing is carried, inaudible or otherwise, and there is no
+        // sign on a zero magnitude to have lost.
         const int grit = p ? P_GRIT_B : P_GRIT_A;
         const float gritKnob = detail::pp(fp, kFfGritA, p);
-        detail::set_base(r, grit, detail::grit_from_knob(gritKnob));
-        if (std::fabs(gritKnob) > 1e-4f)
+        const float gritVal  = detail::grit_from_knob(gritKnob);
+        detail::set_base(r, grit, gritVal);
+        if (gritVal > 1e-4f) {
             sink.note(grit,
                 "carried, but currently inaudible under Glow: Fireflow gates "
                 "the GRIT block with set_fx_on(), which nothing in engine/flow/ "
                 "ever calls, and SoftSwitch defaults off. A pre-existing gap in "
                 "the flow layer, not a conversion loss");
-        // The sign is the OTHER half of this knob -- it picks Reduce vs Drive
-        // (set_grit_mode) -- and flow has no P_GRIT_MODE at all, so it cannot
-        // travel with the magnitude that does.
-        if (gritKnob < 0.f)
-            sink.note(grit,
-                "NOT CARRIED: the knob's sign chose Reduce mode (set_grit_mode); "
-                "flow has no P_GRIT_MODE, so only the magnitude travels and it "
-                "is heard, if the block is ever switched on, as Drive instead");
+            // The sign is the OTHER half of this knob -- it picks Reduce vs
+            // Drive (set_grit_mode) -- and flow has no P_GRIT_MODE at all, so
+            // it cannot travel with the magnitude that does.
+            if (gritKnob < 0.f)
+                sink.note(grit,
+                    "NOT CARRIED: the knob's sign chose Reduce mode "
+                    "(set_grit_mode); flow has no P_GRIT_MODE, so only the "
+                    "magnitude travels and it is heard, if the block is ever "
+                    "switched on, as Drive instead");
+        }
     }
 
     // SUB is strided (Fireflow.cpp:576 pushes it with pp(SUB_A, p)), unlike
@@ -620,14 +628,14 @@ inline TransferReport to_flow_base(const FireflowPatch& fp) {
     // turned deserves better than a bucket. These are the other 14 -- and the
     // list is the whole 14, per deck where the parameter is per deck.
     //
-    // The count moved from 21 on 2026-08-12, when the PACE work deleted the
-    // DIRT story outright and all four of its targets left this list: GRIT_A
-    // and GRIT_B are now carried with their own note above (beside FLUXMIX's,
-    // in the per-deck block), and COMP_A moved in beside COMP_B. DRIVE also
-    // became a base rule that day, but Fireflow still has no control for it
-    // at all -- unlike P_ROOT's row, its map entry names no report
-    // obligation, so a transferred patch's DRIVE stays exactly what it always
-    // was: the terrain's own draw, unmentioned here as before.
+    // The story-owned count moved from 21 on 2026-08-12, when the PACE work
+    // deleted the DIRT story outright and all four of its targets left this
+    // list: GRIT_A and GRIT_B are now carried with their own note above
+    // (beside FLUXMIX's, in the per-deck block), and COMP_A moved in beside
+    // COMP_B. DRIVE also became a base rule that day, but Fireflow still has
+    // no control for it at all -- unlike P_ROOT's row, its map entry names no
+    // report obligation, so a transferred patch's DRIVE stays exactly what it
+    // always was: the terrain's own draw, unmentioned here as before.
     sink.note(kNoteGeneral,
         "NOT TRANSFERABLE AT ALL (no slot, not \"transferred with loss\"): the "
         "14 remaining story-owned parameters -- DENSITY, VARY, FILT and "
