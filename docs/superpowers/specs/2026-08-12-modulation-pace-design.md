@@ -696,14 +696,29 @@ social: an implementer sees a red `interior_hit`, reads §4.5 as licence, and
 weakens it to `edge_hits > 0` — which that same comment already explains is
 *not* evidence of the veto clamp.
 
-**Ordered before the story is removed:** re-home the proof to `P_REVMIX_A`'s
-0.08 interior bound (driven by both BRIGHT and SPACE, the only remaining
-candidate) and *measure* that the sweep drives it past that bound.
-**Acceptance criterion:** `interior_hit[P_REVMIX_A]` true on at least the same
+**Ordered before the story is removed:** re-home the proof to `P_REVMIX_B`'s
+0.08 interior bound and *measure* that the sweep drives it past that bound.
+**Acceptance criterion:** `interior_hit[P_REVMIX_B]` true on at least the same
 share of masters the current `P_COMP_A` gate achieves. If the existing sweep
 cannot reach it, the sweep changes — a wider macro excursion or a second press
 mid-blend — and not the assertion. If neither works, this design stops and the
 DIRT story stays until a proof exists.
+
+**Why B and not A — measured 2026-08-12.** `eval_terrain` resolves a parameter
+owned by several stories by **farthest from base wins** (`flow.cpp:329`,
+`d > dist[c.param]`). `P_REVMIX_A` has two owners: BRIGHT "dawn"
+(`taste.h:894`), whose lowest cell is 0.40, and SPACE "bloom" (`taste.h:928`),
+whose Q0 cell reaches 0.08–0.15. BRIGHT's distant high candidate keeps winning
+the combine, so A is held off its own floor and never overshoots it.
+`P_REVMIX_B` (`taste.h:929`) carries the identical SPACE curve and the
+identical 0.08 veto bound with **no second owner**, so it reaches the floor
+freely. Measured over the same sweep at a re-press cadence of `% 23`: A scores
+**0/400 masters**, B scores **236/400**, against a `P_COMP_A` bar of 171/400
+(13/60 at the unwidened `% 30` cadence).
+
+Single ownership is therefore the property that earns the role — the opposite
+of what revision 3 of this section claimed. Neither macro that owns REVMIX_B is
+touched by §4.5, so the proof survives the DIRT deletion.
 
 ### 8.3 RED proofs
 
@@ -778,6 +793,10 @@ flow commit, then the bridge, then the panel commit.
   which has had no Fireflow control since 2026-08-09 (§4.5).
 - **r2:** `terrain.cpp:160` cited for the stream key; the site is
   `terrain.cpp:382`, and `flow_params.h:107`'s own comment is stale.
+- **r3:** §8.2 named `P_REVMIX_A` as the veto proof's new home "driven by both
+  BRIGHT and SPACE". Having two owners is what *disqualifies* it — the
+  farthest-from-base combine lets BRIGHT hold it off its own floor. Measured
+  0/400 masters. The proof goes to the single-owner `P_REVMIX_B`, 236/400.
 - **r3:** §4.4 asked the plan to rule on a gesture mark mask. The gesture it
   described was removed from Glow on 2026-08-11 with the NEW button, and
   `engine/flow/gesture.h` has had no caller outside `tests/` since. The real

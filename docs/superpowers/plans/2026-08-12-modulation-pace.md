@@ -60,52 +60,28 @@ python3 -m pytest res/test_panel.py res/test_hw_panel.py res/test_flow_panel.py 
 
 ---
 
-### Task 1: Re-home the veto proof (may veto this plan)
+### Task 1: Re-home the veto proof (gate, already measured)
 
-`tests/test_flow_veto.cpp:196-206` is the suite's only red-capable proof that the runtime veto clamp at `flow.cpp:577-582` fires at all, as opposed to the ordinary `clamp_to(kParams, …)`. It rests on `P_COMP_A`, whose story curve Task 8 deletes. **If no other parameter can carry that proof, this plan stops here** (§8.2).
+`tests/test_flow_veto.cpp` holds the suite's only red-capable proof that the runtime veto clamp at `flow.cpp:577-582` fires at all, as opposed to the ordinary `clamp_to(kParams, …)`. It rests on `P_COMP_A`, whose story curve Task 8 deletes, so it moves first.
+
+**The measurement is done — 2026-08-12, recorded in §8.2.** A first attempt aimed the proof at `P_REVMIX_A` and failed: `eval_terrain` resolves a multi-owner parameter by *farthest from base wins* (`flow.cpp:329`), and `P_REVMIX_A`'s second owner BRIGHT "dawn" (`taste.h:894`, floor 0.40) keeps out-distancing SPACE's low candidate, holding A off its own 0.08 bound. Measured 0/400 masters. `P_REVMIX_B` (`taste.h:929`) carries the identical SPACE "bloom" curve and the identical 0.08 bound with **no second owner** and clears easily. Do not re-derive this; the numbers below are the ones to use.
+
+| param | 60 masters, `% 30` (as committed) | 60 masters, `% 23` |
+|---|---|---|
+| `P_COMP_A` (the bar) | 13/60 | 31/60 |
+| `P_REVMIX_A` | 0/60 | 0/60 |
+| **`P_REVMIX_B`** | 0/60 | **37/60** |
 
 **Files:**
-- Modify: `tests/test_flow_veto.cpp:147-206`
+- Modify: `tests/test_flow_veto.cpp` — the `TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto")` body only
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: a veto test whose `interior_hit` requirement names `P_REVMIX_A`, surviving Task 8 unchanged.
+- Produces: a veto test whose `interior_hit` requirement names `P_REVMIX_B`, surviving Task 8 unchanged.
 
-- [ ] **Step 1: Measure the current baseline**
+- [ ] **Step 1: Widen the re-press cadence**
 
-Add a temporary counter so the existing gate reports a *share*, not a bool. In the master loop of `TEST_CASE("flow veto: a mid-blend residual never breaches a veto band")`, add alongside `interior_hit`:
-
-```cpp
-    int masters_with_interior[kVetoCount] = {};   // TEMPORARY, removed in step 6
-```
-
-and inside the master loop, after the tick loop closes but before the next master:
-
-```cpp
-        for (int v = 0; v < kVetoCount; ++v)
-            if (interior_this_master[v]) ++masters_with_interior[v];
-```
-
-with a per-master `bool interior_this_master[kVetoCount] = {};` declared just after `f.wake(st);` and set wherever `interior_hit[v] = true;` is set today. Then before the final `CHECK`s:
-
-```cpp
-    for (int v = 0; v < kVetoCount; ++v)
-        MESSAGE("veto " << pname(kVetos[v].param) << " interior on "
-                        << masters_with_interior[v] << "/60 masters");
-```
-
-- [ ] **Step 2: Run it and record the numbers**
-
-```bash
-source env.sh && cmake --build build
-./build/spky_tests -tc="flow veto: a mid-blend residual never breaches a veto band" -s
-```
-
-Expected: PASS, with a MESSAGE line per veto param. **Write the `P_COMP_A` number down** — it is the acceptance bar. `P_REVMIX_A` is expected to read 0 at this stage; that is the problem this task solves.
-
-- [ ] **Step 3: Widen the sweep until `P_REVMIX_A` clears the bar**
-
-`P_REVMIX_A`'s interior bound is 0.08 (never fully dry) and it is driven by two stories at once — BRIGHT "dawn" pushes it down in Q1 while SPACE "bloom" pushes it up — so the shared-target combine in `eval_terrain` makes it the one remaining parameter whose candidates straddle the base. The current sweep alternates macros between hard 0 and hard 1 every three ticks. Change the re-press cadence so a residual forms while BRIGHT and SPACE disagree: replace
+The sweep alternates macros between hard 0 and hard 1 every three ticks, and re-presses every 30. Those two cadences share a factor, so the residual always forms at the same handful of points. Replace
 
 ```cpp
             if (i > 0 && i % 30 == 0) f.new_full();
@@ -114,61 +90,65 @@ Expected: PASS, with a MESSAGE line per veto param. **Write the `P_COMP_A` numbe
 with
 
 ```cpp
-            // Re-press on a cadence that is coprime with the 3-tick macro
-            // alternation above, so a residual forms at many different points
-            // of the BRIGHT/SPACE disagreement rather than always the same one.
+            // Re-press on a cadence coprime with the 3-tick macro alternation
+            // above, so a residual forms at many different points of the
+            // BRIGHT/SPACE disagreement rather than always the same one.
             if (i > 0 && i % 23 == 0) f.new_full();
 ```
 
-Re-run step 2's command after each change.
+Leave the master count at 60. `P_REVMIX_B` clears the `P_COMP_A` bar there (37 vs 13); the 400-master escalation the first attempt used is not needed.
 
-- [ ] **Step 4: If the bar is still not cleared, escalate once**
+- [ ] **Step 2: Move the requirement to `P_REVMIX_B`**
 
-Raise the master count from 60 to 400 (the comment at `:139` records that 400 was already used for the original measurement, so this is a known-affordable run):
-
-```cpp
-    for (uint32_t master = 1; master <= 400; ++master) {
-```
-
-If `P_REVMIX_A` still reads 0 at 400 masters with the changed cadence, **stop and report**: the design has no home for its veto proof and Task 8 must not proceed. Do not weaken the assertion to `edge_hits > 0` — the comment at `:184-190` already explains that this is not evidence of the veto clamp.
-
-- [ ] **Step 5: Prove the new gate RED**
-
-Temporarily disable the veto clamp — comment out the body of the `for (int vi = 0; vi < kVetoCount; ++vi)` loop at `engine/flow/flow.cpp:577-582` — rebuild, and run the case.
-
-Expected: FAIL on `interior_hit[P_REVMIX_A]`. Restore `flow.cpp` and confirm it passes again.
-
-- [ ] **Step 6: Move the requirement to P_REVMIX_A and delete the scaffolding**
-
-Replace the final loop and rewrite the comment above it:
+Replace the final `for (int v = 0; v < kVetoCount; ++v)` requirement loop and its comment with:
 
 ```cpp
-    // Required on P_REVMIX_A. Its 0.08 lo sits strictly inside kParams' 0..1,
+    // Required on P_REVMIX_B. Its 0.08 lo sits strictly inside kParams' 0..1,
     // so a hit there cannot come from clamp_to(kParams, ...) and is specific
     // evidence the veto clamp itself fired mid-blend. It took this role from
     // P_COMP_A on 2026-08-12, when the PACE work deleted the DIRT story and
     // left COMP_A a near-constant base rule with no range to overshoot from.
-    // REVMIX_A earns it for a reason COMP_A never had: BRIGHT "dawn" and
-    // SPACE "bloom" both own it and pull in opposite directions, so
-    // eval_terrain's farthest-from-base combine can flip mid-sweep and the
-    // residual forms against a moving target. Measured share: see the commit.
+    //
+    // B and not A, though the two share a bound and a curve: eval_terrain
+    // resolves a multi-owner param by farthest-from-base (flow.cpp:329), and
+    // REVMIX_A has a second owner in BRIGHT "dawn" whose floor is 0.40. That
+    // distant candidate keeps winning the combine and holds A off its own
+    // 0.08 bound -- measured 0/400 masters. REVMIX_B has only SPACE "bloom",
+    // so it reaches the floor freely: 37/60 masters here.
     // Do not widen this to all five params without re-measuring first.
     for (int v = 0; v < kVetoCount; ++v) {
-        if (kVetos[v].param != P_REVMIX_A) continue;
+        if (kVetos[v].param != P_REVMIX_B) continue;
         CAPTURE(pname(kVetos[v].param));
         CHECK(interior_hit[v]);
     }
 ```
 
-Remove `masters_with_interior`, `interior_this_master` and the `MESSAGE` loop.
+Keep whatever other `CHECK`s the case already makes; only the interior-bound requirement moves.
 
-- [ ] **Step 7: Full suite, then commit**
+- [ ] **Step 3: Run it green**
+
+```bash
+source env.sh && cmake --build build
+./build/spky_tests -tc="flow veto: a macro moved mid-blend cannot breach a veto"
+```
+
+Expected: PASS.
+
+- [ ] **Step 4: Prove the new gate RED**
+
+Temporarily comment out the body of the `for (int vi = 0; vi < kVetoCount; ++vi)` veto-clamp loop at `engine/flow/flow.cpp:577-582`, rebuild, and run the same case.
+
+Expected: FAIL on the `P_REVMIX_B` requirement — with the clamp gone, nothing pulls the residual back inside the band, so the value that used to land on the interior bound now sails past it and `interior_hit` is never set.
+
+Restore `engine/flow/flow.cpp` (`git checkout -- engine/flow/flow.cpp`), rebuild, confirm green again. `git status` must show `flow.cpp` clean before you commit.
+
+- [ ] **Step 5: Full suite, then commit**
 
 ```bash
 ctest --test-dir build --output-on-failure
 git add tests/test_flow_veto.cpp
 git commit -m "$(cat <<'EOF'
-test(flow): the veto proof moves from COMP_A to REVMIX_A
+test(flow): the veto proof moves from COMP_A to REVMIX_B
 
 The interior-bound requirement was the suite's only red-capable proof
 that flow.cpp's veto clamp fires rather than kParams' ordinary range
@@ -176,16 +156,20 @@ clamp, and it rested on P_COMP_A having a story curve wide enough to
 overshoot from. The PACE work deletes that story, so the proof moves
 first, before anything depends on it.
 
-REVMIX_A earns the role for a reason COMP_A never had: two stories own
-it and pull opposite ways, so the residual forms against a target that
-can flip mid-sweep. Proven red by disabling the clamp.
+REVMIX_B earns the role by owning its 0.08 floor alone. Its twin
+REVMIX_A shares the bound and the SPACE curve but has BRIGHT "dawn" as a
+second owner, and eval_terrain's farthest-from-base combine lets that
+0.40 floor hold A off its own bound -- measured 0/400 masters against
+B's 37/60. The re-press cadence moves to 23 ticks, coprime with the
+sweep's 3-tick macro alternation, so the residual forms at many points
+of the BRIGHT/SPACE disagreement instead of always the same one.
+
+Proven red by disabling the clamp.
 
 Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>
 EOF
 )"
 ```
-
-Record the measured share in the commit body, replacing "see the commit" in the code comment with the actual number.
 
 ---
 
