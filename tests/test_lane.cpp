@@ -237,10 +237,12 @@ TEST_CASE("lane: phase still advances at PACE-reachable slow rates") {
         CAPTURE(hz);
         CAPTURE(turns);
         CAPTURE(commanded);
-        // +-2%: double accumulation lands within 1e-9 of commanded at every
-        // rate here, so the band is wide enough to be about the mechanism and
-        // not about the last bits. Float missed it by 7% (0.0025 Hz) and by
-        // 75% (both stalled rates).
+        // +-2%: chosen to be about the mechanism (frozen vs. tracking), not
+        // about the last bits. `turns` passes through `phase()`, a float
+        // accessor with a resolution around 6e-8 in [0, 1) -- this test
+        // cannot observe agreement any tighter than that, whatever the
+        // internal double accumulator itself achieves. Float missed even
+        // this loose band by 7% (0.0025 Hz) and by 75% (both stalled rates).
         CHECK(turns > commanded * 0.98);
         CHECK(turns < commanded * 1.02);
     }

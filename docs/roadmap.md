@@ -341,7 +341,8 @@ is actually built today, and what is still design-only.
 | **BBD PITCH / tape TIME surface** | `STAGES_A/B` leaves the FX box and takes over the shared VOICE `ATK` slot as the BBD deck's own pitch control, visible only while that deck is BBD (`ATTACK` is hidden there and stays reachable as a `Freeze Attack` context-menu slider); the vacated FX slot gets a new knob driving `FXT_FLUX_TIME` geometrically from ×0.25 through ×1 to ×4, distinct from RATE's tempo-synced division | ✅ **done** (VCV; spec `docs/superpowers/specs/2026-08-02-vcv-bbd-pitch-flux-time-surface-design.md`; released in 2.17.1; the two new captions, `PITCH` and `TIME`, were renamed `BEND` and `MULT` by "VCV engine-aware captions" below) |
 | **BBD dynamic-stage declick** | `BbdLine` keeps one continuous full-ring write history behind every stage-count change and crossfades the old and new read taps over a fixed 16-tick smoothstep, removing the index-reset impulse the previous immediate resize produced when COLOR/MOTION modulates a line's stage count | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-03-bbd-dynamic-stages-declick-design.md`; released in 2.17.1; fixed-stage output stays bit-identical, COLOR = 0 stays bit-identical left/right) |
 | **VCV engine-aware captions** | Every state-dependent panel caption now comes from one `DYNAMIC_CAPTIONS` generator table instead of hand-written special cases: BODY gets honest VOICE words (`HIT`/`DAMP`/`CHAR`/`EXCIT`/`BRITE`) and BBD gets its own (`TAIL`/`TILT`/`FEED`/`LOSS`); the FX-box word collisions are resolved by renaming FLUX `RATE`→`DIV`, FLUX `TIME`→`MULT`, per-deck `ROOM`→`SEND`, `MASTER_DRIVE`→`PUSH` and BBD `PITCH`→`BEND` (collision with the orbit's `PITCH` eyebrow); the GRIT mode pad now shows its own state, `SAT`/`CRSH`, instead of the word `GRIT` it collided with; MELODY drives Sampler `SCAN` only, no longer also `set_variation`; the permanently-printed `SCAN`/`LEN` second words are deleted from the static plate | ✅ **done** (VCV host + generator; spec `docs/superpowers/specs/2026-08-03-vcv-engine-aware-captions-design.md`; branch `vcv-engine-aware-captions`, not yet merged to main or released) |
-| **Flow patch transfer** | A patch built by hand in `Fireflow` rides onto a `Glow` pad as a `BaseOverlay`: the pad recalls that patch's **base skeleton** (the 38 `kBaseRules` parameters) while the terrain keeps supplying the **story layer** the six macros move. Copy/paste through one shared text encoding; the converter reports everything it could not carry | ✅ **done** (engine + VCV host; spec `docs/superpowers/specs/2026-08-11-flow-patch-transfer-design.md`, plan `docs/superpowers/plans/2026-08-11-flow-patch-transfer.md`, parameter map `docs/flow-fireflow-param-map.md`; merged to `main` 2026-08-12, **not released**; five follow-ups open — see below) |
+| **Flow patch transfer** | A patch built by hand in `Fireflow` rides onto a `Glow` pad as a `BaseOverlay`: the pad recalls that patch's **base skeleton** (the 47 `kBaseRules` parameters) while the terrain keeps supplying the **story layer** the six macros move. Copy/paste through one shared text encoding; the converter reports everything it could not carry | ✅ **done** (engine + VCV host; spec `docs/superpowers/specs/2026-08-11-flow-patch-transfer-design.md`, plan `docs/superpowers/plans/2026-08-11-flow-patch-transfer.md`, parameter map `docs/flow-fireflow-param-map.md`; merged to `main` 2026-08-12, **not released**; six follow-ups open — see below) |
+| **PACE** | One global modulation time-stretch, ×1/32 … ×1 … ×4, replacing the DIRT macro (`M_DIRT` → `M_PACE`): a new `Instrument::set_pace()` normalized knob, `pace_mult()` curve (`engine/mod/divisions.h`), a `Transport` pace anchor so the grid re-locks on a change instead of jumping phase, `Flux::set_rhythm_pace`, a `PACE` knob on both `Fireflow` and `Glow` beside `TEMPO`, and render-host coverage. Fixes the three controls that looked like a speed knob and were not: TEMPO is inert in the free world, TIDE never reached the melodic lane, and Glow had no speed control at all | ✅ **done** (engine + VCV hosts + render host; spec `docs/superpowers/specs/2026-08-12-modulation-pace-design.md`, plan `docs/superpowers/plans/2026-08-12-modulation-pace.md`; branch `2026-08-12-modulation-pace`, not yet merged to `main` or released) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
 | **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel design done — regrouping round built on branch `hw-panel-regroup` 2026-08-10; bring-up not started**; the existing shell spec is superseded — see below) |
@@ -2226,21 +2227,25 @@ three movements). Plans: `docs/superpowers/plans/2026-07-31-bbd-part-engine.md`
 (movements 1–2), `docs/superpowers/plans/2026-08-01-flux-tape-echo.md`
 (movement 3).
 
-### Flow patch transfer ✅ (five follow-ups open)
+### Flow patch transfer ✅ (six follow-ups open)
 
 A patch built by hand in `Fireflow` can be carried onto one of `Glow`'s twelve
 pads. `generate()` takes an optional `BaseOverlay` applied over the
 `kBaseRules` rows only, between the stage-1 engine write and stage 4, so the
-**38 base-rule parameters come from the patch and the 25 story-owned ones stay
-with the terrain**. The two sets are disjoint by construction — no macro knob
-can overwrite a transferred value at any position, which is what makes the
-split a rule rather than an accident.
+**47 base-rule parameters come from the patch and the 17 story-owned ones stay
+with the terrain** (`P_COUNT` is 64; `47 + 17 = 64`). The two sets are
+disjoint by construction — no macro knob can overwrite a transferred value at
+any position, which is what makes the split a rule rather than an accident.
+The base-rule count grew twice the same day this section was written, first
+38 → 42 (the 2026-08-12 widening) and then 42 → 47 (the PACE move, which also
+added `P_DRIVE` as a second UNREACHABLE row) — see
+`docs/flow-fireflow-param-map.md` for both.
 
-`docs/flow-fireflow-param-map.md` is the authority for every conversion: 41
-rows mapped, one (`P_ROOT`) unreachable because `Fireflow` has no ROOT control
-at all. The converter's **report is the deliverable** — a transfer that
-carried what it could and said nothing about the rest would look right and
-lose a third of the tonality without a word.
+`docs/flow-fireflow-param-map.md` is the authority for every conversion: 45
+rows mapped, two (`P_ROOT`, `P_DRIVE`) unreachable because `Fireflow` has no
+ROOT or DRIVE control at all. The converter's **report is the deliverable** —
+a transfer that carried what it could and said nothing about the rest would
+look right and lose a third of the tonality without a word.
 
 Merged to `main` 2026-08-12 (`89e50be`..`3e03e81`, 16 commits). **Not
 released**; `plugin.json` untouched.
@@ -2317,8 +2322,12 @@ measuring the converter against itself.
    Ordering a seed by root would close it. The plan listed them under Task 8's
    interfaces but no task step consumed them.
 2. **`set_fx_on` is never called** from `engine/flow/` or `Glow.cpp`, so
-   `P_FLUXMIX_A/B` transfers correctly and is **inaudible under Glow**. Worth
-   settling before twelve places get built against it.
+   `P_FLUXMIX_A/B` transfers correctly and is **inaudible under Glow**. The
+   PACE move (2026-08-12) put `P_GRIT_A/B` on the same footing as base
+   rules — `Fireflow.cpp:644-645` gates the GRIT block with `set_fx_on`
+   exactly the same way, so a carried GRIT send is inaudible under Glow for
+   the identical reason. Worth settling before twelve places get built
+   against it.
 3. **Two of this round's own bug fixes are gated by the plugin build alone**,
    not by `ctest`: `Glow::reinit`'s overlay preservation and
    `drawTwelveInto`'s base clearing. Both are Rack `Module` members. Moving

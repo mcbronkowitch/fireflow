@@ -130,11 +130,16 @@ public:
     // that fraction.
     //
     // That is not a cheaper way to stay aligned, it is the only exact one.
-    // Five float phasors at the same nominal rate round differently depending
-    // on how large their phase gets, so lanes with different cycle lengths
-    // drift apart -- measured at ~2 samples per 3000-sample step between an
-    // 8-slot and a 16-slot lane, a full step of slip in about 90 seconds. One
-    // integer count and one shared fraction cannot do that.
+    // Five phasors at the same nominal rate still round differently
+    // depending on how large their phase gets, so lanes with different cycle
+    // lengths drift apart -- a measurement once quoted here as ~2 samples
+    // per 3000-sample step (a full step of slip in about 90 seconds) between
+    // an 8-slot and a 16-slot lane, taken while `_phase` was `float`. It
+    // predates `_phase`/`_phase_inc` moving to `double` (`e449bf4`) and has
+    // not been re-measured since, so that number no longer applies and is
+    // dropped rather than restated. One integer count and one shared
+    // fraction cannot drift at all, which is the reason this mode exists
+    // regardless of the phasors' width.
     //
     // Returns the post-range output, exactly like tick() does for FLOW.
     //

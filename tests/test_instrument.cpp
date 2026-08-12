@@ -1565,9 +1565,13 @@ TEST_CASE("pace: centre is exactly neutral, and both worlds scale") {
             CHECK(in.lane_rate_hz_for_test(p, l)
                   == doctest::Approx(before[p][l] / 32.f));
 
-    // Grid world: the LANES and the TRANSPORT scale together, or the servo
-    // pulls the lanes back onto the unstretched grid and wins. Checking only
-    // transport_bpm_for_test() here cannot catch a synced SuperModulator that
+    // Grid world: the LANES and the TRANSPORT must scale together, or at
+    // runtime the grid servo (Center::update(), which runs only inside
+    // process() -- this test never calls it) would fight SuperModulator and
+    // pull the lanes back onto the unstretched grid. That is the runtime
+    // motivation for the invariant; it is not something the assertions below
+    // observe, since neither Center::update() nor _grid_servo ever run here.
+    // Checking only transport_bpm_for_test() here cannot catch a synced SuperModulator that
     // stopped tracking PACE -- Center::set_tempo_bpm(_bpm * _pace) is a
     // separate call from SuperModulator::_update_rate's own synced branch,
     // and stays correct even if the lanes stop scaling (verified: reverting
@@ -1615,12 +1619,13 @@ TEST_CASE("pace: a non-finite request is dropped, not propagated") {
 }
 
 TEST_CASE("pace: set_tempo_bpm does not compound the pace factor") {
-    // _bpm must stay RAW. An implementation that folds pace into _bpm inside
-    // set_tempo_bpm (e.g. `_bpm = bpm * _pace;`) can still land on the right
-    // transport BPM on a single call by coincidence -- the invariant this
-    // pins is that a SECOND call at the SAME raw bpm must not drift, which a
-    // compounding implementation cannot satisfy no matter what the first call
-    // happened to produce.
+    // _bpm must stay RAW. `Instrument::set_tempo_bpm` reassigns `_bpm = bpm;`
+    // straight from the argument every call (instrument.cpp) rather than
+    // deriving it from whatever `_bpm` already held, so a version that baked
+    // pace into `_bpm` would already fail the first CHECK below -- nothing
+    // here compounds across calls to catch on a second one. The repeated
+    // call at the same raw bpm is bundled idempotence coverage, not a
+    // separate discriminating case.
     spky::Instrument in;
     in.init(48000.f);
     in.set_pace(1.f);   // x4
@@ -1703,10 +1708,13 @@ TEST_CASE("pace: turns per unit time follow the commanded rate, through the whol
         // though it would still agree with itself in the turns check below.
         const float expected_hz = unity_hz * pace_mult(knob);
         CAPTURE(knob); CAPTURE(hz); CAPTURE(expected_hz);
-        // 0.01%: both sides are a single float multiply of the same inputs
-        // (free_hz(0.35f) and pace_mult(knob)), so healthy agreement is
-        // within a handful of float ULPs -- nowhere near the >=2x errors
-        // (knob 0.f is 32x off) a deleted fan-out produces.
+        // 0.01%: both sides pass through the same chain of float multiplies
+        // -- free_hz(0.35f) * _pitch_scale * kLaneRatio[LANE_PITCH] *
+        // pace_mult(knob) (super_modulator.cpp's _update_rate()/
+        // _apply_rate()), not literally one multiply -- but _pitch_scale and
+        // kLaneRatio[LANE_PITCH] are both exactly 1.f here, so healthy
+        // agreement is still within a handful of float ULPs -- nowhere near
+        // the >=2x errors (knob 0.f is 32x off) a deleted fan-out produces.
         CHECK(hz == doctest::Approx(expected_hz).epsilon(1e-4));
 
         const int secs = 60;
@@ -1723,12 +1731,13 @@ TEST_CASE("pace: turns per unit time follow the commanded rate, through the whol
         const double turns     = double(wraps) + (phase_end - phase_start);
         const double commanded = double(hz) * double(secs);
         CAPTURE(commanded); CAPTURE(turns);
-        // +-0.1%: the real noise floor here is float quantization in
-        // phase() (lane.h's static_cast<float> of the double accumulator),
-        // not the double accumulation itself (which lands within ~2e-8
-        // relative of commanded, measured) -- so the floor is closer to
-        // float epsilon, ~1e-7 relative. 0.1% is about four orders of
-        // magnitude above that floor, and still well under every measured
+        // +-0.1%: the observable noise floor here is float quantization in
+        // phase() (lane.h's static_cast<float> of the double accumulator) --
+        // this test reads phase through that same float accessor, so it
+        // cannot isolate the double accumulator's own error from the
+        // quantization on top of it; the floor it CAN observe is float
+        // epsilon, ~1e-7 relative. 0.1% is about four orders of magnitude
+        // above that floor, and still well under every measured
         // broken-_phase deviation (0.05%-2.5%, worst at the slowest knobs).
         CHECK(turns > commanded * 0.999);
         CHECK(turns < commanded * 1.001);
