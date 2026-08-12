@@ -237,7 +237,7 @@ def test_which_macro_sits_on_which_knob():
 def _rect(c):
     if c.kind == g.PAD:
         index = int(c.enum.split("_")[1]) - 1
-        return g.PAD_SHAPES[index].bounds
+        return g.PAD_SHAPES[index].curve_bounds
     w, h = g.footprint_of(c)
     return (c.x - w / 2.0, c.y - h / 2.0, c.x + w / 2.0, c.y + h / 2.0)
 
@@ -259,6 +259,26 @@ def test_pad_contours_clear_switches():
             check(clearance >= SWITCH_CLEARANCE,
                   "PAD_%d clears a switch by %.2f mm, want %.2f"
                   % (i + 1, clearance, SWITCH_CLEARANCE))
+
+
+def test_pad_runtime_bounds_cover_the_spline_and_halo():
+    """The header emits shape.bounds as a widget's min/max, so it must contain
+    the whole cubic contour plus the outer half of TouchPlate's glow stroke.
+
+    Knot extrema are not enough: Catmull-Rom becomes cubic Beziers and their
+    extrema can sit between anchors. Sampling independently from the emitted
+    bounds catches both that escape and halo clipping.
+    """
+    halo = g.PAD_GLOW_WIDTH / 2.0
+    for i, shape in enumerate(g.PAD_SHAPES):
+        x0, y0, x1, y1 = shape.bounds
+        samples = g.sample_closed_pad(shape, samples_per_segment=200)
+        sx0, sx1 = min(x for x, _ in samples), max(x for x, _ in samples)
+        sy0, sy1 = min(y for _, y in samples), max(y for _, y in samples)
+        check(x0 + halo <= sx0 and sx1 <= x1 - halo and
+              y0 + halo <= sy0 and sy1 <= y1 - halo,
+              "PAD_%d runtime bounds clip its spline or %.2f mm halo"
+              % (i + 1, halo))
 
 
 def test_no_overlap():
@@ -371,7 +391,7 @@ def test_pad_numbers_are_two_digit_edge_engravings():
     check([c.label for c in pads] == ["%02d" % i for i in range(1, 13)],
           "pad labels must read 01 through 12")
     for i, c in enumerate(pads):
-        x0, y0, x1, y1 = g.PAD_SHAPES[i].bounds
+        x0, y0, x1, y1 = g.PAD_SHAPES[i].curve_bounds
         lx, ly = g.label_xy(c)
         check(x0 <= lx <= x1 and y0 <= ly <= y1,
               "%s label is outside its island" % c.enum)
@@ -392,6 +412,8 @@ def test_generated_header_exports_pad_geometry():
                   "kCollar"):
         check(alias not in h,
               "header retains obsolete rectangular-pad alias %s" % alias)
+    check(not hasattr(g, "PAD_R"),
+          "generator retains obsolete rectangular-pad radius PAD_R")
 
 
 def test_the_masthead_rules_survive():

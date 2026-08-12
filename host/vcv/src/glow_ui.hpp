@@ -88,7 +88,7 @@ inline int clamp_genre(int raw) {
 // the only thing the player can see when Flow declines: a locked generator, an
 // empty undo slot, a pad whose place does not decode. Nothing else knows that
 // happened, so the module owns this flash -- Glow.cpp paints it onto the live
-// pad's collar.
+// pad's refusal contour.
 struct RefuseFlash {
     // Kept far enough in the past that a fresh instance does NOT read as
     // "just refused" -- same reasoning gesture.h gives at _refuse_t's

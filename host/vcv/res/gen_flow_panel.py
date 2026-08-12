@@ -23,6 +23,7 @@ Run from host/vcv/:  python3 res/gen_flow_panel.py
 The C++ never hardcodes a coordinate, label or colour -- it reads them from the
 generated header, so graphics and widget placement can never drift apart.
 """
+import math
 import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -78,7 +79,6 @@ GRAIN = tuple((((i * 37) % 79) + 1.0,
 KNOB_R    = geo.KNOB_COLLAR_R     # measured silkscreen collar, 7.77 mm across
 PAD_W     = 7.6
 PAD_H     = 9.0
-PAD_R     = 2.0                   # corner radius
 FADER_W   = 6.8                   # VCVSlider is 6.72 mm wide
 FADER_H   = geo.FADER_TRAVEL
 SWITCH_W  = 5.0                   # CKSSThree is 4.56 x 9.60 mm
@@ -260,8 +260,8 @@ class PadShape(object):
         self.points = tuple(points)
         self.label = label
         self.centre = centre
-        xs, ys = [p[0] for p in points], [p[1] for p in points]
-        self.bounds = (min(xs), min(ys), max(xs), max(ys))
+        self.curve_bounds = None
+        self.bounds = None
 
 
 def _make_pad_shape(i):
@@ -276,8 +276,6 @@ def _make_pad_shape(i):
 
 
 PAD_SHAPES = tuple(_make_pad_shape(i) for i in range(12))
-assert all(s.bounds[0] <= s.centre[0] <= s.bounds[2] and
-           s.bounds[1] <= s.centre[1] <= s.bounds[3] for s in PAD_SHAPES)
 assert len({s.points for s in PAD_SHAPES}) == 12
 
 
@@ -291,6 +289,63 @@ def catmull_rom_cubics(points):
     return out
 
 
+def _cubic_point(p0, c1, c2, p3, t):
+    u = 1.0 - t
+    return (u*u*u*p0[0] + 3*u*u*t*c1[0] + 3*u*t*t*c2[0] + t*t*t*p3[0],
+            u*u*u*p0[1] + 3*u*u*t*c1[1] + 3*u*t*t*c2[1] + t*t*t*p3[1])
+
+
+def _cubic_extrema(a, b, c, d):
+    """Return closed-interval extrema parameters for one Bezier coordinate."""
+    qa = 3.0 * (-a + 3.0*b - 3.0*c + d)
+    qb = 6.0 * (a - 2.0*b + c)
+    qc = 3.0 * (b - a)
+    roots = [0.0, 1.0]
+    eps = 1e-9
+    if abs(qa) < eps:
+        if abs(qb) >= eps:
+            roots.append(-qc / qb)
+    else:
+        disc = qb*qb - 4.0*qa*qc
+        if disc >= 0.0:
+            root = math.sqrt(disc)
+            roots.extend(((-qb - root) / (2.0*qa),
+                          (-qb + root) / (2.0*qa)))
+    return [t for t in roots if 0.0 <= t <= 1.0]
+
+
+def _pad_curve_bounds(shape):
+    points = []
+    for i, (c1, c2, p3) in enumerate(catmull_rom_cubics(shape.points)):
+        p0 = shape.points[i]
+        ts = _cubic_extrema(p0[0], c1[0], c2[0], p3[0])
+        ts += _cubic_extrema(p0[1], c1[1], c2[1], p3[1])
+        points.extend(_cubic_point(p0, c1, c2, p3, t) for t in ts)
+    xs, ys = [p[0] for p in points], [p[1] for p in points]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _runtime_pad_bounds(shape):
+    """Bounds emitted to Rack: cubic contour plus the outer glow radius.
+
+    The values are rounded away from the contour so the three-decimal header
+    cannot shorten a widget enough to clip its NanoVG stroke.
+    """
+    x0, y0, x1, y1 = _pad_curve_bounds(shape)
+    halo = PAD_GLOW_WIDTH / 2.0
+    return (math.floor((x0 - halo) * 1000.0) / 1000.0,
+            math.floor((y0 - halo) * 1000.0) / 1000.0,
+            math.ceil((x1 + halo) * 1000.0) / 1000.0,
+            math.ceil((y1 + halo) * 1000.0) / 1000.0)
+
+
+for _shape in PAD_SHAPES:
+    _shape.curve_bounds = _pad_curve_bounds(_shape)
+    _shape.bounds = _runtime_pad_bounds(_shape)
+assert all(s.bounds[0] <= s.centre[0] <= s.bounds[2] and
+           s.bounds[1] <= s.centre[1] <= s.bounds[3] for s in PAD_SHAPES)
+
+
 def sample_closed_pad(shape, samples_per_segment=20):
     points = []
     for i, (c1, c2, p2) in enumerate(catmull_rom_cubics(shape.points)):
@@ -298,10 +353,7 @@ def sample_closed_pad(shape, samples_per_segment=20):
         for sample in range(samples_per_segment):
             t = sample / float(samples_per_segment)
             u = 1.0 - t
-            points.append((u*u*u*p1[0] + 3*u*u*t*c1[0] +
-                           3*u*t*t*c2[0] + t*t*t*p2[0],
-                           u*u*u*p1[1] + 3*u*u*t*c1[1] +
-                           3*u*t*t*c2[1] + t*t*t*p2[1]))
+            points.append(_cubic_point(p1, c1, c2, p2, t))
     return points
 
 
