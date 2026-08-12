@@ -1,12 +1,11 @@
 {
   "sample_rate": 48000,
   "bpm": 120,
-  "duration_s": 120,
+  "duration_s": 240,
+  "input_wav": "host/render/scenarios/assets/in_drone.wav",
   "init": [
     {
-      "_comment": "Task 12 / spec 2026-08-12-modulation-pace S3.3: wake a flow terrain, park all six macros at 0.5 (M_PACE, slot 3, included -- parked there its offset is exactly zero, so the flow layer's own P_PACE stays at the {0.5,0.5} base rule and never re-pushes Instrument::set_pace on its own). Everything audible in the sweep below comes from the raw set_pace verb driving Instrument::set_pace directly, the same door Fireflow's own PACE knob uses -- so this exercises the listening checks 3.3 calls for on a BBD deck, a Sampler deck and the synth envelopes, whichever the terrain's carrier/texture draw hands to part A/B."
-    },
-    {
+      "_comment": "Task 12 fix round (spec 2026-08-12-modulation-pace S3.3): review found the original single-phase render left engine_a/engine_b to the terrain's own RNG draw (roles_of(), engine/flow/terrain.cpp:262-269) -- for terrain F1-0000FACE-000000000000 that draw happens to be SYNTH on BOTH decks (checked directly against roles_of() with a scratch probe), so the file proved nothing about a BBD or Sampler deck. Fixed by pinning engines explicitly rather than trusting the draw to stay put -- a future terrain change could otherwise silently break this file's whole purpose. Explicit set_engine calls placed AFTER flow_wake survive the flow layer's own per-tick engine push: Flow::wake()'s recompute_and_push(true) force-pushes P_ENGINE_A/B once (flow.cpp:96-123), but every later tick only re-pushes a param when its recomputed value differs from Flow's OWN last-pushed record (flow.cpp:639-643) -- and with no flow_new/flow_new_partial/flow_undo event anywhere in this file, that recomputed value never moves, so Flow never notices (or fights) a scenario override that only touches the live Instrument. Same mechanism already verified for set_pace itself in the task-12 review.",
       "action": "flow_wake",
       "value": "F1-0000FACE-000000000000"
     },
@@ -43,11 +42,65 @@
     {
       "action": "set_pace",
       "value": 0.5
+    },
+    {
+      "_comment": "Phase 1 (0-120s): deck A pinned BBD, deck B pinned SAMPLER. Both read the SAME input_wav each sample (Instrument::process passes one in_l/in_r pair to both parts, engine/instrument.cpp:200-213). in_drone.wav is only 48s long and the host does not loop input_wav (main.cpp zero-pads past end-of-file), which would leave the back half of this 120s phase unfed -- so deck A additionally pulls deck B's own output (set_excitation_sources, other_deck=true; Instrument wires Part::set_deck_in every sample regardless, instrument.cpp:194, and Part::process only USES it when _src_deck is set, part.h:367-370). Deck B's sampler loops its recorded buffer on its own once something is captured (see the record burst below), so from t=8s on, deck A's BBD is fed a continuously-circulating loop instead of running dry. Every other voice/target parameter (voice attack/decay/resonance/sub/filt, and the five LANE_SOURCE..LEVEL target bases) is left to the flow layer's own terrain-driven pushes -- P_ATTACK_A/P_DECAY_A/etc are ordinary flow params (engine/flow/flow_params.h:84-88, 175-184) that the terrain already pushes for whichever engine is live, exactly as a real Glow patch would drive a BBD or Sampler deck it randomly landed on.",
+      "action": "set_engine",
+      "part": 0,
+      "value": "bbd"
+    },
+    {
+      "action": "set_engine",
+      "part": 1,
+      "value": "sampler"
+    },
+    {
+      "action": "set_excitation_sources",
+      "part": 0,
+      "flag": false,
+      "ivalue": 1
+    },
+    {
+      "_comment": "Feedback raised from the 0.95 boot default toward sampler_bloom.json's near-unity 0.971 rung, so the captured loop keeps circulating audibly across the whole 120s phase (and on into deck A's BBD feed) instead of decaying out partway through the sweep.",
+      "action": "sampler_feedback",
+      "part": 1,
+      "value": 0.97
     }
   ],
   "events": [
     {
-      "_comment": "Sweep PACE knob-norm 0.5 (x1, centre) down to 0.0 (x1/32, slowest) over 60s, then back up to 0.5 over the next 60s. 0.5s resolution: set_pace has no internal slew (instrument.cpp:114-121), so this is a staircase standing in for a continuous knob turn -- fine-grained enough that no single step should read as a click, which is exactly what spec S3.3 wants checked by ear on the BBD/Sampler/envelope consumers."
+      "_comment": "Deck B (SAMPLER) records ~7s of the drone near the top of phase 1, then plays the captured loop back for the rest of the phase -- same capture shape as sampler_bloom.json.",
+      "t": 1.0,
+      "action": "sampler_record",
+      "part": 1,
+      "flag": true
+    },
+    {
+      "t": 8.0,
+      "action": "sampler_record",
+      "part": 1,
+      "flag": false
+    },
+    {
+      "_comment": "Phase 2 (120-240s): deck A switches to SYNTH (Part::set_engine crossfades over ~385 samples, ~8ms -- inaudible against a 120s sweep) so the render also covers spec S3.3's third consumer, the synth voice envelopes that rescale with the cycle (synth_engine.cpp:275-276). Deck A's own flow-driven PITCH lane keeps firing chords in FLOW mode regardless of which engine is live (Part::_fire_trigger is Part-level, not engine-specific) -- this is the exact mechanism that made the original single-phase render (both decks SYNTH by the terrain's draw) audible with no manual trigger_* event anywhere in this file. Deck B is silenced for this phase (LEVEL target parked at 0 and its lane deactivated) so deck A's synth voices are heard in isolation, the same isolation bbd_pitch_bend.json and sampler_bloom.json use for their own single-deck listening checks.",
+      "t": 120.0,
+      "action": "set_engine",
+      "part": 0,
+      "value": "synth"
+    },
+    {
+      "t": 120.0,
+      "action": "set_target_active",
+      "part": 1,
+      "slot": 4,
+      "flag": false
+    },
+    {
+      "t": 120.0,
+      "action": "set_target_base",
+      "part": 1,
+      "slot": 4,
+      "value": 0.0
     },
     {
       "t": 0.0,
@@ -1251,6 +1304,1211 @@
     },
     {
       "t": 120.0,
+      "action": "set_pace",
+      "value": 0.5
+    },
+    {
+      "t": 120.0,
+      "action": "set_pace",
+      "value": 0.5
+    },
+    {
+      "t": 120.5,
+      "action": "set_pace",
+      "value": 0.4958
+    },
+    {
+      "t": 121.0,
+      "action": "set_pace",
+      "value": 0.4917
+    },
+    {
+      "t": 121.5,
+      "action": "set_pace",
+      "value": 0.4875
+    },
+    {
+      "t": 122.0,
+      "action": "set_pace",
+      "value": 0.4833
+    },
+    {
+      "t": 122.5,
+      "action": "set_pace",
+      "value": 0.4792
+    },
+    {
+      "t": 123.0,
+      "action": "set_pace",
+      "value": 0.475
+    },
+    {
+      "t": 123.5,
+      "action": "set_pace",
+      "value": 0.4708
+    },
+    {
+      "t": 124.0,
+      "action": "set_pace",
+      "value": 0.4667
+    },
+    {
+      "t": 124.5,
+      "action": "set_pace",
+      "value": 0.4625
+    },
+    {
+      "t": 125.0,
+      "action": "set_pace",
+      "value": 0.4583
+    },
+    {
+      "t": 125.5,
+      "action": "set_pace",
+      "value": 0.4542
+    },
+    {
+      "t": 126.0,
+      "action": "set_pace",
+      "value": 0.45
+    },
+    {
+      "t": 126.5,
+      "action": "set_pace",
+      "value": 0.4458
+    },
+    {
+      "t": 127.0,
+      "action": "set_pace",
+      "value": 0.4417
+    },
+    {
+      "t": 127.5,
+      "action": "set_pace",
+      "value": 0.4375
+    },
+    {
+      "t": 128.0,
+      "action": "set_pace",
+      "value": 0.4333
+    },
+    {
+      "t": 128.5,
+      "action": "set_pace",
+      "value": 0.4292
+    },
+    {
+      "t": 129.0,
+      "action": "set_pace",
+      "value": 0.425
+    },
+    {
+      "t": 129.5,
+      "action": "set_pace",
+      "value": 0.4208
+    },
+    {
+      "t": 130.0,
+      "action": "set_pace",
+      "value": 0.4167
+    },
+    {
+      "t": 130.5,
+      "action": "set_pace",
+      "value": 0.4125
+    },
+    {
+      "t": 131.0,
+      "action": "set_pace",
+      "value": 0.4083
+    },
+    {
+      "t": 131.5,
+      "action": "set_pace",
+      "value": 0.4042
+    },
+    {
+      "t": 132.0,
+      "action": "set_pace",
+      "value": 0.4
+    },
+    {
+      "t": 132.5,
+      "action": "set_pace",
+      "value": 0.3958
+    },
+    {
+      "t": 133.0,
+      "action": "set_pace",
+      "value": 0.3917
+    },
+    {
+      "t": 133.5,
+      "action": "set_pace",
+      "value": 0.3875
+    },
+    {
+      "t": 134.0,
+      "action": "set_pace",
+      "value": 0.3833
+    },
+    {
+      "t": 134.5,
+      "action": "set_pace",
+      "value": 0.3792
+    },
+    {
+      "t": 135.0,
+      "action": "set_pace",
+      "value": 0.375
+    },
+    {
+      "t": 135.5,
+      "action": "set_pace",
+      "value": 0.3708
+    },
+    {
+      "t": 136.0,
+      "action": "set_pace",
+      "value": 0.3667
+    },
+    {
+      "t": 136.5,
+      "action": "set_pace",
+      "value": 0.3625
+    },
+    {
+      "t": 137.0,
+      "action": "set_pace",
+      "value": 0.3583
+    },
+    {
+      "t": 137.5,
+      "action": "set_pace",
+      "value": 0.3542
+    },
+    {
+      "t": 138.0,
+      "action": "set_pace",
+      "value": 0.35
+    },
+    {
+      "t": 138.5,
+      "action": "set_pace",
+      "value": 0.3458
+    },
+    {
+      "t": 139.0,
+      "action": "set_pace",
+      "value": 0.3417
+    },
+    {
+      "t": 139.5,
+      "action": "set_pace",
+      "value": 0.3375
+    },
+    {
+      "t": 140.0,
+      "action": "set_pace",
+      "value": 0.3333
+    },
+    {
+      "t": 140.5,
+      "action": "set_pace",
+      "value": 0.3292
+    },
+    {
+      "t": 141.0,
+      "action": "set_pace",
+      "value": 0.325
+    },
+    {
+      "t": 141.5,
+      "action": "set_pace",
+      "value": 0.3208
+    },
+    {
+      "t": 142.0,
+      "action": "set_pace",
+      "value": 0.3167
+    },
+    {
+      "t": 142.5,
+      "action": "set_pace",
+      "value": 0.3125
+    },
+    {
+      "t": 143.0,
+      "action": "set_pace",
+      "value": 0.3083
+    },
+    {
+      "t": 143.5,
+      "action": "set_pace",
+      "value": 0.3042
+    },
+    {
+      "t": 144.0,
+      "action": "set_pace",
+      "value": 0.3
+    },
+    {
+      "t": 144.5,
+      "action": "set_pace",
+      "value": 0.2958
+    },
+    {
+      "t": 145.0,
+      "action": "set_pace",
+      "value": 0.2917
+    },
+    {
+      "t": 145.5,
+      "action": "set_pace",
+      "value": 0.2875
+    },
+    {
+      "t": 146.0,
+      "action": "set_pace",
+      "value": 0.2833
+    },
+    {
+      "t": 146.5,
+      "action": "set_pace",
+      "value": 0.2792
+    },
+    {
+      "t": 147.0,
+      "action": "set_pace",
+      "value": 0.275
+    },
+    {
+      "t": 147.5,
+      "action": "set_pace",
+      "value": 0.2708
+    },
+    {
+      "t": 148.0,
+      "action": "set_pace",
+      "value": 0.2667
+    },
+    {
+      "t": 148.5,
+      "action": "set_pace",
+      "value": 0.2625
+    },
+    {
+      "t": 149.0,
+      "action": "set_pace",
+      "value": 0.2583
+    },
+    {
+      "t": 149.5,
+      "action": "set_pace",
+      "value": 0.2542
+    },
+    {
+      "t": 150.0,
+      "action": "set_pace",
+      "value": 0.25
+    },
+    {
+      "t": 150.5,
+      "action": "set_pace",
+      "value": 0.2458
+    },
+    {
+      "t": 151.0,
+      "action": "set_pace",
+      "value": 0.2417
+    },
+    {
+      "t": 151.5,
+      "action": "set_pace",
+      "value": 0.2375
+    },
+    {
+      "t": 152.0,
+      "action": "set_pace",
+      "value": 0.2333
+    },
+    {
+      "t": 152.5,
+      "action": "set_pace",
+      "value": 0.2292
+    },
+    {
+      "t": 153.0,
+      "action": "set_pace",
+      "value": 0.225
+    },
+    {
+      "t": 153.5,
+      "action": "set_pace",
+      "value": 0.2208
+    },
+    {
+      "t": 154.0,
+      "action": "set_pace",
+      "value": 0.2167
+    },
+    {
+      "t": 154.5,
+      "action": "set_pace",
+      "value": 0.2125
+    },
+    {
+      "t": 155.0,
+      "action": "set_pace",
+      "value": 0.2083
+    },
+    {
+      "t": 155.5,
+      "action": "set_pace",
+      "value": 0.2042
+    },
+    {
+      "t": 156.0,
+      "action": "set_pace",
+      "value": 0.2
+    },
+    {
+      "t": 156.5,
+      "action": "set_pace",
+      "value": 0.1958
+    },
+    {
+      "t": 157.0,
+      "action": "set_pace",
+      "value": 0.1917
+    },
+    {
+      "t": 157.5,
+      "action": "set_pace",
+      "value": 0.1875
+    },
+    {
+      "t": 158.0,
+      "action": "set_pace",
+      "value": 0.1833
+    },
+    {
+      "t": 158.5,
+      "action": "set_pace",
+      "value": 0.1792
+    },
+    {
+      "t": 159.0,
+      "action": "set_pace",
+      "value": 0.175
+    },
+    {
+      "t": 159.5,
+      "action": "set_pace",
+      "value": 0.1708
+    },
+    {
+      "t": 160.0,
+      "action": "set_pace",
+      "value": 0.1667
+    },
+    {
+      "t": 160.5,
+      "action": "set_pace",
+      "value": 0.1625
+    },
+    {
+      "t": 161.0,
+      "action": "set_pace",
+      "value": 0.1583
+    },
+    {
+      "t": 161.5,
+      "action": "set_pace",
+      "value": 0.1542
+    },
+    {
+      "t": 162.0,
+      "action": "set_pace",
+      "value": 0.15
+    },
+    {
+      "t": 162.5,
+      "action": "set_pace",
+      "value": 0.1458
+    },
+    {
+      "t": 163.0,
+      "action": "set_pace",
+      "value": 0.1417
+    },
+    {
+      "t": 163.5,
+      "action": "set_pace",
+      "value": 0.1375
+    },
+    {
+      "t": 164.0,
+      "action": "set_pace",
+      "value": 0.1333
+    },
+    {
+      "t": 164.5,
+      "action": "set_pace",
+      "value": 0.1292
+    },
+    {
+      "t": 165.0,
+      "action": "set_pace",
+      "value": 0.125
+    },
+    {
+      "t": 165.5,
+      "action": "set_pace",
+      "value": 0.1208
+    },
+    {
+      "t": 166.0,
+      "action": "set_pace",
+      "value": 0.1167
+    },
+    {
+      "t": 166.5,
+      "action": "set_pace",
+      "value": 0.1125
+    },
+    {
+      "t": 167.0,
+      "action": "set_pace",
+      "value": 0.1083
+    },
+    {
+      "t": 167.5,
+      "action": "set_pace",
+      "value": 0.1042
+    },
+    {
+      "t": 168.0,
+      "action": "set_pace",
+      "value": 0.1
+    },
+    {
+      "t": 168.5,
+      "action": "set_pace",
+      "value": 0.0958
+    },
+    {
+      "t": 169.0,
+      "action": "set_pace",
+      "value": 0.0917
+    },
+    {
+      "t": 169.5,
+      "action": "set_pace",
+      "value": 0.0875
+    },
+    {
+      "t": 170.0,
+      "action": "set_pace",
+      "value": 0.0833
+    },
+    {
+      "t": 170.5,
+      "action": "set_pace",
+      "value": 0.0792
+    },
+    {
+      "t": 171.0,
+      "action": "set_pace",
+      "value": 0.075
+    },
+    {
+      "t": 171.5,
+      "action": "set_pace",
+      "value": 0.0708
+    },
+    {
+      "t": 172.0,
+      "action": "set_pace",
+      "value": 0.0667
+    },
+    {
+      "t": 172.5,
+      "action": "set_pace",
+      "value": 0.0625
+    },
+    {
+      "t": 173.0,
+      "action": "set_pace",
+      "value": 0.0583
+    },
+    {
+      "t": 173.5,
+      "action": "set_pace",
+      "value": 0.0542
+    },
+    {
+      "t": 174.0,
+      "action": "set_pace",
+      "value": 0.05
+    },
+    {
+      "t": 174.5,
+      "action": "set_pace",
+      "value": 0.0458
+    },
+    {
+      "t": 175.0,
+      "action": "set_pace",
+      "value": 0.0417
+    },
+    {
+      "t": 175.5,
+      "action": "set_pace",
+      "value": 0.0375
+    },
+    {
+      "t": 176.0,
+      "action": "set_pace",
+      "value": 0.0333
+    },
+    {
+      "t": 176.5,
+      "action": "set_pace",
+      "value": 0.0292
+    },
+    {
+      "t": 177.0,
+      "action": "set_pace",
+      "value": 0.025
+    },
+    {
+      "t": 177.5,
+      "action": "set_pace",
+      "value": 0.0208
+    },
+    {
+      "t": 178.0,
+      "action": "set_pace",
+      "value": 0.0167
+    },
+    {
+      "t": 178.5,
+      "action": "set_pace",
+      "value": 0.0125
+    },
+    {
+      "t": 179.0,
+      "action": "set_pace",
+      "value": 0.0083
+    },
+    {
+      "t": 179.5,
+      "action": "set_pace",
+      "value": 0.0042
+    },
+    {
+      "t": 180.0,
+      "action": "set_pace",
+      "value": 0.0
+    },
+    {
+      "t": 180.5,
+      "action": "set_pace",
+      "value": 0.0042
+    },
+    {
+      "t": 181.0,
+      "action": "set_pace",
+      "value": 0.0083
+    },
+    {
+      "t": 181.5,
+      "action": "set_pace",
+      "value": 0.0125
+    },
+    {
+      "t": 182.0,
+      "action": "set_pace",
+      "value": 0.0167
+    },
+    {
+      "t": 182.5,
+      "action": "set_pace",
+      "value": 0.0208
+    },
+    {
+      "t": 183.0,
+      "action": "set_pace",
+      "value": 0.025
+    },
+    {
+      "t": 183.5,
+      "action": "set_pace",
+      "value": 0.0292
+    },
+    {
+      "t": 184.0,
+      "action": "set_pace",
+      "value": 0.0333
+    },
+    {
+      "t": 184.5,
+      "action": "set_pace",
+      "value": 0.0375
+    },
+    {
+      "t": 185.0,
+      "action": "set_pace",
+      "value": 0.0417
+    },
+    {
+      "t": 185.5,
+      "action": "set_pace",
+      "value": 0.0458
+    },
+    {
+      "t": 186.0,
+      "action": "set_pace",
+      "value": 0.05
+    },
+    {
+      "t": 186.5,
+      "action": "set_pace",
+      "value": 0.0542
+    },
+    {
+      "t": 187.0,
+      "action": "set_pace",
+      "value": 0.0583
+    },
+    {
+      "t": 187.5,
+      "action": "set_pace",
+      "value": 0.0625
+    },
+    {
+      "t": 188.0,
+      "action": "set_pace",
+      "value": 0.0667
+    },
+    {
+      "t": 188.5,
+      "action": "set_pace",
+      "value": 0.0708
+    },
+    {
+      "t": 189.0,
+      "action": "set_pace",
+      "value": 0.075
+    },
+    {
+      "t": 189.5,
+      "action": "set_pace",
+      "value": 0.0792
+    },
+    {
+      "t": 190.0,
+      "action": "set_pace",
+      "value": 0.0833
+    },
+    {
+      "t": 190.5,
+      "action": "set_pace",
+      "value": 0.0875
+    },
+    {
+      "t": 191.0,
+      "action": "set_pace",
+      "value": 0.0917
+    },
+    {
+      "t": 191.5,
+      "action": "set_pace",
+      "value": 0.0958
+    },
+    {
+      "t": 192.0,
+      "action": "set_pace",
+      "value": 0.1
+    },
+    {
+      "t": 192.5,
+      "action": "set_pace",
+      "value": 0.1042
+    },
+    {
+      "t": 193.0,
+      "action": "set_pace",
+      "value": 0.1083
+    },
+    {
+      "t": 193.5,
+      "action": "set_pace",
+      "value": 0.1125
+    },
+    {
+      "t": 194.0,
+      "action": "set_pace",
+      "value": 0.1167
+    },
+    {
+      "t": 194.5,
+      "action": "set_pace",
+      "value": 0.1208
+    },
+    {
+      "t": 195.0,
+      "action": "set_pace",
+      "value": 0.125
+    },
+    {
+      "t": 195.5,
+      "action": "set_pace",
+      "value": 0.1292
+    },
+    {
+      "t": 196.0,
+      "action": "set_pace",
+      "value": 0.1333
+    },
+    {
+      "t": 196.5,
+      "action": "set_pace",
+      "value": 0.1375
+    },
+    {
+      "t": 197.0,
+      "action": "set_pace",
+      "value": 0.1417
+    },
+    {
+      "t": 197.5,
+      "action": "set_pace",
+      "value": 0.1458
+    },
+    {
+      "t": 198.0,
+      "action": "set_pace",
+      "value": 0.15
+    },
+    {
+      "t": 198.5,
+      "action": "set_pace",
+      "value": 0.1542
+    },
+    {
+      "t": 199.0,
+      "action": "set_pace",
+      "value": 0.1583
+    },
+    {
+      "t": 199.5,
+      "action": "set_pace",
+      "value": 0.1625
+    },
+    {
+      "t": 200.0,
+      "action": "set_pace",
+      "value": 0.1667
+    },
+    {
+      "t": 200.5,
+      "action": "set_pace",
+      "value": 0.1708
+    },
+    {
+      "t": 201.0,
+      "action": "set_pace",
+      "value": 0.175
+    },
+    {
+      "t": 201.5,
+      "action": "set_pace",
+      "value": 0.1792
+    },
+    {
+      "t": 202.0,
+      "action": "set_pace",
+      "value": 0.1833
+    },
+    {
+      "t": 202.5,
+      "action": "set_pace",
+      "value": 0.1875
+    },
+    {
+      "t": 203.0,
+      "action": "set_pace",
+      "value": 0.1917
+    },
+    {
+      "t": 203.5,
+      "action": "set_pace",
+      "value": 0.1958
+    },
+    {
+      "t": 204.0,
+      "action": "set_pace",
+      "value": 0.2
+    },
+    {
+      "t": 204.5,
+      "action": "set_pace",
+      "value": 0.2042
+    },
+    {
+      "t": 205.0,
+      "action": "set_pace",
+      "value": 0.2083
+    },
+    {
+      "t": 205.5,
+      "action": "set_pace",
+      "value": 0.2125
+    },
+    {
+      "t": 206.0,
+      "action": "set_pace",
+      "value": 0.2167
+    },
+    {
+      "t": 206.5,
+      "action": "set_pace",
+      "value": 0.2208
+    },
+    {
+      "t": 207.0,
+      "action": "set_pace",
+      "value": 0.225
+    },
+    {
+      "t": 207.5,
+      "action": "set_pace",
+      "value": 0.2292
+    },
+    {
+      "t": 208.0,
+      "action": "set_pace",
+      "value": 0.2333
+    },
+    {
+      "t": 208.5,
+      "action": "set_pace",
+      "value": 0.2375
+    },
+    {
+      "t": 209.0,
+      "action": "set_pace",
+      "value": 0.2417
+    },
+    {
+      "t": 209.5,
+      "action": "set_pace",
+      "value": 0.2458
+    },
+    {
+      "t": 210.0,
+      "action": "set_pace",
+      "value": 0.25
+    },
+    {
+      "t": 210.5,
+      "action": "set_pace",
+      "value": 0.2542
+    },
+    {
+      "t": 211.0,
+      "action": "set_pace",
+      "value": 0.2583
+    },
+    {
+      "t": 211.5,
+      "action": "set_pace",
+      "value": 0.2625
+    },
+    {
+      "t": 212.0,
+      "action": "set_pace",
+      "value": 0.2667
+    },
+    {
+      "t": 212.5,
+      "action": "set_pace",
+      "value": 0.2708
+    },
+    {
+      "t": 213.0,
+      "action": "set_pace",
+      "value": 0.275
+    },
+    {
+      "t": 213.5,
+      "action": "set_pace",
+      "value": 0.2792
+    },
+    {
+      "t": 214.0,
+      "action": "set_pace",
+      "value": 0.2833
+    },
+    {
+      "t": 214.5,
+      "action": "set_pace",
+      "value": 0.2875
+    },
+    {
+      "t": 215.0,
+      "action": "set_pace",
+      "value": 0.2917
+    },
+    {
+      "t": 215.5,
+      "action": "set_pace",
+      "value": 0.2958
+    },
+    {
+      "t": 216.0,
+      "action": "set_pace",
+      "value": 0.3
+    },
+    {
+      "t": 216.5,
+      "action": "set_pace",
+      "value": 0.3042
+    },
+    {
+      "t": 217.0,
+      "action": "set_pace",
+      "value": 0.3083
+    },
+    {
+      "t": 217.5,
+      "action": "set_pace",
+      "value": 0.3125
+    },
+    {
+      "t": 218.0,
+      "action": "set_pace",
+      "value": 0.3167
+    },
+    {
+      "t": 218.5,
+      "action": "set_pace",
+      "value": 0.3208
+    },
+    {
+      "t": 219.0,
+      "action": "set_pace",
+      "value": 0.325
+    },
+    {
+      "t": 219.5,
+      "action": "set_pace",
+      "value": 0.3292
+    },
+    {
+      "t": 220.0,
+      "action": "set_pace",
+      "value": 0.3333
+    },
+    {
+      "t": 220.5,
+      "action": "set_pace",
+      "value": 0.3375
+    },
+    {
+      "t": 221.0,
+      "action": "set_pace",
+      "value": 0.3417
+    },
+    {
+      "t": 221.5,
+      "action": "set_pace",
+      "value": 0.3458
+    },
+    {
+      "t": 222.0,
+      "action": "set_pace",
+      "value": 0.35
+    },
+    {
+      "t": 222.5,
+      "action": "set_pace",
+      "value": 0.3542
+    },
+    {
+      "t": 223.0,
+      "action": "set_pace",
+      "value": 0.3583
+    },
+    {
+      "t": 223.5,
+      "action": "set_pace",
+      "value": 0.3625
+    },
+    {
+      "t": 224.0,
+      "action": "set_pace",
+      "value": 0.3667
+    },
+    {
+      "t": 224.5,
+      "action": "set_pace",
+      "value": 0.3708
+    },
+    {
+      "t": 225.0,
+      "action": "set_pace",
+      "value": 0.375
+    },
+    {
+      "t": 225.5,
+      "action": "set_pace",
+      "value": 0.3792
+    },
+    {
+      "t": 226.0,
+      "action": "set_pace",
+      "value": 0.3833
+    },
+    {
+      "t": 226.5,
+      "action": "set_pace",
+      "value": 0.3875
+    },
+    {
+      "t": 227.0,
+      "action": "set_pace",
+      "value": 0.3917
+    },
+    {
+      "t": 227.5,
+      "action": "set_pace",
+      "value": 0.3958
+    },
+    {
+      "t": 228.0,
+      "action": "set_pace",
+      "value": 0.4
+    },
+    {
+      "t": 228.5,
+      "action": "set_pace",
+      "value": 0.4042
+    },
+    {
+      "t": 229.0,
+      "action": "set_pace",
+      "value": 0.4083
+    },
+    {
+      "t": 229.5,
+      "action": "set_pace",
+      "value": 0.4125
+    },
+    {
+      "t": 230.0,
+      "action": "set_pace",
+      "value": 0.4167
+    },
+    {
+      "t": 230.5,
+      "action": "set_pace",
+      "value": 0.4208
+    },
+    {
+      "t": 231.0,
+      "action": "set_pace",
+      "value": 0.425
+    },
+    {
+      "t": 231.5,
+      "action": "set_pace",
+      "value": 0.4292
+    },
+    {
+      "t": 232.0,
+      "action": "set_pace",
+      "value": 0.4333
+    },
+    {
+      "t": 232.5,
+      "action": "set_pace",
+      "value": 0.4375
+    },
+    {
+      "t": 233.0,
+      "action": "set_pace",
+      "value": 0.4417
+    },
+    {
+      "t": 233.5,
+      "action": "set_pace",
+      "value": 0.4458
+    },
+    {
+      "t": 234.0,
+      "action": "set_pace",
+      "value": 0.45
+    },
+    {
+      "t": 234.5,
+      "action": "set_pace",
+      "value": 0.4542
+    },
+    {
+      "t": 235.0,
+      "action": "set_pace",
+      "value": 0.4583
+    },
+    {
+      "t": 235.5,
+      "action": "set_pace",
+      "value": 0.4625
+    },
+    {
+      "t": 236.0,
+      "action": "set_pace",
+      "value": 0.4667
+    },
+    {
+      "t": 236.5,
+      "action": "set_pace",
+      "value": 0.4708
+    },
+    {
+      "t": 237.0,
+      "action": "set_pace",
+      "value": 0.475
+    },
+    {
+      "t": 237.5,
+      "action": "set_pace",
+      "value": 0.4792
+    },
+    {
+      "t": 238.0,
+      "action": "set_pace",
+      "value": 0.4833
+    },
+    {
+      "t": 238.5,
+      "action": "set_pace",
+      "value": 0.4875
+    },
+    {
+      "t": 239.0,
+      "action": "set_pace",
+      "value": 0.4917
+    },
+    {
+      "t": 239.5,
+      "action": "set_pace",
+      "value": 0.4958
+    },
+    {
+      "t": 240.0,
       "action": "set_pace",
       "value": 0.5
     }
