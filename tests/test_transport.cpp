@@ -18,10 +18,10 @@ TEST_CASE("transport: clock_pulse snaps the phase to the nearest beat") {
     t.init(500.f);
     t.set_bpm(120.f);
     for (int i = 0; i < 540; ++i) t.tick();   // 2.16 beats
-    t.clock_pulse();
+    t.clock_pulse(1.f);
     CHECK(t.beats() == doctest::Approx(2.0));
     for (int i = 0; i < 210; ++i) t.tick();   // 2.84 beats
-    t.clock_pulse();
+    t.clock_pulse(1.f);
     CHECK(t.beats() == doctest::Approx(3.0)); // rounds up too
 }
 
@@ -62,4 +62,30 @@ TEST_CASE("transport: set_bpm rejects non-positive and non-finite values") {
     // A subsequent genuinely valid tempo still applies normally.
     t.set_bpm(90.f);
     CHECK(t.bpm() == doctest::Approx(90.f));
+}
+
+TEST_CASE("transport: an external clock survives a paced transport") {
+    spky::Transport t;
+    t.init(500.f);                 // control rate
+    t.set_bpm(120.f * 0.03125f);   // 120 BPM at PACE x1/32
+
+    // One pulse per REAL beat: at 120 BPM that is every 0.5 s = 250 ticks.
+    // Each pulse must advance the paced transport by `pace` beats, not snap
+    // it back to the same integer.
+    for (int pulse = 0; pulse < 8; ++pulse) {
+        for (int i = 0; i < 250; ++i) t.tick();
+        t.clock_pulse(0.03125f);
+    }
+    CHECK(t.beats() == doctest::Approx(8.0 * 0.03125).epsilon(0.02));
+
+    // And a pace CHANGE mid-stream must not jump: the anchor is the previous
+    // pulse, not absolute zero. Anchored at zero this walks off by up to half
+    // a real beat on every pulse while the knob moves -- straight into a hard
+    // servo whose authority is kLockCap = 0.35.
+    const double before = t.beats();
+    t.set_bpm(120.f * 1.32f);
+    t.set_pace_anchor();            // what Instrument::set_pace calls
+    for (int i = 0; i < 250; ++i) t.tick();
+    t.clock_pulse(1.32f);
+    CHECK(t.beats() - before == doctest::Approx(1.32).epsilon(0.02));
 }

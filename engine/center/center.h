@@ -33,7 +33,8 @@ public:
     void set_drift(float d)  { _drift_target  = clampf(d, 0.f, 1.f); }
     void set_sync(bool on)        { _sync = on; }
     void set_tempo_bpm(float bpm) { _transport.set_bpm(bpm); }
-    void clock_pulse()            { _transport.clock_pulse(); }
+    void clock_pulse(float pace)  { _transport.clock_pulse(pace); }
+    void set_pace_anchor()        { _transport.set_pace_anchor(); }
     // RST = bar resync: zero the downbeat AND drop any grid offsets a live
     // STEPS turn left behind, so the servo pulls the loops back onto the bar.
     void reset_transport()        { _transport.reset(); _grid_off[0] = _grid_off[1] = 0.f; }
