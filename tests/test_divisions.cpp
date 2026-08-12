@@ -37,3 +37,22 @@ TEST_CASE("divisions: free_hz spans 0.02..30 exponentially") {
     CHECK(free_hz(1.f) == doctest::Approx(30.f));
     CHECK(free_hz(0.5f) == doctest::Approx(std::sqrt(0.02f * 30.f)).epsilon(0.001));
 }
+
+TEST_CASE("pace: the curve meets exactly 1 at centre") {
+    // The whole safety argument for a global time control is that it has a
+    // position where it provably does not exist. Exact, not Approx: the
+    // no-op claim is a bit-identity claim (spec 2026-08-12 PACE §2).
+    CHECK(spky::pace_mult(0.5f) == 1.0f);
+    CHECK(spky::pace_mult(0.f)  == doctest::Approx(1.f / 32.f));
+    CHECK(spky::pace_mult(1.f)  == doctest::Approx(4.f));
+    CHECK(spky::pace_mult(0.75f) == doctest::Approx(2.f));
+    // Monotone rising across the knee, and clamped outside 0..1.
+    float prev = spky::pace_mult(0.f);
+    for (int i = 1; i <= 100; ++i) {
+        const float m = spky::pace_mult(float(i) * 0.01f);
+        CHECK(m > prev);
+        prev = m;
+    }
+    CHECK(spky::pace_mult(-1.f) == spky::pace_mult(0.f));
+    CHECK(spky::pace_mult(2.f)  == spky::pace_mult(1.f));
+}
