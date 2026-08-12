@@ -71,6 +71,15 @@ static std::string paceNumStr(float v) {
 struct PaceQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
         const float m = spky::pace_mult(getValue());
+        // Collapse near-unity BEFORE picking a branch. Without this, m just
+        // below 1 (knob roughly (0.4929, 0.5)) takes the fraction branch,
+        // 1.f / m rounds to 1 under the same 0.05 tolerance paceNumStr uses,
+        // and the result is "x1/" + "1" == "x1/1" -- a real string a player
+        // could see, not just a display case. The mirror band just above
+        // centre already printed "x1" correctly (paceNumStr(m) rounds m
+        // itself to 1 there), so this check makes both sides of centre use
+        // the same rule instead of one relying on it by accident.
+        if (std::fabs(m - 1.f) < 0.05f) return "x1";
         return m < 1.f ? "x1/" + paceNumStr(1.f / m) : "x" + paceNumStr(m);
     }
 };
@@ -378,7 +387,7 @@ struct Fireflow : Module {
                         // squared-cents tooltip (see DetuneQuantity above).
                         configParam<DetuneQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == PACE)
-                        configParam<PaceQuantity>(c.id, 0.f, 1.f, init, "Pace");
+                        configParam<PaceQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else
                         configParam(c.id, 0.f, 1.f, init, lbl);
                     break;

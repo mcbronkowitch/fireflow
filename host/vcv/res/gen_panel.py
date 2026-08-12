@@ -425,10 +425,13 @@ GROUPS = part_groups(False) + part_groups(True) + [
      for (bx, lg, col, _well, _items) in JACK_GROUPS]
 SHARED = [
     Ctl("MORPH",  BIGKNOB, CX - 7.0, ROW_BLEND, "MORPH"),
-    # TIMING: a 2x2 clock story -- sync/tempo above, couple/shuffle below
+    # TIMING: a 2x2 clock story -- pace/tempo above, couple/shuffle below
     # (box legend renamed from TIME, spec 2026-08-09 hw-control-reduction
-    # task 6 -- see GROUPS above). SHUFFLE's control is appended to PARAMS
-    # after every existing id.
+    # task 6 -- see GROUPS above; SYNC no longer has a row here, it folded
+    # into COUPLE below). SHUFFLE's control is appended to PARAMS after
+    # every id that existed before it; PACE (spec 2026-08-12 modulation-pace)
+    # is appended after THAT, in its own APPENDED_PANEL_PARAMS list below --
+    # so PACE, not SHUFFLE, is PARAMS' trailing member.
     Ctl("TEMPO",  SMKNOB,  CX + 9.0, ROW_TIME1, "TEMPO"),
     # COUPLE swallowed the SYNC switch (spec 2026-08-09 hw-control-reduction
     # task 7): SYNC was the right-hand end of COUPLE's own axis. Below the
