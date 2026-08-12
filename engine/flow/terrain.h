@@ -135,6 +135,17 @@ struct Terrain {
 // drift apart; test_flow_terrain.cpp pins that they agree anyway.
 Archetype arch_of(uint32_t master);
 
+// Stage 1 (roles), stage 2 (tonality) and stage 3a (mode) alone, without
+// building a terrain -- the same precedent as arch_of() above, for the same
+// reason: draw_new's wish filters (spec §2.2) need to test a master against
+// one of these without paying for a full generate() on the audio thread.
+// Each is a pure function of the master, counter pinned at 0, so a partial
+// reroll never moves what it reports. generate() calls all three, so the two
+// cannot drift apart.
+void roles_of(uint32_t master, int& engine_a, int& engine_b, bool& a_carries);
+void tonality_of(uint32_t master, int& scale, int& root);
+int mode_of(uint32_t master);
+
 Terrain generate(const TerrainState& st, const BaseOverlay* ov = nullptr);
 
 // One value inside a span, narrowed toward the middle by the terrain's

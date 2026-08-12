@@ -258,6 +258,51 @@ Archetype arch_of(uint32_t master) {
     return Archetype(pick_weighted(r, kArchWeight, ARCH_COUNT));
 }
 
+// Stage 1, lifted verbatim from generate() (see the call site below).
+void roles_of(uint32_t master, int& engine_a, int& engine_b, bool& a_carries) {
+    const Archetype arch = arch_of(master);
+    Rng r = make_stream(master, kStreamRoles, 0);
+    a_carries = r.next_unipolar() < 0.5f;
+    const int carrier = kCarrierEngine[pick_weighted(r, kCarrierW[arch], kCarrierEngineCount)];
+    const int texture = kTextureEngine[pick_weighted(r, kTextureW[arch], 5)];
+    engine_a = a_carries ? carrier : texture;
+    engine_b = a_carries ? texture : carrier;
+}
+
+// Stage 2, lifted verbatim from generate(). Reads adventure_base like every
+// other stage-2-and-later draw does, but stage 4 draws it BEFORE stage 2, not
+// here, so this filter must draw it itself from its own stream -- harmless,
+// since streams are independent and adventure_base is itself a pure function
+// of the master (kStreamAdventure, counter 0).
+void tonality_of(uint32_t master, int& scale, int& root) {
+    Rng ra = make_stream(master, kStreamAdventure, 0);
+    const float adventure_base = draw_adventure(ra);
+
+    Rng r = make_stream(master, kStreamTonality, 0);
+    // Weighted, not uniform (spec 2026-08-07 §3). pick_weighted and
+    // pick_index each consume exactly ONE next_unipolar(), so the stream
+    // position after this line is unchanged and the ROOT draw below stays
+    // bit-identical to the uniform version.
+    float w[SCALE_LIST_COUNT];
+    for (int i = 0; i < SCALE_LIST_COUNT; ++i)
+        w[i] = temper(kScaleW[i], adventure_base);
+    scale = pick_weighted(r, w, SCALE_LIST_COUNT);   // 0..12
+    root  = pick_index(r, kParams[P_ROOT].steps);    // 0..11
+}
+
+// Stage 3a, lifted verbatim from generate(). Same adventure_base caveat as
+// tonality_of() above.
+int mode_of(uint32_t master) {
+    const Archetype arch = arch_of(master);
+    Rng ra = make_stream(master, kStreamAdventure, 0);
+    const float adventure_base = draw_adventure(ra);
+
+    Rng r = make_stream(master, kStreamParamBase + uint32_t(P_MODE), 0);
+    const float w[2] = { temper(1.f - kModeW[arch], adventure_base),
+                         temper(kModeW[arch], adventure_base) };
+    return pick_weighted(r, w, 2);
+}
+
 Terrain generate(const TerrainState& st, const BaseOverlay* ov) {
     Terrain t{};
 
@@ -272,15 +317,8 @@ Terrain generate(const TerrainState& st, const BaseOverlay* ov) {
     // the table has no hole, and taste.h documents that stage 1 overrides
     // those draws.
     int engine_a, engine_b;
-    {
-        Rng r = make_stream(st.master, kStreamRoles, 0);
-        const bool a_carries = r.next_unipolar() < 0.5f;
-        t.a_carries = a_carries;          // published for §5's staggered switch
-        const int carrier = kCarrierEngine[pick_weighted(r, kCarrierW[t.arch], 3)];
-        const int texture = kTextureEngine[pick_weighted(r, kTextureW[t.arch], 5)];
-        engine_a = a_carries ? carrier : texture;
-        engine_b = a_carries ? texture : carrier;
-    }
+    roles_of(st.master, engine_a, engine_b, t.a_carries);
+    // t.a_carries: published for §5's staggered switch.
 
     // The base patch's adventure level (spec 2026-08-06 §7). Keyed on the
     // master ALONE, counter fixed at 0: base parameters belong to no macro
@@ -313,18 +351,7 @@ Terrain generate(const TerrainState& st, const BaseOverlay* ov) {
                   "kParams[P_SCALE].steps and kScaleW/SCALE_MASKS must cover "
                   "the same list");
     int scale, root;
-    {
-        Rng r = make_stream(st.master, kStreamTonality, 0);
-        // Weighted, not uniform (spec 2026-08-07 §3). pick_weighted and
-        // pick_index each consume exactly ONE next_unipolar(), so the stream
-        // position after this line is unchanged and the ROOT draw below stays
-        // bit-identical to the uniform version.
-        float w[SCALE_LIST_COUNT];
-        for (int i = 0; i < SCALE_LIST_COUNT; ++i)
-            w[i] = temper(kScaleW[i], t.adventure_base);
-        scale = pick_weighted(r, w, SCALE_LIST_COUNT);   // 0..12
-        root  = pick_index(r, kParams[P_ROOT].steps);    // 0..11
-    }
+    tonality_of(st.master, scale, root);
 
     // Stage 3a: operating mode (spec 2026-08-06 §5). Its base-rule row is a
     // placeholder like the ENGINE rows -- the real draw is this weighted coin,
@@ -337,12 +364,7 @@ Terrain generate(const TerrainState& st, const BaseOverlay* ov) {
     // kStreamParamBase + P_MODE, which the loop never touches (each row seeds
     // its own stream from the master), so the move consumes nothing the loop
     // wanted and leaves every other draw bit-identical.
-    {
-        Rng r = make_stream(st.master, kStreamParamBase + uint32_t(P_MODE), 0);
-        const float w[2] = { temper(1.f - kModeW[t.arch], t.adventure_base),
-                             temper(kModeW[t.arch], t.adventure_base) };
-        t.base[P_MODE] = float(pick_weighted(r, w, 2));
-    }
+    t.base[P_MODE] = float(mode_of(st.master));
 
     // Stage 3: base patch. Every kBaseRules row from its OWN param stream,
     // uniform inside the archetype's span. Counter is 0 for all of them:

@@ -275,3 +275,57 @@ TEST_CASE("undo then redo keeps each state paired with its own overlay") {
     // press instead of the first.
     CHECK(f.flow.terrain_for_test().base[P_TUNE_A] == doctest::Approx(0.15f));
 }
+
+// What this actually gates, post-refactor: that generate() writes the wish
+// filters' results into the terrain and that no later stage overwrites them.
+// It is NOT a check that two implementations agree -- there is only one
+// implementation now (generate() calls roles_of/tonality_of/mode_of
+// directly), so a bug inside one of them moves both sides of every CHECK
+// below equally. See "roles_of puts a carrier on the deck a_carries names"
+// for a property that lives on one side only.
+TEST_CASE("the wish filters agree with generate, over many masters") {
+    for (uint32_t m = 1; m < 600u; ++m) {
+        const Terrain t = generate(TerrainState{ m, {} });
+
+        int ea = -1, eb = -1; bool ac = false;
+        roles_of(m, ea, eb, ac);
+        int scale = -1, root = -1;
+        tonality_of(m, scale, root);
+
+        CAPTURE(m);
+        CHECK(ea == int(t.base[P_ENGINE_A] + 0.5f));
+        CHECK(eb == int(t.base[P_ENGINE_B] + 0.5f));
+        CHECK(ac == t.a_carries);
+        CHECK(scale == int(t.base[P_SCALE] + 0.5f));
+        CHECK(root  == int(t.base[P_ROOT]  + 0.5f));
+        CHECK(mode_of(m) == int(t.base[P_MODE] + 0.5f));
+    }
+}
+
+TEST_CASE("the wish filters ignore the reroll counters") {
+    // The point of the filters: everything they report is drawn at counter 0,
+    // so a rerolled terrain still answers the same wish. If this ever fails,
+    // the filters are reading a stage that moved.
+    TerrainState st; st.master = 0x2C0FFEEu & 0xFFFFFFu;
+    for (int m = 0; m < MACRO_COUNT; ++m) st.reroll[m] = uint16_t(7 * m + 3);
+    const Terrain t = generate(st);
+
+    int ea = -1, eb = -1; bool ac = false;
+    roles_of(st.master, ea, eb, ac);
+    CHECK(ea == int(t.base[P_ENGINE_A] + 0.5f));
+    CHECK(eb == int(t.base[P_ENGINE_B] + 0.5f));
+    CHECK(mode_of(st.master) == int(t.base[P_MODE] + 0.5f));
+}
+
+TEST_CASE("roles_of puts a carrier on the deck a_carries names") {
+    // Independent of generate(): a property of the roles draw itself. This
+    // is what the comparison case above cannot see -- generate() calls
+    // roles_of, so a bug inside it moves both sides of that comparison
+    // equally. Here there is only one side.
+    for (uint32_t m = 1; m < 600u; ++m) {
+        int ea = -1, eb = -1; bool ac = false;
+        roles_of(m, ea, eb, ac);
+        CAPTURE(m);
+        CHECK(is_carrier_engine(ac ? ea : eb));
+    }
+}
