@@ -168,7 +168,10 @@ TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto") {
             const bool phase = (i / 3) % 2 == 0;
             for (int m = 0; m < MACRO_COUNT; ++m)
                 f.set_macro(m, (m % 2) ? (phase ? 1.f : 0.f) : (phase ? 0.f : 1.f));
-            if (i > 0 && i % 30 == 0) f.new_full();
+            // Re-press on a cadence coprime with the 3-tick macro alternation
+            // above, so a residual forms at many different points of the
+            // BRIGHT/SPACE disagreement rather than always the same one.
+            if (i > 0 && i % 23 == 0) f.new_full();
             f.tick();
             for (int v = 0; v < kVetoCount; ++v) {
                 const float got = f.param_now(kVetos[v].param);
@@ -188,19 +191,21 @@ TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto") {
     }
 
     CHECK(edge_hits > 0);
-    // What this actually proves, per param: a hit on a bound that sits
-    // strictly inside kParams' own range cannot come from the ordinary
-    // clamp_to(kParams, ...) every param already gets, so it is specific
-    // evidence the veto clamp itself fired mid-blend, not just the range
-    // clamp every param has anyway. Required only for P_COMP_A -- the sole
-    // param this sweep measurably drives past an interior bound (see the
-    // comment above edge_hits' declaration). The other four non-DRIVE params
-    // stay covered by edge_hits > 0 above, which is real but weaker: it shows
-    // the residual formed and the value landed on SOME veto bound, without
-    // this test being able to say the veto clamp (rather than kParams' own
-    // clamp) is what put it there.
+    // Required on P_REVMIX_B. Its 0.08 lo sits strictly inside kParams' 0..1,
+    // so a hit there cannot come from clamp_to(kParams, ...) and is specific
+    // evidence the veto clamp itself fired mid-blend. It took this role from
+    // P_COMP_A on 2026-08-12, when the PACE work deleted the DIRT story and
+    // left COMP_A a near-constant base rule with no range to overshoot from.
+    //
+    // B and not A, though the two share a bound and a curve: eval_terrain
+    // resolves a multi-owner param by farthest-from-base (flow.cpp:329), and
+    // REVMIX_A has a second owner in BRIGHT "dawn" whose floor is 0.40. That
+    // distant candidate keeps winning the combine and holds A off its own
+    // 0.08 bound -- measured 0/400 masters. REVMIX_B has only SPACE "bloom",
+    // so it reaches the floor freely: 37/60 masters here.
+    // Do not widen this to all five params without re-measuring first.
     for (int v = 0; v < kVetoCount; ++v) {
-        if (kVetos[v].param != P_COMP_A) continue;
+        if (kVetos[v].param != P_REVMIX_B) continue;
         CAPTURE(pname(kVetos[v].param));
         CHECK(interior_hit[v]);
     }
