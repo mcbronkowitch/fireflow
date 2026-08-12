@@ -25,7 +25,13 @@ TEST_CASE("is_base_rule agrees with the kBaseRules table") {
     // Pins the two facts the plan's Background section states. If taste.h
     // legitimately grows a base rule, update BOTH numbers together and say so
     // in the commit -- do not delete the assertion.
-    CHECK(kBaseRuleCount == 38);
+    //
+    // 38 -> 42 on 2026-08-12: P_TIDE, P_COLOR_A, P_COLOR_B and P_SUB_A moved
+    // out of the story tables and into kBaseRules, so a hand-authored patch
+    // carries its own texture-lane speed and its own chord size. The move also
+    // deleted M_DENSITY's "thick" variant, which is what had left COLOR
+    // unmapped on half of all terrains (tests/test_flow_chord_reach.cpp).
+    CHECK(kBaseRuleCount == 42);
     CHECK(is_base_rule(P_COMP_B));
     CHECK_FALSE(is_base_rule(P_COMP_A));
 }

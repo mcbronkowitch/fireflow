@@ -22,6 +22,20 @@ static bool has_note_for(const TransferReport& r, int param) {
     return false;
 }
 
+// Does THIS parameter's note carry `tag`? Searching format_report()'s whole
+// text for a tag was enough while each tag occurred once; it is not any more.
+// P_TEMPO_BPM now carries an unconditional "REWRITTEN AT RUNTIME" note of its
+// own (Glow's TEMPO fader overwrites the carried tempo every control tick), so
+// a whole-report search for that tag answers "yes" on every patch and the
+// COMP_B branch below would have no gate left at all.
+static bool note_for_has(const TransferReport& r, int param, const char* tag) {
+    for (int i = 0; i < r.note_count; ++i)
+        if (r.notes[i].param == param && r.notes[i].reason &&
+            std::string(r.notes[i].reason).find(tag) != std::string::npos)
+            return true;
+    return false;
+}
+
 TEST_CASE("the converter sets only base-rule parameters") {
     FireflowPatch fp{};
     const TransferReport r = to_flow_base(fp);
@@ -125,10 +139,9 @@ TEST_CASE("the veto rewrite is called out only when the value is out of band") {
         fp.p[kFfEngineB] = 0.f;
         fp.p[kFfCompB]   = c.lvl;
         const TransferReport r = to_flow_base(fp);
-        const std::string s = format_report(r);
         CAPTURE(c.lvl);
         CHECK(has_note_for(r, P_COMP_B));
-        CHECK((s.find("REWRITTEN AT RUNTIME") != std::string::npos) == c.rewritten);
+        CHECK(note_for_has(r, P_COMP_B, "REWRITTEN AT RUNTIME") == c.rewritten);
     }
 }
 

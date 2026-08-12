@@ -17,11 +17,15 @@ TEST_CASE("flow taste: static data is internally consistent") {
             CHECK(r.per_arch[a].hi <= kParams[r.param].hi);
             CHECK(r.per_arch[a].lo <= r.per_arch[a].hi);
         }
-    // Every macro has at least one story; DENSITY has two.
+    // Every macro has at least one story. DENSITY used to have two -- "rate"
+    // and "thick" -- and the pick between them was a coin. "thick" was deleted
+    // 2026-08-12 when its targets became base rules (see taste.h): the coin was
+    // the mechanism that left COLOR unmapped on half of all terrains, pinned
+    // under the two-tone edge with nothing able to move it. Every macro now has
+    // exactly one story, so no macro's meaning depends on a draw.
     int per_macro[MACRO_COUNT] = {};
     for (int s = 0; s < kStoryCount; ++s) per_macro[kStories[s].macro]++;
     for (int m = 0; m < MACRO_COUNT; ++m) CHECK(per_macro[m] >= 1);
-    CHECK(per_macro[M_DENSITY] == 2);
     // Story breakpoint spans: inside the param range, and monotone in the
     // direction bp0 -> bp4 (lo bounds non-decreasing or non-increasing).
     for (int s = 0; s < kStoryCount; ++s)

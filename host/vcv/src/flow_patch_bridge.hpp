@@ -415,11 +415,30 @@ inline TransferReport to_flow_base(const FireflowPatch& fp) {
                 "the flow layer, not a conversion loss");
     }
 
+    // SUB is strided (Fireflow.cpp:576 pushes it with pp(SUB_A, p)), unlike
+    // COLOR and LINK below. P_SUB_A became a base rule on 2026-08-12, when
+    // M_DENSITY's "thick" variant was deleted -- before that this knob had no
+    // destination at all.
+    detail::set_base(r, P_SUB_A, detail::pp(fp, kFfSubA, 0));
     detail::set_base(r, P_SUB_B, fp.p[kFfSubB]);
-    sink.note(P_SUB_A,
-        "NO DESTINATION: Fireflow's deck-A SUB knob has nowhere to go -- "
-        "P_SUB_A is not a base rule. On a Sampler deck the same knob is also "
-        "re-pointed to GENE SIZE, which flow never writes at all");
+    for (int p = 0; p < 2; ++p)
+        if (eng[p] == spky::ENGINE_SAMPLER)
+            sink.note(p ? P_SUB_B : P_SUB_A,
+                "carried as the sub level, but HALF of this knob is lost: on a "
+                "Sampler deck Fireflow additionally re-points SUB to LANE_SIZE "
+                "as GENE SIZE (Fireflow.cpp:820-824), which flow never writes");
+
+    // COLOR is the CHORD SIZE, not a timbre tint -- ChordBuilder::set_color
+    // counts tones over fixed zone edges (pitch/chord.h), so this row decides
+    // whether a deck plays one note or four. It became a base rule on
+    // 2026-08-12; until then a carried patch's chords did not travel at all,
+    // and on half of all terrains no macro could bring them back.
+    //
+    // THE EXPLICIT INDEX, not the stride: COLOR_A/B are appended params, and
+    // Fireflow.cpp:575 pushes them with its own ternary for exactly this
+    // reason. pp(kFfColorA, 1) would read a different control entirely.
+    detail::set_base(r, P_COLOR_A, fp.p[kFfColorA]);
+    detail::set_base(r, P_COLOR_B, fp.p[kFfColorB]);
 
     // --- The LVL knob, which is not the comp knob ---
     {
@@ -463,6 +482,13 @@ inline TransferReport to_flow_base(const FireflowPatch& fp) {
         grid ? (coupleKnob - kCoupleZoneSplit) / (1.f - kCoupleZoneSplit)
              : coupleKnob / kCoupleZoneSplit);
 
+    // TIDE scales the four TEXTURE lanes against the PITCH lane, x1/4..x4 off
+    // one knob (tide_free / kTideRatios, mod/divisions.h). A base rule since
+    // 2026-08-12: while the terrain owned it, a carried patch kept its RATE
+    // exactly and still lost its motion, because the texture lanes could run
+    // at four times the speed the patch was built at.
+    detail::set_base(r, P_TIDE, fp.p[kFfTide]);
+
     detail::set_base(r, P_CHOKE, fp.p[kFfChoke] * 0.5f);
     detail::set_base(r, P_SHUFFLE, fp.p[kFfShuffle]);
     detail::set_base(r, P_REV_DIFF, fp.p[kFfRevDiff]);
@@ -474,6 +500,21 @@ inline TransferReport to_flow_base(const FireflowPatch& fp) {
             "CLAMPED: Fireflow's TEMPO knob spans 40..240 BPM, flow's terrain "
             "range is 50..140. The patch's tempo is not the one it will play "
             "at");
+    // Unconditional, like the P_ROOT note and for the same reason: this one is
+    // invisible from the overlay. The value converts and is applied, and then
+    // the HOST overwrites it -- Glow re-pushes its TEMPO fader on every control
+    // tick (Glow.cpp:1039-1042), because the terrain owns tempo and re-pushes
+    // it on every terrain change, so a fader that did not re-assert itself
+    // would be undone by the next wake. The left fader is assigned to TEMPO by
+    // default and boots at mid travel, which is 95 BPM. A carried tempo is
+    // therefore heard only if that fader is set to `off` or parked on it.
+    sink.note(P_TEMPO_BPM,
+        "REWRITTEN AT RUNTIME: the value converts and is applied, and then "
+        "Glow's TEMPO fader overwrites it every control tick. That fader is "
+        "assigned by default and boots at 95 BPM. Set the fader's target to "
+        "`off` to hear the patch's own tempo. In FLOW mode this costs nothing "
+        "-- the mod lanes run on absolute Hz there and ignore BPM entirely -- "
+        "but in STEP mode it moves the whole grid");
 
     // P_MODE is not an independent control on either side. In Fireflow the zone
     // split of COUPLE is the whole of set_sync, and in flow P_MODE is the whole
@@ -496,20 +537,26 @@ inline TransferReport to_flow_base(const FireflowPatch& fp) {
         "both) has nowhere to go -- P_FORM_A and P_SONG_A are story-owned in "
         "flow, not base rules. Only deck B's structure transfers");
 
-    // flow has 63 parameters and 38 base rules, so 25 are story-owned. Five of
-    // those (FORM_A, SONG_A, STEPS_A, SUB_A, COMP_A) have a Fireflow control of
-    // their own and are named individually above, because a knob the owner
-    // actually turned deserves better than a bucket. These are the other 20 --
-    // and the list is the whole 20, per deck where the parameter is per deck.
+    // flow has 63 parameters and 42 base rules, so 21 are story-owned. Four of
+    // those (FORM_A, SONG_A, STEPS_A, COMP_A) have a Fireflow control of their
+    // own and are named individually above, because a knob the owner actually
+    // turned deserves better than a bucket. These are the other 17 -- and the
+    // list is the whole 17, per deck where the parameter is per deck.
+    //
+    // The count moved from 20 on 2026-08-12, when TIDE, COLOR_A/B and SUB_A
+    // became base rules. They were the three loudest names on this list: TIDE
+    // set the texture lanes' speed and COLOR set the chord size, so a patch
+    // that transferred "correctly" still arrived at the wrong tempo of motion
+    // and with its chords flattened to single notes.
     sink.note(kNoteGeneral,
         "NOT TRANSFERABLE AT ALL (no slot, not \"transferred with loss\"): the "
-        "20 remaining story-owned parameters -- DENSITY, COLOR, VARY, FILT, "
-        "GRIT (its mode as well as its mix) and REVMIX, each on both decks, "
-        "plus DRIFT, TIDE, DRIVE and the reverb shape (SIZE, DECAY, TONE, "
-        "SMEAR, MOD). The other five story-owned parameters have Fireflow "
-        "controls of their own and are named above. Outside flow's parameter "
-        "set entirely, and equally lost: sample content, SOURCE, FLUX RATE and "
-        "FEEDBACK, DETUNE, STAGES, REC and the excitation bus");
+        "17 remaining story-owned parameters -- DENSITY, VARY, FILT, GRIT (its "
+        "mode as well as its mix) and REVMIX, each on both decks, plus DRIFT, "
+        "DRIVE and the reverb shape (SIZE, DECAY, TONE, SMEAR, MOD). The other "
+        "four story-owned parameters have Fireflow controls of their own and "
+        "are named above. Outside flow's parameter set entirely, and equally "
+        "lost: sample content, SOURCE, FLUX RATE and FEEDBACK, DETUNE, STAGES, "
+        "REC and the excitation bus");
 
     sink.finish();
     return r;

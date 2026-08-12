@@ -5,17 +5,19 @@ a `flow` `BaseOverlay`.** The converter (`host/vcv/src/flow_patch_bridge.hpp`,
 spec 2026-08-11 §5) implements this table and invents nothing. If a mapping is
 not written here, the converter does not perform it.
 
-Written 2026-08-12, against `HEAD` of branch `flow-patch-transfer`.
+Written 2026-08-12, against `HEAD` of branch `flow-patch-transfer`. **Revised
+2026-08-12** when four parameters moved out of the story tables and into
+`kBaseRules` — see "The 2026-08-12 widening" below.
 
 ## Counts
 
 | | |
 |---|---|
-| **mapped** (`direct` or an explicit formula) | **37** |
+| **mapped** (`direct` or an explicit formula) | **41** |
 | **UNREACHABLE** | **1** |
-| **total base-rule parameters** | **38** |
+| **total base-rule parameters** | **42** |
 
-Derived, not remembered. The 38 come from `engine/flow/taste.h`'s `kBaseRules`
+Derived, not remembered. The 42 come from `engine/flow/taste.h`'s `kBaseRules`
 table:
 
 ```bash
@@ -28,8 +30,48 @@ table and is story-owned. `P_COMP_B` is present. `is_base_rule()`
 (`engine/flow/terrain.cpp:30`) reads the same table, so this list and the
 overlay's honoured set cannot drift apart.
 
-The other 25 of `P_COUNT` = 63 are story-owned and are not transferable at all
+The other 21 of `P_COUNT` = 63 are story-owned and are not transferable at all
 (spec §3). They are not rows here.
+
+## The 2026-08-12 widening
+
+Four parameters left the story tables and became base rules, taking the count
+from 38 to 42. This was not a tidy-up: two of them were the loudest things a
+transferred patch was losing, and one of the two was also broken on pads that
+had never seen a transfer.
+
+- **`P_TIDE`** was owned by `M_MOTION`'s "orbit" story. It scales the four
+  texture lanes against the PITCH lane over a **16× span** — ×1/4 to ×4
+  (`tide_free` / `kTideRatios`, `engine/mod/divisions.h`). A carried patch
+  therefore kept its `RATE` exactly and still ran its modulation at up to four
+  times the speed it was built at, because `RATE` is only one of the inputs to
+  a lane's Hz. Speed is a property of the patch, so it now travels with it.
+  `M_MOTION` keeps DRIFT and the reverb wash and no longer changes how fast
+  anything clocks.
+- **`P_COLOR_A` / `P_COLOR_B`** were owned by `M_DENSITY`'s "thick" story.
+  COLOR **is the chord size** — `ChordBuilder::set_color` counts tones over
+  fixed zone edges (`engine/pitch/chord.h`), so below `kEdge2` = 0.125 a deck
+  voices exactly one note. `M_DENSITY` had two variants and `generate()` picked
+  one uniformly, so on the draws where "thick" lost, `terrain.cpp`'s stage-4
+  else-branch handed COLOR its curve's `bp[0]` as a "calm floor, unmapped" —
+  drawn from the `{0, .1}` band, entirely below `kEdge2` — with `storied[]`
+  false, so no macro, no weather offset and no veto could reach it.
+  **Measured: 1050 of 2000 terrains, and 52.5% of all woken pads had both decks
+  pinned to a single tone with no control able to change it.** Now 0%.
+  `tests/test_flow_chord_reach.cpp` holds both numbers.
+- **`P_SUB_A`** came along because deleting the "thick" variant left it as that
+  story's only target, and a story that moves nothing but a sub level is not a
+  story. It gains a destination it never had.
+
+**The cost, stated plainly:** Glow's macro surface no longer has a chord
+thickness control at all, and `M_DENSITY` no longer has a variant coin. Chord
+size is now a property of the terrain draw and of a transferred patch, moved by
+NEW and by reroll rather than by a knob.
+
+The `P_TIDE` and `P_COLOR_*` base rows are **first-pass values set by
+arithmetic, not by ear** — `taste.h` says so at both rows, and the spans are
+placed against `ChordBuilder`'s zone edges and `tide_free`'s ratios
+respectively. They are the obvious thing to check against the ear first.
 
 ## How to read a row
 
@@ -95,7 +137,8 @@ say so and say what the converter must report.
 | `P_ATTACK_A` / `P_ATTACK_B` | `ATTACK_A` / `ATTACK_B` | **direct** (`Fireflow.cpp:570` — `set_voice_attack`) | Plain `0..1` knob. The caption changes per engine (`HIT` on BODY, `kDynCaptions`, `generated_panel.hpp:203-206`); the engine setter does not |
 | `P_DECAY_A` / `P_DECAY_B` | `DECAY_A` / `DECAY_B` | **direct** (`Fireflow.cpp:571` — `set_voice_decay`) | As above (`DAMP`/`TAIL` captions) |
 | `P_RES_A` / `P_RES_B` | `RES_A` / `RES_B` | **direct, then clamped.** (`Fireflow.cpp:572` — `set_voice_resonance`.) Fireflow's knob is `0..1` (generic `configParam`, `:354`); `kParams[P_RES_*]` caps at **0.75** — the table entry is `X(P_RES_A, 0.f, 0.75f, 0) X(P_RES_B, 0.f, 0.75f, 0)` (`flow_params.h:86`), and the prose calling it the by-ear resonance cap is `flow_params.h:21` — and `terrain.cpp:494` clamps on the way in. **Report any value above 0.75** | Caption is `CHAR`/`TILT` on BODY/BBD; setter unchanged |
-| `P_SUB_B` | `SUB_B` | **direct** (`Fireflow.cpp:575` — `set_voice_sub(p, pp(SUB_A, p))`) | `configParam<SubQuantity>(c.id, 0.f, 1.f, …)` (`:339`); `SubQuantity` is display only (`:129-140`). **Half of this knob is lost:** on a Sampler deck Fireflow *additionally* re-points it to `LANE_SIZE` as GENE SIZE (`Fireflow.cpp:820-824`), which flow never writes. `P_SUB_A` is not a base rule, so Fireflow's `SUB_A` has no destination — report it as dropped |
+| `P_SUB_A` / `P_SUB_B` | `SUB_A` / `SUB_B` | **direct** (`Fireflow.cpp:576` — `set_voice_sub(p, pp(SUB_A, p))`), strided | `configParam<SubQuantity>(c.id, 0.f, 1.f, …)` (`:339`); `SubQuantity` is display only (`:129-140`). **Half of this knob is lost:** on a Sampler deck Fireflow *additionally* re-points it to `LANE_SIZE` as GENE SIZE (`Fireflow.cpp:820-824`), which flow never writes — reported per deck when that deck converts to SAMPLER. `P_SUB_A` became a base rule on 2026-08-12; before that this knob had no destination on deck A at all |
+| `P_COLOR_A` / `P_COLOR_B` | `COLOR_A` / `COLOR_B` | **direct** (`Fireflow.cpp:575` — `set_color(p, params[p ? COLOR_B : COLOR_A])`) | **This is the CHORD SIZE, not a timbre tint.** `ChordBuilder::set_color` (`engine/pitch/chord.h:49-56`) counts tones over fixed edges: under `kEdge2` = 0.125 one note, then 2/3/4 at `kEdge3`/`kEdge4`, with the fifth slot becoming a ninth above `kEdge9` = 0.85. Note the **explicit ternary** at the push site — `COLOR_A/B` are appended params outside `PART_STRIDE`, exactly like `LINK_A/B`, so `pp(COLOR_A, p)` reads the wrong slot. On a BODY deck COLOR is read as chord *quality* rather than as pitches (`engine/body/material.h`); the setter is the same either way |
 
 ### FX sends and glue
 
@@ -112,6 +155,7 @@ say so and say what the converter must report.
 | `P_MORPH` | `MORPH` | **direct** (`Fireflow.cpp:871`) | Plain `0..1` knob |
 | `P_COUPLE` | `COUPLE` (printed **`FREE\|GRID`**) | **formula, zone split.** `k = COUPLE`, `grid = k >= 0.5` (`kCoupleZoneSplit`, `Fireflow.cpp:34`); `P_COUPLE = grid ? (k - 0.5) / 0.5 : k / 0.5` (`Fireflow.cpp:878-883`) | Store the rescaled half-zone value, **not the knob**: flow's `apply_param` hands `P_COUPLE` straight to `set_couple` (`flow_params.h:186`), which is what Fireflow's rescaled value feeds. This is also the sole source of `set_sync` in Fireflow (`:880`) — see `P_MODE` |
 | `P_CHOKE` | `CHOKE` | **formula.** `P_CHOKE = CHOKE * 0.5` (`Fireflow.cpp:898`) | The knob is `configSwitch(c.id, -2.f, 2.f, …)` with 5 snapped states (`:320-324`); x0.5 lands them on flow's `-1..1` — `X(P_CHOKE, -1.f, 1.f, 0)` (`flow_params.h:96`). The five states are by-ear rulings (`spotykach-by-ear-decisions`) — the halving is the whole conversion, nothing rounds |
+| `P_TIDE` | `TIDE` | **direct** (`Fireflow.cpp:898` — `set_tide(params[TIDE])`) | Plain `0..1` knob, but the SCALE it drives is geometric: `tide_free` = `2^(4·(v−0.5))`, so 0.5 is exactly ×1 and the ends are ×1/4 and ×4. Synced, it snaps to `kTideRatios`'s 9 rungs instead. It scales the four **texture** lanes only (`SOURCE ×2`, `SIZE ×0.5`, `MOTION ×0.75`, `LEVEL ×1.5` — `kLaneRatio`); the PITCH lane is unaffected (`_pitch_scale` is a fixed 1.0). A base rule since 2026-08-12 — see the widening note above |
 | `P_SHUFFLE` | `SHUFFLE` | **direct** (`Fireflow.cpp:560`) | Plain `0..1` knob |
 | `P_REV_DIFF` | `REV_DIFF` | **direct** (`Fireflow.cpp:902` — `set_reverb_diffusion`) | Plain `0..1` knob. `REV_SIZE`/`REV_DECAY`/`REV_TONE` are story-owned, and `set_master_drive`/`set_reverb_smear`/`set_reverb_mod` are hardcoded constants in Fireflow (`:912-914`) — none of those are rows here |
 | `P_TEMPO_BPM` | `TEMPO` | **formula, then clamp.** `bpm = 40 + TEMPO * 200` (`Fireflow.cpp:918`), i.e. **40..240 BPM**. `kParams[P_TEMPO_BPM]` is **50..140** — `X(P_TEMPO_BPM, 50.f, 140.f, 0)` (`flow_params.h:101`). Clamp, and **report anything outside** | An external clock at `CLOCK` overrides the knob at runtime (`:919-922`); that is live state, not patch state, and does not transfer |
@@ -131,13 +175,13 @@ Two things the converter must handle that no single row owns:
    transferable at all** — not "partly transferred", dropped. The converter
    must detect this before writing anything and set `overlay_rejected`.
    Widening `kCarrierEngine` is spec §10's open decision, out of scope here.
-2. **Nothing outside the 38 has a destination.** Not "is transferred with
+2. **Nothing outside the 42 has a destination.** Not "is transferred with
    loss" — has no slot. That includes every story-owned parameter (FILT,
-   COLOR, VARIATION, DENSITY, GRIT, REVMIX, DRIFT, TIDE, DRIVE, the reverb
-   shape) as well as the flow params with no base rule but a Fireflow control:
-   `STEPS_A`, `SUB_A`, `SONG_A`/`FORM_A`, `COMP_A`. And it includes everything
-   outside `P_COUNT` entirely: sample content, `SOURCE_A/B`, `FLUXRATE`,
-   `FLUXFB`, `DETUNE`, `STAGES`, `REC`, the excitation bus.
+   VARIATION, DENSITY, GRIT, REVMIX, DRIFT, DRIVE, the reverb shape) as well
+   as the flow params with no base rule but a Fireflow control: `STEPS_A`,
+   `SONG_A`/`FORM_A`, `COMP_A`. And it includes everything outside `P_COUNT`
+   entirely: sample content, `SOURCE_A/B`, `FLUXRATE`, `FLUXFB`, `DETUNE`,
+   `STAGES`, `REC`, the excitation bus.
 
 ## Values a Fireflow patch can hold that flow cannot
 
@@ -150,6 +194,16 @@ clamp on the way in (`terrain.cpp:494`) and each must appear in the report:
 | `TEMPO` | 40..240 BPM | 50..140 BPM | clamp, report |
 | `STEPS_B` | 0..16 | 2..16 (`s == 0` means STEP off) | `0` -> leave unset + `P_MODE = 0` question; `1` -> clamp to 2, report |
 | `COMP_B` (`LVL`) | full travel | veto band 0.40..0.60 | value stored, band applied at runtime, report the rewrite |
+
+And one that is not a range problem at all, because it happens after the value
+has already been applied correctly: **Glow's TEMPO fader overwrites the carried
+tempo on every control tick** (`Glow.cpp:1039-1042`). The terrain owns tempo and
+re-pushes it on every terrain change, so a host-side fader has to re-assert
+itself or one wake would undo it. The left fader is assigned to TEMPO by default
+and boots at mid travel, which is 95 BPM. Set that fader's target to `off` to
+hear the patch's own tempo. In FLOW mode this costs nothing — the mod lanes run
+on absolute Hz there (`free_hz`) and ignore BPM entirely — but in STEP mode it
+moves the whole grid. Reported unconditionally, like `P_ROOT`.
 
 ## Where this file's claims come from
 

@@ -826,8 +826,16 @@ constexpr float kAdventureShape = 3.f;
 inline const StoryVariant kStories[] = {
 // MOTION "still photo -> breathing -> wobble -> seasick" (§3 row 3).
 // Q4 hi values deliberately sit at the params' full ceiling: the risk zone.
-{ M_MOTION, "orbit", 4, {
-  { P_TIDE,      {{0.f,.05f},{.1f,.2f},{.25f,.4f},{.45f,.6f},{.7f,1.f}} },
+//
+// P_TIDE LEFT THIS STORY 2026-08-12 and became a base rule. It is the texture
+// lanes' rate scale -- x1/4 to x4 off one knob (kTideRatios / tide_free,
+// mod/divisions.h) -- and a 16x speed span that the terrain owned meant a
+// hand-authored patch carried onto a pad kept its RATE and lost its motion:
+// the PITCH lane ran at the patch's Hz while the four texture lanes ran at up
+// to four times theirs. Speed is a property of the patch, so it now travels
+// with it. MOTION keeps the wobble it can still honestly claim -- pitch drift
+// plus the reverb's wash -- and no longer changes how fast anything clocks.
+{ M_MOTION, "orbit", 3, {
   { P_DRIFT,     {{0.f,.05f},{.05f,.15f},{.2f,.35f},{.4f,.55f},{.6f,.9f}} },
   // SMEAR is the diffuser LFO (the wash). It carries the seasick end now that
   // WOBL is capped: smear washes the reverb where MOD tears it.
@@ -846,11 +854,30 @@ inline const StoryVariant kStories[] = {
   { P_DENSITY_B, {{.02f,.08f},{.08f,.18f},{.25f,.45f},{.45f,.65f},{.65f,.9f}} },
   { P_STEPS_A,   {{2.f,4.f},{4.f,6.f},{6.f,10.f},{10.f,13.f},{13.f,16.f}} } },
   {{0.f,.45f},{0.f,1.f},{0.f,1.f},{0.f,1.f}} },
-// DENSITY thickness-led (§3 row 2b): chords/pad carry it.
-{ M_DENSITY, "thick", 3, {
-  { P_COLOR_A,   {{0.f,.1f},{.15f,.3f},{.35f,.55f},{.55f,.75f},{.75f,1.f}} },
-  { P_COLOR_B,   {{0.f,.1f},{.1f,.25f},{.3f,.5f},{.5f,.7f},{.7f,.95f}} },
-  { P_SUB_A,     {{.1f,.2f},{.2f,.35f},{.35f,.5f},{.5f,.65f},{.6f,.8f}} } } },
+// DENSITY thickness-led (§3 row 2b) IS GONE, deleted 2026-08-12 with its three
+// targets: P_COLOR_A/B became base rules and P_SUB_A joined P_SUB_B as one.
+//
+// Why the variant went rather than shrinking to its remainder: COLOR *is* the
+// chord size -- ChordBuilder::set_color counts tones over fixed zone edges
+// (pitch/chord.h), so below kEdge2 a deck plays exactly one note -- and it was
+// the only thickness this story had. What would have been left is a single
+// SUB_A curve, which is a sub-oscillator level, not a thickness story; half of
+// every DENSITY knob would have moved nothing but a sub level.
+//
+// It also had to go for a reason that outlives the transfer, measured in
+// tests/test_flow_chord_reach.cpp: with two variants and a uniform pick,
+// COLOR was UNMAPPED on 1050 of 2000 terrains, and terrain.cpp's stage-4
+// else-branch handed every one of those its curve's bp[0] as a "calm floor" --
+// drawn from the {0, .1} band, entirely below kEdge2. storied[] stayed false,
+// so no macro, no weather offset and no veto could reach it. 52.5% of all
+// woken pads had BOTH decks pinned to a single tone with no control able to
+// change it. A base rule is drawn per archetype on every terrain and cannot
+// fall into that gap.
+//
+// The cost, named rather than buried: Glow's macro surface no longer has a
+// chord-thickness control at all. Chord size is now a property of the terrain
+// draw and of a transferred patch, moved by NEW and by reroll, not by a knob.
+// M_DENSITY keeps one variant, so its pick is no longer a coin.
 // BRIGHT "ember -> sweep -> open -> air" (§3 row 1). Q1 dips the dry leg
 // via REVMIX (the spec-named level mechanism) and blooms REV_DECAY --
 // REV_DECAY's curve here runs HIGH at bp0 and settles by bp1: monotone
@@ -937,6 +964,20 @@ inline const BaseRule kBaseRules[] = {
 { P_STEPS_B,  {{2.f,16.f},{4.f,10.f},{8.f,16.f},{4.f,12.f}} }, // arp = many
 { P_RATE_A,   {{0.f,.25f},{.3f,.6f},{.55f,.9f},{.3f,.7f}} },   // drone = slow
 { P_RATE_B,   {{0.f,.25f},{.3f,.6f},{.55f,.9f},{.3f,.7f}} },   // drone = slow
+// TIDE is the four TEXTURE lanes' rate scale against the PITCH lane, and it is
+// geometric, not linear: 0.5 is exactly x1 and the ends are x1/4 and x4
+// (tide_free, mod/divisions.h; the synced ladder kTideRatios matches rung for
+// rung). So a span here is read as a RATIO span, and these are much narrower
+// than the 0..1 the MOTION story used to sweep -- deliberately. Under the
+// story, a terrain could put the texture lanes four times above the patch's
+// own rate, which is what made a carried patch unrecognisable while its RATE
+// transferred perfectly.
+//
+// FIRST-PASS VALUES, set by arithmetic and not yet by ear: drone stays at or
+// under x1 (0.30 = x0.57), arp and fragment reach about x2.3 at their tops.
+// The ratio each endpoint means is worth checking against the ear before these
+// are treated as settled.
+{ P_TIDE,     {{.30f,.50f},{.40f,.60f},{.45f,.70f},{.35f,.70f}} }, // drone = slowest
 // -- pitch ----------------------------------------------------------------
 { P_TUNE_A,   {{.25f,.75f},{.25f,.75f},{.25f,.75f},{.25f,.75f}} }, // neutral
 { P_TUNE_B,   {{.25f,.75f},{.25f,.75f},{.25f,.75f},{.25f,.75f}} }, // neutral
@@ -961,7 +1002,29 @@ inline const BaseRule kBaseRules[] = {
 // -- voice color ----------------------------------------------------------
 { P_RES_A,    {{0.f,.6f},{0.f,.6f},{0.f,.6f},{0.f,.6f}} },     // under 0.75 cap
 { P_RES_B,    {{0.f,.6f},{0.f,.6f},{0.f,.6f},{0.f,.6f}} },     // under 0.75 cap
+{ P_SUB_A,    {{.1f,.6f},{.1f,.6f},{.1f,.6f},{.1f,.6f}} },     // neutral
 { P_SUB_B,    {{.1f,.6f},{.1f,.6f},{.1f,.6f},{.1f,.6f}} },     // neutral
+// COLOR is the CHORD SIZE, not a timbre tint: ChordBuilder::set_color counts
+// the tones over fixed zone edges (pitch/chord.h) -- under kEdge2 = 0.125 a
+// deck voices exactly one note, then 2, 3 and 4 at kEdge3/kEdge4, with the
+// fifth slot becoming a ninth above kEdge9 = 0.85. So these spans are read as
+// TONE COUNTS, and every endpoint below is placed against an edge:
+//
+//   drone     .45-.80   3 tones, reaching 4 -- pads want the weight
+//   pulse     .20-.55   2 tones, reaching 3
+//   arp       .10-.45   1 to 3: an arpeggio may legitimately be a single line
+//   fragment  .05-.50   the widest, because broken material may be anything
+//
+// A single tone stays reachable for arp and fragment on purpose, but it is
+// RARE rather than merely possible: measured at 7 of 2000 terrains, because
+// the archetype weights favour the drone and draw_span's adventure narrowing
+// pulls a calm draw toward the middle of its span. What a single tone may not
+// be is the standing state: before these rows existed COLOR was owned by
+// M_DENSITY's "thick" variant alone, and on the half of all terrains where
+// that variant lost the pick it was pinned under kEdge2 with nothing able to
+// move it (see the deleted story above, and test_flow_chord_reach.cpp).
+{ P_COLOR_A,  {{.45f,.80f},{.20f,.55f},{.10f,.45f},{.05f,.50f}} }, // drone = pad
+{ P_COLOR_B,  {{.45f,.80f},{.20f,.55f},{.10f,.45f},{.05f,.50f}} }, // drone = pad
 // -- fx sends -------------------------------------------------------------
 { P_FLUXMIX_A, {{0.f,.5f},{0.f,.5f},{0.f,.5f},{0.f,.5f}} },    // neutral
 { P_FLUXMIX_B, {{0.f,.5f},{0.f,.5f},{0.f,.5f},{0.f,.5f}} },    // neutral

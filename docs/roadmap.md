@@ -2236,7 +2236,7 @@ with the terrain**. The two sets are disjoint by construction — no macro knob
 can overwrite a transferred value at any position, which is what makes the
 split a rule rather than an accident.
 
-`docs/flow-fireflow-param-map.md` is the authority for every conversion: 37
+`docs/flow-fireflow-param-map.md` is the authority for every conversion: 41
 rows mapped, one (`P_ROOT`) unreachable because `Fireflow` has no ROOT control
 at all. The converter's **report is the deliverable** — a transfer that
 carried what it could and said nothing about the rest would look right and
@@ -2244,6 +2244,66 @@ lose a third of the tonality without a word.
 
 Merged to `main` 2026-08-12 (`89e50be`..`3e03e81`, 16 commits). **Not
 released**; `plugin.json` untouched.
+
+#### The 2026-08-12 round: what the first transfer actually sounded like
+
+Playing a real transferred patch found three things the design had not, and
+the first two were audible immediately.
+
+1. **The modulation ran up to 4× too fast.** `P_TIDE` scales the four texture
+   lanes against the PITCH lane over a 16× span (×1/4 … ×4, `tide_free`), and
+   it was story-owned — so a patch kept its `RATE` exactly and still lost its
+   motion. `RATE` is only one of five inputs to a lane's Hz. **`P_TIDE` is now
+   a base rule**, and `M_MOTION` no longer changes how fast anything clocks.
+2. **Chords arrived as single notes, and no knob brought them back.** COLOR
+   *is* the chord size — `ChordBuilder::set_color` counts tones over fixed zone
+   edges, so under 0.125 a deck voices one note. It was owned by `M_DENSITY`'s
+   "thick" variant *alone*, `M_DENSITY` had two variants, and `generate()`
+   picked one uniformly: on the losing half, `terrain.cpp`'s stage-4
+   else-branch left COLOR at its curve's `bp[0]` — drawn from the `{0, .1}`
+   band, entirely below the two-tone edge — with `storied[]` false, so no
+   macro, no weather offset and no veto could reach it. **Measured at 52.5% of
+   all woken pads with both decks pinned to a single tone; now 0%.** This was
+   never a transfer bug: it hit self-rolled pads just as hard. **`P_COLOR_A/B`
+   are now base rules**, the "thick" variant is deleted, and `P_SUB_A` came
+   along with it (it was that story's only remaining target, and it gains a
+   destination it never had). `kBaseRuleCount` 38 → 42.
+3. **The tempo fader cannot move the mod lanes, and that is structural.**
+   `SuperModulator::_update_rate` reads BPM only when synced; in FLOW mode the
+   rate is `free_hz(RATE)`, absolute Hz. Separately, Glow re-pushes its TEMPO
+   fader every control tick (`Glow.cpp:1039-1042`), so the *carried* tempo is
+   overwritten by a fader that boots at 95 BPM unless its target is set to
+   `off`. Both are now in the converter's report rather than in nobody's head.
+
+**The cost, named rather than buried:** Glow's macro surface no longer has a
+chord thickness control, and `M_DENSITY` no longer has a variant coin. Chord
+size is a property of the terrain draw and of a transferred patch, moved by NEW
+and by reroll rather than by a knob. The new `P_TIDE` and `P_COLOR_*` spans are
+**first-pass values set by arithmetic, not by ear** — the obvious thing to
+check first.
+
+**And the rig that found it**, which is the durable half of this round:
+
+- `tests/test_flow_transfer_diff.cpp` — pushes a `FireflowPatch` through
+  `to_flow_base`, wakes a real `Flow` with the overlay, and compares the
+  **engine** against a reference `Instrument` driven straight from the patch's
+  knobs: lane rates in Hz, chord tone counts, clocking mode. Its value gate is
+  the one worth keeping — a carried value must either be intact at the engine
+  or be named in the report as rewritten; silence fails. It also carries a
+  no-assert readout (`-tc="transfer rig: the readable diff" -s`) that prints
+  what one terrain does to one patch, in engine units.
+- `tests/test_flow_chord_reach.cpp` — the chord-reachability gate, holding both
+  the 52.5% that was and the 0% that is.
+- `Instrument::lane_rate_hz_for_test` / `step_mode_for_test` /
+  `deck_steps_for_test` — `SuperModulator` had these observers; `_parts` being
+  private meant nothing outside the engine could read a lane's actual Hz, so
+  only the setter side of a rate had ever been testable.
+
+All three gates were proven red before being trusted: sabotaging `P_TIDE` in
+the converter moves the lanes by 3.48× and the Hz gate says so; sabotaging
+`P_COLOR_A` turns 4 tones into 1. The first draft of the Hz gate did **not**
+go red, because its reference read the overlay rather than the patch — it was
+measuring the converter against itself.
 
 **Open, in rough priority order:**
 
@@ -2273,10 +2333,22 @@ released**; `plugin.json` untouched.
    `flow/flow_params.h`; splitting them into a small codec header removes the
    whole chain.
 5. **The design was validated against synthetic targets only.** Spec §2.1's
-   numbers were all constructed. Push two or three real saved `Fireflow`
-   patches through `to_flow_base` and read the report — that says how much of
-   a real patch survives before twelve places get built against it. It
-   validates the design; it does not block it.
+   numbers were all constructed. **Partly closed 2026-08-12**: playing a real
+   transferred patch is what found the TIDE and COLOR losses above, and
+   `tests/test_flow_transfer_diff.cpp` now measures the whole chain in engine
+   units. What is still open is the original ask — push two or three **real
+   saved** `Fireflow` patches through `to_flow_base` and read the report. The
+   rig's patch is hand-built and deliberately clean (both decks on carriers,
+   both agreeing with the grid); it cannot speak for a patch that disagrees
+   with itself. There is still no `.vcvm` → `FireflowPatch` reader.
+6. **The render host cannot apply a base overlay.** `flow_wake` calls
+   `fl->wake(st)` with no `BaseOverlay*` (`host/render/scenario.cpp:250`) while
+   `Flow::wake` takes one, so there is no headless path on which a transferred
+   patch can be *heard* — only measured. A `flow_base` scenario action plus the
+   codec split in item 4 would give `render.exe` an A/B: the patch driven
+   directly against the same patch carried onto a terrain, two WAVs and two
+   `mods.csv`. That is the natural next step after item 5's `.vcvm` reader,
+   and the two share it.
 
 Three smaller ones, recorded so they are not rediscovered: `Flow::init()`
 resets `_have_undo` but not `_have_overlay` / `_have_undo_overlay` (latent —

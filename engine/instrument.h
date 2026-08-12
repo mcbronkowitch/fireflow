@@ -86,6 +86,24 @@ public:
     uint8_t active_pattern_for_test(int p) const {
         return _parts[p].mod().active_pattern_for_test();
     }
+    // What a mod lane actually clocks at, in Hz, plus the clocking mode that
+    // decides how that Hz was derived. SuperModulator has held these observers
+    // for a while; _parts is private, so from outside the engine they were
+    // unreachable and only the SETTER side of a rate could be tested.
+    //
+    // That gap is what the Fireflow -> flow transfer rig needs closed
+    // (tests/test_flow_transfer_diff.cpp). "RATE transferred correctly" and
+    // "the lanes run at the speed the patch was built at" are DIFFERENT
+    // claims, and only the second one is audible: RATE is one of five inputs
+    // to a lane's Hz, alongside TIDE, kLaneRatio, the sync flag and -- when
+    // synced -- the tempo. A rig that could only compare parameter values
+    // would have reported a clean transfer for a patch running four times too
+    // fast, which is precisely the failure it was built to find.
+    float lane_rate_hz_for_test(int p, int lane) const {
+        return _parts[p].mod().lane_rate_hz_for_test(lane);
+    }
+    bool step_mode_for_test(int p)  const { return _parts[p].mod().step_mode(); }
+    int  deck_steps_for_test(int p) const { return _parts[p].mod().deck_steps(); }
 #endif
     void set_fixed_slew(int p, bool on)      { _parts[p].mod().set_fixed_slew(on); }
     void set_depth(int p, float n)           { _parts[p].set_depth(n); }
