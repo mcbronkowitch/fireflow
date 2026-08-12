@@ -169,7 +169,10 @@ TEST_CASE("labels: set_label fills a Place's fixed buffer without overrunning "
 TEST_CASE("export: the header row and column order match pool.tsv") {
     Place p[kPadCount];
     const std::string tsv = export_pool_tsv(p, kPadCount);
-    CHECK(tsv.compare(0, 32, "code\tarch\tdate\tfp\tpad\tname\tnote\n") == 0);
+    // `base` is the eighth column since 2026-08-11 §6: the hand-authored
+    // overlay, in the one textual encoding, as a COLUMN and not a line.
+    const std::string hdr = "code\tarch\tdate\tfp\tpad\tname\tnote\tbase\n";
+    CHECK(tsv.compare(0, hdr.size(), hdr) == 0);
 }
 
 TEST_CASE("export: every pad emits a row, and the empty interior columns "
@@ -190,11 +193,15 @@ TEST_CASE("export: every pad emits a row, and the empty interior columns "
     const std::string row = tsv.substr(rowStart, rowEnd - rowStart);
     int tabs = 0;
     for (char c : row) if (c == '\t') ++tabs;
-    CHECK(tabs == 6);                       // seven columns
+    CHECK(tabs == 7);                       // eight columns
     CHECK(row.find(kHouseCode) == 0);
     CHECK(row.find("\t\t\t1\t") != std::string::npos);   // date, fp empty; pad 1
     CHECK(row.find("First light") != std::string::npos);
     CHECK(row.find("It carries at 0.2") != std::string::npos);
+    // No base on this place, so the last column is empty and the row still
+    // ends where it did -- the tab is emitted, the value is not, and nothing
+    // spills onto a line of its own.
+    CHECK(row.back() == '\t');
 }
 
 TEST_CASE("export: the arch column is spelled with the enum's short name") {

@@ -3,7 +3,12 @@
 // The Fireflow -> flow converter (spec 2026-08-11 §5). The report is the
 // deliverable: what could NOT be carried matters more than what could.
 #include "doctest/doctest.h"
+#include <algorithm>
+#include <cstdio>
+#include <type_traits>
 #include "vcv/src/flow_patch_bridge.hpp"
+#include "vcv/src/glow_ui.hpp"
+#include "vcv/src/touch_pads.hpp"
 #include "flow/taste.h"
 
 using namespace spky::flow;
@@ -186,4 +191,173 @@ TEST_CASE("format_report names every note") {
         CHECK(s.find(label) != std::string::npos);
         CHECK(s.find(r.notes[i].reason) != std::string::npos);
     }
+}
+
+// ---------------------------------------------------------------------------
+// The one textual encoding, and the place that carries it (Task 7)
+// ---------------------------------------------------------------------------
+
+TEST_CASE("Place stays trivially copyable after growing") {
+    // Glow.cpp memcpys the whole Place array to the audio thread as one staged
+    // handover (UiOp::SET_PLACES). A heap-owning member would put a malloc
+    // there, for a patch somebody pasted.
+    CHECK(std::is_trivially_copyable<spkyvcv::Place>::value);
+}
+
+TEST_CASE("the pool row carries the base and stays one line per place") {
+    spkyvcv::Place places[2] = {};
+    std::snprintf(places[0].code, sizeof places[0].code, "F1-00000020-000000000000");
+    spkyvcv::set_label(places[0].name, spkyvcv::kNameCap, "opener");
+    places[0].has_base = true;
+    places[0].base.v[spky::flow::P_TUNE_A] = 0.25f;
+    places[0].base.has[spky::flow::P_TUNE_A] = true;
+
+    const std::string tsv = spkyvcv::export_pool_tsv(places, 2);
+    // Header plus one row per place, and not one newline more: a base written
+    // as its own line would make the file unreadable by the §10.3 generator.
+    CHECK(std::count(tsv.begin(), tsv.end(), '\n') == 3);
+    CHECK(tsv.find("opener") != std::string::npos);
+    // ...and the base is actually IN the row. Without this the case above
+    // passes on an export that dropped the column entirely, which is the one
+    // failure it is named for.
+    CHECK(tsv.find("base\n") != std::string::npos);          // the header column
+    CHECK(tsv.find(encode_base(places[0].base)) != std::string::npos);
+    // The second place has none, and an absent base is an EMPTY field rather
+    // than a zero patch: its row ends on the column separator.
+    CHECK(tsv.find("\t2\t\t\t\n") != std::string::npos);      // pad, name, note, base
+}
+
+TEST_CASE("a place with no base is distinguishable from one with a zero base") {
+    spkyvcv::Place p{};
+    CHECK_FALSE(p.has_base);
+    // A default Place must not claim to carry a patch: wakePad passes
+    // nullptr for it, and Flow::wake(s, nullptr) plays the drawn terrain.
+}
+
+TEST_CASE("an overlay survives the text round trip for every base-rule param") {
+    spky::flow::BaseOverlay in;
+    for (int i = 0; i < kBaseRuleCount; ++i) {
+        const int p = kBaseRules[i].param;
+        in.v[p]   = kParams[p].lo + 0.25f * (kParams[p].hi - kParams[p].lo);
+        in.has[p] = true;
+    }
+    spky::flow::BaseOverlay out;
+    REQUIRE(decode_base(encode_base(in).c_str(), out));
+    for (int p = 0; p < P_COUNT; ++p) {
+        CAPTURE(p);
+        CHECK(out.has[p] == in.has[p]);
+        if (in.has[p]) CHECK(out.v[p] == doctest::Approx(in.v[p]));
+    }
+}
+
+TEST_CASE("a malformed base string is rejected, not half-read") {
+    spky::flow::BaseOverlay in;
+    in.v[P_TUNE_A] = 0.5f; in.has[P_TUNE_A] = true;
+    in.v[P_RES_B]  = 0.3f; in.has[P_RES_B]  = true;
+    std::string s = encode_base(in);
+    s.erase(s.find(';'), 1);                 // splice two pairs into one token
+    spky::flow::BaseOverlay out;
+    CHECK_FALSE(decode_base(s.c_str(), out));
+    for (int p = 0; p < P_COUNT; ++p) CHECK_FALSE(out.has[p]);
+}
+
+TEST_CASE("an empty base string decodes to no overlay, not a zero one") {
+    spky::flow::BaseOverlay out;
+    out.has[P_TUNE_A] = true;                // pre-dirty it
+    CHECK(decode_base("", out));             // empty is VALID: a place with no patch
+    for (int p = 0; p < P_COUNT; ++p) CHECK_FALSE(out.has[p]);
+}
+
+TEST_CASE("a story-owned parameter is rejected, not silently dropped") {
+    // decode_base is the entry point for hand-edited pool.tsv rows, clipboard
+    // text and older patches -- text nobody's converter wrote. generate()
+    // honours base rules and nothing else, so an entry for a story-owned
+    // parameter is a string that claims to carry more than it can. Rejecting
+    // it is the same all-or-nothing rule the partial-parse case gets, and it
+    // asks taste.h (is_base_rule) rather than a transcribed list, exactly as
+    // set_base does on the way in -- one authority for both directions.
+    int story = -1;
+    for (int p = 0; p < P_COUNT && story < 0; ++p) if (!is_base_rule(p)) story = p;
+    REQUIRE(story >= 0);                     // 25 of 63 are story-owned
+    CAPTURE(std::string(kParams[story].name));   // a const char* prints as a pointer
+    const std::string s = std::string(kParams[story].name) + ":0.5;";
+    spky::flow::BaseOverlay out;
+    CHECK_FALSE(decode_base(s.c_str(), out));
+    for (int p = 0; p < P_COUNT; ++p) CHECK_FALSE(out.has[p]);
+
+    // ...and the rejection is about the PARTITION, not about the syntax: the
+    // same string shape built on a base rule decodes.
+    int base = -1;
+    for (int p = 0; p < P_COUNT && base < 0; ++p) if (is_base_rule(p)) base = p;
+    REQUIRE(base >= 0);
+    CAPTURE(std::string(kParams[base].name));
+    const std::string ok = std::string(kParams[base].name) + ":0.5;";
+    spky::flow::BaseOverlay out2;
+    CHECK(decode_base(ok.c_str(), out2));
+    CHECK(out2.has[base]);
+}
+
+// ---------------------------------------------------------------------------
+// The live place's base, which is NOT in the twelve
+// ---------------------------------------------------------------------------
+//
+// Place::base covers the pads. The place actually PLAYING does not live in
+// that array -- Flow holds it -- and neither does the undo slot's, so both
+// travel in GlowSave. Without these two cases a reload restores every pad's
+// base and loses the one being heard.
+
+TEST_CASE("the live base and the slot's survive a capture and a restore") {
+    spky::Instrument inst;
+    inst.init(48000.f);
+    spky::flow::Flow fl;
+    fl.init(&inst, 100.f);
+
+    TerrainState house;
+    REQUIRE(decode_code(kHouseCode, house));
+    spky::flow::BaseOverlay ov;
+    ov.v[P_TUNE_A] = 0.25f; ov.has[P_TUNE_A] = true;
+    fl.wake(house, &ov);
+    REQUIRE(fl.new_full());                  // fills the undo slot
+
+    const GlowSave s = glow_capture(fl);
+    REQUIRE(s.have_base);
+    CHECK(s.base.has[P_TUNE_A]);
+    CHECK(s.base.v[P_TUNE_A] == doctest::Approx(0.25f));
+    REQUIRE(s.have_undo_base);               // the slot carries the pair
+
+    spky::Instrument inst2;
+    inst2.init(48000.f);
+    spky::flow::Flow fl2;
+    fl2.init(&inst2, 100.f);
+    REQUIRE(glow_restore(fl2, s));
+    REQUIRE(fl2.overlay() != nullptr);
+    CHECK(fl2.overlay()->has[P_TUNE_A]);
+    CHECK(fl2.overlay()->v[P_TUNE_A] == doctest::Approx(0.25f));
+    // The restored terrain is the one that was saved, base and all: an overlay
+    // that arrived after the wake would render a different terrain from the
+    // one the player heard.
+    CHECK(fl2.state().master == fl.state().master);
+}
+
+TEST_CASE("a payload with no base restores NO overlay, not an empty one") {
+    // The other half of "has_base false is not an all-zero patch", one level
+    // up from Place: a patch saved before this round has no base key, and a
+    // Flow that is already carrying one must be left playing its terrain as
+    // drawn rather than under a zeroed patch.
+    spky::Instrument inst;
+    inst.init(48000.f);
+    spky::flow::Flow fl;
+    fl.init(&inst, 100.f);
+    TerrainState house;
+    REQUIRE(decode_code(kHouseCode, house));
+    spky::flow::BaseOverlay ov;
+    ov.v[P_TUNE_A] = 0.25f; ov.has[P_TUNE_A] = true;
+    fl.wake(house, &ov);
+    REQUIRE(fl.overlay() != nullptr);
+
+    GlowSave bare;                           // as an older patch decodes
+    encode_code(house, bare.code, int(sizeof bare.code));
+    REQUIRE_FALSE(bare.have_base);
+    REQUIRE(glow_restore(fl, bare));
+    CHECK(fl.overlay() == nullptr);
 }

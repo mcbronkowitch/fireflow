@@ -19,6 +19,7 @@
 #include "generated_flow_panel.hpp"
 #include "glow_ui.hpp"
 #include "touch_pads.hpp"
+#include "flow_patch_bridge.hpp"   // encode_base/decode_base: the one encoding
 #include "sampler_ui.hpp"
 
 // The portable engine core -- the same headers the render host uses.
@@ -219,6 +220,13 @@ struct Glow : Module {
     spky::flow::TerrainState uiState;   // SET_TERRAIN, RESTORE
     spky::flow::TerrainState uiUndo;    // RESTORE
     bool uiHaveUndo = false;            // RESTORE
+    // RESTORE's two overlays. They ride the staged payload rather than being
+    // read off `pending`, because the live-module branch of dataFromJson never
+    // touches Flow -- see the LIVE-module note there.
+    spky::flow::BaseOverlay uiBase;     // RESTORE: the live place's base
+    bool uiHaveBase = false;
+    spky::flow::BaseOverlay uiUndoBase; // RESTORE: the undo slot's
+    bool uiHaveUndoBase = false;
     uint8_t uiMask = 0x3F;              // NEW_PARTIAL
     spkyvcv::Place uiPlaces[spkyvcv::kPadCount];   // SET_PLACES, RESTORE
     bool uiForget = false;              // SET_PLACES: the live pad is gone too
@@ -404,6 +412,16 @@ struct Glow : Module {
         json_t* root = json_object();
         json_object_set_new(root, "terrain", json_string(s.code));
         if (s.have_undo) json_object_set_new(root, "undo", json_string(s.undo));
+        // The LIVE place's hand-authored base, and the undo slot's. Written
+        // only when there is one: a patch with no base must come back with no
+        // base, and an absent key is how that is said. Same encoder as the
+        // places below and as the clipboard -- one format, one round trip.
+        if (s.have_base)
+            json_object_set_new(root, "base",
+                                json_string(spkyvcv::encode_base(s.base).c_str()));
+        if (s.have_undo_base)
+            json_object_set_new(root, "undoBase",
+                                json_string(spkyvcv::encode_base(s.undo_base).c_str()));
         json_object_set_new(root, "root", json_integer(rootOverride.load()));
         json_object_set_new(root, "menuScale", json_integer(menuScale.load()));
         json_object_set_new(root, "menuRoot", json_integer(menuRoot.load()));
@@ -429,6 +447,9 @@ struct Glow : Module {
             json_object_set_new(o, "code", json_string(p.code));
             json_object_set_new(o, "name", json_string(p.name));
             json_object_set_new(o, "note", json_string(p.note));
+            if (p.has_base)
+                json_object_set_new(o, "base",
+                                    json_string(spkyvcv::encode_base(p.base).c_str()));
             json_array_append_new(pl, o);
         }
         json_object_set_new(root, "places", pl);
@@ -531,6 +552,20 @@ struct Glow : Module {
                     if (json_is_string(t))
                         spkyvcv::set_label(uiPlaces[i].note, spkyvcv::kNoteCap,
                                            json_string_value(t));
+                    // The base is assigned UNCONDITIONALLY for a place the
+                    // patch actually holds, unlike the three fields above.
+                    // Those keep the live value when the key is missing so a
+                    // short "places" array leaves the rest alone; a base kept
+                    // that way would be the PREVIOUS place's base wearing the
+                    // loaded place's code and name. A patch written before
+                    // this key existed therefore comes back with no base at
+                    // all, which is exactly what it had.
+                    json_t* b = json_object_get(o, "base");
+                    spky::flow::BaseOverlay ov;
+                    uiPlaces[i].has_base =
+                        json_is_string(b) &&
+                        spkyvcv::decode_base(json_string_value(b), ov);
+                    uiPlaces[i].base = ov;   // empty when there is none
                 }
             }
         }
@@ -547,6 +582,20 @@ struct Glow : Module {
                 std::snprintf(s.undo, sizeof s.undo, "%s", json_string_value(u));
                 s.have_undo = true;
             }
+        }
+        // The live place's base and the undo slot's. A string that does not
+        // decode leaves have_base false -- the terrain then plays as drawn,
+        // which is the same answer a place with no base gets, and not a zeroed
+        // patch. No key at all (every patch written before this round) is the
+        // same answer again.
+        if (json_t* b = json_object_get(root, "base")) {
+            if (json_is_string(b))
+                s.have_base = spkyvcv::decode_base(json_string_value(b), s.base);
+        }
+        if (json_t* b = json_object_get(root, "undoBase")) {
+            if (json_is_string(b))
+                s.have_undo_base =
+                    spkyvcv::decode_base(json_string_value(b), s.undo_base);
         }
         // A patch written before this round may still carry a "lock" key. It
         // is ignored on purpose: the LOCK switch is the only thing that can
@@ -585,6 +634,10 @@ struct Glow : Module {
             uiState = plan.state;
             uiUndo = plan.undo;
             uiHaveUndo = plan.have_undo;
+            uiBase = plan.base;
+            uiHaveBase = plan.have_base;
+            uiUndoBase = plan.undo_base;
+            uiHaveUndoBase = plan.have_undo_base;
             // RESTORE applies the staged places too, rather than raising a
             // second op: uiOp is one slot, so a SET_PLACES here would be
             // overwritten by this line and the loaded twelve would vanish.
@@ -820,10 +873,16 @@ struct Glow : Module {
             case UiOp::PIN:         pinCurrent(uiPin); break;
             case UiOp::RESTORE:
                 applyPlaces();
-                flow.wake(uiState);
+                // Each overlay to the verb that owns its state, in flow.h's
+                // documented order -- wake() clears the slot, so the slot's
+                // own base goes in after it and not before. nullptr, never an
+                // empty overlay: a place with no base plays the terrain as
+                // drawn (flow.h, wake()).
+                flow.wake(uiState, uiHaveBase ? &uiBase : nullptr);
                 // No set_lock here: the push above already ran this tick, and
                 // it is the switch's answer. See glow_ui.hpp's GlowSave note.
-                flow.restore_undo(uiUndo, uiHaveUndo);
+                flow.restore_undo(uiUndo, uiHaveUndo,
+                                  uiHaveUndoBase ? &uiUndoBase : nullptr);
                 woken = true;
                 break;
             case UiOp::NONE: default: break;

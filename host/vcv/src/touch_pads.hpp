@@ -16,6 +16,18 @@
 #include "flow/flow_ids.h"
 #include "flow/terrain.h"
 #include "flow/terrain_code.h"
+// For encode_base() in export_pool_tsv below -- the ONE textual encoding of an
+// overlay (spec 2026-08-11 §6), shared with Glow's JSON and the clipboard. It
+// is included rather than restated here because a second encoder in a second
+// place is exactly the divergence the single round-trip test exists to catch.
+//
+// Checked before adding it: this does NOT make touch_pads.hpp pull a Rack type.
+// flow_patch_bridge.hpp is Rack-free by design, and so is the generated_panel.hpp
+// it now includes -- that header is plain enums, PODs and constexpr tables with
+// no #include of its own. What the include DOES bring is generated_panel.hpp's
+// `enum ParamId` into namespace spkyvcv, so a name like RATE_A is now visible
+// here; Glow's own panel enum lives in spkyvcv::glow and does not collide.
+#include "flow_patch_bridge.hpp"
 
 namespace spkyvcv {
 
@@ -139,11 +151,23 @@ struct Place {
     char code[spky::flow::kTerrainCodeLen + 1] = {};
     char name[kNameCap + 1] = {};
     char note[kNoteCap + 1] = {};
+    // The hand-authored base, if this place came from a Fireflow patch (spec
+    // 2026-08-11 §6). has_base false is NOT "an all-zero patch": wakePad
+    // passes nullptr for it, and Flow::wake(s, nullptr) plays the drawn
+    // terrain rather than the previous pad's base.
+    //
+    // BaseOverlay is 63 floats plus 63 bools, so a Place roughly triples and
+    // the twelve go from about 2 kB to about 6 kB. That is bounded, it is off
+    // the heap, and it is the price of the static_assert below staying true.
+    spky::flow::BaseOverlay base;
+    bool has_base = false;
 };
 
 static_assert(std::is_trivially_copyable<Place>::value,
               "Place is copied on the audio thread (Glow.cpp, UiOp::SET_PLACES); "
-              "it must not own heap memory");
+              "it must not own heap memory -- and that now includes its "
+              "BaseOverlay, which is why the overlay is a fixed array and not "
+              "a map of the parameters somebody actually set");
 
 enum class FaderTarget  { OFF, TEMPO, MASTER };
 enum class SwitchTarget { OFF, LOCK, SCALE };
@@ -215,7 +239,14 @@ inline const char* arch_name(int arch) {
 }
 
 // The pool.tsv rows for the twelve pads (parent spec §4.3), column order
-// code / arch / date / fp / pad / name / note.
+// code / arch / date / fp / pad / name / note / base.
+//
+// `base` is the hand-authored overlay in the ONE textual encoding this project
+// has (encode_base, flow_patch_bridge.hpp) -- the same string Glow's JSON and
+// the clipboard carry. It is a COLUMN and not a line: one line per place is
+// what makes this file readable by its own generator, and a base spilled onto
+// a line of its own would break that for every row after it. Empty when the
+// place has no base, which is not the same as a base of all zeroes.
 //
 // date, fp and note-if-unwritten stay EMPTY on purpose. The fingerprint WILL be
 // computed by a gate under tests/ -- that gate is an unbuilt deliverable of the
@@ -228,7 +259,7 @@ inline const char* arch_name(int arch) {
 //
 // Line ending is \n, not \r\n: the destination is a repo file.
 inline std::string export_pool_tsv(const Place* places, int n) {
-    std::string out = "code\tarch\tdate\tfp\tpad\tname\tnote\n";
+    std::string out = "code\tarch\tdate\tfp\tpad\tname\tnote\tbase\n";
     for (int i = 0; i < n; ++i) {
         const Place& p = places[i];
         spky::flow::TerrainState st;
@@ -245,6 +276,8 @@ inline std::string export_pool_tsv(const Place* places, int n) {
         out += p.name;
         out += '\t';
         out += p.note;
+        out += '\t';
+        if (p.has_base) out += encode_base(p.base);
         out += '\n';
     }
     return out;

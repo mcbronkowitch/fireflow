@@ -592,6 +592,21 @@ inline bool decode_into(const char* text, spky::flow::BaseOverlay& out) {
             if (std::strlen(kParams[p].name) == nlen &&
                 std::strncmp(kParams[p].name, q, nlen) == 0) { found = p; break; }
         if (found < 0) return false;
+        // The same is_base_rule() guard set_base() applies on the way IN, and
+        // for the same reason: taste.h owns the base/story partition, and one
+        // authority has to answer for both directions.
+        //
+        // Rejecting rather than dropping. An entry for a story-owned parameter
+        // would be ignored by generate() -- Task 1 made that unreachable by
+        // construction -- so nothing would break; it would just be a string
+        // that claims to carry more than it can, which is the failure this
+        // whole file is written against. This decoder is the entry point for
+        // hand-edited pool.tsv rows and for clipboard text, so it reads
+        // strings no converter wrote, and a person who typed P_DENSITY_A into
+        // a base column deserves a refusal rather than a base that quietly
+        // omits the one thing they added. It is also the rule the partial
+        // parse below already gets: all or nothing, never a plausible half.
+        if (!is_base_rule(found)) return false;
         const size_t vlen = size_t(semi - colon - 1);
         char val[64];
         if (vlen == 0 || vlen >= sizeof val) return false;
@@ -616,6 +631,8 @@ inline bool decode_into(const char* text, spky::flow::BaseOverlay& out) {
 // half-written, so a caller that ignores the return value gets no overlay
 // instead of a plausible wrong one. The empty string is VALID and decodes to no
 // overlay -- that is a place with no hand-authored patch, not a zeroed one.
+// A string naming a parameter that is not a base rule is REJECTED, not
+// filtered -- see the guard in decode_into.
 inline bool decode_base(const char* text, spky::flow::BaseOverlay& out) {
     spky::flow::BaseOverlay tmp;
     const bool ok = detail::decode_into(text, tmp);

@@ -116,10 +116,26 @@ struct RefuseFlash {
 // exactly one control (spec §4.3, "one control, one truth"), and a restore path
 // that reads as though it applied. Flow::locked()/set_lock() stay -- they are
 // the engine's, and controlTick is their caller.
+//
+// The two overlays (spec 2026-08-11 §6) are here for the same reason the undo
+// CODE is: the twelve places keep their own bases in Place, but the place
+// actually PLAYING does not live in that array -- Flow holds it -- and neither
+// does the undo slot's. Without these two a reload would restore every pad's
+// base and lose the one being heard, which is Task 3's bug one level up.
+//
+// They are BaseOverlay rather than the encoded string. The terrain is a char[]
+// because a code IS a string -- 24 characters, fixed, and the thing a player
+// copies. An overlay's string is variable-length and nothing reads it but the
+// JSON layer, so the struct stays a struct and Glow.cpp encodes at the edge,
+// through the same encode_base/decode_base the places and the clipboard use.
 struct GlowSave {
     char code[spky::flow::kTerrainCodeLen + 1] = {};
     char undo[spky::flow::kTerrainCodeLen + 1] = {};
     bool have_undo = false;
+    spky::flow::BaseOverlay base;             // the live place's base
+    bool have_base = false;
+    spky::flow::BaseOverlay undo_base;        // the undo slot's own base
+    bool have_undo_base = false;
 };
 
 inline GlowSave glow_capture(const spky::flow::Flow& fl) {
@@ -127,6 +143,21 @@ inline GlowSave glow_capture(const spky::flow::Flow& fl) {
     spky::flow::encode_code(fl.state(), s.code, int(sizeof s.code));
     spky::flow::encode_code(fl.undo_state(), s.undo, int(sizeof s.undo));
     s.have_undo = fl.can_undo();
+    if (const spky::flow::BaseOverlay* ov = fl.overlay()) {
+        s.base = *ov;
+        s.have_base = true;
+    }
+    // The SLOT's overlay comes from the same accessor, and that is a reading of
+    // Flow rather than a shortcut. Flow exposes no undo_overlay() because the
+    // slot has never had one of its own to expose: wake() and begin_blend()
+    // both set _undo_overlay FROM _overlay, and undo() swaps two values that
+    // both descend from the same wake(). wake() is the only injector of a
+    // different overlay and it writes both. So the pair cannot diverge, and if
+    // some future path ever makes it -- an accessor here, not a second rule in
+    // the restore path below, is the fix. The restore side already honours a
+    // divergence, because a patch can hold two different strings.
+    s.undo_base = s.base;
+    s.have_undo_base = s.have_base;
     return s;
 }
 
@@ -139,6 +170,13 @@ struct GlowRestorePlan {
     spky::flow::TerrainState state;
     spky::flow::TerrainState undo;
     bool have_undo = false;
+    // Carried through untouched: an overlay has no encoded form to validate at
+    // this stage -- Glow.cpp already decoded it, and a string that did not
+    // decode arrived here as "no base" rather than as a bad one.
+    spky::flow::BaseOverlay base;
+    bool have_base = false;
+    spky::flow::BaseOverlay undo_base;
+    bool have_undo_base = false;
 };
 
 // Decodes and validates a saved payload into `out`. Returns false and
@@ -152,6 +190,10 @@ inline bool glow_restore_plan(const GlowSave& s, GlowRestorePlan& out) {
     out.state = st;
     out.undo = un;
     out.have_undo = have;
+    out.base = s.base;
+    out.have_base = s.have_base;
+    out.undo_base = s.undo_base;
+    out.have_undo_base = s.have_undo_base;
     return true;
 }
 
@@ -160,11 +202,17 @@ inline bool glow_restore_plan(const GlowSave& s, GlowRestorePlan& out) {
 // some other instrument. The order is the one flow.h documents: wake clears
 // the undo slot, so restoring it comes last. The lock is not applied here --
 // see the note on GlowSave; controlTick owns it.
+//
+// Each overlay goes to the verb that owns the state it belongs to, and a place
+// with no base passes nullptr rather than an empty overlay: flow.h is explicit
+// that nullptr CLEARS, and "a zeroed patch" is a different instrument from
+// "the terrain as drawn".
 inline bool glow_restore(spky::flow::Flow& fl, const GlowSave& s) {
     GlowRestorePlan plan;
     if (!glow_restore_plan(s, plan)) return false;
-    fl.wake(plan.state);
-    fl.restore_undo(plan.undo, plan.have_undo);
+    fl.wake(plan.state, plan.have_base ? &plan.base : nullptr);
+    fl.restore_undo(plan.undo, plan.have_undo,
+                    plan.have_undo_base ? &plan.undo_base : nullptr);
     return true;
 }
 
