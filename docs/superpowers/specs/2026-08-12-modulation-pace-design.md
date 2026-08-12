@@ -364,7 +364,7 @@ unreachable" *because* every macro has a story, and asks to be re-read if that
 invariant moves. This design moves it; that comment is rewritten in the same
 commit.
 
-### 4.4 Weather, and what NEW on a marked PACE knob does
+### 4.4 Weather, and what a reroll of PACE does
 
 `weather_of` already skips M_MOTION (`flow.cpp:297`). **M_PACE gets the same
 exclusion**: the weather offset is up to ±0.10 in knob units, and in this
@@ -377,15 +377,28 @@ The exclusion also keeps §2's exact-no-op claim true, since that depends on
 that margin at one order of magnitude, not a robust dependency, so it is a
 supporting reason and must not become a plan's primary justification.)
 
-**`new_partial(1u << M_PACE)` still fires and is not a no-op.** The weather
-counter is the *sum* of all six macro counters (`terrain.h:47-51`), so
+**`new_partial(1u << M_PACE)` is not a no-op, and loses its last caller.** The
+weather counter is the *sum* of all six macro counters (`terrain.h:47-51`), so
 rerolling a story-less PACE redraws the entire weather layer — which drives the
-other five macros — plus a 6 s blend and a duck schedule. Reachable by accident:
-`gesture.h:76-82` marks a macro after `kMarkDelta` (0.01) of travel during a
-hold and `Glow.cpp:971` fires `new_partial(uiMask)` on release, so nudging PACE
-while holding NEW rerolls everyone else's weather. **The plan must rule:** either
-M_PACE is excluded from the mark mask, or the behaviour is documented as
-intended. It cannot be left to fall out.
+other five macros — plus a 6 s blend and a duck schedule. It does nothing at all
+to PACE, which has no story to redraw.
+
+Two callers reach `new_partial` today, and only one of them can name a single
+macro. A pad hold fires `new_partial(0x3F)` (`Glow.cpp:1028`) — all six at once,
+so the weather is redrawn there regardless and PACE's presence in the mask
+changes nothing. The other is the Workshop menu's "Reroll one macro"
+(`Glow.cpp:1357-1365`), one entry per macro, `1u << i`.
+
+**Ruling: PACE is skipped in that submenu.** An entry that redraws everyone
+else's weather under the label "PACE" does something other than what it says.
+With the skip, `new_partial(1u << M_PACE)` has no caller and the question is
+closed rather than answered.
+
+*(Revision 3 of this section asked the plan to rule on whether M_PACE should be
+excluded from a gesture mark mask. That question was built on dead code: the
+Simple Touch 2 surface removed Glow's NEW button and its `GestureBridge` on
+2026-08-11, and `engine/flow/gesture.h` now has no caller outside `tests/`. The
+hold-and-turn gesture it described does not exist in the shipping module.)*
 
 ### 4.5 The four orphaned parameters
 
@@ -765,3 +778,7 @@ flow commit, then the bridge, then the panel commit.
   which has had no Fireflow control since 2026-08-09 (§4.5).
 - **r2:** `terrain.cpp:160` cited for the stream key; the site is
   `terrain.cpp:382`, and `flow_params.h:107`'s own comment is stale.
+- **r3:** §4.4 asked the plan to rule on a gesture mark mask. The gesture it
+  described was removed from Glow on 2026-08-11 with the NEW button, and
+  `engine/flow/gesture.h` has had no caller outside `tests/` since. The real
+  question was one Workshop menu entry, and §4.4 now rules on that instead.

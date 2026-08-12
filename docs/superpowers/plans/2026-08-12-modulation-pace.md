@@ -1276,7 +1276,7 @@ Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 ### Task 10: Glow's panel and label
 
 **Files:**
-- Modify: `host/vcv/res/gen_flow_panel.py:233,238`, `host/vcv/src/Glow.cpp:46,74`
+- Modify: `host/vcv/res/gen_flow_panel.py:233,238`, `host/vcv/src/Glow.cpp:46,74,1357-1365`
 - Regenerate: `host/vcv/src/generated_flow_panel.hpp`, `res/Glow.svg`
 - Modify: `host/vcv/res/test_flow_panel.py:40,48,79,84`, `host/vcv/README.md:528,541`
 - Modify: `docs/superpowers/specs/2026-08-11-glow-touch-2-panel-design.md:212`
@@ -1294,11 +1294,35 @@ python3 -m pytest res/test_flow_panel.py -q
 
 `res/Glow.svg` must come back byte-identical — the macro knobs print no caption.
 
-- [ ] **Step 3: Update the live hardware assignment**
+- [ ] **Step 3: Skip PACE in the Workshop's "Reroll one macro" submenu**
+
+Spec §4.4. PACE has no story, so `new_partial(1u << M_PACE)` does nothing to PACE and instead redraws the whole weather layer, because the weather counter is the sum of all six macro counters (`terrain.h:47-51`). An entry that does something other than what its label says gets left out.
+
+In `Glow.cpp`'s `createSubmenuItem("Reroll one macro", ...)` loop:
+
+```cpp
+for (int i = 0; i < spky::flow::MACRO_COUNT; ++i) {
+    // PACE owns no story -- rerolling it cannot change PACE, and would
+    // only redraw every other macro's weather (the weather counter is
+    // the sum of all six). A menu entry that does something other than
+    // its label says is worse than a missing one. Spec 2026-08-12 §4.4.
+    if (i == spky::flow::M_PACE) continue;
+    sub->addChild(createMenuItem(kMacroNames[i], "", [m, i]() {
+        m->uiMask = uint8_t(1u << i);
+        m->uiOp = Glow::UiOp::NEW_PARTIAL;
+    }));
+}
+```
+
+The pad path (`Glow.cpp:1028`, `new_partial(0x3F)`) is deliberately **not** touched: it rerolls all six anyway, so the weather is redrawn there whether PACE is in the mask or not.
+
+No test guards this — `test_flow_panel.py` reads the generator, not `Glow.cpp`, and the menu is Rack-widget code the headless doctest suite cannot reach. Verify by eye in Rack: the submenu lists five macros, and PACE is not among them.
+
+- [ ] **Step 4: Update the live hardware assignment**
 
 `docs/superpowers/specs/2026-08-11-glow-touch-2-panel-design.md:212` assigns DIRT to trim knob `S34` on the shipping Touch-2 panel. That is a live assignment, not history — update it. The older flow-machine and taste-structure specs stay as they are, per the repo's convention on finished decisions.
 
-- [ ] **Step 4: Build the plugin and commit**
+- [ ] **Step 5: Build the plugin and commit**
 
 ```bash
 ./build-local.sh
@@ -1458,6 +1482,8 @@ Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 
 **Spec coverage.** §2 → Task 2. §2.1 → Tasks 3 and 7. §3/§3.1 → Task 5. §3.2 → Task 4. §3.3 → Task 6 (FLUX) and Task 12 step 2 (the BBD/sampler/envelope listening checks). §4.1–4.6 → Task 8. §5 (the map) → Task 8 step 9. §6 (the seven carriers) → Task 5 step 3 (`_pace`), Task 8 step 7 (`_knob`), Task 9 (`FireflowPatch`), Task 11 steps 1 and 4 (`INIT_DEFAULTS`, bench). §7 → Tasks 10 and 11. §8 → the gates in each task. §8.1 → Task 3 step 5, Task 8 step 8, Task 11 step 5. §8.2 → Task 1. §8.3 → the RED steps in Tasks 1, 4, 5, 7. §9 ordering → task order, with the two atomic commits at Tasks 8 and 11.
 
-**Known gaps, deliberate.** §4.4's ruling on whether `M_PACE` is excluded from the gesture mark mask is **not** assigned to a task — it needs the owner's ear on whether nudging PACE during a NEW hold should reroll the weather. Raise it before Task 8 and fold the answer into that task. Task 12's listening checks produce a WAV, not a gate; they are for the owner, not for CI.
+**Known gaps, deliberate.** Task 12's listening checks produce a WAV, not a gate; they are for the owner, not for CI. Task 10 Step 3 has no automated guard either, for the reason stated there: it is Rack-widget code the headless suite cannot reach.
+
+§4.4's reroll question is closed, not open. The owner ruled on 2026-08-12 that PACE is skipped in the Workshop submenu (Task 10, Step 3). The spec's earlier framing — a ruling on a gesture mark mask — was written against `engine/flow/gesture.h`, which has had no caller outside `tests/` since Glow's NEW button was removed on 2026-08-11; there is no hold-and-turn gesture left to rule on.
 
 **Type consistency checked:** `pace_mult(float)->float` (Task 2) is consumed by `Instrument::set_pace` (Task 5) and the host tooltip (Task 11). `Transport::clock_pulse(float)` / `set_pace_anchor()` (Task 4) are called from `Instrument::clock_pulse` and `set_pace` (Task 5). `Flux::set_rhythm_pace(float)` (Task 6) is called from `_apply_tempo` (Task 5) — Task 5 must be amended by Task 6, which its step 3 states. `lane_wraps_for_test(int,int)` (Task 7) is used only in Task 7.
