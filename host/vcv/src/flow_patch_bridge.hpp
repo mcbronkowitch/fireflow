@@ -41,99 +41,110 @@
 #include "flow/flow_params.h"
 #include "flow/taste.h"
 #include "flow/terrain.h"
+#include "generated_panel.hpp"
 #include "mod/song_ladder.h"
 #include "parts/engine_iface.h"
 
 namespace spkyvcv {
 
 // ---------------------------------------------------------------------------
-// The index mirror
+// The index names
 // ---------------------------------------------------------------------------
 //
-// generated_panel.hpp's `enum ParamId`, transcribed. It is NOT included here:
-// it is generated from res/gen_panel.py and drags Rack types in with it, which
-// would cost this header its headless build. The mirror is made safe by a
-// static_assert per constant in Fireflow.cpp (Task 8) -- that assert, not this
-// comment and not any plan text, is the authority on these numbers. Counted
-// from the enum at flow-patch-transfer HEAD: part A occupies [0, 20), part B
-// [20, 40), and 28 appended globals follow, so NUM_PARAMS == 68.
-inline constexpr int kFfPartStride = 20;
+// ALIASES OF generated_panel.hpp's `enum ParamId`, not a transcription of it.
+// The generated header is the authority on these numbers, so this file asks it
+// rather than restating it: a name bound to `ENGINE_A` cannot drift from
+// `ENGINE_A` the way a hand-copied `17` can, and there is nothing left for a
+// static_assert to check.
+//
+// Including it costs nothing this file was protecting. `generated_panel.hpp`
+// has no #include of its own and names no Rack type -- it is plain enums, PODs
+// and constexpr tables -- and `tests/test_seed_audition_init.cpp` already
+// includes it in this same headless suite. The only real cost is that its
+// enumerators land in `spkyvcv`, which is a cost `Fireflow.cpp` and that test
+// already pay.
+//
+// The kFf* names still exist rather than the raw enumerators being used
+// directly, for one reason: at a call site, `ENGINE_A` and `MOD_A` read as
+// engine ids and modulation, which is exactly the confusion the map warns
+// about. `kFfEngineA` and `kFfModA` read as panel indices.
+inline constexpr int kFfPartStride = PART_STRIDE;
 
-inline constexpr int kFfRateA    = 0;
-inline constexpr int kFfShapeA   = 1;
-inline constexpr int kFfDensityA = 2;
-inline constexpr int kFfSmoothA  = 3;
-inline constexpr int kFfRangeA   = 4;
-inline constexpr int kFfMelodyA  = 5;
-inline constexpr int kFfModA     = 6;    // prints "MOD", drives P_DEPTH_A
-inline constexpr int kFfTuneA    = 7;
-inline constexpr int kFfAttackA  = 8;
-inline constexpr int kFfDecayA   = 9;
-inline constexpr int kFfResA     = 10;
-inline constexpr int kFfSubA     = 11;
-inline constexpr int kFfSourceA  = 12;
-inline constexpr int kFfFluxA    = 13;
-inline constexpr int kFfGritA    = 14;
-inline constexpr int kFfCompA    = 15;   // prints "LVL", drives P_COMP_A
-inline constexpr int kFfStepsA   = 16;
-inline constexpr int kFfEngineA  = 17;
-inline constexpr int kFfDetuneA  = 18;
-inline constexpr int kFfSongA    = 19;
+inline constexpr int kFfRateA    = RATE_A;
+inline constexpr int kFfShapeA   = SHAPE_A;
+inline constexpr int kFfDensityA = DENSITY_A;
+inline constexpr int kFfSmoothA  = SMOOTH_A;
+inline constexpr int kFfRangeA   = RANGE_A;
+inline constexpr int kFfMelodyA  = MELODY_A;
+inline constexpr int kFfModA     = MOD_A;      // prints "MOD", drives P_DEPTH_A
+inline constexpr int kFfTuneA    = TUNE_A;
+inline constexpr int kFfAttackA  = ATTACK_A;
+inline constexpr int kFfDecayA   = DECAY_A;
+inline constexpr int kFfResA     = RES_A;
+inline constexpr int kFfSubA     = SUB_A;
+inline constexpr int kFfSourceA  = SOURCE_A;
+inline constexpr int kFfFluxA    = FLUX_A;
+inline constexpr int kFfGritA    = GRIT_A;
+inline constexpr int kFfCompA    = COMP_A;     // prints "LVL", drives P_COMP_A
+inline constexpr int kFfStepsA   = STEPS_A;
+inline constexpr int kFfEngineA  = ENGINE_A;
+inline constexpr int kFfDetuneA  = DETUNE_A;
+inline constexpr int kFfSongA    = SONG_A;
 
-inline constexpr int kFfRateB    = 20;
-inline constexpr int kFfShapeB   = 21;
-inline constexpr int kFfDensityB = 22;
-inline constexpr int kFfSmoothB  = 23;
-inline constexpr int kFfRangeB   = 24;
-inline constexpr int kFfMelodyB  = 25;
-inline constexpr int kFfModB     = 26;
-inline constexpr int kFfTuneB    = 27;
-inline constexpr int kFfAttackB  = 28;
-inline constexpr int kFfDecayB   = 29;
-inline constexpr int kFfResB     = 30;
-inline constexpr int kFfSubB     = 31;
-inline constexpr int kFfSourceB  = 32;
-inline constexpr int kFfFluxB    = 33;
-inline constexpr int kFfGritB    = 34;
-inline constexpr int kFfCompB    = 35;   // prints "LVL", drives P_COMP_B
-inline constexpr int kFfStepsB   = 36;
-inline constexpr int kFfEngineB  = 37;
-inline constexpr int kFfDetuneB  = 38;
-inline constexpr int kFfSongB    = 39;   // prints "SONG", drives FORM *and* SONG
+inline constexpr int kFfRateB    = RATE_B;
+inline constexpr int kFfShapeB   = SHAPE_B;
+inline constexpr int kFfDensityB = DENSITY_B;
+inline constexpr int kFfSmoothB  = SMOOTH_B;
+inline constexpr int kFfRangeB   = RANGE_B;
+inline constexpr int kFfMelodyB  = MELODY_B;
+inline constexpr int kFfModB     = MOD_B;
+inline constexpr int kFfTuneB    = TUNE_B;
+inline constexpr int kFfAttackB  = ATTACK_B;
+inline constexpr int kFfDecayB   = DECAY_B;
+inline constexpr int kFfResB     = RES_B;
+inline constexpr int kFfSubB     = SUB_B;
+inline constexpr int kFfSourceB  = SOURCE_B;
+inline constexpr int kFfFluxB    = FLUX_B;
+inline constexpr int kFfGritB    = GRIT_B;
+inline constexpr int kFfCompB    = COMP_B;     // prints "LVL", drives P_COMP_B
+inline constexpr int kFfStepsB   = STEPS_B;
+inline constexpr int kFfEngineB  = ENGINE_B;
+inline constexpr int kFfDetuneB  = DETUNE_B;
+inline constexpr int kFfSongB    = SONG_B;     // prints "SONG", drives FORM *and* SONG
 
 // Appended globals -- NOT part-strided. Indexing these by kFfPartStride is the
 // bug Fireflow.cpp guards against with an explicit ternary at every one of
 // their push sites; this file does the same.
-inline constexpr int kFfMorph     = 40;
-inline constexpr int kFfTempo     = 41;
-inline constexpr int kFfCouple    = 42;  // prints "FREE|GRID"; also the sync zone
-inline constexpr int kFfScale     = 43;
-inline constexpr int kFfDrift     = 44;
-inline constexpr int kFfRevSize   = 45;
-inline constexpr int kFfRevDecay  = 46;
-inline constexpr int kFfRevTone   = 47;
-inline constexpr int kFfRevDiff   = 48;
-inline constexpr int kFfChoke     = 49;
-inline constexpr int kFfFiltA     = 50;
-inline constexpr int kFfFiltB     = 51;
-inline constexpr int kFfTide      = 52;
-inline constexpr int kFfFluxRateA = 53;
-inline constexpr int kFfFluxRateB = 54;
-inline constexpr int kFfFluxFbA   = 55;
-inline constexpr int kFfFluxFbB   = 56;
-inline constexpr int kFfColorA    = 57;
-inline constexpr int kFfColorB    = 58;
-inline constexpr int kFfLinkA     = 59;
-inline constexpr int kFfLinkB     = 60;
-inline constexpr int kFfStagesA   = 61;
-inline constexpr int kFfStagesB   = 62;
-inline constexpr int kFfRecA      = 63;
-inline constexpr int kFfRecB      = 64;
-inline constexpr int kFfRevMixA   = 65;
-inline constexpr int kFfRevMixB   = 66;
-inline constexpr int kFfShuffle   = 67;
+inline constexpr int kFfMorph     = MORPH;
+inline constexpr int kFfTempo     = TEMPO;
+inline constexpr int kFfCouple    = COUPLE;    // prints "FREE|GRID"; also the sync zone
+inline constexpr int kFfScale     = SCALE;
+inline constexpr int kFfDrift     = DRIFT;
+inline constexpr int kFfRevSize   = REV_SIZE;
+inline constexpr int kFfRevDecay  = REV_DECAY;
+inline constexpr int kFfRevTone   = REV_TONE;
+inline constexpr int kFfRevDiff   = REV_DIFF;
+inline constexpr int kFfChoke     = CHOKE;
+inline constexpr int kFfFiltA     = FILT_A;
+inline constexpr int kFfFiltB     = FILT_B;
+inline constexpr int kFfTide      = TIDE;
+inline constexpr int kFfFluxRateA = FLUXRATE_A;
+inline constexpr int kFfFluxRateB = FLUXRATE_B;
+inline constexpr int kFfFluxFbA   = FLUXFB_A;
+inline constexpr int kFfFluxFbB   = FLUXFB_B;
+inline constexpr int kFfColorA    = COLOR_A;
+inline constexpr int kFfColorB    = COLOR_B;
+inline constexpr int kFfLinkA     = LINK_A;
+inline constexpr int kFfLinkB     = LINK_B;
+inline constexpr int kFfStagesA   = STAGES_A;
+inline constexpr int kFfStagesB   = STAGES_B;
+inline constexpr int kFfRecA      = REC_A;
+inline constexpr int kFfRecB      = REC_B;
+inline constexpr int kFfRevMixA   = REV_MIX_A;
+inline constexpr int kFfRevMixB   = REV_MIX_B;
+inline constexpr int kFfShuffle   = SHUFFLE;
 
-inline constexpr int kFireflowParamCount = 68;   // == NUM_PARAMS
+inline constexpr int kFireflowParamCount = NUM_PARAMS;
 
 // ---------------------------------------------------------------------------
 // The patch, the report
@@ -285,6 +296,15 @@ inline TransferReport to_flow_base(const FireflowPatch& fp) {
         return r;
     }
 
+    // COUPLE's zone split, read early because it decides more than P_COUPLE:
+    // it is the only thing in Fireflow that drives set_sync, so it is also
+    // P_MODE, and P_MODE is what tells the per-deck RANGE note below whether
+    // the BBD cap can apply at all. Both writes happen further down, in the
+    // Global block, where the map's rows for them are.
+    static constexpr float kCoupleZoneSplit = 0.5f;
+    const float coupleKnob = fp.p[kFfCouple];
+    const bool  grid = coupleKnob >= kCoupleZoneSplit;   // true -> STEP/synced
+
     detail::set_base(r, P_ENGINE_A, float(eng[0]));
     detail::set_base(r, P_ENGINE_B, float(eng[1]));
     for (int p = 0; p < 2; ++p) {
@@ -357,11 +377,16 @@ inline TransferReport to_flow_base(const FireflowPatch& fp) {
         // engine has a set_depth naming collision besides (spotykach-gotchas).
         detail::set_base(r, depth, detail::pp(fp, kFfModA,    p));
 
-        if (eng[p] == spky::ENGINE_BBD)
+        // The cap is FLOW-mode only (flow.cpp:555-559 tests !_mode_now), and
+        // this transfer has already decided the mode from COUPLE's zone -- so
+        // on a patch that converts to STEP the cap cannot apply and the note
+        // would be false.
+        if (eng[p] == spky::ENGINE_BBD && !grid)
             sink.note(rng,
-                "carried in full, but a BBD deck in FLOW mode has its RANGE "
-                "capped at runtime (kBbdFlowRangeMax, flow.cpp:555-559). The "
-                "stored value stands; what is heard may be lower");
+                "carried in full, but this deck converts to a BBD in FLOW "
+                "mode, where RANGE is capped at runtime (kBbdFlowRangeMax, "
+                "flow.cpp:555-559). The stored value stands; what is heard may "
+                "be lower");
 
         // --- Envelope and voice colour ---
         const int atk = p ? P_ATTACK_B : P_ATTACK_A;
@@ -430,12 +455,9 @@ inline TransferReport to_flow_base(const FireflowPatch& fp) {
     // --- Global ---
     detail::set_base(r, P_MORPH, fp.p[kFfMorph]);
 
-    // COUPLE runs two worlds on one axis; the zone split is also the only
-    // thing in Fireflow that drives set_sync. Store the RESCALED half-zone
-    // value, because that is what Fireflow handed to set_couple.
-    const float coupleKnob = fp.p[kFfCouple];
-    static constexpr float kCoupleZoneSplit = 0.5f;
-    const bool grid = coupleKnob >= kCoupleZoneSplit;
+    // COUPLE runs two worlds on one axis (the zone split read above). Store the
+    // RESCALED half-zone value, because that is what Fireflow handed to
+    // set_couple -- the knob position itself is not a couple amount.
     detail::set_base(r, P_COUPLE,
         grid ? (coupleKnob - kCoupleZoneSplit) / (1.f - kCoupleZoneSplit)
              : coupleKnob / kCoupleZoneSplit);
@@ -473,13 +495,20 @@ inline TransferReport to_flow_base(const FireflowPatch& fp) {
         "both) has nowhere to go -- P_FORM_A and P_SONG_A are story-owned in "
         "flow, not base rules. Only deck B's structure transfers");
 
+    // flow has 63 parameters and 38 base rules, so 25 are story-owned. Five of
+    // those (FORM_A, SONG_A, STEPS_A, SUB_A, COMP_A) have a Fireflow control of
+    // their own and are named individually above, because a knob the owner
+    // actually turned deserves better than a bucket. These are the other 20 --
+    // and the list is the whole 20, per deck where the parameter is per deck.
     sink.note(kNoteGeneral,
         "NOT TRANSFERABLE AT ALL (no slot, not \"transferred with loss\"): the "
-        "25 story-owned parameters -- FILT, COLOR, VARY, DENSITY, GRIT (its "
-        "mode as well as its mix), REVMIX, DRIFT, TIDE, DRIVE and the reverb "
-        "shape -- plus everything outside flow's parameter set entirely: "
-        "sample content, SOURCE, FLUX RATE and FEEDBACK, DETUNE, STAGES, REC "
-        "and the excitation bus");
+        "20 remaining story-owned parameters -- DENSITY, COLOR, VARY, FILT, "
+        "GRIT (its mode as well as its mix) and REVMIX, each on both decks, "
+        "plus DRIFT, TIDE, DRIVE and the reverb shape (SIZE, DECAY, TONE, "
+        "SMEAR, MOD). The other five story-owned parameters have Fireflow "
+        "controls of their own and are named above. Outside flow's parameter "
+        "set entirely, and equally lost: sample content, SOURCE, FLUX RATE and "
+        "FEEDBACK, DETUNE, STAGES, REC and the excitation bus");
 
     sink.finish();
     return r;
