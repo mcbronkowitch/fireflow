@@ -20,31 +20,52 @@ struct Span { float lo, hi; };
 // ENGINE/SCALE/ROOT/FORM/SONG/STEPS are discrete). steps==0 -> continuous.
 // The RES ceiling 0.75 encodes the by-ear resonance cap as a hard limit.
 //
-// Verified against the real headers (not the brief's placeholder guesses):
+// Verified against the real headers (not the brief's placeholder guesses).
+// These ranges are ENGINE facts. Where a bullet mentions Fireflow at all it is
+// as corroboration, never as the source -- a Fireflow control can be deleted
+// or merged (it has been) without any of these numbers moving.
+//
+// THE AUTHORITY FOR THE Fireflow <-> flow CORRESPONDENCE IS
+// docs/flow-fireflow-param-map.md -- one row per base-rule parameter, each
+// either mapped with its conversion or marked UNREACHABLE with a reason.
+// Do not re-derive a mapping here, and do not let this comment grow one.
+//
 // - ENGINE: engine/parts/engine_iface.h's EngineId runs
 //   ENGINE_TEST_TONE=0 .. ENGINE_BBD=5, ENGINE_COUNT=6 -- so 0..5, 6 steps,
 //   not 0..4/5. apply_param() below hands EngineId(i) straight to
 //   Instrument::set_engine(), so the table must cover the real enum, not
 //   host/vcv/src/Fireflow.cpp's UI remap (which drops ENGINE_TEST_TONE and
 //   renumbers the rest for its own knob -- a host-side translation, not the
-//   engine's id space).
+//   engine's id space). Re-verified 2026-08-12: still true, and the remap is
+//   Fireflow.cpp:649-656.
 // - FORM: engine/mod/song_form.h uses Principle from engine/mod/phrase_gen.h,
 //   whose kCount is 5 (TwoMotif, OneMotif, Hierarchical, CallResponse,
-//   Ostinato) -- so 0..4, 5 steps, not 0..3/4. Matches Fireflow.cpp's own
-//   FORM_A/B configSwitch(0.f, 4.f, ..., 5 labels).
+//   Ostinato) -- so 0..4, 5 steps, not 0..3/4. FORM HAS NO Fireflow CONTROL:
+//   the 2026-08-09 control reduction deleted the FORM_A/B configSwitch this
+//   comment used to cite and folded FORM into the SONG knob, which now walks
+//   a curated 14-rung ladder through the 5x7 (Principle, SongMode) grid
+//   (engine/mod/song_ladder.h, song_ladder_at()) -- 14 of the 35 pairs, all
+//   five Principle values among them. The range above is unaffected: it is
+//   the engine's, and the ladder cannot reach outside it.
 // - SONG: engine/mod/song_form.h's SongMode has kCount 7 (AAAB, ABAB, ABBB,
 //   Build, Rotate, Mirror, Off) and Instrument::set_song() clamps through
-//   clamp_song() to 0..kCount-1 -- so 0..6, 7 steps, not 0..3/4. Matches
-//   Fireflow.cpp's own SONG_A/B configSwitch(0.f, 6.f, ..., 7 labels).
-// - STEPS: host/vcv/src/Fireflow.cpp configures STEPS_A/B as
-//   configParam(c.id, 2.f, 16.f, ...) -- matches the brief's 2..16, 15 steps
-//   exactly, no change needed.
+//   clamp_song() to 0..kCount-1 -- so 0..6, 7 steps, not 0..3/4. Fireflow's
+//   own SONG_A/B is NO LONGER a 0..6 configSwitch: since the same control
+//   reduction it is configSwitch(0.f, kSongLadderCount-1 == 13.f, ..., 14
+//   labels) (Fireflow.cpp:396-398) and its value is a LADDER RUNG, not a
+//   SongMode. The engine range stands; the corroboration did not.
+// - STEPS: 2..16, 15 steps -- the flow layer's own floor, enforced in
+//   Flow::push_mode_and_steps (flow.cpp:400-401). Fireflow does NOT match
+//   it: STEPS_A/B is configParam(c.id, 0.f, 16.f, init, "Steps")
+//   (Fireflow.cpp:411), because 0 is how a Fireflow deck says "STEP off"
+//   (set_step(p, steps > 0, steps), Fireflow.cpp:843). In flow that state is
+//   P_MODE, not a step count, which is why the ranges differ on purpose.
 // - LINK: NOT unipolar's brief placeholder (-1..1). Flux::set_link()
-//   (engine/fx/flux.cpp:128) clamps to [0,1], and Fireflow.cpp's own
-//   LINK_A/B configParam is 0..1 (Fireflow.cpp:323-324) -- the bipolar
-//   surface was retired in a deliberate migration (see the legacy-LINK
-//   patch-load remap around Fireflow.cpp:869-903). So 0..1 continuous,
-//   not -1..1.
+//   (engine/fx/flux.cpp:126-128) clamps to [0,1], and Fireflow.cpp's own
+//   LINK_A/B configParam is 0..1 (Fireflow.cpp:334-335) -- the bipolar
+//   surface was retired in a deliberate migration (see migrate_legacy_link()
+//   at the patch-load site, Fireflow.cpp:1074). So 0..1 continuous, not
+//   -1..1. Re-verified 2026-08-12; only the line numbers had drifted.
 #define SPKY_FLOW_PARAMS(X) \
   X(P_ENGINE_A,   0.f, 5.f,  6)  X(P_ENGINE_B,   0.f, 5.f,  6) \
   X(P_SCALE,      0.f, 12.f, 13) X(P_ROOT,       0.f, 11.f, 12) \

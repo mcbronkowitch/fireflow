@@ -389,8 +389,11 @@ get built against it. This validates the design; it does not block it.
 
 ## 11. Scope
 
-In: the overlay in `engine/flow/`, the converter header, the two menu items,
-`Place`, `pool.tsv`, Glow's JSON, and the stale comment in `flow_params.h`.
+In: the overlay in `engine/flow/`, §7's wish filters (`roles_of()`,
+`tonality_of()`, `mode_of()` beside the existing `arch_of()`), the converter
+header, the two menu items, `Place`, `pool.tsv`, Glow's JSON, the stale comment
+in `flow_params.h`, and `docs/flow-fireflow-param-map.md` — the authoritative
+parameter map the converter implements.
 
 Out: the `kCarrierEngine` widening (§10), the firmware — `shell/` has no flow
 code at all yet, so the format reaches it whenever the flow layer does, and not
