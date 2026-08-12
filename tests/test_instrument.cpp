@@ -6,6 +6,7 @@
 #include "instrument.h"
 #include "fx/reverb.h"
 #include "mod/super_modulator.h"
+#include "mod/divisions.h"
 using namespace spky;
 
 TEST_CASE("instrument: init and render a block without NaNs") {
@@ -1629,15 +1630,20 @@ TEST_CASE("pace: set_tempo_bpm does not compound the pace factor") {
     CHECK(in.transport_bpm_for_test() == doctest::Approx(400.f));
 }
 
-TEST_CASE("pace: wraps per unit time follow the commanded rate, through the whole stack") {
+TEST_CASE("pace: turns per unit time follow the commanded rate, through the whole stack") {
     // Every rate observer in this engine (lane_rate_hz_for_test included)
     // reports the COMMANDED rate, which stays perfectly correct while the
     // phase accumulator is frozen solid (lane.h's _phase comment on the
     // measured float stalls) -- so a gate built on Hz alone would pass a
     // stalled lane green. This one counts real motion, and drives it
     // through Instrument::process() rather than a bare ModLane (Task 3's
-    // gate, tests/test_lane.cpp), so a missing set_pace fan-out or a
-    // grid-servo fight shows up too, not just a lane exercised in isolation.
+    // gate, tests/test_lane.cpp), so a grid-servo fight would show up too,
+    // not just a lane exercised in isolation. It does NOT, by itself, catch
+    // a missing set_pace fan-out (instrument.cpp): _rate_hz and _phase_inc
+    // both derive from the SAME _base_hz (super_modulator.cpp), so a broken
+    // fan-out moves the observed hz and the real accumulation together --
+    // the independent hz-vs-pace_mult cross-check below is what closes
+    // that hole.
     //
     // It counts TURNS (wraps + the still-fractional remainder of phase at
     // the end of the window), not raw wraps. Raw wraps are integers, and at
@@ -1654,14 +1660,55 @@ TEST_CASE("pace: wraps per unit time follow the commanded rate, through the whol
     // quantity -- exactly how Task 3's lane-level gate solved the identical
     // problem -- so one uniform 60 s window resolves every knob position,
     // including the slowest.
+    //
+    // The turns tolerance below assumes FLOW (not STEP) and EVOLVE off:
+    // rate_hz_for_test() (lane.h) reports the rate BEFORE clock_scale(),
+    // while _phase_inc (lane.cpp) is built WITH it, so a STEP lane with
+    // STEPS != 8 would make "commanded" wrong by a factor of 8/steps, not a
+    // percent -- and a nonzero _ev_rate walk feeds directly into the same
+    // per-sample add (lane.cpp's process()). Both are pinned explicitly
+    // below rather than left as unstated init defaults.
+
+    // Unity reference for the independent hz cross-check: pace_mult(0.5f)
+    // is exactly 1.f (divisions.h), so this is free_hz(0.35f) with PACE
+    // taken all the way out of the computation.
+    float unity_hz;
+    {
+        spky::Instrument u;
+        u.init(48000.f);
+        u.set_sync(false);
+        u.set_tempo_bpm(120.f);
+        u.set_rate(0, 0.35f);
+        u.set_variation(0, 0.f);
+        u.set_pace(0.5f);
+        unity_hz = u.lane_rate_hz_for_test(0, spky::LANE_PITCH);
+    }
+
     for (float knob : {0.f, 0.25f, 0.5f, 0.75f, 1.f}) {
         spky::Instrument in;
         in.init(48000.f);
         in.set_sync(false);
         in.set_tempo_bpm(120.f);
         in.set_rate(0, 0.35f);
+        in.set_variation(0, 0.f);      // pin EVOLVE off -- see comment above
         in.set_pace(knob);
+        REQUIRE_FALSE(in.step_mode_for_test(0));  // pin FLOW -- see comment above
         const float hz = in.lane_rate_hz_for_test(0, spky::LANE_PITCH);
+
+        // Independent cross-check: recompute the expected rate from a hz
+        // measured at a DIFFERENT knob (0.5f) times pace_mult(knob), a pure
+        // function of knob alone that shares no code path with _base_hz.
+        // Deleting the set_pace fan-out leaves SuperModulator's _pace at 1
+        // regardless of knob, so `hz` stops tracking `expected_hz` here even
+        // though it would still agree with itself in the turns check below.
+        const float expected_hz = unity_hz * pace_mult(knob);
+        CAPTURE(knob); CAPTURE(hz); CAPTURE(expected_hz);
+        // 0.01%: both sides are a single float multiply of the same inputs
+        // (free_hz(0.35f) and pace_mult(knob)), so healthy agreement is
+        // within a handful of float ULPs -- nowhere near the >=2x errors
+        // (knob 0.f is 32x off) a deleted fan-out produces.
+        CHECK(hz == doctest::Approx(expected_hz).epsilon(1e-4));
+
         const int secs = 60;
         const uint32_t w0 = in.lane_wraps_for_test(0, spky::LANE_PITCH);
         const double phase_start = double(in.lane_phase_for_test(0, spky::LANE_PITCH));
@@ -1675,15 +1722,14 @@ TEST_CASE("pace: wraps per unit time follow the commanded rate, through the whol
         const double phase_end = double(in.lane_phase_for_test(0, spky::LANE_PITCH));
         const double turns     = double(wraps) + (phase_end - phase_start);
         const double commanded = double(hz) * double(secs);
-        CAPTURE(knob); CAPTURE(hz); CAPTURE(commanded); CAPTURE(turns);
-        // +-0.1%: measured double accumulation lands within ~2e-8 relative
-        // of commanded at every knob here (tighter than Task 3's already
-        // generous +-2%, since this gate's window is far shorter than Task
-        // 3's 1600 s and has less room to let a real bug hide inside a wide
-        // band). Reverting _phase to float (lane.h) misses by 0.05%-2.5%
-        // depending on knob, worst at the slowest -- so 0.1% is five orders
-        // of magnitude above the healthy noise floor and still well under
-        // every measured broken knob at 0.f, 0.25f and 0.5f.
+        CAPTURE(commanded); CAPTURE(turns);
+        // +-0.1%: the real noise floor here is float quantization in
+        // phase() (lane.h's static_cast<float> of the double accumulator),
+        // not the double accumulation itself (which lands within ~2e-8
+        // relative of commanded, measured) -- so the floor is closer to
+        // float epsilon, ~1e-7 relative. 0.1% is about four orders of
+        // magnitude above that floor, and still well under every measured
+        // broken-_phase deviation (0.05%-2.5%, worst at the slowest knobs).
         CHECK(turns > commanded * 0.999);
         CHECK(turns < commanded * 1.001);
     }

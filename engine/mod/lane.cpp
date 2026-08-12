@@ -50,6 +50,10 @@ void ModLane::init(float sample_rate, uint32_t seed) {
     _sr = sample_rate;
     _rng.seed(seed);
     _phase = 0.0;
+#ifdef SPKY_TESTING
+    _wraps = 0;   // re-init must zero the counter along with _phase, or a
+                  // turns computation spanning a re-init reads a stale count
+#endif
     _cur_step = -1;
     _shuffle_target = 0.f;
     _shuffle_latched = 0.f;
