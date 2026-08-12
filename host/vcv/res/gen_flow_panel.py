@@ -471,7 +471,7 @@ def fader_svg(c):
         '  <line x1="%s" y1="%s" x2="%s" y2="%s" stroke="%s" '
         'stroke-width="0.6" stroke-linecap="round"/>\n'
         % (mm(c.x - FADER_W / 2.0), mm(c.y - FADER_H / 2.0), mm(FADER_W),
-           mm(FADER_H), mm(FADER_W / 2.0), base.PAPER_DEEP, base.LINE,
+           mm(FADER_H), mm(FADER_W / 2.0), PAD_FILL, PANEL_BORDER,
            sw(HAIRLINE_W),
            mm(c.x), mm(c.y - FADER_H / 2.0 + 1.2),
            mm(c.x), mm(c.y + FADER_H / 2.0 - 1.2), base.WELL))

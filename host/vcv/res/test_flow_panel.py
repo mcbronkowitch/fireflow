@@ -18,6 +18,7 @@ import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_flow_panel as g
+import gen_panel as base
 import touch2_geometry as geo
 
 FAILS = []
@@ -438,6 +439,21 @@ def test_the_header_emits_no_zero_length_input_table():
     check("kInputCtls" not in hpp,
           "the board has no inputs, so no kInputCtls table may be emitted")
     check("NUM_INPUTS" in hpp, "InputId/NUM_INPUTS must still be emitted")
+
+
+def test_fader_wells_use_the_dark_copper_palette():
+    """The two stock slider wells must sit in the graphite/copper panel."""
+    legacy_fill, legacy_stroke = base.PAPER_DEEP, base.LINE
+    for c in (c for c in g.PARAMS if c.kind == g.FADER):
+        well = g.fader_svg(c).splitlines()[0]
+        check('fill="%s"' % g.PAD_FILL in well,
+              "%s well fill is not PAD_FILL: %s" % (c.enum, well))
+        check('stroke="%s"' % g.PANEL_BORDER in well,
+              "%s well stroke is not PANEL_BORDER: %s" % (c.enum, well))
+        check('fill="%s"' % legacy_fill not in well,
+              "%s well still uses legacy PAPER_DEEP: %s" % (c.enum, well))
+        check('stroke="%s"' % legacy_stroke not in well,
+              "%s well still uses legacy LINE: %s" % (c.enum, well))
 
 
 def test_committed_files_match_the_generator():
