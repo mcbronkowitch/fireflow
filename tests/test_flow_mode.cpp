@@ -7,14 +7,35 @@
 #include "instrument.h"
 using namespace spky::flow;
 
-TEST_CASE("flow mode: P_MODE is the last parameter") {
-    // Base draws are keyed kStreamParamBase + param (terrain.cpp). If P_MODE
-    // is not last, every parameter after it gets a different RNG stream and
-    // every existing terrain code resolves to a different sound.
-    CHECK(P_MODE == P_COUNT - 1);
+TEST_CASE("flow mode: nothing may be inserted before P_MODE") {
+    // Base draws are keyed kStreamParamBase + param (terrain.cpp). If a
+    // parameter is inserted BEFORE P_MODE, every parameter from there on gets
+    // a different RNG stream and every existing terrain code resolves to a
+    // different sound.
+    //
+    // This used to read `P_MODE == P_COUNT - 1` -- "P_MODE is the last
+    // parameter". That was never the real invariant, only the cheapest way to
+    // state it, and on 2026-08-12 P_PACE was APPENDED BEHIND P_MODE precisely
+    // because appending is free: a later param re-seeds nothing earlier. So
+    // the position is pinned by INDEX now, against the enum as it stood when
+    // the terrain codes in circulation were drawn. Anything appended after
+    // P_PACE is free too and needs no edit here; anything that moves P_MODE
+    // down re-renders every terrain code and must go red.
+    CHECK(P_MODE == 62);
+    CHECK(P_PACE == P_MODE + 1);
+    CHECK(P_PACE == P_COUNT - 1);      // nothing appended after it yet
+    // The two facts flow.cpp's static_asserts turn into a compile error, kept
+    // here as a readable statement of the ordering they enforce.
+    CHECK(P_RANGE_A < P_MODE);
+    CHECK(P_RANGE_B < P_MODE);
     CHECK(kParams[P_MODE].lo == 0.f);
     CHECK(kParams[P_MODE].hi == 1.f);
     CHECK(kParams[P_MODE].steps == 2);
+    // P_PACE's own table row: continuous, 0..1, centre 0.5 == x1 under
+    // pace_mult (mod/divisions.h).
+    CHECK(kParams[P_PACE].lo == 0.f);
+    CHECK(kParams[P_PACE].hi == 1.f);
+    CHECK(kParams[P_PACE].steps == 0);
 }
 
 TEST_CASE("flow mode: archetype weights are probabilities, drone lowest") {

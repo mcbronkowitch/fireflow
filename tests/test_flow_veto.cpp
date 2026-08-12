@@ -103,19 +103,23 @@ TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto") {
 
     // The clamp saturates at the band edge, so an exact float equality on
     // kVetos[v].lo/.hi is near-certain evidence the clamp actually fired
-    // rather than the sweep merely staying inside the band by luck -- EXCEPT
-    // for P_DRIVE, whose DIRT "heat" story holds it at a literal, degenerate
-    // {0.f, 0.f} span for bp0-bp2 (taste.h): most of its curve is
-    // deterministically exactly 0.0, which is also kVetos' P_DRIVE lo, with
-    // no clamp involved. Verified by sabotage: disabling the re-press below
-    // still gives edge hits on P_DRIVE alone (got == 0.0 from the flat
-    // span), while every other veto param's bp draws are continuous within
-    // their span and essentially never land exactly on a bound by chance. So
-    // P_DRIVE is excluded here and the other five are the signal. If a
+    // rather than the sweep merely staying inside the band by luck. If a
     // future change (begin_blend, the stagger, kBlendS, the tick rate, the
     // "% 23" re-press cadence) stops the residual from re-forming mid-ramp,
     // this count drops to 0 and the CHECK below turns the test red instead
     // of it staying green while exercising nothing.
+    //
+    // P_DRIVE USED TO BE EXCLUDED FROM THIS COUNT, and is not any more
+    // (2026-08-12). The exclusion existed because the DIRT "heat" story held
+    // P_DRIVE at a literal, degenerate {0.f, 0.f} span for bp0-bp2, so most
+    // of its curve was deterministically exactly 0.0 -- which is also kVetos'
+    // P_DRIVE lo, with no clamp involved. That story is deleted and P_DRIVE
+    // is now an ordinary base rule drawn continuously inside {0,.10}..{.10,.30}
+    // per archetype, so it can no longer manufacture an exact 0.0 by itself.
+    // Its 0.40 hi is a strictly-interior bound, so keeping the exclusion would
+    // now be discarding real evidence rather than filtering a coincidence.
+    // Its 0.00 lo remains non-interior (kParams[P_DRIVE].lo is 0 too), which
+    // the interior/edge split below already handles for everybody.
     //
     // CORRECTED 2026-08-06 (final review): a bare edge_hits count over ALL
     // five non-DRIVE params is a weaker exercise-proof than it looks, because
@@ -132,18 +136,38 @@ TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto") {
     // value on its own.
     //
     // WHICH PARAMS ACTUALLY DO THAT, MEASURED rather than assumed from the
-    // band positions alone: of the five interior bounds available (COMP_A
-    // 0.40/0.60, COMP_B 0.40/0.60, REV_MOD's 0.25, REVMIX_A/B's 0.08), this
-    // sweep at 60 masters lands interior hits on P_COMP_A (31/60),
-    // P_REVMIX_B (37/60) and P_REV_MOD (25/60); P_COMP_B and P_REVMIX_A
-    // never do. These numbers are for the % 23 re-press cadence below -- the
-    // older % 30 cadence scored COMP_A 13/60 and everything else 0/60, which
-    // records that the cadence change is what opened the other two up, not a
-    // change in the engine. REVMIX_A's absence is explained at the
-    // requirement loop below (eval_terrain's farthest-from-base combine and
-    // BRIGHT "dawn" holding it off its own bound); no mechanism is claimed
-    // for why COMP_B stays at zero. Do not tighten this to require all five
-    // without re-measuring first.
+    // band positions alone. RE-MEASURED 2026-08-12 with the PACE work, by
+    // instrumenting this loop with a per-param, per-master counter, because
+    // two of the six params changed table on that day. Six interior bounds are
+    // now available (P_DRIVE's 0.40 hi is new -- it joined kBaseRules with the
+    // DIRT story's deletion), and at 60 masters the sweep lands interior hits
+    // on exactly two of them:
+    //
+    //                 interior bound(s)   2026-08-06   2026-08-12
+    //   P_REVMIX_B       lo 0.08             37/60        37/60
+    //   P_REV_MOD        hi 0.25             25/60        25/60
+    //   P_COMP_A         lo 0.40, hi 0.60    31/60         0/60
+    //   P_COMP_B         lo 0.40, hi 0.60     0/60         0/60
+    //   P_REVMIX_A       lo 0.08              0/60         0/60
+    //   P_DRIVE          hi 0.40             (excluded)    0/60
+    //
+    // P_COMP_A's fall to zero is the expected consequence, not a regression,
+    // and it is why the requirement below was re-homed onto P_REVMIX_B first
+    // (plan Task 1): under the DIRT story P_COMP_A swept a curve that ran the
+    // full 0.47-0.60 and overshot its band on a residual, and as a base rule
+    // it is a near-constant draw inside {.50,.60} with no range to overshoot
+    // from. P_DRIVE reaches nothing either -- its widest span tops out at 0.30
+    // against a 0.40 ceiling. The two survivors are unchanged, which is the
+    // check that the sweep itself still works: nothing about the residual
+    // mechanism moved, only which params can ride it.
+    //
+    // The % 23 re-press cadence below is what opened P_REVMIX_B and P_REV_MOD
+    // up in the first place -- the older % 30 cadence scored COMP_A 13/60 and
+    // everything else 0/60. REVMIX_A's absence is explained at the requirement
+    // loop below (eval_terrain's farthest-from-base combine and BRIGHT "dawn"
+    // holding it off its own bound); no mechanism is claimed for why COMP_B
+    // stays at zero. Do not tighten this to require more params without
+    // re-measuring first.
     long edge_hits = 0;                          // kept: loose overall sanity
     bool interior_hit[kVetoCount] = {};           // per-param, strictly-inside bound
     bool lo_interior[kVetoCount], hi_interior[kVetoCount];
@@ -181,8 +205,7 @@ TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto") {
                 CAPTURE(pname(kVetos[v].param)); CAPTURE(got);
                 CHECK(got >= kVetos[v].lo - 1e-5f);
                 CHECK(got <= kVetos[v].hi + 1e-5f);
-                if (kVetos[v].param != P_DRIVE &&
-                    (got == kVetos[v].lo || got == kVetos[v].hi)) {
+                if (got == kVetos[v].lo || got == kVetos[v].hi) {
                     ++edge_hits;
                     if ((got == kVetos[v].lo && lo_interior[v]) ||
                         (got == kVetos[v].hi && hi_interior[v]))
@@ -225,12 +248,28 @@ TEST_CASE("flow veto: adventure never reaches past a veto") {
     //
     // The filter takes the MAXIMUM over all seven of a terrain's levels (spec
     // §7, corrected 2026-08-06: one per macro domain plus one for the base
-    // patch). Every veto param is reachable from both sides -- P_DRIVE and
-    // P_REV_MOD are story-owned, so their bases are curve bp0 draws made under
-    // a MACRO's level, while a base-rule veto param draws under the base
-    // level -- and filtering on the base level alone would leave the storied
-    // ones tested only at whatever nerve they happened to have. Seven chances
-    // at 0.1% each also gives ~140 qualifying terrains instead of ~20.
+    // patch). Every veto param is reachable from both sides -- P_REV_MOD is
+    // story-owned, so its base is a curve bp0 draw made under a MACRO's level,
+    // while a base-rule veto param draws under the base level -- and filtering
+    // on the base level alone would leave the storied one tested only at
+    // whatever nerve it happened to have. Seven chances at 0.1% each also
+    // gives ~140 qualifying terrains instead of ~20.
+    //
+    // Two of the seven levels are worth naming since 2026-08-12:
+    //
+    //  - P_DRIVE and P_COMP_A left the story tables with the DIRT story and
+    //    are now base rules, so of the six veto'd params only P_REV_MOD still
+    //    draws under a macro's level. The union filter is what keeps this case
+    //    covering that one honestly; do not narrow it to adventure_base.
+    //  - t.adventure[M_PACE] IS STILL DRAWN AND IS NOW UNUSED. M_PACE owns no
+    //    story, so nothing consumes its level -- generate() draws it before
+    //    the n_var == 0 guard, deliberately, so that every other macro's
+    //    stream position is unmoved. It therefore joins the maximum below and
+    //    a purely dead level can be what qualifies a terrain as
+    //    high-adventure. That does not weaken the CHECKs (they assert on
+    //    base values, which the OTHER six levels did produce), but it does
+    //    mean `high` counts a few terrains whose qualifying level touched
+    //    nothing. Read the number with that in mind.
     int high = 0;
     for (uint32_t master = 1; master <= 20000; ++master) {
         TerrainState st; st.master = master;

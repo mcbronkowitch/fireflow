@@ -104,10 +104,20 @@ struct Span { float lo, hi; };
      (step sequencer on the divisions.h ladder). ONE global value, not one per
      deck: Instrument::set_sync is global (instrument.h:274), so a per-deck
      mode would need SYNC on and off at once.
-     MUST STAY LAST. Base draws are keyed kStreamParamBase + param
-     (terrain.cpp:160) -- inserting a param before this one re-seeds every
-     later stream and re-resolves every terrain code. */ \
-  X(P_MODE,       0.f, 1.f,  2)
+     MUST BE PUSHED AFTER P_RANGE_A/B (static_assert in flow.cpp) and its base
+     draw must keep its stream key: base draws are keyed kStreamParamBase +
+     param (terrain.cpp:382), so inserting a parameter BEFORE this one re-seeds
+     its stream and re-resolves the FLOW/STEP draw of every existing terrain
+     code. Appending AFTER it is free, which is where P_PACE went on
+     2026-08-12. This used to read "MUST STAY LAST"; the positional half of
+     that argument is now an explicit static_assert. */ \
+  X(P_MODE,       0.f, 1.f,  2) \
+  /* PACE: the global modulation time-stretch (spec 2026-08-12). 0.5 = x1.
+     Deliberately NOT story-owned -- a story-owned parameter is unreachable
+     from the base overlay by construction (terrain.cpp:437-461), so owning it
+     would throw away a transferred patch's own speed. M_PACE adds a live
+     offset on top in Flow's guard chain instead. */ \
+  X(P_PACE,       0.f, 1.f, 0)
 
 enum ParamId {
 #define SPKY_FLOW_ENUM(id, lo, hi, st) id,
@@ -196,6 +206,10 @@ inline void apply_param(Instrument& in, int param, float v) {
     case P_REV_SMEAR:  in.set_reverb_smear(v); break;
     case P_REV_MOD:    in.set_reverb_mod(v); break;
     case P_TEMPO_BPM:  in.set_tempo_bpm(v); break;
+    // PACE is normalized 0..1 and pace_mult() (mod/divisions.h) is the curve;
+    // set_pace takes the knob position, not the multiplier, so this is a
+    // plain forward like every other continuous row.
+    case P_PACE:       in.set_pace(v); break;
     // P_MODE, P_STEPS_A and P_STEPS_B are deliberately NOT handled here.
     // set_step() takes mode AND count together and set_sync() is global, so
     // routing them needs all three values at once -- which this per-param,

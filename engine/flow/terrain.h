@@ -52,9 +52,10 @@ struct TerrainState {
 };
 
 // A hand-authored base patch riding alongside a seed (spec 2026-08-11 §4.1).
-// Indexed by ParamId rather than packed to the 38 base-rule slots: a packed
-// form needs a second index table that can drift from kBaseRules, and 315
-// bytes is not worth that risk.
+// Indexed by ParamId rather than packed to the base-rule slots (47 of them at
+// the time of writing, and the count has moved twice since this comment was
+// first written): a packed form needs a second index table that can drift
+// from kBaseRules, and P_COUNT * 5 == 320 bytes is not worth that risk.
 //
 // Trivially copyable on purpose -- host/vcv/src/touch_pads.hpp's Place holds
 // one, and Glow.cpp copies the whole Place array to the AUDIO thread as one
@@ -96,10 +97,18 @@ struct Terrain {
     // a `Terrain t{}` zero-inits every entry to {0,0}, not the {0,1}
     // identity every other macro relies on -- if generate() ever left a
     // macro's window uncopied, that macro's story would silently sample
-    // only x=0 (its bp[0] floor) at every knob position. Currently
-    // unreachable: "every macro has at least one story"
-    // (test_flow_taste.cpp) guarantees stage 4's `if (picked)` branch fires
-    // for every m. Worth knowing at this site if that invariant ever moves.
+    // only x=0 (its bp[0] floor) at every knob position.
+    //
+    // THAT INVARIANT MOVED ON 2026-08-12 AND THE HOLE IS NOW REAL, not
+    // hypothetical. "Every macro has at least one story" stopped being true
+    // when the DIRT story was deleted and its slot became M_PACE, which owns
+    // no curve at all -- so stage 4's `if (picked)` branch never fires for
+    // that macro and nothing would copy its window. generate() therefore
+    // writes {0,1} for it EXPLICITLY, in the n_var == 0 guard before
+    // pick_index (terrain.cpp). M_PACE is the one exception; every other
+    // macro still gets its window from the picked variant. Delete that guard
+    // and eval_terrain samples M_PACE's window at pos = 0 forever -- no
+    // crash, just a silently wrong terrain.
     Span      window[MACRO_COUNT];
     int       weather_n;                  // 2..4
     float     weather_period_s[4], weather_depth[4];

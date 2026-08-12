@@ -36,7 +36,7 @@ TEST_CASE("flow gesture: the §5 table") {
     // While locked: tap refuses.
     CHECK(run_press(g, 50.0, 0.2, -1, 0.0, true).op == GestureOut::REFUSED);
     // Marked hold past 5 s: NO lock (knob turned) - partial on release.
-    auto held = run_press(g, 60.0, 6.0, M_DIRT, 0.5);
+    auto held = run_press(g, 60.0, 6.0, M_PACE, 0.5);
     CHECK(held.op == GestureOut::NEW_PARTIAL);
 }
 
@@ -107,7 +107,7 @@ TEST_CASE("flow gesture: led() covers every value it can produce") {
     SUBCASE("marked: held with a mark, before release") {
         Gesture g;
         g.button(true, 0.0, false);
-        g.knob_delta(M_DIRT, 0.05f, 0.1);
+        g.knob_delta(M_PACE, 0.05f, 0.1);
         CHECK(g.led(1.f, false) == Gesture::LED_MARKED);
     }
     SUBCASE("undo_armed: held past kUndoArmS clean, before release") {

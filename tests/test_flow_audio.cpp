@@ -111,6 +111,26 @@ RenderStats render_flow(Flow& fl, Instrument& inst,
     return st;
 }
 
+// "The calm corner" is every macro at its calm end -- with ONE macro that has
+// no calm end. M_PACE is a time-stretch, not an amount: 0.5 is exactly x1 (the
+// pace the terrain, or a transferred patch, actually specifies) and 0 is the
+// x1/32 EXTREME, five octaves of tempo below what the terrain asked for. It is
+// also the value Flow::init writes into _knob[M_PACE] for exactly this reason.
+//
+// Parking it at 0 with the other five is not a quieter instrument, it is a
+// DIFFERENT one, and it moved this gate's own subject when PACE took DIRT's
+// slot on 2026-08-12: the population's mute fraction read 32.8% (45 of 137)
+// against a 6.6%-at-the-time bound, because a lane clocked 32x slow emits
+// almost nothing inside a 7 s measurement window. Nothing about the level
+// mechanism had changed. Neither kCalmMuteFracMax nor kCalmCornerRmsMin was
+// touched to accommodate it -- the parking was corrected instead, which is the
+// only move here that does not amount to fitting a gate to a knob position it
+// was never measuring.
+void park_calm(Flow& fl) {
+    for (int m = 0; m < MACRO_COUNT; ++m)
+        fl.set_macro(m, m == M_PACE ? 0.5f : 0.f);
+}
+
 bool terrain_has_sampler(const Terrain& t) {
     return int(t.base[P_ENGINE_A] + 0.5f) == ENGINE_SAMPLER ||
            int(t.base[P_ENGINE_B] + 0.5f) == ENGINE_SAMPLER;
@@ -256,7 +276,7 @@ TEST_CASE("flow audio: calm corner sits under the ceiling on every fixed seed (7
         Flow fl; fl.init(&inst, kCtrlHz);
         TerrainState st; st.master = kept[i];
         fl.wake(st);
-        for (int m = 0; m < MACRO_COUNT; ++m) fl.set_macro(m, 0.f);
+        park_calm(fl);
 
         // Skip the first 3 s (reverb/envelope tails from wake's boot state)
         // per the brief; 10 s total.
@@ -317,7 +337,7 @@ TEST_CASE("flow audio: calm corner holds as a rate over the population (7.8)") {
         inst.init(kSr, mem);
         Flow fl; fl.init(&inst, kCtrlHz);
         fl.wake(st);
-        for (int m = 0; m < MACRO_COUNT; ++m) fl.set_macro(m, 0.f);
+        park_calm(fl);
 
         // Identical render shape to the per-seed case above -- 10 s, first 3 s
         // skipped -- so the rate and the canary measure the same quantity.

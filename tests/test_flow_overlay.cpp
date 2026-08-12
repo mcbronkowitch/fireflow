@@ -31,9 +31,28 @@ TEST_CASE("is_base_rule agrees with the kBaseRules table") {
     // carries its own texture-lane speed and its own chord size. The move also
     // deleted M_DENSITY's "thick" variant, which is what had left COLOR
     // unmapped on half of all terrains (tests/test_flow_chord_reach.cpp).
-    CHECK(kBaseRuleCount == 42);
+    //
+    // 42 -> 47 later the same day: the PACE work deleted the DIRT story
+    // outright, so its four targets (P_GRIT_A, P_GRIT_B, P_COMP_A, P_DRIVE)
+    // became base rules, and P_PACE was added as a fifth. P_PACE draws a
+    // degenerate {0.5, 0.5} span on purpose -- the row exists so an overlay
+    // has a destination for a transferred patch's own speed, which a
+    // story-owned parameter could never have (generate() applies the overlay
+    // by iterating THIS table).
+    CHECK(kBaseRuleCount == 47);
     CHECK(is_base_rule(P_COMP_B));
-    CHECK_FALSE(is_base_rule(P_COMP_A));
+    // Was CHECK_FALSE until 2026-08-12: P_COMP_A was the DIRT story's third
+    // target and therefore story-owned and unreachable from an overlay. It is
+    // a base rule now, in the same 0.40-0.60 veto band as P_COMP_B, so deck
+    // A's compressor transfers with a patch instead of being redrawn.
+    CHECK(is_base_rule(P_COMP_A));
+    // The other three ex-DIRT targets, named individually rather than left to
+    // the count above: a count alone cannot tell "these four arrived" from
+    // "four unrelated rows arrived".
+    CHECK(is_base_rule(P_GRIT_A));
+    CHECK(is_base_rule(P_GRIT_B));
+    CHECK(is_base_rule(P_DRIVE));
+    CHECK(is_base_rule(P_PACE));
 }
 
 TEST_CASE("an overlay reaches every base-rule parameter") {

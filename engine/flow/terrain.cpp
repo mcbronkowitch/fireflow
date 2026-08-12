@@ -528,9 +528,22 @@ Terrain generate(const TerrainState& st, const BaseOverlay* ov) {
         int n_var = 0;
         for (int s = 0; s < kStoryCount; ++s)
             if (kStories[s].macro == m) ++n_var;
+        MacroMap& mm = t.map[m];
+        if (n_var == 0) {
+            // M_PACE has no story: its whole effect is a runtime role in
+            // Flow, like M_MOTION's weather depth but without a curve. Guard
+            // BEFORE pick_index, which returns n-1 == -1 for n == 0 and would
+            // leave mm.story naming story index 0 by value-init. The window
+            // must be written explicitly too: Terrain t{} leaves it {0,0},
+            // and terrain.h's own comment warns that the {0,1} identity is
+            // only "currently unreachable" while every macro has a story.
+            mm.story = -1;
+            mm.n_targets = 0;
+            t.window[m] = {0.f, 1.f};
+            continue;
+        }
         const int pick = pick_index(r, n_var);
 
-        MacroMap& mm = t.map[m];
         mm.n_targets = 0;
         int vi = 0;
         for (int s = 0; s < kStoryCount; ++s) {
@@ -587,9 +600,14 @@ Terrain generate(const TerrainState& st, const BaseOverlay* ov) {
 // is not a tie-breaker on top of the base-patch term, it OUTWEIGHS it
 // outright.
 //
+// THE CURRENT NUMBERS ARE AT THE BOTTOM OF THIS COMMENT (2026-08-12, P_COUNT
+// 64). The two sections immediately below are HISTORY -- each is a valid
+// before/after measurement pair for the change it names, and each is stale as
+// a description of today. Read them for what moved and why, not for values.
+//
 // RE-MEASURED 2026-08-06, after P_MODE joined the parameter table (spec
 // 2026-08-06 §5.1). The mean is taken over P_COUNT params, so one more param
-// changes the denominator (P_COUNT is now 63), and a mode mismatch
+// changes the denominator (P_COUNT was 63 at that point), and a mode mismatch
 // contributes a full 1.0/P_COUNT of its own -- both terms had to be measured
 // again rather than carried over. Measurement: 20 000 random terrain pairs
 // (masters 2i-1 vs 2i), and 3 000 chained draw_new() calls off an Rng seeded
@@ -641,7 +659,7 @@ Terrain generate(const TerrainState& st, const BaseOverlay* ov) {
 // 4ec5be0 -- so this before/after is a measurement pair, not a remembered
 // number:
 //
-//                    4ec5be0 (branch pt)   89eb461 (HEAD)
+//                    4ec5be0 (branch pt)   89eb461 (Task 7)
 //   P_COUNT                  63                 63
 //   base-patch min       0.0588             0.0352
 //   base-patch mean      0.1569             0.1229
@@ -666,11 +684,64 @@ Terrain generate(const TerrainState& st, const BaseOverlay* ov) {
 //
 // THE CONCLUSION DID NOT MOVE -- IT GOT STRONGER. Same-archetype pairs
 // clearing kDistanceMin went 2 -> 1 at 4624822 (the musical weights) -> 0 at
-// 46cd3e8 (the COMP ceiling). NO same-archetype pair in 6 603 now reaches
-// kDistanceMin on its base patch alone, so "far enough away" does not merely
-// mostly mean "a different archetype", it means exactly that: the flat 0.25
-// is the whole decision. Note what this is NOT a claim about -- the base-patch
-// distribution still runs to 0.2193, well past kDistanceMin's 0.18, so the
+// 46cd3e8 (the COMP ceiling).
+//
+// ---------------------------------------------------------------------------
+// RE-MEASURED 2026-08-12 (PACE), AND THESE ARE THE CURRENT NUMBERS. P_COUNT is
+// 64: P_PACE was appended after P_MODE. Four parameters also left the story
+// tables in the same commit -- P_DRIVE, P_GRIT_A, P_GRIT_B and P_COMP_A, the
+// deleted DIRT story's targets -- and base[] is what this metric reads, so
+// every term had to be measured again. Same harness as both sections above
+// (20 000 pairs, masters 2i-1 vs 2i; 3 000 chained draw_new() off an Rng
+// seeded 12345), built and run in a worktree at the branch's own HEAD
+// (7aa1b22) as well as here, so this is a measurement pair and not a
+// comparison against the 89eb461 column above:
+//
+//                    7aa1b22 (before)   this commit
+//   P_COUNT                 63               64
+//   base-patch min      0.0370           0.0373
+//   base-patch mean     0.1302           0.1313
+//   base-patch max      0.2346           0.2378
+//   same-arch pairs      6 603            6 603
+//   ...of which clear        0                0
+//   draw_new same-arch  0/3 000          0/3 000
+//   P_MODE disagrees     50.3 %           50.3 %
+//
+// THE MEAN WENT UP EVEN THOUGH THE DENOMINATOR GREW, and the whole of that is
+// attributed, not reasoned about. The same harness printed the per-param mean
+// |delta| / span for the four moved rows in both trees:
+//
+//                     7aa1b22   this commit
+//   P_DRIVE           0.00000       0.06986
+//   P_GRIT_A          0.00000       0.06143
+//   P_GRIT_B          0.00000       0.06153
+//   P_COMP_A          0.01025       0.01852
+//
+// The three zeros are the point: the DIRT story gave P_DRIVE, P_GRIT_A and
+// P_GRIT_B a literal, degenerate {0.f, 0.f} bp0 span, and stage 4 writes
+// base[p] = bp[0], so all three sat at EXACTLY 0.0 on every terrain ever
+// drawn and contributed exactly nothing to this metric. As base rules they
+// draw real per-archetype spans. P_COMP_A moved from the story's {.47,.54}
+// bp0 band to the {.50,.60} base row, a wider band, hence the near-doubling.
+// The four increases sum to 0.20109, and (0.1302*63 + 0.20109) / 64 = 0.13131
+// against 0.1313 measured -- the mean is arithmetic, with nothing unexplained.
+// P_PACE itself contributes zero |delta| by construction (its span is the
+// degenerate {0.5,0.5}, so every terrain draws the same value) and shows up
+// only in the denominator.
+//
+// The same-archetype pair count is 6 603 in both trees, as it must be: arch is
+// make_stream(master, kStreamArch, 0), a pure function of the master, and
+// appending a param or moving a row between tables cannot touch it. If this
+// number had moved, the measurement would have been wrong before it was
+// interesting.
+// ---------------------------------------------------------------------------
+//
+// NO same-archetype pair in 6 603 reaches kDistanceMin on its base patch
+// alone -- still true at P_COUNT 64, with the base term at its largest since
+// the taste tables landed. So "far enough away" does not merely mostly mean
+// "a different archetype", it means exactly that: the flat 0.25 is the whole
+// decision. Note what this is NOT a claim about -- the base-patch
+// distribution still runs to 0.2378, well past kDistanceMin's 0.18, so the
 // threshold is comfortably reachable in principle. What was measured is that
 // no SAME-ARCHETYPE pair happens to reach it, not that none could.
 //

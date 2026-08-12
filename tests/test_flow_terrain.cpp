@@ -18,8 +18,29 @@ TEST_CASE("flow terrain: 10k seeds stay inside taste limits (spec 7.1)") {
             CHECK(t.base[p] >= kParams[p].lo);
             CHECK(t.base[p] <= kParams[p].hi);
         }
+        int storyless = 0;
         for (int m = 0; m < MACRO_COUNT; ++m) {
             const auto& mm = t.map[m];
+            // M_PACE, BY NAME, and only M_PACE. It owns no story (taste.h,
+            // 2026-08-12): PACE is a base rule so a transferred patch keeps
+            // its own speed, and the macro adds a runtime offset instead of a
+            // curve. Skipping it by name rather than relaxing the bound to
+            // ">= 0" is the whole point -- a relaxed bound would let the NEXT
+            // macro lose its story silently. The two claims below are the
+            // ones that cannot hold for a curve-less macro: it has no
+            // targets, so there is no span to be non-dead.
+            if (m == M_PACE) {
+                ++storyless;
+                CHECK(mm.n_targets == 0);      // exactly none, not "few"
+                CHECK(mm.story == -1);         // generate()'s explicit marker
+                // The window must be the {0,1} identity, not the {0,0} a
+                // `Terrain t{}` leaves behind. This is the assertion that goes
+                // red if terrain.cpp's n_var == 0 guard is removed: without it
+                // eval_terrain samples every macro's story at pos = w.lo = 0.
+                CHECK(t.window[m].lo == 0.f);
+                CHECK(t.window[m].hi == 1.f);
+                continue;
+            }
             CHECK(mm.n_targets >= 1);
             float span_max = 0.f;
             for (int i = 0; i < mm.n_targets; ++i) {
@@ -38,6 +59,11 @@ TEST_CASE("flow terrain: 10k seeds stay inside taste limits (spec 7.1)") {
             }
             CHECK(span_max >= kMinSpan);       // no dead knob (spec 7.1)
         }
+        // EXACTLY one exemption was taken, not "at most one". Without this the
+        // skip above could quietly cover a second story-less macro the day one
+        // appears, and the no-dead-knob bound would stop applying to it with
+        // nothing going red.
+        CHECK(storyless == 1);
         // Named constraints (spec 7.1).
         if (int(t.base[P_ENGINE_A] + .5f) == ENGINE_BODY)
             CHECK(t.base[P_FILT_A] >= kBodyFiltFloor);

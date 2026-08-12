@@ -397,7 +397,9 @@ TEST_CASE("flow runtime: the BBD bend budget holds mid-blend too, not just settl
             // i == 0 is the one tick the guard's own comment (flow.cpp,
             // beside this clamp) names as accepted rather than a bug: on a
             // STEP -> FLOW press, P_MODE switches at blend phase 0 (the
-            // press itself), but P_MODE is LAST in the parameter table, so
+            // press itself), but P_MODE comes AFTER P_RANGE_A/B in the
+            // parameter table (flow.cpp static_assert -- it used to be simply
+            // LAST, until P_PACE was appended behind it on 2026-08-12), so
             // THIS tick's P_RANGE_* row is pushed before THIS tick's P_MODE
             // row updates _mode_now -- the clamp still reads last tick's
             // STEP and is skipped for exactly one control period. Measured:
@@ -601,4 +603,122 @@ TEST_CASE("flow runtime: a root override replaces the terrain's root and stays "
     fl.tick();
     CHECK(fl.param_now(spky::flow::P_ROOT) <= spky::flow::kParams[spky::flow::P_ROOT].hi);
     CHECK(fl.param_now(spky::flow::P_ROOT) >= spky::flow::kParams[spky::flow::P_ROOT].lo);
+}
+
+// ---------------------------------------------------------------------------
+// PACE (spec 2026-08-12 modulation-pace). Three claims, and the first two are
+// the whole design: P_PACE is a BASE RULE, so a transferred patch's own speed
+// survives the transfer, and M_PACE only OFFSETS it -- inside Flow's guard
+// chain, where the offset cannot leak into _resid.
+
+TEST_CASE("flow: PACE is an offset on the patch's own pace, not a replacement") {
+    spky::Instrument in; in.init(48000.f);
+    spky::flow::Flow f; f.init(&in, 500.f);
+    spky::flow::TerrainState st; st.master = 7u;
+
+    // A carried patch that was built slow. BaseOverlay is a plain aggregate
+    // (terrain.h) -- two parallel arrays, no setter -- so both fields are
+    // written here; `has` is what generate()'s kBaseRules walk reads.
+    spky::flow::BaseOverlay ov{};
+    ov.v[spky::flow::P_PACE]   = 0.25f;
+    ov.has[spky::flow::P_PACE] = true;
+    f.wake(st, &ov);
+    f.set_macro(spky::flow::M_PACE, 0.5f);
+    for (int i = 0; i < 10; ++i) f.tick();
+    CHECK(f.param_now(spky::flow::P_PACE) == doctest::Approx(0.25f));
+
+    // The knob offsets it; it does not overwrite it.
+    f.set_macro(spky::flow::M_PACE, 0.75f);
+    for (int i = 0; i < 10; ++i) f.tick();
+    CHECK(f.param_now(spky::flow::P_PACE) == doctest::Approx(0.50f));
+}
+
+TEST_CASE("flow: NEW does not move the pace") {
+    spky::Instrument in; in.init(48000.f);
+    spky::flow::Flow f; f.init(&in, 500.f);
+    spky::flow::TerrainState st; st.master = 11u;
+    f.wake(st);
+    f.set_macro(spky::flow::M_PACE, 0.75f);
+    for (int i = 0; i < 10; ++i) f.tick();
+    const float settled = f.param_now(spky::flow::P_PACE);
+    REQUIRE(f.new_full());
+    // Through the whole 6 s ramp -- an offset that leaked into _resid would
+    // show as a spike here, decaying back over the blend. 3000 ticks, not the
+    // 700 the plan wrote: kBlendS is 6 s and this Flow runs at 500 Hz, so 700
+    // would cover 1.4 s and the comment would be claiming a scope the loop
+    // does not have. The spike is largest at phase 0 either way, so this is a
+    // widening of an already-red-capable gate, not a change of subject.
+    for (int i = 0; i < 3000; ++i) {
+        f.tick();
+        CHECK(f.param_now(spky::flow::P_PACE) == doctest::Approx(settled));
+    }
+}
+
+TEST_CASE("flow: a Flow whose macros were never pushed runs at x1") {
+    // Every value-initialised carrier in this codebase is zero, and zero here
+    // means x1/32 -- the extreme of the range. host/render's flow_wake pushes
+    // no macros at all, so without this default every headless demo of PACE
+    // would play 32x too slow (spec 2026-08-12 §6).
+    spky::Instrument in; in.init(48000.f);
+    spky::flow::Flow f; f.init(&in, 500.f);
+    spky::flow::TerrainState st; st.master = 3u;
+    f.wake(st);
+    for (int i = 0; i < 10; ++i) f.tick();
+    CHECK(f.param_now(spky::flow::P_PACE) == doctest::Approx(0.5f));
+    CHECK(in.pace_for_test() == doctest::Approx(1.f));
+}
+
+TEST_CASE("flow: the weather never touches PACE") {
+    // M_PACE is excluded from weather_of alongside M_MOTION (flow.cpp), for a
+    // different reason: the offset is up to +-0.10 in knob units, and in
+    // pace_mult's curve 0.10 is a factor of TWO. A tempo wandering by two
+    // makes every other macro's motion unreadable, because the pace is the
+    // frame the ear judges them against.
+    //
+    // The master is FOUND, not written down. generate() aims its 2..4
+    // oscillators uniformly over all six macros, so a hardcoded seed that
+    // stopped aiming one at M_PACE after a taste-table edit would leave this
+    // case green while asserting nothing -- the silently-empty scan this
+    // branch has already been burned by. The two REQUIREs below are what make
+    // it non-vacuous: one terrain that really does aim an oscillator at
+    // M_PACE, and one OTHER weathered macro in the same terrain to prove the
+    // weather clock was actually running during the sweep.
+    uint32_t chosen = 0;
+    int other_macro = -1;
+    for (uint32_t master = 1; master <= 4000u && chosen == 0u; ++master) {
+        TerrainState st; st.master = master;
+        const Terrain t = generate(st);
+        bool hits_pace = false;
+        int other = -1;
+        for (int i = 0; i < t.weather_n; ++i) {
+            if (t.weather_target[i] == M_PACE) hits_pace = true;
+            else if (t.weather_target[i] != M_MOTION) other = t.weather_target[i];
+        }
+        if (hits_pace && other >= 0) { chosen = master; other_macro = other; }
+    }
+    REQUIRE(chosen != 0u);
+    REQUIRE(other_macro >= 0);
+    CAPTURE(chosen); CAPTURE(other_macro);
+
+    Instrument in; in.init(48000.f);
+    Flow f; f.init(&in, 100.f);
+    TerrainState st; st.master = chosen; f.wake(st);
+    f.set_macro(M_MOTION, 1.f);          // weather at full depth
+    f.set_macro(M_PACE, 0.5f);           // PACE parked on its own neutral
+    float pace_min = 2.f, pace_max = -2.f, other_max = -2.f;
+    for (int i = 0; i < 100000; ++i) {   // 1000 s at 100 Hz -- past the
+        f.tick();                        // longest weather period (1200 s is
+        const float p = f.eff_macro(M_PACE);      // the cap; 1000 s covers
+        if (p < pace_min) pace_min = p;           // most of a cycle of any
+        if (p > pace_max) pace_max = p;           // drawn period)
+        const float o = f.eff_macro(other_macro);
+        if (o > other_max) other_max = o;
+    }
+    // Exact, not Approx: an excluded macro's offset is not merely small, it is
+    // never added at all, so eff is the clamped knob sum and nothing else.
+    CHECK(pace_min == 0.5f);
+    CHECK(pace_max == 0.5f);
+    // The other weathered macro DID move over the same sweep. Without this the
+    // two CHECKs above would also pass on a Flow whose weather never ran.
+    CHECK(other_max > 0.01f);
 }

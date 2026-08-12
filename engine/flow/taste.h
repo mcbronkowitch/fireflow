@@ -69,7 +69,10 @@ constexpr float kDistanceMin = 0.18f;               // NEW rejection threshold
 // argmax -- and terrain.cpp's own measurement (2026-08-06, at 89eb461) found
 // NO same-archetype pair of 6 603 clearing kDistanceMin on its base patch, so
 // a threshold there would reject every candidate and let the fallback decide
-// every press. Best-of-N is the rule instead, and kGenreCandidates is the one
+// every press. (Re-measured 2026-08-12 with the PACE work, at P_COUNT 64 and
+// with the DIRT story's four targets moved into kBaseRules: still 0 of 6 603.
+// The base term grew -- mean 0.1302 -> 0.1313 -- and did not come close.)
+// Best-of-N is the rule instead, and kGenreCandidates is the one
 // number that tunes it: larger means NEW works harder for contrast.
 constexpr int kGenreCandidates = 8;
 // Termination guard, not a tuning knob. At the rarest archetype weight (0.15)
@@ -893,22 +896,26 @@ inline const StoryVariant kStories[] = {
   { P_REV_TONE,  {{.1f,.2f},{.25f,.4f},{.4f,.55f},{.55f,.7f},{.7f,.9f}} },
   { P_REVMIX_A,  {{.75f,.9f},{.45f,.6f},{.4f,.55f},{.4f,.55f},{.4f,.55f}} },
   { P_REV_DECAY, {{.75f,.9f},{.5f,.65f},{.5f,.65f},{.5f,.65f},{.5f,.65f}} } } },
-// DIRT "clean glue -> warmth -> grit -> risk + DRIVE threshold" (§3 row 4).
-// P_DRIVE flat 0 through Q1..Q3, joins in Q4 only (the threshold rule:
-// once the limiter rides, DRIVE stops controlling dirt -- so it is a Q4
-// commitment, not a gradual blend).
-{ M_DIRT, "heat", 4, {
-  { P_GRIT_A,    {{0.f,0.f},{.05f,.15f},{.2f,.4f},{.45f,.65f},{.7f,1.f}} },
-  { P_GRIT_B,    {{0.f,0.f},{.05f,.12f},{.15f,.35f},{.4f,.6f},{.65f,.95f}} },
-  // COMP rescaled into 0.40-0.60 (2026-08-06, owner heard 0.70 and ruled it
-  // over-compressed -- "Ja passt eher 0.6"), relative shape kept: each
-  // breakpoint's position inside the 0.40-0.70 band maps linearly to the
-  // same position inside the narrower 0.40-0.60 band.
-  { P_COMP_A,    {{.47f,.54f},{.47f,.54f},{.49f,.56f},{.51f,.58f},{.53f,.60f}} },
-  // PUSH joins in Q4 only (the threshold rule), inside the veto band. bp4 hi
-  // lands exactly on the veto ceiling (0.40) on purpose: the loudest quarter
-  // sits right at the limit, not a rounding accident.
-  { P_DRIVE,     {{0.f,0.f},{0.f,0.f},{0.f,0.f},{0.f,.05f},{.25f,.40f}} } } },
+// DIRT "clean glue -> warmth -> grit -> risk + DRIVE threshold" (§3 row 4) IS
+// GONE, deleted 2026-08-12 with all four of its targets, and the macro slot it
+// held is now PACE. The story was mostly dead: both GRIT targets set the
+// wet/dry of a block nothing ever switches on under Glow (nothing in
+// engine/flow/ calls set_fx_on), which left a 0.13 move of deck A's compressor
+// and a master DRIVE that stayed flat until three quarters of the knob. That
+// is a loudness control, which is what its own veto comment warned against.
+//
+// PACE has NO story on purpose, and this is the load-bearing half of the
+// decision: a story-owned parameter is unreachable from the base overlay by
+// construction (terrain.cpp's kBaseRules-bounded overlay walk), so a macro
+// that OWNED the pace would throw away a transferred patch's own speed --
+// exactly the bug the TIDE move closed one level down. P_PACE is a base rule
+// the overlay can reach, and M_PACE adds a live offset on top in Flow's guard
+// chain. M_PACE is therefore the ONE macro with no kStories entry; taste.h's
+// coverage tests name it as the single exception, and terrain.cpp guards the
+// n_var == 0 pick that would otherwise leave its window at {0,0}.
+//
+// The four targets became base rules with real spans -- see kBaseRules below
+// for why they did not inherit the story's degenerate bp0.
 // WANDER "frozen -> fine variation -> melodic wander -> FORM/SONG churn"
 // (§3 row 5). FORM/SONG are discrete: flat until Q4, hysteresis in Task 7.
 // Q4 hi extended vs the plan (which stopped at 3) toward the corrected
@@ -1028,10 +1035,36 @@ inline const BaseRule kBaseRules[] = {
 // -- fx sends -------------------------------------------------------------
 { P_FLUXMIX_A, {{0.f,.5f},{0.f,.5f},{0.f,.5f},{0.f,.5f}} },    // neutral
 { P_FLUXMIX_B, {{0.f,.5f},{0.f,.5f},{0.f,.5f},{0.f,.5f}} },    // neutral
-// Rescaled into 0.40-0.60 (2026-08-06, owner ruled 0.70 over-compressed),
-// same linear map as DIRT "heat"'s P_COMP_A above (0.40-0.70 position ->
-// same position in the narrower 0.40-0.60 band): old {.55f,.70f} -> {.50f,.60f}.
+// Rescaled into 0.40-0.60 (2026-08-06, owner ruled 0.70 over-compressed): the
+// old {.55f,.70f} row's position inside the 0.40-0.70 band maps linearly to
+// the same position inside the narrower 0.40-0.60 one, giving {.50f,.60f}.
+// (The same rescale was applied to DIRT "heat"'s P_COMP_A curve at the time;
+// that story is gone since 2026-08-12 and P_COMP_A is the base row below,
+// carrying this identical band.)
 { P_COMP_B,   {{.50f,.60f},{.50f,.60f},{.50f,.60f},{.50f,.60f}} },     // gentle glue
+// --- former M_DIRT "heat" targets, base rules since 2026-08-12 (PACE) ------
+// Real spans, not the story's degenerate {0,0} bp0. Inheriting bp0 would have
+// kept every existing terrain code rendering identically -- at the price of
+// pinning P_DRIVE at 0 forever, and DRIVE has had no Fireflow control since
+// the 2026-08-09 reduction retired MASTER_DRIVE/PUSH, so Glow would have lost
+// master drive outright with nothing able to restore it. Terrain codes
+// re-render instead; that was the owner's ruling.
+// P_DRIVE stays inside its veto band (kVetos: 0.00-0.40) at every archetype.
+// It is NOT held under the ~0.25 that limiter.h calls the end of "clean":
+// arp reaches exactly that mark and fragment goes to 0.30, one archetype into
+// the "gentle" stretch, which is the archetype that is supposed to be broken.
+// Drone stays clean by construction.
+{ P_DRIVE,    {{0.f,.10f},{.05f,.20f},{.05f,.25f},{.10f,.30f}} },  // drone = clean
+// GRIT is the wet/dry of a block that is never switched on under Glow
+// (nothing in engine/flow/ calls set_fx_on), so these spans are inaudible
+// today and carried for the transfer's sake. Keep them modest so they are not
+// a surprise the day that gap closes.
+{ P_GRIT_A,   {{0.f,.15f},{0.f,.25f},{0.f,.25f},{.05f,.35f}} },
+{ P_GRIT_B,   {{0.f,.15f},{0.f,.25f},{0.f,.25f},{.05f,.35f}} },
+// COMP_A joins COMP_B's band. Both sit inside kVetos' 0.40-0.60, the by-ear
+// ceiling the owner set by listening -- do NOT widen either to claw back level.
+{ P_COMP_A,   {{.50f,.60f},{.50f,.60f},{.50f,.60f},{.50f,.60f}} },
+// --------------------------------------------------------------------------
 { P_LINK_A,   {{0.f,.6f},{0.f,.6f},{0.f,.6f},{0.f,.6f}} },     // unipolar 0..1
 { P_LINK_B,   {{0.f,.6f},{0.f,.6f},{0.f,.6f},{0.f,.6f}} },     // unipolar 0..1
 // -- global modulation / mix ---------------------------------------------
@@ -1045,6 +1078,11 @@ inline const BaseRule kBaseRules[] = {
 { P_REV_DIFF, {{.6f,.8f},{.6f,.8f},{.6f,.8f},{.6f,.8f}} },
 // -- clock ----------------------------------------------------------------
 { P_TEMPO_BPM, {{55.f,75.f},{80.f,110.f},{90.f,130.f},{70.f,110.f}} }, // drone = slow
+// P_PACE: the terrain draws NO pace -- the row exists so the base overlay has
+// a destination (generate() applies the overlay by iterating kBaseRules) and
+// the coverage test has no hole. 0.5 is exactly x1; draw_span returns the
+// centre exactly when lo == hi.
+{ P_PACE,     {{.5f,.5f},{.5f,.5f},{.5f,.5f},{.5f,.5f}} },
 };
 inline const int kBaseRuleCount = int(sizeof(kBaseRules) / sizeof(kBaseRules[0]));
 

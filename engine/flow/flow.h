@@ -174,6 +174,13 @@ private:
     int   _scale_ovr = -1;        // -1 = AUTO (use the terrain's P_SCALE)
     int   _root_ovr  = -1;        // -1 = AUTO (use the terrain's P_ROOT)
 
+    // NOT all-zero in practice: init() writes 0.5 into _knob[M_PACE], because
+    // PACE's neutral is the centre of its knob and zero means x1/32 (spec
+    // 2026-08-12 §6). The member initialiser stays a plain `= {}` rather than
+    // a positional brace list -- a list would hardcode M_PACE's index into
+    // this header, and init() is the one place that decides. A Flow is not
+    // usable before init() anyway (every verb checks _woken, which wake()
+    // sets).
     float _knob[MACRO_COUNT] = {};
     float _cv[MACRO_COUNT]   = {};
     float _eff[MACRO_COUNT]  = {};

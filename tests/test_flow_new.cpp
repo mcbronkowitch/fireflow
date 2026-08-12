@@ -66,8 +66,8 @@ TEST_CASE("flow NEW: undo returns, lock refuses") {
     CHECK_FALSE(f.locked());
     f.new_full(); for (int i = 0; i < 1000; ++i) f.tick();
     CHECK(f.state().master != m0);
-    f.new_partial(1u << M_DIRT); for (int i = 0; i < 1000; ++i) f.tick();
-    CHECK(f.state().reroll[M_DIRT] == 1);
+    f.new_partial(1u << M_PACE); for (int i = 0; i < 1000; ++i) f.tick();
+    CHECK(f.state().reroll[M_PACE] == 1);
 }
 
 TEST_CASE("flow NEW: re-press retargets from the interpolated state") {
@@ -352,6 +352,7 @@ TEST_CASE("flow NEW: knobs stay live through the blend (resolution 3)") {
     // receives the same sweep. Early in the blend the two must agree to
     // within the blend phase's worth of the distance between the terrains.
     int tested_macros = 0;
+    bool contributed[MACRO_COUNT] = {};
     for (int m = 0; m < MACRO_COUNT; ++m) {
         Instrument i1; i1.init(48000.f);
         Instrument i2; i2.init(48000.f);
@@ -386,11 +387,29 @@ TEST_CASE("flow NEW: knobs stay live through the blend (resolution 3)") {
             CAPTURE(m); CAPTURE(kParams[p].name); CAPTURE(moved);
             CHECK(std::fabs(f.param_now(p) - g.param_now(p)) / span < 0.10f);
         }
-        if (checked) ++tested_macros;
+        if (checked) { ++tested_macros; contributed[m] = true; }
     }
-    // SPACE's whole target set is slewed or ducked, so it is legitimately not
-    // readable this way; every other macro must have contributed.
-    CHECK(tested_macros >= MACRO_COUNT - 1);
+    // TWO exceptions, both named, and every other macro asserted INDIVIDUALLY
+    // rather than through the count alone -- a bare `>= MACRO_COUNT - 2` would
+    // be satisfied by any two macros going dark, including two that should
+    // have been readable.
+    for (int m = 0; m < MACRO_COUNT; ++m) {
+        CAPTURE(m);
+        // M_PACE owns no story since 2026-08-12: PACE is a base rule so a
+        // transferred patch keeps its own speed, and the macro adds a runtime
+        // offset instead of a curve. Its MacroMap has zero targets, so the
+        // loop above has nothing to read. Structural, not a tolerance -- hence
+        // CHECK_FALSE and not a skip.
+        if (m == M_PACE) { CHECK_FALSE(contributed[m]); continue; }
+        // M_SPACE's whole target set is slewed (SIZE/DECAY) or ducked
+        // (REVMIX_A/B) and is filtered out above, so it is legitimately not
+        // readable this way. Left permissive rather than pinned false: the
+        // filter is about which targets a story happens to hold, and a future
+        // SPACE target that is neither slewed nor ducked would be welcome.
+        if (m == M_SPACE) continue;
+        CHECK(contributed[m]);
+    }
+    CHECK(tested_macros >= MACRO_COUNT - 2);
 }
 
 TEST_CASE("flow NEW: a finished blend lands where a wake on the target would") {
@@ -480,12 +499,12 @@ TEST_CASE("flow NEW: the verbs report whether they acted") {
     for (int i = 0; i < 1000; ++i) f.tick();
     CHECK(f.undo());                              // accepted: slot is full now
     for (int i = 0; i < 1000; ++i) f.tick();
-    CHECK(f.new_partial(1u << M_DIRT));
+    CHECK(f.new_partial(1u << M_PACE));
     for (int i = 0; i < 1000; ++i) f.tick();
 
     f.set_lock(true);
     CHECK_FALSE(f.new_full());                    // refused: locked
-    CHECK_FALSE(f.new_partial(1u << M_DIRT));
+    CHECK_FALSE(f.new_partial(1u << M_PACE));
     CHECK_FALSE(f.undo());
     f.set_lock(false);
     CHECK(f.new_full());                          // and accepted again after

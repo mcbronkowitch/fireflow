@@ -54,6 +54,11 @@ static_assert(P_ENGINE_A < P_FILT_A && P_ENGINE_B < P_FILT_B,
               "ENGINE_A/B must be pushed before FILT_A/B");
 static_assert(P_ENGINE_A < P_RANGE_A && P_ENGINE_B < P_RANGE_B,
               "ENGINE_A/B must be pushed before RANGE_A/B");
+// P_MODE no longer holds the last slot, so the argument that recompute_and_push
+// may read _mode_now during the P_RANGE_A/B iteration -- because P_MODE has not
+// been pushed yet this tick -- becomes explicit instead of positional.
+static_assert(P_RANGE_A < P_MODE && P_RANGE_B < P_MODE,
+              "P_RANGE_A/B must be pushed before P_MODE");
 
 // Everything the control rate feeds, and nothing else. Split out of init()
 // so a live host can follow a sample-rate change without rebuilding the
@@ -79,7 +84,12 @@ void Flow::init(Instrument* inst, float ctrl_hz) {
     for (int d = 0; d < 2; ++d)
         for (int i = 0; i < kDucksPerDeck; ++i) _duck_t[d][i] = -1e9;
     for (int m = 0; m < MACRO_COUNT; ++m) {
-        _knob[m] = 0.f; _cv[m] = 0.f; _eff[m] = 0.f;
+        // 0.5, not 0: PACE's neutral is the CENTRE of its knob, and zero here
+        // would mean x1/32 on every draw. host/render's flow_wake pushes no
+        // macros at all (scenario.cpp), so a zero default would make every
+        // headless demo run 32x too slow.
+        _knob[m] = (m == M_PACE) ? 0.5f : 0.f;
+        _cv[m] = 0.f; _eff[m] = 0.f;
     }
 }
 
@@ -293,7 +303,13 @@ void Flow::weather_of(const Terrain& t, double ts, float* off) const {
         // control, and letting the weather modulate its own depth would be
         // exactly the feedback loop the spec excludes. generate() may
         // still aim an osc here; it goes quiet at runtime.
-        if (m == M_MOTION) continue;
+        // M_PACE is excluded too, for a different reason: the offset is up to
+        // +-0.10 in knob units, and in pace_mult's curve 0.10 is a factor of
+        // TWO. A tempo wandering by two makes every other macro's motion
+        // unreadable, because the pace is the frame the ear judges them
+        // against. It also keeps eff[M_PACE] exactly 0.5 when nothing moves
+        // it, which the bit-identical-no-op claim depends on.
+        if (m == M_MOTION || m == M_PACE) continue;
         off[m] += t.weather_depth[i]
                 * fast_sin(float(ts / double(t.weather_period_s[i])));
         ++cnt[m];
@@ -509,8 +525,9 @@ void Flow::recompute_and_push(bool force) {
         // The key is the engine the deck is CURRENTLY PUSHED as, not either
         // terrain's assignment: that is well defined at every tick, including
         // mid-stagger, so the guard is too. Reading _pushed[P_ENGINE_*] gives
-        // THIS tick's engine because ENGINE_A/B lead the parameter table and
-        // have already been through the loop (static_assert above).
+        // THIS tick's engine because ENGINE_A/B precede FILT_A/B in the
+        // parameter table and have already been through the loop -- the
+        // static_assert at the top of this file, not a positional accident.
         else if (p == P_FILT_A || p == P_FILT_B) {
             const int ep = (p == P_FILT_A) ? P_ENGINE_A : P_ENGINE_B;
             if (int(_pushed[ep] + 0.5f) == ENGINE_BODY && v < kBodyFiltFloor)
@@ -524,13 +541,14 @@ void Flow::recompute_and_push(bool force) {
         // never put a BBD there.
         //
         // The mode is read as _mode_now, which at this point in the loop is
-        // equal to _pushed[P_MODE]: P_MODE is LAST in the parameter table
-        // (stream seeding, flow_params.h), so neither has been touched by
-        // this tick's push yet, and _mode_now was set from exactly this
-        // field at the END of the PREVIOUS tick (push_mode_and_steps). The
-        // name is read here rather than the field because it names the
-        // question this guard actually asks: the mode the instrument is
-        // currently RUNNING.
+        // equal to _pushed[P_MODE]: P_MODE comes AFTER P_RANGE_A/B in the
+        // parameter table (static_assert at the top of this file -- it stopped
+        // being LAST on 2026-08-12, when P_PACE was appended behind it), so
+        // neither has been touched by this tick's push yet, and _mode_now was
+        // set from exactly this field at the END of the PREVIOUS tick
+        // (push_mode_and_steps). The name is read here rather than the field
+        // because it names the question this guard actually asks: the mode the
+        // instrument is currently RUNNING.
         //
         // What that buys is asymmetric -- "the conservative direction", what
         // an earlier version of this comment called it, is only half true.
@@ -539,9 +557,11 @@ void Flow::recompute_and_push(bool force) {
         // first forced tick and is released a tick later if the terrain
         // turns out to be STEP: conservative, no deck ever gets an
         // unclamped tick it shouldn't. On a NEW press that moves a STEP
-        // terrain to a FLOW one, the other direction holds: P_MODE is LAST
-        // in the parameter table, so this iteration (P_RANGE_*) runs before
-        // that tick's own P_MODE row is pushed, and _mode_now -- set from
+        // terrain to a FLOW one, the other direction holds: P_MODE sits
+        // after P_RANGE_A/B in the parameter table, so this iteration
+        // (P_RANGE_*) runs before that tick's own P_MODE row is pushed --
+        // the static_assert above is what keeps that true now that P_MODE is
+        // no longer simply last -- and _mode_now -- set from
         // the PREVIOUS tick -- still reads STEP for the whole of this one.
         // If the deck is already ENGINE_BBD (its engine did not have to
         // change for this to bite), this guard is skipped and RANGE goes
@@ -558,6 +578,17 @@ void Flow::recompute_and_push(bool force) {
                 && v > kBbdFlowRangeMax)
                 v = kBbdFlowRangeMax;
         }
+        // PACE's macro is an OFFSET on the terrain's (or a transferred patch's)
+        // own pace, not a replacement -- so a carried patch plays at its own
+        // speed with the knob centred. It lands HERE, in the guard chain, and
+        // not between the blend line and _cont_now above: there it would land
+        // in _resid, which begin_blend freezes at press time, and a NEW press
+        // with the knob at 0.75 would push the pace to x4 and slide it back to
+        // x2 over six seconds. The operand is v, the blend line's result --
+        // NOT t.base[P_PACE], which would step instead of ramp when two
+        // terrains carry different transferred paces.
+        else if (p == P_PACE)
+            v = clamp_to(kParams[p], v + (_eff[M_PACE] - 0.5f));
 
         // The veto band (taste.h kVetos, spec §3), enforced HERE and only
         // here at runtime. The build-time test already proves no table span

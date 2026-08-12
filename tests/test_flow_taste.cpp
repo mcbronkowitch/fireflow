@@ -17,15 +17,33 @@ TEST_CASE("flow taste: static data is internally consistent") {
             CHECK(r.per_arch[a].hi <= kParams[r.param].hi);
             CHECK(r.per_arch[a].lo <= r.per_arch[a].hi);
         }
-    // Every macro has at least one story. DENSITY used to have two -- "rate"
-    // and "thick" -- and the pick between them was a coin. "thick" was deleted
-    // 2026-08-12 when its targets became base rules (see taste.h): the coin was
-    // the mechanism that left COLOR unmapped on half of all terrains, pinned
-    // under the two-tone edge with nothing able to move it. Every macro now has
-    // exactly one story, so no macro's meaning depends on a draw.
+    // Every macro has EXACTLY one story -- except M_PACE, which has none.
+    //
+    // DENSITY used to have two -- "rate" and "thick" -- and the pick between
+    // them was a coin. "thick" was deleted 2026-08-12 when its targets became
+    // base rules (see taste.h): the coin was the mechanism that left COLOR
+    // unmapped on half of all terrains, pinned under the two-tone edge with
+    // nothing able to move it. So no macro's meaning depends on a draw.
+    //
+    // M_PACE is the ONE story-less macro, and it is named here rather than the
+    // bound being relaxed to ">= 0" for everybody. PACE is a base rule so a
+    // transferred patch keeps its own speed -- a story-owned parameter is
+    // unreachable from a BaseOverlay by construction -- and the macro adds a
+    // runtime offset in Flow's guard chain instead of owning a curve. A test
+    // that tolerated ANY macro without a story would hide the next real gap,
+    // which is exactly how COLOR went unnoticed for a month.
     int per_macro[MACRO_COUNT] = {};
     for (int s = 0; s < kStoryCount; ++s) per_macro[kStories[s].macro]++;
-    for (int m = 0; m < MACRO_COUNT; ++m) CHECK(per_macro[m] >= 1);
+    int storyless = 0;
+    for (int m = 0; m < MACRO_COUNT; ++m) {
+        CAPTURE(m);
+        if (m == M_PACE) { CHECK(per_macro[m] == 0); ++storyless; continue; }
+        CHECK(per_macro[m] == 1);
+    }
+    // Non-vacuity in both directions: the exemption is taken once, and it is
+    // taken by M_PACE. If a future macro loses its story, this goes red at the
+    // CHECK above rather than being absorbed here.
+    CHECK(storyless == 1);
     // Story breakpoint spans: inside the param range, and monotone in the
     // direction bp0 -> bp4 (lo bounds non-decreasing or non-increasing).
     for (int s = 0; s < kStoryCount; ++s)
@@ -45,8 +63,10 @@ TEST_CASE("flow taste: static data is internally consistent") {
                 }
             }
         }
-    // MOTION's and DIRT's Q4 cells may exceed centers (risk zone) but the
-    // hard param limit still caps them: already covered by the range check.
+    // MOTION's Q4 cells may exceed centers (risk zone) but the hard param
+    // limit still caps them: already covered by the range check. (DIRT's used
+    // to be named here too; that story was deleted on 2026-08-12 and its slot
+    // is PACE, which has no cells at all.)
     // Archetype weights: drone is the heaviest.
     for (int a = 1; a < ARCH_COUNT; ++a)
         CHECK(kArchWeight[ARCH_DRONE] >= kArchWeight[a]);

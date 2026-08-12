@@ -7,17 +7,19 @@ not written here, the converter does not perform it.
 
 Written 2026-08-12, against `HEAD` of branch `flow-patch-transfer`. **Revised
 2026-08-12** when four parameters moved out of the story tables and into
-`kBaseRules` — see "The 2026-08-12 widening" below.
+`kBaseRules` — see "The 2026-08-12 widening" below. **Revised again the same
+day** by the PACE work, which deleted the DIRT story outright and added
+`P_PACE` — see "The PACE move" below.
 
 ## Counts
 
 | | |
 |---|---|
-| **mapped** (`direct` or an explicit formula) | **41** |
-| **UNREACHABLE** | **1** |
-| **total base-rule parameters** | **42** |
+| **mapped** (`direct` or an explicit formula) | **45** |
+| **UNREACHABLE** | **2** |
+| **total base-rule parameters** | **47** |
 
-Derived, not remembered. The 42 come from `engine/flow/taste.h`'s `kBaseRules`
+Derived, not remembered. The 47 come from `engine/flow/taste.h`'s `kBaseRules`
 table:
 
 ```bash
@@ -25,12 +27,11 @@ awk '/^inline const BaseRule kBaseRules\[\] = \{/,/^\};/' engine/flow/taste.h \
   | grep -E "^\s*\{" | grep -o "P_[A-Z_]*" | sort
 ```
 
-`P_COMP_A` is deliberately absent — it occurs only inside a comment in that
-table and is story-owned. `P_COMP_B` is present. `is_base_rule()`
-(`engine/flow/terrain.cpp:30`) reads the same table, so this list and the
-overlay's honoured set cannot drift apart.
+`is_base_rule()` (`engine/flow/terrain.cpp:30`) reads the same table, so this
+list and the overlay's honoured set cannot drift apart. `tests/test_flow_overlay.cpp`
+pins the count and names the five rows the PACE move added.
 
-The other 21 of `P_COUNT` = 63 are story-owned and are not transferable at all
+The other 17 of `P_COUNT` = 64 are story-owned and are not transferable at all
 (spec §3). They are not rows here.
 
 ## The 2026-08-12 widening
@@ -73,9 +74,44 @@ arithmetic, not by ear** — `taste.h` says so at both rows, and the spans are
 placed against `ChordBuilder`'s zone edges and `tide_free`'s ratios
 respectively. They are the obvious thing to check against the ear first.
 
+## The PACE move
+
+Later the same day the PACE work (spec `2026-08-12-modulation-pace-design.md`)
+took the count from 42 to 47. `M_DIRT` became `M_PACE`, and the DIRT "heat"
+story was **deleted entirely** — so all four of its targets became base rules,
+and `P_PACE` was added as a fifth row.
+
+- **`P_PACE`** is new, and the reason it is a base rule rather than a story is
+  the whole design: a story-owned parameter is unreachable from a
+  `BaseOverlay` by construction (`generate()` applies the overlay by iterating
+  `kBaseRules`), so a macro that *owned* the pace would throw away a
+  transferred patch's own speed — the same failure `P_TIDE` was moved to fix,
+  one level up. The terrain draws **no** pace at all: its span is a degenerate
+  `{0.5, 0.5}` on every archetype, which is exactly ×1. The row exists so the
+  overlay has a destination and the coverage test has no hole. `M_PACE` adds a
+  live offset on top, in `Flow`'s guard chain (`flow.cpp`), not in the terrain.
+- **`P_DRIVE`, `P_GRIT_A`, `P_GRIT_B`, `P_COMP_A`** were the DIRT story's four
+  targets. Three of them — `P_DRIVE`, `P_GRIT_A`, `P_GRIT_B` — had a literal,
+  degenerate `{0.f, 0.f}` `bp0` span, and stage 4 writes `base[p] = bp[0]`, so
+  **all three sat at exactly 0.0 on every terrain ever drawn**. They now draw
+  real per-archetype spans. `P_COMP_A` joins `P_COMP_B`'s band.
+- They were given real spans rather than inheriting the degenerate `bp0`,
+  which would have kept every existing terrain code rendering identically. The
+  price of that would have been pinning `P_DRIVE` at 0 forever, and DRIVE has
+  had **no** Fireflow control since the 2026-08-09 reduction retired
+  `MASTER_DRIVE`/`PUSH` — Glow would have lost master drive outright with
+  nothing able to restore it. Terrain codes re-render instead; that was the
+  owner's ruling.
+
+**What this buys the transfer, stated plainly:** deck A's compressor and both
+GRIT sends now have a destination they never had, and `STEPS_A` / `SONG_A` /
+`FORM_A` are the only Fireflow controls still landing nowhere. **What it does
+not buy:** `P_DRIVE` gained a destination in flow and still has no *source* in
+Fireflow, so it is a new **UNREACHABLE** row rather than a new mapped one.
+
 ## How to read a row
 
-- **flow param** — the `spky::flow::ParamId` (`engine/flow/flow_params.h:69-110`,
+- **flow param** — the `spky::flow::ParamId` (`engine/flow/flow_params.h:69-120`,
   the `SPKY_FLOW_PARAMS` X-macro). Rows are in that enum's order.
 - **Fireflow** — the `ParamId` from `host/vcv/src/generated_panel.hpp:16-86`.
   `PART_STRIDE` is 20: part A occupies `[0, 20)`, part B the next 20, and
@@ -88,10 +124,10 @@ Two traps this table exists to survive, both of which have already bitten this
 repo (see the `fireflow-control-merge-init-trap` memory):
 
 1. **The knob's name is not the parameter's name.** `P_DEPTH_A/B` comes from the
-   knob printed `MOD`. `P_COMP_B` comes from the knob printed `LVL`.
+   knob printed `MOD`. `P_COMP_A/B` come from the knobs printed `LVL`.
    `P_FORM_B` comes from the knob printed `SONG`.
 2. **The knob's value is not always the engine's value.** For `ENGINE`, `CHOKE`,
-   `COUPLE`, `TEMPO` and `COMP` (`LVL`), `Fireflow.cpp` transforms the knob
+   `COUPLE`, `TEMPO`, `GRIT` and `COMP` (`LVL`), `Fireflow.cpp` transforms the knob
    before handing it to the engine. Flow's `apply_param()`
    (`flow_params.h:135`) calls the *same* engine setter with the overlay value
    raw. So for those rows the converter must store what **`Fireflow` pushed to
@@ -146,6 +182,9 @@ say so and say what the converter must report.
 |---|---|---|---|
 | `P_FLUXMIX_A` / `P_FLUXMIX_B` | `FLUX_A` / `FLUX_B` | **direct** (`Fireflow.cpp:582` — `set_flux_mix`) | Plain `0..1` knob. **Known asymmetry, not a converter problem:** Fireflow also gates the block with `set_fx_on(p, FxBlock::Flux, mix > 1e-4f)` (`:601`), and **nothing in `engine/flow/` or `Glow.cpp` ever calls `set_fx_on`** (`grep -rn set_fx_on` hits only `Fireflow.cpp` and the render host). `SoftSwitch::_on` defaults `false` (`engine/fx/fx_util.h`), so under Glow the FLUX block is off and this value is currently inaudible. That is a pre-existing gap in the flow layer — the value still transfers, and this row must not be "fixed" by inventing a mapping |
 | `P_COMP_B` | `COMP_B` (printed **`LVL`**) | **formula.** The knob is not the comp amount. Store what Fireflow pushes: `lvl = COMP_B`; `P_COMP_B = lvl <= 0.6 ? 0 : 0.7 * pow((lvl - 0.6) / 0.4, 0.6)` (`Fireflow.cpp:633-641`, constants `kLvlCompSplit = 0.6`, `kCompTop = 0.7`, `kCompShape = 0.6`) | **Deck balance does not transfer.** The lower zone of `LVL` is pure output gain via `set_part_level` (`:637`), and flow never calls `set_part_level` at all — both decks sit at 1.0 under Glow. **And the veto has the last word:** `kVetos` forces `P_COMP_B` into **0.40..0.60** (`taste.h:644`, enforced at `flow.cpp:577-582`), so *every* `LVL` position lands in that band whatever this formula produces. That band is a by-ear ruling (`spotykach-by-ear-decisions`); the converter reports the rewrite, it does not work around it. **This contradicts spec §5's prose**, which assumed the knob transfers raw ("a COMP dialled to 0.85 transfers perfectly and is heard at 0.60"); with the formula 0.85 gives 0.528, which is in band and is what the Fireflow patch actually sounded like. **Corrected in §5 on 2026-08-12 (owner-approved), and §5 now points here as the authority** — this row is the source of truth. The formula is right — copying a merged control's knob value is precisely the `fireflow-control-merge-init-trap` failure |
+| `P_COMP_A` | `COMP_A` (printed **`LVL`**) | **formula.** The identical formula as `P_COMP_B`, read off deck A's own knob: `lvl = COMP_A`; `P_COMP_A = lvl <= 0.6 ? 0 : 0.7 * pow((lvl - 0.6) / 0.4, 0.6)` (`Fireflow.cpp:633-641`; the push site is `pp(COMP_A, p)` and `COMP_A`/`COMP_B` are 20 apart, so the stride is correct here) | **A base rule since 2026-08-12** — before that it was owned by the DIRT story and had no destination at all. Everything the `P_COMP_B` row says applies unchanged: the lower zone of `LVL` is pure output gain via `set_part_level` and does **not** transfer, and `kVetos` forces the result into **0.40..0.60** (`taste.h`, enforced at `flow.cpp`'s veto loop), so every `LVL` position lands in that band whatever the formula produces. Report the rewrite, once per deck |
+| `P_GRIT_A` / `P_GRIT_B` | `GRIT_A` / `GRIT_B` | **formula, bipolar with a dead zone.** `k = GRIT_A` (or `GRIT_B`), a `configParam(c.id, -1.f, 1.f, …)` (`Fireflow.cpp:367`); `mag = abs(k)`; `P_GRIT_* = mag <= 0.03 ? 0 : (mag - 0.03) / (1 - 0.03)` (`Fireflow.cpp:834-842`, `kGritDead = 0.03f` at `:555`). **The sign does not transfer**: it picks `GritMode::Reduce` vs `Drive` (`set_grit_mode`), and flow has no `P_GRIT_MODE` — report a negative knob as a mode dropped to `Drive` | **Base rules since 2026-08-12**, from the deleted DIRT story. **Known asymmetry, the same one the `P_FLUXMIX_*` row carries and for the same reason:** Fireflow gates the block with `set_fx_on(p, FxBlock::Grit, abs(GRIT) > kGritDead)` (`:603-608`), and **nothing in `engine/flow/` or `Glow.cpp` ever calls `set_fx_on`**, so under Glow the GRIT block is off and this value is currently inaudible. That is a pre-existing gap in the flow layer — the value still transfers, and this row must not be "fixed" by inventing a mapping. `taste.h`'s spans are deliberately modest for the day that gap closes |
+| `P_DRIVE` | — | **UNREACHABLE.** Fireflow has no DRIVE control. `set_master_drive` is called with the **hardcoded literal `0.40f`** (`Fireflow.cpp:914`), fixed by ear in the 2026-08-09 control reduction ("PUSH sat at 0.40 in every patch, and once the limiter rides, DRIVE stops controlling dirt anyway"). There is no `ParamId` in `generated_panel.hpp` for it | The overlay must leave `has[P_DRIVE] = false`, so the terrain's own base draw stands. **This became a row on 2026-08-12** — before that `P_DRIVE` was story-owned and outside this table entirely, which is why the count of UNREACHABLE rows went 1 → 2. The two sides moved in opposite directions on the same day: flow gained a destination for DRIVE exactly when Fireflow no longer had a source. Note also that `kVetos` caps `P_DRIVE` at 0.40 — the very value Fireflow hardcodes — so a converter that *did* copy it would be writing the band ceiling |
 | `P_LINK_A` / `P_LINK_B` | `LINK_A` / `LINK_B` | **direct** (`Fireflow.cpp:593` — `set_link(p, params[p ? LINK_B : LINK_A])`) | `configParam<LinkQuantity>(c.id, 0.f, 1.f, …)` (`:334-335`), display quantity only. Note the **explicit ternary**: `LINK_A/B` are appended params outside `PART_STRIDE`, so `pp(LINK_A, p)` would read the wrong slot. A converter that indexes by stride has the same bug available to it |
 
 ### Global
@@ -159,6 +198,7 @@ say so and say what the converter must report.
 | `P_SHUFFLE` | `SHUFFLE` | **direct** (`Fireflow.cpp:560`) | Plain `0..1` knob |
 | `P_REV_DIFF` | `REV_DIFF` | **direct** (`Fireflow.cpp:902` — `set_reverb_diffusion`) | Plain `0..1` knob. `REV_SIZE`/`REV_DECAY`/`REV_TONE` are story-owned, and `set_master_drive`/`set_reverb_smear`/`set_reverb_mod` are hardcoded constants in Fireflow (`:912-914`) — none of those are rows here |
 | `P_TEMPO_BPM` | `TEMPO` | **formula, then clamp.** `bpm = 40 + TEMPO * 200` (`Fireflow.cpp:918`), i.e. **40..240 BPM**. `kParams[P_TEMPO_BPM]` is **50..140** — `X(P_TEMPO_BPM, 50.f, 140.f, 0)` (`flow_params.h:101`). Clamp, and **report anything outside** | An external clock at `CLOCK` overrides the knob at runtime (`:919-922`); that is live state, not patch state, and does not transfer |
+| `P_PACE` | `PACE` | **direct.** The knob is normalized `0..1` and `Instrument::set_pace` takes exactly that normalized position, not the multiplier — `pace_mult()` (`engine/mod/divisions.h`) is the curve, and it lives in the engine so a host tooltip cannot drift from what runs. `kParams[P_PACE]` is `0..1` continuous, the same range, so nothing is clamped and nothing is reported | **0.5 is exactly ×1**, and it is the centre of the knob, not an end: the curve is `32^(2n-1)` below centre and `4^(2n-1)` above, i.e. ×1/32 … ×1 … ×4, asymmetric on purpose (the fast end is already reachable through `RATE`). **The terrain draws no pace** — the `kBaseRules` span is a degenerate `{0.5, 0.5}` — so an unset `has[P_PACE]` leaves the place at ×1, and a *set* one is the patch's own speed carried intact. Glow's `M_PACE` macro then adds a live **offset** on top (`flow.cpp`'s guard chain), so a carried patch plays at its own speed with the knob centred. **Availability:** the `PACE` knob enters `generated_panel.hpp` with the Fireflow panel commit (plan Task 11); a converter built before it lands must treat this row as absent, not guess a source |
 | `P_MODE` | `COUPLE` | **formula, derived.** `P_MODE = (COUPLE >= 0.5) ? 1 : 0` — the COUPLE zone split is the *only* thing that drives `set_sync` in Fireflow (`Fireflow.cpp:879-880`), and `P_MODE` is the only thing that drives `set_sync` in flow (`Flow::push_mode_and_steps`, `flow.cpp:399, :405`) | **Not an independent control, and lossy in one specific way.** In Fireflow the per-deck step flag comes from each deck's own `STEPS` knob (`set_step(p, steps > 0, steps)`, `:843`) while `set_sync` is global; in flow, the single `P_MODE` drives `set_sync` **and both decks' step flags** (`flow.cpp:405-407`). So a patch with deck A free and deck B stepped — an ordinary ambient patch — has no representation. The converter must report whenever `(COUPLE >= 0.5) != (STEPS_A > 0)` or `!= (STEPS_B > 0)`. Spec §5 lists `P_MODE` under "no path at all"; that is about independence, not availability — the value *is* determined by the patch, and leaving it unset would hand a hand-authored stepped patch to the terrain's mode coin, which is worse |
 
 ---
@@ -175,17 +215,20 @@ Two things the converter must handle that no single row owns:
    transferable at all** — not "partly transferred", dropped. The converter
    must detect this before writing anything and set `overlay_rejected`.
    Widening `kCarrierEngine` is spec §10's open decision, out of scope here.
-2. **Nothing outside the 42 has a destination.** Not "is transferred with
-   loss" — has no slot. That includes every story-owned parameter (FILT,
-   VARIATION, DENSITY, GRIT, REVMIX, DRIFT, DRIVE, the reverb shape) as well
-   as the flow params with no base rule but a Fireflow control: `STEPS_A`,
-   `SONG_A`/`FORM_A`, `COMP_A`. And it includes everything outside `P_COUNT`
-   entirely: sample content, `SOURCE_A/B`, `FLUXRATE`, `FLUXFB`, `DETUNE`,
-   `STAGES`, `REC`, the excitation bus.
+2. **Nothing outside the 47 has a destination.** Not "is transferred with
+   loss" — has no slot. That includes every story-owned parameter — the 17 of
+   them left after the PACE move: `FILT_A/B`, `VARIATION_A/B`, `DENSITY_A/B`,
+   `STEPS_A`, `REVMIX_A/B`, `DRIFT`, `FORM_A`, `SONG_A`, and the reverb shape
+   (`REV_SIZE`, `REV_DECAY`, `REV_TONE`, `REV_SMEAR`, `REV_MOD`). The flow
+   params with no base rule but a live Fireflow control are therefore
+   `STEPS_A`, `SONG_A`/`FORM_A` — `COMP_A` and `GRIT_A/B` left this list on
+   2026-08-12 and have rows above. And it includes everything outside
+   `P_COUNT` entirely: sample content, `SOURCE_A/B`, `FLUXRATE`, `FLUXFB`,
+   `DETUNE`, `STAGES`, `REC`, the excitation bus.
 
 ## Values a Fireflow patch can hold that flow cannot
 
-The four places where a legal Fireflow value has no legal flow value. Each is a
+The five places where a legal Fireflow value has no legal flow value. Each is a
 clamp on the way in (`terrain.cpp:494`) and each must appear in the report:
 
 | where | Fireflow can be | flow accepts | on conversion |
@@ -193,7 +236,8 @@ clamp on the way in (`terrain.cpp:494`) and each must appear in the report:
 | `RES_A/B` | `0..1` | `0..0.75` | clamp to 0.75, report |
 | `TEMPO` | 40..240 BPM | 50..140 BPM | clamp, report |
 | `STEPS_B` | 0..16 | 2..16 (`s == 0` means STEP off) | `0` -> leave unset + `P_MODE = 0` question; `1` -> clamp to 2, report |
-| `COMP_B` (`LVL`) | full travel | veto band 0.40..0.60 | value stored, band applied at runtime, report the rewrite |
+| `COMP_A`/`COMP_B` (`LVL`) | full travel | veto band 0.40..0.60 | value stored, band applied at runtime, report the rewrite. `COMP_A` joined this row on 2026-08-12 |
+| `GRIT_A/B` | bipolar `-1..1`, sign = mode | `0..1` magnitude only | the `Reduce`/`Drive` mode has no flow representation; report a negative knob |
 
 And one that is not a range problem at all, because it happens after the value
 has already been applied correctly: **Glow's TEMPO fader overwrites the carried
@@ -209,7 +253,7 @@ moves the whole grid. Reported unconditionally, like `P_ROOT`.
 
 Everything above was read at `flow-patch-transfer` HEAD from:
 
-- `engine/flow/taste.h` — `kBaseRules` (the 38), `kVetos`, `kCarrierEngine`
+- `engine/flow/taste.h` — `kBaseRules` (47 rows since the PACE move), `kVetos`, `kCarrierEngine`
 - `engine/flow/flow_params.h` — `SPKY_FLOW_PARAMS` ranges, `apply_param()`
 - `engine/flow/terrain.{h,cpp}` — `BaseOverlay`, `is_base_rule()`, the overlay
   block in `generate()`
