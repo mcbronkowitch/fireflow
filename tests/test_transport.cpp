@@ -78,13 +78,24 @@ TEST_CASE("transport: an external clock survives a paced transport") {
     }
     CHECK(t.beats() == doctest::Approx(8.0 * 0.03125).epsilon(0.02));
 
-    // And a pace CHANGE mid-stream must not jump: the anchor is the previous
-    // pulse, not absolute zero. Anchored at zero this walks off by up to half
-    // a real beat on every pulse while the knob moves -- straight into a hard
-    // servo whose authority is kLockCap = 0.35.
-    const double before = t.beats();
+    // The PACE knob turns BETWEEN pulses, not exactly on one: let 800 ticks
+    // (800 * 3.75/(60*500) = 0.1 paced beats, at the OLD tempo) pass first,
+    // so _beats (0.35) sits ahead of the last pulse's anchor (0.25) at the
+    // moment set_pace_anchor() runs. That gap is what makes the call
+    // load-bearing: a no-op set_pace_anchor() would leave the STALE 0.25
+    // anchor in place, and the next pulse's snap below would then land 0.1
+    // beat short of the value asserted -- far past this check's ~0.026 beat
+    // tolerance, so a no-op cannot pass it by accident.
+    for (int i = 0; i < 800; ++i) t.tick();
     t.set_bpm(120.f * 1.32f);
     t.set_pace_anchor();            // what Instrument::set_pace calls
+    const double before = t.beats();
+
+    // A pace CHANGE mid-stream must not jump: the anchor is the previous
+    // pulse (just re-anchored above), not absolute zero. Anchored at zero
+    // this walks off by up to half a real beat on every pulse while the
+    // knob moves -- straight into a hard servo whose authority is
+    // kLockCap = 0.35.
     for (int i = 0; i < 250; ++i) t.tick();
     t.clock_pulse(1.32f);
     CHECK(t.beats() - before == doctest::Approx(1.32).epsilon(0.02));
