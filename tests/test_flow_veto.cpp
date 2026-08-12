@@ -134,15 +134,16 @@ TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto") {
     // WHICH PARAMS ACTUALLY DO THAT, MEASURED rather than assumed from the
     // band positions alone: of the five interior bounds available (COMP_A
     // 0.40/0.60, COMP_B 0.40/0.60, REV_MOD's 0.25, REVMIX_A/B's 0.08), this
-    // sweep (60 masters, the same run rechecked at 400) lands an interior hit
-    // on P_COMP_A only. COMP_B, REV_MOD and REVMIX_A/B never do, at either
-    // sample size -- their pre-veto values apparently never overshoot far
-    // enough for THIS sweep to push them past their interior bound, though
-    // their edge_hits (the loose overall counter above) are still nonzero.
-    // No mechanism for the difference is claimed here -- COMP_A alone gets a
-    // story curve with more range than COMP_B's near-constant base rule,
-    // which is a plausible candidate, but it was not isolated. Do not tighten
-    // this to require all five without re-measuring first.
+    // sweep at 60 masters lands interior hits on P_COMP_A (31/60),
+    // P_REVMIX_B (37/60) and P_REV_MOD (25/60); P_COMP_B and P_REVMIX_A
+    // never do. These numbers are for the % 23 re-press cadence below -- the
+    // older % 30 cadence scored COMP_A 13/60 and everything else 0/60, which
+    // records that the cadence change is what opened the other two up, not a
+    // change in the engine. REVMIX_A's absence is explained at the
+    // requirement loop below (eval_terrain's farthest-from-base combine and
+    // BRIGHT "dawn" holding it off its own bound); no mechanism is claimed
+    // for why COMP_B stays at zero. Do not tighten this to require all five
+    // without re-measuring first.
     long edge_hits = 0;                          // kept: loose overall sanity
     bool interior_hit[kVetoCount] = {};           // per-param, strictly-inside bound
     bool lo_interior[kVetoCount], hi_interior[kVetoCount];
