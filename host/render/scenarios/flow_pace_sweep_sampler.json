@@ -5,9 +5,9 @@
   "input_wav": "host/render/scenarios/assets/in_drone.wav",
   "init": [
     {
-      "_comment": "Task 12 fix round 2 (spec 2026-08-12-modulation-pace S3.3): review found that overriding set_engine on a deck the terrain did NOT draw as BBD silently disables the RANGE safety cap for that deck's whole run -- the cap at engine/flow/flow.cpp:576-580 reads _pushed[P_ENGINE_A/B], Flow's OWN record of what it last pushed, and a scenario-side set_engine override deliberately never goes through Flow (that bypass is exactly what makes it survive Flow's per-tick re-push), so _pushed[] keeps reporting the terrain's original draw and the cap's `_pushed[ep] == ENGINE_BBD` condition can never fire. The comment at flow.cpp:536-541 names this exact failure mode ('a deck can run as BBD ... on a RANGE value drawn by a terrain that never put a BBD there') -- a scenario override just makes it last 120s instead of one control tick. Fixed by NOT overriding the engine at all: F1-00000017-000000000000 is a terrain code whose own RNG draw (roles_of(), terrain.cpp:262-269, checked directly with a scratch probe over master seeds 0..200000) naturally assigns ENGINE_BBD to deck A and ENGINE_SYNTH (the carrier) to deck B, with NO scenario intervention. _pushed[P_ENGINE_A] therefore genuinely equals ENGINE_BBD for the whole file, and the RANGE cap stays live and does its real job -- this is also, as a side effect, a synth-envelope render (deck B), since the carrier engine is structurally always one of {SYNTH, WAVE, BODY} (taste.h:659-666, 'the loud pair rule -- never Sampler+BBD together -- is structural: both loud engines are excluded from the carrier list', which is also why a single terrain can never draw BBD AND Sampler together -- see flow_pace_sweep_sampler.json for that half of spec S3.3's listening checks).",
+      "_comment": "Task 12 fix round 2 (spec 2026-08-12-modulation-pace S3.3), the Sampler half of the pair split from flow_pace_sweep.json -- see that file's init comment for the full account of why a scenario-side set_engine override is unsafe (it silently disables the BBD RANGE cap, flow.cpp:576-580) and why one terrain can never draw BOTH Sampler and BBD (taste.h:659-666: carrier is structurally restricted to {SYNTH, WAVE, BODY}, so one deck is always a carrier and never Sampler/BBD -- the 'loud pair' exclusion is by construction, not chance). F1-00000011-000000000000 is a terrain whose own draw (roles_of(), checked directly with a scratch probe over master seeds 0..200000) naturally assigns ENGINE_SAMPLER to deck A and ENGINE_SYNTH (the carrier) to deck B, with no scenario override needed -- so this file also doubles as a synth-envelope render, the same way flow_pace_sweep.json's BBD deck pairs with a natural SYNTH carrier on its own deck B.",
       "action": "flow_wake",
-      "value": "F1-00000017-000000000000"
+      "value": "F1-00000011-000000000000"
     },
     {
       "action": "flow_macro",
@@ -44,14 +44,26 @@
       "value": 0.5
     },
     {
-      "_comment": "Deck A's BBD also pulls deck B's own audio-rate output (set_excitation_sources, other_deck=true) so it has continuous material to circulate for the whole 120s -- in_drone.wav is only 48s and the host does not loop input_wav (main.cpp zero-pads past EOF). Deck B's SYNTH self-drones via flow's own PITCH-lane firing (Part::_fire_trigger, Part-level, needs no manual trigger_* event), so it never runs dry the way a one-shot input file would. This is an audio-routing knob (Instrument::set_excitation_sources / Part::_src_deck), not an engine override -- it has no interaction with Flow's engine-identity tracking or the RANGE cap.",
-      "action": "set_excitation_sources",
+      "_comment": "Feedback raised from the 0.95 boot default toward sampler_bloom.json's near-unity 0.971 rung, so the captured loop keeps circulating audibly for the whole 120s sweep instead of decaying out partway through.",
+      "action": "sampler_feedback",
       "part": 0,
-      "flag": false,
-      "ivalue": 1
+      "value": 0.97
     }
   ],
   "events": [
+    {
+      "_comment": "Deck A (SAMPLER) records ~7s of the drone near the top of the file, then plays the captured loop back for the rest of the sweep -- same capture shape as sampler_bloom.json.",
+      "t": 1.0,
+      "action": "sampler_record",
+      "part": 0,
+      "flag": true
+    },
+    {
+      "t": 8.0,
+      "action": "sampler_record",
+      "part": 0,
+      "flag": false
+    },
     {
       "t": 0.0,
       "action": "set_pace",
