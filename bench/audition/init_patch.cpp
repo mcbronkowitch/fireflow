@@ -199,6 +199,7 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
     inst.set_reverb_mod(0.15f);
     inst.set_scale(static_cast<int>(std::lround(value(SCALE))));
     inst.set_tempo_bpm(40.f + value(TEMPO) * 200.f);
+    inst.set_pace(value(PACE));
 }
 
 void apply_init_patch(spky::Instrument& inst)

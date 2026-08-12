@@ -82,6 +82,7 @@ enum ParamId {
     REV_MIX_A,
     REV_MIX_B,
     SHUFFLE,
+    PACE,
     NUM_PARAMS
 };
 enum InputId {
@@ -176,6 +177,7 @@ static const PanelCtl kParamCtls[] = {
     {REV_MIX_A, WK_SMKNOB, {75.750f, 77.300f}, "SEND", {75.750f, 82.900f}, 0, 1.90f, 0x171713, "Room send"},
     {REV_MIX_B, WK_SMKNOB, {137.610f, 77.300f}, "SEND", {137.610f, 82.900f}, 0, 1.90f, 0x171713, "Room send"},
     {SHUFFLE, WK_SMKNOB, {115.680f, 54.000f}, "SHUFL", {115.680f, 59.600f}, 0, 1.90f, 0x171713, "SHUFL"},
+    {PACE, WK_SMKNOB, {97.680f, 42.000f}, "PACE", {97.680f, 47.600f}, 0, 1.90f, 0x171713, "PACE"},
 };
 static const PanelCtl kInputCtls[] = {
     {IN_L, WK_IN, {55.250f, 118.400f}, "L", {55.250f, 124.800f}, 0, 1.80f, 0x171713, "IN L"},

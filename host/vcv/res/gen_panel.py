@@ -435,7 +435,8 @@ SHARED = [
     # zone split (Fireflow.cpp kCoupleZoneSplit) the knob is the FREE world,
     # above it the GRID world -- each zone sweeps couple across its own full
     # 0..1 range, so "on the grid but breathing" stays reachable. The freed
-    # ROW_TIME1 slot beside TEMPO stays empty; regrouping is a later session.
+    # ROW_TIME1 slot beside TEMPO now holds PACE (APPENDED_PANEL_PARAMS below,
+    # spec 2026-08-12 modulation-pace).
     Ctl("COUPLE", SMKNOB,  CX - 9.0, ROW_TIME2, "FREE|GRID"),
     Ctl("SCALE",  KNOBI,   L,  ROW_DUO1, "SCALE"),
     Ctl("DRIFT",  SMKNOB,  R,  ROW_DUO1, "DRIFT"),
@@ -550,7 +551,13 @@ HIDDEN_PARAMS = []
 # base (Fireflow.cpp pushParams) so CV and the mod lanes can still bend the
 # tape; only the panel's second way to set it is gone. FX_BOT[1], MULT's old
 # slot, stays empty -- freed slots are not regrouped.
-APPENDED_PANEL_PARAMS = []
+APPENDED_PANEL_PARAMS = [
+    # PACE: the global modulation time-stretch (spec 2026-08-12). Takes the
+    # ROW_TIME1 slot freed when SYNC folded into COUPLE. It belongs in TIMING
+    # beside TEMPO, and next to TIDE on the hardware grid -- those two are the
+    # pair this control came out of confusing: TIDE is a ratio, PACE is speed.
+    Ctl("PACE", SMKNOB, CX - 9.0, ROW_TIME1, "PACE"),
+]
 
 # Persistent ids retain the legacy visible and hidden sequences exactly; runtime
 # controls may include appended widgets, while the SVG is the Synth-only view
@@ -681,6 +688,10 @@ INIT_DEFAULTS = {
     "REV_MIX_A": 0.343394309,
     "REV_MIX_B": 0.805333197,
     "SHUFFLE": 0.000000000,
+    # PACE (spec 2026-08-12 modulation-pace): 0.5 is exactly x1 -- the factory
+    # sound (FF_hw_Init.vcvm) must boot at the same speed it always has, not
+    # x1/32 (0.0) or x4 (1.0).
+    "PACE": 0.500000000,
 }
 
 # --- lights --------------------------------------------------------------------

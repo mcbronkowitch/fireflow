@@ -299,7 +299,9 @@ def test_size_classes_match_the_spec():
     big_positions = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "G"]
     check(len(big_positions) == 18, f"expected 18 big positions, got {len(big_positions)}")
     small = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "S"]
-    check(len(small) == 46, f"expected 46 small params, got {len(small)}")
+    # 47 (spec 2026-08-12 modulation-pace): PACE joined as a small knob,
+    # HW_SIZE["PACE"] = "S".
+    check(len(small) == 47, f"expected 47 small params, got {len(small)}")
 
 
 def test_hw_only_inventory():

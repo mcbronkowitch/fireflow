@@ -45,6 +45,9 @@ def ctl(enum):
 # is a genuine feature loss, and DRIVE_A/B was dead menu-only patch state
 # that never reached the engine. HIDDEN_PARAMS is now empty, so DRIVE_A/B's
 # old trailing pair is simply gone, not replaced.
+# PACE (spec 2026-08-12 modulation-pace) is APPENDED_PANEL_PARAMS' first
+# member, appended after PANEL_PARAMS + HIDDEN_PARAMS, so it now trails
+# SHUFFLE as the last ParamId.
 PARAM_ORDER = [
     'RATE_A', 'SHAPE_A', 'DENSITY_A', 'SMOOTH_A', 'RANGE_A', 'MELODY_A',
     'MOD_A', 'TUNE_A', 'ATTACK_A', 'DECAY_A', 'RES_A', 'SUB_A', 'SOURCE_A',
@@ -60,7 +63,7 @@ PARAM_ORDER = [
     'FLUXRATE_A', 'FLUXRATE_B', 'FLUXFB_A', 'FLUXFB_B', 'COLOR_A', 'COLOR_B',
     'LINK_A', 'LINK_B', 'STAGES_A', 'STAGES_B',
     'REC_A', 'REC_B', 'REV_MIX_A', 'REV_MIX_B',
-    'SHUFFLE',
+    'SHUFFLE', 'PACE',
 ]
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
@@ -74,7 +77,7 @@ PARAM_TIPS = [
     'FILT', 'FILT', 'TIDE', 'FLUX time', 'FLUX time', 'FFB', 'FFB',
     'COLOR', 'COLOR', 'LINK', 'LINK', 'BBD Bend', 'BBD Bend', 'REC', 'REC',
     'Room send', 'Room send',
-    'SHUFL',
+    'SHUFL', 'PACE',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
@@ -84,10 +87,10 @@ LIGHT_ORDER = ['GATE_A_L', 'GATE_B_L', 'REC_A_L', 'REC_B_L']
 def test_enum_order():
     """Patch compatibility. If this fails, every saved .vcv breaks."""
     check([c.enum for c in g.PARAMS] == PARAM_ORDER, "PARAMS order changed")
-    check(PARAM_ORDER[-1] == 'SHUFFLE',
-          "SHUFFLE must be the trailing ParamId now that DRIVE_A/B "
-          "(task 9, spec 2026-08-09 hw-control-reduction) is retired and "
-          "HIDDEN_PARAMS is empty")
+    check(PARAM_ORDER[-1] == 'PACE',
+          "PACE must be the trailing ParamId (spec 2026-08-12 "
+          "modulation-pace): it is APPENDED_PANEL_PARAMS' one member, "
+          "landing after SHUFFLE and everything HIDDEN_PARAMS used to hold")
     check([c.enum for c in g.INPUTS] == INPUT_ORDER, "INPUTS order changed")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
@@ -144,19 +147,20 @@ def test_time_knob_replaces_div_and_mult():
 def test_bbd_pitch_flux_time_collections():
     """The three generator views keep saved ParamIds, Rack widgets, and the
     static Synth preview independently intentional. FLUXTIME_A/B (MULT) is
-    retired (task 6, spec 2026-08-09 hw-control-reduction), so
-    APPENDED_PANEL_PARAMS is now empty and TIME (FLUXRATE_A/B, unchanged
-    ParamId) is the only surviving delay-time widget."""
+    retired (task 6, spec 2026-08-09 hw-control-reduction), and TIME
+    (FLUXRATE_A/B, unchanged ParamId) is the only surviving delay-time
+    widget. APPENDED_PANEL_PARAMS was empty from task 6 until PACE (spec
+    2026-08-12 modulation-pace) became its first and, so far, only member."""
     persistent = [c.enum for c in g.PARAMS]
     runtime = [c.enum for c in g.RUNTIME_PANEL_PARAMS]
     static = [c.enum for c in g.STATIC_PANEL_PARAMS]
-    check(g.APPENDED_PANEL_PARAMS == [],
-          "APPENDED_PANEL_PARAMS must stay empty -- MULT was its only member")
+    check([c.enum for c in g.APPENDED_PANEL_PARAMS] == ['PACE'],
+          "APPENDED_PANEL_PARAMS must hold exactly PACE")
     check("FLUXTIME_A" not in persistent and "FLUXTIME_B" not in persistent,
           "FLUXTIME must not survive as a saved ParamId")
-    check(persistent[-1] == 'SHUFFLE',
-          "SHUFFLE must be the trailing ParamId now that DRIVE_A/B "
-          "(task 9) is retired")
+    check(persistent[-1] == 'PACE',
+          "PACE must be the trailing ParamId (spec 2026-08-12 "
+          "modulation-pace)")
     check(all(e in runtime for e in ('STAGES_A', 'STAGES_B',
                                       'FLUXRATE_A', 'FLUXRATE_B')),
           "runtime table lacks PITCH or TIME widgets")
@@ -285,9 +289,9 @@ def test_param_runtime_tip_contract():
     check(PARAM_TIPS[ids["LINK_A"]:ids["STAGES_B"] + 1]
           == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
           "BBD Bend runtime tips drifted")
-    check(PARAM_TIPS[-1] == 'SHUFL',
-          "SHUFFLE must be the trailing runtime tip now that the DRIVE "
-          "pair (task 9) is retired")
+    check(PARAM_TIPS[-1] == 'PACE',
+          "PACE must be the trailing runtime tip (spec 2026-08-12 "
+          "modulation-pace)")
     for enum, caption, tip in (
             ("FLUX_A", "MIX", "FLUX"), ("FLUX_B", "MIX", "FLUX"),
             ("FLUXRATE_A", "TIME", "FLUX time"),

@@ -76,12 +76,13 @@ static const PanelCtl kParamCtls[] = {
     {REV_MIX_A, WK_SMKNOB, {110.000f, 48.000f}, "SEND", {110.000f, 58.500f}, 0, 2.20f, 0x171713, "Room send"},
     {REV_MIX_B, WK_SMKNOB, {194.800f, 48.000f}, "SEND", {194.800f, 58.500f}, 0, 2.20f, 0x171713, "Room send"},
     {SHUFFLE, WK_SMKNOB, {152.400f, 30.000f}, "SHUFL", {152.400f, 38.000f}, 0, 2.20f, 0x171713, "SHUFL"},
+    {PACE, WK_SMKNOB, {127.400f, 48.000f}, "PACE", {127.400f, 56.000f}, 0, 2.20f, 0x171713, "PACE"},
 };
 // 1 = big cap, 0 = small. Parallel to kParamCtls, same order.
 // The rehearsal widget reads THIS, not c.kind -- kind says
 // bipolar/detented, which is not a diameter.
 static const unsigned char kParamSize[] = {
-    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0,
+    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0,
 };
 static_assert(sizeof(kParamSize) == sizeof(kParamCtls) / sizeof(kParamCtls[0]), "kParamSize desynced");
 static const PanelCtl kInputCtls[] = {

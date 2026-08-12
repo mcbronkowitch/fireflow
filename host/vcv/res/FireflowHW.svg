@@ -140,6 +140,8 @@
 <text x="194.800" y="58.500" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SEND</text>
 <circle cx="152.400" cy="30.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
 <text x="152.400" y="38.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SHUFL</text>
+<circle cx="127.400" cy="48.000" r="5.500" fill="#252721" stroke="#d7cdbb" stroke-width="0.3"/>
+<text x="127.400" y="56.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">PACE</text>
 <circle cx="112.000" cy="107.000" r="4.000" fill="#252721" stroke="#d7cdbb" stroke-width="0.35"/>
 <text x="112.000" y="101.000" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">L</text>
 <circle cx="126.000" cy="107.000" r="4.000" fill="#252721" stroke="#d7cdbb" stroke-width="0.35"/>

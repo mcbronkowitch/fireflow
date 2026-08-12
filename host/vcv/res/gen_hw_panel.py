@@ -42,7 +42,7 @@ HW_SIZE = {
     "ENGINE": "P", "REC": "P",
     # --- centre ---
     "MORPH": "G", "TIDE": "S", "CHOKE": "S",          # BLEND
-    "TEMPO": "S", "COUPLE": "S", "SHUFFLE": "S",      # CLOCK
+    "TEMPO": "S", "COUPLE": "S", "SHUFFLE": "S", "PACE": "S",  # CLOCK
     "SCALE": "S", "DRIFT": "S",                       # TONALITY
     "REV_DECAY": "G", "REV_SIZE": "S", "REV_TONE": "S", "REV_DIFF": "S",
 }
@@ -123,6 +123,13 @@ CENTER_POS = {
     "TEMPO":  (127.4, Y_B1K), "COUPLE": (139.9, Y_B1K),
     "SHUFFLE": (152.4, Y_B1K), "SCALE": (164.9, Y_B1K),
     "DRIFT":  (177.4, Y_B1K),
+    # PACE under TEMPO, left of TIDE. The G row is already used for a control
+    # hanging under its K-row column head (MOD under SHAPE, DENSITY under
+    # RANGE), so this is the panel's own construction rather than a new one.
+    # Clearances measured, not estimated: 13.0 mm to TIDE against an 11.0 mm
+    # radius sum -- more generous than the 12.5 mm pitch of the row above.
+    # A "G" glyph does NOT fit here: it needs 13.5 mm and gets 13.0.
+    "PACE": (127.4, Y_B1G),
     "TIDE":   (140.4, Y_B1G), "CHOKE":  (164.4, Y_B1G),
     "MORPH":  (152.4, 62.0),
     "REV_DECAY": (152.4, 79.0),

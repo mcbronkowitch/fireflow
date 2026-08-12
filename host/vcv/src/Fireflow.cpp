@@ -35,12 +35,19 @@ using namespace spkyvcv;
 static constexpr float kCoupleZoneSplit = 0.5f;
 
 // RATE tooltip: the division name while grid (COUPLE >= split) is on, free
-// Hz otherwise.
+// Hz otherwise. The free branch is multiplied by PACE (spec 2026-08-12
+// modulation-pace): SuperModulator::set_pace scales _base_hz in both
+// branches of _update_rate, and free_hz's own comment (mod/divisions.h:55-56)
+// promises this tooltip shows exactly the Hz the engine runs -- so leaving
+// PACE out here would make that promise false the moment PACE moves off
+// centre.
 struct RateQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
         if (module && module->params[COUPLE].getValue() >= kCoupleZoneSplit)
             return spky::kDivisions[spky::division_index(getValue())].name;
-        return string::f("%.3f Hz", spky::free_hz(getValue()));
+        const float pace = module
+            ? spky::pace_mult(module->params[PACE].getValue()) : 1.f;
+        return string::f("%.3f Hz", spky::free_hz(getValue()) * pace);
     }
 };
 
@@ -54,9 +61,28 @@ struct TideQuantity : ParamQuantity {
     }
 };
 
+// PACE tooltip: prints mod/divisions.h's own pace_mult curve, in the same
+// fraction-below-x1 style that curve's doc comment uses ("x1/5.7"), so the
+// panel never needs a second copy of what the number means.
+static std::string paceNumStr(float v) {
+    return std::fabs(v - std::round(v)) < 0.05f
+        ? string::f("%.0f", std::round(v)) : string::f("%.1f", v);
+}
+struct PaceQuantity : ParamQuantity {
+    std::string getDisplayValueString() override {
+        const float m = spky::pace_mult(getValue());
+        return m < 1.f ? "x1/" + paceNumStr(1.f / m) : "x" + paceNumStr(m);
+    }
+};
+
 // FLUX RATE tooltip: the synced division name (always synced). The knob IS
 // the index now (task 6, spec 2026-08-09 hw-control-reduction) -- no more
-// flux_division_index() round-trip through a 0..1 float.
+// flux_division_index() round-trip through a 0..1 float. PACE (spec
+// 2026-08-12 modulation-pace) does not reach here: FLUX's own delay stays in
+// real time and never sees PACE's paced BPM (engine/fx/flux.h:44), so this
+// division name still means what it always meant. That is no longer true of
+// RATE's grid-mode name above it in this file -- PACE now stretches the Hz
+// that name describes, even though the label text is unchanged.
 struct FluxRateQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
         int k = spky::kFluxRateOffset + (int)std::lround(getValue());
@@ -351,6 +377,8 @@ struct Fireflow : Module {
                         // the display quantity is still bespoke, for the
                         // squared-cents tooltip (see DetuneQuantity above).
                         configParam<DetuneQuantity>(c.id, 0.f, 1.f, init, lbl);
+                    else if (c.id == PACE)
+                        configParam<PaceQuantity>(c.id, 0.f, 1.f, init, "Pace");
                     else
                         configParam(c.id, 0.f, 1.f, init, lbl);
                     break;
@@ -922,6 +950,7 @@ struct Fireflow : Module {
             if (measured >= 20.f && measured <= 400.f) bpm = measured;
         }
         inst.set_tempo_bpm(bpm);
+        inst.set_pace(params[PACE].getValue());
     }
 
     void process(const ProcessArgs& args) override {
