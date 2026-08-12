@@ -113,7 +113,7 @@ TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto") {
     // their span and essentially never land exactly on a bound by chance. So
     // P_DRIVE is excluded here and the other five are the signal. If a
     // future change (begin_blend, the stagger, kBlendS, the tick rate, the
-    // "% 30" re-press cadence) stops the residual from re-forming mid-ramp,
+    // "% 23" re-press cadence) stops the residual from re-forming mid-ramp,
     // this count drops to 0 and the CHECK below turns the test red instead
     // of it staying green while exercising nothing.
     //
@@ -162,8 +162,9 @@ TEST_CASE("flow veto: a macro moved mid-blend cannot breach a veto") {
         REQUIRE(f.new_full());              // start a blend
 
         // Sweep every macro across its full travel while the ramp runs, and
-        // mash NEW every 30 ticks (0.3 s) so a genuine mid-flight residual
-        // keeps re-forming through the whole window.
+        // mash NEW every 23 ticks (0.23 s, at the 10 ms/tick rate the 3-tick
+        // macro alternation above already establishes) so a genuine
+        // mid-flight residual keeps re-forming through the whole window.
         const int ticks = int(kBlendS * 100.f) + 20;
         for (int i = 0; i < ticks; ++i) {
             const bool phase = (i / 3) % 2 == 0;
