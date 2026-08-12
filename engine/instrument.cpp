@@ -108,9 +108,23 @@ void Instrument::set_tempo_bpm(float bpm) {
     // an arbitrary floor.
     if (!(bpm > 0.f) || !std::isfinite(bpm)) return;
     _bpm = bpm;
-    _center.set_tempo_bpm(bpm);
-    for (auto& p : _parts) p.mod().set_tempo_bpm(bpm);
-    for (auto& p : _parts) p.fx().set_bpm(bpm);
+    _apply_tempo();
+}
+
+void Instrument::set_pace(float norm) {
+    if (!std::isfinite(norm)) return;
+    const float m = pace_mult(norm);
+    if (m == _pace) return;              // Fireflow pushes every knob per tick
+    _pace = m;
+    _center.set_pace_anchor();           // the clock grid follows the knob
+    _apply_tempo();
+}
+
+void Instrument::_apply_tempo() {
+    _center.set_tempo_bpm(_bpm * _pace);
+    for (auto& p : _parts) p.mod().set_pace(_pace);
+    for (auto& p : _parts) p.mod().set_tempo_bpm(_bpm);
+    for (auto& p : _parts) p.fx().set_bpm(_bpm);
 }
 
 void Instrument::process(const float* inL, const float* inR,

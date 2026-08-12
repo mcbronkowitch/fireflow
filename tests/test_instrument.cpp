@@ -1525,3 +1525,90 @@ TEST_CASE("instrument: closing REVERB MIX fades the tail instead of cutting it")
     for (float v : win) worst = std::max(worst, v);
     CHECK(worst < 0.005f);
 }
+
+TEST_CASE("pace: centre is exactly neutral, and both worlds scale") {
+    spky::Instrument in;
+    in.init(48000.f);
+    in.set_tempo_bpm(120.f);
+    for (int p = 0; p < 2; ++p) in.set_rate(p, 0.5f);
+
+    float before[2][spky::LANE_COUNT];
+    for (int p = 0; p < 2; ++p)
+        for (int l = 0; l < spky::LANE_COUNT; ++l)
+            before[p][l] = in.lane_rate_hz_for_test(p, l);
+
+    // _pace starts at 1.f, and pace_mult(0.5f) is ALSO exactly 1.f -- so a
+    // bare set_pace(0.5f) here would be a no-op on a fresh instrument (the
+    // m == _pace early-out fires) and this case would pass trivially even
+    // with a broken set_pace. Move pace away from centre first, so bringing
+    // it back actually exercises pace_mult, the multiply in _update_rate,
+    // and the fan-out to every lane -- then the return-to-centre check below
+    // is a real bit-identity claim, not a vacuous one.
+    in.set_pace(1.f);
+    bool moved = false;
+    for (int p = 0; p < 2; ++p)
+        for (int l = 0; l < spky::LANE_COUNT; ++l)
+            if (in.lane_rate_hz_for_test(p, l) != before[p][l]) moved = true;
+    CHECK(moved);
+
+    in.set_pace(0.5f);
+    for (int p = 0; p < 2; ++p)
+        for (int l = 0; l < spky::LANE_COUNT; ++l)
+            CHECK(in.lane_rate_hz_for_test(p, l) == before[p][l]);  // EXACT
+
+    // Free world.
+    in.set_sync(false);
+    in.set_pace(0.f);
+    for (int p = 0; p < 2; ++p)
+        for (int l = 0; l < spky::LANE_COUNT; ++l)
+            CHECK(in.lane_rate_hz_for_test(p, l)
+                  == doctest::Approx(before[p][l] / 32.f));
+
+    // Grid world: the LANES and the TRANSPORT scale together, or the servo
+    // pulls the lanes back onto the unstretched grid and wins. Checking only
+    // transport_bpm_for_test() here cannot catch a synced SuperModulator that
+    // stopped tracking PACE -- Center::set_tempo_bpm(_bpm * _pace) is a
+    // separate call from SuperModulator::_update_rate's own synced branch,
+    // and stays correct even if the lanes stop scaling (verified: reverting
+    // just the synced branch's `* _pace`, per step 6, left every assertion
+    // in this test passing). So this also pins a lane-rate baseline at the
+    // grid's own neutral pace, and checks the lanes scale with it.
+    in.set_sync(true);
+    in.set_pace(0.5f);   // neutral: establishes the grid baseline at x1
+    float grid_before[2][spky::LANE_COUNT];
+    for (int p = 0; p < 2; ++p)
+        for (int l = 0; l < spky::LANE_COUNT; ++l)
+            grid_before[p][l] = in.lane_rate_hz_for_test(p, l);
+
+    in.set_pace(1.f);
+    CHECK(in.transport_bpm_for_test() == doctest::Approx(120.f * 4.f));
+    for (int p = 0; p < 2; ++p)
+        for (int l = 0; l < spky::LANE_COUNT; ++l)
+            CHECK(in.lane_rate_hz_for_test(p, l)
+                  == doctest::Approx(grid_before[p][l] * 4.f));
+
+    in.set_pace(0.5f);
+    CHECK(in.transport_bpm_for_test() == doctest::Approx(120.f));
+    for (int p = 0; p < 2; ++p)
+        for (int l = 0; l < spky::LANE_COUNT; ++l)
+            CHECK(in.lane_rate_hz_for_test(p, l)
+                  == doctest::Approx(grid_before[p][l]));
+}
+
+TEST_CASE("pace: a fresh instrument runs at x1") {
+    spky::Instrument in;
+    in.init(48000.f);
+    CHECK(in.pace_for_test() == 1.0f);
+}
+
+TEST_CASE("pace: a non-finite request is dropped, not propagated") {
+    spky::Instrument in;
+    in.init(48000.f);
+    in.set_tempo_bpm(120.f);
+    in.set_rate(0, 0.5f);
+    const float ok = in.lane_rate_hz_for_test(0, spky::LANE_PITCH);
+    in.set_pace(std::numeric_limits<float>::quiet_NaN());
+    // Without the guard NaN reaches _base_hz, set_rate_hz maps it to 0, and
+    // both decks go silent with no error at all.
+    CHECK(in.lane_rate_hz_for_test(0, spky::LANE_PITCH) == ok);
+}

@@ -42,6 +42,12 @@ public:
     void init(float sample_rate);                    // engine only, no FX chain
     void init(float sample_rate, const FxMem& mem);  // full FX chain
     void set_tempo_bpm(float bpm);
+    // PACE (spec 2026-08-12 modulation-pace). Same guard as set_tempo_bpm and for
+    // the same stated reason: host/render/scenario.cpp forwards scenario-file
+    // values unvalidated. A NaN pace is worse than a NaN BPM -- Transport::set_bpm
+    // catches the latter, but a NaN _base_hz is mapped to 0 by set_rate_hz and both
+    // decks go silent with no error.
+    void set_pace(float norm);
 
     void set_rate(int p, float n)            { _parts[p].mod().set_rate(n); }
     void set_shape(int p, float n)           { _parts[p].mod().set_shape(n); }
@@ -104,6 +110,11 @@ public:
     }
     bool step_mode_for_test(int p)  const { return _parts[p].mod().step_mode(); }
     int  deck_steps_for_test(int p) const { return _parts[p].mod().deck_steps(); }
+    float pace_for_test() const { return _pace; }
+    // Reads the TRANSPORT's bpm, which carries the pace -- NOT Instrument::_bpm,
+    // which is the raw value PACE never touches. A gate written against _bpm
+    // would be measuring something this control cannot move.
+    float transport_bpm_for_test() const { return _center.transport().bpm(); }
 #endif
     void set_fixed_slew(int p, bool on)      { _parts[p].mod().set_fixed_slew(on); }
     void set_depth(int p, float n)           { _parts[p].set_depth(n); }
@@ -395,7 +406,7 @@ public:
     // positive mirrored. |c| <= 0.5 blocks during the priority gate only,
     // |c| > 0.5 through the full decay (while the voice is audible).
     void set_choke(float c) { _choke = clampf(c, -1.f, 1.f); }
-    void clock_pulse()     { _center.clock_pulse(1.f); }   // Task 5 replaces 1.f with _pace
+    void clock_pulse()     { _center.clock_pulse(_pace); }
     // RST = bar resync: zero the downbeat, drop the grid offsets a live STEPS
     // turn left behind, and restart the loops at phase 0 — everything lands on
     // the fresh bar start together (no servo drag).
@@ -415,6 +426,11 @@ public:
     void process(const float* inL, const float* inR, float* outL, float* outR, size_t n);
 
 private:
+    // The single door, shared by both set_tempo_bpm and set_pace. PACE reaches
+    // the transport and the mod lanes; FLUX gets the RAW bpm and is corrected
+    // in its own rhythm reader instead (spec §3.3).
+    void _apply_tempo();
+
     std::array<Part, PART_COUNT> _parts;
     AmbientReverb* _reverb = nullptr;
     // Per-deck equal-power mix (spec 2026-07-23): dry rides cos, the wet SEND
@@ -491,6 +507,7 @@ private:
                                // (boots true: the FLOW drone predates any fire)
     float _sr = 48000.f;
     float _bpm = 120.f;
+    float _pace = 1.f;
 };
 
 } // namespace spky

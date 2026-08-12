@@ -25,8 +25,8 @@ void SuperModulator::init(float sample_rate, uint32_t seed_base) {
 }
 
 void SuperModulator::_update_rate() {
-    _base_hz = _synced ? division_hz(division_index(_rate_norm), _bpm)
-                       : free_hz(_rate_norm);
+    _base_hz = (_synced ? division_hz(division_index(_rate_norm), _bpm)
+                        : free_hz(_rate_norm)) * _pace;
     _apply_rate();
 }
 

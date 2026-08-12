@@ -16,6 +16,10 @@ public:
     void init(float sample_rate, uint32_t seed_base);
 
     void set_tempo_bpm(float bpm)  { _bpm = bpm; _update_rate(); }
+    // The global modulation time-stretch. Multiplies _base_hz in BOTH branches
+    // of _update_rate -- synced via division_hz, free via free_hz -- because
+    // free mode never reads _bpm and would otherwise ignore PACE entirely.
+    void set_pace(float mult)      { _pace = mult; _update_rate(); }
     void set_rate(float norm)      { _rate_norm = norm; _update_rate(); }
     void set_synced(bool on)       { _synced = on; _update_tide(); _update_rate(); }
     void set_tide(float norm);     // 0..1 texture-lane rate scale; 0.5 = neutral
@@ -188,6 +192,7 @@ private:
 
     float    _sr = 48000.f;
     float    _bpm = 120.f;
+    float    _pace = 1.f;
     float    _rate_norm = 0.5f;
     bool     _synced = false;
     bool    _step_on    = false;   // the deck's STEP flag; drives the grid lock
