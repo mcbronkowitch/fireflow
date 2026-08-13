@@ -2431,13 +2431,16 @@ follow-up) — this is a pointer, not a second copy:
 `ModLane::tick()`'s FLOW-melody slot walk matches `process()` cleanly across
 the panel-reachable rate range and well beyond it — measured clean to a
 250 Hz phrase-cycle rate, roughly 15× the ~14–16 Hz ceiling the note-rate
-floor allows from the panel. Past that it can still desync GROW/RENEW's RNG
-stream at phrase-cycle rates far outside anything the RATE knob can reach,
-worst at the exact `sample_rate / kTickInterval` resonance (500 Hz at
-48 kHz) — still well under `engine/mod/divisions.h`'s own 120 Hz ceiling
-(`kRateFreeMax = 30` Hz × PACE ×4). `SuperModulator` never drives
-`LANE_PITCH` through `tick()` in production, so this has no audible
-consequence today.
+floor allows from the panel. `engine/mod/divisions.h`'s own panel ceiling for
+phrase-cycle rate (`kRateFreeMax = 30` Hz × PACE ×4 = 120 Hz) sits
+comfortably inside that measured-clean range, a second, independent
+confirmation that the panel cannot reach the desync. Past 250 Hz it can
+still desync GROW/RENEW's RNG stream at phrase-cycle rates far outside
+anything the RATE knob can reach, worst at the exact
+`sample_rate / kTickInterval` resonance (500 Hz at 48 kHz) — itself far
+**above** the 120 Hz panel ceiling, so the panel can never physically
+produce it. `SuperModulator` never drives `LANE_PITCH` through `tick()` in
+production, so this has no audible consequence today.
 
 **Sampler/BBD non-regression, narrowed.** A Sampler or BBD deck's own PITCH
 lane is untouched by this work — `_mod.set_flow_melody(false)` is pushed for
