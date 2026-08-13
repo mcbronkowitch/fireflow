@@ -274,6 +274,34 @@ manufacturing-profile decision. `RIGHTS_APPROVED=no`, `LABELS_FROZEN=no`, and
 `SYNTHUX_PROFILE_APPROVED=no` remain closed; Task 8 generated no Gerber,
 Excellon, or final fabrication export.
 
+## Verification status
+
+Recorded 2026-08-13 at revision `2f077aa` on `codex/glow-hardware-panel-design`.
+
+| Check | Result |
+|---|---|
+| `ctest --test-dir build` (Release, clang) | 9/9 targets, 1147 doctest cases, 0 failures |
+| `python host/vcv/res/validate_glow_assets.py` | `assets OK` |
+| `python host/vcv/res/test_glow_assets.py` | `assets tests OK` |
+| `python host/vcv/res/test_flow_panel.py` | `panel OK` |
+| `python host/vcv/res/test_touch2_geometry.py` | `geometry OK` |
+| `host/vcv/build-local.sh dist` | exit 0; package carries the six PNGs and the `Glow.svg` fallback |
+| Rack render, Rack Pro 2.6.6, zoom 0.75/1.0/1.25/1.5 | module renders at a fixed 16 HP |
+| Missing-raster fallback, each of the six PNGs removed in turn | all six still render at 16 HP; a missing panel layer falls back to the vector plate, a missing switch frame degrades only the switches |
+
+The Release configuration matters and is easy to get wrong in a worktree:
+`env.sh` is gitignored, so a fresh worktree has no `CC`/`CXX` and CMake picks
+up whatever compiler it finds. Copy `env.sh` in from the main checkout and
+`source` it before configuring, or the tree builds with the wrong toolchain and
+its failures are artefacts rather than defects.
+
+Not verified here, and not claimed: interactive Rack behaviour — module
+creation, existing-patch load, control manipulation, context menus,
+live/excursion/refused states, save/reload persistence, and audio. Rack's
+screenshot mode renders panels and exits; none of that is reachable from it.
+Physical proof status is unchanged: no Gerber, drill, 1:1 PDF, or ordered
+prototype exists, because three of the four production gates are still `no`.
+
 ## Restricted reference material
 
 Official DXF, PDF, and frontal images are local-only under
