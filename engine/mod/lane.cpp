@@ -810,6 +810,11 @@ float ModLane::tick() {
     auto advance_floors = [this](double samples) {
         if (samples <= 0.0) return;
         const int add = static_cast<int>(samples + 0.5);   // nearest sample
+        // += add, saturating at the floor instead of overshooting past it --
+        // the "- since > add" form is that same saturating add written so it
+        // cannot overflow: it compares the remaining headroom to add BEFORE
+        // computing since + add, rather than computing the sum first and
+        // clamping after.
         if (_since_fire < _note_min_samples)
             _since_fire = _note_min_samples - _since_fire > add
                 ? _since_fire + add : _note_min_samples;
@@ -835,6 +840,30 @@ float ModLane::tick() {
         if (step != _cur_step) _enter_step(step);
     } else if (_flow_melody_on()) {
         const int slot = step_index(static_cast<float>(_phase), _effective_length());
+        // No advance_floors() call here, unlike every other _on_boundary()/
+        // _wrap_events() call below -- deliberately, not an oversight.
+        // _since_fire/_since_phrase already hold, at this exact point,
+        // exactly the sample count process() would show for "elapsed time
+        // up to the start of this window": every prior tick() call fully
+        // accounted for its own kTickInterval samples before returning
+        // (per edge, plus the leftover at whichever break ends its walk --
+        // see advance_floors above), and this line runs before this
+        // window's own walk has consumed anything (samples_left is still
+        // the full kTickInterval). Zero samples of THIS window have
+        // elapsed yet, so zero is the correct credit.
+        // The two triggers named above (kick's phase jump, FLOW<->STEP
+        // re-entry) do not change that: both are control-rate events that
+        // happen BETWEEN tick() calls, not during one -- they perturb
+        // _phase/_cur_step/mode flags, not the sample clock. process()'s
+        // own equivalent path agrees: a kick() applied between process()
+        // calls does not get its own credit either -- the next process()
+        // call's unconditional `++_since_fire` (one sample, matching real
+        // elapsed time) runs BEFORE its mismatch check, same as here.
+        // Measured: tests/test_lane_tick.cpp, "tick: a kick near the
+        // note-rate floor does not grant it extra credit" -- crediting a
+        // full kTickInterval here instead (the wrong alternative) fires a
+        // boundary tick() shows open where process() still shows frozen,
+        // one tick short of the floor.
         if (slot != _cur_step) { _cur_step = slot; _on_boundary(); }
     }
 

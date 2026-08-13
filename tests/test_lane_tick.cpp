@@ -611,3 +611,48 @@ TEST_CASE("tick: FLOW melody slot walk matches the per-sample path") {
     CHECK(tp.dut.target() == tp.ref.target());
     CHECK(tp.dut.song_position() == tp.ref.song_position());
 }
+
+TEST_CASE("tick: a kick near the note-rate floor does not grant it extra credit") {
+    // Regression for the pending-mismatch entry's flow-melody arm
+    // (lane.cpp, the `else if (_flow_melody_on())` block right after
+    // advance_floors is defined): that call runs with NO advance_floors()
+    // in front of it, unlike every other _on_boundary()/_wrap_events() call
+    // in tick(). A kick() (or a FLOW<->STEP re-entry) can leave _cur_step
+    // stale and land the pending-mismatch entry on a boundary it would not
+    // otherwise have reached this window -- proving that entry does not
+    // also wrongly backdate the floors to "as if this whole window had
+    // already elapsed" the way the old single pre-loop lump did everywhere.
+    //
+    // density 1 (every slot gate-open) isolates the note-rate floor as the
+    // only thing deciding "fired" here; variation 0 removes any RNG-draw
+    // confound; rate_hz 1 keeps the next NATURAL slot boundary (6000
+    // samples away) far outside this case's whole window, so only the
+    // kick's forced mismatch can trigger _on_boundary() here.
+    //
+    // kFlowNoteMinS * 48 kHz == 2880 samples, and 29 * kTickInterval (96)
+    // == 2784 -- exactly one tick short of the floor -- by construction,
+    // not by measurement, so this reddens deterministically (integers, no
+    // float epsilon) rather than depending on where a rate happens to land.
+    TickPair tp;
+    tp.boot_flow_melody(0xF10Eu, 1.f, 0.f);   // density 1.f already set here
+
+    for (int t = 0; t < 29; ++t) tp.advance_one_tick();
+    REQUIRE(tp.ref.cur_step() == 0);
+    REQUIRE(tp.dut.cur_step() == 0);
+
+    tp.ref.kick(0.5f, 0.f);
+    tp.dut.kick(0.5f, 0.f);
+
+    tp.advance_one_tick();
+    INFO("ref_fires=", tp.ref_fires, " dut_fired=", tp.dut_fired,
+         " ref_step=", tp.ref.cur_step(), " dut_step=", tp.dut.cur_step());
+    REQUIRE(tp.ref.cur_step() == 4);          // the kick actually moved a slot
+    CHECK(tp.dut.cur_step() == tp.ref.cur_step());
+    // The real question: crediting a full window's worth of floor advance
+    // at the mismatch entry (the wrong alternative measured separately)
+    // fires here where process() does not -- one tick short of the floor,
+    // a kick must not manufacture the missing 96 samples.
+    CHECK((tp.ref_fires > 0) == tp.dut_fired);
+    CHECK_FALSE(tp.dut_fired);
+    CHECK(tp.dut.target() == tp.ref.target());
+}
