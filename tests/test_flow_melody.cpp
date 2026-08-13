@@ -359,3 +359,47 @@ TEST_CASE("FLOW melody: RST restarts the phrase at slot 0") {
     CHECK(lane.target() ==
           doctest::Approx(lane.pattern_for_test(lane.active_pattern()).pitch[0]));
 }
+
+TEST_CASE("FLOW melody: the note rate has a floor") {
+    // A non-drone archetype reaches P_RATE_A {.55,.9} in FLOW, about 14 Hz.
+    // At k == L == 8 that is over 100 fires a second, where Part's 5 ms gate
+    // never expires so the envelope never re-attacks, and _chord.build()'s lay
+    // search runs per note.
+    ModLane lane = make_flow_melody_lane(0xF10Eu, /*hz=*/14.f);
+    lane.set_density(1.f);
+    int fires = 0;
+    for (int i = 0; i < 48000; ++i) {       // one second
+        lane.process();
+        if (lane.fired()) ++fires;
+    }
+    const int ceiling = static_cast<int>(48000.f / (0.060f * 48000.f)) + 1;
+    CHECK(fires <= ceiling);                // ~16/s, not ~112/s
+    CHECK(fires > 0);                       // it decimates, it does not stop
+}
+
+TEST_CASE("FLOW melody: the phrase rate has a floor") {
+    // The note floor bounds fires, not wraps. Without a second floor,
+    // _advance_song() would run once per cycle at 14 Hz -- fourteen phrases a
+    // second, and a pending FORM would drive generate_phrase at that rate.
+    ModLane lane = make_flow_melody_lane(0xF10Eu, /*hz=*/14.f);
+    drive_to_wrap(lane);
+    const uint32_t start = lane.song_position();
+    for (int i = 0; i < 48000; ++i) lane.process();
+    const uint32_t ceiling =
+        static_cast<uint32_t>(48000.f / (8 * 0.060f * 48000.f)) + 1u;
+    CHECK(lane.song_position() - start <= ceiling);   // ~2/s, not 14/s
+}
+
+TEST_CASE("FLOW melody: the floor never swallows the first note") {
+    // Primed, not zeroed. Left at 0 the counters would suppress the very first
+    // note at boot, after RST, and on the first slot after mode entry.
+    ModLane lane = make_flow_melody_lane(0xF10Eu);
+    lane.process();
+    CHECK(lane.fired());
+
+    drive_to_wrap(lane);
+    for (int i = 0; i < 20000; ++i) lane.process();
+    lane.reset();
+    lane.process();
+    CHECK(lane.fired());
+}

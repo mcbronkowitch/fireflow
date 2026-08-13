@@ -186,6 +186,8 @@ private:
     // getter for the flag, which is the naming collision spotykach-gotchas
     // records for set_depth.
     bool _melody_engine_on() const { return _melodic && (_step_mode || _flow_melody); }
+    void _prime_floors() { _since_fire = _note_min_samples;
+                           _since_phrase = _phrase_min_samples; }
     int   _groove_k() const;              // DENSE -> how many ranked cell notes play
     void  _renew_units();           // RENEW (melodic/STEP): per-unit dice regeneration
     void  _renew_walk();            // RENEW (non-melodic): dice-gated whole-walk regen
@@ -245,6 +247,13 @@ private:
     // fills only [0, n) (phrase_gen.h:165-200) and pitch[32] is zero-init, so a
     // length that grows past the generated one plays the root instead of a note.
     static constexpr int kFlowPhraseSlots = 8;
+    // Note-rate floor. A boundary arriving sooner than this after the last fire
+    // HOLDS instead of firing, so the rate decimates to the floor rather than
+    // falling off a cliff, and DENSITY keeps its full effect everywhere below
+    // the ceiling. 60 ms is ~16 notes/s -- above anything ambient, below
+    // anything that reads as a buzz. A FIRST GUESS SET BY ARITHMETIC, not by
+    // ear; the owner judges it against flow_melody.json.
+    static constexpr float kFlowNoteMinS = 0.060f;
     SongForm _song;
     bool      _melodic   = false;
     bool      _flow_melody = false;
@@ -259,6 +268,14 @@ private:
 #endif
     int   _note_age  = 0;    // steps since the current note fired
     int   _note_hold = 0;    // composed note length (capped at the next note)
+
+    // Samples since the last fire / the last phrase event, for the two floors.
+    // Primed rather than zeroed at init/reset/mode entry -- at 0 the floor
+    // would swallow the first note of every phrase start, including RST's.
+    int _since_fire   = 0;
+    int _since_phrase = 0;
+    int _note_min_samples   = 0;   // kFlowNoteMinS * _sr, cached at init
+    int _phrase_min_samples = 0;   // kFlowPhraseSlots * _note_min_samples
 
     float _ev_phase = 0.f;   // EVOLVE random-walk offsets: shape / phase / rate (Task 7)
     float _ev_shape = 0.f;

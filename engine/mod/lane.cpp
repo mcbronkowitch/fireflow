@@ -48,6 +48,10 @@ static int slot_of(int32_t pos, int slots) {
 
 void ModLane::init(float sample_rate, uint32_t seed) {
     _sr = sample_rate;
+    _note_min_samples   = static_cast<int>(kFlowNoteMinS * _sr);
+    _phrase_min_samples = kFlowPhraseSlots * _note_min_samples;
+    _since_fire   = _note_min_samples;      // primed: the first boundary fires
+    _since_phrase = _phrase_min_samples;
     _rng.seed(seed);
     _phase = 0.0;
 #ifdef SPKY_TESTING
@@ -134,6 +138,7 @@ void ModLane::set_song(SongMode song) {
 void ModLane::set_flow_melody(bool on) {
     _flow_melody = on;
     _frozen = false;          // see set_step: a freeze from the other state is meaningless here
+    _prime_floors();
     // One-sided by construction, and that is the point. ENTERING melody mode the
     // pattern may have been generated at another length -- at boot, whenever a
     // host pushed a STEPS other than kFlowPhraseSlots before this flag -- and
@@ -155,7 +160,7 @@ void ModLane::set_step(bool on, int steps) {
     // Either direction: a slot index and a freeze decision from the other mode
     // mean nothing in this one. _cur_step = -1 makes the first sample fire slot
     // 0, the same way init and reset do.
-    if (mode_changed) { _cur_step = -1; _frozen = false; }
+    if (mode_changed) { _cur_step = -1; _frozen = false; _prime_floors(); }
     // Entering STEP disarms the follower so its first follow() call lands on
     // the deck's current position instead of replaying the whole count.
     if (entering_step) { _follow_armed = false; _follow_jumped = false; }
@@ -448,6 +453,7 @@ void ModLane::reset(float phase) {
     _follow_jumped = false;
     _note_age = 0;
     _note_hold = 0;
+    _prime_floors();
     _slew.reset(_target);
     _slew_tick.reset(_target);
 }
@@ -512,9 +518,12 @@ void ModLane::_on_boundary() {
     // has no per-step gate and always fires (no freeze source after
     // PROBABILITY).
     bool gated = (_step_mode || _flow_melody_on()) ? _effective_gate(slot) : true;
+    if (gated && _flow_melody_on() && _since_fire < _note_min_samples)
+        gated = false;                       // note-rate floor
     _frozen = !gated;
     if (gated) {
         _fired = true;
+        _since_fire = 0;
         if (_melodic && _step_mode) _start_note(slot);   // rhythm: STEP only
         if (_variation > 0.f && (!_melodic || _step_mode || _flow_melody))
             _mutate_slot(slot);  // GROW pitch
@@ -624,6 +633,10 @@ void ModLane::_wrap_events() {
     // The FLOW LFO keeps its old contract: no evolution, no song advancement.
     if (_melodic && !_step_mode && !_flow_melody)
         return;
+    if (_flow_melody_on()) {
+        if (_since_phrase < _phrase_min_samples) return;
+        _since_phrase = 0;
+    }
 
     _evolve_outgoing_pattern();
     if (_melody_engine_on()) {
@@ -636,6 +649,8 @@ float ModLane::process() {
     _fired = false;
     _wrapped = false;
     _apply_preroll_work();
+    if (_since_fire   < _note_min_samples)   ++_since_fire;
+    if (_since_phrase < _phrase_min_samples) ++_since_phrase;
     _kick_shape *= _kick_coef;                 // SPOT shape offset fades toward 0
     if (_settle_ctr > 0) {                     // SETTLE: glide EVOLVE walks + kick to 0
         --_settle_ctr;
