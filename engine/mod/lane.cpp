@@ -150,6 +150,7 @@ void ModLane::set_flow_melody(bool on) {
     if (_flow_melody_on() &&
         _active_pattern().pattern_groove.len != _effective_length())
         _song.length_pending = true;
+    _update_slew();
 }
 
 void ModLane::set_step(bool on, int steps) {
@@ -209,6 +210,7 @@ void ModLane::set_step(bool on, int steps) {
 // pattern-clock behavior.
 void ModLane::_update_inc() {
     _phase_inc = (double(_rate_hz) / double(_sr)) * double(clock_scale());
+    _update_slew();     // the melody clamp is a function of the slot interval
 }
 
 void ModLane::new_phrase() {
@@ -309,6 +311,31 @@ void ModLane::set_fixed_slew(bool on) {
 void ModLane::_update_slew() {
     // smooth 0 -> ~1 sample (near passthrough), smooth 1 -> ~0.5 s.
     float t = _fixed_slew ? 0.02f : (0.00002f * std::pow(25000.f, _smooth));
+    if (_flow_melody_on()) {
+        // Clamp against the interval the notes ACTUALLY have, not the raw slot:
+        // where the note floor decimates, the raw slot is far shorter than the
+        // notes are, and clamping to it would make the glide much tighter than
+        // anything needs. Guard _phase_inc == 0 the way step_samples() does --
+        // in double it yields inf and the clamp goes inert, which is benign but
+        // silent, and a silent inert guard is the shape this project fixes.
+        // _ev_rate is deliberately not a recompute trigger here: re-deriving
+        // the slew at every wrap for a +-20% term inside a 0.35 safety factor
+        // buys nothing, and the value is refreshed at the next rate change
+        // anyway.
+        const double denom = _phase_inc * (1.0 + double(_ev_rate))
+                           * double(_effective_length());
+        if (denom > 0.0) {
+            const double slot_samples = 1.0 / denom;
+            const double effective = slot_samples > double(_note_min_samples)
+                                   ? slot_samples : double(_note_min_samples);
+            // OnePole::init takes SECONDS (onepole.h:14, k = 1/(time_s*sr)),
+            // so the sample count has to be divided by _sr. Without this the
+            // clamp never binds.
+            const float cap =
+                static_cast<float>(double(kFlowSlewFrac) * effective / double(_sr));
+            if (t > cap) t = cap;
+        }
+    }
     _slew.init(_sr, t);
     // Tick twin: the exact kTickInterval-sample compound of the per-sample
     // coefficient, so held segments converge identically at tick sampling.

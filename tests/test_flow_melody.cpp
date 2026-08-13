@@ -5,6 +5,7 @@
 // sequencer without rhythm: one cycle is one phrase pass, DENSITY selects k of
 // L slots through the groove ranking, and the slots it skips HOLD the previous
 // note.
+#include <cmath>
 #include <doctest/doctest.h>
 #include "mod/lane.h"
 
@@ -402,4 +403,46 @@ TEST_CASE("FLOW melody: the floor never swallows the first note") {
     lane.reset();
     lane.process();
     CHECK(lane.fired());
+}
+
+TEST_CASE("FLOW melody: a note arrives within its own slot at full SMOOTH") {
+    // With _range at its default 1.0, apply_range is the identity
+    // (range.h:18, lerpf(uni, v, 1) == v), so process()'s return value is the
+    // post-slew value and can be compared against target() directly.
+    ModLane lane = make_flow_melody_lane(0xF10Eu);
+    lane.set_density(1.f);
+    lane.set_smooth(1.f);              // ~0.5 s unclamped; a slot is 125 ms
+    drive_to_wrap(lane);
+
+    // Find a boundary where the note actually moves, then give it one slot.
+    float out = 0.f;
+    bool checked = false;
+    for (int i = 0; i < 48000 * 3 && !checked; ++i) {
+        out = lane.process();
+        if (!lane.fired()) continue;
+        const float goal = lane.target();
+        const float gap  = goal - out;
+        if (std::fabs(gap) < 0.05f) continue;      // too small to measure
+        for (int s = 0; s < 6000; ++s) out = lane.process();   // one slot
+        CHECK(std::fabs(goal - out) <= 0.10f * std::fabs(gap));
+        checked = true;
+    }
+    CHECK(checked);
+}
+
+TEST_CASE("STEP's slew is unchanged by the melody clamp") {
+    ModLane step_lane;
+    step_lane.set_melodic(true);
+    step_lane.set_step(true, 8);
+    step_lane.init(48000.f, 0xF10Eu);
+    step_lane.set_rate_hz(1.f);
+    step_lane.set_smooth(1.f);
+    // A STEP lane at SMOOTH 1 keeps the long glide: after 6000 samples it must
+    // still be well short of its target, which is what the clamp must not do
+    // to it.
+    float out = 0.f;
+    for (int i = 0; i < 200; ++i) out = step_lane.process();
+    const float early = out;
+    for (int i = 0; i < 6000; ++i) out = step_lane.process();
+    CHECK(std::fabs(out - early) < 1.0f);
 }

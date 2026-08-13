@@ -254,6 +254,12 @@ private:
     // anything that reads as a buzz. A FIRST GUESS SET BY ARITHMETIC, not by
     // ear; the owner judges it against flow_melody.json.
     static constexpr float kFlowNoteMinS = 0.060f;
+    // Melody-mode slew ceiling, as a fraction of the slot interval: a note
+    // reaches 1 - e^(-1/0.35) ~= 94 % of its target inside its own slot. This
+    // is the MINIMUM needed for a melody to be heard as notes rather than a
+    // wobble; everything else about SMOOTH belongs to the SHAPE/SMOOTH rework.
+    // A FIRST GUESS SET BY ARITHMETIC, not by ear.
+    static constexpr float kFlowSlewFrac = 0.35f;
     SongForm _song;
     bool      _melodic   = false;
     bool      _flow_melody = false;
