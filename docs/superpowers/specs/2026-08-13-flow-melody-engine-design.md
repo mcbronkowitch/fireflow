@@ -344,23 +344,38 @@ bool ModLane::_effective_gate(int slot) const {
 }
 ```
 
-This correction decides the design's musical worth. The audit's dead FLOW branch
-reads `cell_groove`, whose `len` is the **motif** length (`_generate_pattern_a`
-passes `layout.motif_len` to `pg_gen_groove`, `lane.cpp:199`). A raster on the motif
-cell would only ever play the first motif instance, so FORM's arrangement — the
-A A B A that `pg_build_arrangement` lays out — would stay inaudible, and the audit's
-largest finding would survive the fix meant to close it. The dead branch is
-**deleted, not wired**.
+**Correction (Task 12, after implementation).** The paragraph originally here
+justified the deletion below by claiming a motif-cell raster "would only ever
+have played the first motif instance, leaving FORM's arrangement inaudible."
+That claim is false, and the implementation task that built §4.5 found the
+mechanism that disproves it: `pg_target_len()` returns **8 for every
+principle** (`engine/mod/phrase_gen.h:53`), so at `kFlowPhraseSlots = 8` the
+sizing in `pg_derive_sizing` always comes out `k = 1, L = 8, r = 0` — exactly
+**one** motif instance spans the whole phrase, and `cell_groove.len` equals
+`pattern_groove.len` by construction, on every principle, always. There is no
+reachable state in which the two rasters differ, so there was never a
+behaviour to fix by deleting the `cell_groove` arm.
+
+The deletion below is still correct, but for a different reason: it is
+**unreachable-code removal**, not a behaviour fix. `_groove_k` has exactly one
+caller, `_effective_gate`, which itself early-returns for any lane that is not
+melodic — so the `cell_groove` arm this section deletes was dead by
+construction (the `!_melodic` guard), independent of the motif/pattern sizing
+argument above. Because no fixture can make the deleted code produce a
+different result than the code that replaces it, **this deletion carries no
+RED proof** — the plan's second RED recipe for it does not exist, and Task 3
+dropped it rather than force one.
 
 **The unreachability argument, correctly.** It is *not* the `!_melodic` early
-return: `lane.cpp:457` sits on the melodic path with `_step_mode == false`, which is
-exactly the `cell_groove` arm. It is dead because **both callers of
-`_effective_gate` are themselves under `_step_mode`** — `lane.cpp:464`
-(`_step_mode ? _effective_gate(slot) : true`) and `lane.cpp:491` inside
-`_start_note`, which only runs from `lane.cpp:468` under `_melodic && _step_mode`.
-`_start_note`'s own `cell_groove` branch (`lane.cpp:500-505`) is dead by the same
-argument and goes with it. Both confirmed by two reviewers; the plan still proves
-the RED once.
+return alone that makes the specific line dead: `lane.cpp:457` sits on the
+melodic path with `_step_mode == false`, which is exactly the `cell_groove`
+arm. It is dead because **both callers of `_effective_gate` are themselves
+under `_step_mode`** — `lane.cpp:464` (`_step_mode ? _effective_gate(slot) :
+true`) and `lane.cpp:491` inside `_start_note`, which only runs from
+`lane.cpp:468` under `_melodic && _step_mode`. `_start_note`'s own
+`cell_groove` branch (`lane.cpp:500-505`) is dead by the same argument and
+goes with it. Both confirmed by two reviewers; RED proof #1 (the gate
+expression itself) stands and is proved once, as the plan requires.
 
 ### 4.6 Cycle-wrap events
 
@@ -692,7 +707,7 @@ compare. `Part` gains, per note rather than per cycle, a `_chord.build()` lay se
 ordered; if M6 timing needs the number the rows are the `instrument_*` FLOW
 workloads, and §4.10's two floors bound the worst case.
 
-## 7. What stays bit-identical — and the one hole
+## 7. What stays bit-identical — and the two holes
 
 Verified and safe: CHOKE does not depend on FLOW having no fires
 (`instrument.cpp:214` opens the window on `gate() || flow()`, and `Part::flow()` is
@@ -701,7 +716,7 @@ open; `test_choke.cpp:226` stays green). `gate_state()`/`note_sustain()` are bot
 `_step_mode`-gated (`lane.h:68`, `:72`), so `Part::gate()` stays pulse-only in FLOW
 and `test_part.cpp:573` holds. Nothing serializes `MelodyPattern` or lane state.
 
-**The hole: "Sampler and BBD stay bit-identical" is true of the lane and false of
+**Hole 1: "Sampler and BBD stay bit-identical" is true of the lane and false of
 the mix.** The reverb is instrument-level with per-part sends
 (`instrument.cpp:258-261`) and the master DRIVE/limiter is shared and is a
 *threshold* (`spotykach-master-drive-is-a-threshold`). In a two-deck render whose
@@ -710,6 +725,37 @@ the limiter, so the Sampler deck's **contribution to the master mix** is not
 bit-identical even though its lane is. §10.13 is scoped to a single-deck render or a
 per-deck tap accordingly; asserting it on a two-deck master bus would go red for a
 non-defect and get quietly weakened.
+
+**Hole 2 (found by Task 12's implementation, narrows the guarantee further,
+owner-ruled): even a single-deck render is not bit-identical to `main`
+end-to-end — only its own PITCH lane is.** `Part::init` boots every deck as
+`ENGINE_SYNTH` (`part.cpp:32`, the pre-existing M2 boot default), and the
+`set_flow_melody` push added by this work sits immediately after it
+(`part.cpp:43`). Before a scenario's own `set_engine` action lands and its
+click-free swap fade completes, the deck genuinely *is* a SYNTH deck running
+the new melody engine in FLOW — for the fade's duration it fires a voice the
+old continuous-LFO SYNTH never fired. Measured on
+`host/render/scenarios/sampler_single_deck.json` (single active deck,
+explicitly configured `sampler` on both sides of the comparison, not left on
+the SYNTH default): **61,309 of 7,680,044 bytes differ, all inside the first
+~36 s of a 40 s render, after which the two renders reconverge exactly for
+the final ~4 s.** The shared master limiter's slow, asymptotic peak-follower
+release (`engine/fx/limiter.h`) is what carries the boot-window transient for
+that long; the transient's own audio is small (max sample delta ≈ −35 dBFS).
+
+**The guarantee is narrowed, not the code — an explicit owner ruling.** State
+it as: a Sampler/BBD deck's own PITCH lane is untouched by this work —
+`_mod.set_flow_melody(false)` is pushed for both, the same value the prior
+default already had, and the two renders' exact reconvergence after the boot
+window demonstrates this rather than asserting it — but a render that ever
+calls `set_engine` differs from `main` through the boot window, because the
+deck is not a Sampler yet during it; that is a pre-existing architectural
+interaction (the universal SYNTH boot default plus the click-free engine-swap
+fade plus the shared master limiter) that this work exposes rather than
+introduces, and fixing it would mean changing `Part`'s boot/swap sequencing,
+which is out of this spec's scope. **Neither hash-gated render is affected**
+(`ctrl_identity.json`, `wave_formant_sweep.json` never call `set_engine`, so
+this path is never exercised there).
 
 ## 8. Hosts
 
@@ -823,9 +869,14 @@ unless a listed existing file is the better home.
 
 **Non-regression:**
 
-16. A Sampler deck and a BBD deck in FLOW are **bit-identical to `main`**, measured
-    on a **single-deck render or a per-deck tap** — §7 explains why a two-deck
-    master bus cannot carry this assertion.
+16. A Sampler deck and a BBD deck in FLOW keep their own PITCH lane
+    **untouched** — measured on a **single-deck render or a per-deck tap**, §7
+    explains why a two-deck master bus cannot carry this assertion. **Narrowed
+    by §7 Hole 2, owner-ruled:** this is not whole-render bit-identity to
+    `main`. A render that calls `set_engine` differs from `main` through the
+    boot window (measured: 61,309/7,680,044 bytes, all before ~36 s, exact
+    reconvergence after) because the deck is not a Sampler yet during that
+    window; a render that never calls `set_engine` is unaffected.
 17. A STEP render is bit-identical to `main`.
 18. The three tests that pin FLOW-LFO behaviour — `test_song_lane.cpp:193`, `:324`
     and `test_rhythm_ring.cpp:144` — stay green under the `false` default and are

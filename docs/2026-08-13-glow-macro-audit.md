@@ -92,6 +92,13 @@ not exposed on `Instrument` at all, so no host can reach them.
 
 ## Result 3 — DENSITY is dead in the free mode
 
+**Historical as of the FLOW melody engine (2026-08-13, `flow-melody-engine`
+branch): DENSITY now selects how many of the phrase's slots the melodic lane
+uses in FLOW, and moves audio there.** The measurement below is unedited — it
+is a record of what was true before that work, not a live description of the
+free mode today. See `docs/roadmap.md`'s "FLOW melody engine" entry under
+"Done" for what changed and what is still unexplained.
+
 Population of 40 terrains, DENSITY swept 0 → 1 with every other macro parked:
 
 ```
@@ -273,7 +280,7 @@ Three readings worth carrying forward:
 | Macro | Verdict |
 |---|---|
 | MOTION | alive, but carried by DRIFT alone once the reverb leaves; DRIFT is 3× weaker in STEP (0.46 vs 1.44), i.e. weakest on the three archetypes that are mostly STEP. Its second mechanism — scaling every other macro's weather depth, `flow.cpp:449` — is real and invisible to the per-target table |
-| DENSITY | dead on every FLOW terrain, all three targets |
+| DENSITY | dead on every FLOW terrain, all three targets — **historical, see Result 3's note** |
 | BRIGHT | alive; `FILT_A/B` carry it. `REV_TONE` (0.03) and `REV_DECAY` (0.03) are decoration |
 | PACE | alive in both modes |
 | WANDER | `FORM_A` and `SONG_A` dead on 40/40; `VARIATION_A` dead on 17/40. Effectively a VARIATION-only knob, and that half only works in STEP |
