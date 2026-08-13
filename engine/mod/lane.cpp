@@ -463,9 +463,16 @@ int ModLane::_sh_slot() const {
 
 int ModLane::_groove_k() const {
     const MelodyPattern& pattern = _active_pattern();
-    int L = (_melodic && _step_mode)
-        ? static_cast<int>(pattern.pattern_groove.len)
-        : static_cast<int>(pattern.cell_groove.len);
+    // Melodic lanes rank over the phrase-length expansion in BOTH modes. The
+    // cell_groove arm this used to have was unreachable: _groove_k has exactly
+    // one caller, _effective_gate, which returns before this for a non-melodic
+    // lane. It is also unobservable in the free mode -- pg_target_len is 8 for
+    // every principle (phrase_gen.h:53), so at kFlowPhraseSlots the sizing is
+    // k = 1, L = 8, r = 0 and cell_groove.len equals pattern_groove.len by
+    // construction. No fixture can tell the two apart, which is why this
+    // deletion carries no RED proof of its own.
+    int L = _melodic ? static_cast<int>(pattern.pattern_groove.len)
+                     : static_cast<int>(pattern.cell_groove.len);
     if (L < 1) L = 1;
     int k = static_cast<int>(std::lround(_density * static_cast<float>(L)));
     if (k < 1) k = 1;              // the anchor is unmaskable
@@ -477,35 +484,32 @@ bool ModLane::_effective_gate(int slot) const {
     const MelodyPattern& pattern = _active_pattern();
     if (!_melodic)
         return pattern.gate[slot];   // non-melodic lanes: all-true, DENSE unrouted
-    if (_step_mode) {
-        const int groove_length =
-            pattern.pattern_groove.len < 1
-                ? 1 : pattern.pattern_groove.len;
-        return pattern.pattern_groove.rank_of_slot[
-                   slot % groove_length] < _groove_k();
-    }
     const int groove_length =
-        pattern.cell_groove.len < 1 ? 1 : pattern.cell_groove.len;
-    return pattern.cell_groove.rank_of_slot[slot % groove_length] <
+        pattern.pattern_groove.len < 1 ? 1 : pattern.pattern_groove.len;
+    return pattern.pattern_groove.rank_of_slot[slot % groove_length] <
            _groove_k();
 }
 
 void ModLane::_on_boundary() {
     int slot = _sh_slot();
-    // STEP consults the effective gate (groove rank vs DENSE); FLOW has no
-    // per-step gate so it always fires (no freeze source after PROBABILITY).
-    bool gated = _step_mode ? _effective_gate(slot) : true;
+    // Both melody modes consult the groove rank against DENSE. The FLOW LFO
+    // has no per-step gate and always fires (no freeze source after
+    // PROBABILITY).
+    bool gated = (_step_mode || _flow_melody_on()) ? _effective_gate(slot) : true;
     _frozen = !gated;
     if (gated) {
         _fired = true;
-        if (_melodic && _step_mode) _start_note(slot);
-        if (_variation > 0.f && !(_melodic && !_step_mode))
+        if (_melodic && _step_mode) _start_note(slot);   // rhythm: STEP only
+        if (_variation > 0.f && (!_melodic || _step_mode || _flow_melody))
             _mutate_slot(slot);  // GROW pitch
         _target = _compute_raw();
-    } else {
+    } else if (_step_mode) {
         ++_note_age;   // rest step: the running note ages toward its release
+                       // -- a STEP concept. Unreachable in FLOW before this
+                       // change (gated was unconditionally true there), so the
+                       // guard is bit-identical for every existing path.
     }
-    // if !gated: hold the previous _target (frozen) — and the buffer slot with it
+    // if !gated: hold the previous _target (frozen) -- and the buffer slot with it
 }
 
 void ModLane::_enter_step(int step, bool latch_now) {
@@ -523,19 +527,12 @@ void ModLane::_start_note(int slot) {
     int dist = 1;                                       // steps to the next note
     while (dist < n && !_effective_gate((slot + dist) % n)) ++dist;
     const MelodyPattern& pattern = _active_pattern();
-    int hold = 1;
-    if (_melodic && _step_mode) {
-        const int groove_length =
-            pattern.pattern_groove.len < 1
-                ? 1 : pattern.pattern_groove.len;
-        hold = static_cast<int>(
-            pattern.pattern_groove.note_len[slot % groove_length]);
-    } else {
-        const int groove_length =
-            pattern.cell_groove.len < 1 ? 1 : pattern.cell_groove.len;
-        hold = static_cast<int>(
-            pattern.cell_groove.note_len[slot % groove_length]);
-    }
+    // _start_note is called only from _on_boundary under _melodic && _step_mode,
+    // so the cell_groove arm this used to carry was unreachable.
+    const int groove_length =
+        pattern.pattern_groove.len < 1 ? 1 : pattern.pattern_groove.len;
+    int hold = static_cast<int>(
+        pattern.pattern_groove.note_len[slot % groove_length]);
     _note_hold = hold > dist ? dist : hold;             // reaching the next note = tie
     _note_age = 0;
 }

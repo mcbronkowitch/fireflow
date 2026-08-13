@@ -131,3 +131,69 @@ TEST_CASE("STEP is unaffected by the phrase-length constant") {
     // three slot entries, three fires at full density.
     CHECK(fires_over_cycles(lane, 2) == 6);
 }
+
+TEST_CASE("FLOW melody: DENSITY selects how many notes the drone uses") {
+    SUBCASE("k == 1 is one standing note") {
+        ModLane lane = make_flow_melody_lane(0xF10Eu);
+        lane.set_density(0.f);           // lround(0 * L) == 0, clamped to 1
+        // Exactly one fire per cycle, and the value never moves between them.
+        drive_to_wrap(lane);
+        const float held = lane.target();
+        int fires = 0, wraps = 0;
+        for (int i = 0; i < kDriveGuard && wraps < 3; ++i) {
+            lane.process();
+            if (lane.fired()) ++fires;
+            if (lane.wrapped()) ++wraps;
+            CHECK(lane.target() == doctest::Approx(held));
+        }
+        CHECK(fires == 3);
+        // The lane really ran -- constancy alone would also pass on a stalled
+        // phase accumulator, which is the vacuity the PACE spec recorded.
+        CHECK(lane.wrap_count_for_test() >= 3u);
+    }
+
+    SUBCASE("k == L is a note per slot") {
+        ModLane lane = make_flow_melody_lane(0xF10Eu);
+        lane.set_density(1.f);
+        CHECK(fires_over_cycles(lane, 2) == 16);
+    }
+
+    SUBCASE("a closed slot holds the previous note") {
+        ModLane lane = make_flow_melody_lane(0xF10Eu);
+        lane.set_density(0.5f);          // k == 4 of 8
+        drive_to_wrap(lane);
+        float last_fired = lane.target();
+        int fires = 0;
+        for (int i = 0; i < 48000; ++i) {
+            lane.process();
+            if (lane.fired()) { last_fired = lane.target(); ++fires; }
+            // Between fires the target must equal the last fired value, never
+            // a fresh one: the skipped slots HOLD, they do not rest.
+            CHECK(lane.target() == doctest::Approx(last_fired));
+            // Slot 0 (the unmaskable anchor, see _groove_k) always fires on the
+            // same sample its entry wraps the cycle -- checking wrapped() before
+            // fired() (as the original draft did) would silently drop that one
+            // fire from the tally below. Break AFTER the fired-check, matching
+            // the "k == 1" subcase above, so this closes exactly one full cycle.
+            if (lane.wrapped()) break;
+        }
+        CHECK(fires == 4);
+    }
+}
+
+TEST_CASE("FLOW melody: the gate is value-dependent, not merely executed") {
+    // Two lanes identical but for DENSITY must emit different sequences. A
+    // counter proving the branch ran would be shape 4 in the vacuous-gates
+    // taxonomy -- it asserts the code executed, not that it did anything.
+    ModLane sparse = make_flow_melody_lane(0xF10Eu);
+    ModLane dense  = make_flow_melody_lane(0xF10Eu);
+    sparse.set_density(0.f);
+    dense.set_density(1.f);
+    bool differed = false;
+    for (int i = 0; i < 48000; ++i) {
+        sparse.process();
+        dense.process();
+        if (sparse.target() != dense.target()) differed = true;
+    }
+    CHECK(differed);
+}
