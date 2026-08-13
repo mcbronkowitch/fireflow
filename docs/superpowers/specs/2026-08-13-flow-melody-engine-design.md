@@ -179,9 +179,9 @@ New `static constexpr` members on `ModLane`, beside `kSeqSlots`:
 | Constant | Value | Origin |
 |---|---|---|
 | `kFlowPhraseSlots` | 8 | §4.9 |
-| `kFlowNoteMinSamples` | 60 ms × `_sr` | §4.10, first guess by arithmetic |
+| `kFlowNoteMinSamples` | 60 ms × `_sr` | §4.10, arithmetic; confirmed by ear 2026-08-13 |
 | `kFlowPhraseMinSamples` | `kFlowPhraseSlots × kFlowNoteMinSamples` | §4.10, **derived** — not a separate tunable |
-| `kFlowSlewFrac` | 0.35 | §4.11, first guess by arithmetic |
+| `kFlowSlewFrac` | 0.35 | §4.11, arithmetic; confirmed by ear 2026-08-13 |
 
 ## 4. Changes in `engine/mod/lane.*`
 
@@ -519,9 +519,10 @@ Two floors, one tunable:
   floor does not touch. The constant is **derived** as `kFlowPhraseSlots ×
   kFlowNoteMinSamples`, so it is not a second thing to tune by ear.
 
-`kFlowNoteMinSamples` = 60 ms of samples (≈ 16 notes/s), **a first guess set by
-arithmetic** — above anything ambient, below anything that reads as a buzz. It is
-sample-rate-derived, so 44.1 kHz behaves the same. §10.21 judges it.
+`kFlowNoteMinSamples` = 60 ms of samples (≈ 16 notes/s), **set by arithmetic** —
+above anything ambient, below anything that reads as a buzz. It is
+sample-rate-derived, so 44.1 kHz behaves the same. Judged per §10.24 and
+**confirmed by ear at this value** (owner, 2026-08-13).
 
 ### 4.11 SMOOTH against the slot interval
 
@@ -561,7 +562,8 @@ safety factor buys nothing, and the value is read at the next rate change anyway
 `set_fixed_slew`'s 20 ms override is already below any plausible clamp and is left
 alone.
 
-`kFlowSlewFrac = 0.35` is **a first guess by arithmetic** (1 − e^(−1/0.35) ≈ 0.94).
+`kFlowSlewFrac = 0.35` is **set by arithmetic** (1 − e^(−1/0.35) ≈ 0.94) and
+**confirmed by ear at this value** (owner, 2026-08-13, §10.24).
 This is the minimum needed for the melody to be heard as notes; everything else
 about SMOOTH stays with its own rework (§11).
 
@@ -906,7 +908,11 @@ unless a listed existing file is the better home.
     out-of-scope finding to record, **not** a failure of this design. Deciding this
     in advance is the point.
 
-**Listening checkpoints** (owner, not automatable):
+**Listening checkpoints** (owner, not automatable). **All answered 2026-08-13**,
+after implementation: the owner heard `flow_melody.wav`, `ctrl_identity.wav` and
+`wave_formant_sweep.wav` and accepted all three. Item 24's two constants
+therefore **stand as chosen** — set by arithmetic, confirmed by ear — and are not
+open values.
 
 21. The drone → melody continuum via `flow_melody.json`, against §1.
 22. **The SHAPE consequence of §6.1** — a drone terrain's smooth sine pitch drift
@@ -914,8 +920,11 @@ unless a listed existing file is the better home.
     larger change.
 23. The retrigger consequences of §6.2, specifically the faster Quantizer glide and
     FLUX's THIN pattern following DENSITY.
-24. `kFlowNoteMinSamples` (§4.10) and `kFlowSlewFrac` (§4.11) — both first guesses by
+24. `kFlowNoteMinSamples` (§4.10) and `kFlowSlewFrac` (§4.11) — both set by
     arithmetic. Gates 8–10 prove the mechanisms bind; only the ear sets the values.
+    **Confirmed by ear 2026-08-13 at the shipped values** (60 ms, 0.35); the
+    arithmetic derivations in §4.10/§4.11 describe where they came from, not a
+    pending decision.
 25. Whether losing WANDER's self-motion (§9) is the right trade.
 
 ## 11. Non-goals
