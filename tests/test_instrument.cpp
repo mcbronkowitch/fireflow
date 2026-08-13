@@ -275,6 +275,13 @@ TEST_CASE("instrument M4: couple 0 + drift 0 -> PITCH lane matches a bare SuperM
     inst.set_rate(PART_A, 0.5f);
     SuperModulator ref; ref.init(48000.f, 0x1234abcdu);   // PART_A seed (see instrument.cpp)
     ref.set_rate(0.5f);
+    // PART_A's default engine is ENGINE_SYNTH (Part::init boot default), and
+    // since spec 2026-08-13 flow-melody-engine task 8, Part pushes
+    // set_flow_melody(true) into the PITCH lane for every note engine. A bare
+    // SuperModulator gets no such push, so it must be told explicitly here or
+    // it stays on the old continuous-LFO path and the two lanes diverge for a
+    // reason that has nothing to do with couple/drift.
+    ref.set_flow_melody(true);
     bool same = true;
     std::vector<float> l(1), r(1);
     for (int i = 0; i < 20000; ++i) {
@@ -965,6 +972,25 @@ TEST_CASE("cross-deck excitation is symmetric and off by default") {
         // stays a controlled variable) makes the dependency honest instead
         // of quietly re-deriving new thresholds around a moved default.
         inst->set_voice_detune(PART_B, 72.f / 140.f);
+        // B is a note engine too, so since spec 2026-08-13 flow-melody-engine
+        // task 8 its PITCH lane runs the FLOW melody engine instead of the
+        // old continuous LFO -- it no longer "fires exactly one auto-drone
+        // pluck and then holds" on its own at the default RATE/DENSITY; left
+        // alone it retriggers itself every couple of hundred ms (measured:
+        // 3-4 times per 500 ms window), which swamps the cross-deck coupling
+        // signal this test exists to isolate with B's OWN self-generated
+        // notes. Pinned slow (RATE floor, ~0.02 Hz -- see
+        // tests/test_flow_melody_wiring.cpp) and sparse (DENSITY 0 -> the
+        // single unmaskable anchor slot, ModLane::_groove_k) so B fires that
+        // one anchor note near boot and then holds for the rest of the test's
+        // ~2 s span, restoring the "quasi-static, coupling-driven" premise
+        // the energy comparisons below depend on. A is deliberately left at
+        // its default RATE/DENSITY: it is the coupling SOURCE, and its own
+        // retriggering is exactly the signal being measured, not noise to be
+        // suppressed -- the two energy comparisons below only depend on A's
+        // LEVEL target, which set_target_active/set_target_base below still
+        // control exactly, independent of how often A's PITCH lane fires.
+        inst->set_density(PART_B, 0.f);
     }
     coupled.set_excitation_sources(PART_B, false, true, false);
 

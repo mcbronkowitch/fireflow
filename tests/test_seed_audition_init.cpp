@@ -32,34 +32,34 @@ TEST_CASE("Seed audition applies the VCV init engine and arranger state")
 
     // SONG_A/B's init default is a ladder rung index (spec 2026-08-09
     // hw-control-reduction task 3), and the factory patch asks for rung 0 on
-    // deck A and rung 13 on deck B. NEITHER LANDS AT BOOT, and that is the
-    // engine's documented behaviour, not a wiring failure:
+    // deck A and rung 13 on deck B. Both decks boot STEPS_A/B == 0, i.e. FLOW.
     //
-    //   ModLane::set_form/set_song only raise pending_form/pending_song
-    //   (lane.cpp). The selection changes in _apply_pending_song_work(),
-    //   reached only from _wrap_events() -- which returns immediately for a
-    //   melodic lane outside step mode (lane.cpp, `if (_melodic &&
-    //   !_step_mode) return;`). The factory patch boots STEPS_A/B == 0, i.e.
-    //   FLOW, so the rung sits parked until a deck enters step mode.
+    // Before spec 2026-08-13 flow-melody-engine task 8, that meant NEITHER
+    // rung landed at boot: ModLane::set_form/set_song only raise
+    // pending_form/pending_song (lane.cpp), and the selection changes in
+    // _apply_pending_song_work(), reached only from _wrap_events() -- which
+    // used to return immediately for a melodic lane outside step mode. Task 8
+    // wires Part::init/_engine_swap to push set_flow_melody(true) into the
+    // PITCH lane for every note engine (both decks here are WAVE/SYNTH), and
+    // _wrap_events() no longer early-returns once the FLOW melody engine is
+    // on -- it is the mechanism that walks the phrase slots. So the pending
+    // rung now lands on the first control tick, same as it would in STEP.
     //
-    // This check used to derive its expectation from the ladder and passed --
-    // but only by coincidence: the previous snapshot's rung 6 is {2, 0}, which
-    // is exactly SongState's own boot default (Principle::Hierarchical /
-    // SongMode::AAAB, song_form.h). It could not have caught a SONG push that
-    // never arrived. The new patch's rungs differ from the boot default, which
-    // is what exposed it.
+    // Rung 0 is {Principle::TwoMotif, SongMode::Off} and rung 13 is
+    // {Principle::Ostinato, SongMode::Mirror} (song_ladder.h's kLadder).
+    // Pinned as the ladder's rungs, not the ladder's index, for the same
+    // reason the ladder test itself does not pin order -- see song_ladder.h.
     //
-    // So what is pinned here is the FLOW gate itself. If SONG is ever made to
-    // apply without steps, these four go red and this comment is the reason.
     // The pending-until-wrap semantics have their own real coverage in
     // tests/test_song_lane.cpp, which drives set_step(true, ..) and watches
-    // the selection land.
+    // the selection land; SAMPLER/BBD decks keep the old parked behaviour,
+    // covered by tests/test_flow_melody_wiring.cpp.
     CHECK(spkyvcv::initParamDefault(spkyvcv::STEPS_A) == doctest::Approx(0.f));
     CHECK(spkyvcv::initParamDefault(spkyvcv::STEPS_B) == doctest::Approx(0.f));
-    CHECK(inst.form(spky::PART_A) == static_cast<int>(spky::Principle::Hierarchical));
-    CHECK(inst.form(spky::PART_B) == static_cast<int>(spky::Principle::Hierarchical));
-    CHECK(inst.song(spky::PART_A) == static_cast<int>(spky::SongMode::AAAB));
-    CHECK(inst.song(spky::PART_B) == static_cast<int>(spky::SongMode::AAAB));
+    CHECK(inst.form(spky::PART_A) == static_cast<int>(spky::Principle::TwoMotif));
+    CHECK(inst.form(spky::PART_B) == static_cast<int>(spky::Principle::Ostinato));
+    CHECK(inst.song(spky::PART_A) == static_cast<int>(spky::SongMode::Off));
+    CHECK(inst.song(spky::PART_B) == static_cast<int>(spky::SongMode::Mirror));
 }
 
 
@@ -367,19 +367,21 @@ TEST_CASE("Seed audition's factory init pins every engine-side observable "
           == doctest::Approx(2.25f).epsilon(0.001));
 
     // --- form and song per deck: the snapshot asks for ladder rung 0 on ---
-    // deck A and rung 13 on deck B, and NEITHER is in effect here. Both decks
-    // boot STEPS == 0 (FLOW), where ModLane parks a SONG/FORM change as
-    // pending and never reaches _apply_pending_song_work() -- see the long
-    // note in "applies the VCV init engine and arranger state" above. What
-    // both decks actually report is SongState's boot default.
+    // deck A and rung 13 on deck B, and (since spec 2026-08-13
+    // flow-melody-engine task 8 wires set_flow_melody(true) into every note
+    // engine's PITCH lane) both now land at boot: _wrap_events() no longer
+    // early-returns for a melodic lane outside step mode once the FLOW
+    // melody engine is on, so the pending rung applies on the first control
+    // tick. See the long note in "applies the VCV init engine and arranger
+    // state" above for the full mechanism.
     //
-    // Pinned as literals rather than derived from the ladder on purpose: this
-    // is a statement about the ENGINE's boot state, and it must not silently
-    // start tracking the ladder if somebody retunes song_ladder.h.
-    CHECK(inst.form(spky::PART_A) == static_cast<int>(spky::Principle::Hierarchical));
-    CHECK(inst.form(spky::PART_B) == static_cast<int>(spky::Principle::Hierarchical));
-    CHECK(inst.song(spky::PART_A) == static_cast<int>(spky::SongMode::AAAB));
-    CHECK(inst.song(spky::PART_B) == static_cast<int>(spky::SongMode::AAAB));
+    // Pinned as the ladder's rungs (song_ladder.h's kLadder), not literals
+    // derived from SongState's boot default: rung 0 is {TwoMotif, Off},
+    // rung 13 is {Ostinato, Mirror}.
+    CHECK(inst.form(spky::PART_A) == static_cast<int>(spky::Principle::TwoMotif));
+    CHECK(inst.form(spky::PART_B) == static_cast<int>(spky::Principle::Ostinato));
+    CHECK(inst.song(spky::PART_A) == static_cast<int>(spky::SongMode::Off));
+    CHECK(inst.song(spky::PART_B) == static_cast<int>(spky::SongMode::Mirror));
 
     // --- per-part level and compressor amount: both decks boot INSIDE ---
     // the comp zone now, which no earlier factory patch did. Level clamps to

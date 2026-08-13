@@ -32,6 +32,9 @@ public:
     float rate() const { return _rate_norm; }
     void set_shape(float s);
     void set_density(float d) { _lanes[LANE_PITCH].set_density(d); }
+    // PITCH lane only, exactly like set_density: the texture lanes have no
+    // melody and no phrase.
+    void set_flow_melody(bool on) { _lanes[LANE_PITCH].set_flow_melody(on); }
     void set_smooth(float s);
     void set_range(float r);
     void set_variation(float v);

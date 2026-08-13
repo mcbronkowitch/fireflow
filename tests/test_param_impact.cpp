@@ -296,19 +296,24 @@ TEST_CASE("param impact: every parameter moves audio somewhere") {
 TEST_CASE("param impact: a live parameter works in both operating modes") {
     // Mode-exclusive by construction, not by accident:
     //
-    // DENSITY / STEPS / SHUFFLE / TEMPO_BPM are step-grid concepts. In the free
-    //   mode the melodic lane is a continuous LFO -- one slot, no gate, no BPM
-    //   ladder -- so none of them has anything to act on. The FLOW melody
-    //   engine (roadmap) is what changes this; when it lands, drop the entries
-    //   it revives and this gate holds the new ground.
+    // STEPS / SHUFFLE / TEMPO_BPM are step-grid concepts with nothing to act on
+    //   in the free mode.
     // COUPLE is the mirror image: it corrects a phase error between the decks
     //   that the step grid does not leave, so it is free-mode-only.
+    //
+    // DENSITY used to be on this list too -- in the free mode the melodic lane
+    //   was a continuous LFO (one slot, no gate) that DENSITY had nothing to
+    //   act on. Spec 2026-08-13 flow-melody-engine task 8 wires the FLOW
+    //   melody engine into every note engine's PITCH lane (Part::init /
+    //   Part::_engine_swap push set_flow_melody(true)), which walks phrase
+    //   slots and consults DENSITY's k-of-8 groove ranking in FLOW exactly as
+    //   STEP already did -- so DENSITY now moves audio in both modes and drops
+    //   off this list, per the comment above that predicted exactly this.
     //
     // Anything NOT listed here that works in one mode only is a defect: half of
     // every terrain population cannot reach it.
     bool expected[P_COUNT] = {};
-    for (int p : { P_DENSITY_A, P_DENSITY_B, P_STEPS_A, P_STEPS_B,
-                   P_SHUFFLE, P_TEMPO_BPM, P_COUPLE })
+    for (int p : { P_STEPS_A, P_STEPS_B, P_SHUFFLE, P_TEMPO_BPM, P_COUPLE })
         expected[p] = true;
 
     const Terrains ter = pick_terrains();

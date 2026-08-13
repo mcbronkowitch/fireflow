@@ -30,6 +30,17 @@ void Part::init(float sample_rate, uint32_t seed_base,
     _sampler.init(sample_rate);
     _last_gate = false;
     _engine_id = ENGINE_SYNTH;                  // boot default (M2 spec)
+    // On a SAMPLER deck the PITCH lane is a read position, and on a BBD deck in
+    // FLOW it is the continuous clock bend -- on both, the sweep IS the feature
+    // and a slot sequencer would make it a staircase. Pushed at the two sites
+    // where _engine_id is written, the same convention _engine_wants_in
+    // follows, so the two cannot drift apart.
+    //
+    // This names the same two engines as the quantizer bypass in
+    // _control_tick (SAMPLER || (BBD && !_step_on)) for the same underlying
+    // reason -- on those decks the PITCH lane is not a note -- but it does NOT
+    // derive from it. Do not move this to that per-tick site.
+    _mod.set_flow_melody(_engine_id != ENGINE_SAMPLER && _engine_id != ENGINE_BBD);
     _pending_engine = _engine_id;
     _switching = false;
     _engine = _engine_for(_engine_id);
@@ -417,6 +428,17 @@ void Part::_engine_swap() {
     _engine_id = _pending_engine;
     _engine = _engine_for(_engine_id);
     _engine_wants_in = _engine->consumes_input();   // pairs with _engine
+    // On a SAMPLER deck the PITCH lane is a read position, and on a BBD deck in
+    // FLOW it is the continuous clock bend -- on both, the sweep IS the feature
+    // and a slot sequencer would make it a staircase. Pushed at the two sites
+    // where _engine_id is written, the same convention _engine_wants_in
+    // follows, so the two cannot drift apart.
+    //
+    // This names the same two engines as the quantizer bypass in
+    // _control_tick (SAMPLER || (BBD && !_step_on)) for the same underlying
+    // reason -- on those decks the PITCH lane is not a note -- but it does NOT
+    // derive from it. Do not move this to that per-tick site.
+    _mod.set_flow_melody(_engine_id != ENGINE_SAMPLER && _engine_id != ENGINE_BBD);
     // The BBD holds charge, and IPartEngine has no swap-away notification --
     // Part only ever pushes state INTO the engine being swapped in. Without
     // this a deck switched away from and back to returns the previous take.

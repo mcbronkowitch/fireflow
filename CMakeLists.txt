@@ -69,6 +69,7 @@ add_executable(spky_tests
     tests/test_step_grid_lock.cpp
     engine/parts/part.cpp
     tests/test_part.cpp
+    tests/test_flow_melody_wiring.cpp
     engine/parts/bbd_engine.cpp
     tests/test_bbd_engine.cpp
     tests/test_deck_bus.cpp
@@ -226,7 +227,13 @@ add_test(
         # No bit-exactness gates -- this is a sanity render, not a checksum
         # (CLAUDE.md); the move is the unavoidable consequence of accumulating
         # the lane phase in double.
-        -DEXPECTED=328f8c8a33ec64d6108246649b75271b48a5a0aea72761acfa16dba000e3720f
+        # Moved again (spec 2026-08-13 flow-melody-engine task 8): the
+        # scenario sets no engine and no set_step, i.e. two SYNTH decks in
+        # FLOW, and Part now pushes set_flow_melody(true) into both PITCH
+        # lanes (Part::init, the boot default engine is ENGINE_SYNTH) -- both
+        # decks step through phrase slots instead of running the old
+        # continuous LFO, which is the entire point of this task.
+        -DEXPECTED=2b836457ff2d20d9f0e7b1c4141b548b8a6a5bd846ff08454521254d6dd4655f
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -P ${CMAKE_SOURCE_DIR}/tests/check_render_hash.cmake
 )
@@ -246,7 +253,12 @@ add_test(
         # Moved again (spec 2026-08-12 modulation-pace task 3): the lane phase
         # accumulator is double, and this scenario's formant sweep is
         # modulated. Same reasoning as above -- sanity render, not a checksum.
-        -DEXPECTED=62274db50a3ed4af21fda658450b17664bbcc026a3cd59bde213aa3f5fdcad5f
+        # Moved again (spec 2026-08-13 flow-melody-engine task 8): WAVE is a
+        # note engine, and this scenario runs it on part 0 with set_step's
+        # flag false, i.e. FLOW -- Part now pushes set_flow_melody(true) into
+        # its PITCH lane (Part::init/_engine_swap), so it steps through phrase
+        # slots instead of the old continuous LFO.
+        -DEXPECTED=622c9d093373fc20e4f907179254073319882379a47ac2f02e289911aa344c0d
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -DGATE_STEM=wave_formant_sweep
         -DREFERENCE=WAVE
