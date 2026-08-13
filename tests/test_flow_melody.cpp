@@ -281,29 +281,71 @@ TEST_CASE("FLOW melody: pending work applies before the first slot") {
     CHECK(lane.pattern_for_test(lane.active_pattern()).pattern_groove.len == 8);
 }
 
-TEST_CASE("FLOW melody: mode entry does not carry stale slot state") {
-    // Two hazards, both invisible before FLOW had slots:
-    //  - a _cur_step left from the other mode means no boundary fires until the
-    //    index happens to differ, so the phrase's first note is skipped or late;
-    //  - a _frozen left true from a CLOSED slot follows the lane into the FLOW
-    //    LFO path, whose branch is `if (!_frozen) _target = _compute_raw()` --
-    //    the "LFO" would then hold a constant for up to a full cycle.
+// The original single-case version of this test tried to gate two hazards
+// through the SAME landing slot's gate decision: the first half needs that
+// slot open (so the boundary fires), the second half is only a real gate on
+// _frozen if that slot is closed (so a stale freeze would carry over). No
+// DENSITY value makes both halves real at once, so the case is split in two
+// -- each with its own density and its own single job.
+
+TEST_CASE("FLOW melody: mode entry fires the first sample, not a stale index") {
+    // A _cur_step left from the other mode means no boundary fires until the
+    // slot index happens to differ, so the phrase's first note can be skipped
+    // or arrive a slot late. set_step clears _cur_step to -1 on any mode
+    // change so the very next sample re-evaluates the boundary.
     ModLane lane = make_flow_melody_lane(0xF10Eu);
-    lane.set_density(0.5f);           // k == 4 of 8: half the slots are closed
+    lane.set_density(0.5f);           // k == 4 of 8: landing slot 3 (rank 2) is open
     drive_to_wrap(lane);
-    for (int i = 0; i < 20000; ++i) lane.process();   // land mid-phrase
+    for (int i = 0; i < 20000; ++i) lane.process();   // land mid-phrase, slot 3
 
     lane.set_step(true, 8);
     // The first sample in the new mode must fire, not wait for an index change.
     lane.process();
     CHECK(lane.fired());
+}
 
-    lane.set_step(false, 8);
+TEST_CASE("FLOW melody: mode entry clears a stale freeze before the LFO resumes") {
+    // A _frozen left true from a CLOSED slot follows the lane into the FLOW
+    // LFO path, whose branch is `if (!_frozen) _target = _compute_raw()` --
+    // the "LFO" would then hold a constant for up to a full cycle.
+    ModLane lane = make_flow_melody_lane(0xF10Eu);
+    lane.set_density(0.25f);          // k == 2 of 8: landing slot 3 (rank 2) is closed
+    drive_to_wrap(lane);
+    for (int i = 0; i < 20000; ++i) lane.process();   // land mid-phrase, slot 3, held
+    REQUIRE(lane.frozen());           // precondition: the hazard this case gates
+
     lane.set_flow_melody(false);
     // Back on the LFO path the lane must move again immediately.
     const float first = lane.target();
     for (int i = 0; i < 200; ++i) lane.process();
     CHECK(lane.target() != doctest::Approx(first));
+}
+
+TEST_CASE("FLOW melody: RST clears a stale freeze for the tick() path") {
+    // process() re-evaluates the boundary on its very next call after RST
+    // (_cur_step == -1 forces slot 0, always open, so _frozen recomputes to
+    // false regardless of reset()'s own clear -- see the mode-entry cases
+    // above, and reset()'s comment). tick() (ModLane's per-control-tick path,
+    // spec 2026-07-19 mod-plane-control-rate) has no such immediate re-check
+    // for FLOW melody mode -- its trailing recompute is
+    // `if (!_step_mode && !_frozen) _target = _compute_raw();` with nothing
+    // ahead of it to clear a stale freeze (a documented gap the plan leaves
+    // for a later task) -- so without reset()'s clear, a freeze survives RST
+    // into the next tick() call and the target stays stuck. This is the one
+    // path where that line is observable.
+    ModLane lane = make_flow_melody_lane(0xF10Eu);
+    lane.set_density(0.5f);           // k == 4 of 8: opens are slots 0, 3, 5, 7
+    drive_to_wrap(lane);
+    for (int i = 0; i < 26000; ++i) lane.process();   // land in slot 4's window, closed
+    REQUIRE(lane.frozen());           // precondition: the hazard this case gates
+    const float held = lane.target();
+
+    lane.reset();
+    lane.tick();
+    // The recompute lands on slot 0's note, which for this seed differs from
+    // the held note -- reset() really moved the target, not left it
+    // accidentally unchanged.
+    CHECK(lane.target() != doctest::Approx(held));
 }
 
 TEST_CASE("FLOW melody: RST restarts the phrase at slot 0") {

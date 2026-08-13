@@ -430,6 +430,15 @@ void ModLane::reset(float phase) {
     _phase = clampf(phase, 0.f, 0.999999f);
     _shuffle_latched = _shuffle_target;
     _cur_step = -1;
+    // Observable through tick(), not process(): process() re-evaluates the
+    // boundary on its very next call (_cur_step == -1 forces slot 0, always
+    // open, so _on_boundary recomputes _frozen to false regardless of this
+    // line). tick()'s FLOW-melody path has no such immediate re-check -- its
+    // trailing recompute is `if (!_step_mode && !_frozen) _target =
+    // _compute_raw();` with nothing ahead of it to clear a stale freeze -- so
+    // without this line a freeze survives RST into the next tick() call and
+    // the target stays stuck. See tests/test_flow_melody.cpp, "RST clears a
+    // stale freeze for the tick() path".
     _frozen = false;
     // RST is the resync gesture: it clears the SPOT offset too, so the lane
     // comes back to the deck's own slot 0 rather than to a stumbled one.
