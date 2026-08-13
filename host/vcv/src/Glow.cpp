@@ -1189,15 +1189,44 @@ struct TouchPlate : app::Switch {
         return mm2px(Vec(x - shape->min.x, y - shape->min.y));
     }
 
+    XY localPoint(const math::Vec& local) const {
+        const float pixelsPerMm = mm2px(1.f);
+        return {shape->min.x + local.x / pixelsPerMm,
+                shape->min.y + local.y / pixelsPerMm};
+    }
+
+    bool containsLocalPoint(const math::Vec& local) const {
+        const XY panelPoint = localPoint(local);
+        if (panelPoint.x < shape->min.x || panelPoint.x > shape->max.x ||
+            panelPoint.y < shape->min.y || panelPoint.y > shape->max.y) {
+            return false;
+        }
+        return spkyvcv::pad_geometry::pointInClosedCatmullRom(
+            shape->points, shape->pointCount, panelPoint);
+    }
+
+    void onButton(const ButtonEvent& event) override {
+        if (!containsLocalPoint(event.pos))
+            return;
+        app::Switch::onButton(event);
+    }
+
+    void onHover(const HoverEvent& event) override {
+        if (!containsLocalPoint(event.pos))
+            return;
+        app::Switch::onHover(event);
+    }
+
     void beginPadPath(NVGcontext* vg, float scale) const {
+        const int pointCount = static_cast<int>(shape->pointCount);
         auto pt = [&](int i) {
-            const auto& q = shape->points[(i + kPadPointCount) % kPadPointCount];
+            const auto& q = shape->points[(i + pointCount) % pointCount];
             return localPoint(q, scale);
         };
         Vec p1 = pt(0);
         nvgBeginPath(vg);
         nvgMoveTo(vg, p1.x, p1.y);
-        for (int i = 0; i < kPadPointCount; ++i) {
+        for (int i = 0; i < pointCount; ++i) {
             Vec p0 = pt(i - 1), p2 = pt(i + 1), p3 = pt(i + 2);
             Vec c1(p1.x + (p2.x - p0.x) / 6.f, p1.y + (p2.y - p0.y) / 6.f);
             Vec c2(p2.x - (p3.x - p1.x) / 6.f, p2.y - (p3.y - p1.y) / 6.f);

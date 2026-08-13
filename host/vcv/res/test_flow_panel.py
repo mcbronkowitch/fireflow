@@ -443,6 +443,23 @@ def test_the_header_emits_no_zero_length_input_table():
     check("NUM_INPUTS" in hpp, "InputId/NUM_INPUTS must still be emitted")
 
 
+def test_header_emits_each_pad_with_its_own_legal_anchor_count():
+    """A pad may gain or lose traced anchors without constraining its peers."""
+    shape = g.PAD_SHAPES[0]
+    original = shape.points
+    try:
+        shape.points = original[:-1]
+        hpp = g.header()
+        check("{ kPadP00Points, 15," in hpp,
+              "P00's emitted pointCount did not follow its own anchors")
+        check("{ kPadP01Points, 16," in hpp,
+              "P01's pointCount was coupled to P00")
+        check("kPadPointCount" not in hpp,
+              "header retains a global pad anchor count")
+    finally:
+        shape.points = original
+
+
 def test_fader_wells_use_the_dark_copper_palette():
     """The two stock slider wells must sit in the graphite/copper panel."""
     legacy_fill, legacy_stroke = base.PAPER_DEEP, base.LINE

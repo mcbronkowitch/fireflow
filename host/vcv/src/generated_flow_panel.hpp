@@ -5,9 +5,9 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include "pad_geometry.hpp"
 namespace spkyvcv { namespace glow {
-struct XY { float x, y; };
-static constexpr std::size_t kPadPointCount = 16;
+using XY = spkyvcv::pad_geometry::Point;
 enum class PadZone : std::uint8_t { LowerTouch, UpperRear };
 struct PadShape { const XY* points; std::size_t pointCount; XY label; XY centre; XY min; XY max; const char* id; PadZone zone; bool verified; };
 enum WidgetKind { WK_MACRO, WK_PAD, WK_FADER, WK_SWITCH, WK_OUT };

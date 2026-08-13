@@ -142,11 +142,6 @@ def label_xy(c):
 
 
 # --- named physical pad geometry ---------------------------------------------
-PAD_POINT_COUNT = len(PADS[0].points_mm)
-assert all(len(p.points_mm) == PAD_POINT_COUNT for p in PADS), \
-    "the current renderer requires a uniform anchor count"
-
-
 def _polygon_centroid(points):
     cross = [x0*y1 - x1*y0
              for (x0, y0), (x1, y1) in zip(points, points[1:] + points[:1])]
@@ -513,9 +508,9 @@ def header():
     out.append("#pragma once\n")
     out.append("#include <cstddef>\n")
     out.append("#include <cstdint>\n")
+    out.append('#include "pad_geometry.hpp"\n')
     out.append("namespace spkyvcv { namespace glow {\n")
-    out.append("struct XY { float x, y; };\n")
-    out.append("static constexpr std::size_t kPadPointCount = %d;\n" % PAD_POINT_COUNT)
+    out.append("using XY = spkyvcv::pad_geometry::Point;\n")
     out.append("enum class PadZone : std::uint8_t { LowerTouch, UpperRear };\n")
     out.append("struct PadShape { const XY* points; std::size_t pointCount; "
                "XY label; XY centre; XY min; XY max; const char* id; "
