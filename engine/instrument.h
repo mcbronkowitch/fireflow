@@ -121,6 +121,17 @@ public:
     float lane_phase_for_test(int p, int lane) const {
         return _parts[p].mod().lane_phase_for_test(lane);
     }
+    // The melody engine's cross-mode phrase-length invariant, readable through
+    // the whole stack: the length the lane is supposed to have right now vs the
+    // length its pattern was actually generated at. A gate that hard-codes
+    // either side stops testing the invariant the moment a host pushes a STEPS
+    // the two happen to share (spec 2026-08-13 flow-melody-engine, §10 14-15).
+    int lane_effective_length_for_test(int p, int lane) const {
+        return _parts[p].mod().lane_effective_length_for_test(lane);
+    }
+    int lane_pattern_groove_len_for_test(int p, int lane) const {
+        return _parts[p].mod().lane_pattern_groove_len_for_test(lane);
+    }
     bool step_mode_for_test(int p)  const { return _parts[p].mod().step_mode(); }
     int  deck_steps_for_test(int p) const { return _parts[p].mod().deck_steps(); }
     float pace_for_test() const { return _pace; }

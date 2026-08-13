@@ -66,6 +66,14 @@ public:
     // lane_wraps_for_test into a continuous "turns" count.
     float   lane_phase_for_test(int i)   const { return _lanes[i].phase(); }
     int     lane_slots_for_test(int i)   const { return _lanes[i].steps(); }
+    // Phrase-length pair for the melody engine's cross-mode invariant --
+    // see ModLane::effective_length_for_test.
+    int lane_effective_length_for_test(int i) const {
+        return _lanes[i].effective_length_for_test();
+    }
+    int lane_pattern_groove_len_for_test(int i) const {
+        return _lanes[i].pattern_groove_len_for_test();
+    }
     int32_t deck_step_for_test()         const { return _deck_step; }
     // The amount PITCH's own phase (and so the deck's follow fraction) was
     // actually built from -- the reference a follower's phase must be

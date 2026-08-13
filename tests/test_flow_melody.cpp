@@ -6,6 +6,7 @@
 // L slots through the groove ranking, and the slots it skips HOLD the previous
 // note.
 #include <cmath>
+#include <cstring>
 #include <doctest/doctest.h>
 #include "mod/lane.h"
 
@@ -153,11 +154,11 @@ TEST_CASE("FLOW melody: DENSITY selects how many notes the drone uses") {
         CHECK(lane.wrap_count_for_test() >= 3u);
     }
 
-    SUBCASE("k == L is a note per slot") {
-        ModLane lane = make_flow_melody_lane(0xF10Eu);
-        lane.set_density(1.f);
-        CHECK(fires_over_cycles(lane, 2) == 16);
-    }
+    // There is no "k == L is a note per slot" subcase here: at this fixture's
+    // default density it would be byte-for-byte the case above
+    // ("the lane fires once per slot, not once per cycle") -- same lane, same
+    // two cycles, same == 16 -- so it added a second copy rather than a second
+    // gate. k == L is covered there.
 
     SUBCASE("a closed slot holds the previous note") {
         ModLane lane = make_flow_melody_lane(0xF10Eu);
@@ -198,8 +199,6 @@ TEST_CASE("FLOW melody: the gate is value-dependent, not merely executed") {
     }
     CHECK(differed);
 }
-
-#include <cstring>
 
 TEST_CASE("FLOW melody: SONG advances one phrase per cycle") {
     ModLane lane = make_flow_melody_lane(0xF10Eu);
@@ -303,6 +302,89 @@ TEST_CASE("FLOW melody: mode entry fires the first sample, not a stale index") {
     // The first sample in the new mode must fire, not wait for an index change.
     lane.process();
     CHECK(lane.fired());
+}
+
+TEST_CASE("FLOW melody: melody-mode entry fires the first sample, "
+          "not a stale index") {
+    // set_step's twin, on the other mode-entry function. The lane leaves melody
+    // mode (an engine swap to SAMPLER/BBD), runs the FLOW LFO -- which writes
+    // _target every sample but never touches _cur_step -- and comes back. If
+    // set_flow_melody keeps that stale index and it still matches the slot the
+    // phase is in, no boundary fires and the LFO's last value is held for the
+    // rest of the slot: measured at 5.15 s of a wrong, held pitch at the free
+    // rate floor. Certain at low phase (slot 0), ~1/8 at random phase.
+    ModLane lane = make_flow_melody_lane(0xF10Eu);
+    lane.set_density(1.f);            // every slot open: the fire is the gate
+    drive_to_wrap(lane);
+    for (int i = 0; i < 20000; ++i) lane.process();   // land mid-phrase, slot 3
+
+    lane.set_flow_melody(false);      // engine swapped to SAMPLER/BBD
+    for (int i = 0; i < 200; ++i) lane.process();     // the LFO overwrites _target
+    lane.set_flow_melody(true);       // ... and back to a note engine
+
+    lane.process();
+    CHECK(lane.fired());
+    const int slot = ModLane::step_index(lane.phase(), 8);
+    CHECK(lane.target() == doctest::Approx(
+              lane.pattern_for_test(lane.active_pattern()).pitch[slot]));
+}
+
+TEST_CASE("FLOW melody: a redundant flag push changes nothing") {
+    // Part pushes this flag at both sites that write _engine_id (part.cpp:43,
+    // :441), so a same-class swap (SYNTH -> WAVE) calls set_flow_melody with
+    // the value the lane already holds. That has to be a no-op: re-priming the
+    // note floor on a call that changes no state lets the next boundary fire
+    // sooner than kFlowNoteMinS after the previous one -- the one thing the
+    // floor exists to prevent -- and clearing the slot index there would
+    // re-fire the slot the lane is already in.
+    //
+    // 14 Hz is the rate the floor actually binds at (see "the note rate has a
+    // floor" below); at the file's default 1 Hz the slots are far longer than
+    // the floor and a lost priming would be invisible.
+    ModLane plain  = make_flow_melody_lane(0xF10Eu, /*hz=*/14.f);
+    ModLane pushed = make_flow_melody_lane(0xF10Eu, /*hz=*/14.f);
+    plain.set_density(1.f);
+    pushed.set_density(1.f);
+    int plain_fires = 0, pushed_fires = 0;
+    for (int i = 0; i < 48000; ++i) {                 // one second
+        if (i % 500 == 0) pushed.set_flow_melody(true);   // same-class swaps
+        plain.process();
+        pushed.process();
+        if (plain.fired())  ++plain_fires;
+        if (pushed.fired()) ++pushed_fires;
+    }
+    CHECK(pushed_fires == plain_fires);
+    CHECK(plain_fires > 0);              // both lanes really ran
+}
+
+TEST_CASE("FLOW melody: leaving melody mode re-lengths the phrase for STEP") {
+    // set_flow_melody(false) changes what _effective_length() returns, so it
+    // owes the same flag set_step's own length check owes. STEPS never moves
+    // here -- the deck was pushed 12 in FLOW and enters STEP at 12 -- so
+    // set_step's before/after delta sees nothing and this is the only check
+    // that can catch it. Without it the STEP phrase keeps the 8-slot melody
+    // groove: the raster repeats every 8 of the 12 steps, DENSITY ranks over
+    // the wrong length, and slots 8..11 play the root instead of a note
+    // (lane.h, kFlowPhraseSlots' comment) until an unrelated FORM/SONG/NEW/
+    // STEPS event happens to regenerate it.
+    ModLane lane = make_flow_melody_lane(0xF10Eu);
+    lane.process();                   // phrase generated at kFlowPhraseSlots
+    REQUIRE(lane.pattern_groove_len_for_test() == 8);
+
+    lane.set_step(false, 12);         // Glow pushes 2..16 in FLOW too
+    lane.set_flow_melody(false);      // engine swapped to SAMPLER/BBD
+    lane.set_step(true, 12);          // ... and then STEP, at that same STEPS
+    lane.process();
+
+    CHECK(lane.pattern_groove_len_for_test() == lane.effective_length_for_test());
+    // The audible half of the same defect: a phrase generated at 8 has nothing
+    // in pitch[8..11] (generate_phrase fills only [0, n)), so those steps play
+    // the root. After the regeneration they carry real notes.
+    const MelodyPattern& pattern = lane.pattern_for_test(lane.active_pattern());
+    bool notes_past_the_old_phrase = false;
+    for (int s = 8; s < 12; ++s)
+        if (pattern.pitch[s] != 0.f) notes_past_the_old_phrase = true;
+    CHECK(notes_past_the_old_phrase);
 }
 
 TEST_CASE("FLOW melody: mode entry clears a stale freeze before the LFO resumes") {

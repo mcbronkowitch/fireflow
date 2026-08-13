@@ -50,8 +50,7 @@ void ModLane::init(float sample_rate, uint32_t seed) {
     _sr = sample_rate;
     _note_min_samples   = static_cast<int>(kFlowNoteMinS * _sr);
     _phrase_min_samples = kFlowPhraseSlots * _note_min_samples;
-    _since_fire   = _note_min_samples;      // primed: the first boundary fires
-    _since_phrase = _phrase_min_samples;
+    _prime_floors();                        // primed: the first boundary fires
     _rng.seed(seed);
     _phase = 0.0;
 #ifdef SPKY_TESTING
@@ -136,18 +135,45 @@ void ModLane::set_song(SongMode song) {
 }
 
 void ModLane::set_flow_melody(bool on) {
+    const bool mode_changed = on != _flow_melody;
     _flow_melody = on;
-    _frozen = false;          // see set_step: a freeze from the other state is meaningless here
-    _prime_floors();
-    // One-sided by construction, and that is the point. ENTERING melody mode the
-    // pattern may have been generated at another length -- at boot, whenever a
-    // host pushed a STEPS other than kFlowPhraseSlots before this flag -- and
-    // pitch[] past that length is zero, so it MUST regenerate. LEAVING it must
-    // not: the lane moves to the FLOW LFO path where _wrap_events early-returns
-    // and nothing reads the melody state, so a flag raised here would sit until
-    // the deck came back and then re-roll the melody for nothing. Testing the
-    // pattern rather than the flip gives both behaviours from one condition.
-    if (_flow_melody_on() &&
+    // Only on a real flip, mirroring set_step's own `if (mode_changed)` line.
+    // Part pushes this flag at BOTH sites that write _engine_id (part.cpp:43,
+    // :441), so a same-class swap (SYNTH -> WAVE) calls this with the value it
+    // already holds; re-priming the floors there would let a note fire sooner
+    // than kFlowNoteMinS after the previous one, and clearing _cur_step there
+    // would re-fire the slot the lane is already in.
+    if (mode_changed) {
+        // See set_step: a slot index and a freeze decision from the other
+        // state mean nothing in this one. _cur_step = -1 makes the next sample
+        // re-evaluate the boundary instead of holding whatever the FLOW LFO
+        // path last wrote into _target -- the LFO writes _target every sample
+        // but never moves _cur_step, so coming back to a still-matching index
+        // fires nothing until the phase leaves the slot.
+        //
+        // Not while _step_mode is true: there the index is STEP's own live
+        // position, and clearing it would re-fire the current step mid-step.
+        // set_step clears it on its way out of STEP anyway.
+        if (!_step_mode) _cur_step = -1;
+        _frozen = false;
+        _prime_floors();
+    }
+    // Absolute, not one-sided, and not conditional on the flip. ENTERING melody
+    // mode the pattern may have been generated at another length -- at boot, or
+    // whenever a host pushed a STEPS other than kFlowPhraseSlots before this
+    // flag -- and pitch[] past that length is zero, so it MUST regenerate.
+    // LEAVING it owes exactly the same flag: this call changes what
+    // _effective_length() returns, and set_step's own length check is a DELTA
+    // (old_len captured before its assignments) whose premise is that old_len
+    // is the length the pattern was last generated at. An unflagged exit
+    // destroys that premise, and STEP entered afterwards at an unchanged STEPS
+    // then keeps the 8-slot melody groove -- see tests/test_flow_melody.cpp,
+    // "leaving melody mode re-lengths the phrase for STEP". length_pending is
+    // sticky and only consumed under _melody_engine_on(), so a lane that
+    // leaves for the FLOW LFO path simply carries it until it enters a melody
+    // mode again, which is the correct moment. Testing the pattern rather than
+    // the flip gives every one of those cases from one condition.
+    if (_melodic &&
         _active_pattern().pattern_groove.len != _effective_length())
         _song.length_pending = true;
     _update_slew();
@@ -514,7 +540,7 @@ int ModLane::_sh_slot() const {
     // mode and the lane emits pitch[0] forever, and because
     // expand_pattern_groove pins rank_of_slot[0] to 0 the gate is then always
     // open too, so DENSITY moves nothing and the whole mechanism is a no-op.
-    if (!_step_mode && !_flow_melody) return 0;
+    if (!_step_mode && !_flow_melody_on()) return 0;
     int s = _cur_step < 0 ? 0 : _cur_step;
     return s % kSeqSlots;
 }
@@ -561,7 +587,7 @@ void ModLane::_on_boundary() {
         _fired = true;
         _since_fire = 0;
         if (_melodic && _step_mode) _start_note(slot);   // rhythm: STEP only
-        if (_variation > 0.f && (!_melodic || _step_mode || _flow_melody))
+        if (_variation > 0.f && (!_melodic || _step_mode || _flow_melody_on()))
             _mutate_slot(slot);  // GROW pitch
         _target = _compute_raw();
     } else if (_step_mode) {

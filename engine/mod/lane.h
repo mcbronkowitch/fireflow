@@ -51,6 +51,18 @@ public:
     uint8_t cadence_slot_for_test() const { return _song.cadence_slot; }
     float bound_a_opening_for_test() const { return _song.bound_a_opening; }
     float rate_hz_for_test() const { return _rate_hz; }
+    // The length the phrase is CURRENTLY supposed to have: kFlowPhraseSlots in
+    // FLOW melody mode, the (clamped) STEPS count everywhere else. Exposed so a
+    // gate can compare it against the length the pattern was actually generated
+    // at (pattern_for_test(...).pattern_groove.len) instead of hard-coding one
+    // side of that comparison -- the invariant this lane has to keep across a
+    // mode change is that the two agree.
+    int effective_length_for_test() const { return _effective_length(); }
+    // The active pattern's generated groove length, the other half of that
+    // comparison, without the caller having to route through active_pattern().
+    int pattern_groove_len_for_test() const {
+        return static_cast<int>(_active_pattern().pattern_groove.len);
+    }
     // Real motion, not the commanded rate: every Hz observer above stays
     // correct even while the phase accumulator is frozen solid, so only a
     // count of actual wraps can tell a stalled lane from a healthy one
@@ -251,14 +263,15 @@ private:
     // HOLDS instead of firing, so the rate decimates to the floor rather than
     // falling off a cliff, and DENSITY keeps its full effect everywhere below
     // the ceiling. 60 ms is ~16 notes/s -- above anything ambient, below
-    // anything that reads as a buzz. A FIRST GUESS SET BY ARITHMETIC, not by
-    // ear; the owner judges it against flow_melody.json.
+    // anything that reads as a buzz. SET BY ARITHMETIC, then CONFIRMED BY EAR
+    // (owner, 2026-08-13, against flow_melody.wav) -- the arithmetic above is
+    // where the value came from, not an open question.
     static constexpr float kFlowNoteMinS = 0.060f;
     // Melody-mode slew ceiling, as a fraction of the slot interval: a note
     // reaches 1 - e^(-1/0.35) ~= 94 % of its target inside its own slot. This
     // is the MINIMUM needed for a melody to be heard as notes rather than a
     // wobble; everything else about SMOOTH belongs to the SHAPE/SMOOTH rework.
-    // A FIRST GUESS SET BY ARITHMETIC, not by ear.
+    // SET BY ARITHMETIC, then CONFIRMED BY EAR (owner, 2026-08-13).
     static constexpr float kFlowSlewFrac = 0.35f;
     SongForm _song;
     bool      _melodic   = false;
