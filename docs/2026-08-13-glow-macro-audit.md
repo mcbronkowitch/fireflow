@@ -354,6 +354,19 @@ belong to the FLOW melody engine and one to the SHAPE/SMOOTH rework.
   expected-set entries in `test_param_impact.cpp` rather than investigated
   further, per task 10's scope. Belongs to the SHAPE/SMOOTH rework, same as
   the line above.
+- **Follow-up on the above (task 10 review, 2026-08-13):** the first pass at
+  this recorded `SONG_A`'s reversed direction and `SONG_B`'s deadness in the
+  same `expected[]` array as the FORM_A/FORM_B/GRIT/FLUXMIX/LINK entries that
+  DO have a traced mechanism, which let the gate assert an untraced anomaly
+  as if it were proven correct. `tests/test_param_impact.cpp` now separates
+  each gate's expectations into `expected_proven[]` (a mechanism is stated in
+  the comment) and `expected_untraced[]` (measured, no mechanism established,
+  presence there pins current behaviour without claiming it is right) — the
+  two are unioned into the array the comparison actually runs against, so the
+  gate's pass/fail behaviour is unchanged. `SONG_A` (mode-exclusive gate) and
+  `SONG_B` (dead-parameter gate) are both in their respective
+  `expected_untraced[]` groups. No measurement changed; this is a
+  classification fix only.
 - **The §5 table** still needs re-measuring at the centred operating point; see
   the correction under Method.
 - **Where MASTER goes** once REVERB takes the right fader.

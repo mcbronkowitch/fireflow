@@ -284,9 +284,14 @@ void report(const bool* actual, const bool* expected, const char* what) {
 } // namespace
 
 TEST_CASE("param impact: every parameter moves audio somewhere") {
-    // The parameters that provably cannot, each with the mechanism that stops
-    // them. Measured 2026-08-13; full method in
-    // docs/2026-08-13-glow-macro-audit.md.
+    // Two groups, kept in SEPARATE arrays on purpose -- see the header
+    // comment on is_excluded() for why an undifferentiated expected[] would
+    // be dishonest here: this file must never assert an untraced anomaly is
+    // correct, only that it is what was measured. Measured 2026-08-13; full
+    // method in docs/2026-08-13-glow-macro-audit.md.
+    //
+    // PROVEN: the parameters that provably cannot move audio, each with the
+    // mechanism that stops them.
     //
     // GRIT / FLUXMIX / LINK: apply_param() has no set_fx_on(), so neither FX
     //   block is ever switched on and all six are wet/dry controls of silence.
@@ -294,21 +299,36 @@ TEST_CASE("param impact: every parameter moves audio somewhere") {
     //   can switch a block on -- so the answer is the same for every sample
     //   set.
     //
+    // REMOVE a PROVEN entry when its cause is fixed; this case fails on a
+    // listed parameter coming back to life just as it does on a new death,
+    // so the list cannot silently outlive the defect.
+    bool expected_proven[P_COUNT] = {};
+    for (int p : { P_GRIT_A, P_GRIT_B, P_FLUXMIX_A, P_FLUXMIX_B,
+                   P_LINK_A, P_LINK_B })
+        expected_proven[p] = true;
+
+    // UNTRACED: measured dead, mechanism not established. Being listed here
+    // pins CURRENT behaviour so the gate stays green and useful for
+    // everything else -- it does NOT claim the deadness is correct or
+    // intended. Do not move an entry to PROVEN without an actual traced
+    // mechanism in its comment; do not delete an entry, narrow the terrain
+    // set, or loosen the threshold to make one go away instead.
+    //
     // SONG_B: dead on both modes even with DEPTH_B forced to its max and
     //   LANE_PITCH forced active (apply_patch()'s FORM/SONG control, task-10,
     //   2026-08-13) -- so this is not the DEPTH/_active masking that
     //   motivated that control. FORM_A, FORM_B and SONG_A all came alive
     //   under the same control (mode-exclusive gate below); SONG_B alone did
-    //   not. Not traced further; open thread in
-    //   docs/2026-08-13-glow-macro-audit.md.
-    //
-    // REMOVE an entry when its cause is fixed; this case fails on a listed
-    // parameter coming back to life just as it does on a new death, so the list
-    // cannot silently outlive the defect.
+    //   not. No mechanism traced; open thread in
+    //   docs/2026-08-13-glow-macro-audit.md ("FORM/SONG re-measured under
+    //   task 10").
+    bool expected_untraced[P_COUNT] = {};
+    for (int p : { P_SONG_B })
+        expected_untraced[p] = true;
+
     bool expected[P_COUNT] = {};
-    for (int p : { P_GRIT_A, P_GRIT_B, P_FLUXMIX_A, P_FLUXMIX_B,
-                   P_LINK_A, P_LINK_B, P_SONG_B })
-        expected[p] = true;
+    for (int p = 0; p < P_COUNT; ++p)
+        expected[p] = expected_proven[p] || expected_untraced[p];
 
     const Terrains ter = pick_terrains();
     bool actual[P_COUNT] = {};
@@ -320,7 +340,13 @@ TEST_CASE("param impact: every parameter moves audio somewhere") {
 }
 
 TEST_CASE("param impact: a live parameter works in both operating modes") {
-    // Mode-exclusive by construction, not by accident:
+    // Two groups, kept in SEPARATE arrays on purpose -- see the header
+    // comment on is_excluded() and the sibling case above: this file must
+    // never assert an untraced anomaly is correct, only that it is what was
+    // measured.
+    //
+    // PROVEN: mode-exclusive by construction, not by accident, each with the
+    // mechanism that makes it so.
     //
     // STEPS / SHUFFLE / TEMPO_BPM are step-grid concepts with nothing to act on
     //   in the free mode.
@@ -336,29 +362,45 @@ TEST_CASE("param impact: a live parameter works in both operating modes") {
     //   STEP already did -- so DENSITY now moves audio in both modes and drops
     //   off this list, per the comment above that predicted exactly this.
     //
-    // FORM_A, FORM_B, SONG_A: task 10 (2026-08-13) deleted FORM/SONG's old
+    // FORM_A, FORM_B: task 10 (2026-08-13) deleted FORM/SONG's old
     //   is_excluded() entry and, per apply_patch(), controls DEPTH and
-    //   LANE_PITCH's _active for these four params specifically so a measured
-    //   result is the melody's own reach, not a downstream attenuator. Under
-    //   that control they turn out genuinely mode-exclusive, in BOTH
-    //   directions: FORM_A/FORM_B move audio only in FLOW -- ModLane::
-    //   _compute_raw() returns the phrase pitch directly under
-    //   _flow_melody_on(), skipping the SHAPE-blended S&H segment
-    //   (waveforms.h) that STEP still goes through, so on the two sampled
-    //   STEP terrains FORM's pitch content never reaches audio. SONG_A moves
-    //   audio only in STEP -- the opposite direction, not traced (SONG_B, by
-    //   contrast, is dead in both -- see the dead-parameter gate above).
-    //   Neither asymmetry is explained by the DEPTH/_active control this gate
-    //   already applies; both are open threads in
-    //   docs/2026-08-13-glow-macro-audit.md, not something this task fixes.
-    //
-    // Anything NOT listed here that works in one mode only is a defect: half of
-    // every terrain population cannot reach it.
-    bool expected[P_COUNT] = {};
+    //   LANE_PITCH's _active for these two specifically so a measured result
+    //   is the melody's own reach, not a downstream attenuator. Under that
+    //   control they move audio only in FLOW -- ModLane::_compute_raw()
+    //   returns the phrase pitch directly under _flow_melody_on(), skipping
+    //   the SHAPE-blended S&H segment (waveforms.h) that STEP still goes
+    //   through, so on the two sampled STEP terrains FORM's pitch content
+    //   never reaches audio. That is a traced mechanism, so these two belong
+    //   here, not in UNTRACED below.
+    bool expected_proven[P_COUNT] = {};
     for (int p : { P_STEPS_A, P_STEPS_B, P_SHUFFLE, P_TEMPO_BPM, P_COUPLE,
-                   P_FORM_A, P_FORM_B, P_SONG_A })
-        expected[p] = true;
+                   P_FORM_A, P_FORM_B })
+        expected_proven[p] = true;
 
+    // UNTRACED: measured mode-exclusive, mechanism not established. Being
+    // listed here pins CURRENT behaviour so the gate stays green and useful
+    // for everything else -- it does NOT claim the asymmetry is correct or
+    // intended. Do not move an entry to PROVEN without an actual traced
+    // mechanism in its comment; do not delete an entry, narrow the terrain
+    // set, or loosen the threshold to make one go away instead.
+    //
+    // SONG_A: alive only in STEP -- the OPPOSITE direction from FORM_A/
+    //   FORM_B above (alive only in FLOW), measured under the identical
+    //   DEPTH/_active control from apply_patch(). Neither this reversal nor
+    //   SONG_B's outright deadness (dead-parameter gate above) is explained
+    //   by that control or by anything else traced so far; both are open
+    //   threads in docs/2026-08-13-glow-macro-audit.md ("FORM/SONG
+    //   re-measured under task 10"), not something this task fixes.
+    bool expected_untraced[P_COUNT] = {};
+    for (int p : { P_SONG_A })
+        expected_untraced[p] = true;
+
+    bool expected[P_COUNT] = {};
+    for (int p = 0; p < P_COUNT; ++p)
+        expected[p] = expected_proven[p] || expected_untraced[p];
+
+    // Anything NOT listed in either group above that works in one mode only
+    // is a defect: half of every terrain population cannot reach it.
     const Terrains ter = pick_terrains();
     bool actual[P_COUNT] = {};
     for (int p = 0; p < P_COUNT; ++p) {
