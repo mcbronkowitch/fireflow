@@ -297,3 +297,13 @@ add_test(
     COMMAND ${Python3_EXECUTABLE} res/test_flow_panel.py
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
 )
+
+# Keep the asset validator independently visible in CTest.  flow_panel_guard
+# imports and runs the same contract first, so it also remains the single
+# guard used by existing build jobs.
+add_test(
+    NAME glow_assets_guard
+    COMMAND ${Python3_EXECUTABLE} res/validate_glow_assets.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
+)
+set_tests_properties(flow_panel_guard PROPERTIES DEPENDS glow_assets_guard)

@@ -86,6 +86,8 @@ SOURCES += \
 # plugin.json is deliberately absent here: plugin.mk:15 already adds it, and
 # naming it again made `cp` warn about a duplicate source on every dist run.
 # That duplication predates this change -- the old `res plugin.json` had it too.
-DISTRIBUTABLES += res/factory.wav res/Fireflow.svg res/Glow.svg res/FireflowHW.svg
+DISTRIBUTABLES += res/factory.wav res/Fireflow.svg res/Glow.svg res/FireflowHW.svg \
+	res/GlowRear.png res/GlowFaceplate.png res/GlowTouch.png \
+	res/GlowSwitchDown.png res/GlowSwitchCenter.png res/GlowSwitchUp.png
 
 include $(RACK_DIR)/plugin.mk

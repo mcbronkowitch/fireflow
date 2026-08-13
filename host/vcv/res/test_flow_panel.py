@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_flow_panel as g
 import gen_panel as base
 import touch2_geometry as geo
+from validate_glow_assets import AssetError, validate_assets
 
 FAILS = []
 
@@ -71,6 +72,15 @@ def test_enum_order():
           "the board has no inputs; INPUTS must stay empty")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER,
           "output enum order drifted: %s" % [c.enum for c in g.OUTPUTS])
+
+
+def test_raster_assets_validate_before_panel_contract():
+    """The hybrid raster layers are a required, rights-safe package input."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    try:
+        validate_assets(here, os.path.join(os.path.dirname(here), "Makefile"))
+    except AssetError as error:
+        check(False, "Glow raster assets are invalid: %s" % error)
 
 
 def test_macro_params_match_flow_macro_order():
