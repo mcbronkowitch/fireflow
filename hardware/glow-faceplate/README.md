@@ -172,8 +172,60 @@ board split lands exactly on source row 912; one-half source pixel is about
 0.042 mm, inside the 0.25 mm mechanical-fiducial tolerance. The material
 layers were inspected in generated 75%, 100%, 125%, and 150% image-only review
 composites. They have not received user visual approval and were not captured
-inside Rack because no `Rack.exe` is available. Task 9 still owns
-`GlowFaceplate.png`; its current placeholder is not a physical-preview claim.
+inside Rack because no `Rack.exe` is available.
+
+### KiCad-derived VCV faceplate
+
+`host/vcv/res/GlowFaceplate.png` is now a compositing derivative of the
+committed [proof/glow-faceplate-preview.png](proof/glow-faceplate-preview.png),
+not independent Rack artwork. Generate the inspection render from the
+repository root with the pinned KiCad 10.0.5 CLI:
+
+```powershell
+New-Item -ItemType Directory -Force hardware/glow-faceplate/proof | Out-Null
+& 'C:\Users\bernd\AppData\Local\Programs\KiCad\10.0\bin\kicad-cli.exe' pcb render --output hardware/glow-faceplate/proof/glow-faceplate-preview.png --width 1920 --height 1680 --side top --background transparent --quality high --preset follow_plot_settings hardware/glow-faceplate/glow-faceplate.kicad_pcb
+python -B host/vcv/res/validate_glow_assets.py --derive-faceplate
+```
+
+KiCad rounds that request to a 1904 x 1656 RGBA image. In the committed render,
+the >= 50% alpha board bounds are `(141,147)-(1761,1509)`, giving a measured
+uniform source density of 20.040601636 px/mm (509.031 DPI). KiCad high-quality
+post-processing adds only a low-alpha halo outside the solid board. The
+deriver removes pixels below 50% alpha before resampling, then uses bilinear
+sampling for a one-pixel antialiased edge; it never redraws, warps, or moves a
+mechanical contour.
+
+The one physical-to-Rack transform is, in millimetres:
+
+```text
+x_rack = 1.0 * x_board + 0.1900015
+y_rack = 1.0 * y_board + 8.5
+pixel   = rack_mm * (960 / 81.28) = rack_mm * 11.811023622
+```
+
+Thus the VCV derivative is an exact 300 DPI, uniform-scale placement in the
+960 x 1520 canvas. The horizontal translation centres the official
+80.899997 mm plate in 81.28 mm; the vertical translation leaves the physical
+lower edge at 76.499993 mm, 0.600007 mm above the fixed/lower-board boundary.
+Outside the board, the outer diagonal opening, and all 15 internal openings
+remain transparent. PNG text records the board hash, preview hash, opaque
+bounds, transform, source density, and unfiltered-pixel hash. The asset guard
+checks those identities plus two mount holes, two fader-opening endpoint
+witnesses, two knob centres, and the diagonal opening at the one-pixel
+0.084667 mm mechanical tolerance.
+
+The older `touch2_geometry.py` control centres remain rectified-photography
+evidence. At the exact 1:1 mechanical placement, the comparable knob/fader
+centres differ by 0.454-0.840 mm. Task 8's separate least-squares photographic
+fit reports 0.218 mm only after scale `1.023423583`; that fit is not applied to
+this render. The validator loads the generated control table and keeps this
+comparison under a separate 1.00 mm source-quality guard, so it cannot be
+mistaken for the 0.084667 mm mechanical-raster contract or used to fudge the
+master.
+
+Task 9 image-only before/after review composites exist at 75%, 100%, 125%, and
+150% in the ignored SDD workspace. They are not Rack screenshots: `Rack.exe`
+is unavailable, and visual user approval remains outstanding.
 
 ## Tooling and export policy
 
