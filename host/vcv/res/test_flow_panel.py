@@ -276,7 +276,7 @@ def test_glow_widget_installs_the_hardware_panel_and_custom_switches():
           "GlowWidget reinstalls the legacy Glow.svg panel")
     check("createParamCentered<GlowToggle>" in code,
           "GlowWidget no longer creates GlowToggle switch overlays")
-    check("createParamCentered<CKSSThree>" not in code,
+    check("CKSSThree" not in code,
           "GlowWidget reinstalls stock CKSSThree widgets")
 
 
