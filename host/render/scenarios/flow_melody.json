@@ -1,0 +1,27 @@
+{
+  "sample_rate": 48000,
+  "bpm": 120,
+  "duration_s": 40,
+  "init": [
+    {"_comment":"FLOW melody engine showcase (spec 2026-08-13 flow-melody-engine, task 10): a single SYNTH deck stays in FLOW at a slow RATE while DENSITY sweeps 0 -> 1, walking the whole continuum from a standing note (DENSITY 0, the single unmaskable anchor slot) to the full 8-slot phrase (DENSITY 1). Part 0's engine is left at its ENGINE_SYNTH boot default, so Part::init's set_flow_melody(true) push (part.cpp) is already in effect -- no separate flag to raise here."},
+    {"action":"set_engine","part":1,"value":"test_tone"},
+    {"_comment":"Part B silenced: default lanes would otherwise siren its pitch (PITCH/LEVEL targets are active by boot default)."},
+    {"action":"set_target_active","part":1,"slot":4,"flag":false},
+    {"action":"set_target_base","part":1,"slot":4,"value":0.0},
+    {"_comment":"Part A: FLOW (not STEP) -- SuperModulator boots in FLOW already (_step_on defaults false), set explicitly so the scenario doesn't lean on that default. RATE 0.35 -> free_hz ~= 0.26 Hz, an ~3.9 s phrase cycle -- slow enough that a listener hears individual notes arrive, not a blur."},
+    {"action":"set_step","part":0,"flag":false,"ivalue":8},
+    {"action":"set_rate","part":0,"value":0.35},
+    {"action":"set_variation","part":0,"value":0.0},
+    {"action":"set_density","part":0,"value":0.0}
+  ],
+  "events": [
+    {"_comment":"8s: DENSITY 0.25 -> 2 of 8 phrase slots gated (ModLane::_groove_k)."},
+    { "t": 8,  "action": "set_density", "part": 0, "value": 0.25 },
+    {"_comment":"16s: DENSITY 0.5 -> 4 of 8."},
+    { "t": 16, "action": "set_density", "part": 0, "value": 0.5 },
+    {"_comment":"24s: DENSITY 0.75 -> 6 of 8."},
+    { "t": 24, "action": "set_density", "part": 0, "value": 0.75 },
+    {"_comment":"32s: DENSITY 1.0 -> the full phrase, held to the end so the last ~2 cycles are heard in full."},
+    { "t": 32, "action": "set_density", "part": 0, "value": 1.0 }
+  ]
+}

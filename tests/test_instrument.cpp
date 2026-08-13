@@ -979,17 +979,19 @@ TEST_CASE("cross-deck excitation is symmetric and off by default") {
         // alone it retriggers itself every couple of hundred ms (measured:
         // 3-4 times per 500 ms window), which swamps the cross-deck coupling
         // signal this test exists to isolate with B's OWN self-generated
-        // notes. Pinned slow (RATE floor, ~0.02 Hz -- see
-        // tests/test_flow_melody_wiring.cpp) and sparse (DENSITY 0 -> the
-        // single unmaskable anchor slot, ModLane::_groove_k) so B fires that
-        // one anchor note near boot and then holds for the rest of the test's
-        // ~2 s span, restoring the "quasi-static, coupling-driven" premise
-        // the energy comparisons below depend on. A is deliberately left at
-        // its default RATE/DENSITY: it is the coupling SOURCE, and its own
-        // retriggering is exactly the signal being measured, not noise to be
-        // suppressed -- the two energy comparisons below only depend on A's
-        // LEVEL target, which set_target_active/set_target_base below still
-        // control exactly, independent of how often A's PITCH lane fires.
+        // notes. RATE is left at B's default (no set_rate call here --
+        // SuperModulator's boot _rate_norm is 0.5, i.e. free_hz(0.5) ~=
+        // 0.78 Hz, not a floor); DENSITY 0 alone is what quiets B down to
+        // the single unmaskable anchor slot (ModLane::_groove_k), so B fires
+        // that one anchor note near boot and then holds for the rest of the
+        // test's ~2 s span, restoring the "quasi-static, coupling-driven"
+        // premise the energy comparisons below depend on. A is deliberately
+        // left at its default RATE/DENSITY: it is the coupling SOURCE, and
+        // its own retriggering is exactly the signal being measured, not
+        // noise to be suppressed -- the two energy comparisons below only
+        // depend on A's LEVEL target, which set_target_active/
+        // set_target_base below still control exactly, independent of how
+        // often A's PITCH lane fires.
         inst->set_density(PART_B, 0.f);
     }
     coupled.set_excitation_sources(PART_B, false, true, false);

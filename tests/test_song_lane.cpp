@@ -51,6 +51,20 @@ void drive_to_step(ModLane& lane, int wanted_step) {
     FAIL("lane did not reach the requested step");
 }
 
+// FLOW melody gates an actual SONG advance behind the phrase-min-samples
+// floor (lane.cpp's _wrap_events: _since_phase must reach _phrase_min_samples
+// before a wrap does anything), so a raw cycle wrap -- drive_to_wrap's signal
+// -- is not the same event as a SONG advance the way it is in STEP. Wait for
+// the position itself to move instead.
+void drive_to_song_advance(ModLane& lane) {
+    const uint32_t start = lane.song_position();
+    for (int sample = 0; sample < 200000; ++sample) {
+        lane.process();
+        if (lane.song_position() != start) return;
+    }
+    FAIL("lane did not advance SONG position within the safety bound");
+}
+
 void check_song_groove(const PatternGroove& groove, int expected_length) {
     REQUIRE(groove.len == expected_length);
     bool seen[32] = {};
@@ -190,7 +204,7 @@ TEST_CASE("FORM rebuilds A and B at the wrap and restarts SONG") {
     CHECK_FALSE(same_pattern(lane.pattern_for_test(1), old_b));
 }
 
-TEST_CASE("FLOW pauses SONG position and both snapshots") {
+TEST_CASE("FLOW LFO pauses SONG position and both snapshots") {
     ModLane lane = make_song_lane(0xD00Du);
     drive_to_wrap(lane);
     const uint32_t paused_position = lane.song_position();
@@ -209,6 +223,23 @@ TEST_CASE("FLOW pauses SONG position and both snapshots") {
     lane.set_step(true, 8);
     CHECK(lane.song_position() == paused_position);
     drive_to_wrap(lane);
+    CHECK(lane.song_position() == paused_position + 1u);
+}
+
+TEST_CASE("FLOW melody advances SONG position instead of pausing it") {
+    // Mirrors "FLOW LFO pauses..." above, but engages set_flow_melody(true)
+    // where that test drops to the bare LFO path (set_step(false, 8) alone,
+    // _flow_melody left at its default false). _flow_melody_on() requires
+    // !_step_mode, so melody mode has to be entered the same way: leave STEP
+    // first, then ask for it.
+    ModLane lane = make_song_lane(0xD00Du);
+    drive_to_wrap(lane);
+    const uint32_t paused_position = lane.song_position();
+
+    lane.set_step(false, 8);
+    lane.set_flow_melody(true);
+    drive_to_wrap(lane);
+
     CHECK(lane.song_position() == paused_position + 1u);
 }
 
@@ -321,7 +352,7 @@ TEST_CASE("song cadence moves exactly halfway once before B") {
     CHECK(same_pattern(lane.pattern_for_test(1), before_extra_samples));
 }
 
-TEST_CASE("song LOOP playback consumes no RNG before future GROW") {
+TEST_CASE("FLOW LFO: song LOOP playback consumes no RNG before future GROW") {
     ModLane playback = make_song_lane(0x123456u);
     ModLane paused = make_song_lane(0x123456u);
     paused.set_step(false, 8);
@@ -349,4 +380,32 @@ TEST_CASE("song LOOP playback consumes no RNG before future GROW") {
                        paused.pattern_for_test(0)));
     CHECK(same_pattern(playback.pattern_for_test(1),
                        paused.pattern_for_test(1)));
+}
+
+TEST_CASE("FLOW melody: playback advances SONG position through AAAB like STEP") {
+    // The FLOW LFO sibling above holds a paused lane's SONG position and
+    // pattern snapshots still against a STEP lane's for 16 cycles, then
+    // proves the RNG stream stayed unconsumed by matching a subsequent GROW
+    // pass. FLOW melody is the opposite claim: unlike the LFO path, it
+    // walks the same AAAB ladder a STEP lane does, so its position and
+    // active-pattern symbol sequence should match a STEP lane's cycle for
+    // cycle, not sit frozen at 0.
+    ModLane step_lane = make_song_lane(0xA11CEu);
+    ModLane flow_lane = make_song_lane(0xA11CEu);
+    flow_lane.set_step(false, 8);
+    flow_lane.set_flow_melody(true);
+
+    std::vector<uint8_t> step_symbols, flow_symbols;
+    step_symbols.push_back(step_lane.active_pattern());
+    flow_symbols.push_back(flow_lane.active_pattern());
+    for (int cycle = 1; cycle < 8; ++cycle) {
+        drive_to_wrap(step_lane);
+        drive_to_song_advance(flow_lane);
+        step_symbols.push_back(step_lane.active_pattern());
+        flow_symbols.push_back(flow_lane.active_pattern());
+    }
+
+    CHECK(flow_symbols == step_symbols);
+    CHECK(flow_symbols == std::vector<uint8_t>({0, 0, 0, 1, 0, 0, 0, 1}));
+    CHECK(flow_lane.song_position() == step_lane.song_position());
 }

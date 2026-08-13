@@ -337,6 +337,23 @@ belong to the FLOW melody engine and one to the SHAPE/SMOOTH rework.
   on only 1 of 6 STEP terrains, so the SHAPE blend is not the whole story.
   `sh` also carries `_ev_shape`, `_shape_offset` (DRIFT writes it every control
   tick) and `_kick_shape`. Belongs to the SHAPE/SMOOTH rework.
+- **FORM/SONG re-measured under task 10** (flow-melody-engine, 2026-08-13):
+  `tests/test_param_impact.cpp` no longer excludes FORM/SONG, and its
+  `apply_patch()` now forces `DEPTH_A/B` to 1.0 and `LANE_PITCH`'s `_active`
+  true whenever the swept parameter is `FORM_A/B` or `SONG_A/B`, to rule out
+  a downstream attenuator as the cause of a measured zero (part 10's brief,
+  decided in advance). Under that control: `FORM_A`/`FORM_B` move audio only
+  in FLOW — consistent with the SHAPE-blend story above, since
+  `ModLane::_compute_raw()` returns the phrase pitch directly under
+  `_flow_melody_on()` (task 8) and no longer goes through the S&H blend that
+  STEP still does. `SONG_A` moves audio only in **STEP** — the opposite
+  direction, unexplained. `SONG_B` is dead in **both** modes even under the
+  same DEPTH/`_active` control — also unexplained, and not the same failure
+  shape as `SONG_A`'s. Neither `SONG_A`'s nor `SONG_B`'s asymmetry is
+  DEPTH/`_active` masking (both were controlled for); both are recorded as
+  expected-set entries in `test_param_impact.cpp` rather than investigated
+  further, per task 10's scope. Belongs to the SHAPE/SMOOTH rework, same as
+  the line above.
 - **The §5 table** still needs re-measuring at the centred operating point; see
   the correction under Method.
 - **Where MASTER goes** once REVERB takes the right fader.

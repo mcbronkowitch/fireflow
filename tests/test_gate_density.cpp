@@ -56,12 +56,23 @@ TEST_CASE("DENSE is reversible: density 1 == the full pattern") {
     CHECK(fired_step_set(a, 16, 47000) == fired_step_set(b, 16, 47000));
 }
 
-TEST_CASE("FLOW never freezes after PROBABILITY removal") {
+TEST_CASE("FLOW LFO never freezes after PROBABILITY removal") {
+    // FLOW LFO: _flow_melody is left at its default false, so
+    // _flow_melody_on() is false and _on_boundary()'s `gated` expression
+    // takes the unconditional `: true` branch -- no per-step gate, so no
+    // freeze source, regardless of DENSITY. (FLOW melody is not this path:
+    // it DOES freeze, via the note-rate floor in _on_boundary.) DENSITY is
+    // set explicitly to a value that would gate other paths off, rather
+    // than left at its default 1 -- with density defaulting to 1 nothing
+    // would ever be gated off on ANY path, melody included, so this test
+    // would pass by that accident instead of by pinning the LFO path's
+    // actual "no gate at all" contract.
     ModLane l;
     l.set_melodic(true);
     l.init(48000.f, 0x22);
     l.set_shape(0.5f);
-    l.set_step(false, 8);            // FLOW: no per-step gate => no freeze source
+    l.set_step(false, 8);            // FLOW
+    l.set_density(0.f);
     l.set_rate_hz(3.0f);
     bool ever_frozen = false;
     for (int n = 0; n < 48000; ++n) { l.process(); ever_frozen |= l.frozen(); }

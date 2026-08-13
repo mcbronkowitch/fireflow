@@ -86,26 +86,26 @@ bool has_sampler(const Terrain& t) {
            int(t.base[P_ENGINE_B] + 0.5f) == ENGINE_SAMPLER;
 }
 
-// Excluded from both gates, each for its own reason.
-//
-// P_MODE, and not because it is hard to measure: it IS the axis the second gate
-// splits on. Sweeping it would compare a FLOW render against a STEP one, which
-// says nothing about whether the parameter is wired -- the two modes are
+// Excluded from both gates: P_MODE IS the axis the second gate splits on.
+// Sweeping it would compare a FLOW render against a STEP one, which says
+// nothing about whether the parameter is wired -- the two modes are
 // different instruments by design. Covered by tests/test_flow_mode.cpp.
 //
-// FORM and SONG because this rig cannot give a STABLE answer about them, and a
-// gate that flips with its sample set teaches the reader to ignore it. They
-// reach the audio only through shape_value()'s S&H segment (waveforms.h, weight
-// (shape-0.75)*4), so whether they move anything depends on a SHAPE value the
-// terrain draws -- capped at {0,.25} for drone, uniform elsewhere, so roughly a
-// quarter of non-drone decks. Measured: dead on 40 of 40 terrains in the first
-// sample; SONG_A alone came alive when the CHOKE fix changed which terrains
-// this rig picks. Widening the sample until the answer stabilised would cost
-// more render time than the whole suite. The SHAPE/SMOOTH rework (roadmap) owns
-// this; when it lands, delete this exclusion and let the gate judge them.
+// FORM and SONG used to be excluded here too, for the same "unstable sample"
+// reason DENSITY left the mode-exclusive gate under: in STEP, ModLane::
+// _compute_raw() still blends the melody pattern through shape_value()'s S&H
+// segment (waveforms.h), so whether FORM/SONG move anything on a STEP
+// terrain depends on a SHAPE value the terrain draws. Spec 2026-08-13
+// flow-melody-engine Task 8 wires set_flow_melody(true) into every SYNTH-
+// engine PITCH lane, and _compute_raw() returns the phrase pitch directly
+// under _flow_melody_on() -- no SHAPE blend, no S&H gate -- so on a FLOW
+// terrain FORM/SONG no longer depend on where SHAPE happened to land. That
+// removes the instability the exclusion existed for; see apply_patch()
+// below for how this gate additionally controls for DEPTH and _active on
+// the FORM/SONG cases specifically (docs/2026-08-13-glow-macro-audit.md,
+// "the second FORM/SONG gate").
 bool is_excluded(int p) {
-    return p == P_MODE ||
-           p == P_FORM_A || p == P_FORM_B || p == P_SONG_A || p == P_SONG_B;
+    return p == P_MODE;
 }
 
 // The operating point every comparison runs at: every value the flow layer
@@ -165,6 +165,24 @@ void apply_patch(Instrument& in, const ReferencePatch& rp, int param, float v) {
     in.set_sync(rp.step);
     in.set_step(PART_A, rp.step, sa);
     in.set_step(PART_B, rp.step, sb);
+
+    // FORM/SONG reach audio only through LANE_PITCH's modulation output
+    // (part.cpp's target_raw). A terrain that drew a low DEPTH, or a future
+    // caller that left LANE_PITCH inactive, could mask the melody
+    // independently of whether FORM/SONG themselves are wired -- decided in
+    // advance (task-10 brief) to hold both out of the way for exactly these
+    // two parameters, so a measured zero below can only be the melody's own
+    // reach, not a downstream attenuator. Applied identically to both the
+    // lo and hi render of a compare() (same `param`, same forced state), so
+    // it cannot itself be the thing that differs between them.
+    if (param == P_FORM_A || param == P_SONG_A) {
+        apply_param(in, P_DEPTH_A, kParams[P_DEPTH_A].hi);
+        in.set_target_active(PART_A, LANE_PITCH, true);
+    }
+    if (param == P_FORM_B || param == P_SONG_B) {
+        apply_param(in, P_DEPTH_B, kParams[P_DEPTH_B].hi);
+        in.set_target_active(PART_B, LANE_PITCH, true);
+    }
 }
 
 // Render two Instruments in lockstep from the same reference patch, differing
@@ -272,16 +290,24 @@ TEST_CASE("param impact: every parameter moves audio somewhere") {
     //
     // GRIT / FLUXMIX / LINK: apply_param() has no set_fx_on(), so neither FX
     //   block is ever switched on and all six are wet/dry controls of silence.
-    //   Unlike FORM/SONG (excluded above), this does not depend on what a
-    //   terrain happens to draw -- no terrain can switch a block on -- so the
-    //   answer is the same for every sample set.
+    //   This does not depend on what a terrain happens to draw -- no terrain
+    //   can switch a block on -- so the answer is the same for every sample
+    //   set.
+    //
+    // SONG_B: dead on both modes even with DEPTH_B forced to its max and
+    //   LANE_PITCH forced active (apply_patch()'s FORM/SONG control, task-10,
+    //   2026-08-13) -- so this is not the DEPTH/_active masking that
+    //   motivated that control. FORM_A, FORM_B and SONG_A all came alive
+    //   under the same control (mode-exclusive gate below); SONG_B alone did
+    //   not. Not traced further; open thread in
+    //   docs/2026-08-13-glow-macro-audit.md.
     //
     // REMOVE an entry when its cause is fixed; this case fails on a listed
     // parameter coming back to life just as it does on a new death, so the list
     // cannot silently outlive the defect.
     bool expected[P_COUNT] = {};
     for (int p : { P_GRIT_A, P_GRIT_B, P_FLUXMIX_A, P_FLUXMIX_B,
-                   P_LINK_A, P_LINK_B })
+                   P_LINK_A, P_LINK_B, P_SONG_B })
         expected[p] = true;
 
     const Terrains ter = pick_terrains();
@@ -310,10 +336,27 @@ TEST_CASE("param impact: a live parameter works in both operating modes") {
     //   STEP already did -- so DENSITY now moves audio in both modes and drops
     //   off this list, per the comment above that predicted exactly this.
     //
+    // FORM_A, FORM_B, SONG_A: task 10 (2026-08-13) deleted FORM/SONG's old
+    //   is_excluded() entry and, per apply_patch(), controls DEPTH and
+    //   LANE_PITCH's _active for these four params specifically so a measured
+    //   result is the melody's own reach, not a downstream attenuator. Under
+    //   that control they turn out genuinely mode-exclusive, in BOTH
+    //   directions: FORM_A/FORM_B move audio only in FLOW -- ModLane::
+    //   _compute_raw() returns the phrase pitch directly under
+    //   _flow_melody_on(), skipping the SHAPE-blended S&H segment
+    //   (waveforms.h) that STEP still goes through, so on the two sampled
+    //   STEP terrains FORM's pitch content never reaches audio. SONG_A moves
+    //   audio only in STEP -- the opposite direction, not traced (SONG_B, by
+    //   contrast, is dead in both -- see the dead-parameter gate above).
+    //   Neither asymmetry is explained by the DEPTH/_active control this gate
+    //   already applies; both are open threads in
+    //   docs/2026-08-13-glow-macro-audit.md, not something this task fixes.
+    //
     // Anything NOT listed here that works in one mode only is a defect: half of
     // every terrain population cannot reach it.
     bool expected[P_COUNT] = {};
-    for (int p : { P_STEPS_A, P_STEPS_B, P_SHUFFLE, P_TEMPO_BPM, P_COUPLE })
+    for (int p : { P_STEPS_A, P_STEPS_B, P_SHUFFLE, P_TEMPO_BPM, P_COUPLE,
+                   P_FORM_A, P_FORM_B, P_SONG_A })
         expected[p] = true;
 
     const Terrains ter = pick_terrains();
