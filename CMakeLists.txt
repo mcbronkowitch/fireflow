@@ -136,6 +136,8 @@ add_executable(spky_tests
     tests/test_glow_ui.cpp
     tests/test_touch_pads.cpp
     tests/test_pad_geometry.cpp
+    host/vcv/src/glow_panel.cpp
+    tests/test_glow_panel_manifest.cpp
     tests/test_choke.cpp
     tests/test_filt.cpp
     tests/test_mod_tide.cpp
