@@ -30,7 +30,13 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-08-13 (FLOW melody engine: the free mode's melodic lane
+- **Last updated:** 2026-08-13 (SHAPE/SMOOTH rework: its spec is written —
+  `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md` — after two
+  merged-axis drafts were rejected by review; the third repairs the four measured
+  defects and does not merge the controls. The owner's Marbles requirement is
+  explicitly not delivered by it and became a Planned entry of its own, on
+  ENTROPY/VARY — see "Marbles round" under "Planned"); before that, 2026-08-13
+  (FLOW melody engine: the free mode's melodic lane
   walks an 8-slot phrase instead of a continuous LFO, fixing three of the four
   findings the Glow macro audit reported for it — TEMPO-in-FLOW was never the
   same cause and stays out of scope; two open threads (`P_SONG_A/B`'s
@@ -2467,12 +2473,14 @@ stay on one engine for their whole run and never call `set_engine`.
 
 ## Planned
 
-The two entries below are ordered: the SHAPE/SMOOTH rework comes **before** the
-Glow rework, because the Glow rework redesigns the macro layer that sits on top
-of it. Designing that layer against today's behaviour would bake the
-workarounds in — which is exactly how the DIRT macro came to target a GRIT
-block that was never switched on. (The FLOW melody engine, formerly the first
-of three entries here, is now built — see "FLOW melody engine" under "Done".)
+Two of the entries below are ordered against each other: the SHAPE/SMOOTH rework
+comes **before** the Glow rework, because the Glow rework redesigns the macro
+layer that sits on top of it. Designing that layer against today's behaviour
+would bake the workarounds in — which is exactly how the DIRT macro came to
+target a GRIT block that was never switched on. The Marbles round sits between
+them with its order deliberately undecided; its own entry says why. (The FLOW
+melody engine, formerly the first of three entries here, is now built — see
+"FLOW melody engine" under "Done".)
 
 ### SHAPE + SMOOTH rework ⬜ (before the Glow rework)
 
@@ -2514,9 +2522,52 @@ and it now has a second half: the two modes disagree about what SHAPE does to a
 melodic lane, and the rework has to decide that deliberately rather than inherit
 it.
 
+**Spec written 2026-08-13:**
+`docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md`. It answers the
+question above by ownership rather than by merging the two controls: the melodic
+lane emits its phrase in STEP as it already does in FLOW, SHAPE keeps the four
+texture lanes, SMOOTH becomes interval-relative, and DRIFT stops writing the
+axis. Two earlier drafts — both of which merged the controls — were rejected by
+review; the spec's revision note carries why, and its §7 records what it
+deliberately does not deliver.
+
+### Marbles round — VARY as the character axis ⬜ (unscheduled; may need to precede the Glow rework)
+
+Opened 2026-08-13, out of the SHAPE/SMOOTH rework's second review pass.
+
+The owner's requirement, in his own framing: a knob like Mutable Instruments
+Marbles — one that changes several modulations at once, non-linear in value but
+audibly coherent, so that turning it reorganizes what the instrument plays rather
+than only how hard it moves.
+
+**The SHAPE/SMOOTH rework does not deliver this, and says so** (decision 7 of its
+spec). Two reviewers concluded independently that SHAPE cannot: it selects a
+waveform for the four texture lanes, and after that rework it is inert on the
+melodic lane. Turning it changes no value the instrument emits.
+
+The axis that already does what the requirement describes is **ENTROPY/VARY** —
+LOOP → GROW → RENEW (`set_variation`, `super_modulator.cpp:83`;
+`lane.cpp:648-681`). It reaches all five lanes, it is bipolar around a meaningful
+centre, and it changes *what* the lanes emit rather than how they travel. That is
+Marbles' DEJA VU, already built and already wired.
+
+What the round has to answer:
+
+- what the axis means at each end, and whether erode / loop / grow is still the
+  right reading of it
+- whether SHAPE's character role folds into it or stays a separate texture control
+- who owns it — the terrain, a Glow macro, or the panel — under the audit's
+  ownership model (its decision 7)
+
+**Ordering is open.** The argument that puts the SHAPE/SMOOTH rework before the
+Glow rework applies here too: a macro layer designed against today's VARY would
+bake in whatever VARY happens to do today. But this round has no spec and no
+measurement of its own, while the Glow rework has both an audit and recorded
+decisions behind it. Deciding the order is the first thing its spec does.
+
 Needs a spec.
 
-### Glow rework ⬜ (after the two above)
+### Glow rework ⬜ (after the SHAPE/SMOOTH rework; order against the Marbles round undecided)
 
 The terrain idea and Glow's macro layer, reconsidered as a whole. Opened
 2026-08-13 after an audit of the six macros found the feature set had outgrown
