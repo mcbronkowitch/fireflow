@@ -69,9 +69,9 @@ int fires_over_cycles(ModLane& lane, int cycles) {
 } // namespace
 
 TEST_CASE("FLOW melody: the lane fires once per slot, not once per cycle") {
-    // 0xF10Eu, not 0xF10Eu: "FLOW" cannot be spelled in hex (W is not a hex
+    // 0xF10Eu, not 0xF10Wu: "FLOW" cannot be spelled in hex (W is not a hex
     // digit) the way tests/test_flow_terrain.cpp spells ALICE/COFFEE/etc., and
-    // the straight pun (0xF10Eu) is an invalid integer-literal suffix -- it
+    // the straight pun (0xF10Wu) is an invalid integer-literal suffix -- it
     // fails to compile, not fails the assertion. Any seed works here; this one
     // stays close to the intended pun.
     ModLane lane = make_flow_melody_lane(0xF10Eu);
