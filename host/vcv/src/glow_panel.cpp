@@ -1,8 +1,6 @@
 #include "glow_panel.hpp"
 
 #if !defined(SPKY_TESTING)
-#include "generated_flow_panel.hpp"
-
 #include <exception>
 #endif
 
@@ -27,6 +25,42 @@ bool allRequiredLayersAvailable(const bool* availability, std::size_t count) {
             return false;
     }
     return true;
+}
+
+const std::array<PadBinding, 12>& padBindings() {
+    static const std::array<PadBinding, 12> bindings = [] {
+        std::array<PadBinding, 12> out{};
+        for (std::size_t i = 0; i < out.size(); ++i) {
+            out[i].shape = &glow::kPadShapes[i];
+            out[i].paramId = glow::PAD_1 + static_cast<int>(i);
+            out[i].accessibleName =
+                std::string("Touch electrode ") + out[i].shape->id;
+        }
+        return out;
+    }();
+    return bindings;
+}
+
+const std::array<ToggleBinding, 2>& toggleBindings() {
+    static const std::array<ToggleBinding, 2> bindings = {{
+        {glow::SW_L, 0.f, 2.f, 0.f, 3},
+        {glow::SW_R, 0.f, 2.f, 0.f, 3},
+    }};
+    return bindings;
+}
+
+const PadBinding* padBindingForParam(int paramId) {
+    for (const PadBinding& binding : padBindings())
+        if (binding.paramId == paramId)
+            return &binding;
+    return nullptr;
+}
+
+const ToggleBinding* toggleBindingForParam(int paramId) {
+    for (const ToggleBinding& binding : toggleBindings())
+        if (binding.paramId == paramId)
+            return &binding;
+    return nullptr;
 }
 
 #if !defined(SPKY_TESTING)

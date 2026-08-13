@@ -35,10 +35,6 @@
 using namespace spkyvcv::glow;
 using namespace spkyvcv::glow_panel;
 
-static std::string padAccessibleName(const PadShape& shape) {
-    return std::string("Touch electrode ") + shape.id;
-}
-
 // The module indexes params[MOTION + m] with m a spky::flow::Macro, so the
 // panel's first six params must BE the macro enum. res/test_flow_panel.py
 // guards the panel side; this guards the C++ side. static_cast<int> on both
@@ -85,11 +81,10 @@ static const char* kMacroNames[spky::flow::MACRO_COUNT] = {
     "MOTION", "DENSITY", "BRIGHT", "PACE", "WANDER", "SPACE"
 };
 
-// A pad's NAME is runtime data (spec 6.3), so it cannot come from the
-// generated header the way every other caption does -- configButton fixes its
-// string at construction. This is the one deliberate carve-out from "the panel
-// table is the only source": the tooltip label is computed live from the
-// module's Place array, while the plate itself still prints only the number.
+// A pad's optional place NAME is runtime data (spec 6.3), so it cannot come
+// from the generated header. The stable electrode identity comes from the
+// shared hardware binding; the optional place name is appended live to that
+// tooltip/screen-reader label. The plate itself prints no pad identifier.
 //
 // The `[base]` marker is the other half of the same rule (spec 2026-08-11
 // §6): a place with a hand-authored overlay is NOT fully described by its
@@ -300,13 +295,14 @@ struct Glow : Module {
                     // configButton clears randomizeEnabled for us (Module.hpp:169),
                     // which is what we want: a Randomize that pokes twelve
                     // momentary pads is a fault, not a dice roll.
-                    const int i = c.id - PAD_1;
-                    const std::string accessibleName =
-                        padAccessibleName(kPadShapes[i]);
-                    auto* pq = configButton<PadQuantity>(c.id, accessibleName);
+                    const PadBinding* binding = padBindingForParam(c.id);
+                    if (!binding) break;
+                    const int i = binding->paramId - PAD_1;
+                    auto* pq = configButton<PadQuantity>(
+                        binding->paramId, binding->accessibleName);
                     pq->place = &places[i];
                     pq->pad = i;
-                    pq->accessibleName = accessibleName;
+                    pq->accessibleName = binding->accessibleName;
                     pq->description = c.tip;
                     break;
                 }
@@ -319,20 +315,22 @@ struct Glow : Module {
                     if (auto* pq = paramQuantities[c.id])
                         pq->randomizeEnabled = false;
                     break;
-                case WK_SWITCH:
+                case WK_SWITCH: {
                     // The three position names are RUNTIME TOOLTIP strings, not
                     // panel captions: Rack shows them in the hover readout and
-                    // the context menu, and nothing here reaches the plate --
-                    // which prints no switch caption at all, as
-                    // test_only_the_pads_carry_printed_captions enforces. Same
-                    // carve-out from "the panel table is the only source" that
-                    // PadQuantity documents above, and for the same reason: a
-                    // caption a generator could print would have to be printed.
-                    configSwitch(c.id, 0.f, 2.f, 0.f, c.tip,
+                    // context menu. The shared binding owns the stable ID and
+                    // 0/1/2 range; no switch caption is printed on the plate.
+                    const ToggleBinding* binding = toggleBindingForParam(c.id);
+                    if (!binding) break;
+                    configSwitch(binding->paramId,
+                                 binding->minValue,
+                                 binding->maxValue,
+                                 binding->defaultValue, c.tip,
                                  { "Down", "Centre", "Up" });
-                    if (auto* pq = paramQuantities[c.id])
+                    if (auto* pq = paramQuantities[binding->paramId])
                         pq->randomizeEnabled = false;
                     break;
+                }
                 // Named rather than defaulted so a future kind is a compile
                 // error here instead of a param that silently gets no config.
                 case WK_OUT: break;
@@ -1099,8 +1097,8 @@ static NVGcolor panelRGB(unsigned c) {
     return nvgRGB((c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff);
 }
 
-// The SVG's <text> is invisible to NanoSVG, so the lettering is redrawn here
-// from the generated tables -- the same reason the big module has PanelText.
+// The layered hardware rasters contain no generated runtime lettering, so the
+// small wordmark/output captions are redrawn from the generated tables.
 struct GlowText : Widget {
     void draw(const DrawArgs& args) override {
         std::shared_ptr<window::Font> font =
@@ -1304,14 +1302,11 @@ struct GlowWidget : ModuleWidget {
         // above the hardware raster makes P10/P11 interactive over the rear
         // image, while later physical controls still win where hardware
         // actually occupies the lower board.
-        for (const auto& c : kParamCtls) {
-            if (c.kind != WK_PAD)
-                continue;
-            const int i = c.id - PAD_1;
-            const auto& s = kPadShapes[i];
+        for (const PadBinding& binding : padBindings()) {
+            const auto& s = *binding.shape;
             auto* p = createParam<TouchPlate>(mm2px(Vec(s.min.x, s.min.y)),
-                                               module, c.id);
-            p->configure(s, c.id, padAccessibleName(s));
+                                               module, binding.paramId);
+            p->configure(s, binding.paramId, binding.accessibleName);
             addParam(p);
         }
 
@@ -1354,11 +1349,10 @@ struct GlowWidget : ModuleWidget {
         // Pass 3: only the moving lever frame. The neutral base is part of the
         // touch-board layer, and app::Switch retains the existing snapped
         // 0/1/2 parameter semantics and patch persistence.
-        for (const auto& c : kParamCtls) {
-            if (c.kind != WK_SWITCH)
-                continue;
+        for (const ToggleBinding& binding : toggleBindings()) {
+            const auto& c = kParamCtls[binding.paramId];
             addParam(createParamCentered<GlowToggle>(
-                mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
+                mm2px(Vec(c.mm.x, c.mm.y)), module, binding.paramId));
         }
 
         addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));

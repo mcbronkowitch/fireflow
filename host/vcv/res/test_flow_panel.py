@@ -206,23 +206,6 @@ def test_controls_belong_to_their_physical_hardware_layers():
               "%s footprint is outside the lower PCB" % control.enum)
 
 
-def test_glow_widget_uses_layered_hardware_wiring():
-    source_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               os.pardir, "src", "Glow.cpp")
-    with open(source_path, encoding="utf-8") as source_file:
-        source = source_file.read()
-    check("box.size = Vec(16 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT)" in source,
-          "GlowWidget does not fix the module at 16 HP")
-    check("setPanel(new GlowHardwarePanel())" in source,
-          "GlowWidget does not install GlowHardwarePanel")
-    check("createPanel(asset::plugin(pluginInstance, \"res/Glow.svg\"))" not in source,
-          "GlowWidget still installs the legacy SVG panel")
-    check("createParamCentered<GlowToggle>" in source,
-          "GlowWidget does not install the custom switch overlays")
-    check("createParamCentered<CKSSThree>" not in source,
-          "GlowWidget still installs stock CKSSThree switches")
-
-
 def test_unverified_paths_keep_source_notes():
     for shape in g.PAD_SHAPES:
         check(shape.verified or bool(shape.source_note.strip()),

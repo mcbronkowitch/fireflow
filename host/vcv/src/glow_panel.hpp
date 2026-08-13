@@ -3,6 +3,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
+
+#include "generated_flow_panel.hpp"
 
 #if !defined(SPKY_TESTING)
 #include "plugin.hpp"
@@ -32,8 +35,26 @@ constexpr std::array<const char*, 3> kSwitchFrames = {{
 
 constexpr int kPanelWidthHp = 16;
 
+struct PadBinding {
+    const glow::PadShape* shape;
+    int paramId;
+    std::string accessibleName;
+};
+
+struct ToggleBinding {
+    int paramId;
+    float minValue;
+    float maxValue;
+    float defaultValue;
+    int positionCount;
+};
+
 int switchFrameIndex(float value);
 bool allRequiredLayersAvailable(const bool* availability, std::size_t count);
+const std::array<PadBinding, 12>& padBindings();
+const std::array<ToggleBinding, 2>& toggleBindings();
+const PadBinding* padBindingForParam(int paramId);
+const ToggleBinding* toggleBindingForParam(int paramId);
 
 #if !defined(SPKY_TESTING)
 struct GlowHardwarePanel : widget::Widget {
