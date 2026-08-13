@@ -52,11 +52,12 @@ y_mm = ( 0.438688194653 - y_dxf) * 25.4
 That transform produces the DXF's analytical 80.899997 x 67.999993 mm
 removable-plate extent (80.900 x 68.000 mm at drawing precision). The diagonal
 opening is part of the one continuous outer contour, not a raster mask or an
-independent screen crop. `Edge.Cuts` contains 114 connected cubic Bezier
-segments derived directly from the official closed spline. A separately
-locked `mechanical_reference` group on `Dwgs.User` retains all 27 official DXF
-spline records: 1,673 native cubic curves in total, including the aperture
-strokes and three open decorative/reference records that are not holes.
+independent screen crop. `Edge.Cuts` contains one 114-curve outer chain plus
+15 distinct closed internal chains made from 967 source-derived cubic Bezier
+segments. A separately locked `mechanical_reference` group on
+`Dwgs.User` retains all 27 official DXF spline records: 1,673 native cubic
+curves in total, including every zero-length source no-op and the three open
+decorative/reference records that are not cuts.
 
 ### Explicit mechanical inventory
 
@@ -73,17 +74,26 @@ strokes and three open decorative/reference records that are not holes.
 
 There is no nominal 8/9/4.5 mm geometry in the generator or verifier. The
 generator connects matching DXF spline endpoints, retains only closed unions
-as mechanics, and calculates each centre and extent from cubic extrema. Every
-mechanic is an explicit board-only KiCad oval NPTH using that source envelope;
-the two tall unions are therefore routed slots, while the thirteen roundish
-unions preserve even their small X/Y differences instead of being rounded.
+as mechanics, and calculates the table metadata from cubic extrema. Every
+mechanic is its source-faithful, separately closed internal `Edge.Cuts` chain;
+there are no NPTH pads and therefore no capsule approximation or doubled
+physical cut.
+The outer chain winds clockwise in board coordinates and all internal chains
+wind counter-clockwise, matching the source; the verifier also rejects chain
+intersection, duplication, omission, or opening.
 
-KiCad's native oval drill is an envelope/capsule representation, whereas the
-authoritative Illustrator Bézier paths are not guaranteed to be exact conics
-or capsules. The locked `Dwgs.User` curves remain the exact contour authority.
-Coordinates and envelopes are serialized at KiCad's 1 nm internal resolution,
-so the only numeric loss is nearest-nanometre rounding (at most 0.5 nm per
-coordinate); there is no millimetre-scale normalization.
+Illustrator emitted 396 repeated zero-length cubic no-ops inside the 15 closed
+unions. They remain in the locked reference but are deliberately omitted from
+fabrication `Edge.Cuts` because they add no path geometry and would create
+zero-length/duplicate board items. Of the 1,014 non-degenerate linear cubics,
+KiCad 10 rejects 47 source segments measuring 92-141 nm as “very small”. Each
+is collapsed by bridging its neighboring source vertices; independent analysis
+measures the maximum resulting contour deviation as 0.000104757 mm
+(0.104757 micrometres). The remaining 967 paths are reparameterized only along
+their unchanged straight-line locus to avoid singular endpoint derivatives,
+then serialized at KiCad's 1 nm coordinate resolution. This documented
+sub-micrometre adaptation is KiCad's true minimum-segment limitation; there is
+no capsule/drill approximation and the complete source stays locked beside it.
 
 ### Vendor-neutral pre-production rules
 
@@ -94,6 +104,8 @@ spacing, 0.20 mm minimum copper track/graphic width, 0.15 mm annular width,
 stroke, and rejects bridged mask apertures. The board source separately sets a
 0.20 mm minimum solder-mask web. These are deliberately conservative review
 defaults, not an approved production profile; `SYNTHUX_PROFILE_APPROVED=no`.
+Hole-spacing and annular-width rules are intentionally retained as conservative
+project defaults but are vacuous for the current all-routed, pad-free master.
 
 ### Artwork ownership
 
@@ -126,8 +138,9 @@ The final Task 8 DRC result is 0 violations, 0 unconnected pads, and 0
 footprint errors; no warning was waived. The independent mechanical guard
 re-parses the pinned DXF without importing generator constants. It checks the
 exact outline, all 1,673 locked reference curves, exact group membership, all
-source-derived NPTH envelopes, SVG groups, conservative rule source, mask web,
-and forbidden text on KiCad `F.Cu`, `F.Mask`, and `F.SilkS` as well as the SVG
+15 internal `Edge.Cuts` chains and their closure/count/winding/nonintersection,
+every canonical SVG reference path, conservative rule source, mask web, and
+forbidden text on KiCad `F.Cu`, `F.Mask`, and `F.SilkS` as well as the SVG
 fabrication groups. It parses `CONTROL_CENTRES_MM` directly from
 `host/vcv/res/touch2_geometry.py` and recomputes the uniform fit on every run;
 the current maximum residual is 0.218 mm. That comparison is evidence only and

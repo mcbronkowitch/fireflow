@@ -81,13 +81,18 @@ group membership.
 The source analyzer joins matching endpoints among records 0-25. It finds 15
 closed mechanical unions: 13 roundish apertures and two high-aspect routes.
 Records 19, 20, and 22 form two open reference-only components and are retained
-but not drilled. Every closed union is emitted as an explicit board-only oval
-NPTH whose centre and X/Y envelope come from analytical cubic extrema. No
-nominal 8.0, 9.0, or 4.5 mm drill authority exists, and the small ellipticities
-are not silently rounded. KiCad serializes the derived numbers at its native
-1 nm resolution, limiting coordinate rounding to 0.5 nm. The exact locked
-Bézier path remains authoritative where a standard KiCad oval/capsule drill
-cannot express an arbitrary source contour.
+but not routed. Every closed union is emitted as its own source-faithful
+internal `Edge.Cuts` chain. The board has no NPTH mechanics, so there is no
+competing or approximate capsule cut. The 15 unions contain 1,410 raw cubic
+segments; 396
+are repeated point-degenerate no-ops from Illustrator and remain on the locked
+reference only. Of the 1,014 non-degenerate linear cubics, KiCad 10 rejects 47
+segments measuring 92-141 nm. Those vertices are bridged with an independently
+calculated maximum source-contour deviation of 0.000104757 mm; the remaining
+967 cubics form the nonduplicated fabrication chains. Their controls are
+reparameterized only on the same straight-line locus and serialized at KiCad's
+1 nm coordinate resolution. No nominal 8.0, 9.0, or 4.5 mm drill authority or
+capsule model exists.
 
 The editable artwork is clean-room FireFlow work. It contributes three
 original flow curves plus unprotected FireFlow identification, revision, and
@@ -99,8 +104,8 @@ explicit.
 
 | Task 8 master | SHA-256 | Derivation |
 | --- | --- | --- |
-| `hardware/glow-faceplate/glow-faceplate.kicad_pcb` | `70619cd3168309cc0957485e5bf59d57b514cf1b4a4c50e55dd1a3b03d6e0c22` | Deterministic native KiCad curves, source-envelope board-only NPTH mechanics, and clean-room front artwork from `scripts/generate_master.py`. |
-| `hardware/glow-faceplate/artwork/glow-faceplate.svg` | `fec5228d972b1ab765f939f0737ad5f8619a97a020fa1d2a1bed4d504cc89aad` | DXF-exact physical-size editable artwork with the four required named groups and all 27 mechanical-reference paths. |
+| `hardware/glow-faceplate/glow-faceplate.kicad_pcb` | `745af5799a38e13bf21eec80266137818832cf3a1e8cfdba858796725d518ba1` | Deterministic outer plus 15 source-faithful internal `Edge.Cuts` chains, locked reference curves, and clean-room front artwork from `scripts/generate_master.py`. |
+| `hardware/glow-faceplate/artwork/glow-faceplate.svg` | `3bdd2df3faff441fe9d00a085ff3eaa1974b7e183f361984f70f29a08806cc8d` | DXF-exact physical-size editable artwork with the four required named groups and all 27 mechanical-reference paths. |
 
 For comparison with the existing Rack geometry only, a uniform least-squares
 map is applied after generation:

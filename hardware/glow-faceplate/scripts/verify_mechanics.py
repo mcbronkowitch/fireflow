@@ -9,6 +9,7 @@ import hashlib
 import math
 import re
 import sys
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,6 +18,7 @@ DXF_SHA256 = "55c84aa39e8d4e1484ae05a5145a545dd4749097129adb35a6fdb9da1ff606a0"
 MM_PER_INCH = 25.4
 DXF_JOIN_TOLERANCE_MM = 0.000010
 KICAD_ROUNDING_TOLERANCE_MM = 0.000002
+KICAD_MIN_EDGE_SEGMENT_MM = 0.000200
 VCV_MAX_ERROR_MM = 0.25
 FORBIDDEN = re.compile(
     r"\b(SYNTHUX|TOUCH|MOTION|SHAPE|ENERGY|SPACE|FADER|SWITCH)\b",
@@ -42,6 +44,9 @@ class ExpectedAperture:
     width: float
     height: float
     record_indices: tuple[int, ...]
+    segments: tuple[Segment, ...]
+    source_segment_count: int
+    max_kicad_deviation: float
 
     @property
     def board_reference(self) -> str:
@@ -126,6 +131,22 @@ def _layer(node) -> str | None:
 def _curve_points(curve) -> tuple[Point, ...]:
     points = _child(curve, "pts")
     return tuple(_xy(item) for item in _children(points, "xy")) if points else ()
+
+
+def _edge_segment(node) -> Segment | None:
+    if node[0] == "gr_curve":
+        points = _curve_points(node)
+        return points if len(points) == 4 else None
+    if node[0] == "gr_line":
+        start, end = _child(node, "start"), _child(node, "end")
+        if not start or not end:
+            return None
+        a, d = _xy(start), _xy(end)
+        return (a, ((2.0 * a[0] + d[0]) / 3.0,
+                    (2.0 * a[1] + d[1]) / 3.0),
+                   ((a[0] + 2.0 * d[0]) / 3.0,
+                    (a[1] + 2.0 * d[1]) / 3.0), d)
+    return None
 
 
 def _uuid(node) -> str | None:
@@ -238,6 +259,73 @@ def _component_closed(component: tuple[int, ...], by_index) -> bool:
                for index, point in enumerate(endpoints))
 
 
+def _reverse_segments(segments: tuple[Segment, ...]) -> tuple[Segment, ...]:
+    return tuple(tuple(reversed(segment)) for segment in reversed(segments))
+
+
+def _ordered_component_segments(component: tuple[int, ...], by_index) \
+        -> tuple[Segment, ...]:
+    first = min(component)
+    ordered = list(by_index[first].segments)
+    remaining = set(component) - {first}
+    while remaining:
+        end = ordered[-1][-1]
+        match = None
+        for index in sorted(remaining):
+            record = by_index[index]
+            if math.dist(end, record.segments[0][0]) <= DXF_JOIN_TOLERANCE_MM:
+                match = index, record.segments
+                break
+            if math.dist(end, record.segments[-1][-1]) <= DXF_JOIN_TOLERANCE_MM:
+                match = index, _reverse_segments(record.segments)
+                break
+        if match is None:
+            raise ValueError(f"DXF component {component} is not one chain")
+        index, segments = match
+        ordered.extend(segments)
+        remaining.remove(index)
+    if math.dist(ordered[0][0], ordered[-1][-1]) > DXF_JOIN_TOLERANCE_MM:
+        raise ValueError(f"DXF component {component} is open")
+    meaningful = tuple(segment for segment in ordered
+                       if any(math.dist(segment[0], point) > 1e-12
+                              for point in segment[1:]))
+    if math.dist(meaningful[0][0], meaningful[-1][-1]) > \
+            DXF_JOIN_TOLERANCE_MM:
+        raise ValueError(f"DXF component {component} changed after no-op removal")
+    seam = max(range(len(meaningful)),
+               key=lambda index: math.dist(meaningful[index][0],
+                                           meaningful[index][-1]))
+    meaningful = meaningful[seam:] + meaningful[:seam]
+    vertices = [segment[0] for segment in meaningful]
+    while True:
+        short = next((index for index in range(len(vertices))
+                      if math.dist(vertices[index],
+                                   vertices[(index + 1) % len(vertices)]) <
+                      KICAD_MIN_EDGE_SEGMENT_MM), None)
+        if short is None:
+            break
+        del vertices[(short + 1) % len(vertices)]
+    regularized = []
+    for index, start in enumerate(vertices):
+        end = vertices[(index + 1) % len(vertices)]
+        one_third = ((2.0 * start[0] + end[0]) / 3.0,
+                     (2.0 * start[1] + end[1]) / 3.0)
+        two_thirds = ((start[0] + 2.0 * end[0]) / 3.0,
+                      (start[1] + 2.0 * end[1]) / 3.0)
+        regularized.append((start, one_third, two_thirds, end))
+    return tuple(regularized)
+
+
+def _point_segment_distance(point: Point, start: Point, end: Point) -> float:
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    length_squared = dx * dx + dy * dy
+    if length_squared == 0.0:
+        return math.dist(point, start)
+    t = max(0.0, min(1.0, ((point[0] - start[0]) * dx +
+                           (point[1] - start[1]) * dy) / length_squared))
+    return math.dist(point, (start[0] + t * dx, start[1] + t * dy))
+
+
 def _derive_names(components: tuple[tuple[int, ...], ...], by_index):
     items = []
     for component in components:
@@ -291,12 +379,22 @@ def _derive_names(components: tuple[tuple[int, ...], ...], by_index):
     if len(unused) != 1:
         raise ValueError("DXF upper-right mount is ambiguous")
     names[unused.pop()] = ("MOUNT_UPPER_RIGHT", "aperture")
-    return tuple(ExpectedAperture(names[item["component"]][0],
-                                  names[item["component"]][1],
-                                  (item["x"], item["y"]),
-                                  item["width"], item["height"],
-                                  item["component"])
-                 for item in items)
+    output = []
+    for item in items:
+        component = item["component"]
+        segments = _ordered_component_segments(component, by_index)
+        source = tuple(segment for index in component
+                       for segment in by_index[index].segments
+                       if any(math.dist(segment[0], point) > 1e-12
+                              for point in segment[1:]))
+        maximum = max(min(_point_segment_distance(point, segment[0], segment[-1])
+                          for segment in segments)
+                      for source_segment in source for point in source_segment)
+        output.append(ExpectedAperture(names[component][0], names[component][1],
+                                       (item["x"], item["y"]), item["width"],
+                                       item["height"], component, segments,
+                                       len(source), maximum))
+    return tuple(output)
 
 
 def _official_geometry(path: Path) -> OfficialGeometry:
@@ -332,50 +430,281 @@ def _close(a: Point, b: Point) -> bool:
 
 
 def _normal_curve_key(points):
-    forward = tuple((round(x, 6), round(y, 6)) for x, y in points)
+    # Curves serialize controls at 1 nm; line items serialize endpoints and
+    # their verifier-side 1/3 controls are reconstructed in binary float.
+    # Five decimal places is only a lookup signature: matched chains are still
+    # checked point-by-point at the 2 nm serialization tolerance below.
+    forward = tuple((round(x, 5), round(y, 5)) for x, y in points)
     reverse = tuple(reversed(forward))
     return min(forward, reverse)
 
 
+def _directed_curve_key(points):
+    return tuple((round(x, 6), round(y, 6))
+                 for x, y in (points[0], points[-1]))
+
+
+def _endpoint_key(point: Point) -> Point:
+    return round(point[0], 6), round(point[1], 6)
+
+
+def _curve_components(curves: list[Segment]) -> tuple[tuple[int, ...], ...]:
+    endpoints: dict[Point, list[int]] = {}
+    for index, curve in enumerate(curves):
+        endpoints.setdefault(_endpoint_key(curve[0]), []).append(index)
+        endpoints.setdefault(_endpoint_key(curve[-1]), []).append(index)
+    adjacency = {index: set() for index in range(len(curves))}
+    for members in endpoints.values():
+        for left in members:
+            adjacency[left].update(right for right in members if right != left)
+    seen, components = set(), []
+    for index in range(len(curves)):
+        if index in seen:
+            continue
+        pending, component = [index], []
+        while pending:
+            current = pending.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            component.append(current)
+            pending.extend(adjacency[current] - seen)
+        components.append(tuple(sorted(component)))
+    return tuple(components)
+
+
+def _ordered_directed_chain(component: tuple[int, ...], curves: list[Segment]):
+    starts: dict[Point, list[int]] = {}
+    ends: dict[Point, list[int]] = {}
+    for index in component:
+        starts.setdefault(_endpoint_key(curves[index][0]), []).append(index)
+        ends.setdefault(_endpoint_key(curves[index][-1]), []).append(index)
+    endpoint_keys = set(starts) | set(ends)
+    closed = all(len(starts.get(key, ())) == 1 and
+                 len(ends.get(key, ())) == 1 for key in endpoint_keys)
+    if not closed:
+        return (), False
+    first = min(component)
+    ordered_indices, seen = [], set()
+    current = first
+    while current not in seen:
+        seen.add(current)
+        ordered_indices.append(current)
+        following = starts.get(_endpoint_key(curves[current][-1]), ())
+        if len(following) != 1:
+            return (), False
+        current = following[0]
+    if current != first or seen != set(component):
+        return (), False
+    return tuple(curves[index] for index in ordered_indices), True
+
+
+def _curve_signature(segments) -> tuple:
+    return tuple(sorted(_directed_curve_key(segment) for segment in segments))
+
+
+def _point_on_cubic(segment: Segment, t: float) -> Point:
+    return tuple(_cubic(*(point[axis] for point in segment), t)
+                 for axis in (0, 1))
+
+
+def _polyline(segments, samples_per_curve=4) -> tuple[Point, ...]:
+    points = [segments[0][0]]
+    for segment in segments:
+        points.extend(_point_on_cubic(segment, sample / samples_per_curve)
+                      for sample in range(1, samples_per_curve + 1))
+    return tuple(points)
+
+
+def _signed_area(segments) -> float:
+    points = _polyline(segments)
+    return 0.5 * sum(a[0] * b[1] - b[0] * a[1]
+                     for a, b in zip(points, points[1:]))
+
+
+def _orientation(a: Point, b: Point, c: Point) -> float:
+    return (b[0] - a[0]) * (c[1] - a[1]) - \
+           (b[1] - a[1]) * (c[0] - a[0])
+
+
+def _line_segments_intersect(a: Point, b: Point, c: Point, d: Point) -> bool:
+    ab_c, ab_d = _orientation(a, b, c), _orientation(a, b, d)
+    cd_a, cd_b = _orientation(c, d, a), _orientation(c, d, b)
+    return ((ab_c > 1e-10 and ab_d < -1e-10 or
+             ab_c < -1e-10 and ab_d > 1e-10) and
+            (cd_a > 1e-10 and cd_b < -1e-10 or
+             cd_a < -1e-10 and cd_b > 1e-10))
+
+
+def _self_intersects(polyline: tuple[Point, ...]) -> bool:
+    count = len(polyline) - 1
+    for left in range(count):
+        for right in range(left + 1, count):
+            if right in (left, left + 1) or (left == 0 and right == count - 1):
+                continue
+            if _line_segments_intersect(polyline[left], polyline[left + 1],
+                                        polyline[right], polyline[right + 1]):
+                return True
+    return False
+
+
+def _polylines_intersect(left: tuple[Point, ...],
+                         right: tuple[Point, ...]) -> bool:
+    for a, b in zip(left, left[1:]):
+        for c, d in zip(right, right[1:]):
+            if _line_segments_intersect(a, b, c, d):
+                return True
+    return False
+
+
+def _point_inside(point: Point, polygon: tuple[Point, ...]) -> bool:
+    x, y = point
+    inside = False
+    for (x0, y0), (x1, y1) in zip(polygon, polygon[1:]):
+        if (y0 > y) != (y1 > y):
+            crossing = (x1 - x0) * (y - y0) / (y1 - y0) + x0
+            if x < crossing:
+                inside = not inside
+    return inside
+
+
+def _topology_errors(contours: dict[str, tuple[Segment, ...]]):
+    errors = []
+    outer = _polyline(contours["outer"])
+    if _self_intersects(outer):
+        errors.append("outer Edge.Cuts contour self-intersects")
+    internals = {name: _polyline(segments) for name, segments in contours.items()
+                 if name != "outer"}
+    for name, polyline in internals.items():
+        if _self_intersects(polyline):
+            errors.append(f"internal contour {name} self-intersects")
+        if not _point_inside(polyline[0], outer):
+            errors.append(f"internal contour {name} is outside the outer outline")
+        if _polylines_intersect(polyline, outer):
+            errors.append(f"internal contour {name} intersects the outer outline")
+    names = sorted(internals)
+    for left_index, left_name in enumerate(names):
+        left_box = _segments_bbox(contours[left_name])
+        for right_name in names[left_index + 1:]:
+            right_box = _segments_bbox(contours[right_name])
+            if (left_box[2] < right_box[0] or right_box[2] < left_box[0] or
+                    left_box[3] < right_box[1] or right_box[3] < left_box[1]):
+                continue
+            if _polylines_intersect(internals[left_name], internals[right_name]):
+                errors.append(f"internal contours {left_name} and {right_name} "
+                              "intersect")
+    return errors
+
+
 def _edge_errors(root, official: OfficialGeometry):
     errors = []
-    curves = [node for node in _children(root, "gr_curve")
-              if _layer(node) == "Edge.Cuts"]
-    parsed = [_curve_points(curve) for curve in curves]
-    expected = official.outer.segments
-    if not parsed:
-        return ["Edge.Cuts has no cubic outline segments",
-                "overall dimensions are unavailable without Edge.Cuts"]
-    if any(len(points) != 4 for points in parsed):
-        errors.append("Edge.Cuts contains a non-cubic curve")
-    valid = [points for points in parsed if len(points) == 4]
-    if len({_normal_curve_key(points) for points in valid}) != len(valid):
-        errors.append("Edge.Cuts contains duplicate curve segments")
-    if len(valid) != len(expected):
-        errors.append(f"Edge.Cuts has {len(valid)} curves, want {len(expected)} "
-                      "from the official DXF")
-    else:
-        for index, (actual, source) in enumerate(zip(valid, expected)):
-            if any(not _close(a, b) for a, b in zip(actual, source)):
-                errors.append(f"Edge.Cuts curve {index} differs from official DXF")
+    nodes = [node for node in root[1:]
+             if isinstance(node, list) and node and
+             node[0] in ("gr_curve", "gr_line") and
+             _layer(node) == "Edge.Cuts"]
+    parsed = [_edge_segment(node) for node in nodes]
+    if not nodes:
+        return ["Edge.Cuts has no cubic contours"]
+    if any(segment is None for segment in parsed):
+        errors.append("Edge.Cuts contains an invalid curve/line")
+    curves = [segment for segment in parsed if segment is not None]
+    identifiers = [_uuid(node) for node, segment in zip(nodes, parsed)
+                   if segment is not None]
+    if any(identifier is None for identifier in identifiers) or \
+            len(identifiers) != len(set(identifiers)):
+        errors.append("Edge.Cuts curve IDs are missing or unstable/duplicated")
+
+    keys = [_normal_curve_key(points) for points in curves]
+    if len(keys) != len(set(keys)):
+        errors.append("duplicate internal contour/curve geometry on Edge.Cuts")
+
+    expected = [("outer", official.outer.segments)] + [
+        (item.name, item.segments)
+        for item in sorted(official.apertures,
+                           key=lambda item: item.record_indices)
+    ]
+    expected_signatures = {name: _curve_signature(segments)
+                           for name, segments in expected}
+    components = _curve_components(curves)
+    actual = []
+    for component in components:
+        segments = tuple(curves[index] for index in component)
+        ordered, closed = _ordered_directed_chain(component, curves)
+        actual.append({"component": component, "segments": segments,
+                       "ordered": ordered, "closed": closed,
+                       "signature": _curve_signature(segments)})
+
+    matched: dict[str, tuple[Segment, ...]] = {}
+    remaining = set(range(len(actual)))
+    for name, segments in expected:
+        signature = expected_signatures[name]
+        exact = next((index for index in remaining
+                      if actual[index]["signature"] == signature), None)
+        if exact is not None:
+            item = actual[exact]
+            remaining.remove(exact)
+        else:
+            wanted_keys = set(signature)
+            ranked = sorted(remaining,
+                            key=lambda index: len(wanted_keys &
+                                                  set(actual[index]["signature"])),
+                            reverse=True)
+            best = ranked[0] if ranked else None
+            overlap = (len(wanted_keys & set(actual[best]["signature"]))
+                       if best is not None else 0)
+            if best is None or overlap < max(1, len(signature) // 2):
+                label = "outer outline" if name == "outer" else \
+                    f"internal contour {name}"
+                errors.append(f"missing {label}")
+                continue
+            item = actual[best]
+            remaining.remove(best)
+            label = "outer contour" if name == "outer" else \
+                f"internal contour {name}"
+            errors.append(f"{label} differs from the official DXF")
+
+        if not item["closed"]:
+            label = "outer contour" if name == "outer" else \
+                f"open internal contour {name}"
+            errors.append(f"{label} is not one closed directed chain")
+            continue
+        ordered = item["ordered"]
+        actual_by_key = {_directed_curve_key(segment): segment
+                         for segment in ordered}
+        for source_segment in segments:
+            actual_segment = actual_by_key.get(_directed_curve_key(source_segment))
+            if actual_segment is None or any(not _close(a, b)
+                                             for a, b in zip(actual_segment,
+                                                             source_segment)):
+                label = "outer contour" if name == "outer" else \
+                    f"internal contour {name}"
+                errors.append(f"{label} differs from the official DXF")
                 break
-    for index, points in enumerate(valid):
-        following = valid[(index + 1) % len(valid)]
-        if not _close(points[-1], following[0]):
-            errors.append(f"Edge.Cuts is open between curves {index} and "
-                          f"{(index + 1) % len(valid)}")
-            break
-    if valid:
-        actual_box = _segments_bbox(valid)
-        source_box = _segments_bbox(expected)
+        wanted_sign = _signed_area(segments)
+        actual_sign = _signed_area(ordered)
+        if wanted_sign * actual_sign <= 0.0:
+            label = "outer contour" if name == "outer" else \
+                f"internal contour {name}"
+            errors.append(f"{label} orientation differs from the DXF")
+        matched[name] = ordered
+
+    if remaining:
+        errors.append(f"Edge.Cuts has {len(remaining)} unexpected contour(s)")
+    if len(components) != 16:
+        errors.append(f"Edge.Cuts has {len(components)} connected contours, want "
+                      "1 outer plus 15 internal")
+
+    if "outer" in matched:
+        actual_box = _segments_bbox(matched["outer"])
+        source_box = _segments_bbox(official.outer.segments)
         actual_size = (actual_box[2] - actual_box[0], actual_box[3] - actual_box[1])
         source_size = (source_box[2] - source_box[0], source_box[3] - source_box[1])
         if not _close(actual_size, source_size):
-            errors.append(f"overall dimensions are {actual_size[0]:.6f} x "
-                          f"{actual_size[1]:.6f} mm, source is "
-                          f"{source_size[0]:.6f} x {source_size[1]:.6f} mm")
+            errors.append("outer Edge.Cuts dimensions differ from the DXF")
         if not _close((actual_box[0], actual_box[1]), (0.0, 0.0)):
             errors.append("official upper-left datum is not board (0, 0)")
+    if len(matched) == 16:
+        errors.extend(_topology_errors(matched))
     return errors
 
 
@@ -419,67 +748,15 @@ def _reference_errors(root, official: OfficialGeometry):
     return errors
 
 
-def _footprint_reference(footprint) -> str | None:
-    for text in _children(footprint, "fp_text"):
-        if len(text) >= 3 and text[1] == "reference":
-            return text[2]
-    return None
-
-
-def _mechanical_inventory(root):
-    inventory = {}
-    footprints = {}
+def _npth_errors(root):
+    count = 0
     for footprint in _children(root, "footprint"):
-        ref = _footprint_reference(footprint)
-        at = _child(footprint, "at")
-        pads = _children(footprint, "pad")
-        if not ref or not at or len(at) < 3 or len(pads) != 1:
-            continue
-        pad = pads[0]
-        if len(pad) < 4 or pad[2] != "np_thru_hole":
-            continue
-        drill = _child(pad, "drill")
-        size = _child(pad, "size")
-        if drill and size:
-            inventory[ref] = ((_xy(at)), pad[3], drill, size)
-            footprints[ref] = footprint
-    return inventory, footprints
-
-
-def _inventory_errors(root, official: OfficialGeometry):
-    errors = []
-    inventory, footprints = _mechanical_inventory(root)
-    expected = {item.board_reference: item for item in official.apertures}
-    missing = sorted(set(expected) - set(inventory))
-    extra = sorted(set(inventory) - set(expected))
-    if missing:
-        errors.append(f"missing source-derived NPTH mechanics: {missing}")
-    if extra:
-        errors.append(f"unexpected NPTH mechanics: {extra}")
-    for ref, source in expected.items():
-        if ref not in inventory:
-            continue
-        footprint = footprints[ref]
-        attr = _child(footprint, "attr")
-        if not attr or "board_only" not in attr[1:]:
-            errors.append(f"{ref} is not marked board_only")
-        if len(footprint) > 1 and ":" in footprint[1]:
-            errors.append(f"{ref} uses a library-qualified footprint id")
-        at, shape, drill, size = inventory[ref]
-        if shape != "oval" or len(drill) != 4 or drill[1] != "oval":
-            errors.append(f"{ref} is not an explicit source-envelope oval NPTH")
-            continue
-        if not _close(at, source.centre):
-            errors.append(f"{ref} centre {at} does not match DXF source "
-                          f"{source.centre}")
-        actual = (float(drill[2]), float(drill[3]))
-        pad_size = (float(size[1]), float(size[2]))
-        wanted = (source.width, source.height)
-        if not _close(actual, wanted) or not _close(pad_size, wanted):
-            errors.append(f"{ref} source envelope is {actual[0]:.6f} x "
-                          f"{actual[1]:.6f} mm, want {wanted[0]:.6f} x "
-                          f"{wanted[1]:.6f} mm")
-    return errors
+        count += sum(len(pad) >= 3 and pad[2] == "np_thru_hole"
+                     for pad in _children(footprint, "pad"))
+    if count:
+        return [f"found {count} approximate NPTH mechanic(s); exact internal "
+                "Edge.Cuts are the sole fabrication authority"]
+    return []
 
 
 def _silk_errors(root):
@@ -517,11 +794,17 @@ def _fabrication_text_errors(root):
 
 def _setup_errors(root):
     setup = _child(root, "setup")
+    max_error = _child(setup, "max_error") if setup else None
     mask_sliver = _child(setup, "solder_mask_min_width") if setup else None
+    errors = []
+    if (not max_error or len(max_error) < 2 or
+            abs(float(max_error[1]) - 0.005) > KICAD_ROUNDING_TOLERANCE_MM):
+        errors.append("board source does not set the 0.005 mm conservative "
+                      "curve-rendering approximation error")
     if (not mask_sliver or len(mask_sliver) < 2 or
             abs(float(mask_sliver[1]) - 0.20) > KICAD_ROUNDING_TOLERANCE_MM):
-        return ["board source does not set the 0.20 mm conservative mask sliver"]
-    return []
+        errors.append("board source does not set the 0.20 mm conservative mask sliver")
+    return errors
 
 
 VCV_NAME_MAP = {
@@ -587,34 +870,87 @@ def _vcv_fit(official: OfficialGeometry, path: Path):
     return scale, tx, ty, residuals
 
 
+def _svg_number(value: float) -> str:
+    if abs(value) < 0.0000005:
+        value = 0.0
+    return f"{value:.6f}".rstrip("0").rstrip(".")
+
+
+def _canonical_svg_path(record: DxfRecord) -> str:
+    start = record.segments[0][0]
+    pieces = [f"M {_svg_number(start[0])},{_svg_number(start[1])}"]
+    for segment in record.segments:
+        pieces.append("C " + " ".join(
+            f"{_svg_number(x)},{_svg_number(y)}"
+            for x, y in (segment[1], segment[2], segment[3])))
+    if record.flags & 1:
+        pieces.append("Z")
+    return " ".join(pieces)
+
+
 def _svg_errors(path: Path, official: OfficialGeometry):
     if not path.exists():
         return [f"artwork SVG is missing: {path}"]
     text = path.read_text(encoding="utf-8")
     errors = []
-    for group in ("copper_front", "mask_front", "silk_front",
-                  "mechanical_reference"):
-        if not re.search(rf'<g\b[^>]*\bid="{re.escape(group)}"', text):
-            errors.append(f"artwork SVG is missing group {group}")
-    svg = re.search(r'<svg\b([^>]*)>', text, re.DOTALL)
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError as exc:
+        return [f"artwork SVG is not valid XML: {exc}"]
+    groups = {node.attrib.get("id"): node for node in root.iter()
+              if node.tag.rsplit("}", 1)[-1] == "g" and node.attrib.get("id")}
+    for group_name in ("copper_front", "mask_front", "silk_front",
+                       "mechanical_reference"):
+        if group_name not in groups:
+            errors.append(f"artwork SVG is missing group {group_name}")
     source_box = _segments_bbox(official.outer.segments)
     wanted = (source_box[2] - source_box[0], source_box[3] - source_box[1])
-    if not svg:
-        errors.append("artwork SVG has no root element")
-    else:
-        width = re.search(r'\bwidth="([0-9.]+)mm"', svg.group(1))
-        height = re.search(r'\bheight="([0-9.]+)mm"', svg.group(1))
-        if (not width or not height or
-                not _close((float(width.group(1)), float(height.group(1))), wanted)):
-            errors.append("artwork SVG physical size does not match the DXF")
-    reference = re.search(r'<g\b[^>]*\bid="mechanical_reference"[^>]*>'
-                          r'(.*?)</g>', text, re.DOTALL)
-    if not reference or len(re.findall(r'<path\b', reference.group(1))) != 28:
-        # 27 source records plus the explicit 2 mm origin cross path.
-        errors.append("SVG mechanical_reference does not contain all 27 DXF records")
-    fabrication = "\n".join(match.group(1) for match in re.finditer(
-        r'<g\b[^>]*\bid="(?:copper_front|mask_front|silk_front)"[^>]*>'
-        r'(.*?)</g>', text, re.DOTALL))
+    try:
+        size = (float(root.attrib["width"].removesuffix("mm")),
+                float(root.attrib["height"].removesuffix("mm")))
+        view_box = tuple(float(value) for value in root.attrib["viewBox"].split())
+    except (KeyError, ValueError):
+        size, view_box = (-1.0, -1.0), ()
+    if not _close(size, wanted) or len(view_box) != 4 or \
+            not _close((view_box[0], view_box[1]), (0.0, 0.0)) or \
+            not _close((view_box[2], view_box[3]), wanted):
+        errors.append("artwork SVG physical size/viewBox does not match the DXF")
+    if root.attrib.get("data-source-sha256") != DXF_SHA256:
+        errors.append("artwork SVG does not identify the pinned DXF hash")
+
+    reference = groups.get("mechanical_reference")
+    if reference is not None:
+        if (reference.attrib.get("data-locked") != "true" or
+                reference.attrib.get("data-units") != "mm"):
+            errors.append("SVG mechanical_reference lock/unit metadata is invalid")
+        paths = [node for node in reference
+                 if node.tag.rsplit("}", 1)[-1] == "path"]
+        if any("data-dxf-record" not in node.attrib for node in paths):
+            errors.append("SVG mechanical_reference contains an unkeyed path")
+        records: dict[int, list[ET.Element]] = {}
+        for node in paths:
+            if "data-dxf-record" not in node.attrib:
+                continue
+            try:
+                index = int(node.attrib["data-dxf-record"])
+            except ValueError:
+                errors.append("SVG mechanical_reference has an invalid record id")
+                continue
+            records.setdefault(index, []).append(node)
+        expected_records = {record.index: record
+                            for record in official.reference_records}
+        if set(records) != set(expected_records) or \
+                any(len(nodes) != 1 for nodes in records.values()):
+            errors.append("SVG mechanical_reference record membership is incomplete")
+        for index, record in expected_records.items():
+            if index not in records or len(records[index]) != 1:
+                continue
+            if records[index][0].attrib.get("d") != _canonical_svg_path(record):
+                errors.append(f"SVG mechanical_reference record {index} differs "
+                              "from the official DXF")
+    fabrication = "\n".join(ET.tostring(groups[name], encoding="unicode")
+                              for name in ("copper_front", "mask_front",
+                                           "silk_front") if name in groups)
     match = FORBIDDEN.search(fabrication)
     if match:
         errors.append("forbidden protected/provisional SVG fabrication text: "
@@ -653,6 +989,14 @@ def main(argv=None) -> int:
     except (OSError, ValueError) as exc:
         print(f"FAIL -- cannot load authoritative DXF: {exc}")
         return 1
+    source_segment_count = sum(item.source_segment_count
+                               for item in official.apertures)
+    fabrication_segment_count = sum(len(item.segments)
+                                    for item in official.apertures)
+    maximum_kicad_deviation = max(item.max_kicad_deviation
+                                  for item in official.apertures)
+    if maximum_kicad_deviation > 0.000105:
+        errors.append("KiCad minimum-segment adaptation exceeds 0.000105 mm")
     if not args.board.exists():
         errors.append(f"KiCad board is missing: {args.board}")
     else:
@@ -662,7 +1006,7 @@ def main(argv=None) -> int:
                 raise ValueError("root is not kicad_pcb")
             errors.extend(_edge_errors(board, official))
             errors.extend(_reference_errors(board, official))
-            errors.extend(_inventory_errors(board, official))
+            errors.extend(_npth_errors(board))
             errors.extend(_silk_errors(board))
             errors.extend(_fabrication_text_errors(board))
             errors.extend(_setup_errors(board))
@@ -691,7 +1035,11 @@ def main(argv=None) -> int:
           f"closed {len(official.outer.segments)}-curve Edge.Cuts")
     print(f"  reference: 27 records / {len(official.reference_segments)} "
           "locked curves / complete group")
-    print("  mechanics: 13 source-envelope NPTHs, 2 routed NPTH slots")
+    print(f"  mechanics: 15 source-faithful internal Edge.Cuts contours / "
+          f"{fabrication_segment_count} curves from {source_segment_count} "
+          "non-degenerate source curves / no approximate NPTHs")
+    print(f"  KiCad minimum-segment adaptation: "
+          f"{maximum_kicad_deviation * 1000:.6f} micrometres maximum")
     print(f"  VCV comparison: recomputed uniform fit s={scale:.9f}, "
           f"tx={tx:.6f}, ty={ty:.6f}, max={max(residuals.values()):.3f} mm "
           f"(limit {VCV_MAX_ERROR_MM:.2f} mm)")

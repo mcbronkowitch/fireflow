@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 
@@ -24,6 +25,19 @@ VERIFIER = HERE / "verify_mechanics.py"
 
 def _curve_blocks(text: str) -> list[re.Match[str]]:
     return list(re.finditer(r"  \(gr_curve\n.*?\n  \)", text, re.DOTALL))
+
+
+def _edge_blocks(text: str) -> list[re.Match[str]]:
+    return [match for match in re.finditer(r"  \(gr_(?:curve|line)\n.*?\n  \)",
+                                           text, re.DOTALL)
+            if '(layer "Edge.Cuts")' in match.group(0)]
+
+
+def _move_curve_point(block: str, point_index: int, dx: float) -> str:
+    points = list(re.finditer(r"\(xy (-?[0-9.]+) (-?[0-9.]+)\)", block))
+    match = points[point_index]
+    changed = f"(xy {float(match.group(1)) + dx:.6f} {match.group(2)})"
+    return block[:match.start()] + changed + block[match.end():]
 
 
 class MechanicalGuardTests(unittest.TestCase):
@@ -43,11 +57,12 @@ class MechanicalGuardTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def _verify(self, *, board: Path | None = None,
+                svg: Path | None = None,
                 vcv: Path | None = None,
                 rules: Path | None = None) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-B", str(VERIFIER),
-             "--board", str(board or self.board), "--svg", str(self.svg),
+             "--board", str(board or self.board), "--svg", str(svg or self.svg),
              "--dxf", str(DXF), "--vcv-geometry", str(vcv or VCV),
              "--rules", str(rules or RULES)],
             text=True, capture_output=True, check=False,
@@ -55,6 +70,11 @@ class MechanicalGuardTests(unittest.TestCase):
 
     def _mutated_board(self, name: str, text: str) -> Path:
         path = Path(self.temporary.name) / f"{name}.kicad_pcb"
+        path.write_text(text, encoding="utf-8", newline="\n")
+        return path
+
+    def _mutated_svg(self, name: str, text: str) -> Path:
+        path = Path(self.temporary.name) / f"{name}.svg"
         path.write_text(text, encoding="utf-8", newline="\n")
         return path
 
@@ -71,6 +91,22 @@ class MechanicalGuardTests(unittest.TestCase):
         self.assertEqual(source.open_reference_record_indices, (19, 20, 22))
         self.assertTrue(any(abs(item.width - item.height) > 0.000001
                             for item in source.apertures))
+        self.assertEqual(sum(len(item.segments) for item in source.apertures),
+                         967)
+        self.assertEqual(sum(item.source_segment_count
+                             for item in source.apertures), 1014)
+        self.assertLessEqual(max(item.max_kicad_deviation
+                                 for item in source.apertures), 0.000105)
+
+    def test_generator_uses_source_faithful_internal_edge_cuts_only(self) -> None:
+        from dxf_apertures import analyze_dxf
+
+        source = analyze_dxf(DXF)
+        text = self.board.read_text(encoding="utf-8")
+        edges = _edge_blocks(text)
+        self.assertEqual(len(edges), len(source.outer.segments) +
+                         sum(len(item.segments) for item in source.apertures))
+        self.assertNotIn("np_thru_hole", text)
 
     def test_generated_master_is_green(self) -> None:
         result = self._verify()
@@ -115,25 +151,87 @@ class MechanicalGuardTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn("mechanical_reference group", result.stdout)
 
-    def test_source_aperture_extent_mutation_is_red(self) -> None:
-        text = self.board.read_text(encoding="utf-8")
-        match = re.search(r"\(drill oval ([0-9.]+) ([0-9.]+)\)", text)
-        self.assertIsNotNone(match)
-        changed = (f"(drill oval {float(match.group(1)) + 0.02:.6f} "
-                   f"{match.group(2)})")
-        mutated = text[:match.start()] + changed + text[match.end():]
-        result = self._verify(board=self._mutated_board("aperture-extent", mutated))
-        self.assertNotEqual(result.returncode, 0, result.stdout)
-        self.assertIn("source envelope", result.stdout)
+    def test_internal_curve_coordinate_drift_is_red(self) -> None:
+        from dxf_apertures import analyze_dxf
 
-    def test_nominalized_round_aperture_is_red(self) -> None:
+        source = analyze_dxf(DXF)
         text = self.board.read_text(encoding="utf-8")
-        match = re.search(r"\(drill oval ([89]\.[0-9]+) ([89]\.[0-9]+)\)", text)
-        self.assertIsNotNone(match)
-        mutated = text[:match.start()] + "(drill 8)" + text[match.end():]
-        result = self._verify(board=self._mutated_board("nominalized-round", mutated))
+        edges = _edge_blocks(text)
+        victim = next(edge for edge in edges[len(source.outer.segments):]
+                      if edge.group(0).startswith("  (gr_curve"))
+        changed = _move_curve_point(victim.group(0), 1, 0.02)
+        mutated = text[:victim.start()] + changed + text[victim.end():]
+        result = self._verify(board=self._mutated_board("internal-drift", mutated))
         self.assertNotEqual(result.returncode, 0, result.stdout)
-        self.assertIn("source-envelope oval", result.stdout)
+        self.assertIn("internal contour", result.stdout)
+        self.assertIn("differs", result.stdout)
+
+    def test_open_internal_contour_is_red(self) -> None:
+        from dxf_apertures import analyze_dxf
+
+        source = analyze_dxf(DXF)
+        text = self.board.read_text(encoding="utf-8")
+        edges = _edge_blocks(text)
+        victim = next(edge for edge in edges[len(source.outer.segments):]
+                      if edge.group(0).startswith("  (gr_curve"))
+        changed = _move_curve_point(victim.group(0), -1, 0.02)
+        mutated = text[:victim.start()] + changed + text[victim.end():]
+        result = self._verify(board=self._mutated_board("internal-open", mutated))
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("open internal contour", result.stdout)
+
+    def test_missing_internal_contour_is_red(self) -> None:
+        from dxf_apertures import analyze_dxf
+
+        source = analyze_dxf(DXF)
+        text = self.board.read_text(encoding="utf-8")
+        edges = _edge_blocks(text)
+        first = sorted(source.apertures,
+                       key=lambda item: item.record_indices)[0]
+        victims = edges[len(source.outer.segments):
+                        len(source.outer.segments) + len(first.segments)]
+        for victim in reversed(victims):
+            text = text[:victim.start()] + text[victim.end():]
+        result = self._verify(board=self._mutated_board("internal-missing", text))
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("missing internal contour", result.stdout)
+
+    def test_duplicate_internal_contour_is_red(self) -> None:
+        from dxf_apertures import analyze_dxf
+
+        source = analyze_dxf(DXF)
+        text = self.board.read_text(encoding="utf-8")
+        edges = _edge_blocks(text)
+        first = sorted(source.apertures,
+                       key=lambda item: item.record_indices)[0]
+        victims = edges[len(source.outer.segments):
+                        len(source.outer.segments) + len(first.segments)]
+        copies = []
+        for index, victim in enumerate(victims):
+            block = victim.group(0)
+            identifier = str(uuid.uuid5(uuid.NAMESPACE_URL,
+                                        f"task-8-duplicate-{index}"))
+            block = re.sub(r'(?<=\(uuid ")[0-9a-f-]+(?="\))', identifier,
+                           block, count=1)
+            copies.append(block)
+        mutated = text.rsplit("\n)", 1)[0] + "\n\n" + "\n\n".join(copies) + "\n)\n"
+        result = self._verify(board=self._mutated_board("internal-duplicate", mutated))
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("duplicate internal contour", result.stdout)
+
+    def test_svg_reference_geometry_corruption_is_red(self) -> None:
+        text = self.svg.read_text(encoding="utf-8")
+        match = re.search(r'(<path data-dxf-record="25" d=")([^"]+)("/>)', text)
+        self.assertIsNotNone(match)
+        path_data = match.group(2)
+        number = re.search(r"-?[0-9]+(?:\.[0-9]+)?", path_data)
+        changed_data = (path_data[:number.start()] +
+                        f"{float(number.group(0)) + 0.02:.6f}" +
+                        path_data[number.end():])
+        mutated = text[:match.start(2)] + changed_data + text[match.end(2):]
+        result = self._verify(svg=self._mutated_svg("svg-corrupt", mutated))
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("SVG mechanical_reference record 25", result.stdout)
 
     def test_protected_silk_text_is_red(self) -> None:
         text = self.board.read_text(encoding="utf-8")

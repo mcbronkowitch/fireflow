@@ -75,43 +75,8 @@ def _text_s_expr(text: str, at, size, thickness, name: str):
     )
 
 
-def _fp_text(kind: str, text: str, name: str):
-    return (
-        f"    (fp_text {kind} {_quote(text)}\n"
-        "      (at 0 0 0)\n"
-        "      (layer \"F.Fab\")\n"
-        "      hide\n"
-        f"      (uuid {_quote(_uid(name))})\n"
-        "      (effects (font (size 0.8 0.8) (thickness 0.12)))\n"
-        "    )"
-    )
-
-
 def _mechanical_id(aperture: dxf.Aperture) -> str:
     return "DXF_" + "_".join(f"{index:02d}" for index in aperture.record_indices)
-
-
-def _aperture_footprint(aperture: dxf.Aperture):
-    ref = _mechanical_id(aperture)
-    x, y = aperture.centre
-    width, height = aperture.width, aperture.height
-    return (
-        f"  (footprint \"Glow_DXF_NPTH_{ref}\"\n"
-        "    (layer \"F.Cu\")\n"
-        f"    (uuid {_quote(_uid('footprint-' + ref))})\n"
-        f"    (at {_fmt(x)} {_fmt(y)})\n"
-        f"{_fp_text('reference', ref, 'ref-' + ref)}\n"
-        f"{_fp_text('value', f'DXF NPTH {_fmt(width)} x {_fmt(height)} mm', 'value-' + ref)}\n"
-        "    (attr board_only exclude_from_pos_files exclude_from_bom)\n"
-        "    (pad \"\" np_thru_hole oval\n"
-        "      (at 0 0)\n"
-        f"      (size {_fmt(width)} {_fmt(height)})\n"
-        f"      (drill oval {_fmt(width)} {_fmt(height)})\n"
-        "      (layers \"*.Cu\" \"*.Mask\")\n"
-        f"      (uuid {_quote(_uid('pad-' + ref))})\n"
-        "    )\n"
-        "  )"
-    )
 
 
 ART_CURVES = (
@@ -133,11 +98,16 @@ def _group_s_expr(name: str, member_names):
 
 def make_board(source: dxf.SourceGeometry):
     items = []
-    edge_names = []
     for index, segment in enumerate(source.outer.segments):
-        name = f"edge-{index:03d}"
-        edge_names.append(name)
+        name = f"edge-outer-{index:03d}"
         items.append(_curve_s_expr(segment, "Edge.Cuts", name))
+
+    for aperture in sorted(source.apertures,
+                           key=lambda item: item.record_indices):
+        contour_id = _mechanical_id(aperture)
+        for index, segment in enumerate(aperture.segments):
+            name = f"edge-internal-{contour_id}-{index:03d}"
+            items.append(_curve_s_expr(segment, "Edge.Cuts", name))
 
     reference_names = []
     for spline_index, spline in enumerate(source.reference_records):
@@ -146,9 +116,6 @@ def make_board(source: dxf.SourceGeometry):
             reference_names.append(name)
             items.append(_curve_s_expr(segment, "Dwgs.User", name, locked=True,
                                        width=0.04))
-
-    for aperture in source.apertures:
-        items.append(_aperture_footprint(aperture))
 
     copper_names, mask_names = [], []
     for index, points in enumerate(ART_CURVES):
@@ -195,6 +162,7 @@ def make_board(source: dxf.SourceGeometry):
     (49 "F.Fab" user)
   )
   (setup
+    (max_error 0.005)
     (pad_to_mask_clearance 0)
     (solder_mask_min_width 0.20)
   )
@@ -221,7 +189,7 @@ def _svg_path(spline: dxf.SplineRecord):
 
 def make_svg(source: dxf.SourceGeometry):
     reference_paths = [
-        f'    <path d="{_svg_path(spline)}"/>'
+        f'    <path data-dxf-record="{spline.index}" d="{_svg_path(spline)}"/>'
         for spline in source.reference_records
     ]
     copper = []
@@ -257,7 +225,6 @@ def make_svg(source: dxf.SourceGeometry):
      data-locked="true" data-units="mm">
 {chr(10).join(reference_paths)}
     <circle cx="0" cy="0" r="0.35"/>
-    <path d="M 0,0 H 2 M 0,0 V 2"/>
   </g>
 </svg>
 '''

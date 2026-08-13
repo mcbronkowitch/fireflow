@@ -18,6 +18,7 @@ from pathlib import Path
 DXF_SHA256 = "55c84aa39e8d4e1484ae05a5145a545dd4749097129adb35a6fdb9da1ff606a0"
 MM_PER_INCH = 25.4
 ENDPOINT_TOLERANCE_MM = 0.000010
+KICAD_MIN_EDGE_SEGMENT_MM = 0.000200
 
 Point = tuple[float, float]
 Segment = tuple[Point, Point, Point, Point]
@@ -38,6 +39,9 @@ class Aperture:
     width: float
     height: float
     record_indices: tuple[int, ...]
+    segments: tuple[Segment, ...]
+    source_segment_count: int
+    max_kicad_deviation: float
 
 
 @dataclass(frozen=True)
@@ -167,6 +171,101 @@ def _component_geometry(component: tuple[int, ...],
             bbox[2] - bbox[0], bbox[3] - bbox[1])
 
 
+def _reverse_segments(segments: tuple[Segment, ...]) -> tuple[Segment, ...]:
+    return tuple(tuple(reversed(segment)) for segment in reversed(segments))
+
+
+def _ordered_component_segments(component: tuple[int, ...],
+                                by_index: dict[int, SplineRecord]) \
+        -> tuple[Segment, ...]:
+    """Order and orient a connected record union into one closed chain."""
+    first = min(component)
+    ordered = list(by_index[first].segments)
+    remaining = set(component) - {first}
+    while remaining:
+        end = ordered[-1][-1]
+        match = None
+        for index in sorted(remaining):
+            record = by_index[index]
+            if math.dist(end, record.segments[0][0]) <= ENDPOINT_TOLERANCE_MM:
+                match = index, record.segments
+                break
+            if math.dist(end, record.segments[-1][-1]) <= ENDPOINT_TOLERANCE_MM:
+                match = index, _reverse_segments(record.segments)
+                break
+        if match is None:
+            raise ValueError(f"DXF component {component} is not one ordered chain")
+        index, segments = match
+        ordered.extend(segments)
+        remaining.remove(index)
+    if math.dist(ordered[0][0], ordered[-1][-1]) > ENDPOINT_TOLERANCE_MM:
+        raise ValueError(f"DXF component {component} is not closed")
+    # Illustrator emits repeated zero-length cubic no-ops at many knots.
+    # They carry no path geometry and are invalid/duplicated Edge.Cuts items.
+    meaningful = tuple(segment for segment in ordered
+                       if any(math.dist(segment[0], point) > 1e-12
+                              for point in segment[1:]))
+    if math.dist(meaningful[0][0], meaningful[-1][-1]) > \
+            ENDPOINT_TOLERANCE_MM:
+        raise ValueError(f"DXF component {component} changed when no-ops were removed")
+    # Put the longest source segment at the serialization seam.  The chain is
+    # geometrically identical, while avoiding KiCad treating a sub-micron
+    # source segment that straddles the list seam as self-intersection.
+    seam = max(range(len(meaningful)),
+               key=lambda index: math.dist(meaningful[index][0],
+                                           meaningful[index][-1]))
+    meaningful = meaningful[seam:] + meaningful[:seam]
+    # KiCad 10 rejects Edge.Cuts segments below 0.2 micrometres.  Remove the
+    # endpoint after each such source segment and bridge its neighbours.  This
+    # is the sole geometric limitation in the fabrication contour; the maximum
+    # source-vertex deviation is computed/documented independently.
+    vertices = [segment[0] for segment in meaningful]
+    while True:
+        short = next((index for index in range(len(vertices))
+                      if math.dist(vertices[index],
+                                   vertices[(index + 1) % len(vertices)]) <
+                      KICAD_MIN_EDGE_SEGMENT_MM), None)
+        if short is None:
+            break
+        del vertices[(short + 1) % len(vertices)]
+
+    # Every retained Illustrator cubic is exactly linear. Reparameterize each
+    # bridge with 1/3 and 2/3 controls on the same line locus to avoid singular
+    # endpoint derivatives in KiCad's curve flattener.
+    regularized = []
+    for index, start in enumerate(vertices):
+        end = vertices[(index + 1) % len(vertices)]
+        one_third = ((2.0 * start[0] + end[0]) / 3.0,
+                     (2.0 * start[1] + end[1]) / 3.0)
+        two_thirds = ((start[0] + 2.0 * end[0]) / 3.0,
+                      (start[1] + 2.0 * end[1]) / 3.0)
+        regularized.append((start, one_third, two_thirds, end))
+    return tuple(regularized)
+
+
+def _point_segment_distance(point: Point, start: Point, end: Point) -> float:
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    length_squared = dx * dx + dy * dy
+    if length_squared == 0.0:
+        return math.dist(point, start)
+    t = max(0.0, min(1.0, ((point[0] - start[0]) * dx +
+                           (point[1] - start[1]) * dy) / length_squared))
+    return math.dist(point, (start[0] + t * dx, start[1] + t * dy))
+
+
+def _source_fidelity(component: tuple[int, ...],
+                     by_index: dict[int, SplineRecord],
+                     fabrication: tuple[Segment, ...]) -> tuple[int, float]:
+    source = tuple(segment for index in component
+                   for segment in by_index[index].segments
+                   if any(math.dist(segment[0], point) > 1e-12
+                          for point in segment[1:]))
+    maximum = max(min(_point_segment_distance(point, segment[0], segment[-1])
+                      for segment in fabrication)
+                  for source_segment in source for point in source_segment)
+    return len(source), maximum
+
+
 def _name_apertures(closed_components: tuple[tuple[int, ...], ...],
                     by_index: dict[int, SplineRecord]) -> tuple[Aperture, ...]:
     derived = []
@@ -230,9 +329,13 @@ def _name_apertures(closed_components: tuple[tuple[int, ...], ...],
     inventory = []
     for item in derived:
         reference, kind = names[item["component"]]
+        segments = _ordered_component_segments(item["component"], by_index)
+        source_count, maximum = _source_fidelity(item["component"], by_index,
+                                                  segments)
         inventory.append(Aperture(reference, kind, (item["x"], item["y"]),
                                   item["width"], item["height"],
-                                  item["component"]))
+                                  item["component"], segments, source_count,
+                                  maximum))
     return tuple(sorted(inventory, key=lambda item: item.reference))
 
 
