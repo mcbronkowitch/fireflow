@@ -2482,7 +2482,7 @@ the two together decide what the modulation lanes actually emit.
 One concrete thing the rework has to settle, found 2026-08-13 and **narrowed by
 the FLOW melody engine on the same day**: **outside FLOW melody mode, the melody
 pattern reaches the audio only through SHAPE's top quarter.** `_compute_raw`
-passes the pattern value as `shape_value`'s third argument (`lane.cpp:532`), and
+passes the pattern value as `shape_value`'s third argument (`lane.cpp:555`), and
 `waveforms.h:32` blends it in only above 0.75, weight `(shape - 0.75) * 4`.
 Below that the melodic lane emits a plain LFO waveform and the pattern is
 computed and discarded. FORM, SONG, the phrase generator, the song ladder and
@@ -2495,7 +2495,7 @@ have just changed:**
 
 - "reaches the audio only through SHAPE's top quarter" is now false **in FLOW on
   a note deck**: `_compute_raw` returns the phrase's note directly under
-  `_flow_melody_on()` (`lane.cpp:530`) and never calls `shape_value` at all. On
+  `_flow_melody_on()` (`lane.cpp:551`) and never calls `shape_value` at all. On
   that path SHAPE is inert on the melody, which is its own open question for the
   rework — what SHAPE should mean for a note — rather than a blend threshold.
 - "measured dead on 40/40 terrains in both modes" no longer holds: this branch's

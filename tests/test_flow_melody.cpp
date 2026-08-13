@@ -387,6 +387,54 @@ TEST_CASE("FLOW melody: leaving melody mode re-lengths the phrase for STEP") {
     CHECK(notes_past_the_old_phrase);
 }
 
+TEST_CASE("FLOW melody: an engine round trip keeps the phrase and the SONG place") {
+    // SYNTH -> SAMPLER -> SYNTH, the gesture Part makes at the two sites that
+    // write _engine_id. Both legs are individually correct: leaving melody mode
+    // owes length_pending (the effective length becomes STEPS again), and
+    // coming back does NOT owe it a second time, because the phrase is already
+    // kFlowPhraseSlots long. The trap is that the flag is sticky and nothing on
+    // the LFO path consumes it -- _wrap_events returns early there and
+    // _apply_preroll_work needs _melody_engine_on() -- while the return leg
+    // sets _cur_step = -1, which is exactly the condition _apply_preroll_work
+    // waits for. A one-sided (conditional) raise therefore carries the exit's
+    // flag into the return and rebuilds pattern A and B and restarts the SONG
+    // ladder at phrase 0 on a round trip that changed nothing: a fresh melody
+    // because the player auditioned another engine for a moment. Only an
+    // ASSIGNMENT clears the flag at the moment the two lengths agree again.
+    //
+    // STEPS 12, not 8: at 8 the exit's own check sees 8 == 8, never raises the
+    // flag, and this case could not fail. Fireflow parks STEPS at 1 in FLOW and
+    // Glow pushes 2..16 there, so both hosts reach a STEPS != kFlowPhraseSlots.
+    ModLane lane = make_flow_melody_lane(0xF10Eu, 1.f, /*steps=*/12);
+    for (int cycle = 0; cycle < 3; ++cycle) drive_to_wrap(lane);
+    const MelodyPattern before_a = lane.pattern_for_test(0);
+    const MelodyPattern before_b = lane.pattern_for_test(1);
+    const uint32_t place = lane.song_position();
+    REQUIRE(place > 0u);              // the ladder really moved before the swap
+    REQUIRE(lane.pattern_groove_len_for_test() ==
+            lane.effective_length_for_test());
+
+    lane.set_flow_melody(false);      // engine swapped to SAMPLER/BBD
+    for (int i = 0; i < 20000; ++i) lane.process();   // under half a cycle: the
+                                                      // LFO path, no wrap
+    lane.set_flow_melody(true);       // ... and back to a note engine
+    lane.process();                   // _apply_preroll_work runs on this sample
+
+    CHECK(lane.song_position() == place);
+    bool phrase_moved = false;
+    const MelodyPattern& after_a = lane.pattern_for_test(0);
+    const MelodyPattern& after_b = lane.pattern_for_test(1);
+    for (int s = 0; s < 32; ++s) {    // ModLane::kSeqSlots, private; 32 is the
+                                      // literal the file's other content
+                                      // comparison uses
+        if (after_a.pitch[s] != before_a.pitch[s]) phrase_moved = true;
+        if (after_b.pitch[s] != before_b.pitch[s]) phrase_moved = true;
+        if (after_a.pattern_groove.rank_of_slot[s] !=
+            before_a.pattern_groove.rank_of_slot[s]) phrase_moved = true;
+    }
+    CHECK_FALSE(phrase_moved);
+}
+
 TEST_CASE("FLOW melody: mode entry clears a stale freeze before the LFO resumes") {
     // A _frozen left true from a CLOSED slot follows the lane into the FLOW
     // LFO path, whose branch is `if (!_frozen) _target = _compute_raw()` --

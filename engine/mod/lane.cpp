@@ -173,9 +173,30 @@ void ModLane::set_flow_melody(bool on) {
     // leaves for the FLOW LFO path simply carries it until it enters a melody
     // mode again, which is the correct moment. Testing the pattern rather than
     // the flip gives every one of those cases from one condition.
-    if (_melodic &&
-        _active_pattern().pattern_groove.len != _effective_length())
-        _song.length_pending = true;
+    //
+    // An ASSIGNMENT, not a one-sided raise -- and that is not tidiness, it is
+    // the round trip. SYNTH -> SAMPLER -> SYNTH raises the flag on the way out
+    // (8 != STEPS) and correctly declines to raise it on the way back (8 == 8),
+    // but nothing on the LFO path consumes it, and the return leg's
+    // `_cur_step = -1` above is precisely the condition _apply_preroll_work
+    // waits for -- so a raise-only check rebuilds both patterns and restarts
+    // the SONG ladder on the next sample, for a gesture that changed nothing.
+    // The assignment clears it at the moment the two lengths agree again.
+    //
+    // Clearing here can never lose work another writer owes. The only other
+    // raise is set_step's length delta, and the condition below is the ground
+    // truth that delta approximates: pattern_groove.len IS the length the
+    // phrase was last generated at (expand_pattern_groove writes it, and
+    // derive_turnaround copies pattern A, so both patterns always carry the
+    // same one), so when it equals _effective_length() there is no length work
+    // left to do, whoever asked for it. The other pending flags are separate
+    // fields and are untouched. The `_melodic` guard stays a guard rather than
+    // folding into the assignment: a non-melodic lane can never raise this flag
+    // (both raise sites test _melodic) and never consumes it either, so this
+    // must not start writing one.
+    if (_melodic)
+        _song.length_pending =
+            _active_pattern().pattern_groove.len != _effective_length();
     _update_slew();
 }
 
