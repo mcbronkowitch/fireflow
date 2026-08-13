@@ -171,8 +171,8 @@ All panel layers are 960 x 1520 RGBA at four times Rack panel resolution. The
 board split lands exactly on source row 912; one-half source pixel is about
 0.042 mm, inside the 0.25 mm mechanical-fiducial tolerance. The material
 layers were inspected in generated 75%, 100%, 125%, and 150% image-only review
-composites. They have not received user visual approval and were not captured
-inside Rack because no `Rack.exe` is available.
+composites, and afterwards in real Rack 2.6.6 renders at the same four zoom
+levels. User visual approval of the material layers remains outstanding.
 
 ### KiCad-derived VCV faceplate
 
@@ -214,10 +214,19 @@ normal validation, the guard reruns the compositor from the pinned preview
 entirely in memory and byte-compares the complete expected 960 x 1520 RGBA
 pixel buffer with the committed image; validation writes no file. Consequently
 a manual edit cannot authorize itself by updating PNG hashes or sidecar text.
-Seven explicit alpha-transition scans cross the two mount holes, two
-fader-opening endpoints, two knob apertures, and the diagonal edge. Their
-observed signed edge offsets are compared with the regenerated, source-derived
-transitions and may differ by at most one pixel, 0.084667 mm.
+Seven explicit alpha-transition scans cross the two mount holes, two knob
+apertures, the diagonal edge, and the two fader slots. Each fader scan crosses
+the 0.169 mm web between a mount hole and its adjacent slot, so it records two
+transitions and the slot endpoint is the second of them. Their observed signed
+edge offsets are compared with the regenerated, source-derived transitions and
+may differ by at most one pixel, 0.084667 mm.
+
+That one-pixel figure is the contour scans' own limit, not the tolerance the
+asset as a whole enjoys. The full-buffer byte comparison runs on every
+validation and admits no difference at all, so it rejects a one-pixel edge
+shift that the contour scans would still accept. The scans exist to name
+*which* mechanical feature moved; complete pixel equality is what decides pass
+or fail.
 
 The older `touch2_geometry.py` control centres remain rectified-photography
 evidence. At the exact 1:1 mechanical placement, the comparable knob/fader
@@ -229,8 +238,16 @@ mistaken for the 0.084667 mm mechanical-raster contract or used to fudge the
 master.
 
 Task 9 image-only before/after review composites exist at 75%, 100%, 125%, and
-150% in the ignored SDD workspace. They are not Rack screenshots: `Rack.exe`
-is unavailable, and visual user approval remains outstanding.
+150% in the ignored SDD workspace. Real Rack screenshots were captured
+afterwards from `C:\Program Files\VCV\Rack2Pro\Rack.exe` (Rack Pro 2.6.6) by
+pointing Rack at a throwaway user directory holding only this plugin and
+running its screenshot mode, which renders each module panel and exits:
+
+```powershell
+& "C:\Program Files\VCV\Rack2Pro\Rack.exe" -u <throwaway-user-dir> -t 1
+```
+
+Visual user approval of the result remains outstanding.
 
 ## Tooling and export policy
 

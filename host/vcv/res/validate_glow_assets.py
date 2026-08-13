@@ -33,7 +33,11 @@ FACEPLATE_MANIFEST = {
         "745af5799a38e13bf21eec80266137818832cf3a1e8cfdba858796725d518ba1",
     "fireflow-source-preview-sha256":
         "9d196304083c09d7a2fb9b22e34d1214d775fdeb43cd8640a12a8ca908674e1b",
-    "fireflow-transform-mm": "s=1;tx=0.1900015;ty=8.5",
+    # Formatted from the constants the compositor actually uses, so changing
+    # FACEPLATE_TX_MM/FACEPLATE_TY_MM cannot leave a stale literal agreeing
+    # with itself.
+    "fireflow-transform-mm": "s=1;tx=%.10g;ty=%.10g" % (FACEPLATE_TX_MM,
+                                                        FACEPLATE_TY_MM),
 }
 
 # This manifest is a review sidecar for geometry generated from the pinned DXF.
@@ -49,7 +53,15 @@ FACEPLATE_FIDUCIALS_MM = {
         (75.774203803, 60.997399711 - FIDUCIAL_TOLERANCE_MM),
     "knob_1": (17.163203227, 36.903498480),
     "knob_6": (63.713604201, 54.048496065),
-    "diagonal_opening": (70.000000000, 10.000000000),
+}
+
+# The diagonal is an edge, not a point, so it has no fiducial coordinate.  This
+# is a scan definition instead: one horizontal cut across the board at this row
+# must cross the diagonal exactly once, anywhere inside the search window.  The
+# crossing position is read from the regenerated image, never asserted here.
+DIAGONAL_PROBE_MM = {
+    "row_y": 10.000000000,
+    "search_x": (25.000000000, 78.000000000),
 }
 
 # Only like-for-like centre comparisons belong here.  The VCV centres came
@@ -428,9 +440,11 @@ def _edge_probe_specs():
         rack_x, rack_y = x + FACEPLATE_TX_MM, y + FACEPLATE_TY_MM
         probes.append((probe_name, "y", rack_x,
                        rack_y - 1.0, rack_y + 1.0, 2))
-    _x, y = FACEPLATE_FIDUCIALS_MM["diagonal_opening"]
-    probes.append(("diagonal", "x", y + FACEPLATE_TY_MM,
-                   25.0 + FACEPLATE_TX_MM, 78.0 + FACEPLATE_TX_MM, 1))
+    search_start, search_end = DIAGONAL_PROBE_MM["search_x"]
+    probes.append(("diagonal", "x",
+                   DIAGONAL_PROBE_MM["row_y"] + FACEPLATE_TY_MM,
+                   search_start + FACEPLATE_TX_MM,
+                   search_end + FACEPLATE_TX_MM, 1))
     return tuple(probes)
 
 

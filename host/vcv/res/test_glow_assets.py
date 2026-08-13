@@ -242,10 +242,11 @@ def test_enlarged_fader_endpoint_is_rejected_by_edge_transition():
 def test_shifted_diagonal_contour_is_rejected_by_edge_transition():
     with tempfile.TemporaryDirectory() as folder:
         write_valid_assets(folder)
-        _cx, cy = validator.FACEPLATE_FIDUCIALS_MM["diagonal_opening"]
-        _px, py = pixel_xy(0.0, cy + validator.FACEPLATE_TY_MM)
-        start, _ = pixel_xy(25.0 + validator.FACEPLATE_TX_MM, 0.0)
-        end, _ = pixel_xy(78.0 + validator.FACEPLATE_TX_MM, 0.0)
+        search_start, search_end = validator.DIAGONAL_PROBE_MM["search_x"]
+        _px, py = pixel_xy(0.0, validator.DIAGONAL_PROBE_MM["row_y"] +
+                           validator.FACEPLATE_TY_MM)
+        start, _ = pixel_xy(search_start + validator.FACEPLATE_TX_MM, 0.0)
+        end, _ = pixel_xy(search_end + validator.FACEPLATE_TX_MM, 0.0)
         mutate_faceplate(folder, lambda image, width, height:
                          extend_opening_at_transition(
                              image, width, height, axis="x", fixed=py,
