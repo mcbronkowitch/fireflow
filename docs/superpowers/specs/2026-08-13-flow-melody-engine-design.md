@@ -581,24 +581,47 @@ derives from the other. Do not wire `set_flow_melody` at that per-tick site.
 *is* a note — but it is not in the SYNTH/WAVE/BODY/ZAP list §2.3 implies, and
 `wave_formant_sweep.json` puts a test tone on part B (§6.5).
 
-**`set_flow_melody` needs no length check, and here is why** — stated because its
-absence would otherwise read as an oversight after draft 2 required one. Flipping
-the flag changes `_effective_length()` only in FLOW, between `kFlowPhraseSlots` and
-`_steps`. During the interval in which the flag is `false` the lane is on the FLOW
-LFO path, where §4.6 early-returns and nothing reads or regenerates the melody
-state; on the way back the length returns to 8 and matches the `pattern_groove`
-built for it. The mismatch exists only where it is unread. The setter still clears
-`_frozen` and primes the two counters (§4.8) and re-runs `_update_slew()` (§4.11).
+**`set_flow_melody` carries a one-sided length check.** Flipping the flag changes
+`_effective_length()` in FLOW, between `kFlowPhraseSlots` and `_steps`, and the two
+directions are not symmetric:
+
+- **Entering melody mode**, the pattern may have been generated at a different
+  length — at boot, whenever a host has pushed a STEPS other than 8 before the
+  first push of this flag. `pitch[]` is then filled only for `[0, _steps)`
+  (`phrase_gen.h:165-200`) and slots past it are zero, so this **must** raise
+  `_song.length_pending`.
+- **Leaving melody mode**, it must not. The lane moves to the FLOW LFO path where
+  §4.6 early-returns and nothing reads or regenerates the melody state; the groove
+  is left at 8 and matches again on the way back. Raising the flag here would sit
+  until the deck returned and then regenerate the melody for no reason.
+
+So the check is written against the pattern rather than against the flip, which
+makes it one-sided by construction:
+
+```cpp
+void ModLane::set_flow_melody(bool on) {
+    _flow_melody  = on;
+    _frozen       = false;                    // §4.8
+    _since_fire   = kFlowNoteMinSamples;      // §4.8, §4.10
+    _since_phrase = kFlowPhraseMinSamples;
+    if (_flow_melody_on() &&
+        _active_pattern().pattern_groove.len != _effective_length())
+        _song.length_pending = true;
+    _update_slew();                           // §4.11
+}
+```
+
+`_apply_preroll_work` — whose guard §4.6 widens — then applies it **before the
+first slot**, because `_cur_step < 0` still holds on the first `process()` call.
+Both patterns are always built at the same length, so testing `_active_pattern()`
+is enough.
 
 **Boot ordering.** `_generate_pattern_a()` runs inside `ModLane::init` and reads
 `_effective_length()` → `_flow_melody`. Order: `Part::init` calls `_mod.init(...)`
 first (flag still `false`, pattern generated at `_steps`, which defaults to 8), then
-pushes `set_flow_melody(...)`. With the default `_steps` of 8 the lengths agree and
-nothing is pending. Where a host has already pushed a different STEPS,
-`length_pending` is raised and `_apply_preroll_work` — whose guard §4.6 widens —
-applies it **before the first slot**, because `_cur_step < 0` still holds on the
-first `process()` call. `Part::init` is called again mid-session by the VCV host (the
-`_step_seen` comment at `part.cpp:47` documents this) and the same order holds.
+pushes `set_flow_melody(...)`, whose check above closes any gap. `Part::init` is
+called again mid-session by the VCV host (the `_step_seen` comment at `part.cpp:47`
+documents this) and the same order holds on every call.
 
 ## 6. Consequences
 
