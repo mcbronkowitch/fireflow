@@ -2,6 +2,10 @@
 
 #include "vcv/src/glow_panel.hpp"
 
+// doctest stringifies the compared values, and the MSVC STL declares
+// operator<<(ostream&, string_view) in <string_view> without defining
+// basic_ostream. libstdc++ happens to pull it in; clang + MSVC STL does not.
+#include <ostream>
 #include <string_view>
 
 namespace panel = spkyvcv::glow_panel;
