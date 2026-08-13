@@ -2,6 +2,9 @@
 #include <doctest/doctest.h>
 #include <cstring>
 #include <string>
+#include "vcv/src/generated_flow_panel.hpp"
+#include "vcv/src/glow_panel.hpp"
+#include "vcv/src/pad_geometry.hpp"
 #include "vcv/src/touch_pads.hpp"
 #include "flow/taste.h"
 #include "flow/terrain_code.h"
@@ -9,6 +12,22 @@
 using namespace spky;
 using namespace spky::flow;
 using namespace spkyvcv;
+
+TEST_CASE("pads: every generated centre is inside its exact physical "
+          "electrode and retains the 10+2 zone split") {
+    using namespace spkyvcv::glow;
+    const auto& bindings = spkyvcv::glow_panel::padBindings();
+    REQUIRE(bindings.size() == 12);
+    for (int i = 0; i < int(bindings.size()); ++i) {
+        REQUIRE(bindings[i].shape != nullptr);
+        const PadShape& shape = *bindings[i].shape;
+        INFO(shape.id);
+        CHECK(spkyvcv::pad_geometry::pointInClosedCatmullRom(
+            shape.points, shape.pointCount, shape.centre));
+        CHECK(shape.zone == (i < 10 ? PadZone::LowerTouch
+                                    : PadZone::UpperRear));
+    }
+}
 
 // A helper that builds the 12-bool "which pads are down" vector.
 static void press(bool* d, int pad) {

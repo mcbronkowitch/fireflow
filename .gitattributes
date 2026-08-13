@@ -1,0 +1,12 @@
+# Files whose SHA-256 is pinned in code must never be line-ending converted on
+# checkout. `git config core.autocrlf` is `true` on the development machine, and
+# a KiCad board is text, so a fresh clone or a new worktree receives CRLF while
+# the committed blob is LF. The pinned hash then fails on a tree that is in fact
+# correct -- the guard reports "physical-master hash is stale" for a file nobody
+# touched. The pin lives in host/vcv/res/validate_glow_assets.py
+# (FACEPLATE_MANIFEST["fireflow-source-board-sha256"]).
+#
+# The other pinned artefacts need no entry: the KiCad preview PNG is detected as
+# binary and left alone, and the official DXF is local-only under .reference/.
+*.kicad_pcb -text
+*.kicad_dru -text

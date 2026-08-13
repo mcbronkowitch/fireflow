@@ -1,0 +1,31 @@
+(version 1)
+
+# Vendor-neutral pre-production defaults for mechanical/artwork review only.
+# These values are not an approved Synthux manufacturing profile.
+
+(rule "Conservative board-edge clearance"
+  (constraint edge_clearance (min 0.25mm)))
+
+(rule "Conservative drilled-hole spacing"
+  (constraint hole_to_hole (min 0.25mm)))
+
+(rule "Conservative copper track width"
+  (constraint track_width (min 0.20mm)))
+
+(rule "Conservative copper graphic width"
+  (condition "A.Type == 'Graphic' && A.Layer == 'F.Cu'")
+  (constraint assertion "A.Line_Width >= 0.20mm"))
+
+(rule "Conservative annular width"
+  (constraint annular_width (min 0.15mm)))
+
+(rule "Conservative silkscreen clearance"
+  (constraint silk_clearance (min 0.15mm)))
+
+(rule "Conservative silkscreen text"
+  (condition "A.Type == '*Text' && A.Layer == 'F.SilkS'")
+  (constraint assertion "A.Height >= 0.80mm && A.Thickness >= 0.10mm"))
+
+(rule "No bridged solder-mask apertures"
+  (severity error)
+  (constraint bridged_mask))

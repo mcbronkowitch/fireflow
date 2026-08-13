@@ -137,6 +137,9 @@ add_executable(spky_tests
     tests/test_vcv_link_migration.cpp
     tests/test_glow_ui.cpp
     tests/test_touch_pads.cpp
+    tests/test_pad_geometry.cpp
+    host/vcv/src/glow_panel.cpp
+    tests/test_glow_panel_manifest.cpp
     tests/test_choke.cpp
     tests/test_filt.cpp
     tests/test_mod_tide.cpp
@@ -285,6 +288,14 @@ add_test(
 # to configure at all rather than silently skipping these -- consistent with
 # wavetable_bank_fresh just above, which already depends on the same
 # ${Python3_EXECUTABLE} unconditionally.
+add_custom_target(glow_assets_guard ALL
+    COMMAND ${Python3_EXECUTABLE} res/validate_glow_assets.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
+    COMMENT "Validating Glow panel raster assets"
+)
+
+add_dependencies(render glow_assets_guard)
+
 add_test(
     NAME panel_guard
     COMMAND ${Python3_EXECUTABLE} res/test_panel.py
@@ -308,3 +319,13 @@ add_test(
     COMMAND ${Python3_EXECUTABLE} res/test_flow_panel.py
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
 )
+
+# Keep the asset validator independently visible in CTest.  flow_panel_guard
+# imports and runs the same contract first, so it also remains the single
+# guard used by existing build jobs.
+add_test(
+    NAME glow_assets_guard
+    COMMAND ${Python3_EXECUTABLE} res/validate_glow_assets.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
+)
+set_tests_properties(flow_panel_guard PROPERTIES DEPENDS glow_assets_guard)

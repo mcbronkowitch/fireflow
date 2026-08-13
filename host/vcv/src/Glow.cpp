@@ -14,9 +14,11 @@
 #include <cstdio>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 #include "plugin.hpp"
 #include "generated_flow_panel.hpp"
+#include "glow_panel.hpp"
 #include "glow_ui.hpp"
 #include "touch_pads.hpp"
 #include "flow_patch_bridge.hpp"   // encode_base/decode_base: the one encoding
@@ -31,6 +33,7 @@
 #include "center/center.h"
 
 using namespace spkyvcv::glow;
+using namespace spkyvcv::glow_panel;
 
 // The module indexes params[MOTION + m] with m a spky::flow::Macro, so the
 // panel's first six params must BE the macro enum. res/test_flow_panel.py
@@ -78,11 +81,10 @@ static const char* kMacroNames[spky::flow::MACRO_COUNT] = {
     "MOTION", "DENSITY", "BRIGHT", "PACE", "WANDER", "SPACE"
 };
 
-// A pad's NAME is runtime data (spec 6.3), so it cannot come from the
-// generated header the way every other caption does -- configButton fixes its
-// string at construction. This is the one deliberate carve-out from "the panel
-// table is the only source": the tooltip label is computed live from the
-// module's Place array, while the plate itself still prints only the number.
+// A pad's optional place NAME is runtime data (spec 6.3), so it cannot come
+// from the generated header. The stable electrode identity comes from the
+// shared hardware binding; the optional place name is appended live to that
+// tooltip/screen-reader label. The plate itself prints no pad identifier.
 //
 // The `[base]` marker is the other half of the same rule (spec 2026-08-11
 // §6): a place with a hand-authored overlay is NOT fully described by its
@@ -94,8 +96,11 @@ static const char* kMacroNames[spky::flow::MACRO_COUNT] = {
 struct PadQuantity : SwitchQuantity {
     const spkyvcv::Place* place = nullptr;
     int pad = 0;
+    std::string accessibleName;
     std::string getLabel() override {
-        std::string s = string::f("Pad %d", pad + 1);
+        std::string s = accessibleName.empty()
+                      ? string::f("Pad %d", pad + 1)
+                      : accessibleName;
         if (!place) return s;
         if (place->name[0] != '\0') { s += "  "; s += place->name; }
         if (place->has_base) s += "  [base]";
@@ -290,10 +295,14 @@ struct Glow : Module {
                     // configButton clears randomizeEnabled for us (Module.hpp:169),
                     // which is what we want: a Randomize that pokes twelve
                     // momentary pads is a fault, not a dice roll.
-                    const int i = c.id - PAD_1;
-                    auto* pq = configButton<PadQuantity>(c.id, c.label);
+                    const PadBinding* binding = padBindingForParam(c.id);
+                    if (!binding) break;
+                    const int i = binding->paramId - PAD_1;
+                    auto* pq = configButton<PadQuantity>(
+                        binding->paramId, binding->accessibleName);
                     pq->place = &places[i];
                     pq->pad = i;
+                    pq->accessibleName = binding->accessibleName;
                     pq->description = c.tip;
                     break;
                 }
@@ -306,20 +315,22 @@ struct Glow : Module {
                     if (auto* pq = paramQuantities[c.id])
                         pq->randomizeEnabled = false;
                     break;
-                case WK_SWITCH:
+                case WK_SWITCH: {
                     // The three position names are RUNTIME TOOLTIP strings, not
                     // panel captions: Rack shows them in the hover readout and
-                    // the context menu, and nothing here reaches the plate --
-                    // which prints no switch caption at all, as
-                    // test_only_the_pads_carry_printed_captions enforces. Same
-                    // carve-out from "the panel table is the only source" that
-                    // PadQuantity documents above, and for the same reason: a
-                    // caption a generator could print would have to be printed.
-                    configSwitch(c.id, 0.f, 2.f, 0.f, c.tip,
+                    // context menu. The shared binding owns the stable ID and
+                    // 0/1/2 range; no switch caption is printed on the plate.
+                    const ToggleBinding* binding = toggleBindingForParam(c.id);
+                    if (!binding) break;
+                    configSwitch(binding->paramId,
+                                 binding->minValue,
+                                 binding->maxValue,
+                                 binding->defaultValue, c.tip,
                                  { "Down", "Centre", "Up" });
-                    if (auto* pq = paramQuantities[c.id])
+                    if (auto* pq = paramQuantities[binding->paramId])
                         pq->randomizeEnabled = false;
                     break;
+                }
                 // Named rather than defaulted so a future kind is a compile
                 // error here instead of a param that silently gets no config.
                 case WK_OUT: break;
@@ -1086,8 +1097,11 @@ static NVGcolor panelRGB(unsigned c) {
     return nvgRGB((c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff);
 }
 
-// The SVG's <text> is invisible to NanoSVG, so the lettering is redrawn here
-// from the generated tables -- the same reason the big module has PanelText.
+// The layered hardware rasters contain no generated runtime lettering, so the
+// small control/output captions are redrawn from the generated tables. The
+// plate itself carries no text: the masthead that used to sit above the
+// controls was drawn under electrodes P10/P11 and is gone, so there is no
+// kTexts table to loop over.
 struct GlowText : Widget {
     void draw(const DrawArgs& args) override {
         std::shared_ptr<window::Font> font =
@@ -1106,8 +1120,6 @@ struct GlowText : Widget {
             const Vec p = mm2px(Vec(xmm, ymm));
             nvgText(args.vg, p.x, p.y, s, nullptr);
         };
-        for (const auto& t : kTexts)
-            put(t.mm.x, t.mm.y, t.size, t.rgb, t.anchor, t.str);
         for (const auto& c : kParamCtls)
             put(c.lbl.x, c.lbl.y, c.lblSize, c.lblRgb, c.anchor, c.label);
         for (const auto& c : kOutputCtls)
@@ -1175,10 +1187,12 @@ struct TouchPlate : app::Switch {
         momentary = true;
     }
 
-    void configure(Glow* module, int padIndex) {
-        mod = module;
-        pad = padIndex;
-        shape = &kPadShapes[padIndex];
+    void configure(const spkyvcv::glow::PadShape& padShape, int paramId, std::string accessibleName) {
+        mod = dynamic_cast<Glow*>(module);
+        pad = paramId - PAD_1;
+        shape = &padShape;
+        if (engine::ParamQuantity* quantity = getParamQuantity())
+            quantity->name = std::move(accessibleName);
         box.size = mm2px(Vec(shape->max.x - shape->min.x,
                              shape->max.y - shape->min.y));
     }
@@ -1189,15 +1203,44 @@ struct TouchPlate : app::Switch {
         return mm2px(Vec(x - shape->min.x, y - shape->min.y));
     }
 
+    XY localPoint(const math::Vec& local) const {
+        const float pixelsPerMm = mm2px(1.f);
+        return {shape->min.x + local.x / pixelsPerMm,
+                shape->min.y + local.y / pixelsPerMm};
+    }
+
+    bool containsLocalPoint(const math::Vec& local) const {
+        const XY panelPoint = localPoint(local);
+        if (panelPoint.x < shape->min.x || panelPoint.x > shape->max.x ||
+            panelPoint.y < shape->min.y || panelPoint.y > shape->max.y) {
+            return false;
+        }
+        return spkyvcv::pad_geometry::pointInClosedCatmullRom(
+            shape->points, shape->pointCount, panelPoint);
+    }
+
+    void onButton(const ButtonEvent& event) override {
+        if (!containsLocalPoint(event.pos))
+            return;
+        app::Switch::onButton(event);
+    }
+
+    void onHover(const HoverEvent& event) override {
+        if (!containsLocalPoint(event.pos))
+            return;
+        app::Switch::onHover(event);
+    }
+
     void beginPadPath(NVGcontext* vg, float scale) const {
+        const int pointCount = static_cast<int>(shape->pointCount);
         auto pt = [&](int i) {
-            const auto& q = shape->points[(i + kPadPointCount) % kPadPointCount];
+            const auto& q = shape->points[(i + pointCount) % pointCount];
             return localPoint(q, scale);
         };
         Vec p1 = pt(0);
         nvgBeginPath(vg);
         nvgMoveTo(vg, p1.x, p1.y);
-        for (int i = 0; i < kPadPointCount; ++i) {
+        for (int i = 0; i < pointCount; ++i) {
             Vec p0 = pt(i - 1), p2 = pt(i + 1), p3 = pt(i + 2);
             Vec c1(p1.x + (p2.x - p0.x) / 6.f, p1.y + (p2.y - p0.y) / 6.f);
             Vec c2(p2.x - (p3.x - p1.x) / 6.f, p2.y - (p3.y - p1.y) / 6.f);
@@ -1216,9 +1259,11 @@ struct TouchPlate : app::Switch {
         const bool refused = mod && mod->refuse.active(mod->flow.now_s());
         const spkyvcv::PadVisualState state =
             spkyvcv::pad_visual_state(live, excursion, refused);
+        const unsigned outer = state == spkyvcv::PadVisualState::REFUSED
+                             ? kPadRefused
+                             : state == spkyvcv::PadVisualState::IDLE
+                             ? kPadCopperDim : kPadCopper;
         if (state != spkyvcv::PadVisualState::IDLE) {
-            const unsigned outer = state == spkyvcv::PadVisualState::REFUSED
-                                 ? kPadRefused : kPadCopper;
             beginPadPath(args.vg, 1.f);
             NVGcolor halo = panelRGB(outer);
             halo.a = 0.18f;
@@ -1226,17 +1271,18 @@ struct TouchPlate : app::Switch {
             nvgStrokeWidth(args.vg, mm2px(kPadGlowWidth));
             nvgStroke(args.vg);
 
-            beginPadPath(args.vg, 1.f);
-            nvgStrokeColor(args.vg, panelRGB(outer));
+        }
+
+        beginPadPath(args.vg, 1.f);
+        nvgStrokeColor(args.vg, panelRGB(outer));
+        nvgStrokeWidth(args.vg, mm2px(kPadStrokeWidth));
+        nvgStroke(args.vg);
+
+        if (state == spkyvcv::PadVisualState::EXCURSION) {
+            beginPadPath(args.vg, kPadInnerScale);
+            nvgStrokeColor(args.vg, panelRGB(kPadGreen));
             nvgStrokeWidth(args.vg, mm2px(kPadStrokeWidth));
             nvgStroke(args.vg);
-
-            if (state == spkyvcv::PadVisualState::EXCURSION) {
-                beginPadPath(args.vg, kPadInnerScale);
-                nvgStrokeColor(args.vg, panelRGB(kPadGreen));
-                nvgStrokeWidth(args.vg, mm2px(kPadStrokeWidth));
-                nvgStroke(args.vg);
-            }
         }
         app::Switch::draw(args);
     }
@@ -1245,12 +1291,28 @@ struct TouchPlate : app::Switch {
 struct GlowWidget : ModuleWidget {
     GlowWidget(Glow* module) {
         setModule(module);
-        setPanel(createPanel(asset::plugin(pluginInstance, "res/Glow.svg")));
+        box.size = Vec(16 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT);
+        setPanel(new GlowHardwarePanel());
+        box.size = Vec(16 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT);
 
         auto* labels = new GlowText();
         labels->box.size = box.size;
         addChild(labels);
 
+        // Pass 1: feedback and hit targets. Keeping all twelve pads directly
+        // above the hardware raster makes P10/P11 interactive over the rear
+        // image, while later physical controls still win where hardware
+        // actually occupies the lower board.
+        for (const PadBinding& binding : padBindings()) {
+            const auto& s = *binding.shape;
+            auto* p = createParam<TouchPlate>(mm2px(Vec(s.min.x, s.min.y)),
+                                               module, binding.paramId);
+            p->configure(s, binding.paramId, binding.accessibleName);
+            addParam(p);
+        }
+
+        // Pass 2: static controls, all centred from the generated physical
+        // table. No control position is duplicated in pixels here.
         for (const auto& c : kParamCtls) {
             const Vec pos = mm2px(Vec(c.mm.x, c.mm.y));
             switch (c.kind) {
@@ -1269,15 +1331,7 @@ struct GlowWidget : ModuleWidget {
                     addParam(createParamCentered<RoundSmallBlackKnob>(pos, module,
                                                                       c.id));
                     break;
-                case WK_PAD: {
-                    const int i = c.id - PAD_1;
-                    const auto& s = kPadShapes[i];
-                    auto* p = createParam<TouchPlate>(mm2px(Vec(s.min.x, s.min.y)),
-                                                       module, c.id);
-                    p->configure(module, i);
-                    addParam(p);
-                    break;
-                }
+                case WK_PAD: break;
                 case WK_FADER:
                     // VCVSlider is 19.843 x 76.535 px at 75 DPI = 6.72 x 25.92
                     // mm, handle 3.98 mm. The board's fader measures about
@@ -1285,33 +1339,22 @@ struct GlowWidget : ModuleWidget {
                     // fit, recorded so nobody re-derives it.
                     addParam(createParamCentered<VCVSlider>(pos, module, c.id));
                     break;
-                case WK_SWITCH:
-                    // CKSSThree, not NKK. Both have three positions, so "the
-                    // board's switches are centre-off, two digital pins each"
-                    // -- true, and the reason this is a three-position widget
-                    // at all -- does not choose between them. Size does.
-                    // Measured off res/ComponentLibrary at Rack's 75 DPI:
-                    // NKK_0.svg is 10.84 x 14.86 mm against the 5.00 x 9.00 mm
-                    // this plate prints, i.e. 2.2x the printed footprint, while
-                    // CKSSThree_0.svg is 4.56 x 9.60 and fits it.
-                    //
-                    // The overlap is not cosmetic. At NKK's size SW_L covers
-                    // 1.90 x 8.16 mm of PAD_2, and SW_R reaches into PAD_3 and
-                    // PAD_8. Switches come after pads in kParamCtls and Rack
-                    // hit-tests children in reverse order, so the switch takes
-                    // the press and those three pads lose 10-23 % of their
-                    // clickable area. Enlarging the printed footprint to match
-                    // NKK is not the alternative: both switches are mounted
-                    // THROUGH the pad field on the real board and there is no
-                    // room there (see "the pad field" in gen_flow_panel.py).
-                    addParam(createParamCentered<CKSSThree>(pos, module, c.id));
-                    break;
+                case WK_SWITCH: break;
                 case WK_OUT: break;
             }
         }
         for (const auto& c : kOutputCtls)
             addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(c.mm.x, c.mm.y)),
                                                        module, c.id));
+
+        // Pass 3: only the moving lever frame. The neutral base is part of the
+        // touch-board layer, and app::Switch retains the existing snapped
+        // 0/1/2 parameter semantics and patch persistence.
+        for (const ToggleBinding& binding : toggleBindings()) {
+            const auto& c = kParamCtls[binding.paramId];
+            addParam(createParamCentered<GlowToggle>(
+                mm2px(Vec(c.mm.x, c.mm.y)), module, binding.paramId));
+        }
 
         addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
         addChild(createWidget<ScrewSilver>(

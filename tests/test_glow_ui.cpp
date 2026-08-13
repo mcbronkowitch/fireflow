@@ -2,6 +2,8 @@
 #include <doctest/doctest.h>
 #include <cstdio>
 #include <cstring>
+#include "vcv/src/generated_flow_panel.hpp"
+#include "vcv/src/glow_panel.hpp"
 #include "vcv/src/glow_ui.hpp"
 #include "flow/taste.h"
 #include "flow/terrain_code.h"
@@ -9,6 +11,64 @@
 using namespace spky;
 using namespace spky::flow;
 using namespace spkyvcv;
+
+TEST_CASE("glow panel: physical P00-P11 map in order to PAD_1-PAD_12") {
+    using namespace spkyvcv::glow;
+    namespace panel = spkyvcv::glow_panel;
+    static constexpr const char* expectedNames[] = {
+        "Touch electrode P00", "Touch electrode P01",
+        "Touch electrode P02", "Touch electrode P03",
+        "Touch electrode P04", "Touch electrode P05",
+        "Touch electrode P06", "Touch electrode P07",
+        "Touch electrode P08", "Touch electrode P09",
+        "Touch electrode P10", "Touch electrode P11",
+    };
+
+    const auto& bindings = panel::padBindings();
+    REQUIRE(bindings.size() == 12);
+    for (int i = 0; i < 12; ++i) {
+        const panel::PadBinding& binding = bindings[i];
+        INFO("physical pad " << i);
+        REQUIRE(binding.shape != nullptr);
+        CHECK(std::string(binding.shape->id) == "P" +
+              (i < 10 ? std::string("0") : std::string()) +
+              std::to_string(i));
+        CHECK(binding.shape->pointCount == kPadShapes[i].pointCount);
+        CHECK(binding.shape->centre.x ==
+              doctest::Approx(kPadShapes[i].centre.x));
+        CHECK(binding.shape->centre.y ==
+              doctest::Approx(kPadShapes[i].centre.y));
+        CHECK(binding.shape->min.x == doctest::Approx(kPadShapes[i].min.x));
+        CHECK(binding.shape->min.y == doctest::Approx(kPadShapes[i].min.y));
+        CHECK(binding.shape->max.x == doctest::Approx(kPadShapes[i].max.x));
+        CHECK(binding.shape->max.y == doctest::Approx(kPadShapes[i].max.y));
+        CHECK(binding.paramId == PAD_1 + i);
+        CHECK(binding.accessibleName == expectedNames[i]);
+        CHECK(panel::padBindingForParam(PAD_1 + i) == &binding);
+    }
+    CHECK(panel::padBindingForParam(PAD_1 - 1) == nullptr);
+    CHECK(panel::padBindingForParam(PAD_12 + 1) == nullptr);
+}
+
+TEST_CASE("glow panel: both custom toggles retain the original three-position "
+          "parameter contract") {
+    namespace panel = spkyvcv::glow_panel;
+    const auto& bindings = panel::toggleBindings();
+    REQUIRE(bindings.size() == 2);
+    CHECK(bindings[0].paramId == spkyvcv::glow::SW_L);
+    CHECK(bindings[1].paramId == spkyvcv::glow::SW_R);
+    for (const panel::ToggleBinding& binding : bindings) {
+        CHECK(binding.minValue == doctest::Approx(0.f));
+        CHECK(binding.maxValue == doctest::Approx(2.f));
+        CHECK(binding.defaultValue == doctest::Approx(0.f));
+        CHECK(binding.positionCount == 3);
+        for (int value = 0; value < binding.positionCount; ++value)
+            CHECK(panel::switchFrameIndex(float(value)) == value);
+        CHECK(panel::toggleBindingForParam(binding.paramId) == &binding);
+    }
+    CHECK(panel::toggleBindingForParam(spkyvcv::glow::SW_L - 1) == nullptr);
+    CHECK(panel::toggleBindingForParam(spkyvcv::glow::SW_R + 1) == nullptr);
+}
 
 TEST_CASE("glow: pad visual states have one unambiguous precedence") {
     CHECK(pad_visual_state(false, false, false) == PadVisualState::IDLE);
