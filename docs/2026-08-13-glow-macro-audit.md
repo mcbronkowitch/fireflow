@@ -92,6 +92,13 @@ not exposed on `Instrument` at all, so no host can reach them.
 
 ## Result 3 — DENSITY is dead in the free mode
 
+**Historical as of the FLOW melody engine (2026-08-13, `flow-melody-engine`
+branch): DENSITY now selects how many of the phrase's slots the melodic lane
+uses in FLOW, and moves audio there.** The measurement below is unedited — it
+is a record of what was true before that work, not a live description of the
+free mode today. See `docs/roadmap.md`'s "FLOW melody engine" entry under
+"Done" for what changed and what is still unexplained.
+
 Population of 40 terrains, DENSITY swept 0 → 1 with every other macro parked:
 
 ```
@@ -273,7 +280,7 @@ Three readings worth carrying forward:
 | Macro | Verdict |
 |---|---|
 | MOTION | alive, but carried by DRIFT alone once the reverb leaves; DRIFT is 3× weaker in STEP (0.46 vs 1.44), i.e. weakest on the three archetypes that are mostly STEP. Its second mechanism — scaling every other macro's weather depth, `flow.cpp:449` — is real and invisible to the per-target table |
-| DENSITY | dead on every FLOW terrain, all three targets |
+| DENSITY | dead on every FLOW terrain, all three targets — **historical, see Result 3's note** |
 | BRIGHT | alive; `FILT_A/B` carry it. `REV_TONE` (0.03) and `REV_DECAY` (0.03) are decoration |
 | PACE | alive in both modes |
 | WANDER | `FORM_A` and `SONG_A` dead on 40/40; `VARIATION_A` dead on 17/40. Effectively a VARIATION-only knob, and that half only works in STEP |
@@ -337,6 +344,36 @@ belong to the FLOW melody engine and one to the SHAPE/SMOOTH rework.
   on only 1 of 6 STEP terrains, so the SHAPE blend is not the whole story.
   `sh` also carries `_ev_shape`, `_shape_offset` (DRIFT writes it every control
   tick) and `_kick_shape`. Belongs to the SHAPE/SMOOTH rework.
+- **FORM/SONG re-measured under task 10** (flow-melody-engine, 2026-08-13):
+  `tests/test_param_impact.cpp` no longer excludes FORM/SONG, and its
+  `apply_patch()` now forces `DEPTH_A/B` to 1.0 and `LANE_PITCH`'s `_active`
+  true whenever the swept parameter is `FORM_A/B` or `SONG_A/B`, to rule out
+  a downstream attenuator as the cause of a measured zero (part 10's brief,
+  decided in advance). Under that control: `FORM_A`/`FORM_B` move audio only
+  in FLOW — consistent with the SHAPE-blend story above, since
+  `ModLane::_compute_raw()` returns the phrase pitch directly under
+  `_flow_melody_on()` (task 8) and no longer goes through the S&H blend that
+  STEP still does. `SONG_A` moves audio only in **STEP** — the opposite
+  direction, unexplained. `SONG_B` is dead in **both** modes even under the
+  same DEPTH/`_active` control — also unexplained, and not the same failure
+  shape as `SONG_A`'s. Neither `SONG_A`'s nor `SONG_B`'s asymmetry is
+  DEPTH/`_active` masking (both were controlled for); both are recorded as
+  expected-set entries in `test_param_impact.cpp` rather than investigated
+  further, per task 10's scope. Belongs to the SHAPE/SMOOTH rework, same as
+  the line above.
+- **Follow-up on the above (task 10 review, 2026-08-13):** the first pass at
+  this recorded `SONG_A`'s reversed direction and `SONG_B`'s deadness in the
+  same `expected[]` array as the FORM_A/FORM_B/GRIT/FLUXMIX/LINK entries that
+  DO have a traced mechanism, which let the gate assert an untraced anomaly
+  as if it were proven correct. `tests/test_param_impact.cpp` now separates
+  each gate's expectations into `expected_proven[]` (a mechanism is stated in
+  the comment) and `expected_untraced[]` (measured, no mechanism established,
+  presence there pins current behaviour without claiming it is right) — the
+  two are unioned into the array the comparison actually runs against, so the
+  gate's pass/fail behaviour is unchanged. `SONG_A` (mode-exclusive gate) and
+  `SONG_B` (dead-parameter gate) are both in their respective
+  `expected_untraced[]` groups. No measurement changed; this is a
+  classification fix only.
 - **The §5 table** still needs re-measuring at the centred operating point; see
   the correction under Method.
 - **Where MASTER goes** once REVERB takes the right fader.

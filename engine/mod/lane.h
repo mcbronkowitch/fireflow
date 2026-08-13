@@ -29,6 +29,13 @@ public:
     void set_variation(float v);      // -1..+1: renew / loop (0) / grow
 
     void set_melodic(bool m) { _melodic = m; }
+    // FLOW melody mode (spec 2026-08-13 flow-melody-engine). Off by default:
+    // the boot value is the legacy continuous-LFO behaviour and the new state
+    // has to be asked for, so a missing push from Part is a silent revert to
+    // the old sound rather than a silent adoption of the new one. Part drives
+    // this from the engine id -- SAMPLER and BBD keep the LFO, because on those
+    // decks the PITCH lane is not a note.
+    void set_flow_melody(bool on);
     void set_form(Principle form);
     Principle form() const { return _song.selected_form; }
     void set_song(SongMode song);
@@ -44,6 +51,18 @@ public:
     uint8_t cadence_slot_for_test() const { return _song.cadence_slot; }
     float bound_a_opening_for_test() const { return _song.bound_a_opening; }
     float rate_hz_for_test() const { return _rate_hz; }
+    // The length the phrase is CURRENTLY supposed to have: kFlowPhraseSlots in
+    // FLOW melody mode, the (clamped) STEPS count everywhere else. Exposed so a
+    // gate can compare it against the length the pattern was actually generated
+    // at (pattern_for_test(...).pattern_groove.len) instead of hard-coding one
+    // side of that comparison -- the invariant this lane has to keep across a
+    // mode change is that the two agree.
+    int effective_length_for_test() const { return _effective_length(); }
+    // The active pattern's generated groove length, the other half of that
+    // comparison, without the caller having to route through active_pattern().
+    int pattern_groove_len_for_test() const {
+        return static_cast<int>(_active_pattern().pattern_groove.len);
+    }
     // Real motion, not the commanded rate: every Hz observer above stays
     // correct even while the phase accumulator is frozen solid, so only a
     // count of actual wraps can tell a stalled lane from a healthy one
@@ -172,6 +191,15 @@ private:
     void  _mutate_slot(int slot);   // GROW: variation dice + pitch walk on a fired step
     void  _fill_walk();             // deterministic contour-walk prefill (non-melodic lanes)
     bool  _effective_gate(int slot) const;  // melodic: groove rank < DENSE depth; else all-true
+    // "this lane is running the FLOW melody engine right now"
+    bool _flow_melody_on() const { return _melodic && !_step_mode && _flow_melody; }
+    // "this lane runs the melody system at all" (STEP or FLOW melody). NOT
+    // named melody(): it would sit next to set_melodic/_melodic and read as a
+    // getter for the flag, which is the naming collision spotykach-gotchas
+    // records for set_depth.
+    bool _melody_engine_on() const { return _melodic && (_step_mode || _flow_melody); }
+    void _prime_floors() { _since_fire = _note_min_samples;
+                           _since_phrase = _phrase_min_samples; }
     int   _groove_k() const;              // DENSE -> how many ranked cell notes play
     void  _renew_units();           // RENEW (melodic/STEP): per-unit dice regeneration
     void  _renew_walk();            // RENEW (non-melodic): dice-gated whole-walk regen
@@ -224,8 +252,30 @@ private:
 
     int   _cur_step = -1;
     static constexpr int kSeqSlots = 32;
+    // The free mode owns its phrase length. It cannot come from STEPS: Fireflow
+    // spends STEPS == 0 on the mode switch (Fireflow.cpp:892-893) and set_step
+    // clamps that to 1, while Glow pushes 2..16 in both modes -- so STEPS would
+    // mean two different things. It also cannot be made variable: generate_phrase
+    // fills only [0, n) (phrase_gen.h:165-200) and pitch[32] is zero-init, so a
+    // length that grows past the generated one plays the root instead of a note.
+    static constexpr int kFlowPhraseSlots = 8;
+    // Note-rate floor. A boundary arriving sooner than this after the last fire
+    // HOLDS instead of firing, so the rate decimates to the floor rather than
+    // falling off a cliff, and DENSITY keeps its full effect everywhere below
+    // the ceiling. 60 ms is ~16 notes/s -- above anything ambient, below
+    // anything that reads as a buzz. SET BY ARITHMETIC, then CONFIRMED BY EAR
+    // (owner, 2026-08-13, against flow_melody.wav) -- the arithmetic above is
+    // where the value came from, not an open question.
+    static constexpr float kFlowNoteMinS = 0.060f;
+    // Melody-mode slew ceiling, as a fraction of the slot interval: a note
+    // reaches 1 - e^(-1/0.35) ~= 94 % of its target inside its own slot. This
+    // is the MINIMUM needed for a melody to be heard as notes rather than a
+    // wobble; everything else about SMOOTH belongs to the SHAPE/SMOOTH rework.
+    // SET BY ARITHMETIC, then CONFIRMED BY EAR (owner, 2026-08-13).
+    static constexpr float kFlowSlewFrac = 0.35f;
     SongForm _song;
     bool      _melodic   = false;
+    bool      _flow_melody = false;
     bool      _melodic_at_init = false;
     float     _density   = 1.f;
     float _target = 0.f;     // pre-smooth held value
@@ -237,6 +287,14 @@ private:
 #endif
     int   _note_age  = 0;    // steps since the current note fired
     int   _note_hold = 0;    // composed note length (capped at the next note)
+
+    // Samples since the last fire / the last phrase event, for the two floors.
+    // Primed rather than zeroed at init/reset/mode entry -- at 0 the floor
+    // would swallow the first note of every phrase start, including RST's.
+    int _since_fire   = 0;
+    int _since_phrase = 0;
+    int _note_min_samples   = 0;   // kFlowNoteMinS * _sr, cached at init
+    int _phrase_min_samples = 0;   // kFlowPhraseSlots * _note_min_samples
 
     float _ev_phase = 0.f;   // EVOLVE random-walk offsets: shape / phase / rate (Task 7)
     float _ev_shape = 0.f;

@@ -141,10 +141,12 @@ TEST_CASE("rhythm ring: the view only moves at a cycle wrap") {
     CHECK(m.rhythm().gap[1] == before.gap[1]);
 }
 
-TEST_CASE("rhythm ring: FLOW lanes fill the ring from cycle wraps") {
+TEST_CASE("rhythm ring: FLOW LFO lanes fill the ring from cycle wraps") {
     // LANE_PITCH is always melodic under SuperModulator (set unconditionally
     // in SuperModulator::init()), matching the old standalone test's
     // explicit l.set_melodic(true) -- see this file's namespace comment.
+    // _flow_melody is left at its default false here, so this pins the FLOW
+    // LFO path specifically: one onset per cycle, DENSITY unconsulted.
     SuperModulator m;
     m.init(48000.f, seed_base_for_pitch(kPitchSeed));
     force_pitch_rate_1hz(m);
@@ -155,6 +157,33 @@ TEST_CASE("rhythm ring: FLOW lanes fill the ring from cycle wraps") {
     const RhythmView& rv = m.rhythm();
     REQUIRE(rv.valid);
     CHECK(rv.gap[0] == doctest::Approx(48000).epsilon(0.01));
+}
+
+TEST_CASE("rhythm ring: FLOW melody lanes shorten the ring's gaps as DENSITY rises") {
+    // FLOW melody walks kFlowPhraseSlots (8) slots per cycle and gates each
+    // one against DENSITY's groove ranking (ModLane::_effective_gate), the
+    // same mechanism STEP uses -- unlike the FLOW LFO sibling above, whose
+    // single per-cycle onset never consults DENSITY at all. A sparse DENSITY
+    // gates most slots off (fewer onsets, longer gaps); a dense one gates
+    // nearly all of them on (more onsets, shorter gaps).
+    auto run = [](float density) {
+        SuperModulator m;
+        m.init(48000.f, seed_base_for_pitch(kPitchSeed));
+        force_pitch_rate_1hz(m);
+        m.set_step(false, 4);
+        m.set_flow_melody(true);
+        m.set_variation(0.f);
+        m.set_density(density);
+        for (int i = 0; i < 4 * 48000; ++i) m.process();
+        return m.rhythm();
+    };
+
+    const RhythmView sparse = run(0.25f);
+    const RhythmView dense  = run(1.0f);
+
+    REQUIRE(sparse.valid);
+    REQUIRE(dense.valid);
+    CHECK(dense.gap[0] < sparse.gap[0]);
 }
 
 TEST_CASE("rhythm ring: reset invalidates and the ring re-fills from scratch") {

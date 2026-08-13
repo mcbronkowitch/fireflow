@@ -309,7 +309,13 @@ void Flow::weather_of(const Terrain& t, double ts, float* off) const {
         // unreadable, because the pace is the frame the ear judges them
         // against. It also keeps eff[M_PACE] exactly 0.5 when nothing moves
         // it, which the bit-identical-no-op claim depends on.
-        if (m == M_MOTION || m == M_PACE) continue;
+        // M_WANDER joins them (spec 2026-08-13 flow-melody-engine §9): the FLOW
+        // melody engine's standing note needs VARIATION at exactly 0, and the
+        // sentence above about M_PACE -- that the exclusion is what keeps its
+        // eff exactly at rest when nothing moves it -- is now true of WANDER
+        // too. The cost is stated plainly: WANDER no longer breathes on its
+        // own, and a terrain moves it only when the player does.
+        if (m == M_MOTION || m == M_PACE || m == M_WANDER) continue;
         off[m] += t.weather_depth[i]
                 * fast_sin(float(ts / double(t.weather_period_s[i])));
         ++cnt[m];

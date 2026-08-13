@@ -76,6 +76,21 @@ and restarts the arrangement at its first phrase — the gesture the retired
 NEW pad used to fire on demand. On a Sampler it also jumps the tape head back
 to ORGANIZE and spawns a grain immediately.
 
+## DENSITY
+
+Each part's **DENSITY** knob (orbit caption `DENS`) picks how many of a
+phrase's slots are actually used, out of however many the current mode has.
+In **STEP** that has always meant thinning the step grid — k of the deck's
+`STEPS` fire, the rest hold the previous note. **As of the FLOW melody
+engine, it means the same thing in FLOW too**: the free mode's melodic lane
+now walks an 8-slot phrase instead of running a continuous LFO, and DENSITY
+selects how many of those eight notes the drone actually plays — one
+standing note at the low end, up to a full eight-note melody at the top.
+Before this, DENSITY was a step-grid-only control and moved no audio at all
+in FLOW (`docs/2026-08-13-glow-macro-audit.md`, Result 3); it is not
+step-grid-only any more, on either part. On a Sampler deck DENSITY is
+repurposed entirely — see the Sampler controls table below.
+
 ## SOURCE and Detune
 
 Each part has one physical **SOURCE** control. Its live caption follows the
@@ -545,6 +560,14 @@ gets `nullptr, nullptr`). The full design behind the rebuilt surface is
 Each knob's exact targets are the current terrain's choice — drawing a new
 terrain can rewire what MOTION touches — but the one-word meaning above always
 holds, and every knob is monotone: more knob is always more of that thing.
+
+**DENSITY, as of the FLOW melody engine.** On a drone (a FLOW-mode note deck)
+DENSITY now selects how many notes the drone actually uses out of the
+phrase's eight slots — one held note at the low end, a full melody at the
+top — rather than a step-grid control with nothing to grip in the free
+world. Before this it moved no audio on any FLOW terrain
+(`docs/2026-08-13-glow-macro-audit.md`, Result 3); "how much happens" now
+holds in both worlds, not only in STEP.
 
 **The calm corner.** All six knobs fully counter-clockwise is a defined quiet
 background on every terrain, not an accident of wherever the mapping curves

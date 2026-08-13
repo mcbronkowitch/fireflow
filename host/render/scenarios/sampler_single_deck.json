@@ -1,0 +1,29 @@
+{
+  "_comment": "Genuinely single-deck, for spec 2026-08-13 flow-melody-engine task 8's non-regression check (Sampler/BBD keep the old continuous LFO, bit-identical to main). sampler_solo.json and sampler_storm_solo.json look single-deck but are NOT: they silence part A via LEVEL base 0 while leaving its engine at the ENGINE_SYNTH boot default, and task 8 wires set_flow_melody(true) into every note engine's PITCH lane. That changes part A's boot voice-trigger count (one flow-melody anchor note fires in addition to the old boundary fire), which very briefly changes the loudness of part A's pre-LEVEL-smoother transient -- inaudible on its own, but enough to nudge the shared master Limiter's slow (~1 s+) peak-follower release (fx/limiter.h, 0.00002 coefficient) onto a different trajectory that colours part B's contribution to the mix for tens of seconds after, even though part A's OWN dry output converges back to exact silence within milliseconds. Measured: sampler_solo.json diverges from main starting at sample 4 and does not re-converge until ~33 s in. Setting part A's engine to sampler too closes that gap: task 8 touches nothing on a Sampler/BBD deck (the new push writes the same `false` set_flow_melody already implied by default), so part A's boot transient -- and therefore the limiter's state -- is bit-identical to main whether or not part A ever runs.",
+  "sample_rate": 48000,
+  "bpm": 96,
+  "duration_s": 40.0,
+  "input_wav": "host/render/scenarios/assets/in_drone.wav",
+  "init": [
+    { "_comment": "part A: also a sampler, inert (no record, no playback material, LEVEL 0) -- silent by construction and untouched by task 8, unlike leaving it at the default SYNTH boot engine.",
+      "action": "set_engine", "part": 0, "value": "sampler" },
+    { "action": "set_target_base", "part": 0, "slot": 4, "value": 0.0 },
+    { "action": "set_target_active", "part": 0, "slot": 4, "flag": false },
+
+    { "action": "set_engine", "part": 1, "value": "sampler" },
+    { "action": "set_target_base", "part": 1, "slot": 4, "value": 1.0 },
+    { "action": "set_target_base", "part": 1, "slot": 3, "value": 0.0 },
+    { "action": "set_target_active", "part": 1, "slot": 3, "flag": false },
+    { "action": "sampler_feedback", "part": 1, "value": 0.95 }
+  ],
+  "events": [
+    { "t": 1.0,  "action": "sampler_record", "part": 1, "flag": true },
+    { "t": 9.0,  "action": "sampler_record", "part": 1, "flag": false },
+    { "t": 10.0, "action": "set_target_base", "part": 1, "slot": 3, "value": 0.0 },
+    { "t": 16.0, "action": "set_target_base", "part": 1, "slot": 3, "value": 0.35 },
+    { "t": 22.0, "action": "set_target_base", "part": 1, "slot": 3, "value": 0.7 },
+    { "t": 28.0, "action": "set_target_base", "part": 1, "slot": 3, "value": 1.0 },
+    { "t": 32.0, "action": "set_step", "part": 1, "flag": true, "ivalue": 8 },
+    { "t": 32.0, "action": "set_target_base", "part": 1, "slot": 3, "value": 0.5 }
+  ]
+}

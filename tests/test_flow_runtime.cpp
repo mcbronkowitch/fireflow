@@ -692,7 +692,12 @@ TEST_CASE("flow: the weather never touches PACE") {
         int other = -1;
         for (int i = 0; i < t.weather_n; ++i) {
             if (t.weather_target[i] == M_PACE) hits_pace = true;
-            else if (t.weather_target[i] != M_MOTION) other = t.weather_target[i];
+            // M_WANDER joined M_MOTION in weather_of's exclusion (task 9 of
+            // this spec), so "other" must skip it too, or this search could
+            // land on a macro that no longer moves and the CHECK below would
+            // read the test's own bug as a regression.
+            else if (t.weather_target[i] != M_MOTION &&
+                     t.weather_target[i] != M_WANDER) other = t.weather_target[i];
         }
         if (hits_pace && other >= 0) { chosen = master; other_macro = other; }
     }
@@ -721,4 +726,26 @@ TEST_CASE("flow: the weather never touches PACE") {
     // The other weathered macro DID move over the same sweep. Without this the
     // two CHECKs above would also pass on a Flow whose weather never ran.
     CHECK(other_max > 0.01f);
+}
+
+TEST_CASE("WANDER at zero stays exactly zero under weather") {
+    // The standing note needs _variation == 0 EXACTLY. taste.h:927 gives
+    // P_VARIATION_A a bp0 cell of {0,0}, so WANDER at 0 draws zero -- but the
+    // weather offsets _eff[M_WANDER] by up to kWeatherDepthMax (0.10) scaled by
+    // MOTION, and at eff 0.10 the curve interpolates 40 % of the way to bp1,
+    // whose span is {.05,.15}. On a terrain that drew the top of that span
+    // P_VARIATION_A reaches ~0.06 and the mutations run at every wrap.
+    Instrument inst;
+    inst.init(48000.f);
+    Flow f = make(inst, 0x5EEDu);
+    f.set_macro(M_WANDER, 0.f);
+    f.set_macro(M_MOTION, 1.f);        // the weather's own depth control
+
+    // A full weather period, so the sweep covers the offset's whole excursion.
+    const int ticks = static_cast<int>(kWeatherPeriodMaxS * 100.f);
+    for (int i = 0; i < ticks; ++i) {
+        f.tick();
+        REQUIRE(f.param_now(P_VARIATION_A) == 0.f);
+        REQUIRE(f.param_now(P_VARIATION_B) == 0.f);
+    }
 }

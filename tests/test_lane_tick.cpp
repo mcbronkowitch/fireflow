@@ -53,6 +53,27 @@ struct TickPair {
         prepare(ref);
         prepare(dut);
     }
+    // FLOW melody-mode config, mirroring tests/test_flow_melody.cpp's
+    // make_flow_melody_lane: set_step(false, steps) + set_flow_melody(true)
+    // AFTER init(), unlike boot_song's STEP config above.
+    void boot_flow_melody(uint32_t seed, float hz = 1.f, float variation = 0.f) {
+        auto prepare = [seed, hz, variation](ModLane& lane) {
+            lane.set_melodic(true);
+            lane.set_step(false, 8);
+            lane.set_form(Principle::Hierarchical);
+            lane.set_song(SongMode::AAAB);
+            lane.init(kSr, seed);
+            lane.set_flow_melody(true);
+            lane.set_range(1.f);
+            lane.set_shape(1.f);
+            lane.set_smooth(0.f);
+            lane.set_density(1.f);
+            lane.set_variation(variation);
+            lane.set_rate_hz(hz);
+        };
+        prepare(ref);
+        prepare(dut);
+    }
 };
 } // namespace
 
@@ -548,4 +569,90 @@ TEST_CASE("tick: SONG process and tick keep form snapshots aligned") {
     CHECK(skew_windows <= 8);
     CHECK_FALSE(require_reconvergence);
     CHECK(full_checks >= 892);
+}
+
+TEST_CASE("tick: FLOW melody slot walk matches the per-sample path") {
+    // 47 Hz across an 8-slot phrase (kFlowPhraseSlots) is a boundary every
+    // ~128 samples -- more than one 96-sample tick apart, but close enough
+    // that most windows still hold one edge and some hold two, exercising
+    // the interior-slot arm as well as the wrap. Far above anything a FLOW
+    // melody RATE reaches from the panel (the note-rate floor caps audible
+    // fires around 14-16 Hz even when the underlying phrase cycle spins
+    // faster -- see test_flow_melody.cpp's "the note rate has a floor",
+    // which drives the *fire* rate this high), but this rate stresses the
+    // *slot walk*, and it and the panel-reachable range both measured clean
+    // (0 mismatches over thousands of ticks, several seeds) with the
+    // per-edge floor advance in tick() (see the advance_floors comment
+    // there). Only a pathological exact-resonance rate where the phrase
+    // cycle divides kTickInterval evenly (500 Hz: 48000/500 == 96 samples,
+    // matching kTickInterval exactly) still measured occasional desync --
+    // far outside anything reachable here, so this case does not probe it.
+    TickPair tp;
+    tp.boot_flow_melody(0xF10Eu, 47.f, 0.6f);
+
+    int mismatch = 0;
+    for (int t = 0; t < 400; ++t) {
+        tp.advance_one_tick();
+        INFO("t=", t, " ref_step=", tp.ref.cur_step(),
+             " dut_step=", tp.dut.cur_step(),
+             " ref_fires=", tp.ref_fires, " dut_fired=", tp.dut_fired,
+             " ref_song_pos=", tp.ref.song_position(),
+             " dut_song_pos=", tp.dut.song_position());
+        if ((tp.ref_fires > 0) != tp.dut_fired ||
+            tp.dut.target() != tp.ref.target()) {
+            ++mismatch;
+            continue;
+        }
+        CHECK(tp.dut.cur_step() == tp.ref.cur_step());
+        CHECK(tp.dut.song_position() == tp.ref.song_position());
+    }
+    CHECK(mismatch <= 2);                          // isolated straddles only
+    CHECK(tp.dut.cur_step() == tp.ref.cur_step());  // re-converged at the end
+    CHECK(tp.dut.target() == tp.ref.target());
+    CHECK(tp.dut.song_position() == tp.ref.song_position());
+}
+
+TEST_CASE("tick: a kick near the note-rate floor does not grant it extra credit") {
+    // Regression for the pending-mismatch entry's flow-melody arm
+    // (lane.cpp, the `else if (_flow_melody_on())` block right after
+    // advance_floors is defined): that call runs with NO advance_floors()
+    // in front of it, unlike every other _on_boundary()/_wrap_events() call
+    // in tick(). A kick() (or a FLOW<->STEP re-entry) can leave _cur_step
+    // stale and land the pending-mismatch entry on a boundary it would not
+    // otherwise have reached this window -- proving that entry does not
+    // also wrongly backdate the floors to "as if this whole window had
+    // already elapsed" the way the old single pre-loop lump did everywhere.
+    //
+    // density 1 (every slot gate-open) isolates the note-rate floor as the
+    // only thing deciding "fired" here; variation 0 removes any RNG-draw
+    // confound; rate_hz 1 keeps the next NATURAL slot boundary (6000
+    // samples away) far outside this case's whole window, so only the
+    // kick's forced mismatch can trigger _on_boundary() here.
+    //
+    // kFlowNoteMinS * 48 kHz == 2880 samples, and 29 * kTickInterval (96)
+    // == 2784 -- exactly one tick short of the floor -- by construction,
+    // not by measurement, so this reddens deterministically (integers, no
+    // float epsilon) rather than depending on where a rate happens to land.
+    TickPair tp;
+    tp.boot_flow_melody(0xF10Eu, 1.f, 0.f);   // density 1.f already set here
+
+    for (int t = 0; t < 29; ++t) tp.advance_one_tick();
+    REQUIRE(tp.ref.cur_step() == 0);
+    REQUIRE(tp.dut.cur_step() == 0);
+
+    tp.ref.kick(0.5f, 0.f);
+    tp.dut.kick(0.5f, 0.f);
+
+    tp.advance_one_tick();
+    INFO("ref_fires=", tp.ref_fires, " dut_fired=", tp.dut_fired,
+         " ref_step=", tp.ref.cur_step(), " dut_step=", tp.dut.cur_step());
+    REQUIRE(tp.ref.cur_step() == 4);          // the kick actually moved a slot
+    CHECK(tp.dut.cur_step() == tp.ref.cur_step());
+    // The real question: crediting a full window's worth of floor advance
+    // at the mismatch entry (the wrong alternative measured separately)
+    // fires here where process() does not -- one tick short of the floor,
+    // a kick must not manufacture the missing 96 samples.
+    CHECK((tp.ref_fires > 0) == tp.dut_fired);
+    CHECK_FALSE(tp.dut_fired);
+    CHECK(tp.dut.target() == tp.ref.target());
 }

@@ -831,6 +831,16 @@ TEST_CASE("part: targets reach the engine on the 96-sample raster") {
     p.mod().set_range(1.f);
     p.mod().set_smooth(0.f);
     p.mod().set_rate(0.9f);
+    // This test is about Part's control-tick raster, not about the melody
+    // engine: since spec 2026-08-13 flow-melody-engine task 8, Part::init
+    // pushes set_flow_melody(true) for SYNTH (this Part's engine, the boot
+    // default), which turns pitch_cv() into a phrase-slot staircase that
+    // barely moves inside a 20-tick window instead of the continuous LFO
+    // this test's margins (9 changes over 20 ticks) were measured against.
+    // Force the continuous-LFO path explicitly so this test keeps exercising
+    // what it names -- the FLOW melody engine's own behavior is covered by
+    // tests/test_flow_melody_wiring.cpp and tests/test_flow_melody.cpp.
+    p.mod().set_flow_melody(false);
 
     // Pin both the interval and the phase: every sample where pitch_cv()
     // changes must be either a raster tick (index % kCtrlInterval == 0) or a

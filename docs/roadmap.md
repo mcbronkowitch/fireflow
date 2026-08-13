@@ -30,10 +30,20 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-08-13 (Glow macro audit: CHOKE no longer silences a deck
-  on most terrains, a per-parameter audio gate is in the suite, and the FLOW
-  melody engine plus the SHAPE/SMOOTH rework are queued ahead of the Glow rework
-  — see `docs/2026-08-13-glow-macro-audit.md`); before that, 2026-08-12 (flow patch transfer merged, not released — see its
+- **Last updated:** 2026-08-13 (FLOW melody engine: the free mode's melodic lane
+  walks an 8-slot phrase instead of a continuous LFO, fixing three of the four
+  findings the Glow macro audit reported for it — TEMPO-in-FLOW was never the
+  same cause and stays out of scope; two open threads (`P_SONG_A/B`'s
+  behaviour, `P_DEPTH_A`'s bypass on the pitch lane) and a panel-unreachable
+  `tick()`/`process()` residual are recorded but not explained; the owner's
+  listening checks were answered the same day — `flow_melody.wav`,
+  `ctrl_identity.wav` and `wave_formant_sweep.wav` all accepted, so
+  `kFlowNoteMinS = 0.060` and `kFlowSlewFrac = 0.35` stand as chosen — see
+  "FLOW melody engine" under "Done"); before that, 2026-08-13 (Glow macro audit: CHOKE no longer silences
+  a deck on most terrains, a per-parameter audio gate is in the suite, and the
+  FLOW melody engine plus the SHAPE/SMOOTH rework were queued ahead of the Glow
+  rework — see `docs/2026-08-13-glow-macro-audit.md`); before that, 2026-08-12
+  (flow patch transfer merged, not released — see its
   entry under "Done" for the five open follow-ups; before that, 2026-08-04: the
   project left the residency and the Spotykach
   hardware target, per "Project status" above; before that, 2026-08-03: VCV
@@ -346,6 +356,7 @@ is actually built today, and what is still design-only.
 | **VCV engine-aware captions** | Every state-dependent panel caption now comes from one `DYNAMIC_CAPTIONS` generator table instead of hand-written special cases: BODY gets honest VOICE words (`HIT`/`DAMP`/`CHAR`/`EXCIT`/`BRITE`) and BBD gets its own (`TAIL`/`TILT`/`FEED`/`LOSS`); the FX-box word collisions are resolved by renaming FLUX `RATE`→`DIV`, FLUX `TIME`→`MULT`, per-deck `ROOM`→`SEND`, `MASTER_DRIVE`→`PUSH` and BBD `PITCH`→`BEND` (collision with the orbit's `PITCH` eyebrow); the GRIT mode pad now shows its own state, `SAT`/`CRSH`, instead of the word `GRIT` it collided with; MELODY drives Sampler `SCAN` only, no longer also `set_variation`; the permanently-printed `SCAN`/`LEN` second words are deleted from the static plate | ✅ **done** (VCV host + generator; spec `docs/superpowers/specs/2026-08-03-vcv-engine-aware-captions-design.md`; branch `vcv-engine-aware-captions`, not yet merged to main or released) |
 | **Flow patch transfer** | A patch built by hand in `Fireflow` rides onto a `Glow` pad as a `BaseOverlay`: the pad recalls that patch's **base skeleton** (the 47 `kBaseRules` parameters) while the terrain keeps supplying the **story layer** the six macros move. Copy/paste through one shared text encoding; the converter reports everything it could not carry | ✅ **done** (engine + VCV host; spec `docs/superpowers/specs/2026-08-11-flow-patch-transfer-design.md`, plan `docs/superpowers/plans/2026-08-11-flow-patch-transfer.md`, parameter map `docs/flow-fireflow-param-map.md`; merged to `main` 2026-08-12, **not released**; six follow-ups open — see below) |
 | **PACE** | One global modulation time-stretch, ×1/32 … ×1 … ×4, replacing the DIRT macro (`M_DIRT` → `M_PACE`): a new `Instrument::set_pace()` normalized knob, `pace_mult()` curve (`engine/mod/divisions.h`), a `Transport` pace anchor so the grid re-locks on a change instead of jumping phase, `Flux::set_rhythm_pace`, a `PACE` knob on both `Fireflow` and `Glow` beside `TEMPO`, and render-host coverage. Fixes the three controls that looked like a speed knob and were not: TEMPO is inert in the free world, TIDE never reached the melodic lane, and Glow had no speed control at all | ✅ **done** (engine + VCV hosts + render host; spec `docs/superpowers/specs/2026-08-12-modulation-pace-design.md`, plan `docs/superpowers/plans/2026-08-12-modulation-pace.md`; branch `2026-08-12-modulation-pace`, not yet merged to `main` or released) |
+| **FLOW melody engine** | The free mode's melodic lane walks an 8-slot phrase instead of running a continuous LFO — DENSITY, FORM and SONG all reach it for the first time, bounded by two rate floors and a slew clamp; SAMPLER and BBD keep the old continuous LFO unchanged | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-13-flow-melody-engine-design.md`, plan `docs/superpowers/plans/2026-08-13-flow-melody-engine.md`; branch `flow-melody-engine`, not yet merged to `main` or released; **owner's listening checks answered 2026-08-13 — all three renders accepted** — see "FLOW melody engine" under "Done") |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
 | **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel design done — regrouping round built on branch `hw-panel-regroup` 2026-08-10; bring-up not started**; the existing shell spec is superseded — see below) |
@@ -2369,63 +2380,139 @@ does this overlay carry" loop is open-coded in three places; and `""` answers
 "does this place carry a base?" differently in `base_for_pad` (no) and
 `Glow::dataFromJson` (yes), reachable only from a hand-edited patch.
 
+### FLOW melody engine ✅
+
+The free mode's melodic lane no longer runs a continuous LFO: it walks an
+8-slot phrase (`kFlowPhraseSlots`), driven by the same song/phrase machinery
+STEP already used, and lands a new note only when a slot opens rather than at
+every sample. DENSITY selects how many of the eight slots the drone actually
+uses; FORM, SONG and VARIATION all reach the lane in FLOW for the first time.
+Two rate floors — `kFlowNoteMinS` (60 ms) and a phrase floor derived from it
+(`kFlowPhraseSlots * _note_min_samples`) — bound how fast the fastest RATE
+setting can retrigger; SMOOTH's slew is clamped against the slot interval so a
+glide can no longer outrun its own note. `Part` turns melody mode on for the
+note engines (SYNTH, WAVE, BODY, the test-tone engine) and leaves SAMPLER and
+BBD on the original continuous LFO, unchanged. `ModLane::tick()` mirrors the
+same slot walk — for parity with `process()`, not for any production caller;
+`SuperModulator` never drives `LANE_PITCH` through `tick()`.
+
+**Result: three of the four findings that opened this milestone are fixed.**
+DENSITY, FORM and SONG all move audio in FLOW now. See
+`docs/2026-08-13-glow-macro-audit.md` for what "dead" meant before this
+landed — its Result 3 and the per-macro DENSITY verdict are left unedited as
+a record of what was true on 2026-08-13, and now carry a pointer to this
+entry instead of a rewrite. **The fourth finding, TEMPO-in-FLOW, was never
+the same cause and was never in scope**: free lanes take their rate from
+`free_hz(_rate_norm) * _pace` and never read `_bpm`
+(`engine/mod/super_modulator.cpp`) — that is what "free" means, and nothing
+in this milestone touches it.
+
+Spec: `docs/superpowers/specs/2026-08-13-flow-melody-engine-design.md`, plan
+`docs/superpowers/plans/2026-08-13-flow-melody-engine.md`. Built on branch
+`flow-melody-engine`. **The owner's listening checks (the plan's Task 12 Step 5,
+plus the pass Task 8 deferred) were answered on 2026-08-13**: the owner heard
+`flow_melody.wav`, `ctrl_identity.wav` and `wave_formant_sweep.wav` and accepted
+all three. That covers SHAPE's consequence for a drone terrain, the DENSITY
+continuum, the retrigger/FLUX-THIN consequences and the trade of WANDER's
+self-motion — and it settles the two constants: `kFlowNoteMinS = 0.060` and
+`kFlowSlewFrac = 0.35` were **set by arithmetic and confirmed by ear**, not left
+as first guesses. This entry records what shipped, what was measured, and that
+it has now been heard.
+
+**Two open threads, measured under this milestone's own re-measurement,
+still unexplained.** Full detail is in `docs/2026-08-13-glow-macro-audit.md`'s
+"Open threads" section (the "FORM/SONG re-measured" entry and its review
+follow-up) — this is a pointer, not a second copy:
+- With DEPTH and `LANE_PITCH`'s `_active` held on, `P_SONG_A` moves audio only
+  in **STEP** — the opposite direction from FORM — and `P_SONG_B` measures
+  dead in **both** modes. `tests/test_param_impact.cpp` separates
+  `expected_proven[]` from `expected_untraced[]` so both are pinned as
+  measured facts without being asserted as understood or correct.
+- `P_DEPTH_A` is bypassed entirely for the pitch lane
+  (`engine/parts/part.cpp:98`: `float d = (slot == LANE_PITCH) ? 1.f :
+  _depth;`), so the DEPTH control this milestone's own gates rely on is inert
+  on the melody lane in practice.
+
+**A residual `tick()`/`process()` divergence, panel-unreachable.**
+`ModLane::tick()`'s FLOW-melody slot walk matches `process()` cleanly across
+the panel-reachable rate range and well beyond it — measured clean to a
+250 Hz phrase-cycle rate, roughly 15× the ~14–16 Hz ceiling the note-rate
+floor allows from the panel. `engine/mod/divisions.h`'s own panel ceiling for
+phrase-cycle rate (`kRateFreeMax = 30` Hz × PACE ×4 = 120 Hz) sits
+comfortably inside that measured-clean range, a second, independent
+confirmation that the panel cannot reach the desync. Past 250 Hz it can
+still desync GROW/RENEW's RNG stream at phrase-cycle rates far outside
+anything the RATE knob can reach, worst at the exact
+`sample_rate / kTickInterval` resonance (500 Hz at 48 kHz) — itself far
+**above** the 120 Hz panel ceiling, so the panel can never physically
+produce it. `SuperModulator` never drives `LANE_PITCH` through `tick()` in
+production, so this has no audible consequence today.
+
+**Sampler/BBD non-regression, narrowed.** A Sampler or BBD deck's own PITCH
+lane is untouched by this work — `_mod.set_flow_melody(false)` is pushed for
+both, the same value the prior default already had — demonstrated by two
+renders of `host/render/scenarios/sampler_single_deck.json` (before/after,
+one deck genuinely Sampler-only) reconverging to bit-identical for the whole
+final 4 s of a 40 s render. But the two renders are **not** bit-identical
+end-to-end: 61,309 of 7,680,044 bytes differ, all inside the first ~36 s.
+Cause: `Part::init` boots every deck as `ENGINE_SYNTH` (the pre-existing M2
+boot default) before any scenario `set_engine` action runs, and the melody-
+mode push now lands immediately after, so during a scenario's click-free
+engine-swap fade the deck genuinely *is* a SYNTH deck running the new melody
+engine in FLOW for a few milliseconds, firing a voice the old continuous-LFO
+SYNTH never fired; the shared master limiter's slow peak follower then
+carries that transient for the rest of the divergence window. Neither
+hash-gated render (`ctrl_identity`, `wave_formant_sweep`) is affected — both
+stay on one engine for their whole run and never call `set_engine`.
+
 ## Planned
 
-The three entries below are ordered: the FLOW melody engine and the SHAPE/SMOOTH
-rework both come **before** the Glow rework, because the Glow rework redesigns
-the macro layer that sits on top of them. Designing that layer against today's
-behaviour would bake the workarounds in — which is exactly how the DIRT macro
-came to target a GRIT block that was never switched on.
-
-### FLOW melody engine ⬜ (next; before the Glow rework)
-
-The free mode gets a melody engine of its own — built on the same song settings
-as the step mode, but working differently. A long drone often wants only one or
-two notes, which is not what a step sequencer's phrase generator produces.
-
-**Why this is a milestone and not a bug fix.** Measured 2026-08-13: in FLOW the
-melodic lane is a continuous LFO, not a sequencer. `_sh_slot()` returns 0 for
-every cycle ("FLOW: one slot, loop-stable per cycle", `engine/mod/lane.cpp:426`),
-`_target = _compute_raw()` runs per sample rather than at boundaries
-(`lane.cpp:619`), and `_on_boundary` hard-wires `gated = true` (`lane.cpp:462`).
-So DENSITY, FORM, SONG, SHUFFLE, STEPS and TEMPO are all step-grid concepts with
-no meaning in the free mode — and `kModeW` puts 85 % of drones there.
-
-Four separately-reported findings are all this one cause:
-
-| Finding | Measured |
-|---|---|
-| DENSITY moves no audio in FLOW | bit-identical on 22/22 FLOW terrains, over 40 s |
-| FORM/SONG never applied in FLOW | `_wrap_events` returns early for the melodic lane, `lane.cpp:578` |
-| TEMPO moves no audio in FLOW | 0.0000 on 3/3 — free lanes clock off `free_hz`, never the BPM ladder |
-| `_effective_gate`'s FLOW branch is dead code | `lane.cpp:454-457`, both call sites sit behind `_step_mode`; a leftover of the removed PROBABILITY feature |
-
-Full measurement and method: `docs/2026-08-13-glow-macro-audit.md`.
-
-**Not a Glow-only concern.** All four sit in `engine/mod/`, which Fireflow and
-the firmware shell compile too. A Fireflow deck at STEPS 0 has the same dead
-DENSITY knob.
-
-Needs a spec.
+The two entries below are ordered: the SHAPE/SMOOTH rework comes **before** the
+Glow rework, because the Glow rework redesigns the macro layer that sits on top
+of it. Designing that layer against today's behaviour would bake the
+workarounds in — which is exactly how the DIRT macro came to target a GRIT
+block that was never switched on. (The FLOW melody engine, formerly the first
+of three entries here, is now built — see "FLOW melody engine" under "Done".)
 
 ### SHAPE + SMOOTH rework ⬜ (before the Glow rework)
 
 SHAPE has never satisfied its owner, and SMOOTH is touched in the same breath —
 the two together decide what the modulation lanes actually emit.
 
-One concrete thing the rework has to settle, found 2026-08-13: **the melody
+One concrete thing the rework has to settle, found 2026-08-13 and **narrowed by
+the FLOW melody engine on the same day**: **outside FLOW melody mode, the melody
 pattern reaches the audio only through SHAPE's top quarter.** `_compute_raw`
-passes the pattern value as `shape_value`'s third argument (`lane.cpp:422`), and
+passes the pattern value as `shape_value`'s third argument (`lane.cpp:555`), and
 `waveforms.h:32` blends it in only above 0.75, weight `(shape - 0.75) * 4`.
 Below that the melodic lane emits a plain LFO waveform and the pattern is
 computed and discarded. FORM, SONG, the phrase generator, the song ladder and
-VARIATION's pitch mutation all hang off that one blend — measured dead on 40/40
-terrains in both modes.
+VARIATION's pitch mutation all hang off that one blend, in STEP and on any lane
+still running the FLOW LFO (SAMPLER and BBD decks).
 
-Whether that is a defect or the intended reading of "SHAPE morphs sine → tri →
-ramp → pulse → S&H" is exactly the question this rework answers. The terrain
-table makes it worse either way: `P_SHAPE_A/B` is capped at `{0, .25}` for
-drone, so a drone can never reach the melody at all.
+**Three claims this entry used to make were falsified by that milestone and are
+corrected here rather than deleted — the rework is still planned, its premises
+have just changed:**
+
+- "reaches the audio only through SHAPE's top quarter" is now false **in FLOW on
+  a note deck**: `_compute_raw` returns the phrase's note directly under
+  `_flow_melody_on()` (`lane.cpp:551`) and never calls `shape_value` at all. On
+  that path SHAPE is inert on the melody, which is its own open question for the
+  rework — what SHAPE should mean for a note — rather than a blend threshold.
+- "measured dead on 40/40 terrains in both modes" no longer holds: this branch's
+  own `tests/test_param_impact.cpp` records `FORM_A`/`FORM_B` **alive in FLOW**,
+  by exactly that mechanism. (`P_SONG_A`/`P_SONG_B` remain measured-but-untraced
+  there; see the FLOW melody engine entry under "Done".)
+- "a drone can never reach the melody at all" is likewise false now: drones are
+  FLOW, which is precisely the mode where the melody bypasses SHAPE. The terrain
+  cap `P_SHAPE_A/B = {0, .25}` still keeps a drone below the 0.75 blend
+  threshold, so the claim holds for STEP and for SAMPLER/BBD decks — not for a
+  drone on a note engine.
+
+Whether the STEP-side blend is a defect or the intended reading of "SHAPE morphs
+sine → tri → ramp → pulse → S&H" is exactly the question this rework answers,
+and it now has a second half: the two modes disagree about what SHAPE does to a
+melodic lane, and the rework has to decide that deliberately rather than inherit
+it.
 
 Needs a spec.
 
