@@ -133,6 +133,7 @@ void ModLane::set_song(SongMode song) {
 
 void ModLane::set_flow_melody(bool on) {
     _flow_melody = on;
+    _frozen = false;          // see set_step: a freeze from the other state is meaningless here
     // One-sided by construction, and that is the point. ENTERING melody mode the
     // pattern may have been generated at another length -- at boot, whenever a
     // host pushed a STEPS other than kFlowPhraseSlots before this flag -- and
@@ -148,8 +149,13 @@ void ModLane::set_flow_melody(bool on) {
 
 void ModLane::set_step(bool on, int steps) {
     const bool entering_step = on && !_step_mode;
+    const bool mode_changed  = on != _step_mode;
     if (entering_step) _shuffle_latched = _shuffle_target;
     if (entering_step) { _note_age = 0; _note_hold = 0; }  // STEP entry: no stale sustain
+    // Either direction: a slot index and a freeze decision from the other mode
+    // mean nothing in this one. _cur_step = -1 makes the first sample fire slot
+    // 0, the same way init and reset do.
+    if (mode_changed) { _cur_step = -1; _frozen = false; }
     // Entering STEP disarms the follower so its first follow() call lands on
     // the deck's current position instead of replaying the whole count.
     if (entering_step) { _follow_armed = false; _follow_jumped = false; }
@@ -424,6 +430,7 @@ void ModLane::reset(float phase) {
     _phase = clampf(phase, 0.f, 0.999999f);
     _shuffle_latched = _shuffle_target;
     _cur_step = -1;
+    _frozen = false;
     // RST is the resync gesture: it clears the SPOT offset too, so the lane
     // comes back to the deck's own slot 0 rather than to a stumbled one.
     _follow_pos    = 0;

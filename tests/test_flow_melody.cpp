@@ -280,3 +280,40 @@ TEST_CASE("FLOW melody: pending work applies before the first slot") {
     lane.process();
     CHECK(lane.pattern_for_test(lane.active_pattern()).pattern_groove.len == 8);
 }
+
+TEST_CASE("FLOW melody: mode entry does not carry stale slot state") {
+    // Two hazards, both invisible before FLOW had slots:
+    //  - a _cur_step left from the other mode means no boundary fires until the
+    //    index happens to differ, so the phrase's first note is skipped or late;
+    //  - a _frozen left true from a CLOSED slot follows the lane into the FLOW
+    //    LFO path, whose branch is `if (!_frozen) _target = _compute_raw()` --
+    //    the "LFO" would then hold a constant for up to a full cycle.
+    ModLane lane = make_flow_melody_lane(0xF10Eu);
+    lane.set_density(0.5f);           // k == 4 of 8: half the slots are closed
+    drive_to_wrap(lane);
+    for (int i = 0; i < 20000; ++i) lane.process();   // land mid-phrase
+
+    lane.set_step(true, 8);
+    // The first sample in the new mode must fire, not wait for an index change.
+    lane.process();
+    CHECK(lane.fired());
+
+    lane.set_step(false, 8);
+    lane.set_flow_melody(false);
+    // Back on the LFO path the lane must move again immediately.
+    const float first = lane.target();
+    for (int i = 0; i < 200; ++i) lane.process();
+    CHECK(lane.target() != doctest::Approx(first));
+}
+
+TEST_CASE("FLOW melody: RST restarts the phrase at slot 0") {
+    ModLane lane = make_flow_melody_lane(0xF10Eu);
+    drive_to_wrap(lane);
+    for (int i = 0; i < 20000; ++i) lane.process();
+
+    lane.reset();
+    lane.process();
+    CHECK(lane.fired());
+    CHECK(lane.target() ==
+          doctest::Approx(lane.pattern_for_test(lane.active_pattern()).pitch[0]));
+}
