@@ -15,6 +15,34 @@ photography, or product artwork.
 The machine-readable hashes are in [checksums.sha256](checksums.sha256). A
 checksum verifies local file identity; it does not confer a licence or approval.
 
+## Clean-room generated material input
+
+`CLEANROOM_FR4_MATERIAL` is an original generated material input, not a
+first-party Synthux source. It is intentionally listed separately from the
+official references above.
+
+| Source ID | Source category | Built-in source | Prompt category | Local filename | SHA-256 | Committed | Derivative role |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `CLEANROOM_FR4_MATERIAL` | Clean-room, material-only generated source | Codex built-in Imagegen, generated for Task 7 | Flat orthographic black FR4/fibreglass surface; unbranded material texture with no text, logo, circuit design, hardware, or directional lighting | `.reference/glow-touch2/cleanroom-fr4-material.png` | `72b42ed0102b37e801ac2a67079f7a59279fac50ca8fc860938ca5b13d3a1c1c` | no | Softened, clipped, and dark-tone blended into the fixed-rear and lower-board substrate masks only. It supplies no product identity, electrode contour, silver artwork, switch geometry, or controller layout. |
+
+Task 7 reconstructs every non-material feature deterministically from local
+geometry and original code-native drawing: named Catmull-Rom electrode masks,
+a logo-free generic controller silhouette, restrained routing, clean-room
+silver crosshatching, static switch bases, and moving-only toggle overlays.
+No official photograph, Synthux/Touch wordmark, or copied decorative artwork
+is present in the exported rasters. `RIGHTS_APPROVED` remains `no`.
+
+| Exported Task 7 asset | SHA-256 | Derivation |
+| --- | --- | --- |
+| `host/vcv/res/GlowRear.png` | `2bb614248129986d76f8a47ad85810415913d132c812ee8ae588e77ecaccd70c` | Clean-room FR4 tone under the exact upper-rear mask; neutral P10/P11 masks and original logo-free fixed-hardware drawing. |
+| `host/vcv/res/GlowTouch.png` | `05d1cc168c44ed109523120a31835fc4322a4ce6016bf47ea8745f49c6197582` | Clean-room FR4 tone under the exact lower-board mask; neutral P00-P09 masks, original silver treatment, and static switch bases. |
+| `host/vcv/res/GlowSwitchDown.png` | `ec7d0fa6d5039cc51552a63be525900501652f1fb0ff50723b9c8f8921ae1c44` | Original moving lever, highlight, and shadow around common source pivot `(48, 96)`; transparent elsewhere. |
+| `host/vcv/res/GlowSwitchCenter.png` | `ea19921d50773a468561f101230dcf9612a2549442dc68b786f5c4f1ee694c3c` | Original foreshortened moving lever, highlight, and shadow around common source pivot `(48, 96)`; transparent elsewhere. |
+| `host/vcv/res/GlowSwitchUp.png` | `d28cede11b4cf4f809c441118de0c3497ecbe38f3a3ba136c4bbb6a76e1ae0b5` | Original moving lever, highlight, and shadow around common source pivot `(48, 96)`; transparent elsewhere. |
+
+`GlowFaceplate.png` is not part of this transformation. Task 9 owns its
+replacement from the physical KiCad preview.
+
 ## Touch-electrode geometry rectification
 
 Task 2 uses the official DXF only for removable-faceplate mechanics. It does

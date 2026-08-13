@@ -33,6 +33,35 @@ availability.
 | `KICAD_AVAILABLE` | `no` | Captured `kicad-cli` path and version from an existing installation or a user-approved installation. |
 | `SYNTHUX_PROFILE_APPROVED` | `no` | Written Synthux manufacturing profile covering thickness, mask, finish, copper treatment, minimum features, and panelisation. |
 
+## VCV clean-room hardware layers
+
+While `RIGHTS_APPROVED` is `no`, the shipped fixed-hardware images are
+clean-room reconstructions only. They contain no official photography,
+Synthux/Touch wordmark, copied decorative artwork, or protected product
+identity. The generated FR4 input is a material-only Codex Imagegen source and
+is recorded separately from the first-party references in
+[sources/provenance.md](sources/provenance.md).
+
+- `GlowRear.png` owns the fixed upper-rear substrate, a logo-free generic
+  controller region, and neutral P10/P11 gold surfaces. It is transparent
+  below the exact 77.1 mm board boundary.
+- `GlowTouch.png` owns the lower substrate, neutral P00-P09 gold surfaces,
+  original clean-room silver crosshatching, and both static switch bases. It is
+  transparent above the same boundary.
+- The three switch PNGs own only moving lever, highlight, and shadow pixels.
+  Their 96 x 192 canvases share pivot `(48, 96)`; no mounting plate or washer
+  changes between frames.
+- Runtime NanoVG remains the sole owner of live, excursion, and refusal state.
+  Neutral raster layers contain no selected-state glow or feedback colour.
+
+All panel layers are 960 x 1520 RGBA at four times Rack panel resolution. The
+board split lands exactly on source row 912; one-half source pixel is about
+0.042 mm, inside the 0.25 mm mechanical-fiducial tolerance. The material
+layers were inspected in generated 75%, 100%, 125%, and 150% image-only review
+composites. They have not received user visual approval and were not captured
+inside Rack because no `Rack.exe` is available. Task 9 still owns
+`GlowFaceplate.png`; its current placeholder is not a physical-preview claim.
+
 ## Tooling and export policy
 
 This project requires **KiCad 8 or later**. The current preflight did not find
