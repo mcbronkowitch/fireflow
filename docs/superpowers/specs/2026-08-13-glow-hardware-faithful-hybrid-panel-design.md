@@ -2,8 +2,7 @@
 
 **Date:** 13 August 2026
 
-**Status:** Draft for written-spec review; the design sections were approved in
-conversation on 13 August 2026.
+**Status:** Approved for implementation on 13 August 2026.
 
 **Scope:** The Glow VCV panel, a fabrication-ready swappable faceplate for
 Synthux Touch 2, and the shared visual sources that keep both representations

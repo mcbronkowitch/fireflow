@@ -14,6 +14,11 @@ __pycache__/
 .superpowers/
 .worktrees/
 
+# Restricted first-party Touch 2 reference material is retained locally for
+# verified mechanical and visual analysis. Its provenance and checksums are
+# committed under hardware/glow-faceplate/sources/ instead of the source files.
+/.reference/glow-touch2/
+
 # Local agent index -- a map of this working copy, not project documentation.
 /CLAUDE.md
 /.claude/
