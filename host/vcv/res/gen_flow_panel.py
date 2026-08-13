@@ -299,11 +299,13 @@ OUTPUTS = [
     Ctl("OUT_R", OUT, geo.JACKS[1][0], geo.JACKS[1][1], "R", "Main out, right"),
 ]
 
-TEXTS = [
-    Txt(W*.5-2.2, 10.0, 3.2, PAD_COPPER, 2, "FIREFLOW", 500),
-    Txt(W*.5,     10.0, 3.2, PANEL_TEXT, 0, "/", 400),
-    Txt(W*.5+2.2, 10.0, 3.2, PAD_COPPER, 1, "GLOW", 700),
-]
+# The plate carries no drawn text of its own. The masthead that used to sit at
+# y = 10.0 mm was inherited from the vector-only panel, where nothing else
+# occupied the top of the plate. Electrodes P10 and P11 now do: they span
+# y 2.0 .. 11.5 mm across x 25.5 .. 62.0 mm and are drawn over it, so the
+# wordmark read as half-erased in Rack. Real hardware prints no silkscreen
+# under an electrode either. The removable faceplate carries the product name.
+TEXTS = []
 
 
 # --- SVG ----------------------------------------------------------------------
@@ -427,17 +429,8 @@ def svg():
                'width="%s" height="%s" rx="1.2" fill="none" stroke="%s" '
                'stroke-width="%s"/>\n'
                % (mm(W - 1.3), mm(Hh - 1.3), PANEL_BORDER, sw(HAIRLINE_W)))
-    # The product mockup's masthead: quiet rules, one solder-green dot and one
-    # copper dot around the compact FireFlow Glow wordmark.
-    out.append('  <circle cx="4.000" cy="8.650" r="0.250" fill="%s"/>\n' % PAD_GREEN)
-    out.append('  <line id="glowBrandRuleLeft" x1="5.900" y1="8.650" '
-               'x2="8.800" y2="8.650" stroke="%s" stroke-width="0.25"/>\n'
-               % PAD_GREEN)
-    out.append('  <line id="glowBrandRuleRight" x1="%s" y1="8.650" '
-               'x2="%s" y2="8.650" stroke="%s" stroke-width="0.25"/>\n'
-               % (mm(W - 9.1), mm(W - 6.2), PAD_COPPER))
-    out.append('  <circle cx="%s" cy="8.650" r="0.250" fill="%s"/>\n'
-               % (mm(W - 4.3), PAD_COPPER))
+    # The masthead's flanking rules and dots went out with the wordmark they
+    # flanked; see TEXTS. Nothing is drawn across the electrode band.
     for c in PARAMS + OUTPUTS:
         out.append(SVG_FOR[c.kind](c))
     for t in TEXTS:
@@ -520,8 +513,9 @@ def header():
                " XY lbl; unsigned char anchor; float lblSize; unsigned lblRgb;"
                " const char* tip; };\n")
     out.append("// anchor: 0 = middle, 1 = start (left-aligned), 2 = end (right-aligned)\n")
-    out.append("struct PanelTxt { XY mm; float size; unsigned rgb;"
-               " unsigned char anchor; int weight; const char* str; };\n")
+    if TEXTS:
+        out.append("struct PanelTxt { XY mm; float size; unsigned rgb;"
+                   " unsigned char anchor; int weight; const char* str; };\n")
     out.append(enum_block("ParamId", PARAMS, "NUM_PARAMS"))
     # The board has no inputs. An empty enum still yields NUM_INPUTS == 0, but
     # an empty ARRAY would be `PanelCtl kInputCtls[] = {}` -- a zero-length
@@ -556,12 +550,16 @@ def header():
         for c in ctls:
             out.append(ctl_row(c))
         out.append("};\n")
-    out.append("static const PanelTxt kTexts[] = {\n")
-    for t in TEXTS:
-        out.append('    { {%sf, %sf}, %sf, %s, %d, %d, "%s" },\n'
-                   % (mm(t.x), mm(t.y), mm(t.size), rgb(t.rgb), t.anchor,
-                      t.weight, t.str))
-    out.append("};\n")
+    # Same zero-length-array rule as kInputCtls above: with no plate text there
+    # must be no `PanelTxt kTexts[] = {}`, so neither the table nor the struct
+    # it needs is emitted, and Glow.cpp has no kTexts loop.
+    if TEXTS:
+        out.append("static const PanelTxt kTexts[] = {\n")
+        for t in TEXTS:
+            out.append('    { {%sf, %sf}, %sf, %s, %d, %d, "%s" },\n'
+                       % (mm(t.x), mm(t.y), mm(t.size), rgb(t.rgb), t.anchor,
+                          t.weight, t.str))
+        out.append("};\n")
     out.append("} } // namespace spkyvcv::glow\n")
     return "".join(out)
 

@@ -1098,7 +1098,10 @@ static NVGcolor panelRGB(unsigned c) {
 }
 
 // The layered hardware rasters contain no generated runtime lettering, so the
-// small wordmark/output captions are redrawn from the generated tables.
+// small control/output captions are redrawn from the generated tables. The
+// plate itself carries no text: the masthead that used to sit above the
+// controls was drawn under electrodes P10/P11 and is gone, so there is no
+// kTexts table to loop over.
 struct GlowText : Widget {
     void draw(const DrawArgs& args) override {
         std::shared_ptr<window::Font> font =
@@ -1117,8 +1120,6 @@ struct GlowText : Widget {
             const Vec p = mm2px(Vec(xmm, ymm));
             nvgText(args.vg, p.x, p.y, s, nullptr);
         };
-        for (const auto& t : kTexts)
-            put(t.mm.x, t.mm.y, t.size, t.rgb, t.anchor, t.str);
         for (const auto& c : kParamCtls)
             put(c.lbl.x, c.lbl.y, c.lblSize, c.lblRgb, c.anchor, c.label);
         for (const auto& c : kOutputCtls)

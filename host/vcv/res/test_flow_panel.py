@@ -469,35 +469,70 @@ def test_neutral_svg_prints_no_p_number_labels():
               "neutral SVG visibly prints %s" % pad_id)
 
 
-def test_silkscreen_copy():
-    words = [t.str for t in g.TEXTS]
-    check(words == ["FIREFLOW", "/", "GLOW"],
-          "header must read FIREFLOW / GLOW only: %r" % words)
-    check(len({t.y for t in g.TEXTS}) == 1,
-          "FIREFLOW / GLOW must share one baseline")
+def test_the_plate_carries_no_text_of_its_own():
+    """The masthead is gone: wordmark, flanking rules and dots.
+
+    It sat at y = 10.0 mm, directly under electrodes P10/P11, which span
+    y 2.0 .. 11.5 mm and are drawn over it. Both surfaces that carried it are
+    checked here -- the vector fallback, and the generated table the widget
+    draws from. The table must be absent rather than empty: a zero-length
+    `PanelTxt kTexts[] = {}` is the same ill-formed construct kInputCtls
+    already avoids, so the struct goes with it.
+    """
+    check(g.TEXTS == [],
+          "the plate must carry no text of its own: %r"
+          % [t.str for t in g.TEXTS])
+    hpp = g.header()
+    for symbol in ("kTexts", "PanelTxt"):
+        check(symbol not in hpp,
+              "header still emits %s for an empty plate-text list" % symbol)
+    panel = g.svg()
+    for rule in ("glowBrandRuleLeft", "glowBrandRuleRight"):
+        check('id="%s"' % rule not in panel,
+              "the masthead rule %s outlived the wordmark it flanked" % rule)
+    for word in ("FIREFLOW", "GLOW"):
+        check(">%s<" % word not in panel,
+              "the vector fallback still prints the %s wordmark" % word)
 
 
-def test_logo_font_weights():
-    fireflow = next((t for t in g.TEXTS if t.str == "FIREFLOW"), None)
-    glow = next((t for t in g.TEXTS if t.str == "GLOW"), None)
-    check(fireflow is not None, "FireFlow text entry not found")
-    check(glow is not None, "GLOW text entry not found")
-    if fireflow is None or glow is None:
-        return          # a missing half is already reported; do not crash on it
-    check(fireflow.weight is not None and glow.weight is not None,
-          "both wordmark halves must carry a weight")
-    check(fireflow.weight < glow.weight,
-          "FireFlow must be lighter than GLOW")
+def _text_box_mm(x, y, size, anchor, text):
+    """Bounding box of a drawn string, in millimetres.
+
+    ShareTechMono is monospaced at roughly 0.6 em advance, and the panel
+    draws on the baseline, so the glyphs occupy `size` upwards from y.
+    """
+    width = 0.6 * size * len(text)
+    left = x if anchor == 1 else x - width if anchor == 2 else x - width / 2.0
+    return (left, y - size, left + width, y)
 
 
-def test_wordmark_separator_is_panel_centred():
-    separator = next((t for t in g.TEXTS if t.str == "/"), None)
-    check(separator is not None, "wordmark separator is missing")
-    if separator is not None:
-        check(approx(separator.x, g.W * 0.5),
-              "wordmark separator is not on the panel centre")
-        check(separator.anchor == 0,
-              "wordmark separator must be middle-anchored")
+def test_no_drawn_lettering_lands_on_an_electrode():
+    """Whatever the panel draws in text must stay clear of the electrodes.
+
+    This is the invariant the masthead actually broke, and it survives the
+    masthead's removal: it is not "the plate has no text", it is "no drawn
+    glyph occupies a place a pad is drawn over". Control captions are checked
+    alongside the plate text, because a relocated caption fails the same way.
+    """
+    drawn = [(_text_box_mm(t.x, t.y, t.size, t.anchor, t.str), t.str)
+             for t in g.TEXTS]
+    for control in g.PARAMS + g.OUTPUTS:
+        if not control.label:
+            continue
+        lx, ly = g.label_xy(control)
+        # Control captions are emitted middle-anchored; see the label loop in
+        # gen_flow_panel.svg().
+        drawn.append((_text_box_mm(lx, ly, g.LBL_SZ[control.kind], 0,
+                                   control.label),
+                      control.label))
+    for shape in g.PAD_SHAPES:
+        # curve_bounds is the drawn spline extent, not the control points.
+        pad = shape.curve_bounds
+        for (x0, y0, x1, y1), text in drawn:
+            overlaps = (x0 < pad.max_x and x1 > pad.min_x and
+                        y0 < pad.max_y and y1 > pad.min_y)
+            check(not overlaps,
+                  "%r is drawn across electrode %s" % (text, shape.pad_id))
 
 
 def test_dark_copper_panel_contract():
@@ -505,7 +540,7 @@ def test_dark_copper_panel_contract():
     check(g.PANEL_TOP == "#20221d" and g.PANEL_BOTTOM == "#10110f",
           "Glow must use the approved warm graphite gradient")
     check('id="alphaPennant"' not in panel, "alpha pennant must be removed")
-    check('ALPHA' not in [t.str for t in g.TEXTS], "ALPHA text must be removed")
+    check('ALPHA' not in panel, "ALPHA text must be removed")
     check('<rect class="touchPlate"' not in panel,
           "touch pads must no longer be rounded rectangles")
 
@@ -548,19 +583,29 @@ def test_generated_header_exports_pad_geometry():
           "generator retains obsolete rectangular-pad radius PAD_R")
 
 
-def test_the_masthead_rules_survive():
-    """The two brand rules flanking the wordmark, by id.
+def test_the_plate_top_stays_free_of_decoration():
+    """Nothing decorative may be drawn across the electrode band again.
 
-    They are what is left of the four mockup signatures the old gate checked.
-    Two of those four -- the macro accent and the NEW collar -- went out with
-    the surface they belonged to and are correctly gone. These two did not:
-    the generator still emits them, and until this they were the only drawn
-    elements on the plate with an id and no gate.
+    The masthead's rules and dots sat at y = 8.650 mm, inside the same
+    y 2.0 .. 11.5 mm band the upper electrodes occupy. Their ids are gated in
+    test_the_plate_carries_no_text_of_its_own; this gates the coordinate, so
+    an unnamed replacement cannot quietly take their place.
     """
     panel = g.svg()
-    for rule in ("glowBrandRuleLeft", "glowBrandRuleRight"):
-        check('id="%s"' % rule in panel,
-              "the masthead lost %s -- the wordmark reads unflanked" % rule)
+    band_top, band_bottom = 2.0, 11.5
+    for line in panel.splitlines():
+        if "<line" not in line and "<circle" not in line:
+            continue
+        if "glowPad" in line or "class=" in line:
+            continue
+        for attribute in ("cy=", "y1=", "y2="):
+            index = line.find(attribute)
+            if index < 0:
+                continue
+            value = float(line[index + len(attribute):].split('"')[1])
+            check(not (band_top <= value <= band_bottom),
+                  "decoration at y=%s is drawn across the electrode band: %s"
+                  % (value, line.strip()))
 
 
 def test_the_header_emits_no_zero_length_input_table():

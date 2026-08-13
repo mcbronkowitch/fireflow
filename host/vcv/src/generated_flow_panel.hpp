@@ -13,7 +13,6 @@ struct PadShape { const XY* points; std::size_t pointCount; XY label; XY centre;
 enum WidgetKind { WK_MACRO, WK_PAD, WK_FADER, WK_SWITCH, WK_OUT };
 struct PanelCtl { int id; WidgetKind kind; XY mm; const char* label; XY lbl; unsigned char anchor; float lblSize; unsigned lblRgb; const char* tip; };
 // anchor: 0 = middle, 1 = start (left-aligned), 2 = end (right-aligned)
-struct PanelTxt { XY mm; float size; unsigned rgb; unsigned char anchor; int weight; const char* str; };
 enum ParamId {
     MOTION,
     DENSITY,
@@ -118,10 +117,5 @@ static const PanelCtl kParamCtls[] = {
 static const PanelCtl kOutputCtls[] = {
     { OUT_L, WK_OUT, {4.310f, 15.150f}, "L", {4.310f, 20.750f}, 0, 2.200f, 0xD7D1C5, "Main out, left" },
     { OUT_R, WK_OUT, {4.330f, 30.600f}, "R", {4.330f, 36.200f}, 0, 2.200f, 0xD7D1C5, "Main out, right" },
-};
-static const PanelTxt kTexts[] = {
-    { {38.440f, 10.000f}, 3.200f, 0xB96532, 2, 500, "FIREFLOW" },
-    { {40.640f, 10.000f}, 3.200f, 0xD7D1C5, 0, 400, "/" },
-    { {42.840f, 10.000f}, 3.200f, 0xB96532, 1, 700, "GLOW" },
 };
 } } // namespace spkyvcv::glow
