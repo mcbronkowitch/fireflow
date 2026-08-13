@@ -17,7 +17,6 @@ import zlib
 
 
 RACK_WIDTH_MM = 81.28
-RACK_HEIGHT_MM = 128.5
 RACK_WIDTH_PX = 960
 RACK_HEIGHT_PX = 1520
 RACK_PX_PER_MM = RACK_WIDTH_PX / RACK_WIDTH_MM
@@ -30,8 +29,6 @@ OPAQUE_BOARD_ALPHA = 128
 
 FACEPLATE_MANIFEST = {
     "fireflow-derivation": "kicad-physical-master-v1",
-    "fireflow-pixel-sha256":
-        "08eb70559d816dea30eac00b362f9fc82e684b84efc4ff16889f3896db3ac77e",
     "fireflow-source-board-sha256":
         "745af5799a38e13bf21eec80266137818832cf3a1e8cfdba858796725d518ba1",
     "fireflow-source-preview-sha256":
@@ -76,6 +73,8 @@ MECHANICAL_CONTROL_CENTRES_MM = {
 # best-fit comparison is 0.218 mm, but that 1.023423583 scale must never move
 # or warp the faceplate master.
 CONTROL_SOURCE_MAX_ERROR_MM = 1.00
+
+_EXPECTED_FACEPLATE_CACHE = {}
 
 PANEL_ASSETS = {
     "GlowRear.png": (960, 1520, "RGBA"),
@@ -155,10 +154,6 @@ def _sha256(path):
         for block in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
-
-
-def _pixel_sha256(raw, width, height):
-    return hashlib.sha256(b"".join(_unfilter_rgba(raw, width, height))).hexdigest()
 
 
 def _unfilter_rgba(raw, width, height):
@@ -243,12 +238,6 @@ def validate_assets(asset_dir, makefile):
     if len(switch_sizes) != 1:
         raise AssetError("switch assets do not have identical dimensions")
 
-    canonical_asset_dir = os.path.dirname(os.path.abspath(__file__))
-    if os.path.abspath(asset_dir) == canonical_asset_dir:
-        _validate_faceplate_derivation(
-            os.path.join(asset_dir, "GlowFaceplate.png"),
-            infos["GlowFaceplate.png"])
-
     for name, (expected_width, expected_height, expected_mode) in all_assets.items():
         width, height, mode, raw = infos[name]
         if (width, height) != (expected_width, expected_height):
@@ -262,6 +251,10 @@ def validate_assets(asset_dir, makefile):
                 raise AssetError("%s is fully transparent" % name)
         if "res/" + name not in package:
             raise AssetError("%s is absent from DISTRIBUTABLES" % name)
+
+    _validate_faceplate_derivation(
+        os.path.join(asset_dir, "GlowFaceplate.png"),
+        infos["GlowFaceplate.png"])
 
 
 def _blank(width, height):
@@ -336,8 +329,8 @@ def _bilinear(rows, width, height, x, y):
     return tuple(out)
 
 
-def derive_faceplate(preview_path, output_path):
-    """Uniformly map one KiCad front render into the 4x Rack canvas."""
+def render_faceplate(preview_path):
+    """Return the uniformly mapped KiCad front render and its manifest."""
     width, height, mode, raw = _png_info(preview_path)
     if mode != "RGBA":
         raise AssetError("KiCad preview must be RGBA")
@@ -381,14 +374,29 @@ def derive_faceplate(preview_path, output_path):
         "fireflow-source-pixels-per-mm": "%.9f" % source_ppmm,
         "fireflow-pixel-sha256": pixel_hash,
     })
+    return image, manifest
+
+
+def derive_faceplate(preview_path, output_path):
+    """Write the deterministic 4x Rack derivative of one KiCad preview."""
+    image, manifest = render_faceplate(preview_path)
     _png(output_path, RACK_WIDTH_PX, RACK_HEIGHT_PX, image, manifest)
     return manifest
 
 
-def _alpha_at_rack_mm(rows, x_mm, y_mm):
-    px = min(RACK_WIDTH_PX - 1, max(0, int(round(x_mm * RACK_PX_PER_MM - 0.5))))
-    py = min(RACK_HEIGHT_PX - 1, max(0, int(round(y_mm * RACK_PX_PER_MM - 0.5))))
-    return rows[py][px * 4 + 3]
+def _expected_faceplate(preview_path):
+    """Regenerate once per pinned preview hash without touching the filesystem."""
+    preview_hash = _sha256(preview_path)
+    key = (os.path.abspath(preview_path), preview_hash)
+    if key not in _EXPECTED_FACEPLATE_CACHE:
+        _EXPECTED_FACEPLATE_CACHE.clear()
+        _EXPECTED_FACEPLATE_CACHE[key] = render_faceplate(preview_path)
+    return _EXPECTED_FACEPLATE_CACHE[key]
+
+
+def _flat_rows(image, width, height):
+    stride = width * 4
+    return [image[y * stride:(y + 1) * stride] for y in range(height)]
 
 
 def _control_source_residuals():
@@ -402,44 +410,102 @@ def _control_source_residuals():
     return residuals
 
 
+def _edge_probe_specs():
+    """Named Rack-mm scan lines through source-derived mechanical contours."""
+    probes = []
+    for name in ("mount_left_top", "mount_right_bottom"):
+        x, y = FACEPLATE_FIDUCIALS_MM[name]
+        rack_x, rack_y = x + FACEPLATE_TX_MM, y + FACEPLATE_TY_MM
+        probes.append((name, "x", rack_y, rack_x - 4.0, rack_x + 4.0, 2))
+    for name in ("knob_1", "knob_6"):
+        x, y = FACEPLATE_FIDUCIALS_MM[name]
+        rack_x, rack_y = x + FACEPLATE_TX_MM, y + FACEPLATE_TY_MM
+        probes.append((name, "x", rack_y, rack_x - 6.0, rack_x + 6.0, 2))
+    for fiducial, probe_name in (
+            ("fader_left_top_inset_1px", "fader_left_top"),
+            ("fader_right_bottom_inset_1px", "fader_right_bottom")):
+        x, y = FACEPLATE_FIDUCIALS_MM[fiducial]
+        rack_x, rack_y = x + FACEPLATE_TX_MM, y + FACEPLATE_TY_MM
+        probes.append((probe_name, "y", rack_x,
+                       rack_y - 1.0, rack_y + 1.0, 2))
+    _x, y = FACEPLATE_FIDUCIALS_MM["diagonal_opening"]
+    probes.append(("diagonal", "x", y + FACEPLATE_TY_MM,
+                   25.0 + FACEPLATE_TX_MM, 78.0 + FACEPLATE_TX_MM, 1))
+    return tuple(probes)
+
+
+def _scan_transitions(rows, width, height, axis, fixed_mm, start_mm, end_mm):
+    fixed = int(round(fixed_mm * RACK_PX_PER_MM - 0.5))
+    start = int(round(start_mm * RACK_PX_PER_MM - 0.5))
+    end = int(round(end_mm * RACK_PX_PER_MM - 0.5))
+    limit = width if axis == "x" else height
+    fixed_limit = height if axis == "x" else width
+    fixed = min(fixed_limit - 1, max(0, fixed))
+    start = min(limit - 1, max(0, start))
+    end = min(limit - 1, max(0, end))
+    if start > end:
+        start, end = end, start
+    solid = []
+    for position in range(start, end + 1):
+        x, y = (position, fixed) if axis == "x" else (fixed, position)
+        solid.append(rows[y][x * 4 + 3] >= OPAQUE_BOARD_ALPHA)
+    return tuple(start + index for index in range(1, len(solid))
+                 if solid[index] != solid[index - 1])
+
+
+def _validate_contour_transitions(actual_rows, expected_rows, width, height):
+    for name, axis, fixed, start, end, expected_count in _edge_probe_specs():
+        expected = _scan_transitions(expected_rows, width, height, axis,
+                                     fixed, start, end)
+        actual = _scan_transitions(actual_rows, width, height, axis,
+                                   fixed, start, end)
+        if len(expected) != expected_count:
+            raise AssetError("regenerated %s contour has %d transitions, want %d" %
+                             (name, len(expected), expected_count))
+        if len(actual) != len(expected):
+            raise AssetError("%s contour transition count differs from KiCad derivative" %
+                             name)
+        for observed, source_derived in zip(actual, expected):
+            signed_distance_mm = ((observed - source_derived) /
+                                  RACK_PX_PER_MM)
+            if abs(signed_distance_mm) > FIDUCIAL_TOLERANCE_MM + 1e-12:
+                raise AssetError(
+                    "%s contour transition signed distance %.6f mm exceeds %.6f mm" %
+                    (name, signed_distance_mm, FIDUCIAL_TOLERANCE_MM))
+
+
 def _validate_faceplate_derivation(path, info):
     width, height, _mode, raw = info
-    fields = _png_text(path)
-    for key, expected in FACEPLATE_MANIFEST.items():
-        if fields.get(key) != expected:
-            raise AssetError("GlowFaceplate.png is not the KiCad physical preview derivative")
-    required = ("fireflow-source-opaque-bounds",
-                "fireflow-source-pixels-per-mm")
-    if any(not fields.get(key) for key in required):
-        raise AssetError("GlowFaceplate.png lacks its KiCad derivation sidecar")
-    if _pixel_sha256(raw, width, height) != fields["fireflow-pixel-sha256"]:
-        raise AssetError("GlowFaceplate.png pixels differ from its derivation manifest")
-
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     preview = os.path.join(root, "hardware", "glow-faceplate", "proof",
                            "glow-faceplate-preview.png")
     board = os.path.join(root, "hardware", "glow-faceplate",
                          "glow-faceplate.kicad_pcb")
     if not os.path.isfile(preview) or _sha256(preview) != \
-            fields["fireflow-source-preview-sha256"]:
+            FACEPLATE_MANIFEST["fireflow-source-preview-sha256"]:
         raise AssetError("GlowFaceplate.png does not match the committed KiCad preview")
     if not os.path.isfile(board) or _sha256(board) != \
             FACEPLATE_MANIFEST["fireflow-source-board-sha256"]:
         raise AssetError("GlowFaceplate.png physical-master hash is stale")
 
-    rows = _unfilter_rgba(raw, width, height)
-    for name, (board_x, board_y) in FACEPLATE_FIDUCIALS_MM.items():
-        rack_x = board_x + FACEPLATE_TX_MM
-        rack_y = board_y + FACEPLATE_TY_MM
-        pixel_x = int(round(rack_x * RACK_PX_PER_MM - 0.5))
-        pixel_y = int(round(rack_y * RACK_PX_PER_MM - 0.5))
-        sampled_rack = ((pixel_x + 0.5) / RACK_PX_PER_MM,
-                        (pixel_y + 0.5) / RACK_PX_PER_MM)
-        if math.dist((rack_x, rack_y), sampled_rack) > FIDUCIAL_TOLERANCE_MM:
-            raise AssetError("GlowFaceplate.png fiducial %s exceeds one pixel" % name)
-        alpha = _alpha_at_rack_mm(rows, rack_x, rack_y)
-        if alpha > 16:
-            raise AssetError("GlowFaceplate.png fiducial %s is not transparent" % name)
+    expected_image, expected_fields = _expected_faceplate(preview)
+    fields = _png_text(path)
+    for key in sorted(set(fields) | set(expected_fields)):
+        if key == "fireflow-pixel-sha256":
+            continue
+        if fields.get(key) != expected_fields.get(key):
+            raise AssetError("GlowFaceplate.png derivation metadata differs: %s" % key)
+
+    actual_rows = _unfilter_rgba(raw, width, height)
+    expected_rows = _flat_rows(expected_image, width, height)
+    _validate_contour_transitions(actual_rows, expected_rows, width, height)
+    if b"".join(actual_rows) != bytes(expected_image):
+        raise AssetError(
+            "GlowFaceplate.png pixels differ from regenerated KiCad derivative")
+    if fields.get("fireflow-pixel-sha256") != \
+            expected_fields["fireflow-pixel-sha256"]:
+        raise AssetError(
+            "GlowFaceplate.png derivation metadata differs: fireflow-pixel-sha256")
 
     residuals = _control_source_residuals()
     if max(residuals.values()) > CONTROL_SOURCE_MAX_ERROR_MM:

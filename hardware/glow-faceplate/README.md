@@ -209,10 +209,15 @@ Thus the VCV derivative is an exact 300 DPI, uniform-scale placement in the
 lower edge at 76.499993 mm, 0.600007 mm above the fixed/lower-board boundary.
 Outside the board, the outer diagonal opening, and all 15 internal openings
 remain transparent. PNG text records the board hash, preview hash, opaque
-bounds, transform, source density, and unfiltered-pixel hash. The asset guard
-checks those identities plus two mount holes, two fader-opening endpoint
-witnesses, two knob centres, and the diagonal opening at the one-pixel
-0.084667 mm mechanical tolerance.
+bounds, transform, source density, and unfiltered-pixel hash. During every
+normal validation, the guard reruns the compositor from the pinned preview
+entirely in memory and byte-compares the complete expected 960 x 1520 RGBA
+pixel buffer with the committed image; validation writes no file. Consequently
+a manual edit cannot authorize itself by updating PNG hashes or sidecar text.
+Seven explicit alpha-transition scans cross the two mount holes, two
+fader-opening endpoints, two knob apertures, and the diagonal edge. Their
+observed signed edge offsets are compared with the regenerated, source-derived
+transitions and may differ by at most one pixel, 0.084667 mm.
 
 The older `touch2_geometry.py` control centres remain rectified-photography
 evidence. At the exact 1:1 mechanical placement, the comparable knob/fader
