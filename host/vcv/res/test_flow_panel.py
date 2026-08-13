@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Guard rails for the generated FireFlow Glow panel (Simple Touch 2).
 
-Runs the generator in-process and asserts what must never drift: the enum
-ORDER, the control complement of the board, rectangle-based collisions, and
-that the committed SVG/header still match what the generator emits.
+Runs the generator in-process and asserts what must never drift: enum order,
+the physical 10+2 pad split, stable identities, switch and silver-field
+exclusions, and byte-for-byte generated SVG/header agreement.
 
 No pytest in this environment -- plain asserts, exit code says it all.
 Run from host/vcv/:  python res/test_flow_panel.py
@@ -59,11 +59,8 @@ KNOB_CHAN = ['S31', 'S32', 'S33', 'S34', 'S30', 'S35']
 # its threshold from the file it polices can be disarmed by editing that file.
 EDGE_KEEPOUT = 0.0
 
-# Both switches are mounted THROUGH the pad field on the real board, so the
-# twelve places are laid out around them (gen_flow_panel's "the pad field").
-# This is the margin that layout must keep -- not zero, because a tile that
-# merely fails to intersect a switch by 0.05 mm is a collision waiting for the
-# next re-measure. The tightest pair today is the middle row against SW_R.
+# Both switches are mounted through the lower touch board. The traced electrode
+# contours must clear their physical footprints by more than a rounding error.
 SWITCH_CLEARANCE = 0.5
 
 
@@ -91,6 +88,29 @@ def test_panel_size():
     check(approx(g.Hh, 128.5), "panel height is %.3f, want 128.5" % g.Hh)
 
 
+def test_touch2_uses_true_ten_plus_two_mapping():
+    """A physical Touch 2 is P00-P09 below and P10/P11 above."""
+    check([getattr(p, "pad_id", None) for p in g.PAD_SHAPES] ==
+          ["P%02d" % i for i in range(12)],
+          "pad shapes must retain physical IDs P00 through P11")
+    check([getattr(p, "zone", None) for p in g.PAD_SHAPES[:10]] ==
+          ["lower_touch"] * 10,
+          "P00-P09 must belong to the lower touch board")
+    check([getattr(p, "zone", None) for p in g.PAD_SHAPES[10:]] ==
+          ["upper_rear"] * 2,
+          "P10/P11 must belong to the upper rear PCB")
+
+
+def test_upper_pads_are_above_lower_touch_board():
+    """The 10+2 split is physical, not another twelve-place lower field."""
+    if any(not hasattr(p.bounds, "min_y") for p in g.PAD_SHAPES):
+        check(False, "pad bounds need named min_y/max_y coordinates")
+        return
+    lower_top = min(p.bounds.min_y for p in g.PAD_SHAPES[:10])
+    check(all(p.bounds.max_y < lower_top for p in g.PAD_SHAPES[10:]),
+          "P10/P11 must sit wholly above the lower touch board")
+
+
 def test_control_complement_matches_the_board():
     counts = {}
     for c in g.PARAMS + g.OUTPUTS:
@@ -104,13 +124,8 @@ def test_control_complement_matches_the_board():
               "want %d %s, have %d" % (want, what, counts.get(kind, 0)))
 
 
-def test_geometry_comes_from_the_measured_table():
-    """Positions must not be re-typed into the generator by hand.
-
-    The pads are the exception and have their own tests below: their centres
-    are computed from the measured field, not printed from the measured
-    centres. Everything else is the measurement, verbatim.
-    """
+def test_geometry_comes_from_the_named_physical_table():
+    """Every generator coordinate comes from the named geometry module."""
     faders = [(c.x, c.y) for c in g.PARAMS if c.kind == g.FADER]
     check(faders == [(x, y) for x, y in geo.FADERS],
           "fader centres drifted from touch2_geometry.FADERS")
@@ -127,79 +142,19 @@ def test_geometry_comes_from_the_measured_table():
           "the printed knob cap radius is %.3f mm, not the measured collar "
           "radius %.3f -- a round number was typed into the generator"
           % (g.KNOB_R, geo.KNOB_COLLAR_R))
+    for source, generated in zip(geo.PADS, g.PAD_SHAPES):
+        check(generated.pad_id == source.pad_id and
+              generated.zone == source.zone and
+              generated.points == source.points_mm and
+              generated.verified == source.verified,
+              "%s was retyped or lost physical metadata in the generator"
+              % source.pad_id)
 
 
-def test_the_measured_pad_list_is_not_reading_order():
-    """geo.PADS is left-to-right within three overlapping bands, and index i is
-    MPR121 place i. Tidying it into reading order would silently renumber every
-    electrode, and a y-sorted list is exactly what a tidy-up produces. The
-    laid-out places ARE in reading order now, so this has to be asserted on the
-    measured table -- which is the record, and stays one."""
-    ys = [y for _, y in geo.PADS]
-    check(ys != sorted(ys),
-          "the measured pad list is sorted top-to-bottom -- it was tidied into "
-          "reading order, which renumbers the MPR121 channels")
-
-
-def test_the_measured_field_top_is_a_field_top():
-    """PAD_FIELD_TOP is the one solid number in the pad segmentation and the
-    layout hangs off it. It must sit below the knob row and above every
-    measured pad centre, or it is not the top of the field."""
-    check(max(y for _, y in geo.KNOBS) < geo.PAD_FIELD_TOP,
-          "PAD_FIELD_TOP %.2f is not below the knob row (%.2f)"
-          % (geo.PAD_FIELD_TOP, max(y for _, y in geo.KNOBS)))
-    check(geo.PAD_FIELD_TOP <= min(y for _, y in geo.PADS),
-          "PAD_FIELD_TOP %.2f sits below the topmost measured pad (%.2f)"
-          % (geo.PAD_FIELD_TOP, min(y for _, y in geo.PADS)))
-    check(geo.PAD_FIELD_TOP < geo.PLATE_H,
-          "PAD_FIELD_TOP %.2f is off the plate" % geo.PAD_FIELD_TOP)
-
-
-def test_the_bands_come_out_of_the_measurement():
-    """Five, five and two, split out of the measured y positions. The sizes are
-    stated here, not read from the generator: they are a fact about the board.
-    """
-    check([len(b) for b in g.PAD_BANDS] == [5, 5, 2],
-          "the pad bands are %s, want [5, 5, 2]"
-          % [len(b) for b in g.PAD_BANDS])
-    check([i for b in g.PAD_BANDS for i in b] == list(range(12)),
-          "the bands no longer read as places 1..12 in order: %s"
-          % [i for b in g.PAD_BANDS for i in b])
-
-
-def test_each_place_stays_where_it_was_measured():
-    """The layout is tidy, not a reshuffle: of the twelve laid-out places, the
-    one nearest measured centre i must BE place i. Stated globally on purpose,
-    so it is not the generator's band/column arithmetic restated -- a swapped
-    pair or a mixed-up band moves a place past its neighbour and fails here."""
-    places = [(c.x, c.y) for c in g.PARAMS if c.kind == g.PAD]
-    check(len(places) == len(geo.PADS), "place count differs from measured")
-    if len(places) != len(geo.PADS):
-        return
-    for i, (mx, my) in enumerate(geo.PADS):
-        d = [((px - mx) ** 2 + (py - my) ** 2) ** 0.5 for px, py in places]
-        nearest = min(range(len(d)), key=lambda k: d[k])
-        check(nearest == i,
-              "measured place %d (%.2f, %.2f) is nearest laid-out place %d, "
-              "not its own" % (i + 1, mx, my, nearest + 1))
-
-
-def test_the_places_stay_inside_the_measured_field():
-    """The field is measured; the places inside it are not. A tile that leaves
-    the field is drawing over the knob row or off the plate."""
-    for c in g.PARAMS:
-        if c.kind != g.PAD:
-            continue
-        x0, y0, x1, y1 = _rect(c)
-        check(y0 >= geo.PAD_FIELD_TOP,
-              "%s starts at y = %.2f, above the measured field top (%.2f)"
-              % (c.enum, y0, geo.PAD_FIELD_TOP))
-        check(y1 <= geo.PLATE_H,
-              "%s ends at y = %.2f, below the plate (%.2f)"
-              % (c.enum, y1, geo.PLATE_H))
-        check(x0 >= 0.0 and x1 <= geo.PLATE_W,
-              "%s spans %.2f .. %.2f, outside the full-width field"
-              % (c.enum, x0, x1))
+def test_unverified_paths_keep_source_notes():
+    for shape in g.PAD_SHAPES:
+        check(shape.verified or bool(shape.source_note.strip()),
+              "%s is unverified without a source note" % shape.pad_id)
 
 
 def test_which_macro_sits_on_which_knob():
@@ -251,15 +206,61 @@ def _point_rect_distance(p, rect):
     return (dx * dx + dy * dy) ** 0.5
 
 
+def _point_in_polygon(point, polygon):
+    x, y = point
+    inside = False
+    previous = polygon[-1]
+    for current in polygon:
+        x0, y0 = previous
+        x1, y1 = current
+        if (y0 > y) != (y1 > y):
+            crossing_x = x0 + (y - y0) * (x1 - x0) / (y1 - y0)
+            if x < crossing_x:
+                inside = not inside
+        previous = current
+    return inside
+
+
+def _polygon_edge_samples(polygon, samples_per_edge=20):
+    out = []
+    for a, b in zip(polygon, polygon[1:] + polygon[:1]):
+        for sample in range(samples_per_edge):
+            t = sample / float(samples_per_edge)
+            out.append((a[0] + (b[0] - a[0]) * t,
+                        a[1] + (b[1] - a[1]) * t))
+    return out
+
+
 def test_pad_contours_clear_switches():
     switch_rects = [_rect(c) for c in g.PARAMS if c.kind == g.SWITCH]
-    for i, shape in enumerate(g.PAD_SHAPES):
-        samples = g.sample_closed_pad(shape, samples_per_segment=20)
+    check(len(switch_rects) == 2, "Touch 2 must expose two switch clearances")
+    for shape in g.PAD_SHAPES:
+        samples = g.sample_closed_pad(shape, samples_per_segment=100)
         for rect in switch_rects:
             clearance = min(_point_rect_distance(p, rect) for p in samples)
-            check(clearance >= SWITCH_CLEARANCE,
-                  "PAD_%d clears a switch by %.2f mm, want %.2f"
-                  % (i + 1, clearance, SWITCH_CLEARANCE))
+            x0, y0, x1, y1 = rect
+            probes = ((x0, y0), (x1, y0), (x1, y1), (x0, y1),
+                      ((x0 + x1) / 2.0, (y0 + y1) / 2.0))
+            switch_inside_pad = any(_point_in_polygon(p, samples) for p in probes)
+            check(clearance >= SWITCH_CLEARANCE and not switch_inside_pad,
+                  "%s clears a switch by %.2f mm, want %.2f mm with no "
+                  "enclosed switch hardware"
+                  % (shape.pad_id, clearance, SWITCH_CLEARANCE))
+
+
+def test_no_electrode_enters_silver_decoration_zones():
+    check(len(geo.SILVER_DECORATION_ZONES_MM) == 2,
+          "Touch 2 must define two silver decorative fields")
+    for shape in g.PAD_SHAPES:
+        electrode = g.sample_closed_pad(shape, samples_per_segment=100)
+        for zone_index, silver in enumerate(geo.SILVER_DECORATION_ZONES_MM):
+            electrode_enters = any(_point_in_polygon(p, silver)
+                                    for p in electrode)
+            silver_enters = any(_point_in_polygon(p, electrode)
+                                for p in _polygon_edge_samples(silver, 50))
+            check(not electrode_enters and not silver_enters,
+                  "%s overlaps silver decoration zone %d"
+                  % (shape.pad_id, zone_index + 1))
 
 
 def test_pad_runtime_bounds_cover_the_spline_and_halo():
@@ -283,13 +284,12 @@ def test_pad_runtime_bounds_cover_the_spline_and_halo():
 
 
 def test_no_overlap():
-    """Rectangles guard every pair except organic pad/switch pairs, whose
-    clearance is tested against the rendered spline in test_pad_contours_clear_switches."""
+    """Rectangles guard conventional controls; pads use exact contour gates."""
     all_ctls = g.PARAMS + g.OUTPUTS
     for i, a in enumerate(all_ctls):
         ax0, ay0, ax1, ay1 = _rect(a)
         for b in all_ctls[i + 1:]:
-            if {a.kind, b.kind} == {g.PAD, g.SWITCH}:
+            if a.kind == g.PAD or b.kind == g.PAD:
                 continue
             bx0, by0, bx1, by1 = _rect(b)
             check(not (ax0 < bx1 and bx0 < ax1 and ay0 < by1 and by0 < ay1),
@@ -299,7 +299,11 @@ def test_no_overlap():
 def test_on_panel():
     m = EDGE_KEEPOUT
     for c in g.PARAMS + g.OUTPUTS:
-        x0, y0, x1, y1 = _rect(c)
+        if c.kind == g.PAD:
+            index = int(c.enum.split("_")[1]) - 1
+            x0, y0, x1, y1 = g.PAD_SHAPES[index].curve_bounds
+        else:
+            x0, y0, x1, y1 = _rect(c)
         check(x0 >= m and x1 <= g.W - m,
               "%s runs off the plate horizontally (%.2f .. %.2f)"
               % (c.enum, x0, x1))
@@ -322,16 +326,18 @@ def test_labels_clear_every_glyph():
                   "%s's label baseline sits inside %s" % (c.enum, other.enum))
 
 
-def test_only_the_pads_carry_printed_captions():
-    """A printed TEMPO beside a fader assigned to `off` would be a lie baked
-    into an SVG. Function names are runtime tooltips (spec 3.3)."""
+def test_parameters_carry_no_printed_captions():
+    """P-numbers and provisional functions belong to runtime metadata."""
     for c in g.PARAMS:
-        if c.kind == g.PAD:
-            check(c.label.isdigit(),
-                  "pad %s must print its number, prints %r" % (c.enum, c.label))
-        else:
-            check(c.label == "",
-                  "%s must print no caption, prints %r" % (c.enum, c.label))
+        check(c.label == "",
+              "%s must print no caption, prints %r" % (c.enum, c.label))
+
+
+def test_neutral_svg_prints_no_p_number_labels():
+    panel = g.svg()
+    for pad_id in ("P%02d" % i for i in range(12)):
+        check(">%s<" % pad_id not in panel,
+              "neutral SVG visibly prints %s" % pad_id)
 
 
 def test_silkscreen_copy():
@@ -379,34 +385,30 @@ def test_twelve_unique_pad_splines():
     check(len(g.PAD_SHAPES) == 12, "want twelve pad shapes")
     fingerprints = []
     for i, shape in enumerate(g.PAD_SHAPES):
-        check(len(shape.points) == g.PAD_POINT_COUNT == 8,
-              "PAD_%d must have eight anchors" % (i + 1))
-        check(shape.centre == g.PAD_PLACES[i],
-              "PAD_%d lost its control centre" % (i + 1))
+        check(12 <= len(shape.points) <= 32,
+              "%s must retain 12-32 reviewed anchors" % shape.pad_id)
+        param = next(c for c in g.PARAMS if c.enum == "PAD_%d" % (i + 1))
+        check((param.x, param.y) == shape.centre,
+              "%s lost its generated control centre" % shape.pad_id)
+        check(shape.pad_id in param.tip,
+              "%s is missing from PAD_%d runtime metadata"
+              % (shape.pad_id, i + 1))
         fingerprints.append(tuple(shape.points))
     check(len(set(fingerprints)) == 12, "all pad contours must be unique")
 
 
-def test_pad_numbers_are_two_digit_edge_engravings():
-    pads = [c for c in g.PARAMS if c.kind == g.PAD]
-    check([c.label for c in pads] == ["%02d" % i for i in range(1, 13)],
-          "pad labels must read 01 through 12")
-    for i, c in enumerate(pads):
-        x0, y0, x1, y1 = g.PAD_SHAPES[i].curve_bounds
-        lx, ly = g.label_xy(c)
-        check(x0 <= lx <= x1 and y0 <= ly <= y1,
-              "%s label is outside its island" % c.enum)
-        check(abs(lx - c.x) > 0.15 * (x1 - x0),
-              "%s label is still centred" % c.enum)
-
-
 def test_generated_header_exports_pad_geometry():
     h = g.header()
-    check("static constexpr int kPadPointCount = 8;" in h,
-          "header lacks point count")
-    check("struct PadShape" in h and "XY min; XY max;" in h and
+    check("enum class PadZone : std::uint8_t { LowerTouch, UpperRear };" in h,
+          "header lacks physical pad zones")
+    check("struct PadShape" in h and "const XY* points;" in h and
+          "std::size_t pointCount;" in h and "const char* id;" in h and
+          "PadZone zone;" in h and "bool verified;" in h and
           "kPadShapes[12]" in h,
           "header lacks pad geometry")
+    for pad_id in ("P%02d" % i for i in range(12)):
+        check(('"%s"' % pad_id) in h,
+              "generated header lacks stable ID %s" % pad_id)
     for alias in ("static constexpr float kPadW",
                   "static constexpr float kPadH",
                   "static constexpr float kPadR",

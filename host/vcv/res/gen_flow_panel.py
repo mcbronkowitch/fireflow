@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 """Single source of truth for the FireFlow Glow VCV panel (Simple Touch 2).
 
-16 HP, laid out on the measured control centres of a Synthux Simple Touch 2
-(res/touch2_geometry.py): twelve touch pads, six trim knobs, two faders, two
-switches and one stereo out. No CV inputs -- the board has none.
-
-Every centre is the measured one except the twelve pad places, which are
-computed from the measured field: see "the pad field" below for why, and for
-what is still measurement in them.
+16 HP, laid out on the reviewed control centres and named physical 10+2 pad
+geometry in res/touch2_geometry.py: P00-P09 on the lower touch board, P10/P11
+on the upper rear PCB, six trim knobs, two faders, two switches and one stereo
+out. No CV inputs -- the board has none.
 
 This is a VCV panel. It is NOT the faceplate draft -- see touch2_geometry.py
 for why the millimetres here are good enough for Rack and not for a router.
@@ -29,6 +26,7 @@ import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_panel as base
 import touch2_geometry as geo
+from touch2_geometry import PADS
 
 HP = 16
 W  = HP * base.MM_PER_HP          # 81.28 mm
@@ -62,14 +60,6 @@ GRAIN = tuple((((i * 37) % 79) + 1.0,
 # touch2_geometry, and a footprint that will not fit between two measured
 # centres gets smaller -- those centres never move.
 #
-# PAD_W is the one footprint set by a collision rather than by taste. The pad
-# grid is five columns wide and SW_L's measured centre (x = 30.34) falls in the
-# gap between columns 1 and 2; at 7.6 mm the column-1 tile stops 1.02 mm short
-# of the switch, and every millimetre added to the tile eats one and a half off
-# that gap (the outer columns are pinned by COL_MARGIN, so the pitch shrinks
-# with the tile). PAD_H is capped the same way by SW_R, which the top row
-# passes 1.28 mm above and the middle row 0.92 mm below.
-#
 # KNOB_R is the one footprint that is NOT ours: the board prints a gold collar
 # around each knob and Task 2 measured it, so the plate prints that and not a
 # round number. It used to read 4.5 -- a 9 mm cap on a board whose own collar
@@ -77,8 +67,6 @@ GRAIN = tuple((((i * 37) % 79) + 1.0,
 # now follow geo.KNOB_COLLAR_R: 3.885 mm radius, and Rack's RoundSmallBlackKnob
 # (7.68 mm) is the stock cap nearest to it.
 KNOB_R    = geo.KNOB_COLLAR_R     # measured silkscreen collar, 7.77 mm across
-PAD_W     = 7.6
-PAD_H     = 9.0
 FADER_W   = 6.8                   # VCVSlider is 6.72 mm wide
 FADER_H   = geo.FADER_TRAVEL
 SWITCH_W  = 5.0                   # CKSSThree is 4.56 x 9.60 mm
@@ -101,15 +89,13 @@ OUT    = "OUT"
 
 FOOTPRINT = {
     MACRO:  (KNOB_R * 2, KNOB_R * 2),
-    PAD:    (PAD_W, PAD_H),
     FADER:  (FADER_W, FADER_H),
     SWITCH: (SWITCH_W, SWITCH_H),
     OUT:    (JACK_R * 2, JACK_R * 2),
 }
-# Pad digits are optically centred in their tile, so their baseline sits a
-# little below the centre. Jack captions print BELOW the jack: above it they
-# would land on the masthead rule at y = 8.65.
-LBL_DY = {MACRO: 0.0, PAD: 0.91, FADER: 0.0, SWITCH: 0.0, OUT: 5.6}
+# Jack captions print BELOW the jack: above it they would land on the masthead
+# rule at y = 8.65. Physical pad IDs remain metadata and are not printed.
+LBL_DY = {MACRO: 0.0, PAD: 0.0, FADER: 0.0, SWITCH: 0.0, OUT: 5.6}
 LBL_SZ = {MACRO: 2.2, PAD: 2.6, FADER: 2.2, SWITCH: 2.2, OUT: 2.2}
 WKMAP  = {MACRO: "WK_MACRO", PAD: "WK_PAD", FADER: "WK_FADER",
           SWITCH: "WK_SWITCH", OUT: "WK_OUT"}
@@ -140,6 +126,10 @@ class Txt(object):
 
 
 def footprint_of(c):
+    if c.kind == PAD:
+        index = int(c.enum.split("_")[1]) - 1
+        bounds = PAD_SHAPES[index].curve_bounds
+        return (bounds.max_x - bounds.min_x, bounds.max_y - bounds.min_y)
     return FOOTPRINT[c.kind]
 
 
@@ -151,132 +141,38 @@ def label_xy(c):
     return (c.x, c.y + LBL_DY[c.kind])
 
 
-# --- the pad field: measured structure, computed places -----------------------
-# touch2_geometry.PADS is a measurement and stays one. It is also the weakest
-# row in that file: the photograph resolves TEN copper cells, not twelve, and
-# two of the twelve centres come from a 2-means split of the two oversized edge
-# cells. Printed straight, that field reads as accidental -- ragged rows, two
-# lonely tiles at the bottom, and SW_L standing on PAD_2 over a quarter of the
-# switch's area.
-#
-# So the STRUCTURE is taken from the measurement and the PLACES are computed
-# from it. What is still measured:
-#   * the field runs from geo.PAD_FIELD_TOP to the plate's bottom edge, full
-#     width -- the solid part of the segmentation;
-#   * the twelve places fall into three bands of five, five and two, split out
-#     of the measured y positions at the two large gaps (below);
-#   * inside a band, each place keeps its measured left-to-right order and
-#     takes the grid column nearest its own measured x.
-# What is not: the even column pitch and the even row pitch. Nothing here is a
-# new measurement, and no measured number is re-typed -- when the 600 dpi scan
-# replaces geo.PADS, this layout follows it.
-
-# The largest y step INSIDE a measured band is 4.13 mm; the smallest step
-# BETWEEN two bands is 10.85 mm. 8.0 sits in the middle of that gap, so the
-# split is not sensitive to the +/- 2 mm the pad row carries.
-BAND_GAP     = 8.0
-FIELD_MARGIN = 1.0                # inside the field top and the plate bottom
-COL_MARGIN   = 1.6                # inside the plate's side edges; the inner
-                                  # border rule sits at 0.65 + 0.28 stroke, and
-                                  # a tile flush against it reads as a mistake
+# --- named physical pad geometry ---------------------------------------------
+PAD_POINT_COUNT = len(PADS[0].points_mm)
+assert all(len(p.points_mm) == PAD_POINT_COUNT for p in PADS), \
+    "the current renderer requires a uniform anchor count"
 
 
-def _bands_of(pads, gap):
-    """Group measured pad centres into bands, splitting at the large y gaps.
-
-    Returns lists of INDICES into `pads`, top band first, each band sorted by
-    measured x. The indices are the MPR121 places and must survive the trip.
-    """
-    by_y = sorted(range(len(pads)), key=lambda i: pads[i][1])
-    bands, cur = [], [by_y[0]]
-    for prev, i in zip(by_y, by_y[1:]):
-        if pads[i][1] - pads[prev][1] > gap:
-            bands.append(cur)
-            cur = []
-        cur.append(i)
-    bands.append(cur)
-    return [sorted(b, key=lambda i: pads[i][0]) for b in bands]
-
-
-def _lay_out(pads, bands):
-    """Place one tile per measured pad on an even grid inside the field."""
-    cols = max(len(b) for b in bands)
-    step_x = (W - 2 * COL_MARGIN - PAD_W) / float(cols - 1)
-    grid_x = [COL_MARGIN + PAD_W / 2.0 + k * step_x for k in range(cols)]
-    top_y = geo.PAD_FIELD_TOP + FIELD_MARGIN + PAD_H / 2.0
-    bot_y = Hh - FIELD_MARGIN - PAD_H / 2.0
-    step_y = (bot_y - top_y) / float(len(bands) - 1)
-    places = [None] * len(pads)
-    for row, band in enumerate(bands):
-        y = top_y + row * step_y
-        free = list(range(cols))
-        for i in band:                      # ascending measured x
-            k = min(free, key=lambda k: abs(grid_x[k] - pads[i][0]))
-            free.remove(k)
-            places[i] = (grid_x[k], y)
-    return places
-
-
-PAD_BANDS = _bands_of(geo.PADS, BAND_GAP)
-assert sorted(i for b in PAD_BANDS for i in b) == list(range(len(geo.PADS))), \
-    "every measured pad must land in exactly one band"
-PAD_PLACES = _lay_out(geo.PADS, PAD_BANDS)
-assert None not in PAD_PLACES, "a measured pad got no place on the grid"
-
-
-# --- shared organic pad geometry ---------------------------------------------
-PAD_POINT_COUNT = 8
-PAD_BOXES = (
-    (0.8,77.8,13.8,91.0), (14.8,77.7,28.0,90.5),
-    (32.8,77.7,48.4,91.0), (50.5,77.8,65.9,91.0),
-    (67.5,77.8,80.5,91.0), (0.8,94.4,13.8,111.2),
-    (14.8,94.4,30.0,111.2), (32.8,98.4,48.4,111.2),
-    (50.5,94.4,65.9,111.2), (67.5,94.4,80.5,111.2),
-    (14.8,114.0,31.2,128.0), (50.5,114.0,66.0,128.0),
-)
-PAD_PROFILES = (
-    (.94,.86,.98,.90,.92,.88,1.00,.91), (.89,.97,.91,.82,.96,.87,.93,1.00),
-    (.96,.88,1.00,.94,.80,.96,.90,.87), (.87,1.00,.92,.89,.97,.84,.96,.90),
-    (1.00,.90,.86,.97,.89,.95,.83,.98), (.92,.84,.99,.88,1.00,.91,.86,.95),
-    (.85,.98,.90,1.00,.87,.93,.97,.89), (.98,.91,.84,.96,.93,1.00,.88,.86),
-    (.90,1.00,.95,.85,.98,.89,.92,.96), (.97,.87,.93,.99,.84,.98,.91,.88),
-    (.88,.96,1.00,.90,.95,.85,.98,.92), (1.00,.89,.87,.95,.91,.97,.86,.99),
-)
-PAD_UNIT_RING = ((-.70,-1.00),(.20,-.96),(.91,-.62),(1.00,.12),
-                 (.70,.92),(-.12,1.00),(-.93,.66),(-1.00,-.18))
-PAD_POINT_OVERRIDES = {
-    1: {3:(27.00,81.00), 4:(26.40,86.20)},
-    2: {4:(41.60,87.60), 5:(38.60,90.40)},
-}
-PAD_LABELS = (
-    (2.0,81.0),(16.2,80.7),(34.2,80.7),(52.0,81.0),(68.8,81.0),
-    (2.0,98.0),(16.3,98.0),(34.2,101.6),(52.0,98.0),(68.8,98.0),
-    (16.4,117.4),(52.0,117.4),
-)
+def _polygon_centroid(points):
+    cross = [x0*y1 - x1*y0
+             for (x0, y0), (x1, y1) in zip(points, points[1:] + points[:1])]
+    scale = 1.0 / (3.0 * sum(cross))
+    x = sum((p0[0] + p1[0]) * c
+            for p0, p1, c in zip(points, points[1:] + points[:1], cross))
+    y = sum((p0[1] + p1[1]) * c
+            for p0, p1, c in zip(points, points[1:] + points[:1], cross))
+    return (x * scale, y * scale)
 
 
 class PadShape(object):
-    def __init__(self, points, label, centre):
-        self.points = tuple(points)
-        self.label = label
-        self.centre = centre
+    def __init__(self, physical):
+        self.pad_id = physical.pad_id
+        self.zone = physical.zone
+        self.points = physical.points_mm
+        self.label = physical.label_anchor_mm
+        self.centre = _polygon_centroid(self.points)
+        self.verified = physical.verified
+        self.source_note = physical.source_note
         self.curve_bounds = None
         self.bounds = None
 
 
-def _make_pad_shape(i):
-    x0, y0, x1, y1 = PAD_BOXES[i]
-    cx, cy = (x0+x1)/2.0, (y0+y1)/2.0
-    hx, hy = (x1-x0)/2.0, (y1-y0)/2.0
-    pts = []
-    for k, ((ux, uy), radius) in enumerate(zip(PAD_UNIT_RING, PAD_PROFILES[i])):
-        p = (cx + ux*hx*radius, cy + uy*hy*radius)
-        pts.append(PAD_POINT_OVERRIDES.get(i, {}).get(k, p))
-    return PadShape(pts, PAD_LABELS[i], PAD_PLACES[i])
-
-
-PAD_SHAPES = tuple(_make_pad_shape(i) for i in range(12))
-assert len({s.points for s in PAD_SHAPES}) == 12
+PAD_SHAPES = tuple(PadShape(pad) for pad in PADS)
+assert len({shape.pad_id for shape in PAD_SHAPES}) == 12
 
 
 def catmull_rom_cubics(points):
@@ -322,7 +218,7 @@ def _pad_curve_bounds(shape):
         ts += _cubic_extrema(p0[1], c1[1], c2[1], p3[1])
         points.extend(_cubic_point(p0, c1, c2, p3, t) for t in ts)
     xs, ys = [p[0] for p in points], [p[1] for p in points]
-    return min(xs), min(ys), max(xs), max(ys)
+    return geo.Bounds(min(xs), min(ys), max(xs), max(ys))
 
 
 def _runtime_pad_bounds(shape):
@@ -333,17 +229,17 @@ def _runtime_pad_bounds(shape):
     """
     x0, y0, x1, y1 = _pad_curve_bounds(shape)
     halo = PAD_GLOW_WIDTH / 2.0
-    return (math.floor((x0 - halo) * 1000.0) / 1000.0,
-            math.floor((y0 - halo) * 1000.0) / 1000.0,
-            math.ceil((x1 + halo) * 1000.0) / 1000.0,
-            math.ceil((y1 + halo) * 1000.0) / 1000.0)
+    return geo.Bounds(math.floor((x0 - halo) * 1000.0) / 1000.0,
+                      math.floor((y0 - halo) * 1000.0) / 1000.0,
+                      math.ceil((x1 + halo) * 1000.0) / 1000.0,
+                      math.ceil((y1 + halo) * 1000.0) / 1000.0)
 
 
 for _shape in PAD_SHAPES:
     _shape.curve_bounds = _pad_curve_bounds(_shape)
     _shape.bounds = _runtime_pad_bounds(_shape)
-assert all(s.bounds[0] <= s.centre[0] <= s.bounds[2] and
-           s.bounds[1] <= s.centre[1] <= s.bounds[3] for s in PAD_SHAPES)
+assert all(s.bounds.min_x <= s.centre[0] <= s.bounds.max_x and
+           s.bounds.min_y <= s.centre[1] <= s.bounds.max_y for s in PAD_SHAPES)
 
 
 def sample_closed_pad(shape, samples_per_segment=20):
@@ -379,12 +275,14 @@ for _pos, _macro in enumerate(KNOB_MACRO):
     PARAMS[_macro] = Ctl(_MACRO_NAMES[_macro], MACRO, _x, _y, "",
                          "%s  [%s]" % (_MACRO_TIPS[_macro], _KNOB_CHAN[_pos]))
 
-# PAD_PLACES is indexed exactly like geo.PADS: index i is MPR121 place i, so
-# the order is load-bearing and must not be tidied into reading order.
-for _i, (_x, _y) in enumerate(PAD_PLACES):
-    PARAMS.append(Ctl("PAD_%d" % (_i + 1), PAD, _x, _y, "%02d" % (_i + 1),
-                      "Place %d -- tap: go there. Hold: reroll all six macro "
-                      "domains, the ground stays. Tap again: back." % (_i + 1)))
+# Physical P00-P11 identity is load-bearing; musical parameter identity remains
+# PAD_1 through PAD_12 so existing patches retain the same parameter IDs.
+for _i, _shape in enumerate(PAD_SHAPES):
+    _x, _y = _shape.centre
+    PARAMS.append(Ctl("PAD_%d" % (_i + 1), PAD, _x, _y, "",
+                      "Touch electrode %s -- Place %d. Tap: go there. Hold: "
+                      "reroll all six macro domains, the ground stays. Tap "
+                      "again: back." % (_shape.pad_id, _i + 1)))
 
 for _i, (_x, _y) in enumerate(geo.FADERS):
     PARAMS.append(Ctl(["FADER_L", "FADER_R"][_i], FADER, _x, _y, "",
@@ -454,9 +352,9 @@ def pad_svg(c):
     index = int(c.enum.split("_")[1]) - 1
     shape = PAD_SHAPES[index]
     path = pad_path_svg(shape)
-    out = ['  <path class="touchIsland" data-pad="%02d" d="%s" fill="%s" '
+    out = ['  <path class="touchIsland" data-pad="%s" d="%s" fill="%s" '
            'stroke="%s" stroke-width="%s"/>\n'
-           % (index + 1, path, PAD_FILL, PAD_COPPER_DIM, sw(PAD_STROKE_W))]
+           % (shape.pad_id, path, PAD_FILL, PAD_COPPER_DIM, sw(PAD_STROKE_W))]
     for scale in (0.78, 0.58, 0.38):
         out.append('  <path class="touchTopo" d="%s" fill="none" stroke="%s" '
                    'stroke-width="0.18"/>\n'
@@ -582,33 +480,46 @@ def enum_block(name, ctls, last):
     return "enum %s {\n%s    %s\n};\n" % (name, body, last)
 
 
-def pad_shape_row(shape):
+def pad_points_name(shape):
+    return "kPad%sPoints" % shape.pad_id
+
+
+def pad_points_array(shape):
     points = ", ".join("{ %sf, %sf }" % (mm(x), mm(y))
                        for x, y in shape.points)
+    return "static const XY %s[] = { %s };\n" % (pad_points_name(shape), points)
+
+
+def pad_shape_row(shape):
     lx, ly = shape.label
     cx, cy = shape.centre
     x0, y0, x1, y1 = shape.bounds
-    return ("    { { %s }, { %sf, %sf }, { %sf, %sf }, { %sf, %sf }, { %sf, %sf } },\n" %
-            (points, mm(lx), mm(ly), mm(cx), mm(cy), mm(x0), mm(y0),
-             mm(x1), mm(y1)))
+    zone = "PadZone::LowerTouch" if shape.zone == "lower_touch" else \
+        "PadZone::UpperRear"
+    verified = "true" if shape.verified else "false"
+    return ("    { %s, %d, { %sf, %sf }, { %sf, %sf }, { %sf, %sf }, "
+            "{ %sf, %sf }, \"%s\", %s, %s },\n" %
+            (pad_points_name(shape), len(shape.points), mm(lx), mm(ly),
+             mm(cx), mm(cy), mm(x0), mm(y0), mm(x1), mm(y1),
+             shape.pad_id, zone, verified))
 
 
 def header():
     out = []
     out.append("// GENERATED by res/gen_flow_panel.py -- do not edit by hand.\n")
-    out.append("// Geometry comes from res/touch2_geometry.py, which was measured\n")
-    out.append("// off %s\n" % geo.SRC_IMAGE)
-    out.append("// (a sibling repo). Those numbers are photo-derived and\n")
-    out.append("// provisional; they get corrected against the board when it\n")
-    out.append("// arrives. The twelve pad places are laid out on the measured\n")
-    out.append("// field rather than printed from the measured centres -- see\n")
-    out.append("// \"the pad field\" in the generator. This panel is a VCV panel,\n")
-    out.append("// NOT a faceplate draft.\n")
+    out.append("// Physical 10+2 geometry comes from res/touch2_geometry.py.\n")
+    out.append("// It is photo-rectified VCV reference data, not fabrication data;\n")
+    out.append("// per-path verification state is carried in PadShape::verified.\n")
     out.append("#pragma once\n")
+    out.append("#include <cstddef>\n")
+    out.append("#include <cstdint>\n")
     out.append("namespace spkyvcv { namespace glow {\n")
     out.append("struct XY { float x, y; };\n")
-    out.append("static constexpr int kPadPointCount = %d;\n" % PAD_POINT_COUNT)
-    out.append("struct PadShape { XY points[kPadPointCount]; XY label; XY centre; XY min; XY max; };\n")
+    out.append("static constexpr std::size_t kPadPointCount = %d;\n" % PAD_POINT_COUNT)
+    out.append("enum class PadZone : std::uint8_t { LowerTouch, UpperRear };\n")
+    out.append("struct PadShape { const XY* points; std::size_t pointCount; "
+               "XY label; XY centre; XY min; XY max; const char* id; "
+               "PadZone zone; bool verified; };\n")
     out.append("enum WidgetKind { WK_MACRO, WK_PAD, WK_FADER, WK_SWITCH, WK_OUT };\n")
     out.append("struct PanelCtl { int id; WidgetKind kind; XY mm; const char* label;"
                " XY lbl; unsigned char anchor; float lblSize; unsigned lblRgb;"
@@ -634,6 +545,8 @@ def header():
     out.append("static constexpr float kPadGlowWidth   = %sf;\n" % mm(PAD_GLOW_WIDTH))
     out.append("static constexpr float kPadStrokeWidth = %sf;\n" % mm(PAD_STROKE_W))
     out.append("static constexpr float kPadInnerScale  = %sf;\n" % mm(PAD_INNER_SCALE))
+    for shape in PAD_SHAPES:
+        out.append(pad_points_array(shape))
     out.append("static const PadShape kPadShapes[12] = {\n")
     for shape in PAD_SHAPES:
         out.append(pad_shape_row(shape))
