@@ -43,6 +43,82 @@ is present in the exported rasters. `RIGHTS_APPROVED` remains `no`.
 `GlowFaceplate.png` is not part of this transformation. Task 9 owns its
 replacement from the physical KiCad preview.
 
+## Task 8 physical-master derivation
+
+Task 8 used only the two locally held `AUDREYTOUCH_FACEPLATE` mechanical files
+for fabrication geometry. The PDF was rendered at 600 dpi and visually checked
+against the DXF: both show the same outer silhouette/diagonal, two jack rings,
+six knob rings, two long fader routes, and five small mounting rings. The PDF
+page is 239.483 x 203.512 points; the drawn mechanical extent is 80.900 x
+68.000 mm.
+
+The DXF declares `$INSUNITS=1` (inches). Its final `ENTITIES` record is a
+closed, planar degree-3 spline with 343 control points and clamped/tripled
+knots, exactly 114 cubic Bezier segments. Its geometric bounds in DXF inches
+are:
+
+```text
+min_x = -0.0893630708668
+max_x =  3.0956762990545
+min_y = -2.2384769236935
+max_y =  0.4386881946530
+```
+
+The committed origin/axis transform is:
+
+```text
+x_mm = (x_dxf - min_x) * 25.4
+y_mm = (max_y - y_dxf) * 25.4
+```
+
+This is a translation, Y-axis reflection, and inch-to-millimetre conversion;
+it contains no design rescale. The last spline becomes the one closed
+`Edge.Cuts` contour. All 27 DXF spline records are also retained byte-derived
+on `Dwgs.User` as a locked `mechanical_reference` group. Recognised aperture
+centres are emitted as explicit board-only NPTH footprints: two nominal 8.0 mm
+jack holes, six nominal 9.0 mm knob holes, five nominal 4.5 mm mounts, and two
+4.3010 x 26.0409 mm oval fader routes. The approximately 0.0106 mm diameter
+excess in the Illustrator spline extrema is normalised to those nominal drill
+classes without moving a centre; the exact source curves remain beside the
+mechanics for audit.
+
+The editable artwork is clean-room FireFlow work. It contributes three
+original flow curves plus unprotected FireFlow identification, revision, and
+date metadata. It contributes no official photograph, Synthux/Touch identity,
+copied decorative artwork, or provisional control assignment. The physical
+SVG separates `copper_front`, `mask_front`, `silk_front`, and
+`mechanical_reference`; matching named KiCad groups make the layer ownership
+explicit.
+
+| Task 8 master | SHA-256 | Derivation |
+| --- | --- | --- |
+| `hardware/glow-faceplate/glow-faceplate.kicad_pcb` | `bdb5ef9ffe45afc46d769bba902f3b716c3e791d9c5fd3636d75f030e7199939` | Deterministic native KiCad curves, embedded board-only NPTH mechanics, and clean-room front artwork from `scripts/generate_master.py`. |
+| `hardware/glow-faceplate/artwork/glow-faceplate.svg` | `003934acc8b903404f878c92503ea3b7ba66163da7cbef32da17551c17d0160b` | 80.900 x 68.000 mm editable artwork with the four required named groups and exact mechanical-reference paths. |
+
+For comparison with the existing Rack geometry only, a uniform least-squares
+map is applied after generation:
+
+```text
+x_vcv = 1.0234410317105 * x_local - 0.7363784792542
+y_vcv = 1.0234410317105 * y_local + 7.6027954202413
+```
+
+Across the two jacks, six knobs, and two fader centres, the maximum residual is
+0.211 mm, inside the 0.25 mm Task 8 comparison limit. This comparison compensates
+the earlier photograph-rectified Rack coordinates and is not used by KiCad or
+any future fabrication export. The physical master always remains at the exact
+1:1 DXF conversion above.
+
+KiCad evidence was captured from the existing stable
+`C:\Users\bernd\AppData\Local\Programs\KiCad\10.0\bin\kicad-cli.exe`, version
+`10.0.5`. KiCad 10 does not expose DXF in `pcb import`, so the deterministic
+headless converter emits native `gr_curve` records and KiCad performs the
+downstream parse, DRC, SVG plot, and 3D render. Final DRC reported 0 violations,
+0 unconnected pads, and 0 footprint errors, with no exclusions added by this
+task. No Gerber, drill file, or production package was generated because
+`RIGHTS_APPROVED=no`, `LABELS_FROZEN=no`, and
+`SYNTHUX_PROFILE_APPROVED=no` remain closed.
+
 ## Touch-electrode geometry rectification
 
 Task 2 uses the official DXF only for removable-faceplate mechanics. It does
