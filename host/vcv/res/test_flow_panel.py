@@ -14,7 +14,7 @@ byte-length neutral (swapping two names, 12.0 -> 17.0, [0, 1, ...] -> [1, 0,
 ...]), so a size-neutral edit inside one mtime tick re-runs the OLD module and
 prints a clean pass. Four false greens were collected that way once.
 """
-import os, sys
+import os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_flow_panel as g
@@ -32,6 +32,56 @@ def check(cond, msg):
 
 def approx(a, b, tol=0.01):
     return abs(a - b) <= tol
+
+
+def _cpp_struct_body(source, declaration):
+    """Return one C++ struct body, counting braces outside comments/strings."""
+    start = source.find(declaration)
+    if start < 0:
+        return ""
+    opening = source.find("{", start + len(declaration))
+    if opening < 0:
+        return ""
+    depth = 0
+    state = "code"
+    escaped = False
+    index = opening
+    while index < len(source):
+        char = source[index]
+        following = source[index + 1] if index + 1 < len(source) else ""
+        if state == "line":
+            if char == "\n":
+                state = "code"
+        elif state == "block":
+            if char == "*" and following == "/":
+                state = "code"
+                index += 1
+        elif state in ("string", "char"):
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif ((state == "string" and char == '"') or
+                  (state == "char" and char == "'")):
+                state = "code"
+        elif char == "/" and following == "/":
+            state = "line"
+            index += 1
+        elif char == "/" and following == "*":
+            state = "block"
+            index += 1
+        elif char == '"':
+            state = "string"
+        elif char == "'":
+            state = "char"
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return source[opening + 1:index]
+        index += 1
+    return ""
 
 
 # --- the contract: enum ORDER defines ids in every saved patch ----------------
@@ -204,6 +254,30 @@ def test_controls_belong_to_their_physical_hardware_layers():
         check(all(_point_in_polygon(point, LOWER_BOARD_ZONE)
                   for point in footprint),
               "%s footprint is outside the lower PCB" % control.enum)
+
+
+def test_glow_widget_installs_the_hardware_panel_and_custom_switches():
+    """Rack-only installation facts stay guarded without duplicating IDs."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, os.pardir, "src", "Glow.cpp"),
+              encoding="utf-8") as source_file:
+        source = source_file.read()
+    body = _cpp_struct_body(source, "struct GlowWidget : ModuleWidget")
+    check(bool(body), "GlowWidget struct body was not found")
+    # Comments are not installation evidence. Strip them after isolating the
+    # struct so a historical note cannot satisfy or trip the class checks.
+    code = re.sub(r"//.*?$|/\*.*?\*/", "", body,
+                  flags=re.MULTILINE | re.DOTALL)
+    check("box.size = Vec(16 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT)" in code,
+          "GlowWidget no longer fixes its module box at 16 HP")
+    check("setPanel(new GlowHardwarePanel())" in code,
+          "GlowWidget no longer installs GlowHardwarePanel")
+    check("createPanel(" not in code and '"res/Glow.svg"' not in code,
+          "GlowWidget reinstalls the legacy Glow.svg panel")
+    check("createParamCentered<GlowToggle>" in code,
+          "GlowWidget no longer creates GlowToggle switch overlays")
+    check("createParamCentered<CKSSThree>" not in code,
+          "GlowWidget reinstalls stock CKSSThree widgets")
 
 
 def test_unverified_paths_keep_source_notes():
