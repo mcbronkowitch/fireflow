@@ -45,37 +45,60 @@ upper-left of the official DXF outer spline. The exact conversion from the DXF
 inch coordinates is:
 
 ```text
-x_mm = (x_dxf - -0.0893630708668) * 25.4
+x_mm = (x_dxf - -0.0893630597716) * 25.4
 y_mm = ( 0.438688194653 - y_dxf) * 25.4
 ```
 
-That transform produces an 80.900 x 68.000 mm removable plate. The diagonal
+That transform produces the DXF's analytical 80.899997 x 67.999993 mm
+removable-plate extent (80.900 x 68.000 mm at drawing precision). The diagonal
 opening is part of the one continuous outer contour, not a raster mask or an
 independent screen crop. `Edge.Cuts` contains 114 connected cubic Bezier
 segments derived directly from the official closed spline. A separately
 locked `mechanical_reference` group on `Dwgs.User` retains all 27 official DXF
-spline records, including the aperture strokes used for the coordinate review.
+spline records: 1,673 native cubic curves in total, including the aperture
+strokes and three open decorative/reference records that are not holes.
 
 ### Explicit mechanical inventory
 
-| Feature | Board-local centre(s), mm | Definition |
-| --- | --- | --- |
-| two audio jacks | `(5.066304, 7.407949)`, `(5.066304, 22.641449)` | circular NPTH, nominal 8.0 mm |
-| four upper knobs | `(17.163205, 36.903497)`, `(32.678405, 36.903497)`, `(48.196807, 36.903497)`, `(63.711706, 36.903497)` | circular NPTH, nominal 9.0 mm |
-| two lower knobs | `(17.163205, 54.048495)`, `(63.713606, 54.048495)` | circular NPTH, nominal 9.0 mm |
-| two fader routes | `(5.079804, 47.976946)`, `(75.774196, 47.976946)` | oval NPTH/routed slot, 4.3010 x 26.0409 mm |
-| four fader mounts | `(5.079804, 32.485598)`, `(75.774196, 32.485598)`, `(5.079804, 63.468294)`, `(75.774196, 63.468294)` | circular NPTH, nominal 4.5 mm |
-| upper-right mount | `(75.661701, 26.907097)` | circular NPTH, nominal 4.5 mm |
+| Feature | DXF record union | Board-local centre, mm | Source envelope, mm |
+| --- | --- | --- | --- |
+| upper jack | `23` | `(5.066302968, 7.407949984)` | `8.010596778 x 8.010699775` |
+| lower jack | `24` | `(5.066302968, 22.641449607)` | `8.010596778 x 8.010701682` |
+| upper knobs 1-4 | `2+12`, `3+11`, `4+10`, `5+7+9` | `(17.163203227, 36.903498480)`, `(32.680002280, 36.903498480)`, `(48.196805148, 36.833496881)`, `(63.713604201, 36.903498480)` | respectively `9.010596722 x 9.010596722`, `9.010596722 x 9.010596722`, `9.010604351 x 9.010600536`, `9.010604351 x 9.010596722` |
+| lower knobs 5-6 | `14+16`, `15` | `(17.163203227, 54.048496065)`, `(63.713604201, 54.048496065)` | `9.010596722 x 9.010600536`, `9.010604351 x 9.010600536` |
+| left/right routes | `1+13+17`, `8` | `(5.079803181, 47.976949852)`, `(75.774203803, 47.976949852)` | each `4.300994631 x 26.040899718` |
+| left top/bottom mounts | `0`, `18` | `(5.079803181, 32.485598643)`, `(5.079803181, 63.468293432)` | each `4.510604604 x 4.527999623` |
+| right top/bottom mounts | `6`, `21` | `(75.774196174, 32.485598643)`, `(75.774196174, 63.468293432)` | each `4.510604604 x 4.527999623` |
+| upper-right mount | `25` | `(75.661700758, 26.907098209)` | `4.510589346 x 4.510600790` |
 
-The DXF spline extrema are 8.0106, 9.0106, and approximately 4.5106 mm for
-the three circular classes. The pads use the intended nominal 8.0, 9.0, and
-4.5 mm drills at the unchanged official centres; the complete source splines
-remain locked beside them for review.
+There is no nominal 8/9/4.5 mm geometry in the generator or verifier. The
+generator connects matching DXF spline endpoints, retains only closed unions
+as mechanics, and calculates each centre and extent from cubic extrema. Every
+mechanic is an explicit board-only KiCad oval NPTH using that source envelope;
+the two tall unions are therefore routed slots, while the thirteen roundish
+unions preserve even their small X/Y differences instead of being rounded.
+
+KiCad's native oval drill is an envelope/capsule representation, whereas the
+authoritative Illustrator Bézier paths are not guaranteed to be exact conics
+or capsules. The locked `Dwgs.User` curves remain the exact contour authority.
+Coordinates and envelopes are serialized at KiCad's 1 nm internal resolution,
+so the only numeric loss is nearest-nanometre rounding (at most 0.5 nm per
+coordinate); there is no millimetre-scale normalization.
+
+### Vendor-neutral pre-production rules
+
+[glow-faceplate.kicad_dru](glow-faceplate.kicad_dru) is the auditable KiCad 10
+custom-rule source. It sets 0.25 mm board-edge clearance, 0.25 mm drilled-hole
+spacing, 0.20 mm minimum copper track/graphic width, 0.15 mm annular width,
+0.15 mm silkscreen clearance, 0.80/0.10 mm minimum silkscreen text height/
+stroke, and rejects bridged mask apertures. The board source separately sets a
+0.20 mm minimum solder-mask web. These are deliberately conservative review
+defaults, not an approved production profile; `SYNTHUX_PROFILE_APPROVED=no`.
 
 ### Artwork ownership
 
-The 80.900 x 68.000 mm SVG and the KiCad board use the same named ownership
-groups:
+The DXF-exact physical-size SVG and the KiCad board use the same named
+ownership groups:
 
 - `copper_front`: three original FireFlow flow lines on `F.Cu`;
 - `mask_front`: explicit, wider `F.Mask` openings over those copper lines;
@@ -93,17 +116,21 @@ Run from the repository root:
 ```powershell
 python -B hardware/glow-faceplate/scripts/generate_master.py
 python -B hardware/glow-faceplate/scripts/verify_mechanics.py
+$env:KICAD_CLI = 'C:\Users\bernd\AppData\Local\Programs\KiCad\10.0\bin\kicad-cli.exe'
+python -B -m unittest hardware/glow-faceplate/scripts/test_mechanical_guard.py -v
 & 'C:\Users\bernd\AppData\Local\Programs\KiCad\10.0\bin\kicad-cli.exe' pcb drc --output .superpowers/sdd/2026-08-13-glow-hardware-faithful-hybrid-panel/task-8-drc-report.txt --format report --units mm --severity-all --exit-code-violations hardware/glow-faceplate/glow-faceplate.kicad_pcb
 & 'C:\Users\bernd\AppData\Local\Programs\KiCad\10.0\bin\kicad-cli.exe' pcb render --output .superpowers/sdd/2026-08-13-glow-hardware-faithful-hybrid-panel/task-8-kicad-preview.png --width 1600 --height 1400 --side top --background transparent --quality high --preset follow_plot_settings hardware/glow-faceplate/glow-faceplate.kicad_pcb
 ```
 
 The final Task 8 DRC result is 0 violations, 0 unconnected pads, and 0
-footprint errors; no warning was waived. The mechanical guard checks exact DXF
-curves, contour closure, duplicate segments, dimensions, the locked reference,
-all 13 circular NPTHs, both routed slots, SVG groups, forbidden text, and VCV
-fiducials. It also records a 0.211 mm maximum error after one uniform
-least-squares comparison from the official local datum to the existing
-photograph-rectified Rack centres. That comparison scale is evidence only and
+footprint errors; no warning was waived. The independent mechanical guard
+re-parses the pinned DXF without importing generator constants. It checks the
+exact outline, all 1,673 locked reference curves, exact group membership, all
+source-derived NPTH envelopes, SVG groups, conservative rule source, mask web,
+and forbidden text on KiCad `F.Cu`, `F.Mask`, and `F.SilkS` as well as the SVG
+fabrication groups. It parses `CONTROL_CENTRES_MM` directly from
+`host/vcv/res/touch2_geometry.py` and recomputes the uniform fit on every run;
+the current maximum residual is 0.218 mm. That comparison is evidence only and
 is never applied to the 1:1 KiCad geometry.
 
 ## VCV clean-room hardware layers
@@ -145,11 +172,12 @@ captured `kicad-cli version` output `10.0.5`; therefore
 
 KiCad 10's `pcb import` command accepts PCB exchange formats but does not list
 DXF. To keep the official Adobe-authored DXF exact and the build headless, the
-committed generator reads its cubic spline records directly, verifies the
-provenance hash, converts inches to millimetres once, and writes native KiCad
-`gr_curve` objects. KiCad 10 then parses, checks, plots, and renders that board
-through the CLI. This is the only CLI difference from the original GUI-import
-plan.
+committed generator analysis reads the cubic spline records directly, verifies
+the provenance hash, derives connected aperture unions, converts inches to
+millimetres once, and writes native KiCad objects. The verifier independently
+repeats the DXF parsing/derivation. KiCad 10 then parses the `.kicad_dru`, runs
+DRC, plots, and renders the board through the CLI. This headless native-object
+conversion is the only CLI difference from the original GUI-import plan.
 
 Gerbers, drill files, and production fabrication packages cannot be generated
 while any production gate is `no`. Mechanical study files and clean-room

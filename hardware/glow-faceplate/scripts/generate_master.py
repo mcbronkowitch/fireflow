@@ -4,24 +4,16 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
 
-import verify_mechanics as verify
+import dxf_apertures as dxf
 
 
-GENERATOR_VERSION = "1"
+GENERATOR_VERSION = "2"
 FABRICATION_DATE = "2026-08-13"
 REVISION = "A"
 UUID_NAMESPACE = uuid.UUID("9ee2beb7-f348-5ea0-90ef-bf1f83bcb138")
-
-
-@dataclass(frozen=True)
-class DxfSpline:
-    flags: int
-    segments: tuple[tuple[tuple[float, float], ...], ...]
 
 
 def _uid(name: str) -> str:
@@ -36,50 +28,6 @@ def _fmt(value: float) -> str:
 
 def _quote(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-
-def _extract_splines(dxf: Path):
-    digest = hashlib.sha256(dxf.read_bytes()).hexdigest()
-    if digest != verify.DXF_SHA256:
-        raise ValueError(f"DXF hash {digest} does not match provenance")
-    pairs = verify._dxf_pairs(dxf)
-    records = []
-    for start, pair in enumerate(pairs):
-        if pair != (0, "SPLINE"):
-            continue
-        end = next(index for index in range(start + 1, len(pairs))
-                   if pairs[index][0] == 0)
-        entity = pairs[start:end]
-        degree = next(int(value) for code, value in entity if code == 71)
-        flags = next(int(value) for code, value in entity if code == 70)
-        xs = [float(value) for code, value in entity if code == 10]
-        ys = [float(value) for code, value in entity if code == 20]
-        if degree != 3 or len(xs) != len(ys) or (len(xs) - 1) % 3:
-            raise ValueError("DXF SPLINE is not a cubic Bezier chain")
-        controls = list(zip(xs, ys))
-        records.append((flags, tuple(
-            tuple(controls[index:index + 4])
-            for index in range(0, len(controls) - 1, 3)
-        )))
-    if len(records) != 27:
-        raise ValueError(f"expected 27 official spline records, found {len(records)}")
-    outer_raw = records[-1][1]
-    min_x, _min_y, _max_x, max_y = verify._segments_bbox(outer_raw)
-
-    def transform(segment):
-        return tuple(((x - min_x) * verify.MM_PER_INCH,
-                      (max_y - y) * verify.MM_PER_INCH)
-                     for x, y in segment)
-
-    transformed = [DxfSpline(flags, tuple(transform(segment)
-                                           for segment in segments))
-                   for flags, segments in records]
-    # ENTITIES contains the exact filled outer contour; Block_0 contains the
-    # official aperture/reference strokes.  Put outer first on the locked
-    # reference layer so the verifier can compare it without inference.
-    outer = transformed[-1]
-    references = (outer,) + tuple(transformed[:-1])
-    return outer, references
 
 
 def _curve_s_expr(points, layer: str, name: str, *, locked=False,
@@ -139,34 +87,21 @@ def _fp_text(kind: str, text: str, name: str):
     )
 
 
-def _circle_footprint(ref: str, x: float, y: float, diameter: float):
+def _mechanical_id(aperture: dxf.Aperture) -> str:
+    return "DXF_" + "_".join(f"{index:02d}" for index in aperture.record_indices)
+
+
+def _aperture_footprint(aperture: dxf.Aperture):
+    ref = _mechanical_id(aperture)
+    x, y = aperture.centre
+    width, height = aperture.width, aperture.height
     return (
-        f"  (footprint \"Glow_NPTH_{_fmt(diameter)}mm\"\n"
+        f"  (footprint \"Glow_DXF_NPTH_{ref}\"\n"
         "    (layer \"F.Cu\")\n"
         f"    (uuid {_quote(_uid('footprint-' + ref))})\n"
         f"    (at {_fmt(x)} {_fmt(y)})\n"
         f"{_fp_text('reference', ref, 'ref-' + ref)}\n"
-        f"{_fp_text('value', f'NPTH {_fmt(diameter)} mm', 'value-' + ref)}\n"
-        "    (attr board_only exclude_from_pos_files exclude_from_bom)\n"
-        "    (pad \"\" np_thru_hole circle\n"
-        "      (at 0 0)\n"
-        f"      (size {_fmt(diameter)} {_fmt(diameter)})\n"
-        f"      (drill {_fmt(diameter)})\n"
-        "      (layers \"*.Cu\" \"*.Mask\")\n"
-        f"      (uuid {_quote(_uid('pad-' + ref))})\n"
-        "    )\n"
-        "  )"
-    )
-
-
-def _slot_footprint(ref: str, x: float, y: float, width: float, height: float):
-    return (
-        f"  (footprint \"Glow_NPTH_SLOT_{_fmt(width)}x{_fmt(height)}mm\"\n"
-        "    (layer \"F.Cu\")\n"
-        f"    (uuid {_quote(_uid('footprint-' + ref))})\n"
-        f"    (at {_fmt(x)} {_fmt(y)})\n"
-        f"{_fp_text('reference', ref, 'ref-' + ref)}\n"
-        f"{_fp_text('value', f'NPTH SLOT {_fmt(width)} x {_fmt(height)} mm', 'value-' + ref)}\n"
+        f"{_fp_text('value', f'DXF NPTH {_fmt(width)} x {_fmt(height)} mm', 'value-' + ref)}\n"
         "    (attr board_only exclude_from_pos_files exclude_from_bom)\n"
         "    (pad \"\" np_thru_hole oval\n"
         "      (at 0 0)\n"
@@ -196,26 +131,24 @@ def _group_s_expr(name: str, member_names):
     )
 
 
-def make_board(outer: DxfSpline, references):
+def make_board(source: dxf.SourceGeometry):
     items = []
     edge_names = []
-    for index, segment in enumerate(outer.segments):
+    for index, segment in enumerate(source.outer.segments):
         name = f"edge-{index:03d}"
         edge_names.append(name)
         items.append(_curve_s_expr(segment, "Edge.Cuts", name))
 
     reference_names = []
-    for spline_index, spline in enumerate(references):
+    for spline_index, spline in enumerate(source.reference_records):
         for segment_index, segment in enumerate(spline.segments):
             name = f"reference-{spline_index:02d}-{segment_index:03d}"
             reference_names.append(name)
             items.append(_curve_s_expr(segment, "Dwgs.User", name, locked=True,
                                        width=0.04))
 
-    for ref, (x, y, diameter) in verify.EXPECTED_CIRCULAR_NPTH.items():
-        items.append(_circle_footprint(ref, x, y, diameter))
-    for ref, (x, y, width, height) in verify.EXPECTED_SLOTS.items():
-        items.append(_slot_footprint(ref, x, y, width, height))
+    for aperture in source.apertures:
+        items.append(_aperture_footprint(aperture))
 
     copper_names, mask_names = [], []
     for index, points in enumerate(ART_CURVES):
@@ -272,7 +205,7 @@ def make_board(outer: DxfSpline, references):
 '''
 
 
-def _svg_path(spline: DxfSpline):
+def _svg_path(spline: dxf.SplineRecord):
     if not spline.segments:
         return ""
     start = spline.segments[0][0]
@@ -286,9 +219,10 @@ def _svg_path(spline: DxfSpline):
     return " ".join(pieces)
 
 
-def make_svg(outer: DxfSpline, references):
+def make_svg(source: dxf.SourceGeometry):
     reference_paths = [
-        f'    <path d="{_svg_path(spline)}"/>' for spline in references
+        f'    <path d="{_svg_path(spline)}"/>'
+        for spline in source.reference_records
     ]
     copper = []
     mask = []
@@ -299,9 +233,10 @@ def make_svg(outer: DxfSpline, references):
         mask.append(f'    <path id="mask-flow-{index}" d="{d}"/>')
     return f'''<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg"
-     width="80.900mm" height="68.000mm" viewBox="0 0 80.9 68"
+     width="{_fmt(source.width)}mm" height="{_fmt(source.height)}mm"
+     viewBox="0 0 {_fmt(source.width)} {_fmt(source.height)}"
      data-origin="official-dxf-upper-left"
-     data-source-sha256="{verify.DXF_SHA256}">
+     data-source-sha256="{dxf.DXF_SHA256}">
   <title>FireFlow Glow faceplate editable artwork master</title>
   <desc>Physical millimetres. Fabrication exports remain gated.</desc>
   <g id="copper_front" fill="none" stroke="#c78b36" stroke-width="0.55"
@@ -338,12 +273,12 @@ def main(argv=None) -> int:
     parser.add_argument("--svg", type=Path,
                         default=root / "hardware/glow-faceplate/artwork/glow-faceplate.svg")
     args = parser.parse_args(argv)
-    outer, references = _extract_splines(args.dxf)
+    source = dxf.analyze_dxf(args.dxf)
     args.board.parent.mkdir(parents=True, exist_ok=True)
     args.svg.parent.mkdir(parents=True, exist_ok=True)
-    args.board.write_text(make_board(outer, references), encoding="utf-8",
+    args.board.write_text(make_board(source), encoding="utf-8",
                           newline="\n")
-    args.svg.write_text(make_svg(outer, references), encoding="utf-8",
+    args.svg.write_text(make_svg(source), encoding="utf-8",
                         newline="\n")
     print(f"wrote {args.board}")
     print(f"wrote {args.svg}")

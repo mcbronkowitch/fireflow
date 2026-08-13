@@ -14208,423 +14208,423 @@
     (uuid "e4023963-8074-55f4-af74-17896b4f33fd")
   )
 
-  (footprint "Glow_NPTH_8mm"
+  (footprint "Glow_DXF_NPTH_DXF_01_13_17"
     (layer "F.Cu")
-    (uuid "ce8d41bf-41b7-57b9-91fe-e8a76d8f1953")
-    (at 5.066304 7.407949)
-    (fp_text reference "JACK_UPPER"
+    (uuid "d52a36e4-c1ee-54a8-b53d-eeda91a59020")
+    (at 5.079803 47.97695)
+    (fp_text reference "DXF_01_13_17"
       (at 0 0 0)
       (layer "F.Fab")
       hide
-      (uuid "b51374b3-25a0-5ac4-8684-740e2bbb4aca")
+      (uuid "668a8cab-4b28-5c6f-ba05-5e25f4573a7a")
       (effects (font (size 0.8 0.8) (thickness 0.12)))
     )
-    (fp_text value "NPTH 8 mm"
+    (fp_text value "DXF NPTH 4.300995 x 26.0409 mm"
       (at 0 0 0)
       (layer "F.Fab")
       hide
-      (uuid "daecc081-0d0d-5edc-b1ba-cc66f10dbe9c")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (attr board_only exclude_from_pos_files exclude_from_bom)
-    (pad "" np_thru_hole circle
-      (at 0 0)
-      (size 8 8)
-      (drill 8)
-      (layers "*.Cu" "*.Mask")
-      (uuid "cde7d11e-9331-5653-8894-fa5e27482f90")
-    )
-  )
-
-  (footprint "Glow_NPTH_8mm"
-    (layer "F.Cu")
-    (uuid "8a117d53-bcc9-56eb-96dc-870431aebd64")
-    (at 5.066304 22.641449)
-    (fp_text reference "JACK_LOWER"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "2cf2c97f-0a7a-520b-8941-0a4b7f5853de")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (fp_text value "NPTH 8 mm"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "cbc78b41-9b98-5584-bb90-90715b27accc")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (attr board_only exclude_from_pos_files exclude_from_bom)
-    (pad "" np_thru_hole circle
-      (at 0 0)
-      (size 8 8)
-      (drill 8)
-      (layers "*.Cu" "*.Mask")
-      (uuid "96eae788-2cd9-51ca-81a3-d9d1cfa9f0eb")
-    )
-  )
-
-  (footprint "Glow_NPTH_9mm"
-    (layer "F.Cu")
-    (uuid "fa8a3d7a-156c-5fc3-89a0-ed6920207121")
-    (at 17.163205 36.903497)
-    (fp_text reference "KNOB_1"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "3aaf8ced-74b3-5623-84de-8a390f357b8a")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (fp_text value "NPTH 9 mm"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "f65d49f0-f467-56cb-b487-373bca394368")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (attr board_only exclude_from_pos_files exclude_from_bom)
-    (pad "" np_thru_hole circle
-      (at 0 0)
-      (size 9 9)
-      (drill 9)
-      (layers "*.Cu" "*.Mask")
-      (uuid "3367847d-124f-5bcc-9c37-34d5a771bdd6")
-    )
-  )
-
-  (footprint "Glow_NPTH_9mm"
-    (layer "F.Cu")
-    (uuid "7116841b-f1a0-59e5-9ae9-97f3b9199b68")
-    (at 32.678405 36.903497)
-    (fp_text reference "KNOB_2"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "2dc220de-90e3-55d3-8083-ca4e7f048550")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (fp_text value "NPTH 9 mm"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "d9f4a07d-be68-523d-8ed3-1aff51fdcf93")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (attr board_only exclude_from_pos_files exclude_from_bom)
-    (pad "" np_thru_hole circle
-      (at 0 0)
-      (size 9 9)
-      (drill 9)
-      (layers "*.Cu" "*.Mask")
-      (uuid "dd269c66-da83-5b65-b0cd-8a4f6a7acf5e")
-    )
-  )
-
-  (footprint "Glow_NPTH_9mm"
-    (layer "F.Cu")
-    (uuid "b341040f-2e4e-5b61-ab45-5719eb342d88")
-    (at 48.196807 36.903497)
-    (fp_text reference "KNOB_3"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "ebc37dfb-cb80-51eb-8fab-3bb9817ee8e2")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (fp_text value "NPTH 9 mm"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "64da3b7e-faff-58a3-9bf0-472798f6f98f")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (attr board_only exclude_from_pos_files exclude_from_bom)
-    (pad "" np_thru_hole circle
-      (at 0 0)
-      (size 9 9)
-      (drill 9)
-      (layers "*.Cu" "*.Mask")
-      (uuid "5d04e11a-4b8a-5d38-8106-2db4a0280bca")
-    )
-  )
-
-  (footprint "Glow_NPTH_9mm"
-    (layer "F.Cu")
-    (uuid "93ba5c54-aca4-5d68-a6d5-bb32bdda683a")
-    (at 63.711706 36.903497)
-    (fp_text reference "KNOB_4"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "1844f4a2-5757-5513-b785-1e50918a4c2a")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (fp_text value "NPTH 9 mm"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "8ca490a5-8d07-59a9-978d-4c547011ea60")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (attr board_only exclude_from_pos_files exclude_from_bom)
-    (pad "" np_thru_hole circle
-      (at 0 0)
-      (size 9 9)
-      (drill 9)
-      (layers "*.Cu" "*.Mask")
-      (uuid "abb16ccc-42dc-5caf-bf59-bc4cec235e20")
-    )
-  )
-
-  (footprint "Glow_NPTH_9mm"
-    (layer "F.Cu")
-    (uuid "b01c6a14-45bf-5c9c-b105-275acca331e5")
-    (at 17.163205 54.048495)
-    (fp_text reference "KNOB_5"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "696b275c-b889-5819-8491-2c0ef855fd9b")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (fp_text value "NPTH 9 mm"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "efe94e1f-1d56-5989-aa88-1424ca616532")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (attr board_only exclude_from_pos_files exclude_from_bom)
-    (pad "" np_thru_hole circle
-      (at 0 0)
-      (size 9 9)
-      (drill 9)
-      (layers "*.Cu" "*.Mask")
-      (uuid "792fd21e-ecf6-5fc5-9d20-e46987b08a83")
-    )
-  )
-
-  (footprint "Glow_NPTH_9mm"
-    (layer "F.Cu")
-    (uuid "8fbff8a2-81b2-5fd5-b61e-3a7f2e474601")
-    (at 63.713606 54.048495)
-    (fp_text reference "KNOB_6"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "85b42a15-2801-51be-8ac3-fd34466bea16")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (fp_text value "NPTH 9 mm"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "96a25e5b-c1ef-514e-984d-5fbb09f672c7")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (attr board_only exclude_from_pos_files exclude_from_bom)
-    (pad "" np_thru_hole circle
-      (at 0 0)
-      (size 9 9)
-      (drill 9)
-      (layers "*.Cu" "*.Mask")
-      (uuid "c5e35360-25de-5d67-a95c-cc41ccfcb59b")
-    )
-  )
-
-  (footprint "Glow_NPTH_4.5mm"
-    (layer "F.Cu")
-    (uuid "9c89d22a-d92c-504e-8311-3429d87bc168")
-    (at 5.079804 32.485598)
-    (fp_text reference "MOUNT_FADER_L_TOP"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "0fc742f7-f865-5204-835f-e6d79a1d4fad")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (fp_text value "NPTH 4.5 mm"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "a80260f9-a671-52b2-bcbc-c7e6510fc733")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (attr board_only exclude_from_pos_files exclude_from_bom)
-    (pad "" np_thru_hole circle
-      (at 0 0)
-      (size 4.5 4.5)
-      (drill 4.5)
-      (layers "*.Cu" "*.Mask")
-      (uuid "d6b67c7d-c7ed-5af0-99f0-54bf98a54fae")
-    )
-  )
-
-  (footprint "Glow_NPTH_4.5mm"
-    (layer "F.Cu")
-    (uuid "ac80dcc0-f6c0-5566-91cb-b84042d27720")
-    (at 75.774196 32.485598)
-    (fp_text reference "MOUNT_FADER_R_TOP"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "316b4858-0793-5f0b-8983-d38fe1678a70")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (fp_text value "NPTH 4.5 mm"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "bede32d1-b99c-512f-9b18-d66c95c59633")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (attr board_only exclude_from_pos_files exclude_from_bom)
-    (pad "" np_thru_hole circle
-      (at 0 0)
-      (size 4.5 4.5)
-      (drill 4.5)
-      (layers "*.Cu" "*.Mask")
-      (uuid "17dd70a1-03a3-52c0-a32a-485485e8bee8")
-    )
-  )
-
-  (footprint "Glow_NPTH_4.5mm"
-    (layer "F.Cu")
-    (uuid "870930ac-8e1e-5d59-93b7-b4d5d2a570b6")
-    (at 5.079804 63.468294)
-    (fp_text reference "MOUNT_FADER_L_BOTTOM"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "24bcabb7-2247-5e7f-8930-8751f06a9357")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (fp_text value "NPTH 4.5 mm"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "d69f5091-ab44-599f-ace1-2b4601808e11")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (attr board_only exclude_from_pos_files exclude_from_bom)
-    (pad "" np_thru_hole circle
-      (at 0 0)
-      (size 4.5 4.5)
-      (drill 4.5)
-      (layers "*.Cu" "*.Mask")
-      (uuid "fbc4a482-706c-5e61-8c65-7f56fb34ae21")
-    )
-  )
-
-  (footprint "Glow_NPTH_4.5mm"
-    (layer "F.Cu")
-    (uuid "e948202a-c542-5f16-86a5-fa9c3e28890e")
-    (at 75.774196 63.468294)
-    (fp_text reference "MOUNT_FADER_R_BOTTOM"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "82bcf0d1-3ec4-5a7a-babc-2c0132cb1cf7")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (fp_text value "NPTH 4.5 mm"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "0ab466ea-8931-54aa-8ac8-d019a600ba4f")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (attr board_only exclude_from_pos_files exclude_from_bom)
-    (pad "" np_thru_hole circle
-      (at 0 0)
-      (size 4.5 4.5)
-      (drill 4.5)
-      (layers "*.Cu" "*.Mask")
-      (uuid "b2266107-2070-5013-a0c7-111669589e2d")
-    )
-  )
-
-  (footprint "Glow_NPTH_4.5mm"
-    (layer "F.Cu")
-    (uuid "9ab9a827-5b50-551a-9b88-767b44da9682")
-    (at 75.661701 26.907097)
-    (fp_text reference "MOUNT_UPPER_RIGHT"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "cbb5f731-5955-55f3-9f36-615ff841a334")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (fp_text value "NPTH 4.5 mm"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "4134be50-2853-5a7e-a6ab-5450b7adf47f")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (attr board_only exclude_from_pos_files exclude_from_bom)
-    (pad "" np_thru_hole circle
-      (at 0 0)
-      (size 4.5 4.5)
-      (drill 4.5)
-      (layers "*.Cu" "*.Mask")
-      (uuid "eae22eda-aefe-585c-a80f-861884660648")
-    )
-  )
-
-  (footprint "Glow_NPTH_SLOT_4.301x26.0409mm"
-    (layer "F.Cu")
-    (uuid "19cd7b29-db60-519e-a6db-021c4c493d8c")
-    (at 5.079804 47.976946)
-    (fp_text reference "FADER_LEFT"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "6a9d37c6-912b-53ac-b602-97c7c978591e")
-      (effects (font (size 0.8 0.8) (thickness 0.12)))
-    )
-    (fp_text value "NPTH SLOT 4.301 x 26.0409 mm"
-      (at 0 0 0)
-      (layer "F.Fab")
-      hide
-      (uuid "cad73d46-5c19-5e3f-b2e3-f0e8c9880f42")
+      (uuid "195b96e2-428d-584c-bd28-3b11ab1aa4ed")
       (effects (font (size 0.8 0.8) (thickness 0.12)))
     )
     (attr board_only exclude_from_pos_files exclude_from_bom)
     (pad "" np_thru_hole oval
       (at 0 0)
-      (size 4.301 26.0409)
-      (drill oval 4.301 26.0409)
+      (size 4.300995 26.0409)
+      (drill oval 4.300995 26.0409)
       (layers "*.Cu" "*.Mask")
-      (uuid "47cf696b-1f2f-5f3b-a7b9-26f7ff26894e")
+      (uuid "7e9a76de-2436-546e-b6c4-2d0ba4a3ce49")
     )
   )
 
-  (footprint "Glow_NPTH_SLOT_4.301x26.0409mm"
+  (footprint "Glow_DXF_NPTH_DXF_08"
     (layer "F.Cu")
-    (uuid "7aa35d0b-54f2-5542-bcea-fbbe761b6820")
-    (at 75.774196 47.976946)
-    (fp_text reference "FADER_RIGHT"
+    (uuid "50ae394e-1632-59d9-b750-9d68c6895b5e")
+    (at 75.774204 47.97695)
+    (fp_text reference "DXF_08"
       (at 0 0 0)
       (layer "F.Fab")
       hide
-      (uuid "280db205-95ab-51ac-9172-81ceaa028824")
+      (uuid "1e083dab-b499-504d-9582-b43239ed4ec2")
       (effects (font (size 0.8 0.8) (thickness 0.12)))
     )
-    (fp_text value "NPTH SLOT 4.301 x 26.0409 mm"
+    (fp_text value "DXF NPTH 4.300995 x 26.0409 mm"
       (at 0 0 0)
       (layer "F.Fab")
       hide
-      (uuid "bfbfb20b-d087-5017-9f83-ce3fd8d79aef")
+      (uuid "147a5da3-5497-5366-81f2-8c741f91404a")
       (effects (font (size 0.8 0.8) (thickness 0.12)))
     )
     (attr board_only exclude_from_pos_files exclude_from_bom)
     (pad "" np_thru_hole oval
       (at 0 0)
-      (size 4.301 26.0409)
-      (drill oval 4.301 26.0409)
+      (size 4.300995 26.0409)
+      (drill oval 4.300995 26.0409)
       (layers "*.Cu" "*.Mask")
-      (uuid "d55d2695-5dc7-5c77-b4cf-3ed8fe7e646e")
+      (uuid "b3f90240-69c0-5e51-8814-ccb40ab97501")
+    )
+  )
+
+  (footprint "Glow_DXF_NPTH_DXF_24"
+    (layer "F.Cu")
+    (uuid "aeb1dd4e-e23d-562e-88eb-d2881076b5ed")
+    (at 5.066303 22.64145)
+    (fp_text reference "DXF_24"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "53652c01-f6ab-50da-9e73-a8901289e0a8")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (fp_text value "DXF NPTH 8.010597 x 8.010702 mm"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "a9a937cd-e7bf-5819-838e-2952490b293c")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (attr board_only exclude_from_pos_files exclude_from_bom)
+    (pad "" np_thru_hole oval
+      (at 0 0)
+      (size 8.010597 8.010702)
+      (drill oval 8.010597 8.010702)
+      (layers "*.Cu" "*.Mask")
+      (uuid "3f277c53-bf37-5765-a9a2-a7f916319c99")
+    )
+  )
+
+  (footprint "Glow_DXF_NPTH_DXF_23"
+    (layer "F.Cu")
+    (uuid "4c80a6ff-e81f-567e-9711-3e547aeb87b3")
+    (at 5.066303 7.40795)
+    (fp_text reference "DXF_23"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "b797f881-9327-5b13-ac34-c70c8475db74")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (fp_text value "DXF NPTH 8.010597 x 8.0107 mm"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "d19f3fc5-945c-5c11-8a56-88bc571edebe")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (attr board_only exclude_from_pos_files exclude_from_bom)
+    (pad "" np_thru_hole oval
+      (at 0 0)
+      (size 8.010597 8.0107)
+      (drill oval 8.010597 8.0107)
+      (layers "*.Cu" "*.Mask")
+      (uuid "7ce27006-9109-58d0-8ca7-4503646cf503")
+    )
+  )
+
+  (footprint "Glow_DXF_NPTH_DXF_02_12"
+    (layer "F.Cu")
+    (uuid "1e90d85c-3cf4-5be2-8f6b-220de9fa14c8")
+    (at 17.163203 36.903498)
+    (fp_text reference "DXF_02_12"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "3953b12f-97ab-55ec-9731-34f41dbfe4eb")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (fp_text value "DXF NPTH 9.010597 x 9.010597 mm"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "359ea5b5-05cb-5473-802c-b0e36ebaee8d")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (attr board_only exclude_from_pos_files exclude_from_bom)
+    (pad "" np_thru_hole oval
+      (at 0 0)
+      (size 9.010597 9.010597)
+      (drill oval 9.010597 9.010597)
+      (layers "*.Cu" "*.Mask")
+      (uuid "d9a362c2-0cfa-5d9e-abac-4e7ea5c246dc")
+    )
+  )
+
+  (footprint "Glow_DXF_NPTH_DXF_03_11"
+    (layer "F.Cu")
+    (uuid "b113fe1e-c308-520f-9674-99dbf3641027")
+    (at 32.680002 36.903498)
+    (fp_text reference "DXF_03_11"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "6c6e41e0-fe94-57b9-b3ea-d9c905c7323f")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (fp_text value "DXF NPTH 9.010597 x 9.010597 mm"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "90a8c30e-6205-578a-a576-0532d0fb191f")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (attr board_only exclude_from_pos_files exclude_from_bom)
+    (pad "" np_thru_hole oval
+      (at 0 0)
+      (size 9.010597 9.010597)
+      (drill oval 9.010597 9.010597)
+      (layers "*.Cu" "*.Mask")
+      (uuid "ddd0fa1b-97d4-5c4d-a866-7ba29c880740")
+    )
+  )
+
+  (footprint "Glow_DXF_NPTH_DXF_04_10"
+    (layer "F.Cu")
+    (uuid "50afe865-d427-529d-97c1-50702d6c849c")
+    (at 48.196805 36.833497)
+    (fp_text reference "DXF_04_10"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "9a92e3fb-7e4e-59fd-a0df-54fb58d351a4")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (fp_text value "DXF NPTH 9.010604 x 9.010601 mm"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "a1306068-6452-5f8e-a9a5-4d1239076f75")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (attr board_only exclude_from_pos_files exclude_from_bom)
+    (pad "" np_thru_hole oval
+      (at 0 0)
+      (size 9.010604 9.010601)
+      (drill oval 9.010604 9.010601)
+      (layers "*.Cu" "*.Mask")
+      (uuid "83b941da-1660-5e00-94cc-2d449877f60e")
+    )
+  )
+
+  (footprint "Glow_DXF_NPTH_DXF_05_07_09"
+    (layer "F.Cu")
+    (uuid "e92e1aeb-ac19-5473-aa7a-710947b230e9")
+    (at 63.713604 36.903498)
+    (fp_text reference "DXF_05_07_09"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "21e44f6a-fad5-5c17-971a-ed873f8583b7")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (fp_text value "DXF NPTH 9.010604 x 9.010597 mm"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "5e67162d-7e7d-5659-aff1-5c138e0e8392")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (attr board_only exclude_from_pos_files exclude_from_bom)
+    (pad "" np_thru_hole oval
+      (at 0 0)
+      (size 9.010604 9.010597)
+      (drill oval 9.010604 9.010597)
+      (layers "*.Cu" "*.Mask")
+      (uuid "e22a5d6a-a40c-5a06-bb17-f23964bd850d")
+    )
+  )
+
+  (footprint "Glow_DXF_NPTH_DXF_14_16"
+    (layer "F.Cu")
+    (uuid "862ac6f0-fc3f-58c9-9436-5b8f8c39e88d")
+    (at 17.163203 54.048496)
+    (fp_text reference "DXF_14_16"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "3bf3d2d2-faf8-5ba1-b9b7-f7d939ffd553")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (fp_text value "DXF NPTH 9.010597 x 9.010601 mm"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "402c21c5-239a-523c-b62c-701866480b98")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (attr board_only exclude_from_pos_files exclude_from_bom)
+    (pad "" np_thru_hole oval
+      (at 0 0)
+      (size 9.010597 9.010601)
+      (drill oval 9.010597 9.010601)
+      (layers "*.Cu" "*.Mask")
+      (uuid "4aa3bdfd-1cb0-5249-8bb1-7722d5f30ae5")
+    )
+  )
+
+  (footprint "Glow_DXF_NPTH_DXF_15"
+    (layer "F.Cu")
+    (uuid "350a165e-234f-5a2a-be0a-a854d6f04049")
+    (at 63.713604 54.048496)
+    (fp_text reference "DXF_15"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "16f4d704-31f3-502f-a520-0aad9053eac1")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (fp_text value "DXF NPTH 9.010604 x 9.010601 mm"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "b1fb6437-4f96-5304-abfb-3c59e6b62a3e")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (attr board_only exclude_from_pos_files exclude_from_bom)
+    (pad "" np_thru_hole oval
+      (at 0 0)
+      (size 9.010604 9.010601)
+      (drill oval 9.010604 9.010601)
+      (layers "*.Cu" "*.Mask")
+      (uuid "c903949d-1a43-59d9-bedf-d3be99124c11")
+    )
+  )
+
+  (footprint "Glow_DXF_NPTH_DXF_18"
+    (layer "F.Cu")
+    (uuid "183a55e5-3113-57db-be3c-516c5f9ec7eb")
+    (at 5.079803 63.468293)
+    (fp_text reference "DXF_18"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "5fcfab54-dc5a-5bbe-9e7e-f0e2bbdb02ad")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (fp_text value "DXF NPTH 4.510605 x 4.528 mm"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "fc578021-c9fa-5c0a-a925-675a3aca7f0f")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (attr board_only exclude_from_pos_files exclude_from_bom)
+    (pad "" np_thru_hole oval
+      (at 0 0)
+      (size 4.510605 4.528)
+      (drill oval 4.510605 4.528)
+      (layers "*.Cu" "*.Mask")
+      (uuid "c9a5db6d-0ef5-5d68-b6e6-a39877e1e354")
+    )
+  )
+
+  (footprint "Glow_DXF_NPTH_DXF_00"
+    (layer "F.Cu")
+    (uuid "307b739c-df0f-5922-9e06-b29197c04e17")
+    (at 5.079803 32.485599)
+    (fp_text reference "DXF_00"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "9af33186-131c-514a-8955-f0291fcf88b2")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (fp_text value "DXF NPTH 4.510605 x 4.528 mm"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "8326a045-68d2-5fb6-83f9-2a8efd8e5f9c")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (attr board_only exclude_from_pos_files exclude_from_bom)
+    (pad "" np_thru_hole oval
+      (at 0 0)
+      (size 4.510605 4.528)
+      (drill oval 4.510605 4.528)
+      (layers "*.Cu" "*.Mask")
+      (uuid "b39d8740-8f29-5979-92af-2e396b97064c")
+    )
+  )
+
+  (footprint "Glow_DXF_NPTH_DXF_21"
+    (layer "F.Cu")
+    (uuid "757b067a-c9d2-5251-b495-ab2a8e8f5205")
+    (at 75.774196 63.468293)
+    (fp_text reference "DXF_21"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "a500577c-570f-586e-b6c6-ec29c0cbddeb")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (fp_text value "DXF NPTH 4.510605 x 4.528 mm"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "c27097dc-b4ae-56f9-a34d-699fcf1201be")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (attr board_only exclude_from_pos_files exclude_from_bom)
+    (pad "" np_thru_hole oval
+      (at 0 0)
+      (size 4.510605 4.528)
+      (drill oval 4.510605 4.528)
+      (layers "*.Cu" "*.Mask")
+      (uuid "69fd2d03-e9cb-50ce-887e-fd0dcfd3c4cc")
+    )
+  )
+
+  (footprint "Glow_DXF_NPTH_DXF_06"
+    (layer "F.Cu")
+    (uuid "7161dfb0-e4b3-5e13-9d5a-677100bac318")
+    (at 75.774196 32.485599)
+    (fp_text reference "DXF_06"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "e57c913e-fe8d-5b90-a29e-c53004806880")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (fp_text value "DXF NPTH 4.510605 x 4.528 mm"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "3843ad24-3ff2-59e5-b435-fa3387325180")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (attr board_only exclude_from_pos_files exclude_from_bom)
+    (pad "" np_thru_hole oval
+      (at 0 0)
+      (size 4.510605 4.528)
+      (drill oval 4.510605 4.528)
+      (layers "*.Cu" "*.Mask")
+      (uuid "ea0a77e2-9e93-5f42-a259-3f0f0eed8e63")
+    )
+  )
+
+  (footprint "Glow_DXF_NPTH_DXF_25"
+    (layer "F.Cu")
+    (uuid "b1a75f8f-5457-557c-b095-93161f880408")
+    (at 75.661701 26.907098)
+    (fp_text reference "DXF_25"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "bdfd8f0e-ed29-59d0-8f78-6176f86d689e")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (fp_text value "DXF NPTH 4.510589 x 4.510601 mm"
+      (at 0 0 0)
+      (layer "F.Fab")
+      hide
+      (uuid "b8d6caa7-bdd3-5272-9aca-94b322f43a5d")
+      (effects (font (size 0.8 0.8) (thickness 0.12)))
+    )
+    (attr board_only exclude_from_pos_files exclude_from_bom)
+    (pad "" np_thru_hole oval
+      (at 0 0)
+      (size 4.510589 4.510601)
+      (drill oval 4.510589 4.510601)
+      (layers "*.Cu" "*.Mask")
+      (uuid "2b721c3d-0bfc-5d4f-a402-93637a1d57d3")
     )
   )
 

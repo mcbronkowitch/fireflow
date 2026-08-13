@@ -58,9 +58,9 @@ knots, exactly 114 cubic Bezier segments. Its geometric bounds in DXF inches
 are:
 
 ```text
-min_x = -0.0893630708668
-max_x =  3.0956762990545
-min_y = -2.2384769236935
+min_x = -0.0893630597716
+max_x =  3.0956761910848
+min_y = -2.2384768963327
 max_y =  0.4386881946530
 ```
 
@@ -73,14 +73,21 @@ y_mm = (max_y - y_dxf) * 25.4
 
 This is a translation, Y-axis reflection, and inch-to-millimetre conversion;
 it contains no design rescale. The last spline becomes the one closed
-`Edge.Cuts` contour. All 27 DXF spline records are also retained byte-derived
-on `Dwgs.User` as a locked `mechanical_reference` group. Recognised aperture
-centres are emitted as explicit board-only NPTH footprints: two nominal 8.0 mm
-jack holes, six nominal 9.0 mm knob holes, five nominal 4.5 mm mounts, and two
-4.3010 x 26.0409 mm oval fader routes. The approximately 0.0106 mm diameter
-excess in the Illustrator spline extrema is normalised to those nominal drill
-classes without moving a centre; the exact source curves remain beside the
-mechanics for audit.
+`Edge.Cuts` contour. Its analytical extent is 80.899996972 x 67.999993311 mm.
+All 27 DXF spline records are also retained byte-derived on `Dwgs.User` as a
+locked `mechanical_reference` group: 1,673 native cubic curves with complete
+group membership.
+
+The source analyzer joins matching endpoints among records 0-25. It finds 15
+closed mechanical unions: 13 roundish apertures and two high-aspect routes.
+Records 19, 20, and 22 form two open reference-only components and are retained
+but not drilled. Every closed union is emitted as an explicit board-only oval
+NPTH whose centre and X/Y envelope come from analytical cubic extrema. No
+nominal 8.0, 9.0, or 4.5 mm drill authority exists, and the small ellipticities
+are not silently rounded. KiCad serializes the derived numbers at its native
+1 nm resolution, limiting coordinate rounding to 0.5 nm. The exact locked
+Bézier path remains authoritative where a standard KiCad oval/capsule drill
+cannot express an arbitrary source contour.
 
 The editable artwork is clean-room FireFlow work. It contributes three
 original flow curves plus unprotected FireFlow identification, revision, and
@@ -92,28 +99,32 @@ explicit.
 
 | Task 8 master | SHA-256 | Derivation |
 | --- | --- | --- |
-| `hardware/glow-faceplate/glow-faceplate.kicad_pcb` | `bdb5ef9ffe45afc46d769bba902f3b716c3e791d9c5fd3636d75f030e7199939` | Deterministic native KiCad curves, embedded board-only NPTH mechanics, and clean-room front artwork from `scripts/generate_master.py`. |
-| `hardware/glow-faceplate/artwork/glow-faceplate.svg` | `003934acc8b903404f878c92503ea3b7ba66163da7cbef32da17551c17d0160b` | 80.900 x 68.000 mm editable artwork with the four required named groups and exact mechanical-reference paths. |
+| `hardware/glow-faceplate/glow-faceplate.kicad_pcb` | `70619cd3168309cc0957485e5bf59d57b514cf1b4a4c50e55dd1a3b03d6e0c22` | Deterministic native KiCad curves, source-envelope board-only NPTH mechanics, and clean-room front artwork from `scripts/generate_master.py`. |
+| `hardware/glow-faceplate/artwork/glow-faceplate.svg` | `fec5228d972b1ab765f939f0737ad5f8619a97a020fa1d2a1bed4d504cc89aad` | DXF-exact physical-size editable artwork with the four required named groups and all 27 mechanical-reference paths. |
 
 For comparison with the existing Rack geometry only, a uniform least-squares
 map is applied after generation:
 
 ```text
-x_vcv = 1.0234410317105 * x_local - 0.7363784792542
-y_vcv = 1.0234410317105 * y_local + 7.6027954202413
+x_vcv = 1.023423583 * x_local - 0.736154
+y_vcv = 1.023423583 * y_local + 7.610624
 ```
 
-Across the two jacks, six knobs, and two fader centres, the maximum residual is
-0.211 mm, inside the 0.25 mm Task 8 comparison limit. This comparison compensates
-the earlier photograph-rectified Rack coordinates and is not used by KiCad or
-any future fabrication export. The physical master always remains at the exact
-1:1 DXF conversion above.
+Across the two jacks, six knobs, and two route centres, the maximum residual is
+0.218 mm, inside the 0.25 mm Task 8 comparison limit. The verifier parses the
+actual `CONTROL_CENTRES_MM` mapping in `host/vcv/res/touch2_geometry.py` and
+recomputes this fit rather than embedding its coordinates or coefficients.
+This comparison compensates the earlier photograph-rectified Rack coordinates
+and is not used by KiCad or any future fabrication export. The physical master
+always remains at the exact 1:1 DXF conversion above.
 
 KiCad evidence was captured from the existing stable
 `C:\Users\bernd\AppData\Local\Programs\KiCad\10.0\bin\kicad-cli.exe`, version
 `10.0.5`. KiCad 10 does not expose DXF in `pcb import`, so the deterministic
 headless converter emits native `gr_curve` records and KiCad performs the
-downstream parse, DRC, SVG plot, and 3D render. Final DRC reported 0 violations,
+downstream parse, custom-rule DRC, SVG plot, and 3D render. The committed
+`glow-faceplate.kicad_dru` and board setup are vendor-neutral pre-production
+defaults, not a Synthux manufacturing profile. Final DRC reported 0 violations,
 0 unconnected pads, and 0 footprint errors, with no exclusions added by this
 task. No Gerber, drill file, or production package was generated because
 `RIGHTS_APPROVED=no`, `LABELS_FROZEN=no`, and
