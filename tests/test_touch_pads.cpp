@@ -1,7 +1,11 @@
 // tests/test_touch_pads.cpp
 #include <doctest/doctest.h>
 #include <cstring>
+#include <fstream>
+#include <sstream>
 #include <string>
+#include "vcv/src/generated_flow_panel.hpp"
+#include "vcv/src/pad_geometry.hpp"
 #include "vcv/src/touch_pads.hpp"
 #include "flow/taste.h"
 #include "flow/terrain_code.h"
@@ -9,6 +13,39 @@
 using namespace spky;
 using namespace spky::flow;
 using namespace spkyvcv;
+
+TEST_CASE("pads: every generated centre is inside its exact physical "
+          "electrode and retains the 10+2 zone split") {
+    using namespace spkyvcv::glow;
+    for (int i = 0; i < 12; ++i) {
+        const PadShape& shape = kPadShapes[i];
+        INFO(shape.id);
+        CHECK(spkyvcv::pad_geometry::pointInClosedCatmullRom(
+            shape.points, shape.pointCount, shape.centre));
+        CHECK(shape.zone == (i < 10 ? PadZone::LowerTouch
+                                    : PadZone::UpperRear));
+    }
+}
+
+TEST_CASE("pads: TouchPlate is configured from a shape, parameter id, and "
+          "screen-reader name") {
+    std::string source;
+    for (const char* prefix : {"", "../"}) {
+        std::ifstream input(std::string(prefix) + "host/vcv/src/Glow.cpp");
+        if (input) {
+            std::ostringstream text;
+            text << input.rdbuf();
+            source = text.str();
+            break;
+        }
+    }
+    REQUIRE_FALSE(source.empty());
+    CHECK(source.find("void configure(const spkyvcv::glow::PadShape& padShape,"
+                      " int paramId, std::string accessibleName)")
+          != std::string::npos);
+    CHECK(source.find("p->configure(s, c.id, padAccessibleName(s))")
+          != std::string::npos);
+}
 
 // A helper that builds the 12-bool "which pads are down" vector.
 static void press(bool* d, int pad) {

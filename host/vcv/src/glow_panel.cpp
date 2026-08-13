@@ -209,6 +209,9 @@ void GlowToggle::draw(const DrawArgs& args) {
         drawFallbackToggle(args, box.size, frame);
     }
 
+    // The custom frame is the moving overlay. app::Switch owns interaction
+    // and tooltip recursion only; it contributes no stock SVG child that
+    // could obscure the physical switch base in GlowTouch.png.
     app::Switch::draw(args);
 }
 #endif

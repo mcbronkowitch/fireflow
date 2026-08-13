@@ -64,6 +64,24 @@ EDGE_KEEPOUT = 0.0
 # contours must clear their physical footprints by more than a rounding error.
 SWITCH_CLEARANCE = 0.5
 
+# Independent ownership regions from the approved physical-layer reading.
+# These are deliberately test fixtures rather than generator inputs: changing
+# generated control centres must not move the boundary that judges them.  The
+# faceplate's diagonal starts above the left jack column and falls toward the
+# exposed upper-rear controller region.  The lower PCB begins at the measured
+# PAD_FIELD_TOP separator.
+REMOVABLE_FACEPLATE_POLYGON = (
+    (0.00, 10.00), (10.00, 10.00), (81.28, 37.00),
+    (81.28, geo.PAD_FIELD_TOP), (0.00, geo.PAD_FIELD_TOP),
+)
+UPPER_REAR_ZONE = (
+    (10.00, 0.00), (81.28, 0.00), (81.28, 37.00), (10.00, 10.00),
+)
+LOWER_BOARD_ZONE = (
+    (0.00, geo.PAD_FIELD_TOP), (81.28, geo.PAD_FIELD_TOP),
+    (81.28, geo.PLATE_H), (0.00, geo.PLATE_H),
+)
+
 
 def test_enum_order():
     check([c.enum for c in g.PARAMS] == PARAM_ORDER,
@@ -159,6 +177,50 @@ def test_geometry_comes_from_the_named_physical_table():
               generated.verified == source.verified,
               "%s was retyped or lost physical metadata in the generator"
               % source.pad_id)
+
+
+def test_controls_belong_to_their_physical_hardware_layers():
+    faceplate_kinds = (g.MACRO, g.FADER, g.OUT)
+    for control in (c for c in g.PARAMS + g.OUTPUTS
+                    if c.kind in faceplate_kinds):
+        x0, y0, x1, y1 = _rect(control)
+        footprint = ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+        check(all(_point_in_polygon(point, REMOVABLE_FACEPLATE_POLYGON)
+                  for point in footprint),
+              "%s footprint is outside the removable faceplate" % control.enum)
+
+    for shape in g.PAD_SHAPES[10:]:
+        check(all(_point_in_polygon(point, UPPER_REAR_ZONE)
+                  for point in shape.points),
+              "%s contour is outside the upper-rear PCB" % shape.pad_id)
+
+    for shape in g.PAD_SHAPES[:10]:
+        check(all(_point_in_polygon(point, LOWER_BOARD_ZONE)
+                  for point in shape.points),
+              "%s contour is outside the lower PCB" % shape.pad_id)
+    for control in (c for c in g.PARAMS if c.kind == g.SWITCH):
+        x0, y0, x1, y1 = _rect(control)
+        footprint = ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+        check(all(_point_in_polygon(point, LOWER_BOARD_ZONE)
+                  for point in footprint),
+              "%s footprint is outside the lower PCB" % control.enum)
+
+
+def test_glow_widget_uses_layered_hardware_wiring():
+    source_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               os.pardir, "src", "Glow.cpp")
+    with open(source_path, encoding="utf-8") as source_file:
+        source = source_file.read()
+    check("box.size = Vec(16 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT)" in source,
+          "GlowWidget does not fix the module at 16 HP")
+    check("setPanel(new GlowHardwarePanel())" in source,
+          "GlowWidget does not install GlowHardwarePanel")
+    check("createPanel(asset::plugin(pluginInstance, \"res/Glow.svg\"))" not in source,
+          "GlowWidget still installs the legacy SVG panel")
+    check("createParamCentered<GlowToggle>" in source,
+          "GlowWidget does not install the custom switch overlays")
+    check("createParamCentered<CKSSThree>" not in source,
+          "GlowWidget still installs stock CKSSThree switches")
 
 
 def test_unverified_paths_keep_source_notes():

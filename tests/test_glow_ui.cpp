@@ -2,6 +2,10 @@
 #include <doctest/doctest.h>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <sstream>
+#include <string_view>
+#include "vcv/src/generated_flow_panel.hpp"
 #include "vcv/src/glow_ui.hpp"
 #include "flow/taste.h"
 #include "flow/terrain_code.h"
@@ -9,6 +13,59 @@
 using namespace spky;
 using namespace spky::flow;
 using namespace spkyvcv;
+
+static std::string glowSource() {
+    for (const char* prefix : {"", "../"}) {
+        std::ifstream input(std::string(prefix) + "host/vcv/src/Glow.cpp");
+        if (input) {
+            std::ostringstream text;
+            text << input.rdbuf();
+            return text.str();
+        }
+    }
+    return {};
+}
+
+TEST_CASE("glow panel: physical P00-P11 map in order to PAD_1-PAD_12") {
+    using namespace spkyvcv::glow;
+    static constexpr const char* expectedNames[] = {
+        "Touch electrode P00", "Touch electrode P01",
+        "Touch electrode P02", "Touch electrode P03",
+        "Touch electrode P04", "Touch electrode P05",
+        "Touch electrode P06", "Touch electrode P07",
+        "Touch electrode P08", "Touch electrode P09",
+        "Touch electrode P10", "Touch electrode P11",
+    };
+
+    for (int i = 0; i < 12; ++i) {
+        const PanelCtl& control = kParamCtls[PAD_1 + i];
+        INFO("physical pad " << i);
+        CHECK(control.id == PAD_1 + i);
+        CHECK(control.kind == WK_PAD);
+        CHECK(control.mm.x == doctest::Approx(kPadShapes[i].centre.x));
+        CHECK(control.mm.y == doctest::Approx(kPadShapes[i].centre.y));
+        const std::string_view tooltip(control.tip);
+        CHECK(tooltip.substr(0, tooltip.find(" --")) == expectedNames[i]);
+    }
+}
+
+TEST_CASE("glow panel: Rack widget installs the layered panel and custom "
+          "three-position toggles") {
+    const std::string source = glowSource();
+    REQUIRE_FALSE(source.empty());
+    CHECK(source.find("box.size = Vec(16 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT)")
+          != std::string::npos);
+    CHECK(source.find("setPanel(new GlowHardwarePanel())") != std::string::npos);
+    CHECK(source.find("createPanel(asset::plugin(pluginInstance, \"res/Glow.svg\"))")
+          == std::string::npos);
+    CHECK(source.find("createParamCentered<GlowToggle>") != std::string::npos);
+    CHECK(source.find("createParamCentered<CKSSThree>") == std::string::npos);
+    CHECK(source.find("configSwitch(c.id, 0.f, 2.f, 0.f") != std::string::npos);
+    CHECK(spkyvcv::glow::kParamCtls[spkyvcv::glow::SW_L].kind ==
+          spkyvcv::glow::WK_SWITCH);
+    CHECK(spkyvcv::glow::kParamCtls[spkyvcv::glow::SW_R].kind ==
+          spkyvcv::glow::WK_SWITCH);
+}
 
 TEST_CASE("glow: pad visual states have one unambiguous precedence") {
     CHECK(pad_visual_state(false, false, false) == PadVisualState::IDLE);
