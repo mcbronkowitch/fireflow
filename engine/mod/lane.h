@@ -238,6 +238,13 @@ private:
 
     int   _cur_step = -1;
     static constexpr int kSeqSlots = 32;
+    // The free mode owns its phrase length. It cannot come from STEPS: Fireflow
+    // spends STEPS == 0 on the mode switch (Fireflow.cpp:892-893) and set_step
+    // clamps that to 1, while Glow pushes 2..16 in both modes -- so STEPS would
+    // mean two different things. It also cannot be made variable: generate_phrase
+    // fills only [0, n) (phrase_gen.h:165-200) and pitch[32] is zero-init, so a
+    // length that grows past the generated one plays the root instead of a note.
+    static constexpr int kFlowPhraseSlots = 8;
     SongForm _song;
     bool      _melodic   = false;
     bool      _flow_melody = false;

@@ -133,6 +133,17 @@ void ModLane::set_song(SongMode song) {
 
 void ModLane::set_flow_melody(bool on) {
     _flow_melody = on;
+    // One-sided by construction, and that is the point. ENTERING melody mode the
+    // pattern may have been generated at another length -- at boot, whenever a
+    // host pushed a STEPS other than kFlowPhraseSlots before this flag -- and
+    // pitch[] past that length is zero, so it MUST regenerate. LEAVING it must
+    // not: the lane moves to the FLOW LFO path where _wrap_events early-returns
+    // and nothing reads the melody state, so a flag raised here would sit until
+    // the deck came back and then re-roll the melody for nothing. Testing the
+    // pattern rather than the flip gives both behaviours from one condition.
+    if (_flow_melody_on() &&
+        _active_pattern().pattern_groove.len != _effective_length())
+        _song.length_pending = true;
 }
 
 void ModLane::set_step(bool on, int steps) {
@@ -142,13 +153,10 @@ void ModLane::set_step(bool on, int steps) {
     // Entering STEP disarms the follower so its first follow() call lands on
     // the deck's current position instead of replaying the whole count.
     if (entering_step) { _follow_armed = false; _follow_jumped = false; }
+    // Captured BEFORE the assignments below: _effective_length() reads
+    // _step_mode and _steps, both of which this function is about to change.
+    const int old_len = _melodic ? _effective_length() : 0;
     int new_steps = steps < 1 ? 1 : steps;
-    if (_melodic) {
-        int old_n = _steps > kSeqSlots ? kSeqSlots : _steps;
-        int new_n = new_steps > kSeqSlots ? kSeqSlots : new_steps;
-        if (new_n != old_n)
-            _song.length_pending = true; // only when effective length changes
-    }
     if (on && _step_mode && new_steps != _steps && _cur_step >= 0) {
         // Seamless live STEPS turn (spec: step-clock): keep the step index and
         // the fraction inside it so the boundary grid never jumps; _cur_step
@@ -172,6 +180,12 @@ void ModLane::set_step(bool on, int steps) {
     }
     _step_mode = on;
     _steps = new_steps;
+    // Only when the EFFECTIVE length changes. Keep the _melodic guard: the
+    // helper clamps to kSeqSlots, and lane_slots() can hand a texture lane up
+    // to 64 (tests/test_lane_len.cpp:26), so an unguarded check would start
+    // clamping lengths that today pass through.
+    if (_melodic && _effective_length() != old_len)
+        _song.length_pending = true;
     if (entering_step && _melodic_at_init &&
         _song.patterns[1].pattern_groove.len == 0)
         _song.new_pending = true;
@@ -191,22 +205,25 @@ void ModLane::new_phrase() {
 }
 
 int ModLane::_effective_length() const {
-    if (_steps < 1) return 1;
-    return _steps > kSeqSlots ? kSeqSlots : _steps;
+    if (_flow_melody_on()) return kFlowPhraseSlots;
+    int n = _steps < 1 ? 1 : _steps;
+    return n > kSeqSlots ? kSeqSlots : n;
 }
 
 void ModLane::_generate_pattern_a() {
     MelodyPattern& pattern = _song.patterns[0];
-    generate_phrase(_song.selected_form, _rng, _steps,
+    const int len = _effective_length();
+    generate_phrase(_song.selected_form, _rng, len,
                     pattern.pitch, pattern.gate, pattern.motif_id,
                     pattern.layout);
     pg_gen_groove(_rng, pattern.layout.motif_len, pattern.cell_groove);
     expand_pattern_groove(
-        pattern.cell_groove, _steps, pattern.pattern_groove);
+        pattern.cell_groove, len, pattern.pattern_groove);
 }
 
 void ModLane::_derive_pattern_b() {
-    derive_turnaround(_song.patterns[0], _steps, _rng, _song.patterns[1],
+    derive_turnaround(_song.patterns[0], _effective_length(), _rng,
+                      _song.patterns[1],
                       _song.cadence_slot, _song.bound_a_opening);
 }
 
@@ -501,7 +518,7 @@ void ModLane::_start_note(int slot) {
     // For _steps > kSeqSlots this scan models the 32-slot buffer's own order
     // (slot after step _steps-1 wraps to slot 0), not the outer cycle seam —
     // unreachable from the panel, where STEPS clamps to 16.
-    int n = _steps > kSeqSlots ? kSeqSlots : _steps;   // effective phrase length
+    int n = _effective_length();                        // effective phrase length
     if (n < 1) n = 1;
     int dist = 1;                                       // steps to the next note
     while (dist < n && !_effective_gate((slot + dist) % n)) ++dist;

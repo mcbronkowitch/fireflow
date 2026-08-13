@@ -103,3 +103,31 @@ TEST_CASE("FLOW LFO mode is untouched when the flag is off") {
     // The legacy free lane fires exactly once per cycle, at the wrap.
     CHECK(fires_over_cycles(lane, 3) == 3);
 }
+
+TEST_CASE("FLOW melody: the phrase length is a constant, not STEPS") {
+    // A deck whose STEPS says 3 still gets an 8-slot FLOW phrase. STEPS means
+    // different things on the two hosts in FLOW -- Fireflow spends STEPS == 0
+    // on the mode switch itself, which set_step clamps to 1, while Glow pushes
+    // 2..16 in both modes -- so the free mode owns its own length and both
+    // hosts produce the same phrase from the same terrain.
+    ModLane lane = make_flow_melody_lane(0xF10Eu, 1.f, /*steps=*/3);
+    CHECK(fires_over_cycles(lane, 2) == 16);
+}
+
+TEST_CASE("STEP is unaffected by the phrase-length constant") {
+    // The same lane in STEP still follows STEPS exactly. _effective_length()
+    // must not leak into the stepped world.
+    ModLane lane;
+    lane.set_melodic(true);
+    lane.set_step(true, 3);
+    lane.set_form(Principle::Hierarchical);
+    lane.set_song(SongMode::AAAB);
+    lane.init(48000.f, 0xF10Eu);
+    lane.set_rate_hz(1.f);
+    lane.set_density(1.f);
+    lane.set_variation(0.f);
+    CHECK(lane.steps() == 3);
+    // A STEP lane's clock_scale is 8/steps, so one cycle is still one phrase:
+    // three slot entries, three fires at full density.
+    CHECK(fires_over_cycles(lane, 2) == 6);
+}
