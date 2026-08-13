@@ -165,31 +165,44 @@ The base rule drew it *continuously* from `{-.25, .25}`, under a comment that
 already called the values "by-ear states". A continuous draw lands on exactly 0
 with probability zero, so every terrain drew a choke.
 
-Fixed in `taste.h` + `terrain.cpp`, in three parts, each of which was measured
-rather than reasoned:
+**The fix: the terrain draws no choke at all.** `P_CHOKE` becomes a
+single-point base rule — the `P_PACE` shape, and for the same reason. The row
+exists so the base overlay has a destination, and `draw_span` returns the centre
+exactly when `lo == hi`. CHOKE therefore reaches Glow through a transferred
+patch and nowhere else, which is a real path and not a theoretical one:
+`flow_patch_bridge.hpp:569` carries it as `P_CHOKE = CHOKE * 0.5`, landing
+Fireflow's five snapped by-ear states on flow's −1..1 unrounded, and the overlay
+is applied after the base-rule loop so it wins.
 
-- **Zone-snapped**, weighted toward the centre (`kChokeZones` / `kChokeW`,
-  `snap_choke`), the same shape as `snap_rate` and `snap_steps`.
-- **No choke in the free mode at all.** The engine has no partial choke to offer
-  there, so the generator draws none. The engine behaviour is deliberately
-  unchanged: on the panel, where 0 is reachable, a hard priority in the free
-  mode is a choice the player makes.
-- **The sign follows the roles, it is not drawn.** A drawn sign points the
-  priority at the texture deck half the time. Master 771 — STEP drone, SYNTH
-  carrier on A, BBD texture on B — drew +0.5, gave the BBD priority, and
-  rendered at RMS 1.2e-5 against the 1e-3 floor of the fixed-seed audio gate.
-  The amount now comes from the zone draw and the direction from `a_carries`:
-  the texture yields to the lead, never the reverse.
+Measured after the fix: **both decks audible on 40 of 52 terrains — 27 of 31
+free-mode, 13 of 21 stepped** — against 7, 0 and 7 before.
 
-A fourth thing was tried and withdrawn: letting the zone draw reach ±1. That is
-stage 2 in `instrument.cpp`, where the yielding deck is blocked through the
-priority side's *whole audible decay*. The old continuous band could not reach
-it either; opening it at a 5 % weight per sign is what first broke master 771.
-The base rule's span stops at 0.5 for that reason, and
-`tests/test_flow_terrain.cpp` pins both the exclusion and the sign rule.
+### The version that was built first, and why it went
 
-Measured after the fix: **both decks audible on 40 of 52 terrains, and 27 of 31
-free-mode ones**, against 7 and 0 before.
+A zone-snapped draw was implemented, measured and then withdrawn in favour of
+the simpler rule above. It is recorded because it looks like the smaller change
+and is not:
+
+- **Zone-snapped** (`kChokeZones` / `kChokeW`, `snap_choke`), weighted toward
+  the centre, the shape `snap_rate` and `snap_steps` already use. This fixed the
+  free mode, but a stepped terrain whose priority deck *sustains* still had its
+  window permanently open, so the mute merely became rarer rather than gone.
+- **Drawing the sign** put the priority on the texture deck half the time.
+  Master 771 — STEP drone, SYNTH carrier on A, BBD texture on B — drew +0.5,
+  handed the BBD priority and rendered at RMS 1.2e-5 against the 1e-3 floor of
+  the fixed-seed audio gate. Taking the sign from `a_carries` instead fixed that
+  case but left the mirror risk: a *quiet carrier* then chokes the audible
+  texture deck.
+- **Letting the draw reach ±1** opens stage 2 in `instrument.cpp`, where the
+  yielding deck is blocked through the priority side's whole audible decay. The
+  old continuous band could not reach it either; opening it at a 5 % weight per
+  sign is what first broke master 771.
+
+Three guards, each answering the previous one's measurement, and the deck
+balance came out identical to simply not drawing the parameter. The rule that
+survives is the one that needs no guards: a control whose inhibit is binary at
+every stage has no gradient for a generator to sit on, so the generator does not
+touch it.
 
 **Not fully closed.** The remaining 12 are a second, untraced cause: they
 survive `CHOKE = 0` and all of them carry a BODY deck on the silent side. That
@@ -304,10 +317,10 @@ own. That is the Glow rework's subject.
 
 Everything else above is a finding; these are the edits.
 
-- `engine/flow/taste.h`, `engine/flow/terrain.cpp` — the CHOKE fix of §4b, with
-  `tests/test_flow_terrain.cpp` pinning zone snapping, the free-mode rule, the
-  stage-2 exclusion and the sign rule. The RED was proven before the fix: 4000
-  of 4000 draws landed off every panel zone.
+- `engine/flow/taste.h` — the CHOKE fix of §4b: a single-point base rule, no
+  generator draw. `tests/test_flow_terrain.cpp` pins both halves, the always-zero
+  draw and the overlay's value arriving unrounded. The RED was proven by putting
+  the old continuous span back.
 - `tests/test_param_impact.cpp` — the two gates, new.
 - `docs/roadmap.md` — the FLOW melody engine and the SHAPE/SMOOTH rework, both
   ahead of the Glow rework, plus the Glow rework entry carrying the decisions

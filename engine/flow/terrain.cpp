@@ -163,28 +163,6 @@ float snap_steps(Rng& r, float lo, float hi, float adv) {
     return float(val[pick_weighted(r, w, n)]);
 }
 
-// Weighted zone draw for CHOKE, the mirror of snap_rate/snap_steps: the span
-// filters which of the five panel positions this archetype may reach, the
-// weights bias the pick toward the centre.
-//
-// The fallback returns 0 rather than `lo`, unlike its two siblings. Theirs hand
-// back a span endpoint because for a rate or a step count any value in range is
-// a legal setting; here the endpoints are the STRONGEST settings, and a span
-// too narrow to contain a zone must not silently resolve to a full priority
-// choke. 0 is the identity -- neither deck yields -- which is what "this span
-// names no zone" should mean.
-float snap_choke(Rng& r, float lo, float hi, float adv) {
-    float val[kChokeZoneCount], w[kChokeZoneCount];
-    int n = 0;
-    for (int i = 0; i < kChokeZoneCount; ++i) {
-        const float z = kChokeZones[i];
-        if (z < lo - 1e-4f || z > hi + 1e-4f) continue;
-        val[n] = z; w[n] = temper(kChokeW[i], adv); ++n;
-    }
-    if (n == 0) return 0.f;
-    return val[pick_weighted(r, w, n)];
-}
-
 // Draw one story-curve target: each breakpoint uniform inside ITS OWN span,
 // then the five values sorted monotone in the story's direction. Direction
 // = sign of (bp4 span lo - bp0 span lo); a flat story counts as ascending.
@@ -426,45 +404,6 @@ Terrain generate(const TerrainState& st, const BaseOverlay* ov) {
                 t.base[br.param] = snap_rate(r, s.lo, s.hi, t.adventure_base);
         } else if (br.param == P_STEPS_B) {
             t.base[br.param] = snap_steps(r, s.lo, s.hi, t.adventure_base);
-        } else if (br.param == P_CHOKE) {
-            // Zone-snapped, and only where a choke means what it says. In the
-            // FREE mode instrument.cpp's inhibit window is
-            // `gate() || flow()` and Part::flow() is `!_step_on`, so the window
-            // never closes: any non-zero CHOKE mutes the yielding deck for the
-            // whole life of the terrain, and its magnitude is not consulted at
-            // all. That is a deck switch, not a priority, so the terrain draws
-            // no choke there -- measured before this rule, EVERY free-mode
-            // terrain played on one deck
-            // (docs/2026-08-13-glow-macro-audit.md).
-            //
-            // The engine behaviour is deliberately NOT changed: on the panel,
-            // where CHOKE snaps to five reachable positions with 0 among them,
-            // a hard priority in the free mode is a choice the player makes.
-            // What was broken is a generator handing that choice out by
-            // accident, on every terrain, from a band that cannot express "no".
-            //
-            // Like the RATE branch above, the FLOW case still consumes
-            // draw_span's draw and throws it away -- the stream stays keyed to
-            // the parameter, so this branch cannot shift any other row.
-            //
-            // THE SIGN IS NOT DRAWN, it follows the ROLES. instrument.cpp reads
-            // a negative CHOKE as "deck A has priority", and a generator that
-            // picks that independently of stage 1 can point the priority at the
-            // TEXTURE deck and choke the lead voice. That is backwards
-            // musically, and it silences a terrain outright when the texture
-            // deck is a quiet one: master 771 (STEP drone, SYNTH carrier on A,
-            // BBD texture on B) drew +0.5, handed priority to the BBD, and
-            // rendered at RMS 1.2e-5 against the 1e-3 floor of "flow audio:
-            // fixed seeds render clean and inside RMS bounds".
-            //
-            // So the zone draw supplies the AMOUNT -- the span below admits
-            // only 0 and +0.5 -- and a_carries supplies the direction. The
-            // texture yields to the lead; never the other way round. A player
-            // reaching for the panel can still choke either deck.
-            const float amount = t.base[P_MODE] > 0.5f
-                ? snap_choke(r, s.lo, s.hi, t.adventure_base)
-                : 0.f;
-            t.base[br.param] = t.a_carries ? -amount : amount;
         } else if (br.param == P_SHUFFLE) {
             // The skew tempers too: kShuffleSkew^(1 - a^kAdventureExp) is the
             // table's skew at a = 0 and decays to 1.0 -- a uniform draw across

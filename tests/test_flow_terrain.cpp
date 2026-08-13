@@ -356,87 +356,51 @@ TEST_CASE("flow terrain: SHUFFLE leans to the low end of its span") {
     CHECK(heavy > 100);
 }
 
-TEST_CASE("flow terrain: CHOKE lands on a panel zone, and never chokes in FLOW") {
-    // CHOKE is a FIVE-STATE zone control, not a continuous one. Fireflow drives
-    // it with snapEnabled over -2..+2 scaled by 0.5 (Fireflow.cpp), i.e. exactly
-    // {-1, -0.5, 0, +0.5, +1}, and 0 -- "neither deck yields" -- is its centre
-    // position.
+TEST_CASE("flow terrain: the terrain draws no CHOKE, and an overlay still can") {
+    // CHOKE reaches Glow through a transferred patch and nowhere else.
     //
-    // The base rule drew it CONTINUOUSLY from {-.25, .25} until 2026-08-13, with
-    // a comment that already called the values "by-ear states". A continuous
-    // draw lands on exactly 0 with probability zero, and in the FREE mode any
-    // non-zero CHOKE mutes the yielding deck outright and permanently:
-    // instrument.cpp computes `window = _parts[pri].gate() || _parts[pri].flow()`
-    // and Part::flow() is `!_step_on`, so in FLOW the inhibit window never
-    // closes and Part::_note_suppressed swallows every note that deck would
-    // ever start. The magnitude is not consulted at all -- only the sign and
-    // `amt > 0` -- so a CHOKE of -0.016 silenced a deck as completely as -1.0
-    // would. Measured before this fix: EVERY free-mode terrain played on one
-    // deck, with the other contributing bit-exact silence over 30 s.
+    // The reason is that CHOKE has no gradient for a generator to sit on. Its
+    // inhibit is binary at every stage: instrument.cpp sets
+    // `_parts[yld].set_inhibit(window)` and Part::_note_suppressed then swallows
+    // every note that deck would start. The magnitude is never consulted --
+    // only the sign and `amt > 0` -- so any non-zero value is a deck mute
+    // conditioned on the other deck's gate, and in the free mode it is not even
+    // conditioned: `window = gate() || flow()` with Part::flow() == !_step_on,
+    // so the window never closes.
     //
-    // Hence the two halves below. Zone snapping alone would not fix the free
-    // mode -- it would only replace "always a tiny choke" with "sometimes a
-    // full one".
-    const float kZones[5] = { -1.f, -0.5f, 0.f, 0.5f, 1.f };
-    int hist[5] = {};
-    int flow_n = 0, flow_choked = 0, step_n = 0, step_choked = 0, off_zone = 0;
-    int wrong_way = 0;
+    // This row was a continuous {-.25, .25} until 2026-08-13, which lands on
+    // exactly 0 with probability zero. Measured cost: 45 of 52 terrains played
+    // on ONE deck, and 31 of 31 free-mode ones, with the silent side rendering
+    // bit-exact zeros over 30 s (docs/2026-08-13-glow-macro-audit.md).
+    //
+    // A zone-snapped draw was built first and withdrawn. It is worth knowing
+    // why, because it looks like the smaller change: snapping fixed the free
+    // mode but still handed a mute to any STEP terrain whose priority deck
+    // sustains, drawing the SIGN pointed the priority at the texture deck half
+    // the time -- master 771 rendered at RMS 1.2e-5 against a 1e-3 floor that
+    // way -- and letting the draw reach +-1 opened stage 2, where the yielding
+    // deck is blocked through the priority side's whole audible decay.
     for (uint32_t master = 1; master <= 4000; ++master) {
         const Terrain t = generate(st(master));
-        const float c = t.base[P_CHOKE];
-        int zone = -1;
-        for (int z = 0; z < 5; ++z)
-            if (std::fabs(c - kZones[z]) < 1e-6f) zone = z;
-        if (zone < 0) { ++off_zone; continue; }
-        ++hist[zone];
-        // instrument.cpp: negative == deck A has priority. The priority must
-        // sit on the CARRIER, so the sign is the carrier's, not a draw.
-        if (c != 0.f && ((c < 0.f) != t.a_carries)) ++wrong_way;
-        if (t.base[P_MODE] > 0.5f) { ++step_n; if (zone != 2) ++step_choked; }
-        else                       { ++flow_n; if (zone != 2) ++flow_choked; }
+        CAPTURE(master);
+        CHECK(t.base[P_CHOKE] == 0.f);      // exactly, at every archetype and mode
     }
-    CAPTURE(off_zone);
-    CHECK(off_zone == 0);          // every draw is a panel position
 
-    // The free mode has no partial choke to offer, so it gets none.
-    CAPTURE(flow_n);
-    CAPTURE(flow_choked);
-    REQUIRE(flow_n > 500);         // the population is worth asserting on
-    CHECK(flow_choked == 0);
-
-    // In STEP the window is gate(), which opens and closes, so the control is
-    // a real priority again. Centre dominates but the other zones stay
-    // reachable -- a bound in both directions, so neither collapsing onto 0 nor
-    // drawing uniformly passes.
-    REQUIRE(step_n > 500);
-    const float centre = float(step_n - step_choked) / float(step_n);
-    CAPTURE(centre);
-    CHECK(centre > 0.45f);
-    CHECK(centre < 0.90f);
-    CAPTURE(hist[0]); CAPTURE(hist[1]); CAPTURE(hist[3]); CAPTURE(hist[4]);
-    CHECK(hist[1] + hist[3] > 0);  // the half-zones happen
-
-    // The FULL priority is out of a generator's reach, and this is the half of
-    // the rule that was learned the hard way. |CHOKE| > 0.5 is stage 2 in
-    // instrument.cpp: the yielding deck is blocked through the priority side's
-    // whole audible decay, not merely while it gates. The first version of this
-    // fix let the zone draw reach +-1 at a 5 % weight per sign, and master 771
-    // -- a seed the audio suite renders at the calm corner -- dropped to RMS
-    // 1.2e-5 against that case's 1e-3 floor. The old continuous {-.25, .25}
-    // band could not reach stage 2 either; keeping it unreachable is not a
-    // regression from the fix, it is the fix staying inside the envelope it
-    // found.
-    CHECK(hist[0] == 0);
-    CHECK(hist[4] == 0);
-
-    // The priority always sits on the CARRIER. Drawn independently it is a
-    // coin, and the coin lands on the texture deck half the time -- which is
-    // backwards musically and can silence the terrain when the texture deck is
-    // a quiet one. Master 771 is the measured case: STEP drone, SYNTH carrier
-    // on A, BBD texture on B, drawn CHOKE +0.5 giving the BBD priority, whole
-    // render at RMS 1.2e-5 against a 1e-3 floor.
-    CAPTURE(wrong_way);
-    CHECK(wrong_way == 0);
+    // The other half of the rule, and the half that makes the first half a
+    // decision rather than a deletion: a hand-authored patch still gets its
+    // choke through, unrounded. flow_patch_bridge.hpp carries it as
+    // `P_CHOKE = CHOKE * 0.5`, which lands Fireflow's five snapped by-ear
+    // states on flow's -1..1. "an overlay reaches every base-rule parameter"
+    // in test_flow_overlay.cpp covers the mechanism for all rows; this pins
+    // THIS row's value, because a single-point span is exactly the shape that
+    // would make a silently-dropped overlay look correct.
+    for (float want : { -1.f, -0.5f, 0.5f, 1.f }) {
+        BaseOverlay ov;
+        ov.v[P_CHOKE] = want; ov.has[P_CHOKE] = true;
+        const Terrain t = generate(st(0x51A7E1u), &ov);
+        CAPTURE(want);
+        CHECK(t.base[P_CHOKE] == want);
+    }
 }
 
 TEST_CASE("flow terrain: adventure is rare, per domain, and rerolls with it") {
