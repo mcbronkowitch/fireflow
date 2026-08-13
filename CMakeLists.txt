@@ -176,6 +176,7 @@ add_executable(spky_tests
     tests/test_flow_new.cpp
     tests/test_flow_gesture.cpp
     tests/test_flow_audio.cpp
+    tests/test_param_impact.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
 target_include_directories(spky_tests PRIVATE host)

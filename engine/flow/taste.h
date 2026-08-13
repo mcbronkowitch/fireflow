@@ -767,6 +767,34 @@ inline constexpr float kStepsW[kStepsWCount] = {
 //  2    3    4    5    6    7    8    9   10   11   12   13   14   15   16
    .15f,.05f,.50f,.05f,.20f,.05f,1.0f,.05f,.15f,.05f,.50f,.05f,.10f,.05f,1.0f,
 };
+// CHOKE is a FIVE-STATE zone control, not a continuous parameter. Fireflow
+// drives it with snapEnabled over -2..+2 scaled by 0.5, i.e. exactly these five
+// values, and 0 -- "neither deck yields" -- is its centre position. The base
+// rule below used to draw it continuously from {-.25, .25}, which lands on 0
+// with probability zero; see terrain.cpp's snap_choke and
+// docs/2026-08-13-glow-macro-audit.md for what that cost.
+//
+// All five are listed because the table mirrors the PANEL, which reaches all
+// five. The base rule's spans below deliberately stop at +-0.5, so the outer
+// pair is unreachable from a terrain draw and its weights never come up --
+// snap_choke's span filter is what enforces that, exactly as snap_rate's does
+// for the division rungs.
+//
+// That exclusion is load-bearing, not tidiness. |CHOKE| > 0.5 is stage 2 in
+// instrument.cpp: the yielding deck is blocked not merely while the priority
+// side gates, but through its WHOLE audible decay (env floor 1e-4). The old
+// continuous band {-.25, .25} could not reach it either, and the first version
+// of this fix opened it at a 5 % weight per sign -- master 771 then rendered at
+// RMS 1.2e-5 against the 1e-3 floor of "flow audio: fixed seeds render clean
+// and inside RMS bounds". A generator may hand out a priority; it may not hand
+// out a mute.
+inline constexpr int kChokeZoneCount = 5;
+inline constexpr float kChokeZones[kChokeZoneCount] = {
+    -1.f, -0.5f, 0.f, 0.5f, 1.f
+};
+inline constexpr float kChokeW[kChokeZoneCount] = {
+    .05f, .25f, 1.0f, .25f, .05f
+};
 // SHUFFLE has no rungs to weight, so its bias is a skew inside the drawn span:
 // v = lo + (hi-lo) * u^kShuffleSkew. Above 1 pulls toward the low end; a heavy
 // -shuffle fragment stays reachable, which a narrowed span would have killed.
@@ -1070,7 +1098,19 @@ inline const BaseRule kBaseRules[] = {
 // -- global modulation / mix ---------------------------------------------
 { P_MORPH,    {{.2f,.8f},{.2f,.8f},{.2f,.8f},{.2f,.8f}} },     // neutral
 { P_COUPLE,   {{0.f,.5f},{0.f,.5f},{0.f,.5f},{0.f,.5f}} },     // neutral
-{ P_CHOKE,    {{-.25f,.25f},{-.25f,.25f},{-.25f,.25f},{-.25f,.25f}} }, // near center (by-ear states)
+// CHOKE: the span no longer bounds a continuous draw, it FILTERS which of the
+// five panel zones (kChokeZones above) a terrain may reach -- the same role the
+// span plays for P_RATE_A/B and P_STEPS_B.
+//
+// NON-NEGATIVE, which makes this the one base rule whose span is not the range
+// of the parameter: terrain.cpp draws the AMOUNT here and takes the SIGN from
+// a_carries, so the texture deck yields to the lead rather than to a coin. And
+// it stops at 0.5, one zone short of the panel's reach, because |CHOKE| > 0.5
+// is stage 2 in instrument.cpp -- the yielding deck blocked through the
+// priority side's whole audible decay. Identical for all four archetypes on
+// purpose: both bounds come from the ENGINE, not from any archetype's
+// character.
+{ P_CHOKE,    {{0.f,.5f},{0.f,.5f},{0.f,.5f},{0.f,.5f}} },  // amount only, stage 1
 { P_SHUFFLE,  {{0.f,.1f},{0.f,.35f},{0.f,.3f},{.1f,.5f}} },    // fragment = loose
 // -- reverb character (DIFF = density, per the reverb mod split) ----------
 // DIFF: 0.4-0.6 is simply not wanted, so this is a span narrowing rather than

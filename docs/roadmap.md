@@ -30,7 +30,10 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-08-12 (flow patch transfer merged, not released — see its
+- **Last updated:** 2026-08-13 (Glow macro audit: CHOKE no longer silences a deck
+  on most terrains, a per-parameter audio gate is in the suite, and the FLOW
+  melody engine plus the SHAPE/SMOOTH rework are queued ahead of the Glow rework
+  — see `docs/2026-08-13-glow-macro-audit.md`); before that, 2026-08-12 (flow patch transfer merged, not released — see its
   entry under "Done" for the five open follow-ups; before that, 2026-08-04: the
   project left the residency and the Spotykach
   hardware target, per "Project status" above; before that, 2026-08-03: VCV
@@ -2367,6 +2370,94 @@ does this overlay carry" loop is open-coded in three places; and `""` answers
 `Glow::dataFromJson` (yes), reachable only from a hand-edited patch.
 
 ## Planned
+
+The three entries below are ordered: the FLOW melody engine and the SHAPE/SMOOTH
+rework both come **before** the Glow rework, because the Glow rework redesigns
+the macro layer that sits on top of them. Designing that layer against today's
+behaviour would bake the workarounds in — which is exactly how the DIRT macro
+came to target a GRIT block that was never switched on.
+
+### FLOW melody engine ⬜ (next; before the Glow rework)
+
+The free mode gets a melody engine of its own — built on the same song settings
+as the step mode, but working differently. A long drone often wants only one or
+two notes, which is not what a step sequencer's phrase generator produces.
+
+**Why this is a milestone and not a bug fix.** Measured 2026-08-13: in FLOW the
+melodic lane is a continuous LFO, not a sequencer. `_sh_slot()` returns 0 for
+every cycle ("FLOW: one slot, loop-stable per cycle", `engine/mod/lane.cpp:426`),
+`_target = _compute_raw()` runs per sample rather than at boundaries
+(`lane.cpp:619`), and `_on_boundary` hard-wires `gated = true` (`lane.cpp:462`).
+So DENSITY, FORM, SONG, SHUFFLE, STEPS and TEMPO are all step-grid concepts with
+no meaning in the free mode — and `kModeW` puts 85 % of drones there.
+
+Four separately-reported findings are all this one cause:
+
+| Finding | Measured |
+|---|---|
+| DENSITY moves no audio in FLOW | bit-identical on 22/22 FLOW terrains, over 40 s |
+| FORM/SONG never applied in FLOW | `_wrap_events` returns early for the melodic lane, `lane.cpp:578` |
+| TEMPO moves no audio in FLOW | 0.0000 on 3/3 — free lanes clock off `free_hz`, never the BPM ladder |
+| `_effective_gate`'s FLOW branch is dead code | `lane.cpp:454-457`, both call sites sit behind `_step_mode`; a leftover of the removed PROBABILITY feature |
+
+Full measurement and method: `docs/2026-08-13-glow-macro-audit.md`.
+
+**Not a Glow-only concern.** All four sit in `engine/mod/`, which Fireflow and
+the firmware shell compile too. A Fireflow deck at STEPS 0 has the same dead
+DENSITY knob.
+
+Needs a spec.
+
+### SHAPE + SMOOTH rework ⬜ (before the Glow rework)
+
+SHAPE has never satisfied its owner, and SMOOTH is touched in the same breath —
+the two together decide what the modulation lanes actually emit.
+
+One concrete thing the rework has to settle, found 2026-08-13: **the melody
+pattern reaches the audio only through SHAPE's top quarter.** `_compute_raw`
+passes the pattern value as `shape_value`'s third argument (`lane.cpp:422`), and
+`waveforms.h:32` blends it in only above 0.75, weight `(shape - 0.75) * 4`.
+Below that the melodic lane emits a plain LFO waveform and the pattern is
+computed and discarded. FORM, SONG, the phrase generator, the song ladder and
+VARIATION's pitch mutation all hang off that one blend — measured dead on 40/40
+terrains in both modes.
+
+Whether that is a defect or the intended reading of "SHAPE morphs sine → tri →
+ramp → pulse → S&H" is exactly the question this rework answers. The terrain
+table makes it worse either way: `P_SHAPE_A/B` is capped at `{0, .25}` for
+drone, so a drone can never reach the melody at all.
+
+Needs a spec.
+
+### Glow rework ⬜ (after the two above)
+
+The terrain idea and Glow's macro layer, reconsidered as a whole. Opened
+2026-08-13 after an audit of the six macros found the feature set had outgrown
+its owner's picture of it.
+
+Decisions already taken in that session, to be carried into the spec rather than
+re-derived:
+
+- **Ownership model.** A story-owned parameter is unreachable from the base
+  overlay by construction, so every parameter a macro owns drops out of the
+  patch transfer — the bug that forced TIDE out of the MOTION story. The chosen
+  fix is to shift the story curve so that knob-centre meets the overlay's value
+  when a patch supplies one, and to leave it absolute when none does. That makes
+  "may this parameter belong to a knob?" a non-question for the rest of the
+  project.
+- **Reverb leaves the macros.** DECAY and MIX go on the right fader, the control
+  that gets turned constantly. SIZE, TONE, DIFF, SMEAR and MOD become
+  terrain-only base rules — MOD held low (it wobbles), TONE held high. A fader
+  owning REVMIX must inherit `duck()`'s maximum or the NEW-press wash disappears.
+- **Fader defaults**: TEMPO left, REVERB right. Where MASTER goes is **open** and
+  deliberately left so.
+- **The freed sixth macro becomes DELAY**, on FLUX — the block is completely
+  unreachable today. GRIT stays out: drive is too strong to sit next to a delay
+  permanently, and if it returns at all it returns sparingly.
+- Not decided, and the reason the session stopped: which parameters the
+  remaining five macros own.
+
+Needs a spec.
 
 ### M5k — ZAP ⬜
 
