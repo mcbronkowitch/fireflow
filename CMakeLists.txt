@@ -274,6 +274,14 @@ add_test(
 # to configure at all rather than silently skipping these -- consistent with
 # wavetable_bank_fresh just above, which already depends on the same
 # ${Python3_EXECUTABLE} unconditionally.
+add_custom_target(glow_assets_guard ALL
+    COMMAND ${Python3_EXECUTABLE} res/validate_glow_assets.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
+    COMMENT "Validating Glow panel raster assets"
+)
+
+add_dependencies(render glow_assets_guard)
+
 add_test(
     NAME panel_guard
     COMMAND ${Python3_EXECUTABLE} res/test_panel.py

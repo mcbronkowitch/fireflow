@@ -39,6 +39,8 @@ def write_valid_assets(folder):
         write_png(os.path.join(folder, name), (width, height), mode)
     for name, (width, height, mode) in SWITCH_ASSETS.items():
         write_png(os.path.join(folder, name), (width, height), mode)
+    with open(os.path.join(folder, "Glow.svg"), "w", encoding="utf-8") as output:
+        output.write("<svg/>")
 
 
 def package_list():
@@ -80,7 +82,15 @@ def test_switches_require_identical_sizes():
     with tempfile.TemporaryDirectory() as folder:
         write_valid_assets(folder)
         write_png(os.path.join(folder, "GlowSwitchUp.png"), (95, 192))
-        expect_error(folder, package_list(), "GlowSwitchUp.png has size 95x192")
+        expect_error(folder, package_list(), "switch assets do not have identical dimensions")
+
+
+def test_switches_require_their_exact_size():
+    with tempfile.TemporaryDirectory() as folder:
+        write_valid_assets(folder)
+        for name in SWITCH_ASSETS:
+            write_png(os.path.join(folder, name), (95, 192))
+        expect_error(folder, package_list(), "GlowSwitchDown.png has size 95x192")
 
 
 def test_switches_require_visible_alpha():
@@ -95,6 +105,29 @@ def test_every_asset_is_explicitly_packaged():
         write_valid_assets(folder)
         makefile = package_list().replace("res/GlowSwitchDown.png ", "")
         expect_error(folder, makefile, "GlowSwitchDown.png is absent from DISTRIBUTABLES")
+
+
+def test_comments_and_other_variables_do_not_package_assets():
+    with tempfile.TemporaryDirectory() as folder:
+        write_valid_assets(folder)
+        makefile = ("DISTRIBUTABLES += res/Glow.svg\n"
+                    "# DISTRIBUTABLES += res/GlowRear.png\nOTHER = " +
+                    package_list())
+        expect_error(folder, makefile, "GlowRear.png is absent from DISTRIBUTABLES")
+
+
+def test_fallback_svg_must_exist():
+    with tempfile.TemporaryDirectory() as folder:
+        write_valid_assets(folder)
+        os.remove(os.path.join(folder, "Glow.svg"))
+        expect_error(folder, package_list(), "Glow.svg is missing")
+
+
+def test_fallback_svg_must_be_packaged():
+    with tempfile.TemporaryDirectory() as folder:
+        write_valid_assets(folder)
+        expect_error(folder, package_list().replace("res/Glow.svg ", ""),
+                     "Glow.svg is absent from DISTRIBUTABLES")
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ photography, third-party logo, wordmark, or copied decorative artwork.
 """
 import argparse
 import os
+import re
 import struct
 import sys
 import zlib
@@ -119,17 +120,43 @@ def _package_text(makefile):
     return makefile
 
 
+def _distributables(makefile):
+    """Return literal paths assigned to DISTRIBUTABLES (comments excluded)."""
+    text = _package_text(makefile)
+    logical_lines = re.sub(r"\\\r?\n", " ", text).splitlines()
+    entries = set()
+    for line in logical_lines:
+        line = line.split("#", 1)[0]
+        assignment = re.match(r"^\s*DISTRIBUTABLES\s*(?:\+?=|:=)\s*(.*)$", line)
+        if assignment:
+            entries.update(assignment.group(1).split())
+    return entries
+
+
 def validate_assets(asset_dir, makefile):
     """Raise AssetError unless every source asset and package entry is valid."""
-    package = _package_text(makefile)
+    package = _distributables(makefile)
     all_assets = dict(PANEL_ASSETS)
     all_assets.update(SWITCH_ASSETS)
-    switch_sizes = set()
+    infos = {}
     for name, (expected_width, expected_height, expected_mode) in all_assets.items():
         path = os.path.join(asset_dir, name)
         if not os.path.isfile(path):
             raise AssetError("%s is missing" % name)
-        width, height, mode, raw = _png_info(path)
+        infos[name] = _png_info(path)
+
+    fallback = os.path.join(asset_dir, "Glow.svg")
+    if not os.path.isfile(fallback):
+        raise AssetError("Glow.svg is missing")
+    if "res/Glow.svg" not in package:
+        raise AssetError("Glow.svg is absent from DISTRIBUTABLES")
+
+    switch_sizes = {(infos[name][0], infos[name][1]) for name in SWITCH_ASSETS}
+    if len(switch_sizes) != 1:
+        raise AssetError("switch assets do not have identical dimensions")
+
+    for name, (expected_width, expected_height, expected_mode) in all_assets.items():
+        width, height, mode, raw = infos[name]
         if (width, height) != (expected_width, expected_height):
             raise AssetError("%s has size %dx%d, want %dx%d" %
                              (name, width, height, expected_width, expected_height))
@@ -137,13 +164,10 @@ def validate_assets(asset_dir, makefile):
             raise AssetError("%s has mode %s, want %s" %
                              (name, mode, expected_mode))
         if name in SWITCH_ASSETS:
-            switch_sizes.add((width, height))
             if not _has_visible_alpha(raw, width, height):
                 raise AssetError("%s is fully transparent" % name)
         if "res/" + name not in package:
             raise AssetError("%s is absent from DISTRIBUTABLES" % name)
-    if len(switch_sizes) != 1:
-        raise AssetError("switch assets do not have identical dimensions")
 
 
 def _blank(width, height):
