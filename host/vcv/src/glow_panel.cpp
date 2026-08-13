@@ -9,11 +9,14 @@
 namespace spkyvcv::glow_panel {
 
 int switchFrameIndex(float value) {
-    if (value <= -0.5f)
+    // Glow's existing Rack parameters are snapped integer switches with the
+    // unchanged range 0 (down), 1 (centre), 2 (up). Round around those values
+    // and clamp anything beyond the configured range to the nearest frame.
+    if (value < 0.5f)
         return 0;
-    if (value >= 0.5f)
-        return 2;
-    return 1;
+    if (value < 1.5f)
+        return 1;
+    return 2;
 }
 
 bool allRequiredLayersAvailable(const bool* availability, std::size_t count) {
