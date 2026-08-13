@@ -197,3 +197,86 @@ TEST_CASE("FLOW melody: the gate is value-dependent, not merely executed") {
     }
     CHECK(differed);
 }
+
+#include <cstring>
+
+TEST_CASE("FLOW melody: SONG advances one phrase per cycle") {
+    ModLane lane = make_flow_melody_lane(0xF10Eu);
+    drive_to_wrap(lane);
+    const uint32_t start = lane.song_position();
+    int wraps = 0;
+    for (int i = 0; i < kDriveGuard && wraps < 3; ++i) {
+        lane.process();
+        if (lane.wrapped()) ++wraps;
+    }
+    CHECK(lane.song_position() == start + 3u);
+}
+
+TEST_CASE("FLOW melody: a FORM change reaches the phrase") {
+    ModLane lane = make_flow_melody_lane(0xF10Eu);
+    drive_to_wrap(lane);
+    MelodyPattern before = lane.pattern_for_test(0);
+
+    lane.set_form(Principle::CallResponse);
+    int wraps = 0;
+    for (int i = 0; i < kDriveGuard && wraps < 1; ++i) {
+        lane.process();
+        if (lane.wrapped()) ++wraps;
+    }
+    CHECK(lane.form() == Principle::CallResponse);
+    CHECK(std::memcmp(&before, &lane.pattern_for_test(0), sizeof(before)) != 0);
+}
+
+TEST_CASE("FLOW melody: VARIATION moves the standing note two ways") {
+    // At k == 1 the open slot is rank 0. VARIATION walks its pitch
+    // (_mutate_slot) AND swaps groove ranks (mutate_pattern_groove), so the
+    // open slot itself migrates and starts reading a different pitch[] entry.
+    // Both are wanted; a gate on the pitch walk alone would miss half of it.
+    SUBCASE("VARIATION 0 is loop-stable") {
+        ModLane lane = make_flow_melody_lane(0xF10Eu);
+        lane.set_density(0.f);
+        lane.set_variation(0.f);
+        drive_to_wrap(lane);
+        const MelodyPattern before = lane.pattern_for_test(lane.active_pattern());
+        int wraps = 0;
+        for (int i = 0; i < kDriveGuard && wraps < 4; ++i) {
+            lane.process();
+            if (lane.wrapped()) ++wraps;
+        }
+        const MelodyPattern after = lane.pattern_for_test(lane.active_pattern());
+        CHECK(std::memcmp(&before, &after, sizeof(before)) == 0);
+    }
+
+    SUBCASE("VARIATION 1 moves both pitch and groove") {
+        ModLane lane = make_flow_melody_lane(0xF10Eu);
+        lane.set_density(0.f);
+        lane.set_variation(1.f);
+        drive_to_wrap(lane);
+        const MelodyPattern before = lane.pattern_for_test(lane.active_pattern());
+        int wraps = 0;
+        for (int i = 0; i < kDriveGuard && wraps < 8; ++i) {
+            lane.process();
+            if (lane.wrapped()) ++wraps;
+        }
+        const MelodyPattern after = lane.pattern_for_test(lane.active_pattern());
+        bool pitch_moved = false, groove_moved = false;
+        for (int s = 0; s < 32; ++s) {
+            if (before.pitch[s] != after.pitch[s]) pitch_moved = true;
+            if (before.pattern_groove.rank_of_slot[s] !=
+                after.pattern_groove.rank_of_slot[s]) groove_moved = true;
+        }
+        CHECK(pitch_moved);
+        CHECK(groove_moved);
+    }
+}
+
+TEST_CASE("FLOW melody: pending work applies before the first slot") {
+    // A lane whose STEPS disagrees with kFlowPhraseSlots has its phrase
+    // generated at the wrong length by init(); set_flow_melody raises
+    // length_pending and _apply_preroll_work must consume it on the first
+    // process() call, while _cur_step is still -1. Otherwise the phrase would
+    // stay wrong until the next wrap -- up to 50 s at kRateFreeMin.
+    ModLane lane = make_flow_melody_lane(0xF10Eu, 1.f, /*steps=*/3);
+    lane.process();
+    CHECK(lane.pattern_for_test(lane.active_pattern()).pattern_groove.len == 8);
+}

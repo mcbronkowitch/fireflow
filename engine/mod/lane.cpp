@@ -267,7 +267,7 @@ void ModLane::_apply_pending_song_work() {
 }
 
 void ModLane::_apply_preroll_work() {
-    if (_melodic && _step_mode && _cur_step < 0 &&
+    if (_melody_engine_on() && _cur_step < 0 &&
         (_song.form_pending || _song.song_pending ||
          _song.new_pending || _song.length_pending))
         _apply_pending_song_work();
@@ -573,7 +573,7 @@ void ModLane::_renew_walk() {
 }
 
 void ModLane::_mutate_groove(bool renew_side) {
-    if (!_melodic || !_step_mode) return;
+    if (!_melody_engine_on()) return;
     mutate_pattern_groove(
         _rng, _active_pattern().pattern_groove,
         _variation, renew_side);
@@ -586,7 +586,7 @@ void ModLane::_evolve_outgoing_pattern() {
         _ev_rate  = clampf(_ev_rate  + _rng.next_bipolar() * 0.01f * _variation, -0.2f, 0.2f);
         _mutate_groove(false);              // outer zone: rhythm drifts too
     } else if (_variation < 0.f) {          // RENEW: per-unit regen + walk decay
-        if (_melodic && _step_mode) _renew_units();
+        if (_melody_engine_on()) _renew_units();
         else if (!_melodic) {
             if (_rng.next_unipolar() < _variation * _variation) _renew_walk();
         }
@@ -605,11 +605,12 @@ void ModLane::_wrap_events() {
         _song.new_pending ||
         _song.length_pending;
 
-    if (_melodic && !_step_mode)
+    // The FLOW LFO keeps its old contract: no evolution, no song advancement.
+    if (_melodic && !_step_mode && !_flow_melody)
         return;
 
     _evolve_outgoing_pattern();
-    if (_melodic && _step_mode) {
+    if (_melody_engine_on()) {
         if (pending) _apply_pending_song_work();
         else         _advance_song();
     }
