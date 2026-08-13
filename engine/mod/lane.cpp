@@ -462,15 +462,24 @@ void ModLane::reset(float phase) {
     _phase = clampf(phase, 0.f, 0.999999f);
     _shuffle_latched = _shuffle_target;
     _cur_step = -1;
-    // Observable through tick(), not process(): process() re-evaluates the
-    // boundary on its very next call (_cur_step == -1 forces slot 0, always
-    // open, so _on_boundary recomputes _frozen to false regardless of this
-    // line). tick()'s FLOW-melody path has no such immediate re-check -- its
-    // trailing recompute is `if (!_step_mode && !_frozen) _target =
-    // _compute_raw();` with nothing ahead of it to clear a stale freeze -- so
-    // without this line a freeze survives RST into the next tick() call and
-    // the target stays stuck. See tests/test_flow_melody.cpp, "RST clears a
-    // stale freeze for the tick() path".
+    // Until 2026-08-13 (Task 11, FLOW melody engine plan) this line was
+    // observable through tick() only: process() re-evaluates the boundary on
+    // its very next call regardless (_cur_step == -1 forces slot 0, always
+    // open, so _on_boundary recomputes _frozen to false on its own), but
+    // tick()'s FLOW-melody path had no such immediate re-check, so a freeze
+    // could survive RST into the next tick() call with nothing to clear it.
+    // Task 11 gave tick() the same immediate pending-mismatch re-check
+    // process() already had (both paths now force-evaluate slot 0 on their
+    // very next call after reset()), so this line is superseded by BOTH
+    // paths' next call the same way and no longer has a downstream-behavior
+    // consequence through either one. It is still observable directly,
+    // though: nothing else in reset() touches _frozen, so querying
+    // frozen() between reset() and the next process()/tick() call reads
+    // this line and only this line. See tests/test_flow_melody.cpp, "RST
+    // clears a stale freeze immediately, before the next process()/tick()
+    // call" (re-homed there by Task 11 when the original tick()-path case
+    // stopped being able to fail -- see that task's report for the
+    // measurement).
     _frozen = false;
     // RST is the resync gesture: it clears the SPOT offset too, so the lane
     // comes back to the deck's own slot 0 rather than to a stumbled one.
@@ -741,6 +750,15 @@ float ModLane::process() {
 // not deleted: this is ModLane's own standalone contract, exercised directly
 // by tests/test_lane_tick.cpp's STEP cases, independent of whatever engine
 // wiring happens to call it today.
+//
+// FLOW-melody note (spec 2026-08-13 flow-melody-engine, Task 11): the
+// `if (_flow_melody_on())` arms below walk the melody-mode slot raster the
+// same way, but SuperModulator never takes this path for LANE_PITCH either
+// -- it drives LANE_PITCH through process() exclusively (super_modulator.cpp)
+// -- so, same as the STEP arms above, nothing in production exercises this.
+// It is kept in sync anyway because tick()'s documented contract is that it
+// mirrors process()'s observable sequence, and tests/test_lane_tick.cpp
+// exercises it directly.
 float ModLane::tick() {
     _fired = false;
     _wrapped = false;
@@ -768,21 +786,56 @@ float ModLane::tick() {
     int window_wraps = 0;
     window_dp[0] = _phase_inc * (1.0 + double(_ev_rate));
 
-    // Pending step mismatch first: init/reset leave _cur_step = -1 and the
-    // per-sample path fires step 0 on its very first sample the same way.
-    // This same check also absorbs kick()'s phase jumps (a kick can land
-    // _phase past the current step's boundary without _cur_step having
-    // moved), FLOW->STEP re-entry (_cur_step is stale from before FLOW was
-    // engaged), and accumulator-rounding overshoot of the final partial-
-    // interval phase advance (rounding can nudge _phase a hair past a step
-    // edge the walk below already accounted for). Do not simplify this to an
-    // init/reset-only check -- all four cases share the same "phase says a
-    // different step than _cur_step remembers" symptom and this one branch
-    // catches them all.
+    // Advance the note/phrase floors in lockstep with the edge walk below
+    // (per edge, via advance_floors(to_edge), plus the final leftover at
+    // whichever break/return ends the walk) rather than in one lump before
+    // it. A single up-front kTickInterval lump was tried first and measured
+    // to desync GROW/RENEW's RNG stream from process()'s: a fire (gated
+    // _on_boundary(), which resets _since_fire to 0) partway through a tick
+    // window leaves every OTHER boundary in that same window reading the
+    // stale post-reset count instead of its own elapsed time, and the next
+    // tick's lump then adds a full window on top of that undercount. At slow
+    // melody rates (a boundary every 3000+ samples, well past both floors
+    // before the next one arrives) the gating decision this feeds is not
+    // close enough to the floor for the error to matter, but at the rates
+    // the floor exists FOR -- test_flow_melody.cpp's "the note rate has a
+    // floor" case runs 14 Hz, kFlowPhraseSlots(8)/14 Hz is close to the
+    // 60 ms floor itself -- the lump measurably flips which boundary gates,
+    // and unlike a phase/step skew (which resyncs the next cycle) a flipped
+    // gate permanently offsets the RNG stream every GROW/RENEW draw reads
+    // from afterward. process() advances the same counters by 1 every
+    // sample; advance_floors' clamp mirrors process()'s own
+    // `if (_since_x < min) ++_since_x` so a lane already past its floor does
+    // not overflow.
+    auto advance_floors = [this](double samples) {
+        if (samples <= 0.0) return;
+        const int add = static_cast<int>(samples + 0.5);   // nearest sample
+        if (_since_fire < _note_min_samples)
+            _since_fire = _note_min_samples - _since_fire > add
+                ? _since_fire + add : _note_min_samples;
+        if (_since_phrase < _phrase_min_samples)
+            _since_phrase = _phrase_min_samples - _since_phrase > add
+                ? _since_phrase + add : _phrase_min_samples;
+    };
+
+    // Pending step/slot mismatch first: init/reset leave _cur_step = -1 and
+    // the per-sample path fires step 0 (STEP) or slot 0 (FLOW melody) on its
+    // very first sample the same way. This same check also absorbs kick()'s
+    // phase jumps (a kick can land _phase past the current step's boundary
+    // without _cur_step having moved), FLOW<->STEP re-entry (_cur_step is
+    // stale from before the other mode was engaged), and accumulator-
+    // rounding overshoot of the final partial-interval phase advance
+    // (rounding can nudge _phase a hair past an edge the walk below already
+    // accounted for). Do not simplify this to an init/reset-only check -- all
+    // these cases share the same "phase says a different step/slot than
+    // _cur_step remembers" symptom and this one branch catches them all.
     if (_step_mode) {
         const int step = shuffle_step_index(
             static_cast<float>(_phase), _steps, _shuffle_latched);
         if (step != _cur_step) _enter_step(step);
+    } else if (_flow_melody_on()) {
+        const int slot = step_index(static_cast<float>(_phase), _effective_length());
+        if (slot != _cur_step) { _cur_step = slot; _on_boundary(); }
     }
 
     // Walk every edge inside the interval, in order. Panel-reachable worst
@@ -797,7 +850,15 @@ float ModLane::tick() {
         const double next_edge = _step_mode
             ? double(shuffle_boundary_phase(
                   _cur_step + 1, _steps, _shuffle_latched))
-            : 1.0;
+            // FLOW melody: the next edge is the next slot boundary, straight
+            // (not shuffled -- process()'s flow-melody branch uses
+            // step_index(), never shuffle_step_index()). At the last slot
+            // (_cur_step + 1) / length is exactly 1.0, same as the wrap
+            // arm below. FLOW LFO keeps the old contract: the only edge is
+            // the wrap.
+            : _flow_melody_on()
+                ? double(_cur_step + 1) / double(_effective_length())
+                : 1.0;
         const double dist = next_edge - _phase;
         const double to_edge = dp1 > 0.0 ? dist / dp1 : 1e30;
         const bool near_endpoint =
@@ -818,16 +879,30 @@ float ModLane::tick() {
                     ? (window_wraps + 1) * _steps
                     : window_wraps * _steps + _cur_step + 1;
                 reached = end_position >= edge_position;
+            } else if (_flow_melody_on()) {
+                // Same position-count comparison as the STEP arm above, on
+                // the straight slot grid (_effective_length() slots, no
+                // shuffle) instead of the shuffled step grid.
+                const int length = _effective_length();
+                const int end_slot = step_index(
+                    static_cast<float>(shadow_end.phase), length);
+                const int end_position = shadow_end.wraps * length + end_slot;
+                const int edge_position = next_edge >= 1.0
+                    ? (window_wraps + 1) * length
+                    : window_wraps * length + _cur_step + 1;
+                reached = end_position >= edge_position;
             } else {
                 reached = shadow_end.wraps > window_wraps;
             }
         }
         if (!reached) {
+            advance_floors(samples_left);   // leftover: no more edges this window
             _phase = have_shadow_end && shadow_end.wraps == window_wraps
                 ? shadow_end.phase
                 : _phase + samples_left * dp1;
             break;
         }
+        advance_floors(to_edge);   // this edge's own share, before it fires
         samples_left -= to_edge;
         if (samples_left < 0.0) samples_left = 0.0; // numerical endpoint only
         if (next_edge >= 1.0) {
@@ -838,15 +913,36 @@ float ModLane::tick() {
             if (window_dp_count < 2 * kSeqSlots + 1)
                 window_dp[window_dp_count++] =
                     _phase_inc * (1.0 + double(_ev_rate));
-            if (_step_mode) _enter_step(0);
-            else _on_boundary();         // FLOW fires per wrap; STEP fires step 0
+            if (_step_mode) {
+                _enter_step(0);
+            } else {
+                // FLOW LFO fires per wrap with _cur_step untouched (it never
+                // moves in that mode); FLOW melody enters slot 0, mirroring
+                // _enter_step(0)'s STEP-side assignment but without the
+                // shuffle-latch update _enter_step also does (flow melody
+                // uses a straight grid -- process()'s own flow-melody branch
+                // never touches _shuffle_latched either).
+                if (_flow_melody_on()) _cur_step = 0;
+                _on_boundary();
+            }
         } else {
             _phase = next_edge;
-            _enter_step(_cur_step + 1);
+            // Non-wrap edge: an interior STEP boundary, or now (Task 11) an
+            // interior FLOW-melody slot boundary. FLOW LFO's next_edge is
+            // always 1.0, so it never reaches this arm. Mirror _enter_step
+            // only for STEP (it also updates _shuffle_latched, a STEP-only
+            // concept); FLOW melody sets _cur_step directly, matching
+            // process()'s own flow-melody branch.
+            if (_step_mode) _enter_step(_cur_step + 1);
+            else { _cur_step = _cur_step + 1; _on_boundary(); }
         }
     }
 
-    if (!_step_mode && !_frozen) _target = _compute_raw();   // continuous FLOW
+    // Continuous FLOW LFO only: FLOW melody holds _target between boundaries
+    // (set inside _on_boundary() above), same as process()'s flow-melody
+    // branch at process()'s trailing "No per-sample recompute" comment.
+    if (!_step_mode && !_flow_melody_on() && !_frozen)
+        _target = _compute_raw();
 
     float smoothed = _slew_tick.process(_target);
     return apply_range(smoothed, _range);

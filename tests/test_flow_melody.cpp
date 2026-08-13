@@ -322,31 +322,32 @@ TEST_CASE("FLOW melody: mode entry clears a stale freeze before the LFO resumes"
     CHECK(lane.target() != doctest::Approx(first));
 }
 
-TEST_CASE("FLOW melody: RST clears a stale freeze for the tick() path") {
-    // process() re-evaluates the boundary on its very next call after RST
-    // (_cur_step == -1 forces slot 0, always open, so _frozen recomputes to
-    // false regardless of reset()'s own clear -- see the mode-entry cases
-    // above, and reset()'s comment). tick() (ModLane's per-control-tick path,
-    // spec 2026-07-19 mod-plane-control-rate) has no such immediate re-check
-    // for FLOW melody mode -- its trailing recompute is
-    // `if (!_step_mode && !_frozen) _target = _compute_raw();` with nothing
-    // ahead of it to clear a stale freeze (a documented gap the plan leaves
-    // for a later task) -- so without reset()'s clear, a freeze survives RST
-    // into the next tick() call and the target stays stuck. This is the one
-    // path where that line is observable.
+TEST_CASE("FLOW melody: RST clears a stale freeze immediately, "
+          "before the next process()/tick() call") {
+    // Originally titled "...for the tick() path": process() re-evaluated the
+    // boundary on its very next call after RST (_cur_step == -1 forces slot
+    // 0, always open, so _frozen recomputes to false on its own -- see the
+    // mode-entry case above), and tick() did not, so driving through
+    // reset()+tick() and checking the target moved was the one place
+    // reset()'s own `_frozen = false;` line was observable.
+    //
+    // Task 11 (2026-08-13, FLOW melody engine plan) gave tick() the same
+    // immediate pending-mismatch re-check process() already had, so BOTH
+    // paths now force-evaluate slot 0 -- and recompute _frozen fresh -- on
+    // their very next call after reset(). Re-running this case with
+    // reset()'s clear removed (Task 11's RED re-proof) still passed: the
+    // gate had gone vacuous. Re-homed here to check the ONE place reset()'s
+    // line is still observable -- frozen() queried directly between reset()
+    // and the next process()/tick() call, before either path's own
+    // recompute has run. See reset()'s comment.
     ModLane lane = make_flow_melody_lane(0xF10Eu);
     lane.set_density(0.5f);           // k == 4 of 8: opens are slots 0, 3, 5, 7
     drive_to_wrap(lane);
     for (int i = 0; i < 26000; ++i) lane.process();   // land in slot 4's window, closed
     REQUIRE(lane.frozen());           // precondition: the hazard this case gates
-    const float held = lane.target();
 
     lane.reset();
-    lane.tick();
-    // The recompute lands on slot 0's note, which for this seed differs from
-    // the held note -- reset() really moved the target, not left it
-    // accidentally unchanged.
-    CHECK(lane.target() != doctest::Approx(held));
+    CHECK_FALSE(lane.frozen());
 }
 
 TEST_CASE("FLOW melody: RST restarts the phrase at slot 0") {

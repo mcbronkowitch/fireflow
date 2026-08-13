@@ -53,6 +53,27 @@ struct TickPair {
         prepare(ref);
         prepare(dut);
     }
+    // FLOW melody-mode config, mirroring tests/test_flow_melody.cpp's
+    // make_flow_melody_lane: set_step(false, steps) + set_flow_melody(true)
+    // AFTER init(), unlike boot_song's STEP config above.
+    void boot_flow_melody(uint32_t seed, float hz = 1.f, float variation = 0.f) {
+        auto prepare = [seed, hz, variation](ModLane& lane) {
+            lane.set_melodic(true);
+            lane.set_step(false, 8);
+            lane.set_form(Principle::Hierarchical);
+            lane.set_song(SongMode::AAAB);
+            lane.init(kSr, seed);
+            lane.set_flow_melody(true);
+            lane.set_range(1.f);
+            lane.set_shape(1.f);
+            lane.set_smooth(0.f);
+            lane.set_density(1.f);
+            lane.set_variation(variation);
+            lane.set_rate_hz(hz);
+        };
+        prepare(ref);
+        prepare(dut);
+    }
 };
 } // namespace
 
@@ -548,4 +569,45 @@ TEST_CASE("tick: SONG process and tick keep form snapshots aligned") {
     CHECK(skew_windows <= 8);
     CHECK_FALSE(require_reconvergence);
     CHECK(full_checks >= 892);
+}
+
+TEST_CASE("tick: FLOW melody slot walk matches the per-sample path") {
+    // 47 Hz across an 8-slot phrase (kFlowPhraseSlots) is a boundary every
+    // ~128 samples -- more than one 96-sample tick apart, but close enough
+    // that most windows still hold one edge and some hold two, exercising
+    // the interior-slot arm as well as the wrap. Far above anything a FLOW
+    // melody RATE reaches from the panel (the note-rate floor caps audible
+    // fires around 14-16 Hz even when the underlying phrase cycle spins
+    // faster -- see test_flow_melody.cpp's "the note rate has a floor",
+    // which drives the *fire* rate this high), but this rate stresses the
+    // *slot walk*, and it and the panel-reachable range both measured clean
+    // (0 mismatches over thousands of ticks, several seeds) with the
+    // per-edge floor advance in tick() (see the advance_floors comment
+    // there). Only a pathological exact-resonance rate where the phrase
+    // cycle divides kTickInterval evenly (500 Hz: 48000/500 == 96 samples,
+    // matching kTickInterval exactly) still measured occasional desync --
+    // far outside anything reachable here, so this case does not probe it.
+    TickPair tp;
+    tp.boot_flow_melody(0xF10Eu, 47.f, 0.6f);
+
+    int mismatch = 0;
+    for (int t = 0; t < 400; ++t) {
+        tp.advance_one_tick();
+        INFO("t=", t, " ref_step=", tp.ref.cur_step(),
+             " dut_step=", tp.dut.cur_step(),
+             " ref_fires=", tp.ref_fires, " dut_fired=", tp.dut_fired,
+             " ref_song_pos=", tp.ref.song_position(),
+             " dut_song_pos=", tp.dut.song_position());
+        if ((tp.ref_fires > 0) != tp.dut_fired ||
+            tp.dut.target() != tp.ref.target()) {
+            ++mismatch;
+            continue;
+        }
+        CHECK(tp.dut.cur_step() == tp.ref.cur_step());
+        CHECK(tp.dut.song_position() == tp.ref.song_position());
+    }
+    CHECK(mismatch <= 2);                          // isolated straddles only
+    CHECK(tp.dut.cur_step() == tp.ref.cur_step());  // re-converged at the end
+    CHECK(tp.dut.target() == tp.ref.target());
+    CHECK(tp.dut.song_position() == tp.ref.song_position());
 }
