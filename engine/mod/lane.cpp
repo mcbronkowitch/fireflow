@@ -131,6 +131,10 @@ void ModLane::set_song(SongMode song) {
     _song.song_pending = _song.pending_song != _song.selected_song;
 }
 
+void ModLane::set_flow_melody(bool on) {
+    _flow_melody = on;
+}
+
 void ModLane::set_step(bool on, int steps) {
     const bool entering_step = on && !_step_mode;
     if (entering_step) _shuffle_latched = _shuffle_target;
@@ -416,6 +420,13 @@ void ModLane::reset(float phase) {
 }
 
 float ModLane::_compute_raw() const {
+    // FLOW melody mode emits the phrase's note directly. This is arithmetically
+    // shape_value(ph, 1.f, pitch[slot]) -- at shape 1 the clamp in
+    // waveforms.h:26 forces i == 3, f == 1 and the return at :32 is sh_hold
+    // exactly -- but it is written out rather than pinned, so SHAPE's inertness
+    // on this lane is visible here instead of implied by an argument. What
+    // SHAPE should mean for a melody is the SHAPE/SMOOTH rework's question.
+    if (_flow_melody_on()) return _active_pattern().pitch[_sh_slot()];
     const double phd = _phase + double(_ev_phase);
     float ph = static_cast<float>(phd - std::floor(phd));
     float sh = clampf(_shape + _ev_shape + _shape_offset + _kick_shape, 0.f, 1.f);
@@ -423,7 +434,12 @@ float ModLane::_compute_raw() const {
 }
 
 int ModLane::_sh_slot() const {
-    if (!_step_mode) return 0;                 // FLOW: one slot, loop-stable per cycle
+    // FLOW LFO: one slot, loop-stable per cycle. STEP and FLOW melody both walk
+    // the phrase. Getting this wrong is silent: leave it returning 0 in melody
+    // mode and the lane emits pitch[0] forever, and because
+    // expand_pattern_groove pins rank_of_slot[0] to 0 the gate is then always
+    // open too, so DENSITY moves nothing and the whole mechanism is a no-op.
+    if (!_step_mode && !_flow_melody) return 0;
     int s = _cur_step < 0 ? 0 : _cur_step;
     return s % kSeqSlots;
 }
@@ -614,6 +630,15 @@ float ModLane::process() {
         const int step = shuffle_step_index(
             static_cast<float>(_phase), _steps, _shuffle_latched);
         if (step != _cur_step) _enter_step(step);
+    } else if (_flow_melody_on()) {
+        // One cycle is one phrase pass -- the same relation STEP already has.
+        // A STRAIGHT grid, not shuffle_step_index: SHUFFLE is a rhythmic
+        // control and stays out of FLOW, and tests/test_instrument.cpp:653
+        // pins a FLOW deck bit-exact under a live shared SHUFFLE turn.
+        const int slot = step_index(static_cast<float>(_phase),
+                                    _effective_length());
+        if (slot != _cur_step) { _cur_step = slot; _on_boundary(); }
+        // No per-sample recompute: _target holds between boundaries.
     } else {
         if (wrapped) _on_boundary();
         if (!_frozen) _target = _compute_raw();     // continuous in FLOW

@@ -29,6 +29,13 @@ public:
     void set_variation(float v);      // -1..+1: renew / loop (0) / grow
 
     void set_melodic(bool m) { _melodic = m; }
+    // FLOW melody mode (spec 2026-08-13 flow-melody-engine). Off by default:
+    // the boot value is the legacy continuous-LFO behaviour and the new state
+    // has to be asked for, so a missing push from Part is a silent revert to
+    // the old sound rather than a silent adoption of the new one. Part drives
+    // this from the engine id -- SAMPLER and BBD keep the LFO, because on those
+    // decks the PITCH lane is not a note.
+    void set_flow_melody(bool on);
     void set_form(Principle form);
     Principle form() const { return _song.selected_form; }
     void set_song(SongMode song);
@@ -172,6 +179,13 @@ private:
     void  _mutate_slot(int slot);   // GROW: variation dice + pitch walk on a fired step
     void  _fill_walk();             // deterministic contour-walk prefill (non-melodic lanes)
     bool  _effective_gate(int slot) const;  // melodic: groove rank < DENSE depth; else all-true
+    // "this lane is running the FLOW melody engine right now"
+    bool _flow_melody_on() const { return _melodic && !_step_mode && _flow_melody; }
+    // "this lane runs the melody system at all" (STEP or FLOW melody). NOT
+    // named melody(): it would sit next to set_melodic/_melodic and read as a
+    // getter for the flag, which is the naming collision spotykach-gotchas
+    // records for set_depth.
+    bool _melody_engine_on() const { return _melodic && (_step_mode || _flow_melody); }
     int   _groove_k() const;              // DENSE -> how many ranked cell notes play
     void  _renew_units();           // RENEW (melodic/STEP): per-unit dice regeneration
     void  _renew_walk();            // RENEW (non-melodic): dice-gated whole-walk regen
@@ -226,6 +240,7 @@ private:
     static constexpr int kSeqSlots = 32;
     SongForm _song;
     bool      _melodic   = false;
+    bool      _flow_melody = false;
     bool      _melodic_at_init = false;
     float     _density   = 1.f;
     float _target = 0.f;     // pre-smooth held value
