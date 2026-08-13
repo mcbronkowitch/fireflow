@@ -6,19 +6,24 @@
 **Precedes:** the Glow rework (`docs/roadmap.md`)
 **Evidence base:** `docs/2026-08-13-glow-macro-audit.md`, plus the measurements in §1 taken during this session
 
-**Revision:** second draft, after two reviewers.
+**Revision:** third draft, after four reviewers over two passes. Both earlier
+drafts were rejected, and the rejections are what this draft is built from.
 
-Draft 1 proposed "one axis, two renderings" — a trajectory for slot-walking lanes,
-the existing waveform bank for FLOW LFO lanes. Both reviewers rejected it
-independently and for the same reason: on a FLOW note deck **both renderings run
-at once from one knob**, and they diverge (§2.2). Draft 1 also called
-`lane.cpp:611` a defect and proposed removing it; that line is the ENTROPY LOOP
-contract, and removing it restores the "note salad" the entropy sequencer was
-built to end (§1.5). Draft 2 collapses to a single mechanism, which repairs both
-at once and costs less code than draft 1 did.
-
-Every correction the code-truth reviewer verified is carried inline; the claims
-draft 1 got wrong are marked where they mattered.
+- **Draft 1** proposed "one axis, two renderings" — a trajectory for slot-walking
+  lanes, the existing waveform bank for FLOW LFO lanes. Two reviewers rejected it
+  independently: on a FLOW note deck both renderings run at once from one knob and
+  disagree across the whole axis. It also called `lane.cpp:611` a defect; that line
+  is the ENTROPY LOOP contract.
+- **Draft 2** collapsed to a single mechanism — every lane walks its 32-slot buffer,
+  SHAPE becomes the glide fraction, `waveforms.h` is deleted. The technical review
+  found the central change is a **no-op** (§1.7), that the buffer walk is four times
+  *weaker* than the sine it replaces and carries a per-seed DC offset (§1.8), and
+  that "no new RNG draw" was false. The goal review found that it delivered
+  predictability by deleting the only thing SHAPE could change, and removed
+  modulation character from the instrument with no successor.
+- **Draft 3 does not merge the two controls.** It repairs the three defects both
+  passes confirmed, and it dissolves the SHAPE/SMOOTH overlap by *ownership* rather
+  than by merging (§3). The waveform bank stays.
 
 ## 1. The problem
 
@@ -39,476 +44,376 @@ seconds (`engine/mod/lane.cpp:360`), in absolute seconds:
 | glide time | 0.02 ms | 0.25 ms | 3.2 ms | 8.7 ms | 40 ms | 180 ms | 500 ms |
 
 Anything below roughly 10 ms is not heard as gliding, only as "immediate". **The
-lower 60 % of the travel is one setting.** Everything musical lives above 0.75. A
-knob whose usable range is its top quarter is operated exactly the way the owner
+lower 60 % of the travel is one setting**, and everything musical lives above 0.75.
+A knob whose usable range is its top quarter is operated exactly the way the owner
 operates it.
 
 The absolute scale is the deeper defect: a fixed number of milliseconds has no
 musical meaning across tempo changes, so the control cannot mean the same thing
-twice.
+twice. The terrain shows the same symptom — it draws SMOOTH from `{.1, .5}` across
+the non-drone archetypes (`taste.h:1000-1001`), which is 55 µs to 3.2 ms: a spread
+that cannot be heard at all.
 
-Side finding: the terrain draws SMOOTH from `{.1, .5}` across the non-drone
-archetypes (`engine/flow/taste.h:1000-1001`) — 55 µs to 3.2 ms, a spread that
-cannot be heard at all.
-
-### 1.2 SHAPE is a waveform bank, which is the wrong model
-
-`shape_value` crossfades four fixed waveforms plus a held random value
-(`engine/mod/waveforms.h:22-33`). sine → triangle → ramp occupies 0 … 0.5, the
-morph into pulse 0.5 … 0.75, the S&H blend 0.75 … 1.
-
-Draft 1 claimed three quarters of the axis sound alike. That is overstated, and
-the repo asserts the opposite as mechanics: `taste.h:995-997` and
-`tests/test_flow_taste.cpp:99-102` record that *from the ramp up the lane emits a
-discontinuity per cycle, and that is what makes a drone read as rhythmic*. The
-honest statement is narrower and enough: **the axis is a table index, not a
-quantity.** Equal turns move the index equally and move what is heard unequally,
-and no re-spacing of break points can cure that, because the stops are discrete
-objects rather than points on a continuum.
-
-### 1.3 The melody hangs off the top quarter
+### 1.2 The melody hangs off SHAPE's top quarter
 
 `_compute_raw` passes the pattern value as `shape_value`'s third argument
 (`lane.cpp:555`); `waveforms.h:32` blends it in only above 0.75, weight
-`(shape - 0.75) * 4`. Below that the pattern is computed and discarded. FORM,
-SONG, the phrase generator and VARY's pitch mutation all hang off that one blend,
-in STEP and on any lane still running the FLOW LFO.
+`(shape - 0.75) * 4`. Below that the pattern is computed and discarded. FORM, SONG,
+the phrase generator and VARY's pitch mutation all hang off that one blend — in
+STEP, and on any lane still running the FLOW LFO.
 
-### 1.4 The knob is not the value
+### 1.3 The knob is not the value
 
 `sh = clampf(_shape + _ev_shape + _shape_offset + _kick_shape, 0.f, 1.f)`
 (`lane.cpp:554`). Three sources write onto the axis:
 
 | Source | Bound | Character |
 |---|---|---|
-| DRIFT | ±0.12 deck A, ±0.15 deck B — bipolar, `w = _weather * _drift` with `_weather = tanh(_ou)` | permanent, every control tick (`engine/center/center.cpp:14,17,139,143-144`) |
-| EVOLVE | ±0.25 (the bound is fixed; the step scales with VARY) | permanent, creeping (`lane.cpp:693`) |
-| SPOT | ±0.35, decays with τ = 1.5 s, skips PITCH | gesture (`super_modulator.cpp:180-182`, `lane.cpp:103`) |
+| DRIFT | ±0.12 deck A, ±0.15 deck B, bipolar (`w = _weather * _drift`, `_weather = tanh(_ou)`) | permanent, every control tick (`center.cpp:14,17,139,143-144`) |
+| EVOLVE | ±0.25 (bound fixed; the step scales with VARY) | permanent, creeping (`lane.cpp:693`) |
+| SPOT | ±0.35, τ = 1.5 s, skips PITCH | gesture (`super_modulator.cpp:180-182`) |
 
-Up to **±0.75 on an axis of 1.0**, before the clamp at the point of use. The
-effective state can sit three quarters of the axis away from where the knob points.
+Up to ±0.75 on an axis of 1.0 before the clamp. The effective state can sit three
+quarters of the axis from where the knob points.
 
-The owner ruled the knob's *reach* — one control over all five lanes
-(`super_modulator.cpp:78`) — out as a complaint. The reach stays.
+### 1.4 The morph is a table index, not a quantity
 
-### 1.5 What draft 1 got wrong about the frozen lane
+`shape_value` crossfades four waveforms plus a held value
+(`engine/mod/waveforms.h:22-33`) in four equal quarters. The stops are discrete
+objects; equal turns move the index equally and move what is heard unequally. This
+is a real defect, and it is the *smallest* of the four — which is why draft 2's
+attempt to solve it by deleting the bank cost more than it bought (§1.9).
 
-Draft 1 reported that at SHAPE 1 a lane freezes, and proposed removing the
-condition at `lane.cpp:611` to fix it. The code-truth review corrected three
-things, and they change the diagnosis:
+### 1.5 The overlap is only on the melodic lane
 
-- **The S&H end is not an S&H.** `_mutate_slot` fires with probability
-  `variation²` — 9 % of cycles at VARY 0.3 — and then takes a small,
-  gravity-damped random *step from the previous value* (`lane.cpp:649-659`). At
-  the top of the axis a FLOW texture lane emits a slowly creeping DC, not noise.
-  "SHAPE 1 is a random source" is true nowhere today.
-- **There is a second redraw path, on the other side of VARY.** `_renew_walk()`
-  (`lane.cpp:678-681`, called from `_evolve_outgoing_pattern` at `_variation < 0`)
-  rewrites the whole buffer including `pitch[0]`. RENEW is panel-reachable
-  (`engine/flow/flow_params.h:83`). So the lane is frozen only at **exactly
-  VARY = 0**, not across the lower half.
+SHAPE's low end means "the value travels smoothly between its states"; that is what
+SMOOTH owns. But a lane only has states to travel between if it walks slots — which
+means the melodic lane, in STEP and (since the FLOW melody engine) in FLOW on a note
+deck. **On the four texture lanes there is no overlap at all**: they run a continuous
+waveform, and SMOOTH is the only smoothing they have.
+
+Drafts 1 and 2 both read this as "the two controls are one axis" and merged them.
+That was the wrong conclusion from the right observation. The overlap is a
+**question of ownership on one lane**, and §3 resolves it there.
+
+### 1.6 What draft 1 got wrong about the frozen lane
+
+Draft 1 reported that at SHAPE 1 a lane freezes and proposed removing
+`lane.cpp:611`. Three corrections from the code review:
+
+- **The S&H end is not an S&H.** `_mutate_slot` fires with probability `variation²`
+  — 9 % of cycles at VARY 0.3 — then takes a small, gravity-damped step from the
+  previous value (`lane.cpp:649-659`). At the top of the axis a FLOW texture lane
+  emits a slowly creeping DC, not noise.
+- **A second redraw path exists on the other side of VARY.** `_renew_walk()`
+  (`lane.cpp:678-681`, from `_evolve_outgoing_pattern` at `_variation < 0`) rewrites
+  the whole buffer including `pitch[0]`. RENEW is panel-reachable
+  (`flow_params.h:83`). The lane is frozen only at **exactly VARY = 0**.
 - **`lane.cpp:611` is not a defect.** It is the ENTROPY contract the roadmap
   records: *"0 — LOOP: the melody repeats exactly"*, built because STEP + S&H
-  melodies were "unusable note salad (one random value per cycle)". Removing it
-  restores exactly that, at ENTROPY 0, on every deck.
+  melodies were "unusable note salad (one random value per cycle)".
 
-What survives is the real defect, and it is smaller and different: **a FLOW lane
-has one slot** (`_sh_slot()` returns 0 — `lane.cpp:564`), so at the top of the
-axis it has one value to hold and nothing to move between. The fix is **more
-slots, not more randomness** (§3.2).
+The residue — a FLOW LFO lane at exactly VARY = 0 and SHAPE 1 emits a constant — is
+**recorded as a known defect and not fixed here** (§7). Fixing it needs slots in
+FLOW, and §1.7 is what that costs.
 
-### 1.6 The two controls are one axis
+### 1.7 Why draft 2's mechanism is not available cheaply
 
-Under any repair, SHAPE's low end means "the value travels smoothly between its
-states" — which is what SMOOTH already owns on a lane that has states. That
-overlap is why neither knob owns anything: SMOOTH has no live middle because
-SHAPE's bottom half decides the same thing, and SHAPE feels inert at the bottom
-because SMOOTH holds the movement there.
+Draft 2 proposed giving FLOW lanes eight slots per cycle by changing `_sh_slot()`.
+That change is a **no-op**: `_sh_slot()` reads `_cur_step` (`lane.cpp:558-567`), and
+in the FLOW LFO path nothing writes it — `process()`'s wrap branch
+(`lane.cpp:771-774`) never touches it, `tick()`'s arms are gated on `_step_mode` and
+`_flow_melody_on()` (`:884-915`, `:935-937`, `:1001`), and `_enter_step()` is
+reached only under `_step_on` (`super_modulator.cpp:167`). `_cur_step` stays at −1
+and the lane emits `pitch[0]` forever. A real slot raster in FLOW means editing
+`process()` and four sites in `tick()`.
+
+### 1.8 And why it would not have sounded right either
+
+`pg_contour_walk(_rng, pitch, 32, 0.f, 0.6f, 0.12f)` (`lane.cpp:662-665`),
+re-implemented exactly and measured over 4000 seeds on the first 8 values — the ones
+a FLOW cycle would read:
+
+| observable | buffer walk | sine (`shape_value` at SHAPE 0) |
+|---|---|---|
+| peak-to-peak, median | **0.535** | **2.000** |
+| per-cycle DC offset | sd 0.263 | exactly 0 |
+| slot→slot hops below 0.05 | 34.6 % | — |
+
+Four times weaker than what it replaces, with a per-seed DC offset a waveform cannot
+produce — a LEVEL lane whose slots sit at +0.3 shifts the base instead of modulating
+around it. A third of the "hard jumps" at the top of the axis would be inaudible.
+
+### 1.9 The waveform bank is not the defect
+
+Both reviewers concluded independently that deleting `waveforms.h` impoverishes the
+instrument. After the deletion, a texture lane's contour would come only from
+`pg_contour_walk`'s hard-coded width 0.6 and gravity 0.12 — no parameter, no terrain
+row, no knob — so the *statistical character* of texture modulation becomes a
+compile-time constant, and the terrain generator is left with no row expressing
+modulation character at all. `taste.h:101-114` also records, by reversion isolation,
+that the drone SHAPE cap is what keeps the calm-corner population gate green
+(`0x707` RMS 6.6e-03 as shipped against 9.9e-02 with the cap reverted, a factor of
+15). The bank is load-bearing. It stays.
 
 ## 2. Decisions taken
 
-Rulings from the brainstorming session of 2026-08-13. Rulings 1–6 were taken
-before the review, 7–9 after it, on the reviewers' findings.
+Rulings from the brainstorming session of 2026-08-13, in the order they were taken.
+Rulings 5 and 6 reverse earlier ones after the second review pass; that is recorded
+rather than hidden.
 
-1. **The Marbles framing is the target.** A knob should bend one property of a
-   single process, monotone in one perceived quantity, non-linear in value — not
-   crossfade between fixed building blocks.
-2. **SHAPE and SMOOTH merge into one control.** SMOOTH disappears as a parameter.
-   Rejected: two cleanly separated knobs (leaves them coupled — at SHAPE 1 the
-   glide still smears the edge away), and re-purposing SMOOTH as a jitter axis
-   (invents a function; ENTROPY and DRIFT already hold that ground).
-3. **Gestures may write on the axis, permanent sources may not.** DRIFT loses its
-   shape tap, SPOT keeps ±0.35, EVOLVE is capped at ±0.10.
-4. **The freed panel positions stay empty for now**, and the hole is a real
-   design object, not an absence — see §5.
-5. **Faceplate landmarks, no detents.** The terrain draws continuous values;
-   snapping would quantize the terrain with it.
-6. **Patch compatibility is not a concern.** Stored patches may break, VCV
-   parameter IDs may shift — dev alpha, already decided.
-7. **One mechanism, no second rendering.** The FLOW LFO is replaced by a walk over
-   the 32-slot buffer the lane already owns; SHAPE is then the glide fraction on
-   every lane in every mode, and `shape_value` and the waveform bank leave the
-   instrument. Rejected: keeping the waveform for LFO lanes (§2.2).
-8. **The glide maximum is `kFlowSlewFrac` re-expressed, not a new value** (§3.3).
-9. **Three branches, in order** (§7): axis ownership, then the engine axis with
-   `set_smooth` kept as a pass-through, then the surface removal.
+1. **Gestures may write on the axis, permanent sources may not.**
+2. **Patch compatibility is not a concern** — dev alpha.
+3. **SHAPE's reach across all five lanes is not a complaint** and does not change.
+4. **The engine may be changed** where a control has no audio path (audit ruling 1).
+5. **The merge is off.** SMOOTH stays its own control. Drafts 1 and 2 both merged;
+   both mechanisms failed review, and §1.5 shows the premise was over-read.
+   Consequence: no base-rule change (47 stays 47), no panel change, no param-map
+   change, no patch-bridge change, no `bench/` API change.
+6. **The waveform bank stays** (§1.9), re-spaced rather than replaced.
+7. **Goal fidelity is stated, not assumed.** This spec delivers predictability
+   (§1.3, §1.4), a live SMOOTH middle (§1.1) and a reachable melody (§1.2). It does
+   **not** deliver the owner's Marbles requirement — a knob that changes several
+   modulations at once, non-linearly and coherently. §7 records where that goal
+   goes instead.
 
-### 2.1 Why the buffer walk and not more randomness
+## 3. Ownership: SHAPE shapes the texture, the melodic lane plays notes
 
-The single-slot FLOW lane is a *lack of states*, so the repair is to give it
-states. The buffer is already there: `_fill_walk()` seeds all 32 slots with
-`pg_contour_walk` at init (`lane.cpp:76,662-665`), non-melodic lanes carry
-all-true gates (`lane.cpp:78,591`), and ENTROPY already owns how those values
-evolve. Walking it costs no new RNG draw, keeps LOOP exactly repeating, keeps
-ERODE and RENEW meaningful, and leaves the BBD deck's PITCH lane — which is that
-deck's clock — free of unrequested per-cycle jumps.
+One rule, and everything below follows from it.
 
-### 2.2 Why "two renderings" was rejected
+**The melodic lane emits its phrase value, in both modes.** In FLOW on a note deck
+this is already true — the FLOW melody engine returns the phrase note directly and
+never calls `shape_value` (`lane.cpp:551`). This spec extends it to **STEP**.
 
-On a FLOW note deck the melodic lane walks slots while the four texture lanes ran
-the LFO, both driven by the same knob. Across the axis they disagree:
+**In STEP this is not new behaviour.** At SHAPE 1 the blend weight
+`(shape - 0.75) * 4` is exactly 1 and `waveforms.h:32` already returns the slot
+value verbatim. The change makes an existing path unconditional; §6 gate 6 pins that
+the two are bit-identical at SHAPE 1.
 
-| SHAPE | slot lane | LFO lane (draft 1) |
-|---|---|---|
-| 0.00 → 0.60 | the whole portamento range, continuously variable | sine → ramp: nothing |
-| 0.85 | soft edge, glide fraction ≈ 0.04 | two hard square edges per cycle |
-| 1.00 | hard jump | hard throw |
+Three things follow:
 
-The bottom 60 % of the turn would move the melody from glissando to nearly stepped
-and the textures not at all; at 0.85 the textures would be harder than the melody.
-That is two knobs, which is the complaint this rework exists to answer. Draft 1's
-closing argument — "a waveform already is a trajectory" — argues for replacing the
-waveform, not for keeping it.
+- **The 0.75 threshold is gone from the melodic lane.** FORM, SONG, the phrase
+  generator and VARY's pitch mutation reach the audio at every SHAPE position.
+- **The overlap dissolves without a merge.** SHAPE now owns the four texture lanes'
+  waveform character; SMOOTH owns how any value travels. Two controls, two subjects.
+- **SHAPE becomes inert on the melodic lane**, in both modes, consistently. That is
+  the same state FLOW already has, made uniform instead of mode-dependent. It is a
+  real reduction in what SHAPE does, and it is the price of the melody being
+  reachable.
 
-## 3. The axis
+**Not changed:** the melodic lane on a SAMPLER or BBD deck in FLOW keeps its
+continuous LFO (`part.cpp` pushes `set_flow_melody(false)` there). Draft 2's
+reversal of that exclusion is withdrawn — the technical review found it would reset
+the Sampler's slice cursor every cycle (`sampler_engine.cpp:788`) and turn the BBD
+deck's clock into an eight-step staircase per cycle.
 
-One control per deck, `SHAPE`, `0..1`: **how edged the modulation moves.** One
-mechanism, every lane, both modes.
+## 4. The four repairs
 
-### 3.1 Every lane walks slots
+### 4.1 SMOOTH becomes interval-relative
 
-- **STEP** — unchanged: every lane already walks its slots.
-- **FLOW, melodic lane on a note deck** — unchanged: the FLOW melody engine
-  already walks `kFlowPhraseSlots = 8` per cycle (`lane.h:261`).
-- **FLOW, everything else** (the four texture lanes, and the melodic lane on a
-  SAMPLER or BBD deck) — **new**: `_sh_slot()` walks `kFlowPhraseSlots` slots per
-  cycle instead of returning 0. No gate pattern: non-melodic lanes keep all-true
-  gates (`lane.cpp:591`), so DENSITY gains no new reach and this is not a second
-  melody engine.
+The observable is **t90: the time to cover 90 % of the distance to the target**,
+expressed as a fraction of the lane's own interval — its slot interval where it
+walks slots, its cycle interval on a FLOW LFO lane.
 
-The buffer walked is the one that exists (`pitch[kSeqSlots]`), seeded by
-`_fill_walk()` and evolved by ENTROPY exactly as today. **No new RNG draw is
-introduced anywhere**, so LOOP still repeats bit-exactly and ERODE keeps its
-meaning.
-
-**This reverses the FLOW melody engine's exclusion of SAMPLER and BBD decks**
-(that spec's decision 3). Those lanes get slots too. Their default stays
-continuous because the terrain's drone cap holds SHAPE low (§4), but the reversal
-is deliberate and carries its own listening item (§6).
-
-### 3.2 SHAPE is the glide fraction, and nothing else
-
-The observable is **t90: the time the value takes to cover 90 % of the distance to
-the next slot value**, expressed as a fraction of that slot's interval:
-
-| SHAPE | 0.00 | 0.25 | 0.50 | 0.75 | 1.00 |
+| SMOOTH | 0.00 | 0.25 | 0.50 | 0.75 | 1.00 |
 |---|---|---|---|---|---|
-| t90 fraction | 0.80 | 0.45 | 0.20 | 0.07 | 0 |
-| feel | wanders continuously | travels, settles | aims, holds | step with a soft edge | hard jump |
+| t90 fraction | 0 | 0.07 | 0.20 | 0.45 | 0.80 |
 
-t90 rather than a one-pole time constant, because a one-pole never arrives: draft 1
-wrote "arrives just as the next slot begins", which is false — at τ = one interval
-the value reaches 63 %. t90 is a stated, measurable quantity, which is also what
-makes gate 2 possible (§6).
+t90 rather than a one-pole time constant because a one-pole never arrives: at τ =
+one interval the value reaches 63 %. t90 is measurable, which is what makes gate 2
+possible.
 
-`shape_value`, `wave_sine/triangle/ramp/pulse` and `engine/mod/waveforms.h` are
-deleted. The lane emits its slot value; SHAPE decides only the path there. **The
-0.75 threshold disappears with no replacement**: FORM, SONG, the phrase generator
-and VARY's pitch mutation are audible at every knob position.
+**0.80 is not a new number.** The FLOW melody engine clamps the melodic lane at
+`kFlowSlewFrac = 0.35 × interval` as a safety ceiling; τ = 0.35 is t90 = 2.303 ×
+0.35 = **0.806**. The owner accepted that by ear on 2026-08-13 (`flow_melody.wav`).
+The top of the new range is the setting he already approved, so no fresh ruling on
+how far a glide may go is needed, and the melody engine's clamp stops being a
+special case: it becomes the law's own maximum.
 
-### 3.3 The maximum is a value already confirmed by ear
+**The three intermediate knots are a first guess, tunable by ear.** What is not
+tunable: fraction of the interval, not seconds; 0.80 at the top; 0 at the bottom.
 
-0.80 is not a new number. The FLOW melody engine clamps the melodic lane's slew at
-`kFlowSlewFrac = 0.35 × interval` as a *safety ceiling*, because at SMOOTH 1 short
-notes never arrive and the melody flattens into a wobble; τ = 0.35 interval is
-t90 = 2.303 × 0.35 = **0.806 interval**. The owner accepted that by ear on
-2026-08-13 (`flow_melody.wav`). This spec turns that ceiling into the axis
-maximum, so the bottom of the new axis is the setting he already approved, and
-the rework needs no fresh ruling on how far a glide may go.
+**Where the interval comes from.** `_update_slew()` keeps its current call sites
+(rate change, mode change, init) and derives the interval as it does today, with two
+corrections the code review forced:
 
-**The five knots are a first guess between the endpoints, tunable by ear.** What is
-not tunable: fraction of the interval, not seconds; 0.80 at the bottom; 0 at the
-top.
+- Not from `_effective_length()`, which clamps at `kSeqSlots = 32`
+  (`lane.cpp:267-271`) while a STEP texture lane reaches **64** slots
+  (`lane_len.h:29,42`, via LANE_SIZE × STEPS ÷ TIDE — flagged at `lane.cpp:243-244`).
+  It must use the lane's real slot count.
+- The `_phase_inc == 0` guard stays. Draft 2 claimed a boundary-time interval would
+  remove it; the review showed the dependence is unchanged, so the existing guard is
+  kept rather than replaced by a silent inert branch.
 
-### 3.4 Which interval, and when it is computed
+**Validity floor, stated rather than discovered:** texture lanes advance in `tick()`
+at a 96-sample raster and `_slew_tick` steps once per call (`lane.cpp:1023`). Below
+a slot of about 96 samples the glide cannot be rendered and t90 stops being
+measurable. Gate 1 runs above that floor and the floor is written into the test.
 
-The fraction is taken of **the interval to the next boundary, computed at each
-boundary** — not of a nominal slot length. That single choice answers four
-questions at once: SHUFFLE's uneven slots (`lane.cpp:464-465`), TIDE's stretched
-slot counts, the grid lock's per-lane cycle lengths, and rate changes mid-cycle.
-It also removes the dependence on `_phase_inc` that today forces a silent-inert
-guard (`lane.cpp:374`) and makes `_ev_rate`'s exclusion from the recompute
-(`lane.cpp:368-371`) moot.
+### 4.2 The melodic lane emits its phrase
 
-Draft 1 said "the `kFlowSlewFrac` special case becomes the rule". That was wrong in
-one detail the reviewer caught: that clamp derives its interval from
-`_effective_length()`, which is capped at `kSeqSlots = 32` (`lane.cpp:267-271`),
-while a STEP texture lane reaches **64** slots (`lane_len.h:29-30,42`, reachable
-via LANE_SIZE × STEPS ÷ TIDE — flagged at `lane.cpp:243-244`). Generalizing it
-verbatim would glide twice as long as the slot on those lanes. The boundary-time
-rule above does not have that failure mode.
+§3. `_compute_raw`'s melodic branch returns `_active_pattern().pitch[_sh_slot()]`
+in STEP as it already does in FLOW melody mode. The texture lanes' path is
+untouched.
 
-**The axis read at the boundary is the composite** `_shape + _ev_shape +
-_kick_shape` (`_shape_offset` is gone, §3.5), so SPOT still reaches the glide as
-decision 3 requires. It is sampled per boundary, **not per sample** — `_kick_shape`
-decays per sample (`lane.cpp:737`), and following that continuously would put
-`_update_slew`'s `std::pow` in the per-sample path on a board with 2.17 points of
-reserve. Per-boundary sampling is the reason the CPU claim in §6 holds.
+### 4.3 The knob holds
 
-At fraction 0 the one-pole is bypassed and the target is set directly; there is no
-seconds-valued floor anywhere, or §1.1's defect would be back in the code. The
-click-free requirement at fraction 0 is a gate, not a hidden constant (§6, gate 7).
-
-### 3.5 The knob holds
-
-- **DRIFT** no longer writes to the axis. `set_shape_offset` and the taps at
-  `center.cpp:143-144` are deleted; `_shape_offset` leaves `ModLane`. DRIFT keeps
-  its rate tap and its detune tap (`center.cpp:140-146`).
+- **DRIFT** no longer writes the axis: `set_shape_offset` and `_shape_offset` are
+  deleted (`lane.h:139,304`, `super_modulator.h:111`, `instrument.h`), with the taps
+  at `center.cpp:143-144`. DRIFT keeps its rate tap and its detune tap
+  (`center.cpp:140-146`).
 - **EVOLVE** is capped at ±0.10 instead of ±0.25 (`lane.cpp:693`).
-- **SPOT** keeps ±0.35 (`super_modulator.cpp:181`).
+- **SPOT** keeps ±0.35.
 
-Two honest consequences, neither of which draft 1 named. DRIFT loses one of three
-mechanisms just as the Glow rework prepares to build MOTION on it, so **the
-audit's DRIFT impact rows go stale and are re-measured in branch 1** (§7). And
-SPOT's shape component changes character: it used to jump a waveform, now it
-changes a glide fraction, which is a quieter gesture. Whether ±0.35 is still the
-right number is a listening item, not an assumption.
+Two consequences, named rather than assumed. Decision 1 says permanent sources may
+not write the axis, and EVOLVE at ±0.10 still does — this is a deliberate reduction
+rather than a removal, because EVOLVE's shape walk is one of GROW's few texture
+mechanisms; the residual foreign write is ±0.45 rather than ±0.75. And DRIFT loses
+one of three mechanisms just as the Glow rework prepares to build MOTION on it, so
+**the audit's DRIFT impact rows go stale and are re-measured** in the same branch.
 
-### 3.6 What this costs
+### 4.4 The bank is re-spaced
 
-- **Every stored STEP terrain sounds different.** Below SHAPE 0.75, STEP today
-  emits a stepped waveform sampled at each boundary; afterwards it emits its slot
-  values everywhere. That is the price of making the melody reachable, and it is
-  the change the audit asked for.
-- **STEP loses its only monotone-contour generator.** A stepped ramp or triangle
-  is an ascending or descending run; nothing replaces it at any control position.
-  The mod grid lock (2.13.2) keeps its ratios as pattern lengths, but the lanes no
-  longer trace *contours* of different lengths against the grid — its ratio
-  structure becomes pattern-length variety. This is accepted, and named here so it
-  is not discovered later.
-- **Texture-lane modulation depth rises.** At the owner's playing position SMOOTH
-  is a 500 ms one-pole — a corner at 0.32 Hz, which attenuates a several-Hz
-  texture lane by 15–20 dB. Removing it raises effective depth on FILT, TIMBRE,
-  LEVEL and MOTION across every terrain, in one direction. Gate 8 pins it; §4's
-  terrain re-tuning is where it is compensated.
-- **Every FLOW render changes**, not only STEP terrains: the four texture lanes
-  and the SAMPLER/BBD pitch lanes now walk eight slots per cycle where they held
-  one.
+`shape_value`'s four equal quarters become perceptually chosen break points. First
+guess, explicitly tunable by ear:
 
-## 4. Blast radius
+| SHAPE | 0.00 | 0.35 | 0.55 | 0.75 | 1.00 |
+|---|---|---|---|---|---|
+| wave | sine | triangle | ramp | pulse | hold |
+
+The reasoning is `taste.h:995-997`'s own: *from the ramp up the lane emits a
+discontinuity per cycle, and that is what makes a drone read as rhythmic.* The
+audible event is the arrival of a discontinuity, so the smooth pair is compressed
+and the edged stops get the larger share.
+
+This moves a number the terrain depends on. `taste.h:998-999`'s drone cap `{0, .25}`
+exists to keep a drone below the first discontinuity; with the triangle stop at
+0.35 the same intent reads `{0, .35}`, and `tests/test_flow_taste.cpp:98-118`
+asserts both that cap and `ARCH_ARP.hi > 0.25`. Both move together, and **the
+calm-corner population gate (`tests/test_flow_audio.cpp:447-470`) is the arbiter**:
+per `taste.h:101-114` the cap is what keeps it green, so if the re-spacing takes it
+red, the re-spacing is reverted, not the gate re-baselined.
+
+This is the least-evidenced of the four repairs and the only one that touches the
+terrain. It is implemented **last**, so the other three land whatever it does.
+
+## 5. Blast radius
+
+Small, and deliberately so. Everything drafts 1 and 2 would have moved and this one
+does not: the panel and both generators, `docs/flow-fireflow-param-map.md`,
+`flow_patch_bridge.hpp`, `flow_params.h`, the base-rule count, `io-budget.md`,
+`bench/`'s API use, the render host's scenario actions.
 
 **Engine**
 
-- `ModLane::set_smooth`, `SuperModulator::set_smooth` (`super_modulator.cpp:78`,
-  `super_modulator.h:38`) and `Instrument::set_smooth` (`instrument.h:60`) are
-  removed — in branch 3; branch 2 keeps `set_smooth` as an ignored pass-through
-  (§7).
-- `_update_slew()` is replaced by a per-boundary derivation (§3.4).
-- `_sh_slot()` walks `kFlowPhraseSlots` in FLOW for every lane (`lane.cpp:564`).
-- `_compute_raw()` emits the slot value; `engine/mod/waveforms.h` is deleted.
-- `set_fixed_slew` (fixed 20 ms) goes: it contradicts an interval-relative axis
-  outright. It has no scenario user — only `host/render/scenario.cpp:154` declaring
-  the action and `tests/test_step.cpp:43-52` exercising it.
-- `set_shape_offset` and `_shape_offset` are removed (`lane.h:139,304`,
-  `super_modulator.h:111`, `instrument.h`), with `center.cpp:14,17,143-144`.
+- `engine/mod/lane.cpp` — `_update_slew()` (§4.1), `_compute_raw()`'s melodic branch
+  (§4.2), the `_ev_shape` clamp (§4.3), `_shape_offset` removal.
+- `engine/mod/waveforms.h` — re-spaced break points (§4.4).
+- `engine/center/center.cpp:14,17,143-144` — the DRIFT shape tap.
+- `engine/mod/lane.h:139,304`, `engine/mod/super_modulator.h:111`,
+  `engine/instrument.h` — `set_shape_offset` removal.
+- `engine/flow/taste.h` — the SHAPE spans at `:998-999` (§4.4) and the SMOOTH spans
+  at `:1000-1001`, which become audible for the first time under §4.1 and must be
+  re-chosen rather than kept.
 
-**Terrain and base rules**
+**Tests that break and are rewritten:** `test_waveforms.cpp:6-22` (break points),
+`test_flow_taste.cpp:98-118` (the cap), `test_lane.cpp:35` (SMOOTH) and `:66-77`
+(shape_offset), `test_lane_tick.cpp:168`, `test_center.cpp` and
+`test_instrument.cpp:292` (the shape_offset identity), `test_flow_melody.cpp:539,570`
+(the `kFlowSlewFrac` gates, which become the law's maximum), `test_param_impact.cpp`
+(FORM/SONG, §6 gate 3), `test_flow_audio.cpp` (re-run, §4.4).
 
-- `P_SMOOTH_A/B` leave the X-macro at `engine/flow/flow_params.h:79` and the apply
-  switch at `:165-166`: **47 base rules become 45** (counted in
-  `taste.h:952-1112`).
-- `taste.h:1000-1001` (the SMOOTH rows) are deleted. `taste.h:994-997`'s comment
-  describes the morph and goes with it.
-- `P_SHAPE_A/B`'s spans (`taste.h:998-999`) are re-chosen **in branch 3**, together
-  with the drone cap's new rationale — under the new axis `{0, .25}` reads "glides
-  continuously", which is what a drone wants, but the old justification ("from the
-  ramp up the lane emits a discontinuity per cycle") describes a mechanism that no
-  longer exists. `tests/test_flow_taste.cpp:98-118` asserts both the drone cap and
-  `ARCH_ARP.hi > 0.25` and is rewritten with them.
+**Other trees:** `shell/` has no SHAPE or SMOOTH source reference but compiles
+`engine/mod/lane.cpp` (`shell/Makefile:94-95`), so it needs a rebuild round.
+`bench/workloads_mod.cpp:13-17` labels its FLOW rows by `shape_value`'s four
+segments (`s00`/`s03`/`s07`/`s10`); the API is unchanged, but the labels stop
+matching the break points and are corrected in the same commit —
+`spotykach-bench-stale-object-trap` applies.
 
-**Patch transfer**
-
-- `host/vcv/src/flow_patch_bridge.hpp` loses `kFfSmoothA/B` (`:77`, `:98`) and the
-  `smth` lines (`:380`, `:387`). The converter **reports SMOOTH in its
-  "could not carry" list** rather than dropping it silently.
-- `docs/flow-fireflow-param-map.md` is the authority for that mapping: row `:165`
-  goes, row `:164` (SHAPE) stays with new wording, and both rows' call-site
-  citations are stale today — the real lines are `Fireflow.cpp:613` (`set_shape`)
-  and `:615` (`set_smooth`).
-
-**Hosts, panels, firmware, bench**
-
-- `host/vcv/src/Fireflow.cpp:615` (the module's own push).
-- Both panel generators — `host/vcv/res/gen_panel.py` and
-  `host/vcv/res/gen_hw_panel.py:32,107` — plus the generated headers
-  (`generated_panel.hpp:20,40,115,135`, `generated_hw_panel.hpp:14,34`) and the
-  panel guard `host/vcv/res/test_panel.py:52,56,69,72,439,2263,2287`, whose
-  `:2134` already documents the ParamId-aliasing failure a removal causes.
-- `docs/hardware/io-budget.md:73,93` carries SMOOTH in the 68-on-66 budget.
-- `host/render/scenario.cpp:143,154`; three scenarios call `set_smooth`
-  (`ambient_wash.json`, `ctrl_identity.json`, `wave_formant_sweep.json`) and none
-  calls `set_fixed_slew`.
-- **`bench/`** — missing from draft 1 entirely. `bench/audition/init_patch.cpp:57`
-  calls `set_smooth` and includes `generated_panel.hpp`, so the enum shift moves
-  every index it reads; `bench/workloads_mod.cpp:13-17,27,44,71` is built around
-  `shape_value`'s four segments and its row labels (`s00`/`s03`/`s07`/`s10`) stop
-  meaning anything. Given `spotykach-bench-stale-object-trap`, the bench is updated
-  in the same commit as the engine change, never later.
-- **`shell/`** has no SMOOTH or SHAPE reference in its own source, but compiles
-  `engine/mod/lane.cpp` and `engine/mod/super_modulator.cpp`
-  (`shell/Makefile:94-95`), so it needs a rebuild round in branch 2.
-- `docs/roadmap.md:2392` states "SMOOTH's slew is clamped against the slot
-  interval" in the FLOW-melody entry and is corrected.
-
-**Tests that break and are rewritten**: `test_waveforms.cpp:6-22` (deleted with
-the header), `test_flow_taste.cpp:98-118`, `test_lane.cpp:35` and `:66-77`,
-`test_lane_tick.cpp:168`, `test_step.cpp:43-52`, `test_flow_melody.cpp:539,570`,
-`test_flow_transfer_diff.cpp:62`, `test_center.cpp`, `test_instrument.cpp:292`.
-
-## 5. The panel hole is a design object
-
-`gen_panel.py:122` places nine controls on a ring at a 40° pitch, grouped into
-three captioned sector arcs. **SMOOTH sits at 80°, inside the MOTION sector;
-SHAPE at 120°, inside TIMBRE.** So the merge leaves a visible gap mid-arc on both
-decks, on the VCV panel and on the hardware plate — and puts the merged control in
-TIMBRE although half of what it now does (the glide) belonged to MOTION.
-
-Decision 4 keeps the position empty for now, which means branch 3 must choose
-between re-spacing the ring (moving every knob, and re-opening the four unchecked
-position mirrors from the panel round) and accepting the hole deliberately. That
-choice is made **with a rendered picture in front of the owner**, not in prose, and
-it belongs to branch 3 — but it is named here so it is not discovered at
-implementation time.
-
-The printed landmarks change with the mechanism: they are no longer waveform
-symbols (arc / triangle / ramp / pulse), because no waveform survives. They become
-the four points of the glide axis — **wander / travel / step / jump** — and they
-are honest in both modes for the first time, because there is now one mechanism to
-be honest about.
+**Hash gates.** `ctrl_identity.json` and `wave_formant_sweep.json` both call
+`set_smooth`, so §4.1 changes what they render and their byte-identity hashes in
+`tests/check_render_hash.cmake` break. Order: **the owner listens first, then the
+hashes move.** `ambient_wash.json` follows and carries no hash gate.
 
 ## 6. Verification
 
-Eight gates. Each names its observable and its RED.
+Seven gates. Each names its observable and its RED.
 
-1. **Tempo invariance.** In STEP (free lanes never read `_bpm`, so the gate would
-   be vacuous in FLOW): measured t90 ÷ measured slot interval is equal at two
-   tempi, within tolerance. Output-domain, not a read-back of the coefficient.
+1. **Tempo invariance.** In STEP — free lanes never read `_bpm`, so the gate would
+   be vacuous in FLOW — measured t90 ÷ measured slot interval is equal at two tempi,
+   above §4.1's validity floor. Output-domain, not a read-back of the coefficient.
    RED: restore the absolute-seconds formula.
-2. **Even axis.** Observable: **hold fraction** — the share of each slot the lane
-   output spends within 10 % of its target. Sweep SHAPE across the five knots; the
-   hold fraction must rise monotonically and each quarter turn must move it by at
-   least a stated minimum. RED: the old law, where at a fixed tempo the hold
-   fraction is ≈ 1.0 across the lower 60 % of the travel — flat, and the gate
-   fails on the monotone-step requirement rather than on a retuned knot.
-3. **The melody is reachable everywhere.** `tests/test_param_impact.cpp` checks
-   FORM and SONG at SHAPE 0, 0.5 and 1 in STEP, under the FLOW-melody spec's
-   gate-20 discipline: `DEPTH_A/B` forced to 1.0 and `_active` true, so a measured
-   zero cannot be a downstream attenuator. **Pre-decided:** a residual zero under
-   that control is an out-of-scope finding to be recorded, not a gate failure —
-   the audit's second FORM/SONG gate is explicitly not this spec's job (§8).
-   RED: restore the 0.75 blend.
-4. **A FLOW lane moves at ENTROPY 0.** Every lane's output travels at least a
-   stated magnitude (in lane-output units, not float epsilon) across N cycles, on
-   every deck engine, at VARY = 0 and at SHAPE 1. RED: return `_sh_slot()` to a
-   single slot.
-5. **LOOP still loops.** At ENTROPY 0 the emitted slot sequence repeats
-   bit-exactly across cycles, on a FLOW texture lane and on a STEP lane. This gate
-   exists because draft 1 would have broken it; it is the guard against solving
-   gate 4 with randomness. RED: introduce a per-cycle redraw.
-6. **The knob holds.** Sweep DRIFT 0 → 1 with SHAPE fixed: the hold fraction from
-   gate 2 is invariant. Plus the EVOLVE ±0.10 clamp, asserted directly.
-   RED: restore the DRIFT tap, or ±0.25.
-7. **Click-free at fraction 0.** Maximum per-sample discontinuity on the LEVEL and
-   FILT lanes stays under a stated bound at SHAPE 1. RED: remove whatever bounds it.
-8. **Modulation depth is not silently raised.** On one fixed terrain, texture-lane
-   output depth before and after the change stays within a stated band — the guard
-   on §3.6's third bullet. This gate can only be written in branch 2, against a
-   pre-branch baseline capture.
+2. **SMOOTH has a live middle.** Observable: **hold fraction** — the share of each
+   slot the lane output spends within 10 % of its target. Across the five SMOOTH
+   knots it must fall monotonically, and each quarter turn must move it by at least a
+   stated minimum. RED: the old law, where at a fixed tempo the hold fraction is
+   ≈ 1.0 across the lower 60 % of the travel and the monotone-step requirement fails.
+3. **The melody is reachable everywhere.** `tests/test_param_impact.cpp` checks FORM
+   and SONG at SHAPE 0, 0.5 and 1 in STEP, under the FLOW-melody spec's gate-20
+   discipline: `DEPTH_A/B` forced to 1.0 and `_active` true, so a measured zero
+   cannot be a downstream attenuator. **Pre-decided:** a residual zero under that
+   control is an out-of-scope finding to be recorded, not a gate failure — the
+   audit measured that forcing `SHAPE_A = 1.0` made FORM audible on only 1 of 6 STEP
+   terrains, so at least one further gate exists that this spec does not claim to
+   remove (§7). RED: restore the 0.75 blend.
+4. **The knob holds.** Sweep DRIFT 0 → 1 with SHAPE fixed: the lane's emitted
+   waveform is invariant. Plus the EVOLVE ±0.10 clamp asserted directly. RED:
+   restore the DRIFT tap, or ±0.25.
+5. **The drone cap stays below the first discontinuity.** A relational invariant:
+   `P_SHAPE`'s drone `hi` sits at or below the triangle→ramp break point, whatever
+   both values are. RED: move either one independently. This is what survives §4.4's
+   retuning, and it is the reason the cap can be re-chosen without losing its
+   meaning.
+6. **The STEP melodic path is unchanged at SHAPE 1.** The new unconditional phrase
+   emission is bit-identical to today's output at SHAPE 1, proving §3's claim that
+   this is an existing behaviour made unconditional rather than new behaviour. RED:
+   perturb either path.
+7. **The calm corner stays green.** `tests/test_flow_audio.cpp:447-470` runs
+   unchanged and un-rebaselined. It is the arbiter for §4.4, not a gate to be tuned
+   around.
 
-**Gate 9, the init conversion, is branch 3's** and is a *comparison*, not a
-self-baseline: the post-merge init render is compared against the **pre-merge**
-init render on a stated measure and threshold. RED: leave SHAPE at the
-unconverted 0.0. A gate baselined on its own output could only go red by later
-editing the init, which is the tautology the `fireflow-control-merge-init-trap`
-memory records biting four times.
+**Listening pack** (same shape as `flow_melody.wav`):
 
-**Two hash gates are re-baselined in branch 3.** `ctrl_identity.json` and
-`wave_formant_sweep.json` both call `set_smooth`; when the action goes their
-byte-identity hashes in `tests/check_render_hash.cmake` break. Order: **the owner
-listens to the new renders first, then the hashes move** — never the other way
-round. `ambient_wash.json` follows as the third scenario and carries no hash gate.
+- SMOOTH at 0 / 0.25 / 0.5 / 0.75 / 1 on one STEP terrain and one drone — five
+  different things, or two?
+- a STEP terrain at SHAPE 0 / 0.5 / 1 — does the phrase carry at every position now?
+- the same terrain before and after §4.2, at SHAPE 0.3 — the position where a
+  stepped waveform used to play and the phrase now does
+- SHAPE across its four stops after re-spacing, on a texture-heavy terrain
+- SPOT, before against after (§4.3 changes what its shape kick lands on)
 
-**Listening pack** (branch 2, same shape as `flow_melody.wav`):
+**CPU.** Nothing moves into the per-sample path: `_update_slew()` keeps its existing
+call sites, `_compute_raw`'s melodic branch gets shorter, and the texture path is
+untouched. No bench round is planned and **no figure is claimed**. The board's 2.17
+points of reserve remain the frame; `bench/`'s mod rows are relabelled, not
+re-measured.
 
-- a drone at SHAPE 0 / 0.35 / 0.7 / 1
-- a STEP terrain across the same four positions — does the phrase carry everywhere?
-- **a FLOW note deck across the same four positions** — the case that exposed
-  draft 1: melodic and texture lanes on one knob, now one mechanism
-- **a SAMPLER deck and a BBD deck in FLOW** — §3.1 reverses their exclusion, and
-  the BBD deck's PITCH lane is its clock
-- the ENTROPY 0 case that freezes today
-- SPOT, before and against after (§3.5: the gesture changes character)
+## 7. Out of scope, and not promised
 
-**CPU.** The per-sample path loses a `shape_value` call and gains nothing; the
-slew derivation moves from rate-change time to boundary time, which is a small
-fixed cost per slot rather than per sample. The change is expected to remove work,
-and **no figure is claimed** — the board's 2.17 points of reserve remain the frame.
-Branch 2 rebuilds `shell/` and refreshes the `bench/` mod rows (§4).
+- **The Marbles requirement is not delivered by this spec** (decision 7). The axis in
+  this engine that already changes several modulations at once, non-linearly and
+  coherently, is **ENTROPY/VARY** — LOOP → GROW → RENEW, reaching all five lanes and
+  rewriting what they emit. If a Marbles knob is the goal, that is where it lives,
+  and it needs its own spec. SHAPE, after this spec, is an honest texture-character
+  control and nothing more.
+- **The frozen FLOW lane at exactly VARY = 0 and SHAPE 1** (§1.6) stays a recorded
+  defect. Fixing it needs a real slot raster in FLOW (§1.7), which is a larger piece
+  of work than this spec's whole scope.
+- Three unexplained threads from the audit are **re-measured and recorded, not
+  fixed**: `SONG_A` audible only in STEP, `SONG_B` dead in both modes, and the second
+  silent-deck cause (12 of 52 terrains, always with BODY on the silent side).
+- The second FORM/SONG gate the audit measured (§6 gate 3's pre-decision) is not
+  claimed to be removed. On the measured evidence this spec's repair may leave FORM
+  inaudible on most STEP terrains; that would be a finding for the next round, not a
+  failure of this one.
+- `set_fixed_slew` stays. It is dead surface (no host, no scenario — only
+  `instrument.h:143`, `scenario.cpp:154` and `tests/test_step.cpp:52`), and removing
+  it buys nothing this spec needs.
 
-## 7. Three branches, in order
+## 8. Roadmap
 
-Draft 1 was one commit spanning engine, both hosts, both panel generators, the
-firmware, the bench and three hash re-baselines. Split:
-
-**Branch 1 — axis ownership.** DRIFT's shape tap out, EVOLVE capped at ±0.10
-(§3.5). Small, independent of the merge, gates 6's second half. Ends by
-**re-measuring the audit's DRIFT impact rows**, because the Glow rework builds
-MOTION on DRIFT and would otherwise inherit stale numbers.
-
-**Branch 2 — the engine axis.** The buffer walk, the glide fraction, the deletion
-of `waveforms.h`. `set_smooth` stays as an ignored pass-through so no host, panel,
-scenario, bench or hash file has to move yet — the owner hears the sound change on
-its own, undiluted by a mechanical cross-host diff. Gates 1–8, the listening pack,
-the `shell/` and `bench/` rebuild.
-
-**Branch 3 — the surface.** `P_SMOOTH_A/B` out of `flow_params.h` and `taste.h`,
-47 → 45 base rules, the patch bridge and the param map, both panel generators, the
-panel hole decision (§5), `io-budget.md`, the three scenarios, gate 9 and the two
-hash re-baselines.
-
-## 8. Out of scope, and not promised
-
-- **The knob's reach across all five lanes stays as it is.** The owner ruled it out
-  as a complaint.
-- Three unexplained threads from the audit are **re-measured and recorded under the
-  new axis, not fixed**: `SONG_A` audible only in STEP, `SONG_B` dead in both
-  modes, and the second silent-deck cause (12 of 52 terrains, always with BODY on
-  the silent side).
-- The `sh` composition as the second FORM/SONG gate should fall away through §3.5.
-  Whether it does is decided by the measurement, not by this spec (gate 3's
-  pre-decision).
-- DENSITY gains no reach into the FLOW texture lanes: they keep all-true gates
-  (§3.1). Giving them a gate pattern would be a second melody engine and belongs to
-  a spec of its own.
-- Which controls take the two freed panel positions.
-- The COLOR caveat from the FLOW melody engine's §6.3 — the chord lay is chosen
-  against the post-slew root — is unchanged by this spec: the glide maximum is the
-  ear-approved `kFlowSlewFrac`, so the latch is no longer than it is today.
-
-## 9. Roadmap
-
-`docs/roadmap.md`'s Planned entry "SHAPE + SMOOTH rework" is replaced by a pointer
-to this spec and the three-branch order. The Glow rework stays behind it, for the
-reason already recorded there: designing the macro layer against today's behaviour
-would bake the workarounds in. `docs/roadmap.md:2392`'s description of the
-FLOW-melody slew clamp is corrected in branch 2 (§4).
+`docs/roadmap.md`'s Planned entry "SHAPE + SMOOTH rework" is replaced by a pointer to
+this spec, and its three falsified premises are already corrected there. The Glow
+rework stays behind it. `docs/roadmap.md:2392`'s description of the FLOW-melody slew
+clamp changes with §4.1: the clamp becomes the law's maximum rather than a special
+case.
