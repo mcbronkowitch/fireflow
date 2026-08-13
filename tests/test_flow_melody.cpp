@@ -440,9 +440,17 @@ TEST_CASE("STEP's slew is unchanged by the melody clamp") {
     // A STEP lane at SMOOTH 1 keeps the long glide: after 6000 samples it must
     // still be well short of its target, which is what the clamp must not do
     // to it.
+    //
+    // The bound is 0.02, not the loose 1.0 a first draft used: for this seed
+    // the unclamped tau (~0.5 s) moves the output only ~0.006 over this
+    // window, but a guard that leaks the melody clamp into STEP (e.g.
+    // checking `_melodic` instead of `_flow_melody_on()`, so a STEP lane gets
+    // clamped too) measures ~0.065 here -- an order of magnitude more. 1.0
+    // would pass either way and never catch that regression; 0.02 sits
+    // between the two with margin on both sides.
     float out = 0.f;
     for (int i = 0; i < 200; ++i) out = step_lane.process();
     const float early = out;
     for (int i = 0; i < 6000; ++i) out = step_lane.process();
-    CHECK(std::fabs(out - early) < 1.0f);
+    CHECK(std::fabs(out - early) < 0.02f);
 }
