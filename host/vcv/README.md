@@ -565,9 +565,10 @@ optional note. The gesture, timed against `host/vcv/src/touch_pads.hpp`'s
 | hold ~0.4 s | rerolls all six macro domains at once (a partial reroll, mask `0x3F`), keeping the ground — tonality, roles, pace — intact |
 | tap the same pad again | returns to the curated state; there is no separate undo for this, because a plain wake already *is* the return |
 
-The tile's collar reports the state: **green** while a pad is live and
-playing its curated place, **copper** once a hold has excursed it away from
-that place, and a brief muted red flash when a hold is refused.
+The tile's contour strokes report the state: **copper** while a pad is live
+and playing its curated place, a nested **green** contour once a hold has
+excursed it away from that place, and a brief muted red flash when a hold is
+refused.
 
 **Under LOCK, pads still change place; holds are refused.** LOCK guards the
 generator, not the recall — tapping between curated places always works, only

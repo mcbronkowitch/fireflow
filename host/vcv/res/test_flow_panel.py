@@ -18,6 +18,7 @@ import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_flow_panel as g
+import gen_panel as base
 import touch2_geometry as geo
 
 FAILS = []
@@ -201,26 +202,6 @@ def test_the_places_stay_inside_the_measured_field():
               % (c.enum, x0, x1))
 
 
-def test_no_pad_comes_near_a_switch():
-    """Both switches stand IN the pad field, so the places are laid out around
-    them. test_no_overlap already forbids an intersection; this one keeps a
-    real margin, because a tile that clears a switch by 0.05 mm has not been
-    laid out around it, it has got away with it."""
-    switches = [c for c in g.PARAMS if c.kind == g.SWITCH]
-    for c in g.PARAMS:
-        if c.kind != g.PAD:
-            continue
-        ax0, ay0, ax1, ay1 = _rect(c)
-        for s in switches:
-            bx0, by0, bx1, by1 = _rect(s)
-            dx = max(0.0, bx0 - ax1, ax0 - bx1)
-            dy = max(0.0, by0 - ay1, ay0 - by1)
-            d = (dx * dx + dy * dy) ** 0.5
-            check(d >= SWITCH_CLEARANCE,
-                  "%s clears %s by only %.2f mm (want %.2f)"
-                  % (c.enum, s.enum, d, SWITCH_CLEARANCE))
-
-
 def test_which_macro_sits_on_which_knob():
     """The six macros keep enum order; which knob each SITS on is a table.
 
@@ -255,18 +236,61 @@ def test_which_macro_sits_on_which_knob():
 
 
 def _rect(c):
+    if c.kind == g.PAD:
+        index = int(c.enum.split("_")[1]) - 1
+        return g.PAD_SHAPES[index].curve_bounds
     w, h = g.footprint_of(c)
     return (c.x - w / 2.0, c.y - h / 2.0, c.x + w / 2.0, c.y + h / 2.0)
 
 
+def _point_rect_distance(p, rect):
+    x, y = p
+    x0, y0, x1, y1 = rect
+    dx = max(x0 - x, 0.0, x - x1)
+    dy = max(y0 - y, 0.0, y - y1)
+    return (dx * dx + dy * dy) ** 0.5
+
+
+def test_pad_contours_clear_switches():
+    switch_rects = [_rect(c) for c in g.PARAMS if c.kind == g.SWITCH]
+    for i, shape in enumerate(g.PAD_SHAPES):
+        samples = g.sample_closed_pad(shape, samples_per_segment=20)
+        for rect in switch_rects:
+            clearance = min(_point_rect_distance(p, rect) for p in samples)
+            check(clearance >= SWITCH_CLEARANCE,
+                  "PAD_%d clears a switch by %.2f mm, want %.2f"
+                  % (i + 1, clearance, SWITCH_CLEARANCE))
+
+
+def test_pad_runtime_bounds_cover_the_spline_and_halo():
+    """The header emits shape.bounds as a widget's min/max, so it must contain
+    the whole cubic contour plus the outer half of TouchPlate's glow stroke.
+
+    Knot extrema are not enough: Catmull-Rom becomes cubic Beziers and their
+    extrema can sit between anchors. Sampling independently from the emitted
+    bounds catches both that escape and halo clipping.
+    """
+    halo = g.PAD_GLOW_WIDTH / 2.0
+    for i, shape in enumerate(g.PAD_SHAPES):
+        x0, y0, x1, y1 = shape.bounds
+        samples = g.sample_closed_pad(shape, samples_per_segment=200)
+        sx0, sx1 = min(x for x, _ in samples), max(x for x, _ in samples)
+        sy0, sy1 = min(y for _, y in samples), max(y for _, y in samples)
+        check(x0 + halo <= sx0 and sx1 <= x1 - halo and
+              y0 + halo <= sy0 and sy1 <= y1 - halo,
+              "PAD_%d runtime bounds clip its spline or %.2f mm halo"
+              % (i + 1, halo))
+
+
 def test_no_overlap():
-    """No exceptions. There used to be one -- SW_L stood on PAD_2 while the
-    pads were printed at their measured centres -- and laying the field out
-    around the switches retired it."""
+    """Rectangles guard every pair except organic pad/switch pairs, whose
+    clearance is tested against the rendered spline in test_pad_contours_clear_switches."""
     all_ctls = g.PARAMS + g.OUTPUTS
     for i, a in enumerate(all_ctls):
         ax0, ay0, ax1, ay1 = _rect(a)
         for b in all_ctls[i + 1:]:
+            if {a.kind, b.kind} == {g.PAD, g.SWITCH}:
+                continue
             bx0, by0, bx1, by1 = _rect(b)
             check(not (ax0 < bx1 and bx0 < ax1 and ay0 < by1 and by0 < ay1),
                   "%s and %s overlap" % (a.enum, b.enum))
@@ -312,17 +336,14 @@ def test_only_the_pads_carry_printed_captions():
 
 def test_silkscreen_copy():
     words = [t.str for t in g.TEXTS]
-    check('FireFlow' in words, "the logo must read FireFlow")
-    check('GLOW' in words, "the logo must read GLOW")
-    ys = {t.y for t in g.TEXTS if t.str in ('FireFlow', 'GLOW')}
-    check(len(ys) == 1, "FireFlow and GLOW must sit on ONE line")
-    joined = " ".join(words + [c.label for c in g.PARAMS + g.OUTPUTS])
-    check('ton-k' not in joined and 'ton k' not in joined.lower(),
-          "ton-k is the brand and must not appear on the panel")
+    check(words == ["FIREFLOW", "/", "GLOW"],
+          "header must read FIREFLOW / GLOW only: %r" % words)
+    check(len({t.y for t in g.TEXTS}) == 1,
+          "FIREFLOW / GLOW must share one baseline")
 
 
 def test_logo_font_weights():
-    fireflow = next((t for t in g.TEXTS if t.str == "FireFlow"), None)
+    fireflow = next((t for t in g.TEXTS if t.str == "FIREFLOW"), None)
     glow = next((t for t in g.TEXTS if t.str == "GLOW"), None)
     check(fireflow is not None, "FireFlow text entry not found")
     check(glow is not None, "GLOW text entry not found")
@@ -334,28 +355,66 @@ def test_logo_font_weights():
           "FireFlow must be lighter than GLOW")
 
 
-def test_wordmark_is_visually_centred():
-    """The two differently sized words must centre as ONE visible mark.
-
-    They are anchored end / start, so equal anchors put the visible mark ~5 mm
-    left of centre. Derive the outer bounds here independently of the
-    generator's own offset arithmetic.
-    """
-    fireflow = next(t for t in g.TEXTS if t.str == "FireFlow")
-    glow = next(t for t in g.TEXTS if t.str == "GLOW")
-    left = fireflow.x - len(fireflow.str) * fireflow.size * 0.60
-    right = glow.x + len(glow.str) * glow.size * 0.60
-    centre = (left + right) / 2.0
-    check(abs(centre - g.W / 2.0) <= 0.5,
-          "wordmark is %.2f mm off panel centre" % (centre - g.W / 2.0))
+def test_wordmark_separator_is_panel_centred():
+    separator = next((t for t in g.TEXTS if t.str == "/"), None)
+    check(separator is not None, "wordmark separator is missing")
+    if separator is not None:
+        check(approx(separator.x, g.W * 0.5),
+              "wordmark separator is not on the panel centre")
+        check(separator.anchor == 0,
+              "wordmark separator must be middle-anchored")
 
 
-def test_alpha_pennant_survives():
+def test_dark_copper_panel_contract():
     panel = g.svg()
-    check('id="alphaPennant"' in panel,
-          "the early-alpha faceplate needs its pennant")
-    check('ALPHA' in [t.str for t in g.TEXTS],
-          "the pennant label must reach Rack's runtime text overlay")
+    check(g.PANEL_TOP == "#20221d" and g.PANEL_BOTTOM == "#10110f",
+          "Glow must use the approved warm graphite gradient")
+    check('id="alphaPennant"' not in panel, "alpha pennant must be removed")
+    check('ALPHA' not in [t.str for t in g.TEXTS], "ALPHA text must be removed")
+    check('<rect class="touchPlate"' not in panel,
+          "touch pads must no longer be rounded rectangles")
+
+
+def test_twelve_unique_pad_splines():
+    check(len(g.PAD_SHAPES) == 12, "want twelve pad shapes")
+    fingerprints = []
+    for i, shape in enumerate(g.PAD_SHAPES):
+        check(len(shape.points) == g.PAD_POINT_COUNT == 8,
+              "PAD_%d must have eight anchors" % (i + 1))
+        check(shape.centre == g.PAD_PLACES[i],
+              "PAD_%d lost its control centre" % (i + 1))
+        fingerprints.append(tuple(shape.points))
+    check(len(set(fingerprints)) == 12, "all pad contours must be unique")
+
+
+def test_pad_numbers_are_two_digit_edge_engravings():
+    pads = [c for c in g.PARAMS if c.kind == g.PAD]
+    check([c.label for c in pads] == ["%02d" % i for i in range(1, 13)],
+          "pad labels must read 01 through 12")
+    for i, c in enumerate(pads):
+        x0, y0, x1, y1 = g.PAD_SHAPES[i].curve_bounds
+        lx, ly = g.label_xy(c)
+        check(x0 <= lx <= x1 and y0 <= ly <= y1,
+              "%s label is outside its island" % c.enum)
+        check(abs(lx - c.x) > 0.15 * (x1 - x0),
+              "%s label is still centred" % c.enum)
+
+
+def test_generated_header_exports_pad_geometry():
+    h = g.header()
+    check("static constexpr int kPadPointCount = 8;" in h,
+          "header lacks point count")
+    check("struct PadShape" in h and "XY min; XY max;" in h and
+          "kPadShapes[12]" in h,
+          "header lacks pad geometry")
+    for alias in ("static constexpr float kPadW",
+                  "static constexpr float kPadH",
+                  "static constexpr float kPadR",
+                  "kCollar"):
+        check(alias not in h,
+              "header retains obsolete rectangular-pad alias %s" % alias)
+    check(not hasattr(g, "PAD_R"),
+          "generator retains obsolete rectangular-pad radius PAD_R")
 
 
 def test_the_masthead_rules_survive():
@@ -380,6 +439,21 @@ def test_the_header_emits_no_zero_length_input_table():
     check("kInputCtls" not in hpp,
           "the board has no inputs, so no kInputCtls table may be emitted")
     check("NUM_INPUTS" in hpp, "InputId/NUM_INPUTS must still be emitted")
+
+
+def test_fader_wells_use_the_dark_copper_palette():
+    """The two stock slider wells must sit in the graphite/copper panel."""
+    legacy_fill, legacy_stroke = base.PAPER_DEEP, base.LINE
+    for c in (c for c in g.PARAMS if c.kind == g.FADER):
+        well = g.fader_svg(c).splitlines()[0]
+        check('fill="%s"' % g.PAD_FILL in well,
+              "%s well fill is not PAD_FILL: %s" % (c.enum, well))
+        check('stroke="%s"' % g.PANEL_BORDER in well,
+              "%s well stroke is not PANEL_BORDER: %s" % (c.enum, well))
+        check('fill="%s"' % legacy_fill not in well,
+              "%s well still uses legacy PAPER_DEEP: %s" % (c.enum, well))
+        check('stroke="%s"' % legacy_stroke not in well,
+              "%s well still uses legacy LINE: %s" % (c.enum, well))
 
 
 def test_committed_files_match_the_generator():

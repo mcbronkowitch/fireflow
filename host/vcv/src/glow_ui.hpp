@@ -88,7 +88,7 @@ inline int clamp_genre(int raw) {
 // the only thing the player can see when Flow declines: a locked generator, an
 // empty undo slot, a pad whose place does not decode. Nothing else knows that
 // happened, so the module owns this flash -- Glow.cpp paints it onto the live
-// pad's collar.
+// pad's refusal contour.
 struct RefuseFlash {
     // Kept far enough in the past that a fresh instance does NOT read as
     // "just refused" -- same reasoning gesture.h gives at _refuse_t's
@@ -100,6 +100,14 @@ struct RefuseFlash {
         return now_s - at < spky::flow::kRefuseFlashS;
     }
 };
+
+enum class PadVisualState { IDLE, LIVE, EXCURSION, REFUSED };
+inline PadVisualState pad_visual_state(bool live, bool excursion, bool refused) {
+    if (!live) return PadVisualState::IDLE;
+    if (refused) return PadVisualState::REFUSED;
+    if (excursion) return PadVisualState::EXCURSION;
+    return PadVisualState::LIVE;
+}
 
 // Exactly what a patch stores OF THE TERRAIN: current code and undo slot.
 // The tonality overrides (spec 2026-08-07 §3) are module settings rather than

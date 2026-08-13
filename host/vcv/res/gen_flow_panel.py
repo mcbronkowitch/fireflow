@@ -23,6 +23,7 @@ Run from host/vcv/:  python3 res/gen_flow_panel.py
 The C++ never hardcodes a coordinate, label or colour -- it reads them from the
 generated header, so graphics and widget placement can never drift apart.
 """
+import math
 import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -32,6 +33,25 @@ import touch2_geometry as geo
 HP = 16
 W  = HP * base.MM_PER_HP          # 81.28 mm
 Hh = geo.PLATE_H                  # 128.5 mm
+
+# --- dark copper surface ------------------------------------------------------
+PANEL_TOP       = "#20221d"
+PANEL_MID       = "#171814"
+PANEL_BOTTOM    = "#10110f"
+PANEL_BORDER    = "#5f594d"
+PANEL_TEXT      = "#d7d1c5"
+PAD_FILL        = "#171812"
+PAD_COPPER_DIM  = "#7d4a30"
+PAD_TOPO        = "#633c29"
+PAD_COPPER      = base.COPPER
+PAD_GREEN       = base.GREEN
+PAD_REFUSED     = base.BRICK
+PAD_GLOW_WIDTH  = 1.60
+PAD_STROKE_W    = 0.55
+PAD_INNER_SCALE = 0.82
+GRAIN = tuple((((i * 37) % 79) + 1.0,
+               ((i * 53) % 123) + 2.0,
+               0.10 if i % 3 else 0.16) for i in range(36))
 
 # --- printed footprints -------------------------------------------------------
 # Widget classes are chosen in Glow.cpp; these are what the PLATE prints, and
@@ -59,47 +79,19 @@ Hh = geo.PLATE_H                  # 128.5 mm
 KNOB_R    = geo.KNOB_COLLAR_R     # measured silkscreen collar, 7.77 mm across
 PAD_W     = 7.6
 PAD_H     = 9.0
-PAD_R     = 2.0                   # corner radius
 FADER_W   = 6.8                   # VCVSlider is 6.72 mm wide
 FADER_H   = geo.FADER_TRAVEL
 SWITCH_W  = 5.0                   # CKSSThree is 4.56 x 9.60 mm
 SWITCH_H  = 9.0
 JACK_R    = 4.2
 
-# --- strokes and the runtime pad collar ---------------------------------------
-# HAIRLINE_W is the stroke the plate prints around every printed shape. It is a
-# constant rather than five typed literals because Glow.cpp's TouchPlate draws
-# ITS collar over the printed pad tile and has to match it exactly.
-#
-# COLLAR_* are the four colours that same widget strokes the live pad with, and
-# the heavier width it uses while a pad is live. They are emitted for one
-# reason: three of the four ARE gen_panel palette entries, and typed into
-# Glow.cpp they were a second copy -- retune the palette and the printed tiles
-# move while the live / excursed / refused collars silently keep the old
-# colours, with nothing gating it. Spec 3.1 grants exactly one carve-out from
-# "no colour is written into Glow.cpp", and it is PadQuantity's runtime label,
-# not this.
-#
-# What stays the widget's is WHICH colour a state gets and when -- that is
-# runtime state, and it is why the pads have no LightIds. This file only owns
-# what the four colours ARE.
-HAIRLINE_W    = 0.28
-COLLAR_LIVE_W = 0.55
-COLLAR_REFUSED  = base.BRICK    # a hold LOCK turned down, or a code that will
-                                # not decode. Copper here would read as the
-                                # reroll that just did not happen.
-COLLAR_EXCURSED = base.COPPER   # part-B accent: "that worked"
-COLLAR_LIVE     = base.GREEN    # part-A accent: this pad's place is playing
-COLLAR_IDLE     = base.LINE     # the printed hairline, redrawn
+# Printed panel-outline width.
+HAIRLINE_W = 0.28
 
 LOGO_Y = 10.0
 LOGO_SZ = 4.2
 LOGO_GAP = 1.1                    # between the two anchors, see TEXTS
 GLYPH_ADV = 0.60                  # Share Tech Mono advance, in em
-ALPHA_FLAG_X = W - 6.9
-ALPHA_FLAG_Y = 14.2
-ALPHA_FLAG_H = 3.8
-
 # --- control kinds ------------------------------------------------------------
 MACRO  = "MACRO"
 PAD    = "PAD"
@@ -153,6 +145,9 @@ def footprint_of(c):
 
 def label_xy(c):
     """Baseline position of a control's caption."""
+    if c.kind == PAD:
+        index = int(c.enum.split("_")[1]) - 1
+        return PAD_SHAPES[index].label
     return (c.x, c.y + LBL_DY[c.kind])
 
 
@@ -229,6 +224,139 @@ PAD_PLACES = _lay_out(geo.PADS, PAD_BANDS)
 assert None not in PAD_PLACES, "a measured pad got no place on the grid"
 
 
+# --- shared organic pad geometry ---------------------------------------------
+PAD_POINT_COUNT = 8
+PAD_BOXES = (
+    (0.8,77.8,13.8,91.0), (14.8,77.7,28.0,90.5),
+    (32.8,77.7,48.4,91.0), (50.5,77.8,65.9,91.0),
+    (67.5,77.8,80.5,91.0), (0.8,94.4,13.8,111.2),
+    (14.8,94.4,30.0,111.2), (32.8,98.4,48.4,111.2),
+    (50.5,94.4,65.9,111.2), (67.5,94.4,80.5,111.2),
+    (14.8,114.0,31.2,128.0), (50.5,114.0,66.0,128.0),
+)
+PAD_PROFILES = (
+    (.94,.86,.98,.90,.92,.88,1.00,.91), (.89,.97,.91,.82,.96,.87,.93,1.00),
+    (.96,.88,1.00,.94,.80,.96,.90,.87), (.87,1.00,.92,.89,.97,.84,.96,.90),
+    (1.00,.90,.86,.97,.89,.95,.83,.98), (.92,.84,.99,.88,1.00,.91,.86,.95),
+    (.85,.98,.90,1.00,.87,.93,.97,.89), (.98,.91,.84,.96,.93,1.00,.88,.86),
+    (.90,1.00,.95,.85,.98,.89,.92,.96), (.97,.87,.93,.99,.84,.98,.91,.88),
+    (.88,.96,1.00,.90,.95,.85,.98,.92), (1.00,.89,.87,.95,.91,.97,.86,.99),
+)
+PAD_UNIT_RING = ((-.70,-1.00),(.20,-.96),(.91,-.62),(1.00,.12),
+                 (.70,.92),(-.12,1.00),(-.93,.66),(-1.00,-.18))
+PAD_POINT_OVERRIDES = {
+    1: {3:(27.00,81.00), 4:(26.40,86.20)},
+    2: {4:(41.60,87.60), 5:(38.60,90.40)},
+}
+PAD_LABELS = (
+    (2.0,81.0),(16.2,80.7),(34.2,80.7),(52.0,81.0),(68.8,81.0),
+    (2.0,98.0),(16.3,98.0),(34.2,101.6),(52.0,98.0),(68.8,98.0),
+    (16.4,117.4),(52.0,117.4),
+)
+
+
+class PadShape(object):
+    def __init__(self, points, label, centre):
+        self.points = tuple(points)
+        self.label = label
+        self.centre = centre
+        self.curve_bounds = None
+        self.bounds = None
+
+
+def _make_pad_shape(i):
+    x0, y0, x1, y1 = PAD_BOXES[i]
+    cx, cy = (x0+x1)/2.0, (y0+y1)/2.0
+    hx, hy = (x1-x0)/2.0, (y1-y0)/2.0
+    pts = []
+    for k, ((ux, uy), radius) in enumerate(zip(PAD_UNIT_RING, PAD_PROFILES[i])):
+        p = (cx + ux*hx*radius, cy + uy*hy*radius)
+        pts.append(PAD_POINT_OVERRIDES.get(i, {}).get(k, p))
+    return PadShape(pts, PAD_LABELS[i], PAD_PLACES[i])
+
+
+PAD_SHAPES = tuple(_make_pad_shape(i) for i in range(12))
+assert len({s.points for s in PAD_SHAPES}) == 12
+
+
+def catmull_rom_cubics(points):
+    n, out = len(points), []
+    for i, p1 in enumerate(points):
+        p0, p2, p3 = points[(i-1)%n], points[(i+1)%n], points[(i+2)%n]
+        c1 = (p1[0] + (p2[0]-p0[0])/6.0, p1[1] + (p2[1]-p0[1])/6.0)
+        c2 = (p2[0] - (p3[0]-p1[0])/6.0, p2[1] - (p3[1]-p1[1])/6.0)
+        out.append((c1, c2, p2))
+    return out
+
+
+def _cubic_point(p0, c1, c2, p3, t):
+    u = 1.0 - t
+    return (u*u*u*p0[0] + 3*u*u*t*c1[0] + 3*u*t*t*c2[0] + t*t*t*p3[0],
+            u*u*u*p0[1] + 3*u*u*t*c1[1] + 3*u*t*t*c2[1] + t*t*t*p3[1])
+
+
+def _cubic_extrema(a, b, c, d):
+    """Return closed-interval extrema parameters for one Bezier coordinate."""
+    qa = 3.0 * (-a + 3.0*b - 3.0*c + d)
+    qb = 6.0 * (a - 2.0*b + c)
+    qc = 3.0 * (b - a)
+    roots = [0.0, 1.0]
+    eps = 1e-9
+    if abs(qa) < eps:
+        if abs(qb) >= eps:
+            roots.append(-qc / qb)
+    else:
+        disc = qb*qb - 4.0*qa*qc
+        if disc >= 0.0:
+            root = math.sqrt(disc)
+            roots.extend(((-qb - root) / (2.0*qa),
+                          (-qb + root) / (2.0*qa)))
+    return [t for t in roots if 0.0 <= t <= 1.0]
+
+
+def _pad_curve_bounds(shape):
+    points = []
+    for i, (c1, c2, p3) in enumerate(catmull_rom_cubics(shape.points)):
+        p0 = shape.points[i]
+        ts = _cubic_extrema(p0[0], c1[0], c2[0], p3[0])
+        ts += _cubic_extrema(p0[1], c1[1], c2[1], p3[1])
+        points.extend(_cubic_point(p0, c1, c2, p3, t) for t in ts)
+    xs, ys = [p[0] for p in points], [p[1] for p in points]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _runtime_pad_bounds(shape):
+    """Bounds emitted to Rack: cubic contour plus the outer glow radius.
+
+    The values are rounded away from the contour so the three-decimal header
+    cannot shorten a widget enough to clip its NanoVG stroke.
+    """
+    x0, y0, x1, y1 = _pad_curve_bounds(shape)
+    halo = PAD_GLOW_WIDTH / 2.0
+    return (math.floor((x0 - halo) * 1000.0) / 1000.0,
+            math.floor((y0 - halo) * 1000.0) / 1000.0,
+            math.ceil((x1 + halo) * 1000.0) / 1000.0,
+            math.ceil((y1 + halo) * 1000.0) / 1000.0)
+
+
+for _shape in PAD_SHAPES:
+    _shape.curve_bounds = _pad_curve_bounds(_shape)
+    _shape.bounds = _runtime_pad_bounds(_shape)
+assert all(s.bounds[0] <= s.centre[0] <= s.bounds[2] and
+           s.bounds[1] <= s.centre[1] <= s.bounds[3] for s in PAD_SHAPES)
+
+
+def sample_closed_pad(shape, samples_per_segment=20):
+    points = []
+    for i, (c1, c2, p2) in enumerate(catmull_rom_cubics(shape.points)):
+        p1 = shape.points[i]
+        for sample in range(samples_per_segment):
+            t = sample / float(samples_per_segment)
+            u = 1.0 - t
+            points.append(_cubic_point(p1, c1, c2, p2, t))
+    return points
+
+
 # --- the tables ---------------------------------------------------------------
 _MACRO_NAMES = ["MOTION", "DENSITY", "BRIGHT", "PACE", "WANDER", "SPACE"]
 _MACRO_TIPS = [
@@ -254,7 +382,7 @@ for _pos, _macro in enumerate(KNOB_MACRO):
 # PAD_PLACES is indexed exactly like geo.PADS: index i is MPR121 place i, so
 # the order is load-bearing and must not be tidied into reading order.
 for _i, (_x, _y) in enumerate(PAD_PLACES):
-    PARAMS.append(Ctl("PAD_%d" % (_i + 1), PAD, _x, _y, str(_i + 1),
+    PARAMS.append(Ctl("PAD_%d" % (_i + 1), PAD, _x, _y, "%02d" % (_i + 1),
                       "Place %d -- tap: go there. Hold: reroll all six macro "
                       "domains, the ground stays. Tap again: back." % (_i + 1)))
 
@@ -278,17 +406,10 @@ OUTPUTS = [
     Ctl("OUT_R", OUT, geo.JACKS[1][0], geo.JACKS[1][1], "R", "Main out, right"),
 ]
 
-# The two wordmark halves are anchored end / start around a 1.1 mm gap. Their
-# anchors are NOT symmetric about the centre line: FireFlow has eight glyphs
-# and GLOW four, so equal anchors would push the combined visible mark about
-# 5 mm to the left. Derive the offset instead of typing it, so the mark stays
-# centred if the size or the gap ever changes.
-_LOGO_DX = (len("FireFlow") * LOGO_SZ * GLYPH_ADV - LOGO_GAP
-            - len("GLOW") * LOGO_SZ * GLYPH_ADV) / 2.0
 TEXTS = [
-    Txt(W * 0.5 + _LOGO_DX, LOGO_Y, LOGO_SZ, base.MUTED, 2, "FireFlow", 300),
-    Txt(W * 0.5 + _LOGO_DX + LOGO_GAP, LOGO_Y, LOGO_SZ, base.INK, 1, "GLOW", 700),
-    Txt(W - 3.0, 16.75, 1.15, base.WHITE, 0, "ALPHA", 700),
+    Txt(W*.5-2.2, 10.0, 3.2, PAD_COPPER, 2, "FIREFLOW", 500),
+    Txt(W*.5,     10.0, 3.2, PANEL_TEXT, 0, "/", 400),
+    Txt(W*.5+2.2, 10.0, 3.2, PAD_COPPER, 1, "GLOW", 700),
 ]
 
 
@@ -316,15 +437,31 @@ def knob_svg(c):
            base.WHITE))
 
 
+def pad_path_svg(shape, scale=1.0):
+    """Return a closed SVG cubic path for an island, optionally scaled in-place."""
+    cx, cy = shape.centre
+    points = tuple((cx + (x - cx) * scale, cy + (y - cy) * scale)
+                   for x, y in shape.points)
+    out = ["M %s %s" % (mm(points[0][0]), mm(points[0][1]))]
+    for c1, c2, p2 in catmull_rom_cubics(points):
+        out.append("C %s %s %s %s %s %s" %
+                   (mm(c1[0]), mm(c1[1]), mm(c2[0]), mm(c2[1]),
+                    mm(p2[0]), mm(p2[1])))
+    return " ".join(out) + " Z"
+
+
 def pad_svg(c):
-    """A plate the widget draws over. The SVG tile is the printed footprint;
-    TouchPlate paints the live/excursed state on top of it at runtime."""
-    return (
-        '  <rect class="touchPlate" x="%s" y="%s" width="%s" height="%s" '
-        'rx="%s" fill="%s" fill-opacity="0.55" stroke="%s" '
-        'stroke-width="%s"/>\n'
-        % (mm(c.x - PAD_W / 2.0), mm(c.y - PAD_H / 2.0), mm(PAD_W), mm(PAD_H),
-           mm(PAD_R), base.PAPER_DEEP, base.LINE, sw(HAIRLINE_W)))
+    index = int(c.enum.split("_")[1]) - 1
+    shape = PAD_SHAPES[index]
+    path = pad_path_svg(shape)
+    out = ['  <path class="touchIsland" data-pad="%02d" d="%s" fill="%s" '
+           'stroke="%s" stroke-width="%s"/>\n'
+           % (index + 1, path, PAD_FILL, PAD_COPPER_DIM, sw(PAD_STROKE_W))]
+    for scale in (0.78, 0.58, 0.38):
+        out.append('  <path class="touchTopo" d="%s" fill="none" stroke="%s" '
+                   'stroke-width="0.18"/>\n'
+                   % (pad_path_svg(shape, scale), PAD_TOPO))
+    return "".join(out)
 
 
 def fader_svg(c):
@@ -334,7 +471,7 @@ def fader_svg(c):
         '  <line x1="%s" y1="%s" x2="%s" y2="%s" stroke="%s" '
         'stroke-width="0.6" stroke-linecap="round"/>\n'
         % (mm(c.x - FADER_W / 2.0), mm(c.y - FADER_H / 2.0), mm(FADER_W),
-           mm(FADER_H), mm(FADER_W / 2.0), base.PAPER_DEEP, base.LINE,
+           mm(FADER_H), mm(FADER_W / 2.0), PAD_FILL, PANEL_BORDER,
            sw(HAIRLINE_W),
            mm(c.x), mm(c.y - FADER_H / 2.0 + 1.2),
            mm(c.x), mm(c.y + FADER_H / 2.0 - 1.2), base.WELL))
@@ -382,35 +519,32 @@ def svg():
     out.append('    <stop offset="1" stop-color="#15160f"/>\n')
     out.append('  </radialGradient>\n')
     out.append('  <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">\n')
-    out.append('    <stop offset="0" stop-color="%s"/>\n' % base.PAPER_HI)
-    out.append('    <stop offset="0.48" stop-color="%s"/>\n' % base.PAPER)
-    out.append('    <stop offset="1" stop-color="%s"/>\n' % base.PAPER_LO)
+    out.append('    <stop offset="0" stop-color="%s"/>\n' % PANEL_TOP)
+    out.append('    <stop offset="0.48" stop-color="%s"/>\n' % PANEL_MID)
+    out.append('    <stop offset="1" stop-color="%s"/>\n' % PANEL_BOTTOM)
     out.append('  </linearGradient>\n')
     out.append('  </defs>\n')
     out.append('  <rect x="0" y="0" width="%s" height="%s" fill="url(#plate)"/>\n'
                % (mm(W), mm(Hh)))
+    for x, y, opacity in GRAIN:
+        out.append('  <circle class="panelGrain" cx="%s" cy="%s" r="0.12" fill="%s" '
+                   'fill-opacity="%s"/>\n'
+                   % (mm(x), mm(y), PANEL_TEXT, sw(opacity)))
     out.append('  <rect id="glowPanelInnerBorder" x="0.650" y="0.650" '
                'width="%s" height="%s" rx="1.2" fill="none" stroke="%s" '
                'stroke-width="%s"/>\n'
-               % (mm(W - 1.3), mm(Hh - 1.3), base.LINE, sw(HAIRLINE_W)))
+               % (mm(W - 1.3), mm(Hh - 1.3), PANEL_BORDER, sw(HAIRLINE_W)))
     # The product mockup's masthead: quiet rules, one solder-green dot and one
     # copper dot around the compact FireFlow Glow wordmark.
-    out.append('  <circle cx="4.000" cy="8.650" r="0.650" fill="%s"/>\n' % base.GREEN)
+    out.append('  <circle cx="4.000" cy="8.650" r="0.250" fill="%s"/>\n' % PAD_GREEN)
     out.append('  <line id="glowBrandRuleLeft" x1="5.900" y1="8.650" '
-               'x2="8.800" y2="8.650" stroke="%s" stroke-width="0.35"/>\n'
-               % base.GREEN)
+               'x2="8.800" y2="8.650" stroke="%s" stroke-width="0.25"/>\n'
+               % PAD_GREEN)
     out.append('  <line id="glowBrandRuleRight" x1="%s" y1="8.650" '
-               'x2="%s" y2="8.650" stroke="%s" stroke-width="0.35"/>\n'
-               % (mm(W - 9.1), mm(W - 6.2), base.COPPER))
-    out.append('  <circle cx="%s" cy="8.650" r="0.650" fill="%s"/>\n'
-               % (mm(W - 4.3), base.COPPER))
-    # Early-alpha badge: a small edge-mounted pennant.
-    out.append('  <polygon id="alphaPennant" points="%s,%s %s,%s %s,%s %s,%s %s,%s" '
-               'fill="%s"/>\n'
-               % (mm(W), mm(ALPHA_FLAG_Y), mm(ALPHA_FLAG_X), mm(ALPHA_FLAG_Y),
-                  mm(ALPHA_FLAG_X + 1.7), mm(ALPHA_FLAG_Y + ALPHA_FLAG_H / 2.0),
-                  mm(ALPHA_FLAG_X), mm(ALPHA_FLAG_Y + ALPHA_FLAG_H),
-                  mm(W), mm(ALPHA_FLAG_Y + ALPHA_FLAG_H), base.COPPER))
+               'x2="%s" y2="8.650" stroke="%s" stroke-width="0.25"/>\n'
+               % (mm(W - 9.1), mm(W - 6.2), PAD_COPPER))
+    out.append('  <circle cx="%s" cy="8.650" r="0.250" fill="%s"/>\n'
+               % (mm(W - 4.3), PAD_COPPER))
     for c in PARAMS + OUTPUTS:
         out.append(SVG_FOR[c.kind](c))
     for t in TEXTS:
@@ -418,7 +552,7 @@ def svg():
     for c in PARAMS + OUTPUTS:
         if c.label:
             lx, ly = label_xy(c)
-            out.append(text_svg(lx, ly, LBL_SZ[c.kind], base.INK, 0, c.label))
+            out.append(text_svg(lx, ly, LBL_SZ[c.kind], label_rgb(c), 0, c.label))
     out.append('</svg>\n')
     return "".join(out)
 
@@ -428,16 +562,35 @@ def rgb(hexcol):
     return "0x" + hexcol.lstrip("#").upper()
 
 
+def label_rgb(c):
+    if c.kind == PAD:
+        return PAD_COPPER
+    if c.kind == OUT:
+        return PANEL_TEXT
+    return base.INK
+
+
 def ctl_row(c):
     lx, ly = label_xy(c)
     return ('    { %s, %s, {%sf, %sf}, "%s", {%sf, %sf}, 0, %sf, %s, "%s" },\n'
             % (c.enum, WKMAP[c.kind], mm(c.x), mm(c.y), c.label,
-               mm(lx), mm(ly), mm(LBL_SZ[c.kind]), rgb(base.INK), c.tip))
+               mm(lx), mm(ly), mm(LBL_SZ[c.kind]), rgb(label_rgb(c)), c.tip))
 
 
 def enum_block(name, ctls, last):
     body = "".join("    %s,\n" % c.enum for c in ctls)
     return "enum %s {\n%s    %s\n};\n" % (name, body, last)
+
+
+def pad_shape_row(shape):
+    points = ", ".join("{ %sf, %sf }" % (mm(x), mm(y))
+                       for x, y in shape.points)
+    lx, ly = shape.label
+    cx, cy = shape.centre
+    x0, y0, x1, y1 = shape.bounds
+    return ("    { { %s }, { %sf, %sf }, { %sf, %sf }, { %sf, %sf }, { %sf, %sf } },\n" %
+            (points, mm(lx), mm(ly), mm(cx), mm(cy), mm(x0), mm(y0),
+             mm(x1), mm(y1)))
 
 
 def header():
@@ -454,6 +607,8 @@ def header():
     out.append("#pragma once\n")
     out.append("namespace spkyvcv { namespace glow {\n")
     out.append("struct XY { float x, y; };\n")
+    out.append("static constexpr int kPadPointCount = %d;\n" % PAD_POINT_COUNT)
+    out.append("struct PadShape { XY points[kPadPointCount]; XY label; XY centre; XY min; XY max; };\n")
     out.append("enum WidgetKind { WK_MACRO, WK_PAD, WK_FADER, WK_SWITCH, WK_OUT };\n")
     out.append("struct PanelCtl { int id; WidgetKind kind; XY mm; const char* label;"
                " XY lbl; unsigned char anchor; float lblSize; unsigned lblRgb;"
@@ -472,31 +627,22 @@ def header():
     out.append("static constexpr float kPanelW = %sf;\n" % mm(W))
     out.append("static constexpr float kPanelH = %sf;\n" % mm(Hh))
     out.append("static constexpr float kKnobR   = %sf;\n" % mm(KNOB_R))
-    out.append("static constexpr float kPadW    = %sf;\n" % mm(PAD_W))
-    out.append("static constexpr float kPadH    = %sf;\n" % mm(PAD_H))
-    out.append("static constexpr float kPadR    = %sf;\n" % mm(PAD_R))
+    out.append("static constexpr unsigned kPadCopper    = %su;\n" % rgb(PAD_COPPER))
+    out.append("static constexpr unsigned kPadCopperDim = %su;\n" % rgb(PAD_COPPER_DIM))
+    out.append("static constexpr unsigned kPadGreen     = %su;\n" % rgb(PAD_GREEN))
+    out.append("static constexpr unsigned kPadRefused   = %su;\n" % rgb(PAD_REFUSED))
+    out.append("static constexpr float kPadGlowWidth   = %sf;\n" % mm(PAD_GLOW_WIDTH))
+    out.append("static constexpr float kPadStrokeWidth = %sf;\n" % mm(PAD_STROKE_W))
+    out.append("static constexpr float kPadInnerScale  = %sf;\n" % mm(PAD_INNER_SCALE))
+    out.append("static const PadShape kPadShapes[12] = {\n")
+    for shape in PAD_SHAPES:
+        out.append(pad_shape_row(shape))
+    out.append("};\n")
     out.append("static constexpr float kFaderW  = %sf;\n" % mm(FADER_W))
     out.append("static constexpr float kFaderH  = %sf;\n" % mm(FADER_H))
     out.append("static constexpr float kSwitchW = %sf;\n" % mm(SWITCH_W))
     out.append("static constexpr float kSwitchH = %sf;\n" % mm(SWITCH_H))
     out.append("static constexpr float kJackR   = %sf;\n" % mm(JACK_R))
-    # The pad collar Glow.cpp's TouchPlate strokes at runtime. The WIDGET picks
-    # which of these a state gets -- that is runtime state, not panel state, and
-    # it is why the pads have no LightIds. What the colours ARE is the panel's,
-    # and three of the four are gen_panel palette entries: typed into Glow.cpp
-    # they were a second copy that a palette retune would have left behind.
-    out.append("static constexpr unsigned kCollarRefused  = %su;\n"
-               % rgb(COLLAR_REFUSED))
-    out.append("static constexpr unsigned kCollarExcursed = %su;\n"
-               % rgb(COLLAR_EXCURSED))
-    out.append("static constexpr unsigned kCollarLive     = %su;\n"
-               % rgb(COLLAR_LIVE))
-    out.append("static constexpr unsigned kCollarIdle     = %su;\n"
-               % rgb(COLLAR_IDLE))
-    out.append("static constexpr float kCollarWLive = %sf;\n"
-               % mm(COLLAR_LIVE_W))
-    out.append("static constexpr float kCollarWIdle = %sf;\n"
-               % mm(HAIRLINE_W))
     for name, ctls in (("kParamCtls", PARAMS), ("kOutputCtls", OUTPUTS)):
         out.append("static const PanelCtl %s[] = {\n" % name)
         for c in ctls:

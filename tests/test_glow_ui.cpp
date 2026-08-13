@@ -10,6 +10,15 @@ using namespace spky;
 using namespace spky::flow;
 using namespace spkyvcv;
 
+TEST_CASE("glow: pad visual states have one unambiguous precedence") {
+    CHECK(pad_visual_state(false, false, false) == PadVisualState::IDLE);
+    CHECK(pad_visual_state(true, false, false) == PadVisualState::LIVE);
+    CHECK(pad_visual_state(true, true, false) == PadVisualState::EXCURSION);
+    CHECK(pad_visual_state(true, false, true) == PadVisualState::REFUSED);
+    CHECK(pad_visual_state(true, true, true) == PadVisualState::REFUSED);
+    CHECK(pad_visual_state(false, true, true) == PadVisualState::IDLE);
+}
+
 TEST_CASE("glow: the house code is a decodable terrain code") {
     TerrainState st;
     CHECK(decode_code(kHouseCode, st));

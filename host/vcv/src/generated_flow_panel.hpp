@@ -10,6 +10,8 @@
 #pragma once
 namespace spkyvcv { namespace glow {
 struct XY { float x, y; };
+static constexpr int kPadPointCount = 8;
+struct PadShape { XY points[kPadPointCount]; XY label; XY centre; XY min; XY max; };
 enum WidgetKind { WK_MACRO, WK_PAD, WK_FADER, WK_SWITCH, WK_OUT };
 struct PanelCtl { int id; WidgetKind kind; XY mm; const char* label; XY lbl; unsigned char anchor; float lblSize; unsigned lblRgb; const char* tip; };
 // anchor: 0 = middle, 1 = start (left-aligned), 2 = end (right-aligned)
@@ -53,20 +55,32 @@ enum LightId {
 static constexpr float kPanelW = 81.280f;
 static constexpr float kPanelH = 128.500f;
 static constexpr float kKnobR   = 3.885f;
-static constexpr float kPadW    = 7.600f;
-static constexpr float kPadH    = 9.000f;
-static constexpr float kPadR    = 2.000f;
+static constexpr unsigned kPadCopper    = 0xB96532u;
+static constexpr unsigned kPadCopperDim = 0x7D4A30u;
+static constexpr unsigned kPadGreen     = 0x1D6F5Fu;
+static constexpr unsigned kPadRefused   = 0x8F4A45u;
+static constexpr float kPadGlowWidth   = 1.600f;
+static constexpr float kPadStrokeWidth = 0.550f;
+static constexpr float kPadInnerScale  = 0.820f;
+static const PadShape kPadShapes[12] = {
+    { { { 3.023f, 78.196f }, { 8.418f, 78.951f }, { 13.097f, 80.390f }, { 13.150f, 85.113f }, { 11.486f, 89.986f }, { 6.614f, 90.208f }, { 1.255f, 88.756f }, { 1.385f, 83.319f } }, { 2.000f, 81.000f }, { 5.400f, 82.600f }, { 0.034f, 77.154f }, { 14.334f, 91.296f } },
+    { { { 17.288f, 78.404f }, { 22.680f, 78.140f }, { 26.865f, 80.489f }, { 27.000f, 81.000f }, { 26.400f, 86.200f }, { 20.711f, 89.668f }, { 15.692f, 88.028f }, { 14.800f, 82.948f } }, { 16.200f, 80.700f }, { 23.020f, 82.600f }, { 13.887f, 77.040f }, { 28.047f, 90.532f } },
+    { { { 35.358f, 77.966f }, { 41.973f, 78.732f }, { 47.698f, 80.227f }, { 47.932f, 85.100f }, { 41.600f, 87.600f }, { 38.600f, 90.400f }, { 34.071f, 88.300f }, { 33.814f, 83.309f } }, { 34.200f, 80.700f }, { 40.640f, 82.600f }, { 32.762f, 76.910f }, { 49.380f, 91.210f } },
+    { { { 53.511f, 78.658f }, { 59.740f, 78.064f }, { 64.646f, 80.635f }, { 65.053f, 85.105f }, { 63.428f, 90.290f }, { 57.424f, 89.944f }, { 51.325f, 88.582f }, { 51.270f, 83.331f } }, { 52.000f, 81.000f }, { 58.260f, 82.600f }, { 49.957f, 77.075f }, { 66.060f, 91.425f } },
+    { { { 69.450f, 77.800f }, { 75.170f, 78.698f }, { 79.087f, 80.881f }, { 80.305f, 85.168f }, { 78.049f, 89.804f }, { 73.259f, 90.670f }, { 68.983f, 88.015f }, { 67.630f, 83.236f } }, { 68.800f, 81.000f }, { 75.880f, 82.600f }, { 66.821f, 76.748f }, { 81.138f, 91.590f } },
+    { { { 3.114f, 95.072f }, { 8.392f, 96.026f }, { 13.156f, 97.644f }, { 13.020f, 103.687f }, { 11.850f, 110.528f }, { 6.590f, 110.444f }, { 2.101f, 107.568f }, { 1.125f, 101.364f } }, { 2.000f, 98.000f }, { 5.400f, 102.800f }, { 0.274f, 93.983f }, { 14.312f, 111.928f } },
+    { { { 17.878f, 95.660f }, { 23.890f, 94.897f }, { 28.624f, 98.113f }, { 30.000f, 103.808f }, { 27.028f, 109.523f }, { 21.552f, 110.612f }, { 15.544f, 108.178f }, { 15.636f, 101.454f } }, { 16.300f, 98.000f }, { 23.020f, 102.800f }, { 14.237f, 93.869f }, { 30.862f, 111.497f } },
+    { { { 35.249f, 98.528f }, { 42.020f, 99.209f }, { 46.562f, 101.467f }, { 48.088f, 105.537f }, { 45.678f, 110.276f }, { 39.664f, 111.200f }, { 34.216f, 108.517f }, { 33.892f, 103.809f } }, { 34.200f, 101.600f }, { 40.640f, 102.800f }, { 32.827f, 97.440f }, { 48.909f, 112.112f } },
+    { { { 53.349f, 95.240f }, { 59.740f, 94.736f }, { 64.857f, 97.852f }, { 64.745f, 103.657f }, { 63.482f, 110.373f }, { 57.378f, 110.276f }, { 51.612f, 107.900f }, { 50.808f, 101.348f } }, { 52.000f, 98.000f }, { 58.260f, 102.800f }, { 49.844f, 93.604f }, { 66.050f, 111.737f } },
+    { { { 69.587f, 94.652f }, { 75.131f, 95.784f }, { 79.501f, 97.957f }, { 80.435f, 103.798f }, { 77.822f, 109.292f }, { 73.236f, 111.032f }, { 68.499f, 107.845f }, { 68.280f, 101.469f } }, { 68.800f, 98.000f }, { 75.880f, 102.800f }, { 67.208f, 93.549f }, { 81.333f, 111.876f } },
+    { { { 17.949f, 114.840f }, { 24.574f, 114.549f }, { 30.462f, 116.660f }, { 30.380f, 121.756f }, { 28.453f, 127.118f }, { 22.164f, 126.950f }, { 15.527f, 125.528f }, { 15.456f, 119.841f } }, { 16.400f, 117.400f }, { 23.020f, 123.000f }, { 14.101f, 113.449f }, { 31.750f, 128.319f } },
+    { { { 52.825f, 114.000f }, { 59.630f, 115.019f }, { 64.386f, 117.224f }, { 65.612f, 121.798f }, { 63.187f, 126.860f }, { 57.348f, 127.790f }, { 52.052f, 124.973f }, { 50.578f, 119.753f } }, { 52.000f, 117.400f }, { 58.260f, 123.000f }, { 49.756f, 112.948f }, { 66.461f, 128.719f } },
+};
 static constexpr float kFaderW  = 6.800f;
 static constexpr float kFaderH  = 25.290f;
 static constexpr float kSwitchW = 5.000f;
 static constexpr float kSwitchH = 9.000f;
 static constexpr float kJackR   = 4.200f;
-static constexpr unsigned kCollarRefused  = 0x8F4A45u;
-static constexpr unsigned kCollarExcursed = 0xB96532u;
-static constexpr unsigned kCollarLive     = 0x1D6F5Fu;
-static constexpr unsigned kCollarIdle     = 0xD7CDBBu;
-static constexpr float kCollarWLive = 0.550f;
-static constexpr float kCollarWIdle = 0.280f;
 static const PanelCtl kParamCtls[] = {
     { MOTION, WK_MACRO, {16.900f, 45.420f}, "", {16.900f, 45.420f}, 0, 2.200f, 0x171713, "MOTION -- how much everything moves  [S31]" },
     { DENSITY, WK_MACRO, {32.730f, 45.480f}, "", {32.730f, 45.480f}, 0, 2.200f, 0x171713, "DENSITY -- how much happens  [S32]" },
@@ -74,30 +88,30 @@ static const PanelCtl kParamCtls[] = {
     { PACE, WK_MACRO, {64.470f, 45.500f}, "", {64.470f, 45.500f}, 0, 2.200f, 0x171713, "PACE -- stretched to rhythmic  [S34]" },
     { WANDER, WK_MACRO, {16.890f, 62.820f}, "", {16.890f, 62.820f}, 0, 2.200f, 0x171713, "WANDER -- predictable to wandering  [S30]" },
     { SPACE, WK_MACRO, {64.460f, 62.830f}, "", {64.460f, 62.830f}, 0, 2.200f, 0x171713, "SPACE -- close to vast  [S35]" },
-    { PAD_1, WK_PAD, {5.400f, 82.600f}, "1", {5.400f, 83.510f}, 0, 2.600f, 0x171713, "Place 1 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
-    { PAD_2, WK_PAD, {23.020f, 82.600f}, "2", {23.020f, 83.510f}, 0, 2.600f, 0x171713, "Place 2 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
-    { PAD_3, WK_PAD, {40.640f, 82.600f}, "3", {40.640f, 83.510f}, 0, 2.600f, 0x171713, "Place 3 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
-    { PAD_4, WK_PAD, {58.260f, 82.600f}, "4", {58.260f, 83.510f}, 0, 2.600f, 0x171713, "Place 4 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
-    { PAD_5, WK_PAD, {75.880f, 82.600f}, "5", {75.880f, 83.510f}, 0, 2.600f, 0x171713, "Place 5 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
-    { PAD_6, WK_PAD, {5.400f, 102.800f}, "6", {5.400f, 103.710f}, 0, 2.600f, 0x171713, "Place 6 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
-    { PAD_7, WK_PAD, {23.020f, 102.800f}, "7", {23.020f, 103.710f}, 0, 2.600f, 0x171713, "Place 7 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
-    { PAD_8, WK_PAD, {40.640f, 102.800f}, "8", {40.640f, 103.710f}, 0, 2.600f, 0x171713, "Place 8 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
-    { PAD_9, WK_PAD, {58.260f, 102.800f}, "9", {58.260f, 103.710f}, 0, 2.600f, 0x171713, "Place 9 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
-    { PAD_10, WK_PAD, {75.880f, 102.800f}, "10", {75.880f, 103.710f}, 0, 2.600f, 0x171713, "Place 10 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
-    { PAD_11, WK_PAD, {23.020f, 123.000f}, "11", {23.020f, 123.910f}, 0, 2.600f, 0x171713, "Place 11 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
-    { PAD_12, WK_PAD, {58.260f, 123.000f}, "12", {58.260f, 123.910f}, 0, 2.600f, 0x171713, "Place 12 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
+    { PAD_1, WK_PAD, {5.400f, 82.600f}, "01", {2.000f, 81.000f}, 0, 2.600f, 0xB96532, "Place 1 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
+    { PAD_2, WK_PAD, {23.020f, 82.600f}, "02", {16.200f, 80.700f}, 0, 2.600f, 0xB96532, "Place 2 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
+    { PAD_3, WK_PAD, {40.640f, 82.600f}, "03", {34.200f, 80.700f}, 0, 2.600f, 0xB96532, "Place 3 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
+    { PAD_4, WK_PAD, {58.260f, 82.600f}, "04", {52.000f, 81.000f}, 0, 2.600f, 0xB96532, "Place 4 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
+    { PAD_5, WK_PAD, {75.880f, 82.600f}, "05", {68.800f, 81.000f}, 0, 2.600f, 0xB96532, "Place 5 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
+    { PAD_6, WK_PAD, {5.400f, 102.800f}, "06", {2.000f, 98.000f}, 0, 2.600f, 0xB96532, "Place 6 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
+    { PAD_7, WK_PAD, {23.020f, 102.800f}, "07", {16.300f, 98.000f}, 0, 2.600f, 0xB96532, "Place 7 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
+    { PAD_8, WK_PAD, {40.640f, 102.800f}, "08", {34.200f, 101.600f}, 0, 2.600f, 0xB96532, "Place 8 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
+    { PAD_9, WK_PAD, {58.260f, 102.800f}, "09", {52.000f, 98.000f}, 0, 2.600f, 0xB96532, "Place 9 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
+    { PAD_10, WK_PAD, {75.880f, 102.800f}, "10", {68.800f, 98.000f}, 0, 2.600f, 0xB96532, "Place 10 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
+    { PAD_11, WK_PAD, {23.020f, 123.000f}, "11", {16.400f, 117.400f}, 0, 2.600f, 0xB96532, "Place 11 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
+    { PAD_12, WK_PAD, {58.260f, 123.000f}, "12", {52.000f, 117.400f}, 0, 2.600f, 0xB96532, "Place 12 -- tap: go there. Hold: reroll all six macro domains, the ground stays. Tap again: back." },
     { FADER_L, WK_FADER, {4.610f, 56.750f}, "", {4.610f, 56.750f}, 0, 2.200f, 0x171713, "Fader S36 -- assignable from the context menu" },
     { FADER_R, WK_FADER, {76.740f, 56.800f}, "", {76.740f, 56.800f}, 0, 2.200f, 0x171713, "Fader S37 -- assignable from the context menu" },
     { SW_L, WK_SWITCH, {30.340f, 86.370f}, "", {30.340f, 86.370f}, 0, 2.200f, 0x171713, "Switch S09/S10 -- assignable from the context menu" },
     { SW_R, WK_SWITCH, {45.250f, 92.880f}, "", {45.250f, 92.880f}, 0, 2.200f, 0x171713, "Switch S07/S08 -- assignable from the context menu" },
 };
 static const PanelCtl kOutputCtls[] = {
-    { OUT_L, WK_OUT, {4.310f, 15.150f}, "L", {4.310f, 20.750f}, 0, 2.200f, 0x171713, "Main out, left" },
-    { OUT_R, WK_OUT, {4.330f, 30.600f}, "R", {4.330f, 36.200f}, 0, 2.200f, 0x171713, "Main out, right" },
+    { OUT_L, WK_OUT, {4.310f, 15.150f}, "L", {4.310f, 20.750f}, 0, 2.200f, 0xD7D1C5, "Main out, left" },
+    { OUT_R, WK_OUT, {4.330f, 30.600f}, "R", {4.330f, 36.200f}, 0, 2.200f, 0xD7D1C5, "Main out, right" },
 };
 static const PanelTxt kTexts[] = {
-    { {45.130f, 10.000f}, 4.200f, 0x656056, 2, 300, "FireFlow" },
-    { {46.230f, 10.000f}, 4.200f, 0x171713, 1, 700, "GLOW" },
-    { {78.280f, 16.750f}, 1.150f, 0xFFFDF7, 0, 700, "ALPHA" },
+    { {38.440f, 10.000f}, 3.200f, 0xB96532, 2, 500, "FIREFLOW" },
+    { {40.640f, 10.000f}, 3.200f, 0xD7D1C5, 0, 400, "/" },
+    { {42.840f, 10.000f}, 3.200f, 0xB96532, 1, 700, "GLOW" },
 };
 } } // namespace spkyvcv::glow
