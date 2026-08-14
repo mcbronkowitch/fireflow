@@ -156,7 +156,7 @@ TEST_CASE("engine-map §1: on a STEP lane _flow_melody picks phrase or waveform"
     }
 
     // The phrase only exists in FLOW (step off): much smaller, seed-dependent
-    // ambitus (map: 0.155..0.840 over ten seeds) and a small value set.
+    // ambitus (map: 0.155..0.822 over ten seeds) and a small value set.
     {
         ModLane l = make_lane(true, 12345);
         l.set_step(false, 8);

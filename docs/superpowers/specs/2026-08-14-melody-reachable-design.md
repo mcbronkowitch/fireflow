@@ -62,6 +62,13 @@ take `shape_value`. Measured with the real `generate()` over 20 000 terrains:
 | **either deck above SHAPE 0.95** | **0.01 %** |
 | drone archetype (SHAPE capped at 0.25) | 49.2 % of terrains, **0.00 %** in that zone |
 
+> **Superseded — see [`docs/engine-map.md`](../../engine-map.md) §7.** Re-measured
+> on 2026-08-14 over masters 1…20 000 with every reroll counter at 0 and no
+> overlay: mean **0.314**, above 0.75 **4.84 %**, drone **49.5 %**. The 0.01 %
+> and the drone's 0.00 % in the fade zone both reproduce. This table's figures
+> are consistent with a smaller draw of the same population and are kept as the
+> record of what this spec was argued on; the map is the authority.
+
 `P_SHAPE_A/B` appears in `kBaseRules` and in **no** story curve, so no Glow macro
 can move it; only the in-lane offsets can, and they total ±0.40 on the melodic lane.
 
@@ -237,7 +244,8 @@ Each must be shown RED once (`fireflow-tests-must-be-able-to-fail`).
 - **SHAPE is left inert on the melodic lane.** That is an improvement over a knob
   whose bottom half plays a fixed sine, and it is not an answer. Giving SHAPE a
   new melodic meaning belongs to the SHAPE spec.
-- **SHAPE's own reachability** (mean drawn 0.316, top quarter in 4.65 %) is
+- **SHAPE's own reachability** (mean drawn 0.316, top quarter in 4.65 % —
+  superseded, **0.314** and **4.84 %**, `docs/engine-map.md` §7) is
   untouched. After this spec it no longer gates the melody.
 - **SMOOTH** is a separate spec.
 - **The Marbles round** is unscheduled (`roadmap.md:2534`, "⬜ unscheduled",

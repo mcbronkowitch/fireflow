@@ -134,19 +134,30 @@ instead — measured 3 of 4 `Principle`s differing at SHAPE 0.00, 0.50 and 1.00 
 all four seeds, pinned by `tests/test_melody_reachable.cpp`. Its ambitus is
 **much smaller than the staircase's, and not a constant**.
 
-**The phrase ambitus is a distribution, not a number.** Ten seeds, correct
-construction order, rate 0.5 Hz, 20 s, VARY 0:
+**The phrase ambitus is a distribution, not a number.** Ten seeds (999, 12345,
+7, 4242, 31337, 1, 2, 3, 77, 888), correct construction order, **default FORM**
+(`Principle::Hierarchical`, `song_form.h:52` — FORM now moves this lane at every
+SHAPE, so a probe that sets another `Principle` measures another distribution),
+rate 0.5 Hz, SHAPE 0, SMOOTH 0, RANGE 1, VARY 0, 20 s:
 
 ```
-0.155  0.246  0.295  0.351  0.354  0.388  0.590  0.653  0.698  0.840
+0.155  0.246  0.315  0.318  0.351  0.549  0.594  0.607  0.698  0.822
 ```
 
-Since 2026-08-14 this is the STEP note deck's distribution as well, not only
-FLOW's: over ten seeds (999, 12345, 7, 4242, 31337, 1, 2, 3, 77, 888) the STEP
-p2p equals the FLOW p2p to the last bit at 8 steps — 0.155 … 0.822 on that set.
+Since 2026-08-14 that is the STEP note deck's distribution as well, not only
+FLOW's: at 8 steps the STEP p2p equals the FLOW p2p to the last bit on every
+seed in the set, so this is **one** distribution, not two. Re-measured on
+2026-08-14 by the map-catches-up task, because it was two: the list this file
+carried differed from the measured one in six of its ten entries and reproduced
+under no variation tried (10 / 20 / 30 / 60 s, 4 / 8 / 16 steps, SHAPE 0 and 1,
+rate 0.2 and 0.5 Hz, with and without a `set_step()` call), while the
+`0.155 … 0.822` endpoints quoted beside it for the STEP row reproduced exactly.
 
 So the ratio against the 2.000 sine staircase runs **2.4× to 12.9×** over the seed
-set above, and a wider set will widen it. Any design that routes phrase values
+set above, and a wider set will widen it. That is a ratio of **lane p2p**; it is
+**not** the ratio on the pitch axis, where the clamp of `part.cpp:117` cuts it to
+1.8×–10.7× — see §7's closing paragraph before quoting either at the other's
+question. Any design that routes phrase values
 where a waveform used to be pays a factor in that band — **quote the range, never
 a single figure.** An earlier version of this file canonicalised "4.8×" from one
 seed measured in the wrong construction order; that is exactly the mistake this
@@ -162,10 +173,10 @@ the modulation layer: the axes look symmetric on the panel and are not.
 
 | Axis | Sources summed into the played value | Additional multiplicative paths |
 |---|---|---|
-| **SHAPE** | `_shape` + `_ev_shape` + `_shape_offset` + `_kick_shape`, then clamped (`lane.cpp:554`) | — |
+| **SHAPE** | `_shape` + `_ev_shape` + `_shape_offset` + `_kick_shape`, then clamped (`lane.cpp:559`) | — |
 | **SMOOTH** | `_smooth` **only** (`lane.cpp:349` → `:360`) | — |
 | **RATE** | — | `_phase_inc * (1 + _ev_rate)`, plus DRIFT via `set_rate_scale` |
-| **PHASE** | `_phase + _ev_phase` (`lane.cpp:114, 552`) | — |
+| **PHASE** | `_phase + _ev_phase` (`lane.cpp:114, 557`) | — |
 
 **SHAPE has four writers. SMOOTH has exactly one.** `ModLane::_smooth` has a
 setter, a reader, and nothing else — grep for it and filter out the unrelated
@@ -178,7 +189,7 @@ The three hidden SHAPE contributors and their ranges:
 | Source | Set by | Range | Character |
 |---|---|---|---|
 | `_shape_offset` | DRIFT, per control tick (`center.cpp:143-144`) | `±0.15 · tap · weather · drift`, taps `{+0.8, −1.0}` — the smoothed DRIFT knob is a **fourth factor**, which is what makes the term exactly 0 while DRIFT is 0 | continuous, τ ≈ 45 s |
-| `_ev_shape` | EVOLVE random walk (`lane.cpp:693`) | clamped `±0.25` | drifts, decays on settle |
+| `_ev_shape` | EVOLVE random walk (`lane.cpp:698`) | clamped `±0.25` | drifts, decays on settle |
 | `_kick_shape` | SPOT (`lane.cpp:403,418`) | `±0.35` per draw, **accumulates** | decays to 0, τ ≈ 1.5 s |
 
 **The fan-in also differs per lane.** `SuperModulator::spot()` skips `LANE_PITCH`
@@ -221,7 +232,7 @@ non-zero park point across seeds, and VARY reviving the corner):
 Above SHAPE 0.75 the bank crossfades pulse → S&H (`waveforms.h`), so this is the
 **top quarter** of the knob. On a **non-melodic lane in FLOW** `_sh_slot()`
 returns 0 permanently — not because `_cur_step` is stale, but because of the
-**explicit early return** at `lane.cpp:564`, `if (!_step_mode && !_flow_melody_on()) return 0;`,
+**explicit early return** at `lane.cpp:569`, `if (!_step_mode && !_flow_melody_on()) return 0;`,
 taken before `_cur_step` is read at all — its observable face (distinct = 1 over
 30 s) is pinned by `tests/test_engine_map.cpp` (§4 case). So "S&H" is a frozen
 constant, and the
@@ -260,10 +271,10 @@ Behaviour that depends on a variable is only as knowable as that variable's
 
 | Variable | Written by | Never written by |
 |---|---|---|
-| `_cur_step` | STEP path and the FLOW-melody path. `tick()` also writes it in a non-STEP branch (`lane.cpp:1013`), unreachable for the FLOW LFO only because `next_edge` is always 1.0 there | — but for the FLOW LFO this is moot: `_sh_slot()` **early-returns 0** at `lane.cpp:564` before reading `_cur_step` at all. Do not reason about its value on that path |
+| `_cur_step` | STEP path and the FLOW-melody path. `tick()` also writes it in a non-STEP branch (`lane.cpp:1018`), unreachable for the FLOW LFO only because `next_edge` is always 1.0 there | — but for the FLOW LFO this is moot: `_sh_slot()` **early-returns 0** at `lane.cpp:569` before reading `_cur_step` at all. Do not reason about its value on that path |
 | `_flow_melody` | `part.cpp:43,441` from the engine id: **off for SAMPLER and BBD** | any host directly; Glow cannot reach it except by changing the engine |
 | `_melodic` | `super_modulator.cpp:14`, unconditionally, once | anything else, ever |
-| `_active[slot]` | boots **all true** (`part.h:640`); only writer today is `Fireflow.cpp:881` (LANE_PITCH, `!samplerPart`), pushed every block | **the flow layer — `flow.cpp` never calls `set_target_active`** |
+| `_active[slot]` | boots **all true** (`part.h:639`); only writer today is `Fireflow.cpp:881` (LANE_PITCH, `!samplerPart`), pushed every block | **the flow layer — `flow.cpp` never calls `set_target_active`** |
 | `_shape_offset` | `center.cpp:143-144` every control tick | — (it is re-pushed continuously; it cannot be "left" at a value) |
 
 ### Settled: does a Sampler deck's PITCH lane modulate under Glow?
@@ -379,28 +390,56 @@ clang++ -std=c++17 -O2 -Iengine -Ithird_party -Ilib/DaisySP/Source \
 
 §2 and §3 describe what a knob position *does*. This section is about which
 positions a Glow terrain ever *reaches* — a different question, and the one that
-decides whether a feature exists in play. Measured with the real `generate()`
-over 20 000 terrains (not a re-implementation of `draw_span`):
+decides whether a feature exists in play. Measured with the real `generate()`,
+not a re-implementation of `draw_span`, over **masters 1…20 000, every reroll
+counter at 0, no `BaseOverlay`** — that population is what every percentage below
+means:
 
 | | |
 |---|---|
-| mean drawn SHAPE | **0.316** |
-| highest SHAPE seen in 20 000 terrains | 0.956 |
-| either deck in the §3 fade zone (SHAPE > 0.75) | **4.65 %** |
-| either deck above SHAPE 0.95 | **0.01 %** |
-| deck A drawn with RANGE < 0.25 | **24.97 %** |
-| terrains whose archetype is *drone* | **49.2 %** |
+| mean drawn SHAPE, both decks | **0.314** |
+| highest SHAPE seen in the 20 000 terrains | 0.955 |
+| either deck in the §3 fade zone (SHAPE > 0.75) | **4.84 %** |
+| either deck above SHAPE 0.95 | **0.01 %** (2 terrains) |
+| deck A drawn with RANGE < 0.25 | **25.29 %** (deck B 24.98 %) |
+| terrains whose archetype is *drone* | **49.5 %** |
 
-Per archetype, share with a deck in the fade zone: **drone 0.00 %**, the other
-three 8.5–10.1 %. The drone can never get there — `taste.h:998-999` caps its
-SHAPE span at `{0, 0.25}` — and it is half of all terrains.
+Per archetype, share with a deck in the fade zone: **drone 0.00 %** — 0 of the
+9905 drone terrains — pulse 10.1 %, arp 8.9 %, fragment 9.7 %. The drone can
+never get there: `taste.h:998-999` caps its SHAPE span at `{0, 0.25}`, and it is
+half of all terrains.
+
+Re-measured on 2026-08-14. The figures this table carried before (4.65 %, mean
+0.316, max 0.956, deck A RANGE 24.97 %, drone 49.2 %) do not reproduce over the
+population above; shifting the master range by one (0…19 999) moves nothing past
+the third digit. **They look like a smaller draw of this same population, not a
+different generator** — measured over masters 1…N for N ∈ {1, 2, 5, 10, 20, 50,
+100} × 1000, the mean is 0.3160 at N = 5 000 (the old figure exactly) and deck A's
+RANGE < 0.25 is 24.96 % at N = 10 000, while max SHAPE climbs 0.885 → 0.962 and
+the drone share wanders 48.9 – 50.2 % with N. The one figure that never printed
+is the fade-zone share: **4.60 – 5.02 % across all seven sizes**, never 4.65 %.
+
+So quote the fade-zone share as *what a population of this size prints*, not as a
+constant: it is **4.84 %** at masters 1…20 000, and about 5 % anywhere in that
+range. `ModLane::_compute_raw()`'s comment quotes the same 4.84 % and points
+here — the two were corrected together, on purpose, so they cannot disagree
+again. **What does not move with N is the zero.** Over masters 1…100 000 — a
+superset of every size above — **0 of 50 238 drone terrains** reach the fade
+zone, and the highest SHAPE ever drawn on a drone is **0.2449**, under the 0.25
+cap with room to spare. That is `taste.h:998-999` showing through, not a sampling
+result, and it is the only figure in this section safe to quote without its
+population.
 
 **Neither SHAPE nor RANGE is reachable by any macro.** `P_SHAPE_A/B` and
-`P_RANGE_A/B` appear in `kBaseRules` and in **no** story curve, so nothing in the
-macro layer can move them; only the in-lane offsets of §2 can, and on the melodic
-lane those total ±0.40. A drone's 0.25 base plus 0.40 is 0.65, still under the
-0.75 where the bank starts crossfading toward the phrase. **On half of all
-terrains the melodic phrase is unreachable by any means available to the player.**
+`P_RANGE_A/B` appear in `kBaseRules` (`taste.h:991-999`) and in **no** story
+curve, so nothing in the macro layer can move them; only the in-lane offsets of
+§2 can, and on the melodic lane those total ±0.40. A drone's 0.25 base plus 0.40
+is 0.65, still under the 0.75 where the bank starts crossfading toward the
+phrase. **On a SAMPLER or BBD deck, therefore, the melodic phrase is unreachable
+on half of all terrains by any means available to the player** — those two engine
+classes still route PITCH through the waveform bank in both modes (§1), and the
+drone's cap is not something a knob or a macro can lift. A note deck no longer
+depends on any of this: since `07d5b9d` it emits its phrase at every SHAPE.
 
 ### The melody's second gate: RANGE, through the quantizer
 
@@ -420,15 +459,54 @@ VARY 0, mean of seeds 12345/777/4242):
 At the bottom of its RANGE band a deck plays the entire phrase — every FORM,
 every SONG, every seed — on **one** scale degree.
 
-### And the inversion worth remembering
+### And the inversion, which has since inverted
 
-FORM is not inert; it is unreachable. At SHAPE 1.0, three of the four other
-`Principle`s emit a different value set from `TwoMotif`. At SHAPE 0.0, **none of
-them do** — all five collapse onto the same 5-value sine staircase, which spans
-the *whole* pitch axis and clears 3–4 scale degrees.
+This section used to close on FORM being unreachable rather than inert: at SHAPE
+1.0 three of the four other `Principle`s emitted a different value set from
+`TwoMotif`, at SHAPE 0.0 none of them did, and the terrain draws the quarter of
+the knob where that begins to change in 4.84 % of cases, its far end in 0.01 %.
+Commit `07d5b9d` (spec `melody-reachable`) took the
+SHAPE dependence off the note engines, and the measurement moved with it.
+Re-measured 2026-08-14 — STEP, 8 steps, rate 0.5 Hz, SMOOTH 0, RANGE 1, VARY 0,
+20 s, `set_melodic()` before `init()`, seeds 999 / 12345 / 7 / 4242, every cell
+the same on all four:
 
-So the instrument moves more pitch with the thing that carries no melodic
-information than with the phrase, and draws the phrase's corner of the knob in
-0.01 % of terrains. Any SHAPE/SMOOTH design has to answer where on the axis the
-melody should live and where its RANGE headroom comes from — not whether the
-melodic lane emits the phrase, which it already does.
+| deck | SHAPE 0.00 | SHAPE 0.50 | SHAPE 1.00 |
+|---|---|---|---|
+| note engine (`_flow_melody` true) | **3 of 4** | **3 of 4** | 3 of 4 |
+| SAMPLER / BBD | 0 of 4 | 0 of 4 | 3 of 4 |
+
+"*n* of 4" is how many of the four other `Principle`s emit a value set that
+differs from `TwoMotif`'s. On a note deck FORM now reaches the output at every
+SHAPE; on the other two engine classes the old picture stands unchanged, and the
+4.84 % / 0.01 % shares above are what govern them. Pinned by
+`tests/test_melody_reachable.cpp`.
+
+**What did not change is the size of the gesture, and that is the real remaining
+limitation.** The staircase a SAMPLER/BBD deck emits at SHAPE 0 is still p2p
+2.000, which at RANGE 1 saturates the *whole* 36-semitone pitch axis — measured
+36.000 semitones after the base-plus-clamp of `part.cpp:117`, on every seed,
+because ±1.0 around a 0.5 base clips at both ends. The note deck's phrase is
+0.155 … 0.822 p2p over the ten seeds of §1, which through the same chain is
+**3.4 to 19.8 semitones**, i.e. **1.8× to 10.7× narrower**.
+
+⚠️ **That is not the 2.4×–12.9× of §1, and substituting one for the other is a
+mistake this file has now made once.** §1's factor is the ratio of *p2p*, before
+`clampf(0.5f + v, 0.f, 1.f)`; the clamp is exactly what stops it carrying to the
+pitch axis, because it truncates the staircase (which reaches the rails on every
+seed) far harder than the phrase (which mostly does not). It also **reorders the
+seeds**: the widest phrase in p2p is seed 3 at 0.822, but the widest in semitones
+is seed 888 at 19.777, whose p2p is only 0.549. Measured per seed, ten seeds,
+setup as in §1: p2p ratio 2.43× … 12.89×, **semitone ratio 1.82× … 10.69×**.
+Quote the semitone figure whenever the subject is audible pitch — a RANGE design
+sized against 2.4×–12.9× is sized against a limitation overstated by about a
+fifth.
+
+So the instrument still moves less
+pitch with the phrase than it moved with the decoy that carried no melodic
+information; what changed is that the phrase is now what it moves. How much of
+those semitones survives quantization is the RANGE gate above, which is
+**unsolved** — it is what §2.2 of the `melody-reachable` spec is about, and
+nothing on this branch touched it. Settled, and no longer a question for a
+SHAPE/SMOOTH design: where on the SHAPE axis the melody lives. Everywhere, on a
+note deck.
