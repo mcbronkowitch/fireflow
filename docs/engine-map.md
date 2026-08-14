@@ -57,7 +57,8 @@ seed 12345, **`set_melodic()` before `init()`** (see §6 — the order matters).
 | true | true | **true** | 2.000 | 5 | **identical to the row above** |
 
 **`_flow_melody` is ignored whenever `_step_mode` is true.** The last two rows are
-the same measurement. A design that treats "FLOW melody" as a mode orthogonal to
+the same measurement — pinned by `tests/test_engine_map.cpp` (§1 case: the two
+streams are compared sample by sample, plus the staircase-vs-phrase contrast). A design that treats "FLOW melody" as a mode orthogonal to
 STEP is describing a state that does not exist.
 
 **`_melodic` is not a choice.** `super_modulator.cpp:14` sets it unconditionally
@@ -139,7 +140,9 @@ may never reach — and §3 below shows the one place where reaching it matters 
 
 ## 3. The top of the SHAPE knob is a fade-out, not a waveform
 
-Measured with `deadzone.cpp` — texture lane, FLOW, 30 s, seed 999:
+Measured with `deadzone.cpp` — texture lane, FLOW, 30 s, seed 999. Pinned by
+`tests/test_engine_map.cpp` (§3 case: the fade law at 0.90, p2p ≈ 0 at 1.00, the
+non-zero park point across seeds, and VARY reviving the corner):
 
 | SHAPE | VARY | p2p | distinct values |
 |---|---|---|---|
@@ -155,7 +158,9 @@ Above SHAPE 0.75 the bank crossfades pulse → S&H (`waveforms.h`), so this is t
 **top quarter** of the knob. On a **non-melodic lane in FLOW** `_sh_slot()`
 returns 0 permanently — not because `_cur_step` is stale, but because of the
 **explicit early return** at `lane.cpp:564`, `if (!_step_mode && !_flow_melody_on()) return 0;`,
-taken before `_cur_step` is read at all. So "S&H" is a frozen constant, and the
+taken before `_cur_step` is read at all — its observable face (distinct = 1 over
+30 s) is pinned by `tests/test_engine_map.cpp` (§4 case). So "S&H" is a frozen
+constant, and the
 crossfade toward it is an **amplitude fade to a fixed DC offset**. Depth falls
 linearly: p2p = 2·(1 − 4·(sh − 0.75)).
 
