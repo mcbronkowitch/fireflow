@@ -24,8 +24,8 @@ namespace {
 // Pre-conversion init-patch SMOOTH values. Duplicated here rather than
 // included from host/vcv/ because tests/ must not depend on the VCV host.
 // Task 4 converts these together with the three VCV mirrors.
-constexpr float kInitSmoothA = 0.836144507f;
-constexpr float kInitSmoothB = 1.0f;
+constexpr float kInitSmoothA = 0.004974f;
+constexpr float kInitSmoothB = 0.026026f;
 
 float s_sl_echo[PART_COUNT][2][Flux::kMaxSamples];
 float s_sl_bbd[PART_COUNT][2][BbdEngine::kCells];

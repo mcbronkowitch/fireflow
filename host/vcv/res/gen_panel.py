@@ -595,7 +595,13 @@ INIT_DEFAULTS = {
     "RATE_A": 0.184337318,
     "SHAPE_A": 0.000000000,
     "DENSITY_A": 0.534939826,
-    "SMOOTH_A": 0.836144507,
+    # SMOOTH_A/B were 0.836144507 / 1.0 -- the top of the knob, where they sat
+    # because the absolute-seconds slew law made the knob inert (measured: at
+    # most 0.11 dB anywhere in this patch). Converted 2026-08-14 to preserve
+    # the shipped sound under the interval-relative law; see spec
+    # docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md 2.4.
+    # tests/test_smooth_law.cpp's G4' is the gate that these two are right.
+    "SMOOTH_A": 0.004974,
     "RANGE_A": 0.000000000,
     "MELODY_A": 0.768674195,
     "MOD_A": 0.403613269,
@@ -640,7 +646,7 @@ INIT_DEFAULTS = {
     "RATE_B": 0.163855359,
     "SHAPE_B": 0.000000000,
     "DENSITY_B": 0.000000000,
-    "SMOOTH_B": 1.000000000,
+    "SMOOTH_B": 0.026026,
     "RANGE_B": 0.000000000,
     "MELODY_B": 0.671083927,
     "MOD_B": 0.681928277,
