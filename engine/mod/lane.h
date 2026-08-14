@@ -69,6 +69,7 @@ public:
     // (spec 2026-08-12 modulation-pace, Task 7). Incremented in process()'s
     // wrap loop, lane.cpp.
     uint32_t wrap_count_for_test() const { return _wraps; }
+    float last_out_for_test() const { return _last_out; }
 #endif
 
     float process();                  // advance one sample, return post-range value
@@ -241,6 +242,16 @@ private:
     OnePole _slew_tick;          // tick-rate twin of _slew; a lane is driven by
                                  // exactly ONE path, so the twin's state never
                                  // fights the per-sample instance
+
+#ifdef SPKY_TESTING
+    // The value this lane last EMITTED, whichever smoother produced it.
+    // Reading _slew.value() instead would be wrong for every lane driven by
+    // tick() -- which is the four texture lanes in FLOW -- because tick()
+    // writes _slew_tick and leaves _slew at its init value. Written only
+    // under SPKY_TESTING: the per-sample path sits inside a block budget
+    // currently near 96%, and a test accessor does not get to spend it.
+    float _last_out = 0.f;
+#endif
 
     float _sr = 48000.f;
     // The phase accumulator is double, and so is its increment (spec

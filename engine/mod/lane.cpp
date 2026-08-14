@@ -498,6 +498,9 @@ float ModLane::follow(int32_t deck_step, float frac, float shuffle) {
         static_cast<float>(here) + frac, slots, shuffle);
 
     float smoothed = _slew_tick.process(_target);
+#ifdef SPKY_TESTING
+    _last_out = apply_range(smoothed, _range);
+#endif
     return apply_range(smoothed, _range);
 }
 
@@ -782,6 +785,9 @@ float ModLane::process() {
     }
 
     float smoothed = _slew.process(_target);
+#ifdef SPKY_TESTING
+    _last_out = apply_range(smoothed, _range);
+#endif
     return apply_range(smoothed, _range);
 }
 
@@ -1029,5 +1035,8 @@ float ModLane::tick() {
         _target = _compute_raw();
 
     float smoothed = _slew_tick.process(_target);
+#ifdef SPKY_TESTING
+    _last_out = apply_range(smoothed, _range);
+#endif
     return apply_range(smoothed, _range);
 }

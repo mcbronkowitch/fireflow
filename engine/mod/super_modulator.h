@@ -57,6 +57,7 @@ public:
         return _lanes[LANE_PITCH].active_pattern();
     }
     float   lane_rate_hz_for_test(int i) const { return _lanes[i].rate_hz_for_test(); }
+    float lane_last_out_for_test(int i) const { return _lanes[i].last_out_for_test(); }
     // Real motion, not the commanded rate -- see ModLane::wrap_count_for_test.
     uint32_t lane_wraps_for_test(int i)  const { return _lanes[i].wrap_count_for_test(); }
     // The fractional remainder of the current cycle. phase() is already
