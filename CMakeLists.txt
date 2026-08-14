@@ -137,11 +137,6 @@ add_executable(spky_tests
     tests/test_song_lane.cpp
     tests/test_vcv_form_song_migration.cpp
     tests/test_vcv_link_migration.cpp
-    tests/test_glow_ui.cpp
-    tests/test_touch_pads.cpp
-    tests/test_pad_geometry.cpp
-    host/vcv/src/glow_panel.cpp
-    tests/test_glow_panel_manifest.cpp
     tests/test_choke.cpp
     tests/test_filt.cpp
     tests/test_mod_tide.cpp
@@ -167,22 +162,6 @@ add_executable(spky_tests
     tests/test_material.cpp
     tests/test_part_engine_contract.cpp
     tests/test_flow_params.cpp
-    tests/test_flow_rng.cpp
-    tests/test_flow_taste.cpp
-    tests/test_flow_veto.cpp
-    tests/test_flow_mode.cpp
-    engine/flow/terrain.cpp
-    tests/test_flow_terrain.cpp
-    tests/test_flow_terrain_code.cpp
-    tests/test_flow_overlay.cpp
-    tests/test_flow_patch_bridge.cpp
-    tests/test_flow_chord_reach.cpp
-    tests/test_flow_transfer_diff.cpp
-    engine/flow/flow.cpp
-    tests/test_flow_runtime.cpp
-    tests/test_flow_new.cpp
-    tests/test_flow_gesture.cpp
-    tests/test_flow_audio.cpp
     tests/test_param_impact.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
@@ -215,8 +194,6 @@ add_executable(render
     engine/body/mode_bank.cpp
     engine/body/ks_string.cpp
     engine/body/body_voice.cpp
-    engine/flow/terrain.cpp
-    engine/flow/flow.cpp
 )
 target_include_directories(render PRIVATE host engine third_party)
 target_link_libraries(render PRIVATE nlohmann_json daisysp_min)
@@ -279,8 +256,8 @@ add_test(
 
 # --- panel guards (host/vcv/res/test_*.py) ---------------------------------
 # res/test_panel.py (97 tests -- the authority on the whole generated-artifact
-# contract), res/test_hw_panel.py and res/test_flow_panel.py were manual-only:
-# nothing in CI or ctest ran them, and during the 2026-08-09
+# contract) and res/test_hw_panel.py were manual-only: nothing in CI or ctest
+# ran them, and during the 2026-08-09
 # hw-control-reduction plan one of them briefly had no runner at all while
 # task reports cited it as a passing gate (review finding IMPORTANT 4). Each
 # script resolves its own paths relative to host/vcv/, hence WORKING_DIRECTORY
@@ -290,14 +267,6 @@ add_test(
 # to configure at all rather than silently skipping these -- consistent with
 # wavetable_bank_fresh just above, which already depends on the same
 # ${Python3_EXECUTABLE} unconditionally.
-add_custom_target(glow_assets_guard ALL
-    COMMAND ${Python3_EXECUTABLE} res/validate_glow_assets.py
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
-    COMMENT "Validating Glow panel raster assets"
-)
-
-add_dependencies(render glow_assets_guard)
-
 add_test(
     NAME panel_guard
     COMMAND ${Python3_EXECUTABLE} res/test_panel.py
@@ -309,25 +278,3 @@ add_test(
     COMMAND ${Python3_EXECUTABLE} res/test_hw_panel.py
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
 )
-
-add_test(
-    NAME touch2_geometry_guard
-    COMMAND ${Python3_EXECUTABLE} res/test_touch2_geometry.py
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
-)
-
-add_test(
-    NAME flow_panel_guard
-    COMMAND ${Python3_EXECUTABLE} res/test_flow_panel.py
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
-)
-
-# Keep the asset validator independently visible in CTest.  flow_panel_guard
-# imports and runs the same contract first, so it also remains the single
-# guard used by existing build jobs.
-add_test(
-    NAME glow_assets_guard
-    COMMAND ${Python3_EXECUTABLE} res/validate_glow_assets.py
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
-)
-set_tests_properties(flow_panel_guard PROPERTIES DEPENDS glow_assets_guard)

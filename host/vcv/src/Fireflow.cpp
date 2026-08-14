@@ -7,7 +7,6 @@
 #include <osdialog.h>
 #include "plugin.hpp"
 #include "generated_panel.hpp"   // enums + control table (generated from res/gen_panel.py)
-#include "flow_patch_bridge.hpp" // to_flow_base/encode_base: the patch -> Glow pad carrier
 #include "init_patch.hpp"       // sampler.vcvm snapshot + non-param init state
 #include "form_song_migration.hpp"
 #include "link_migration.hpp"
@@ -1801,54 +1800,6 @@ static void appendFireflowMenu(Menu* menu, Fireflow* m) {
             sub->addChild(createBoolPtrMenuItem("Engine: test tone (dev)", "",
                                                 &m->smp[p].testTone));
         }));
-    }
-
-    // --- carry this patch onto a Glow pad (spec 2026-08-11) ----------------
-    // LAST in the menu, and behind a separator, because it brings a block of
-    // report rows with it: anything below would read as another report row, and
-    // "visible in the same gesture" is satisfied identically down here.
-    //
-    // The clipboard string is spkyvcv::clipboard_base's -- encode_base's pairs,
-    // the same encoding pool.tsv's base column and Glow's JSON use, with the
-    // whole report commented out underneath. Glow's "Paste patch onto pad" is
-    // the other end, and it decodes the string entire, comments and all.
-    //
-    // Why the report travels at all, in either half: only a third of flow's
-    // parameters are base rules, Fireflow has no ROOT control, and several
-    // values that do travel get rewritten by taste.h's vetoes on arrival. A
-    // converter that carries what it can and says nothing about the rest looks
-    // correct while losing the tonality. See flow_patch_bridge.hpp's header --
-    // the report is the deliverable.
-    menu->addChild(new MenuSeparator);
-    {
-        // Built HERE, at menu-open time, and the clipboard string is captured
-        // BY VALUE rather than recomputed inside the handler. Rack blocks knob
-        // gestures while a context menu is open, so the two could not actually
-        // disagree today -- but a report describing one patch above an item
-        // that copies another is a failure nobody would ever see, and the copy
-        // costs a few hundred bytes to make impossible.
-        spkyvcv::FireflowPatch fp{};
-        for (int i = 0; i < spkyvcv::kFireflowParamCount; ++i)
-            fp.p[i] = m->params[i].getValue();
-        // Not a param, and it still changes what the engine was: testTone
-        // re-points a Sampler deck at ENGINE_TEST_TONE. The converter reports
-        // it as lost; it cannot see it unless it is handed over.
-        fp.test_tone[0] = m->smp[0].testTone;
-        fp.test_tone[1] = m->smp[1].testTone;
-        const spkyvcv::TransferReport rep = spkyvcv::to_flow_base(fp);
-        const std::string payload = spkyvcv::clipboard_base(rep);
-
-        menu->addChild(createMenuItem("Copy patch as flow base", "",
-            [payload]() {
-                glfwSetClipboardString(APP->window->win, payload.c_str());
-            }));
-        // The HEAVY notes only -- which parameter, and how badly. The full
-        // report is thirty notes of prose and would bury the menu; it rides on
-        // the clipboard, where a text editor can hold it, and the last row here
-        // says how many notes were left there. A rejected transfer says so in
-        // the first row, which is the one a player most needs before pasting.
-        for (const std::string& line : spkyvcv::report_summary_lines(rep))
-            menu->addChild(createMenuLabel(line));
     }
 }
 

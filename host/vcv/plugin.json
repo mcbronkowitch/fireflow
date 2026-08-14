@@ -17,12 +17,6 @@
       "tags": ["Function generator", "LFO", "Random", "Synth voice", "Effect", "Polyphonic"]
     },
     {
-      "slug": "Glow",
-      "name": "FireFlow Glow",
-      "description": "The flow machine on a Synthux Touch 2 surface: twelve places on twelve pads, six macro trim knobs, two assignable faders, two assignable switches.",
-      "tags": ["Generator", "Random", "Synth voice", "Drone", "Polyphonic"]
-    },
-    {
       "slug": "FireflowHW",
       "name": "FireFlow HW Draft",
       "description": "60 HP hardware-envelope draft of the full instrument: static labels, real knob clearances, no LED rings. The regrouping workbench, not a release module.",

@@ -1,6 +1,5 @@
 // engine/flow/flow_params.h
 #pragma once
-#include "flow/flow_ids.h"
 #include "instrument.h"
 
 namespace spky { namespace flow {

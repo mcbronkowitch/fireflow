@@ -1771,3 +1771,21 @@ TEST_CASE("pace: turns per unit time follow the commanded rate, through the whol
         CHECK(turns < commanded * 1.001);
     }
 }
+
+// The only assertion in the suite that a step count reaches the deck it was
+// addressed to. Inherited from tests/test_flow_mode.cpp, deleted with the flow
+// layer (removal spec 4.4); its own comment observed that swapping the two
+// arguments would otherwise leave the whole suite green.
+TEST_CASE("instrument: set_step routes each count to its own deck") {
+    Instrument in;
+    in.init(48000.f);          // engine only, no FX chain needed -- the idiom
+                               // the neighbouring cases in this file use
+    in.set_sync(true);
+    in.set_step(PART_A, true, 6);
+    in.set_step(PART_B, true, 11);
+    CHECK(in.deck_steps(PART_A) == 6);
+    CHECK(in.deck_steps(PART_B) == 11);
+    in.set_step(PART_A, true, 16);
+    CHECK(in.deck_steps(PART_A) == 16);
+    CHECK(in.deck_steps(PART_B) == 11);   // untouched by A's change
+}

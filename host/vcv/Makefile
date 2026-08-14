@@ -42,8 +42,6 @@ SOURCES += \
 	$(REPO)/engine/parts/part.cpp \
 	$(REPO)/engine/parts/bbd_engine.cpp \
 	$(REPO)/engine/instrument.cpp \
-	$(REPO)/engine/flow/terrain.cpp \
-	$(REPO)/engine/flow/flow.cpp \
 	$(REPO)/engine/center/center.cpp \
 	$(REPO)/engine/fx/grit.cpp \
 	$(REPO)/engine/fx/flux.cpp \
@@ -86,17 +84,6 @@ SOURCES += \
 # plugin.json is deliberately absent here: plugin.mk:15 already adds it, and
 # naming it again made `cp` warn about a duplicate source on every dist run.
 # That duplication predates this change -- the old `res plugin.json` had it too.
-DISTRIBUTABLES += res/factory.wav res/Fireflow.svg res/Glow.svg res/FireflowHW.svg \
-	res/GlowRear.png res/GlowFaceplate.png res/GlowTouch.png \
-	res/GlowSwitchDown.png res/GlowSwitchCenter.png res/GlowSwitchUp.png
-
-# plugin.mk supplies the dist recipe.  Make must validate before either the
-# regular build or that recipe can copy a panel asset into the package.
-PYTHON ?= python
-.PHONY: validate_glow_assets
-validate_glow_assets:
-	$(PYTHON) res/validate_glow_assets.py
-
-all dist: validate_glow_assets
+DISTRIBUTABLES += res/factory.wav res/Fireflow.svg res/FireflowHW.svg
 
 include $(RACK_DIR)/plugin.mk
