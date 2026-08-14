@@ -16,7 +16,9 @@ namespace {
 // STEPS 8 makes "pattern_groove.len == _effective_length()" true by
 // construction and cannot fail on it. A caller that sets mode and count
 // independently -- the render host's set_step action -- pushes 2..16 in FLOW
-// as well as in STEP (super_modulator.cpp), so 12 is a value really produced.
+// as well as in STEP (super_modulator.cpp), so 12 is a value a caller can
+// really produce (no shipped scenario sets a step count in FLOW, but
+// apply_mode_and_steps(in, false, 12, 12) in engine/param_table.h now can).
 constexpr int kOffGridSteps = 12;
 
 // A single deck in FLOW at a slow rate, with the neighbour muted so nothing

@@ -132,10 +132,6 @@ the `all dist: validate_glow_assets` prerequisite). Missing `:96-100` breaks
 `make` once the script is gone — which is exactly the manual check §7 relies on
 to prove the VCV host still builds.
 
-**Working tree** — the stale worktree `.worktrees/glow-hardware-panel-design/`,
-a second checkout of `codex/glow-hardware-panel-design`, whose head `3b6a27d` is
-an ancestor of `main`. Verified clean.
-
 ### 3.1 Survivors that need edits, not deletion
 
 - **`tests/test_flow_params.cpp` → `tests/test_param_table.cpp`.** Its two cases
@@ -151,6 +147,24 @@ an ancestor of `main`. Verified clean.
   engine feature and survives, so one replacement scenario exercising
   `set_pace()` without the flow layer is written in the same commit. Neither old
   scenario is gated in CTest; they were hand-run listening material.
+
+### 3.2 What is not deleted: the stale worktree
+
+An earlier revision of this spec listed `.worktrees/glow-hardware-panel-design/`
+under "What is deleted — Working tree". That did not happen and was not
+attempted as a slip: `git worktree remove` on it refuses with `fatal: working
+trees containing submodules cannot be moved or removed`, and forcing it past
+that refusal was correctly not done in this branch.
+
+Consequence: the worktree still holds a complete second on-disk copy of
+`engine/flow/`, `Glow.cpp`, `flow_patch_bridge.hpp` and
+`hardware/glow-faceplate/`. An unscoped `grep -rn Glow .` from the repo root
+still finds all of it there, even though §3's deletions removed every trace
+from the tracked tree. Its head, `3b6a27d`, is an ancestor of `main`, so a
+forced removal (`git worktree remove --force`, after the submodule is dealt
+with) would lose no work that isn't already on `main`. Whether to force it is
+the owner's decision, not this branch's — this spec only records the state
+accurately.
 
 ## 4. What moves out, and what has to be rebuilt
 
@@ -419,6 +433,19 @@ the kind of gate that cannot go red for the right reason.
   ordering dependency and answers its ownership question.
 - It does not address the six open follow-ups recorded for the flow patch
   transfer. They are moot; the roadmap entry carrying them goes.
+- **It does not replace `tests/test_flow_audio.cpp`'s whole-instrument
+  audio-health gates.** §4.4 named two clean losses but did not weigh this
+  file's other five cases (`:208`, `:273`, `:418`, `:583`, `:673` in the
+  pre-deletion file): NaN-free plus RMS ceiling/floor checks over filtered
+  seed populations, with a documented history of catching real regressions
+  (the 0x707 ceiling breach, the 0x404 silence floor, the `should_fail`-marker
+  trap it left behind). They cannot survive without `generate()`, which is
+  gone. After this branch the suite's only whole-instrument audio-health
+  checks are the four frozen operating points' `deck_audible` `REQUIRE`s
+  (§4.3) and the two fixed render-hash renders (`ctrl_identity`,
+  `wave_formant_sweep`); nothing asserts NaN-freedom over any populated patch
+  set any more. A future health gate needs to be designed from nothing, not
+  assumed to still exist somewhere.
 
 ## 9. Errors revision 1 made, kept as warnings
 

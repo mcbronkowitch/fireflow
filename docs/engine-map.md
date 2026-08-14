@@ -299,7 +299,7 @@ Behaviour that depends on a variable is only as knowable as that variable's
 | `_cur_step` | STEP path and the FLOW-melody path. `tick()` also writes it in a non-STEP branch (`lane.cpp:1018`), unreachable for the FLOW LFO only because `next_edge` is always 1.0 there | — but for the FLOW LFO this is moot: `_sh_slot()` **early-returns 0** at `lane.cpp:569` before reading `_cur_step` at all. Do not reason about its value on that path |
 | `_flow_melody` | `part.cpp:43,441` from the engine id: **off for SAMPLER and BBD** | any host directly — the only way to move it is to change the deck's engine |
 | `_melodic` | `super_modulator.cpp:14`, unconditionally, once | anything else, ever |
-| `_active[slot]` | boots **all true** (`part.h:639`); the only writer that runs by itself is `Fireflow.cpp:881` (LANE_PITCH, `!samplerPart`), pushed every block | **`engine/` itself — no engine code ever writes it. Away from that one host line it moves only when a caller sets it explicitly (the render host's `set_target_active` scenario action, or a test)** |
+| `_active[slot]` | boots **all true** (`part.h:639`); the only writer that runs by itself is `Fireflow.cpp:880` (LANE_PITCH, `!samplerPart`), pushed every block | **`engine/` itself — no engine code ever writes it. Away from that one host line it moves only when a caller sets it explicitly (the render host's `set_target_active` scenario action, or a test)** |
 | `_shape_offset` | `center.cpp:143-144` every control tick | — (it is re-pushed continuously; it cannot be "left" at a value) |
 
 ### Settled: a Sampler deck's PITCH lane is deactivated by the host, not by the engine
@@ -427,7 +427,8 @@ played SHAPE is the knob plus the three in-lane offsets of §2 and nothing else,
 and on the melodic lane those offsets total ±0.40. So a SHAPE knob parked below
 0.35 cannot reach the 0.75 where the bank starts crossfading toward the phrase,
 whatever else is turned. **On a SAMPLER or BBD deck the melodic phrase
-therefore lives in the top quarter of SHAPE and nowhere else** — those two
+therefore lives in the top quarter of the *played* SHAPE and nowhere else**
+(knob 0.35 and up, not knob 0.75 and up) — those two
 engine classes still route PITCH through the waveform bank in both modes (§1).
 A note deck no longer depends on any of this: since `07d5b9d` it emits its
 phrase at every SHAPE.

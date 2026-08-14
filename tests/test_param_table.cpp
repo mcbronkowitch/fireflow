@@ -12,9 +12,49 @@ TEST_CASE("param table: table is sane") {
     }
 }
 
+TEST_CASE("param table: inventory marker -- P_MODE, P_PACE, P_COUNT") {
+    // Inherited from the deleted tests/test_flow_mode.cpp, whose own comment
+    // put it best: "The first two CHECKs are the invariant. The third is
+    // NOT -- it is a deliberate INVENTORY MARKER, and appending a parameter
+    // WILL redden it. That is the intent: appending is free ... but it is
+    // not free for the reader, and the one edit it should cost is bumping
+    // this line while re-reading the paragraph above."
+    //
+    // The removal spec (docs/superpowers/specs/2026-08-14-flow-glow-removal-
+    // design.md, 4.4) judged the original's first two CHECKs moot -- they
+    // pinned P_MODE's absolute index because the deleted terrain generator
+    // keyed its per-parameter RNG streams by index, and nothing keys a
+    // stream by index any more. That judgment was correct and this case does
+    // NOT restate those two.
+    //
+    // But the third CHECK was never about terrain streams -- it is the only
+    // thing in this suite that pins P_COUNT, i.e. the only guard against a
+    // parameter being inserted anywhere in the enum without a human noticing.
+    // That matters more now than it did before this branch: commit 1 added
+    // tests/param_impact_points.h, whose frozen `float v[P_COUNT]` vectors
+    // are bound BY POSITION. Insert a ParamId anywhere before the end and
+    // every later row silently shifts one slot -- C++ zero-fills the tail of
+    // a short aggregate initializer without a warning, so the file still
+    // compiles. The parameter-impact gate then goes red, but it reports
+    // "these parameters died", not "your frozen patches are stale": the
+    // diagnosis cost is high and the failure actively misleads. Appending
+    // P_COUNT - 1 restores.
+    //
+    // So: if this CHECK reddens because you inserted a parameter, do not
+    // treat it as a terrain-stream problem (there is no terrain layer left
+    // to reseed) -- treat it as a instruction to go re-check
+    // tests/param_impact_points.h's comment for what an insertion does to
+    // those vectors, then bump P_MODE and P_PACE below to match the enum as
+    // it now stands and re-read this paragraph again before moving on.
+    CHECK(P_MODE == 62);
+    CHECK(P_PACE == P_MODE + 1);
+    CHECK(P_PACE == P_COUNT - 1);      // inventory marker: bump on append
+}
+
 TEST_CASE("param table: the two rows other code reads by hand") {
     // P_MODE is discrete and binary; P_PACE is continuous 0..1 with 0.5 = x1.
-    // Inherited from tests/test_flow_mode.cpp (removal spec 4.4).
+    // Inherited from tests/test_flow_mode.cpp (removal spec
+    // docs/superpowers/specs/2026-08-14-flow-glow-removal-design.md, 4.4).
     CHECK(kParams[P_MODE].steps == 2);
     CHECK(kParams[P_MODE].lo == doctest::Approx(0.f));
     CHECK(kParams[P_MODE].hi == doctest::Approx(1.f));
@@ -33,6 +73,13 @@ TEST_CASE("param table: apply_mode_and_steps reaches what apply_param refuses") 
     apply_mode_and_steps(in, true, 6, 11);
     CHECK(in.deck_steps(PART_A) == 6);
     CHECK(in.deck_steps(PART_B) == 11);
+    // The deleted test_flow_mode.cpp:59 invariant ("steps never run without a
+    // grid") -- step_on() must track synced() on both decks -- was true only
+    // because it was drawn from a single global P_MODE row. Now that this
+    // function is the only place forcing STEP and SYNC together, the
+    // invariant is asserted nowhere else; pin it here.
+    CHECK(in.step_on(PART_A) == in.synced(PART_A));
+    CHECK(in.step_on(PART_B) == in.synced(PART_B));
 }
 
 TEST_CASE("param table: apply routes to the engine (spot checks via observers)") {

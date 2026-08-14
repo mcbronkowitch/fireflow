@@ -206,7 +206,8 @@ bool deck_audible(const FrozenPoint& rp, int deck) {
 
 struct Terrains { FrozenPoint flow[kPer], step[kPer]; };
 
-// The generator that drew these is gone (removal spec 4.3). What it did on
+// The generator that drew these is gone (removal spec
+// docs/superpowers/specs/2026-08-14-flow-glow-removal-design.md, 4.3). What it did on
 // every build and this cannot is re-check that both decks still carry the
 // mix -- so that check runs here instead, live, on each frozen point. A
 // change that leaves a deck near-silent at one of these points would

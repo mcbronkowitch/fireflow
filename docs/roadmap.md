@@ -38,7 +38,14 @@ is actually built today, and what is still design-only.
   it have no product left to belong to. **Nothing was thrown away:** the specs,
   the plans, the macro audit, the parameter map and the by-ear tuning values
   are in [`docs/attic/`](attic/README.md), which also carries the commands to
-  recover the code from git. Spec
+  recover the code from git. **Coverage lost and not replaced:**
+  `test_flow_audio.cpp`'s whole-instrument NaN-free plus RMS ceiling/floor
+  gates over filtered seed populations went with it and needed `generate()`,
+  which is gone. After this removal the suite's only whole-instrument
+  audio-health checks are the four frozen operating points' `deck_audible`
+  `REQUIRE`s (`tests/test_param_impact.cpp`) and the two fixed render-hash
+  renders (`ctrl_identity`, `wave_formant_sweep`) — **nothing asserts
+  NaN-freedom over any populated patch set any more.** Spec
   `docs/superpowers/specs/2026-08-14-flow-glow-removal-design.md`, plan
   `docs/superpowers/plans/2026-08-14-flow-glow-removal.md`); before that,
   2026-08-13 (SHAPE/SMOOTH rework: its spec is written —

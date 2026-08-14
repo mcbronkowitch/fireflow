@@ -1,10 +1,38 @@
 // GENERATED once on 2026-08-14 by tools/dump_points.cpp,
 // which was then deleted. See the removal plan, task 1.
+// The generator is gone, so THIS FILE IS NOW HAND-MAINTAINED: any future
+// edit to it (or to the enum it is keyed against) is a human edit, with no
+// program left to regenerate it or check it against the enum.
 //
 // These are the four operating points tests/test_param_impact.cpp
 // used to draw from the terrain generator on every build. The
 // generator is gone; the points are not. deck_audible() still runs
 // live against each one -- see load_points() in the test.
+//
+// EACH `v[P_COUNT]` BELOW IS POSITIONAL, bound to the ParamId enum in
+// engine/param_table.h by array index, with only a trailing `// P_NAME`
+// comment for a human to cross-check by eye. That has two very different
+// consequences for editing the enum in engine/param_table.h:
+//
+//  - APPENDING a new ParamId at the end (right before P_COUNT) is genuinely
+//    harmless. Every existing row here keeps its old index and its old
+//    meaning; the short aggregate initializer below zero-fills the new,
+//    unused tail slot, and nothing else changes.
+//  - INSERTING a new ParamId anywhere else silently shifts every later row
+//    down by one position. C++ accepts a short aggregate initializer without
+//    a warning, so this file keeps compiling -- but from the insertion point
+//    on, every value is now paired with the wrong parameter, and the tail
+//    that has nowhere left to go is zero-filled. tests/test_param_impact.cpp
+//    then goes red, but it reports "these parameters died", which is a
+//    misleading diagnosis for "your frozen points are stale".
+//
+// HOW TO TELL WHICH HAPPENED: compare P_COUNT and P_MODE/P_PACE against
+// tests/test_param_table.cpp's inventory-marker case (`P_MODE == 62`,
+// `P_PACE == P_COUNT - 1`). If that case still passes unmodified, nothing
+// was inserted above P_MODE and this file's rows are still aligned. If you
+// changed the enum and that case reddened as intended, re-derive these
+// vectors (there is no generator left -- re-measure by hand, or shift the
+// affected rows to match the new indices) before trusting a red run here.
 #pragma once
 #include "param_table.h"
 

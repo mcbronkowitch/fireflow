@@ -215,8 +215,19 @@ inline void apply_param(Instrument& in, int param, float v) {
 // have to be: set_step() takes mode and count together and set_sync() is
 // global, so a per-parameter, stateless setter cannot see all three at once.
 // Flow::push_mode_and_steps() used to own this and was deleted with the flow
-// layer (removal spec 4.2); a panel driving the instrument through kParams
-// needs it or it cannot set the operating mode or either step count.
+// layer (removal spec
+// docs/superpowers/specs/2026-08-14-flow-glow-removal-design.md, 4.2); a
+// panel driving the instrument through kParams needs it or it cannot set the
+// operating mode or either step count.
+//
+// This forces both decks' STEP state and SYNC together, so it gives up the
+// per-deck freedom Instrument actually has: set_step() is per-deck
+// (instrument.h:91) while set_sync() is the only global piece
+// (instrument.h:424), and the shipped Fireflow VCV module uses that freedom
+// every day -- host/vcv/src/Fireflow.cpp:892 calls
+// `set_step(p, steps > 0, steps)` inside a per-deck loop, so deck A can run
+// STEP while deck B runs free. A caller that needs that split cannot reach
+// it through this function and must call set_step()/set_sync() directly.
 inline void apply_mode_and_steps(Instrument& in, bool step_mode,
                                  int steps_a, int steps_b) {
     in.set_sync(step_mode);
