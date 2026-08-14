@@ -356,32 +356,53 @@ void ModLane::set_fixed_slew(bool on) {
 }
 
 void ModLane::_update_slew() {
-    // smooth 0 -> ~1 sample (near passthrough), smooth 1 -> ~0.5 s.
-    float t = _fixed_slew ? 0.02f : (0.00002f * std::pow(25000.f, _smooth));
-    if (_flow_melody_on()) {
-        // Clamp against the interval the notes ACTUALLY have, not the raw slot:
-        // where the note floor decimates, the raw slot is far shorter than the
-        // notes are, and clamping to it would make the glide much tighter than
-        // anything needs. Guard _phase_inc == 0 the way step_samples() does --
-        // in double it yields inf and the clamp goes inert, which is benign but
-        // silent, and a silent inert guard is the shape this project fixes.
-        // _ev_rate is deliberately not a recompute trigger here: re-deriving
-        // the slew at every wrap for a +-20% term inside a 0.35 safety factor
-        // buys nothing, and the value is refreshed at the next rate change
-        // anyway.
-        const double denom = _phase_inc * (1.0 + double(_ev_rate))
-                           * double(_effective_length());
+    // SMOOTH is a fraction of the lane's own INTERVAL, not a wall-clock time.
+    // The old law was `0.00002 * pow(25000, _smooth)` -- absolute seconds
+    // against cycles spanning four decades, so the knob's reach was whatever
+    // the rate made it: inert on a 40 s cycle, annihilating on a 0.03 s one.
+    // Spec: docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md 1-2.
+    //
+    // _fixed_slew keeps the absolute 0.02 s on purpose. It is reachable only
+    // from the render host's set_fixed_slew scenario action and is an
+    // absolute-seconds escape hatch for test fixtures (spec 4).
+    float t;
+    if (_fixed_slew) {
+        t = 0.02f;
+    } else {
+        // Samples per cycle. _ev_rate is part of the phase advance, exactly as
+        // in step_samples() -- and is deliberately NOT a recompute trigger; see
+        // the note below the clamp.
+        const double denom = _phase_inc * (1.0 + double(_ev_rate));
+        double interval = 0.0;                 // in SAMPLES
         if (denom > 0.0) {
-            const double slot_samples = 1.0 / denom;
-            const double effective = slot_samples > double(_note_min_samples)
-                                   ? slot_samples : double(_note_min_samples);
-            // OnePole::init takes SECONDS (onepole.h:14, k = 1/(time_s*sr)),
-            // so the sample count has to be divided by _sr. Without this the
-            // clamp never binds.
-            const float cap =
-                static_cast<float>(double(kFlowSlewFrac) * effective / double(_sr));
-            if (t > cap) t = cap;
+            const double cycle = 1.0 / denom;
+            if (_step_mode) {
+                // One STEP of THIS lane. In STEP each lane carries its own slot
+                // count (kLaneRatio reappears as slots), so one knob position
+                // is a different tau per lane -- intended, spec 2.3.
+                interval = cycle / double(_steps);
+            } else if (_flow_melody_on()) {
+                // One SLOT, floored at the note minimum: where the floor
+                // decimates, the raw slot is far shorter than the notes
+                // actually are, and using it would glide much tighter than
+                // anything needs.
+                const double slot = cycle / double(_effective_length());
+                const double floor_s = double(_note_min_samples);
+                interval = slot > floor_s ? slot : floor_s;
+            } else {
+                // FLOW LFO: the lane cycle. NOTE _effective_length() is wrong
+                // here -- it returns _steps on this path, not 1.
+                interval = cycle;
+            }
         }
+        const float top = _melodic ? kFlowSlewFrac : kSmoothTopTexture;
+        t = static_cast<float>(double(_smooth) * double(top) * interval)
+          / _sr;
+        // OnePole::init treats time_s <= 0 as passthrough (k = 1), which is the
+        // right behaviour at SMOOTH 0 -- but floor it at one sample so a
+        // stopped lane (denom == 0) cannot produce a negative or NaN tau.
+        const float min_t = 1.f / _sr;
+        if (!(t > min_t)) t = min_t;
     }
     _slew.init(_sr, t);
     // Tick twin: the exact kTickInterval-sample compound of the per-sample

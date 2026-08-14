@@ -16,6 +16,17 @@ public:
     // SynthEngine::kCtrlInterval -- the mod layer must not include synth.
     static constexpr int kTickInterval = 96;
 
+    // SMOOTH's ceiling on the four texture lanes, as a fraction of the lane
+    // cycle. LANE_PITCH uses kFlowSlewFrac instead: a note must arrive inside
+    // its own slot, and one value cannot serve both cases (spec 2.1).
+    //
+    // 0.5 rather than 1.0 by ear, 2026-08-14: at 0.5 the right stop lands
+    // within 0.3% of where the OLD law's right stop already sat (p2p 0.322 vs
+    // 0.323 at a 0.5 Hz patch), so the change is confined to the middle of the
+    // axis -- which is where the complaint was. 1.0 buys 6 dB more ceiling at
+    // a stop nobody asked for. Revisable by ear; the law does not depend on it.
+    static constexpr float kSmoothTopTexture = 0.5f;
+
     void init(float sample_rate, uint32_t seed);
 
     void set_rate_hz(float hz);
