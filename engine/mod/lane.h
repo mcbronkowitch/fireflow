@@ -198,6 +198,16 @@ private:
     // getter for the flag, which is the naming collision spotykach-gotchas
     // records for set_depth.
     bool _melody_engine_on() const { return _melodic && (_step_mode || _flow_melody); }
+    // "this lane carries composed notes", i.e. the deck runs a note engine.
+    // NAMING TRAP: _flow_melody reads as "FLOW melody is on" and is not that.
+    // Part pushes it from the engine id at parts/part.cpp:43 and :441 --
+    // `_engine_id != ENGINE_SAMPLER && != ENGINE_BBD` -- in BOTH modes, so it
+    // is an engine-class flag. Gating on it rather than on _melody_engine_on()
+    // is what keeps this out of a BBD deck's PITCH lane, which is the delay
+    // clock and not a note: kBbdFlowRangeMax derives its 2 from apply_range
+    // itself (flow/taste.h:586-588), and the owner ruled for that trade
+    // 2026-08-07.
+    bool _note_lane() const { return _melodic && _flow_melody; }
     void _prime_floors() { _since_fire = _note_min_samples;
                            _since_phrase = _phrase_min_samples; }
     int   _groove_k() const;              // DENSE -> how many ranked cell notes play

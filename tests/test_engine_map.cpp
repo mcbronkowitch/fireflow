@@ -82,13 +82,16 @@ TEST_CASE("engine-map §3: SHAPE top quarter is an amplitude fade onto a held of
     CHECK(vary.p2p > 0.4f);
 }
 
-TEST_CASE("engine-map §1: _flow_melody is ignored whenever STEP is on") {
-    // The last two rows of the lane state table are the same measurement:
-    // melodic + STEP produces the identical output stream with the flag on or
-    // off. Same seed, same code path — the streams must match sample by sample.
-    auto run = [](bool flow_melody) {
+TEST_CASE("engine-map §1: on a STEP lane _flow_melody picks phrase or waveform") {
+    // The last two rows of the lane state table are two behaviours, not one.
+    // _flow_melody is an engine-class flag (note deck vs SAMPLER/BBD), and
+    // since 2026-08-14 a note lane emits its phrase in STEP as in FLOW while a
+    // SAMPLER/BBD lane keeps running the waveform bank. Same seed, same
+    // everything else — the streams must diverge, and by far more than the
+    // 6e−08 of §5 (measured max deviation 1.086 at this seed).
+    auto run = [](bool flow_melody, int steps = 8) {
         ModLane l = make_lane(true, 12345);
-        l.set_step(true, 8);
+        l.set_step(true, steps);
         l.set_flow_melody(flow_melody);
         l.set_shape(0.f);
         std::vector<float> out(48000 * 20);
@@ -100,18 +103,56 @@ TEST_CASE("engine-map §1: _flow_melody is ignored whenever STEP is on") {
     float max_diff = 0.f;
     for (size_t i = 0; i < off.size(); ++i)
         max_diff = std::max(max_diff, std::fabs(off[i] - on[i]));
-    CHECK(max_diff < 1e-7f);
+    CHECK(max_diff > 0.5f);
 
-    // And that shared stream is the 5-value sine staircase (p2p 2.0), which
-    // carries no melodic information — not the phrase.
+    // With the flag off — a SAMPLER or BBD deck — that stream is still the
+    // 5-value sine staircase (p2p 2.0), which carries no melodic information.
+    {
+        ModLane l = make_lane(true, 12345);
+        l.set_step(true, 8);
+        l.set_flow_melody(false);
+        l.set_shape(0.f);
+        Sweep s = sweep(l, 20);
+        CHECK(s.p2p == doctest::Approx(2.0f).epsilon(0.02));
+        CHECK(s.distinct <= 6);
+    }
+
+    // With it on — a note deck — it is the phrase: the same small,
+    // seed-dependent ambitus the FLOW row has, at SHAPE 0 as at SHAPE 1.
     {
         ModLane l = make_lane(true, 12345);
         l.set_step(true, 8);
         l.set_flow_melody(true);
         l.set_shape(0.f);
         Sweep s = sweep(l, 20);
-        CHECK(s.p2p == doctest::Approx(2.0f).epsilon(0.02));
-        CHECK(s.distinct <= 6);
+        CHECK(s.p2p > 0.05f);
+        CHECK(s.p2p < 1.0f);
+        CHECK(s.distinct >= 2);
+        CHECK(s.distinct <= 32);
+    }
+
+    // At 8 steps the STEP clock scaling (8/steps) is 1, so the note lane's STEP
+    // stream is the FLOW stream sample for sample. This is the identity the old
+    // version of this case asserted between the two STEP rows; it holds between
+    // the two note-deck rows instead, and only at this step count — measured
+    // max deviation 0.298 at 4 steps and 0.526 at 16.
+    {
+        ModLane l = make_lane(true, 12345);
+        l.set_step(false, 8);
+        l.set_flow_melody(true);
+        l.set_shape(0.f);
+        std::vector<float> flow(48000 * 20);
+        for (float& v : flow) v = l.process();
+        float d = 0.f;
+        for (size_t i = 0; i < flow.size(); ++i)
+            d = std::max(d, std::fabs(flow[i] - on[i]));
+        CHECK(d < 1e-7f);
+
+        std::vector<float> on16 = run(true, 16);
+        float d16 = 0.f;
+        for (size_t i = 0; i < flow.size(); ++i)
+            d16 = std::max(d16, std::fabs(flow[i] - on16[i]));
+        CHECK(d16 > 0.1f);
     }
 
     // The phrase only exists in FLOW (step off): much smaller, seed-dependent

@@ -542,13 +542,18 @@ void ModLane::reset(float phase) {
 }
 
 float ModLane::_compute_raw() const {
-    // FLOW melody mode emits the phrase's note directly. This is arithmetically
-    // shape_value(ph, 1.f, pitch[slot]) -- at shape 1 the clamp in
-    // waveforms.h:26 forces i == 3, f == 1 and the return at :32 is sh_hold
-    // exactly -- but it is written out rather than pinned, so SHAPE's inertness
-    // on this lane is visible here instead of implied by an argument. What
-    // SHAPE should mean for a melody is the SHAPE/SMOOTH rework's question.
-    if (_flow_melody_on()) return _active_pattern().pitch[_sh_slot()];
+    // A note lane emits its phrase directly, in STEP as in FLOW. Routing it
+    // through shape_value instead would weight the phrase only in the bank's
+    // fourth arm (waveforms.h:32, shape >= 0.75): below that the composed pitch
+    // is computed and discarded, and every FORM emitted the same sine staircase
+    // -- measured at SHAPE 0, p2p 2.000 over 5 distinct values on seeds
+    // 999/12345/7/4242/31337 alike, and 0 of 4 Principles differing from
+    // TwoMotif. The terrain draws that top quarter in 4.65 % of cases and never
+    // on a drone (docs/engine-map.md §7), so the melody system was unreachable
+    // where the instrument plays. SHAPE is therefore inert on this lane in both
+    // modes, consistently. What SHAPE should mean for a melody is the
+    // SHAPE/SMOOTH rework's question.
+    if (_note_lane()) return _active_pattern().pitch[_sh_slot()];
     const double phd = _phase + double(_ev_phase);
     float ph = static_cast<float>(phd - std::floor(phd));
     float sh = clampf(_shape + _ev_shape + _shape_offset + _kick_shape, 0.f, 1.f);

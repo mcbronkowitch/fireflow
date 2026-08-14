@@ -60,12 +60,13 @@ rot would be expensive, pin it with a test instead (§1, §3 and §4 are pinned 
 
 ## 1. The lane state space
 
-A `ModLane`'s behaviour is a product of three flags, not one mode. Two derived
-predicates (`lane.h:195,200`) do the actual gating:
+A `ModLane`'s behaviour is a product of three flags, not one mode. Three derived
+predicates do the actual gating:
 
 ```
 _flow_melody_on()   = _melodic && !_step_mode && _flow_melody
 _melody_engine_on() = _melodic && (_step_mode || _flow_melody)
+_note_lane()        = _melodic && _flow_melody
 ```
 
 Eight flag combinations collapse to **five behaviours**. Measured at SMOOTH 0
@@ -74,17 +75,41 @@ seed 12345, **`set_melodic()` before `init()`** (see §6 — the order matters).
 
 | `_melodic` | `_step_mode` | `_flow_melody` | p2p @ SHAPE 0 | distinct | behaviour |
 |---|---|---|---|---|---|
-| false | false | – | 2.000 | 13152 | texture LFO, continuous |
+| false | false | – | 2.000 | 13152 † | texture LFO, continuous |
 | false | true | – | 2.000 | 5 | texture, STEP follower — staircase |
-| true | false | false | 2.000 | 13152 | PITCH **as an LFO** (Sampler, BBD) |
+| true | false | false | 2.000 | 13152 † | PITCH **as an LFO** (Sampler, BBD) |
 | true | false | true | **0.246** | 7 | FLOW melody phrase — *seed-dependent, see below* |
-| true | true | false | 2.000 | 5 | STEP melody |
-| true | true | **true** | 2.000 | 5 | **identical to the row above** |
+| true | true | false | 2.000 | 5 | STEP melody through the bank (Sampler, BBD) |
+| true | true | **true** | **0.246** | 7 | **STEP melody phrase — note deck** |
 
-**`_flow_melody` is ignored whenever `_step_mode` is true.** The last two rows are
-the same measurement — pinned by `tests/test_engine_map.cpp` (§1 case: the two
-streams are compared sample by sample, plus the staircase-vs-phrase contrast). A design that treats "FLOW melody" as a mode orthogonal to
-STEP is describing a state that does not exist.
+**† These two cells do not reproduce.** Every other cell above was re-measured on
+2026-08-14 under the setup stated above and matched to the digit; the `distinct`
+count of the two *continuous* rows came out **17903**, not 13152, on two
+independent re-measurements (and unchanged between `-O2` and `-O3`). The old
+figure is left standing because nothing establishes *why* it differs — replacing
+one unverified count with another buys nothing. Note what the quantity is: the
+number of distinct `float` values a continuous LFO visits in 960 000 samples, i.e.
+a count of rounding outcomes, which is exactly what §5 says not to trust. **The
+p2p of those rows, which is the load-bearing figure, reproduces exactly.** No test
+pins either count; the §1 case pins the melodic rows only.
+
+**`_flow_melody_on()` is false whenever `_step_mode` is true — but the pitch
+output no longer is.** The predicate still reads as written above and still
+excludes STEP; what changed on 2026-08-14 (spec `melody-reachable`) is that
+`_compute_raw()` gates on `_note_lane()` instead, which has no `_step_mode` term.
+So a note deck emits its composed phrase in STEP as in FLOW, and a SAMPLER or BBD
+deck keeps running the waveform bank in both modes. The last two rows are two
+behaviours, not one measurement: at seed 12345 their streams differ by **1.086**
+peak, measured. Pinned by `tests/test_engine_map.cpp` (§1 case). What is still
+true is the shape of the flag: `_flow_melody` is an engine-class flag, not a mode,
+so a design that treats "FLOW melody" as a mode orthogonal to STEP is describing a
+state that does not exist.
+
+At the 8 steps this table is measured at, the STEP note deck's stream is the FLOW
+note deck's stream **sample for sample** (max deviation 0.0 over ten seeds) — the
+step clock's `8/steps` scaling is 1 there. That is a property of the step count,
+not of the lane: at 4 steps the two diverge by 0.298 and at 16 by 0.526, measured
+at seed 12345. Both halves are pinned by the §1 case.
 
 **`_melodic` is not a choice.** `super_modulator.cpp:14` sets it unconditionally
 to `i == LANE_PITCH`. Exactly one lane of five is melodic, on every deck, always.
@@ -93,11 +118,21 @@ There is no host call that changes this.
 ### The consequence that keeps getting missed
 
 Read the p2p column across a *row*, not down it. At SHAPE 0 a melodic STEP lane
-emits **2.000** — the sine sampled at 8 step boundaries, which is 5 distinct
-values (`0, ±0.7078`, `±1` — `wave_sine` is `fast_sin`, error < 1.2e−3),
-seed-independent, identical on every FORM and every `SongMode`. It carries no
-melodic information at all. The real phrase only appears at the S&H end of the
-bank — and its ambitus is **much smaller, and not a constant**.
+on a **SAMPLER or BBD** deck emits **2.000** — the sine sampled at 8 step
+boundaries, which is 5 distinct values (`0, ±0.7078`, `±1` — `wave_sine` is
+`fast_sin`, error < 1.2e−3), seed-independent, identical on every FORM and every
+`SongMode`. It carries no melodic information at all, and on those two engines the
+phrase still only appears at the S&H end of the bank.
+
+Until 2026-08-14 that was the measurement for **every** STEP deck, note engines
+included, and it is the reason the melody system was unreachable where the
+instrument plays: FORM moved nothing below SHAPE 0.75 (measured, 0 of 4
+`Principle`s differing from `TwoMotif` at SHAPE 0.00 and 0.50, on seeds
+999/12345/7/4242), and §7 below shows how rarely the terrain draws that quarter —
+never at all on a drone. A note deck now emits the phrase at every SHAPE
+instead — measured 3 of 4 `Principle`s differing at SHAPE 0.00, 0.50 and 1.00 on
+all four seeds, pinned by `tests/test_melody_reachable.cpp`. Its ambitus is
+**much smaller than the staircase's, and not a constant**.
 
 **The phrase ambitus is a distribution, not a number.** Ten seeds, correct
 construction order, rate 0.5 Hz, 20 s, VARY 0:
@@ -106,8 +141,12 @@ construction order, rate 0.5 Hz, 20 s, VARY 0:
 0.155  0.246  0.295  0.351  0.354  0.388  0.590  0.653  0.698  0.840
 ```
 
-So the ratio against the 2.000 sine staircase runs **2.4× to 12.9×** over this
-seed set, and a wider set will widen it. Any design that routes phrase values
+Since 2026-08-14 this is the STEP note deck's distribution as well, not only
+FLOW's: over ten seeds (999, 12345, 7, 4242, 31337, 1, 2, 3, 77, 888) the STEP
+p2p equals the FLOW p2p to the last bit at 8 steps — 0.155 … 0.822 on that set.
+
+So the ratio against the 2.000 sine staircase runs **2.4× to 12.9×** over the seed
+set above, and a wider set will widen it. Any design that routes phrase values
 where a waveform used to be pays a factor in that band — **quote the range, never
 a single figure.** An earlier version of this file canonicalised "4.8×" from one
 seed measured in the wrong construction order; that is exactly the mistake this
@@ -259,8 +298,10 @@ the day an M6 pad can toggle `LANE_PITCH` that push will silently overwrite it,
   exact-equality gate fails near zero and cannot be trusted to go RED for the
   right reason.**
 - Consequence: `shape_value(ph, 1.0f, hold)` does **not** return `hold` exactly,
-  despite the comment at `lane.cpp:546-548` and the claim in
-  `2026-08-13-flow-melody-engine-design.md:328-330`. Both are wrong.
+  despite the claim in `2026-08-13-flow-melody-engine-design.md:328-330`, which is
+  wrong. `ModLane::_compute_raw()` carried the same claim in a comment until
+  2026-08-14, when spec `melody-reachable` rewrote that comment and dropped it —
+  do not reintroduce it there.
   `test_waveforms.cpp:14-15` passes only because it already uses `.epsilon(0.01)`.
   Any gate written as bit-identity across this call cannot be relied on.
 

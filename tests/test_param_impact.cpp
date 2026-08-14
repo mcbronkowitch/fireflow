@@ -92,18 +92,18 @@ bool has_sampler(const Terrain& t) {
 // different instruments by design. Covered by tests/test_flow_mode.cpp.
 //
 // FORM and SONG used to be excluded here too, for the same "unstable sample"
-// reason DENSITY left the mode-exclusive gate under: in STEP, ModLane::
-// _compute_raw() still blends the melody pattern through shape_value()'s S&H
-// segment (waveforms.h), so whether FORM/SONG move anything on a STEP
-// terrain depends on a SHAPE value the terrain draws. Spec 2026-08-13
-// flow-melody-engine Task 8 wires set_flow_melody(true) into every SYNTH-
-// engine PITCH lane, and _compute_raw() returns the phrase pitch directly
-// under _flow_melody_on() -- no SHAPE blend, no S&H gate -- so on a FLOW
-// terrain FORM/SONG no longer depend on where SHAPE happened to land. That
-// removes the instability the exclusion existed for; see apply_patch()
-// below for how this gate additionally controls for DEPTH and _active on
-// the FORM/SONG cases specifically (docs/2026-08-13-glow-macro-audit.md,
-// "the second FORM/SONG gate").
+// reason DENSITY left the mode-exclusive gate under: ModLane::_compute_raw()
+// blended the melody pattern through shape_value()'s S&H segment
+// (waveforms.h), so whether FORM/SONG moved anything depended on a SHAPE
+// value the terrain draws. Spec 2026-08-13 flow-melody-engine Task 8 wired
+// set_flow_melody(true) into every note engine's PITCH lane and removed that
+// dependence in FLOW; spec 2026-08-14 melody-reachable removed it in STEP as
+// well, so _compute_raw() now returns the phrase pitch directly whenever the
+// deck runs a note engine (_note_lane()) -- no SHAPE blend, no S&H gate, in
+// either mode. That removes the instability the exclusion existed for; see
+// apply_patch() below for how this gate additionally controls for DEPTH and
+// _active on the FORM/SONG cases specifically
+// (docs/2026-08-13-glow-macro-audit.md, "the second FORM/SONG gate").
 bool is_excluded(int p) {
     return p == P_MODE;
 }
@@ -340,7 +340,7 @@ TEST_CASE("param impact: every parameter moves audio somewhere") {
 }
 
 TEST_CASE("param impact: a live parameter works in both operating modes") {
-    // Two groups, kept in SEPARATE arrays on purpose -- see the header
+    // Three groups, kept in SEPARATE arrays on purpose -- see the header
     // comment on is_excluded() and the sibling case above: this file must
     // never assert an untraced anomaly is correct, only that it is what was
     // measured.
@@ -362,19 +362,17 @@ TEST_CASE("param impact: a live parameter works in both operating modes") {
     //   STEP already did -- so DENSITY now moves audio in both modes and drops
     //   off this list, per the comment above that predicted exactly this.
     //
-    // FORM_A, FORM_B: task 10 (2026-08-13) deleted FORM/SONG's old
-    //   is_excluded() entry and, per apply_patch(), controls DEPTH and
-    //   LANE_PITCH's _active for these two specifically so a measured result
-    //   is the melody's own reach, not a downstream attenuator. Under that
-    //   control they move audio only in FLOW -- ModLane::_compute_raw()
-    //   returns the phrase pitch directly under _flow_melody_on(), skipping
-    //   the SHAPE-blended S&H segment (waveforms.h) that STEP still goes
-    //   through, so on the two sampled STEP terrains FORM's pitch content
-    //   never reaches audio. That is a traced mechanism, so these two belong
-    //   here, not in UNTRACED below.
+    // FORM_A and FORM_B used to be on this list, on a mechanism that is gone:
+    //   in STEP the melody went through shape_value()'s S&H segment, so FORM's
+    //   pitch content only reached audio above SHAPE 0.75. Spec 2026-08-14
+    //   melody-reachable makes _compute_raw() return the phrase directly on
+    //   any note deck, in STEP as in FLOW (_note_lane()), and FORM_A now moves
+    //   audio in both modes -- measured 0.797 on a FLOW terrain and 0.143 on a
+    //   STEP one -- so it drops off this list exactly as DENSITY did. FORM_B
+    //   moves in both modes too; see SAMPLE-BOUND below for why this gate
+    //   still reports it as mode-exclusive.
     bool expected_proven[P_COUNT] = {};
-    for (int p : { P_STEPS_A, P_STEPS_B, P_SHUFFLE, P_TEMPO_BPM, P_COUPLE,
-                   P_FORM_A, P_FORM_B })
+    for (int p : { P_STEPS_A, P_STEPS_B, P_SHUFFLE, P_TEMPO_BPM, P_COUPLE })
         expected_proven[p] = true;
 
     // UNTRACED: measured mode-exclusive, mechanism not established. Being
@@ -384,22 +382,52 @@ TEST_CASE("param impact: a live parameter works in both operating modes") {
     // mechanism in its comment; do not delete an entry, narrow the terrain
     // set, or loosen the threshold to make one go away instead.
     //
-    // SONG_A: alive only in STEP -- the OPPOSITE direction from FORM_A/
-    //   FORM_B above (alive only in FLOW), measured under the identical
-    //   DEPTH/_active control from apply_patch(). Neither this reversal nor
-    //   SONG_B's outright deadness (dead-parameter gate above) is explained
-    //   by that control or by anything else traced so far; both are open
-    //   threads in docs/2026-08-13-glow-macro-audit.md ("FORM/SONG
-    //   re-measured under task 10"), not something this task fixes.
+    // SONG_A: alive only in STEP, measured under the DEPTH/_active control
+    //   from apply_patch(). Neither this nor SONG_B's outright deadness
+    //   (dead-parameter gate above) is explained by that control or by
+    //   anything else traced so far; both are open threads in
+    //   docs/2026-08-13-glow-macro-audit.md ("FORM/SONG re-measured under
+    //   task 10"), not something this task fixes.
     bool expected_untraced[P_COUNT] = {};
     for (int p : { P_SONG_A })
         expected_untraced[p] = true;
 
+    // SAMPLE-BOUND: NOT mode-exclusive in the instrument -- mode-exclusive
+    // only in what this gate's kPer = 2 terrains per mode happen to draw. An
+    // entry here is a statement about the sample, not about the parameter, and
+    // it is the one group whose members are expected to leave the moment the
+    // terrain sample changes. Nothing may be added here without a measurement
+    // over a wider master range showing the parameter alive in both modes.
+    //
+    // FORM_B: was PROVEN until 2026-08-14 on the S&H mechanism above, and the
+    //   melody-reachable change did reach it. Measured with this rig's own
+    //   filters over masters 1..59, both guards, FORM_B moving audio on a STEP
+    //   terrain: 1 of 13 under the old guard (master 43 only), 9 of 13 under
+    //   the new one (masters 11, 13, 16, 19, 31, 43, 44, 51, 58; 0.314 ..
+    //   1.183). Several of those are far below the old SHAPE 0.75 gate --
+    //   master 11 at SHAPE_B 0.325, 19 at 0.483, 31 at 0.468 -- and read
+    //   exactly 0.0 under the old guard, which only the phrase path explains.
+    //
+    //   What is left is a sampling accident, not an asymmetry: pick_terrains()
+    //   draws masters 3 and 8, which are two of the four STEP terrains where
+    //   FORM_B reads exactly 0.0. A FORM reading of exactly 0.0 on a given
+    //   terrain is ordinary in BOTH modes -- FORM_A reads 0.0 on FLOW masters
+    //   1, 5, 7 and 9 -- so "dead in STEP" here is a property of two draws.
+    //   Not the drawn step counts either: forcing steps_a = steps_b = 8 on
+    //   masters 3 and 8 leaves FORM_B at exactly 0.0 on both.
+    //
+    //   Do NOT go hunting a mechanism downstream of the lane for this. Remove
+    //   the entry if the terrain sample ever moves onto one of the nine.
+    bool expected_sample_bound[P_COUNT] = {};
+    for (int p : { P_FORM_B })
+        expected_sample_bound[p] = true;
+
     bool expected[P_COUNT] = {};
     for (int p = 0; p < P_COUNT; ++p)
-        expected[p] = expected_proven[p] || expected_untraced[p];
+        expected[p] = expected_proven[p] || expected_untraced[p] ||
+                      expected_sample_bound[p];
 
-    // Anything NOT listed in either group above that works in one mode only
+    // Anything NOT listed in any group above that works in one mode only
     // is a defect: half of every terrain population cannot reach it.
     const Terrains ter = pick_terrains();
     bool actual[P_COUNT] = {};
