@@ -204,9 +204,13 @@ private:
     // `_engine_id != ENGINE_SAMPLER && != ENGINE_BBD` -- in BOTH modes, so it
     // is an engine-class flag. Gating on it rather than on _melody_engine_on()
     // is what keeps this out of a BBD deck's PITCH lane, which is the delay
-    // clock and not a note: kBbdFlowRangeMax derives its 2 from apply_range
-    // itself (flow/taste.h:586-588), and the owner ruled for that trade
-    // 2026-08-07.
+    // clock and not a note, and the owner ruled for that trade 2026-08-07.
+    // NOT the kBbdFlowRangeMax cap, which an earlier version of this comment
+    // claimed: that cap is FLOW-only (flow.cpp:583-585, `== ENGINE_BBD &&
+    // !_mode_now`, and _mode_now is STEP), so it never runs in the one mode
+    // where the two candidate guards differ. Measured over 400 masters: all
+    // 35 BBD decks drawn in STEP carry RANGE above the cap, up to 0.7266
+    // against a cap of 0.0083.
     bool _note_lane() const { return _melodic && _flow_melody; }
     void _prime_floors() { _since_fire = _note_min_samples;
                            _since_phrase = _phrase_min_samples; }

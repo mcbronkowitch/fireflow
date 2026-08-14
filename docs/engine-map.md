@@ -37,7 +37,7 @@ Files are named without their directory. The key:
 
 | Named | Lives at |
 |---|---|
-| `lane.cpp`, `lane.h`, `super_modulator.cpp/.h`, `waveforms.h` | `engine/mod/` |
+| `lane.cpp`, `lane.h`, `song_form.h`, `super_modulator.cpp/.h`, `waveforms.h` | `engine/mod/` |
 | `part.cpp`, `part.h` | `engine/parts/` |
 | `center.cpp` | `engine/center/` |
 | `flow.cpp`, `taste.h`, `terrain.cpp` | `engine/flow/` |
@@ -69,7 +69,11 @@ _melody_engine_on() = _melodic && (_step_mode || _flow_melody)
 _note_lane()        = _melodic && _flow_melody
 ```
 
-Eight flag combinations collapse to **five behaviours**. Measured at SMOOTH 0
+Eight flag combinations collapse to **six behaviours** — count the last column,
+not the measurement columns: rows 1 and 3 read alike there, as do rows 2 and 5,
+and each pair is still two behaviours (a texture lane and a Sampler/BBD PITCH
+lane). It said five until 2026-08-14, when the last row stopped being "identical
+to the row above" and the count was left behind. Measured at SMOOTH 0
 (passthrough, so the raw target is visible), RANGE 1, VARY 0, rate 0.5 Hz, 20 s,
 seed 12345, **`set_melodic()` before `init()`** (see §6 — the order matters).
 
@@ -100,7 +104,9 @@ excludes STEP; what changed on 2026-08-14 (spec `melody-reachable`) is that
 So a note deck emits its composed phrase in STEP as in FLOW, and a SAMPLER or BBD
 deck keeps running the waveform bank in both modes. The last two rows are two
 behaviours, not one measurement: at seed 12345 their streams differ by **1.086**
-peak, measured. Pinned by `tests/test_engine_map.cpp` (§1 case). What is still
+peak, measured (1.0862, re-measured 2026-08-14). What the §1 case in
+`tests/test_engine_map.cpp` pins is that they diverge at all — `max_diff > 0.5f`
+— not the 1.086; the figure is a measurement, the gate is a floor. What is still
 true is the shape of the flag: `_flow_melody` is an engine-class flag, not a mode,
 so a design that treats "FLOW melody" as a mode orthogonal to STEP is describing a
 state that does not exist.
@@ -109,7 +115,20 @@ At the 8 steps this table is measured at, the STEP note deck's stream is the FLO
 note deck's stream **sample for sample** (max deviation 0.0 over ten seeds) — the
 step clock's `8/steps` scaling is 1 there. That is a property of the step count,
 not of the lane: at 4 steps the two diverge by 0.298 and at 16 by 0.526, measured
-at seed 12345. Both halves are pinned by the §1 case.
+at seed 12345 (re-measured 2026-08-14: 0.0000 / 0.2979 / 0.5264). The identity is
+pinned by the §1 case (`d < 1e-7f`); of the two divergences only the 16-step one
+is pinned, and as a floor (`d16 > 0.1f`) — the 4-step figure is measured only.
+
+**That identity is this setup line's, not the lane's — it holds at SMOOTH 0 and
+does not survive the top of the SMOOTH axis.** `_update_slew()`'s note-interval
+slew clamp (`lane.cpp:361`, `if (_flow_melody_on())`) is now the only place on
+the melody path that still splits on `_step_mode`, so a glide is clamped in FLOW
+and not in STEP. Measured on a note deck, seed 999, 8 steps, SHAPE 0, RANGE 1,
+VARY 0, 20 s, max |STEP − FLOW|: bit-identical at SMOOTH 0.00 / 0.25 / 0.50 at
+both 0.5 Hz and 2 Hz and at SMOOTH 0.75 at 0.5 Hz, but **0.0787 at SMOOTH 0.75 /
+2 Hz, 0.2069 at SMOOTH 1.00 / 0.5 Hz and 0.2995 at SMOOTH 1.00 / 2 Hz**. Do not
+carry the identity past SMOOTH 0; that clamp is the SHAPE/SMOOTH rework's to
+decide, and nothing on the `melody-reachable` branch touched it.
 
 **`_melodic` is not a choice.** `super_modulator.cpp:14` sets it unconditionally
 to `i == LANE_PITCH`. Exactly one lane of five is melodic, on every deck, always.

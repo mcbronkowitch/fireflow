@@ -94,7 +94,13 @@ TEST_CASE("melody-reachable: SHAPE is inert on a note lane, both modes") {
 TEST_CASE("melody-reachable: SAMPLER and BBD PITCH lanes are untouched") {
     // Their decks push set_flow_melody(false) from the engine id
     // (part.cpp:43,441), so _note_lane() is false in BOTH modes and the
-    // guard must not reach them. This is what protects kBbdFlowRangeMax.
+    // guard must not reach them: a BBD deck's PITCH lane is the delay clock
+    // and not a note (owner's ruling, 2026-08-07). It is NOT kBbdFlowRangeMax
+    // that this protects, as an earlier version of this comment claimed --
+    // that cap is FLOW-only (flow.cpp:583-585, `== ENGINE_BBD && !_mode_now`),
+    // i.e. it never runs in STEP, the one mode where the two candidate guards
+    // differ. Measured over 400 masters: all 35 BBD decks drawn in STEP carry
+    // RANGE above the cap, up to 0.7266 against a cap of 0.0083.
     // RED against the _melody_engine_on() variant: STEP case drops from
     // 9 distinct values to 4 (measured; p2p was not probed).
     for (bool step : {false, true}) {

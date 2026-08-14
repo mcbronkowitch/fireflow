@@ -155,8 +155,13 @@ TEST_CASE("engine-map §1: on a STEP lane _flow_melody picks phrase or waveform"
         CHECK(d16 > 0.1f);
     }
 
-    // The phrase only exists in FLOW (step off): much smaller, seed-dependent
-    // ambitus (map: 0.155..0.822 over ten seeds) and a small value set.
+    // The FLOW row of the table, measured on its own rather than inherited
+    // through the identity above: the phrase's much smaller, seed-dependent
+    // ambitus (map: 0.155..0.822 over ten seeds) and a small value set. Today
+    // the two blocks above imply this one, because they assert the STEP and
+    // FLOW streams are equal at the 8 steps they run at; that implication is
+    // a property of the step count, so this block is what still pins the FLOW
+    // row if the step count above ever moves.
     {
         ModLane l = make_lane(true, 12345);
         l.set_step(false, 8);

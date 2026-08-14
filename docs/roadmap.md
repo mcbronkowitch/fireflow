@@ -2487,40 +2487,48 @@ melody engine, formerly the first of three entries here, is now built — see
 SHAPE has never satisfied its owner, and SMOOTH is touched in the same breath —
 the two together decide what the modulation lanes actually emit.
 
-One concrete thing the rework has to settle, found 2026-08-13 and **narrowed by
-the FLOW melody engine on the same day**: **outside FLOW melody mode, the melody
-pattern reaches the audio only through SHAPE's top quarter.** `_compute_raw`
-passes the pattern value as `shape_value`'s third argument (`lane.cpp:555`), and
-`waveforms.h:32` blends it in only above 0.75, weight `(shape - 0.75) * 4`.
-Below that the melodic lane emits a plain LFO waveform and the pattern is
-computed and discarded. FORM, SONG, the phrase generator, the song ladder and
-VARIATION's pitch mutation all hang off that one blend, in STEP and on any lane
-still running the FLOW LFO (SAMPLER and BBD decks).
+One concrete thing the rework has to settle, found 2026-08-13, **narrowed by the
+FLOW melody engine on the same day and narrowed again on 2026-08-14**: **on a
+SAMPLER or BBD deck the melody pattern reaches the audio only through SHAPE's top
+quarter.** `_compute_raw` passes the pattern value as `shape_value`'s third
+argument (`lane.cpp:560`), and `waveforms.h:32` blends it in only above 0.75,
+weight `(shape - 0.75) * 4`. Below that the lane emits a plain LFO waveform and
+the pattern is computed and discarded. FORM, SONG, the phrase generator, the song
+ladder and VARIATION's pitch mutation all hang off that one blend — but only on
+the lanes that still reach it, which since the `melody-reachable` branch
+(`07d5b9d`) means SAMPLER and BBD decks, in STEP and in FLOW alike.
 
-**Three claims this entry used to make were falsified by that milestone and are
-corrected here rather than deleted — the rework is still planned, its premises
-have just changed:**
+**Three claims this entry used to make were falsified by that milestone and by
+the `melody-reachable` branch that followed it, and are corrected here rather
+than deleted — the rework is still planned, its premises have just changed:**
 
-- "reaches the audio only through SHAPE's top quarter" is now false **in FLOW on
-  a note deck**: `_compute_raw` returns the phrase's note directly under
-  `_flow_melody_on()` (`lane.cpp:551`) and never calls `shape_value` at all. On
-  that path SHAPE is inert on the melody, which is its own open question for the
-  rework — what SHAPE should mean for a note — rather than a blend threshold.
-- "measured dead on 40/40 terrains in both modes" no longer holds: this branch's
-  own `tests/test_param_impact.cpp` records `FORM_A`/`FORM_B` **alive in FLOW**,
-  by exactly that mechanism. (`P_SONG_A`/`P_SONG_B` remain measured-but-untraced
-  there; see the FLOW melody engine entry under "Done".)
-- "a drone can never reach the melody at all" is likewise false now: drones are
-  FLOW, which is precisely the mode where the melody bypasses SHAPE. The terrain
-  cap `P_SHAPE_A/B = {0, .25}` still keeps a drone below the 0.75 blend
-  threshold, so the claim holds for STEP and for SAMPLER/BBD decks — not for a
-  drone on a note engine.
+- "reaches the audio only through SHAPE's top quarter" is now false **on a note
+  deck in either mode**, not only in FLOW: `_compute_raw` returns the phrase's
+  note directly under `_note_lane()` (`lane.cpp:556`) and never calls
+  `shape_value` at all. On that path SHAPE is inert on the melody — consistently
+  in both modes, which is what makes it a design question for the rework (what
+  SHAPE should mean for a note) rather than a mode asymmetry to reconcile.
+- "measured dead on 40/40 terrains in both modes" no longer holds:
+  `tests/test_param_impact.cpp` records `FORM_A` **alive in both modes** and no
+  longer lists it as mode-exclusive at all; `FORM_B` moves in both modes too and
+  is now filed as SAMPLE-BOUND there — mode-exclusive only in the two terrains
+  that gate happens to draw, not by mechanism. (`P_SONG_A`/`P_SONG_B` remain
+  measured-but-untraced there; see the FLOW melody engine entry under "Done".)
+- "a drone can never reach the melody at all" is likewise false now: a note
+  engine bypasses SHAPE in both modes, so a drone on one reaches the melody at
+  every knob position, whichever mode its terrain drew. The terrain cap
+  `P_SHAPE_A/B = {0, .25}` still keeps a drone below the 0.75 blend threshold, so
+  the claim holds for SAMPLER and BBD decks only — not for a drone on a note
+  engine.
 
-Whether the STEP-side blend is a defect or the intended reading of "SHAPE morphs
-sine → tri → ramp → pulse → S&H" is exactly the question this rework answers,
-and it now has a second half: the two modes disagree about what SHAPE does to a
-melodic lane, and the rework has to decide that deliberately rather than inherit
-it.
+Whether the blend that remains is a defect or the intended reading of "SHAPE
+morphs sine → tri → ramp → pulse → S&H" is exactly the question this rework
+answers, now for the four texture lanes and for SAMPLER/BBD PITCH lanes, which
+are what is left on that path. The second half this entry used to carry — that
+the two modes disagree about what SHAPE does to a melodic lane, and the rework
+has to decide that deliberately — is gone: `docs/engine-map.md` §7 records it as
+settled. The phrase plays at every SHAPE on a note deck in both modes, so the
+rework inherits one behaviour there, not two.
 
 **Spec written 2026-08-13:**
 `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md`. It answers the
@@ -2529,7 +2537,14 @@ lane emits its phrase in STEP as it already does in FLOW, SHAPE keeps the four
 texture lanes, SMOOTH becomes interval-relative, and DRIFT stops writing the
 axis. Two earlier drafts — both of which merged the controls — were rejected by
 review; the spec's revision note carries why, and its §7 records what it
-deliberately does not deliver.
+deliberately does not deliver. **The first of those four deliverables shipped
+ahead of the rest** on branch `feat/melody-reachable` (`07d5b9d`), under its own
+spec `docs/superpowers/specs/2026-08-14-melody-reachable-design.md`: the guard
+moved to `_note_lane()`, so a note deck emits its phrase in STEP as in FLOW while
+SAMPLER and BBD decks keep the waveform bank in both modes. Three deliverables
+remain, and SMOOTH's note-interval slew clamp (`lane.cpp:361`) is still guarded
+by `_flow_melody_on()` — the one place on the melody path that still splits on
+the mode, measured to open a 0.2995 STEP/FLOW gap at SMOOTH 1.0 (map §1).
 
 ### Marbles round — VARY as the character axis ⬜ (unscheduled; may need to precede the Glow rework)
 

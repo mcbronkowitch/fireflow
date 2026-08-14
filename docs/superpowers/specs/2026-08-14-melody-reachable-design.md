@@ -75,7 +75,7 @@ can move it; only the in-lane offsets can, and they total ±0.40 on the melodic 
 ### 1.3 Where the phrase *is* already playing, RANGE flattens it
 
 On a FLOW deck with a note engine the phrase is emitted directly at
-`lane.cpp:551`, at **every** SHAPE — `shape_value` is never called. That is not a
+`lane.cpp:556`, at **every** SHAPE — `shape_value` is never called. That is not a
 corner case: `kArchWeight` drone = 0.50 (`taste.h:656`), and `mode_of` puts
 **82.2 %** of drones in FLOW (`terrain.cpp:295-304`; the raw `kModeW` 0.15 is
 tempered toward uniform), with carrier engines restricted to SYNTH / WAVE / BODY

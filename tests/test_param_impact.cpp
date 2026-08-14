@@ -418,6 +418,9 @@ TEST_CASE("param impact: a live parameter works in both operating modes") {
     //
     //   Do NOT go hunting a mechanism downstream of the lane for this. Remove
     //   the entry if the terrain sample ever moves onto one of the nine.
+    //   The asymmetry is deliberate and is the whole difference between this
+    //   group and UNTRACED above: WIDENING the sample may retire an entry,
+    //   NARROWING it to keep one is the abuse UNTRACED names.
     bool expected_sample_bound[P_COUNT] = {};
     for (int p : { P_FORM_B })
         expected_sample_bound[p] = true;
