@@ -20,7 +20,7 @@ Every number states its probe setup. **Construction order matters**:
 |---|---|---|---|
 | I1 | ENTROPY 0 = LOOP: nothing mutates, the buffer repeats exactly. | `…entropy-sequencer-design.md:61` | Neither change touches mutation, RNG, or the buffer. |
 | I2 | The drone SHAPE cap `{0, 0.25}` keeps the calm-corner gate green. | `taste.h:998-999`; evidence log `:101-113` | Nothing here touches `taste.h`. This spec makes the melody independent of SHAPE, so the cap stops mattering for it. |
-| I3 | **The BBD PITCH lane is not a note.** It is the delay clock, "a bend, not a keyboard", and `kBbdFlowRangeMax = kBbdFlowSemis / (2·60)` derives its 2 **from `apply_range` itself**. The owner ruled for that trade on 2026-08-07. | `taste.h:578-597` | §2.2's law is gated on `_melody_engine_on()`, which is false for a BBD deck in FLOW. See §2.2 for the STEP case. |
+| I3 | **The BBD PITCH lane is not a note.** It is the delay clock, "a bend, not a keyboard", and `kBbdFlowRangeMax = kBbdFlowSemis / (2·60)` derives its 2 **from `apply_range` itself**. The owner ruled for that trade on 2026-08-07. | `taste.h:578-597` | Both changes are gated on `_melodic && _flow_melody`, which is false for a BBD deck **in either mode**. Measured: a BBD/SAMPLER PITCH lane is bit-unchanged in FLOW and in STEP. |
 | I4 | `fireflow-dev-alpha-no-patch-compat` — saved patches may break. | memory | No migration designed. |
 
 A note on a **retired** invariant. Draft 5 carried
@@ -106,33 +106,47 @@ moves with TUNE, since `part.cpp:132` adds `(_tune − 0.5)` before clamping.
 
 ### 2.1 The melody system stops going through the waveform bank
 
-`lane.cpp:551`'s guard changes from `_flow_melody_on()` to `_melody_engine_on()`
-(`lane.h:200`), so any lane running the melody system emits its phrase directly,
-in STEP as in FLOW, at every SHAPE.
+`lane.cpp:551`'s guard changes from `_flow_melody_on()` to **`_melodic && _flow_melody`**,
+so a lane on a **note engine** emits its phrase directly, in STEP as in FLOW, at
+every SHAPE.
 
-**Measured on a patched build**, all eight `(melodic, step_mode, flow_melody)`
-states, 20 s at 0.5 Hz, SHAPE 0.5:
+**Not `_melody_engine_on()`.** That predicate (`_melodic && (_step_mode || _flow_melody)`,
+`lane.h:200`) also catches a SAMPLER and a BBD deck in STEP, and a BBD's PITCH
+lane is the delay clock, not a note (I3). Gating on `_flow_melody` instead
+excludes both engine classes in **both** modes, because `part.cpp:43,441` pushes
+that flag from the engine id: `_engine_id != ENGINE_SAMPLER && != ENGINE_BBD`.
+
+⚠️ **Naming trap.** `_flow_melody` reads as "FLOW melody is on"; it actually means
+"this deck has a note engine", and it is pushed in both modes. This is the shape
+`fireflow-gotchas` records for `set_depth`. **Rename it `_note_engine` in the same
+commit**, or the next reader will misjudge the gate exactly as draft 5 did.
+
+**Measured on a patched build**, all six reachable states, 20 s at 0.5 Hz, SHAPE 0.5:
 
 | state | stock | after |
 |---|---|---|
-| non-melodic, either mode | 2.000 / 7734 · 1.750 / 9 | **unchanged** |
-| melodic, FLOW, flow_melody off (SAMPLER, BBD) | 2.000 / 7734 | **unchanged** |
-| melodic, FLOW, flow_melody on | 0.351 / 8 | **unchanged** |
-| **melodic, STEP, flow_melody off** | 1.750 / 9 | **0.351 / 8** |
-| **melodic, STEP, flow_melody on** | 1.750 / 9 | **0.351 / 8** |
+| non-melodic, FLOW / STEP | 2.000 / 7734 · 1.750 / 9 | **unchanged** |
+| melodic, FLOW, note engine | 0.351 / 8 | **unchanged** |
+| **melodic, STEP, note engine** | **1.750 / 9** | **0.351 / 8** |
+| melodic, FLOW, SAMPLER / BBD | 2.000 / 7734 | **unchanged** |
+| melodic, STEP, SAMPLER / BBD | 1.750 / 9 | **unchanged** |
 
-**Exactly two states change, both melodic in STEP.** SHAPE becomes inert on the
-melodic lane in both modes — measured identical at SHAPE 0.00 / 0.25 / 0.50 /
-0.75 / 1.00 — which is the consistency `roadmap.md:2519-2523` names as what the
-rework exists to decide.
+**Exactly one state changes.** SHAPE becomes inert on the note deck in both
+modes — the consistency `roadmap.md:2519-2523` names as what the rework exists to
+decide — and SAMPLER and BBD decks are bit-unchanged everywhere, so I3 needs no
+exception and the `kBbdFlowRangeMax` chain is untouched.
 
-**Two engine classes are affected that the earlier drafts never named.** A
-**SAMPLER** and a **BBD** deck have `_flow_melody` false but `_step_mode` true in
-STEP, so their PITCH lanes newly emit the phrase. The `Fireflow` module
-deactivates the sampler's (`Fireflow.cpp:881`); the flow layer never calls
-`set_target_active`, so under **Glow it stays active**. This is a real behaviour
-change, and it is the intended one for a SAMPLER (STEP already quantizes) — but
-see §2.2 for BBD, where it is not.
+**The gain is undiminished by the narrower gate.** FORM's audibility, STEP 8,
+four seeds:
+
+| | SHAPE 0.00 | SHAPE 0.50 | SHAPE 1.00 |
+|---|---|---|---|
+| stock: `Principle`s differing from `TwoMotif` | **0 / 4** | **0 / 4** | 3 / 4 |
+| after | **3 / 4** | **3 / 4** | 3 / 4 |
+
+Note the middle column: today the decoy reaches the **centre** of the knob, not
+just its bottom. After the change every SHAPE position gives what only 1.00 gave
+before, with per-seed value sets of 10–13.
 
 What is given up: the crossfade in the top quarter, where the emitted value is
 `f·pitch[slot] + (1−f)·wave_pulse(ph)`. `wave_pulse` is ±1, so at half weight the
@@ -148,22 +162,24 @@ SHAPE work.
 scaled by `2r`. Applied to a quantized pitch axis it produces §1.3's two defects —
 too little ambitus at the bottom of the band, and clipping over the whole top half.
 
-The melodic lane gets its own law, expressed in **scale degrees**, with a floor.
-The floor value is a by-ear call; G3 measures it and the owner rules.
+The note-engine lane gets its own law, expressed in **scale degrees**, with a
+floor. The floor value is a by-ear call; G3 measures it and the owner rules.
 
-**The gate is `_melody_engine_on()`, not `slot == LANE_PITCH`.** This matters:
+**The gate is the same `_melodic && _flow_melody` as §2.1 — not `slot == LANE_PITCH`.**
+This is what keeps the law out of the BBD's clock: `kBbdFlowRangeMax = kBbdFlowSemis / (2·60) = 0.00833`
+derives its `2` **from `apply_range`'s unipolar behaviour**, stated verbatim at
+`taste.h:586-588`, so any floor applied to a BBD deck would void that constant and
+the owner's 2026-08-07 ruling.
 
-- A **BBD** deck's PITCH lane is the delay clock, not a note (I3). Its
-  `kBbdFlowRangeMax = kBbdFlowSemis / (2·60) = 0.00833` derives its `2` **from
-  `apply_range`'s unipolar behaviour**, stated in `taste.h:586-588`. A floor of
-  any size would void that constant and the owner's 2026-08-07 ruling. Gating on
-  `_melody_engine_on()` excludes a BBD in FLOW automatically.
-- **Open, and it must be decided before implementation:** a BBD deck in **STEP**
-  has `_melody_engine_on()` true. Either the law also excludes `ENGINE_BBD`
-  explicitly, or `kBbdFlowRangeMax`'s derivation must be re-checked for the STEP
-  case. `flow.cpp:581-585` only applies the cap in FLOW (`!_mode_now`), which
-  suggests the first. **Do not implement until this is settled** — it is the one
-  place this spec can silently break a by-ear ruling.
+An earlier version of this spec left the BBD-in-STEP case open, because
+`_melody_engine_on()` is true there. Measurement closed it: the cap at
+`flow.cpp:581-585` is FLOW-only (`&& !_mode_now`), and a BBD in STEP *is*
+quantized onto scale steps (`part.cpp:241-242`, "STEP puts the clock on scale
+steps so the bend is in the key") — so a degree floor would not be *meaningless*
+there, but it would be a large unasked-for change: a drone-band BBD deck at
+RANGE 0.10 travels ~12 semitones of clock today and would travel ~42 under a
+floor at 0.35. Gating on the engine class avoids the question entirely rather
+than answering it.
 
 ---
 
@@ -178,7 +194,7 @@ Each must be shown RED once (`fireflow-tests-must-be-able-to-fail`).
 | G3 | On a drone-band terrain (RANGE ≤ 0.4) the phrase clears **≥ 3 scale degrees** | the pitch RANGE floor is absent or too low |
 | G4 | At RANGE 1.0 fewer than **5 %** of emitted samples are clamped at `part.cpp:132` | the clip §1.3 measures at 54.2 % survived |
 | G5 | A **non-melodic** lane's output is unchanged by both changes, sample for sample, in both modes | the change leaked off the melody |
-| G6 | A **BBD** deck's PITCH-lane travel stays within `kBbdFlowSemis` in FLOW **and in STEP** | §2.2's open question was answered wrongly (I3) |
+| G6 | A **SAMPLER** and a **BBD** deck's PITCH lane is unchanged, sample for sample, in **both** modes | the gate was written as `_melody_engine_on()` instead of `_melodic && _flow_melody` (I3). *Proven RED against that variant: it moves the STEP case from 1.750/9 to 0.351/8.* |
 
 ---
 
@@ -197,7 +213,12 @@ Each must be shown RED once (`fireflow-tests-must-be-able-to-fail`).
 - `tests/test_range.cpp` — the only direct test of `apply_range`.
 - `tests/test_param_impact.cpp:310-340, 371-390` — encodes the exact FLOW/STEP
   asymmetry §2.1 deletes, and cites the SHAPE/SMOOTH spec by date.
-- `tests/test_flow_runtime.cpp:344, 345, 419` — the BBD RANGE cap gates (I3).
+- `tests/test_flow_runtime.cpp:344, 345, 419` — the BBD RANGE cap gates. Expected
+  **unchanged** under the engine-class gate; they are G6's existing half and
+  should be run as a regression, not edited.
+- `engine/mod/lane.h` / `lane.cpp` / `super_modulator.h` — the `_flow_melody` →
+  `_note_engine` rename (§2.1), plus `part.cpp:43,441` and the `set_flow_melody`
+  setter chain.
 - `tests/test_flow_melody.cpp` — the FLOW-melody cases; §2.1 makes STEP agree
   with them, which several may already assert.
 - `docs/engine-map.md` §1 (row 5/6 of the state table) and §7 — both describe the
