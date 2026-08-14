@@ -81,6 +81,11 @@ public:
     // wrap loop, lane.cpp.
     uint32_t wrap_count_for_test() const { return _wraps; }
     float last_out_for_test() const { return _last_out; }
+    // kFlowSlewFrac itself stays private (it's an implementation constant of
+    // _update_slew's top selection, not part of the public control surface);
+    // this exposes its value so a test can derive an expectation from it
+    // instead of pasting the number.
+    static constexpr float kFlowSlewFrac_for_test() { return kFlowSlewFrac; }
 #endif
 
     float process();                  // advance one sample, return post-range value

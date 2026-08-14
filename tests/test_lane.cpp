@@ -38,7 +38,12 @@ TEST_CASE("lane: SMOOTH turns a step into a glide") {
     l.set_range(1.f);
     l.set_shape(0.5f);        // ramp: consecutive step values differ
     l.set_step(true, 2);      // step-clock: step = 6000 samples; boundary at ~6000
-    l.set_smooth(0.5f);       // glide ~3 ms: settles well within a step, still gliding ~1 ms past a boundary
+    // SMOOTH is a fraction of one STEP now, not an absolute time: 0.05 gives
+    // tau = 0.05 * kSmoothTopTexture * 6000 = 150 samples (~3 ms at TOP 0.5),
+    // which is the glide this case was written around. It was 0.5 under the
+    // absolute law, where 0.5 also meant ~3 ms -- the number moved, the
+    // intent did not.
+    l.set_smooth(0.05f);
     l.set_rate_hz(1.f);       // cycle_hz = 4 -> 12000 samples/cycle
 
     for (int i = 0; i < 5000; ++i) l.process();    // settle in step 0
