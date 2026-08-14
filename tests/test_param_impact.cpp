@@ -28,7 +28,7 @@
 // a price worth paying to prove a gate), so a Sampler deck runs silent -- every
 // candidate terrain is inspected and rejected before it is rendered.
 #include "doctest/doctest.h"
-#include "flow/flow_params.h"
+#include "param_table.h"
 #include "param_impact_points.h"
 #include "center/center.h"
 #include "fx/flux.h"
@@ -39,7 +39,6 @@
 #include <string>
 
 using namespace spky;
-using namespace spky::flow;
 
 namespace {
 

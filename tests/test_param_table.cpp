@@ -1,11 +1,10 @@
-// tests/test_flow_params.cpp
+// tests/test_param_table.cpp
 #include "doctest/doctest.h"
-#include "flow/flow_params.h"
+#include "param_table.h"
 #include "instrument.h"
 using namespace spky;
-using namespace spky::flow;
 
-TEST_CASE("flow params: table is sane") {
+TEST_CASE("param table: table is sane") {
     for (int p = 0; p < P_COUNT; ++p) {
         CAPTURE(kParams[p].name);
         CHECK(kParams[p].lo < kParams[p].hi);
@@ -13,7 +12,30 @@ TEST_CASE("flow params: table is sane") {
     }
 }
 
-TEST_CASE("flow params: apply routes to the engine (spot checks via observers)") {
+TEST_CASE("param table: the two rows other code reads by hand") {
+    // P_MODE is discrete and binary; P_PACE is continuous 0..1 with 0.5 = x1.
+    // Inherited from tests/test_flow_mode.cpp (removal spec 4.4).
+    CHECK(kParams[P_MODE].steps == 2);
+    CHECK(kParams[P_MODE].lo == doctest::Approx(0.f));
+    CHECK(kParams[P_MODE].hi == doctest::Approx(1.f));
+    CHECK(kParams[P_PACE].steps == 0);
+    CHECK(kParams[P_PACE].lo == doctest::Approx(0.f));
+    CHECK(kParams[P_PACE].hi == doctest::Approx(1.f));
+}
+
+TEST_CASE("param table: apply_mode_and_steps reaches what apply_param refuses") {
+    Instrument in;
+    in.init(48000.f);          // as the file's existing "apply routes to the
+                               // engine" case does -- no FX chain needed
+    // apply_param cannot route these three -- it is per-parameter and stateless.
+    apply_param(in, P_STEPS_A, 6.f);
+    CHECK(in.deck_steps(PART_A) != 6);      // the documented refusal
+    apply_mode_and_steps(in, true, 6, 11);
+    CHECK(in.deck_steps(PART_A) == 6);
+    CHECK(in.deck_steps(PART_B) == 11);
+}
+
+TEST_CASE("param table: apply routes to the engine (spot checks via observers)") {
     Instrument inst;
     inst.init(48000.f);                       // engine only, no FX chain needed
     float l, r;

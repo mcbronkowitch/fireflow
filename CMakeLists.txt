@@ -161,7 +161,7 @@ add_executable(spky_tests
     # bench/Makefile, bench/audition/Makefile AND host/vcv/Makefile.
     tests/test_material.cpp
     tests/test_part_engine_contract.cpp
-    tests/test_flow_params.cpp
+    tests/test_param_table.cpp
     tests/test_param_impact.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)

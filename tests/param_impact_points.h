@@ -6,7 +6,7 @@
 // generator is gone; the points are not. deck_audible() still runs
 // live against each one -- see load_points() in the test.
 #pragma once
-#include "flow/flow_params.h"
+#include "param_table.h"
 
 namespace spky {
 
@@ -14,7 +14,7 @@ constexpr int kPer = 2;
 
 struct FrozenPoint {
     const char* origin;
-    float v[spky::flow::P_COUNT];
+    float v[P_COUNT];
     bool  step;
     int   steps_a, steps_b;
 };

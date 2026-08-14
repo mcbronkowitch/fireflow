@@ -1,8 +1,8 @@
-// engine/flow/flow_params.h
+// engine/param_table.h
 #pragma once
 #include "instrument.h"
 
-namespace spky { namespace flow {
+namespace spky {
 
 // A draw range, engine units. Lives here rather than in taste.h (where it was
 // originally declared) because it is a two-float struct with no tuning
@@ -65,7 +65,7 @@ struct Span { float lo, hi; };
 //   surface was retired in a deliberate migration (see migrate_legacy_link()
 //   at the patch-load site, Fireflow.cpp:1074). So 0..1 continuous, not
 //   -1..1. Re-verified 2026-08-12; only the line numbers had drifted.
-#define SPKY_FLOW_PARAMS(X) \
+#define SPKY_PARAMS(X) \
   X(P_ENGINE_A,   0.f, 5.f,  6)  X(P_ENGINE_B,   0.f, 5.f,  6) \
   X(P_SCALE,      0.f, 12.f, 13) X(P_ROOT,       0.f, 11.f, 12) \
   X(P_FORM_A,     0.f, 4.f,  5)  X(P_FORM_B,     0.f, 4.f,  5) \
@@ -98,39 +98,29 @@ struct Span { float lo, hi; };
   X(P_REV_TONE,   0.f, 1.f, 0)   X(P_REV_DIFF,   0.f, 1.f, 0) \
   X(P_REV_SMEAR,  0.f, 1.f, 0)   X(P_REV_MOD,    0.f, 1.f, 0) \
   X(P_TEMPO_BPM, 50.f, 140.f, 0) \
-  /* The terrain's operating mode, spec 2026-08-06 §5. 0 = FLOW/free (lanes
-     breathe in their own kLaneRatio relationships, no grid), 1 = STEP/synced
-     (step sequencer on the divisions.h ladder). ONE global value, not one per
-     deck: Instrument::set_sync is global (instrument.h:274), so a per-deck
-     mode would need SYNC on and off at once.
-     MUST BE PUSHED AFTER P_RANGE_A/B (static_assert in flow.cpp) and its base
-     draw must keep its stream key: base draws are keyed kStreamParamBase +
-     param (terrain.cpp:382), so inserting a parameter BEFORE this one re-seeds
-     its stream and re-resolves the FLOW/STEP draw of every existing terrain
-     code. Appending AFTER it is free, which is where P_PACE went on
-     2026-08-12. This used to read "MUST STAY LAST"; the positional half of
-     that argument is now an explicit static_assert. */ \
+  /* The instrument's operating mode. 0 = FLOW/free (lanes breathe in their
+     own kLaneRatio relationships, no grid), 1 = STEP/synced (step sequencer
+     on the divisions.h ladder). ONE global value, not one per deck:
+     Instrument::set_sync is global (instrument.h:274), so a per-deck mode
+     would need SYNC on and off at once. */ \
   X(P_MODE,       0.f, 1.f,  2) \
-  /* PACE: the global modulation time-stretch (spec 2026-08-12). 0.5 = x1.
-     Deliberately NOT story-owned -- a story-owned parameter is unreachable
-     from the base overlay by construction (terrain.cpp:437-461), so owning it
-     would throw away a transferred patch's own speed. M_PACE adds a live
-     offset on top in Flow's guard chain instead. */ \
+  /* PACE: the global modulation time-stretch. 0.5 = x1. Carries a live
+     offset rather than a base value. */ \
   X(P_PACE,       0.f, 1.f, 0)
 
 enum ParamId {
-#define SPKY_FLOW_ENUM(id, lo, hi, st) id,
-  SPKY_FLOW_PARAMS(SPKY_FLOW_ENUM)
-#undef SPKY_FLOW_ENUM
+#define SPKY_ENUM(id, lo, hi, st) id,
+  SPKY_PARAMS(SPKY_ENUM)
+#undef SPKY_ENUM
   P_COUNT
 };
 
 struct ParamInfo { const char* name; float lo, hi; int steps; };
 
 constexpr ParamInfo kParams[P_COUNT] = {
-#define SPKY_FLOW_INFO(id, lo_, hi_, st) { #id, lo_, hi_, st },
-  SPKY_FLOW_PARAMS(SPKY_FLOW_INFO)
-#undef SPKY_FLOW_INFO
+#define SPKY_INFO(id, lo_, hi_, st) { #id, lo_, hi_, st },
+  SPKY_PARAMS(SPKY_INFO)
+#undef SPKY_INFO
 };
 
 inline float clamp_to(const ParamInfo& pi, float v) {
@@ -212,10 +202,23 @@ inline void apply_param(Instrument& in, int param, float v) {
     // P_MODE, P_STEPS_A and P_STEPS_B are deliberately NOT handled here.
     // set_step() takes mode AND count together and set_sync() is global, so
     // routing them needs all three values at once -- which this per-param,
-    // stateless function cannot see. Flow::push_mode_and_steps() owns them.
+    // stateless function cannot see. apply_mode_and_steps() below owns them.
     case P_MODE: case P_STEPS_A: case P_STEPS_B: break;
     default: break;
     }
 }
 
-} } // namespace spky::flow
+// The three parameters apply_param() refuses, issued as the one unit they
+// have to be: set_step() takes mode and count together and set_sync() is
+// global, so a per-parameter, stateless setter cannot see all three at once.
+// Flow::push_mode_and_steps() used to own this and was deleted with the flow
+// layer (removal spec 4.2); a panel driving the instrument through kParams
+// needs it or it cannot set the operating mode or either step count.
+inline void apply_mode_and_steps(Instrument& in, bool step_mode,
+                                 int steps_a, int steps_b) {
+    in.set_sync(step_mode);
+    in.set_step(PART_A, step_mode, steps_a);
+    in.set_step(PART_B, step_mode, steps_b);
+}
+
+} // namespace spky
