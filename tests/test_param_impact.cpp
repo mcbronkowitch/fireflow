@@ -28,7 +28,8 @@
 // a price worth paying to prove a gate), so a Sampler deck runs silent -- every
 // candidate terrain is inspected and rejected before it is rendered.
 #include "doctest/doctest.h"
-#include "flow/flow.h"
+#include "flow/flow_params.h"
+#include "param_impact_points.h"
 #include "center/center.h"
 #include "fx/flux.h"
 #include "parts/bbd_engine.h"
@@ -66,7 +67,6 @@ constexpr int    kBlock = Center::kCtrlInterval;      // 96
 constexpr float  kCtrlHz = kSr / float(kBlock);       // 500 Hz, as the hosts run it
 constexpr double kDur   = 4.0;   // render window, seconds
 constexpr double kSkip  = 0.5;   // discarded attack/settle head
-constexpr int    kPer   = 2;     // terrains per operating mode
 
 // A parameter counts as moving audio at this much relative difference. The
 // measured population is bimodal by orders of magnitude -- dead parameters read
@@ -80,11 +80,6 @@ constexpr double kMoved = 1e-6;
 // How much of the mix a deck must carry before its parameters may be judged on
 // that terrain. See ReferencePatch below for why this check exists at all.
 constexpr double kDeckAudible = 0.05;
-
-bool has_sampler(const Terrain& t) {
-    return int(t.base[P_ENGINE_A] + 0.5f) == ENGINE_SAMPLER ||
-           int(t.base[P_ENGINE_B] + 0.5f) == ENGINE_SAMPLER;
-}
 
 // Excluded from both gates: P_MODE IS the axis the second gate splits on.
 // Sweeping it would compare a FLOW render against a STEP one, which says
@@ -120,36 +115,10 @@ bool is_excluded(int p) {
 // then reports every _B parameter as dead. The bug was in the rig, not the
 // instrument. A centred macro vector is an operating point somebody might
 // actually listen to.
-struct ReferencePatch {
-    float v[P_COUNT];
-    bool  step;
-    int   steps_a, steps_b;
-};
-
-ReferencePatch reference_patch(uint32_t master) {
-    TerrainState st; st.master = master;
-    Instrument probe;
-    probe.init(kSr, pi_fx_mem(0));
-    Flow fl;
-    fl.init(&probe, kCtrlHz);
-    for (int m = 0; m < MACRO_COUNT; ++m) fl.set_macro(m, 0.5f);
-    fl.wake(st);
-    // Long enough for the SPACE slew and the discrete hysteresis to land; the
-    // wake() itself forces them, so this only has to outlast the blend that
-    // wake() does not start. Cheap: no audio is rendered here.
-    for (int i = 0; i < 1000; ++i) fl.tick();
-
-    ReferencePatch rp{};
-    for (int p = 0; p < P_COUNT; ++p) rp.v[p] = fl.param_now(p);
-    rp.step    = rp.v[P_MODE] > 0.5f;
-    rp.steps_a = int(clamp_to(kParams[P_STEPS_A], rp.v[P_STEPS_A]) + 0.5f);
-    rp.steps_b = int(clamp_to(kParams[P_STEPS_B], rp.v[P_STEPS_B]) + 0.5f);
-    return rp;
-}
 
 // Push a reference patch onto an Instrument, optionally overriding one
 // parameter. `param < 0` means "no override".
-void apply_patch(Instrument& in, const ReferencePatch& rp, int param, float v) {
+void apply_patch(Instrument& in, const FrozenPoint& rp, int param, float v) {
     for (int p = 0; p < P_COUNT; ++p) {
         // set_step() takes mode and count together and set_sync() is global, so
         // these three cannot go through the per-parameter apply_param() -- the
@@ -193,7 +162,7 @@ void apply_patch(Instrument& in, const ReferencePatch& rp, int param, float v) {
 // parameter each control tick from its own terrain evaluation, so an override
 // would be erased on the next tick. Flow establishes the operating point; the
 // render then holds it still so ONE parameter can differ.
-double compare(const ReferencePatch& rp, int param, float v_lo, float v_hi,
+double compare(const FrozenPoint& rp, int param, float v_lo, float v_hi,
                int mute_deck = -1) {
     Instrument a, b;
     a.init(kSr, pi_fx_mem(0));
@@ -225,34 +194,37 @@ double compare(const ReferencePatch& rp, int param, float v_lo, float v_hi,
 // -- an engine whose excitation never arrives, an envelope that never opens --
 // and on such a terrain every parameter of that deck renders bit-identical.
 // Without this check the gate reports those as defects.
-bool deck_audible(const ReferencePatch& rp, int deck) {
+bool deck_audible(const FrozenPoint& rp, int deck) {
     return compare(rp, -1, 0.f, 0.f, deck) > kDeckAudible;
 }
 
-struct Terrains { ReferencePatch flow[kPer], step[kPer]; };
+struct Terrains { FrozenPoint flow[kPer], step[kPer]; };
 
-Terrains pick_terrains() {
+// The generator that drew these is gone (removal spec 4.3). What it did on
+// every build and this cannot is re-check that both decks still carry the
+// mix -- so that check runs here instead, live, on each frozen point. A
+// change that leaves a deck near-silent at one of these points would
+// otherwise report that deck's whole parameter set as dead, which is the
+// mistake this rig already made once (see the ReferencePatch note above).
+Terrains load_points() {
     Terrains out{};
-    int nf = 0, ns = 0;
-    for (uint32_t m = 1; m < 400 && (nf < kPer || ns < kPer); ++m) {
-        TerrainState st; st.master = m;
-        Terrain t = generate(st);
-        if (has_sampler(t)) continue;
-        const ReferencePatch rp = reference_patch(m);
-        if (!deck_audible(rp, PART_A) || !deck_audible(rp, PART_B)) continue;
-        if (rp.step && ns < kPer)  out.step[ns++] = rp;
-        if (!rp.step && nf < kPer) out.flow[nf++] = rp;
+    for (int i = 0; i < kPer; ++i) {
+        out.flow[i] = kFlowPoints[i];
+        out.step[i] = kStepPoints[i];
     }
-    // A filter that silently kept nothing would be a gate that tests nothing.
-    REQUIRE(nf == kPer);
-    REQUIRE(ns == kPer);
+    for (int i = 0; i < kPer; ++i) {
+        REQUIRE_MESSAGE(deck_audible(out.flow[i], PART_A), out.flow[i].origin);
+        REQUIRE_MESSAGE(deck_audible(out.flow[i], PART_B), out.flow[i].origin);
+        REQUIRE_MESSAGE(deck_audible(out.step[i], PART_A), out.step[i].origin);
+        REQUIRE_MESSAGE(deck_audible(out.step[i], PART_B), out.step[i].origin);
+    }
     return out;
 }
 
 // Does `param` move audio on any of these terrains? Stops at the first terrain
 // that says yes -- the gate asks a yes/no question, and paying for the
 // remaining renders would only refine a number nobody reads.
-bool moves_audio(const ReferencePatch* rps, int param) {
+bool moves_audio(const FrozenPoint* rps, int param) {
     for (int i = 0; i < kPer; ++i)
         if (compare(rps[i], param, kParams[param].lo, kParams[param].hi) > kMoved)
             return true;
@@ -330,7 +302,7 @@ TEST_CASE("param impact: every parameter moves audio somewhere") {
     for (int p = 0; p < P_COUNT; ++p)
         expected[p] = expected_proven[p] || expected_untraced[p];
 
-    const Terrains ter = pick_terrains();
+    const Terrains ter = load_points();
     bool actual[P_COUNT] = {};
     for (int p = 0; p < P_COUNT; ++p) {
         if (is_excluded(p)) continue;
@@ -416,8 +388,9 @@ TEST_CASE("param impact: a live parameter works in both operating modes") {
     //   Not the drawn step counts either: forcing steps_a = steps_b = 8 on
     //   masters 3 and 8 leaves FORM_B at exactly 0.0 on both.
     //
-    //   Do NOT go hunting a mechanism downstream of the lane for this. Remove
-    //   the entry if the terrain sample ever moves onto one of the nine.
+    //   Do NOT go hunting a mechanism downstream of the lane for this. The
+    //   sample is frozen (removal spec 4.3), so this entry is now permanent
+    //   unless the frozen points are re-authored by hand.
     //   The asymmetry is deliberate and is the whole difference between this
     //   group and UNTRACED above: WIDENING the sample may retire an entry,
     //   NARROWING it to keep one is the abuse UNTRACED names.
@@ -432,7 +405,7 @@ TEST_CASE("param impact: a live parameter works in both operating modes") {
 
     // Anything NOT listed in any group above that works in one mode only
     // is a defect: half of every terrain population cannot reach it.
-    const Terrains ter = pick_terrains();
+    const Terrains ter = load_points();
     bool actual[P_COUNT] = {};
     for (int p = 0; p < P_COUNT; ++p) {
         if (is_excluded(p)) continue;
