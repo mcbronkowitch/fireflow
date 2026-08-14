@@ -349,3 +349,37 @@ TEST_CASE("groove mutators are deterministic per seed") {
         CHECK(ga.note_len[i] == gb.note_len[i]);
     }
 }
+
+TEST_CASE("arrangement: k is clamped to the arrays it writes") {
+    // pg_build_arrangement fills k entries of caller-supplied arrays. Both call
+    // sites in phrase_gen.h pass uint8_t[kPgMaxInstances]. The k <= 32 bound is
+    // established in pg_derive_sizing, but regenerate_unit re-reads it from
+    // PhraseLayout::inst_count -- a uint8_t, so 0..255 -- which makes the bound a
+    // convention between two functions rather than a property of this one. GCC
+    // sees exactly that after inlining and warns about vectorised stores past
+    // moti[32] (-Wstringop-overflow, -O3, the VCV build; clang has no such
+    // warning, which is why the desktop build is silent).
+    //
+    // 40 rather than a huge number on purpose: the overrun then still lands
+    // inside the 64-byte probe buffer, so the RED is observable instead of
+    // being undefined behaviour.
+    for (int pi = 0; pi < (int)Principle::kCount; ++pi) {
+        CAPTURE(pi);
+        uint8_t moti[64], uniti[64];
+        for (int i = 0; i < 64; ++i) { moti[i] = 0xAAu; uniti[i] = 0xBBu; }
+        int mc = -1, uc = -1;
+        pg_build_arrangement((Principle)pi, 40, moti, uniti, mc, uc);
+
+        for (int i = kPgMaxInstances; i < 64; ++i) {
+            CAPTURE(i);
+            CHECK(moti[i]  == 0xAAu);   // nothing written past the array
+            CHECK(uniti[i] == 0xBBu);
+        }
+        // CallResponse reports motif_count = k, so an unclamped k escapes
+        // through the count as well as through the arrays.
+        CHECK(mc >= 1);
+        CHECK(mc <= kPgMaxInstances);
+        CHECK(uc >= 1);
+        CHECK(uc <= kPgMaxInstances);
+    }
+}

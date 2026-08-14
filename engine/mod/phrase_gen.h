@@ -12,6 +12,14 @@ enum class Principle : uint8_t {
     TwoMotif = 0, OneMotif, Hierarchical, CallResponse, Ostinato, kCount
 };
 
+// Capacity of every per-instance array in this file: the `n = min(steps, N)` cap
+// in generate_phrase, the moti[]/uniti[] locals, and the k clamp in
+// pg_build_arrangement are all this one number. Keep them one constant --
+// the bound used to be established in pg_derive_sizing and merely *assumed*
+// where the arrays are written, with PhraseLayout::inst_count (a uint8_t, so
+// 0..255) carrying it between the two.
+static constexpr int kPgMaxInstances = 32;
+
 // motif_count = number of RENEW renewal units (regenerate_unit's `unit` domain).
 struct PhraseLayout {
     uint8_t motif_len   = 0;  // L: slots per instance
@@ -72,6 +80,9 @@ inline void pg_build_arrangement(Principle p, int k,
                                  uint8_t* motif_of_inst, uint8_t* unit_of_inst,
                                  int& motif_count, int& unit_count) {
     if (k < 1) k = 1;
+    // Both call sites pass uint8_t[kPgMaxInstances]. Clamping here makes that a
+    // property of this function instead of an invariant held elsewhere.
+    if (k > kPgMaxInstances) k = kPgMaxInstances;
     switch (p) {
     case Principle::TwoMotif: {
         // A A B A rolled; degrades: k1->A, k2->A B, k3->A A B, k>=4->A..B A
@@ -162,11 +173,11 @@ inline void pg_gen_motif(Principle p, Rng& rng, int motif_id, int L,
 inline void generate_phrase(Principle p, Rng& rng, int steps,
                             float* pitch, bool* gate, uint8_t* motif_id,
                             PhraseLayout& out) {
-    int n = steps; if (n > 32) n = 32; if (n < 1) n = 1;
+    int n = steps; if (n > kPgMaxInstances) n = kPgMaxInstances; if (n < 1) n = 1;
     int k, L, r;
     pg_derive_sizing(p, n, k, L, r);
 
-    uint8_t moti[32], uniti[32];
+    uint8_t moti[kPgMaxInstances], uniti[kPgMaxInstances];
     int motif_count, unit_count;
     pg_build_arrangement(p, k, moti, uniti, motif_count, unit_count);
 
@@ -216,7 +227,7 @@ inline void regenerate_unit(Principle p, Rng& rng, const PhraseLayout& layout,
     int L = layout.motif_len;
     if (k < 1 || L < 1) return;
 
-    uint8_t moti[32], uniti[32];
+    uint8_t moti[kPgMaxInstances], uniti[kPgMaxInstances];
     int mc, uc;
     pg_build_arrangement(p, k, moti, uniti, mc, uc);
 
