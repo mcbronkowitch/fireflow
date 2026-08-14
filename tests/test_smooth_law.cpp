@@ -53,7 +53,12 @@ void apply_init_patch(Instrument& in) {
     float v[P_COUNT] = {0.f};
     v[P_ENGINE_A] = 2.f;          v[P_ENGINE_B] = 0.f;
     v[P_SCALE]    = 3.f;
-    v[P_SONG_B]   = 6.f;
+    // The VCV SONG knob is a RUNG on song_ladder.h's ladder, not an engine
+    // parameter: song_ladder_at() resolves it into a {form, song} pair, and
+    // only that pair reaches the engine. init_patch.hpp stores SONG_A = 0
+    // (rung 0 -> {0, 6}) and SONG_B = 13 (rung 13 -> {4, 5}).
+    v[P_FORM_A]   = 0.f;          v[P_SONG_A]   = 6.f;
+    v[P_FORM_B]   = 4.f;          v[P_SONG_B]   = 5.f;
     v[P_RATE_A]   = 0.184337318f; v[P_RATE_B]   = 0.163855359f;
     v[P_DENSITY_A]= 0.534939826f;
     v[P_SMOOTH_A] = kInitSmoothA; v[P_SMOOTH_B] = kInitSmoothB;
@@ -74,7 +79,11 @@ void apply_init_patch(Instrument& in) {
     v[P_DRIFT]    = 0.791999996f;
     v[P_REV_SIZE] = 1.f;          v[P_REV_DECAY]= 0.800755024f;
     v[P_REV_TONE] = 0.905333221f; v[P_REV_DIFF] = 0.768000245f;
-    v[P_TEMPO_BPM]= 50.f;         v[P_PACE]     = 0.5f;
+    // The VCV TEMPO knob stores 0.0, and Fireflow.cpp:967 maps it as
+    // bpm = 40.f + knob * 200.f -- so the init patch's tempo is 40, not 50.
+    // 50 is param_table.h's ParamId range FLOOR for P_TEMPO_BPM, not a
+    // default; don't repeat that mix-up.
+    v[P_TEMPO_BPM]= 40.f;         v[P_PACE]     = 0.5f;
     for (int p = 0; p < P_COUNT; ++p) {
         if (p == P_MODE || p == P_STEPS_A || p == P_STEPS_B) continue;
         apply_param(in, p, v[p]);
@@ -127,6 +136,13 @@ TEST_CASE("G4': the init patch's texture lanes keep their movement") {
     // patch, 40 s, SMOOTH 0.836144507 / 1.0, audio finite.
     // Per lane, per deck, in ParamId lane order SOURCE/SIZE/MOTION/LEVEL.
     // A +-3 dB band: the conversion in gen_panel.py exists to hold this.
+    // 2026-08-15: apply_init_patch's SONG_A/B, FORM_A/B and TEMPO_BPM were
+    // corrected after this baseline was captured (review findings -- SONG
+    // is a song_ladder.h rung, not an engine param, and TEMPO's init is 40,
+    // not param_table.h's range floor of 50). Re-measured post-fix: all
+    // eight texture-lane p2p values are bit-identical to the pre-fix run
+    // (delta +0.000000000 everywhere), so the baseline below did not need
+    // to move.
     static const float kBaseline[PART_COUNT][4] = {
         {1.955478f, 0.972017f, 0.989842f, 1.960271f},   // deck A
         {1.975470f, 0.999991f, 0.999896f, 1.968115f},   // deck B
