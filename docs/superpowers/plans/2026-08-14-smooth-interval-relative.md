@@ -604,13 +604,25 @@ rather than adding a fourth render.
 
 **One constant this file declares itself:** `kInitSmoothA` / `kInitSmoothB`, at
 the top of the anonymous namespace, as `constexpr float`, holding the
-**converted** values from Task 4 (`0.004974f` and `0.026026f`). They are
-duplicated here rather than included from `host/vcv/` because `tests/` must not
-depend on the VCV host. Say so in a comment, and say that Task 4 moves both
-places together.
+**pre-conversion** values — `0.836144507f` and `1.0f`. They are duplicated here
+rather than included from `host/vcv/` because `tests/` must not depend on the VCV
+host. Say so in a comment, and say that Task 4 converts them together with the
+three VCV mirrors.
 
-**`lane_value_for_test` does not exist and Step 1b builds it. Read this first —
-the obvious implementation is wrong.**
+> **Corrected 2026-08-14 (preflight ruling).** An earlier draft of this task
+> declared the *converted* values here. That is wrong twice over: G4′ could then
+> never show the RED this task's Step 4 depends on, and Task 4's "G4′ now passes"
+> would be a claim about a change it did not make. Declaring the original values
+> here also makes the four mirrors literally move together in Task 4, which is
+> the point of the `fireflow-control-merge-init-trap` memory that task cites.
+
+> **Struck (preflight ruling).** Step 1b — building `lane_value_for_test` — moved
+> to **Task 0**, which the controller inserted ahead of Task 1. The accessor has
+> to exist on the *pre-law* tree so the G4′ baseline can be measured there, and
+> by this task that tree is two commits back. The accessor is therefore already
+> present when this task runs; use `Instrument::lane_value_for_test(part, lane)`
+> as given. Task 0's brief carries the reasoning (the two one-poles, and why
+> `_slew.value()` would be wrong for exactly the lanes these gates measure).
 
 `ModLane` holds **two** one-pole smoothers, and which one carries the lane's
 output depends on how the lane is driven:
@@ -628,84 +640,22 @@ does not describe a lane the engine drives through `tick()`.*
 
 So record the value at the point of emission instead of guessing the source.
 
-- [ ] **Step 1b: Add the accessor, at the emission sites**
+- [ ] **Step 2: Fill in the G4′ baseline**
 
-In `engine/mod/lane.h`, in the private members near `_slew` / `_slew_tick`:
+**The controller measures this and hands it to you in the dispatch** — do not
+try to derive it yourself.
 
-```cpp
-#ifdef SPKY_TESTING
-    // The value this lane last EMITTED, whichever smoother produced it.
-    // Reading _slew.value() instead would be wrong for every lane driven by
-    // tick() -- which is the four texture lanes in FLOW -- because tick()
-    // writes _slew_tick and leaves _slew at its init value. Written only
-    // under SPKY_TESTING: the per-sample path is inside a block budget that
-    // currently sits near 96%, and a test accessor does not get to spend it.
-    float _last_out = 0.f;
-#endif
-```
+Why it cannot be a step here: the baseline has to be measured on the tree as it
+was *before* Task 1 changed the law, or the gate compares the new law against
+itself and proves nothing. By the time this task runs, that tree is two commits
+back, so no working-copy trick reaches it. The controller captured it on the
+Task 0 tree — accessor present, law untouched, which is exactly the condition
+the baseline needs.
 
-and in the public `#ifdef SPKY_TESTING` block:
-
-```cpp
-    float last_out_for_test() const { return _last_out; }
-```
-
-Then, at **all three** emission sites in `engine/mod/lane.cpp` — `:500`, `:784`
-and `:1031` — immediately after the local `smoothed` is computed and mapped
-through `apply_range` into the value the function returns, add:
-
-```cpp
-#ifdef SPKY_TESTING
-    _last_out = <the value being returned>;
-#endif
-```
-
-Read each of the three return paths and use the actual returned expression; they
-are not identical, and copying one into the others is how this accessor starts
-lying. **If any of the three is missed, G4′ silently reports 0 for that path** —
-so verify by asserting, in a scratch probe, that all five lanes of both decks
-report a non-zero p2p at the init patch *before* trusting Step 2's baseline.
-
-Add the forwarders, following the exact pattern of the neighbours:
-
-`engine/mod/super_modulator.h`, in its `#ifdef SPKY_TESTING` block beside
-`lane_rate_hz_for_test`:
-
-```cpp
-    float lane_last_out_for_test(int i) const { return _lanes[i].last_out_for_test(); }
-```
-
-`engine/instrument.h`, beside `lane_phase_for_test` (~line 121):
-
-```cpp
-    // The value a lane last emitted, read through the whole stack. See
-    // ModLane::_last_out for why this is not _slew.value().
-    float lane_value_for_test(int p, int lane) const {
-        return _parts[p].mod().lane_last_out_for_test(lane);
-    }
-```
-
-- [ ] **Step 2: Capture the G4′ baseline on the PRE-change tree**
-
-The baseline must come from the code as it was *before* Task 1, or the gate
-compares the new law against itself and proves nothing.
-
-```bash
-git stash
-```
-
-Then build and run a scratch probe that calls `apply_init_patch` (with
-`kInitSmoothA = 0.836144507f`, `kInitSmoothB = 1.0f` — the *unconverted* values)
-and `sweep(in, 40.f)`, and prints the eight `p2p` numbers. Put the probe in the
-scratchpad, not the repo — see `docs/engine-map.md` §6 for the compile line.
-
-```bash
-git stash pop
-```
-
-Paste the eight numbers into `kBaseline` and delete the `FILL FROM STEP 2`
-comments. **Record them in the commit message too** — a baseline nobody can trace
-is a baseline nobody can re-derive.
+Paste the eight numbers into `kBaseline`, delete the `FILL FROM STEP 2`
+comments, and **record the numbers and the commit they were measured at in the
+commit message** — a baseline nobody can trace is a baseline nobody can
+re-derive.
 
 - [ ] **Step 3: Register the file**
 
