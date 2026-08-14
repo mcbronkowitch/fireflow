@@ -121,9 +121,15 @@ is pinned, and as a floor (`d16 > 0.1f`) — the 4-step figure is measured only.
 
 **That identity is this setup line's, not the lane's — it holds at SMOOTH 0 and
 does not survive the top of the SMOOTH axis.** `_update_slew()`'s note-interval
-slew clamp (`lane.cpp:361`, `if (_flow_melody_on())`) is now the only place on
-the melody path that still splits on `_step_mode`, so a glide is clamped in FLOW
-and not in STEP. Measured on a note deck, seed 999, 8 steps, SHAPE 0, RANGE 1,
+slew clamp (`lane.cpp:361`, `if (_flow_melody_on())`) is the only split that
+survives an equal step count, not the only place on the melody path that splits
+on `_step_mode` outright: `_effective_length()` (`lane.cpp:268`) returns
+`kFlowPhraseSlots` in FLOW against the (clamped) STEPS count in STEP, changing
+the phrase's own length whenever the two disagree, and `_on_boundary()`'s
+FLOW-only note-rate floor (`lane.cpp:609`) gates `_compute_raw()` outright —
+both inert at this paragraph's matched 8-step setup, which is why they do not
+show up here. So a glide is clamped in FLOW and not in STEP. Measured on a note
+deck, seed 999, 8 steps, SHAPE 0, RANGE 1,
 VARY 0, 20 s, max |STEP − FLOW|: bit-identical at SMOOTH 0.00 / 0.25 / 0.50 at
 both 0.5 Hz and 2 Hz and at SMOOTH 0.75 at 0.5 Hz, but **0.0787 at SMOOTH 0.75 /
 2 Hz, 0.2069 at SMOOTH 1.00 / 0.5 Hz and 0.2995 at SMOOTH 1.00 / 2 Hz**. Do not

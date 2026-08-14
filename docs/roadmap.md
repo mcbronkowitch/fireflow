@@ -2543,8 +2543,9 @@ spec `docs/superpowers/specs/2026-08-14-melody-reachable-design.md`: the guard
 moved to `_note_lane()`, so a note deck emits its phrase in STEP as in FLOW while
 SAMPLER and BBD decks keep the waveform bank in both modes. Three deliverables
 remain, and SMOOTH's note-interval slew clamp (`lane.cpp:361`) is still guarded
-by `_flow_melody_on()` — the one place on the melody path that still splits on
-the mode, measured to open a 0.2995 STEP/FLOW gap at SMOOTH 1.0 (map §1).
+by `_flow_melody_on()` — the split that survives an equal step count, not the
+only place on the melody path that still splits on the mode, measured to open a
+0.2995 STEP/FLOW gap at SMOOTH 1.0, 2 Hz (map §1).
 
 ### Marbles round — VARY as the character axis ⬜ (unscheduled; may need to precede the Glow rework)
 
