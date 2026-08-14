@@ -12,6 +12,14 @@ writes, a knob position nothing reaches, an identity that floating point does no
 honour. The fix is not to restructure the engine. It is to write down the parts
 that are invisible, and to measure before claiming.
 
+That opening statistic is derived, not remembered — reproduce it with:
+
+```bash
+for f in docs/superpowers/specs/*.md; do
+  echo "$(basename $f | cut -c1-10) $(git log --oneline -- "$f" | wc -l)"
+done | sort
+```
+
 **Scope:** the modulation layer, because that is where the tangle is — how a
 lane behaves and what actually reaches its axes. Extend it when another area
 burns a review round.
@@ -35,16 +43,16 @@ _flow_melody_on()   = _melodic && !_step_mode && _flow_melody
 _melody_engine_on() = _melodic && (_step_mode || _flow_melody)
 ```
 
-Eight flag combinations collapse to **five behaviours**. Measured with
-`statemap.cpp`: SMOOTH 0 (passthrough, so the raw target is visible), RANGE 1,
-VARY 0, rate 0.5 Hz, 8 s, seed 12345.
+Eight flag combinations collapse to **five behaviours**. Measured at SMOOTH 0
+(passthrough, so the raw target is visible), RANGE 1, VARY 0, rate 0.5 Hz, 20 s,
+seed 12345, **`set_melodic()` before `init()`** (see §6 — the order matters).
 
 | `_melodic` | `_step_mode` | `_flow_melody` | p2p @ SHAPE 0 | distinct | behaviour |
 |---|---|---|---|---|---|
 | false | false | – | 2.000 | 13152 | texture LFO, continuous |
 | false | true | – | 2.000 | 5 | texture, STEP follower — staircase |
 | true | false | false | 2.000 | 13152 | PITCH **as an LFO** (Sampler, BBD) |
-| true | false | true | 0.420 | 10 | FLOW melody phrase |
+| true | false | true | **0.246** | 7 | FLOW melody phrase — *seed-dependent, see below* |
 | true | true | false | 2.000 | 5 | STEP melody |
 | true | true | **true** | 2.000 | 5 | **identical to the row above** |
 
@@ -60,13 +68,24 @@ There is no host call that changes this.
 
 Read the p2p column across a *row*, not down it. At SHAPE 0 a melodic STEP lane
 emits **2.000** — the sine sampled at 8 step boundaries, which is 5 distinct
-values (`0, ±0.707, ±1`), seed-independent, identical on every FORM and every
-terrain. It carries no melodic information at all. The real phrase (**0.420**
-p2p, 10 distinct) only appears at the S&H end of the bank.
+values (`0, ±0.7078`, `±1` — `wave_sine` is `fast_sin`, error < 1.2e−3),
+seed-independent, identical on every FORM and every `SongMode`. It carries no
+melodic information at all. The real phrase only appears at the S&H end of the
+bank — and its ambitus is **much smaller, and not a constant**.
 
-**Ambitus ratio: 2.000 / 0.420 = 4.8×.** Any design that routes phrase values
-where a waveform used to be pays that factor. This number has now been rediscovered
-three times in three drafts; it belongs here so it is found once.
+**The phrase ambitus is a distribution, not a number.** Ten seeds, correct
+construction order, rate 0.5 Hz, 20 s, VARY 0:
+
+```
+0.155  0.246  0.295  0.351  0.354  0.388  0.590  0.653  0.698  0.840
+```
+
+So the ratio against the 2.000 sine staircase runs **2.4× to 12.9×** over this
+seed set, and a wider set will widen it. Any design that routes phrase values
+where a waveform used to be pays a factor in that band — **quote the range, never
+a single figure.** An earlier version of this file canonicalised "4.8×" from one
+seed measured in the wrong construction order; that is exactly the mistake this
+file exists to stop.
 
 ---
 
@@ -83,16 +102,17 @@ the modulation layer: the axes look symmetric on the panel and are not.
 | **RATE** | — | `_phase_inc * (1 + _ev_rate)`, plus DRIFT via `set_rate_scale` |
 | **PHASE** | `_phase + _ev_phase` (`lane.cpp:114, 552`) | — |
 
-**SHAPE has four writers. SMOOTH has exactly one.** Grep the whole engine for
-`_smooth` and you get the setter, the reader, and nothing else. That asymmetry —
-not the waveform bank — is why one knob feels unpredictable and the other feels
-inert.
+**SHAPE has four writers. SMOOTH has exactly one.** `ModLane::_smooth` has a
+setter, a reader, and nothing else — grep for it and filter out the unrelated
+`_morph_smooth` / `_lvl_smooth` / `_drift_smooth` / `PartFx::_smooth`. That
+asymmetry — not the waveform bank — is why one knob feels unpredictable and the
+other feels inert.
 
 The three hidden SHAPE contributors and their ranges:
 
 | Source | Set by | Range | Character |
 |---|---|---|---|
-| `_shape_offset` | DRIFT, per control tick (`center.cpp:143-144`) | `±0.15 · tap · weather`, taps `{+0.8, −1.0}` | continuous, τ ≈ 45 s |
+| `_shape_offset` | DRIFT, per control tick (`center.cpp:143-144`) | `±0.15 · tap · weather · drift`, taps `{+0.8, −1.0}` — the smoothed DRIFT knob is a **fourth factor**, which is what makes the term exactly 0 while DRIFT is 0 | continuous, τ ≈ 45 s |
 | `_ev_shape` | EVOLVE random walk (`lane.cpp:693`) | clamped `±0.25` | drifts, decays on settle |
 | `_kick_shape` | SPOT (`lane.cpp:403,418`) | `±0.35` per draw, **accumulates** | decays to 0, τ ≈ 1.5 s |
 
@@ -103,12 +123,17 @@ else stumbles around"), while DRIFT and EVOLVE reach all five. So:
 - **PITCH lane:** ±0.40 sustained (DRIFT + EVOLVE).
 - **Texture lanes:** ±0.75 peak, of which ±0.35 is a decaying gesture.
 
-Either way, **more than a third of the axis is not under the knob.** With DRIFT
-engaged a knob at 1.0 lands anywhere in `[0.60, 1.00]` on the melodic lane and
-`[0.25, 1.00]` on a texture lane just after a SPOT; a terrain base rule below 1.0
-widens the band further. A spec that says "at SHAPE 1 the behaviour is X" is
-describing an axis value the player may never reach — and §3 below shows the one
-place where reaching it matters most.
+Either way, **more than a third of the axis is not under the knob.** A knob at 1.0
+can be pulled down to `0.60` on the melodic lane and `0.25` on a texture lane
+just after a SPOT; a terrain base rule below 1.0 widens the band further.
+
+⚠️ **Those two bands are computed worst-case envelopes, not measurements** — the
+only inferred numbers in this file, flagged as such. Reaching an edge needs
+`|weather| = 1` **and** DRIFT at 1 **and** `_ev_shape` pinned at its clamp **and**
+a fresh SPOT draw at its extreme, all at once. Nobody has measured the actual
+distribution. The safe conclusion is directional and holds regardless: a spec
+that says "at SHAPE 1 the behaviour is X" is describing an axis value the player
+may never reach — and §3 below shows the one place where reaching it matters most.
 
 ---
 
@@ -126,17 +151,36 @@ Measured with `deadzone.cpp` — texture lane, FLOW, 30 s, seed 999:
 | 1.00 | +0.5 | 0.906 | 5 |
 | 1.00 | −0.5 | 0.450 | 4 |
 
-Above SHAPE 0.75 the bank crossfades pulse → S&H (`waveforms.h`). But on a
-**non-melodic lane in FLOW**, `_sh_slot()` returns 0 permanently: it reads
-`_cur_step`, and nothing writes `_cur_step` outside STEP and the FLOW-melody path
-(`lane.cpp:564`). So "S&H" is a frozen constant, and the crossfade toward it is an
-**amplitude fade to DC**. At VARY 0 the top fifth of the knob is a two-value
-square whose depth falls linearly to silence.
+Above SHAPE 0.75 the bank crossfades pulse → S&H (`waveforms.h`), so this is the
+**top quarter** of the knob. On a **non-melodic lane in FLOW** `_sh_slot()`
+returns 0 permanently — not because `_cur_step` is stale, but because of the
+**explicit early return** at `lane.cpp:564`, `if (!_step_mode && !_flow_melody_on()) return 0;`,
+taken before `_cur_step` is read at all. So "S&H" is a frozen constant, and the
+crossfade toward it is an **amplitude fade to a fixed DC offset**. Depth falls
+linearly: p2p = 2·(1 − 4·(sh − 0.75)).
+
+**It does not fade to silence, and this distinction matters.** The lane settles on
+the held value, which is nowhere near zero. Measured at SHAPE 1.00, VARY 0, ten
+seeds:
+
+```
++0.090  −0.157  −0.227  −0.355  −0.382  −0.390  −0.520  −0.527  −0.527  +0.274
+```
+
+So the target parks at base + depth·(up to ±0.53), **permanently and per seed**.
+A designer reading "the modulation turns off" expects the base value; what
+actually happens is a silent static offset. Different bug, different fix.
 
 VARY is what makes that corner move at all — mutation is the only thing that
-changes the held value. This is the mechanism behind the "SHAPE is unpredictable"
-report: for a fifth of its travel the knob does not change the shape, it turns the
-modulation off, and whether it does depends on a *different* knob.
+changes the held value (VARY +0.5 restores p2p 0.906). This is the mechanism
+behind the "SHAPE is unpredictable" report: for a quarter of its travel the knob
+does not change the shape, it fades the modulation out onto an arbitrary offset,
+and whether it does depends on a *different* knob.
+
+The finding survives attack: unchanged across seeds 999 / 12345 / 7, across rates
+0.05 / 0.5 / 2.3 Hz, under SMOOTH 0.5 and 1.0 and `_fixed_slew` (which add slew
+ringing, not depth), and it scales proportionally with RANGE. The `distinct = 2`
+is not a rounding artefact — the exact-float count is also 2.
 
 ---
 
@@ -147,7 +191,7 @@ Behaviour that depends on a variable is only as knowable as that variable's
 
 | Variable | Written by | Never written by |
 |---|---|---|
-| `_cur_step` | STEP path and the FLOW-melody path only | the FLOW LFO path — it stays −1 → `_sh_slot()` = 0 |
+| `_cur_step` | STEP path and the FLOW-melody path. `tick()` also writes it in a non-STEP branch (`lane.cpp:1013`), unreachable for the FLOW LFO only because `next_edge` is always 1.0 there | — but for the FLOW LFO this is moot: `_sh_slot()` **early-returns 0** at `lane.cpp:564` before reading `_cur_step` at all. Do not reason about its value on that path |
 | `_flow_melody` | `part.cpp:43,441` from the engine id: **off for SAMPLER and BBD** | any host directly; Glow cannot reach it except by changing the engine |
 | `_melodic` | `super_modulator.cpp:14`, unconditionally, once | anything else, ever |
 | `_active[slot]` | boots **all true** (`part.h:640`); only writer today is `Fireflow.cpp:881` (LANE_PITCH, `!samplerPart`), pushed every block | **the flow layer — `flow.cpp` never calls `set_target_active`** |
@@ -165,16 +209,23 @@ deactivated. **Host-dependent, and only one of the two hosts protects it.**
 
 ## 5. Floating point: what is not an identity
 
-- `lerpf(a, b, t)` is `a + (b − a)·t`. At `t == 1` this is **not** `b`. Measured:
-  over 400 000 points, 41 669 mismatches (10.4 %), max error 5.96e−08 (1 ULP).
-  The mismatch *rate* depends entirely on how you sample and is not a stable
-  property — only "not exact, ≤ 1 ULP" is.
+- `lerpf(a, b, t)` is `a + (b − a)·t`. At `t == 1` this is **not** `b`.
+  Worst **absolute** error over operands in `[−1, 1]`: **5.96e−08 = 2⁻²⁴**, measured.
+- The mismatch *rate* is not a property at all — it depends entirely on how you
+  sample. Measured on different sweeps of the same function: 10.4 %, 9.4 %, and
+  0 % (uniform random floats, coarse enough to be exact). A rate quoted without
+  its sweep is meaningless.
+- **The error is not 1 ULP.** Worst measured ULP *distance* on a 4001-point grid:
+  **1024**. The absolute error is bounded because the operands are; the relative
+  error is not, and it blows up as the held value approaches zero.
+  → **Write such a gate as an absolute epsilon of ~6e−08. A ULP-relative or
+  exact-equality gate fails near zero and cannot be trusted to go RED for the
+  right reason.**
 - Consequence: `shape_value(ph, 1.0f, hold)` does **not** return `hold` exactly,
   despite the comment at `lane.cpp:546-548` and the claim in
   `2026-08-13-flow-melody-engine-design.md:328-330`. Both are wrong.
-  `test_waveforms.cpp:14-15` passes only because it uses `.epsilon(0.01)`.
-- Any gate written as bit-identity across this call **cannot go RED reliably**.
-  State it as equality within 1 ULP.
+  `test_waveforms.cpp:14-15` passes only because it already uses `.epsilon(0.01)`.
+  Any gate written as bit-identity across this call cannot be relied on.
 
 ---
 
@@ -199,13 +250,29 @@ repo. Promote one to `tests/` only when it asserts something worth defending.
 
 Skeleton:
 
+### Construction order is part of the measurement
+
+**`set_melodic()` must come BEFORE `init()`.** `init()` reads `_melodic`
+(`lane.cpp:70`) and branches: melodic → `_generate_pattern_a()`, non-melodic →
+`_fill_walk()`. `SuperModulator::init` therefore orders them that way
+(`super_modulator.cpp:14-15`). A probe that calls `init()` first measures a
+melodic lane whose RNG stream was consumed by a contour walk the engine never
+runs on it — a different object, with different numbers.
+
+This is not hypothetical: the first version of this file shipped a skeleton with
+the order reversed, and §1 row 4 carried its wrong figure (0.420 / 10 distinct
+instead of 0.246 / 7) into the map until an independent review re-measured it.
+**A probe is only as good as its setup, so the setup belongs in the report.**
+State seed, rate, duration, and construction order beside every number.
+
 ```cpp
 #include "mod/lane.h"
 #include <cstdio>
 int main(){
     spky::ModLane l;
+    l.set_melodic(false);              // BEFORE init() -- see above
     l.init(48000.f, /*seed*/ 12345);
-    l.set_melodic(false); l.set_step(false, 8);
+    l.set_step(false, 8);
     l.set_rate_hz(0.5f); l.set_shape(1.0f); l.set_smooth(0.f);
     l.set_range(1.f); l.set_variation(0.f);
     float mn = 1e9f, mx = -1e9f;
