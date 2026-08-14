@@ -1,0 +1,175 @@
+// The whole-instrument audio-health gates for the interval-relative SMOOTH
+// law. Spec: docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md 3.
+//
+// G4' and G4" are deliberately DIFFERENT gates. Only the init patch is
+// converted to preserve its sound (spec 2.4), so only it owes a +-3 dB band.
+// The four frozen points carry SMOOTH values drawn from the deleted terrain
+// generator against the OLD law; under the new one they legitimately land 5-14
+// dB quieter, and asking them to hold a band would be asking the rework not to
+// work. They owe continued life, which is what G4" asserts.
+#include "doctest/doctest.h"
+#include "param_table.h"
+#include "param_impact_points.h"
+#include "center/center.h"
+#include "fx/flux.h"
+#include "parts/bbd_engine.h"
+#include <cmath>
+#include <cstdio>
+#include <string>
+
+using namespace spky;
+
+namespace {
+
+// Pre-conversion init-patch SMOOTH values. Duplicated here rather than
+// included from host/vcv/ because tests/ must not depend on the VCV host.
+// Task 4 converts these together with the three VCV mirrors.
+constexpr float kInitSmoothA = 0.836144507f;
+constexpr float kInitSmoothB = 1.0f;
+
+float s_sl_echo[PART_COUNT][2][Flux::kMaxSamples];
+float s_sl_bbd[PART_COUNT][2][BbdEngine::kCells];
+AmbientReverb s_sl_reverb;
+
+FxMem sl_fx_mem() {
+    FxMem m;
+    for (int p = 0; p < PART_COUNT; ++p) {
+        m.echo[p][0] = s_sl_echo[p][0];
+        m.echo[p][1] = s_sl_echo[p][1];
+        m.bbd[p][0]  = s_sl_bbd[p][0];
+        m.bbd[p][1]  = s_sl_bbd[p][1];
+    }
+    m.reverb = &s_sl_reverb;
+    return m;
+}
+
+constexpr float kSr = 48000.f;
+constexpr int   kTextureLanes[4] = {LANE_SOURCE, LANE_SIZE, LANE_MOTION, LANE_LEVEL};
+
+// The shipped VCV init patch, in ENGINE ParamId order. init_patch.hpp is in
+// VCV PANEL order, so this is mapped by NAME, not by index -- copying it
+// positionally silently pairs every value with the wrong parameter.
+void apply_init_patch(Instrument& in) {
+    float v[P_COUNT] = {0.f};
+    v[P_ENGINE_A] = 2.f;          v[P_ENGINE_B] = 0.f;
+    v[P_SCALE]    = 3.f;
+    v[P_SONG_B]   = 6.f;
+    v[P_RATE_A]   = 0.184337318f; v[P_RATE_B]   = 0.163855359f;
+    v[P_DENSITY_A]= 0.534939826f;
+    v[P_SMOOTH_A] = kInitSmoothA; v[P_SMOOTH_B] = kInitSmoothB;
+    v[P_DEPTH_A]  = 0.403613269f; v[P_DEPTH_B]  = 0.681928277f;
+    v[P_VARIATION_A] = 0.768674195f; v[P_VARIATION_B] = 0.671083927f;
+    v[P_TUNE_A]   = 0.001204819f; v[P_TUNE_B]   = 0.321686625f;
+    v[P_ATTACK_A] = 1.f;          v[P_ATTACK_B] = 1.f;
+    v[P_DECAY_A]  = 1.f;          v[P_DECAY_B]  = 1.f;
+    v[P_RES_B]    = 0.220000312f;
+    v[P_SUB_A]    = 0.738666236f;
+    v[P_FILT_A]   = -0.199999928f; v[P_FILT_B]  = -0.292000026f;
+    v[P_FLUXMIX_A]= 0.353333473f; v[P_FLUXMIX_B]= 0.650667071f;
+    v[P_GRIT_A]   = 0.173493922f;
+    v[P_COMP_A]   = 0.761333168f; v[P_COMP_B]   = 0.848000109f;
+    v[P_COLOR_A]  = 0.001204819f; v[P_COLOR_B]  = 0.862999976f;
+    v[P_REVMIX_A] = 0.343394309f; v[P_REVMIX_B] = 0.805333197f;
+    v[P_MORPH]    = 0.495180398f; v[P_COUPLE]   = 1.0f;
+    v[P_DRIFT]    = 0.791999996f;
+    v[P_REV_SIZE] = 1.f;          v[P_REV_DECAY]= 0.800755024f;
+    v[P_REV_TONE] = 0.905333221f; v[P_REV_DIFF] = 0.768000245f;
+    v[P_TEMPO_BPM]= 50.f;         v[P_PACE]     = 0.5f;
+    for (int p = 0; p < P_COUNT; ++p) {
+        if (p == P_MODE || p == P_STEPS_A || p == P_STEPS_B) continue;
+        apply_param(in, p, v[p]);
+    }
+    apply_mode_and_steps(in, false, 0, 0);
+}
+
+void apply_frozen(Instrument& in, const FrozenPoint& rp) {
+    for (int p = 0; p < P_COUNT; ++p) {
+        if (p == P_MODE || p == P_STEPS_A || p == P_STEPS_B) continue;
+        apply_param(in, p, rp.v[p]);
+    }
+    in.set_sync(rp.step);
+    in.set_step(PART_A, rp.step, rp.steps_a);
+    in.set_step(PART_B, rp.step, rp.steps_b);
+}
+
+// Peak-to-peak of one lane's post-slew output, plus a NaN watch on the audio.
+struct Sweep { float p2p[PART_COUNT][LANE_COUNT]; bool finite; };
+
+Sweep sweep(Instrument& in, float seconds) {
+    Sweep s{};
+    s.finite = true;
+    float mn[PART_COUNT][LANE_COUNT], mx[PART_COUNT][LANE_COUNT];
+    for (int p = 0; p < PART_COUNT; ++p)
+        for (int i = 0; i < LANE_COUNT; ++i) { mn[p][i] = 1e9f; mx[p][i] = -1e9f; }
+
+    const int total = int(seconds * kSr);
+    for (int n = 0; n < total; ++n) {
+        float l = 0.f, r = 0.f;
+        in.process(nullptr, nullptr, &l, &r, 1);
+        if (!std::isfinite(l) || !std::isfinite(r)) s.finite = false;
+        for (int p = 0; p < PART_COUNT; ++p)
+            for (int i = 0; i < LANE_COUNT; ++i) {
+                const float v = in.lane_value_for_test(p, i);
+                if (v < mn[p][i]) mn[p][i] = v;
+                if (v > mx[p][i]) mx[p][i] = v;
+            }
+    }
+    for (int p = 0; p < PART_COUNT; ++p)
+        for (int i = 0; i < LANE_COUNT; ++i) s.p2p[p][i] = mx[p][i] - mn[p][i];
+    return s;
+}
+
+} // namespace
+
+TEST_CASE("G4': the init patch's texture lanes keep their movement") {
+    // Baseline captured on commit b328984 (accessor present, OLD law still in
+    // place -- the only tree where this measurement is meaningful), init
+    // patch, 40 s, SMOOTH 0.836144507 / 1.0, audio finite.
+    // Per lane, per deck, in ParamId lane order SOURCE/SIZE/MOTION/LEVEL.
+    // A +-3 dB band: the conversion in gen_panel.py exists to hold this.
+    static const float kBaseline[PART_COUNT][4] = {
+        {1.955478f, 0.972017f, 0.989842f, 1.960271f},   // deck A
+        {1.975470f, 0.999991f, 0.999896f, 1.968115f},   // deck B
+    };
+    Instrument in;
+    in.init(kSr, sl_fx_mem());
+    apply_init_patch(in);
+    // The init patch's slowest texture lane cycles in ~153 s; 8 cycles is not
+    // affordable in a unit test, so this measures 40 s -- long enough for the
+    // two fast lanes to complete several cycles and for the slow ones to
+    // traverse most of one, which is what a p2p comparison needs.
+    const Sweep s = sweep(in, 40.f);
+    CHECK_MESSAGE(s.finite, "G5: non-finite audio at the init patch");
+    for (int p = 0; p < PART_COUNT; ++p)
+        for (int k = 0; k < 4; ++k) {
+            const float got = s.p2p[p][kTextureLanes[k]];
+            const float want = kBaseline[p][k];
+            const float db = 20.f * std::log10((got + 1e-9f) / (want + 1e-9f));
+            CHECK_MESSAGE(std::fabs(db) <= 3.f,
+                          "deck " << p << " lane " << kTextureLanes[k]
+                                  << " moved " << db << " dB");
+        }
+}
+
+// G4" and G5 share one render per frozen point. Kept as one TEST_CASE rather
+// than two on purpose: `sweep` already returns both answers, and rendering the
+// four points twice would double this file's contribution to suite runtime for
+// nothing. The two CHECKs stay separately worded so a failure still names which
+// gate fell over.
+TEST_CASE("G4\"/G5: the frozen points still move, and stay finite") {
+    for (int i = 0; i < kPer; ++i) {
+        for (const FrozenPoint* rp : {&kFlowPoints[i], &kStepPoints[i]}) {
+            Instrument in;
+            in.init(kSr, sl_fx_mem());
+            apply_frozen(in, *rp);
+            const Sweep s = sweep(in, 20.f);
+            CHECK_MESSAGE(s.finite, "G5: non-finite audio at "
+                                        << std::string(rp->origin));
+            for (int p = 0; p < PART_COUNT; ++p)
+                for (int k = 0; k < 4; ++k)
+                    CHECK_MESSAGE(s.p2p[p][kTextureLanes[k]] > 0.05f,
+                                  "G4\": " << std::string(rp->origin) << " deck "
+                                           << p << " lane " << kTextureLanes[k]);
+        }
+    }
+}
