@@ -213,10 +213,10 @@ Terrains load_points() {
         out.step[i] = kStepPoints[i];
     }
     for (int i = 0; i < kPer; ++i) {
-        REQUIRE_MESSAGE(deck_audible(out.flow[i], PART_A), out.flow[i].origin);
-        REQUIRE_MESSAGE(deck_audible(out.flow[i], PART_B), out.flow[i].origin);
-        REQUIRE_MESSAGE(deck_audible(out.step[i], PART_A), out.step[i].origin);
-        REQUIRE_MESSAGE(deck_audible(out.step[i], PART_B), out.step[i].origin);
+        REQUIRE_MESSAGE(deck_audible(out.flow[i], PART_A), std::string(out.flow[i].origin));
+        REQUIRE_MESSAGE(deck_audible(out.flow[i], PART_B), std::string(out.flow[i].origin));
+        REQUIRE_MESSAGE(deck_audible(out.step[i], PART_A), std::string(out.step[i].origin));
+        REQUIRE_MESSAGE(deck_audible(out.step[i], PART_B), std::string(out.step[i].origin));
     }
     return out;
 }
