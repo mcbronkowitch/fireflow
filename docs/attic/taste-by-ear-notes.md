@@ -45,8 +45,10 @@ claim that no music in this box ever wants that value."
 Two more hard limits live outside this table on purpose and are *not*
 duplicated here, per taste.h's own note: `P_RES`'s 0.75 ceiling is in
 `flow_params.h` (it also normalises the terrain distance metric), and
-`kBodyFiltFloor` / `kBbdFlowRangeMax` are runtime clamps in `flow.cpp`
-because they're conditional on which engine a deck is running. All three
+`kBodyFiltFloor` is a runtime clamp in `flow.cpp` because it's conditional
+on which engine a deck is running, and `kBbdFlowRangeMax` is a runtime
+clamp there for the same reason **and** because it is additionally
+conditional on the operating mode. All three
 still express the same kind of claim and are equally worth carrying to a
 panel design; they are just not in this file.
 
@@ -65,6 +67,56 @@ measured that about 3.4 dB of the level the owner still wants is
 unaccounted for after this move — the file explicitly says not to chase it
 by raising the ceiling back to 0.70; that has already been ruled out by
 ear.
+
+**"The four redrawn curves"** — a floor-list item named only by a commit
+label inside taste.h's own per-commit dB table (`engine/flow/taste.h:511`,
+`9f6daf6 veto table + four redrawn curves`). taste.h does not itself name
+the four; the commit they come from does (`git show -s 9f6daf6`, title
+"the taste tables get their hard limits, and four curves get redrawn"):
+MOTION "orbit"'s WOBL curve (`P_REV_MOD`) flattens into the new veto band
+instead of being clipped, with SMEAR (`P_REV_SMEAR`) picking up the
+"seasick" end it used to carry (this is the MOTION-story use recorded in
+§3.3); DIRT "heat"'s `P_DRIVE` and `P_COMP_A` curves rescale into their
+bands with shape kept; SPACE "bloom"'s `P_REVMIX_A`/`P_REVMIX_B` bp0 floors
+at the veto instead of sitting near-dry. Two of those four — DIRT's
+`P_DRIVE` and `P_COMP_A` — no longer exist as curves at all: the DIRT
+story was deleted 2026-08-12 and both became the base rules described in
+§1.4, carrying the same redrawn band forward.
+
+**The per-commit dB evidence behind the COMP band move and the "owner's
++6 dB"** (`engine/flow/taste.h:502-545`, "THE OWNER'S +6 dB, WHAT ACTUALLY
+REACHES HIM"). Mean per-seed loudness change across the whole branch is
++2.58 dB, range −0.45 to +6.21 dB — not the same figure as the +4.78 dB
+the COMP work reported on its own, because that report's baseline was 3.67
+dB below the branch point already. Mean per-commit change, in dB against
+the previous commit:
+
+```
+9f6daf6 veto table + four redrawn curves     -2.12
+3435c31 base rule edits                      +0.16
+50ad085 DENSITY archetype window             -0.11
+4624822 musical weights (rungs/steps/skew)   -1.60
+d1a9416 COMP 0.10-0.50 -> 0.40-0.70          +6.38
+46cd3e8 COMP ceiling -> 0.60 (by ear)        -1.61
+c945866 the per-domain adventure draw        +1.46
+019901c adventure per domain, corrected      +0.01
+                                       NET   +2.58
+```
+
+Two mechanisms behind the spread were measured, and the file is explicit
+about what was and wasn't established: across the ten candidate seeds,
+correlation between a seed's pre-COMP level in dBFS and the dB it gained
+from the COMP move is −0.66 — the loudest seed (0x101, −19.6 dBFS) gained
+only +1.50 dB where the other nine gained +3.55 to +5.78 dB, a correlation
+over ten points whose underlying compressor mechanism was "NOT measured
+and is deliberately not named" in the file. Separately, three of the four
+seeds that gained least overall (0x303, 0x606, 0x505) are not COMP cases
+at all — their COMP gains sit near the mean — but they lost level to the
+musical-weights commit `4624822` (−1.80, −1.62, −1.19 dB respectively,
+against that commit's own −1.60 dB mean), because that commit changes
+which rung and step count a terrain draws, so "a seed's level after it is
+a different terrain's level, not the same terrain turned down." No further
+mechanism is claimed for either finding.
 
 ### 1.3 The drone SHAPE cap, and the coupling finding (carry verbatim)
 
@@ -109,7 +161,11 @@ want to know about:
   not a weight. This is new detail on top of the already-recorded
   reverb-mod-split finding (DIFF is the one with a knob; SMEAR and MOD/WOBL
   are constants) — it says *where in DIFF's own range* the owner doesn't
-  want to land.
+  want to land. Note for the next reader: `P_REV_TONE` (BRIGHT story,
+  `taste.h:896`) is *not* a by-ear constant of the same kind — it is a
+  5-breakpoint story curve that rises from ~0.1 to ~0.9 as the BRIGHT
+  macro moves, not a value held anywhere. Don't go looking for a
+  "TONE held high" rule; there isn't one.
 
 ### 1.5 First-pass, explicitly *not yet* by ear — do not treat as settled
 
@@ -256,8 +312,43 @@ not eliminated — the ceiling is a property the generator holds for
 **`kCalmCornerRmsMin = 1e-5`** (§7.8 floor) is explicitly a silence
 *detector*, not a musical target — it exists only to catch a calm corner
 that has gone functionally mute by accident, not to state where quiet
-should sit. The musical question it sits next to *is* answered, though,
-and is the by-ear content worth carrying: the owner signed off
+should sit. It carries its own per-commit measurement, distinct from
+`kCalmCornerRmsMax`'s table above: same masters 1..2000 calm-corner scan,
+1,566 non-Sampler terrains, counting terrains at or below this floor:
+
+```
+                          at or below this floor    also below 1e-4
+4ec5be0 (branch point)      193  (12.3 %)               53
+89eb461 (Task 7 point)      103  ( 6.6 %)               70
+```
+
+So roughly one drawn terrain in fifteen currently renders functionally
+mute at its calm corner (one in eight before this branch) — a defect the
+file calls arguably worse than the ceiling breach, because it is a NEW
+press producing silence, and it reads green in the gate purely because
+none of the ten fixed candidate seeds happens to sit in that fraction.
+
+The onset and the cure are **not equally strong claims, and the file is
+explicit about the difference — carried here for the same reason:**
+
+- **ONSET**, isolated *within* its commit by reversion, using the same
+  three-way revert of `3435c31` above (0x404's rows are what make that
+  table double as this constant's own isolation): reverting the drone
+  SHAPE cap alone puts 0x404 back at 1.35e-03 (mute), while reverting
+  either the DIFF narrowing (6.93e-08) or the drone STEPS_B widening
+  (7.00e-08) leaves it mute regardless. Same one span that retired the
+  0x707 ceiling breach (§1.3) is what silences 0x404.
+- **CURE, commit-granularity only.** 0x404 stayed mute through commit
+  `46cd3e8` and reads 8.03e-05 (above the floor) at `c945866`, "the
+  commit that introduced the per-domain adventure draw." That is a
+  per-commit bisect, **not** a within-commit isolation — `c945866` was
+  followed by `019901c` ("the nerve goes per domain") correcting the same
+  mechanism, so "the adventure draw did it" is the commit's headline, not
+  a measured attribution to a single edit. Do not restate the cure with
+  the same confidence as the onset; the file itself draws that line.
+
+The musical question the floor sits next to *is* answered, though, and is
+the by-ear content worth carrying: the owner signed off
 (2026-08-07) that the measured spread of calm-corner levels across
 terrains — roughly −105 to −31 dBFS, a ~74 dB range driven by archetype
 and per-terrain draws — is **character, not error**: "a sparse drone
