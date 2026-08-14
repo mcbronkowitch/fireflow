@@ -104,6 +104,7 @@ TEST_CASE("lane: SMOOTH is relative to the lane cycle, not to wall clock") {
         const float smoothed = p2p_at(rates[r], 0.9f);
         REQUIRE(raw > 0.1f);                 // a silent lane answers nothing
         const float attenuation = smoothed / raw;
+        REQUIRE(attenuation < 0.9f);   // SMOOTH 0.9 must actually smooth
         INFO("rate " << rates[r] << " Hz: raw " << raw
              << " smoothed " << smoothed << " attenuation " << attenuation);
         if (r == 0) first = attenuation;
