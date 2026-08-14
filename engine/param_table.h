@@ -1,22 +1,22 @@
-// engine/flow/flow_params.h
+// engine/param_table.h
 #pragma once
-#include "flow/flow_ids.h"
 #include "instrument.h"
 
-namespace spky { namespace flow {
+namespace spky {
 
-// A draw range, engine units. Lives here rather than in taste.h (where it was
-// originally declared) because it is a two-float struct with no tuning
-// content of its own -- taste.h's kBaseRules/kStories build ON it, but
-// terrain.h only needs the TYPE (for Terrain::window[]), and taste.h is the
-// whole tuning table plus its transitive includes (mod/divisions.h,
-// parts/engine_iface.h). Moved 2026-08-06 (final review) so a consumer that
-// only needs to name a Span -- terrain.h chief among them -- no longer drags
-// in every tuning constant in the file to get it.
+// A draw range, engine units. It was declared in the terrain layer's tuning
+// table and moved out on 2026-08-06 so a consumer that only needed to name a
+// range did not have to drag the whole table in to get it. That layer was
+// deleted 2026-08-14 and the type currently has no consumer left; it survives
+// as the vocabulary a panel or a generator would use to state a parameter's
+// draw range against the table below.
 struct Span { float lo, hi; };
 
-// Every parameter the flow layer owns. Ranges are ENGINE units (§2: the
-// surface is not uniformly 0..1 -- FILT/VARIATION/CHOKE are bipolar,
+// Every parameter reachable through apply_param() / apply_mode_and_steps()
+// below -- the set the deleted terrain layer owned, kept because it is the
+// engine's own parameter table and the only enumeration of the whole surface
+// in one place. Ranges are ENGINE units (the surface is not uniformly
+// 0..1 -- FILT/VARIATION/CHOKE are bipolar,
 // ENGINE/SCALE/ROOT/FORM/SONG/STEPS are discrete). steps==0 -> continuous.
 // The RES ceiling 0.75 encodes the by-ear resonance cap as a hard limit.
 //
@@ -25,10 +25,11 @@ struct Span { float lo, hi; };
 // as corroboration, never as the source -- a Fireflow control can be deleted
 // or merged (it has been) without any of these numbers moving.
 //
-// THE AUTHORITY FOR THE Fireflow <-> flow CORRESPONDENCE IS
-// docs/flow-fireflow-param-map.md -- one row per base-rule parameter, each
-// either mapped with its conversion or marked UNREACHABLE with a reason.
-// Do not re-derive a mapping here, and do not let this comment grow one.
+// The Fireflow <-> terrain correspondence this table once served is history:
+// the converter and the layer it fed were deleted 2026-08-14. Its parameter
+// map is kept for the reasoning only, at
+// docs/attic/flow-fireflow-param-map.md. Do not re-derive a mapping here, and
+// do not let this comment grow one.
 //
 // - ENGINE: engine/parts/engine_iface.h's EngineId runs
 //   ENGINE_TEST_TONE=0 .. ENGINE_BBD=5, ENGINE_COUNT=6 -- so 0..5, 6 steps,
@@ -54,19 +55,20 @@ struct Span { float lo, hi; };
 //   reduction it is configSwitch(0.f, kSongLadderCount-1 == 13.f, ..., 14
 //   labels) (Fireflow.cpp:396-398) and its value is a LADDER RUNG, not a
 //   SongMode. The engine range stands; the corroboration did not.
-// - STEPS: 2..16, 15 steps -- the flow layer's own floor, enforced in
-//   Flow::push_mode_and_steps (flow.cpp:400-401). Fireflow does NOT match
-//   it: STEPS_A/B is configParam(c.id, 0.f, 16.f, init, "Steps")
-//   (Fireflow.cpp:411), because 0 is how a Fireflow deck says "STEP off"
-//   (set_step(p, steps > 0, steps), Fireflow.cpp:843). In flow that state is
-//   P_MODE, not a step count, which is why the ranges differ on purpose.
+// - STEPS: 2..16, 15 steps. The floor of 2 is this table's own: it is the
+//   count a caller may issue through apply_mode_and_steps() below, and it
+//   never reaches 0 or 1 because "off" is a mode, not a step count. Fireflow
+//   does NOT match it: STEPS_A/B is configParam(c.id, 0.f, 16.f, init,
+//   "Steps") (Fireflow.cpp:411), because 0 is how a Fireflow deck says "STEP
+//   off" (set_step(p, steps > 0, steps), Fireflow.cpp:843). Here that state
+//   is P_MODE, which is why the ranges differ on purpose.
 // - LINK: NOT unipolar's brief placeholder (-1..1). Flux::set_link()
 //   (engine/fx/flux.cpp:126-128) clamps to [0,1], and Fireflow.cpp's own
 //   LINK_A/B configParam is 0..1 (Fireflow.cpp:334-335) -- the bipolar
 //   surface was retired in a deliberate migration (see migrate_legacy_link()
 //   at the patch-load site, Fireflow.cpp:1074). So 0..1 continuous, not
 //   -1..1. Re-verified 2026-08-12; only the line numbers had drifted.
-#define SPKY_FLOW_PARAMS(X) \
+#define SPKY_PARAMS(X) \
   X(P_ENGINE_A,   0.f, 5.f,  6)  X(P_ENGINE_B,   0.f, 5.f,  6) \
   X(P_SCALE,      0.f, 12.f, 13) X(P_ROOT,       0.f, 11.f, 12) \
   X(P_FORM_A,     0.f, 4.f,  5)  X(P_FORM_B,     0.f, 4.f,  5) \
@@ -99,39 +101,29 @@ struct Span { float lo, hi; };
   X(P_REV_TONE,   0.f, 1.f, 0)   X(P_REV_DIFF,   0.f, 1.f, 0) \
   X(P_REV_SMEAR,  0.f, 1.f, 0)   X(P_REV_MOD,    0.f, 1.f, 0) \
   X(P_TEMPO_BPM, 50.f, 140.f, 0) \
-  /* The terrain's operating mode, spec 2026-08-06 §5. 0 = FLOW/free (lanes
-     breathe in their own kLaneRatio relationships, no grid), 1 = STEP/synced
-     (step sequencer on the divisions.h ladder). ONE global value, not one per
-     deck: Instrument::set_sync is global (instrument.h:274), so a per-deck
-     mode would need SYNC on and off at once.
-     MUST BE PUSHED AFTER P_RANGE_A/B (static_assert in flow.cpp) and its base
-     draw must keep its stream key: base draws are keyed kStreamParamBase +
-     param (terrain.cpp:382), so inserting a parameter BEFORE this one re-seeds
-     its stream and re-resolves the FLOW/STEP draw of every existing terrain
-     code. Appending AFTER it is free, which is where P_PACE went on
-     2026-08-12. This used to read "MUST STAY LAST"; the positional half of
-     that argument is now an explicit static_assert. */ \
+  /* The instrument's operating mode. 0 = FLOW/free (lanes breathe in their
+     own kLaneRatio relationships, no grid), 1 = STEP/synced (step sequencer
+     on the divisions.h ladder). ONE global value, not one per deck:
+     Instrument::set_sync is global (instrument.h:274), so a per-deck mode
+     would need SYNC on and off at once. */ \
   X(P_MODE,       0.f, 1.f,  2) \
-  /* PACE: the global modulation time-stretch (spec 2026-08-12). 0.5 = x1.
-     Deliberately NOT story-owned -- a story-owned parameter is unreachable
-     from the base overlay by construction (terrain.cpp:437-461), so owning it
-     would throw away a transferred patch's own speed. M_PACE adds a live
-     offset on top in Flow's guard chain instead. */ \
+  /* PACE: the global modulation time-stretch. 0.5 = x1. Carries a live
+     offset rather than a base value. */ \
   X(P_PACE,       0.f, 1.f, 0)
 
 enum ParamId {
-#define SPKY_FLOW_ENUM(id, lo, hi, st) id,
-  SPKY_FLOW_PARAMS(SPKY_FLOW_ENUM)
-#undef SPKY_FLOW_ENUM
+#define SPKY_ENUM(id, lo, hi, st) id,
+  SPKY_PARAMS(SPKY_ENUM)
+#undef SPKY_ENUM
   P_COUNT
 };
 
 struct ParamInfo { const char* name; float lo, hi; int steps; };
 
 constexpr ParamInfo kParams[P_COUNT] = {
-#define SPKY_FLOW_INFO(id, lo_, hi_, st) { #id, lo_, hi_, st },
-  SPKY_FLOW_PARAMS(SPKY_FLOW_INFO)
-#undef SPKY_FLOW_INFO
+#define SPKY_INFO(id, lo_, hi_, st) { #id, lo_, hi_, st },
+  SPKY_PARAMS(SPKY_INFO)
+#undef SPKY_INFO
 };
 
 inline float clamp_to(const ParamInfo& pi, float v) {
@@ -213,10 +205,34 @@ inline void apply_param(Instrument& in, int param, float v) {
     // P_MODE, P_STEPS_A and P_STEPS_B are deliberately NOT handled here.
     // set_step() takes mode AND count together and set_sync() is global, so
     // routing them needs all three values at once -- which this per-param,
-    // stateless function cannot see. Flow::push_mode_and_steps() owns them.
+    // stateless function cannot see. apply_mode_and_steps() below owns them.
     case P_MODE: case P_STEPS_A: case P_STEPS_B: break;
     default: break;
     }
 }
 
-} } // namespace spky::flow
+// The three parameters apply_param() refuses, issued as the one unit they
+// have to be: set_step() takes mode and count together and set_sync() is
+// global, so a per-parameter, stateless setter cannot see all three at once.
+// Flow::push_mode_and_steps() used to own this and was deleted with the flow
+// layer (removal spec
+// docs/superpowers/specs/2026-08-14-flow-glow-removal-design.md, 4.2); a
+// panel driving the instrument through kParams needs it or it cannot set the
+// operating mode or either step count.
+//
+// This forces both decks' STEP state and SYNC together, so it gives up the
+// per-deck freedom Instrument actually has: set_step() is per-deck
+// (instrument.h:91) while set_sync() is the only global piece
+// (instrument.h:424), and the shipped Fireflow VCV module uses that freedom
+// every day -- host/vcv/src/Fireflow.cpp:892 calls
+// `set_step(p, steps > 0, steps)` inside a per-deck loop, so deck A can run
+// STEP while deck B runs free. A caller that needs that split cannot reach
+// it through this function and must call set_step()/set_sync() directly.
+inline void apply_mode_and_steps(Instrument& in, bool step_mode,
+                                 int steps_a, int steps_b) {
+    in.set_sync(step_mode);
+    in.set_step(PART_A, step_mode, steps_a);
+    in.set_step(PART_B, step_mode, steps_b);
+}
+
+} // namespace spky

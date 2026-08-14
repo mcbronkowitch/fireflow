@@ -14,8 +14,11 @@ namespace {
 // A STEPS the melody engine's own phrase length cannot coincide with. The
 // phrase is kFlowPhraseSlots == 8 slots whatever STEPS says, so a fixture at
 // STEPS 8 makes "pattern_groove.len == _effective_length()" true by
-// construction and cannot fail on it. Glow pushes 2..16 in FLOW as well as in
-// STEP (super_modulator.cpp), so 12 is a value the hosts really produce.
+// construction and cannot fail on it. A caller that sets mode and count
+// independently -- the render host's set_step action -- pushes 2..16 in FLOW
+// as well as in STEP (super_modulator.cpp), so 12 is a value a caller can
+// really produce (no shipped scenario sets a step count in FLOW, but
+// apply_mode_and_steps(in, false, 12, 12) in engine/param_table.h now can).
 constexpr int kOffGridSteps = 12;
 
 // A single deck in FLOW at a slow rate, with the neighbour muted so nothing
@@ -131,8 +134,8 @@ TEST_CASE("a deck that leaves FLOW melody for STEP re-lengths its phrase") {
     // only set_flow_melody's own check can flag the phrase for regeneration.
     //
     // Fireflow cannot reach this (it spends STEPS 0 on the mode switch, so the
-    // delta always fires); Glow and the render host push a real STEPS in both
-    // modes and can.
+    // delta always fires); the render host pushes a real STEPS in both modes
+    // and can.
     Instrument inst;
     inst.init(48000.f);
     configure_flow_deck(inst, 0, ENGINE_SYNTH, kOffGridSteps);

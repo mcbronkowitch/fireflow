@@ -8,10 +8,13 @@ namespace spky {
 
 // The hardware SONG knob is one axis through the 5x7 (Principle, SongMode)
 // grid -- 35 combinations do not fit on a 9 mm pot and nobody learns them.
-// The path runs tame -> churning, modelled on M_WANDER (engine/flow/taste.h:891),
-// which already sweeps FORM and SONG together and is tuned in Glow.
+// The path runs tame -> churning, modelled on the WANDER macro of the terrain
+// layer that used to sit on top of this engine: it already swept FORM and SONG
+// together and was tuned by ear there. That layer was deleted 2026-08-14; the
+// macro's own curve is recorded in
+// docs/attic/2026-08-05-flow-engine-layer.md.
 //
-// One deliberate difference from M_WANDER: it excludes SongMode::Off because a
+// One deliberate difference from WANDER: it excludes SongMode::Off because a
 // WANDER macro must never disable wandering. This knob is a structure SELECTOR,
 // not a wander amount, so "no alternation at all" is a legitimate destination
 // and owns rung 0.
@@ -37,12 +40,14 @@ inline const SongRung& song_ladder_at(int idx) {
     return kLadder[idx];
 }
 
-// Free-standing twin of Flow::quantize_hyst (engine/flow/flow.cpp:234) for
-// controls that do not run through the flow layer. Without it a pot parked on
-// a seam re-quantises every tick and the engine gets a new FORM/SONG dozens of
-// times a minute -- flow.cpp's own comment measured 14 flips over one hover
-// sweep. Hold `cur` until the value passes the seam by a further half step,
-// then snap to whatever step is nearest, so a big turn still lands in one move.
+// Hysteretic quantizer for a pot that selects a discrete value. Without it a
+// pot parked on a seam re-quantises every tick and the engine gets a new
+// FORM/SONG dozens of times a minute -- 14 flips over one hover sweep, measured
+// in the deleted terrain layer, which carried the twin of this function
+// (docs/attic/2026-08-07-glow-genre-and-scale-design.md discusses that twin and
+// its kHysteresisFrac = 0.5). Hold `cur` until the value passes the seam by a
+// further half step, then snap to whatever step is nearest, so a big turn still
+// lands in one move.
 //
 // >= / <= , not > / < : in Rack, SONG is a configSwitch with snapping, so
 // params[SONG_A].getValue() is always an exact integer rung, and the host

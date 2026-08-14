@@ -3,8 +3,8 @@
 
 using namespace rack;
 
-// The plugin instance and the one module model it exposes.
+// The plugin instance and the two module models it exposes: the full-control
+// panel and the 60 HP hardware-panel draft.
 extern Plugin* pluginInstance;
 extern Model* modelFireflow;
-extern Model* modelGlow;
 extern Model* modelFireflowHW;

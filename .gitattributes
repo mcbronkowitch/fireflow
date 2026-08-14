@@ -1,12 +1,17 @@
-# Files whose SHA-256 is pinned in code must never be line-ending converted on
-# checkout. `git config core.autocrlf` is `true` on the development machine, and
-# a KiCad board is text, so a fresh clone or a new worktree receives CRLF while
-# the committed blob is LF. The pinned hash then fails on a tree that is in fact
-# correct -- the guard reports "physical-master hash is stale" for a file nobody
-# touched. The pin lives in host/vcv/res/validate_glow_assets.py
-# (FACEPLATE_MANIFEST["fireflow-source-board-sha256"]).
+# No rules on purpose, and worth reading before any are added back.
 #
-# The other pinned artefacts need no entry: the KiCad preview PNG is detected as
-# binary and left alone, and the official DXF is local-only under .reference/.
-*.kicad_pcb -text
-*.kicad_dru -text
+# It used to carry `*.kicad_pcb -text` and `*.kicad_dru -text` for the Glow
+# faceplate, whose board file had its SHA-256 pinned in an asset guard. Both the
+# faceplate and the guard were deleted on 2026-08-14 with the flow layer, and no
+# tracked KiCad file is left, so the rules have no subject and are removed rather
+# than left pointing at nothing.
+#
+# The trap they existed for is not gone, and the M6 hardware faceplate will meet
+# it: `git config core.autocrlf` is `true` on the development machine, and a
+# KiCad board is text, so a fresh clone or a new worktree receives CRLF while the
+# committed blob is LF. Any hash pinned over such a file then fails on a tree
+# that is in fact correct. If a board file is ever pinned again, restore the
+# `-text` rule for its extension in the same commit.
+#
+# The other pinned artefacts needed no entry: a KiCad preview PNG is detected as
+# binary and left alone, and the official DXF was local-only under .reference/.

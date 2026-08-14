@@ -10,7 +10,9 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-13-flow-melody-engine-design.md` — the authority. Where this plan and the spec disagree, the spec wins; report the disagreement rather than picking one.
 
-**Evidence the spec rests on:** `docs/2026-08-13-glow-macro-audit.md`.
+**Evidence the spec rests on:** `docs/attic/2026-08-13-glow-macro-audit.md`
+(moved there 2026-08-14 when the flow layer and Glow were struck; see
+`docs/attic/README.md`).
 
 ## Global Constraints
 

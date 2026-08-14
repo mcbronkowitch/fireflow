@@ -3003,9 +3003,9 @@ def test_committed_files_match_the_generator():
     """Every assertion above runs g.svg()/g.header() IN MEMORY -- none of
     them would notice gen_panel.py being edited without being re-run, which
     would leave the plugin compiling against a stale header while every
-    guard here still passes (review finding IMPORTANT 5). Mirror
-    test_flow_panel.py's test_committed_files_match_the_generator: compare
+    guard here still passes (review finding IMPORTANT 5). So: compare
     the committed artifacts byte-for-byte against a fresh generator run.
+    test_hw_panel.py carries the same check for the hardware draft.
     init_patch.hpp already gets an equivalent (if differently-shaped) check
     in test_init_defaults_are_generated_from_names above, so it is included
     here too for the same reason, not left out."""

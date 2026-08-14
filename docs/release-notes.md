@@ -8,6 +8,12 @@
   Everything below the comment is public.
 -->
 
+> **STALE — must be rewritten before the next tag (2026-08-14).** Everything
+> below describes **FireFlow Glow**, a module that no longer exists: it was
+> deleted with the terrain layer when the residency closed. This file's contents
+> become the next GitHub release body verbatim, so tagging without rewriting it
+> would publish a release note for a module the plugin does not ship.
+
 ## FireFlow Glow is now a Synthux Touch 2 replica
 
 This release touches one module. **FireFlow** and **FireFlow HW Draft** are

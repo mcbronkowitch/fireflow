@@ -206,11 +206,13 @@ private:
     // is what keeps this out of a BBD deck's PITCH lane, which is the delay
     // clock and not a note, and the owner ruled for that trade 2026-08-07.
     // NOT the kBbdFlowRangeMax cap, which an earlier version of this comment
-    // claimed: that cap is FLOW-only (flow.cpp:583-585, `== ENGINE_BBD &&
-    // !_mode_now`, and _mode_now is STEP), so it never runs in the one mode
-    // where the two candidate guards differ. Measured over 400 masters: all
-    // 35 BBD decks drawn in STEP carry RANGE above the cap, up to 0.7266
-    // against a cap of 0.0083.
+    // claimed: that cap lived in the terrain layer, applied in FLOW only, and
+    // so never ran in STEP -- the one mode where the two candidate guards
+    // differ. Measured over 400 masters while that layer still existed: all
+    // 35 BBD decks drawn in STEP carried RANGE above the cap, up to 0.7266
+    // against a cap of 0.0083. The layer was deleted 2026-08-14; the cap's
+    // by-ear rationale survives in docs/attic/taste-by-ear-notes.md, "The BBD
+    // flow bend budget".
     bool _note_lane() const { return _melodic && _flow_melody; }
     void _prime_floors() { _since_fire = _note_min_samples;
                            _since_phrase = _phrase_min_samples; }
@@ -268,8 +270,10 @@ private:
     static constexpr int kSeqSlots = 32;
     // The free mode owns its phrase length. It cannot come from STEPS: Fireflow
     // spends STEPS == 0 on the mode switch (Fireflow.cpp:892-893) and set_step
-    // clamps that to 1, while Glow pushes 2..16 in both modes -- so STEPS would
-    // mean two different things. It also cannot be made variable: generate_phrase
+    // clamps that to 1, while a caller that sets mode and count independently
+    // -- the render host's set_step action, and engine/param_table.h's own
+    // P_STEPS range -- pushes 2..16 in both modes, so STEPS would mean two
+    // different things. It also cannot be made variable: generate_phrase
     // fills only [0, n) (phrase_gen.h:165-200) and pitch[32] is zero-init, so a
     // length that grows past the generated one plays the root instead of a note.
     static constexpr int kFlowPhraseSlots = 8;

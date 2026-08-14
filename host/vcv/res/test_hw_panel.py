@@ -247,8 +247,8 @@ def test_committed_files_match_the_generator():
     """test_header_contract/test_svg_exists_and_is_60hp above read the
     committed files but only grep for substrings -- they would not notice
     gen_hw_panel.py being edited without being re-run (review finding
-    IMPORTANT 5, same gap as the big panel and already closed there and in
-    test_flow_panel.py). Compare byte-for-byte against a fresh generator run.
+    IMPORTANT 5, same gap as the big panel and already closed there in
+    test_panel.py). Compare byte-for-byte against a fresh generator run.
 
     hw_label() raises ValueError by design when geometry gets too tight for
     some control's caption. Calling hw.svg()/hw.header() unguarded would let
