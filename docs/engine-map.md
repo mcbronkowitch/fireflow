@@ -322,3 +322,72 @@ Set `set_smooth(0.f)` when you want to see the raw target; the slew otherwise
 hides everything the target does. Count `distinct` values alongside p2p — that is
 what separates "a waveform" from "a two-value square", and p2p alone will not tell
 you.
+
+**To probe the flow layer** (`generate()`, terrain draws) the line is longer —
+`engine/flow/` needs C++17 and the vendored DaisySP headers, because `terrain.h`
+pulls in `instrument.h`:
+
+```bash
+clang++ -std=c++17 -O2 -Iengine -Ithird_party -Ilib/DaisySP/Source \
+        -o probe.exe probe.cpp engine/flow/terrain.cpp
+```
+
+---
+
+## 7. Reachability: what a terrain actually draws
+
+§2 and §3 describe what a knob position *does*. This section is about which
+positions a Glow terrain ever *reaches* — a different question, and the one that
+decides whether a feature exists in play. Measured with the real `generate()`
+over 20 000 terrains (not a re-implementation of `draw_span`):
+
+| | |
+|---|---|
+| mean drawn SHAPE | **0.316** |
+| highest SHAPE seen in 20 000 terrains | 0.956 |
+| either deck in the §3 fade zone (SHAPE > 0.75) | **4.65 %** |
+| either deck above SHAPE 0.95 | **0.01 %** |
+| deck A drawn with RANGE < 0.25 | **24.97 %** |
+| terrains whose archetype is *drone* | **49.2 %** |
+
+Per archetype, share with a deck in the fade zone: **drone 0.00 %**, the other
+three 8.5–10.1 %. The drone can never get there — `taste.h:998-999` caps its
+SHAPE span at `{0, 0.25}` — and it is half of all terrains.
+
+**Neither SHAPE nor RANGE is reachable by any macro.** `P_SHAPE_A/B` and
+`P_RANGE_A/B` appear in `kBaseRules` and in **no** story curve, so nothing in the
+macro layer can move them; only the in-lane offsets of §2 can, and on the melodic
+lane those total ±0.40. A drone's 0.25 base plus 0.40 is 0.65, still under the
+0.75 where the bank starts crossfading toward the phrase. **On half of all
+terrains the melodic phrase is unreachable by any means available to the player.**
+
+### The melody's second gate: RANGE, through the quantizer
+
+The pitch axis is 36 semitones over `0..1` (`part.cpp:228-229`; the
+`_detune_cents * 1/3600` at `:244` corroborates), and `LANE_PITCH` is handed
+depth 1.0 unconditionally (`part.cpp:98`), so a lane value lands on that axis
+directly. What the phrase then moves, after quantizing (Aeolian, STEP, 8 steps,
+VARY 0, mean of seeds 12345/777/4242):
+
+| RANGE | span (semitones) | distinct scale degrees |
+|---|---|---|
+| 1.0 | 8.42 | 4 |
+| 0.4 — top of the drone band | 4.11 | 3 |
+| 0.25 | 2.57 | 2 |
+| **0.1 — bottom of the drone band** | **1.03** | **1** |
+
+At the bottom of its RANGE band a deck plays the entire phrase — every FORM,
+every SONG, every seed — on **one** scale degree.
+
+### And the inversion worth remembering
+
+FORM is not inert; it is unreachable. At SHAPE 1.0, three of the four other
+`Principle`s emit a different value set from `TwoMotif`. At SHAPE 0.0, **none of
+them do** — all five collapse onto the same 5-value sine staircase, which spans
+the *whole* pitch axis and clears 3–4 scale degrees.
+
+So the instrument moves more pitch with the thing that carries no melodic
+information than with the phrase, and draws the phrase's corner of the knob in
+0.01 % of terrains. Any SHAPE/SMOOTH design has to answer where on the axis the
+melody should live and where its RANGE headroom comes from — not whether the
+melodic lane emits the phrase, which it already does.
