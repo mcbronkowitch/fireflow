@@ -31,6 +31,31 @@ pinned by `tests/test_flow_overlay.cpp:42`). It maps **parameters across hosts**
 this file maps **behaviour inside a lane**. Neither answers the other's question,
 and a design touching both needs both.
 
+## How to read a citation
+
+Files are named without their directory. The key:
+
+| Named | Lives at |
+|---|---|
+| `lane.cpp`, `lane.h`, `super_modulator.cpp/.h`, `waveforms.h` | `engine/mod/` |
+| `part.cpp`, `part.h` | `engine/parts/` |
+| `center.cpp` | `engine/center/` |
+| `flow.cpp`, `taste.h`, `terrain.cpp` | `engine/flow/` |
+| `Fireflow.cpp`, `Glow.cpp`, `init_patch.hpp` | `host/vcv/src/` |
+
+Note the repo also carries a full second tree under `.worktrees/`; a bare grep
+will hit both.
+
+**Line numbers rot — the quoted expression beside each is what identifies the
+site.** This is not theoretical: the sibling param map was written on 2026-08-12
+and by 2026-08-14 every one of its 39 `Fireflow.cpp` citations had drifted by
+exactly 12 lines, plus six in `flow.cpp` and one in `flow_params.h`. All 69 were
+re-derived from their quoted expressions on 2026-08-14. **When a line number here
+does not show what the text says it shows, the text is still the claim — find the
+expression and fix the number.** Where a fact is load-bearing enough that silent
+rot would be expensive, pin it with a test instead (§1, §3 and §4 are pinned by
+`tests/test_engine_map.cpp`).
+
 ---
 
 ## 1. The lane state space
@@ -140,7 +165,7 @@ may never reach — and §3 below shows the one place where reaching it matters 
 
 ## 3. The top of the SHAPE knob is a fade-out, not a waveform
 
-Measured with `deadzone.cpp` — texture lane, FLOW, 30 s, seed 999. Pinned by
+Measured on a texture lane, FLOW, 30 s, seed 999. Pinned by
 `tests/test_engine_map.cpp` (§3 case: the fade law at 0.90, p2p ≈ 0 at 1.00, the
 non-zero park point across seeds, and VARY reviving the corner):
 
@@ -209,6 +234,13 @@ the only writer is the `Fireflow` module, and the flow layer never calls it. So 
 a Glow terrain a Sampler deck keeps `_active[LANE_PITCH] == true`, while
 `_flow_melody` is false (engine id). Under the `Fireflow` module the same deck is
 deactivated. **Host-dependent, and only one of the two hosts protects it.**
+
+⚠️ **This is a known defect, not a contract.** It is recorded here so the question
+stops being re-argued, not so the behaviour is preserved — do not build a design
+that relies on it. `part.h:634-638` already flags the neighbouring half of the
+same problem: the `Fireflow` module re-pushes `set_target_active` every block, so
+the day an M6 pad can toggle `LANE_PITCH` that push will silently overwrite it,
+*"harmless today only because the pad doesn't exist yet."*
 
 ---
 
