@@ -5,6 +5,13 @@ a `flow` `BaseOverlay`.** The converter (`host/vcv/src/flow_patch_bridge.hpp`,
 spec 2026-08-11 §5) implements this table and invents nothing. If a mapping is
 not written here, the converter does not perform it.
 
+**Sibling authority:** [`engine-map.md`](engine-map.md) owns the *other*
+question — how a `ModLane` behaves once a value arrives: the lane state space,
+which sources sum into an axis besides its knob, and who writes the variables the
+behaviour depends on. This file maps **parameters across hosts**; that one maps
+**behaviour inside a lane**. A parameter being transferable says nothing about
+what it does when it lands.
+
 Written 2026-08-12, against `HEAD` of branch `flow-patch-transfer`. **Revised
 2026-08-12** when four parameters moved out of the story tables and into
 `kBaseRules` — see "The 2026-08-12 widening" below. **Revised again the same

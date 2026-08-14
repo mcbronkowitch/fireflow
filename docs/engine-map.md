@@ -12,8 +12,16 @@ writes, a knob position nothing reaches, an identity that floating point does no
 honour. The fix is not to restructure the engine. It is to write down the parts
 that are invisible, and to measure before claiming.
 
-**Scope:** the modulation layer, because that is where the tangle is. Extend it
-when another area burns a review round.
+**Scope:** the modulation layer, because that is where the tangle is — how a
+lane behaves and what actually reaches its axes. Extend it when another area
+burns a review round.
+
+**Sibling authority:** [`flow-fireflow-param-map.md`](flow-fireflow-param-map.md)
+owns the *other* question — which of the 64 `ParamId`s a hand-authored `Fireflow`
+patch can carry into a `flow` overlay (47 base rules, 45 mapped, 2 unreachable,
+pinned by `tests/test_flow_overlay.cpp:42`). It maps **parameters across hosts**;
+this file maps **behaviour inside a lane**. Neither answers the other's question,
+and a design touching both needs both.
 
 ---
 
