@@ -118,22 +118,45 @@ at seed 12345 (re-measured 2026-08-14: 0.0000 / 0.2979 / 0.5264). The identity i
 pinned by the §1 case (`d < 1e-7f`); of the two divergences only the 16-step one
 is pinned, and as a floor (`d16 > 0.1f`) — the 4-step figure is measured only.
 
-**That identity is this setup line's, not the lane's — it holds at SMOOTH 0 and
-does not survive the top of the SMOOTH axis.** `_update_slew()`'s note-interval
-slew clamp (`lane.cpp:361`, `if (_flow_melody_on())`) is the only split that
-survives an equal step count, not the only place on the melody path that splits
-on `_step_mode` outright: `_effective_length()` (`lane.cpp:268`) returns
-`kFlowPhraseSlots` in FLOW against the (clamped) STEPS count in STEP, changing
-the phrase's own length whenever the two disagree, and `_on_boundary()`'s
-FLOW-only note-rate floor (`lane.cpp:609`) gates `_compute_raw()` outright —
-both inert at this paragraph's matched 8-step setup, which is why they do not
-show up here. So a glide is clamped in FLOW and not in STEP. Measured on a note
-deck, seed 999, 8 steps, SHAPE 0, RANGE 1,
-VARY 0, 20 s, max |STEP − FLOW|: bit-identical at SMOOTH 0.00 / 0.25 / 0.50 at
-both 0.5 Hz and 2 Hz and at SMOOTH 0.75 at 0.5 Hz, but **0.0787 at SMOOTH 0.75 /
-2 Hz, 0.2069 at SMOOTH 1.00 / 0.5 Hz and 0.2995 at SMOOTH 1.00 / 2 Hz**. Do not
-carry the identity past SMOOTH 0; that clamp is the SHAPE/SMOOTH rework's to
-decide, and nothing on the `melody-reachable` branch touched it.
+**Superseded 2026-08-15 (spec `2026-08-13-shape-smooth-rework-design.md`,
+branch `2026-08-14-smooth-interval-relative`): the note-interval slew clamp this
+paragraph used to describe is gone.** Until then, `_update_slew()` carried a
+clamp (`lane.cpp:361`, `if (_flow_melody_on())`) that was "the only split that
+survives an equal step count" on the melody path, and the SMOOTH axis broke the
+STEP/FLOW identity above SMOOTH 0 because of it: measured on a note deck, seed
+999, 8 steps, SHAPE 0, RANGE 1, VARY 0, 20 s, max |STEP − FLOW| — bit-identical
+at SMOOTH 0.00 / 0.25 / 0.50 at both 0.5 Hz and 2 Hz and at SMOOTH 0.75 at
+0.5 Hz, but **0.0787 at SMOOTH 0.75 / 2 Hz, 0.2069 at SMOOTH 1.00 / 0.5 Hz and
+0.2995 at SMOOTH 1.00 / 2 Hz**. That old law made SMOOTH an absolute wall-clock
+time (`τ = 0.00002 · 25000^smooth`); the clamp existed to stop it over-gliding
+a note deck in FLOW, and STEP never had the clamp applied to it, hence the gap.
+
+**The new law makes the clamp unreachable, and it was deleted rather than kept
+dead.** SMOOTH is now `τ = smooth · TOP · interval`, where `interval` is one
+slot in FLOW-melody and one step in STEP and `TOP` is `kFlowSlewFrac` (0.35) on
+the melodic lane — both branches of `_update_slew()` (`lane.cpp:379` STEP,
+`:384` FLOW-melody) now compute the *same* interval whenever `_effective_length()`
+agrees with `_steps` (`lane.cpp:268` — `kFlowPhraseSlots` in FLOW against the
+STEPS count in STEP), which it does at 8 steps. Re-measured under the setup
+above, same seed, same rate pair, all five SMOOTH values, both 0.5 Hz and
+2 Hz: **max |STEP − FLOW| = 0.00000000, bit-identical, at every cell** —
+verified by exact float comparison (`step_buf[i] != flow_buf[i]`), not only by
+p2p. The identity now survives the whole SMOOTH axis in this setup, not only
+SMOOTH 0.
+
+That does not make it a property of the lane rather than the setup:
+`_effective_length()` still splits FLOW from STEP outright whenever the step
+count is not 8 (§1's own 4-step/16-step divergence above, 0.298 and 0.526,
+comes from that split and is untouched by this branch — it is about phrase
+*content*, not slew, and nothing here re-measures it), and `_on_boundary()`'s
+FLOW-only note-rate floor (`lane.cpp:609`) still gates `_compute_raw()`
+outright, inert at this paragraph's matched 8-step setup for the same reason
+it always was. So "a glide is clamped in FLOW and not in STEP" is no longer
+true — there is no clamp — but "STEP and FLOW behave identically" is still a
+claim about this setup's step count, not about the lane in general. The
+`_flow_melody_on()` guard itself is unchanged and still gates the FLOW-only
+branch of `_update_slew()`; `docs/engine-map.md` §7 owns whether removing the
+guard rather than the clamp is worth doing.
 
 **`_melodic` is not a choice.** `super_modulator.cpp:14` sets it unconditionally
 to `i == LANE_PITCH`. Exactly one lane of five is melodic, on every deck, always.
