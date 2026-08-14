@@ -87,7 +87,7 @@ now walks an 8-slot phrase instead of running a continuous LFO, and DENSITY
 selects how many of those eight notes the drone actually plays — one
 standing note at the low end, up to a full eight-note melody at the top.
 Before this, DENSITY was a step-grid-only control and moved no audio at all
-in FLOW (`docs/2026-08-13-glow-macro-audit.md`, Result 3); it is not
+in FLOW (`docs/attic/2026-08-13-glow-macro-audit.md`, Result 3); it is not
 step-grid-only any more, on either part. On a Sampler deck DENSITY is
 repurposed entirely — see the Sampler controls table below.
 
@@ -516,203 +516,23 @@ Three consequences that would otherwise read as bugs:
   between fires: the clock only re-derives on a fire, so SIZE moves the
   rhythm there and leaves the pitch alone.
 
-## FireFlow Glow — the second module
+## FireFlow HW Draft — the second module
 
-The plugin ships a second module alongside the one described above: **Glow**,
-a true-size, 16 HP replica of the Synthux Simple Touch 2's control surface —
-twelve touch pads, six trim knobs, two faders, two centre-off switches and a
-stereo out — driving the same portable engine through `engine/flow/` instead
-of through `Fireflow.cpp`'s one-control-per-parameter mapping. Where the big
-module is the full-control view — every engine setter on its own knob — Glow
-is the flow-machine view: one seed generates an entire patch (both decks,
-every FX send, the tempo), and the six knobs ride curated macro curves over it
-rather than individual engine parameters. Both modules embed the exact same
-`Instrument`; nothing in `engine/` is duplicated a second time for Glow, and
-the two never share state — they are two independent instances of the same
-engine core.
+The plugin ships a second module alongside the one described above:
+**FireFlow HW Draft**, a design study of the 60 HP hardware panel M6 is heading
+for. It is the same engine behind a different control layout, and its panel
+says `DRAFT` because that is what it is. Its panel and header are generated the
+same way the big module's are — from `res/gen_hw_panel.py`, run from
+`host/vcv/`, guarded by `res/test_hw_panel.py` — and are never hand-edited.
 
-Glow has **no CV inputs and no clock input**. The board has none, so neither
-does the module; its stereo input is not drawn either (`Instrument::process`
-gets `nullptr, nullptr`). The full design behind the rebuilt surface is
-`docs/superpowers/specs/2026-08-11-glow-touch-2-panel-design.md`.
-
-### The surface
-
-| Board | Count | Default |
-|---|---|---|
-| Trim knobs | 6 | MOTION, DENSITY, BRIGHT, PACE (upper row), WANDER, SPACE |
-| Faders | 2 | left = Tempo, right = Master |
-| Switches (centre-off) | 2 | left = Lock, right = Scale |
-| Touch pads | 12 | places 1–12 |
-| Jacks | 2 | OUT L, OUT R (no inputs) |
-
-### The six macros
-
-| Knob | Meaning |
-|---|---|
-| **MOTION** | how much everything moves |
-| **DENSITY** | how much happens |
-| **BRIGHT** | spectral centre |
-| **PACE** | stretched ↔ rhythmic |
-| **WANDER** | predictable ↔ wandering |
-| **SPACE** | close ↔ vast |
-
-Each knob's exact targets are the current terrain's choice — drawing a new
-terrain can rewire what MOTION touches — but the one-word meaning above always
-holds, and every knob is monotone: more knob is always more of that thing.
-
-**DENSITY, as of the FLOW melody engine.** On a drone (a FLOW-mode note deck)
-DENSITY now selects how many notes the drone actually uses out of the
-phrase's eight slots — one held note at the low end, a full melody at the
-top — rather than a step-grid control with nothing to grip in the free
-world. Before this it moved no audio on any FLOW terrain
-(`docs/2026-08-13-glow-macro-audit.md`, Result 3); "how much happens" now
-holds in both worlds, not only in STEP.
-
-**The calm corner.** All six knobs fully counter-clockwise is a defined quiet
-background on every terrain, not an accident of wherever the mapping curves
-happen to bottom out — the generator is required to land there. It is the
-module's gas pedal: pulling any subset of knobs down recedes the instrument
-toward that corner, and turning any of them up adds a specific kind of energy
-on top of it.
-
-### The twelve pads
-
-Each pad is one curated place — a terrain code, an optional name and an
-optional note. The gesture, timed against `host/vcv/src/touch_pads.hpp`'s
-`kPadHoldS` — a host-side value set by ear, not an engine constant:
-
-| Event | Effect |
-|---|---|
-| tap a pad | wakes that pad's place immediately — no latency |
-| hold ~0.4 s | rerolls all six macro domains at once (a partial reroll, mask `0x3F`), keeping the ground — tonality, roles, pace — intact |
-| tap the same pad again | returns to the curated state; there is no separate undo for this, because a plain wake already *is* the return |
-
-The tile's contour strokes report the state: **copper** while a pad is live
-and playing its curated place, a nested **green** contour once a hold has
-excursed it away from that place, and a brief muted red flash when a hold is
-refused.
-
-**Under LOCK, pads still change place; holds are refused.** LOCK guards the
-generator, not the recall — tapping between curated places always works, only
-the reroll gesture is gated.
-
-The default twelve places are **drawn, not curated**: on first insert, and
-again on Initialize, the module draws three places per archetype from a fixed
-seed, so "pad 7" means the same thing on every machine — but a draw is a
-slot machine (parent design spec's own words), not a curated set. A session
-meant to answer a real hardware question about the Touch 2 has to pin curated
-terrain onto the pads first (right-click → Places → a pad → **Pin current
-terrain here**), never rely on the default draw.
-
-### Faders and switches — assignable
-
-Both faders and both switches are assigned from the right-click menu, not
-fixed in code, and every save carries its own assignment:
-
-| Control | Candidates | Default |
-|---|---|---|
-| Either fader | Off, Tempo, Master | left = Tempo, right = Master |
-| Either switch | Off, Lock, Scale | left = Lock, right = Scale |
-
-**Tempo.** The terrain owns the tempo — every wake force-pushes it, drawn
-from the archetype's own span in `taste.h`. A fader assigned to Tempo
-overrides that, continuously, every control tick, across 50–140 BPM.
-**Off gives the place its own tempo back** — which is the musically
-interesting setting, since a flat fader flattens exactly what per-place
-tempo curation is for.
-
-**Master.** Linear output gain, 0..1, default unity at the top of the
-travel. Off is unity too, never silence — a module that boots at half gain
-is a bug report.
-
-**Lock.** A pure function of switch position — up is the locked end, and down
-and centre both read unlocked. There is no separate stored
-lock any more: the old context-menu lock toggle is gone, and nothing else can
-set the state. If no switch is assigned to Lock, the module reads as
-unlocked, full stop — including on loading a patch that was saved locked.
-One control, one truth, rather than a physical switch and a menu item that
-can disagree.
-
-**Scale.** The switch only *gates* a value chosen in the workshop menu (see
-below); it never selects one itself. Down = Auto (the terrain's own drawn
-scale and root, untouched). Centre = the menu's Scale fixed, root still free.
-Up = the menu's Scale and Root both fixed, held across taps, holds and
-reroll, until the switch returns to Auto.
-
-### The workshop menu
-
-The board is the stage; Rack is the workshop — and the workshop never ships
-to the Touch. Everything the twelve pads and the four assignable controls
-cannot reach lives in the right-click menu instead:
-
-- **Draw a new terrain**, **Reroll one macro** (a submenu, one entry per
-  macro), and **Undo terrain** — Glow's old NEW gesture family, kept because
-  the pads still call the same underlying API and would otherwise be its only
-  user.
-- **Genre** — constrains which archetype a draw may land in (Any, Drone,
-  Pulse, Arp, Fragment); a live label above it shows which archetype the
-  current terrain is.
-- **Root**, and the **Scale** the Scale switch gates — the standing tonality
-  values, Auto by default.
-- **Places** — a submenu per pad, to **Pin current terrain here**, and to
-  edit that pad's **Name** and its **Note — why it was kept**.
-- **Copy all twelve as pool.tsv** — exports all twelve rows (code, archetype,
-  pad number, name, note) in `pool.tsv` format, for pasting into a curated
-  pool file by hand.
-- **Reset all twelve places (discards names and notes)** — redraws the same
-  fixed-seed twelve, discarding every pin, name and note. One click, no
-  confirmation, right under the export.
-
-### Initialize and Randomize
-
-Rack's own **Initialize** (right-click → Initialize, or Ctrl+I) draws the
-same twelve places a fresh module starts with (the seed is fixed), clears
-every name and note, puts the fader and switch assignments back to their
-defaults, wakes pad 1 with no excursion, and clears lock, scale and root back
-to Auto.
-
-**Randomize** touches the six macro knobs only. The twelve pads, both
-faders and both switches are excluded — a Randomize that jams the tempo,
-throws a random output gain, flips Lock and pokes twelve momentary pads
-would not be a musical dice roll, it would be a fault.
-
-### Terrain codes
-
-A terrain's whole state — the master seed plus, once any partial rerolls
-have happened, one small counter per macro — is a short string like
-`F1-DEADBEEF-000100020000`. The code is the terrain's whole identity —
-nothing about the *place* lives anywhere else — so copying the string out and
-pasting it back in later (or into another instance) puts you back on the same
-terrain. It is not quite the whole patch any more: a Scale or Root override
-rides on top of the terrain and travels in the saved patch rather than in the
-code, so someone you send a code to lands on your terrain but hears it in the
-key the terrain itself drew. Say which override you were on, or send the
-patch. The
-right-click context menu shows the live code, offers **Copy terrain code**
-and **Paste terrain code**, and carries an editable text field for typing one
-in by hand. Pasting or typing a malformed code is a no-op — it changes
-nothing, rather than moving the player somewhere arbitrary; the same rule
-protects a saved patch whose stored place code is corrupt.
-
-### Generated panel, and why it is not a faceplate draft
-
-`res/Glow.svg` and `src/generated_flow_panel.hpp` are both produced by
-`host/vcv/res/gen_flow_panel.py` — the same one-script-drives-both approach
-`gen_panel.py` uses for the big module's panel — and guarded by
-`res/test_flow_panel.py`. Neither generated file is ever hand-edited; change
-the control table in the script (or the measured geometry in
-`res/touch2_geometry.py`) and regenerate.
-
-The panel is drawn at the board's true size, **81.28 × 128.5 mm (16 HP)**,
-from control centres measured off a reference photo of the board — but
-**this is a VCV panel, not a faceplate draft.** Rack renders at 75 DPI
-(≈ 2.95 px/mm) against a display's own ~3.78 px/mm, and the user zooms
-freely, so nothing on screen can show a half-millimetre difference either
-way; the true-size geometry exists so the pads sit right relative to the
-knobs and the module reads as the board, not to double as the 1:1 drawing
-the eventual M6 hardware faceplate will need. That drawing needs a scan of
-the board itself once it arrives — a separate, later job.
+A third module used to ship here and no longer does. **FireFlow Glow**, between
+2026-08-05 and 2026-08-14, was a
+16 HP replica of the Synthux Simple Touch 2 driving a seeded terrain generator
+and a six-macro story layer instead of one control per parameter. It was built
+for the Synthux residency, and it was deleted with that layer when the residency
+closed. Its whole paper trail — the module spec, the Touch 2 panel spec, the
+macro audit and the by-ear tuning notes — is in `docs/attic/`, which also
+carries the commands to recover the code from git.
 
 ## Build
 

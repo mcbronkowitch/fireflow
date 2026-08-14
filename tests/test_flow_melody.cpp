@@ -72,7 +72,7 @@ int fires_over_cycles(ModLane& lane, int cycles) {
 
 TEST_CASE("FLOW melody: the lane fires once per slot, not once per cycle") {
     // 0xF10Eu, not 0xF10Wu: "FLOW" cannot be spelled in hex (W is not a hex
-    // digit) the way tests/test_flow_terrain.cpp spells ALICE/COFFEE/etc., and
+    // digit) the way the deleted terrain tests spelled ALICE/COFFEE/etc., and
     // the straight pun (0xF10Wu) is an invalid integer-literal suffix -- it
     // fails to compile, not fails the assertion. Any seed works here; this one
     // stays close to the intended pun.
@@ -107,11 +107,12 @@ TEST_CASE("FLOW LFO mode is untouched when the flag is off") {
 }
 
 TEST_CASE("FLOW melody: the phrase length is a constant, not STEPS") {
-    // A deck whose STEPS says 3 still gets an 8-slot FLOW phrase. STEPS means
-    // different things on the two hosts in FLOW -- Fireflow spends STEPS == 0
-    // on the mode switch itself, which set_step clamps to 1, while Glow pushes
-    // 2..16 in both modes -- so the free mode owns its own length and both
-    // hosts produce the same phrase from the same terrain.
+    // A deck whose STEPS says 3 still gets an 8-slot FLOW phrase. STEPS does
+    // not mean the same thing to every caller in FLOW -- Fireflow spends
+    // STEPS == 0 on the mode switch itself, which set_step clamps to 1, while
+    // engine/param_table.h's own range is 2..16 in both modes -- so the free
+    // mode owns its own length and every caller gets the same phrase from the
+    // same patch.
     ModLane lane = make_flow_melody_lane(0xF10Eu, 1.f, /*steps=*/3);
     CHECK(fires_over_cycles(lane, 2) == 16);
 }
@@ -371,7 +372,7 @@ TEST_CASE("FLOW melody: leaving melody mode re-lengths the phrase for STEP") {
     lane.process();                   // phrase generated at kFlowPhraseSlots
     REQUIRE(lane.pattern_groove_len_for_test() == 8);
 
-    lane.set_step(false, 12);         // Glow pushes 2..16 in FLOW too
+    lane.set_step(false, 12);         // the render host pushes 2..16 in FLOW too
     lane.set_flow_melody(false);      // engine swapped to SAMPLER/BBD
     lane.set_step(true, 12);          // ... and then STEP, at that same STEPS
     lane.process();
@@ -404,7 +405,8 @@ TEST_CASE("FLOW melody: an engine round trip keeps the phrase and the SONG place
     //
     // STEPS 12, not 8: at 8 the exit's own check sees 8 == 8, never raises the
     // flag, and this case could not fail. Fireflow parks STEPS at 1 in FLOW and
-    // Glow pushes 2..16 there, so both hosts reach a STEPS != kFlowPhraseSlots.
+    // the render host pushes 2..16 there, so both reach a
+    // STEPS != kFlowPhraseSlots.
     ModLane lane = make_flow_melody_lane(0xF10Eu, 1.f, /*steps=*/12);
     for (int cycle = 0; cycle < 3; ++cycle) drive_to_wrap(lane);
     const MelodyPattern before_a = lane.pattern_for_test(0);

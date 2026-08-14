@@ -30,7 +30,18 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-08-13 (SHAPE/SMOOTH rework: its spec is written —
+- **Last updated:** 2026-08-14 (**the flow layer and Glow are struck**:
+  `engine/flow/`, the `Glow` VCV module, its faceplate, five render
+  scenarios and eighteen tests are deleted — 65 files, −42 754 lines. Both
+  existed to serve the Synthux residency, which closed with a final rejection
+  on 2026-08-14, so a seeded terrain generator and a six-macro story layer over
+  it have no product left to belong to. **Nothing was thrown away:** the specs,
+  the plans, the macro audit, the parameter map and the by-ear tuning values
+  are in [`docs/attic/`](attic/README.md), which also carries the commands to
+  recover the code from git. Spec
+  `docs/superpowers/specs/2026-08-14-flow-glow-removal-design.md`, plan
+  `docs/superpowers/plans/2026-08-14-flow-glow-removal.md`); before that,
+  2026-08-13 (SHAPE/SMOOTH rework: its spec is written —
   `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md` — after two
   merged-axis drafts were rejected by review; the third repairs the four measured
   defects and does not merge the controls. The owner's Marbles requirement is
@@ -38,19 +49,18 @@ is actually built today, and what is still design-only.
   ENTROPY/VARY — see "Marbles round" under "Planned"); before that, 2026-08-13
   (FLOW melody engine: the free mode's melodic lane
   walks an 8-slot phrase instead of a continuous LFO, fixing three of the four
-  findings the Glow macro audit reported for it — TEMPO-in-FLOW was never the
+  findings the macro audit reported for it — TEMPO-in-FLOW was never the
   same cause and stays out of scope; two open threads (`P_SONG_A/B`'s
   behaviour, `P_DEPTH_A`'s bypass on the pitch lane) and a panel-unreachable
   `tick()`/`process()` residual are recorded but not explained; the owner's
   listening checks were answered the same day — `flow_melody.wav`,
   `ctrl_identity.wav` and `wave_formant_sweep.wav` all accepted, so
   `kFlowNoteMinS = 0.060` and `kFlowSlewFrac = 0.35` stand as chosen — see
-  "FLOW melody engine" under "Done"); before that, 2026-08-13 (Glow macro audit: CHOKE no longer silences
+  "FLOW melody engine" under "Done"); before that, 2026-08-13 (macro audit: CHOKE no longer silences
   a deck on most terrains, a per-parameter audio gate is in the suite, and the
-  FLOW melody engine plus the SHAPE/SMOOTH rework were queued ahead of the Glow
-  rework — see `docs/2026-08-13-glow-macro-audit.md`); before that, 2026-08-12
-  (flow patch transfer merged, not released — see its
-  entry under "Done" for the five open follow-ups; before that, 2026-08-04: the
+  FLOW melody engine plus the SHAPE/SMOOTH rework were queued ahead of a macro
+  rework that this removal has since cancelled — see
+  `docs/attic/2026-08-13-glow-macro-audit.md`); before that, 2026-08-04: the
   project left the residency and the Spotykach
   hardware target, per "Project status" above; before that, 2026-08-03: VCV
   2.17.1; the BBD deck gained its own PITCH/
@@ -360,8 +370,7 @@ is actually built today, and what is still design-only.
 | **BBD PITCH / tape TIME surface** | `STAGES_A/B` leaves the FX box and takes over the shared VOICE `ATK` slot as the BBD deck's own pitch control, visible only while that deck is BBD (`ATTACK` is hidden there and stays reachable as a `Freeze Attack` context-menu slider); the vacated FX slot gets a new knob driving `FXT_FLUX_TIME` geometrically from ×0.25 through ×1 to ×4, distinct from RATE's tempo-synced division | ✅ **done** (VCV; spec `docs/superpowers/specs/2026-08-02-vcv-bbd-pitch-flux-time-surface-design.md`; released in 2.17.1; the two new captions, `PITCH` and `TIME`, were renamed `BEND` and `MULT` by "VCV engine-aware captions" below) |
 | **BBD dynamic-stage declick** | `BbdLine` keeps one continuous full-ring write history behind every stage-count change and crossfades the old and new read taps over a fixed 16-tick smoothstep, removing the index-reset impulse the previous immediate resize produced when COLOR/MOTION modulates a line's stage count | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-03-bbd-dynamic-stages-declick-design.md`; released in 2.17.1; fixed-stage output stays bit-identical, COLOR = 0 stays bit-identical left/right) |
 | **VCV engine-aware captions** | Every state-dependent panel caption now comes from one `DYNAMIC_CAPTIONS` generator table instead of hand-written special cases: BODY gets honest VOICE words (`HIT`/`DAMP`/`CHAR`/`EXCIT`/`BRITE`) and BBD gets its own (`TAIL`/`TILT`/`FEED`/`LOSS`); the FX-box word collisions are resolved by renaming FLUX `RATE`→`DIV`, FLUX `TIME`→`MULT`, per-deck `ROOM`→`SEND`, `MASTER_DRIVE`→`PUSH` and BBD `PITCH`→`BEND` (collision with the orbit's `PITCH` eyebrow); the GRIT mode pad now shows its own state, `SAT`/`CRSH`, instead of the word `GRIT` it collided with; MELODY drives Sampler `SCAN` only, no longer also `set_variation`; the permanently-printed `SCAN`/`LEN` second words are deleted from the static plate | ✅ **done** (VCV host + generator; spec `docs/superpowers/specs/2026-08-03-vcv-engine-aware-captions-design.md`; branch `vcv-engine-aware-captions`, not yet merged to main or released) |
-| **Flow patch transfer** | A patch built by hand in `Fireflow` rides onto a `Glow` pad as a `BaseOverlay`: the pad recalls that patch's **base skeleton** (the 47 `kBaseRules` parameters) while the terrain keeps supplying the **story layer** the six macros move. Copy/paste through one shared text encoding; the converter reports everything it could not carry | ✅ **done** (engine + VCV host; spec `docs/superpowers/specs/2026-08-11-flow-patch-transfer-design.md`, plan `docs/superpowers/plans/2026-08-11-flow-patch-transfer.md`, parameter map `docs/flow-fireflow-param-map.md`; merged to `main` 2026-08-12, **not released**; six follow-ups open — see below) |
-| **PACE** | One global modulation time-stretch, ×1/32 … ×1 … ×4, replacing the DIRT macro (`M_DIRT` → `M_PACE`): a new `Instrument::set_pace()` normalized knob, `pace_mult()` curve (`engine/mod/divisions.h`), a `Transport` pace anchor so the grid re-locks on a change instead of jumping phase, `Flux::set_rhythm_pace`, a `PACE` knob on both `Fireflow` and `Glow` beside `TEMPO`, and render-host coverage. Fixes the three controls that looked like a speed knob and were not: TEMPO is inert in the free world, TIDE never reached the melodic lane, and Glow had no speed control at all | ✅ **done** (engine + VCV hosts + render host; spec `docs/superpowers/specs/2026-08-12-modulation-pace-design.md`, plan `docs/superpowers/plans/2026-08-12-modulation-pace.md`; branch `2026-08-12-modulation-pace`, not yet merged to `main` or released) |
+| **PACE** | One global modulation time-stretch, ×1/32 … ×1 … ×4: a new `Instrument::set_pace()` normalized knob, `pace_mult()` curve (`engine/mod/divisions.h`), a `Transport` pace anchor so the grid re-locks on a change instead of jumping phase, `Flux::set_rhythm_pace`, a `PACE` knob on `Fireflow` beside `TEMPO`, and render-host coverage. Fixes the two controls that looked like a speed knob and were not: TEMPO is inert in the free world, and TIDE never reached the melodic lane | ✅ **done** (engine + VCV host + render host; spec `docs/superpowers/specs/2026-08-12-modulation-pace-design.md`, plan `docs/superpowers/plans/2026-08-12-modulation-pace.md`; branch `2026-08-12-modulation-pace`, not yet merged to `main` or released) |
 | **FLOW melody engine** | The free mode's melodic lane walks an 8-slot phrase instead of running a continuous LFO — DENSITY, FORM and SONG all reach it for the first time, bounded by two rate floors and a slew clamp; SAMPLER and BBD keep the old continuous LFO unchanged | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-13-flow-melody-engine-design.md`, plan `docs/superpowers/plans/2026-08-13-flow-melody-engine.md`; branch `flow-melody-engine`, not yet merged to `main` or released; **owner's listening checks answered 2026-08-13 — all three renders accepted** — see "FLOW melody engine" under "Done") |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
@@ -2247,145 +2256,6 @@ three movements). Plans: `docs/superpowers/plans/2026-07-31-bbd-part-engine.md`
 (movements 1–2), `docs/superpowers/plans/2026-08-01-flux-tape-echo.md`
 (movement 3).
 
-### Flow patch transfer ✅ (six follow-ups open)
-
-A patch built by hand in `Fireflow` can be carried onto one of `Glow`'s twelve
-pads. `generate()` takes an optional `BaseOverlay` applied over the
-`kBaseRules` rows only, between the stage-1 engine write and stage 4, so the
-**47 base-rule parameters come from the patch and the 17 story-owned ones stay
-with the terrain** (`P_COUNT` is 64; `47 + 17 = 64`). The two sets are
-disjoint by construction — no macro knob can overwrite a transferred value at
-any position, which is what makes the split a rule rather than an accident.
-The base-rule count grew twice the same day this section was written, first
-38 → 42 (the 2026-08-12 widening) and then 42 → 47 (the PACE move, which also
-added `P_DRIVE` as a second UNREACHABLE row) — see
-`docs/flow-fireflow-param-map.md` for both.
-
-`docs/flow-fireflow-param-map.md` is the authority for every conversion: 45
-rows mapped, two (`P_ROOT`, `P_DRIVE`) unreachable because `Fireflow` has no
-ROOT or DRIVE control at all. The converter's **report is the deliverable** —
-a transfer that carried what it could and said nothing about the rest would
-look right and lose a third of the tonality without a word.
-
-Merged to `main` 2026-08-12 (`89e50be`..`3e03e81`, 16 commits). **Not
-released**; `plugin.json` untouched.
-
-#### The 2026-08-12 round: what the first transfer actually sounded like
-
-Playing a real transferred patch found three things the design had not, and
-the first two were audible immediately.
-
-1. **The modulation ran up to 4× too fast.** `P_TIDE` scales the four texture
-   lanes against the PITCH lane over a 16× span (×1/4 … ×4, `tide_free`), and
-   it was story-owned — so a patch kept its `RATE` exactly and still lost its
-   motion. `RATE` is only one of five inputs to a lane's Hz. **`P_TIDE` is now
-   a base rule**, and `M_MOTION` no longer changes how fast anything clocks.
-2. **Chords arrived as single notes, and no knob brought them back.** COLOR
-   *is* the chord size — `ChordBuilder::set_color` counts tones over fixed zone
-   edges, so under 0.125 a deck voices one note. It was owned by `M_DENSITY`'s
-   "thick" variant *alone*, `M_DENSITY` had two variants, and `generate()`
-   picked one uniformly: on the losing half, `terrain.cpp`'s stage-4
-   else-branch left COLOR at its curve's `bp[0]` — drawn from the `{0, .1}`
-   band, entirely below the two-tone edge — with `storied[]` false, so no
-   macro, no weather offset and no veto could reach it. **Measured at 52.5% of
-   all woken pads with both decks pinned to a single tone; now 0%.** This was
-   never a transfer bug: it hit self-rolled pads just as hard. **`P_COLOR_A/B`
-   are now base rules**, the "thick" variant is deleted, and `P_SUB_A` came
-   along with it (it was that story's only remaining target, and it gains a
-   destination it never had). `kBaseRuleCount` 38 → 42.
-3. **The tempo fader cannot move the mod lanes, and that is structural.**
-   `SuperModulator::_update_rate` reads BPM only when synced; in FLOW mode the
-   rate is `free_hz(RATE)`, absolute Hz. Separately, Glow re-pushes its TEMPO
-   fader every control tick (`Glow.cpp:1039-1042`), so the *carried* tempo is
-   overwritten by a fader that boots at 95 BPM unless its target is set to
-   `off`. Both are now in the converter's report rather than in nobody's head.
-
-**The cost, named rather than buried:** Glow's macro surface no longer has a
-chord thickness control, and `M_DENSITY` no longer has a variant coin. Chord
-size is a property of the terrain draw and of a transferred patch, moved by NEW
-and by reroll rather than by a knob. The new `P_TIDE` and `P_COLOR_*` spans are
-**first-pass values set by arithmetic, not by ear** — the obvious thing to
-check first.
-
-**And the rig that found it**, which is the durable half of this round:
-
-- `tests/test_flow_transfer_diff.cpp` — pushes a `FireflowPatch` through
-  `to_flow_base`, wakes a real `Flow` with the overlay, and compares the
-  **engine** against a reference `Instrument` driven straight from the patch's
-  knobs: lane rates in Hz, chord tone counts, clocking mode. Its value gate is
-  the one worth keeping — a carried value must either be intact at the engine
-  or be named in the report as rewritten; silence fails. It also carries a
-  no-assert readout (`-tc="transfer rig: the readable diff" -s`) that prints
-  what one terrain does to one patch, in engine units.
-- `tests/test_flow_chord_reach.cpp` — the chord-reachability gate, holding both
-  the 52.5% that was and the 0% that is.
-- `Instrument::lane_rate_hz_for_test` / `step_mode_for_test` /
-  `deck_steps_for_test` — `SuperModulator` had these observers; `_parts` being
-  private meant nothing outside the engine could read a lane's actual Hz, so
-  only the setter side of a rate had ever been testable.
-
-All three gates were proven red before being trusted: sabotaging `P_TIDE` in
-the converter moves the lanes by 3.48× and the Hz gate says so; sabotaging
-`P_COLOR_A` turns 4 tones into 1. The first draft of the Hz gate did **not**
-go red, because its reference read the overlay rather than the patch — it was
-measuring the converter against itself.
-
-**Open, in rough priority order:**
-
-1. **The wish filters have no surface.** `roles_of` / `tonality_of` /
-   `mode_of` (`engine/flow/terrain.h`) make archetype, roles, tonality and
-   mode orderable — they are pure functions of the master at counter zero, so
-   a seed can be *ordered* rather than searched, at roughly 1 in 300 masters
-   for an exact hit. `generate()` calls them, but no menu does. This is the
-   only route to the transfer's biggest audible gap: **the root does not
-   transfer**, so a carried patch plays in the terrain's key, not its own.
-   Ordering a seed by root would close it. The plan listed them under Task 8's
-   interfaces but no task step consumed them.
-2. **`set_fx_on` is never called** from `engine/flow/` or `Glow.cpp`, so
-   `P_FLUXMIX_A/B` transfers correctly and is **inaudible under Glow**. The
-   PACE move (2026-08-12) put `P_GRIT_A/B` on the same footing as base
-   rules — `Fireflow.cpp:644-645` gates the GRIT block with `set_fx_on`
-   exactly the same way, so a carried GRIT send is inaudible under Glow for
-   the identical reason. Worth settling before twelve places get built
-   against it.
-3. **Two of this round's own bug fixes are gated by the plugin build alone**,
-   not by `ctest`: `Glow::reinit`'s overlay preservation and
-   `drawTwelveInto`'s base clearing. Both are Rack `Module` members. Moving
-   `drawTwelveInto` into `glow_ui.hpp` — it is already `static`, takes
-   `Place*`, and touches no module state — would give the second a headless
-   gate. The suite's "8/8 green" does not cover either today.
-4. **`touch_pads.hpp` drags `Fireflow`'s whole panel enum in** for one call to
-   `encode_base`: it includes `flow_patch_bridge.hpp`, which transitively
-   brings `generated_panel.hpp`, `mod/song_ladder.h` and
-   `parts/engine_iface.h`, injecting ~68 unscoped enumerators into `spkyvcv`.
-   `encode_base` / `decode_base` need only `flow/terrain.h` and
-   `flow/flow_params.h`; splitting them into a small codec header removes the
-   whole chain.
-5. **The design was validated against synthetic targets only.** Spec §2.1's
-   numbers were all constructed. **Partly closed 2026-08-12**: playing a real
-   transferred patch is what found the TIDE and COLOR losses above, and
-   `tests/test_flow_transfer_diff.cpp` now measures the whole chain in engine
-   units. What is still open is the original ask — push two or three **real
-   saved** `Fireflow` patches through `to_flow_base` and read the report. The
-   rig's patch is hand-built and deliberately clean (both decks on carriers,
-   both agreeing with the grid); it cannot speak for a patch that disagrees
-   with itself. There is still no `.vcvm` → `FireflowPatch` reader.
-6. **The render host cannot apply a base overlay.** `flow_wake` calls
-   `fl->wake(st)` with no `BaseOverlay*` (`host/render/scenario.cpp:250`) while
-   `Flow::wake` takes one, so there is no headless path on which a transferred
-   patch can be *heard* — only measured. A `flow_base` scenario action plus the
-   codec split in item 4 would give `render.exe` an A/B: the patch driven
-   directly against the same patch carried onto a terrain, two WAVs and two
-   `mods.csv`. That is the natural next step after item 5's `.vcvm` reader,
-   and the two share it.
-
-Three smaller ones, recorded so they are not rediscovered: `Flow::init()`
-resets `_have_undo` but not `_have_overlay` / `_have_undo_overlay` (latent —
-every reachable `init()` is followed by a `wake()`); the "how many parameters
-does this overlay carry" loop is open-coded in three places; and `""` answers
-"does this place carry a base?" differently in `base_for_pad` (no) and
-`Glow::dataFromJson` (yes), reachable only from a hand-edited patch.
-
 ### FLOW melody engine ✅
 
 The free mode's melodic lane no longer runs a continuous LFO: it walks an
@@ -2404,7 +2274,7 @@ same slot walk — for parity with `process()`, not for any production caller;
 
 **Result: three of the four findings that opened this milestone are fixed.**
 DENSITY, FORM and SONG all move audio in FLOW now. See
-`docs/2026-08-13-glow-macro-audit.md` for what "dead" meant before this
+`docs/attic/2026-08-13-glow-macro-audit.md` for what "dead" meant before this
 landed — its Result 3 and the per-macro DENSITY verdict are left unedited as
 a record of what was true on 2026-08-13, and now carry a pointer to this
 entry instead of a rewrite. **The fourth finding, TEMPO-in-FLOW, was never
@@ -2426,7 +2296,8 @@ as first guesses. This entry records what shipped, what was measured, and that
 it has now been heard.
 
 **Two open threads, measured under this milestone's own re-measurement,
-still unexplained.** Full detail is in `docs/2026-08-13-glow-macro-audit.md`'s
+still unexplained.** Full detail is in
+`docs/attic/2026-08-13-glow-macro-audit.md`'s
 "Open threads" section (the "FORM/SONG re-measured" entry and its review
 follow-up) — this is a pointer, not a second copy:
 - With DEPTH and `LANE_PITCH`'s `_active` held on, `P_SONG_A` moves audio only
@@ -2473,16 +2344,13 @@ stay on one engine for their whole run and never call `set_engine`.
 
 ## Planned
 
-Two of the entries below are ordered against each other: the SHAPE/SMOOTH rework
-comes **before** the Glow rework, because the Glow rework redesigns the macro
-layer that sits on top of it. Designing that layer against today's behaviour
-would bake the workarounds in — which is exactly how the DIRT macro came to
-target a GRIT block that was never switched on. The Marbles round sits between
-them with its order deliberately undecided; its own entry says why. (The FLOW
-melody engine, formerly the first of three entries here, is now built — see
-"FLOW melody engine" under "Done".)
+The ordering that used to open this section is gone with its subject: the
+SHAPE/SMOOTH rework came **before** a Glow rework that no longer exists, and
+the Marbles round sat between them. Both survivors are now unordered against
+each other. (The FLOW melody engine, formerly the first of three entries here,
+is built — see "FLOW melody engine" under "Done".)
 
-### SHAPE + SMOOTH rework ⬜ (before the Glow rework)
+### SHAPE + SMOOTH rework ⬜
 
 SHAPE has never satisfied its owner, and SMOOTH is touched in the same breath —
 the two together decide what the modulation lanes actually emit.
@@ -2516,10 +2384,14 @@ than deleted — the rework is still planned, its premises have just changed:**
   measured-but-untraced there; see the FLOW melody engine entry under "Done".)
 - "a drone can never reach the melody at all" is likewise false now: a note
   engine bypasses SHAPE in both modes, so a drone on one reaches the melody at
-  every knob position, whichever mode its terrain drew. The terrain cap
-  `P_SHAPE_A/B = {0, .25}` still keeps a drone below the 0.75 blend threshold, so
-  the claim holds for SAMPLER and BBD decks only — not for a drone on a note
-  engine.
+  every knob position, in either mode. The cap that produced the original
+  claim — the terrain generator's `P_SHAPE_A/B = {0, .25}` drone span, which
+  kept a drone below the 0.75 blend threshold — is not a live constraint any
+  more: that generator was deleted on 2026-08-14 and nothing replaces it, so
+  SHAPE is whatever the patch says. Its by-ear rationale, and the coupling
+  finding attached to it, are in `docs/attic/taste-by-ear-notes.md` §1.3. What
+  survives is the mechanism, not the cap: below SHAPE 0.75 a SAMPLER or BBD
+  deck still emits the waveform bank rather than the phrase.
 
 Whether the blend that remains is a defect or the intended reading of "SHAPE
 morphs sine → tri → ramp → pulse → S&H" is exactly the question this rework
@@ -2547,7 +2419,7 @@ by `_flow_melody_on()` — the split that survives an equal step count, not the
 only place on the melody path that still splits on the mode, measured to open a
 0.2995 STEP/FLOW gap at SMOOTH 1.0, 2 Hz (map §1).
 
-### Marbles round — VARY as the character axis ⬜ (unscheduled; may need to precede the Glow rework)
+### Marbles round — VARY as the character axis ⬜ (unscheduled)
 
 Opened 2026-08-13, out of the SHAPE/SMOOTH rework's second review pass.
 
@@ -2572,44 +2444,17 @@ What the round has to answer:
 - what the axis means at each end, and whether erode / loop / grow is still the
   right reading of it
 - whether SHAPE's character role folds into it or stays a separate texture control
-- who owns it — the terrain, a Glow macro, or the panel — under the audit's
-  ownership model (its decision 7)
+- **who owns it — and that question now has one answer.** It used to be a
+  three-way choice between the terrain, a macro knob and the panel, under the
+  ownership model of the macro audit's decision 7
+  (`docs/attic/2026-08-13-glow-macro-audit.md`). Two of the three are deleted,
+  so the answer is **the panel**, and what is left for the round to decide is
+  which panel control and with what law.
 
-**Ordering is open.** The argument that puts the SHAPE/SMOOTH rework before the
-Glow rework applies here too: a macro layer designed against today's VARY would
-bake in whatever VARY happens to do today. But this round has no spec and no
-measurement of its own, while the Glow rework has both an audit and recorded
-decisions behind it. Deciding the order is the first thing its spec does.
-
-Needs a spec.
-
-### Glow rework ⬜ (after the SHAPE/SMOOTH rework; order against the Marbles round undecided)
-
-The terrain idea and Glow's macro layer, reconsidered as a whole. Opened
-2026-08-13 after an audit of the six macros found the feature set had outgrown
-its owner's picture of it.
-
-Decisions already taken in that session, to be carried into the spec rather than
-re-derived:
-
-- **Ownership model.** A story-owned parameter is unreachable from the base
-  overlay by construction, so every parameter a macro owns drops out of the
-  patch transfer — the bug that forced TIDE out of the MOTION story. The chosen
-  fix is to shift the story curve so that knob-centre meets the overlay's value
-  when a patch supplies one, and to leave it absolute when none does. That makes
-  "may this parameter belong to a knob?" a non-question for the rest of the
-  project.
-- **Reverb leaves the macros.** DECAY and MIX go on the right fader, the control
-  that gets turned constantly. SIZE, TONE, DIFF, SMEAR and MOD become
-  terrain-only base rules — MOD held low (it wobbles), TONE held high. A fader
-  owning REVMIX must inherit `duck()`'s maximum or the NEW-press wash disappears.
-- **Fader defaults**: TEMPO left, REVERB right. Where MASTER goes is **open** and
-  deliberately left so.
-- **The freed sixth macro becomes DELAY**, on FLUX — the block is completely
-  unreachable today. GRIT stays out: drive is too strong to sit next to a delay
-  permanently, and if it returns at all it returns sparingly.
-- Not decided, and the reason the session stopped: which parameters the
-  remaining five macros own.
+**Ordering is open**, and no longer against anything in particular: the round
+this used to be sequenced against — the Glow rework — is cancelled with its
+subject. It still has no spec and no measurement of its own, which is the
+argument for taking the SHAPE/SMOOTH rework first.
 
 Needs a spec.
 
@@ -2689,92 +2534,15 @@ LED field is fixed at 20, and the SD cutout has its position.
 coordinates and keep-outs. Step 1 is closed; step 2 (bring-up) still has no
 spec and is next.
 
-**Flow layer — Plan A and Plan B both landed 2026-08-05.** The compact-macro-
-module spec (`docs/superpowers/specs/2026-08-05-flow-machine-design.md`)
-splits its own build into two plans. Plan A — `engine/flow/`: the seeded
-terrain generator, the six-macro story layer, weather, the NEW gesture
-family, render-host scenario wiring and the audio sanity gates — is built
-and green. Plan B — the VCV module **FireFlow Glow**, a second module in the
-`Fireflow` plugin, driving `engine/flow/` instead of `Fireflow.cpp`'s
-one-control-per-parameter surface — is also built. At this point its panel
-was 12 HP with six macro knobs, five CV jacks, one NEW button and one clock
-input; that surface did not survive (see the 2026-08-11 entry below).
-
-**Verified in Rack 2026-08-06.** The branch merged with its three hand-check
-lists still unrun — no agent has a Rack — and Bastian ran them on the built
-plugin before the merge: the module wakes on the house seed and sounds, the
-six macros and five CVs move it, the clock overrides tempo; the whole NEW
-gesture family reads correctly, including the refusal flash the plan's own
-code could not light; and a terrain survives copy, paste, save/reload and
-Ctrl+I. All three confirmed against the 12 HP surface described above, not
-the one Glow ships today. The lists themselves are in
-`.superpowers/sdd/2026-08-05-flow-glow-vcv-module/task-{3,4,5}-report.md`.
-
-**Rebuilt onto the Synthux Touch 2 surface, 2026-08-11.** Glow's control
-surface is replaced, not extended: a true-size, 16 HP replica of the Touch 2
-board — twelve touch pads (twelve curated places), six trim knobs, two
-assignable faders, two assignable centre-off switches, one stereo out. The
-five CV jacks and the clock input are gone; the module takes no CV and no
-external clock at all. NEW, GENRE and the old lock toggle move to the
-right-click "Workshop" menu — the board is the stage, Rack is the workshop,
-and the menu never ships to the Touch. Full rationale, the measured geometry
-and the pad gesture are in
-`docs/superpowers/specs/2026-08-11-glow-touch-2-panel-design.md`; the current
-control surface is documented in `host/vcv/README.md`'s "FireFlow Glow"
-section.
-
-With Glow built, the open items in
-`docs/superpowers/specs/2026-08-05-flow-listening-notes.md` are reachable
-for the first time: that file's own listening rounds were called off because
-a rendered file can only judge level, never whether a knob feels alive under
-the hand or a terrain is worth staying in, and answering that needed an
-instrument to play rather than a file to play back. Glow is that instrument.
-The house seed in `engine/flow/taste.h` remains the one open item Task 6
-called out explicitly: a measured placeholder, not the by-ear choice the
-design spec asks for, now answerable on the module that exists to answer it.
-
-**Taste tables (`glow-taste-tables`, 2026-08-06) — two open findings, both
-left for the owner's ear.** The branch encoded Bastian's by-ear rules into
-`engine/flow/taste.h` (vetoes, redrawn curves, an archetype window, musical
-weights, the COMP band move, a per-domain adventure draw) and its final
-review found no Critical issues, but two gates carry findings that a code fix
-cannot close — both currently live only in `taste.h`'s own header comments,
-which is not where this project looks for open questions, so they are
-recorded here too:
-
-- **`kBlendSpikeDb` (the NEW-blend level gate, §7.8) is RED and stays red.**
-  Two of the four asserted seeds breach it (0xD0D at +6.49 dB, 0xC0C0 at
-  +6.36 dB, both in the gate's window 3). Measured on the population the gate
-  actually asserts over (masters 1..2000, the 85 non-Sampler/no-engine-switch
-  terrains), the worst in-gate spike exceeds the 6 dB bound on 24/85 (28.2 %)
-  at HEAD and 31/85 (36.5 %) at the branch point — the branch made the rate
-  BETTER, not worse; the gate reads red only because the taste tables moved
-  two of the ten fixed candidate seeds into the breaching third that was
-  always there. **The honest resolution is a spec tolerance in §7.8 of
-  `docs/superpowers/specs/2026-08-06-glow-taste-structure-design.md`** — either
-  the blend genuinely has to hold level (and the generator changes until it
-  does) or §7.8 states the fraction it tolerates and the gate becomes a
-  distribution check — **not a code fix**, and not raising `kBlendSpikeDb` to
-  cover the two seeds.
-- **The calm-corner floor (`kCalmCornerRmsMin`, §7.8) — a mute finding, green
-  only by seed-set luck.** Over the same 1 566-terrain calm-corner scan, 103
-  terrains (6.6 %) now render functionally mute at their calm corner (rms at
-  or below the silence floor), down from 193 (12.3 %) at the branch point —
-  still roughly one drawn terrain in fifteen. Awaiting the owner's ruling
-  (same shape of question as the spike gate: does the generator guarantee an
-  audible calm corner, or does §7.8 state a tolerated fraction).
-- **The coupling between them, so a partial fix does not reopen the other
-  half:** both findings trace to the SAME one span. The drone SHAPE cap
-  (`P_SHAPE_A/B` drone span `{0,1}` → `{0,.25}`) is what retired the earlier
-  `kCalmCornerRmsMax` ceiling breach at master 0x707 (reverting it alone puts
-  0x707 back over the ceiling; reverting either of the other two candidate
-  edits at that commit does not) — and reverting that same cap is also what
-  un-mutes master 0x404 (1.35e-03 reverted vs. 7.00e-08/6.93e-08 for the other
-  two). So if the ruling on the mute finding is "the calm corner must stay
-  audible," the drone SHAPE cap is the first place to look — and the ceiling
-  breach it retired comes back with it. See `kCalmCornerRmsMax`'s and
-  `kCalmCornerRmsMin`'s comments in `engine/flow/taste.h` for the full
-  per-commit isolation.
+**2026-08-14 — preset persistence now starts from nothing.** M6's scope names
+it, and until this date the repo had two pieces of prior art for it: the
+terrain layer's `terrain_code.h`, the **only whole-patch serialiser** anything
+here ever had (a short text string that reconstructed a complete two-deck
+patch), and `host/vcv/src/flow_patch_bridge.hpp`, the **only patch transfer**
+between two different control surfaces. Both were deleted with that layer.
+Nothing replaces either, so step 2 designs preset persistence from scratch —
+there is no format to extend and no conversion to reuse. The two files and the
+reasoning behind them are recoverable from `docs/attic/`.
 
 ## Build & verify
 

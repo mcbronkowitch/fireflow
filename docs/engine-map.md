@@ -24,12 +24,10 @@ done | sort
 lane behaves and what actually reaches its axes. Extend it when another area
 burns a review round.
 
-**Sibling authority:** [`flow-fireflow-param-map.md`](flow-fireflow-param-map.md)
-owns the *other* question — which of the 64 `ParamId`s a hand-authored `Fireflow`
-patch can carry into a `flow` overlay (47 base rules, 45 mapped, 2 unreachable,
-pinned by `tests/test_flow_overlay.cpp:42`). It maps **parameters across hosts**;
-this file maps **behaviour inside a lane**. Neither answers the other's question,
-and a design touching both needs both.
+This file maps **behaviour inside a lane**. The sibling authority it used to
+name — the parameter map from `Fireflow` into the terrain layer's overlay — went
+to [`docs/attic/flow-fireflow-param-map.md`](attic/flow-fireflow-param-map.md)
+with that layer on 2026-08-14. Nothing in this file depends on it.
 
 ## How to read a citation
 
@@ -40,16 +38,17 @@ Files are named without their directory. The key:
 | `lane.cpp`, `lane.h`, `song_form.h`, `super_modulator.cpp/.h`, `waveforms.h` | `engine/mod/` |
 | `part.cpp`, `part.h` | `engine/parts/` |
 | `center.cpp` | `engine/center/` |
-| `flow.cpp`, `taste.h`, `terrain.cpp` | `engine/flow/` |
-| `Fireflow.cpp`, `Glow.cpp`, `init_patch.hpp` | `host/vcv/src/` |
+| `Fireflow.cpp`, `init_patch.hpp` | `host/vcv/src/` |
 
 Note the repo also carries a full second tree under `.worktrees/`; a bare grep
-will hit both.
+will hit both. It is a checkout of `codex/glow-hardware-panel-design`, kept only
+because `git worktree remove` refuses a tree containing submodules — it is not a
+second copy of anything live.
 
 **Line numbers rot — the quoted expression beside each is what identifies the
-site.** This is not theoretical: the sibling param map was written on 2026-08-12
-and by 2026-08-14 every one of its 39 `Fireflow.cpp` citations had drifted by
-exactly 12 lines, plus six in `flow.cpp` and one in `flow_params.h`. All 69 were
+site.** This is not theoretical: the param map now in `docs/attic/` was written
+on 2026-08-12 and by 2026-08-14 every one of its 39 `Fireflow.cpp` citations had
+drifted by exactly 12 lines. All 69 of its citations were
 re-derived from their quoted expressions on 2026-08-14. **When a line number here
 does not show what the text says it shows, the text is still the claim — find the
 expression and fix the number.** Where a fact is load-bearing enough that silent
@@ -153,8 +152,8 @@ Until 2026-08-14 that was the measurement for **every** STEP deck, note engines
 included, and it is the reason the melody system was unreachable where the
 instrument plays: FORM moved nothing below SHAPE 0.75 (measured, 0 of 4
 `Principle`s differing from `TwoMotif` at SHAPE 0.00 and 0.50, on seeds
-999/12345/7/4242), and §7 below shows how rarely the terrain draws that quarter —
-never at all on a drone. A note deck now emits the phrase at every SHAPE
+999/12345/7/4242) — a quarter of one knob was the whole of where it lived. A
+note deck now emits the phrase at every SHAPE
 instead — measured 3 of 4 `Principle`s differing at SHAPE 0.00, 0.50 and 1.00 on
 all four seeds, pinned by `tests/test_melody_reachable.cpp`. Its ambitus is
 **much smaller than the staircase's, and not a constant**.
@@ -226,7 +225,8 @@ else stumbles around"), while DRIFT and EVOLVE reach all five. So:
 
 Either way, **more than a third of the axis is not under the knob.** A knob at 1.0
 can be pulled down to `0.60` on the melodic lane and `0.25` on a texture lane
-just after a SPOT; a terrain base rule below 1.0 widens the band further.
+just after a SPOT; any caller that sets the knob below 1.0 widens the band
+further.
 
 ⚠️ **Those two bands are computed worst-case envelopes, not measurements** — the
 only inferred numbers in this file, flagged as such. Reaching an edge needs
@@ -297,25 +297,31 @@ Behaviour that depends on a variable is only as knowable as that variable's
 | Variable | Written by | Never written by |
 |---|---|---|
 | `_cur_step` | STEP path and the FLOW-melody path. `tick()` also writes it in a non-STEP branch (`lane.cpp:1018`), unreachable for the FLOW LFO only because `next_edge` is always 1.0 there | — but for the FLOW LFO this is moot: `_sh_slot()` **early-returns 0** at `lane.cpp:569` before reading `_cur_step` at all. Do not reason about its value on that path |
-| `_flow_melody` | `part.cpp:43,441` from the engine id: **off for SAMPLER and BBD** | any host directly; Glow cannot reach it except by changing the engine |
+| `_flow_melody` | `part.cpp:43,441` from the engine id: **off for SAMPLER and BBD** | any host directly — the only way to move it is to change the deck's engine |
 | `_melodic` | `super_modulator.cpp:14`, unconditionally, once | anything else, ever |
-| `_active[slot]` | boots **all true** (`part.h:639`); only writer today is `Fireflow.cpp:881` (LANE_PITCH, `!samplerPart`), pushed every block | **the flow layer — `flow.cpp` never calls `set_target_active`** |
+| `_active[slot]` | boots **all true** (`part.h:639`); the only writer that runs by itself is `Fireflow.cpp:881` (LANE_PITCH, `!samplerPart`), pushed every block | **`engine/` itself — no engine code ever writes it. Away from that one host line it moves only when a caller sets it explicitly (the render host's `set_target_active` scenario action, or a test)** |
 | `_shape_offset` | `center.cpp:143-144` every control tick | — (it is re-pushed continuously; it cannot be "left" at a value) |
 
-### Settled: does a Sampler deck's PITCH lane modulate under Glow?
+### Settled: a Sampler deck's PITCH lane is deactivated by the host, not by the engine
 
-**Yes.** Two reviews disagreed on this; the code settles it. `_active` boots true,
-the only writer is the `Fireflow` module, and the flow layer never calls it. So on
-a Glow terrain a Sampler deck keeps `_active[LANE_PITCH] == true`, while
-`_flow_melody` is false (engine id). Under the `Fireflow` module the same deck is
-deactivated. **Host-dependent, and only one of the two hosts protects it.**
+`_active` boots **true**, and no engine code ever clears it. The single writer
+that runs on its own is the `Fireflow` module, which pushes
+`set_target_active(LANE_PITCH, !samplerPart)` every block — so under `Fireflow` a
+Sampler deck's PITCH lane is deactivated, and under **any caller that does not
+make that call** the same deck keeps `_active[LANE_PITCH] == true` while
+`_flow_melody` is false (engine id). Two reviews disagreed on this; the code
+settles it. `tests/test_param_impact.cpp:152-159` (`apply_patch`'s FORM/SONG
+branch) depends on exactly this — it
+forces `_active` on for the FORM/SONG cases precisely because nothing else in
+the engine would.
 
-⚠️ **This is a known defect, not a contract.** It is recorded here so the question
-stops being re-argued, not so the behaviour is preserved — do not build a design
-that relies on it. `part.h:634-638` already flags the neighbouring half of the
-same problem: the `Fireflow` module re-pushes `set_target_active` every block, so
-the day an M6 pad can toggle `LANE_PITCH` that push will silently overwrite it,
-*"harmless today only because the pad doesn't exist yet."*
+⚠️ **The host-side deactivation is a known defect, not a contract.** It is
+recorded here so the question stops being re-argued, not so the behaviour is
+preserved — do not build a design that relies on it. `part.h:634-638` already
+flags the neighbouring half of the same problem: the `Fireflow` module re-pushes
+`set_target_active` every block, so the day an M6 pad can toggle `LANE_PITCH`
+that push will silently overwrite it, *"harmless today only because the pad
+doesn't exist yet."*
 
 ---
 
@@ -400,71 +406,31 @@ hides everything the target does. Count `distinct` values alongside p2p — that
 what separates "a waveform" from "a two-value square", and p2p alone will not tell
 you.
 
-**To probe the flow layer** (`generate()`, terrain draws) the line is longer —
-`engine/flow/` needs C++17 and the vendored DaisySP headers, because `terrain.h`
-pulls in `instrument.h`:
-
-```bash
-clang++ -std=c++17 -O2 -Iengine -Ithird_party -Ilib/DaisySP/Source \
-        -o probe.exe probe.cpp engine/flow/terrain.cpp
-```
-
 ---
 
-## 7. Reachability: what a terrain actually draws
+## 7. Reachability: where the melody lives on the axes
 
 §2 and §3 describe what a knob position *does*. This section is about which
-positions a Glow terrain ever *reaches* — a different question, and the one that
-decides whether a feature exists in play. Measured with the real `generate()`,
-not a re-implementation of `draw_span`, over **masters 1…20 000, every reroll
-counter at 0, no `BaseOverlay`** — that population is what every percentage below
-means:
+positions the melody is actually *reachable* from — a different question, and
+the one that decides whether a feature exists in play.
 
-| | |
-|---|---|
-| mean drawn SHAPE, both decks | **0.314** |
-| highest SHAPE seen in the 20 000 terrains | 0.955 |
-| either deck in the §3 fade zone (SHAPE > 0.75) | **4.84 %** |
-| either deck above SHAPE 0.95 | **0.01 %** (2 terrains) |
-| deck A drawn with RANGE < 0.25 | **25.29 %** (deck B 24.98 %) |
-| terrains whose archetype is *drone* | **49.5 %** |
+Until 2026-08-14 this section opened on a population study of the terrain
+generator: how often a drawn patch put a deck in §3's fade zone (about 5 %),
+and the fact that it never did so on a drone, half of all draws, because the
+drone's SHAPE span was capped at `{0, 0.25}`. That generator was deleted with
+the terrain layer; the study cannot be reproduced and is not restated here. Its
+by-ear content — the drone SHAPE cap and the coupling finding around it — is in
+[`docs/attic/taste-by-ear-notes.md`](attic/taste-by-ear-notes.md) §1.3.
 
-Per archetype, share with a deck in the fade zone: **drone 0.00 %** — 0 of the
-9905 drone terrains — pulse 10.1 %, arp 8.9 %, fragment 9.7 %. The drone can
-never get there: `taste.h:998-999` caps its SHAPE span at `{0, 0.25}`, and it is
-half of all terrains.
-
-Re-measured on 2026-08-14. The figures this table carried before (4.65 %, mean
-0.316, max 0.956, deck A RANGE 24.97 %, drone 49.2 %) do not reproduce over the
-population above; shifting the master range by one (0…19 999) moves nothing past
-the third digit. **They look like a smaller draw of this same population, not a
-different generator** — measured over masters 1…N for N ∈ {1, 2, 5, 10, 20, 50,
-100} × 1000, the mean is 0.3160 at N = 5 000 (the old figure exactly) and deck A's
-RANGE < 0.25 is 24.96 % at N = 10 000, while max SHAPE climbs 0.885 → 0.962 and
-the drone share wanders 48.9 – 50.2 % with N. The one figure that never printed
-is the fade-zone share: **4.60 – 5.02 % across all seven sizes**, never 4.65 %.
-
-So quote the fade-zone share as *what a population of this size prints*, not as a
-constant: it is **4.84 %** at masters 1…20 000, and about 5 % anywhere in that
-range. `ModLane::_compute_raw()`'s comment quotes the same 4.84 % and points
-here — the two were corrected together, on purpose, so they cannot disagree
-again. **What does not move with N is the zero.** Over masters 1…100 000 — a
-superset of every size above — **0 of 50 238 drone terrains** reach the fade
-zone, and the highest SHAPE ever drawn on a drone is **0.2449**, under the 0.25
-cap with room to spare. That is `taste.h:998-999` showing through, not a sampling
-result, and it is the only figure in this section safe to quote without its
-population.
-
-**Neither SHAPE nor RANGE is reachable by any macro.** `P_SHAPE_A/B` and
-`P_RANGE_A/B` appear in `kBaseRules` (`taste.h:991-999`) and in **no** story
-curve, so nothing in the macro layer can move them; only the in-lane offsets of
-§2 can, and on the melodic lane those total ±0.40. A drone's 0.25 base plus 0.40
-is 0.65, still under the 0.75 where the bank starts crossfading toward the
-phrase. **On a SAMPLER or BBD deck, therefore, the melodic phrase is unreachable
-on half of all terrains by any means available to the player** — those two engine
-classes still route PITCH through the waveform bank in both modes (§1), and the
-drone's cap is not something a knob or a macro can lift. A note deck no longer
-depends on any of this: since `07d5b9d` it emits its phrase at every SHAPE.
+**What survives it, and is engine truth rather than population truth:** the
+played SHAPE is the knob plus the three in-lane offsets of §2 and nothing else,
+and on the melodic lane those offsets total ±0.40. So a SHAPE knob parked below
+0.35 cannot reach the 0.75 where the bank starts crossfading toward the phrase,
+whatever else is turned. **On a SAMPLER or BBD deck the melodic phrase
+therefore lives in the top quarter of SHAPE and nowhere else** — those two
+engine classes still route PITCH through the waveform bank in both modes (§1).
+A note deck no longer depends on any of this: since `07d5b9d` it emits its
+phrase at every SHAPE.
 
 ### The melody's second gate: RANGE, through the quantizer
 
@@ -477,19 +443,22 @@ VARY 0, mean of seeds 12345/777/4242):
 | RANGE | span (semitones) | distinct scale degrees |
 |---|---|---|
 | 1.0 | 8.42 | 4 |
-| 0.4 — top of the drone band | 4.11 | 3 |
+| 0.4 | 4.11 | 3 |
 | 0.25 | 2.57 | 2 |
-| **0.1 — bottom of the drone band** | **1.03** | **1** |
+| **0.1** | **1.03** | **1** |
 
-At the bottom of its RANGE band a deck plays the entire phrase — every FORM,
-every SONG, every seed — on **one** scale degree.
+At the bottom of the RANGE knob a deck plays the entire phrase — every FORM,
+every SONG, every seed — on **one** scale degree. (The two boundary values were
+chosen because they were the ends of the band the deleted terrain generator drew
+for a drone; the measurement is the lane's, not the generator's, and stands
+without it.)
 
 ### And the inversion, which has since inverted
 
 This section used to close on FORM being unreachable rather than inert: at SHAPE
 1.0 three of the four other `Principle`s emitted a different value set from
-`TwoMotif`, at SHAPE 0.0 none of them did, and the terrain draws the quarter of
-the knob where that begins to change in 4.84 % of cases, its far end in 0.01 %.
+`TwoMotif`, at SHAPE 0.0 none of them did, and a patch had to be parked in the
+top quarter of the knob before any of it began to change.
 Commit `07d5b9d` (spec `melody-reachable`) took the
 SHAPE dependence off the note engines, and the measurement moved with it.
 Re-measured 2026-08-14 — STEP, 8 steps, rate 0.5 Hz, SMOOTH 0, RANGE 1, VARY 0,
@@ -504,7 +473,7 @@ the same on all four:
 "*n* of 4" is how many of the four other `Principle`s emit a value set that
 differs from `TwoMotif`'s. On a note deck FORM now reaches the output at every
 SHAPE; on the other two engine classes the old picture stands unchanged, and the
-4.84 % / 0.01 % shares above are what govern them. Pinned by
+top-quarter gate above is what governs them. Pinned by
 `tests/test_melody_reachable.cpp`.
 
 **What did not change is the size of the gesture, and that is the real remaining

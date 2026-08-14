@@ -2,10 +2,10 @@
 //
 // The gate that would have caught the DIRT macro. DIRT aimed two of its four
 // targets at GRIT, the wet/dry of a block nothing ever switches on, and nobody
-// noticed until someone rendered it: the flow layer pushed the values, the
+// noticed until someone rendered it: the macro layer pushed the values, the
 // setters accepted them, every unit test stayed green, and the knob did
 // nothing. Nine more parameters were in the same state when this file was
-// written (docs/2026-08-13-glow-macro-audit.md).
+// written (docs/attic/2026-08-13-glow-macro-audit.md).
 //
 // So this is not a unit test of any one component. It renders audio and asks
 // the only question those components cannot answer about themselves: does
@@ -14,19 +14,20 @@
 // TWO GATES, both exact-set comparisons rather than one-way checks, so neither
 // list can rot:
 //
-//   1. Every ParamId moves audio on at least one terrain, except a named set
-//      that provably cannot. A parameter that goes dead reddens this; so does
-//      one that comes back to life while still on the list.
+//   1. Every ParamId moves audio at at least one of the frozen operating
+//      points, except a named set that provably cannot. A parameter that goes
+//      dead reddens this; so does one that comes back to life while still on
+//      the list.
 //   2. Every ParamId that moves audio moves it in BOTH operating modes, except
 //      a named set of mode-exclusive ones. This is the gate the FLOW melody
 //      engine will change on purpose -- when it lands, the expected set here
 //      shrinks and this test tells you exactly by how much.
 //
 // FxMem: echo + BBD line memory is static here, the idiom
-// tests/test_flow_audio.cpp and tests/test_bbd_engine.cpp already use. Sampler
-// record buffers are deliberately left null (two 42 s/part heap buffers is not
-// a price worth paying to prove a gate), so a Sampler deck runs silent -- every
-// candidate terrain is inspected and rejected before it is rendered.
+// tests/test_bbd_engine.cpp already uses. Sampler record buffers are
+// deliberately left null (two 42 s/part heap buffers is not a price worth
+// paying to prove a gate), so a Sampler deck runs silent -- which is why none
+// of the four frozen points puts a Sampler on either deck.
 #include "doctest/doctest.h"
 #include "param_table.h"
 #include "param_impact_points.h"
@@ -76,44 +77,49 @@ constexpr double kSkip  = 0.5;   // discarded attack/settle head
 // file exists to catch.
 constexpr double kMoved = 1e-6;
 
-// How much of the mix a deck must carry before its parameters may be judged on
-// that terrain. See ReferencePatch below for why this check exists at all.
+// How much of the mix a deck must carry before its parameters may be judged at
+// a given point. See the operating-point note below for why this check exists
+// at all.
 constexpr double kDeckAudible = 0.05;
 
 // Excluded from both gates: P_MODE IS the axis the second gate splits on.
 // Sweeping it would compare a FLOW render against a STEP one, which says
 // nothing about whether the parameter is wired -- the two modes are
-// different instruments by design. Covered by tests/test_flow_mode.cpp.
+// different instruments by design. The mode itself is exercised by the lane
+// tests (tests/test_step.cpp, tests/test_flow_melody.cpp), not here.
 //
 // FORM and SONG used to be excluded here too, for the same "unstable sample"
 // reason DENSITY left the mode-exclusive gate under: ModLane::_compute_raw()
 // blended the melody pattern through shape_value()'s S&H segment
 // (waveforms.h), so whether FORM/SONG moved anything depended on a SHAPE
-// value the terrain draws. Spec 2026-08-13 flow-melody-engine Task 8 wired
-// set_flow_melody(true) into every note engine's PITCH lane and removed that
-// dependence in FLOW; spec 2026-08-14 melody-reachable removed it in STEP as
+// value the operating point happened to carry. Spec 2026-08-13
+// flow-melody-engine Task 8 wired set_flow_melody(true) into every note
+// engine's PITCH lane and removed that dependence in FLOW; spec 2026-08-14
+// melody-reachable removed it in STEP as
 // well, so _compute_raw() now returns the phrase pitch directly whenever the
 // deck runs a note engine (_note_lane()) -- no SHAPE blend, no S&H gate, in
 // either mode. That removes the instability the exclusion existed for; see
 // apply_patch() below for how this gate additionally controls for DEPTH and
 // _active on the FORM/SONG cases specifically
-// (docs/2026-08-13-glow-macro-audit.md, "the second FORM/SONG gate").
+// (docs/attic/2026-08-13-glow-macro-audit.md, "the second FORM/SONG gate").
 bool is_excluded(int p) {
     return p == P_MODE;
 }
 
-// The operating point every comparison runs at: every value the flow layer
-// actually pushes with all six macros at their CENTRE, settled.
+// The operating points every comparison runs at were captured from the deleted
+// terrain layer with all six macros at their CENTRE, settled -- that is what
+// param_impact_points.h holds and why it holds those numbers.
 //
-// NOT Terrain::base[]. That was this rig's first version and it measured the
-// wrong instrument: for a story-owned parameter stage 4 writes base[p] =
-// bp[0], the curve's calm floor, so rendering from base[] puts every macro at
-// zero at once. Measured at that corner, BRIGHT's floor holds FILT_A/B at
-// about -0.5 on EVERY terrain, both decks sit near silence, and one of them
-// usually falls off the filter cliff entirely and renders exact zeros -- which
-// then reports every _B parameter as dead. The bug was in the rig, not the
-// instrument. A centred macro vector is an operating point somebody might
-// actually listen to.
+// NOT the layer's own base[] array. That was this rig's first version and it
+// measured the wrong instrument: for a story-owned parameter the generator's
+// last stage wrote base[p] = bp[0], the curve's calm floor, so rendering from
+// base[] put every macro at zero at once. Measured at that corner, BRIGHT's
+// floor held FILT_A/B at about -0.5 everywhere, both decks sat near silence,
+// and one of them usually fell off the filter cliff entirely and rendered
+// exact zeros -- which then reported every _B parameter as dead. The bug was
+// in the rig, not the instrument. A centred macro vector is an operating point
+// somebody might actually listen to, which is why these four are the ones that
+// were frozen.
 
 // Push a reference patch onto an Instrument, optionally overriding one
 // parameter. `param < 0` means "no override".
@@ -121,8 +127,8 @@ void apply_patch(Instrument& in, const FrozenPoint& rp, int param, float v) {
     for (int p = 0; p < P_COUNT; ++p) {
         // set_step() takes mode and count together and set_sync() is global, so
         // these three cannot go through the per-parameter apply_param() -- the
-        // same reason Flow::push_mode_and_steps exists. Issued as one unit
-        // below.
+        // same reason apply_mode_and_steps() (param_table.h) exists. Issued as
+        // one unit below.
         if (p == P_MODE || p == P_STEPS_A || p == P_STEPS_B) continue;
         apply_param(in, p, p == param ? v : rp.v[p]);
     }
@@ -135,7 +141,7 @@ void apply_patch(Instrument& in, const FrozenPoint& rp, int param, float v) {
     in.set_step(PART_B, rp.step, sb);
 
     // FORM/SONG reach audio only through LANE_PITCH's modulation output
-    // (part.cpp's target_raw). A terrain that drew a low DEPTH, or a future
+    // (part.cpp's target_raw). A point that carries a low DEPTH, or a future
     // caller that left LANE_PITCH inactive, could mask the melody
     // independently of whether FORM/SONG themselves are wired -- decided in
     // advance (task-10 brief) to hold both out of the way for exactly these
@@ -157,10 +163,11 @@ void apply_patch(Instrument& in, const FrozenPoint& rp, int param, float v) {
 // in exactly one thing, and return the relative RMS difference. 0.0 means the
 // two renders are bit-identical.
 //
-// Deliberately NOT driven through Flow during the render: Flow re-pushes every
-// parameter each control tick from its own terrain evaluation, so an override
-// would be erased on the next tick. Flow establishes the operating point; the
-// render then holds it still so ONE parameter can differ.
+// The frozen points are pushed once and then held: nothing re-pushes a
+// parameter during the render, so the single override survives the whole
+// window. (When the terrain layer still existed this was a live hazard -- it
+// re-pushed every parameter each control tick, so an override was erased on the
+// next one, and the rig deliberately never rendered through it.)
 double compare(const FrozenPoint& rp, int param, float v_lo, float v_hi,
                int mute_deck = -1) {
     Instrument a, b;
@@ -189,10 +196,10 @@ double compare(const FrozenPoint& rp, int param, float v_lo, float v_hi,
 }
 
 // Does `deck` carry enough of the mix for its parameters to be judgeable here?
-// A terrain can still leave one deck near-silent even at a centred macro vector
-// -- an engine whose excitation never arrives, an envelope that never opens --
-// and on such a terrain every parameter of that deck renders bit-identical.
-// Without this check the gate reports those as defects.
+// An operating point can leave one deck near-silent even with the macros
+// centred -- an engine whose excitation never arrives, an envelope that never
+// opens -- and at such a point every parameter of that deck renders
+// bit-identical. Without this check the gate reports those as defects.
 bool deck_audible(const FrozenPoint& rp, int deck) {
     return compare(rp, -1, 0.f, 0.f, deck) > kDeckAudible;
 }
@@ -204,7 +211,7 @@ struct Terrains { FrozenPoint flow[kPer], step[kPer]; };
 // mix -- so that check runs here instead, live, on each frozen point. A
 // change that leaves a deck near-silent at one of these points would
 // otherwise report that deck's whole parameter set as dead, which is the
-// mistake this rig already made once (see the ReferencePatch note above).
+// mistake this rig already made once (see the operating-point note above).
 Terrains load_points() {
     Terrains out{};
     for (int i = 0; i < kPer; ++i) {
@@ -220,7 +227,7 @@ Terrains load_points() {
     return out;
 }
 
-// Does `param` move audio on any of these terrains? Stops at the first terrain
+// Does `param` move audio at any of these points? Stops at the first point
 // that says yes -- the gate asks a yes/no question, and paying for the
 // remaining renders would only refine a number nobody reads.
 bool moves_audio(const FrozenPoint* rps, int param) {
@@ -259,16 +266,16 @@ TEST_CASE("param impact: every parameter moves audio somewhere") {
     // comment on is_excluded() for why an undifferentiated expected[] would
     // be dishonest here: this file must never assert an untraced anomaly is
     // correct, only that it is what was measured. Measured 2026-08-13; full
-    // method in docs/2026-08-13-glow-macro-audit.md.
+    // method in docs/attic/2026-08-13-glow-macro-audit.md.
     //
     // PROVEN: the parameters that provably cannot move audio, each with the
     // mechanism that stops them.
     //
     // GRIT / FLUXMIX / LINK: apply_param() has no set_fx_on(), so neither FX
     //   block is ever switched on and all six are wet/dry controls of silence.
-    //   This does not depend on what a terrain happens to draw -- no terrain
-    //   can switch a block on -- so the answer is the same for every sample
-    //   set.
+    //   This does not depend on what an operating point happens to carry -- no
+    //   parameter value can switch a block on -- so the answer is the same for
+    //   every sample set.
     //
     // REMOVE a PROVEN entry when its cause is fixed; this case fails on a
     // listed parameter coming back to life just as it does on a new death,
@@ -282,7 +289,7 @@ TEST_CASE("param impact: every parameter moves audio somewhere") {
     // pins CURRENT behaviour so the gate stays green and useful for
     // everything else -- it does NOT claim the deadness is correct or
     // intended. Do not move an entry to PROVEN without an actual traced
-    // mechanism in its comment; do not delete an entry, narrow the terrain
+    // mechanism in its comment; do not delete an entry, narrow the point
     // set, or loosen the threshold to make one go away instead.
     //
     // SONG_B: dead on both modes even with DEPTH_B forced to its max and
@@ -291,7 +298,7 @@ TEST_CASE("param impact: every parameter moves audio somewhere") {
     //   motivated that control. FORM_A, FORM_B and SONG_A all came alive
     //   under the same control (mode-exclusive gate below); SONG_B alone did
     //   not. No mechanism traced; open thread in
-    //   docs/2026-08-13-glow-macro-audit.md ("FORM/SONG re-measured under
+    //   docs/attic/2026-08-13-glow-macro-audit.md ("FORM/SONG re-measured under
     //   task 10").
     bool expected_untraced[P_COUNT] = {};
     for (int p : { P_SONG_B })
@@ -338,7 +345,7 @@ TEST_CASE("param impact: a live parameter works in both operating modes") {
     //   pitch content only reached audio above SHAPE 0.75. Spec 2026-08-14
     //   melody-reachable makes _compute_raw() return the phrase directly on
     //   any note deck, in STEP as in FLOW (_note_lane()), and FORM_A now moves
-    //   audio in both modes -- measured 0.797 on a FLOW terrain and 0.143 on a
+    //   audio in both modes -- measured 0.797 at a FLOW point and 0.143 at a
     //   STEP one -- so it drops off this list exactly as DENSITY did. FORM_B
     //   moves in both modes too; see SAMPLE-BOUND below for why this gate
     //   still reports it as mode-exclusive.
@@ -350,39 +357,40 @@ TEST_CASE("param impact: a live parameter works in both operating modes") {
     // listed here pins CURRENT behaviour so the gate stays green and useful
     // for everything else -- it does NOT claim the asymmetry is correct or
     // intended. Do not move an entry to PROVEN without an actual traced
-    // mechanism in its comment; do not delete an entry, narrow the terrain
+    // mechanism in its comment; do not delete an entry, narrow the point
     // set, or loosen the threshold to make one go away instead.
     //
     // SONG_A: alive only in STEP, measured under the DEPTH/_active control
     //   from apply_patch(). Neither this nor SONG_B's outright deadness
     //   (dead-parameter gate above) is explained by that control or by
     //   anything else traced so far; both are open threads in
-    //   docs/2026-08-13-glow-macro-audit.md ("FORM/SONG re-measured under
+    //   docs/attic/2026-08-13-glow-macro-audit.md ("FORM/SONG re-measured under
     //   task 10"), not something this task fixes.
     bool expected_untraced[P_COUNT] = {};
     for (int p : { P_SONG_A })
         expected_untraced[p] = true;
 
     // SAMPLE-BOUND: NOT mode-exclusive in the instrument -- mode-exclusive
-    // only in what this gate's kPer = 2 terrains per mode happen to draw. An
-    // entry here is a statement about the sample, not about the parameter, and
-    // it is the one group whose members are expected to leave the moment the
-    // terrain sample changes. Nothing may be added here without a measurement
-    // over a wider master range showing the parameter alive in both modes.
+    // only in what this gate's kPer = 2 frozen points per mode happen to carry.
+    // An entry here is a statement about the sample, not about the parameter,
+    // and it is the one group whose members are expected to leave the moment
+    // that sample changes. Nothing may be added here without a measurement
+    // over a wider sample showing the parameter alive in both modes.
     //
     // FORM_B: was PROVEN until 2026-08-14 on the S&H mechanism above, and the
-    //   melody-reachable change did reach it. Measured with this rig's own
-    //   filters over masters 1..59, both guards, FORM_B moving audio on a STEP
-    //   terrain: 1 of 13 under the old guard (master 43 only), 9 of 13 under
+    //   melody-reachable change did reach it. Measured on 2026-08-14, while the
+    //   generator still existed, with this rig's own filters over masters
+    //   1..59, both guards, FORM_B moving audio at a STEP
+    //   point: 1 of 13 under the old guard (master 43 only), 9 of 13 under
     //   the new one (masters 11, 13, 16, 19, 31, 43, 44, 51, 58; 0.314 ..
     //   1.183). Several of those are far below the old SHAPE 0.75 gate --
     //   master 11 at SHAPE_B 0.325, 19 at 0.483, 31 at 0.468 -- and read
     //   exactly 0.0 under the old guard, which only the phrase path explains.
     //
-    //   What is left is a sampling accident, not an asymmetry: pick_terrains()
-    //   draws masters 3 and 8, which are two of the four STEP terrains where
-    //   FORM_B reads exactly 0.0. A FORM reading of exactly 0.0 on a given
-    //   terrain is ordinary in BOTH modes -- FORM_A reads 0.0 on FLOW masters
+    //   What is left is a sampling accident, not an asymmetry: the two frozen
+    //   STEP points are masters 3 and 8, which are two of the four STEP draws
+    //   where FORM_B read exactly 0.0. A FORM reading of exactly 0.0 at a given
+    //   point is ordinary in BOTH modes -- FORM_A reads 0.0 on FLOW masters
     //   1, 5, 7 and 9 -- so "dead in STEP" here is a property of two draws.
     //   Not the drawn step counts either: forcing steps_a = steps_b = 8 on
     //   masters 3 and 8 leaves FORM_B at exactly 0.0 on both.
@@ -403,7 +411,8 @@ TEST_CASE("param impact: a live parameter works in both operating modes") {
                       expected_sample_bound[p];
 
     // Anything NOT listed in any group above that works in one mode only
-    // is a defect: half of every terrain population cannot reach it.
+    // is a defect: half of everything the instrument can be set to cannot
+    // reach it.
     const Terrains ter = load_points();
     bool actual[P_COUNT] = {};
     for (int p = 0; p < P_COUNT; ++p) {

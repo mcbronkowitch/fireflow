@@ -1,7 +1,7 @@
 {
   "sample_rate": 48000,
   "bpm": 120,
-  "duration_s": 60,
+  "duration_s": 61,
   "init": [
     {
       "_comment": "PACE across its full range on a note engine. Replaces the deleted flow_pace_sweep.json, which drove the same knob through the flow layer's terrain draw (removal spec 4.4); the sweep itself never needed flow -- set_pace is an ordinary Instrument setter, and the terrain only supplied the patch around it. A 16-step STEP PITCH melody on deck A's synth voices makes the tempo change audible as note spacing rather than as a texture drift."
@@ -76,7 +76,7 @@
   ],
   "events": [
     {
-      "_comment": "PACE sweep, 0.5 s per step. 0.5 is exactly neutral (x1); 0.0 is the slowest end, 1.0 the fastest. The whole range is covered, and it returns to neutral so the ear has the same reference at both ends of the file."
+      "_comment": "PACE sweep, 0.5 s per step. 0.5 is exactly neutral (x1); 0.0 is the slowest end, 1.0 the fastest. The whole range is covered, and it returns to neutral so the ear has the same reference at both ends of the file. duration_s is 61, not 60: the render loop runs i < duration_s * sample_rate, so the last t it reaches at 60 s would be 59.99998 and the closing return to neutral at t = 60.0 would never fire. The extra second also lets that return be heard."
     },
     {
       "t": 0.0,

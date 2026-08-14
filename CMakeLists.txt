@@ -257,11 +257,11 @@ add_test(
 # --- panel guards (host/vcv/res/test_*.py) ---------------------------------
 # res/test_panel.py (97 tests -- the authority on the whole generated-artifact
 # contract) and res/test_hw_panel.py were manual-only: nothing in CI or ctest
-# ran them, and during the 2026-08-09
-# hw-control-reduction plan one of them briefly had no runner at all while
-# task reports cited it as a passing gate (review finding IMPORTANT 4). Each
-# script resolves its own paths relative to host/vcv/, hence WORKING_DIRECTORY
-# below -- running them from the repo root fails to find generated_panel.hpp.
+# ran them, and during the 2026-08-09 hw-control-reduction plan one of them
+# briefly had no runner at all while task reports cited it as a passing gate
+# (review finding IMPORTANT 4). Each script resolves its own paths relative to
+# host/vcv/, hence WORKING_DIRECTORY below -- running them from the repo root
+# fails to find generated_panel.hpp.
 #
 # find_package(Python3) above is REQUIRED, so a machine without Python 3 fails
 # to configure at all rather than silently skipping these -- consistent with

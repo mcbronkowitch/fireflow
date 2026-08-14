@@ -48,8 +48,10 @@ BRICK      = "#8f4a45"   # "I refused you" -- a muted, greyish red. Same value
                          # a third of its saturation and 20 degrees round the
                          # wheel, which is what makes it read as dull brick
                          # rather than as warm metal. Sits with MUTED, not
-                         # above COPPER. Used by Glow's refusal contour
-                         # (gen_flow_panel.py emits it into the header).
+                         # above COPPER. Its only consumer, the deleted Glow
+                         # module's refusal contour, went with that module on
+                         # 2026-08-14; the value is kept as the palette's
+                         # "refused" slot for whatever needs one next.
 GRAPHITE   = "#252721"   # knob caps, jack wells
 WELL       = "#1d1f1a"   # LED-ring well (dark, so the glow reads)
 WHITE      = "#fffdf7"   # pad keys / knob ticks

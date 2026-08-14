@@ -12,8 +12,10 @@ written in the deletion commit, so it cannot name that commit's own hash.
 
 To recover the deleted `hardware/glow-faceplate/` KiCad faceplate tree, use:
 ```bash
-git show a4aca1a:hardware/glow-faceplate/
-git show a4aca1a:hardware/glow-faceplate/README.md
+git show a4aca1a:hardware/glow-faceplate/           # lists the tree
+git show a4aca1a:hardware/glow-faceplate/README.md # one file out of it
+git show a4aca1a:hardware/glow-faceplate/...       # ... and so on, one path per
+                                                   # file the listing names
 ```
 
 This avoids hunting through the history with `--diff-filter=D` when the faceplate KiCad files need to be reviewed or recovered.

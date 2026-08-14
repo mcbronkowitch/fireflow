@@ -4,18 +4,19 @@
 
 namespace spky {
 
-// A draw range, engine units. Lives here rather than in taste.h (where it was
-// originally declared) because it is a two-float struct with no tuning
-// content of its own -- taste.h's kBaseRules/kStories build ON it, but
-// terrain.h only needs the TYPE (for Terrain::window[]), and taste.h is the
-// whole tuning table plus its transitive includes (mod/divisions.h,
-// parts/engine_iface.h). Moved 2026-08-06 (final review) so a consumer that
-// only needs to name a Span -- terrain.h chief among them -- no longer drags
-// in every tuning constant in the file to get it.
+// A draw range, engine units. It was declared in the terrain layer's tuning
+// table and moved out on 2026-08-06 so a consumer that only needed to name a
+// range did not have to drag the whole table in to get it. That layer was
+// deleted 2026-08-14 and the type currently has no consumer left; it survives
+// as the vocabulary a panel or a generator would use to state a parameter's
+// draw range against the table below.
 struct Span { float lo, hi; };
 
-// Every parameter the flow layer owns. Ranges are ENGINE units (§2: the
-// surface is not uniformly 0..1 -- FILT/VARIATION/CHOKE are bipolar,
+// Every parameter reachable through apply_param() / apply_mode_and_steps()
+// below -- the set the deleted terrain layer owned, kept because it is the
+// engine's own parameter table and the only enumeration of the whole surface
+// in one place. Ranges are ENGINE units (the surface is not uniformly
+// 0..1 -- FILT/VARIATION/CHOKE are bipolar,
 // ENGINE/SCALE/ROOT/FORM/SONG/STEPS are discrete). steps==0 -> continuous.
 // The RES ceiling 0.75 encodes the by-ear resonance cap as a hard limit.
 //
@@ -24,10 +25,11 @@ struct Span { float lo, hi; };
 // as corroboration, never as the source -- a Fireflow control can be deleted
 // or merged (it has been) without any of these numbers moving.
 //
-// THE AUTHORITY FOR THE Fireflow <-> flow CORRESPONDENCE IS
-// docs/flow-fireflow-param-map.md -- one row per base-rule parameter, each
-// either mapped with its conversion or marked UNREACHABLE with a reason.
-// Do not re-derive a mapping here, and do not let this comment grow one.
+// The Fireflow <-> terrain correspondence this table once served is history:
+// the converter and the layer it fed were deleted 2026-08-14. Its parameter
+// map is kept for the reasoning only, at
+// docs/attic/flow-fireflow-param-map.md. Do not re-derive a mapping here, and
+// do not let this comment grow one.
 //
 // - ENGINE: engine/parts/engine_iface.h's EngineId runs
 //   ENGINE_TEST_TONE=0 .. ENGINE_BBD=5, ENGINE_COUNT=6 -- so 0..5, 6 steps,
@@ -53,12 +55,13 @@ struct Span { float lo, hi; };
 //   reduction it is configSwitch(0.f, kSongLadderCount-1 == 13.f, ..., 14
 //   labels) (Fireflow.cpp:396-398) and its value is a LADDER RUNG, not a
 //   SongMode. The engine range stands; the corroboration did not.
-// - STEPS: 2..16, 15 steps -- the flow layer's own floor, enforced in
-//   Flow::push_mode_and_steps (flow.cpp:400-401). Fireflow does NOT match
-//   it: STEPS_A/B is configParam(c.id, 0.f, 16.f, init, "Steps")
-//   (Fireflow.cpp:411), because 0 is how a Fireflow deck says "STEP off"
-//   (set_step(p, steps > 0, steps), Fireflow.cpp:843). In flow that state is
-//   P_MODE, not a step count, which is why the ranges differ on purpose.
+// - STEPS: 2..16, 15 steps. The floor of 2 is this table's own: it is the
+//   count a caller may issue through apply_mode_and_steps() below, and it
+//   never reaches 0 or 1 because "off" is a mode, not a step count. Fireflow
+//   does NOT match it: STEPS_A/B is configParam(c.id, 0.f, 16.f, init,
+//   "Steps") (Fireflow.cpp:411), because 0 is how a Fireflow deck says "STEP
+//   off" (set_step(p, steps > 0, steps), Fireflow.cpp:843). Here that state
+//   is P_MODE, which is why the ranges differ on purpose.
 // - LINK: NOT unipolar's brief placeholder (-1..1). Flux::set_link()
 //   (engine/fx/flux.cpp:126-128) clamps to [0,1], and Fireflow.cpp's own
 //   LINK_A/B configParam is 0..1 (Fireflow.cpp:334-335) -- the bipolar

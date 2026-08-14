@@ -548,10 +548,11 @@ float ModLane::_compute_raw() const {
     // is computed and discarded, and every FORM emitted the same sine staircase
     // -- measured at SHAPE 0, p2p 2.000 over 5 distinct values on seeds
     // 999/12345/7/4242/31337 alike, and 0 of 4 Principles differing from
-    // TwoMotif. The terrain draws that top quarter in 4.84 % of cases and never
-    // on a drone (docs/engine-map.md §7), so the melody system was unreachable
-    // where the instrument plays. SHAPE is therefore inert on this lane in both
-    // modes, consistently. What SHAPE should mean for a melody is the
+    // TwoMotif. The whole melody system therefore lived in the top quarter of
+    // one knob and nowhere else (docs/engine-map.md §7), which is what made it
+    // effectively unreachable where the instrument plays -- a patch parked
+    // anywhere below 0.75 never heard it at all. SHAPE is inert on this lane
+    // in both modes, consistently. What SHAPE should mean for a melody is the
     // SHAPE/SMOOTH rework's question.
     if (_note_lane()) return _active_pattern().pitch[_sh_slot()];
     const double phd = _phase + double(_ev_phase);
