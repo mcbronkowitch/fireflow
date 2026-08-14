@@ -53,21 +53,22 @@ struct Span { float lo, hi; };
 //   clamp_song() to 0..kCount-1 -- so 0..6, 7 steps, not 0..3/4. Fireflow's
 //   own SONG_A/B is NO LONGER a 0..6 configSwitch: since the same control
 //   reduction it is configSwitch(0.f, kSongLadderCount-1 == 13.f, ..., 14
-//   labels) (Fireflow.cpp:396-398) and its value is a LADDER RUNG, not a
+//   labels) (Fireflow.cpp:445-447) and its value is a LADDER RUNG, not a
 //   SongMode. The engine range stands; the corroboration did not.
 // - STEPS: 2..16, 15 steps. The floor of 2 is this table's own: it is the
 //   count a caller may issue through apply_mode_and_steps() below, and it
 //   never reaches 0 or 1 because "off" is a mode, not a step count. Fireflow
 //   does NOT match it: STEPS_A/B is configParam(c.id, 0.f, 16.f, init,
-//   "Steps") (Fireflow.cpp:411), because 0 is how a Fireflow deck says "STEP
-//   off" (set_step(p, steps > 0, steps), Fireflow.cpp:843). Here that state
+//   "Steps") (Fireflow.cpp:460), because 0 is how a Fireflow deck says "STEP
+//   off" (set_step(p, steps > 0, steps), Fireflow.cpp:892). Here that state
 //   is P_MODE, which is why the ranges differ on purpose.
 // - LINK: NOT unipolar's brief placeholder (-1..1). Flux::set_link()
 //   (engine/fx/flux.cpp:126-128) clamps to [0,1], and Fireflow.cpp's own
-//   LINK_A/B configParam is 0..1 (Fireflow.cpp:334-335) -- the bipolar
+//   LINK_A/B configParam is 0..1 (Fireflow.cpp:381-382) -- the bipolar
 //   surface was retired in a deliberate migration (see migrate_legacy_link()
-//   at the patch-load site, Fireflow.cpp:1074). So 0..1 continuous, not
-//   -1..1. Re-verified 2026-08-12; only the line numbers had drifted.
+//   at the patch-load site, Fireflow.cpp:1124). So 0..1 continuous, not
+//   -1..1. Re-verified 2026-08-14; only the line numbers had drifted, all
+//   five of them by the same ~49 lines.
 #define SPKY_PARAMS(X) \
   X(P_ENGINE_A,   0.f, 5.f,  6)  X(P_ENGINE_B,   0.f, 5.f,  6) \
   X(P_SCALE,      0.f, 12.f, 13) X(P_ROOT,       0.f, 11.f, 12) \
