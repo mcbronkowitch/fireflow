@@ -246,9 +246,17 @@ add_test(
         # lane interval instead of an absolute time, so its modulation lands
         # differently. ctrl_identity sets SMOOTH 0.0 twice -- passthrough under
         # both laws -- and is confirmed green, not re-cut. The owner heard both
-        # renders (wave_formant_sweep_ALT/NEU.wav) and accepted the new one;
-        # the approved file is byte-identical to the render this hash names.
-        -DEXPECTED=e1463149a181b212aede8128c1feec1956849bd6d65afcf3b519c0f43a434837
+        # renders (wave_formant_sweep_ALT/NEU.wav) and accepted the new one.
+        # Moved once more in the same branch (review fix): the tick slew's
+        # coefficient is now derived in double, because in float it quantised
+        # and eventually underflowed to zero at the slow end of the panel. That
+        # reaches every render, this one included -- but as ROUNDING, not as a
+        # sound change. Measured against the render the owner accepted: RMS
+        # identical to 0.01 dB, difference signal at -88.86 dBFS (59.2 dB below
+        # the render, worst single sample 17 LSB of 32768). The accepted
+        # ALT->NEU change, for scale, sat 4.1 dB below the render. So the
+        # owner's decision about the SOUND still stands; only the checksum moved.
+        -DEXPECTED=4b9173d5ebbfd4df86e6b104699b0235b5568d52e2577ee4fb39109b18b4fd05
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -DGATE_STEM=wave_formant_sweep
         -DREFERENCE=WAVE

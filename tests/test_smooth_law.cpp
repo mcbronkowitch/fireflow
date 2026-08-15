@@ -189,3 +189,61 @@ TEST_CASE("G4\"/G5: the frozen points still move, and stay finite") {
         }
     }
 }
+
+// G6 exists because the interval-relative law made a failure mode reachable
+// that the absolute one could not produce. tau is now proportional to the lane
+// cycle, so at the slowest panel position -- RATE 0 (0.02 Hz), PACE 0 (x1/32),
+// TIDE 0 (x1/4) -- tau reaches hundreds of seconds and the per-tick coefficient
+// k = 1/(tau*sr) falls to ~1e-8. The tick twin's coefficient is 1 - (1-k)^96,
+// and in FLOAT `1.f - k` rounds to exactly 1.0f below half an ulp, so the
+// coefficient QUANTISES and eventually reaches zero. Under the old absolute law
+// tau was capped at 0.5 s and k never fell below 4e-5, so none of this was
+// reachable -- this is a defect the rework introduced.
+//
+// What the gate asserts, and why it is this and not "the lane still moves":
+// driving ModLane directly at 0.0003125 Hz does freeze it outright (p2p exactly
+// 0.000000000 over 60 s at SMOOTH 0.50/0.70/1.00, measured). Through the whole
+// instrument it does NOT -- no lane reaches p2p 0 at any panel position, so a
+// "> 0" assertion cannot go red and would be vacuous. What survives at the
+// instrument level is the quantisation: the SMOOTH knob stops resolving.
+// Measured on deck A's SOURCE lane, TIDE 0, 20 s, unfixed vs fixed:
+//
+//   SMOOTH   0.20        0.60        1.00
+//   float    0.00352925  0.00240338  0.00240338   <- 0.60 and 1.00 identical
+//   double   0.00398457  0.00293958  0.00272623   <- strictly decreasing
+//
+// So the gate is monotonicity: turning SMOOTH up must reduce the lane's
+// movement. That is the rework's whole promise ("the knob has the same reach at
+// every rate") stated at the one setpoint where float arithmetic breaks it.
+// It is checked on SOURCE because at TIDE 0 the other three texture lanes cycle
+// so slowly that a test-affordable window shows almost nothing of them -- their
+// p2p is window-limited, not slew-limited, and it does not move with SMOOTH
+// under either arithmetic. Three renders rather than five: the 0.60/1.00 pair
+// alone carries the RED, and this file already costs ~1 s.
+TEST_CASE("G6: SMOOTH still resolves at the slowest reachable setting") {
+    const float kSmooth[3] = {0.20f, 0.60f, 1.00f};
+    float p2p[3] = {0.f, 0.f, 0.f};
+
+    for (int i = 0; i < 3; ++i) {
+        Instrument in;
+        in.init(kSr, sl_fx_mem());
+        apply_init_patch(in);
+        // The knobs that reach the underflow, pushed to their slow extremes.
+        apply_param(in, P_RATE_A, 0.f);
+        apply_param(in, P_RATE_B, 0.f);
+        apply_param(in, P_PACE,   0.f);
+        apply_param(in, P_TIDE,   0.f);
+        apply_param(in, P_SMOOTH_A, kSmooth[i]);
+        apply_param(in, P_SMOOTH_B, kSmooth[i]);
+        const Sweep s = sweep(in, 20.f);
+        CHECK_MESSAGE(s.finite, "G5: non-finite audio at SMOOTH " << kSmooth[i]);
+        p2p[i] = s.p2p[PART_A][LANE_SOURCE];
+    }
+
+    for (int i = 1; i < 3; ++i)
+        CHECK_MESSAGE(p2p[i] < p2p[i - 1],
+                      "G6: SMOOTH " << kSmooth[i] << " did not smooth more than "
+                                    << kSmooth[i - 1] << " (p2p " << p2p[i]
+                                    << " vs " << p2p[i - 1]
+                                    << ") -- the coefficient has quantised");
+}

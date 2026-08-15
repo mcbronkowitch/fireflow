@@ -413,9 +413,27 @@ void ModLane::_update_slew() {
     // exactly. If that formula changes, this must change with it -- these
     // two are a matched pair, not independent code, and this tick twin would
     // otherwise silently diverge from process()'s slew.
-    float k = 1.f / (t * _sr);
-    if (k > 1.f) k = 1.f;
-    _slew_tick.set_coef(1.f - std::pow(1.f - k, static_cast<float>(kTickInterval)));
+    // In DOUBLE, and not as a style preference. Under the old absolute law tau
+    // was capped at 0.5 s, so k never fell below 4e-5. It is now proportional
+    // to the cycle, and at the slow end of the panel k reaches ~1e-8. In float
+    // `1.f - k` rounds to exactly 1.0f below half an ulp (k < 2.98e-8), so the
+    // power is 1 and the coefficient QUANTISES -- and at the extreme reaches
+    // exactly zero, which is a one-pole that never moves again.
+    //
+    // Measured on ModLane driven directly at 0.0003125 Hz (what RATE 0 + PACE 0
+    // hand LANE_SIZE), 60 s: p2p 0.000000000 at SMOOTH 0.50, 0.70 and 1.00, and
+    // one single coefficient shared by every knob position from 0.15 to 0.40.
+    // Through the whole instrument the outright freeze is NOT reachable -- other
+    // per-tick motion keeps p2p off zero -- but the quantisation is, and
+    // tests/test_smooth_law.cpp's G6 gates it there.
+    //
+    // The per-sample _slew above is NOT affected: k itself is perfectly
+    // representable, and it was measured tracking the analytic settling curve
+    // at these same tau values. Only this half of the pair needs the precision.
+    double k = 1.0 / (double(t) * double(_sr));
+    if (k > 1.0) k = 1.0;
+    _slew_tick.set_coef(static_cast<float>(
+        1.0 - std::pow(1.0 - k, static_cast<double>(kTickInterval))));
 }
 
 void ModLane::kick(float dphase, float dshape) {
