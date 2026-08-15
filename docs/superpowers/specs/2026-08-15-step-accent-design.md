@@ -1,7 +1,7 @@
 # STEP accent: per-note velocity and decay from the groove rank
 
 **Date:** 2026-08-15
-**Status:** design, approved in conversation, not implemented
+**Status:** implemented, on branch `2026-08-15-step-accent`
 
 ## 1. What this is for
 
@@ -136,14 +136,14 @@ _voices[pick].set_vel(vel * (1.f - (1.f - kAccentVelFloor) * _accent));
 pattern strikes at 30 % of the anchor's amplitude.
 
 It **multiplies onto** the existing `vel`, which today carries the equal-power
-chord compensation `1/sqrt(n)` (`synth_engine.cpp:164`, `:247`). The two are
+chord compensation `1/sqrt(n)` (`synth_engine.cpp:164`, `:258`). The two are
 independent quantities — how many notes are sounding at once, and how strong
 this note is meant to be — and composing them is correct. At `a == 0` the
 product is the value that ships today, which is what makes the "chord
 compensation unchanged" gate in §8 possible.
 
 **The latch survives.** The per-control-tick refresh `_voices[v].set_vel(_vel_now)`
-(`synth_engine.cpp:344`) is gated on `_sustaining[v]`, and in STEP no voice is
+(`synth_engine.cpp:355`) is gated on `_sustaining[v]`, and in STEP no voice is
 sustaining: `_do_trigger` sets `_sustaining[pick] = false` unconditionally in
 its non-flow branch (`:211`), the sole writer of `true` is `:207` under
 `if (_flow)` in that same function — the two auto-drone paths (`:120`, `:133`)
@@ -166,20 +166,30 @@ vanishes and the accent cannot touch the envelope at all; at DEC 1 the weakest
 note decays in 30 % of the set time; between them the effect grows with the
 setting. The knob stays the ceiling — the accent only ever subtracts.
 
+This "30 % of the set time" figure is exact for `VoiceT` (SYNTH/WAVE), whose
+`set_decay_scale` multiplies `decay_s` linearly. It is not exact for
+`BodyVoice` (BODY): `_apply_env()`'s `_damping = d_s / (d_s + 1)` is not
+linear in `d_s`, so the same scale factor produces a different proportional
+ring time. Measured (seed 99, cycle 0.25 s, DEC knob 1.0): SYNTH 42929 →
+13231 samples (ratio 0.3082, matches `kAccentDecFloor`); BODY 212802 → 32893
+samples (ratio 0.1546, about twice as strong). Full write-up:
+`docs/engine-map.md` §8. This is a documentation fact, not a defect — BODY's
+damping curve is unchanged, long-standing, by-ear design.
+
 Two things this needs that do not exist today:
 
 - **The engine must keep the knob position.** `set_decay()` stores only
-  `_decay_ratio = 0.1 · 80^n` (`synth_engine.cpp:390`) and the mapping is not
+  `_decay_ratio = 0.1 · 80^n` (`synth_engine.cpp:400`) and the mapping is not
   worth inverting. Store `_decay_n` beside it.
 - **The voice must latch the scale.** `set_env_times(attack_s, decay_s)` is
-  pushed to *every* voice on *every* control tick (`:288`), so a decay written
+  pushed to *every* voice on *every* control tick (`:299`), so a decay written
   at trigger time is overwritten within a control block. Add
   `V::set_decay_scale(float)`, set in `_do_trigger` next to `set_vel`, applied
   where the voice consumes `decay_s`. Unlike VEL, the `_sustaining` closure of
   §5 does not protect this one — the refresh is unconditional.
 
 Note the useful side effect of `decay_s` already being cycle-relative
-(`decay_s = _decay_ratio · _cycle_s`, `:276`): the accent inherits that and
+(`decay_s = _decay_ratio · _cycle_s`, `:287`): the accent inherits that and
 stays correct across tempo.
 
 ## 7. Engine scope
@@ -210,8 +220,16 @@ Each one is to be proven red once before it is trusted
   denominator.
 - **G2 (DENSE 1.0) — the contour spans.** At DENSE 1.0 the set of accents
   emitted over one cycle equals `{ r/(L-1) : r in 0..L-1 }` and therefore
-  reaches both 0 and 1. Red if the rank lookup loses the `% L` or reads a
-  stale groove. Like G1, this cannot discriminate the `L`-vs-`_groove_k()`
+  reaches both 0 and 1. Red if the rank lookup reads a stale groove — exactly
+  the failure the settle-wrap in every helper in `tests/test_step_accent.cpp`
+  exists to guard against. The `% L` in `rank_of_slot[slot % L]` is **not**
+  exercised by this gate, or by any gate in this file: in every settled state
+  `pattern_groove.len == _effective_length()`, so `slot % L == slot` there and
+  dropping the modulo is a no-op post-wrap. It is load-bearing only in the
+  pre-wrap window immediately after `set_step()`, where the groove table is
+  still the previous cell's (and the modulo also prevents an out-of-range
+  read there) — a window every test helper here deliberately runs past before
+  it trusts anything it reads. Like G1, this cannot discriminate the `L`-vs-`_groove_k()`
   normalization either — at DENSE 1.0, `_groove_k()` computes `k == L`
   exactly, so the two denominators are numerically identical there.
 - **G2 (intermediate DENSE) — the normalization is `L`, not `k`.** At an
@@ -255,7 +273,7 @@ Each one is to be proven red once before it is trusted
   section assumed the opposite. Both hashed scenarios run in FLOW, where the
   accent is 0 by §3: `wave_formant_sweep.json:10` sets `set_step` with
   `"flag": false` explicitly, `ctrl_identity.json` carries no `set_step` action
-  at all, and `ModLane::_step_mode` boots false (`lane.h:297`). So
+  at all, and `ModLane::_step_mode` boots false (`lane.h:308`). So
   `ctrl_identity` and `wave_formant_sweep` should pass untouched — and if
   either moves, that is a **finding**, not a baseline to bump: it would mean
   the accent is reaching a FLOW deck. The re-baseline procedure in
