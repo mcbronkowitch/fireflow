@@ -241,7 +241,14 @@ add_test(
         # flag false, i.e. FLOW -- Part now pushes set_flow_melody(true) into
         # its PITCH lane (Part::init/_engine_swap), so it steps through phrase
         # slots instead of the old continuous LFO.
-        -DEXPECTED=622c9d093373fc20e4f907179254073319882379a47ac2f02e289911aa344c0d
+        # Moved again (spec 2026-08-13 shape-smooth-rework task 5): the
+        # scenario sets set_smooth 0.65, and SMOOTH is now a fraction of the
+        # lane interval instead of an absolute time, so its modulation lands
+        # differently. ctrl_identity sets SMOOTH 0.0 twice -- passthrough under
+        # both laws -- and is confirmed green, not re-cut. The owner heard both
+        # renders (wave_formant_sweep_ALT/NEU.wav) and accepted the new one;
+        # the approved file is byte-identical to the render this hash names.
+        -DEXPECTED=e1463149a181b212aede8128c1feec1956849bd6d65afcf3b519c0f43a434837
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -DGATE_STEM=wave_formant_sweep
         -DREFERENCE=WAVE
