@@ -12,10 +12,13 @@ host/vcv/
 ├── src/
 │   ├── plugin.{hpp,cpp}  plugin entry + model registration
 │   ├── Fireflow.cpp      Module: param→engine mapping, process(), widget
-│   └── generated_panel.hpp   GENERATED (enums + control table)
+│   ├── generated_panel.hpp      GENERATED (enums + control table)
+│   └── generated_hw_panel.hpp   GENERATED, the HW draft's table
 └── res/
     ├── gen_panel.py      single source of truth for the panel layout
-    └── Fireflow.svg      GENERATED faceplate
+    ├── Fireflow.svg      GENERATED faceplate
+    ├── gen_hw_panel.py   the same, for the 60 HP hardware draft
+    └── FireflowHW.svg    GENERATED faceplate (see "FireFlow HW Draft" below)
 ```
 
 ## Design: one control per function (VCV-native)

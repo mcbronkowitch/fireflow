@@ -93,7 +93,7 @@ module, and (later) on the hardware prototype.
 
 <p align="center">
   <img src="docs/img/architecture.png" width="900"
-       alt="Architecture diagram: one portable engine/ core (mod, parts, synth, pitch, fx, util behind a single engine/instrument.h API) feeds three hosts — host/render (desktop CLI → WAV + mods.csv, built), host/vcv (VCV Rack module, beta) and the Daisy Patch Submodule prototype (host/daisy firmware shell, M6, planned). No hardware type crosses into engine/; tests/ runs 907 deterministic Doctest cases.">
+       alt="Architecture diagram: one portable engine/ core (mod, parts, synth, pitch, fx, util behind a single engine/instrument.h API) feeds three hosts — host/render (desktop CLI → WAV + mods.csv, built), host/vcv (VCV Rack module, beta) and the Daisy Patch Submodule prototype (shell/ firmware shell, M6, planned). No hardware type crosses into engine/; tests/ runs 1001 deterministic Doctest cases.">
 </p>
 
 `Instrument` (`engine/instrument.h`) is the complete public API: `init(sample_rate)`,
@@ -119,7 +119,7 @@ Run the unit tests:
 ctest --test-dir build --output-on-failure
 ```
 
-Configure with `-DCMAKE_BUILD_TYPE=Release`. Two of the four tests (`spky_tests`
+Configure with `-DCMAKE_BUILD_TYPE=Release`. Two of the six tests (`spky_tests`
 and `ctrl_identity`) compare rendered audio against stored SHA-256 references,
 and those were generated from an optimised build — a Debug configuration renders
 slightly different floats and fails them with `SYNTH reference moved`.
@@ -158,9 +158,10 @@ carries recordings from most milestones, next to the story of how they came
 about.
 
 **[Download the latest release](https://github.com/mcbronkowitch/fireflow/releases/latest)**
-— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.20.0**
+— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.21.3**
 (both modules: Synth, Sampler, WAVE, BODY and BBD, the independent FORM/SONG
-phrase arranger, and the STEP mod grid lock). Unpack into Rack's
+phrase arranger, the STEP mod grid lock, the PACE modulation time-stretch, and
+the redrawn 60 HP hardware plate). Unpack into Rack's
 user plugin directory and restart Rack.
 
 Building it yourself needs its own toolchain (a native MinGW/GCC compiler, not
@@ -183,14 +184,16 @@ the desktop clang path); the build, install and I/O details live in
 | **M4.10** | Chord layer — COLOR knob, diatonic stacks, voice-leading, live FLOW surface | **done** (engine + hosts; hardware placement deferred) |
 | **M5** | Sampler -- the texture deck: granular cloud, live recording + overdub, WAV load/save, Morphagene-style DENS/SCAN/NEW/LEN/ORG controls, clocked slice-groove, FEEL accents, and FLOW cloud dispersion | **done** (engine + hosts; released through 2.11.0) |
 | **M5h** | Per-deck **SEND** mix: independent dry/send mix per deck into one shared Oliverb reverb | **done** (engine + VCV panel; released in 2.11.0) |
-| **CPU** | Three measured rounds on real hardware: `instrument_worst`'s worst block went from ~156 % of the audio-block budget to 94 %, and back up to 102 % when M5j's tape tap landed (measured at 5.4 % of the block). FLUX's bucket-brigade redesign (below) is done; a fresh hardware measurement of the redesigned block (`instrument_worst_bbd`, its row added to the `system` profile by `bench/workloads_system.cpp`, alongside an isolated `bbd` bench family in `bench/workloads_bbd.cpp`) is built but not yet run — outstanding, needs a Daisy Seed + ST-Link. Method and every number in [`bench/`](bench/README.md) and [`docs/bench/`](docs/bench/) | **done** (ongoing as a tool) |
+| **CPU** | Three measured rounds on real hardware: `instrument_worst`'s worst block went from ~156 % of the audio-block budget to 94 %, and back up to 102 % when M5j's tape tap landed (measured at 5.4 % of the block). Since then an optimization ladder (DTCM placement, an ITCM audio hotset, `-O3`) brought the selected gate `instrument_worst_bbd_dtcm` to **96.43 %** of the block on a Daisy Seed, and the whole signal path has been re-measured against it. **The engine's own worst case still does not fit**: on a Patch Submodule `instrument_worst` reads 102.27 % average / 108.62 % maximum, and whether that is a reachable operating point is an open question. Two more caveats live in `docs/roadmap.md`: every workload is more expensive on the submodule than on the Seed (reserve 2.17 points, so no Seed figure may be quoted for a submodule claim), and the intended ITCM placement does not currently link at the optimization level that ships. A debug probe is no longer needed — the bench also reports over USB-CDC. Method and every number in [`bench/`](bench/README.md) and [`docs/bench/`](docs/bench/) | **done** (ongoing as a tool) |
 | **M5i** | WAVE: four-voice PPG-style wavetable part engine | **done** (engine + renderer + VCV; 65,024-byte mapped-QSPI bank; hardware-gated; released in 2.13.0) |
 | **+ FORM/SONG** | Persistent A/B phrase snapshots: five FORM phrase engines plus AAAB, ABAB, ABBB, BUILD, ROTATE, MIRROR, and OFF SONG arrangements; boundary-safe changes and legacy patch migration | **done** (engine + renderer + VCV; released in 2.13.1) |
 | **M5j** | BODY: one-voice-per-deck resonator part engine, morphing string -> metal -> bell, with a sympathetic excitation bus | **done** (engine + renderer + VCV; hardware-gated: `body_2x4` 295078 cycles, 30.7 % of the block, inside the spec's 29-32 % prediction and cheaper than SYNTH) |
-| **FLUX -> BBD** | FLUX's interpolating tape echo replaced by a bucket-brigade delay model: the clock rate *is* the delay time, so RATE bends stored pitch, and `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane (STAGES has since moved off FLUX onto the BBD deck's own pitch lane, captioned **BEND** on the panel) | **done** (engine + renderer + VCV; RATE/STAGES/`FXT_FLUX_TIME` confirmed by ear, DRIVE diagnosed and fixed but awaiting re-listening; hardware CPU measurement outstanding) |
+| **BBD** | A bucket-brigade delay model, where the clock rate *is* the delay time — so RATE bends stored pitch **only transiently, while it moves**: held steady, a bucket-brigade line's pitch is unity at any clock rate. It first replaced FLUX's tape echo everywhere and now lives on as the fifth part engine only; FLUX itself is a plain tape echo again. `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane, and STAGES has moved onto the BBD deck's own pitch lane, captioned **BEND** on the panel | **done** (engine + renderer + VCV; released in 2.17.0/2.17.1, measured on hardware — `inst_bbd_engine_worst` 96.91 % of the block at `-O3`) |
+| **Modulation reachability** | Four rounds that made the modulation surface mean what it says: **PACE**, one global time-stretch from ×1/32 to ×4, because TEMPO was inert in the free world and TIDE never reached the melodic lane; the **FLOW melody engine**, so the free mode's melodic lane walks an 8-slot phrase instead of a continuous LFO; the same phrase in **STEP**, which makes FORM and SONG audible at every SHAPE position instead of only above 0.75; and **SMOOTH as a fraction of the lane interval** rather than absolute seconds, so the knob means the same thing at every rate | **done** (engine + hosts; released in 2.21.2) |
+| **60 HP plate** | The hardware panel, drawn and playable in Rack as the second module: seven engine-grounded groups, eight CV inputs under the knobs they drive, and a dark anodised plate with framed fields and numbered legends | **done** as a design study (released in 2.21.2/2.21.3; still labelled `DRAFT`, no hardware ordered) |
 | **M5k** | ZAP: monophonic percussion part engine | planned (spec ready; not implemented) |
 | **M5l** | PULL: chord gravity between the two decks | planned (spec ready; not implemented) |
-| **M6** | Hardware prototype: bring-up on a Daisy Patch Submodule — panel, controls, LEDs, CV/gate I/O, preset persistence | planned after M5l (**needs a new hardware/panel spec**; the existing shell spec assumes Spotykach's panel) |
+| **M6** | Hardware prototype: bring-up on a Daisy Patch Submodule — panel, controls, LEDs, CV/gate I/O, preset persistence | planned after M5l (panel design **done**, see above; **bring-up needs a new spec** — the existing shell spec assumes Spotykach's panel) |
 
 Per-milestone detail and current status live in [`docs/roadmap.md`](docs/roadmap.md).
 
@@ -198,9 +201,13 @@ Per-milestone detail and current status live in [`docs/roadmap.md`](docs/roadmap
 
 The instrument's own hardware is a **standalone Daisy Patch Submodule**
 prototype — panel, controls, LEDs, CV/gate I/O and preset persistence — planned
-as milestone **M6**, after the two remaining engine milestones. Nothing of it is
-built yet, and its panel still has to be designed: the existing firmware-shell
-spec was written against a different device and no longer describes the target.
+as milestone **M6**, after the two remaining engine milestones. No firmware of it
+is built yet. Its **panel is designed**, though, and you can turn it: the plugin's
+second module, **FireFlow HW Draft**, is that 60 HP surface on the same engine,
+generated from `host/vcv/res/gen_hw_panel.py` and guarded against the spec's own
+coordinates. What still has no spec is the bring-up itself — the existing
+firmware-shell spec was written against a different device and no longer
+describes the target.
 
 CPU headroom on the target MCU is not guesswork, though. Selected workloads are
 measured on real Daisy hardware (a Daisy Seed, which carries the same STM32H750

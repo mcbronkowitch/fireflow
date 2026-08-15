@@ -1,4 +1,7 @@
-# Spotykach — Milestone History
+# FireFlow — Milestone History
+
+*(the project was called spotymod, and before that Spotykach, until 2026-08-04;
+the dated entries below keep the name they were written under)*
 
 This is a chronological, commit-level record of how each milestone actually
 happened: commit ranges and SHAs, plan defects caught during execution,
@@ -16,8 +19,12 @@ reviewer verdicts, and the specific by-ear/play-test iterations, none of
 which roadmap.md carries.
 
 Current state (which milestones are merged/pushed/released today) lives in
-the assistant's `spotykach-milestone-status` memory, not here — that file is
-kept current; this one is not.
+[`docs/roadmap.md`](roadmap.md), not here — that file is kept current; this one
+is not. **This archive stops at 2026-08-04**, the rename; everything after it —
+the hardware panel rounds, PACE, the FLOW melody engine, the flow/Glow removal,
+the SMOOTH rework — is recorded in the roadmap alone. (An earlier version of
+this paragraph pointed at a `spotykach-milestone-status` memory; that memory no
+longer exists.)
 
 ---
 

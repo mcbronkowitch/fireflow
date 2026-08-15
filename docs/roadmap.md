@@ -30,7 +30,27 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-08-15 (**SMOOTH becomes interval-relative**: the
+- **Last updated:** 2026-08-15 (**the 60 HP plate is drawn**: the
+  redistribution round's layout reached the generator in 2.21.2, and the plate
+  was then redrawn twice — first an organic light plate with wells, then design
+  round 2a, "Technical Blueprint": a dark anodised plate in three tinted zones,
+  an airflow/ember silhouette printed underneath, and every function group
+  inside a framed field with a numbered legend. **No control moved in round
+  2a** — it is colour, texture, frames and lettering, and the geometry guards
+  are untouched. Three fixes followed the same day: group frames hug their own
+  ink with equal air above and below and exactly 3 mm between rows, every
+  caption keeps one distance to its own body (3.6 mm, read off the small pots —
+  51 of the 69 params) instead of one per size class, and the MOTION/VOICE/
+  TIMING band runs on three knob lines instead of the five it had drifted onto.
+  Three findings are about **Rack** rather than about the drawing, and each was
+  found by rendering the module rather than by reading the file: NanoSVG drops
+  `<mask>`, so the silhouette fade is baked as a gradient overlay; with
+  `objectBoundingBox` gradients Rack painted one deck's overlay opaque, so every
+  gradient is in millimetres now; and Rack's 8.03 mm `PJ301M` body buries
+  lettering that a real 6.2 mm jack clears, which is now its own guard. Released
+  as **2.21.2** and **2.21.3**; the plate is a design study and still says
+  `DRAFT` — see "M6 — Hardware prototype" under "Planned"); before
+  that, 2026-08-15 (**SMOOTH becomes interval-relative**: the
   slew law is now `τ = smooth · TOP · interval` instead of absolute
   wall-clock seconds, `kSmoothTopTexture = 0.5` was chosen by ear, the
   factory SMOOTH defaults are converted to preserve the shipped sound, and
@@ -40,7 +60,7 @@ is actually built today, and what is still design-only.
   Spec `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md`,
   plan `docs/superpowers/plans/2026-08-14-smooth-interval-relative.md`,
   branch `2026-08-14-smooth-interval-relative`, **merged to `main`
-  2026-08-15** (`4493d67`), not yet released — see "SMOOTH becomes
+  2026-08-15** (`4493d67`) and **released in 2.21.2** — see "SMOOTH becomes
   interval-relative" under "Done"); before
   that, 2026-08-14 (**the flow layer and Glow are struck**:
   `engine/flow/`, the `Glow` VCV module, its faceplate, five render
@@ -62,6 +82,15 @@ is actually built today, and what is still design-only.
   removal took are still gone.** Spec
   `docs/superpowers/specs/2026-08-14-flow-glow-removal-design.md`, plan
   `docs/superpowers/plans/2026-08-14-flow-glow-removal.md`); before that,
+  2026-08-14 (**the melody becomes reachable**: a note deck's melodic lane
+  emits its composed phrase in STEP as it already did in FLOW, so FORM and
+  SONG are audible at every SHAPE position instead of only above 0.75. One
+  guard moves, from `_flow_melody_on()` to `_melodic && _flow_melody`, and
+  exactly one of the six reachable lane states changes with it; in rendered
+  audio FORM_B moves 9 of 13 STEP terrains against 1 of 13 before.
+  **§2.2 of its spec, the pitch RANGE law, was deliberately not built** and is
+  still unspecified — see "The melody becomes reachable" under "Done" and the
+  open thread under "Planned"); before that,
   2026-08-13 (SHAPE/SMOOTH rework: its spec is written —
   `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md` — after two
   merged-axis drafts were rejected by review; the third repairs the four measured
@@ -390,9 +419,12 @@ is actually built today, and what is still design-only.
 | **BBD part engine** | `ENGINE_BBD` (ENG state 4) is a fifth, voiceless part engine — no synth voices, just a stereo `BbdEcho` pair fed by audio-in and/or the neighbour (via a new audio-rate cross-deck bus), driven through the five modulation lanes (SOURCE→DRIVE, PITCH→clock, SIZE→division, MOTION→FEEDBACK, LEVEL→dry/wet MIX). The same work reverts FLUX — the echo effect on every engine, including this one — from its BBD model back to a plain tape echo, so the "FLUX → BBD" row above no longer describes FLUX's current mechanism; the bucket-brigade device that survives is this engine, on the BBD deck only | ✅ **done** (engine + VCV; spec `docs/superpowers/specs/2026-07-31-bbd-part-engine-design.md`; released in 2.17.0; measured on real hardware at the engine's own worst case, `inst_bbd_engine_worst` 94.16 avg / 98.39–98.56 max % of the 960 000-cycle block at `-O2` — fits, but no `-O3` measurement of this row exists; see below — **superseded 2026-08-04: the `-O3` measurement now exists.** On the `regress` profile, layout `axi`, `-O3`, this row reads **92.91 % `pct_max`** on the constructed `19f7560` baseline and **96.91 %** on `main` (+4.00 against a 0.19 repeat band). Evidence: [signal-path regression](bench/2026-08-04-2101349-signal-path-regression.md)) |
 | **BBD PITCH / tape TIME surface** | `STAGES_A/B` leaves the FX box and takes over the shared VOICE `ATK` slot as the BBD deck's own pitch control, visible only while that deck is BBD (`ATTACK` is hidden there and stays reachable as a `Freeze Attack` context-menu slider); the vacated FX slot gets a new knob driving `FXT_FLUX_TIME` geometrically from ×0.25 through ×1 to ×4, distinct from RATE's tempo-synced division | ✅ **done** (VCV; spec `docs/superpowers/specs/2026-08-02-vcv-bbd-pitch-flux-time-surface-design.md`; released in 2.17.1; the two new captions, `PITCH` and `TIME`, were renamed `BEND` and `MULT` by "VCV engine-aware captions" below) |
 | **BBD dynamic-stage declick** | `BbdLine` keeps one continuous full-ring write history behind every stage-count change and crossfades the old and new read taps over a fixed 16-tick smoothstep, removing the index-reset impulse the previous immediate resize produced when COLOR/MOTION modulates a line's stage count | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-03-bbd-dynamic-stages-declick-design.md`; released in 2.17.1; fixed-stage output stays bit-identical, COLOR = 0 stays bit-identical left/right) |
-| **VCV engine-aware captions** | Every state-dependent panel caption now comes from one `DYNAMIC_CAPTIONS` generator table instead of hand-written special cases: BODY gets honest VOICE words (`HIT`/`DAMP`/`CHAR`/`EXCIT`/`BRITE`) and BBD gets its own (`TAIL`/`TILT`/`FEED`/`LOSS`); the FX-box word collisions are resolved by renaming FLUX `RATE`→`DIV`, FLUX `TIME`→`MULT`, per-deck `ROOM`→`SEND`, `MASTER_DRIVE`→`PUSH` and BBD `PITCH`→`BEND` (collision with the orbit's `PITCH` eyebrow); the GRIT mode pad now shows its own state, `SAT`/`CRSH`, instead of the word `GRIT` it collided with; MELODY drives Sampler `SCAN` only, no longer also `set_variation`; the permanently-printed `SCAN`/`LEN` second words are deleted from the static plate | ✅ **done** (VCV host + generator; spec `docs/superpowers/specs/2026-08-03-vcv-engine-aware-captions-design.md`; branch `vcv-engine-aware-captions`, not yet merged to main or released) |
-| **PACE** | One global modulation time-stretch, ×1/32 … ×1 … ×4: a new `Instrument::set_pace()` normalized knob, `pace_mult()` curve (`engine/mod/divisions.h`), a `Transport` pace anchor so the grid re-locks on a change instead of jumping phase, `Flux::set_rhythm_pace`, a `PACE` knob on `Fireflow` beside `TEMPO`, and render-host coverage. Fixes the two controls that looked like a speed knob and were not: TEMPO is inert in the free world, and TIDE never reached the melodic lane | ✅ **done** (engine + VCV host + render host; spec `docs/superpowers/specs/2026-08-12-modulation-pace-design.md`, plan `docs/superpowers/plans/2026-08-12-modulation-pace.md`; branch `2026-08-12-modulation-pace`, not yet merged to `main` or released) |
-| **FLOW melody engine** | The free mode's melodic lane walks an 8-slot phrase instead of running a continuous LFO — DENSITY, FORM and SONG all reach it for the first time, bounded by two rate floors and a slew clamp; SAMPLER and BBD keep the old continuous LFO unchanged | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-13-flow-melody-engine-design.md`, plan `docs/superpowers/plans/2026-08-13-flow-melody-engine.md`; branch `flow-melody-engine`, not yet merged to `main` or released; **owner's listening checks answered 2026-08-13 — all three renders accepted** — see "FLOW melody engine" under "Done") |
+| **VCV engine-aware captions** | Every state-dependent panel caption now comes from one `DYNAMIC_CAPTIONS` generator table instead of hand-written special cases: BODY gets honest VOICE words (`HIT`/`DAMP`/`CHAR`/`EXCIT`/`BRITE`) and BBD gets its own (`TAIL`/`TILT`/`FEED`/`LOSS`); the FX-box word collisions are resolved by renaming FLUX `RATE`→`DIV`, FLUX `TIME`→`MULT`, per-deck `ROOM`→`SEND`, `MASTER_DRIVE`→`PUSH` and BBD `PITCH`→`BEND` (collision with the orbit's `PITCH` eyebrow); the GRIT mode pad now shows its own state, `SAT`/`CRSH`, instead of the word `GRIT` it collided with; MELODY drives Sampler `SCAN` only, no longer also `set_variation`; the permanently-printed `SCAN`/`LEN` second words are deleted from the static plate | ✅ **done** (VCV host + generator; spec `docs/superpowers/specs/2026-08-03-vcv-engine-aware-captions-design.md`; landed on `main` 2026-08-03 (`0c03e3c`), released in 2.18.0) |
+| **PACE** | One global modulation time-stretch, ×1/32 … ×1 … ×4: a new `Instrument::set_pace()` normalized knob, `pace_mult()` curve (`engine/mod/divisions.h`), a `Transport` pace anchor so the grid re-locks on a change instead of jumping phase, `Flux::set_rhythm_pace`, a `PACE` knob on `Fireflow` beside `TEMPO`, and render-host coverage. Fixes the two controls that looked like a speed knob and were not: TEMPO is inert in the free world, and TIDE never reached the melodic lane | ✅ **done** (engine + VCV host + render host; spec `docs/superpowers/specs/2026-08-12-modulation-pace-design.md`, plan `docs/superpowers/plans/2026-08-12-modulation-pace.md`; branch `2026-08-12-modulation-pace`, fast-forwarded onto `main` 2026-08-13 (tip `338e6eb`, so there is no merge commit to cite), released in 2.21.2) |
+| **FLOW melody engine** | The free mode's melodic lane walks an 8-slot phrase instead of running a continuous LFO — DENSITY, FORM and SONG all reach it for the first time, bounded by two rate floors and a slew clamp; SAMPLER and BBD keep the old continuous LFO unchanged | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-13-flow-melody-engine-design.md`, plan `docs/superpowers/plans/2026-08-13-flow-melody-engine.md`; branch `flow-melody-engine`, merged to `main` 2026-08-13 (`ad3bb93`), released in 2.21.2; **owner's listening checks answered 2026-08-13 — all three renders accepted** — see "FLOW melody engine" under "Done") |
+| **Melody reachable in STEP** | A note deck's melodic lane emits its composed phrase in STEP exactly as it already did in FLOW: one guard in `ModLane::_compute_raw()` changes from `_flow_melody_on()` to `_melodic && _flow_melody` (an engine-class flag, so SAMPLER and BBD are excluded in both modes). FORM and SONG become audible at every SHAPE position instead of only above 0.75 — measured, FORM_B moves rendered audio on 9 of 13 STEP terrains against 1 of 13 under the old guard. Exactly one of the six reachable lane states changes | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-14-melody-reachable-design.md` §2.1, plan `docs/superpowers/plans/2026-08-14-melody-reachable.md`; landed on `main` 2026-08-14 (`07d5b9d`), released in 2.21.2. **§2.2, the pitch RANGE law, is not built** — see "The melody becomes reachable" under "Done") |
+| **SMOOTH becomes interval-relative** | The slew law is `τ = smooth · TOP · interval` instead of absolute wall-clock seconds, so SMOOTH means the same thing at every rate; `kSmoothTopTexture = 0.5` chosen by ear, factory defaults converted to preserve the shipped sound, five gates behind it. SHAPE is deliberately not delivered and goes to the Marbles round | ✅ **done** (engine + VCV defaults; spec `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md`, plan `docs/superpowers/plans/2026-08-14-smooth-interval-relative.md`; merged to `main` 2026-08-15 (`4493d67`), released in 2.21.2) |
+| **60 HP plate** | The hardware panel gets its layout and then its drawing: the redistribution round's placement reaches `gen_hw_panel.py` (2.21.2), and design round 2a, "Technical Blueprint", replaces the organic light plate with a dark anodised one in three tinted zones, a printed airflow/ember silhouette and framed fields with numbered legends — no control moved for it. Three fixes follow: frames hug their own ink with 3 mm between rows, one caption distance (3.6 mm) for every control instead of one per size class, and three knob lines through the MOTION/VOICE/TIMING band instead of five | ✅ **done** as a design study (VCV `FireflowHW` panel + generator; spec `docs/superpowers/specs/2026-08-10-hw-panel-redistribution-design.md`; released in 2.21.2 and 2.21.3; still labelled `DRAFT`, and no hardware is ordered — see "M6 — Hardware prototype" under "Planned") |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
 | **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel design done — regrouping round built on branch `hw-panel-regroup` 2026-08-10; bring-up not started**; the existing shell spec is superseded — see below) |
@@ -2363,6 +2395,58 @@ carries that transient for the rest of the divergence window. Neither
 hash-gated render (`ctrl_identity`, `wave_formant_sweep`) is affected — both
 stay on one engine for their whole run and never call `set_engine`.
 
+### The melody becomes reachable ✅
+
+A note deck in STEP emitted a waveform where it should have emitted its
+composed phrase. FORM and SONG therefore only became audible above SHAPE 0.75,
+where the S&H zone starts: below it FORM differed on **0 of 4** Principles,
+and it now differs on **3 of 4** at every SHAPE and on every seed tried.
+
+**One guard.** `ModLane::_compute_raw()` gated the phrase path on
+`_flow_melody_on()`, which is mode-dependent; it now gates on
+`_melodic && _flow_melody`. `_flow_melody` is an engine-class flag pushed from
+the engine id in **both** modes (`part.cpp`: `!= ENGINE_SAMPLER &&
+!= ENGINE_BBD`), so it really reads "this deck has a note engine" and excludes
+SAMPLER and BBD everywhere. **Exactly one of the six reachable lane states
+changes**, measured: melodic + STEP + note engine goes from p2p 2.000 over 5
+values to the phrase (0.246 over 7 at seed 12345); the SAMPLER/BBD row beside
+it stays at 2.000 over 5.
+
+**In rendered audio**, over masters 1..59 through `test_param_impact`'s rig:
+FORM_B moves audio on **9 of 13** STEP terrains against **1 of 13** under the
+old guard, FORM_A on **7 of 13** against **0 of 13**. Several of those sit far
+below SHAPE 0.75 — master 11 at SHAPE_B 0.325, 19 at 0.483, 31 at 0.468 — and
+read exactly 0.0 before. FLOW is unchanged under both guards, as expected: it
+was already on the phrase path.
+
+**One misattribution was caught and corrected in the branch** (`0009a9a`): the
+guard does **not** protect `kBbdFlowRangeMax`. That cap is FLOW-only
+(`flow.cpp`, `== ENGINE_BBD && !_mode_now`), and STEP is the one mode where the
+two candidate guards differ, so the cap never runs where the choice matters —
+measured over 400 masters, 0 of 28 BBD decks drawn in FLOW carry RANGE above
+the cap and 35 of 35 drawn in STEP do, up to 0.7266 against a cap of 0.0083.
+What carries the guard alone is the owner's ruling of 2026-08-07: a BBD deck's
+PITCH lane is the delay clock, not a note.
+
+**The spec's §2.2 — the pitch RANGE law — was deliberately not built.** The
+plan says so in its own header: §2.2 is unspecified in the spec and needs a
+design pass first. It is the one open thread this round leaves behind.
+
+The plan also deviates from the spec on purpose and says why: the spec asked
+for `_flow_melody` to be **renamed** `_note_engine` in the same commit, which
+enumerates to ~90 sites across `engine/`, `host/` and 14 test files and would
+have buried a one-line behaviour change in its own diff. A named predicate at
+the point of use went in instead.
+
+Spec `docs/superpowers/specs/2026-08-14-melody-reachable-design.md`, plan
+`docs/superpowers/plans/2026-08-14-melody-reachable.md`; landed on `main`
+2026-08-14 (`07d5b9d`), released in 2.21.2. Two gates were re-baselined because
+the change genuinely reaches them — `tests/test_engine_map.cpp` §1 (the two STEP
+rows are no longer sample-identical; the identity now holds between the note
+deck's STEP and FLOW streams instead, max deviation 0.0 over ten seeds at 8
+steps) and `tests/test_param_impact.cpp` (FORM_A leaves the mode-exclusive
+list).
+
 ### SMOOTH becomes interval-relative ✅
 
 SMOOTH's law used to be `τ = 0.00002 · 25000^smooth` — absolute wall-clock
@@ -2438,7 +2522,7 @@ the old one marked superseded.
 Spec: `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md`, plan
 `docs/superpowers/plans/2026-08-14-smooth-interval-relative.md`. Built on
 branch `2026-08-14-smooth-interval-relative`, **merged to `main` on 2026-08-15
-(`4493d67`, twelve commits) and not yet released.** One render hash,
+(`4493d67`, twelve commits) and released in 2.21.2.** One render hash,
 `wave_formant_sweep`, moved under the new law
 (`set_smooth` 0.65); Bastian heard both renders and accepted the new one on
 2026-08-15, and it was re-cut then. `ctrl_identity` is untouched
@@ -2461,8 +2545,9 @@ ALT→NEU change sat 4.1 dB below, for scale).
 
 The SHAPE/SMOOTH rework's SMOOTH half has shipped — see "SMOOTH becomes
 interval-relative" under "Done". Its SHAPE half was handed to the round below
-rather than delivered, per spec §5, so **the Marbles round is now the only
-entry left under "Planned" before M5k.**
+rather than delivered, per spec §5, so **the Marbles round is the only designed
+round left before M5k**, followed by one loose thread that has no round of its
+own yet (the pitch RANGE law, below it).
 
 ### Marbles round — VARY as the character axis ⬜ (unscheduled)
 
@@ -2503,6 +2588,36 @@ argument for taking the SHAPE/SMOOTH rework first.
 
 Needs a spec.
 
+### Open thread — the pitch RANGE law ⬜ (unscheduled, no round yet)
+
+Left behind by the melody-reachable round, whose plan excluded it on purpose:
+spec §2.2 is stated but not designed, and it needs a design pass before anyone
+builds it.
+
+`apply_range` (`engine/mod/range.h`) is an **amplitude** law — unipolar below
+r = 0.5, scaled by `2r`. On the quantized pitch axis that produces two measured
+defects: too little ambitus at the bottom of the knob, and clipping over the
+whole top half. Measured through the real path at STEP 8, SHAPE 1.0, TUNE 0.5,
+mean of 6 seeds, the ambitus **peaks at RANGE ≈ 0.5 (7.23 semitones) and falls
+for the entire upper half** — 29.2 % of samples clamped at RANGE 0.75 and
+54.2 % at 1.00, because `pitch_pre_quant`'s `clampf(…, 0, 1)` starts discarding
+samples at r ≈ 0.55. The clip's position moves with TUNE, since
+`part.cpp` adds `(_tune − 0.5)` before clamping. An earlier draft blamed a
+unipolar/bipolar seam at r = 0.5; **that seam does not exist** — `apply_range`
+is provably continuous there, and the mechanism was mislabelled while the
+residue was real.
+
+Two things constrain whoever picks it up:
+
+- **The gate must be the engine class, not the slot.** `kBbdFlowRangeMax`
+  derives its `2` from `apply_range`'s unipolar behaviour, so a degree floor
+  applied to a BBD deck would void that constant and the owner's 2026-08-07
+  ruling that a BBD's PITCH lane is the delay clock, not a note.
+- **The measurements above came through a rig that no longer exists.** §1.3's
+  drone RANGE band and its terrain statistics were read off `engine/flow/`,
+  deleted one day later on 2026-08-14. The numbers stand as measured; anything
+  new has to be re-measured through a different setup.
+
 ### M5k — ZAP ⬜
 
 Monophonic two-oscillator FM/AM percussion part engine whose PITCH lane selects
@@ -2524,7 +2639,8 @@ Spec: `docs/superpowers/specs/2026-07-19-pull-chord-gravity-design.md`
 An instrument of its own, built on a **Daisy Patch Submodule**: a thin shell
 hosting `engine/`, plus the physical surface around it — controls, LEDs, CV +
 gate + V/Oct + clock I/O, and preset persistence. **First milestone that runs on
-hardware.** Nothing of it is implemented.
+hardware.** No firmware of it is implemented; what exists is the panel, and only
+as a Rack design study (the `FireflowHW` module, still labelled `DRAFT`).
 
 **2026-08-07 — the submodule is measurable without a debug probe.** The bench
 has a second transport (`--transport usb`): `dfu-util` loads it through the
@@ -2558,7 +2674,11 @@ So M6 now decomposes into two pieces, in order:
    round is **cancelled**: the envelope spec
    (`docs/superpowers/specs/2026-08-08-fireflow-hardware-envelope-design.md`)
    fixes the hardware at **60 HP with the full control set** (82 runtime
-   params on 80 physical positions, BEND sharing ATTACK's knob). What remains
+   params on 80 physical positions, BEND sharing ATTACK's knob, as counted on
+   2026-08-08). **The built panel now carries fewer**, because the rounds below
+   merged controls rather than only moving them — `gen_hw_panel.py` prints
+   `params=69 inputs=12 outputs=6 lights=4 panel=60HP` today, and that printed
+   line is the number to quote, not the envelope's. What remains
    is a **regrouping** pass — bounded, tested in Rack via the hardware-mode
    panel generator (`host/vcv/res/gen_hw_panel.py`), max. 3 rounds, static
    labels enforced from round 1. The parked hardware-placement questions from
@@ -2567,17 +2687,57 @@ So M6 now decomposes into two pieces, in order:
    as cuts.
 2. **Bring-up** — the shell itself, against the panel decided in step 1.
 
-**2026-08-10 — round 1 done, and the only one it took.** The regrouping spec
+**2026-08-10 — the regrouping round.** The regrouping spec
 (`docs/superpowers/specs/2026-08-10-hw-panel-regroup-design.md`, plan
-`docs/superpowers/plans/2026-08-10-hw-panel-regroup.md`) is built on branch
-`hw-panel-regroup`, not yet merged to main or released: hardware size
+`docs/superpowers/plans/2026-08-10-hw-panel-regroup.md`) landed on `main`
+2026-08-10 (`4981c96`) and shipped in **2.21.1**: hardware size
 classes decoupled from the VCV widget kind (18 big / 46 small), the seven
 engine-grounded groups from §2 replace the old orbit cut, eight CV inputs
 land under the four big knobs they drive, MOD/SHIFT are reserved pads, the
 LED field is fixed at 20, and the SD cutout has its position.
 `hw_panel_guard` proves the generated panel and header against the spec's
-coordinates and keep-outs. Step 1 is closed; step 2 (bring-up) still has no
-spec and is next.
+coordinates and keep-outs.
+
+**Two further panel rounds followed it, and the round cap did not bite.** The
+envelope spec's "max. 3 rounds" counts freeze breaks *after* the hardware is
+ordered; nothing is ordered, so rearranging still costs nothing (redistribution
+spec, preamble to §1).
+
+- **Redistribution** — spec and drawing 2026-08-10 (`90572ed`, nothing
+  implemented at the time), generator in **2.21.2**. The regrouping round had
+  found the groups but left them where the screen draft put them: the plate was
+  **28 % occupied**, with two 19.5 mm holes beside the centre column and a
+  bottom fifth at 15 %, because one deck used 96 mm of the 127 mm it owns. This
+  round redistributes — a group is a block of two rows with a constant internal
+  pitch, so slack collects between groups as a capped gutter instead of tearing
+  groups apart; ENGINE becomes a five-zone detented pot at the head of VOICE and
+  retires ten LEDs; RATE and VARY join STPS and SONG in the deck's time group;
+  knob caps grow a millimetre, which is what finally clears the void gate. Its
+  2026-08-15 addendum places PACE beside MORPH, moves CHOKE into the status
+  strip and puts SCALE and DRIFT on the CLOCK grid. Spec
+  `docs/superpowers/specs/2026-08-10-hw-panel-redistribution-design.md`.
+- **Plate design round 2a, "Technical Blueprint"** — **2.21.3**, 2026-08-15.
+  Colour, texture, frames and lettering only; **no control moved and the
+  geometry guards are untouched**. A dark anodised plate in three tinted zones,
+  an airflow/ember silhouette printed underneath, and one fixed raster of
+  drawing frames with numbered legends, cut from a list rather than hand-placed
+  and sized against the *real* bodies (12 mm and 8.8 mm pots, 6.2 mm jacks).
+  Three same-day fixes finish it: frames hug their own ink with equal air above
+  and below and 3 mm between rows, one caption distance for every control
+  (3.6 mm, read off the small pots — 51 of the 69 params — so the common case
+  does not move), and the MOTION/VOICE/TIMING band on three knob lines instead
+  of the five it had drifted onto under four guards that could not disagree with
+  each other. **Three of the round's findings are about Rack, not about the
+  drawing**, and each came from rendering the module rather than reading the
+  file: NanoSVG drops `<mask>`, so the silhouette fade is baked as a gradient
+  overlay; `objectBoundingBox` gradients made Rack paint deck A's overlay
+  opaque while its mirror rendered fine, so every gradient is in millimetres
+  now; and Rack's 8.03 mm `PJ301M` body buries lettering that a real 6.2 mm
+  jack clears — now a guard of its own, beside the plate body and the layout
+  clearance circle. Four new guards in total, each shown red once.
+
+Step 1 is closed as far as the drawing goes; **step 2 (bring-up) still has no
+spec and is next**, and no hardware is ordered.
 
 **2026-08-14 — preset persistence now starts from nothing.** M6's scope names
 it, and until this date the repo had two pieces of prior art for it: the

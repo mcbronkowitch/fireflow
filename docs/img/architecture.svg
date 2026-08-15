@@ -70,10 +70,10 @@
   <rect x="620" y="412" width="340" height="76" rx="8" fill="#efe9dc" stroke="#d7cdbb" stroke-width="1.5" stroke-dasharray="7 5"/>
   <rect x="620" y="412" width="6" height="76" rx="3" fill="#8f8676"/>
   <text x="642" y="440" fill="#3f3b33" font-size="17" font-weight="700">Daisy Patch Submodule</text>
-  <text x="642" y="462" fill="#8f8676" font-size="12.5"><tspan font-weight="700">host/daisy/</tspan> firmware shell &#183; panel,</text>
+  <text x="642" y="462" fill="#8f8676" font-size="12.5"><tspan font-weight="700">shell/</tspan> firmware shell &#183; panel,</text>
   <text x="642" y="479" fill="#8f8676" font-size="12.5">LEDs, CV/gate &#183; own prototype</text>
   <text x="944" y="429" fill="#8f8676" font-size="10.5" font-weight="700" text-anchor="end">M6 &#183; PLANNED</text>
 
   <!-- footer note: tests + submodules -->
-  <text x="40" y="520" fill="#656056" font-size="12"><tspan fill="#171713" font-weight="700">tests/</tspan> doctest &#8212; 907 deterministic tests over engine/<tspan dx="18" fill="#171713" font-weight="700">lib/</tspan> libDaisy + DaisySP (submodules, host-side)</text>
+  <text x="40" y="520" fill="#656056" font-size="12"><tspan fill="#171713" font-weight="700">tests/</tspan> doctest &#8212; 1001 deterministic tests over engine/<tspan dx="18" fill="#171713" font-weight="700">lib/</tspan> libDaisy + DaisySP (submodules, host-side)</text>
 </svg>
