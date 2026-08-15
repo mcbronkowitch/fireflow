@@ -16,9 +16,16 @@ public:
     // SynthEngine::kCtrlInterval -- the mod layer must not include synth.
     static constexpr int kTickInterval = 96;
 
-    // SMOOTH's ceiling on the four texture lanes, as a fraction of the lane
-    // cycle. LANE_PITCH uses kFlowSlewFrac instead: a note must arrive inside
-    // its own slot, and one value cannot serve both cases (spec 2.1).
+    // SMOOTH's ceiling on the four texture lanes, as a fraction of whichever
+    // INTERVAL _update_slew() selected -- the lane cycle in FLOW LFO, one step
+    // in STEP. Not always the cycle.
+    //
+    // LANE_PITCH uses kFlowSlewFrac instead, and one value cannot serve both
+    // cases (spec 2.1). Its motivating case is "a note must arrive inside its
+    // own slot", but it is the melodic lane's top on EVERY path, including the
+    // ones with no notes at all: a Sampler or BBD deck's PITCH lane runs FLOW
+    // LFO, where the interval is the whole cycle. Measured there: tau/cycle =
+    // 0.2499 at SMOOTH 0.714, i.e. 0.35 * smooth of a full cycle.
     //
     // 0.5 rather than 1.0 by ear, 2026-08-14: at 0.5 the right stop lands
     // within 0.3% of where the OLD law's right stop already sat (p2p 0.322 vs

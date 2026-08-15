@@ -2384,16 +2384,22 @@ as-is, so the shipped sound is preserved instead of going nearly static
 under the new law — all four mirrors moved together (`init_patch.hpp`,
 `gen_panel.py`, its generated output, and the panel guard).
 
-Four gates back the law, three of them new: **G1** (SMOOTH 0.25 gives the
-same τ/cycle ratio across a 0.02–30 Hz sweep, and SMOOTH 0.9 measurably
-smooths — closes the blind spot where the floor could silently disable
-smoothing entirely), **G4′** (at the init patch, every texture lane's p2p
-stays within 3 dB of today's — the quiet-direction check a bare audibility
-gate can't see), **G4″** (at the four frozen points, every texture lane
-still moves, p2p > 0.05 absolute), and **G5** (no NaN or non-finite sample
-over a full render at all five setpoints). All four were shown RED once
-before being made to pass, and the RED is recorded in the commit history
-(`56b9e9d`, `30350a7`, and the vacuity checks in the spec's §3). **G5
+Five gates back the law, four of them new: **G1** (at SMOOTH 0.9, a lane's
+attenuation against its own unsmoothed reference is the same across a
+0.02–30 Hz sweep — 0.2608/0.2609/0.2609/0.2610, where the old law spanned
+0.976 to 0.025 — plus a companion assertion that SMOOTH 0.9 measurably
+smooths at all, closing the blind spot where the floor could silently
+disable smoothing entirely), **G4′** (at the init patch, every texture
+lane's p2p stays within 3 dB of today's — the quiet-direction check a bare
+audibility gate can't see), **G4″** (at the four frozen points, every
+texture lane still moves, p2p > 0.05 absolute), **G5** (no NaN or
+non-finite sample over a full render at all five setpoints), and **G6**
+(at the slowest reachable panel position — RATE 0, PACE 0, TIDE 0 — the
+SMOOTH knob still resolves; added by the final review, see below). All
+five were shown RED once before being made to pass, and each RED is
+recorded in the commit that introduced its gate (`56b9e9d`, `30350a7`,
+`365b856`), with G4″'s and G5's written into `tests/test_smooth_law.cpp`
+beside the gates themselves. **G5
 restores NaN-freedom over a populated patch set** — coverage the flow/Glow
 removal took on 2026-08-14 (see the "Coverage lost and not replaced" note
 above, now corrected) and nothing had replaced until this round. It is
@@ -2431,10 +2437,23 @@ the old one marked superseded.
 Spec: `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md`, plan
 `docs/superpowers/plans/2026-08-14-smooth-interval-relative.md`. Built on
 branch `2026-08-14-smooth-interval-relative`, **not yet merged to `main` or
-released.** One render hash, `wave_formant_sweep`, moves under the new law
-(`set_smooth` 0.65) and is pending the owner's listening decision before
-re-cutting; `ctrl_identity` is untouched (`set_smooth` 0.0 is passthrough
-under both laws).
+released.** One render hash, `wave_formant_sweep`, moved under the new law
+(`set_smooth` 0.65); Bastian heard both renders and accepted the new one on
+2026-08-15, and it was re-cut then. `ctrl_identity` is untouched
+(`set_smooth` 0.0 is passthrough under both laws) — a check, not a
+formality: it is what proves the law's floor did not change SMOOTH 0.
+
+The final whole-branch review found one real defect, fixed in `365b856`:
+the tick slew's coefficient `1 − (1−k)^96` was computed in float, and the
+new law's τ is proportional to the lane cycle, so at the slow end of the
+panel `k` reaches ~1e-8 and `1.f - k` rounds to exactly `1.0f`. The knob
+quantised — SOURCE read the same p2p to the last digit at SMOOTH 0.60 and
+1.00 — and driving the lane directly it froze outright. Deriving that one
+coefficient in double fixes it; the per-sample slew stays float, measured
+to be unaffected. `wave_formant_sweep` was re-cut a second time for it, as
+rounding rather than sound: RMS identical to 0.01 dB against the render
+Bastian accepted, difference signal 59.2 dB below it (the accepted
+ALT→NEU change sat 4.1 dB below, for scale).
 
 ## Planned
 

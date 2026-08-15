@@ -149,6 +149,20 @@ toward 1.0 for symmetry with `interval`. The law does not depend on it.
 In STEP every lane reports the deck's master rate and carries its own slot count
 (`kLaneRatio` reappears as slots, `_apply_steps`). One step is therefore a
 different length per lane, so one knob position is a different τ per lane.
+
+> **Corrected 2026-08-15 (final review of branch
+> `2026-08-14-smooth-interval-relative`).** That last sentence is wrong, and it
+> had propagated into `lane.cpp`'s STEP branch as a comment before it was
+> caught. **τ is the same on all four texture lanes in STEP.** The slot count
+> cancels: `clock_scale()` is `8/_steps`, so `cycle/_steps` is
+> `sr/(8·rate·(1+_ev_rate))` whatever `_steps` is. Measured at master 0.5 Hz,
+> deck steps 8, SMOOTH 0.714, seed 12345 — slot counts 4/16/12/6 all land on
+> **τ = 4284.00 samples exactly**. What differs per lane is **τ/cycle**, because
+> `cycle = step · slots` does differ — which is exactly what the table below
+> shows, monotone in slots. **The measurements and the decision below stand
+> unchanged; only this paragraph's explanation of them was wrong.** Recorded in
+> `docs/engine-map.md` §1 so the next reader meets the correction first.
+
 Measured at master 8, deck A, SMOOTH 0.714:
 
 | lane | SOURCE | LEVEL | MOTION | SIZE | PITCH |
@@ -157,8 +171,9 @@ Measured at master 8, deck A, SMOOTH 0.714:
 | attenuation | −7.80 dB | −5.10 dB | −1.93 dB | −1.19 dB | −0.62 dB |
 
 **Decided: keep it.** The rule this law exists to enforce is "a value arrives
-inside its own interval"; a two-slot lane has eight times the interval of a
-sixteen-slot one and therefore needs eight times the glide to say the same thing.
+inside its own interval"; a two-slot lane has eight times the *cycle* of a
+sixteen-slot one at the same step length, so the same τ is eight times less of
+it — which is the spread the table measures.
 Normalising to the deck's step count instead would restore a uniform knob and
 reintroduce the original defect in miniature — fast lanes smoothed past their own
 slot. Revision 6 did not mention this at all; it is named here so a later reader
@@ -205,7 +220,7 @@ whole risk is the quiet direction, so it is rebuilt on what survives.
 
 | # | Gate | Red when | Lives in |
 |---|---|---|---|
-| G1 | SMOOTH 0.25 gives the same τ/cycle ratio at 0.02 / 0.5 / 5 / 30 Hz within 2 %. *Measured on a patched build: p2p 0.487 / 0.488 / 0.488 / 0.487 — rate-invariant.* | the law is still absolute | `tests/test_lane.cpp` |
+| G1 | ~~SMOOTH 0.25 gives the same τ/cycle ratio at 0.02 / 0.5 / 5 / 30 Hz within 2 %. *Measured on a patched build: p2p 0.487 / 0.488 / 0.488 / 0.487 — rate-invariant.*~~ **Superseded 2026-08-15: that setpoint cannot discriminate.** At SMOOTH 0.25 the OLD law's τ is ~12 samples, negligible against every cycle in the sweep, so the old law passes this too — the quoted p2p figures are real but prove nothing. The shipped gate measures **attenuation at SMOOTH 0.9** against the same lane unsmoothed, in FLOW LFO (STEP's `8/_steps` makes the window a whole number of periods under any law): new law 0.2608 / 0.2609 / 0.2609 / 0.2610, old law 0.976 / 0.692 / 0.137 / 0.025. | the law is still absolute | `tests/test_lane.cpp` |
 | G2 | The melody note floor still holds at 14 Hz | `_note_min_samples` was dropped | `test_flow_melody.cpp` (existing case) |
 | G3′ | `deck_audible` still passes at all four frozen points, both decks, both modes | the conversion or the law left a deck near-silent | `test_param_impact.cpp` (**exists today**, `load_points()`) |
 | G4′ | **At the INIT PATCH, every texture lane's p2p stays within 3 dB of today's**, per lane, over ≥ 8 cycles | §2.4's conversion failed — the quiet direction. G3′ cannot see this: a deck stays audible while its modulation dies | **new**, `tests/test_smooth_law.cpp` |

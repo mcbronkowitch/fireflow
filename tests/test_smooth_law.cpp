@@ -21,9 +21,16 @@ using namespace spky;
 
 namespace {
 
-// Pre-conversion init-patch SMOOTH values. Duplicated here rather than
+// The shipped init-patch SMOOTH values, CONVERTED to the interval-relative law
+// (the pre-conversion pair was 0.836144507 / 1.0). Duplicated here rather than
 // included from host/vcv/ because tests/ must not depend on the VCV host.
-// Task 4 converts these together with the three VCV mirrors.
+//
+// This is the fourth mirror of these two numbers, and the only one nothing
+// guards: host/vcv/res/test_panel.py couples gen_panel.INIT_DEFAULTS,
+// init_patch.hpp and its own approved table to each other, but not to this
+// file. If gen_panel.py's values ever move again, G4' below goes on gating a
+// patch the product no longer ships -- silently, and still green. Change all
+// four together.
 constexpr float kInitSmoothA = 0.004974f;
 constexpr float kInitSmoothB = 0.026026f;
 
@@ -172,6 +179,15 @@ TEST_CASE("G4': the init patch's texture lanes keep their movement") {
 // four points twice would double this file's contribution to suite runtime for
 // nothing. The two CHECKs stay separately worded so a failure still names which
 // gate fell over.
+//
+// Both were shown RED once, and the proofs are recorded HERE rather than only
+// in the branch's working notes, which are gitignored and do not survive the
+// merge:
+//   G4" -- forcing kSmoothTopTexture to 8.0 (16x its shipped 0.5) drives the
+//          texture lanes below the 0.05 floor: 8 of the 32 assertions fail,
+//          with G5 unaffected, so the two gates are independent as intended.
+//   G5  -- injecting a NaN into the audio path fails at "master 3, STEP"
+//          while G4"'s p2p assertions still pass, the mirror image.
 TEST_CASE("G4\"/G5: the frozen points still move, and stay finite") {
     for (int i = 0; i < kPer; ++i) {
         for (const FrozenPoint* rp : {&kFlowPoints[i], &kStepPoints[i]}) {

@@ -137,7 +137,14 @@ slot in FLOW-melody and one step in STEP and `TOP` is `kFlowSlewFrac` (0.35) on
 the melodic lane — both branches of `_update_slew()` (`lane.cpp:379` STEP,
 `:384` FLOW-melody) now compute the *same* interval whenever `_effective_length()`
 agrees with `_steps` (`lane.cpp:268` — `kFlowPhraseSlots` in FLOW against the
-STEPS count in STEP), which it does at 8 steps. Re-measured under the setup
+STEPS count in STEP), which it does at 8 steps — **and additionally only below
+≈2.083 Hz**, because the FLOW-melody branch floors its slot at
+`_note_min_samples` (2880 samples) and STEP does not. Measured at 8 slots, seed
+12345, SMOOTH 0.714: τ is identical at 0.5 / 1.0 / 2.0 / 2.05 / 2.083 Hz and
+diverges from 2.1 Hz up (714.00 vs 719.71 samples), where the floor starts
+binding and STEP keeps shrinking. Both cells measured below sit under that
+threshold, so the identity result stands; the sentence around it would not have,
+unqualified. Re-measured under the setup
 above, same seed, same rate pair, all five SMOOTH values, both 0.5 Hz and
 2 Hz: **max |STEP − FLOW| = 0.00000000, bit-identical, at every cell** —
 verified by exact float comparison (`step_buf[i] != flow_buf[i]`), not only by
@@ -157,6 +164,36 @@ claim about this setup's step count, not about the lane in general. The
 `_flow_melody_on()` guard itself is unchanged and still gates the FLOW-only
 branch of `_update_slew()`; `docs/engine-map.md` §7 owns whether removing the
 guard rather than the clamp is worth doing.
+
+**In STEP the slot count cancels out of τ — the slow lanes are not glided
+longer.** This corrects a mechanism that was stated in the spec
+(`2026-08-13-shape-smooth-rework-design.md` §2.3, "one knob position is a
+different τ per lane") and had propagated into `lane.cpp`'s STEP branch as a
+comment. It does not hold: `clock_scale()` is `8/_steps` in STEP, so
+`cycle/_steps` is `sr/(8·rate·(1+_ev_rate))` **whatever `_steps` is**. Measured
+at master 0.5 Hz, deck steps 8, SMOOTH 0.714, seed 12345 — SOURCE/SIZE/MOTION/
+LEVEL carry slot counts 4/16/12/6 and all four land on **τ = 4284.00 samples
+exactly**; LANE_PITCH lands on 2998.80 only because its top is `kFlowSlewFrac`
+(0.35) rather than `kSmoothTopTexture` (0.5). What differs per lane is
+**τ/cycle**, since `cycle = step · slots` does differ — which is what §2.3's
+attenuation table actually shows (monotone in slots). The spec's numbers
+survive; its explanation of them does not.
+
+**The slow end of the panel quantises SMOOTH, and used to freeze the lane
+outright.** τ is proportional to the cycle now, so at RATE 0 (0.02 Hz) × PACE 0
+(×1/32) × TIDE 0 (×1/4) the per-tick coefficient `k = 1/(τ·sr)` reaches ~1e-8.
+The tick twin's coefficient is `1 − (1−k)^96`, and computed in **float** `1.f - k`
+rounds to exactly `1.0f` below half an ulp, so the coefficient collapses. Driving
+`ModLane` directly at 0.0003125 Hz (what RATE 0 + PACE 0 hand LANE_SIZE): p2p
+**0.000000000 over 60 s** at SMOOTH 0.50/0.70/1.00, and one single coefficient
+shared by every knob position from 0.15 to 0.40. Through the whole instrument the
+outright freeze is **not** reachable — other per-tick motion keeps p2p off zero —
+but the quantisation is: deck A's SOURCE at TIDE 0 read 0.00352925 / 0.00240338 /
+0.00240338 at SMOOTH 0.20 / 0.60 / 1.00, the last two identical to the digit.
+Fixed 2026-08-15 by deriving that coefficient in double (0.00398457 / 0.00293958
+/ 0.00272623, strictly decreasing); gated by `tests/test_smooth_law.cpp`'s G6.
+The per-sample slew is deliberately still float — `k` itself is representable and
+was measured tracking the analytic settling curve at the same τ values.
 
 **`_melodic` is not a choice.** `super_modulator.cpp:14` sets it unconditionally
 to `i == LANE_PITCH`. Exactly one lane of five is melodic, on every deck, always.

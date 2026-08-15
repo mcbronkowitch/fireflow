@@ -101,6 +101,16 @@ evidence.
 
 - [ ] **Step 1: Write the failing test (G1 — rate invariance)**
 
+> **The code block below was NOT built — it is vacuous, and the implementer was
+> right to refuse it (2026-08-14).** Two independent reasons, either alone
+> enough: it runs in STEP, where `clock_scale()`'s `8/_steps` makes an `sr/rate`
+> window a whole number of lane periods, so sampling a settled periodic signal
+> one period apart returns the same value under *any* slew law; and it sits at
+> SMOOTH 0.25, where the old law's τ is ~12 samples and therefore negligible
+> against every cycle in the sweep. What shipped instead measures **attenuation
+> at SMOOTH 0.9 in FLOW LFO** against the same lane unsmoothed. Kept here
+> unedited because the ledger's ruling refers to it.
+
 Add to `tests/test_lane.cpp`:
 
 ```cpp
@@ -815,7 +825,10 @@ Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>"
 ### Task 5: Re-cut the render hash
 
 **Files:**
-- Modify: `tests/check_render_hash.cmake`
+- Modify: ~~`tests/check_render_hash.cmake`~~ → **`CMakeLists.txt:244`**. Corrected
+  2026-08-15: `check_render_hash.cmake` only *compares*; the expected value is
+  passed in as `-DEXPECTED=` from the `add_test()` call, which that file's own
+  header says in its re-baseline recipe.
 
 **Interfaces:**
 - Consumes: everything above.

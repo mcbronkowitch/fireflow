@@ -257,7 +257,7 @@ void ModLane::set_step(bool on, int steps) {
 // pattern-clock behavior.
 void ModLane::_update_inc() {
     _phase_inc = (double(_rate_hz) / double(_sr)) * double(clock_scale());
-    _update_slew();     // the melody clamp is a function of the slot interval
+    _update_slew();     // SMOOTH's tau is a fraction of the interval this sets
 }
 
 void ModLane::new_phrase() {
@@ -370,16 +370,27 @@ void ModLane::_update_slew() {
         t = 0.02f;
     } else {
         // Samples per cycle. _ev_rate is part of the phase advance, exactly as
-        // in step_samples() -- and is deliberately NOT a recompute trigger; see
-        // the note below the clamp.
+        // in step_samples(). It is deliberately NOT a recompute trigger: it
+        // decays every tick while _settle_ctr runs (tick(), :871), so treating
+        // it as one would rebuild both slews on every sample of every settle.
+        // tau is therefore computed from the _ev_rate standing at the last
+        // real parameter change, which is the resting value the lane returns
+        // to anyway.
         const double denom = _phase_inc * (1.0 + double(_ev_rate));
         double interval = 0.0;                 // in SAMPLES
         if (denom > 0.0) {
             const double cycle = 1.0 / denom;
             if (_step_mode) {
-                // One STEP of THIS lane. In STEP each lane carries its own slot
-                // count (kLaneRatio reappears as slots), so one knob position
-                // is a different tau per lane -- intended, spec 2.3.
+                // One STEP of THIS lane. Note the slot count CANCELS: in STEP
+                // clock_scale() is 8/_steps, so cycle/_steps is
+                // sr/(8*rate*(1+_ev_rate)) whatever _steps is. Measured at
+                // master 0.5 Hz, deck steps 8: SOURCE/SIZE/MOTION/LEVEL carry
+                // slot counts 4/16/12/6 and all four land on tau = 4284.00
+                // samples exactly. What differs per lane is tau/CYCLE, because
+                // cycle = step * slots does differ -- which is what spec 2.3's
+                // attenuation table shows (monotone in slots). Spec 2.3's prose
+                // explains it as "a different tau per lane"; that mechanism is
+                // wrong, its numbers are not. Corrected 2026-08-15.
                 interval = cycle / double(_steps);
             } else if (_flow_melody_on()) {
                 // One SLOT, floored at the note minimum: where the floor
