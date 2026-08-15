@@ -257,7 +257,7 @@ void ModLane::set_step(bool on, int steps) {
 // pattern-clock behavior.
 void ModLane::_update_inc() {
     _phase_inc = (double(_rate_hz) / double(_sr)) * double(clock_scale());
-    _update_slew();     // the melody clamp is a function of the slot interval
+    _update_slew();     // SMOOTH's tau is a fraction of the interval this sets
 }
 
 void ModLane::new_phrase() {
@@ -356,32 +356,64 @@ void ModLane::set_fixed_slew(bool on) {
 }
 
 void ModLane::_update_slew() {
-    // smooth 0 -> ~1 sample (near passthrough), smooth 1 -> ~0.5 s.
-    float t = _fixed_slew ? 0.02f : (0.00002f * std::pow(25000.f, _smooth));
-    if (_flow_melody_on()) {
-        // Clamp against the interval the notes ACTUALLY have, not the raw slot:
-        // where the note floor decimates, the raw slot is far shorter than the
-        // notes are, and clamping to it would make the glide much tighter than
-        // anything needs. Guard _phase_inc == 0 the way step_samples() does --
-        // in double it yields inf and the clamp goes inert, which is benign but
-        // silent, and a silent inert guard is the shape this project fixes.
-        // _ev_rate is deliberately not a recompute trigger here: re-deriving
-        // the slew at every wrap for a +-20% term inside a 0.35 safety factor
-        // buys nothing, and the value is refreshed at the next rate change
-        // anyway.
-        const double denom = _phase_inc * (1.0 + double(_ev_rate))
-                           * double(_effective_length());
+    // SMOOTH is a fraction of the lane's own INTERVAL, not a wall-clock time.
+    // The old law was `0.00002 * pow(25000, _smooth)` -- absolute seconds
+    // against cycles spanning four decades, so the knob's reach was whatever
+    // the rate made it: inert on a 40 s cycle, annihilating on a 0.03 s one.
+    // Spec: docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md 1-2.
+    //
+    // _fixed_slew keeps the absolute 0.02 s on purpose. It is reachable only
+    // from the render host's set_fixed_slew scenario action and is an
+    // absolute-seconds escape hatch for test fixtures (spec 4).
+    float t;
+    if (_fixed_slew) {
+        t = 0.02f;
+    } else {
+        // Samples per cycle. _ev_rate is part of the phase advance, exactly as
+        // in step_samples(). It is deliberately NOT a recompute trigger: it
+        // decays every tick while _settle_ctr runs (tick(), :871), so treating
+        // it as one would rebuild both slews on every sample of every settle.
+        // tau is therefore computed from the _ev_rate standing at the last
+        // real parameter change, which is the resting value the lane returns
+        // to anyway.
+        const double denom = _phase_inc * (1.0 + double(_ev_rate));
+        double interval = 0.0;                 // in SAMPLES
         if (denom > 0.0) {
-            const double slot_samples = 1.0 / denom;
-            const double effective = slot_samples > double(_note_min_samples)
-                                   ? slot_samples : double(_note_min_samples);
-            // OnePole::init takes SECONDS (onepole.h:14, k = 1/(time_s*sr)),
-            // so the sample count has to be divided by _sr. Without this the
-            // clamp never binds.
-            const float cap =
-                static_cast<float>(double(kFlowSlewFrac) * effective / double(_sr));
-            if (t > cap) t = cap;
+            const double cycle = 1.0 / denom;
+            if (_step_mode) {
+                // One STEP of THIS lane. Note the slot count CANCELS: in STEP
+                // clock_scale() is 8/_steps, so cycle/_steps is
+                // sr/(8*rate*(1+_ev_rate)) whatever _steps is. Measured at
+                // master 0.5 Hz, deck steps 8: SOURCE/SIZE/MOTION/LEVEL carry
+                // slot counts 4/16/12/6 and all four land on tau = 4284.00
+                // samples exactly. What differs per lane is tau/CYCLE, because
+                // cycle = step * slots does differ -- which is what spec 2.3's
+                // attenuation table shows (monotone in slots). Spec 2.3's prose
+                // explains it as "a different tau per lane"; that mechanism is
+                // wrong, its numbers are not. Corrected 2026-08-15.
+                interval = cycle / double(_steps);
+            } else if (_flow_melody_on()) {
+                // One SLOT, floored at the note minimum: where the floor
+                // decimates, the raw slot is far shorter than the notes
+                // actually are, and using it would glide much tighter than
+                // anything needs.
+                const double slot = cycle / double(_effective_length());
+                const double floor_s = double(_note_min_samples);
+                interval = slot > floor_s ? slot : floor_s;
+            } else {
+                // FLOW LFO: the lane cycle. NOTE _effective_length() is wrong
+                // here -- it returns _steps on this path, not 1.
+                interval = cycle;
+            }
         }
+        const float top = _melodic ? kFlowSlewFrac : kSmoothTopTexture;
+        t = static_cast<float>(double(_smooth) * double(top) * interval)
+          / _sr;
+        // OnePole::init treats time_s <= 0 as passthrough (k = 1), which is the
+        // right behaviour at SMOOTH 0 -- but floor it at one sample so a
+        // stopped lane (denom == 0) cannot produce a negative or NaN tau.
+        const float min_t = 1.f / _sr;
+        if (!(t > min_t)) t = min_t;
     }
     _slew.init(_sr, t);
     // Tick twin: the exact kTickInterval-sample compound of the per-sample
@@ -392,9 +424,27 @@ void ModLane::_update_slew() {
     // exactly. If that formula changes, this must change with it -- these
     // two are a matched pair, not independent code, and this tick twin would
     // otherwise silently diverge from process()'s slew.
-    float k = 1.f / (t * _sr);
-    if (k > 1.f) k = 1.f;
-    _slew_tick.set_coef(1.f - std::pow(1.f - k, static_cast<float>(kTickInterval)));
+    // In DOUBLE, and not as a style preference. Under the old absolute law tau
+    // was capped at 0.5 s, so k never fell below 4e-5. It is now proportional
+    // to the cycle, and at the slow end of the panel k reaches ~1e-8. In float
+    // `1.f - k` rounds to exactly 1.0f below half an ulp (k < 2.98e-8), so the
+    // power is 1 and the coefficient QUANTISES -- and at the extreme reaches
+    // exactly zero, which is a one-pole that never moves again.
+    //
+    // Measured on ModLane driven directly at 0.0003125 Hz (what RATE 0 + PACE 0
+    // hand LANE_SIZE), 60 s: p2p 0.000000000 at SMOOTH 0.50, 0.70 and 1.00, and
+    // one single coefficient shared by every knob position from 0.15 to 0.40.
+    // Through the whole instrument the outright freeze is NOT reachable -- other
+    // per-tick motion keeps p2p off zero -- but the quantisation is, and
+    // tests/test_smooth_law.cpp's G6 gates it there.
+    //
+    // The per-sample _slew above is NOT affected: k itself is perfectly
+    // representable, and it was measured tracking the analytic settling curve
+    // at these same tau values. Only this half of the pair needs the precision.
+    double k = 1.0 / (double(t) * double(_sr));
+    if (k > 1.0) k = 1.0;
+    _slew_tick.set_coef(static_cast<float>(
+        1.0 - std::pow(1.0 - k, static_cast<double>(kTickInterval))));
 }
 
 void ModLane::kick(float dphase, float dshape) {
@@ -498,6 +548,9 @@ float ModLane::follow(int32_t deck_step, float frac, float shuffle) {
         static_cast<float>(here) + frac, slots, shuffle);
 
     float smoothed = _slew_tick.process(_target);
+#ifdef SPKY_TESTING
+    _last_out = apply_range(smoothed, _range);
+#endif
     return apply_range(smoothed, _range);
 }
 
@@ -782,6 +835,9 @@ float ModLane::process() {
     }
 
     float smoothed = _slew.process(_target);
+#ifdef SPKY_TESTING
+    _last_out = apply_range(smoothed, _range);
+#endif
     return apply_range(smoothed, _range);
 }
 
@@ -1029,5 +1085,8 @@ float ModLane::tick() {
         _target = _compute_raw();
 
     float smoothed = _slew_tick.process(_target);
+#ifdef SPKY_TESTING
+    _last_out = apply_range(smoothed, _range);
+#endif
     return apply_range(smoothed, _range);
 }

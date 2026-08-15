@@ -118,22 +118,82 @@ at seed 12345 (re-measured 2026-08-14: 0.0000 / 0.2979 / 0.5264). The identity i
 pinned by the §1 case (`d < 1e-7f`); of the two divergences only the 16-step one
 is pinned, and as a floor (`d16 > 0.1f`) — the 4-step figure is measured only.
 
-**That identity is this setup line's, not the lane's — it holds at SMOOTH 0 and
-does not survive the top of the SMOOTH axis.** `_update_slew()`'s note-interval
-slew clamp (`lane.cpp:361`, `if (_flow_melody_on())`) is the only split that
-survives an equal step count, not the only place on the melody path that splits
-on `_step_mode` outright: `_effective_length()` (`lane.cpp:268`) returns
-`kFlowPhraseSlots` in FLOW against the (clamped) STEPS count in STEP, changing
-the phrase's own length whenever the two disagree, and `_on_boundary()`'s
-FLOW-only note-rate floor (`lane.cpp:609`) gates `_compute_raw()` outright —
-both inert at this paragraph's matched 8-step setup, which is why they do not
-show up here. So a glide is clamped in FLOW and not in STEP. Measured on a note
-deck, seed 999, 8 steps, SHAPE 0, RANGE 1,
-VARY 0, 20 s, max |STEP − FLOW|: bit-identical at SMOOTH 0.00 / 0.25 / 0.50 at
-both 0.5 Hz and 2 Hz and at SMOOTH 0.75 at 0.5 Hz, but **0.0787 at SMOOTH 0.75 /
-2 Hz, 0.2069 at SMOOTH 1.00 / 0.5 Hz and 0.2995 at SMOOTH 1.00 / 2 Hz**. Do not
-carry the identity past SMOOTH 0; that clamp is the SHAPE/SMOOTH rework's to
-decide, and nothing on the `melody-reachable` branch touched it.
+**Superseded 2026-08-15 (spec `2026-08-13-shape-smooth-rework-design.md`,
+branch `2026-08-14-smooth-interval-relative`): the note-interval slew clamp this
+paragraph used to describe is gone.** Until then, `_update_slew()` carried a
+clamp (`lane.cpp:361`, `if (_flow_melody_on())`) that was "the only split that
+survives an equal step count" on the melody path, and the SMOOTH axis broke the
+STEP/FLOW identity above SMOOTH 0 because of it: measured on a note deck, seed
+999, 8 steps, SHAPE 0, RANGE 1, VARY 0, 20 s, max |STEP − FLOW| — bit-identical
+at SMOOTH 0.00 / 0.25 / 0.50 at both 0.5 Hz and 2 Hz and at SMOOTH 0.75 at
+0.5 Hz, but **0.0787 at SMOOTH 0.75 / 2 Hz, 0.2069 at SMOOTH 1.00 / 0.5 Hz and
+0.2995 at SMOOTH 1.00 / 2 Hz**. That old law made SMOOTH an absolute wall-clock
+time (`τ = 0.00002 · 25000^smooth`); the clamp existed to stop it over-gliding
+a note deck in FLOW, and STEP never had the clamp applied to it, hence the gap.
+
+**The new law makes the clamp unreachable, and it was deleted rather than kept
+dead.** SMOOTH is now `τ = smooth · TOP · interval`, where `interval` is one
+slot in FLOW-melody and one step in STEP and `TOP` is `kFlowSlewFrac` (0.35) on
+the melodic lane — both branches of `_update_slew()` (`lane.cpp:379` STEP,
+`:384` FLOW-melody) now compute the *same* interval whenever `_effective_length()`
+agrees with `_steps` (`lane.cpp:268` — `kFlowPhraseSlots` in FLOW against the
+STEPS count in STEP), which it does at 8 steps — **and additionally only below
+≈2.083 Hz**, because the FLOW-melody branch floors its slot at
+`_note_min_samples` (2880 samples) and STEP does not. Measured at 8 slots, seed
+12345, SMOOTH 0.714: τ is identical at 0.5 / 1.0 / 2.0 / 2.05 / 2.083 Hz and
+diverges from 2.1 Hz up (714.00 vs 719.71 samples), where the floor starts
+binding and STEP keeps shrinking. Both cells measured below sit under that
+threshold, so the identity result stands; the sentence around it would not have,
+unqualified. Re-measured under the setup
+above, same seed, same rate pair, all five SMOOTH values, both 0.5 Hz and
+2 Hz: **max |STEP − FLOW| = 0.00000000, bit-identical, at every cell** —
+verified by exact float comparison (`step_buf[i] != flow_buf[i]`), not only by
+p2p. The identity now survives the whole SMOOTH axis in this setup, not only
+SMOOTH 0.
+
+That does not make it a property of the lane rather than the setup:
+`_effective_length()` still splits FLOW from STEP outright whenever the step
+count is not 8 (§1's own 4-step/16-step divergence above, 0.298 and 0.526,
+comes from that split and is untouched by this branch — it is about phrase
+*content*, not slew, and nothing here re-measures it), and `_on_boundary()`'s
+FLOW-only note-rate floor (`lane.cpp:609`) still gates `_compute_raw()`
+outright, inert at this paragraph's matched 8-step setup for the same reason
+it always was. So "a glide is clamped in FLOW and not in STEP" is no longer
+true — there is no clamp — but "STEP and FLOW behave identically" is still a
+claim about this setup's step count, not about the lane in general. The
+`_flow_melody_on()` guard itself is unchanged and still gates the FLOW-only
+branch of `_update_slew()`; `docs/engine-map.md` §7 owns whether removing the
+guard rather than the clamp is worth doing.
+
+**In STEP the slot count cancels out of τ — the slow lanes are not glided
+longer.** This corrects a mechanism that was stated in the spec
+(`2026-08-13-shape-smooth-rework-design.md` §2.3, "one knob position is a
+different τ per lane") and had propagated into `lane.cpp`'s STEP branch as a
+comment. It does not hold: `clock_scale()` is `8/_steps` in STEP, so
+`cycle/_steps` is `sr/(8·rate·(1+_ev_rate))` **whatever `_steps` is**. Measured
+at master 0.5 Hz, deck steps 8, SMOOTH 0.714, seed 12345 — SOURCE/SIZE/MOTION/
+LEVEL carry slot counts 4/16/12/6 and all four land on **τ = 4284.00 samples
+exactly**; LANE_PITCH lands on 2998.80 only because its top is `kFlowSlewFrac`
+(0.35) rather than `kSmoothTopTexture` (0.5). What differs per lane is
+**τ/cycle**, since `cycle = step · slots` does differ — which is what §2.3's
+attenuation table actually shows (monotone in slots). The spec's numbers
+survive; its explanation of them does not.
+
+**The slow end of the panel quantises SMOOTH, and used to freeze the lane
+outright.** τ is proportional to the cycle now, so at RATE 0 (0.02 Hz) × PACE 0
+(×1/32) × TIDE 0 (×1/4) the per-tick coefficient `k = 1/(τ·sr)` reaches ~1e-8.
+The tick twin's coefficient is `1 − (1−k)^96`, and computed in **float** `1.f - k`
+rounds to exactly `1.0f` below half an ulp, so the coefficient collapses. Driving
+`ModLane` directly at 0.0003125 Hz (what RATE 0 + PACE 0 hand LANE_SIZE): p2p
+**0.000000000 over 60 s** at SMOOTH 0.50/0.70/1.00, and one single coefficient
+shared by every knob position from 0.15 to 0.40. Through the whole instrument the
+outright freeze is **not** reachable — other per-tick motion keeps p2p off zero —
+but the quantisation is: deck A's SOURCE at TIDE 0 read 0.00352925 / 0.00240338 /
+0.00240338 at SMOOTH 0.20 / 0.60 / 1.00, the last two identical to the digit.
+Fixed 2026-08-15 by deriving that coefficient in double (0.00398457 / 0.00293958
+/ 0.00272623, strictly decreasing); gated by `tests/test_smooth_law.cpp`'s G6.
+The per-sample slew is deliberately still float — `k` itself is representable and
+was measured tracking the analytic settling curve at the same τ values.
 
 **`_melodic` is not a choice.** `super_modulator.cpp:14` sets it unconditionally
 to `i == LANE_PITCH`. Exactly one lane of five is melodic, on every deck, always.

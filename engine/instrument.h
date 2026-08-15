@@ -121,6 +121,11 @@ public:
     float lane_phase_for_test(int p, int lane) const {
         return _parts[p].mod().lane_phase_for_test(lane);
     }
+    // The value a lane last emitted, read through the whole stack. See
+    // ModLane::_last_out for why this is not _slew.value().
+    float lane_value_for_test(int p, int lane) const {
+        return _parts[p].mod().lane_last_out_for_test(lane);
+    }
     // The melody engine's cross-mode phrase-length invariant, readable through
     // the whole stack: the length the lane is supposed to have right now vs the
     // length its pattern was actually generated at. A gate that hard-codes

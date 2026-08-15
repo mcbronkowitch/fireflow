@@ -2257,10 +2257,18 @@ def test_sampler_preset_init_snapshot():
         # gen_panel's INIT_DEFAULTS -- that is what makes this a test: a later
         # hand-edit to either table, or to the generated header, has to
         # disagree with this one.
+        #
+        # EXCEPT SMOOTH_A/SMOOTH_B, which are DERIVED, not transcribed. The
+        # preset stored 0.836144507 / 1.0 against the old absolute SMOOTH law;
+        # the 2026-08-14 interval-relative rework converted them so the patch
+        # keeps its sound (tests/test_smooth_law.cpp's G4' is what holds it,
+        # measured at 0.046 dB max deviation). Do NOT "restore" them from the
+        # .vcvm -- that would silently revert the conversion and this table
+        # would agree with itself while the product changed.
         "RATE_A": 0.184337318,
         "SHAPE_A": 0.0,
         "DENSITY_A": 0.534939826,
-        "SMOOTH_A": 0.836144507,
+        "SMOOTH_A": 0.004974,
         "RANGE_A": 0.0,
         "MELODY_A": 0.768674195,
         "MOD_A": 0.403613269,
@@ -2284,7 +2292,7 @@ def test_sampler_preset_init_snapshot():
         "RATE_B": 0.163855359,
         "SHAPE_B": 0.0,
         "DENSITY_B": 0.0,
-        "SMOOTH_B": 1.0,
+        "SMOOTH_B": 0.026026,
         "RANGE_B": 0.0,
         "MELODY_B": 0.671083927,
         "MOD_B": 0.681928277,

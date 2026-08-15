@@ -16,6 +16,24 @@ public:
     // SynthEngine::kCtrlInterval -- the mod layer must not include synth.
     static constexpr int kTickInterval = 96;
 
+    // SMOOTH's ceiling on the four texture lanes, as a fraction of whichever
+    // INTERVAL _update_slew() selected -- the lane cycle in FLOW LFO, one step
+    // in STEP. Not always the cycle.
+    //
+    // LANE_PITCH uses kFlowSlewFrac instead, and one value cannot serve both
+    // cases (spec 2.1). Its motivating case is "a note must arrive inside its
+    // own slot", but it is the melodic lane's top on EVERY path, including the
+    // ones with no notes at all: a Sampler or BBD deck's PITCH lane runs FLOW
+    // LFO, where the interval is the whole cycle. Measured there: tau/cycle =
+    // 0.2499 at SMOOTH 0.714, i.e. 0.35 * smooth of a full cycle.
+    //
+    // 0.5 rather than 1.0 by ear, 2026-08-14: at 0.5 the right stop lands
+    // within 0.3% of where the OLD law's right stop already sat (p2p 0.322 vs
+    // 0.323 at a 0.5 Hz patch), so the change is confined to the middle of the
+    // axis -- which is where the complaint was. 1.0 buys 6 dB more ceiling at
+    // a stop nobody asked for. Revisable by ear; the law does not depend on it.
+    static constexpr float kSmoothTopTexture = 0.5f;
+
     void init(float sample_rate, uint32_t seed);
 
     void set_rate_hz(float hz);
@@ -69,6 +87,12 @@ public:
     // (spec 2026-08-12 modulation-pace, Task 7). Incremented in process()'s
     // wrap loop, lane.cpp.
     uint32_t wrap_count_for_test() const { return _wraps; }
+    float last_out_for_test() const { return _last_out; }
+    // kFlowSlewFrac itself stays private (it's an implementation constant of
+    // _update_slew's top selection, not part of the public control surface);
+    // this exposes its value so a test can derive an expectation from it
+    // instead of pasting the number.
+    static constexpr float kFlowSlewFrac_for_test() { return kFlowSlewFrac; }
 #endif
 
     float process();                  // advance one sample, return post-range value
@@ -241,6 +265,16 @@ private:
     OnePole _slew_tick;          // tick-rate twin of _slew; a lane is driven by
                                  // exactly ONE path, so the twin's state never
                                  // fights the per-sample instance
+
+#ifdef SPKY_TESTING
+    // The value this lane last EMITTED, whichever smoother produced it.
+    // Reading _slew.value() instead would be wrong for every lane driven by
+    // tick() -- which is the four texture lanes in FLOW -- because tick()
+    // writes _slew_tick and leaves _slew at its init value. Written only
+    // under SPKY_TESTING: the per-sample path sits inside a block budget
+    // currently near 96%, and a test accessor does not get to spend it.
+    float _last_out = 0.f;
+#endif
 
     float _sr = 48000.f;
     // The phase accumulator is double, and so is its increment (spec

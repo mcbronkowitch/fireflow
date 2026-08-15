@@ -163,6 +163,7 @@ add_executable(spky_tests
     tests/test_part_engine_contract.cpp
     tests/test_param_table.cpp
     tests/test_param_impact.cpp
+    tests/test_smooth_law.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
 target_include_directories(spky_tests PRIVATE host)
@@ -240,7 +241,22 @@ add_test(
         # flag false, i.e. FLOW -- Part now pushes set_flow_melody(true) into
         # its PITCH lane (Part::init/_engine_swap), so it steps through phrase
         # slots instead of the old continuous LFO.
-        -DEXPECTED=622c9d093373fc20e4f907179254073319882379a47ac2f02e289911aa344c0d
+        # Moved again (spec 2026-08-13 shape-smooth-rework task 5): the
+        # scenario sets set_smooth 0.65, and SMOOTH is now a fraction of the
+        # lane interval instead of an absolute time, so its modulation lands
+        # differently. ctrl_identity sets SMOOTH 0.0 twice -- passthrough under
+        # both laws -- and is confirmed green, not re-cut. The owner heard both
+        # renders (wave_formant_sweep_ALT/NEU.wav) and accepted the new one.
+        # Moved once more in the same branch (review fix): the tick slew's
+        # coefficient is now derived in double, because in float it quantised
+        # and eventually underflowed to zero at the slow end of the panel. That
+        # reaches every render, this one included -- but as ROUNDING, not as a
+        # sound change. Measured against the render the owner accepted: RMS
+        # identical to 0.01 dB, difference signal at -88.86 dBFS (59.2 dB below
+        # the render, worst single sample 17 LSB of 32768). The accepted
+        # ALT->NEU change, for scale, sat 4.1 dB below the render. So the
+        # owner's decision about the SOUND still stands; only the checksum moved.
+        -DEXPECTED=4b9173d5ebbfd4df86e6b104699b0235b5568d52e2577ee4fb39109b18b4fd05
         -DOUT_DIR=${CMAKE_BINARY_DIR}
         -DGATE_STEM=wave_formant_sweep
         -DREFERENCE=WAVE

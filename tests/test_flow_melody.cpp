@@ -563,27 +563,66 @@ TEST_CASE("FLOW melody: a note arrives within its own slot at full SMOOTH") {
     CHECK(checked);
 }
 
-TEST_CASE("STEP's slew is unchanged by the melody clamp") {
-    ModLane step_lane;
-    step_lane.set_melodic(true);
-    step_lane.set_step(true, 8);
-    step_lane.init(48000.f, 0xF10Eu);
-    step_lane.set_rate_hz(1.f);
-    step_lane.set_smooth(1.f);
-    // A STEP lane at SMOOTH 1 keeps the long glide: after 6000 samples it must
-    // still be well short of its target, which is what the clamp must not do
-    // to it.
+TEST_CASE("STEP: the melodic lane uses its own SMOOTH top") {
+    // Replaces "STEP's slew is unchanged by the melody clamp", whose premise
+    // died with the interval-relative law: there is no clamp any more, and the
+    // melodic top is applied in STEP on purpose (spec 2.1, 2.3). What still
+    // needs defending is that the melodic lane's top is kFlowSlewFrac and NOT
+    // kSmoothTopTexture -- nothing else covers that in STEP, though
+    // test_flow_melody.cpp's "a note arrives within its own slot" covers it
+    // in FLOW.
     //
-    // The bound is 0.02, not the loose 1.0 a first draft used: for this seed
-    // the unclamped tau (~0.5 s) moves the output only ~0.006 over this
-    // window, but a guard that leaks the melody clamp into STEP (e.g.
-    // checking `_melodic` instead of `_flow_melody_on()`, so a STEP lane gets
-    // clamped too) measures ~0.065 here -- an order of magnitude more. 1.0
-    // would pass either way and never catch that regression; 0.02 sits
-    // between the two with margin on both sides.
+    // Measured as NORMALISED settling: gap(K)/gap(0) = exp(-K/tau) depends
+    // only on tau, not on the waveform, so a melodic lane can be measured
+    // without comparing it against a texture lane that emits something else.
+    // K is a quarter step, so the window cannot straddle a boundary -- the
+    // mistake that made the predecessor case undiscriminating.
+    ModLane lane;
+    lane.set_melodic(true);          // before init(): init() branches on it
+    lane.set_step(true, 8);
+    lane.init(48000.f, 0xF10Eu);
+    lane.set_rate_hz(1.f);
+    lane.set_smooth(1.f);
+    lane.set_range(1.f);
+    lane.set_density(1.f);
+    lane.set_variation(0.f);
+
+    // Find a boundary where the note actually moves, then measure the glide
+    // for a quarter step (1500 of the 6000-sample step) after it.
+    const int K = 1500;
     float out = 0.f;
-    for (int i = 0; i < 200; ++i) out = step_lane.process();
-    const float early = out;
-    for (int i = 0; i < 6000; ++i) out = step_lane.process();
-    CHECK(std::fabs(out - early) < 0.02f);
+    bool checked = false;
+    for (int i = 0; i < 48000 * 3 && !checked; ++i) {
+        out = lane.process();
+        if (!lane.fired()) continue;
+        const float goal = lane.target();
+        const float gap0 = goal - out;
+        if (std::fabs(gap0) < 0.05f) continue;     // too small to measure
+        for (int s = 0; s < K; ++s) out = lane.process();
+        const float gapK = goal - out;
+        const float ratio = gapK / gap0;
+
+        // Predictions from the two source constants, not pasted literals --
+        // the bound moves if either constant does. kSmoothTopTexture is
+        // public; kFlowSlewFrac is private and reached through the
+        // SPKY_TESTING accessor kFlowSlewFrac_for_test() (lane.h) added for
+        // this case.
+        const float step_samples = 6000.f;   // rate 1 Hz, 8 steps, 48 kHz
+        const float tau_correct  = ModLane::kFlowSlewFrac_for_test() * step_samples;
+        const float tau_wrong    = ModLane::kSmoothTopTexture * step_samples;
+        const float predicted_correct = std::exp(-float(K) / tau_correct);
+        const float predicted_wrong   = std::exp(-float(K) / tau_wrong);
+        // Sanity: the two predictions must actually be far enough apart to
+        // make a tight bound meaningful (this is not itself a claim about the
+        // implementation, just a guard against a degenerate setpoint).
+        const float spread = std::fabs(predicted_correct - predicted_wrong);
+        REQUIRE(spread > 0.05f);
+
+        // Bound at half the spread to the wrong prediction: tight enough to
+        // exclude kSmoothTopTexture, loose enough for float slop.
+        const float bound = spread * 0.4f;
+        CHECK(std::fabs(ratio - predicted_correct) < bound);
+        checked = true;
+    }
+    CHECK(checked);
 }

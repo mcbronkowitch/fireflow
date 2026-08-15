@@ -7,7 +7,7 @@ static constexpr float kInitParamDefaults[] = {
     0.184337318f, // RATE_A
     0.0f, // SHAPE_A
     0.534939826f, // DENSITY_A
-    0.836144507f, // SMOOTH_A
+    0.004974f, // SMOOTH_A
     0.0f, // RANGE_A
     0.768674195f, // MELODY_A
     0.403613269f, // MOD_A
@@ -27,7 +27,7 @@ static constexpr float kInitParamDefaults[] = {
     0.163855359f, // RATE_B
     0.0f, // SHAPE_B
     0.0f, // DENSITY_B
-    1.0f, // SMOOTH_B
+    0.026026f, // SMOOTH_B
     0.0f, // RANGE_B
     0.671083927f, // MELODY_B
     0.681928277f, // MOD_B

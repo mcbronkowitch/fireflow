@@ -38,7 +38,12 @@ TEST_CASE("lane: SMOOTH turns a step into a glide") {
     l.set_range(1.f);
     l.set_shape(0.5f);        // ramp: consecutive step values differ
     l.set_step(true, 2);      // step-clock: step = 6000 samples; boundary at ~6000
-    l.set_smooth(0.5f);       // glide ~3 ms: settles well within a step, still gliding ~1 ms past a boundary
+    // SMOOTH is a fraction of one STEP now, not an absolute time: 0.05 gives
+    // tau = 0.05 * kSmoothTopTexture * 6000 = 150 samples (~3 ms at TOP 0.5),
+    // which is the glide this case was written around. It was 0.5 under the
+    // absolute law, where 0.5 also meant ~3 ms -- the number moved, the
+    // intent did not.
+    l.set_smooth(0.05f);
     l.set_rate_hz(1.f);       // cycle_hz = 4 -> 12000 samples/cycle
 
     for (int i = 0; i < 5000; ++i) l.process();    // settle in step 0
@@ -51,6 +56,65 @@ TEST_CASE("lane: SMOOTH turns a step into a glide") {
     CHECK(target1 != doctest::Approx(target0));        // new value latched
     CHECK(std::fabs(out_after - target1) > 0.01f);     // output still gliding
     CHECK(std::fabs(settled0  - target0) < 0.01f);     // was settled before
+}
+
+TEST_CASE("lane: SMOOTH is relative to the lane cycle, not to wall clock") {
+    // The law's whole claim: one knob position means the same fraction of a
+    // CYCLE at every rate. Measured as attenuation -- the smoothed output's
+    // peak-to-peak over the same lane's raw peak-to-peak -- because that is
+    // what "the same amount of smoothing" means, and unlike a settling
+    // measurement it does not depend on where in the cycle the window starts.
+    //
+    // Two things an earlier draft of this gate got wrong, both of which made
+    // it pass under the OLD law:
+    //   - It ran in STEP. clock_scale()'s 8/_steps makes one step
+    //     sr/(8*rate) samples whatever _steps is, so a sr/rate window is
+    //     always a whole number of lane periods, and sampling a settled
+    //     periodic signal one period apart returns the same value under any
+    //     slew law. FLOW LFO here: clock_scale() is 1.
+    //   - It used SMOOTH 0.25, where the old law's tau is ~12 samples --
+    //     negligible against every cycle in this sweep. 0.9 is where the two
+    //     laws actually disagree: old-law attenuation runs 0.028 at 30 Hz to
+    //     0.9997 at 0.02 Hz, while the new law is 0.45*T at every rate.
+    const float rates[] = {0.02f, 0.5f, 5.f, 30.f};
+
+    auto p2p_at = [](float rate, float smooth) {
+        ModLane l;
+        l.set_melodic(false);          // BEFORE init() -- see engine-map.md 6
+        l.init(48000.f, 55);
+        l.set_step(false, 8);          // FLOW LFO
+        l.set_shape(0.5f);             // ramp: a clean periodic waveform
+        l.set_range(1.f);
+        l.set_density(1.f);
+        l.set_variation(0.f);
+        l.set_smooth(smooth);
+        l.set_rate_hz(rate);
+        const int cycle = static_cast<int>(48000.f / rate);
+        // Three cycles of warm-up: at 0.02 Hz and SMOOTH 0.9 tau is 22.5 s,
+        // so one cycle would still be inside the transient from
+        // _slew.reset(0) and the measurement would read the ramp-up.
+        for (int i = 0; i < cycle * 3; ++i) l.process();
+        float mn = 1e9f, mx = -1e9f;
+        for (int i = 0; i < cycle * 2; ++i) {
+            const float v = l.process();
+            if (v < mn) mn = v;
+            if (v > mx) mx = v;
+        }
+        return mx - mn;
+    };
+
+    float first = 0.f;
+    for (int r = 0; r < 4; ++r) {
+        const float raw      = p2p_at(rates[r], 0.f);
+        const float smoothed = p2p_at(rates[r], 0.9f);
+        REQUIRE(raw > 0.1f);                 // a silent lane answers nothing
+        const float attenuation = smoothed / raw;
+        REQUIRE(attenuation < 0.9f);   // SMOOTH 0.9 must actually smooth
+        INFO("rate " << rates[r] << " Hz: raw " << raw
+             << " smoothed " << smoothed << " attenuation " << attenuation);
+        if (r == 0) first = attenuation;
+        else CHECK(attenuation == doctest::Approx(first).epsilon(0.05));
+    }
 }
 
 TEST_CASE("lane kick: phase jump is permanent, no decay") {

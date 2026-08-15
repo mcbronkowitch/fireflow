@@ -30,7 +30,18 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-08-14 (**the flow layer and Glow are struck**:
+- **Last updated:** 2026-08-15 (**SMOOTH becomes interval-relative**: the
+  slew law is now `τ = smooth · TOP · interval` instead of absolute
+  wall-clock seconds, `kSmoothTopTexture = 0.5` was chosen by ear, the
+  factory SMOOTH defaults are converted to preserve the shipped sound, and
+  four gates — one of them, G5, restoring NaN-freedom coverage over a
+  populated patch set that the flow/Glow removal below took and nothing had
+  replaced — back the change. SHAPE stays out, handed to the Marbles round.
+  Spec `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md`,
+  plan `docs/superpowers/plans/2026-08-14-smooth-interval-relative.md`,
+  branch `2026-08-14-smooth-interval-relative`, not yet merged to `main` or
+  released — see "SMOOTH becomes interval-relative" under "Done"); before
+  that, 2026-08-14 (**the flow layer and Glow are struck**:
   `engine/flow/`, the `Glow` VCV module, its faceplate, five render
   scenarios and eighteen tests are deleted — 65 files, −42 754 lines. Both
   existed to serve the Synthux residency, which closed with a final rejection
@@ -38,14 +49,16 @@ is actually built today, and what is still design-only.
   it have no product left to belong to. **Nothing was thrown away:** the specs,
   the plans, the macro audit, the parameter map and the by-ear tuning values
   are in [`docs/attic/`](attic/README.md), which also carries the commands to
-  recover the code from git. **Coverage lost and not replaced:**
+  recover the code from git. **Coverage lost, and partly replaced 2026-08-15:**
   `test_flow_audio.cpp`'s whole-instrument NaN-free plus RMS ceiling/floor
   gates over filtered seed populations went with it and needed `generate()`,
   which is gone. After this removal the suite's only whole-instrument
-  audio-health checks are the four frozen operating points' `deck_audible`
+  audio-health checks were the four frozen operating points' `deck_audible`
   `REQUIRE`s (`tests/test_param_impact.cpp`) and the two fixed render-hash
-  renders (`ctrl_identity`, `wave_formant_sweep`) — **nothing asserts
-  NaN-freedom over any populated patch set any more.** Spec
+  renders (`ctrl_identity`, `wave_formant_sweep`) — **nothing asserted
+  NaN-freedom over any populated patch set any more, until the SMOOTH rework's
+  G5 above added five setpoints' worth; the filtered seed populations this
+  removal took are still gone.** Spec
   `docs/superpowers/specs/2026-08-14-flow-glow-removal-design.md`, plan
   `docs/superpowers/plans/2026-08-14-flow-glow-removal.md`); before that,
   2026-08-13 (SHAPE/SMOOTH rework: its spec is written —
@@ -2349,82 +2362,105 @@ carries that transient for the rest of the divergence window. Neither
 hash-gated render (`ctrl_identity`, `wave_formant_sweep`) is affected — both
 stay on one engine for their whole run and never call `set_engine`.
 
+### SMOOTH becomes interval-relative ✅
+
+SMOOTH's law used to be `τ = 0.00002 · 25000^smooth` — absolute wall-clock
+seconds against lane cycles spanning four decades, so the knob's reach was
+whatever the rate happened to make it: inert on a slow cycle, annihilating on
+a fast one. Measured against the setpoints that survive the flow/Glow
+removal (the four frozen operating points plus the VCV init patch), the old
+knob's largest effect anywhere was **0.11 dB** — indistinguishable from off.
+It is now `τ = smooth · TOP · interval`, where `interval` is the lane cycle
+in FLOW, one slot in FLOW-melody, and one step in STEP, and `TOP` is
+**`kSmoothTopTexture = 0.5`** on the four texture lanes and the existing
+`kFlowSlewFrac = 0.35` on the melodic lane. **`kSmoothTopTexture` was chosen
+by ear** by the owner on 2026-08-14, from three rendered candidates
+(`scratchpad/smooth_axis.json` at the old law, TOP 1.0 and TOP 0.5) — it is
+a by-ear constant per `fireflow-by-ear-decisions`, revisable by listening,
+not by argument, and not something a later session should "fix" toward 1.0
+for symmetry with `interval`. The stored factory SMOOTH defaults
+(`SMOOTH_A = 0.836144507`, `SMOOTH_B = 1.0`) were converted rather than left
+as-is, so the shipped sound is preserved instead of going nearly static
+under the new law — all four mirrors moved together (`init_patch.hpp`,
+`gen_panel.py`, its generated output, and the panel guard).
+
+Five gates back the law, four of them new: **G1** (at SMOOTH 0.9, a lane's
+attenuation against its own unsmoothed reference is the same across a
+0.02–30 Hz sweep — 0.2608/0.2609/0.2609/0.2610, where the old law spanned
+0.976 to 0.025 — plus a companion assertion that SMOOTH 0.9 measurably
+smooths at all, closing the blind spot where the floor could silently
+disable smoothing entirely), **G4′** (at the init patch, every texture
+lane's p2p stays within 3 dB of today's — the quiet-direction check a bare
+audibility gate can't see), **G4″** (at the four frozen points, every
+texture lane still moves, p2p > 0.05 absolute), **G5** (no NaN or
+non-finite sample over a full render at all five setpoints), and **G6**
+(at the slowest reachable panel position — RATE 0, PACE 0, TIDE 0 — the
+SMOOTH knob still resolves; added by the final review, see below). All
+five were shown RED once before being made to pass, and each RED is
+recorded in the commit that introduced its gate (`56b9e9d`, `30350a7`,
+`365b856`), with G4″'s and G5's written into `tests/test_smooth_law.cpp`
+beside the gates themselves. **G5
+restores NaN-freedom over a populated patch set** — coverage the flow/Glow
+removal took on 2026-08-14 (see the "Coverage lost and not replaced" note
+above, now corrected) and nothing had replaced until this round. It is
+narrower than what was lost: five setpoints, not the filtered seed
+populations `test_flow_audio.cpp` used to render.
+
+**Deliberately not delivered, per spec §6:**
+
+- **SHAPE.** Five drafts of a SHAPE repair were measured and none survived
+  review; the measurements are solid and are handed to the Marbles/VARY
+  round rather than re-derived — see "Marbles round" under "Planned", and
+  spec §5 for the findings it inherits (the top-quarter amplitude fade onto
+  a fixed offset, the `tick()`-vs-`process()` trap, and `_ev_shape`'s
+  unbounded random walk as the real source of "SHAPE is unpredictable").
+- **`_fixed_slew`** stays absolute at 0.02 s, by decision — it is an
+  absolute-seconds escape hatch for test fixtures, reachable only from the
+  render host's `set_fixed_slew` scenario action, and converting it would
+  change a control nothing on the panel reaches while adding a second law
+  to reason about.
+- **The `_flow_melody_on()` guard** on the melody path's slew branch is
+  unchanged; `docs/engine-map.md` §7 owns whether removing the guard rather
+  than the clamp it used to gate is worth doing.
+- **Any re-tuning of `TOP_MELODY`.** `kFlowSlewFrac = 0.35` is ear-confirmed
+  from the FLOW melody engine round and is reused here, not re-derived.
+
+`docs/engine-map.md` §1 recorded a 0.2995 STEP/FLOW gap at SMOOTH 1.0, 2 Hz,
+produced by a note-interval slew clamp the old law needed and the new one
+does not. That clamp is gone — deleted, not left dead, because the new law's
+melodic top makes it unreachable — and the gap it produced is gone with it:
+re-measured under the same setup (note deck, seed 999, 8 steps, SHAPE 0,
+RANGE 1, VARY 0, 20 s), STEP and FLOW are bit-identical at every SMOOTH value
+from 0.00 to 1.00, at both 0.5 Hz and 2 Hz. The map's §1 records both figures,
+the old one marked superseded.
+
+Spec: `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md`, plan
+`docs/superpowers/plans/2026-08-14-smooth-interval-relative.md`. Built on
+branch `2026-08-14-smooth-interval-relative`, **not yet merged to `main` or
+released.** One render hash, `wave_formant_sweep`, moved under the new law
+(`set_smooth` 0.65); Bastian heard both renders and accepted the new one on
+2026-08-15, and it was re-cut then. `ctrl_identity` is untouched
+(`set_smooth` 0.0 is passthrough under both laws) — a check, not a
+formality: it is what proves the law's floor did not change SMOOTH 0.
+
+The final whole-branch review found one real defect, fixed in `365b856`:
+the tick slew's coefficient `1 − (1−k)^96` was computed in float, and the
+new law's τ is proportional to the lane cycle, so at the slow end of the
+panel `k` reaches ~1e-8 and `1.f - k` rounds to exactly `1.0f`. The knob
+quantised — SOURCE read the same p2p to the last digit at SMOOTH 0.60 and
+1.00 — and driving the lane directly it froze outright. Deriving that one
+coefficient in double fixes it; the per-sample slew stays float, measured
+to be unaffected. `wave_formant_sweep` was re-cut a second time for it, as
+rounding rather than sound: RMS identical to 0.01 dB against the render
+Bastian accepted, difference signal 59.2 dB below it (the accepted
+ALT→NEU change sat 4.1 dB below, for scale).
+
 ## Planned
 
-The ordering that used to open this section is gone with its subject: the
-SHAPE/SMOOTH rework came **before** a Glow rework that no longer exists, and
-the Marbles round sat between them. Both survivors are now unordered against
-each other. (The FLOW melody engine, formerly the first of three entries here,
-is built — see "FLOW melody engine" under "Done".)
-
-### SHAPE + SMOOTH rework ⬜
-
-SHAPE has never satisfied its owner, and SMOOTH is touched in the same breath —
-the two together decide what the modulation lanes actually emit.
-
-One concrete thing the rework has to settle, found 2026-08-13, **narrowed by the
-FLOW melody engine on the same day and narrowed again on 2026-08-14**: **on a
-SAMPLER or BBD deck the melody pattern reaches the audio only through SHAPE's top
-quarter.** `_compute_raw` passes the pattern value as `shape_value`'s third
-argument (`lane.cpp:560`), and `waveforms.h:32` blends it in only above 0.75,
-weight `(shape - 0.75) * 4`. Below that the lane emits a plain LFO waveform and
-the pattern is computed and discarded. FORM, SONG, the phrase generator, the song
-ladder and VARIATION's pitch mutation all hang off that one blend — but only on
-the lanes that still reach it, which since the `melody-reachable` branch
-(`07d5b9d`) means SAMPLER and BBD decks, in STEP and in FLOW alike.
-
-**Three claims this entry used to make were falsified by that milestone and by
-the `melody-reachable` branch that followed it, and are corrected here rather
-than deleted — the rework is still planned, its premises have just changed:**
-
-- "reaches the audio only through SHAPE's top quarter" is now false **on a note
-  deck in either mode**, not only in FLOW: `_compute_raw` returns the phrase's
-  note directly under `_note_lane()` (`lane.cpp:556`) and never calls
-  `shape_value` at all. On that path SHAPE is inert on the melody — consistently
-  in both modes, which is what makes it a design question for the rework (what
-  SHAPE should mean for a note) rather than a mode asymmetry to reconcile.
-- "measured dead on 40/40 terrains in both modes" no longer holds:
-  `tests/test_param_impact.cpp` records `FORM_A` **alive in both modes** and no
-  longer lists it as mode-exclusive at all; `FORM_B` moves in both modes too and
-  is now filed as SAMPLE-BOUND there — mode-exclusive only in the two terrains
-  that gate happens to draw, not by mechanism. (`P_SONG_A`/`P_SONG_B` remain
-  measured-but-untraced there; see the FLOW melody engine entry under "Done".)
-- "a drone can never reach the melody at all" is likewise false now: a note
-  engine bypasses SHAPE in both modes, so a drone on one reaches the melody at
-  every knob position, in either mode. The cap that produced the original
-  claim — the terrain generator's `P_SHAPE_A/B = {0, .25}` drone span, which
-  kept a drone below the 0.75 blend threshold — is not a live constraint any
-  more: that generator was deleted on 2026-08-14 and nothing replaces it, so
-  SHAPE is whatever the patch says. Its by-ear rationale, and the coupling
-  finding attached to it, are in `docs/attic/taste-by-ear-notes.md` §1.3. What
-  survives is the mechanism, not the cap: below SHAPE 0.75 a SAMPLER or BBD
-  deck still emits the waveform bank rather than the phrase.
-
-Whether the blend that remains is a defect or the intended reading of "SHAPE
-morphs sine → tri → ramp → pulse → S&H" is exactly the question this rework
-answers, now for the four texture lanes and for SAMPLER/BBD PITCH lanes, which
-are what is left on that path. The second half this entry used to carry — that
-the two modes disagree about what SHAPE does to a melodic lane, and the rework
-has to decide that deliberately — is gone: `docs/engine-map.md` §7 records it as
-settled. The phrase plays at every SHAPE on a note deck in both modes, so the
-rework inherits one behaviour there, not two.
-
-**Spec written 2026-08-13:**
-`docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md`. It answers the
-question above by ownership rather than by merging the two controls: the melodic
-lane emits its phrase in STEP as it already does in FLOW, SHAPE keeps the four
-texture lanes, SMOOTH becomes interval-relative, and DRIFT stops writing the
-axis. Two earlier drafts — both of which merged the controls — were rejected by
-review; the spec's revision note carries why, and its §7 records what it
-deliberately does not deliver. **The first of those four deliverables shipped
-ahead of the rest** on branch `feat/melody-reachable` (`07d5b9d`), under its own
-spec `docs/superpowers/specs/2026-08-14-melody-reachable-design.md`: the guard
-moved to `_note_lane()`, so a note deck emits its phrase in STEP as in FLOW while
-SAMPLER and BBD decks keep the waveform bank in both modes. Three deliverables
-remain, and SMOOTH's note-interval slew clamp (`lane.cpp:361`) is still guarded
-by `_flow_melody_on()` — the split that survives an equal step count, not the
-only place on the melody path that still splits on the mode, measured to open a
-0.2995 STEP/FLOW gap at SMOOTH 1.0, 2 Hz (map §1).
+The SHAPE/SMOOTH rework's SMOOTH half has shipped — see "SMOOTH becomes
+interval-relative" under "Done". Its SHAPE half was handed to the round below
+rather than delivered, per spec §5, so **the Marbles round is now the only
+entry left under "Planned" before M5k.**
 
 ### Marbles round — VARY as the character axis ⬜ (unscheduled)
 
