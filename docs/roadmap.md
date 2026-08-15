@@ -34,13 +34,14 @@ is actually built today, and what is still design-only.
   slew law is now `τ = smooth · TOP · interval` instead of absolute
   wall-clock seconds, `kSmoothTopTexture = 0.5` was chosen by ear, the
   factory SMOOTH defaults are converted to preserve the shipped sound, and
-  four gates — one of them, G5, restoring NaN-freedom coverage over a
+  five gates — one of them, G5, restoring NaN-freedom coverage over a
   populated patch set that the flow/Glow removal below took and nothing had
   replaced — back the change. SHAPE stays out, handed to the Marbles round.
   Spec `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md`,
   plan `docs/superpowers/plans/2026-08-14-smooth-interval-relative.md`,
-  branch `2026-08-14-smooth-interval-relative`, not yet merged to `main` or
-  released — see "SMOOTH becomes interval-relative" under "Done"); before
+  branch `2026-08-14-smooth-interval-relative`, **merged to `main`
+  2026-08-15** (`4493d67`), not yet released — see "SMOOTH becomes
+  interval-relative" under "Done"); before
   that, 2026-08-14 (**the flow layer and Glow are struck**:
   `engine/flow/`, the `Glow` VCV module, its faceplate, five render
   scenarios and eighteen tests are deleted — 65 files, −42 754 lines. Both
@@ -2436,8 +2437,9 @@ the old one marked superseded.
 
 Spec: `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md`, plan
 `docs/superpowers/plans/2026-08-14-smooth-interval-relative.md`. Built on
-branch `2026-08-14-smooth-interval-relative`, **not yet merged to `main` or
-released.** One render hash, `wave_formant_sweep`, moved under the new law
+branch `2026-08-14-smooth-interval-relative`, **merged to `main` on 2026-08-15
+(`4493d67`, twelve commits) and not yet released.** One render hash,
+`wave_formant_sweep`, moved under the new law
 (`set_smooth` 0.65); Bastian heard both renders and accepted the new one on
 2026-08-15, and it was re-cut then. `ctrl_identity` is untouched
 (`set_smooth` 0.0 is passthrough under both laws) — a check, not a
