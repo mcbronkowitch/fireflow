@@ -46,6 +46,10 @@ public:
     static constexpr float kDetuneCeilCt = 105.f;
     static constexpr int   kMaxChord     = 4;
     static constexpr float kStabSpreadS  = 0.008f;   // stab humanization (ear-tunable)
+    // How hard the WEAKEST note of a full pattern strikes, relative to the
+    // rank-0 anchor. By ear, first try, deliberately equal to
+    // kAccentDecFloor so a listening session says which half wants to differ.
+    static constexpr float kAccentVelFloor = 0.3f;
 
     static_assert(kMaxChord == ChordBuilder::kMaxNotes,
                   "chord slot count must match the builder");

@@ -10,7 +10,9 @@
 #include <doctest/doctest.h>
 #include "mod/lane.h"
 #include "parts/part.h"
+#include "synth_engine_contract.h"   // spky_contract::fresh / render_l
 #include <algorithm>
+#include <cmath>
 #include <set>
 #include <vector>
 
@@ -156,4 +158,56 @@ TEST_CASE("accent: a STEP deck pushes its note accent into the active engine") {
         flow_max = std::max(flow_max, part.synth().accent_for_test());
     }
     CHECK(flow_max == doctest::Approx(0.f));
+}
+
+namespace {
+
+// Peak of one struck note, in STEP, at a given accent. Everything except the
+// accent is identical between calls, so the ratio of two of these isolates
+// exactly what the accent did.
+template <class EngineT>
+float note_peak(uint32_t seed, float accent, int n_chord = 1) {
+    EngineT e;
+    spky_contract::fresh(e, seed);
+    e.set_flow(false);                       // STEP: struck notes, no drone
+    e.set_accent(accent);
+    const float chord[3] = {0.35f, 0.5f, 0.65f};
+    e.trigger_chord(chord, n_chord);
+    std::vector<float> buf = spky_contract::render_l(e, 48000);
+    float pk = 0.f;
+    for (float v : buf) pk = std::max(pk, std::fabs(v));
+    return pk;
+}
+
+}  // namespace
+
+TEST_CASE("accent G4: the accent scales a struck note down to the VEL floor") {
+    const float loud = note_peak<SynthEngine>(99u, 0.f);
+    const float soft = note_peak<SynthEngine>(99u, 1.f);
+    REQUIRE(loud > 1e-4f);                   // the reference note actually sounded
+    CHECK(soft / loud
+          == doctest::Approx(SynthEngine::kAccentVelFloor).epsilon(0.05));
+}
+
+TEST_CASE("accent G4: WAVE gets the same scaling as SYNTH") {
+    // Both are VoiceT instantiations, so this is cheap; it exists so that a
+    // future engine added to the SynthEngineT family cannot quietly miss the
+    // accent while SYNTH keeps the gate green.
+    const float loud = note_peak<WaveEngine>(99u, 0.f);
+    const float soft = note_peak<WaveEngine>(99u, 1.f);
+    REQUIRE(loud > 1e-4f);
+    CHECK(soft / loud
+          == doctest::Approx(WaveEngine::kAccentVelFloor).epsilon(0.05));
+}
+
+TEST_CASE("accent G6: the accent multiplies onto the chord compensation") {
+    // If the accent REPLACED the 1/sqrt(n) equal-power compensation instead of
+    // composing with it, the chord's accent ratio would differ from the solo
+    // note's. That it does not is the whole claim.
+    const float solo = note_peak<SynthEngine>(99u, 1.f, 1)
+                     / note_peak<SynthEngine>(99u, 0.f, 1);
+    const float chord = note_peak<SynthEngine>(99u, 1.f, 3)
+                      / note_peak<SynthEngine>(99u, 0.f, 3);
+    REQUIRE(note_peak<SynthEngine>(99u, 0.f, 3) > 1e-4f);
+    CHECK(chord == doctest::Approx(solo).epsilon(0.05));
 }

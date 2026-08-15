@@ -215,7 +215,12 @@ void SynthEngineT<V>::_do_trigger(float pitch_norm, float vel, int chord_slot) {
     // bank, and it should do that with the chord that is being struck rather
     // than with the one the last control tick saw. No-op on VoiceT.
     _voices[pick].set_material_character(_material_char);
-    _voices[pick].set_vel(vel);
+    // The accent MULTIPLIES onto vel rather than replacing it: vel carries the
+    // 1/sqrt(n) equal-power chord compensation, which answers "how many notes
+    // are sounding", while the accent answers "how strong is this one". Two
+    // independent quantities, so they compose. At _accent == 0 this is exactly
+    // the value that shipped before.
+    _voices[pick].set_vel(vel * (1.f - (1.f - kAccentVelFloor) * _accent));
     _voices[pick].trigger(pitch_to_hz(pitch_norm));   // pitch LATCHED here
 }
 
