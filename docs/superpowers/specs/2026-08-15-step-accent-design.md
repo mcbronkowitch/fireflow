@@ -182,9 +182,8 @@ question with a separate answer, and it is out of scope here.
 
 ## 8. Gates
 
-Each gate but G3 is to be proven red once before it is trusted
-(`fireflow-tests-must-be-able-to-fail`); G3 is the one exception, and its
-bullet below says why.
+Each one is to be proven red once before it is trusted
+(`fireflow-tests-must-be-able-to-fail`).
 
 - **G1 — the anchor is loud.** At `k == 1`, every note that fires reports
   `a == 0`. Swept over STEPS 4/8/16 and the four seeds. This does **not**
@@ -208,12 +207,17 @@ bullet below says why.
   case that does.
 - **G3 — FLOW is silent about it.** A note deck in FLOW reports `a == 0` for
   the whole run, and a deck driven STEP → FLOW → STEP reports 0 throughout the
-  FLOW leg. **This one cannot be proven red.** `_note_accent` is written only
-  by `_start_note` (STEP-only, §3), and `set_step()` zeroes it on every mode
-  change before `note_accent()`'s guard is ever consulted — no reachable
-  sequence can violate the claim above, guard or not, so no mutation of the
-  guard can redden this gate. Kept anyway as a statement of the guarantee, not
-  as insurance against a bug the code can still have.
+  FLOW leg. The property is redundantly protected, not unprovable:
+  `_note_accent` is written only by `_start_note` (STEP-only, §3), and
+  `set_step()` zeroes it on every mode change before `note_accent()`'s guard
+  is ever consulted — each of the two mechanisms independently holds the
+  line, so no *single* mutation of guard-or-reset can redden this gate; only
+  removing both at once does — measured: dropping `note_accent()`'s guard
+  (`lane.h:126`) and `set_step()`'s `_note_accent = 0.f` reset
+  (`lane.cpp:211`) together produces `CHECK_FALSE( leaked ) is NOT correct!
+  values: CHECK_FALSE( true )`, a stale STEP accent leaking into the FLOW
+  leg; reverted, the case passes again. That is why Step 2's single-mutation
+  round did not redden it — a different claim from "cannot be proven red."
 - **G4 — DENSE is the intensity.** The spread of per-note peak levels at
   DENSE 1.0 is strictly greater than at the DENSE value that yields `k == 1`,
   measured on rendered audio rather than on the accent value. This is the gate
