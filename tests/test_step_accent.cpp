@@ -233,3 +233,50 @@ TEST_CASE("accent G6: at accent 0, the chord still carries its equal-power compe
     REQUIRE(solo > 1e-4f);
     CHECK(chord / solo < kChordSoloRatioCeiling);
 }
+
+namespace {
+
+// Index of the last sample above 5 % of the note's own peak: a length measure
+// that does not depend on the envelope's exact shape. Returns -1 if the note
+// is still sounding when the buffer runs out, which the caller must reject --
+// a truncated note would make every comparison meaningless.
+template <class EngineT>
+int note_len_samples(uint32_t seed, float dec_knob, float accent) {
+    EngineT e;
+    spky_contract::fresh(e, seed);
+    e.set_cycle(0.25f);                  // keeps even DEC 1 inside the buffer
+    e.set_flow(false);
+    e.set_decay(dec_knob);
+    e.set_accent(accent);
+    const float chord[1] = {0.5f};
+    e.trigger_chord(chord, 1);
+    std::vector<float> buf = spky_contract::render_l(e, 48000 * 6);
+    float pk = 0.f;
+    for (float v : buf) pk = std::max(pk, std::fabs(v));
+    if (pk <= 1e-5f) return -1;
+    const float thr = pk * 0.05f;
+    int last = 0;
+    for (int i = 0; i < static_cast<int>(buf.size()); ++i)
+        if (std::fabs(buf[i]) > thr) last = i;
+    return (last >= static_cast<int>(buf.size()) - 2) ? -1 : last;
+}
+
+}  // namespace
+
+TEST_CASE("accent G5: the DEC accent is inert at DEC 0 and real at DEC 1") {
+    // Half one: at DEC 0 there is no room to take away, so the accent must not
+    // change the note at all. A gate asserting only half two would pass on an
+    // implementation that ignores the knob entirely.
+    const int flat_loud = note_len_samples<SynthEngine>(99u, 0.f, 0.f);
+    const int flat_soft = note_len_samples<SynthEngine>(99u, 0.f, 1.f);
+    REQUIRE(flat_loud > 0);
+    CHECK(flat_loud == flat_soft);
+
+    // Half two: at DEC 1 the weakest note is measurably shorter.
+    const int full = note_len_samples<SynthEngine>(99u, 1.f, 0.f);
+    const int cut  = note_len_samples<SynthEngine>(99u, 1.f, 1.f);
+    REQUIRE(full > 0);
+    REQUIRE(cut > 0);
+    CHECK(cut < full);
+    CHECK(static_cast<float>(cut) / static_cast<float>(full) < 0.6f);
+}

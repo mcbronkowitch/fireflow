@@ -129,10 +129,22 @@ void BodyVoice::set_material_character(float c) { _material_char = clampf(c, -1.
 
 // ATTACK is exciter length, DECAY is damping (spec §5).
 void BodyVoice::set_env_times(float attack_s, float decay_s) {
-    _exciter.set_length(attack_s);
+    _attack_s = attack_s;
+    _decay_s  = decay_s;
+    _env_seen = true;
+    _apply_env();
+}
+
+void BodyVoice::set_decay_scale(float s) {
+    _decay_scale = clampf(s, 0.f, 1.f);
+    if (_env_seen) _apply_env();
+}
+
+void BodyVoice::_apply_env() {
+    _exciter.set_length(_attack_s);
     // Longer decay = less damping = longer ring. Curve is tuning material.
-    const float d = decay_s / (decay_s + 1.f);
-    _damping = d;
+    const float d_s = _decay_s * _decay_scale;
+    _damping = d_s / (d_s + 1.f);
 }
 
 // RESO is the exciter character, not filter resonance.

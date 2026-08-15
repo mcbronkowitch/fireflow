@@ -221,6 +221,12 @@ void SynthEngineT<V>::_do_trigger(float pitch_norm, float vel, int chord_slot) {
     // independent quantities, so they compose. At _accent == 0 this is exactly
     // the value that shipped before.
     _voices[pick].set_vel(vel * (1.f - (1.f - kAccentVelFloor) * _accent));
+    // The room the accent has to shorten a note is the room the DEC knob
+    // dialled in: at DEC 0 the term vanishes and the envelope is untouchable,
+    // at DEC 1 the weakest note rings for kAccentDecFloor of the set time.
+    // The knob stays the ceiling -- the accent only ever subtracts.
+    _voices[pick].set_decay_scale(
+        1.f - (1.f - kAccentDecFloor) * _accent * _decay_n);
     _voices[pick].trigger(pitch_to_hz(pitch_norm));   // pitch LATCHED here
 }
 
@@ -392,7 +398,10 @@ void SynthEngineT<V>::set_attack(float n) {
 
 template <class V>
 void SynthEngineT<V>::set_decay(float n) {
-    _decay_ratio = 0.1f * std::pow(80.f, clampf(n, 0.f, 1.f));
+    // The knob position is kept beside the ratio because the accent scales
+    // with it, and 0.1 * 80^n is not worth inverting.
+    _decay_n = clampf(n, 0.f, 1.f);
+    _decay_ratio = 0.1f * std::pow(80.f, _decay_n);
 }
 
 template <class V>

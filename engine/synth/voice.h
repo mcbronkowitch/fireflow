@@ -37,6 +37,10 @@ public:
 
     // control-rate parameter feeds
     void set_env_times(float attack_s, float decay_s);
+    // Per-note decay scale, latched at trigger time by SynthEngineT. Kept
+    // separate from set_env_times because that one is re-pushed to EVERY voice
+    // on EVERY control tick and would otherwise overwrite it within a block.
+    void set_decay_scale(float s);
     void set_morph(float m);
     void set_detune_cents(float max_ct);  // split +/- max_ct/2 across osc A/B
     void set_sub_level(float n);
@@ -82,6 +86,9 @@ private:
     float _gain_r = 0.70710678f;
     float _vel = 1.f;
     float _vel_target = 1.f;
+    float _attack_s = 0.f, _decay_s = 0.f;   // last times pushed, unscaled
+    float _decay_scale = 1.f;
+    bool  _env_seen = false;                 // has set_env_times run yet?
 
     // slow deterministic drift (control-rate)
     float _drift_pan_phase = 0.f;

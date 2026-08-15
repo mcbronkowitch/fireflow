@@ -50,6 +50,9 @@ public:
     // rank-0 anchor. By ear, first try, deliberately equal to
     // kAccentDecFloor so a listening session says which half wants to differ.
     static constexpr float kAccentVelFloor = 0.3f;
+    // How long the WEAKEST note of a full pattern rings, relative to the DEC
+    // knob's setting, at DEC fully up. By ear, first try.
+    static constexpr float kAccentDecFloor = 0.3f;
 
     static_assert(kMaxChord == ChordBuilder::kMaxNotes,
                   "chord slot count must match the builder");
@@ -174,6 +177,7 @@ private:
     float _cycle_s = 1.f;
     float _attack_ratio = 0.02f;   // boot: 2 % of cycle (spec)
     float _decay_ratio  = 1.5f;    // boot: 1.5 x cycle (spec)
+    float _decay_n = 0.f;          // DEC knob position; the accent's room
     float _accent = 0.f;           // STEP accent of the note being struck
     float _resonance = 0.15f;      // boot (spec)
     float _sub_level = 0.3f;       // boot (spec)
@@ -243,6 +247,7 @@ struct VoiceCountProbe {
     void set_pitch_hz(float /*freq_hz*/) {}
     void set_vel(float /*v*/) {}
     void set_env_times(float /*attack_s*/, float /*decay_s*/) {}
+    void set_decay_scale(float /*s*/) {}
     void set_morph(float /*m*/) {}
     void set_detune_cents(float /*max_ct*/) {}
     void set_sub_level(float /*n*/) {}
