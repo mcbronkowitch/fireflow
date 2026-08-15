@@ -70,11 +70,21 @@ _note_accent = (L > 1) ? rank_of_slot[slot % L] / (L - 1) : 0
 and exposes it as `note_accent()`. `a == 0` is the anchor and the strongest
 note; `a == 1` is the last note DENSE reveals.
 
-`_note_accent` initialises to 0 and is reset alongside `_note_age` and
-`_note_hold` on STEP entry (`lane.cpp:207`), so a deck that has never been in
-STEP, and a deck that just left it, both report 0. **FLOW therefore reports a
-constant 0 without a mode test anywhere downstream** — the STEP-only scope is a
-property of the single writer, not a condition sprinkled across the consumers.
+`_note_accent` initialises to 0 and is cleared on every mode change alongside
+`_cur_step` and `_frozen` (`lane.cpp:210`), and the accessor is additionally
+`_step_mode`-guarded:
+
+```
+float note_accent() const { return _step_mode ? _note_accent : 0.f; }
+```
+
+The guard is not redundant with the reset. Lanes fire in FLOW too, and
+`Part::_fire_trigger()` runs on those fires — without it, a deck leaving STEP
+would push the last STEP note's accent into its drone until the reset path was
+audited and found correct. One mode test, at the one place that cannot be
+bypassed, is cheaper than trusting every reset path forever. **FLOW is then
+constant 0 with no mode test in any consumer** — the STEP-only scope is a
+property of the source, not a condition sprinkled across the engines.
 
 ## 4. Delivery
 
@@ -195,10 +205,15 @@ Each one is to be proven red once before it is trusted
 
 ## 9. Consequences
 
-- **The render hashes move.** Any scenario with a STEP note deck at DENSE > 0
-  changes, so `tests/check_render_hash.cmake` is re-baselined in the same
-  round. Per house rule these are sanity checks, not identity gates
-  (`fireflow-bit-exactness-not-required`), but they are not self-updating.
+- **The render hashes are expected NOT to move.** An earlier draft of this
+  section assumed the opposite. Both hashed scenarios run in FLOW, where the
+  accent is 0 by §3: `wave_formant_sweep.json:10` sets `set_step` with
+  `"flag": false` explicitly, `ctrl_identity.json` carries no `set_step` action
+  at all, and `ModLane::_step_mode` boots false (`lane.h:297`). So
+  `ctrl_identity` and `wave_formant_sweep` should pass untouched — and if
+  either moves, that is a **finding**, not a baseline to bump: it would mean
+  the accent is reaching a FLOW deck. The re-baseline procedure in
+  `tests/check_render_hash.cmake` is not expected to be needed here.
 - **No RNG draw is added or moved.** The accent reads a table the groove
   generator already filled. Determinism at a given seed is untouched, and the
   COLOR-0 short-circuit that byte-identity depends on (`fireflow-gotchas`) is
