@@ -370,22 +370,130 @@ def test_sd_cutout_is_clear():
     check(y1 <= hw.KEEP_BOT + 1e-9, "SD cutout crosses the bottom rail")
 
 
-def test_zone_wash_follows_the_deck_silhouette():
-    """The A/B wash is a smoothed polygon along the deck, not a vertical at
-    ZONE_A and not a chain of raw circles. The edge stays west of the centre
-    wells and still moves with the silhouette (not a straight slab)."""
-    edge = hw.wash_edge_xs()
-    xs = [x for _y, x in edge]
-    centre_min = hw.centre_well_left()
-    check(max(xs) < centre_min,
-          f"wash edge reaches {max(xs):.2f}, centre wells start {centre_min:.2f}")
-    check(min(xs) >= hw.SLAB_X - 1e-9, "wash edge dropped below the slab floor")
-    check(max(xs) - min(xs) > 8.0,
-          f"wash edge is too flat ({max(xs) - min(xs):.1f} mm) — smoothing ate the silhouette")
+def test_plate_paints_survive_nanosvg():
+    """The plate is the 15 Aug design round, variant 2a: three tinted zones,
+    an airflow/ember print, a baked fade. Rack parses the panel with NanoSVG,
+    which silently drops <mask>, <pattern> and <filter> -- a design that
+    leans on any of them looks right in a browser and wrong on the module,
+    which is exactly how it would ship unnoticed."""
     svg = hw.svg()
-    check(f'<polygon fill="{hw.KNOB_DISC_A}"' in svg, "left wash polygon is missing")
-    check(f'<polygon fill="{hw.KNOB_DISC_B}"' in svg, "right wash polygon is missing")
-    check(svg.count("<polygon") == 2, f"expected 2 wash polygons, got {svg.count('<polygon')}")
+    for zone in ("zoneA", "zoneC", "zoneB"):
+        check(f'fill="url(#hw-{zone})"' in svg, f"plate zone {zone} is missing")
+    check("<mask" not in svg and "mask=" not in svg,
+          "an SVG mask is back -- NanoSVG drops it, so the fade must be baked")
+    check("<pattern" not in svg, "a <pattern> is in the plate -- NanoSVG drops it")
+    check("<filter" not in svg and "feTurbulence" not in svg,
+          "a <filter> is in the plate -- NanoSVG drops it")
+    check("rgba(" not in svg,
+          "rgba() is in the plate -- NanoSVG's colour parser is not a browser's")
+    # Measured, not assumed: with objectBoundingBox gradients Rack painted
+    # the fadeA overlay opaque across the whole of deck A and swallowed the
+    # airflow print, while the mirrored deck B rendered correctly. The
+    # browser preview showed both halves. Every gradient stays in mm.
+    n_grad = svg.count("<linearGradient")
+    check(n_grad == 8, f"expected 8 plate gradients, got {n_grad}")
+    check(svg.count('gradientUnits="userSpaceOnUse"') == n_grad,
+          "a gradient is in bounding-box units -- NanoSVG and the browser "
+          "then disagree about the plate")
+    check(f'stroke-opacity="{hw.SILHOUETTE_OPACITY}"' in svg,
+          "the airflow/ember print is missing")
+    check(svg.count('d="M-14.0,8.7C') == 1, "the airflow paths are missing")
+    check(svg.count('transform="translate(304.800,0) scale(-1,1)"') == 1,
+          "the ember half is not the mirrored airflow artwork")
+    for fade in ("fadeA", "fadeB", "seamL", "seamR"):
+        check(svg.count(f'fill="url(#hw-{fade})"') == 1,
+              f"the baked {fade} overlay is missing")
+
+
+def test_group_raster_closes():
+    """The frames sit on ONE raster and the arithmetic has to close: 3 mm of
+    air between any two boxes, a shared deck edge at 120 mm, and deck B is
+    deck A mirrored. Hand-placed frames drift; a cut list cannot."""
+    boxes = hw.BOXES
+    check(len(boxes) == 24, f"expected 24 group frames, got {len(boxes)}")
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1:]:
+            ox = min(a.x + a.w, b.x + b.w) - max(a.x, b.x)
+            oy = min(a.y + a.h, b.y + b.h) - max(a.y, b.y)
+            tag = f"{a.n}/{a.side} and {b.n}/{b.side}"
+            check(ox <= 1e-9 or oy <= 1e-9, f"{tag} overlap")
+            if oy > 1e-9:
+                check(-ox >= hw.BOX_GAP - 1e-9, f"{tag} are only {-ox:.2f} mm apart")
+            elif ox > 1e-9:
+                check(-oy >= hw.BOX_GAP - 1e-9, f"{tag} are only {-oy:.2f} mm apart")
+    for y, h, x0, _cuts, names_a, _names_b, _centre in hw.GROUP_ROWS:
+        row = [b for b in boxes if abs(b.y - y) < 1e-9]
+        check(len(row) == 2 * len(names_a) + 1, f"row y={y} has {len(row)} boxes")
+        for b in row:
+            check(abs(b.h - h) < 1e-9, f"{b.n}/{b.side} is not row height {h}")
+        left = sorted((b for b in row if b.side == "A"), key=lambda b: b.x)
+        right = sorted((b for b in row if b.side == "B"), key=lambda b: b.x)
+        check(abs(left[0].x - x0) < 1e-9,
+              f"row y={y} does not start at {x0} (got {left[0].x})")
+        check(abs(left[-1].x + left[-1].w - hw.DECK_EDGE) < 1e-9,
+              f"row y={y} does not end on the deck edge {hw.DECK_EDGE}")
+        for p, q in zip(left, reversed(right)):
+            check(abs((hw.W - (q.x + q.w)) - p.x) < 1e-9,
+                  f"{p.n}: deck B frame is not deck A mirrored")
+            check(abs(p.w - q.w) < 1e-9, f"{p.n}: mirrored frame width differs")
+        centre = [b for b in row if b.side == "C"]
+        check(abs(centre[0].x - hw.CENTRE_L) < 1e-9, "centre column moved")
+        check(abs(centre[0].x + centre[0].w - (hw.W - hw.CENTRE_L)) < 1e-9,
+              "centre column is not symmetric")
+    check(len({b.idx for b in boxes}) == len(hw.GROUP_ORDER),
+          "group legend numbering is not one number per group name")
+
+
+def _rect_hits_circle(x0, x1, y0, y1, cx, cy, r):
+    dx = max(x0 - cx, 0.0, cx - x1)
+    dy = max(y0 - cy, 0.0, cy - y1)
+    return (dx * dx + dy * dy) ** 0.5 < r - 1e-6
+
+
+def test_legends_are_not_buried_by_rack_widgets():
+    """A Rack widget is a THIRD radius, next to the plate body and the layout
+    clearance circle, and it is the one that hides lettering. This bit for
+    real: the jack-row legends sat at the frame's top edge, 111.15 mm, which
+    the SVG showed clear of a 6.2 mm jack body -- and Rack's 8.03 mm PJ301M
+    swallowed every one of them. The whole run is checked, not the anchor:
+    the collision was at the tail of "13 MOD A", not under its first glyph."""
+    for (x, y, size, spacing, col, anchor, txt) in hw.TEXTS:
+        x0, x1, ytop, ybase = hw.text_run(x, y, size, spacing, anchor, txt)
+        for c in hw.ALL_HW:
+            r = hw.RACK_R[hw.hw_class(c.enum)]
+            check(not _rect_hits_circle(x0, x1, ytop, ybase, c.x, c.y, r),
+                  f"lettering {txt!r} at ({x:.1f},{y:.1f}) is under "
+                  f"{c.enum}'s Rack widget")
+
+
+def test_bodies_and_captions_sit_inside_their_frame():
+    """Variant 2a draws the frames against the REAL bodies (12 mm and 8.8 mm
+    pots, 6.2 mm jacks), not the finger-clearance circles the layout is
+    spaced on -- that is where its air between the boxes comes from. So a
+    body or a caption crossing its own frame is the one way this raster can
+    go wrong, and reading the SVG will not show it."""
+    loose = []
+    for c in hw.ALL_HW:
+        b = hw.box_of(c)
+        if b is None:
+            loose.append(c.enum)
+            continue
+        r = hw.body_r(c)
+        check(c.x - r >= b.x - 1e-9 and c.x + r <= b.x + b.w + 1e-9 and
+              c.y - r >= b.y - 1e-9 and c.y + r <= b.y + b.h + 1e-9,
+              f"{c.enum} ({r} mm body) pokes out of frame {b.n}/{b.side}")
+        if not c.label:
+            continue
+        lx, ly = hw.hw_label(c)[:2]
+        check(b.x <= lx <= b.x + b.w and b.y <= ly <= b.y + b.h,
+              f"caption {c.enum} at ({lx:.1f},{ly:.1f}) is outside {b.n}/{b.side}")
+    check(sorted(loose) == ["MODBTN", "SHIFTBTN"],
+          f"controls outside the frame raster: {sorted(loose)}")
+    # The SD slot is a body on the jack row like any other.
+    sd = [b for b in hw.BOXES if b.n == "CLOCK"][0]
+    check(sd.x <= hw.SD_X - hw.SD_W / 2 and hw.SD_X + hw.SD_W / 2 <= sd.x + sd.w
+          and sd.y <= hw.SD_Y - hw.SD_H / 2 and hw.SD_Y + hw.SD_H / 2 <= sd.y + sd.h,
+          "the SD slot pokes out of the CLOCK frame")
 
 
 def test_sd_cutout_is_drawn():
@@ -416,23 +524,26 @@ def test_drawing_geometry():
     check(abs(by["REV_TONE"].y - 97.00) < 1e-9, "TONE did not follow DECY")
     check(abs(by["SHIFTBTN"].y - hw.JACK_Y) < 1e-9, "SHIFT is not on the jack row")
     check(abs(by["MODBTN"].y - hw.JACK_Y) < 1e-9, "MOD is not on the jack row")
-    check(not hw.TEXTS, "title/legend TEXTS should be empty")
+    # Lettering Rack has to draw itself: brand block plus two rows per frame
+    # (index, name). Rack does not render SVG text, so an empty TEXTS means a
+    # plate whose legends exist in the preview and nowhere else.
+    check(len(hw.TEXTS) == len(hw.BRAND_TEXTS) + 2 * len(hw.BOXES),
+          f"TEXTS carries {len(hw.TEXTS)} rows, not brand + one pair per frame")
+    words = {t[6] for t in hw.TEXTS}
+    for w in ("FIREFLOW", "DECK A", "DECK B", "60 HP", "SEQUENCE", "ROOM"):
+        check(w in words, f"{w!r} is not in the panel lettering")
     lx, ly = hw.hw_label(by["IN_L"])[:2]
     check(ly > by["IN_L"].y, "IN L caption is not under the jack")
     svg = hw.svg()
     check('y1="9.00"' not in svg and 'y1="119.50"' not in svg,
           "rail keep-out dashes are still drawn")
-    check('y="0"' in svg or 'y="0.000"' in svg, "zone wash does not start at the edge")
-    check(f'fill="{hw.HW_KNOB}"' not in svg, "black knob discs are back")
-    check("<polygon" in svg, "smoothed silhouette wash is missing")
-    check(f'width="{hw.mm(hw.ZONE_A)}"' not in svg, "hard ZONE_A wash rect is back")
+    check('y="0"' in svg or 'y="0.000"' in svg, "the plate zones do not start at the edge")
     for c in hw.HW_PARAMS:
         if hw.hw_class(c.enum) == "P":
             continue
-        fill = hw.knob_disc_fill(c.x)
-        needle = (f'cx="{hw.mm(c.x)}" cy="{hw.mm(c.y)}" r="{hw.mm(c.r)}" '
-                  f'fill="{fill}"')
-        check(needle in svg, f"{c.enum} disc is not the zone colour ({fill})")
+        needle = (f'cx="{hw.mm(c.x)}" cy="{hw.mm(c.y)}" r="{hw.mm(hw.body_r(c))}" '
+                  f'fill="{hw.HW_WELL}"')
+        check(needle in svg, f"{c.enum} is not drawn as a mounting hole")
     for c in hw.HW_PARAMS:
         if c.label:
             check(len(c.label) <= 4, f"knob caption {c.enum}={c.label!r} is over 4 chars")
