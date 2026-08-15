@@ -136,14 +136,14 @@ _voices[pick].set_vel(vel * (1.f - (1.f - kAccentVelFloor) * _accent));
 pattern strikes at 30 % of the anchor's amplitude.
 
 It **multiplies onto** the existing `vel`, which today carries the equal-power
-chord compensation `1/sqrt(n)` (`synth_engine.cpp:164`, `:258`). The two are
+chord compensation `1/sqrt(n)` (`synth_engine.cpp:164`, `:273`). The two are
 independent quantities — how many notes are sounding at once, and how strong
 this note is meant to be — and composing them is correct. At `a == 0` the
 product is the value that ships today, which is what makes the "chord
 compensation unchanged" gate in §8 possible.
 
 **The latch survives.** The per-control-tick refresh `_voices[v].set_vel(_vel_now)`
-(`synth_engine.cpp:355`) is gated on `_sustaining[v]`, and in STEP no voice is
+(`synth_engine.cpp:370`) is gated on `_sustaining[v]`, and in STEP no voice is
 sustaining: `_do_trigger` sets `_sustaining[pick] = false` unconditionally in
 its non-flow branch (`:211`), the sole writer of `true` is `:207` under
 `if (_flow)` in that same function — the two auto-drone paths (`:120`, `:133`)
@@ -179,17 +179,17 @@ damping curve is unchanged, long-standing, by-ear design.
 Two things this needs that do not exist today:
 
 - **The engine must keep the knob position.** `set_decay()` stores only
-  `_decay_ratio = 0.1 · 80^n` (`synth_engine.cpp:400`) and the mapping is not
+  `_decay_ratio = 0.1 · 80^n` (`synth_engine.cpp:415`) and the mapping is not
   worth inverting. Store `_decay_n` beside it.
 - **The voice must latch the scale.** `set_env_times(attack_s, decay_s)` is
-  pushed to *every* voice on *every* control tick (`:299`), so a decay written
+  pushed to *every* voice on *every* control tick (`:314`), so a decay written
   at trigger time is overwritten within a control block. Add
   `V::set_decay_scale(float)`, set in `_do_trigger` next to `set_vel`, applied
   where the voice consumes `decay_s`. Unlike VEL, the `_sustaining` closure of
   §5 does not protect this one — the refresh is unconditional.
 
 Note the useful side effect of `decay_s` already being cycle-relative
-(`decay_s = _decay_ratio · _cycle_s`, `:287`): the accent inherits that and
+(`decay_s = _decay_ratio · _cycle_s`, `:302`): the accent inherits that and
 stays correct across tempo.
 
 ## 7. Engine scope

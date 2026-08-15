@@ -375,9 +375,14 @@ TEST_CASE("accent G5: the DEC accent is inert at DEC 0 and real at DEC 1") {
     // Bound tied to the named constant, not to a free-standing literal (the
     // plan's Global Constraints forbid a gate depending on the by-ear 0.3):
     // same shape as G4 above. Strictly stronger than the `< 0.6f` bound this
-    // replaced -- measured margin at the shipped kAccentDecFloor (0.3082) is
-    // 0.008 against this 10% window, whereas the old fixed bound only went
-    // red once kAccentDecFloor was raised past 0.60 (measured: 0.30 -> 0.3082
+    // replaced -- doctest's Approx compares against
+    // epsilon * (scale + max(|lhs|, |rhs|)), and scale defaults to 1.0, so
+    // epsilon(0.10) here is a tolerance of about 0.10 * (1 + 0.3082) ~= 0.131
+    // absolute, roughly four times looser than a literal 10% band around
+    // 0.3082 (~0.031) would be. Measured margin at the shipped
+    // kAccentDecFloor (0.3082) is 0.008 against that ~0.131 tolerance,
+    // whereas the old fixed bound only went red once kAccentDecFloor was
+    // raised past 0.60 (measured: 0.30 -> 0.3082
     // PASS, 0.50 -> 0.5077 PASS, 0.55 -> 0.5562 PASS, 0.60 -> 0.6065 RED,
     // 0.70 -> 0.7053 RED against `< 0.6f`), so a by-ear retune in that gap
     // could have moved past 0.6 without this test ever seeing it.
