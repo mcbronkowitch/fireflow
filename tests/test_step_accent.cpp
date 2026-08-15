@@ -200,14 +200,36 @@ TEST_CASE("accent G4: WAVE gets the same scaling as SYNTH") {
           == doctest::Approx(WaveEngine::kAccentVelFloor).epsilon(0.05));
 }
 
-TEST_CASE("accent G6: the accent multiplies onto the chord compensation") {
-    // If the accent REPLACED the 1/sqrt(n) equal-power compensation instead of
-    // composing with it, the chord's accent ratio would differ from the solo
-    // note's. That it does not is the whole claim.
-    const float solo = note_peak<SynthEngine>(99u, 1.f, 1)
-                     / note_peak<SynthEngine>(99u, 0.f, 1);
-    const float chord = note_peak<SynthEngine>(99u, 1.f, 3)
-                      / note_peak<SynthEngine>(99u, 0.f, 3);
-    REQUIRE(note_peak<SynthEngine>(99u, 0.f, 3) > 1e-4f);
-    CHECK(chord == doctest::Approx(solo).epsilon(0.05));
+TEST_CASE("accent G6: at accent 0, the chord still carries its equal-power compensation") {
+    // Spec G6 (docs/superpowers/specs/2026-08-15-step-accent-design.md section 8)
+    // is an ABSOLUTE-level claim: at accent == 0, a COLOR > 0 chord produces the
+    // level it produced before this task -- i.e. vel's 1/sqrt(n) equal-power
+    // compensation is still reaching the voice, not silently dropped by
+    // whatever the accent multiply landed next to it.
+    //
+    // An earlier draft of this gate compared the accent-1-to-accent-0 ratio at
+    // n==3 against the same ratio at n==1. That does NOT discriminate the
+    // claim above: at a FIXED n, vel's 1/sqrt(n) factor is common to the
+    // numerator and denominator of that ratio and cancels out of it whether it
+    // is present or not. A version of _do_trigger that DROPS the `vel *`
+    // multiply and REPLACES vel with the accent factor instead of composing
+    // with it passes that comparison unchanged -- proven by measurement, not
+    // argument (see the fix report for the exact numbers).
+    //
+    // This gate instead measures the chord/solo peak ratio directly, at
+    // accent 0, where the two implementations diverge. Measured on this
+    // machine: the correct code (vel * accent-factor) gives chord/solo ~=
+    // 1.565; the replace-bug (accent-factor only, vel dropped) gives
+    // chord/solo ~= 2.711 (~sqrt(3) times higher, because the bug hands every
+    // voice of a 3-note chord a vel of 1.0 where the correct code hands it
+    // 1/sqrt(3)). kChordSoloRatioCeiling sits strictly between the two. It is
+    // a regression bound on today's mix, not a physical constant -- a
+    // deliberate change to the chord voicing, the pan fan, or the gain
+    // staging could legitimately move the correct-code value and this ceiling
+    // would need re-measuring, same as any other by-ear bound in this suite.
+    constexpr float kChordSoloRatioCeiling = 2.0f;
+    const float solo  = note_peak<SynthEngine>(99u, 0.f, 1);
+    const float chord = note_peak<SynthEngine>(99u, 0.f, 3);
+    REQUIRE(solo > 1e-4f);
+    CHECK(chord / solo < kChordSoloRatioCeiling);
 }
