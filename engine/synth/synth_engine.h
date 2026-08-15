@@ -176,8 +176,20 @@ private:
 
     float _cycle_s = 1.f;
     float _attack_ratio = 0.02f;   // boot: 2 % of cycle (spec)
+    // _decay_ratio and _decay_n describe ONE knob (ratio = 0.1 * 80^n,
+    // set_decay()) and must move together. _decay_ratio keeps the exact
+    // literal 1.5f the spec calls for (boot: 1.5x cycle) rather than being
+    // derived from _decay_n, because 0.1 * 80^0.6179904 lands on ~1.5000001
+    // in float32, not bit-exact 1.5 -- deriving it would move any render
+    // hash from a scenario that never calls set_decay(). _decay_n is instead
+    // derived FROM the ratio, offline: 0.1 * 80^n == 1.5 <=> 80^n == 15
+    // <=> n == log(15)/log(80) == 0.6179903563. Before this fix _decay_n
+    // booted to 0.f while _decay_ratio booted to 1.5f -- two members
+    // describing one knob that disagreed at boot, which left the DEC half of
+    // the STEP accent (`_accent * _decay_n` in _do_trigger) silently inert
+    // until a host pushed DECAY at least once.
     float _decay_ratio  = 1.5f;    // boot: 1.5 x cycle (spec)
-    float _decay_n = 0.f;          // DEC knob position; the accent's room
+    float _decay_n = 0.6179903563f; // DEC knob position; the accent's room
     float _accent = 0.f;           // STEP accent of the note being struck
     float _resonance = 0.15f;      // boot (spec)
     float _sub_level = 0.3f;       // boot (spec)
