@@ -311,10 +311,11 @@ DECK_EDGE = 120.0                 # right edge of the last deck-A box
 CENTRE_L = 123.0                  # left edge of the centre column
 PLATE_EDGE = 8.0                  # outer edge of a full-width row
 
-# (y, h, first x, cuts, deck-A names, deck-B names, centre name)
+# The y/h pair in each row below is a SEED, not the drawn frame: it only
+# says which controls belong to the row. The frame that gets drawn is
+# derived in row_frames() from what the row actually prints.
+# (seed y, seed h, first x, cuts, deck-A names, deck-B names, centre name)
 GROUP_ROWS = [
-    # The status row starts at KEEP_TOP, not at 8: its legend straddles the
-    # box edge, and at y=8 the lettering would print under the rail.
     (9.00, 16.0, 28.00, [85.20],
      ["SEQUENCE", "CAPTURE"], ["SEQUENCE", "CAPTURE"], "GLOBAL"),
     (28.00, 38.2, PLATE_EDGE, [56.25],
@@ -332,8 +333,84 @@ GROUP_ORDER = ("SEQUENCE", "CAPTURE", "MOTION", "VOICE", "PITCH", "FLUX",
                "CLOCK", "OUT")
 
 
-JACK_ROW_Y = GROUP_ROWS[-1][0]
 LEGEND_SIZE, LEGEND_SPACING = 1.9, 0.5
+LEGEND_DY = 0.75                  # legend baseline below a frame's top edge
+LEGEND_LIFT = 0.80                # jack row: baseline ABOVE its top edge
+
+# The one free number in the whole vertical chain. Not a taste value: the
+# status row sits as high as its own legend is allowed to print, so that
+# legend's baseline lands exactly on the rail line.
+ROW1_TOP = KEEP_TOP - LEGEND_DY
+
+
+def body_r(c):
+    """Radius of the real component body, not the layout clearance circle."""
+    return BODY_R[hw_class(c.enum)]
+
+
+def _row_cells(row):
+    """(name, side, x, w) for every frame in a row, left to right."""
+    _y, _h, x0, cuts, names_a, names_b, centre = row
+    edges = [x0] + list(cuts) + [DECK_EDGE]
+
+    def span(i):
+        lo = edges[i] + (BOX_GAP / 2.0 if i else 0.0)
+        hi = edges[i + 1] - (BOX_GAP / 2.0 if i + 1 < len(names_a) else 0.0)
+        return lo, hi
+
+    cells = []
+    for i, n in enumerate(names_a):
+        lo, hi = span(i)
+        cells.append((n, "A", lo, hi - lo))
+    cells.append((centre, "C", CENTRE_L, W - 2 * CENTRE_L))
+    for i, n in enumerate(names_b):
+        lo, hi = span(i)
+        cells.append((n, "B", W - hi, hi - lo))
+    return cells
+
+
+def _row_ink(row):
+    """Top and bottom of everything a row PRINTS: real component bodies and
+    caption ink. hw_label() raises when a caption has nowhere clear to go --
+    that is by design and must stay loud, so it is not caught here."""
+    y0, h = row[0], row[1]
+    spans = [(x, x + w) for _n, _s, x, w in _row_cells(row)]
+    top = bot = None
+    for c in ALL_HW:
+        if not (y0 <= c.y <= y0 + h):
+            continue
+        if not any(x0 <= c.x <= x1 for x0, x1 in spans):
+            continue
+        r = body_r(c)
+        edges = [(c.y - r, c.y + r)]
+        if c.label:
+            _lx, ly, _anchor, size, _col = hw_label(c)
+            edges.append((ly - size * FONT_CAP, ly))
+        for a, b in edges:
+            top = a if top is None else min(top, a)
+            bot = b if bot is None else max(bot, b)
+    if top is None:
+        raise ValueError(f"group row seeded at y={y0} prints nothing")
+    return top, bot
+
+
+def row_frames():
+    """(y, h) per row. Every frame hugs its own ink with the SAME margin
+    above and below -- a frame whose contents sit high in it reads as a
+    mistake, and with captions below their controls that is what a fixed
+    row height produces. The rows are then chained by BOX_GAP, so the air
+    between them stays uniform and only ROW1_TOP is chosen."""
+    out, prev = [], None
+    for row in GROUP_ROWS:
+        t, b = _row_ink(row)
+        m = t - ROW1_TOP if prev is None else t - (prev + BOX_GAP)
+        out.append((t - m, (b + m) - (t - m)))
+        prev = b + m
+    return out
+
+
+ROW_FRAMES = row_frames()
+JACK_ROW_Y = ROW_FRAMES[-1][0]
 
 
 class Box:
@@ -356,7 +433,8 @@ class Box:
         up to y=109.99 and would bury a legend sitting at 111.15 -- visible
         in Rack, invisible in the SVG, where the jack body is only 6.2 mm.
         So that one row's legend rides just above its frame instead."""
-        return self.y - 0.80 if self.y == JACK_ROW_Y else self.y + 0.75
+        return (self.y - LEGEND_LIFT if self.y == JACK_ROW_Y
+                else self.y + LEGEND_DY)
 
     @property
     def legend_straddles(self):
@@ -366,26 +444,13 @@ class Box:
 def group_boxes():
     """The 24 drawing frames, left to right within each row."""
     out = []
-    for y, h, x0, cuts, names_a, names_b, centre in GROUP_ROWS:
-        edges = [x0] + list(cuts) + [DECK_EDGE]
-        for i, n in enumerate(names_a):
-            lo = edges[i] + (BOX_GAP / 2.0 if i else 0.0)
-            hi = edges[i + 1] - (BOX_GAP / 2.0 if i + 1 < len(names_a) else 0.0)
-            out.append(Box(n, "A", lo, y, hi - lo, h))
-        out.append(Box(centre, "C", CENTRE_L, y, W - 2 * CENTRE_L, h))
-        for i, n in enumerate(names_b):
-            lo = edges[i] + (BOX_GAP / 2.0 if i else 0.0)
-            hi = edges[i + 1] - (BOX_GAP / 2.0 if i + 1 < len(names_a) else 0.0)
-            out.append(Box(n, "B", W - hi, y, hi - lo, h))
+    for row, (y, h) in zip(GROUP_ROWS, ROW_FRAMES):
+        for n, side, x, w in _row_cells(row):
+            out.append(Box(n, side, x, y, w, h))
     return out
 
 
 BOXES = group_boxes()
-
-
-def body_r(c):
-    """Radius of the real component body, not the layout clearance circle."""
-    return BODY_R[hw_class(c.enum)]
 
 
 def box_of(c):

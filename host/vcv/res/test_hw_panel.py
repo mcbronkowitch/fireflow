@@ -421,7 +421,8 @@ def test_group_raster_closes():
                 check(-ox >= hw.BOX_GAP - 1e-9, f"{tag} are only {-ox:.2f} mm apart")
             elif ox > 1e-9:
                 check(-oy >= hw.BOX_GAP - 1e-9, f"{tag} are only {-oy:.2f} mm apart")
-    for y, h, x0, _cuts, names_a, _names_b, _centre in hw.GROUP_ROWS:
+    for (_sy, _sh, x0, _cuts, names_a, _nb, _c), (y, h) in zip(hw.GROUP_ROWS,
+                                                               hw.ROW_FRAMES):
         row = [b for b in boxes if abs(b.y - y) < 1e-9]
         check(len(row) == 2 * len(names_a) + 1, f"row y={y} has {len(row)} boxes")
         for b in row:
@@ -442,6 +443,37 @@ def test_group_raster_closes():
               "centre column is not symmetric")
     check(len({b.idx for b in boxes}) == len(hw.GROUP_ORDER),
           "group legend numbering is not one number per group name")
+
+
+def test_rows_are_centred_on_their_ink():
+    """A group whose contents sit high in its frame with a fat empty strip
+    underneath reads as a mistake, and a fixed row height produces exactly
+    that, because captions hang below their controls. Every row's frame
+    must carry the SAME margin above and below what it prints.
+
+    The chain is what makes this checkable at all: rows are spaced by
+    BOX_GAP from each other, so once ROW1_TOP is chosen every other margin
+    follows. Bolted-on row heights would each be a free number and nothing
+    would ever go red."""
+    prev_bot = None
+    for row, (y, h) in zip(hw.GROUP_ROWS, hw.ROW_FRAMES):
+        t, b = hw._row_ink(row)
+        up, dn = t - y, (y + h) - b
+        check(abs(up - dn) < 1e-6,
+              f"row at y={y:.2f} is off centre: {up:.2f} above the ink, "
+              f"{dn:.2f} below")
+        check(up > 0.0, f"row at y={y:.2f} clips its own contents")
+        if prev_bot is not None:
+            check(abs((y - prev_bot) - hw.BOX_GAP) < 1e-6,
+                  f"row at y={y:.2f} is {y - prev_bot:.2f} mm below the one "
+                  f"above, not {hw.BOX_GAP}")
+        prev_bot = y + h
+    # The status row is as high as its own legend may print, and no higher:
+    # that legend's baseline is the rail line itself.
+    top = hw.ROW_FRAMES[0][0]
+    check(abs((top + hw.LEGEND_DY) - hw.KEEP_TOP) < 1e-6,
+          f"the status row's legend is at {top + hw.LEGEND_DY:.2f}, not on "
+          f"the rail line {hw.KEEP_TOP}")
 
 
 def _rect_hits_circle(x0, x1, y0, y1, cx, cy, r):
