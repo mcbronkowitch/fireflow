@@ -178,10 +178,15 @@ _JACK_ENUMS = ({c.enum for c in gp.INPUTS} | {c.enum for c in gp.OUTPUTS}
                | {c.enum for c in gp.HW_MOD_INPUTS})
 _LIGHT_ENUMS = {c.enum for c in gp.LIGHTS}
 
-# Row rhythm (spec 2026-08-10 §8), VOICE big-row compacted to y=51 with TIMB small.
+# Row rhythm (spec 2026-08-10 §8). The middle band runs on three lines and
+# nothing sits between them: small knobs at Y_B1K, the four that had drifted
+# to 47.61/49.25/50.22 gathered on Y_B1M, and every big cap on Y_B1G. FILT
+# came DOWN to that line rather than the other three coming up -- MORPH
+# cannot rise past 52.0 without displacing SYNC's caption, and shortening
+# this band would leave the jack row without a margin (only 0.75 mm of slack
+# is left in the whole row chain).
 Y_TOP = 14.5
-Y_B1K, Y_B1G = 34.0, 53.0
-Y_VOICE = 51.0
+Y_B1K, Y_B1M, Y_B1G = 34.0, 50.22, 53.0
 Y_B2K, Y_B2G = 76.0, 95.0
 JACK_Y = 114.0
 SD_X, SD_Y, SD_W, SD_H = 152.4, JACK_Y, 11.0, 6.0
@@ -197,7 +202,7 @@ DECK_POS = {
     "MOD":    (21.75, Y_B1G), "DENSITY": (40.75, Y_B1G),
     "ATTACK": (68.25, Y_B1K), "DECAY": (81.25, Y_B1K),
     "RES":    (94.25, Y_B1K), "SUB": (107.25, Y_B1K),
-    "ENGINE": (70.25, 49.25), "FILT": (86.25, Y_VOICE), "SOURCE": (102.25, 47.61),
+    "ENGINE": (70.25, Y_B1M), "FILT": (86.25, Y_B1G), "SOURCE": (102.25, Y_B1M),
     "TUNE":   (17.00, Y_B2K), "DETUNE": (30.00, Y_B2K),
     "COLOR":  (23.50, Y_B2G),
     "FLUX":   (67.00, Y_B2K),
@@ -210,7 +215,7 @@ DECK_POS = {
 CENTER_POS = {
     "SCALE":  (139.40, Y_TOP), "DRIFT": (152.40, Y_TOP), "CHOKE": (165.40, Y_TOP),
     "TEMPO":  (139.40, Y_B1K), "COUPLE": (152.40, Y_B1K), "SHUFFLE": (165.40, Y_B1K),
-    "TIDE":   (136.40, 50.22), "MORPH": (152.40, Y_B1G), "PACE": (168.40, 50.22),
+    "TIDE":   (136.40, Y_B1M), "MORPH": (152.40, Y_B1G), "PACE": (168.40, Y_B1M),
     "REV_SIZE": (136.40, Y_B2K), "REV_DECAY": (152.40, 79.00), "REV_DIFF": (168.40, Y_B2K),
     "REV_TONE": (152.40, 97.00),
 }

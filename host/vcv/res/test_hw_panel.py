@@ -445,6 +445,44 @@ def test_group_raster_closes():
           "group legend numbering is not one number per group name")
 
 
+def test_middle_band_runs_on_three_lines():
+    """Nothing in MOTION/VOICE/TIMING sits between the band's three lines.
+
+    This replaces four separate pins (ENG at 49.25, TIMB at 47.61, TIDE and
+    PACE at 50.22) that each recorded where one knob had been nudged. Four
+    such numbers cannot disagree with each other -- which is how the band
+    ended up with five different heights, each individually "as approved".
+    A line rule can disagree, and does the moment anything drifts off one.
+
+    FILT came DOWN to the big-cap line rather than the other three coming
+    up: MORPH cannot pass 52.0 without displacing SYNC's caption, and a
+    shorter band leaves the jack row without a margin."""
+    lines = (hw.Y_B1K, hw.Y_B1M, hw.Y_B1G)
+    seed_y, seed_h = hw.GROUP_ROWS[1][0], hw.GROUP_ROWS[1][1]
+    seen, off = {}, []
+    for c in hw.ALL_HW:
+        if not (seed_y <= c.y <= seed_y + seed_h):
+            continue
+        hit = [ln for ln in lines if abs(c.y - ln) < 1e-9]
+        if hit:
+            seen.setdefault(hit[0], []).append(c.enum)
+        else:
+            off.append(f"{c.enum} at y={c.y}")
+    check(not off, f"middle-band controls between the lines: {off}")
+    check(len(seen) == 3,
+          f"only {len(seen)} of the three band lines are used -- {sorted(seen)}")
+    for ln, members in seen.items():
+        check(len(members) >= 2, f"line y={ln} carries only {members}")
+    # Every big cap on the band's big line, and the line is the lowest one.
+    for c in hw.HW_PARAMS:
+        if hw.hw_class(c.enum) != "G":
+            continue
+        if not (seed_y <= c.y <= seed_y + seed_h):
+            continue
+        check(abs(c.y - hw.Y_B1G) < 1e-9,
+              f"{c.enum} is a big cap in the middle band but not on Y_B1G")
+
+
 def test_caption_gap_is_one_number():
     """Every printed word keeps the SAME distance to its own body edge.
 
@@ -585,16 +623,12 @@ def test_drawing_geometry():
     check((hw.SD_W, hw.SD_H) == (11.0, 6.0), f"SD size is {hw.SD_W}x{hw.SD_H}")
     check(abs(hw.SD_Y - hw.JACK_Y) < 1e-9, f"SD_Y is {hw.SD_Y}, not on the jack row")
     check(abs(by["ENGINE_A"].x - 70.25) < 1e-9, "ENGINE is not at the VOICE head")
-    check(abs(by["ENGINE_A"].y - 49.25) < 1e-9, "ENG did not rise toward ATK")
-    check(abs(by["SOURCE_A"].y - 47.61) < 1e-9, "TIMB did not rise toward SUB")
     for enum in ("ATTACK_A", "DECAY_A", "RES_A", "SUB_A"):
         ly = hw.hw_label(by[enum])[1]
         check(ly > by[enum].y, f"{enum} caption flipped above the knob")
         check(abs(by[enum].y - hw.Y_B1K) < 1e-9, f"{enum} left the ATK row")
     check(abs(by["FLUXRATE_A"].y - 89.86) < 1e-9, "TIME did not rise toward MIX")
     check(abs(by["LINK_A"].y - 89.86) < 1e-9, "LINK did not rise toward MIX")
-    check(abs(by["TIDE"].y - 50.22) < 1e-9, "TIDE did not rise toward TEMP")
-    check(abs(by["PACE"].y - 50.22) < 1e-9, "PACE did not rise toward SHFL")
     check(abs(by["REV_DECAY"].y - 79.00) < 1e-9, "DECY did not drop away from MORPH")
     check(abs(by["REV_TONE"].y - 97.00) < 1e-9, "TONE did not follow DECY")
     check(abs(by["SHIFTBTN"].y - hw.JACK_Y) < 1e-9, "SHIFT is not on the jack row")
