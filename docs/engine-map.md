@@ -565,3 +565,66 @@ those semitones survives quantization is the RANGE gate above, which is
 nothing on this branch touched it. Settled, and no longer a question for a
 SHAPE/SMOOTH design: where on the SHAPE axis the melody lives. Everywhere, on a
 note deck.
+
+---
+
+## 8. The groove cell: length, rank, and when it exists
+
+Measured 2026-08-15 on a note deck (`_melodic` and `_flow_melody` both true),
+STEP, rate 0.5 Hz, SHAPE 0, SMOOTH 0, RANGE 1, VARY 0, `set_melodic()` before
+`init()`, seeds 999 / 12345 / 7 / 4242, STEPS 4 / 8 / 16, DENSE 0.0 / 0.05 /
+0.125 / 0.25 / 0.5 / 0.75 / 1.0.
+
+- **`pattern_groove.len` equals the STEPS count**, not `pg_target_len()`'s
+  constant 8 — that function sizes the pitch motif, not the groove cell.
+- **`set_step()` does not regenerate the groove. The next cycle wrap does.**
+  Read the table immediately after the call and you get the previous cell: at
+  4 steps an 8-slot groove whose slots 4..7 the phrase never reaches. The
+  first probe written against this measured exactly that and reported a false
+  mismatch on two of three STEPS counts.
+- **`rank_of_slot[]` is a permutation of `0..L-1` with slot 0 pinned to rank
+  0**, in every cell measured, both patterns of the song pair. Enforced, not
+  emergent: `phrase_gen.h`'s groove build fixes `score[0] = 2.0` above every
+  other slot's jittered score before the stable sort that produces `order[]`
+  (`phrase_gen.h:297`), so slot 0 always sorts first regardless of seed.
+- **The firing set is exactly `{ slot : rank_of_slot[slot % L] < k }`** with
+  `k = clamp(round(DENSE·L), 1, L)` (`lane.cpp:643`, `:655`) — every cell of
+  the sweep matched after the settle wrap.
+
+Pinned by `tests/test_step_accent.cpp` (G1 and G2: G2's
+`a.size() == steps` is what holds `len == STEPS`, and its permutation check
+is what holds the rank claim).
+
+### Two of the six accent red-proofs did not redden their gate, and both point at real engine behaviour, not a test defect
+
+Red-proofing `tests/test_step_accent.cpp` on 2026-08-15 (six one-line
+mutations, one at a time, `-DCMAKE_BUILD_TYPE=Release`) reddened four of six.
+The two that did not:
+
+- **G2 ("at DENSE 1 the contour is the whole rank scale") cannot distinguish
+  normalizing `_start_note`'s accent by `groove_length` from normalizing it
+  by `_groove_k()`.** The case runs at `set_density(1.f)`, and `_groove_k()`
+  (`lane.cpp:643-646`) computes `k = clamp(round(density·L), 1, L)`; at
+  `density == 1` that is `L` exactly, so `_groove_k() - 1 == groove_length - 1`
+  and the mutated denominator is bit-identical to the original at the one
+  density this case exercises. The mutation only becomes observable at
+  DENSE < 1, which G2 does not test — G1 covers DENSE 0 but the accent there
+  is 0 regardless of denominator (the anchor's rank is always 0), so no
+  existing case in the file distinguishes the two normalizations.
+- **G3 ("FLOW reports 0, including right after leaving STEP") cannot
+  distinguish `note_accent()`'s `_step_mode` guard (`lane.h:123`) from having
+  no guard at all**, because `set_step()`'s own mode-changed branch already
+  does `_note_accent = 0.f` (`lane.cpp:211`) on every STEP↔FLOW transition,
+  before the getter's guard is ever consulted. Once in FLOW, nothing writes
+  `_note_accent` again (`_start_note` only runs under `_melodic && _step_mode`,
+  `lane.cpp:671`), so the stored value stays 0 with or without the guard. The
+  comment on `note_accent()` claims "the `_step_mode` guard is not redundant
+  with the reset in `set_step()`" — measured, for the transition path this
+  gate exercises, it is: removing the guard changes nothing observable.
+
+Neither finding says the mutated code is *correct* — `_groove_k()`
+normalization and a guardless getter may still be wrong for reasons these two
+gates were never built to see. It says the two gates, as written, do not see
+the difference they are named for. Recorded rather than "fixed" by widening
+the gate, per this file's own rule: a claim this specific needs its own probe
+before it is trusted, not a patched assertion.

@@ -30,7 +30,32 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-08-15 (**the 60 HP plate is drawn**: the
+- **Last updated:** 2026-08-15 (**the STEP accent lands**: a note deck's
+  melodic lane now derives a per-note accent from its groove rank
+  (`ModLane::note_accent()`, 0 at the rank-0 anchor, 1 at the rank DENSE last
+  reveals) and `Part` pushes it into the active engine every STEP fire. The
+  engine spends it twice, both by-ear floors set to 0.3 and both Bastian's to
+  retune: velocity scales by `vel · (1 − (1 − kAccentVelFloor) · accent)`
+  (`SynthEngineT<V>::kAccentVelFloor`), composing with rather than replacing
+  the chord's `1/√n` equal-power term, and decay scales by
+  `1 − (1 − kAccentDecFloor) · accent · decay_n` (`kAccentDecFloor`), gated by
+  the DEC knob so DEC 0 leaves ring time untouched. Six gates back it in
+  `tests/test_step_accent.cpp` (G1–G6); the render-hash gates `ctrl_identity`
+  and `wave_formant_sweep` did not move, because both hashed scenarios run in
+  FLOW, where the accent is always 0. Verification red-proofed all six gates
+  with one-line mutations, one at a time, reverted between: G4, G5 and G6
+  reddened as designed; G1 survived its mutation as predicted (the DENSE-0
+  anchor's accent is 0 regardless of the normalization it names); **G2 and G3
+  did not redden** — not because the feature is broken, but because each
+  case's specific setup makes its named mutation unobservable there (G2 tests
+  only at DENSE 1, where the two normalizations it is meant to tell apart
+  compute the same denominator; G3's FLOW-leak check is already covered by a
+  separate reset in `set_step()` before its own guard is ever consulted) —
+  see `docs/engine-map.md` §8 for the mechanism of both. Spec
+  `docs/superpowers/specs/2026-08-15-step-accent-design.md`, plan
+  `docs/superpowers/plans/2026-08-15-step-accent.md`, branch
+  `2026-08-15-step-accent`); before
+  that, 2026-08-15 (**the 60 HP plate is drawn**: the
   redistribution round's layout reached the generator in 2.21.2, and the plate
   was then redrawn twice — first an organic light plate with wells, then design
   round 2a, "Technical Blueprint": a dark anodised plate in three tinted zones,
