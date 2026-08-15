@@ -481,6 +481,10 @@ void Part::_fire_trigger() {
     int nch = _chord.build(_tg[LANE_PITCH], _chord_mask(),
                            _quant.root_semis(), chord);
     nch = _flatten_for_sampler(chord, nch);
+    // Before the strike, like set_material_character inside the engine: the
+    // note being triggered must be struck with ITS OWN accent, not with the
+    // one the previous fire left behind.
+    _engine->set_accent(_mod.pitch_note_accent());
     _engine->trigger_chord(chord, nch);
 }
 

@@ -88,6 +88,7 @@ public:
     // Slice-groove side channel (spec 2026-07-22), master/PITCH lane only.
     int   pitch_cur_step()     const { return _lanes[LANE_PITCH].cur_step(); }
     int   pitch_steps()        const { return _lanes[LANE_PITCH].steps(); }
+    float pitch_note_accent()  const { return _lanes[LANE_PITCH].note_accent(); }
     int   pitch_step_at_phase(float phase) const {
         return _lanes[LANE_PITCH].step_at_phase(phase);
     }

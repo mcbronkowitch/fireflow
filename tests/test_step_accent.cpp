@@ -9,6 +9,7 @@
 // different fraction of a cycle at every STEPS value).
 #include <doctest/doctest.h>
 #include "mod/lane.h"
+#include "parts/part.h"
 #include <algorithm>
 #include <set>
 #include <vector>
@@ -124,4 +125,35 @@ TEST_CASE("accent G3: FLOW reports 0, including right after leaving STEP") {
         if (l.note_accent() != 0.f) leaked = true;
     }
     CHECK_FALSE(leaked);
+}
+
+TEST_CASE("accent: a STEP deck pushes its note accent into the active engine") {
+    Part part;
+    part.init(48000.f, 0xabcd1234u);          // null FX memory is fine here
+    part.set_engine(ENGINE_SYNTH);
+    part.mod().set_tempo_bpm(120.f);
+    part.mod().set_rate(0.8f);
+    part.mod().set_density(1.f);
+    part.set_step(true, 8);
+
+    float l = 0.f, r = 0.f;
+    float seen_max = 0.f;
+    bool seen_any = false;
+    for (int i = 0; i < 48000 * 8; ++i) {
+        part.process(l, r);
+        const float a = part.synth().accent_for_test();
+        if (a > 0.f) { seen_any = true; seen_max = std::max(seen_max, a); }
+    }
+    CHECK(seen_any);              // the push happens at all
+    CHECK(seen_max > 0.9f);       // and it carries the whole range, not a floor
+
+    // FLOW must not push a stale accent into the drone.
+    part.set_step(false, 8);
+    for (int i = 0; i < 48000; ++i) part.process(l, r);
+    float flow_max = 0.f;
+    for (int i = 0; i < 48000 * 4; ++i) {
+        part.process(l, r);
+        flow_max = std::max(flow_max, part.synth().accent_for_test());
+    }
+    CHECK(flow_max == doctest::Approx(0.f));
 }

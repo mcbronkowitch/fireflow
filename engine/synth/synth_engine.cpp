@@ -391,6 +391,9 @@ void SynthEngineT<V>::set_decay(float n) {
 }
 
 template <class V>
+void SynthEngineT<V>::set_accent(float a) { _accent = clampf(a, 0.f, 1.f); }
+
+template <class V>
 void SynthEngineT<V>::set_resonance(float n) { _resonance = clampf(n, 0.f, 1.f); }
 template <class V>
 void SynthEngineT<V>::set_sub(float n)       { _sub_level = clampf(n, 0.f, 1.f); }

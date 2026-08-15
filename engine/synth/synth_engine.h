@@ -86,6 +86,7 @@ public:
     // VOICE edit layer (normalized knobs; boot defaults live as raw ratios)
     void set_attack(float n);      // ratio = 0.002 * 250^n  (0.2%..50% of cycle)
     void set_decay(float n);       // ratio = 0.1 * 80^n     (0.1x..8x cycle)
+    void set_accent(float a) override;   // STEP accent, 0..1 (0 = full strength)
     void set_resonance(float n);
     void set_sub(float n);
     void set_detune(float n);      // independent symmetric spread = n * 105 ct
@@ -109,6 +110,14 @@ public:
     // Part::_flatten_for_sampler collapses the chord for the SAMPLER only and
     // leaves the synth's chord surface intact. Not used on the audio path.
     int chord_n() const { return _chord_n; }
+#ifdef SPKY_TESTING
+    // The accent set_accent() last stored, same idiom as the SPKY_TESTING
+    // accessors in engine/instrument.h, engine/mod/lane.h and
+    // engine/mod/super_modulator.h: a test-only window into private state,
+    // compiled only for the tests target so `render` and the firmware never
+    // see it.
+    float accent_for_test() const { return _accent; }
+#endif
 
 private:
     void _do_trigger(float pitch_norm, float vel, int chord_slot);
@@ -161,6 +170,7 @@ private:
     float _cycle_s = 1.f;
     float _attack_ratio = 0.02f;   // boot: 2 % of cycle (spec)
     float _decay_ratio  = 1.5f;    // boot: 1.5 x cycle (spec)
+    float _accent = 0.f;           // STEP accent of the note being struck
     float _resonance = 0.15f;      // boot (spec)
     float _sub_level = 0.3f;       // boot (spec)
     // Boot default (spec). An ABSOLUTE cents value, not derived from

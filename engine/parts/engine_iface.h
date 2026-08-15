@@ -115,6 +115,14 @@ public:
     // gets pushed, and an engine switched away from and back to needs no
     // re-sync reasoning. One virtual call per part per control tick.
     virtual void set_width(float /*n*/) {}
+
+    // STEP accent, pushed by Part::_fire_trigger() immediately before
+    // trigger_chord(): 0 = the groove's rank-0 anchor at full strength, 1 =
+    // the last note DENSE reveals, and always 0 in FLOW. Default no-op, the
+    // set_excitation idiom -- SAMPLER has no per-note envelope and the BBD's
+    // DECAY is not a note property, so both take the default on purpose
+    // (spec 2026-08-15-step-accent-design.md section 7).
+    virtual void set_accent(float /*a*/) {}
 };
 
 } // namespace spky
