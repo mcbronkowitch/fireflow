@@ -57,7 +57,17 @@ KNOCKOUT = "#0b0f12"              # patch the frame under a group legend
 # Real hardware bodies, not the finger-clearance radius the layout is spaced
 # on. The frames are drawn against THESE, which is what buys the air between
 # the boxes (design note 2a).
-BODY_R = {"G": 6.0, "S": 4.4, "P": 3.1, "J": 3.1, "L": 1.5}
+# P is 4.0 because that is the keycap this file actually draws (an 8 mm
+# square), not the 3.1 the design's cap-radius rule would hand a 4.0 slot.
+BODY_R = {"G": 6.0, "S": 4.4, "P": 4.0, "J": 3.1, "L": 1.5}
+
+# Distance from the printed word to the real body edge -- ONE number, not a
+# per-class offset. Read off the small pots, which are 51 of the 69 params,
+# so the common case does not move. Setting the offsets per class instead
+# is how the plate ended up with four different gaps (4.50 big, 3.60 small,
+# 2.50 pad, 4.90 jack): each was plausible on its own and nothing compared
+# them.
+CAPTION_GAP = 3.60
 
 # What Rack actually puts on top of the plate, in mm. Neither the plate body
 # nor the layout clearance circle: the rehearsal widget is a third radius,
@@ -122,7 +132,12 @@ HW_SIZE = {
 }
 
 CLASS_R = {"G": 8.5, "S": 6.0, "P": 4.0, "J": 4.0, "L": 1.5}
-CLASS_LBL_DY = {"G": 10.5, "S": 8.0, "P": 6.5, "J": 8.0, "L": 0.0}
+CLASS_LBL_DY = {cls: (0.0 if cls == "L" else r + CAPTION_GAP)
+                for cls, r in BODY_R.items()}
+# The jack row is the one place a shared BASELINE beats a shared gap: SHFT
+# and MOD are keycaps sitting in a line of jacks, and letting them keep
+# their own offset puts two words 0.9 mm below the other seven.
+JACK_ROW_LBL_DY = CLASS_LBL_DY["J"]
 
 # Four-character plate words. Keys are enum bases (SHAPE) or full names (IN_L).
 HW_CAPTION = {
@@ -287,7 +302,7 @@ def hw_label(c):
         return (c.x, c.y, "middle", 2.2, HW_LABEL)
     dy = CLASS_LBL_DY[hw_class(c.enum)]
     if c.y >= JACK_Y - 0.5:
-        dy = 8.0
+        dy = JACK_ROW_LBL_DY
     third = ((c.x + c.r + 1.0, c.y + 1.0, "start") if c.x <= CX else
              (c.x - c.r - 1.0, c.y + 1.0, "end"))
     for lx, ly, anchor in ((c.x, c.y + dy, "middle"),

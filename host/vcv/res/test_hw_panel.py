@@ -445,6 +445,49 @@ def test_group_raster_closes():
           "group legend numbering is not one number per group name")
 
 
+def test_caption_gap_is_one_number():
+    """Every printed word keeps the SAME distance to its own body edge.
+
+    Per-class offsets shipped four different gaps -- 4.50 mm on the big
+    pots, 3.60 on the small, 2.50 on the pads, 4.90 on the jacks. Each was
+    a plausible number on its own; nothing ever put them side by side, and
+    on the plate the big knobs visibly hung further from their labels than
+    the small ones. This is that comparison.
+
+    The jack row is the one exception, and a deliberate one: SHFT and MOD
+    are keycaps standing in a line of jacks, so that row shares a baseline
+    instead of a gap."""
+    seen = {}
+    for c in hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_ONLY:
+        if not c.label:
+            continue
+        cls = hw.hw_class(c.enum)
+        ly = hw.hw_label(c)[1]
+        if ly <= c.y:                      # caption stepped above or aside
+            continue
+        gap = ly - c.y - hw.body_r(c)
+        if c.y >= hw.JACK_Y - 0.5:
+            check(abs(ly - (hw.JACK_Y + hw.JACK_ROW_LBL_DY)) < 1e-6,
+                  f"{c.enum} breaks the jack row's shared baseline "
+                  f"({ly:.2f} vs {hw.JACK_Y + hw.JACK_ROW_LBL_DY:.2f})")
+            continue
+        check(abs(gap - hw.CAPTION_GAP) < 1e-6,
+              f"{c.enum} ({cls}) sits {gap:.2f} mm from its body, "
+              f"not {hw.CAPTION_GAP}")
+        seen[cls] = gap
+    check(set(seen) >= {"G", "S", "P"},
+          f"only saw caption gaps for {sorted(seen)} -- the comparison that "
+          "matters is big pot vs small pot, so both must be in it")
+    # The drawn keycap is 8 mm square, so 4.0 is its half-width. A BODY_R
+    # that disagrees with the drawing would put the pads' gap silently off.
+    svg = hw.svg()
+    for c in hw.HW_PARAMS:
+        if hw.hw_class(c.enum) != "P":
+            continue
+        check(f'width="{hw.mm(2 * hw.body_r(c))}"' in svg,
+              f"{c.enum} is drawn at a size BODY_R does not know about")
+
+
 def test_rows_are_centred_on_their_ink():
     """A group whose contents sit high in its frame with a fat empty strip
     underneath reads as a mistake, and a fixed row height produces exactly
