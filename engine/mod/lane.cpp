@@ -208,7 +208,7 @@ void ModLane::set_step(bool on, int steps) {
     // Either direction: a slot index and a freeze decision from the other mode
     // mean nothing in this one. _cur_step = -1 makes the first sample fire slot
     // 0, the same way init and reset do.
-    if (mode_changed) { _cur_step = -1; _frozen = false; _prime_floors(); }
+    if (mode_changed) { _cur_step = -1; _frozen = false; _note_accent = 0.f; _prime_floors(); }
     // Entering STEP disarms the follower so its first follow() call lands on
     // the deck's current position instead of replaying the whole count.
     if (entering_step) { _follow_armed = false; _follow_jumped = false; }
@@ -704,6 +704,15 @@ void ModLane::_start_note(int slot) {
         pattern.pattern_groove.note_len[slot % groove_length]);
     _note_hold = hold > dist ? dist : hold;             // reaching the next note = tie
     _note_age = 0;
+    // The groove rank IS the accent. Normalized against the cell length rather
+    // than against the DENSE depth k, which is what makes a thin pattern loud:
+    // at k == 1 only the rank-0 anchor fires, so a == 0 by construction and no
+    // separate depth control has to enforce it (spec section 2).
+    _note_accent =
+        groove_length > 1
+            ? static_cast<float>(pattern.pattern_groove.rank_of_slot[slot % groove_length])
+                  / static_cast<float>(groove_length - 1)
+            : 0.f;
 }
 
 void ModLane::_mutate_slot(int slot) {

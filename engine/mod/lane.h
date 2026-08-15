@@ -113,6 +113,14 @@ public:
     // Unlike gate_state() this is false in FLOW and non-melodic lanes, so it
     // is safe to OR into a pulse-based gate without forcing it permanently high.
     bool  note_sustain() const { return _step_mode && _melodic && _note_age < _note_hold; }
+    // STEP accent: 0 = the rank-0 anchor at full strength, 1 = the last note
+    // DENSE reveals. Spec 2026-08-15-step-accent-design.md section 3.
+    //
+    // The _step_mode guard is not redundant with the reset in set_step():
+    // lanes fire in FLOW too and Part::_fire_trigger() runs on those fires, so
+    // without it a deck leaving STEP would push its last STEP note's accent
+    // into its drone. One mode test at the one place that cannot be bypassed.
+    float note_accent() const { return _step_mode ? _note_accent : 0.f; }
     float phase()  const { return static_cast<float>(_phase); }
     // Step-clock factor on the cycle rate (spec 2026-07-17): 8/steps in STEP,
     // 1 in FLOW. The grid servo scales its transport target by this so a
@@ -339,6 +347,7 @@ private:
 #endif
     int   _note_age  = 0;    // steps since the current note fired
     int   _note_hold = 0;    // composed note length (capped at the next note)
+    float _note_accent = 0.f;   // groove rank of the running note, normalized
 
     // Samples since the last fire / the last phrase event, for the two floors.
     // Primed rather than zeroed at init/reset/mode entry -- at 0 the floor
