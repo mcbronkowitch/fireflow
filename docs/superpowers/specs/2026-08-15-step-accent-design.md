@@ -182,18 +182,38 @@ question with a separate answer, and it is out of scope here.
 
 ## 8. Gates
 
-Each one is to be proven red once before it is trusted
-(`fireflow-tests-must-be-able-to-fail`).
+Each gate but G3 is to be proven red once before it is trusted
+(`fireflow-tests-must-be-able-to-fail`); G3 is the one exception, and its
+bullet below says why.
 
 - **G1 — the anchor is loud.** At `k == 1`, every note that fires reports
-  `a == 0`. Swept over STEPS 4/8/16 and the four seeds. Red if the
-  normalization is ever taken against `k` instead of `L`.
-- **G2 — the contour spans.** At DENSE 1.0 the set of accents emitted over one
-  cycle equals `{ r/(L-1) : r in 0..L-1 }` and therefore reaches both 0 and 1.
-  Red if the rank lookup loses the `% L` or reads a stale groove.
+  `a == 0`. Swept over STEPS 4/8/16 and the four seeds. This does **not**
+  discriminate the `L`-vs-`_groove_k()` normalization choice (G2,
+  intermediate DENSE, below) — measured: at `k == 1` the sole firing slot is
+  always rank 0, so its accent is `0 / anything == 0` under either
+  denominator.
+- **G2 (DENSE 1.0) — the contour spans.** At DENSE 1.0 the set of accents
+  emitted over one cycle equals `{ r/(L-1) : r in 0..L-1 }` and therefore
+  reaches both 0 and 1. Red if the rank lookup loses the `% L` or reads a
+  stale groove. Like G1, this cannot discriminate the `L`-vs-`_groove_k()`
+  normalization either — at DENSE 1.0, `_groove_k()` computes `k == L`
+  exactly, so the two denominators are numerically identical there.
+- **G2 (intermediate DENSE) — the normalization is `L`, not `k`.** At an
+  intermediate DENSE where `k < L` (e.g. 8 steps, DENSE 0.5, `k = 4`), the set
+  of accents emitted over one cycle equals exactly `{ r/(L-1) : r in 0..k-1 }`.
+  Red if `_start_note` normalizes against `_groove_k() - 1` instead of
+  `groove_length - 1`: measured, the correct code's maximum accent there is
+  `3/7 ≈ 0.4286`; the mutation gives `1.0` instead. Neither G1 nor G2
+  (DENSE 1.0) can catch this, for the reasons stated above — this is the only
+  case that does.
 - **G3 — FLOW is silent about it.** A note deck in FLOW reports `a == 0` for
   the whole run, and a deck driven STEP → FLOW → STEP reports 0 throughout the
-  FLOW leg.
+  FLOW leg. **This one cannot be proven red.** `_note_accent` is written only
+  by `_start_note` (STEP-only, §3), and `set_step()` zeroes it on every mode
+  change before `note_accent()`'s guard is ever consulted — no reachable
+  sequence can violate the claim above, guard or not, so no mutation of the
+  guard can redden this gate. Kept anyway as a statement of the guarantee, not
+  as insurance against a bug the code can still have.
 - **G4 — DENSE is the intensity.** The spread of per-note peak levels at
   DENSE 1.0 is strictly greater than at the DENSE value that yields `k == 1`,
   measured on rendered audio rather than on the accent value. This is the gate

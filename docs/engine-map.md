@@ -591,9 +591,10 @@ STEP, rate 0.5 Hz, SHAPE 0, SMOOTH 0, RANGE 1, VARY 0, `set_melodic()` before
   `k = clamp(round(DENSE·L), 1, L)` (`lane.cpp:643`, `:655`) — every cell of
   the sweep matched after the settle wrap.
 
-Pinned by `tests/test_step_accent.cpp` (G1 and both G2 cases: the DENSE-1
+Pinned by `tests/test_step_accent.cpp` (G1 pins the firing-set formula's
+`k == 1` case — exactly one note fires and its accent is 0; the DENSE-1 G2
 case's `a.size() == steps` is what holds `len == STEPS`, and its permutation
-check is what holds the rank claim; the intermediate-DENSE case below is what
+check is what holds the rank claim; the intermediate-DENSE G2 case is what
 holds the `groove_length`-vs-`_groove_k()` normalization choice).
 
 ### Red-proofing found one real gate gap and one false one; the gap is closed, the other is a documented property

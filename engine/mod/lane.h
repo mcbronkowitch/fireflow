@@ -116,10 +116,13 @@ public:
     // STEP accent: 0 = the rank-0 anchor at full strength, 1 = the last note
     // DENSE reveals. Spec 2026-08-15-step-accent-design.md section 3.
     //
-    // The _step_mode guard is not redundant with the reset in set_step():
-    // lanes fire in FLOW too and Part::_fire_trigger() runs on those fires, so
-    // without it a deck leaving STEP would push its last STEP note's accent
-    // into its drone. One mode test at the one place that cannot be bypassed.
+    // The guard is deliberate redundancy, not the load-bearing mechanism:
+    // set_step()'s mode-changed branch already zeroes _note_accent
+    // (lane.cpp:211) on every transition, before this guard is ever
+    // consulted, and _start_note (STEP-only) is the value's only writer. No
+    // gate can tell a guarded accessor from a guardless one here, which is
+    // why none exists -- the guard is insurance against a future second
+    // writer of _note_accent.
     float note_accent() const { return _step_mode ? _note_accent : 0.f; }
     float phase()  const { return static_cast<float>(_phase); }
     // Step-clock factor on the cycle rate (spec 2026-07-17): 8/steps in STEP,
