@@ -102,6 +102,23 @@ that do not implement it cost nothing and need no per-engine branch at the call
 site, and an engine swap needs no re-sync reasoning because whichever engine is
 active is exactly the one that gets pushed.
 
+**`Part::trigger_manual()` is a second call site, and it does not inherit the
+sequencer's accent.** `trigger_manual()` (the PLAY tap / TRIG press) calls
+`_engine->trigger_chord()` directly, on the same footing CHOKE already gives
+it — `part.h`'s comment on the method: "a user gesture and is deliberately
+NOT inhibited" by the sequencer's policy. A manual strike is an anchor by
+definition: there is nothing for it to be subordinate to, exactly the §1
+argument for why a `k == 1` STEP note is loud. So `trigger_manual()` pushes
+`_engine->set_accent(0.f)` immediately before `trigger_chord()`, unconditionally
+-- a manual strike always lands at full strength, whatever accent the last
+STEP fire left sitting in the engine. Measured, before this push existed: a
+press landing while the engine held `_accent = 0.857143` produced audio
+differing in 9806/24000 rendered samples (max `|d|` 0.0369) from the same
+press with the accent cleared -- roughly 40% velocity instead of full
+strength, silently. Gated by
+`tests/test_step_accent.cpp`'s "a manual trigger strikes at full strength
+even while the engine holds a high accent from the sequencer" case.
+
 Deliberately **not** a new argument on `trigger_chord()`: that signature has a
 default implementation fanning out to `trigger()`, and every engine overrides
 one or the other. Widening it would touch all of them for a value most of them

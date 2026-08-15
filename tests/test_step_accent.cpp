@@ -222,6 +222,38 @@ TEST_CASE("accent: a STEP deck pushes its note accent into the active engine") {
     CHECK(flow_max == doctest::Approx(0.f));
 }
 
+TEST_CASE("accent: a manual trigger strikes at full strength even while the "
+          "engine holds a high accent from the sequencer") {
+    // trigger_manual() (the PLAY tap / TRIG press) is a user gesture, not a
+    // groove note -- the same footing CHOKE already gives it (part.h:
+    // "trigger_manual() is a user gesture and is deliberately NOT
+    // inhibited"). It must not inherit whatever accent the last STEP fire
+    // left sitting in the engine.
+    Part part;
+    part.init(48000.f, 0xabcd1234u);
+    part.set_engine(ENGINE_SYNTH);
+    part.mod().set_tempo_bpm(120.f);
+    part.mod().set_rate(0.8f);
+    part.mod().set_density(1.f);
+    part.set_step(true, 8);
+
+    float l = 0.f, r = 0.f;
+    // Drive the deck until the engine is actually holding a strong accent
+    // from a STEP fire -- the exact precondition trigger_manual() has to
+    // override, not a made-up one.
+    bool armed = false;
+    for (int i = 0; i < 48000 * 8 && !armed; ++i) {
+        part.process(l, r);
+        if (part.synth().accent_for_test() > 0.5f) armed = true;
+    }
+    REQUIRE(armed);   // setup sanity: the precondition really occurred
+
+    part.trigger_manual();
+    // The strike just fired must have landed at accent 0 (full strength),
+    // not at whatever the engine held a moment ago.
+    CHECK(part.synth().accent_for_test() == doctest::Approx(0.f));
+}
+
 namespace {
 
 // Peak of one struck note, in STEP, at a given accent. Everything except the

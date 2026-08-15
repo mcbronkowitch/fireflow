@@ -166,6 +166,17 @@ void Part::trigger_manual() {
     float chord[ChordBuilder::kMaxNotes];
     const int n = _chord.build(target_value(LANE_PITCH), _chord_mask(),
                                _quant.root_semis(), chord);
+    // A manual strike is an anchor by definition, not a groove note -- it
+    // gets accent 0 (full strength) regardless of whatever accent the
+    // sequencer's last STEP fire left in the engine. Same precedent as CHOKE:
+    // trigger_manual() is a user gesture and is deliberately NOT subject to
+    // the sequencer's policy (see the CHOKE comment on this method in
+    // part.h). Without this push, a TRIG press landing while the engine held
+    // a high accent struck at a fraction of full velocity and a shorter
+    // decay -- measured: a press at _accent == 0.857143 differed from the
+    // same press with the accent cleared in 9806/24000 rendered samples, max
+    // |d| 0.0369 (spec 2026-08-15-step-accent-design.md section 4).
+    _engine->set_accent(0.f);
     // Durch _flatten_for_sampler, genau wie der Fire-Pfad in
     // _fire_trigger(). Ohne das landeten bei COLOR > 0 bis zu vier Toene in
     // der SamplerEngine, bis der naechste _control_tick (<= 96 Samples) ueber
