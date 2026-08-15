@@ -90,6 +90,14 @@ enum InputId {
     IN_R,
     CLOCK,
     RESET,
+    MOD1_A,
+    MOD2_A,
+    MOD3_A,
+    MOD4_A,
+    MOD1_B,
+    MOD2_B,
+    MOD3_B,
+    MOD4_B,
     NUM_INPUTS
 };
 enum OutputId {
@@ -184,6 +192,16 @@ static const PanelCtl kInputCtls[] = {
     {IN_R, WK_IN, {66.750f, 118.400f}, "R", {66.750f, 124.800f}, 0, 1.80f, 0x171713, "IN R"},
     {CLOCK, WK_IN, {100.930f, 118.400f}, "CLK", {100.930f, 124.800f}, 0, 1.80f, 0x171713, "Clock"},
     {RESET, WK_IN, {112.430f, 118.400f}, "RST", {112.430f, 124.800f}, 0, 1.80f, 0x171713, "Reset"},
+};
+static const PanelCtl kHwModInputCtls[] = {
+    {MOD1_A, WK_IN, {0.000f, 0.000f}, "MOD1", {0.000f, 6.400f}, 0, 1.90f, 0x171713, "Mod 1 (unwired)"},
+    {MOD2_A, WK_IN, {0.000f, 0.000f}, "MOD2", {0.000f, 6.400f}, 0, 1.90f, 0x171713, "Mod 2 (unwired)"},
+    {MOD3_A, WK_IN, {0.000f, 0.000f}, "MOD3", {0.000f, 6.400f}, 0, 1.90f, 0x171713, "Mod 3 (unwired)"},
+    {MOD4_A, WK_IN, {0.000f, 0.000f}, "MOD4", {0.000f, 6.400f}, 0, 1.90f, 0x171713, "Mod 4 (unwired)"},
+    {MOD1_B, WK_IN, {0.000f, 0.000f}, "MOD1", {0.000f, 6.400f}, 0, 1.90f, 0x171713, "Mod 1 (unwired)"},
+    {MOD2_B, WK_IN, {0.000f, 0.000f}, "MOD2", {0.000f, 6.400f}, 0, 1.90f, 0x171713, "Mod 2 (unwired)"},
+    {MOD3_B, WK_IN, {0.000f, 0.000f}, "MOD3", {0.000f, 6.400f}, 0, 1.90f, 0x171713, "Mod 3 (unwired)"},
+    {MOD4_B, WK_IN, {0.000f, 0.000f}, "MOD4", {0.000f, 6.400f}, 0, 1.90f, 0x171713, "Mod 4 (unwired)"},
 };
 static const PanelCtl kOutputCtls[] = {
     {OUT_L, WK_OUT, {146.610f, 118.400f}, "L", {146.610f, 124.800f}, 0, 1.80f, 0xFFFDF7, "OUT L"},

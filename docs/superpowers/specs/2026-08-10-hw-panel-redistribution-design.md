@@ -2,6 +2,9 @@
 
 **Datum:** 10. August 2026
 **Status:** Entwurf, abgenommen. Nichts davon ist implementiert.
+**Nachtrag:** 15. August 2026 — PACE (spec 2026-08-12) sitzt rechts neben MORPH;
+CHOKE zieht in den Statusstreifen, SCALE und DRIFT rücken auf das CLOCK-Raster.
+Zeichnung und Generator sind nachgezogen (organische Runde, v2.21.2).
 **Vorgänger:** `2026-08-10-hw-panel-regroup-design.md` (Gruppen gefunden),
 `2026-08-08-fireflow-hardware-envelope-design.md` (Rahmen, Klassen, Rundendeckel)
 
@@ -102,12 +105,19 @@ im gerenderten Bild sichtbar wurde (§10).
 
 | Zeile | Inhalt |
 |---|---|
-| Statusstreifen | SCALE · DRIFT (TONALITY) |
+| Statusstreifen | SCALE · DRIFT · CHOKE |
 | y = 34 | TEMPO-LED · TEMPO · FREE\|GRID · SHUFL · SYNC-LED (CLOCK) |
-| y = 53 | TIDE · **MORPH** · CHOKE (BLEND) |
+| y = 53 | TIDE · **MORPH** · PACE (BLEND) |
 | y = 76 | SIZE · **DECAY** · DIFF (ROOM) |
 | y = 95 | **SEND A** · TONE · **SEND B** (ROOM) |
 | y = 114 | CLK · SD-Ausschnitt · RST |
+
+SCALE · DRIFT · CHOKE teilen die x-Spalten von TEMPO · FREE|GRID · SHUFL
+(139,4 / 152,4 / 165,4). PACE nimmt den alten Platz von CHOKE rechts von MORPH
+(168,4 / 53) — klein neben groß, 16 mm, unverändert. TIDE und PACE stehen
+damit links und rechts vom Blend: Verhältnis und Tempo. CHOKE ist kein
+Tonalitätsknopf; er sitzt in der Kopfzeile, weil die Zeile sonst zwei Knöpfe
+auf drei Spalten hätte und CHOKE ein globaler Griff ist, kein Deck-Block.
 
 DECAY liegt in der **oberen** ROOM-Zeile, nicht in der unteren. Unten fiel seine
 Bildunterschrift in den SD-Ausschnitt; nach oben gedrängt las sie sich als
@@ -148,8 +158,12 @@ nannte. Die **Zeitgruppe** des Decks hat einen Kopf, und der heißt STEPS:
 Objekt (`_parts[p].mod()`, `instrument.h:46`), dessen Zerschneidung die
 Regroup-Runde repariert hat. Der Unterschied ist, dass die Naht diesmal im Code
 steht und nicht in einer alten Bildschirmaufteilung. Dass SONG und VARY im
-FLOW-Modus inert sind, ist **nicht verifiziert** — es stammt aus einer früheren
-Sitzungsnotiz über `_wrap_events()` bei STEPS = 0. Verifiziert ist nur `RATE × STEPS`.
+FLOW-Modus inert sind, ist **nicht verifiziert** — es stammte aus einer
+Sitzungsnotiz über `_wrap_events()` bei STEPS = 0. Verifiziert ist nur
+`RATE × STEPS`. **Nachtrag 15. Aug:** SONG erreicht FLOW seit der
+FLOW-melody-Runde (13. Aug); FORM ebenfalls, liegt aber nicht auf dieser
+Platte. VARY auf der Melodielane ist die Marbles-Runde. Die Zeitgruppe
+ändert sich dadurch nicht.
 
 ---
 
@@ -215,9 +229,10 @@ außen, in der Buchsenzeile. Zwei Gründe:
 Die Buchsenzeile rückt dafür auf **11,5 mm Raster** zusammen und nach innen.
 
 **Folge für die Mitte:** MOD und SHIFT waren das Einzige, was deren Kopfzeile
-füllte. TONALITY (SCALE, DRIFT) zieht dorthin nach — global gestimmt, globale
-Zeile. Bei x = 123,4 in der Zeile y = 53 kollidierte SCALE ohnehin mit 0,4 mm
-an RANGE.
+füllte. SCALE und DRIFT ziehen dorthin nach — global gestimmt, globale Zeile.
+CHOKE folgt (Nachtrag 15. Aug), damit die Kopfzeile dasselbe 13-mm-Dreier-Raster
+trägt wie CLOCK darunter. Bei x = 123,4 in der Zeile y = 53 kollidierte SCALE
+ohnehin mit 0,4 mm an RANGE.
 
 ---
 
@@ -356,12 +371,12 @@ Damit sie niemand ein zweites Mal probiert:
 | | Anzahl |
 |---|---|
 | Potis groß (8,5 mm) | 18 |
-| Potis klein (6,0 mm) | 46 |
+| Potis klein (6,0 mm) | 47 (46 plus PACE, Nachtrag 15. Aug) |
 | Taster | 4 (REC ×2, SHIFT, MOD) |
 | Buchsen | 18 |
 | LEDs | 10 (vorher 20) |
 | SD-Ausschnitt | 1, bei 152,4 / 111,0 |
-| **Fußabdrücke gesamt** | **96** (vorher 108) |
+| **Fußabdrücke gesamt** | **97** (vorher 108, dann 96 vor PACE) |
 
 Die Zahl der großen Kappen bleibt bei 18, obwohl SEND in die Mitte gewandert ist
 und ENGINE als kleiner Poti dazugekommen ist.
@@ -379,7 +394,12 @@ und ENGINE als kleiner Poti dazugekommen ist.
 - **BEND ist in dieser Runde nicht modelliert worden.** Die Doppelbelegung
   (BEND über ATTACKs Knopf, Regroup-Spec §6) fehlt in allen Messungen dieser
   Runde. Ihre zweite Bildunterschrift hat das Schrift-gegen-Schrift-Gate nie
-  gesehen. **Vor dem Bauen nachrüsten und neu messen.**
+  gesehen. **Vor dem Bauen nachrüsten und neu messen.** Unverändert am 15. Aug.
+- **PACE** war am 10. Aug noch kein Panel-Knopf. Der Nachtrag 15. Aug setzt ihn
+  auf den alten Platz von CHOKE (168,4 / 53) und überholt damit den Hardware-Slot
+  in `2026-08-12-modulation-pace-design.md` §7 (`CENTER_POS["PACE"] = (127.4, Y_B1G)`,
+  die Regroup-Mitte). Die Verwechslung TIDE/PACE bleibt lernbar: sie flankieren
+  MORPH.
 - **Was ein CV-Eingang tut.** Unverändert offen aus der Regroup-Runde.
 - **Was MOD und SHIFT tun.** Reserviert, nicht definiert.
 - **Ob die Gruppen einen gedruckten Rahmen bekommen.** Nach dieser Runde
@@ -402,3 +422,4 @@ und ENGINE als kleiner Poti dazugekommen ist.
 | dieselbe §9 | „Legendendruck und Gruppenrahmen" — Vorentscheidung: die Gasse ersetzt den Rahmen |
 | `2026-08-08-...-envelope-design.md` §1 | Größenklassen wie oben; ENGINE wechselt von Taster zu `KNOBI` |
 | `docs/hardware/io-budget.md` | ENGINE_A/B von Taster zu Rastpoti; LED-Zahl 20 → 10 |
+| `2026-08-12-modulation-pace-design.md` §7 | HW-Slot `(127.4, Y_B1G)` unter TEMPO → **168,4 / 53** rechts von MORPH |

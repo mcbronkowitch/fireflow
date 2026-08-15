@@ -1,9 +1,46 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="304.80mm" height="128.50mm" viewBox="0 0 304.80 128.50">
 <rect width="304.80" height="128.50" fill="#f7f4ec"/>
 <rect x="0.3" y="0.3" width="304.20" height="127.90" fill="none" stroke="#c9c2b2" stroke-width="0.4"/>
-<line x1="0" y1="9.00" x2="304.80" y2="9.00" stroke="#c9c2b2" stroke-width="0.3" stroke-dasharray="2,1.5"/>
-<line x1="0" y1="119.50" x2="304.80" y2="119.50" stroke="#c9c2b2" stroke-width="0.3" stroke-dasharray="2,1.5"/>
-<rect x="144.90" y="105.00" width="15.00" height="12.00" rx="1" fill="none" stroke="#171713" stroke-width="0.5" stroke-dasharray="1.5,1"/>
+<!-- zone washes + organic wells (union of padded knobs, metal rim, solid interior) -->
+<rect x="0" y="0" width="124.20" height="128.50" fill="#1d6f5f" fill-opacity="0.16"/>
+<rect x="180.60" y="0" width="124.20" height="128.50" fill="#b96532" fill-opacity="0.18"/>
+<path fill="#1d6f5f" d="M41.500,21.497A9.550,9.550 0 1 1 41.500,7.503A9.550,9.550 0 0 1 54.500,7.503A9.550,9.550 0 0 1 67.500,7.503A9.550,9.550 0 1 1 67.500,21.497A9.550,9.550 0 0 1 54.500,21.497A9.550,9.550 0 0 1 41.500,21.497Z"/>
+<path fill="#b96532" d="M263.300,7.503A9.550,9.550 0 1 1 263.300,21.497A9.550,9.550 0 0 1 250.300,21.497A9.550,9.550 0 0 1 237.300,21.497A9.550,9.550 0 1 1 237.300,7.503A9.550,9.550 0 0 1 250.300,7.503A9.550,9.550 0 0 1 263.300,7.503Z"/>
+<path fill="#1d6f5f" d="M95.150,19.273A5.050,5.050 0 1 1 95.150,9.727A7.550,7.550 0 0 1 106.850,9.727A5.050,5.050 0 0 1 110.500,9.863A5.050,5.050 0 0 1 114.500,9.863A5.050,5.050 0 1 1 114.500,19.137A5.050,5.050 0 0 1 110.500,19.137A5.050,5.050 0 0 1 106.850,19.273A7.550,7.550 0 0 1 95.150,19.273Z"/>
+<path fill="#b96532" d="M209.650,9.727A5.050,5.050 0 1 1 209.650,19.273A7.550,7.550 0 0 1 197.950,19.273A5.050,5.050 0 0 1 194.300,19.137A5.050,5.050 0 0 1 190.300,19.137A5.050,5.050 0 1 1 190.300,9.863A5.050,5.050 0 0 1 194.300,9.863A5.050,5.050 0 0 1 197.950,9.727A7.550,7.550 0 0 1 209.650,9.727Z"/>
+<path fill="#1d6f5f" d="M15.037,42.993A9.550,9.550 0 1 1 24.750,27.003A9.550,9.550 0 0 1 37.750,27.003A9.550,9.550 0 1 1 47.463,42.993A12.050,12.050 0 1 1 31.250,60.413A12.050,12.050 0 1 1 15.037,42.993Z"/>
+<path fill="#b96532" d="M280.050,27.003A9.550,9.550 0 1 1 289.763,42.993A12.050,12.050 0 1 1 273.550,60.413A12.050,12.050 0 1 1 257.337,42.993A9.550,9.550 0 1 1 267.050,27.003A9.550,9.550 0 0 1 280.050,27.003Z"/>
+<path fill="#1d6f5f" d="M65.042,42.995A9.550,9.550 0 1 1 74.750,27.003A9.550,9.550 0 0 1 87.750,27.003A9.550,9.550 0 0 1 100.750,27.003A9.550,9.550 0 1 1 108.169,43.506A9.550,9.550 0 1 1 95.938,58.166A12.050,12.050 0 0 1 76.562,58.166A9.550,9.550 0 1 1 65.042,42.995Z"/>
+<path fill="#b96532" d="M230.050,27.003A9.550,9.550 0 1 1 239.758,42.995A9.550,9.550 0 1 1 228.238,58.166A12.050,12.050 0 0 1 208.863,58.166A9.550,9.550 0 1 1 196.631,43.506A9.550,9.550 0 1 1 204.050,27.003A9.550,9.550 0 0 1 217.050,27.003A9.550,9.550 0 0 1 230.050,27.003Z"/>
+<path fill="#1d6f5f" d="M16.080,85.506A9.550,9.550 0 1 1 23.500,69.003A9.550,9.550 0 1 1 30.920,85.506A12.050,12.050 0 1 1 16.080,85.506Z"/>
+<path fill="#b96532" d="M281.300,69.003A9.550,9.550 0 1 1 288.720,85.506A12.050,12.050 0 1 1 273.880,85.506A9.550,9.550 0 1 1 281.300,69.003Z"/>
+<path fill="#1d6f5f" d="M61.908,86.921A12.050,12.050 0 1 1 72.092,86.921A9.550,9.550 0 0 1 73.500,88.003A9.550,9.550 0 1 1 73.500,101.997A9.550,9.550 0 0 1 60.500,101.997A9.550,9.550 0 1 1 60.500,88.003A9.550,9.550 0 0 1 61.908,86.921Z"/>
+<path fill="#b96532" d="M232.708,86.921A12.050,12.050 0 1 1 242.892,86.921A9.550,9.550 0 0 1 244.300,88.003A9.550,9.550 0 1 1 244.300,101.997A9.550,9.550 0 0 1 231.300,101.997A9.550,9.550 0 1 1 231.300,88.003A9.550,9.550 0 0 1 232.708,86.921Z"/>
+<path fill="#1d6f5f" d="M101.408,86.921A12.050,12.050 0 1 1 111.592,86.921A9.550,9.550 0 1 1 101.408,86.921Z"/>
+<path fill="#b96532" d="M193.208,86.921A12.050,12.050 0 1 1 203.392,86.921A9.550,9.550 0 1 1 193.208,86.921Z"/>
+<path fill="#171713" d="M145.900,21.497A9.550,9.550 0 1 1 145.900,7.503A9.550,9.550 0 0 1 158.900,7.503A9.550,9.550 0 1 1 158.900,21.497A9.550,9.550 0 0 1 145.900,21.497Z"/>
+<path fill="#171713" d="M131.250,38.978A5.050,5.050 0 1 1 131.250,29.022A9.550,9.550 0 0 1 145.900,27.003A9.550,9.550 0 0 1 158.900,27.003A9.550,9.550 0 0 1 173.550,29.022A5.050,5.050 0 1 1 173.550,38.978A9.550,9.550 0 0 1 158.900,40.997A9.550,9.550 0 0 1 145.900,40.997A9.550,9.550 0 0 1 131.250,38.978Z"/>
+<path fill="#171713" d="M142.713,60.166A9.550,9.550 0 1 1 142.713,45.834A12.050,12.050 0 0 1 162.088,45.834A9.550,9.550 0 1 1 162.088,60.166A12.050,12.050 0 0 1 142.713,60.166Z"/>
+<path fill="#171713" d="M131.308,84.079A9.550,9.550 0 1 1 142.713,68.834A12.050,12.050 0 0 1 162.088,68.834A9.550,9.550 0 1 1 173.492,84.079A12.050,12.050 0 1 1 158.713,102.166A9.550,9.550 0 0 1 146.088,102.166A12.050,12.050 0 1 1 131.308,84.079Z"/>
+<path fill="#f7f4ec" d="M41.500,20.725A9.000,9.000 0 1 1 41.500,8.275A9.000,9.000 0 0 1 54.500,8.275A9.000,9.000 0 0 1 67.500,8.275A9.000,9.000 0 1 1 67.500,20.725A9.000,9.000 0 0 1 54.500,20.725A9.000,9.000 0 0 1 41.500,20.725Z"/>
+<path fill="#f7f4ec" d="M263.300,8.275A9.000,9.000 0 1 1 263.300,20.725A9.000,9.000 0 0 1 250.300,20.725A9.000,9.000 0 0 1 237.300,20.725A9.000,9.000 0 1 1 237.300,8.275A9.000,9.000 0 0 1 250.300,8.275A9.000,9.000 0 0 1 263.300,8.275Z"/>
+<path fill="#f7f4ec" d="M95.333,18.610A4.500,4.500 0 1 1 95.333,10.390A7.000,7.000 0 0 1 106.667,10.390A4.500,4.500 0 0 1 110.500,10.469A4.500,4.500 0 0 1 114.500,10.469A4.500,4.500 0 1 1 114.500,18.531A4.500,4.500 0 0 1 110.500,18.531A4.500,4.500 0 0 1 106.667,18.610A7.000,7.000 0 0 1 95.333,18.610Z"/>
+<path fill="#f7f4ec" d="M209.467,10.390A4.500,4.500 0 1 1 209.467,18.610A7.000,7.000 0 0 1 198.133,18.610A4.500,4.500 0 0 1 194.300,18.531A4.500,4.500 0 0 1 190.300,18.531A4.500,4.500 0 1 1 190.300,10.469A4.500,4.500 0 0 1 194.300,10.469A4.500,4.500 0 0 1 198.133,10.390A7.000,7.000 0 0 1 209.467,10.390Z"/>
+<path fill="#f7f4ec" d="M16.417,42.811A9.000,9.000 0 1 1 24.750,27.775A9.000,9.000 0 0 1 37.750,27.775A9.000,9.000 0 1 1 46.083,42.811A11.500,11.500 0 1 1 31.250,59.481A11.500,11.500 0 1 1 16.417,42.811Z"/>
+<path fill="#f7f4ec" d="M280.050,27.775A9.000,9.000 0 1 1 288.383,42.811A11.500,11.500 0 1 1 273.550,59.481A11.500,11.500 0 1 1 258.717,42.811A9.000,9.000 0 1 1 267.050,27.775A9.000,9.000 0 0 1 280.050,27.775Z"/>
+<path fill="#f7f4ec" d="M66.485,42.825A9.000,9.000 0 1 1 74.750,27.775A9.000,9.000 0 0 1 87.750,27.775A9.000,9.000 0 0 1 100.750,27.775A9.000,9.000 0 1 1 106.267,42.946A9.000,9.000 0 1 1 95.852,57.329A11.500,11.500 0 0 1 76.648,57.329A9.000,9.000 0 1 1 66.485,42.825Z"/>
+<path fill="#f7f4ec" d="M230.050,27.775A9.000,9.000 0 1 1 238.315,42.825A9.000,9.000 0 1 1 228.152,57.329A11.500,11.500 0 0 1 208.948,57.329A9.000,9.000 0 1 1 198.533,42.946A9.000,9.000 0 1 1 204.050,27.775A9.000,9.000 0 0 1 217.050,27.775A9.000,9.000 0 0 1 230.050,27.775Z"/>
+<path fill="#f7f4ec" d="M17.902,84.955A9.000,9.000 0 1 1 23.500,69.775A9.000,9.000 0 1 1 29.098,84.955A11.500,11.500 0 1 1 17.902,84.955Z"/>
+<path fill="#f7f4ec" d="M281.300,69.775A9.000,9.000 0 1 1 286.898,84.955A11.500,11.500 0 1 1 275.702,84.955A9.000,9.000 0 1 1 281.300,69.775Z"/>
+<path fill="#f7f4ec" d="M63.185,86.849A11.500,11.500 0 1 1 70.815,86.849A9.000,9.000 0 0 1 73.500,88.775A9.000,9.000 0 1 1 73.500,101.225A9.000,9.000 0 0 1 60.500,101.225A9.000,9.000 0 1 1 60.500,88.775A9.000,9.000 0 0 1 63.185,86.849Z"/>
+<path fill="#f7f4ec" d="M233.985,86.849A11.500,11.500 0 1 1 241.615,86.849A9.000,9.000 0 0 1 244.300,88.775A9.000,9.000 0 1 1 244.300,101.225A9.000,9.000 0 0 1 231.300,101.225A9.000,9.000 0 1 1 231.300,88.775A9.000,9.000 0 0 1 233.985,86.849Z"/>
+<path fill="#f7f4ec" d="M102.685,86.849A11.500,11.500 0 1 1 110.315,86.849A9.000,9.000 0 1 1 102.685,86.849Z"/>
+<path fill="#f7f4ec" d="M194.485,86.849A11.500,11.500 0 1 1 202.115,86.849A9.000,9.000 0 1 1 194.485,86.849Z"/>
+<path fill="#e6ddd0" d="M145.900,20.725A9.000,9.000 0 1 1 145.900,8.275A9.000,9.000 0 0 1 158.900,8.275A9.000,9.000 0 1 1 158.900,20.725A9.000,9.000 0 0 1 145.900,20.725Z"/>
+<path fill="#e6ddd0" d="M131.525,38.357A4.500,4.500 0 1 1 131.525,29.643A9.000,9.000 0 0 1 145.900,27.775A9.000,9.000 0 0 1 158.900,27.775A9.000,9.000 0 0 1 173.275,29.643A4.500,4.500 0 1 1 173.275,38.357A9.000,9.000 0 0 1 158.900,40.225A9.000,9.000 0 0 1 145.900,40.225A9.000,9.000 0 0 1 131.525,38.357Z"/>
+<path fill="#e6ddd0" d="M142.798,59.329A9.000,9.000 0 1 1 142.798,46.671A11.500,11.500 0 0 1 162.002,46.671A9.000,9.000 0 1 1 162.002,59.329A11.500,11.500 0 0 1 142.798,59.329Z"/>
+<path fill="#e6ddd0" d="M132.585,84.151A9.000,9.000 0 1 1 142.798,69.671A11.500,11.500 0 0 1 162.002,69.671A9.000,9.000 0 1 1 172.215,84.151A11.500,11.500 0 1 1 158.798,101.329A9.000,9.000 0 0 1 146.002,101.329A11.500,11.500 0 1 1 132.585,84.151Z"/>
+<rect x="146.90" y="111.00" width="11.00" height="6.00" rx="1" fill="none" stroke="#171713" stroke-width="0.5" stroke-dasharray="1.5,1"/>
 <circle cx="35.00" cy="14.50" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
 <circle cx="269.80" cy="14.50" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
 <circle cx="48.00" cy="14.50" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
@@ -48,8 +85,9 @@
 <circle cx="136.40" cy="53.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
 <circle cx="152.40" cy="53.00" r="8.50" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
 <circle cx="168.40" cy="53.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
-<circle cx="145.90" cy="14.50" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
-<circle cx="158.90" cy="14.50" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
+<circle cx="139.40" cy="14.50" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
+<circle cx="152.40" cy="14.50" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
+<circle cx="165.40" cy="14.50" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
 <circle cx="136.40" cy="76.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
 <circle cx="152.40" cy="76.00" r="8.50" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
 <circle cx="168.40" cy="76.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
@@ -76,12 +114,12 @@
 <circle cx="210.55" cy="34.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
 <circle cx="107.25" cy="34.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
 <circle cx="197.55" cy="34.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
-<circle cx="70.25" cy="53.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
-<circle cx="234.55" cy="53.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
-<circle cx="86.25" cy="53.00" r="8.50" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
-<circle cx="218.55" cy="53.00" r="8.50" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
-<circle cx="105.25" cy="53.00" r="8.50" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
-<circle cx="199.55" cy="53.00" r="8.50" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
+<circle cx="70.25" cy="51.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
+<circle cx="234.55" cy="51.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
+<circle cx="86.25" cy="51.00" r="8.50" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
+<circle cx="218.55" cy="51.00" r="8.50" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
+<circle cx="102.25" cy="51.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
+<circle cx="202.55" cy="51.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
 <circle cx="17.00" cy="76.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
 <circle cx="287.80" cy="76.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
 <circle cx="30.00" cy="76.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
@@ -100,31 +138,31 @@
 <circle cx="198.30" cy="76.00" r="8.50" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
 <circle cx="106.50" cy="95.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
 <circle cx="198.30" cy="95.00" r="6.00" fill="#2b2b28" stroke="#c9c2b2" stroke-width="0.3"/>
-<text x="33.00" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">IN L</text>
-<text x="271.80" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">OUT R</text>
-<text x="44.50" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">IN R</text>
-<text x="260.30" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">OUT L</text>
-<text x="56.00" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">PIT</text>
-<text x="248.80" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">PIT</text>
-<text x="67.50" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">GATE</text>
-<text x="237.30" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">GATE</text>
-<text x="79.00" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">COLOR</text>
-<text x="225.80" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">COLOR</text>
-<text x="90.50" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FILT</text>
-<text x="214.30" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FILT</text>
-<text x="102.00" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
-<text x="202.80" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
-<text x="113.50" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">LVL</text>
-<text x="191.30" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">LVL</text>
-<text x="14.00" y="107.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SHIFT</text>
-<text x="290.80" y="107.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">MOD</text>
-<text x="136.00" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">CLK</text>
-<text x="168.80" y="108.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">RST</text>
+<text x="33.00" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">IN L</text>
+<text x="271.80" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">OUT R</text>
+<text x="44.50" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">IN R</text>
+<text x="260.30" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">OUT L</text>
+<text x="56.00" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">PIT</text>
+<text x="248.80" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">PIT</text>
+<text x="67.50" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">GATE</text>
+<text x="237.30" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">GATE</text>
+<text x="79.00" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">COLR</text>
+<text x="225.80" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">COLR</text>
+<text x="90.50" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FILT</text>
+<text x="214.30" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FILT</text>
+<text x="102.00" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
+<text x="202.80" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
+<text x="113.50" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">LVL</text>
+<text x="191.30" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">LVL</text>
+<text x="14.00" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SHFT</text>
+<text x="290.80" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">MOD</text>
+<text x="136.00" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">CLK</text>
+<text x="168.80" y="122.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">RST</text>
 <text x="136.40" y="105.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SEND</text>
 <text x="152.40" y="103.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TONE</text>
 <text x="168.40" y="105.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SEND</text>
-<text x="23.50" y="105.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">COLOR</text>
-<text x="281.30" y="105.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">COLOR</text>
+<text x="23.50" y="105.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">COLR</text>
+<text x="281.30" y="105.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">COLR</text>
 <text x="54.00" y="103.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIME</text>
 <text x="250.80" y="103.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIME</text>
 <text x="67.00" y="103.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FB</text>
@@ -134,7 +172,7 @@
 <text x="106.50" y="103.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">GRIT</text>
 <text x="198.30" y="103.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">GRIT</text>
 <text x="136.40" y="84.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SIZE</text>
-<text x="152.40" y="86.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">DECAY</text>
+<text x="152.40" y="86.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">DECY</text>
 <text x="168.40" y="84.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">DIFF</text>
 <text x="17.00" y="84.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TUNE</text>
 <text x="287.80" y="84.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TUNE</text>
@@ -145,27 +183,27 @@
 <text x="106.50" y="86.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">LVL</text>
 <text x="198.30" y="86.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">LVL</text>
 <text x="136.40" y="61.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIDE</text>
-<text x="152.40" y="63.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">MORPH</text>
-<text x="168.40" y="61.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">CHOKE</text>
+<text x="152.40" y="63.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">MRPH</text>
+<text x="168.40" y="61.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">PACE</text>
 <text x="21.75" y="63.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">MOD</text>
 <text x="283.05" y="63.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">MOD</text>
 <text x="40.75" y="63.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">DENS</text>
 <text x="264.05" y="63.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">DENS</text>
-<text x="70.25" y="61.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">ENGINE</text>
-<text x="234.55" y="61.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">ENGINE</text>
-<text x="86.25" y="63.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FILT</text>
-<text x="218.55" y="63.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FILT</text>
-<text x="105.25" y="63.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
-<text x="199.55" y="63.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
-<text x="139.40" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TEMPO</text>
-<text x="152.40" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FREE&#124;GRID</text>
-<text x="165.40" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SHUFL</text>
-<text x="18.25" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SHAPE</text>
-<text x="286.55" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SHAPE</text>
+<text x="70.25" y="59.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">ENG</text>
+<text x="234.55" y="59.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">ENG</text>
+<text x="86.25" y="61.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FILT</text>
+<text x="218.55" y="61.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">FILT</text>
+<text x="102.25" y="59.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
+<text x="202.55" y="59.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
+<text x="139.40" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">TEMP</text>
+<text x="152.40" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SYNC</text>
+<text x="165.40" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SHFL</text>
+<text x="18.25" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SHAP</text>
+<text x="286.55" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SHAP</text>
 <text x="31.25" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SMTH</text>
 <text x="273.55" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SMTH</text>
-<text x="44.25" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">RANGE</text>
-<text x="260.55" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">RANGE</text>
+<text x="44.25" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">RANG</text>
+<text x="260.55" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">RANG</text>
 <text x="68.25" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">ATK</text>
 <text x="236.55" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">ATK</text>
 <text x="81.25" y="42.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">DEC</text>
@@ -184,7 +222,7 @@
 <text x="230.80" y="22.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">VARY</text>
 <text x="101.00" y="21.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">REC</text>
 <text x="203.80" y="21.00" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">REC</text>
-<text x="145.90" y="22.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SCALE</text>
-<text x="158.90" y="22.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">DRIFT</text>
-<text x="152.40" y="6.2" fill="#171713" text-anchor="middle" font-family="monospace" font-size="3.2" letter-spacing="0.9" font-weight="bold">FIREFLOW HW DRAFT 60HP</text>
+<text x="139.40" y="22.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">SCAL</text>
+<text x="152.40" y="22.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">DRFT</text>
+<text x="165.40" y="22.50" fill="#171713" text-anchor="middle" font-family="monospace" font-size="2.2">CHOK</text>
 </svg>

@@ -26,7 +26,8 @@ def test_panel_is_60hp():
 def test_same_runtime_params_same_order():
     # The hw panel is the SAME instrument: identical enum set, identical order.
     assert [c.enum for c in hw.HW_PARAMS] == [c.enum for c in gp.RUNTIME_PANEL_PARAMS]
-    assert [c.enum for c in hw.HW_INPUTS] == [c.enum for c in gp.INPUTS]
+    assert [c.enum for c in hw.HW_INPUTS] == (
+        [c.enum for c in gp.INPUTS] + [c.enum for c in gp.HW_MOD_INPUTS])
     assert [c.enum for c in hw.HW_OUTPUTS] == [c.enum for c in gp.OUTPUTS]
     assert [c.enum for c in hw.HW_LIGHTS] == [c.enum for c in gp.LIGHTS]
 
@@ -52,20 +53,17 @@ def test_hardware_footprints():
 
 def test_rail_keepout():
     # Rails and screws own the top/bottom ~9 mm; VCV's 2 mm rule is not enough.
+    # Status-strip small knobs at y=14.5, r=6 sit 0.5 mm into KEEP_TOP — the
+    # approved drawing, same nibble SCALE/DRIFT already had (spec 2026-08-10
+    # §8 nachtrag). Bodies still cannot cross the rail by more than that.
     for c in hw.ALL_HW:
-        assert c.y - c.r >= hw.KEEP_TOP - 1e-9, (c.enum, "top")
+        assert c.y - c.r >= hw.KEEP_TOP - 0.5 - 1e-9, (c.enum, "top")
         assert c.y + c.r <= hw.KEEP_BOT + 1e-9, (c.enum, "bottom")
         assert c.x - c.r >= 2.0 and c.x + c.r <= hw.W - 2.0, (c.enum, "side")
     # Static lettering (hw.TEXTS) used to be invisible to this guard: nothing
     # stopped a title or legend from being placed inside a keep-out rail.
     # Text has no radius, so it is checked as a bare point.
     for (x, y, size, spacing, col, anchor, txt) in hw.TEXTS:
-        if txt == hw.TITLE_TEXT:
-            # Named exemption, not a silent skip: see the TITLE_TEXT comment
-            # in gen_hw_panel.py -- the mounting screws are at the panel's
-            # left/right edges, not near x=CX where the title sits, so this
-            # particular overlap with KEEP_TOP is mechanically harmless.
-            continue
         check(y >= hw.KEEP_TOP - 1e-9, f"text {txt!r} at y={y} crosses the top rail")
         check(y <= hw.KEEP_BOT + 1e-9, f"text {txt!r} at y={y} crosses the bottom rail")
         check(x >= 2.0 and x <= hw.W - 2.0, f"text {txt!r} at x={x} crosses the side keepout")
@@ -189,13 +187,15 @@ def test_svg_exists_and_is_60hp():
     assert f'width="{hw.W:.3f}mm"' in svg and 'height="128.500mm"' in svg
 
 def test_shared_knob_labels_do_not_coincide():
-    # BEND shares ATTACK's knob; an aluminium plate prints both words
-    # stacked, never superimposed.
+    # BEND shares ATTACK's knob, but the graphics round left the second word
+    # off the plate (spec 2026-08-10 §13). Printing it above ATK lands it in
+    # the TIME/VOICE gap, which is how "BLEND" showed up under RATE/VARY.
     by_enum = {c.enum: c for c in hw.HW_PARAMS}
     for side in ("_A", "_B"):
-        atk, bend = by_enum["ATTACK" + side], by_enum["STAGES" + side]
-        la, lb = hw.hw_label(atk), hw.hw_label(bend)
-        assert abs(la[1] - lb[1]) >= 2.0, side
+        check(not by_enum["STAGES" + side].label,
+              f"STAGES{side} still prints {by_enum['STAGES' + side].label!r}")
+    svg = hw.svg()
+    check(">BEND</text>" not in svg, "BEND is still drawn on the HW plate")
 
 def test_hw_slot_map_matches_the_reduced_inventory():
     """Every runtime param has a hardware slot and no slot is left pointing
@@ -290,61 +290,61 @@ def test_every_control_has_a_size_class():
 
 
 def test_size_classes_match_the_spec():
-    """Die 18 großen sind namentlich beschlossen (spec 2026-08-10 §1).
-    Ohne diese Prüfung wandert die Vergabe beim nächsten Umbau lautlos."""
-    BIG = {"DENSITY", "MOD", "COLOR", "FILT", "SOURCE", "FLUX", "REV_MIX",
+    """Große Kappen nach Redistribution + Grafikrunde: SOURCE/TIMB ist klein,
+    ENGINE ist ein Rastpoti (spec 2026-08-10 §5/§9, TIMB-Schrumpf 15. Aug)."""
+    BIG = {"DENSITY", "MOD", "COLOR", "FILT", "FLUX", "REV_MIX",
            "COMP", "MORPH", "REV_DECAY"}
     got = {b for b, cls in hw.HW_SIZE.items() if cls == "G"}
     check(got == BIG, f"big-knob set drifted: extra={got-BIG} missing={BIG-got}")
     big_positions = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "G"]
-    check(len(big_positions) == 18, f"expected 18 big positions, got {len(big_positions)}")
+    check(len(big_positions) == 16, f"expected 16 big positions, got {len(big_positions)}")
     small = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "S"]
-    # 47 (spec 2026-08-12 modulation-pace): PACE joined as a small knob,
-    # HW_SIZE["PACE"] = "S".
-    check(len(small) == 47, f"expected 47 small params, got {len(small)}")
+    # 47 (PACE) + SOURCE×2 (was G) + ENGINE×2 (was P) = 51
+    check(len(small) == 51, f"expected 51 small params, got {len(small)}")
+    check(abs(hw.CLASS_R["G"] - 8.5) < 1e-9, "CLASS_R G is not 8.5")
+    check(abs(hw.CLASS_R["S"] - 6.0) < 1e-9, "CLASS_R S is not 6.0")
+    check(hw.HW_SIZE["SOURCE"] == "S", "TIMB/SOURCE is not small")
+    check(hw.HW_SIZE["ENGINE"] == "S", "ENGINE is not a small knob")
 
 
 def test_hw_only_inventory():
-    """Was es auf Blech gibt, aber nicht im VCV-Modul: 2 Taster, 8 CV-Buchsen,
-    16 zusätzliche LEDs (spec 2026-08-10 §5)."""
+    """Was es auf Blech gibt, aber nicht im VCV-Modul: 2 Taster, 6 zusätzliche
+    LEDs. Die acht MOD-Buchsen sind echte Inputs (unwired), keine HW_ONLY-
+    Platzhalter mehr. Zehn LEDs insgesamt."""
     kinds = {}
     for c in hw.HW_ONLY:
         kinds[hw.hw_class(c.enum)] = kinds.get(hw.hw_class(c.enum), 0) + 1
     check(kinds.get("P") == 2, f"expected 2 hw-only pads, got {kinds.get('P')}")
-    check(kinds.get("J") == 8, f"expected 8 CV jacks, got {kinds.get('J')}")
-    check(kinds.get("L") == 16, f"expected 16 hw-only LEDs, got {kinds.get('L')}")
-    # and they must NOT have leaked into the shared param inventory
+    check(kinds.get("J", 0) == 0, f"expected 0 hw-only jacks, got {kinds.get('J')}")
+    check(kinds.get("L") == 6, f"expected 6 hw-only LEDs, got {kinds.get('L')}")
     assert [c.enum for c in hw.HW_PARAMS] == [c.enum for c in gp.RUNTIME_PANEL_PARAMS]
     total_leds = len([c for c in hw.ALL_HW if hw.hw_class(c.enum) == "L"])
-    check(total_leds == 20, f"expected 20 LEDs on the panel, got {total_leds}")
+    check(total_leds == 10, f"expected 10 LEDs on the panel, got {total_leds}")
 
 
-def test_cv_sits_under_its_target():
-    """Jede CV-Buchse trägt den Namen ihres Ziels, teilt dessen x exakt und
-    liegt darunter (spec 2026-08-10 §4). Ohne diese Prüfung wandert eine
-    Buchse in der nächsten Runde weg und die Beschriftung lügt."""
-    by_label = {}
-    for c in hw.HW_PARAMS:
-        by_label[(c.label, c.x > hw.CX)] = c
-    cvs = [c for c in hw.HW_ONLY if c.enum.startswith("CV_")]
-    check(len(cvs) == 8, f"expected 8 CV jacks, got {len(cvs)}")
-    for j in cvs:
-        target = by_label.get((j.label, j.x > hw.CX))
-        check(target is not None, f"{j.enum} names {j.label!r}, which is not a knob")
-        if target is None:
-            continue
-        check(abs(target.x - j.x) < 1e-6,
-              f"{j.enum} at x={j.x} does not share x with {target.enum} "
-              f"at x={target.x}")
-        check(j.y > target.y, f"{j.enum} is not below {target.enum}")
-        check(hw.hw_class(target.enum) == "G",
-              f"{j.enum} points at {target.enum}, which is not a big knob")
+def test_mod_jacks_on_the_jack_row():
+    """The eight green COLOR/FILT/TIMB/LVL placeholders are real Rack inputs
+    labelled MOD1–MOD4, mirrored, on the jack row. process() does not read them."""
+    mods = [c for c in hw.HW_INPUTS if c.enum.startswith("MOD")]
+    check(len(mods) == 8, f"expected 8 MOD jacks, got {len(mods)}")
+    check([c.enum for c in mods] == [c.enum for c in gp.HW_MOD_INPUTS],
+          "HW MOD jack order drifted from HW_MOD_INPUTS")
+    check([c.label for c in mods] == ["MOD1", "MOD2", "MOD3", "MOD4"] * 2,
+          f"MOD captions drifted: {[c.label for c in mods]}")
+    xs_a = (hw.X_COLOR, hw.X_FILT, hw.X_TIMB, hw.X_LVL)
+    for j, x in zip(mods[:4], xs_a):
+        check(abs(j.y - hw.JACK_Y) < 1e-6, f"{j.enum} is not on the jack row")
+        check(abs(j.x - x) < 1e-6, f"{j.enum} x is {j.x}, not {x}")
+    for c in hw.HW_ONLY:
+        check(not c.enum.startswith("CV_"), f"placeholder {c.enum} is still HW_ONLY")
+        check(c.enum not in {m.enum for m in gp.HW_MOD_INPUTS},
+              f"{c.enum} is HW_ONLY, not a real input")
 
 
 def test_sd_cutout_is_clear():
     """Kein Bedienelement, keine Buchse, keine LED und kein Beschriftungsanker
-    liegt im SD-Ausschnitt (spec 2026-08-10 §3/§5). Der Ausschnitt sitzt 3 mm
-    tiefer als die Buchsenmitten, weil TONEs Beschriftung sonst darin läge."""
+    liegt im SD-Ausschnitt. MicroSD-Platzhalter: 11 × 6 mm, mittig zwischen
+    CLK und RST (Grafikrunde 15. Aug)."""
     x0, x1 = hw.SD_X - hw.SD_W / 2, hw.SD_X + hw.SD_W / 2
     y0, y1 = hw.SD_Y - hw.SD_H / 2, hw.SD_Y + hw.SD_H / 2
 
@@ -370,10 +370,72 @@ def test_sd_cutout_is_clear():
     check(y1 <= hw.KEEP_BOT + 1e-9, "SD cutout crosses the bottom rail")
 
 
+def test_zone_wash_follows_the_deck_silhouette():
+    """The A/B wash is a smoothed polygon along the deck, not a vertical at
+    ZONE_A and not a chain of raw circles. The edge stays west of the centre
+    wells and still moves with the silhouette (not a straight slab)."""
+    edge = hw.wash_edge_xs()
+    xs = [x for _y, x in edge]
+    centre_min = hw.centre_well_left()
+    check(max(xs) < centre_min,
+          f"wash edge reaches {max(xs):.2f}, centre wells start {centre_min:.2f}")
+    check(min(xs) >= hw.SLAB_X - 1e-9, "wash edge dropped below the slab floor")
+    check(max(xs) - min(xs) > 8.0,
+          f"wash edge is too flat ({max(xs) - min(xs):.1f} mm) — smoothing ate the silhouette")
+    svg = hw.svg()
+    check(f'<polygon fill="{hw.KNOB_DISC_A}"' in svg, "left wash polygon is missing")
+    check(f'<polygon fill="{hw.KNOB_DISC_B}"' in svg, "right wash polygon is missing")
+    check(svg.count("<polygon") == 2, f"expected 2 wash polygons, got {svg.count('<polygon')}")
+
+
 def test_sd_cutout_is_drawn():
     svg = open(os.path.join(HERE, "FireflowHW.svg")).read()
     check(f'width="{hw.SD_W:.3f}"' in svg and f'height="{hw.SD_H:.3f}"' in svg,
           "the SD cutout is not in the SVG")
+
+
+def test_drawing_geometry():
+    """Pins the 15 Aug graphics-round drawing: row rhythm, SD, no title,
+    no rail dashes, zone wash to the edge, jack captions under the jacks."""
+    by = {c.enum: c for c in hw.ALL_HW}
+    check(abs(hw.JACK_Y - 114.0) < 1e-9, f"JACK_Y is {hw.JACK_Y}, not 114")
+    check((hw.SD_W, hw.SD_H) == (11.0, 6.0), f"SD size is {hw.SD_W}x{hw.SD_H}")
+    check(abs(hw.SD_Y - hw.JACK_Y) < 1e-9, f"SD_Y is {hw.SD_Y}, not on the jack row")
+    check(abs(by["ENGINE_A"].x - 70.25) < 1e-9, "ENGINE is not at the VOICE head")
+    check(abs(by["ENGINE_A"].y - 49.25) < 1e-9, "ENG did not rise toward ATK")
+    check(abs(by["SOURCE_A"].y - 47.61) < 1e-9, "TIMB did not rise toward SUB")
+    for enum in ("ATTACK_A", "DECAY_A", "RES_A", "SUB_A"):
+        ly = hw.hw_label(by[enum])[1]
+        check(ly > by[enum].y, f"{enum} caption flipped above the knob")
+        check(abs(by[enum].y - hw.Y_B1K) < 1e-9, f"{enum} left the ATK row")
+    check(abs(by["FLUXRATE_A"].y - 89.86) < 1e-9, "TIME did not rise toward MIX")
+    check(abs(by["LINK_A"].y - 89.86) < 1e-9, "LINK did not rise toward MIX")
+    check(abs(by["TIDE"].y - 50.22) < 1e-9, "TIDE did not rise toward TEMP")
+    check(abs(by["PACE"].y - 50.22) < 1e-9, "PACE did not rise toward SHFL")
+    check(abs(by["REV_DECAY"].y - 79.00) < 1e-9, "DECY did not drop away from MORPH")
+    check(abs(by["REV_TONE"].y - 97.00) < 1e-9, "TONE did not follow DECY")
+    check(abs(by["SHIFTBTN"].y - hw.JACK_Y) < 1e-9, "SHIFT is not on the jack row")
+    check(abs(by["MODBTN"].y - hw.JACK_Y) < 1e-9, "MOD is not on the jack row")
+    check(not hw.TEXTS, "title/legend TEXTS should be empty")
+    lx, ly = hw.hw_label(by["IN_L"])[:2]
+    check(ly > by["IN_L"].y, "IN L caption is not under the jack")
+    svg = hw.svg()
+    check('y1="9.00"' not in svg and 'y1="119.50"' not in svg,
+          "rail keep-out dashes are still drawn")
+    check('y="0"' in svg or 'y="0.000"' in svg, "zone wash does not start at the edge")
+    check(f'fill="{hw.HW_KNOB}"' not in svg, "black knob discs are back")
+    check("<polygon" in svg, "smoothed silhouette wash is missing")
+    check(f'width="{hw.mm(hw.ZONE_A)}"' not in svg, "hard ZONE_A wash rect is back")
+    for c in hw.HW_PARAMS:
+        if hw.hw_class(c.enum) == "P":
+            continue
+        fill = hw.knob_disc_fill(c.x)
+        needle = (f'cx="{hw.mm(c.x)}" cy="{hw.mm(c.y)}" r="{hw.mm(c.r)}" '
+                  f'fill="{fill}"')
+        check(needle in svg, f"{c.enum} disc is not the zone colour ({fill})")
+    for c in hw.HW_PARAMS:
+        if c.label:
+            check(len(c.label) <= 4, f"knob caption {c.enum}={c.label!r} is over 4 chars")
 
 
 def main():

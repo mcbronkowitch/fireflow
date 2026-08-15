@@ -101,6 +101,25 @@ def test_enum_order():
     check(g.PART_STRIDE == 20, f"PART_STRIDE is {g.PART_STRIDE}, must be 20")
 
 
+def test_hw_mod_inputs_are_appended_ids_not_42hp_widgets():
+    """FireflowHW's MOD1–MOD4 jacks share the InputId enum so Rack can host
+    the ports; they are not drawn on the 42 HP panel and must append after
+    RESET so saved patches keep the original four input ids."""
+    want = [f"MOD{i}_A" for i in range(1, 5)] + [f"MOD{i}_B" for i in range(1, 5)]
+    check([c.enum for c in g.HW_MOD_INPUTS] == want,
+          f"HW_MOD_INPUTS drifted: {[c.enum for c in g.HW_MOD_INPUTS]}")
+    h = g.header()
+    check("static const PanelCtl kHwModInputCtls[]" in h,
+          "generated header has no kHwModInputCtls")
+    check("RESET,\n    MOD1_A," in h, "MOD1_A is not appended after RESET")
+    kinput = h.split("static const PanelCtl kInputCtls[] = {")[1].split("};")[0]
+    check("{MOD1_A," not in kinput, "MOD jacks leaked into the 42 HP kInputCtls")
+    check("MOD1" not in g.svg(), "MOD jacks leaked onto the 42 HP plate")
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp"), encoding="utf-8").read()
+    check("kHwModInputCtls" in cpp, "Fireflow.cpp does not config the HW MOD inputs")
+
+
 def test_source_and_hidden_detune_partition():
     """SOURCE owns the former DTUN widgets; DETUNE is a real panel knob again
     (spec 2026-08-09 hw-control-reduction task 10 -- out of HIDDEN_PARAMS and

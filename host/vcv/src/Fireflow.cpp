@@ -514,6 +514,7 @@ struct Fireflow : Module {
         // panel labels are short ("L", "PIT"); the group legend carries the rest,
         // so tooltips use the control table's spelled-out tip instead
         for (const auto& c : kInputCtls)  configInput(c.id, c.tip);
+        for (const auto& c : kHwModInputCtls) configInput(c.id, c.tip);
         for (const auto& c : kOutputCtls) configOutput(c.id, c.tip);
     }
 
@@ -1971,8 +1972,14 @@ struct FireflowHWWidget : ModuleWidget {
                 case WK_SW2:
                     addParam(createParamCentered<CKSS>(pos, module, c.id)); break;
                 case WK_LATCH:
-                    if (c.id == ENGINE_A || c.id == ENGINE_B)
-                        addParam(createParamCentered<EngineCycleLatch>(pos, module, c.id));
+                    if (c.id == ENGINE_A || c.id == ENGINE_B) {
+                        // Detent pot on the hardware draft (spec 2026-08-10 §5);
+                        // the big module keeps the cycle latch.
+                        if (big)
+                            addParam(createParamCentered<EngineCycleLatch>(pos, module, c.id));
+                        else
+                            addParam(createParamCentered<Trimpot>(pos, module, c.id));
+                    }
                     else if (c.id == REC_A || c.id == REC_B) {
                         auto* pad = createParamCentered<SlotVisible<VCVLatch>>(pos, module, c.id);
                         pad->fireflow = module;

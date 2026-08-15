@@ -6,47 +6,33 @@
   It describes one release, not a changelog: rewrite it in the same commit that
   bumps `host/vcv/plugin.json`, before tagging. Past texts stay in git history.
   Everything below the comment is public.
-
-  Written 2026-08-14 for the flow/Glow removal. `plugin.json` still reads
-  2.21.1 — the bump belongs to whoever tags this, and MAJOR stays 2.
 -->
 
-## FireFlow Glow is removed
+## FireFlow 2.21.2
 
-This release takes a module away and leaves the other two alone. **FireFlow**
-and **FireFlow HW Draft** are unchanged: same panels, same parameters, same
-sound.
+The 42 HP **FireFlow** module is unchanged in layout and sound. This release
+is the 60 HP **FireFlow HW Draft**: a visual pass on the hardware-envelope
+rehearsal, still a design study, still labelled as a draft.
 
-**FireFlow Glow is gone, and it is not coming back.** It was a six-macro box
-built to be the small thing you turn up with, on top of a generative terrain
-layer that drew whole patches from a seed. That layer — `engine/flow/`, some
-seven thousand lines — went with it. Neither existed for its own sake, and the
-reason they existed no longer does.
+**The plate.** Deck A is solder-green, deck B copper, the shared centre paper.
+Those three fields no longer meet on a hard vertical: the inner edge follows
+the deck silhouette, then a light smooth so it reads as one curve rather than
+a chain of circles. Knob discs under the Rack widgets are the same wash colour,
+so they sit as holes through the wells rather than black caps.
 
-**If you have a saved patch containing a Glow**, Rack will report the module as
-missing when you open it and leave a placeholder in its place. The rest of the
-patch loads normally; FireFlow and FireFlow HW Draft instances in the same
-patch are untouched. There is no migration, and none is planned — Glow's state
-was a terrain seed, and the generator that turned a seed into a sound is not in
-the plugin any more.
+**Knobs.** ENG and TIMB, TIME and LINK, TIDE and PACE sit slightly off the old
+row grid so the organic wells close; DECY drops a little to give MORPH air.
+ATK and SUB stay on the envelope row, captions underneath.
 
-**Nothing in the engine changed.** The removal was subtraction plus one
-rename: the parameter table that Glow drove the instrument through was never
-Glow's — it is a reflection table over the engine's own setters — and it now
-lives at `engine/param_table.h`, where the hardware panel will use it. The
-audio path, the modulation system and both surviving panels are byte-for-byte
-what they were.
+**MOD 1–4.** The eight green COLOR / FILT / TIMB / LVL placeholders are real
+Rack jacks, mirrored, on the jack row. They are not wired into the engine yet.
 
-The reasoning, the specs and the plans that produced Glow are kept in
-`docs/attic/`, together with a note recording the values that were tuned by
-ear rather than derived, so the next design round does not have to guess at
-them a second time.
+Saved patches keep their original four inputs (IN L/R, CLOCK, RESET); the MOD
+jacks append after those ids. FireFlow HW Draft remains a 60 HP workbench, not
+a finished instrument.
 
 ## Install
 
 Download the `.vcvplugin` for your platform, unpack it into Rack's user plugin
 directory and restart Rack. Built against Rack SDK 2.6.6 for Windows x64, Apple
 Silicon (mac-arm64) and Linux x64.
-
-FireFlow HW Draft still says `DRAFT` on its panel: it is a design study for a
-60 HP hardware module, not a finished instrument.

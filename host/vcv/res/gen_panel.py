@@ -402,6 +402,19 @@ INPUTS = [jack_at(e) for e in ("IN_L", "IN_R", "CLOCK", "RESET")]
 OUTPUTS = [jack_at(e) for e in ("OUT_L", "OUT_R", "PITCH_A", "GATE_A",
                                 "PITCH_B", "GATE_B")]
 
+# FireflowHW only. IDs live in the shared InputId enum so Rack can host the
+# ports; they are not drawn on the 42 HP panel and process() does not read them.
+HW_MOD_INPUTS = [
+    Ctl("MOD1_A", IN, 0, 0, "MOD1", "Mod 1 (unwired)"),
+    Ctl("MOD2_A", IN, 0, 0, "MOD2", "Mod 2 (unwired)"),
+    Ctl("MOD3_A", IN, 0, 0, "MOD3", "Mod 3 (unwired)"),
+    Ctl("MOD4_A", IN, 0, 0, "MOD4", "Mod 4 (unwired)"),
+    Ctl("MOD1_B", IN, 0, 0, "MOD1", "Mod 1 (unwired)"),
+    Ctl("MOD2_B", IN, 0, 0, "MOD2", "Mod 2 (unwired)"),
+    Ctl("MOD3_B", IN, 0, 0, "MOD3", "Mod 3 (unwired)"),
+    Ctl("MOD4_B", IN, 0, 0, "MOD4", "Mod 4 (unwired)"),
+]
+
 # The centre's outer background card is gone (spec 2026-07-18 §6) -- the four
 # fieldset boxes carry the grouping alone and grew to 41 mm, so the columns
 # use +/-10.5 outer columns.
@@ -940,7 +953,7 @@ def header():
         L2.append("};")
 
     emit_enum("ParamId",  PARAMS,  "NUM_PARAMS")
-    emit_enum("InputId",  INPUTS,  "NUM_INPUTS")
+    emit_enum("InputId",  INPUTS + HW_MOD_INPUTS,  "NUM_INPUTS")
     emit_enum("OutputId", OUTPUTS, "NUM_OUTPUTS")
     emit_enum("LightId",  LIGHTS,  "NUM_LIGHTS")
 
@@ -957,6 +970,7 @@ def header():
 
     emit_table("kParamCtls",  RUNTIME_PANEL_PARAMS)
     emit_table("kInputCtls",  INPUTS)
+    emit_table("kHwModInputCtls", HW_MOD_INPUTS)
     emit_table("kOutputCtls", OUTPUTS)
     emit_table("kLightCtls",  LIGHTS)
 
