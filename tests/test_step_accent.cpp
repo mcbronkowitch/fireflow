@@ -192,11 +192,28 @@ TEST_CASE("accent: a STEP deck pushes its note accent into the active engine") {
         if (a > 0.f) { seen_any = true; seen_max = std::max(seen_max, a); }
     }
     CHECK(seen_any);              // the push happens at all
+    // 0.9 rather than 1.0: at DENSE 1.0 the fired accents are the whole rank
+    // scale { r/(L-1) : r in 0..L-1 } (G2), whose top value IS exactly 1.0 and
+    // is what this setup measurably reaches (probed: seen_max == 1.0 exactly,
+    // 120 bpm, rate 0.8, 8 steps, over the 8 s window below). The bound is
+    // deliberately looser than that measured value, not a concession to it:
+    // the point of this case is only to separate "the whole DENSE-reveal
+    // range reaches the engine" from a stub that tops out at a floor like
+    // kAccentVelFloor/kAccentDecFloor (0.3f), and 0.9 does that with room to
+    // spare without pinning this seam test to an exact top value the way G2
+    // already does at the lane level.
     CHECK(seen_max > 0.9f);       // and it carries the whole range, not a floor
 
-    // FLOW must not push a stale accent into the drone.
+    // FLOW must not push a stale accent into the drone. No settle window here
+    // on purpose: the accent is a stored scalar with no settling behaviour of
+    // its own, so discarding samples after the switch would only shrink the
+    // window this gate is supposed to cover. Measured (docs/engine-map.md
+    // section 8): Part::process runs _fire_trigger() before _engine->
+    // process(), and the lane fires on the first FLOW sample after
+    // set_step(false), so the auto-drone's trigger never spends a stale STEP
+    // accent -- 0 leaks over 360 switch points. Reading from sample 0 is what
+    // makes this gate measure that invariant instead of assuming it.
     part.set_step(false, 8);
-    for (int i = 0; i < 48000; ++i) part.process(l, r);
     float flow_max = 0.f;
     for (int i = 0; i < 48000 * 4; ++i) {
         part.process(l, r);
@@ -323,5 +340,15 @@ TEST_CASE("accent G5: the DEC accent is inert at DEC 0 and real at DEC 1") {
     REQUIRE(full > 0);
     REQUIRE(cut > 0);
     CHECK(cut < full);
-    CHECK(static_cast<float>(cut) / static_cast<float>(full) < 0.6f);
+    // Bound tied to the named constant, not to a free-standing literal (the
+    // plan's Global Constraints forbid a gate depending on the by-ear 0.3):
+    // same shape as G4 above. Strictly stronger than the `< 0.6f` bound this
+    // replaced -- measured margin at the shipped kAccentDecFloor (0.3082) is
+    // 0.008 against this 10% window, whereas the old fixed bound only went
+    // red once kAccentDecFloor was raised past 0.60 (measured: 0.30 -> 0.3082
+    // PASS, 0.50 -> 0.5077 PASS, 0.55 -> 0.5562 PASS, 0.60 -> 0.6065 RED,
+    // 0.70 -> 0.7053 RED against `< 0.6f`), so a by-ear retune in that gap
+    // could have moved past 0.6 without this test ever seeing it.
+    CHECK(static_cast<float>(cut) / static_cast<float>(full)
+          == doctest::Approx(SynthEngine::kAccentDecFloor).epsilon(0.10));
 }
