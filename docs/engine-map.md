@@ -591,40 +591,47 @@ STEP, rate 0.5 Hz, SHAPE 0, SMOOTH 0, RANGE 1, VARY 0, `set_melodic()` before
   `k = clamp(round(DENSE·L), 1, L)` (`lane.cpp:643`, `:655`) — every cell of
   the sweep matched after the settle wrap.
 
-Pinned by `tests/test_step_accent.cpp` (G1 and G2: G2's
-`a.size() == steps` is what holds `len == STEPS`, and its permutation check
-is what holds the rank claim).
+Pinned by `tests/test_step_accent.cpp` (G1 and both G2 cases: the DENSE-1
+case's `a.size() == steps` is what holds `len == STEPS`, and its permutation
+check is what holds the rank claim; the intermediate-DENSE case below is what
+holds the `groove_length`-vs-`_groove_k()` normalization choice).
 
-### Two of the six accent red-proofs did not redden their gate, and both point at real engine behaviour, not a test defect
+### Red-proofing found one real gate gap and one false one; the gap is closed, the other is a documented property
 
-Red-proofing `tests/test_step_accent.cpp` on 2026-08-15 (six one-line
-mutations, one at a time, `-DCMAKE_BUILD_TYPE=Release`) reddened four of six.
-The two that did not:
+Red-proofing `tests/test_step_accent.cpp` on 2026-08-15 (one-line mutations,
+one at a time, `-DCMAKE_BUILD_TYPE=Release`) found that G2 and G3, as they
+stood, could not catch the mutation each is named for.
 
-- **G2 ("at DENSE 1 the contour is the whole rank scale") cannot distinguish
-  normalizing `_start_note`'s accent by `groove_length` from normalizing it
-  by `_groove_k()`.** The case runs at `set_density(1.f)`, and `_groove_k()`
-  (`lane.cpp:643-646`) computes `k = clamp(round(density·L), 1, L)`; at
-  `density == 1` that is `L` exactly, so `_groove_k() - 1 == groove_length - 1`
-  and the mutated denominator is bit-identical to the original at the one
-  density this case exercises. The mutation only becomes observable at
-  DENSE < 1, which G2 does not test — G1 covers DENSE 0 but the accent there
-  is 0 regardless of denominator (the anchor's rank is always 0), so no
-  existing case in the file distinguishes the two normalizations.
-- **G3 ("FLOW reports 0, including right after leaving STEP") cannot
-  distinguish `note_accent()`'s `_step_mode` guard (`lane.h:123`) from having
-  no guard at all**, because `set_step()`'s own mode-changed branch already
-  does `_note_accent = 0.f` (`lane.cpp:211`) on every STEP↔FLOW transition,
-  before the getter's guard is ever consulted. Once in FLOW, nothing writes
-  `_note_accent` again (`_start_note` only runs under `_melodic && _step_mode`,
-  `lane.cpp:671`), so the stored value stays 0 with or without the guard. The
-  comment on `note_accent()` claims "the `_step_mode` guard is not redundant
-  with the reset in `set_step()`" — measured, for the transition path this
-  gate exercises, it is: removing the guard changes nothing observable.
+**G2 was a real gap, now closed.** The original case ("at DENSE 1 the contour
+is the whole rank scale") runs at `set_density(1.f)`, and `_groove_k()`
+(`lane.cpp:643-646`) computes `k = clamp(round(density·L), 1, L)`; at
+`density == 1` that is `L` exactly, so `_groove_k() - 1 == groove_length - 1`
+and a mutation normalizing `_start_note`'s accent by `_groove_k()` instead of
+`groove_length` is bit-identical to the original at the one density that case
+exercises. G1 (DENSE 0) can't see it either — the sole firing slot is always
+rank 0, so its accent is `0 / anything == 0` regardless of the denominator.
+**A new case, "accent G2: at an intermediate DENSE, the fired accents are
+exactly the k lowest ranks over L-1", closes it**: at DENSE 0.5, `k < L` for
+every STEPS in the sweep (e.g. 4/8/16 steps → k 2/4/8), so
+`_groove_k() - 1 ≠ groove_length - 1` there and the two normalizations
+diverge. The case asserts the exact accent set `{ r/(L-1) : r in 0..k-1 }`,
+not just its bound, which also re-pins that the firing slots are precisely
+the `k` lowest ranks. Red-proved: under the `_groove_k()` mutation it fails on
+every STEPS/seed pair (first: `CHECK( 1 == Approx( 0.333333 ) )`, steps 4,
+seed 999); reverted, all three `accent G2*` cases pass (140/140 assertions).
 
-Neither finding says the mutated code is *correct* — `_groove_k()`
-normalization and a guardless getter may still be wrong for reasons these two
-gates were never built to see. It says the two gates, as written, do not see
-the difference they are named for. Recorded rather than "fixed" by widening
-the gate, per this file's own rule: a claim this specific needs its own probe
-before it is trusted, not a patched assertion.
+**G3 was never a gap — it is a property of the source, confirmed rather than
+patched.** `_note_accent` is written only by `_start_note`, which runs under
+`_step_mode` alone (`lane.cpp:671`), and `set_step()` is the only thing that
+changes mode; its `mode_changed` branch zeroes `_note_accent`
+(`lane.cpp:211`) on every STEP↔FLOW transition, before `note_accent()`'s
+`_step_mode` guard (`lane.h:123`) is ever consulted. So no reachable sequence
+can leak a stale STEP accent into FLOW, guard or not, and no gate can be
+written that tells a guarded accessor apart from a guardless one — which is
+why G3 doesn't. The design spec's §3 used to argue the opposite (the guard as
+the load-bearing mechanism, the reset as unaudited support); it now states
+the reset as what covers every reachable path and the guard as deliberate
+redundancy against a future second writer of `_note_accent`. **The guard
+stays, uncovered by any gate, on purpose** — removing it or writing a test for
+it were both considered and rejected: cheap insurance the day a second writer
+appears is worth more than a gate that could only ever pass.

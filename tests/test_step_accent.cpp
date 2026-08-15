@@ -108,6 +108,51 @@ TEST_CASE("accent G2: at DENSE 1 the contour is the whole rank scale") {
     }
 }
 
+TEST_CASE("accent G2: at an intermediate DENSE, the fired accents are exactly "
+          "the k lowest ranks over L-1") {
+    // Discriminates L-normalization from k-normalization in _start_note --
+    // something neither G1 nor G2 above can do. G1 runs at k == 1, where the
+    // lone firing slot is always rank 0, so the accent is 0/anything == 0
+    // under either normalization. G2 above runs at DENSE 1.0, where
+    // _groove_k() computes k == L exactly (round(1.0*L) clamped to L), so
+    // _groove_k() - 1 and (the actual denominator) L - 1 are numerically
+    // identical there. The two forms only diverge where k < L, so this case
+    // sits at DENSE 0.5, which yields k < L for every STEPS in kStepSet, and
+    // asserts the exact accent SET (not just its max) so it also re-pins
+    // that the firing slots are precisely the k lowest ranks (lane.cpp:655).
+    constexpr float kDense = 0.5f;
+    for (int steps : kStepSet) {
+        for (uint32_t seed : kSeeds) {
+            CAPTURE(steps);
+            CAPTURE(seed);
+
+            const int L = steps;   // pattern_groove.len == STEPS count (G2 above)
+            const int k = std::clamp(
+                static_cast<int>(std::lround(kDense * static_cast<float>(L))),
+                1, L);
+            REQUIRE(k < L);   // the setup must actually exercise k < L
+
+            ModLane l = note_step(seed, steps);
+            l.set_density(kDense);
+            std::vector<float> a = accents_in_cycle(l);
+
+            // Exactly k notes fire per cycle (the k lowest ranks), and their
+            // accents are exactly { r/(L-1) : r in 0..k-1 }.
+            REQUIRE(a.size() == static_cast<size_t>(k));
+            std::set<float> got(a.begin(), a.end());
+            std::set<float> want;
+            for (int r = 0; r < k; ++r)
+                want.insert(static_cast<float>(r) / static_cast<float>(L - 1));
+
+            REQUIRE(got.size() == want.size());
+            auto git = got.begin();
+            auto wit = want.begin();
+            for (; git != got.end(); ++git, ++wit)
+                CHECK(*git == doctest::Approx(*wit));
+        }
+    }
+}
+
 TEST_CASE("accent G3: FLOW reports 0, including right after leaving STEP") {
     ModLane l = note_step(12345u, 8);
     l.set_density(1.f);

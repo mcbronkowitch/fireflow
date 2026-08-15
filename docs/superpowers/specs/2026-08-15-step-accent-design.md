@@ -78,12 +78,17 @@ note; `a == 1` is the last note DENSE reveals.
 float note_accent() const { return _step_mode ? _note_accent : 0.f; }
 ```
 
-The guard is not redundant with the reset. Lanes fire in FLOW too, and
-`Part::_fire_trigger()` runs on those fires — without it, a deck leaving STEP
-would push the last STEP note's accent into its drone until the reset path was
-audited and found correct. One mode test, at the one place that cannot be
-bypassed, is cheaper than trusting every reset path forever. **FLOW is then
-constant 0 with no mode test in any consumer** — the STEP-only scope is a
+The reset, not the guard, is what covers every reachable path: `_note_accent`
+is written only by `_start_note`, which runs under `_step_mode` alone
+(`lane.cpp:671`); `set_step()` is the only thing that changes mode; and it
+zeroes `_note_accent` on every mode change (`lane.cpp:211`), before the
+accessor's guard is ever consulted. So no reachable sequence can leak a stale
+STEP accent into FLOW, guard or not — and no gate can be written that
+distinguishes the two, which is why none does. The guard stays anyway, as
+deliberate redundancy against a future second writer of `_note_accent` outside
+`_start_note`: one mode test, at the one place that cannot be bypassed, costs
+one comparison and is cheap insurance the day that writer appears. **FLOW is
+then constant 0 with no mode test in any consumer** — the STEP-only scope is a
 property of the source, not a condition sprinkled across the engines.
 
 ## 4. Delivery
