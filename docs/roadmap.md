@@ -427,7 +427,7 @@ is actually built today, and what is still design-only.
 | **+ Scales** | Pitch quantization (13 scales, SCALE/CHROM/FREE, root) layered onto the PITCH lane | ✅ **done** (engine + host; UI wiring deferred to M6) |
 | **M1.6** | FX: per-part FLUX (tape echo) + GRIT (drive/reduce), shared ambient reverb, FX params as modulation targets | ✅ **done** (engine + host; UI wiring deferred to M6) |
 | **M2** | Polyphonic synth voice (replaces the M1 test tone) | ✅ **done** (engine + host; UI wiring deferred to M6) |
-| **M3** | Capture sequencer (freeze the PITCH lane into a loop) | ✅ **done** (engine + host; UI wiring deferred to M6) |
+| **M3** | Capture sequencer (freeze the PITCH lane into a loop) | ⬛ **built, then removed 2026-07-14** (`6e6e2de`) — `engine/mod/capture.h`, `tests/test_capture.cpp` and the demo scenarios are gone, 562 lines. Removed as orthogonal to the melody rework, so that its `_on_boundary`/`process` edits would be clean — not because anything replaced it. See "M3 — Capture sequencer" under "Done" |
 | **+ Entropy** | Looping S&H melody buffer; bipolar ENTROPY (erode / loop / grow) replaces EVOLVE | ✅ **done** (engine + host; switch mapping in M6) |
 | **M4** | Center section — MORPH / COUPLE / DRIFT / SPOT / SETTLE | ✅ **done** (engine + host; UI wiring deferred to M6) |
 | **M4.5** | Ambient reverb v2 — Oliverb port: Doppler SIZE, DECAY > 100 % bloom, TONE, DEPTH; shimmer + DaisySP-LGPL removed | ✅ **done** (engine + host; UI wiring deferred to M6) |
@@ -528,8 +528,8 @@ but not yet wired (that is UI work, i.e. M6).
   harmonic minor, whole tone). Boot default: Dorian, both parts SCALE.
 - **Placement** — last stage of `Part::target_value(LANE_PITCH)`, so SMOOTH
   glides step through scale notes and ENTROPY grows or erodes the melody. `pitch_cv()` is
-  the single quantized source of truth for engine, CV out, and the future
-  capture sequencer.
+  the single quantized source of truth for engine and CV out. (It also named the
+  then-future capture sequencer, removed 2026-07-14 — see M3 below.)
 - **Host** — `set_scale`, `set_quant_mode`, `set_root` scenario actions; demo
   scenarios `dorian_melody.json`, `pentatonic_melody.json`, `dorian_vs_drift.json`.
 - **Tests** (`tests/test_quantizer.cpp` + Part integration) — scale mapping,
@@ -593,7 +593,22 @@ reference).
 - **UI (M6)** — VOICE edit layer gestures (PLAY-pad hold), PLAY-tap manual
   trigger wiring, engine-switch gesture.
 
-### M3 — Capture sequencer ✅
+### M3 — Capture sequencer ✅ built, ⬛ removed 2026-07-14
+
+**This feature no longer exists.** `6e6e2de` deleted `engine/mod/capture.h`,
+`tests/test_capture.cpp` (386 lines), the `capture_now`/`set_replay` scenario
+actions and the three demo scenarios — 562 lines in total — and removed the
+`Instrument` and `ModLane` surface with them. The commit's reason is not that
+something replaced it: *"Capture is orthogonal to the melody rework and had to
+go first so later `_on_boundary`/`process` edits are clean."* Nothing has taken
+over what it did, and no round has been opened to.
+
+The description below is kept as the record of what was built, and is written
+in the present tense of the day it shipped. **Nothing in it is true of the code
+today** — the section is history, not status. (It survived a month of status
+rounds because they looked for what had been added, not for what had gone; the
+LED-feedback round found it on 2026-08-16, by asking why a `CAP` indicator had
+no control to indicate.)
 
 Per-part freeze of the PITCH lane's last cycle into a replayable loop
 (`capture_now` / `set_replay` in scenarios; `ALT + SEQ` on hardware, M6).

@@ -182,7 +182,7 @@ the desktop clang path); the build, install and I/O details live in
 | **M1** | Portable engine foundation: SuperModulator, five lanes, `Instrument` API, desktop render host + tests | ✅ done |
 | **M1.6** | FX: per-part FLUX (tape echo) + GRIT (drive/reduce), shared ambient reverb, FX params as modulation targets | **done** (engine + host) |
 | **M2** | Polyphonic synth voice (replaces the M1 test tone) | **done** (engine + host) |
-| **M3** | Capture sequencer (freeze the PITCH lane into a loop) | **done** (engine + host) |
+| **M3** | Capture sequencer (freeze the PITCH lane into a loop) | built, then **removed** 2026-07-14 as orthogonal to the melody rework; nothing replaced it |
 | **M4** | Center section — MORPH / COUPLE / DRIFT / SPOT / SETTLE | **done** (engine + host) |
 | **M4.5** | Ambient reverb v2 — Oliverb port: Doppler SIZE, DECAY > 100 % bloom, TONE; shimmer & LGPL removed | **done** (engine + host) |
 | **M4.6** | Dynamics — one-knob comp per part + master limiter w/ master drive (captioned **PUSH** on the panel) | **done** (engine + host) |
