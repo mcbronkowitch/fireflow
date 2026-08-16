@@ -2876,6 +2876,22 @@ spec, preamble to §1).
 Step 1 is closed as far as the drawing goes; **step 2 (bring-up) still has no
 spec and is next**, and no hardware is ordered.
 
+**2026-08-16 — step 2 has one obligation nobody had costed: the ADC mux scan.**
+The panel's 65 pot channels reach the MCU through 16:1 muxes whose address and
+enable lines hang on the 595 chain — the topology that costs zero GPIOs and is
+the reason the 4-bit SD slot fits at all (envelope spec §2). **libDaisy cannot
+drive that.** `AdcChannelConfig::InitMux` takes three address pins
+(`MUX_SEL_LAST == 3`, `adc.h:34-40`), clamps the channel count with
+`mux_channels_ = mux_channels < 8 ? mux_channels : 8` (`adc.cpp:183`), and
+initialises the address lines as GPIO outputs it drives itself
+(`adc.cpp:185-191`). Stock, that is 8:1 on real GPIOs: **4 sense pins × 8 = 32
+channels against 65 needed**, and the three address GPIOs would have to come
+from a pool the SD slot has already emptied. The `AdcHandle` DMA scan stays
+usable; the channel switching has to be written for this project, and its CPU
+cost is unmeasured. The rest of the I/O budget does fit, with slack in every row
+— the full four-resource balance is in
+[`docs/hardware/io-budget.md`](hardware/io-budget.md) §3.
+
 **2026-08-14 — preset persistence now starts from nothing.** M6's scope names
 it, and until this date the repo had two pieces of prior art for it: the
 terrain layer's `terrain_code.h`, the **only whole-patch serialiser** anything

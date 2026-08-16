@@ -232,16 +232,39 @@ und scannt per DMA. Der Mux-Scan kostet damit in der Audioschleife praktisch
 nichts — die Warnung im Plan vor blockierendem Scan gilt `src/hw/sr_165.h`,
 dem Schieberegister für Taster, nicht dem analogen Mux.
 
-### Die Stock-Init kann den Mux nicht — das muss das Bring-up übernehmen
+### libDaisy kann diesen Mux-Entwurf nicht — das ist ungeplante Firmware-Arbeit
 
-`DaisyPatchSM::Init()` legt **alle zwölf** ADC-Kanäle mit `InitSingle` an
-(`daisy_patch_sm.cpp:318-322`) und konditioniert die ersten acht anschließend
-mit `InitBipolarCv`, die vier rohen mit dem einfachen `Init`
+Zwei Befunde, beide aus der Bibliothek gelesen (2026-08-16), und der zweite ist
+der teure.
+
+**Erstens: die Stock-Init belegt alle zwölf Kanäle.** `DaisyPatchSM::Init()`
+legt sie mit `InitSingle` an (`daisy_patch_sm.cpp:318-322`) und konditioniert
+die ersten acht mit `InitBipolarCv`, die vier rohen mit dem einfachen `Init`
 (`:324-331`). `InitSingle` und `InitMux` schließen sich pro Kanal aus — die
-geplante Mux-Kette auf ADC_9..12 bekommt man also **nicht** dazu, indem man die
-Stock-Init laufen lässt und danach etwas ergänzt. Die vier Kanäle müssen selbst
-konfiguriert werden. **Die acht CV-Kanäle sind davon nicht betroffen** und
-bleiben, wie libDaisy sie liefert.
+Mux-Kette auf ADC_9..12 bekommt man also nicht dazu, indem man die Stock-Init
+laufen lässt und danach ergänzt.
+
+**Zweitens, und das wiegt schwerer: `InitMux` kann nur 8:1, und nur an GPIOs.**
+`AdcChannelConfig::InitMux` nimmt drei Adresspins (`MUX_SEL_LAST == 3`,
+`adc.h:34-40`) und klemmt die Kanalzahl hart:
+`mux_channels_ = mux_channels < 8 ? mux_channels : 8` (`adc.cpp:183`). Die
+Adressleitungen werden als `GPIO::Mode::OUTPUT` initialisiert und von libDaisy
+selbst getrieben (`adc.cpp:185-191`). **Der Entwurf dieses Dokuments ist damit
+mit der Bibliothek, wie sie ist, nicht baubar:**
+
+- 4 Sense-Pins × 8 Kanäle = **32 Kanäle gegen 65 Bedarf** — Faktor zwei zu wenig.
+- Die drei Adress-GPIOs müssten aus dem Pool kommen, und der ist nach dem
+  SD-Slot leer (GPIO-Bilanz unten).
+
+Was daraus folgt, ist keine Absage an die Topologie — die ist elektrisch
+richtig und der Grund, warum der SD-Slot überhaupt passt. Es folgt daraus, dass
+**der ADC-Scan für 16:1 mit Adressen aus der 595-Kette selbst geschrieben
+werden muss**. Der DMA-Scan der `AdcHandle` bleibt nutzbar; was fehlt, ist die
+Kanalumschaltung. Diese Arbeit ist in keiner Spec und in keinem Plan
+veranschlagt und gehört ins Bring-up (M6, Schritt 2).
+
+**Die acht CV-Kanäle sind von beidem nicht betroffen** und bleiben, wie
+libDaisy sie liefert.
 
 ### Kollision, die man kennen muss: SPI2 gegen ADC 11/12
 
@@ -266,6 +289,38 @@ Pool: B7, B8, D1, D10, D2–D7 = **10**.
 Ketten, nicht in den Pins. Jede Erweiterung — mehr LEDs, mehr Taster, mehr Muxe
 — kostet ein weiteres Schieberegister an der vorhandenen Kette und **keinen**
 GPIO. Die 20-%-Reserve-Regel des Phase-0-Plans gilt hier auf Ketten-Ebene.
+
+**Die Reihenfolge ist wichtig, weil sie oft rückwärts erzählt wird:** der
+SD-Slot wurde nicht dazugenommen und dann gehofft, dass es reicht. Die
+Adressleitungen sind auf die 595-Kette gewandert, **damit** die sechs
+SDMMC-Pins frei bleiben. Hätten die Muxe ihre Adressen an GPIOs, gäbe es
+keinen 4-bit-SD-Anschluss.
+
+### Reicht es? Die Bilanz über alle vier Ressourcen
+
+Bedarf ist **65 Mux-Kanäle**, nicht 67: die zwei `REC`-Pads hängen an der
+Taster-Kette, und `STAGES` teilt sich seinen Poti mit `ATTACK` — ein Poti, ein
+Kanal.
+
+| Ressource | Kapazität | Bedarf | Rest |
+|---|---:|---:|---:|
+| Sense-Pins (ADC, **nicht** aus dem GPIO-Pool) | 4 | 4 | 0 |
+| GPIO-Pool | 10 | 10 | **0** |
+| Mux-Kanäle (5 × 16:1 auf 4 Sense-Pins) | 80 | 65 | 15 |
+| 595-Ausgänge (3 Register) | 24 | 10 LEDs + 4 Adressen + 5 Enables = 19 | 5 |
+| 165-Eingänge | 24 | 4 Taster | 20 |
+
+Die 595-Zeile ist hier **hergeleitet, nicht aus der Spec zitiert**: die
+Envelope-Spec bemisst die drei Register für 20 LEDs und legt die Adress- und
+Enable-Leitungen auf dieselbe Kette, ohne sie durchzuzählen. Die Rechnung oben
+nimmt einen Enable je Mux an; mit einem Dekoder wären es weniger. Und sie hängt
+an der LED-Zahl von heute (10, nicht 20) — steigt die wieder, wird die Kette
+länger, was einen weiteren Baustein kostet und keinen Pin.
+
+**Das Ergebnis ist also: es reicht, mit Luft in jeder Zeile außer den Pins
+selbst** — und die Null dort ist die geplante Null. Die zwei Dinge, die es
+kippen könnten, sind kein Pin-Problem: die ungemessene Einschwingzeit pro
+Kanal (§6) und der selbst zu schreibende Mux-Scan (oben).
 
 ## 4. Die geometrische Kapazität
 
@@ -353,8 +408,11 @@ Die Liste von 2026-08-08 nannte an erster Stelle die Einstufung der Parameter.
 
 - **Die Einschwingzeit pro Mux-Kanal.** Task 6 Schritt 5b des Phase-0-Plans.
   Ohne sie ist keine Panelgröße gegen das Audio-Budget gegengerechnet — das ist
-  die einzige Zahl in diesem Dokument, an der die 67 Positionen noch scheitern
+  die einzige *Zahl* in diesem Dokument, an der die 67 Positionen noch scheitern
   könnten.
+- **Der Mux-Scan selbst.** libDaisys `InitMux` kann 8:1 an GPIOs, gebraucht wird
+  16:1 mit Adressen aus der 595-Kette (§3). Die Umschaltung muss geschrieben
+  werden, sie steht in keinem Plan, und niemand hat sie in CPU-Zeit veranschlagt.
 - **Die Wahl 8:1 gegen 16:1.** Hängt an Verfügbarkeit und Bestückungspreis.
 - **Ob ein `MAX11300` das Buchsenfeld übernimmt.** Der Kandidat ist real (ein
   Modul ist vorhanden und verdrahtet), aber er kostet SPI2 und damit zwei rohe
