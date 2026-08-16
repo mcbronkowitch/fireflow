@@ -65,6 +65,13 @@ changes land on phrase boundaries; OFF keeps A evolving while B remains stored.
 On the Rack panel the PLAY row is **STEP · FORM · SONG · NEW**. NEW rebuilds
 the A/B pair and, on a Sampler, also spawns a grain immediately.
 
+Those STEP notes are not all the same note. Each deck already ranks the slots
+of its groove, and **DENSE** decides how far down that ranking it fires — so
+the first slot to sound is the anchor and the ones DENSE reveals sit under it.
+That ranking *is* the accent: it scales how hard a note is struck and how long
+it rings (the ring-time half only once **DEC** is up), which gives a dense
+pattern a contour instead of a machine pulse. No knob was added for it.
+
 Each of the two **parts** is a **SuperModulator** — one performable macro
 surface (RATE, SHAPE, DENSITY, SMOOTH, RANGE, MOD) sitting on top of
 **five independent modulation lanes**, one per target. Every lane has its own
@@ -93,7 +100,7 @@ module, and (later) on the hardware prototype.
 
 <p align="center">
   <img src="docs/img/architecture.png" width="900"
-       alt="Architecture diagram: one portable engine/ core (mod, parts, synth, pitch, fx, util behind a single engine/instrument.h API) feeds three hosts — host/render (desktop CLI → WAV + mods.csv, built), host/vcv (VCV Rack module, beta) and the Daisy Patch Submodule prototype (shell/ firmware shell, M6, planned). No hardware type crosses into engine/; tests/ runs 1001 deterministic Doctest cases.">
+       alt="Architecture diagram: one portable engine/ core (mod, parts, synth, pitch, fx, util behind a single engine/instrument.h API) feeds three hosts — host/render (desktop CLI → WAV + mods.csv, built), host/vcv (VCV Rack module, beta) and the Daisy Patch Submodule prototype (shell/ firmware shell, M6, planned). No hardware type crosses into engine/; tests/ runs 1011 deterministic Doctest cases.">
 </p>
 
 `Instrument` (`engine/instrument.h`) is the complete public API: `init(sample_rate)`,
@@ -191,6 +198,7 @@ the desktop clang path); the build, install and I/O details live in
 | **BBD** | A bucket-brigade delay model, where the clock rate *is* the delay time — so RATE bends stored pitch **only transiently, while it moves**: held steady, a bucket-brigade line's pitch is unity at any clock rate. It first replaced FLUX's tape echo everywhere and now lives on as the fifth part engine only; FLUX itself is a plain tape echo again. `FXT_FLUX_TIME` is a genuine chorus/vibrato modulation lane, and STAGES has moved onto the BBD deck's own pitch lane, captioned **BEND** on the panel | **done** (engine + renderer + VCV; released in 2.17.0/2.17.1, measured on hardware — `inst_bbd_engine_worst` 96.91 % of the block at `-O3`) |
 | **Modulation reachability** | Four rounds that made the modulation surface mean what it says: **PACE**, one global time-stretch from ×1/32 to ×4, because TEMPO was inert in the free world and TIDE never reached the melodic lane; the **FLOW melody engine**, so the free mode's melodic lane walks an 8-slot phrase instead of a continuous LFO; the same phrase in **STEP**, which makes FORM and SONG audible at every SHAPE position instead of only above 0.75; and **SMOOTH as a fraction of the lane interval** rather than absolute seconds, so the knob means the same thing at every rate | **done** (engine + hosts; released in 2.21.2) |
 | **60 HP plate** | The hardware panel, drawn and playable in Rack as the second module: seven engine-grounded groups, eight CV inputs under the knobs they drive, and a dark anodised plate with framed fields and numbered legends | **done** as a design study (released in 2.21.2/2.21.3; still labelled `DRAFT`, no hardware ordered) |
+| **STEP accent** | STEP notes get a contour from the groove rank the deck already computes: the anchor slot is loudest and longest, the slots DENSE reveals sit under it, on velocity and — once DEC is up — on ring time. No new control, no new randomness, FLOW unaffected; SYNTH, WAVE and BODY only | **done** (engine; released in 2.21.4) |
 | **M5k** | ZAP: monophonic percussion part engine | planned (spec ready; not implemented) |
 | **M5l** | PULL: chord gravity between the two decks | planned (spec ready; not implemented) |
 | **M6** | Hardware prototype: bring-up on a Daisy Patch Submodule — panel, controls, LEDs, CV/gate I/O, preset persistence | planned after M5l (panel design **done**, see above; **bring-up needs a new spec** — the existing shell spec assumes Spotykach's panel) |

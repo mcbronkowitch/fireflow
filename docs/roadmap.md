@@ -16,8 +16,14 @@ is actually built today, and what is still design-only.
   **2026-08-08:** the reducibility rule is retired — the hardware target is
   defined (60 HP, the full control set; envelope spec
   `docs/superpowers/specs/2026-08-08-fireflow-hardware-envelope-design.md`).
-  The live rule is one-in-one-out: a panel change that adds a control names
-  the control it removes.
+  **2026-08-09: one-in-one-out is retired too.** The control-reduction round
+  merged seven control pairs, fixed three values as constants and deleted two
+  controls, so the panel is no longer full and a new control no longer has to
+  name a victim — judge it on whether it earns its place. **No panel count in
+  any spec, or in this file above the M6 section, is current:** three panel
+  rounds have moved and merged controls since. Run the generator, which prints
+  its own — `python host/vcv/res/gen_hw_panel.py` from `host/vcv/`,
+  `params=69 inputs=12 outputs=6 lights=4 panel=60HP` (measured 2026-08-16).
 - **Design intent:** the master design spec
   (`docs/superpowers/specs/2026-07-10-spotykach-modulation-first-synth-design.md`),
   the scale spec (`docs/superpowers/specs/2026-07-11-spotykach-scales-design.md`),
@@ -30,7 +36,7 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-08-15 (**the STEP accent lands**: a note deck's
+- **Last updated:** 2026-08-16 (**the STEP accent lands**: a note deck's
   melodic lane now derives a per-note accent from its groove rank
   (`ModLane::note_accent()`, 0 at the rank-0 anchor, 1 at the rank DENSE last
   reveals) and `Part` pushes it into the active engine every STEP fire. The
@@ -59,8 +65,10 @@ is actually built today, and what is still design-only.
   corrected to say so instead of naming the guard as load-bearing. See
   `docs/engine-map.md` §8 for the mechanism of both. Spec
   `docs/superpowers/specs/2026-08-15-step-accent-design.md`, plan
-  `docs/superpowers/plans/2026-08-15-step-accent.md`; merged to `main` and
-  released in **2.21.4**); before
+  `docs/superpowers/plans/2026-08-15-step-accent.md`; merged to `main`
+  2026-08-16 (`83d29e1`) and released in **2.21.4** — see "The STEP accent"
+  under "Done" for the two facts that outlast the round and for what is still
+  waiting on a listening session); before
   that, 2026-08-15 (**the 60 HP plate is drawn**: the
   redistribution round's layout reached the generator in 2.21.2, and the plate
   was then redrawn twice — first an organic light plate with wells, then design
@@ -456,9 +464,10 @@ is actually built today, and what is still design-only.
 | **Melody reachable in STEP** | A note deck's melodic lane emits its composed phrase in STEP exactly as it already did in FLOW: one guard in `ModLane::_compute_raw()` changes from `_flow_melody_on()` to `_melodic && _flow_melody` (an engine-class flag, so SAMPLER and BBD are excluded in both modes). FORM and SONG become audible at every SHAPE position instead of only above 0.75 — measured, FORM_B moves rendered audio on 9 of 13 STEP terrains against 1 of 13 under the old guard. Exactly one of the six reachable lane states changes | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-14-melody-reachable-design.md` §2.1, plan `docs/superpowers/plans/2026-08-14-melody-reachable.md`; landed on `main` 2026-08-14 (`07d5b9d`), released in 2.21.2. **§2.2, the pitch RANGE law, is not built** — see "The melody becomes reachable" under "Done") |
 | **SMOOTH becomes interval-relative** | The slew law is `τ = smooth · TOP · interval` instead of absolute wall-clock seconds, so SMOOTH means the same thing at every rate; `kSmoothTopTexture = 0.5` chosen by ear, factory defaults converted to preserve the shipped sound, five gates behind it. SHAPE is deliberately not delivered and goes to the Marbles round | ✅ **done** (engine + VCV defaults; spec `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md`, plan `docs/superpowers/plans/2026-08-14-smooth-interval-relative.md`; merged to `main` 2026-08-15 (`4493d67`), released in 2.21.2) |
 | **60 HP plate** | The hardware panel gets its layout and then its drawing: the redistribution round's placement reaches `gen_hw_panel.py` (2.21.2), and design round 2a, "Technical Blueprint", replaces the organic light plate with a dark anodised one in three tinted zones, a printed airflow/ember silhouette and framed fields with numbered legends — no control moved for it. Three fixes follow: frames hug their own ink with 3 mm between rows, one caption distance (3.6 mm) for every control instead of one per size class, and three knob lines through the MOTION/VOICE/TIMING band instead of five | ✅ **done** as a design study (VCV `FireflowHW` panel + generator; spec `docs/superpowers/specs/2026-08-10-hw-panel-redistribution-design.md`; released in 2.21.2 and 2.21.3; still labelled `DRAFT`, and no hardware is ordered — see "M6 — Hardware prototype" under "Planned") |
+| **STEP accent** | A note deck's melodic lane derives a per-note accent from the groove rank it already computes — 0 at the rank-0 anchor, 1 at the rank DENSE last reveals (`ModLane::note_accent()`) — and `Part` pushes it into the active engine on every STEP fire. The engine spends it twice, on velocity and on decay, the decay half gated by the DEC knob so DEC 0 leaves ring time untouched. **No new control**, no new RNG draw, and FLOW is unaffected (the accent is 0 there). SYNTH, WAVE and BODY take it; SAMPLER and BBD take neither half | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-15-step-accent-design.md`, plan `docs/superpowers/plans/2026-08-15-step-accent.md`; merged to `main` 2026-08-16 (`83d29e1`), released in 2.21.4; **both depth floors are first-try 0.3 and have not been through a listening session** — see "The STEP accent" under "Done") |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
-| **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel design done — regrouping round built on branch `hw-panel-regroup` 2026-08-10; bring-up not started**; the existing shell spec is superseded — see below) |
+| **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel design closed as far as the drawing goes** — regrouping, redistribution and plate round 2a all shipped, in 2.21.1/2.21.2/2.21.3; **bring-up has no spec and is next**, the existing shell spec is superseded and no hardware is ordered — see below) |
 
 Milestone order follows the design spec's build order (audible first, hardware
 last). The scale layer was inserted after M1 because it only touches the PITCH
@@ -2572,6 +2581,101 @@ rounding rather than sound: RMS identical to 0.01 dB against the render
 Bastian accepted, difference signal 59.2 dB below it (the accepted
 ALT→NEU change sat 4.1 dB below, for scale).
 
+### The STEP accent ✅
+
+In STEP a note deck used to play every composed note at the same level and the
+same length: pitch and placement differed, nothing else did. The accent that
+fixes it adds **no control and no RNG draw** — it reads a ranking the groove
+generator already fills. `ModLane::_start_note()` stores
+`rank_of_slot[slot] / (groove_length − 1)` for the slot that just fired, and
+`note_accent()` hands it out in STEP (0 in FLOW): **0 at the rank-0 anchor** —
+the slot that sounds first at any DENSE, pinned to rank 0 by
+`phrase_gen.h:297`'s `score[0] = 2.0f` — and **1 at the last rank DENSE
+reveals**. Normalizing against the cell length rather than against the DENSE
+depth `k` is what keeps a thin pattern from being loud: at `k == 1` only the
+anchor fires, so the accent is 0 by construction and no depth control has to
+enforce it. `Part::_fire_trigger()` (`part.cpp:498`) pushes it into the active
+engine on every STEP fire, before `_engine->process()` runs.
+
+The engine spends it twice, both floors **first-try 0.3 and deliberately equal**
+so a listening session can say which half wants to differ
+(`SynthEngineT<V>::kAccentVelFloor`, `kAccentDecFloor`,
+`engine/synth/synth_engine.h:52`, `:55`):
+
+- **velocity**, `vel · (1 − (1 − kAccentVelFloor) · accent)` — it *composes
+  with* the chord's `1/√n` equal-power term rather than replacing it, which is
+  what G6 pins;
+- **decay**, `1 − (1 − kAccentDecFloor) · accent · decay_n`, **gated by the DEC
+  knob**, so at DEC 0 ring time is untouched and the coupling only exists where
+  the player asked for it.
+
+**Engine scope is exactly the set for which `_flow_melody` is true:** SYNTH,
+WAVE and BODY (all `SynthEngineT<V>` instantiations, so both halves land in one
+place); **SAMPLER and BBD take neither half** via the no-op default — a grain
+window is not a note envelope, and the BBD's DECAY trims a frozen loop. Whether
+a sampler cloud wants a density-dependent accent is a separate question and was
+left open.
+
+Ten cases in `tests/test_step_accent.cpp` back it — the named gates G1, G2
+(two cases), G3, G4 (two: SYNTH and WAVE), G5 and G6, plus two that are not
+gates (the `Part`→engine push, and the manual-trigger ruling below). **The
+render hashes did not move, as the spec predicted rather than as a baseline to
+bump:** both hashed scenarios run in FLOW, where the accent is always 0, so a
+moved hash would have been a finding.
+
+Red-proofing (one-line mutations, one at a time, Release, reverted between)
+produced two findings and one confirmation. **G4, G5 and G6 reddened as
+designed. G1 survived its mutation, as predicted** — the DENSE-0 anchor's
+accent is `0 / anything`, so it cannot see the denominator it names. **G2 was a
+real gap and is closed:** at DENSE 1 the two candidate normalizations
+(`groove_length` vs `_groove_k()`) compute the same denominator, so the
+original case was bit-identical under the mutation; a second case at an
+intermediate DENSE, where `k < L`, asserts the exact accent set and red-proves.
+**G3 was never a gap:** `set_step()`'s own `mode_changed` reset zeroes
+`_note_accent` on every STEP↔FLOW transition *before* `note_accent()`'s
+`_step_mode` guard is consulted, so no reachable path can leak a stale accent
+and no gate can tell a guarded accessor from a guardless one. The guard stays
+as deliberate redundancy against a future second writer, uncovered on purpose,
+and the spec's §3 was corrected to stop calling it load-bearing.
+
+**Two bugs surfaced on the way, both older than this round.**
+`Part::trigger_manual()` (the PLAY tap / TRIG press) called
+`trigger_chord()` directly, so a manual strike inherited whatever accent the
+last STEP fire had left in the engine — measured, a press landing on
+`_accent == 0.857143` rendered ~40 % velocity, differing in 9806 of 24000
+samples. A manual strike is an anchor by definition and now pushes accent 0,
+the same footing `trigger_manual()` already has against CHOKE (`5efc3a4`).
+And `_decay_n` booted to `0.f` while its twin `_decay_ratio` booted to the
+spec's `1.5f`, so **the DEC half of the accent was silently inert until a host
+called `set_decay()` once** — `_decay_n` is now derived from the ratio offline
+(`log(15)/log(80)`), leaving the literal `1.5f` bit-exact so no hash could move
+(`0b9fc5b`).
+
+**Two measured facts outlast the round**, both in
+[`docs/engine-map.md` §8](engine-map.md):
+
+- **The DEC accent is about twice as strong on BODY as on SYNTH.** One formula,
+  two envelope laws: `VoiceT` scales `decay_s` linearly, so the factor *is* the
+  ring-time ratio (42929 → 13231 samples, 0.3082), while `BodyVoice::_apply_env()`
+  maps `_damping = d_s / (d_s + 1)`, which is not (212802 → 32893, 0.1546). This
+  is documentation, not a defect — the damping curve is long-standing by-ear
+  design, and no gate asserts a BODY decay ratio.
+- **The fire-before-process ordering is what makes FLOW's auto-drone safe.**
+  `Part::process` runs `_fire_trigger()` before `_engine->process()` in the same
+  sample, so the drone promise is struck with the accent just pushed (0 in FLOW),
+  never with the STEP leg's leftover. Measured 2026-08-16: **0 of 360 switch
+  points leaked**, max `|d|` 0.000000 — which is why the seam gate measures from
+  sample 0 instead of after a settle window.
+
+Spec `docs/superpowers/specs/2026-08-15-step-accent-design.md`, plan
+`docs/superpowers/plans/2026-08-15-step-accent.md`; merged to `main` 2026-08-16
+(`83d29e1`) and released in **2.21.4**.
+
+**Open, and the only thing this round left open: nobody has listened yet.**
+Both floors are 0.3 because they were written that way, not because a session
+chose them; they are tuning values and no gate depends on either number
+(`fireflow-by-ear-decisions` applies once they are set by ear, not before).
+
 ## Planned
 
 The SHAPE/SMOOTH rework's SMOOTH half has shipped — see "SMOOTH becomes
@@ -2709,10 +2813,12 @@ So M6 now decomposes into two pieces, in order:
    2026-08-08). **The built panel now carries fewer**, because the rounds below
    merged controls rather than only moving them — `gen_hw_panel.py` prints
    `params=69 inputs=12 outputs=6 lights=4 panel=60HP` today, and that printed
-   line is the number to quote, not the envelope's. What remains
-   is a **regrouping** pass — bounded, tested in Rack via the hardware-mode
-   panel generator (`host/vcv/res/gen_hw_panel.py`), max. 3 rounds, static
-   labels enforced from round 1. The parked hardware-placement questions from
+   line is the number to quote, not the envelope's. What this step called for
+   when it was written — a **regrouping** pass, bounded, tested in Rack via the
+   hardware-mode panel generator (`host/vcv/res/gen_hw_panel.py`), max. 3
+   rounds, static labels enforced from round 1 — **has since happened, three
+   times over**: see the three rounds below, and the closing line under them.
+   The parked hardware-placement questions from
    earlier milestones (M4.10's COLOR placement, the BBD deck's contextual
    VOICE row, the per-deck SEND) come due in this round — as placement, not
    as cuts.

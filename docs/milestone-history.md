@@ -21,10 +21,10 @@ which roadmap.md carries.
 Current state (which milestones are merged/pushed/released today) lives in
 [`docs/roadmap.md`](roadmap.md), not here — that file is kept current; this one
 is not. **This archive stops at 2026-08-04**, the rename; everything after it —
-the hardware panel rounds, PACE, the FLOW melody engine, the flow/Glow removal,
-the SMOOTH rework — is recorded in the roadmap alone. (An earlier version of
-this paragraph pointed at a `spotykach-milestone-status` memory; that memory no
-longer exists.)
+the hardware panel rounds, PACE, the FLOW melody engine, the melody-reachable
+round, the flow/Glow removal, the SMOOTH rework, the STEP accent — is recorded
+in the roadmap alone. (An earlier version of this paragraph pointed at a
+`spotykach-milestone-status` memory; that memory no longer exists.)
 
 ---
 

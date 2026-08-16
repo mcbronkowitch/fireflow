@@ -6,7 +6,9 @@ real engine costs about half a second (see [Probes](#probes) at the bottom).
 
 This file exists because spec drafts kept asserting runtime behaviour that the
 code does not have. Mean review rounds per spec grew 1.44 → 4.33 between 10 July
-and 13 August 2026 as `engine/` grew to 86 files / ~20 800 lines, and the
+and 13 August 2026 as `engine/` grew to 86 files / ~20 800 lines (**it is 77
+files / 17 791 lines today, measured 2026-08-16** — the drop is the flow layer's
+removal on 2026-08-14, not a simplification of what is mapped here), and the
 rejections were consistently facts no amount of reading finds: a variable nobody
 writes, a knob position nothing reaches, an identity that floating point does not
 honour. The fix is not to restructure the engine. It is to write down the parts
