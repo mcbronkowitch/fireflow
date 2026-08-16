@@ -87,12 +87,17 @@ inline int duty_from_light(float light, int steps) {
     return duty(std::pow(std::min(1.f, light), 1.f / kGamma), steps);
 }
 
-// Steady for snapshot A, a double pulse for B. Brightness is the channel the
-// excursion lamps use, so this lamp is carried by shape instead -- which is
-// only legible if the two shapes actually differ over a blink cycle.
-inline bool phrase_on(bool snapshot_b, float blink) {
-    if (!snapshot_b) return true;
-    return blink < 0.15f || (blink > 0.3f && blink < 0.45f);
+// Fraction of the transport beat the TEMPO lamp is on. Short on purpose: a
+// 50% square would read as "the grid is running", a tick reads as the beat.
+// Scales with TEMPO and PACE (beat_phase already carries both) instead of a
+// wall-clock flash that would eat the whole beat at high BPM. By-ear
+// candidate, not an invariant.
+constexpr float kTempoPulse = 0.12f;
+
+constexpr float kSongFlash = 0.15f;
+
+inline bool tempo_on(float beat_phase) {
+    return beat_phase < kTempoPulse;
 }
 
 struct Panel {
@@ -101,7 +106,10 @@ struct Panel {
     // purpose (a hard on/off, not a breath -- see the comment at the GATE
     // block below). Don't "fix" this by routing them through Lamp::follow.
     Lamp  lamp[spkyvcv::NUM_LIGHTS];
-    float blink = 0.f;                 // free-running, for the phrase lamps
+    float blink = 0.f;                 // free-running 1 Hz, for REC
+    bool    song_armed[2]  = {false, false};
+    uint8_t song_pat[2]    = {0, 0};
+    float   song_remain[2] = {0.f, 0.f};
 };
 
 // The whole panel in one call, so a gate can assert that every light is
@@ -111,14 +119,19 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
                  int steps, int* duty_out) {
     using namespace spkyvcv;
 
-    // Written, not skipped. FLOW, TEMPO and SYNC need host state this round
-    // does not wire, and the two pad lamps need the latch that spec 3.4 leaves
+    // Written, not skipped. FLOW and SYNC need host state this round does
+    // not wire, and the two pad lamps need the latch that spec 3.4 leaves
     // to the round that builds MOD and SHIFT. A blanket zero at the top of
     // this function would make the gate below -- "every light is written" --
     // pass without asserting anything.
-    for (int id : {FLOW_A_L, FLOW_B_L, TEMPO_L, SYNC_L,
+    for (int id : {FLOW_A_L, FLOW_B_L, SYNC_L,
                    MODBTN_L, SHIFTBTN_L})
         duty_out[id] = 0;
+
+    // Metronome: a short pulse on the transport downbeat. Hard on/off, no
+    // envelope -- this reports where the beat is, which is the question the
+    // lamp at TEMPO is there to answer.
+    duty_out[TEMPO_L] = tempo_on(inst.beat_phase()) ? steps - 1 : 0;
 
     p.blink += dt;
     if (p.blink >= 1.f) p.blink -= 1.f;
@@ -137,12 +150,23 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
         duty_out[kExc[i].id] = duty(intensity(p.lamp[kExc[i].id].env, e), steps);
     }
 
-    // Phrase: steady for snapshot A, double-pulse for B. Brightness is the
-    // channel the excursion lights use, so this one is carried by shape.
     const int songId[2] = {SONG_A_L, SONG_B_L};
     for (int part = 0; part < 2; ++part) {
-        const bool b = inst.active_pattern(part) != 0;
-        duty_out[songId[part]] = phrase_on(b, p.blink) ? steps - 1 : 0;
+        const uint8_t now = inst.active_pattern(part);
+        if (!p.song_armed[part]) {
+            p.song_pat[part] = now;
+            p.song_armed[part] = true;
+        } else if (now != p.song_pat[part]) {
+            p.song_pat[part] = now;
+            p.song_remain[part] = kSongFlash;
+        }
+        if (p.song_remain[part] > 0.f) {
+            duty_out[songId[part]] = steps - 1;
+            p.song_remain[part] -= dt;
+            if (p.song_remain[part] < 0.f) p.song_remain[part] = 0.f;
+        } else {
+            duty_out[songId[part]] = 0;
+        }
     }
 
     // Straight through, no envelope: this reports that a note is sounding, not
@@ -163,9 +187,9 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
     // they go through duty_from_light(), not duty(), or the gamma darkens
     // them and the fill meter goes flat over its lower third.
     //
-    // 2 Hz, as the code this replaces pulsed it. blink itself runs at 1 Hz
-    // because the phrase lamps' windows are written against that, so REC
-    // reads it at double rate rather than carrying a second phase.
+    // 2 Hz, as the code this replaces pulsed it. blink exists for REC: it
+    // runs at 1 Hz so REC can read it at double rate rather than carrying
+    // a second phase.
     //
     // One behavioural difference from the code it replaces, worth naming
     // rather than claiming away: recPhase used to advance only inside the

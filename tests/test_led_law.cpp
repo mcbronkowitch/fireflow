@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 #include "instrument.h"
 #include "fx/limiter.h"
+#include "mod/song_form.h"
 #include "vcv/src/led_law.hpp"
 #include <cmath>
 
@@ -217,31 +218,119 @@ TEST_CASE("led G6: every light is written, and a modulating lane moves") {
     CHECK(duty[spkyvcv::SRC_A_L] == 0);
 }
 
-TEST_CASE("led G11: the phrase lamps differ by shape, not by level") {
-    // Snapshot A is steady; snapshot B pulses twice per cycle. Sample a whole
-    // blink cycle rather than a point -- a lamp that reads "on" at one phase
-    // says nothing about whether the two shapes are distinguishable.
-    int onA = 0, onB = 0, edges = 0;
-    bool prev = spkyled::phrase_on(true, 0.f);
-    for (int i = 0; i < 1000; ++i) {
-        const float b = static_cast<float>(i) / 1000.f;
-        if (spkyled::phrase_on(false, b)) ++onA;
-        const bool nowB = spkyled::phrase_on(true, b);
-        if (nowB) ++onB;
-        if (nowB != prev) ++edges;
-        prev = nowB;
+static void arm_song_deck(Instrument& inst) {
+    inst.set_form(0, static_cast<int>(Principle::Hierarchical));
+    inst.set_song(0, static_cast<int>(SongMode::AAAB));
+    inst.set_rate(0, 1.f);
+    inst.set_shape(0, 1.f);
+    inst.set_density(0, 1.f);
+    inst.set_step(0, true, 8);
+}
+
+static void process_until_pattern(Instrument& inst, uint8_t want) {
+    float l = 0.f, r = 0.f;
+    for (int i = 0; i < 200000; ++i) {
+        if (inst.active_pattern(0) == want) return;
+        inst.process(nullptr, nullptr, &l, &r, 1);
     }
-    // blink is cyclic in real use (Panel::blink wraps at 1.0), so the count
-    // above is one edge short: the sweep never samples the wrap from b just
-    // below 1.0 back to b = 0, which is itself a transition (OFF -> ON,
-    // since phrase_on(true, 0.f) is true). Close the cycle explicitly rather
-    // than sampling b = 1.0 -- that would just move the same gap to the
-    // other end, since 1.0 and 0.0 are the same phase.
-    if (spkyled::phrase_on(true, 0.f) != prev) ++edges;
-    CHECK(onA == 1000);          // steady means steady, at every phase
-    CHECK(onB > 0);              // and B is lit somewhere
-    CHECK(onB < onA);            // but not everywhere
-    CHECK(edges == 4);           // two pulses: on-off-on-off
+    FAIL("active_pattern did not reach ", (int)want, " within the safety bound");
+}
+
+TEST_CASE("led S1: a snapshot edge produces a flash, then dark") {
+    Instrument inst;
+    inst.init(48000.f);
+    arm_song_deck(inst);
+    process_until_pattern(inst, 0);
+
+    spkyled::Panel panel;
+    int duty[spkyvcv::NUM_LIGHTS] = {};
+    const float dt = 1.f / 750.f;
+    const int steps = 16;
+    spkyled::fill(inst, panel, dt, steps, duty);
+    CHECK(duty[spkyvcv::SONG_A_L] == 0);          // first fill arms, no flash
+
+    float l = 0.f, r = 0.f;
+    for (int i = 0; i < 200000; ++i) {
+        inst.process(nullptr, nullptr, &l, &r, 1);
+        if (inst.active_pattern(0) == 1) break;
+    }
+    REQUIRE(inst.active_pattern(0) == 1);
+    spkyled::fill(inst, panel, dt, steps, duty);
+    CHECK(duty[spkyvcv::SONG_A_L] == steps - 1);  // A→B flash
+
+    const int hold = static_cast<int>(spkyled::kSongFlash / dt) + 2;
+    for (int k = 0; k < hold / 2; ++k)
+        spkyled::fill(inst, panel, dt, steps, duty);
+    CHECK(duty[spkyvcv::SONG_A_L] == steps - 1);  // still lit mid-flash
+    for (int k = hold / 2; k < hold; ++k)
+        spkyled::fill(inst, panel, dt, steps, duty);
+    CHECK(duty[spkyvcv::SONG_A_L] == 0);          // dark after 150 ms
+
+    for (int i = 0; i < 200000; ++i) {
+        inst.process(nullptr, nullptr, &l, &r, 1);
+        if (inst.active_pattern(0) == 0) break;
+    }
+    REQUIRE(inst.active_pattern(0) == 0);
+    spkyled::fill(inst, panel, dt, steps, duty);
+    CHECK(duty[spkyvcv::SONG_A_L] == steps - 1);  // B→A same flash
+}
+
+TEST_CASE("led S2: no flash on first fill") {
+    Instrument inst;
+    inst.init(48000.f);
+    arm_song_deck(inst);
+    process_until_pattern(inst, 1);
+
+    spkyled::Panel panel;
+    int duty[spkyvcv::NUM_LIGHTS] = {};
+    spkyled::fill(inst, panel, 1.f / 750.f, 16, duty);
+    CHECK(duty[spkyvcv::SONG_A_L] == 0);
+}
+
+TEST_CASE("led S3: OFF stays dark") {
+    Instrument inst;
+    inst.init(48000.f);
+    arm_song_deck(inst);
+    inst.set_song(0, static_cast<int>(SongMode::Off));
+
+    spkyled::Panel panel;
+    int duty[spkyvcv::NUM_LIGHTS] = {};
+    const float dt = 1.f / 750.f;
+    float l = 0.f, r = 0.f;
+    for (int i = 0; i < 50000; ++i) {
+        inst.process(nullptr, nullptr, &l, &r, 1);
+        if ((i % 64) == 0) {
+            spkyled::fill(inst, panel, dt, 16, duty);
+            CHECK(duty[spkyvcv::SONG_A_L] == 0);
+        }
+    }
+}
+
+TEST_CASE("led: TEMPO_L is a metronome pulse on the transport beat") {
+    // Wiring gate, not a helper test: fill() used to write TEMPO_L to 0
+    // every block (the LED-feedback round deferred it). A 50% square on
+    // beat_phase would still be on a quarter of the way through the beat;
+    // a pulse must already be off there. 120 BPM so the arithmetic is
+    // exact: one beat is 0.5 s = 24000 samples at 48 kHz.
+    Instrument inst;
+    inst.init(48000.f);
+    inst.set_tempo_bpm(120.f);
+
+    spkyled::Panel panel;
+    int duty[spkyvcv::NUM_LIGHTS];
+    const float dt = 1.f / 750.f;
+    const int steps = 16;
+
+    spkyled::fill(inst, panel, dt, steps, duty);
+    CHECK(duty[spkyvcv::TEMPO_L] == steps - 1);     // downbeat
+
+    settle(inst, 6000);                             // 0.125 s, phase ~0.25
+    spkyled::fill(inst, panel, dt, steps, duty);
+    CHECK(duty[spkyvcv::TEMPO_L] == 0);             // pulse already over
+
+    settle(inst, 18000);                            // rest of the beat
+    spkyled::fill(inst, panel, dt, steps, duty);
+    CHECK(duty[spkyvcv::TEMPO_L] == steps - 1);     // next downbeat
 }
 
 TEST_CASE("led: the envelope attacks instantly and falls slowly") {

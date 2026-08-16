@@ -67,10 +67,11 @@ Macht **4 Taster** (`REC_A/B` + die zwei reservierten).
 `HW_ONLY`.** Alle Lampen auf der Platte sind jetzt echte `LightId`s — die
 Platte trägt **21**, nicht mehr 10: 8 der bisherigen 10 blieben, `CAP_A_L`/
 `CAP_B_L` sind mit der Capture-Sequenz gelöscht (die gibt es seit 2026-07-14
-nicht mehr, siehe `docs/roadmap.md`), und 13 sind neu. Sechs davon sind
-absichtlich dunkel — `FLOW_A_L`, `FLOW_B_L`, `TEMPO_L`, `SYNC_L` und die zwei
+nicht mehr, siehe `docs/roadmap.md`), und 13 sind neu. Fünf davon sind
+absichtlich dunkel — `FLOW_A_L`, `FLOW_B_L`, `SYNC_L` und die zwei
 Pad-Lampen `MODBTN_L`/`SHIFTBTN_L` —, aber jeden Block *geschrieben*, nicht
-übersprungen; ein Gate prüft das. Herleitung, Platzierung und die offene
+übersprungen; ein Gate prüft das. `TEMPO_L` tickt den Transport-Beat
+(Metronom-Puls, `kTempoPulse` der Beat-Phase). Herleitung, Platzierung und die offene
 Mux-Breite (8:1 gegen 16:1, deshalb nimmt `duty()` den Schrittzähler als
 Parameter): Spec
 [`2026-08-16-led-feedback-design.md`](../superpowers/specs/2026-08-16-led-feedback-design.md)

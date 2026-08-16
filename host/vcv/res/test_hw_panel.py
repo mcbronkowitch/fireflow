@@ -29,8 +29,10 @@ def test_same_runtime_params_same_order():
     assert [c.enum for c in hw.HW_INPUTS] == (
         [c.enum for c in gp.INPUTS] + [c.enum for c in gp.HW_MOD_INPUTS])
     assert [c.enum for c in hw.HW_OUTPUTS] == [c.enum for c in gp.OUTPUTS]
+    flow = {"FLOW_A_L", "FLOW_B_L"}
     assert [c.enum for c in hw.HW_LIGHTS] == \
-           [c.enum for c in gp.LIGHTS] + [c.enum for c in gp.HW_ONLY_LIGHTS]
+           [c.enum for c in gp.LIGHTS] + \
+           [c.enum for c in gp.HW_ONLY_LIGHTS if c.enum not in flow]
 
 def test_static_captions_only():
     # An aluminium panel is printed: every label is the resting word, and the
@@ -70,10 +72,17 @@ def test_rail_keepout():
         check(x >= 2.0 and x <= hw.W - 2.0, f"text {txt!r} at x={x} crosses the side keepout")
 
 def test_no_overlap_with_hw_radii():
-    # Radius-sum clearance with REAL footprints. Exactly one legal overlap:
-    # BEND shares ATTACK's knob (deliberate dual assignment, spec §1).
+    # Radius-sum clearance with REAL footprints. Legal overlaps:
+    # BEND shares ATTACK's knob (deliberate dual assignment, spec §1), and a
+    # knob-owned lamp sits inside its own knob's CLASS_R circle -- that
+    # circle is finger spacing between controls, not between a knob and its
+    # indicator. GATE is at ATTACK, so it also shares the shaft with STAGES.
     SHARED_OK = {frozenset(("ATTACK_A", "STAGES_A")),
                  frozenset(("ATTACK_B", "STAGES_B"))}
+    for lamp, knob in hw.KNOB_LAMPS.items():
+        SHARED_OK.add(frozenset((lamp, knob)))
+        if knob.startswith("ATTACK_"):
+            SHARED_OK.add(frozenset((lamp, knob.replace("ATTACK", "STAGES"))))
     items = hw.ALL_HW
     for i, a in enumerate(items):
         for b in items[i + 1:]:
@@ -126,6 +135,8 @@ def test_mirror_symmetry():
     items = hw.HW_PARAMS + hw.HW_INPUTS + hw.HW_OUTPUTS + hw.HW_LIGHTS + hw.HW_ONLY
     pairs = 0
     for enum, a, twin, b in _mirror_pairs(items):
+        if a.enum in hw.KNOB_LAMPS:
+            continue
         check(abs((hw.W - a.x) - b.x) < 1e-6,
               f"{enum}/{twin}: x does not mirror ({a.x:.2f} vs {b.x:.2f})")
         check(abs(a.y - b.y) < 1e-6,
@@ -151,6 +162,18 @@ def test_caption_mirror_symmetry():
             continue
         lxa, lya, anchor_a = hw.hw_label(a)[:3]
         lxb, lyb, anchor_b = hw.hw_label(b)[:3]
+        if a.enum in hw.KNOBS_WITH_LAMPS:
+            # Same reading order on both decks: word then LED, so the caption
+            # shifts the same way locally instead of optically mirroring.
+            check(abs((lxa - a.x) - (lxb - b.x)) < 1e-6,
+                  f"{enum}/{twin}: cluster caption offset differs "
+                  f"({lxa - a.x:.2f} vs {lxb - b.x:.2f})")
+            check(abs(lya - lyb) < 1e-6,
+                  f"{enum}/{twin}: caption y does not match ({lya:.2f} vs {lyb:.2f})")
+            check(anchor_a == anchor_b == "middle",
+                  f"{enum}/{twin}: cluster captions are not middle-anchored")
+            pairs += 1
+            continue
         check(abs((hw.W - lxa) - lxb) < 1e-6,
               f"{enum}/{twin}: caption x does not mirror ({lxa:.2f} vs {lxb:.2f})")
         check(abs(lya - lyb) < 1e-6,
@@ -310,9 +333,9 @@ def test_size_classes_match_the_spec():
 
 def test_hw_only_inventory():
     """What exists on sheet metal but not in the VCV module: 2 pads, no more
-    extra LEDs -- all 17 added lamps are now real, placed kLightCtls entries
-    (HW_ONLY_LIGHTS). The eight MOD jacks are real inputs (unwired), no
-    longer HW_ONLY placeholders. 21 LEDs in total."""
+    extra LEDs. 19 lamps drawn on the plate, 21 LightIds (`FLOW_*` undrawn).
+    The eight MOD jacks are real inputs (unwired), no longer HW_ONLY
+    placeholders."""
     kinds = {}
     for c in hw.HW_ONLY:
         kinds[hw.hw_class(c.enum)] = kinds.get(hw.hw_class(c.enum), 0) + 1
@@ -321,55 +344,93 @@ def test_hw_only_inventory():
     check(kinds.get("L", 0) == 0, f"expected 0 hw-only LEDs, got {kinds.get('L')}")
     assert [c.enum for c in hw.HW_PARAMS] == [c.enum for c in gp.RUNTIME_PANEL_PARAMS]
     total_leds = len([c for c in hw.ALL_HW if hw.hw_class(c.enum) == "L"])
-    check(total_leds == 21, f"expected 21 LEDs on the panel, got {total_leds}")
+    check(total_leds == 19, f"expected 19 LEDs on the plate, got {total_leds}")
+
+
+def test_steps_has_no_lamp_on_the_hw_plate():
+    """Spec 2026-08-16 song-phrase-flash S4: FLOW lamps are not drawn;
+    STPS captions sit on the knob x."""
+    names = {c.enum for c in hw.HW_LIGHTS}
+    check("FLOW_A_L" not in names and "FLOW_B_L" not in names,
+          "FLOW_* still drawn on FireflowHW")
+    check("STEPS_A" not in hw.KNOBS_WITH_LAMPS and
+          "STEPS_B" not in hw.KNOBS_WITH_LAMPS,
+          "STEPS is still in KNOBS_WITH_LAMPS")
+    by = {c.enum: c for c in hw.HW_PARAMS}
+    for enum in ("STEPS_A", "STEPS_B"):
+        lx, ly = hw.hw_label(by[enum])[:2]
+        check(abs(lx - by[enum].x) < 1e-6,
+              f"{enum} caption x={lx:.2f} is not on the knob ({by[enum].x:.2f})")
 
 
 def test_led_inventory_after_the_feedback_round():
-    """21 lamps, the two capture indicators gone, GATE out of the timing row
-    and SYNC at the CLOCK jack. Spec 2026-08-16 sections 3.1-3.5."""
+    """19 lamps drawn on FireflowHW (21 LightIds, FLOW_* undrawn), the two
+    capture indicators gone, GATE out of the timing row and SYNC at the
+    CLOCK jack. Spec 2026-08-16 sections 3.1-3.5."""
     names = {c.enum for c in hw.HW_LIGHTS}
-    check(len(hw.HW_LIGHTS) == 21, f"{len(hw.HW_LIGHTS)} lights, expected 21")
+    check(len(hw.HW_LIGHTS) == 19, f"{len(hw.HW_LIGHTS)} lights, expected 19")
     for dead in ("CAP_A_L", "CAP_B_L"):
         check(dead not in names, f"{dead} still drawn -- capture was deleted 2026-07-14")
     for new in ("SRC_A_L", "FLT_A_L", "CLR_A_L", "LVL_A_L", "SONG_A_L",
                 "MODBTN_L", "SHIFTBTN_L", "CEIL_L"):
         check(new in names, f"{new} missing")
     by = {c.enum: c for c in hw.HW_LIGHTS}
-    check(abs(by["GATE_A_L"].y - 37.75) < 1e-6,
-          f"GATE_A_L is at y={by['GATE_A_L'].y}, not in the VOICE row")
     check(abs(by["SYNC_L"].y - 114.0) < 1e-6,
           f"SYNC_L is at y={by['SYNC_L'].y}, not on the jack row")
+    check(abs(by["CEIL_L"].y - hw.JACK_Y) < 1e-6,
+          f"CEIL_L is at y={by['CEIL_L'].y}, not on the jack row with MODBTN_L")
+    check(by["CEIL_L"].x > hw.JACK_POS["OUT_R"],
+          "CEIL_L is not outboard of OUT_R")
+
+
+def test_knob_lamps_sit_in_the_caption_cluster():
+    """Knob-owned lamps sit in a word-then-LED block centred on the knob.
+
+    Replaces the satellite (anchor radius + 1.5 mm) rule for those lamps.
+    A lamp typed to a clear-but-wrong side of the knob still passes the
+    overlap guard; this checks the cluster itself. Pads, SYNC_L and CEIL_L
+    stay on the old satellite rule -- see the test below."""
+    by = {c.enum: c for c in hw.ALL_HW}
+    checked = 0
+    led_r = hw.BODY_R["L"]
+    for lamp, knob_enum in hw.KNOB_LAMPS.items():
+        if lamp not in by or knob_enum not in by:
+            check(False, f"{lamp} or its knob {knob_enum} is missing")
+            continue
+        k, l = by[knob_enum], by[lamp]
+        cap_x, cap_y, led_x, led_y = hw.caption_led_cluster(k)
+        check(abs(l.x - led_x) < 1e-6 and abs(l.y - led_y) < 1e-6,
+              f"{lamp} is at ({l.x:.2f},{l.y:.2f}), not the cluster "
+              f"({led_x:.2f},{led_y:.2f})")
+        lx, ly = hw.hw_label(k)[:2]
+        check(abs(lx - cap_x) < 1e-6 and abs(ly - cap_y) < 1e-6,
+              f"{knob_enum} caption is at ({lx:.2f},{ly:.2f}), not the "
+              f"cluster word ({cap_x:.2f},{cap_y:.2f})")
+        w = len(k.label) * (hw.CAPTION_SIZE * hw.FONT_ADVANCE)
+        x0 = cap_x - w / 2.0
+        x1 = l.x + led_r
+        check(abs((x0 + x1) / 2.0 - k.x) < 1e-6,
+              f"{lamp} cluster is not centred on {knob_enum}")
+        gap = (l.x - led_r) - (cap_x + w / 2.0)
+        check(abs(gap - hw.LED_CAPTION_GAP) < 1e-6,
+              f"{lamp} caption-to-LED gap is {gap:.2f}, not {hw.LED_CAPTION_GAP}")
+        check(l.x > cap_x, f"{lamp} is not after the {knob_enum} word")
+        mid = cap_y - (hw.CAPTION_SIZE * hw.FONT_CAP) / 2.0
+        check(abs(l.y - mid) < 1e-6,
+              f"{lamp} y={l.y:.3f} is not on the {knob_enum} glyph midline "
+              f"({mid:.3f})")
+        checked += 1
+    check(checked == len(hw.KNOB_LAMPS),
+          f"expected {len(hw.KNOB_LAMPS)} clustered lamps, checked {checked}")
 
 
 def test_satellite_lamps_sit_at_anchor_radius_plus_1_5mm():
-    """Spec 2026-08-16 section 5.1's placement rule, pinned rather than left
-    to test_no_overlap_with_hw_radii's clearance check. That guard only
-    proves a lamp does not collide with anything -- a lamp typo'd to a
-    clear-but-wrong spot passes it, and TEMPO_L is now exempt from the
-    three-lines guard with nothing else holding it. This checks the rule
-    itself: every one of the thirteen new lamps sits at exactly its anchor's
-    class radius + 1.5 mm.
-
-    One exception, named rather than hidden: CEIL_L sits 20 degrees off
-    vertical from REV_DECAY -- the on-axis spot collides with REV_DECAY's
-    own caption anchor (0.40 mm against a required 3.0 mm). The distance
-    rule still holds for it, only the bearing differs, so the assertion
-    below covers it unchanged.
-
-    Tolerance is 0.01 mm: LIGHT_POS's literals are hand-rounded to two
-    decimal places from an exact anchor-radius + 1.5 mm construction at a
-    turned bearing (e.g. FLT_A_L's 9 degrees, CEIL_L's 20), which leaves a
-    residual of a few thousandths of a millimetre -- an order of magnitude
-    under this tolerance, and two orders under the 1 mm nudge the red proof
-    for this guard uses."""
+    """Pads and the ceiling lamp keep the satellite rule: exactly the
+    anchor's class radius + 1.5 mm. CEIL_L is a satellite of OUT_R on the
+    jack row, same height as MODBTN_L. Knob-owned lamps left this rule."""
     SATELLITES = {
-        "SRC_A_L": "SOURCE_A", "SRC_B_L": "SOURCE_B",
-        "FLT_A_L": "FILT_A",   "FLT_B_L": "FILT_B",
-        "CLR_A_L": "COLOR_A",  "CLR_B_L": "COLOR_B",
-        "LVL_A_L": "COMP_A",   "LVL_B_L": "COMP_B",
-        "SONG_A_L": "SONG_A",  "SONG_B_L": "SONG_B",
         "MODBTN_L": "MODBTN",  "SHIFTBTN_L": "SHIFTBTN",
-        "CEIL_L": "REV_DECAY",  # exception: bearing differs, distance does not
+        "CEIL_L": "OUT_R",
     }
     by = {c.enum: c for c in hw.ALL_HW}
     checked = 0
@@ -384,7 +445,7 @@ def test_satellite_lamps_sit_at_anchor_radius_plus_1_5mm():
               f"{lamp} is {d:.3f} mm from {anchor}, not anchor radius + 1.5 "
               f"({want:.2f} mm)")
         checked += 1
-    check(checked == 13, f"expected 13 satellites, checked {checked}")
+    check(checked == 3, f"expected 3 satellites, checked {checked}")
 
 
 def test_mod_jacks_on_the_jack_row():
@@ -523,10 +584,9 @@ def test_middle_band_runs_on_three_lines():
     up: MORPH cannot pass 52.0 without displacing SYNC's caption, and a
     shorter band leaves the jack row without a margin.
 
-    LED feedback round (2026-08-16): satellite lights (GATE_A/B_L, FLT_A/B_L)
-    ride at anchor radius + 1.5 mm from their knob, diagonally offset from
-    that knob's line by design -- they do not themselves set the row's
-    rhythm, so they are exempt from the on-a-line rule the knobs keep."""
+    LED feedback round (2026-08-16): lights do not set the row's rhythm --
+    they sit in the caption cluster under the knob, or as pad satellites --
+    so they are exempt from the on-a-line rule the knobs keep."""
     lines = (hw.Y_B1K, hw.Y_B1M, hw.Y_B1G)
     seed_y, seed_h = hw.GROUP_ROWS[1][0], hw.GROUP_ROWS[1][1]
     seen, off = {}, []
@@ -675,8 +735,9 @@ def test_bodies_and_captions_sit_inside_their_frame():
     # LED feedback round (2026-08-16): MODBTN_L/SHIFTBTN_L are satellites of
     # the two pads, at anchor radius + 1.5 mm -- exactly as loose as the pads
     # themselves, which is what makes them read as "this pad is lit" rather
-    # than as members of the jack-row frame.
-    check(sorted(loose) == ["MODBTN", "MODBTN_L", "SHIFTBTN", "SHIFTBTN_L"],
+    # than as members of the jack-row frame. CEIL_L sits the same way, just
+    # outside the OUT frame to the right of OUT_R.
+    check(sorted(loose) == ["CEIL_L", "MODBTN", "MODBTN_L", "SHIFTBTN", "SHIFTBTN_L"],
           f"controls outside the frame raster: {sorted(loose)}")
     # The SD slot is a body on the jack row like any other.
     sd = [b for b in hw.BOXES if b.n == "CLOCK"][0]

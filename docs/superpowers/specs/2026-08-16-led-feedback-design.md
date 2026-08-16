@@ -15,7 +15,9 @@ drawn; six of them cannot light at all, and of the four that can, two sit in a
 row where they mean nothing.
 
 **The lights answer one question: what is modulating right now, and how hard.**
-Not what is set — the knob shaft already says that. Not where the beat is.
+Not what is set — the knob shaft already says that. **The TEMPO lamp is the
+exception:** it sits at the tempo knob and flashes the transport beat, because
+that is the question asked there. Nothing else on the plate is a metronome.
 
 **The principle that decides every placement:** a light sits where the question
 it answers is asked. And **the quantity is the modulation excursion, never the
@@ -158,17 +160,17 @@ accepts a known gap. The GATE light shows when a note fires, not how far the
 lane moved, and on a Sampler deck the lane fires identically whether pitch is
 moving or frozen. The gap is recorded in §9 rather than papered over.
 
-### 3.2 Phrase light — "which of the two phrases is sounding"
+### 3.2 Phrase light — "the snapshot just changed"
 
-One per deck at `SONG` (48,00 / 256,80), reading `active_pattern_for_test(p)`.
+One per deck at `SONG` (48,00 / 256,80), reading `active_pattern(p)`.
 
 `SONG` arranges two stored snapshots into AAAB, ABAB, ABBB, BUILD, ROTATE,
-MIRROR or OFF and nothing reveals which is playing. Structural changes land on
-phrase boundaries, so turning SONG does nothing for a while — the built-in "is
-this broken?" moment. **Two snapshots are two blink patterns, steady versus
-double-pulse, not two brightness levels:** brightness is the channel the
-excursion lights already use, and two brightness levels on one LED is the least
-reliable discrimination available at arm's length.
+MIRROR or OFF. The interesting event is the switch, not which snapshot is
+held. **Dark, except for a 150 ms flash on A→B and on B→A.** Same flash both
+ways. OFF never switches, so the lamp stays dark. Replaces the steady /
+double-pulse law, which in FLOW melody strobed at 1 Hz on snapshot B and
+could not be read. Details:
+[`2026-08-16-song-phrase-flash-design.md`](2026-08-16-song-phrase-flash-design.md).
 
 ### 3.3 Ceiling light — "the sound is being squeezed"
 
@@ -213,10 +215,10 @@ for that, and they are individually addressable already.
 | LED | Decision |
 |---|---|
 | `REC_A/B_L` | **kept** — the only one of the top-row three with a neighbour it belongs to. Behaviour unchanged (`Fireflow.cpp:1018-1033`) |
-| `FLOW_A/B_L` | **kept, given an ID.** It disambiguates the one thing the row cannot show: whether STEPS is exactly at 0. In FLOW, `SONG` is inert and `MELODY` is inert on the melody but still live on the texture lanes and on a Sampler deck — the light is worth having, but not for the sweeping reason the first draft gave (§10) |
+| `FLOW_A/B_L` | **ID kept, not drawn on `FireflowHW`.** The STEPS lamp cannot light today and the owner dropped it. `LightId` stays so `NUM_LIGHTS` does not move; `fill()` writes duty 0; the HW panel skips the two widgets. See the phrase-flash spec §3 |
 | `GATE_A/B_L` | **moved** out of the timing row into the VOICE row (y 34), where the note is shaped. Behaviour unchanged |
 | `SYNC_L` | **moved** to the `CLOCK` jack, where an external clock arrives, and given an ID |
-| `TEMPO_L` | **kept**, given an ID |
+| `TEMPO_L` | **kept**, given an ID, driven as a metronome pulse on the transport beat |
 | `CAP_A/B_L` | **deleted** — the feature has not existed since 2026-07-14 |
 
 ## 4. The display law
@@ -265,8 +267,12 @@ step, and only intensity exactly 0 maps to duty 0.** Lift, then quantise.
 
 ### 4.4 Event and state lights
 
-`GATE`: unchanged. `SONG`: steady versus double-pulse (§3.2). `FLOW`, `SYNC`,
-`TEMPO`: state. Ceiling: decays rather than blinks, so brief peaks stay visible.
+`GATE`: unchanged. `SONG`: 150 ms flash on a snapshot edge, then dark (§3.2).
+`FLOW`: written, always 0, not drawn on `FireflowHW`. `SYNC`: state, still
+unwired. `TEMPO`: metronome pulse — on for `kTempoPulse` (0,12) of each transport
+beat, hard on/off, no envelope. The phase already carries PACE, so the tick
+follows the musical beat, not wall-clock tempo. Ceiling: decays rather than
+blinks, so brief peaks stay visible.
 
 **No light uses the existing GATE coefficient as an event-flash model.** That
 coefficient (`Fireflow.cpp:1014`, `0.05f` applied per sample) is τ ≈ 0,42 ms —
@@ -275,75 +281,66 @@ of order 100–200 ms.
 
 ## 5. Placement
 
-The plate is drawn, guarded and tight. **The placement rule is chosen so that
-adding thirteen lights cannot move anything that is already on it**, and so that
-the implementation has exactly one free number.
+The plate is drawn, guarded and tight. Knob-owned lamps sit in a caption+LED
+cluster under the knob. Pads, the CLOCK jack lamp and the ceiling lamp stay
+satellites. Positions are derived, not literals.
 
-### 5.1 The rule: a satellite inside the row's ink band
+### 5.1 Knob lamps: a word-then-LED cluster under the knob
 
-1. **Same row as its anchor control, inside that row's existing ink band.**
-2. **Distance exactly `anchor radius + 1,5 mm`** — touching clearance under
-   `test_no_overlap_with_hw_radii` (`d ≥ a.r + b.r`).
-3. **Bearing inboard**, toward the centre column.
+For every lamp that belongs to a knob (`SRC_*` at SOURCE, `FLT_*` at FILT,
+`CLR_*` at COLOR, `LVL_*` at COMP, `SONG_*` at SONG, `GATE_*` at ATTACK,
+`TEMPO_L` at TEMPO). `FLOW_*` is not in this set — STEPS has no lamp.
+
+1. **Reading order on both decks: word, 0,8 mm air, LED.** Not an optical
+   `[LED][word]` mirror on deck B.
+2. **The block is centred on the knob x.** A four-letter word is 8,2 mm wide;
+   `ATK` / `LVL` are 7,1 mm.
+3. **LED y: centre on the caption's glyph midline**
+   (`ly − 0,5 × 2,2 × 0,72`). The body hangs ~0,7 mm below the baseline;
+   `_row_ink()` ignores knob lamps so the frame chain does not grow.
+
+`test_no_overlap_with_hw_radii` exempts `{knob, lamp}` (and `ATTACK`/`STAGES`,
+who share a shaft). The only CLASS_R hit is the lamp vs **its own** knob
+(vertical 6,5 mm vs required 7,5 mm on a small pot). That circle is finger
+spacing between controls, not between a knob and its own indicator.
+
+**Stay put, still satellites at `anchor radius + 1,5 mm`:** `REC_*`,
+`MODBTN_L`, `SHIFTBTN_L` (pads), `SYNC_L` (CLOCK jack). `CEIL_L` is a
+satellite of `OUT_R`, outboard on the jack row at the same y as `MODBTN_L`
+— the output limiter, not a decay lamp.
 
 **Why this cannot move a frame.** `test_rows_are_centred_on_their_ink` derives
-every frame from `_row_ink(row)` and chains the rows through `BOX_GAP`, so
-anything that extends a row's ink shifts every frame below it — that is the
-mechanism by which a small addition wrecks a layout. An LED cannot trigger it
-from inside a row: its radius is 1,5 mm against a knob's 6,0 or 8,5, so as long
-as its own extent stays inside the band the knobs already define, `_row_ink()`
-returns exactly what it returned before.
+every frame from `_row_ink(row)` and chains the rows through `BOX_GAP`. The
+LED hangs slightly below the caption baseline the knobs already print;
+`_row_ink()` ignores those lamps, so the band it returns does not grow.
 
-### 5.2 Measured start positions
+### 5.2 Measured cluster
 
-Every anchor has a legal position at **exactly the theoretical minimum
-distance**, inside its row band, clearing every drawn element. Measured
-2026-08-16 by scanning a polar grid around each anchor against `ALL_HW`:
+Measured 2026-08-16 against `gen_hw_panel.py`: physical bodies clear;
+neighbour CLASS_R clear; clusters do not overlap. The generator fills
+`LIGHT_POS` for knob lamps from `caption_led_cluster()`, not from a table.
 
-| Light at | Anchor r | Distance | Bearing | Deck A position |
-|---|---:|---|---:|---|
-| `SOURCE` | 6,0 | 7,50 = minimum | 0° | 109,75 / 50,22 |
-| `FILT` | 8,5 | 10,00 = minimum | 9° | 96,13 / 54,56 |
-| `COLOR` | 8,5 | 10,00 = minimum | 0° | 33,50 / 95,00 |
-| `COMP` | 8,5 | 10,00 = minimum | 0° | 116,50 / 76,00 |
-| `SONG` | 6,0 | 7,50 = minimum | 30° | 54,50 / 18,25 |
-| `GATE` (at `ATTACK`) | 6,0 | 7,50 = minimum | 30° | 74,75 / 37,75 |
-| `SHIFTBTN` | 4,0 | 5,50 = minimum | 0° | 19,50 / 114,00 |
-
-Five of seven sit plainly to the side; `FILT` needs 9° of tilt and `SONG` and
-`GATE` 30°. The ceiling light is unconstrained — the centre column (x 145…160)
-has hundreds of free grid points in every row band.
-
-This also settles a question the review raised as unverified: an LED does **not**
-fit on the straight line between `FILT_A` (86,25/53,00, r 8,5) and `SOURCE_A`
-(102,25/50,22, r 6,0), which are 16,24 mm apart against a required 17,50. Off
-that line, at 9°, it fits at the minimum.
+The satellite scan that first placed the thirteen lamps (minimum distance,
+bearing inboard) is superseded for knob lamps. It still describes the pads:
+`SHIFTBTN_L` at 19,50 / 114,00, `MODBTN_L` the mirror at 285,30 / 114,00.
+`CEIL_L` sits at `OUT_R` + jack radius + 1,5 mm, same y (277,30 / 114,00),
+just outside the OUT frame.
 
 ### 5.3 One degree of freedom
 
-The order of work, and the only value the implementation may change:
+The cluster has one free number: `LED_CAPTION_GAP` (0,8 mm). Do not grow it
+to dodge a guard, and do not move a knob. Where a guard goes red, the
+geometry is too tight for this layout.
 
-1. Place all thirteen as satellites at minimum distance, bearing inboard.
-2. Run the generator, run `hw_panel_guard`.
-3. Where a guard goes red, **turn the bearing** — never grow the distance, never
-   move a knob.
-
-**What §5.2 does not prove.** Only radius clearance and row-band containment
-were measured. The caption guards were not: `test_labels_stay_off_neighbour_
-footprints`, `test_captions_stay_off_their_own_knob` and
-`test_caption_gap_is_one_number`. **That, not geometry, is where this will
-actually bite** — a 3 mm lamp overlapping a neighbour's four-letter word. Step 2
-is what finds it.
+`test_caption_mirror_symmetry` excepts these knobs: the cluster centre still
+mirrors with the knob, the word does not.
 
 ### 5.4 Coupling constraints
 
-**The lights do not mirror themselves.** `place()` (`gen_hw_panel.py:236-257`)
-routes `_A`/`_B` enums through `DECK_POS`, but light enums end in `_L` and fall
-through to `LIGHT_POS`, which raises `KeyError` if an entry is missing. Every new
-light needs a hand-written, hand-mirrored pair; `test_mirror_symmetry` checks
-them, it does not generate them. The scan above reports deck A only — and it
-found `MODBTN`'s nearest free spot *outboard* at 296,30, where the mirror of
-`SHIFTBTN`'s 19,50 is 285,30. Mirror first, then verify, not the other way round.
+Knob-lamp coordinates are derived from the placed knob. Pad / CLOCK / ceiling
+lamps still need a hand-written `LIGHT_POS` entry; light enums end in `_L`
+and do not route through `DECK_POS`. `test_mirror_symmetry` skips knob lamps
+(local `+dx` on both decks) and still checks the satellites.
 
 ### 5.5 The large module stays out of it — via the pattern the repo already uses
 
@@ -498,10 +495,9 @@ G1–G6 and G9 are unit tests in `spky_tests`; G7 and G8 are panel guards.
   every block. If it cannot, an N-step sweep lands near 30 Hz and the LEDs
   strobe — worst at low duty, which is where the gamma curve puts most of the
   breath.
-- **Geometry is settled, lettering is not.** §5.2 measures a legal spot for every
-  light at minimum clearance inside its row band, so no frame can move. The
-  caption guards are unmeasured, and a 3 mm lamp landing on a neighbour's
-  four-letter word is the realistic way this round loses a day.
+- **Knob lamps sit in the caption cluster.** §5.1 replaces the satellite rule
+  for those lamps; pads, `SYNC_L` and `CEIL_L` stay as they were. The frame
+  chain cannot move because `_row_ink()` ignores the clustered lamps.
 - **`LANE_PITCH` has no excursion display**, and the RANGE law that flattens a
   phrase onto one scale degree (engine-map §7) stays undiagnosable from the
   panel.

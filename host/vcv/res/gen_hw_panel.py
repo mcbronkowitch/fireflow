@@ -228,40 +228,51 @@ JACK_POS = {"PITCH_A": 56.00, "GATE_A": 67.50,
             "MOD1_B": W - X_COLOR, "MOD2_B": W - X_FILT,
             "MOD3_B": W - X_TIMB, "MOD4_B": W - X_LVL}
 
+# Knob-owned lamps: the caption and the LED are one block under the knob,
+# word then air then LED, centred on the knob x. Same reading order on both
+# decks -- not an optical [LED][word] mirror. Pads, the CLOCK jack lamp and
+# the ceiling lamp stay as satellites (LIGHT_POS below).
+KNOB_LAMPS = {
+    "SRC_A_L": "SOURCE_A", "SRC_B_L": "SOURCE_B",
+    "FLT_A_L": "FILT_A",   "FLT_B_L": "FILT_B",
+    "CLR_A_L": "COLOR_A",  "CLR_B_L": "COLOR_B",
+    "LVL_A_L": "COMP_A",   "LVL_B_L": "COMP_B",
+    "SONG_A_L": "SONG_A",  "SONG_B_L": "SONG_B",
+    "GATE_A_L": "ATTACK_A", "GATE_B_L": "ATTACK_B",
+    "TEMPO_L": "TEMPO",
+}
+KNOBS_WITH_LAMPS = set(KNOB_LAMPS.values())
+LED_CAPTION_GAP = 0.8   # mm of air between the word's ink and the LED body
+CAPTION_SIZE = 2.2      # same size hw_label prints
+
+
+def caption_led_cluster(knob):
+    """(cap_x, cap_y, led_x, led_y) for a knob-owned lamp.
+
+    LED centre sits on the caption's glyph midline. The body then hangs
+    ~0.7 mm below the baseline; _row_ink() ignores these lamps so the
+    frame chain does not grow -- the caption already defines that floor.
+    """
+    w = len(knob.label) * (CAPTION_SIZE * FONT_ADVANCE)
+    led_r = BODY_R["L"]
+    total = w + LED_CAPTION_GAP + 2 * led_r
+    x0 = knob.x - total / 2.0
+    cap_x = x0 + w / 2.0
+    cap_y = knob.y + CLASS_LBL_DY[hw_class(knob.enum)]
+    led_x = x0 + w + LED_CAPTION_GAP + led_r
+    led_y = cap_y - (CAPTION_SIZE * FONT_CAP) / 2.0
+    return cap_x, cap_y, led_x, led_y
+
+# Stay-put lamps only. Knob-owned entries are filled from caption_led_cluster
+# after HW_PARAMS exists -- do not hand-edit those back in here.
 LIGHT_POS = {"REC_A_L": (108.50, Y_TOP), "REC_B_L": (W - 108.50, Y_TOP),
-             # --- LED feedback round, 2026-08-16 -------------------------------------
-             # Satellites: each at exactly anchor radius + 1.5 mm, inside its row's
-             # existing ink band, so _row_ink() is unchanged and no frame can move.
-             # Measured free at these points against every drawn element (spec 5.2).
-             "SRC_A_L":    (109.75,  50.22),  "SRC_B_L":    (195.05,  50.22),
-             "FLT_A_L":    ( 96.13,  54.56),  "FLT_B_L":    (208.67,  54.56),
-             "CLR_A_L":    ( 33.50,  95.00),  "CLR_B_L":    (271.30,  95.00),
-             "LVL_A_L":    (116.50,  76.00),  "LVL_B_L":    (188.30,  76.00),
-             "SONG_A_L":   ( 54.50,  18.25),  "SONG_B_L":   (250.30,  18.25),
-             # GATE leaves the timing row, where it sat 4 mm from REC and CAP and
-             # meant nothing, for the VOICE row where the note is shaped.
-             "GATE_A_L":   ( 74.75,  37.75),  "GATE_B_L":   (230.05,  37.75),
-             # FLOW and the two pad lamps keep their drawn positions; SYNC leaves
-             # SHUFFLE's side, where only mirror symmetry had put it, for the CLOCK
-             # jack, where an external clock actually arrives.
              "SYNC_L":     (130.50, 114.00),
              "MODBTN_L":   (285.30, 114.00),  "SHIFTBTN_L": ( 19.50, 114.00),
-             # In the master column between REV_DECAY and REV_TONE. Unsuffixed,
-             # so _twin_enum declares no mirror partner and test_mirror_symmetry
-             # leaves it alone -- as it already does TEMPO_L. Not on REV_DECAY's
-             # own axis (x=152.40): straight down from REV_DECAY at anchor
-             # radius + 1.5 mm lands inside REV_DECAY's own default caption spot,
-             # (152.40, 88.6), forcing that caption to flip above REV_DECAY and
-             # blow out row3's frame. Bearing turned 20 degrees off vertical,
-             # same anchor radius + 1.5 mm from REV_DECAY, clears that caption
-             # by 3.0 mm+ instead (spec 5.3: turn the bearing, not the distance).
-             "CEIL_L":     (155.82,  88.40),
-             # TEMPO/FLOW keep the coordinates HW_ONLY already drew them at
-             # (spec 2026-08-10 §8), carrying the row symbols rather than the
-             # transcribed numbers, so a later row re-rhythm moves the lamp
-             # with its row instead of stranding it.
-             "TEMPO_L":    (130.40, Y_B1K),
-             "FLOW_A_L":   (93.50, Y_TOP),  "FLOW_B_L": (W - 93.50, Y_TOP)}
+             # Limiter lamp: jack-row satellite of OUT_R, outboard, same y as
+             # MODBTN_L. Unsuffixed, so _twin_enum declares no mirror partner.
+             # Just outside the OUT frame (right edge 276.80); inside the
+             # frame the CLASS_R circles of jack and lamp overlap.
+             "CEIL_L":     (JACK_POS["OUT_R"] + CLASS_R["J"] + 1.5, JACK_Y)}
 
 
 def place(c):
@@ -289,9 +300,14 @@ def place(c):
     raise KeyError(f"no hw slot for {base}")
 
 HW_PARAMS  = [place(c) for c in gp.RUNTIME_PANEL_PARAMS]
+_by_param = {c.enum: c for c in HW_PARAMS}
+for lamp, knob_enum in KNOB_LAMPS.items():
+    LIGHT_POS[lamp] = caption_led_cluster(_by_param[knob_enum])[2:]
 HW_INPUTS  = [place(c) for c in gp.INPUTS] + [place(c) for c in gp.HW_MOD_INPUTS]
 HW_OUTPUTS = [place(c) for c in gp.OUTPUTS]
-HW_LIGHTS  = [place(c) for c in gp.LIGHTS + gp.HW_ONLY_LIGHTS]
+_SKIP_HW_LIGHTS = {"FLOW_A_L", "FLOW_B_L"}
+HW_LIGHTS  = [place(c) for c in gp.LIGHTS + gp.HW_ONLY_LIGHTS
+              if c.enum not in _SKIP_HW_LIGHTS]
 
 
 class HwOnly:
@@ -331,7 +347,10 @@ def _caption_is_clear(c, lx, ly):
 def hw_label(c):
     """Caption placement, by rule rather than by named exception."""
     if not c.label:
-        return (c.x, c.y, "middle", 2.2, HW_LABEL)
+        return (c.x, c.y, "middle", CAPTION_SIZE, HW_LABEL)
+    if c.enum in KNOBS_WITH_LAMPS:
+        cap_x, cap_y, _, _ = caption_led_cluster(c)
+        return (cap_x, cap_y, "middle", CAPTION_SIZE, HW_LABEL)
     dy = CLASS_LBL_DY[hw_class(c.enum)]
     if c.y >= JACK_Y - 0.5:
         dy = JACK_ROW_LBL_DY
@@ -341,7 +360,7 @@ def hw_label(c):
                            (c.x, c.y - dy, "middle"),
                            third):
         if _caption_is_clear(c, lx, ly):
-            return (lx, ly, anchor, 2.2, HW_LABEL)
+            return (lx, ly, anchor, CAPTION_SIZE, HW_LABEL)
     raise ValueError(f"no clear caption position for {c.enum} -- the geometry "
                      f"is too tight, move a control (spec 2026-08-10 §3)")
 
@@ -427,6 +446,10 @@ def _row_ink(row):
         if not (y0 <= c.y <= y0 + h):
             continue
         if not any(x0 <= c.x <= x1 for x0, x1 in spans):
+            continue
+        if c.enum in KNOB_LAMPS:
+            # Cluster lamp: hangs slightly below the caption baseline by
+            # design. The caption ink already sets the row floor.
             continue
         r = body_r(c)
         edges = [(c.y - r, c.y + r)]

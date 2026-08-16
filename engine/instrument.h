@@ -420,6 +420,9 @@ public:
     // The modulation term alone -- what the LED law displays. Deliberately
     // NOT target_value(), which is base + mod and would show the knob.
     float lane_excursion(int p, int s) const { return _parts[p].lane_excursion(s); }
+    // Transport beat in [0, 1). The TEMPO lamp's metronome pulse reads this;
+    // it already carries PACE (the transport ticks at _bpm * _pace).
+    float beat_phase() const { return _center.transport().beat_phase(); }
     float target_value(int p, int s) const { return _parts[p].target_value(s); }
     bool  lane_fired(int p, int s)   const { return _parts[p].lane_fired(s); }
     bool  gate(int p)  const { return _parts[p].gate(); }
