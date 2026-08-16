@@ -340,26 +340,30 @@ Kanal (§6) und der selbst zu schreibende Mux-Scan (oben).
 
 ### LED-Ausbau: was ein weiteres Register bringt
 
-Gefragt am 2026-08-16, weil mehr Anzeige gewünscht ist: RATE, MOD, TIME und
-LVL je Deck, dazu TIDE und PACE (TEMPO hat schon eine LED). Das sind **zehn
-neue**, also 20 statt 10 — genau das Feld, das die Neugruppierung ursprünglich
-vorgesehen hatte, bevor die Neuverteilung die zehn ENGINE-Anzeigen einsparte.
+Gefragt am 2026-08-16, **bevor** die LED-Feedback-Runde lief: RATE, MOD, TIME
+und LVL je Deck, dazu TIDE und PACE (TEMPO hatte schon eine LED). Gebaut wurde
+am selben Tag mehr als das — **21 Lampen** statt der damals gezählten zehn (§3),
+zwei davon frei geworden durch das Löschen der Capture-Anzeigen. Was hier steht,
+ist deshalb keine Planung mehr, sondern die Rechnung für den *nächsten* Schritt:
+was ein **fünftes** Register brächte.
 
-| | heute | mit zehn weiteren |
+| | heute (21 Lampen) | mit acht weiteren |
 |---|---:|---:|
-| 595-Ausgänge nötig (LEDs + 4 Adressen + 5 Enables) | 19 | **29** |
-| Register à 8 Ausgänge | 3 (24) | **4 (32)** |
+| 595-Ausgänge nötig (LEDs + 4 Adressen + 5 Enables) | 30 | **38** |
+| Register à 8 Ausgänge | 4 (32) | **5 (40)** |
 | GPIOs | 4 | **4** |
 
-**Hardwareseitig ist das ein Bauteil.** Ein weiteres 74HC595 in die bestehende
-Kette, dazu die LEDs mit Vorwiderständen — **keine GPIOs**, genau dafür ist die
-Kette da. Beim Verteilen nicht alle auf ein Register hängen (Paket-Gesamtstrom);
+**Hardwareseitig ist jede Ausbaustufe ein Bauteil.** Ein weiteres 74HC595 in die
+bestehende Kette, dazu die LEDs mit Vorwiderständen — **keine GPIOs**, genau
+dafür ist die Kette da. Das vierte Register ist dabei kein Ausbau mehr, sondern
+Bestand: 30 der 32 Ausgänge sind belegt (§3). Beim Verteilen nicht alle auf ein
+Register hängen (Paket-Gesamtstrom);
 das ist eine Datenblattfrage beim Bestellen, keine Architekturfrage. Jedes
 weitere Register sind wieder 8 LEDs, weiterhin ohne einen einzigen Pin — die
 praktische Grenze ist die Kettenlänge und der Strom, nicht das Board.
 
 **CPU-seitig kostet An/Aus nichts.** Eine Schieberegisterkette wird immer ganz
-geschrieben, gleich wie viele ihrer Bits LEDs sind; von 24 auf 32 Bit sind acht
+geschrieben, gleich wie viele ihrer Bits LEDs sind; von 32 auf 40 Bit sind acht
 zusätzliche Schiebetakte pro Schreibvorgang. Und weil die Mux-Adressen auf
 derselben Kette liegen, **wird die Kette ohnehin bei jedem Adressschritt neu
 geschrieben** — die LED-Daten fahren mit.
@@ -368,27 +372,38 @@ geschrieben** — die LED-Daten fahren mit.
 die Kette 16× pro Sweep, einmal je Adresse. Variiert man über diese 16
 Schreibvorgänge, welche LED-Bits gesetzt sind, ergibt das **16-stufiges PWM ohne
 einen einzigen zusätzlichen Schreibvorgang** — Auflösung = Adressschritte,
-Bildwiederholrate = Sweep-Rate.
+Bildwiederholrate = Sweep-Rate. Die LED-Feedback-Runde hat genau darauf gebaut:
+`spkyled::duty()` nimmt die Stufenzahl als Parameter, weil die 8:1-gegen-16:1-Wahl
+(§6) sie bestimmt, und der Rack-Host quantisiert auf dieselben 16 Stufen, damit
+er nicht feiner atmet als das Panel je kann.
 
 **Die Grenze, und sie ist scharf:** wer *feinere* Helligkeit als 16 Stufen will,
 muss das PWM vom Scan entkoppeln, und dann sind es echte zusätzliche
 Kettenschreibvorgänge pro Block. Das kostet CPU und zahlt auf den Block-Artefakt
-ein (§6) — 24 → 32 Bit ist marginal, eine eigene PWM-Schleife wäre es nicht.
+ein (§6) — 32 → 40 Bit ist marginal, eine eigene PWM-Schleife wäre es nicht.
 
 **Alles in diesem Abschnitt ist hergeleitet, nicht gemessen.** Zu messen ist die
-Kettenschreibzeit bei 32 gegen 24 Bit auf dem Board.
+Kettenschreibzeit bei 40 gegen 32 Bit auf dem Board.
 
-**Engine-seitig ist nichts zu bauen:** `lane_output(part, slot)`,
-`target_value(part, lane)`, `gate(part)` und `pitch_gate(part)` sind öffentlich
-und const (`engine/instrument.h:409-414`) — der Render-Host baut daraus seit
-jeher `mods.csv`. Was diese LEDs anzeigen sollen, liegt bereits an; die
-Zuordnung ist Firmware.
+**Engine-seitig war doch etwas zu bauen.** Der Absatz, der hier stand, hielt
+`lane_output`, `target_value`, `gate` und `pitch_gate` für ausreichend. Das war
+falsch: `target_value` ist Knopf **plus** Modulation und hätte damit die
+Knopfstellung angezeigt — genau das, was die Anzeige nicht zeigen soll. Die
+LED-Feedback-Runde hat zwei const-Beobachter ergänzt:
+`lane_excursion(part, lane)` für den Modulationsanteil allein
+(`engine/instrument.h:422`, aus `Part::target_raw` herausgezogen, damit Lampe und
+Audiopfad denselben Ausdruck lesen) und `limiter_squash()` für den Master-Former
+(`:306`). Die Zuordnung auf Lampen liegt in `host/vcv/src/led_law.hpp`, ist
+Rack-frei und damit für die Firmware wiederverwendbar — wo die Datei am Ende
+liegt, entscheidet die M6-Inbetriebnahme.
 
-Was hier **nicht** entschieden ist: ob eine LED die Knopfstellung zeigt oder die
-Lane-Bewegung. Die Stellung sieht man am Knopf; der Gewinn liegt darin, die
-Modulation laufen zu sehen — und davon hängt ab, ob es binär bleibt (ein Blitz
-pro Zyklus) oder Helligkeit braucht. Das ist eine Instrumentenfrage und gehört
-in die LED-Feedback-Runde, siehe [`docs/roadmap.md`](../roadmap.md).
+**Die Instrumentenfrage ist entschieden.** Eine Lampe zeigt die
+**Lane-Bewegung**, nicht die Knopfstellung — die sieht man am Knopf. Und sie
+zeigt sie über **Helligkeit**, nicht als Blitz pro Zyklus: eine Hüllkurve setzt
+die Obergrenze, die Momentanauslenkung atmet darin, und dunkel heißt genau eine
+Sache, nämlich dass hier nichts moduliert. Siehe
+[`2026-08-16-led-feedback-design.md`](../superpowers/specs/2026-08-16-led-feedback-design.md)
+§1/§10 und [`docs/roadmap.md`](../roadmap.md).
 
 ## 4. Die geometrische Kapazität
 
