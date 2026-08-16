@@ -87,3 +87,71 @@ TEST_CASE("led G9: the ceiling observer tracks the bend, and clears again") {
     // The band the design exists for: bending, but no gain reduction yet.
     CHECK(squash_at(0.40f, 0.60f) > 0.f);
 }
+
+#include "vcv/src/led_law.hpp"
+
+TEST_CASE("led G1: dark means zero modulation, and nothing else does") {
+    CHECK(spkyled::duty(spkyled::intensity(0.f, 0.f), 16) == 0);
+    CHECK(spkyled::duty(spkyled::intensity(0.5f, 0.f), 16) > 0);
+    CHECK(spkyled::duty(spkyled::intensity(0.5f, 0.5f), 16) > 0);
+}
+
+TEST_CASE("led G2: no non-zero intensity is quantised away to off") {
+    for (int i = 1; i <= 10000; ++i) {
+        const float v = static_cast<float>(i) / 10000.f;
+        CHECK(spkyled::duty(v, 16) >= 1);
+    }
+    CHECK(spkyled::duty(0.f, 16) == 0);
+}
+
+TEST_CASE("led G3: the step count is the mux width and every step is reached") {
+    for (int steps : {8, 16}) {
+        bool seen[64] = {false};
+        for (int i = 0; i <= 100000; ++i) {
+            const float v = static_cast<float>(i) / 100000.f;
+            const int d = spkyled::duty(v, steps);
+            REQUIRE(d >= 0);
+            REQUIRE(d < steps);
+            seen[d] = true;
+        }
+        for (int d = 0; d < steps; ++d)
+            CHECK_MESSAGE(seen[d], "step ", d, " of ", steps, " unreachable");
+    }
+}
+
+TEST_CASE("led G4: gamma runs in the perceptual direction") {
+    const int steps = 16;
+    const int mid   = spkyled::duty(0.5f, steps);
+    const int lin   = static_cast<int>(0.5f * (steps - 1) + 0.5f);
+    CHECK(mid < lin - 1);                       // measurably BELOW linear
+    // ... and it is perceptually linear: duty^(1/gamma) tracks the input.
+    // Measured on a fine ladder rather than on the panel's 16 steps: down
+    // there the raster dominates the curve -- duty(0.25, 16) is 1, and
+    // (1/15)^(1/2.2) is 0.292 against 0.25, a 14% error that says nothing
+    // about gamma. At 256 steps this tests the law instead of the raster.
+    for (float v : {0.25f, 0.5f, 0.75f, 1.0f}) {
+        const float d = static_cast<float>(spkyled::duty(v, 256)) / 255.f;
+        CHECK(std::pow(d, 1.f / spkyled::kGamma) == doctest::Approx(v).epsilon(0.05));
+    }
+}
+
+TEST_CASE("led G5: the trough scales with depth") {
+    const float deep    = spkyled::intensity(0.9f, 0.f);
+    const float shallow = spkyled::intensity(0.2f, 0.f);
+    CHECK(deep > shallow);
+    // A lane frozen at its own peak stays bright rather than fading out.
+    CHECK(spkyled::intensity(0.9f, 0.9f) == doctest::Approx(0.9f));
+}
+
+TEST_CASE("led: the envelope attacks instantly and falls slowly") {
+    spkyled::Lamp lamp;
+    const float dt = 1.f / 750.f;               // the control rate used in Rack
+    lamp.follow(0.8f, dt);
+    CHECK(lamp.env == doctest::Approx(0.8f));   // instant attack
+    lamp.follow(0.f, dt);
+    CHECK(lamp.env > 0.7f);                     // one tick barely moves it
+    // 8 s is four times kEnvFall; at 5.3 s the envelope is still at 0.056 and
+    // this would fail on arithmetic rather than on a defect.
+    for (int i = 0; i < 6000; ++i) lamp.follow(0.f, dt);
+    CHECK(lamp.env < 0.05f);                    // but it does let go
+}
