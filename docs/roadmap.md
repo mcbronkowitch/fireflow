@@ -30,7 +30,38 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-08-15 (**the 60 HP plate is drawn**: the
+- **Last updated:** 2026-08-15 (**the STEP accent lands**: a note deck's
+  melodic lane now derives a per-note accent from its groove rank
+  (`ModLane::note_accent()`, 0 at the rank-0 anchor, 1 at the rank DENSE last
+  reveals) and `Part` pushes it into the active engine every STEP fire. The
+  engine spends it twice, both by-ear floors set to 0.3 and both Bastian's to
+  retune: velocity scales by `vel · (1 − (1 − kAccentVelFloor) · accent)`
+  (`SynthEngineT<V>::kAccentVelFloor`), composing with rather than replacing
+  the chord's `1/√n` equal-power term, and decay scales by
+  `1 − (1 − kAccentDecFloor) · accent · decay_n` (`kAccentDecFloor`), gated by
+  the DEC knob so DEC 0 leaves ring time untouched. Seven gates back it in
+  `tests/test_step_accent.cpp` (G1, two G2 cases, G3–G6); the render-hash
+  gates `ctrl_identity` and `wave_formant_sweep` did not move, because both
+  hashed scenarios run in FLOW, where the accent is always 0. Verification
+  red-proofed every gate with one-line mutations, one at a time, reverted
+  between: G4, G5 and G6 reddened as designed; G1 survived its mutation as
+  predicted (the DENSE-0 anchor's accent is 0 regardless of the
+  normalization it names). Two findings surfaced along the way, one real and
+  now closed, one not a gap at all: the original DENSE-1 G2 case couldn't
+  distinguish the `groove_length`-vs-`_groove_k()` normalization the feature
+  is built on (both compute the same denominator at DENSE 1), so a second
+  G2 case at an intermediate DENSE was added and red-proved to close it; G3's
+  mutation (dropping `note_accent()`'s `_step_mode` guard) never had anything
+  to catch, because `set_step()`'s own reset already zeroes `_note_accent` on
+  every STEP↔FLOW transition before the guard is consulted, so no reachable
+  path can leak a stale accent either way — the guard stays as deliberate
+  redundancy against a future second writer, and the design spec's §3 is
+  corrected to say so instead of naming the guard as load-bearing. See
+  `docs/engine-map.md` §8 for the mechanism of both. Spec
+  `docs/superpowers/specs/2026-08-15-step-accent-design.md`, plan
+  `docs/superpowers/plans/2026-08-15-step-accent.md`, branch
+  `2026-08-15-step-accent`); before
+  that, 2026-08-15 (**the 60 HP plate is drawn**: the
   redistribution round's layout reached the generator in 2.21.2, and the plate
   was then redrawn twice — first an organic light plate with wells, then design
   round 2a, "Technical Blueprint": a dark anodised plate in three tinted zones,

@@ -34,6 +34,10 @@ public:
     void set_vel(float v);
 
     void set_env_times(float attack_s, float decay_s);  // exciter length, damping
+    // Per-note decay scale, latched at trigger time by SynthEngineT. Kept
+    // separate from set_env_times because that one is re-pushed to EVERY voice
+    // on EVERY control tick and would otherwise overwrite it within a block.
+    void set_decay_scale(float s);
     void set_morph(float m);                            // MATL
     void set_detune_cents(float max_ct);                // spread + mode stretch
     void set_sub_level(float n);                        // excitation bus level
@@ -70,6 +74,7 @@ public:
 
 private:
     void _apply_params();
+    void _apply_env();
 
     static constexpr float kFloor = 0.000251f;   // -72 dB
     static constexpr int   kMinHoldSamples = 4800;   // 100 ms
@@ -86,6 +91,9 @@ private:
     // brightest setting, so a voice that never sees FILTER is unaffected.
     float _bright_gain = 1.f;
     float _vel = 1.f, _vel_target = 1.f;
+    float _attack_s = 0.f, _decay_s = 0.f;   // last times pushed, unscaled
+    float _decay_scale = 1.f;
+    bool  _env_seen = false;                 // has set_env_times run yet?
     float _mix_string = 1.f, _mix_modal = 0.f;   // equal-power MATL gains
     float _excitation = 0.f;
     float _follower = 0.f, _peak = 0.f;

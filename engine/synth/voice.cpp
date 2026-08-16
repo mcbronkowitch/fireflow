@@ -59,7 +59,20 @@ void VoiceT<OscT>::set_pitch_hz(float freq_hz) {
 
 template <class OscT>
 void VoiceT<OscT>::set_env_times(float attack_s, float decay_s) {
-    _env.set_times(attack_s, decay_s);
+    _attack_s = attack_s;
+    _decay_s  = decay_s;
+    _env_seen = true;
+    _env.set_times(attack_s, decay_s * _decay_scale);
+}
+
+template <class OscT>
+void VoiceT<OscT>::set_decay_scale(float s) {
+    _decay_scale = clampf(s, 0.f, 1.f);
+    // Re-apply now rather than waiting for the next control tick: at a short
+    // attack the envelope would otherwise start decaying on the previous
+    // note's time. The _env_seen guard stops a scale pushed before any
+    // set_env_times from writing invented times into the envelope.
+    if (_env_seen) _env.set_times(_attack_s, _decay_s * _decay_scale);
 }
 
 template <class OscT>

@@ -115,6 +115,24 @@ public:
     // gets pushed, and an engine switched away from and back to needs no
     // re-sync reasoning. One virtual call per part per control tick.
     virtual void set_width(float /*n*/) {}
+
+    // STEP accent: 0 = full strength, 1 = the last note DENSE reveals.
+    // Default no-op, the set_excitation idiom -- SAMPLER has no per-note
+    // envelope and the BBD's DECAY is not a note property, so both take the
+    // default on purpose (spec 2026-08-15-step-accent-design.md section 7).
+    //
+    // Two call sites, each pushing it immediately before the trigger it
+    // qualifies, and each pushing a different value for a different reason:
+    //   - Part::_fire_trigger() (part.cpp), before trigger_chord(): the
+    //     sequenced value, _mod.note_accent() -- the groove's rank-0 anchor
+    //     at full strength, up to the last note DENSE reveals, and always 0
+    //     in FLOW (spec section 3).
+    //   - Part::trigger_manual() (part.cpp), before trigger_chord(): always
+    //     0.f. A manual strike (the PLAY tap / TRIG press) is a user gesture
+    //     and an anchor by definition, on the same footing CHOKE already
+    //     gives it -- it does not inherit whatever accent the last STEP fire
+    //     left in the engine (spec section 4).
+    virtual void set_accent(float /*a*/) {}
 };
 
 } // namespace spky

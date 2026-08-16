@@ -565,3 +565,127 @@ those semitones survives quantization is the RANGE gate above, which is
 nothing on this branch touched it. Settled, and no longer a question for a
 SHAPE/SMOOTH design: where on the SHAPE axis the melody lives. Everywhere, on a
 note deck.
+
+---
+
+## 8. The groove cell: length, rank, and when it exists
+
+Measured 2026-08-15 on a note deck (`_melodic` and `_flow_melody` both true),
+STEP, rate 0.5 Hz, SHAPE 0, SMOOTH 0, RANGE 1, VARY 0, `set_melodic()` before
+`init()`, seeds 999 / 12345 / 7 / 4242, STEPS 4 / 8 / 16, DENSE 0.0 / 0.05 /
+0.125 / 0.25 / 0.5 / 0.75 / 1.0.
+
+- **`pattern_groove.len` equals the STEPS count**, not `pg_target_len()`'s
+  constant 8 — that function sizes the pitch motif, not the groove cell.
+- **`set_step()` does not regenerate the groove. The next cycle wrap does.**
+  Read the table immediately after the call and you get the previous cell: at
+  4 steps an 8-slot groove whose slots 4..7 the phrase never reaches. The
+  first probe written against this measured exactly that and reported a false
+  mismatch on two of three STEPS counts.
+- **`rank_of_slot[]` is a permutation of `0..L-1` with slot 0 pinned to rank
+  0**, in every cell measured, both patterns of the song pair. Enforced, not
+  emergent: `phrase_gen.h`'s groove build fixes `score[0] = 2.0` above every
+  other slot's jittered score before the stable sort that produces `order[]`
+  (`phrase_gen.h:297`), so slot 0 always sorts first regardless of seed.
+- **The firing set is exactly `{ slot : rank_of_slot[slot % L] < k }`** with
+  `k = clamp(round(DENSE·L), 1, L)` (`lane.cpp:643`, `:655`) — every cell of
+  the sweep matched after the settle wrap.
+
+Pinned by `tests/test_step_accent.cpp`, as exactly as the gates carry it: G1
+pins the firing-set formula's `k == 1` case — exactly one note fires and its
+accent is 0. The DENSE-1 G2 case checks the *accent set* — `uniq.size() ==
+steps` (L distinct values) and `*uniq.rbegin() == Approx(1.0)` (the top one
+reaches 1) — which is consistent with `rank_of_slot[]` being a permutation
+but is not itself what separates `len == STEPS` from a stale or wrong-length
+groove: fires per cycle are bounded by STEPS whatever `L` is (a `k > STEPS`
+groove would still only ever fire `STEPS` times), so it is specifically the
+`*uniq.rbegin() == Approx(1.0)` assertion — reachable only when the last
+distinct accent is `(L-1)/(L-1) == 1`, i.e. `L` actually equals the fired
+count — that holds `len == STEPS`. Slot 0 being rank 0 specifically is not
+pinned by any gate at all; it rests on `phrase_gen.h:297`'s `score[0] = 2.0f`
+(cited above), read directly. The intermediate-DENSE G2 case is what holds
+the `groove_length`-vs-`_groove_k()` normalization choice.
+
+### Red-proofing found one real gate gap and one false one; the gap is closed, the other is a documented property
+
+Red-proofing `tests/test_step_accent.cpp` on 2026-08-15 (one-line mutations,
+one at a time, `-DCMAKE_BUILD_TYPE=Release`) found that G2 and G3, as they
+stood, could not catch the mutation each is named for.
+
+**G2 was a real gap, now closed.** The original case ("at DENSE 1 the contour
+is the whole rank scale") runs at `set_density(1.f)`, and `_groove_k()`
+(`lane.cpp:643-646`) computes `k = clamp(round(density·L), 1, L)`; at
+`density == 1` that is `L` exactly, so `_groove_k() - 1 == groove_length - 1`
+and a mutation normalizing `_start_note`'s accent by `_groove_k()` instead of
+`groove_length` is bit-identical to the original at the one density that case
+exercises. G1 (DENSE 0) can't see it either — the sole firing slot is always
+rank 0, so its accent is `0 / anything == 0` regardless of the denominator.
+**A new case, "accent G2: at an intermediate DENSE, the fired accents are
+exactly the k lowest ranks over L-1", closes it**: at DENSE 0.5, `k < L` for
+every STEPS in the sweep (e.g. 4/8/16 steps → k 2/4/8), so
+`_groove_k() - 1 ≠ groove_length - 1` there and the two normalizations
+diverge. The case asserts the exact accent set `{ r/(L-1) : r in 0..k-1 }`,
+not just its bound, which also re-pins that the firing slots are precisely
+the `k` lowest ranks. Red-proved: under the `_groove_k()` mutation it fails on
+every STEPS/seed pair (first: `CHECK( 1 == Approx( 0.333333 ) )`, steps 4,
+seed 999); reverted, all three `accent G2*` cases pass (140/140 assertions).
+
+**G3 was never a gap — it is a property of the source, confirmed rather than
+patched.** `_note_accent` is written only by `_start_note`, which runs under
+`_step_mode` alone (`lane.cpp:671`), and `set_step()` is the only thing that
+changes mode; its `mode_changed` branch zeroes `_note_accent`
+(`lane.cpp:211`) on every STEP↔FLOW transition, before `note_accent()`'s
+`_step_mode` guard (`lane.h:126`) is ever consulted. So no reachable sequence
+can leak a stale STEP accent into FLOW, guard or not, and no gate can be
+written that tells a guarded accessor apart from a guardless one — which is
+why G3 doesn't. The design spec's §3 used to argue the opposite (the guard as
+the load-bearing mechanism, the reset as unaudited support); it now states
+the reset as what covers every reachable path and the guard as deliberate
+redundancy against a future second writer of `_note_accent`. **The guard
+stays, uncovered by any gate, on purpose** — removing it or writing a test for
+it were both considered and rejected: cheap insurance the day a second writer
+appears is worth more than a gate that could only ever pass.
+
+### The DEC accent is about twice as strong on BODY as on SYNTH
+
+`SynthEngineT<V>::_do_trigger()` (`synth_engine.cpp`) applies one formula --
+`set_decay_scale(1.f - (1.f - kAccentDecFloor) * _accent * _decay_n)` -- to
+every `V` it is instantiated with, and a comment beside that call used to
+claim "at DEC 1 the weakest note rings for `kAccentDecFloor` of the set time"
+without qualification. That is exact for `VoiceT` (SYNTH/WAVE), where
+`set_decay_scale` multiplies `decay_s` linearly, so the scale factor IS the
+ring-time ratio. It is not exact for `BodyVoice` (BODY): `_apply_env()` maps
+`_damping = d_s / (d_s + 1)`, which is not linear in `d_s`, so the same scale
+factor produces a different proportional ring time.
+
+Measured (seed 99, `set_cycle(0.25f)`, one struck note, DEC knob 1.0, note
+length = index of the last sample above 5% of the note's own peak,
+`tests/test_step_accent.cpp`'s `note_len_samples` helper): at accent 1 vs.
+accent 0, SYNTH goes 42929 → 13231 samples, ratio 0.3082 (matches
+`kAccentDecFloor` within G5's window); BODY goes 212802 → 32893 samples,
+ratio 0.1546 — about twice as strong. At DEC knob 0 both are exactly 1.0
+(inert), so the knob-gating half of the coupling is unaffected; only the
+DEC-1 proportional strength differs by engine.
+
+This is a documentation fact, not a defect: `BodyVoice::_apply_env()`'s
+damping curve is long-standing, by-ear design, and no gate in
+`tests/test_step_accent.cpp` asserts a BODY decay ratio at all (G5 is
+`SynthEngine`-only) — BODY's compile-enforced obligation is only that
+`set_decay_scale` exists and both callers (`set_env_times`, `set_decay_scale`
+itself) route through `_apply_env()`, not that its ring time matches SYNTH's
+proportionally.
+
+### The fire-before-process ordering is what makes FLOW's auto-drone safe from a stale accent
+
+`Part::process` (`part.h`) runs `_fire_trigger()` before `_engine->process()`
+within the same sample, and the lane fires on the first FLOW sample after
+`set_step(false)` — so when `SynthEngineT::process()`'s `_auto_pending` drone
+promise fires that same sample, it is struck with the accent
+`_fire_trigger()` just pushed (0, since FLOW's `note_accent()` is 0 by §3),
+never with whatever `_accent` the engine held from the STEP leg an instant
+before. Measured 2026-08-16: 0 of 360 switch points leaked a stale STEP
+accent into the FLOW auto-drone (STEPS 4/8/16 × 4 seeds × 3 rates × 10 switch
+phases), max `|d|` 0.000000. This is the invariant
+`tests/test_step_accent.cpp`'s STEP→FLOW seam case measures from sample 0 of
+the switch rather than after a settle window — the ordering is why there is
+nothing to settle.

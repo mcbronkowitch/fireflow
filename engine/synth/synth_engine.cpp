@@ -215,7 +215,33 @@ void SynthEngineT<V>::_do_trigger(float pitch_norm, float vel, int chord_slot) {
     // bank, and it should do that with the chord that is being struck rather
     // than with the one the last control tick saw. No-op on VoiceT.
     _voices[pick].set_material_character(_material_char);
-    _voices[pick].set_vel(vel);
+    // The accent MULTIPLIES onto vel rather than replacing it: vel carries the
+    // 1/sqrt(n) equal-power chord compensation, which answers "how many notes
+    // are sounding", while the accent answers "how strong is this one". Two
+    // independent quantities, so they compose. At _accent == 0 this is exactly
+    // the value that shipped before.
+    _voices[pick].set_vel(vel * (1.f - (1.f - kAccentVelFloor) * _accent));
+    // The room the accent has to shorten a note is the room the DEC knob
+    // dialled in: at DEC 0 the term vanishes and the envelope is untouchable.
+    // The knob stays the ceiling -- the accent only ever subtracts.
+    //
+    // "At DEC 1 the weakest note rings for kAccentDecFloor of the set time"
+    // is exact for VoiceT (SYNTH/WAVE): set_decay_scale there multiplies
+    // decay_s linearly, so the scale factor IS the ring-time ratio. It is
+    // NOT exact for BodyVoice (BODY): BodyVoice::_apply_env() maps
+    // _damping = d_s / (d_s + 1), which is not linear in d_s, so the same
+    // scale factor produces a different proportional ring time there.
+    // Measured (seed 99, cycle 0.25 s, DEC knob 1.0, note length = last
+    // sample above 5% of peak): SYNTH goes 42929 -> 13231 samples at full
+    // accent, ratio 0.3082 (== kAccentDecFloor within the gate's window);
+    // BODY goes 212802 -> 32893, ratio 0.1546 -- about twice as strong. At
+    // DEC knob 0 both are exactly 1.0 (inert), so only the DEC-1 half of the
+    // coupling differs by engine; see docs/engine-map.md section 8 for the
+    // full write-up. This is documentation only -- BodyVoice's damping curve
+    // is unchanged and by-ear, and no gate depends on BODY matching SYNTH's
+    // ratio.
+    _voices[pick].set_decay_scale(
+        1.f - (1.f - kAccentDecFloor) * _accent * _decay_n);
     _voices[pick].trigger(pitch_to_hz(pitch_norm));   // pitch LATCHED here
 }
 
@@ -387,8 +413,14 @@ void SynthEngineT<V>::set_attack(float n) {
 
 template <class V>
 void SynthEngineT<V>::set_decay(float n) {
-    _decay_ratio = 0.1f * std::pow(80.f, clampf(n, 0.f, 1.f));
+    // The knob position is kept beside the ratio because the accent scales
+    // with it, and 0.1 * 80^n is not worth inverting.
+    _decay_n = clampf(n, 0.f, 1.f);
+    _decay_ratio = 0.1f * std::pow(80.f, _decay_n);
 }
+
+template <class V>
+void SynthEngineT<V>::set_accent(float a) { _accent = clampf(a, 0.f, 1.f); }
 
 template <class V>
 void SynthEngineT<V>::set_resonance(float n) { _resonance = clampf(n, 0.f, 1.f); }

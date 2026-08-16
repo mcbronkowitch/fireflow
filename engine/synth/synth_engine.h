@@ -46,6 +46,13 @@ public:
     static constexpr float kDetuneCeilCt = 105.f;
     static constexpr int   kMaxChord     = 4;
     static constexpr float kStabSpreadS  = 0.008f;   // stab humanization (ear-tunable)
+    // How hard the WEAKEST note of a full pattern strikes, relative to the
+    // rank-0 anchor. By ear, first try, deliberately equal to
+    // kAccentDecFloor so a listening session says which half wants to differ.
+    static constexpr float kAccentVelFloor = 0.3f;
+    // How long the WEAKEST note of a full pattern rings, relative to the DEC
+    // knob's setting, at DEC fully up. By ear, first try.
+    static constexpr float kAccentDecFloor = 0.3f;
 
     static_assert(kMaxChord == ChordBuilder::kMaxNotes,
                   "chord slot count must match the builder");
@@ -86,6 +93,7 @@ public:
     // VOICE edit layer (normalized knobs; boot defaults live as raw ratios)
     void set_attack(float n);      // ratio = 0.002 * 250^n  (0.2%..50% of cycle)
     void set_decay(float n);       // ratio = 0.1 * 80^n     (0.1x..8x cycle)
+    void set_accent(float a) override;   // STEP accent, 0..1 (0 = full strength)
     void set_resonance(float n);
     void set_sub(float n);
     void set_detune(float n);      // independent symmetric spread = n * 105 ct
@@ -109,6 +117,14 @@ public:
     // Part::_flatten_for_sampler collapses the chord for the SAMPLER only and
     // leaves the synth's chord surface intact. Not used on the audio path.
     int chord_n() const { return _chord_n; }
+#ifdef SPKY_TESTING
+    // The accent set_accent() last stored, same idiom as the SPKY_TESTING
+    // accessors in engine/instrument.h, engine/mod/lane.h and
+    // engine/mod/super_modulator.h: a test-only window into private state,
+    // compiled only for the tests target so `render` and the firmware never
+    // see it.
+    float accent_for_test() const { return _accent; }
+#endif
 
 private:
     void _do_trigger(float pitch_norm, float vel, int chord_slot);
@@ -160,7 +176,21 @@ private:
 
     float _cycle_s = 1.f;
     float _attack_ratio = 0.02f;   // boot: 2 % of cycle (spec)
+    // _decay_ratio and _decay_n describe ONE knob (ratio = 0.1 * 80^n,
+    // set_decay()) and must move together. _decay_ratio keeps the exact
+    // literal 1.5f the spec calls for (boot: 1.5x cycle) rather than being
+    // derived from _decay_n, because 0.1 * 80^0.6179904 lands on ~1.5000001
+    // in float32, not bit-exact 1.5 -- deriving it would move any render
+    // hash from a scenario that never calls set_decay(). _decay_n is instead
+    // derived FROM the ratio, offline: 0.1 * 80^n == 1.5 <=> 80^n == 15
+    // <=> n == log(15)/log(80) == 0.6179903563. Before this fix _decay_n
+    // booted to 0.f while _decay_ratio booted to 1.5f -- two members
+    // describing one knob that disagreed at boot, which left the DEC half of
+    // the STEP accent (`_accent * _decay_n` in _do_trigger) silently inert
+    // until a host pushed DECAY at least once.
     float _decay_ratio  = 1.5f;    // boot: 1.5 x cycle (spec)
+    float _decay_n = 0.6179903563f; // DEC knob position; the accent's room
+    float _accent = 0.f;           // STEP accent of the note being struck
     float _resonance = 0.15f;      // boot (spec)
     float _sub_level = 0.3f;       // boot (spec)
     // Boot default (spec). An ABSOLUTE cents value, not derived from
@@ -229,6 +259,7 @@ struct VoiceCountProbe {
     void set_pitch_hz(float /*freq_hz*/) {}
     void set_vel(float /*v*/) {}
     void set_env_times(float /*attack_s*/, float /*decay_s*/) {}
+    void set_decay_scale(float /*s*/) {}
     void set_morph(float /*m*/) {}
     void set_detune_cents(float /*max_ct*/) {}
     void set_sub_level(float /*n*/) {}
