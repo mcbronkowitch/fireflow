@@ -1,154 +1,185 @@
-# I/O-Budget — FireFlow auf 42 HP
+# I/O-Budget — FireFlow auf 60 HP
 
-> **Stand 2026-08-08, Git `9326fee`. Dieses Dokument ist VORARBEIT, keine
-> Entscheidung.** Task 2 des Phase-0-Plans hält ausdrücklich fest, dass die
-> Panel-Reduktion Instrumentendesign ist und Bastian gehört. Was hier steht,
-> ist alles, was sich ohne diese Entscheidung feststellen lässt: die
-> Ausgangszahlen, die tatsächlich vorhandenen Pins, die geometrische
-> Kapazität und die Buchsen. Die Spalte **Einstufung** ist leer und bleibt
-> leer, bis sie in einer eigenen Sitzung ausgefüllt wird.
+> **Stand 2026-08-16.** Ursprünglich am 2026-08-08 (Git `9326fee`) als
+> **Vorarbeit auf 42 HP** geschrieben, mit leerer Einstufungsspalte in §2, weil
+> die Panel-Reduktion Instrumentendesign ist und Bastian gehört.
 >
-> **Nachtrag 2026-08-09** (`2026-08-09-hw-control-reduction-design.md`, Tasks
-> 1–10): die Ausgangszahl von 82 Runtime-Parametern, auf der §1/§2 unten
-> aufbauen, existiert nicht mehr — das Instrument ist auf **68** gesunken.
-> §1/§2 sind unten auf den aktuellen Stand nachgezogen; §3–§6 (Pins,
-> geometrische Kapazität, Buchsen) sind von der Parameterzahl nicht direkt
-> abhängig und bleiben unverändert. Die 60-HP-Entscheidung
-> (`2026-08-08-fireflow-hardware-envelope-design.md`) hat die 42-HP-Prämisse
-> dieses Dokuments ohnehin bereits überholt; das ist weiterhin Task-2-Vorarbeit
-> für die Neurechnung, keine Behauptung, dass 42 HP noch das Ziel ist.
+> **Diese Prämisse ist zweimal überholt worden, und beide Male nach oben.** Die
+> Envelope-Entscheidung (`2026-08-08-fireflow-hardware-envelope-design.md`)
+> setzte 60 HP mit vollem Control-Set, und die Bedienelement-Reduktion
+> (`2026-08-09-hw-control-reduction-design.md`) senkte das Inventar von 82 auf
+> 68 Parameter. Danach haben **drei Panel-Runden** — Neugruppierung (2.21.1),
+> Neuverteilung (2.21.2) und Plattenrunde 2a (2.21.3) — Controls verschoben,
+> zusammengelegt und die Bauform geändert.
+>
+> **Was das für dieses Dokument heißt:** §1, §2, §4 und §5 sind auf das
+> **gebaute** Panel nachgezogen und nicht mehr Vorarbeit — die Einstufung ist
+> entschieden, sie steht in §2 und sie kommt aus dem Generator, nicht aus einer
+> Absicht. §3 (Pins) ist von der Parameterzahl unabhängig und steht unverändert;
+> es hat nur einen Nachtrag zur Mux-Topologie bekommen. §6 listet, was heute
+> noch offen ist — es ist eine andere Liste als 2026-08-08.
 
 ## 1. Die Ausgangslage
 
-Ausgabe von `tools/count_panel_controls.py`, das `host/vcv/res/gen_panel.py`
-als Autorität liest — eine Handzählung veraltet beim nächsten Panel-Commit.
+**Autorität ist der Generator, nicht dieses Dokument.** Eine Handzählung
+veraltet beim nächsten Panel-Commit; jede Zahl unten stammt aus einem Lauf und
+ist mit ihm reproduzierbar.
 
 ```
-panel        68
-appended      0
-hidden        0
-runtime      68
-part_a       20
-part_b       20
-shared       10
-inputs        4
-outputs       6
-lights        4
+python host/vcv/res/gen_hw_panel.py          # aus host/vcv/, idempotent
+params=69 inputs=12 outputs=6 lights=4  panel=60HP
+
+python tools/count_panel_controls.py         # aus dem Repo-Wurzelverzeichnis
+panel 68 · appended 1 · runtime 69 · part_a 20 · part_b 20 · shared 10
 ```
 
-Nach Bauform der 68 Runtime-Parameter:
+Beide Zahlen sind gemessen 2026-08-16. **Die 69 sind dieselben 69:** jeder
+Parameter des Hardware-Panels ist auch ein VCV-Runtime-Parameter, es gibt
+keinen hardware-only *Parameter* (geprüft gegen `RUNTIME_PANEL_PARAMS`, leere
+Differenzmenge). Was nur auf der Hardware existiert, sind Bedienelemente ohne
+Parameterwert und die LEDs — siehe unten.
 
-| Glyph im VCV-Panel | Anzahl |
-|---|---:|
-| kleiner Poti (`SMKNOB`) | 36 |
-| grosser Poti (`BIGKNOB`) | 17 |
-| Rastschalter (`LATCH`) | 4 |
-| Rastpoti, ganzzahlig (`KNOBI`) | 7 |
-| Taster (`SMBTN`) | 0 |
-| Poti bipolar (`KNOBC`) | 4 |
-| Kippschalter (`SW2`) | 0 |
-| **Summe** | **68** |
+**69 Runtime-Parameter auf 67 physischen Positionen.** Die Differenz sind die
+beiden bewussten Doppelbelegungen: `STAGES_A/B` (BEND) teilt sich den Knopf mit
+`ATTACK_A/B`, mit engine-abhängigem Moduswechsel. Das ist die einzige
+Mehrfachbelegung auf dem Panel.
 
-`HIDDEN_PARAMS` ist seit Task 10 **leer** — es gibt keine menü-only
-*Parameter* mehr. Das Kontextmenü selbst existiert weiterhin (Resync to
-bar, BBD Freeze Attack, die Sampler-Untermenüs, Excitation-Flags, Copy
-terrain code) — es trägt nur keinen einzigen Parameterwert mehr, der nicht
-auch auf dem Panel sitzt. `DETUNE_A/B` ist zurück auf dem Panel
-(`PLAY`-Reihe); `DRIVE_A/B` ist ersatzlos gelöscht (BBD-Drive kommt aus
-`bbd_engine.cpp`, nie aus einem Panel-Wert). Die ursprüngliche Fußnote hier
-betraf 4 `HIDDEN_PARAMS`, die es so nicht mehr gibt.
+Nach Bauform **auf der Hardware** — nicht nach dem VCV-Glyph, der eine andere
+Größenklasse haben darf und bei mehreren Controls auch hat:
 
-## 2. Die 68 Parameter
+| Bauform | Radius | Anzahl | Positionen |
+|---|---:|---:|---:|
+| grosser Poti (`G`) | 8,5 mm | 16 | 16 |
+| kleiner Poti (`S`) | 6,0 mm | 51 | 49 |
+| Taster (`P`) | 4,0 mm | 2 | 2 |
+| **Summe** | | **69** | **67** |
 
-**Regel aus dem Plan:** jeder Parameter bekommt genau eine Einstufung aus
-`KNOB` / `FADER` / `PAD` / `ENCODER` / `LAYER` / `SELECT` / `MENU` / `CUT`.
-Die Summe der Zeilen muss 68 ergeben — das ist die Prüfsumme, die verhindert,
-dass etwas stillschweigend verschwindet.
+Dazu 8 Elemente, die **kein** Runtime-Parameter sind und deshalb in keiner der
+Zahlen oben stecken (`HW_ONLY` im Generator):
 
-| # | Parameter | Glyph im VCV-Panel | Gruppe | Einstufung |
+| Element | Art | Anmerkung |
+|---|---|---|
+| `MODBTN`, `SHIFTBTN` | Taster | reserviert, ohne Funktion — 2 weitere Pads |
+| `FLOW_A_L`, `FLOW_B_L` | LED | FLOW/STEP pro Deck |
+| `CAP_A_L`, `CAP_B_L` | LED | Capture-Replay pro Deck |
+| `TEMPO_L`, `SYNC_L` | LED | global |
+
+Macht **4 Taster** (`REC_A/B` + die zwei reservierten) und **10 LEDs**
+(die 6 oben plus `GATE_A/B_L` und `REC_A/B_L`, die als VCV-Lights zählen).
+
+> **Die LED-Zahl ist gefallen, und zwar absichtlich.** Die Neugruppierung hatte
+> das Feld auf 20 festgelegt (Envelope-Spec §1, oberes Ende des Korridors); die
+> Neuverteilung hat `ENGINE_A/B` vom Taster zum **fünf-Zonen-Rastpoti** am Kopf
+> der VOICE-Gruppe gemacht und damit zehn Anzeige-LEDs eingespart. 20 − 10 = 10,
+> und die Kette bleibt dieselbe.
+
+`HIDDEN_PARAMS` ist seit der Reduktionsrunde leer — es gibt keinen menü-only
+*Parameter* mehr. Das Kontextmenü selbst existiert weiter (Resync to bar, BBD
+Freeze Attack, die Sampler-Untermenüs, Excitation-Flags), es trägt nur keinen
+Wert mehr, der nicht auch auf dem Panel sitzt.
+
+## 2. Die 69 Parameter
+
+Die Einstufungsspalte dieses Abschnitts war bis 2026-08-09 leer und war die
+offene Frage des ganzen Dokuments. **Sie ist entschieden.** Was hier steht, ist
+nicht mehr eine Absicht, sondern das gebaute Panel, ausgelesen aus
+`host/vcv/res/gen_hw_panel.py` (`HW_PARAMS`, `hw_class()`, Positionen in mm vom
+linken oberen Panelrand). Die Prüfsumme der Zeilen ist **69**.
+
+| # | Parameter | Bauform auf der Hardware | Gruppe | Position (mm) |
 |---:|---|---|---|---|
-| 1 | `RATE_A` | grosser Poti | PART_A | |
-| 2 | `SHAPE_A` | grosser Poti | PART_A | |
-| 3 | `DENSITY_A` | grosser Poti | PART_A | |
-| 4 | `SMOOTH_A` | grosser Poti | PART_A | |
-| 5 | `RANGE_A` | grosser Poti | PART_A | |
-| 6 | `MELODY_A` | Poti bipolar | PART_A | |
-| 7 | `MOD_A` | grosser Poti | PART_A | |
-| 8 | `TUNE_A` | grosser Poti | PART_A | |
-| 9 | `ATTACK_A` | kleiner Poti | PART_A | |
-| 10 | `DECAY_A` | kleiner Poti | PART_A | |
-| 11 | `RES_A` | kleiner Poti | PART_A | |
-| 12 | `SUB_A` | kleiner Poti | PART_A | |
-| 13 | `SOURCE_A` | kleiner Poti | PART_A | |
-| 14 | `FLUX_A` | kleiner Poti | PART_A | |
-| 15 | `GRIT_A` | Poti bipolar | PART_A | |
-| 16 | `COMP_A` | kleiner Poti | PART_A | |
-| 17 | `STEPS_A` | Rastpoti (int) | PART_A | |
-| 18 | `ENGINE_A` | Rastschalter | PART_A | |
-| 19 | `DETUNE_A` | kleiner Poti | PART_A | |
-| 20 | `SONG_A` | Rastpoti (int) | PART_A | |
-| 21 | `RATE_B` | grosser Poti | PART_B | |
-| 22 | `SHAPE_B` | grosser Poti | PART_B | |
-| 23 | `DENSITY_B` | grosser Poti | PART_B | |
-| 24 | `SMOOTH_B` | grosser Poti | PART_B | |
-| 25 | `RANGE_B` | grosser Poti | PART_B | |
-| 26 | `MELODY_B` | Poti bipolar | PART_B | |
-| 27 | `MOD_B` | grosser Poti | PART_B | |
-| 28 | `TUNE_B` | grosser Poti | PART_B | |
-| 29 | `ATTACK_B` | kleiner Poti | PART_B | |
-| 30 | `DECAY_B` | kleiner Poti | PART_B | |
-| 31 | `RES_B` | kleiner Poti | PART_B | |
-| 32 | `SUB_B` | kleiner Poti | PART_B | |
-| 33 | `SOURCE_B` | kleiner Poti | PART_B | |
-| 34 | `FLUX_B` | kleiner Poti | PART_B | |
-| 35 | `GRIT_B` | Poti bipolar | PART_B | |
-| 36 | `COMP_B` | kleiner Poti | PART_B | |
-| 37 | `STEPS_B` | Rastpoti (int) | PART_B | |
-| 38 | `ENGINE_B` | Rastschalter | PART_B | |
-| 39 | `DETUNE_B` | kleiner Poti | PART_B | |
-| 40 | `SONG_B` | Rastpoti (int) | PART_B | |
-| 41 | `MORPH` | grosser Poti | SHARED | |
-| 42 | `TEMPO` | kleiner Poti | SHARED | |
-| 43 | `COUPLE` | kleiner Poti | SHARED | |
-| 44 | `SCALE` | Rastpoti (int) | SHARED | |
-| 45 | `DRIFT` | kleiner Poti | SHARED | |
-| 46 | `REV_SIZE` | kleiner Poti | SHARED | |
-| 47 | `REV_DECAY` | kleiner Poti | SHARED | |
-| 48 | `REV_TONE` | kleiner Poti | SHARED | |
-| 49 | `REV_DIFF` | kleiner Poti | SHARED | |
-| 50 | `CHOKE` | kleiner Poti | SHARED | |
-| 51 | `FILT_A` | kleiner Poti | — | |
-| 52 | `FILT_B` | kleiner Poti | — | |
-| 53 | `TIDE` | kleiner Poti | — | |
-| 54 | `FLUXRATE_A` | Rastpoti (int) | — | |
-| 55 | `FLUXRATE_B` | Rastpoti (int) | — | |
-| 56 | `FLUXFB_A` | kleiner Poti | — | |
-| 57 | `FLUXFB_B` | kleiner Poti | — | |
-| 58 | `COLOR_A` | grosser Poti | — | |
-| 59 | `COLOR_B` | grosser Poti | — | |
-| 60 | `LINK_A` | kleiner Poti | — | |
-| 61 | `LINK_B` | kleiner Poti | — | |
-| 62 | `STAGES_A` | kleiner Poti | — | |
-| 63 | `STAGES_B` | kleiner Poti | — | |
-| 64 | `REC_A` | Rastschalter | — | |
-| 65 | `REC_B` | Rastschalter | — | |
-| 66 | `REV_MIX_A` | kleiner Poti | — | |
-| 67 | `REV_MIX_B` | kleiner Poti | — | |
-| 68 | `SHUFFLE` | kleiner Poti | — | |
+| 1 | `RATE_A` | kleiner Poti | PART_A | 61,00 / 14,50 |
+| 2 | `SHAPE_A` | kleiner Poti | PART_A | 18,25 / 34,00 |
+| 3 | `DENSITY_A` | grosser Poti | PART_A | 40,75 / 53,00 |
+| 4 | `SMOOTH_A` | kleiner Poti | PART_A | 31,25 / 34,00 |
+| 5 | `RANGE_A` | kleiner Poti | PART_A | 44,25 / 34,00 |
+| 6 | `MELODY_A` | kleiner Poti | PART_A | 74,00 / 14,50 |
+| 7 | `MOD_A` | grosser Poti | PART_A | 21,75 / 53,00 |
+| 8 | `TUNE_A` | kleiner Poti | PART_A | 17,00 / 76,00 |
+| 9 | `ATTACK_A` | kleiner Poti | PART_A | 68,25 / 34,00 — geteilt mit `STAGES_A` |
+| 10 | `DECAY_A` | kleiner Poti | PART_A | 81,25 / 34,00 |
+| 11 | `RES_A` | kleiner Poti | PART_A | 94,25 / 34,00 |
+| 12 | `SUB_A` | kleiner Poti | PART_A | 107,25 / 34,00 |
+| 13 | `SOURCE_A` | kleiner Poti | PART_A | 102,25 / 50,22 |
+| 14 | `FLUX_A` | grosser Poti | PART_A | 67,00 / 76,00 |
+| 15 | `GRIT_A` | kleiner Poti | PART_A | 106,50 / 95,00 |
+| 16 | `COMP_A` | grosser Poti | PART_A | 106,50 / 76,00 |
+| 17 | `STEPS_A` | kleiner Poti | PART_A | 35,00 / 14,50 |
+| 18 | `ENGINE_A` | kleiner Poti | PART_A | 70,25 / 50,22 |
+| 19 | `DETUNE_A` | kleiner Poti | PART_A | 30,00 / 76,00 |
+| 20 | `SONG_A` | kleiner Poti | PART_A | 48,00 / 14,50 |
+| 21 | `RATE_B` | kleiner Poti | PART_B | 243,80 / 14,50 |
+| 22 | `SHAPE_B` | kleiner Poti | PART_B | 286,55 / 34,00 |
+| 23 | `DENSITY_B` | grosser Poti | PART_B | 264,05 / 53,00 |
+| 24 | `SMOOTH_B` | kleiner Poti | PART_B | 273,55 / 34,00 |
+| 25 | `RANGE_B` | kleiner Poti | PART_B | 260,55 / 34,00 |
+| 26 | `MELODY_B` | kleiner Poti | PART_B | 230,80 / 14,50 |
+| 27 | `MOD_B` | grosser Poti | PART_B | 283,05 / 53,00 |
+| 28 | `TUNE_B` | kleiner Poti | PART_B | 287,80 / 76,00 |
+| 29 | `ATTACK_B` | kleiner Poti | PART_B | 236,55 / 34,00 — geteilt mit `STAGES_B` |
+| 30 | `DECAY_B` | kleiner Poti | PART_B | 223,55 / 34,00 |
+| 31 | `RES_B` | kleiner Poti | PART_B | 210,55 / 34,00 |
+| 32 | `SUB_B` | kleiner Poti | PART_B | 197,55 / 34,00 |
+| 33 | `SOURCE_B` | kleiner Poti | PART_B | 202,55 / 50,22 |
+| 34 | `FLUX_B` | grosser Poti | PART_B | 237,80 / 76,00 |
+| 35 | `GRIT_B` | kleiner Poti | PART_B | 198,30 / 95,00 |
+| 36 | `COMP_B` | grosser Poti | PART_B | 198,30 / 76,00 |
+| 37 | `STEPS_B` | kleiner Poti | PART_B | 269,80 / 14,50 |
+| 38 | `ENGINE_B` | kleiner Poti | PART_B | 234,55 / 50,22 |
+| 39 | `DETUNE_B` | kleiner Poti | PART_B | 274,80 / 76,00 |
+| 40 | `SONG_B` | kleiner Poti | PART_B | 256,80 / 14,50 |
+| 41 | `MORPH` | grosser Poti | SHARED | 152,40 / 53,00 |
+| 42 | `TEMPO` | kleiner Poti | SHARED | 139,40 / 34,00 |
+| 43 | `COUPLE` | kleiner Poti | SHARED | 152,40 / 34,00 |
+| 44 | `SCALE` | kleiner Poti | SHARED | 139,40 / 14,50 |
+| 45 | `DRIFT` | kleiner Poti | SHARED | 152,40 / 14,50 |
+| 46 | `REV_SIZE` | kleiner Poti | SHARED | 136,40 / 76,00 |
+| 47 | `REV_DECAY` | grosser Poti | SHARED | 152,40 / 79,00 |
+| 48 | `REV_TONE` | kleiner Poti | SHARED | 152,40 / 97,00 |
+| 49 | `REV_DIFF` | kleiner Poti | SHARED | 168,40 / 76,00 |
+| 50 | `CHOKE` | kleiner Poti | SHARED | 165,40 / 14,50 |
+| 51 | `FILT_A` | grosser Poti | — | 86,25 / 53,00 |
+| 52 | `FILT_B` | grosser Poti | — | 218,55 / 53,00 |
+| 53 | `TIDE` | kleiner Poti | — | 136,40 / 50,22 |
+| 54 | `FLUXRATE_A` | kleiner Poti | — | 54,00 / 89,86 |
+| 55 | `FLUXRATE_B` | kleiner Poti | — | 250,80 / 89,86 |
+| 56 | `FLUXFB_A` | kleiner Poti | — | 67,00 / 95,00 |
+| 57 | `FLUXFB_B` | kleiner Poti | — | 237,80 / 95,00 |
+| 58 | `COLOR_A` | grosser Poti | — | 23,50 / 95,00 |
+| 59 | `COLOR_B` | grosser Poti | — | 281,30 / 95,00 |
+| 60 | `LINK_A` | kleiner Poti | — | 80,00 / 89,86 |
+| 61 | `LINK_B` | kleiner Poti | — | 224,80 / 89,86 |
+| 62 | `STAGES_A` | kleiner Poti | — | 68,25 / 34,00 — geteilt mit `ATTACK_A` |
+| 63 | `STAGES_B` | kleiner Poti | — | 236,55 / 34,00 — geteilt mit `ATTACK_B` |
+| 64 | `REC_A` | Taster | — | 101,00 / 14,50 |
+| 65 | `REC_B` | Taster | — | 203,80 / 14,50 |
+| 66 | `REV_MIX_A` | grosser Poti | — | 136,40 / 95,00 |
+| 67 | `REV_MIX_B` | grosser Poti | — | 168,40 / 95,00 |
+| 68 | `SHUFFLE` | kleiner Poti | — | 165,40 / 34,00 |
+| 69 | `PACE` | kleiner Poti | — | 168,40 / 50,22 |
 
-Retiriert seit Stand 2026-08-08 (nicht mehr Teil der 68, Begründung siehe
+**Zugegangen seit dem Stand 2026-08-08:** `PACE` (Zeile 69), der globale
+Modulations-Zeitdehner aus der PACE-Runde — der einzige Parameter, den das
+Instrument seit der Reduktion dazubekommen hat, und ein Beleg dafür, dass
+„one in, one out" wirklich tot ist: es musste nichts weichen.
+
+**Retiriert und nicht mehr Teil der Zählung** (Begründung in
 `2026-08-09-hw-control-reduction-design.md`): `GRITMODE_A/B`, `STEP_A/B`,
-`FORM_A/B`, `NEWPHRASE_A/B` (PART_A/B); `SYNC`, `SPOT`, `MASTER_DRIVE`,
-`SETTLE`, `REV_SMEAR`, `REV_MOD` (SHARED); `FLUXTIME_A/B` (in FLUX
-aufgegangen); `DRIVE_A/B` (war `HIDDEN_PARAMS`, ersatzlos gelöscht).
-`DETUNE_A/B` war `HIDDEN_PARAMS` und ist jetzt Zeile 19/39 oben — kein
-Verlust, ein Umzug.
+`FORM_A/B`, `NEWPHRASE_A/B`; `SYNC`, `SPOT`, `MASTER_DRIVE`, `SETTLE`,
+`REV_SMEAR`, `REV_MOD`; `FLUXTIME_A/B` (in FLUX aufgegangen); `DRIVE_A/B`
+(ersatzlos, BBD-Drive kommt aus `bbd_engine.cpp`).
+
+**Eine offene Kleinigkeit, die genau hier auffällt:** `STAGES` hat im Generator
+ein **leeres Plattenwort** (`HW_CAPTION["STAGES"] = ""`), BEND wird also gar
+nicht aufs Panel gedruckt. Das ist bekannt und nicht entschieden — auf der
+Hardware ist der Knopf da, die Beschriftung nicht.
 
 ## 3. Was das Patch Submodule wirklich hergibt
 
 Gelesen aus `lib/libDaisy/src/daisy_patch_sm.h` (Pinliste) und
 `daisy_patch_sm.cpp:10-21` (ADC-Zuordnung). **Das ist der Teil dieses
-Dokuments, der die Reduktion am härtesten einschränkt.**
+Dokuments, der die Reduktion am härtesten einschränkt** — und der einzige, den
+die drei Panel-Runden nicht berührt haben.
 
 Das Modul hat 40 Anschlüsse (A1–A10, B1–B10, C1–C10, D1–D10). Davon sind
 vergeben und nicht verfügbar:
@@ -177,80 +208,160 @@ Bleibt für Bedienelemente und Buchsen:
 
 Ein Poti liefert 0–3,3 V. Dafür taugen **A2, A3, D8, D9** — die acht CV-Pins
 tragen die bipolare Eingangsstufe des Moduls und würden ein unipolares
-Potisignal auf einen Teil des ADC-Bereichs stauchen. Also:
+Potisignal auf einen Teil des ADC-Bereichs stauchen.
+
+> **Nachtrag 2026-08-08 (Envelope-Spec §2), und er ändert das Ergebnis:** die
+> Rechnung unten geht davon aus, dass die Adressleitungen GPIOs kosten. Das tun
+> sie nicht mehr — **Adress- *und* Enable-Leitungen der 74HC4067 wandern auf die
+> 595-Kette.** Damit teilen sich bis zu **acht** Muxe die vier Sense-Pins:
+> **128 Kanäle für null GPIOs.** Genau diese Einsparung ist es, die den
+> 4-bit-SD-Anschluss überhaupt möglich macht. Bedarf heute: **67 Positionen** —
+> die Mux-Kapazität ist damit nicht mehr die knappe Ressource, die sie 2026-08-08
+> war.
 
 ```
 Mux-Kanäle = rohe ADC-Pins × Kanäle pro Chip
 
   4 × 74HC4051  (8:1)  = 32 Kanäle,  3 Adress-GPIO (geteilt)
   4 × CD74HC4067 (16:1) = 64 Kanäle, 4 Adress-GPIO (geteilt)
+  8 × CD74HC4067 (16:1) = 128 Kanäle, 0 GPIO (Adressen über die 595-Kette)
 ```
-
-**32 Kanäle reichen für ein Panel mit 45–55 Bedienelementen nicht.** Mit
-16:1-Muxen reichen 64 — das ist die Layoutfrage, die der Plan nach Phase 1
-verschiebt, aber die Zahl steht jetzt schon fest und sie ist knapp.
 
 `InitMux()` in `lib/libDaisy/src/per/adc.h` treibt die Adressleitungen selbst
 und scannt per DMA. Der Mux-Scan kostet damit in der Audioschleife praktisch
 nichts — die Warnung im Plan vor blockierendem Scan gilt `src/hw/sr_165.h`,
 dem Schieberegister für Taster, nicht dem analogen Mux.
 
+### Die Stock-Init kann den Mux nicht — das muss das Bring-up übernehmen
+
+`DaisyPatchSM::Init()` legt **alle zwölf** ADC-Kanäle mit `InitSingle` an
+(`daisy_patch_sm.cpp:318-322`) und konditioniert die ersten acht anschließend
+mit `InitBipolarCv`, die vier rohen mit dem einfachen `Init`
+(`:324-331`). `InitSingle` und `InitMux` schließen sich pro Kanal aus — die
+geplante Mux-Kette auf ADC_9..12 bekommt man also **nicht** dazu, indem man die
+Stock-Init laufen lässt und danach etwas ergänzt. Die vier Kanäle müssen selbst
+konfiguriert werden. **Die acht CV-Kanäle sind davon nicht betroffen** und
+bleiben, wie libDaisy sie liefert.
+
 ### Kollision, die man kennen muss: SPI2 gegen ADC 11/12
 
 **`D8`/`D9` sind gleichzeitig SPI2 MISO/MOSI und ADC 11/12.** Wer den SPI-Bus
 benutzt — etwa für einen `MAX11300` —, verliert damit **die Hälfte der rohen
-ADC-Pins** und kommt auf 2 × 16 = 32 Mux-Kanäle. Das ist keine Kleinigkeit,
+ADC-Pins** und kommt auf die halbe Mux-Kapazität. Das ist keine Kleinigkeit,
 sondern genau die Stelle, an der sich die zwei I/O-Strategien gegenseitig im
-Weg stehen. Zu entscheiden ist es hier nicht, aber zu wissen schon.
+Weg stehen. Die Envelope-Spec hat daraus eine Regel gemacht: **SPI2 ist tabu**,
+solange nichts Zwingendes auftaucht.
+
+### Die GPIO-Bilanz, vollständig
+
+Pool: B7, B8, D1, D10, D2–D7 = **10**.
+
+| Verbraucher | Pins |
+|---|---:|
+| SDMMC 4-bit (D2–D7) — Pflicht, siehe §5 | 6 |
+| 595/165-Ketten, gebitbangt (Daten-Out, Takt, Latch/Load, Daten-In) | 4 |
+| **Rest** | **0** |
+
+**Die Pin-Reserve ist null, und das ist Absicht:** die Reserve steckt in den
+Ketten, nicht in den Pins. Jede Erweiterung — mehr LEDs, mehr Taster, mehr Muxe
+— kostet ein weiteres Schieberegister an der vorhandenen Kette und **keinen**
+GPIO. Die 20-%-Reserve-Regel des Phase-0-Plans gilt hier auf Ketten-Ebene.
 
 ## 4. Die geometrische Kapazität
 
-Nutzbare Fläche 42 HP: rund **213 × 115 mm**. Kapazität bei quadratischem
-Raster, ohne Abzug für Buchsen und Beschriftung:
+**Diese Frage ist beantwortet, und zwar durch Zeichnen statt durch Rechnen.**
+Der Abschnitt stand ursprünglich hier, um für 42 HP eine Obergrenze aus einem
+Rasterüberschlag zu gewinnen (98 Plätze bei 15 mm, 45 bei 22 mm). Das Panel ist
+inzwischen gezeichnet, generiert und gegen seine eigenen Keep-outs geprüft:
 
-| Raster | Spalten × Reihen | Plätze |
-|---:|---|---:|
-| 15 mm | 14 × 7 | 98 |
-| 18 mm | 11 × 6 | 66 |
-| 20 mm | 10 × 5 | 50 |
-| 22 mm | 9 × 5 | 45 |
+- Plattenmaß **304,8 × 128,5 mm** (60 HP, 3 HE) — `HP = 60`,
+  `W = HP * MM_PER_HP`, `Hh = 128.5` in `gen_hw_panel.py`.
+- Bedienelemente laufen von **y = 14,5 mm** (obere Reihe) bis **y = 97 mm**, auf
+  neun Linien (14,5 / 34 / 50,22 / 53 / 76 / 79 / 89,86 / 95 / 97); waagerecht
+  von x = 17 bis x = 287,8. Darunter die Buchsenreihe bei **y = 114 mm**, in der
+  auch die zwei reservierten Pads und der SD-Slot sitzen.
+- Untergebracht sind **67 Poti-/Taster-Positionen, 2 reservierte Pads, 10 LEDs,
+  18 Buchsen und der SD-Slot** — geprüft von `hw_panel_guard`: Schienen-Keepout,
+  Überlappung nach echten Bauteilradien, ein Beschriftungsabstand für alle
+  Klassen, Legenden gegen den 8,03-mm-Rack-Jack-Körper, SD-Ausschnitt frei,
+  Spiegelsymmetrie — und dass die eingecheckten Dateien dem entsprechen, was der
+  Generator heute erzeugt.
 
-Das ist eine **Obergrenze und keine Zielzahl**: die Buchsenreihe, die
-Beschriftung und die Ränder gehen davon ab. Der Plan verlangt zusätzlich
-**20 % Reserve** auf die Zahl der Bedienelemente, bevor die Rechnung als
-bestanden gilt.
+Der Rasterüberschlag von 2026-08-08 ist damit historisch und wird hier nicht auf
+60 HP hochgerechnet — er würde eine Zahl liefern, die weniger wert ist als die
+gezeichnete Platte.
 
 ## 5. Die Buchsen
 
-Aus `gen_panel.py` 4 Eingänge und 6 Ausgänge, plus 8 CV-Eingänge, die nur auf
-dem Hardware-Panel existieren (Spec 2026-08-10 §4):
+**18 Buchsen: 12 Eingänge, 6 Ausgänge** (`gen_hw_panel.py`, gemessen
+2026-08-16). Die acht MOD-CV-Eingänge existieren nur auf dem Hardware-Panel
+(Spec 2026-08-10 §4); im VCV-Modul sind es vier Eingänge.
 
-| Buchse | Art | Anmerkung |
-|---|---|---|
-| `IN_L`, `IN_R` | Audio in | direkt an B4/B3 des Submodule |
-| `CLOCK`, `RESET` | Gate/Trigger in | B10/B9 (Gate In 1/2) oder CV In |
-| `OUT_L`, `OUT_R` | Audio out | direkt an B2/B1 |
-| `PITCH_A`, `PITCH_B` | CV out | **hier klemmt es** |
-| `GATE_A`, `GATE_B` | Gate out | B5/B6 (Gate Out 1/2) |
-| `CV_FILT/TIMB/COLOR/LVL` ×2 | CV in | `CV_1..8`, bipolar konditioniert (`InitBipolarCv`) — genau deshalb als Poti-Sense verworfen und hier richtig |
+| Buchse | Art | liegt auf | Anmerkung |
+|---|---|---|---|
+| `IN_L`, `IN_R` | Audio in | B4/B3 | auf dem Submodule vorhanden |
+| `CLOCK`, `RESET` | Gate/Trigger in | B10/B9 (Gate In 1/2) | `GateIn`, **digital** — Gates und Trigger, keine analoge Clock-Spannung |
+| `MOD1..4_A`, `MOD1..4_B` | CV in | `CV_1..8` (C2–C9) | bipolar konditioniert (`InitBipolarCv`: ±5 V, invertiert, 2 ms Slew) — als Poti-Sense verworfen, **hier genau richtig** |
+| `OUT_L`, `OUT_R` | Audio out | B2/B1 | auf dem Submodule vorhanden |
+| `GATE_A`, `GATE_B` | Gate out | B5/B6 (Gate Out 1/2) | |
+| `PITCH_A`, `PITCH_B` | CV out | C1/C10 (CV Out 1/2) | **hier klemmt es** |
 
-Audio-I/O und die CV-Wandler sind auf dem Submodule bereits vorhanden — das
-ist der Grund, dieses Modul zu nehmen, und muss in der Rechnung auftauchen.
+Audio-I/O und die CV-Wandler sind auf dem Submodule bereits vorhanden — das ist
+der Grund, dieses Modul zu nehmen, und es muss in der Rechnung auftauchen. **Das
+ganze Buchsenfeld bildet 1:1 auf Modulpins ab, ohne eine einzige externe
+Wandlerstufe.**
 
-**Die Lücke:** das Panel will **zwei** Pitch-Ausgänge, das Submodule hat
-**zwei** CV-Ausgänge insgesamt — und die liefern **0–5 V unipolar**
-(`WriteCvOut`, `daisy_patch_sm.h:170`). Für zwei Pitch-CVs geht das gerade
-auf, für Pitch mit negativem Bereich oder für jede weitere CV-Ausgabe nicht.
-Das ist die konkrete Lücke, für die ein externer DAC oder ein `MAX11300`
-in Frage käme.
+**Die CV-Eingänge laufen auf Blockrate, nicht auf Audiorate.** libDaisy setzt
+`callback_rate_ = AudioSampleRate() / AudioBlockSize()` und aktualisiert die
+`AnalogControl`-Objekte damit. **Achtung, gemessen statt angenommen:** die
+Config im Quelltext trägt `blocksize = 48` (`daisy_patch_sm.cpp:294`), das Board
+hat auf Nachfrage aber **96** gemeldet — bei 48 kHz also **500 Hz**
+Aktualisierungsrate. Genau diese Annahme ist am 2026-08-08 einmal schiefgegangen
+(aus Phasendauern auf 48 Samples geschlossen); seitdem fragt `shell/main.cpp`
+die Blockgröße ab, statt sie zu setzen.
+
+**Die Lücke, unverändert seit 2026-08-08 — und sie ist nicht die, für die man
+sie beim Überfliegen hält.** Zwei Pitch- **und** zwei Gate-Ausgänge gehen: die
+Gates sind GPIOs auf B5/B6 (`gate_out_1.Init(B5, GPIO::Mode::OUTPUT)`), die
+zwei CVs hängen an einem 12-bit-DAC im DMA-Betrieb bei 48 kHz, der den zuletzt
+geschriebenen Wert hält. Es ist exakt das Budget, und danach ist es leer. Zwei
+Einschränkungen, beide aus `daisy_patch_sm.cpp` gelesen, nicht geschätzt:
+
+- **0–5 V, hart geklemmt.** `VoltageToCode` rechnet `input * 819` und klemmt auf
+  0..4095, Vollausschlag also exakt 5,000 V. Bei 1 V/Oktave sind das **fünf
+  Oktaven und keine negative Spannung** — was darunter liegt, klebt auf 0 statt
+  überzulaufen.
+- **Kein dritter CV-Ausgang.** Eine Lane als CV, Velocity oder der STEP-Accent
+  als Spannung, ein Clock-Out: dafür ist nichts mehr da.
+
+Die Auflösung ist dabei *nicht* das Problem: 819 Codes pro Volt sind 1,22 mV
+pro Schritt, rund **1,47 Cent**. Entscheidung der Envelope-Spec: dabei bleiben,
+dokumentiert. Der Ausweg (externer DAC, `MAX11300`) kostet SPI2 und damit zwei
+Sense-Pins, also die halbe Poti-Kapazität.
+
+**SD-Slot, 4-bit, nicht 1-bit.** Die Sampler-Engine lädt User-Samples von SD
+(`src/hw/card.h`), und der Daisy-Bootloader flasht Firmware per Drag & Drop von
+der Karte — **aber nur bei voll verdrahtetem 4-bit-Bus**. Für ein Gerät ohne
+SWD-Pins ist das der zweite Update-Pfad neben USB-DFU und allein den Mehraufwand
+wert. Auf dem Panel: 11 × 6 mm bei x = 152,4 mm in der Buchsenreihe,
+frontzugänglich.
 
 ## 6. Was hier bewusst NICHT steht
 
-- **Die Einstufung der 82 Parameter.** Eigene Sitzung, eigene Entscheidung.
-- **Die Wahl 8:1 gegen 16:1.** Hängt an Verfügbarkeit und Bestückungspreis
-  bei JLCPCB und gehört vor den 11. September, nicht in Phase 0.
-- **Ob ein `MAX11300` das Buchsenfeld übernimmt.** Der Kandidat ist real
-  (ein Modul ist vorhanden und verdrahtet), aber er kostet SPI2 und damit
-  zwei rohe ADC-Pins, und seine CPU-Kosten sind ungemessen.
-- **Die Einschwingzeit pro Mux-Kanal.** Die misst Task 6 Schritt 5b, und
-  ohne sie ist keine Panelgröße gegengerechnet.
+Die Liste von 2026-08-08 nannte an erster Stelle die Einstufung der Parameter.
+**Die ist entschieden und steht in §2.** Offen ist heute:
+
+- **Die Einschwingzeit pro Mux-Kanal.** Task 6 Schritt 5b des Phase-0-Plans.
+  Ohne sie ist keine Panelgröße gegen das Audio-Budget gegengerechnet — das ist
+  die einzige Zahl in diesem Dokument, an der die 67 Positionen noch scheitern
+  könnten.
+- **Die Wahl 8:1 gegen 16:1.** Hängt an Verfügbarkeit und Bestückungspreis.
+- **Ob ein `MAX11300` das Buchsenfeld übernimmt.** Der Kandidat ist real (ein
+  Modul ist vorhanden und verdrahtet), aber er kostet SPI2 und damit zwei rohe
+  ADC-Pins, und seine CPU-Kosten sind ungemessen.
+- **Die exakte Pin-Map.** Task-2-Deliverable von Phase 0; die Envelope-Spec
+  fixiert die Topologie, nicht die Pinnummern.
+- **Das Plattenwort für BEND** (§2, letzter Absatz).
+
+Nicht offen, sondern schlicht nicht begonnen: die Bring-up-Firmware selbst. Sie
+hat keine Spec — siehe „M6 — Hardware prototype" in [`docs/roadmap.md`](../roadmap.md).
