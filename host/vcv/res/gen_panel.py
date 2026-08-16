@@ -738,6 +738,32 @@ LIGHTS = [
 # kLightCtls in the generated header; only the SVG loop reads STATIC_LIGHTS.
 STATIC_LIGHTS = [c for c in LIGHTS if c.enum not in ("REC_A_L", "REC_B_L")]
 
+# Lights that exist only on the 60 HP hardware panel. Their IDs must be in
+# the shared LightId enum -- both widgets share one Fireflow module class --
+# but they must NOT enter kLightCtls, which FireflowWidget loops to build
+# widgets: appended there they would be drawn on the large panel at hardware
+# coordinates. Exactly the split HW_MOD_INPUTS already uses. Coordinates are
+# 0/0 here and come from gen_hw_panel's LIGHT_POS, same as those jacks.
+HW_ONLY_LIGHTS = [
+    Ctl("SRC_A_L",     LIGHT, 0, 0, ""),   # LANE_SOURCE excursion
+    Ctl("SRC_B_L",     LIGHT, 0, 0, ""),
+    Ctl("FLT_A_L",     LIGHT, 0, 0, ""),   # LANE_SIZE excursion
+    Ctl("FLT_B_L",     LIGHT, 0, 0, ""),
+    Ctl("CLR_A_L",     LIGHT, 0, 0, ""),   # LANE_MOTION excursion
+    Ctl("CLR_B_L",     LIGHT, 0, 0, ""),
+    Ctl("LVL_A_L",     LIGHT, 0, 0, ""),   # LANE_LEVEL excursion
+    Ctl("LVL_B_L",     LIGHT, 0, 0, ""),
+    Ctl("SONG_A_L",    LIGHT, 0, 0, ""),   # which phrase snapshot is sounding
+    Ctl("SONG_B_L",    LIGHT, 0, 0, ""),
+    Ctl("FLOW_A_L",    LIGHT, 0, 0, ""),   # drawn since the regroup, never lit
+    Ctl("FLOW_B_L",    LIGHT, 0, 0, ""),
+    Ctl("TEMPO_L",     LIGHT, 0, 0, ""),
+    Ctl("SYNC_L",      LIGHT, 0, 0, ""),
+    Ctl("MODBTN_L",    LIGHT, 0, 0, ""),   # latched, per spec 3.4
+    Ctl("SHIFTBTN_L",  LIGHT, 0, 0, ""),
+    Ctl("CEIL_L",      LIGHT, 0, 0, ""),   # the master shaper is bending
+]
+
 # --- shared panel lettering (drawn by SVG for preview, by C++ at runtime) -----
 # (x, y baseline, size mm, letter-spacing mm, hex colour, anchor, text)
 TEXTS = [
@@ -955,7 +981,7 @@ def header():
     emit_enum("ParamId",  PARAMS,  "NUM_PARAMS")
     emit_enum("InputId",  INPUTS + HW_MOD_INPUTS,  "NUM_INPUTS")
     emit_enum("OutputId", OUTPUTS, "NUM_OUTPUTS")
-    emit_enum("LightId",  LIGHTS,  "NUM_LIGHTS")
+    emit_enum("LightId",  LIGHTS + HW_ONLY_LIGHTS,  "NUM_LIGHTS")
 
     ANCHOR_ID = {"middle": 0, "start": 1, "end": 2}
 

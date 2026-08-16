@@ -769,6 +769,41 @@ def test_static_lights_excludes_rec_but_lights_keeps_all_four():
           f"kLightCtls row order is {row_ids}, want {LIGHT_ORDER}")
 
 
+def test_hw_only_lights_are_in_the_enum_but_not_in_the_table():
+    """The two widgets share one Fireflow module class, so LightId must
+    carry every lamp on either panel. The TABLES must not: kLightCtls is
+    what FireflowWidget loops to create widgets, so anything appended there
+    would be drawn on the large panel at hardware coordinates. Same split
+    the eight HW-only CV jacks already use (emit_enum INPUTS +
+    HW_MOD_INPUTS, emit_table kInputCtls INPUTS)."""
+    extra = getattr(g, "HW_ONLY_LIGHTS", None)
+    check(extra is not None, "gen_panel has no HW_ONLY_LIGHTS list")
+    if extra is None:
+        return
+    check(len(g.LIGHTS) + len(extra) == 21,
+          f"expected 21 lights in the enum, got {len(g.LIGHTS)} + {len(extra)}")
+    names = {c.enum for c in g.LIGHTS}
+    for c in extra:
+        check(c.enum not in names, f"{c.enum} is in both lists")
+    check("CAP_A_L" not in {c.enum for c in extra},
+          "CAP_A_L is back: the capture sequencer was deleted 2026-07-14")
+
+
+def test_light_ids_do_not_collide_with_param_ids():
+    """LightId and ParamId are separate enums that both start at 0, and the
+    C++ indexes lights[] and params[] with them. A comment in Fireflow.cpp
+    (REC_A_L == 2 == DENSITY_A) has been the only thing standing between
+    that and a silent mix-up. Assert the shapes instead: every light id must
+    be reachable in lights[], and NUM_LIGHTS must cover the whole list."""
+    all_lights = list(g.LIGHTS) + list(g.HW_ONLY_LIGHTS)
+    check(len(all_lights) == len(set(c.enum for c in all_lights)),
+          "duplicate light enum name")
+    param_names = {c.enum for c in g.RUNTIME_PANEL_PARAMS}
+    for c in all_lights:
+        check(c.enum not in param_names,
+              f"{c.enum} is both a light and a parameter name")
+
+
 def test_song_control_contract():
     """SONG swallowed FORM and the NEW pad (spec 2026-08-09
     hw-control-reduction task 3): the frozen final slot exposes one integer
