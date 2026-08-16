@@ -13,6 +13,7 @@
 #include "bbd_edge_state.hpp"   // ENG->BBD edge detector (dependency-free, unit-tested)
 #include "song_rung_state.hpp"  // SONG rung tracker (dependency-free, unit-tested)
 #include "drift_settle_state.hpp"  // DRIFT left-stop edge detector (dependency-free, unit-tested)
+#include "led_law.hpp"           // the panel's LED display law (Rack-free, unit-tested)
 
 // The portable engine core -- exactly the same headers the desktop render host
 // and (later) the Daisy firmware use. No hardware type crosses this boundary.
@@ -339,8 +340,13 @@ struct Fireflow : Module {
     // drift_settle_state.hpp.
     spkyvcv::DriftSettleState driftSettled;
     float clkSamples = 0.f;                 // samples since last external clock edge
-    float gateFilt[2] = {0.f, 0.f};
-    float recPhase[2] = {0.f, 0.f};        // REC LED pulse while recording
+    // The mux scan gives the hardware 16 brightness steps for free, so Rack
+    // quantises to the same raster -- a module that breathes more finely than
+    // the panel ever can is validating itself against the wrong instrument.
+    static constexpr int kLedSteps = 16;
+    spkyled::Panel ledPanel;
+    dsp::ClockDivider ledDiv;               // throttle the LED law to ~750 Hz
+    int ledDuty[NUM_LIGHTS] = {0};
     std::atomic<bool> resyncReq { false };  // menu "Resync to bar" -> audio thread
     bool pendingRestore = false;    // dataFromJson ran before onAdd; content reload deferred
 
@@ -353,6 +359,7 @@ struct Fireflow : Module {
         }
         fxmem.reverb = &reverb;
         ctrlDiv.setDivision(16);
+        ledDiv.setDivision(64);
     }
 
     void configControls() {
@@ -1009,28 +1016,16 @@ struct Fireflow : Module {
         outputs[GATE_A].setVoltage(inst.gate(0) ? 10.f : 0.f);
         outputs[GATE_B].setVoltage(inst.gate(1) ? 10.f : 0.f);
 
-        for (int p = 0; p < 2; ++p) {
-            float g = inst.gate(p) ? 1.f : 0.f;
-            gateFilt[p] += (g - gateFilt[p]) * 0.05f;
-        }
-        lights[GATE_A_L].setBrightness(gateFilt[0]);
-        lights[GATE_B_L].setBrightness(gateFilt[1]);
-
-        // REC LED: pulsing while recording, steady at the fill level when the
-        // part holds content, dark when empty or on any non-Sampler engine. Content
-        // left over from a part that was switched away from Sampler must not
-        // relight the LED -- ENG, not buffer state, decides what's shown.
-        for (int p = 0; p < spky::PART_COUNT; ++p) {
-            float b = 0.f;
-            const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;
-            if (inst.sampler_is_recording(p)) {
-                recPhase[p] += 2.f / args.sampleRate;      // 2 Hz pulse
-                if (recPhase[p] >= 1.f) recPhase[p] -= 1.f;
-                b = recPhase[p] < 0.5f ? 1.f : 0.25f;
-            } else if (samplerPart && !inst.sampler_empty(p)) {
-                b = 0.15f + 0.55f * inst.sampler_fill(p);
-            }
-            lights[p ? REC_B_L : REC_A_L].setBrightness(b);
+        // One law, one call, 21 lamps -- host/vcv/src/led_law.hpp. Quantised
+        // to kLedSteps even here: that is what the mux scan gives the
+        // hardware for free, and a Rack module that breathes more finely than
+        // the panel ever can is validating itself against the wrong
+        // instrument.
+        if (ledDiv.process()) {
+            const float dt = ledDiv.getDivision() * args.sampleTime;
+            spkyled::fill(inst, ledPanel, dt, kLedSteps, ledDuty);
+            for (int i = 0; i < NUM_LIGHTS; ++i)
+                lights[i].setBrightness(float(ledDuty[i]) / float(kLedSteps - 1));
         }
     }
 

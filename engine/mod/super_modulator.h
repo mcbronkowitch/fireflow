@@ -47,6 +47,8 @@ public:
     void set_song(SongMode song) { _lanes[LANE_PITCH].set_song(song); }
     Principle form() const { return _lanes[LANE_PITCH].form(); }
     SongMode song() const { return _lanes[LANE_PITCH].song(); }
+    // Ordinary observer, not a test-only path -- see Instrument::active_pattern.
+    uint8_t active_pattern() const { return _lanes[LANE_PITCH].active_pattern(); }
     void set_principle(Principle p) { set_form(p); }
     void new_phrase() { _lanes[LANE_PITCH].new_phrase(); }
 #ifdef SPKY_TESTING

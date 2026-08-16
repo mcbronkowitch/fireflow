@@ -76,6 +76,13 @@ public:
     int song(int p) const {
         return static_cast<int>(_parts[p].mod().song());
     }
+    // Which snapshot (A/B) is currently playing -- an ordinary observer like
+    // form()/song(), not a test-only path. The hardware panel's SONG lamp
+    // (led_law.hpp) reads this at runtime to know which snapshot to show, so
+    // it cannot live behind SPKY_TESTING the way active_pattern_for_test does.
+    uint8_t active_pattern(int p) const {
+        return _parts[p].mod().active_pattern();
+    }
     // Wie form()/song() ein gewoehnlicher Observer, kein Testsonderweg.
     // tests/test_controls_map.cpp braucht ihn, um die Abbildung Mux-Kanal ->
     // Setter der Firmware-Shell auf dem Host pruefen zu koennen.

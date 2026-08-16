@@ -88,12 +88,12 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
     using namespace spkyvcv;
 
     // Written, not skipped. FLOW, TEMPO and SYNC need host state this round
-    // does not wire, the two pad lamps need the latch that spec 3.4 leaves to
-    // the round that builds MOD and SHIFT, and REC is filled in the next task.
-    // A blanket zero at the top of this function would make the gate below --
-    // "every light is written" -- pass without asserting anything.
+    // does not wire, and the two pad lamps need the latch that spec 3.4 leaves
+    // to the round that builds MOD and SHIFT. A blanket zero at the top of
+    // this function would make the gate below -- "every light is written" --
+    // pass without asserting anything.
     for (int id : {FLOW_A_L, FLOW_B_L, TEMPO_L, SYNC_L,
-                   MODBTN_L, SHIFTBTN_L, REC_A_L, REC_B_L})
+                   MODBTN_L, SHIFTBTN_L})
         duty_out[id] = 0;
 
     p.blink += dt;
@@ -117,7 +117,7 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
     // channel the excursion lights use, so this one is carried by shape.
     const int songId[2] = {SONG_A_L, SONG_B_L};
     for (int part = 0; part < 2; ++part) {
-        const bool b = inst.active_pattern_for_test(part) != 0;
+        const bool b = inst.active_pattern(part) != 0;
         const bool on = b ? (p.blink < 0.15f || (p.blink > 0.3f && p.blink < 0.45f))
                           : true;
         duty_out[songId[part]] = on ? steps - 1 : 0;
@@ -132,6 +132,25 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
         duty_out[gateId[part]] = inst.gate(part) ? steps - 1 : 0;
 
     duty_out[CEIL_L] = duty(inst.limiter_squash(), steps);
+
+    // REC keeps the three-state behaviour it already had: pulsing while
+    // recording, steady at the fill level when the part holds content, dark
+    // otherwise and on any non-Sampler engine.
+    //
+    // 2 Hz, as the code this replaces pulsed it. blink itself runs at 1 Hz
+    // because the phrase lamps' windows are written against that, so REC
+    // reads it at double rate rather than carrying a second phase.
+    const float recPh = p.blink < 0.5f ? p.blink * 2.f : p.blink * 2.f - 1.f;
+    const int recId[2] = {REC_A_L, REC_B_L};
+    for (int part = 0; part < 2; ++part) {
+        float v = 0.f;
+        const bool sampler = inst.engine_id(part) == spky::ENGINE_SAMPLER;
+        if (inst.sampler_is_recording(part))
+            v = recPh < 0.5f ? 1.f : 0.25f;
+        else if (sampler && !inst.sampler_empty(part))
+            v = 0.15f + 0.55f * inst.sampler_fill(part);
+        duty_out[recId[part]] = duty(v, steps);
+    }
 }
 
 } // namespace spkyled
