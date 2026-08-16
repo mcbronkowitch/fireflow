@@ -228,8 +228,40 @@ JACK_POS = {"PITCH_A": 56.00, "GATE_A": 67.50,
             "MOD1_B": W - X_COLOR, "MOD2_B": W - X_FILT,
             "MOD3_B": W - X_TIMB, "MOD4_B": W - X_LVL}
 
-LIGHT_POS = {"REC_A_L": (108.50, Y_TOP), "GATE_A_L": (116.50, Y_TOP),
-             "REC_B_L": (W - 108.50, Y_TOP), "GATE_B_L": (W - 116.50, Y_TOP)}
+LIGHT_POS = {"REC_A_L": (108.50, Y_TOP), "REC_B_L": (W - 108.50, Y_TOP),
+             # --- LED feedback round, 2026-08-16 -------------------------------------
+             # Satellites: each at exactly anchor radius + 1.5 mm, inside its row's
+             # existing ink band, so _row_ink() is unchanged and no frame can move.
+             # Measured free at these points against every drawn element (spec 5.2).
+             "SRC_A_L":    (109.75,  50.22),  "SRC_B_L":    (195.05,  50.22),
+             "FLT_A_L":    ( 96.13,  54.56),  "FLT_B_L":    (208.67,  54.56),
+             "CLR_A_L":    ( 33.50,  95.00),  "CLR_B_L":    (271.30,  95.00),
+             "LVL_A_L":    (116.50,  76.00),  "LVL_B_L":    (188.30,  76.00),
+             "SONG_A_L":   ( 54.50,  18.25),  "SONG_B_L":   (250.30,  18.25),
+             # GATE leaves the timing row, where it sat 4 mm from REC and CAP and
+             # meant nothing, for the VOICE row where the note is shaped.
+             "GATE_A_L":   ( 74.75,  37.75),  "GATE_B_L":   (230.05,  37.75),
+             # FLOW and the two pad lamps keep their drawn positions; SYNC leaves
+             # SHUFFLE's side, where only mirror symmetry had put it, for the CLOCK
+             # jack, where an external clock actually arrives.
+             "SYNC_L":     (130.50, 114.00),
+             "MODBTN_L":   (285.30, 114.00),  "SHIFTBTN_L": ( 19.50, 114.00),
+             # In the master column between REV_DECAY and REV_TONE. Unsuffixed,
+             # so _twin_enum declares no mirror partner and test_mirror_symmetry
+             # leaves it alone -- as it already does TEMPO_L. Not on REV_DECAY's
+             # own axis (x=152.40): straight down from REV_DECAY at anchor
+             # radius + 1.5 mm lands inside REV_DECAY's own default caption spot,
+             # (152.40, 88.6), forcing that caption to flip above REV_DECAY and
+             # blow out row3's frame. Bearing turned 20 degrees off vertical,
+             # same anchor radius + 1.5 mm from REV_DECAY, clears that caption
+             # by 3.0 mm+ instead (spec 5.3: turn the bearing, not the distance).
+             "CEIL_L":     (155.82,  88.40),
+             # TEMPO/FLOW keep the coordinates HW_ONLY already drew them at
+             # (spec 2026-08-10 §8), carrying the row symbols rather than the
+             # transcribed numbers, so a later row re-rhythm moves the lamp
+             # with its row instead of stranding it.
+             "TEMPO_L":    (130.40, Y_B1K),
+             "FLOW_A_L":   (93.50, Y_TOP),  "FLOW_B_L": (W - 93.50, Y_TOP)}
 
 
 def place(c):
@@ -259,7 +291,7 @@ def place(c):
 HW_PARAMS  = [place(c) for c in gp.RUNTIME_PANEL_PARAMS]
 HW_INPUTS  = [place(c) for c in gp.INPUTS] + [place(c) for c in gp.HW_MOD_INPUTS]
 HW_OUTPUTS = [place(c) for c in gp.OUTPUTS]
-HW_LIGHTS  = [place(c) for c in gp.LIGHTS]
+HW_LIGHTS  = [place(c) for c in gp.LIGHTS + gp.HW_ONLY_LIGHTS]
 
 
 class HwOnly:
@@ -274,12 +306,7 @@ class HwOnly:
 HW_ONLY = [
     HwOnly("SHIFTBTN", "P", 14.00, JACK_Y, "SHFT", "reserved, no function"),
     HwOnly("MODBTN", "P", W - 14.00, JACK_Y, "MOD", "reserved, no function"),
-    HwOnly("TEMPO_L", "L", 130.40, Y_B1K, "", "tempo"),
-    HwOnly("SYNC_L", "L", W - 130.40, Y_B1K, "", "sync"),
 ]
-for _side, _sx in (("A", lambda v: v), ("B", lambda v: W - v)):
-    HW_ONLY.append(HwOnly(f"FLOW_{_side}_L", "L", _sx(93.50), Y_TOP, "", "flow"))
-    HW_ONLY.append(HwOnly(f"CAP_{_side}_L", "L", _sx(112.50), Y_TOP, "", "capture"))
 
 ALL_HW = HW_PARAMS + HW_INPUTS + HW_OUTPUTS + HW_LIGHTS + HW_ONLY
 

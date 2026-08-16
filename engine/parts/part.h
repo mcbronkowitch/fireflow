@@ -214,6 +214,7 @@ public:
     float target_raw(int slot) const;          // base + mod*depth, unquantized
     float pitch_pre_quant() const;             // PITCH target + TUNE, pre-quantize
     float lane_output(int slot) const { return _mod.lane_output(slot); }
+    float lane_excursion(int slot) const { return _mod_term(slot); }
     bool  lane_fired(int slot) const  { return _mod.lane_fired(slot); }
     // GATE jack: the ~5 ms retrigger pulse, OR'd with the composed melodic
     // STEP note sustain (spec: rhythm-groove-design.md section 3). pitch_sustain()
@@ -535,6 +536,10 @@ private:
     void _push_master_cycle(float hz);
     void _fire_trigger();
     void _gate_edge(bool g);
+
+    // The modulation term alone, factored out of target_raw() (part.cpp) so
+    // the LED law and the audio path read one expression.
+    float _mod_term(int slot) const;
 
     // --- CONTRACT OF THE CONTROL RASTER COUNTER _ctrl_ctr -------------------
     // The counter itself is declared with the per-sample hot block at the top

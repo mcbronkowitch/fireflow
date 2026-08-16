@@ -54,24 +54,35 @@ Größenklasse haben darf und bei mehreren Controls auch hat:
 | Taster (`P`) | 4,0 mm | 2 | 2 |
 | **Summe** | | **69** | **67** |
 
-Dazu 8 Elemente, die **kein** Runtime-Parameter sind und deshalb in keiner der
+Dazu 2 Elemente, die **kein** Runtime-Parameter sind und deshalb in keiner der
 Zahlen oben stecken (`HW_ONLY` im Generator):
 
 | Element | Art | Anmerkung |
 |---|---|---|
 | `MODBTN`, `SHIFTBTN` | Taster | reserviert, ohne Funktion — 2 weitere Pads |
-| `FLOW_A_L`, `FLOW_B_L` | LED | FLOW/STEP pro Deck |
-| `CAP_A_L`, `CAP_B_L` | LED | Capture-Replay pro Deck |
-| `TEMPO_L`, `SYNC_L` | LED | global |
 
-Macht **4 Taster** (`REC_A/B` + die zwei reservierten) und **10 LEDs**
-(die 6 oben plus `GATE_A/B_L` und `REC_A/B_L`, die als VCV-Lights zählen).
+Macht **4 Taster** (`REC_A/B` + die zwei reservierten).
 
-> **Die LED-Zahl ist gefallen, und zwar absichtlich.** Die Neugruppierung hatte
-> das Feld auf 20 festgelegt (Envelope-Spec §1, oberes Ende des Korridors); die
-> Neuverteilung hat `ENGINE_A/B` vom Taster zum **fünf-Zonen-Rastpoti** am Kopf
-> der VOICE-Gruppe gemacht und damit zehn Anzeige-LEDs eingespart. 20 − 10 = 10,
-> und die Kette bleibt dieselbe.
+**Die LEDs laufen seit der LED-Feedback-Runde (2026-08-16) nicht mehr über
+`HW_ONLY`.** Alle Lampen auf der Platte sind jetzt echte `LightId`s — die
+Platte trägt **21**, nicht mehr 10: 8 der bisherigen 10 blieben, `CAP_A_L`/
+`CAP_B_L` sind mit der Capture-Sequenz gelöscht (die gibt es seit 2026-07-14
+nicht mehr, siehe `docs/roadmap.md`), und 13 sind neu. Sechs davon sind
+absichtlich dunkel — `FLOW_A_L`, `FLOW_B_L`, `TEMPO_L`, `SYNC_L` und die zwei
+Pad-Lampen `MODBTN_L`/`SHIFTBTN_L` —, aber jeden Block *geschrieben*, nicht
+übersprungen; ein Gate prüft das. Herleitung, Platzierung und die offene
+Mux-Breite (8:1 gegen 16:1, deshalb nimmt `duty()` den Schrittzähler als
+Parameter): Spec
+[`2026-08-16-led-feedback-design.md`](../superpowers/specs/2026-08-16-led-feedback-design.md)
+§2–§3, und `docs/roadmap.md`.
+
+> **Die LED-Zahl war erst gefallen, und zwar absichtlich.** Die Neugruppierung
+> hatte das Feld auf 20 festgelegt (Envelope-Spec §1, oberes Ende des
+> Korridors); die Neuverteilung hat `ENGINE_A/B` vom Taster zum
+> **fünf-Zonen-Rastpoti** am Kopf der VOICE-Gruppe gemacht und damit zehn
+> Anzeige-LEDs eingespart. 20 − 10 = 10, und die Kette blieb dieselbe — bis
+> die LED-Feedback-Runde das Feld auf 21 anhob, mehr als das ursprüngliche
+> Korridor-Ende, weil kein Rundungsdruck mehr bestand.
 
 `HIDDEN_PARAMS` ist seit der Reduktionsrunde leer — es gibt keinen menü-only
 *Parameter* mehr. Das Kontextmenü selbst existiert weiter (Resync to bar, BBD
@@ -307,15 +318,20 @@ Kanal.
 | Sense-Pins (ADC, **nicht** aus dem GPIO-Pool) | 4 | 4 | 0 |
 | GPIO-Pool | 10 | 10 | **0** |
 | Mux-Kanäle (5 × 16:1 auf 4 Sense-Pins) | 80 | 65 | 15 |
-| 595-Ausgänge (3 Register) | 24 | 10 LEDs + 4 Adressen + 5 Enables = 19 | 5 |
+| 595-Ausgänge (4 Register) | 32 | 21 LEDs + 4 Adressen + 5 Enables = 30 | 2 |
 | 165-Eingänge | 24 | 4 Taster | 20 |
 
 Die 595-Zeile ist hier **hergeleitet, nicht aus der Spec zitiert**: die
-Envelope-Spec bemisst die drei Register für 20 LEDs und legt die Adress- und
-Enable-Leitungen auf dieselbe Kette, ohne sie durchzuzählen. Die Rechnung oben
-nimmt einen Enable je Mux an; mit einem Dekoder wären es weniger. Und sie hängt
-an der LED-Zahl von heute (10, nicht 20) — steigt die wieder, wird die Kette
-länger, was einen weiteren Baustein kostet und keinen Pin.
+LED-Feedback-Spec bemisst 21 LEDs, 4 Adress- und 5 Enable-Leitungen auf
+derselben Kette — 30 von 32 Ausgängen (`2026-08-16-led-feedback-design.md`
+§3/§9). Die Rechnung oben nimmt einen Enable je Mux an; mit einem Dekoder
+wären es weniger. Bei 16:1-Muxen ist das vierte Register damit **nicht mehr
+optional**, sondern gebraucht — die 3-Register-Rechnung von vor der
+LED-Feedback-Runde (10 LEDs, 19 von 24 Ausgängen) ist überholt. Fällt die
+Mux-Wahl auf 8:1, braucht es neun Muxe statt fünf und damit neun statt fünf
+Enables: 21 + 3 Adressen + 9 Enables = 33, ein Ausgang über die vier Register
+hinaus — kostet ein **fünftes** 74HC595, kein Pin. Die 8:1-gegen-16:1-Frage
+bleibt offen (§6).
 
 **Das Ergebnis ist also: es reicht, mit Luft in jeder Zeile außer den Pins
 selbst** — und die Null dort ist die geplante Null. Die zwei Dinge, die es
@@ -387,7 +403,7 @@ inzwischen gezeichnet, generiert und gegen seine eigenen Keep-outs geprüft:
   neun Linien (14,5 / 34 / 50,22 / 53 / 76 / 79 / 89,86 / 95 / 97); waagerecht
   von x = 17 bis x = 287,8. Darunter die Buchsenreihe bei **y = 114 mm**, in der
   auch die zwei reservierten Pads und der SD-Slot sitzen.
-- Untergebracht sind **67 Poti-/Taster-Positionen, 2 reservierte Pads, 10 LEDs,
+- Untergebracht sind **67 Poti-/Taster-Positionen, 2 reservierte Pads, 21 LEDs,
   18 Buchsen und der SD-Slot** — geprüft von `hw_panel_guard`: Schienen-Keepout,
   Überlappung nach echten Bauteilradien, ein Beschriftungsabstand für alle
   Klassen, Legenden gegen den 8,03-mm-Rack-Jack-Körper, SD-Ausschnitt frei,

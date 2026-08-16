@@ -92,10 +92,20 @@ void Part::init(float sample_rate, uint32_t seed_base,
     _chord.init();
 }
 
+// The modulation term alone: what the lanes add to the knob, before the base
+// and before any clamping. target_raw() below adds the base to exactly this,
+// and the LED law displays exactly this (spec 2026-08-16 §3.1) -- one
+// expression, so the display and the audio path cannot drift apart.
+float Part::_mod_term(int slot) const {
+    float d = (slot == LANE_PITCH) ? 1.f : _depth;
+    if (slot == LANE_SOURCE && _engine_id == ENGINE_SAMPLER)
+        d = std::pow(d, sampler_cfg::kSourceModExp);
+    return _active[slot] ? _mod.lane_output(slot) * d * _tdepth[slot] : 0.f;
+}
+
 float Part::target_raw(int slot) const {
     // Master MOD (ex-DEPTH) shapes the texture only; the PITCH lane is the
     // anchor and keeps its per-slot depth alone (spec 2026-07-17 mod-tide).
-    float d = (slot == LANE_PITCH) ? 1.f : _depth;
     // Die SOURCE-Lane ist auf einem Sampler-Deck die LESEPOSITION und greift
     // ueber die gesamte Aufnahme -- linear warf schon eine Prise MOD die
     // Position durchs Material (spec 2026-07-23 sampler-performance-fixes).
@@ -111,9 +121,7 @@ float Part::target_raw(int slot) const {
     // fade the OLD engine is what is actually sounding, so shaping SOURCE's
     // MOD curve by the currently-sounding engine is defensible here even
     // though the two rules diverge.
-    if (slot == LANE_SOURCE && _engine_id == ENGINE_SAMPLER)
-        d = std::pow(d, sampler_cfg::kSourceModExp);
-    float mod = _active[slot] ? _mod.lane_output(slot) * d * _tdepth[slot] : 0.f;
+    float mod = _mod_term(slot);
     float v = clampf(_base[slot] + mod, 0.f, 1.f);
     // LEVEL floor (play-test rev 2026-07-17): modulation may duck the part to
     // at most 40% of its set level, never into silence. Relative to the base,

@@ -114,6 +114,23 @@ enum LightId {
     GATE_B_L,
     REC_A_L,
     REC_B_L,
+    SRC_A_L,
+    SRC_B_L,
+    FLT_A_L,
+    FLT_B_L,
+    CLR_A_L,
+    CLR_B_L,
+    LVL_A_L,
+    LVL_B_L,
+    SONG_A_L,
+    SONG_B_L,
+    FLOW_A_L,
+    FLOW_B_L,
+    TEMPO_L,
+    SYNC_L,
+    MODBTN_L,
+    SHIFTBTN_L,
+    CEIL_L,
     NUM_LIGHTS
 };
 static const PanelCtl kParamCtls[] = {

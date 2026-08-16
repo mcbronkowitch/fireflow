@@ -769,6 +769,41 @@ def test_static_lights_excludes_rec_but_lights_keeps_all_four():
           f"kLightCtls row order is {row_ids}, want {LIGHT_ORDER}")
 
 
+def test_hw_only_lights_are_in_the_enum_but_not_in_the_table():
+    """The two widgets share one Fireflow module class, so LightId must
+    carry every lamp on either panel. The TABLES must not: kLightCtls is
+    what FireflowWidget loops to create widgets, so anything appended there
+    would be drawn on the large panel at hardware coordinates. Same split
+    the eight HW-only CV jacks already use (emit_enum INPUTS +
+    HW_MOD_INPUTS, emit_table kInputCtls INPUTS)."""
+    extra = getattr(g, "HW_ONLY_LIGHTS", None)
+    check(extra is not None, "gen_panel has no HW_ONLY_LIGHTS list")
+    if extra is None:
+        return
+    check(len(g.LIGHTS) + len(extra) == 21,
+          f"expected 21 lights in the enum, got {len(g.LIGHTS)} + {len(extra)}")
+    names = {c.enum for c in g.LIGHTS}
+    for c in extra:
+        check(c.enum not in names, f"{c.enum} is in both lists")
+    check("CAP_A_L" not in {c.enum for c in extra},
+          "CAP_A_L is back: the capture sequencer was deleted 2026-07-14")
+
+
+def test_light_ids_do_not_collide_with_param_ids():
+    """LightId and ParamId are separate enums that both start at 0, and the
+    C++ indexes lights[] and params[] with them. A comment in Fireflow.cpp
+    (REC_A_L == 2 == DENSITY_A) has been the only thing standing between
+    that and a silent mix-up. Assert the shapes instead: every light id must
+    be reachable in lights[], and NUM_LIGHTS must cover the whole list."""
+    all_lights = list(g.LIGHTS) + list(g.HW_ONLY_LIGHTS)
+    check(len(all_lights) == len(set(c.enum for c in all_lights)),
+          "duplicate light enum name")
+    param_names = {c.enum for c in g.RUNTIME_PANEL_PARAMS}
+    for c in all_lights:
+        check(c.enum not in param_names,
+              f"{c.enum} is both a light and a parameter name")
+
+
 def test_song_control_contract():
     """SONG swallowed FORM and the NEW pad (spec 2026-08-09
     hw-control-reduction task 3): the frozen final slot exposes one integer
@@ -1365,7 +1400,7 @@ def compact_cpp(source):
     return re.sub(r"\s+", "", source)
 
 
-def engine_cycle_wiring_issues(cpp, makefile):
+def engine_cycle_wiring_issues(cpp, makefile, led_law):
     """Return scoped ENG integration regressions found in host source."""
     issues = []
     latch = cpp_scope(cpp, "struct EngineCycleLatch : VCVLatch")
@@ -1375,11 +1410,17 @@ def engine_cycle_wiring_issues(cpp, makefile):
     process = cpp_scope(cpp, "void process(const ProcessArgs& args) override")
     ring = cpp_scope(cpp, "struct SpkyRing : Widget")
     widget = cpp_scope(cpp, "FireflowWidget(Fireflow* module)")
+    # REC's engine-id gate lives in led_law.hpp's fill() since spec
+    # 2026-08-16 led-feedback task 7 -- process() now only calls the law and
+    # copies the result, so the exact-sampler-id and sampler-only checks
+    # below read that scope instead of process().
+    rec_fill = cpp_scope(led_law, "inline void fill(")
 
     for label, block in (("latch", latch), ("shade table", shades),
                          ("config", config),
-                         ("parameter push", push), ("REC LED", process),
-                         ("sampler ring", ring), ("widget", widget)):
+                         ("parameter push", push), ("process", process),
+                         ("sampler ring", ring), ("widget", widget),
+                         ("REC LED", rec_fill)):
         if block is None:
             issues.append(f"ENG {label} scope is missing")
     if issues:
@@ -1499,11 +1540,19 @@ if (songRung[p].tick(songNorm, spky::kSongLadderCount)) {
     if any(bad in push_n for bad in ("eng>0", "eng!=0", "eng>=1", "eng==1||eng==2")):
         issues.append("pushParams has a boolean ENG alternative that can route Wave as Sampler")
 
-    process_n = compact_cpp(process)
-    if process_n.count(sampler_part) != 1:
+    rec_fill_n = compact_cpp(rec_fill)
+    rec_sampler_id = "inst.engine_id(part)==spky::ENGINE_SAMPLER"
+    rec_sampler = "constboolsampler=" + rec_sampler_id + ";"
+    if rec_fill_n.count(rec_sampler) != 1:
         issues.append("REC LED must use the exact sampler engine id")
-    if "elseif(samplerPart&&!inst.sampler_empty(p)){" not in process_n:
+    if "elseif(sampler&&!inst.sampler_empty(part))" not in rec_fill_n:
         issues.append("REC LED fill state must remain sampler-only")
+
+    # The one seam this round is about: process() must actually drive the
+    # panel through the law, not just declare the members that could.
+    process_n = compact_cpp(process)
+    if "spkyled::fill(inst,ledPanel,dt,kLedSteps,ledDuty);" not in process_n:
+        issues.append("process must drive the panel through the LED law")
 
     ring_n = compact_cpp(ring)
     if ring_n.count("if(module&&module->inst.engine_id(part)==spky::ENGINE_SAMPLER){") != 1:
@@ -1525,8 +1574,10 @@ def test_engine_cycle_host_wiring():
         cpp = f.read()
     with open(os.path.join(here, "..", "Makefile")) as f:
         makefile = f.read()
+    with open(os.path.join(here, "..", "src", "led_law.hpp")) as f:
+        led_law = f.read()
 
-    for issue in engine_cycle_wiring_issues(cpp, makefile):
+    for issue in engine_cycle_wiring_issues(cpp, makefile, led_law):
         check(False, issue)
 
 
@@ -1537,6 +1588,8 @@ def test_engine_cycle_guard_rejects_representative_regressions():
         cpp = f.read()
     with open(os.path.join(here, "..", "Makefile")) as f:
         makefile = f.read()
+    with open(os.path.join(here, "..", "src", "led_law.hpp")) as f:
+        led_law = f.read()
 
     mutations = [
         ("createParamCentered<EngineCycleLatch>",
@@ -1554,10 +1607,26 @@ def test_engine_cycle_guard_rejects_representative_regressions():
         ("inst.new_phrase(p);          // turn the knob, get a new melody",
          "if (!samplerPart) inst.new_phrase(p);          // turn the knob, get a new melody",
          "SONG phrase rebuild"),
+        ("spkyled::fill(inst, ledPanel, dt, kLedSteps, ledDuty);",
+         "spkyledFillDisabled(inst, ledPanel, dt, kLedSteps, ledDuty);",
+         "process no longer drives the panel through the LED law"),
     ]
     for before, after, label in mutations:
         mutated = cpp.replace(before, after, 1)
-        check(engine_cycle_wiring_issues(mutated, makefile),
+        check(engine_cycle_wiring_issues(mutated, makefile, led_law),
+              f"ENG guard accepted a {label} regression")
+
+    # REC's gate lives in led_law.hpp since task 7; mutate that file instead
+    # of cpp to prove the relocated checks can still go red.
+    led_law_mutations = [
+        ("const bool sampler = inst.engine_id(part) == spky::ENGINE_SAMPLER;",
+         "const bool sampler = true;", "REC LED sampler-id"),
+        ("else if (sampler && !inst.sampler_empty(part))",
+         "else if (sampler)", "REC LED fill-state"),
+    ]
+    for before, after, label in led_law_mutations:
+        mutated = led_law.replace(before, after, 1)
+        check(engine_cycle_wiring_issues(cpp, makefile, mutated),
               f"ENG guard accepted a {label} regression")
 
 

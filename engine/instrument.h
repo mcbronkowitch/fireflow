@@ -76,6 +76,13 @@ public:
     int song(int p) const {
         return static_cast<int>(_parts[p].mod().song());
     }
+    // Which snapshot (A/B) is currently playing -- an ordinary observer like
+    // form()/song(), not a test-only path. The hardware panel's SONG lamp
+    // (led_law.hpp) reads this at runtime to know which snapshot to show, so
+    // it cannot live behind SPKY_TESTING the way active_pattern_for_test does.
+    uint8_t active_pattern(int p) const {
+        return _parts[p].mod().active_pattern();
+    }
     // Wie form()/song() ein gewoehnlicher Observer, kein Testsonderweg.
     // tests/test_controls_map.cpp braucht ihn, um die Abbildung Mux-Kanal ->
     // Setter der Firmware-Shell auf dem Host pruefen zu koennen.
@@ -95,7 +102,7 @@ public:
         return _parts[p].mod().song_position_for_test();
     }
     uint8_t active_pattern_for_test(int p) const {
-        return _parts[p].mod().active_pattern_for_test();
+        return active_pattern(p);
     }
     // What a mod lane actually clocks at, in Hz, plus the clocking mode that
     // decides how that Hz was derived. SuperModulator has held these observers
@@ -294,6 +301,9 @@ public:
     // outside a duck is indistinguishable from quieter playing (the same
     // argument as limiter_gain()), so this is the only honest probe.
     float duck_gain() const { return _duck_gain; }
+    // 0 while the master shaper is transparent, rising as it bends. This is
+    // the audible onset, not the gain reduction -- see limiter.h.
+    float limiter_squash() const { return _limiter.squash(); }
     // Observer only, for tests: deck p's post-FX output from the sample just
     // processed. ch 0 = L, 1 = R. Latency cannot be measured from the summed
     // output, which cannot distinguish 0 samples from 1.
@@ -407,6 +417,9 @@ public:
     size_t sampler_rec_size(int p) const { return _parts[p].sampler().rec_size(); }
 
     float lane_output(int p, int s)  const { return _parts[p].lane_output(s); }
+    // The modulation term alone -- what the LED law displays. Deliberately
+    // NOT target_value(), which is base + mod and would show the knob.
+    float lane_excursion(int p, int s) const { return _parts[p].lane_excursion(s); }
     float target_value(int p, int s) const { return _parts[p].target_value(s); }
     bool  lane_fired(int p, int s)   const { return _parts[p].lane_fired(s); }
     bool  gate(int p)  const { return _parts[p].gate(); }
