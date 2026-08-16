@@ -337,12 +337,44 @@ them, it does not generate them. The scan above reports deck A only — and it
 found `MODBTN`'s nearest free spot *outboard* at 296,30, where the mirror of
 `SHIFTBTN`'s 19,50 is 285,30. Mirror first, then verify, not the other way round.
 
-- `test_hw_panel.py:32` requires `HW_LIGHTS` and `gp.LIGHTS` to match **in order**.
-- `gen_panel.py:729`: the C++ side centres the LED rings on `kLightCtls[0..1]`,
-  so the gate lights must keep indices 0 and 1.
-- The large module must exclude the new lights via `STATIC_LIGHTS`
-  (`gen_panel.py:739`) **and** skip them widget-side, or its panel draws 21 LEDs
-  at positions it has to invent.
+### 5.5 The large module stays out of it — via the pattern the repo already uses
+
+The two modules share one `Fireflow` class, so `LightId` and `NUM_LIGHTS` are
+necessarily shared. Everything else can be, and already is, separate — and the
+naive move breaks loudly rather than silently:
+
+- **The large module draws every entry of its table.** `Fireflow.cpp:1860` loops
+  `kLightCtls` and gives anything that is not REC a `MediumLight<YellowLight>` at
+  that entry's coordinates. Appending HW-only lights to the shared list would
+  scatter them across the large panel at hardware coordinates.
+- **Its guard freezes the list at four, in two places.** `test_panel.py:84`
+  `LIGHT_ORDER = ['GATE_A_L', 'GATE_B_L', 'REC_A_L', 'REC_B_L']`, asserted at
+  `:96` and again at `:752`. Growing `gp.LIGHTS` turns `panel_guard` red
+  immediately. The coupling is guarded, not silent.
+
+**The established solution is three lines above, for the eight HW-only CV jacks:**
+
+```python
+emit_enum("InputId",  INPUTS + HW_MOD_INPUTS,  "NUM_INPUTS")   # ID space shared
+emit_table("kInputCtls",      INPUTS)                          # large module
+emit_table("kHwModInputCtls", HW_MOD_INPUTS)                   # hardware only
+```
+
+The lights take the same shape: `LIGHTS` keeps its four in their frozen order,
+the seventeen new ones go in a second list, and the two are concatenated **only**
+at `emit_enum("LightId", …)`. `emit_table("kLightCtls", LIGHTS)`
+(`gen_panel.py:975`) is untouched, so **the large module needs no change at all**
+— no filter, no widget-side skip. It keeps its four lamps, and its guards stay
+green as the proof that nothing leaked into it.
+
+**The LED rings are safe for the same reason.** `SpkyRing` is centred on
+`kLightCtls[0..1]`, i.e. the two gate lights, and that table does not grow.
+`STATIC_LIGHTS` (`gen_panel.py:739`) likewise keeps describing the large panel's
+SVG only.
+
+Exactly one guard changes: `test_hw_panel.py:32`, which asserts `HW_LIGHTS` and
+`gp.LIGHTS` match in order, becomes the concatenation. `gen_hw_panel.py:262`,
+`HW_LIGHTS = [place(c) for c in gp.LIGHTS]`, follows it.
 
 ## 6. What gets built
 
@@ -361,7 +393,10 @@ lights.
 3. **`res/gen_panel.py`** — 17 new `LightId`s: thirteen for the new lights (eight
    excursion, two phrase, two modifier, one ceiling) and four for lamps drawn
    today that cannot light (`FLOW_A/B_L`, `TEMPO_L`, `SYNC_L`). With the four
-   that already have IDs that is 21. **Trap:** parameter and light number spaces
+   that already have IDs that is 21. **They go in a second list, not into
+   `LIGHTS`** — see §5.5; `LIGHTS` stays frozen at four and the two are
+   concatenated only at `emit_enum("LightId", …)`, so the large module and its
+   guards are untouched. **Trap:** parameter and light number spaces
    must not collide
    (`Fireflow.cpp:1571`, `REC_A_L == 2 == DENSITY_A`).
 4. **`res/gen_hw_panel.py`** — delete `CAP_A/B_L`, move `GATE_A/B_L` and
