@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 #include "instrument.h"
 #include "fx/limiter.h"
+#include "vcv/src/led_law.hpp"
 #include <cmath>
 
 using namespace spky;
@@ -88,8 +89,6 @@ TEST_CASE("led G9: the ceiling observer tracks the bend, and clears again") {
     CHECK(squash_at(0.40f, 0.60f) > 0.f);
 }
 
-#include "vcv/src/led_law.hpp"
-
 TEST_CASE("led G1: dark means zero modulation, and nothing else does") {
     CHECK(spkyled::duty(spkyled::intensity(0.f, 0.f), 16) == 0);
     CHECK(spkyled::duty(spkyled::intensity(0.5f, 0.f), 16) > 0);
@@ -129,6 +128,12 @@ TEST_CASE("led G4: gamma runs in the perceptual direction") {
     // there the raster dominates the curve -- duty(0.25, 16) is 1, and
     // (1/15)^(1/2.2) is 0.292 against 0.25, a 14% error that says nothing
     // about gamma. At 256 steps this tests the law instead of the raster.
+    // .epsilon(0.05) reads as a 5% band; it is not one. doctest scales
+    // epsilon by (1 + max(|lhs|,|rhs|)), so at v = 1 this is a ~0.10 ABSOLUTE
+    // band -- against a measured round-trip error of about 0.002 at these
+    // four points (0.2493 / 0.5021 / 0.7490 / 1.0 for v = 0.25/0.5/0.75/1.0).
+    // Loose on purpose: this gate is for gamma direction, not precision, and
+    // 0.002 already proves the curve.
     for (float v : {0.25f, 0.5f, 0.75f, 1.0f}) {
         const float d = static_cast<float>(spkyled::duty(v, 256)) / 255.f;
         CHECK(std::pow(d, 1.f / spkyled::kGamma) == doctest::Approx(v).epsilon(0.05));
@@ -147,18 +152,22 @@ TEST_CASE("led G10: a light value survives the law unchanged") {
     // The REC lamp's constants were tuned as light output. Round-tripping them
     // through the gamma must land back on the same brightness, inside the
     // 16-step raster -- and the three states must stay three states.
+    // doctest scales epsilon by (1 + max(|lhs|,|rhs|)), not by v alone: at
+    // v = 0.15, .epsilon(0.06) is an ABSOLUTE band of +-0.069 -- a +-46%
+    // window against a v this small, not the +-6% it reads as. The measured
+    // round-trip error at 16 steps is at most 0.033 (2 of 15 steps, at
+    // v = 0.50 and v = 0.70), so 0.03 is the tightest epsilon that still
+    // clears every point with margin.
     const int steps = 16;
     for (float v : {0.15f, 0.25f, 0.50f, 0.70f, 1.0f}) {
         const float back = static_cast<float>(spkyled::duty_from_light(v, steps))
                          / static_cast<float>(steps - 1);
-        CHECK(back == doctest::Approx(v).epsilon(0.06));
+        CHECK(back == doctest::Approx(v).epsilon(0.03));
     }
     CHECK(spkyled::duty_from_light(0.15f, steps)
           != spkyled::duty_from_light(0.25f, steps));
     CHECK(spkyled::duty_from_light(0.f, steps) == 0);
 }
-
-#include "vcv/src/generated_panel.hpp"
 
 TEST_CASE("led G6: every light is written, and a modulating lane moves") {
     Instrument inst;
@@ -172,11 +181,20 @@ TEST_CASE("led G6: every light is written, and a modulating lane moves") {
     for (int i = 0; i < spkyvcv::NUM_LIGHTS; ++i) duty[i] = -1;
 
     const float dt = 1.f / 750.f;
+    const int steps = 16;
     settle(inst, 200);
-    spkyled::fill(inst, panel, dt, 16, duty);
+    spkyled::fill(inst, panel, dt, steps, duty);
 
     for (int i = 0; i < spkyvcv::NUM_LIGHTS; ++i)
         CHECK_MESSAGE(duty[i] >= 0, "light ", i, " was never written");
+
+    // GATE: commit c3ac938 claims the gate lamps keep the behaviour they had
+    // -- straight through, no envelope. Read the live state rather than
+    // assuming it, so this is a check on the mapping, not on the sequencer.
+    CHECK(duty[spkyvcv::GATE_A_L] == (inst.gate(0) ? steps - 1 : 0));
+    // CEIL: the instrument is idle here (default drive, no signal pushed
+    // near the knee), so the ceiling lamp must read dark.
+    CHECK(duty[spkyvcv::CEIL_L] == 0);
 
     // The SOURCE excursion light must actually change over time.
     int lo = 99, hi = -1;
@@ -197,6 +215,33 @@ TEST_CASE("led G6: every light is written, and a modulating lane moves") {
                                        * std::log(1.f / spkyled::kEnvOff) / dt);
     for (int k = 0; k < decay; ++k) spkyled::fill(inst, panel, dt, 16, duty);
     CHECK(duty[spkyvcv::SRC_A_L] == 0);
+}
+
+TEST_CASE("led G11: the phrase lamps differ by shape, not by level") {
+    // Snapshot A is steady; snapshot B pulses twice per cycle. Sample a whole
+    // blink cycle rather than a point -- a lamp that reads "on" at one phase
+    // says nothing about whether the two shapes are distinguishable.
+    int onA = 0, onB = 0, edges = 0;
+    bool prev = spkyled::phrase_on(true, 0.f);
+    for (int i = 0; i < 1000; ++i) {
+        const float b = static_cast<float>(i) / 1000.f;
+        if (spkyled::phrase_on(false, b)) ++onA;
+        const bool nowB = spkyled::phrase_on(true, b);
+        if (nowB) ++onB;
+        if (nowB != prev) ++edges;
+        prev = nowB;
+    }
+    // blink is cyclic in real use (Panel::blink wraps at 1.0), so the count
+    // above is one edge short: the sweep never samples the wrap from b just
+    // below 1.0 back to b = 0, which is itself a transition (OFF -> ON,
+    // since phrase_on(true, 0.f) is true). Close the cycle explicitly rather
+    // than sampling b = 1.0 -- that would just move the same gap to the
+    // other end, since 1.0 and 0.0 are the same phase.
+    if (spkyled::phrase_on(true, 0.f) != prev) ++edges;
+    CHECK(onA == 1000);          // steady means steady, at every phase
+    CHECK(onB > 0);              // and B is lit somewhere
+    CHECK(onB < onA);            // but not everywhere
+    CHECK(edges == 4);           // two pulses: on-off-on-off
 }
 
 TEST_CASE("led: the envelope attacks instantly and falls slowly") {

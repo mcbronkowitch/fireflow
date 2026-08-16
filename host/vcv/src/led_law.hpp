@@ -87,7 +87,19 @@ inline int duty_from_light(float light, int steps) {
     return duty(std::pow(std::min(1.f, light), 1.f / kGamma), steps);
 }
 
+// Steady for snapshot A, a double pulse for B. Brightness is the channel the
+// excursion lamps use, so this lamp is carried by shape instead -- which is
+// only legible if the two shapes actually differ over a blink cycle.
+inline bool phrase_on(bool snapshot_b, float blink) {
+    if (!snapshot_b) return true;
+    return blink < 0.15f || (blink > 0.3f && blink < 0.45f);
+}
+
 struct Panel {
+    // lamp[GATE_A_L] and lamp[GATE_B_L] are never touched: the gate lamps
+    // read inst.gate() straight through in fill(), bypassing the envelope on
+    // purpose (a hard on/off, not a breath -- see the comment at the GATE
+    // block below). Don't "fix" this by routing them through Lamp::follow.
     Lamp  lamp[spkyvcv::NUM_LIGHTS];
     float blink = 0.f;                 // free-running, for the phrase lamps
 };
@@ -130,9 +142,7 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
     const int songId[2] = {SONG_A_L, SONG_B_L};
     for (int part = 0; part < 2; ++part) {
         const bool b = inst.active_pattern(part) != 0;
-        const bool on = b ? (p.blink < 0.15f || (p.blink > 0.3f && p.blink < 0.45f))
-                          : true;
-        duty_out[songId[part]] = on ? steps - 1 : 0;
+        duty_out[songId[part]] = phrase_on(b, p.blink) ? steps - 1 : 0;
     }
 
     // Straight through, no envelope: this reports that a note is sounding, not
@@ -156,6 +166,14 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
     // 2 Hz, as the code this replaces pulsed it. blink itself runs at 1 Hz
     // because the phrase lamps' windows are written against that, so REC
     // reads it at double rate rather than carrying a second phase.
+    //
+    // One behavioural difference from the code it replaces, worth naming
+    // rather than claiming away: recPhase used to advance only inside the
+    // is_recording branch, so a deck lit bright the instant recording began
+    // and the two decks pulsed independently. blink is free-running, so
+    // recording can now start anywhere in the cycle -- up to 0.25 s dark
+    // before it brightens -- and both decks pulse in phase with each other.
+    // Harmless, arguably nicer, but not what the earlier commit claimed.
     const float recPh = p.blink < 0.5f ? p.blink * 2.f : p.blink * 2.f - 1.f;
     const int recId[2] = {REC_A_L, REC_B_L};
     for (int part = 0; part < 2; ++part) {

@@ -309,11 +309,10 @@ def test_size_classes_match_the_spec():
 
 
 def test_hw_only_inventory():
-    """Was es auf Blech gibt, aber nicht im VCV-Modul: 2 Taster, keine
-    zusätzlichen LEDs mehr -- alle 17 Zusatz-Lampen sind jetzt echte,
-    platzierte kLightCtls-Einträge (HW_ONLY_LIGHTS). Die acht MOD-Buchsen
-    sind echte Inputs (unwired), keine HW_ONLY-Platzhalter mehr. 21 LEDs
-    insgesamt."""
+    """What exists on sheet metal but not in the VCV module: 2 pads, no more
+    extra LEDs -- all 17 added lamps are now real, placed kLightCtls entries
+    (HW_ONLY_LIGHTS). The eight MOD jacks are real inputs (unwired), no
+    longer HW_ONLY placeholders. 21 LEDs in total."""
     kinds = {}
     for c in hw.HW_ONLY:
         kinds[hw.hw_class(c.enum)] = kinds.get(hw.hw_class(c.enum), 0) + 1
@@ -340,6 +339,52 @@ def test_led_inventory_after_the_feedback_round():
           f"GATE_A_L is at y={by['GATE_A_L'].y}, not in the VOICE row")
     check(abs(by["SYNC_L"].y - 114.0) < 1e-6,
           f"SYNC_L is at y={by['SYNC_L'].y}, not on the jack row")
+
+
+def test_satellite_lamps_sit_at_anchor_radius_plus_1_5mm():
+    """Spec 2026-08-16 section 5.1's placement rule, pinned rather than left
+    to test_no_overlap_with_hw_radii's clearance check. That guard only
+    proves a lamp does not collide with anything -- a lamp typo'd to a
+    clear-but-wrong spot passes it, and TEMPO_L is now exempt from the
+    three-lines guard with nothing else holding it. This checks the rule
+    itself: every one of the thirteen new lamps sits at exactly its anchor's
+    class radius + 1.5 mm.
+
+    One exception, named rather than hidden: CEIL_L sits 20 degrees off
+    vertical from REV_DECAY -- the on-axis spot collides with REV_DECAY's
+    own caption anchor (0.40 mm against a required 3.0 mm). The distance
+    rule still holds for it, only the bearing differs, so the assertion
+    below covers it unchanged.
+
+    Tolerance is 0.01 mm: LIGHT_POS's literals are hand-rounded to two
+    decimal places from an exact anchor-radius + 1.5 mm construction at a
+    turned bearing (e.g. FLT_A_L's 9 degrees, CEIL_L's 20), which leaves a
+    residual of a few thousandths of a millimetre -- an order of magnitude
+    under this tolerance, and two orders under the 1 mm nudge the red proof
+    for this guard uses."""
+    SATELLITES = {
+        "SRC_A_L": "SOURCE_A", "SRC_B_L": "SOURCE_B",
+        "FLT_A_L": "FILT_A",   "FLT_B_L": "FILT_B",
+        "CLR_A_L": "COLOR_A",  "CLR_B_L": "COLOR_B",
+        "LVL_A_L": "COMP_A",   "LVL_B_L": "COMP_B",
+        "SONG_A_L": "SONG_A",  "SONG_B_L": "SONG_B",
+        "MODBTN_L": "MODBTN",  "SHIFTBTN_L": "SHIFTBTN",
+        "CEIL_L": "REV_DECAY",  # exception: bearing differs, distance does not
+    }
+    by = {c.enum: c for c in hw.ALL_HW}
+    checked = 0
+    for lamp, anchor in SATELLITES.items():
+        if lamp not in by or anchor not in by:
+            check(False, f"{lamp} or its anchor {anchor} is missing from the panel")
+            continue
+        l, a = by[lamp], by[anchor]
+        d = ((l.x - a.x) ** 2 + (l.y - a.y) ** 2) ** 0.5
+        want = hw.CLASS_R[hw.hw_class(anchor)] + 1.5
+        check(abs(d - want) < 0.01,
+              f"{lamp} is {d:.3f} mm from {anchor}, not anchor radius + 1.5 "
+              f"({want:.2f} mm)")
+        checked += 1
+    check(checked == 13, f"expected 13 satellites, checked {checked}")
 
 
 def test_mod_jacks_on_the_jack_row():
