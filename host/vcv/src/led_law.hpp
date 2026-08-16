@@ -4,6 +4,8 @@
 // the wiring. Spec: docs/superpowers/specs/2026-08-16-led-feedback-design.md
 #include <algorithm>
 #include <cmath>
+#include "instrument.h"
+#include "generated_panel.hpp"
 
 namespace spkyled {
 
@@ -27,6 +29,15 @@ constexpr float kGamma = 2.2f;
 // still never dark while it moves, which is what the design needs.
 constexpr float kEnvFall = 2.0f;
 
+// Envelope floor: below this a lamp is off, not merely dim. It has to exist and
+// it has to be well above a denormal guard, because duty()'s lift holds any
+// positive intensity at one step -- so this constant, not the release, is what
+// makes "dark" reachable. At 1e-6 a lamp would sit at one step of fifteen for
+// 27 s after modulation stopped. 0.02 is 3.9 release constants, about 8 s, and
+// stays an order of magnitude below the shallowest breath the lift protects.
+// By-ear candidate, not an invariant.
+constexpr float kEnvOff = 0.02f;
+
 // One light's state: a peak-tracked envelope of |excursion|, i.e. the
 // modulation DEPTH.
 struct Lamp {
@@ -37,7 +48,7 @@ struct Lamp {
         if (a >= env) { env = a; return; }           // instant attack
         const float k = dt / (kEnvFall + dt);        // one-pole release
         env += (a - env) * k;
-        if (env < 1e-6f) env = 0.f;
+        if (env < kEnvOff) env = 0.f;
     }
 };
 
@@ -62,6 +73,65 @@ inline int duty(float intens, int steps) {
     const float v = std::min(1.f, intens);
     const int   q = static_cast<int>(std::pow(v, kGamma) * (steps - 1) + 0.5f);
     return q < 1 ? 1 : q;
+}
+
+struct Panel {
+    Lamp  lamp[spkyvcv::NUM_LIGHTS];
+    float blink = 0.f;                 // free-running, for the phrase lamps
+};
+
+// The whole panel in one call, so a gate can assert that every light is
+// written -- six lamps sat on this plate for months with no LightId and
+// nothing noticed. Writes exactly NUM_LIGHTS entries of duty_out.
+inline void fill(const spky::Instrument& inst, Panel& p, float dt,
+                 int steps, int* duty_out) {
+    using namespace spkyvcv;
+
+    // Written, not skipped. FLOW, TEMPO and SYNC need host state this round
+    // does not wire, the two pad lamps need the latch that spec 3.4 leaves to
+    // the round that builds MOD and SHIFT, and REC is filled in the next task.
+    // A blanket zero at the top of this function would make the gate below --
+    // "every light is written" -- pass without asserting anything.
+    for (int id : {FLOW_A_L, FLOW_B_L, TEMPO_L, SYNC_L,
+                   MODBTN_L, SHIFTBTN_L, REC_A_L, REC_B_L})
+        duty_out[id] = 0;
+
+    p.blink += dt;
+    if (p.blink >= 1.f) p.blink -= 1.f;
+
+    struct Slot { int id; int lane; };
+    static const Slot kExc[8] = {
+        {SRC_A_L, spky::LANE_SOURCE}, {SRC_B_L, spky::LANE_SOURCE},
+        {FLT_A_L, spky::LANE_SIZE},   {FLT_B_L, spky::LANE_SIZE},
+        {CLR_A_L, spky::LANE_MOTION}, {CLR_B_L, spky::LANE_MOTION},
+        {LVL_A_L, spky::LANE_LEVEL},  {LVL_B_L, spky::LANE_LEVEL},
+    };
+    for (int i = 0; i < 8; ++i) {
+        const int part = i & 1;
+        const float e  = inst.lane_excursion(part, kExc[i].lane);
+        p.lamp[kExc[i].id].follow(e, dt);
+        duty_out[kExc[i].id] = duty(intensity(p.lamp[kExc[i].id].env, e), steps);
+    }
+
+    // Phrase: steady for snapshot A, double-pulse for B. Brightness is the
+    // channel the excursion lights use, so this one is carried by shape.
+    const int songId[2] = {SONG_A_L, SONG_B_L};
+    for (int part = 0; part < 2; ++part) {
+        const bool b = inst.active_pattern_for_test(part) != 0;
+        const bool on = b ? (p.blink < 0.15f || (p.blink > 0.3f && p.blink < 0.45f))
+                          : true;
+        duty_out[songId[part]] = on ? steps - 1 : 0;
+    }
+
+    // Straight through, no envelope: this reports that a note is sounding, not
+    // that one sounded recently. The code it replaces smoothed the gate with a
+    // 0.42 ms one-pole, which at the LED update rate is indistinguishable from
+    // following it directly.
+    const int gateId[2] = {GATE_A_L, GATE_B_L};
+    for (int part = 0; part < 2; ++part)
+        duty_out[gateId[part]] = inst.gate(part) ? steps - 1 : 0;
+
+    duty_out[CEIL_L] = duty(inst.limiter_squash(), steps);
 }
 
 } // namespace spkyled

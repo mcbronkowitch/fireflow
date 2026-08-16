@@ -143,6 +143,47 @@ TEST_CASE("led G5: the trough scales with depth") {
     CHECK(spkyled::intensity(0.9f, 0.9f) == doctest::Approx(0.9f));
 }
 
+#include "vcv/src/generated_panel.hpp"
+
+TEST_CASE("led G6: every light is written, and a modulating lane moves") {
+    Instrument inst;
+    inst.init(48000.f);
+    inst.set_rate(0, 2.0f);
+    inst.set_range(0, 1.f);
+    inst.set_depth(0, 1.f);
+
+    spkyled::Panel panel;
+    int duty[spkyvcv::NUM_LIGHTS];
+    for (int i = 0; i < spkyvcv::NUM_LIGHTS; ++i) duty[i] = -1;
+
+    const float dt = 1.f / 750.f;
+    settle(inst, 200);
+    spkyled::fill(inst, panel, dt, 16, duty);
+
+    for (int i = 0; i < spkyvcv::NUM_LIGHTS; ++i)
+        CHECK_MESSAGE(duty[i] >= 0, "light ", i, " was never written");
+
+    // The SOURCE excursion light must actually change over time.
+    int lo = 99, hi = -1;
+    for (int k = 0; k < 400; ++k) {
+        settle(inst, 64);
+        spkyled::fill(inst, panel, dt, 16, duty);
+        lo = std::min(lo, duty[spkyvcv::SRC_A_L]);
+        hi = std::max(hi, duty[spkyvcv::SRC_A_L]);
+    }
+    CHECK(hi > lo);
+
+    // At MOD 0 the same light must go all the way out, not merely dim. Long
+    // enough for a full swing to fall below kEnvOff, with margin; derived, so
+    // re-tuning either constant does not turn this into an arithmetic failure.
+    inst.set_depth(0, 0.f);
+    settle(inst, 200);
+    const int decay = static_cast<int>(1.5f * spkyled::kEnvFall
+                                       * std::log(1.f / spkyled::kEnvOff) / dt);
+    for (int k = 0; k < decay; ++k) spkyled::fill(inst, panel, dt, 16, duty);
+    CHECK(duty[spkyvcv::SRC_A_L] == 0);
+}
+
 TEST_CASE("led: the envelope attacks instantly and falls slowly") {
     spkyled::Lamp lamp;
     const float dt = 1.f / 750.f;               // the control rate used in Rack
