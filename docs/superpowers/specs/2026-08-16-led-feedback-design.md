@@ -95,9 +95,17 @@ a contract … do not build a design that relies on it."*
 
 **The limiter's audible onset is not where its gain reduction starts.** The VCV
 host pushes `set_master_drive(0.40f)` unconditionally (`Fireflow.cpp:962`, pinned
-by `test_panel.py`), so `_pre = 1,48` and `knee = 0,7147`. Measured: `shape()`
-begins bending at bus peak **0,483** while `gain < 1` only from **0,676** — about
-2,9 dB of audible soft saturation before any gain reduction exists to report.
+by `test_panel.py`), so `_pre = 1,48`. The internal `drive` is **not** the knob:
+it is `(_pre − 1) / 3 = 0,16`, so `knee = 0,89125 − 0,44125 · 0,16 = 0,8207`.
+`shape()` therefore begins bending at bus peak **0,5545** (`knee / _pre`;
+measured detectable from 0,569) while `gain < 1` requires `_peak > 1`, i.e. bus
+peak **0,676** (`1 / _pre`). That is **about 1,5–1,7 dB** of audible soft
+saturation before any gain reduction exists to report — and the band exists at
+DRIVE 0 too, where the same probe measures 0,907 against 0,925.
+
+*(An earlier revision of this section said knee 0,7147, onset 0,483 and 2,9 dB.
+That came from reading the knob value 0,40 as the internal `drive`. Re-probed
+2026-08-16; the finding stands, its size does not.)*
 
 **Chain budget** (io-budget §3): three 74HC595 give 24 outputs, 4 to mux
 addresses and 5 to mux enables; a fourth register brings it to 32. Brightness
@@ -169,7 +177,7 @@ hardware panel, so nothing tells you where the ceiling is any more.
 
 **It reports the audible onset, not the gain reduction:** the measurand is
 `peak > knee` inside `Limiter::process`, not `gain < 1`. Reporting gain
-reduction alone would leave the light dark through the 2,9 dB of soft saturation
+reduction alone would leave the light dark through the 1,5–1,7 dB of soft saturation
 measured in §2 — the very stretch where the sound changes first.
 
 ### 3.4 Modifier lights — "this button is latched"
