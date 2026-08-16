@@ -407,6 +407,9 @@ public:
     size_t sampler_rec_size(int p) const { return _parts[p].sampler().rec_size(); }
 
     float lane_output(int p, int s)  const { return _parts[p].lane_output(s); }
+    // The modulation term alone -- what the LED law displays. Deliberately
+    // NOT target_value(), which is base + mod and would show the knob.
+    float lane_excursion(int p, int s) const { return _parts[p].lane_excursion(s); }
     float target_value(int p, int s) const { return _parts[p].target_value(s); }
     bool  lane_fired(int p, int s)   const { return _parts[p].lane_fired(s); }
     bool  gate(int p)  const { return _parts[p].gate(); }
