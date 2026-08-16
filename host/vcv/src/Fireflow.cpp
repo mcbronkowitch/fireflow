@@ -341,11 +341,13 @@ struct Fireflow : Module {
     spkyvcv::DriftSettleState driftSettled;
     float clkSamples = 0.f;                 // samples since last external clock edge
     // The mux scan gives the hardware 16 brightness steps for free, so Rack
-    // quantises to the same raster -- a module that breathes more finely than
-    // the panel ever can is validating itself against the wrong instrument.
+    // quantises to the same raster -- and applies the same perceptual gamma
+    // curve on the way there (led_law.hpp's duty()) -- because a module that
+    // breathes more finely, or more linearly, than the panel ever can is
+    // validating itself against the wrong instrument.
     static constexpr int kLedSteps = 16;
     spkyled::Panel ledPanel;
-    dsp::ClockDivider ledDiv;               // throttle the LED law to ~750 Hz
+    dsp::ClockDivider ledDiv;               // throttle the LED law; 750 Hz at 48 kHz, scales with sample rate
     int ledDuty[NUM_LIGHTS] = {0};
     std::atomic<bool> resyncReq { false };  // menu "Resync to bar" -> audio thread
     bool pendingRestore = false;    // dataFromJson ran before onAdd; content reload deferred
@@ -1017,10 +1019,10 @@ struct Fireflow : Module {
         outputs[GATE_B].setVoltage(inst.gate(1) ? 10.f : 0.f);
 
         // One law, one call, 21 lamps -- host/vcv/src/led_law.hpp. Quantised
-        // to kLedSteps even here: that is what the mux scan gives the
-        // hardware for free, and a Rack module that breathes more finely than
-        // the panel ever can is validating itself against the wrong
-        // instrument.
+        // to kLedSteps AND run through the same perceptual gamma even here:
+        // that is what the mux scan gives the hardware for free, and a Rack
+        // module that breathes more finely, or more linearly, than the panel
+        // ever can is validating itself against the wrong instrument.
         if (ledDiv.process()) {
             const float dt = ledDiv.getDivision() * args.sampleTime;
             spkyled::fill(inst, ledPanel, dt, kLedSteps, ledDuty);

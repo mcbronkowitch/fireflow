@@ -102,7 +102,7 @@ public:
         return _parts[p].mod().song_position_for_test();
     }
     uint8_t active_pattern_for_test(int p) const {
-        return _parts[p].mod().active_pattern_for_test();
+        return active_pattern(p);
     }
     // What a mod lane actually clocks at, in Hz, plus the clocking mode that
     // decides how that Hz was derived. SuperModulator has held these observers

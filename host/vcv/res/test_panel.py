@@ -1548,6 +1548,12 @@ if (songRung[p].tick(songNorm, spky::kSongLadderCount)) {
     if "elseif(sampler&&!inst.sampler_empty(part))" not in rec_fill_n:
         issues.append("REC LED fill state must remain sampler-only")
 
+    # The one seam this round is about: process() must actually drive the
+    # panel through the law, not just declare the members that could.
+    process_n = compact_cpp(process)
+    if "spkyled::fill(inst,ledPanel,dt,kLedSteps,ledDuty);" not in process_n:
+        issues.append("process must drive the panel through the LED law")
+
     ring_n = compact_cpp(ring)
     if ring_n.count("if(module&&module->inst.engine_id(part)==spky::ENGINE_SAMPLER){") != 1:
         issues.append("sampler ring display must use the exact sampler engine id")
@@ -1601,6 +1607,9 @@ def test_engine_cycle_guard_rejects_representative_regressions():
         ("inst.new_phrase(p);          // turn the knob, get a new melody",
          "if (!samplerPart) inst.new_phrase(p);          // turn the knob, get a new melody",
          "SONG phrase rebuild"),
+        ("spkyled::fill(inst, ledPanel, dt, kLedSteps, ledDuty);",
+         "spkyledFillDisabled(inst, ledPanel, dt, kLedSteps, ledDuty);",
+         "process no longer drives the panel through the LED law"),
     ]
     for before, after, label in mutations:
         mutated = cpp.replace(before, after, 1)

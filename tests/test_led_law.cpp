@@ -143,6 +143,21 @@ TEST_CASE("led G5: the trough scales with depth") {
     CHECK(spkyled::intensity(0.9f, 0.9f) == doctest::Approx(0.9f));
 }
 
+TEST_CASE("led G10: a light value survives the law unchanged") {
+    // The REC lamp's constants were tuned as light output. Round-tripping them
+    // through the gamma must land back on the same brightness, inside the
+    // 16-step raster -- and the three states must stay three states.
+    const int steps = 16;
+    for (float v : {0.15f, 0.25f, 0.50f, 0.70f, 1.0f}) {
+        const float back = static_cast<float>(spkyled::duty_from_light(v, steps))
+                         / static_cast<float>(steps - 1);
+        CHECK(back == doctest::Approx(v).epsilon(0.06));
+    }
+    CHECK(spkyled::duty_from_light(0.15f, steps)
+          != spkyled::duty_from_light(0.25f, steps));
+    CHECK(spkyled::duty_from_light(0.f, steps) == 0);
+}
+
 #include "vcv/src/generated_panel.hpp"
 
 TEST_CASE("led G6: every light is written, and a modulating lane moves") {

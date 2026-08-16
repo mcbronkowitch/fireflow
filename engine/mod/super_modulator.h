@@ -56,7 +56,7 @@ public:
         return _lanes[LANE_PITCH].song_position();
     }
     uint8_t active_pattern_for_test() const {
-        return _lanes[LANE_PITCH].active_pattern();
+        return active_pattern();
     }
     float   lane_rate_hz_for_test(int i) const { return _lanes[i].rate_hz_for_test(); }
     float lane_last_out_for_test(int i) const { return _lanes[i].last_out_for_test(); }

@@ -75,6 +75,18 @@ inline int duty(float intens, int steps) {
     return q < 1 ? 1 : q;
 }
 
+// For values that were tuned as LIGHT output rather than as perceived
+// brightness. The REC lamp's three states were set by eye against Rack's
+// setBrightness long before this law existed, so they are already light
+// levels; duty() expects a perceptual value and applies the gamma, and
+// handing it one of these directly comes out visibly darker -- 0.15 and 0.25
+// collapse onto the same step and the fill meter goes flat over its lower
+// third. Lifting into perceptual space first makes duty() round-trip them.
+inline int duty_from_light(float light, int steps) {
+    if (light <= 0.f) return 0;
+    return duty(std::pow(std::min(1.f, light), 1.f / kGamma), steps);
+}
+
 struct Panel {
     Lamp  lamp[spkyvcv::NUM_LIGHTS];
     float blink = 0.f;                 // free-running, for the phrase lamps
@@ -135,7 +147,11 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
 
     // REC keeps the three-state behaviour it already had: pulsing while
     // recording, steady at the fill level when the part holds content, dark
-    // otherwise and on any non-Sampler engine.
+    // otherwise and on any non-Sampler engine. The three constants below
+    // (1.f, 0.25f, the 0.15f..0.70f fill range) were tuned by eye as LIGHT
+    // output against Rack's setBrightness, before this law existed -- so
+    // they go through duty_from_light(), not duty(), or the gamma darkens
+    // them and the fill meter goes flat over its lower third.
     //
     // 2 Hz, as the code this replaces pulsed it. blink itself runs at 1 Hz
     // because the phrase lamps' windows are written against that, so REC
@@ -149,7 +165,7 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
             v = recPh < 0.5f ? 1.f : 0.25f;
         else if (sampler && !inst.sampler_empty(part))
             v = 0.15f + 0.55f * inst.sampler_fill(part);
-        duty_out[recId[part]] = duty(v, steps);
+        duty_out[recId[part]] = duty_from_light(v, steps);
     }
 }
 
