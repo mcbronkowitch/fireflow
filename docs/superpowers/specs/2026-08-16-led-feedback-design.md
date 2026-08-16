@@ -1,31 +1,33 @@
 # LED feedback — what the panel says while the instrument runs
 
-**Status:** design, not built. Brainstormed 2026-08-16 with the owner.
-**Scope:** the `FireflowHW` module and the shared light inventory. No new
-hardware decisions — the envelope is settled in
-[`docs/hardware/io-budget.md`](../../hardware/io-budget.md) §3.
+**Status:** design, not built. Brainstormed 2026-08-16 with the owner, reviewed
+the same day, and **recomposed after the review** — see §10 for what changed and
+why, because three of the first draft's load-bearing arguments were false against
+the code.
+**Scope:** the `FireflowHW` module and the shared light inventory. The hardware
+envelope is settled in [`docs/hardware/io-budget.md`](../../hardware/io-budget.md)
+§3 and this design does not reopen it.
 
 ## 1. What this is for
 
-The panel currently says almost nothing about what the instrument is doing.
-Ten LEDs are drawn; four of them can light at all, and of those four, two sit
-in a row where they mean nothing.
+The panel says almost nothing about what the instrument is doing. Ten LEDs are
+drawn; six of them cannot light at all, and of the four that can, two sit in a
+row where they mean nothing.
 
-The owner's request was "more feedback about what is happening", and the first
-decision of the round narrowed it: **the LEDs answer "what is modulating right
-now"**, not "what is set" and not "where is the beat". Everything below follows
-from that, with two exceptions added at the end of the round because they cover
-documented blind spots (§3.3, §3.4).
+**The lights answer one question: what is modulating right now, and how hard.**
+Not what is set — the knob shaft already says that. Not where the beat is.
 
-**The design principle, and it decides every placement question:** a light sits
-where the question it answers is asked. A value light sits at the knob whose
-destination it moves — not at the knob that sets its base. A speed light sits at
-the speed knob. A phrase light sits at the arrangement knob.
+**The principle that decides every placement:** a light sits where the question
+it answers is asked. And **the quantity is the modulation excursion, never the
+target value** — the first draft read `target_value()`, which is
+`clampf(_base[slot] + mod, 0.f, 1.f)` (`part.cpp:117`), i.e. knob plus
+modulation. A knob at 0,9 sitting perfectly still would then outshine a knob at
+0,1 swinging full scale, and the display would answer the question §1 rejects.
 
 ## 2. Measured ground
 
-Everything in this section was measured or read on 2026-08-16, not carried over
-from an earlier document.
+Read or measured on 2026-08-16. Nothing here is carried over from an earlier
+document.
 
 **What exists.** `gen_hw_panel.py` draws ten LEDs:
 
@@ -39,238 +41,360 @@ from an earlier document.
 | `SYNC_L` | 174,40 at y 34,0 | no — `HW_ONLY` |
 
 **`HW_ONLY` elements cannot light.** `kHwOnlyCtls` is consumed in exactly one
-place, `Fireflow.cpp:1932`, and only for caption text. The six LEDs above are
-painted into the SVG and have no `LightId`, so nothing can drive them. Any light
-this design relies on must have an ID in the shared inventory.
+place, `Fireflow.cpp:1932`, and only for caption text. Any light this design
+relies on needs a `LightId` in the shared inventory.
 
-**Three of deck A's LEDs are crowded into 8 mm** — `REC_A_L` 108,5, `CAP_A_L`
-112,5, `GATE_A_L` 116,5 — beside the REC button at 101,0. Only `REC_A_L` has a
-neighbour it relates to. `CAP` is the capture sequencer and `REC` is the sampler
-recorder: two unrelated mechanisms, 4 mm apart, drawn identically.
+**Three of deck A's LEDs are crowded into 8 mm** beside the REC button at 101,0,
+and only `REC_A_L` relates to it. `CAP` is the capture sequencer, `REC` is the
+sampler recorder: unrelated mechanisms, 4 mm apart, drawn identically.
 
 **`CAP_A/B_L` indicate a feature that no longer exists.** `engine/mod/capture.h`
-was deleted on 2026-07-14 in `6e6e2de` ("remove capture/replay sequencer from
-engine, host and tests", 562 lines including `tests/test_capture.cpp` and the
-demo scenarios). No capture control appears among the 69 panel parameters and
-`gen_panel.py` does not mention capture at all.
+was deleted on 2026-07-14 in `6e6e2de`, together with `tests/test_capture.cpp`
+and the demo scenarios — 562 lines. No capture control appears among the 69
+panel parameters.
 
-**`SYNC_L` is placed by symmetry, not by meaning.** It is the mirror of
-`TEMPO_L` about the centre and therefore lands beside `SHUFFLE`. There is no
-sync control at that position — "SYNC" on the plate is `COUPLE`'s caption
-(`HW_CAPTION["COUPLE"] = "SYNC"`).
+**`SYNC_L` is placed by symmetry, not meaning.** It is `TEMPO_L`'s mirror about
+the centre and therefore lands beside `SHUFFLE`. "SYNC" on the plate is
+`COUPLE`'s caption (`gen_hw_panel.py:145`).
 
-**The five lanes and their panel homes.** `LANE_SOURCE`, `LANE_SIZE`,
-`LANE_PITCH`, `LANE_MOTION`, `LANE_LEVEL` (`engine/mod/lane_id.h`), each at a
-**fixed** ratio of one master rate (×2, ×½, ×1, ×¾, ×1,5). Only one has an
-unambiguous panel control: `set_target_base` is called from exactly four sites
-in `Fireflow.cpp` — `LANE_SOURCE` from SOURCE unconditionally (`:783`),
-`LANE_PITCH` conditionally (`:805`), `LANE_SIZE` from SUB on some engines and
-pinned to 0,5 otherwise (`:871`, `:873`). `LANE_MOTION` has no base setter (MOD
-is its depth control, and it feeds COLOR and DENS at once — `part.cpp:258-292`)
-and `LANE_LEVEL` has none at all.
+**The lane ratios are not fixed.** `super_modulator.cpp:44-46`:
 
-**What the engine already exposes**, all public and const, all consumed by the
-render host today: `lane_output(p, s)`, `target_value(p, lane)`, `gate(p)`,
-`pitch_gate(p)` (`instrument.h:409-414`), `active_pattern_for_test(p)` (`:97`)
-and `song_position_for_test(p)` (`:94`).
+```cpp
+const float s = (i == LANE_PITCH) ? _pitch_scale : _mod_scale * _tide_mult;
+_lanes[i].set_rate_hz(_base_hz * s * kLaneRatio[i]);
+```
 
-**What it does not expose:** the limiter's gain reduction. `Limiter::process`
-computes `const float gain = _peak > 1.f ? 1.f / _peak : 1.f`
-(`engine/fx/limiter.h:68`) as a local and discards it.
+**TIDE multiplies the four texture lanes and leaves PITCH alone.** Measured
+across the TIDE range (`kTideRatios`, ×1/4…×4), lane rate over master rate:
 
-**Chain budget** (io-budget §3): three 74HC595 give 24 outputs, of which 4 go to
-mux addresses and 5 to mux enables. A fourth register brings it to 32. Brightness
-comes from the mux scan for free at **16 steps** — the scan rewrites the whole
-chain once per address step, sixteen times per sweep, so varying which LED bits
-are set across those writes is PWM at no additional cost. Finer brightness would
-need a PWM loop decoupled from the scan, which is real per-block CPU.
+| TIDE | SOURCE | SIZE | PITCH | MOTION | LEVEL |
+|---|---|---|---|---|---|
+| ×1/4 | 0,500 | 0,125 | 1,000 | 0,188 | 0,375 |
+| ×1 | 2,000 | 0,500 | 1,000 | 0,750 | 1,500 |
+| ×4 | 8,000 | 2,000 | 1,000 | 3,000 | 6,000 |
+
+A 16× spread. In STEP it is worse: `lane_slots()` (`lane_len.h:35-44`) divides by
+TIDE and then rounds and clamps to `[2, 64]`, so at STEPS 16 / TIDE ×1/4 two
+lanes collapse onto the same cycle length. `_pitch_scale` and `_mod_scale` are
+also written independently by COUPLE and DRIFT.
+
+**The "inactive lane" state is not reachable for texture lanes.** `_active[]`
+boots all true (`part.h:639`) and the only writer that runs by itself is
+`Fireflow.cpp:881`, `set_target_active(p, LANE_PITCH, !samplerPart)` — PITCH
+only. And `docs/engine-map.md:380` says of that mechanism: *"a known defect, not
+a contract … do not build a design that relies on it."*
+
+**What the engine exposes**, public and const, consumed by the render host today:
+`lane_output(p, s)`, `target_value(p, lane)`, `gate(p)`, `pitch_gate(p)`
+(`instrument.h:409-414`), `active_pattern_for_test(p)` (`:97`).
+
+**What it does not expose:** the modulation excursion (`_depth`, `_tdepth` and
+`_base` are all private to `Part`), and the limiter's gain reduction —
+`Limiter::process` computes `const float gain = _peak > 1.f ? 1.f / _peak : 1.f`
+(`limiter.h:68`) as a local and discards it.
+
+**The limiter's audible onset is not where its gain reduction starts.** The VCV
+host pushes `set_master_drive(0.40f)` unconditionally (`Fireflow.cpp:962`, pinned
+by `test_panel.py`), so `_pre = 1,48` and `knee = 0,7147`. Measured: `shape()`
+begins bending at bus peak **0,483** while `gain < 1` only from **0,676** — about
+2,9 dB of audible soft saturation before any gain reduction exists to report.
+
+**Chain budget** (io-budget §3): three 74HC595 give 24 outputs, 4 to mux
+addresses and 5 to mux enables; a fourth register brings it to 32. Brightness
+rides the mux scan for free at one step per address, so **the step count equals
+the mux width — 16 with 16:1 parts, 8 with 8:1** — and that choice is explicitly
+still open (io-budget §6).
 
 ## 3. The inventory
 
-**19 LEDs: 8 of today's 10 kept, 2 deleted, 11 new.** Two of the kept ones move,
-and four of them are given IDs they never had. With 4 address and 5 enable lines
-that is **28 of 32 chain outputs**, four spare.
+**19 LEDs: 8 of today's 10 kept, 2 deleted, 11 new.** Two of the kept ones move
+and four are given IDs they never had. With 4 address and 5 enable lines that is
+**28 of 32 chain outputs**, four spare — and one spare if the mux choice lands on
+8:1, which needs nine muxes and therefore nine enables.
 
-### 3.1 Value lights — "how hard is this being pushed right now"
+### 3.1 Excursion lights — "how hard is this lane pushing right now"
 
-Three per deck, each at the knob its lane moves:
+Four per deck, one per texture lane, each at the knob nearest the lane's usual
+destination:
 
-| Light at | Lane | Reads |
+| Light at | Lane | Position A / B (mm) |
 |---|---|---|
-| `SOURCE` (102,25 / 202,55) | `LANE_SOURCE` | `target_value(p, LANE_SOURCE)` |
-| `FILT` (86,25 / 218,55) | `LANE_SIZE` | `target_value(p, LANE_SIZE)` |
-| `COLOR` (23,50 / 281,30) | `LANE_MOTION` | `target_value(p, LANE_MOTION)` |
+| `SOURCE` | `LANE_SOURCE` | 102,25 / 202,55 |
+| `FILT` | `LANE_SIZE` | 86,25 / 218,55 |
+| `COLOR` | `LANE_MOTION` | 23,50 / 281,30 |
+| `COMP` | `LANE_LEVEL` | 106,50 / 198,30 |
 
-`target_value()` and not `lane_output()`: the former is what actually reaches the
-engine, the latter is the raw bipolar lane before the deck is done with it.
+All four read the **excursion** — the modulation term alone, `lane_output(slot) ·
+depth · tdepth`, which is zero when MOD is zero and zero when the lane is not
+moving. Not `target_value()`, which carries the knob (§1), and not the raw
+`lane_output()`, which ignores depth and would show full swing at MOD 0.
 
-**Two lanes deliberately get no value light.** `LANE_PITCH` is already displayed
-— the GATE light flashes on every note it fires, and a second lamp beside it
-would repeat one fact. `LANE_LEVEL` has no destination on the plate and its
-effect is immediately audible as loudness; it is dropped rather than housed
-somewhere arbitrary.
+**The placement claims a lane, not a destination.** This matters because the
+destinations move per engine: `LANE_SOURCE` is timbre on SYNTH, read position on
+SAMPLER and **drive** on BBD; `LANE_MOTION` is stereo width plus COLOR on SYNTH
+and **feedback** on BBD; `LANE_SIZE` is filter cutoff on SYNTH and **grain size**
+on SAMPLER, where its base comes from SUB and not from FILT. A light that
+promised "this is your filter" would be lying on two of five engines. A light
+that says "the lane that lands here is pushing this hard" is true on all five —
+which is why the excursion framing is not merely a fix for §1's contradiction
+but the thing that makes a fixed placement defensible at all.
 
-### 3.2 Speed lights — "how fast is all of this running"
+`LANE_LEVEL` gets a light **because** it has no control anywhere: on a BBD deck
+it is the wet/dry mix (`bbd_engine.h:15`, *"MIX is on LANE_LEVEL, not on a
+knob"*, `bbd_engine.cpp:215`). Its light at COMP is the only readout that
+parameter can ever have.
 
-One per deck, at `RATE` (61,00 / 243,80): a short decaying flash on each master
-cycle wrap.
+**`LANE_PITCH` gets no excursion light**, and this is the one place the design
+accepts a known gap. The GATE light shows when a note fires, not how far the
+lane moved, and on a Sampler deck the lane fires identically whether pitch is
+moving or frozen. The gap is recorded in §9 rather than papered over.
 
-One flash suffices for all five lanes because **their ratios never change**. The
-lanes differ in speed by construction, so the master pulse plus a fixed ladder
-is the whole truth about tempo. TIDE and PACE become readable here without
-lights of their own, because both stretch exactly this pulse — which is why the
-round dropped the owner's original TIDE and PACE lamps: the information is
-already larger and closer to hand.
+### 3.2 Phrase light — "which of the two phrases is sounding"
 
-### 3.3 Phrase light — "which of the two phrases is sounding"
-
-One per deck, at `SONG` (48,00 / 256,80), reading `active_pattern_for_test(p)`.
+One per deck at `SONG` (48,00 / 256,80), reading `active_pattern_for_test(p)`.
 
 `SONG` arranges two stored snapshots into AAAB, ABAB, ABBB, BUILD, ROTATE,
-MIRROR or OFF, and nothing on the instrument reveals which one is currently
-playing. Worse, **structural changes land on phrase boundaries**, so turning
-SONG does nothing for a while — the classic "is this broken?" moment, built in
-by design. This light is the answer to both questions at once.
+MIRROR or OFF and nothing reveals which is playing. Structural changes land on
+phrase boundaries, so turning SONG does nothing for a while — the built-in "is
+this broken?" moment. **Two snapshots are two blink patterns, steady versus
+double-pulse, not two brightness levels:** brightness is the channel the
+excursion lights already use, and two brightness levels on one LED is the least
+reliable discrimination available at arm's length.
 
-### 3.4 Ceiling light — "the limiter is working"
+### 3.3 Ceiling light — "the sound is being squeezed"
 
-One, central, near the master output.
+One, central, near the master output. `MASTER_DRIVE` was retired from the
+hardware panel, so nothing tells you where the ceiling is any more.
 
-`MASTER_DRIVE` was retired from the hardware panel by the control-reduction
-round, so **no control tells you where the ceiling is any more**. When COMP and
-GRIT drive the instrument into the limiter the sound changes and nothing says
-so. This is the one addition in this design that costs an engine change (§6).
+**It reports the audible onset, not the gain reduction:** the measurand is
+`peak > knee` inside `Limiter::process`, not `gain < 1`. Reporting gain
+reduction alone would leave the light dark through the 2,9 dB of soft saturation
+measured in §2 — the very stretch where the sound changes first.
 
-### 3.5 Kept, moved, deleted
+### 3.4 Kept, moved, deleted
 
 | LED | Decision |
 |---|---|
-| `REC_A/B_L` | **kept in place** — the only one of the top-row three with a neighbour it belongs to. Behaviour unchanged (`Fireflow.cpp:1018-1033`) |
-| `FLOW_A/B_L` | **kept in place, and given an ID.** In FLOW, SONG, VARY and FORM are inert, and three of the four knobs in that row are exactly those — the light says whether the row it sits in is live |
-| `GATE_A/B_L` | **moved** out of the timing row into the VOICE row (y 34), where the note is shaped. Behaviour unchanged (slewed gate, `Fireflow.cpp:1011-1016`) |
-| `SYNC_L` | **moved** to the `CLOCK` jack, where an external clock actually arrives, and given an ID |
-| `TEMPO_L` | **kept in place**, given an ID. The beat is not the modulation cycle; it does not duplicate §3.2 |
+| `REC_A/B_L` | **kept** — the only one of the top-row three with a neighbour it belongs to. Behaviour unchanged (`Fireflow.cpp:1018-1033`) |
+| `FLOW_A/B_L` | **kept, given an ID.** It disambiguates the one thing the row cannot show: whether STEPS is exactly at 0. In FLOW, `SONG` is inert and `MELODY` is inert on the melody but still live on the texture lanes and on a Sampler deck — the light is worth having, but not for the sweeping reason the first draft gave (§10) |
+| `GATE_A/B_L` | **moved** out of the timing row into the VOICE row (y 34), where the note is shaped. Behaviour unchanged |
+| `SYNC_L` | **moved** to the `CLOCK` jack, where an external clock arrives, and given an ID |
+| `TEMPO_L` | **kept**, given an ID |
 | `CAP_A/B_L` | **deleted** — the feature has not existed since 2026-07-14 |
 
 ## 4. The display law
 
-### 4.1 Value lights: three states
+### 4.1 Intensity: an envelope sets the ceiling, the excursion breathes inside it
 
-- **dark** — the lane is inactive. This happens by itself where it should: a
-  Sampler deck's PITCH lane is deactivated by the host, so its light is dark
-  without a special case.
-- **glow** — active but not moving: a fixed low floor, distinguishable from dark
-  at arm's length.
-- **breathing** — brightness follows the value.
+Per light, from the excursion `e`:
 
-"Moving or not" comes from a one-pole lowpass over `|Δ target_value|` per block,
-one per lane. Ten of those at block rate is not a measurable cost.
+- **`E`** — a peak-tracked envelope of `|e|`, fast attack, slow release. This is
+  the modulation *depth*.
+- **intensity** = `E · (kFloor + (1 − kFloor) · |e| / max(E, ε))`.
 
-**Why three states and not two:** brightness alone lies. A lane that is switched
-on but modulating by zero sits at a constant value and would glow steadily,
-claiming activity it does not have — and "is this knob doing anything" is a
-question this instrument has burned several rounds on already.
+So the trough of every breath is `kFloor · E` and its peak is `E`. Three
+readings fall out of one formula instead of being bolted on:
 
-### 4.2 Brightness is gamma-corrected
+- **dark** — `E = 0`: nothing is modulating here. Reachable, honest, and the
+  common case at MOD 0.
+- **dim breath** — shallow modulation.
+- **bright breath** — deep modulation.
 
-LED perception is strongly non-linear; a linearly driven breath looks static
-across its top half. The law applies a gamma curve before quantisation. Without
-it the display computes correctly and looks wrong.
+**Why the floor is proportional and not fixed:** a fixed floor would make a lane
+parked at zero look the same as one modulating gently, and would put every
+breath's trough through the same dark band, which reads as a loose contact at
+the slow rates this instrument is built for. A proportional floor also solves
+what the review called the display's worst failure: **a very slow, deep
+modulation shows as a bright steady light — "a lot is happening here, slowly" —
+rather than as inert**, because `E` is large even when `|e|` barely moves.
 
-### 4.3 Sixteen steps, on both hosts
+### 4.2 Brightness is gamma-corrected, in the correct direction
 
-The law quantises to **16 brightness levels even in Rack**, where the host could
-do better, because 16 is what the mux scan gives the hardware for free (§2). A
-Rack module that breathes more finely than the panel ever can is a design that
-validates itself against the wrong instrument.
+Perceived lightness goes roughly as the cube root of duty cycle, so
+perceptual linearity needs **duty = intensity^γ with γ ≈ 2,2**, which puts the
+midpoint duty *below* the linear midpoint (0,5^2,2 ≈ 0,22). A linear duty ramp
+looks static across its top half.
 
-### 4.4 Event lights
+### 4.3 Quantisation must not swallow the bottom of the breath
 
-`RATE`, `GATE`: a flash at the event, decaying with a fixed coefficient — the
-shape the existing GATE light already uses. `SONG`: steady, two brightness
-levels for the two snapshots (not a colour change; the panel has one LED colour
-per zone). `FLOW`, `SYNC`, `TEMPO`, ceiling: state, on or off, with the ceiling
-light decaying rather than blinking so brief peaks stay visible.
+The step count is **the mux width, not a constant 16** — the 8:1/16:1 choice is
+open (§2), so it is a parameter of the law and the gates are written against it.
+
+Naive quantisation of a gamma curve at 16 steps sends everything below intensity
+≈ 0,37 to duty 0, i.e. **off** — the bottom third of every breath would be
+indistinguishable from "nothing is modulating", destroying §4.1's whole point.
+The law therefore requires: **every non-zero intensity maps to at least one duty
+step, and only intensity exactly 0 maps to duty 0.** Lift, then quantise.
+
+### 4.4 Event and state lights
+
+`GATE`: unchanged. `SONG`: steady versus double-pulse (§3.2). `FLOW`, `SYNC`,
+`TEMPO`: state. Ceiling: decays rather than blinks, so brief peaks stay visible.
+
+**No light uses the existing GATE coefficient as an event-flash model.** That
+coefficient (`Fireflow.cpp:1014`, `0.05f` applied per sample) is τ ≈ 0,42 ms —
+edge-softening on a sustained gate, not a decay. An event flash needs its own,
+of order 100–200 ms.
 
 ## 5. Placement
 
-Ten of the eleven new lights sit beside controls that already exist, so they
-mirror by themselves — the panel's mirror-symmetry guard covers them without new
-rules.
-Exact millimetres are the generator's business and are settled by the existing
-guards (clearance circles, caption gaps, the 8,03 mm Rack jack body), not by
-this document. The two placements that are not simply "beside an existing knob"
-are `GATE` (VOICE row) and the ceiling light (centre column, near the master
-output); both need a position that survives `hw_panel_guard`.
+Ten of the eleven new lights sit beside controls that already exist; the ceiling
+light is the exception and needs a position in the centre column that survives
+`hw_panel_guard`.
+
+**They do not mirror by themselves.** `place()` (`gen_hw_panel.py:236-257`)
+routes `_A`/`_B` enums through `DECK_POS`, but light enums end in `_L` and fall
+through to `LIGHT_POS`, which raises `KeyError` if an entry is missing. Every new
+light needs a hand-written, hand-mirrored `LIGHT_POS` pair; `test_mirror_symmetry`
+checks them, it does not generate them.
+
+Three coupling constraints the implementation will hit:
+
+- `test_hw_panel.py:32` requires `HW_LIGHTS` and `gp.LIGHTS` to match **in order**.
+- `gen_panel.py:729`: the C++ side centres the LED rings on `kLightCtls[0..1]`,
+  so the gate lights must keep indices 0 and 1.
+- The large module must exclude the new lights via `STATIC_LIGHTS`
+  (`gen_panel.py:739`) **and** skip them widget-side, or its panel draws 19 LEDs
+  at positions it has to invent.
+
+Whether an LED fits beside `FILT_A` is not assumed: `FILT_A` (86,25/53,00, r 8,5)
+and `SOURCE_A` (102,25/50,22, r 6,0) are 16,24 mm apart, so the direct line
+between them has no legal point under `test_hw_panel.py`'s `d ≥ a.r + b.r`. The
+light goes off-axis, and the guard decides.
 
 ## 6. What gets built
 
-**Only the `FireflowHW` module.** Both widgets share one `Fireflow` module
-class, so the display law is computed once and the large module simply does not
-draw the new lights.
+**Only the `FireflowHW` module.** Both widgets share one `Fireflow` module class,
+so the law is computed once and the large module simply does not draw the new
+lights.
 
-1. **`res/gen_panel.py`** — 15 new `LightId`s in the shared inventory: eleven for
-   the new lights (six value, two speed, two phrase, one ceiling) and four for
-   lamps that are drawn today but cannot light — `FLOW_A/B_L`, `TEMPO_L`,
-   `SYNC_L`. With the four that already have IDs (`GATE_A/B_L`, `REC_A/B_L`)
-   that is 19. **Trap:** the parameter and light number spaces must not collide
+1. **`engine/instrument.h`** — `lane_excursion(p, slot) const`, returning the
+   modulation term alone. The host cannot derive it: `_depth`, `_tdepth` and
+   `_base` are private to `Part`.
+2. **`engine/fx/limiter.h`** + **`engine/instrument.h`** — store and expose
+   whether the shaper is bending (`peak > knee`) and by how much. **Note the
+   early return at `limiter.h:66`**, `if (_pre == 1.f && _peak <= 1.f && peak <=
+   knee) return;` — it skips line 68 entirely, so a naive "store what line 68
+   discards" leaves a stale value on that path.
+3. **`res/gen_panel.py`** — 15 new `LightId`s: eleven for the new lights (eight
+   excursion, two phrase, one ceiling) and four for lamps drawn today that cannot
+   light (`FLOW_A/B_L`, `TEMPO_L`, `SYNC_L`). With the four that already have IDs
+   that is 19. **Trap:** parameter and light number spaces must not collide
    (`Fireflow.cpp:1571`, `REC_A_L == 2 == DENSITY_A`).
-2. **`res/gen_hw_panel.py`** — delete `CAP_A/B_L`, move `GATE_A/B_L` and
-   `SYNC_L`, add eleven positions.
-3. **`src/led_law.hpp`** (new) — the law as a pure, Rack-free unit: value and
-   movement measure in, quantised brightness out. This exists so the law can be
-   tested; `Fireflow.cpp` keeps only the wiring.
-4. **`src/Fireflow.cpp`** — feed the law in `process`, drive 19 lights.
-5. **`engine/fx/limiter.h`** and **`engine/instrument.h`** — store the gain
-   factor `limiter.h:68` currently discards and expose it as a const accessor.
-   About three lines, and the only engine change in this design.
+4. **`res/gen_hw_panel.py`** — delete `CAP_A/B_L`, move `GATE_A/B_L` and
+   `SYNC_L`, add eleven `LIGHT_POS` entries — five mirrored pairs plus the
+   single ceiling light.
+5. **`src/led_law.hpp`** (new) — the law as a pure, Rack-free unit: excursion in,
+   quantised duty out. It exists so the law can go red in `spky_tests`;
+   `Fireflow.cpp` keeps only the wiring.
+6. **`src/Fireflow.cpp`** — feed the law, drive 19 lights.
+
+Two engine additions, both const observers. The first draft's RATE pulse would
+have needed a third (there is no phase accessor on `Instrument`); it is gone.
 
 ## 7. Gates
 
-Every gate must be shown red once before it is trusted.
+Each must be shown red once before it is trusted.
 
-- **G1 — three states are distinguishable.** For a lane driven inactive, active
-  but static, and moving, `led_law` returns brightness in three disjoint bands.
-- **G2 — a static lane is not dark and not breathing.** At a constant value the
-  law settles on the glow floor within a bounded number of blocks.
-- **G3 — sixteen levels, exactly.** Sweeping the input across its whole range
-  yields at most 16 distinct outputs, and all 16 are reachable.
-- **G4 — gamma is applied.** The output is not proportional to the input:
-  midpoint brightness sits measurably above the linear midpoint.
-- **G5 — the panel inventory is right.** `hw_panel_guard` asserts 19 lights, no
-  `CAP_*`, `GATE_*` and `SYNC_L` at their new positions, and every new light
-  mirrored.
-- **G6 — no light ID collides with a parameter ID** (`panel_guard`).
-- **G7 — the limiter accessor reports what the limiter did.** Driving the
-  instrument past the ceiling returns a value below 1; leaving it below returns
-  exactly 1.
+- **G1 — dark means zero modulation, and it is reachable.** On a real `Fireflow`
+  module at MOD 0, all eight excursion lights read duty 0. With MOD up and a lane
+  moving, the same light reads non-zero. *(Also a wiring gate: it fails if the
+  light is never written.)*
+- **G2 — no non-zero intensity quantises to off.** Sweeping intensity across its
+  whole range, the only input producing duty 0 is exactly 0.
+- **G3 — the step count is the mux width, and every step is reachable.** At the
+  configured width N, the law produces exactly N distinct duties and all N occur.
+- **G4 — gamma runs in the correct direction.** Duty at intensity 0,5 sits
+  measurably *below* half of full scale, and `duty(v)^(1/γ)` tracks `v` within
+  tolerance.
+- **G5 — the trough scales with depth.** For a deep and a shallow modulation at
+  equal instantaneous phase, the deep light's trough is brighter than the
+  shallow light's trough; and a lane whose `E` is large but whose `|e|` is
+  frozen stays bright rather than decaying to dark.
+- **G6 — every light is written every block.** Instantiate `Fireflow`, run a
+  handful of blocks, assert all 19 brightnesses have been set and that a
+  modulating lane's light changes across blocks. This is the gate that would
+  have caught six LEDs sitting on the panel for months with no `LightId`.
+- **G7 — the panel inventory is right.** 19 lights, no `CAP_*`, `GATE_*` and
+  `SYNC_L` at their new positions, every new light mirrored. Replaces
+  `test_hw_panel.py`'s hard-coded `kinds.get("L") == 6` and `total_leds == 10`.
+- **G8 — no light ID collides with a parameter ID.** Check first whether
+  `panel_guard` already compares the two enum spaces; `test_hw_panel.py:169` only
+  asserts the tables exist, so this may be new work rather than an existing guard.
+- **G9 — the ceiling light tracks the audible onset, in order.** Drive the
+  instrument above the knee, then below, then assert the reported value returns
+  to exactly "not bending". Written as two independent cases the second passes
+  trivially from the init value and cannot catch the `limiter.h:66` staleness.
+  And it must light in the band where `peak > knee` but `gain == 1`.
 
-G1–G4 and G7 are unit tests in `spky_tests`; G5 and G6 are panel guards.
+G1–G6 and G9 are unit tests in `spky_tests`; G7 and G8 are panel guards.
 
 ## 8. Deliberately not delivered
 
-- **A light per lane.** Five lamps in a row say *that* something modulates and
-  never *what*, which is the whole value. The round rejected this explicitly.
-- **`LANE_LEVEL`.** No destination on the plate; audible anyway.
-- **TIDE and PACE lamps**, from the owner's original list — the RATE pulse shows
-  their effect at four times the size.
-- **An audio-input light.** Considered and dropped this round; it is cheap
-  (measurable at the host boundary, no engine change) and can be added later
-  into the four spare chain outputs.
-- **Anything in the large `Fireflow` module.** It gets the IDs and draws none of
-  them.
-- **Finer brightness than 16 steps**, which would cost a decoupled PWM loop and
-  feed the unexplained block-rate artifact (io-budget §6).
+- **A light per lane in a row.** Five lamps side by side say *that* something
+  modulates and never *what*. Rejected in round 1.
+- **A deck speed pulse at RATE.** Round 1 justified one pulse per deck with
+  "the lane ratios never change"; §2 measures a 16× spread across TIDE. The
+  breath is the rate display — three lanes breathing at different speeds show
+  the ratios directly, and TIDE becomes visible as the lights drifting apart,
+  which is the very thing the deck pulse could not show.
+- **TIDE and PACE lamps**, from the owner's original list — see above; their
+  effect is legible in the breath.
+- **An ENGINE indicator per deck.** The review's second recommendation, declined:
+  ENGINE is a five-zone detented pot and its pointer shows the zone, while one
+  LED would have to encode five states as a blink code — worse to read than the
+  pointer. The excursion framing (§3.1) also removes the argument's force, since
+  a light no longer claims a destination that the engine can move.
+- **An audio-input light.** Cheap and needs no engine change; deferred to the
+  spare outputs rather than dropped.
+- **A `LANE_PITCH` excursion light** (§3.1) and **a per-deck output-level lamp**,
+  which the review proposed as a way to answer "why is deck B silent". Both are
+  live candidates for the spare outputs; neither is designed here.
+- **Anything in the large `Fireflow` module.**
 
-## 9. Consequences
+## 9. Consequences and open risks
 
-- **The chain needs its fourth 74HC595** — one part, no GPIO. It was going to
-  need it for any LED expansion; this design fixes the number at 19 of 32 with
-  four spare after the mux lines.
-- **Nothing here is measured on hardware.** The 16-step figure and the "costs no
-  CPU" claim are derived from the chain topology (io-budget §3), not timed on a
-  board. The Rack implementation is the design's only proving ground until
-  bring-up.
-- **The roadmap and README still list M3 "Capture sequencer" as done**, which
-  §2 shows to be false since 2026-07-14. That is a documentation defect this
-  round uncovered and does not fix; it belongs in a status commit, not here.
+- **The chain needs its fourth 74HC595** — one part, no GPIO.
+- **The two headline numbers hang on an undecided part choice.** With 8:1 muxes
+  it is 8 duty steps, nine muxes and nine enables: 19 + 3 + 9 = 31 of 32, and
+  the four spare outputs become one. §4.3 is written against the width for that
+  reason, and no number in this design should be quoted as settled until the
+  part is chosen.
+- **The refresh rate is unmeasured and is the largest visual risk.** PWM refresh
+  equals the mux sweep rate. Blocks run at 500 Hz, io-budget §6 records that the
+  per-channel settling time is unmeasured and that a full sweep need not run
+  every block. If it cannot, an N-step sweep lands near 30 Hz and the LEDs
+  strobe — worst at low duty, which is where the gamma curve puts most of the
+  breath.
+- **`LANE_PITCH` has no excursion display**, and the RANGE law that flattens a
+  phrase onto one scale degree (engine-map §7) stays undiagnosable from the
+  panel.
+- **Nothing here is measured on hardware.** The Rack module is the design's only
+  proving ground until bring-up.
+
+## 10. What the review changed
+
+The first draft was reviewed on 2026-08-16 and three load-bearing arguments did
+not survive contact with the code. All three were re-verified before rewriting.
+
+1. **The lights showed the knob, not the modulation.** They read
+   `target_value()`, which is base plus modulation (`part.cpp:117`) — the
+   quantity §1 explicitly rejects. Now the excursion, which also removed the
+   dependency on `target_value`'s divergence from `_tg` on Sampler decks, made
+   the FILT placement honest (the FILT knob enters the engine *after* the lane,
+   so it never moved that light), and gave the dark state something to mean.
+2. **"The lane ratios never change" was false**, by 16× across TIDE, measured.
+   It was the sole justification for one pulse per deck and for dropping the
+   owner's TIDE lamp. The pulse is gone; the breath carries the rate.
+3. **The dark state was unreachable.** `_active[]` is written for `LANE_PITCH`
+   only, and PITCH has no light — so the three-state law was a two-state law and
+   its gate tested a fixture. The proportional floor (§4.1) makes the states fall
+   out of one quantity instead.
+
+Smaller corrections: the gamma gate ran backwards; quantisation at 16 steps
+swallowed the bottom third of the breath; the ceiling light measured gain
+reduction instead of the audible onset, and its gate could not go red for the
+one bug it can have; `FORM` was cited as a hardware control although the
+control-reduction round retired it; the RATE pulse needed a phase accessor the
+first draft did not count; the lights do not mirror by themselves; and §9 named
+a documentation defect that had already been fixed two commits earlier.
