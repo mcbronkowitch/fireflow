@@ -8,41 +8,46 @@
   Everything below the comment is public.
 -->
 
-## FireFlow 2.21.4
+## FireFlow 2.21.5
 
-In STEP a deck used to play every composed note at the same level and the same
-length. Pitch and placement differed; nothing else did, which is why a dense
-pattern read as a machine running rather than as a phrase being played. This
-release gives those notes a contour — **without adding a single control.**
+The hardware panel draft (`FireflowHW`) said nothing about what the instrument
+was doing. Ten LEDs were drawn, six of them could not light at all, and two of
+the four that could sat in a row where they meant nothing. This release makes
+the plate talk: **19 lamps, and every one of them answers the question that is
+asked where it sits.** Nothing in the audio path changed, and the large
+`Fireflow` module is untouched.
 
-**The accent comes from the groove that is already there.** Every note deck
-already ranks the slots of its groove cell, and DENSE decides how far down that
-ranking it fires. The first slot to sound is the anchor; the ones DENSE reveals
-later are, by construction, further down the rank. That rank is now the accent:
-the anchor strikes at full strength, and each note DENSE adds strikes a little
-softer and a little shorter than the one before it. Turn DENSE down to a single
-note and it is loud again. The animation appears as the pattern fills in, which
-is where the ear wants it.
+**The lights show modulation excursion, not knob position.** That distinction is
+the whole design. A knob parked at 0,9 sitting perfectly still would outshine a
+knob at 0,1 swinging full scale if the lamps read the modulated target — so they
+read the *swing* instead. Four lamps per deck, at the knob nearest each lane's
+usual destination (`SOURCE`, `FILT`, `COLOR`, `COMP`), track their lane's
+excursion with a peak-held envelope: dark when nothing moves, a dim breath when
+the modulation is shallow, a bright one when it is deep. The envelope sets the
+ceiling and the instantaneous excursion breathes inside it, so depth and motion
+are both readable from one lamp.
 
-**DEC is the ceiling.** The accent shortens notes only as far as the DEC knob
-has opened the envelope: at DEC 0 it cannot touch ring time at all, at DEC 1 the
-weakest note of a full pattern decays in about a third of the set time. The knob
-still decides how long a note is; the accent only ever subtracts from it. Level
-works the same way, down to 30 % at the far end, and it composes with the
-existing chord compensation instead of replacing it — chords keep their level.
+**TEMPO is the one metronome on the plate.** A short tick on the transport
+downbeat, scaled by TEMPO and PACE rather than by wall clock, so it stays a beat
+marker instead of eating the bar at high BPM. **SONG** flashes for 150 ms when a
+deck switches its A/B snapshot and goes dark again — the earlier double-pulse
+became unreadable once the FLOW melody engine started advancing SONG on its own.
+**GATE** reports that a note is sounding, straight through with no smoothing.
+**CEIL**, outboard of the OUT R jack, shows the master limiter bending — its
+audible onset, not its gain reduction. **REC** keeps the three states it always
+had.
 
-**FLOW is untouched, on purpose.** A FLOW deck is a drone, and per-note dynamics
-there would be animation where the design wants stillness. The accent is
-computed only in STEP and reads as zero everywhere else. SYNTH, WAVE and BODY
-spend it; SAMPLER and BBD ignore it, since neither has a per-note envelope for
-it to scale.
+**Two dead lamps are gone.** `CAP_A`/`CAP_B` indicated the capture sequencer,
+which was deleted a month ago; they had been drawn 4 mm from the unrelated REC
+button ever since. Three lamps are deliberately dark for now: `SYNC`, and the two
+pad lamps at MOD and SHIFT, which need a latch that does not exist yet. They are
+written every tick rather than skipped, and a test asserts it.
 
-**Fixed: a manual strike is always full strength.** Tapping PLAY or TRIG used to
-inherit whatever accent the sequencer had last pushed into the engine, so a
-press could land at roughly 40 % velocity for no visible reason. A hand-played
-note is an anchor by definition and now strikes accordingly.
-
-Both accent depths are first-pass by-ear values and may still move.
+Under the hood the display law lives in `host/vcv/src/led_law.hpp`, free of Rack
+and unit-tested on its own, and the engine gained two const observers —
+`lane_excursion()` and the limiter's bend — that read state without touching it.
+Brightness floor, gamma and release are by-ear candidates awaiting a look at real
+hardware; on screen they are already honest.
 
 ## Install
 
