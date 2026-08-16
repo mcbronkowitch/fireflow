@@ -107,10 +107,11 @@ still open (io-budget §6).
 
 ## 3. The inventory
 
-**19 LEDs: 8 of today's 10 kept, 2 deleted, 11 new.** Two of the kept ones move
+**21 LEDs: 8 of today's 10 kept, 2 deleted, 13 new.** Two of the kept ones move
 and four are given IDs they never had. With 4 address and 5 enable lines that is
-**28 of 32 chain outputs**, four spare — and one spare if the mux choice lands on
-8:1, which needs nine muxes and therefore nine enables.
+**30 of 32 chain outputs**, two spare — **and one register short if the mux
+choice lands on 8:1**, which needs nine muxes and therefore nine enables:
+21 + 3 + 9 = 33. That costs a fifth 74HC595 and no pin (§9).
 
 ### 3.1 Excursion lights — "how hard is this lane pushing right now"
 
@@ -171,7 +172,35 @@ hardware panel, so nothing tells you where the ceiling is any more.
 reduction alone would leave the light dark through the 2,9 dB of soft saturation
 measured in §2 — the very stretch where the sound changes first.
 
-### 3.4 Kept, moved, deleted
+### 3.4 Modifier lights — "this button is latched"
+
+One at `MODBTN` (290,80 / 114,00) and one at `SHIFTBTN` (14,00 / 114,00), the two
+reserved pads in the jack row.
+
+**These are the only lights here that prevent a fault rather than improve a
+feel.** A momentary button needs no indicator — you can feel that you are
+pressing it. A *latched* modifier silently changes what every other control
+means, so an instrument left with SHIFT latched behaves wrongly on every knob
+with nothing to say why. If the buttons also take the usual double behaviour
+(hold = momentary, tap = latch), the light is the only thing that separates the
+two states.
+
+**This design fixes one thing about them and nothing else: lit means latched.**
+Both pads are unwired today (`HW_ONLY`, no function). The functions the owner
+intends — freely mappable CV inputs, and per-lane modulation depth set through
+MOD — are not designed here, and neither is any second state such as a blink for
+"a mapping is armed". The light is placed, given an ID and defined for latch;
+the round that builds the function inherits a working lamp instead of opening
+the plate again.
+
+Two forward notes, recorded so the later round does not re-derive them. **MOD's
+intended job lands on exactly the quantity §3.1 displays** — while a depth is
+being adjusted, that lane's excursion light responds directly, so the display
+supports the feature without being designed for it. And a mapping mode has to
+show *which target is armed*; the eight excursion lights are the natural surface
+for that, and they are individually addressable already.
+
+### 3.5 Kept, moved, deleted
 
 | LED | Decision |
 |---|---|
@@ -238,7 +267,7 @@ of order 100–200 ms.
 
 ## 5. Placement
 
-Ten of the eleven new lights sit beside controls that already exist; the ceiling
+Twelve of the thirteen new lights sit beside controls that already exist; the ceiling
 light is the exception and needs a position in the centre column that survives
 `hw_panel_guard`.
 
@@ -254,7 +283,7 @@ Three coupling constraints the implementation will hit:
 - `gen_panel.py:729`: the C++ side centres the LED rings on `kLightCtls[0..1]`,
   so the gate lights must keep indices 0 and 1.
 - The large module must exclude the new lights via `STATIC_LIGHTS`
-  (`gen_panel.py:739`) **and** skip them widget-side, or its panel draws 19 LEDs
+  (`gen_panel.py:739`) **and** skip them widget-side, or its panel draws 21 LEDs
   at positions it has to invent.
 
 Whether an LED fits beside `FILT_A` is not assumed: `FILT_A` (86,25/53,00, r 8,5)
@@ -276,18 +305,19 @@ lights.
    early return at `limiter.h:66`**, `if (_pre == 1.f && _peak <= 1.f && peak <=
    knee) return;` — it skips line 68 entirely, so a naive "store what line 68
    discards" leaves a stale value on that path.
-3. **`res/gen_panel.py`** — 15 new `LightId`s: eleven for the new lights (eight
-   excursion, two phrase, one ceiling) and four for lamps drawn today that cannot
-   light (`FLOW_A/B_L`, `TEMPO_L`, `SYNC_L`). With the four that already have IDs
-   that is 19. **Trap:** parameter and light number spaces must not collide
+3. **`res/gen_panel.py`** — 17 new `LightId`s: thirteen for the new lights (eight
+   excursion, two phrase, two modifier, one ceiling) and four for lamps drawn
+   today that cannot light (`FLOW_A/B_L`, `TEMPO_L`, `SYNC_L`). With the four
+   that already have IDs that is 21. **Trap:** parameter and light number spaces
+   must not collide
    (`Fireflow.cpp:1571`, `REC_A_L == 2 == DENSITY_A`).
 4. **`res/gen_hw_panel.py`** — delete `CAP_A/B_L`, move `GATE_A/B_L` and
-   `SYNC_L`, add eleven `LIGHT_POS` entries — five mirrored pairs plus the
+   `SYNC_L`, add thirteen `LIGHT_POS` entries — six mirrored pairs plus the
    single ceiling light.
 5. **`src/led_law.hpp`** (new) — the law as a pure, Rack-free unit: excursion in,
    quantised duty out. It exists so the law can go red in `spky_tests`;
    `Fireflow.cpp` keeps only the wiring.
-6. **`src/Fireflow.cpp`** — feed the law, drive 19 lights.
+6. **`src/Fireflow.cpp`** — feed the law, drive 21 lights.
 
 Two engine additions, both const observers. The first draft's RATE pulse would
 have needed a third (there is no phase accessor on `Instrument`); it is gone.
@@ -312,10 +342,10 @@ Each must be shown red once before it is trusted.
   shallow light's trough; and a lane whose `E` is large but whose `|e|` is
   frozen stays bright rather than decaying to dark.
 - **G6 — every light is written every block.** Instantiate `Fireflow`, run a
-  handful of blocks, assert all 19 brightnesses have been set and that a
+  handful of blocks, assert all 21 brightnesses have been set and that a
   modulating lane's light changes across blocks. This is the gate that would
   have caught six LEDs sitting on the panel for months with no `LightId`.
-- **G7 — the panel inventory is right.** 19 lights, no `CAP_*`, `GATE_*` and
+- **G7 — the panel inventory is right.** 21 lights, no `CAP_*`, `GATE_*` and
   `SYNC_L` at their new positions, every new light mirrored. Replaces
   `test_hw_panel.py`'s hard-coded `kinds.get("L") == 6` and `total_leds == 10`.
 - **G8 — no light ID collides with a parameter ID.** Check first whether
@@ -345,6 +375,11 @@ G1–G6 and G9 are unit tests in `spky_tests`; G7 and G8 are panel guards.
   LED would have to encode five states as a blink code — worse to read than the
   pointer. The excursion framing (§3.1) also removes the argument's force, since
   a light no longer claims a destination that the engine can move.
+- **Any second state on the modifier lights.** A blink for "a mapping is armed",
+  a distinction between momentary and latched engagement, or anything that
+  encodes *which* target is selected — all of it belongs to the round that
+  builds the function (§3.4). This design fixes only "lit means latched", so the
+  lamp is wired and waiting rather than speculatively defined.
 - **An audio-input light.** Cheap and needs no engine change; deferred to the
   spare outputs rather than dropped.
 - **A `LANE_PITCH` excursion light** (§3.1) and **a per-deck output-level lamp**,
@@ -356,8 +391,9 @@ G1–G6 and G9 are unit tests in `spky_tests`; G7 and G8 are panel guards.
 
 - **The chain needs its fourth 74HC595** — one part, no GPIO.
 - **The two headline numbers hang on an undecided part choice.** With 8:1 muxes
-  it is 8 duty steps, nine muxes and nine enables: 19 + 3 + 9 = 31 of 32, and
-  the four spare outputs become one. §4.3 is written against the width for that
+  it is 8 duty steps, nine muxes and nine enables: 21 + 3 + 9 = **33**, which
+  overruns the fourth register and needs a fifth — a part, not a pin.
+  At 16:1 the same inventory leaves two spare. §4.3 is written against the width for that
   reason, and no number in this design should be quoted as settled until the
   part is chosen.
 - **The refresh rate is unmeasured and is the largest visual risk.** PWM refresh
