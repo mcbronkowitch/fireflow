@@ -414,6 +414,52 @@ Die Liste von 2026-08-08 nannte an erster Stelle die Einstufung der Parameter.
   16:1 mit Adressen aus der 595-Kette (§3). Die Umschaltung muss geschrieben
   werden, sie steht in keinem Plan, und niemand hat sie in CPU-Zeit veranschlagt.
 - **Die Wahl 8:1 gegen 16:1.** Hängt an Verfügbarkeit und Bestückungspreis.
+
+### Ist das eine Zeit- oder eine Machbarkeitsfrage?
+
+Gestellt am 2026-08-16, weil die zwei Posten oben zusammen nach mehr klingen
+als nach Fleißarbeit. **Antwort: überwiegend Zeit, aber nicht ausschließlich.**
+
+**Wofür die Machbarkeit spricht:** 16:1-Muxe an einem ADC sind das
+Standardverfahren jedes Hardware-Synths. Der Entwurf ist elektrisch richtig,
+die Kapazität passt mit Reserve in jeder Zeile (§3), und der DMA-Scan der
+`AdcHandle` bleibt nutzbar — es fehlt die Kanalumschaltung, nicht das Konzept.
+
+**Drei Stellen, an denen es trotzdem klemmen kann, nach Ernst sortiert:**
+
+1. **Das CPU-Budget — die reale Gefahr.** Der Gate `instrument_worst_bbd_dtcm`
+   steht bei 96,43 % `pct_max`, also 3,57 Punkte Reserve — gemessen auf dem
+   **Seed**. Auf dem Submodule ist jede Last teurer; dort bleiben **2,17
+   Punkte** (`docs/bench/2026-08-07-seed-vs-patch-sm.md`). Ein pro Block
+   gebitbangter Ketten-Write plus Kanalauswertung landet genau in dieser
+   Reserve. Beherrschbar — ein voller Sweep muss nicht jeden Block laufen, die
+   Potis sind auch bei einem Sweep alle paar Blöcke schnell genug —, aber nicht
+   gratis, und **ungemessen**. Wenn etwas den Plan kippt, dann das.
+2. **Der ungeklärte Block-Artefakt.** Auf dem Board liegt ein Störton auf der
+   Blockrate, 28 dB über dem Desktop-Referenzpunkt. Zwei Messungen vom
+   2026-08-08 sagen dazu: den Callback zwingen, nur Nullen zu schreiben, ändert
+   den Pegel **gar nicht** (−59,5 dBFS in beiden Fällen); die Leerlaufzeit im
+   Block mit einer `nop`-Schleife füllen, senkt ihn um **7,5 dB**. Der Störer
+   nimmt also nicht den Signalweg, sondern hängt daran, **wie Rechenaktivität im
+   Block verteilt ist** — und die Ursache ist bis heute nicht benannt. Eine
+   periodische GPIO-Salve pro Block ist genau eine neue Quelle dieser Sorte.
+   Das ist keine Spekulation über einen Zusammenhang, sondern die Fortschreibung
+   einer vorliegenden Messung; ob sie eintritt, ist offen.
+3. **Die Einschwingzeit pro Kanal.** Sie entscheidet, wie viele Adressschritte
+   pro Block gehen — nicht, ob es überhaupt geht. Der harmloseste der drei.
+
+**Der Rückfallweg, falls 1 oder 2 zuschlagen** (Vorschlag, keine Entscheidung,
+nirgends spezifiziert): ein Co-Controller auf der Control-PCB, der Potis und
+Taster selbst scannt und die Werte seriell schickt. Dann braucht das Audio-MCU
+**gar keine Sense-Pins mehr** — weder die vier rohen noch die Mux-Kette —, der
+Scan-Aufwand verschwindet vollständig aus dem Audio-Budget, und A2/A3 werden als
+UART frei, was sie von Haus aus sind. Kostet ein Bauteil und ein zweites
+Firmware-Projekt.
+
+**Fazit für die Planung:** die Machbarkeit steht nicht zur Debatte, es gibt
+zwei Wege und der Rückfallweg ist der sauberere. Zur Debatte steht der Aufwand
+und ob die dünnste Ressource des Projekts — die CPU-Reserve — ihn mitträgt.
+**Das ist messbar, sobald ein Board mit Panel dranhängt, und vorher nicht.**
 - **Ob ein `MAX11300` das Buchsenfeld übernimmt.** Der Kandidat ist real (ein
   Modul ist vorhanden und verdrahtet), aber er kostet SPI2 und damit zwei rohe
   ADC-Pins, und seine CPU-Kosten sind ungemessen.
