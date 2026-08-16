@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 #include "instrument.h"
+#include "fx/limiter.h"
 #include <cmath>
 
 using namespace spky;
@@ -36,4 +37,53 @@ TEST_CASE("led G0: the excursion is the modulation alone, never the knob") {
         CHECK(hi <= 1.0f);
         CHECK(lo >= -1.0f);
     }
+}
+
+// Feed a sine of the given amplitude through a settled limiter and return
+// the squash it reports at the end.
+static float squash_at(float knob, float amp) {
+    Limiter lim;
+    lim.init();
+    lim.set_drive(knob);
+    for (int i = 0; i < 20000; ++i) { float a = 0.f, b = 0.f; lim.process(a, b); }
+    for (int i = 0; i < 4000; ++i) {
+        float s = amp * std::sin(6.2831853f * 300.f * i / 48000.f);
+        float l = s, r = s;
+        lim.process(l, r);
+    }
+    return lim.squash();
+}
+
+TEST_CASE("led G9: the ceiling observer tracks the bend, and clears again") {
+    // Ordered on purpose: written as independent cases the "clears again"
+    // clause passes from the init value and could never catch a stale
+    // reading. At DRIVE 0 on purpose: _pre == 1 there, and that is the only
+    // setting where the transparent early return in Limiter::process is
+    // reachable at all -- so it is the only setting where the observer's
+    // two failure modes exist.
+    Limiter lim;
+    lim.init();
+    lim.set_drive(0.f);
+    for (int i = 0; i < 20000; ++i) { float a = 0.f, b = 0.f; lim.process(a, b); }
+
+    // A sustained tone past the knee. The lamp must not blink at the
+    // waveform's zero crossings, so sample it at every phase and take the
+    // worst reading, not the last one.
+    float worst = 1e9f;
+    for (int i = 0; i < 4000; ++i) {
+        const float s = 0.95f * std::sin(6.2831853f * 300.f * i / 48000.f);
+        float l = s, r = s;
+        lim.process(l, r);
+        if (i > 2000) worst = std::fmin(worst, lim.squash());   // past the attack
+    }
+    CHECK(worst > 0.f);
+
+    for (int i = 0; i < 48000; ++i) {                // silence, long enough to settle
+        float a = 0.f, b = 0.f;
+        lim.process(a, b);
+    }
+    CHECK(lim.squash() == doctest::Approx(0.f));
+
+    // The band the design exists for: bending, but no gain reduction yet.
+    CHECK(squash_at(0.40f, 0.60f) > 0.f);
 }

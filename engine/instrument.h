@@ -294,6 +294,9 @@ public:
     // outside a duck is indistinguishable from quieter playing (the same
     // argument as limiter_gain()), so this is the only honest probe.
     float duck_gain() const { return _duck_gain; }
+    // 0 while the master shaper is transparent, rising as it bends. This is
+    // the audible onset, not the gain reduction -- see limiter.h.
+    float limiter_squash() const { return _limiter.squash(); }
     // Observer only, for tests: deck p's post-FX output from the sample just
     // processed. ch 0 = L, 1 = R. Latency cannot be measured from the summed
     // output, which cannot distinguish 0 samples from 1.

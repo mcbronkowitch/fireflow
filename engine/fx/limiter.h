@@ -26,6 +26,7 @@ public:
         _peak = 0.5f;
         _pre = 1.f;
         _pre_target = 1.f;
+        _squash = 0.f;
     }
     // Square law, not linear. The pre-gain is what decides how deep into the
     // knee the signal lands, and a linear 1+3n spent the whole knob in its
@@ -42,6 +43,7 @@ public:
         _pre_target = 1.f + 3.f * c * c;
     }
     float pre_gain() const { return _pre_target; }
+    float squash() const { return _squash; }
 
     void process(float& l, float& r) {
         // DRIVE was the one knob reaching the audio path unsmoothed (the
@@ -63,9 +65,18 @@ public:
         // transition is wider => softer, warmer saturation of the driven peaks.
         const float drive = (_pre - 1.f) * (1.f / 3.f);              // 0..1
         const float knee  = kKneeHi - (kKneeHi - kKneeLo) * drive;
+        const float gain = _peak > 1.f ? 1.f / _peak : 1.f;
+        // How hard the shaper is bending, for the panel's ceiling lamp. Read
+        // from the SMOOTHED _peak, not from this sample's peak: an
+        // instantaneous reading is zero at every zero crossing, so the lamp
+        // would blink at twice the signal frequency. Computed before the
+        // early return below, because that branch is taken at those very zero
+        // crossings at drive 0 -- clearing it there would blank a lamp whose
+        // shaper is bending.
+        const float lvl = _peak * gain;               // == min(_peak, 1)
+        _squash = lvl > knee ? std::min(1.f, (lvl - knee) / (1.f - knee)) : 0.f;
         if (_pre == 1.f && _peak <= 1.f && peak <= knee)
             return;                                   // transparent: out == in, bit-exact
-        const float gain = _peak > 1.f ? 1.f / _peak : 1.f;
         l = shape(pl * gain, knee);
         r = shape(pr * gain, knee);
     }
@@ -89,6 +100,11 @@ private:
     float _peak = 0.5f;
     float _pre  = 1.f;
     float _pre_target = 1.f;
+    // How hard shape() is bending, 0 = transparent. Read by the panel's
+    // ceiling light: the AUDIBLE onset is _peak*gain > knee, which at the
+    // shipped DRIVE 0.40 arrives about 1.5-1.7 dB before gain reduction
+    // exists at all (bus peak 0.5545 against 0.676, measured 2026-08-16).
+    float _squash = 0.f;
 };
 
 } // namespace spky
