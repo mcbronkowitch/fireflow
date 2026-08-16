@@ -465,6 +465,7 @@ is actually built today, and what is still design-only.
 | **SMOOTH becomes interval-relative** | The slew law is `τ = smooth · TOP · interval` instead of absolute wall-clock seconds, so SMOOTH means the same thing at every rate; `kSmoothTopTexture = 0.5` chosen by ear, factory defaults converted to preserve the shipped sound, five gates behind it. SHAPE is deliberately not delivered and goes to the Marbles round | ✅ **done** (engine + VCV defaults; spec `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md`, plan `docs/superpowers/plans/2026-08-14-smooth-interval-relative.md`; merged to `main` 2026-08-15 (`4493d67`), released in 2.21.2) |
 | **60 HP plate** | The hardware panel gets its layout and then its drawing: the redistribution round's placement reaches `gen_hw_panel.py` (2.21.2), and design round 2a, "Technical Blueprint", replaces the organic light plate with a dark anodised one in three tinted zones, a printed airflow/ember silhouette and framed fields with numbered legends — no control moved for it. Three fixes follow: frames hug their own ink with 3 mm between rows, one caption distance (3.6 mm) for every control instead of one per size class, and three knob lines through the MOTION/VOICE/TIMING band instead of five | ✅ **done** as a design study (VCV `FireflowHW` panel + generator; spec `docs/superpowers/specs/2026-08-10-hw-panel-redistribution-design.md`; released in 2.21.2 and 2.21.3; still labelled `DRAFT`, and no hardware is ordered — see "M6 — Hardware prototype" under "Planned") |
 | **STEP accent** | A note deck's melodic lane derives a per-note accent from the groove rank it already computes — 0 at the rank-0 anchor, 1 at the rank DENSE last reveals (`ModLane::note_accent()`) — and `Part` pushes it into the active engine on every STEP fire. The engine spends it twice, on velocity and on decay, the decay half gated by the DEC knob so DEC 0 leaves ring time untouched. **No new control**, no new RNG draw, and FLOW is unaffected (the accent is 0 there). SYNTH, WAVE and BODY take it; SAMPLER and BBD take neither half | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-15-step-accent-design.md`, plan `docs/superpowers/plans/2026-08-15-step-accent.md`; merged to `main` 2026-08-16 (`83d29e1`), released in 2.21.4; **both depth floors are first-try 0.3 and have not been through a listening session** — see "The STEP accent" under "Done") |
+| **LED feedback** | What the panel shows while the instrument runs: RATE/MOD/TIME/LVL per deck plus TIDE and PACE on the owner's starting list, ten LEDs today. The hardware envelope is settled — a fourth 74HC595 buys twenty, costs no GPIO, on/off costs no CPU and 16-step brightness rides the mux scan; the engine already exposes every value such a light would show. What is open is the instrument question: knob position or lane movement | ⬜ **next** (needs a brainstorming round, then a spec; envelope in `docs/hardware/io-budget.md` §3) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
 | **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel design closed as far as the drawing goes** — regrouping, redistribution and plate round 2a all shipped, in 2.21.1/2.21.2/2.21.3; **bring-up has no spec and is next**, the existing shell spec is superseded and no hardware is ordered — see below) |
@@ -2682,7 +2683,10 @@ The SHAPE/SMOOTH rework's SMOOTH half has shipped — see "SMOOTH becomes
 interval-relative" under "Done". Its SHAPE half was handed to the round below
 rather than delivered, per spec §5, so **the Marbles round is the only designed
 round left before M5k**, followed by one loose thread that has no round of its
-own yet (the pitch RANGE law, below it).
+own yet (the pitch RANGE law, below it). Newly opened on 2026-08-16 and ahead of
+both in the owner's order: **LED feedback**, which has neither a spec nor a
+brainstorming round yet — its hardware envelope is answered, its instrument
+question is not.
 
 ### Marbles round — VARY as the character axis ⬜ (unscheduled)
 
@@ -2752,6 +2756,48 @@ Two things constrain whoever picks it up:
   drone RANGE band and its terrain statistics were read off `engine/flow/`,
   deleted one day later on 2026-08-14. The numbers stand as measured; anything
   new has to be re-measured through a different setup.
+
+### LED feedback — what the instrument shows ⬜ (next, needs a brainstorming round)
+
+Opened 2026-08-16 by the owner: the panel should say more about what is
+happening. His starting list is **RATE, MOD, TIME and LVL per deck, plus TIDE
+and PACE** — TEMPO already has an LED — and "more if the board allows it
+without a big operation".
+
+**The board does allow it, and that part is already answered**, so the round
+does not have to negotiate with the hardware. Measured and derived in
+[`docs/hardware/io-budget.md`](hardware/io-budget.md) §3: ten LEDs are drawn
+today; those ten more make twenty, which needs a **fourth 74HC595 and not one
+GPIO** — the shift-register chain exists precisely so that this costs a part
+rather than a pin. Every further register is another eight. On/off costs no CPU
+at all (a chain is written whole, and the mux addresses already rewrite it at
+every address step), and **16-step brightness rides along on the mux scan for
+free**. The sharp edge is finer brightness than that: it needs a PWM loop
+decoupled from the scan, which is real per-block CPU and feeds the unexplained
+block-rate artifact.
+
+**Nothing has to be built in `engine/` either.** `lane_output(part, slot)`,
+`target_value(part, lane)`, `gate(part)` and `pitch_gate(part)` are already
+public and const (`engine/instrument.h:409-414`) — the render host has been
+building `mods.csv` from them all along.
+
+So the round is free to be about the instrument, which is where it should be.
+What it has to answer:
+
+- **Position or movement?** A knob's position is already visible on the knob.
+  The gain is seeing the modulation *run* — and that decides the cost: a flash
+  per cycle is binary, a breathing MOD or LVL wants brightness.
+- **Which lanes earn a light**, and whether a light per macro is even the right
+  cut, or whether the two decks want one shared "what is moving right now"
+  display instead of four each.
+- **What the light means when the deck is a SAMPLER or a BBD**, where the same
+  lanes drive read positions and clock rates rather than notes.
+- **Where they go on a plate that is already drawn** and guarded — per-deck
+  lights mirror by themselves, TIDE and PACE would want a mirrored pair around
+  x = 152,4 the way `TEMPO_L`/`SYNC_L` already sit at 130,4 and 174,4.
+
+Not blocking anything: it can run before or after M5k, and its result lands in
+M6's panel and bring-up. **Needs a brainstorming round, then a spec.**
 
 ### M5k — ZAP ⬜
 

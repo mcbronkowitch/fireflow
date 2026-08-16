@@ -322,6 +322,58 @@ selbst** — und die Null dort ist die geplante Null. Die zwei Dinge, die es
 kippen könnten, sind kein Pin-Problem: die ungemessene Einschwingzeit pro
 Kanal (§6) und der selbst zu schreibende Mux-Scan (oben).
 
+### LED-Ausbau: was ein weiteres Register bringt
+
+Gefragt am 2026-08-16, weil mehr Anzeige gewünscht ist: RATE, MOD, TIME und
+LVL je Deck, dazu TIDE und PACE (TEMPO hat schon eine LED). Das sind **zehn
+neue**, also 20 statt 10 — genau das Feld, das die Neugruppierung ursprünglich
+vorgesehen hatte, bevor die Neuverteilung die zehn ENGINE-Anzeigen einsparte.
+
+| | heute | mit zehn weiteren |
+|---|---:|---:|
+| 595-Ausgänge nötig (LEDs + 4 Adressen + 5 Enables) | 19 | **29** |
+| Register à 8 Ausgänge | 3 (24) | **4 (32)** |
+| GPIOs | 4 | **4** |
+
+**Hardwareseitig ist das ein Bauteil.** Ein weiteres 74HC595 in die bestehende
+Kette, dazu die LEDs mit Vorwiderständen — **keine GPIOs**, genau dafür ist die
+Kette da. Beim Verteilen nicht alle auf ein Register hängen (Paket-Gesamtstrom);
+das ist eine Datenblattfrage beim Bestellen, keine Architekturfrage. Jedes
+weitere Register sind wieder 8 LEDs, weiterhin ohne einen einzigen Pin — die
+praktische Grenze ist die Kettenlänge und der Strom, nicht das Board.
+
+**CPU-seitig kostet An/Aus nichts.** Eine Schieberegisterkette wird immer ganz
+geschrieben, gleich wie viele ihrer Bits LEDs sind; von 24 auf 32 Bit sind acht
+zusätzliche Schiebetakte pro Schreibvorgang. Und weil die Mux-Adressen auf
+derselben Kette liegen, **wird die Kette ohnehin bei jedem Adressschritt neu
+geschrieben** — die LED-Daten fahren mit.
+
+**Daraus folgt, dass auch Helligkeit fast umsonst ist:** der Mux-Scan schreibt
+die Kette 16× pro Sweep, einmal je Adresse. Variiert man über diese 16
+Schreibvorgänge, welche LED-Bits gesetzt sind, ergibt das **16-stufiges PWM ohne
+einen einzigen zusätzlichen Schreibvorgang** — Auflösung = Adressschritte,
+Bildwiederholrate = Sweep-Rate.
+
+**Die Grenze, und sie ist scharf:** wer *feinere* Helligkeit als 16 Stufen will,
+muss das PWM vom Scan entkoppeln, und dann sind es echte zusätzliche
+Kettenschreibvorgänge pro Block. Das kostet CPU und zahlt auf den Block-Artefakt
+ein (§6) — 24 → 32 Bit ist marginal, eine eigene PWM-Schleife wäre es nicht.
+
+**Alles in diesem Abschnitt ist hergeleitet, nicht gemessen.** Zu messen ist die
+Kettenschreibzeit bei 32 gegen 24 Bit auf dem Board.
+
+**Engine-seitig ist nichts zu bauen:** `lane_output(part, slot)`,
+`target_value(part, lane)`, `gate(part)` und `pitch_gate(part)` sind öffentlich
+und const (`engine/instrument.h:409-414`) — der Render-Host baut daraus seit
+jeher `mods.csv`. Was diese LEDs anzeigen sollen, liegt bereits an; die
+Zuordnung ist Firmware.
+
+Was hier **nicht** entschieden ist: ob eine LED die Knopfstellung zeigt oder die
+Lane-Bewegung. Die Stellung sieht man am Knopf; der Gewinn liegt darin, die
+Modulation laufen zu sehen — und davon hängt ab, ob es binär bleibt (ein Blitz
+pro Zyklus) oder Helligkeit braucht. Das ist eine Instrumentenfrage und gehört
+in die LED-Feedback-Runde, siehe [`docs/roadmap.md`](../roadmap.md).
+
 ## 4. Die geometrische Kapazität
 
 **Diese Frage ist beantwortet, und zwar durch Zeichnen statt durch Rechnen.**
