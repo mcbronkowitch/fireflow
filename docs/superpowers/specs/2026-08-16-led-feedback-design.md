@@ -267,17 +267,75 @@ of order 100–200 ms.
 
 ## 5. Placement
 
-Twelve of the thirteen new lights sit beside controls that already exist; the ceiling
-light is the exception and needs a position in the centre column that survives
-`hw_panel_guard`.
+The plate is drawn, guarded and tight. **The placement rule is chosen so that
+adding thirteen lights cannot move anything that is already on it**, and so that
+the implementation has exactly one free number.
 
-**They do not mirror by themselves.** `place()` (`gen_hw_panel.py:236-257`)
+### 5.1 The rule: a satellite inside the row's ink band
+
+1. **Same row as its anchor control, inside that row's existing ink band.**
+2. **Distance exactly `anchor radius + 1,5 mm`** — touching clearance under
+   `test_no_overlap_with_hw_radii` (`d ≥ a.r + b.r`).
+3. **Bearing inboard**, toward the centre column.
+
+**Why this cannot move a frame.** `test_rows_are_centred_on_their_ink` derives
+every frame from `_row_ink(row)` and chains the rows through `BOX_GAP`, so
+anything that extends a row's ink shifts every frame below it — that is the
+mechanism by which a small addition wrecks a layout. An LED cannot trigger it
+from inside a row: its radius is 1,5 mm against a knob's 6,0 or 8,5, so as long
+as its own extent stays inside the band the knobs already define, `_row_ink()`
+returns exactly what it returned before.
+
+### 5.2 Measured start positions
+
+Every anchor has a legal position at **exactly the theoretical minimum
+distance**, inside its row band, clearing every drawn element. Measured
+2026-08-16 by scanning a polar grid around each anchor against `ALL_HW`:
+
+| Light at | Anchor r | Distance | Bearing | Deck A position |
+|---|---:|---|---:|---|
+| `SOURCE` | 6,0 | 7,50 = minimum | 0° | 109,75 / 50,22 |
+| `FILT` | 8,5 | 10,00 = minimum | 9° | 96,13 / 54,56 |
+| `COLOR` | 8,5 | 10,00 = minimum | 0° | 33,50 / 95,00 |
+| `COMP` | 8,5 | 10,00 = minimum | 0° | 116,50 / 76,00 |
+| `SONG` | 6,0 | 7,50 = minimum | 30° | 54,50 / 18,25 |
+| `GATE` (at `ATTACK`) | 6,0 | 7,50 = minimum | 30° | 74,75 / 37,75 |
+| `SHIFTBTN` | 4,0 | 5,50 = minimum | 0° | 19,50 / 114,00 |
+
+Five of seven sit plainly to the side; `FILT` needs 9° of tilt and `SONG` and
+`GATE` 30°. The ceiling light is unconstrained — the centre column (x 145…160)
+has hundreds of free grid points in every row band.
+
+This also settles a question the review raised as unverified: an LED does **not**
+fit on the straight line between `FILT_A` (86,25/53,00, r 8,5) and `SOURCE_A`
+(102,25/50,22, r 6,0), which are 16,24 mm apart against a required 17,50. Off
+that line, at 9°, it fits at the minimum.
+
+### 5.3 One degree of freedom
+
+The order of work, and the only value the implementation may change:
+
+1. Place all thirteen as satellites at minimum distance, bearing inboard.
+2. Run the generator, run `hw_panel_guard`.
+3. Where a guard goes red, **turn the bearing** — never grow the distance, never
+   move a knob.
+
+**What §5.2 does not prove.** Only radius clearance and row-band containment
+were measured. The caption guards were not: `test_labels_stay_off_neighbour_
+footprints`, `test_captions_stay_off_their_own_knob` and
+`test_caption_gap_is_one_number`. **That, not geometry, is where this will
+actually bite** — a 3 mm lamp overlapping a neighbour's four-letter word. Step 2
+is what finds it.
+
+### 5.4 Coupling constraints
+
+**The lights do not mirror themselves.** `place()` (`gen_hw_panel.py:236-257`)
 routes `_A`/`_B` enums through `DECK_POS`, but light enums end in `_L` and fall
 through to `LIGHT_POS`, which raises `KeyError` if an entry is missing. Every new
-light needs a hand-written, hand-mirrored `LIGHT_POS` pair; `test_mirror_symmetry`
-checks them, it does not generate them.
-
-Three coupling constraints the implementation will hit:
+light needs a hand-written, hand-mirrored pair; `test_mirror_symmetry` checks
+them, it does not generate them. The scan above reports deck A only — and it
+found `MODBTN`'s nearest free spot *outboard* at 296,30, where the mirror of
+`SHIFTBTN`'s 19,50 is 285,30. Mirror first, then verify, not the other way round.
 
 - `test_hw_panel.py:32` requires `HW_LIGHTS` and `gp.LIGHTS` to match **in order**.
 - `gen_panel.py:729`: the C++ side centres the LED rings on `kLightCtls[0..1]`,
@@ -285,11 +343,6 @@ Three coupling constraints the implementation will hit:
 - The large module must exclude the new lights via `STATIC_LIGHTS`
   (`gen_panel.py:739`) **and** skip them widget-side, or its panel draws 21 LEDs
   at positions it has to invent.
-
-Whether an LED fits beside `FILT_A` is not assumed: `FILT_A` (86,25/53,00, r 8,5)
-and `SOURCE_A` (102,25/50,22, r 6,0) are 16,24 mm apart, so the direct line
-between them has no legal point under `test_hw_panel.py`'s `d ≥ a.r + b.r`. The
-light goes off-axis, and the guard decides.
 
 ## 6. What gets built
 
@@ -402,6 +455,10 @@ G1–G6 and G9 are unit tests in `spky_tests`; G7 and G8 are panel guards.
   every block. If it cannot, an N-step sweep lands near 30 Hz and the LEDs
   strobe — worst at low duty, which is where the gamma curve puts most of the
   breath.
+- **Geometry is settled, lettering is not.** §5.2 measures a legal spot for every
+  light at minimum clearance inside its row band, so no frame can move. The
+  caption guards are unmeasured, and a 3 mm lamp landing on a neighbour's
+  four-letter word is the realistic way this round loses a day.
 - **`LANE_PITCH` has no excursion display**, and the RANGE law that flattens a
   phrase onto one scale degree (engine-map §7) stays undiagnosable from the
   panel.
