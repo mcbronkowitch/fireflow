@@ -150,8 +150,12 @@ TEST_CASE("led: the envelope attacks instantly and falls slowly") {
     CHECK(lamp.env == doctest::Approx(0.8f));   // instant attack
     lamp.follow(0.f, dt);
     CHECK(lamp.env > 0.7f);                     // one tick barely moves it
-    // 8 s is four times kEnvFall; at 5.3 s the envelope is still at 0.056 and
-    // this would fail on arithmetic rather than on a defect.
-    for (int i = 0; i < 6000; ++i) lamp.follow(0.f, dt);
+    // Four release constants' worth, derived rather than counted: kEnvFall is
+    // a by-ear tuning candidate, and a hardcoded tick count would start
+    // failing on arithmetic the first time it is re-tuned. At 2.67 constants
+    // the envelope is still at 0.056 and this assertion would fail without
+    // catching anything.
+    const int ticks = static_cast<int>(4.f * spkyled::kEnvFall / dt);
+    for (int i = 0; i < ticks; ++i) lamp.follow(0.f, dt);
     CHECK(lamp.env < 0.05f);                    // but it does let go
 }
