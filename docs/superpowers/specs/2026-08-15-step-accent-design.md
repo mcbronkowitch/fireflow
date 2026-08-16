@@ -1,7 +1,7 @@
 # STEP accent: per-note velocity and decay from the groove rank
 
 **Date:** 2026-08-15
-**Status:** implemented, on branch `2026-08-15-step-accent`
+**Status:** implemented; merged to `main` 2026-08-16, released in 2.21.4
 
 ## 1. What this is for
 

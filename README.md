@@ -158,10 +158,10 @@ carries recordings from most milestones, next to the story of how they came
 about.
 
 **[Download the latest release](https://github.com/mcbronkowitch/fireflow/releases/latest)**
-— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.21.3**
+— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.21.4**
 (both modules: Synth, Sampler, WAVE, BODY and BBD, the independent FORM/SONG
-phrase arranger, the STEP mod grid lock, the PACE modulation time-stretch, and
-the redrawn 60 HP hardware plate). Unpack into Rack's
+phrase arranger, the STEP mod grid lock, the PACE modulation time-stretch, the
+redrawn 60 HP hardware plate, and the STEP accent). Unpack into Rack's
 user plugin directory and restart Rack.
 
 Building it yourself needs its own toolchain (a native MinGW/GCC compiler, not

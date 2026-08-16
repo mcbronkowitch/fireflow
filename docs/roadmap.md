@@ -59,8 +59,8 @@ is actually built today, and what is still design-only.
   corrected to say so instead of naming the guard as load-bearing. See
   `docs/engine-map.md` §8 for the mechanism of both. Spec
   `docs/superpowers/specs/2026-08-15-step-accent-design.md`, plan
-  `docs/superpowers/plans/2026-08-15-step-accent.md`, branch
-  `2026-08-15-step-accent`); before
+  `docs/superpowers/plans/2026-08-15-step-accent.md`; merged to `main` and
+  released in **2.21.4**); before
   that, 2026-08-15 (**the 60 HP plate is drawn**: the
   redistribution round's layout reached the generator in 2.21.2, and the plate
   was then redrawn twice — first an organic light plate with wells, then design

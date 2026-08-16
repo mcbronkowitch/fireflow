@@ -8,32 +8,41 @@
   Everything below the comment is public.
 -->
 
-## FireFlow 2.21.3
+## FireFlow 2.21.4
 
-The 42 HP **FireFlow** module is unchanged in layout and sound. This release
-redraws the 60 HP **FireFlow HW Draft**, which is still a design study and
-still labelled as a draft.
+In STEP a deck used to play every composed note at the same level and the same
+length. Pitch and placement differed; nothing else did, which is why a dense
+pattern read as a machine running rather than as a phrase being played. This
+release gives those notes a contour — **without adding a single control.**
 
-**A new plate.** The light panel with its organic wells is gone. In its place:
-a dark anodised plate in three tinted zones — cool on deck A, warm on deck B,
-neutral through the centre — with an airflow and ember silhouette printed
-underneath, and every function group drawn as a framed field with a numbered
-legend. Knob positions did not move for it.
+**The accent comes from the groove that is already there.** Every note deck
+already ranks the slots of its groove cell, and DENSE decides how far down that
+ranking it fires. The first slot to sound is the anchor; the ones DENSE reveals
+later are, by construction, further down the rank. That rank is now the accent:
+the anchor strikes at full strength, and each note DENSE adds strikes a little
+softer and a little shorter than the one before it. Turn DENSE down to a single
+note and it is loud again. The animation appears as the pattern fills in, which
+is where the ear wants it.
 
-**Frames that sit straight.** Each frame hugs what it prints with the same
-margin above and below, and the rows keep 3 mm between them. Row heights are
-computed rather than typed in, so a caption that moves takes its frame with it.
+**DEC is the ceiling.** The accent shortens notes only as far as the DEC knob
+has opened the envelope: at DEC 0 it cannot touch ring time at all, at DEC 1 the
+weakest note of a full pattern decays in about a third of the set time. The knob
+still decides how long a note is; the accent only ever subtracts from it. Level
+works the same way, down to 30 % at the far end, and it composes with the
+existing chord compensation instead of replacing it — chords keep their level.
 
-**One caption distance.** Every printed word now keeps the same 3.6 mm to its
-own component. Previously each size class had its own offset, and the four had
-grown apart — 4.5 mm on the big pots against 2.5 mm on the pads — which showed
-as labels hanging further from the large knobs than from the small ones.
+**FLOW is untouched, on purpose.** A FLOW deck is a drone, and per-note dynamics
+there would be animation where the design wants stillness. The accent is
+computed only in STEP and reads as zero everywhere else. SYNTH, WAVE and BODY
+spend it; SAMPLER and BBD ignore it, since neither has a per-note envelope for
+it to scale.
 
-**Three lines through the middle.** MOTION, VOICE and TIMING ran on five
-different knob heights. They now run on three: small caps, the mid row, and
-every large cap together, with FILT joining MOD, DENS and MORPH.
+**Fixed: a manual strike is always full strength.** Tapping PLAY or TRIG used to
+inherit whatever accent the sequencer had last pushed into the engine, so a
+press could land at roughly 40 % velocity for no visible reason. A hand-played
+note is an anchor by definition and now strikes accordingly.
 
-FireFlow HW Draft remains a 60 HP workbench, not a finished instrument.
+Both accent depths are first-pass by-ear values and may still move.
 
 ## Install
 
