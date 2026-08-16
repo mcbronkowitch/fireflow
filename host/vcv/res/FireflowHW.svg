@@ -382,30 +382,52 @@
 <circle cx="237.300" cy="114.000" r="2.000" fill="none" stroke="#7f8f96" stroke-width="0.7"/>
 <circle cx="237.300" cy="114.000" r="1.178" fill="#050607"/>
 <text x="237.300" y="120.700" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">GATE</text>
-<circle cx="116.500" cy="14.500" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="116.500" cy="14.500" r="0.750" fill="#297260"/>
-<circle cx="188.300" cy="14.500" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="188.300" cy="14.500" r="0.750" fill="#855a3c"/>
+<circle cx="74.750" cy="37.750" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="74.750" cy="37.750" r="0.750" fill="#297260"/>
+<circle cx="230.050" cy="37.750" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="230.050" cy="37.750" r="0.750" fill="#855a3c"/>
 <circle cx="108.500" cy="14.500" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
 <circle cx="108.500" cy="14.500" r="0.750" fill="#297260"/>
 <circle cx="196.300" cy="14.500" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
 <circle cx="196.300" cy="14.500" r="0.750" fill="#855a3c"/>
+<circle cx="109.750" cy="50.220" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="109.750" cy="50.220" r="0.750" fill="#297260"/>
+<circle cx="195.050" cy="50.220" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="195.050" cy="50.220" r="0.750" fill="#855a3c"/>
+<circle cx="96.130" cy="54.560" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="96.130" cy="54.560" r="0.750" fill="#297260"/>
+<circle cx="208.670" cy="54.560" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="208.670" cy="54.560" r="0.750" fill="#855a3c"/>
+<circle cx="33.500" cy="95.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="33.500" cy="95.000" r="0.750" fill="#297260"/>
+<circle cx="271.300" cy="95.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="271.300" cy="95.000" r="0.750" fill="#855a3c"/>
+<circle cx="116.500" cy="76.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="116.500" cy="76.000" r="0.750" fill="#297260"/>
+<circle cx="188.300" cy="76.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="188.300" cy="76.000" r="0.750" fill="#855a3c"/>
+<circle cx="54.500" cy="18.250" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="54.500" cy="18.250" r="0.750" fill="#297260"/>
+<circle cx="250.300" cy="18.250" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="250.300" cy="18.250" r="0.750" fill="#855a3c"/>
+<circle cx="93.500" cy="14.500" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="93.500" cy="14.500" r="0.750" fill="#297260"/>
+<circle cx="211.300" cy="14.500" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="211.300" cy="14.500" r="0.750" fill="#855a3c"/>
+<circle cx="130.400" cy="34.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="130.400" cy="34.000" r="0.750" fill="#4c6d79"/>
+<circle cx="130.500" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="130.500" cy="114.000" r="0.750" fill="#4c6d79"/>
+<circle cx="285.300" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="285.300" cy="114.000" r="0.750" fill="#855a3c"/>
+<circle cx="19.500" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="19.500" cy="114.000" r="0.750" fill="#297260"/>
+<circle cx="155.820" cy="88.400" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="155.820" cy="88.400" r="0.750" fill="#4c6d79"/>
 <rect x="10.000" y="110.000" width="8.000" height="8.000" rx="1.2" fill="#dbe9ef" stroke="#3c525c" stroke-width="0.3"/>
 <text x="14.000" y="120.700" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">SHFT</text>
 <rect x="286.800" y="110.000" width="8.000" height="8.000" rx="1.2" fill="#dbe9ef" stroke="#3c525c" stroke-width="0.3"/>
 <text x="290.800" y="120.700" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">MOD</text>
-<circle cx="130.400" cy="34.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="130.400" cy="34.000" r="0.750" fill="#4c6d79"/>
-<circle cx="174.400" cy="34.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="174.400" cy="34.000" r="0.750" fill="#4c6d79"/>
-<circle cx="93.500" cy="14.500" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="93.500" cy="14.500" r="0.750" fill="#297260"/>
-<circle cx="112.500" cy="14.500" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="112.500" cy="14.500" r="0.750" fill="#297260"/>
-<circle cx="211.300" cy="14.500" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="211.300" cy="14.500" r="0.750" fill="#855a3c"/>
-<circle cx="192.300" cy="14.500" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="192.300" cy="14.500" r="0.750" fill="#855a3c"/>
 <text x="4.500" y="9.400" fill="#a7bcc6" text-anchor="start" font-family="monospace" font-size="3.3" letter-spacing="0.55">FIREFLOW</text>
 <text x="4.600" y="14.600" fill="#3fbf9c" text-anchor="start" font-family="monospace" font-size="2.1" letter-spacing="0.55">DECK A</text>
 <text x="300.300" y="9.400" fill="#6f8894" text-anchor="end" font-family="monospace" font-size="2.3" letter-spacing="0.55">60 HP</text>

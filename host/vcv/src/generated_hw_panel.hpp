@@ -108,22 +108,33 @@ static const PanelCtl kOutputCtls[] = {
     {GATE_B, WK_OUT, {237.300f, 114.000f}, "GATE", {237.300f, 120.700f}, 0, 2.20f, 0xA7BCC6, "Gate B"},
 };
 static const PanelCtl kLightCtls[] = {
-    {GATE_A_L, WK_LIGHT, {116.500f, 14.500f}, "", {116.500f, 14.500f}, 0, 2.20f, 0xA7BCC6, ""},
-    {GATE_B_L, WK_LIGHT, {188.300f, 14.500f}, "", {188.300f, 14.500f}, 0, 2.20f, 0xA7BCC6, ""},
+    {GATE_A_L, WK_LIGHT, {74.750f, 37.750f}, "", {74.750f, 37.750f}, 0, 2.20f, 0xA7BCC6, ""},
+    {GATE_B_L, WK_LIGHT, {230.050f, 37.750f}, "", {230.050f, 37.750f}, 0, 2.20f, 0xA7BCC6, ""},
     {REC_A_L, WK_LIGHT, {108.500f, 14.500f}, "", {108.500f, 14.500f}, 0, 2.20f, 0xA7BCC6, ""},
     {REC_B_L, WK_LIGHT, {196.300f, 14.500f}, "", {196.300f, 14.500f}, 0, 2.20f, 0xA7BCC6, ""},
+    {SRC_A_L, WK_LIGHT, {109.750f, 50.220f}, "", {109.750f, 50.220f}, 0, 2.20f, 0xA7BCC6, ""},
+    {SRC_B_L, WK_LIGHT, {195.050f, 50.220f}, "", {195.050f, 50.220f}, 0, 2.20f, 0xA7BCC6, ""},
+    {FLT_A_L, WK_LIGHT, {96.130f, 54.560f}, "", {96.130f, 54.560f}, 0, 2.20f, 0xA7BCC6, ""},
+    {FLT_B_L, WK_LIGHT, {208.670f, 54.560f}, "", {208.670f, 54.560f}, 0, 2.20f, 0xA7BCC6, ""},
+    {CLR_A_L, WK_LIGHT, {33.500f, 95.000f}, "", {33.500f, 95.000f}, 0, 2.20f, 0xA7BCC6, ""},
+    {CLR_B_L, WK_LIGHT, {271.300f, 95.000f}, "", {271.300f, 95.000f}, 0, 2.20f, 0xA7BCC6, ""},
+    {LVL_A_L, WK_LIGHT, {116.500f, 76.000f}, "", {116.500f, 76.000f}, 0, 2.20f, 0xA7BCC6, ""},
+    {LVL_B_L, WK_LIGHT, {188.300f, 76.000f}, "", {188.300f, 76.000f}, 0, 2.20f, 0xA7BCC6, ""},
+    {SONG_A_L, WK_LIGHT, {54.500f, 18.250f}, "", {54.500f, 18.250f}, 0, 2.20f, 0xA7BCC6, ""},
+    {SONG_B_L, WK_LIGHT, {250.300f, 18.250f}, "", {250.300f, 18.250f}, 0, 2.20f, 0xA7BCC6, ""},
+    {FLOW_A_L, WK_LIGHT, {93.500f, 14.500f}, "", {93.500f, 14.500f}, 0, 2.20f, 0xA7BCC6, ""},
+    {FLOW_B_L, WK_LIGHT, {211.300f, 14.500f}, "", {211.300f, 14.500f}, 0, 2.20f, 0xA7BCC6, ""},
+    {TEMPO_L, WK_LIGHT, {130.400f, 34.000f}, "", {130.400f, 34.000f}, 0, 2.20f, 0xA7BCC6, ""},
+    {SYNC_L, WK_LIGHT, {130.500f, 114.000f}, "", {130.500f, 114.000f}, 0, 2.20f, 0xA7BCC6, ""},
+    {MODBTN_L, WK_LIGHT, {285.300f, 114.000f}, "", {285.300f, 114.000f}, 0, 2.20f, 0xA7BCC6, ""},
+    {SHIFTBTN_L, WK_LIGHT, {19.500f, 114.000f}, "", {19.500f, 114.000f}, 0, 2.20f, 0xA7BCC6, ""},
+    {CEIL_L, WK_LIGHT, {155.820f, 88.400f}, "", {155.820f, 88.400f}, 0, 2.20f, 0xA7BCC6, ""},
 };
 // Hardware-only: no VCV id. Rack does not render SVG text,
 // so these captions must come from here (spec 2026-08-10 §5).
 static const HwOnlyCtl kHwOnlyCtls[] = {
     {WK_LATCH, {14.000f, 114.000f}, "SHFT", {14.000f, 120.700f}, 0, 2.20f, 0xA7BCC6},
     {WK_LATCH, {290.800f, 114.000f}, "MOD", {290.800f, 120.700f}, 0, 2.20f, 0xA7BCC6},
-    {WK_LIGHT, {130.400f, 34.000f}, "", {130.400f, 34.000f}, 0, 2.20f, 0xA7BCC6},
-    {WK_LIGHT, {174.400f, 34.000f}, "", {174.400f, 34.000f}, 0, 2.20f, 0xA7BCC6},
-    {WK_LIGHT, {93.500f, 14.500f}, "", {93.500f, 14.500f}, 0, 2.20f, 0xA7BCC6},
-    {WK_LIGHT, {112.500f, 14.500f}, "", {112.500f, 14.500f}, 0, 2.20f, 0xA7BCC6},
-    {WK_LIGHT, {211.300f, 14.500f}, "", {211.300f, 14.500f}, 0, 2.20f, 0xA7BCC6},
-    {WK_LIGHT, {192.300f, 14.500f}, "", {192.300f, 14.500f}, 0, 2.20f, 0xA7BCC6},
 };
 static const PanelTxt kPanelTexts[] = {
     {{4.500f, 9.400f}, 3.30f, 0.55f, 0xA7BCC6, 1, "FIREFLOW"},
