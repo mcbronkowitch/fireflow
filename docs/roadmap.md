@@ -466,6 +466,8 @@ is actually built today, and what is still design-only.
 | **60 HP plate** | The hardware panel gets its layout and then its drawing: the redistribution round's placement reaches `gen_hw_panel.py` (2.21.2), and design round 2a, "Technical Blueprint", replaces the organic light plate with a dark anodised one in three tinted zones, a printed airflow/ember silhouette and framed fields with numbered legends — no control moved for it. Three fixes follow: frames hug their own ink with 3 mm between rows, one caption distance (3.6 mm) for every control instead of one per size class, and three knob lines through the MOTION/VOICE/TIMING band instead of five | ✅ **done** as a design study (VCV `FireflowHW` panel + generator; spec `docs/superpowers/specs/2026-08-10-hw-panel-redistribution-design.md`; released in 2.21.2 and 2.21.3; still labelled `DRAFT`, and no hardware is ordered — see "M6 — Hardware prototype" under "Planned") |
 | **STEP accent** | A note deck's melodic lane derives a per-note accent from the groove rank it already computes — 0 at the rank-0 anchor, 1 at the rank DENSE last reveals (`ModLane::note_accent()`) — and `Part` pushes it into the active engine on every STEP fire. The engine spends it twice, on velocity and on decay, the decay half gated by the DEC knob so DEC 0 leaves ring time untouched. **No new control**, no new RNG draw, and FLOW is unaffected (the accent is 0 there). SYNTH, WAVE and BODY take it; SAMPLER and BBD take neither half | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-15-step-accent-design.md`, plan `docs/superpowers/plans/2026-08-15-step-accent.md`; merged to `main` 2026-08-16 (`83d29e1`), released in 2.21.4; **both depth floors are first-try 0.3 and have not been through a listening session** — see "The STEP accent" under "Done") |
 | **LED feedback** | What the panel shows while the instrument runs, settled the way spec §1/§10 argue it: the quantity is the modulation **excursion**, never the knob (`target_value()` would let a still knob at 0.9 outshine one swinging full-scale at 0.1). An envelope-tracked excursion light per texture lane (one per lane, at the knob nearest its usual destination — `SOURCE`/`FILT`/`COLOR`/`COMP`), a `SONG` phrase lamp per deck that flashes on an A/B switch (150 ms) then goes dark, a `CEIL` lamp for the limiter's audible onset (not its gain reduction), and two latch-ready modifier lamps at `MODBTN`/`SHIFTBTN`. The display law (`host/vcv/src/led_law.hpp`) is Rack-free and unit-tested; `engine/instrument.h` gains `lane_excursion()` and the limiter exposes its bend as a const observer | ✅ **done** (engine + VCV `FireflowHW`; spec `docs/superpowers/specs/2026-08-16-led-feedback-design.md`, plan `docs/superpowers/plans/2026-08-16-led-feedback.md`; branch `led-feedback`, merged to `main` 2026-08-16 (`354db6f`), released in 2.21.5. **19 lamps drawn on FireflowHW, 21 LightIds (`FLOW_*` undrawn), up from ten** — two dead ones, `CAP_A_L`/`CAP_B_L`, removed along with the capture sequencer they used to indicate (see M3 below). **Five lamps are deliberately dark** at the end of this round: `FLOW_A_L`, `FLOW_B_L`, `SYNC_L`, and the two pad lamps `MODBTN_L`/`SHIFTBTN_L` — the last two need a latch that does not exist yet (spec §3.4 leaves it to the round that builds MOD and SHIFT). All five are *written* every tick, not skipped; a gate asserts that. `TEMPO_L` pulses the transport beat (metronome, `kTempoPulse` of `beat_phase()`). The 8:1-versus-16:1 mux width is **still open** (`docs/hardware/io-budget.md` §6), which is why `duty()` takes the step count as a parameter rather than a constant. `kFloor`, `kGamma`, `kEnvFall` and `kEnvOff` are **by-ear candidates awaiting Bastian's eye on real hardware** — `kEnvOff` in particular was set from arithmetic, not by listening; today that flag survives only in a comment in `host/vcv/src/led_law.hpp`) |
+| **FEED** | Coupled feedback-FM drone engine (working title) — a few operator pairs cross-modulating at the edge of chaos, the Lyra-8 corner | ⬜ **planned** (queued 2026-08-17, ordered before M5k; no spec — needs its own brainstorming round. Restored to this table 2026-08-18: the SWARM wind-back removed this row along with SWARM's own, and it was never about SWARM) |
+| **AIR** | Noise/formant texture engine (working title) — filtered noise through a resonant bank: wind, breath, vowel colours without sample material | ⬜ **planned** (queued 2026-08-17, ordered before M5k; no spec — needs its own brainstorming round. Restored 2026-08-18, same reason as FEED) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
 | **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel design closed as far as the drawing goes** — regrouping, redistribution and plate round 2a all shipped, in 2.21.1/2.21.2/2.21.3; **bring-up has no spec and is next**, the existing shell spec is superseded and no hardware is ordered — see below) |
@@ -476,9 +478,14 @@ lane's output stage and needed no new engine. M1.6 sits before M2 so that
 M2–M5 build on the final signal chain (part FX + reverb sends) from the start
 instead of rewiring it later; the M1 test tone is enough to hear and verify
 the effects in the renderer. FORM/SONG is a completed cross-cutting melodic STEP
-capability and does not change the M5j → M5k → M5l → M6 order. M5k and M5l are
-the remaining engine-level milestones that can be completed without the target
-hardware; M6 follows them as the hardware bring-up. What changed with the move
+capability and does not change the M5j → M5k → M5l → M6 order. An ambient
+drone-engine round opened 2026-08-17 with three candidate directions and queued
+FEED and AIR ahead of M5k; the third, SWARM, was built and then withdrawn by ear
+on 2026-08-18 ([`docs/attic/2026-08-18-swarm-withdrawn.md`](attic/2026-08-18-swarm-withdrawn.md)),
+which leaves FEED and AIR exactly where they were queued and the sixth engine id
+free again. The engine-level milestones still completable without the target
+hardware are therefore FEED, AIR, M5k and M5l; M6 follows them as the hardware
+bring-up. What changed with the move
 to a standalone prototype is M6's content, not its position: it is still last,
 and it is now the milestone that has to define its own device rather than fit an
 existing one.
@@ -2703,6 +2710,11 @@ below it). Newly opened on 2026-08-16 and ahead of every one of them in the
 owner's order: **LED feedback**, which has neither a spec nor a brainstorming
 round yet — its hardware envelope is answered, its instrument question is not.
 
+Two engine directions sit ahead of M5k with no design at all: **FEED** and
+**AIR**, the two candidates of the 2026-08-17 ambient-engine brainstorming that
+were never built. Each needs its own brainstorming round before it can have a
+spec, which is why neither counts as a designed round above.
+
 ### Marbles round — VARY as the character axis ⬜ (unscheduled)
 
 Opened 2026-08-13, out of the SHAPE/SMOOTH rework's second review pass.
@@ -2813,6 +2825,64 @@ What it has to answer:
 
 Not blocking anything: it can run before or after M5k, and its result lands in
 M6's panel and bring-up. **Needs a brainstorming round, then a spec.**
+
+### FEED — coupled feedback-FM drone engine ⬜ (working title)
+
+Queued 2026-08-17 from the ambient-engine brainstorming, which surfaced three
+candidate directions for a sixth part engine. The first of them, the additive
+partial swarm SWARM, was built and then withdrawn on a listening decision
+2026-08-18; FEED was never touched by that work and stands where it was queued.
+Both entries were restored here on 2026-08-18 — the wind-back to `42f9c79` took
+this section out along with SWARM's, which was an accident of where the text
+sat, not a decision about FEED.
+
+FEED is the instability corner: a few operator pairs cross-modulating at the
+edge of chaos — the Lyra-8 idea — with the feedback amount as the playable
+cliff. It could plausibly reuse the excitation-bus pattern BODY established for
+cross-deck coupling. It would also be **the first FM anywhere in the built
+engine**: M5k's ZAP spec designs a two-oscillator FM/AM voice, but nothing
+implements it, so no operator primitive exists to inherit.
+
+The sixth slot in `EngineId` is free — `ENGINE_BBD = 5` is still the last one
+built, and removing SWARM renumbered nothing.
+
+Three things the SWARM round leaves behind for it, **none of them a measurement
+of FEED**:
+
+- **The nearest price anchor there is.** A sine partial with per-sample glide
+  and control-tick retargeting measured **7405 cycles per partial per 96-sample
+  block** at `-O3` on the Patch Submodule
+  ([`docs/attic/2026-08-17-swarm-n-decision.md`](attic/2026-08-17-swarm-n-decision.md)).
+  An FM operator is that class of loop; that is an argument for opening the
+  round, not a number for a spec. SWARM's own lesson is that the kernel row
+  alone sizes the bank too generously — the whole-engine row corrected it.
+- **The denormal tax** (see "Two threads carried out of the SWARM withdrawal"
+  below). A feedback network with quiet decaying tails is exactly the shape
+  that pays it, and nothing in this repo sets flush-to-zero.
+- **One shape decision worth copying**: a fixed bank per deck, retuned rather
+  than re-voiced, so CPU does not depend on the played density.
+
+The cost question the round has to settle is not the operator count but
+**whether the chaotic end needs oversampling** — a decision that doubles the
+row or does not, and which is a design question today, not a measurement.
+
+Ordered before M5k (ZAP). **Needs a brainstorming round, then a spec.**
+
+### AIR — noise/formant texture engine ⬜ (working title)
+
+Queued 2026-08-17 from the same brainstorming, and restored here 2026-08-18 for
+the same reason as FEED. The air layer: filtered noise through a resonant bank —
+wind, breath, vowel colours — texture without sample material, which today only
+the sampler provides and only when fed.
+
+One finding from the SWARM rounds points straight at it: the vowel-shaped
+spectral character cost about **2.5× a plain block through denormals alone** —
+in an additive partial bank, not in a filter bank, so it is a hint and not a
+transferable figure. But an engine whose whole premise is quiet resonator
+states settling toward zero meets that question before it meets any other, and
+nothing here sets flush-to-zero yet.
+
+Ordered before M5k (ZAP). **Needs a brainstorming round, then a spec.**
 
 ### M5k — ZAP ⬜
 
