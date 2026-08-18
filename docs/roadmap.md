@@ -2697,11 +2697,11 @@ chose them; they are tuning values and no gate depends on either number
 The SHAPE/SMOOTH rework's SMOOTH half has shipped — see "SMOOTH becomes
 interval-relative" under "Done". Its SHAPE half was handed to the round below
 rather than delivered, per spec §5, so **the Marbles round is the only designed
-round left before M5k**, followed by one loose thread that has no round of its
-own yet (the pitch RANGE law, below it). Newly opened on 2026-08-16 and ahead of
-both in the owner's order: **LED feedback**, which has neither a spec nor a
-brainstorming round yet — its hardware envelope is answered, its instrument
-question is not.
+round left before M5k**, followed by loose threads that have no round of their
+own yet (the pitch RANGE law, and two carried out of the SWARM withdrawal, all
+below it). Newly opened on 2026-08-16 and ahead of every one of them in the
+owner's order: **LED feedback**, which has neither a spec nor a brainstorming
+round yet — its hardware envelope is answered, its instrument question is not.
 
 ### Marbles round — VARY as the character axis ⬜ (unscheduled)
 
@@ -2962,6 +2962,40 @@ between two different control surfaces. Both were deleted with that layer.
 Nothing replaces either, so step 2 designs preset persistence from scratch —
 there is no format to extend and no conversion to reuse. The two files and the
 reasoning behind them are recoverable from `docs/attic/`.
+
+### Two threads carried out of the SWARM withdrawal ⬜ (unscheduled)
+
+SWARM was withdrawn 2026-08-18 on a listening decision and `main` was wound
+back to `42f9c79`; the account, the specs and the plans are in
+[`docs/attic/2026-08-18-swarm-withdrawn.md`](attic/2026-08-18-swarm-withdrawn.md).
+Two findings from that work are **not SWARM-specific** and survive it. Neither
+has a round, an owner or a date.
+
+**1. The `itcm-relief` bench layout now exists only in a tag.** It was built
+for SWARM's `-O3` link pressure on the Patch Submodule, but what it is — a
+documented route from "the image does not link" to "it links", with a
+placement guard (`itcm_placement.py`) and its own tests — has nothing to do
+with SWARM. The `full` bench profile still fails to link, deliberately and
+visibly (`bench/README.md`), so this problem returns with the next engine.
+
+Recover with `git diff 42f9c79 attic/swarm-2026-08-18 -- bench/`. Note what it
+is not: the layout is **link-verified only**. Three attempts to run it on the
+Submodule ended without evidence and the cause was never identified, so
+reviving it means finishing that verification, not just re-applying the diff.
+
+**2. Nothing in this repo ever sets flush-to-zero.** Verified 2026-08-18 by
+searching `shell/`, `bench/`, `host/render/`, `engine/` and `src/` for FTZ,
+DAZ, FPSCR and flush-to-zero: no match. Denormals therefore run at full cost
+everywhere.
+
+SWARM's partial bank is where this was noticed — one character cost about
+2.5x another purely through denormals, and enabling FTZ+DAZ collapsed it from
+10,398 ns to 4,440 ns. That engine is gone, but the absence is
+instrument-wide, and any future engine with quiet decaying partials, long
+reverb tails or filter states settling toward zero pays the same tax. The open
+question is where the flag belongs (`shell/main.cpp` on the target, and
+whether the desktop hosts should match so renders and hardware agree) and
+whether any existing gate would notice the change.
 
 ## Build & verify
 
