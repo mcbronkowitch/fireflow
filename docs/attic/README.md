@@ -2,6 +2,15 @@
 
 This directory holds discontinued work from FireFlow development—specs, plans, audits, and tuning notes that remain in the repository for their reasoning and design rationale, rather than their code implementation. The documents here have been superseded or removed from the active roadmap and should be read for context only, not as current direction.
 
+## How to recover SWARM
+
+**Tag:** `attic/swarm-2026-08-18`. The withdrawal is written up in
+[`2026-08-18-swarm-withdrawn.md`](2026-08-18-swarm-withdrawn.md), which carries
+the recovery commands, what the two rounds measured, and what was never
+established. Both specs, all three plans and the round-1 CPU decision are kept
+here as documents; the code, the tests and the `itcm-relief` bench work exist
+only in the tag.
+
 ## How to recover the faceplate
 
 **Last commit that still contains the faceplate:** `a4aca1a` — the parent of the
