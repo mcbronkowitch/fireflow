@@ -1,6 +1,7 @@
 # FEED — coupled feedback-FM drone engine
 
 **Date:** 2026-08-18
+**Revised:** 2026-08-19 — deck-compatibility review round (§2.6, §9.9, SPREAD/RATIO bounds)
 **Status:** design approved in brainstorming; implementation plan not yet written
 **Working title:** FEED (captions finalized in the VCV round)
 
@@ -53,6 +54,20 @@ Settled in the brainstorming round, 2026-08-18:
 5. **A trigger drives amplitude and index from one envelope.** In FM the attack
    lives in the index envelope, not in the level. Bright and rough on the
    attack, darker and calmer in the tail. The sustain level is the drone.
+
+Added 2026-08-19, in the spec review round:
+
+6. **FEED blends; it does not detune the mix.** The engine plays alongside
+   other decks, so the perceived pitch centre must hold: over the whole SPREAD
+   travel and up to a defined BOND threshold, the estimated fundamental stays
+   within a small tolerance of the played pitch (the gate is §9.9). Beyond the
+   threshold the network may break — the cliff stays, but it becomes a *place*
+   on the knob rather than an accident. The variety this spec promises comes
+   from motion (BOND, SPREAD, the index), never from parking the deck out of
+   tune. SWARM's withdrawal calibrates the scale: a +420-cent overtone
+   excursion earned the complaint "HARM almost always sounds detuned", and
+   +4.5 cents was accepted
+   ([`docs/attic/2026-08-18-swarm-withdrawn.md`](../../attic/2026-08-18-swarm-withdrawn.md)).
 
 ## 3. The pair bank
 
@@ -109,6 +124,15 @@ Both are recipes ported into float, not vendored code (§11):
    Its curve is a by-ear candidate (§10); that it is wired at all is a gate
    (§9.4).
 
+**One attenuation, both terms — deliberate.** `fb_amount_i` multiplies the
+blended input in §3.1, so the pitch-dependent attenuation dampens the
+neighbour term exactly as much as the self-feedback: high chord tones are not
+only more stable, they are also less *infected* — BOND audibly weakens toward
+the top of a chord. This is a decision, not a side effect: the top staying
+clean is part of §2.6. A review that files "coupling doesn't reach high notes"
+as a defect should be pointed here (the `fireflow-bbd-range-cap-is-flow-only`
+precedent: name the intent before it gets reported as a bug).
+
 ### 3.3 The ceiling
 
 A `tanh` ceiling on the deck sum, the `BodyVoice::kFlowSatCeil` pattern and for
@@ -125,6 +149,14 @@ centre pitch does not move with SPREAD). Under coupling, two nearly-equal
 mutually-modulating systems interfere aperiodically — the beat pattern never
 repeats, at no cost and with no state to freeze.
 
+**SPREAD is bounded by the spec, not only by ear.** The usable region is
+"beating audible, detune not": the beat tempo grows with the pair offset long
+before the offset reads as out-of-tune, and where that boundary sits is a
+desktop probe, not a taste question. The lower half of the knob stays in
+single-digit cents; only the top end is allowed to reach §4's "dense
+roughness". §10 still owns the curve inside that frame — and the
+symmetric-centre claim above stops being only a claim: §9.9 gates it.
+
 This is the deliberate opposite of SWARM's mechanism, and the reason is
 recorded in that engine's withdrawal: a drift implemented as a per-tick step
 **froze** at low settings (93.9 % of control ticks left the frequency exactly
@@ -136,6 +168,15 @@ FEED has no per-tick drift step, so the float32 cliff described in
 **`NEW` redraws the detune signature** of the bank — one `Rng` draw at the
 control tick, the deck's "individual", exactly as `NEW` reseeds elsewhere. It
 is the only randomness in the engine and it is not in the audio path.
+
+**`NEW` also draws small per-pair `fb_amount` offsets.** With one shared
+`fb_amount` the only per-pair individuality is the detune signature — thin, if
+SWARM's "it always sounds the same" is the bar. Small deterministic offsets,
+applied at the control tick, make each pair tip at a slightly different BOND
+position: the cliff becomes a gradient the ear can ride instead of an edge.
+Per-pair *ratio* offsets were considered for the same job and rejected — they
+push the sidebands inharmonic, which is exactly the detune §2.6 forbids. The
+offset range is a by-ear candidate (§10).
 
 ## 4. Lanes and voice row
 
@@ -155,7 +196,15 @@ HIT/DAMP/CHAR pattern):
 - **SOURCE contextual knob → RATIO** — modulator-to-carrier ratio, arcing from
   1:1 through integer ratios into irrational territory: tonal → bell-like →
   clangorous. Same slot as BODY's MATL, same role: the pretty range is the
-  lower half, the extreme is deliberately reachable.
+  lower half, the extreme is deliberately reachable. **The lower half
+  gravitates to integer ratios.** A continuous knob stands *between* the
+  integers almost everywhere, and near-integer ratios (2.03…) read as
+  chorus/detune — motion, but from the wrong source: §2.6 wants the motion to
+  come from BOND and SPREAD, not from a knob that happens to sit crooked. So
+  the lower half locks onto 1:1…4:1 (magnet curve vs. zones with hysteresis is
+  a plan decision; SWARM's zone reader survives in the attic tag as a
+  reference recipe), and only the upper half runs continuously into the
+  irrational.
 - **ATTACK → RISE / DECAY → FALL** — the one envelope, driving amplitude and
   index together. FALL carries the ring half of the STEP accent, gated by the
   DEC knob exactly as SYNTH/WAVE/BODY do it.
@@ -164,9 +213,13 @@ HIT/DAMP/CHAR pattern):
   by which SWARM took the slot.
 - **SUB → SUB** — one sine an octave below the root, the foundation under the
   network. Not part of the ring and not coupled.
-- **FILT (bipolar) → DAMP** — the low-pass tilt **inside the feedback path**:
-  left dark and tame, right bright and wild. It is honestly a filter; it sits
-  at the place where a filter means something in FM.
+- **FILT (bipolar) → DAMP** — a one-pole low-pass **inside the feedback
+  path**. Precisely, because "bright" is ambiguous on a low-pass: the centre
+  detent is a by-ear neutral cutoff (§10); left sweeps the cutoff down — dark
+  and tame, the feedback loses the highs that feed escalation; right sweeps it
+  up toward effectively open — bright and wild, unfiltered feedback carries
+  its full spectrum back into the phase input. It is honestly a filter; it
+  sits at the place where a filter means something in FM.
 
 DETUNE A/B stays what it is everywhere: a deck-wide offset.
 
@@ -242,7 +295,8 @@ and SONG reach it in both modes through the phrase machinery shipped in 2.21.2.
   shared implementation, so desktop renders and firmware agree. That matters
   more here than anywhere else: a chaotic system amplifies any difference
   between two sine implementations, and there is only one.
-- **`Rng`** for the `NEW` detune signature only.
+- **`Rng`** for the `NEW` draws only — the detune signature and the per-pair
+  `fb_amount` offsets (§3.4).
 - **`OnePole`** for DAMP, on the control side for coefficients; the per-sample
   path is a multiply-add.
 - **Part plumbing is free:** control tick, `set_chord`, accent, hold, width,
@@ -313,6 +367,14 @@ what SPREAD does to it) go through desktop probes
 ([`docs/engine-map.md` §6](../../engine-map.md)) before they enter the plan;
 measured facts land in the engine map.
 
+One of those probes is named here because three spec decisions hang on it: a
+**regime map** over BOND × DEPTH × RATIO — where the output is tonal, where it
+beats, where it escalates, where it breaks — measured on the desktop build and
+recorded in the engine map before the plan is written. The BOND knob curve
+(§10) is laid onto that map instead of searched blind, and §9.9's BOND
+threshold and cent tolerance are read off it rather than invented. The same
+probe finds SPREAD's "audibly beating but not yet detuned" boundary (§3.4).
+
 ## 9. Tests
 
 Doctest, each with its RED proven once (`fireflow-tests-must-be-able-to-fail`),
@@ -332,6 +394,12 @@ and none of the four vacuous shapes (`fireflow-vacuous-test-gates`).
    frequencies, so the windowed magnitude spectrum is stationary. Only coupling
    makes the sidebands themselves wander. A time-domain measure would see
    motion in both cases and the gate would be vacuous.
+
+   One implementation constraint, so the negative side cannot fail spuriously:
+   the analysis window must be long enough to **resolve the SPREAD detune**
+   (window length > 1/Δf for the smallest pair offset). An unresolved pair
+   merges into one bin whose magnitude pulses at the beat rate — the BOND 0
+   side would then move for a reason that has nothing to do with coupling.
 3. **Boundedness.** A sweep over BOND × DEPTH × RATIO × played pitch: the
    output is never NaN, never inf, and never exceeds the ceiling. This is
    feedback FM's real failure mode and the gate is cheap.
@@ -346,6 +414,12 @@ and none of the four vacuous shapes (`fireflow-vacuous-test-gates`).
    accent lands on both halves.**
 8. **Determinism.** Same knob state → same output; `NEW` changes it, and only
    `NEW`.
+9. **The pitch centre holds (two-sided).** Up to the BOND threshold read off
+   §8's regime map, and over the full SPREAD travel, the estimated fundamental
+   (autocorrelation on the deck output) stays within the tolerance of the
+   played pitch; **beyond the threshold it is allowed to break**, and the test
+   asserts nothing there. This is §2.6 made falsifiable — and it also proves
+   §3.4's symmetric-centre claim, which until this gate is only a claim.
 
 No render hash gates (`fireflow-bit-exactness-not-required`).
 
@@ -354,12 +428,17 @@ No render hash gates (`fireflow-bit-exactness-not-required`).
 Reserved for Bastian's ears and marked as such in the plan, the way the STEP
 accent's depth floors were:
 
-- where in BOND's travel the cliff sits (the curve, not the endpoint),
-- the SPREAD range in cents,
+- where in BOND's travel the cliff sits (the curve, laid onto §8's regime
+  map — the endpoint of the tonal region is the map's, not the ear's),
+- the SPREAD range in cents, inside §3.4's frame (lower half single-digit),
+- the per-pair `fb_amount` offset range of §3.4,
 - the minimum floor in FLOW,
 - RATIO's irrational end,
-- the DAMP range,
+- the DAMP range and its neutral centre cutoff (§4),
 - the pitch-attenuation curve of §3.2.2 and the ceiling constant of §3.3.
+
+Not by-ear, recorded to keep the boundary clean: §9.9's BOND threshold and
+cent tolerance come from the regime map (§8), not from listening.
 
 First-try values ship flagged.
 
@@ -421,4 +500,8 @@ written afterwards.
   round with the `DYNAMIC_CAPTIONS` change.
 - **Whether SPREAD's distribution is symmetric in cents or in ratio** — a
   desktop probe decides, before the plan.
+- **§9.9's BOND threshold and cent tolerance** — read off the §8 regime map,
+  fixed in the plan.
+- **RATIO's lower-half mechanism** — magnet curve vs. zones with hysteresis; a
+  plan decision (§4).
 - **FTZ** — measured in this round (§8), decided in its own.
