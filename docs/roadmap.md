@@ -2834,6 +2834,13 @@ What the round has to decide: what DPTH and EDGE control on SYNTH, WAVE, BODY,
 SAMPLER and BBD, and what each prints there. Then they join
 `DYNAMIC_CAPTIONS` like the rest.
 
+**Designed 2026-08-19:**
+[`specs/2026-08-19-voice-knobs-dpth-edge-design.md`](superpowers/specs/2026-08-19-voice-knobs-dpth-edge-design.md).
+DPTH becomes the MOTION lane's base on all six engines — the mechanism already
+exists and five of the six cells cost no engine code; EDGE becomes "the second
+filter", inside the loop where there is one and a high-pass where there is not.
+Not planned yet.
+
 **Two things it inherits, both already flagged in the source:**
 
 - **The plate word EDGE is a placeholder.** `DAMP` was the obvious word and it
@@ -2845,6 +2852,25 @@ SAMPLER and BBD, and what each prints there. Then they join
   SMKNOB pair needs 6.0 mm of clearance — a column on pitch (40.75) fails by
   2.5 mm. The hardware plate has no such problem: there the row is a clean 13 mm
   4×2, the same pitch as ATK/DEC/RES/SUB above it.
+
+### An anti-aliasing defeat, as a character control ⬜ (unscheduled)
+
+Rejected as an axis for EDGE on 2026-08-19, kept because it is a good knob in
+its own right: **"how sharp are the edges"** — the polyblep residual's amount
+on SYNTH's `MorphOsc` (0 = the raw, buzzing discontinuity; 1 = today's clean
+saw and pulse) and the mip-selection bias on WAVE's `WtOsc` (how much aliasing
+the table keeps). Both are cheap: one scale factor on the residual, one offset
+in `_select_mip`.
+
+It lost the EDGE slot because it makes a different promise. EDGE is a tone
+control; this is a lo-fi control that deliberately lets aliasing through, and
+two of six cells is a bad place for a promise the other four do not make. As
+its own control on its own knob it would be honest.
+
+Nothing is designed. Anyone picking this up starts with whether the two decks
+want it at all, and with the fact that FireFlow's other four engines have no
+equivalent — it would be a SYNTH/WAVE control, or it would need an answer for
+the rest.
 
 ### Marbles round — VARY as the character axis ⬜ (unscheduled)
 
