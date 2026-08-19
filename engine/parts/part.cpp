@@ -25,6 +25,8 @@ void Part::init(float sample_rate, uint32_t seed_base,
     _body.init(sample_rate);
     _bbd.init(sample_rate);
     _bbd.init_buffers(bbd_l, bbd_r, BbdEngine::kCells);
+    _feed.set_seed(seed_base ^ 0x46454544u);    // "FEED", distinct individual
+    _feed.init(sample_rate);
     _sampler.set_seed(seed_base ^ 0x5A11E20Du);
     _sampler.set_memory(sampler_mem, sampler_frames);
     _sampler.init(sample_rate);

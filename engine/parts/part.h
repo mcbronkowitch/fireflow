@@ -7,6 +7,7 @@
 #include "parts/engine_iface.h"
 #include "parts/test_tone_engine.h"
 #include "parts/bbd_engine.h"
+#include "feed/feed_engine.h"
 #include "synth/synth_engine.h"
 #include "sampler/sampler_engine.h"
 #include "fx/fx_util.h"
@@ -163,9 +164,21 @@ public:
     // be dead on a BBD deck -- the same failure class as the process_in()/
     // consumes_input() pairing, and why all six lines below carry a _bbd. call
     // in one edit rather than each engine's forward landing on its own.
-    void set_voice_attack(float n)    { _synth.set_attack(n);    _wave.set_attack(n);    _body.set_attack(n);    _sampler.set_window_attack(n); _bbd.set_attack(n); }
-    void set_voice_decay(float n)     { _synth.set_decay(n);     _wave.set_decay(n);     _body.set_decay(n);     _sampler.set_window_decay(n);  _bbd.set_decay(n); }
-    void set_voice_resonance(float n) { _synth.set_resonance(n); _wave.set_resonance(n); _body.set_resonance(n); _sampler.set_resonance(n);     _bbd.set_resonance(n); }
+    //
+    // FEED reinterprets them a fourth time, network-side (spec 2026-08-18
+    // feed-coupled-feedback-fm, the plan's control map): ATTACK is RISE,
+    // DECAY is FALL with FLOOR folded into its top quarter (one knob, two
+    // meanings, which is what frees RESONANCE), RESONANCE is the
+    // modulator:carrier RATIO -- free because FEED has no filter resonance --
+    // SUB is the uncoupled sub-octave sine, and FILT is DAMP, a one-pole
+    // INSIDE the feedback path rather than after it. DETUNE is deliberately a
+    // no-op on FEED: DETUNE means SPREAD there and the host re-points that
+    // knob to LANE_SIZE's base (host/vcv/src/Fireflow.cpp), so the forward
+    // below still carries a _feed. call -- an engine missing from one of these
+    // lines is exactly the silent-dead-knob failure this comment is about.
+    void set_voice_attack(float n)    { _synth.set_attack(n);    _wave.set_attack(n);    _body.set_attack(n);    _sampler.set_window_attack(n); _bbd.set_attack(n);    _feed.set_attack(n); }
+    void set_voice_decay(float n)     { _synth.set_decay(n);     _wave.set_decay(n);     _body.set_decay(n);     _sampler.set_window_decay(n);  _bbd.set_decay(n);     _feed.set_decay(n); }
+    void set_voice_resonance(float n) { _synth.set_resonance(n); _wave.set_resonance(n); _body.set_resonance(n); _sampler.set_resonance(n);     _bbd.set_resonance(n); _feed.set_resonance(n); }
     // The visible SUB control is routed separately as GENE SIZE on a sampler,
     // while visible SOURCE becomes ORG through LANE_SOURCE. The independent,
     // widgetless Detune parameter has no sampler meaning. Keep melodic SUB and
@@ -174,9 +187,9 @@ public:
     // the sampler either, but it DOES have its own reinterpretation of both
     // (input level, slew time -- see the block comment above), so it joins
     // Synth/Wave/BODY on these two lines.
-    void set_voice_sub(float n)       { _synth.set_sub(n);       _wave.set_sub(n);       _body.set_sub(n);       _bbd.set_sub(n); }
-    void set_voice_detune(float n)    { _synth.set_detune(n);    _wave.set_detune(n);    _body.set_detune(n);    _bbd.set_detune(n); }
-    void set_voice_filt(float t)      { _synth.set_filt(t);      _wave.set_filt(t);      _body.set_filt(t);      _sampler.set_filt(t);          _bbd.set_filt(t); }
+    void set_voice_sub(float n)       { _synth.set_sub(n);       _wave.set_sub(n);       _body.set_sub(n);       _bbd.set_sub(n);       _feed.set_sub(n); }
+    void set_voice_detune(float n)    { _synth.set_detune(n);    _wave.set_detune(n);    _body.set_detune(n);    _bbd.set_detune(n);    _feed.set_detune(n); }
+    void set_voice_filt(float t)      { _synth.set_filt(t);      _wave.set_filt(t);      _body.set_filt(t);      _sampler.set_filt(t);          _bbd.set_filt(t);      _feed.set_filt(t); }
 
     SamplerEngine& sampler() { return _sampler; }
     const SamplerEngine& sampler() const { return _sampler; }
@@ -191,11 +204,16 @@ public:
     const BodyEngine& body() const { return _body; }
     BbdEngine& bbd() { return _bbd; }
     const BbdEngine& bbd() const { return _bbd; }
+    FeedEngine& feed() { return _feed; }
+    const FeedEngine& feed() const { return _feed; }
 
     int active_voices() const {
         if (_engine_id == ENGINE_SYNTH) return _synth.active_voices();
         if (_engine_id == ENGINE_WAVE) return _wave.active_voices();
         if (_engine_id == ENGINE_BODY) return _body.active_voices();
+        // A coupled network is ONE sound, not n voices: FeedEngine answers 1
+        // while its single Env is audible and 0 otherwise (spec section 6).
+        if (_engine_id == ENGINE_FEED) return _feed.active_voices();
         return 0;
     }
     float voice_env(int v) const {
@@ -207,6 +225,9 @@ public:
         // envelope reading meant for the meter that consumes it, but do not
         // expect an AD shape from it.
         if (_engine_id == ENGINE_BODY) return _body.voice_env(v);
+        // Slot 0 carries the deck's one envelope; every other slot is 0, which
+        // is what max_voice_env()'s loop over kVoices needs to see.
+        if (_engine_id == ENGINE_FEED) return _feed.voice_env(v);
         return 0.f;
     }
 
@@ -452,6 +473,7 @@ private:
     WaveEngine     _wave;
     BodyEngine     _body;
     BbdEngine      _bbd;
+    FeedEngine     _feed;
     SamplerEngine  _sampler;
     EngineId       _engine_id = ENGINE_SYNTH;
     EngineId       _pending_engine = ENGINE_SYNTH;
@@ -472,6 +494,7 @@ private:
             case ENGINE_WAVE:    return static_cast<IPartEngine*>(&_wave);
             case ENGINE_BODY:    return static_cast<IPartEngine*>(&_body);
             case ENGINE_BBD:     return static_cast<IPartEngine*>(&_bbd);
+            case ENGINE_FEED:    return static_cast<IPartEngine*>(&_feed);
             default:             return static_cast<IPartEngine*>(&_tone);
         }
     }

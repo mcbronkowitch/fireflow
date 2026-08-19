@@ -76,6 +76,9 @@ add_executable(spky_tests
     tests/test_flow_melody_wiring.cpp
     engine/parts/bbd_engine.cpp
     tests/test_bbd_engine.cpp
+    engine/feed/feed_engine.cpp
+    tests/test_feed_pair.cpp
+    tests/test_feed_engine.cpp
     tests/test_deck_bus.cpp
     engine/instrument.cpp
     bench/audition/init_patch.cpp
@@ -180,6 +183,7 @@ add_executable(render
     engine/mod/super_modulator.cpp
     engine/parts/part.cpp
     engine/parts/bbd_engine.cpp
+    engine/feed/feed_engine.cpp
     engine/instrument.cpp
     engine/center/center.cpp
     engine/fx/grit.cpp
