@@ -293,6 +293,15 @@ constexpr float  kWindowHalfMin = 0.02f;
 // 2026-07-18-sampler-texture-deck-design.md). Ear-tunable.
 constexpr float  kScatterPosFrac  = 1.0f;
 constexpr float  kScatterTimeFrac = 0.75f;   // spawn-interval jitter, fraction of interval
+
+// LANE_MOTION's base, as read by a SAMPLER deck (part.cpp). Halved, and the
+// halving is the whole point: at base >= 0.5 the position jitter is uniform
+// over one content length, which makes ORGANIZE and SCAN provably irrelevant
+// (measured 2026-07-22: means 12036 / 11896 / 11951 at SOURCE 0 / 0.25 / 0.9
+// over content 24000). That state used to be unavoidable, which is why the
+// base was discarded entirely; with DPTH on the panel it becomes the top of
+// the knob's travel instead -- a choice, not an accident.
+constexpr float  kMotionBaseScale = 0.5f;
 // kScatterOctProb (0.25) lived here: the chance a grain jumped an octave.
 // Removed 2026-07-21 with the scatter itself -- it was the one MOTION scatter
 // that moved PITCH, which the sampler must hold still so a sampler deck and a
