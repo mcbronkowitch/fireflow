@@ -82,8 +82,11 @@ PARAM_TIPS = [
     'SHUFL', 'PACE',
     # DPTH/EDGE per deck (2026-08-19). Rack names, not plate captions -- the
     # faceplate prints DPTH and EDGE, the tooltip says what the knob is.
-    'FEED: FM index', 'FEED: FM index',
-    'FEED: in-loop damp cutoff', 'FEED: in-loop damp cutoff',
+    # Task 8 retired the FEED-only tips: both knobs broadcast to all six
+    # engines now (Tasks 2-7), so a tooltip naming FEED alone would lie on
+    # the other five decks.
+    'MOTION lane base', 'MOTION lane base',
+    'Second-filter trim', 'Second-filter trim',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
@@ -319,10 +322,10 @@ def test_param_runtime_tip_contract():
     check(PARAM_TIPS[ids["LINK_A"]:ids["STAGES_B"] + 1]
           == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
           "BBD Bend runtime tips drifted")
-    check(PARAM_TIPS[-4:] == ['FEED: FM index', 'FEED: FM index',
-                              'FEED: in-loop damp cutoff',
-                              'FEED: in-loop damp cutoff'],
-          "the appended FEED tips are not the trailing runtime tips")
+    check(PARAM_TIPS[-4:] == ['MOTION lane base', 'MOTION lane base',
+                              'Second-filter trim',
+                              'Second-filter trim'],
+          "the appended DPTH/EDGE tips are not the trailing runtime tips")
     check(PARAM_TIPS[-5] == 'PACE',
           "PACE must sit at the end of the legacy runtime tips (spec 2026-08-12 "
           "modulation-pace)")
@@ -1843,49 +1846,105 @@ def feed_host_wiring_issues(cpp):
     return issues
 
 
-def _feed_cfg_floats():
-    """kDepthBase and kDampFixedHz, read from the engine header."""
+def _read_float(rel_path_parts, name):
+    """Read a `constexpr float NAME = VALUE;` literal out of an engine
+    source file (header or .cpp -- BBD's constants live in a .cpp on
+    purpose, for internal linkage, spec 2026-08-19 voice-knobs-dpth-edge
+    task 8). rel_path_parts is a tuple of path components under the repo
+    root, e.g. ("engine", "feed", "feed_config.h"). Returns None (not an
+    exception) when the file or the name is missing, so a caller can assert
+    on absence the same way it asserts on a wrong value -- the generalised
+    form of the parser this file has used since _feed_cfg_floats()."""
     here = os.path.dirname(os.path.abspath(__file__))
-    hdr = os.path.join(here, "..", "..", "..", "engine", "feed", "feed_config.h")
-    with open(hdr) as f:
-        text = f.read()
+    path = os.path.join(here, "..", "..", "..", *rel_path_parts)
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return None
+    m = re.search(r"(?:static\s+)?constexpr\s+float\s+" + re.escape(name) +
+                  r"\s*=\s*([0-9.]+)f", text)
+    return float(m.group(1)) if m else None
+
+
+def _feed_cfg_floats():
+    """kDepthBase, read from the engine header. kDampFixedHz used to be
+    parsed here too (Task 3), to derive EDGE's boot default; EDGE stopped
+    being an absolute cutoff (spec 4.2) and the derivation went with it --
+    test_edge_neutral_is_every_engine_s_own_constant reads kDampFixedHz
+    itself now, through _read_float, so it does not belong in this
+    DPTH-only helper any more."""
     out = {}
-    for name in ("kDepthBase", "kDampFixedHz"):
-        m = re.search(r"constexpr\s+float\s+" + name + r"\s*=\s*([0-9.]+)f", text)
-        check(m is not None, f"feed_config.h has no {name}")
-        out[name] = float(m.group(1))
+    for name in ("kDepthBase",):
+        v = _read_float(("engine", "feed", "feed_config.h"), name)
+        check(v is not None, f"feed_config.h has no {name}")
+        out[name] = v
     return out
 
 
 def test_feed_shipped_defaults_are_the_engine_constants():
-    """The two VOICE knobs of 2026-08-19 must BOOT neutral, so a patch that
-    never touches them sounds exactly as it did before they existed.
+    """DPTH must BOOT neutral, so a patch that never touches it sounds
+    exactly as it did before it existed. The knob IS the LANE_MOTION base,
+    so kDepthBase is literally the position it must boot at.
 
-    DPTH still recomputes its default from feed_config.h: the knob IS the
-    LANE_MOTION base, so kDepthBase is literally the position it must boot at.
-
-    EDGE no longer can, and that is the change rather than a weakening. It
-    stopped being an absolute cutoff on host-owned 200..16000 Hz rails, where
-    the boot position had to be DERIVED from kDampFixedHz, and became a
-    bipolar trim around a neutral each engine defines for itself -- so the one
-    boot value that can be right on six engines at once is the trim's centre,
-    0. There is no host-side range left to read.
-
-    Task 8 of the same plan replaces this with the stronger gate the trim
-    makes possible: that every engine's neutral is a NAMED CONSTANT in its own
-    header rather than a literal in the host."""
+    EDGE's half of this gate moved to
+    test_edge_neutral_is_every_engine_s_own_constant (Task 8): it stopped
+    being an absolute cutoff on host-owned rails, where the boot position
+    had to be DERIVED from kDampFixedHz, and became a bipolar trim around a
+    neutral each engine defines for itself -- so the one boot value that can
+    be right on six engines at once is the trim's centre, 0, checked
+    alongside the six neutral constants rather than here."""
     cfg = _feed_cfg_floats()
     want_depth = cfg["kDepthBase"]
     for side in ("A", "B"):
         got_d = g.INIT_DEFAULTS["DEPTH_" + side]
-        got_e = g.INIT_DEFAULTS["DAMP_" + side]
         check(abs(got_d - want_depth) < 1e-6,
               f"DEPTH_{side} boots at {got_d}, not feed_cfg::kDepthBase "
               f"({want_depth})")
-        check(got_e == 0.0,
-              f"DAMP_{side} boots at {got_e}, not at EDGE's trim centre (0.0) "
-              f"-- any other position moves five engines' factory sound the "
-              f"moment the knob exists")
+
+
+# Where each engine's EDGE neutral is a named constant, wherever it actually
+# lives -- not one shared header. FEED's is feed_config.h; the sampler's is
+# sampler_config.h; SYNTH's (and WAVE's: both engines instantiate the same
+# SynthEngineT<V> template, so they share this one constant by construction,
+# spec 2026-08-19 voice-knobs-dpth-edge §4.2/4.3) is a SynthEngineT class
+# member in synth_engine.h; BODY's is a PRIVATE Exciter member in exciter.h;
+# the BBD's live in an anonymous namespace inside bbd_engine.cpp, on purpose,
+# for internal linkage -- moving any of these to satisfy a text parser was
+# ruled out (Task 8 brief). SYNTH/WAVE and the sampler and the BBD keep the
+# neutral itself as a fixed Hz constant (kEdgeHpNeutralHz/kDampFixedHz) that
+# t == 0 reads unmodified; BODY has no such fixed corner -- its neutral is
+# whatever RESO already derived, and what proves t == 0 leaves that alone is
+# kEdgeOctaves itself: pow(2, kEdgeOctaves * 0) == 1 exactly (exciter.h's own
+# comment), so checking that constant is named is what stands in for BODY's
+# neutral here.
+EDGE_NEUTRAL_CONSTANTS = (
+    ("SYNTH",   ("engine", "synth", "synth_engine.h"),   "kEdgeHpNeutralHz"),
+    ("SAMPLER", ("engine", "sampler", "sampler_config.h"), "kEdgeHpNeutralHz"),
+    ("WAVE",    ("engine", "synth", "synth_engine.h"),   "kEdgeHpNeutralHz"),
+    ("BODY",    ("engine", "body", "exciter.h"),          "kEdgeOctaves"),
+    ("BBD",     ("engine", "parts", "bbd_engine.cpp"),    "kEdgeHpNeutralHz"),
+    ("FEED",    ("engine", "feed", "feed_config.h"),      "kDampFixedHz"),
+)
+
+
+def test_edge_neutral_is_every_engine_s_own_constant():
+    """EDGE boots at centre and centre means 'unchanged' on all six engines.
+
+    This replaces the FEED-only default gate. The old one derived one knob
+    position from one constant; that shape cannot survive six engines with
+    six neutrals, which is exactly the defect that made EDGE a trim (spec
+    4.2). What is checkable instead: the knob's init default is the centre,
+    the centre is 0, and every engine's neutral is a named constant near its
+    own engine -- header or .cpp, whichever the engine actually uses --
+    rather than a literal in the host."""
+    check(g.INIT_DEFAULTS["DAMP_A"] == 0.0 and g.INIT_DEFAULTS["DAMP_B"] == 0.0,
+          "EDGE must boot at the trim's centre")
+    for engine, rel_path_parts, name in EDGE_NEUTRAL_CONSTANTS:
+        path = "/".join(rel_path_parts)
+        check(_read_float(rel_path_parts, name) is not None,
+              f"{engine}: {name} must be a named constant in {path}, "
+              f"not a host literal")
 
 
 def test_feed_host_wiring():

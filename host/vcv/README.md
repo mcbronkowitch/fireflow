@@ -149,7 +149,7 @@ pinned to `0.40`, and the reverb's **REV_SMEAR** (diffuser-LFO wash) and
 
 ## Engine-dependent captions
 
-Eight controls change their caption with the deck's `ENG`. The words live in
+Nine controls change their caption with the deck's `ENG`. The words live in
 `DYNAMIC_CAPTIONS` in `res/gen_panel.py` and reach both the SVG and Rack from
 there — the C++ holds no caption word at all.
 
@@ -164,6 +164,7 @@ there — the C++ holds no caption word at all.
 | SOURCE | `TIMB` | `ORG` | `FRAME` | `MATL` | `DRIVE` | `BOND` |
 | DETUNE | `DTUN` | `DTUN` | `DTUN` | `DTUN` | `DTUN` | `SPRD` |
 | DEPTH | `DPTH` | `SCAT` | `DPTH` | `SWAY` | `RPTS` | `DPTH` |
+| EDGE | `EDGE` | `EDGE` | `EDGE` | `SNAP` | `PRE` | `EDGE` |
 
 DETUNE joined the table with FEED (spec 2026-08-18). It had been a fixed
 `DTUN` plate, and on a FEED deck a fixed plate would lie: there the knob is
@@ -184,6 +185,28 @@ untouched patch sounds the same as before on five engines. The Sampler is the
 exception: it reads the base through `sampler_cfg::kMotionBaseScale = 0.5`, so
 the knob's default lands at base `0.25` there, not the degenerate `0.5` that
 used to flatten the spawn-position jitter.
+
+EDGE is the engine's second filter (spec 2026-08-19 voice-knobs-dpth-edge,
+§4): `FILT` takes the top end of what leaves the engine, EDGE takes what
+`FILT` does not. On the straight engines (Synth, Wave, Sampler) that is a
+one-pole high-pass on the summed output — up removes low end, `EDGE`. On
+Body it trims the exciter's own low-pass corner ahead of the resonator —
+`SNAP`, how bright the strike is. On the BBD it is pre-emphasis on what
+enters the delay line, ahead of the loss pole and the feedback tilt that
+already shape the decay — `PRE`, the one EDGE cell that shapes an arrival
+rather than a decay. On Feed it stays the in-loop one-pole and keeps `EDGE`.
+
+**EDGE is a trim, not an absolute cutoff.** The knob has one boot value
+(centre, `0.0`); six engines have six neutral points, so centre means "this
+engine, unchanged" everywhere — the same shape `FILT` already uses. A patch
+that never touches EDGE sounds identical to one from before the knob
+existed, on all six engines, by construction: each engine's neutral is a
+named constant next to that engine's own filter math (`kDampFixedHz` on
+Feed, `kEdgeHpNeutralHz` on Synth/Wave/Sampler/BBD, the RESO-derived corner
+itself on Body), never a host-side literal. Body's zone 2 (RESO's top
+third, the sputter/ping character) is a documented exception: the click/
+noise filter EDGE trims does not run there at all, so EDGE is inert on that
+part of Body's RESO travel — not a bug, a signal path with no filter in it.
 
 GRIT itself is bipolar (spec 2026-08-09 hw-control-reduction task 4): there is
 no separate mode pad any more. The knob's sign picks the mode -- left of

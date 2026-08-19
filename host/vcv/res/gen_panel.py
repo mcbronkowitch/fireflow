@@ -256,6 +256,23 @@ ROW_V1, ROW_V2 = 77.3, 89.4
 #
 # DETUNE is a NEW row here. It was a fixed DTUN plate until this spec, and a
 # fixed plate would now lie: on a FEED deck that knob is SPREAD.
+#
+# EDGE's words (spec 2026-08-19 voice-knobs-dpth-edge, 4.3), the caption
+# round that gives EDGE six real destinations instead of five stubs (Tasks
+# 4-7). Word[0] is EDGE itself, not a per-engine name -- Synth's voice is a
+# straight oscillator/sub/SvfLp chain with no drive term (voice.cpp) for a
+# second filter to trim against, so this is the axis's own plain reading,
+# same shape as FILT's four plain cells (design 6). Sampler and Wave share
+# that identical bottom-rail high-pass and read EDGE too. Body prints SNAP
+# (Exciter::set_edge, a trim on the click/noise corner _recompute_filter
+# already derives from RESO) -- not DAMP, which is already this table's
+# DECAY word for Body two rows up, and one word may only ever name one
+# control (test_every_printed_word_is_unique). BBD prints PRE
+# (BbdEngine::set_edge, a pre-emphasis one-pole on what enters the line,
+# ahead of SUB's input gain -- the one EDGE cell that shapes an ARRIVAL
+# rather than a decay, spec 4.5). Feed keeps EDGE: the knob is no longer an
+# absolute cutoff, it is a bipolar trim around feed_cfg::kDampFixedHz, the
+# same shape FILT already carries everywhere else on this axis (spec 4.2).
 DYNAMIC_CAPTIONS = [
     ("MELODY",   "ENGINE",   ("VARY", "SCAN", "VARY", "VARY", "VARY", "VARY")),
     ("ATTACK",   "ENGINE",   ("ATK",  "ATK",  "ATK",   "HIT",   "ATK",   "RISE")),
@@ -266,6 +283,7 @@ DYNAMIC_CAPTIONS = [
     ("SOURCE",   "ENGINE",   ("TIMB", "ORG",  "FRAME", "MATL",  "DRIVE", "BOND")),
     ("DETUNE",   "ENGINE",   ("DTUN", "DTUN", "DTUN",  "DTUN",  "DTUN",  "SPRD")),
     ("DEPTH",    "ENGINE",   ("DPTH", "SCAT", "DPTH",  "SWAY",  "RPTS", "DPTH")),
+    ("DAMP",     "ENGINE",   ("EDGE", "EDGE", "EDGE",  "SNAP",  "PRE",  "EDGE")),
 ]
 
 
@@ -611,28 +629,23 @@ APPENDED_PANEL_PARAMS = [
     # beside TEMPO, and next to TIDE on the hardware grid -- those two are the
     # pair this control came out of confusing: TIDE is a ratio, PACE is speed.
     Ctl("PACE", SMKNOB, CX - 9.0, ROW_TIME1, "PACE"),
-    # DPTH and DAMP: the two FEED values that had no panel home (spec
-    # 2026-08-18 feed §4, and docs/engine-map.md §9's two open questions).
-    # DPTH is the FM index -- it was always reachable as the LANE_MOTION base,
-    # but the host pinned it to feed_cfg::kDepthBase and only MOD could move
-    # it. DAMP is EDGE: on FEED the in-loop one-pole, whose 3200 Hz was
-    # confirmed against darker settings only.
-    #
-    # The re-pointing round is UNDER WAY (spec 2026-08-19 voice-knobs-dpth-
-    # edge). DPTH reaches all six engines since Task 2; EDGE broadcasts since
-    # Task 3 but still lands on a stub in five of them, so it is inert
-    # everywhere but FEED until Tasks 4-7 land. The tips below still say FEED
-    # for that reason; Task 8 is the caption round that retires them.
+    # DPTH and DAMP: the two VOICE knobs that grew out of FEED (spec
+    # 2026-08-18 feed §4, and docs/engine-map.md §9's two open questions),
+    # and now reach all six engines (spec 2026-08-19 voice-knobs-dpth-edge).
+    # DPTH is the LANE_MOTION base -- read as width+drift, drift alone,
+    # scatter, feedback amount or FM index depending on the engine (design
+    # §3). DAMP is EDGE, a bipolar trim around each engine's own neutral --
+    # the second filter on the straight engines, the exciter corner on Body,
+    # pre-emphasis on the BBD, unchanged in what it does on Feed (design
+    # §4). The enum stays DAMP because that is what it is in the engine
+    # (Part::set_voice_edge, FEED's original one-pole); the printed word is
+    # EDGE (DYNAMIC_CAPTIONS below).
     #
     # Appended, so every existing param id keeps its number.
-    Ctl("DEPTH_A", SMKNOB, VOICE_X[3],     ROW_V1, "DPTH", "FEED: FM index"),
-    Ctl("DEPTH_B", SMKNOB, W - VOICE_X[3], ROW_V1, "DPTH", "FEED: FM index"),
-    # The printed word is EDGE, not DAMP: BODY's DECAY already prints DAMP
-    # (DYNAMIC_CAPTIONS below), and one word may name only one knob. The enum
-    # stays DAMP because that is what it is in the engine. PLACEHOLDER -- the
-    # word is Bastian's to pick.
-    Ctl("DAMP_A",  SMKNOB, VOICE_X[3],     ROW_V2, "EDGE", "FEED: in-loop damp cutoff"),
-    Ctl("DAMP_B",  SMKNOB, W - VOICE_X[3], ROW_V2, "EDGE", "FEED: in-loop damp cutoff"),
+    Ctl("DEPTH_A", SMKNOB, VOICE_X[3],     ROW_V1, "DPTH", "MOTION lane base"),
+    Ctl("DEPTH_B", SMKNOB, W - VOICE_X[3], ROW_V1, "DPTH", "MOTION lane base"),
+    Ctl("DAMP_A",  SMKNOB, VOICE_X[3],     ROW_V2, "EDGE", "Second-filter trim"),
+    Ctl("DAMP_B",  SMKNOB, W - VOICE_X[3], ROW_V2, "EDGE", "Second-filter trim"),
 ]
 
 # Persistent ids retain the legacy visible and hidden sequences exactly; runtime
