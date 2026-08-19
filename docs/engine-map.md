@@ -1187,10 +1187,63 @@ specifically to keep the voices busy. The 81.41 % above is the cheap state. This
 also reaches the P decision — sizing `kPairs` against a sounding deck sizes it
 against the wrong case.
 
-The fix has two candidate shapes and this round does not pick one: a local snap
-in `FeedBank` (when the target is zero and `amp` is below an epsilon, set it to
-zero) or `FPSCR.FZ` instrument-wide, which spec §8 already says is its own
-decision. The local one is the smaller claim.
+### Fixed, and what the board says
+
+The local fix, chosen over `FPSCR.FZ` because it is the smaller claim and
+leaves the instrument-wide decision where spec §8 put it. It took two parts,
+and the second only became visible once the first worked:
+
+1. **`FeedBankT::kArriveEps`** (`1e-9`). `set_target` snaps a value to its
+   target when the remaining travel falls under it, at the control rate, so
+   the audio path is untouched. The increments went subnormal along with the
+   values, which is why a SOUNDING deck at static pitch was paying a smaller
+   version of the same tax.
+2. **`SvfLp::FlushDenormals`**. With the glide arriving, the deck goes
+   *exactly* silent -- and a two-pole fed exact zeros decays into the same
+   place. Opt-in at the caller's control rate, so `Voice` and `SamplerEngine`
+   are bit-for-bit unaffected and the `daisysp::Svf` equality still pins the
+   algebra.
+
+Desktop, `FeedEngine`, 20 s after one hit at FALL 0:
+
+| | subnormal output samples | idle vs sounding | FTZ off vs on |
+|---|---:|---:|---:|
+| before | 1 759 436 of 1.92 M | 1.65× | 1.76× |
+| after | **0** | **1.00×** | **1.00×** |
+
+**FTZ making no difference at all is the proof**, not the ratio: nothing on
+FEED's path reaches the subnormal range any more. The sounding case got 6 %
+faster too (59.98 → 56.47 ns/sample).
+
+On hardware, with the new `inst_feed_engine_idle` row
+([`500775c`](bench/2026-08-19-500775c-feed-axi-o2-patch_sm-usb.md)):
+
+| workload | avg % | max % |
+|---|---:|---:|
+| `inst_feed_engine_idle` (both decks SILENT) | 75.64 | **76.77** |
+| `inst_feed_engine_worst` (both decks sounding) | 77.70 | 83.32 |
+| `instrument_worst`, same image | 98.67 | 103.48 |
+| `feed_pairs` at P = 4 | 8.03 | 8.21 |
+
+Silence is now the CHEAPER state, which is what a working engine looks like.
+The spread between average and maximum is the other tell: 1.5 % on the idle
+row against 7.2 % on the sounding one, i.e. a genuinely steady state rather
+than a tail doing intermittent work.
+
+**The ARM factor itself is unmeasured.** 1.65× is a desktop number, and this
+image does not contain the broken engine to compare against. Getting it would
+cost a commit of a deliberately reverted engine plus a board round; the fix is
+justified without it, so it has not been spent.
+
+**What it took to reach silence at all**, because none of it is visible from
+reading the workload: `set_step(p, true, 16)` from the worst-case config keeps
+the sequencer firing, `DENS 0` still leaves a note on every phrase boundary
+(2.58 s), and FEED's FALL at 0 needs **6.67 s** to cross `Env`'s 1e-4 idle
+threshold at 120 BPM. The row now sets DENS, RATE and VARY to 0 and *waits*
+for both parts to report idle rather than warming for a guessed number of
+blocks -- a guess that was short by 333 blocks out of 3000 and halted the
+board with no row and no message, twice. An `assert` in a bench setup has no
+failure mode that reaches the operator.
 
 ### Three measurement traps this engine sets, and what they cost
 
