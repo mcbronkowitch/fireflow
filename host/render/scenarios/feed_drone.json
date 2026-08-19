@@ -1,0 +1,41 @@
+{
+  "_comment": "FEED listening render (spec 2026-08-18). Part A is a FEED deck left in FLOW (set_step is never called for part 0, so Part::flow() stays true -- 'lanes boot in FLOW -> drone', part.cpp), part B is silenced at LEVEL so nothing else is in the picture. Four sweeps, one at a time, each the thing the engine exists for: BOND from self-feedback into the ring, SPREAD from still to beating, DEPTH from tonal to rough, and one COLOR move to hear a chord change arrive as a glissando rather than a retrigger. BOND rides LANE_SOURCE's base, SPREAD LANE_SIZE's and DEPTH LANE_MOTION's -- the three lane bases the VCV host writes from the SOURCE, DETUNE and (as a constant) MOTION re-points, so what this render sweeps is what a player can reach. No hash gate: renders are sanity checks, not checksums (CLAUDE.md).",
+  "sample_rate": 48000,
+  "bpm": 90,
+  "duration_s": 44,
+  "init": [
+    {"action":"set_engine","part":0,"value":"feed"},
+    {"action":"set_engine","part":1,"value":"test_tone"},
+    {"action":"set_target_active","part":1,"slot":4,"flag":false},
+    {"action":"set_target_base","part":1,"slot":4,"value":0.0},
+
+    {"_comment":"A held drone: DECAY high, so FALL is long AND FLOOR is up -- the two live on one knob (the fold that frees RES for RATIO)."},
+    {"action":"set_voice_attack","part":0,"value":0.45},
+    {"action":"set_voice_decay","part":0,"value":0.92},
+    {"action":"set_voice_resonance","part":0,"value":0.18},
+    {"action":"set_voice_sub","part":0,"value":0.45},
+    {"action":"set_voice_filt","part":0,"value":0.0},
+
+    {"_comment":"Lanes held still, so what moves is the engine and not the plane. MOD 0; every sweep below is a lane BASE."},
+    {"action":"set_depth","part":0,"value":0.0},
+    {"action":"set_target_base","part":0,"slot":0,"value":0.0},
+    {"action":"set_target_base","part":0,"slot":1,"value":0.0},
+    {"action":"set_target_base","part":0,"slot":2,"value":0.35},
+    {"action":"set_target_base","part":0,"slot":3,"value":0.5},
+    {"action":"set_reverb_mix","value":0.25}
+  ],
+  "events": [
+    {"_comment":"0-10s: BOND 0, SPREAD 0 -- self-feedback only, one pitch. The reference the other three are heard against."},
+    {"t":10.0,"action":"set_target_base","part":0,"slot":1,"value":0.35},
+    {"_comment":"10-18s: SPREAD into the single-digit region -- slow breathing, no detune."},
+    {"t":18.0,"action":"set_target_base","part":0,"slot":0,"value":0.45},
+    {"_comment":"18-26s: BOND half up -- the ring engages and the sidebands start to wander."},
+    {"t":26.0,"action":"set_target_base","part":0,"slot":0,"value":0.85},
+    {"_comment":"26-32s: BOND past the measured pitch threshold (0.7, docs/engine-map.md section 9) -- the cliff, on purpose."},
+    {"t":32.0,"action":"set_target_base","part":0,"slot":0,"value":0.45},
+    {"t":32.0,"action":"set_target_base","part":0,"slot":3,"value":0.95},
+    {"_comment":"32-38s: back below the cliff, DEPTH to the top -- the index alone."},
+    {"t":38.0,"action":"set_color","part":0,"value":0.8}
+    ,{"_comment":"38-44s: a chord arrives as a glide of the whole ring, with no retrigger."}
+  ]
+}

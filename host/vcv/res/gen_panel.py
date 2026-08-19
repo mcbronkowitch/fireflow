@@ -205,8 +205,8 @@ ROW_V1, ROW_V2 = 77.3, 89.4
 # own value.
 #
 # Engine order is the frozen ENG order: 0 Synth, 1 Sampler, 2 Wave, 3 Body,
-# 4 BBD. Word[0] is also the control's resting label on the static plate --
-# test_static_label_is_the_tables_first_word holds the two together.
+# 4 BBD, 5 Feed. Word[0] is also the control's resting label on the static
+# plate -- test_static_label_is_the_tables_first_word holds the two together.
 #
 # Sources, so a later reader can check each word against the engine rather
 # than against taste: BodyVoice::set_env_times is "exciter length, damping";
@@ -222,14 +222,43 @@ ROW_V1, ROW_V2 = 77.3, 89.4
 # FEEDBACK. A four-letter FEED between those two reads as a third feedback
 # control -- the one thing this knob is NOT. INPUT is what set_sub does, and
 # five letters is a length EXCIT already carries in this exact slot.
+#
+# FEED's words (spec 2026-08-18 feed-coupled-feedback-fm), each naming the
+# setter it stands for so the next reader can check the word against the engine
+# rather than against taste. RISE and FALL are the deck's ONE envelope in
+# absolute seconds (FeedEngine::set_attack/set_decay), and FALL's top quarter
+# is also FLOOR -- one knob, two meanings, which is what frees the RES slot.
+# RATIO is set_resonance, the modulator:carrier ratio, magnet-locked to the
+# integers in its lower half. BRITE is set_filt, a one-pole INSIDE the feedback
+# path rather than after it, bipolar around a neutral centre cutoff. BOND is
+# the LANE_SOURCE target, morphing each modulator's input from its own
+# feedback into its neighbour's output. SPRD is the LANE_SIZE base, re-pointed
+# from the DETUNE knob in Fireflow.cpp -- the sampler's SUB -> LANE_SIZE
+# re-point, one entry further down the same ledger.
+#
+# FEED's FILT word is BRITE and NOT DAMP, which is what it wanted to be. DAMP
+# is already BODY's DECAY word, and "no word is printed twice" caught the
+# collision -- two controls saying one word in different engine states is
+# exactly what that guard exists for. TONE, the obvious replacement, is also
+# already printed (the FLUX fieldset). BRITE is free because it is already THIS
+# row's BODY word, and printed_words dedupes within one control: a knob may say
+# the same word in two of its states, that is one meaning said twice rather
+# than a collision. It is also the honest word -- on both decks FILT opens the
+# top end, and that FEED's filter sits INSIDE the feedback path (so it governs
+# how far the coupling escalates, not just the tone) is a manual matter and not
+# something five characters can carry.
+#
+# DETUNE is a NEW row here. It was a fixed DTUN plate until this spec, and a
+# fixed plate would now lie: on a FEED deck that knob is SPREAD.
 DYNAMIC_CAPTIONS = [
-    ("MELODY",   "ENGINE",   ("VARY", "SCAN", "VARY", "VARY", "VARY")),
-    ("ATTACK",   "ENGINE",   ("ATK",  "ATK",  "ATK",   "HIT",   "ATK")),
-    ("DECAY",    "ENGINE",   ("DEC",  "DEC",  "DEC",   "DAMP",  "TAIL")),
-    ("RES",      "ENGINE",   ("RES",  "RES",  "RES",   "CHAR",  "TILT")),
-    ("SUB",      "ENGINE",   ("SUB",  "LEN",  "SUB",   "EXCIT", "INPUT")),
-    ("FILT",     "ENGINE",   ("FILT", "FILT", "FILT",  "BRITE", "LOSS")),
-    ("SOURCE",   "ENGINE",   ("TIMB", "ORG",  "FRAME", "MATL",  "DRIVE")),
+    ("MELODY",   "ENGINE",   ("VARY", "SCAN", "VARY", "VARY", "VARY", "VARY")),
+    ("ATTACK",   "ENGINE",   ("ATK",  "ATK",  "ATK",   "HIT",   "ATK",   "RISE")),
+    ("DECAY",    "ENGINE",   ("DEC",  "DEC",  "DEC",   "DAMP",  "TAIL",  "FALL")),
+    ("RES",      "ENGINE",   ("RES",  "RES",  "RES",   "CHAR",  "TILT",  "RATIO")),
+    ("SUB",      "ENGINE",   ("SUB",  "LEN",  "SUB",   "EXCIT", "INPUT", "SUB")),
+    ("FILT",     "ENGINE",   ("FILT", "FILT", "FILT",  "BRITE", "LOSS",  "BRITE")),
+    ("SOURCE",   "ENGINE",   ("TIMB", "ORG",  "FRAME", "MATL",  "DRIVE", "BOND")),
+    ("DETUNE",   "ENGINE",   ("DTUN", "DTUN", "DTUN",  "DTUN",  "DTUN",  "SPRD")),
 ]
 
 
@@ -962,7 +991,7 @@ def header():
     L2.append("struct PanelTxt { XY mm; float size; float spacing; unsigned rgb; "
               "unsigned char anchor; const char* str; };")
     L2.append("struct DynCaption { int id; int driverId; int count; "
-              "const char* words[5]; };")
+              "const char* words[6]; };")
     L2.append(f"static constexpr int PART_STRIDE = {PART_STRIDE};")
     L2.append(f"static constexpr float kRingR = {RING_R:.3f}f;      // mm, LED-dot orbit")
     L2.append(f"static constexpr float kRingDotR = 0.95f;   // mm, lit-dot radius")
@@ -1005,7 +1034,7 @@ def header():
     # the target itself for a self-driving pad.
     L2.append("static const DynCaption kDynCaptions[] = {")
     for target, driver, words in DYNAMIC_CAPTIONS:
-        padded = list(words) + [""] * (5 - len(words))
+        padded = list(words) + [""] * (6 - len(words))
         cells = ", ".join(f'"{w}"' for w in padded)
         for suffix in ("_A", "_B"):
             L2.append(f"    {{{target}{suffix}, {driver}{suffix}, "

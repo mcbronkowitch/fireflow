@@ -6,7 +6,7 @@ enum WidgetKind { WK_BIGKNOB, WK_KNOBC, WK_SMKNOB, WK_KNOBI, WK_SW2, WK_LATCH, W
 struct PanelCtl { int id; WidgetKind kind; XY mm; const char* label; XY lbl; unsigned char anchor; float lblSize; unsigned lblRgb; const char* tip; };
 // anchor: 0 = middle, 1 = start (left-aligned), 2 = end (right-aligned)
 struct PanelTxt { XY mm; float size; float spacing; unsigned rgb; unsigned char anchor; const char* str; };
-struct DynCaption { int id; int driverId; int count; const char* words[5]; };
+struct DynCaption { int id; int driverId; int count; const char* words[6]; };
 static constexpr int PART_STRIDE = 20;
 static constexpr float kRingR = 16.000f;      // mm, LED-dot orbit
 static constexpr float kRingDotR = 0.95f;   // mm, lit-dot radius
@@ -235,20 +235,22 @@ static const PanelCtl kLightCtls[] = {
     {REC_B_L, WK_LIGHT, {182.360f, 103.600f}, "", {182.360f, 103.600f}, 0, 1.90f, 0x171713, ""},
 };
 static const DynCaption kDynCaptions[] = {
-    {MELODY_A, ENGINE_A, 5, {"VARY", "SCAN", "VARY", "VARY", "VARY"}},
-    {MELODY_B, ENGINE_B, 5, {"VARY", "SCAN", "VARY", "VARY", "VARY"}},
-    {ATTACK_A, ENGINE_A, 5, {"ATK", "ATK", "ATK", "HIT", "ATK"}},
-    {ATTACK_B, ENGINE_B, 5, {"ATK", "ATK", "ATK", "HIT", "ATK"}},
-    {DECAY_A, ENGINE_A, 5, {"DEC", "DEC", "DEC", "DAMP", "TAIL"}},
-    {DECAY_B, ENGINE_B, 5, {"DEC", "DEC", "DEC", "DAMP", "TAIL"}},
-    {RES_A, ENGINE_A, 5, {"RES", "RES", "RES", "CHAR", "TILT"}},
-    {RES_B, ENGINE_B, 5, {"RES", "RES", "RES", "CHAR", "TILT"}},
-    {SUB_A, ENGINE_A, 5, {"SUB", "LEN", "SUB", "EXCIT", "INPUT"}},
-    {SUB_B, ENGINE_B, 5, {"SUB", "LEN", "SUB", "EXCIT", "INPUT"}},
-    {FILT_A, ENGINE_A, 5, {"FILT", "FILT", "FILT", "BRITE", "LOSS"}},
-    {FILT_B, ENGINE_B, 5, {"FILT", "FILT", "FILT", "BRITE", "LOSS"}},
-    {SOURCE_A, ENGINE_A, 5, {"TIMB", "ORG", "FRAME", "MATL", "DRIVE"}},
-    {SOURCE_B, ENGINE_B, 5, {"TIMB", "ORG", "FRAME", "MATL", "DRIVE"}},
+    {MELODY_A, ENGINE_A, 6, {"VARY", "SCAN", "VARY", "VARY", "VARY", "VARY"}},
+    {MELODY_B, ENGINE_B, 6, {"VARY", "SCAN", "VARY", "VARY", "VARY", "VARY"}},
+    {ATTACK_A, ENGINE_A, 6, {"ATK", "ATK", "ATK", "HIT", "ATK", "RISE"}},
+    {ATTACK_B, ENGINE_B, 6, {"ATK", "ATK", "ATK", "HIT", "ATK", "RISE"}},
+    {DECAY_A, ENGINE_A, 6, {"DEC", "DEC", "DEC", "DAMP", "TAIL", "FALL"}},
+    {DECAY_B, ENGINE_B, 6, {"DEC", "DEC", "DEC", "DAMP", "TAIL", "FALL"}},
+    {RES_A, ENGINE_A, 6, {"RES", "RES", "RES", "CHAR", "TILT", "RATIO"}},
+    {RES_B, ENGINE_B, 6, {"RES", "RES", "RES", "CHAR", "TILT", "RATIO"}},
+    {SUB_A, ENGINE_A, 6, {"SUB", "LEN", "SUB", "EXCIT", "INPUT", "SUB"}},
+    {SUB_B, ENGINE_B, 6, {"SUB", "LEN", "SUB", "EXCIT", "INPUT", "SUB"}},
+    {FILT_A, ENGINE_A, 6, {"FILT", "FILT", "FILT", "BRITE", "LOSS", "BRITE"}},
+    {FILT_B, ENGINE_B, 6, {"FILT", "FILT", "FILT", "BRITE", "LOSS", "BRITE"}},
+    {SOURCE_A, ENGINE_A, 6, {"TIMB", "ORG", "FRAME", "MATL", "DRIVE", "BOND"}},
+    {SOURCE_B, ENGINE_B, 6, {"TIMB", "ORG", "FRAME", "MATL", "DRIVE", "BOND"}},
+    {DETUNE_A, ENGINE_A, 6, {"DTUN", "DTUN", "DTUN", "DTUN", "DTUN", "SPRD"}},
+    {DETUNE_B, ENGINE_B, 6, {"DTUN", "DTUN", "DTUN", "DTUN", "DTUN", "SPRD"}},
 };
 static const PanelTxt kPanelTexts[] = {
     {{39.500f, 36.100f}, 5.00f, 0.00f, 0x2E6355, 0, "A"},

@@ -1150,7 +1150,7 @@ def test_dynamic_caption_table_is_well_formed():
     if table is None:
         return
     enums = {c.enum for c in g.RUNTIME_PANEL_PARAMS}
-    driver_states = {"ENGINE": 5}
+    driver_states = {"ENGINE": 6}
     for target, driver, words in table:
         for suffix in ("_A", "_B"):
             check(target + suffix in enums,
@@ -1161,8 +1161,8 @@ def test_dynamic_caption_table_is_well_formed():
               f"{target}: driver {driver!r} has no known state count")
         check(len(words) == driver_states.get(driver, -1),
               f"{target}: {len(words)} words for a {driver} driver")
-        check(len(words) <= 5,
-              f"{target}: {len(words)} words exceeds the header's word[5]")
+        check(len(words) <= 6,
+              f"{target}: {len(words)} words exceeds the header's word[6]")
         check(all(w and w.isupper() for w in words),
               f"{target}: captions must be non-empty upper case: {words}")
 
@@ -1195,14 +1195,14 @@ def test_header_carries_the_dynamic_caption_table():
     """Rack must read the words, never hold its own copy."""
     h = g.header()
     check("struct DynCaption { int id; int driverId; int count; "
-          "const char* words[5]; };" in h,
+          "const char* words[6]; };" in h,
           "generated header has no DynCaption struct")
     check("static const DynCaption kDynCaptions[]" in h,
           "generated header has no kDynCaptions table")
     rows = 2 * len(g.DYNAMIC_CAPTIONS)
-    check(h.count("{SUB_A, ENGINE_A, 5, {") == 1,
+    check(h.count("{SUB_A, ENGINE_A, 6, {") == 1,
           "SUB_A is not bound to its own deck's ENG")
-    check(h.count("{SUB_B, ENGINE_B, 5, {") == 1,
+    check(h.count("{SUB_B, ENGINE_B, 6, {") == 1,
           "SUB_B is not bound to its own deck's ENG")
     body = h.split("static const DynCaption kDynCaptions[] = {")[1].split("};")[0]
     check(body.count("},") == rows,
@@ -1437,6 +1437,7 @@ def engine_cycle_wiring_issues(cpp, makefile, led_law):
         "nvgRGBA(120,210,255,145)",
         "nvgRGBA(160,255,150,140)",
         "nvgRGBA(230,140,255,140)",
+        "nvgRGBA(230,140,110,140)",
     ]
     if got_shades != want_shades:
         issues.append(
@@ -1467,12 +1468,13 @@ struct EngineCycleLatch : VCVLatch {
 
     engine_config = """
 else if (c.id == ENGINE_A || c.id == ENGINE_B) {
-    configSwitch(c.id, 0.f, 4.f, init, "Engine",
-                 {"Synth", "Sampler", "Wave", "Body", "BBD"});
+    configSwitch(c.id, 0.f, 5.f, init, "Engine",
+                 {"Synth", "Sampler", "Wave", "Body", "BBD",
+                  "Feed"});
     getParamQuantity(c.id)->snapEnabled = true;
 }"""
     if compact_cpp(config).count(compact_cpp(engine_config)) != 1:
-        issues.append("ENG config must be one snapped Synth/Sampler/Wave/Body/BBD 0..4 branch")
+        issues.append("ENG config must be one snapped Synth/Sampler/Wave/Body/BBD/Feed 0..5 branch")
 
     engine_widget = """
 case WK_LATCH:
@@ -1502,10 +1504,11 @@ const spky::EngineId id =
     eng == 2 ? spky::ENGINE_WAVE :
     eng == 3 ? spky::ENGINE_BODY :
     eng == 4 ? spky::ENGINE_BBD :
+    eng == 5 ? spky::ENGINE_FEED :
     smp[p].testTone ? spky::ENGINE_TEST_TONE : spky::ENGINE_SAMPLER;
 inst.set_engine(p, id);"""
     if push_n.count(compact_cpp(dispatch)) != 1:
-        issues.append("ENG dispatch must exactly preserve Synth/Sampler/Wave/Body/BBD/test-tone states")
+        issues.append("ENG dispatch must exactly preserve Synth/Sampler/Wave/Body/BBD/Feed/test-tone states")
     factory = "if(eng==1&&!smp[p].testTone&&inst.sampler_empty(p)&&!factoryTried[p]){"
     if push_n.count(factory) != 1:
         issues.append("factory autoload must be restricted to ENG state 1")
@@ -1701,8 +1704,10 @@ def source_detune_wiring_issues(cpp):
             'auto* source = configParam(c.id, 0.f, 1.f, init, '
             'c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");'
             'source->description = "Controls Synth TIMB, Sampler ORG, Wave '
-            'FRAME, or Body MATL according to the selected engine.";'),
-         "SOURCE A/B need stable names and a TIMB/FRAME/ORG/MATL description"),
+            'FRAME, Body MATL, BBD DRIVE or Feed BOND according to the '
+            'selected engine.";'),
+         "SOURCE A/B need stable names and a "
+         "TIMB/FRAME/ORG/MATL/DRIVE/BOND description"),
     ):
         if required not in config_n:
             issues.append(label)
@@ -1755,11 +1760,11 @@ def test_source_detune_guard_rejects_representative_regressions():
     mutations = [
         ("pp(SOURCE_A, p)", "pp(DETUNE_A, p)", "SOURCE lane"),
         ("const float detKnob = pp(DETUNE_A, p);\n"
-         "            inst.set_voice_detune(p, detKnob * detKnob);",
+         "                inst.set_voice_detune(p, detKnob * detKnob);",
          "inst.set_voice_detune(p, pp(DETUNE_A, p));", "linear detune taper"),
         ("c.id == DETUNE_A || c.id == DETUNE_B",
          "c.id == DETUNE_A", "Detune B configControls branch"),
-        ("Synth TIMB, Sampler ORG, Wave FRAME, or Body MATL",
+        ("Synth TIMB, Sampler ORG, Wave FRAME, Body MATL, BBD DRIVE or Feed BOND",
          "Synth COLOR, Sampler POSITION, Wave START, or Body SHAPE",
          "SOURCE description"),
         ("string::f(\"%.1f ct\",\n            v * v * spky::SynthEngine::kDetuneCeilCt);",
@@ -1771,6 +1776,80 @@ def test_source_detune_guard_rejects_representative_regressions():
         mutated = cpp.replace(before, after, 1)
         check(source_detune_wiring_issues(mutated),
               f"SOURCE/Detune guard accepted a {label} regression")
+
+
+def feed_host_wiring_issues(cpp):
+    """Return regressions in the two re-points a FEED deck needs.
+
+    Both are BEHAVIOURAL, not cosmetic, and both are silent when reverted:
+    a FEED deck whose DETUNE knob stops writing LANE_SIZE simply has a dead
+    SPREAD control, and one whose LANE_MOTION base is never written sits on
+    Part's compiled-in 0.5 with no way to reach DEPTH's ends from the panel --
+    the same defect this host already had for every engine before 2026-08-18.
+    """
+    issues = []
+    push = cpp_scope(cpp, "void pushParams()")
+    if push is None:
+        return ["FEED wiring: parameter push scope is missing"]
+    push_n = compact_cpp(push)
+
+    if "constboolfeedPart=inst.engine_id(p)==spky::ENGINE_FEED;" not in push_n:
+        issues.append("FEED deck detection must read the dispatched engine_id")
+    if "elseif(feedPart){inst.set_target_base(p,spky::LANE_SIZE,pp(DETUNE_A,p));}" \
+            not in push_n:
+        issues.append("DETUNE must write LANE_SIZE's base as SPREAD on a FEED deck")
+    if "inst.set_target_base(p,spky::LANE_SIZE,pp(DETUNE_A,p)*pp(DETUNE_A,p))" in push_n:
+        issues.append("SPREAD must reach LANE_SIZE raw -- FEED owns its own curve, "
+                      "and DetuneQuantity's square would compress the "
+                      "single-digit region the spec reserves for it")
+    if "if(inst.engine_id(p)!=spky::ENGINE_FEED){" not in push_n:
+        issues.append("set_voice_detune must be gated off on a FEED deck, where "
+                      "that knob is SPREAD and reaches the engine elsewhere")
+    if "inst.set_target_base(p,spky::LANE_MOTION," not in push_n:
+        issues.append("LANE_MOTION's base must be written, or DEPTH's ends are "
+                      "unreachable from the panel")
+    if "feedPart?spky::feed_cfg::kDepthBase:0.5f" not in push_n:
+        issues.append("LANE_MOTION's base must be feed_cfg::kDepthBase on a FEED "
+                      "deck and Part's own 0.5f elsewhere")
+    return issues
+
+
+def test_feed_host_wiring():
+    """The FEED deck's two lane-base re-points are present and correctly shaped."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
+        cpp = f.read()
+    for issue in feed_host_wiring_issues(cpp):
+        check(False, issue)
+
+
+def test_feed_host_wiring_guard_rejects_representative_regressions():
+    """Each of the four ways the FEED re-points can be reverted is caught."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
+        cpp = f.read()
+    mutations = [
+        ("} else if (feedPart) {\n"
+         "                inst.set_target_base(p, spky::LANE_SIZE,   pp(DETUNE_A, p));\n",
+         "} else if (false) {\n"
+         "                inst.set_target_base(p, spky::LANE_SIZE,   pp(DETUNE_A, p));\n",
+         "SPREAD re-point removed"),
+        ("            inst.set_target_base(p, spky::LANE_MOTION,\n"
+         "                                 feedPart ? spky::feed_cfg::kDepthBase : 0.5f);",
+         "",
+         "LANE_MOTION base write removed"),
+        ("                                 feedPart ? spky::feed_cfg::kDepthBase : 0.5f);",
+         "                                 0.5f);",
+         "DEPTH default reverted to the lane-layer coincidence"),
+        ("            if (inst.engine_id(p) != spky::ENGINE_FEED) {",
+         "            if (true) {",
+         "DETUNE gate removed"),
+    ]
+    for before, after, label in mutations:
+        check(before in cpp, f"fixture drifted: {label!r} needle not found")
+        mutated = cpp.replace(before, after, 1)
+        check(feed_host_wiring_issues(mutated),
+              f"FEED wiring guard accepted a {label} regression")
 
 
 def flux_time_wiring_issues(cpp):

@@ -18,6 +18,7 @@
 // The portable engine core -- exactly the same headers the desktop render host
 // and (later) the Daisy firmware use. No hardware type crosses this boundary.
 #include "instrument.h"
+#include "feed/feed_config.h"    // kDepthBase, the LANE_MOTION base on a FEED deck
 #include "mod/divisions.h"
 #include "mod/song_ladder.h"
 #include "sampler_ui.hpp"
@@ -222,6 +223,7 @@ static const NVGcolor kEngineShades[] = {
     nvgRGBA(120, 210, 255, 145),  // Wave: blue
     nvgRGBA(160, 255, 150, 140),  // Body: green
     nvgRGBA(230, 140, 255, 140),  // BBD: violet
+    nvgRGBA(230, 140, 110, 140),  // Feed: warm ember
 };
 struct EngineCycleLatch : VCVLatch {
     void drawLayer(const DrawArgs& args, int layer) override {
@@ -398,7 +400,7 @@ struct Fireflow : Module {
                             c.id, 0.f, 1.f, init,
                             c.id == SOURCE_A ? "SOURCE A" : "SOURCE B");
                         source->description =
-                            "Controls Synth TIMB, Sampler ORG, Wave FRAME, or Body MATL according to the selected engine.";
+                            "Controls Synth TIMB, Sampler ORG, Wave FRAME, Body MATL, BBD DRIVE or Feed BOND according to the selected engine.";
                     }
                     else if (c.id == DETUNE_A || c.id == DETUNE_B)
                         // DETUNE is a real panel control now (kParamCtls),
@@ -488,8 +490,9 @@ struct Fireflow : Module {
                         configSwitch(c.id, 0.f, 1.f, init, "Record",
                                      {"Stopped", "Recording"});
                     else if (c.id == ENGINE_A || c.id == ENGINE_B) {
-                        configSwitch(c.id, 0.f, 4.f, init, "Engine",
-                                     {"Synth", "Sampler", "Wave", "Body", "BBD"});
+                        configSwitch(c.id, 0.f, 5.f, init, "Engine",
+                                     {"Synth", "Sampler", "Wave", "Body", "BBD",
+                                      "Feed"});
                         getParamQuantity(c.id)->snapEnabled = true;
                     }
                     else {
@@ -635,8 +638,18 @@ struct Fireflow : Module {
             // Quadratic taper: the first ~20 ct is where the fine beating
             // lives, and a linear map would squeeze it into a fifth of the
             // travel now that the ceiling is 105 ct.
-            const float detKnob = pp(DETUNE_A, p);
-            inst.set_voice_detune(p, detKnob * detKnob);
+            //
+            // Not on a FEED deck. There DETUNE means SPREAD and gets to the
+            // engine as the LANE_SIZE base further down -- the sampler's
+            // SUB -> LANE_SIZE re-point, one entry further down the same
+            // ledger. It is passed RAW there, not squared: FEED owns its own
+            // curve in feed_cfg's two-segment SPREAD map, and applying
+            // DetuneQuantity's square on top would compress the single-digit
+            // region the spec reserves for the lower half.
+            if (inst.engine_id(p) != spky::ENGINE_FEED) {
+                const float detKnob = pp(DETUNE_A, p);
+                inst.set_voice_detune(p, detKnob * detKnob);
+            }
 
             inst.set_flux_mix(p, pp(FLUX_A, p));
             inst.set_flux_rate(p, (int)std::lround(
@@ -700,17 +713,18 @@ struct Fireflow : Module {
                                    (1.f - kLvlCompSplit), kCompShape));
 
             // Saved ENG meanings remain 0 = Synth and 1 = Sampler; 2 adds
-            // Wave, 3 Body, 4 the BBD. Each new engine needs its own explicit
-            // arm here -- anything that isn't 0/2/3/4 still falls through to
-            // Sampler (or the dev test tone), which is also why old patches
-            // keep their exact meaning. The test tone stays a Sampler-only
-            // override.
+            // Wave, 3 Body, 4 the BBD, 5 FEED. Each new engine needs its own
+            // explicit arm here -- anything that isn't 0/2/3/4/5 still falls
+            // through to Sampler (or the dev test tone), which is also why old
+            // patches keep their exact meaning. The test tone stays a
+            // Sampler-only override.
             const int eng = static_cast<int>(std::round(pp(ENGINE_A, p)));
             const spky::EngineId id =
                 eng == 0 ? spky::ENGINE_SYNTH :
                 eng == 2 ? spky::ENGINE_WAVE :
                 eng == 3 ? spky::ENGINE_BODY :
                 eng == 4 ? spky::ENGINE_BBD :
+                eng == 5 ? spky::ENGINE_FEED :
                 smp[p].testTone ? spky::ENGINE_TEST_TONE : spky::ENGINE_SAMPLER;
             inst.set_engine(p, id);
 
@@ -794,12 +808,20 @@ struct Fireflow : Module {
             // Ledger of every lane base this function re-points per engine, so
             // the next addition has one place to check itself against rather
             // than re-discovering the rule by breaking it a third time:
-            //   - LANE_SIZE:  sampler-only (SUB_A -> GENE SIZE), restored to
-            //                 0.5f below when the deck is not the sampler.
+            //   - LANE_SIZE:  sampler (SUB_A -> GENE SIZE) and FEED
+            //                 (DETUNE_A -> SPREAD), restored to 0.5f below
+            //                 when the deck is neither.
             //   - LANE_PITCH: BBD-only (STAGES_A/B). Other engines retain
             //                 their existing base; this movement only rehomes
             //                 the preserved STAGES state while BBD is active.
+            //   - LANE_MOTION: written for every engine since 2026-08-18 --
+            //                 feed_cfg::kDepthBase on a FEED deck, and Part's
+            //                 own 0.5f on every other, so nothing moves for
+            //                 them. Before that this host never wrote this
+            //                 base at all, so the only thing that could reach
+            //                 LANE_MOTION in Rack was MOD.
             const bool bbdPart = inst.engine_id(p) == spky::ENGINE_BBD;
+            const bool feedPart = inst.engine_id(p) == spky::ENGINE_FEED;
             // STAGES is orphaned by movement 3 and becomes the LANE_PITCH base
             // on a BBD deck. Re-pointing a knob per engine is not new -- the
             // sampler already moves SUB_A to LANE_SIZE as GENE SIZE.
@@ -873,14 +895,28 @@ struct Fireflow : Module {
             inst.set_variation(p, samplerPart ? 0.f : pp(MELODY_A, p));
             if (samplerPart) inst.sampler_scan(p, pp(MELODY_A, p));
 
-            // GENE SIZE rides the lane base only in the sampler. The else
-            // branch is load-bearing -- a base left behind on an engine flip
-            // would silently stick.
+            // GENE SIZE rides the lane base in the sampler, SPREAD in FEED.
+            // The else branch is load-bearing -- a base left behind on an
+            // engine flip would silently stick.
             if (samplerPart) {
                 inst.set_target_base(p, spky::LANE_SIZE,   pp(SUB_A, p));
+            } else if (feedPart) {
+                inst.set_target_base(p, spky::LANE_SIZE,   pp(DETUNE_A, p));
             } else {
                 inst.set_target_base(p, spky::LANE_SIZE,   0.5f);
             }
+
+            // LANE_MOTION's base was never written by this host at all, so it
+            // sat on Part's compiled-in 0.5 and the only thing that moved it in
+            // Rack was MOD. An engine that reads LANE_MOTION therefore had a
+            // control whose ends the player could not reach. FEED reads it as
+            // DEPTH, the FM index, and gets its own by-ear default here instead
+            // of inheriting a lane-layer coincidence. The else branch is
+            // load-bearing for the same reason the LANE_SIZE one is: a base
+            // left behind on an engine flip sticks. 0.5f is exactly Part's
+            // default, so nothing moves for the other five engines.
+            inst.set_target_base(p, spky::LANE_MOTION,
+                                 feedPart ? spky::feed_cfg::kDepthBase : 0.5f);
 
             // Stable pitch in the sampler: the lane still FIRES (that is what
             // keeps STEP triggering alive -- Part::process reads the fire as
