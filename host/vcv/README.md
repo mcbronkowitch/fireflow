@@ -149,7 +149,7 @@ pinned to `0.40`, and the reverb's **REV_SMEAR** (diffuser-LFO wash) and
 
 ## Engine-dependent captions
 
-Nine controls change their caption with the deck's `ENG`. The words live in
+Ten controls change their caption with the deck's `ENG`. The words live in
 `DYNAMIC_CAPTIONS` in `res/gen_panel.py` and reach both the SVG and Rack from
 there — the C++ holds no caption word at all.
 

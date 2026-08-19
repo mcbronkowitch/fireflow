@@ -256,6 +256,56 @@ that constant says.
   but BODY's level rides MATL and EXCIT hard and one setting is not a verdict.
   Needs its own pass before anything moves.
 
+## DPTH and EDGE, on the other five engines
+
+FEED's own DPTH/EDGE items are above, under "FEED: DPTH and EDGE are yours to
+turn now" — that section already covers `kDepthBase` and `kDampFixedHz`. This
+one covers the first values `docs/superpowers/specs/2026-08-19-voice-knobs-dpth-edge-design.md`
+introduced on the other five engines, none of them confirmed by ear yet
+(spec §9).
+
+- **Every engine's EDGE octave span and neutral is a FIRST VALUE (spec §9
+  items 1 and 5).**
+
+  | Engine | Neutral | Span (octaves) | Constant |
+  |---|---|---|---|
+  | BODY | RESO-derived corner (`Exciter::_recompute_filter`) | 2.0 | `Exciter::kEdgeOctaves` — `engine/body/exciter.h`, **private** |
+  | SYNTH, WAVE | 20 Hz | 3.0 | `SynthEngineT<V>::kEdgeHpNeutralHz` / `kEdgeHpOctaves` — `engine/synth/synth_engine.h` |
+  | SAMPLER | 20 Hz | 3.0 | `sampler_cfg::kEdgeHpNeutralHz` / `kEdgeOctaves` — `engine/sampler/sampler_config.h` |
+  | BBD | 20 Hz | 3.0 | anonymous-namespace `kEdgeHpNeutralHz` / `kEdgeOctaves` — `engine/parts/bbd_engine.cpp` |
+
+  Spec §9 item 5 asks specifically whether SYNTH/WAVE/SAMPLER's shared
+  3.0-octave span wants to split into three, or stay one control with one
+  span copied across engines that merely happen to share the "output
+  high-pass" shape. Still open. BODY's 2.0 octaves was matched to
+  `feed_cfg::kEdgeOctaves` rather than measured for BODY specifically
+  (`exciter.h`'s own comment says so) — the probe rule forbids justifying it
+  with a number nobody printed for this engine.
+
+- **`sampler_cfg::kMotionBaseScale = 0.5f`.** DPTH's base reaches a sampler
+  deck halved, not at face value: knob 0.5 → base 0.25 (jitter window half a
+  content length, ORGANIZE/SCAN stay audible), knob 1.0 → base 0.5 (the
+  degenerate all-uniform state described under "MOTION's scatter on a
+  sampler deck" above), knob 0.0 → base 0 (today's behaviour, the return
+  ticket). Whether 0.25 — DPTH's shipped default of 0.5, halved — is the
+  right factory point is unconfirmed (spec §9 item 2).
+
+- **BODY's DPTH may be a whisper.** `body_voice.cpp`'s `kDriftDetuneCt = 3.f`
+  caps the drift at ±3 cents, and `kDriftPanAmt = 0.25f` moves a pan fan that
+  is pinned to centre on BODY's one voice (`BodyVoice::kEngineVoices == 1`)
+  — so a full DPTH sweep on a BODY deck buys ±3 cents of pitch wander and
+  nothing in the stereo field. If the listening pass finds `SWAY` too small
+  to be worth a quarter of the VOICE row, `kDriftDetuneCt` is the ceiling to
+  move, not the knob (spec §9 item 6).
+
+- **DPTH at the top of its travel on a BBD deck reaches above unity before
+  the loss pole.** `_fb_lane = clampf(t[LANE_MOTION], 0.f, 1.f) * 1.2f /
+  bbd_drive_gain(_drive)` (`bbd_engine.cpp`), so DPTH 1.0 lands at
+  `1.2 / bbd_drive_gain(DRIVE)` — above 1 before the loss pole eats into it.
+  Not new territory (`MOD` could already drive the lane to 1.0 today), but
+  newly reachable without modulation, under one finger, for the first time.
+  A listening item, not a bug (spec §3.4); no probe has run yet.
+
 ## Panel & factory patch
 
 - **The reduced panel's two contested legends stand** (confirmed 2026-08-09):
