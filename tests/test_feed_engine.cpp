@@ -776,3 +776,116 @@ TEST_CASE("feed G22: a retrigger is click-free") {
     CAPTURE(worst_hit);
     CHECK(worst_hit < 3.f * worst_running);
 }
+
+TEST_CASE("feed G23: trigger_chord fires ONE envelope hit, not n") {
+    // IPartEngine's default implementation loops trigger(). A four-note chord
+    // would be four hits inside one sample -- four Env::trigger calls, each
+    // restarting the attack, so the audible result is one hit at the wrong
+    // shape and three wasted.
+    //
+    // The envelope's SHAPE is the observable, and it is read directly rather
+    // than inferred from the audio's peak index: the ring is a drone of
+    // detuned pairs, so where its waveform happens to peak is a beat artifact.
+    // voice_env is the envelope itself.
+    auto rise_profile = [](const float* p, int n) {
+        FeedEngine e = fresh_feed();
+        e.set_attack(0.5f);
+        e.set_decay(0.4f);
+        feed_lanes(e, 0.5f, 0.2f, 0.2f, 0.8f);
+        e.set_flow(false);
+        e.trigger_chord(p, n);
+        std::vector<float> env;
+        for (int i = 0; i < 12000; ++i) {
+            float l, r;
+            e.process(l, r);
+            env.push_back(e.voice_env(0));
+        }
+        return env;
+    };
+    const float one[1] = { 0.4f };
+    const float four[4] = { 0.4f, 0.45f, 0.5f, 0.55f };
+    const std::vector<float> a = rise_profile(one, 1);
+    const std::vector<float> b = rise_profile(four, 4);
+    REQUIRE(a.size() == b.size());
+    // One hit rises once, and n stacked triggers rise differently -- so if the
+    // override were missing, these two envelopes would not coincide.
+    float worst = 0.f;
+    for (size_t i = 0; i < a.size(); ++i)
+        worst = std::max(worst, std::fabs(a[i] - b[i]));
+    CAPTURE(worst);
+    CHECK(worst < 1e-6f);
+    // And the envelope actually did something, so the comparison is not
+    // between two flat lines.
+    CHECK(peak_of(a) > 0.5f);
+}
+
+TEST_CASE("feed G24: a chord change is a glissando, not a retrigger") {
+    // set_chord must re-voice the network live, with no envelope hit at all --
+    // COLOR is a modulation destination and it moves every control tick.
+    FeedEngine e = fresh_feed();
+    e.set_decay(1.f);
+    feed_lanes(e, 0.5f, 0.2f, 0.2f, 0.8f);
+    e.set_flow(true);
+    const float one[1] = { 0.4f };
+    e.set_chord(one, 1);
+    e.trigger_chord(one, 1);
+    settle(e, 60);
+    const float env_before = e.voice_env(0);
+    REQUIRE(env_before > 0.1f);
+    const float four[4] = { 0.4f, 0.5f, 0.6f, 0.7f };
+    e.set_chord(four, 4);
+    // The envelope must not jump: a retrigger would push it back toward 1.
+    for (int i = 0; i < 96; ++i) { float l, r; e.process(l, r); }
+    CHECK(e.voice_env(0) == doctest::Approx(env_before).epsilon(0.02));
+    // ...but the pitches must move.
+    settle(e, 60);
+    bool moved = false;
+    for (int i = 0; i < feed_cfg::kPairs; ++i)
+        if (std::fabs(e.pair_hz_for_test(i) - pitch_to_hz_ref(0.4f)) >
+            pitch_to_hz_ref(0.4f) * 0.02f) moved = true;
+    CHECK(moved);
+}
+
+TEST_CASE("feed G25: pairs on the root hold still, and the tone cap binds") {
+    // Nearest-neighbour allocation, spec section 5: pairs on common tones hold
+    // still, only moving ones glide. The strided grouping (pair i -> tone
+    // i % voiced) is what delivers it: growing the chord leaves pair 0 on the
+    // root.
+    FeedEngine e = fresh_feed();
+    feed_lanes(e, 0.5f, 0.f, 0.f);         // SPREAD 0: pitches are the tones
+    e.set_flow(true);
+    const float one[1] = { 0.4f };
+    e.set_chord(one, 1);
+    settle(e, 60);
+    const float root_hz = e.pair_hz_for_test(0);
+    // The root really is the tone, not whatever the lane happened to hold.
+    CHECK(root_hz == doctest::Approx(pitch_to_hz_ref(0.4f)).epsilon(0.001));
+    const float four[4] = { 0.4f, 0.5f, 0.6f, 0.7f };
+    e.set_chord(four, 4);
+    settle(e, 60);
+    CHECK(e.pair_hz_for_test(0) == doctest::Approx(root_hz).epsilon(0.001));
+
+    // The cap: at most kPairs / kPairsPerTone tones are voiced, so every
+    // voiced tone keeps a group SPREAD can reach (plan open point 4).
+    const int cap = feed_cfg::kPairs / feed_cfg::kPairsPerTone;
+    CHECK(e.voiced_tones_for_test() == (4 < cap ? 4 : cap));
+    e.set_chord(one, 1);
+    settle(e, 60);
+    CHECK(e.voiced_tones_for_test() == 1);
+
+    // Tones are stored SORTED, which is what makes i % voiced a
+    // nearest-neighbour map rather than an arbitrary one: the same chord
+    // pushed in a different order must voice the same frequencies.
+    const float shuffled[4] = { 0.6f, 0.4f, 0.7f, 0.5f };
+    e.set_chord(four, 4);
+    settle(e, 60);
+    std::vector<float> in_order;
+    for (int i = 0; i < feed_cfg::kPairs; ++i)
+        in_order.push_back(e.pair_hz_for_test(i));
+    e.set_chord(shuffled, 4);
+    settle(e, 60);
+    for (int i = 0; i < feed_cfg::kPairs; ++i) {
+        CAPTURE(i);
+        CHECK(e.pair_hz_for_test(i) == doctest::Approx(in_order[i]).epsilon(0.001));
+    }
+}

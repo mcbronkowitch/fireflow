@@ -236,17 +236,40 @@ void FeedEngine::trigger(float pitch_norm) {
 }
 
 void FeedEngine::trigger_chord(const float* p, int n) {
-    if (n < 1) return;       // Task 7: the whole chord, not just its root
-    _chord[0] = clampf(p[0], 0.f, 1.f);
-    _chord_n = 1;
-    _pitch_named = true;
+    if (n < 1) return;
+    if (n > kMaxChord) n = kMaxChord;
+    _set_chord_tones(p, n);
     _hit_gain = 1.f - (1.f - feed_cfg::kAccentVelFloor) * _accent;
-    _env.trigger();
+    _env.trigger();          // ONE hit, whatever the chord holds
     _auto_pending = false;
     _rebuild_allocation();
 }
 
-void FeedEngine::set_chord(const float* /*p*/, int /*n*/) {}   // Task 7
+void FeedEngine::set_chord(const float* p, int n) {
+    // Arrives once per control tick from Part::_control_tick, so this must be
+    // cheap and must NOT touch the envelope: a COLOR move re-voices the network
+    // as a glissando, with no retrigger (spec section 5).
+    if (n < 1) return;
+    if (n > kMaxChord) n = kMaxChord;
+    _set_chord_tones(p, n);
+}
+
+// Stores the tones SORTED ASCENDING, which is what makes i % _voiced_n a
+// nearest-neighbour allocation rather than an arbitrary one: sorted, tone 0 is
+// the root, so a chord that grows upward leaves pair 0 -- and every pair whose
+// index is 0 mod the voiced count -- exactly where it was (G25).
+void FeedEngine::_set_chord_tones(const float* p, int n) {
+    for (int i = 0; i < n; ++i) _chord[i] = clampf(p[i], 0.f, 1.f);
+    // Insertion sort, n <= 4.
+    for (int i = 1; i < n; ++i) {
+        const float v = _chord[i];
+        int j = i - 1;
+        while (j >= 0 && _chord[j] > v) { _chord[j + 1] = _chord[j]; --j; }
+        _chord[j + 1] = v;
+    }
+    _chord_n = n;
+    _pitch_named = true;
+}
 
 void FeedEngine::set_cycle(float seconds) {
     _cycle_s = seconds > 1e-4f ? seconds : 1e-4f;

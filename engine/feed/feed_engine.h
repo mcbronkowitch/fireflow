@@ -71,6 +71,7 @@ private:
     void _control_tick();
     void _rebuild_allocation();
     void _draw_individual();
+    void _set_chord_tones(const float* p, int n);
     float _rise_s() const;      // RISE knob -> seconds
     float _fall_s() const;      // FALL knob -> seconds
     float _damp_coef() const;   // DAMP knob -> one-pole coefficient
