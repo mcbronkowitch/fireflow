@@ -94,6 +94,8 @@ private:
     // voice row
     float _rise_n = 0.5f;
     float _fall_n = 0.5f;
+    float _rise_ratio = 0.002f;   // RISE as a fraction of the master cycle
+    float _fall_ratio = 0.1f;     // FALL likewise
     float _floor_n = 0.f;
     float _ratio_n = 0.f;    // the RATIO knob
     float _ratio = 1.f;      // ...and the ratio it maps to (Task 8's magnet)
@@ -107,6 +109,13 @@ private:
     float _cycle_s = 1.f;
     bool  _flow = false;
     bool  _hold = false;
+    // The hit half of the STEP accent: a scale on the strike, applied to the
+    // ring AND to SUB so the accent stays a dynamics change rather than a
+    // timbre one.
+    float _hit_gain = 1.f;
+    // FLOW's drone promise, deferred to process() the way SynthEngineT defers
+    // it -- the targets are fresh there and stale in the setter.
+    bool  _auto_pending = false;
 
     // chord surface
     float _chord[kMaxChord] = { 0.5f, 0.f, 0.f, 0.f };

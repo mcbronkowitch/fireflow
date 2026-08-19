@@ -31,6 +31,17 @@ void FeedEngine::init(float sample_rate) {
     _bank.init(_sr);
     _rng.seed(_seed);
     _draw_individual();
+    // Derive every cached knob mapping from the knob value it belongs to,
+    // rather than letting the member initialisers carry one value for the knob
+    // and another for its ratio. Without this the boot state holds _rise_n 0.5
+    // beside a _rise_ratio that belongs to knob 0. set_filt additionally reads
+    // _sr, so it MUST run after _sr is assigned -- otherwise a 44.1 kHz host
+    // gets a DAMP coefficient computed for 48 kHz, which is the kind of
+    // ordering bug a render never shows.
+    set_attack(_rise_n);
+    set_decay(_fall_n);
+    set_resonance(_ratio_n);
+    set_filt(_damp_t);
     _ctrl_ctr = 0;
     _sub_phase = 0.f;
     _sub_inc = 0.f;
@@ -141,7 +152,11 @@ void FeedEngine::_rebuild_allocation() {
                                (1.f + _fb_offset[i]));
 
         // Equal power across the bank, and a deterministic pan spread.
-        const float amp = _level * _env.value() * _inv_sqrt_pairs;
+        // _hit_gain is here AND on SUB in process(), both -- an accent that
+        // scaled only the ring would change the balance between the network
+        // and its foundation, which is a timbre change wearing a dynamics
+        // costume.
+        const float amp = _level * _hit_gain * _env.value() * _inv_sqrt_pairs;
         const float pan = (feed_cfg::kPairs > 1
                            ? (-1.f + 2.f * i / (feed_cfg::kPairs - 1)) : 0.f) * _width;
         _bank.set_target(i, hz, amp, pan);
@@ -162,7 +177,13 @@ void FeedEngine::_control_tick() {
     // the pitch-dependent feedback attenuation would read a constant (G12).
     if (!_pitch_named) _chord[0] = _pitch_n;
     _env.set_times(_rise_s(), _fall_s());
-    _env.set_sustain(_flow ? std::max(_floor_n, feed_cfg::kFlowFloorMin) : _floor_n);
+    // CHOKE wins over both the FLOOR knob and FLOW's minimum: while held, the
+    // sustain is 0 and the drone decays out. This is read fresh every tick
+    // rather than written once in set_hold, because otherwise the very next
+    // tick would restore the floor and the hold would last 96 samples.
+    _env.set_sustain(_hold ? 0.f
+                           : (_flow ? std::max(_floor_n, feed_cfg::kFlowFloorMin)
+                                    : _floor_n));
     _bank.set_bond(_bond);
     _bank.set_index(_depth_n * feed_cfg::kIndexMaxCycles * _env.value());
     _bank.set_ratio(_ratio);
@@ -173,6 +194,10 @@ void FeedEngine::_control_tick() {
 
 void FeedEngine::process(float& outL, float& outR) {
     if (--_ctrl_ctr <= 0) { _ctrl_ctr = kCtrlInterval; _control_tick(); }
+    // FLOW's drone promise, deferred to here rather than fired inside the
+    // setter for the reason SynthEngineT defers it: the targets are fresh here
+    // and stale at the setter.
+    if (_auto_pending) { _auto_pending = false; _env.trigger(); }
     const float env = _env.process();
 
     float l = 0.f, r = 0.f;
@@ -183,7 +208,8 @@ void FeedEngine::process(float& outL, float& outR) {
     // would put the one stable thing in the deck inside the unstable loop.
     _sub_phase += _sub_inc;
     _sub_phase -= std::floor(_sub_phase);
-    const float sub = fast_sin(_sub_phase) * _sub_n * feed_cfg::kSubMax * env * _level;
+    const float sub = fast_sin(_sub_phase) * _sub_n * feed_cfg::kSubMax * env
+                    * _level * _hit_gain;
     l += sub;
     r += sub;
 
@@ -201,7 +227,11 @@ void FeedEngine::trigger(float pitch_norm) {
     _chord[0] = clampf(pitch_norm, 0.f, 1.f);
     _chord_n = 1;
     _pitch_named = true;
+    // The hit half of the accent, composed the way SynthEngineT composes it:
+    // a scale on the strike, not a replacement for it.
+    _hit_gain = 1.f - (1.f - feed_cfg::kAccentVelFloor) * _accent;
     _env.trigger();          // rises from the CURRENT level: click-free (G22)
+    _auto_pending = false;
     _rebuild_allocation();   // the retune lands as a glide, this tick
 }
 
@@ -210,7 +240,9 @@ void FeedEngine::trigger_chord(const float* p, int n) {
     _chord[0] = clampf(p[0], 0.f, 1.f);
     _chord_n = 1;
     _pitch_named = true;
+    _hit_gain = 1.f - (1.f - feed_cfg::kAccentVelFloor) * _accent;
     _env.trigger();
+    _auto_pending = false;
     _rebuild_allocation();
 }
 
@@ -220,22 +252,52 @@ void FeedEngine::set_cycle(float seconds) {
     _cycle_s = seconds > 1e-4f ? seconds : 1e-4f;
 }
 
-void FeedEngine::set_flow(bool flow) { _flow = flow; }   // Task 6: auto-retrigger
+void FeedEngine::set_flow(bool flow) {
+    if (flow == _flow) return;
+    _flow = flow;
+    // Nothing is demoted on either edge: FEED has no voices to demote, and the
+    // ring runs either way. What changes is the envelope's sustain, which
+    // _control_tick reads fresh, and whether the drone re-arms.
+    _auto_pending = flow && !_hold && !_env.active();
+}
 
-void FeedEngine::set_hold(bool on) { _hold = on; }       // Task 6: CHOKE
+void FeedEngine::set_hold(bool on) {
+    if (on == _hold) return;
+    _hold = on;
+    if (on) {
+        // CHOKE: the sustain goes to 0 while holding, which IS the demotion
+        // release -- the same coefficient now converges to zero (env.h). The
+        // floor decays out click-free and auto-retrigger stops. _control_tick
+        // re-reads _hold every tick, so this is not a value the next tick
+        // overwrites.
+        _env.set_sustain(0.f);
+        _auto_pending = false;
+    } else if (_flow) {
+        _auto_pending = true;
+    }
+}
 
 void FeedEngine::set_width(float n) { _width = clampf(n, 0.f, 1.f); }
 
 void FeedEngine::set_accent(float a) { _accent = clampf(a, 0.f, 1.f); }
 
-void FeedEngine::set_attack(float n) { _rise_n = clampf(n, 0.f, 1.f); }   // Task 6
+// RISE and FALL as ratios of the master cycle, the SynthEngineT law so the two
+// engines' knobs mean the same thing: attack 0.002 * 250^n of the cycle,
+// decay 0.1 * 80^n. std::pow at CONTROL rate only -- both are recomputed in
+// the setters, not in _control_tick, because the knobs move at gesture rate and
+// Env::set_times already guards against recomputing identical coefficients.
+void FeedEngine::set_attack(float n) {
+    _rise_n = clampf(n, 0.f, 1.f);
+    _rise_ratio = 0.002f * std::pow(250.f, _rise_n);
+}
 
-// FLOOR rides the top quarter of the FALL knob (the plan's control map). The
-// FALL half of the same knob is Task 6's; the FLOOR half lands here because
-// every gate in this task needs a ring that stands still long enough to be
-// measured, and at FLOOR 0 the deck is audible only for as long as one decay.
 void FeedEngine::set_decay(float n) {
     _fall_n = clampf(n, 0.f, 1.f);
+    _fall_ratio = 0.1f * std::pow(80.f, _fall_n);
+    // FLOOR rides the top quarter (the plan's control map). Below the fold
+    // start the deck blooms and dies; above it the tail stops decaying to zero
+    // and stands, reaching an endless drone at DEC 1. The knob keeps its whole
+    // travel for FALL, so nothing about the tail's LENGTH is given up.
     _floor_n = clampf((_fall_n - feed_cfg::kFloorFoldStart) /
                       (1.f - feed_cfg::kFloorFoldStart), 0.f, 1.f);
 }
@@ -251,11 +313,19 @@ void FeedEngine::set_filt(float t) { _damp_t = clampf(t, -1.f, 1.f); }    // Tas
 
 void FeedEngine::reseed(uint32_t s) { _rng.seed(s); }                     // Task 9
 
-// Task 6 fills the two envelope helpers; until then they return a short attack
-// and a medium decay, so this task's gates measure a ring whose envelope is
-// not yet under test.
-float FeedEngine::_rise_s() const { return 0.01f; }        // Task 6
-float FeedEngine::_fall_s() const { return 1.0f; }         // Task 6
+float FeedEngine::_rise_s() const {
+    return clampf(_rise_ratio * _cycle_s, SynthEngine::kAttackFloorS, 20.f);
+}
+
+float FeedEngine::_fall_s() const {
+    // The ring half of the STEP accent, gated by the DEC knob exactly as
+    // SYNTH/WAVE/BODY do it: DEC 0 leaves ring time untouched, so a player who
+    // never raises DEC never hears the accent shorten a note.
+    const float acc = 1.f - (1.f - feed_cfg::kAccentDecFloor) * _accent * _fall_n;
+    return clampf(_fall_ratio * _cycle_s * acc,
+                  SynthEngine::kDecayMinS, SynthEngine::kDecayMaxS);
+}
+
 float FeedEngine::_damp_coef() const { return 1.f; }       // Task 8
 
 float FeedEngine::pair_hz_for_test(int i) const { return _bank.hz(i); }

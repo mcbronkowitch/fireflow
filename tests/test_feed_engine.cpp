@@ -522,3 +522,257 @@ TEST_CASE("feed G15: the pitch centre holds up to the BOND threshold") {
     REQUIRE(checked > 6);          // the loop actually ran
     CHECK(feed_cfg::kBondPitchThreshold < 1.f);   // there IS a region beyond
 }
+
+TEST_CASE("feed G16: FLOOR rides the top quarter of FALL -- two-sided") {
+    // The fold that frees the RES slot for RATIO (the plan's control map).
+    // Both halves asserted, because a fold that is always on and a fold that
+    // is never on both pass a one-sided gate.
+    FeedEngine e = fresh_feed();
+    e.set_decay(feed_cfg::kFloorFoldStart * 0.5f);
+    CHECK(e.floor_for_test() == 0.f);
+    e.set_decay(feed_cfg::kFloorFoldStart);
+    CHECK(e.floor_for_test() == doctest::Approx(0.f));
+    e.set_decay(1.f);
+    CHECK(e.floor_for_test() == doctest::Approx(1.f));
+    // ...and it is monotone in between, so the knob has no step in it.
+    float prev = -1.f;
+    for (float n = feed_cfg::kFloorFoldStart; n <= 1.0001f; n += 0.02f) {
+        e.set_decay(n);
+        CAPTURE(n);
+        REQUIRE(e.floor_for_test() >= prev);
+        prev = e.floor_for_test();
+    }
+}
+
+TEST_CASE("feed G17: FLOOR 1 is a standing drone, FLOOR 0 blooms and dies") {
+    auto tail_after = [](float dec, float seconds) {
+        FeedEngine e = fresh_feed();
+        e.set_decay(dec);
+        e.set_attack(0.2f);
+        feed_lanes(e, 0.5f, 0.3f, 0.3f, 0.8f);
+        e.set_flow(false);                    // STEP: no minimum floor
+        e.trigger(0.5f);
+        for (int i = 0; i < int(48000 * seconds); ++i) { float l, r; e.process(l, r); }
+        return peak_of(render_l(e, 4800));
+    };
+    CHECK(tail_after(1.f, 8.f) > 0.02f);      // endless
+    CHECK(tail_after(0.3f, 8.f) < 1e-4f);     // gone
+}
+
+TEST_CASE("feed G17b: RISE and FALL are the knobs, on the SynthEngineT law") {
+    // A gap in the planned set, found by running it: G17 moves the DECAY knob
+    // across the FLOOR fold and asserts what the FLOOR half does, so it passes
+    // unchanged against an engine whose FALL TIME is a compiled-in constant --
+    // which is exactly what the engine held while this gate was written. RISE
+    // has no gate at all in the planned set.
+    //
+    // Both are measured as note length (the 5 %-of-own-peak idiom) and as time
+    // to peak, in STEP so nothing sustains, and both are compared as RATIOS
+    // between two knob positions rather than against an absolute -- the law is
+    // ratio = 0.002 * 250^n for RISE and 0.1 * 80^n for FALL, so the knob's
+    // meaning is a ratio and an absolute expectation would be pinning the
+    // cycle length instead.
+    auto shape = [](float rise_n, float fall_n) {
+        FeedEngine e = fresh_feed();
+        e.set_attack(rise_n);
+        e.set_decay(fall_n);
+        feed_lanes(e, 0.5f, 0.2f, 0.2f, 0.8f);
+        e.set_flow(false);
+        e.trigger(0.5f);
+        const std::vector<float> x = render_l(e, 48000 * 6);
+        const float pk = peak_of(x);
+        int to_peak = 0, len = 0;
+        for (size_t i = 0; i < x.size(); ++i) {
+            if (std::fabs(x[i]) >= pk * 0.999f && to_peak == 0)
+                to_peak = static_cast<int>(i);
+            if (std::fabs(x[i]) > 0.05f * pk) len = static_cast<int>(i);
+        }
+        return std::pair<int, int>(to_peak, len);
+    };
+    // FALL: both positions below kFloorFoldStart, so FLOOR is 0 on both and
+    // what moves is the tail alone.
+    const auto shortf = shape(0.f, 0.1f);
+    const auto longf  = shape(0.f, 0.6f);
+    CAPTURE(shortf.second); CAPTURE(longf.second);
+    CHECK(longf.second > 2 * shortf.second);
+    // RISE, at a fixed FALL.
+    const auto fast = shape(0.05f, 0.6f);
+    const auto slow = shape(0.8f, 0.6f);
+    CAPTURE(fast.first); CAPTURE(slow.first);
+    CHECK(slow.first > 4 * fast.first);
+    // ...and the cycle scales both, which is what makes them ratios.
+    FeedEngine e = fresh_feed();
+    e.set_cycle(4.f);
+    e.set_attack(0.f);
+    e.set_decay(0.6f);
+    feed_lanes(e, 0.5f, 0.2f, 0.2f, 0.8f);
+    e.set_flow(false);
+    e.trigger(0.5f);
+    const std::vector<float> x = render_l(e, 48000 * 20);
+    const float pk = peak_of(x);
+    int len4 = 0;
+    for (size_t i = 0; i < x.size(); ++i)
+        if (std::fabs(x[i]) > 0.05f * pk) len4 = static_cast<int>(i);
+    CAPTURE(len4);
+    CHECK(len4 > 2 * longf.second);
+}
+
+TEST_CASE("feed G18: the index rides the envelope, not just the level") {
+    // Spec 2.5: bright and rough on the attack, darker and calmer in the tail.
+    // If the index were constant, the attack and the tail would have the same
+    // spectral shape at different gains -- so the gate normalises the two
+    // windows and compares their SHAPE.
+    FeedEngine e = fresh_feed();
+    e.set_attack(0.6f);
+    e.set_decay(0.5f);
+    e.set_resonance(0.4f);
+    feed_lanes(e, 0.4f, 0.2f, 0.2f, 1.f);
+    e.set_flow(false);
+    e.trigger(0.4f);
+    const std::vector<float> attack = render_l(e, 8192);
+    for (int i = 0; i < 24000; ++i) { float l, r; e.process(l, r); }
+    const std::vector<float> tail = render_l(e, 8192);
+    auto centroid = [](const std::vector<float>& x) {
+        const std::vector<double> m = mag_spectrum(x);
+        double num = 0.0, den = 0.0;
+        for (size_t i = 0; i < m.size(); ++i) { num += i * m[i]; den += m[i]; }
+        return den > 0.0 ? num / den : 0.0;
+    };
+    const double c_attack = centroid(attack);
+    const double c_tail = centroid(tail);
+    CAPTURE(c_attack);
+    CAPTURE(c_tail);
+    CHECK(c_tail < 0.8 * c_attack);
+}
+
+TEST_CASE("feed G19: FLOW keeps a minimum floor at FLOOR 0") {
+    // The drone promise. SWARM's rule, kept (spec section 5).
+    FeedEngine e = fresh_feed();
+    e.set_decay(0.f);                          // FLOOR 0
+    feed_lanes(e, 0.5f, 0.2f, 0.2f, 0.8f);
+    e.set_flow(true);
+    e.trigger(0.5f);
+    for (int i = 0; i < 48000 * 10; ++i) { float l, r; e.process(l, r); }
+    CHECK(peak_of(render_l(e, 4800)) > 0.01f);
+    // The other side: in STEP the same knob really does decay to nothing, so
+    // the floor is a FLOW rule and not a leak.
+    FeedEngine s = fresh_feed();
+    s.set_decay(0.f);
+    feed_lanes(s, 0.5f, 0.2f, 0.2f, 0.8f);
+    s.set_flow(false);
+    s.trigger(0.5f);
+    for (int i = 0; i < 48000 * 10; ++i) { float l, r; s.process(l, r); }
+    CHECK(peak_of(render_l(s, 4800)) < 1e-4f);
+}
+
+TEST_CASE("feed G20: CHOKE decays the drone out and stops re-arming") {
+    FeedEngine e = fresh_feed();
+    e.set_decay(1.f);
+    feed_lanes(e, 0.5f, 0.2f, 0.2f, 0.8f);
+    e.set_flow(true);
+    e.trigger(0.5f);
+    settle(e, 40);
+    const float before = peak_of(render_l(e, 4800));
+    REQUIRE(before > 0.02f);
+    e.set_hold(true);
+    // Monotone decay -- a level that dips and returns is an auto-retrigger
+    // that did not stop. Sampled on the ENVELOPE rather than on the audio
+    // peak: the audio is a drone of detuned pairs beating against each other,
+    // so its peak over a 2400-sample window rises and falls by a percent or
+    // two under a perfectly monotone envelope (measured +1.2 % at window 6),
+    // and a gate on that would be measuring the beat. The envelope is what
+    // must not re-arm, and it is exactly what voice_env reports to the meter.
+    // The windows are a second each, not a tenth: at DEC 1 the FALL ratio is
+    // 0.1 * 80^1 = 8 cycles, so a 60 dB release takes 8 s and twelve tenths of
+    // a second only reaches 39 % of the starting level.
+    float prev = e.voice_env(0);
+    REQUIRE(prev > 0.f);
+    for (int w = 0; w < 12; ++w) {
+        for (int i = 0; i < 48000; ++i) { float l, r; e.process(l, r); }
+        const float now = e.voice_env(0);
+        CAPTURE(w); CAPTURE(now); CAPTURE(prev);
+        REQUIRE(now <= prev);
+        prev = now;
+    }
+    // ...and the audio really did go with it.
+    CHECK(peak_of(render_l(e, 4800)) < 0.1f * before);
+    // Release re-arms.
+    e.set_hold(false);
+    settle(e, 40);
+    CHECK(peak_of(render_l(e, 4800)) > 0.5f * before);
+}
+
+TEST_CASE("feed G21: the accent spends itself twice -- and DEC gates the second") {
+    // Spec section 5, the SYNTH/WAVE/BODY shape. Two halves, and the DEC gate
+    // is what makes the ring half's inert case reachable (vacuous shape 4).
+    //
+    // Ring time is measured as the index of the last sample above 5 % of the
+    // note's OWN peak -- tests/test_step_accent.cpp's note_len_samples idiom.
+    // A ratio of two window peaks (which the plan asked for) is degenerate at
+    // DEC 0, where both windows are already silent and the inert half reads
+    // 0 == 0: true, and true whatever the accent does.
+    //
+    // LEVEL is held well below the ceiling on purpose. At LEVEL 1 the full
+    // note peaks at 0.523 against a kSatCeil of 0.55, so its peak is
+    // tanh-compressed and the weak note's is not -- and "5 % of own peak" then
+    // lands at different points on two notes whose envelopes are identical.
+    // Measured: the DEC-0 half read 3085 against 3313 samples, a 7 % gap that
+    // was the ceiling and not the accent.
+    struct Note { float peak; int len; };
+    auto note = [](float accent, float dec) {
+        FeedEngine e = fresh_feed();
+        e.set_attack(0.f);
+        e.set_decay(dec);
+        feed_lanes(e, 0.5f, 0.2f, 0.2f, 0.8f, /*level=*/0.35f);
+        e.set_flow(false);
+        e.set_accent(accent);
+        e.trigger(0.5f);
+        const std::vector<float> x = render_l(e, 48000 * 3);
+        const float pk = peak_of(x);
+        int len = 0;
+        for (size_t i = 0; i < x.size(); ++i)
+            if (std::fabs(x[i]) > 0.05f * pk) len = static_cast<int>(i);
+        return Note{ pk, len };
+    };
+    const Note full = note(0.f, 0.5f);
+    const Note weak = note(1.f, 0.5f);
+    CAPTURE(full.peak); CAPTURE(weak.peak);
+    CAPTURE(full.len);  CAPTURE(weak.len);
+    // Hit height: the accent scales the strike, and not past its own floor.
+    CHECK(weak.peak < full.peak);
+    CHECK(weak.peak > feed_cfg::kAccentVelFloor * 0.8f * full.peak);
+    // Ring time: shorter at accent 1 with DEC up...
+    CHECK(weak.len < full.len);
+    // ...and untouched at DEC 0, which is the half that has to be reachable.
+    const Note full0 = note(0.f, 0.f);
+    const Note weak0 = note(1.f, 0.f);
+    CAPTURE(full0.len); CAPTURE(weak0.len);
+    REQUIRE(full0.len > 0);            // there IS a note to compare
+    CHECK(weak0.len == doctest::Approx(full0.len).epsilon(0.02));
+}
+
+TEST_CASE("feed G22: a retrigger is click-free") {
+    // Env::trigger rises from the CURRENT level, so a re-hit on a sounding
+    // drone must not step. The bound is on the sample-to-sample derivative
+    // around the trigger, compared against the same signal's own worst
+    // derivative while running -- so the threshold is measured, not invented.
+    FeedEngine e = fresh_feed();
+    e.set_decay(1.f);
+    e.set_attack(0.4f);
+    feed_lanes(e, 0.5f, 0.2f, 0.2f, 0.8f);
+    e.set_flow(true);
+    e.trigger(0.5f);
+    settle(e, 40);
+    const std::vector<float> quiet = render_l(e, 24000);
+    float worst_running = 0.f;
+    for (size_t i = 1; i < quiet.size(); ++i)
+        worst_running = std::max(worst_running, std::fabs(quiet[i] - quiet[i - 1]));
+    e.trigger(0.5f);
+    const std::vector<float> hit = render_l(e, 4800);
+    float worst_hit = 0.f;
+    for (size_t i = 1; i < hit.size(); ++i)
+        worst_hit = std::max(worst_hit, std::fabs(hit[i] - hit[i - 1]));
+    CAPTURE(worst_running);
+    CAPTURE(worst_hit);
+    CHECK(worst_hit < 3.f * worst_running);
+}
