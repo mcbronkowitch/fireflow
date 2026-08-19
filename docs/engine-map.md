@@ -865,3 +865,121 @@ against an absolute "still < 0.02" would fail on a correct engine. The
 threshold belongs on the *ratio*, and the absolute floor has to be measured on
 `FeedEngine` — with the envelope and the ceiling in the path — rather than
 carried over from this table.
+
+### What the finished engine measures
+
+Measured 2026-08-19 on `FeedEngine` at 48 kHz — the whole engine, so the chord
+layer, the pitch attenuation, the envelope, the `tanh` ceiling and SUB are all
+in the path, unlike the bank-only figures above. `set_seed()` before `init()`
+(the `SynthEngineT` order — `init()` consumes the seed to draw the SPREAD
+signature and the per-pair feedback offsets), seeds 99 / 999 / 4242 / 7 /
+12345. P is `feed_cfg::kPairs` and is **still a placeholder here**: the
+`feed_pairs` bench has not run, `kPDecided` is false, and gate `feed G8` is red
+until it does. Every figure below is at P = 4.
+
+**BOND 0 is a line spectrum and coupled BOND is not.** Over a 262144-sample
+(5.5 s) window, with every lane static and FLOOR 1, the spectral flatness of
+the deck's output:
+
+| seed | BOND 0 | BOND 0.5 | BOND 1.0 |
+|---|---|---|---|
+| 99 | 0.000547 | 0.005369 | 0.125733 |
+| 4242 | 0.000826 | 0.004624 | 0.066854 |
+| 999 | 0.000436 | 0.003013 | 0.036366 |
+| 7 | 0.000933 | 0.004263 | 0.062244 |
+| 12345 | 0.000416 | 0.005348 | 0.078832 |
+
+Monotone in BOND at every seed, worst separation 4.6× at half BOND and 39× at
+full. A fixed set of frequencies produces a line spectrum however hard its
+members beat against each other, so this is the coupling and nothing else.
+
+**Flatness, not window-to-window flux, is what separates them**, and that is a
+measurement rather than a preference. The flux measure §2.4 suggests does not
+discriminate on this engine: BOND 0 gives 0.031–0.210 against BOND 0.5's
+0.124–0.231 — overlapping ranges, because the SPREAD signature is a random draw
+and the two closest pairs can land unresolvably close, beating with a period of
+tens of seconds. Which seed was drawn decided the answer.
+
+**Flatness at BOND 0 also reads inharmonicity, so the gate runs at an integer
+RATIO.** Measured at BOND 0 across the RATIO knob: 0.00064 at 1:1 and 0.024 at
+4:1, against 0.084 at 2.5, 0.187 at 6.8 and 0.288 at 11. Only an integer
+modulator:carrier ratio puts the sidebands on the carrier's harmonics.
+
+**The pitch centre holds across the whole BOND travel below the threshold.**
+At played pitch 0.35 (227.76 Hz), depth 0.7, FLOOR 1, over SPREAD's lower half
+and five seeds, with a 131072-sample YIN window: the worst drift from the same
+configuration's own BOND 0 reading is **1.204 ct**, and at SPREAD 0 — where
+there is no cluster to confound it — the worst absolute offset from the played
+pitch is **0.063 ct**. Aperiodicity stayed below 0.004 on every row.
+
+Two consequences the gate is written around:
+
+- The claim is about BOND, so the quantity is drift **with BOND**. An absolute
+  bound at fixed SPREAD measures something else: a detuned cluster's perceived
+  centre sits a fraction of its own half-spread from the geometric mean of its
+  pairs — up to 3.795 ct at `kSpreadKneeCt` on seed 99 — because the pairs are
+  at fixed frequencies and their exact positions are a random draw. G13 pins
+  the arithmetic centre; G15 pins what the knob does to it.
+- **The engine does not break beyond the threshold at this pitch.** Measured at
+  BOND 0.8 / 0.9 / 1.0, SPREAD 0, seeds 99 and 4242: −0.07 to −0.12 ct at
+  aperiodicity 0.0008. The bank breaks there and the engine does not, because
+  the pitch attenuation is doing its job: at pitch 0.35 the effective feedback
+  is ~0.059 cycles, below the 0.08 the bank's cliff was measured at. The cliff
+  §2.3 asks BOND to have therefore lives at the BOTTOM of the pitch range,
+  where the attenuation is weakest — which is a listening question for the
+  by-ear pass, not something a gate should assert.
+
+**The feedback attenuation spans 0.077 down to 0.019 cycles** from the bottom of
+the pitch axis to the top — a factor of 4.0 — which is why BOND audibly weakens
+toward the top of a chord. A decision, not a side effect (G12):
+
+| pitch | Hz | fb range across the pairs (cycles) |
+|---|---|---|
+| 0.00 | 110.00 | 0.07732 – 0.08338 |
+| 0.25 | 185.00 | 0.06283 – 0.06774 |
+| 0.50 | 311.13 | 0.04833 – 0.05211 |
+| 0.75 | 523.25 | 0.03383 – 0.03648 |
+| 1.00 | 880.00 | 0.01933 – 0.02084 |
+
+(the spread within each row is NEW's per-pair offset, ±`kFbOffsetRange`.)
+
+**RATIO's lower half spends 34.3 % of its travel within 2 % of an integer**
+against 4.8 % for a linear map over the same knob positions — **7.2×** — and the
+map is monotone throughout (G26). The gate asserts the ratio against the linear
+baseline rather than the 34.3 %, because that figure is a statement about
+`kRatioMagnetExp`, which is a by-ear constant.
+
+**SPREAD is exact at the centre and two-segment in its travel** (G13, G14). The
+geometric mean of the pairs sits within **0.021 cents** of the tone at every
+knob position, which is what the per-group zero-meaning buys:
+
+| knob | `_spread_ct` | span across the pairs | geometric mean vs tone |
+|---|---|---|---|
+| 0.00 | 0.00 ct | 0.00 ct | −0.0155 ct |
+| 0.25 | 3.50 ct | 6.29 ct | −0.0188 ct |
+| 0.50 | 7.00 ct | 12.59 ct | −0.0185 ct |
+| 0.75 | 26.00 ct | 46.77 ct | −0.0206 ct |
+| 1.00 | 45.00 ct | 80.95 ct | −0.0185 ct |
+
+**A FEED deck voices at most `kPairs / kPairsPerTone` chord tones**, so every
+voiced tone keeps a group SPREAD can reach. At P = 4 that cap is 2, and at
+COLOR's four-note chord the deck voices 2 tones (G25).
+
+### Three measurement traps this engine sets, and what they cost
+
+Recorded because each one produced a confident wrong number first, and each is
+the kind a later gate will walk into again:
+
+1. **A pitch estimator that is not YIN.** Both simpler estimators returned
+   octave errors with high confidence — see the table above. Any FEED pitch
+   measurement needs YIN and needs to read its aperiodicity.
+2. **A window shorter than the beat.** A ±S cent cluster beats at
+   `f·(2^(S/600) − 1)`; at S = 3 ct that is a 1.31 s period, and a
+   16384-sample window read +1203 ct at aperiodicity 0.08.
+3. **The `tanh` ceiling standing in for the thing being measured.** Two gates
+   were caught by this. G18 (does the index ride the envelope?) passed with the
+   envelope removed from `set_index` entirely, because at LEVEL 1 the attack
+   window clips and the tail does not, which moves the spectral centroid by
+   itself. G21's DEC-0 inert half read a 7 % note-length gap that was the
+   ceiling compressing the louder note's peak. **Any FEED gate whose subject is
+   spectral shape or relative level must run below `kSatCeil`.**

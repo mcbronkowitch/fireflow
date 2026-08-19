@@ -466,7 +466,7 @@ is actually built today, and what is still design-only.
 | **60 HP plate** | The hardware panel gets its layout and then its drawing: the redistribution round's placement reaches `gen_hw_panel.py` (2.21.2), and design round 2a, "Technical Blueprint", replaces the organic light plate with a dark anodised one in three tinted zones, a printed airflow/ember silhouette and framed fields with numbered legends — no control moved for it. Three fixes follow: frames hug their own ink with 3 mm between rows, one caption distance (3.6 mm) for every control instead of one per size class, and three knob lines through the MOTION/VOICE/TIMING band instead of five | ✅ **done** as a design study (VCV `FireflowHW` panel + generator; spec `docs/superpowers/specs/2026-08-10-hw-panel-redistribution-design.md`; released in 2.21.2 and 2.21.3; still labelled `DRAFT`, and no hardware is ordered — see "M6 — Hardware prototype" under "Planned") |
 | **STEP accent** | A note deck's melodic lane derives a per-note accent from the groove rank it already computes — 0 at the rank-0 anchor, 1 at the rank DENSE last reveals (`ModLane::note_accent()`) — and `Part` pushes it into the active engine on every STEP fire. The engine spends it twice, on velocity and on decay, the decay half gated by the DEC knob so DEC 0 leaves ring time untouched. **No new control**, no new RNG draw, and FLOW is unaffected (the accent is 0 there). SYNTH, WAVE and BODY take it; SAMPLER and BBD take neither half | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-15-step-accent-design.md`, plan `docs/superpowers/plans/2026-08-15-step-accent.md`; merged to `main` 2026-08-16 (`83d29e1`), released in 2.21.4; **both depth floors are first-try 0.3 and have not been through a listening session** — see "The STEP accent" under "Done") |
 | **LED feedback** | What the panel shows while the instrument runs, settled the way spec §1/§10 argue it: the quantity is the modulation **excursion**, never the knob (`target_value()` would let a still knob at 0.9 outshine one swinging full-scale at 0.1). An envelope-tracked excursion light per texture lane (one per lane, at the knob nearest its usual destination — `SOURCE`/`FILT`/`COLOR`/`COMP`), a `SONG` phrase lamp per deck that flashes on an A/B switch (150 ms) then goes dark, a `CEIL` lamp for the limiter's audible onset (not its gain reduction), and two latch-ready modifier lamps at `MODBTN`/`SHIFTBTN`. The display law (`host/vcv/src/led_law.hpp`) is Rack-free and unit-tested; `engine/instrument.h` gains `lane_excursion()` and the limiter exposes its bend as a const observer | ✅ **done** (engine + VCV `FireflowHW`; spec `docs/superpowers/specs/2026-08-16-led-feedback-design.md`, plan `docs/superpowers/plans/2026-08-16-led-feedback.md`; branch `led-feedback`, merged to `main` 2026-08-16 (`354db6f`), released in 2.21.5. **19 lamps drawn on FireflowHW, 21 LightIds (`FLOW_*` undrawn), up from ten** — two dead ones, `CAP_A_L`/`CAP_B_L`, removed along with the capture sequencer they used to indicate (see M3 below). **Five lamps are deliberately dark** at the end of this round: `FLOW_A_L`, `FLOW_B_L`, `SYNC_L`, and the two pad lamps `MODBTN_L`/`SHIFTBTN_L` — the last two need a latch that does not exist yet (spec §3.4 leaves it to the round that builds MOD and SHIFT). All five are *written* every tick, not skipped; a gate asserts that. `TEMPO_L` pulses the transport beat (metronome, `kTempoPulse` of `beat_phase()`). The 8:1-versus-16:1 mux width is **still open** (`docs/hardware/io-budget.md` §6), which is why `duty()` takes the step count as a parameter rather than a constant. `kFloor`, `kGamma`, `kEnvFall` and `kEnvOff` are **by-ear candidates awaiting Bastian's eye on real hardware** — `kEnvOff` in particular was set from arithmetic, not by listening; today that flag survives only in a comment in `host/vcv/src/led_law.hpp`) |
-| **FEED** | Coupled feedback-FM drone engine (working title) — a few operator pairs cross-modulating at the edge of chaos, the Lyra-8 corner | ⬜ **planned** (queued 2026-08-17, ordered before M5k; no spec — needs its own brainstorming round. Restored to this table 2026-08-18: the SWARM wind-back removed this row along with SWARM's own, and it was never about SWARM) |
+| **FEED** | Coupled feedback-FM drone engine — `ENGINE_FEED = 6`, a fixed ring of `feed_cfg::kPairs` two-operator FM pairs per deck, free-running. BOND morphs each modulator's phase-modulation input from its own feedback into its neighbour's output; the motion is a consequence of that coupling rather than an addition to it. Two stabilizers, no oversampling: the Plaits two-sample feedback average and the Braids pitch-dependent attenuation. One `Env` drives amplitude AND index. Seven knobs re-pointed (BOND/RISE/FALL/RATIO/SUB/BRITE/SPREAD), and DEPTH has no knob by decision | ✅ **engine + both hosts built** (spec `docs/superpowers/specs/2026-08-18-feed-coupled-feedback-fm-design.md`, plan `docs/superpowers/plans/2026-08-19-feed-coupled-feedback-fm.md`; branch `feat/feed-coupled-feedback-fm`). **THREE things are open and none is cosmetic:** (1) **P is undecided** — `feed_cfg::kPairs` is a PLACEHOLDER of 4, `kPDecided` is false, and gate `feed G8` is RED until the `feed_pairs` bench runs on the Patch Submodule. The branch does not merge until it does. (2) **No hardware measurement exists** — neither `feed_pairs` nor `inst_feed_engine_worst` has been run; both are written, both link at `-O2`, and neither links at `-O3` because the `system` family ALREADY overflows SRAM_EXEC by 2844 B before FEED existed. (3) **Every by-ear constant is first-try**, except `kFbBaseCycles`, which the regime map measured DOWN from 0.30 to 0.08 because at 0.30 the pitch centre is gone at BOND 0. See "FEED" under "Done") |
 | **AIR** | Noise/formant texture engine (working title) — filtered noise through a resonant bank: wind, breath, vowel colours without sample material | ⬜ **planned** (queued 2026-08-17, ordered before M5k; no spec — needs its own brainstorming round. Restored 2026-08-18, same reason as FEED) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
@@ -482,15 +482,81 @@ capability and does not change the M5j → M5k → M5l → M6 order. An ambient
 drone-engine round opened 2026-08-17 with three candidate directions and queued
 FEED and AIR ahead of M5k; the third, SWARM, was built and then withdrawn by ear
 on 2026-08-18 ([`docs/attic/2026-08-18-swarm-withdrawn.md`](attic/2026-08-18-swarm-withdrawn.md)),
-which leaves FEED and AIR exactly where they were queued and the sixth engine id
-free again. The engine-level milestones still completable without the target
-hardware are therefore FEED, AIR, M5k and M5l; M6 follows them as the hardware
-bring-up. What changed with the move
+which left FEED and AIR exactly where they were queued. FEED was then specced
+2026-08-18 and built 2026-08-19 and took the sixth engine id, so `ENGINE_FEED = 6`
+and `ENGINE_COUNT == 7`. The engine-level milestones still completable without
+the target hardware are therefore AIR, M5k and M5l; M6 follows them as the
+hardware bring-up. What changed with the move
 to a standalone prototype is M6's content, not its position: it is still last,
 and it is now the milestone that has to define its own device rather than fit an
 existing one.
 
 ## Done
+
+### FEED — coupled feedback-FM drone engine ✅ built (2026-08-19), ⏳ P undecided, ⏳ untuned
+
+The sixth part engine, `ENGINE_FEED = 6`. A fixed ring of `feed_cfg::kPairs`
+two-operator FM pairs per deck, running continuously; a trigger retunes the ring
+and injects energy through one `Env` rather than starting it. BOND blends each
+modulator's phase-modulation input from its own feedback into its neighbour's
+output, `(1-k)*self + k*neighbour`, evaluated in two passes per sample so every
+pair reads its neighbour's PREVIOUS samples regardless of loop order.
+
+Spec `docs/superpowers/specs/2026-08-18-feed-coupled-feedback-fm-design.md`,
+plan `docs/superpowers/plans/2026-08-19-feed-coupled-feedback-fm.md`, branch
+`feat/feed-coupled-feedback-fm`. Ported recipes are attributed in
+`THIRD_PARTY.md`: Plaits' two-sample feedback average and Braids'
+pitch-dependent attenuation, both Émilie Gillet, both MIT, both reimplemented
+in float on normalized phase rather than vendored.
+
+**What is open, and it is the important half of this entry:**
+
+- **P is a placeholder and the branch does not merge.** `feed_cfg::kPairs` is 4
+  because the desktop tasks had to build; `kPDecided` is false and gate
+  `feed G8` is RED. The `feed_pairs` bench row and the `feed` profile are
+  written and the image links, but nothing has run on the board. **No CPU claim
+  of any kind exists for FEED.**
+- **The bench does not link at `-O3` on the submodule, and that is not FEED's
+  doing.** Measured against a stashed tree: the `system` family ALONE overflows
+  SRAM_EXEC by 2844 B at o3/patch_sm before any FEED code exists. FEED adds
+  2880 B on top (1368 B for `inst_feed_engine_worst`, 1512 B for the `feed`
+  family). At `-O2` the `system feed` selection uses 233796 B of 262880 B
+  (88.94 %) and links. Since the only submodule prior art the plan permits
+  citing is an o3 run, "measure at o2" is a comparison-validity decision rather
+  than a build workaround.
+- **Every by-ear constant is first-try**, and the listening pass has not
+  happened. `kDepthBase` matters most, because DEPTH is the one FEED control
+  with no knob of its own.
+
+**What was measured, and is therefore not open** (`docs/engine-map.md` §9
+carries the tables and the setups):
+
+- `kFbBaseCycles` came DOWN from a first-try 0.30 to 0.08. At 0.30 cycles
+  (1.885 rad) the pitch centre is already gone at BOND 0 — +49.6 ct on ONE pair
+  with no coupling and no spread, because a feedback-FM operator stops being
+  periodic at its carrier past beta = 1 rad. This is the one by-ear constant
+  with a measured ceiling.
+- `kBondPitchThreshold` = 0.7 and `kPitchCentreTolCt` = 2.0 ct, both the map's
+  rather than the ear's. 0.7 is the last BOND position at which all 80 measured
+  rows still had a fundamental and sat inside a cent; at 0.8 the worst row jumps
+  to +22.5 ct.
+- On the finished engine the pitch centre holds across the WHOLE BOND travel at
+  a mid pitch (worst drift 1.204 ct), because the pitch attenuation keeps the
+  effective feedback below the bank's cliff. The cliff §2.3 asks BOND to have
+  therefore lives at the bottom of the pitch range — a listening question, not
+  a gate.
+- The coupling is the motion: spectral flatness 0.00044–0.00093 at BOND 0
+  against 0.0030–0.0054 at half BOND across five seeds, monotone in BOND.
+
+**Gates:** 8 in `tests/test_feed_pair.cpp` (P1–P8) and 31 in
+`tests/test_feed_engine.cpp` (G1–G32 plus G17b), red-proofed by an automated
+mutation sweep. Three of the planned gates could not go red and were rewritten:
+P7 was vacuous at index 0, G18 was measuring the `tanh` ceiling rather than the
+index, and G22 could not click because it retriggered a drone already pinned at
+its ceiling. `docs/engine-map.md` §9 records the three measurement traps
+(pitch estimator, window length, and the ceiling standing in for the subject)
+so the next round does not walk into them again.
+
 
 ### M1 — Portable engine foundation ✅
 
@@ -2826,47 +2892,24 @@ What it has to answer:
 Not blocking anything: it can run before or after M5k, and its result lands in
 M6's panel and bring-up. **Needs a brainstorming round, then a spec.**
 
-### FEED — coupled feedback-FM drone engine ⬜ (working title)
+### FEED — coupled feedback-FM drone engine ✅ built, ⏳ unmeasured on hardware, ⏳ untuned by ear
 
-Queued 2026-08-17 from the ambient-engine brainstorming, which surfaced three
-candidate directions for a sixth part engine. The first of them, the additive
-partial swarm SWARM, was built and then withdrawn on a listening decision
-2026-08-18; FEED was never touched by that work and stands where it was queued.
-Both entries were restored here on 2026-08-18 — the wind-back to `42f9c79` took
-this section out along with SWARM's, which was an accident of where the text
-sat, not a decision about FEED.
+Queued 2026-08-17 from the ambient-engine brainstorming, specced 2026-08-18 and
+built 2026-08-19. The detail is under "Done"; this entry stays here only as the
+pointer, because two of the three things this section promised are still open.
 
-FEED is the instability corner: a few operator pairs cross-modulating at the
-edge of chaos — the Lyra-8 idea — with the feedback amount as the playable
-cliff. It could plausibly reuse the excitation-bus pattern BODY established for
-cross-deck coupling. It would also be **the first FM anywhere in the built
-engine**: M5k's ZAP spec designs a two-oscillator FM/AM voice, but nothing
-implements it, so no operator primitive exists to inherit.
+What the SWARM round left behind for it held up. The fixed-bank-per-deck shape
+was copied. Its "the kernel row alone sizes the bank too generously" lesson is
+exactly why `inst_feed_engine_worst` exists beside `feed_pairs` rather than
+instead of it. The denormal question is still open and still unmeasured.
 
-The sixth slot in `EngineId` is free — `ENGINE_BBD = 5` is still the last one
-built, and removing SWARM renumbered nothing.
+The cost question this section said the round had to settle — whether the
+chaotic end needs oversampling — was deferred by the plan rather than answered,
+and it stays deferred: round 1 ships the two stabilizers (the Plaits two-sample
+feedback average and the Braids pitch-dependent attenuation) and no
+oversampling. If the by-ear pass reports aliasing, 2x is a rebuild and a
+separate round, decided on a measurement instead of a fear.
 
-Three things the SWARM round leaves behind for it, **none of them a measurement
-of FEED**:
-
-- **The nearest price anchor there is.** A sine partial with per-sample glide
-  and control-tick retargeting measured **7405 cycles per partial per 96-sample
-  block** at `-O3` on the Patch Submodule
-  ([`docs/attic/2026-08-17-swarm-n-decision.md`](attic/2026-08-17-swarm-n-decision.md)).
-  An FM operator is that class of loop; that is an argument for opening the
-  round, not a number for a spec. SWARM's own lesson is that the kernel row
-  alone sizes the bank too generously — the whole-engine row corrected it.
-- **The denormal tax** (see "Two threads carried out of the SWARM withdrawal"
-  below). A feedback network with quiet decaying tails is exactly the shape
-  that pays it, and nothing in this repo sets flush-to-zero.
-- **One shape decision worth copying**: a fixed bank per deck, retuned rather
-  than re-voiced, so CPU does not depend on the played density.
-
-The cost question the round has to settle is not the operator count but
-**whether the chaotic end needs oversampling** — a decision that doubles the
-row or does not, and which is a design question today, not a measurement.
-
-Ordered before M5k (ZAP). **Needs a brainstorming round, then a spec.**
 
 ### AIR — noise/formant texture engine ⬜ (working title)
 
