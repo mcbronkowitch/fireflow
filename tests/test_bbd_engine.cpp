@@ -19,7 +19,7 @@ static float s_bbd_r[BbdEngine::kCells];
 
 TEST_CASE("bbd engine: the id is appended, never renumbered") {
     CHECK(ENGINE_BBD == 5);
-    CHECK(ENGINE_COUNT == 6);
+    CHECK(ENGINE_COUNT == 7);
 }
 
 TEST_CASE("bbd engine: a deck set to BBD reaches the BBD, not the test tone") {

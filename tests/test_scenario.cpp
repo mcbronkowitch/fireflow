@@ -620,6 +620,35 @@ TEST_CASE("scenario: the BBD engine is selectable by name") {
     std::remove(path);
 }
 
+// Spec 2026-08-18 feed-coupled-feedback-fm: the same shape as the body/bbd
+// cases above it. parse_engine falls back to SYNTH for an unknown spelling, so
+// a typo in that table is invisible without a case per spelling -- and
+// feed_drone.json, the whole listening render for this engine, is one such
+// typo away from rendering a SYNTH deck and looking fine.
+TEST_CASE("scenario: the FEED engine is selectable by name") {
+    const char* path = "test_scenario_feed.json";
+    {
+        std::ofstream o(path);
+        o << R"({"duration_s":0.1,"init":[
+            {"action":"set_engine","part":0,"value":"feed"}]})";
+    }
+    Scenario s;
+    std::string err;
+    REQUIRE_MESSAGE(load_scenario(path, s, err), err);
+    REQUIRE(s.init_events.size() == 1);
+    CHECK(s.init_events[0].svalue == "feed");
+
+    Instrument inst;
+    inst.init(48000.f);
+    apply_event(inst, s.init_events[0]);
+    for (int i = 0; i < 500; ++i) {
+        float in[1] {}, l[1], r[1];
+        inst.process(in, in, l, r, 1);
+    }
+    CHECK(inst.engine_id(0) == ENGINE_FEED);
+    std::remove(path);
+}
+
 // Task 12: body_sympathetic.json needs the excitation bus source flags
 // reachable from a scenario (task-12-brief-addendum.md §B -- no action for
 // Instrument::set_excitation_sources existed before this task). Parity

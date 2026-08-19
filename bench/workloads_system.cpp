@@ -531,6 +531,78 @@ void setup_inst_bbd_engine_worst()
     setup_inst_worst_bbd();
 }
 
+// FEED on both decks, at the ring's worst case (spec 2026-08-18). Modelled
+// line for line on configure_inst_bbd_engine_worst above, and for the same
+// reason: the kernel row (feed_pairs, workloads_feed.cpp) prices ONE bank in
+// isolation, and SWARM's own history is that a kernel figure alone sized a
+// bank too generously and the whole-engine row corrected the reading.
+void configure_inst_feed_engine_worst(Instrument& inst)
+{
+    for (int p = 0; p < PART_COUNT; ++p) {
+        inst.set_engine(p, ENGINE_FEED);
+        // STEP with a short pattern, so envelope hits and chord retargeting
+        // are actually happening rather than a settled drone coasting.
+        inst.set_step(p, true, 16);
+        inst.set_color(p, 1.f);              // the largest chord COLOR reaches
+        inst.set_quant_mode(p, QuantMode::Free);
+        // FEED has no input path, so the excitation bus is left alone; what it
+        // does have is a ring whose per-sample cost is flat in every knob
+        // except the ones below.
+        inst.set_fx_on(p, FxBlock::Flux, false);   // as the BBD row does
+
+        // RISE short and FALL long with FLOOR up: the envelope is always
+        // moving and never idles, so Env::process is never on its free path.
+        inst.set_voice_attack(p, 0.f);
+        inst.set_voice_decay(p, 1.f);
+        // RATIO into the irrational upper half -- no magnet flattening, and
+        // the modulator phase advances at a rate the compiler cannot fold.
+        inst.set_voice_resonance(p, 1.f);
+        inst.set_voice_sub(p, 1.f);          // the SUB oscillator live
+        // FILT at -0.4: the darkest cutoff that does NOT fade the deck out.
+        // The SVF costs the same at every cutoff, so the point of this value
+        // is not the filter -- it is that the deck still emits. At -1 the
+        // gain fade reaches zero and every stage downstream of the part
+        // (Grit, Comp, the center reverb, the master limiter) would be
+        // priced on silence instead of on signal.
+        inst.set_voice_filt(p, -0.4f);
+        // BOND high so the ring taps are live rather than a self-feedback
+        // path the compiler could narrow, and SPREAD full so every pair sits
+        // at its own frequency. Both lanes DEACTIVATED and based at the
+        // ceiling, the same reasoning the BBD row states: an active lane
+        // spends most of its time below the worst case.
+        inst.set_target_active(p, LANE_SOURCE, false);
+        inst.set_target_base(p, LANE_SOURCE, 1.f);
+        inst.set_target_active(p, LANE_SIZE, false);
+        inst.set_target_base(p, LANE_SIZE, 1.f);
+        inst.set_target_active(p, LANE_MOTION, false);
+        inst.set_target_base(p, LANE_MOTION, 1.f);   // DEPTH at the top
+        inst.set_target_active(p, LANE_LEVEL, false);
+        inst.set_target_base(p, LANE_LEVEL, 1.f);
+    }
+    const float* in = test_input();
+    for (int b = 0; b < 200; ++b) {
+        inst.trigger_manual(PART_A);
+        inst.trigger_manual(PART_B);
+        inst.process(in, in, g_instrument_harness.out_l,
+                     g_instrument_harness.out_r, kBlock);
+    }
+    // The same self-check the BBD row carries, and for the same reason: a
+    // row that stayed on the wrong engine would return a wrong-but-stable
+    // checksum and nothing in the harness would notice.
+    for (int p = 0; p < PART_COUNT; ++p) {
+        assert(inst.engine_id(p) == ENGINE_FEED);
+        assert(inst.active_voices(p) == 1);   // the ring is audible
+    }
+}
+
+void setup_inst_feed_engine_worst()
+{
+    auto& group = construct_axi_instrument_group();
+    configure_inst_common(group.instrument);
+    configure_inst_worst(group.instrument);
+    configure_inst_feed_engine_worst(group.instrument);
+}
+
 float proc_inst()
 {
     auto& inst = *g_active_instrument;
@@ -564,6 +636,89 @@ float proc_inst_bbd_frozen()
     return proc_inst();
 }
 
+// FEED's other worst case, and the one no other row in this file reaches:
+// SILENCE. A deck between notes is not idle work -- FeedBank's ring runs at
+// full rate whatever the amplitude is -- and until 2026-08-19 that state cost
+// 1.65x a SOUNDING deck on the desktop, because the amplitude glide converged
+// on zero without arriving and the tail then ran entirely on subnormals.
+// Fixed in the engine (FeedBankT::kArriveEps, SvfLp::FlushDenormals); this row
+// exists so a regression is measured instead of argued.
+//
+// proc_inst fires both decks every ~half second on purpose, so it can never
+// see this. That is why the row needs its own proc as well as its own setup.
+void configure_inst_feed_engine_idle(Instrument& inst)
+{
+    for (int p = 0; p < PART_COUNT; ++p) {
+        // FALL at 0 is the shortest decay and FLOOR sits in the top quarter of
+        // the same control, so 0 is FLOOR 0 too and the envelope actually
+        // reaches zero. The worst-case row uses 1.f, which never goes quiet.
+        inst.set_voice_decay(p, 0.f);
+        // Getting to silence took all three of these, measured rather than
+        // assumed. DENS 0 alone leaves a note firing every 2.58 s -- k =
+        // round(0 * L) picks no groove cells, but the phrase boundary fires
+        // anyway -- which would have made this row a 93/7 mixture with the
+        // sounding case landing in max_cyc. RATE 0 stretches that past any
+        // measurement window; VARY 0 is "loop", so the cell cannot re-draw
+        // itself into one. Verified: 70 s of exactly zero after the single
+        // manual hit below, with active_voices 0 throughout.
+        inst.set_density(p, 0.f);
+        inst.set_rate(p, 0.f);
+        inst.set_variation(p, 0.f);
+    }
+    const float* in = test_input();
+    inst.trigger_manual(PART_A);
+    inst.trigger_manual(PART_B);
+    // WAIT for the envelope to land rather than guessing a warm-up length. A
+    // guessed 3000 blocks (6 s) was short by 333 and hung the board on the
+    // assert below -- twice, because the failure mode of an assert here is a
+    // silent halt with no row emitted, not a message. FEED's FALL at 0 still
+    // takes 6.67 s to cross Env's 1e-4 idle threshold at 120 BPM: the decay is
+    // exponential, so the last two orders of magnitude cost as much time as
+    // the first two. The bound is a backstop, not a duration.
+    int settled = 0;
+    for (int b = 0; b < 20000 && settled < 500; ++b) {
+        inst.process(in, in, g_instrument_harness.out_l,
+                     g_instrument_harness.out_r, kBlock);
+        // 500 further blocks after both parts go idle, so everything
+        // downstream of the decks has reached the state being priced too.
+        // Measured: the instrument output is then EXACTLY zero, reverb
+        // included, which is the point of the row.
+        settled = (inst.active_voices(PART_A) == 0 &&
+                   inst.active_voices(PART_B) == 0) ? settled + 1 : 0;
+    }
+    for (int p = 0; p < PART_COUNT; ++p) {
+        assert(inst.engine_id(p) == ENGINE_FEED);
+        // Silent, which is the whole subject. A row that kept ringing would
+        // return a plausible number for the wrong state.
+        assert(inst.active_voices(p) == 0);
+    }
+}
+
+void setup_inst_feed_engine_idle()
+{
+    auto& group = construct_axi_instrument_group();
+    configure_inst_common(group.instrument);
+    configure_inst_worst(group.instrument);
+    configure_inst_feed_engine_worst(group.instrument);
+    configure_inst_feed_engine_idle(group.instrument);
+}
+
+float proc_inst_feed_idle()
+{
+    auto& inst = *g_active_instrument;
+    auto& harness = g_instrument_harness;
+    const float* in = test_input();
+    inst.process(in, in, harness.out_l, harness.out_r, kBlock);
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i)
+        acc += harness.out_l[i] + harness.out_r[i];
+    // Fold the voice counts in as proc_inst does -- here they must stay 0, so
+    // a row that started ringing mid-measurement moves the checksum.
+    acc += static_cast<float>(inst.active_voices(PART_A));
+    acc += static_cast<float>(inst.active_voices(PART_B));
+    return acc;
+}
+
 } // namespace
 
 const Workload kCoreWorkloads[] = {
@@ -588,6 +743,15 @@ const Workload kCoreWorkloads[] = {
       setup_inst_worst_bbd_dtcm, proc_inst_bbd_frozen },
     { "system", "inst_bbd_engine_worst",
       setup_inst_bbd_engine_worst, proc_inst_bbd_frozen },
+    // proc_inst, not proc_inst_bbd_frozen: FEED has no freeze to re-arm every
+    // block, and proc_inst already fires both decks every ~half second and
+    // folds active_voices into the checksum -- which on FEED is 1 while the
+    // ring is audible and 0 when it is not, so a deck that fell silent moves
+    // the checksum instead of passing quietly.
+    { "system", "inst_feed_engine_worst",
+      setup_inst_feed_engine_worst, proc_inst },
+    { "system", "inst_feed_engine_idle",
+      setup_inst_feed_engine_idle, proc_inst_feed_idle },
 };
 const int kCoreCount = sizeof(kCoreWorkloads) / sizeof(kCoreWorkloads[0]);
 

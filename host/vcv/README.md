@@ -149,19 +149,26 @@ pinned to `0.40`, and the reverb's **REV_SMEAR** (diffuser-LFO wash) and
 
 ## Engine-dependent captions
 
-Seven controls change their caption with the deck's `ENG`. The words live in
+Eight controls change their caption with the deck's `ENG`. The words live in
 `DYNAMIC_CAPTIONS` in `res/gen_panel.py` and reach both the SVG and Rack from
 there — the C++ holds no caption word at all.
 
-| Control | Synth | Sampler | Wave | Body | BBD |
-|---|---|---|---|---|---|
-| MELODY | `VARY` | `SCAN` | `VARY` | `VARY` | `VARY` |
-| ATTACK | `ATK` | `ATK` | `ATK` | `HIT` | — (`BEND` occupies the slot) |
-| DECAY | `DEC` | `DEC` | `DEC` | `DAMP` | `TAIL` |
-| RES | `RES` | `RES` | `RES` | `CHAR` | `TILT` |
-| SUB | `SUB` | `LEN` | `SUB` | `EXCIT` | `INPUT` |
-| FILT | `FILT` | `FILT` | `FILT` | `BRITE` | `LOSS` |
-| SOURCE | `TIMB` | `ORG` | `FRAME` | `MATL` | `DRIVE` |
+| Control | Synth | Sampler | Wave | Body | BBD | Feed |
+|---|---|---|---|---|---|---|
+| MELODY | `VARY` | `SCAN` | `VARY` | `VARY` | `VARY` | `VARY` |
+| ATTACK | `ATK` | `ATK` | `ATK` | `HIT` | — (`BEND` occupies the slot) | `RISE` |
+| DECAY | `DEC` | `DEC` | `DEC` | `DAMP` | `TAIL` | `FALL` |
+| RES | `RES` | `RES` | `RES` | `CHAR` | `TILT` | `RATIO` |
+| SUB | `SUB` | `LEN` | `SUB` | `EXCIT` | `INPUT` | `SUB` |
+| FILT | `FILT` | `FILT` | `FILT` | `BRITE` | `LOSS` | `BRITE` |
+| SOURCE | `TIMB` | `ORG` | `FRAME` | `MATL` | `DRIVE` | `BOND` |
+| DETUNE | `DTUN` | `DTUN` | `DTUN` | `DTUN` | `DTUN` | `SPRD` |
+
+DETUNE joined the table with FEED (spec 2026-08-18). It had been a fixed
+`DTUN` plate, and on a FEED deck a fixed plate would lie: there the knob is
+SPREAD, and it reaches the engine as `LANE_SIZE`'s base rather than through
+`set_voice_detune` — the same re-point the sampler's SUB → `LANE_SIZE` already
+uses.
 
 GRIT itself is bipolar (spec 2026-08-09 hw-control-reduction task 4): there is
 no separate mode pad any more. The knob's sign picks the mode -- left of

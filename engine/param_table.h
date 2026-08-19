@@ -32,7 +32,7 @@ struct Span { float lo, hi; };
 // do not let this comment grow one.
 //
 // - ENGINE: engine/parts/engine_iface.h's EngineId runs
-//   ENGINE_TEST_TONE=0 .. ENGINE_BBD=5, ENGINE_COUNT=6 -- so 0..5, 6 steps,
+//   ENGINE_TEST_TONE=0 .. ENGINE_FEED=6, ENGINE_COUNT=7 -- so 0..6, 7 steps,
 //   not 0..4/5. apply_param() below hands EngineId(i) straight to
 //   Instrument::set_engine(), so the table must cover the real enum, not
 //   host/vcv/src/Fireflow.cpp's UI remap (which drops ENGINE_TEST_TONE and
@@ -70,7 +70,7 @@ struct Span { float lo, hi; };
 //   -1..1. Re-verified 2026-08-14; only the line numbers had drifted, all
 //   five of them by the same ~49 lines.
 #define SPKY_PARAMS(X) \
-  X(P_ENGINE_A,   0.f, 5.f,  6)  X(P_ENGINE_B,   0.f, 5.f,  6) \
+  X(P_ENGINE_A,   0.f, 6.f,  7)  X(P_ENGINE_B,   0.f, 6.f,  7) \
   X(P_SCALE,      0.f, 12.f, 13) X(P_ROOT,       0.f, 11.f, 12) \
   X(P_FORM_A,     0.f, 4.f,  5)  X(P_FORM_B,     0.f, 4.f,  5) \
   X(P_SONG_A,     0.f, 6.f,  7)  X(P_SONG_B,     0.f, 6.f,  7) \

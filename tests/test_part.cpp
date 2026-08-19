@@ -285,6 +285,7 @@ TEST_CASE("part: engine ids stay patch-stable when BBD is appended") {
     // silently reassigns every deck that used it.
     CHECK(ENGINE_BODY == 4);
     CHECK(ENGINE_BBD == 5);
+    CHECK(ENGINE_FEED == 6);
 }
 
 TEST_CASE("part: BODY switches through the existing 4 ms engine fade") {

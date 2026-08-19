@@ -121,13 +121,13 @@ TEST_CASE("param table: apply routes to the engine (spot checks via observers)")
 
     // Discrete params clamp, never wrap: over-range engine id stays legal
     // AND actually lands on the clamped top of the range (99 clamps to
-    // hi=5 == ENGINE_BBD). Needs the same crossfade-settling process()
+    // hi=6 == ENGINE_FEED). Needs the same crossfade-settling process()
     // loop as the P_ENGINE_A check above -- reading engine_id() right after
     // apply_param() would silently read the pre-change boot default and
     // pass even with a deleted/broken P_ENGINE_B case.
     apply_param(inst, P_ENGINE_B, 99.f);
     for (int i = 0; i < 1000; ++i) inst.process(nullptr, nullptr, &l, &r, 1);
-    CHECK(inst.engine_id(PART_B) == ENGINE_BBD);
+    CHECK(inst.engine_id(PART_B) == ENGINE_FEED);
     CHECK(inst.engine_id(PART_B) >= 0);
     CHECK(inst.engine_id(PART_B) < ENGINE_COUNT);
 }

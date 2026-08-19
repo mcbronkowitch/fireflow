@@ -50,15 +50,41 @@ Located under `third_party/`.
 
 ## Ported (rewritten from a licensed reference, not vendored verbatim)
 
-Located under `engine/fx/`. Unlike the `third_party/` entries above, no
-upstream source file is copied into this repository — the reference project's
-own source is not included here at all — but the model, structure and several
-formulas are derived closely enough from it that the license and full
-attribution belong here regardless.
+Located under `engine/fx/` and `engine/feed/`. Unlike the `third_party/`
+entries above, no upstream source file is copied into this repository — the
+reference project's own source is not included here at all — but the model,
+structure and several formulas are derived closely enough from it that the
+license and full attribution belong here regardless.
 
 | Component | Reference | License | Copyright |
 |-----------|-----------|---------|-----------|
 | **`engine/fx/bbd.h`, `engine/fx/bbd.cpp`** (FLUX's bucket-brigade delay) | [jpcima/bbd-delay-experimental](https://github.com/jpcima/bbd-delay-experimental) — `bbd_line.cc`, `bbd_filter.cc` | Boost Software License 1.0 | © jpcima |
+| **`engine/feed/feed_pair.h`, `engine/feed/feed_engine.cpp`** (FEED's operator pair and its feedback attenuation) | [pichenettes/eurorack](https://github.com/pichenettes/eurorack) — Plaits `plaits/dsp/fm/operator.h`, Braids `braids/digital_oscillator.cc` (`RenderFeedbackFm`) | MIT | © Emilie Gillet |
+
+- **What was taken, and it is two recipes, not any code.** From Plaits'
+  `operator.h`, the two-sample feedback average — a phase-modulation feedback
+  tap reads `0.5 * (m[n-1] + m[n-2])` rather than `m[n-1]`, which low-passes
+  the loop and is simultaneously FEED's anti-aliasing and anti-blowup measure
+  (spec §3.2.1). From Braids' `RenderFeedbackFm`, the pitch-dependent
+  attenuation of that feedback amount, so high notes escalate less than low
+  ones (spec §3.2.2). Braids' `RenderChaoticFeedbackFm` is the acknowledged
+  ancestor of FEED's *topology* — a ring of coupled feedback-FM operators —
+  but it is **not** the mechanism used: FEED's coupling is a blend between a
+  pair's own feedback and its neighbour's output, evaluated in two passes so
+  every pair reads its neighbour's previous samples.
+- **How the port differs from the reference.** Both recipes are reimplemented
+  in `float` on NORMALIZED phase (`fast_sin(p) == sin(2*pi*p)`, so every
+  phase-domain quantity in FEED is in cycles, not radians, and not in the
+  reference's 16-bit fixed-point phase either); the attenuation is a clamped
+  straight line in FEED's own already-logarithmic normalized pitch rather than
+  a table lookup on a pitch offset; and there is no `stmlib` dependency of any
+  kind. No upstream line is copied.
+- **Where it lives:** `engine/feed/feed_pair.h` (the average, in the hot loop)
+  and `engine/feed/feed_engine.cpp` (`_rebuild_allocation`'s attenuation).
+  Design spec:
+  `docs/superpowers/specs/2026-08-18-feed-coupled-feedback-fm-design.md`.
+- **License — MIT**, the same notice already reproduced in full for the
+  vendored Oliverb port above; © Emilie Gillet.
 
 - **What was taken.** The combined bucket-brigade-device-and-filters model of
   Martin Holters & Julian Parker, *A Combined Model for a Bucket Brigade

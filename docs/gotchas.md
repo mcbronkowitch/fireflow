@@ -190,6 +190,19 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   work of this shape: list every field both halves touch and name a single
   owner for each.
 
+- **`SvfLp::SetRes` maps through `r^0.25`, so "a touch of resonance" is not a
+  small number.** `_res_damp = 2*(1 - powf(res, 0.25f))`, which means `0.15`
+  already sits 62 % of the way to full resonance and lands the damping ratio at
+  0.38 — well under the 0.707 where a two-pole stops peaking. FEED picked 0.15
+  as a deliberately conservative value for a filter on its output and measured
+  **1.58× its own saturation ceiling, +4.0 dB**; at `0` the same sweep reads
+  0.973×. Nothing in `svf_lp.h` warns about it, because both existing callers
+  (Voice, SamplerEngine) hand it a player-facing RESONANCE knob where the warp
+  is the point. A new caller that wants "almost none" wants **0**, and should
+  measure rather than trust the number's appearance. Full table:
+  [`engine-map.md` §9](engine-map.md).
+
+
 ## Host (VCV)
 
 - **The host never writes the LANE_MOTION or LANE_LEVEL target base.**

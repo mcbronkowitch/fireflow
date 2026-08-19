@@ -72,3 +72,59 @@ TEST_CASE("svf_lp: a fresh filter takes its first SetFreq/SetRes") {
     }
     CHECK(a.Low() != 0.f);   // guard against both being silently dead
 }
+
+// A two-pole fed exact zeros decays geometrically: it approaches zero without
+// reaching it and settles in the subnormal range, where every subsequent
+// Process pays the denormal penalty for as long as the input stays silent.
+// FEED found this the hard way -- after its own amplitude glide was fixed to
+// arrive at zero, the filter inherited the whole tax and an idle deck still
+// cost 1.17x a sounding one.
+//
+// FlushDenormals is opt-in at the caller's control rate, so the equality
+// against daisysp::Svf above is untouched: that test drives full-scale noise
+// and never comes near the threshold.
+TEST_CASE("svf_lp: FlushDenormals ends a silent tail, and only a silent one") {
+    SvfLp lp;
+    lp.Init(48000.f);
+    lp.SetFreq(2000.f);
+    lp.SetRes(0.f);
+    for (int i = 0; i < 64; ++i) lp.Process(i == 0 ? 1.f : 0.f);   // excite
+
+    // Silence, with the flush pushed at a control rate. The state has to reach
+    // EXACT zero -- "very small" is the defect, not the fix.
+    long long subnormal_out = 0;
+    for (int blk = 0; blk < 4000; ++blk) {
+        lp.FlushDenormals();
+        for (int i = 0; i < 96; ++i) {
+            lp.Process(0.f);
+            if (std::fpclassify(lp.Low()) == FP_SUBNORMAL) ++subnormal_out;
+        }
+    }
+    CAPTURE(subnormal_out);
+    CHECK(subnormal_out == 0);
+    CHECK(lp.Low() == 0.f);
+
+    // The half that stops the guard from being "zero the filter whenever the
+    // input is quiet". At a low cutoff the ring outlives the excitation by a
+    // long way: 60 Hz is a 16.7 ms period, so 5 ms in it is near its peak and
+    // must survive any number of flush calls.
+    //
+    // What this catches is an UNCONDITIONAL flush -- verified red, peak 0. It
+    // does NOT catch dropping the _band term from the condition: at 1e-15 that
+    // mutation stays green, because a live ring's zero crossings never land in
+    // a window that narrow. Said here so the next reader does not take this
+    // block for a gate on _band; svf_lp.h carries the same note.
+    SvfLp ring;
+    ring.Init(48000.f);
+    ring.SetFreq(60.f);
+    ring.SetRes(0.9f);
+    for (int i = 0; i < 8; ++i) ring.Process(i == 0 ? 1.f : 0.f);
+    float peak = 0.f;
+    for (int i = 0; i < 240; ++i) {          // 5 ms
+        ring.FlushDenormals();
+        ring.Process(0.f);
+        peak = fmaxf(peak, fabsf(ring.Low()));
+    }
+    CAPTURE(peak);
+    CHECK(peak > 1e-4f);
+}

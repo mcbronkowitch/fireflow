@@ -12,6 +12,13 @@
 > Neuverteilung (2.21.2) und Plattenrunde 2a (2.21.3) — Controls verschoben,
 > zusammengelegt und die Bauform geändert.
 >
+> **Nachtrag 2026-08-19.** Zwei Zahlen korrigiert, beide gefunden, indem der
+> Generator gelaufen ist statt zitiert zu werden — der Fehler, vor dem §1
+> warnt: die 595-Bilanz rechnete mit den **21** LEDs des Rack-Panels statt den
+> **19** der Hardwareplatte (§3, §4), und die CPU-Reserve stand als
+> Seed-Hochrechnung (2,17 Punkte) statt als die inzwischen direkt gemessenen
+> ~2,9 (§6). Beide Korrekturen gehen zugunsten des Entwurfs aus.
+>
 > **Was das für dieses Dokument heißt:** §1, §2, §4 und §5 sind auf das
 > **gebaute** Panel nachgezogen und nicht mehr Vorarbeit — die Einstufung ist
 > entschieden, sie steht in §2 und sie kommt aus dem Generator, nicht aus einer
@@ -27,7 +34,7 @@ ist mit ihm reproduzierbar.
 
 ```
 python host/vcv/res/gen_hw_panel.py          # aus host/vcv/, idempotent
-params=69 inputs=12 outputs=6 lights=4  panel=60HP
+params=69 inputs=12 outputs=6 lights=19  panel=60HP
 
 python tools/count_panel_controls.py         # aus dem Repo-Wurzelverzeichnis
 panel 68 · appended 1 · runtime 69 · part_a 20 · part_b 20 · shared 10
@@ -64,13 +71,28 @@ Zahlen oben stecken (`HW_ONLY` im Generator):
 Macht **4 Taster** (`REC_A/B` + die zwei reservierten).
 
 **Die LEDs laufen seit der LED-Feedback-Runde (2026-08-16) nicht mehr über
-`HW_ONLY`.** Alle Lampen auf der Platte sind jetzt echte `LightId`s — die
-Platte trägt **21**, nicht mehr 10: 8 der bisherigen 10 blieben, `CAP_A_L`/
-`CAP_B_L` sind mit der Capture-Sequenz gelöscht (die gibt es seit 2026-07-14
-nicht mehr, siehe `docs/roadmap.md`), und 13 sind neu. Fünf davon sind
-absichtlich dunkel — `FLOW_A_L`, `FLOW_B_L`, `SYNC_L` und die zwei
-Pad-Lampen `MODBTN_L`/`SHIFTBTN_L` —, aber jeden Block *geschrieben*, nicht
-übersprungen; ein Gate prüft das. `TEMPO_L` tickt den Transport-Beat
+`HW_ONLY`.** Alle Lampen auf der Platte sind jetzt echte `LightId`s.
+
+> **Drei verschiedene LED-Zahlen, und dieser Abschnitt hat sie bis 2026-08-19
+> vermischt.** Sie sind alle drei richtig, nur für verschiedene Dinge:
+>
+> | Zahl | Was sie zählt | Woher |
+> |---:|---|---|
+> | **21** | `LightId`s insgesamt, alle jeden Block geschrieben | `gen_panel.LIGHTS` (4) + `HW_ONLY_LIGHTS` (17) |
+> | **19** | Lampen auf der **Hardwareplatte** | `gen_hw_panel.py` druckt `lights=19` |
+> | **4** | Lampen auf dem **Rack**-Panel | `count_panel_controls.py` druckt `lights 4` |
+>
+> Die 19 sind die 21 ohne `FLOW_A_L`/`FLOW_B_L`, die `_SKIP_HW_LIGHTS` auf der
+> Hardwareplatte bewusst weglässt. **Für die 595-Kette zählen die 19** — sie
+> trägt physische Lampen, keine `LightId`s (§3).
+
+Der Bestand: 8 der bisherigen 10 blieben, `CAP_A_L`/`CAP_B_L` sind mit der
+Capture-Sequenz gelöscht (die gibt es seit 2026-07-14 nicht mehr, siehe
+`docs/roadmap.md`), und 13 sind neu. Drei der Lampen auf der Platte sind
+absichtlich dunkel — `SYNC_L` und die zwei Pad-Lampen `MODBTN_L`/`SHIFTBTN_L`
+—, aber jeden Block *geschrieben*, nicht übersprungen; ein Gate prüft das. Das
+gilt auch für `FLOW_A_L`/`FLOW_B_L`, die geschrieben werden, obwohl die
+Hardwareplatte sie nicht zeichnet. `TEMPO_L` tickt den Transport-Beat
 (Metronom-Puls, `kTempoPulse` der Beat-Phase). Herleitung, Platzierung und die offene
 Mux-Breite (8:1 gegen 16:1, deshalb nimmt `duty()` den Schrittzähler als
 Parameter): Spec
@@ -82,8 +104,9 @@ Parameter): Spec
 > Korridors); die Neuverteilung hat `ENGINE_A/B` vom Taster zum
 > **fünf-Zonen-Rastpoti** am Kopf der VOICE-Gruppe gemacht und damit zehn
 > Anzeige-LEDs eingespart. 20 − 10 = 10, und die Kette blieb dieselbe — bis
-> die LED-Feedback-Runde das Feld auf 21 anhob, mehr als das ursprüngliche
-> Korridor-Ende, weil kein Rundungsdruck mehr bestand.
+> die LED-Feedback-Runde das Feld auf 21 `LightId`s anhob (19 davon auf der
+> Platte, siehe Kasten oben), mehr als das ursprüngliche Korridor-Ende, weil
+> kein Rundungsdruck mehr bestand.
 
 `HIDDEN_PARAMS` ist seit der Reduktionsrunde leer — es gibt keinen menü-only
 *Parameter* mehr. Das Kontextmenü selbst existiert weiter (Resync to bar, BBD
@@ -319,20 +342,29 @@ Kanal.
 | Sense-Pins (ADC, **nicht** aus dem GPIO-Pool) | 4 | 4 | 0 |
 | GPIO-Pool | 10 | 10 | **0** |
 | Mux-Kanäle (5 × 16:1 auf 4 Sense-Pins) | 80 | 65 | 15 |
-| 595-Ausgänge (4 Register) | 32 | 21 LEDs + 4 Adressen + 5 Enables = 30 | 2 |
+| 595-Ausgänge (4 Register) | 32 | 19 LEDs + 4 Adressen + 5 Enables = 28 | 4 |
 | 165-Eingänge | 24 | 4 Taster | 20 |
 
-Die 595-Zeile ist hier **hergeleitet, nicht aus der Spec zitiert**: die
-LED-Feedback-Spec bemisst 21 LEDs, 4 Adress- und 5 Enable-Leitungen auf
-derselben Kette — 30 von 32 Ausgängen (`2026-08-16-led-feedback-design.md`
-§3/§9). Die Rechnung oben nimmt einen Enable je Mux an; mit einem Dekoder
-wären es weniger. Bei 16:1-Muxen ist das vierte Register damit **nicht mehr
-optional**, sondern gebraucht — die 3-Register-Rechnung von vor der
-LED-Feedback-Runde (10 LEDs, 19 von 24 Ausgängen) ist überholt. Fällt die
-Mux-Wahl auf 8:1, braucht es neun Muxe statt fünf und damit neun statt fünf
-Enables: 21 + 3 Adressen + 9 Enables = 33, ein Ausgang über die vier Register
-hinaus — kostet ein **fünftes** 74HC595, kein Pin. Die 8:1-gegen-16:1-Frage
-bleibt offen (§6).
+Die 595-Zeile ist hier **hergeleitet, nicht aus der Spec zitiert**, und sie
+ist am 2026-08-19 nach unten korrigiert worden. Sie stand mit **21** LEDs, der
+Zahl aus der LED-Feedback-Spec (`2026-08-16-led-feedback-design.md` §3/§9) —
+aber das ist die Zahl des **Rack**-Panels. Die Hardwareplatte zeichnet **19**:
+`_SKIP_HW_LIGHTS` in `gen_hw_panel.py` lässt `FLOW_A_L` und `FLOW_B_L` dort
+bewusst weg, und `python res/gen_hw_panel.py` druckt entsprechend `lights=19`.
+Es ist genau der Fehler, vor dem §1 warnt — eine Zahl aus einem Dokument statt
+aus einem Lauf.
+
+Die Rechnung nimmt einen Enable je Mux an; mit einem Dekoder wären es weniger.
+Bei 16:1-Muxen sind 28 der 32 Ausgänge belegt, das vierte Register ist also
+gebraucht und **vier Ausgänge bleiben frei** (nicht zwei). Die
+3-Register-Rechnung von vor der LED-Feedback-Runde (10 LEDs, 19 von 24
+Ausgängen) ist überholt.
+
+**Und die Folgerung für 8:1 kippt mit der Korrektur:** neun Muxe statt fünf
+heißen neun statt fünf Enables, also 19 + 3 Adressen + 9 Enables = **31 von
+32** — das passt in die vier Register. Der Satz, der hier stand, verlangte ein
+**fünftes** 74HC595; das war eine Folge der 21. Die 8:1-gegen-16:1-Frage bleibt
+offen (§6), aber sie kostet kein Bauteil mehr.
 
 **Das Ergebnis ist also: es reicht, mit Luft in jeder Zeile außer den Pins
 selbst** — und die Null dort ist die geplante Null. Die zwei Dinge, die es
@@ -419,8 +451,10 @@ inzwischen gezeichnet, generiert und gegen seine eigenen Keep-outs geprüft:
   neun Linien (14,5 / 34 / 50,22 / 53 / 76 / 79 / 89,86 / 95 / 97); waagerecht
   von x = 17 bis x = 287,8. Darunter die Buchsenreihe bei **y = 114 mm**, in der
   auch die zwei reservierten Pads und der SD-Slot sitzen.
-- Untergebracht sind **67 Poti-/Taster-Positionen, 2 reservierte Pads, 21 LEDs,
-  18 Buchsen und der SD-Slot** — geprüft von `hw_panel_guard`: Schienen-Keepout,
+- Untergebracht sind **67 Poti-/Taster-Positionen, 2 reservierte Pads, 19 LEDs,
+  18 Buchsen und der SD-Slot** — 19, nicht die 21 der LED-Spec, weil die
+  Hardwareplatte `FLOW_A_L`/`FLOW_B_L` nicht zeichnet (§3) — geprüft von
+  `hw_panel_guard`: Schienen-Keepout,
   Überlappung nach echten Bauteilradien, ein Beschriftungsabstand für alle
   Klassen, Legenden gegen den 8,03-mm-Rack-Jack-Körper, SD-Ausschnitt frei,
   Spiegelsymmetrie — und dass die eingecheckten Dateien dem entsprechen, was der
@@ -512,9 +546,12 @@ die Kapazität passt mit Reserve in jeder Zeile (§3), und der DMA-Scan der
 **Drei Stellen, an denen es trotzdem klemmen kann, nach Ernst sortiert:**
 
 1. **Das CPU-Budget — die reale Gefahr.** Der Gate `instrument_worst_bbd_dtcm`
-   steht bei 96,43 % `pct_max`, also 3,57 Punkte Reserve — gemessen auf dem
-   **Seed**. Auf dem Submodule ist jede Last teurer; dort bleiben **2,17
-   Punkte** (`docs/bench/2026-08-07-seed-vs-patch-sm.md`). Ein pro Block
+   steht auf dem Submodule bei **97,02–97,16 % `pct_max`, also ~2,9 Punkte
+   Reserve** — direkt gemessen am 2026-08-19
+   (`docs/bench/2026-08-19-3def5d5-feed-axi-o2-patch_sm-usb.md`, zwei Läufe).
+   Hier stand vorher 2,17 Punkte, vom **Seed** hochgerechnet über
+   `docs/bench/2026-08-07-seed-vs-patch-sm.md` (dort 96,43 % auf dem Seed); die
+   Hochrechnung ist durch die direkte Messung ersetzt und lag konservativ. Ein pro Block
    gebitbangter Ketten-Write plus Kanalauswertung landet genau in dieser
    Reserve. Beherrschbar — ein voller Sweep muss nicht jeden Block laufen, die
    Potis sind auch bei einem Sweep alle paar Blöcke schnell genug —, aber nicht

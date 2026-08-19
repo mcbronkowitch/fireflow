@@ -18,6 +18,12 @@ enum EngineId {
     // and input-consuming, so it is the second engine after the sampler to
     // override the process_in/consumes_input pair.
     ENGINE_BBD = 5,
+    // The coupled feedback-FM drone (spec 2026-08-18 feed-coupled-feedback-fm).
+    // A melodic engine like SYNTH/WAVE/BODY -- Part's note-deck flag is derived
+    // as "not SAMPLER and not BBD" (part.cpp), so this id needs no entry there
+    // -- but NOT a SynthEngineT<Voice>: it has no per-note voices and no
+    // allocator, one free-running ring of P operator pairs per deck instead.
+    ENGINE_FEED = 6,
     // Sentinel, not a selectable engine -- keep it last so it always equals
     // the count. Exists so a `static_assert(ENGINE_COUNT == N, ...)` next to
     // any hand-written "every engine" list (e.g. tests/test_deck_bus.cpp's

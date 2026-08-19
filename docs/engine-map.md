@@ -691,3 +691,650 @@ phases), max `|d|` 0.000000. This is the invariant
 `tests/test_step_accent.cpp`'s STEP→FLOW seam case measures from sample 0 of
 the switch rather than after a settle window — the ordering is why there is
 nothing to settle.
+
+## 9. FEED: where the coupling tips
+
+Spec: `docs/superpowers/specs/2026-08-18-feed-coupled-feedback-fm-design.md`.
+Measured 2026-08-19 on `FeedBank` alone — `engine/feed/feed_pair.h`, driven
+directly, with **no** `FeedEngine` around it: no chord layer, no pitch
+attenuation, no envelope, no `tanh` ceiling and no SUB. Everything below is a
+statement about the ring, not about a FEED deck. What the finished engine
+measures is a separate section, written when there is a finished engine.
+
+**Setup, in full.** 48 kHz. Played pitch 220 Hz. `feed_cfg::kPairs` was **4 and
+a PLACEHOLDER** when this ran — `kPDecided` was false and the `feed_pairs`
+bench had not happened, so every figure here is "at P = 4" and not "at P".
+Pairs snapped (not glided) onto a zero-mean signature spanning ±S cents, equal
+amplitude `1/kPairs`, pan = the signature. `set_damp_coef(1)` throughout, i.e.
+the DAMP one-pole fully open, which is the worst case — a FEED deck at FILT
+centre runs coefficient 0.342 and is quieter than this. 2 s settle before every
+measurement.
+
+### The pitch estimator is part of the measurement, and two of them lied
+
+Every "cents off" figure here is YIN (de Cheveigné & Kawahara 2002) — the
+cumulative mean normalized difference function, absolute threshold 0.15,
+parabolic peak — over a **131072-sample (2.73 s)** window, reporting both a
+frequency and an aperiodicity. Three estimators were tried; the first two
+returned confident wrong answers, which is the only kind of measurement error
+that survives into a document:
+
+| Estimator | Failure | Measured |
+|---|---|---|
+| `argmax` of raw autocorrelation | locks to a SUB-multiple | −1200.97 ct (the octave below) and −1905.27 ct (~73 Hz), on rows including BOND 0 |
+| normalized autocorrelation, shortest lag reaching 0.9·max | locks to a HARMONIC | +1904.44 ct (the third harmonic, 660 Hz) |
+| YIN | — | ±0.02 ct on sine, 8-harmonic, missing-fundamental and harmonics-3..9-only test signals; 0.9726 aperiodicity on white noise |
+
+Two consequences that any later gate inherits:
+
+- **Aperiodicity is part of the answer.** A row whose aperiodicity reaches 0.30
+  has no fundamental to be right or wrong about, and is counted as *unpitched*
+  below rather than folded into a cents average. A ring driven past its
+  stability point genuinely has no pitch; an estimator that returns a number
+  anyway is how a gate ends up asserting something about noise.
+- **The window has to outlast the beat.** A ±S cent cluster beats at
+  `220·(2^(S/600) − 1)` Hz — 0.764 Hz at S = 3, i.e. a 1.31 s period. Measured
+  at S = 3 with a 16384-sample (0.34 s) window: **+1203 ct at aperiodicity
+  0.08**, a confident octave error, at five different BOND positions. The same
+  row at 131072 samples reads +0.02 ct. Any gate that estimates FEED's pitch
+  needs a window of at least two beat periods at the smallest spread it uses.
+
+### RATIO 3.5 is excluded, and it is arithmetic rather than a defect
+
+A half-integer modulator:carrier ratio doubles the signal's period, so the
+fundamental of a 220 Hz carrier at ratio 3.5 really is 110 Hz. Measured
+−1200 ct at every BOND including 0. The ratio grid here is therefore
+{1, 2, 3, 7}. This is also, independently, the argument for RATIO's integer
+magnet (spec §4): the knob's lower half must not stand on a half-integer.
+
+### The feedback amount is the dominant variable, and 0.30 cycles was past the edge
+
+Worst |cents| among *pitched* rows, and how many of the 20 depth × ratio rows
+had no fundamental at all, at spread 7 ct:
+
+| `fb` (cycles) | (rad) | BOND 0 | BOND 0.5 | BOND 1.0 |
+|---|---|---|---|---|
+| 0.04 | 0.251 | −0.40, 0 unpitched | −0.40, 0 | +0.56, 0 |
+| 0.06 | 0.377 | −0.40, 0 | +0.47, 0 | +0.75, 0 |
+| **0.08** | **0.503** | **−0.40, 0** | **+0.55, 0** | **+0.70, 3** |
+| 0.10 | 0.628 | −0.40, 0 | +0.55, 0 | +0.75, 5 |
+| 0.12 | 0.754 | +1903, 0 | −0.68, 0 | +0.87, 7 |
+| 0.15 | 0.942 | +1907, 0 | −1.25, 1 | −1202, 9 |
+| 0.20 | 1.257 | +1903, 0 | −0.97, 5 | +0.47, 12 |
+| 0.30 | 1.885 | +23.7, 2 | −1.91, 8 | +0.61, 12 |
+| 0.40 | 2.513 | −0.40, 15 | −1.98, 12 | +0.41, 14 |
+
+Isolated further: **one pair, spread 0, BOND 0** — no coupling, no cluster,
+nothing but self-feedback — shifts +49.6 ct at `fb` 0.30 and +0.04 ct at
+`fb` 0.15, index 0.70. The mechanism is the classical one: a feedback-FM
+operator stops being periodic at its carrier somewhere past β = 1 rad
+(= 0.159 cycles), and 0.30 cycles is 1.885 rad. The two-sample average
+(`0.5·(m[n−1] + m[n−2])`, the Plaits recipe) lifts that limit — the table shows
+BOND 0 clean up to 0.10 cycles, not up to 0.159/2 — but it does not remove it.
+
+`feed_cfg::kFbBaseCycles` was **0.30 by ear, first try, and is 0.08 measured**.
+It is still a by-ear constant and Task 13 may move it; what this section fixes
+is the ceiling it may not be moved above.
+
+### The BOND threshold, and the cliff
+
+At `fb` 0.08, spread ≤ `kSpreadKneeCt`, over 80 rows per BOND position
+(4 spreads × 5 depths × 4 ratios), 131072-sample window:
+
+| BOND | worst cents | unpitched |
+|---|---|---|
+| 0.0 | +0.253 | 0/80 |
+| 0.1 | +0.240 | 0/80 |
+| 0.2 | +0.294 | 0/80 |
+| 0.3 | +0.392 | 0/80 |
+| 0.4 | +0.465 | 0/80 |
+| 0.5 | +0.508 | 0/80 |
+| 0.6 | +0.551 | 0/80 |
+| **0.7** | **+0.609** | **0/80** |
+| 0.8 | **+22.522** | 1/80 |
+| 0.9 | +0.692 | 1/80 |
+| 1.0 | +0.718 | 3/80 |
+
+**BOND 0.7 is the last position at which every row is pitched and inside a
+cent.** The break at 0.8 is not gradual — the worst row jumps from +0.609 ct to
++22.522 ct and the first row loses its fundamental entirely — which is the
+cliff §2.3 asks the knob to have, arriving at 70 % of its travel.
+
+Two numbers follow, and they are the map's rather than the ear's:
+
+- `feed_cfg::kBondPitchThreshold` = **0.7**.
+- `feed_cfg::kPitchCentreTolCt` = **2.0 ct**. Sized as 3.3× the worst reading
+  below the threshold (0.609 ct) and 11× below the first broken row (+22.5 ct),
+  so it discriminates with a wide margin in both directions. Against §2.6's own
+  calibration — SWARM's withdrawn +420 ct earned "HARM almost always sounds
+  detuned", +4.5 ct was accepted — 2.0 ct is comfortably inside what was
+  accepted by ear and two orders of magnitude below what was rejected.
+
+**Do not retune either in a listening session — re-run the probe.**
+
+### SPREAD: the lower half has a fundamental, the upper half stops having one
+
+`fb` 0.08, BOND ∈ {0, 0.35, 0.7}, 27 rows per spread, same window:
+
+| spread (ct) | worst cents | unpitched |
+|---|---|---|
+| 0 | +0.522 | 0/27 |
+| 3 | +0.534 | 0/27 |
+| 5 | +0.582 | 0/27 |
+| **7** | **+0.609** | **0/27** |
+| 10 | +0.590 | 1/27 |
+| 15 | +0.939 | 3/27 |
+| 20 | +1.221 | 4/27 |
+| 30 | +1.708 | 7/27 |
+| 45 | +2.433 | 10/27 |
+| 60 | +4.509 | 11/27 |
+
+The boundary between "audibly beating" and "audibly a cluster" lands on
+**7 cents**, which is `kSpreadKneeCt`'s by-ear first-try value to the cent —
+the last spread at which every row still has one fundamental. Above it the
+cluster progressively stops having one, reaching 10 of 27 rows at
+`kSpreadMaxCt` = 45.
+
+That is **not** a reason to lower `kSpreadMaxCt`, and §3.4 is why: the upper
+half of SPREAD is *meant* to reach dense roughness. What it does mean is that
+§9.9's pitch-centre claim is a claim about SPREAD's lower half, and a gate that
+asserted it across the whole travel would be asserting a pitch that the design
+deliberately dissolves. The rows that remain pitched at 45 ct are still within
+2.433 ct, so nothing above the knee is *out of tune* — there is simply less and
+less of a single "tune" to be out of.
+
+### Spectral flux: the shape of the G10 measurement, on the bank
+
+Normalized magnitude flux between two Hann-windowed 32768-sample spectra taken
+9 s apart, `fb` 0.12, ratio 1:
+
+| BOND | spread 7 ct | spread 20 ct |
+|---|---|---|
+| 0.00 | 0.182 / 0.164 | 0.054 / 0.055 |
+| 0.25 | 0.377 / 0.350 | 0.234 / 0.266 |
+| 0.50 | 0.412 / 0.332 | 0.291 / 0.286 |
+| 0.75 | 0.335 / 0.301 | 0.281 / 0.293 |
+
+(two figures per cell: depth 0.5 / depth 0.8.)
+
+The structure the two-sided inner-life gate needs is here — coupled BOND moves
+the spectrum 2–5× as much as BOND 0 does — but **the BOND 0 floor is 0.05–0.18,
+not the ~0.02 a gate might assume**, because a bank of detuned pairs beating
+against each other is not perfectly stationary over 9 s either. A G10 written
+against an absolute "still < 0.02" would fail on a correct engine. The
+threshold belongs on the *ratio*, and the absolute floor has to be measured on
+`FeedEngine` — with the envelope and the ceiling in the path — rather than
+carried over from this table.
+
+### What the finished engine measures
+
+Measured 2026-08-19 on `FeedEngine` at 48 kHz — the whole engine, so the chord
+layer, the pitch attenuation, the envelope, the `tanh` ceiling and SUB are all
+in the path, unlike the bank-only figures above. `set_seed()` before `init()`
+(the `SynthEngineT` order — `init()` consumes the seed to draw the SPREAD
+signature and the per-pair feedback offsets), seeds 99 / 999 / 4242 / 7 /
+12345. P is `feed_cfg::kPairs` and is **still a placeholder here**: the
+`feed_pairs` bench has not run, `kPDecided` is false, and gate `feed G8` is red
+until it does. Every figure below is at P = 4.
+
+**BOND 0 is a line spectrum and coupled BOND is not.** Over a 262144-sample
+(5.5 s) window, with every lane static and FLOOR 1, the spectral flatness of
+the deck's output:
+
+| seed | BOND 0 | BOND 0.5 | BOND 1.0 |
+|---|---|---|---|
+| 99 | 0.000547 | 0.005369 | 0.125733 |
+| 4242 | 0.000826 | 0.004624 | 0.066854 |
+| 999 | 0.000436 | 0.003013 | 0.036366 |
+| 7 | 0.000933 | 0.004263 | 0.062244 |
+| 12345 | 0.000416 | 0.005348 | 0.078832 |
+
+Monotone in BOND at every seed, worst separation 4.6× at half BOND and 39× at
+full. A fixed set of frequencies produces a line spectrum however hard its
+members beat against each other, so this is the coupling and nothing else.
+
+**Flatness, not window-to-window flux, is what separates them**, and that is a
+measurement rather than a preference. The flux measure §2.4 suggests does not
+discriminate on this engine: BOND 0 gives 0.031–0.210 against BOND 0.5's
+0.124–0.231 — overlapping ranges, because the SPREAD signature is a random draw
+and the two closest pairs can land unresolvably close, beating with a period of
+tens of seconds. Which seed was drawn decided the answer.
+
+**Flatness at BOND 0 also reads inharmonicity, so the gate runs at an integer
+RATIO.** Measured at BOND 0 across the RATIO knob: 0.00064 at 1:1 and 0.024 at
+4:1, against 0.084 at 2.5, 0.187 at 6.8 and 0.288 at 11. Only an integer
+modulator:carrier ratio puts the sidebands on the carrier's harmonics.
+
+**The pitch centre holds across the whole BOND travel below the threshold.**
+At played pitch 0.35 (227.76 Hz), depth 0.7, FLOOR 1, over SPREAD's lower half
+and five seeds, with a 131072-sample YIN window: the worst drift from the same
+configuration's own BOND 0 reading is **1.204 ct**, and at SPREAD 0 — where
+there is no cluster to confound it — the worst absolute offset from the played
+pitch is **0.063 ct**. Aperiodicity stayed below 0.004 on every row.
+
+Two consequences the gate is written around:
+
+- The claim is about BOND, so the quantity is drift **with BOND**. An absolute
+  bound at fixed SPREAD measures something else: a detuned cluster's perceived
+  centre sits a fraction of its own half-spread from the geometric mean of its
+  pairs — up to 3.795 ct at `kSpreadKneeCt` on seed 99 — because the pairs are
+  at fixed frequencies and their exact positions are a random draw. G13 pins
+  the arithmetic centre; G15 pins what the knob does to it.
+- **The engine does not break beyond the threshold at this pitch.** Measured at
+  BOND 0.8 / 0.9 / 1.0, SPREAD 0, seeds 99 and 4242: −0.07 to −0.12 ct at
+  aperiodicity 0.0008. The bank breaks there and the engine does not, because
+  the pitch attenuation is doing its job: at pitch 0.35 the effective feedback
+  is ~0.059 cycles, below the 0.08 the bank's cliff was measured at. The cliff
+  §2.3 asks BOND to have therefore lives at the BOTTOM of the pitch range,
+  where the attenuation is weakest — which is a listening question for the
+  by-ear pass, not something a gate should assert.
+
+**The feedback attenuation spans 0.135 down to 0.034 cycles** from the bottom of
+the pitch axis to the top — a factor of 4.0 — which is why BOND audibly weakens
+toward the top of a chord. A decision, not a side effect (G12):
+
+| pitch | Hz | fb range, drive 0.14 | fb range, drive 0.08 |
+|---|---|---|---|
+| 0.00 | 110.00 | 0.13532 – 0.14591 | 0.07732 – 0.08338 |
+| 0.25 | 185.00 | 0.10994 – 0.11855 | 0.06283 – 0.06774 |
+| 0.50 | 311.13 | 0.08457 – 0.09119 | 0.04833 – 0.05211 |
+| 0.75 | 523.25 | 0.05920 – 0.06384 | 0.03383 – 0.03648 |
+| 1.00 | 880.00 | 0.03383 – 0.03648 | 0.01933 – 0.02084 |
+
+(the spread within each row is NEW's per-pair offset, ±`kFbOffsetRange`.)
+
+**RATIO's lower half spends 34.3 % of its travel within 2 % of an integer**
+against 4.8 % for a linear map over the same knob positions — **7.2×** — and the
+map is monotone throughout (G26). The gate asserts the ratio against the linear
+baseline rather than the 34.3 %, because that figure is a statement about
+`kRatioMagnetExp`, which is a by-ear constant.
+
+**SPREAD is exact at the centre and two-segment in its travel** (G13, G14). The
+geometric mean of the pairs sits within **0.021 cents** of the tone at every
+knob position, which is what the per-group zero-meaning buys:
+
+| knob | `_spread_ct` | span across the pairs | geometric mean vs tone |
+|---|---|---|---|
+| 0.00 | 0.00 ct | 0.00 ct | −0.0155 ct |
+| 0.25 | 3.50 ct | 6.29 ct | −0.0188 ct |
+| 0.50 | 7.00 ct | 12.59 ct | −0.0185 ct |
+| 0.75 | 26.00 ct | 46.77 ct | −0.0206 ct |
+| 1.00 | 45.00 ct | 80.95 ct | −0.0185 ct |
+
+**A FEED deck voices at most `kPairs / kPairsPerTone` chord tones**, so every
+voiced tone keeps a group SPREAD can reach. At P = 4 that cap is 2, and at
+COLOR's four-note chord the deck voices 2 tones (G25).
+
+**FILT is a real low-pass on the output, and was not one until 2026-08-19.**
+It drove a one-pole INSIDE the feedback path; Bastian reported the knob as
+doing nothing, and the measurement says he was right. Three reasons, each
+sufficient on its own: the in-loop pole never touches the carrier, so it
+changes how the coupling wanders rather than where the spectrum ends; the
+signal it filtered peaks at `kFbBaseCycles`, which is 0.08 cycles at the
+bottom of the pitch range and 0.019 at the top; and its coefficient
+`1 - exp(-2*pi*fc/sr)` already sat at 0.34 at the centre detent, 0.72 half a
+travel up and 0.98 at the top, so the upper third of the knob was
+indistinguishable from wide open. The in-loop pole is now FIXED at
+`kDampFixedHz` — it is half of this engine's anti-aliasing, the other half
+being FeedPair's two-sample average, and a knob that can switch that off is
+not a knob. FILT is an `SvfLp` on the deck output, on the instrument's usual
+60 Hz–14 kHz rails.
+
+Measured on the finished path, seeds 99/999/4242/7/12345 over
+BOND × DEPTH × RATIO × pitch, 1 s per cell (G33):
+
+| `kFiltRes` | damping ratio | worst output | vs `kSatCeil` |
+|---|---|---|---|
+| 0.15 | 0.38 | 0.8714 | **1.584× (+4.00 dB)** |
+| 0 | 0.91 | 0.5353 | 0.973× (−0.24 dB) |
+
+**`SvfLp::SetRes` maps through `r^0.25`, so a value that reads as "a touch of
+resonance" is not one.** 0.15 is already 62 % of the way to full resonance, and
+`0.707` — where a two-pole stops peaking at all — is passed well below it.
+`kFiltRes` is therefore 0, which is a measurement and not a preference: the
+filter sits AFTER the tanh (upstream, the saturator would regenerate exactly
+the partials the filter removed and the knob would read weak again), so a
+resonant peak there breaks the one hard bound the deck offers. Any future
+engine reaching for `SvfLp` with a "small" resonance should read this row
+first — the trap is in the shared primitive, not in FEED.
+
+**The right half of FILT is scaled by `kFiltRightScale`, and the left half is
+the sampler's arithmetic verbatim.** On a sampler deck FILT is a TRIM added to
+a lane that already carries the cutoff, so `n_raw = kFiltNeutral + amt`
+saturating early costs nothing. FEED has no such lane — `LANE_SIZE` is SPREAD
+here — so FILT is the whole control, and unscaled it clamped at `n_raw = 1` by
+knob position 0.25: measured bit-identical 14 000.0 Hz from there to +1, i.e.
+the top 70 % of the right half dead in the hand. Scaled, the travel is
+monotone across its whole length: 60 Hz at −0.6, 3 582 Hz at the detent,
+14 000 Hz at +1, with −1.0…−0.8 the fade to silence. High-band share above
+4 kHz runs 0.720 wide open against 0.0100 nearly shut — a factor of 72.
+
+### The drive went to 0.14 by ear, and what moved
+
+`kFbBaseCycles` was raised from 0.08 to **0.14** on 2026-08-19 after a
+six-render A/B (variants of `kDampFixedHz` × `kFbBaseCycles`, BOND stepped
+0 → 1 over 26 s at pitch 0.35). Bastian picked the hard-drive, bright-path
+variant: *"ruhig hart, filtern kann ich selbst dahinter"* — the escalation is
+the point, and taming its top end is the output FILT's job now that FILT is a
+real low-pass. Darkening the in-loop path instead (1200 Hz and 500 Hz were
+both rendered) was rejected because it removes the brightness for everyone
+rather than leaving it under a knob.
+
+**0.14 knowingly sits above the 0.08 at which the bank alone tips.** That
+ceiling is still the measurement §2 recorded; the engine is now driven past
+it over the lower part of the pitch range on purpose. Do not "correct" one
+number to the other.
+
+**The BOND pitch threshold fell from 0.70 to 0.65** (`kBondPitchThreshold`).
+It is a description the gate samples below, not a setting — nothing in the
+engine reads it — so it has to be re-run whenever the drive moves. What the
+re-run found matters more than the number: at pitch 0.35 the ring **does not
+break anywhere on the knob**. Across the whole BOND travel and SPREAD's lower
+half the aperiodicity peaks at **0.0171**, against the 0.30 that would mean
+"no fundamental". The drift is a smooth monotone creep, and it crosses the
+2 ct tolerance rather than falling off anything:
+
+| BOND | drift at SPREAD 0 | at 0.25 | at 0.50 |
+|---|---|---|---|
+| 0.25 | 0.001 ct | 0.237 ct | 0.295 ct |
+| 0.50 | 0.002 ct | 0.825 ct | 1.158 ct |
+| 0.65 | 0.005 ct | 1.259 ct | 1.813 ct |
+| 0.70 | 0.006 ct | 1.363 ct | **2.003 ct** |
+| 1.00 | 0.015 ct | 1.861 ct | 3.007 ct |
+
+So the honest statement is "the 2 ct bound holds to BOND 0.65, and a 3.1 ct
+bound holds everywhere". `kPitchCentreTolCt` was deliberately NOT widened to
+3.5 to keep the whole travel inside the gate: loosening a bound so a test
+passes is how a gate stops being one. The cliff proper still lives at the
+bottom of the pitch range, where the attenuation is weakest.
+
+**BOND is not inert and never was.** The complaint that produced this round
+was "klingt nicht gut", not "tut nichts", and the two need different fixes.
+Spectral flatness across the knob, seed 99, FLOOR 1, DEPTH 1, at the old
+drive:
+
+| pitch | BOND 0 | 0.50 | 1.00 | span |
+|---|---|---|---|---|
+| 0.00 | 0.00002 | 0.00161 | 0.04803 | 2492× |
+| 0.35 | 0.00004 | 0.00119 | 0.02040 | 543× |
+| 0.70 | 0.00006 | 0.00057 | 0.00190 | 31× |
+| 1.00 | 0.00027 | 0.00104 | 0.00205 | 7.6× |
+
+Monotone everywhere, and heavily back-loaded: half the knob travels between
+two line spectra. A future "BOND does nothing" report should be checked
+against the *distribution* of its effect before its magnitude.
+
+### Level parity, and the ceiling that was a compressor
+
+Reported by ear ("die Engine scheint mir viel lauter zu sein als die anderen"),
+then measured. One `Part`, identical lanes, identical LEVEL 1, no part FX and
+no reverb, 6 s from one trigger:
+
+| engine | FLOW peak | FLOW RMS | vs SYNTH | STEP RMS | vs SYNTH |
+|---|---|---|---|---|---|
+| SYNTH | 0.333 | −21.8 dB | ±0 | −32.9 dB | ±0 |
+| WAVE | 0.444 | −19.0 dB | +2.8 dB | −29.5 dB | +3.4 dB |
+| BODY | 0.053 | −31.8 dB | −10.0 dB | −62.0 dB | −29.1 dB |
+| FEED (before) | 0.547 | −10.0 dB | **+11.8 dB** | −14.8 dB | **+18.1 dB** |
+| FEED (after) | 0.343 | −18.7 dB | +3.1 dB | −25.3 dB | +7.6 dB |
+
+**The 0.547 peak was `kSatCeil`, not the signal.** Sweeping LEVEL shows the
+tanh was not a ceiling at all but a permanent compressor:
+
+| LEVEL | peak | linear expectation | squash |
+|---|---|---|---|
+| 0.10 | 0.122 | 0.124 | −0.14 dB |
+| 0.30 | 0.323 | 0.371 | −1.20 dB |
+| 0.50 | 0.444 | 0.618 | −2.87 dB |
+| 1.00 | 0.537 | 1.236 | **−7.24 dB** |
+
+So the coupling was being judged through 7 dB of gain reduction before it
+reached any compressor downstream — and the master limiter's drive-0 knee
+(−1 dBFS, bit-transparent below) sat only 4.2 dB above one FEED deck, against
+8.6 dB for SYNTH. Two FEED decks cleared it.
+
+The cause is that `1/sqrt(kPairs)` normalizes for INCOHERENT summation, and FM
+carriers on chord tones plus an uncoupled SUB are partially coherent. Fixed
+with `kDeckGain` = 0.25 applied to the deck sum immediately before the ceiling;
+the tanh now catches peaks (~0.8 dB at LEVEL 1) and the cliff it exists for is
+untouched. Two decks now peak at 0.686 against SYNTH's 0.666.
+
+**FEED still reads +7.6 dB RMS in STEP, and that is density rather than gain.**
+Its peaks match (0.308 against SYNTH's 0.167 is the struck case; the drone case
+is 0.343 against 0.333). A FEED note keeps ringing where a SYNTH note has
+decayed — the ring is free-running by design, a trigger only injects into it.
+Trimming further to equalise the struck RMS would leave the drone too quiet,
+and the drone is the mode the engine exists for.
+
+**BODY is 10 dB below SYNTH as a drone and 29 dB below struck**, on the same
+settings. That is unexamined here: BODY's level depends heavily on MATL and
+EXCIT, and one probe setting is not a verdict on it. Recorded because the
+parity brief covers every engine, not just this one.
+
+### What the hardware measures, and the state nobody was benching
+
+Patch Submodule, 480 MHz, block 96, dcache+icache, `-O2`, AXI, over USB; two
+runs, checksums and QSPI digest identical.
+[`docs/bench/2026-08-19-ac26589-feed-axi-o2-patch_sm-usb.md`](bench/2026-08-19-ac26589-feed-axi-o2-patch_sm-usb.md).
+
+| workload | avg % | max % |
+|---|---:|---:|
+| `inst_feed_engine_worst` (both decks FEED) | 75.99 | 81.41 |
+| `inst_bbd_engine_worst`, same image | 93.56 | 98.39 |
+| `instrument_worst`, same image | 99.30 | 104.18 |
+| `feed_pairs` at P = 4 | 8.04 | 8.24 |
+
+Task 11's gate — `inst_feed_engine_worst` must not exceed `instrument_worst`
+**inside one image** — passes on both average and maximum, with room. P is
+still a placeholder: one point is not a slope, so `kPDecided` stays false and
+`feed G8` stays red.
+
+**Two traps this capture set, both worth more than the numbers.**
+
+**1. The FEED worst case was priced on a silent deck.** `inst_feed_engine_worst`
+set FILT to −1, which under the old DAMP mapping was "darkest" and under the new
+one is exactly where `_filt_gain` fades to zero. The ring, the `tanh` and the
+SVF still ran, but Grit, Comp, the centre reverb and the master limiter were all
+priced on zeros. Corrected to −0.4, the darkest cutoff that does not fade; the
+SVF costs the same at every cutoff, so the value is chosen for the deck emitting.
+Silence had understated the row by about 1 percentage point.
+
+**2. A cross-capture subtraction is not a measurement, and here is the size of
+it.** Between `3bdcb17` and `ac26589`, rows whose checksum did not change at all
+moved from **−0.31 % to +2.54 %** on a relink — `mod_plane_2x_center` alone swung
+−4.59 % on an intermediate capture. `inst_feed_engine_worst` grew 6.10 %, of
+which the heavy-instrument drift band accounts for 0.43–2.54 %. So the filter and
+drive work costs FEED somewhere in **+24 500 to +39 000 cycles** on two decks
+(+2.6 to +4.1 points of block budget). That range is the honest answer; splitting
+it finer needs an ablation image, not another capture.
+
+### FEED spends 92 % of a silent tail in denormals
+
+Task 11 step 5.1, measured 2026-08-19 on the desktop. `FeedEngine`, FALL 0 so
+FLOOR is 0 too, one hit, then 20 s:
+
+| quantity | subnormal | zero | normal |
+|---|---:|---:|---:|
+| deck output L/R | 1 759 436 | 96 780 | 63 784 |
+| per-pair `amp` (every 64th sample) | 57 960 | 8 | 2 032 |
+
+The envelope reaches exactly 0. `p.amp` does not, and **the reason is the fix
+for the glide runaway**. `FeedBank::set_target` arms `_slope_left` and the
+snap-to-target at the end of `process` only fires when that counter expires —
+but `_rebuild_allocation` re-targets every pair every control tick (96 samples,
+well inside `kSlopeSamples`), so the counter is re-armed before it ever expires
+and the amplitude converges *geometrically* instead of arriving. Geometric
+convergence to zero lands in the subnormal range and stays there. The comment at
+`engine/feed/feed_pair.h:76` describes this behaviour precisely — as a feature.
+
+Nothing else in the bank decays: `m1`, `m2`, `o1`, `o2` and the DAMP state `lp`
+are all `fast_sin` outputs on a path that is never amplitude-scaled. A bare
+`FeedBank` retargeted **once** counts **zero** subnormals across all of them and
+lands `amp` at exact zero — the contrast is the retargeting, not the ring.
+
+**What it costs, on the desktop, where the penalty is not the board's:**
+
+| state | ns/sample | |
+|---|---:|---|
+| sounding, FTZ off (the state the bench measures) | 59.98 | |
+| sounding, FTZ on | 56.51 | |
+| **idle tail, FTZ off** | **99.05** | **1.65× a sounding deck** |
+| idle tail, FTZ on | 56.36 | the penalty is entirely denormals |
+
+**So FEED's worst case may be silence, not any knob setting**, and no bench row
+measures it: `inst_feed_engine_worst` fires a trigger every ~half second
+specifically to keep the voices busy. The 81.41 % above is the cheap state. This
+also reaches the P decision — sizing `kPairs` against a sounding deck sizes it
+against the wrong case.
+
+### Fixed, and what the board says
+
+The local fix, chosen over `FPSCR.FZ` because it is the smaller claim and
+leaves the instrument-wide decision where spec §8 put it. It took two parts,
+and the second only became visible once the first worked:
+
+1. **`FeedBankT::kArriveEps`** (`1e-9`). `set_target` snaps a value to its
+   target when the remaining travel falls under it, at the control rate, so
+   the audio path is untouched. The increments went subnormal along with the
+   values, which is why a SOUNDING deck at static pitch was paying a smaller
+   version of the same tax.
+2. **`SvfLp::FlushDenormals`**. With the glide arriving, the deck goes
+   *exactly* silent -- and a two-pole fed exact zeros decays into the same
+   place. Opt-in at the caller's control rate, so `Voice` and `SamplerEngine`
+   are bit-for-bit unaffected and the `daisysp::Svf` equality still pins the
+   algebra.
+
+Desktop, `FeedEngine`, 20 s after one hit at FALL 0:
+
+| | subnormal output samples | idle vs sounding | FTZ off vs on |
+|---|---:|---:|---:|
+| before | 1 759 436 of 1.92 M | 1.65× | 1.76× |
+| after | **0** | **1.00×** | **1.00×** |
+
+**FTZ making no difference at all is the proof**, not the ratio: nothing on
+FEED's path reaches the subnormal range any more. The sounding case got 6 %
+faster too (59.98 → 56.47 ns/sample).
+
+On hardware, with the new `inst_feed_engine_idle` row
+([`500775c`](bench/2026-08-19-500775c-feed-axi-o2-patch_sm-usb.md)):
+
+| workload | avg % | max % |
+|---|---:|---:|
+| `inst_feed_engine_idle` (both decks SILENT) | 75.64 | **76.77** |
+| `inst_feed_engine_worst` (both decks sounding) | 77.70 | 83.32 |
+| `instrument_worst`, same image | 98.67 | 103.48 |
+| `feed_pairs` at P = 4 | 8.03 | 8.21 |
+
+Silence is now the CHEAPER state, which is what a working engine looks like.
+The spread between average and maximum is the other tell: 1.5 % on the idle
+row against 7.2 % on the sounding one, i.e. a genuinely steady state rather
+than a tail doing intermittent work.
+
+**The ARM factor itself is unmeasured.** 1.65× is a desktop number, and this
+image does not contain the broken engine to compare against. Getting it would
+cost a commit of a deliberately reverted engine plus a board round; the fix is
+justified without it, so it has not been spent.
+
+**What it took to reach silence at all**, because none of it is visible from
+reading the workload: `set_step(p, true, 16)` from the worst-case config keeps
+the sequencer firing, `DENS 0` still leaves a note on every phrase boundary
+(2.58 s), and FEED's FALL at 0 needs **6.67 s** to cross `Env`'s 1e-4 idle
+threshold at 120 BPM. The row now sets DENS, RATE and VARY to 0 and *waits*
+for both parts to report idle rather than warming for a guessed number of
+blocks -- a guess that was short by 333 blocks out of 3000 and halted the
+board with no row and no message, twice. An `assert` in a bench setup has no
+failure mode that reaches the operator.
+
+### P = 6, and the two things it buys
+
+Decided 2026-08-19 from three sweep points on the Patch Submodule;
+[the confirming run carries the full derivation](bench/2026-08-19-3def5d5-feed-axi-o2-patch_sm-usb.md).
+
+**18 655 cycles per pair**, plus ~2 100 fixed. Linear to within 3 % over a 4×
+range in P, and the whole-engine row agrees independently at 18 708 per pair
+per deck -- the check that caught SWARM's kernel row sizing its bank too
+generously found nothing to catch here.
+
+| P | `feed_pairs` avg | two-deck worst max | % budget | tones at COLOR max |
+|---:|---:|---:|---:|---|
+| 2 | 39 110 | 710 455 | 74.0 | 1 of 4 |
+| 4 | 77 176 | 799 939 | 83.3 | 2 of 4 |
+| **6** | **118 025** | **888 099** | **92.51** | **3 of 4** |
+| 8 | 151 190 | 951 817 | 99.2 | 4 of 4 |
+
+Two traps in reading that table. **The worst-case row runs with FLUX off**, as
+the BBD row does, so no percentage in it includes stereo tape -- one switch
+away, 10.3 % on its own. And **6 was confirmed rather than interpolated**: the
+linear fit predicted 91.04 % and the run measured 92.51 %, so the fit is about
+1.6 % optimistic between its points and the surviving reserve is 7.5 %.
+
+P is not only a CPU number. The bank voices `kPairs / kPairsPerTone` tones
+capped at `ChordBuilder::kMaxNotes` = 4, so six pairs sound a complete triad
+and drop only the fourth note at the top of COLOR. Four pairs would have
+sounded half the chord, silently -- which is why the decision did not simply
+take the cheapest P that fits.
+
+`kDeckGain` was re-measured at the new P, as its own comment demands, and left
+at 0.25: the deck rose 0.6 dB (drone peak 0.343 → 0.369), the RMS distance to
+SYNTH is unchanged at +3.05 dB, and two decks reach 0.738 against the limiter's
+0.891 knee.
+
+### The two open questions got a knob
+
+Neither DEPTH nor the in-loop DAMP cutoff had a panel home, and both are
+recorded above as unanswered. They spent 2026-08-19 as context-menu sliders and
+are **panel knobs** since the same evening — `DPTH` and `EDGE`, in VOICE on both
+panels, one per deck.
+
+- **DEPTH**, the FM index, 0..1. It was never unreachable in principle — it is
+  the `LANE_MOTION` base — but the host pinned it to `feed_cfg::kDepthBase` and
+  the only way to move it was to route MOD at it. On an FM engine the index is
+  arguably the most musical parameter there is, which makes spec §4's
+  "DEPTH at 0.5 must be a good sound" a claim worth being able to disprove.
+- **DAMP cutoff**, 200 Hz to 16 kHz on a LOG slider, through the new
+  `FeedEngine::set_damp_hz`. 3200 Hz was confirmed only against DARKER
+  alternatives — variants B and C at 1200 and 500 Hz were rejected by ear — and
+  nobody has heard it against a brighter one. The top of the range deliberately
+  reaches past where half this engine's anti-aliasing stops working (the other
+  half is FeedPair's two-sample average): hearing where it starts to alias is
+  the point.
+
+Both boot on the shipped constants, so a patch that never touches them behaves
+exactly as before. As ParamIds Rack persists them for free, so the module holds
+no state for them at all — the two float arrays, their JSON keys and their reset
+all left with the menu. `set_damp_hz` carries an exact-argument guard: the host
+pushes it every block from a knob that almost never moves, and without the
+compare that is one libm `expf` per part per block for nothing. The firmware
+never calls it; `init()` is its only other writer.
+
+**The gate on the defaults RECOMPUTES them** rather than comparing against a
+literal (`test_feed_shipped_defaults_are_the_engine_constants`): it reads
+`kDepthBase` and `kDampFixedHz` out of `feed_config.h`, reads the knob's range
+out of `Fireflow.cpp`, and derives what `INIT_DEFAULTS` must hold. A gate that
+hard-codes 0.632718364 stops meaning anything the moment `kDampFixedHz` moves —
+which is exactly when it is needed. It earned its keep on its first run by
+catching 0.632631779, which is what this document would otherwise be quoting.
+
+**They are dead on the other five engines**, which is the first time anything on
+this panel is, and it is an interim: the re-pointing round is owed and is in
+[`roadmap.md`](roadmap.md). The plate word `EDGE` is likewise a placeholder —
+`DAMP` is taken by BODY's `DECAY`.
+
+### Three measurement traps this engine sets, and what they cost
+
+Recorded because each one produced a confident wrong number first, and each is
+the kind a later gate will walk into again:
+
+1. **A pitch estimator that is not YIN.** Both simpler estimators returned
+   octave errors with high confidence — see the table above. Any FEED pitch
+   measurement needs YIN and needs to read its aperiodicity.
+2. **A window shorter than the beat.** A ±S cent cluster beats at
+   `f·(2^(S/600) − 1)`; at S = 3 ct that is a 1.31 s period, and a
+   16384-sample window read +1203 ct at aperiodicity 0.08.
+3. **The `tanh` ceiling standing in for the thing being measured.** Two gates
+   were caught by this. G18 (does the index ride the envelope?) passed with the
+   envelope removed from `set_index` entirely, because at LEVEL 1 the attack
+   window clips and the tail does not, which moves the spectral centroid by
+   itself. G21's DEC-0 inert half read a 7 % note-length gap that was the
+   ceiling compressing the louder note's peak. **Any FEED gate whose subject is
+   spectral shape or relative level must run below `kSatCeil`.**

@@ -84,6 +84,14 @@ public:
     float   pitch_shuffle_latched_for_test() const {
         return _lanes[LANE_PITCH].shuffle_latched();
     }
+    // Whether the PITCH lane is currently a NOTE lane, i.e. whether the
+    // melodic phrase machinery reaches it. Part derives this from the engine
+    // id ("not SAMPLER and not BBD", part.cpp), so an engine added to that
+    // exclusion list silently loses FORM, SONG and the phrase -- with nothing
+    // to observe it. feed G3 is what observes it.
+    bool pitch_lane_is_note_lane_for_test() const {
+        return _lanes[LANE_PITCH].note_lane_for_test();
+    }
 #endif
     bool pitch_gate() const { return _lanes[LANE_PITCH].gate_state(); }
     bool pitch_sustain() const { return _lanes[LANE_PITCH].note_sustain(); }

@@ -35,6 +35,9 @@ const Family kFamilies[] = {
 #if BENCH_FAMILY_BODY
     { "body",    kBodyWorkloads,    kBodyCount    },
 #endif
+#if BENCH_FAMILY_FEED
+    { "feed",    kFeedWorkloads,    kFeedCount    },
+#endif
 #if BENCH_FAMILY_SAMPLER
     // Last on purpose: the sampler rows use the 8 MB SDRAM arena as their load
     // source and overwrite whatever earlier families left in it.

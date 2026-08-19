@@ -96,7 +96,11 @@ public:
         set_form(p, pr);
     }
     void set_step(int p, bool on, int steps) { _parts[p].set_step(on, steps); }
-    void new_phrase(int p)                   { _parts[p].mod().new_phrase(); }
+    // Routed through Part, not straight into mod(): "what NEW means" is a
+    // per-deck question, and Part is the only scope that knows which engine is
+    // active (part.cpp). Until FEED there was no engine with an individual to
+    // redraw, so the shortcut through mod() was harmless.
+    void new_phrase(int p)                   { _parts[p].new_phrase(); }
 #ifdef SPKY_TESTING
     uint32_t song_position_for_test(int p) const {
         return _parts[p].mod().song_position_for_test();
@@ -317,6 +321,10 @@ public:
     void set_voice_sub(int p, float n)       { _parts[p].set_voice_sub(n); }
     void set_voice_detune(int p, float n)    { _parts[p].set_voice_detune(n); }
     void set_voice_filt(int p, float t)      { _parts[p].set_voice_filt(t); }
+    // FEED audition control, host-only: the in-loop DAMP cutoff in Hz. Inert
+    // on every other engine because it does not broadcast. The firmware never
+    // calls it; FeedEngine::init leaves it at feed_cfg::kDampFixedHz.
+    void set_feed_damp_hz(int p, float hz)   { _parts[p].set_feed_damp_hz(hz); }
     void trigger_manual(int p)               { _parts[p].trigger_manual(); }
     int  active_voices(int p) const          { return _parts[p].active_voices(); }
     float voice_env(int p, int v) const      { return _parts[p].voice_env(v); }

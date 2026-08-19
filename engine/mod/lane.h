@@ -76,6 +76,10 @@ public:
     // side of that comparison -- the invariant this lane has to keep across a
     // mode change is that the two agree.
     int effective_length_for_test() const { return _effective_length(); }
+    // "this lane carries composed notes" -- the private _note_lane() predicate,
+    // exposed so a test can pin that a newly added engine still reaches the
+    // melodic phrase machinery. See _note_lane()'s NAMING TRAP comment below.
+    bool note_lane_for_test() const { return _note_lane(); }
     // The active pattern's generated groove length, the other half of that
     // comparison, without the caller having to route through active_pattern().
     int pattern_groove_len_for_test() const {

@@ -31,6 +31,18 @@ PROFILES = {
         families=("system", "body"),
         gates=frozenset({WAVE_ACCEPTANCE}),
     ),
+    # The FEED kernel round (spec 2026-08-18). Carries `system` for the same
+    # reason `body` and `sweep` do: without it verdict() finds no DTCM+BBD gate
+    # anchor and reports "undetermined", and the whole question -- how many
+    # pairs fit -- is only meaningful against the instrument's own worst case
+    # measured in the SAME image (bench rows shift by points from icache
+    # layout alone, so a cross-image subtraction is not a measurement).
+    # `system` is also where inst_feed_engine_worst lives, which is the row
+    # that actually judges whether FEED fits; feed_pairs only prices a pair.
+    "feed": Profile(
+        families=("system", "feed"),
+        gates=frozenset({WAVE_ACCEPTANCE}),
+    ),
     # The BBD gate, on its own. `system` is deliberately NOT carried: the
     # question this profile answers -- what does one BBD line cost at its
     # ceiling -- is answered by the three bbd rows alone, and leaving system

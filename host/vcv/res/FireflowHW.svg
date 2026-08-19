@@ -35,12 +35,18 @@
 <rect x="118.000" y="0" width="12.400" height="128.500" fill="url(#hw-seamL)"/>
 <rect x="174.400" y="0" width="12.400" height="128.500" fill="url(#hw-seamR)"/>
 <rect x="0.4" y="0.4" width="304.000" height="127.700" rx="1.2" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="0.3"/>
-<rect x="28.000" y="8.250" width="55.700" height="16.100" fill="#0c1215" fill-opacity="0.55" stroke="#2b3d46" stroke-width="0.25" stroke-dasharray="1.6 1.2"/>
-<path fill="none" stroke="#3fbf9c" stroke-width="0.45" stroke-opacity="0.9" d="M30.600,8.250 L28.000,8.250 L28.000,10.850"/>
+<rect x="8.000" y="8.250" width="16.500" height="16.100" fill="#0c1215" fill-opacity="0.55" stroke="#2b3d46" stroke-width="0.25" stroke-dasharray="1.6 1.2"/>
+<path fill="none" stroke="#3fbf9c" stroke-width="0.45" stroke-opacity="0.9" d="M10.600,8.250 L8.000,8.250 L8.000,10.850"/>
+<path fill="none" stroke="#3fbf9c" stroke-width="0.45" stroke-opacity="0.9" d="M21.900,8.250 L24.500,8.250 L24.500,10.850"/>
+<path fill="none" stroke="#3fbf9c" stroke-width="0.45" stroke-opacity="0.9" d="M10.600,24.350 L8.000,24.350 L8.000,21.750"/>
+<path fill="none" stroke="#3fbf9c" stroke-width="0.45" stroke-opacity="0.9" d="M21.900,24.350 L24.500,24.350 L24.500,21.750"/>
+<rect x="11.000" y="6.750" width="10.750" height="3.000" fill="#0b0f12"/>
+<rect x="27.500" y="8.250" width="56.200" height="16.100" fill="#0c1215" fill-opacity="0.55" stroke="#2b3d46" stroke-width="0.25" stroke-dasharray="1.6 1.2"/>
+<path fill="none" stroke="#3fbf9c" stroke-width="0.45" stroke-opacity="0.9" d="M30.100,8.250 L27.500,8.250 L27.500,10.850"/>
 <path fill="none" stroke="#3fbf9c" stroke-width="0.45" stroke-opacity="0.9" d="M81.100,8.250 L83.700,8.250 L83.700,10.850"/>
-<path fill="none" stroke="#3fbf9c" stroke-width="0.45" stroke-opacity="0.9" d="M30.600,24.350 L28.000,24.350 L28.000,21.750"/>
+<path fill="none" stroke="#3fbf9c" stroke-width="0.45" stroke-opacity="0.9" d="M30.100,24.350 L27.500,24.350 L27.500,21.750"/>
 <path fill="none" stroke="#3fbf9c" stroke-width="0.45" stroke-opacity="0.9" d="M81.100,24.350 L83.700,24.350 L83.700,21.750"/>
-<rect x="31.000" y="6.750" width="18.000" height="3.000" fill="#0b0f12"/>
+<rect x="30.500" y="6.750" width="18.000" height="3.000" fill="#0b0f12"/>
 <rect x="86.700" y="8.250" width="33.300" height="16.100" fill="#0c1215" fill-opacity="0.55" stroke="#2b3d46" stroke-width="0.25" stroke-dasharray="1.6 1.2"/>
 <path fill="none" stroke="#3fbf9c" stroke-width="0.45" stroke-opacity="0.9" d="M89.300,8.250 L86.700,8.250 L86.700,10.850"/>
 <path fill="none" stroke="#3fbf9c" stroke-width="0.45" stroke-opacity="0.9" d="M117.400,8.250 L120.000,8.250 L120.000,10.850"/>
@@ -53,11 +59,17 @@
 <path fill="none" stroke="#7fb6c9" stroke-width="0.45" stroke-opacity="0.9" d="M125.600,24.350 L123.000,24.350 L123.000,21.750"/>
 <path fill="none" stroke="#7fb6c9" stroke-width="0.45" stroke-opacity="0.9" d="M179.200,24.350 L181.800,24.350 L181.800,21.750"/>
 <rect x="126.000" y="6.750" width="15.100" height="3.000" fill="#0b0f12"/>
-<rect x="221.100" y="8.250" width="55.700" height="16.100" fill="#0c1215" fill-opacity="0.55" stroke="#2b3d46" stroke-width="0.25" stroke-dasharray="1.6 1.2"/>
+<rect x="280.300" y="8.250" width="16.500" height="16.100" fill="#0c1215" fill-opacity="0.55" stroke="#2b3d46" stroke-width="0.25" stroke-dasharray="1.6 1.2"/>
+<path fill="none" stroke="#e8945a" stroke-width="0.45" stroke-opacity="0.9" d="M282.900,8.250 L280.300,8.250 L280.300,10.850"/>
+<path fill="none" stroke="#e8945a" stroke-width="0.45" stroke-opacity="0.9" d="M294.200,8.250 L296.800,8.250 L296.800,10.850"/>
+<path fill="none" stroke="#e8945a" stroke-width="0.45" stroke-opacity="0.9" d="M282.900,24.350 L280.300,24.350 L280.300,21.750"/>
+<path fill="none" stroke="#e8945a" stroke-width="0.45" stroke-opacity="0.9" d="M294.200,24.350 L296.800,24.350 L296.800,21.750"/>
+<rect x="283.300" y="6.750" width="10.750" height="3.000" fill="#0b0f12"/>
+<rect x="221.100" y="8.250" width="56.200" height="16.100" fill="#0c1215" fill-opacity="0.55" stroke="#2b3d46" stroke-width="0.25" stroke-dasharray="1.6 1.2"/>
 <path fill="none" stroke="#e8945a" stroke-width="0.45" stroke-opacity="0.9" d="M223.700,8.250 L221.100,8.250 L221.100,10.850"/>
-<path fill="none" stroke="#e8945a" stroke-width="0.45" stroke-opacity="0.9" d="M274.200,8.250 L276.800,8.250 L276.800,10.850"/>
+<path fill="none" stroke="#e8945a" stroke-width="0.45" stroke-opacity="0.9" d="M274.700,8.250 L277.300,8.250 L277.300,10.850"/>
 <path fill="none" stroke="#e8945a" stroke-width="0.45" stroke-opacity="0.9" d="M223.700,24.350 L221.100,24.350 L221.100,21.750"/>
-<path fill="none" stroke="#e8945a" stroke-width="0.45" stroke-opacity="0.9" d="M274.200,24.350 L276.800,24.350 L276.800,21.750"/>
+<path fill="none" stroke="#e8945a" stroke-width="0.45" stroke-opacity="0.9" d="M274.700,24.350 L277.300,24.350 L277.300,21.750"/>
 <rect x="224.100" y="6.750" width="18.000" height="3.000" fill="#0b0f12"/>
 <rect x="184.800" y="8.250" width="33.300" height="16.100" fill="#0c1215" fill-opacity="0.55" stroke="#2b3d46" stroke-width="0.25" stroke-dasharray="1.6 1.2"/>
 <path fill="none" stroke="#e8945a" stroke-width="0.45" stroke-opacity="0.9" d="M187.400,8.250 L184.800,8.250 L184.800,10.850"/>
@@ -198,8 +210,8 @@
 <text x="94.250" y="42.000" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">RES</text>
 <circle cx="107.250" cy="34.000" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="107.250" y="42.000" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">SUB</text>
-<circle cx="102.250" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<text x="100.350" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
+<circle cx="81.250" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="79.350" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
 <circle cx="67.000" cy="76.000" r="6.000" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="67.000" y="85.600" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">MIX</text>
 <circle cx="106.500" cy="95.000" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
@@ -208,8 +220,8 @@
 <text x="104.600" y="85.600" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">LVL</text>
 <circle cx="35.000" cy="14.500" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="35.000" y="22.500" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">STPS</text>
-<circle cx="70.250" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<text x="70.250" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">ENG</text>
+<circle cx="16.250" cy="14.500" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="16.250" y="22.500" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">ENG</text>
 <circle cx="30.000" cy="76.000" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="30.000" y="84.000" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">DTUN</text>
 <circle cx="48.000" cy="14.500" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
@@ -238,8 +250,8 @@
 <text x="210.550" y="42.000" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">RES</text>
 <circle cx="197.550" cy="34.000" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="197.550" y="42.000" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">SUB</text>
-<circle cx="202.550" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<text x="200.650" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
+<circle cx="223.550" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="221.650" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">TIMB</text>
 <circle cx="237.800" cy="76.000" r="6.000" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="237.800" y="85.600" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">MIX</text>
 <circle cx="198.300" cy="95.000" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
@@ -248,8 +260,8 @@
 <text x="196.400" y="85.600" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">LVL</text>
 <circle cx="269.800" cy="14.500" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="269.800" y="22.500" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">STPS</text>
-<circle cx="234.550" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<text x="234.550" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">ENG</text>
+<circle cx="288.550" cy="14.500" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="288.550" y="22.500" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">ENG</text>
 <circle cx="274.800" cy="76.000" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="274.800" y="84.000" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">DTUN</text>
 <circle cx="256.800" cy="14.500" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
@@ -274,10 +286,10 @@
 <text x="168.400" y="84.000" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">DIFF</text>
 <circle cx="165.400" cy="14.500" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="165.400" y="22.500" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">CHOK</text>
-<circle cx="86.250" cy="53.000" r="6.000" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<text x="84.350" y="62.600" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">FILT</text>
-<circle cx="218.550" cy="53.000" r="6.000" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<text x="216.650" y="62.600" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">FILT</text>
+<circle cx="68.250" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="66.350" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">FILT</text>
+<circle cx="236.550" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="234.650" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">FILT</text>
 <circle cx="136.400" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="136.400" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">TIDE</text>
 <circle cx="54.000" cy="89.860" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
@@ -310,6 +322,14 @@
 <text x="165.400" y="42.000" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">SHFL</text>
 <circle cx="168.400" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="168.400" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">PACE</text>
+<circle cx="94.250" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="94.250" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">DPTH</text>
+<circle cx="210.550" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="210.550" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">DPTH</text>
+<circle cx="107.250" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="107.250" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">EDGE</text>
+<circle cx="197.550" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="197.550" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">EDGE</text>
 <circle cx="33.000" cy="114.000" r="3.100" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <circle cx="33.000" cy="114.000" r="2.000" fill="none" stroke="#7f8f96" stroke-width="0.7"/>
 <circle cx="33.000" cy="114.000" r="1.178" fill="#050607"/>
@@ -390,14 +410,14 @@
 <circle cx="108.500" cy="14.500" r="0.750" fill="#297260"/>
 <circle cx="196.300" cy="14.500" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
 <circle cx="196.300" cy="14.500" r="0.750" fill="#855a3c"/>
-<circle cx="104.850" cy="57.428" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="104.850" cy="57.428" r="0.750" fill="#297260"/>
-<circle cx="205.150" cy="57.428" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="205.150" cy="57.428" r="0.750" fill="#855a3c"/>
-<circle cx="88.850" cy="61.808" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="88.850" cy="61.808" r="0.750" fill="#297260"/>
-<circle cx="221.150" cy="61.808" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="221.150" cy="61.808" r="0.750" fill="#855a3c"/>
+<circle cx="83.850" cy="57.428" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="83.850" cy="57.428" r="0.750" fill="#297260"/>
+<circle cx="226.150" cy="57.428" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="226.150" cy="57.428" r="0.750" fill="#855a3c"/>
+<circle cx="70.850" cy="57.428" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="70.850" cy="57.428" r="0.750" fill="#297260"/>
+<circle cx="239.150" cy="57.428" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
+<circle cx="239.150" cy="57.428" r="0.750" fill="#855a3c"/>
 <circle cx="26.100" cy="103.808" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
 <circle cx="26.100" cy="103.808" r="0.750" fill="#297260"/>
 <circle cx="283.900" cy="103.808" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
@@ -425,55 +445,59 @@
 <rect x="286.800" y="110.000" width="8.000" height="8.000" rx="1.2" fill="#dbe9ef" stroke="#3c525c" stroke-width="0.3"/>
 <text x="290.800" y="120.700" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">MOD</text>
 <text x="4.500" y="9.400" fill="#a7bcc6" text-anchor="start" font-family="monospace" font-size="3.3" letter-spacing="0.55">FIREFLOW</text>
-<text x="4.600" y="14.600" fill="#3fbf9c" text-anchor="start" font-family="monospace" font-size="2.1" letter-spacing="0.55">DECK A</text>
+<text x="8.000" y="26.600" fill="#3fbf9c" text-anchor="start" font-family="monospace" font-size="2.1" letter-spacing="0.55">DECK A</text>
 <text x="300.300" y="9.400" fill="#6f8894" text-anchor="end" font-family="monospace" font-size="2.3" letter-spacing="0.55">60 HP</text>
-<text x="300.200" y="14.600" fill="#e8945a" text-anchor="end" font-family="monospace" font-size="2.1" letter-spacing="0.55">DECK B</text>
-<text x="32.000" y="9.000" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">01</text>
-<text x="36.400" y="9.000" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">SEQUENCE</text>
-<text x="90.700" y="9.000" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">02</text>
+<text x="296.800" y="26.600" fill="#e8945a" text-anchor="end" font-family="monospace" font-size="2.1" letter-spacing="0.55">DECK B</text>
+<text x="12.000" y="9.000" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">01</text>
+<text x="16.400" y="9.000" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">ENG</text>
+<text x="31.500" y="9.000" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">02</text>
+<text x="35.900" y="9.000" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">SEQUENCE</text>
+<text x="90.700" y="9.000" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">03</text>
 <text x="95.100" y="9.000" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">CAPTURE</text>
-<text x="127.000" y="9.000" fill="#628c9b" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">08</text>
+<text x="127.000" y="9.000" fill="#628c9b" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">09</text>
 <text x="131.400" y="9.000" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">GLOBAL</text>
-<text x="225.100" y="9.000" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">01</text>
+<text x="284.300" y="9.000" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">01</text>
+<text x="288.700" y="9.000" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">ENG</text>
+<text x="225.100" y="9.000" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">02</text>
 <text x="229.500" y="9.000" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">SEQUENCE</text>
-<text x="188.800" y="9.000" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">02</text>
+<text x="188.800" y="9.000" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">03</text>
 <text x="193.200" y="9.000" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">CAPTURE</text>
-<text x="12.000" y="28.100" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">03</text>
+<text x="12.000" y="28.100" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">04</text>
 <text x="16.400" y="28.100" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">MOTION</text>
-<text x="61.750" y="28.100" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">04</text>
+<text x="61.750" y="28.100" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">05</text>
 <text x="66.150" y="28.100" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">VOICE</text>
-<text x="127.000" y="28.100" fill="#628c9b" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">09</text>
+<text x="127.000" y="28.100" fill="#628c9b" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">10</text>
 <text x="131.400" y="28.100" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">TIMING</text>
-<text x="254.050" y="28.100" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">03</text>
+<text x="254.050" y="28.100" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">04</text>
 <text x="258.450" y="28.100" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">MOTION</text>
-<text x="188.800" y="28.100" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">04</text>
+<text x="188.800" y="28.100" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">05</text>
 <text x="193.200" y="28.100" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">VOICE</text>
-<text x="12.000" y="68.600" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">05</text>
+<text x="12.000" y="68.600" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">06</text>
 <text x="16.400" y="68.600" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">PITCH</text>
-<text x="47.500" y="68.600" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">06</text>
+<text x="47.500" y="68.600" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">07</text>
 <text x="51.900" y="68.600" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">FLUX</text>
-<text x="97.950" y="68.600" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">07</text>
+<text x="97.950" y="68.600" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">08</text>
 <text x="102.350" y="68.600" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">LEVEL</text>
-<text x="127.000" y="68.600" fill="#628c9b" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">10</text>
+<text x="127.000" y="68.600" fill="#628c9b" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">11</text>
 <text x="131.400" y="68.600" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">ROOM</text>
-<text x="268.300" y="68.600" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">05</text>
+<text x="268.300" y="68.600" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">06</text>
 <text x="272.700" y="68.600" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">PITCH</text>
-<text x="217.850" y="68.600" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">06</text>
+<text x="217.850" y="68.600" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">07</text>
 <text x="222.250" y="68.600" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">FLUX</text>
-<text x="188.800" y="68.600" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">07</text>
+<text x="188.800" y="68.600" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">08</text>
 <text x="193.200" y="68.600" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">LEVEL</text>
-<text x="32.000" y="109.350" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">11</text>
+<text x="32.000" y="109.350" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">12</text>
 <text x="36.400" y="109.350" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">IN</text>
-<text x="55.750" y="109.350" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">12</text>
+<text x="55.750" y="109.350" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">13</text>
 <text x="60.150" y="109.350" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">CV A</text>
-<text x="78.750" y="109.350" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">13</text>
+<text x="78.750" y="109.350" fill="#32937a" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">14</text>
 <text x="83.150" y="109.350" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">MOD A</text>
-<text x="127.000" y="109.350" fill="#628c9b" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">14</text>
+<text x="127.000" y="109.350" fill="#628c9b" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">15</text>
 <text x="131.400" y="109.350" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">CLOCK</text>
-<text x="260.050" y="109.350" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">15</text>
+<text x="260.050" y="109.350" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">16</text>
 <text x="264.450" y="109.350" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">OUT</text>
-<text x="237.050" y="109.350" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">12</text>
+<text x="237.050" y="109.350" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">13</text>
 <text x="241.450" y="109.350" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">CV B</text>
-<text x="188.800" y="109.350" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">13</text>
+<text x="188.800" y="109.350" fill="#b17348" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">14</text>
 <text x="193.200" y="109.350" fill="#6f8894" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">MOD B</text>
 </svg>

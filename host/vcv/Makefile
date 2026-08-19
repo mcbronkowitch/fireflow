@@ -41,6 +41,7 @@ SOURCES += \
 	$(REPO)/engine/mod/super_modulator.cpp \
 	$(REPO)/engine/parts/part.cpp \
 	$(REPO)/engine/parts/bbd_engine.cpp \
+	$(REPO)/engine/feed/feed_engine.cpp \
 	$(REPO)/engine/instrument.cpp \
 	$(REPO)/engine/center/center.cpp \
 	$(REPO)/engine/fx/grit.cpp \

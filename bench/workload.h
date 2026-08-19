@@ -62,6 +62,9 @@ extern const int      kSweepCount;
 extern const Workload kInstrWorkloads[];
 extern const int      kInstrCount;
 
+extern const Workload kFeedWorkloads[];
+extern const int      kFeedCount;
+
 // Anchor mode re-runs rows the offline tables already define, by name.
 const Workload* find_workload(const char* name);
 

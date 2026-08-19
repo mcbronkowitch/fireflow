@@ -71,8 +71,10 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
     // nothing else) when that happens; do not carry a mismatch forward as a
     // "pre-existing failure" (spec 2026-08-09 hw-control-reduction task 3
     // review, Finding 5 -- this exact mistake shipped once already).
-    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 69,
-                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 69 -- "
+    // 69 -> 73 on 2026-08-19: DEPTH_A/B and DAMP_A/B, the two FEED knobs that
+    // moved out of the context menu onto both panels.
+    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 73,
+                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 73 -- "
                   "if the panel inventory genuinely changed, update this "
                   "literal to match");
     // FF_hw_Init.vcvm (2026-08-09) pairs WAVE (2) on deck A with SYNTH (0) on

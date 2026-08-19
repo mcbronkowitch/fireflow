@@ -174,6 +174,70 @@ From the 2026-07-22 fix pass (register IDs in the test suite):
   the trade. Table and attribution sit at the constant in
   `sampler_config.h`.
 
+## FEED
+
+The engine shipped with every constant below the "by ear, first try" line in
+`engine/feed/feed_config.h` at its first guess. These are the ones a listening
+pass has since settled; the rest are still first guesses and still Bastian's
+to confirm.
+
+- **`kFbBaseCycles` 0.14, raised from 0.08** (2026-08-19). Chosen off a
+  six-render A/B that crossed `kDampFixedHz` with `kFbBaseCycles` and stepped
+  BOND 0 → 1 over 26 s. The brief was *"ruhig hart, filtern kann ich selbst
+  dahinter"*: the escalation is what the engine is for, and its top end is the
+  output FILT's problem. **It deliberately sits above the 0.08 at which the
+  bank alone was measured to tip** — that ceiling is still a real
+  measurement, and this value knowingly exceeds it. Do not reconcile the two.
+- **The in-loop damp stays BRIGHT at `kDampFixedHz` 3200 Hz.** Darkening it
+  (1200 Hz and 500 Hz were both rendered) was explicitly rejected: it removes
+  the brightness for every patch instead of leaving it under a knob. If a
+  later session wants a darker coupling, the answer is a knob, not this
+  constant.
+- **`kFiltRes` 0 is NOT a by-ear value** — it is measured, and it is in this
+  list only so nobody moves it looking for "some resonance". At 0.15 the deck
+  exceeds its own saturation ceiling by 4 dB. See
+  [`gotchas.md`](gotchas.md) for the `r^0.25` trap behind that.
+
+Still first-try and still open: `kIndexMaxCycles`, `kFbPitchSlope`,
+`kFbAttenMin`, `kFbOffsetRange`, `kSpreadKneeCt`, `kSpreadMaxCt`,
+`kRatioMagnetTop`, `kRatioMagnetExp`, `kRatioMax`, `kDampFixedHz` (confirmed
+only against darker alternatives, not swept), `kFloorFoldStart`,
+`kFlowFloorMin`, `kAccentVelFloor`, `kAccentDecFloor`, `kSatCeil`, `kSubMax`,
+`kDepthBase`.
+
+### FEED: DPTH and EDGE are yours to turn now
+
+`kDepthBase` (0.5) and `kDampFixedHz` (3200 Hz) are both still **first-try**,
+and since 2026-08-19 both have a knob — `DPTH` and `EDGE` in VOICE, one per
+deck, on both panels. They boot on exactly those constants, so nothing has
+changed until you move them.
+
+What is worth knowing before the listening pass:
+
+- **3200 Hz was only ever confirmed DOWNWARD.** Variants B and C at 1200 and
+  500 Hz were rejected by ear on 2026-08-19; nobody has heard 3200 against
+  anything brighter. The knob reaches 16 kHz on purpose — past where half this
+  engine's anti-aliasing stops working.
+- **DEPTH at 0.5 is a defensive requirement, not a measurement.** Spec §4 asks
+  that it be a good sound because the control had no knob; now that it has one,
+  that requirement can be tested instead of assumed.
+
+If a listening pass moves either, move the CONSTANT in `feed_config.h` — the
+knob default is derived from it and a gate recomputes the derivation.
+
+### FEED level parity
+
+- **`kDeckGain` 0.25** (2026-08-19). Not a taste setting — a parity target.
+  Bastian's brief: *"die sollen gleich laut sein damit man auch im laufenden
+  Betrieb die Engine wechseln kann ohne dass es krasse Lautstärke-Ausreißer
+  gibt."* Do not raise it to make FEED "present"; the deck is meant to sit
+  where SYNTH sits. Re-measure if `kPairs` changes. Full table in
+  [`engine-map.md`](engine-map.md).
+- **Open, not decided: BODY sits 10 dB (drone) to 29 dB (struck) below SYNTH**
+  on the same probe settings. Under the same parity brief that is a defect,
+  but BODY's level rides MATL and EXCIT hard and one setting is not a verdict.
+  Needs its own pass before anything moves.
+
 ## Panel & factory patch
 
 - **The reduced panel's two contested legends stand** (confirmed 2026-08-09):

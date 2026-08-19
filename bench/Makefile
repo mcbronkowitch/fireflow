@@ -108,6 +108,7 @@ FAMILY_SOURCE_body    = workloads_body.cpp
 FAMILY_SOURCE_bbd     = workloads_bbd.cpp
 FAMILY_SOURCE_sweep   = workloads_sweep.cpp
 FAMILY_SOURCE_instr   = workloads_instr.cpp
+FAMILY_SOURCE_feed    = workloads_feed.cpp
 
 FAMILY_DEFINE_system  = BENCH_FAMILY_SYSTEM
 FAMILY_DEFINE_voice   = BENCH_FAMILY_VOICE
@@ -119,6 +120,7 @@ FAMILY_DEFINE_body    = BENCH_FAMILY_BODY
 FAMILY_DEFINE_bbd     = BENCH_FAMILY_BBD
 FAMILY_DEFINE_sweep   = BENCH_FAMILY_SWEEP
 FAMILY_DEFINE_instr   = BENCH_FAMILY_INSTR
+FAMILY_DEFINE_feed    = BENCH_FAMILY_FEED
 
 # Fail loudly on a typo rather than silently building a smaller image.
 $(foreach f,$(BENCH_FAMILIES),\
@@ -157,6 +159,7 @@ CPP_SOURCES = \
 	../engine/mod/super_modulator.cpp \
 	../engine/parts/part.cpp \
 	../engine/parts/bbd_engine.cpp \
+	../engine/feed/feed_engine.cpp \
 	../engine/instrument.cpp \
 	../engine/center/center.cpp \
 	../engine/fx/grit.cpp \

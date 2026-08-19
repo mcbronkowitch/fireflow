@@ -193,8 +193,13 @@ def orbit_label(cx, cy, ang_deg, mir):
 
 # --- lower half per part (spec 2026-07-18 §5) --------------------------------
 # VOICE and FX sit side by side, PLAY spans the full part width below them.
-VOICE_X  = [9.25, 19.75, 30.25]      # ATK FILT SUB / DEC RES TIMB
+VOICE_X  = [9.25, 19.75, 30.25, 37.25]   # ATK FILT SUB DPTH / DEC RES TIMB DAMP
 ROW_V1, ROW_V2 = 77.3, 89.4
+# The fourth column breaks the 10.5 mm pitch of the first three, and it has to.
+# FLUXRATE_A sits at 44.25 and a SMKNOB pair needs 6.0 mm of clearance, so a
+# fourth column on pitch (40.75) would fail by 2.5 mm. 37.25 leaves exactly
+# 7.0 mm on both sides. The alternative was re-spacing all four evenly, which
+# moves three controls a player already knows for a rhythm nobody asked about.
 # --- state-dependent captions (spec 2026-08-03) -------------------------------
 # (target param base, driver param base, words indexed by the driver's value)
 #
@@ -205,8 +210,8 @@ ROW_V1, ROW_V2 = 77.3, 89.4
 # own value.
 #
 # Engine order is the frozen ENG order: 0 Synth, 1 Sampler, 2 Wave, 3 Body,
-# 4 BBD. Word[0] is also the control's resting label on the static plate --
-# test_static_label_is_the_tables_first_word holds the two together.
+# 4 BBD, 5 Feed. Word[0] is also the control's resting label on the static
+# plate -- test_static_label_is_the_tables_first_word holds the two together.
 #
 # Sources, so a later reader can check each word against the engine rather
 # than against taste: BodyVoice::set_env_times is "exciter length, damping";
@@ -222,14 +227,44 @@ ROW_V1, ROW_V2 = 77.3, 89.4
 # FEEDBACK. A four-letter FEED between those two reads as a third feedback
 # control -- the one thing this knob is NOT. INPUT is what set_sub does, and
 # five letters is a length EXCIT already carries in this exact slot.
+#
+# FEED's words (spec 2026-08-18 feed-coupled-feedback-fm), each naming the
+# setter it stands for so the next reader can check the word against the engine
+# rather than against taste. RISE and FALL are the deck's ONE envelope in
+# absolute seconds (FeedEngine::set_attack/set_decay), and FALL's top quarter
+# is also FLOOR -- one knob, two meanings, which is what frees the RES slot.
+# RATIO is set_resonance, the modulator:carrier ratio, magnet-locked to the
+# integers in its lower half. FILT is set_filt, a real low-pass on the deck's
+# output. BOND is the LANE_SOURCE target, morphing each modulator's input from
+# its own feedback into its neighbour's output. SPRD is the LANE_SIZE base,
+# re-pointed from the DETUNE knob in Fireflow.cpp -- the sampler's SUB ->
+# LANE_SIZE re-point, one entry further down the same ledger.
+#
+# FEED's FILT word was BRITE until 2026-08-19, and the rename tracks what the
+# control became rather than taste. It printed BRITE because set_filt drove a
+# one-pole INSIDE the feedback path and DAMP -- the word that wanted -- was
+# already BODY's DECAY word. Bastian reported that knob as not working, and
+# feed_config.h now carries the measured reason: the in-loop one-pole never
+# touched the carrier, filtered a phase wobble of at most 0.08 cycles, and
+# saturated over the upper third of its travel. It is fixed now, and FILT is a
+# real SvfLp on the output -- the same filter Synth, WAVE and the sampler run,
+# on the same 60 Hz..14 kHz rails, with the same fade to silence at the left
+# end. So the honest word is the one those three already print, and printing it
+# here is legal because "no word is printed twice" is a guard against ONE word
+# meaning two controls: FILT at the FILT base in a fourth engine state is the
+# same meaning said again, which is what that guard permits.
+#
+# DETUNE is a NEW row here. It was a fixed DTUN plate until this spec, and a
+# fixed plate would now lie: on a FEED deck that knob is SPREAD.
 DYNAMIC_CAPTIONS = [
-    ("MELODY",   "ENGINE",   ("VARY", "SCAN", "VARY", "VARY", "VARY")),
-    ("ATTACK",   "ENGINE",   ("ATK",  "ATK",  "ATK",   "HIT",   "ATK")),
-    ("DECAY",    "ENGINE",   ("DEC",  "DEC",  "DEC",   "DAMP",  "TAIL")),
-    ("RES",      "ENGINE",   ("RES",  "RES",  "RES",   "CHAR",  "TILT")),
-    ("SUB",      "ENGINE",   ("SUB",  "LEN",  "SUB",   "EXCIT", "INPUT")),
-    ("FILT",     "ENGINE",   ("FILT", "FILT", "FILT",  "BRITE", "LOSS")),
-    ("SOURCE",   "ENGINE",   ("TIMB", "ORG",  "FRAME", "MATL",  "DRIVE")),
+    ("MELODY",   "ENGINE",   ("VARY", "SCAN", "VARY", "VARY", "VARY", "VARY")),
+    ("ATTACK",   "ENGINE",   ("ATK",  "ATK",  "ATK",   "HIT",   "ATK",   "RISE")),
+    ("DECAY",    "ENGINE",   ("DEC",  "DEC",  "DEC",   "DAMP",  "TAIL",  "FALL")),
+    ("RES",      "ENGINE",   ("RES",  "RES",  "RES",   "CHAR",  "TILT",  "RATIO")),
+    ("SUB",      "ENGINE",   ("SUB",  "LEN",  "SUB",   "EXCIT", "INPUT", "SUB")),
+    ("FILT",     "ENGINE",   ("FILT", "FILT", "FILT",  "BRITE", "LOSS",  "FILT")),
+    ("SOURCE",   "ENGINE",   ("TIMB", "ORG",  "FRAME", "MATL",  "DRIVE", "BOND")),
+    ("DETUNE",   "ENGINE",   ("DTUN", "DTUN", "DTUN",  "DTUN",  "DTUN",  "SPRD")),
 ]
 
 
@@ -575,6 +610,28 @@ APPENDED_PANEL_PARAMS = [
     # beside TEMPO, and next to TIDE on the hardware grid -- those two are the
     # pair this control came out of confusing: TIDE is a ratio, PACE is speed.
     Ctl("PACE", SMKNOB, CX - 9.0, ROW_TIME1, "PACE"),
+    # DPTH and DAMP: the two FEED values that had no panel home (spec
+    # 2026-08-18 feed §4, and docs/engine-map.md §9's two open questions).
+    # DPTH is the FM index -- it was always reachable as the LANE_MOTION base,
+    # but the host pinned it to feed_cfg::kDepthBase and only MOD could move
+    # it. DAMP is the in-loop one-pole cutoff in Hz, whose 3200 was confirmed
+    # against darker settings only.
+    #
+    # FEED-ONLY, and today they are inert on the other five engines. That is a
+    # deliberate interim: Bastian wants to feel whether two more VOICE knobs
+    # are worth having before deciding what they should do elsewhere, and this
+    # panel's idiom is otherwise re-pointing (RES -> RATIO, SOURCE -> TIMB,
+    # FILT -> BRITE), never a dead control. The re-pointing round is owed.
+    #
+    # Appended, so every existing param id keeps its number.
+    Ctl("DEPTH_A", SMKNOB, VOICE_X[3],     ROW_V1, "DPTH", "FEED: FM index"),
+    Ctl("DEPTH_B", SMKNOB, W - VOICE_X[3], ROW_V1, "DPTH", "FEED: FM index"),
+    # The printed word is EDGE, not DAMP: BODY's DECAY already prints DAMP
+    # (DYNAMIC_CAPTIONS below), and one word may name only one knob. The enum
+    # stays DAMP because that is what it is in the engine. PLACEHOLDER -- the
+    # word is Bastian's to pick.
+    Ctl("DAMP_A",  SMKNOB, VOICE_X[3],     ROW_V2, "EDGE", "FEED: in-loop damp cutoff"),
+    Ctl("DAMP_B",  SMKNOB, W - VOICE_X[3], ROW_V2, "EDGE", "FEED: in-loop damp cutoff"),
 ]
 
 # Persistent ids retain the legacy visible and hidden sequences exactly; runtime
@@ -716,6 +773,19 @@ INIT_DEFAULTS = {
     # sound (FF_hw_Init.vcvm) must boot at the same speed it always has, not
     # x1/32 (0.0) or x4 (1.0).
     "PACE": 0.500000000,
+    # The two FEED knobs boot on the shipped constants, so a fresh patch
+    # sounds exactly as it did before they existed.
+    #   DPTH = feed_cfg::kDepthBase = 0.5, the knob IS the LANE_MOTION base.
+    #   DAMP = feed_cfg::kDampFixedHz = 3200 Hz on the log travel 200..16000:
+    #          ln(3200/200) / ln(16000/200) = ln 16 / ln 80 = 0.632718364.
+    #          test_feed_shipped_defaults_are_the_engine_constants RECOMPUTES
+    #          this from feed_config.h and the host's own range instead of
+    #          comparing it to a literal -- and earned its keep on the first
+    #          run, catching 0.632631779 here.
+    "DEPTH_A": 0.500000000,
+    "DEPTH_B": 0.500000000,
+    "DAMP_A": 0.632718364,
+    "DAMP_B": 0.632718364,
 }
 
 # --- lights --------------------------------------------------------------------
@@ -962,7 +1032,7 @@ def header():
     L2.append("struct PanelTxt { XY mm; float size; float spacing; unsigned rgb; "
               "unsigned char anchor; const char* str; };")
     L2.append("struct DynCaption { int id; int driverId; int count; "
-              "const char* words[5]; };")
+              "const char* words[6]; };")
     L2.append(f"static constexpr int PART_STRIDE = {PART_STRIDE};")
     L2.append(f"static constexpr float kRingR = {RING_R:.3f}f;      // mm, LED-dot orbit")
     L2.append(f"static constexpr float kRingDotR = 0.95f;   // mm, lit-dot radius")
@@ -1005,7 +1075,7 @@ def header():
     # the target itself for a self-driving pad.
     L2.append("static const DynCaption kDynCaptions[] = {")
     for target, driver, words in DYNAMIC_CAPTIONS:
-        padded = list(words) + [""] * (5 - len(words))
+        padded = list(words) + [""] * (6 - len(words))
         cells = ", ".join(f'"{w}"' for w in padded)
         for suffix in ("_A", "_B"):
             L2.append(f"    {{{target}{suffix}, {driver}{suffix}, "
