@@ -631,11 +631,17 @@ TEST_CASE("feed G18: the index rides the envelope, not just the level") {
     // If the index were constant, the attack and the tail would have the same
     // spectral shape at different gains -- so the gate normalises the two
     // windows and compares their SHAPE.
+    //
+    // LEVEL is held well below kSatCeil, and that is what makes this gate
+    // about the index at all. At LEVEL 1 the attack window clips into the tanh
+    // and the tail window does not, which moves the centroid by itself:
+    // measured, the gate passed unchanged with the envelope removed from
+    // set_index entirely. It was measuring the ceiling.
     FeedEngine e = fresh_feed();
     e.set_attack(0.6f);
     e.set_decay(0.5f);
     e.set_resonance(0.4f);
-    feed_lanes(e, 0.4f, 0.2f, 0.2f, 1.f);
+    feed_lanes(e, 0.4f, 0.2f, 0.2f, 1.f, /*level=*/0.25f);
     e.set_flow(false);
     e.trigger(0.4f);
     const std::vector<float> attack = render_l(e, 8192);
@@ -762,22 +768,53 @@ TEST_CASE("feed G21: the accent spends itself twice -- and DEC gates the second"
 
 TEST_CASE("feed G22: a retrigger is click-free") {
     // Env::trigger rises from the CURRENT level, so a re-hit on a sounding
-    // drone must not step. The bound is on the sample-to-sample derivative
-    // around the trigger, compared against the same signal's own worst
-    // derivative while running -- so the threshold is measured, not invented.
+    // drone must not step.
+    //
+    // FLOOR is deliberately MID, not 1. At FLOOR 1 the envelope is already
+    // pinned at its ceiling when the retrigger lands, so trigger() has nothing
+    // to change and "click-free" is true of every possible implementation --
+    // measured, a trigger that reset the level to zero left the FLOOR-1
+    // formulation green.
     FeedEngine e = fresh_feed();
-    e.set_decay(1.f);
+    e.set_decay(0.8f);                       // FLOOR ~0.2, a sustaining drone
     e.set_attack(0.4f);
     feed_lanes(e, 0.5f, 0.2f, 0.2f, 0.8f);
     e.set_flow(true);
     e.trigger(0.5f);
-    settle(e, 40);
+    settle(e, 400);                          // ...settled onto the floor
+
     const std::vector<float> quiet = render_l(e, 24000);
     float worst_running = 0.f;
     for (size_t i = 1; i < quiet.size(); ++i)
         worst_running = std::max(worst_running, std::fabs(quiet[i] - quiet[i - 1]));
+
+    // Read the level at the trigger, not before the window above it: the
+    // envelope is still settling onto the floor and is legitimately lower here
+    // than it was 24000 samples ago.
+    const float env_before = e.voice_env(0);
+    REQUIRE(env_before > 0.05f);
+    REQUIRE(env_before < 0.9f);              // there IS room to rise
     e.trigger(0.5f);
-    const std::vector<float> hit = render_l(e, 4800);
+    // The envelope is the discriminating observable: the bank's amplitude
+    // glide smooths the AUDIO whatever the envelope does, so an audio-only
+    // bound cannot tell a rise-from-current-level from a restart-from-zero.
+    // voice_env is not glided.
+    float env_floor = 1e9f;
+    std::vector<float> hit;
+    for (int i = 0; i < 4800; ++i) {
+        float l = 0.f, r = 0.f;
+        e.process(l, r);
+        hit.push_back(l);
+        env_floor = std::min(env_floor, e.voice_env(0));
+    }
+    CAPTURE(env_before);
+    CAPTURE(env_floor);
+    // Rises FROM the current level: it never dips below where it started.
+    CHECK(env_floor >= env_before - 1e-4f);
+
+    // ...and end to end, the audio does not step either. The bound is against
+    // the same signal's own worst derivative while running, so the threshold
+    // is measured rather than invented.
     float worst_hit = 0.f;
     for (size_t i = 1; i < hit.size(); ++i)
         worst_hit = std::max(worst_hit, std::fabs(hit[i] - hit[i - 1]));
@@ -816,8 +853,7 @@ TEST_CASE("feed G23: trigger_chord fires ONE envelope hit, not n") {
     const std::vector<float> a = rise_profile(one, 1);
     const std::vector<float> b = rise_profile(four, 4);
     REQUIRE(a.size() == b.size());
-    // One hit rises once, and n stacked triggers rise differently -- so if the
-    // override were missing, these two envelopes would not coincide.
+    // One hit rises once, and a four-note chord must rise identically.
     float worst = 0.f;
     for (size_t i = 0; i < a.size(); ++i)
         worst = std::max(worst, std::fabs(a[i] - b[i]));
@@ -826,6 +862,28 @@ TEST_CASE("feed G23: trigger_chord fires ONE envelope hit, not n") {
     // And the envelope actually did something, so the comparison is not
     // between two flat lines.
     CHECK(peak_of(a) > 0.5f);
+
+    // The half that actually catches a missing override, and the envelope
+    // above is NOT it. Env::trigger() only sets the stage to Attack -- it does
+    // not reset the level -- so calling it n times in one sample is idempotent
+    // and the interface default's n hits are envelope-identical to one. What
+    // the default really does is call trigger(p[i]) per note, and FEED's
+    // trigger() sets _chord[0] and _chord_n = 1 each time: the chord collapses
+    // to its LAST note and the deck voices one tone instead of the cap.
+    // Measured: with trigger_chord replaced by the default's loop, the
+    // envelope comparison above stayed green.
+    FeedEngine g = fresh_feed();
+    feed_lanes(g, 0.5f, 0.2f, 0.f, 0.8f);      // SPREAD 0: pitches are tones
+    g.set_flow(true);
+    g.trigger_chord(four, 4);
+    settle(g, 60);
+    const int cap = feed_cfg::kPairs / feed_cfg::kPairsPerTone;
+    CAPTURE(g.voiced_tones_for_test());
+    CHECK(g.voiced_tones_for_test() == (4 < cap ? 4 : cap));
+    // ...and the tones really are the chord's, sorted, not the last note n
+    // times: pair 0 sits on the lowest.
+    CHECK(g.pair_hz_for_test(0) ==
+          doctest::Approx(pitch_to_hz_ref(four[0])).epsilon(0.001));
 }
 
 TEST_CASE("feed G24: a chord change is a glissando, not a retrigger") {

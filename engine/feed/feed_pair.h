@@ -152,6 +152,23 @@ public:
     float amp(int i) const { return _p[i].amp; }
     float fb_amount(int i) const { return _p[i].fb; }
 
+    // --- observation (tests). Not used on the audio path. ---
+    //
+    // The blend itself, so a gate can check the arithmetic rather than infer
+    // it from audio. The claim "BOND crossfades, it does not sum" is not
+    // observable at the output whenever the index is 0 -- there `_index * m`
+    // erases the modulator entirely and every feedback formula agrees -- and
+    // it is buried under FM sidebands whenever the index is not. feed P7 reads
+    // these three and reconstructs (1-k)*self + k*ring from them.
+    float self_tap_for_test(int i) const { return 0.5f * (_p[i].m1 + _p[i].m2); }
+    float ring_tap_for_test(int i) const {
+        const FeedPair& n = _p[(i + 1) % P];
+        return 0.5f * (n.o1 + n.o2);
+    }
+    // The DAMP one-pole's state, which at coefficient 1 IS the blended and
+    // fb-scaled input the modulator's phase receives.
+    float mod_input_for_test(int i) const { return _p[i].lp; }
+
 private:
     // equal-power pan, the Voice::_apply_pan law (synth/voice.cpp): angle
     // 0..0.25 turns, gl = cos, gr = sin, both through fast_sin so the desktop

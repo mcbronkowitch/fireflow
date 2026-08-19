@@ -73,7 +73,7 @@ constexpr float kIndexMaxCycles = 0.95f;   // BY EAR, first try
 // CYCLES. This is the term spec section 3.2.2's attenuation multiplies.
 //
 // MEASURED DOWN from a first-try 0.30. This is still a by-ear constant and
-// Task 13 may move it, but not upward past the ceiling the regime map found:
+// the listening pass may move it, but not upward past the ceiling the map found:
 // at 0.30 cycles (1.885 rad) the pitch centre is already gone at BOND 0, on a
 // single pair, with no coupling and no spread -- +50 ct, because 1.885 rad of
 // self-feedback is far past the classical beta = 1 rad point where a

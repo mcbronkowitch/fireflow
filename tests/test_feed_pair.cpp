@@ -257,31 +257,52 @@ TEST_CASE("feed P7: at BOND 1 a pair's own feedback is gone") {
     };
     // fb_amount multiplies the BLENDED input (spec 3.2, "one attenuation, both
     // terms"), so changing pair 0's own fb_amount still changes its output at
-    // BOND 1 -- what must vanish is the m[n-1] term, not the multiplier. The
-    // gate therefore compares two banks whose only difference is pair 0's own
-    // modulator history, which is what a zero index on pair 0 removes.
+    // BOND 1 -- what must vanish is the m[n-1] term, not the multiplier.
     const std::vector<float> a = run(feed_cfg::kFbBaseCycles);
     const std::vector<float> b = run(feed_cfg::kFbBaseCycles);
     for (size_t i = 0; i < a.size(); ++i) REQUIRE(a[i] == b[i]);   // determinism first
-    // The real assertion lives in the engine, where BOND 0 vs BOND 1 can be
-    // compared spectrally (feed G9/G10). Here the claim is narrower and exact:
-    // with every neighbour silent AND fb_amount 0 on the neighbours, a pair at
-    // BOND 1 receives exactly zero phase modulation.
-    FeedBank c = fresh_bank();
-    for (int i = 0; i < feed_cfg::kPairs; ++i) c.snap(i, 220.f, 0.f, 0.f);
-    c.snap(0, 220.f, 1.f, 0.f);
-    c.set_bond(1.f);
-    c.set_index(0.f);
-    c.set_fb_amount(0, 2.f);         // large, and it must not matter
-    const std::vector<float> quiet = render(c, 8000);
-    FeedBank d = fresh_bank();
-    for (int i = 0; i < feed_cfg::kPairs; ++i) d.snap(i, 220.f, 0.f, 0.f);
-    d.snap(0, 220.f, 1.f, 0.f);
-    d.set_bond(1.f);
-    d.set_index(0.f);
-    d.set_fb_amount(0, 0.f);
-    const std::vector<float> zero = render(d, 8000);
-    for (size_t i = 0; i < quiet.size(); ++i) REQUIRE(quiet[i] == zero[i]);
+
+    // The blend is checked as ARITHMETIC, against the two taps themselves.
+    //
+    // It cannot be checked at the output. The plan's formulation ran at index
+    // 0 and asserted that pair 0's fb_amount then makes no difference -- which
+    // is true of every possible feedback formula, because `_index * m` at
+    // index 0 removes the modulator from the carrier entirely. Measured: with
+    // the blend replaced by a SUM, (1-k)*self + k*ring -> self + k*ring, that
+    // formulation stayed green. Above index 0 the same claim is buried under
+    // FM sidebands and stops being exact.
+    //
+    // So the gate reads the taps and the modulator input directly. With the
+    // DAMP one-pole fully open the state IS the blended, fb-scaled input, so
+    // one process() call gives an exact identity to check -- at k = 0, k = 1
+    // and one k in between, which is what separates a crossfade from a sum
+    // (they agree only at k = 0).
+    for (float k : { 0.f, 0.5f, 1.f }) {
+        FeedBank c = fresh_bank();
+        for (int i = 0; i < feed_cfg::kPairs; ++i) {
+            c.snap(i, 220.f + 31.f * i, 1.f / feed_cfg::kPairs, 0.f);
+            c.set_fb_amount(i, feed_cfg::kFbBaseCycles);
+        }
+        c.set_bond(k);
+        c.set_index(0.5f);
+        c.set_damp_coef(1.f);            // the one-pole passes everything
+        // Run a while so both histories are non-trivial, then read the taps
+        // BEFORE the call that consumes them.
+        float l = 0.f, r = 0.f;
+        for (int i = 0; i < 1000; ++i) c.process(l, r);
+        const float self_tap = c.self_tap_for_test(0);
+        const float ring_tap = c.ring_tap_for_test(0);
+        const float fb = c.fb_amount(0);
+        c.process(l, r);
+        const float got = c.mod_input_for_test(0);
+        const float want = fb * ((1.f - k) * self_tap + k * ring_tap);
+        CAPTURE(k); CAPTURE(self_tap); CAPTURE(ring_tap); CAPTURE(got); CAPTURE(want);
+        // Both taps must be doing something, or the identity is satisfied by
+        // zeros and proves nothing.
+        REQUIRE(std::fabs(self_tap) > 1e-6f);
+        REQUIRE(std::fabs(ring_tap) > 1e-6f);
+        CHECK(got == doctest::Approx(want).epsilon(1e-5));
+    }
 }
 
 TEST_CASE("feed P8: driven to the rails, the bank stays finite") {
