@@ -558,8 +558,13 @@ void configure_inst_feed_engine_worst(Instrument& inst)
         // the modulator phase advances at a rate the compiler cannot fold.
         inst.set_voice_resonance(p, 1.f);
         inst.set_voice_sub(p, 1.f);          // the SUB oscillator live
-        inst.set_voice_filt(p, -1.f);        // DAMP at its darkest: the
-                                             // one-pole is doing real work
+        // FILT at -0.4: the darkest cutoff that does NOT fade the deck out.
+        // The SVF costs the same at every cutoff, so the point of this value
+        // is not the filter -- it is that the deck still emits. At -1 the
+        // gain fade reaches zero and every stage downstream of the part
+        // (Grit, Comp, the center reverb, the master limiter) would be
+        // priced on silence instead of on signal.
+        inst.set_voice_filt(p, -0.4f);
         // BOND high so the ring taps are live rather than a self-feedback
         // path the compiler could narrow, and SPREAD full so every pair sits
         // at its own frequency. Both lanes DEACTIVATED and based at the
