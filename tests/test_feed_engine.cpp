@@ -326,10 +326,19 @@ TEST_CASE("feed G10: the inner life is the coupling -- two-sided") {
     // 4.6x. The thresholds below are sized off that table: 0.002 is 2.1x the
     // worst BOND 0 reading, and the 3x ratio has 1.5x of margin against the
     // worst seed.
+    //
+    // RATIO must be an INTEGER here, and 1:1 is the one used. Flatness at
+    // BOND 0 measures inharmonicity as well as wandering, and only an integer
+    // modulator:carrier ratio puts the sidebands on the carrier's harmonics --
+    // so only there is a still ring a line spectrum. Measured at BOND 0 across
+    // the RATIO knob: 0.00064 at 1:1 and 0.024 at 4:1, against 0.084 at 2.5,
+    // 0.187 at 6.8 and 0.288 at 11. The plan's knob position of 0.25 lands on
+    // exactly 2.5 -- the midpoint between two integers, where the magnet has
+    // no pull at all -- and the gate would have been measuring the ratio.
     auto flatness_at = [](float bond, int extra_seconds) {
         FeedEngine e = fresh_feed();
         e.set_decay(1.f);                      // FLOOR 1
-        e.set_resonance(0.25f);
+        e.set_resonance(0.f);                  // RATIO 1:1, an integer
         feed_lanes(e, 0.5f, bond, 0.3f, 0.8f);
         e.set_flow(true);
         e.trigger(0.5f);
@@ -888,4 +897,143 @@ TEST_CASE("feed G25: pairs on the root hold still, and the tone cap binds") {
         CAPTURE(i);
         CHECK(e.pair_hz_for_test(i) == doctest::Approx(in_order[i]).epsilon(0.001));
     }
+}
+
+TEST_CASE("feed G26: RATIO's lower half gravitates to the integers") {
+    // Spec section 4. A continuous knob stands BETWEEN the integers almost
+    // everywhere, and near-integer ratios read as chorus -- motion from the
+    // wrong source. Plan open point 3 chose a monotone warp over zones with
+    // hysteresis, and monotonicity is asserted rather than claimed.
+    //
+    // "Gravitates" is measured AGAINST THE LINEAR MAP, computed here over the
+    // same knob positions, rather than against a fixed fraction. The plan
+    // asked for "more than half the travel within 2 % of an integer", but that
+    // is a statement about kRatioMagnetExp -- at its by-ear 3.0 the true
+    // figure is 34 %, and the gate would have been asserting a by-ear literal
+    // through the back door (memory fireflow-vacuous-test-gates, shape 3). The
+    // ratio between the two maps is the claim that survives a retuning.
+    FeedEngine e = fresh_feed();
+    int near_magnet = 0, near_linear = 0, samples = 0;
+    float prev = -1.f;
+    for (float n = 0.f; n <= 0.5f + 1e-6f; n += 0.002f) {
+        e.set_resonance(n);
+        const float r = e.ratio_for_test();
+        // The same knob position under a plain linear map to the same span.
+        const float lin = 1.f + (feed_cfg::kRatioMagnetTop - 1.f) * (n * 2.f);
+        CAPTURE(n); CAPTURE(r); CAPTURE(lin);
+        REQUIRE(r >= prev);                       // monotone: no zone flip
+        prev = r;
+        REQUIRE(r >= 1.f - 1e-4f);
+        REQUIRE(r <= feed_cfg::kRatioMagnetTop + 1e-4f);
+        if (std::fabs(r - std::round(r)) < 0.02f) ++near_magnet;
+        if (std::fabs(lin - std::round(lin)) < 0.02f) ++near_linear;
+        ++samples;
+    }
+    CAPTURE(near_magnet);
+    CAPTURE(near_linear);
+    CAPTURE(samples);
+    REQUIRE(near_linear > 0);                     // the baseline is reachable
+    CHECK(near_magnet > 3 * near_linear);
+    // The endpoints are exact, or the lower half does not actually reach 1:1
+    // and 4:1.
+    e.set_resonance(0.f);
+    CHECK(e.ratio_for_test() == doctest::Approx(1.f));
+    e.set_resonance(0.5f);
+    CHECK(e.ratio_for_test() == doctest::Approx(feed_cfg::kRatioMagnetTop));
+}
+
+TEST_CASE("feed G27: RATIO's upper half runs continuously into the irrational") {
+    FeedEngine e = fresh_feed();
+    int off_integer = 0, samples = 0;
+    float prev = feed_cfg::kRatioMagnetTop - 1e-4f;
+    for (float n = 0.5f; n <= 1.f + 1e-6f; n += 0.002f) {
+        e.set_resonance(n);
+        const float r = e.ratio_for_test();
+        CAPTURE(n); CAPTURE(r);
+        REQUIRE(r >= prev);
+        prev = r;
+        if (std::fabs(r - std::round(r)) > 0.1f) ++off_integer;
+        ++samples;
+    }
+    CAPTURE(off_integer);
+    CAPTURE(samples);
+    CHECK(off_integer > samples / 2);           // no magnet up here
+    e.set_resonance(1.f);
+    CHECK(e.ratio_for_test() == doctest::Approx(feed_cfg::kRatioMax));
+}
+
+TEST_CASE("feed G28: DAMP is honestly a filter, and its centre is neutral") {
+    // FILT is bipolar: left sweeps the feedback path's cutoff DOWN (dark and
+    // tame -- the loop loses the highs that feed escalation), right sweeps it
+    // up toward effectively open (bright and wild). The centre detent is the
+    // by-ear neutral cutoff.
+    auto centroid_at = [](float t) {
+        FeedEngine e = fresh_feed();
+        e.set_filt(t);
+        e.set_decay(1.f);
+        e.set_resonance(0.3f);
+        feed_lanes(e, 0.35f, 0.5f, 0.3f, 0.9f);
+        e.set_flow(true);
+        e.trigger(0.35f);
+        settle(e, 60);
+        const std::vector<double> m = mag_spectrum(render_l(e, 32768));
+        double num = 0.0, den = 0.0;
+        for (size_t i = 0; i < m.size(); ++i) { num += i * m[i]; den += m[i]; }
+        return den > 0.0 ? num / den : 0.0;
+    };
+    const double dark = centroid_at(-1.f);
+    const double mid = centroid_at(0.f);
+    const double bright = centroid_at(1.f);
+    CAPTURE(dark); CAPTURE(mid); CAPTURE(bright);
+    CHECK(dark < mid);
+    CHECK(mid < bright);
+}
+
+TEST_CASE("feed G29: SUB is a sub, and DEPTH 0.5 is a good sound") {
+    // Two claims in one case because they share a setup, and both are about
+    // the deck being usable rather than merely finite.
+    //
+    // SUB: energy an octave below the root appears when the knob is up and is
+    // absent when it is down.
+    auto sub_energy = [](float sub_n) {
+        FeedEngine e = fresh_feed();
+        e.set_sub(sub_n);
+        e.set_decay(1.f);
+        e.set_resonance(0.f);
+        feed_lanes(e, 0.5f, 0.f, 0.f, 0.f);     // DEPTH 0: a bare carrier
+        e.set_flow(true);
+        e.trigger(0.5f);
+        settle(e, 60);
+        const std::vector<double> m = mag_spectrum(render_l(e, 32768));
+        const double bin_hz = 48000.0 / 32768.0;
+        const int half = int(0.5 * pitch_to_hz_ref(0.5f) / bin_hz);
+        double band = 0.0;
+        for (int i = half - 2; i <= half + 2; ++i) band += m[i];
+        return band;
+    };
+    CHECK(sub_energy(1.f) > 20.0 * sub_energy(0.f));
+
+    // DEPTH at kDepthBase must be a SOUND, not a dead sine. DEPTH is the one
+    // FEED control with no knob of its own (the plan's control map), so spec
+    // section 4's defensive requirement is what stands in for one -- and this
+    // is what makes it falsifiable.
+    FeedEngine e = fresh_feed();
+    e.set_decay(1.f);
+    e.set_resonance(0.3f);
+    feed_lanes(e, 0.4f, 0.4f, 0.3f, feed_cfg::kDepthBase);
+    e.set_flow(true);
+    e.trigger(0.4f);
+    settle(e, 60);
+    const std::vector<double> m = mag_spectrum(render_l(e, 32768));
+    const double bin_hz = 48000.0 / 32768.0;
+    const int f0_bin = int(pitch_to_hz_ref(0.4f) / bin_hz);
+    double fundamental = 0.0, above = 0.0;
+    for (int i = f0_bin - 3; i <= f0_bin + 3; ++i) fundamental += m[i];
+    for (size_t i = size_t(f0_bin) + 4; i < m.size(); ++i) above += m[i];
+    CAPTURE(fundamental);
+    CAPTURE(above);
+    // A bare sine puts essentially nothing above the fundamental. "A good
+    // sound" is not testable; "has a spectrum" is, and it is the half that
+    // would actually have caught a dead default.
+    CHECK(above > 0.1 * fundamental);
 }

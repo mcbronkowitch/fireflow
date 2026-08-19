@@ -325,14 +325,51 @@ void FeedEngine::set_decay(float n) {
                       (1.f - feed_cfg::kFloorFoldStart), 0.f, 1.f);
 }
 
-// Task 8: the integer magnet. Until then the knob is stored and the ratio is
-// the neutral 1:1, so this task's gates measure a ring whose RATIO is not yet
-// under test and cannot be blamed for a failure.
-void FeedEngine::set_resonance(float n) { _ratio_n = clampf(n, 0.f, 1.f); _ratio = 1.f; }
+// RATIO. The lower half runs 1:1..kRatioMagnetTop through a monotone warp that
+// flattens near the integers; the upper half runs continuously from there into
+// the irrational (spec section 4).
+//
+// A magnet, not zones with hysteresis (plan open point 3): a zone reader is a
+// discrete selector with state, and this knob must stay continuous across the
+// midpoint. The warp has no state, cannot be "between" states, and is monotone
+// by construction -- which G26 asserts rather than trusts.
+void FeedEngine::set_resonance(float n) {
+    _ratio_n = clampf(n, 0.f, 1.f);
+    const float k = _ratio_n;
+    if (k <= 0.5f) {
+        const float lin = 1.f + (feed_cfg::kRatioMagnetTop - 1.f) * (k * 2.f);
+        const float ri = std::round(lin);
+        const float d = lin - ri;                       // [-0.5, 0.5]
+        // |2d|^exp * 0.5, sign preserved: flat at the integer, exact at the
+        // midpoint between two integers, monotone everywhere.
+        const float a = std::fabs(d) * 2.f;
+        const float warped = 0.5f * std::pow(a, feed_cfg::kRatioMagnetExp);
+        _ratio = ri + (d < 0.f ? -warped : warped);
+    } else {
+        _ratio = feed_cfg::kRatioMagnetTop +
+                 (feed_cfg::kRatioMax - feed_cfg::kRatioMagnetTop) * ((k - 0.5f) * 2.f);
+    }
+}
 
 void FeedEngine::set_sub(float n) { _sub_n = clampf(n, 0.f, 1.f); }
 
-void FeedEngine::set_filt(float t) { _damp_t = clampf(t, -1.f, 1.f); }    // Task 8
+// DAMP. FILT is bipolar; the centre detent is the neutral cutoff and the travel
+// multiplies and divides it by kDampSpan. std::pow at CONTROL rate, once per
+// knob move -- not in _control_tick, which reads the cached coefficient.
+//
+// Reads _sr, so init() MUST call this after assigning _sr -- otherwise the
+// coefficient is computed against the constructor's default and a 44.1 kHz
+// host gets a filter tuned for 48 kHz. That call is in init(), beside the
+// other knob re-derivations, and this comment is here because it is the kind
+// of ordering bug a render never shows.
+void FeedEngine::set_filt(float t) {
+    _damp_t = clampf(t, -1.f, 1.f);
+    const float hz = feed_cfg::kDampCenterHz * std::pow(feed_cfg::kDampSpan, _damp_t);
+    // One-pole coefficient expressed as a cutoff rather than a time:
+    // k = 1 - exp(-2*pi*fc/sr), clamped to 1 so the top of the travel is
+    // genuinely open rather than merely steep.
+    _damp_k = clampf(1.f - std::exp(-6.2831853f * hz / _sr), 0.f, 1.f);
+}
 
 void FeedEngine::reseed(uint32_t s) { _rng.seed(s); }                     // Task 9
 
@@ -349,7 +386,7 @@ float FeedEngine::_fall_s() const {
                   SynthEngine::kDecayMinS, SynthEngine::kDecayMaxS);
 }
 
-float FeedEngine::_damp_coef() const { return 1.f; }       // Task 8
+float FeedEngine::_damp_coef() const { return _damp_k; }
 
 float FeedEngine::pair_hz_for_test(int i) const { return _bank.hz(i); }
 float FeedEngine::pair_amp_for_test(int i) const { return _bank.amp(i); }

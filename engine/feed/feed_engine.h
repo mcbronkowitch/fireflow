@@ -101,7 +101,8 @@ private:
     float _ratio_n = 0.f;    // the RATIO knob
     float _ratio = 1.f;      // ...and the ratio it maps to (Task 8's magnet)
     float _sub_n = 0.f;
-    float _damp_t = 0.f;
+    float _damp_t = 0.f;     // the FILT knob, bipolar
+    float _damp_k = 1.f;     // ...and the one-pole coefficient it maps to
     float _accent = 0.f;
     float _width = 1.f;
 
