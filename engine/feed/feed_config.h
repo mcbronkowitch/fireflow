@@ -50,7 +50,18 @@ constexpr float kIndexMaxCycles = 0.95f;   // BY EAR, first try
 
 // The feedback / neighbour input amount before the pitch attenuation, in
 // CYCLES. This is the term spec section 3.2.2's attenuation multiplies.
-constexpr float kFbBaseCycles = 0.30f;     // BY EAR, first try
+//
+// MEASURED DOWN from a first-try 0.30. This is still a by-ear constant and
+// Task 13 may move it, but not upward past the ceiling the regime map found:
+// at 0.30 cycles (1.885 rad) the pitch centre is already gone at BOND 0, on a
+// single pair, with no coupling and no spread -- +50 ct, because 1.885 rad of
+// self-feedback is far past the classical beta = 1 rad point where a
+// feedback-FM operator stops being periodic at its carrier. The two-sample
+// average lifts that limit but does not remove it. At 0.08 cycles (0.503 rad)
+// the whole BOND travel below the threshold holds within 0.61 ct, and the
+// cliff still arrives on schedule at BOND 0.8. See docs/engine-map.md
+// section 9, "Where the coupling tips", for the sweep this came off.
+constexpr float kFbBaseCycles = 0.08f;     // BY EAR, first try; ceiling MEASURED
 
 // Pitch attenuation (spec section 3.2.2, the Braids RenderFeedbackFm recipe).
 // The pair's NORMALIZED pitch is already logarithmic -- pitch_to_hz(p) is

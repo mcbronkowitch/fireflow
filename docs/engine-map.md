@@ -691,3 +691,177 @@ phases), max `|d|` 0.000000. This is the invariant
 `tests/test_step_accent.cpp`'s STEP→FLOW seam case measures from sample 0 of
 the switch rather than after a settle window — the ordering is why there is
 nothing to settle.
+
+## 9. FEED: where the coupling tips
+
+Spec: `docs/superpowers/specs/2026-08-18-feed-coupled-feedback-fm-design.md`.
+Measured 2026-08-19 on `FeedBank` alone — `engine/feed/feed_pair.h`, driven
+directly, with **no** `FeedEngine` around it: no chord layer, no pitch
+attenuation, no envelope, no `tanh` ceiling and no SUB. Everything below is a
+statement about the ring, not about a FEED deck. What the finished engine
+measures is a separate section, written when there is a finished engine.
+
+**Setup, in full.** 48 kHz. Played pitch 220 Hz. `feed_cfg::kPairs` was **4 and
+a PLACEHOLDER** when this ran — `kPDecided` was false and the `feed_pairs`
+bench had not happened, so every figure here is "at P = 4" and not "at P".
+Pairs snapped (not glided) onto a zero-mean signature spanning ±S cents, equal
+amplitude `1/kPairs`, pan = the signature. `set_damp_coef(1)` throughout, i.e.
+the DAMP one-pole fully open, which is the worst case — a FEED deck at FILT
+centre runs coefficient 0.342 and is quieter than this. 2 s settle before every
+measurement.
+
+### The pitch estimator is part of the measurement, and two of them lied
+
+Every "cents off" figure here is YIN (de Cheveigné & Kawahara 2002) — the
+cumulative mean normalized difference function, absolute threshold 0.15,
+parabolic peak — over a **131072-sample (2.73 s)** window, reporting both a
+frequency and an aperiodicity. Three estimators were tried; the first two
+returned confident wrong answers, which is the only kind of measurement error
+that survives into a document:
+
+| Estimator | Failure | Measured |
+|---|---|---|
+| `argmax` of raw autocorrelation | locks to a SUB-multiple | −1200.97 ct (the octave below) and −1905.27 ct (~73 Hz), on rows including BOND 0 |
+| normalized autocorrelation, shortest lag reaching 0.9·max | locks to a HARMONIC | +1904.44 ct (the third harmonic, 660 Hz) |
+| YIN | — | ±0.02 ct on sine, 8-harmonic, missing-fundamental and harmonics-3..9-only test signals; 0.9726 aperiodicity on white noise |
+
+Two consequences that any later gate inherits:
+
+- **Aperiodicity is part of the answer.** A row whose aperiodicity reaches 0.30
+  has no fundamental to be right or wrong about, and is counted as *unpitched*
+  below rather than folded into a cents average. A ring driven past its
+  stability point genuinely has no pitch; an estimator that returns a number
+  anyway is how a gate ends up asserting something about noise.
+- **The window has to outlast the beat.** A ±S cent cluster beats at
+  `220·(2^(S/600) − 1)` Hz — 0.764 Hz at S = 3, i.e. a 1.31 s period. Measured
+  at S = 3 with a 16384-sample (0.34 s) window: **+1203 ct at aperiodicity
+  0.08**, a confident octave error, at five different BOND positions. The same
+  row at 131072 samples reads +0.02 ct. Any gate that estimates FEED's pitch
+  needs a window of at least two beat periods at the smallest spread it uses.
+
+### RATIO 3.5 is excluded, and it is arithmetic rather than a defect
+
+A half-integer modulator:carrier ratio doubles the signal's period, so the
+fundamental of a 220 Hz carrier at ratio 3.5 really is 110 Hz. Measured
+−1200 ct at every BOND including 0. The ratio grid here is therefore
+{1, 2, 3, 7}. This is also, independently, the argument for RATIO's integer
+magnet (spec §4): the knob's lower half must not stand on a half-integer.
+
+### The feedback amount is the dominant variable, and 0.30 cycles was past the edge
+
+Worst |cents| among *pitched* rows, and how many of the 20 depth × ratio rows
+had no fundamental at all, at spread 7 ct:
+
+| `fb` (cycles) | (rad) | BOND 0 | BOND 0.5 | BOND 1.0 |
+|---|---|---|---|---|
+| 0.04 | 0.251 | −0.40, 0 unpitched | −0.40, 0 | +0.56, 0 |
+| 0.06 | 0.377 | −0.40, 0 | +0.47, 0 | +0.75, 0 |
+| **0.08** | **0.503** | **−0.40, 0** | **+0.55, 0** | **+0.70, 3** |
+| 0.10 | 0.628 | −0.40, 0 | +0.55, 0 | +0.75, 5 |
+| 0.12 | 0.754 | +1903, 0 | −0.68, 0 | +0.87, 7 |
+| 0.15 | 0.942 | +1907, 0 | −1.25, 1 | −1202, 9 |
+| 0.20 | 1.257 | +1903, 0 | −0.97, 5 | +0.47, 12 |
+| 0.30 | 1.885 | +23.7, 2 | −1.91, 8 | +0.61, 12 |
+| 0.40 | 2.513 | −0.40, 15 | −1.98, 12 | +0.41, 14 |
+
+Isolated further: **one pair, spread 0, BOND 0** — no coupling, no cluster,
+nothing but self-feedback — shifts +49.6 ct at `fb` 0.30 and +0.04 ct at
+`fb` 0.15, index 0.70. The mechanism is the classical one: a feedback-FM
+operator stops being periodic at its carrier somewhere past β = 1 rad
+(= 0.159 cycles), and 0.30 cycles is 1.885 rad. The two-sample average
+(`0.5·(m[n−1] + m[n−2])`, the Plaits recipe) lifts that limit — the table shows
+BOND 0 clean up to 0.10 cycles, not up to 0.159/2 — but it does not remove it.
+
+`feed_cfg::kFbBaseCycles` was **0.30 by ear, first try, and is 0.08 measured**.
+It is still a by-ear constant and Task 13 may move it; what this section fixes
+is the ceiling it may not be moved above.
+
+### The BOND threshold, and the cliff
+
+At `fb` 0.08, spread ≤ `kSpreadKneeCt`, over 80 rows per BOND position
+(4 spreads × 5 depths × 4 ratios), 131072-sample window:
+
+| BOND | worst cents | unpitched |
+|---|---|---|
+| 0.0 | +0.253 | 0/80 |
+| 0.1 | +0.240 | 0/80 |
+| 0.2 | +0.294 | 0/80 |
+| 0.3 | +0.392 | 0/80 |
+| 0.4 | +0.465 | 0/80 |
+| 0.5 | +0.508 | 0/80 |
+| 0.6 | +0.551 | 0/80 |
+| **0.7** | **+0.609** | **0/80** |
+| 0.8 | **+22.522** | 1/80 |
+| 0.9 | +0.692 | 1/80 |
+| 1.0 | +0.718 | 3/80 |
+
+**BOND 0.7 is the last position at which every row is pitched and inside a
+cent.** The break at 0.8 is not gradual — the worst row jumps from +0.609 ct to
++22.522 ct and the first row loses its fundamental entirely — which is the
+cliff §2.3 asks the knob to have, arriving at 70 % of its travel.
+
+Two numbers follow, and they are the map's rather than the ear's:
+
+- `feed_cfg::kBondPitchThreshold` = **0.7**.
+- `feed_cfg::kPitchCentreTolCt` = **2.0 ct**. Sized as 3.3× the worst reading
+  below the threshold (0.609 ct) and 11× below the first broken row (+22.5 ct),
+  so it discriminates with a wide margin in both directions. Against §2.6's own
+  calibration — SWARM's withdrawn +420 ct earned "HARM almost always sounds
+  detuned", +4.5 ct was accepted — 2.0 ct is comfortably inside what was
+  accepted by ear and two orders of magnitude below what was rejected.
+
+**Do not retune either in a listening session — re-run the probe.**
+
+### SPREAD: the lower half has a fundamental, the upper half stops having one
+
+`fb` 0.08, BOND ∈ {0, 0.35, 0.7}, 27 rows per spread, same window:
+
+| spread (ct) | worst cents | unpitched |
+|---|---|---|
+| 0 | +0.522 | 0/27 |
+| 3 | +0.534 | 0/27 |
+| 5 | +0.582 | 0/27 |
+| **7** | **+0.609** | **0/27** |
+| 10 | +0.590 | 1/27 |
+| 15 | +0.939 | 3/27 |
+| 20 | +1.221 | 4/27 |
+| 30 | +1.708 | 7/27 |
+| 45 | +2.433 | 10/27 |
+| 60 | +4.509 | 11/27 |
+
+The boundary between "audibly beating" and "audibly a cluster" lands on
+**7 cents**, which is `kSpreadKneeCt`'s by-ear first-try value to the cent —
+the last spread at which every row still has one fundamental. Above it the
+cluster progressively stops having one, reaching 10 of 27 rows at
+`kSpreadMaxCt` = 45.
+
+That is **not** a reason to lower `kSpreadMaxCt`, and §3.4 is why: the upper
+half of SPREAD is *meant* to reach dense roughness. What it does mean is that
+§9.9's pitch-centre claim is a claim about SPREAD's lower half, and a gate that
+asserted it across the whole travel would be asserting a pitch that the design
+deliberately dissolves. The rows that remain pitched at 45 ct are still within
+2.433 ct, so nothing above the knee is *out of tune* — there is simply less and
+less of a single "tune" to be out of.
+
+### Spectral flux: the shape of the G10 measurement, on the bank
+
+Normalized magnitude flux between two Hann-windowed 32768-sample spectra taken
+9 s apart, `fb` 0.12, ratio 1:
+
+| BOND | spread 7 ct | spread 20 ct |
+|---|---|---|
+| 0.00 | 0.182 / 0.164 | 0.054 / 0.055 |
+| 0.25 | 0.377 / 0.350 | 0.234 / 0.266 |
+| 0.50 | 0.412 / 0.332 | 0.291 / 0.286 |
+| 0.75 | 0.335 / 0.301 | 0.281 / 0.293 |
+
+(two figures per cell: depth 0.5 / depth 0.8.)
+
+The structure the two-sided inner-life gate needs is here — coupled BOND moves
+the spectrum 2–5× as much as BOND 0 does — but **the BOND 0 floor is 0.05–0.18,
+not the ~0.02 a gate might assume**, because a bank of detuned pairs beating
+against each other is not perfectly stationary over 9 s either. A G10 written
+against an absolute "still < 0.02" would fail on a correct engine. The
+threshold belongs on the *ratio*, and the absolute floor has to be measured on
+`FeedEngine` — with the envelope and the ceiling in the path — rather than
+carried over from this table.
