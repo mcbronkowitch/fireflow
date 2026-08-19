@@ -43,6 +43,17 @@ void SynthEngineT<V>::init(float sample_rate) {
     _stab_rng.seed(_seed ^ 0x57AB5EEDu);
     _level.init(sample_rate, 0.01f);
     _level.reset(_targets[LANE_LEVEL]);
+    // EDGE's output high-pass (spec 2026-08-19 voice-knobs-dpth-edge, 4.3),
+    // SYNTH/WAVE only. init() sets a 20 Hz corner (engine/util/onepole_hp.h)
+    // that is provably never read: process() skips _hp_l/_hp_r entirely
+    // while _edge == 0 (the boot value), and set_edge() always overwrites
+    // the coefficient before any nonzero-_edge process() call can reach it.
+    // What init() has to do here is put _sr and the {x1, y1} history in a
+    // known state -- .init() is the only call that sets _sr at all.
+    if constexpr (V::kEdgeUsesOutputHp) {
+        _hp_l.init(sample_rate);
+        _hp_r.init(sample_rate);
+    }
     _update_control();
 }
 
@@ -408,6 +419,21 @@ void SynthEngineT<V>::process(float& outL, float& outR) {
     const float gain = _level.process(_targets[LANE_LEVEL] * _filt_gain) * kVoiceGain;
     float l = 0.f, r = 0.f;
     for (auto& v : _voices) v.process(l, r);
+    // EDGE's output high-pass (spec 2026-08-19 voice-knobs-dpth-edge, 4.1/
+    // 4.3): applied to the summed stereo pair, after the voices mix and
+    // before the LEVEL/FILT gain below -- the sum point is linear, so
+    // nothing else stands in the way (4.1). _edge == 0 SKIPS process()
+    // entirely rather than running the filter at its bottom rail: see
+    // set_edge() and kEdgeHpNeutralHz above, and engine/util/onepole_hp.h's
+    // own measurement that the bottom rail is not a bit-exact bypass in
+    // float32. This is why t == 0 is genuinely bit-identical to an engine
+    // that never called set_edge (ctrl_identity, wave_formant_sweep).
+    if constexpr (V::kEdgeUsesOutputHp) {
+        if (_edge != 0.f) {
+            l = _hp_l.process(l);
+            r = _hp_r.process(r);
+        }
+    }
     outL = l * gain;
     outR = r * gain;
 }

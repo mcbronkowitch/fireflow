@@ -26,6 +26,13 @@ class BodyVoice {
 public:
     static constexpr int kEngineVoices = 1;
 
+    // EDGE is real on BodyVoice already -- Exciter::set_edge trims the
+    // exciter's own corner (spec 2026-08-19 voice-knobs-dpth-edge, 4.3) --
+    // so SynthEngineT<BodyVoice> must NOT also run its output high-pass on
+    // top of that. Read by SynthEngineT<V>::set_edge/process (synth_engine.h)
+    // via `if constexpr`.
+    static constexpr bool kEdgeUsesOutputHp = false;
+
     void init(float sample_rate, uint32_t seed);
 
     void trigger(float freq_hz);

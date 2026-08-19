@@ -6,6 +6,7 @@
 #include "synth/synth_engine.h"
 #include "synth_engine_contract.h"
 #include "synth_voicet_contract.h"
+#include "instrument.h"
 
 using namespace spky;
 
@@ -111,4 +112,34 @@ TEST_CASE("detune reaches 105 cents at full for the synth engines") {
     e.set_detune(0.f);
     render_l(e, SynthEngine::kCtrlInterval + 1);
     CHECK(e.applied_detune_ct() == doctest::Approx(0.f).epsilon(0.001));
+}
+
+namespace {
+void render_instrument(Instrument& inst, float* l, float* r, int n) {
+    float in[64] = {};
+    for (int i = 0; i < n; i += 64) inst.process(in, in, l + i, r + i, 64);
+}
+}  // namespace
+
+// EDGE's output high-pass (spec 2026-08-19 voice-knobs-dpth-edge, 4.1/4.3):
+// the whole reason it is a TRIM rather than an absolute corner is that five
+// engines' factory sound has to survive the knob's arrival untouched.
+// Silence is enough for this half of the claim (see
+// tests/test_voice_edge_broadcast.cpp's own note on the NEUTRAL half vs. the
+// REACH half): a bit-exact comparison of two silences still catches a HP that
+// runs at t == 0 instead of bypassing, because engine/util/onepole_hp.h's own
+// warning is that its bottom rail is not a bit-exact bypass in float32.
+TEST_CASE("synth: EDGE at 0 is bit-identical to no EDGE at all") {
+    static float a[9600], b[9600], c[9600], d[9600];
+    Instrument i1, i2;
+    i1.init(48000.f);
+    i2.init(48000.f);
+    // i1 never calls set_voice_edge; i2 calls it with 0.
+    i2.set_voice_edge(PART_A, 0.f);
+    render_instrument(i1, a, b, 9600);
+    render_instrument(i2, c, d, 9600);
+    for (int n = 0; n < 9600; ++n) {
+        CHECK(a[n] == c[n]);
+        CHECK(b[n] == d[n]);
+    }
 }
