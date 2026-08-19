@@ -1604,25 +1604,59 @@ TEST_CASE("bbd engine: EDGE shapes what ARRIVES, not how it decays") {
     // EDGE's effect on the input is audible on the very first thing that
     // reaches the output, not only three delay periods in.
     //
-    // DRIVE 0.7 / FEEDBACK (MOTION) 1.0 is NOT an arbitrary choice, and this
-    // is the one place the non-redundancy claim actually lives or dies --
-    // measured (this fixture, scratchpad probe before committing to it): at
-    // DRIVE 0 / MOTION 0.5 the low-band ratio came out r1 = 0.7466,
-    // r2 = 0.6802, r3 = 0.6596, r4 = 0.7067 -- non-monotonic, and r1 vs r4
-    // land inside the 5 % epsilon (0.7466 vs 0.7067, doctest::Approx calls
-    // them equal), which would have reported a FALSE redundancy failure.
-    // The reason: pass 0 is dry-dominated and therefore DRIVE-independent
-    // (the compander only touches the WET path), so a fixture with little
-    // compander drive gives the wet passes almost nothing beyond linear
-    // decay to diverge on, and a linear per-pass loop preserves an initial
-    // spectral imprint proportionally -- which is indistinguishable from "a
-    // fixed gain trim" in exactly the way spec 4.5 warns about. Raising
-    // DRIVE (real compander nonlinearity) and FEEDBACK (more circulations
-    // for that nonlinearity to act on) gives the trend actually asserted
-    // below: r1 = 0.7466, r2 = 0.6802, r3 = 0.6596, r4 = 0.6352 --
-    // monotonically diverging, comfortably outside the epsilon. Do not
-    // "fix" a future near-equal reading here by loosening the epsilon; move
-    // the operating point the way this comment already did once.
+    // THE PASS-0 CHECK BELOW (CHECK(e1_p0 < 0.8f * e0_p0)) IS THE
+    // FIXTURE-INDEPENDENT PROOF of non-redundancy, not the ratio trend
+    // after it. Pass 0 spans [0, d), before the first wet return can even
+    // arrive, so at MIX 0.5 it is essentially the dry tap,
+    // fast_tanh(0.5*_in_l). FILT (the loss pole) and RES (the feedback
+    // tilt) live entirely INSIDE BbdLine and structurally cannot touch the
+    // dry tap at ANY DRIVE/FEEDBACK setting -- confirmed, not assumed:
+    // e0_p0/e1_p0 read IDENTICAL to six decimal digits (0.009827/0.007336)
+    // whether DRIVE is 0 or 0.7 and MOTION is 0.5 or 1.0 (both probed
+    // below). So the pass-0 check alone already proves EDGE cannot be
+    // redundant with either -- no operating point matters for THIS
+    // assertion, and if it is ever true that r1 == r4 at some fixture, that
+    // is a fact about the SECONDARY metric's resolution, not a reason to
+    // doubt this one.
+    //
+    // The ratio trend (r1 vs r4, below) is that secondary,
+    // resolution-limited metric, and DRIVE 0.7 / MOTION 1.0 is what IT
+    // needs, not what the non-redundancy claim needs. Fix-round-1 review
+    // corrected two things this comment had wrong about why:
+    //  1. It is NOT about compander nonlinearity. BbdEcho::SetDrive
+    //     (engine/fx/bbd.h) feeds only the fast_tanh SATURATOR
+    //     (sat_in_ = g/kSatCeil); Compander (bbd.h) takes no DRIVE input at
+    //     all and runs identically regardless of it. "DRIVE for real
+    //     compander nonlinearity" was wrong -- DRIVE does not touch the
+    //     compander.
+    //  2. The falling r1..r4 trend needs no nonlinearity to explain: FILT's
+    //     kLossCoef is a one-pole applied every circulation and
+    //     low_energy() is a FIXED 200 Hz weighting, so as the loss pole
+    //     darkens what circulates, the meter's weight migrates into
+    //     exactly the band a high-pass removes hardest -- a purely LINEAR
+    //     cascade already predicts a monotonically falling r_n. What the
+    //     rejected fixture (DRIVE 0, MOTION 0.5) actually got wrong was
+    //     FEEDBACK, not DRIVE: at MOTION 0.5, e0_p3 sat 14.2x below e0_p0
+    //     (probed: e0_p0 = 0.009827, e0_p3 = 0.000694) -- close enough to
+    //     BbdLine's own injected dither floor (kDither, bbd_engine.cpp)
+    //     that r2/r3/r4 came out non-monotonic (probed: r1 = 0.746571,
+    //     r2 = 0.673597, r3 = 0.699009, r4 = 0.706663) -- noise, not a real
+    //     trend, and r1 vs r4 landed inside the epsilon by chance, not
+    //     because EDGE stopped doing anything distinct from FILT/RES.
+    //     MOTION 1.0 raises e0_p3 6.8x (0.000694 -> 0.004704, DRIVE also at
+    //     0.7 for the fixture actually used below) clear of that floor
+    //     (e0_p0/e0_p3 drops from 14.2x to 2.1x), and the trend becomes
+    //     what the linear loss-pole story alone predicts: r1 = 0.746571,
+    //     r2 = 0.680201, r3 = 0.659572, r4 = 0.635173 -- monotonic,
+    //     comfortably outside the epsilon. DRIVE 0.7 is kept in the
+    //     fixture below but is not load-bearing for this trend; MOTION is.
+    // Do not "fix" a future near-equal r1/r4 reading here by loosening the
+    // epsilon or by reaching for more DRIVE -- raise MOTION until e0_p3
+    // clears the non-vacuity floor below, and only if it STILL lands
+    // inside the epsilon does this become a design finding to report.
+    // This is a test-methodology fact about this metric's resolution, not
+    // a fact about the shipped instrument -- it does not belong in
+    // docs/by-ear-decisions.md next to BODY's zone-2 blind spot.
     auto delay_samples = [](BbdEngine& e, float sr) {
         return static_cast<int>(e.stages() / (2.f * e.clock_hz()) * sr + 0.5f);
     };
@@ -1663,12 +1697,28 @@ TEST_CASE("bbd engine: EDGE shapes what ARRIVES, not how it decays") {
     CAPTURE(e1_p0);
     CAPTURE(e0_p3);
     CAPTURE(e1_p3);
-    // Pass 1 must move: that is the claim.
+    // Pass 1 must move: that is the claim, and it is the fixture-independent
+    // proof (see the comment above) -- FILT and RES cannot reach the dry
+    // tap pass 0 dominates, at any operating point.
     CHECK(e1_p0 < 0.8f * e0_p0);
+    // Non-vacuity FIRST (same idiom as "the output stays inside its stated
+    // bound with BOTH decks"): pass 3 must be real circulating signal, not
+    // BbdLine's own injected dither floor, before the ratio built from it
+    // means anything. Measured (fix-round-1 review): at the fixture this
+    // case used to use (DRIVE 0, MOTION 0.5), e0_p3 read 0.000694, only
+    // 14.2x below e0_p0 -- close enough to the dither floor that the ratio
+    // trend came out non-monotonic and noisy. At the fixture below, e0_p3
+    // reads 0.004704, 2.1x below e0_p0. 2e-3 sits between the two: it fails
+    // on the rejected fixture and passes on this one, so it is a real
+    // discriminator, not a floor nothing can miss.
+    CHECK(e0_p3 > 2e-3f);
     // And it must not move merely because the whole line got quieter -- if
-    // the ratio at pass 4 equals the ratio at pass 1, EDGE is behaving like
-    // a loss pole and this cell IS redundant. That is a design failure to
-    // report, not a threshold to widen (spec 4.5's whole argument).
+    // the ratio at pass 4 equals the ratio at pass 1, EDGE would be
+    // behaving like a fixed-gain trim rather than genuine pre-emphasis on
+    // THIS secondary metric. That is a reason to raise MOTION further (see
+    // the comment above), not a threshold to widen -- and only a reading
+    // that stays near-equal after e0_p3 clearly clears the floor above is
+    // the design failure worth reporting.
     const float r1 = e1_p0 / e0_p0;
     const float r4 = e1_p3 / e0_p3;
     CAPTURE(r1);

@@ -97,28 +97,30 @@ constexpr float kSlewMaxS = 0.5f;
 // input itself argues for a different span; a listening pass owns it.
 //
 // The negative half's inertness is NOT copied from either earlier
-// measurement -- see the non-redundancy test in tests/test_bbd_engine.cpp
-// ("bbd engine: EDGE shapes what ARRIVES, not how it decays") for why the
-// BBD's own case had to be probed separately: unlike SYNTH/WAVE (a 55 Hz
-// sub-osc floor) or the sampler (arbitrary recorded material, but still an
-// OUTPUT filter), this is an INPUT pre-emphasis on whatever the deck bus
-// feeds it -- audio-in, tape, or another deck's tap -- which is not bounded
-// by any floor the way SYNTH/WAVE's is.
+// measurement -- probed separately (scratchpad, not a committed test: the
+// non-redundancy test in tests/test_bbd_engine.cpp is about the FIRST-vs-
+// later-pass shape, not the negative half) because unlike SYNTH/WAVE (a
+// 55 Hz sub-osc floor) or the sampler (arbitrary recorded material, but
+// still an OUTPUT filter), this is an INPUT pre-emphasis on whatever the
+// deck bus feeds it -- audio-in, tape, or another deck's tap -- which is
+// not bounded by any floor the way SYNTH/WAVE's is.
 //
 // Measured (scratchpad probe, OnePoleHp's own math, same rms_at/db method as
-// tests/test_onepole_hp.cpp -- and, because the filter CLASS and both
-// constants are identical to the sampler's Task 6, the same numbers by
-// construction, not by coincidence): sweeping the negative half from
-// t -> 0- (corner 20 Hz) to t == -1 (corner 2.5 Hz), a 20 Hz tone opens from
-// -3.016 dB to -0.069 dB, 30 Hz from -1.605 to -0.031, 40 Hz from -0.978 to
-// -0.018, 55 Hz from -0.549 to -0.010, 80 Hz from -0.274 to -0.006, 110 Hz
-// from -0.152 to -0.004. So: NOT a documented blind spot the way SYNTH/
-// WAVE's negative half is (spec 4.2's bottom-rail neutral leaves those two
-// nothing below 55 Hz to remove) -- BBD's process_in() has no such floor,
-// so whenever the deck bus actually carries content down in the 20-55 Hz
-// region, the negative half does something a listener can register, same
-// conclusion as the sampler's and for the same reason (arbitrary external
-// material, not a synthesized tone bounded below by a fixed fundamental).
+// tests/test_onepole_hp.cpp): sweeping the negative half from t -> 0- (corner
+// 20 Hz) to t == -1 (corner 2.5 Hz), a 20 Hz tone opens from -3.016 dB to
+// -0.069 dB, 30 Hz from -1.605 to -0.031, 40 Hz from -0.978 to -0.018, 55 Hz
+// from -0.549 to -0.010, 80 Hz from -0.274 to -0.006, 110 Hz from -0.152 to
+// -0.004 -- close to, but not identical to, the sampler's own Task 6 numbers
+// (-3.007/-0.069, -1.599/-0.031, -0.975/-0.018, -0.547/-0.010 at the same
+// four frequencies): same filter class and the same two constants, so the
+// same MATH, but a separately run probe rig, not a value carried over. So:
+// NOT a documented blind spot the way SYNTH/WAVE's negative half is (spec
+// 4.2's bottom-rail neutral leaves those two nothing below 55 Hz to remove)
+// -- BBD's process_in() has no such floor, so whenever the deck bus actually
+// carries content down in the 20-55 Hz region, the negative half does
+// something a listener can register, same conclusion as the sampler's and
+// for the same reason (arbitrary external material, not a synthesized tone
+// bounded below by a fixed fundamental).
 constexpr float kEdgeHpNeutralHz = 20.f;
 constexpr float kEdgeOctaves     = 3.f;
 
@@ -514,11 +516,11 @@ void BbdEngine::process_in(float inL, float inR) {
     // therefore ahead of the line -- both the wet path (fed to _l/_r in
     // process()) and the dry path (outL/outR's own _in_l/_in_r term) see the
     // pre-emphasised signal, because both are downstream of _in_l/_in_r.
-    // _edge == 0 SKIPS process() entirely rather than running the filter at
-    // its bottom rail -- see set_edge() and engine/util/onepole_hp.h's own
-    // measurement that the bottom rail is not a bit-exact bypass in float32.
-    // This is why t == 0 is genuinely bit-identical to a deck that never
-    // called set_edge.
+    // _edge == 0 SKIPS OnePoleHp::process() entirely rather than running the
+    // filter at its bottom rail -- see set_edge() and
+    // engine/util/onepole_hp.h's own measurement that the bottom rail is not
+    // a bit-exact bypass in float32. This is why t == 0 is genuinely
+    // bit-identical to a deck that never called set_edge.
     float l = inL, r = inR;
     if (_edge != 0.f) {
         l = _hp_l.process(l);

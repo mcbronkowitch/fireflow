@@ -112,7 +112,7 @@ public:
     // once, at the write). See process_in() (.cpp) for where it sits
     // relative to _in_gain (SUB) and the line.
     //
-    // Same "t == 0 skips process() entirely" contract as Task 5/6
+    // Same "t == 0 skips OnePoleHp::process() entirely" contract as Task 5/6
     // (synth_engine.h / sampler_engine.h's set_edge()): computing a
     // coefficient here for a process_in() call that never reaches the filter
     // at _edge == 0 would be dead work, and engine/util/onepole_hp.h's own

@@ -11,16 +11,20 @@
 // knob was never touched (NEUTRAL).
 //
 // WHAT THE NEUTRAL HALF DOES NOT PROVE (fix-round-1 finding, Task 7): on
-// every engine but FEED, i0 (set_voice_edge never called) and i1
+// every engine but FEED and BODY, i0 (set_voice_edge never called) and i1
 // (set_voice_edge(0.f)) both land on the identical stored _edge == 0 through
 // the identical deterministic code path -- so bit equality between them
 // proves the SETTER is side-effect-free at zero, not that neutral means "no
 // filter runs". A set_edge(0.f) that ran a filter at its bottom rail instead
-// of skipping it would pass this exact loop too, on every engine, because i0
-// and i1 would then both run that filter identically (two instances on the
-// same deterministic path land on the same bits either way). Where each
-// engine's REAL bypass proof -- that process() actually SKIPS the filter
-// rather than running it transparently -- actually lives:
+// of skipping it would pass this exact loop too, on every one of those
+// engines, because i0 and i1 would then both run that filter identically
+// (two instances on the same deterministic path land on the same bits
+// either way). FEED and BODY are carved out because they have no such skip
+// branch to hide behind in the first place -- their filter always runs, at
+// every _edge, so there is no "skipped vs. ran transparently" ambiguity for
+// this particular hypothetical to expose (see their own bullets below).
+// Where each engine's REAL bypass proof -- that process() actually SKIPS
+// the filter rather than running it transparently -- actually lives:
 //   SYNTH and WAVE: the stored-hash gates ctrl_identity and
 //     wave_formant_sweep, which compare against pre-EDGE baselines and would
 //     move the moment a filter ran at boot.

@@ -12,6 +12,7 @@ namespace spky {
 // here rather than staying duplicated (spec 2026-08-19 voice-knobs-dpth-edge,
 // Task 7's ruling on the brief).
 inline float low_energy(const std::vector<float>& v, float sr = 48000.f) {
+    if (v.empty()) return 0.f;   // 0.0/0 would otherwise read back NaN
     const float a = 1.f - std::exp(-6.2831853f * 200.f / sr);
     float y = 0.f; double acc = 0.0;
     for (float x : v) { y += a * (x - y); acc += (double)y * y; }
