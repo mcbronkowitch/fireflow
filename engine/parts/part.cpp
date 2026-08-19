@@ -15,6 +15,8 @@ void Part::init(float sample_rate, uint32_t seed_base,
                 SampleBuffer::Frame* sampler_mem, size_t sampler_frames,
                 float* bbd_l, float* bbd_r) {
     _sr = sample_rate;
+    _seed_base = seed_base;
+    _new_ctr = 0;
     _mod.init(sample_rate, seed_base);
     _tone.init(sample_rate);
     _synth.set_seed(seed_base ^ 0x5eedC0DEu);   // per-part drift decorrelation
@@ -195,6 +197,16 @@ void Part::trigger_manual() {
     // Tonhoehe halten soll. Auf einer Synth-Part gibt der Helper nch
     // unveraendert zurueck, dort aendert sich also nichts.
     _engine->trigger_chord(chord, _flatten_for_sampler(chord, n));
+}
+
+void Part::new_phrase() {
+    _mod.new_phrase();
+    // On a FEED deck NEW also redraws the engine's own individual -- the
+    // SPREAD signature and the per-pair feedback offsets. The counter makes it
+    // progressive as well as deterministic; see the members' comment in
+    // part.h.
+    if (_engine_id == ENGINE_FEED)
+        _feed.reseed(_seed_base ^ (0x46454544u + (++_new_ctr)));
 }
 
 float Part::max_voice_env() const {

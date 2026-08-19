@@ -371,7 +371,14 @@ void FeedEngine::set_filt(float t) {
     _damp_k = clampf(1.f - std::exp(-6.2831853f * hz / _sr), 0.f, 1.f);
 }
 
-void FeedEngine::reseed(uint32_t s) { _rng.seed(s); }                     // Task 9
+void FeedEngine::reseed(uint32_t s) {
+    // Immediately, not deferred: the new signature arrives as a glide because
+    // every target change does, so there is nothing to defer it for. The
+    // alternative (pending until the next phrase wrap, as ModLane::new_phrase
+    // does) is one `if` away if a listening session asks for it.
+    _rng.seed(s);
+    _draw_individual();
+}
 
 float FeedEngine::_rise_s() const {
     return clampf(_rise_ratio * _cycle_s, SynthEngine::kAttackFloorS, 20.f);

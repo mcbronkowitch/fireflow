@@ -1037,3 +1037,123 @@ TEST_CASE("feed G29: SUB is a sub, and DEPTH 0.5 is a good sound") {
     // would actually have caught a dead default.
     CHECK(above > 0.1 * fundamental);
 }
+
+TEST_CASE("feed G30: same seed and same knobs give bit-identical audio") {
+    auto run = [](uint32_t seed) {
+        FeedEngine e = fresh_feed(seed);
+        e.set_resonance(0.35f);
+        e.set_decay(0.9f);
+        e.set_filt(0.3f);
+        e.set_sub(0.5f);
+        feed_lanes(e, 0.45f, 0.55f, 0.6f, 0.8f);
+        e.set_flow(true);
+        e.trigger(0.45f);
+        return render_l(e, 48000 * 2);
+    };
+    const std::vector<float> a = run(4242u);
+    const std::vector<float> b = run(4242u);
+    REQUIRE(a.size() == b.size());
+    for (size_t i = 0; i < a.size(); ++i) REQUIRE(a[i] == b[i]);
+    // Different seed, different individual -- otherwise the seed is dead state
+    // and G31 below could not tell anything.
+    const std::vector<float> c = run(999u);
+    bool differs = false;
+    for (size_t i = 0; i < a.size(); ++i) if (a[i] != c[i]) differs = true;
+    CHECK(differs);
+}
+
+TEST_CASE("feed G31: NEW redraws the individual, and only NEW does") {
+    FeedEngine e = fresh_feed(4242u);
+    feed_lanes(e, 0.5f, 0.4f, 1.f, 0.8f);      // SPREAD full: the signature shows
+    e.set_flow(true);
+    settle(e, 60);
+    std::vector<float> before;
+    std::vector<float> fb_before;
+    for (int i = 0; i < feed_cfg::kPairs; ++i) {
+        before.push_back(e.pair_hz_for_test(i));
+        fb_before.push_back(e.pair_fb_amount_for_test(i));
+    }
+
+    // Everything short of NEW leaves the individual alone: re-pushing the same
+    // lanes, moving the chord and coming back, triggering again.
+    feed_lanes(e, 0.5f, 0.4f, 1.f, 0.8f);
+    const float chord[2] = { 0.5f, 0.6f };
+    e.set_chord(chord, 2);
+    settle(e, 60);
+    const float one[1] = { 0.5f };
+    e.set_chord(one, 1);
+    e.trigger_chord(one, 1);
+    settle(e, 60);
+    for (int i = 0; i < feed_cfg::kPairs; ++i) {
+        CAPTURE(i);
+        CHECK(e.pair_hz_for_test(i) == doctest::Approx(before[i]).epsilon(0.001));
+        CHECK(e.pair_fb_amount_for_test(i) ==
+              doctest::Approx(fb_before[i]).epsilon(0.001));
+    }
+
+    e.reseed(777u);
+    settle(e, 60);
+    int hz_moved = 0, fb_moved = 0;
+    for (int i = 0; i < feed_cfg::kPairs; ++i) {
+        if (std::fabs(e.pair_hz_for_test(i) - before[i]) > before[i] * 0.0005f) ++hz_moved;
+        if (std::fabs(e.pair_fb_amount_for_test(i) - fb_before[i]) >
+            fb_before[i] * 0.005f) ++fb_moved;
+    }
+    CAPTURE(hz_moved); CAPTURE(fb_moved);
+    // Both halves of the individual redrawn -- the detune signature AND the
+    // per-pair feedback offsets (spec 3.4). A reseed that moved only the
+    // frequencies would leave the cliff an edge rather than a gradient.
+    CHECK(hz_moved > 0);
+    CHECK(fb_moved > 0);
+}
+
+TEST_CASE("feed G32: NEW on a FEED deck reaches the ring") {
+    // Instrument::new_phrase reached only mod() until this task, so the redraw
+    // had no route in at all.
+    Part p;
+    p.init(48000.f, 5u);
+    float l = 0.f, r = 0.f;
+    p.set_engine(ENGINE_FEED);
+    for (int i = 0; i < 500; ++i) p.process(l, r);
+    REQUIRE(p.engine_id() == ENGINE_FEED);
+    p.set_target_base(LANE_SIZE, 1.f);          // SPREAD full
+    for (int i = 0; i < 96 * 80; ++i) p.process(l, r);
+    std::vector<float> before;
+    for (int i = 0; i < feed_cfg::kPairs; ++i)
+        before.push_back(p.feed().pair_hz_for_test(i));
+    p.new_phrase();
+    for (int i = 0; i < 96 * 80; ++i) p.process(l, r);
+    int moved = 0;
+    for (int i = 0; i < feed_cfg::kPairs; ++i)
+        if (std::fabs(p.feed().pair_hz_for_test(i) - before[i]) > before[i] * 0.0005f)
+            ++moved;
+    CHECK(moved > 0);
+    // NEW is deterministic AND progressive: a fresh Part pressed NEW three
+    // times always lands on the same third individual, which is what makes
+    // this gate and any future render reproducible.
+    auto third_press = [] {
+        Part q;
+        q.init(48000.f, 5u);
+        float a = 0.f, b = 0.f;
+        q.set_engine(ENGINE_FEED);
+        for (int i = 0; i < 500; ++i) q.process(a, b);
+        q.set_target_base(LANE_SIZE, 1.f);
+        for (int k = 0; k < 3; ++k) q.new_phrase();
+        for (int i = 0; i < 96 * 80; ++i) q.process(a, b);
+        std::vector<float> hz;
+        for (int i = 0; i < feed_cfg::kPairs; ++i)
+            hz.push_back(q.feed().pair_hz_for_test(i));
+        return hz;
+    };
+    const std::vector<float> x = third_press();
+    const std::vector<float> y = third_press();
+    for (int i = 0; i < feed_cfg::kPairs; ++i) {
+        CAPTURE(i);
+        CHECK(x[i] == doctest::Approx(y[i]).epsilon(1e-6));
+    }
+    // ...and the third press is not the first: the counter advances.
+    bool progressed = false;
+    for (int i = 0; i < feed_cfg::kPairs; ++i)
+        if (std::fabs(x[i] - before[i]) > before[i] * 0.0005f) progressed = true;
+    CHECK(progressed);
+}

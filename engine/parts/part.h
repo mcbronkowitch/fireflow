@@ -144,6 +144,13 @@ public:
     }
     float max_voice_env() const;   // 0 when idle or on the test-tone engine
 
+    // NEW. The modulation layer's phrase redraw, plus -- on a FEED deck -- the
+    // engine's own individual (spec 2026-08-18 feed, section 3.4). Routed
+    // through Part rather than from Instrument straight into mod(), because
+    // "what NEW means" is a per-deck question and Part is the only scope that
+    // knows which engine is active.
+    void new_phrase();
+
     // VOICE edit layer - forwarded to every melodic engine directly, so edits
     // stick whichever engine is active. The sampler reinterprets each knob as
     // its cloud analogue (spec: "no dead knobs"), so one panel row serves all.
@@ -486,6 +493,11 @@ private:
     bool           _step_seen = false;
     bool           _step_snap = false;
     bool           _inhibit = false;
+    // NEW's bookkeeping. _seed_base is what init() was handed; _new_ctr counts
+    // presses, so the redraw is deterministic AND progressive -- a fresh Part
+    // pressed NEW three times always lands on the same third individual.
+    uint32_t       _seed_base = 0;
+    uint32_t       _new_ctr = 0;
 
     IPartEngine* _engine_for(EngineId e) {
         switch (e) {

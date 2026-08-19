@@ -96,7 +96,11 @@ public:
         set_form(p, pr);
     }
     void set_step(int p, bool on, int steps) { _parts[p].set_step(on, steps); }
-    void new_phrase(int p)                   { _parts[p].mod().new_phrase(); }
+    // Routed through Part, not straight into mod(): "what NEW means" is a
+    // per-deck question, and Part is the only scope that knows which engine is
+    // active (part.cpp). Until FEED there was no engine with an individual to
+    // redraw, so the shortcut through mod() was harmless.
+    void new_phrase(int p)                   { _parts[p].new_phrase(); }
 #ifdef SPKY_TESTING
     uint32_t song_position_for_test(int p) const {
         return _parts[p].mod().song_position_for_test();
