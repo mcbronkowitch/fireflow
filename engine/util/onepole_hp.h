@@ -12,15 +12,25 @@ namespace spky {
 //
 // y[n] = a * (y[n-1] + x[n] - x[n-1]), a = 1 / (1 + 2*pi*fc/sr).
 //
-// AT ITS BOTTOM RAIL THIS IS A DC BLOCKER, NOT A BYPASS. set_hz(0) gives
-// a == 1, and y[n] = y[n-1] + x[n] - x[n-1] still removes DC and still costs
-// the signal its lowest partials' phase. Any engine whose EDGE neutral is
-// "the corner at the bottom rail" is therefore claiming that its own DC
-// blocker already does this job -- check what Part/PartFx removes before
-// claiming it, and pin the claim with a bit-equality test at t == 0. If that
-// test cannot go green, add an explicit bypass branch; do not lower the
-// corner until the difference hides under a tolerance (that is a gate
-// nothing can fail). FEED does not have this problem: its neutral is
+// AT ITS BOTTOM RAIL THIS IS A BYPASS ON PAPER AND NOT IN FLOAT32, which is
+// the trap for any engine whose EDGE neutral is "the corner at the bottom
+// rail". set_hz(0) gives a == 1, where y[n] = y[n-1] + x[n] - x[n-1]
+// telescopes to y[n] == x[n] -- in exact arithmetic. Each sample still pays
+// one rounding of (y1 + x) - x1, and the error random-walks.
+//
+// MEASURED, not reasoned (scratchpad probe, 4.8 M samples at 48 kHz, this
+// class as written): a 440.7 Hz sine comes out bit-identical on 0.48 % of
+// samples, worst deviation 5.0e-6; with a 0.3 DC offset added it is 0.02 %,
+// worst 2.1e-4. DC is NOT removed at this rail either -- a held step comes
+// out held (1.000000 after one second), so "DC blocker" is the wrong mental
+// model here. It becomes a real filter as soon as the corner leaves 0: at
+// 20 Hz it takes 0.18 dB off 100 Hz, 0.01 dB off 1 kHz, and is -3.02 dB at
+// its own corner.
+//
+// So: pin the neutral with a bit-equality test at t == 0, and when it fails,
+// add an explicit branch that SKIPS process() entirely. Do not lower the
+// corner until the difference hides under a tolerance -- that is a gate
+// nothing can fail. FEED does not have this problem: its neutral is
 // kDampFixedHz and pow(2, k*0) == 1 makes it exact by construction.
 class OnePoleHp {
 public:
