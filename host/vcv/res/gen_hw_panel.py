@@ -117,7 +117,12 @@ HW_SIZE = {
     "RATE": "S", "SHAPE": "S", "SMOOTH": "S", "RANGE": "S", "MELODY": "S",
     "COLOR": "G",
     "TUNE": "S", "DETUNE": "S",
-    "FILT": "G", "SOURCE": "S",                    # TIMB is small (graphics round)
+    # FILT went G -> S on 2026-08-19. Not for room -- four controls fit the
+    # VOICE row with FILT large -- but for RASTER: at r=8.5 its neighbour
+    # spacing is 14.5 mm against 12 for every other pair, so the row could
+    # not sit on the 13 mm pitch of the four knobs directly above it.
+    "FILT": "S", "SOURCE": "S",                    # TIMB is small (graphics round)
+    "DEPTH": "S", "DAMP": "S",                     # FEED, the two new VOICE knobs
     "ATTACK": "S", "DECAY": "S", "RES": "S", "SUB": "S", "STAGES": "S",
     "FLUX": "G",
     "FLUXRATE": "S", "FLUXFB": "S", "LINK": "S",
@@ -146,6 +151,12 @@ HW_CAPTION = {
     "SCALE": "SCAL", "DRIFT": "DRFT", "CHOKE": "CHOK",
     "MORPH": "MRPH", "REV_DECAY": "DECY",
     "STAGES": "",
+    # PLACEHOLDER WORD. "DAMP" is taken -- BODY's DECAY prints it
+    # (gen_panel.DYNAMIC_CAPTIONS), and two knobs printing the same word on
+    # one instrument is what the printed-word gate exists to stop. EDGE says
+    # what the control does (how much edge the feedback path develops) and is
+    # free, but the word is Bastian's to pick.
+    "DEPTH": "DPTH", "DAMP": "EDGE",
     "IN_L": "IN L", "IN_R": "IN R", "OUT_L": "OUT L", "OUT_R": "OUT R",
     "SHIFTBTN": "SHFT",
 }
@@ -202,7 +213,13 @@ DECK_POS = {
     "MOD":    (21.75, Y_B1G), "DENSITY": (40.75, Y_B1G),
     "ATTACK": (68.25, Y_B1K), "DECAY": (81.25, Y_B1K),
     "RES":    (94.25, Y_B1K), "SUB": (107.25, Y_B1K),
-    "ENGINE": (70.25, Y_B1M), "FILT": (86.25, Y_B1G), "SOURCE": (102.25, Y_B1M),
+    # VOICE's lower row, on the SAME 13 mm pitch and the same x as the four
+    # knobs above it -- ATTACK/DECAY/RES/SUB. ENGINE used to open this row at
+    # 70.25; it moved to its own frame in the status row (GROUP_ROWS below),
+    # which is what freed the two slots DEPTH and DAMP now hold.
+    "FILT":   (68.25, Y_B1M), "SOURCE": (81.25, Y_B1M),
+    "DEPTH":  (94.25, Y_B1M), "DAMP":   (107.25, Y_B1M),
+    "ENGINE": (16.25, Y_TOP),
     "TUNE":   (17.00, Y_B2K), "DETUNE": (30.00, Y_B2K),
     "COLOR":  (23.50, Y_B2G),
     "FLUX":   (67.00, Y_B2K),
@@ -382,8 +399,12 @@ PLATE_EDGE = 8.0                  # outer edge of a full-width row
 # derived in row_frames() from what the row actually prints.
 # (seed y, seed h, first x, cuts, deck-A names, deck-B names, centre name)
 GROUP_ROWS = [
-    (9.00, 16.0, 28.00, [85.20],
-     ["SEQUENCE", "CAPTURE"], ["SEQUENCE", "CAPTURE"], "GLOBAL"),
+    # ENG is its own frame at the outer edge, left of SEQUENCE on deck A and
+    # mirrored on B. The status row used to start at x=28 and leave the plate's
+    # outer 20 mm empty; the side keep-out is only 2 mm, so that space was
+    # always there. Moving ENG out of VOICE is what pays for DEPTH and DAMP.
+    (9.00, 16.0, PLATE_EDGE, [26.00, 85.20],
+     ["ENG", "SEQUENCE", "CAPTURE"], ["ENG", "SEQUENCE", "CAPTURE"], "GLOBAL"),
     (28.00, 38.2, PLATE_EDGE, [56.25],
      ["MOTION", "VOICE"], ["MOTION", "VOICE"], "TIMING"),
     (69.20, 38.2, PLATE_EDGE, [42.00, 92.45],
@@ -394,8 +415,8 @@ GROUP_ROWS = [
 
 # Legend numbering, in reading order: decks top to bottom, then the centre
 # column, then the jack row.
-GROUP_ORDER = ("SEQUENCE", "CAPTURE", "MOTION", "VOICE", "PITCH", "FLUX",
-               "LEVEL", "GLOBAL", "TIMING", "ROOM", "IN", "CV", "MOD",
+GROUP_ORDER = ("ENG", "SEQUENCE", "CAPTURE", "MOTION", "VOICE", "PITCH",
+               "FLUX", "LEVEL", "GLOBAL", "TIMING", "ROOM", "IN", "CV", "MOD",
                "CLOCK", "OUT")
 
 
@@ -573,9 +594,14 @@ def group_texts():
 
 BRAND_TEXTS = [
     (4.50, 9.40, 3.3, 0.55, HW_LABEL, "start", "FIREFLOW"),
-    (4.60, 14.60, 2.1, 0.55, ACC["A"], "start", "DECK A"),
+    # Moved out of the top-left corner 2026-08-19: ENG's own frame now sits
+    # there, and "DECK A" ran x=4.60..14.20 straight through it. It drops into
+    # the 3 mm gap between the status row (bottom 24.35) and the MOTION/VOICE
+    # row (top 27.35) -- the one horizontal strip on the plate that no frame
+    # claims -- and starts on PLATE_EDGE so it lines up with the row below it.
+    (8.00, 26.60, 2.1, 0.55, ACC["A"], "start", "DECK A"),
     (W - 4.50, 9.40, 2.3, 0.55, HW_LEGEND, "end", "60 HP"),
-    (W - 4.60, 14.60, 2.1, 0.55, ACC["B"], "end", "DECK B"),
+    (W - 8.00, 26.60, 2.1, 0.55, ACC["B"], "end", "DECK B"),
 ]
 
 TEXTS[:] = BRAND_TEXTS + group_texts()

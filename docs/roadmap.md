@@ -2815,6 +2815,37 @@ Starting points: the per-engine table and the `kDeckGain` reasoning in
 FEED used (one `Part`, engine swapped, peak AND RMS — a drone and a struck note
 with the same peak are not the same loudness).
 
+### FEED knob re-pointing ⬜ (owed, next session)
+
+**DPTH and EDGE are the panel's first controls that do nothing on five of six
+engines**, and that is an interim, not a decision. Shipped 2026-08-19 because
+Bastian wants to feel whether two more VOICE knobs are worth having before
+deciding what they should do elsewhere — *"Können wir in der nächsten Session
+die Knobs auf den anderen Engines belegen, ich möchte erstmal testen ob sich 2
+weitere Voice Knobs gut anfühlen."*
+
+The house idiom is the opposite and has been since the reduction round: one
+knob, re-pointed per engine, caption follows the ENG switch. `RES` prints
+RATIO on FEED, `SOURCE` prints TIMB, `FILT` prints BRITE on BBD and LOSS on the
+sampler — all through `DYNAMIC_CAPTIONS` in `gen_panel.py`. Nothing on this
+panel is dead anywhere; these two are.
+
+What the round has to decide: what DPTH and EDGE control on SYNTH, WAVE, BODY,
+SAMPLER and BBD, and what each prints there. Then they join
+`DYNAMIC_CAPTIONS` like the rest.
+
+**Two things it inherits, both already flagged in the source:**
+
+- **The plate word EDGE is a placeholder.** `DAMP` was the obvious word and it
+  is taken: BODY's `DECAY` prints DAMP, and the printed-word gate refuses two
+  knobs one word. EDGE is free and says what the control does; the word is
+  Bastian's.
+- **The Rack panel's fourth VOICE column sits off-pitch.** 37.25 mm against the
+  10.5 mm rhythm of the first three, because `FLUXRATE_A` is at 44.25 and a
+  SMKNOB pair needs 6.0 mm of clearance — a column on pitch (40.75) fails by
+  2.5 mm. The hardware plate has no such problem: there the row is a clean 13 mm
+  4×2, the same pitch as ATK/DEC/RES/SUB above it.
+
 ### Marbles round — VARY as the character axis ⬜ (unscheduled)
 
 Opened 2026-08-13, out of the SHAPE/SMOOTH rework's second review pass.

@@ -193,8 +193,13 @@ def orbit_label(cx, cy, ang_deg, mir):
 
 # --- lower half per part (spec 2026-07-18 §5) --------------------------------
 # VOICE and FX sit side by side, PLAY spans the full part width below them.
-VOICE_X  = [9.25, 19.75, 30.25]      # ATK FILT SUB / DEC RES TIMB
+VOICE_X  = [9.25, 19.75, 30.25, 37.25]   # ATK FILT SUB DPTH / DEC RES TIMB DAMP
 ROW_V1, ROW_V2 = 77.3, 89.4
+# The fourth column breaks the 10.5 mm pitch of the first three, and it has to.
+# FLUXRATE_A sits at 44.25 and a SMKNOB pair needs 6.0 mm of clearance, so a
+# fourth column on pitch (40.75) would fail by 2.5 mm. 37.25 leaves exactly
+# 7.0 mm on both sides. The alternative was re-spacing all four evenly, which
+# moves three controls a player already knows for a rhythm nobody asked about.
 # --- state-dependent captions (spec 2026-08-03) -------------------------------
 # (target param base, driver param base, words indexed by the driver's value)
 #
@@ -605,6 +610,28 @@ APPENDED_PANEL_PARAMS = [
     # beside TEMPO, and next to TIDE on the hardware grid -- those two are the
     # pair this control came out of confusing: TIDE is a ratio, PACE is speed.
     Ctl("PACE", SMKNOB, CX - 9.0, ROW_TIME1, "PACE"),
+    # DPTH and DAMP: the two FEED values that had no panel home (spec
+    # 2026-08-18 feed §4, and docs/engine-map.md §9's two open questions).
+    # DPTH is the FM index -- it was always reachable as the LANE_MOTION base,
+    # but the host pinned it to feed_cfg::kDepthBase and only MOD could move
+    # it. DAMP is the in-loop one-pole cutoff in Hz, whose 3200 was confirmed
+    # against darker settings only.
+    #
+    # FEED-ONLY, and today they are inert on the other five engines. That is a
+    # deliberate interim: Bastian wants to feel whether two more VOICE knobs
+    # are worth having before deciding what they should do elsewhere, and this
+    # panel's idiom is otherwise re-pointing (RES -> RATIO, SOURCE -> TIMB,
+    # FILT -> BRITE), never a dead control. The re-pointing round is owed.
+    #
+    # Appended, so every existing param id keeps its number.
+    Ctl("DEPTH_A", SMKNOB, VOICE_X[3],     ROW_V1, "DPTH", "FEED: FM index"),
+    Ctl("DEPTH_B", SMKNOB, W - VOICE_X[3], ROW_V1, "DPTH", "FEED: FM index"),
+    # The printed word is EDGE, not DAMP: BODY's DECAY already prints DAMP
+    # (DYNAMIC_CAPTIONS below), and one word may name only one knob. The enum
+    # stays DAMP because that is what it is in the engine. PLACEHOLDER -- the
+    # word is Bastian's to pick.
+    Ctl("DAMP_A",  SMKNOB, VOICE_X[3],     ROW_V2, "EDGE", "FEED: in-loop damp cutoff"),
+    Ctl("DAMP_B",  SMKNOB, W - VOICE_X[3], ROW_V2, "EDGE", "FEED: in-loop damp cutoff"),
 ]
 
 # Persistent ids retain the legacy visible and hidden sequences exactly; runtime
@@ -746,6 +773,19 @@ INIT_DEFAULTS = {
     # sound (FF_hw_Init.vcvm) must boot at the same speed it always has, not
     # x1/32 (0.0) or x4 (1.0).
     "PACE": 0.500000000,
+    # The two FEED knobs boot on the shipped constants, so a fresh patch
+    # sounds exactly as it did before they existed.
+    #   DPTH = feed_cfg::kDepthBase = 0.5, the knob IS the LANE_MOTION base.
+    #   DAMP = feed_cfg::kDampFixedHz = 3200 Hz on the log travel 200..16000:
+    #          ln(3200/200) / ln(16000/200) = ln 16 / ln 80 = 0.632718364.
+    #          test_feed_shipped_defaults_are_the_engine_constants RECOMPUTES
+    #          this from feed_config.h and the host's own range instead of
+    #          comparing it to a literal -- and earned its keep on the first
+    #          run, catching 0.632631779 here.
+    "DEPTH_A": 0.500000000,
+    "DEPTH_B": 0.500000000,
+    "DAMP_A": 0.632718364,
+    "DAMP_B": 0.632718364,
 }
 
 # --- lights --------------------------------------------------------------------

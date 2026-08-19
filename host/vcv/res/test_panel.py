@@ -64,6 +64,8 @@ PARAM_ORDER = [
     'LINK_A', 'LINK_B', 'STAGES_A', 'STAGES_B',
     'REC_A', 'REC_B', 'REV_MIX_A', 'REV_MIX_B',
     'SHUFFLE', 'PACE',
+    # Appended 2026-08-19, so every id above keeps its number.
+    'DEPTH_A', 'DEPTH_B', 'DAMP_A', 'DAMP_B',
 ]
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
@@ -78,6 +80,10 @@ PARAM_TIPS = [
     'COLOR', 'COLOR', 'LINK', 'LINK', 'BBD Bend', 'BBD Bend', 'REC', 'REC',
     'Room send', 'Room send',
     'SHUFL', 'PACE',
+    # DPTH/EDGE per deck (2026-08-19). Rack names, not plate captions -- the
+    # faceplate prints DPTH and EDGE, the tooltip says what the knob is.
+    'FEED: FM index', 'FEED: FM index',
+    'FEED: in-loop damp cutoff', 'FEED: in-loop damp cutoff',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
@@ -87,10 +93,15 @@ LIGHT_ORDER = ['GATE_A_L', 'GATE_B_L', 'REC_A_L', 'REC_B_L']
 def test_enum_order():
     """Patch compatibility. If this fails, every saved .vcv breaks."""
     check([c.enum for c in g.PARAMS] == PARAM_ORDER, "PARAMS order changed")
-    check(PARAM_ORDER[-1] == 'PACE',
-          "PACE must be the trailing ParamId (spec 2026-08-12 "
-          "modulation-pace): it is APPENDED_PANEL_PARAMS' one member, "
-          "landing after SHUFFLE and everything HIDDEN_PARAMS used to hold")
+    # PACE was the trailing id until 2026-08-19; the four FEED params were
+    # appended behind it. What the gate protects is that appending NEVER
+    # renumbers what came before, so it pins the boundary rather than the
+    # last name: everything up to PACE, in order, then the new block.
+    check(PARAM_ORDER[:PARAM_ORDER.index('PACE') + 1][-1] == 'PACE',
+          "PACE moved out of the legacy tail -- ids above it renumbered")
+    check(PARAM_ORDER[PARAM_ORDER.index('PACE') + 1:]
+          == ['DEPTH_A', 'DEPTH_B', 'DAMP_A', 'DAMP_B'],
+          "the appended block after PACE changed")
     check([c.enum for c in g.INPUTS] == INPUT_ORDER, "INPUTS order changed")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
@@ -173,13 +184,13 @@ def test_bbd_pitch_flux_time_collections():
     persistent = [c.enum for c in g.PARAMS]
     runtime = [c.enum for c in g.RUNTIME_PANEL_PARAMS]
     static = [c.enum for c in g.STATIC_PANEL_PARAMS]
-    check([c.enum for c in g.APPENDED_PANEL_PARAMS] == ['PACE'],
-          "APPENDED_PANEL_PARAMS must hold exactly PACE")
+    check([c.enum for c in g.APPENDED_PANEL_PARAMS]
+          == ['PACE', 'DEPTH_A', 'DEPTH_B', 'DAMP_A', 'DAMP_B'],
+          "APPENDED_PANEL_PARAMS changed")
     check("FLUXTIME_A" not in persistent and "FLUXTIME_B" not in persistent,
           "FLUXTIME must not survive as a saved ParamId")
-    check(persistent[-1] == 'PACE',
-          "PACE must be the trailing ParamId (spec 2026-08-12 "
-          "modulation-pace)")
+    check(persistent[-4:] == ['DEPTH_A', 'DEPTH_B', 'DAMP_A', 'DAMP_B'],
+          "the appended FEED block is not the persistent tail")
     check(all(e in runtime for e in ('STAGES_A', 'STAGES_B',
                                       'FLUXRATE_A', 'FLUXRATE_B')),
           "runtime table lacks PITCH or TIME widgets")
@@ -308,8 +319,12 @@ def test_param_runtime_tip_contract():
     check(PARAM_TIPS[ids["LINK_A"]:ids["STAGES_B"] + 1]
           == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
           "BBD Bend runtime tips drifted")
-    check(PARAM_TIPS[-1] == 'PACE',
-          "PACE must be the trailing runtime tip (spec 2026-08-12 "
+    check(PARAM_TIPS[-4:] == ['FEED: FM index', 'FEED: FM index',
+                              'FEED: in-loop damp cutoff',
+                              'FEED: in-loop damp cutoff'],
+          "the appended FEED tips are not the trailing runtime tips")
+    check(PARAM_TIPS[-5] == 'PACE',
+          "PACE must sit at the end of the legacy runtime tips (spec 2026-08-12 "
           "modulation-pace)")
     for enum, caption, tip in (
             ("FLUX_A", "MIX", "FLUX"), ("FLUX_B", "MIX", "FLUX"),
@@ -469,7 +484,10 @@ def test_layout_constants():
     check(approx(g.RING_CX_A, 39.5), f"RING_CX_A {g.RING_CX_A}, want 39.5")
     check(approx(g.RING_CY, 34.5), f"RING_CY {g.RING_CY}, want 34.5")
     check(approx(g.KNOB_R, 25.5), f"KNOB_R {g.KNOB_R}, want 25.5")
-    check(g.VOICE_X == [9.25, 19.75, 30.25], f"VOICE_X {g.VOICE_X}")
+    # Fourth column 2026-08-19: DPTH over EDGE. It breaks the 10.5 mm pitch
+    # of the first three and has to -- FLUXRATE_A sits at 44.25 and a
+    # SMKNOB pair needs 6.0 mm, so a column on pitch (40.75) fails by 2.5.
+    check(g.VOICE_X == [9.25, 19.75, 30.25, 37.25], f"VOICE_X {g.VOICE_X}")
     check(g.FX_TOP == [44.25, 54.75, 65.25, 75.75], f"FX_TOP {g.FX_TOP}")
     check(g.FX_BOT == g.FX_TOP, f"FX rows disagree: {g.FX_TOP} / {g.FX_BOT}")
 
@@ -1779,13 +1797,14 @@ def test_source_detune_guard_rejects_representative_regressions():
 
 
 def feed_host_wiring_issues(cpp):
-    """Return regressions in the two re-points a FEED deck needs.
+    """Return regressions in the four re-points a FEED deck needs.
 
-    Both are BEHAVIOURAL, not cosmetic, and both are silent when reverted:
-    a FEED deck whose DETUNE knob stops writing LANE_SIZE simply has a dead
-    SPREAD control, and one whose LANE_MOTION base is never written sits on
-    Part's compiled-in 0.5 with no way to reach DEPTH's ends from the panel --
-    the same defect this host already had for every engine before 2026-08-18.
+    All four are BEHAVIOURAL and all four are SILENT when reverted, which is
+    the whole reason they are gated by source text: a FEED deck whose DETUNE
+    knob stops writing LANE_SIZE simply has a dead SPREAD control, one whose
+    LANE_MOTION base is never written sits on Part's compiled-in 0.5 with no
+    way to reach DEPTH's ends, and one whose EDGE knob never reaches
+    set_feed_damp_hz keeps init()'s cutoff while the knob turns.
     """
     issues = []
     push = cpp_scope(cpp, "void pushParams()")
@@ -1808,33 +1827,74 @@ def feed_host_wiring_issues(cpp):
     if "inst.set_target_base(p,spky::LANE_MOTION," not in push_n:
         issues.append("LANE_MOTION's base must be written, or DEPTH's ends are "
                       "unreachable from the panel")
-    if "feedPart?feedDepth[p]:0.5f" not in push_n:
-        issues.append("LANE_MOTION's base must be the FEED audition value on "
-                      "a FEED deck and Part's own 0.5f elsewhere")
-    # DEPTH reaches the lane through a menu value now, which MOVES the place
-    # the shipped default is stated. If that initialiser drifts off
-    # feed_cfg::kDepthBase, every patch that never opens the menu gets a
-    # different DEPTH -- a change to the shipped sound with no symptom at
-    # the call site the reader is looking at.
-    whole = compact_cpp(cpp)
-    if ("floatfeedDepth[spky::PART_COUNT]={spky::feed_cfg::kDepthBase,"
-            "spky::feed_cfg::kDepthBase};") not in whole:
-        issues.append("the DEPTH audition value must DEFAULT to "
-                      "feed_cfg::kDepthBase on both parts")
-    if ("floatfeedDampHz[spky::PART_COUNT]={spky::feed_cfg::kDampFixedHz,"
-            "spky::feed_cfg::kDampFixedHz};") not in whole:
-        issues.append("the DAMP audition value must DEFAULT to "
-                      "feed_cfg::kDampFixedHz on both parts")
-    # Silent when reverted, exactly like the two lane re-points above: the
-    # slider would keep moving and the ring would keep its init() cutoff.
-    if "inst.set_feed_damp_hz(p,feedDampHz[p]);" not in push_n:
-        issues.append("the DAMP audition value must be pushed, or the menu "
-                      "slider reaches nothing")
+    if "feedPart?pp(DEPTH_A,p):0.5f" not in push_n:
+        issues.append("LANE_MOTION's base must be the DPTH knob on a FEED deck "
+                      "and Part's own 0.5f elsewhere")
+    if "inst.set_feed_damp_hz(p,feedDampHzFromKnob(pp(DAMP_A,p)));" not in push_n:
+        issues.append("the EDGE knob must reach set_feed_damp_hz, or it turns "
+                      "against init()'s cutoff and nothing moves")
     return issues
 
 
+def _feed_cfg_floats():
+    """kDepthBase and kDampFixedHz, read from the engine header."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    hdr = os.path.join(here, "..", "..", "..", "engine", "feed", "feed_config.h")
+    with open(hdr) as f:
+        text = f.read()
+    out = {}
+    for name in ("kDepthBase", "kDampFixedHz"):
+        m = re.search(r"constexpr\s+float\s+" + name + r"\s*=\s*([0-9.]+)f", text)
+        check(m is not None, f"feed_config.h has no {name}")
+        out[name] = float(m.group(1))
+    return out
+
+
+def _damp_range():
+    """kFeedDampLoHz / kFeedDampHiHz, read from the host."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
+        cpp = f.read()
+    out = {}
+    for name in ("kFeedDampLoHz", "kFeedDampHiHz"):
+        m = re.search(r"constexpr\s+float\s+" + name + r"\s*=\s*([0-9.]+)f", cpp)
+        check(m is not None, f"Fireflow.cpp has no {name}")
+        out[name] = float(m.group(1))
+    return out
+
+
+def test_feed_shipped_defaults_are_the_engine_constants():
+    """The two FEED knobs must BOOT on what the engine ships, so a patch that
+    never touches them sounds exactly as it did before they existed.
+
+    This is the half of the old guard that moved: while DPTH and EDGE were
+    module floats, their default was a C++ initialiser; as ParamIds it is
+    INIT_DEFAULTS. Both numbers are RECOMPUTED here from feed_config.h and the
+    host's own range rather than compared against a literal -- a gate that
+    hard-codes 0.632631779 stops meaning anything the moment kDampFixedHz
+    moves, which is exactly when it is needed."""
+    cfg = _feed_cfg_floats()
+    rng = _damp_range()
+    want_depth = cfg["kDepthBase"]
+    want_damp = (math.log(cfg["kDampFixedHz"] / rng["kFeedDampLoHz"])
+                 / math.log(rng["kFeedDampHiHz"] / rng["kFeedDampLoHz"]))
+    check(rng["kFeedDampLoHz"] < cfg["kDampFixedHz"] < rng["kFeedDampHiHz"],
+          f"kDampFixedHz {cfg['kDampFixedHz']} is outside the knob's own range "
+          f"{rng['kFeedDampLoHz']}..{rng['kFeedDampHiHz']} -- the shipped value "
+          f"is not reachable")
+    for side in ("A", "B"):
+        got_d = g.INIT_DEFAULTS["DEPTH_" + side]
+        got_e = g.INIT_DEFAULTS["DAMP_" + side]
+        check(abs(got_d - want_depth) < 1e-6,
+              f"DEPTH_{side} boots at {got_d}, not feed_cfg::kDepthBase "
+              f"({want_depth})")
+        check(abs(got_e - want_damp) < 1e-6,
+              f"DAMP_{side} boots at {got_e}, which is not kDampFixedHz "
+              f"({cfg['kDampFixedHz']} Hz -> {want_damp:.9f} on this knob)")
+
+
 def test_feed_host_wiring():
-    """The FEED deck's two lane-base re-points are present and correctly shaped."""
+    """The FEED deck's four lane/engine re-points are present and correctly shaped."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
@@ -1843,7 +1903,7 @@ def test_feed_host_wiring():
 
 
 def test_feed_host_wiring_guard_rejects_representative_regressions():
-    """Each of the seven ways the FEED wiring can be reverted is caught."""
+    """Each of the five ways the FEED wiring can be reverted is caught."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
@@ -1854,23 +1914,15 @@ def test_feed_host_wiring_guard_rejects_representative_regressions():
          "                inst.set_target_base(p, spky::LANE_SIZE,   pp(DETUNE_A, p));\n",
          "SPREAD re-point removed"),
         ("            inst.set_target_base(p, spky::LANE_MOTION,\n"
-         "                                 feedPart ? feedDepth[p] : 0.5f);",
+         "                                 feedPart ? pp(DEPTH_A, p) : 0.5f);",
          "",
          "LANE_MOTION base write removed"),
-        ("                                 feedPart ? feedDepth[p] : 0.5f);",
+        ("                                 feedPart ? pp(DEPTH_A, p) : 0.5f);",
          "                                 0.5f);",
-         "DEPTH default reverted to the lane-layer coincidence"),
-        ("    float feedDepth[spky::PART_COUNT]  = {spky::feed_cfg::kDepthBase,\n"
-         "                                          spky::feed_cfg::kDepthBase};",
-         "    float feedDepth[spky::PART_COUNT]  = {0.75f, 0.75f};",
-         "DEPTH audition default drifted off kDepthBase"),
-        ("    float feedDampHz[spky::PART_COUNT] = {spky::feed_cfg::kDampFixedHz,\n"
-         "                                          spky::feed_cfg::kDampFixedHz};",
-         "    float feedDampHz[spky::PART_COUNT] = {1200.f, 1200.f};",
-         "DAMP audition default drifted off kDampFixedHz"),
-        ("            inst.set_feed_damp_hz(p, feedDampHz[p]);",
+         "DPTH reverted to the lane-layer coincidence"),
+        ("            inst.set_feed_damp_hz(p, feedDampHzFromKnob(pp(DAMP_A, p)));",
          "",
-         "DAMP audition push removed"),
+         "EDGE push removed"),
         ("            if (inst.engine_id(p) != spky::ENGINE_FEED) {",
          "            if (true) {",
          "DETUNE gate removed"),

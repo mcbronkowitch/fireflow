@@ -1281,10 +1281,10 @@ SYNTH is unchanged at +3.05 dB, and two decks reach 0.738 against the limiter's
 
 ### The two open questions got a knob
 
-Neither DEPTH nor the in-loop DAMP cutoff has a panel home, and both are
-recorded above as unanswered. They are now in the VCV context menu, under
-**FEED A — audition** / **FEED B — audition**, shown only while that deck is
-running FEED.
+Neither DEPTH nor the in-loop DAMP cutoff had a panel home, and both are
+recorded above as unanswered. They spent 2026-08-19 as context-menu sliders and
+are **panel knobs** since the same evening — `DPTH` and `EDGE`, in VOICE on both
+panels, one per deck.
 
 - **DEPTH**, the FM index, 0..1. It was never unreachable in principle — it is
   the `LANE_MOTION` base — but the host pinned it to `feed_cfg::kDepthBase` and
@@ -1299,14 +1299,26 @@ running FEED.
   half is FeedPair's two-sample average): hearing where it starts to alias is
   the point.
 
-Both default to the shipped constants, so a patch that never opens the menu
-behaves exactly as before; both persist per patch, because a setting found by
-ear is useless if reopening the patch silently reverts it; and `res/test_panel.py`
-guards the defaults themselves, since a menu value is a new place for a shipped
-default to drift with no symptom at the call site. `set_damp_hz` carries an
-exact-argument guard — the host pushes it every block from a slider that almost
-never moves, and without the compare that is one libm `expf` per part per block
-for nothing. The firmware never calls it; `init()` is its only other writer.
+Both boot on the shipped constants, so a patch that never touches them behaves
+exactly as before. As ParamIds Rack persists them for free, so the module holds
+no state for them at all — the two float arrays, their JSON keys and their reset
+all left with the menu. `set_damp_hz` carries an exact-argument guard: the host
+pushes it every block from a knob that almost never moves, and without the
+compare that is one libm `expf` per part per block for nothing. The firmware
+never calls it; `init()` is its only other writer.
+
+**The gate on the defaults RECOMPUTES them** rather than comparing against a
+literal (`test_feed_shipped_defaults_are_the_engine_constants`): it reads
+`kDepthBase` and `kDampFixedHz` out of `feed_config.h`, reads the knob's range
+out of `Fireflow.cpp`, and derives what `INIT_DEFAULTS` must hold. A gate that
+hard-codes 0.632718364 stops meaning anything the moment `kDampFixedHz` moves —
+which is exactly when it is needed. It earned its keep on its first run by
+catching 0.632631779, which is what this document would otherwise be quoting.
+
+**They are dead on the other five engines**, which is the first time anything on
+this panel is, and it is an interim: the re-pointing round is owed and is in
+[`roadmap.md`](roadmap.md). The plate word `EDGE` is likewise a placeholder —
+`DAMP` is taken by BODY's `DECAY`.
 
 ### Three measurement traps this engine sets, and what they cost
 
