@@ -41,6 +41,27 @@ constexpr int kPairsPerTone = 2;
 static_assert(kPairs >= kPairsPerTone,
               "a bank must hold at least one full tone group");
 
+// --- measured, not by ear (the regime map) --------------------------------
+//
+// Read off docs/engine-map.md section 9. Spec section 10 is explicit that
+// these two are the map's and not the ear's: the BOND position where the
+// estimated fundamental leaves the tolerance, and the tolerance itself. Do not
+// retune them in a listening session -- re-run the probe.
+//
+// 0.7 is the last BOND position at which all 80 measured rows (4 spreads x 5
+// depths x 4 ratios, spread <= kSpreadKneeCt) still had a fundamental AND sat
+// inside a cent of the played pitch. At 0.8 the worst row jumps from +0.609 ct
+// to +22.522 ct and the first row loses its fundamental entirely -- the knob's
+// cliff, arriving at 70 % of its travel.
+constexpr float kBondPitchThreshold = 0.7f;
+
+// 2.0 ct: 3.3x the worst reading below the threshold (0.609 ct) and 11x below
+// the first broken row (+22.5 ct), so it discriminates with a wide margin in
+// both directions. Against spec section 2.6's own calibration -- SWARM's
+// withdrawn +420 ct earned "HARM almost always sounds detuned", +4.5 ct was
+// accepted -- this sits comfortably inside what was accepted by ear.
+constexpr float kPitchCentreTolCt = 2.0f;
+
 // --- by ear, first try (spec section 10) ----------------------------------
 // Every constant below this line is Bastian's to confirm in Task 13. No gate
 // asserts any of these literals; gates derive from the names.

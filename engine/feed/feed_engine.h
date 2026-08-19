@@ -71,6 +71,9 @@ private:
     void _control_tick();
     void _rebuild_allocation();
     void _draw_individual();
+    float _rise_s() const;      // RISE knob -> seconds
+    float _fall_s() const;      // FALL knob -> seconds
+    float _damp_coef() const;   // DAMP knob -> one-pole coefficient
 
     FeedBank _bank;
     Env      _env;
@@ -79,6 +82,7 @@ private:
     uint32_t _seed = 0x46454544u;   // "FEED"
     float    _sr = 48000.f;
     int      _ctrl_ctr = 0;
+    float    _inv_sqrt_pairs = 1.f;   // 1/sqrt(kPairs), set in init()
 
     // lanes
     float _bond = 0.f;
@@ -91,7 +95,8 @@ private:
     float _rise_n = 0.5f;
     float _fall_n = 0.5f;
     float _floor_n = 0.f;
-    float _ratio = 1.f;
+    float _ratio_n = 0.f;    // the RATIO knob
+    float _ratio = 1.f;      // ...and the ratio it maps to (Task 8's magnet)
     float _sub_n = 0.f;
     float _damp_t = 0.f;
     float _accent = 0.f;
@@ -107,6 +112,10 @@ private:
     float _chord[kMaxChord] = { 0.5f, 0.f, 0.f, 0.f };
     int   _chord_n = 1;
     int   _voiced_n = 1;
+    // Has anything explicitly named a pitch yet -- a trigger, or the chord
+    // layer? Until something has, the ring's root follows the PITCH lane. See
+    // _control_tick.
+    bool  _pitch_named = false;
 
     // NEW's individual
     float _spread_sig[feed_cfg::kPairs] = {};
