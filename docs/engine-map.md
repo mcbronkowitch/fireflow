@@ -1279,6 +1279,35 @@ at 0.25: the deck rose 0.6 dB (drone peak 0.343 → 0.369), the RMS distance to
 SYNTH is unchanged at +3.05 dB, and two decks reach 0.738 against the limiter's
 0.891 knee.
 
+### The two open questions got a knob
+
+Neither DEPTH nor the in-loop DAMP cutoff has a panel home, and both are
+recorded above as unanswered. They are now in the VCV context menu, under
+**FEED A — audition** / **FEED B — audition**, shown only while that deck is
+running FEED.
+
+- **DEPTH**, the FM index, 0..1. It was never unreachable in principle — it is
+  the `LANE_MOTION` base — but the host pinned it to `feed_cfg::kDepthBase` and
+  the only way to move it was to route MOD at it. On an FM engine the index is
+  arguably the most musical parameter there is, which makes spec §4's
+  "DEPTH at 0.5 must be a good sound" a claim worth being able to disprove.
+- **DAMP cutoff**, 200 Hz to 16 kHz on a LOG slider, through the new
+  `FeedEngine::set_damp_hz`. 3200 Hz was confirmed only against DARKER
+  alternatives — variants B and C at 1200 and 500 Hz were rejected by ear — and
+  nobody has heard it against a brighter one. The top of the range deliberately
+  reaches past where half this engine's anti-aliasing stops working (the other
+  half is FeedPair's two-sample average): hearing where it starts to alias is
+  the point.
+
+Both default to the shipped constants, so a patch that never opens the menu
+behaves exactly as before; both persist per patch, because a setting found by
+ear is useless if reopening the patch silently reverts it; and `res/test_panel.py`
+guards the defaults themselves, since a menu value is a new place for a shipped
+default to drift with no symptom at the call site. `set_damp_hz` carries an
+exact-argument guard — the host pushes it every block from a slider that almost
+never moves, and without the compare that is one libm `expf` per part per block
+for nothing. The firmware never calls it; `init()` is its only other writer.
+
 ### Three measurement traps this engine sets, and what they cost
 
 Recorded because each one produced a confident wrong number first, and each is

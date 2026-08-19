@@ -1808,9 +1808,28 @@ def feed_host_wiring_issues(cpp):
     if "inst.set_target_base(p,spky::LANE_MOTION," not in push_n:
         issues.append("LANE_MOTION's base must be written, or DEPTH's ends are "
                       "unreachable from the panel")
-    if "feedPart?spky::feed_cfg::kDepthBase:0.5f" not in push_n:
-        issues.append("LANE_MOTION's base must be feed_cfg::kDepthBase on a FEED "
-                      "deck and Part's own 0.5f elsewhere")
+    if "feedPart?feedDepth[p]:0.5f" not in push_n:
+        issues.append("LANE_MOTION's base must be the FEED audition value on "
+                      "a FEED deck and Part's own 0.5f elsewhere")
+    # DEPTH reaches the lane through a menu value now, which MOVES the place
+    # the shipped default is stated. If that initialiser drifts off
+    # feed_cfg::kDepthBase, every patch that never opens the menu gets a
+    # different DEPTH -- a change to the shipped sound with no symptom at
+    # the call site the reader is looking at.
+    whole = compact_cpp(cpp)
+    if ("floatfeedDepth[spky::PART_COUNT]={spky::feed_cfg::kDepthBase,"
+            "spky::feed_cfg::kDepthBase};") not in whole:
+        issues.append("the DEPTH audition value must DEFAULT to "
+                      "feed_cfg::kDepthBase on both parts")
+    if ("floatfeedDampHz[spky::PART_COUNT]={spky::feed_cfg::kDampFixedHz,"
+            "spky::feed_cfg::kDampFixedHz};") not in whole:
+        issues.append("the DAMP audition value must DEFAULT to "
+                      "feed_cfg::kDampFixedHz on both parts")
+    # Silent when reverted, exactly like the two lane re-points above: the
+    # slider would keep moving and the ring would keep its init() cutoff.
+    if "inst.set_feed_damp_hz(p,feedDampHz[p]);" not in push_n:
+        issues.append("the DAMP audition value must be pushed, or the menu "
+                      "slider reaches nothing")
     return issues
 
 
@@ -1824,7 +1843,7 @@ def test_feed_host_wiring():
 
 
 def test_feed_host_wiring_guard_rejects_representative_regressions():
-    """Each of the four ways the FEED re-points can be reverted is caught."""
+    """Each of the seven ways the FEED wiring can be reverted is caught."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
@@ -1835,12 +1854,23 @@ def test_feed_host_wiring_guard_rejects_representative_regressions():
          "                inst.set_target_base(p, spky::LANE_SIZE,   pp(DETUNE_A, p));\n",
          "SPREAD re-point removed"),
         ("            inst.set_target_base(p, spky::LANE_MOTION,\n"
-         "                                 feedPart ? spky::feed_cfg::kDepthBase : 0.5f);",
+         "                                 feedPart ? feedDepth[p] : 0.5f);",
          "",
          "LANE_MOTION base write removed"),
-        ("                                 feedPart ? spky::feed_cfg::kDepthBase : 0.5f);",
+        ("                                 feedPart ? feedDepth[p] : 0.5f);",
          "                                 0.5f);",
          "DEPTH default reverted to the lane-layer coincidence"),
+        ("    float feedDepth[spky::PART_COUNT]  = {spky::feed_cfg::kDepthBase,\n"
+         "                                          spky::feed_cfg::kDepthBase};",
+         "    float feedDepth[spky::PART_COUNT]  = {0.75f, 0.75f};",
+         "DEPTH audition default drifted off kDepthBase"),
+        ("    float feedDampHz[spky::PART_COUNT] = {spky::feed_cfg::kDampFixedHz,\n"
+         "                                          spky::feed_cfg::kDampFixedHz};",
+         "    float feedDampHz[spky::PART_COUNT] = {1200.f, 1200.f};",
+         "DAMP audition default drifted off kDampFixedHz"),
+        ("            inst.set_feed_damp_hz(p, feedDampHz[p]);",
+         "",
+         "DAMP audition push removed"),
         ("            if (inst.engine_id(p) != spky::ENGINE_FEED) {",
          "            if (true) {",
          "DETUNE gate removed"),

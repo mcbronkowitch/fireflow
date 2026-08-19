@@ -311,6 +311,34 @@ struct Fireflow : Module {
     // pushParams (audio thread) only ever reads factoryL/factoryR -- a
     // memcpy via inst.load_sample, no disk I/O and no resample.
     bool factoryTried[spky::PART_COUNT] = {false, false};
+
+    // FEED audition values. Neither has a panel home and both are questions
+    // the engine map records as OPEN, so they live in the menu until a
+    // listening pass answers them:
+    //
+    //   feedDampHz -- the in-loop DAMP cutoff. 3200 Hz was confirmed only
+    //   against DARKER alternatives (variants B/C at 1200 and 500 Hz were
+    //   rejected by ear); nobody has heard it against a brighter one.
+    //
+    //   feedDepth -- the FM index. DEPTH is the one FEED control with no knob
+    //   of its own: the host writes it as the LANE_MOTION base and it has sat
+    //   on feed_cfg::kDepthBase, so the player could reach it only by routing
+    //   MOD at it. On an FM engine the index is arguably the most musical
+    //   parameter there is, which makes "0.5 is a good sound" a claim worth
+    //   being able to disprove by hand.
+    //
+    // Both default to the shipped constants, so a patch that never opens the
+    // menu behaves exactly as before.
+    // The slider's travel, here rather than on FeedDampQuantity because
+    // dataFromJson clamps against it and is defined earlier in this file.
+    // 200 Hz sits below the darkest variant that was rejected by ear (500);
+    // 16 kHz is past anything that could still be called damping.
+    static constexpr float kFeedDampLoHz = 200.f;
+    static constexpr float kFeedDampHiHz = 16000.f;
+    float feedDampHz[spky::PART_COUNT] = {spky::feed_cfg::kDampFixedHz,
+                                          spky::feed_cfg::kDampFixedHz};
+    float feedDepth[spky::PART_COUNT]  = {spky::feed_cfg::kDepthBase,
+                                          spky::feed_cfg::kDepthBase};
     // Edge-detects the ENG switch landing on BBD, so the FLUX-off and
     // excite-other-deck defaults below (spec 5.11/5.12) apply once on a
     // genuine player-driven transition and never fight a player who
@@ -915,8 +943,18 @@ struct Fireflow : Module {
             // load-bearing for the same reason the LANE_SIZE one is: a base
             // left behind on an engine flip sticks. 0.5f is exactly Part's
             // default, so nothing moves for the other five engines.
+            // feedDepth[p] starts AT kDepthBase, so this is the same write it
+            // has always been until somebody moves the menu slider.
             inst.set_target_base(p, spky::LANE_MOTION,
-                                 feedPart ? spky::feed_cfg::kDepthBase : 0.5f);
+                                 feedPart ? feedDepth[p] : 0.5f);
+
+            // The in-loop DAMP cutoff, likewise an audition value. Pushed
+            // unconditionally rather than only on a FEED deck: the setter does
+            // not broadcast, so it is inert elsewhere, and pushing it always
+            // means a deck flipped ONTO FEED arrives with the menu's value
+            // instead of whatever init() left. FeedEngine::set_damp_hz holds an
+            // exact-argument guard, so a motionless slider costs one compare.
+            inst.set_feed_damp_hz(p, feedDampHz[p]);
 
             // Stable pitch in the sampler: the lane still FIRES (that is what
             // keeps STEP triggering alive -- Part::process reads the fire as
@@ -1075,6 +1113,10 @@ struct Fireflow : Module {
             smp[p] = SamplerPartState{};
             inst.sampler_clear(p);
             factoryTried[p] = false;
+            // Initialize means the shipped constants, not whatever the last
+            // listening session left in the menu.
+            feedDampHz[p] = spky::feed_cfg::kDampFixedHz;
+            feedDepth[p]  = spky::feed_cfg::kDepthBase;
             // Rack resets params (including SONG_A/B) to their default
             // BEFORE calling onReset(). Without this re-arm, an
             // already-ticking module's stale pre-Initialize rung would make
@@ -1116,6 +1158,11 @@ struct Fireflow : Module {
             // deliberately-cleared part on the first control tick after
             // patch open with no user gesture at all (I-1b).
             json_object_set_new(o, "factoryTried", json_boolean(factoryTried[p]));
+            // FEED audition values. Worth persisting precisely because they are
+            // audition values: a setting found by ear is useless if reopening
+            // the patch silently puts it back to the shipped constant.
+            json_object_set_new(o, "feedDampHz", json_real(feedDampHz[p]));
+            json_object_set_new(o, "feedDepth", json_real(feedDepth[p]));
             // BODY's excitation bus (design spec §6) -- patch state, not a
             // performance control. A missing key on load leaves the
             // constructor default (tape on, deck/audio off) in place, so old
@@ -1222,6 +1269,14 @@ struct Fireflow : Module {
             // which no longer overwrites this.
             json_t* v = json_object_get(o, "factoryTried");
             factoryTried[p] = v ? json_boolean_value(v) : false;
+            // Read-guarded and clamped: a patch predating this menu has no
+            // such keys and keeps the shipped constants, and a hand-edited
+            // file cannot push the DAMP one-pole somewhere init() would not.
+            if (json_t* e = json_object_get(o, "feedDampHz"))
+                feedDampHz[p] = clamp((float)json_real_value(e),
+                                      kFeedDampLoHz, kFeedDampHiHz);
+            if (json_t* e = json_object_get(o, "feedDepth"))
+                feedDepth[p] = clamp((float)json_real_value(e), 0.f, 1.f);
             // Read-guarded like every other field here: a patch saved before
             // this task has none of these keys, so the struct's own
             // defaults (tape on, deck/audio off) stand.
@@ -1558,6 +1613,13 @@ static bool isBbdSelected(Fireflow* module, int engineId) {
     return roundedEngineState(module, engineId) == 4;
 }
 
+// Same shape, for FEED. 5 is the ENG switch position the process() loop maps to
+// spky::ENGINE_FEED -- one comparison, one definition, so the menu's visibility
+// rule cannot drift from what the deck is actually running.
+static bool isFeedSelected(Fireflow* module, int engineId) {
+    return roundedEngineState(module, engineId) == 5;
+}
+
 // One definition of "this deck is running the Sampler", shared by the REC
 // pad's visibility rule (ctlVisible below) and the REC LED's (SamplerOnly
 // below). Duplicating the comparison would let the two drift, and this
@@ -1695,6 +1757,73 @@ struct PanelText : Widget {
     }
 };
 
+// --- FEED audition menu ---------------------------------------------------
+// Two values with no panel home and no lane the player can reach, both of them
+// recorded as open questions in docs/engine-map.md §9. They are here to be
+// heard, not performed.
+//
+// DAMP travels on a LOG scale: the interesting comparisons are ratios, and a
+// linear slider would spend three quarters of its travel above 4 kHz where the
+// ear hears almost no change. The range deliberately reaches 16 kHz, past the
+// point where half this engine's anti-aliasing stops working -- hearing where
+// it starts to alias is the point of the control.
+struct FeedDampQuantity : Quantity {
+    float* v;
+    explicit FeedDampQuantity(float* p) : v(p) {}
+    // The slider is 0..1; the value it carries is Hz. The range lives on the
+    // module so dataFromJson clamps against the same two numbers.
+    static constexpr float kLo = Fireflow::kFeedDampLoHz;
+    static constexpr float kHi = Fireflow::kFeedDampHiHz;
+    void setValue(float x) override {
+        *v = kLo * std::pow(kHi / kLo, clamp(x, 0.f, 1.f));
+    }
+    float getValue() override {
+        return std::log(*v / kLo) / std::log(kHi / kLo);
+    }
+    float getMinValue() override     { return 0.f; }
+    float getMaxValue() override     { return 1.f; }
+    float getDefaultValue() override {
+        return std::log(spky::feed_cfg::kDampFixedHz / kLo) / std::log(kHi / kLo);
+    }
+    std::string getLabel() override  { return "DAMP cutoff"; }
+    std::string getDisplayValueString() override {
+        return *v >= 1000.f ? string::f("%.2f kHz", *v / 1000.f)
+                            : string::f("%.0f Hz", *v);
+    }
+};
+
+struct FeedDampSlider : ui::Slider {
+    explicit FeedDampSlider(float* v) {
+        box.size.x = 180.f;
+        quantity = new FeedDampQuantity(v);
+    }
+    ~FeedDampSlider() override { delete quantity; }
+};
+
+// DEPTH is the FM index. Normalised 0..1 exactly as the LANE_MOTION base is,
+// so the percentage IS the value the engine reads -- no mapping to explain.
+struct FeedDepthQuantity : Quantity {
+    float* v;
+    explicit FeedDepthQuantity(float* p) : v(p) {}
+    void  setValue(float x) override { *v = clamp(x, 0.f, 1.f); }
+    float getValue() override        { return *v; }
+    float getMinValue() override     { return 0.f; }
+    float getMaxValue() override     { return 1.f; }
+    float getDefaultValue() override { return spky::feed_cfg::kDepthBase; }
+    std::string getLabel() override  { return "DEPTH (FM index)"; }
+    std::string getDisplayValueString() override {
+        return string::f("%.0f%%", *v * 100.f);
+    }
+};
+
+struct FeedDepthSlider : ui::Slider {
+    explicit FeedDepthSlider(float* v) {
+        box.size.x = 180.f;
+        quantity = new FeedDepthQuantity(v);
+    }
+    ~FeedDepthSlider() override { delete quantity; }
+};
+
 // --- sampler edit-layer menu ---------------------------------------------------
 // Overdub feedback is a continuous value with no panel home -- the menu
 // slider is its only surface. 0.95 (~-3 dB) is the engine default. The knob
@@ -1742,6 +1871,17 @@ static void appendFireflowMenu(Menu* menu, Fireflow* m) {
     // the same widgetless shape, but task 10 moved it back onto the panel as
     // a real performance control -- its slider lives there now
     // (kParamCtls/DetuneQuantity), not in this menu.
+
+    // Shown only on a FEED deck, the same rule the BBD entries below follow:
+    // a slider that reaches nothing is worse than no slider.
+    for (int p = 0; p < spky::PART_COUNT; ++p) {
+        if (!isFeedSelected(m, p ? ENGINE_B : ENGINE_A)) continue;
+        const std::string name = p ? "FEED B — audition" : "FEED A — audition";
+        menu->addChild(createSubmenuItem(name, "", [m, p](Menu* sub) {
+            sub->addChild(new FeedDepthSlider(&m->feedDepth[p]));
+            sub->addChild(new FeedDampSlider(&m->feedDampHz[p]));
+        }));
+    }
 
     if (isBbdSelected(m, ENGINE_A)) {
         menu->addChild(createSubmenuItem("BBD A — Freeze Attack", "", [m](Menu* sub) {

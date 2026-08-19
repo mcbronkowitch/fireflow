@@ -197,6 +197,10 @@ public:
     void set_voice_sub(float n)       { _synth.set_sub(n);       _wave.set_sub(n);       _body.set_sub(n);       _bbd.set_sub(n);       _feed.set_sub(n); }
     void set_voice_detune(float n)    { _synth.set_detune(n);    _wave.set_detune(n);    _body.set_detune(n);    _bbd.set_detune(n);    _feed.set_detune(n); }
     void set_voice_filt(float t)      { _synth.set_filt(t);      _wave.set_filt(t);      _body.set_filt(t);      _sampler.set_filt(t);          _bbd.set_filt(t);      _feed.set_filt(t); }
+    // FEED-only, and deliberately NOT in the broadcast line above: an audition
+    // control for the in-loop DAMP cutoff, with no meaning on the other five
+    // engines. Same shape as snap_sampler_cursor -- one engine, one setter.
+    void set_feed_damp_hz(float hz)   { _feed.set_damp_hz(hz); }
 
     SamplerEngine& sampler() { return _sampler; }
     const SamplerEngine& sampler() const { return _sampler; }

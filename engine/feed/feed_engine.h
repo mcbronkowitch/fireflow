@@ -43,6 +43,15 @@ public:
     void set_resonance(float n);   // RATIO
     void set_sub(float n);         // SUB
     void set_filt(float t);        // FILT, bipolar: a real LP on the output
+
+    // AUDITION only, not a performance control and not on the panel: the
+    // in-loop DAMP cutoff in Hz, so kDampFixedHz can be heard against brighter
+    // settings as well as the darker ones it was already rejected against.
+    // init() sets it to feed_cfg::kDampFixedHz; on the firmware nothing else
+    // ever calls it. See the definition for why the top of the range aliases
+    // on purpose.
+    void set_damp_hz(float hz);
+    float damp_hz_for_test() const { return _damp_hz; }
     // DETUNE means SPREAD on a FEED deck, and it gets there as the LANE_SIZE
     // base (host/vcv/src/Fireflow.cpp), not through this setter. Kept as an
     // explicit no-op rather than left unimplemented: Part::set_voice_detune
@@ -87,6 +96,7 @@ private:
     float    _sr = 48000.f;
     int      _ctrl_ctr = 0;
     float    _inv_sqrt_pairs = 1.f;   // 1/sqrt(kPairs), set in init()
+    float    _damp_hz = -1.f;         // set_damp_hz's guard; init() opens it
 
     // lanes
     float _bond = 0.f;

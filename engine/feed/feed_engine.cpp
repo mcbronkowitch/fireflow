@@ -29,10 +29,11 @@ void FeedEngine::init(float sample_rate) {
     _inv_sqrt_pairs = 1.f / std::sqrt(static_cast<float>(feed_cfg::kPairs));
     _env.init(_sr);
     _bank.init(_sr);
-    // The in-loop damp is fixed now (feed_config.h): set once, here, where _sr
-    // is known, and never touched again.
-    _bank.set_damp_coef(clampf(
-        1.f - std::exp(-6.2831853f * feed_cfg::kDampFixedHz / _sr), 0.f, 1.f));
+    // The in-loop damp defaults to feed_config.h's fixed value. set_damp_hz
+    // exists so it can be auditioned by hand; nothing but the VCV menu calls
+    // it, and on the firmware this line is the only writer.
+    _damp_hz = -1.f;                      // force the guard in set_damp_hz open
+    set_damp_hz(feed_cfg::kDampFixedHz);
     _svf_l.Init(_sr);
     _svf_r.Init(_sr);
     _svf_l.SetRes(feed_cfg::kFiltRes);   // no SetDrive: SvfLp has no drive term
@@ -391,6 +392,29 @@ void FeedEngine::set_resonance(float n) {
 }
 
 void FeedEngine::set_sub(float n) { _sub_n = clampf(n, 0.f, 1.f); }
+
+// The in-loop DAMP cutoff, in Hz. An AUDITION control, not a performance one:
+// feed_cfg::kDampFixedHz is the shipped value and the only thing that calls
+// this outside the VCV menu is init(). It exists because 3200 Hz was confirmed
+// only AGAINST DARKER alternatives -- variants B and C at 1200 and 500 Hz were
+// rejected by ear -- and nobody has heard it against a brighter one. That is a
+// listening question, and a listening question needs a knob.
+//
+// Half of this engine's anti-aliasing lives here (the other half is FeedPair's
+// two-sample average), so the top of the range is deliberately reachable: a
+// setting that aliases is a legitimate thing to hear, and finding where it
+// starts is the point of auditioning it.
+//
+// The exact-argument guard matters. The host pushes this every block from a
+// menu value that almost never moves, and without the compare that would be
+// one libm expf per part per block for nothing.
+void FeedEngine::set_damp_hz(float hz) {
+    const float f = clampf(hz, 20.f, 0.45f * _sr);
+    if (f == _damp_hz) return;
+    _damp_hz = f;
+    _bank.set_damp_coef(clampf(
+        1.f - std::exp(-6.2831853f * _damp_hz / _sr), 0.f, 1.f));
+}
 
 // FILT. The knob only stores; the cutoff and the fade gain are derived in
 // _control_tick, which is where the std::pow belongs -- once per 96 samples,
