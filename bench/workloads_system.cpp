@@ -648,10 +648,23 @@ float proc_inst_bbd_frozen()
 // see this. That is why the row needs its own proc as well as its own setup.
 void configure_inst_feed_engine_idle(Instrument& inst)
 {
-    // FALL at 0 is the shortest decay and FLOOR sits in the top quarter of the
-    // same control, so 0 is FLOOR 0 too and the envelope actually reaches
-    // zero. The worst-case row uses 1.f, which by design never goes quiet.
-    for (int p = 0; p < PART_COUNT; ++p) inst.set_voice_decay(p, 0.f);
+    for (int p = 0; p < PART_COUNT; ++p) {
+        // FALL at 0 is the shortest decay and FLOOR sits in the top quarter of
+        // the same control, so 0 is FLOOR 0 too and the envelope actually
+        // reaches zero. The worst-case row uses 1.f, which never goes quiet.
+        inst.set_voice_decay(p, 0.f);
+        // Getting to silence took all three of these, measured rather than
+        // assumed. DENS 0 alone leaves a note firing every 2.58 s -- k =
+        // round(0 * L) picks no groove cells, but the phrase boundary fires
+        // anyway -- which would have made this row a 93/7 mixture with the
+        // sounding case landing in max_cyc. RATE 0 stretches that past any
+        // measurement window; VARY 0 is "loop", so the cell cannot re-draw
+        // itself into one. Verified: 70 s of exactly zero after the single
+        // manual hit below, with active_voices 0 throughout.
+        inst.set_density(p, 0.f);
+        inst.set_rate(p, 0.f);
+        inst.set_variation(p, 0.f);
+    }
     const float* in = test_input();
     inst.trigger_manual(PART_A);
     inst.trigger_manual(PART_B);
