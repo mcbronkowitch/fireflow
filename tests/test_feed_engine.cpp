@@ -1391,12 +1391,24 @@ TEST_CASE("feed G33: FILT is a real low-pass, and its whole travel is live") {
 // the host pushes now is a trim whose centre is this engine's own neutral.
 
 TEST_CASE("feed: EDGE at 0 is exactly kDampFixedHz") {
+    // The property is "RETURNING to t == 0 lands exactly back on the engine's
+    // neutral", which is what every engine Tasks 4-7 add has to preserve. It
+    // must therefore be measured after the trim has actually moved: reading
+    // damp_hz_for_test() straight after init() and then calling set_edge(0.f)
+    // asserts nothing at all, because _edge is already 0 there and the
+    // exact-argument guard returns before the trim law runs -- the CHECK then
+    // compares the member against a copy of itself (review round 1, finding 1).
+    //
+    // Exact ==, not Approx: pow(2, kEdgeOctaves * 0) is exactly 1 and
+    // 3200 * 1 is exactly 3200, so "unchanged" here means bit-unchanged and
+    // an Approx would hide a law that merely lands nearby.
     FeedEngine e;
     e.init(48000.f);
-    const float neutral = e.damp_hz_for_test();
+    CHECK(e.damp_hz_for_test() == feed_cfg::kDampFixedHz);   // init's own path
+    e.set_edge(0.5f);
+    CHECK(e.damp_hz_for_test() != feed_cfg::kDampFixedHz);   // the trim moved
     e.set_edge(0.f);
-    CHECK(e.damp_hz_for_test() == neutral);
-    CHECK(neutral == doctest::Approx(feed_cfg::kDampFixedHz));
+    CHECK(e.damp_hz_for_test() == feed_cfg::kDampFixedHz);   // and came back
 }
 
 TEST_CASE("feed: EDGE spans kEdgeOctaves either side, symmetrically") {

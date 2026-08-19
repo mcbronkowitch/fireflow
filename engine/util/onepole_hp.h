@@ -32,6 +32,10 @@ namespace spky {
 // corner until the difference hides under a tolerance -- that is a gate
 // nothing can fail. FEED does not have this problem: its neutral is
 // kDampFixedHz and pow(2, k*0) == 1 makes it exact by construction.
+// init() LEAVES THE CORNER AT 20 Hz, not at 0. An engine whose EDGE neutral
+// is "the bottom rail" and which never calls set_hz() is therefore filtering
+// while believing it is neutral -- call set_hz(0.f) explicitly, or better,
+// skip process() entirely at t == 0 (see the paragraph above).
 class OnePoleHp {
 public:
     void init(float sample_rate) {
