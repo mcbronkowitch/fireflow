@@ -20,7 +20,7 @@ namespace feed_cfg {
 // so the desktop tasks can build, and it carries NO CPU claim of any kind: do
 // not quote it, do not size anything against it by hand, and do not let a test
 // depend on its value.
-constexpr int kPairs = 4;
+constexpr int kPairs = 2;   // SWEEP POINT 1 of 3 -- not a decision
 
 // False until the bench has run and kPairs above is its result. The gate
 // "feed G8" in tests/test_feed_engine.cpp fails while this is false, so an
