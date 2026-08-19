@@ -18,6 +18,7 @@
 #include <doctest/doctest.h>
 #include "instrument.h"
 #include <cmath>
+#include <vector>
 
 using namespace spky;
 
@@ -53,8 +54,34 @@ void render(Instrument& inst, float* l, float* r, int n) {
 // vacuously.
 void edge_case(EngineId eng) {
     static float a[24000], b[24000], c[24000], d[24000], e[24000], f[24000];
+    // SAMPLER needs its own record memory. Instrument::init(sample_rate)
+    // alone forwards an empty FxMem{}, which leaves every sampler_buf
+    // pointer null -- SamplerEngine::_buf then reports !valid() and
+    // load_sample() is a silent no-op (FxMem::sampler_buf's own comment:
+    // "nullptr -> that part's sampler runs silent"). Passing a real FxMem
+    // here does NOT turn on reverb/echo/BBD -- those pointers stay null and
+    // their subsystems no-op exactly as they do under the plain
+    // no-argument init(), so this is still "no FX chain" in every way that
+    // matters to this test, just with a working sampler buffer. Three
+    // independent buffers, one per instrument, so i0/i1/i2 cannot leak
+    // record state into each other.
+    std::vector<SampleBuffer::Frame> mem0, mem1, mem2;
     Instrument i0, i1, i2;
-    i0.init(48000.f); i1.init(48000.f); i2.init(48000.f);  // no FX chain
+    if (eng == ENGINE_SAMPLER) {
+        constexpr size_t kFrames = 48000;   // 1 s @ 48 kHz, plenty for 24000 samples
+        mem0.assign(kFrames, SampleBuffer::Frame{});
+        mem1.assign(kFrames, SampleBuffer::Frame{});
+        mem2.assign(kFrames, SampleBuffer::Frame{});
+        FxMem fx0, fx1, fx2;
+        fx0.sampler_buf[PART_A] = mem0.data(); fx0.sampler_frames = kFrames;
+        fx1.sampler_buf[PART_A] = mem1.data(); fx1.sampler_frames = kFrames;
+        fx2.sampler_buf[PART_A] = mem2.data(); fx2.sampler_frames = kFrames;
+        i0.init(48000.f, fx0);
+        i1.init(48000.f, fx1);
+        i2.init(48000.f, fx2);
+    } else {
+        i0.init(48000.f); i1.init(48000.f); i2.init(48000.f);  // no FX chain
+    }
     i0.set_engine(PART_A, eng);
     i1.set_engine(PART_A, eng);
     i2.set_engine(PART_A, eng);
@@ -69,6 +96,20 @@ void edge_case(EngineId eng) {
         i1.set_voice_resonance(PART_A, 0.2f);
         i2.set_voice_resonance(PART_A, 0.2f);
     }
+    // SAMPLER needs MATERIAL, not a note -- a trigger into an empty buffer
+    // is still silence. A part boots in FLOW (Part::init, "lanes boot in
+    // FLOW -> drone"), so once content is loaded the cloud spawns on its
+    // own; no set_flow() call needed here. Same content on all three so the
+    // NEUTRAL half compares like with like.
+    if (eng == ENGINE_SAMPLER) {
+        std::vector<float> l(4800), r(4800);
+        for (size_t i = 0; i < l.size(); ++i)
+            l[i] = std::sin(6.2831853f * 441.f * float(i) / 48000.f);
+        r = l;
+        i0.load_sample(PART_A, l.data(), r.data(), l.size());
+        i1.load_sample(PART_A, l.data(), r.data(), l.size());
+        i2.load_sample(PART_A, l.data(), r.data(), l.size());
+    }
     /* i0: the knob is never touched */
     i1.set_voice_edge(PART_A, 0.f);          // neutral
     i2.set_voice_edge(PART_A, 0.9f);         // trimmed
@@ -77,6 +118,28 @@ void edge_case(EngineId eng) {
         i0.trigger_manual(PART_A);
         i1.trigger_manual(PART_A);
         i2.trigger_manual(PART_A);
+    }
+    // SAMPLER only: every Part boots on ENGINE_SYNTH (Part::init) and
+    // set_engine() above only ARMS the switch -- Part::process() crossfades
+    // out the old engine and into the new one over two Hann ramps of 4 ms
+    // each (SoftSwitch::init, fx_util.h), ~384 samples total. set_voice_edge
+    // reaches SYNTH too, so for ~384 samples the still-live SYNTH drone
+    // (auto-triggered by "lanes boot in FLOW", synth_engine.cpp's
+    // _auto_pending) differs between i1 (EDGE 0) and i2 (EDGE 0.9),
+    // measured: with the sampler's own set_edge() still a stub, diff over
+    // [0, 24000) was 0.167939, entirely inside [0, 500) (probed with a
+    // split-window CAPTURE, removed once this was understood) -- a REACH
+    // pass with nothing behind it. A short warm-up render, discarded, lets
+    // the crossfade finish so the measurement below is the SAMPLER's own
+    // output, not the boot engine's tail.
+    if (eng == ENGINE_SAMPLER) {
+        constexpr int kWarmup = 1024;   // must stay a multiple of 64: render()
+                                         // steps in fixed 64-sample blocks and
+                                         // writes past a non-multiple length
+        std::vector<float> wl(kWarmup), wr(kWarmup);
+        render(i0, wl.data(), wr.data(), kWarmup);
+        render(i1, wl.data(), wr.data(), kWarmup);
+        render(i2, wl.data(), wr.data(), kWarmup);
     }
     render(i0, e, f, 24000);
     render(i1, a, b, 24000);
@@ -116,3 +179,4 @@ TEST_CASE("edge: the trim reaches FEED")    { edge_case(ENGINE_FEED); }
 TEST_CASE("edge: the trim reaches BODY")    { edge_case(ENGINE_BODY); }
 TEST_CASE("edge: the trim reaches SYNTH")   { edge_case(ENGINE_SYNTH); }
 TEST_CASE("edge: the trim reaches WAVE")    { edge_case(ENGINE_WAVE); }
+TEST_CASE("edge: the trim reaches SAMPLER") { edge_case(ENGINE_SAMPLER); }

@@ -1,4 +1,5 @@
 #pragma once
+#include <cmath>
 #include <cstdint>
 #include "mod/rng.h"
 #include "parts/engine_iface.h"
@@ -7,6 +8,7 @@
 #include "sampler/sampler_config.h"
 #include "sampler/slice_map.h"
 #include "util/onepole.h"
+#include "util/onepole_hp.h"
 #include "util/svf_lp.h"     // low-pass-only SVF; see the header for why
 
 namespace spky {
@@ -245,12 +247,37 @@ public:
     void set_window_decay(float n);
     void set_filt(float n);
     // EDGE, bipolar, 0 == this engine's own neutral (spec 2026-08-19
-    // voice-knobs-dpth-edge, 4.2).
+    // voice-knobs-dpth-edge, 4.2/4.3): a one-pole high-pass on the summed
+    // grain bus, own rails and own sum point -- SAMPLER's leg of the same
+    // idiom Task 5 built for SYNTH/WAVE (synth_engine.h's set_edge()), not
+    // shared state with them.
     //
-    // STUB. It stores the trim and does nothing else, so EDGE is silently
-    // DEAD on a sampler deck. TASK 6 of that plan replaces it with a
-    // high-pass on the summed grain bus.
-    void set_edge(float t) { _edge = clampf(t, -1.f, 1.f); }
+    // Stores the trim and -- only when it leaves 0 -- keeps _hp_l/_hp_r's
+    // coefficient current; process() is what actually applies the filter,
+    // gated on the identical `_edge != 0.f` test (see process() in the
+    // .cpp). t == 0 SKIPS both: engine/util/onepole_hp.h's own measurement
+    // is that the corner's bottom rail is a bypass on paper but not in
+    // float32 (the {x1, y1} history keeps updating and rounds every
+    // sample), so a coefficient computed here for a process() call that
+    // never happens at _edge == 0 would be dead work, and running the filter
+    // AT its bottom rail to "be safe" would break the bit-exact neutral this
+    // knob promises (spec 4.2) instead of protecting it.
+    //
+    // DELIBERATELY does not reset() _hp_l/_hp_r when re-entering the trim
+    // (_edge going 0 -> nonzero): same open question Task 5 left for SYNTH/
+    // WAVE (synth_engine.h's set_edge() comment) -- the filter resumes from
+    // whatever {x1, y1} it held from its last nonzero run rather than a
+    // fresh start, and a listening pass picks between the two discontinuities
+    // if this one turns out to be the wrong choice.
+    void set_edge(float t) {
+        _edge = clampf(t, -1.f, 1.f);
+        if (_edge != 0.f) {
+            const float hz = sampler_cfg::kEdgeHpNeutralHz *
+                              std::pow(2.f, sampler_cfg::kEdgeOctaves * _edge);
+            _hp_l.set_hz(hz);
+            _hp_r.set_hz(hz);
+        }
+    }
     void set_resonance(float n);
     void set_sub(float n);
     void set_detune(float n);
@@ -306,6 +333,23 @@ public:
     int test_cursor() const    { return _cursor; }
     int test_last_slot() const { return _last_slot; }
 
+#ifdef SPKY_TESTING
+    // Test-only window onto EDGE's high-pass, guarded like OnePoleHp's own
+    // x1_for_test()/y1_for_test() (engine/util/onepole_hp.h) and the
+    // SPKY_TESTING accessors elsewhere in this codebase. Exists because
+    // "sampler: EDGE at 0 is bit-identical to no EDGE at all"
+    // (tests/test_sampler_engine.cpp) cannot, by comparing two engine
+    // instances that BOTH end up at EDGE == 0, prove process() actually
+    // SKIPPED _hp_l/_hp_r rather than running them at a coefficient that
+    // happens to match -- checked directly by removing the skip and
+    // rerunning that exact comparison, which still passed (two instances on
+    // the identical deterministic path land on identical bits regardless).
+    // Reading the filter's own state is the only way to tell "skipped" from
+    // "ran once transparently" apart.
+    float edge_hp_x1_for_test() const { return _hp_l.x1_for_test(); }
+    float edge_hp_y1_for_test() const { return _hp_l.y1_for_test(); }
+#endif
+
 private:
     void  _update_control();     // recompute derived values on the raster
     // Das effektive Intervall bis zum naechsten Spawn: Grundintervall mal
@@ -358,6 +402,13 @@ private:
     Rng   _rng;
     uint32_t _seed = 0xC0FFEEu;
 
+    // EDGE's output high-pass (Task 6), applied to the grain bus BEFORE
+    // _svf_l/_svf_r below -- process() (.cpp) documents the order, which is
+    // fixed and deliberate: two independent filters on a linear sum point,
+    // so nothing about their signal path forces one order over the other,
+    // but leaving it undocumented is exactly the kind of ambiguity a later
+    // change could silently invert.
+    OnePoleHp _hp_l, _hp_r;
     SvfLp _svf_l, _svf_r;
     OnePole _level;
     OnePole _norm;          // smoothed 1/sqrt(active) -- see _update_control
@@ -430,7 +481,8 @@ private:
     // voice row
     float _atk_n = 0.3f, _dec_n = 0.3f;
     float _filt_amt = 0.f, _res_n = 0.15f, _sub_n = 0.f, _detune_n = 0.f;
-    // EDGE knob -1..+1 (boot: neutral). Stored and unread -- see set_edge().
+    // EDGE knob -1..+1 (boot: neutral). Drives _hp_l/_hp_r above -- see
+    // set_edge().
     float _edge = 0.f;
 };
 

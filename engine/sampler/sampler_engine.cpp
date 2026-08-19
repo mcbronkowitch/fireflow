@@ -108,6 +108,16 @@ void SamplerEngine::init(float sample_rate) {
     _svf_l.SetRes(_res_n);   // no SetDrive: SvfLp has no drive term (svf_lp.h)
     _svf_r.SetRes(_res_n);
 
+    // EDGE's output high-pass (spec 2026-08-19 voice-knobs-dpth-edge, 4.3).
+    // init() sets a 20 Hz corner (engine/util/onepole_hp.h) that is provably
+    // never read: process() skips _hp_l/_hp_r entirely while _edge == 0 (the
+    // boot value), and set_edge() always overwrites the coefficient before
+    // any nonzero-_edge process() call can reach it. What init() has to do
+    // here is put _sr and the {x1, y1} history in a known state -- same
+    // reasoning as SynthEngineT<V>::init (synth_engine.cpp).
+    _hp_l.init(sample_rate);
+    _hp_r.init(sample_rate);
+
     _level.init(sample_rate, 0.01f);   // 10 ms, as the synth's LEVEL
     _norm.init(sample_rate, kNormSmoothS);
     _norm.reset(1.f);   // no grains yet == the n==0 baseline _update_control gives
@@ -941,7 +951,19 @@ void SamplerEngine::process(float& outL, float& outR) {
     l *= norm;
     r *= norm;
 
-    // --- filter, then LEVEL with the FILT silence fade folded in ---
+    // --- EDGE's high-pass, then FILT's low-pass, then LEVEL ---
+    // EDGE runs BEFORE the SVF, not after (spec 2026-08-19
+    // voice-knobs-dpth-edge, 4.3): a fixed, documented order for the two
+    // filters on this linear sum point (sampler_engine.h's _hp_l/_hp_r
+    // comment). _edge == 0 SKIPS process() entirely rather than running the
+    // filter at its bottom rail -- see set_edge() and
+    // engine/util/onepole_hp.h's own measurement that the bottom rail is not
+    // a bit-exact bypass in float32. This is why t == 0 is genuinely
+    // bit-identical to a deck that never called set_edge.
+    if (_edge != 0.f) {
+        l = _hp_l.process(l);
+        r = _hp_r.process(r);
+    }
     _svf_l.Process(l);
     _svf_r.Process(r);
     l = _svf_l.Low();

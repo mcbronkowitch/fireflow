@@ -53,6 +53,21 @@ public:
         _x1 = x;
         return _y1;
     }
+#ifdef SPKY_TESTING
+    // Test-only window onto the filter's own {x1, y1} history, guarded like
+    // OnePole::coef() (engine/util/onepole.h) and the other SPKY_TESTING
+    // accessors. Exists because a bit-equality comparison between two
+    // engine instances that BOTH end up at EDGE == 0 cannot, by itself,
+    // prove process() actually SKIPPED this filter rather than merely
+    // running it at a coefficient that happens to match: two instances
+    // taking the identical deterministic code path land on the identical
+    // float bits regardless. Only this filter's OWN state -- read directly,
+    // not inferred from a downstream comparison -- can tell "skipped" from
+    // "ran once transparently" apart: it stays exactly {0, 0} only if
+    // process() was never called at all.
+    float x1_for_test() const { return _x1; }
+    float y1_for_test() const { return _y1; }
+#endif
 private:
     float _sr = 48000.f, _a = 1.f, _x1 = 0.f, _y1 = 0.f;
 };
