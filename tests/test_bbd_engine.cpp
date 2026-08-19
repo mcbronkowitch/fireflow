@@ -6,6 +6,7 @@
 #include "fx/flux.h"
 #include "mod/rng.h"
 #include "util/svf_bp.h"
+#include "low_energy.h"
 #include <algorithm>
 #include <chrono>
 #include <vector>
@@ -1514,4 +1515,163 @@ TEST_CASE("bbd engine: the output stays inside its stated bound with BOTH decks 
     // The bound itself, per deck, before the sum and before the limiter.
     CHECK(peak_a <= 1.f);
     CHECK(peak_b <= 1.f);
+}
+
+// EDGE (Task 7, spec 2026-08-19 voice-knobs-dpth-edge, 4.5): a pre-emphasis
+// high-pass applied in process_in(), ahead of SUB's _in_gain and the line --
+// see bbd_engine.cpp's process_in() and set_edge() for the wiring.
+
+TEST_CASE("bbd engine: EDGE at 0 leaves the line exactly as it was") {
+    // Bit equality between a deck that never hears set_edge and one that
+    // hears set_edge(0.f) -- same rig, same input, same seed (both engines
+    // use the SAME s_bbd_l/s_bbd_r buffers in turn, and init_buffers()'s own
+    // comment is that BbdLine::Reset seeds the dither from one fixed
+    // constant, so two freshly-init'd engines fed identical input agree
+    // regardless).
+    //
+    // This loop is a REGRESSION guard, not the bypass proof: two engines
+    // that BOTH land on _edge == 0 take the identical deterministic code
+    // path on identical content and therefore land on identical bits EITHER
+    // WAY, whether or not process_in() actually skips _hp_l/_hp_r (same
+    // reasoning as tests/test_sampler_engine.cpp's "sampler: EDGE at 0 is
+    // bit-identical to no EDGE at all"). The case below this one is what
+    // actually pins the skip.
+    auto render = [](bool touch_edge) {
+        BbdEngine e;
+        e.init(48000.f);
+        e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
+        e.set_cycle(0.5f);
+        float t[LANE_COUNT] = { 0.3f, 1.f, 0.5f, 0.6f, 1.f };
+        e.set_targets(t, 0.5f);
+        if (touch_edge) e.set_edge(0.f);
+        std::vector<float> out;
+        out.reserve(24000);
+        for (int i = 0; i < 24000; ++i) {
+            float l, r;
+            const float x = std::sin(i * 0.05f) * 0.5f;
+            e.process_in(x, x);
+            e.process(l, r);
+            out.push_back(l);
+        }
+        return out;
+    };
+    const auto untouched = render(false);
+    const auto neutral = render(true);
+    REQUIRE(untouched.size() == neutral.size());
+    int mismatch = 0;
+    for (size_t i = 0; i < untouched.size(); ++i)
+        if (untouched[i] != neutral[i]) ++mismatch;
+    CHECK(mismatch == 0);
+}
+
+TEST_CASE("bbd engine: EDGE at 0 provably skips the pre-emphasis filter") {
+    // The white-box half the case above cannot provide (see its own
+    // comment): reads _hp_l's OWN {x1, y1} history straight off a real
+    // render at _edge == 0, which stays at its post-init() {0, 0} only if
+    // process_in() never called the filter at all -- removing the skip in
+    // process_in() turns this into a hard fail (same idiom as
+    // tests/test_sampler_engine.cpp's SPKY_TESTING assertions, Task 6).
+    BbdEngine e;
+    e.init(48000.f);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
+    e.set_cycle(0.5f);
+    float t[LANE_COUNT] = { 0.3f, 1.f, 0.5f, 0.6f, 1.f };
+    e.set_targets(t, 0.5f);
+    e.set_edge(0.f);
+    for (int i = 0; i < 4800; ++i) {
+        float l, r;
+        const float x = std::sin(i * 0.05f) * 0.5f;
+        e.process_in(x, x);
+        e.process(l, r);
+    }
+    CHECK(e.edge_hp_x1_for_test() == 0.f);
+    CHECK(e.edge_hp_y1_for_test() == 0.f);
+}
+
+TEST_CASE("bbd engine: EDGE shapes what ARRIVES, not how it decays") {
+    // The distinguishing test, and the reason this cell is not redundant
+    // with FILT (the loss pole, INSIDE the loop, applied every circulation)
+    // or RES (the feedback-path tilt, also every circulation): EDGE must
+    // change the FIRST pass, because it acts once, at process_in(), on
+    // whatever arrives from outside -- never on what is already circulating.
+    //
+    // Fixture: FLOW at PITCH 0.5, cycle 0.1 s, SIZE at the top rung (div 1,
+    // T == cycle) -> delay ~= 0.1 s. LEVEL 0.5 (not 1) is deliberate: at
+    // MIX 1 the very first output segment is pure WET and the line has not
+    // had time to return anything yet, which would make "pass 1" compare
+    // two near-silences -- vacuous. At MIX 0.5 pass 1 is dominated by the
+    // live dry tap, which is exactly what "shapes what ARRIVES" means:
+    // EDGE's effect on the input is audible on the very first thing that
+    // reaches the output, not only three delay periods in.
+    //
+    // DRIVE 0.7 / FEEDBACK (MOTION) 1.0 is NOT an arbitrary choice, and this
+    // is the one place the non-redundancy claim actually lives or dies --
+    // measured (this fixture, scratchpad probe before committing to it): at
+    // DRIVE 0 / MOTION 0.5 the low-band ratio came out r1 = 0.7466,
+    // r2 = 0.6802, r3 = 0.6596, r4 = 0.7067 -- non-monotonic, and r1 vs r4
+    // land inside the 5 % epsilon (0.7466 vs 0.7067, doctest::Approx calls
+    // them equal), which would have reported a FALSE redundancy failure.
+    // The reason: pass 0 is dry-dominated and therefore DRIVE-independent
+    // (the compander only touches the WET path), so a fixture with little
+    // compander drive gives the wet passes almost nothing beyond linear
+    // decay to diverge on, and a linear per-pass loop preserves an initial
+    // spectral imprint proportionally -- which is indistinguishable from "a
+    // fixed gain trim" in exactly the way spec 4.5 warns about. Raising
+    // DRIVE (real compander nonlinearity) and FEEDBACK (more circulations
+    // for that nonlinearity to act on) gives the trend actually asserted
+    // below: r1 = 0.7466, r2 = 0.6802, r3 = 0.6596, r4 = 0.6352 --
+    // monotonically diverging, comfortably outside the epsilon. Do not
+    // "fix" a future near-equal reading here by loosening the epsilon; move
+    // the operating point the way this comment already did once.
+    auto delay_samples = [](BbdEngine& e, float sr) {
+        return static_cast<int>(e.stages() / (2.f * e.clock_hz()) * sr + 0.5f);
+    };
+    auto render_burst = [&](float edge, int total) {
+        BbdEngine e;
+        e.init(48000.f);
+        e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
+        e.set_cycle(0.1f);
+        e.set_flow(true);
+        float t[LANE_COUNT] = { 0.7f, 1.f, 0.5f, 1.f, 0.5f };   // SRC SIZE PITCH MOT LEVEL
+        e.set_targets(t, 0.5f);
+        e.set_edge(edge);
+        const int d = delay_samples(e, 48000.f);
+        REQUIRE(d > 0);
+        REQUIRE(total >= 4 * d);
+        Rng rng; rng.seed(0xfeedu);
+        std::vector<float> out(static_cast<size_t>(total));
+        for (int i = 0; i < total; ++i) {
+            const float in = i < d ? rng.next_bipolar() * 0.3f : 0.f;
+            float l, r;
+            e.process_in(in, in);
+            e.process(l, r);
+            out[static_cast<size_t>(i)] = l;
+        }
+        return std::make_pair(out, d);
+    };
+    auto pass = [&](float edge, int n) {
+        const auto [v, d] = render_burst(edge, 24000);
+        const size_t lo = static_cast<size_t>(n) * static_cast<size_t>(d);
+        const size_t hi = lo + static_cast<size_t>(d);
+        REQUIRE(hi <= v.size());
+        return low_energy({v.begin() + static_cast<long>(lo),
+                            v.begin() + static_cast<long>(hi)});
+    };
+    const float e0_p0 = pass(0.f, 0), e1_p0 = pass(1.f, 0);
+    const float e0_p3 = pass(0.f, 3), e1_p3 = pass(1.f, 3);
+    CAPTURE(e0_p0);
+    CAPTURE(e1_p0);
+    CAPTURE(e0_p3);
+    CAPTURE(e1_p3);
+    // Pass 1 must move: that is the claim.
+    CHECK(e1_p0 < 0.8f * e0_p0);
+    // And it must not move merely because the whole line got quieter -- if
+    // the ratio at pass 4 equals the ratio at pass 1, EDGE is behaving like
+    // a loss pole and this cell IS redundant. That is a design failure to
+    // report, not a threshold to widen (spec 4.5's whole argument).
+    const float r1 = e1_p0 / e0_p0;
+    const float r4 = e1_p3 / e0_p3;
+    CAPTURE(r1);
+    CAPTURE(r4);
+    CHECK(r1 != doctest::Approx(r4).epsilon(0.05));
 }

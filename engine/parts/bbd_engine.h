@@ -5,6 +5,7 @@
 #include "parts/bbd_music.h"
 #include "parts/engine_iface.h"
 #include "util/fast_tanh.h"
+#include "util/onepole_hp.h"
 
 namespace spky {
 
@@ -103,13 +104,27 @@ public:
     // two file-scope singletons -- see the .cpp for the full argument).
     void set_filt(float t);
     // EDGE, bipolar, 0 == this engine's own neutral (spec 2026-08-19
-    // voice-knobs-dpth-edge, 4.2).
+    // voice-knobs-dpth-edge, 4.2/4.5): a one-pole high-pass on the audio
+    // BEFORE it reaches the line -- the only cell that shapes what ARRIVES
+    // rather than how it decays, which is why it is pre-emphasis and not a
+    // second FILT (spec 4.5: FILT is the loss pole INSIDE the loop, RES is
+    // the feedback-path tilt, both act on every circulation; this one acts
+    // once, at the write). See process_in() (.cpp) for where it sits
+    // relative to _in_gain (SUB) and the line.
     //
-    // STUB. It stores the trim and does nothing else, so EDGE is silently
-    // DEAD on a BBD deck. TASK 7 of that plan replaces it with the
-    // pre-emphasis one-pole ahead of the line (spec 4.5 for why it is
-    // pre-emphasis and not kFilterHz).
-    void set_edge(float t) { _edge = clampf(t, -1.f, 1.f); }
+    // Same "t == 0 skips process() entirely" contract as Task 5/6
+    // (synth_engine.h / sampler_engine.h's set_edge()): computing a
+    // coefficient here for a process_in() call that never reaches the filter
+    // at _edge == 0 would be dead work, and engine/util/onepole_hp.h's own
+    // measurement is that running the filter AT its bottom rail is not a
+    // bit-exact bypass in float32 -- only skipping it is.
+    //
+    // DELIBERATELY does not reset() _hp_l/_hp_r when re-entering the trim
+    // (_edge going 0 -> nonzero): same open question left for SYNTH/WAVE and
+    // the sampler -- the filter resumes from whatever {x1, y1} it held from
+    // its last nonzero run rather than a fresh start, and a listening pass
+    // picks between the two discontinuities if this turns out to be wrong.
+    void set_edge(float t);
     // Whether the freeze is ENGAGED, not whether its ramp has finished: the
     // gate's own state, so a caller (and the FLOW rule's test) can read the
     // decision without first running the ramp out. _freeze_want is only ever
@@ -168,6 +183,21 @@ public:
     // number; they are not any more, and every test about how the engine
     // ANSWERS modulation has to read this one, not clock_hz().
     float clock_now() const { return _f_now; }
+
+#ifdef SPKY_TESTING
+    // Test-only window onto EDGE's pre-emphasis high-pass, guarded like
+    // OnePoleHp's own x1_for_test()/y1_for_test() (engine/util/onepole_hp.h)
+    // and SamplerEngine's edge_hp_x1_for_test()/edge_hp_y1_for_test()
+    // (Task 6, same idiom). Exists for the identical reason: a bit-equality
+    // comparison between two engine instances that BOTH end up at
+    // _edge == 0 cannot, by itself, prove process_in() actually SKIPPED
+    // _hp_l/_hp_r rather than running them at a coefficient that happens to
+    // match -- two instances on the identical deterministic path land on
+    // identical bits either way. Only the filter's OWN state -- read
+    // directly -- tells "skipped" from "ran once transparently" apart.
+    float edge_hp_x1_for_test() const { return _hp_l.x1_for_test(); }
+    float edge_hp_y1_for_test() const { return _hp_l.y1_for_test(); }
+#endif
 
 private:
     // Pitch-aware: derives _f_clk from _pitch/_flow/_latched (STEP/FLOW rule),
@@ -250,8 +280,18 @@ private:
     // so an engine never touched by set_filt() behaves exactly as it did
     // before this task.
     float _loss_a = bbd_tuning::kLossCoef;
-    // EDGE knob -1..+1 (boot: neutral). Stored and unread -- see set_edge().
+    // EDGE knob -1..+1 (boot: neutral). Drives _hp_l/_hp_r below -- see
+    // set_edge() (.cpp).
     float _edge = 0.f;
+    // EDGE's pre-emphasis high-pass (Task 7), applied in process_in() BEFORE
+    // _in_gain and before the sample ever reaches _l/_r -- the .cpp's
+    // process_in() documents the exact order. Own pair, not shared with any
+    // other engine: SYNTH/WAVE filter their summed VOICE output
+    // (synth_engine.h), the sampler filters its summed grain bus
+    // (sampler_engine.h), and this one filters the deck's INPUT -- the one
+    // signal point on this engine that is not already downstream of FILT's
+    // loss pole or RES's feedback tilt.
+    OnePoleHp _hp_l, _hp_r;
     // RESONANCE: the feedback-path tilt at freeze_amount() == 0. 0 at the
     // knob's centre, so an engine never touched by set_resonance() is
     // bit-exact through the tilt at rest, same as before this task.

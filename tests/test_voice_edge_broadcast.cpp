@@ -7,8 +7,39 @@
 // the set_voice_* block, engine_iface.h says it again about process_in/
 // consumes_input). One case per engine, each asserting BOTH halves of what
 // the knob promises: that EDGE at a non-zero trim CHANGES that engine's
-// output, and that EDGE at 0 leaves it bit-identical to a deck whose knob was
-// never touched.
+// output (REACH), and that EDGE at 0 leaves it bit-identical to a deck whose
+// knob was never touched (NEUTRAL).
+//
+// WHAT THE NEUTRAL HALF DOES NOT PROVE (fix-round-1 finding, Task 7): on
+// every engine but FEED, i0 (set_voice_edge never called) and i1
+// (set_voice_edge(0.f)) both land on the identical stored _edge == 0 through
+// the identical deterministic code path -- so bit equality between them
+// proves the SETTER is side-effect-free at zero, not that neutral means "no
+// filter runs". A set_edge(0.f) that ran a filter at its bottom rail instead
+// of skipping it would pass this exact loop too, on every engine, because i0
+// and i1 would then both run that filter identically (two instances on the
+// same deterministic path land on the same bits either way). Where each
+// engine's REAL bypass proof -- that process() actually SKIPS the filter
+// rather than running it transparently -- actually lives:
+//   SYNTH and WAVE: the stored-hash gates ctrl_identity and
+//     wave_formant_sweep, which compare against pre-EDGE baselines and would
+//     move the moment a filter ran at boot.
+//   SAMPLER: the #ifdef SPKY_TESTING state assertions in
+//     tests/test_sampler_engine.cpp ("sampler: EDGE at 0 is bit-identical to
+//     no EDGE at all"), reading _hp_l's own {x1, y1} history.
+//   BBD: the same idiom, in tests/test_bbd_engine.cpp ("bbd engine: EDGE at
+//     0 provably skips the pre-emphasis filter").
+//   BODY: not applicable in the same shape -- Exciter's corner filter ALWAYS
+//     runs, so t == 0 means "coefficient unchanged", pinned in
+//     tests/test_body_voice.cpp ("body: EDGE at 0 leaves the exciter's
+//     corner exactly where RESO put it") -- against the coefficient RESO
+//     alone had already computed, not a literal named constant, because
+//     BODY's neutral corner moves with RESO/character rather than sitting at
+//     one fixed value the way FEED's does.
+//   FEED: also always-runs, and its case (test_feed_engine.cpp, "feed: EDGE
+//     at 0 is exactly kDampFixedHz") IS pinned directly against a named
+//     engine constant, feed_cfg::kDampFixedHz -- FEED's neutral corner is a
+//     fixed Hz, not a RESO-derived one, so it has one to pin against.
 //
 // This file ends the DPTH/EDGE plan with SIX cases, one per engine. Task 3
 // ships only FEED, because Task 3 is the spine: the other five engines carry
@@ -17,6 +48,7 @@
 // last step of your task, not an optional extra.
 #include <doctest/doctest.h>
 #include "instrument.h"
+#include "parts/bbd_engine.h"
 #include <cmath>
 #include <vector>
 
@@ -27,6 +59,13 @@ namespace {
 void render(Instrument& inst, float* l, float* r, int n) {
     float in[64] = {};
     for (int i = 0; i < n; i += 64) inst.process(in, in, l + i, r + i, 64);
+}
+
+// BBD is input-consuming (IPartEngine::consumes_input) and renders silence
+// on a plain render() above -- this overload drives it with real audio,
+// block by block, from a caller-supplied buffer.
+void render_with_input(Instrument& inst, const float* in, float* l, float* r, int n) {
+    for (int i = 0; i < n; i += 64) inst.process(in + i, in + i, l + i, r + i, 64);
 }
 
 // THREE identical instruments, rendered in lockstep and differing only in
@@ -44,14 +83,13 @@ void render(Instrument& inst, float* l, float* r, int n) {
 // its bottom rail is a bypass on paper and not in float32. i2 against i1 is
 // the REACH half.
 //
-// EXTENDING THIS (Tasks 4-7): FEED is a continuously running network and
-// needs nothing beyond set_engine to make sound. The four voice engines and
-// the input-consuming BBD do not -- they render silence until something
-// excites them. When you add your engine's case, teach this helper to drive
-// it (a trigger_manual on all THREE instruments, a fed input buffer for the
-// BBD) rather than reaching for the threshold below. Whatever you add has to
-// reach i0 as well, or the neutral half compares two silences and passes
-// vacuously.
+// Tasks 4-7 (all landed): FEED is a continuously running network and needs
+// nothing beyond set_engine to make sound. The four voice engines needed a
+// trigger_manual on all THREE instruments; BBD, voiceless and
+// input-consuming, needed a fed input buffer instead (render_with_input()
+// above) -- neither excitation shortcut reaches for the REACH threshold
+// below, and both had to reach i0 as well, or the neutral half would compare
+// two silences and pass vacuously.
 void edge_case(EngineId eng) {
     static float a[24000], b[24000], c[24000], d[24000], e[24000], f[24000];
     // SAMPLER needs its own record memory. Instrument::init(sample_rate)
@@ -66,6 +104,15 @@ void edge_case(EngineId eng) {
     // independent buffers, one per instrument, so i0/i1/i2 cannot leak
     // record state into each other.
     std::vector<SampleBuffer::Frame> mem0, mem1, mem2;
+    // BBD needs its own LINE memory the same way SAMPLER needs record memory:
+    // FxMem::bbd's own pointers default null, and BbdEngine::process() checks
+    // exactly that (`if (!_buf_ok) { outL = 0.f; outR = 0.f; return; }`,
+    // bbd_engine.cpp) -- an instrument built with the plain no-argument
+    // init() renders a permanently silent BBD deck regardless of what
+    // reaches process_in(). Three independent line pairs, one per
+    // instrument, same reasoning as SAMPLER's mem0/mem1/mem2.
+    static float bbd0[2][BbdEngine::kCells], bbd1[2][BbdEngine::kCells],
+                 bbd2[2][BbdEngine::kCells];
     Instrument i0, i1, i2;
     if (eng == ENGINE_SAMPLER) {
         constexpr size_t kFrames = 48000;   // 1 s @ 48 kHz, plenty for 24000 samples
@@ -76,6 +123,14 @@ void edge_case(EngineId eng) {
         fx0.sampler_buf[PART_A] = mem0.data(); fx0.sampler_frames = kFrames;
         fx1.sampler_buf[PART_A] = mem1.data(); fx1.sampler_frames = kFrames;
         fx2.sampler_buf[PART_A] = mem2.data(); fx2.sampler_frames = kFrames;
+        i0.init(48000.f, fx0);
+        i1.init(48000.f, fx1);
+        i2.init(48000.f, fx2);
+    } else if (eng == ENGINE_BBD) {
+        FxMem fx0, fx1, fx2;
+        fx0.bbd[PART_A][0] = bbd0[0]; fx0.bbd[PART_A][1] = bbd0[1];
+        fx1.bbd[PART_A][0] = bbd1[0]; fx1.bbd[PART_A][1] = bbd1[1];
+        fx2.bbd[PART_A][0] = bbd2[0]; fx2.bbd[PART_A][1] = bbd2[1];
         i0.init(48000.f, fx0);
         i1.init(48000.f, fx1);
         i2.init(48000.f, fx2);
@@ -110,6 +165,18 @@ void edge_case(EngineId eng) {
         i1.load_sample(PART_A, l.data(), r.data(), l.size());
         i2.load_sample(PART_A, l.data(), r.data(), l.size());
     }
+    // BBD is voiceless and input-consuming (IPartEngine::consumes_input) --
+    // a trigger_manual would do nothing (BbdEngine::trigger is a no-op) and
+    // an unfed deck renders silence, which would make the NEUTRAL half
+    // compare two silences and the REACH half compare two more. A steady
+    // tone, same content on all three so the NEUTRAL half compares like
+    // with like.
+    std::vector<float> bbd_in;
+    if (eng == ENGINE_BBD) {
+        bbd_in.resize(24000);
+        for (size_t i = 0; i < bbd_in.size(); ++i)
+            bbd_in[i] = std::sin(6.2831853f * 220.f * float(i) / 48000.f) * 0.4f;
+    }
     /* i0: the knob is never touched */
     i1.set_voice_edge(PART_A, 0.f);          // neutral
     i2.set_voice_edge(PART_A, 0.9f);         // trimmed
@@ -119,31 +186,51 @@ void edge_case(EngineId eng) {
         i1.trigger_manual(PART_A);
         i2.trigger_manual(PART_A);
     }
-    // SAMPLER only: every Part boots on ENGINE_SYNTH (Part::init) and
+    // SAMPLER and BBD: every Part boots on ENGINE_SYNTH (Part::init) and
     // set_engine() above only ARMS the switch -- Part::process() crossfades
     // out the old engine and into the new one over two Hann ramps of 4 ms
     // each (SoftSwitch::init, fx_util.h), ~384 samples total. set_voice_edge
     // reaches SYNTH too, so for ~384 samples the still-live SYNTH drone
     // (auto-triggered by "lanes boot in FLOW", synth_engine.cpp's
     // _auto_pending) differs between i1 (EDGE 0) and i2 (EDGE 0.9),
-    // measured: with the sampler's own set_edge() still a stub, diff over
-    // [0, 24000) was 0.167939, entirely inside [0, 500) (probed with a
-    // split-window CAPTURE, removed once this was understood) -- a REACH
-    // pass with nothing behind it. A short warm-up render, discarded, lets
-    // the crossfade finish so the measurement below is the SAMPLER's own
-    // output, not the boot engine's tail.
-    if (eng == ENGINE_SAMPLER) {
+    // measured on SAMPLER (Task 6): with the sampler's own set_edge() still
+    // a stub, diff over [0, 24000) was 0.167939, entirely inside [0, 500)
+    // (probed with a split-window CAPTURE, removed once this was
+    // understood) -- a REACH pass with nothing behind it. Both engines are
+    // voiceless and reach Part via the identical set_engine()/soft-switch
+    // path, so BBD (Task 7) gets the same short warm-up render, discarded.
+    // Checked, not just copied: with the warm-up removed BBD's own REACH
+    // diff read 152.858 over [0, 24000), against 207.309 with it -- both
+    // orders of magnitude past the 1e-3 floor below, unlike the sampler's
+    // 0.167939 boot-tail artifact. BBD's own audio input dominates the
+    // measurement quickly enough that the crossfade tail never had a
+    // realistic chance to be what this case was actually measuring, but the
+    // warm-up costs nothing and keeps both voiceless engines' cases built
+    // the same way.
+    if (eng == ENGINE_SAMPLER || eng == ENGINE_BBD) {
         constexpr int kWarmup = 1024;   // must stay a multiple of 64: render()
                                          // steps in fixed 64-sample blocks and
                                          // writes past a non-multiple length
         std::vector<float> wl(kWarmup), wr(kWarmup);
-        render(i0, wl.data(), wr.data(), kWarmup);
-        render(i1, wl.data(), wr.data(), kWarmup);
-        render(i2, wl.data(), wr.data(), kWarmup);
+        if (eng == ENGINE_BBD) {
+            render_with_input(i0, bbd_in.data(), wl.data(), wr.data(), kWarmup);
+            render_with_input(i1, bbd_in.data(), wl.data(), wr.data(), kWarmup);
+            render_with_input(i2, bbd_in.data(), wl.data(), wr.data(), kWarmup);
+        } else {
+            render(i0, wl.data(), wr.data(), kWarmup);
+            render(i1, wl.data(), wr.data(), kWarmup);
+            render(i2, wl.data(), wr.data(), kWarmup);
+        }
     }
-    render(i0, e, f, 24000);
-    render(i1, a, b, 24000);
-    render(i2, c, d, 24000);
+    if (eng == ENGINE_BBD) {
+        render_with_input(i0, bbd_in.data(), e, f, 24000);
+        render_with_input(i1, bbd_in.data(), a, b, 24000);
+        render_with_input(i2, bbd_in.data(), c, d, 24000);
+    } else {
+        render(i0, e, f, 24000);
+        render(i1, a, b, 24000);
+        render(i2, c, d, 24000);
+    }
 
     // 1. NEUTRAL: pushing 0 must be indistinguishable from never pushing.
     //    Exact ==, on both channels, because "unchanged" is a bit claim. An
@@ -180,3 +267,4 @@ TEST_CASE("edge: the trim reaches BODY")    { edge_case(ENGINE_BODY); }
 TEST_CASE("edge: the trim reaches SYNTH")   { edge_case(ENGINE_SYNTH); }
 TEST_CASE("edge: the trim reaches WAVE")    { edge_case(ENGINE_WAVE); }
 TEST_CASE("edge: the trim reaches SAMPLER") { edge_case(ENGINE_SAMPLER); }
+TEST_CASE("edge: the trim reaches BBD")     { edge_case(ENGINE_BBD); }

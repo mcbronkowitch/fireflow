@@ -5,6 +5,7 @@
 #include <vector>
 #include "sampler/sampler_engine.h"
 #include "sampler/sampler_config.h"
+#include "low_energy.h"
 using namespace spky;
 
 static constexpr size_t kFrames = 48000 * 2;   // 2 s of storage
@@ -3491,15 +3492,9 @@ TEST_CASE("sampler: the SCAN curve is linear below the knee") {
 // EDGE (Task 6, spec 2026-08-19 voice-knobs-dpth-edge, 4.3): a high-pass on
 // the summed grain bus, same idiom as SYNTH/WAVE (Task 5) but its own rails
 // and its own sum point -- see sampler_engine.h's set_edge() for why.
-
-// A crude low-band meter, built here rather than borrowed: the engine's own
-// filters are what is under test, so the measurement must not share them.
-static float low_energy(const std::vector<float>& v, float sr = 48000.f) {
-    const float a = 1.f - std::exp(-6.2831853f * 200.f / sr);
-    float y = 0.f; double acc = 0.0;
-    for (float x : v) { y += a * (x - y); acc += (double)y * y; }
-    return std::sqrt(acc / v.size());
-}
+//
+// low_energy() used to live only here; Task 7 (BBD) needed the identical
+// meter, so it moved to low_energy.h rather than staying duplicated.
 
 TEST_CASE("sampler: EDGE at 0 is bit-identical to no EDGE at all") {
     // FLOW, not STEP: a standing cloud puts a real signal through the
