@@ -335,6 +335,10 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "instrument_worst_bbd",
         "instrument_worst_bbd_dtcm",
         "inst_bbd_engine_worst",
+        "inst_feed_engine_worst",
+    ),
+    "feed": (
+        "feed_pairs",
     ),
     "sweep": (
         "sweep_flux_rate_0",

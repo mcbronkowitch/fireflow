@@ -1637,7 +1637,16 @@ class FullProfileLinkContract(unittest.TestCase):
     # Makefile entry and a BENCH_PROTOCOL_ROWS_BY_FAMILY entry, deliberately
     # left off the `BENCH_FAMILIES ?=` default list, carried instead by its
     # own `ablate` profile.
-    NOT_IN_FULL = frozenset({"sweep", "instr"})
+    #
+    # `feed` (spec 2026-08-18 feed-coupled-feedback-fm) is the third: its one
+    # kernel row prices a FeedBank at a compile-time P, and the round it
+    # belongs to is "build, measure, edit kPairs, rebuild, measure" -- several
+    # images of the same row, which is exactly what a small dedicated `feed`
+    # profile is for and what carrying it in `full` would make more expensive
+    # for no reading. The row that judges whether FEED FITS is
+    # inst_feed_engine_worst, and that one lives in `system`, so it is in
+    # `full` already.
+    NOT_IN_FULL = frozenset({"sweep", "instr", "feed"})
 
     def test_full_profile_manifest_resolves_cleanly(self):
         resolve_profile("full")  # must not raise a manifest error
