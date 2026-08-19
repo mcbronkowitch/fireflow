@@ -1245,6 +1245,40 @@ blocks -- a guess that was short by 333 blocks out of 3000 and halted the
 board with no row and no message, twice. An `assert` in a bench setup has no
 failure mode that reaches the operator.
 
+### P = 6, and the two things it buys
+
+Decided 2026-08-19 from three sweep points on the Patch Submodule;
+[the confirming run carries the full derivation](bench/2026-08-19-3def5d5-feed-axi-o2-patch_sm-usb.md).
+
+**18 655 cycles per pair**, plus ~2 100 fixed. Linear to within 3 % over a 4×
+range in P, and the whole-engine row agrees independently at 18 708 per pair
+per deck -- the check that caught SWARM's kernel row sizing its bank too
+generously found nothing to catch here.
+
+| P | `feed_pairs` avg | two-deck worst max | % budget | tones at COLOR max |
+|---:|---:|---:|---:|---|
+| 2 | 39 110 | 710 455 | 74.0 | 1 of 4 |
+| 4 | 77 176 | 799 939 | 83.3 | 2 of 4 |
+| **6** | **118 025** | **888 099** | **92.51** | **3 of 4** |
+| 8 | 151 190 | 951 817 | 99.2 | 4 of 4 |
+
+Two traps in reading that table. **The worst-case row runs with FLUX off**, as
+the BBD row does, so no percentage in it includes stereo tape -- one switch
+away, 10.3 % on its own. And **6 was confirmed rather than interpolated**: the
+linear fit predicted 91.04 % and the run measured 92.51 %, so the fit is about
+1.6 % optimistic between its points and the surviving reserve is 7.5 %.
+
+P is not only a CPU number. The bank voices `kPairs / kPairsPerTone` tones
+capped at `ChordBuilder::kMaxNotes` = 4, so six pairs sound a complete triad
+and drop only the fourth note at the top of COLOR. Four pairs would have
+sounded half the chord, silently -- which is why the decision did not simply
+take the cheapest P that fits.
+
+`kDeckGain` was re-measured at the new P, as its own comment demands, and left
+at 0.25: the deck rose 0.6 dB (drone peak 0.343 → 0.369), the RMS distance to
+SYNTH is unchanged at +3.05 dB, and two decks reach 0.738 against the limiter's
+0.891 knee.
+
 ### Three measurement traps this engine sets, and what they cost
 
 Recorded because each one produced a confident wrong number first, and each is

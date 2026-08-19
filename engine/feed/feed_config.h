@@ -37,6 +37,14 @@ namespace feed_cfg {
 // which is one switch away and prices at 10.3 % on its own. P=8 measured 99.2 %
 // and would have had no room for it at all.
 //
+// CONFIRMED by its own run rather than left on the interpolation, because 6 is
+// not one of the sweep points: `inst_feed_engine_worst` measures **92.51 %**
+// against the fit's 91.04 %, so the linear fit runs about 1.6 % optimistic
+// between its points. The reserve that actually survives is therefore **7.5 %**,
+// not the 9 % the derivation aimed at -- and the number to quote is 92.51.
+// FEED still sits far under the same image's `instrument_worst` (102.76 %),
+// which is Task 11's gate.
+//
 // P=6 also decides how much of a chord is heard: the bank voices
 // kPairs/kPairsPerTone tones, capped at ChordBuilder::kMaxNotes = 4. So 6 pairs
 // sound 3 of the 4 tones COLOR reaches at its top -- a complete triad, with
