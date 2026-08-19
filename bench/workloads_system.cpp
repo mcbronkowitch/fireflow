@@ -668,12 +668,24 @@ void configure_inst_feed_engine_idle(Instrument& inst)
     const float* in = test_input();
     inst.trigger_manual(PART_A);
     inst.trigger_manual(PART_B);
-    // ~6 s. The tail has to settle all the way into the state being priced,
-    // and a geometric amplitude takes far longer to get there than the 200
-    // blocks (~0.4 s) the sounding rows warm for.
-    for (int b = 0; b < 3000; ++b)
+    // WAIT for the envelope to land rather than guessing a warm-up length. A
+    // guessed 3000 blocks (6 s) was short by 333 and hung the board on the
+    // assert below -- twice, because the failure mode of an assert here is a
+    // silent halt with no row emitted, not a message. FEED's FALL at 0 still
+    // takes 6.67 s to cross Env's 1e-4 idle threshold at 120 BPM: the decay is
+    // exponential, so the last two orders of magnitude cost as much time as
+    // the first two. The bound is a backstop, not a duration.
+    int settled = 0;
+    for (int b = 0; b < 20000 && settled < 500; ++b) {
         inst.process(in, in, g_instrument_harness.out_l,
                      g_instrument_harness.out_r, kBlock);
+        // 500 further blocks after both parts go idle, so everything
+        // downstream of the decks has reached the state being priced too.
+        // Measured: the instrument output is then EXACTLY zero, reverb
+        // included, which is the point of the row.
+        settled = (inst.active_voices(PART_A) == 0 &&
+                   inst.active_voices(PART_B) == 0) ? settled + 1 : 0;
+    }
     for (int p = 0; p < PART_COUNT; ++p) {
         assert(inst.engine_id(p) == ENGINE_FEED);
         // Silent, which is the whole subject. A row that kept ringing would
