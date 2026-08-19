@@ -265,6 +265,7 @@ DYNAMIC_CAPTIONS = [
     ("FILT",     "ENGINE",   ("FILT", "FILT", "FILT",  "BRITE", "LOSS",  "FILT")),
     ("SOURCE",   "ENGINE",   ("TIMB", "ORG",  "FRAME", "MATL",  "DRIVE", "BOND")),
     ("DETUNE",   "ENGINE",   ("DTUN", "DTUN", "DTUN",  "DTUN",  "DTUN",  "SPRD")),
+    ("DEPTH",    "ENGINE",   ("DPTH", "SCAT", "DPTH",  "SWAY",  "RPTS", "DPTH")),
 ]
 
 

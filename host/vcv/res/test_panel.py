@@ -1827,9 +1827,13 @@ def feed_host_wiring_issues(cpp):
     if "inst.set_target_base(p,spky::LANE_MOTION," not in push_n:
         issues.append("LANE_MOTION's base must be written, or DEPTH's ends are "
                       "unreachable from the panel")
-    if "feedPart?pp(DEPTH_A,p):0.5f" not in push_n:
-        issues.append("LANE_MOTION's base must be the DPTH knob on a FEED deck "
-                      "and Part's own 0.5f elsewhere")
+    if "inst.set_target_base(p,spky::LANE_MOTION,pp(DEPTH_A,p));" not in push_n:
+        issues.append("DPTH must write LANE_MOTION's base on EVERY engine -- "
+                      "each one reads that lane as something (width, drift, "
+                      "scatter, feedback, FM index) and a per-engine ternary "
+                      "here is what made five of them unreachable")
+    if "feedPart?pp(DEPTH_A,p)" in push_n:
+        issues.append("the FEED-only ternary on LANE_MOTION's base is back")
     if "inst.set_feed_damp_hz(p,feedDampHzFromKnob(pp(DAMP_A,p)));" not in push_n:
         issues.append("the EDGE knob must reach set_feed_damp_hz, or it turns "
                       "against init()'s cutoff and nothing moves")
@@ -1913,13 +1917,13 @@ def test_feed_host_wiring_guard_rejects_representative_regressions():
          "} else if (false) {\n"
          "                inst.set_target_base(p, spky::LANE_SIZE,   pp(DETUNE_A, p));\n",
          "SPREAD re-point removed"),
-        ("            inst.set_target_base(p, spky::LANE_MOTION,\n"
-         "                                 feedPart ? pp(DEPTH_A, p) : 0.5f);",
+        ("            inst.set_target_base(p, spky::LANE_MOTION, pp(DEPTH_A, p));",
          "",
          "LANE_MOTION base write removed"),
-        ("                                 feedPart ? pp(DEPTH_A, p) : 0.5f);",
-         "                                 0.5f);",
-         "DPTH reverted to the lane-layer coincidence"),
+        ("            inst.set_target_base(p, spky::LANE_MOTION, pp(DEPTH_A, p));",
+         "            inst.set_target_base(p, spky::LANE_MOTION,\n"
+         "                                 feedPart ? pp(DEPTH_A, p) : 0.5f);",
+         "the FEED-only ternary restored"),
         ("            inst.set_feed_damp_hz(p, feedDampHzFromKnob(pp(DAMP_A, p)));",
          "",
          "EDGE push removed"),

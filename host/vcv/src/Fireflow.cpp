@@ -852,11 +852,10 @@ struct Fireflow : Module {
             //   - LANE_PITCH: BBD-only (STAGES_A/B). Other engines retain
             //                 their existing base; this movement only rehomes
             //                 the preserved STAGES state while BBD is active.
-            //   - LANE_MOTION: written for every engine since 2026-08-18 --
-            //                 feed_cfg::kDepthBase on a FEED deck, and Part's
-            //                 own 0.5f on every other, so nothing moves for
-            //                 them. Before that this host never wrote this
-            //                 base at all, so the only thing that could reach
+            //   - LANE_MOTION: the DPTH knob's base, on every engine, since
+            //                 2026-08-19 (no more FEED-only ternary). Before
+            //                 2026-08-18 this host never wrote this base at
+            //                 all, so the only thing that could reach
             //                 LANE_MOTION in Rack was MOD.
             const bool bbdPart = inst.engine_id(p) == spky::ENGINE_BBD;
             const bool feedPart = inst.engine_id(p) == spky::ENGINE_FEED;
@@ -944,20 +943,17 @@ struct Fireflow : Module {
                 inst.set_target_base(p, spky::LANE_SIZE,   0.5f);
             }
 
-            // LANE_MOTION's base was never written by this host at all, so it
-            // sat on Part's compiled-in 0.5 and the only thing that moved it in
-            // Rack was MOD. An engine that reads LANE_MOTION therefore had a
-            // control whose ends the player could not reach. FEED reads it as
-            // DEPTH, the FM index, and gets its own by-ear default here instead
-            // of inheriting a lane-layer coincidence. The else branch is
-            // load-bearing for the same reason the LANE_SIZE one is: a base
-            // left behind on an engine flip sticks. 0.5f is exactly Part's
-            // default, so nothing moves for the other five engines.
-            // DPTH is a knob now (2026-08-19). Its init default IS
-            // feed_cfg::kDepthBase, so an untouched patch writes what this line
-            // always wrote.
-            inst.set_target_base(p, spky::LANE_MOTION,
-                                 feedPart ? pp(DEPTH_A, p) : 0.5f);
+            // DPTH writes LANE_MOTION's base on every engine, because every
+            // engine reads that lane: width (and drift) on SYNTH/WAVE, drift
+            // alone on BODY, scatter on the sampler, the feedback amount on
+            // the BBD, the FM index on FEED. This host never wrote the base at
+            // all until 2026-08-18, so all six had a control whose ends the
+            // player could not reach; FEED got the repair first, through a
+            // ternary that pinned the other five to Part's compiled-in 0.5.
+            // The knob's init default IS that 0.5 (and IS feed_cfg::kDepthBase),
+            // so an untouched patch writes exactly what the ternary wrote --
+            // the sampler excepted, which halves the base (sampler_config.h).
+            inst.set_target_base(p, spky::LANE_MOTION, pp(DEPTH_A, p));
 
             // EDGE, the in-loop DAMP cutoff. Pushed unconditionally rather
             // than only on a FEED deck: the setter does not broadcast, so it is

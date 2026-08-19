@@ -259,6 +259,8 @@ static const DynCaption kDynCaptions[] = {
     {SOURCE_B, ENGINE_B, 6, {"TIMB", "ORG", "FRAME", "MATL", "DRIVE", "BOND"}},
     {DETUNE_A, ENGINE_A, 6, {"DTUN", "DTUN", "DTUN", "DTUN", "DTUN", "SPRD"}},
     {DETUNE_B, ENGINE_B, 6, {"DTUN", "DTUN", "DTUN", "DTUN", "DTUN", "SPRD"}},
+    {DEPTH_A, ENGINE_A, 6, {"DPTH", "SCAT", "DPTH", "SWAY", "RPTS", "DPTH"}},
+    {DEPTH_B, ENGINE_B, 6, {"DPTH", "SCAT", "DPTH", "SWAY", "RPTS", "DPTH"}},
 };
 static const PanelTxt kPanelTexts[] = {
     {{39.500f, 36.100f}, 5.00f, 0.00f, 0x2E6355, 0, "A"},

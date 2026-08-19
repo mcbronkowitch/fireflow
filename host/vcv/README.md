@@ -163,12 +163,27 @@ there — the C++ holds no caption word at all.
 | FILT | `FILT` | `FILT` | `FILT` | `BRITE` | `LOSS` | `BRITE` |
 | SOURCE | `TIMB` | `ORG` | `FRAME` | `MATL` | `DRIVE` | `BOND` |
 | DETUNE | `DTUN` | `DTUN` | `DTUN` | `DTUN` | `DTUN` | `SPRD` |
+| DEPTH | `DPTH` | `SCAT` | `DPTH` | `SWAY` | `RPTS` | `DPTH` |
 
 DETUNE joined the table with FEED (spec 2026-08-18). It had been a fixed
 `DTUN` plate, and on a FEED deck a fixed plate would lie: there the knob is
 SPREAD, and it reaches the engine as `LANE_SIZE`'s base rather than through
 `set_voice_detune` — the same re-point the sampler's SUB → `LANE_SIZE` already
 uses.
+
+DEPTH is the base of `LANE_MOTION`, the lane every engine already reads as
+something (spec 2026-08-19 voice-knobs-dpth-edge): stereo width and per-voice
+drift on Synth/Wave, drift alone on Body (`SWAY`), grain spawn-position and
+spawn-interval jitter on the Sampler (`SCAT`), the feedback amount on the BBD
+(`RPTS`), and the FM index on Feed. The host never wrote this base at all
+until 2026-08-18, when Feed's `DPTH` knob reached it through a per-engine
+ternary that left the other five pinned to Part's compiled-in `0.5`; this
+pulls the ternary so DPTH reaches all six. The knob's init default stays
+`0.5`, which is that same compiled-in base and `feed_cfg::kDepthBase`, so an
+untouched patch sounds the same as before on five engines. The Sampler is the
+exception: it reads the base through `sampler_cfg::kMotionBaseScale = 0.5`, so
+the knob's default lands at base `0.25` there, not the degenerate `0.5` that
+used to flatten the spawn-position jitter.
 
 GRIT itself is bipolar (spec 2026-08-09 hw-control-reduction task 4): there is
 no separate mode pad any more. The knob's sign picks the mode -- left of
