@@ -1111,6 +1111,87 @@ settings. That is unexamined here: BODY's level depends heavily on MATL and
 EXCIT, and one probe setting is not a verdict on it. Recorded because the
 parity brief covers every engine, not just this one.
 
+### What the hardware measures, and the state nobody was benching
+
+Patch Submodule, 480 MHz, block 96, dcache+icache, `-O2`, AXI, over USB; two
+runs, checksums and QSPI digest identical.
+[`docs/bench/2026-08-19-ac26589-feed-axi-o2-patch_sm-usb.md`](bench/2026-08-19-ac26589-feed-axi-o2-patch_sm-usb.md).
+
+| workload | avg % | max % |
+|---|---:|---:|
+| `inst_feed_engine_worst` (both decks FEED) | 75.99 | 81.41 |
+| `inst_bbd_engine_worst`, same image | 93.56 | 98.39 |
+| `instrument_worst`, same image | 99.30 | 104.18 |
+| `feed_pairs` at P = 4 | 8.04 | 8.24 |
+
+Task 11's gate — `inst_feed_engine_worst` must not exceed `instrument_worst`
+**inside one image** — passes on both average and maximum, with room. P is
+still a placeholder: one point is not a slope, so `kPDecided` stays false and
+`feed G8` stays red.
+
+**Two traps this capture set, both worth more than the numbers.**
+
+**1. The FEED worst case was priced on a silent deck.** `inst_feed_engine_worst`
+set FILT to −1, which under the old DAMP mapping was "darkest" and under the new
+one is exactly where `_filt_gain` fades to zero. The ring, the `tanh` and the
+SVF still ran, but Grit, Comp, the centre reverb and the master limiter were all
+priced on zeros. Corrected to −0.4, the darkest cutoff that does not fade; the
+SVF costs the same at every cutoff, so the value is chosen for the deck emitting.
+Silence had understated the row by about 1 percentage point.
+
+**2. A cross-capture subtraction is not a measurement, and here is the size of
+it.** Between `3bdcb17` and `ac26589`, rows whose checksum did not change at all
+moved from **−0.31 % to +2.54 %** on a relink — `mod_plane_2x_center` alone swung
+−4.59 % on an intermediate capture. `inst_feed_engine_worst` grew 6.10 %, of
+which the heavy-instrument drift band accounts for 0.43–2.54 %. So the filter and
+drive work costs FEED somewhere in **+24 500 to +39 000 cycles** on two decks
+(+2.6 to +4.1 points of block budget). That range is the honest answer; splitting
+it finer needs an ablation image, not another capture.
+
+### FEED spends 92 % of a silent tail in denormals
+
+Task 11 step 5.1, measured 2026-08-19 on the desktop. `FeedEngine`, FALL 0 so
+FLOOR is 0 too, one hit, then 20 s:
+
+| quantity | subnormal | zero | normal |
+|---|---:|---:|---:|
+| deck output L/R | 1 759 436 | 96 780 | 63 784 |
+| per-pair `amp` (every 64th sample) | 57 960 | 8 | 2 032 |
+
+The envelope reaches exactly 0. `p.amp` does not, and **the reason is the fix
+for the glide runaway**. `FeedBank::set_target` arms `_slope_left` and the
+snap-to-target at the end of `process` only fires when that counter expires —
+but `_rebuild_allocation` re-targets every pair every control tick (96 samples,
+well inside `kSlopeSamples`), so the counter is re-armed before it ever expires
+and the amplitude converges *geometrically* instead of arriving. Geometric
+convergence to zero lands in the subnormal range and stays there. The comment at
+`engine/feed/feed_pair.h:76` describes this behaviour precisely — as a feature.
+
+Nothing else in the bank decays: `m1`, `m2`, `o1`, `o2` and the DAMP state `lp`
+are all `fast_sin` outputs on a path that is never amplitude-scaled. A bare
+`FeedBank` retargeted **once** counts **zero** subnormals across all of them and
+lands `amp` at exact zero — the contrast is the retargeting, not the ring.
+
+**What it costs, on the desktop, where the penalty is not the board's:**
+
+| state | ns/sample | |
+|---|---:|---|
+| sounding, FTZ off (the state the bench measures) | 59.98 | |
+| sounding, FTZ on | 56.51 | |
+| **idle tail, FTZ off** | **99.05** | **1.65× a sounding deck** |
+| idle tail, FTZ on | 56.36 | the penalty is entirely denormals |
+
+**So FEED's worst case may be silence, not any knob setting**, and no bench row
+measures it: `inst_feed_engine_worst` fires a trigger every ~half second
+specifically to keep the voices busy. The 81.41 % above is the cheap state. This
+also reaches the P decision — sizing `kPairs` against a sounding deck sizes it
+against the wrong case.
+
+The fix has two candidate shapes and this round does not pick one: a local snap
+in `FeedBank` (when the target is zero and `amp` is below an epsilon, set it to
+zero) or `FPSCR.FZ` instrument-wide, which spec §8 already says is its own
+decision. The local one is the smaller claim.
+
 ### Three measurement traps this engine sets, and what they cost
 
 Recorded because each one produced a confident wrong number first, and each is
