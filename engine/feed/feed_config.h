@@ -14,18 +14,43 @@ namespace feed_cfg {
 
 // --- P, the one number here that is not a taste decision ------------------
 //
-// P is MEASURED. The feed_pairs row in bench/workloads_feed.cpp prints cycles
-// per pair on the Daisy Patch Submodule, and P follows from the 960 000-cycle
-// block budget (spec section 8). The literal below is a PLACEHOLDER that exists
-// so the desktop tasks can build, and it carries NO CPU claim of any kind: do
-// not quote it, do not size anything against it by hand, and do not let a test
-// depend on its value.
-constexpr int kPairs = 8;   // SWEEP POINT 3 of 3 -- not a decision
+// P is MEASURED, on a Daisy Patch Submodule over USB at -O2, AXI layout, three
+// sweep points at kPairs 2 / 4 / 8. `-O3` did not enter it and cannot: the
+// `system` family overflows SRAM_EXEC by 2844 B there, and did so before FEED
+// existed. No Seed figure entered it either.
+//
+// **18 655 cycles per pair**, from a least-squares fit over the three
+// `feed_pairs` points (39 110 / 77 176 / 151 190 average cycles), with about
+// 2 100 cycles of fixed overhead -- so the row is very nearly pure per-pair
+// cost. The two adjacent slopes are 19 033 and 18 504, a ratio of 0.972, which
+// is what makes the fit worth quoting at all. The whole-engine row agrees
+// independently: `inst_feed_engine_worst` fits 18 708 cycles per pair per deck.
+//
+// P follows from the 960 000-cycle block budget as measured on
+// `inst_feed_engine_worst` -- BOTH decks on FEED, worst-case knobs -- whose
+// maximum fits 39 904*P + 634 516. Measured: P=2 74.0 %, P=4 83.3 %, P=8
+// 99.2 %. A ~9 % reserve puts the ceiling at 6.95 pairs, and rounding DOWN to
+// a multiple of kPairsPerTone gives 6.
+//
+// The reserve is not a formality. The worst-case row runs with **FLUX off**
+// (as the BBD row does), so none of those percentages include stereo tape,
+// which is one switch away and prices at 10.3 % on its own. P=8 measured 99.2 %
+// and would have had no room for it at all.
+//
+// P=6 also decides how much of a chord is heard: the bank voices
+// kPairs/kPairsPerTone tones, capped at ChordBuilder::kMaxNotes = 4. So 6 pairs
+// sound 3 of the 4 tones COLOR reaches at its top -- a complete triad, with
+// only the fourth note dropped at the very end of the knob. P=4 would have
+// sounded two.
+constexpr int kPairs = 6;
 
-// False until the bench has run and kPairs above is its result. The gate
-// "feed G8" in tests/test_feed_engine.cpp fails while this is false, so an
-// undecided P cannot reach main.
-constexpr bool kPDecided = false;
+// Set 2026-08-19 by the sweep cited above.
+// docs/bench/2026-08-19-f836a32-feed-axi-o2-patch_sm-usb.md   (P=2)
+// docs/bench/2026-08-19-500775c-feed-axi-o2-patch_sm-usb.md   (P=4)
+// docs/bench/2026-08-19-ab0a6bf-feed-axi-o2-patch_sm-usb.md   (P=8)
+// The gate "feed G8" in tests/test_feed_engine.cpp failed while this was
+// false, so an undecided P could not reach main.
+constexpr bool kPDecided = true;
 
 // --- structure ------------------------------------------------------------
 
@@ -240,6 +265,13 @@ constexpr float kSatInv  = 1.f / kSatCeil;
 // nothing in the feedback path reads amp: the ring taps `o1`/`o2`, which are
 // the pre-amp carrier outputs. Scaling the sum is therefore exactly equal to
 // scaling every amp, in one place instead of two.
+// RE-MEASURED at kPairs = 6, as the paragraph above demands, and the answer was
+// LEAVE IT. Moving P from 4 to 6 lifted the deck by 0.6 dB: drone peak 0.343 ->
+// 0.369, and the RMS distance to SYNTH is unchanged at +3.05 dB against +3.1.
+// Two FEED decks reach 0.738 against the limiter's -1 dBFS knee at 0.891, so
+// the headroom the parity round bought is still there. A re-measurement that
+// finds nothing is still a re-measurement; recorded so the next P change does
+// not skip it on the grounds that this one changed nothing.
 constexpr float kDeckGain = 0.25f;
 
 // SUB: one sine an octave below the root, not in the ring and not coupled.
