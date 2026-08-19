@@ -79,7 +79,28 @@ public:
     // thresholds in tests/test_filt.cpp ("edge: up removes low end and
     // leaves the top alone") -- at kEdgeHpOctaves == 3 that test's corner
     // lands near 160 Hz at t == 1, which sits comfortably between the
-    // test's own pitches (110*8^0.05 =~ 123 Hz, 110*8^0.9 =~ 667 Hz).
+    // test's own pitches (110*8^0.05 =~ 122 Hz, 110*8^0.9 =~ 715 Hz).
+    //
+    // The negative half is not just "nowhere useful to go" -- it is
+    // essentially inert on THIS pair of engines, and the fix-round-1 review
+    // put a number on it worth keeping. pitch_to_hz(p) = 110*8^p over
+    // p in [0,1] gives 110-880 Hz, and the sub-osc runs exactly one octave
+    // below the fundamental (voice.cpp:56), so 55 Hz is the lowest
+    // frequency either engine can ever produce. Probed with OnePoleHp's own
+    // math (scratchpad probe, same method as tests/test_onepole_hp.cpp's
+    // rms_at/db): a 55 Hz tone through the corner EDGE approaches as t
+    // leaves 0 (hz = kEdgeHpNeutralHz = 20) loses 0.549 dB; through the
+    // corner at t == -1 (hz = 20 * 2^-3 = 2.5) it loses 0.010 dB. So the
+    // entire negative half of this knob removes essentially nothing an ear
+    // can register on SYNTH or WAVE -- the direct, and by construction
+    // unavoidable, consequence of the spec's choice (4.2) that neutral on
+    // these two engines IS the bottom rail, which is also what buys the
+    // bit-exact neutral in front of ctrl_identity/wave_formant_sweep. Same
+    // class of documented blind spot as BODY's zone 2 (spec 4.6,
+    // tests/test_voice_edge_broadcast.cpp's edge_case()) -- not a defect,
+    // not something to fix here. SAMPLER shares this bottom-rail neutral
+    // (4.2's table) and is likely to inherit the identical inertness; check
+    // before re-deriving it.
     static constexpr float kEdgeHpNeutralHz = 20.f;
     static constexpr float kEdgeHpOctaves   = 3.f;
 
@@ -134,6 +155,16 @@ public:
     // bit-exact bypass in float32. Computing a coefficient here that
     // process() never reads would just be dead work, not a correctness bug,
     // but skipping it keeps this setter's cost proportional to what it does.
+    //
+    // DELIBERATELY does not reset() _hp_l/_hp_r when re-entering the trim
+    // (_edge going 0 -> nonzero): the filter resumes from whatever {x1, y1}
+    // it held from its last nonzero run, which is stale history, not a
+    // fresh start. A reset() here would trade one discontinuity for another
+    // -- resetting a filter's state mid-signal can click too, and this
+    // project does not pick between two audible options without a listening
+    // pass (fix-round-1 review, 2026-08-19). Left open for that pass, not
+    // silently decided: reset() is the one-line fix if stale history turns
+    // out to be the worse of the two.
     void set_edge(float t) {
         _edge = clampf(t, -1.f, 1.f);
         if constexpr (V::kEdgeUsesOutputHp) {
