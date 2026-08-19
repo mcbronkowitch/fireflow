@@ -203,6 +203,12 @@ void FeedEngine::_control_tick() {
                       20.f, 0.3f * _sr);
     _svf_l.SetFreq(_filt_hz);
     _svf_r.SetFreq(_filt_hz);
+    // The deck goes exactly silent between notes -- FeedBank's glide now
+    // arrives at zero rather than converging on it -- and a two-pole fed exact
+    // zeros decays into the subnormal range and stays. Self-guarded, so this
+    // cannot truncate a tail that is still ringing; see SvfLp::FlushDenormals.
+    _svf_l.FlushDenormals();
+    _svf_r.FlushDenormals();
     _sub_inc = 0.5f * pitch_to_hz(_chord[0]) / _sr;   // one octave below the root
     _rebuild_allocation();
 }

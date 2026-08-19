@@ -42,6 +42,27 @@ public:
     static constexpr int kSlopeTicks = 4;
     static constexpr int kSlopeSamples = kSlopeTicks * feed_cfg::kCtrlInterval;
 
+    // Arrival threshold for a re-armed glide. Not a tuning value -- a
+    // numerical guard, which is why it lives here and not in feed_config.h.
+    //
+    // The snap at the end of process() only fires when _slope_left expires,
+    // and in the engine it never does: _rebuild_allocation retargets every
+    // pair every control tick, well inside kSlopeSamples. So the glide
+    // converges GEOMETRICALLY -- it approaches its target without reaching
+    // it. For frequency that is inaudible. For an amplitude on its way to
+    // zero it is a permanent denormal source: measured 2026-08-19, 92 % of a
+    // 20 s tail subnormal, and an idle deck then costs 1.65x a sounding one
+    // (docs/engine-map.md section 9). Both increments go subnormal with it,
+    // so a sounding deck at static pitch pays a smaller version of the same
+    // tax. Snapping when the remaining travel falls under this ends both.
+    //
+    // 1e-9 is ~180 dB below any amplitude this bank produces and ~5e-5 Hz in
+    // frequency, and it sits 29 orders of magnitude above the subnormal range
+    // (1.18e-38), so nothing can creep underneath it. The smallest increment
+    // it can leave behind is 1e-9/kSlopeSamples, still normal by a wide
+    // margin.
+    static constexpr float kArriveEps = 1e-9f;
+
     void init(float sr) {
         _sr = sr > 1.f ? sr : 48000.f;
         _inv_sr = 1.f / _sr;
@@ -69,6 +90,13 @@ public:
         FeedPair& p = _p[i];
         p.t_inc_c = hz * _inv_sr;
         p.t_amp = amp;
+        // Arrive, before the slope is recomputed from the current value. A
+        // re-armed glide otherwise never gets to arrive at all; see
+        // kArriveEps. Doing it here rather than in process() keeps the audio
+        // path untouched -- this runs at the control rate, which is exactly
+        // the rate that creates the problem.
+        if (std::fabs(p.t_amp   - p.amp)   < kArriveEps) p.amp   = p.t_amp;
+        if (std::fabs(p.t_inc_c - p.inc_c) < kArriveEps) p.inc_c = p.t_inc_c;
         constexpr float inv = 1.f / static_cast<float>(kSlopeSamples);
         p.d_inc_c = (p.t_inc_c - p.inc_c) * inv;
         p.d_amp   = (p.t_amp   - p.amp)   * inv;

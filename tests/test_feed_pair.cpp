@@ -321,3 +321,47 @@ TEST_CASE("feed P8: driven to the rails, the bank stays finite") {
         REQUIRE(std::isfinite(r));
     }
 }
+
+// The glide is re-armed every control tick by FeedEngine, which means the
+// snap at the end of process() -- the one P3 exercises -- never fires there.
+// A slope recomputed from the current value on every push converges
+// GEOMETRICALLY, so an amplitude heading for zero approaches it without ever
+// arriving, lands in the subnormal range, and stays there for as long as the
+// deck is quiet. Measured 2026-08-19 before the fix: 92 % of a 20 s tail
+// subnormal, and the deck then cost 1.65x a sounding one.
+//
+// This reproduces FeedEngine's push pattern rather than P3's single push,
+// because the defect only exists under repetition.
+TEST_CASE("feed P9: a re-armed glide arrives at zero, it does not creep") {
+    FeedBank b = fresh_bank();
+    for (int i = 0; i < feed_cfg::kPairs; ++i) b.snap(i, 220.f, 1.f, 0.f);
+
+    // Ten seconds of "every pair wants to be silent", pushed at the control
+    // rate exactly as _rebuild_allocation pushes it.
+    long long subnormal_amps = 0;
+    for (int tick = 0; tick < 10 * 48000 / feed_cfg::kCtrlInterval; ++tick) {
+        for (int i = 0; i < feed_cfg::kPairs; ++i) b.set_target(i, 220.f, 0.f, 0.f);
+        for (int s = 0; s < feed_cfg::kCtrlInterval; ++s) {
+            float l = 0.f, r = 0.f;
+            b.process(l, r);
+        }
+        for (int i = 0; i < feed_cfg::kPairs; ++i)
+            if (std::fpclassify(b.amp(i)) == FP_SUBNORMAL) ++subnormal_amps;
+    }
+    CAPTURE(subnormal_amps);
+    CHECK(subnormal_amps == 0);
+    // Arrived, not merely small: exact zero is what stops the tail from
+    // regenerating subnormals downstream in the filter and the FX chain.
+    for (int i = 0; i < feed_cfg::kPairs; ++i) CHECK(b.amp(i) == 0.f);
+
+    // The other half, or the gate would pass on a bank that snaps everything
+    // to its target immediately and has no glide left at all: a retarget that
+    // is NOT within kArriveEps must still take time.
+    FeedBank g = fresh_bank();
+    for (int i = 0; i < feed_cfg::kPairs; ++i) g.snap(i, 220.f, 0.f, 0.f);
+    g.set_target(0, 220.f, 1.f, 0.f);
+    float l = 0.f, r = 0.f;
+    g.process(l, r);
+    CHECK(g.amp(0) > 0.f);
+    CHECK(g.amp(0) < 1.f);
+}

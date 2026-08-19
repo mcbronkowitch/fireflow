@@ -95,6 +95,42 @@ public:
 
     float Low() const { return _out_low; }
 
+    // Zero the state once it has decayed below audibility. A two-pole fed
+    // exact zeros decays GEOMETRICALLY: it approaches zero without reaching
+    // it, lands in the subnormal range and stays there for as long as the
+    // input is silent. Measured on FEED 2026-08-19, where the deck's own
+    // amplitude glide had just been fixed and the filter inherited the whole
+    // tax: an idle deck still cost 1.17x a sounding one with nothing but this
+    // left (docs/engine-map.md section 9).
+    //
+    // NOT called by Process -- this is opt-in, at the caller's control rate,
+    // so Voice and SamplerEngine are bit-for-bit unaffected and the equality
+    // against daisysp::Svf in tests/test_svf_lp.cpp still pins the algebra.
+    //
+    // 1e-15 is about -300 dBFS and sits 23 orders of magnitude above the
+    // subnormal range.
+    //
+    // Both state variables are in the condition, but only _low is PROVABLY
+    // load-bearing, and the comment says so rather than implying otherwise:
+    // at this threshold a _low-only guard is not distinguishable by any test
+    // written against it. A decaying two-pole whose _low is within 1e-15 of
+    // zero has a _band that is tiny as well, and the zero crossings of a
+    // still-audible ring never land inside a window that narrow. _band is
+    // kept because kFlushEps is exactly the kind of constant somebody raises
+    // later, and at a wider threshold the crossing does become reachable --
+    // _low passes through zero on every cycle of a ring that _band is still
+    // carrying at full size. What the gate in tests/test_svf_lp.cpp proves is
+    // that the flush is CONDITIONAL at all: an unconditional one truncates a
+    // 60 Hz ring to nothing 5 ms in.
+    void FlushDenormals() {
+        constexpr float kFlushEps = 1e-15f;
+        if (fabsf(_low) < kFlushEps && fabsf(_band) < kFlushEps) {
+            _low = 0.f;
+            _band = 0.f;
+            _out_low = 0.f;
+        }
+    }
+
 private:
     static constexpr float PI_F_ = 3.1415927410125732421875f;   // == DaisySP PI_F
     static float min_(float a, float b) { return a < b ? a : b; }

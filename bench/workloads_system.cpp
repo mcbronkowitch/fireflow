@@ -636,6 +636,64 @@ float proc_inst_bbd_frozen()
     return proc_inst();
 }
 
+// FEED's other worst case, and the one no other row in this file reaches:
+// SILENCE. A deck between notes is not idle work -- FeedBank's ring runs at
+// full rate whatever the amplitude is -- and until 2026-08-19 that state cost
+// 1.65x a SOUNDING deck on the desktop, because the amplitude glide converged
+// on zero without arriving and the tail then ran entirely on subnormals.
+// Fixed in the engine (FeedBankT::kArriveEps, SvfLp::FlushDenormals); this row
+// exists so a regression is measured instead of argued.
+//
+// proc_inst fires both decks every ~half second on purpose, so it can never
+// see this. That is why the row needs its own proc as well as its own setup.
+void configure_inst_feed_engine_idle(Instrument& inst)
+{
+    // FALL at 0 is the shortest decay and FLOOR sits in the top quarter of the
+    // same control, so 0 is FLOOR 0 too and the envelope actually reaches
+    // zero. The worst-case row uses 1.f, which by design never goes quiet.
+    for (int p = 0; p < PART_COUNT; ++p) inst.set_voice_decay(p, 0.f);
+    const float* in = test_input();
+    inst.trigger_manual(PART_A);
+    inst.trigger_manual(PART_B);
+    // ~6 s. The tail has to settle all the way into the state being priced,
+    // and a geometric amplitude takes far longer to get there than the 200
+    // blocks (~0.4 s) the sounding rows warm for.
+    for (int b = 0; b < 3000; ++b)
+        inst.process(in, in, g_instrument_harness.out_l,
+                     g_instrument_harness.out_r, kBlock);
+    for (int p = 0; p < PART_COUNT; ++p) {
+        assert(inst.engine_id(p) == ENGINE_FEED);
+        // Silent, which is the whole subject. A row that kept ringing would
+        // return a plausible number for the wrong state.
+        assert(inst.active_voices(p) == 0);
+    }
+}
+
+void setup_inst_feed_engine_idle()
+{
+    auto& group = construct_axi_instrument_group();
+    configure_inst_common(group.instrument);
+    configure_inst_worst(group.instrument);
+    configure_inst_feed_engine_worst(group.instrument);
+    configure_inst_feed_engine_idle(group.instrument);
+}
+
+float proc_inst_feed_idle()
+{
+    auto& inst = *g_active_instrument;
+    auto& harness = g_instrument_harness;
+    const float* in = test_input();
+    inst.process(in, in, harness.out_l, harness.out_r, kBlock);
+    float acc = 0.f;
+    for (size_t i = 0; i < kBlock; ++i)
+        acc += harness.out_l[i] + harness.out_r[i];
+    // Fold the voice counts in as proc_inst does -- here they must stay 0, so
+    // a row that started ringing mid-measurement moves the checksum.
+    acc += static_cast<float>(inst.active_voices(PART_A));
+    acc += static_cast<float>(inst.active_voices(PART_B));
+    return acc;
+}
+
 } // namespace
 
 const Workload kCoreWorkloads[] = {
@@ -667,6 +725,8 @@ const Workload kCoreWorkloads[] = {
     // the checksum instead of passing quietly.
     { "system", "inst_feed_engine_worst",
       setup_inst_feed_engine_worst, proc_inst },
+    { "system", "inst_feed_engine_idle",
+      setup_inst_feed_engine_idle, proc_inst_feed_idle },
 };
 const int kCoreCount = sizeof(kCoreWorkloads) / sizeof(kCoreWorkloads[0]);
 

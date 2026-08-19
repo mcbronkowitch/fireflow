@@ -336,6 +336,10 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         "instrument_worst_bbd_dtcm",
         "inst_bbd_engine_worst",
         "inst_feed_engine_worst",
+        # The same instrument with the decks SILENT. Not a slack case: FEED's
+        # ring runs at full rate whatever the amplitude is, and a silent deck
+        # used to be the expensive one. See workloads_system.cpp.
+        "inst_feed_engine_idle",
     ),
     "feed": (
         "feed_pairs",
