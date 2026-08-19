@@ -30,6 +30,15 @@ Four questions were asked and answered before anything below was written.
 3. **DPTH is the base of the MOTION lane** on all six engines (§3).
 4. **The sampler scales that base** rather than dropping it (§3.3).
 
+A review pass over this document (2026-08-19, after §1–§9 were first written)
+found two defects and added two more decisions:
+
+5. **EDGE is a trim, not an absolute corner** (§4.2). One knob has one boot
+   value; six engines have six neutral points. FILT already solves exactly
+   this, and EDGE copies it.
+6. **BODY's zone 2 stays unfiltered** and EDGE is inert there, written down
+   rather than repaired (§4.6).
+
 ## 3. DPTH — the MOTION lane's base
 
 ### 3.1 The mechanism already exists
@@ -125,29 +134,100 @@ and a control that imitates another control is worse than a dead one, because
 it promises something. A high-pass is not an imitation: thin/full and
 bright/dark are different axes.
 
-Because those chains are linear, a high-pass per voice and a high-pass on the
-engine's summed output are the same filter. The summed form is the one to
-build: **two one-poles per deck, not eight.**
+**Build the high-pass on the engine's summed output, not per voice** — two
+one-poles per deck instead of eight. Note what this is and is not: filtering
+the sum is not identical to filtering each voice, because each voice carries
+its own envelope and pan drift before the sum, and a filter only commutes with
+a *constant* gain. It is the cheaper of two legitimate designs, not a
+rearrangement of one. `SynthEngineT`'s sum point is linear
+(`synth_engine.cpp`), so nothing else stands in the way.
 
 **Direction, identical on all six: up = more edge, less weight.** A low-pass
 corner rising means brighter; a high-pass corner rising means thinner. Both
 lose at the bottom and gain at the top.
 
-### 4.2 The six cells
+### 4.2 The contract: a trim, not an absolute corner
+
+**One knob has one boot value. Six engines have six neutral points.** The
+first draft of this design had EDGE be an absolute cutoff with per-engine
+rails and a Hz readout, inherited from FEED, where the knob boots at
+`INIT_DEFAULTS["DAMP_A"] = 0.632718364` because that position *means* 3200 Hz
+on FEED's 200–16000 Hz rails. The same position on a new high-pass lands
+mid-travel: five engines would boot with a filter switched on, moving their
+factory sound and taking `ctrl_identity` and the render hashes with them.
+There is no set of rails that fixes this honestly — for a high-pass, placing
+neutral at 0.63 means the lower two thirds of the knob all sit below hearing.
+
+**FILT already solves this exact problem and EDGE copies it.** `FILT` is not
+an absolute cutoff either; it is a **bipolar trim around a neutral each engine
+defines for itself** — `SamplerEngine` has `kFiltNeutral`, `SynthEngineT`
+trims `_targets[LANE_SIZE]`, `BbdEngine::set_filt` trims `kLossCoef` by an
+asymmetric octave span, and all of them agree that `t == 0` is the untouched
+value.
+
+EDGE takes the same shape: **centre = the engine's own neutral, travel = a
+span in octaves either side.**
+
+| Engine | EDGE's neutral | So centre means |
+|---|---|---|
+| SYNTH, WAVE, SAMPLER | the high-pass corner at its bottom rail | the filter is off |
+| BODY | the exciter corner `_recompute_filter` derives from RESO | today's strike |
+| BBD | pre-emphasis flat | today's input |
+| FEED | `feed_cfg::kDampFixedHz` (3200 Hz) | today's loop damping |
+
+Three things follow, all of them improvements:
+
+- **The factory sound is preserved by construction, on all six engines** — not
+  by six rail sets coincidentally agreeing on one knob position.
+- **The gate gets stronger, not weaker.** Today's gate recomputes
+  `INIT_DEFAULTS` from `kDampFixedHz` and the host's rails. Its successor
+  asserts something better: *the neutral IS the engine constant* — one
+  assertion per engine, each read from that engine's own header.
+- **FEED's knob changes shape**, from an absolute Hz readout to a trim around
+  3200 Hz. It is one day old and has never been through a listening pass, so
+  there is nothing to preserve. It can still print Hz: neutral × 2^(t·span).
+
+### 4.3 The six cells
 
 | Engine | Where EDGE acts | What it does | Work |
 |---|---|---|---|
 | SYNTH | one-pole high-pass on the engine's stereo sum | takes the weight out | 2 one-poles/deck, new |
 | SAMPLER | same, on the summed grain bus | same | 2 one-poles/deck, new |
 | WAVE | same | same | 2 one-poles/deck, new |
-| BODY | the exciter's low-pass corner, ahead of the resonator | how bright the strike that hits the string is | a trim inside `Exciter::_update_lp`, filter exists |
+| BODY | the exciter's low-pass corner, ahead of the resonator | how bright the strike that hits the string is | a trim inside `Exciter::_recompute_filter`, filter exists |
 | BBD | **pre-emphasis** one-pole on the input, ahead of the line | how bright what enters the line is | 1 one-pole/channel, new |
-| FEED | the one-pole **inside** the feedback path | unchanged, 200 Hz…16 kHz | none |
+| FEED | the one-pole **inside** the feedback path | unchanged in what it does | the filter stays; the knob becomes a trim (§4.2) and moves onto the broadcast (§4.4) |
 
-Each cell gets its own rails and prints Hz, exactly as `ATTACK` and `DECAY`
-already carry per-engine curves.
+Each cell gets its own octave span either side of neutral, exactly as `ATTACK`
+and `DECAY` already carry per-engine curves and `BbdEngine::set_filt` already
+carries an asymmetric one.
 
-### 4.3 Why BBD is pre-emphasis and not `kFilterHz`
+### 4.4 How EDGE reaches six engines
+
+FEED's EDGE is delivered by `Part::set_feed_damp_hz`, which is deliberately
+**not** in the broadcast line — a one-engine setter, in Hz, with the knob's
+curve living host-side in `Fireflow.cpp`. That shape does not survive contact
+with five more cells, and the plan must change it rather than add five more
+one-engine setters:
+
+- `Part` gains `set_voice_edge(float t)` next to `set_voice_filt(float t)`,
+  broadcasting to all six engines. `set_feed_damp_hz` and its host-side curve
+  go away; FEED's neutral moves into `feed_config.h` where the other engines'
+  neutrals also live.
+- `Instrument` gains the matching per-part forward.
+- Each engine gains `set_edge(float t)`, bipolar, `0 == neutral` — the same
+  signature `set_filt` already has.
+- **All three hosts have to deliver it, and only one of them will complain if
+  it does not.** `host/vcv/` pushes it in `pushParams`; `host/render/` needs a
+  scenario action in `scenario.cpp` or EDGE is unreachable from every render
+  test; `shell/` maps one control today and needs nothing, which is a fact
+  worth stating so nobody goes looking.
+
+The same review that found this also found the reason it matters: an engine
+missing from a broadcast line is the silent-dead-knob failure this project has
+already had three times, and `part.h`'s own comment on those lines says so.
+
+### 4.5 Why BBD is pre-emphasis and not `kFilterHz`
 
 An earlier draft of this design named `bbd_tuning::kFilterHz` (3600 Hz, three
 poles inside the delay loop) as BBD's existing cell. That is wrong twice over,
@@ -168,25 +248,31 @@ tone controls shape how the signal decays. In a companded bucket brigade the
 compander responds to what comes in, so pre-emphasis is an audibly different
 grip and is not redundant with either existing control.
 
-### 4.4 BODY's dead zone, stated rather than hidden
+### 4.6 BODY's dead zone, stated rather than hidden
 
-`Exciter::_update_lp` derives the click/noise cutoff from `_char` (RESO) in
-three zones: click 2–8 kHz, noise 1–10 kHz, and — in zone 2, the sputter/ping
-character at RESO ≥ 0.67 — a flat 10 kHz that the comment marks `unused`.
+`Exciter::_recompute_filter` derives the click/noise cutoff from `_char`
+(RESO) in three zones: click 2–8 kHz, noise 1–10 kHz, and — in zone 2, the
+sputter/ping character at RESO ≥ 0.67 — a flat 10 kHz the comment marks
+`unused`.
 
-**EDGE is therefore inert in the top third of another knob's travel.** Three
-ways out:
+It says `unused` because **zone 2 does not run through the filter at all.**
+`Exciter::process` computes `sputter * (1 - t) + ping * t` and never calls
+`_lp.process()`; the one-pole is in the zone 0 and zone 1 branches only. An
+earlier draft of this document had this wrong and called the repair "give the
+corner back, a small change" — it is not: it is inserting a filter into a
+signal path that has none.
 
-1. Give zone 2 its filtering back. The ping already runs through `_lp`; it is
-   the corner that is switched off, so this is a small change with audible
-   consequences.
-2. Give EDGE a second meaning in zone 2 (the ping frequency).
-3. Leave it and write it down.
+**Decision: zone 2 stays as it is, and EDGE is inert there.** Not because the
+repair is hard, but because it would change a character somebody chose, and it
+would couple EDGE to level rather than tone — the ping is a `fast_sin` at the
+fundamental, so a low-pass sweeping down attenuates it outright instead of
+colouring it.
 
-The plan should take option 1 and treat it as a listening item; option 3 is
-the fallback if the listening pass rejects it. Option 2 is recorded for
-completeness and is not recommended — a knob that changes meaning inside
-another knob's travel is the failure mode `DYNAMIC_CAPTIONS` exists to avoid.
+So: **EDGE does nothing in the top third of RESO on a BODY deck.** That is a
+documented blind spot, and the plan writes it into the source comment, the
+engine map and the by-ear ledger so the next reader does not file it as a bug.
+A knob that changes meaning inside another knob's travel — the alternative —
+is the failure mode `DYNAMIC_CAPTIONS` exists to prevent.
 
 ## 5. The words
 
@@ -204,10 +290,11 @@ plain one and a specific word only where the meaning genuinely departs. §6
 says why that shape, and not a specific word per cell, is the one to copy.
 
 `SCAT`, `SWAY`, `RPTS`, `SNAP` and `PRE` were checked against the generator's
-printed vocabulary; none collides. `RPTS` rather than `FDBK` because `FB` and
-`FFB` are already printed for the reverb, and two feedbacks would be one word
-too many on one instrument. Repeats *within* one knob's tuple are house
-practice — `ATTACK` prints `ATK` four times, `FILT` prints `FILT` three times.
+printed vocabulary; none collides. `RPTS` rather than `FDBK` because `FB` is
+already printed for FLUX's tape-echo feedback (`FLUXFB_A/B`, tooltip `FFB`),
+and two feedbacks would be one word too many on one instrument. Repeats
+*within* one knob's tuple are house practice — `ATTACK` prints `ATK` four
+times, `FILT` prints `FILT` four times.
 
 ## 6. Why the SYNTH cell is the axis name
 
@@ -263,8 +350,16 @@ Four gates above the cell level:
   the base **only** on FEED. That inverts: keeping the ternary becomes the
   regression.
 - **Shipped defaults.** The gate that recomputes `INIT_DEFAULTS` from
-  `feed_config.h` grows to cover six engines' rails, each read from its engine
-  header rather than compared against a literal.
+  `feed_config.h` changes its subject: instead of deriving one knob position
+  from one engine constant, it asserts **the neutral is the engine constant**,
+  once per engine, each read from that engine's own header. EDGE at centre
+  must leave all six engines bit-unchanged; that is one render per engine and
+  it is RED-provable by nudging any single neutral.
+- **Delivery.** A gate that fails if any engine is missing from
+  `set_voice_edge`'s broadcast line, and a render-host scenario that actually
+  moves EDGE — without the `scenario.cpp` action the whole control is
+  unreachable from every render test, which is the one way this feature could
+  ship with green tests and no coverage at all.
 
 **No CPU figure before the bench.** Four new one-poles per deck is a statement
 about the design; what they cost is the board's to say. A bench row runs before
@@ -272,7 +367,9 @@ any number enters a document.
 
 ## 8. Not in this design
 
-- The rails and curves themselves — listening work, §9.
+- The octave spans and curves themselves — listening work, §9. The *neutrals*
+  are not optional and are named in §4.2; only how far the trim reaches is
+  open.
 - BODY's level parity, which has its own `⬜ Planned` roadmap entry.
 - **"EDGE = how sharp are the edges"** — the rejected alternative axis: polyblep
   amount on SYNTH, mip bias on WAVE, i.e. a deliberate lo-fi/aliasing control.
@@ -287,5 +384,10 @@ any number enters a document.
 3. BBD at `DPTH = 1.0` — above unity before the loss pole.
 4. BODY zone 2: whether restoring the exciter's corner there is an improvement
    or a change to a character that was chosen.
-5. Whether the high-pass on SYNTH, WAVE and SAMPLER wants three different rail
-   pairs or is honestly one control with one pair.
+5. Whether the high-pass on SYNTH, WAVE and SAMPLER wants three different
+   octave spans or is honestly one control with one span.
+6. **DPTH on BODY may be a whisper.** `body_voice.cpp` caps the drift at
+   `kDriftDetuneCt = 3.f` (±3 cents) and `kDriftPanAmt = 0.25f`, and BODY's
+   pan fan is pinned to centre at one voice — so a full knob sweep buys ±3
+   cents of wander. If the listening pass finds `SWAY` too small to be worth a
+   quarter of the VOICE row, the ceiling is the number to move, not the knob.
