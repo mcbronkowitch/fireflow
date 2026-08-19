@@ -344,6 +344,12 @@ void SynthEngineT<V>::_update_control() {
         vc.set_pan((kVoices > 1 ? kPanFan[v] : 0.f) * width);
         vc.set_drift_amount(width);
         vc.set_material_character(_material_char);   // no-op on VoiceT
+        // EDGE (spec 2026-08-19 voice-knobs-dpth-edge, 4.2): pushed here, not
+        // from set_edge() above, so a voice allocated WHILE the knob sits at
+        // a non-zero trim still gets it -- same reasoning as set_hold below.
+        // Real on BodyVoice (Task 4); a no-op on VoiceT until Task 5 (SYNTH,
+        // WAVE) fills in the output high-pass.
+        vc.set_edge(_edge);
         // CHOKE's palm mute. set_hold() above records _hold and demotes the
         // surface, but never pushed the flag to the voices -- so BodyVoice::
         // set_hold was dead code and a BODY deck ignored CHOKE entirely

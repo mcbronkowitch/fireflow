@@ -58,9 +58,25 @@ void edge_case(EngineId eng) {
     i0.set_engine(PART_A, eng);
     i1.set_engine(PART_A, eng);
     i2.set_engine(PART_A, eng);
+    // BODY (and every future voice engine added here) renders silence until
+    // something excites it -- unlike FEED, an always-on seeded network. RESO
+    // is fixed inside zone 0/1 (< 0.67): at RESO >= 0.67 EDGE is legitimately
+    // inert on BODY (spec 4.6, the sputter/ping zone's filter is not in the
+    // signal path at all), and a case driven there would measure that blind
+    // spot instead of the wiring.
+    if (eng == ENGINE_BODY) {
+        i0.set_voice_resonance(PART_A, 0.2f);
+        i1.set_voice_resonance(PART_A, 0.2f);
+        i2.set_voice_resonance(PART_A, 0.2f);
+    }
     /* i0: the knob is never touched */
     i1.set_voice_edge(PART_A, 0.f);          // neutral
     i2.set_voice_edge(PART_A, 0.9f);         // trimmed
+    if (eng == ENGINE_BODY) {
+        i0.trigger_manual(PART_A);
+        i1.trigger_manual(PART_A);
+        i2.trigger_manual(PART_A);
+    }
     render(i0, e, f, 24000);
     render(i1, a, b, 24000);
     render(i2, c, d, 24000);
@@ -96,3 +112,4 @@ void edge_case(EngineId eng) {
 }  // namespace
 
 TEST_CASE("edge: the trim reaches FEED")    { edge_case(ENGINE_FEED); }
+TEST_CASE("edge: the trim reaches BODY")    { edge_case(ENGINE_BODY); }

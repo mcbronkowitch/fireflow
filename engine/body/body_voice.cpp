@@ -150,6 +150,11 @@ void BodyVoice::_apply_env() {
 // RESO is the exciter character, not filter resonance.
 void BodyVoice::set_resonance(float n) { _exciter.set_character(n); }
 
+// EDGE trims the exciter's own filter corner (spec 2026-08-19
+// voice-knobs-dpth-edge, 4.3) -- Exciter::set_edge does the clamping and the
+// recompute, same as set_character above.
+void BodyVoice::set_edge(float t) { _exciter.set_edge(t); }
+
 // FILTER's Hz value becomes brightness on a log map over the engine's own
 // 60 Hz - 14 kHz rail, plus the loudness tilt that brightness alone does not
 // produce.

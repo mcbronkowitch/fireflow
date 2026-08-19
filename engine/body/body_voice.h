@@ -47,6 +47,10 @@ public:
     void set_drift_amount(float a);
     void set_hold(bool on);                             // palm mute
     void set_excitation(float x);                       // per-sample bus feed
+    // EDGE: bipolar trim on the exciter's own filter corner (spec 2026-08-19
+    // voice-knobs-dpth-edge, 4.3). Forwards straight to Exciter::set_edge,
+    // same shape as set_resonance below.
+    void set_edge(float t);
     // COLOR, read as the chord's QUALITY (spec §5/§7). Signed -1..+1: which
     // WAY the partials stretch. DETUNE (set_detune_cents) is how far, and
     // multiplies this -- so DETUNE = 0 is harmonic whatever COLOR says.

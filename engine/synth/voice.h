@@ -66,6 +66,13 @@ public:
     void set_excitation(float /*x*/) {}
     void set_material_character(float /*c*/) {}
 
+    // EDGE stub (spec 2026-08-19 voice-knobs-dpth-edge, 4.3): SynthEngineT
+    // pushes this to every voice unconditionally. SYNTH and WAVE get their
+    // output high-pass in Task 5; until then this is an empty inline, exactly
+    // like set_material_character above, so the push costs one dead call per
+    // voice per control tick and changes nothing about the signal path.
+    void set_edge(float /*t*/) {}
+
 private:
     void _apply_freq();                   // osc A/B freq from pitch+detune+drift
 

@@ -35,6 +35,7 @@ public:
 
     void reset(float value = 0.f) { _value = value; _smoothing = false; }
     float value() const { return _value; }
+    float coef() const { return _kof; }
 
 private:
     float _kof = 1.f;

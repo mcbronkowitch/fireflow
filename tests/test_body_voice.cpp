@@ -268,6 +268,60 @@ TEST_CASE("Exciter bows the click zone at the fundamental, not a fixed rate") {
     CHECK(high < 920);
 }
 
+// -- EDGE on BODY (Task 4, spec 2026-08-19 voice-knobs-dpth-edge 4.3/4.6) --
+
+TEST_CASE("body: EDGE at 0 leaves the exciter's corner exactly where RESO put it") {
+    Exciter ex;
+    ex.init(1, 48000.f);
+    ex.set_character(0.2f);                 // zone 0, click
+    const float k0 = ex.coef_for_test();
+    ex.set_edge(0.f);
+    CHECK(ex.coef_for_test() == k0);        // bit equality, not Approx
+}
+
+TEST_CASE("body: EDGE moves the corner in both directions, inside zones 0 and 1") {
+    Exciter ex;
+    ex.init(1, 48000.f);
+    for (float c : {0.2f, 0.5f}) {          // click zone, noise zone
+        ex.set_character(c);
+        ex.set_edge(0.f);   const float k0 = ex.coef_for_test();
+        ex.set_edge(+1.f);  CHECK(ex.coef_for_test() > k0);
+        ex.set_edge(-1.f);  CHECK(ex.coef_for_test() < k0);
+    }
+}
+
+TEST_CASE("body: EDGE is inert in zone 2, and that is the documented behaviour") {
+    // NOT a bug and NOT a tolerance: Exciter::process computes
+    // sputter*(1-t) + ping*t and never calls _lp.process(), so the one-pole is
+    // not in the zone-2 path at all. This test exists so that INSERTING it
+    // later breaks something loudly instead of quietly changing a character.
+    //
+    // TWO fresh Exciters, not one Exciter rendered twice: zone 2's sputter is
+    // RNG-driven (_rng.next_unipolar()/next_bipolar() gate the bursts), so a
+    // second render on the SAME object continues the RNG stream and could
+    // never equal the first regardless of EDGE -- that would fail the test
+    // for a reason that has nothing to do with the knob. Two identically
+    // seeded, identically driven objects instead compare the same RNG draws
+    // under two different _edge values.
+    Exciter a, b;
+    a.init(1, 48000.f);
+    b.init(1, 48000.f);
+    a.set_character(0.9f);   // zone 2, sputter -> ping
+    b.set_character(0.9f);
+    a.set_length(0.05f);     // _decay must be non-zero, or _env collapses to 0
+    b.set_length(0.05f);     // after the very first sample and the whole
+                              // render reads 0 == 0 for a reason that has
+                              // nothing to do with EDGE (caught by hand:
+                              // first draft of this test did exactly that).
+    a.set_freq(220.f);
+    b.set_freq(220.f);
+    a.strike(1.f);
+    b.strike(1.f);
+    a.set_edge(0.f);
+    b.set_edge(+1.f);
+    CHECK(a.render_sum_for_test(4800) == b.render_sum_for_test(4800));
+}
+
 // --- BodyVoice (Task 7) ---------------------------------------------------
 
 static void tick(BodyVoice& v, int samples, float* l = nullptr, float* r = nullptr) {
