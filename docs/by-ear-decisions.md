@@ -161,11 +161,20 @@ From the 2026-07-22 fix pass (register IDs in the test suite):
   threshold, accepted: removing it needs unconditional `tanh`, which costs
   the shipped default 57 % of its level. Do not "finish" this by making the
   saturation unconditional.
-- **MOTION's scatter starts at zero on a sampler deck, MOD is the control
-  (F-04, variant a).** Chosen over deleting the scatter. The lane is bipolar
-  and the negative half is clamped away, so the scatter *pulses* rather than
-  breathes — an accepted side effect judged by ear from the
-  `sampler_extremes` render, not an oversight.
+- **MOTION's scatter on a sampler deck (F-04, variant a).** The hard clamp
+  that folds away the lane's negative half — chosen over deleting the
+  scatter — is still the accepted form, judged by ear from the
+  `sampler_extremes` render, not an oversight. What changed since (voice-
+  knobs-dpth-edge, task 1): the base used to be discarded on a sampler deck,
+  with MOD as the only control; DPTH now writes that base and the sampler
+  reads it halved (`sampler_cfg::kMotionBaseScale`), so DPTH moves the
+  scatter too. That also makes the pulse-vs-breathe question DPTH-dependent
+  rather than unconditional: at DPTH 0 the clamp still throws the whole
+  negative half away and the scatter *pulses*; above DPTH 0 the sum sits off
+  the floor and the clamp should bite less, softening toward a *breathe* —
+  unmeasured where or how far. See the open-question comment above the
+  `ENGINE_SAMPLER` block in `part.cpp` for the two named alternative
+  formulas, still unresolved.
 - **`kSpawnHeadroom = 2`.** Caps live grains at `ceil(overlap) + 2`, and
   through `len_ceil` it also caps how far tape mode may stretch a grain — one
   constant, two jobs. Bastian chose 2 over 1 to keep tape's smear out to ~4

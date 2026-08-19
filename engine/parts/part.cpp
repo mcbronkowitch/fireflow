@@ -302,6 +302,24 @@ void Part::_control_tick() {
     // For scenario authors: set_target_base(part, LANE_MOTION, …) on a
     // sampler deck now DOES move the sound -- the reverse of the finding a
     // 2026-07-22 review recorded here, from before DPTH existed to write it.
+    //
+    // Open listening question, carried over unresolved from the code this
+    // replaced: the lane stays bipolar, and clampf(…, 0.f, 1.f) below still
+    // throws away whatever the sum falls below 0. Call the modulation term
+    // mmod (= _mod_term(LANE_MOTION)). At DPTH 0 (base_eff 0) that is exactly
+    // the old behaviour: mmod's negative half is clamped away entirely, so
+    // the scatter PULSES -- sits at 0 for half the modulation period, then
+    // jumps into a positive excursion -- instead of breathing evenly. Above
+    // DPTH 0 the sum sits off the floor by base_eff, so the clamp bites
+    // progressively less as DPTH rises and the pulse should soften toward a
+    // breathe -- unmeasured where or how far. Two alternatives, if pulsing at
+    // low DPTH is not the wanted shape: fabsf(mmod) for a continuous
+    // full-rate version (both half-waves contribute, never a standstill), or
+    // a rescaled bipolar mapping (0.5f + 0.5f*mmod) that breathes throughout
+    // instead of pulsing. The hard clamp here is still the currently
+    // accepted form (variant a, docs/by-ear-decisions.md) -- which of the
+    // three wins, and whether DPTH changes the answer, is a listening
+    // decision, not one this comment makes.
     if (_engine_id == ENGINE_SAMPLER) {
         _tg[LANE_MOTION] = clampf(
             _base[LANE_MOTION] * sampler_cfg::kMotionBaseScale + _mod_term(LANE_MOTION),
