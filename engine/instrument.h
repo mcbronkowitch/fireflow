@@ -321,10 +321,9 @@ public:
     void set_voice_sub(int p, float n)       { _parts[p].set_voice_sub(n); }
     void set_voice_detune(int p, float n)    { _parts[p].set_voice_detune(n); }
     void set_voice_filt(int p, float t)      { _parts[p].set_voice_filt(t); }
-    // FEED audition control, host-only: the in-loop DAMP cutoff in Hz. Inert
-    // on every other engine because it does not broadcast. The firmware never
-    // calls it; FeedEngine::init leaves it at feed_cfg::kDampFixedHz.
-    void set_feed_damp_hz(int p, float hz)   { _parts[p].set_feed_damp_hz(hz); }
+    // EDGE: bipolar trim, 0 == every engine's own neutral. Broadcasts to all
+    // six engines -- see Part::set_voice_edge.
+    void set_voice_edge(int p, float t)      { _parts[p].set_voice_edge(t); }
     void trigger_manual(int p)               { _parts[p].trigger_manual(); }
     int  active_voices(int p) const          { return _parts[p].active_voices(); }
     float voice_env(int p, int v) const      { return _parts[p].voice_env(v); }

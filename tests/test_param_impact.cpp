@@ -305,9 +305,28 @@ TEST_CASE("param impact: every parameter moves audio somewhere") {
     for (int p : { P_SONG_B })
         expected_untraced[p] = true;
 
+    // STUBBED: dead because the engine's cell is not written YET, with a task
+    // that writes it. This group exists to be EMPTIED, not maintained -- it is
+    // a third array rather than an entry in either list above because "not
+    // built yet" is a different claim from "cannot" and from "nobody knows".
+    //
+    // EDGE_A / EDGE_B: the broadcast line Part::set_voice_edge reaches all six
+    //   engines and FEED implements it (tests/test_voice_edge_broadcast.cpp),
+    //   but SYNTH, WAVE, BODY, the sampler and the BBD carry one-line stubs
+    //   that store the trim and nothing else, and NONE of the four frozen
+    //   points runs FEED -- they run BODY, WAVE and SYNTH. So this reads dead
+    //   here while being demonstrably live in the engine it is finished on.
+    //   Tasks 4-7 of spec 2026-08-19 voice-knobs-dpth-edge replace the stubs;
+    //   the FIRST of Task 4 (BODY) or Task 5 (SYNTH/WAVE) to land will redden
+    //   this case, and the fix then is to DELETE this group, not to extend it.
+    bool expected_stubbed[P_COUNT] = {};
+    for (int p : { P_EDGE_A, P_EDGE_B })
+        expected_stubbed[p] = true;
+
     bool expected[P_COUNT] = {};
     for (int p = 0; p < P_COUNT; ++p)
-        expected[p] = expected_proven[p] || expected_untraced[p];
+        expected[p] = expected_proven[p] || expected_untraced[p]
+                   || expected_stubbed[p];
 
     const Terrains ter = load_points();
     bool actual[P_COUNT] = {};

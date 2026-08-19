@@ -44,13 +44,12 @@ public:
     void set_sub(float n);         // SUB
     void set_filt(float t);        // FILT, bipolar: a real LP on the output
 
-    // AUDITION only, not a performance control and not on the panel: the
-    // in-loop DAMP cutoff in Hz, so kDampFixedHz can be heard against brighter
-    // settings as well as the darker ones it was already rejected against.
-    // init() sets it to feed_cfg::kDampFixedHz; on the firmware nothing else
-    // ever calls it. See the definition for why the top of the range aliases
-    // on purpose.
-    void set_damp_hz(float hz);
+    // EDGE, bipolar, and on the broadcast line (Part::set_voice_edge): a trim
+    // of feed_cfg::kEdgeOctaves either side of the in-loop DAMP cutoff. t == 0
+    // IS feed_cfg::kDampFixedHz, exactly, so a deck nobody touched sounds as
+    // it did before the knob existed. The Hz law is FEED's own; every engine
+    // defines its own neutral (spec 2026-08-19 voice-knobs-dpth-edge, 4.2).
+    void set_edge(float t);
     float damp_hz_for_test() const { return _damp_hz; }
     // DETUNE means SPREAD on a FEED deck, and it gets there as the LANE_SIZE
     // base (host/vcv/src/Fireflow.cpp), not through this setter. Kept as an
@@ -80,6 +79,11 @@ public:
     int   voiced_tones_for_test() const { return _voiced_n; }
 
 private:
+    // The old public set_damp_hz, in Hz and with its own clamp and expf.
+    // Private because EDGE is the only surface now: an absolute-Hz setter
+    // beside a trim would be two ways to write one value, and only one of
+    // them would keep _edge honest.
+    void _set_damp_hz(float hz);
     void _control_tick();
     void _rebuild_allocation();
     void _draw_individual();
@@ -96,7 +100,8 @@ private:
     float    _sr = 48000.f;
     int      _ctrl_ctr = 0;
     float    _inv_sqrt_pairs = 1.f;   // 1/sqrt(kPairs), set in init()
-    float    _damp_hz = -1.f;         // set_damp_hz's guard; init() opens it
+    float    _damp_hz = -1.f;         // _set_damp_hz's guard; init() opens it
+    float    _edge = -2.f;            // set_edge's guard; init() opens it too
 
     // lanes
     float _bond = 0.f;

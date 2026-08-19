@@ -244,6 +244,13 @@ public:
     void set_window_attack(float n);
     void set_window_decay(float n);
     void set_filt(float n);
+    // EDGE, bipolar, 0 == this engine's own neutral (spec 2026-08-19
+    // voice-knobs-dpth-edge, 4.2).
+    //
+    // STUB. It stores the trim and does nothing else, so EDGE is silently
+    // DEAD on a sampler deck. TASK 6 of that plan replaces it with a
+    // high-pass on the summed grain bus.
+    void set_edge(float t) { _edge = clampf(t, -1.f, 1.f); }
     void set_resonance(float n);
     void set_sub(float n);
     void set_detune(float n);
@@ -423,6 +430,8 @@ private:
     // voice row
     float _atk_n = 0.3f, _dec_n = 0.3f;
     float _filt_amt = 0.f, _res_n = 0.15f, _sub_n = 0.f, _detune_n = 0.f;
+    // EDGE knob -1..+1 (boot: neutral). Stored and unread -- see set_edge().
+    float _edge = 0.f;
 };
 
 }  // namespace spky

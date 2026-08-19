@@ -168,6 +168,7 @@ add_executable(spky_tests
     tests/test_part_engine_contract.cpp
     tests/test_param_table.cpp
     tests/test_param_impact.cpp
+    tests/test_voice_edge_broadcast.cpp
     tests/test_smooth_law.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)

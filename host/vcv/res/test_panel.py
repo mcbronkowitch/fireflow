@@ -1804,7 +1804,7 @@ def feed_host_wiring_issues(cpp):
     knob stops writing LANE_SIZE simply has a dead SPREAD control, one whose
     LANE_MOTION base is never written sits on Part's compiled-in 0.5 with no
     way to reach DEPTH's ends, and one whose EDGE knob never reaches
-    set_feed_damp_hz keeps init()'s cutoff while the knob turns.
+    set_voice_edge keeps every engine's own neutral while the knob turns.
     """
     issues = []
     push = cpp_scope(cpp, "void pushParams()")
@@ -1834,9 +1834,12 @@ def feed_host_wiring_issues(cpp):
                       "here is what made five of them unreachable")
     if "feedPart?pp(DEPTH_A,p)" in push_n:
         issues.append("the FEED-only ternary on LANE_MOTION's base is back")
-    if "inst.set_feed_damp_hz(p,feedDampHzFromKnob(pp(DAMP_A,p)));" not in push_n:
-        issues.append("the EDGE knob must reach set_feed_damp_hz, or it turns "
-                      "against init()'s cutoff and nothing moves")
+    if "inst.set_voice_edge(p,pp(DAMP_A,p));" not in push_n:
+        issues.append("the EDGE knob must reach set_voice_edge RAW, or it "
+                      "turns against every engine's own neutral and nothing "
+                      "moves -- the knob-to-Hz law is the engine's now, and a "
+                      "host-side conversion would be right on one engine and "
+                      "wrong on five")
     return issues
 
 
@@ -1854,47 +1857,35 @@ def _feed_cfg_floats():
     return out
 
 
-def _damp_range():
-    """kFeedDampLoHz / kFeedDampHiHz, read from the host."""
-    here = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
-        cpp = f.read()
-    out = {}
-    for name in ("kFeedDampLoHz", "kFeedDampHiHz"):
-        m = re.search(r"constexpr\s+float\s+" + name + r"\s*=\s*([0-9.]+)f", cpp)
-        check(m is not None, f"Fireflow.cpp has no {name}")
-        out[name] = float(m.group(1))
-    return out
-
-
 def test_feed_shipped_defaults_are_the_engine_constants():
-    """The two FEED knobs must BOOT on what the engine ships, so a patch that
+    """The two VOICE knobs of 2026-08-19 must BOOT neutral, so a patch that
     never touches them sounds exactly as it did before they existed.
 
-    This is the half of the old guard that moved: while DPTH and EDGE were
-    module floats, their default was a C++ initialiser; as ParamIds it is
-    INIT_DEFAULTS. Both numbers are RECOMPUTED here from feed_config.h and the
-    host's own range rather than compared against a literal -- a gate that
-    hard-codes 0.632631779 stops meaning anything the moment kDampFixedHz
-    moves, which is exactly when it is needed."""
+    DPTH still recomputes its default from feed_config.h: the knob IS the
+    LANE_MOTION base, so kDepthBase is literally the position it must boot at.
+
+    EDGE no longer can, and that is the change rather than a weakening. It
+    stopped being an absolute cutoff on host-owned 200..16000 Hz rails, where
+    the boot position had to be DERIVED from kDampFixedHz, and became a
+    bipolar trim around a neutral each engine defines for itself -- so the one
+    boot value that can be right on six engines at once is the trim's centre,
+    0. There is no host-side range left to read.
+
+    Task 8 of the same plan replaces this with the stronger gate the trim
+    makes possible: that every engine's neutral is a NAMED CONSTANT in its own
+    header rather than a literal in the host."""
     cfg = _feed_cfg_floats()
-    rng = _damp_range()
     want_depth = cfg["kDepthBase"]
-    want_damp = (math.log(cfg["kDampFixedHz"] / rng["kFeedDampLoHz"])
-                 / math.log(rng["kFeedDampHiHz"] / rng["kFeedDampLoHz"]))
-    check(rng["kFeedDampLoHz"] < cfg["kDampFixedHz"] < rng["kFeedDampHiHz"],
-          f"kDampFixedHz {cfg['kDampFixedHz']} is outside the knob's own range "
-          f"{rng['kFeedDampLoHz']}..{rng['kFeedDampHiHz']} -- the shipped value "
-          f"is not reachable")
     for side in ("A", "B"):
         got_d = g.INIT_DEFAULTS["DEPTH_" + side]
         got_e = g.INIT_DEFAULTS["DAMP_" + side]
         check(abs(got_d - want_depth) < 1e-6,
               f"DEPTH_{side} boots at {got_d}, not feed_cfg::kDepthBase "
               f"({want_depth})")
-        check(abs(got_e - want_damp) < 1e-6,
-              f"DAMP_{side} boots at {got_e}, which is not kDampFixedHz "
-              f"({cfg['kDampFixedHz']} Hz -> {want_damp:.9f} on this knob)")
+        check(got_e == 0.0,
+              f"DAMP_{side} boots at {got_e}, not at EDGE's trim centre (0.0) "
+              f"-- any other position moves five engines' factory sound the "
+              f"moment the knob exists")
 
 
 def test_feed_host_wiring():
@@ -1924,7 +1915,7 @@ def test_feed_host_wiring_guard_rejects_representative_regressions():
          "            inst.set_target_base(p, spky::LANE_MOTION,\n"
          "                                 feedPart ? pp(DEPTH_A, p) : 0.5f);",
          "the FEED-only ternary restored"),
-        ("            inst.set_feed_damp_hz(p, feedDampHzFromKnob(pp(DAMP_A, p)));",
+        ("            inst.set_voice_edge(p, pp(DAMP_A, p));",
          "",
          "EDGE push removed"),
         ("            if (inst.engine_id(p) != spky::ENGINE_FEED) {",

@@ -615,14 +615,14 @@ APPENDED_PANEL_PARAMS = [
     # 2026-08-18 feed §4, and docs/engine-map.md §9's two open questions).
     # DPTH is the FM index -- it was always reachable as the LANE_MOTION base,
     # but the host pinned it to feed_cfg::kDepthBase and only MOD could move
-    # it. DAMP is the in-loop one-pole cutoff in Hz, whose 3200 was confirmed
-    # against darker settings only.
+    # it. DAMP is EDGE: on FEED the in-loop one-pole, whose 3200 Hz was
+    # confirmed against darker settings only.
     #
-    # FEED-ONLY, and today they are inert on the other five engines. That is a
-    # deliberate interim: Bastian wants to feel whether two more VOICE knobs
-    # are worth having before deciding what they should do elsewhere, and this
-    # panel's idiom is otherwise re-pointing (RES -> RATIO, SOURCE -> TIMB,
-    # FILT -> BRITE), never a dead control. The re-pointing round is owed.
+    # The re-pointing round is UNDER WAY (spec 2026-08-19 voice-knobs-dpth-
+    # edge). DPTH reaches all six engines since Task 2; EDGE broadcasts since
+    # Task 3 but still lands on a stub in five of them, so it is inert
+    # everywhere but FEED until Tasks 4-7 land. The tips below still say FEED
+    # for that reason; Task 8 is the caption round that retires them.
     #
     # Appended, so every existing param id keeps its number.
     Ctl("DEPTH_A", SMKNOB, VOICE_X[3],     ROW_V1, "DPTH", "FEED: FM index"),
@@ -774,19 +774,20 @@ INIT_DEFAULTS = {
     # sound (FF_hw_Init.vcvm) must boot at the same speed it always has, not
     # x1/32 (0.0) or x4 (1.0).
     "PACE": 0.500000000,
-    # The two FEED knobs boot on the shipped constants, so a fresh patch
-    # sounds exactly as it did before they existed.
+    # The two VOICE knobs of 2026-08-19 boot neutral, so a fresh patch sounds
+    # exactly as it did before they existed.
     #   DPTH = feed_cfg::kDepthBase = 0.5, the knob IS the LANE_MOTION base.
-    #   DAMP = feed_cfg::kDampFixedHz = 3200 Hz on the log travel 200..16000:
-    #          ln(3200/200) / ln(16000/200) = ln 16 / ln 80 = 0.632718364.
-    #          test_feed_shipped_defaults_are_the_engine_constants RECOMPUTES
-    #          this from feed_config.h and the host's own range instead of
-    #          comparing it to a literal -- and earned its keep on the first
-    #          run, catching 0.632631779 here.
+    #   DAMP = EDGE's trim centre. 0.0, and no arithmetic: EDGE stopped being
+    #          an absolute cutoff on 200..16000 Hz rails (where 3200 Hz meant
+    #          the knob position 0.632718364) and became a BIPOLAR TRIM whose
+    #          centre is each engine's own neutral. One knob has one boot
+    #          value and six engines have six neutrals, so the boot value
+    #          cannot be a Hz-derived position -- it has to be the centre
+    #          (spec 2026-08-19 voice-knobs-dpth-edge, 4.2).
     "DEPTH_A": 0.500000000,
     "DEPTH_B": 0.500000000,
-    "DAMP_A": 0.632718364,
-    "DAMP_B": 0.632718364,
+    "DAMP_A": 0.000000000,
+    "DAMP_B": 0.000000000,
 }
 
 # --- lights --------------------------------------------------------------------

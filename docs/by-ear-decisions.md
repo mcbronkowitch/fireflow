@@ -225,14 +225,23 @@ What is worth knowing before the listening pass:
 
 - **3200 Hz was only ever confirmed DOWNWARD.** Variants B and C at 1200 and
   500 Hz were rejected by ear on 2026-08-19; nobody has heard 3200 against
-  anything brighter. The knob reaches 16 kHz on purpose — past where half this
-  engine's anti-aliasing stops working.
+  anything brighter, which is why the trim reaches up as far as it reaches
+  down.
+- **EDGE is a TRIM, not a cutoff, since later the same day.** The 200–16000 Hz
+  log rails are gone with the FEED-only setter that owned them: the knob is
+  bipolar now, its centre IS `kDampFixedHz`, and its travel is
+  `feed_cfg::kEdgeOctaves` — **2.0 octaves, a FIRST VALUE and yours** — either
+  side, so ±1 reaches 800 Hz and 12.8 kHz. Widening it hands the player more
+  of the aliasing guard; that is a legitimate thing to want to hear, and it is
+  what this constant decides.
 - **DEPTH at 0.5 is a defensive requirement, not a measurement.** Spec §4 asks
   that it be a good sound because the control had no knob; now that it has one,
   that requirement can be tested instead of assumed.
 
-If a listening pass moves either, move the CONSTANT in `feed_config.h` — the
-knob default is derived from it and a gate recomputes the derivation.
+If a listening pass moves `kDepthBase`, move the CONSTANT in `feed_config.h` —
+the DPTH knob default is derived from it and a gate recomputes the derivation.
+`kDampFixedHz` needs no such care any more: EDGE boots at its centre whatever
+that constant says.
 
 ### FEED level parity
 

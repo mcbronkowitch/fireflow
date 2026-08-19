@@ -1291,33 +1291,39 @@ panels, one per deck.
   the only way to move it was to route MOD at it. On an FM engine the index is
   arguably the most musical parameter there is, which makes spec §4's
   "DEPTH at 0.5 must be a good sound" a claim worth being able to disprove.
-- **DAMP cutoff**, 200 Hz to 16 kHz on a LOG slider, through the new
-  `FeedEngine::set_damp_hz`. 3200 Hz was confirmed only against DARKER
-  alternatives — variants B and C at 1200 and 500 Hz were rejected by ear — and
-  nobody has heard it against a brighter one. The top of the range deliberately
-  reaches past where half this engine's anti-aliasing stops working (the other
-  half is FeedPair's two-sample average): hearing where it starts to alias is
-  the point.
+- **DAMP cutoff**, first as an absolute 200 Hz–16 kHz LOG control and, later
+  the same day, as the bipolar **EDGE trim** it is now: `FeedEngine::set_edge`,
+  centred exactly on `kDampFixedHz` and spanning `feed_cfg::kEdgeOctaves` (2.0)
+  either side, i.e. 800 Hz to 12.8 kHz. 3200 Hz was confirmed only against
+  DARKER alternatives — variants B and C at 1200 and 500 Hz were rejected by
+  ear — and nobody has heard it against a brighter one, so the trim reaches up
+  as far as it reaches down. It still reaches past where half this engine's
+  anti-aliasing stops working (the other half is FeedPair's two-sample
+  average): hearing where it starts to alias is the point.
 
-Both boot on the shipped constants, so a patch that never touches them behaves
-exactly as before. As ParamIds Rack persists them for free, so the module holds
-no state for them at all — the two float arrays, their JSON keys and their reset
-all left with the menu. `set_damp_hz` carries an exact-argument guard: the host
-pushes it every block from a knob that almost never moves, and without the
-compare that is one libm `expf` per part per block for nothing. The firmware
-never calls it; `init()` is its only other writer.
+Both boot neutral, so a patch that never touches them behaves exactly as
+before. As ParamIds Rack persists them for free, so the module holds no state
+for them at all — the two float arrays, their JSON keys and their reset all
+left with the menu. `set_edge` carries an exact-argument guard on the KNOB
+value: the host pushes it every block from a knob that almost never moves, and
+without the compare that is one libm `pow` plus one `exp` per part per block
+for nothing. The firmware calls neither; `init()` reaches the cutoff through
+`set_edge(0)`, which is the only other writer.
 
-**The gate on the defaults RECOMPUTES them** rather than comparing against a
+**The gate on DPTH's default RECOMPUTES it** rather than comparing against a
 literal (`test_feed_shipped_defaults_are_the_engine_constants`): it reads
-`kDepthBase` and `kDampFixedHz` out of `feed_config.h`, reads the knob's range
-out of `Fireflow.cpp`, and derives what `INIT_DEFAULTS` must hold. A gate that
-hard-codes 0.632718364 stops meaning anything the moment `kDampFixedHz` moves —
-which is exactly when it is needed. It earned its keep on its first run by
-catching 0.632631779, which is what this document would otherwise be quoting.
+`kDepthBase` out of `feed_config.h` and derives what `INIT_DEFAULTS` must hold,
+because that knob IS the `LANE_MOTION` base. EDGE's half of that gate is gone
+with the rails it derived from — a trim's boot value is its centre, on every
+engine at once, and Task 8 of the DPTH/EDGE plan replaces it with the stronger
+assertion the trim makes possible: that each engine's neutral is a NAMED
+CONSTANT in its own header.
 
-**They are dead on the other five engines**, which is the first time anything on
-this panel is, and it is an interim: the re-pointing round is owed and is in
-[`roadmap.md`](roadmap.md). The plate word `EDGE` is likewise a placeholder —
+**EDGE broadcasts to all six engines since 2026-08-19** (`Part::set_voice_edge`,
+spec voice-knobs-dpth-edge §4.4), but five of them still answer with a stub, so
+it is audible on FEED alone until Tasks 4–7 land;
+`tests/test_voice_edge_broadcast.cpp` is the ledger of which ones are real. DPTH
+reaches all six for real. The plate word `EDGE` is still a placeholder —
 `DAMP` is taken by BODY's `DECAY`.
 
 ### Three measurement traps this engine sets, and what they cost

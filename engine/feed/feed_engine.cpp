@@ -29,11 +29,15 @@ void FeedEngine::init(float sample_rate) {
     _inv_sqrt_pairs = 1.f / std::sqrt(static_cast<float>(feed_cfg::kPairs));
     _env.init(_sr);
     _bank.init(_sr);
-    // The in-loop damp defaults to feed_config.h's fixed value. set_damp_hz
-    // exists so it can be auditioned by hand; nothing but the VCV menu calls
-    // it, and on the firmware this line is the only writer.
-    _damp_hz = -1.f;                      // force the guard in set_damp_hz open
-    set_damp_hz(feed_cfg::kDampFixedHz);
+    // The in-loop damp defaults to feed_config.h's fixed value, reached
+    // through EDGE's own neutral so there is exactly one path to it. Both
+    // guards are forced open first: _edge to a value the clamp cannot
+    // produce, so this call is not swallowed, and _damp_hz because a
+    // re-init() at a new sample rate must recompute the coefficient even
+    // though the cutoff in Hz did not move.
+    _edge    = -2.f;                      // outside [-1, +1] on purpose
+    _damp_hz = -1.f;
+    set_edge(0.f);
     _svf_l.Init(_sr);
     _svf_r.Init(_sr);
     _svf_l.SetRes(feed_cfg::kFiltRes);   // no SetDrive: SvfLp has no drive term
@@ -393,22 +397,41 @@ void FeedEngine::set_resonance(float n) {
 
 void FeedEngine::set_sub(float n) { _sub_n = clampf(n, 0.f, 1.f); }
 
-// The in-loop DAMP cutoff, in Hz. An AUDITION control, not a performance one:
-// feed_cfg::kDampFixedHz is the shipped value and the only thing that calls
-// this outside the VCV menu is init(). It exists because 3200 Hz was confirmed
-// only AGAINST DARKER alternatives -- variants B and C at 1200 and 500 Hz were
-// rejected by ear -- and nobody has heard it against a brighter one. That is a
-// listening question, and a listening question needs a knob.
+// EDGE on a FEED deck: a bipolar trim of the in-loop DAMP cutoff, centred on
+// feed_cfg::kDampFixedHz and spanning feed_cfg::kEdgeOctaves either side.
 //
+// Centre is not a rail position that happens to land on the shipped value --
+// pow(2, k*0) is exactly 1, so t == 0 writes kDampFixedHz bit for bit and a
+// deck nobody touched sounds as it did before this knob existed. That is what
+// makes EDGE a TRIM rather than an absolute cutoff, and it is the property
+// that lets one knob boot neutral on six engines with six different neutrals
+// (spec 2026-08-19 voice-knobs-dpth-edge, 4.2).
+//
+// 3200 Hz was confirmed only AGAINST DARKER alternatives -- variants B and C
+// at 1200 and 500 Hz were rejected by ear -- and nobody has heard it against a
+// brighter one, which is why the trim reaches up as far as it reaches down.
 // Half of this engine's anti-aliasing lives here (the other half is FeedPair's
-// two-sample average), so the top of the range is deliberately reachable: a
-// setting that aliases is a legitimate thing to hear, and finding where it
-// starts is the point of auditioning it.
+// two-sample average), so the span is what bounds how far the player can open
+// that guard; a setting that aliases is a legitimate thing to hear, and
+// kEdgeOctaves is the by-ear knob on how much of it is reachable.
 //
-// The exact-argument guard matters. The host pushes this every block from a
-// menu value that almost never moves, and without the compare that would be
-// one libm expf per part per block for nothing.
-void FeedEngine::set_damp_hz(float hz) {
+// The exact-argument guard matters, and it moved OUT to the knob value: the
+// host pushes this every block from a knob that almost never moves, and
+// without the compare that would be one libm pow plus one exp per part per
+// block for nothing.
+void FeedEngine::set_edge(float t) {
+    const float c = clampf(t, -1.f, 1.f);
+    if (c == _edge) return;
+    _edge = c;
+    _set_damp_hz(feed_cfg::kDampFixedHz *
+                 std::pow(2.f, feed_cfg::kEdgeOctaves * c));
+}
+
+// The Hz law itself, kept private behind set_edge: its own clamp (the engine's
+// bounds, not the knob's) and its own expf. The second guard is not redundant
+// with set_edge's -- init() reaches this through set_edge with _edge forced
+// open, and the clamp can map two different cutoffs onto one coefficient.
+void FeedEngine::_set_damp_hz(float hz) {
     const float f = clampf(hz, 20.f, 0.45f * _sr);
     if (f == _damp_hz) return;
     _damp_hz = f;

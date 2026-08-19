@@ -1385,3 +1385,29 @@ TEST_CASE("feed G33: FILT is a real low-pass, and its whole travel is live") {
         CHECK(peak_of(render_l(e, 48000)) <= feed_cfg::kSatCeil + 1e-4f);
     }
 }
+
+// --- EDGE: the in-loop DAMP cutoff became a bipolar trim (spec 2026-08-19
+// voice-knobs-dpth-edge, section 4.2). The absolute-Hz setter is gone; what
+// the host pushes now is a trim whose centre is this engine's own neutral.
+
+TEST_CASE("feed: EDGE at 0 is exactly kDampFixedHz") {
+    FeedEngine e;
+    e.init(48000.f);
+    const float neutral = e.damp_hz_for_test();
+    e.set_edge(0.f);
+    CHECK(e.damp_hz_for_test() == neutral);
+    CHECK(neutral == doctest::Approx(feed_cfg::kDampFixedHz));
+}
+
+TEST_CASE("feed: EDGE spans kEdgeOctaves either side, symmetrically") {
+    FeedEngine e;
+    e.init(48000.f);
+    e.set_edge(1.f);
+    CHECK(e.damp_hz_for_test() ==
+          doctest::Approx(feed_cfg::kDampFixedHz *
+                          std::pow(2.f, feed_cfg::kEdgeOctaves)));
+    e.set_edge(-1.f);
+    CHECK(e.damp_hz_for_test() ==
+          doctest::Approx(feed_cfg::kDampFixedHz *
+                          std::pow(2.f, -feed_cfg::kEdgeOctaves)));
+}

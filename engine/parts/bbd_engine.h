@@ -102,6 +102,14 @@ public:
     // constexpr, baked into butterworth_poles(), and shared by every line via
     // two file-scope singletons -- see the .cpp for the full argument).
     void set_filt(float t);
+    // EDGE, bipolar, 0 == this engine's own neutral (spec 2026-08-19
+    // voice-knobs-dpth-edge, 4.2).
+    //
+    // STUB. It stores the trim and does nothing else, so EDGE is silently
+    // DEAD on a BBD deck. TASK 7 of that plan replaces it with the
+    // pre-emphasis one-pole ahead of the line (spec 4.5 for why it is
+    // pre-emphasis and not kFilterHz).
+    void set_edge(float t) { _edge = clampf(t, -1.f, 1.f); }
     // Whether the freeze is ENGAGED, not whether its ramp has finished: the
     // gate's own state, so a caller (and the FLOW rule's test) can read the
     // decision without first running the ramp out. _freeze_want is only ever
@@ -242,6 +250,8 @@ private:
     // so an engine never touched by set_filt() behaves exactly as it did
     // before this task.
     float _loss_a = bbd_tuning::kLossCoef;
+    // EDGE knob -1..+1 (boot: neutral). Stored and unread -- see set_edge().
+    float _edge = 0.f;
     // RESONANCE: the feedback-path tilt at freeze_amount() == 0. 0 at the
     // knob's centre, so an engine never touched by set_resonance() is
     // bit-exact through the tilt at rest, same as before this task.

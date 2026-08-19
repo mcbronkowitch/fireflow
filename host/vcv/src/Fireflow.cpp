@@ -52,34 +52,12 @@ static constexpr float kCoupleZoneSplit = 0.5f;
 // ratio, and so the name, stays true without any PACE term of its own.
 // Multiplying PACE into this branch would make the printed name wrong, not
 // right.
-// EDGE, the FEED deck's in-loop DAMP cutoff: knob 0..1 -> Hz, LOG.
-//
-// Log because the interesting comparisons here are ratios; a linear knob would
-// spend three quarters of its throw above 4 kHz, where the ear hears almost
-// nothing move. 200 Hz sits below the darkest setting that was rejected by ear
-// (500) and 16 kHz is past anything that could still be called damping -- and
-// past where half this engine's anti-aliasing stops working (the other half is
-// FeedPair's two-sample average). Hearing where it starts to alias is the
-// point of the control, so the top of the range is reachable on purpose.
-//
-// A free function rather than a member: the display quantity below and
-// Fireflow::pushParams both need it, and the quantity has to be complete
-// before configControls names it.
-static constexpr float kFeedDampLoHz = 200.f;
-static constexpr float kFeedDampHiHz = 16000.f;
-
-static float feedDampHzFromKnob(float knob) {
-    return kFeedDampLoHz * std::pow(kFeedDampHiHz / kFeedDampLoHz,
-                                    clamp(knob, 0.f, 1.f));
-}
-
-struct FeedDampParamQuantity : ParamQuantity {
-    std::string getDisplayValueString() override {
-        const float hz = feedDampHzFromKnob(getValue());
-        return hz >= 1000.f ? string::f("%.2f kHz", hz / 1000.f)
-                            : string::f("%.0f Hz", hz);
-    }
-};
+// EDGE has no knob-to-Hz law here any more, and that is the point of the
+// change it went through on 2026-08-19. It was a FEED-only absolute cutoff on
+// a 200..16000 Hz log knob, whose boot position (0.632718364) MEANT 3200 Hz on
+// those rails; it is now a bipolar trim around whatever neutral the engine
+// under the deck defines for itself, so there is nothing left for the host to
+// convert and no rails for it to own. See Part::set_voice_edge.
 
 struct RateQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
@@ -344,9 +322,9 @@ struct Fireflow : Module {
     // DPTH and EDGE were menu sliders for exactly one day (2026-08-19).
     // They are knobs now, so Rack persists them as ParamIds and this module
     // holds no state for them at all: the two float arrays, their JSON keys,
-    // their reset and the two sliders all left together. The knob-to-Hz law
-    // lives at file scope (feedDampHzFromKnob), because the display quantity
-    // needs it before this struct is complete.
+    // their reset and the two sliders all left together. EDGE's knob-to-Hz
+    // law left the host on the same day -- it is a per-engine trim now, so
+    // the law is the engine's (Part::set_voice_edge).
     // Edge-detects the ENG switch landing on BBD, so the FLUX-off and
     // excite-other-deck defaults below (spec 5.11/5.12) apply once on a
     // genuine player-driven transition and never fight a player who
@@ -419,8 +397,12 @@ struct Fireflow : Module {
                     }
                     else if (c.id == FILT_A || c.id == FILT_B)  // bipolar cutoff trim
                         configParam(c.id, -1.f, 1.f, init, lbl);
+                    // EDGE, the other bipolar trim. No display quantity: the
+                    // Hz it lands on depends on which engine the deck is
+                    // running, so a host-side readout would be right on one
+                    // engine and wrong on five.
                     else if (c.id == DAMP_A || c.id == DAMP_B)
-                        configParam<FeedDampParamQuantity>(c.id, 0.f, 1.f, init, lbl);
+                        configParam(c.id, -1.f, 1.f, init, lbl);
                     else if (c.id == TIDE)  // texture-lane rate, snaps in the GRID zone
                         configParam<TideQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == FLUXFB_A || c.id == FLUXFB_B)
@@ -955,13 +937,15 @@ struct Fireflow : Module {
             // the sampler excepted, which halves the base (sampler_config.h).
             inst.set_target_base(p, spky::LANE_MOTION, pp(DEPTH_A, p));
 
-            // EDGE, the in-loop DAMP cutoff. Pushed unconditionally rather
-            // than only on a FEED deck: the setter does not broadcast, so it is
-            // inert elsewhere, and pushing it always means a deck flipped ONTO
-            // FEED arrives at the knob's value instead of whatever init() left.
-            // FeedEngine::set_damp_hz holds an exact-argument guard, so a
-            // motionless knob costs one float compare per block.
-            inst.set_feed_damp_hz(p, feedDampHzFromKnob(pp(DAMP_A, p)));
+            // EDGE, the second filter, on every engine: a bipolar TRIM whose
+            // centre is each engine's own neutral, not an absolute cutoff in
+            // Hz. That is why the knob boots at 0 and why five engines'
+            // factory sound is untouched by its arrival -- one knob has one
+            // boot value, six engines have six neutrals (spec 2026-08-19
+            // voice-knobs-dpth-edge, 4.2). The knob-to-Hz law that used to
+            // live at file scope here went with it: the law is the engine's
+            // now, because only the engine knows what its own neutral is.
+            inst.set_voice_edge(p, pp(DAMP_A, p));
 
             // Stable pitch in the sampler: the lane still FIRES (that is what
             // keeps STEP triggering alive -- Part::process reads the fire as

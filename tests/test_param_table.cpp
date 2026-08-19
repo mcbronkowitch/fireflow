@@ -46,7 +46,13 @@ TEST_CASE("param table: inventory marker -- P_MODE, P_PACE, P_COUNT") {
     // tests/param_impact_points.h's comment for what an insertion does to
     // those vectors, then bump P_MODE and P_PACE below to match the enum as
     // it now stands and re-read this paragraph again before moving on.
-    CHECK(P_MODE == 62);
+    // 62 -> 64 on 2026-08-19: P_EDGE_A/P_EDGE_B were INSERTED after P_FILT_B
+    // (spec voice-knobs-dpth-edge, 4.4), not appended, so this case reddened
+    // exactly as the paragraph above says it should. The frozen vectors in
+    // tests/param_impact_points.h were shifted by hand in the same commit and
+    // carry 0.0f -- EDGE's neutral -- in the two new slots; see that file's
+    // header for the record of what the insertion cost.
+    CHECK(P_MODE == 64);
     CHECK(P_PACE == P_MODE + 1);
     CHECK(P_PACE == P_COUNT - 1);      // inventory marker: bump on append
 }

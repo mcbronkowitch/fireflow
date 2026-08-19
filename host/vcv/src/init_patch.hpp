@@ -75,8 +75,8 @@ static constexpr float kInitParamDefaults[] = {
     0.5f, // PACE
     0.5f, // DEPTH_A
     0.5f, // DEPTH_B
-    0.632718364f, // DAMP_A
-    0.632718364f, // DAMP_B
+    0.0f, // DAMP_A
+    0.0f, // DAMP_B
 };
 static_assert(sizeof(kInitParamDefaults) / sizeof(kInitParamDefaults[0])
               == NUM_PARAMS, "init snapshot must cover every ParamId");

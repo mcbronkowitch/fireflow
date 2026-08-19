@@ -98,6 +98,16 @@ public:
     void set_sub(float n);
     void set_detune(float n);      // independent symmetric spread = n * 105 ct
     void set_filt(float n);        // -1..+1 cutoff trim; left end fades to silence
+    // EDGE, bipolar, 0 == this engine's own neutral (spec 2026-08-19
+    // voice-knobs-dpth-edge, 4.2).
+    //
+    // STUB. It stores the trim and does nothing else, so EDGE is silently
+    // DEAD on every engine this template instantiates. That is ONE stub
+    // serving THREE engines: SYNTH and WAVE get their output high-pass in
+    // Task 5, BODY gets the exciter-corner trim in Task 4. Whichever lands
+    // first, the other still has to be checked -- BodyVoice and VoiceT do not
+    // share the cell.
+    void set_edge(float t) { _edge = clampf(t, -1.f, 1.f); }
 
     int   active_voices() const;
     float voice_env(int v) const;
@@ -209,6 +219,8 @@ private:
     float _detune_spread_ct = 18.f;
     float _filt_amt  = 0.f;        // FILT knob -1..+1 (boot: neutral)
     float _filt_gain = 1.f;        // silence fade below the 60 Hz rail (control-rate)
+    float _edge      = 0.f;        // EDGE knob -1..+1 (boot: neutral). Stored
+                                   // and unread -- see the stub on set_edge().
 
     OnePole _level;                // smoothed master gain (LEVEL target)
 };
