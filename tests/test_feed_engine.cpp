@@ -110,6 +110,22 @@ double spectral_flux(const std::vector<double>& a, const std::vector<double>& b)
     return den > 0.0 ? num / den : 0.0;
 }
 
+// The share of a spectrum's magnitude sitting above `hz`. A ratio, not an
+// absolute, so it is blind to how loud the deck happens to be -- G33 sweeps a
+// knob whose left end deliberately changes the level, and an absolute
+// high-band figure would fall for that instead of for the filter.
+double high_band_share(const std::vector<float>& x, double hz, double sr) {
+    const std::vector<double> m = mag_spectrum(x);
+    const int n = static_cast<int>(x.size());
+    const int lo = static_cast<int>(hz * n / sr);
+    double all = 0.0, high = 0.0;
+    for (int i = 1; i < n / 2; ++i) {
+        all += m[i];
+        if (i >= lo) high += m[i];
+    }
+    return all > 0.0 ? high / all : 0.0;
+}
+
 // Spectral flatness: geometric mean over arithmetic mean of the magnitude
 // spectrum. 0 = pure lines, 1 = white noise. The measure G10 is about, and it
 // is a property of ONE window rather than of the difference between two --
@@ -721,18 +737,28 @@ TEST_CASE("feed G21: the accent spends itself twice -- and DEC gates the second"
     // Spec section 5, the SYNTH/WAVE/BODY shape. Two halves, and the DEC gate
     // is what makes the ring half's inert case reachable (vacuous shape 4).
     //
-    // Ring time is measured as the index of the last sample above 5 % of the
-    // note's OWN peak -- tests/test_step_accent.cpp's note_len_samples idiom.
-    // A ratio of two window peaks (which the plan asked for) is degenerate at
-    // DEC 0, where both windows are already silent and the inert half reads
-    // 0 == 0: true, and true whatever the accent does.
+    // HEIGHT is measured on the audio, because that is what the accent's first
+    // half does. LENGTH is measured on the ENVELOPE (voice_env), because the
+    // claim is about _fall_s() and nothing else -- and every attempt to read it
+    // off the audio has been level-sensitive:
     //
-    // LEVEL is held well below the ceiling on purpose. At LEVEL 1 the full
-    // note peaks at 0.523 against a kSatCeil of 0.55, so its peak is
-    // tanh-compressed and the weak note's is not -- and "5 % of own peak" then
-    // lands at different points on two notes whose envelopes are identical.
-    // Measured: the DEC-0 half read 3085 against 3313 samples, a 7 % gap that
-    // was the ceiling and not the accent.
+    //  - at LEVEL 1 the full note peaked at 0.523 against a kSatCeil of 0.55,
+    //    so its peak was tanh-compressed and the weak note's was not; "5 % of
+    //    own peak" then landed at different points on two notes whose
+    //    envelopes are identical. The DEC-0 half read 3085 against 3313
+    //    samples, a 7 % gap that was the ceiling and not the accent.
+    //  - dropping to LEVEL 0.35 bought margin rather than immunity. When
+    //    kFbBaseCycles went to 0.14 by ear the peaks moved again and the same
+    //    half read 3090 against 3159 -- 2.2 % against a 2 % tolerance, still
+    //    the ceiling, still not the accent. The output low-pass added on the
+    //    same day contributes its own tail on top.
+    //
+    // The envelope has neither problem: _hit_gain scales the amplitude and
+    // never the envelope, so at DEC 0 the two notes are EXACTLY equal in
+    // length, and the gate is an equality rather than a tolerance. It is not
+    // vacuous for being exact -- making the accent reach ring time at DEC 0 is
+    // what it catches, and that mutation moves _fall_s() and therefore the
+    // envelope. G20 was moved off window peaks for the same reason.
     struct Note { float peak; int len; };
     auto note = [](float accent, float dec) {
         FeedEngine e = fresh_feed();
@@ -742,11 +768,18 @@ TEST_CASE("feed G21: the accent spends itself twice -- and DEC gates the second"
         e.set_flow(false);
         e.set_accent(accent);
         e.trigger(0.5f);
-        const std::vector<float> x = render_l(e, 48000 * 3);
-        const float pk = peak_of(x);
+        std::vector<float> env(48000 * 3);
+        float pk = 0.f, env_pk = 0.f;
+        for (size_t i = 0; i < env.size(); ++i) {
+            float l = 0.f, r = 0.f;
+            e.process(l, r);
+            pk = std::max(pk, std::fabs(l));
+            env[i] = e.voice_env(0);
+            env_pk = std::max(env_pk, env[i]);
+        }
         int len = 0;
-        for (size_t i = 0; i < x.size(); ++i)
-            if (std::fabs(x[i]) > 0.05f * pk) len = static_cast<int>(i);
+        for (size_t i = 0; i < env.size(); ++i)
+            if (env[i] > 0.05f * env_pk) len = static_cast<int>(i);
         return Note{ pk, len };
     };
     const Note full = note(0.f, 0.5f);
@@ -763,7 +796,7 @@ TEST_CASE("feed G21: the accent spends itself twice -- and DEC gates the second"
     const Note weak0 = note(1.f, 0.f);
     CAPTURE(full0.len); CAPTURE(weak0.len);
     REQUIRE(full0.len > 0);            // there IS a note to compare
-    CHECK(weak0.len == doctest::Approx(full0.len).epsilon(0.02));
+    CHECK(weak0.len == full0.len);     // exact: see the note on the lambda
 }
 
 TEST_CASE("feed G22: a retrigger is click-free") {
@@ -812,15 +845,43 @@ TEST_CASE("feed G22: a retrigger is click-free") {
     // Rises FROM the current level: it never dips below where it started.
     CHECK(env_floor >= env_before - 1e-4f);
 
-    // ...and end to end, the audio does not step either. The bound is against
-    // the same signal's own worst derivative while running, so the threshold
-    // is measured rather than invented.
+    // There is deliberately NO audio-domain assertion here, and `quiet` is
+    // kept only for the derivative figures the CAPTUREs carry.
+    //
+    // This gate used to bound the attack window's worst sample-to-sample
+    // delta against the settled drone's, at 3x. That comparison went red when
+    // kDeckGain took the deck out of permanent tanh compression -- which was
+    // the tell, because a uniform gain cannot change a ratio. It was comparing
+    // two structurally different signals: the settled window has a constant
+    // index, the attack window has an index that rises every control tick, so
+    // its derivative grows with the note whether or not anything ever steps.
+    // The worst delta sits at sample 1734, control tick 18, and the per-tick
+    // profile climbs smoothly from 0.0040 to 0.0267 over the first twelve
+    // ticks. No discontinuity anywhere in it.
+    //
+    // Rewriting it to look at the trigger instant instead (and at the SEAM,
+    // hit[0] against quiet.back(), which every earlier formulation skipped by
+    // starting its loop at i = 1) still could not be made to fail. Three
+    // step-injecting mutations inside trigger() -- restart the whole bank,
+    // snap every amp to zero, re-snap every pair -- all stayed GREEN.
+    //
+    // The reason is a property of the engine and worth stating: FeedBank's
+    // amplitude GLIDE absorbs anything a trigger does. Measured under the
+    // bank-restart mutation, amp[0] is 0.000000 immediately after trigger()
+    // and the output still leaves smoothly -- 0.0187, 0.0158, 0.0124,
+    // 0.0094 -- instead of stepping. So no audio bound can distinguish
+    // rise-from-current-level from restart-from-zero, which is exactly what
+    // the note on env_floor above says, and an assertion that cannot fail for
+    // its own subject does not belong here (vacuous shape 1).
+    //
+    // The envelope check above is the discriminating one, and it red-proofs:
+    // `_env.init(_sr); _env.trigger();` in place of the bare trigger fails it.
     float worst_hit = 0.f;
     for (size_t i = 1; i < hit.size(); ++i)
         worst_hit = std::max(worst_hit, std::fabs(hit[i] - hit[i - 1]));
     CAPTURE(worst_running);
     CAPTURE(worst_hit);
-    CHECK(worst_hit < 3.f * worst_running);
+    CAPTURE(std::fabs(hit[0] - quiet.back()));
 }
 
 TEST_CASE("feed G23: trigger_chord fires ONE envelope hit, not n") {
@@ -1214,4 +1275,113 @@ TEST_CASE("feed G32: NEW on a FEED deck reaches the ring") {
     for (int i = 0; i < feed_cfg::kPairs; ++i)
         if (std::fabs(x[i] - before[i]) > before[i] * 0.0005f) progressed = true;
     CHECK(progressed);
+}
+
+
+// FILT was a one-pole INSIDE the feedback path until 2026-08-19, and Bastian
+// reported it as not working. It was not: it never touched the carrier, the
+// signal it filtered peaked at kFbBaseCycles, and its coefficient saturated
+// over the upper third of the travel. It is an SvfLp on the deck's output now,
+// and this is the gate that would have caught the old one -- there was none,
+// which is how a knob reaches a player doing nothing.
+//
+// Runs at LEVEL 0.25. The subject is spectral shape, and engine-map section 9
+// records two gates that were caught measuring the tanh ceiling instead
+// because they ran loud enough to clip.
+TEST_CASE("feed G33: FILT is a real low-pass, and its whole travel is live") {
+    constexpr int   kWin = 65536;          // radix-2: mag_spectrum needs it
+    constexpr float kSr  = 48000.f;
+    constexpr double kBandHz = 4000.0;
+
+    // A deck with something up there to remove: coupled, deep, inharmonic
+    // ratio, standing drone.
+    auto at_filt = [&](float filt) {
+        FeedEngine e = fresh_feed(99u);
+        e.set_decay(1.f);                  // FLOOR up -> it drones
+        e.set_resonance(1.f);              // the irrational end of RATIO
+        e.set_filt(filt);
+        feed_lanes(e, 0.35f, 1.f, 0.5f, 1.f, 0.25f);
+        e.set_flow(true);
+        e.trigger(0.35f);
+        settle(e, 60);
+        return render_l(e, kWin);
+    };
+
+    // 1. The knob's WHOLE travel is live. Not one dead position: the cutoff
+    //    strictly increases at every step, and it reaches both configured
+    //    rails. The sampler's unscaled right half clamped by FILT 0.25 and
+    //    measured bit-identical from there to +1 -- see kFiltRightScale.
+    float prev_hz = -1.f;
+    for (int i = -6; i <= 10; ++i) {       // from the end of the fade upward
+        FeedEngine e = fresh_feed(99u);
+        e.set_filt(i * 0.1f);
+        settle(e, 2);
+        const float hz = e.filt_hz_for_test();
+        CAPTURE(i);
+        CAPTURE(hz);
+        CHECK(hz > prev_hz);
+        prev_hz = hz;
+    }
+    {
+        FeedEngine lo = fresh_feed(99u); lo.set_filt(-0.6f); settle(lo, 2);
+        FeedEngine hi = fresh_feed(99u); hi.set_filt(1.f);   settle(hi, 2);
+        CHECK(lo.filt_hz_for_test() == doctest::Approx(feed_cfg::kCutoffMinHz)
+                                           .epsilon(0.02));
+        CHECK(hi.filt_hz_for_test() == doctest::Approx(feed_cfg::kCutoffMaxHz)
+                                           .epsilon(0.02));
+    }
+
+    // 2. Closing it removes top end, monotonically, and by a lot. This is the
+    //    assertion the old in-loop one-pole could not have passed.
+    double prev_share = 1e9;
+    double open_share = 0.0, shut_share = 0.0;
+    for (int i = 10; i >= -5; --i) {
+        const float f = i * 0.1f;
+        const double share = high_band_share(at_filt(f), kBandHz, kSr);
+        CAPTURE(f);
+        CAPTURE(share);
+        CHECK(share <= prev_share * 1.02);   // monotone, 2% for FFT leakage
+        prev_share = share;
+        if (i == 10) open_share = share;
+        if (i == -5) shut_share = share;
+    }
+    CAPTURE(open_share);
+    CAPTURE(shut_share);
+    // Wide open against nearly shut. A bypassed filter reads 1.0 here.
+    CHECK(shut_share < open_share * 0.1);
+
+    // 3. The far left fades to silence rather than parking on a cutoff wall,
+    //    which is what kFiltLeftScale overshooting kFiltFadeRange buys.
+    // Not Approx(0): doctest's relative epsilon makes `0 == Approx(0)` false.
+    CHECK(peak_of(at_filt(-1.f)) == 0.f);
+    {
+        FeedEngine e = fresh_feed(99u);
+        e.set_filt(-1.f);
+        settle(e, 2);
+        CHECK(e.filt_gain_for_test() == doctest::Approx(0.f));
+    }
+
+    // 4. The filter sits AFTER the tanh, so it can add gain the ceiling has
+    //    already bounded away. kFiltRes is 0 for exactly this reason: at 0.15
+    //    the damping ratio is 0.38, the filter peaks, and the deck measured
+    //    1.58x kSatCeil.
+    //
+    //    This runs LOUD and at its own corner -- deliberately not through
+    //    at_filt(), whose LEVEL 0.25 is what keeps checks 1-3 off the ceiling.
+    //    Written the obvious way (re-using at_filt) it was VACUOUS: restoring
+    //    kFiltRes = 0.15f left it green, because a quarter-level deck never
+    //    approaches the bound whatever the filter does. G11 sweeps the same
+    //    property far wider and DOES catch that edit; this check earns its
+    //    place only by failing too, at the knob the constant belongs to.
+    for (int i = -6; i <= 10; ++i) {
+        FeedEngine e = fresh_feed(99u);
+        e.set_decay(1.f);
+        e.set_filt(i * 0.1f);
+        feed_lanes(e, 1.f, 0.f, 0.5f, 0.f, 1.f);   // the probe's worst corner
+        e.set_flow(true);
+        e.trigger(1.f);
+        settle(e, 40);
+        CAPTURE(i);
+        CHECK(peak_of(render_l(e, 48000)) <= feed_cfg::kSatCeil + 1e-4f);
+    }
 }

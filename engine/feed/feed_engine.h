@@ -9,6 +9,7 @@
 #include "pitch/chord.h"
 #include "synth/env.h"
 #include "util/math.h"           // clampf, in the inline setters below
+#include "util/svf_lp.h"         // FILT's output low-pass, one per channel
 
 namespace spky {
 
@@ -41,7 +42,7 @@ public:
     void set_decay(float n);       // FALL, and FLOOR in its top quarter
     void set_resonance(float n);   // RATIO
     void set_sub(float n);         // SUB
-    void set_filt(float t);        // DAMP, bipolar
+    void set_filt(float t);        // FILT, bipolar: a real LP on the output
     // DETUNE means SPREAD on a FEED deck, and it gets there as the LANE_SIZE
     // base (host/vcv/src/Fireflow.cpp), not through this setter. Kept as an
     // explicit no-op rather than left unimplemented: Part::set_voice_detune
@@ -65,6 +66,8 @@ public:
     float ratio_for_test() const  { return _ratio; }
     float spread_ct_for_test() const { return _spread_ct; }
     float floor_for_test() const  { return _floor_n; }
+    float filt_hz_for_test() const   { return _filt_hz; }
+    float filt_gain_for_test() const { return _filt_gain; }
     int   voiced_tones_for_test() const { return _voiced_n; }
 
 private:
@@ -74,10 +77,10 @@ private:
     void _set_chord_tones(const float* p, int n);
     float _rise_s() const;      // RISE knob -> seconds
     float _fall_s() const;      // FALL knob -> seconds
-    float _damp_coef() const;   // DAMP knob -> one-pole coefficient
 
     FeedBank _bank;
     Env      _env;
+    SvfLp    _svf_l, _svf_r;    // FILT, on the output and after the ceiling
     Rng      _rng;
 
     uint32_t _seed = 0x46454544u;   // "FEED"
@@ -101,8 +104,9 @@ private:
     float _ratio_n = 0.f;    // the RATIO knob
     float _ratio = 1.f;      // ...and the ratio it maps to (Task 8's magnet)
     float _sub_n = 0.f;
-    float _damp_t = 0.f;     // the FILT knob, bipolar
-    float _damp_k = 1.f;     // ...and the one-pole coefficient it maps to
+    float _filt_amt = 0.f;   // the FILT knob, bipolar
+    float _filt_gain = 1.f;  // ...and the left end's fade to silence
+    float _filt_hz = feed_cfg::kCutoffMaxHz;   // ...and the cutoff it maps to
     float _accent = 0.f;
     float _width = 1.f;
 

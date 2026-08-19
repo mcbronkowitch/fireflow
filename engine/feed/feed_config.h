@@ -48,12 +48,30 @@ static_assert(kPairs >= kPairsPerTone,
 // estimated fundamental leaves the tolerance, and the tolerance itself. Do not
 // retune them in a listening session -- re-run the probe.
 //
-// 0.7 is the last BOND position at which all 80 measured rows (4 spreads x 5
-// depths x 4 ratios, spread <= kSpreadKneeCt) still had a fundamental AND sat
-// inside a cent of the played pitch. At 0.8 the worst row jumps from +0.609 ct
-// to +22.522 ct and the first row loses its fundamental entirely -- the knob's
-// cliff, arriving at 70 % of its travel.
-constexpr float kBondPitchThreshold = 0.7f;
+// 0.7 was the last such BOND position while kFbBaseCycles was 0.08: all 80
+// measured rows (4 spreads x 5 depths x 4 ratios, spread <= kSpreadKneeCt)
+// still had a fundamental AND sat inside a cent of the played pitch, and at
+// 0.8 the worst row jumped from +0.609 ct to +22.522 ct.
+//
+// RE-MEASURED 2026-08-19 after the drive went to 0.14 by ear: 0.65. This
+// number tracks the drive and has to be re-run whenever kFbBaseCycles moves --
+// that is what makes it a measurement rather than a setting. Nothing in the
+// engine reads it; it is the DESCRIPTION the gate samples below.
+//
+// What the re-run actually found is worth having in front of you before
+// anyone treats 0.65 as a stability limit. At pitch 0.35 the ring does not
+// break anywhere on the knob any more than it did at 0.08 -- across the whole
+// BOND travel and SPREAD's lower half the aperiodicity peaks at 0.0171,
+// nowhere near the 0.30 that would mean "no fundamental". The drift is a
+// smooth monotone creep to 3.007 ct at BOND 1.0, and it crosses
+// kPitchCentreTolCt at 0.70 rather than falling off anything. So the honest
+// reading is "the 2 ct bound holds to 0.65, and a 3.1 ct bound holds
+// everywhere" -- the tolerance was deliberately NOT widened to keep the whole
+// travel inside the gate, because loosening a bound so a test passes is how a
+// gate stops being one. The cliff proper still lives at the bottom of the
+// pitch range, where the attenuation is weakest; see docs/engine-map.md
+// section 9.
+constexpr float kBondPitchThreshold = 0.65f;
 
 // 2.0 ct: 3.3x the worst reading below the threshold (0.609 ct) and 11x below
 // the first broken row (+22.5 ct), so it discriminates with a wide margin in
@@ -82,7 +100,20 @@ constexpr float kIndexMaxCycles = 0.95f;   // BY EAR, first try
 // the whole BOND travel below the threshold holds within 0.61 ct, and the
 // cliff still arrives on schedule at BOND 0.8. See docs/engine-map.md
 // section 9, "Where the coupling tips", for the sweep this came off.
-constexpr float kFbBaseCycles = 0.08f;     // BY EAR, first try; ceiling MEASURED
+//
+// BY EAR, 2026-08-19 (Bastian, the E variant of the six-render BOND A/B). 0.14
+// is deliberately ABOVE the 0.08 ceiling the paragraph above measured, so the
+// deck now runs past the bank's own tipping point over the lower part of the
+// pitch range -- which is the point. The brief was "ruhig hart, filtern kann
+// ich selbst dahinter": the escalation is what the engine is for, and taming
+// its top end is now the output FILT's job, which became a real low-pass on
+// the same day. The alternative on the table was darkening the in-loop path
+// (kDampFixedHz 1200 or 500 Hz, variants B/C/F) and it was rejected -- that
+// removes the brightness for everyone instead of leaving it under a knob.
+//
+// So: the ceiling above is still the measurement it always was, and this
+// value knowingly sits over it. Do not "correct" one to the other.
+constexpr float kFbBaseCycles = 0.14f;     // BY EAR 2026-08-19; see above
 
 // Pitch attenuation (spec section 3.2.2, the Braids RenderFeedbackFm recipe).
 // The pair's NORMALIZED pitch is already logarithmic -- pitch_to_hz(p) is
@@ -111,10 +142,60 @@ constexpr float kRatioMagnetTop = 4.f;
 constexpr float kRatioMagnetExp = 3.f;     // BY EAR, first try (>1 = flatter)
 constexpr float kRatioMax       = 11.f;    // BY EAR, first try
 
-// DAMP: the one-pole inside the feedback path. FILT's centre detent is
-// kDampCenterHz; the bipolar travel multiplies and divides it by kDampSpan.
-constexpr float kDampCenterHz = 3200.f;    // BY EAR, first try
-constexpr float kDampSpan     = 9.f;       // BY EAR, first try
+// The one-pole inside the feedback path. FIXED, and no longer a knob: it is
+// half of this engine's anti-aliasing (the other half is the two-sample
+// average in FeedPair), so handing it to the player means handing them a
+// switch that turns the aliasing guard off. It held FILT until 2026-08-19 and
+// FILT could not be heard, which is the measured reason it stopped:
+//
+//   - it never touches the carrier. FM brightness is set by the index and the
+//     ratio; damping the feedback perturbation changes how the coupling
+//     wanders, not where the spectrum ends.
+//   - the signal it filters is tiny. kFbBaseCycles is 0.08 cycles at the
+//     bottom of the pitch range and 0.019 at the top (engine-map section 9),
+//     so the one-pole is shaping a small phase wobble.
+//   - its travel saturated. At k = 1 - exp(-2*pi*fc/sr) the old centre
+//     detent already sat at 0.34, +0.5 of travel at 0.72 and the top at 0.98
+//     -- the upper third of the knob was indistinguishable from wide open.
+//
+// The value is the old centre detent, so the ring's own character is exactly
+// what it was at the neutral knob position.
+constexpr float kDampFixedHz = 3200.f;     // BY EAR, first try
+
+// FILT: a real low-pass on the deck's OUTPUT (SvfLp, the same filter Synth,
+// WAVE and the sampler run), on the same 60 Hz..14 kHz rails.
+//
+// Deliberately restated here rather than shared through a header: every one of
+// these is a tuning literal and this file is where FEED's tuning literals
+// live. If a listening pass moves them, it moves them HERE and FEED's filter
+// stops matching the other decks on purpose, not by drift.
+constexpr float kCutoffMinHz   = 60.f;     // same rails as the synth FILTER
+constexpr float kCutoffMaxHz   = 14000.f;
+constexpr float kFiltNeutral   = 0.75f;    // centre detent -> about 3.6 kHz
+constexpr float kFiltLeftScale = 1.25f;    // left travel reaches past 0...
+constexpr float kFiltFadeRange = 0.25f;    // ...into a fade to silence
+// The right half is scaled to land exactly on kCutoffMaxHz at FILT +1, which
+// is where FEED departs from the sampler's otherwise identical arithmetic.
+// On a sampler deck FILT is a TRIM added to a lane that already carries the
+// cutoff, so an upper travel that saturates early costs nothing -- the lane
+// reaches the rest. FEED has no such lane (LANE_SIZE is SPREAD here), so FILT
+// is the whole control, and with the sampler's unscaled +1 the knob clamped at
+// n_raw = 1 by FILT 0.25: measured, the top 70 % of the right half returned a
+// bit-identical 14 kHz and the knob was dead in the hand over most of its
+// travel. That is the same defect this control was rewritten to fix, so it
+// does not get to come back on the other side of the detent.
+constexpr float kFiltRightScale = 1.f - kFiltNeutral;
+// Fixed, because FEED's RES knob is RATIO and there is no knob left. ZERO, and
+// that is a measurement rather than a preference: SvfLp::SetRes maps through
+// r^0.25, so a value that reads as "a touch of resonance" is not one. At 0.15
+// the damping ratio is 0.38, the filter peaks 3 dB, a drone parks a partial on
+// that peak, and the deck's output measured 1.58x kSatCeil (+4.0 dB) -- the
+// engine's one hard bound, broken by the thing added to tame it. At 0 the
+// damping ratio is 0.91, above the 0.707 where a two-pole stops peaking at
+// all. A resonant peak downstream of a saturator on a network already allowed
+// to escalate is a second thing that can ring, and this is not the deck to put
+// it in. G11 is the gate.
+constexpr float kFiltRes       = 0.f;
 
 // The envelope. FLOOR rides the top quarter of the FALL knob (the control map
 // above; the fold SWARM's round 2 used). kFlowFloorMin is the minimum floor
@@ -131,6 +212,35 @@ constexpr float kAccentDecFloor = 0.3f;    // BY EAR, first try
 // BodyVoice::kFlowSatCeil pattern and for the same stated reason.
 constexpr float kSatCeil = 0.55f;          // BY EAR, first try
 constexpr float kSatInv  = 1.f / kSatCeil;
+
+// Deck output trim, applied to the bank AND to SUB just before the ceiling.
+//
+// MEASURED 2026-08-19, and it exists because without it the ceiling above was
+// not a ceiling. `1/sqrt(kPairs)` normalizes the bank for INCOHERENT
+// summation, but FM carriers on chord tones plus an uncoupled SUB are
+// partially coherent: the deck wanted 1.236 peak at LEVEL 1 and the tanh
+// folded it to 0.537 -- a permanent 7.24 dB of gain reduction, audible from
+// about LEVEL 0.3 upward. FEED measured +11.8 dB RMS over SYNTH as a drone and
+// +18.1 dB struck. So the coupling was being judged through a compressor
+// before it ever reached one, which is what Bastian reported.
+//
+// That also broke the instrument's own stated rule (docs/by-ear-decisions.md):
+// a ceiling stays only if it prevents an actual FAILURE, never merely an
+// unpleasant sound. At 0.25 the deck peaks near 0.28 against SYNTH's 0.333,
+// the tanh is back to catching peaks (~0.8 dB at LEVEL 1) instead of riding
+// the whole signal, and the cliff it exists for is untouched.
+//
+// The value is a LEVEL PARITY target, not a taste setting: Bastian's brief was
+// that every engine sit at the same loudness so a live engine switch does not
+// jump. Re-measure it (scratchpad level probe, or any equivalent) if the
+// bank's gain structure changes -- kPairs above all, since the coherence this
+// compensates for grows with P.
+//
+// Applied at the output rather than folded into each pair's amp because
+// nothing in the feedback path reads amp: the ring taps `o1`/`o2`, which are
+// the pre-amp carrier outputs. Scaling the sum is therefore exactly equal to
+// scaling every amp, in one place instead of two.
+constexpr float kDeckGain = 0.25f;
 
 // SUB: one sine an octave below the root, not in the ring and not coupled.
 constexpr float kSubMax = 0.7f;            // BY EAR, first try

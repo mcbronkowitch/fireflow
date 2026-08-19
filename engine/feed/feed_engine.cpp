@@ -29,19 +29,24 @@ void FeedEngine::init(float sample_rate) {
     _inv_sqrt_pairs = 1.f / std::sqrt(static_cast<float>(feed_cfg::kPairs));
     _env.init(_sr);
     _bank.init(_sr);
+    // The in-loop damp is fixed now (feed_config.h): set once, here, where _sr
+    // is known, and never touched again.
+    _bank.set_damp_coef(clampf(
+        1.f - std::exp(-6.2831853f * feed_cfg::kDampFixedHz / _sr), 0.f, 1.f));
+    _svf_l.Init(_sr);
+    _svf_r.Init(_sr);
+    _svf_l.SetRes(feed_cfg::kFiltRes);   // no SetDrive: SvfLp has no drive term
+    _svf_r.SetRes(feed_cfg::kFiltRes);
     _rng.seed(_seed);
     _draw_individual();
     // Derive every cached knob mapping from the knob value it belongs to,
     // rather than letting the member initialisers carry one value for the knob
     // and another for its ratio. Without this the boot state holds _rise_n 0.5
-    // beside a _rise_ratio that belongs to knob 0. set_filt additionally reads
-    // _sr, so it MUST run after _sr is assigned -- otherwise a 44.1 kHz host
-    // gets a DAMP coefficient computed for 48 kHz, which is the kind of
-    // ordering bug a render never shows.
+    // beside a _rise_ratio that belongs to knob 0.
     set_attack(_rise_n);
     set_decay(_fall_n);
     set_resonance(_ratio_n);
-    set_filt(_damp_t);
+    set_filt(_filt_amt);
     _ctrl_ctr = 0;
     _sub_phase = 0.f;
     _sub_inc = 0.f;
@@ -187,7 +192,17 @@ void FeedEngine::_control_tick() {
     _bank.set_bond(_bond);
     _bank.set_index(_depth_n * feed_cfg::kIndexMaxCycles * _env.value());
     _bank.set_ratio(_ratio);
-    _bank.set_damp_coef(_damp_coef());
+    // FILT -> cutoff and fade gain, the sampler's mapping verbatim.
+    const float off = _filt_amt < 0.f ? feed_cfg::kFiltLeftScale * _filt_amt
+                                      : feed_cfg::kFiltRightScale * _filt_amt;
+    const float n_raw = feed_cfg::kFiltNeutral + off;
+    _filt_gain = clampf(1.f + n_raw / feed_cfg::kFiltFadeRange, 0.f, 1.f);
+    _filt_hz = clampf(feed_cfg::kCutoffMinHz *
+                          std::pow(feed_cfg::kCutoffMaxHz / feed_cfg::kCutoffMinHz,
+                                   clampf(n_raw, 0.f, 1.f)),
+                      20.f, 0.3f * _sr);
+    _svf_l.SetFreq(_filt_hz);
+    _svf_r.SetFreq(_filt_hz);
     _sub_inc = 0.5f * pitch_to_hz(_chord[0]) / _sr;   // one octave below the root
     _rebuild_allocation();
 }
@@ -217,8 +232,26 @@ void FeedEngine::process(float& outL, float& outR) {
     // same stated reason: where opening a path lets a value diverge, add the
     // bounding nonlinearity the instrument already has rather than re-imposing
     // a limit downstream.
-    outL = feed_cfg::kSatCeil * fast_tanh(l * feed_cfg::kSatInv);
-    outR = feed_cfg::kSatCeil * fast_tanh(r * feed_cfg::kSatInv);
+    // The deck trim comes FIRST, so the ceiling below is reached by peaks and
+    // not by the whole signal -- see kDeckGain for the 7.24 dB of permanent
+    // squash this removes, and why the bank's 1/sqrt(P) does not cover it.
+    l *= feed_cfg::kDeckGain;
+    r *= feed_cfg::kDeckGain;
+
+    l = feed_cfg::kSatCeil * fast_tanh(l * feed_cfg::kSatInv);
+    r = feed_cfg::kSatCeil * fast_tanh(r * feed_cfg::kSatInv);
+
+    // FILT, AFTER the ceiling and not before it. The tanh is a harmonic
+    // generator, so a filter upstream of it would have its work undone one
+    // line later: every partial the low-pass removed comes back as saturation
+    // product, and the knob reads as weak. Downstream, FILT governs the
+    // distortion too, which on a feedback instrument is most of what there is
+    // to filter. The ceiling still does its whole job -- it is what bounds the
+    // ring, and nothing about the filter's position changes that.
+    _svf_l.Process(l);
+    _svf_r.Process(r);
+    outL = _svf_l.Low() * _filt_gain;
+    outR = _svf_r.Low() * _filt_gain;
 }
 
 void FeedEngine::trigger(float pitch_norm) {
@@ -353,22 +386,20 @@ void FeedEngine::set_resonance(float n) {
 
 void FeedEngine::set_sub(float n) { _sub_n = clampf(n, 0.f, 1.f); }
 
-// DAMP. FILT is bipolar; the centre detent is the neutral cutoff and the travel
-// multiplies and divides it by kDampSpan. std::pow at CONTROL rate, once per
-// knob move -- not in _control_tick, which reads the cached coefficient.
+// FILT. The knob only stores; the cutoff and the fade gain are derived in
+// _control_tick, which is where the std::pow belongs -- once per 96 samples,
+// not once per sample, and pushed through SvfLp's exact-argument guard so a
+// motionless knob costs one float compare per tick.
 //
-// Reads _sr, so init() MUST call this after assigning _sr -- otherwise the
-// coefficient is computed against the constructor's default and a 44.1 kHz
-// host gets a filter tuned for 48 kHz. That call is in init(), beside the
-// other knob re-derivations, and this comment is here because it is the kind
-// of ordering bug a render never shows.
+// The bipolar rails are the sampler's on the left, arithmetic included: the
+// left half is stretched by kFiltLeftScale so that the last fifth of its
+// travel drives n_raw below zero, where _filt_gain fades the deck to silence
+// rather than leaving the knob pressed against a cutoff wall. The right half
+// is FEED's own -- see kFiltRightScale for the measurement that put it there.
+// FEED has no lane for a cutoff (LANE_SIZE is SPREAD here), so unlike SYNTH
+// this knob is the whole control rather than a trim on a lane.
 void FeedEngine::set_filt(float t) {
-    _damp_t = clampf(t, -1.f, 1.f);
-    const float hz = feed_cfg::kDampCenterHz * std::pow(feed_cfg::kDampSpan, _damp_t);
-    // One-pole coefficient expressed as a cutoff rather than a time:
-    // k = 1 - exp(-2*pi*fc/sr), clamped to 1 so the top of the travel is
-    // genuinely open rather than merely steep.
-    _damp_k = clampf(1.f - std::exp(-6.2831853f * hz / _sr), 0.f, 1.f);
+    _filt_amt = clampf(t, -1.f, 1.f);
 }
 
 void FeedEngine::reseed(uint32_t s) {
@@ -392,8 +423,6 @@ float FeedEngine::_fall_s() const {
     return clampf(_fall_ratio * _cycle_s * acc,
                   SynthEngine::kDecayMinS, SynthEngine::kDecayMaxS);
 }
-
-float FeedEngine::_damp_coef() const { return _damp_k; }
 
 float FeedEngine::pair_hz_for_test(int i) const { return _bank.hz(i); }
 float FeedEngine::pair_amp_for_test(int i) const { return _bank.amp(i); }

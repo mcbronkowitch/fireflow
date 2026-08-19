@@ -929,17 +929,17 @@ Two consequences the gate is written around:
   where the attenuation is weakest — which is a listening question for the
   by-ear pass, not something a gate should assert.
 
-**The feedback attenuation spans 0.077 down to 0.019 cycles** from the bottom of
+**The feedback attenuation spans 0.135 down to 0.034 cycles** from the bottom of
 the pitch axis to the top — a factor of 4.0 — which is why BOND audibly weakens
 toward the top of a chord. A decision, not a side effect (G12):
 
-| pitch | Hz | fb range across the pairs (cycles) |
-|---|---|---|
-| 0.00 | 110.00 | 0.07732 – 0.08338 |
-| 0.25 | 185.00 | 0.06283 – 0.06774 |
-| 0.50 | 311.13 | 0.04833 – 0.05211 |
-| 0.75 | 523.25 | 0.03383 – 0.03648 |
-| 1.00 | 880.00 | 0.01933 – 0.02084 |
+| pitch | Hz | fb range, drive 0.14 | fb range, drive 0.08 |
+|---|---|---|---|
+| 0.00 | 110.00 | 0.13532 – 0.14591 | 0.07732 – 0.08338 |
+| 0.25 | 185.00 | 0.10994 – 0.11855 | 0.06283 – 0.06774 |
+| 0.50 | 311.13 | 0.08457 – 0.09119 | 0.04833 – 0.05211 |
+| 0.75 | 523.25 | 0.05920 – 0.06384 | 0.03383 – 0.03648 |
+| 1.00 | 880.00 | 0.03383 – 0.03648 | 0.01933 – 0.02084 |
 
 (the spread within each row is NEW's per-pair offset, ±`kFbOffsetRange`.)
 
@@ -964,6 +964,152 @@ knob position, which is what the per-group zero-meaning buys:
 **A FEED deck voices at most `kPairs / kPairsPerTone` chord tones**, so every
 voiced tone keeps a group SPREAD can reach. At P = 4 that cap is 2, and at
 COLOR's four-note chord the deck voices 2 tones (G25).
+
+**FILT is a real low-pass on the output, and was not one until 2026-08-19.**
+It drove a one-pole INSIDE the feedback path; Bastian reported the knob as
+doing nothing, and the measurement says he was right. Three reasons, each
+sufficient on its own: the in-loop pole never touches the carrier, so it
+changes how the coupling wanders rather than where the spectrum ends; the
+signal it filtered peaks at `kFbBaseCycles`, which is 0.08 cycles at the
+bottom of the pitch range and 0.019 at the top; and its coefficient
+`1 - exp(-2*pi*fc/sr)` already sat at 0.34 at the centre detent, 0.72 half a
+travel up and 0.98 at the top, so the upper third of the knob was
+indistinguishable from wide open. The in-loop pole is now FIXED at
+`kDampFixedHz` — it is half of this engine's anti-aliasing, the other half
+being FeedPair's two-sample average, and a knob that can switch that off is
+not a knob. FILT is an `SvfLp` on the deck output, on the instrument's usual
+60 Hz–14 kHz rails.
+
+Measured on the finished path, seeds 99/999/4242/7/12345 over
+BOND × DEPTH × RATIO × pitch, 1 s per cell (G33):
+
+| `kFiltRes` | damping ratio | worst output | vs `kSatCeil` |
+|---|---|---|---|
+| 0.15 | 0.38 | 0.8714 | **1.584× (+4.00 dB)** |
+| 0 | 0.91 | 0.5353 | 0.973× (−0.24 dB) |
+
+**`SvfLp::SetRes` maps through `r^0.25`, so a value that reads as "a touch of
+resonance" is not one.** 0.15 is already 62 % of the way to full resonance, and
+`0.707` — where a two-pole stops peaking at all — is passed well below it.
+`kFiltRes` is therefore 0, which is a measurement and not a preference: the
+filter sits AFTER the tanh (upstream, the saturator would regenerate exactly
+the partials the filter removed and the knob would read weak again), so a
+resonant peak there breaks the one hard bound the deck offers. Any future
+engine reaching for `SvfLp` with a "small" resonance should read this row
+first — the trap is in the shared primitive, not in FEED.
+
+**The right half of FILT is scaled by `kFiltRightScale`, and the left half is
+the sampler's arithmetic verbatim.** On a sampler deck FILT is a TRIM added to
+a lane that already carries the cutoff, so `n_raw = kFiltNeutral + amt`
+saturating early costs nothing. FEED has no such lane — `LANE_SIZE` is SPREAD
+here — so FILT is the whole control, and unscaled it clamped at `n_raw = 1` by
+knob position 0.25: measured bit-identical 14 000.0 Hz from there to +1, i.e.
+the top 70 % of the right half dead in the hand. Scaled, the travel is
+monotone across its whole length: 60 Hz at −0.6, 3 582 Hz at the detent,
+14 000 Hz at +1, with −1.0…−0.8 the fade to silence. High-band share above
+4 kHz runs 0.720 wide open against 0.0100 nearly shut — a factor of 72.
+
+### The drive went to 0.14 by ear, and what moved
+
+`kFbBaseCycles` was raised from 0.08 to **0.14** on 2026-08-19 after a
+six-render A/B (variants of `kDampFixedHz` × `kFbBaseCycles`, BOND stepped
+0 → 1 over 26 s at pitch 0.35). Bastian picked the hard-drive, bright-path
+variant: *"ruhig hart, filtern kann ich selbst dahinter"* — the escalation is
+the point, and taming its top end is the output FILT's job now that FILT is a
+real low-pass. Darkening the in-loop path instead (1200 Hz and 500 Hz were
+both rendered) was rejected because it removes the brightness for everyone
+rather than leaving it under a knob.
+
+**0.14 knowingly sits above the 0.08 at which the bank alone tips.** That
+ceiling is still the measurement §2 recorded; the engine is now driven past
+it over the lower part of the pitch range on purpose. Do not "correct" one
+number to the other.
+
+**The BOND pitch threshold fell from 0.70 to 0.65** (`kBondPitchThreshold`).
+It is a description the gate samples below, not a setting — nothing in the
+engine reads it — so it has to be re-run whenever the drive moves. What the
+re-run found matters more than the number: at pitch 0.35 the ring **does not
+break anywhere on the knob**. Across the whole BOND travel and SPREAD's lower
+half the aperiodicity peaks at **0.0171**, against the 0.30 that would mean
+"no fundamental". The drift is a smooth monotone creep, and it crosses the
+2 ct tolerance rather than falling off anything:
+
+| BOND | drift at SPREAD 0 | at 0.25 | at 0.50 |
+|---|---|---|---|
+| 0.25 | 0.001 ct | 0.237 ct | 0.295 ct |
+| 0.50 | 0.002 ct | 0.825 ct | 1.158 ct |
+| 0.65 | 0.005 ct | 1.259 ct | 1.813 ct |
+| 0.70 | 0.006 ct | 1.363 ct | **2.003 ct** |
+| 1.00 | 0.015 ct | 1.861 ct | 3.007 ct |
+
+So the honest statement is "the 2 ct bound holds to BOND 0.65, and a 3.1 ct
+bound holds everywhere". `kPitchCentreTolCt` was deliberately NOT widened to
+3.5 to keep the whole travel inside the gate: loosening a bound so a test
+passes is how a gate stops being one. The cliff proper still lives at the
+bottom of the pitch range, where the attenuation is weakest.
+
+**BOND is not inert and never was.** The complaint that produced this round
+was "klingt nicht gut", not "tut nichts", and the two need different fixes.
+Spectral flatness across the knob, seed 99, FLOOR 1, DEPTH 1, at the old
+drive:
+
+| pitch | BOND 0 | 0.50 | 1.00 | span |
+|---|---|---|---|---|
+| 0.00 | 0.00002 | 0.00161 | 0.04803 | 2492× |
+| 0.35 | 0.00004 | 0.00119 | 0.02040 | 543× |
+| 0.70 | 0.00006 | 0.00057 | 0.00190 | 31× |
+| 1.00 | 0.00027 | 0.00104 | 0.00205 | 7.6× |
+
+Monotone everywhere, and heavily back-loaded: half the knob travels between
+two line spectra. A future "BOND does nothing" report should be checked
+against the *distribution* of its effect before its magnitude.
+
+### Level parity, and the ceiling that was a compressor
+
+Reported by ear ("die Engine scheint mir viel lauter zu sein als die anderen"),
+then measured. One `Part`, identical lanes, identical LEVEL 1, no part FX and
+no reverb, 6 s from one trigger:
+
+| engine | FLOW peak | FLOW RMS | vs SYNTH | STEP RMS | vs SYNTH |
+|---|---|---|---|---|---|
+| SYNTH | 0.333 | −21.8 dB | ±0 | −32.9 dB | ±0 |
+| WAVE | 0.444 | −19.0 dB | +2.8 dB | −29.5 dB | +3.4 dB |
+| BODY | 0.053 | −31.8 dB | −10.0 dB | −62.0 dB | −29.1 dB |
+| FEED (before) | 0.547 | −10.0 dB | **+11.8 dB** | −14.8 dB | **+18.1 dB** |
+| FEED (after) | 0.343 | −18.7 dB | +3.1 dB | −25.3 dB | +7.6 dB |
+
+**The 0.547 peak was `kSatCeil`, not the signal.** Sweeping LEVEL shows the
+tanh was not a ceiling at all but a permanent compressor:
+
+| LEVEL | peak | linear expectation | squash |
+|---|---|---|---|
+| 0.10 | 0.122 | 0.124 | −0.14 dB |
+| 0.30 | 0.323 | 0.371 | −1.20 dB |
+| 0.50 | 0.444 | 0.618 | −2.87 dB |
+| 1.00 | 0.537 | 1.236 | **−7.24 dB** |
+
+So the coupling was being judged through 7 dB of gain reduction before it
+reached any compressor downstream — and the master limiter's drive-0 knee
+(−1 dBFS, bit-transparent below) sat only 4.2 dB above one FEED deck, against
+8.6 dB for SYNTH. Two FEED decks cleared it.
+
+The cause is that `1/sqrt(kPairs)` normalizes for INCOHERENT summation, and FM
+carriers on chord tones plus an uncoupled SUB are partially coherent. Fixed
+with `kDeckGain` = 0.25 applied to the deck sum immediately before the ceiling;
+the tanh now catches peaks (~0.8 dB at LEVEL 1) and the cliff it exists for is
+untouched. Two decks now peak at 0.686 against SYNTH's 0.666.
+
+**FEED still reads +7.6 dB RMS in STEP, and that is density rather than gain.**
+Its peaks match (0.308 against SYNTH's 0.167 is the struck case; the drone case
+is 0.343 against 0.333). A FEED note keeps ringing where a SYNTH note has
+decayed — the ring is free-running by design, a trigger only injects into it.
+Trimming further to equalise the struck RMS would leave the drone too quiet,
+and the drone is the mode the engine exists for.
+
+**BODY is 10 dB below SYNTH as a drone and 29 dB below struck**, on the same
+settings. That is unexamined here: BODY's level depends heavily on MATL and
+EXCIT, and one probe setting is not a verdict on it. Recorded because the
+parity brief covers every engine, not just this one.
 
 ### Three measurement traps this engine sets, and what they cost
 

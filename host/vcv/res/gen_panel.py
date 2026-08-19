@@ -229,24 +229,25 @@ ROW_V1, ROW_V2 = 77.3, 89.4
 # absolute seconds (FeedEngine::set_attack/set_decay), and FALL's top quarter
 # is also FLOOR -- one knob, two meanings, which is what frees the RES slot.
 # RATIO is set_resonance, the modulator:carrier ratio, magnet-locked to the
-# integers in its lower half. BRITE is set_filt, a one-pole INSIDE the feedback
-# path rather than after it, bipolar around a neutral centre cutoff. BOND is
-# the LANE_SOURCE target, morphing each modulator's input from its own
-# feedback into its neighbour's output. SPRD is the LANE_SIZE base, re-pointed
-# from the DETUNE knob in Fireflow.cpp -- the sampler's SUB -> LANE_SIZE
-# re-point, one entry further down the same ledger.
+# integers in its lower half. FILT is set_filt, a real low-pass on the deck's
+# output. BOND is the LANE_SOURCE target, morphing each modulator's input from
+# its own feedback into its neighbour's output. SPRD is the LANE_SIZE base,
+# re-pointed from the DETUNE knob in Fireflow.cpp -- the sampler's SUB ->
+# LANE_SIZE re-point, one entry further down the same ledger.
 #
-# FEED's FILT word is BRITE and NOT DAMP, which is what it wanted to be. DAMP
-# is already BODY's DECAY word, and "no word is printed twice" caught the
-# collision -- two controls saying one word in different engine states is
-# exactly what that guard exists for. TONE, the obvious replacement, is also
-# already printed (the FLUX fieldset). BRITE is free because it is already THIS
-# row's BODY word, and printed_words dedupes within one control: a knob may say
-# the same word in two of its states, that is one meaning said twice rather
-# than a collision. It is also the honest word -- on both decks FILT opens the
-# top end, and that FEED's filter sits INSIDE the feedback path (so it governs
-# how far the coupling escalates, not just the tone) is a manual matter and not
-# something five characters can carry.
+# FEED's FILT word was BRITE until 2026-08-19, and the rename tracks what the
+# control became rather than taste. It printed BRITE because set_filt drove a
+# one-pole INSIDE the feedback path and DAMP -- the word that wanted -- was
+# already BODY's DECAY word. Bastian reported that knob as not working, and
+# feed_config.h now carries the measured reason: the in-loop one-pole never
+# touched the carrier, filtered a phase wobble of at most 0.08 cycles, and
+# saturated over the upper third of its travel. It is fixed now, and FILT is a
+# real SvfLp on the output -- the same filter Synth, WAVE and the sampler run,
+# on the same 60 Hz..14 kHz rails, with the same fade to silence at the left
+# end. So the honest word is the one those three already print, and printing it
+# here is legal because "no word is printed twice" is a guard against ONE word
+# meaning two controls: FILT at the FILT base in a fourth engine state is the
+# same meaning said again, which is what that guard permits.
 #
 # DETUNE is a NEW row here. It was a fixed DTUN plate until this spec, and a
 # fixed plate would now lie: on a FEED deck that knob is SPREAD.
@@ -256,7 +257,7 @@ DYNAMIC_CAPTIONS = [
     ("DECAY",    "ENGINE",   ("DEC",  "DEC",  "DEC",   "DAMP",  "TAIL",  "FALL")),
     ("RES",      "ENGINE",   ("RES",  "RES",  "RES",   "CHAR",  "TILT",  "RATIO")),
     ("SUB",      "ENGINE",   ("SUB",  "LEN",  "SUB",   "EXCIT", "INPUT", "SUB")),
-    ("FILT",     "ENGINE",   ("FILT", "FILT", "FILT",  "BRITE", "LOSS",  "BRITE")),
+    ("FILT",     "ENGINE",   ("FILT", "FILT", "FILT",  "BRITE", "LOSS",  "FILT")),
     ("SOURCE",   "ENGINE",   ("TIMB", "ORG",  "FRAME", "MATL",  "DRIVE", "BOND")),
     ("DETUNE",   "ENGINE",   ("DTUN", "DTUN", "DTUN",  "DTUN",  "DTUN",  "SPRD")),
 ]
