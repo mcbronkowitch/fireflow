@@ -3534,3 +3534,20 @@ TEST_CASE("sampler: EDGE up thins the grain bus") {
     CHECK(low_energy(thin) < 0.7f * low_energy(flat));
     CHECK(rms(thin, 0, thin.size()) > 0.3f * rms(flat, 0, flat.size()));
 }
+
+// fix-wave finding (2026-08-19 voice-knobs-dpth-edge review, item 2): every
+// EDGE case in this file drives set_edge with 0 or +1 only. SYNTH, WAVE,
+// SAMPLER and BBD all share the copy-pasted `if (_edge != 0.f)` skip shape
+// (see set_edge()/process() here and in bbd_engine.cpp) -- a rewrite to
+// `_edge > 0.f` would silently skip the whole negative half on all four and
+// every test in the suite would stay green. Cheapest closure: after a render
+// at a NEGATIVE trim, assert the filter's own state actually moved off its
+// post-init() {0, 0} -- it cannot do that if process() skipped it.
+TEST_CASE("sampler: EDGE down drives the high-pass too, not just EDGE up") {
+    Rig g;
+    g.e.set_flow(true);
+    feed_clicks(g, 24000, 8);
+    g.e.set_edge(-0.9f);
+    g.render(24000);
+    CHECK(g.e.edge_hp_y1_for_test() != 0.f);
+}

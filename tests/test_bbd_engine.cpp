@@ -1725,3 +1725,29 @@ TEST_CASE("bbd engine: EDGE shapes what ARRIVES, not how it decays") {
     CAPTURE(r4);
     CHECK(r1 != doctest::Approx(r4).epsilon(0.05));
 }
+
+// fix-wave finding (2026-08-19 voice-knobs-dpth-edge review, item 2): every
+// EDGE case in this file drives set_edge with 0 or a positive trim only.
+// SYNTH, WAVE, SAMPLER and BBD all share the copy-pasted `if (_edge != 0.f)`
+// skip shape (set_edge()/process_in() above, and sampler_engine.h's own) -- a
+// rewrite to `_edge > 0.f` would silently skip the whole negative half on
+// all four and every test in the suite would stay green. Cheapest closure,
+// same idiom as tests/test_sampler_engine.cpp's own case of this name: after
+// a render at a NEGATIVE trim, assert the filter's own state actually moved
+// off its post-init() {0, 0} -- it cannot do that if process_in() skipped it.
+TEST_CASE("bbd engine: EDGE down drives the high-pass too, not just EDGE up") {
+    BbdEngine e;
+    e.init(48000.f);
+    e.init_buffers(s_bbd_l, s_bbd_r, BbdEngine::kCells);
+    e.set_cycle(0.5f);
+    float t[LANE_COUNT] = { 0.3f, 1.f, 0.5f, 0.6f, 1.f };
+    e.set_targets(t, 0.5f);
+    e.set_edge(-0.9f);
+    for (int i = 0; i < 4800; ++i) {
+        float l, r;
+        const float x = std::sin(i * 0.05f) * 0.5f;
+        e.process_in(x, x);
+        e.process(l, r);
+    }
+    CHECK(e.edge_hp_y1_for_test() != 0.f);
+}

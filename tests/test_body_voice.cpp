@@ -271,12 +271,32 @@ TEST_CASE("Exciter bows the click zone at the fundamental, not a fixed rate") {
 // -- EDGE on BODY (Task 4, spec 2026-08-19 voice-knobs-dpth-edge 4.3/4.6) --
 
 TEST_CASE("body: EDGE at 0 leaves the exciter's corner exactly where RESO put it") {
+    // fix-wave finding (2026-08-19 voice-knobs-dpth-edge review, item 1):
+    // the original shape here captured k0 AFTER set_character but BEFORE
+    // set_edge(0.f), then checked it against the SAME object after
+    // set_edge(0.f) -- both calls run through _recompute_filter() at the
+    // identical _edge == 0, so it compares a computation against a re-run
+    // of itself. A mutation that shifts every _recompute_filter() call's
+    // neutral point (e.g. kEdgeOctaves * (_edge - 0.5f) instead of
+    // kEdgeOctaves * _edge) moves BOTH sides together and this test still
+    // passes -- caught only by red-proofing it, not by reading it.
+    //
+    // Fix: pin against the coefficient computed independently from the
+    // zone table in exciter.h, not against another call into the object
+    // under test. At c == 0.2, z = 0.6 < 1 -> zone 0 (click):
+    // cutoff_hz = 2000 + 6000*0.6 = 5600 Hz (verified against
+    // engine/body/exciter.h's _recompute_filter, matches the reviewer's
+    // number). kTwoPi == 6.2831853f is Exciter::kTwoPi's own value, copied
+    // here because it is a private class constant; the coefficient formula
+    // (1 - exp(-kTwoPi * cutoff_hz / sample_rate)) is copied from
+    // Exciter::_recompute_filter the same way.
     Exciter ex;
     ex.init(1, 48000.f);
     ex.set_character(0.2f);                 // zone 0, click
-    const float k0 = ex.coef_for_test();
     ex.set_edge(0.f);
-    CHECK(ex.coef_for_test() == k0);        // bit equality, not Approx
+    const float kTwoPi = 6.2831853f;
+    const float expected = 1.f - std::exp(-kTwoPi * 5600.f / 48000.f);
+    CHECK(ex.coef_for_test() == doctest::Approx(expected));
 }
 
 TEST_CASE("body: EDGE moves the corner in both directions, inside zones 0 and 1") {
