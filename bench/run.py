@@ -340,6 +340,11 @@ BENCH_PROTOCOL_ROWS_BY_FAMILY = {
         # ring runs at full rate whatever the amplitude is, and a silent deck
         # used to be the expensive one. See workloads_system.cpp.
         "inst_feed_engine_idle",
+        # Task 10 (voice-knobs-dpth-edge): SYNTH deck + BBD deck, EDGE driven
+        # off-neutral on both so the OnePoleHp pair this branch added to
+        # SynthEngineT's summed output and BbdEngine::process_in is actually
+        # live rather than skipped by the t==0 bypass branch.
+        "inst_edge_synth_bbd",
     ),
     "feed": (
         "feed_pairs",
