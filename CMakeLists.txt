@@ -168,7 +168,6 @@ add_executable(spky_tests
     tests/test_part_engine_contract.cpp
     tests/test_param_table.cpp
     tests/test_param_impact.cpp
-    tests/test_voice_edge_broadcast.cpp
     # engine/util/onepole_hp.h is header-only. Tasks 4-7 of the DPTH/EDGE
     # plan landed and engine/parts/bbd_engine.h, engine/sampler/
     # sampler_engine.h and engine/synth/synth_engine.h now include it too --
