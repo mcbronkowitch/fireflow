@@ -85,8 +85,6 @@ enum ParamId {
     PACE,
     DEPTH_A,
     DEPTH_B,
-    DAMP_A,
-    DAMP_B,
     NUM_PARAMS
 };
 enum InputId {
@@ -209,8 +207,6 @@ static const PanelCtl kParamCtls[] = {
     {PACE, WK_SMKNOB, {97.680f, 42.000f}, "PACE", {97.680f, 47.600f}, 0, 1.90f, 0x171713, "PACE"},
     {DEPTH_A, WK_SMKNOB, {37.250f, 77.300f}, "DPTH", {37.250f, 82.900f}, 0, 1.90f, 0x171713, "MOTION lane base"},
     {DEPTH_B, WK_SMKNOB, {176.110f, 77.300f}, "DPTH", {176.110f, 82.900f}, 0, 1.90f, 0x171713, "MOTION lane base"},
-    {DAMP_A, WK_SMKNOB, {37.250f, 89.400f}, "EDGE", {37.250f, 95.000f}, 0, 1.90f, 0x171713, "Second-filter trim"},
-    {DAMP_B, WK_SMKNOB, {176.110f, 89.400f}, "EDGE", {176.110f, 95.000f}, 0, 1.90f, 0x171713, "Second-filter trim"},
 };
 static const PanelCtl kInputCtls[] = {
     {IN_L, WK_IN, {55.250f, 118.400f}, "L", {55.250f, 124.800f}, 0, 1.80f, 0x171713, "IN L"},
@@ -261,8 +257,6 @@ static const DynCaption kDynCaptions[] = {
     {DETUNE_B, ENGINE_B, 6, {"DTUN", "DTUN", "DTUN", "DTUN", "DTUN", "SPRD"}},
     {DEPTH_A, ENGINE_A, 6, {"DPTH", "SCAT", "DPTH", "SWAY", "RPTS", "DPTH"}},
     {DEPTH_B, ENGINE_B, 6, {"DPTH", "SCAT", "DPTH", "SWAY", "RPTS", "DPTH"}},
-    {DAMP_A, ENGINE_A, 6, {"EDGE", "EDGE", "EDGE", "SNAP", "PRE", "EDGE"}},
-    {DAMP_B, ENGINE_B, 6, {"EDGE", "EDGE", "EDGE", "SNAP", "PRE", "EDGE"}},
 };
 static const PanelTxt kPanelTexts[] = {
     {{39.500f, 36.100f}, 5.00f, 0.00f, 0x2E6355, 0, "A"},

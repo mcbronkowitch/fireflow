@@ -65,7 +65,7 @@ PARAM_ORDER = [
     'REC_A', 'REC_B', 'REV_MIX_A', 'REV_MIX_B',
     'SHUFFLE', 'PACE',
     # Appended 2026-08-19, so every id above keeps its number.
-    'DEPTH_A', 'DEPTH_B', 'DAMP_A', 'DAMP_B',
+    'DEPTH_A', 'DEPTH_B',
 ]
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
@@ -80,13 +80,12 @@ PARAM_TIPS = [
     'COLOR', 'COLOR', 'LINK', 'LINK', 'BBD Bend', 'BBD Bend', 'REC', 'REC',
     'Room send', 'Room send',
     'SHUFL', 'PACE',
-    # DPTH/EDGE per deck (2026-08-19). Rack names, not plate captions -- the
-    # faceplate prints DPTH and EDGE, the tooltip says what the knob is.
-    # Task 8 retired the FEED-only tips: both knobs broadcast to all six
-    # engines now (Tasks 2-7), so a tooltip naming FEED alone would lie on
-    # the other five decks.
+    # DPTH per deck (2026-08-19). Rack name, not the plate caption -- the
+    # faceplate prints DPTH, the tooltip says what the knob is. Task 8
+    # retired the FEED-only tip: the knob broadcasts to all six engines now
+    # (Tasks 2-7), so a tooltip naming FEED alone would lie on the other
+    # five decks.
     'MOTION lane base', 'MOTION lane base',
-    'Second-filter trim', 'Second-filter trim',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
@@ -103,7 +102,7 @@ def test_enum_order():
     check(PARAM_ORDER[:PARAM_ORDER.index('PACE') + 1][-1] == 'PACE',
           "PACE moved out of the legacy tail -- ids above it renumbered")
     check(PARAM_ORDER[PARAM_ORDER.index('PACE') + 1:]
-          == ['DEPTH_A', 'DEPTH_B', 'DAMP_A', 'DAMP_B'],
+          == ['DEPTH_A', 'DEPTH_B'],
           "the appended block after PACE changed")
     check([c.enum for c in g.INPUTS] == INPUT_ORDER, "INPUTS order changed")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
@@ -188,11 +187,11 @@ def test_bbd_pitch_flux_time_collections():
     runtime = [c.enum for c in g.RUNTIME_PANEL_PARAMS]
     static = [c.enum for c in g.STATIC_PANEL_PARAMS]
     check([c.enum for c in g.APPENDED_PANEL_PARAMS]
-          == ['PACE', 'DEPTH_A', 'DEPTH_B', 'DAMP_A', 'DAMP_B'],
+          == ['PACE', 'DEPTH_A', 'DEPTH_B'],
           "APPENDED_PANEL_PARAMS changed")
     check("FLUXTIME_A" not in persistent and "FLUXTIME_B" not in persistent,
           "FLUXTIME must not survive as a saved ParamId")
-    check(persistent[-4:] == ['DEPTH_A', 'DEPTH_B', 'DAMP_A', 'DAMP_B'],
+    check(persistent[-2:] == ['DEPTH_A', 'DEPTH_B'],
           "the appended FEED block is not the persistent tail")
     check(all(e in runtime for e in ('STAGES_A', 'STAGES_B',
                                       'FLUXRATE_A', 'FLUXRATE_B')),
@@ -322,11 +321,9 @@ def test_param_runtime_tip_contract():
     check(PARAM_TIPS[ids["LINK_A"]:ids["STAGES_B"] + 1]
           == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
           "BBD Bend runtime tips drifted")
-    check(PARAM_TIPS[-4:] == ['MOTION lane base', 'MOTION lane base',
-                              'Second-filter trim',
-                              'Second-filter trim'],
-          "the appended DPTH/EDGE tips are not the trailing runtime tips")
-    check(PARAM_TIPS[-5] == 'PACE',
+    check(PARAM_TIPS[-2:] == ['MOTION lane base', 'MOTION lane base'],
+          "the appended DPTH tip is not the trailing runtime tip")
+    check(PARAM_TIPS[-3] == 'PACE',
           "PACE must sit at the end of the legacy runtime tips (spec 2026-08-12 "
           "modulation-pace)")
     for enum, caption, tip in (
@@ -487,9 +484,10 @@ def test_layout_constants():
     check(approx(g.RING_CX_A, 39.5), f"RING_CX_A {g.RING_CX_A}, want 39.5")
     check(approx(g.RING_CY, 34.5), f"RING_CY {g.RING_CY}, want 34.5")
     check(approx(g.KNOB_R, 25.5), f"KNOB_R {g.KNOB_R}, want 25.5")
-    # Fourth column 2026-08-19: DPTH over EDGE. It breaks the 10.5 mm pitch
-    # of the first three and has to -- FLUXRATE_A sits at 44.25 and a
-    # SMKNOB pair needs 6.0 mm, so a column on pitch (40.75) fails by 2.5.
+    # Fourth column 2026-08-19: DPTH, with a free slot below it (the EDGE
+    # knob, removed 2026-08-20). It breaks the 10.5 mm pitch of the first
+    # three and has to -- FLUXRATE_A sits at 44.25 and a SMKNOB pair needs
+    # 6.0 mm, so a column on pitch (40.75) fails by 2.5.
     check(g.VOICE_X == [9.25, 19.75, 30.25, 37.25], f"VOICE_X {g.VOICE_X}")
     check(g.FX_TOP == [44.25, 54.75, 65.25, 75.75], f"FX_TOP {g.FX_TOP}")
     check(g.FX_BOT == g.FX_TOP, f"FX rows disagree: {g.FX_TOP} / {g.FX_BOT}")
@@ -1800,14 +1798,13 @@ def test_source_detune_guard_rejects_representative_regressions():
 
 
 def feed_host_wiring_issues(cpp):
-    """Return regressions in the four re-points a FEED deck needs.
+    """Return regressions in the three re-points a FEED deck needs.
 
-    All four are BEHAVIOURAL and all four are SILENT when reverted, which is
-    the whole reason they are gated by source text: a FEED deck whose DETUNE
-    knob stops writing LANE_SIZE simply has a dead SPREAD control, one whose
-    LANE_MOTION base is never written sits on Part's compiled-in 0.5 with no
-    way to reach DEPTH's ends, and one whose EDGE knob never reaches
-    set_voice_edge keeps every engine's own neutral while the knob turns.
+    All three are BEHAVIOURAL and all three are SILENT when reverted, which
+    is the whole reason they are gated by source text: a FEED deck whose
+    DETUNE knob stops writing LANE_SIZE simply has a dead SPREAD control,
+    and one whose LANE_MOTION base is never written sits on Part's
+    compiled-in 0.5 with no way to reach DEPTH's ends.
     """
     issues = []
     push = cpp_scope(cpp, "void pushParams()")
@@ -1837,12 +1834,6 @@ def feed_host_wiring_issues(cpp):
                       "here is what made five of them unreachable")
     if "feedPart?pp(DEPTH_A,p)" in push_n:
         issues.append("the FEED-only ternary on LANE_MOTION's base is back")
-    if "inst.set_voice_edge(p,pp(DAMP_A,p));" not in push_n:
-        issues.append("the EDGE knob must reach set_voice_edge RAW, or it "
-                      "turns against every engine's own neutral and nothing "
-                      "moves -- the knob-to-Hz law is the engine's now, and a "
-                      "host-side conversion would be right on one engine and "
-                      "wrong on five")
     return issues
 
 
@@ -1868,12 +1859,7 @@ def _read_float(rel_path_parts, name):
 
 
 def _feed_cfg_floats():
-    """kDepthBase, read from the engine header. kDampFixedHz used to be
-    parsed here too (Task 3), to derive EDGE's boot default; EDGE stopped
-    being an absolute cutoff (spec 4.2) and the derivation went with it --
-    test_edge_neutral_is_every_engine_s_own_constant reads kDampFixedHz
-    itself now, through _read_float, so it does not belong in this
-    DPTH-only helper any more."""
+    """kDepthBase, read from the engine header."""
     out = {}
     for name in ("kDepthBase",):
         v = _read_float(("engine", "feed", "feed_config.h"), name)
@@ -1885,15 +1871,7 @@ def _feed_cfg_floats():
 def test_feed_shipped_defaults_are_the_engine_constants():
     """DPTH must BOOT neutral, so a patch that never touches it sounds
     exactly as it did before it existed. The knob IS the LANE_MOTION base,
-    so kDepthBase is literally the position it must boot at.
-
-    EDGE's half of this gate moved to
-    test_edge_neutral_is_every_engine_s_own_constant (Task 8): it stopped
-    being an absolute cutoff on host-owned rails, where the boot position
-    had to be DERIVED from kDampFixedHz, and became a bipolar trim around a
-    neutral each engine defines for itself -- so the one boot value that can
-    be right on six engines at once is the trim's centre, 0, checked
-    alongside the six neutral constants rather than here."""
+    so kDepthBase is literally the position it must boot at."""
     cfg = _feed_cfg_floats()
     want_depth = cfg["kDepthBase"]
     for side in ("A", "B"):
@@ -1903,52 +1881,8 @@ def test_feed_shipped_defaults_are_the_engine_constants():
               f"({want_depth})")
 
 
-# Where each engine's EDGE neutral is a named constant, wherever it actually
-# lives -- not one shared header. FEED's is feed_config.h; the sampler's is
-# sampler_config.h; SYNTH's (and WAVE's: both engines instantiate the same
-# SynthEngineT<V> template, so they share this one constant by construction,
-# spec 2026-08-19 voice-knobs-dpth-edge §4.2/4.3) is a SynthEngineT class
-# member in synth_engine.h; BODY's is a PRIVATE Exciter member in exciter.h;
-# the BBD's live in an anonymous namespace inside bbd_engine.cpp, on purpose,
-# for internal linkage -- moving any of these to satisfy a text parser was
-# ruled out (Task 8 brief). SYNTH/WAVE and the sampler and the BBD keep the
-# neutral itself as a fixed Hz constant (kEdgeHpNeutralHz/kDampFixedHz) that
-# t == 0 reads unmodified; BODY has no such fixed corner -- its neutral is
-# whatever RESO already derived, and what proves t == 0 leaves that alone is
-# kEdgeOctaves itself: pow(2, kEdgeOctaves * 0) == 1 exactly (exciter.h's own
-# comment), so checking that constant is named is what stands in for BODY's
-# neutral here.
-EDGE_NEUTRAL_CONSTANTS = (
-    ("SYNTH",   ("engine", "synth", "synth_engine.h"),   "kEdgeHpNeutralHz"),
-    ("SAMPLER", ("engine", "sampler", "sampler_config.h"), "kEdgeHpNeutralHz"),
-    ("WAVE",    ("engine", "synth", "synth_engine.h"),   "kEdgeHpNeutralHz"),
-    ("BODY",    ("engine", "body", "exciter.h"),          "kEdgeOctaves"),
-    ("BBD",     ("engine", "parts", "bbd_engine.cpp"),    "kEdgeHpNeutralHz"),
-    ("FEED",    ("engine", "feed", "feed_config.h"),      "kDampFixedHz"),
-)
-
-
-def test_edge_neutral_is_every_engine_s_own_constant():
-    """EDGE boots at centre and centre means 'unchanged' on all six engines.
-
-    This replaces the FEED-only default gate. The old one derived one knob
-    position from one constant; that shape cannot survive six engines with
-    six neutrals, which is exactly the defect that made EDGE a trim (spec
-    4.2). What is checkable instead: the knob's init default is the centre,
-    the centre is 0, and every engine's neutral is a named constant near its
-    own engine -- header or .cpp, whichever the engine actually uses --
-    rather than a literal in the host."""
-    check(g.INIT_DEFAULTS["DAMP_A"] == 0.0 and g.INIT_DEFAULTS["DAMP_B"] == 0.0,
-          "EDGE must boot at the trim's centre")
-    for engine, rel_path_parts, name in EDGE_NEUTRAL_CONSTANTS:
-        path = "/".join(rel_path_parts)
-        check(_read_float(rel_path_parts, name) is not None,
-              f"{engine}: {name} must be a named constant in {path}, "
-              f"not a host literal")
-
-
 def test_feed_host_wiring():
-    """The FEED deck's four lane/engine re-points are present and correctly shaped."""
+    """The FEED deck's three lane/engine re-points are present and correctly shaped."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
@@ -1957,7 +1891,7 @@ def test_feed_host_wiring():
 
 
 def test_feed_host_wiring_guard_rejects_representative_regressions():
-    """Each of the five ways the FEED wiring can be reverted is caught."""
+    """Each of the four ways the FEED wiring can be reverted is caught."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
@@ -1974,9 +1908,6 @@ def test_feed_host_wiring_guard_rejects_representative_regressions():
          "            inst.set_target_base(p, spky::LANE_MOTION,\n"
          "                                 feedPart ? pp(DEPTH_A, p) : 0.5f);",
          "the FEED-only ternary restored"),
-        ("            inst.set_voice_edge(p, pp(DAMP_A, p));",
-         "",
-         "EDGE push removed"),
         ("            if (inst.engine_id(p) != spky::ENGINE_FEED) {",
          "            if (true) {",
          "DETUNE gate removed"),
