@@ -1244,3 +1244,17 @@ archival files under `docs/bench/`, `docs/superpowers/`, `docs/audits/` and
 `.superpowers/` were left untouched, as were the dated provenance notes in
 `third_party/oliverb/` and the historical release names in this file and in
 `docs/roadmap.md` — at those dates the project really was called that.
+
+## EDGE knob removed (2026-08-20)
+
+DPTH and EDGE shipped together 2026-08-19 (spec/plan
+`2026-08-19-voice-knobs-dpth-edge`), each a VOICE knob broadcasting to all six
+engines. A listening pass on EDGE (`docs/by-ear-decisions.md`) found its
+negative half inaudible at neutral (≤0.08 dB at 55 Hz) and its positive
+extreme worth only ~5 dB off a 110 Hz fundamental — the knob did not earn its
+panel space. Spec/plan `2026-08-20-edge-knob-removal` took it back out across
+six tasks: both VCV panels, `P_EDGE_A`/`P_EDGE_B`, `Instrument::set_voice_edge`
+/ `Part::set_voice_edge`, all six per-engine cells including
+`engine/util/onepole_hp.h`, the bench workload built to price its filters, and
+this paper trail. DPTH was untouched and stays on all six engines; the VOICE
+slot EDGE occupied is free space, by decision, not re-flowed.

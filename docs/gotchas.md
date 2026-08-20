@@ -63,9 +63,10 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
 - **The `instrument_worst_bbd_dtcm` decision gate crossed 100% of budget from
   adding one bench row, with zero behaviour change.** Measured same-board
   A/B (`--profile system --transport usb`, board `seed`), commit
-  `e122e6e` (before Task 10's `inst_edge_synth_bbd` row) vs. `48f8665`
+  `e122e6e` (before Task 10 added a new bench row) vs. `48f8665`
   (after, the commit the run actually measured -- `2cc9267` only recorded
-  the capture in docs afterward): max% went 98.51/98.56 → 101.07/101.11,
+  the capture in docs afterward; the row itself, `inst_edge_synth_bbd`, was
+  removed 2026-08-20 along with EDGE): max% went 98.51/98.56 → 101.07/101.11,
   checksum identical (`07fb14fc`) both before and after — confirming pure
   code-layout cost, not an engine regression. This is the icache-layout
   entry above made concrete: the gate itself, not just an arbitrary row, is
@@ -215,16 +216,6 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   is the point. A new caller that wants "almost none" wants **0**, and should
   measure rather than trust the number's appearance. Full table:
   [`engine-map.md` §9](engine-map.md).
-- **EDGE does nothing in the top third of RESO on a BODY deck.**
-  `Exciter::_recompute_filter` computes and EDGE-trims a cutoff for zone 2
-  (RESO ≥ 0.67, the sputter/ping character) the same as the other two zones,
-  but `Exciter::process`'s zone-2 branch never calls `_lp.process()` — the
-  coefficient sits in `_lp` unread. Deliberate (spec
-  `2026-08-19-voice-knobs-dpth-edge-design.md` §4.6): restoring the filter
-  there would change a chosen character and couple EDGE to level instead of
-  tone, not a bug to fix. `tests/test_body_voice.cpp` pins the inertness so a
-  future "repair" reddens a test instead of shipping silently. Full
-  mechanism: [`engine-map.md` §10](engine-map.md).
 - **A sampler deck reads DPTH's base HALVED, not at face value.** Every other
   engine reads `LANE_MOTION`'s base exactly as the host writes it;
   `Part::_control_tick` scales it by `sampler_cfg::kMotionBaseScale = 0.5f`
