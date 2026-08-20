@@ -60,6 +60,17 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   translation unit links into the binary (observed on small rows with no
   engine change). Only compare bench rows measured in the same build/run,
   never across commits with unrelated code churn.
+- **The `instrument_worst_bbd_dtcm` decision gate crossed 100% of budget from
+  adding one bench row, with zero behaviour change.** Measured same-board
+  A/B (`--profile system --transport usb`, board `seed`), commit
+  `e122e6e` (before Task 10's `inst_edge_synth_bbd` row) vs. `2cc9267`
+  (after): max% went 98.51/98.56 → 101.07/101.11, checksum identical
+  (`07fb14fc`) both before and after — confirming pure code-layout cost,
+  not an engine regression. This is the icache-layout entry above made
+  concrete: the gate itself, not just an arbitrary row, is now reading
+  over budget as of `2026-08-20`, and it will read differently again the
+  next time anything links into `bench/build/bench.elf`. Full baseline
+  capture: `docs/bench/2026-08-20-e122e6e-system-axi-o2-usb.md`.
 
 ## Modulation layer (`engine/mod/`)
 

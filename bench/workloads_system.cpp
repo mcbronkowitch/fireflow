@@ -735,6 +735,14 @@ float proc_inst_feed_idle()
 // process_in actually runs at kClockMaxHz rather than on an idling line --
 // see that function's comments for why each of these setters is the worst
 // case, not just a non-default one.
+//
+// This row measures over 100% of the block budget on hardware (~105% max,
+// 2026-08-20). That is by construction, not a claim that EDGE broke the
+// budget: it stacks configure_inst_worst's full worst-case-instrument
+// FX/reverb/master-drive load on top of the BBD clock ceiling AND a maxed
+// EDGE trim on both decks -- a compound ceiling, same spirit as the
+// existing instrument_worst_bbd / inst_bbd_engine_worst rows, which are
+// already in the high-90s/low-100s on their own before EDGE is touched.
 void configure_inst_edge_synth_bbd(Instrument& inst)
 {
     inst.set_engine(PART_B, ENGINE_BBD);
@@ -778,9 +786,12 @@ void configure_inst_edge_synth_bbd(Instrument& inst)
     }
 
     // The same self-check the BBD and FEED rows carry: a row that silently
-    // stayed on the wrong engine, or whose EDGE write did not land, would
-    // return a plausible-looking but wrong-basis checksum and nothing in the
-    // harness would notice otherwise.
+    // stayed on the wrong engine, or whose BBD deck never reached the clock
+    // ceiling, would return a plausible-looking but wrong-basis checksum and
+    // nothing in the harness would notice otherwise. This does NOT verify
+    // the EDGE write itself -- there is no getter, only set_voice_edge --
+    // that was checked by reading both set_edge clamps and both process
+    // paths directly (see the header comment above and the task-10 report).
     assert(inst.engine_id(PART_A) == ENGINE_SYNTH);
     assert(inst.engine_id(PART_B) == ENGINE_BBD);
     assert(inst.bbd_div(PART_B) == 0);                    // 1/32, the shortest
