@@ -196,11 +196,6 @@ constexpr float kRatioMax       = 11.f;    // BY EAR, first try
 // what it was at the neutral knob position.
 constexpr float kDampFixedHz = 3200.f;     // BY EAR, first try
 
-// EDGE's span either side of neutral, in octaves. Neutral (t == 0) is
-// kDampFixedHz itself, so a patch that never touches the knob is unchanged.
-// FIRST VALUE -- the by-ear pass owns it (docs/by-ear-decisions.md).
-constexpr float kEdgeOctaves = 2.f;
-
 // FILT: a real low-pass on the deck's OUTPUT (SvfLp, the same filter Synth,
 // WAVE and the sampler run), on the same 60 Hz..14 kHz rails.
 //
