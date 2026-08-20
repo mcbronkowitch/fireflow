@@ -122,7 +122,7 @@ HW_SIZE = {
     # spacing is 14.5 mm against 12 for every other pair, so the row could
     # not sit on the 13 mm pitch of the four knobs directly above it.
     "FILT": "S", "SOURCE": "S",                    # TIMB is small (graphics round)
-    "DEPTH": "S", "DAMP": "S",                     # FEED, the two new VOICE knobs
+    "DEPTH": "S",                                   # FEED, the VOICE knob
     "ATTACK": "S", "DECAY": "S", "RES": "S", "SUB": "S", "STAGES": "S",
     "FLUX": "G",
     "FLUXRATE": "S", "FLUXFB": "S", "LINK": "S",
@@ -151,12 +151,7 @@ HW_CAPTION = {
     "SCALE": "SCAL", "DRIFT": "DRFT", "CHOKE": "CHOK",
     "MORPH": "MRPH", "REV_DECAY": "DECY",
     "STAGES": "",
-    # PLACEHOLDER WORD. "DAMP" is taken -- BODY's DECAY prints it
-    # (gen_panel.DYNAMIC_CAPTIONS), and two knobs printing the same word on
-    # one instrument is what the printed-word gate exists to stop. EDGE says
-    # what the control does (how much edge the feedback path develops) and is
-    # free, but the word is Bastian's to pick.
-    "DEPTH": "DPTH", "DAMP": "EDGE",
+    "DEPTH": "DPTH",
     "IN_L": "IN L", "IN_R": "IN R", "OUT_L": "OUT L", "OUT_R": "OUT R",
     "SHIFTBTN": "SHFT",
 }
@@ -216,9 +211,11 @@ DECK_POS = {
     # VOICE's lower row, on the SAME 13 mm pitch and the same x as the four
     # knobs above it -- ATTACK/DECAY/RES/SUB. ENGINE used to open this row at
     # 70.25; it moved to its own frame in the status row (GROUP_ROWS below),
-    # which is what freed the two slots DEPTH and DAMP now hold.
+    # which is what freed the slot DEPTH now holds. The slot after it
+    # (107.25, Y_B1M) held DAMP (the EDGE knob) until 2026-08-20 and stays
+    # deliberately empty now that it is gone.
     "FILT":   (68.25, Y_B1M), "SOURCE": (81.25, Y_B1M),
-    "DEPTH":  (94.25, Y_B1M), "DAMP":   (107.25, Y_B1M),
+    "DEPTH":  (94.25, Y_B1M),
     "ENGINE": (16.25, Y_TOP),
     "TUNE":   (17.00, Y_B2K), "DETUNE": (30.00, Y_B2K),
     "COLOR":  (23.50, Y_B2G),
@@ -402,7 +399,8 @@ GROUP_ROWS = [
     # ENG is its own frame at the outer edge, left of SEQUENCE on deck A and
     # mirrored on B. The status row used to start at x=28 and leave the plate's
     # outer 20 mm empty; the side keep-out is only 2 mm, so that space was
-    # always there. Moving ENG out of VOICE is what pays for DEPTH and DAMP.
+    # always there. Moving ENG out of VOICE is what pays for DPTH and the
+    # free slot beside it (DAMP, the EDGE knob, removed 2026-08-20).
     (9.00, 16.0, PLATE_EDGE, [26.00, 85.20],
      ["ENG", "SEQUENCE", "CAPTURE"], ["ENG", "SEQUENCE", "CAPTURE"], "GLOBAL"),
     (28.00, 38.2, PLATE_EDGE, [56.25],

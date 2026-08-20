@@ -327,8 +327,8 @@ def test_size_classes_match_the_spec():
     big_positions = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "G"]
     check(len(big_positions) == 14, f"expected 14 big positions, got {len(big_positions)}")
     small = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "S"]
-    # 51 + FILT×2 (was G) + DEPTH×2 + DAMP×2 = 57
-    check(len(small) == 57, f"expected 57 small params, got {len(small)}")
+    # 51 + FILT×2 (was G) + DEPTH×2 = 55
+    check(len(small) == 55, f"expected 55 small params, got {len(small)}")
     check(abs(hw.CLASS_R["G"] - 8.5) < 1e-9, "CLASS_R G is not 8.5")
     check(abs(hw.CLASS_R["S"] - 6.0) < 1e-9, "CLASS_R S is not 6.0")
     check(hw.HW_SIZE["SOURCE"] == "S", "TIMB/SOURCE is not small")
@@ -765,19 +765,20 @@ def test_drawing_geometry():
     check((hw.SD_W, hw.SD_H) == (11.0, 6.0), f"SD size is {hw.SD_W}x{hw.SD_H}")
     check(abs(hw.SD_Y - hw.JACK_Y) < 1e-9, f"SD_Y is {hw.SD_Y}, not on the jack row")
     # ENGINE left the VOICE head on 2026-08-19 for its own frame at the outer
-    # edge of the status row, which is what freed the two VOICE slots DEPTH
-    # and DAMP hold. Both halves are checked, because "it moved" and "it
-    # landed where it was supposed to" are different claims.
+    # edge of the status row, which is what freed the VOICE slot DEPTH
+    # holds (its neighbour, DAMP, was removed 2026-08-20 and stays empty).
+    # Both halves are checked, because "it moved" and "it landed where it
+    # was supposed to" are different claims.
     check(abs(by["ENGINE_A"].x - 16.25) < 1e-9,
           f"ENGINE_A is at {by['ENGINE_A'].x}, not in its own status-row frame")
     check(abs(by["ENGINE_A"].y - hw.Y_TOP) < 1e-9,
           "ENGINE_A is not on the status row")
     check("ENG" in [n for n, _s, _x, _w in hw._row_cells(hw.GROUP_ROWS[0])],
           "the status row has no ENG frame")
-    # The two knobs it paid for, on the same 13 mm pitch and the same x as
+    # The knob it paid for, on the same 13 mm pitch and the same x as
     # ATTACK/DECAY/RES/SUB directly above them.
     for lower, upper in (("FILT_A", "ATTACK_A"), ("SOURCE_A", "DECAY_A"),
-                         ("DEPTH_A", "RES_A"), ("DAMP_A", "SUB_A")):
+                         ("DEPTH_A", "RES_A")):
         check(abs(by[lower].x - by[upper].x) < 1e-9,
               f"{lower} is not aligned under {upper}")
         check(abs(by[lower].y - hw.Y_B1M) < 1e-9,

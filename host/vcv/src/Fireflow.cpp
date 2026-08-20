@@ -52,12 +52,6 @@ static constexpr float kCoupleZoneSplit = 0.5f;
 // ratio, and so the name, stays true without any PACE term of its own.
 // Multiplying PACE into this branch would make the printed name wrong, not
 // right.
-// EDGE has no knob-to-Hz law here any more, and that is the point of the
-// change it went through on 2026-08-19. It was a FEED-only absolute cutoff on
-// a 200..16000 Hz log knob, whose boot position (0.632718364) MEANT 3200 Hz on
-// those rails; it is now a bipolar trim around whatever neutral the engine
-// under the deck defines for itself, so there is nothing left for the host to
-// convert and no rails for it to own. See Part::set_voice_edge.
 
 struct RateQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
@@ -319,12 +313,10 @@ struct Fireflow : Module {
     // memcpy via inst.load_sample, no disk I/O and no resample.
     bool factoryTried[spky::PART_COUNT] = {false, false};
 
-    // DPTH and EDGE were menu sliders for exactly one day (2026-08-19).
-    // They are knobs now, so Rack persists them as ParamIds and this module
-    // holds no state for them at all: the two float arrays, their JSON keys,
-    // their reset and the two sliders all left together. EDGE's knob-to-Hz
-    // law left the host on the same day -- it is a per-engine trim now, so
-    // the law is the engine's (Part::set_voice_edge).
+    // DPTH was a menu slider for exactly one day (2026-08-19). It is a knob
+    // now, so Rack persists it as a ParamId and this module holds no state
+    // for it at all: the float array, its JSON key, its reset and the
+    // slider all left together.
     // Edge-detects the ENG switch landing on BBD, so the FLUX-off and
     // excite-other-deck defaults below (spec 5.11/5.12) apply once on a
     // genuine player-driven transition and never fight a player who
@@ -396,12 +388,6 @@ struct Fireflow : Module {
                         getParamQuantity(c.id)->snapEnabled = true;
                     }
                     else if (c.id == FILT_A || c.id == FILT_B)  // bipolar cutoff trim
-                        configParam(c.id, -1.f, 1.f, init, lbl);
-                    // EDGE, the other bipolar trim. No display quantity: the
-                    // Hz it lands on depends on which engine the deck is
-                    // running, so a host-side readout would be right on one
-                    // engine and wrong on five.
-                    else if (c.id == DAMP_A || c.id == DAMP_B)
                         configParam(c.id, -1.f, 1.f, init, lbl);
                     else if (c.id == TIDE)  // texture-lane rate, snaps in the GRID zone
                         configParam<TideQuantity>(c.id, 0.f, 1.f, init, lbl);
@@ -936,16 +922,6 @@ struct Fireflow : Module {
             // so an untouched patch writes exactly what the ternary wrote --
             // the sampler excepted, which halves the base (sampler_config.h).
             inst.set_target_base(p, spky::LANE_MOTION, pp(DEPTH_A, p));
-
-            // EDGE, the second filter, on every engine: a bipolar TRIM whose
-            // centre is each engine's own neutral, not an absolute cutoff in
-            // Hz. That is why the knob boots at 0 and why five engines'
-            // factory sound is untouched by its arrival -- one knob has one
-            // boot value, six engines have six neutrals (spec 2026-08-19
-            // voice-knobs-dpth-edge, 4.2). The knob-to-Hz law that used to
-            // live at file scope here went with it: the law is the engine's
-            // now, because only the engine knows what its own neutral is.
-            inst.set_voice_edge(p, pp(DAMP_A, p));
 
             // Stable pitch in the sampler: the lane still FIRES (that is what
             // keeps STEP triggering alive -- Part::process reads the fire as

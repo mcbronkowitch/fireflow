@@ -214,34 +214,24 @@ only against darker alternatives, not swept), `kFloorFoldStart`,
 `kFlowFloorMin`, `kAccentVelFloor`, `kAccentDecFloor`, `kSatCeil`, `kSubMax`,
 `kDepthBase`.
 
-### FEED: DPTH and EDGE are yours to turn now
+### FEED: DPTH is yours to turn now
 
-`kDepthBase` (0.5) and `kDampFixedHz` (3200 Hz) are both still **first-try**,
-and since 2026-08-19 both have a knob — `DPTH` and `EDGE` in VOICE, one per
-deck, on both panels. They boot on exactly those constants, so nothing has
-changed until you move them.
+`kDepthBase` (0.5) is still **first-try**, and since 2026-08-19 it has a knob
+— `DPTH` in VOICE, one per deck, on both panels. It boots on exactly that
+constant, so nothing has changed until you move it.
 
 What is worth knowing before the listening pass:
 
-- **3200 Hz was only ever confirmed DOWNWARD.** Variants B and C at 1200 and
-  500 Hz were rejected by ear on 2026-08-19; nobody has heard 3200 against
-  anything brighter, which is why the trim reaches up as far as it reaches
-  down.
-- **EDGE is a TRIM, not a cutoff, since later the same day.** The 200–16000 Hz
-  log rails are gone with the FEED-only setter that owned them: the knob is
-  bipolar now, its centre IS `kDampFixedHz`, and its travel is
-  `feed_cfg::kEdgeOctaves` — **2.0 octaves, a FIRST VALUE and yours** — either
-  side, so ±1 reaches 800 Hz and 12.8 kHz. Widening it hands the player more
-  of the aliasing guard; that is a legitimate thing to want to hear, and it is
-  what this constant decides.
 - **DEPTH at 0.5 is a defensive requirement, not a measurement.** Spec §4 asks
   that it be a good sound because the control had no knob; now that it has one,
   that requirement can be tested instead of assumed.
 
 If a listening pass moves `kDepthBase`, move the CONSTANT in `feed_config.h` —
 the DPTH knob default is derived from it and a gate recomputes the derivation.
-`kDampFixedHz` needs no such care any more: EDGE boots at its centre whatever
-that constant says.
+
+`kDampFixedHz` (3200 Hz) is also still first-try and was briefly reachable
+through the EDGE trim; EDGE was withdrawn 2026-08-20 (see "EDGE" below), so
+`kDampFixedHz` is once again a fixed constant with no panel reach.
 
 ### FEED level parity
 
@@ -256,44 +246,24 @@ that constant says.
   but BODY's level rides MATL and EXCIT hard and one setting is not a verdict.
   Needs its own pass before anything moves.
 
-## DPTH and EDGE, on the other five engines
+## EDGE (withdrawn 2026-08-20)
 
-FEED's own DPTH/EDGE items are above, under "FEED: DPTH and EDGE are yours to
-turn now" — that section already covers `kDepthBase` and `kDampFixedHz`. This
-one covers the first values `docs/superpowers/specs/2026-08-19-voice-knobs-dpth-edge-design.md`
-introduced on the other five engines, none of them confirmed by ear yet
-(spec §9).
+EDGE was removed on 2026-08-20 after a listening pass — at neutral 20 Hz
+±3 octaves the knob's negative half was inaudible (≤0.08 dB at 55 Hz) and its
+positive extreme took only ~5 dB off a 110 Hz fundamental. Both figures are
+the one-pole high-pass (`OnePoleHp`) at that neutral, as SYNTH, WAVE, SAMPLER
+and BBD ran it — measured with `OnePoleHp`'s own math in a scratchpad probe
+(48 kHz, 4 s per point, RMS ratio). Do not reintroduce it as a wider-span
+high-pass without a new design pass; the open question was whether EDGE
+should have been a tilt at the deck output, not whether its span was too
+small.
 
-- **Every engine's EDGE octave span and neutral is a FIRST VALUE (spec §9
-  items 1 and 5).**
+## DPTH, on the other five engines
 
-  | Engine | Neutral | Span (octaves) | Constant |
-  |---|---|---|---|
-  | BODY | RESO-derived corner (`Exciter::_recompute_filter`) | 2.0 | `Exciter::kEdgeOctaves` — `engine/body/exciter.h`, **private** |
-  | SYNTH, WAVE | 20 Hz | 3.0 | `SynthEngineT<V>::kEdgeHpNeutralHz` / `kEdgeHpOctaves` — `engine/synth/synth_engine.h` |
-  | SAMPLER | 20 Hz | 3.0 | `sampler_cfg::kEdgeHpNeutralHz` / `kEdgeOctaves` — `engine/sampler/sampler_config.h` |
-  | BBD | 20 Hz | 3.0 | anonymous-namespace `kEdgeHpNeutralHz` / `kEdgeOctaves` — `engine/parts/bbd_engine.cpp` |
-
-  Spec §9 item 5 asks specifically whether SYNTH/WAVE/SAMPLER's shared
-  3.0-octave span wants to split into three, or stay one control with one
-  span copied across engines that merely happen to share the "output
-  high-pass" shape. Still open. BODY's 2.0 octaves was matched to
-  `feed_cfg::kEdgeOctaves` rather than measured for BODY specifically
-  (`exciter.h`'s own comment says so) — the probe rule forbids justifying it
-  with a number nobody printed for this engine.
-
-- **EDGE's negative half is a dead bottom on SYNTH/WAVE, and near-dead on
-  sampler/BBD without low material.** Measured, `docs/engine-map.md` §10: on
-  SYNTH and WAVE neither engine can produce anything below 55 Hz, so sweeping
-  EDGE's whole negative half (20 Hz neutral down to 2.5 Hz at `t == -1`)
-  moves the signal by −0.549 dB at most. The sampler and BBD have no such
-  floor, so their negative half is genuinely doing something — but only on
-  content that actually has 20–55 Hz energy in it (−3.0 dB at 20 Hz down to
-  −0.5 dB at 55 Hz); on material without it, the same near-dead feel as
-  SYNTH/WAVE. Nobody turning the knob on these four engines will know this
-  from the panel — the bottom half of EDGE reads as broken rather than as an
-  engine that has nothing down there to trim. Not a bug: FIRST VALUES per the
-  bullet above, and this is exactly the kind of fact a listening pass is for.
+FEED's own DPTH item is above, under "FEED: DPTH is yours to turn now" — that
+section already covers `kDepthBase`. This one covers the first values
+`docs/superpowers/specs/2026-08-19-voice-knobs-dpth-edge-design.md` introduced
+on the other five engines, none of them confirmed by ear yet (spec §9).
 
 - **`sampler_cfg::kMotionBaseScale = 0.5f`.** DPTH's base reaches a sampler
   deck halved, not at face value: knob 0.5 → base 0.25 (jitter window half a

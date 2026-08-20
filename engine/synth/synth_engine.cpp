@@ -43,17 +43,6 @@ void SynthEngineT<V>::init(float sample_rate) {
     _stab_rng.seed(_seed ^ 0x57AB5EEDu);
     _level.init(sample_rate, 0.01f);
     _level.reset(_targets[LANE_LEVEL]);
-    // EDGE's output high-pass (spec 2026-08-19 voice-knobs-dpth-edge, 4.3),
-    // SYNTH/WAVE only. init() sets a 20 Hz corner (engine/util/onepole_hp.h)
-    // that is provably never read: process() skips _hp_l/_hp_r entirely
-    // while _edge == 0 (the boot value), and set_edge() always overwrites
-    // the coefficient before any nonzero-_edge process() call can reach it.
-    // What init() has to do here is put _sr and the {x1, y1} history in a
-    // known state -- .init() is the only call that sets _sr at all.
-    if constexpr (V::kEdgeUsesOutputHp) {
-        _hp_l.init(sample_rate);
-        _hp_r.init(sample_rate);
-    }
     _update_control();
 }
 
@@ -355,15 +344,6 @@ void SynthEngineT<V>::_update_control() {
         vc.set_pan((kVoices > 1 ? kPanFan[v] : 0.f) * width);
         vc.set_drift_amount(width);
         vc.set_material_character(_material_char);   // no-op on VoiceT
-        // EDGE (spec 2026-08-19 voice-knobs-dpth-edge, 4.2): pushed here, not
-        // from set_edge() above, so a voice allocated WHILE the knob sits at
-        // a non-zero trim still gets it -- same reasoning as set_hold below.
-        // Real on BodyVoice (Task 4); a no-op on VoiceT permanently, by
-        // design -- SYNTH and WAVE's output high-pass lives one level up, in
-        // SynthEngineT<V>::set_edge/process (_hp_l/_hp_r, gated by
-        // V::kEdgeUsesOutputHp), not per voice. voice.h's own set_edge
-        // comment says so.
-        vc.set_edge(_edge);
         // CHOKE's palm mute. set_hold() above records _hold and demotes the
         // surface, but never pushed the flag to the voices -- so BodyVoice::
         // set_hold was dead code and a BODY deck ignored CHOKE entirely
@@ -422,21 +402,6 @@ void SynthEngineT<V>::process(float& outL, float& outR) {
     const float gain = _level.process(_targets[LANE_LEVEL] * _filt_gain) * kVoiceGain;
     float l = 0.f, r = 0.f;
     for (auto& v : _voices) v.process(l, r);
-    // EDGE's output high-pass (spec 2026-08-19 voice-knobs-dpth-edge, 4.1/
-    // 4.3): applied to the summed stereo pair, after the voices mix and
-    // before the LEVEL/FILT gain below -- the sum point is linear, so
-    // nothing else stands in the way (4.1). _edge == 0 SKIPS process()
-    // entirely rather than running the filter at its bottom rail: see
-    // set_edge() and kEdgeHpNeutralHz above, and engine/util/onepole_hp.h's
-    // own measurement that the bottom rail is not a bit-exact bypass in
-    // float32. This is why t == 0 is genuinely bit-identical to an engine
-    // that never called set_edge (ctrl_identity, wave_formant_sweep).
-    if constexpr (V::kEdgeUsesOutputHp) {
-        if (_edge != 0.f) {
-            l = _hp_l.process(l);
-            r = _hp_r.process(r);
-        }
-    }
     outL = l * gain;
     outR = r * gain;
 }

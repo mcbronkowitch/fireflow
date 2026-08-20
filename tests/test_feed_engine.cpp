@@ -1386,40 +1386,31 @@ TEST_CASE("feed G33: FILT is a real low-pass, and its whole travel is live") {
     }
 }
 
-// --- EDGE: the in-loop DAMP cutoff became a bipolar trim (spec 2026-08-19
-// voice-knobs-dpth-edge, section 4.2). The absolute-Hz setter is gone; what
-// the host pushes now is a trim whose centre is this engine's own neutral.
+// init() no longer reaches the damping corner through set_edge (EDGE removed
+// 2026-08-20); _set_damp_hz's early-out guard makes a missed call silent, so
+// this pins the corner a fresh engine actually boots with. kDampFixedHz is
+// now bit-exact by construction -- init() passes it straight through with no
+// intervening arithmetic -- so this is ==, not Approx: an Approx would hide
+// a law that merely lands nearby.
+TEST_CASE("feed: a fresh engine boots on kDampFixedHz") {
+    FeedEngine e = fresh_feed();
+    CHECK(e.damp_hz_for_test() == feed_cfg::kDampFixedHz);
 
-TEST_CASE("feed: EDGE at 0 is exactly kDampFixedHz") {
-    // The property is "RETURNING to t == 0 lands exactly back on the engine's
-    // neutral", which is what every engine Tasks 4-7 add has to preserve. It
-    // must therefore be measured after the trim has actually moved: reading
-    // damp_hz_for_test() straight after init() and then calling set_edge(0.f)
-    // asserts nothing at all, because _edge is already 0 there and the
-    // exact-argument guard returns before the trim law runs -- the CHECK then
-    // compares the member against a copy of itself (review round 1, finding 1).
-    //
-    // Exact ==, not Approx: pow(2, kEdgeOctaves * 0) is exactly 1 and
-    // 3200 * 1 is exactly 3200, so "unchanged" here means bit-unchanged and
-    // an Approx would hide a law that merely lands nearby.
-    FeedEngine e;
-    e.init(48000.f);
-    CHECK(e.damp_hz_for_test() == feed_cfg::kDampFixedHz);   // init's own path
-    e.set_edge(0.5f);
-    CHECK(e.damp_hz_for_test() != feed_cfg::kDampFixedHz);   // the trim moved
-    e.set_edge(0.f);
-    CHECK(e.damp_hz_for_test() == feed_cfg::kDampFixedHz);   // and came back
-}
-
-TEST_CASE("feed: EDGE spans kEdgeOctaves either side, symmetrically") {
-    FeedEngine e;
-    e.init(48000.f);
-    e.set_edge(1.f);
-    CHECK(e.damp_hz_for_test() ==
-          doctest::Approx(feed_cfg::kDampFixedHz *
-                          std::pow(2.f, feed_cfg::kEdgeOctaves)));
-    e.set_edge(-1.f);
-    CHECK(e.damp_hz_for_test() ==
-          doctest::Approx(feed_cfg::kDampFixedHz *
-                          std::pow(2.f, -feed_cfg::kEdgeOctaves)));
+    // Re-init at a new sample rate must still land on the same fixed corner
+    // AND recompute the ring's actual damping coefficient for it. init()
+    // forces _damp_hz to a value _set_damp_hz's clamp cannot produce before
+    // calling it, specifically so this second call is not swallowed by that
+    // function's own early-out (feed_engine.cpp). damp_hz_for_test() alone
+    // does not falsify a missing force: kDampFixedHz never changes, so the
+    // Hz label reads right either way. FeedBank::init() (called earlier in
+    // FeedEngine::init()) unconditionally resets the coefficient to 1
+    // (bypass); only a non-swallowed _set_damp_hz() call puts it back. So the
+    // coefficient is the observable that actually depends on the force: a
+    // stale one is 1, a live one is well under it and specific to the new
+    // sample rate.
+    e.init(96000.f);
+    CHECK(e.damp_hz_for_test() == feed_cfg::kDampFixedHz);
+    const float expect_coef =
+        1.f - std::exp(-6.2831853f * feed_cfg::kDampFixedHz / 96000.f);
+    CHECK(e.bank_damp_coef_for_test() == doctest::Approx(expect_coef));
 }

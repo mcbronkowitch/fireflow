@@ -44,13 +44,13 @@ public:
     void set_sub(float n);         // SUB
     void set_filt(float t);        // FILT, bipolar: a real LP on the output
 
-    // EDGE, bipolar, and on the broadcast line (Part::set_voice_edge): a trim
-    // of feed_cfg::kEdgeOctaves either side of the in-loop DAMP cutoff. t == 0
-    // IS feed_cfg::kDampFixedHz, exactly, so a deck nobody touched sounds as
-    // it did before the knob existed. The Hz law is FEED's own; every engine
-    // defines its own neutral (spec 2026-08-19 voice-knobs-dpth-edge, 4.2).
-    void set_edge(float t);
     float damp_hz_for_test() const { return _damp_hz; }
+    // The ring's own damping coefficient, as opposed to the Hz label above:
+    // FeedBank::init() resets it to 1 (bypass) on every init() call, and only
+    // _set_damp_hz() -- when it is not swallowed by its own early-out --
+    // recomputes it back to the value kDampFixedHz maps to at the current
+    // sample rate.
+    float bank_damp_coef_for_test() const { return _bank.damp_coef_for_test(); }
     // DETUNE means SPREAD on a FEED deck, and it gets there as the LANE_SIZE
     // base (host/vcv/src/Fireflow.cpp), not through this setter. Kept as an
     // explicit no-op rather than left unimplemented: Part::set_voice_detune
@@ -80,9 +80,7 @@ public:
 
 private:
     // The old public set_damp_hz, in Hz and with its own clamp and expf.
-    // Private because EDGE is the only surface now: an absolute-Hz setter
-    // beside a trim would be two ways to write one value, and only one of
-    // them would keep _edge honest.
+    // Private: init() is its only caller, and no knob writes it directly.
     void _set_damp_hz(float hz);
     void _control_tick();
     void _rebuild_allocation();
@@ -101,7 +99,6 @@ private:
     int      _ctrl_ctr = 0;
     float    _inv_sqrt_pairs = 1.f;   // 1/sqrt(kPairs), set in init()
     float    _damp_hz = -1.f;         // _set_damp_hz's guard; init() opens it
-    float    _edge = -2.f;            // set_edge's guard; init() opens it too
 
     // lanes
     float _bond = 0.f;

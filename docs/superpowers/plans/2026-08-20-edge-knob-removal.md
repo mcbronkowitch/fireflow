@@ -188,9 +188,22 @@ In `engine/instrument.h`, delete `set_voice_edge` and its comment (`:325-326`). 
     else if (a == "set_voice_edge")      inst.set_voice_edge(e.part, e.value);
 ```
 
-- [ ] **Step 2: Prove the inventory tripwire fires — RED, on purpose**
+- [ ] **Step 2: Prove the first tripwire — the build must not compile**
 
-Build and run the param-table case *before* touching any test file:
+Build *before* touching any test file:
+
+```bash
+source env.sh
+cmake --build build
+```
+
+Expected: **compile error** in `tests/param_impact_points.h` — `excess elements in array initializer` (or your compiler's wording for it), four times, once per frozen vector.
+
+This is the tripwire, and it is stronger than the test below. `param_impact_points.h:53` declares `float v[P_COUNT]` and fills it positionally: *inserting* a `ParamId` leaves a short initializer, which C++ accepts silently and zero-fills — that is the silent failure the file's header warns about. *Removing* two ids leaves each vector two elements too long, which is a hard error. Record the observed error in the task report. Do not proceed until you have seen it.
+
+- [ ] **Step 3: Prove the second tripwire — the inventory marker goes red**
+
+Delete the eight lines named in Step 4 below (two per vector), then:
 
 ```bash
 source env.sh
@@ -198,26 +211,26 @@ cmake --build build
 ./build/spky_tests -ts="*param table*"
 ```
 
-Expected: **FAIL** on `CHECK(P_MODE == 64)` at `tests/test_param_table.cpp:55`, reporting 62. This is the tripwire doing its job — it is the only thing standing between a two-slot enum shift and four silently mis-paired frozen vectors. Record the observed failure in the task report. Do not proceed until you have seen it red.
+Expected: the build now succeeds and the run **FAILS** on `CHECK(P_MODE == 64)` at `tests/test_param_table.cpp:55`, reporting 62. Record this second observation in the task report too. Only after seeing it red do you move the marker in Step 4.
 
-- [ ] **Step 3: Un-shift the frozen vectors and move the marker**
+- [ ] **Step 4: Un-shift the frozen vectors and move the marker**
 
-In `tests/param_impact_points.h`, delete exactly these two lines from **each of the four vectors** (at `:98-99`, `:166-167`, `:237-238`, `:305-306`):
+The eight lines deleted in Step 3 are exactly these two, from **each of the four vectors** (at `:98-99`, `:166-167`, `:237-238`, `:305-306`):
 
 ```cpp
       0.0f, // P_EDGE_A
       0.0f, // P_EDGE_B
 ```
 
-Every other line carries its parameter's name in a trailing comment, so verify by reading that `// P_FILT_B` is now immediately followed by `// P_FLUXMIX_A` in all four. Then rewrite the file's `AN INSERTION HAS HAPPENED ONCE` paragraph (`:29-35`) into the honest record: the insertion happened on 2026-08-19 and was undone on 2026-08-20, the vectors are back at their pre-insertion alignment, and the two removed slots held EDGE's neutral so the four points still describe exactly the instrument they were captured from.
+Every other line carries its parameter's name in a trailing comment, so verify by reading that `// P_FILT_B` is now immediately followed by `// P_FLUXMIX_A` in all four. Then rewrite the file's `AN INSERTION HAS HAPPENED ONCE` paragraph (`:29-35`) into the honest record: the insertion happened on 2026-08-19 and was undone on 2026-08-20, the vectors are back at their pre-insertion alignment, and the two removed slots held EDGE's neutral so the four points still describe exactly the instrument they were captured from. Add the asymmetry Step 2 demonstrated, because it is the file's most useful fact and is currently absent: **an insertion shifts these vectors silently, a removal does not compile.** The warning in this file exists for the first case only.
 
 In `tests/test_param_table.cpp`, change `CHECK(P_MODE == 64)` to `CHECK(P_MODE == 62)` (`:55`) and rewrite the `62 -> 64 on 2026-08-19` note (`:49-53`) to record the reverse move.
 
-- [ ] **Step 4: Drop the broadcast test and the stale impact note**
+- [ ] **Step 5: Drop the broadcast test and the stale impact note**
 
 Delete `tests/test_voice_edge_broadcast.cpp` and remove its line from `CMakeLists.txt:171`. In `tests/test_param_impact.cpp:308-317`, delete the paragraph explaining why the STUBBED `EDGE_A`/`EDGE_B` group was deleted — the ids it names no longer exist.
 
-- [ ] **Step 5: Rebuild and run everything**
+- [ ] **Step 6: Rebuild and run everything**
 
 ```bash
 source env.sh
@@ -227,7 +240,7 @@ ctest --test-dir build --output-on-failure
 
 Expected: all pass. Pay particular attention to `param_impact`, `ctrl_identity` and `wave_formant_sweep`. A moved render hash here is a stop-and-report, not a re-bless (see Global Constraints).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add engine tests CMakeLists.txt host/render/scenario.cpp
@@ -368,10 +381,10 @@ git rm engine/util/onepole_hp.h tests/test_onepole_hp.cpp
 In `CMakeLists.txt`, delete `tests/test_onepole_hp.cpp` (`:176`) and the four-line comment above it (`:172-175`) that explains which engines include the header. Confirm nothing else references it:
 
 ```bash
-grep -rn "onepole_hp\|OnePoleHp" engine host bench tests CMakeLists.txt
+grep -rn --exclude-dir=build "onepole_hp\|OnePoleHp" engine host bench tests CMakeLists.txt
 ```
 
-Expected: no hits. (`engine/util/onepole.h`, the control-rate smoother, is a different class and stays.)
+Expected: no hits. `--exclude-dir=build` is required: `bench/build/*.lst` are listing files from an earlier ARM build that quote the removed sources verbatim (`bbd_engine.lst:864` still carries `void BbdEngine::set_edge(float t) {`). They are stale generated output — do not edit them, and do not read a hit there as unfinished work. (`engine/util/onepole.h`, the control-rate smoother, is a different class and stays.)
 
 - [ ] **Step 4: Delete both engines' EDGE test cases**
 

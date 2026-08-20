@@ -196,6 +196,9 @@ public:
     // The DAMP one-pole's state, which at coefficient 1 IS the blended and
     // fb-scaled input the modulator's phase receives.
     float mod_input_for_test(int i) const { return _p[i].lp; }
+    // The DAMP one-pole's coefficient itself -- init()'s reset value (1,
+    // i.e. bypass) versus whatever set_damp_coef() last computed it to.
+    float damp_coef_for_test() const { return _damp; }
 
 private:
     // equal-power pan, the Voice::_apply_pan law (synth/voice.cpp): angle

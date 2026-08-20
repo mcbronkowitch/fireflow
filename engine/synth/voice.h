@@ -28,15 +28,6 @@ public:
     // from SYNTH/WAVE without touching the shared template).
     static constexpr int kEngineVoices = 4;
 
-    // EDGE takes SynthEngineT's output high-pass instead of a per-voice
-    // filter here (spec 2026-08-19 voice-knobs-dpth-edge, 4.1): this voice's
-    // chain is oscillator -> sub -> SvfLp -> Env, no loop, no resonator, so a
-    // second low-pass in front of the first would only imitate FILT. Read by
-    // SynthEngineT<V>::set_edge/process (synth_engine.h) via
-    // `if constexpr`. WtOsc's VoiceT instantiation (WAVE) shares this same
-    // template, so it inherits the same true.
-    static constexpr bool kEdgeUsesOutputHp = true;
-
     void init(float sample_rate, uint32_t seed);
 
     void trigger(float freq_hz);          // latch pitch + retrigger env from level
@@ -74,17 +65,6 @@ public:
     void set_hold(bool /*on*/) {}
     void set_excitation(float /*x*/) {}
     void set_material_character(float /*c*/) {}
-
-    // EDGE (spec 2026-08-19 voice-knobs-dpth-edge, 4.1/4.3): SynthEngineT
-    // pushes this to every voice unconditionally, exactly like
-    // set_material_character above, but this voice has no inside for EDGE to
-    // trim -- SYNTH and WAVE get the output high-pass at the engine's summed
-    // stereo output instead (SynthEngineT<V>::_hp_l/_hp_r, gated by
-    // kEdgeUsesOutputHp above). Deliberately staying an empty inline, not a
-    // temporary stub: the push still costs one dead call per voice per
-    // control tick and still changes nothing about this voice's own signal
-    // path.
-    void set_edge(float /*t*/) {}
 
 private:
     void _apply_freq();                   // osc A/B freq from pitch+detune+drift

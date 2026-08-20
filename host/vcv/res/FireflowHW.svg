@@ -326,10 +326,6 @@
 <text x="94.250" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">DPTH</text>
 <circle cx="210.550" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="210.550" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">DPTH</text>
-<circle cx="107.250" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<text x="107.250" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">EDGE</text>
-<circle cx="197.550" cy="50.220" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<text x="197.550" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">EDGE</text>
 <circle cx="33.000" cy="114.000" r="3.100" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <circle cx="33.000" cy="114.000" r="2.000" fill="none" stroke="#7f8f96" stroke-width="0.7"/>
 <circle cx="33.000" cy="114.000" r="1.178" fill="#050607"/>

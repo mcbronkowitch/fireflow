@@ -5,7 +5,6 @@
 #include <vector>
 #include "sampler/sampler_engine.h"
 #include "sampler/sampler_config.h"
-#include "low_energy.h"
 using namespace spky;
 
 static constexpr size_t kFrames = 48000 * 2;   // 2 s of storage
@@ -3489,65 +3488,3 @@ TEST_CASE("sampler: the SCAN curve is linear below the knee") {
     CHECK(test_scan_rate(0.5f) > 0.5f);
 }
 
-// EDGE (Task 6, spec 2026-08-19 voice-knobs-dpth-edge, 4.3): a high-pass on
-// the summed grain bus, same idiom as SYNTH/WAVE (Task 5) but its own rails
-// and its own sum point -- see sampler_engine.h's set_edge() for why.
-//
-// low_energy() used to live only here; Task 7 (BBD) needed the identical
-// meter, so it moved to low_energy.h rather than staying duplicated.
-
-TEST_CASE("sampler: EDGE at 0 is bit-identical to no EDGE at all") {
-    // FLOW, not STEP: a standing cloud puts a real signal through the
-    // engine, not silence.
-    //
-    // The a[n]==b[n] loop below is a REGRESSION guard -- worth keeping, and
-    // it would catch plenty of real mistakes (asymmetric L/R handling, a
-    // corrupted _edge, NaN propagation) -- but on its own it does NOT prove
-    // process() actually SKIPS _hp_l/_hp_r at t == 0 rather than just
-    // running them at a coefficient that happens to equal the init()
-    // default. g1 (never touched) and g2 (set_edge(0.f)) both arrive at
-    // _edge == 0 through the identical deterministic code path on identical
-    // content, so they land on identical bits EITHER WAY -- checked
-    // directly: removing the skip in process() and rerunning this exact
-    // loop still passed, 24000/24000. The two SPKY_TESTING assertions below
-    // are what actually pin the skip: they read _hp_l's own {x1, y1}
-    // history straight off g2's engine after a real render at EDGE == 0,
-    // which stays at its post-init() {0, 0} only if process() never called
-    // it -- removing the skip turns both into a hard fail (verified the
-    // same way).
-    Rig g1, g2;
-    g1.e.set_flow(true); g2.e.set_flow(true);
-    feed_clicks(g1, 24000, 8); feed_clicks(g2, 24000, 8);
-    g2.e.set_edge(0.f);
-    const auto a = g1.render(24000), b = g2.render(24000);
-    for (size_t n = 0; n < a.size(); ++n) CHECK(a[n] == b[n]);
-    CHECK(g2.e.edge_hp_x1_for_test() == 0.f);
-    CHECK(g2.e.edge_hp_y1_for_test() == 0.f);
-}
-
-TEST_CASE("sampler: EDGE up thins the grain bus") {
-    Rig g1, g2;
-    g1.e.set_flow(true); g2.e.set_flow(true);   // a standing cloud to filter
-    feed_clicks(g1, 24000, 8); feed_clicks(g2, 24000, 8);
-    g1.e.set_edge(0.f); g2.e.set_edge(1.f);
-    const auto flat = g1.render(24000), thin = g2.render(24000);
-    CHECK(low_energy(thin) < 0.7f * low_energy(flat));
-    CHECK(rms(thin, 0, thin.size()) > 0.3f * rms(flat, 0, flat.size()));
-}
-
-// fix-wave finding (2026-08-19 voice-knobs-dpth-edge review, item 2): every
-// EDGE case in this file drives set_edge with 0 or +1 only. SYNTH, WAVE,
-// SAMPLER and BBD all share the copy-pasted `if (_edge != 0.f)` skip shape
-// (see set_edge()/process() here and in bbd_engine.cpp) -- a rewrite to
-// `_edge > 0.f` would silently skip the whole negative half on all four and
-// every test in the suite would stay green. Cheapest closure: after a render
-// at a NEGATIVE trim, assert the filter's own state actually moved off its
-// post-init() {0, 0} -- it cannot do that if process() skipped it.
-TEST_CASE("sampler: EDGE down drives the high-pass too, not just EDGE up") {
-    Rig g;
-    g.e.set_flow(true);
-    feed_clicks(g, 24000, 8);
-    g.e.set_edge(-0.9f);
-    g.render(24000);
-    CHECK(g.e.edge_hp_y1_for_test() != 0.f);
-}

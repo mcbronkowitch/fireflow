@@ -48,11 +48,16 @@ TEST_CASE("param table: inventory marker -- P_MODE, P_PACE, P_COUNT") {
     // it now stands and re-read this paragraph again before moving on.
     // 62 -> 64 on 2026-08-19: P_EDGE_A/P_EDGE_B were INSERTED after P_FILT_B
     // (spec voice-knobs-dpth-edge, 4.4), not appended, so this case reddened
-    // exactly as the paragraph above says it should. The frozen vectors in
-    // tests/param_impact_points.h were shifted by hand in the same commit and
-    // carry 0.0f -- EDGE's neutral -- in the two new slots; see that file's
-    // header for the record of what the insertion cost.
-    CHECK(P_MODE == 64);
+    // exactly as the paragraph above says it should.
+    // 64 -> 62 on 2026-08-20: P_EDGE_A/P_EDGE_B were REMOVED (plan
+    // edge-knob-removal, task 2) as part of taking the EDGE knob out of the
+    // instrument entirely. A removal is a hard compile error in
+    // tests/param_impact_points.h's frozen vectors -- each `float
+    // v[P_COUNT]` became two elements too long -- so this case's own red was
+    // proved only after that first, stronger tripwire had already fired and
+    // been fixed. The frozen vectors were un-shifted by hand in the same
+    // commit; see that file's header for the record of both moves.
+    CHECK(P_MODE == 62);
     CHECK(P_PACE == P_MODE + 1);
     CHECK(P_PACE == P_COUNT - 1);      // inventory marker: bump on append
 }

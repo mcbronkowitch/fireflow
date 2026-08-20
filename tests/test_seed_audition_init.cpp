@@ -73,8 +73,9 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
     // review, Finding 5 -- this exact mistake shipped once already).
     // 69 -> 73 on 2026-08-19: DEPTH_A/B and DAMP_A/B, the two FEED knobs that
     // moved out of the context menu onto both panels.
-    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 73,
-                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 73 -- "
+    // 73 -> 71 on 2026-08-20: DAMP_A/B, the EDGE knob, removed.
+    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 71,
+                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 71 -- "
                   "if the panel inventory genuinely changed, update this "
                   "literal to match");
     // FF_hw_Init.vcvm (2026-08-09) pairs WAVE (2) on deck A with SYNTH (0) on
