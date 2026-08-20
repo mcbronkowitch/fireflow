@@ -124,11 +124,16 @@ void render_instrument(Instrument& inst, float* l, float* r, int n) {
 // EDGE's output high-pass (spec 2026-08-19 voice-knobs-dpth-edge, 4.1/4.3):
 // the whole reason it is a TRIM rather than an absolute corner is that five
 // engines' factory sound has to survive the knob's arrival untouched.
-// Silence is enough for this half of the claim (see
+// This is a REGRESSION guard, not the bypass proof (see
 // tests/test_voice_edge_broadcast.cpp's own note on the NEUTRAL half vs. the
-// REACH half): a bit-exact comparison of two silences still catches a HP that
-// runs at t == 0 instead of bypassing, because engine/util/onepole_hp.h's own
-// warning is that its bottom rail is not a bit-exact bypass in float32.
+// REACH half): with x identically 0, a HP running at t == 0 instead of
+// bypassing still outputs y = a*(x + x1 - y1) = a*(0 + 0 - 0) == 0 forever,
+// so a bit-exact comparison of two silences cannot distinguish "skipped" from
+// "ran on silence" -- it catches asymmetric L/R handling, a corrupted _edge,
+// NaN propagation, that class of mistake, not a HP that runs transparently
+// at boot. The actual bypass proof for SYNTH and WAVE is the stored-hash
+// gates ctrl_identity and wave_formant_sweep, which compare against
+// pre-EDGE baselines and would move the moment a filter ran at boot.
 TEST_CASE("synth: EDGE at 0 is bit-identical to no EDGE at all") {
     static float a[9600], b[9600], c[9600], d[9600];
     Instrument i1, i2;

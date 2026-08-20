@@ -282,6 +282,19 @@ introduced on the other five engines, none of them confirmed by ear yet
   (`exciter.h`'s own comment says so) — the probe rule forbids justifying it
   with a number nobody printed for this engine.
 
+- **EDGE's negative half is a dead bottom on SYNTH/WAVE, and near-dead on
+  sampler/BBD without low material.** Measured, `docs/engine-map.md` §10: on
+  SYNTH and WAVE neither engine can produce anything below 55 Hz, so sweeping
+  EDGE's whole negative half (20 Hz neutral down to 2.5 Hz at `t == -1`)
+  moves the signal by −0.549 dB at most. The sampler and BBD have no such
+  floor, so their negative half is genuinely doing something — but only on
+  content that actually has 20–55 Hz energy in it (−3.0 dB at 20 Hz down to
+  −0.5 dB at 55 Hz); on material without it, the same near-dead feel as
+  SYNTH/WAVE. Nobody turning the knob on these four engines will know this
+  from the panel — the bottom half of EDGE reads as broken rather than as an
+  engine that has nothing down there to trim. Not a bug: FIRST VALUES per the
+  bullet above, and this is exactly the kind of fact a listening pass is for.
+
 - **`sampler_cfg::kMotionBaseScale = 0.5f`.** DPTH's base reaches a sampler
   deck halved, not at face value: knob 0.5 → base 0.25 (jitter window half a
   content length, ORGANIZE/SCAN stay audible), knob 1.0 → base 0.5 (the

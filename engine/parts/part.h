@@ -207,9 +207,11 @@ public:
     // All six engines on ONE line, for the reason the block comment above
     // gives: an engine missing from a broadcast line is a knob that is
     // silently dead on that engine, and this project has shipped that failure
-    // three times. Five of these six call a STUB today (SYNTH/WAVE/BODY share
-    // one, in SynthEngineT); tests/test_voice_edge_broadcast.cpp is the ledger
-    // of which ones are real, and it ends the plan with six cases.
+    // three times. All six are real: SYNTH and WAVE share SynthEngineT's
+    // set_edge (the output high-pass, gated by kEdgeUsesOutputHp); BODY,
+    // SAMPLER, BBD and FEED each have their own.
+    // tests/test_voice_edge_broadcast.cpp is the ledger of which ones are
+    // real, one case per engine.
     void set_voice_edge(float t)      { _synth.set_edge(t);      _wave.set_edge(t);      _body.set_edge(t);      _sampler.set_edge(t);          _bbd.set_edge(t);      _feed.set_edge(t); }
 
     SamplerEngine& sampler() { return _sampler; }

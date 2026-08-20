@@ -358,8 +358,11 @@ void SynthEngineT<V>::_update_control() {
         // EDGE (spec 2026-08-19 voice-knobs-dpth-edge, 4.2): pushed here, not
         // from set_edge() above, so a voice allocated WHILE the knob sits at
         // a non-zero trim still gets it -- same reasoning as set_hold below.
-        // Real on BodyVoice (Task 4); a no-op on VoiceT until Task 5 (SYNTH,
-        // WAVE) fills in the output high-pass.
+        // Real on BodyVoice (Task 4); a no-op on VoiceT permanently, by
+        // design -- SYNTH and WAVE's output high-pass lives one level up, in
+        // SynthEngineT<V>::set_edge/process (_hp_l/_hp_r, gated by
+        // V::kEdgeUsesOutputHp), not per voice. voice.h's own set_edge
+        // comment says so.
         vc.set_edge(_edge);
         // CHOKE's palm mute. set_hold() above records _hold and demotes the
         // surface, but never pushed the flag to the voices -- so BodyVoice::

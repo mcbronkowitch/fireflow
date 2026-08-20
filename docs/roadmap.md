@@ -557,7 +557,7 @@ its ceiling. `docs/engine-map.md` §9 records the three measurement traps
 (pitch estimator, window length, and the ceiling standing in for the subject)
 so the next round does not walk into them again.
 
-### DPTH and EDGE reach all six engines ✅ built (2026-08-19); ⏳ owed: the listening pass; ⏳ owed: the bench
+### DPTH and EDGE reach all six engines ✅ built (2026-08-19); ✅ bench captured (Task 10, 2026-08-20); ⏳ owed: the listening pass
 
 DPTH and EDGE shipped 2026-08-19 pointed at FEED only — the panel's first
 controls that did nothing on five of six engines, an interim Bastian asked
@@ -614,10 +614,16 @@ now enforces it the same way it already enforces `TIMB`/`FILT`.
   section is the checklist: each engine's `kEdgeOctaves`/HP neutral,
   `sampler_cfg::kMotionBaseScale`, BODY's `kDriftDetuneCt = 3.f` ceiling, and
   DPTH's reach above unity on a BBD deck (spec §3.4).
-- **The bench row for the new one-poles.** Four new filters per linear deck
-  and one per BBD channel per sample is a claim about the design, not the
-  chip — spec §7 says explicitly "no CPU figure before the bench," and none
-  has run. Plan Task 10.
+- **What the new one-poles actually cost, isolated.** Task 10 ran and two
+  capture sets sit in `docs/bench/2026-08-20-*`, but the row it added,
+  `inst_edge_synth_bbd`, is a COMPOUND worst case — worst-instrument config
+  + BBD clock ceiling + EDGE maxed, 101.82/105.56 % — not an isolated price
+  for the filters. There is no EDGE-off twin row to difference against, so
+  the new one-poles' own cost is still unmeasured. The repo already has that
+  twin-row pattern twice (`inst_feed_engine_worst`/`_idle`,
+  `instrument_worst_bbd`/`_dtcm`); an `inst_edge_synth_bbd`-with-EDGE-off
+  twin would close this the same way. Not building or running it now — that
+  needs the board and is Bastian's call.
 
 ### M1 — Portable engine foundation ✅
 

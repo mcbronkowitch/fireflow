@@ -36,20 +36,25 @@
 //   BODY: not applicable in the same shape -- Exciter's corner filter ALWAYS
 //     runs, so t == 0 means "coefficient unchanged", pinned in
 //     tests/test_body_voice.cpp ("body: EDGE at 0 leaves the exciter's
-//     corner exactly where RESO put it") -- against the coefficient RESO
-//     alone had already computed, not a literal named constant, because
-//     BODY's neutral corner moves with RESO/character rather than sitting at
-//     one fixed value the way FEED's does.
+//     corner exactly where RESO put it") -- against the coefficient
+//     computed independently from exciter.h's own zone table and coefficient
+//     formula (not a literal named constant, because BODY's neutral corner
+//     moves with RESO/character rather than sitting at one fixed value the
+//     way FEED's does, and not against another call into the object under
+//     test either, which is what made the original version of that pin
+//     vacuous -- fix-wave finding, 2026-08-19 voice-knobs-dpth-edge review
+//     item 1).
 //   FEED: also always-runs, and its case (test_feed_engine.cpp, "feed: EDGE
 //     at 0 is exactly kDampFixedHz") IS pinned directly against a named
 //     engine constant, feed_cfg::kDampFixedHz -- FEED's neutral corner is a
 //     fixed Hz, not a RESO-derived one, so it has one to pin against.
 //
 // This file ends the DPTH/EDGE plan with SIX cases, one per engine. Task 3
-// ships only FEED, because Task 3 is the spine: the other five engines carry
-// one-line set_edge STUBS until Tasks 4-7 replace them, and a stub that moved
-// audio would mean the stub is not a stub. Adding your engine's case is the
-// last step of your task, not an optional extra.
+// shipped only FEED, because Task 3 is the spine: the other five engines
+// carried one-line set_edge STUBS until Tasks 4-7 replaced them (all landed
+// -- see the per-engine cases below), and a stub that moved audio would have
+// meant the stub was not a stub. Adding your engine's case was the last step
+// of your task, not an optional extra.
 #include <doctest/doctest.h>
 #include "instrument.h"
 #include "parts/bbd_engine.h"

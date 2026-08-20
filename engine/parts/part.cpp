@@ -99,7 +99,15 @@ void Part::init(float sample_rate, uint32_t seed_base,
 // The modulation term alone: what the lanes add to the knob, before the base
 // and before any clamping. target_raw() below adds the base to exactly this,
 // and the LED law displays exactly this (spec 2026-08-16 §3.1) -- one
-// expression, so the display and the audio path cannot drift apart.
+// expression, so the MODULATION CONTRIBUTION cannot drift between display and
+// audio. Narrower than it used to be: since DPTH (spec 2026-08-19
+// voice-knobs-dpth-edge), the TOTAL target can still differ between the two.
+// On a sampler deck, _control_tick's LANE_MOTION write scales
+// _base[LANE_MOTION] by sampler_cfg::kMotionBaseScale (0.5) before adding
+// this same _mod_term(), while target_raw(LANE_MOTION) -- what the LED law
+// reads -- adds this _mod_term() to the unhalved base. Only the modulation
+// term itself is guaranteed to be the one shared expression; the base it
+// gets added to is not.
 float Part::_mod_term(int slot) const {
     float d = (slot == LANE_PITCH) ? 1.f : _depth;
     if (slot == LANE_SOURCE && _engine_id == ENGINE_SAMPLER)

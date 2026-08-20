@@ -89,9 +89,13 @@ constexpr float kSlewMaxS = 0.5f;
 // of SUB's _in_gain and the line itself -- the one cell that shapes what
 // ARRIVES rather than how it decays (FILT is the loss pole INSIDE the loop,
 // RES is the feedback-path tilt; both act every circulation, this acts once,
-// at the write). Same class and the same neutral-at-the-bottom-rail contract
-// as SYNTH/WAVE (Task 5, synth_engine.h's kEdgeHpNeutralHz/kEdgeHpOctaves)
-// and the sampler (Task 6, sampler_config.h's kEdgeHpNeutralHz/kEdgeOctaves),
+// at the write). "Pre-emphasis" names the shape of the filter, not a tape/FM
+// noise-reduction scheme -- there is no complementary de-emphasis stage
+// anywhere downstream, deliberately: EDGE is a tone trim the player hears
+// directly, not a codec pair to be undone later. Same class and the same
+// neutral-at-the-bottom-rail contract as SYNTH/WAVE (Task 5, synth_engine.h's
+// kEdgeHpNeutralHz/kEdgeHpOctaves) and the sampler (Task 6,
+// sampler_config.h's kEdgeHpNeutralHz/kEdgeOctaves),
 // but its own rails and its own signal point. FIRST VALUES, unconfirmed by
 // ear (design §9.5) -- copied from those two because nothing about the BBD's
 // input itself argues for a different span; a listening pass owns it.
