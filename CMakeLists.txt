@@ -168,11 +168,6 @@ add_executable(spky_tests
     tests/test_part_engine_contract.cpp
     tests/test_param_table.cpp
     tests/test_param_impact.cpp
-    # engine/util/onepole_hp.h is header-only. Tasks 4-7 of the DPTH/EDGE
-    # plan landed and engine/parts/bbd_engine.h, engine/sampler/
-    # sampler_engine.h and engine/synth/synth_engine.h now include it too --
-    # this is no longer the only translation unit that does.
-    tests/test_onepole_hp.cpp
     tests/test_smooth_law.cpp
 )
 target_link_libraries(spky_tests PRIVATE spky_engine doctest nlohmann_json daisysp_min)
