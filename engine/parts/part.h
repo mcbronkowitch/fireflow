@@ -197,10 +197,22 @@ public:
     void set_voice_sub(float n)       { _synth.set_sub(n);       _wave.set_sub(n);       _body.set_sub(n);       _bbd.set_sub(n);       _feed.set_sub(n); }
     void set_voice_detune(float n)    { _synth.set_detune(n);    _wave.set_detune(n);    _body.set_detune(n);    _bbd.set_detune(n);    _feed.set_detune(n); }
     void set_voice_filt(float t)      { _synth.set_filt(t);      _wave.set_filt(t);      _body.set_filt(t);      _sampler.set_filt(t);          _bbd.set_filt(t);      _feed.set_filt(t); }
-    // FEED-only, and deliberately NOT in the broadcast line above: an audition
-    // control for the in-loop DAMP cutoff, with no meaning on the other five
-    // engines. Same shape as snap_sampler_cursor -- one engine, one setter.
-    void set_feed_damp_hz(float hz)   { _feed.set_damp_hz(hz); }
+    // EDGE, the second filter: inside the loop where an engine has one, a
+    // high-pass where it does not. Bipolar, and 0 is EVERY engine's own
+    // neutral -- six engines, six neutrals, one knob that boots unchanged on
+    // all of them (spec 2026-08-19 voice-knobs-dpth-edge, 4.2). It replaced
+    // Part::set_feed_damp_hz, a one-engine setter in Hz, because that shape
+    // does not survive contact with five more cells.
+    //
+    // All six engines on ONE line, for the reason the block comment above
+    // gives: an engine missing from a broadcast line is a knob that is
+    // silently dead on that engine, and this project has shipped that failure
+    // three times. All six are real: SYNTH and WAVE share SynthEngineT's
+    // set_edge (the output high-pass, gated by kEdgeUsesOutputHp); BODY,
+    // SAMPLER, BBD and FEED each have their own.
+    // tests/test_voice_edge_broadcast.cpp is the ledger of which ones are
+    // real, one case per engine.
+    void set_voice_edge(float t)      { _synth.set_edge(t);      _wave.set_edge(t);      _body.set_edge(t);      _sampler.set_edge(t);          _bbd.set_edge(t);      _feed.set_edge(t); }
 
     SamplerEngine& sampler() { return _sampler; }
     const SamplerEngine& sampler() const { return _sampler; }

@@ -89,6 +89,7 @@ struct Span { float lo, hi; };
   X(P_RES_A,      0.f, 0.75f, 0) X(P_RES_B,      0.f, 0.75f, 0) \
   X(P_SUB_A,      0.f, 1.f, 0)   X(P_SUB_B,      0.f, 1.f, 0) \
   X(P_FILT_A,    -1.f, 1.f, 0)   X(P_FILT_B,    -1.f, 1.f, 0) \
+  X(P_EDGE_A,    -1.f, 1.f, 0)   X(P_EDGE_B,    -1.f, 1.f, 0) \
   X(P_FLUXMIX_A,  0.f, 1.f, 0)   X(P_FLUXMIX_B,  0.f, 1.f, 0) \
   X(P_GRIT_A,     0.f, 1.f, 0)   X(P_GRIT_B,     0.f, 1.f, 0) \
   X(P_COMP_A,     0.f, 1.f, 0)   X(P_COMP_B,     0.f, 1.f, 0) \
@@ -175,6 +176,8 @@ inline void apply_param(Instrument& in, int param, float v) {
     case P_SUB_B:      in.set_voice_sub(PART_B, v); break;
     case P_FILT_A:     in.set_voice_filt(PART_A, v); break;
     case P_FILT_B:     in.set_voice_filt(PART_B, v); break;
+    case P_EDGE_A:     in.set_voice_edge(PART_A, v); break;
+    case P_EDGE_B:     in.set_voice_edge(PART_B, v); break;
     case P_FLUXMIX_A:  in.set_flux_mix(PART_A, v); break;
     case P_FLUXMIX_B:  in.set_flux_mix(PART_B, v); break;
     case P_GRIT_A:     in.set_grit_mix(PART_A, v); break;

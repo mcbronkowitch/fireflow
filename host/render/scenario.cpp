@@ -163,6 +163,11 @@ void spky::apply_event(Instrument& inst, const Event& e) {
     else if (a == "set_voice_sub")       inst.set_voice_sub(e.part, e.value);
     else if (a == "set_voice_detune")    inst.set_voice_detune(e.part, e.value);
     else if (a == "set_voice_filt")      inst.set_voice_filt(e.part, e.value);
+    // Without this line EDGE is unreachable from every render scenario, which
+    // is the one way this feature could ship with a green suite and no
+    // coverage at all. DPTH needs no action of its own: set_target_base is
+    // already one.
+    else if (a == "set_voice_edge")      inst.set_voice_edge(e.part, e.value);
     // Excitation bus source selection (spec §6, Task 10 -- Instrument::
     // set_excitation_sources, engine/instrument.h). Three booleans, no new
     // Event field: `flag` carries the tape source (the same slot every other

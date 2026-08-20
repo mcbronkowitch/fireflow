@@ -1291,34 +1291,46 @@ panels, one per deck.
   the only way to move it was to route MOD at it. On an FM engine the index is
   arguably the most musical parameter there is, which makes spec §4's
   "DEPTH at 0.5 must be a good sound" a claim worth being able to disprove.
-- **DAMP cutoff**, 200 Hz to 16 kHz on a LOG slider, through the new
-  `FeedEngine::set_damp_hz`. 3200 Hz was confirmed only against DARKER
-  alternatives — variants B and C at 1200 and 500 Hz were rejected by ear — and
-  nobody has heard it against a brighter one. The top of the range deliberately
-  reaches past where half this engine's anti-aliasing stops working (the other
-  half is FeedPair's two-sample average): hearing where it starts to alias is
-  the point.
+- **DAMP cutoff**, first as an absolute 200 Hz–16 kHz LOG control and, later
+  the same day, as the bipolar **EDGE trim** it is now: `FeedEngine::set_edge`,
+  centred exactly on `kDampFixedHz` and spanning `feed_cfg::kEdgeOctaves` (2.0)
+  either side, i.e. 800 Hz to 12.8 kHz. 3200 Hz was confirmed only against
+  DARKER alternatives — variants B and C at 1200 and 500 Hz were rejected by
+  ear — and nobody has heard it against a brighter one, so the trim reaches up
+  as far as it reaches down. It still reaches past where half this engine's
+  anti-aliasing stops working (the other half is FeedPair's two-sample
+  average): hearing where it starts to alias is the point.
 
-Both boot on the shipped constants, so a patch that never touches them behaves
-exactly as before. As ParamIds Rack persists them for free, so the module holds
-no state for them at all — the two float arrays, their JSON keys and their reset
-all left with the menu. `set_damp_hz` carries an exact-argument guard: the host
-pushes it every block from a knob that almost never moves, and without the
-compare that is one libm `expf` per part per block for nothing. The firmware
-never calls it; `init()` is its only other writer.
+Both boot neutral, so a patch that never touches them behaves exactly as
+before. As ParamIds Rack persists them for free, so the module holds no state
+for them at all — the two float arrays, their JSON keys and their reset all
+left with the menu. `set_edge` carries an exact-argument guard on the KNOB
+value: the host pushes it every block from a knob that almost never moves, and
+without the compare that is one libm `pow` plus one `exp` per part per block
+for nothing. The firmware calls neither; `init()` reaches the cutoff through
+`set_edge(0)`, which is the only other writer.
 
-**The gate on the defaults RECOMPUTES them** rather than comparing against a
+**The gate on DPTH's default RECOMPUTES it** rather than comparing against a
 literal (`test_feed_shipped_defaults_are_the_engine_constants`): it reads
-`kDepthBase` and `kDampFixedHz` out of `feed_config.h`, reads the knob's range
-out of `Fireflow.cpp`, and derives what `INIT_DEFAULTS` must hold. A gate that
-hard-codes 0.632718364 stops meaning anything the moment `kDampFixedHz` moves —
-which is exactly when it is needed. It earned its keep on its first run by
-catching 0.632631779, which is what this document would otherwise be quoting.
+`kDepthBase` out of `feed_config.h` and derives what `INIT_DEFAULTS` must hold,
+because that knob IS the `LANE_MOTION` base. EDGE's half of that gate is gone
+with the rails it derived from — a trim's boot value is its centre, on every
+engine at once, and Task 8 of the DPTH/EDGE plan replaces it with the stronger
+assertion the trim makes possible: that each engine's neutral is a NAMED
+CONSTANT in its own header.
 
-**They are dead on the other five engines**, which is the first time anything on
-this panel is, and it is an interim: the re-pointing round is owed and is in
-[`roadmap.md`](roadmap.md). The plate word `EDGE` is likewise a placeholder —
-`DAMP` is taken by BODY's `DECAY`.
+**EDGE broadcasts to all six engines** (`Part::set_voice_edge`, spec
+voice-knobs-dpth-edge §4.4) **and is real on all six**: Task 3 shipped five
+one-line `set_edge` stubs alongside FEED's real cell so the broadcast line
+could exist at all, and Tasks 4–7 replaced every stub with a real trim —
+`tests/test_voice_edge_broadcast.cpp` carries one case per engine, the ledger
+of which are real, and it ends the plan with all six passing. DPTH reaches
+all six for real too. See §10 below for what each engine's EDGE cell actually
+is. The plate word `EDGE` is no longer a placeholder — it is the deliberate
+choice spec §6 argues for (the SYNTH cell carries the axis name so the
+aluminium plate can print one word; the other five words are Rack-only), now
+shipped in `gen_panel.py`'s `DYNAMIC_CAPTIONS` table. `DAMP` stays unavailable
+regardless — it is BODY's `DECAY`.
 
 ### Three measurement traps this engine sets, and what they cost
 
@@ -1338,3 +1350,140 @@ the kind a later gate will walk into again:
    itself. G21's DEC-0 inert half read a 7 % note-length gap that was the
    ceiling compressing the louder note's peak. **Any FEED gate whose subject is
    spectral shape or relative level must run below `kSatCeil`.**
+
+---
+
+## 10. DPTH and EDGE across the six engines
+
+Spec `docs/superpowers/specs/2026-08-19-voice-knobs-dpth-edge-design.md`, plan
+`docs/superpowers/plans/2026-08-19-voice-knobs-dpth-edge.md`. DPTH writes
+`LANE_MOTION`'s base on every engine (`Fireflow.cpp`'s `pushParams`, no more
+FEED-only ternary); EDGE is a bipolar trim on each engine's own "second
+filter", `t == 0` meaning that engine's own neutral, reached through
+`Part::set_voice_edge(float t)` broadcasting to all six.
+
+### LANE_MOTION, read six ways
+
+This is a lane fact, not a DPTH fact — DPTH only gave the base a way to move;
+every engine already read this lane before the knob existed.
+
+| Engine | Reads `_targets[LANE_MOTION]` as | Where |
+|---|---|---|
+| SYNTH | `width` → the four-voice pan fan **and** per-voice drift | `synth_engine.cpp:320,355-356` |
+| WAVE | identical arithmetic; `kVoices == 4` keeps it bit-identical to SYNTH | same file |
+| BODY | `width` → drift only; the pan fan is pinned to centre because `BodyVoice::kEngineVoices == 1` (the `kVoices > 1` guard, `synth_engine.cpp:355`) | same file |
+| SAMPLER | scatter: grain position and spawn-interval jitter, but the base arrives HALVED (`sampler_cfg::kMotionBaseScale = 0.5f`) before `_spawn_one` ever sees it — see below | `part.cpp`, `sampler_engine.cpp` |
+| BBD | `_fb_lane`, the feedback amount: `clampf(t[LANE_MOTION], 0.f, 1.f) * 1.2f / bbd_drive_gain(_drive)` | `bbd_engine.cpp:263` |
+| FEED | `_depth_n`, the FM index | `feed_engine.cpp:65` |
+
+Line numbers rot (see "How to read a citation" above) — the spec that first
+tabulated this cited `bbd_engine.cpp:213` and `feed_engine.cpp:61`; both had
+already moved by the time this section was written.
+
+**The sampler's halving, and why it exists.** `Part::_control_tick` used to
+discard the base entirely on a sampler deck — nothing wrote it, and at the
+compiled-in rest value (0.5) the position jitter in `SamplerEngine::_spawn_one`
+is uniform over an interval exactly `content` wide, so
+`(SOURCE*span + _scan_pos + jitter) mod content` is uniform independently of
+both summands: ORGANIZE and SCAN had provably zero effect on spawn position
+(measured 2026-07-22, means 12036 / 11896 / 11951 at SOURCE 0 / 0.25 / 0.9
+over content 24000, `sampler_config.h`). DPTH made that base reachable under a
+finger for the first time, so `kMotionBaseScale = 0.5f` keeps the degenerate
+window at the TOP of DPTH's travel instead of at rest — a choice, not an
+accident: knob 0.5 → base 0.25 (jitter window half a content length,
+ORGANIZE/SCAN stay audible), knob 1.0 → base 0.5 (the degenerate "full fog"
+state, now reachable deliberately), knob 0.0 → base 0 (today's behaviour
+exactly, the return ticket). The open pulse-vs-breathe question this
+reintroduces is in `docs/by-ear-decisions.md`, not repeated here.
+
+**BBD at DPTH 1.0 reaches above unity before the loss pole.** The formula
+above evaluates to `1.2 / bbd_drive_gain(_drive)` at DPTH 1.0, which is above
+1 before `bbd_drive_gain`'s division has a chance to bring it back down — not
+new territory (`MOD` could already drive the lane to 1.0), but newly
+reachable without modulation, under one finger, for the first time. Spec
+§3.4; the by-ear ledger carries the item, not a probed number, because none
+has been run yet.
+
+### EDGE's neutral, per engine
+
+Same shape as `FILT`: **centre = the engine's own neutral, travel = a span in
+octaves either side**, `t == 0` bit-identical to a deck that never called
+`set_edge`.
+
+| Engine | What EDGE trims | Neutral | Span (octaves) | Constants, where they live |
+|---|---|---|---|---|
+| FEED | the one-pole inside the feedback path | `feed_cfg::kDampFixedHz` = 3200 Hz | `feed_cfg::kEdgeOctaves` = 2.0 | `engine/feed/feed_config.h` |
+| BODY | `Exciter`'s click/noise filter corner, ahead of the resonator | whatever `_recompute_filter` already derives from RESO (`_char`) — not a fixed value | `Exciter::kEdgeOctaves` = 2.0, a **private** class member | `engine/body/exciter.h` |
+| SYNTH, WAVE | one-pole high-pass on the summed stereo output | `SynthEngineT<V>::kEdgeHpNeutralHz` = 20 Hz | `kEdgeHpOctaves` = 3.0 | `engine/synth/synth_engine.h` |
+| SAMPLER | one-pole high-pass on the summed grain bus, applied BEFORE `_svf_l`/`_svf_r` | `sampler_cfg::kEdgeHpNeutralHz` = 20 Hz | `kEdgeOctaves` = 3.0 | `engine/sampler/sampler_config.h` |
+| BBD | pre-emphasis one-pole in `process_in`, ahead of `_in_gain` and the line | anonymous-namespace `kEdgeHpNeutralHz` = 20 Hz (internal linkage, deliberate) | anonymous-namespace `kEdgeOctaves` = 3.0 | `engine/parts/bbd_engine.cpp` |
+
+Every value in the last three columns is a FIRST VALUE, unconfirmed by ear
+(spec §9) — see `docs/by-ear-decisions.md`.
+
+**Neutral is an explicit bypass, not a low corner, and the reason is
+measured, not aesthetic.** `engine/util/onepole_hp.h`'s own header comment:
+at its bottom rail the one-pole high-pass is an exact bypass in real
+arithmetic, but float32 rounding makes `_y1` random-walk (measured: a
+440.7 Hz sine through it at that rail comes out bit-identical on only 0.48 %
+of samples, worst deviation 5.0e-6). So on the four engines whose filter has
+a skip branch, `process()` skips the filter and the setter skips the
+coefficient update, both gated on the identical `_edge != 0.f` test —
+`SynthEngineT::set_edge`/`process()`, `SamplerEngine::set_edge`/`process()`,
+`BbdEngine::set_edge`/`process_in()`. FEED and BODY need no such branch:
+their filters always run at every `_edge`, and neutral is a coefficient
+value, not a skip — FEED's corner is fixed at `kDampFixedHz`, BODY's is
+already recomputed every control tick from RESO regardless of EDGE.
+
+**The negative half is inert on the three linear engines, measured, not
+assumed.** SYNTH and WAVE cannot produce anything below 55 Hz
+(`pitch_to_hz(p) = 110 * 8^p` over `p` in `[0,1]` gives 110–880 Hz, and the
+sub-oscillator sits exactly one octave below the fundamental, `voice.cpp:56`),
+so sweeping the negative half from the neutral corner (20 Hz) down to
+`t == -1` (2.5 Hz) barely touches a 55 Hz tone: **−0.549 dB at the end
+nearest neutral, −0.010 dB at the extreme** (`synth_engine.h`'s own comment,
+probed with `OnePoleHp`'s own math, the `rms_at`/`db` method
+`tests/test_onepole_hp.cpp` uses). Same class of documented blind spot as
+BODY's zone 2 below, not a defect.
+
+The sampler and BBD were probed SEPARATELY, because neither has a 55 Hz
+floor — the sampler plays arbitrary recorded material, and BBD's EDGE is an
+INPUT pre-emphasis on whatever the deck bus feeds it, not bounded by any
+synthesized-tone floor. Both therefore treat the negative half as doing
+something real, not as a blind spot:
+
+| Tone | Sampler (`sampler_config.h`) | BBD (`bbd_engine.cpp`) |
+|---|---|---|
+| 20 Hz | −3.007 dB → −0.069 dB | −3.016 dB → −0.069 dB |
+| 30 Hz | −1.599 dB → −0.031 dB | −1.605 dB → −0.031 dB |
+| 40 Hz | −0.975 dB → −0.018 dB | −0.978 dB → −0.018 dB |
+| 55 Hz | −0.547 dB → −0.010 dB | −0.549 dB → −0.010 dB |
+| 80 Hz | not probed | −0.274 dB → −0.006 dB |
+| 110 Hz | not probed | −0.152 dB → −0.004 dB |
+
+Both columns run the identical filter math (`OnePoleHp`, the same two
+constants) through separately run scratchpad probes, not one value copied
+into two files — the near-agreement at 55 Hz (0.547 vs 0.549) is the expected
+cross-check, and the small remaining gap is two different probe rigs, not a
+discrepancy to chase.
+
+### BODY's zone-2 blind spot
+
+`Exciter::_recompute_filter` derives a click/noise cutoff from RESO (`_char`)
+in three zones (click 2–8 kHz, noise 1–10 kHz, and — in zone 2, RESO ≥ 0.67,
+the sputter/ping character — a flat 10 kHz the comment marks `unused`). EDGE's
+trim is applied to `cutoff_hz` unconditionally, in all three zones including
+zone 2. **It has no audible effect there**: `Exciter::process` computes
+`sputter * (1 - t) + ping * t` in zone 2 and never calls `_lp.process()` — the
+one-pole is wired into the zone 0 and zone 1 branches only, so a
+trimmed-but-unused coefficient sits in `_lp` unread.
+
+This is a deliberate decision (spec §4.6), not an unfixed bug: restoring the
+filter to zone 2 would change a character Bastian chose (the ping is a
+`fast_sin` at the fundamental; a low-pass sweeping down would attenuate it
+outright, not colour it), and it would couple EDGE to level rather than tone.
+`tests/test_voice_edge_broadcast.cpp`'s `edge_case(ENGINE_BODY)` deliberately
+pins RESO at 0.2 (zone 0) so that broadcast test measures the wiring, not this
+blind spot; `tests/test_body_voice.cpp` pins the inertness itself, so that
+*inserting* a filter into zone 2 later breaks a test loudly instead of
+shipping silently.

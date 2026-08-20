@@ -77,10 +77,10 @@ static const PanelCtl kParamCtls[] = {
     {REV_MIX_B, WK_SMKNOB, {168.400f, 95.000f}, "SEND", {168.400f, 104.600f}, 0, 2.20f, 0xA7BCC6, "Room send"},
     {SHUFFLE, WK_SMKNOB, {165.400f, 34.000f}, "SHFL", {165.400f, 42.000f}, 0, 2.20f, 0xA7BCC6, "SHUFL"},
     {PACE, WK_SMKNOB, {168.400f, 50.220f}, "PACE", {168.400f, 58.220f}, 0, 2.20f, 0xA7BCC6, "PACE"},
-    {DEPTH_A, WK_SMKNOB, {94.250f, 50.220f}, "DPTH", {94.250f, 58.220f}, 0, 2.20f, 0xA7BCC6, "FEED: FM index"},
-    {DEPTH_B, WK_SMKNOB, {210.550f, 50.220f}, "DPTH", {210.550f, 58.220f}, 0, 2.20f, 0xA7BCC6, "FEED: FM index"},
-    {DAMP_A, WK_SMKNOB, {107.250f, 50.220f}, "EDGE", {107.250f, 58.220f}, 0, 2.20f, 0xA7BCC6, "FEED: in-loop damp cutoff"},
-    {DAMP_B, WK_SMKNOB, {197.550f, 50.220f}, "EDGE", {197.550f, 58.220f}, 0, 2.20f, 0xA7BCC6, "FEED: in-loop damp cutoff"},
+    {DEPTH_A, WK_SMKNOB, {94.250f, 50.220f}, "DPTH", {94.250f, 58.220f}, 0, 2.20f, 0xA7BCC6, "MOTION lane base"},
+    {DEPTH_B, WK_SMKNOB, {210.550f, 50.220f}, "DPTH", {210.550f, 58.220f}, 0, 2.20f, 0xA7BCC6, "MOTION lane base"},
+    {DAMP_A, WK_SMKNOB, {107.250f, 50.220f}, "EDGE", {107.250f, 58.220f}, 0, 2.20f, 0xA7BCC6, "Second-filter trim"},
+    {DAMP_B, WK_SMKNOB, {197.550f, 50.220f}, "EDGE", {197.550f, 58.220f}, 0, 2.20f, 0xA7BCC6, "Second-filter trim"},
 };
 // 1 = big cap, 0 = small. Parallel to kParamCtls, same order.
 // The rehearsal widget reads THIS, not c.kind -- kind says

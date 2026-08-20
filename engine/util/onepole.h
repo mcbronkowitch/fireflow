@@ -36,6 +36,18 @@ public:
     void reset(float value = 0.f) { _value = value; _smoothing = false; }
     float value() const { return _value; }
 
+#ifdef SPKY_TESTING
+    // Test-only window onto the current coefficient, added so
+    // Exciter::coef_for_test() (engine/body/exciter.h) can read what RESO and
+    // EDGE together produced without OnePole growing a permanent public
+    // accessor for it. Guarded like the SPKY_TESTING accessors in
+    // body_voice.h, synth_engine.h, instrument.h, mod/lane.h and
+    // mod/super_modulator.h -- this header backs BODY's exciter filter,
+    // SYNTH/WAVE's smoothing and the master LEVEL gain, so it does not ship
+    // an unguarded reader in every build for one caller's sake.
+    float coef() const { return _kof; }
+#endif
+
 private:
     float _kof = 1.f;
     float _value = 0.f;

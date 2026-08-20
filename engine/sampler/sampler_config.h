@@ -293,6 +293,15 @@ constexpr float  kWindowHalfMin = 0.02f;
 // 2026-07-18-sampler-texture-deck-design.md). Ear-tunable.
 constexpr float  kScatterPosFrac  = 1.0f;
 constexpr float  kScatterTimeFrac = 0.75f;   // spawn-interval jitter, fraction of interval
+
+// LANE_MOTION's base, as read by a SAMPLER deck (part.cpp). Halved, and the
+// halving is the whole point: at base >= 0.5 the position jitter is uniform
+// over one content length, which makes ORGANIZE and SCAN provably irrelevant
+// (measured 2026-07-22: means 12036 / 11896 / 11951 at SOURCE 0 / 0.25 / 0.9
+// over content 24000). That state used to be unavoidable, which is why the
+// base was discarded entirely; with DPTH on the panel it becomes the top of
+// the knob's travel instead -- a choice, not an accident.
+constexpr float  kMotionBaseScale = 0.5f;
 // kScatterOctProb (0.25) lived here: the chance a grain jumped an octave.
 // Removed 2026-07-21 with the scatter itself -- it was the one MOTION scatter
 // that moved PITCH, which the sampler must hold still so a sampler deck and a
@@ -315,6 +324,35 @@ constexpr float  kFiltFadeRange = 0.25f;
 constexpr float  kFiltNeutral = 0.75f;
 constexpr float  kDetuneCeilCt  = 35.f;      // DTUN spread ceiling, deliberately NOT the synth's ceiling any more (spec 2026-08-09 §4)
 constexpr float  kSubMaxShare   = 1.f;       // SUB 1 = every grain an octave down
+
+// EDGE's output high-pass (Task 6, spec 2026-08-19 voice-knobs-dpth-edge,
+// 4.3): a one-pole high-pass on the summed grain bus, same filter class and
+// same neutral-at-the-bottom-rail contract as SYNTH/WAVE (Task 5,
+// engine/synth/synth_engine.h's kEdgeHpNeutralHz/kEdgeHpOctaves), but its
+// own rails and its own sum point (spec 4.3's table: "same, on the summed
+// grain bus"). FIRST VALUES, unconfirmed by ear (design §9.5) -- copied from
+// SYNTH/WAVE's choice because nothing about the sampler's filter itself
+// argues for a different span; a listening pass owns both.
+//
+// The negative half is NOT the same story as SYNTH/WAVE, though, and this is
+// measured, not assumed (scratchpad probe, OnePoleHp's own math, same
+// rms_at/db method as tests/test_onepole_hp.cpp): SYNTH/WAVE cannot produce
+// anything below 55 Hz (voice.cpp's sub-osc floor), so their negative half is
+// essentially inert. The sampler plays arbitrary recorded material and has no
+// such floor. At 20 Hz -- right at this neutral corner -- the negative half
+// goes from -3.007 dB (t just left of 0, corner ~20 Hz) to -0.069 dB (t == -1,
+// corner 2.5 Hz): a genuine ~3 dB of audible opening across the negative
+// half for content with real energy that low. At 30/40/55 Hz the same sweep
+// is -1.599/-0.975/-0.547 dB down to -0.031/-0.018/-0.010 dB -- shrinking
+// fast as content moves above the corner, and by 55 Hz (SYNTH/WAVE's floor)
+// this matches their own measurement (~0.549 dB / ~0.010 dB, engine/synth/
+// synth_engine.h) almost exactly, which is the expected cross-check: the
+// filter math is identical, only what material can reach it differs. So
+// unlike SYNTH/WAVE, do not treat SAMPLER's negative half as a documented
+// blind spot -- it does something real whenever the loaded material has bass
+// content near or below the neutral corner.
+constexpr float  kEdgeHpNeutralHz = 20.f;
+constexpr float  kEdgeOctaves     = 3.f;
 
 // Overlap-normalization (1/sqrt(active)) smoothing time constant. Ear-tunable,
 // but chosen from measurement, not taste: "sampler: FLOW is a standing

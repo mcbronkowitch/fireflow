@@ -26,8 +26,16 @@
 //    then goes red, but it reports "these parameters died", which is a
 //    misleading diagnosis for "your frozen points are stale".
 //
+// AN INSERTION HAS HAPPENED ONCE, and this is what it cost: P_EDGE_A/P_EDGE_B
+// were inserted after P_FILT_B on 2026-08-19 (spec voice-knobs-dpth-edge, 4.4)
+// so the two bipolar trims sit together in the enum. All four vectors were
+// shifted by hand, and the value written into the two new slots is 0.0f --
+// which is not a placeholder but EDGE's exact neutral on every engine, so
+// these four points still describe exactly the instrument they were captured
+// from. The inventory marker in tests/test_param_table.cpp moved with it.
+//
 // HOW TO TELL WHICH HAPPENED: compare P_COUNT and P_MODE/P_PACE against
-// tests/test_param_table.cpp's inventory-marker case (`P_MODE == 62`,
+// tests/test_param_table.cpp's inventory-marker case (`P_MODE == 64`,
 // `P_PACE == P_COUNT - 1`). If that case still passes unmodified, nothing
 // was inserted above P_MODE and this file's rows are still aligned. If you
 // changed the enum and that case reddened as intended, re-derive these
@@ -87,6 +95,8 @@ inline constexpr FrozenPoint kFlowPoints[kPer] = {
       0.382589996f, // P_SUB_B
       0.0863982737f, // P_FILT_A
       0.080051139f, // P_FILT_B
+      0.0f, // P_EDGE_A
+      0.0f, // P_EDGE_B
       0.229908779f, // P_FLUXMIX_A
       0.225242376f, // P_FLUXMIX_B
       0.134162173f, // P_GRIT_A
@@ -153,6 +163,8 @@ inline constexpr FrozenPoint kFlowPoints[kPer] = {
       0.215408742f, // P_SUB_B
       0.126671791f, // P_FILT_A
       0.0615344606f, // P_FILT_B
+      0.0f, // P_EDGE_A
+      0.0f, // P_EDGE_B
       0.174638748f, // P_FLUXMIX_A
       0.314266503f, // P_FLUXMIX_B
       0.113334186f, // P_GRIT_A
@@ -222,6 +234,8 @@ inline constexpr FrozenPoint kStepPoints[kPer] = {
       0.233362153f, // P_SUB_B
       0.124613494f, // P_FILT_A
       0.124712244f, // P_FILT_B
+      0.0f, // P_EDGE_A
+      0.0f, // P_EDGE_B
       0.137902111f, // P_FLUXMIX_A
       0.232209027f, // P_FLUXMIX_B
       0.156781018f, // P_GRIT_A
@@ -288,6 +302,8 @@ inline constexpr FrozenPoint kStepPoints[kPer] = {
       0.495584309f, // P_SUB_B
       0.113015607f, // P_FILT_A
       0.101828143f, // P_FILT_B
+      0.0f, // P_EDGE_A
+      0.0f, // P_EDGE_B
       0.402365088f, // P_FLUXMIX_A
       0.339851558f, // P_FLUXMIX_B
       0.0767824799f, // P_GRIT_A

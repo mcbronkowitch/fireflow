@@ -305,6 +305,15 @@ TEST_CASE("param impact: every parameter moves audio somewhere") {
     for (int p : { P_SONG_B })
         expected_untraced[p] = true;
 
+    // The STUBBED group (EDGE_A/EDGE_B, "not built yet" rather than "cannot"
+    // or "nobody knows") lived here until Task 4 of spec 2026-08-19
+    // voice-knobs-dpth-edge wired BodyVoice::set_edge for real: two of the
+    // four frozen points below run BODY at a RESO inside zones 0/1
+    // (master 1 and master 3, both decks; master 8's B deck), where EDGE now
+    // demonstrably moves the exciter's filter corner, so the group would
+    // read red rather than empty. Per that task's brief, the fix on the first
+    // engine to land (BODY or, via Task 5, SYNTH/WAVE) is to delete the
+    // group, not extend it -- deleted here.
     bool expected[P_COUNT] = {};
     for (int p = 0; p < P_COUNT; ++p)
         expected[p] = expected_proven[p] || expected_untraced[p];

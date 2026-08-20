@@ -3,6 +3,7 @@
 #include <cstdint>
 #include "mod/rng.h"
 #include "util/fast_sin.h"
+#include "util/math.h"
 #include "util/onepole.h"
 
 namespace spky {
@@ -65,12 +66,25 @@ public:
         _continuous = false;
         _fresh = false;
         _click_phase = 0.f;
+        _edge = 0.f;
         _recompute_filter();
     }
 
     // Control rate. 0..1, four zones (RESO) -- see the class comment.
     void set_character(float c) {
         _char = c < 0.f ? 0.f : (c > 1.f ? 1.f : c);
+        _recompute_filter();
+    }
+
+    // Control rate. Bipolar corner trim from the VOICE knob EDGE (spec
+    // 2026-08-19 voice-knobs-dpth-edge, 4.3): "the exciter's low-pass corner,
+    // ahead of the resonator" -- a trim on the filter RESO already computes,
+    // not a second filter. t == 0 is pow(2, kEdgeOctaves * 0) == 1 exactly,
+    // so a deck that never calls this reads the same cutoff, bit for bit, as
+    // before the knob existed. _recompute_filter is control rate only (see
+    // the class comment); this setter just gives it one more input.
+    void set_edge(float t) {
+        _edge = clampf(t, -1.f, 1.f);
         _recompute_filter();
     }
 
@@ -138,14 +152,42 @@ public:
         return s * _env;
     }
 
+#ifdef SPKY_TESTING
+    // Test-only window onto the click/noise filter's current coefficient --
+    // what RESO and EDGE together produced -- without reaching past _lp's
+    // own encapsulation. Same idiom as the SPKY_TESTING accessors in
+    // body_voice.h, synth_engine.h, instrument.h, mod/lane.h and
+    // mod/super_modulator.h.
+    float coef_for_test() const { return _lp.coef(); }
+
+    // Sums n samples of process() with no other transform, for a test that
+    // needs the raw output over a window rather than accumulated energy
+    // (this file's energy() helper squares first and would hide a
+    // sign-only or purely-RNG-driven difference).
+    float render_sum_for_test(int n) {
+        float sum = 0.f;
+        for (int i = 0; i < n; ++i) sum += process();
+        return sum;
+    }
+#endif
+
 private:
     static constexpr float kTwoPi = 6.2831853f;
 
-    // Control rate. The click/noise filter cutoff depends only on _char, so
-    // it is derived here and cached as a OnePole coefficient -- never as a
-    // per-sample cutoff_hz-to-coefficient conversion (that would be a
-    // std::exp per sample, the exact daisysp::String mistake this engine
-    // keeps having to unwind).
+    // EDGE's octave span either side of neutral, for BODY's exciter corner
+    // (spec 2026-08-19 voice-knobs-dpth-edge, 4.3). FIRST VALUE: matched to
+    // feed_cfg::kEdgeOctaves (feed/feed_config.h) rather than measured for
+    // this engine -- the probe rule (CLAUDE.md) forbids justifying it with a
+    // number nobody printed for BODY specifically. A listening pass owns
+    // tuning it, the same way FEED's own span was checked by ear against
+    // darker alternatives (feed_engine.cpp) before it was trusted.
+    static constexpr float kEdgeOctaves = 2.f;
+
+    // Control rate. The click/noise filter cutoff depends only on _char and
+    // _edge, so it is derived here and cached as a OnePole coefficient --
+    // never as a per-sample cutoff_hz-to-coefficient conversion (that would
+    // be a std::exp per sample, the exact daisysp::String mistake this
+    // engine keeps having to unwind).
     void _recompute_filter() {
         const float z = _char * 3.f;
         float cutoff_hz;
@@ -156,6 +198,16 @@ private:
         } else {
             cutoff_hz = 10000.f;                           // unused (sputter/ping zone)
         }
+        // EDGE trim. Applied to cutoff_hz before the coefficient conversion,
+        // in every zone -- including zone 2's "unused" 10 kHz -- because this
+        // is the one place all three zones' cutoffs pass through and doing it
+        // unconditionally here is simpler than a zone guard. It has no
+        // audible effect in zone 2: process() never calls _lp.process() there
+        // (spec 4.6), so a trimmed-but-unused coefficient just sits in _lp
+        // unread. t == 0 multiplies by exactly 1 (pow(2, 0) == 1), so an
+        // untouched deck's cutoff is bit-identical to before this knob
+        // existed.
+        cutoff_hz *= std::pow(2.f, kEdgeOctaves * _edge);
         const float k = 1.f - std::exp(-kTwoPi * cutoff_hz / _sr);
         _lp.set_coef(k);
     }
@@ -164,7 +216,7 @@ private:
     OnePole _lp;
 
     float _sr = 48000.f;
-    float _char = 0.f, _decay = 0.f, _inc = 0.f;
+    float _char = 0.f, _decay = 0.f, _inc = 0.f, _edge = 0.f;
     float _env = 0.f, _phase = 0.f, _gate = 0.f;
     int   _burst = 0;
     // Bow phase for the click zone, advanced by _inc -- see the class comment.

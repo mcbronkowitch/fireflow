@@ -557,6 +557,73 @@ its ceiling. `docs/engine-map.md` §9 records the three measurement traps
 (pitch estimator, window length, and the ceiling standing in for the subject)
 so the next round does not walk into them again.
 
+### DPTH and EDGE reach all six engines ✅ built (2026-08-19); ✅ bench captured (Task 10, 2026-08-20); ⏳ owed: the listening pass
+
+DPTH and EDGE shipped 2026-08-19 pointed at FEED only — the panel's first
+controls that did nothing on five of six engines, an interim Bastian asked
+for so he could feel whether two more VOICE knobs were worth having before
+deciding what they should do: *"Können wir in der nächsten Session die Knobs
+auf den anderen Engines belegen, ich möchte erstmal testen ob sich 2 weitere
+Voice Knobs gut anfühlen."* They are, and this round gives DPTH and EDGE the
+same house idiom every other VOICE knob already has — one control, re-pointed
+per engine, caption following the ENG switch — closing the "FEED knob
+re-pointing" item under Planned below.
+
+Spec `docs/superpowers/specs/2026-08-19-voice-knobs-dpth-edge-design.md`,
+plan `docs/superpowers/plans/2026-08-19-voice-knobs-dpth-edge.md`.
+
+**DPTH is the MOTION lane's base on all six engines.** The mechanism already
+existed — every engine already read `LANE_MOTION` as something (width+drift
+on SYNTH/WAVE, drift alone on BODY, scatter on the sampler, the feedback
+amount on BBD, the FM index on FEED) — the host simply never wrote the base,
+so the FEED-only ternary in `Fireflow.cpp` is gone and
+`inst.set_target_base(p, LANE_MOTION, pp(DEPTH_A, p))` runs unconditionally.
+Five of the six cells cost no engine code; the sampler is the one exception,
+reading the base scaled by `sampler_cfg::kMotionBaseScale = 0.5f` rather than
+at face value, so its factory sound is the only one that moves. Full
+per-engine table: `docs/engine-map.md` §10.
+
+**EDGE is a bipolar trim on each engine's own "second filter"**, `t == 0`
+meaning that engine's own neutral rather than an absolute cutoff — the same
+contract `FILT` already has. `Part::set_voice_edge(float t)` broadcasts to
+all six (`_synth`, `_wave`, `_body`, `_sampler`, `_bbd`, `_feed`), replacing
+`Part::set_feed_damp_hz`, the FEED-only Hz setter this design outgrew. Each
+engine's cell, neutral and span are in `docs/engine-map.md` §10; every span
+and every neutral other than FEED's `kDampFixedHz` is a FIRST VALUE, not yet
+confirmed by ear. BODY's zone-2 blind spot — EDGE has no audible effect in
+the RESO ≥ 0.67 sputter/ping zone, because that zone's signal path never runs
+through the filter it trims — is a written-down, deliberate omission (spec
+§4.6), not a defect.
+
+The words joined `DYNAMIC_CAPTIONS` in `gen_panel.py`:
+
+| | SYNTH | SAMPLER | WAVE | BODY | BBD | FEED |
+|---|---|---|---|---|---|---|
+| **DPTH** | DPTH | SCAT | DPTH | SWAY | RPTS | DPTH |
+| **EDGE** | EDGE | EDGE | EDGE | SNAP | PRE | EDGE |
+
+The plate word is `EDGE`, not a placeholder any more — spec §6 argues the
+SYNTH cell should carry the axis name so the aluminium plate (which cannot
+repaint) prints one honest word, and `test_hw_panel.py::test_static_captions_only`
+now enforces it the same way it already enforces `TIMB`/`FILT`.
+
+**What is still owed, and neither is done:**
+
+- **The listening pass over every first value** this design introduced —
+  `docs/by-ear-decisions.md`'s "DPTH and EDGE, on the other five engines"
+  section is the checklist: each engine's `kEdgeOctaves`/HP neutral,
+  `sampler_cfg::kMotionBaseScale`, BODY's `kDriftDetuneCt = 3.f` ceiling, and
+  DPTH's reach above unity on a BBD deck (spec §3.4).
+- **What the new one-poles actually cost, isolated.** Task 10 ran and two
+  capture sets sit in `docs/bench/2026-08-20-*`, but the row it added,
+  `inst_edge_synth_bbd`, is a COMPOUND worst case — worst-instrument config
+  + BBD clock ceiling + EDGE maxed, 101.82/105.56 % — not an isolated price
+  for the filters. There is no EDGE-off twin row to difference against, so
+  the new one-poles' own cost is still unmeasured. The repo already has that
+  twin-row pattern twice (`inst_feed_engine_worst`/`_idle`,
+  `instrument_worst_bbd`/`_dtcm`); an `inst_edge_synth_bbd`-with-EDGE-off
+  twin would close this the same way. Not building or running it now — that
+  needs the board and is Bastian's call.
 
 ### M1 — Portable engine foundation ✅
 
@@ -2815,43 +2882,37 @@ Starting points: the per-engine table and the `kDeckGain` reasoning in
 FEED used (one `Part`, engine swapped, peak AND RMS — a drone and a struck note
 with the same peak are not the same loudness).
 
-### FEED knob re-pointing ⬜ (owed, next session)
+### FEED knob re-pointing ✅ done (2026-08-19) — see "DPTH and EDGE reach all six engines" under Done
 
-**DPTH and EDGE are the panel's first controls that do nothing on five of six
-engines**, and that is an interim, not a decision. Shipped 2026-08-19 because
-Bastian wants to feel whether two more VOICE knobs are worth having before
-deciding what they should do elsewhere — *"Können wir in der nächsten Session
-die Knobs auf den anderen Engines belegen, ich möchte erstmal testen ob sich 2
-weitere Voice Knobs gut anfühlen."*
+Closed. DPTH and EDGE were the panel's first controls that did nothing on
+five of six engines — an interim, not a decision, shipped 2026-08-19 so
+Bastian could feel whether two more VOICE knobs were worth having before
+deciding what they should do elsewhere. They are, and the re-pointing round
+gives both the same house idiom every other VOICE knob already has: one
+knob, re-pointed per engine, caption following the ENG switch, through
+`DYNAMIC_CAPTIONS` in `gen_panel.py`. Nothing on this panel is dead anywhere
+any more.
 
-The house idiom is the opposite and has been since the reduction round: one
-knob, re-pointed per engine, caption follows the ENG switch. `RES` prints
-RATIO on FEED, `SOURCE` prints TIMB, `FILT` prints BRITE on BBD and LOSS on the
-sampler — all through `DYNAMIC_CAPTIONS` in `gen_panel.py`. Nothing on this
-panel is dead anywhere; these two are.
+Full story — the mechanism, the per-engine table, what is still owed (the
+listening pass and the bench) — is under **"DPTH and EDGE reach all six
+engines"** in the Done section above, right after "FEED". Spec
+[`specs/2026-08-19-voice-knobs-dpth-edge-design.md`](superpowers/specs/2026-08-19-voice-knobs-dpth-edge-design.md),
+plan
+[`plans/2026-08-19-voice-knobs-dpth-edge.md`](superpowers/plans/2026-08-19-voice-knobs-dpth-edge.md).
 
-What the round has to decide: what DPTH and EDGE control on SYNTH, WAVE, BODY,
-SAMPLER and BBD, and what each prints there. Then they join
-`DYNAMIC_CAPTIONS` like the rest.
+**One thing this round settled, one thing it did not touch:**
 
-**Designed 2026-08-19:**
-[`specs/2026-08-19-voice-knobs-dpth-edge-design.md`](superpowers/specs/2026-08-19-voice-knobs-dpth-edge-design.md).
-DPTH becomes the MOTION lane's base on all six engines — the mechanism already
-exists and five of the six cells cost no engine code; EDGE becomes "the second
-filter", inside the loop where there is one and a high-pass where there is not.
-Not planned yet.
-
-**Two things it inherits, both already flagged in the source:**
-
-- **The plate word EDGE is a placeholder.** `DAMP` was the obvious word and it
-  is taken: BODY's `DECAY` prints DAMP, and the printed-word gate refuses two
-  knobs one word. EDGE is free and says what the control does; the word is
-  Bastian's.
-- **The Rack panel's fourth VOICE column sits off-pitch.** 37.25 mm against the
-  10.5 mm rhythm of the first three, because `FLUXRATE_A` is at 44.25 and a
-  SMKNOB pair needs 6.0 mm of clearance — a column on pitch (40.75) fails by
-  2.5 mm. The hardware plate has no such problem: there the row is a clean 13 mm
-  4×2, the same pitch as ATK/DEC/RES/SUB above it.
+- **The plate word EDGE is no longer a placeholder.** Spec §6 decided it
+  stays `EDGE` — the SYNTH cell carries the axis name so the aluminium plate
+  (which cannot repaint) prints one honest word — and
+  `test_hw_panel.py::test_static_captions_only` now enforces it.
+- **The Rack panel's fourth VOICE column still sits off-pitch**, unrelated to
+  this round: 37.25 mm against the 10.5 mm rhythm of the first three, because
+  `FLUXRATE_A` is at 44.25 and a SMKNOB pair needs 6.0 mm of clearance — a
+  column on pitch (40.75) fails by 2.5 mm. The hardware plate has no such
+  problem: there the row is a clean 13 mm 4×2, the same pitch as
+  ATK/DEC/RES/SUB above it. Nothing in this round moved a column, and nothing
+  here fixes it.
 
 ### An anti-aliasing defeat, as a character control ⬜ (unscheduled)
 

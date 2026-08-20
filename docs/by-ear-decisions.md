@@ -161,11 +161,20 @@ From the 2026-07-22 fix pass (register IDs in the test suite):
   threshold, accepted: removing it needs unconditional `tanh`, which costs
   the shipped default 57 % of its level. Do not "finish" this by making the
   saturation unconditional.
-- **MOTION's scatter starts at zero on a sampler deck, MOD is the control
-  (F-04, variant a).** Chosen over deleting the scatter. The lane is bipolar
-  and the negative half is clamped away, so the scatter *pulses* rather than
-  breathes — an accepted side effect judged by ear from the
-  `sampler_extremes` render, not an oversight.
+- **MOTION's scatter on a sampler deck (F-04, variant a).** The hard clamp
+  that folds away the lane's negative half — chosen over deleting the
+  scatter — is still the accepted form, judged by ear from the
+  `sampler_extremes` render, not an oversight. What changed since (voice-
+  knobs-dpth-edge, task 1): the base used to be discarded on a sampler deck,
+  with MOD as the only control; DPTH now writes that base and the sampler
+  reads it halved (`sampler_cfg::kMotionBaseScale`), so DPTH moves the
+  scatter too. That also makes the pulse-vs-breathe question DPTH-dependent
+  rather than unconditional: at DPTH 0 the clamp still throws the whole
+  negative half away and the scatter *pulses*; above DPTH 0 the sum sits off
+  the floor and the clamp should bite less, softening toward a *breathe* —
+  unmeasured where or how far. See the open-question comment above the
+  `ENGINE_SAMPLER` block in `part.cpp` for the two named alternative
+  formulas, still unresolved.
 - **`kSpawnHeadroom = 2`.** Caps live grains at `ceil(overlap) + 2`, and
   through `len_ceil` it also caps how far tape mode may stretch a grain — one
   constant, two jobs. Bastian chose 2 over 1 to keep tape's smear out to ~4
@@ -216,14 +225,23 @@ What is worth knowing before the listening pass:
 
 - **3200 Hz was only ever confirmed DOWNWARD.** Variants B and C at 1200 and
   500 Hz were rejected by ear on 2026-08-19; nobody has heard 3200 against
-  anything brighter. The knob reaches 16 kHz on purpose — past where half this
-  engine's anti-aliasing stops working.
+  anything brighter, which is why the trim reaches up as far as it reaches
+  down.
+- **EDGE is a TRIM, not a cutoff, since later the same day.** The 200–16000 Hz
+  log rails are gone with the FEED-only setter that owned them: the knob is
+  bipolar now, its centre IS `kDampFixedHz`, and its travel is
+  `feed_cfg::kEdgeOctaves` — **2.0 octaves, a FIRST VALUE and yours** — either
+  side, so ±1 reaches 800 Hz and 12.8 kHz. Widening it hands the player more
+  of the aliasing guard; that is a legitimate thing to want to hear, and it is
+  what this constant decides.
 - **DEPTH at 0.5 is a defensive requirement, not a measurement.** Spec §4 asks
   that it be a good sound because the control had no knob; now that it has one,
   that requirement can be tested instead of assumed.
 
-If a listening pass moves either, move the CONSTANT in `feed_config.h` — the
-knob default is derived from it and a gate recomputes the derivation.
+If a listening pass moves `kDepthBase`, move the CONSTANT in `feed_config.h` —
+the DPTH knob default is derived from it and a gate recomputes the derivation.
+`kDampFixedHz` needs no such care any more: EDGE boots at its centre whatever
+that constant says.
 
 ### FEED level parity
 
@@ -237,6 +255,69 @@ knob default is derived from it and a gate recomputes the derivation.
   on the same probe settings. Under the same parity brief that is a defect,
   but BODY's level rides MATL and EXCIT hard and one setting is not a verdict.
   Needs its own pass before anything moves.
+
+## DPTH and EDGE, on the other five engines
+
+FEED's own DPTH/EDGE items are above, under "FEED: DPTH and EDGE are yours to
+turn now" — that section already covers `kDepthBase` and `kDampFixedHz`. This
+one covers the first values `docs/superpowers/specs/2026-08-19-voice-knobs-dpth-edge-design.md`
+introduced on the other five engines, none of them confirmed by ear yet
+(spec §9).
+
+- **Every engine's EDGE octave span and neutral is a FIRST VALUE (spec §9
+  items 1 and 5).**
+
+  | Engine | Neutral | Span (octaves) | Constant |
+  |---|---|---|---|
+  | BODY | RESO-derived corner (`Exciter::_recompute_filter`) | 2.0 | `Exciter::kEdgeOctaves` — `engine/body/exciter.h`, **private** |
+  | SYNTH, WAVE | 20 Hz | 3.0 | `SynthEngineT<V>::kEdgeHpNeutralHz` / `kEdgeHpOctaves` — `engine/synth/synth_engine.h` |
+  | SAMPLER | 20 Hz | 3.0 | `sampler_cfg::kEdgeHpNeutralHz` / `kEdgeOctaves` — `engine/sampler/sampler_config.h` |
+  | BBD | 20 Hz | 3.0 | anonymous-namespace `kEdgeHpNeutralHz` / `kEdgeOctaves` — `engine/parts/bbd_engine.cpp` |
+
+  Spec §9 item 5 asks specifically whether SYNTH/WAVE/SAMPLER's shared
+  3.0-octave span wants to split into three, or stay one control with one
+  span copied across engines that merely happen to share the "output
+  high-pass" shape. Still open. BODY's 2.0 octaves was matched to
+  `feed_cfg::kEdgeOctaves` rather than measured for BODY specifically
+  (`exciter.h`'s own comment says so) — the probe rule forbids justifying it
+  with a number nobody printed for this engine.
+
+- **EDGE's negative half is a dead bottom on SYNTH/WAVE, and near-dead on
+  sampler/BBD without low material.** Measured, `docs/engine-map.md` §10: on
+  SYNTH and WAVE neither engine can produce anything below 55 Hz, so sweeping
+  EDGE's whole negative half (20 Hz neutral down to 2.5 Hz at `t == -1`)
+  moves the signal by −0.549 dB at most. The sampler and BBD have no such
+  floor, so their negative half is genuinely doing something — but only on
+  content that actually has 20–55 Hz energy in it (−3.0 dB at 20 Hz down to
+  −0.5 dB at 55 Hz); on material without it, the same near-dead feel as
+  SYNTH/WAVE. Nobody turning the knob on these four engines will know this
+  from the panel — the bottom half of EDGE reads as broken rather than as an
+  engine that has nothing down there to trim. Not a bug: FIRST VALUES per the
+  bullet above, and this is exactly the kind of fact a listening pass is for.
+
+- **`sampler_cfg::kMotionBaseScale = 0.5f`.** DPTH's base reaches a sampler
+  deck halved, not at face value: knob 0.5 → base 0.25 (jitter window half a
+  content length, ORGANIZE/SCAN stay audible), knob 1.0 → base 0.5 (the
+  degenerate all-uniform state described under "MOTION's scatter on a
+  sampler deck" above), knob 0.0 → base 0 (today's behaviour, the return
+  ticket). Whether 0.25 — DPTH's shipped default of 0.5, halved — is the
+  right factory point is unconfirmed (spec §9 item 2).
+
+- **BODY's DPTH may be a whisper.** `body_voice.cpp`'s `kDriftDetuneCt = 3.f`
+  caps the drift at ±3 cents, and `kDriftPanAmt = 0.25f` moves a pan fan that
+  is pinned to centre on BODY's one voice (`BodyVoice::kEngineVoices == 1`)
+  — so a full DPTH sweep on a BODY deck buys ±3 cents of pitch wander and
+  nothing in the stereo field. If the listening pass finds `SWAY` too small
+  to be worth a quarter of the VOICE row, `kDriftDetuneCt` is the ceiling to
+  move, not the knob (spec §9 item 6).
+
+- **DPTH at the top of its travel on a BBD deck reaches above unity before
+  the loss pole.** `_fb_lane = clampf(t[LANE_MOTION], 0.f, 1.f) * 1.2f /
+  bbd_drive_gain(_drive)` (`bbd_engine.cpp`), so DPTH 1.0 lands at
+  `1.2 / bbd_drive_gain(DRIVE)` — above 1 before the loss pole eats into it.
+  Not new territory (`MOD` could already drive the lane to 1.0 today), but
+  newly reachable without modulation, under one finger, for the first time.
+  A listening item, not a bug (spec §3.4); no probe has run yet.
 
 ## Panel & factory patch
 

@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include <algorithm>
 #include <cmath>
 #include <vector>
 #include "instrument.h"
@@ -643,10 +644,11 @@ TEST_CASE("part: the sampler's cloud disperses around TUNE, not the chord") {
 // --- Review 2026-07-22: MOTION pinnt den Sampler nicht mehr ---
 
 TEST_CASE("F-04: ORGANIZE reaches the spawn position on a sampler deck") {
-    // LANE_MOTION hat die Basis 0.5, und niemand schreibt sie -- weder Host
-    // noch Instrument. Der Positions-Scatter ist damit +-content und die
-    // Spawn-Position exakt gleichverteilt, egal was ORGANIZE sagt. Der Test
-    // misst bei MOD = 0, wo gar kein Scatter sein darf.
+    // LANE_MOTION's base is written by the host now (DPTH, Fireflow.cpp), and
+    // the sampler halves it (sampler_cfg::kMotionBaseScale, part.cpp). This
+    // test explicitly zeroes it below, so the only source of position scatter
+    // left is the one under test: ORGANIZE, at MOD = 0 where the lane itself
+    // contributes nothing.
     //
     // A single last_spawn_pos() read after the render is not enough: pre-fix,
     // that position is uniform over the whole buffer (kSFrames = 48000), and
@@ -690,6 +692,12 @@ TEST_CASE("F-04: ORGANIZE reaches the spawn position on a sampler deck") {
         r[i] = l[i];
     }
     p.sampler().load_sample(l.data(), r.data(), kSFrames);
+
+    // MOTION's base now reaches the sampler (halved, sampler_cfg::
+    // kMotionBaseScale) instead of being discarded, so it has to be zeroed
+    // explicitly to isolate ORGANIZE -- otherwise the compiled-in default
+    // base of 0.5 (part.h) would add its own position scatter on top.
+    p.set_target_base(LANE_MOTION, 0.f);
 
     // ORGANIZE ans obere Ende: alle Spawns muessen dort landen.
     p.set_target_base(LANE_SOURCE, 0.9f);
@@ -748,6 +756,55 @@ TEST_CASE("F-04: MOD brings the sampler's scatter back") {
     }
     INFO("spawn position range " << lo << " .. " << hi);
     CHECK(hi - lo > 0.2f * float(kSFrames));
+}
+
+// The sampler used to DISCARD LANE_MOTION's base (part.cpp), which made the
+// knob that now writes it inert there. It reads it halved instead. Measured
+// at the effect -- the scatter the base is supposed to cause -- not at the
+// base, which would be the setter asserting its own echo.
+static float spawn_pos_spread(float dpth_base, int want = 200) {
+    std::vector<SampleBuffer::Frame> sbuf(kSFrames, SampleBuffer::Frame{ 0.f, 0.f });
+    Part p;
+    p.init(48000.f, 0, nullptr, nullptr, sbuf.data(), sbuf.size());
+    p.set_engine(ENGINE_SAMPLER);
+    p.set_depth(0.f);                     // MOD 0: the lane contributes nothing,
+                                           // so only the BASE can cause scatter
+
+    std::vector<float> l(kSFrames), r(kSFrames);
+    for (size_t i = 0; i < kSFrames; ++i) {
+        l[i] = std::sin(6.2831853f * 220.f * float(i) / 48000.f);
+        r[i] = l[i];
+    }
+    p.sampler().load_sample(l.data(), r.data(), kSFrames);
+    p.set_target_base(LANE_MOTION, dpth_base);
+
+    std::vector<float> pos;
+    int last = p.sampler().spawn_count(), guard = 0;
+    while (int(pos.size()) < want && guard++ < 4000000) {
+        float a = 0.f, b = 0.f;
+        p.process(a, b);
+        const int count = p.sampler().spawn_count();
+        if (count != last) {
+            last = count;
+            pos.push_back(p.sampler().last_spawn_pos());
+        }
+    }
+    REQUIRE(int(pos.size()) == want);      // a starved loop would make every
+                                           // assertion below vacuous
+    const auto mm = std::minmax_element(pos.begin(), pos.end());
+    return *mm.second - *mm.first;
+}
+
+TEST_CASE("sampler: DPTH 0 is exactly the old flattened behaviour") {
+    CHECK(spawn_pos_spread(0.f) == doctest::Approx(0.f));
+}
+
+TEST_CASE("sampler: DPTH mid-travel scatters, and less than the knob's top") {
+    const float mid = spawn_pos_spread(0.5f);
+    CHECK(mid > 0.f);
+    // The degenerate window -- one whole content length, where ORGANIZE and
+    // SCAN provably stop mattering -- is now only reachable at the knob's top.
+    CHECK(mid < spawn_pos_spread(1.f));
 }
 
 TEST_CASE("K-01: trigger_manual flattens the chord on a sampler deck") {
@@ -957,6 +1014,11 @@ TEST_CASE("part: sampler shuffle alternates fires without warping the step clock
     p.set_depth(0.f);                 // no SOURCE/MOTION walk
     p.set_target_base(LANE_SOURCE, 0.f);
     p.set_target_base(LANE_SIZE, 0.f); // 1/16-slot grains: no ceiling drops
+    // MOTION's base now reaches the sampler (halved, sampler_cfg::
+    // kMotionBaseScale) instead of being discarded, so the compiled-in
+    // default of 0.5 (part.h) would add its own position scatter on top of
+    // the grid this test measures. Zeroed for the same reason SOURCE is.
+    p.set_target_base(LANE_MOTION, 0.f);
     p.mod().set_rate(1.f);            // 30 Hz, 8 STEP slots -> nominal 200 samples
     p.mod().set_density(1.f);
     p.mod().set_shuffle(1.f);
@@ -1042,6 +1104,11 @@ TEST_CASE("part: the phrase position reaches the sampler -- the wrap sends the c
     REQUIRE(p.sampler().slice_count() == 8);   // marker mode, pool of 8
 
     p.set_depth(0.f);                 // MOTION lane silent: the walk is 0
+    // MOTION's base now reaches the sampler (halved, sampler_cfg::
+    // kMotionBaseScale) instead of being discarded, so the compiled-in
+    // default of 0.5 (part.h) would make the walk nonzero even at MOD 0 --
+    // exactly what the paragraph above this test requires to stay 0.
+    p.set_target_base(LANE_MOTION, 0.f);
     p.set_sampler_overlap(1.f);       // DENS max: no fire drops at the ceiling
     p.mod().set_rate(0.35f);
     p.set_step(true, 5);              // 5 steps, 8 slices: see above

@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include "mod/rng.h"
 #include "parts/engine_iface.h"
@@ -7,6 +8,7 @@
 #include "synth/voice.h"
 #include "synth/wt_osc.h"
 #include "util/onepole.h"
+#include "util/onepole_hp.h"
 #include "body/body_voice.h"
 
 namespace spky {
@@ -67,6 +69,41 @@ public:
     static constexpr float kFiltLeftScale = 1.25f;
     static constexpr float kFiltFadeRange = 0.25f;
 
+    // EDGE's output high-pass, SYNTH and WAVE only (spec 2026-08-19
+    // voice-knobs-dpth-edge, 4.1/4.3): "the corner at its bottom rail" is
+    // this engine's own neutral (4.2), so the trim only ever OPENS the
+    // high-pass -- there is no travel below "off" to give the knob's
+    // negative half. FIRST VALUES, unconfirmed by ear (design §9.5): probed
+    // only for bit-exactness at t == 0 (this class's set_edge/process, plus
+    // engine/util/onepole_hp.h's own measurements) and for the two
+    // thresholds in tests/test_filt.cpp ("edge: up removes low end and
+    // leaves the top alone") -- at kEdgeHpOctaves == 3 that test's corner
+    // lands near 160 Hz at t == 1, which sits comfortably between the
+    // test's own pitches (110*8^0.05 =~ 122 Hz, 110*8^0.9 =~ 715 Hz).
+    //
+    // The negative half is not just "nowhere useful to go" -- it is
+    // essentially inert on THIS pair of engines, and the fix-round-1 review
+    // put a number on it worth keeping. pitch_to_hz(p) = 110*8^p over
+    // p in [0,1] gives 110-880 Hz, and the sub-osc runs exactly one octave
+    // below the fundamental (voice.cpp:56), so 55 Hz is the lowest
+    // frequency either engine can ever produce. Probed with OnePoleHp's own
+    // math (scratchpad probe, same method as tests/test_onepole_hp.cpp's
+    // rms_at/db): a 55 Hz tone through the corner EDGE approaches as t
+    // leaves 0 (hz = kEdgeHpNeutralHz = 20) loses 0.549 dB; through the
+    // corner at t == -1 (hz = 20 * 2^-3 = 2.5) it loses 0.010 dB. So the
+    // entire negative half of this knob removes essentially nothing an ear
+    // can register on SYNTH or WAVE -- the direct, and by construction
+    // unavoidable, consequence of the spec's choice (4.2) that neutral on
+    // these two engines IS the bottom rail, which is also what buys the
+    // bit-exact neutral in front of ctrl_identity/wave_formant_sweep. Same
+    // class of documented blind spot as BODY's zone 2 (spec 4.6,
+    // tests/test_voice_edge_broadcast.cpp's edge_case()) -- not a defect,
+    // not something to fix here. SAMPLER shares this bottom-rail neutral
+    // (4.2's table) and is likely to inherit the identical inertness; check
+    // before re-deriving it.
+    static constexpr float kEdgeHpNeutralHz = 20.f;
+    static constexpr float kEdgeHpOctaves   = 3.f;
+
     void set_seed(uint32_t seed) { _seed = seed; }   // call BEFORE init
 
     void init(float sample_rate) override;
@@ -98,6 +135,46 @@ public:
     void set_sub(float n);
     void set_detune(float n);      // independent symmetric spread = n * 105 ct
     void set_filt(float n);        // -1..+1 cutoff trim; left end fades to silence
+    // EDGE, bipolar, 0 == this engine's own neutral (spec 2026-08-19
+    // voice-knobs-dpth-edge, 4.2).
+    //
+    // Stores the trim here, and -- on SYNTH/WAVE only -- keeps the output
+    // high-pass pair's coefficient current; the push to every VOICE still
+    // happens in _update_control(), the same control-tick idiom as
+    // _material_char, and this setter does not touch that path. ONE
+    // dispatch serving THREE engines: BodyVoice::set_edge (Task 4) forwards
+    // to the exciter's corner and is real. VoiceT::set_edge is still an
+    // empty inline (its voice has no inside to trim -- 4.1); this engine's
+    // own _hp_l/_hp_r are what SYNTH and WAVE get instead (Task 5), applied
+    // once at the summed stereo output in process(), not per voice.
+    //
+    // t == 0 leaves _hp_l/_hp_r untouched on purpose: process() skips them
+    // entirely at _edge == 0 (see process() below), so there is nothing to
+    // keep current, and engine/util/onepole_hp.h's own measurement is that
+    // running the filter at all -- even at its bottom rail -- is not a
+    // bit-exact bypass in float32. Computing a coefficient here that
+    // process() never reads would just be dead work, not a correctness bug,
+    // but skipping it keeps this setter's cost proportional to what it does.
+    //
+    // DELIBERATELY does not reset() _hp_l/_hp_r when re-entering the trim
+    // (_edge going 0 -> nonzero): the filter resumes from whatever {x1, y1}
+    // it held from its last nonzero run, which is stale history, not a
+    // fresh start. A reset() here would trade one discontinuity for another
+    // -- resetting a filter's state mid-signal can click too, and this
+    // project does not pick between two audible options without a listening
+    // pass (fix-round-1 review, 2026-08-19). Left open for that pass, not
+    // silently decided: reset() is the one-line fix if stale history turns
+    // out to be the worse of the two.
+    void set_edge(float t) {
+        _edge = clampf(t, -1.f, 1.f);
+        if constexpr (V::kEdgeUsesOutputHp) {
+            if (_edge != 0.f) {
+                const float hz = kEdgeHpNeutralHz * std::pow(2.f, kEdgeHpOctaves * _edge);
+                _hp_l.set_hz(hz);
+                _hp_r.set_hz(hz);
+            }
+        }
+    }
 
     int   active_voices() const;
     float voice_env(int v) const;
@@ -209,6 +286,18 @@ private:
     float _detune_spread_ct = 18.f;
     float _filt_amt  = 0.f;        // FILT knob -1..+1 (boot: neutral)
     float _filt_gain = 1.f;        // silence fade below the 60 Hz rail (control-rate)
+    float _edge      = 0.f;        // EDGE knob -1..+1 (boot: neutral). Pushed
+                                   // to every voice each control tick; real on
+                                   // BODY (Task 4). Also drives _hp_l/_hp_r
+                                   // below on SYNTH/WAVE (Task 5) -- see
+                                   // set_edge() above.
+    // EDGE's output high-pass (Task 5), SYNTH/WAVE only -- see
+    // kEdgeHpNeutralHz above. Exist on every V (BodyVoice included: the
+    // template has one _edge, not one per specialization) but are only ever
+    // init()'d, coefficient-updated or process()'d when V::kEdgeUsesOutputHp
+    // is true; on BodyVoice that is compiled-out dead code, not a runtime
+    // branch, so it costs BODY nothing.
+    OnePoleHp _hp_l, _hp_r;
 
     OnePole _level;                // smoothed master gain (LEVEL target)
 };
@@ -245,6 +334,12 @@ namespace detail {
 // to make sound. See tests/test_synth_engine_voice_count.cpp.
 struct VoiceCountProbe {
     static constexpr int kEngineVoices = 1;
+    // Not a real voice (class comment above) and makes no sound, so there is
+    // nothing for an output high-pass to do here -- false is the honest
+    // reading, not a placeholder (Task 5, spec 2026-08-19
+    // voice-knobs-dpth-edge). Required for SynthEngineT<V> to compile at all:
+    // set_edge/process gate their EDGE branch on V::kEdgeUsesOutputHp.
+    static constexpr bool kEdgeUsesOutputHp = false;
 
     // Counts triggers so a test can pin how OFTEN the engine fires, not just
     // how many voices ended up active -- the one observation a real voice
@@ -272,6 +367,7 @@ struct VoiceCountProbe {
     void set_hold(bool /*on*/) {}
     void set_excitation(float /*x*/) {}
     void set_material_character(float /*c*/) {}
+    void set_edge(float /*t*/) {}
 
     bool  active() const { return _active; }
     float env_value() const { return _active ? 1.f : 0.f; }

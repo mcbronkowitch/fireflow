@@ -99,7 +99,15 @@ void Part::init(float sample_rate, uint32_t seed_base,
 // The modulation term alone: what the lanes add to the knob, before the base
 // and before any clamping. target_raw() below adds the base to exactly this,
 // and the LED law displays exactly this (spec 2026-08-16 §3.1) -- one
-// expression, so the display and the audio path cannot drift apart.
+// expression, so the MODULATION CONTRIBUTION cannot drift between display and
+// audio. Narrower than it used to be: since DPTH (spec 2026-08-19
+// voice-knobs-dpth-edge), the TOTAL target can still differ between the two.
+// On a sampler deck, _control_tick's LANE_MOTION write scales
+// _base[LANE_MOTION] by sampler_cfg::kMotionBaseScale (0.5) before adding
+// this same _mod_term(), while target_raw(LANE_MOTION) -- what the LED law
+// reads -- adds this _mod_term() to the unhalved base. Only the modulation
+// term itself is guaranteed to be the one shared expression; the base it
+// gets added to is not.
 float Part::_mod_term(int slot) const {
     float d = (slot == LANE_PITCH) ? 1.f : _depth;
     if (slot == LANE_SOURCE && _engine_id == ENGINE_SAMPLER)
@@ -276,56 +284,54 @@ void Part::_control_tick() {
                                                          : pitch_quantized;
     _tg[LANE_PITCH] = clampf(_pitch_q + _detune_cents * (1.f / 3600.f), 0.f, 1.f);
 
-    // MOTION's Scatter startet auf einem Sampler-Deck bei null, nicht bei der
-    // Lane-Basis 0.5. Dieselbe Schicht und dieselbe Begruendung wie
-    // _flatten_for_sampler und die abgeschaltete PITCH-Lane: die INSTRUMENT-
-    // Schicht entscheidet, was ein Sampler-Deck nicht tut.
+    // MOTION's base reaches a sampler deck scaled, not discarded. Same layer,
+    // same reasoning as _flatten_for_sampler and the disabled PITCH lane: the
+    // INSTRUMENT layer decides what a sampler deck does with a lane every
+    // other engine reads at face value.
     //
-    // Der Grund ist messbar, nicht aesthetisch. Die Basis 0.5 schreibt
-    // niemand -- weder Host noch Instrument -- und SuperModulator::set_range
-    // trifft nur LANE_PITCH, die Texturlanes behalten also _range = 1. Bei
-    // MOD = 0 stand _targets[LANE_MOTION] damit unabaenderlich auf 0.5, und
-    // in SamplerEngine::_spawn_one ist der Positions-Jitter dann
-    // gleichverteilt ueber ein Intervall der Breite GENAU content. Damit ist
-    // (SOURCE*span + _scan_pos + jitter) mod content exakt gleichverteilt,
-    // unabhaengig von beiden Summanden: ORGANIZE und SCAN hatten auf die
-    // Spawn-Position nachweislich null Effekt (gemessen: Mittelwert 12036 /
-    // 11896 / 11951 bei SOURCE 0 / 0.25 / 0.9 ueber content 24000).
+    // The scale is measured, not aesthetic; the measurement lives next to
+    // sampler_cfg::kMotionBaseScale (sampler_config.h), which this block
+    // reads. At base >= 0.5 the position jitter in SamplerEngine::_spawn_one
+    // is uniform over an interval exactly content wide, so (SOURCE*span +
+    // _scan_pos + jitter) mod content is uniform independently of both
+    // summands: ORGANIZE and SCAN had provably zero effect on spawn position
+    // (measured: means 12036 / 11896 / 11951 at SOURCE 0 / 0.25 / 0.9 over
+    // content 24000). That degenerate state used to be reached
+    // unconditionally, because nothing wrote the compiled-in base of 0.5 and
+    // SuperModulator::set_range only ever touches LANE_PITCH -- which is why
+    // the base used to be discarded outright. DPTH now writes that base
+    // directly (Fireflow.cpp), so the same window is reachable on purpose, at
+    // the top of DPTH's travel, instead of unconditionally at rest.
     //
-    // Nur der Basisanteil faellt weg, die Lane-Modulation bleibt: bei MOD > 0
-    // schiebt sie von 0 nach oben, MOD wird also zum MOTION-Regler des Decks
-    // und der Nebel bleibt erreichbar.
+    // Deliberately on _tg, not on _base: COLOR (cmod) and DENS (omod) below
+    // read _mod.lane_output(LANE_MOTION) directly and are unaffected by this
+    // scale.
     //
-    // Bewusst an _tg und nicht an _base: COLOR (cmod) und DENS (omod) unten
-    // lesen _mod.lane_output(LANE_MOTION) direkt und bleiben davon unberuehrt.
+    // For scenario authors: set_target_base(part, LANE_MOTION, …) on a
+    // sampler deck now DOES move the sound -- the reverse of the finding a
+    // 2026-07-22 review recorded here, from before DPTH existed to write it.
     //
-    // Fuer Szenario-Autoren (review 2026-07-22, F-04-Nachtrag): auf einem
-    // Sampler-Deck ist set_target_base(part, LANE_MOTION, …) damit absichtlich
-    // wirkungslos, egal welchen Wert man ihm gibt -- der Regler, der MOTION
-    // hier tatsaechlich bewegt, ist MOD (set_depth), nicht die Lane-Basis. Ein
-    // Szenario, das stattdessen die Basis walkt, rendert an allen Punkten
-    // dieselbe Audio (traf host/render/scenarios/sampler_extremes.json genau
-    // so, bevor es korrigiert wurde).
-    //
-    // Die Lane selbst bleibt bipolar: _mod.lane_output(LANE_MOTION) liefert
-    // [-1, 1] (_range bleibt 1, siehe oben), und clampf(mmod, 0.f, 1.f) unten
-    // kappt die untere Haelfte komplett weg, statt sie -- wie die alte
-    // 0.5+mod-Formel -- symmetrisch um einen Mittelpunkt zu falten. Hoerbar
-    // heisst das: der Scatter PULSIERT (steht die halbe Modulationsperiode
-    // lang exakt bei 0 und schiesst dann in einen positiven Ausschlag),
-    // statt gleichmaessig zu ATMEN. Zwei Alternativen, falls das nicht die
-    // gewuenschte Form ist: fabsf(mmod) fuer eine kontinuierliche
-    // Vollratenversion (beide Halbwellen tragen bei, nie ein Stillstand),
-    // oder eine reskalierte bipolare Abbildung (0.5f + 0.5f*mmod), die wieder
-    // atmet statt zu pulsen. Der harte Clamp hier ist die aktuell gehoerte
-    // und vorlaeufig akzeptierte Fassung (Variante a) -- welche der drei am
-    // Ende bleibt, ist eine Hoerentscheidung, keine, die dieser Kommentar
-    // trifft.
+    // Open listening question, carried over unresolved from the code this
+    // replaced: the lane stays bipolar, and clampf(…, 0.f, 1.f) below still
+    // throws away whatever the sum falls below 0. Call the modulation term
+    // mmod (= _mod_term(LANE_MOTION)). At DPTH 0 (base_eff 0) that is exactly
+    // the old behaviour: mmod's negative half is clamped away entirely, so
+    // the scatter PULSES -- sits at 0 for half the modulation period, then
+    // jumps into a positive excursion -- instead of breathing evenly. Above
+    // DPTH 0 the sum sits off the floor by base_eff, so the clamp bites
+    // progressively less as DPTH rises and the pulse should soften toward a
+    // breathe -- unmeasured where or how far. Two alternatives, if pulsing at
+    // low DPTH is not the wanted shape: fabsf(mmod) for a continuous
+    // full-rate version (both half-waves contribute, never a standstill), or
+    // a rescaled bipolar mapping (0.5f + 0.5f*mmod) that breathes throughout
+    // instead of pulsing. The hard clamp here is still the currently
+    // accepted form (variant a, docs/by-ear-decisions.md) -- which of the
+    // three wins, and whether DPTH changes the answer, is a listening
+    // decision, not one this comment makes.
     if (_engine_id == ENGINE_SAMPLER) {
-        const float mmod = _active[LANE_MOTION]
-            ? _mod.lane_output(LANE_MOTION) * _depth * _tdepth[LANE_MOTION]
-            : 0.f;
-        _tg[LANE_MOTION] = clampf(mmod, 0.f, 1.f);
+        _tg[LANE_MOTION] = clampf(
+            _base[LANE_MOTION] * sampler_cfg::kMotionBaseScale + _mod_term(LANE_MOTION),
+            0.f, 1.f);
     }
 
     // chord layer: refresh the surface every tick (cheap interval apply);

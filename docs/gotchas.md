@@ -60,6 +60,20 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   translation unit links into the binary (observed on small rows with no
   engine change). Only compare bench rows measured in the same build/run,
   never across commits with unrelated code churn.
+- **The `instrument_worst_bbd_dtcm` decision gate crossed 100% of budget from
+  adding one bench row, with zero behaviour change.** Measured same-board
+  A/B (`--profile system --transport usb`, board `seed`), commit
+  `e122e6e` (before Task 10's `inst_edge_synth_bbd` row) vs. `48f8665`
+  (after, the commit the run actually measured -- `2cc9267` only recorded
+  the capture in docs afterward): max% went 98.51/98.56 → 101.07/101.11,
+  checksum identical (`07fb14fc`) both before and after — confirming pure
+  code-layout cost, not an engine regression. This is the icache-layout
+  entry above made concrete: the gate itself, not just an arbitrary row, is
+  now reading over budget as of `2026-08-20`, and it will read differently
+  again the next time anything links into `bench/build/bench.elf` -- never
+  linked into the shell firmware. Before capture:
+  `docs/bench/2026-08-20-e122e6e-system-axi-o2-usb.md`; after capture:
+  `docs/bench/2026-08-20-48f8665-system-axi-o2-usb.md`.
 
 ## Modulation layer (`engine/mod/`)
 
@@ -201,23 +215,42 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   is the point. A new caller that wants "almost none" wants **0**, and should
   measure rather than trust the number's appearance. Full table:
   [`engine-map.md` §9](engine-map.md).
+- **EDGE does nothing in the top third of RESO on a BODY deck.**
+  `Exciter::_recompute_filter` computes and EDGE-trims a cutoff for zone 2
+  (RESO ≥ 0.67, the sputter/ping character) the same as the other two zones,
+  but `Exciter::process`'s zone-2 branch never calls `_lp.process()` — the
+  coefficient sits in `_lp` unread. Deliberate (spec
+  `2026-08-19-voice-knobs-dpth-edge-design.md` §4.6): restoring the filter
+  there would change a chosen character and couple EDGE to level instead of
+  tone, not a bug to fix. `tests/test_body_voice.cpp` pins the inertness so a
+  future "repair" reddens a test instead of shipping silently. Full
+  mechanism: [`engine-map.md` §10](engine-map.md).
+- **A sampler deck reads DPTH's base HALVED, not at face value.** Every other
+  engine reads `LANE_MOTION`'s base exactly as the host writes it;
+  `Part::_control_tick` scales it by `sampler_cfg::kMotionBaseScale = 0.5f`
+  first (`sampler_config.h`), so DPTH 1.0 on a sampler deck is base 0.5 — the
+  same degenerate all-uniform jitter state the base sat at unconditionally
+  before DPTH existed (see [`by-ear-decisions.md`](by-ear-decisions.md) for
+  why that state is degenerate). Comparing a sampler deck's scatter against
+  another engine's DPTH reading by knob position alone is off by 2×.
 
 
 ## Host (VCV)
 
-- **The host never writes the LANE_MOTION or LANE_LEVEL target base.**
-  `Fireflow.cpp` calls `set_target_base` for exactly three lanes:
-  `LANE_SOURCE` (always), `LANE_PITCH` (BBD parts only) and `LANE_SIZE`.
-  LANE_MOTION and LANE_LEVEL sit on `Part`'s compiled-in defaults
-  (`{0.5, 0.5, 0.5, 0.5, 0.8}` in `part.h`), so LANE_MOTION reads a constant
-  0.5 and only the modulation itself moves it. Verified 2026-08-18. An engine
-  control designed against those lane bases is unreachable while playing —
-  SWARM was built this way, and render scenarios do not reveal it because they
-  write lane bases directly. When a design puts an engine parameter on a
-  modulation lane, first check whether the host writes that lane's base;
-  either wire a knob to it in the same round or design against a lane that is
-  actually driven. Do not accept a render as evidence that a control is
-  playable.
+- **The host still never writes the LANE_LEVEL target base — LANE_MOTION was
+  fixed 2026-08-19.** `Fireflow.cpp` calls `set_target_base` for
+  `LANE_SOURCE` (always), `LANE_PITCH` (BBD parts only), `LANE_SIZE`, and now
+  `LANE_MOTION` too (the DPTH knob, on every engine — spec
+  `2026-08-19-voice-knobs-dpth-edge-design.md` §3). LANE_LEVEL alone still
+  sits on `Part`'s compiled-in default (`0.8`, the `_base` array in
+  `part.h`), so an engine control designed against IT is unreachable while
+  playing, for exactly the reason this entry used to apply to LANE_MOTION as
+  well — SWARM was built against an unwritten base, and render scenarios do
+  not reveal the gap because they write lane bases directly. When a design
+  puts an engine parameter on a modulation lane, first check whether the host
+  writes that lane's base; either wire a knob to it in the same round or
+  design against a lane that is actually driven. Do not accept a render as
+  evidence that a control is playable.
 - **`PanelCtl::id` is a DIFFERENT enum in each generated table** — a `ParamId`
   in `kParamCtls`, an `InputId` in `kInputCtls`, an `OutputId` in
   `kOutputCtls`, a `LightId` in `kLightCtls`, all starting at 0. Any lookup
