@@ -49,7 +49,7 @@ TEST_CASE("param table: inventory marker -- P_MODE, P_PACE, P_COUNT") {
     // 62 -> 64 on 2026-08-19: P_EDGE_A/P_EDGE_B were INSERTED after P_FILT_B
     // (spec voice-knobs-dpth-edge, 4.4), not appended, so this case reddened
     // exactly as the paragraph above says it should.
-    // 64 -> 62 on 2026-08-20: P_EDGE_A/P_EDGE_B were REMOVED (spec
+    // 64 -> 62 on 2026-08-20: P_EDGE_A/P_EDGE_B were REMOVED (plan
     // edge-knob-removal, task 2) as part of taking the EDGE knob out of the
     // instrument entirely. A removal is a hard compile error in
     // tests/param_impact_points.h's frozen vectors -- each `float

@@ -45,6 +45,12 @@ public:
     void set_filt(float t);        // FILT, bipolar: a real LP on the output
 
     float damp_hz_for_test() const { return _damp_hz; }
+    // The ring's own damping coefficient, as opposed to the Hz label above:
+    // FeedBank::init() resets it to 1 (bypass) on every init() call, and only
+    // _set_damp_hz() -- when it is not swallowed by its own early-out --
+    // recomputes it back to the value kDampFixedHz maps to at the current
+    // sample rate.
+    float bank_damp_coef_for_test() const { return _bank.damp_coef_for_test(); }
     // DETUNE means SPREAD on a FEED deck, and it gets there as the LANE_SIZE
     // base (host/vcv/src/Fireflow.cpp), not through this setter. Kept as an
     // explicit no-op rather than left unimplemented: Part::set_voice_detune

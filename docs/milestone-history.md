@@ -1252,7 +1252,7 @@ DPTH and EDGE shipped together 2026-08-19 (spec/plan
 engines. A listening pass on EDGE (`docs/by-ear-decisions.md`) found its
 negative half inaudible at neutral (≤0.08 dB at 55 Hz) and its positive
 extreme worth only ~5 dB off a 110 Hz fundamental — the knob did not earn its
-panel space. Spec/plan `2026-08-20-edge-knob-removal` took it back out across
+panel space. Plan `2026-08-20-edge-knob-removal` took it back out across
 six tasks: both VCV panels, `P_EDGE_A`/`P_EDGE_B`, `Instrument::set_voice_edge`
 / `Part::set_voice_edge`, all six per-engine cells including
 `engine/util/onepole_hp.h`, the bench workload built to price its filters, and

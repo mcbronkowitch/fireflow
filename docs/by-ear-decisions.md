@@ -250,10 +250,13 @@ through the EDGE trim; EDGE was withdrawn 2026-08-20 (see "EDGE" below), so
 
 EDGE was removed on 2026-08-20 after a listening pass — at neutral 20 Hz
 ±3 octaves the knob's negative half was inaudible (≤0.08 dB at 55 Hz) and its
-positive extreme took only ~5 dB off a 110 Hz fundamental. Do not
-reintroduce it as a wider-span high-pass without a new design pass; the open
-question was whether EDGE should have been a tilt at the deck output, not
-whether its span was too small.
+positive extreme took only ~5 dB off a 110 Hz fundamental. Both figures are
+the one-pole high-pass (`OnePoleHp`) at that neutral, as SYNTH, WAVE, SAMPLER
+and BBD ran it — measured with `OnePoleHp`'s own math in a scratchpad probe
+(48 kHz, 4 s per point, RMS ratio). Do not reintroduce it as a wider-span
+high-pass without a new design pass; the open question was whether EDGE
+should have been a tilt at the deck output, not whether its span was too
+small.
 
 ## DPTH, on the other five engines
 

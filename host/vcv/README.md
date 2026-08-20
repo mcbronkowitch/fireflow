@@ -188,7 +188,7 @@ used to flatten the spawn-position jitter.
 EDGE was a fourth VOICE knob, a bipolar trim on each engine's own "second
 filter" (spec 2026-08-19 voice-knobs-dpth-edge, §4), shipped alongside DEPTH
 2026-08-19 and withdrawn 2026-08-20 after a listening pass found it did not
-earn its panel space (spec/plan `2026-08-20-edge-knob-removal`; the
+earn its panel space (plan `2026-08-20-edge-knob-removal`; the
 measurements are in the repo root's `docs/by-ear-decisions.md`). The knob
 slot is free space by decision, not re-flowed.
 

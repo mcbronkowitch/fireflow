@@ -175,12 +175,12 @@ constexpr float kRatioMagnetTop = 4.f;
 constexpr float kRatioMagnetExp = 3.f;     // BY EAR, first try (>1 = flatter)
 constexpr float kRatioMax       = 11.f;    // BY EAR, first try
 
-// The one-pole inside the feedback path. This is the NEUTRAL of the EDGE trim
-// below, not a free control: it is half of this engine's anti-aliasing (the
-// other half is the two-sample average in FeedPair), so what the player gets
-// is a bounded trim around this value rather than the whole travel that would
-// turn the aliasing guard off. It held FILT until 2026-08-19 and FILT could
-// not be heard, which is the measured reason it stopped being that knob:
+// The one-pole inside the feedback path. It is a fixed corner, not a free
+// control: it is half of this engine's anti-aliasing (the other half is the
+// two-sample average in FeedPair), and there is no knob left that reaches it
+// -- turning it into player travel would mean turning part of the aliasing
+// guard off. It held FILT until 2026-08-19 and FILT could not be heard,
+// which is the measured reason it stopped being that knob:
 //
 //   - it never touches the carrier. FM brightness is set by the index and the
 //     ratio; damping the feedback perturbation changes how the coupling
@@ -193,7 +193,10 @@ constexpr float kRatioMax       = 11.f;    // BY EAR, first try
 //     -- the upper third of the knob was indistinguishable from wide open.
 //
 // The value is the old centre detent, so the ring's own character is exactly
-// what it was at the neutral knob position.
+// what it was at the neutral knob position. It briefly grew a bounded EDGE
+// trim around this value; that trim was withdrawn 2026-08-20 (see
+// docs/by-ear-decisions.md, "EDGE"), and 3200 Hz is now a fixed corner with
+// no panel reach at all.
 constexpr float kDampFixedHz = 3200.f;     // BY EAR, first try
 
 // FILT: a real low-pass on the deck's OUTPUT (SvfLp, the same filter Synth,

@@ -5,7 +5,6 @@
 #include <vector>
 #include "sampler/sampler_engine.h"
 #include "sampler/sampler_config.h"
-#include "low_energy.h"
 using namespace spky;
 
 static constexpr size_t kFrames = 48000 * 2;   // 2 s of storage

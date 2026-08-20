@@ -1388,8 +1388,29 @@ TEST_CASE("feed G33: FILT is a real low-pass, and its whole travel is live") {
 
 // init() no longer reaches the damping corner through set_edge (EDGE removed
 // 2026-08-20); _set_damp_hz's early-out guard makes a missed call silent, so
-// this pins the corner a fresh engine actually boots with.
+// this pins the corner a fresh engine actually boots with. kDampFixedHz is
+// now bit-exact by construction -- init() passes it straight through with no
+// intervening arithmetic -- so this is ==, not Approx: an Approx would hide
+// a law that merely lands nearby.
 TEST_CASE("feed: a fresh engine boots on kDampFixedHz") {
     FeedEngine e = fresh_feed();
-    CHECK(e.damp_hz_for_test() == doctest::Approx(feed_cfg::kDampFixedHz));
+    CHECK(e.damp_hz_for_test() == feed_cfg::kDampFixedHz);
+
+    // Re-init at a new sample rate must still land on the same fixed corner
+    // AND recompute the ring's actual damping coefficient for it. init()
+    // forces _damp_hz to a value _set_damp_hz's clamp cannot produce before
+    // calling it, specifically so this second call is not swallowed by that
+    // function's own early-out (feed_engine.cpp). damp_hz_for_test() alone
+    // does not falsify a missing force: kDampFixedHz never changes, so the
+    // Hz label reads right either way. FeedBank::init() (called earlier in
+    // FeedEngine::init()) unconditionally resets the coefficient to 1
+    // (bypass); only a non-swallowed _set_damp_hz() call puts it back. So the
+    // coefficient is the observable that actually depends on the force: a
+    // stale one is 1, a live one is well under it and specific to the new
+    // sample rate.
+    e.init(96000.f);
+    CHECK(e.damp_hz_for_test() == feed_cfg::kDampFixedHz);
+    const float expect_coef =
+        1.f - std::exp(-6.2831853f * feed_cfg::kDampFixedHz / 96000.f);
+    CHECK(e.bank_damp_coef_for_test() == doctest::Approx(expect_coef));
 }

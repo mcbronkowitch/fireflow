@@ -30,7 +30,7 @@
 // were inserted after P_FILT_B on 2026-08-19 (spec voice-knobs-dpth-edge,
 // 4.4) so the two bipolar trims sat together in the enum; all four vectors
 // were shifted by hand, with 0.0f -- EDGE's exact neutral on every engine --
-// written into the two new slots. On 2026-08-20 (spec edge-knob-removal,
+// written into the two new slots. On 2026-08-20 (plan edge-knob-removal,
 // task 2) EDGE itself left the instrument and those two ids were removed
 // again, so the vectors are back at their pre-2026-08-19 alignment: P_FILT_B
 // is once more immediately followed by P_FLUXMIX_A in all four. Because the

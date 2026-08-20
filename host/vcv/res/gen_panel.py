@@ -258,7 +258,7 @@ ROW_V1, ROW_V2 = 77.3, 89.4
 # fixed plate would now lie: on a FEED deck that knob is SPREAD.
 #
 # The DAMP row (EDGE's words, spec 2026-08-19 voice-knobs-dpth-edge, 4.3) was
-# removed 2026-08-20 (spec edge-knob-removal) along with the DAMP_A/DAMP_B
+# removed 2026-08-20 (plan edge-knob-removal) along with the DAMP_A/DAMP_B
 # knobs themselves -- measured and rejected, it did not earn its panel space.
 DYNAMIC_CAPTIONS = [
     ("MELODY",   "ENGINE",   ("VARY", "SCAN", "VARY", "VARY", "VARY", "VARY")),
@@ -622,7 +622,7 @@ APPENDED_PANEL_PARAMS = [
     # feedback amount or FM index depending on the engine (design §3). The
     # enum stays DEPTH because that is what it is in the engine.
     #
-    # DAMP (the EDGE knob, ROW_V2 below DPTH) was removed 2026-08-20 (spec
+    # DAMP (the EDGE knob, ROW_V2 below DPTH) was removed 2026-08-20 (plan
     # edge-knob-removal): measured and rejected, it did not earn its panel
     # space. VOICE_X[3]/ROW_V2 stays reserved and deliberately empty --
     # freed slots are not regrouped (see APPENDED_PANEL_PARAMS's PACE note

@@ -6,7 +6,6 @@
 #include "fx/flux.h"
 #include "mod/rng.h"
 #include "util/svf_bp.h"
-#include "low_energy.h"
 #include <algorithm>
 #include <chrono>
 #include <vector>
