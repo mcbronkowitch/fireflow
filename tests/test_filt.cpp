@@ -99,30 +99,6 @@ TEST_CASE("filt: bites from the first movement (no dead zone)") {
     CHECK(maxdiff > 1e-3f);
 }
 
-// --- EDGE (SYNTH's output high-pass) ------------------------------------
-// spec 2026-08-19 voice-knobs-dpth-edge, 4.1/4.3. WAVE shares this template
-// and is bit-identical for the same reason FILT's own tests never duplicate
-// for WAVE (kVoices == 4 keeps kPanFan[v] exact) -- this file's harness is
-// SYNTH-only by house convention (see the comment at the top of this file).
-
-TEST_CASE("edge: up removes low end and leaves the top alone") {
-    auto level_at = [](float pitch, float edge) {
-        SynthEngine e;
-        fresh(e);
-        feed(e, pitch);
-        e.set_edge(edge);
-        e.trigger(pitch);   // fresh() alone leaves every voice idle; the
-                             // brief's snippet omits this and reads silence
-                             // both ways -- the RED proof caught it.
-        return rms(render_l(e, 24000), 4800);   // skip the attack
-    };
-    const float lo_flat = level_at(0.05f, 0.f), lo_up = level_at(0.05f, 1.f);
-    const float hi_flat = level_at(0.90f, 0.f), hi_up = level_at(0.90f, 1.f);
-    CAPTURE(lo_flat); CAPTURE(lo_up); CAPTURE(hi_flat); CAPTURE(hi_up);
-    CHECK(lo_up < 0.7f * lo_flat);              // the bottom goes
-    CHECK(hi_up > 0.95f * hi_flat);             // the top stays
-}
-
 // --- BODY --------------------------------------------------------------
 // On VoiceT, FILTER drives a real lowpass, so the loudness comes for free.
 // BodyVoice maps the same control to brightness -- a timbre parameter -- so

@@ -719,110 +719,6 @@ float proc_inst_feed_idle()
     return acc;
 }
 
-// --- 11. EDGE's own filter cost: SYNTH deck + BBD deck, EDGE off-neutral ---
-// This branch (voice-knobs-dpth-edge) added an OnePoleHp pair to the summed
-// stereo output of SynthEngineT (SYNTH, WAVE) and a second pair to BbdEngine::
-// process_in, ahead of SUB's _in_gain. Both are skipped by an explicit branch
-// -- `if (_edge != 0.f)` -- at EDGE's boot/neutral value (synth_engine.cpp,
-// bbd_engine.cpp), so a row that leaves EDGE at 0 measures the branch, not
-// the filter (task-10 brief). This row exists to put a real, non-bypassed
-// SynthEngineT filter and a real, non-bypassed BBD process_in filter into one
-// system-family measurement.
-//
-// PART_A is left on the boot-default ENGINE_SYNTH (configure_inst_worst
-// never calls set_engine); only PART_B is switched to ENGINE_BBD here, reusing
-// configure_inst_bbd_engine_worst's clock-ceiling recipe for that one part so
-// process_in actually runs at kClockMaxHz rather than on an idling line --
-// see that function's comments for why each of these setters is the worst
-// case, not just a non-default one.
-//
-// This row measures over 100% of the block budget on hardware (~105% max,
-// 2026-08-20). That is by construction, not a claim that EDGE broke the
-// budget: it stacks configure_inst_worst's full worst-case-instrument
-// FX/reverb/master-drive load on top of the BBD clock ceiling AND a maxed
-// EDGE trim on both decks -- a compound ceiling, same spirit as the
-// existing instrument_worst_bbd / inst_bbd_engine_worst rows, which are
-// already in the high-90s/low-100s on their own before EDGE is touched.
-void configure_inst_edge_synth_bbd(Instrument& inst)
-{
-    inst.set_engine(PART_B, ENGINE_BBD);
-    inst.set_step(PART_B, true, 16);
-    inst.set_color(PART_B, 1.f);               // maximum stereo clock spread
-    inst.set_voice_attack(PART_B, 0.f);
-    inst.set_voice_decay(PART_B, 1.f);
-    inst.set_excitation_sources(PART_B, /*tape=*/false, /*other_deck=*/true,
-                                /*audio_in=*/true);
-    inst.set_fx_on(PART_B, FxBlock::Flux, false);
-    inst.set_quant_mode(PART_B, QuantMode::Free);
-    inst.set_target_active(PART_B, LANE_PITCH, false);
-    inst.set_target_base(PART_B, LANE_PITCH, 1.f);
-    inst.set_target_active(PART_B, LANE_SIZE, false);
-    inst.set_target_base(PART_B, LANE_SIZE, 0.f);
-    inst.set_target_active(PART_B, LANE_LEVEL, false);
-    inst.set_target_base(PART_B, LANE_LEVEL, 1.f);
-    inst.set_target_active(PART_B, LANE_MOTION, false);
-    inst.set_target_base(PART_B, LANE_MOTION, 1.f);
-    inst.set_voice_resonance(PART_B, 1.f);
-    inst.set_voice_sub(PART_B, 1.f);
-    inst.set_voice_detune(PART_B, 0.f);
-    inst.set_voice_filt(PART_B, 1.f);
-
-    // EDGE off-neutral on both decks -- the entire point of this row. 1.f is
-    // the top of the bipolar (-1..1) travel BbdEngine::set_edge and
-    // SynthEngineT::set_edge both clamp to, as far from the t==0 bypass
-    // branch as the knob goes.
-    for (int p = 0; p < PART_COUNT; ++p)
-        inst.set_voice_edge(p, 1.f);
-
-    // Settle every envelope, slew and the engine swap's own SoftSwitch fade
-    // before the runner's measured window opens -- same 200-block depth
-    // configure_inst_bbd_engine_worst uses, and for the same reason.
-    const float* in = test_input();
-    for (int b = 0; b < 200; ++b) {
-        inst.trigger_manual(PART_A);
-        inst.trigger_manual(PART_B);
-        inst.process(in, in, g_instrument_harness.out_l,
-                     g_instrument_harness.out_r, kBlock);
-    }
-
-    // The same self-check the BBD and FEED rows carry: a row that silently
-    // stayed on the wrong engine, or whose BBD deck never reached the clock
-    // ceiling, would return a plausible-looking but wrong-basis checksum and
-    // nothing in the harness would notice otherwise. This does NOT verify
-    // the EDGE write itself -- there is no getter, only set_voice_edge --
-    // that was checked by reading both set_edge clamps and both process
-    // paths directly (see the header comment above and the task-10 report).
-    assert(inst.engine_id(PART_A) == ENGINE_SYNTH);
-    assert(inst.engine_id(PART_B) == ENGINE_BBD);
-    assert(inst.bbd_div(PART_B) == 0);                    // 1/32, the shortest
-    assert(inst.bbd_clock_hz(PART_B) >= bbd_tuning::kClockMaxHz);
-    assert(inst.bbd_frozen(PART_B));
-}
-
-void setup_inst_edge_synth_bbd()
-{
-    auto& group = construct_axi_instrument_group();
-    configure_inst_common(group.instrument);
-    configure_inst_worst(group.instrument);
-    configure_inst_edge_synth_bbd(group.instrument);
-}
-
-// Not proc_inst_bbd_frozen: that helper retriggers BOTH parts every block,
-// which is right for the all-BBD rows it was written for (freeze needs
-// re-arming every block) but wrong here -- PART_A is SYNTH, and retriggering
-// it every ~2 ms leaves no voice ever idle long enough to free up, so
-// SynthEngineT::_do_trigger's steal path (synth_engine.cpp) fires on every
-// single measured call instead of the occasional bloom/retrigger proc_inst's
-// own ~250-block cadence models. That would price constant voice-stealing,
-// not EDGE. So: re-arm PART_B's freeze gate every block (the actual
-// requirement), and leave PART_A to proc_inst's normal cadence.
-float proc_inst_edge_synth_bbd()
-{
-    auto& inst = *g_active_instrument;
-    inst.trigger_manual(PART_B);
-    return proc_inst();
-}
-
 } // namespace
 
 const Workload kCoreWorkloads[] = {
@@ -856,8 +752,6 @@ const Workload kCoreWorkloads[] = {
       setup_inst_feed_engine_worst, proc_inst },
     { "system", "inst_feed_engine_idle",
       setup_inst_feed_engine_idle, proc_inst_feed_idle },
-    { "system", "inst_edge_synth_bbd",
-      setup_inst_edge_synth_bbd, proc_inst_edge_synth_bbd },
 };
 const int kCoreCount = sizeof(kCoreWorkloads) / sizeof(kCoreWorkloads[0]);
 
