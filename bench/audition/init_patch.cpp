@@ -69,9 +69,16 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
         inst.set_voice_sub(deck, part(SUB_A, deck));
         // Quadratic taper: the first ~20 ct is where the fine beating lives,
         // and a linear map would squeeze it into a fifth of the travel now
-        // that the ceiling is 105 ct. Mirrors Fireflow.cpp pushParams.
-        const float detKnob = part(DETUNE_A, deck);
-        inst.set_voice_detune(deck, detKnob * detKnob);
+        // that the ceiling is 105 ct. Mirrors Fireflow.cpp pushParams --
+        // including its FEED gate: on a FEED deck this knob is SPREAD and
+        // reaches the engine as the LANE_SIZE base below, raw rather than
+        // squared, so pushing it as detune as well would be a second, wrong
+        // job for the same number.
+        if(engine != spky::ENGINE_FEED)
+        {
+            const float detKnob = part(DETUNE_A, deck);
+            inst.set_voice_detune(deck, detKnob * detKnob);
+        }
 
         inst.set_flux_mix(deck, part(FLUX_A, deck));
         // TIME's knob value IS the raw division index now (task 6, spec
@@ -122,10 +129,26 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
             deck, spky::LANE_SOURCE, part(SOURCE_A, deck));
         if(sampler)
             inst.sampler_scan(deck, part(MELODY_A, deck));
+        // GENE SIZE rides the lane base in the sampler, SPREAD in FEED, and
+        // the else branch parks it at Part's compiled-in 0.5 everywhere else.
+        // Mirrors Fireflow.cpp pushParams' samplerPart/feedPart ternary. The
+        // FEED arm was missing here until 2026-08-21 and only became audible
+        // with FM-INIT.vcvm, the first factory patch to boot a FEED deck: this
+        // function was writing 0.5 where the host writes DETUNE_A.
+        const bool feed = engine == spky::ENGINE_FEED;
         inst.set_target_base(
             deck,
             spky::LANE_SIZE,
-            sampler ? part(SUB_A, deck) : 0.5f);
+            sampler ? part(SUB_A, deck)
+                    : feed ? part(DETUNE_A, deck) : 0.5f);
+        // DPTH is the LANE_MOTION base on every engine (spec 2026-08-19
+        // voice-knobs-dpth-edge) -- FM index on FEED, width+drift on
+        // SYNTH/WAVE, drift alone on BODY, scatter on the sampler, feedback
+        // amount on the BBD. Same omission and the same date: while every
+        // factory patch booted DPTH at Part's compiled-in 0.5, not writing it
+        // and writing it were the same thing.
+        inst.set_target_base(
+            deck, spky::LANE_MOTION, value(deck ? DEPTH_B : DEPTH_A));
         inst.set_target_active(deck, spky::LANE_PITCH, !sampler);
 
         // GRIT is one bipolar knob: sign is the mode, magnitude the mix.

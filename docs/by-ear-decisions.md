@@ -296,11 +296,22 @@ on the other five engines, none of them confirmed by ear yet (spec §9).
   word) and COUPLE's `FREE|GRID`, at nine characters the longest label on the
   instrument. Do not "shorten for the hardware" — the footprint was measured
   and `res/test_hw_panel.py` guards it.
-- **The factory patch is FF_hw_Init.vcvm (2026-08-09), not drone.vcvm.**
-  Bastian replaced it wholesale after judging the old one unusable: 54 of 68
-  values moved, deck A boots WAVE against SYNTH on deck B (no BODY deck any
-  more), and both decks start inside the compressor zone. Comments and specs
-  describing the drone.vcvm boot sound describe a closed lineage.
+- **The factory patch is FM-INIT.vcvm (2026-08-21).** The third wholesale
+  replacement (drone.vcvm → FF_hw_Init.vcvm → this one), played and saved from
+  a 2.21.5 module: 42 of 71 values moved. Deck A boots **FEED** against
+  **WAVE** on deck B — no SYNTH, BODY or SAMPLER deck at boot for the first
+  time. Four things are new in kind and are not to be "fixed" back:
+  **deck B boots in step mode** (`STEPS_B == 8`), **TEMPO is off its floor**
+  (79.47 BPM, so every clocked thing runs faster than in any earlier patch),
+  **DRIFT is parked at 0**, and **PACE sits below ×1** (0.168). Both decks sit
+  at the top of LVL/COMP, i.e. at the taper's maximum compressor amount (0.7).
+  SCALE is Minor pentatonic, the first patch outside the modes group.
+  Comments and specs describing the FF_hw_Init.vcvm or drone.vcvm boot sound
+  describe closed lineages.
+- **DPTH no longer boots neutral.** The knob shipped (2026-08-19) with a rule
+  that both decks start at `feed_cfg::kDepthBase` so an existing patch could
+  not change; this patch dials deck A to 0.365. `res/test_panel.py` keeps the
+  deck-B-on-the-constant half of that guard and pins deck A's departure.
 - **DETUNE has per-deck init values matching each deck's booted engine** —
   SYNTH and BODY read the same knob through different scales that only agree
   at full deflection, so there is no single correct number (see the

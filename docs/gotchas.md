@@ -263,12 +263,14 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   default forever after.)
 - **Merging or remapping controls silently changes the factory sound unless
   the stored init value is CONVERTED.** The init snapshot (`INIT_DEFAULTS`,
-  from FF_hw_Init.vcvm via `gen_panel.py`) is a list of bare numbers keyed by
+  from FM-INIT.vcvm via `gen_panel.py`) is a list of bare numbers keyed by
   name; nothing ties a number to the semantics of the control that reads it.
   This bit **four times** in the 2026-08-09 control-reduction branch alone:
   SONG swallowed FORM (init 0 now meant a different rung), STEPS swallowed the
   STEP pad (the factory patch silently booted *in* step mode — found two tasks
-  later), FLUXRATE became a raw 12-detent index (a stale normalised float
+  later; since FM-INIT.vcvm, 2026-08-21, deck B boots stepped **on purpose**,
+  `STEPS_B == 8` — do not "repair" that back to 0),
+  FLUXRATE became a raw 12-detent index (a stale normalised float
   would have rounded to index 0), and for COUPLE the *plan text itself*
   prescribed the wrong value. Before deleting or remapping any control:
   `git show <pre-branch-sha>:host/vcv/src/init_patch.hpp | grep -i <NAME>`,

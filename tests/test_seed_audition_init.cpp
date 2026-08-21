@@ -27,39 +27,42 @@ TEST_CASE("Seed audition applies the VCV init engine and arranger state")
     for(int block = 0; block < 8; ++block)
         inst.process(in, in, out_l, out_r, 96);
 
-    CHECK(inst.engine_id(spky::PART_A) == spky::ENGINE_WAVE);
-    CHECK(inst.engine_id(spky::PART_B) == spky::ENGINE_SYNTH);
+    CHECK(inst.engine_id(spky::PART_A) == spky::ENGINE_FEED);
+    CHECK(inst.engine_id(spky::PART_B) == spky::ENGINE_WAVE);
 
     // SONG_A/B's init default is a ladder rung index (spec 2026-08-09
-    // hw-control-reduction task 3), and the factory patch asks for rung 0 on
-    // deck A and rung 13 on deck B. Both decks boot STEPS_A/B == 0, i.e. FLOW.
+    // hw-control-reduction task 3), and FM-INIT.vcvm asks for rung 0 on both
+    // decks. The two decks reach it by different routes, which is new: deck A
+    // boots STEPS_A == 0 (FLOW), deck B boots STEPS_B == 8 (step mode, eight
+    // steps) -- the first factory patch that starts a deck stepped on purpose.
     //
-    // Before spec 2026-08-13 flow-melody-engine task 8, that meant NEITHER
-    // rung landed at boot: ModLane::set_form/set_song only raise
+    // Before spec 2026-08-13 flow-melody-engine task 8, a FLOW deck's rung did
+    // not land at boot at all: ModLane::set_form/set_song only raise
     // pending_form/pending_song (lane.cpp), and the selection changes in
     // _apply_pending_song_work(), reached only from _wrap_events() -- which
     // used to return immediately for a melodic lane outside step mode. Task 8
     // wires Part::init/_engine_swap to push set_flow_melody(true) into the
-    // PITCH lane for every note engine (both decks here are WAVE/SYNTH), and
-    // _wrap_events() no longer early-returns once the FLOW melody engine is
-    // on -- it is the mechanism that walks the phrase slots. So the pending
-    // rung now lands on the first control tick, same as it would in STEP.
+    // PITCH lane for every note engine (FEED is one: part.cpp derives the
+    // note-deck flag as "not SAMPLER and not BBD"), and _wrap_events() no
+    // longer early-returns once the FLOW melody engine is on. So deck A's
+    // pending rung lands on the first control tick, and deck B's lands the way
+    // it always did in STEP.
     //
-    // Rung 0 is {Principle::TwoMotif, SongMode::Off} and rung 13 is
-    // {Principle::Ostinato, SongMode::Mirror} (song_ladder.h's kLadder).
-    // Pinned as the ladder's rungs, not the ladder's index, for the same
-    // reason the ladder test itself does not pin order -- see song_ladder.h.
+    // Rung 0 is {Principle::TwoMotif, SongMode::Off} (song_ladder.h's
+    // kLadder). Pinned as the ladder's rung, not the ladder's index, for the
+    // same reason the ladder test itself does not pin order -- see
+    // song_ladder.h.
     //
     // The pending-until-wrap semantics have their own real coverage in
     // tests/test_song_lane.cpp, which drives set_step(true, ..) and watches
     // the selection land; SAMPLER/BBD decks keep the old parked behaviour,
     // covered by tests/test_flow_melody_wiring.cpp.
     CHECK(spkyvcv::initParamDefault(spkyvcv::STEPS_A) == doctest::Approx(0.f));
-    CHECK(spkyvcv::initParamDefault(spkyvcv::STEPS_B) == doctest::Approx(0.f));
+    CHECK(spkyvcv::initParamDefault(spkyvcv::STEPS_B) == doctest::Approx(8.f));
     CHECK(inst.form(spky::PART_A) == static_cast<int>(spky::Principle::TwoMotif));
-    CHECK(inst.form(spky::PART_B) == static_cast<int>(spky::Principle::Ostinato));
+    CHECK(inst.form(spky::PART_B) == static_cast<int>(spky::Principle::TwoMotif));
     CHECK(inst.song(spky::PART_A) == static_cast<int>(spky::SongMode::Off));
-    CHECK(inst.song(spky::PART_B) == static_cast<int>(spky::SongMode::Mirror));
+    CHECK(inst.song(spky::PART_B) == static_cast<int>(spky::SongMode::Off));
 }
 
 
@@ -78,28 +81,30 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
                   "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 71 -- "
                   "if the panel inventory genuinely changed, update this "
                   "literal to match");
-    // FF_hw_Init.vcvm (2026-08-09) pairs WAVE (2) on deck A with SYNTH (0) on
-    // deck B, where the drone.vcvm lineage before it paired SYNTH with BODY.
-    // Both ENG pins must track the snapshot exactly, because
+    // FM-INIT.vcvm (2026-08-21) pairs FEED (5) on deck A with WAVE (2) on
+    // deck B, where the FF_hw_Init.vcvm lineage before it paired WAVE with
+    // SYNTH. Both ENG pins must track the snapshot exactly, because
     // bench/audition/init_patch.cpp dispatches off this same table -- and a
     // number here that the dispatcher has no arm for boots as SAMPLER in
     // silence (see "boots the same engines the VCV host does" below).
     CHECK(spkyvcv::initParamDefault(spkyvcv::ENGINE_A)
-          == doctest::Approx(2.f));
+          == doctest::Approx(5.f));
     CHECK(spkyvcv::initParamDefault(spkyvcv::ENGINE_B)
-          == doctest::Approx(0.f));
-    // Bottom of the tempo range: bpm == 40 + 0 * 200 == 40.
+          == doctest::Approx(2.f));
+    // Off the bottom of the tempo range for the first time: bpm == 40 +
+    // 0.197333470 * 200 == 79.4667. Everything clocked moves with it, which
+    // is why the flux delay pin in the golden test below changed too.
     CHECK(spkyvcv::initParamDefault(spkyvcv::TEMPO)
-          == doctest::Approx(0.f));
-    // DETUNE is a plain per-deck knob position again. It stopped needing a
-    // derivation the moment no deck booted BODY: the old value here was
-    // solved as sqrt(24 / 140) to hold BODY's 24 ct through its private
-    // kDetuneScale, and with SYNTH on deck B there is no private scale left
-    // to solve against. The engine-side consequence (0.456^2 * 105 == 21.83
-    // ct reaching the oscillators) is pinned in the golden test below; this
-    // is only the raw snapshot value.
+          == doctest::Approx(0.197333470f));
+    // DETUNE is a plain per-deck knob position on deck B (its engine-side
+    // consequence, 0.456^2 * 105 == 21.83 ct, is pinned in the golden test
+    // below). On deck A it is not a detune at all: FEED re-points the same
+    // knob to the LANE_SIZE base as SPREAD, and both the host and the
+    // audition dispatcher gate set_voice_detune off there.
     CHECK(spkyvcv::initParamDefault(spkyvcv::DETUNE_B)
           == doctest::Approx(0.455999434f));
+    CHECK(spkyvcv::initParamDefault(spkyvcv::DETUNE_A)
+          == doctest::Approx(0.f));
     // LINK's default is the branch's one load-bearing product invariant:
     // centre (0) is the bit-identical path (spec 2026-07-28 flux-link).
     CHECK(spkyvcv::initParamDefault(spkyvcv::LINK_A) == doctest::Approx(0.f));
@@ -147,17 +152,17 @@ TEST_CASE("Seed audition boots the same engines the VCV host does")
     for(int block = 0; block < 8; ++block)
         inst.process(in, in, out_l, out_r, 96);
 
-    // The snapshot puts deck A on WAVE and deck B on SYNTH (FF_hw_Init.vcvm,
-    // 2026-08-09). The previous one paired SYNTH with BODY.
+    // The snapshot puts deck A on FEED and deck B on WAVE (FM-INIT.vcvm,
+    // 2026-08-21). The previous one paired WAVE with SYNTH.
     //
     // What this case is really guarding has not changed with the patch: every
     // engine the snapshot can name needs its own explicit arm in the
     // dispatcher, and anything unrecognised falls through to SAMPLER. Before
     // 2026-07-31 there was no BODY arm and deck B silently booted as SAMPLER
-    // -- audible on the Seed, invisible in every test. WAVE is arm 2 and has
+    // -- audible on the Seed, invisible in every test. FEED is arm 5 and has
     // been since it was added; this is the first factory patch to use it.
-    CHECK(inst.engine_id(spky::PART_A) == spky::ENGINE_WAVE);
-    CHECK(inst.engine_id(spky::PART_B) == spky::ENGINE_SYNTH);
+    CHECK(inst.engine_id(spky::PART_A) == spky::ENGINE_FEED);
+    CHECK(inst.engine_id(spky::PART_B) == spky::ENGINE_WAVE);
 }
 
 TEST_CASE("Seed audition dispatcher routes generated STAGES by generated engine")
@@ -171,6 +176,13 @@ TEST_CASE("Seed audition dispatcher routes generated STAGES by generated engine"
     snapshot[spkyvcv::STAGES_B] = 0.9375f;
     snapshot[spkyvcv::TUNE_A] = 0.5f;
     snapshot[spkyvcv::TUNE_B] = 0.5f;
+    // Both decks in FLOW is this case's premise, not an accident of the
+    // snapshot: FM-INIT.vcvm boots deck B stepped (STEPS_B == 8), and
+    // part.cpp's _pitch_q rule quantizes a stepped deck's pitch to the scale
+    // grid, which is exactly the continuity the two pins below measure.
+    // Overridden here rather than worked around, so the case keeps testing
+    // the dispatcher and not the step rule.
+    snapshot[spkyvcv::STEPS_B] = 0.f;
 
     spky::Instrument inst;
     inst.init(48000.f);
@@ -345,83 +357,84 @@ TEST_CASE("Seed audition's factory init pins every engine-side observable "
     for (int block = 0; block < 2500; ++block)
         inst.process(in, in, out_l, out_r, 96);
 
-    // --- per-deck grit mode and mix: GRIT_A == 0.173493922, positive and ---
-    // past the 0.03 dead zone, so deck A boots with DRV audible:
-    // (0.173493922 - 0.03) / (1 - 0.03) == 0.147932. Deck B is at 0.0, inside
-    // the dead zone -- present but silent. Mode is Drive on both because the
-    // mode follows the SIGN, and neither knob is negative.
+    // --- per-deck grit mode and mix: both GRIT knobs are at 0.0 in this ---
+    // patch, i.e. inside the 0.03 dead zone -- present but silent on both
+    // decks, where the previous factory patch had DRV audible on deck A at
+    // mix 0.147932. Mode is Drive on both because the mode follows the SIGN
+    // and neither knob is negative; that is the value a zero knob reports,
+    // not a statement about audible drive.
     CHECK(static_cast<int>(inst.grit_mode_for_test(spky::PART_A))
           == static_cast<int>(spky::GritMode::Drive));
     CHECK(static_cast<int>(inst.grit_mode_for_test(spky::PART_B))
           == static_cast<int>(spky::GritMode::Drive));
-    CHECK(inst.grit_mix_for_test(spky::PART_A)
-          == doctest::Approx(0.147932f).epsilon(0.0001));
+    CHECK(inst.grit_mix_for_test(spky::PART_A) == doctest::Approx(0.f));
     CHECK(inst.grit_mix_for_test(spky::PART_B) == doctest::Approx(0.f));
 
     // --- flux delay target: the tape echo time TIME/FLUXRATE resolves to. ---
-    // TEMPO == 0.0 is the bottom of the range, so bpm == 40 + 0 * 200 == 40.
+    // TEMPO == 0.197333470, so bpm == 40 + 0.197333470 * 200 == 79.46669.
     // Both decks sit at FLUXRATE index 1, which is kDivisions[5 + 1] == "1/4."
-    // at cpb 2/3: hz == (40/60) * (2/3) == 4/9, delay == 9/4 == 2.25 s exactly.
-    // Well inside the 5.46 s the 262144-sample tape holds at 48 kHz, so the
-    // clamp in update_time_target never bites and this is the raw figure.
+    // at cpb 2/3: hz == (bpm/60) * (2/3) == bpm/90, delay == 90/bpm ==
+    // 1.132549 s. Well inside the 5.46 s the 262144-sample tape holds at
+    // 48 kHz, so the clamp in update_time_target never bites and this is the
+    // raw figure. It halved against the previous patch's 2.25 s purely
+    // because that patch sat on the tempo floor -- the division did not move.
     CHECK(inst.flux_delay_target_for_test(spky::PART_A)
-          == doctest::Approx(2.25f).epsilon(0.001));
+          == doctest::Approx(1.132549f).epsilon(0.001));
     CHECK(inst.flux_delay_target_for_test(spky::PART_B)
-          == doctest::Approx(2.25f).epsilon(0.001));
+          == doctest::Approx(1.132549f).epsilon(0.001));
 
     // --- form and song per deck: the snapshot asks for ladder rung 0 on ---
-    // deck A and rung 13 on deck B, and (since spec 2026-08-13
+    // BOTH decks now, and both land at boot -- deck B through the ordinary
+    // STEP path (STEPS_B == 8), deck A because spec 2026-08-13
     // flow-melody-engine task 8 wires set_flow_melody(true) into every note
-    // engine's PITCH lane) both now land at boot: _wrap_events() no longer
-    // early-returns for a melodic lane outside step mode once the FLOW
-    // melody engine is on, so the pending rung applies on the first control
-    // tick. See the long note in "applies the VCV init engine and arranger
-    // state" above for the full mechanism.
+    // engine's PITCH lane, so _wrap_events() no longer early-returns for a
+    // melodic lane outside step mode. See the long note in "applies the VCV
+    // init engine and arranger state" above for the full mechanism.
     //
-    // Pinned as the ladder's rungs (song_ladder.h's kLadder), not literals
-    // derived from SongState's boot default: rung 0 is {TwoMotif, Off},
-    // rung 13 is {Ostinato, Mirror}.
+    // Pinned as the ladder's rung (song_ladder.h's kLadder), not a literal
+    // derived from SongState's boot default: rung 0 is {TwoMotif, Off}.
     CHECK(inst.form(spky::PART_A) == static_cast<int>(spky::Principle::TwoMotif));
-    CHECK(inst.form(spky::PART_B) == static_cast<int>(spky::Principle::Ostinato));
+    CHECK(inst.form(spky::PART_B) == static_cast<int>(spky::Principle::TwoMotif));
     CHECK(inst.song(spky::PART_A) == static_cast<int>(spky::SongMode::Off));
-    CHECK(inst.song(spky::PART_B) == static_cast<int>(spky::SongMode::Mirror));
+    CHECK(inst.song(spky::PART_B) == static_cast<int>(spky::SongMode::Off));
 
-    // --- per-part level and compressor amount: both decks boot INSIDE ---
-    // the comp zone now, which no earlier factory patch did. Level clamps to
-    // unity for anything at or above kLvlCompSplit (0.6), and the amount is
-    // kCompTop * ((knob - 0.6) / 0.4) ^ kCompShape:
-    //   deck A  0.761333168 -> 0.7 * (0.403333) ^ 0.6 == 0.405972
-    //   deck B  0.848000109 -> 0.7 * (0.620000) ^ 0.6 == 0.525452
-    // i.e. roughly +7.1 dB and +10.9 dB of make-up at boot. These two numbers
-    // are only meaningful together with kCompShape: reshape the taper and the
-    // same knob positions give different amounts, which is exactly what this
-    // pin is here to force somebody to notice.
+    // --- per-part level and compressor amount: both decks boot at the TOP ---
+    // of LVL/COMP, deeper into the comp zone than any earlier patch. Level
+    // clamps to unity for anything at or above kLvlCompSplit (0.6), and the
+    // amount is kCompTop * ((knob - 0.6) / 0.4) ^ kCompShape, which at knob
+    // 1.0 is kCompTop * 1 ^ 0.6 == 0.7 exactly on both decks -- the maximum
+    // the taper offers. These numbers are only meaningful together with
+    // kCompShape: reshape the taper and the same knob positions give
+    // different amounts, which is exactly what this pin is here to force
+    // somebody to notice. (At the top of travel the shape drops out, so this
+    // pin no longer catches a kCompShape change on its own -- kCompTop and
+    // kLvlCompSplit still move it.)
     CHECK(inst.part_level_for_test(spky::PART_A) == doctest::Approx(1.f));
     CHECK(inst.part_level_for_test(spky::PART_B) == doctest::Approx(1.f));
     CHECK(inst.comp_amount_for_test(spky::PART_A)
-          == doctest::Approx(0.405972f).epsilon(0.0001));
+          == doctest::Approx(0.7f).epsilon(0.0001));
     CHECK(inst.comp_amount_for_test(spky::PART_B)
-          == doctest::Approx(0.525452f).epsilon(0.0001));
+          == doctest::Approx(0.7f).epsilon(0.0001));
 
-    // --- applied detune cents per deck: deck A boots WAVE, deck B SYNTH. ---
-    // Both are SynthEngineT<VoiceT<..>>, so both read the same law and no
-    // engine-private scale sits in between (the kDetuneScale caveat that used
-    // to belong here was BODY's, and no deck boots BODY any more).
-    //
-    // The host pushes DETUNE SQUARED (Fireflow.cpp: set_voice_detune(knob *
-    // knob), a quadratic taper so the fine beating near zero is not squeezed
-    // into a fifth of the travel at a 105 ct ceiling), then set_detune
-    // multiplies by kDetuneCeilCt:
-    //   deck A  0.377333373^2 * 105 == 14.9500 ct
+    // --- applied detune cents per deck: deck A boots FEED, deck B WAVE. ---
+    // Deck B is SynthEngineT<VoiceT<..>>: the host pushes DETUNE SQUARED
+    // (Fireflow.cpp: set_voice_detune(knob * knob), a quadratic taper so the
+    // fine beating near zero is not squeezed into a fifth of the travel at a
+    // 105 ct ceiling), then set_detune multiplies by kDetuneCeilCt:
     //   deck B  0.455999434^2 * 105 == 21.8332 ct
+    // Deck A gets no detune push at all. On a FEED deck the DETUNE knob is
+    // SPREAD and reaches the engine as the LANE_SIZE base instead, so both
+    // Fireflow.cpp and bench/audition/init_patch.cpp gate set_voice_detune
+    // off there; 0 is what an unpushed deck reports.
     CHECK(inst.applied_detune_ct_for_test(spky::PART_A)
-          == doctest::Approx(14.9500f).epsilon(0.0001));   // deck A (WAVE)
+          == doctest::Approx(0.f));                        // deck A (FEED)
     CHECK(inst.applied_detune_ct_for_test(spky::PART_B)
-          == doctest::Approx(21.8332f).epsilon(0.0001));   // deck B (SYNTH)
+          == doctest::Approx(21.8332f).epsilon(0.0001));   // deck B (WAVE)
 
-    // --- scale: SCALE == 3 is SCALE_LYDIAN, mask 0x0AD5 (0 2 4 6 7 9 11). ---
-    // The mask is the literal, not SCALE_MASKS[SCALE_LYDIAN]: reading the same
-    // table set_scale() reads would let a retuned mask move both sides at once.
+    // --- scale: SCALE == 6 is SCALE_MIN_PENT, mask 0x04A9 (0 3 5 7 10). ---
+    // The mask is the literal, not SCALE_MASKS[SCALE_MIN_PENT]: reading the
+    // same table set_scale() reads would let a retuned mask move both sides at
+    // once. This is the first factory patch outside the modes group.
     //
     // This pin exists because SCALE is the control that already got away. Its
     // configParam hard-coded spky::SCALE_LYDIAN instead of the snapshot value,
@@ -429,8 +442,8 @@ TEST_CASE("Seed audition's factory init pins every engine-side observable "
     // two boot scales for one instrument, and nothing here noticed, because
     // nothing read a mask back. res/test_panel.py guards the host branch;
     // this guards the engine state it produces.
-    CHECK(inst.scale_mask_for_test(spky::PART_A) == 0x0AD5);
-    CHECK(inst.scale_mask_for_test(spky::PART_B) == 0x0AD5);
+    CHECK(inst.scale_mask_for_test(spky::PART_A) == 0x04A9);
+    CHECK(inst.scale_mask_for_test(spky::PART_B) == 0x04A9);
 
     // --- drift, couple, sync ---
     // COUPLE == 1.0 (top of travel): grid zone, SYNC on, couple == 1.0 (the
@@ -438,10 +451,12 @@ TEST_CASE("Seed audition's factory init pins every engine-side observable "
     CHECK(inst.synced(spky::PART_A) == true);
     CHECK(inst.synced(spky::PART_B) == true);
     CHECK(inst.couple() == doctest::Approx(1.f));
-    // DRIFT == 0.791999996, past the 0.02 SETL zone: (0.791999996 - 0.02) /
-    // (1 - 0.02) == 0.787755 -- a moderate weather walk, calmer than the
-    // near-maxed 0.958667 the previous factory patch booted at.
-    CHECK(inst.drift() == doctest::Approx(0.787755f).epsilon(0.0001));
+    // DRIFT == 0.0, inside the 0.02 SETL zone, so the weather walk is parked
+    // at exactly 0 -- every earlier factory patch drifted (the last one at
+    // 0.787755 after the zone map). The 2500 blocks above therefore prove
+    // something different than they used to: not that a glide converged, but
+    // that nothing walks away from zero on its own.
+    CHECK(inst.drift() == doctest::Approx(0.f));
 
     // --- master drive, reverb smear, reverb mod: fixed-by-ear constants ---
     // (spec 2026-08-09 hw-control-reduction task 9). PUSH == 0.40 ->

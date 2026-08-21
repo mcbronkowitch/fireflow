@@ -1869,16 +1869,33 @@ def _feed_cfg_floats():
 
 
 def test_feed_shipped_defaults_are_the_engine_constants():
-    """DPTH must BOOT neutral, so a patch that never touches it sounds
-    exactly as it did before it existed. The knob IS the LANE_MOTION base,
-    so kDepthBase is literally the position it must boot at."""
+    """DPTH's neutral position is feed_cfg::kDepthBase -- the knob IS the
+    LANE_MOTION base, so the engine constant and the knob's neutral have to
+    be the same number or "untouched" means two different things on the two
+    sides of the host.
+
+    Until 2026-08-21 this case required BOTH decks to boot there, so that
+    introducing the knob could not change how an existing patch sounded.
+    That migration is over: FM-INIT.vcvm dials deck A to 0.365333289 on
+    purpose, and a rule that forbids the factory patch from using a shipped
+    knob is not a rule worth keeping. What is still worth guarding is the
+    relationship the case is named for -- deck B sits exactly ON the engine
+    constant, so this goes red if kDepthBase moves without the snapshot
+    following it (or the reverse), which is the silent failure. Deck A's
+    departure is pinned against the transcribed preset value in
+    test_sampler_preset_init_snapshot, not here.
+    """
     cfg = _feed_cfg_floats()
     want_depth = cfg["kDepthBase"]
-    for side in ("A", "B"):
-        got_d = g.INIT_DEFAULTS["DEPTH_" + side]
-        check(abs(got_d - want_depth) < 1e-6,
-              f"DEPTH_{side} boots at {got_d}, not feed_cfg::kDepthBase "
-              f"({want_depth})")
+    got_b = g.INIT_DEFAULTS["DEPTH_B"]
+    check(abs(got_b - want_depth) < 1e-6,
+          f"DEPTH_B boots at {got_b}, not feed_cfg::kDepthBase "
+          f"({want_depth})")
+    got_a = g.INIT_DEFAULTS["DEPTH_A"]
+    check(abs(got_a - 0.365333289) < 1e-6,
+          f"DEPTH_A boots at {got_a}, not the approved FM-INIT.vcvm value "
+          f"(0.365333289) -- if the factory patch really changed, move this "
+          f"number and the one in test_sampler_preset_init_snapshot together")
 
 
 def test_feed_host_wiring():
@@ -2486,95 +2503,109 @@ def test_sampler_preset_init_snapshot():
     with open(header_path) as f:
         header = f.read()
     approved = {
-        # Transcribed from FF_hw_Init.vcvm (2026-08-10 revision), the preset
-        # Bastian approved. A second, independent copy of the numbers in
-        # gen_panel's INIT_DEFAULTS -- that is what makes this a test: a later
-        # hand-edit to either table, or to the generated header, has to
-        # disagree with this one.
+        # Transcribed from FM-INIT.vcvm (2026-08-21), the preset Bastian
+        # approved. A second, independent copy of the numbers in gen_panel's
+        # INIT_DEFAULTS -- that is what makes this a test: a later hand-edit to
+        # either table, or to the generated header, has to disagree with this
+        # one.
         #
-        # EXCEPT SMOOTH_A/SMOOTH_B, which are DERIVED, not transcribed. The
-        # preset stored 0.836144507 / 1.0 against the old absolute SMOOTH law;
-        # the 2026-08-14 interval-relative rework converted them so the patch
-        # keeps its sound (tests/test_smooth_law.cpp's G4' is what holds it,
-        # measured at 0.046 dB max deviation). Do NOT "restore" them from the
-        # .vcvm -- that would silently revert the conversion and this table
-        # would agree with itself while the product changed.
-        "RATE_A": 0.184337318,
+        # SMOOTH_A/B are plain transcriptions again. Under the FF_hw_Init.vcvm
+        # snapshot they were the one DERIVED pair, converted by hand from the
+        # old absolute-seconds slew law; FM-INIT.vcvm was saved from a module
+        # already running the interval-relative law, so there is nothing left
+        # to convert. tests/test_smooth_law.cpp keeps the old patch as its own
+        # fixture and stays the gate on the law itself.
+        "RATE_A": 0.112000011,
         "SHAPE_A": 0.0,
-        "DENSITY_A": 0.534939826,
-        "SMOOTH_A": 0.004974,
+        "DENSITY_A": 0.604819179,
+        "SMOOTH_A": 0.0,
         "RANGE_A": 0.0,
-        "MELODY_A": 0.768674195,
-        "MOD_A": 0.403613269,
-        "TUNE_A": 0.001204819,
-        "ATTACK_A": 1.0,
-        "DECAY_A": 1.0,
+        "MELODY_A": 0.0,
+        "MOD_A": 0.740963936,
+        "TUNE_A": 0.500000179,
+        "ATTACK_A": 0.685333312,
+        "DECAY_A": 0.609333158,
         "RES_A": 0.0,
-        "SUB_A": 0.738666236,
-        "SOURCE_A": 0.453333825,
-        "FLUX_A": 0.353333473,
-        "GRIT_A": 0.173493922,
-        # Both decks boot INSIDE the comp zone now (above kLvlCompSplit 0.6),
-        # unlike every earlier snapshot. Set by ear on the kCompShape taper.
-        "COMP_A": 0.761333168,
+        "SUB_A": 0.711999893,
+        "SOURCE_A": 0.0,
+        "FLUX_A": 0.0,
+        "GRIT_A": 0.0,
+        # Both decks boot at the top of LVL/COMP: past kLvlCompSplit (0.6) the
+        # level clamps to unity and the rest is compressor amount, so this is
+        # kCompTop (0.7) exactly. Set by ear on the kCompShape taper.
+        "COMP_A": 1.0,
         "STEPS_A": 0.0,
-        # 2 == Wave. Deck B is Synth (0). No BODY deck boots in this patch.
-        "ENGINE_A": 2.0,
-        "DETUNE_A": 0.377333373,
-        # Ladder rung 0 == {form 0, song 6}; deck B sits at rung 13 == {4, 5}.
+        # 5 == Feed. Deck B is Wave (2). No BODY and no SAMPLER deck boots in
+        # this patch.
+        "ENGINE_A": 5.0,
+        # 0 on deck A, and on a FEED deck DETUNE is also the LANE_SIZE base
+        # (SPREAD), so that base boots at 0 too.
+        "DETUNE_A": 0.0,
+        # Ladder rung 0 == {TwoMotif, Off}. Both decks sit on rung 0 here.
         "SONG_A": 0.0,
         "RATE_B": 0.163855359,
         "SHAPE_B": 0.0,
-        "DENSITY_B": 0.0,
-        "SMOOTH_B": 0.026026,
+        "DENSITY_B": 0.386746973,
+        "SMOOTH_B": 0.971359313,
         "RANGE_B": 0.0,
         "MELODY_B": 0.671083927,
-        "MOD_B": 0.681928277,
-        "TUNE_B": 0.321686625,
+        "MOD_B": 0.710844219,
+        "TUNE_B": 0.179020017,
         "ATTACK_B": 1.0,
         "DECAY_B": 1.0,
-        "RES_B": 0.220000312,
+        "RES_B": 0.539999962,
         "SUB_B": 0.0,
-        "SOURCE_B": 0.0,
+        "SOURCE_B": 0.404000044,
         "FLUX_B": 0.650667071,
         "GRIT_B": 0.0,
-        "COMP_B": 0.848000109,
-        "STEPS_B": 0.0,
-        "ENGINE_B": 0.0,
+        "COMP_B": 1.0,
+        # 8 == step mode with eight steps: the first factory patch that boots a
+        # deck stepped on purpose (deck A stays in FLOW).
+        "STEPS_B": 8.0,
+        "ENGINE_B": 2.0,
         "DETUNE_B": 0.455999434,
-        "SONG_B": 13.0,
-        "MORPH": 0.495180398,
-        "TEMPO": 0.0,
+        "SONG_B": 0.0,
+        "MORPH": 0.384337217,
+        # Off the tempo floor for the first time: 40 + 0.197333470 * 200
+        # == 79.47 BPM.
+        "TEMPO": 0.197333470,
         "COUPLE": 1.0,
-        # 3 == Lydian. Fireflow.cpp's WK_KNOBI branch used to hard-code
-        # SCALE_LYDIAN here instead of reading the snapshot, so the module
-        # booted Lydian while this table said Mixolydian (2); the preset was
-        # saved from the module, which is why the two agree again.
-        "SCALE": 3.0,
-        "DRIFT": 0.791999996,
-        "REV_SIZE": 1.0,
-        "REV_DECAY": 0.800755024,
-        "REV_TONE": 0.905333221,
-        "REV_DIFF": 0.768000245,
+        # 6 == Minor pentatonic, the first factory patch outside the modes
+        # group. Fireflow.cpp's WK_KNOBI branch has to READ this value -- it
+        # once hard-coded SCALE_LYDIAN, and the module then booted a different
+        # scale than the snapshot named; the check below still guards that.
+        "SCALE": 6.0,
+        # Inside the 0.02 SETL zone, i.e. drift parked at exactly 0.
+        "DRIFT": 0.0,
+        "REV_SIZE": 0.885333359,
+        "REV_DECAY": 0.785541177,
+        "REV_TONE": 1.0,
+        "REV_DIFF": 0.052000195,
         "CHOKE": 0.0,
-        "FILT_A": -0.199999928,
-        "FILT_B": -0.292000026,
+        "FILT_A": -0.066666692,
+        "FILT_B": -0.064000070,
         "TIDE": 0.0,
         "FLUXRATE_A": 1.0,
         "FLUXRATE_B": 1.0,
-        "FLUXFB_A": 0.643999279,
+        "FLUXFB_A": 0.426666766,
         "FLUXFB_B": 0.790665507,
-        "COLOR_A": 0.001204819,
-        "COLOR_B": 0.862999976,
+        "COLOR_A": 1.0,
+        "COLOR_B": 0.687095642,
         "LINK_A": 0.0,
         "LINK_B": 0.0,
-        "STAGES_A": 0.0,
+        # BBD-only, and neither deck boots BBD: stored panel state, not sound.
+        "STAGES_A": 1.0,
         "STAGES_B": 0.0,
         "REC_A": 0.0,
         "REC_B": 0.0,
-        "REV_MIX_A": 0.343394309,
+        "REV_MIX_A": 0.774703741,
         "REV_MIX_B": 0.805333197,
         "SHUFFLE": 0.0,
+        # Below x1 (0.5): the modulation clock boots slowed down.
+        "PACE": 0.167999804,
+        # The LANE_MOTION base per deck -- dialled on A, neutral on B.
+        "DEPTH_A": 0.365333289,
+        "DEPTH_B": 0.5,
     }
     for name, want in approved.items():
         if name not in gp.INIT_DEFAULTS:

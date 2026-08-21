@@ -8,46 +8,35 @@
   Everything below the comment is public.
 -->
 
-## FireFlow 2.21.5
+## FireFlow 2.21.6
 
-The hardware panel draft (`FireflowHW`) said nothing about what the instrument
-was doing. Ten LEDs were drawn, six of them could not light at all, and two of
-the four that could sat in a row where they meant nothing. This release makes
-the plate talk: **19 lamps, and every one of them answers the question that is
-asked where it sits.** Nothing in the audio path changed, and the large
-`Fireflow` module is untouched.
+**A new factory patch.** Adding a module to the rack — or hitting Initialize —
+now boots a different instrument. Nothing in the engine changed; every number
+that moved is a knob position, played and saved from a 2.21.5 module.
 
-**The lights show modulation excursion, not knob position.** That distinction is
-the whole design. A knob parked at 0,9 sitting perfectly still would outshine a
-knob at 0,1 swinging full scale if the lamps read the modulated target — so they
-read the *swing* instead. Four lamps per deck, at the knob nearest each lane's
-usual destination (`SOURCE`, `FILT`, `COLOR`, `COMP`), track their lane's
-excursion with a peak-held envelope: dark when nothing moves, a dim breath when
-the modulation is shallow, a bright one when it is deep. The envelope sets the
-ceiling and the instantaneous excursion breathes inside it, so depth and motion
-are both readable from one lamp.
+**FEED against WAVE.** Deck A boots the coupled feedback-FM drone, deck B the
+wavetable engine. It is the first factory patch to start a FEED deck at all,
+and the first with no SYNTH, BODY or SAMPLER deck at boot.
 
-**TEMPO is the one metronome on the plate.** A short tick on the transport
-downbeat, scaled by TEMPO and PACE rather than by wall clock, so it stays a beat
-marker instead of eating the bar at high BPM. **SONG** flashes for 150 ms when a
-deck switches its A/B snapshot and goes dark again — the earlier double-pulse
-became unreadable once the FLOW melody engine started advancing SONG on its own.
-**GATE** reports that a note is sounding, straight through with no smoothing.
-**CEIL**, outboard of the OUT R jack, shows the master limiter bending — its
-audible onset, not its gain reduction. **REC** keeps the three states it always
-had.
+**Deck B starts stepped**, eight steps, while deck A free-runs — the first
+factory patch that boots a deck in step mode on purpose. Both decks sit on
+ladder rung 0 (*TwoMotif / Off*), where the old patch spread them to opposite
+ends.
 
-**Two dead lamps are gone.** `CAP_A`/`CAP_B` indicated the capture sequencer,
-which was deleted a month ago; they had been drawn 4 mm from the unrelated REC
-button ever since. Three lamps are deliberately dark for now: `SYNC`, and the two
-pad lamps at MOD and SHIFT, which need a latch that does not exist yet. They are
-written every tick rather than skipped, and a test asserts it.
+**It also starts moving.** TEMPO is off its floor for the first time (79.5 BPM
+instead of 40), so everything clocked — both lane rates, the tape division,
+deck B's step grid — runs faster out of the box, while PACE sits *below* ×1 to
+slow the modulation clock underneath it. DRIFT is parked at zero: the weather
+walk stays where you leave it until you ask for it. The scale is Minor
+pentatonic, the first factory patch outside the modes group, and both decks
+boot at the top of LVL/COMP.
 
-Under the hood the display law lives in `host/vcv/src/led_law.hpp`, free of Rack
-and unit-tested on its own, and the engine gained two const observers —
-`lane_excursion()` and the limiter's bend — that read state without touching it.
-Brightness floor, gamma and release are by-ear candidates awaiting a look at real
-hardware; on screen they are already honest.
+Along the way two mirroring gaps closed in `bench/audition`, the harness the
+desktop tests and the Seed audition share with the Rack host: a FEED deck's
+`SPREAD` and the `DPTH` knob were never pushed there. Both were invisible while
+no factory patch used them, and both are audible now.
+
+Saved patches are unaffected — this changes what a *new* module boots with.
 
 ## Install
 

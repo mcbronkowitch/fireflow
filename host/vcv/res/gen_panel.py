@@ -650,132 +650,148 @@ PARAMS = PANEL_PARAMS + HIDDEN_PARAMS + APPENDED_PANEL_PARAMS
 # Approved init snapshot, keyed by param NAME rather than by position: adding
 # or removing a control must not be able to shift somebody else's default.
 #
-# Provenance: FF_hw_Init.vcvm, a FireflowHW preset Bastian played and approved.
-# The 2026-08-09 revision replaced the drone.vcvm (2026-07-28) lineage wholesale
-# -- a different instrument at boot, not a retune, which is why no per-value
-# note here justifies a number by what it preserved from drone.vcvm any more.
-# The 2026-08-10 revision keeps that instrument and moves five values: both
-# lane RATEs off their floors, ATTACK_A/DECAY_A to full, and SCALE from
-# Mixolydian to Lydian. The preset's module data (sampler paths, excitation
-# checkboxes) is NOT carried: only params reach this table, and nothing in that
-# blob is audible for these engines anyway (Part::set_excitation is a no-op
-# outside BODY, and no deck boots BODY now).
+# Provenance: FM-INIT.vcvm (2026-08-21), a FireflowHW preset Bastian played and
+# approved, saved from a 2.21.5 module. It replaces the FF_hw_Init.vcvm
+# (2026-08-09/08-10) lineage wholesale, the same way that one replaced
+# drone.vcvm: 42 of 71 values moved, both ENG selections included, so no
+# per-value note here justifies a number by what it preserved from the previous
+# patch. What changed in kind:
+#   * deck A boots FEED and deck B WAVE; the old patch was WAVE against SYNTH.
+#     No deck boots BODY or SAMPLER, so Part::set_excitation stays a no-op and
+#     BodyVoice::kDetuneScale touches nothing at boot.
+#   * deck B boots IN step mode (STEPS_B == 8). Every factory patch so far
+#     booted both decks free-running -- docs/gotchas.md records the one time
+#     that happened by accident. This one is deliberate: the preset was played
+#     and saved from the module in exactly this state.
+#   * TEMPO is off its floor for the first time (79.5 BPM, not 40).
+#   * DPTH is dialled on deck A, so the "boots at feed_cfg::kDepthBase" rule
+#     the knob shipped with in 2026-08-19 no longer describes the shipped
+#     patch -- see res/test_panel.py's DPTH case.
+# The preset's module data (sampler paths, excitation checkboxes) is NOT
+# carried: only params reach this table, and with no SAMPLER/BODY deck at boot
+# nothing in that blob is audible anyway.
 INIT_DEFAULTS = {
-    "RATE_A": 0.184337318,
+    "RATE_A": 0.112000011,
     "SHAPE_A": 0.000000000,
-    "DENSITY_A": 0.534939826,
-    # SMOOTH_A/B were 0.836144507 / 1.0 -- the top of the knob, where they sat
-    # because the absolute-seconds slew law made the knob inert (measured: at
-    # most 0.11 dB anywhere in this patch). Converted 2026-08-14 to preserve
-    # the shipped sound under the interval-relative law; see spec
-    # docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md 2.4.
-    # tests/test_smooth_law.cpp's G4' is the gate that these two are right.
-    "SMOOTH_A": 0.004974,
+    "DENSITY_A": 0.604819179,
+    # SMOOTH_A/B are transcribed, not derived. The 2026-08-14 conversion note
+    # that used to sit here belonged to FF_hw_Init.vcvm, whose two values were
+    # saved against the old absolute-seconds slew law and had to be converted
+    # by hand. FM-INIT.vcvm was saved from a module that already ran the
+    # interval-relative law, so its numbers need no conversion --
+    # tests/test_smooth_law.cpp keeps its own copy of the OLD patch and is
+    # still the gate on that law, independent of this table.
+    "SMOOTH_A": 0.000000000,
     "RANGE_A": 0.000000000,
-    "MELODY_A": 0.768674195,
-    "MOD_A": 0.403613269,
-    "TUNE_A": 0.001204819,
-    "ATTACK_A": 1.000000000,
-    "DECAY_A": 1.000000000,
+    "MELODY_A": 0.000000000,
+    "MOD_A": 0.740963936,
+    "TUNE_A": 0.500000179,
+    "ATTACK_A": 0.685333312,
+    "DECAY_A": 0.609333158,
     "RES_A": 0.000000000,
-    "SUB_A": 0.738666236,
-    "SOURCE_A": 0.453333825,
-    "FLUX_A": 0.353333473,
-    "GRIT_A": 0.173493922,
-    # LVL/COMP: both decks now boot INSIDE the compressor zone, above
-    # kLvlCompSplit (0.6). That is a change of kind from the previous snapshot,
-    # where the value sat exactly on the split and the compressor was
-    # disengaged at boot. Deck A lands at amount 0.406 (~7.1 dB of make-up),
-    # deck B at 0.525 (~10.9 dB) -- set by ear on the reshaped taper
-    # (kCompShape), so the numbers only mean what they mean WITH that taper.
-    # If kLvlCompSplit or kCompShape ever move again, these two do not follow
-    # mechanically any more: they have to be re-heard.
-    "COMP_A": 0.761333168,
+    "SUB_A": 0.711999893,
+    "SOURCE_A": 0.000000000,
+    "FLUX_A": 0.000000000,
+    "GRIT_A": 0.000000000,
+    # LVL/COMP: both decks boot at the TOP of the knob, i.e. deep inside the
+    # compressor zone above kLvlCompSplit (0.6), where the amount is exactly
+    # kCompTop (0.7). Level clamps to unity for anything at or above the split,
+    # so the whole top-of-travel setting is make-up, not gain. Set by ear on
+    # the kCompShape taper: if kLvlCompSplit or kCompShape ever move, these
+    # two do not follow mechanically -- they have to be re-heard.
+    "COMP_A": 1.000000000,
     # 0 IS flow mode: the count is the mode (the separate STEP pad was merged
-    # into this knob, spec 2026-08-09 hw-control-reduction task 3). Both decks
-    # free-running, unchanged from the previous snapshot.
+    # into this knob, spec 2026-08-09 hw-control-reduction task 3). Deck A
+    # free-running; deck B is the one that boots stepped, see STEPS_B.
     "STEPS_A": 0.000000000,
-    # 2 == Wave. The previous snapshot booted Synth here and BODY on deck B;
-    # this patch runs Wave against Synth and boots no BODY deck at all. Two
-    # consequences worth knowing: BodyVoice::kDetuneScale no longer touches
-    # anything at boot, and the excitation bus is inert (Part::set_excitation
-    # is a no-op outside BODY).
-    "ENGINE_A": 2.000000000,
-    # DETUNE is pushed SQUARED (Fireflow.cpp: set_voice_detune(knob*knob)) and
-    # the ceiling is 105 ct, so this is 0.377^2 * 105 == 14.95 ct on deck A and
-    # 0.456^2 * 105 == 21.83 ct on deck B. Both decks read the same law now
-    # that neither runs BODY -- the per-deck split the previous snapshot needed
-    # (SYNTH and BODY only agreeing at full scale) no longer applies.
-    "DETUNE_A": 0.377333373,
-    # Rung 0 of the ladder (song_ladder.h) == {form 0, song 6}: no alternation,
-    # two generators. The previous snapshot sat on rung 6 ({2, 0},
-    # Hierarchical/AAAB) because that rung reproduced the even older
-    # FORM/SONG pair -- that lineage ends here, this is a fresh choice.
+    # 5 == Feed, the coupled feedback-FM drone. bench/audition/init_patch.cpp
+    # has an arm for 5; anything the dispatcher does NOT name boots as SAMPLER
+    # in silence, which is why both ENG values are pinned in
+    # tests/test_seed_audition_init.cpp.
+    "ENGINE_A": 5.000000000,
+    # DETUNE is pushed SQUARED (Fireflow.cpp: set_voice_detune(knob*knob)) at a
+    # 105 ct ceiling, so deck B is 0.456^2 * 105 == 21.83 ct. Deck A is at 0,
+    # and on a FEED deck this knob does a second job: Fireflow.cpp re-points
+    # DETUNE_A to the LANE_SIZE base (SPREAD), so deck A also boots with that
+    # base at 0.
+    "DETUNE_A": 0.000000000,
+    # Rung 0 of the ladder (song_ladder.h) == {TwoMotif, Off}: no alternation,
+    # two generators. Both decks sit on rung 0 in this patch -- the previous
+    # one deliberately spread them to opposite ends (0 and 13).
     "SONG_A": 0.000000000,
     "RATE_B": 0.163855359,
     "SHAPE_B": 0.000000000,
-    "DENSITY_B": 0.000000000,
-    "SMOOTH_B": 0.026026,
+    "DENSITY_B": 0.386746973,
+    "SMOOTH_B": 0.971359313,
     "RANGE_B": 0.000000000,
     "MELODY_B": 0.671083927,
-    "MOD_B": 0.681928277,
-    "TUNE_B": 0.321686625,
+    "MOD_B": 0.710844219,
+    "TUNE_B": 0.179020017,
     "ATTACK_B": 1.000000000,
     "DECAY_B": 1.000000000,
-    "RES_B": 0.220000312,
+    "RES_B": 0.539999962,
     "SUB_B": 0.000000000,
-    "SOURCE_B": 0.000000000,
+    "SOURCE_B": 0.404000044,
     "FLUX_B": 0.650667071,
     "GRIT_B": 0.000000000,
-    "COMP_B": 0.848000109,
-    "STEPS_B": 0.000000000,
-    "ENGINE_B": 0.000000000,
+    "COMP_B": 1.000000000,
+    # 8 == step mode, eight steps. The first factory patch that boots a deck
+    # stepped on purpose (see the header note above). Consequences worth
+    # knowing: deck B's phrase rungs land through the STEP path rather than
+    # the FLOW-melody path, and part.cpp's _pitch_q rule quantizes a stepped
+    # deck's pitch to the scale grid.
+    "STEPS_B": 8.000000000,
+    # 2 == Wave.
+    "ENGINE_B": 2.000000000,
     "DETUNE_B": 0.455999434,
-    # Rung 13 == {form 4, song 5}: Ostinato against Mirror, the top of the
-    # ladder. The two decks deliberately sit at opposite ends now.
-    "SONG_B": 13.000000000,
-    "MORPH": 0.495180398,
-    "TEMPO": 0.000000000,
+    "SONG_B": 0.000000000,
+    "MORPH": 0.384337217,
+    # First factory patch off the tempo floor: bpm == 40 + 0.197333470 * 200
+    # == 79.47. Everything clocked (both lane RATEs, the FLUX division, deck
+    # B's step grid) is faster at boot than in every patch before this one.
+    "TEMPO": 0.197333470,
     "COUPLE": 1.000000000,
-    # 3 == SCALE_LYDIAN (quantizer.h), the bright end of the modes group.
-    # Until this revision the table said 2 (Mixolydian) while the module booted
-    # Lydian: Fireflow.cpp's WK_KNOBI branch passed spky::SCALE_LYDIAN instead
-    # of the snapshot value, so this entry only reached the bench audition.
-    # That branch reads `init` now, and the preset -- saved from the module --
-    # agrees with it.
-    "SCALE": 3.000000000,
-    "DRIFT": 0.791999996,
-    "REV_SIZE": 1.000000000,
-    "REV_DECAY": 0.800755024,
-    "REV_TONE": 0.905333221,
-    "REV_DIFF": 0.768000245,
+    # 6 == SCALE_MIN_PENT (quantizer.h), mask 0x04A9 -- out of the modes group
+    # and into the pentatonics for the first time.
+    "SCALE": 6.000000000,
+    # 0 is inside the 0.02 SETL zone, so drift() boots at exactly 0: the
+    # weather walk is parked. Every earlier factory patch drifted (the last one
+    # at 0.79).
+    "DRIFT": 0.000000000,
+    "REV_SIZE": 0.885333359,
+    "REV_DECAY": 0.785541177,
+    "REV_TONE": 1.000000000,
+    "REV_DIFF": 0.052000195,
     "CHOKE": 0.000000000,
-    "FILT_A": -0.199999928,
-    "FILT_B": -0.292000026,
+    "FILT_A": -0.066666692,
+    "FILT_B": -0.064000070,
     "TIDE": 0.000000000,
     "FLUXRATE_A": 1.000000000,
     "FLUXRATE_B": 1.000000000,
-    "FLUXFB_A": 0.643999279,
+    "FLUXFB_A": 0.426666766,
     "FLUXFB_B": 0.790665507,
-    "COLOR_A": 0.001204819,
-    "COLOR_B": 0.862999976,
+    "COLOR_A": 1.000000000,
+    "COLOR_B": 0.687095642,
     "LINK_A": 0.000000000,
     "LINK_B": 0.000000000,
-    "STAGES_A": 0.000000000,
+    # BBD-only (it becomes the LANE_PITCH base on a BBD deck and is inert
+    # elsewhere). Neither deck boots BBD, so STAGES_A's 1.0 is stored panel
+    # state, not a sound.
+    "STAGES_A": 1.000000000,
     "STAGES_B": 0.000000000,
     "REC_A": 0.000000000,
     "REC_B": 0.000000000,
-    "REV_MIX_A": 0.343394309,
+    "REV_MIX_A": 0.774703741,
     "REV_MIX_B": 0.805333197,
     "SHUFFLE": 0.000000000,
-    # PACE (spec 2026-08-12 modulation-pace): 0.5 is exactly x1 -- the factory
-    # sound (FF_hw_Init.vcvm) must boot at the same speed it always has, not
-    # x1/32 (0.0) or x4 (1.0).
-    "PACE": 0.500000000,
-    # The VOICE knob of 2026-08-19 boots neutral, so a fresh patch sounds
-    # exactly as it did before it existed.
-    #   DPTH = feed_cfg::kDepthBase = 0.5, the knob IS the LANE_MOTION base.
-    "DEPTH_A": 0.500000000,
+    # PACE (spec 2026-08-12 modulation-pace): 0.5 is exactly x1. This patch
+    # sits BELOW it -- 0.168 slows the modulation clock well under unity, the
+    # first factory patch to use the knob for anything.
+    "PACE": 0.167999804,
+    # DPTH is the LANE_MOTION base on every engine -- the FM index on deck A's
+    # FEED, width+drift on deck B's WAVE. Deck A is dialled below
+    # feed_cfg::kDepthBase (0.5); deck B sits on it.
+    "DEPTH_A": 0.365333289,
     "DEPTH_B": 0.500000000,
 }
 
