@@ -470,7 +470,7 @@ is actually built today, and what is still design-only.
 | **AIR** | Noise/formant texture engine (working title) — filtered noise through a resonant bank: wind, breath, vowel colours without sample material | ⬜ **planned** (queued 2026-08-17, ordered before M5k; no spec — needs its own brainstorming round. Restored 2026-08-18, same reason as FEED) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
-| **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel design closed as far as the drawing goes** — regrouping, redistribution and plate round 2a all shipped, in 2.21.1/2.21.2/2.21.3; **bring-up has no spec and is next**, the existing shell spec is superseded and no hardware is ordered — see below) |
+| **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel design closed as far as the drawing goes** — regrouping, redistribution and plate round 2a all shipped, in 2.21.1/2.21.2/2.21.3; **bring-up has no spec and is next**, the existing shell spec is superseded and no hardware is ordered; **form factor decided 2026-08-21: one brain, one 60 HP module, desktop as a shell decision** — see below) |
 
 Milestone order follows the design spec's build order (audible first, hardware
 last). The scale layer was inserted after M1 because it only touches the PITCH
@@ -3171,6 +3171,20 @@ spec, preamble to §1).
 
 Step 1 is closed as far as the drawing goes; **step 2 (bring-up) still has no
 spec and is next**, and no hardware is ordered.
+
+**2026-08-21 — the form-factor question is closed: one brain, one module, two
+shells.** A concept round examined splitting FireFlow into two or three
+Daisy-based modules (deck A / deck B / master) and rejected it: the cross-deck
+coupling — CHOKE, mutual delay ducking, the BBD engine's audio-rate neighbour
+bus, shared transport, and the planned PULL — is the product identity and only
+exists on one chip. M6 stays the 60 HP module; the desktop feel the split was
+reaching for becomes a **shell decision** (Mother-32 pattern: stage 1 an
+off-the-shelf ~62 HP case whose 1U row carries line-out/phones/MIDI, stage 2
+an optional dedicated powered shell, later, as its own project). Two
+constraints bind the bring-up spec: the jack set must be usable with no rack
+neighbours (MIDI-clock question lands there), and headphone/line-out stay off
+the 60 HP panel. Decision note:
+`docs/superpowers/specs/2026-08-21-m6-one-brain-two-shells-design.md`.
 
 **2026-08-16 — step 2 has one obligation nobody had costed: the ADC mux scan.**
 The panel's 65 pot channels reach the MCU through 16:1 muxes whose address and
