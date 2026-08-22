@@ -153,6 +153,27 @@ composes on top the same way it does for every other knob.
 - The four unwired `MOD1..4` CV jacks per deck stay unwired; CV over depths
   is a later, separate design.
 
+### Visual affordance (decided 2026-08-22, variant B of three mocked options)
+
+- **Printed mod wreath.** Every modulatable knob gets a second, dashed
+  hairline ring outside its body ring: radius = body radius + 1.2 mm, stroke
+  0.35 mm at 0.85 opacity, dash `1.6 1.2` — the group frames' own dash — in
+  the zone accent (`ACC`: deck A teal, deck B orange, center blue-grey).
+  Drawn by `gen_hw_panel.py` as plate print; silkscreen-friendly (pure line
+  work, like the rest of the Blueprint plate).
+- **Absence carries meaning:** no wreath = the knob keeps its sound function
+  even while MOD is latched. The MOD knob itself is deliberately unwreathed —
+  it is the per-deck master in both modes.
+- **Dynamic layer feedback in VCV:** while latched, the swapped-in depth
+  knobs render in the zone accent color, so the whole panel visibly changes
+  state; plus the `MODBTN_L` lamp. On hardware the printed wreath and the
+  lamp are the whole affordance.
+- Validated on a preview built from the real generated plate (48 wreaths
+  injected into a copy of `res/FireflowHW.svg`, 2026-08-22): wreaths clear
+  the captions by ~0.6 mm (`CAPTION_GAP` 3.60 vs. ring offset 1.2 + 0.175
+  stroke) and stay outside the Rack widget radii (`RACK_R` G 4.80 / S 3.02
+  vs. wreath radii 7.2 / 5.6), so they remain visible under the widgets.
+
 ## 6. Measured facts this design stands on
 
 All probes 2026-08-22, scratchpad probe round (probe recipe
@@ -180,7 +201,9 @@ All probes 2026-08-22, scratchpad probe round (probe recipe
 ## 7. Testing
 
 - **Panel guards:** `res/test_hw_panel.py` follows the MODBTN move; the
-  generated header is regenerated, never hand-edited.
+  generated header is regenerated, never hand-edited. A new guard asserts
+  the wreathed set equals the set of params that own a depth (and that the
+  excluded list owns none) — one source of truth for "modulatable".
 - **LED law:** unit test that `MODBTN_L` equals the latch state (the law is
   Rack-free and already under test).
 - **Mapping table:** a host-side test that every modulatable param has exactly
