@@ -77,8 +77,10 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
     // 69 -> 73 on 2026-08-19: DEPTH_A/B and DAMP_A/B, the two FEED knobs that
     // moved out of the context menu onto both panels.
     // 73 -> 71 on 2026-08-20: DAMP_A/B, the EDGE knob, removed.
-    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 71,
-                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 71 -- "
+    // 71 -> 120 on 2026-08-22: the MOD latch layer, MODBTN latch plus 48
+    // MODD_* depth params, appended by res/gen_panel.py.
+    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 120,
+                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 120 -- "
                   "if the panel inventory genuinely changed, update this "
                   "literal to match");
     // FM-INIT.vcvm (2026-08-21) pairs FEED (5) on deck A with WAVE (2) on
