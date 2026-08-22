@@ -2,6 +2,7 @@
 // Spec: docs/superpowers/specs/2026-07-19-pull-chord-gravity-design.md
 // Plan: docs/superpowers/plans/2026-08-22-pull-chord-gravity.md
 #include <doctest/doctest.h>
+#include <vector>
 #include "parts/part.h"
 #include "pitch/chord.h"
 using namespace spky;
@@ -154,4 +155,83 @@ TEST_CASE("follower: gravity off releases a bound note") {
     CHECK_FALSE(p.gravity_bound());
     for (int i = 0; i < 48000; ++i) p.process(l, r);
     CHECK_FALSE(p.quant().gravity_on());
+}
+
+#include "instrument.h"
+
+namespace {
+// Two note decks, both stepped, A voiced as a chord.
+void two_decks(Instrument& in) {
+    in.init(48000.f);
+    for (int d = 0; d < 2; ++d) {
+        in.set_engine(d, ENGINE_SYNTH);
+        in.set_step(d, true, 8);
+        in.set_target_active(d, LANE_PITCH, true);
+        in.set_target_base(d, LANE_PITCH, 0.5f);
+        in.set_target_depth(d, LANE_PITCH, 1.f);
+        in.set_quant_mode(d, QuantMode::Scale);
+    }
+    in.set_scale(SCALE_DORIAN);
+    in.set_color(PART_A, 0.75f);      // A leads with four tones
+    in.set_color(PART_B, 0.f);
+}
+void run(Instrument& in, float sec) {
+    const int n = static_cast<int>(48000.f * sec);
+    std::vector<float> l(64), r(64);
+    for (int i = 0; i < n; i += 64) in.process(nullptr, nullptr, l.data(), r.data(), 64);
+}
+} // namespace
+
+TEST_CASE("pull: the sign picks the leader, CHOKE's convention") {
+    { Instrument in; two_decks(in); in.set_pull(-1.f); run(in, 4.f);
+      CHECK(in.part(PART_B).gravity_bound());        // A leads, B is pulled
+      CHECK_FALSE(in.part(PART_A).gravity_bound()); }
+    { Instrument in; two_decks(in); in.set_pull(+1.f); run(in, 4.f);
+      CHECK(in.part(PART_A).gravity_bound());
+      CHECK_FALSE(in.part(PART_B).gravity_bound()); }
+}
+
+TEST_CASE("pull: the dead zone makes noon reliably off") {
+    Instrument in; two_decks(in);
+    in.set_pull(0.02f);                              // inside kPullDead
+    run(in, 4.f);
+    CHECK_FALSE(in.part(PART_A).gravity_bound());
+    CHECK_FALSE(in.part(PART_B).gravity_bound());
+}
+
+TEST_CASE("pull: at full deflection every follower note is a leader chord tone") {
+    Instrument in; two_decks(in);
+    in.set_pull(-1.f);
+    run(in, 2.f);
+    int checked = 0;
+    for (int k = 0; k < 12 && checked < 6; ++k) {
+        run(in, 0.5f);
+        const uint16_t lead = in.part(PART_A).chord_pc_mask();
+        if (!lead) continue;
+        const int semis = static_cast<int>(
+            in.part(PART_B).pitch_cv() * Quantizer::SPAN_SEMIS + 0.5f);
+        CAPTURE(lead); CAPTURE(semis);
+        CHECK(((1u << (semis % 12)) & lead) != 0u);
+        ++checked;
+    }
+    CHECK(checked == 6);
+}
+
+TEST_CASE("pull: sweeping through centre releases the old follower") {
+    Instrument in; two_decks(in);
+    in.set_pull(-1.f); run(in, 4.f);
+    CHECK(in.part(PART_B).gravity_bound());
+    in.set_pull(0.f);  run(in, 0.1f);
+    CHECK_FALSE(in.part(PART_B).gravity_bound());
+    CHECK_FALSE(in.part(PART_B).quant().gravity_on());
+}
+
+TEST_CASE("pull: a sampler leader means the knob does nothing") {
+    // D2: the PITCH lane is not a note on SAMPLER or BBD, so those decks
+    // publish mask 0 and gravity in that direction is simply off.
+    Instrument in; two_decks(in);
+    in.set_engine(PART_A, ENGINE_SAMPLER);
+    in.set_pull(-1.f);
+    run(in, 4.f);
+    CHECK_FALSE(in.part(PART_B).gravity_bound());
 }

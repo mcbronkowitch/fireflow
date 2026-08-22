@@ -155,6 +155,12 @@ public:
     // which is the raw value PACE never touches. A gate written against _bpm
     // would be measuring something this control cannot move.
     float transport_bpm_for_test() const { return _center.transport().bpm(); }
+    // A window for the PULL gates (tests/test_pull.cpp): they have to see
+    // which deck ended up bound, which is per-Part state with no host-facing
+    // reason to exist. Same idiom as accent_for_test() in synth_engine.h --
+    // compiled only for the tests target, so render and the firmware never
+    // see it.
+    const Part& part(int p) const { return _parts[p]; }
 #endif
     void set_fixed_slew(int p, bool on)      { _parts[p].mod().set_fixed_slew(on); }
     void set_depth(int p, float n)           { _parts[p].set_depth(n); }
@@ -465,6 +471,14 @@ public:
     //                      side holds a note
     //   |c| > 0.75       duck at 100 % + events blocked through the full decay
     void set_choke(float c) { _choke = clampf(c, -1.f, 1.f); }
+    // PULL (spec 2026-07-19 pull-chord-gravity): bipolar chord gravity between
+    // the decks, CHOKE's sign convention -- negative = A leads and B's notes
+    // are pulled onto A's chord, positive mirrored, 0 = off and structurally
+    // bypassed. |PULL| is the per-note probability of a note being bound,
+    // rescaled off the dead zone so full deflection is exactly 1. The dead
+    // zone exists so 12 o'clock on a real pot is reliably off.
+    void set_pull(float p) { _pull = clampf(p, -1.f, 1.f); }
+    static constexpr float kPullDead = 0.03f;
     void clock_pulse()     { _center.clock_pulse(_pace); }
     // RST = bar resync: zero the downbeat, drop the grid offsets a live STEPS
     // turn left behind, and restart the loops at phase 0 — everything lands on
@@ -595,6 +609,7 @@ private:
     int    _ctrl_ctr = 0;    // counts down to the next control-rate Center::update
     float _choke = 0.f;        // -1..+1 event-priority knob (discrete zones)
                                // (boots true: the FLOW drone predates any fire)
+    float _pull = 0.f;         // -1..+1 chord-gravity knob (dead zone at noon)
     float _sr = 48000.f;
     float _bpm = 120.f;
     float _pace = 1.f;

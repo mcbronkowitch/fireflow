@@ -255,6 +255,27 @@ void Instrument::process(const float* inL, const float* inR,
             _parts[PART_A].fx().set_rhythm(rhythm(PART_B));
             _parts[PART_B].fx().set_rhythm(rhythm(PART_A));
 
+            // PULL: chord gravity, leader -> follower (spec 2026-07-19
+            // pull-chord-gravity). Cross-deck knowledge stays here, exactly as
+            // it does for CHOKE, the excitation bus and the FLUX rhythm: the
+            // Parts never see each other. A leader with no harmony to offer --
+            // a SAMPLER or BBD deck -- publishes mask 0, and Part::set_gravity
+            // turns that into "off", so the knob is simply inert in that
+            // direction rather than special-cased here.
+            {
+                const float amt = _pull < 0.f ? -_pull : _pull;
+                if (amt <= kPullDead) {
+                    _parts[PART_A].set_gravity(0, 0.f);
+                    _parts[PART_B].set_gravity(0, 0.f);
+                } else {
+                    const int lead = _pull < 0.f ? PART_A : PART_B;
+                    const int foll = lead == PART_A ? PART_B : PART_A;
+                    const float prob = (amt - kPullDead) / (1.f - kPullDead);
+                    _parts[foll].set_gravity(_parts[lead].chord_pc_mask(), prob);
+                    _parts[lead].set_gravity(0, 0.f);
+                }
+            }
+
             // Bloom duck target (spec 2026-08-03): feedforward from the
             // room's own return envelope -- seconds-slow by construction,
             // so it cannot pump the way the dead return-side rides did.
