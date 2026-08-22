@@ -325,14 +325,20 @@ real behaviour changes on the way. **Both are OPEN — awaiting Bastian's ears,
 not decisions already taken.** Do not "finish" either one in either direction
 before a listening pass.
 
-- **Nothing on this branch has been checked in interactive Rack — the full
-  latch-and-listen checklist below is unrun, not just the two behaviour
-  changes further down.** Task 6 (`host/vcv/src/Fireflow.cpp`: `modLatched()`,
+- **The functional half is RUN and passed, 2026-08-22.** Bastian latched MOD on
+  `FireflowHW` in interactive Rack and reported the swap, the booted depth
+  positions and the excluded knobs all correct. Two items below were not part
+  of that pass and stay open: the **audible anchor** check and the
+  **visual-collision** check, both of which need ears and eyes rather than a
+  click. Keep the list — it is the regression checklist for the next time this
+  widget code is touched, and it is the only coverage that exists for it.
+  Task 6 (`host/vcv/src/Fireflow.cpp`: `modLatched()`,
   `ModSound<W>`, `ModDepth<W>`, and the rewritten
-  `WK_BIGKNOB`/`WK_KNOBC`/`WK_SMKNOB`/`WK_KNOBI` case) was verified only
-  against a headless screenshot of the unlatched browser-preview state
-  (`module == nullptr`); screenshot mode cannot click a control, open a
-  context menu, or produce audio. Preserved here because the report that
+  `WK_BIGKNOB`/`WK_KNOBC`/`WK_SMKNOB`/`WK_KNOBI` case) can be reached by
+  nothing else: Rack does not link into `spky_tests`, so that code has no
+  automated coverage at all, and screenshot mode renders the unlatched
+  browser-preview state (`module == nullptr`) and exits without clicking a
+  control, opening a context menu or producing audio. Preserved here because the report that
   first wrote it down lived in gitignored `.superpowers/sdd/` scratch and was
   cleared once the branch merged. (This checklist also once named a
   `ModDepthRing` widget that drew a *second*, dynamic accent ring in Rack

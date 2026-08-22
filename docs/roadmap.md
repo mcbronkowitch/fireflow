@@ -3243,11 +3243,15 @@ zone accent, so the printed plate and the live widget swap target the same
 set. SHIFT stays reserved, still inert. Spec
 `docs/superpowers/specs/2026-08-22-mod-latch-layer-design.md`, plan
 `docs/superpowers/plans/2026-08-22-mod-latch-layer.md`, branch
-`feat/mod-latch-layer`. **Not yet checked interactively in Rack** — a
-headless screenshot proves only that the panel composes for the unlatched
-(browser-preview) state; the latch-and-listen checklist is still Bastian's to
-run, preserved in [`docs/by-ear-decisions.md`](by-ear-decisions.md) under
-"MOD latch layer (2026-08-22)".
+`feat/mod-latch-layer`. **Checked interactively in Rack 2026-08-22** — Bastian
+latched MOD on `FireflowHW` and confirmed the swap, the booted depths and the
+excluded knobs all behave; released in 2.21.7. That closes the one gap no gate
+here could reach: the widget half (`modLatched()`, `ModSound<W>`,
+`ModDepth<W>`) cannot be driven from `spky_tests`, because Rack does not link
+there, and screenshot mode renders and exits without clicking anything. What
+remains open is only by ear, not function — the two listening passes in
+[`docs/by-ear-decisions.md`](by-ear-decisions.md) under "MOD latch layer
+(2026-08-22)".
 
 ### Two threads carried out of the SWARM withdrawal ⬜ (unscheduled)
 
