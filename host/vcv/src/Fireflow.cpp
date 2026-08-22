@@ -683,27 +683,36 @@ struct Fireflow : Module {
     // At init every host-computed depth is 0 and modded() returns the knob by
     // early return, so this whole layer is a no-op on a fresh patch: the push
     // stream is exactly what it was before the layer existed.
-    inline float mv(int soundId, int part) {
+    // No `part` parameter (fix round 2): the master/lane index the term
+    // needs is `t.part`, read out of the very kModLayer row this function
+    // already looks up by soundId -- a caller-supplied part that disagreed
+    // with it used to be silently obeyed instead of the row's own part,
+    // which is the same shape of cross-deck aliasing the DEPTH_A/DEPTH_B fix
+    // above closed (F1). All eight call sites already passed a part matching
+    // t.part (verified by inspection, fix round 2), so this is a no-op in
+    // behaviour; it just removes the ability to get it wrong.
+    inline float mv(int soundId) {
         const float v = params[soundId].getValue();
         const int mi = modIdxBySound[soundId];
         if (mi < 0) return v;
         const ModTarget& t = kModLayer[mi];
         if (t.kind != MODK_HOST) return v;
-        // part == 2 marks a center-column target: both decks mixed, so both
+        // t.part == 2 marks a center-column target: both decks mixed, so both
         // masters down means the center is still.
         const float term = (t.part == 2)
             ? spkymod::center_term(modMaster[0], laneOut[0][t.slot],
                                    modMaster[1], laneOut[1][t.slot])
-            : spkymod::lane_term(modMaster[part], laneOut[part][t.slot]);
+            : spkymod::lane_term(modMaster[t.part], laneOut[t.part][t.slot]);
         ParamQuantity* q = paramQuantities[soundId];
         return spkymod::modded(v, params[t.depthId].getValue(), term,
                                q->getMinValue(), q->getMaxValue());
     }
     // Strided twin of pp(). Only valid inside the part blocks, exactly like
     // pp() itself -- the appended pairs (COLOR/LINK/FILT/FLUX/FLUXFB/REV_MIX/
-    // DEPTH/STAGES) must go through mv(p ? X_B : X_A, p).
+    // DEPTH/STAGES) must go through mv(p ? X_B : X_A). mvp() still takes
+    // `part`: it needs it to build the strided soundId, same as pp() does.
     inline float mvp(int baseA, int part) {
-        return mv(baseA + part * PART_STRIDE, part);
+        return mv(baseA + part * PART_STRIDE);
     }
 
     // GRIT is one bipolar knob (spec 2026-08-09 hw-control-reduction task
@@ -746,7 +755,7 @@ struct Fireflow : Module {
             // FILT is engine-backed (its depth writes _tdepth[LANE_SIZE] in
             // step 6 below), so the knob stays the raw trim it always was.
             inst.set_voice_filt(p, params[p ? FILT_B : FILT_A].getValue());
-            inst.set_color(p, mv(p ? COLOR_B : COLOR_A, p));
+            inst.set_color(p, mv(p ? COLOR_B : COLOR_A));
             inst.set_voice_sub(p, mvp(SUB_A, p));
             // Quadratic taper: the first ~20 ct is where the fine beating
             // lives, and a linear map would squeeze it into a fifth of the
@@ -779,7 +788,7 @@ struct Fireflow : Module {
             inst.set_fx_target_base(p, spky::FXT_FLUX_TIME, 0.5f);
             // Appended params are outside the stride, so pp() would compute the
             // wrong id — the explicit ternary is required (see FLUXRATE/FLUXFB).
-            inst.set_link(p, mv(p ? LINK_B : LINK_A, p));
+            inst.set_link(p, mv(p ? LINK_B : LINK_A));
             // STAGES itself is pushed further down, alongside samplerPart's
             // analogous re-point gate -- it needs this tick's dispatched
             // engine_id(p), which set_engine (below) hasn't set yet here.
@@ -919,10 +928,13 @@ struct Fireflow : Module {
             // SCAN-only on a Sampler deck (spec 2026-08-03); it is pushed
             // below, behind the same samplerPart gate. DENS is the one knob
             // that genuinely does two things in sampler STEP mode: it still
-            // thins the groove gate AND now sets grain overlap. Both point the
-            // same direction (sparser), so this is left as-is.
+            // thins the groove gate AND now sets grain overlap. Both meanings
+            // now follow the same modulated read (fix round 2, spec §8): the
+            // groove gate already went through mv()/mvp() above, and a raw
+            // pp() here would let a DENS mod depth move the gate without
+            // moving overlap, splitting one wreathed knob's face in two.
             const bool samplerPart = inst.engine_id(p) == spky::ENGINE_SAMPLER;
-            inst.sampler_overlap(p, pp(DENSITY_A, p));
+            inst.sampler_overlap(p, mvp(DENSITY_A, p));
             inst.set_target_base(p, spky::LANE_SOURCE, pp(SOURCE_A, p));
 
             // Ledger of every lane base this function re-points per engine, so
@@ -1127,7 +1139,7 @@ struct Fireflow : Module {
             }
         }
 
-        inst.set_morph(mv(MORPH, 0));
+        inst.set_morph(mv(MORPH));
         // COUPLE runs both worlds on one axis (kCoupleZoneSplit, declared
         // above). Below the split SYNC is off and couple drives the
         // Kuramoto lock; at or above it SYNC is on and couple sets how
@@ -1153,16 +1165,16 @@ struct Fireflow : Module {
         inst.set_drift(driftInZone
             ? 0.f
             : (driftKnob - kDriftSettleZone) / (1.f - kDriftSettleZone));
-        inst.set_tide(mv(TIDE, 0));
+        inst.set_tide(mv(TIDE));
         inst.set_choke(params[CHOKE].getValue());   // continuous -1..+1, engine quantises zones
         // The room's four shape knobs are center targets: mixed from both
         // decks' SIZE lanes (mv() takes the center branch on t.part == 2), so
         // the reverb breathes with whichever deck is actually moving. SEND is
         // NOT here -- it is per-deck and engine-backed (step 6 above).
-        inst.set_reverb_size(mv(REV_SIZE, 0));
-        inst.set_reverb_decay(mv(REV_DECAY, 0));
-        inst.set_reverb_tone(mv(REV_TONE, 0));
-        inst.set_reverb_diffusion(mv(REV_DIFF, 0));
+        inst.set_reverb_size(mv(REV_SIZE));
+        inst.set_reverb_decay(mv(REV_DECAY));
+        inst.set_reverb_tone(mv(REV_TONE));
+        inst.set_reverb_diffusion(mv(REV_DIFF));
         inst.set_reverb_mix(spky::PART_A, params[REV_MIX_A].getValue());
         inst.set_reverb_mix(spky::PART_B, params[REV_MIX_B].getValue());
         // Fixed by ear (spec 2026-08-09 hw-control-reduction task 9): PUSH

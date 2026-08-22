@@ -1864,7 +1864,9 @@ def strip_cpp_comments(source):
 
 
 def strided_accessor_issues(cpp):
-    """Return every pp()/ppb()/mvp() call whose base id is not part-strided.
+    """Return every pp()/ppb()/mvp() call whose base id is not part-strided,
+    PLUS every inline `* PART_STRIDE` offset built outside pp()'s/mvp()'s own
+    definitions.
 
     `pp(baseA, part)` is `params[baseA + part * PART_STRIDE]`, so it is only
     correct for the ids the generator templates into the PART_A block. For any
@@ -1885,6 +1887,19 @@ def strided_accessor_issues(cpp):
     The valid-base set is derived from the generator (`g.PART_A`), never from
     a hardcoded id threshold, so the next appended block is covered the day it
     lands without touching this guard.
+
+    The accessor-name scan above only sees the bug when it is spelled
+    `pp(NAME, ...)` / `ppb(NAME, ...)` / `mvp(NAME, ...)`. A call site that
+    hand-builds the same offset instead -- `params[COLOR_A + p *
+    PART_STRIDE].getValue()` -- is the identical hazard in a spelling the
+    name-based scan walks straight past, and it is not even limited to
+    appended ids: ANY call site that reaches for `* PART_STRIDE` directly is
+    bypassing the one place (pp()/mvp()) that is allowed to do that
+    arithmetic, so the fix-round-2 addition below flags every such site
+    unconditionally, not just ones naming an appended id. pp()'s own body and
+    mvp()'s own body (the strided twin -- it must build the same offset
+    before handing off to mv()) are the two legitimate uses of this
+    arithmetic in the whole file, so both are carved out before the scan.
     """
     issues = []
     strided = {c.enum for c in g.PART_A}
@@ -1909,11 +1924,33 @@ def strided_accessor_issues(cpp):
                     f"{accessor}({name}, ...) reads an APPENDED param id "
                     f"through the part stride -- {name} is not in the "
                     f"templated PART_A block.")
+
+    # Fix round 2: inline stride arithmetic outside pp()'s/mvp()'s own bodies.
+    # Carve out those two definitions -- the only legitimate uses -- before
+    # scanning the rest of the file for the same `* PART_STRIDE` spelling.
+    exclude = []
+    for anchor in ("inline float pp(int baseA, int part)",
+                   "inline float mvp(int baseA, int part)"):
+        scope = cpp_scope(body, anchor)
+        if scope is not None:
+            start = body.find(anchor)
+            exclude.append((start, start + len(scope)))
+    for m in re.finditer(r"\*\s*PART_STRIDE", body):
+        pos = m.start()
+        if any(s <= pos < e for s, e in exclude):
+            continue      # pp()'s or mvp()'s own definition
+        issues.append(
+            "inline `* PART_STRIDE` arithmetic outside pp()/mvp() -- read "
+            "the param through pp()/ppb()/mvp() (part-strided ids) or an "
+            "explicit params[p ? X_B : X_A] (appended ids), never by "
+            "hand-building the stride offset at the call site.")
     return issues
 
 
 def test_appended_params_are_never_read_through_the_part_stride():
-    """No appended ParamId is read via pp()/ppb()/mvp() anywhere in the host."""
+    """No appended ParamId is read via pp()/ppb()/mvp() anywhere in the host,
+    and no call site hand-builds a `* PART_STRIDE` offset instead of calling
+    one of those accessors (fix round 2)."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
@@ -1923,9 +1960,12 @@ def test_appended_params_are_never_read_through_the_part_stride():
 
 def test_strided_accessor_guard_rejects_representative_regressions():
     """The guard must reject a real appended-id read, not merely recognize
-    today's source. Both fixtures rewrite an explicit `params[p ? X_B : X_A]`
-    read -- the correct shape -- back into the strided accessor that caused
-    the measured DPTH bug."""
+    today's source. The first two fixtures rewrite an explicit
+    `params[p ? X_B : X_A]` read -- the correct shape -- back into the
+    strided accessor that caused the measured DPTH bug. The third rewrites
+    the same correct shape into a hand-built stride offset instead of an
+    accessor call -- the identical hazard in the spelling the accessor-name
+    scan cannot see (fix round 2)."""
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
         cpp = f.read()
@@ -1934,6 +1974,9 @@ def test_strided_accessor_guard_rejects_representative_regressions():
          "pp(DEPTH_A, p)", "DPTH read through the stride"),
         ("params[p ? STAGES_B : STAGES_A].getValue()",
          "pp(STAGES_A, p)", "STAGES read through the stride"),
+        ("params[p ? DEPTH_B : DEPTH_A].getValue()",
+         "params[DEPTH_A + p * PART_STRIDE].getValue()",
+         "DPTH read via a hand-built stride offset"),
     ]
     for before, after, label in mutations:
         check(before in cpp, f"fixture drifted: {label!r} needle not found")
