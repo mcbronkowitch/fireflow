@@ -57,9 +57,14 @@ TEST_CASE("param table: inventory marker -- P_MODE, P_PACE, P_COUNT") {
     // proved only after that first, stronger tripwire had already fired and
     // been fixed. The frozen vectors were un-shifted by hand in the same
     // commit; see that file's header for the record of both moves.
+    // 62 -> 63 on 2026-08-22: P_PULL was APPENDED after P_PACE (plan
+    // 2026-08-22-pull-chord-gravity, task 5), so P_MODE and P_PACE keep their
+    // indices and tests/param_impact_points.h's frozen vectors keep their
+    // meaning -- only the trailing marker moves. That is what an append is
+    // supposed to cost.
     CHECK(P_MODE == 62);
     CHECK(P_PACE == P_MODE + 1);
-    CHECK(P_PACE == P_COUNT - 1);      // inventory marker: bump on append
+    CHECK(P_PULL == P_COUNT - 1);      // inventory marker: bump on append
 }
 
 TEST_CASE("param table: the two rows other code reads by hand") {
@@ -72,6 +77,12 @@ TEST_CASE("param table: the two rows other code reads by hand") {
     CHECK(kParams[P_PACE].steps == 0);
     CHECK(kParams[P_PACE].lo == doctest::Approx(0.f));
     CHECK(kParams[P_PACE].hi == doctest::Approx(1.f));
+}
+
+TEST_CASE("param table: PULL is bipolar and continuous") {
+    CHECK(kParams[P_PULL].steps == 0);
+    CHECK(kParams[P_PULL].lo == doctest::Approx(-1.f));
+    CHECK(kParams[P_PULL].hi == doctest::Approx(1.f));
 }
 
 TEST_CASE("param table: apply_mode_and_steps reaches what apply_param refuses") {

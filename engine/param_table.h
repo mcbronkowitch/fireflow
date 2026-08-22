@@ -110,7 +110,13 @@ struct Span { float lo, hi; };
   X(P_MODE,       0.f, 1.f,  2) \
   /* PACE: the global modulation time-stretch. 0.5 = x1. Carries a live
      offset rather than a base value. */ \
-  X(P_PACE,       0.f, 1.f, 0)
+  X(P_PACE,       0.f, 1.f, 0) \
+  /* PULL: bipolar chord gravity between the decks (spec 2026-07-19
+     pull-chord-gravity). Sign = direction on CHOKE's convention, magnitude =
+     per-note bind probability, 0 = off with a +-0.03 dead zone in the
+     engine. Appended LAST: tests/param_impact_points.h's frozen vectors are
+     positional, so an append is free and an insertion is not. */ \
+  X(P_PULL,      -1.f, 1.f, 0)
 
 enum ParamId {
 #define SPKY_ENUM(id, lo, hi, st) id,
@@ -190,6 +196,7 @@ inline void apply_param(Instrument& in, int param, float v) {
     case P_DRIFT:      in.set_drift(v); break;
     case P_TIDE:       in.set_tide(v); break;
     case P_CHOKE:      in.set_choke(v); break;
+    case P_PULL:       in.set_pull(v); break;
     case P_SHUFFLE:    in.set_shuffle(v); break;
     case P_DRIVE:      in.set_master_drive(v); break;
     case P_REV_SIZE:   in.set_reverb_size(v); break;
