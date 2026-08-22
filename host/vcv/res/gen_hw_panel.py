@@ -780,16 +780,15 @@ def svg():
         else:
             # The mounting hole, drawn at the real pot body -- not a cap. Rack
             # puts its own knob widget on top and a plate has a hole here.
+            # Variant B mod wreath (docs/superpowers/specs/2026-08-22-mod-latch-
+            # layer-design.md §5): a wreathed knob's own body ring is recoloured
+            # to the zone accent instead of HW_RING -- same radius, same
+            # stroke-width, solid. A non-wreathed knob keeps the plain dark
+            # ring. Absence of the accent colour still carries the meaning:
+            # the knob keeps its sound function while MOD is latched.
+            ring = ACC[zone_of(c.x)] if c.enum in MOD_WREATHED else HW_RING
             P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="{mm(br)}" '
-                      f'fill="{HW_WELL}" stroke="{HW_RING}" stroke-width="0.3"/>')
-            if c.enum in MOD_WREATHED:
-                # Variant B mod wreath: dashed satellite ring, group-frame
-                # dash, zone accent. Absence of the ring means the knob
-                # keeps its sound function while MOD is latched.
-                P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" '
-                          f'r="{mm(br + 1.2)}" fill="none" '
-                          f'stroke="{ACC[zone_of(c.x)]}" stroke-width="0.35" '
-                          f'stroke-opacity="0.85" stroke-dasharray="1.6 1.2"/>')
+                      f'fill="{HW_WELL}" stroke="{ring}" stroke-width="0.3"/>')
         if c.label:
             lx, ly, anchor, size, colour = hw_label(c)
             P.append(f'<text x="{mm(lx)}" y="{mm(ly)}" fill="{colour}" '

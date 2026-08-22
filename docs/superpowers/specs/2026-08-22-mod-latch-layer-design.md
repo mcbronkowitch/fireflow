@@ -155,26 +155,43 @@ composes on top the same way it does for every other knob.
 - The four unwired `MOD1..4` CV jacks per deck stay unwired; CV over depths
   is a later, separate design.
 
-### Visual affordance (decided 2026-08-22, variant B of three mocked options)
+### Visual affordance (decided 2026-08-22, variant B of three mocked options;
+**revised 2026-08-22, same day, after the owner reviewed the rendered
+panel**)
 
-- **Printed mod wreath.** Every modulatable knob gets a second, dashed
-  hairline ring outside its body ring: radius = body radius + 1.2 mm, stroke
-  0.35 mm at 0.85 opacity, dash `1.6 1.2` — the group frames' own dash — in
-  the zone accent (`ACC`: deck A teal, deck B orange, center blue-grey).
-  Drawn by `gen_hw_panel.py` as plate print; silkscreen-friendly (pure line
-  work, like the rest of the Blueprint plate).
-- **Absence carries meaning:** no wreath = the knob keeps its sound function
-  even while MOD is latched. The MOD knob itself is deliberately unwreathed —
-  it is the per-deck master in both modes.
+- **Printed mod wreath — recolour, not a satellite ring.** The first cut of
+  variant B drew a second, dashed hairline ring outside each modulatable
+  knob's body ring (radius = body radius + 1.2 mm, stroke 0.35 mm at 0.85
+  opacity, dash `1.6 1.2` — the group frames' own dash). Seeing it rendered
+  in Rack, the owner asked for it plainer: every knob already has a body
+  ring, so a modulatable knob should simply have *that same ring*, at the
+  same radius and stroke-width, recoloured to the zone accent (`ACC`: deck A
+  teal, deck B orange, center blue-grey) instead of the default hairline
+  colour (`HW_RING`). Solid, no dash, no opacity — one stroke doing the job
+  two strokes used to. A knob without a depth keeps the plain `HW_RING`
+  ring, so the plate still reads as "light and dark rings", just in two
+  colours where before it was one. Drawn by `gen_hw_panel.py` as plate
+  print; silkscreen-friendly (pure line work, like the rest of the
+  Blueprint plate).
+- **Absence carries meaning:** a plain `HW_RING` ring (not a zone-accent
+  ring) = the knob keeps its sound function even while MOD is latched. The
+  MOD knob itself is deliberately left with the plain ring — it is the
+  per-deck master in both modes.
 - **Dynamic layer feedback in VCV:** while latched, the swapped-in depth
   knobs render in the zone accent color, so the whole panel visibly changes
-  state; plus the `MODBTN_L` lamp. On hardware the printed wreath and the
-  lamp are the whole affordance.
-- Validated on a preview built from the real generated plate (48 wreaths
-  injected into a copy of `res/FireflowHW.svg`, 2026-08-22): wreaths clear
-  the captions by ~0.6 mm (`CAPTION_GAP` 3.60 vs. ring offset 1.2 + 0.175
-  stroke) and stay outside the Rack widget radii (`RACK_R` G 4.80 / S 3.02
-  vs. wreath radii 7.2 / 5.6), so they remain visible under the widgets.
+  state; plus the `MODBTN_L` lamp. On hardware the printed ring recolour and
+  the lamp are the whole affordance.
+- Validated on the real generated plate (`res/FireflowHW.svg`, regenerated
+  2026-08-22 with the recolour): the ring sits at the same radius as every
+  other knob's body ring, so it needs no new caption-clearance check — moving
+  it inward from `body_r + 1.2` to `body_r` only *increases* the clearance to
+  the printed captions that the original variant-B pass already measured
+  (`CAPTION_GAP` 3.60 vs. the old ring's outer edge at offset 1.2 + 0.175
+  stroke). It also stays outside the Rack widget radii for the same reason
+  the satellite ring did — `body_r` itself is already outside `RACK_R` (G
+  6.0 vs. `RACK_R` G 4.80; S 4.4 vs. `RACK_R` S 3.02) — so the recoloured
+  ring remains visible around the Rack knob widget exactly as the plain
+  `HW_RING` ring always has.
 
 ## 6. Measured facts this design stands on
 

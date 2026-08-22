@@ -363,26 +363,35 @@ def test_hw_only_inventory():
 
 
 def test_mod_wreaths():
-    """Spec 2026-08-22 §5: every mod target wears a dashed accent wreath,
-    nothing else does, and MODBTN is a real latch param now."""
+    """Spec 2026-08-22 §5 (revised 2026-08-22 after the owner reviewed the
+    rendered plate): every mod target's own body ring is recoloured to its
+    zone accent -- same radius, same stroke-width, solid, no satellite
+    circle -- and every other knob keeps the plain HW_RING body ring."""
     want = ({f"{b}_A" for b, _, _, _ in gp.MOD_DECK_TARGETS}
             | {f"{b}_B" for b, _, _, _ in gp.MOD_DECK_TARGETS}
             | {b for b, _, _, _ in gp.MOD_CENTER_TARGETS})
     check(hw.MOD_WREATHED == want,
           f"MOD_WREATHED diverged from gp tables: {hw.MOD_WREATHED ^ want}")
     svg = open(os.path.join(HERE, "FireflowHW.svg"), encoding="utf-8").read()
-    rings = re.findall(r'<circle[^>]*stroke-dasharray="1.6 1.2"[^>]*/>', svg)
-    # group frames use the same dash but are <rect>, not <circle>, so every
-    # dashed circle on the plate is a wreath
-    check(len(rings) == len(want), f"{len(rings)} wreath circles, want {len(want)}")
-    for ring in rings:
-        check(any(acc in ring for acc in hw.ACC.values()),
-              f"wreath without a zone accent: {ring}")
-    # the master knob is deliberately unwreathed
+    # no satellite ring survives: the group frames still use this dash but
+    # are <rect>, so any <circle ... stroke-dasharray> left would be a wreath
+    check(not re.search(r'<circle[^>]*stroke-dasharray', svg),
+          "a dashed satellite circle still exists on the plate")
+    knobs = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) != "P"]
+    accent_rings = 0
+    for c in knobs:
+        br = hw.body_r(c)
+        want_stroke = hw.ACC[hw.zone_of(c.x)] if c.enum in want else hw.HW_RING
+        pat = (f'<circle cx="{c.x:.3f}" cy="{c.y:.3f}" r="{br:.3f}" '
+               f'fill="{hw.HW_WELL}" stroke="{want_stroke}" stroke-width="0.3"/>')
+        check(pat in svg, f"{c.enum} body ring is not {want_stroke}: {pat}")
+        if want_stroke != hw.HW_RING:
+            accent_rings += 1
+    check(accent_rings == len(want),
+          f"{accent_rings} knobs carry an accent ring, want {len(want)}")
+    # the master knobs are deliberately unwreathed
     for enum in ("MOD_A", "MOD_B"):
-        c = next(c for c in hw.HW_PARAMS if c.enum == enum)
-        check(f'cx="{c.x:.3f}" cy="{c.y:.3f}" r="{hw.BODY_R["G"] + 1.2:.3f}"'
-              not in svg, f"{enum} grew a wreath")
+        check(enum not in want, f"{enum} unexpectedly in MOD_WREATHED")
     # MODBTN: real param, out of kHwOnlyCtls, caption on the jack-row baseline
     src = open(os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"),
                encoding="utf-8").read()
