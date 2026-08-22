@@ -551,6 +551,12 @@ private:
     // the envelope state intact instead of starting a fresh attack.
     float _choke_env = 0.f;
     float _choke_atk = 1.f, _choke_rel = 1.f;   // per-sample follower coefficients
+    // The same pair at the top of the overdrive region (see kChokeDuckAtkHotS
+    // in instrument.cpp). Precomputed here so the per-sample path lerps between
+    // two coefficients instead of calling exp() -- the follower's times are
+    // knob-dependent above 100 % depth, and the Daisy does not get a transcendental
+    // in the audio loop for that.
+    float _choke_atk_hot = 1.f, _choke_rel_hot = 1.f;
     // The knob's own glide (kMixSmoothS). The follower smooths the SIGNAL side;
     // this smooths the CONTROL side, so turning CHOKE cannot step the mix gain.
     OnePole _choke_depth;

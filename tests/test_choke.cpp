@@ -357,29 +357,134 @@ static DuckDiff duck_diff(float choke) {
     return d;
 }
 
+// The knob position the duck zone reaches 100 % depth at. The zone spans
+// |c| 0..0.5 and maps it to depth 0..1.2, so 100 % is five sixths of the way
+// up rather than at the top -- see kChokeDepthTop in instrument.cpp.
+constexpr float kChoke100 = -1.f / 2.4f;
+
 TEST_CASE("choke duck: the yielding deck's contribution drops, deeper the further in") {
     const DuckDiff quarter = duck_diff(-0.125f);
     const DuckDiff half    = duck_diff(-0.25f);
-    const DuckDiff full    = duck_diff(-0.5f);
+    const DuckDiff full    = duck_diff(kChoke100);
     // 0.89125 is Limiter's transparent knee: below it the master is an exact
     // identity, so these three renders differ by the duck and nothing else.
     REQUIRE(full.ref_peak < 0.89f);
     CHECK(quarter.energy > 0.0);                 // the duck exists at all
     CHECK(half.energy > quarter.energy);         // and deepens with the knob
     CHECK(full.energy > half.energy);
-    // ...and at the bottom of the zone it is a real duck, not a trim. Before
-    // the envelope window existed this rig bottomed out at 0.8315 (-1.60 dB),
-    // because the gain normalised against a full scale the deck never reaches;
-    // the gate is set at -12 dB, comfortably past that and comfortably short of
-    // the -16.5 dB floor, so it fails on a reverted window without pinning the
-    // by-ear constants. The number read here is measured, not derived.
+    // ...and at 100 % it is a real duck, not a trim. Before the envelope window
+    // existed this rig bottomed out at 0.8315 (-1.60 dB), because the gain
+    // normalised against a full scale the deck never reaches; the gate is set at
+    // -12 dB, comfortably past that and comfortably short of the -16.5 dB floor,
+    // so it fails on a reverted window without pinning the by-ear constants. The
+    // number read here is measured, not derived.
     CHECK(full.gain_min < 0.25f);
-    // Never below the floor -- with an absolute epsilon, because the floor is
-    // computed as 1 - (1 - 0.15f) and lands on 0.14999998, not on 0.15
+    // Never below the 100 % floor -- with an absolute epsilon, because the floor
+    // is computed as 1 - (1 - 0.15f) and lands on 0.14999998, not on 0.15
     // (engine-map.md section 5: write such a gate as ~6e-08 absolute, never as
     // an exact or ULP-relative comparison). Measured, 2.4e-08 under.
     CHECK(full.gain_min >= 0.15f - 1e-6f);
     CHECK(quarter.gain_min > full.gain_min);     // depth still orders the floor
+}
+
+// --- the 100..120 % overdrive region -----------------------------------------
+// The duck zone's top sixth pumps rather than merely ducking: the floor keeps
+// falling past -16.5 dB and the follower gets faster at both ends. Measured on
+// the two rigs below, both of which are depth-independent today -- which is
+// exactly what makes them read the change and nothing else.
+
+TEST_CASE("choke duck: 100 % sits at five sixths of the zone, not at its top") {
+    // The rescale, stated as a number rather than as an intention: at kChoke100
+    // this rig bottoms out on the 100 % floor. On the old *2 mapping the same
+    // knob position gave 0.29167 (depth 0.833), so this fails on a revert.
+    // env_n saturates on drones, so gain_min here is exactly 1 - depth*(1-floor)
+    // and the reading is not a tolerance dressed up as a measurement.
+    const DuckDiff at100 = duck_diff(kChoke100);
+    CHECK(at100.gain_min < 0.15f + 1e-6f);
+    CHECK(at100.gain_min >= 0.15f - 1e-6f);
+}
+
+TEST_CASE("choke duck: past 100 % the floor keeps falling") {
+    const DuckDiff at100 = duck_diff(kChoke100);
+    const DuckDiff at120 = duck_diff(-0.5f);
+    // 0.15 -> 0.02 is another 17.5 dB below the 100 % floor. The gate is set at
+    // 0.03 (-30.5 dB): past the 0.15 the old top of the zone gave, and short of
+    // the floor itself so it does not pin the by-ear constant.
+    CHECK(at120.gain_min < 0.03f);
+    CHECK(at120.gain_min < at100.gain_min);
+    // ...but still a duck, never a mute and never a phase flip -- the depth
+    // above 100 % must drive the floor, not run the gain formula past zero.
+    CHECK(at120.gain_min > 0.f);
+    CHECK(at120.gain_min >= 0.02f - 1e-6f);
+    // No gate on the difference ENERGY here, and that is a finding rather than
+    // an omission: measured on this rig the energy FALLS across the overdrive
+    // region (309.3 at 100 %, 293.9 at 120 %) because the faster follower rides
+    // the drone's own waveform -- mean gain 0.42839 -> 0.50611, direction
+    // reversals 214/s -> 265/s at a ~107 Hz drone. The peak duck deepens while
+    // the average one lightens. See kChokeDuckAtkHotS for what that means.
+}
+
+// One manual pluck on the priority deck with nothing else running: density 0 on
+// both decks keeps the sequencer silent, so there is exactly one trough and the
+// climb out of it is the follower's release and nothing else. voice_decay 0
+// makes the source stop abruptly, which is the only regime a release time is
+// audible in at all.
+static void arm_pluck_rig(Instrument& inst, float choke) {
+    inst.init(48000.f);
+    inst.set_tempo_bpm(120.f);
+    for (int p = 0; p < PART_COUNT; ++p) {
+        inst.set_step(p, true, 8);
+        inst.set_density(p, 0.f);
+        inst.set_range(p, 1.f);
+        inst.set_voice_decay(p, 0.f);
+    }
+    inst.set_choke(choke);
+}
+
+struct Pluck { float g_min = 1.f; int to_min = 0; int recover90 = -1; };
+
+// Recovery measured against the trough's OWN depth: samples from the minimum
+// until the gain has travelled 90 % of the way back to 1. That normalisation is
+// what makes two settings with different floors comparable -- it reads the
+// release coefficient, not the depth. Measured before this feature existed:
+// 7621 samples (158.8 ms) at every knob position in the zone, and 1415 samples
+// down to the trough at every knob position.
+static Pluck pluck_trace(float choke) {
+    Instrument inst;
+    arm_pluck_rig(inst, choke);
+    std::vector<float> l(1), r(1);
+    inst.trigger_manual(PART_A);
+    std::vector<float> trace(240000);            // 5 s
+    Pluck p;
+    for (int i = 0; i < (int)trace.size(); ++i) {
+        inst.process(nullptr, nullptr, l.data(), r.data(), 1);
+        trace[i] = inst.choke_duck_gain();
+        if (trace[i] < p.g_min) { p.g_min = trace[i]; p.to_min = i; }
+    }
+    const float target = p.g_min + 0.9f * (1.f - p.g_min);
+    for (int i = p.to_min; i < (int)trace.size(); ++i)
+        if (trace[i] >= target) { p.recover90 = i - p.to_min; break; }
+    return p;
+}
+
+TEST_CASE("choke duck: past 100 % the duck lets go again far sooner") {
+    const Pluck at100 = pluck_trace(kChoke100);
+    const Pluck at120 = pluck_trace(-0.5f);
+    REQUIRE(at100.recover90 > 0);                // the trough recovers at all
+    REQUIRE(at120.recover90 > 0);
+    // 150 ms -> 40 ms of release is a factor 3.75; the gate asks for half, which
+    // is past every rounding and still fails outright on the old shared
+    // coefficient (both sides read 7621 samples then).
+    CHECK(at120.recover90 * 2 < at100.recover90);
+}
+
+TEST_CASE("choke duck: past 100 % the duck also bites sooner") {
+    const Pluck at100 = pluck_trace(kChoke100);
+    const Pluck at120 = pluck_trace(-0.5f);
+    // 5 ms -> 1 ms of attack: the envelope lags the source's peak by less, so
+    // the trough arrives earlier. Same source either way (the pluck does not
+    // know about CHOKE), so the whole difference is the attack coefficient.
+    CHECK(at120.to_min < at100.to_min);
 }
 
 TEST_CASE("choke duck: the priority deck and the cross-deck taps stay untouched") {

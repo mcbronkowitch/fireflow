@@ -211,11 +211,17 @@ struct MelodyQuantity : ParamQuantity {
 // side by |c| instead of 5 snapped detents; this reads the same zones back).
 // |c| == 0 is bypass; the duck zone (0 < |c| <= 0.5) reports the depth
 // percentage the engine's own ramp reaches at this knob position
-// (instrument.cpp: depth = min(amt, 0.5) * 2, glided but the tooltip reads
+// (instrument.cpp: depth = min(amt, 0.5) * 2.4, glided but the tooltip reads
 // the target); past 0.5 the two choke zones read exactly what the old
 // 5-state switch printed. Sign picks the side the same way instrument.cpp's
 // own pri/yld split does: negative = A has priority (ducks/chokes B),
 // positive = B has priority.
+//
+// The zone runs to 120 %, not to 100 %: past 100 % (|c| = 0.4167) the engine
+// stops deepening the multiply and starts shortening the follower instead, so
+// the reading is called "pumps" rather than "ducks" there. Same knob, same
+// zone, different mechanism -- and the word is the only warning the panel gives
+// that the last sixth behaves differently.
 struct ChokeQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
         const float c = getValue();
@@ -223,9 +229,11 @@ struct ChokeQuantity : ParamQuantity {
         if (amt < 1e-6f) return "Off";
         const char* pri = c < 0.f ? "A" : "B";
         const char* yld = c < 0.f ? "B" : "A";
-        if (amt <= 0.5f)
-            return string::f("%s ducks %s %.0f %%", pri, yld,
-                              std::min(amt, 0.5f) * 2.f * 100.f);
+        if (amt <= 0.5f) {
+            const float pct = std::min(amt, 0.5f) * 2.4f * 100.f;
+            return string::f("%s %s %s %.0f %%", pri,
+                              pct > 100.f ? "pumps" : "ducks", yld, pct);
+        }
         if (amt <= 0.75f)
             return string::f("%s chokes %s while playing", pri, yld);
         return string::f("%s chokes %s thru decay", pri, yld);

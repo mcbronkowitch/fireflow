@@ -99,6 +99,41 @@ constexpr float kChokeDuckRelS  = 0.150f;  // envelope release -- rides back bet
 // the detector's placement, not a defect to tune out.
 constexpr float kChokeDuckThresh = 0.015f;  // below: no duck, whatever the knob
 constexpr float kChokeDuckFull   = 0.11f;   // at and above: the floor is reached
+
+// The overdrive region: the duck zone's top sixth pumps instead of merely
+// ducking. |c| 0..0.5 maps to depth 0..kChokeDepthTop, so 100 % lands at
+// |c| = 0.4167 and the knob keeps going for another fifth. The zone boundaries
+// at 0.5 / 0.75 are untouched -- this rescales what happens INSIDE the duck
+// zone, it does not move where the choke zones start.
+//
+// Past 100 % the depth stops deepening the multiply (which would run the gain
+// formula through zero into a phase flip) and instead drives three things at
+// once: the floor keeps falling, and BOTH follower times shorten. The times are
+// what makes it read as a pump rather than as a deeper duck -- a hole that
+// opens and closes around the transient instead of sagging around it.
+//
+// Like the four constants above these are by-ear STARTING POINTS. What is
+// measured is only their effect (probe 2026-08-22, 48 kHz, |c| 0.4167 vs 0.5):
+// on the FLOW-drone rig the floor goes 0.15 -> 0.02 (-16.5 -> -34 dB), and on a
+// single plucked note with voice_decay 0 the 90 % recovery goes 7621 -> 2771
+// samples (158.8 -> 57.7 ms) with the trough arriving 30 samples sooner. The
+// recovery does not shorten by the full 150/40 because the source's own decay
+// is part of it; at voice_decay 0.7 the same pair reads 472.2 -> 279.2 ms.
+//
+// KNOWN, MEASURED, AND NOT TUNED OUT: at kChokeDuckAtkHotS the follower tracks a
+// sustained source's individual wave cycles instead of its level. On the drone
+// rig the gain then swings 0.02..1.00 at roughly the priority deck's own pitch
+// (~107 Hz), so the MEAN duck lightens (0.42839 -> 0.50611) while its peak
+// deepens, and direction reversals go 214/s -> 265/s. That is amplitude
+// modulation, not ducking. It is a difference of degree rather than of kind --
+// the 5 ms attack already ripples at 214/s -- and it does not appear on plucks,
+// which is the material the region was shaped for. Shortening the attack
+// further makes it worse; the fix, if it is ever wanted, is a detector that
+// holds its peak rather than a slower attack.
+constexpr float kChokeDepthTop     = 1.2f;    // depth at the top of the duck zone
+constexpr float kChokeDuckFloorHot = 0.02f;   // floor at 120 %: -34 dB, still not a mute
+constexpr float kChokeDuckAtkHotS  = 0.001f;  // attack at 120 % -- snaps onto the transient
+constexpr float kChokeDuckRelHotS  = 0.040f;  // release at 120 % -- lets go before the note does
 }
 
 void Instrument::init(float sample_rate) { init(sample_rate, FxMem{}); }
@@ -134,6 +169,10 @@ void Instrument::init(float sample_rate, const FxMem& mem) {
     _choke_env = 0.f;
     _choke_atk = 1.f - std::exp(-1.f / (kChokeDuckAtkS * sample_rate));
     _choke_rel = 1.f - std::exp(-1.f / (kChokeDuckRelS * sample_rate));
+    // The overdrive pair, precomputed for the same reason the pair above is:
+    // the per-sample path lerps between them, so no exp() rides the audio loop.
+    _choke_atk_hot = 1.f - std::exp(-1.f / (kChokeDuckAtkHotS * sample_rate));
+    _choke_rel_hot = 1.f - std::exp(-1.f / (kChokeDuckRelHotS * sample_rate));
     // The knob glide, not the envelope: it exists so a CHOKE move cannot step
     // the mix gain. Shares kMixSmoothS with the reverb crossfade because it is
     // the same job on the same bus, not because the two are coupled.
@@ -289,17 +328,36 @@ void Instrument::process(const float* inL, const float* inR,
         const float pri_gain = (pri == PART_A) ? ga : gb;
         const float rect = std::max(std::fabs(pl[pri] * pri_gain),
                                     std::fabs(prr[pri] * pri_gain));
-        _choke_env += (rect > _choke_env ? _choke_atk : _choke_rel)
-                    * (rect - _choke_env);
-        // Depth: the duck zone (0 < |c| <= 0.5) maps 0 -> 1, and both choke
-        // zones sit pinned at 1 above it. Glided, so a knob move cannot step
-        // the mix gain.
-        const float depth = _choke_depth.process(std::min(amt, 0.5f) * 2.f);
+
+        // Depth first, because the follower's coefficients depend on it now.
+        // The duck zone (0 < |c| <= 0.5) maps 0 -> kChokeDepthTop, and both
+        // choke zones sit pinned at the top above it -- the extreme knob
+        // positions get the extreme duck, including on the tail of a deck their
+        // event window has already blocked. Glided, so a knob move cannot step
+        // the mix gain, and `over` inherits that glide rather than needing one.
+        const float depth_raw =
+            _choke_depth.process(std::min(amt, 0.5f) * (kChokeDepthTop / 0.5f));
+        // Above 100 % the multiply stops deepening -- pushing depth past 1
+        // through the gain formula below would cross zero and flip phase. The
+        // surplus becomes `over` instead, 0 at 100 % and 1 at the top.
+        const float over  = std::min(1.f, std::max(0.f, (depth_raw - 1.f)
+                                     / (kChokeDepthTop - 1.f)));
+        const float depth = std::min(depth_raw, 1.f);
+        const float floor_g = kChokeDuckFloor
+                            + over * (kChokeDuckFloorHot - kChokeDuckFloor);
+        // Lerping the coefficients, not the time constants: the two are not the
+        // same curve, but both are monotone in the same direction and the
+        // interval is crossed by a knob, not by a spec. What it buys is an
+        // exp()-free audio loop.
+        const float atk = _choke_atk + over * (_choke_atk_hot - _choke_atk);
+        const float rel = _choke_rel + over * (_choke_rel_hot - _choke_rel);
+        _choke_env += (rect > _choke_env ? atk : rel) * (rect - _choke_env);
+
         // Floor-style, like the Bloom duck, and windowed for the same reason:
         // at full depth with the priority deck at or above kChokeDuckFull the
-        // yielding deck sits at kChokeDuckFloor, never muted; below
-        // kChokeDuckThresh it is not ducked at all, whatever the knob says.
-        // See the window's declaration for the distribution it is sized to.
+        // yielding deck sits at floor_g, never muted; below kChokeDuckThresh it
+        // is not ducked at all, whatever the knob says. See the window's
+        // declaration for the distribution it is sized to.
         // Exactly 1.0f whenever depth is 0 -- which is the whole of CHOKE's
         // noon bypass, since a multiply by 1.0f is exact and the mix below
         // therefore stays bit-identical without a branch.
@@ -307,7 +365,7 @@ void Instrument::process(const float* inL, const float* inR,
             ? 0.f
             : std::min(1.f, (_choke_env - kChokeDuckThresh)
                                 / (kChokeDuckFull - kChokeDuckThresh));
-        _choke_duck_gain = 1.f - depth * (1.f - kChokeDuckFloor) * env_n;
+        _choke_duck_gain = 1.f - depth * (1.f - floor_g) * env_n;
         float duck[PART_COUNT] = { 1.f, 1.f };
         duck[yld] = _choke_duck_gain;             // the priority deck never ducks
 
