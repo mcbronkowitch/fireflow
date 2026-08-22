@@ -1935,7 +1935,7 @@ def strided_accessor_issues(cpp):
         if scope is not None:
             start = body.find(anchor)
             exclude.append((start, start + len(scope)))
-    for m in re.finditer(r"\*\s*PART_STRIDE", body):
+    for m in re.finditer(r"\*\s*PART_STRIDE|PART_STRIDE\s*\*", body):
         pos = m.start()
         if any(s <= pos < e for s, e in exclude):
             continue      # pp()'s or mvp()'s own definition

@@ -304,6 +304,6 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   pair in `Fireflow.cpp` states the rule in prose, and `res/test_panel.py`
   enforces it mechanically — it derives the legal strided-base set from the
   generator and scans for both the `pp(`/`ppb(`/`mvp(` call shapes and inline
-  `* PART_STRIDE` arithmetic. **One known evasion:** the inline-arithmetic
-  scan matches only the token order `* PART_STRIDE`, so
-  `params[COLOR_A + PART_STRIDE * p]` would still slip past it.
+  `* PART_STRIDE` arithmetic in either token order — `p * PART_STRIDE` and
+  `PART_STRIDE * p` both trip it, so `params[COLOR_A + PART_STRIDE * p]` is
+  caught the same as `params[COLOR_A + p * PART_STRIDE]`.

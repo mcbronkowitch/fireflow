@@ -40,7 +40,8 @@ master (`part.cpp` `_mod_term`, spec 2026-07-17 mod-tide). That exception
   RANG 0 silences it exactly (probe 1). One amplifier per signal.
 - **Excluded from modulation** (their knobs stay live on their normal function
   while MOD is latched, matching how hardware pots will behave):
-  - structural/discrete: ENG, STPS, SONG, SCAL, REC
+  - structural/discrete: ENG, STPS, SONG, SCAL, REC, STAGES (BBD deck's
+    stage-count control, conditionally visible rather than modulatable)
   - clock: TEMP, SHFL, PACE
   - zone/action knobs: DRFT (settle at left stop), SYNC/COUPLE, GRIT
     (sign picks mode), TIME (discrete flux slices), CHOK (zones)
