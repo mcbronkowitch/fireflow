@@ -469,7 +469,7 @@ is actually built today, and what is still design-only.
 | **FEED** | Coupled feedback-FM drone engine — `ENGINE_FEED = 6`, a fixed ring of `feed_cfg::kPairs` two-operator FM pairs per deck, free-running. BOND morphs each modulator's phase-modulation input from its own feedback into its neighbour's output; the motion is a consequence of that coupling rather than an addition to it. Two stabilizers, no oversampling: the Plaits two-sample feedback average and the Braids pitch-dependent attenuation. One `Env` drives amplitude AND index. Seven knobs re-pointed (BOND/RISE/FALL/RATIO/SUB/BRITE/SPREAD), and DEPTH has no knob by decision | ✅ **engine + both hosts built** (spec `docs/superpowers/specs/2026-08-18-feed-coupled-feedback-fm-design.md`, plan `docs/superpowers/plans/2026-08-19-feed-coupled-feedback-fm.md`; branch `feat/feed-coupled-feedback-fm`). **THREE things are open and none is cosmetic:** (1) **P is DECIDED — 6 pairs, 18 655 cycles each** (2026-08-19). Three sweep points on the Patch Submodule at kPairs 2/4/8, confirmed by its own run at 6: `inst_feed_engine_worst` 92.51 % of block budget against the same image's `instrument_worst` at 102.76 %. `kPDecided` is true and **gate `feed G8` is GREEN — the whole desktop suite is green, 6 of 6.** P=6 also sounds 3 of the 4 chord tones COLOR reaches, against 2 at P=4. Derivation: `docs/bench/2026-08-19-3def5d5-feed-axi-o2-patch_sm-usb.md`. (2) **Hardware says FEED fits, and that silence is its worst case** — measured 2026-08-19 on the Patch Submodule at `-O2` (`-O3` still does not link: the `system` family ALREADY overflows SRAM_EXEC by 2844 B before FEED existed). `inst_feed_engine_worst` 75.99 % / 81.41 % of block budget against the same image's `instrument_worst` at 99.30 % / 104.18 %, so Task 11's gate passes. The desktop denormal probe found an idle FEED deck running **1.65× slower than a sounding one** — 92 % of a 20 s tail subnormal, because `FeedBank`'s amplitude glide converged geometrically and never arrived at zero. FIXED (`FeedBankT::kArriveEps` plus `SvfLp::FlushDenormals`, which the deck going exactly silent exposed underneath it): 0 subnormals, and FTZ on/off now makes no difference at all. The new `inst_feed_engine_idle` row prices that state on the board at 75.64 % / 76.77 %, BELOW the sounding row's 77.70 % / 83.32 %. See `docs/engine-map.md` §9. (3) **Seventeen by-ear constants are still first-try**, and two of the open questions now have a hand-testable surface: the VCV context menu carries a **FEED A/B — audition** submenu with DEPTH (the FM index, which has no knob and sat pinned at `kDepthBase`) and the in-loop DAMP cutoff in Hz (`kDampFixedHz` = 3200 was confirmed only against DARKER alternatives, never a brighter one). Both default to the shipped constants, are persisted per patch, and are guarded by `res/test_panel.py` against drifting off those defaults. See "FEED" under "Done") |
 | **AIR** | Noise/formant texture engine (working title) — filtered noise through a resonant bank: wind, breath, vowel colours without sample material | ⬜ **planned** (queued 2026-08-17, ordered before M5k; no spec — needs its own brainstorming round. Restored 2026-08-18, same reason as FEED) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
-| **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
+| **M5l** | PULL — chord gravity between the two decks: one deck's melody drawn onto the other's sounding chord by a bipolar centre knob under CHOKE | ✅ **done** (engine + both VCV panels; spec `docs/superpowers/specs/2026-07-19-pull-chord-gravity-design.md`, plan `docs/superpowers/plans/2026-08-22-pull-chord-gravity.md`; branch `feat/pull-chord-gravity` off `main` `224d2ac`, tip `8f412b9`, released in 2.21.8. **PULL has had no listening pass** — `kPullDead = 0.03` and the linear-after-dead-zone probability curve are both first-try values, see `docs/by-ear-decisions.md`. **The 60 HP plate has no free slot for it**: a 0.1 mm scan found no clearing position anywhere in the ROOM group box (best margin −1.201 mm), so PULL sits loose outside every group frame at `(183.30, 21.20)` — a provisional placement, not a settled one) |
 | **Lane crossover** | A deck's lane output (LEVEL/MOTION/…) becomes a selectable modulation source for a target on the *other* deck — the first direct mod-to-mod bridge between the decks (today only audio and the rhythm view cross over) | ⬜ **planned** (from the 2026-08-22 dual-deck brainstorm, `docs/superpowers/specs/2026-08-22-dual-deck-brainstorm.md`; no spec; not yet ordered into the milestone sequence; spec together with "Mirror lanes" — same mod-glue) |
 | **Mirror lanes** | A deck follows a chosen lane of the sibling inverted or phase-shifted — direct per-lane counter-motion, deterministic call-and-response, complementing DRIFT's stochastic anti-correlation | ⬜ **planned** (from the 2026-08-22 dual-deck brainstorm, same doc as above; no spec; not yet ordered into the milestone sequence) |
 | **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel design closed as far as the drawing goes** — regrouping, redistribution and plate round 2a all shipped, in 2.21.1/2.21.2/2.21.3; **bring-up has no spec and is next**, the existing shell spec is superseded and no hardware is ordered; **form factor decided 2026-08-21: one brain, one 60 HP module, desktop as a shell decision** — see below) |
@@ -486,9 +486,12 @@ FEED and AIR ahead of M5k; the third, SWARM, was built and then withdrawn by ear
 on 2026-08-18 ([`docs/attic/2026-08-18-swarm-withdrawn.md`](attic/2026-08-18-swarm-withdrawn.md)),
 which left FEED and AIR exactly where they were queued. FEED was then specced
 2026-08-18 and built 2026-08-19 and took the sixth engine id, so `ENGINE_FEED = 6`
-and `ENGINE_COUNT == 7`. The engine-level milestones still completable without
-the target hardware are therefore AIR, M5k and M5l; M6 follows them as the
-hardware bring-up. What changed with the move
+and `ENGINE_COUNT == 7`. PULL (M5l) shipped 2026-08-22, out of table order —
+before AIR and M5k, both still unbuilt — because it needed no new engine id and
+no brainstorming round; the spec had been sitting ready since 2026-07-19. The
+engine-level milestones still completable without the target hardware are
+therefore AIR and M5k; M6 follows them as the hardware bring-up. What changed
+with the move
 to a standalone prototype is M6's content, not its position: it is still last,
 and it is now the milestone that has to define its own device rather than fit an
 existing one.
@@ -2807,6 +2810,66 @@ Both floors are 0.3 because they were written that way, not because a session
 chose them; they are tuning values and no gate depends on either number
 (`fireflow-by-ear-decisions` applies once they are set by ear, not before).
 
+### PULL — chord gravity between the two decks ✅ built (2026-08-22), ⏳ no listening pass, ⏳ HW-panel placement provisional
+
+A bipolar centre knob, CHOKE's own left/right convention, draws one deck's
+melody onto the other deck's sounding chord. The leader publishes the pitch
+classes of its current chord as a 12-bit absolute mask
+(`Part::chord_pc_mask()`, built by `pc_mask12()` in `engine/pitch/chord.h`);
+`Instrument` — the one scope that sees both decks, as it already does for
+CHOKE, the excitation bus and the FLUX rhythm anchor — reads PULL at the
+control raster, picks leader and follower from the sign, and pushes
+`(mask, probability)` into the follower. The follower draws bind-or-free once
+per PITCH-lane fire and, while bound, its `Quantizer` swaps the root-relative
+scale mask for the leader's absolute one in every mode, FREE included —
+binding a note to the neighbour's harmony is the whole point, so a
+free-running deck is not exempt. A bound note follows the leader's chord
+live: when the leader re-triggers with a new chord, the bound note glides
+onto the nearest tone of the new mask over the quantizer's existing ~40 ms
+change slew, with no new re-trigger machinery. `kPullDead = 0.03` keeps
+12 o'clock reliably off; `|PULL|` above it rescales linearly to a 0..1 bind
+probability.
+
+**Where the follower can bind, measured 2026-08-22:** the quantizer reaches
+the sounding pitch on five of the six engines in both modes, and not on a
+SAMPLER deck (either mode) or a BBD deck in FLOW — the same bypass
+`Part::_control_tick` already has, no new gate needed. A leader with nothing
+to publish (SAMPLER, or BBD in FLOW) simply pulls nothing; the direction is
+inert rather than special-cased. Full table and the live-follow A/B proof
+(24 000 of 24 000 samples differ under a mask swap 100 ms into a note, max
+`|d|` 0.544) are in [`docs/engine-map.md` §7](engine-map.md).
+
+Spec `docs/superpowers/specs/2026-07-19-pull-chord-gravity-design.md`, plan
+`docs/superpowers/plans/2026-08-22-pull-chord-gravity.md`; branch
+`feat/pull-chord-gravity` off `main` `224d2ac`, tip `8f412b9`; released in
+**2.21.8**. Engine: the gravity mask (`3e78ca9`), the chord publication
+(`bc26974`, negative-rounding fix `f430ac3`), the follower bind (`c08465f`),
+the routing and dead zone (`2a00245`, slew-race hardening `ea69303`),
+`P_PULL` and the render-host action (`1a04697`). VCV: the panel knob under
+CHOKE (`ee23912`, `NUM_PARAMS` 120 → 121 fix `e28bd0d`); the 60 HP plate
+placement (`205c188`, see below). Tests: the spec's remaining two acceptance
+checks (`9dd1770`, red-proof fix `8f412b9`).
+
+**Two things the spec did not know, decided on the branch.** SAMPLER and BBD
+decks publish no chord — the spec assumed every deck could lead, written
+before SAMPLER was flattened to one note and before BBD or FEED existed. And
+`P_PULL`, appended last, landed after `MOD_LAYER_PARAMS` had grown to 49 ids
+since 2.21.7, so "appended last" now means last in `APPENDED_PANEL_PARAMS`
+and shifts every mod-layer id by one — accepted under the dev-alpha rule, no
+patch migration.
+
+**Two things open, honestly. PULL has had no listening pass.**
+`kPullDead = 0.03` and the linear-after-dead-zone probability curve are both
+first-try values (`docs/by-ear-decisions.md`). **And the 60 HP plate has no
+free slot for it.** A 0.1 mm brute-force scan found no clearing position
+anywhere in the ROOM group box (best margin −1.201 mm; GLOBAL best
+−0.945 mm; TIMING's +0.100 mm is fabrication noise, not a slot) — every
+row-to-row seam on the plate runs 6–8 mm against a 12 mm knob body. PULL sits
+loose, outside every group frame, at `(183.30, 21.20)`, 7.113 mm clear of
+CHOKE: a provisional placement pending a real layout pass, not a settled one.
+This is the first crack in "60 HP with room to spare"
+(`fireflow-hardware-constraint`) and belongs on the M6 open list.
+
 ## Planned
 
 The SHAPE/SMOOTH rework's SMOOTH half has shipped — see "SMOOTH becomes
@@ -3059,11 +3122,14 @@ started.
 
 Spec: `docs/superpowers/specs/2026-07-18-zap-percussion-engine-design.md`
 
-### M5l — PULL ⬜
+### M5l — PULL ✅ built, ⏳ no listening pass, ⏳ HW-panel placement provisional
 
 Chord gravity between the two decks, using the existing scale, root, and chord
-layers. PULL is deliberately the last engine milestone before M6. The design is
-complete, but implementation has not started.
+layers. Queued as deliberately the last engine milestone before M6, and built
+out of table order — 2026-08-22, ahead of AIR and M5k — because it needed no
+new engine id and no brainstorming round; the spec had been sitting ready
+since 2026-07-19. The detail is under "Done"; this entry stays here only as
+the pointer.
 
 Spec: `docs/superpowers/specs/2026-07-19-pull-chord-gravity-design.md`
 
@@ -3193,9 +3259,10 @@ spec and is next**, and no hardware is ordered.
 shells.** A concept round examined splitting FireFlow into two or three
 Daisy-based modules (deck A / deck B / master) and rejected it: the cross-deck
 coupling — CHOKE, mutual delay ducking, the BBD engine's audio-rate neighbour
-bus, shared transport, and the planned PULL — is the product identity and only
-exists on one chip. M6 stays the 60 HP module; the desktop feel the split was
-reaching for becomes a **shell decision** (Mother-32 pattern: stage 1 an
+bus, shared transport, and PULL (built 2026-08-22, after this note) — is the
+product identity and only exists on one chip. M6 stays the 60 HP module; the
+desktop feel the split was reaching for becomes a **shell decision** (Mother-32
+pattern: stage 1 an
 off-the-shelf ~62 HP case whose 1U row carries line-out/phones/MIDI, stage 2
 an optional dedicated powered shell, later, as its own project). Two
 constraints bind the bring-up spec: the jack set must be usable with no rack

@@ -394,3 +394,26 @@ which is exactly why they are recorded here.
   swinging depth — which is the reason the change was made. With a DENS depth
   turned up it was listened to and kept: the two meanings track each other and
   the face still reads as one control. Do not split them back apart.
+
+## PULL (2026-08-22) — NOT YET HEARD
+
+PULL — chord gravity between the two decks — shipped on branch
+`feat/pull-chord-gravity`, spec
+`docs/superpowers/specs/2026-07-19-pull-chord-gravity-design.md`. Unlike every
+other section above, nothing here has been through a listening pass at all;
+both values are arithmetic first guesses, recorded so a later session does not
+mistake "compiles and passes its gates" for "tuned."
+
+- **`kPullDead = 0.03f`** (`engine/instrument.h`, beside `set_pull`) — the
+  bipolar knob's dead zone at 12 o'clock. Chosen by analogy to the family's
+  other cross-deck bipolar controls, not by ear on PULL itself. `|PULL|` is
+  rescaled off it so full deflection is exactly a bind probability of 1.
+  Unconfirmed: whether 0.03 reads as reliably off at noon on a real pot once
+  the feature is audible, or whether it wants to be wider or narrower.
+- **The bind probability is linear in `|PULL|` after the dead-zone rescale**
+  — `(amt - kPullDead) / (1.f - kPullDead)` in `Instrument`'s control-rate
+  block (`engine/instrument.cpp`). A first-try shape, not a curve chosen by
+  ear. Whether the pull should feel more on/off (most of the travel already
+  binding near-certain) or spread evenly across the whole span is an open
+  listening question — do not curve it, and do not declare the straight line
+  "correct," without a pass.

@@ -8,45 +8,36 @@
   Everything below the comment is public.
 -->
 
-## FireFlow 2.21.7
+## FireFlow 2.21.8
 
-**Every knob becomes its own modulation depth.** The MOD pad on the hardware
-panel is a latching button now. Press it and the lamp stays lit; while it does,
-each modulatable knob stops showing its sound value and shows how deeply the
-modulation engine moves it instead. Press again and the panel comes back
-exactly as you left it — both sets of values live in the patch.
+**PULL — the two decks can share a chord now.** A new bipolar knob, centred in
+the panel under CHOKE, draws one deck's melody onto the other deck's sounding
+harmony. Turn it left and deck A leads: every note deck B's melodic lane fires
+has a chance to land on a pitch class deck A is currently sounding, in whatever
+octave deck B's own register puts it, instead of on its own scale. Turn it
+right and the roles swap — the same left/right convention CHOKE already uses.
+Centred, it does nothing; a small dead zone around noon keeps it reliably off
+there on a real knob rather than needing a pixel-perfect click-stop.
 
-**The panel tells you which knobs those are.** Every modulatable pot wears its
-zone's accent colour on the ring around it — teal on deck A, orange on deck B,
-blue-grey in the centre. A plain dark ring means the knob keeps its normal job
-even while the layer is latched: MOD itself, GRIT, TIME, DRFT, SYNC, CHOK and
-the whole clock and structure row. The absence of colour is the information.
+**The pull is a probability, not a snap.** How far you turn PULL sets how often
+a follower note is pulled onto the leader's chord rather than how hard — near
+the dead zone only a few notes bind, at full deflection every one does. A note
+already sounding keeps listening: if the leader's chord changes underneath a
+bound note, that note glides onto the new chord over the same short slide the
+instrument already uses whenever a scale or root changes, instead of waiting
+for its own next strike.
 
-**48 depths, two routes into the sound.** Six faces per deck already owned a
-depth slot in the engine — TIMB, DPTH, FILT and the three FX sends — and their
-knobs now write those slots directly. Everything else is computed in the host
-and folded into the knob position before it reaches the engine, so no new
-summing points appeared anywhere in the signal path.
+**Not every deck has a chord to offer.** SAMPLER and BBD-in-FLOW decks use
+their pitch lane for something other than a note — a read position, a clock
+bend — so leading from one of those simply does nothing; the follower side
+behaves normally as soon as the other deck leads instead.
 
-**Pitch stays anchored.** Nothing in the layer targets the pitch lane's depth;
-RANG still owns how far the phrase moves, and RANG at zero still silences it
-exactly. Turn MOD down and the texture stops breathing while the phrase keeps
-playing — that relationship is unchanged and deliberate.
+**On the 60 HP hardware draft, PULL had no ready-made slot.** It sits placed
+but loose, outside the panel's usual grouping — a provisional position pending
+a proper layout pass, not a finished placement.
 
-**Nothing sounds different until you raise a depth.** The three engine-backed
-depths boot at the values the engine already used, every host-computed depth
-boots at zero, and the latch boots off.
-
-**One exception, and it is audible: deck B's DPTH knob works now.** It never
-reached the engine — the read resolved to the wrong parameter — so deck B's
-motion base has been stuck since the knob was wired up. Fixing it moves that
-base from 0.0 to 0.5 (0.25 on a sampler deck). A saved patch with a deck B will
-sound different where it was silently ignoring that knob before. Along the same
-line, DENS on a sampler deck now modulates grain overlap as well as the groove
-gate, so the two halves of that one knob move together.
-
-The full-size Fireflow module is untouched — this layer belongs to the hardware
-panel. SHIFT remains reserved and inert.
+Both the dead zone and the pull-probability curve are first-try values and have
+not been through a listening pass yet.
 
 ## Install
 

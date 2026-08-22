@@ -40,6 +40,8 @@ Files are named without their directory. The key:
 | `lane.cpp`, `lane.h`, `song_form.h`, `super_modulator.cpp/.h`, `waveforms.h` | `engine/mod/` |
 | `part.cpp`, `part.h` | `engine/parts/` |
 | `center.cpp` | `engine/center/` |
+| `quantizer.h`, `chord.h` | `engine/pitch/` |
+| `instrument.h`, `instrument.cpp` | `engine/` |
 | `Fireflow.cpp`, `init_patch.hpp` | `host/vcv/src/` |
 
 Note the repo also carries a full second tree under `.worktrees/`; a bare grep
@@ -567,6 +569,42 @@ those semitones survives quantization is the RANGE gate above, which is
 nothing on this branch touched it. Settled, and no longer a question for a
 SHAPE/SMOOTH design: where on the SHAPE axis the melody lives. Everywhere, on a
 note deck.
+
+### PULL: where the follower can bind, and proof a bound note follows live
+
+§7's reachability question applies to PULL too, on a different axis from SHAPE
+or RANGE: which of the six part engines the quantizer's gravity mask can
+actually reach. Measured 2026-08-22 against `main` @ `224d2ac`, desktop, 48 kHz,
+`clang++ -std=c++17 -O2` — the plan this stands behind is
+`docs/superpowers/plans/2026-08-22-pull-chord-gravity.md`, "What was measured".
+
+**Reach, six engines × two modes.** One `Part` per engine, constructed then
+`init()`'d, `LANE_PITCH` base 0.5, depth 0, scale swapped Dorian → whole-tone
+(17.0 st → 18.0 st), pitch read from `target_value(LANE_PITCH)` after 20 000
+samples each. No RNG draw in this probe, so no seed applies.
+
+| engine | FLOW | STEP |
+|---|---|---|
+| SYNTH (1) | quantized | quantized |
+| SAMPLER (2) | bypass | bypass |
+| WAVE (3) | quantized | quantized |
+| BODY (4) | quantized | quantized |
+| BBD (5) | bypass | quantized |
+| FEED (6) | quantized | quantized |
+
+This is also the answer to "where is PULL inert?" — the follower side does
+nothing on a SAMPLER deck, or on a BBD deck in FLOW, because those two cells
+already bypass the quantizer in `part.cpp`'s `_control_tick`. `Part::set_gravity`
+adds no new gate there; it inherits the one that already exists.
+
+**A sounding note follows a mask change; it is not latched at trigger.** A/B
+render, identical `Part`s (SYNTH, FLOW, one note struck with `trigger_manual()`)
+except that run B swaps the scale mask 100 ms into the note; 24 000 samples
+compared: **24 000 of 24 000 differ, max |d| 0.544.** The change rides the
+quantizer's existing scale-change slew, itself measured at exactly **40.0 ms**
+— 20 calls at `SynthEngine::kCtrlInterval` = 96 samples, 48 kHz — so a bound
+note glides onto a new mask over the same 20 control ticks a scale or root
+change already takes. PULL opens no new slew path; it reuses this one.
 
 ---
 
