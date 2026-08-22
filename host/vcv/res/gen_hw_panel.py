@@ -103,6 +103,13 @@ def _blend_hex(fg, bg, t):
 IDX_COL = {s: _blend_hex(ACC[s], KNOCKOUT, 0.75) for s in ACC}
 LED_ON = {s: _blend_hex(ACC[s], LED_OFF, 0.55) for s in ACC}
 
+# Which pots wear the printed mod wreath (spec 2026-08-22 §5, variant B):
+# exactly the faces with a depth param. Derived from gen_panel's tables so
+# the plate and the param block cannot drift apart.
+MOD_WREATHED = ({f"{b}_A" for b, _, _, _ in gp.MOD_DECK_TARGETS}
+                | {f"{b}_B" for b, _, _, _ in gp.MOD_DECK_TARGETS}
+                | {b for b, _, _, _ in gp.MOD_CENTER_TARGETS})
+
 
 def zone_of(x):
     """Which of the three plate zones x falls in."""
@@ -154,6 +161,7 @@ HW_CAPTION = {
     "DEPTH": "DPTH",
     "IN_L": "IN L", "IN_R": "IN R", "OUT_L": "OUT L", "OUT_R": "OUT R",
     "SHIFTBTN": "SHFT",
+    "MODBTN": "MOD",
 }
 
 
@@ -232,6 +240,10 @@ CENTER_POS = {
     "TIDE":   (136.40, Y_B1M), "MORPH": (152.40, Y_B1G), "PACE": (168.40, Y_B1M),
     "REV_SIZE": (136.40, Y_B2K), "REV_DECAY": (152.40, 79.00), "REV_DIFF": (168.40, Y_B2K),
     "REV_TONE": (152.40, 97.00),
+    # MODBTN is a real latch param now (spec 2026-08-22 mod-latch-layer §5),
+    # placed through the same place() path as every sound knob; the
+    # coordinates are unchanged from its old HW_ONLY slot.
+    "MODBTN": (W - 14.00, JACK_Y),
 }
 
 JACK_POS = {"PITCH_A": 56.00, "GATE_A": 67.50,
@@ -314,6 +326,10 @@ def place(c):
     raise KeyError(f"no hw slot for {base}")
 
 HW_PARAMS  = [place(c) for c in gp.RUNTIME_PANEL_PARAMS]
+# MODBTN is a real latch param now (spec 2026-08-22 mod-latch-layer §5); it
+# lives in gp.MOD_LAYER_PARAMS, outside RUNTIME_PANEL_PARAMS, so the big
+# panel never draws it -- placed here explicitly, keycap slot it always had.
+HW_PARAMS = HW_PARAMS + [place(gp.MODBTN_CTL)]
 _by_param = {c.enum: c for c in HW_PARAMS}
 for lamp, knob_enum in KNOB_LAMPS.items():
     LIGHT_POS[lamp] = caption_led_cluster(_by_param[knob_enum])[2:]
@@ -335,7 +351,6 @@ class HwOnly:
 
 HW_ONLY = [
     HwOnly("SHIFTBTN", "P", 14.00, JACK_Y, "SHFT", "reserved, no function"),
-    HwOnly("MODBTN", "P", W - 14.00, JACK_Y, "MOD", "reserved, no function"),
 ]
 
 ALL_HW = HW_PARAMS + HW_INPUTS + HW_OUTPUTS + HW_LIGHTS + HW_ONLY
@@ -767,6 +782,14 @@ def svg():
             # puts its own knob widget on top and a plate has a hole here.
             P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="{mm(br)}" '
                       f'fill="{HW_WELL}" stroke="{HW_RING}" stroke-width="0.3"/>')
+            if c.enum in MOD_WREATHED:
+                # Variant B mod wreath: dashed satellite ring, group-frame
+                # dash, zone accent. Absence of the ring means the knob
+                # keeps its sound function while MOD is latched.
+                P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" '
+                          f'r="{mm(br + 1.2)}" fill="none" '
+                          f'stroke="{ACC[zone_of(c.x)]}" stroke-width="0.35" '
+                          f'stroke-opacity="0.85" stroke-dasharray="1.6 1.2"/>')
         if c.label:
             lx, ly, anchor, size, colour = hw_label(c)
             P.append(f'<text x="{mm(lx)}" y="{mm(ly)}" fill="{colour}" '

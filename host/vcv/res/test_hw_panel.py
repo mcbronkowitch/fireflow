@@ -25,7 +25,11 @@ def test_panel_is_60hp():
 
 def test_same_runtime_params_same_order():
     # The hw panel is the SAME instrument: identical enum set, identical order.
-    assert [c.enum for c in hw.HW_PARAMS] == [c.enum for c in gp.RUNTIME_PANEL_PARAMS]
+    # MODBTN is the one exception -- it is a real latch param now (spec
+    # 2026-08-22 mod-latch-layer §5) but lives outside RUNTIME_PANEL_PARAMS,
+    # so the big panel never draws it. gen_hw_panel.py appends it explicitly.
+    assert [c.enum for c in hw.HW_PARAMS] == \
+        [c.enum for c in gp.RUNTIME_PANEL_PARAMS] + ["MODBTN"]
     assert [c.enum for c in hw.HW_INPUTS] == (
         [c.enum for c in gp.INPUTS] + [c.enum for c in gp.HW_MOD_INPUTS])
     assert [c.enum for c in hw.HW_OUTPUTS] == [c.enum for c in gp.OUTPUTS]
@@ -223,14 +227,18 @@ def test_shared_knob_labels_do_not_coincide():
 
 def test_hw_slot_map_matches_the_reduced_inventory():
     """Every runtime param has a hardware slot and no slot is left pointing
-    at a control that no longer exists."""
+    at a control that no longer exists. MODBTN's CENTER_POS slot is the one
+    exception: it is a real param (a latch, spec 2026-08-22 §5) but not a
+    RUNTIME_PANEL_PARAMS member -- gen_hw_panel.py places it explicitly,
+    same as JACK_POS names are excused below."""
     live = {c.enum for c in gp.RUNTIME_PANEL_PARAMS}
     stems = set(hw.DECK_POS) | set(hw.CENTER_POS)
     dead = [s for s in stems
-            if s not in live and f"{s}_A" not in live and s not in hw.JACK_POS]
+            if s not in live and f"{s}_A" not in live and s not in hw.JACK_POS
+            and s != "MODBTN"]
     check(not dead, f"hw slots for controls that no longer exist: {dead}")
-    check(len(hw.HW_PARAMS) == len(gp.RUNTIME_PANEL_PARAMS),
-          "hw param count drifted from the shared inventory")
+    check(len(hw.HW_PARAMS) == len(gp.RUNTIME_PANEL_PARAMS) + 1,
+          "hw param count drifted from the shared inventory (+1 MODBTN latch)")
 
 
 LBL_MARGIN = 1.5
@@ -336,19 +344,55 @@ def test_size_classes_match_the_spec():
 
 
 def test_hw_only_inventory():
-    """What exists on sheet metal but not in the VCV module: 2 pads, no more
-    extra LEDs. 19 lamps drawn on the plate, 21 LightIds (`FLOW_*` undrawn).
-    The eight MOD jacks are real inputs (unwired), no longer HW_ONLY
-    placeholders."""
+    """What exists on sheet metal but not in the VCV module: 1 pad (SHIFT,
+    still reserved and inert), no more extra LEDs. MODBTN moved out of
+    HW_ONLY 2026-08-22 -- it is a real latch param now, drawn from
+    hw.HW_PARAMS instead. 19 lamps drawn on the plate, 21 LightIds (`FLOW_*`
+    undrawn). The eight MOD jacks are real inputs (unwired), no longer
+    HW_ONLY placeholders."""
     kinds = {}
     for c in hw.HW_ONLY:
         kinds[hw.hw_class(c.enum)] = kinds.get(hw.hw_class(c.enum), 0) + 1
-    check(kinds.get("P") == 2, f"expected 2 hw-only pads, got {kinds.get('P')}")
+    check(kinds.get("P") == 1, f"expected 1 hw-only pad, got {kinds.get('P')}")
     check(kinds.get("J", 0) == 0, f"expected 0 hw-only jacks, got {kinds.get('J')}")
     check(kinds.get("L", 0) == 0, f"expected 0 hw-only LEDs, got {kinds.get('L')}")
-    assert [c.enum for c in hw.HW_PARAMS] == [c.enum for c in gp.RUNTIME_PANEL_PARAMS]
+    assert [c.enum for c in hw.HW_PARAMS] == \
+        [c.enum for c in gp.RUNTIME_PANEL_PARAMS] + ["MODBTN"]
     total_leds = len([c for c in hw.ALL_HW if hw.hw_class(c.enum) == "L"])
     check(total_leds == 19, f"expected 19 LEDs on the plate, got {total_leds}")
+
+
+def test_mod_wreaths():
+    """Spec 2026-08-22 §5: every mod target wears a dashed accent wreath,
+    nothing else does, and MODBTN is a real latch param now."""
+    want = ({f"{b}_A" for b, _, _, _ in gp.MOD_DECK_TARGETS}
+            | {f"{b}_B" for b, _, _, _ in gp.MOD_DECK_TARGETS}
+            | {b for b, _, _, _ in gp.MOD_CENTER_TARGETS})
+    check(hw.MOD_WREATHED == want,
+          f"MOD_WREATHED diverged from gp tables: {hw.MOD_WREATHED ^ want}")
+    svg = open(os.path.join(HERE, "FireflowHW.svg"), encoding="utf-8").read()
+    rings = re.findall(r'<circle[^>]*stroke-dasharray="1.6 1.2"[^>]*/>', svg)
+    # group frames use the same dash but are <rect>, not <circle>, so every
+    # dashed circle on the plate is a wreath
+    check(len(rings) == len(want), f"{len(rings)} wreath circles, want {len(want)}")
+    for ring in rings:
+        check(any(acc in ring for acc in hw.ACC.values()),
+              f"wreath without a zone accent: {ring}")
+    # the master knob is deliberately unwreathed
+    for enum in ("MOD_A", "MOD_B"):
+        c = next(c for c in hw.HW_PARAMS if c.enum == enum)
+        check(f'cx="{c.x:.3f}" cy="{c.y:.3f}" r="{hw.BODY_R["G"] + 1.2:.3f}"'
+              not in svg, f"{enum} grew a wreath")
+    # MODBTN: real param, out of kHwOnlyCtls, caption on the jack-row baseline
+    src = open(os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"),
+               encoding="utf-8").read()
+    check(re.search(r"\{\s*MODBTN\s*,\s*WK_LATCH", src), "MODBTN not in kParamCtls")
+    hwonly = src.split("kHwOnlyCtls")[1]
+    check("MODBTN" not in hwonly.split("};")[0], "MODBTN still in kHwOnlyCtls")
+    mod = next(c for c in hw.HW_PARAMS if c.enum == "MODBTN")
+    shift = next(c for c in hw.HW_ONLY if c.enum == "SHIFTBTN")
+    my, sy = hw.hw_label(mod)[1], hw.hw_label(shift)[1]
+    check(abs(my - sy) < 1e-6, f"MOD caption baseline {my} != SHFT {sy}")
 
 
 def test_steps_has_no_lamp_on_the_hw_plate():
