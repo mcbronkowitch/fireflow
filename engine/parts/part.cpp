@@ -401,6 +401,10 @@ void Part::_control_tick() {
     // part had been a sampler. Same reasoning as the quantizer call above.
     int nch = _chord.apply(_tg[LANE_PITCH], _chord_mask(),
                            _quant.root_semis(), chord);
+    // PULL, leader side. Taken here rather than after the flatten because the
+    // flatten is a sampler-only collapse and a sampler publishes nothing
+    // anyway -- reading before it keeps the two concerns separate.
+    _chord_pc = _note_deck() ? pc_mask12(chord, nch) : 0;
     nch = _flatten_for_sampler(chord, nch);
     _engine->set_chord(chord, nch);
 

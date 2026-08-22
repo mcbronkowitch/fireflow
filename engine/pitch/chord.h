@@ -220,4 +220,19 @@ private:
     int   _prev_n = 0;
 };
 
+// Built chord tones (0..1 = 36 semitones) -> absolute 12-bit pitch-class mask,
+// rounded to the nearest semitone. Absolute on purpose: PULL's follower checks
+// this mask mod 12 with no root shift (spec 2026-07-19 pull-chord-gravity).
+// The rounding is exact for a quantized root and is the only sane reading of
+// an unquantized one.
+inline uint16_t pc_mask12(const float* norm, int n) {
+    uint16_t m = 0;
+    for (int i = 0; i < n; ++i) {
+        int s = static_cast<int>(norm[i] * Quantizer::SPAN_SEMIS + 0.5f) % 12;
+        if (s < 0) s += 12;
+        m |= static_cast<uint16_t>(1u << s);
+    }
+    return m;
+}
+
 } // namespace spky

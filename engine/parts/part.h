@@ -87,6 +87,12 @@ public:
     // color-motion-target).
     void set_color(float c) { _color = clampf(c, 0.f, 1.f); }
     int  chord_size() const { return _chord.size(); }
+    // PULL, leader side (spec 2026-07-19 pull-chord-gravity): the pitch
+    // classes this deck is currently sounding, as an absolute 12-bit mask.
+    // 0 = this deck publishes no harmony, which is what a SAMPLER or BBD deck
+    // does: there the PITCH lane is a read position and a clock bend, not a
+    // note. Instrument is the only reader -- a Part never sees its sibling.
+    uint16_t chord_pc_mask() const { return _chord_pc; }
     // The color actually handed to the ChordBuilder: the knob plus MOTION's
     // swing (spec 2026-07-18 color-motion-target). Equals the knob when
     // MOD = 0 or the MOTION target is inactive.
@@ -735,6 +741,14 @@ private:
     Quantizer _quant;
     float     _pitch_q = 0.f;
     ChordBuilder _chord;
+    uint16_t _chord_pc = 0;      // PULL: what chord_pc_mask() hands out
+    // The two engines on which the PITCH lane is not a note. Same set as
+    // set_flow_melody's (part.cpp) and as the quantizer bypass's, and named
+    // separately for the same reason that one is: they share a cause, not a
+    // definition.
+    bool _note_deck() const {
+        return _engine_id != ENGINE_SAMPLER && _engine_id != ENGINE_BBD;
+    }
     uint16_t _chord_mask() const {
         return _quant.mode() == QuantMode::Chrom ? CHROM_MASK : _quant.scale_mask();
     }
