@@ -200,19 +200,54 @@ TEST_CASE("pull: the dead zone makes noon reliably off") {
 }
 
 TEST_CASE("pull: at full deflection every follower note is a leader chord tone") {
+    // Fix round 1 (review of 2a00245): the original version sampled
+    // pitch_cv() right after a fixed 500 ms run(), unsynchronised with the
+    // follower's own 40 ms change slew -- a structural race against
+    // _slew_len (~1920 samples), not evidence that PULL was wrong. Hardened
+    // to Task 3's idiom in this same file ("follower: a bound note sounds a
+    // pitch class of the mask"): detect the PITCH-lane fire's rising edge,
+    // then ride past the slew before reading.
+    //
+    // The edge itself needs sample accuracy, measured, not assumed: probing
+    // in.part(PART_B).lane_fired(LANE_PITCH) after a 64-sample process()
+    // call caught 0 of 25 true rising edges over 4 s, because Part::process
+    // (called once per sample from Instrument::process's inner loop) resets
+    // and recomputes _fired every single sample -- only the LAST of the 64
+    // survives past the block call. Per-sample polling caught all 25. So the
+    // edge is detected one sample at a time here; the post-edge ride is
+    // still done in 64-sample steps, since position there genuinely doesn't
+    // matter (64 samples is two orders of magnitude inside the 1920-sample
+    // slew).
     Instrument in; two_decks(in);
     in.set_pull(-1.f);
-    run(in, 2.f);
+    run(in, 2.f);                                 // let PULL bind in
+    std::vector<float> l1(1), r1(1);
+    std::vector<float> l(64), r(64);
     int checked = 0;
-    for (int k = 0; k < 12 && checked < 6; ++k) {
-        run(in, 0.5f);
-        const uint16_t lead = in.part(PART_A).chord_pc_mask();
-        if (!lead) continue;
-        const int semis = static_cast<int>(
-            in.part(PART_B).pitch_cv() * Quantizer::SPAN_SEMIS + 0.5f);
-        CAPTURE(lead); CAPTURE(semis);
-        CHECK(((1u << (semis % 12)) & lead) != 0u);
-        ++checked;
+    bool prev = false;
+    // 20 s ceiling, matching Task 3's per-sample gates in this same file --
+    // ample margin for a stepped 8-step deck to produce 6 fires.
+    for (int i = 0; i < 48000 * 20 && checked < 6; ++i) {
+        in.process(nullptr, nullptr, l1.data(), r1.data(), 1);
+        const bool f = in.part(PART_B).lane_fired(LANE_PITCH);
+        if (f && !prev) {
+            for (int k = 0; k < 4000; k += 64)
+                in.process(nullptr, nullptr, l.data(), r.data(), 64);
+            const uint16_t lead = in.part(PART_A).chord_pc_mask();
+            if (lead) {
+                const int semis = static_cast<int>(
+                    in.part(PART_B).pitch_cv() * Quantizer::SPAN_SEMIS + 0.5f);
+                CAPTURE(lead); CAPTURE(semis);
+                CHECK(((1u << (semis % 12)) & lead) != 0u);
+                ++checked;
+            }
+            // Re-arm against the post-ride state, not the pre-ride edge: the
+            // ride advances thousands of samples, long enough for another
+            // fire to have already happened inside it.
+            prev = in.part(PART_B).lane_fired(LANE_PITCH);
+            continue;
+        }
+        prev = f;
     }
     CHECK(checked == 6);
 }
