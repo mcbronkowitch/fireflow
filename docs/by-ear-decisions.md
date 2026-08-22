@@ -325,6 +325,34 @@ real behaviour changes on the way. **Both are OPEN — awaiting Bastian's ears,
 not decisions already taken.** Do not "finish" either one in either direction
 before a listening pass.
 
+- **Nothing on this branch has been checked in interactive Rack — the full
+  latch-and-listen checklist below is unrun, not just the two behaviour
+  changes further down.** Task 6 (`host/vcv/src/Fireflow.cpp`: `modLatched()`,
+  `ModSound<W>`, `ModDepth<W>`, `ModDepthRing`, and the rewritten
+  `WK_BIGKNOB`/`WK_KNOBC`/`WK_SMKNOB`/`WK_KNOBI` case) was verified only
+  against a headless screenshot of the unlatched browser-preview state
+  (`module == nullptr`); screenshot mode cannot click a control, open a
+  context menu, or produce audio. Preserved here because the report that
+  first wrote it down lived in gitignored `.superpowers/sdd/` scratch and was
+  cleared once the branch merged. Still to check by hand on `FireflowHW`:
+  - Latch MOD (click the MOD button): every wreathed knob swaps to its depth
+    twin, each with a solid accent ring behind it in its zone colour
+    (teal/orange/blue-grey).
+  - The three engine-backed depth defaults land at their booted positions:
+    TIMB depth ≈ 1.0, DPTH depth ≈ 0.7, FILT depth ≈ 0.55; every other
+    depth twin boots at 0.
+  - The excluded knobs stay live and unchanged while latched: MOD, GRIT,
+    TIME/FLUXRATE, DRFT, SYNC/COUPLE, CHOK, and the whole clock/structure
+    row (STPS, SONG, RATE, VARY, TEMP, SYNC, SHFL).
+  - Unlatch MOD: sound knobs return, values kept, nothing reset.
+  - Audible anchor: with MOD latched and deck A's master MOD knob turned up,
+    raising deck A's FILT depth knob should audibly deepen SIZE-axis
+    modulation; turning deck A's master MOD down to 0 should stop the
+    texture modulation while the pitch phrase keeps playing.
+  - General visual check in a live patch: nothing overlaps oddly at the
+    edges of big vs. small knob sizes (ring radius 7.2 mm big, 5.6 mm
+    small), and no ring visually collides with a neighbouring control on a
+    tightly-packed row.
 - **Deck B's `LANE_MOTION` base now actually moves, 0.0 → 0.5 (0.25 on a
   sampler deck, which halves the base) — unheard.**
   `inst.set_target_base(p, spky::LANE_MOTION, pp(DEPTH_A, p))` was reading
