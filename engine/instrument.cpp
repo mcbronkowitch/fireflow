@@ -63,28 +63,36 @@ constexpr float kRevReturnFadeS = 0.15f;  // ear-tunable: tail fade-out before t
 // are the classic sidechain shape (fast in, slow out, a floor rather than a
 // mute) at plausible values -- nothing here has been tuned against the
 // instrument, and none of it is a measurement.
-constexpr float kChokeDuckFloor = 0.15f;   // gain at full depth and a saturated
-                                           // envelope: -16.5 dB, ducked not muted
+constexpr float kChokeDuckFloor = 0.15f;   // gain at full depth, top of the
+                                           // window: -16.5 dB, ducked not muted
 constexpr float kChokeDuckAtkS  = 0.005f;  // envelope attack -- catches a note's edge
 constexpr float kChokeDuckRelS  = 0.150f;  // envelope release -- rides back between notes
 
-// kChokeDuckFloor is NOT REACHED IN PLAY, and knowing that is the difference
-// between tuning this duck and chasing it. The gain below normalises the
-// envelope against full scale (min(1, env)), but a deck's part output does not
-// run anywhere near full scale: measured 2026-08-22 on the two rigs
-// tests/test_choke.cpp uses, 10 s each after a 1 s settle, reading deck_tap()
-// (which IS the al/ar the follower rectifies) --
+// The window the envelope is normalised against, and it is NOT 0..1 -- that is
+// the whole point. A deck's part output never approaches full scale, so
+// normalising against it made kChokeDuckFloor unreachable: measured before this
+// window existed, the duck bottomed out at 0.8315 (-1.60 dB) on FLOW drones and
+// 0.8489 (-1.42 dB) on STEP plucks, against the -16.5 dB the floor names. Same
+// shape and same reason as the Bloom duck's kDuckThresh/kDuckFull above.
 //
-//   FLOW drones   peak 0.2998  rms 0.0620  ->  duck gain bottoms at 0.8315 (-1.60 dB)
-//   STEP plucks   peak 0.2475  rms 0.0464  ->  duck gain bottoms at 0.8489 (-1.42 dB)
+// Sized from the envelope's measured distribution rather than from its peak
+// (2026-08-22, three rigs, 10 s each after a 1 s settle, envelope recovered
+// from the applied gain at depth 1):
 //
-// So at the knob's deepest the yielding deck is pulled back about 1.5 dB, not
-// the 16.5 dB the constant names, and moving kChokeDuckFloor alone scales only
-// that 1.5 dB. Closing the gap is a WINDOW question, not a floor question --
-// the Bloom duck above answers the same problem with kDuckThresh/kDuckFull,
-// sized to the range its envelope actually visits. Left as specified here
-// because the window is a design decision this task was not given; it is the
-// first thing to settle in the by-ear pass.
+//   FLOW drones  min 0.0419  p10 0.0700  p50 0.1118  p90 0.1555  max 0.1983  <0.02:  0.0%
+//   STEP plucks  min 0.0029  p10 0.0172  p50 0.0458  p90 0.1330  max 0.1778  <0.02: 13.1%
+//   STEP sparse  min 0.0000  p10 0.0000  p50 0.0000  p90 0.0302  max 0.1600  <0.02: 87.6%
+//
+// THRESH 0.02 is the silence gate: the sparse rig sits at exactly 0 for 87.6 %
+// of its run and the drone rig never drops below 0.0419, so this value lets a
+// silent priority deck stop ducking without ever gating a sustained one.
+// FULL 0.15 is the drone rig's p90 -- the level a deck reaches when it is
+// properly sounding, not a peak it touches once. Choosing the p90 rather than
+// the max is what makes the floor genuinely reachable instead of a corner case.
+// Both are by-ear STARTING POINTS like the three above; what is measured is the
+// distribution they are sized against, not that they sound right.
+constexpr float kChokeDuckThresh = 0.02f;  // below: no duck, whatever the knob
+constexpr float kChokeDuckFull   = 0.15f;  // at and above: the floor is reached
 }
 
 void Instrument::init(float sample_rate) { init(sample_rate, FxMem{}); }
@@ -261,15 +269,19 @@ void Instrument::process(const float* inL, const float* inR,
         // zones sit pinned at 1 above it. Glided, so a knob move cannot step
         // the mix gain.
         const float depth = _choke_depth.process(std::min(amt, 0.5f) * 2.f);
-        // Floor-style, like the Bloom duck: at full depth and a saturated
-        // envelope the yielding deck sits at kChokeDuckFloor, never muted --
-        // but the envelope does NOT saturate in play, so read the measurement
-        // beside kChokeDuckFloor's declaration before tuning anything here.
+        // Floor-style, like the Bloom duck, and windowed for the same reason:
+        // at full depth with the priority deck at or above kChokeDuckFull the
+        // yielding deck sits at kChokeDuckFloor, never muted; below
+        // kChokeDuckThresh it is not ducked at all, whatever the knob says.
+        // See the window's declaration for the distribution it is sized to.
         // Exactly 1.0f whenever depth is 0 -- which is the whole of CHOKE's
         // noon bypass, since a multiply by 1.0f is exact and the mix below
         // therefore stays bit-identical without a branch.
-        _choke_duck_gain = 1.f - depth * (1.f - kChokeDuckFloor)
-                                * std::min(1.f, _choke_env);
+        const float env_n = _choke_env <= kChokeDuckThresh
+            ? 0.f
+            : std::min(1.f, (_choke_env - kChokeDuckThresh)
+                                / (kChokeDuckFull - kChokeDuckThresh));
+        _choke_duck_gain = 1.f - depth * (1.f - kChokeDuckFloor) * env_n;
         float duck[PART_COUNT] = { 1.f, 1.f };
         duck[yld] = _choke_duck_gain;             // the priority deck never ducks
 

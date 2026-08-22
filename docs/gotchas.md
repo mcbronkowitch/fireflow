@@ -172,14 +172,20 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   (saturator ahead of the follower) was measured and deliberately **not**
   taken — it is never bit-transparent once DRIVE > 0. Revisit only as a
   voicing decision, not as a bug fix.
-- **CHOKE's inhibit is binary at every stage.** `instrument.cpp` sets
-  `set_inhibit(window)` and `Part::_note_suppressed` then swallows every note;
-  the magnitude is never consulted, only the sign and `amt > 0`. In the free
-  mode `window = gate() || flow()` and `Part::flow()` is `!_step_on`, so the
-  window never closes at all. A control whose inhibit is binary at every stage
-  has no gradient for any generator or macro to sit on. (The flow-layer side
-  of this — the terrain draw that muted one deck on 45 of 52 terrains, fixed
-  2026-08-13 — went to `docs/attic/` with that layer.)
+- **CHOKE's inhibit is binary in every zone — but CHOKE itself is no longer
+  gradient-free.** `instrument.cpp` sets `set_inhibit(window)` and
+  `Part::_note_suppressed` then swallows every note; the magnitude is never
+  consulted by that path, only which zone `|c|` lands in. In the held window
+  `window = gate() || flow()` and `Part::flow()` is `!_step_on`, so on a FLOW
+  deck the window never closes at all. **What changed on 2026-08-22** (plan
+  `2026-08-22-choke-sidechain-duck`): the knob's inner zone (`0 < |c| <= 0.5`)
+  drives a continuous sidechain duck on the yielding deck's share of the mix,
+  and the event windows moved out to `|c| > 0.5` (held) and `|c| > 0.75`
+  (decay). So a generator or macro now HAS a gradient to sit on — it is in the
+  duck, not in the inhibit, and it lives in the lower half of the knob only.
+  Do not read the old "no gradient anywhere" conclusion off this entry. (The
+  flow-layer side of this — the terrain draw that muted one deck on 45 of 52
+  terrains, fixed 2026-08-13 — went to `docs/attic/` with that layer.)
 - **BODY goes silent below FILT −0.5 because its FILTER is a timbre parameter,
   not an attenuating filter.** Open as of 2026-07-28: diagnosed and measured,
   no fix written. FILT's left half fades a voice to silence via `_filt_gain`

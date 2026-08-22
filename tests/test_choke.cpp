@@ -332,7 +332,7 @@ static void arm_duck_rig(Instrument& inst, float choke) {
     inst.set_choke(choke);
 }
 
-struct DuckDiff { double energy = 0.0; float ref_peak = 0.f; };
+struct DuckDiff { double energy = 0.0; float ref_peak = 0.f; float gain_min = 1.f; };
 
 // Energy of (noon render - ducked render). Every knob value used here is inside
 // the duck zone, so nothing is inhibited and both instruments run bit-identical
@@ -350,6 +350,7 @@ static DuckDiff duck_diff(float choke) {
         d.energy += el * el + er * er;
         d.ref_peak = std::max(d.ref_peak,
                               std::max(std::fabs(rl[0]), std::fabs(rr[0])));
+        d.gain_min = std::min(d.gain_min, ducked.choke_duck_gain());
     }
     return d;
 }
@@ -364,6 +365,19 @@ TEST_CASE("choke duck: the yielding deck's contribution drops, deeper the furthe
     CHECK(quarter.energy > 0.0);                 // the duck exists at all
     CHECK(half.energy > quarter.energy);         // and deepens with the knob
     CHECK(full.energy > half.energy);
+    // ...and at the bottom of the zone it is a real duck, not a trim. Before
+    // the envelope window existed this rig bottomed out at 0.8315 (-1.60 dB),
+    // because the gain normalised against a full scale the deck never reaches;
+    // the gate is set at -12 dB, comfortably past that and comfortably short of
+    // the -16.5 dB floor, so it fails on a reverted window without pinning the
+    // by-ear constants. The number read here is measured, not derived.
+    CHECK(full.gain_min < 0.25f);
+    // Never below the floor -- with an absolute epsilon, because the floor is
+    // computed as 1 - (1 - 0.15f) and lands on 0.14999998, not on 0.15
+    // (engine-map.md section 5: write such a gate as ~6e-08 absolute, never as
+    // an exact or ULP-relative comparison). Measured, 2.4e-08 under.
+    CHECK(full.gain_min >= 0.15f - 1e-6f);
+    CHECK(quarter.gain_min > full.gain_min);     // depth still orders the floor
 }
 
 TEST_CASE("choke duck: the priority deck and the cross-deck taps stay untouched") {
