@@ -165,3 +165,76 @@ TEST_CASE("quantizer: masks match their documented semitones and names") {
         CHECK(std::string(SCALE_NAMES[r.id]) == std::string(r.name));
     }
 }
+
+// --- PULL, spec 2026-07-19 pull-chord-gravity ---
+
+TEST_CASE("gravity: off is the old quantizer, value for value") {
+    // The identity that ctrl_identity and wave_formant_sweep enforce at the
+    // render level, asserted here where a failure names the input.
+    Quantizer a, b;
+    a.init(48000.f, 96); b.init(48000.f, 96);
+    a.set_scale(SCALE_MASKS[SCALE_DORIAN]); b.set_scale(SCALE_MASKS[SCALE_DORIAN]);
+    a.set_root(3);                          b.set_root(3);
+    b.set_gravity(0x0000, true);            // a zero mask is not gravity
+    for (int i = 0; i <= 100; ++i) {
+        const float x = i / 100.f;
+        CHECK(a.process(x) == b.process(x));   // exact, not Approx
+    }
+    CHECK_FALSE(b.gravity_on());
+}
+
+TEST_CASE("gravity: a bound note lands on a pitch class of the mask") {
+    Quantizer q; q.init(48000.f, 96);
+    q.set_scale(SCALE_MASKS[SCALE_DORIAN]);
+    q.set_root(0);
+    q.set_gravity(0x0044, true);            // pitch classes 2 and 6 only
+    float v = 0.f;
+    for (int i = 0; i < 200; ++i) v = q.process(0.5f);   // ride the slew out
+    const int semis = static_cast<int>(v * Quantizer::SPAN_SEMIS + 0.5f);
+    CHECK(((1u << (semis % 12)) & 0x0044u) != 0u);
+}
+
+TEST_CASE("gravity: the mask is absolute -- the root does not shift it") {
+    // The scale mask is root-relative; this one is not, because it comes from
+    // the sibling deck's sounding chord, which is already absolute.
+    Quantizer a, b;
+    a.init(48000.f, 96); b.init(48000.f, 96);
+    a.set_root(0);  b.set_root(5);
+    a.set_gravity(0x0044, true); b.set_gravity(0x0044, true);
+    float va = 0.f, vb = 0.f;
+    for (int i = 0; i < 200; ++i) { va = a.process(0.5f); vb = b.process(0.5f); }
+    CHECK(va == vb);
+}
+
+TEST_CASE("gravity: FREE is not exempt while bound, and passthrough returns") {
+    Quantizer q; q.init(48000.f, 96);
+    q.set_mode(QuantMode::Free);
+    q.set_scale(SCALE_MASKS[SCALE_DORIAN]);
+    CHECK(q.process(0.3141f) == 0.3141f);         // free: raw
+    q.set_gravity(0x0044, true);
+    float v = 0.f;
+    for (int i = 0; i < 200; ++i) v = q.process(0.3141f);
+    CHECK(v != 0.3141f);                          // bound: quantized anyway
+    const int semis = static_cast<int>(v * Quantizer::SPAN_SEMIS + 0.5f);
+    CHECK(((1u << (semis % 12)) & 0x0044u) != 0u);
+    q.set_gravity(0x0044, false);
+    CHECK(q.process(0.3141f) == 0.3141f);         // released: raw again
+}
+
+TEST_CASE("gravity: a mask change slews over 20 calls (40 ms at 48k/96)") {
+    // Measured 2026-08-22: the existing scale-change slew is exactly 20 calls
+    // at kCtrlInterval 96. Gravity rides the same on_change() path.
+    Quantizer q; q.init(48000.f, 96);
+    q.set_root(0);
+    q.set_gravity(0x0044, true);                  // classes 2, 6
+    float v = 0.f;
+    for (int i = 0; i < 200; ++i) v = q.process(0.5f);
+    q.set_gravity(0x0088, true);                  // classes 3, 7
+    int last_move = 0; float prev = v;
+    for (int i = 1; i <= 200; ++i) {
+        const float x = q.process(0.5f);
+        if (x != prev) last_move = i;
+        prev = x;
+    }
+    CHECK(last_move == 20);
+}

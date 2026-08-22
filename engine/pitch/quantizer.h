@@ -85,21 +85,39 @@ public:
     void set_mode(QuantMode m)      { if (m != _mode)       { _mode = m;       on_change(); } }
     void set_root(int semis)        { if (semis != _root)   { _root = semis;   on_change(); } }
 
+    // PULL (spec 2026-07-19 pull-chord-gravity): a SECOND mask, absolute.
+    // Bit i = pitch class i with no root shift -- the scale mask stays
+    // root-relative, this one does not, because it comes from the sibling
+    // deck's sounding chord and that is already absolute. While it is on it
+    // REPLACES the scale/chrom mask in every mode, FREE included: binding a
+    // note to the neighbour's harmony is the whole point of the feature, so a
+    // free-running deck is not exempt. A zero mask is not gravity.
+    void set_gravity(uint16_t abs_pc_mask, bool on) {
+        const bool want = on && abs_pc_mask != 0;
+        if (want == _grav_on && (!want || abs_pc_mask == _grav_mask)) return;
+        _grav_mask = abs_pc_mask;
+        _grav_on   = want;
+        on_change();
+    }
+    bool gravity_on() const { return _grav_on; }
+
     QuantMode mode() const { return _mode; }
     uint16_t scale_mask() const { return _scale; }   // last active scale (survives FREE)
     int      root_semis() const { return _root; }
 
     float process(float norm) {
-        if (_mode == QuantMode::Free) {
+        if (!_quantizing()) {                  // FREE, and no note bound
             _last_out = norm;
             _have_out = true;
             _have_note = false;
             return norm;
         }
-        const uint16_t mask = (_mode == QuantMode::Chrom) ? CHROM_MASK : _scale;
+        const uint16_t mask = _grav_on ? _grav_mask
+                            : (_mode == QuantMode::Chrom ? CHROM_MASK : _scale);
+        const int root = _grav_on ? 0 : _root;
         const float semis = clampf(norm, 0.f, 1.f) * SPAN_SEMIS;
-        int note = nearest_note(semis, mask);
-        if (_have_note && note != _last_note && allowed(_last_note, mask)) {
+        int note = nearest_note(semis, mask, root);
+        if (_have_note && note != _last_note && allowed(_last_note, mask, root)) {
             const float d_last = std::fabs(semis - static_cast<float>(_last_note));
             const float d_note = std::fabs(semis - static_cast<float>(note));
             if (d_last - d_note < HYST_SEMIS) note = _last_note;   // hold
@@ -119,18 +137,22 @@ public:
     }
 
 private:
+    // "Is the next process() call going to snap?" -- FREE alone no longer
+    // answers it, because a bound note quantizes in FREE too.
+    bool _quantizing() const { return _grav_on || _mode != QuantMode::Free; }
+
     void on_change() {
         _have_note = false;                       // re-pick without hysteresis
-        if (_have_out && _mode != QuantMode::Free) {
+        if (_have_out && _quantizing()) {
             _slew_from = _last_out;               // soften the jump (~40 ms)
             _slew_ctr = _slew_len;
         } else {
-            _slew_ctr = 0;                        // into FREE: instant passthrough
+            _slew_ctr = 0;                        // into passthrough: instant
         }
     }
 
-    bool allowed(int k, uint16_t mask) const {
-        int deg = (k - _root) % 12;
+    bool allowed(int k, uint16_t mask, int root) const {
+        int deg = (k - root) % 12;
         if (deg < 0) deg += 12;
         return (mask >> deg) & 1;
     }
@@ -138,12 +160,12 @@ private:
     // Outward search from the rounded center: the first allowed note at
     // integer distance d is the float-nearest up to the lo/hi tie, which is
     // resolved by comparing real distances (equal -> lower note wins).
-    int nearest_note(float semis, uint16_t mask) const {
+    int nearest_note(float semis, uint16_t mask, int root) const {
         const int center = static_cast<int>(semis + 0.5f);
         for (int d = 0; d <= 12; ++d) {
             const int lo = center - d, hi = center + d;
-            const bool lo_ok = lo >= 0 && allowed(lo, mask);
-            const bool hi_ok = hi <= 36 && allowed(hi, mask);
+            const bool lo_ok = lo >= 0 && allowed(lo, mask, root);
+            const bool hi_ok = hi <= 36 && allowed(hi, mask, root);
             if (lo_ok && hi_ok && lo != hi)
                 return std::fabs(semis - static_cast<float>(hi))
                      < std::fabs(semis - static_cast<float>(lo)) ? hi : lo;
@@ -163,6 +185,8 @@ private:
     float     _slew_from = 0.f;
     int       _slew_ctr  = 0;
     int       _slew_len  = 1920;
+    uint16_t  _grav_mask = 0;
+    bool      _grav_on   = false;
 };
 
 } // namespace spky
