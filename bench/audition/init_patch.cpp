@@ -209,7 +209,7 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
         ? 0.f
         : (driftKnob - kDriftSettleZone) / (1.f - kDriftSettleZone));
     inst.set_tide(value(TIDE));
-    inst.set_choke(value(CHOKE) * 0.5f);
+    inst.set_choke(value(CHOKE));
     inst.set_reverb_size(value(REV_SIZE));
     inst.set_reverb_decay(value(REV_DECAY));
     inst.set_reverb_tone(value(REV_TONE));
