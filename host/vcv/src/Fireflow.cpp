@@ -1041,7 +1041,26 @@ struct Fireflow : Module {
             // The knob's init default IS that 0.5 (and IS feed_cfg::kDepthBase),
             // so an untouched patch writes exactly what the ternary wrote --
             // the sampler excepted, which halves the base (sampler_config.h).
-            inst.set_target_base(p, spky::LANE_MOTION, pp(DEPTH_A, p));
+            //
+            // NOT pp(DEPTH_A, p). DEPTH_A/B are APPENDED ids (69/70), not a
+            // part-strided pair, so pp() computed params[69 + 20] = params[89]
+            // for deck B -- measured 2026-08-22. Before the MOD layer appended
+            // its 49 params that index was past the end of the params vector
+            // (undefined); after, it silently aliased MODD_DENSITY_B, so
+            // raising deck B's DENS mod depth would have driven deck B's
+            // LANE_MOTION base. That is the hazard the static_assert block at
+            // the top of this file calls "UPGRADED, not gone", and it is now
+            // guarded mechanically by res/test_panel.py's
+            // strided_accessor_issues(), which derives the legal pp() bases
+            // from the generator. Explicit ternary, exactly as REC/STAGES/
+            // LINK/COLOR do three lines up.
+            //
+            // Consequence, stated so nobody has to rediscover it: deck B's
+            // LANE_MOTION base at init moves from 0.0 (MODD_DENSITY_B's
+            // default, read by accident) to 0.5 (DEPTH_B's own default).
+            // Deck B's init sound changes and a listening pass is owed.
+            inst.set_target_base(p, spky::LANE_MOTION,
+                                 params[p ? DEPTH_B : DEPTH_A].getValue());
 
             // Stable pitch in the sampler: the lane still FIRES (that is what
             // keeps STEP triggering alive -- Part::process reads the fire as

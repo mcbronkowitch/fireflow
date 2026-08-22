@@ -1851,6 +1851,97 @@ def test_source_detune_guard_rejects_representative_regressions():
               f"SOURCE/Detune guard accepted a {label} regression")
 
 
+def strip_cpp_comments(source):
+    """Drop // and /* */ comments.
+
+    Load-bearing for the guard below: Fireflow.cpp's own STAGES comment spells
+    out `pp(STAGES_A, p)` as the thing NOT to write, so a scan of the raw text
+    would report the prose that documents the rule as a violation of it.
+    """
+    source = re.sub(r"/\*.*?\*/", " ", source, flags=re.S)
+    source = re.sub(r"//[^\n]*", " ", source)
+    return source
+
+
+def strided_accessor_issues(cpp):
+    """Return every pp()/ppb()/mvp() call whose base id is not part-strided.
+
+    `pp(baseA, part)` is `params[baseA + part * PART_STRIDE]`, so it is only
+    correct for the ids the generator templates into the PART_A block. For any
+    APPENDED id the arithmetic lands somewhere else entirely, and the file's
+    own static_assert block can only say so in prose -- a static_assert cannot
+    see a call site. This is that rule made mechanical.
+
+    The hazard is not theoretical and it is not merely an out-of-range read.
+    Measured 2026-08-22 while implementing the MOD latch layer: DPTH pushed
+    LANE_MOTION's base as `pp(DEPTH_A, p)`, and with DEPTH_A = 69 and
+    PART_STRIDE = 20 that resolves to index 89 -- `MODD_DENSITY_B`. Before the
+    layer appended its 49 params, index 89 was simply past the end of the
+    params vector (undefined); after, deck B's LANE_MOTION base silently
+    followed deck B's DENS mod depth. Every other appended pair in this file
+    is already read as `params[p ? X_B : X_A]` (the REC precedent); DPTH was
+    the one that missed, and nothing could catch it.
+
+    The valid-base set is derived from the generator (`g.PART_A`), never from
+    a hardcoded id threshold, so the next appended block is covered the day it
+    lands without touching this guard.
+    """
+    issues = []
+    strided = {c.enum for c in g.PART_A}
+    known = {c.enum for c in g.PARAMS}
+    body = strip_cpp_comments(cpp)
+    # mvp() is pp()'s MOD-layer twin (spec 2026-08-22) and carries exactly the
+    # same stride arithmetic, so it is held to exactly the same rule.
+    for accessor in ("pp", "ppb", "mvp"):
+        pattern = r"(?<![A-Za-z0-9_])" + accessor + r"\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,"
+        for m in re.finditer(pattern, body):
+            name = m.group(1)
+            if name not in known:
+                continue      # a local, a parameter name, or a non-ParamId arg
+            if name not in strided:
+                issues.append(
+                    f"{accessor}({name}, ...) reads an APPENDED param id "
+                    f"through the part stride -- {name} is not in the "
+                    f"templated PART_A block, so the arithmetic lands on "
+                    f"another param. Read it as params[p ? {name[:-2]}_B : "
+                    f"{name[:-2]}_A] instead (the REC precedent)."
+                    if name.endswith(("_A", "_B")) else
+                    f"{accessor}({name}, ...) reads an APPENDED param id "
+                    f"through the part stride -- {name} is not in the "
+                    f"templated PART_A block.")
+    return issues
+
+
+def test_appended_params_are_never_read_through_the_part_stride():
+    """No appended ParamId is read via pp()/ppb()/mvp() anywhere in the host."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
+        cpp = f.read()
+    for issue in strided_accessor_issues(cpp):
+        check(False, issue)
+
+
+def test_strided_accessor_guard_rejects_representative_regressions():
+    """The guard must reject a real appended-id read, not merely recognize
+    today's source. Both fixtures rewrite an explicit `params[p ? X_B : X_A]`
+    read -- the correct shape -- back into the strided accessor that caused
+    the measured DPTH bug."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "..", "src", "Fireflow.cpp")) as f:
+        cpp = f.read()
+    mutations = [
+        ("params[p ? DEPTH_B : DEPTH_A].getValue()",
+         "pp(DEPTH_A, p)", "DPTH read through the stride"),
+        ("params[p ? STAGES_B : STAGES_A].getValue()",
+         "pp(STAGES_A, p)", "STAGES read through the stride"),
+    ]
+    for before, after, label in mutations:
+        check(before in cpp, f"fixture drifted: {label!r} needle not found")
+        mutated = cpp.replace(before, after, 1)
+        check(strided_accessor_issues(mutated),
+              f"strided-accessor guard accepted a {label} regression")
+
+
 def feed_host_wiring_issues(cpp):
     """Return regressions in the three re-points a FEED deck needs.
 
@@ -1884,12 +1975,20 @@ def feed_host_wiring_issues(cpp):
     if "inst.set_target_base(p,spky::LANE_MOTION," not in push_n:
         issues.append("LANE_MOTION's base must be written, or DEPTH's ends are "
                       "unreachable from the panel")
-    if "inst.set_target_base(p,spky::LANE_MOTION,pp(DEPTH_A,p));" not in push_n:
-        issues.append("DPTH must write LANE_MOTION's base on EVERY engine -- "
-                      "each one reads that lane as something (width, drift, "
-                      "scatter, feedback, FM index) and a per-engine ternary "
-                      "here is what made five of them unreachable")
-    if "feedPart?pp(DEPTH_A,p)" in push_n:
+    # The explicit ternary, not pp(DEPTH_A, p): DEPTH_A/B are APPENDED ids, so
+    # the stride accessor read params[89] for deck B (measured 2026-08-22 --
+    # see strided_accessor_issues above). This needle now pins the SHAPE of the
+    # read as well as its presence, and the deck-B id is part of that shape.
+    if ("inst.set_target_base(p,spky::LANE_MOTION,"
+            "params[p?DEPTH_B:DEPTH_A].getValue());") not in push_n:
+        issues.append("DPTH must write LANE_MOTION's base on EVERY engine, on "
+                      "BOTH decks -- each engine reads that lane as something "
+                      "(width, drift, scatter, feedback, FM index); a "
+                      "per-engine ternary here is what made five of them "
+                      "unreachable, and pp() on this APPENDED id is what made "
+                      "deck B read another param entirely")
+    if "feedPart?pp(DEPTH_A,p)" in push_n or \
+       "feedPart?params[p?DEPTH_B:DEPTH_A].getValue()" in push_n:
         issues.append("the FEED-only ternary on LANE_MOTION's base is back")
     return issues
 
@@ -1975,12 +2074,15 @@ def test_feed_host_wiring_guard_rejects_representative_regressions():
          "} else if (false) {\n"
          "                inst.set_target_base(p, spky::LANE_SIZE,   mvp(DETUNE_A, p));\n",
          "SPREAD re-point removed"),
-        ("            inst.set_target_base(p, spky::LANE_MOTION, pp(DEPTH_A, p));",
+        ("            inst.set_target_base(p, spky::LANE_MOTION,\n"
+         "                                 params[p ? DEPTH_B : DEPTH_A].getValue());",
          "",
          "LANE_MOTION base write removed"),
-        ("            inst.set_target_base(p, spky::LANE_MOTION, pp(DEPTH_A, p));",
+        ("            inst.set_target_base(p, spky::LANE_MOTION,\n"
+         "                                 params[p ? DEPTH_B : DEPTH_A].getValue());",
          "            inst.set_target_base(p, spky::LANE_MOTION,\n"
-         "                                 feedPart ? pp(DEPTH_A, p) : 0.5f);",
+         "                                 feedPart ? params[p ? DEPTH_B : DEPTH_A].getValue()\n"
+         "                                          : 0.5f);",
          "the FEED-only ternary restored"),
         ("            if (inst.engine_id(p) != spky::ENGINE_FEED) {",
          "            if (true) {",
