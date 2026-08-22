@@ -57,11 +57,14 @@ TEST_CASE("param table: inventory marker -- P_MODE, P_PACE, P_COUNT") {
     // proved only after that first, stronger tripwire had already fired and
     // been fixed. The frozen vectors were un-shifted by hand in the same
     // commit; see that file's header for the record of both moves.
-    // 62 -> 63 on 2026-08-22: P_PULL was APPENDED after P_PACE (plan
-    // 2026-08-22-pull-chord-gravity, task 5), so P_MODE and P_PACE keep their
-    // indices and tests/param_impact_points.h's frozen vectors keep their
-    // meaning -- only the trailing marker moves. That is what an append is
-    // supposed to cost.
+    // P_MODE unchanged (still 62) on 2026-08-22: P_PULL was APPENDED after
+    // P_PACE (plan 2026-08-22-pull-chord-gravity, task 5) -- the first entry
+    // in this list where the number does not move, because an append is the
+    // one enum change that leaves P_MODE alone. What moved is the trailing
+    // inventory marker, 63 -> 64: it tracked P_PACE's index before, P_PULL's
+    // now. P_MODE and P_PACE keep their indices and
+    // tests/param_impact_points.h's frozen vectors keep their meaning --
+    // only that marker moves. That is what an append is supposed to cost.
     CHECK(P_MODE == 62);
     CHECK(P_PACE == P_MODE + 1);
     CHECK(P_PULL == P_COUNT - 1);      // inventory marker: bump on append
