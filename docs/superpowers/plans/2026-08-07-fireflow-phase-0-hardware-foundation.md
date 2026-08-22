@@ -660,20 +660,65 @@ Erwartet: 2 passed. Danach RED einmal beweisen: `PART_A` im Mapping auf `PART_B`
 
 - [ ] **Schritt 5: Den Mux physisch anschließen**
 
-Verwendet wird der vorhandene **`74HC4051`**, 8 Kanäle. Der Aufbau steht auf dem Breadboard, es wird nichts bestellt.
+Verwendet wird das vorhandene **CJMCU-Breakout mit `74HC4051`**, 8 Kanäle
+(roboter-bausatz RBS17672, 30 × 19 mm). Der Aufbau steht auf dem Breadboard, es
+wird nichts bestellt.
+
+> **Nachtrag 2026-08-22 — das Board ist angesehen worden, und drei Dinge ändern
+> sich gegenüber dem Text von 2026-08-07.** Die Bestückung ist vom Produktfoto
+> abgelesen, nicht aus der Artikelbeschreibung — die sagt zu Passiven nichts,
+> und das verlinkte „Datenblatt“ ist das generische Nexperia-Chipdatenblatt,
+> das über die Platine drumherum keine Aussage macht.
+>
+> 1. **Der Chip ist ein NXP `74HC4051D`** im SO16. Echtes `HC`, also weder ein
+>    `HCT` (VCC 4,5–5,5 V, bei 3,3 V außerhalb der Spezifikation) noch ein
+>    `CD4051B`. Die Warnung am Ende dieses Schritts bleibt trotzdem stehen: sie
+>    gilt für jedes Ersatzteil und für die Bestückung der PCB.
+> 2. **Ein Abblockkondensator sitzt bereits auf der Platine** — unmarkiertes
+>    beiges MLCC zwischen den VCC/GND-Bahnen am Chip. Die 100 nF, die dieser
+>    Schritt früher verlangt hat, entfallen. Der einzige *markierte* Passive,
+>    `103`, ist **ein 10-k-Widerstand an `E`** und kein Kondensator — als
+>    Kondensator-Kennung wären 103 = 10 nF gewesen, und die wären an `COM` ein
+>    Problem (siehe unten). Er sitzt nicht an `COM`.
+> 3. **Oben links liegen zwei freie Lötpads.** Der Lage nach ist das der
+>    VEE-GND-Jumper, und er ist offen — `VEE` muss also verdrahtet werden.
+>    Ungeprüft ist, ob die Pads wirklich VEE und GND verbinden; dass sie offen
+>    sind, ist am Foto zu sehen. `VEE` hart auf GND zu legen ist in beiden
+>    Fällen richtig.
+>
+> Zwei Dinge, die das Foto **nicht** entscheidet und die ein Multimeter in
+> 10 Sekunden klärt, falls es je darauf ankommt: ob der 10 k an `E` ein Pull-up
+> oder ein Pull-down ist (`E` gegen GND und gegen VCC messen, einer zeigt
+> ~10 k), und der Wert des Abblockkondensators. Auf den Aufbau wirkt sich
+> keines von beidem aus, solange `E` hart auf GND liegt.
+
+**Die Board-Beschriftung weicht von den Namen im Datenblatt ab**, und dieser
+Plan benutzt bis hier die Datenblattnamen:
+
+| Aufdruck | Datenblatt / dieser Plan |
+|---|---|
+| `Z` | `COM` |
+| `S0` `S1` `S2` | `A` `B` `C` |
+| `E` | `INH` |
 
 | Pin | geht an |
 |---|---|
 | `VCC` | 3V3 des Submodule |
-| `GND`, `VEE`, `INH` | GND (`VEE` auf GND, weil nur unipolare Signale 0–3,3 V geschaltet werden; `INH` low hält den Chip dauerhaft freigegeben) |
-| `A`, `B`, `C` | drei GPIO — das sind die Adressleitungen, die sich später **alle** Muxe teilen |
-| `COM` | ein ADC-Pin des Submodule |
+| `GND` | GND |
+| `VEE` | GND — **nicht weglassen**, der Board-Jumper ist offen. Auf GND, weil nur unipolare Signale 0–3,3 V geschaltet werden |
+| `E` (`INH`) | GND — low hält den Chip dauerhaft freigegeben |
+| `S0`, `S1`, `S2` | drei GPIO — das sind die Adressleitungen, die sich später **alle** Muxe teilen |
+| `Z` (`COM`) | ein **roher** ADC-Pin des Submodule: `A2`, `A3`, `D8` oder `D9`. **Nicht** `C2`–`C9` — die tragen die bipolare Eingangsstufe und würden ein unipolares Potisignal auf einen Teil des ADC-Bereichs stauchen (io-budget §3) |
 | `Y0` | Schleifer eines 10-k-Potis, dessen Enden an 3V3 und GND |
 | `Y1`…`Y7` | vorerst über je 10 k gegen GND oder 3V3, abwechselnd |
 
+Dazuzulegen sind damit **ein 10-k-Poti, sieben 10-k-Widerstände und
+Jumperkabel** — sonst nichts. Poti und Widerstände sind kein Board-Zubehör,
+das ein Breakout mitbringen könnte, sondern der Prüfreiz selbst.
+
 Die abwechselnd auf die Extreme gezogenen Nachbarkanäle sind kein Beiwerk, sondern der Prüfaufbau für Schritt 5b: nur wenn links und rechts vom gemessenen Kanal das Gegenteil anliegt, wird ein zu kurzes Settling überhaupt sichtbar.
 
-Dazu **100 nF** direkt zwischen `VCC` und `GND` am Chip. An `COM` **höchstens 1 nF** gegen GND — die früher hier empfohlenen 10 nF machen τ ≈ 26 µs und drücken den Vollscan auf ~270 Hz, haarscharf ans Ziel (Envelope-Spec §5); Schritt 5b misst, ob es auch ganz ohne Kondensator ruhig ist.
+An `COM` **höchstens 1 nF** gegen GND — die früher hier empfohlenen 10 nF machen τ ≈ 26 µs und drücken den Vollscan auf ~270 Hz, haarscharf ans Ziel (Envelope-Spec §5); Schritt 5b misst, ob es auch ganz ohne Kondensator ruhig ist. Der vorhandene Abblockkondensator liegt an `VCC`/`GND` und ist davon nicht betroffen.
 
 Nicht verwenden: **`CD4051B`** oder andere klassische CMOS-Typen. Das Submodule läuft auf 3,3 V, wo diese Typen einen deutlich höheren Durchlasswiderstand haben — das verschleppt die Einschwingzeit beim Kanalwechsel und erzeugt zappelige ADC-Werte, die man dann für einen Software-Fehler hält. Das `HC` im Namen ist der Unterschied; der Aufdruck auf dem Chip zählt, nicht die Artikelbeschreibung.
 
