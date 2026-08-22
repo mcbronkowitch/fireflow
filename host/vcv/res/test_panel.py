@@ -1585,7 +1585,7 @@ inst.set_engine(p, id);"""
         issues.append("REC must be gated by the exact sampler engine id")
     if push_n.count(sampler_part) != 1:
         issues.append("sampler controls must use one exact samplerPart engine-id gate")
-    for required in ("if(samplerPart)inst.sampler_scan(p,pp(MELODY_A,p));",
+    for required in ("if(samplerPart)inst.sampler_scan(p,mvp(MELODY_A,p));",
                      "if(samplerPart){",
                      "inst.set_target_active(p,spky::LANE_PITCH,!samplerPart);"):
         if required not in push_n:
@@ -1714,12 +1714,14 @@ def test_variation_is_gated_off_the_sampler():
     n = compact_cpp(push)
     check(n.count("inst.set_variation(") == 1,
           "set_variation must be pushed exactly once")
-    check("inst.set_variation(p,samplerPart?0.f:pp(MELODY_A,p));" in n,
+    # mvp(), not pp(), since the MOD latch layer (spec 2026-08-22): VARY owns
+    # a mod depth, so both of its meanings read the knob through the layer.
+    check("inst.set_variation(p,samplerPart?0.f:mvp(MELODY_A,p));" in n,
           "set_variation must park at LOOP on a Sampler deck")
     if "constboolsamplerPart=" in n and "inst.set_variation(" in n:
         check(n.index("constboolsamplerPart=") < n.index("inst.set_variation("),
               "set_variation must run after samplerPart resolves this tick's engine")
-    check("if(samplerPart)inst.sampler_scan(p,pp(MELODY_A,p));" in n,
+    check("if(samplerPart)inst.sampler_scan(p,mvp(MELODY_A,p));" in n,
           "sampler_scan must stay gated on the same samplerPart")
 
 
@@ -1781,15 +1783,19 @@ def source_detune_wiring_issues(cpp):
 
     push_n = compact_cpp(push)
     source_base = "inst.set_target_base(p,spky::LANE_SOURCE,pp(SOURCE_A,p));"
-    detune_read = "constfloatdetKnob=pp(DETUNE_A,p);"
+    # mvp(), not pp(), since the MOD latch layer (spec 2026-08-22 §3b): the
+    # depth term lands in KNOB space, BEFORE the square, so the same depth is
+    # worth the same fraction of the knob at every position.
+    detune_read = "constfloatdetKnob=mvp(DETUNE_A,p);"
     detune_push = "inst.set_voice_detune(p,detKnob*detKnob);"
     if push_n.count(source_base) != 1:
         issues.append("SOURCE must set LANE_SOURCE once for every engine")
     if push_n.count(detune_read) != 1:
-        issues.append("DETUNE must be read once per deck with the strided pp() accessor")
+        issues.append("DETUNE must be read once per deck with the strided mvp() accessor")
     if push_n.count(detune_push) != 1:
         issues.append("DETUNE must feed voice detune through the squared taper")
-    if "set_voice_detune(p,pp(DETUNE_A,p))" in push_n:
+    if "set_voice_detune(p,mvp(DETUNE_A,p))" in push_n or \
+       "set_voice_detune(p,pp(DETUNE_A,p))" in push_n:
         issues.append("DETUNE must not reach the engine linearly -- the taper is squared")
     if "set_voice_detune(p,pp(SOURCE_A,p))" in push_n:
         issues.append("SOURCE must not feed voice detune")
@@ -1826,9 +1832,9 @@ def test_source_detune_guard_rejects_representative_regressions():
         cpp = f.read()
     mutations = [
         ("pp(SOURCE_A, p)", "pp(DETUNE_A, p)", "SOURCE lane"),
-        ("const float detKnob = pp(DETUNE_A, p);\n"
+        ("const float detKnob = mvp(DETUNE_A, p);\n"
          "                inst.set_voice_detune(p, detKnob * detKnob);",
-         "inst.set_voice_detune(p, pp(DETUNE_A, p));", "linear detune taper"),
+         "inst.set_voice_detune(p, mvp(DETUNE_A, p));", "linear detune taper"),
         ("c.id == DETUNE_A || c.id == DETUNE_B",
          "c.id == DETUNE_A", "Detune B configControls branch"),
         ("Synth TIMB, Sampler ORG, Wave FRAME, Body MATL, BBD DRIVE or Feed BOND",
@@ -1862,10 +1868,13 @@ def feed_host_wiring_issues(cpp):
 
     if "constboolfeedPart=inst.engine_id(p)==spky::ENGINE_FEED;" not in push_n:
         issues.append("FEED deck detection must read the dispatched engine_id")
-    if "elseif(feedPart){inst.set_target_base(p,spky::LANE_SIZE,pp(DETUNE_A,p));}" \
+    # mvp(), not pp(), since the MOD latch layer (spec 2026-08-22 §4): a
+    # conditional face follows its FACE, so DTUN stays modulated on the one
+    # engine where its value lands on a lane base instead of the voice.
+    if "elseif(feedPart){inst.set_target_base(p,spky::LANE_SIZE,mvp(DETUNE_A,p));}" \
             not in push_n:
         issues.append("DETUNE must write LANE_SIZE's base as SPREAD on a FEED deck")
-    if "inst.set_target_base(p,spky::LANE_SIZE,pp(DETUNE_A,p)*pp(DETUNE_A,p))" in push_n:
+    if "inst.set_target_base(p,spky::LANE_SIZE,mvp(DETUNE_A,p)*mvp(DETUNE_A,p))" in push_n:
         issues.append("SPREAD must reach LANE_SIZE raw -- FEED owns its own curve, "
                       "and DetuneQuantity's square would compress the "
                       "single-digit region the spec reserves for it")
@@ -1962,9 +1971,9 @@ def test_feed_host_wiring_guard_rejects_representative_regressions():
         cpp = f.read()
     mutations = [
         ("} else if (feedPart) {\n"
-         "                inst.set_target_base(p, spky::LANE_SIZE,   pp(DETUNE_A, p));\n",
+         "                inst.set_target_base(p, spky::LANE_SIZE,   mvp(DETUNE_A, p));\n",
          "} else if (false) {\n"
-         "                inst.set_target_base(p, spky::LANE_SIZE,   pp(DETUNE_A, p));\n",
+         "                inst.set_target_base(p, spky::LANE_SIZE,   mvp(DETUNE_A, p));\n",
          "SPREAD re-point removed"),
         ("            inst.set_target_base(p, spky::LANE_MOTION, pp(DEPTH_A, p));",
          "",
