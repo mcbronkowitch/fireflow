@@ -8,35 +8,45 @@
   Everything below the comment is public.
 -->
 
-## FireFlow 2.21.6
+## FireFlow 2.21.7
 
-**A new factory patch.** Adding a module to the rack — or hitting Initialize —
-now boots a different instrument. Nothing in the engine changed; every number
-that moved is a knob position, played and saved from a 2.21.5 module.
+**Every knob becomes its own modulation depth.** The MOD pad on the hardware
+panel is a latching button now. Press it and the lamp stays lit; while it does,
+each modulatable knob stops showing its sound value and shows how deeply the
+modulation engine moves it instead. Press again and the panel comes back
+exactly as you left it — both sets of values live in the patch.
 
-**FEED against WAVE.** Deck A boots the coupled feedback-FM drone, deck B the
-wavetable engine. It is the first factory patch to start a FEED deck at all,
-and the first with no SYNTH, BODY or SAMPLER deck at boot.
+**The panel tells you which knobs those are.** Every modulatable pot wears its
+zone's accent colour on the ring around it — teal on deck A, orange on deck B,
+blue-grey in the centre. A plain dark ring means the knob keeps its normal job
+even while the layer is latched: MOD itself, GRIT, TIME, DRFT, SYNC, CHOK and
+the whole clock and structure row. The absence of colour is the information.
 
-**Deck B starts stepped**, eight steps, while deck A free-runs — the first
-factory patch that boots a deck in step mode on purpose. Both decks sit on
-ladder rung 0 (*TwoMotif / Off*), where the old patch spread them to opposite
-ends.
+**48 depths, two routes into the sound.** Six faces per deck already owned a
+depth slot in the engine — TIMB, DPTH, FILT and the three FX sends — and their
+knobs now write those slots directly. Everything else is computed in the host
+and folded into the knob position before it reaches the engine, so no new
+summing points appeared anywhere in the signal path.
 
-**It also starts moving.** TEMPO is off its floor for the first time (79.5 BPM
-instead of 40), so everything clocked — both lane rates, the tape division,
-deck B's step grid — runs faster out of the box, while PACE sits *below* ×1 to
-slow the modulation clock underneath it. DRIFT is parked at zero: the weather
-walk stays where you leave it until you ask for it. The scale is Minor
-pentatonic, the first factory patch outside the modes group, and both decks
-boot at the top of LVL/COMP.
+**Pitch stays anchored.** Nothing in the layer targets the pitch lane's depth;
+RANG still owns how far the phrase moves, and RANG at zero still silences it
+exactly. Turn MOD down and the texture stops breathing while the phrase keeps
+playing — that relationship is unchanged and deliberate.
 
-Along the way two mirroring gaps closed in `bench/audition`, the harness the
-desktop tests and the Seed audition share with the Rack host: a FEED deck's
-`SPREAD` and the `DPTH` knob were never pushed there. Both were invisible while
-no factory patch used them, and both are audible now.
+**Nothing sounds different until you raise a depth.** The three engine-backed
+depths boot at the values the engine already used, every host-computed depth
+boots at zero, and the latch boots off.
 
-Saved patches are unaffected — this changes what a *new* module boots with.
+**One exception, and it is audible: deck B's DPTH knob works now.** It never
+reached the engine — the read resolved to the wrong parameter — so deck B's
+motion base has been stuck since the knob was wired up. Fixing it moves that
+base from 0.0 to 0.5 (0.25 on a sampler deck). A saved patch with a deck B will
+sound different where it was silently ignoring that knob before. Along the same
+line, DENS on a sampler deck now modulates grain overlap as well as the groove
+gate, so the two halves of that one knob move together.
+
+The full-size Fireflow module is untouched — this layer belongs to the hardware
+panel. SHIFT remains reserved and inert.
 
 ## Install
 
