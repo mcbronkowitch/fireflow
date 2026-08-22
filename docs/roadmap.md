@@ -470,6 +470,8 @@ is actually built today, and what is still design-only.
 | **AIR** | Noise/formant texture engine (working title) — filtered noise through a resonant bank: wind, breath, vowel colours without sample material | ⬜ **planned** (queued 2026-08-17, ordered before M5k; no spec — needs its own brainstorming round. Restored 2026-08-18, same reason as FEED) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks | ⬜ **planned** (spec ready; not implemented) |
+| **Lane crossover** | A deck's lane output (LEVEL/MOTION/…) becomes a selectable modulation source for a target on the *other* deck — the first direct mod-to-mod bridge between the decks (today only audio and the rhythm view cross over) | ⬜ **planned** (from the 2026-08-22 dual-deck brainstorm, `docs/superpowers/specs/2026-08-22-dual-deck-brainstorm.md`; no spec; not yet ordered into the milestone sequence; spec together with "Mirror lanes" — same mod-glue) |
+| **Mirror lanes** | A deck follows a chosen lane of the sibling inverted or phase-shifted — direct per-lane counter-motion, deterministic call-and-response, complementing DRIFT's stochastic anti-correlation | ⬜ **planned** (from the 2026-08-22 dual-deck brainstorm, same doc as above; no spec; not yet ordered into the milestone sequence) |
 | **M6** | Hardware prototype — Daisy Patch Submodule bring-up: panel, controls, LEDs, CV/gate I/O, preset persistence | ⬜ planned (**panel design closed as far as the drawing goes** — regrouping, redistribution and plate round 2a all shipped, in 2.21.1/2.21.2/2.21.3; **bring-up has no spec and is next**, the existing shell spec is superseded and no hardware is ordered; **form factor decided 2026-08-21: one brain, one 60 HP module, desktop as a shell decision** — see below) |
 
 Milestone order follows the design spec's build order (audible first, hardware
@@ -3064,6 +3066,21 @@ layers. PULL is deliberately the last engine milestone before M6. The design is
 complete, but implementation has not started.
 
 Spec: `docs/superpowers/specs/2026-07-19-pull-chord-gravity-design.md`
+
+### Lane crossover & mirror lanes ⬜
+
+Two ideas from the 2026-08-22 dual-deck brainstorm, promoted to the roadmap the
+same day. They open the one cross-deck layer that is still unconnected: the
+modulation lanes (today only audio and the rhythm view travel between the
+decks). **Lane crossover** makes a deck's lane output a selectable modulation
+source for a target on the other deck; **mirror lanes** lets a deck follow a
+chosen lane of the sibling inverted or phase-shifted — deterministic
+call-and-response next to DRIFT's stochastic anti-correlation. Both sit in the
+same mod-glue and should be specced together; they are not yet ordered into
+the milestone sequence. **No spec — needs a brainstorming/spec round.**
+
+Source: `docs/superpowers/specs/2026-08-22-dual-deck-brainstorm.md` (the full
+twelve-idea list, including what was deliberately left off the roadmap).
 
 ### M6 — Hardware prototype ⬜ (after M5l; **needs a new spec**)
 
