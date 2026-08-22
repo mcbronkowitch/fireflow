@@ -326,6 +326,8 @@
 <text x="94.250" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">DPTH</text>
 <circle cx="210.550" cy="50.220" r="4.400" fill="#080b0d" stroke="#e8945a" stroke-width="0.3"/>
 <text x="210.550" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">DPTH</text>
+<circle cx="183.300" cy="21.200" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="183.300" y="29.200" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">PULL</text>
 <rect x="286.800" y="110.000" width="8.000" height="8.000" rx="1.2" fill="#dbe9ef" stroke="#3c525c" stroke-width="0.3"/>
 <text x="290.800" y="120.700" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">MOD</text>
 <circle cx="33.000" cy="114.000" r="3.100" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>

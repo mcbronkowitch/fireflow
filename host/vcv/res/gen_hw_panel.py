@@ -137,7 +137,7 @@ HW_SIZE = {
     "COMP": "G", "GRIT": "S",
     "STEPS": "S", "SONG": "S",
     "ENGINE": "S", "REC": "P",                     # ENGINE is a 5-zone detent pot
-    "MORPH": "G", "TIDE": "S", "CHOKE": "S", "PACE": "S",
+    "MORPH": "G", "TIDE": "S", "CHOKE": "S", "PACE": "S", "PULL": "S",
     "TEMPO": "S", "COUPLE": "S", "SHUFFLE": "S",
     "SCALE": "S", "DRIFT": "S",
     "REV_DECAY": "G", "REV_SIZE": "S", "REV_TONE": "S", "REV_DIFF": "S",
@@ -240,6 +240,25 @@ CENTER_POS = {
     "TIDE":   (136.40, Y_B1M), "MORPH": (152.40, Y_B1G), "PACE": (168.40, Y_B1M),
     "REV_SIZE": (136.40, Y_B2K), "REV_DECAY": (152.40, 79.00), "REV_DIFF": (168.40, Y_B2K),
     "REV_TONE": (152.40, 97.00),
+    # PULL (spec 2026-07-19 pull-chord-gravity): PROVISIONAL, unapproved by
+    # eye. Task 7 measured that the centre column has zero spare capacity
+    # for a 7th S-class knob: a brute-force scan of every centre-column
+    # group box (GLOBAL/TIMING/ROOM) found no clearing position for a new
+    # r=6.0 layout circle anywhere in ROOM (best margin -1.201 mm) or
+    # GLOBAL (-0.945 mm), and only a 0.100 mm curiosity in TIMING -- not a
+    # real slot, a coincidence of the search grid. Moving an approved
+    # control (REV_DECAY/REV_TONE's y are pinned in test_drawing_geometry,
+    # a by-ear decision) or re-pitching a band to make room is Bastian's
+    # call, not this task's -- ruled out on review. So PULL sits loose,
+    # outside every group-frame box's SEED zone (GROUP_ROWS y-range x
+    # cell x-span, the same thing _row_ink() tests), the same family as
+    # SHIFTBTN/MODBTN/CEIL_L below: in the ~3 mm horizontal seam between
+    # the GLOBAL centre box and deck B's CAPTURE box, just past CHOKE
+    # (the centre column's other status-row knob) on deck B's side.
+    # Nearest neighbour is CHOKE itself at 7.11 mm clearance -- comfortably
+    # more than the 0.5 mm a real placement needs, not a razor's edge.
+    # Needs a real layout pass before this is a settled position.
+    "PULL": (183.30, 21.20),
     # MODBTN is a real latch param now (spec 2026-08-22 mod-latch-layer §5),
     # placed through the same place() path as every sound knob; the
     # coordinates are unchanged from its old HW_ONLY slot.

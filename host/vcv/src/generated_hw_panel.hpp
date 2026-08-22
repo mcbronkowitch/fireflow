@@ -79,13 +79,14 @@ static const PanelCtl kParamCtls[] = {
     {PACE, WK_SMKNOB, {168.400f, 50.220f}, "PACE", {168.400f, 58.220f}, 0, 2.20f, 0xA7BCC6, "PACE"},
     {DEPTH_A, WK_SMKNOB, {94.250f, 50.220f}, "DPTH", {94.250f, 58.220f}, 0, 2.20f, 0xA7BCC6, "MOTION lane base"},
     {DEPTH_B, WK_SMKNOB, {210.550f, 50.220f}, "DPTH", {210.550f, 58.220f}, 0, 2.20f, 0xA7BCC6, "MOTION lane base"},
+    {PULL, WK_SMKNOB, {183.300f, 21.200f}, "PULL", {183.300f, 29.200f}, 0, 2.20f, 0xA7BCC6, "PULL"},
     {MODBTN, WK_LATCH, {290.800f, 114.000f}, "MOD", {290.800f, 120.700f}, 0, 2.20f, 0xA7BCC6, "MOD layer latch"},
 };
 // 1 = big cap, 0 = small. Parallel to kParamCtls, same order.
 // The rehearsal widget reads THIS, not c.kind -- kind says
 // bipolar/detented, which is not a diameter.
 static const unsigned char kParamSize[] = {
-    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0,
+    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0,
 };
 static_assert(sizeof(kParamSize) == sizeof(kParamCtls) / sizeof(kParamCtls[0]), "kParamSize desynced");
 static const PanelCtl kInputCtls[] = {
