@@ -299,16 +299,22 @@ static_assert(TUNE_B == TUNE_A + PART_STRIDE, "part-block stride drifted from ge
 static_assert(SONG_B == SONG_A + PART_STRIDE, "part-block stride drifted from generator");
 
 // REC is the exception and must never be read with pp()/ppb(). M5b appended it
-// LAST (gen_panel.py:359) so that adding it would not grow PART_STRIDE and
-// shift every already-saved patch's part-B ids -- so REC_A/REC_B are adjacent
-// trailing ids, not a strided pair. ppb(REC_A, 1) therefore indexed
+// after the part blocks (gen_panel.py:359) so that adding it would not grow
+// PART_STRIDE and shift every already-saved patch's part-B ids -- so REC_A/REC_B
+// are adjacent trailing ids, not a strided pair. ppb(REC_A, 1) therefore indexed
 // REC_A + 23 == 99 into a 78-element params vector: out of bounds, and part B
 // could never record. Read them as `p ? REC_B : REC_A`, the way the REC lights
 // already do.
 static_assert(REC_B == REC_A + 1,
               "REC ids are trailing, not part-strided -- read them explicitly, never via pp()");
-static_assert(REC_A + PART_STRIDE >= NUM_PARAMS,
-              "if REC ever moves into the part blocks, revisit the explicit REC reads");
+
+// REC used to close the param list; the MOD layer's appended block trails it
+// now. The hazard the old assert guarded is UPGRADED, not gone: a pp()/ppb()
+// read of any appended id no longer indexes out of bounds -- it silently
+// aliases a mod-layer param. Appended params are read explicitly or through
+// kModLayer, never via pp().
+static_assert(MODBTN > REC_B, "mod-layer params must stay appended after REC");
+static_assert(NUM_PARAMS == MODBTN + 49, "mod layer is 49 params: MODBTN + 48 depths");
 
 struct Fireflow : Module {
     spky::Instrument inst;
@@ -1096,7 +1102,8 @@ struct Fireflow : Module {
         // ever can is validating itself against the wrong instrument.
         if (ledDiv.process()) {
             const float dt = ledDiv.getDivision() * args.sampleTime;
-            spkyled::fill(inst, ledPanel, dt, kLedSteps, ledDuty);
+            spkyled::fill(inst, ledPanel, dt, kLedSteps,
+                          params[MODBTN].getValue() > 0.5f, ledDuty);
             for (int i = 0; i < NUM_LIGHTS; ++i)
                 lights[i].setBrightness(float(ledDuty[i]) / float(kLedSteps - 1));
         }

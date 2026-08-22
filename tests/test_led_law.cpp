@@ -184,7 +184,7 @@ TEST_CASE("led G6: every light is written, and a modulating lane moves") {
     const float dt = 1.f / 750.f;
     const int steps = 16;
     settle(inst, 200);
-    spkyled::fill(inst, panel, dt, steps, duty);
+    spkyled::fill(inst, panel, dt, steps, false, duty);
 
     for (int i = 0; i < spkyvcv::NUM_LIGHTS; ++i)
         CHECK_MESSAGE(duty[i] >= 0, "light ", i, " was never written");
@@ -201,7 +201,7 @@ TEST_CASE("led G6: every light is written, and a modulating lane moves") {
     int lo = 99, hi = -1;
     for (int k = 0; k < 400; ++k) {
         settle(inst, 64);
-        spkyled::fill(inst, panel, dt, 16, duty);
+        spkyled::fill(inst, panel, dt, 16, false, duty);
         lo = std::min(lo, duty[spkyvcv::SRC_A_L]);
         hi = std::max(hi, duty[spkyvcv::SRC_A_L]);
     }
@@ -214,7 +214,7 @@ TEST_CASE("led G6: every light is written, and a modulating lane moves") {
     settle(inst, 200);
     const int decay = static_cast<int>(1.5f * spkyled::kEnvFall
                                        * std::log(1.f / spkyled::kEnvOff) / dt);
-    for (int k = 0; k < decay; ++k) spkyled::fill(inst, panel, dt, 16, duty);
+    for (int k = 0; k < decay; ++k) spkyled::fill(inst, panel, dt, 16, false, duty);
     CHECK(duty[spkyvcv::SRC_A_L] == 0);
 }
 
@@ -246,7 +246,7 @@ TEST_CASE("led S1: a snapshot edge produces a flash, then dark") {
     int duty[spkyvcv::NUM_LIGHTS] = {};
     const float dt = 1.f / 750.f;
     const int steps = 16;
-    spkyled::fill(inst, panel, dt, steps, duty);
+    spkyled::fill(inst, panel, dt, steps, false, duty);
     CHECK(duty[spkyvcv::SONG_A_L] == 0);          // first fill arms, no flash
 
     float l = 0.f, r = 0.f;
@@ -255,15 +255,15 @@ TEST_CASE("led S1: a snapshot edge produces a flash, then dark") {
         if (inst.active_pattern(0) == 1) break;
     }
     REQUIRE(inst.active_pattern(0) == 1);
-    spkyled::fill(inst, panel, dt, steps, duty);
+    spkyled::fill(inst, panel, dt, steps, false, duty);
     CHECK(duty[spkyvcv::SONG_A_L] == steps - 1);  // A→B flash
 
     const int hold = static_cast<int>(spkyled::kSongFlash / dt) + 2;
     for (int k = 0; k < hold / 2; ++k)
-        spkyled::fill(inst, panel, dt, steps, duty);
+        spkyled::fill(inst, panel, dt, steps, false, duty);
     CHECK(duty[spkyvcv::SONG_A_L] == steps - 1);  // still lit mid-flash
     for (int k = hold / 2; k < hold; ++k)
-        spkyled::fill(inst, panel, dt, steps, duty);
+        spkyled::fill(inst, panel, dt, steps, false, duty);
     CHECK(duty[spkyvcv::SONG_A_L] == 0);          // dark after 150 ms
 
     for (int i = 0; i < 200000; ++i) {
@@ -271,7 +271,7 @@ TEST_CASE("led S1: a snapshot edge produces a flash, then dark") {
         if (inst.active_pattern(0) == 0) break;
     }
     REQUIRE(inst.active_pattern(0) == 0);
-    spkyled::fill(inst, panel, dt, steps, duty);
+    spkyled::fill(inst, panel, dt, steps, false, duty);
     CHECK(duty[spkyvcv::SONG_A_L] == steps - 1);  // B→A same flash
 }
 
@@ -283,7 +283,7 @@ TEST_CASE("led S2: no flash on first fill") {
 
     spkyled::Panel panel;
     int duty[spkyvcv::NUM_LIGHTS] = {};
-    spkyled::fill(inst, panel, 1.f / 750.f, 16, duty);
+    spkyled::fill(inst, panel, 1.f / 750.f, 16, false, duty);
     CHECK(duty[spkyvcv::SONG_A_L] == 0);
 }
 
@@ -300,7 +300,7 @@ TEST_CASE("led S3: OFF stays dark") {
     for (int i = 0; i < 50000; ++i) {
         inst.process(nullptr, nullptr, &l, &r, 1);
         if ((i % 64) == 0) {
-            spkyled::fill(inst, panel, dt, 16, duty);
+            spkyled::fill(inst, panel, dt, 16, false, duty);
             CHECK(duty[spkyvcv::SONG_A_L] == 0);
         }
     }
@@ -321,16 +321,33 @@ TEST_CASE("led: TEMPO_L is a metronome pulse on the transport beat") {
     const float dt = 1.f / 750.f;
     const int steps = 16;
 
-    spkyled::fill(inst, panel, dt, steps, duty);
+    spkyled::fill(inst, panel, dt, steps, false, duty);
     CHECK(duty[spkyvcv::TEMPO_L] == steps - 1);     // downbeat
 
     settle(inst, 6000);                             // 0.125 s, phase ~0.25
-    spkyled::fill(inst, panel, dt, steps, duty);
+    spkyled::fill(inst, panel, dt, steps, false, duty);
     CHECK(duty[spkyvcv::TEMPO_L] == 0);             // pulse already over
 
     settle(inst, 18000);                            // rest of the beat
-    spkyled::fill(inst, panel, dt, steps, duty);
+    spkyled::fill(inst, panel, dt, steps, false, duty);
     CHECK(duty[spkyvcv::TEMPO_L] == steps - 1);     // next downbeat
+}
+
+TEST_CASE("led law: MODBTN lamp is the latch state") {
+    Instrument inst;
+    inst.init(48000.f);
+
+    spkyled::Panel p;
+    int duty[spkyvcv::NUM_LIGHTS] = {0};
+    const float dt = 1.f / 750.f;
+    const int steps = 16;
+
+    spkyled::fill(inst, p, dt, steps, /*mod_latched=*/true, duty);
+    CHECK(duty[spkyvcv::MODBTN_L] == steps - 1);
+    CHECK(duty[spkyvcv::SHIFTBTN_L] == 0);   // SHIFT stays reserved and dark
+
+    spkyled::fill(inst, p, dt, steps, /*mod_latched=*/false, duty);
+    CHECK(duty[spkyvcv::MODBTN_L] == 0);
 }
 
 TEST_CASE("led: the envelope attacks instantly and falls slowly") {

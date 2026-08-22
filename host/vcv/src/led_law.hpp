@@ -116,17 +116,18 @@ struct Panel {
 // written -- six lamps sat on this plate for months with no LightId and
 // nothing noticed. Writes exactly NUM_LIGHTS entries of duty_out.
 inline void fill(const spky::Instrument& inst, Panel& p, float dt,
-                 int steps, int* duty_out) {
+                 int steps, bool mod_latched, int* duty_out) {
     using namespace spkyvcv;
 
     // Written, not skipped. FLOW and SYNC need host state this round does
-    // not wire, and the two pad lamps need the latch that spec 3.4 leaves
-    // to the round that builds MOD and SHIFT. A blanket zero at the top of
-    // this function would make the gate below -- "every light is written" --
-    // pass without asserting anything.
-    for (int id : {FLOW_A_L, FLOW_B_L, SYNC_L,
-                   MODBTN_L, SHIFTBTN_L})
+    // not wire, and SHIFTBTN still waits for the round that builds SHIFT.
+    // MODBTN left this list on 2026-08-22: its latch exists now.
+    for (int id : {FLOW_A_L, FLOW_B_L, SYNC_L, SHIFTBTN_L})
         duty_out[id] = 0;
+
+    // The MOD layer's lamp: lit while the latch holds, hard on/off -- this
+    // reports a mode, not a level (spec 2026-08-22 mod-latch-layer §5).
+    duty_out[MODBTN_L] = mod_latched ? steps - 1 : 0;
 
     // Metronome: a short pulse on the transport downbeat. Hard on/off, no
     // envelope -- this reports where the beat is, which is the question the
