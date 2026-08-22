@@ -307,7 +307,7 @@ TEST_CASE("pull: leader COLOR 0 plus full PULL is a unison follow") {
 
 TEST_CASE("pull: a hard sign flip swaps leader and follower with no zero crossing") {
     // Task 4 review's deferred minor: the instrument-level PULL block clears
-    // the leader's gravity on every control tick (instrument.cpp:268-275,
+    // the leader's gravity on every control tick (instrument.cpp:275,
     // "_parts[lead].set_gravity(0, 0.f)"), so a -1 -> +1 flip with no 0.f
     // stop in between should still swap the roles cleanly. Verified correct
     // by inspection for Task 4; this is the running gate for that path.
