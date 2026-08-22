@@ -3248,10 +3248,12 @@ latched MOD on `FireflowHW` and confirmed the swap, the booted depths and the
 excluded knobs all behave; released in 2.21.7. That closes the one gap no gate
 here could reach: the widget half (`modLatched()`, `ModSound<W>`,
 `ModDepth<W>`) cannot be driven from `spky_tests`, because Rack does not link
-there, and screenshot mode renders and exits without clicking anything. What
-remains open is only by ear, not function — the two listening passes in
-[`docs/by-ear-decisions.md`](by-ear-decisions.md) under "MOD latch layer
-(2026-08-22)".
+there, and screenshot mode renders and exits without clicking anything. The two
+by-ear consequences — deck B's restored `LANE_MOTION` base and sampler DENS
+reaching grain overlap — were listened to and kept the same day; both are
+settled in [`docs/by-ear-decisions.md`](by-ear-decisions.md) under "MOD latch
+layer (2026-08-22)", which also keeps the latch checklist as the regression
+list for that widget code. Nothing on this round is outstanding.
 
 ### Two threads carried out of the SWARM withdrawal ⬜ (unscheduled)
 

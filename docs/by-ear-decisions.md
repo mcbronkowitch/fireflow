@@ -317,21 +317,23 @@ on the other five engines, none of them confirmed by ear yet (spec §9).
   at full deflection, so there is no single correct number (see the
   control-merge init trap in [`gotchas.md`](gotchas.md)).
 
-## MOD latch layer (2026-08-22) — two OPEN listening passes
+## MOD latch layer (2026-08-22) — CONFIRMED BY EAR
 
 The branch that gave every wreathed knob its own modulation depth
 (`docs/superpowers/specs/2026-08-22-mod-latch-layer-design.md`) surfaced two
-real behaviour changes on the way. **Both are OPEN — awaiting Bastian's ears,
-not decisions already taken.** Do not "finish" either one in either direction
-before a listening pass.
+real behaviour changes on the way. **Both were listened to and confirmed on
+2026-08-22, together with the functional and visual checks.** They are settled
+decisions now: do not revert either one, and do not "correct" the code that
+produces them, without a new listening pass. Both look like bugs from the
+source — a base that moved and a knob that grew a second modulated meaning —
+which is exactly why they are recorded here.
 
-- **The functional half is RUN and passed, 2026-08-22.** Bastian latched MOD on
-  `FireflowHW` in interactive Rack and reported the swap, the booted depth
-  positions and the excluded knobs all correct. Two items below were not part
-  of that pass and stay open: the **audible anchor** check and the
-  **visual-collision** check, both of which need ears and eyes rather than a
-  click. Keep the list — it is the regression checklist for the next time this
-  widget code is touched, and it is the only coverage that exists for it.
+- **The functional and visual checks are RUN and passed, 2026-08-22.** Bastian
+  latched MOD on `FireflowHW` in interactive Rack: the swap, the booted depth
+  positions, the excluded knobs, the audible anchor and the ring spacing all
+  behave. Keep the list below — it is the regression checklist for the next
+  time this widget code is touched, and it is the only coverage that exists
+  for it.
   Task 6 (`host/vcv/src/Fireflow.cpp`: `modLatched()`,
   `ModSound<W>`, `ModDepth<W>`, and the rewritten
   `WK_BIGKNOB`/`WK_KNOBC`/`WK_SMKNOB`/`WK_KNOBI` case) can be reached by
@@ -367,7 +369,7 @@ before a listening pass.
     4.4 mm small), and no ring visually collides with a neighbouring
     control on a tightly-packed row.
 - **Deck B's `LANE_MOTION` base now actually moves, 0.0 → 0.5 (0.25 on a
-  sampler deck, which halves the base) — unheard.**
+  sampler deck, which halves the base) — heard and kept, 2026-08-22.**
   `inst.set_target_base(p, spky::LANE_MOTION, pp(DEPTH_A, p))` was reading
   `params[DEPTH_A + 1*PART_STRIDE]` — index 89. `DEPTH_A`/`DEPTH_B` are
   appended, non-strided ids, so deck B's DPTH knob never reached the engine:
@@ -376,10 +378,12 @@ before a listening pass.
   in-bounds alias of `MODD_DENSITY_B` instead (see the `pp()` trap in
   [`gotchas.md`](gotchas.md)). Fixed in `0d9f959` to the explicit
   `params[p ? DEPTH_B : DEPTH_A].getValue()`. Deck A was always correct and
-  is unaffected — this is a deck-B-only change nobody has heard yet, and
-  deck B's scatter/jitter response to DPTH stays unconfirmed until it is.
+  is unaffected. **Heard and kept, 2026-08-22:** deck B's scatter/jitter
+  response to DPTH is what it should be at the restored base. Do not "restore"
+  the old sound by reintroducing the aliased read — the old sound was the
+  symptom of a knob that never arrived.
 - **Sampler DENS now also modulates grain overlap, not only the groove gate
-  — unheard.** `inst.sampler_overlap(p, ...)` was left reading the raw knob
+  — heard and kept, 2026-08-22.** `inst.sampler_overlap(p, ...)` was left reading the raw knob
   in `ea419ba` and changed to `mvp(DENSITY_A, p)` in `9f79141`, so both
   meanings of the DENS face now follow the same modulated read. Inert at
   init — every host-computed depth boots at 0 — so it only bites once DENS
@@ -387,6 +391,6 @@ before a listening pass.
   DENS across gate and overlap with "both point the same direction
   (sparser)"; under modulation that stops being automatically true — the
   gate would breathe while overlap sat still if the two diverged under a
-  swinging depth — which is the reason the change was made, not proof it is
-  already the right call. Needs its own listening pass once a DENS depth is
-  actually turned up.
+  swinging depth — which is the reason the change was made. With a DENS depth
+  turned up it was listened to and kept: the two meanings track each other and
+  the face still reads as one control. Do not split them back apart.
