@@ -316,3 +316,36 @@ on the other five engines, none of them confirmed by ear yet (spec §9).
   SYNTH and BODY read the same knob through different scales that only agree
   at full deflection, so there is no single correct number (see the
   control-merge init trap in [`gotchas.md`](gotchas.md)).
+
+## MOD latch layer (2026-08-22) — two OPEN listening passes
+
+The branch that gave every wreathed knob its own modulation depth
+(`docs/superpowers/specs/2026-08-22-mod-latch-layer-design.md`) surfaced two
+real behaviour changes on the way. **Both are OPEN — awaiting Bastian's ears,
+not decisions already taken.** Do not "finish" either one in either direction
+before a listening pass.
+
+- **Deck B's `LANE_MOTION` base now actually moves, 0.0 → 0.5 (0.25 on a
+  sampler deck, which halves the base) — unheard.**
+  `inst.set_target_base(p, spky::LANE_MOTION, pp(DEPTH_A, p))` was reading
+  `params[DEPTH_A + 1*PART_STRIDE]` — index 89. `DEPTH_A`/`DEPTH_B` are
+  appended, non-strided ids, so deck B's DPTH knob never reached the engine:
+  before this branch that index sat past the end of a 71-element params
+  vector, and this branch's 49 appended params turned it into a silent
+  in-bounds alias of `MODD_DENSITY_B` instead (see the `pp()` trap in
+  [`gotchas.md`](gotchas.md)). Fixed in `0d9f959` to the explicit
+  `params[p ? DEPTH_B : DEPTH_A].getValue()`. Deck A was always correct and
+  is unaffected — this is a deck-B-only change nobody has heard yet, and
+  deck B's scatter/jitter response to DPTH stays unconfirmed until it is.
+- **Sampler DENS now also modulates grain overlap, not only the groove gate
+  — unheard.** `inst.sampler_overlap(p, ...)` was left reading the raw knob
+  in `ea419ba` and changed to `mvp(DENSITY_A, p)` in `9f79141`, so both
+  meanings of the DENS face now follow the same modulated read. Inert at
+  init — every host-computed depth boots at 0 — so it only bites once DENS
+  depth is raised above 0. The "Sampler" section above justifies sharing
+  DENS across gate and overlap with "both point the same direction
+  (sparser)"; under modulation that stops being automatically true — the
+  gate would breathe while overlap sat still if the two diverged under a
+  swinging depth — which is the reason the change was made, not proof it is
+  already the right call. Needs its own listening pass once a DENS depth is
+  actually turned up.

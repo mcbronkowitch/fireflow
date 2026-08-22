@@ -285,3 +285,25 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   cases have no formula and need a decision: DETUNE (per-deck scales that only
   agree at full deflection) and LVL/COMP (the old compressor make-up gain WAS
   the factory loudness).
+- **`pp(baseA, part)` only covers the first 20 param ids — read an appended id
+  through it and, since the mod-latch layer, you get a silent wrong answer
+  instead of a crash.** `pp(baseA, part)` is `params[baseA + part *
+  PART_STRIDE]` (`Fireflow.cpp`), and `PART_STRIDE` is 20, which spans only
+  `RATE_A … SONG_A`. Everything appended after that — `FILT`, `COLOR`, `LINK`,
+  `FLUXFB`, `REV_MIX`, `DEPTH`, `STAGES`, `REC`, and now the whole 49-entry
+  mod-layer block — has no strided B twin and must be read explicitly,
+  `params[p ? X_B : X_A]`. Before the mod latch layer, a `pp()` read of an
+  appended id ran off the end of the params vector; now that the vector is
+  long enough, it silently **aliases a mod-layer param** instead, which is
+  strictly harder to notice than a crash. The real casualty: deck B's DPTH
+  knob silently stopped reaching `LANE_MOTION`'s base the moment the
+  2026-08-19 change made DPTH write that base on every engine, and stayed
+  broken — reading `MODD_DENSITY_B` instead — until fixed in `0d9f959` (see
+  [`by-ear-decisions.md`](by-ear-decisions.md) for the two open listening
+  items this same fix raised). What protects readers now: a `static_assert`
+  pair in `Fireflow.cpp` states the rule in prose, and `res/test_panel.py`
+  enforces it mechanically — it derives the legal strided-base set from the
+  generator and scans for both the `pp(`/`ppb(`/`mvp(` call shapes and inline
+  `* PART_STRIDE` arithmetic. **One known evasion:** the inline-arithmetic
+  scan matches only the token order `* PART_STRIDE`, so
+  `params[COLOR_A + PART_STRIDE * p]` would still slip past it.

@@ -1,7 +1,8 @@
 # MOD latch layer — design
 
 **Date:** 2026-08-22
-**Status:** approved design, pre-plan
+**Status:** implemented 2026-08-22, plan
+`docs/superpowers/plans/2026-08-22-mod-latch-layer.md`
 **Scope:** `FireflowHW` module (VCV), engine untouched except where stated. The
 `shell/` firmware inherits the pattern later; it is out of scope here.
 

@@ -3229,6 +3229,25 @@ Nothing replaces either, so step 2 designs preset persistence from scratch —
 there is no format to extend and no conversion to reuse. The two files and the
 reasoning behind them are recoverable from `docs/attic/`.
 
+**2026-08-22 — the MOD latch layer lands on `FireflowHW`.** MODBTN moves from
+print-only to a real global latch (`WK_LATCH`, like REC); while it is held,
+every wreathed knob shows and edits its own modulation depth instead of its
+sound value, over 48 new depth params split across two paths — six per deck
+engine-backed (write straight into `Part`'s existing depth slots via
+`set_target_depth`/`set_fx_target_depth`) and the rest host-computed (summed
+in knob space, pushed through the parameter's existing setter, degenerating
+to the old plain push at depth 0). `MODBTN_L` now shows the latch state,
+ending the wait `led_law.hpp`'s own comment recorded. `gen_hw_panel.py`
+prints a dashed mod wreath around every modulatable knob's body ring in its
+zone accent, so the printed plate and the live widget swap target the same
+set. SHIFT stays reserved, still inert. Spec
+`docs/superpowers/specs/2026-08-22-mod-latch-layer-design.md`, plan
+`docs/superpowers/plans/2026-08-22-mod-latch-layer.md`, branch
+`feat/mod-latch-layer`. **Not yet checked interactively in Rack** — a
+headless screenshot proves only that the panel composes for the unlatched
+(browser-preview) state; the latch-and-listen checklist is still Bastian's to
+run.
+
 ### Two threads carried out of the SWARM withdrawal ⬜ (unscheduled)
 
 SWARM was withdrawn 2026-08-18 on a listening decision and `main` was wound
