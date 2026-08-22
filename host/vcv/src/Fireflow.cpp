@@ -1780,6 +1780,57 @@ struct SlotVisible : W {
     }
 };
 
+// MOD latch layer (spec 2026-08-22 §5). Module absent -- the browser
+// preview -- counts as unlatched, so the browser shows the sound panel.
+static bool modLatched(Fireflow* m) {
+    return m && m->params[MODBTN].getValue() > 0.5f;
+}
+
+// The sound half of a wreathed knob: hidden while the layer holds. Combines
+// with ctlVisible so ATTACK keeps its BBD hiding under the layer too.
+template <typename W>
+struct ModSound : W {
+    Fireflow* fireflow = nullptr;
+    int ctlId = 0;
+    void step() override {
+        this->setVisible(ctlVisible(fireflow, ctlId) && !modLatched(fireflow));
+        W::step();
+    }
+};
+
+// The depth half: visible only while latched, and only where its sound twin
+// would be (an ATTACK depth has no business on a BBD deck).
+template <typename W>
+struct ModDepth : W {
+    Fireflow* fireflow = nullptr;
+    int soundId = 0;
+    void step() override {
+        this->setVisible(ctlVisible(fireflow, soundId) && modLatched(fireflow));
+        W::step();
+    }
+};
+
+// The dynamic half of the printed wreath: a solid accent ring behind the
+// depth knob while the layer holds, so the whole panel visibly changes
+// state (spec §5, "visual affordance").
+struct ModDepthRing : TransparentWidget {
+    Fireflow* fireflow = nullptr;
+    int soundId = 0;
+    NVGcolor col = nvgRGB(0x7f, 0xb6, 0xc9);
+    float rMm = 5.6f;
+    void step() override {
+        setVisible(ctlVisible(fireflow, soundId) && modLatched(fireflow));
+        TransparentWidget::step();
+    }
+    void draw(const DrawArgs& args) override {
+        nvgBeginPath(args.vg);
+        nvgCircle(args.vg, box.size.x * 0.5f, box.size.y * 0.5f, mm2px(rMm));
+        nvgStrokeColor(args.vg, col);
+        nvgStrokeWidth(args.vg, mm2px(0.35f));
+        nvgStroke(args.vg);
+    }
+};
+
 // The LED half of the Sampler-only rule. It takes the deck's ENGINE PARAM id,
 // not the light's own id: a LightId is a different enum from a ParamId and the
 // two spaces must never meet (REC_A_L == 2 == DENSITY_A). See the captions
@@ -2169,21 +2220,69 @@ struct FireflowHWWidget : ModuleWidget {
             // used to judge grip.
             const bool big = spkyhw::kParamSize[i] != 0;
             switch (c.kind) {
-                case WK_BIGKNOB: case WK_KNOBC: case WK_SMKNOB: case WK_KNOBI:
-                    if (big) {
-                        addParam(createParamCentered<RoundBlackKnob>(pos, module, c.id));
+                case WK_BIGKNOB: case WK_KNOBC: case WK_SMKNOB: case WK_KNOBI: {
+                    // depth twin lookup, module-independent so the browser
+                    // preview (no module) agrees with a live module
+                    int depthId = -1;
+                    for (const auto& t : kModLayer)
+                        if (t.soundId == c.id) { depthId = t.depthId; break; }
+
+                    if (depthId < 0) {
+                        // not a mod target: exactly the pre-layer code.
+                        // ATTACK dissolved out of this branch -- it is
+                        // always a mod target now -- STAGES stays, it owns
+                        // no depth.
+                        if (big) {
+                            addParam(createParamCentered<RoundBlackKnob>(pos, module, c.id));
+                        } else if (c.id == STAGES_A || c.id == STAGES_B) {
+                            auto* knob = createParamCentered<SlotVisible<Trimpot>>(pos, module, c.id);
+                            knob->fireflow = module;
+                            knob->ctlId = c.id;
+                            addParam(knob);
+                        } else {
+                            addParam(createParamCentered<Trimpot>(pos, module, c.id));
+                        }
                         break;
                     }
-                    if (c.id == ATTACK_A || c.id == ATTACK_B
-                            || c.id == STAGES_A || c.id == STAGES_B) {
-                        auto* knob = createParamCentered<SlotVisible<Trimpot>>(pos, module, c.id);
-                        knob->fireflow = module;
-                        knob->ctlId = c.id;
-                        addParam(knob);
+                    // wreathed: sound half hides under the latch (ModSound
+                    // still runs ctlVisible first, so ATTACK keeps its BBD
+                    // hiding under the layer too)...
+                    if (big) {
+                        auto* k = createParamCentered<ModSound<RoundBlackKnob>>(pos, module, c.id);
+                        k->fireflow = module; k->ctlId = c.id;
+                        addParam(k);
                     } else {
-                        addParam(createParamCentered<Trimpot>(pos, module, c.id));
+                        auto* k = createParamCentered<ModSound<Trimpot>>(pos, module, c.id);
+                        k->fireflow = module; k->ctlId = c.id;
+                        addParam(k);
+                    }
+                    // ...the accent ring and the depth twin surface with it.
+                    // Zone split (124.2 mm of a 304.8 mm plate) and the three
+                    // accent colours mirror res/gen_hw_panel.py's ZONE_A/W
+                    // and ACC dict exactly -- same numbers the printed
+                    // wreath's own stroke colour uses. No C++ constant
+                    // carries them yet, so this duplicates the generator's
+                    // geometry rather than inventing a new source of truth.
+                    NVGcolor acc = c.mm.x < 124.2f ? nvgRGB(0x3f, 0xbf, 0x9c)
+                                 : c.mm.x > 304.8f - 124.2f ? nvgRGB(0xe8, 0x94, 0x5a)
+                                 : nvgRGB(0x7f, 0xb6, 0xc9);
+                    auto* ring = new ModDepthRing;
+                    ring->fireflow = module; ring->soundId = c.id;
+                    ring->col = acc; ring->rMm = big ? 7.2f : 5.6f;
+                    ring->box.size = mm2px(Vec(2.f * ring->rMm + 1.f, 2.f * ring->rMm + 1.f));
+                    ring->box.pos = pos.minus(ring->box.size.div(2.f));
+                    addChild(ring);
+                    if (big) {
+                        auto* d = createParamCentered<ModDepth<RoundBlackKnob>>(pos, module, depthId);
+                        d->fireflow = module; d->soundId = c.id;
+                        addParam(d);
+                    } else {
+                        auto* d = createParamCentered<ModDepth<Trimpot>>(pos, module, depthId);
+                        d->fireflow = module; d->soundId = c.id;
+                        addParam(d);
                     }
                     break;
+                }
                 case WK_SW2:
                     addParam(createParamCentered<CKSS>(pos, module, c.id)); break;
                 case WK_LATCH:
