@@ -79,8 +79,11 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
     // 73 -> 71 on 2026-08-20: DAMP_A/B, the EDGE knob, removed.
     // 71 -> 120 on 2026-08-22: the MOD latch layer, MODBTN latch plus 48
     // MODD_* depth params, appended by res/gen_panel.py.
-    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 120,
-                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 120 -- "
+    // 120 -> 121 on 2026-08-22: PULL, the chord-gravity knob, appended last
+    // in APPENDED_PANEL_PARAMS by res/gen_panel.py -- this also shifts the
+    // 49 MOD-layer ids (MODBTN plus the 48 MODD_* depths) up by one slot.
+    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 121,
+                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 121 -- "
                   "if the panel inventory genuinely changed, update this "
                   "literal to match");
     // FM-INIT.vcvm (2026-08-21) pairs FEED (5) on deck A with WAVE (2) on
