@@ -206,6 +206,32 @@ struct MelodyQuantity : ParamQuantity {
     }
 };
 
+// CHOKE tooltip: zone-aware since the knob went continuous (plan
+// 2026-08-22-choke-sidechain-duck -- task 1 gave the engine three zones per
+// side by |c| instead of 5 snapped detents; this reads the same zones back).
+// |c| == 0 is bypass; the duck zone (0 < |c| <= 0.5) reports the depth
+// percentage the engine's own ramp reaches at this knob position
+// (instrument.cpp: depth = min(amt, 0.5) * 2, glided but the tooltip reads
+// the target); past 0.5 the two choke zones read exactly what the old
+// 5-state switch printed. Sign picks the side the same way instrument.cpp's
+// own pri/yld split does: negative = A has priority (ducks/chokes B),
+// positive = B has priority.
+struct ChokeQuantity : ParamQuantity {
+    std::string getDisplayValueString() override {
+        const float c = getValue();
+        const float amt = std::fabs(c);
+        if (amt < 1e-6f) return "Off";
+        const char* pri = c < 0.f ? "A" : "B";
+        const char* yld = c < 0.f ? "B" : "A";
+        if (amt <= 0.5f)
+            return string::f("%s ducks %s %.0f %%", pri, yld,
+                              std::min(amt, 0.5f) * 2.f * 100.f);
+        if (amt <= 0.75f)
+            return string::f("%s chokes %s while playing", pri, yld);
+        return string::f("%s chokes %s thru decay", pri, yld);
+    }
+};
+
 struct ParamMenuSlider : ui::Slider {
     explicit ParamMenuSlider(ParamQuantity* pq) {
         box.size.x = 180.f;
@@ -381,12 +407,8 @@ struct Fireflow : Module {
                 case WK_SMKNOB:
                     if (c.id == RATE_A || c.id == RATE_B)
                         configParam<RateQuantity>(c.id, 0.f, 1.f, init, lbl);
-                    else if (c.id == CHOKE) {  // event-priority, 5 snapped states
-                        configSwitch(c.id, -2.f, 2.f, init, lbl,
-                                     {"A chokes B thru decay", "A chokes B while playing",
-                                      "Off", "B chokes A while playing", "B chokes A thru decay"});
-                        getParamQuantity(c.id)->snapEnabled = true;
-                    }
+                    else if (c.id == CHOKE)  // event-priority, continuous, zone-aware tooltip
+                        configParam<ChokeQuantity>(c.id, -1.f, 1.f, init, lbl);
                     else if (c.id == FILT_A || c.id == FILT_B)  // bipolar cutoff trim
                         configParam(c.id, -1.f, 1.f, init, lbl);
                     else if (c.id == TIDE)  // texture-lane rate, snaps in the GRID zone
@@ -995,7 +1017,7 @@ struct Fireflow : Module {
             ? 0.f
             : (driftKnob - kDriftSettleZone) / (1.f - kDriftSettleZone));
         inst.set_tide(params[TIDE].getValue());
-        inst.set_choke(params[CHOKE].getValue() * 0.5f);   // snap -2..+2 -> zones
+        inst.set_choke(params[CHOKE].getValue());   // continuous -1..+1, engine quantises zones
         inst.set_reverb_size(params[REV_SIZE].getValue());
         inst.set_reverb_decay(params[REV_DECAY].getValue());
         inst.set_reverb_tone(params[REV_TONE].getValue());
