@@ -76,23 +76,29 @@ constexpr float kChokeDuckRelS  = 0.150f;  // envelope release -- rides back bet
 // shape and same reason as the Bloom duck's kDuckThresh/kDuckFull above.
 //
 // Sized from the envelope's measured distribution rather than from its peak
-// (2026-08-22, three rigs, 10 s each after a 1 s settle, envelope recovered
-// from the applied gain at depth 1):
+// (re-measured 2026-08-22 after the detector moved behind the MORPH/LEVEL gain,
+// which rescaled every figure by the boot morph's 0.7071; three rigs, 10 s each
+// after a 1 s settle, at the boot MORPH and LVL, identity window):
 //
-//   FLOW drones  min 0.0419  p10 0.0700  p50 0.1118  p90 0.1555  max 0.1983  <0.02:  0.0%
-//   STEP plucks  min 0.0029  p10 0.0172  p50 0.0458  p90 0.1330  max 0.1778  <0.02: 13.1%
-//   STEP sparse  min 0.0000  p10 0.0000  p50 0.0000  p90 0.0302  max 0.1600  <0.02: 87.6%
+//   FLOW drones  min 0.0296  p10 0.0495  p50 0.0790  p90 0.1099  max 0.1402  <0.02:  0.0%
+//   STEP plucks  min 0.0021  p10 0.0122  p50 0.0324  p90 0.0940  max 0.1257  <0.02: 25.5%
+//   STEP sparse  min 0.0000  p10 0.0000  p50 0.0000  p90 0.0213  max 0.1132  <0.02: 89.6%
 //
-// THRESH 0.02 is the silence gate: the sparse rig sits at exactly 0 for 87.6 %
-// of its run and the drone rig never drops below 0.0419, so this value lets a
-// silent priority deck stop ducking without ever gating a sustained one.
-// FULL 0.15 is the drone rig's p90 -- the level a deck reaches when it is
+// THRESH 0.015 is the silence gate, set at about half the quietest SUSTAINED
+// deck's floor: the sparse rig sits at exactly 0 for 89.6 % of its run while the
+// drone rig never drops below 0.0296, so this lets a silent priority deck stop
+// ducking without ever gating a sounding one.
+// FULL 0.11 is the drone rig's p90 -- the level a deck reaches when it is
 // properly sounding, not a peak it touches once. Choosing the p90 rather than
 // the max is what makes the floor genuinely reachable instead of a corner case.
 // Both are by-ear STARTING POINTS like the three above; what is measured is the
 // distribution they are sized against, not that they sound right.
-constexpr float kChokeDuckThresh = 0.02f;  // below: no duck, whatever the knob
-constexpr float kChokeDuckFull   = 0.15f;  // at and above: the floor is reached
+//
+// These are in POST-GAIN units, so they are not comparable to a raw part
+// output, and a deck played quiet ducks less by design -- that is the point of
+// the detector's placement, not a defect to tune out.
+constexpr float kChokeDuckThresh = 0.015f;  // below: no duck, whatever the knob
+constexpr float kChokeDuckFull   = 0.11f;   // at and above: the floor is reached
 }
 
 void Instrument::init(float sample_rate) { init(sample_rate, FxMem{}); }
@@ -234,6 +240,15 @@ void Instrument::process(const float* inL, const float* inR,
         }
         --_ctrl_ctr;
 
+        // MORPH/LEVEL gains, hoisted above the CHOKE block because the duck's
+        // detector needs them (see below). Value-identical to reading them at
+        // the mix: within this loop _center is touched only by update() in the
+        // control-tick branch above, and nothing between here and the mix calls
+        // back into it -- Center::update takes the parts by reference, but a
+        // Part never reaches Center. So this is one read, not two.
+        const float ga = _center.gain_a();
+        const float gb = _center.gain_b();
+
         // CHOKE: sidechain duck + event-priority between the decks (spec
         // 2026-07-16 choke-priority, rev. 2 discrete zones + rev. 3 env
         // windows; rev. 4 = plan 2026-08-22-choke-sidechain-duck). The knob is
@@ -262,7 +277,18 @@ void Instrument::process(const float* inL, const float* inR,
         // answers THIS sample. One follower, always on whichever deck has
         // priority right now: on a sign flip the roles swap and this state
         // carries over, which is what keeps the crossing continuous.
-        const float rect = std::max(std::fabs(pl[pri]), std::fabs(prr[pri]));
+        //
+        // The detector rectifies the priority deck's output AFTER its MORPH and
+        // LEVEL gain, not the raw part output. A sidechain follows what you
+        // HEAR: on the raw signal, a deck morphed away or with LVL at 0 was
+        // inaudible and still pulled the other one to the floor. It is also the
+        // same rule the reverb send obeys three lines down ("a morphed-away deck
+        // injects no new reverb", M4) -- reading the raw output here gave the
+        // engine two different answers to whether a silent deck still acts on
+        // the bus.
+        const float pri_gain = (pri == PART_A) ? ga : gb;
+        const float rect = std::max(std::fabs(pl[pri] * pri_gain),
+                                    std::fabs(prr[pri] * pri_gain));
         _choke_env += (rect > _choke_env ? _choke_atk : _choke_rel)
                     * (rect - _choke_env);
         // Depth: the duck zone (0 < |c| <= 0.5) maps 0 -> 1, and both choke
@@ -330,8 +356,6 @@ void Instrument::process(const float* inL, const float* inR,
         _deck_tap[PART_B][0] = bl;  _deck_tap[PART_B][1] = br;
 #endif
 
-        const float ga = _center.gain_a();
-        const float gb = _center.gain_b();
         // MORPH blend (null-reverb path keeps this). The CHOKE duck joins HERE
         // and nowhere earlier: al/ar/bl/br, _dry_tap and _deck_tap above are
         // already written and must stay untouched -- same argument as the

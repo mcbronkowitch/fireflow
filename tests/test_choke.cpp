@@ -322,13 +322,15 @@ TEST_CASE("choke zones: 0.5 and 0.75 are the boundaries between duck, held and d
     CHECK(zone_count(-0.9f).onsets == 0);
 }
 
-// Both decks droning in FLOW at a modest level, so the master limiter stays in
-// its bit-transparent region -- otherwise the shaper's nonlinearity, not the
-// duck, would be what the energy numbers below measure. The peak is asserted
-// against the limiter's own knee in the test.
+// Both decks droning in FLOW at the boot MORPH and LVL. Those defaults matter
+// now that the duck's detector reads the priority deck AFTER its MORPH/LEVEL
+// gain: the window constants are sized against what a deck contributes at
+// neutral morph, so a rig that quietly turned LVL down would be measuring a
+// different signal than the probe did. The master limiter stays in its
+// bit-transparent region here on its own -- the test asserts the reference peak
+// against the limiter's own knee rather than assuming it.
 static void arm_duck_rig(Instrument& inst, float choke) {
     arm_both(inst);
-    for (int p = 0; p < PART_COUNT; ++p) inst.set_part_level(p, 0.3f);
     inst.set_choke(choke);
 }
 
@@ -403,6 +405,60 @@ TEST_CASE("choke duck: the priority deck and the cross-deck taps stay untouched"
         for (int p = 0; p < PART_COUNT; ++p)
             for (int ch = 0; ch < 2; ++ch)
                 REQUIRE(ref.deck_tap(p, ch) == ducked.deck_tap(p, ch));
+    }
+}
+
+TEST_CASE("choke duck: a priority deck you cannot hear does not duck the one you can") {
+    // The sidechain follows what you HEAR. MORPH hard to B makes the PRIORITY
+    // deck (A, at negative choke) inaudible, so the yielding deck must come out
+    // exactly as it does at CHOKE noon -- an inaudible deck has nothing to duck
+    // with. Before the detector moved behind the MORPH/LEVEL gain this ducked B
+    // to the floor on a deck contributing nothing to the bus, which also
+    // contradicted the reverb send's M4 rule three lines below it.
+    //
+    // Bit-identity, not a tolerance: once MORPH has settled, ga is exactly 0,
+    // so the detector's input is exactly 0, the envelope releases to 0 and the
+    // gain is exactly 1.0f. The settle is ridden out before comparing rather
+    // than tolerated -- during the glide the priority deck IS partly audible and
+    // ducking is correct there.
+    SUBCASE("morphed away") {
+        Instrument ref, ducked;
+        arm_duck_rig(ref, 0.f);
+        arm_duck_rig(ducked, -0.4f);             // the ruling's case
+        ref.set_morph(1.f);                      // hard to B: A is inaudible
+        ducked.set_morph(1.f);
+        std::vector<float> rl(1), rr(1), dl(1), dr(1);
+        for (int i = 0; i < 48000; ++i) {        // 1 s: MORPH glide + duck release
+            ref.process(nullptr, nullptr, rl.data(), rr.data(), 1);
+            ducked.process(nullptr, nullptr, dl.data(), dr.data(), 1);
+        }
+        for (int i = 0; i < 240000; ++i) {       // 5 s
+            ref.process(nullptr, nullptr, rl.data(), rr.data(), 1);
+            ducked.process(nullptr, nullptr, dl.data(), dr.data(), 1);
+            REQUIRE(ducked.choke_duck_gain() == 1.f);
+            REQUIRE(rl[0] == dl[0]);
+            REQUIRE(rr[0] == dr[0]);
+        }
+    }
+    // Same claim through the other gain the detector now honours.
+    SUBCASE("LEVEL at zero") {
+        Instrument ref, ducked;
+        arm_duck_rig(ref, 0.f);
+        arm_duck_rig(ducked, -0.4f);
+        ref.set_part_level(PART_A, 0.f);
+        ducked.set_part_level(PART_A, 0.f);
+        std::vector<float> rl(1), rr(1), dl(1), dr(1);
+        for (int i = 0; i < 48000; ++i) {
+            ref.process(nullptr, nullptr, rl.data(), rr.data(), 1);
+            ducked.process(nullptr, nullptr, dl.data(), dr.data(), 1);
+        }
+        for (int i = 0; i < 240000; ++i) {
+            ref.process(nullptr, nullptr, rl.data(), rr.data(), 1);
+            ducked.process(nullptr, nullptr, dl.data(), dr.data(), 1);
+            REQUIRE(ducked.choke_duck_gain() == 1.f);
+            REQUIRE(rl[0] == dl[0]);
+            REQUIRE(rr[0] == dr[0]);
+        }
     }
 }
 
