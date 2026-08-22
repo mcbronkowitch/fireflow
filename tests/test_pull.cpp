@@ -270,3 +270,53 @@ TEST_CASE("pull: a sampler leader means the knob does nothing") {
     run(in, 4.f);
     CHECK_FALSE(in.part(PART_B).gravity_bound());
 }
+
+TEST_CASE("pull: a chord change under a bound note settles within 40 ms") {
+    // Spec check 4. The leader's mask is swapped by hand rather than by
+    // waiting for its next trigger, so the test measures the settle and not
+    // the sequencer.
+    Part p; stepped(p, 21);
+    p.set_gravity(0x0044, 1.f);                    // classes 2, 6
+    float l, r;
+    for (int i = 0; i < 48000 * 4; ++i) p.process(l, r);
+    REQUIRE(p.gravity_bound());
+    p.set_gravity(0x0088, 1.f);                    // classes 3, 7
+    // 40 ms = 1920 samples at 48k. Give it that and one control tick's slack.
+    for (int i = 0; i < 1920 + 96; ++i) p.process(l, r);
+    const int semis = static_cast<int>(p.pitch_cv() * Quantizer::SPAN_SEMIS + 0.5f);
+    CAPTURE(semis);
+    CHECK(((1u << (semis % 12)) & 0x0088u) != 0u);
+}
+
+TEST_CASE("pull: leader COLOR 0 plus full PULL is a unison follow") {
+    // Spec check 5, and it is emergent, not coded: at COLOR 0 the leader's
+    // "chord" is one pitch class (measured 2026-08-22), so the follower can
+    // only land on that class, in whatever octave its own register puts it.
+    Instrument in; two_decks(in);
+    in.set_color(PART_A, 0.f);
+    in.set_pull(-1.f);
+    run(in, 4.f);
+    const uint16_t lead = in.part(PART_A).chord_pc_mask();
+    REQUIRE(lead != 0u);
+    CHECK(popcount12(lead) == 1);
+    const int semis = static_cast<int>(
+        in.part(PART_B).pitch_cv() * Quantizer::SPAN_SEMIS + 0.5f);
+    CAPTURE(semis); CAPTURE(lead);
+    CHECK(((1u << (semis % 12)) & lead) != 0u);
+}
+
+TEST_CASE("pull: a hard sign flip swaps leader and follower with no zero crossing") {
+    // Task 4 review's deferred minor: the instrument-level PULL block clears
+    // the leader's gravity on every control tick (instrument.cpp:268-275,
+    // "_parts[lead].set_gravity(0, 0.f)"), so a -1 -> +1 flip with no 0.f
+    // stop in between should still swap the roles cleanly. Verified correct
+    // by inspection for Task 4; this is the running gate for that path.
+    Instrument in; two_decks(in);
+    in.set_pull(-1.f); run(in, 4.f);
+    CHECK(in.part(PART_B).gravity_bound());           // B is the first follower
+    CHECK_FALSE(in.part(PART_A).gravity_bound());
+    in.set_pull(1.f);  run(in, 4.f);                  // hard flip, no 0.f stop
+    CHECK_FALSE(in.part(PART_B).gravity_bound());     // old follower released
+    CHECK_FALSE(in.part(PART_B).quant().gravity_on());
+    CHECK(in.part(PART_A).gravity_bound());           // old leader now bound
+}
