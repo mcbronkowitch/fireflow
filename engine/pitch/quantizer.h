@@ -79,6 +79,12 @@ public:
         _slew_ctr = 0;
         _have_note = false;
         _have_out = false;
+        // PULL's gravity mask is runtime-derived, same footing as _have_out
+        // above: Part re-pushes it via set_gravity() every control tick, so
+        // a reinit must not let a stale pre-reinit mask survive into the
+        // first post-reinit process() call.
+        _grav_mask = 0;
+        _grav_on   = false;
     }
 
     void set_scale(uint16_t mask12) { if (mask12 != _scale) { _scale = mask12; on_change(); } }
@@ -94,7 +100,22 @@ public:
     // free-running deck is not exempt. A zero mask is not gravity.
     void set_gravity(uint16_t abs_pc_mask, bool on) {
         const bool want = on && abs_pc_mask != 0;
+        // Load-bearing, not a redundant fast path: Part::_control_tick calls
+        // this every control tick (500 Hz at 48k/96), so without this guard
+        // on_change() would fire that often even while gravity sits off or
+        // unchanged, clearing _have_note and re-arming the slew on every
+        // call. That destroys the hysteresis and the change-slew shape
+        // process() above relies on, and moves ctrl_identity and
+        // wave_formant_sweep -- the same failure shape Instrument::set_pace
+        // guards against with its own early-out (instrument.cpp). Do not
+        // "simplify" this away.
         if (want == _grav_on && (!want || abs_pc_mask == _grav_mask)) return;
+        // _grav_mask is written unconditionally here, including on the "off"
+        // path (want == false): harmless today because _grav_mask is only
+        // ever read while _grav_on is true (process() above), so a stale
+        // value sitting here while gravity is off is never observed. Kept
+        // rather than special-cased to skip the write on that path, so this
+        // setter stays the one place both members change together.
         _grav_mask = abs_pc_mask;
         _grav_on   = want;
         on_change();
@@ -147,7 +168,19 @@ private:
             _slew_from = _last_out;               // soften the jump (~40 ms)
             _slew_ctr = _slew_len;
         } else {
-            _slew_ctr = 0;                        // into passthrough: instant
+            // Into passthrough: instant, on purpose. This is the PULL-release
+            // case in FREE mode -- gravity going off there drops straight
+            // into _quantizing() == false, so the very next process() call
+            // takes process()'s early "not quantizing" return and hands back
+            // the raw value with no slew at all. The spec's edge case ("...
+            // slewing back into the scale") describes Scale/Chrom release,
+            // where _quantizing() stays true and this branch is not taken;
+            // it does not describe FREE. tests/test_quantizer.cpp's
+            // "gravity: FREE is not exempt while bound, and passthrough
+            // returns" gates this snap deliberately -- do not widen this
+            // branch to slew without checking that test and the identity
+            // gates first.
+            _slew_ctr = 0;
         }
     }
 

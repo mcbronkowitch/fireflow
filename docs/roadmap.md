@@ -2833,11 +2833,13 @@ probability.
 **Where the follower can bind, measured 2026-08-22:** the quantizer reaches
 the sounding pitch on five of the six engines in both modes, and not on a
 SAMPLER deck (either mode) or a BBD deck in FLOW — the same bypass
-`Part::_control_tick` already has, no new gate needed. A leader with nothing
-to publish (SAMPLER, or BBD in FLOW) simply pulls nothing; the direction is
-inert rather than special-cased. Full table and the live-follow A/B proof
-(24 000 of 24 000 samples differ under a mask swap 100 ms into a note, max
-`|d|` 0.544) are in [`docs/engine-map.md` §7](engine-map.md).
+`Part::_control_tick` already has, no new gate needed. The leader side is a
+different, unconditional rule: a SAMPLER or BBD deck never leads, in either
+mode (`Part::_note_deck()`), so a leader with nothing to publish simply pulls
+nothing; the direction is inert rather than special-cased. Full table and the
+live-follow A/B proof (24 000 of 24 000 samples differ under a mask swap
+100 ms into a note, max `|d|` 0.544) are in
+[`docs/engine-map.md` §7](engine-map.md).
 
 Spec `docs/superpowers/specs/2026-07-19-pull-chord-gravity-design.md`, plan
 `docs/superpowers/plans/2026-08-22-pull-chord-gravity.md`; branch

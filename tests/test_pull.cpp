@@ -10,11 +10,13 @@ using namespace spky;
 namespace {
 int popcount12(uint16_t m) { int k = 0; while (m) { k += m & 1; m >>= 1; } return k; }
 
-// Settle a part on a fixed pitch with the quantizer in scale mode.
-void settle(Part& p, EngineId e, float color) {
+// Settle a part on a fixed pitch with the quantizer in scale mode. `step`
+// defaults to false (FLOW) so every existing caller is unaffected; the
+// unconditional-leader-rule gate below is the one caller that passes true.
+void settle(Part& p, EngineId e, float color, bool step = false) {
     p.init(48000.f, 11);
     p.set_engine(e);
-    p.set_step(false, 8);
+    p.set_step(step, 8);
     p.set_target_active(LANE_PITCH, true);
     p.set_target_base(LANE_PITCH, 0.5f);
     p.set_target_depth(LANE_PITCH, 0.f);
@@ -69,6 +71,12 @@ TEST_CASE("leader: a sampler or BBD deck publishes no harmony") {
     CHECK(b.chord_pc_mask() == 0u);
     Part f; settle(f, ENGINE_FEED, 0.75f);
     CHECK(f.chord_pc_mask() != 0u);      // FEED is a note deck and does lead
+    // The leader rule (_note_deck(), part.h) has no STEP/FLOW term -- a BBD
+    // deck never leads in EITHER mode, unlike the follower bypass above,
+    // which IS mode-qualified. Nothing above pins that: settle() above only
+    // ever ran BBD in FLOW.
+    Part bs; settle(bs, ENGINE_BBD, 0.75f, true);
+    CHECK(bs.chord_pc_mask() == 0u);
 }
 
 namespace {

@@ -800,6 +800,12 @@ def test_bodies_and_captions_sit_inside_their_frame():
     # centre column has no free slot for a 7th S-class knob (measured --
     # see gen_hw_panel.py's CENTER_POS comment), so PULL sits loose,
     # provisionally, pending a real layout pass.
+    # TEMPORARY, tied to the M6 layout pass -- unlike the pads/satellite LEDs
+    # above, PULL is not loose by design. It is here only because the plate
+    # is full (final-fix review, Important 3): remove this entry once M6's
+    # layout pass gives PULL a real group frame, at which point this guard
+    # goes back to asserting "every knob lives inside a frame" without an
+    # exception.
     check(sorted(loose) == ["CEIL_L", "MODBTN", "MODBTN_L", "PULL",
                              "SHIFTBTN", "SHIFTBTN_L"],
           f"controls outside the frame raster: {sorted(loose)}")

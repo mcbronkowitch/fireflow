@@ -262,6 +262,27 @@ void Instrument::process(const float* inL, const float* inR,
             // a SAMPLER or BBD deck -- publishes mask 0, and Part::set_gravity
             // turns that into "off", so the knob is simply inert in that
             // direction rather than special-cased here.
+            //
+            // This block runs BEFORE both Parts' _control_tick() for this
+            // sample (those happen inside the process() calls further down),
+            // so _parts[lead].chord_pc_mask() here still holds whatever the
+            // LEADER's own _control_tick computed at the previous raster tick
+            // (up to Center::kCtrlInterval samples / ~2 ms old). Correct, and
+            // the same one-block lag the excitation bus's _other_deck_tap
+            // hand-over has just above -- that one spells the lag out
+            // ("_dry_tap still holds last block's values here"), this one
+            // hadn't, until now.
+            //
+            // Pushed every tick, unconditionally, rather than only when
+            // `_pull` changes -- a `set_pace`-style guard here would look like
+            // a harmless micro-optimisation and would break live-follow
+            // entirely: it is this per-tick push that carries the leader's
+            // NEW chord mask to the follower whenever the leader re-triggers,
+            // and Part::_control_tick's own comment on the symmetric push
+            // (part.cpp, beside `_quant.set_gravity(_grav_mask, _grav_bound)`)
+            // explains why that side has to be per-tick too. Gate this one and
+            // a bound note would freeze on the mask it happened to inherit the
+            // one tick PULL last moved, deaf to every chord change after.
             {
                 const float amt = _pull < 0.f ? -_pull : _pull;
                 if (amt <= kPullDead) {

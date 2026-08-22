@@ -27,10 +27,10 @@ bound note, that note glides onto the new chord over the same short slide the
 instrument already uses whenever a scale or root changes, instead of waiting
 for its own next strike.
 
-**Not every deck has a chord to offer.** SAMPLER and BBD-in-FLOW decks use
-their pitch lane for something other than a note — a read position, a clock
-bend — so leading from one of those simply does nothing; the follower side
-behaves normally as soon as the other deck leads instead.
+**Not every deck has a chord to offer.** SAMPLER and BBD decks use their pitch
+lane for something other than a note — a read position, a clock bend — so
+leading from one of those simply does nothing, in either mode; the follower
+side behaves normally as soon as the other deck leads instead.
 
 **On the 60 HP hardware draft, PULL had no ready-made slot.** It sits placed
 but loose, outside the panel's usual grouping — a provisional position pending

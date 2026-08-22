@@ -79,6 +79,14 @@ void Part::init(float sample_rate, uint32_t seed_base,
     // pre-reinit audio leak into the first post-reinit control tick.
     _other_deck_tap = 0.f;
     _audio_in_tap = 0.f;
+    // PULL's gravity state is runtime-derived too -- _grav_mask/_grav_prob
+    // are pushed fresh by Instrument every control tick and _chord_pc is
+    // rebuilt every control tick from the currently-sounding chord, so all
+    // four are on the taps' footing above, not the patch-state footing
+    // below: a reinit must not let a stale pre-reinit chord or bind
+    // probability carry into the first post-reinit _quant.process() call
+    // (see this function's closing _pitch_q assignment).
+    _grav_mask = 0; _grav_prob = 0.f; _grav_bound = false; _chord_pc = 0;
     // _bus_dc.Process() only ever runs from _control_tick(), i.e. once per
     // SynthEngine::kCtrlInterval samples (500 Hz at 48 kHz) -- NOT once per
     // sample. daisysp::DcBlock::Init(rate) sizes its pole from the rate it is
