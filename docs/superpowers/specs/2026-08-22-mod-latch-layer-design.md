@@ -177,10 +177,26 @@ panel**)
   ring) = the knob keeps its sound function even while MOD is latched. The
   MOD knob itself is deliberately left with the plain ring — it is the
   per-deck master in both modes.
-- **Dynamic layer feedback in VCV:** while latched, the swapped-in depth
-  knobs render in the zone accent color, so the whole panel visibly changes
-  state; plus the `MODBTN_L` lamp. On hardware the printed ring recolour and
-  the lamp are the whole affordance.
+- **VCV affordance is the printed ring plus the lamp, same as hardware —
+  no extra dynamic ring** (revised 2026-08-22, later the same day, after the
+  owner reviewed the rendered panel with `9a3a779` applied). The first cut of
+  this section additionally drew a dynamic accent ring in Rack
+  (`ModDepthRing` in `host/vcv/src/Fireflow.cpp`) at the pre-recolour
+  satellite radius (`rMm = big ? 7.2f : 5.6f`), visible only while latched.
+  Once the printed ring itself moved onto the body ring and picked up the
+  zone accent colour (`9a3a779`), that dynamic ring became a second,
+  concentric accent ring drawn on top of the first — a duplicate signal, not
+  a distinct one. The owner's call: delete it. His reasoning — the printed
+  accent ring already marks *which* knobs are modulatable, the `MODBTN_L`
+  lamp already shows *whether* the layer is engaged, and the knob's own
+  pointer shows the depth value; a third indicator of the same state is
+  noise. `ModDepthRing`, its instantiation in the `FireflowHWWidget`
+  constructor, and the `acc` colour computation that existed only to feed it
+  (which duplicated `res/gen_hw_panel.py`'s `ACC`/`ZONE_A`/`W` constants as
+  hardcoded literals) were removed 2026-08-22. The pleasing consequence:
+  VCV and hardware now share the *same* affordance — printed ring marks
+  modulatability, lamp reports the latch, knob shows the depth — rather than
+  VCV carrying one indicator hardware physically cannot.
 - Validated on the real generated plate (`res/FireflowHW.svg`, regenerated
   2026-08-22 with the recolour): the ring sits at the same radius as every
   other knob's body ring, so it needs no new caption-clearance check — moving

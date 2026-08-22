@@ -328,16 +328,23 @@ before a listening pass.
 - **Nothing on this branch has been checked in interactive Rack — the full
   latch-and-listen checklist below is unrun, not just the two behaviour
   changes further down.** Task 6 (`host/vcv/src/Fireflow.cpp`: `modLatched()`,
-  `ModSound<W>`, `ModDepth<W>`, `ModDepthRing`, and the rewritten
+  `ModSound<W>`, `ModDepth<W>`, and the rewritten
   `WK_BIGKNOB`/`WK_KNOBC`/`WK_SMKNOB`/`WK_KNOBI` case) was verified only
   against a headless screenshot of the unlatched browser-preview state
   (`module == nullptr`); screenshot mode cannot click a control, open a
   context menu, or produce audio. Preserved here because the report that
   first wrote it down lived in gitignored `.superpowers/sdd/` scratch and was
-  cleared once the branch merged. Still to check by hand on `FireflowHW`:
+  cleared once the branch merged. (This checklist also once named a
+  `ModDepthRing` widget that drew a *second*, dynamic accent ring in Rack
+  while latched; the owner deleted it 2026-08-22 after reviewing the
+  rendered panel — the printed accent ring on the plate already marks
+  modulatability and does not change with the latch, so the checklist below
+  no longer expects a ring to appear or disappear.) Still to check by hand
+  on `FireflowHW`:
   - Latch MOD (click the MOD button): every wreathed knob swaps to its depth
-    twin, each with a solid accent ring behind it in its zone colour
-    (teal/orange/blue-grey).
+    twin. The knob's own printed body ring stays in its zone accent colour
+    (teal/orange/blue-grey) exactly as it prints when unlatched — nothing
+    extra appears or changes on the plate when the layer engages.
   - The three engine-backed depth defaults land at their booted positions:
     TIMB depth ≈ 1.0, DPTH depth ≈ 0.7, FILT depth ≈ 0.55; every other
     depth twin boots at 0.
@@ -350,9 +357,9 @@ before a listening pass.
     modulation; turning deck A's master MOD down to 0 should stop the
     texture modulation while the pitch phrase keeps playing.
   - General visual check in a live patch: nothing overlaps oddly at the
-    edges of big vs. small knob sizes (ring radius 7.2 mm big, 5.6 mm
-    small), and no ring visually collides with a neighbouring control on a
-    tightly-packed row.
+    edges of big vs. small knob sizes (printed body ring radius 6.0 mm big,
+    4.4 mm small), and no ring visually collides with a neighbouring
+    control on a tightly-packed row.
 - **Deck B's `LANE_MOTION` base now actually moves, 0.0 → 0.5 (0.25 on a
   sampler deck, which halves the base) — unheard.**
   `inst.set_target_base(p, spky::LANE_MOTION, pp(DEPTH_A, p))` was reading

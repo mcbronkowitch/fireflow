@@ -1810,27 +1810,6 @@ struct ModDepth : W {
     }
 };
 
-// The dynamic half of the printed wreath: a solid accent ring behind the
-// depth knob while the layer holds, so the whole panel visibly changes
-// state (spec §5, "visual affordance").
-struct ModDepthRing : TransparentWidget {
-    Fireflow* fireflow = nullptr;
-    int soundId = 0;
-    NVGcolor col = nvgRGB(0x7f, 0xb6, 0xc9);
-    float rMm = 5.6f;
-    void step() override {
-        setVisible(ctlVisible(fireflow, soundId) && modLatched(fireflow));
-        TransparentWidget::step();
-    }
-    void draw(const DrawArgs& args) override {
-        nvgBeginPath(args.vg);
-        nvgCircle(args.vg, box.size.x * 0.5f, box.size.y * 0.5f, mm2px(rMm));
-        nvgStrokeColor(args.vg, col);
-        nvgStrokeWidth(args.vg, mm2px(0.35f));
-        nvgStroke(args.vg);
-    }
-};
-
 // The LED half of the Sampler-only rule. It takes the deck's ENGINE PARAM id,
 // not the light's own id: a LightId is a different enum from a ParamId and the
 // two spaces must never meet (REC_A_L == 2 == DENSITY_A). See the captions
@@ -2256,22 +2235,11 @@ struct FireflowHWWidget : ModuleWidget {
                         k->fireflow = module; k->ctlId = c.id;
                         addParam(k);
                     }
-                    // ...the accent ring and the depth twin surface with it.
-                    // Zone split (124.2 mm of a 304.8 mm plate) and the three
-                    // accent colours mirror res/gen_hw_panel.py's ZONE_A/W
-                    // and ACC dict exactly -- same numbers the printed
-                    // wreath's own stroke colour uses. No C++ constant
-                    // carries them yet, so this duplicates the generator's
-                    // geometry rather than inventing a new source of truth.
-                    NVGcolor acc = c.mm.x < 124.2f ? nvgRGB(0x3f, 0xbf, 0x9c)
-                                 : c.mm.x > 304.8f - 124.2f ? nvgRGB(0xe8, 0x94, 0x5a)
-                                 : nvgRGB(0x7f, 0xb6, 0xc9);
-                    auto* ring = new ModDepthRing;
-                    ring->fireflow = module; ring->soundId = c.id;
-                    ring->col = acc; ring->rMm = big ? 7.2f : 5.6f;
-                    ring->box.size = mm2px(Vec(2.f * ring->rMm + 1.f, 2.f * ring->rMm + 1.f));
-                    ring->box.pos = pos.minus(ring->box.size.div(2.f));
-                    addChild(ring);
+                    // ...and the depth twin surfaces with it. The printed
+                    // wreath (res/gen_hw_panel.py's ZONE_A/W and ACC dict)
+                    // already marks which knobs are modulatable; there is no
+                    // dynamic ring to draw here any more (owner's call,
+                    // 2026-08-22 -- see spec §5).
                     if (big) {
                         auto* d = createParamCentered<ModDepth<RoundBlackKnob>>(pos, module, depthId);
                         d->fireflow = module; d->soundId = c.id;
