@@ -305,6 +305,12 @@ public:
     // outside a duck is indistinguishable from quieter playing (the same
     // argument as limiter_gain()), so this is the only honest probe.
     float duck_gain() const { return _duck_gain; }
+    // Observer only, for tests: the CHOKE sidechain duck's gain on the
+    // yielding deck's share of the mix. Same argument as duck_gain() above --
+    // from outside, a ducked deck is indistinguishable from a quiet one. Its
+    // exact 1.0f at CHOKE noon is what the bypass rests on, so it is worth
+    // being able to assert directly rather than inferring it from a render.
+    float choke_duck_gain() const { return _choke_duck_gain; }
     // 0 while the master shaper is transparent, rising as it bends. This is
     // the audible onset, not the gain reduction -- see limiter.h.
     float limiter_squash() const { return _limiter.squash(); }
@@ -450,10 +456,14 @@ public:
         _center.set_sync(on);
         for (auto& p : _parts) p.mod().set_synced(on);
     }
-    // CHOKE (spec 2026-07-16 choke-priority, rev. 2): discrete zones.
+    // CHOKE (spec 2026-07-16 choke-priority, rev. 4 = plan 2026-08-22
+    // choke-sidechain-duck): continuous, three zones per side by |c|.
     // 0 = off (bit-identical bypass); negative = A priority / B yields,
-    // positive mirrored. |c| <= 0.5 blocks during the priority gate only,
-    // |c| > 0.5 through the full decay (while the voice is audible).
+    // positive mirrored.
+    //   0 < |c| <= 0.5   sidechain duck only, depth ramping 0 -> 100 %
+    //   0.5 < |c| <= 0.75  duck at 100 % + events blocked while the priority
+    //                      side holds a note
+    //   |c| > 0.75       duck at 100 % + events blocked through the full decay
     void set_choke(float c) { _choke = clampf(c, -1.f, 1.f); }
     void clock_pulse()     { _center.clock_pulse(_pace); }
     // RST = bar resync: zero the downbeat, drop the grid offsets a live STEPS
@@ -530,6 +540,24 @@ private:
     // and the duck takes the envelope. Not 02134e3's dead trim: the knob is
     // read as a regime bit here, never as a level.
     bool _duck_armed = false;
+    // CHOKE sidechain duck (plan 2026-08-22-choke-sidechain-duck). Unrelated to
+    // the Bloom duck above and deliberately not merged with it: that one is a
+    // control-rate feedforward from the reverb return onto the whole dry bus,
+    // this one is an audio-rate follower on the PRIORITY deck that pulls only
+    // the YIELDING deck's share of the mix (and its reverb send) down.
+    //
+    // One follower, not one per deck: it always tracks whichever deck has
+    // priority at this sample, so a sign flip of _choke swaps the roles with
+    // the envelope state intact instead of starting a fresh attack.
+    float _choke_env = 0.f;
+    float _choke_atk = 1.f, _choke_rel = 1.f;   // per-sample follower coefficients
+    // The knob's own glide (kMixSmoothS). The follower smooths the SIGNAL side;
+    // this smooths the CONTROL side, so turning CHOKE cannot step the mix gain.
+    OnePole _choke_depth;
+    // The gain actually applied to the yielding deck. Exactly 1.0f whenever the
+    // depth is 0 -- that exactness, not a branch, is what makes CHOKE at noon a
+    // bit-identical bypass (see the mix in process()).
+    float _choke_duck_gain = 1.f;
     Limiter _limiter;
     Center _center;
     // Excitation bus, cross-deck source (spec §6, Task 10): each part's own

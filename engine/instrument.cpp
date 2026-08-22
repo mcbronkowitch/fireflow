@@ -52,6 +52,39 @@ constexpr float kDuckDownS = 1.5f;
 constexpr float kDuckUpS   = 4.0f;
 
 constexpr float kRevReturnFadeS = 0.15f;  // ear-tunable: tail fade-out before the room sleeps
+
+// CHOKE sidechain duck (plan 2026-08-22-choke-sidechain-duck, task 1). Same
+// shape as the Bloom duck above -- an envelope picks a floor-style gain -- but
+// fed from the PRIORITY deck's own output instead of the room's return, and
+// applied to the YIELDING deck's contribution to the mix instead of the whole
+// dry bus. Audio-rate, not control-rate: this one answers a note, not a swell.
+//
+// All three are BY-EAR STARTING POINTS, chosen blind and not yet heard. They
+// are the classic sidechain shape (fast in, slow out, a floor rather than a
+// mute) at plausible values -- nothing here has been tuned against the
+// instrument, and none of it is a measurement.
+constexpr float kChokeDuckFloor = 0.15f;   // gain at full depth and a saturated
+                                           // envelope: -16.5 dB, ducked not muted
+constexpr float kChokeDuckAtkS  = 0.005f;  // envelope attack -- catches a note's edge
+constexpr float kChokeDuckRelS  = 0.150f;  // envelope release -- rides back between notes
+
+// kChokeDuckFloor is NOT REACHED IN PLAY, and knowing that is the difference
+// between tuning this duck and chasing it. The gain below normalises the
+// envelope against full scale (min(1, env)), but a deck's part output does not
+// run anywhere near full scale: measured 2026-08-22 on the two rigs
+// tests/test_choke.cpp uses, 10 s each after a 1 s settle, reading deck_tap()
+// (which IS the al/ar the follower rectifies) --
+//
+//   FLOW drones   peak 0.2998  rms 0.0620  ->  duck gain bottoms at 0.8315 (-1.60 dB)
+//   STEP plucks   peak 0.2475  rms 0.0464  ->  duck gain bottoms at 0.8489 (-1.42 dB)
+//
+// So at the knob's deepest the yielding deck is pulled back about 1.5 dB, not
+// the 16.5 dB the constant names, and moving kChokeDuckFloor alone scales only
+// that 1.5 dB. Closing the gap is a WINDOW question, not a floor question --
+// the Bloom duck above answers the same problem with kDuckThresh/kDuckFull,
+// sized to the range its envelope actually visits. Left as specified here
+// because the window is a design decision this task was not given; it is the
+// first thing to settle in the by-ear pass.
 }
 
 void Instrument::init(float sample_rate) { init(sample_rate, FxMem{}); }
@@ -84,6 +117,15 @@ void Instrument::init(float sample_rate, const FxMem& mem) {
     _limiter.init();
     _duck_keep_down = std::exp(-1.f / (kDuckDownS * sample_rate));
     _duck_keep_up   = std::exp(-1.f / (kDuckUpS * sample_rate));
+    _choke_env = 0.f;
+    _choke_atk = 1.f - std::exp(-1.f / (kChokeDuckAtkS * sample_rate));
+    _choke_rel = 1.f - std::exp(-1.f / (kChokeDuckRelS * sample_rate));
+    // The knob glide, not the envelope: it exists so a CHOKE move cannot step
+    // the mix gain. Shares kMixSmoothS with the reverb crossfade because it is
+    // the same job on the same bus, not because the two are coupled.
+    _choke_depth.init(sample_rate, kMixSmoothS);
+    _choke_depth.reset(0.f);
+    _choke_duck_gain = 1.f;
     _center.init(sample_rate, 0x5ce47e12u);
     _ctrl_ctr = 0;
     set_tempo_bpm(_bpm);
@@ -184,9 +226,10 @@ void Instrument::process(const float* inL, const float* inR,
         }
         --_ctrl_ctr;
 
-        // CHOKE: event-priority between the decks (spec 2026-07-16
-        // choke-priority, rev. 2 discrete zones + rev. 3 env windows).
-        // The panel snaps to -1/-0.5/0/+0.5/+1; negative = A priority.
+        // CHOKE: sidechain duck + event-priority between the decks (spec
+        // 2026-07-16 choke-priority, rev. 2 discrete zones + rev. 3 env
+        // windows; rev. 4 = plan 2026-08-22-choke-sidechain-duck). The knob is
+        // continuous now, three zones per side by |c|; negative = A priority.
         const int pri = _choke > 0.f ? PART_B : PART_A;
         const int yld = 1 - pri;
         const float amt = _choke < 0.f ? -_choke : _choke;
@@ -206,13 +249,38 @@ void Instrument::process(const float* inL, const float* inR,
         float psl[PART_COUNT], psr[PART_COUNT];
         _parts[pri].set_inhibit(false);   // knob flips must never strand a part
         _parts[pri].process(in_l, in_r, pl[pri], prr[pri], psl[pri], psr[pri]);
-        if (amt > 0.f) {
-            // Stage 1 (|c| <= 0.5): blocked while the priority side HOLDS a
-            // note — STEP: gate high (note + sustain, the tail is free);
-            // FLOW: a drone is always "on". Stage 2 (|c| > 0.5): additionally
-            // through the whole audible decay (env floor 1e-4).
+
+        // The duck stage, read straight after the priority deck ran so it
+        // answers THIS sample. One follower, always on whichever deck has
+        // priority right now: on a sign flip the roles swap and this state
+        // carries over, which is what keeps the crossing continuous.
+        const float rect = std::max(std::fabs(pl[pri]), std::fabs(prr[pri]));
+        _choke_env += (rect > _choke_env ? _choke_atk : _choke_rel)
+                    * (rect - _choke_env);
+        // Depth: the duck zone (0 < |c| <= 0.5) maps 0 -> 1, and both choke
+        // zones sit pinned at 1 above it. Glided, so a knob move cannot step
+        // the mix gain.
+        const float depth = _choke_depth.process(std::min(amt, 0.5f) * 2.f);
+        // Floor-style, like the Bloom duck: at full depth and a saturated
+        // envelope the yielding deck sits at kChokeDuckFloor, never muted --
+        // but the envelope does NOT saturate in play, so read the measurement
+        // beside kChokeDuckFloor's declaration before tuning anything here.
+        // Exactly 1.0f whenever depth is 0 -- which is the whole of CHOKE's
+        // noon bypass, since a multiply by 1.0f is exact and the mix below
+        // therefore stays bit-identical without a branch.
+        _choke_duck_gain = 1.f - depth * (1.f - kChokeDuckFloor)
+                                * std::min(1.f, _choke_env);
+        float duck[PART_COUNT] = { 1.f, 1.f };
+        duck[yld] = _choke_duck_gain;             // the priority deck never ducks
+
+        // Choke zones, on top of the duck. Held (0.5 < |c| <= 0.75): blocked
+        // while the priority side HOLDS a note — STEP: gate high (note +
+        // sustain, the tail is free); FLOW: a drone is always "on". Decay
+        // (|c| > 0.75): additionally through the whole audible decay (env
+        // floor 1e-4). Below 0.5 the events are free and the duck is alone.
+        if (amt > 0.5f) {
             bool window = _parts[pri].gate() || _parts[pri].flow();
-            if (!window && amt > 0.5f)
+            if (!window && amt > 0.75f)
                 window = _parts[pri].max_voice_env() > 1e-4f;
             _parts[yld].set_inhibit(window);
         } else {
@@ -252,8 +320,13 @@ void Instrument::process(const float* inL, const float* inR,
 
         const float ga = _center.gain_a();
         const float gb = _center.gain_b();
-        float l = al * ga + bl * gb;          // MORPH blend (null-reverb path keeps this)
-        float r = ar * ga + br * gb;
+        // MORPH blend (null-reverb path keeps this). The CHOKE duck joins HERE
+        // and nowhere earlier: al/ar/bl/br, _dry_tap and _deck_tap above are
+        // already written and must stay untouched -- same argument as the
+        // Bloom duck's at the reverb mix below. duck[] is { 1, 1 } whenever
+        // CHOKE is at noon, and a multiply by 1.0f is exact.
+        float l = al * ga * duck[PART_A] + bl * gb * duck[PART_B];
+        float r = ar * ga * duck[PART_A] + br * gb * duck[PART_B];
         if (_reverb) {
             if (!_rev_primed) {              // snap the mix set before the first block
                 for (int p = 0; p < PART_COUNT; ++p) {
@@ -302,15 +375,19 @@ void Instrument::process(const float* inL, const float* inR,
                                                          : _duck_keep_up;
             _duck_residual *= keep;
             _duck_gain = _duck_target + _duck_residual;
-            l = (al * ga * dga + bl * gb * dgb) * _duck_gain;
-            r = (ar * ga * dga + br * gb * dgb) * _duck_gain;
+            l = (al * ga * dga * duck[PART_A] + bl * gb * dgb * duck[PART_B]) * _duck_gain;
+            r = (ar * ga * dga * duck[PART_A] + br * gb * dgb * duck[PART_B]) * _duck_gain;
             if (!_rev_asleep) {
                 // Per-deck send: the equal-power wet curve (sin) rides the SEND
                 // -- one shared room has only one return. MORPH fades the send
                 // too (M4 rule): a morphed-away deck injects no new reverb.
+                // So does the CHOKE duck: a ducked deck must not go on filling
+                // the room at full level, or the duck would only be audible on
+                // the dry half of a wet patch.
                 float wl, wr;
-                _reverb->process(asl * ga * wga + bsl * gb * wgb,
-                                 asr * ga * wga + bsr * gb * wgb, wl, wr);
+                _reverb->process(asl * ga * wga * duck[PART_A] + bsl * gb * wgb * duck[PART_B],
+                                 asr * ga * wga * duck[PART_A] + bsr * gb * wgb * duck[PART_B],
+                                 wl, wr);
                 const bool closing = wga == 0.f && wgb == 0.f &&
                     _rev_wet_target[PART_A] == 0.f && _rev_wet_target[PART_B] == 0.f;
                 if (closing) {
