@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdint>
 #include "mod/super_modulator.h"
+#include "mod/rng.h"
 #include "pitch/quantizer.h"
 #include "pitch/chord.h"
 #include "parts/engine_iface.h"
@@ -93,6 +94,17 @@ public:
     // does: there the PITCH lane is a read position and a clock bend, not a
     // note. Instrument is the only reader -- a Part never sees its sibling.
     uint16_t chord_pc_mask() const { return _chord_pc; }
+    // PULL, follower side. Instrument pushes the LEADER's mask plus the
+    // per-note bind probability at the control raster; a zero mask or a zero
+    // probability is off, and off releases whatever is bound (the spec's
+    // zero-crossing release). The draw itself happens on the PITCH fire, in
+    // process() -- see the comment there for why it cannot happen here.
+    void set_gravity(uint16_t abs_pc_mask, float p) {
+        _grav_mask = abs_pc_mask;
+        _grav_prob = clampf(p, 0.f, 1.f);
+        if (_grav_mask == 0 || _grav_prob == 0.f) _grav_bound = false;
+    }
+    bool gravity_bound() const { return _grav_bound; }
     // The color actually handed to the ChordBuilder: the knob plus MOTION's
     // swing (spec 2026-07-18 color-motion-target). Equals the knob when
     // MOD = 0 or the MOTION target is inactive.
@@ -327,6 +339,16 @@ public:
         if (fired) {
             _note_suppressed = _inhibit;
             if (!_inhibit) _gate_ctr = _gate_len;
+            // PULL: bind-or-free for the note that is about to fire. Drawn
+            // HERE, in front of the fire's own _control_tick() below, so the
+            // quantizer call in that tick already carries this note's
+            // decision -- a draw inside _fire_trigger() would land one tick
+            // (up to 96 samples) late and the note would be struck free and
+            // only then glide. Drawn even when the note is suppressed, so the
+            // stream does not depend on CHOKE: same reproducibility rule the
+            // lane seeds follow.
+            _grav_bound = (_grav_mask != 0 && _grav_prob > 0.f)
+                        && _pull_rng.next_unipolar() < _grav_prob;
         }
         if (_gate_ctr > 0) --_gate_ctr;
 
@@ -742,6 +764,10 @@ private:
     float     _pitch_q = 0.f;
     ChordBuilder _chord;
     uint16_t _chord_pc = 0;      // PULL: what chord_pc_mask() hands out
+    uint16_t _grav_mask  = 0;    // PULL: the leader's pitch classes
+    float    _grav_prob  = 0.f;  // PULL: per-note bind probability
+    bool     _grav_bound = false;// PULL: is the note now sounding bound?
+    Rng      _pull_rng;          // PULL: own stream, seeded off _seed_base
     // The two engines on which the PITCH lane is not a note. Same set as
     // set_flow_melody's (part.cpp) and as the quantizer bypass's, and named
     // separately for the same reason that one is: they share a cause, not a

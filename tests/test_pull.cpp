@@ -69,3 +69,89 @@ TEST_CASE("leader: a sampler or BBD deck publishes no harmony") {
     Part f; settle(f, ENGINE_FEED, 0.75f);
     CHECK(f.chord_pc_mask() != 0u);      // FEED is a note deck and does lead
 }
+
+namespace {
+// A stepped note deck that fires often, for counting draws.
+void stepped(Part& p, uint32_t seed) {
+    p.init(48000.f, seed);
+    p.set_engine(ENGINE_SYNTH);
+    p.set_step(true, 8);
+    p.set_target_active(LANE_PITCH, true);
+    p.set_target_base(LANE_PITCH, 0.5f);
+    p.set_target_depth(LANE_PITCH, 1.f);
+    p.set_depth(1.f);
+    p.mod().set_range(1.f);
+    p.quant().set_mode(QuantMode::Scale);
+    p.quant().set_scale(SCALE_MASKS[SCALE_DORIAN]);
+}
+// Count fires and how many of them were bound, over `sec` seconds.
+void count(Part& p, float sec, int& fires, int& bound) {
+    fires = 0; bound = 0;
+    bool prev = false; float l, r;
+    const int n = static_cast<int>(48000.f * sec);
+    for (int i = 0; i < n; ++i) {
+        p.process(l, r);
+        const bool f = p.mod().lane_fired(LANE_PITCH);
+        if (f && !prev) { ++fires; if (p.gravity_bound()) ++bound; }
+        prev = f;
+    }
+}
+} // namespace
+
+TEST_CASE("follower: probability 0 binds nothing, probability 1 binds every note") {
+    int fires = 0, bound = 0;
+    { Part p; stepped(p, 21); p.set_gravity(0x0044, 0.f);
+      count(p, 8.f, fires, bound);
+      CHECK(fires > 20); CHECK(bound == 0); }
+    { Part p; stepped(p, 21); p.set_gravity(0x0044, 1.f);
+      count(p, 8.f, fires, bound);
+      CHECK(fires > 20); CHECK(bound == fires); }
+}
+
+TEST_CASE("follower: half probability binds roughly half, reproducibly") {
+    // Deterministic seed -> the count is exact and repeatable, so this is a
+    // regression gate on the stream as well as a statistics check.
+    int f1 = 0, b1 = 0, f2 = 0, b2 = 0;
+    Part a; stepped(a, 21); a.set_gravity(0x0044, 0.5f); count(a, 30.f, f1, b1);
+    Part b; stepped(b, 21); b.set_gravity(0x0044, 0.5f); count(b, 30.f, f2, b2);
+    CHECK(f1 == f2);
+    CHECK(b1 == b2);                       // same seed, same stream
+    CHECK(b1 > f1 / 4);                    // not stuck off
+    CHECK(b1 < (3 * f1) / 4);              // not stuck on
+}
+
+TEST_CASE("follower: a bound note sounds a pitch class of the mask") {
+    Part p; stepped(p, 21);
+    p.set_gravity(0x0044, 1.f);            // classes 2 and 6 only
+    float l, r;
+    bool prev = false; int checked = 0;
+    for (int i = 0; i < 48000 * 20 && checked < 8; ++i) {
+        p.process(l, r);
+        const bool f = p.mod().lane_fired(LANE_PITCH);
+        if (f && !prev) {
+            // Ride the 40 ms change slew out before reading the pitch: the
+            // glide is the feature, so the value at the fire sample is not
+            // the destination (measured 2026-08-22: 20 control ticks).
+            for (int k = 0; k < 4000; ++k) p.process(l, r);
+            const int semis =
+                static_cast<int>(p.pitch_cv() * Quantizer::SPAN_SEMIS + 0.5f);
+            CAPTURE(semis);
+            CHECK(((1u << (semis % 12)) & 0x0044u) != 0u);
+            ++checked;
+        }
+        prev = f;
+    }
+    CHECK(checked == 8);
+}
+
+TEST_CASE("follower: gravity off releases a bound note") {
+    Part p; stepped(p, 21);
+    p.set_gravity(0x0044, 1.f);
+    float l, r;
+    for (int i = 0; i < 48000 * 4; ++i) p.process(l, r);
+    CHECK(p.gravity_bound());
+    p.set_gravity(0, 0.f);
+    CHECK_FALSE(p.gravity_bound());
+    for (int i = 0; i < 48000; ++i) p.process(l, r);
+    CHECK_FALSE(p.quant().gravity_on());
+}

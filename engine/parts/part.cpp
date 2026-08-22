@@ -30,6 +30,7 @@ void Part::init(float sample_rate, uint32_t seed_base,
     _feed.set_seed(seed_base ^ 0x46454544u);    // "FEED", distinct individual
     _feed.init(sample_rate);
     _sampler.set_seed(seed_base ^ 0x5A11E20Du);
+    _pull_rng.seed(seed_base ^ 0x50554C4Cu);   // 'PULL'
     _sampler.set_memory(sampler_mem, sampler_frames);
     _sampler.init(sample_rate);
     _last_gate = false;
@@ -258,6 +259,13 @@ void Part::_control_tick() {
     // and make the first synth tick after an engine switch depend on how long
     // the part spent as a sampler. Cheap, and it keeps the synth's behaviour
     // exactly what it was.
+    // PULL: the override is pushed every tick, not only on a fire, because a
+    // bound note follows the leader's chord LIVE -- when the leader
+    // re-triggers, this deck glides onto the nearest tone of the new mask over
+    // the quantizer's own 40 ms change slew. Measured 2026-08-22: a sounding
+    // SYNTH note does follow a mask change (24000/24000 samples differ,
+    // max |d| 0.544), so no re-trigger machinery is needed here.
+    _quant.set_gravity(_grav_mask, _grav_bound);
     const float pitch_quantized = _quant.process(pitch_raw);
 
     // The SAMPLER does not quantize. The quantizer is a melody device: it snaps
