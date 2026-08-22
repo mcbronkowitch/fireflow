@@ -631,6 +631,13 @@ APPENDED_PANEL_PARAMS = [
     # Appended, so every existing param id keeps its number.
     Ctl("DEPTH_A", SMKNOB, VOICE_X[3],     ROW_V1, "DPTH", "MOTION lane base"),
     Ctl("DEPTH_B", SMKNOB, W - VOICE_X[3], ROW_V1, "DPTH", "MOTION lane base"),
+    # PULL: bipolar chord gravity between the decks (spec 2026-07-19
+    # pull-chord-gravity). Appended LAST like CHOKE/FILT/TIDE, which now means
+    # last in APPENDED_PANEL_PARAMS -- the 49 MOD_LAYER_PARAMS ids behind it
+    # all shift by one. Accepted: this is a dev alpha and saved patches may
+    # break (memory fireflow-dev-alpha-no-patch-compat). The slot is the empty
+    # ROW_DUO2 directly under CHOKE, the centre's other cross-deck knob.
+    Ctl("PULL", SMKNOB, CX, ROW_DUO2, "PULL"),
 ]
 
 # --- MOD latch layer (spec 2026-08-22-mod-latch-layer-design.md) ----------
@@ -846,6 +853,9 @@ INIT_DEFAULTS = {
     # feed_cfg::kDepthBase (0.5); deck B sits on it.
     "DEPTH_A": 0.365333289,
     "DEPTH_B": 0.500000000,
+    # Centre = off, the same boot value CHOKE has and for the same reason:
+    # a cross-deck control that is on at boot is a surprise, not a feature.
+    "PULL": 0.000000000,
 }
 
 # MOD latch layer defaults (spec §3a): engine-backed depths carry the booted

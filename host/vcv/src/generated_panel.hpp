@@ -85,6 +85,7 @@ enum ParamId {
     PACE,
     DEPTH_A,
     DEPTH_B,
+    PULL,
     MODBTN,
     MODD_SOURCE_A,
     MODD_SOURCE_B,
@@ -256,6 +257,7 @@ static const PanelCtl kParamCtls[] = {
     {PACE, WK_SMKNOB, {97.680f, 42.000f}, "PACE", {97.680f, 47.600f}, 0, 1.90f, 0x171713, "PACE"},
     {DEPTH_A, WK_SMKNOB, {37.250f, 77.300f}, "DPTH", {37.250f, 82.900f}, 0, 1.90f, 0x171713, "MOTION lane base"},
     {DEPTH_B, WK_SMKNOB, {176.110f, 77.300f}, "DPTH", {176.110f, 82.900f}, 0, 1.90f, 0x171713, "MOTION lane base"},
+    {PULL, WK_SMKNOB, {106.680f, 78.000f}, "PULL", {106.680f, 83.600f}, 0, 1.90f, 0x171713, "PULL"},
 };
 static const PanelCtl kInputCtls[] = {
     {IN_L, WK_IN, {55.250f, 118.400f}, "L", {55.250f, 124.800f}, 0, 1.80f, 0x171713, "IN L"},

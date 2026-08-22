@@ -66,10 +66,15 @@ PARAM_ORDER = [
     'SHUFFLE', 'PACE',
     # Appended 2026-08-19, so every id above keeps its number.
     'DEPTH_A', 'DEPTH_B',
+    # PULL (spec 2026-07-19 pull-chord-gravity, task 6): appended last in
+    # APPENDED_PANEL_PARAMS, after DEPTH_A/B, so every id above keeps its
+    # number -- the 49 MOD_LAYER_PARAMS ids behind it all shift by one
+    # (accepted, dev alpha).
+    'PULL',
     # MOD latch layer (spec 2026-08-22-mod-latch-layer-design.md): MODBTN
     # then one depth pair per deck target (MOD_DECK_TARGETS order), then one
     # depth per center target (MOD_CENTER_TARGETS order). Appended after
-    # DEPTH_A/B, so every id above keeps its number.
+    # PULL, so every id above keeps its number.
     'MODBTN',
     'MODD_SOURCE_A', 'MODD_SOURCE_B', 'MODD_DEPTH_A', 'MODD_DEPTH_B',
     'MODD_FILT_A', 'MODD_FILT_B', 'MODD_FLUX_A', 'MODD_FLUX_B',
@@ -104,6 +109,9 @@ PARAM_TIPS = [
     # (Tasks 2-7), so a tooltip naming FEED alone would lie on the other
     # five decks.
     'MOTION lane base', 'MOTION lane base',
+    # PULL (spec 2026-07-19 pull-chord-gravity, task 6): Ctl's
+    # tip-defaults-to-label rule, same as CHOKE, so the tip is just "PULL".
+    'PULL',
     # MOD latch layer: MODBTN carries a real tooltip; the 48 depth knobs are
     # unlabelled widgetless-in-Rack SMKNOBs (Task 5/6 draw them on the HW
     # panel only), so Ctl's tip-defaults-to-label rule leaves every one of
@@ -131,9 +139,14 @@ def test_enum_order():
     check(PARAM_ORDER[PARAM_ORDER.index('PACE') + 1:PARAM_ORDER.index('PACE') + 3]
           == ['DEPTH_A', 'DEPTH_B'],
           "the appended block after PACE changed")
-    # MOD latch layer (spec 2026-08-22): appended after DEPTH_A/B for the
-    # same reason -- everything above (through DEPTH_B) keeps its number.
-    check(PARAM_ORDER[PARAM_ORDER.index('DEPTH_B') + 1] == 'MODBTN',
+    # PULL (spec 2026-07-19 pull-chord-gravity, task 6): appended after
+    # DEPTH_A/B for the same reason -- everything above (through DEPTH_B)
+    # keeps its number.
+    check(PARAM_ORDER[PARAM_ORDER.index('DEPTH_B') + 1] == 'PULL',
+          "PULL moved out of the appended tail -- ids above it renumbered")
+    # MOD latch layer (spec 2026-08-22): appended after PULL for the same
+    # reason -- everything above (through PULL) keeps its number.
+    check(PARAM_ORDER[PARAM_ORDER.index('PULL') + 1] == 'MODBTN',
           "MODBTN moved out of the appended tail -- ids above it renumbered")
     check(PARAM_ORDER[-1] == 'MODD_TIDE',
           "the mod-layer block is no longer the persistent tail")
@@ -221,13 +234,19 @@ def test_bbd_pitch_flux_time_collections():
     runtime = [c.enum for c in g.RUNTIME_PANEL_PARAMS]
     static = [c.enum for c in g.STATIC_PANEL_PARAMS]
     check([c.enum for c in g.APPENDED_PANEL_PARAMS]
-          == ['PACE', 'DEPTH_A', 'DEPTH_B'],
+          == ['PACE', 'DEPTH_A', 'DEPTH_B', 'PULL'],
           "APPENDED_PANEL_PARAMS changed")
     check("FLUXTIME_A" not in persistent and "FLUXTIME_B" not in persistent,
           "FLUXTIME must not survive as a saved ParamId")
-    check(persistent[-51:-49] == ['DEPTH_A', 'DEPTH_B'],
-          "the appended FEED block moved out of its slot ahead of the mod layer")
-    # MOD latch layer (spec 2026-08-22) is appended after FEED, so it is now
+    check(persistent[-52:-50] == ['DEPTH_A', 'DEPTH_B'],
+          "the appended FEED block moved out of its slot ahead of PULL")
+    # PULL (task 6) is appended after FEED, ahead of the mod layer, so it now
+    # sits directly before the mod layer's fixed-length tail -- inserting it
+    # does not move MODBTN's own distance from the end (MOD_LAYER_PARAMS'
+    # length is unchanged), only DEPTH_A/B's.
+    check(persistent[-50] == 'PULL',
+          "PULL moved out of its slot ahead of the mod layer")
+    # MOD latch layer (spec 2026-08-22) is appended after PULL, so it is now
     # the persistent tail instead.
     check(persistent[-1] == 'MODD_TIDE',
           "the appended mod-layer block is not the persistent tail")
@@ -359,12 +378,18 @@ def test_param_runtime_tip_contract():
     check(PARAM_TIPS[ids["LINK_A"]:ids["STAGES_B"] + 1]
           == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
           "BBD Bend runtime tips drifted")
-    check(PARAM_TIPS[-51:-49] == ['MOTION lane base', 'MOTION lane base'],
-          "the appended DPTH tip moved out of its slot ahead of the mod layer")
-    check(PARAM_TIPS[-52] == 'PACE',
+    check(PARAM_TIPS[-52:-50] == ['MOTION lane base', 'MOTION lane base'],
+          "the appended DPTH tip moved out of its slot ahead of PULL")
+    check(PARAM_TIPS[-53] == 'PACE',
           "PACE must sit at the end of the legacy runtime tips (spec 2026-08-12 "
           "modulation-pace)")
-    # MOD latch layer (spec 2026-08-22) is appended after DPTH, so its own
+    # PULL (task 6) sits directly ahead of the mod layer's fixed-length tail,
+    # so its own tip is one slot further from the end than DPTH's pair, and
+    # MODBTN's distance from the end is unchanged (MOD_LAYER_PARAMS' length
+    # did not change).
+    check(PARAM_TIPS[-50] == 'PULL',
+          "PULL's tooltip moved out of its slot ahead of the mod layer")
+    # MOD latch layer (spec 2026-08-22) is appended after PULL, so its own
     # tips (MODBTN's real tooltip, then 48 blank SMKNOB tips) are now the
     # trailing runtime tips.
     check(PARAM_TIPS[-49] == 'MOD layer latch',
@@ -2808,6 +2833,10 @@ def test_sampler_preset_init_snapshot():
         # The LANE_MOTION base per deck -- dialled on A, neutral on B.
         "DEPTH_A": 0.365333289,
         "DEPTH_B": 0.5,
+        # Centre = off, same reason as CHOKE: a cross-deck control that is on
+        # at boot is a surprise, not a feature (spec 2026-07-19
+        # pull-chord-gravity, task 6).
+        "PULL": 0.0,
     }
     for name, want in approved.items():
         if name not in gp.INIT_DEFAULTS:

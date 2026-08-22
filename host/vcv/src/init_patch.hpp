@@ -75,6 +75,7 @@ static constexpr float kInitParamDefaults[] = {
     0.167999804f, // PACE
     0.365333289f, // DEPTH_A
     0.5f, // DEPTH_B
+    0.0f, // PULL
     0.0f, // MODBTN
     1.0f, // MODD_SOURCE_A
     1.0f, // MODD_SOURCE_B

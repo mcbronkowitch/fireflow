@@ -436,6 +436,9 @@ struct Fireflow : Module {
                         configParam<RateQuantity>(c.id, 0.f, 1.f, init, lbl);
                     else if (c.id == CHOKE)  // event-priority, continuous, zone-aware tooltip
                         configParam<ChokeQuantity>(c.id, -1.f, 1.f, init, lbl);
+                    else if (c.id == PULL)  // bipolar chord gravity between the decks (spec 2026-07-19 pull-chord-gravity)
+                        configParam(c.id, -1.f, 1.f, init,
+                                    "Chord gravity: left = A leads, right = B leads");
                     else if (c.id == FILT_A || c.id == FILT_B)  // bipolar cutoff trim
                         configParam(c.id, -1.f, 1.f, init, lbl);
                     else if (c.id == TIDE)  // texture-lane rate, snaps in the GRID zone
@@ -1167,6 +1170,7 @@ struct Fireflow : Module {
             : (driftKnob - kDriftSettleZone) / (1.f - kDriftSettleZone));
         inst.set_tide(mv(TIDE));
         inst.set_choke(params[CHOKE].getValue());   // continuous -1..+1, engine quantises zones
+        inst.set_pull(params[PULL].getValue());     // continuous -1..+1, engine holds the dead zone
         // The room's four shape knobs are center targets: mixed from both
         // decks' SIZE lanes (mv() takes the center branch on t.part == 2), so
         // the reverb breathes with whichever deck is actually moving. SEND is
