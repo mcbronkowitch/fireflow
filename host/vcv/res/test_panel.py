@@ -66,6 +66,24 @@ PARAM_ORDER = [
     'SHUFFLE', 'PACE',
     # Appended 2026-08-19, so every id above keeps its number.
     'DEPTH_A', 'DEPTH_B',
+    # MOD latch layer (spec 2026-08-22-mod-latch-layer-design.md): MODBTN
+    # then one depth pair per deck target (MOD_DECK_TARGETS order), then one
+    # depth per center target (MOD_CENTER_TARGETS order). Appended after
+    # DEPTH_A/B, so every id above keeps its number.
+    'MODBTN',
+    'MODD_SOURCE_A', 'MODD_SOURCE_B', 'MODD_DEPTH_A', 'MODD_DEPTH_B',
+    'MODD_FILT_A', 'MODD_FILT_B', 'MODD_FLUX_A', 'MODD_FLUX_B',
+    'MODD_FLUXFB_A', 'MODD_FLUXFB_B', 'MODD_REV_MIX_A', 'MODD_REV_MIX_B',
+    'MODD_RATE_A', 'MODD_RATE_B', 'MODD_SHAPE_A', 'MODD_SHAPE_B',
+    'MODD_DENSITY_A', 'MODD_DENSITY_B', 'MODD_SMOOTH_A', 'MODD_SMOOTH_B',
+    'MODD_RANGE_A', 'MODD_RANGE_B', 'MODD_MELODY_A', 'MODD_MELODY_B',
+    'MODD_SUB_A', 'MODD_SUB_B', 'MODD_DETUNE_A', 'MODD_DETUNE_B',
+    'MODD_ATTACK_A', 'MODD_ATTACK_B', 'MODD_DECAY_A', 'MODD_DECAY_B',
+    'MODD_RES_A', 'MODD_RES_B', 'MODD_COLOR_A', 'MODD_COLOR_B',
+    'MODD_TUNE_A', 'MODD_TUNE_B', 'MODD_LINK_A', 'MODD_LINK_B',
+    'MODD_COMP_A', 'MODD_COMP_B',
+    'MODD_MORPH', 'MODD_REV_SIZE', 'MODD_REV_DECAY', 'MODD_REV_TONE',
+    'MODD_REV_DIFF', 'MODD_TIDE',
 ]
 PARAM_TIPS = [
     'RATE', 'SHAPE', 'DENS', 'SMTH', 'RANGE', 'Variation', 'MOD', 'TUNE',
@@ -86,6 +104,15 @@ PARAM_TIPS = [
     # (Tasks 2-7), so a tooltip naming FEED alone would lie on the other
     # five decks.
     'MOTION lane base', 'MOTION lane base',
+    # MOD latch layer: MODBTN carries a real tooltip; the 48 depth knobs are
+    # unlabelled widgetless-in-Rack SMKNOBs (Task 5/6 draw them on the HW
+    # panel only), so Ctl's tip-defaults-to-label rule leaves every one of
+    # them "".
+    'MOD layer latch',
+    '', '', '', '', '', '', '', '', '', '', '', '',
+    '', '', '', '', '', '', '', '', '', '', '', '',
+    '', '', '', '', '', '', '', '', '', '', '', '',
+    '', '', '', '', '', '', '', '', '', '', '', '',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
@@ -101,9 +128,15 @@ def test_enum_order():
     # last name: everything up to PACE, in order, then the new block.
     check(PARAM_ORDER[:PARAM_ORDER.index('PACE') + 1][-1] == 'PACE',
           "PACE moved out of the legacy tail -- ids above it renumbered")
-    check(PARAM_ORDER[PARAM_ORDER.index('PACE') + 1:]
+    check(PARAM_ORDER[PARAM_ORDER.index('PACE') + 1:PARAM_ORDER.index('PACE') + 3]
           == ['DEPTH_A', 'DEPTH_B'],
           "the appended block after PACE changed")
+    # MOD latch layer (spec 2026-08-22): appended after DEPTH_A/B for the
+    # same reason -- everything above (through DEPTH_B) keeps its number.
+    check(PARAM_ORDER[PARAM_ORDER.index('DEPTH_B') + 1] == 'MODBTN',
+          "MODBTN moved out of the appended tail -- ids above it renumbered")
+    check(PARAM_ORDER[-1] == 'MODD_TIDE',
+          "the mod-layer block is no longer the persistent tail")
     check([c.enum for c in g.INPUTS] == INPUT_ORDER, "INPUTS order changed")
     check([c.enum for c in g.OUTPUTS] == OUTPUT_ORDER, "OUTPUTS order changed")
     check([c.enum for c in g.LIGHTS] == LIGHT_ORDER, "LIGHTS order changed")
@@ -150,7 +183,8 @@ def test_source_and_hidden_detune_partition():
     check("DRIVE_A" not in visible and "DRIVE_B" not in visible,
           "dead DRIVE_A/B leaked into panel controls")
     appended = [c.enum for c in g.APPENDED_PANEL_PARAMS]
-    check([c.enum for c in g.PARAMS] == visible + hidden + appended,
+    mod_layer = [c.enum for c in g.MOD_LAYER_PARAMS]
+    check([c.enum for c in g.PARAMS] == visible + hidden + appended + mod_layer,
           "complete ParamId order must preserve declared partitions")
     h = g.header()
     check(h.count("{DETUNE_A, WK_SMKNOB,") == 1
@@ -191,8 +225,12 @@ def test_bbd_pitch_flux_time_collections():
           "APPENDED_PANEL_PARAMS changed")
     check("FLUXTIME_A" not in persistent and "FLUXTIME_B" not in persistent,
           "FLUXTIME must not survive as a saved ParamId")
-    check(persistent[-2:] == ['DEPTH_A', 'DEPTH_B'],
-          "the appended FEED block is not the persistent tail")
+    check(persistent[-51:-49] == ['DEPTH_A', 'DEPTH_B'],
+          "the appended FEED block moved out of its slot ahead of the mod layer")
+    # MOD latch layer (spec 2026-08-22) is appended after FEED, so it is now
+    # the persistent tail instead.
+    check(persistent[-1] == 'MODD_TIDE',
+          "the appended mod-layer block is not the persistent tail")
     check(all(e in runtime for e in ('STAGES_A', 'STAGES_B',
                                       'FLUXRATE_A', 'FLUXRATE_B')),
           "runtime table lacks PITCH or TIME widgets")
@@ -202,7 +240,7 @@ def test_bbd_pitch_flux_time_collections():
                                      'FLUXRATE_A', 'FLUXRATE_B')),
           "static Synth preview lacks ATK or TIME")
     check(g.PARAMS == g.PANEL_PARAMS + g.HIDDEN_PARAMS
-                      + g.APPENDED_PANEL_PARAMS,
+                      + g.APPENDED_PANEL_PARAMS + g.MOD_LAYER_PARAMS,
           "persistent ParamId order no longer matches the declared partitions")
     check(not any(c.enum in runtime for c in g.HIDDEN_PARAMS),
           "menu-only DRIVE leaked into runtime widgets")
@@ -321,11 +359,18 @@ def test_param_runtime_tip_contract():
     check(PARAM_TIPS[ids["LINK_A"]:ids["STAGES_B"] + 1]
           == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
           "BBD Bend runtime tips drifted")
-    check(PARAM_TIPS[-2:] == ['MOTION lane base', 'MOTION lane base'],
-          "the appended DPTH tip is not the trailing runtime tip")
-    check(PARAM_TIPS[-3] == 'PACE',
+    check(PARAM_TIPS[-51:-49] == ['MOTION lane base', 'MOTION lane base'],
+          "the appended DPTH tip moved out of its slot ahead of the mod layer")
+    check(PARAM_TIPS[-52] == 'PACE',
           "PACE must sit at the end of the legacy runtime tips (spec 2026-08-12 "
           "modulation-pace)")
+    # MOD latch layer (spec 2026-08-22) is appended after DPTH, so its own
+    # tips (MODBTN's real tooltip, then 48 blank SMKNOB tips) are now the
+    # trailing runtime tips.
+    check(PARAM_TIPS[-49] == 'MOD layer latch',
+          "MODBTN's tooltip is not the first mod-layer runtime tip")
+    check(PARAM_TIPS[-1] == '',
+          "the mod-layer block's tip is not the trailing runtime tip")
     for enum, caption, tip in (
             ("FLUX_A", "MIX", "FLUX"), ("FLUX_B", "MIX", "FLUX"),
             ("FLUXRATE_A", "TIME", "FLUX time"),
@@ -3270,6 +3315,54 @@ def test_fixed_values_agree_across_host_and_bench():
             check(float(host_v) == want,
                   f"{fn} is {host_v}, want {want} (spec 2026-08-09 "
                   f"hw-control-reduction task 9)")
+
+
+def test_mod_layer():
+    """Spec 2026-08-22 mod-latch-layer: 48 depth targets + MODBTN appended
+    LAST, engine-backed inits carried over, everything else 0."""
+    deck = g.MOD_DECK_TARGETS
+    cent = g.MOD_CENTER_TARGETS
+    check(len(deck) == 21, f"deck targets: {len(deck)} != 21")
+    check(len(cent) == 6, f"center targets: {len(cent)} != 6")
+    # the appended block is PARAMS' tail, MODBTN first
+    tail = [c.enum for c in g.PARAMS[-(1 + 2 * len(deck) + len(cent)):]]
+    check(tail[0] == "MODBTN", f"tail starts {tail[0]}, not MODBTN")
+    for base, _k, _s, _i in deck:
+        check(f"MODD_{base}_A" in tail and f"MODD_{base}_B" in tail,
+              f"MODD_{base} pair missing from PARAMS tail")
+    for base, _k, _s, _i in cent:
+        check(f"MODD_{base}" in tail, f"MODD_{base} missing from PARAMS tail")
+    # inits: engine-backed carry the booted _tdepth values, all else 0
+    want = {"SOURCE": 1.0, "DEPTH": 0.7, "FILT": 0.55}
+    for base, kind, _s, init in deck:
+        expect = want.get(base, 0.0)
+        check(abs(init - expect) < 1e-9, f"{base} init {init} != {expect}")
+        for sfx in ("_A", "_B"):
+            check(abs(g.INIT_DEFAULTS[f"MODD_{base}{sfx}"] - expect) < 1e-9,
+                  f"INIT_DEFAULTS[MODD_{base}{sfx}] != {expect}")
+    for base, _k, _s, init in cent:
+        check(init == 0.0 and g.INIT_DEFAULTS[f"MODD_{base}"] == 0.0,
+              f"center {base} init must be 0")
+    check(g.INIT_DEFAULTS["MODBTN"] == 0.0, "MODBTN boots unlatched")
+    # the pitch anchor: no target may sit on LANE_PITCH via the engine table
+    for base, kind, slot, _i in deck + cent:
+        if kind == "TDEPTH":
+            check(slot != 2, f"{base}: TDEPTH on LANE_PITCH is forbidden (anchor)")
+    # excluded faces never grew a depth
+    for base in ("GRIT", "FLUXRATE", "STAGES", "MOD", "TEMPO", "SHUFFLE",
+                 "PACE", "DRIFT", "COUPLE", "CHOKE", "SCALE", "STEPS",
+                 "SONG", "ENGINE", "REC"):
+        check(f"MODD_{base}_A" not in g.INIT_DEFAULTS
+              and f"MODD_{base}" not in g.INIT_DEFAULTS,
+              f"excluded face {base} has a depth param")
+    # emission reached the header
+    here = os.path.dirname(os.path.abspath(__file__))
+    src = open(os.path.join(here, "..", "src", "generated_panel.hpp")).read()
+    check("kModLayer" in src, "kModLayer missing from generated_panel.hpp")
+    check(src.count("MODK_HOST") >= 1 and "struct ModTarget" in src,
+          "ModTarget/ModKind missing from generated_panel.hpp")
+    check(len(re.findall(r"\{\s*\w+, MODD_", src)) == 48,
+          f"kModLayer row count != 48")
 
 
 def test_committed_files_match_the_generator():

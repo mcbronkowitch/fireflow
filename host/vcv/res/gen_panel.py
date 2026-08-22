@@ -633,6 +633,59 @@ APPENDED_PANEL_PARAMS = [
     Ctl("DEPTH_B", SMKNOB, W - VOICE_X[3], ROW_V1, "DPTH", "MOTION lane base"),
 ]
 
+# --- MOD latch layer (spec 2026-08-22-mod-latch-layer-design.md) ----------
+# One row per modulatable face. kind: "TDEPTH" writes Part::_tdepth[slot]
+# via set_target_depth, "FXDEPTH" writes _fx_depth[slot] via
+# set_fx_target_depth (+ active <=> depth > 0), "HOST" is host-computed in
+# knob space (Fireflow.cpp pushParams). slot is the spky lane index for
+# TDEPTH/HOST (SOURCE 0, SIZE 1, PITCH 2, MOTION 3, LEVEL 4) and the FX
+# target index for FXDEPTH. init: engine-backed faces carry the booted
+# _tdepth values (part.h) so init sounds exactly like today; every
+# host-computed depth starts at 0 for the same reason. The pitch anchor:
+# nothing here may put a TDEPTH on slot 2 (LANE_PITCH) -- RANG already owns
+# pitch-mod amount and RANGE 0 silences the lane exactly (spec §6 probe 1).
+MOD_DECK_TARGETS = [
+    ("SOURCE",  "TDEPTH", 0, 1.0),
+    ("DEPTH",   "TDEPTH", 3, 0.7),
+    ("FILT",    "TDEPTH", 1, 0.55),
+    ("FLUX",    "FXDEPTH", 2, 0.0),   # FXT_FX_MIX
+    ("FLUXFB",  "FXDEPTH", 4, 0.0),   # FXT_FLUX_FB
+    ("REV_MIX", "FXDEPTH", 3, 0.0),   # FXT_REV_SEND
+    ("RATE",    "HOST", 1, 0.0),
+    ("SHAPE",   "HOST", 3, 0.0),
+    ("DENSITY", "HOST", 3, 0.0),
+    ("SMOOTH",  "HOST", 1, 0.0),
+    ("RANGE",   "HOST", 1, 0.0),
+    ("MELODY",  "HOST", 4, 0.0),
+    ("SUB",     "HOST", 4, 0.0),
+    ("DETUNE",  "HOST", 0, 0.0),
+    ("ATTACK",  "HOST", 3, 0.0),
+    ("DECAY",   "HOST", 3, 0.0),
+    ("RES",     "HOST", 1, 0.0),
+    ("COLOR",   "HOST", 3, 0.0),
+    ("TUNE",    "HOST", 2, 0.0),      # HOST on the pitch lane is fine; TDEPTH is not
+    ("LINK",    "HOST", 4, 0.0),
+    ("COMP",    "HOST", 4, 0.0),
+]
+MOD_CENTER_TARGETS = [
+    ("MORPH",     "HOST", 3, 0.0),
+    ("REV_SIZE",  "HOST", 1, 0.0),
+    ("REV_DECAY", "HOST", 1, 0.0),
+    ("REV_TONE",  "HOST", 1, 0.0),
+    ("REV_DIFF",  "HOST", 1, 0.0),
+    ("TIDE",      "HOST", 1, 0.0),
+]
+# The latch itself. Coordinates are the HW plate's (W-14, jack row); the big
+# panel never draws this block (it is not in RUNTIME_PANEL_PARAMS), so the
+# numbers only matter to gen_hw_panel.py's place().
+MODBTN_CTL = Ctl("MODBTN", LATCH, W - 14.0, 114.0, "MOD", "MOD layer latch")
+MOD_LAYER_PARAMS = [MODBTN_CTL]
+for _base, _kind, _slot, _init in MOD_DECK_TARGETS:
+    for _sfx in ("_A", "_B"):
+        MOD_LAYER_PARAMS.append(Ctl(f"MODD_{_base}{_sfx}", SMKNOB, 0.0, 0.0, ""))
+for _base, _kind, _slot, _init in MOD_CENTER_TARGETS:
+    MOD_LAYER_PARAMS.append(Ctl(f"MODD_{_base}", SMKNOB, 0.0, 0.0, ""))
+
 # Persistent ids retain the legacy visible and hidden sequences exactly; runtime
 # controls may include appended widgets, while the SVG is the Synth-only view
 # minus the controls that appear on no engine's default state. STAGES_A/B is
@@ -645,7 +698,7 @@ STATIC_PANEL_PARAMS = [
     c for c in RUNTIME_PANEL_PARAMS
     if c.enum not in ("STAGES_A", "STAGES_B", "REC_A", "REC_B")
 ]
-PARAMS = PANEL_PARAMS + HIDDEN_PARAMS + APPENDED_PANEL_PARAMS
+PARAMS = PANEL_PARAMS + HIDDEN_PARAMS + APPENDED_PANEL_PARAMS + MOD_LAYER_PARAMS
 
 # Approved init snapshot, keyed by param NAME rather than by position: adding
 # or removing a control must not be able to shift somebody else's default.
@@ -794,6 +847,16 @@ INIT_DEFAULTS = {
     "DEPTH_A": 0.365333289,
     "DEPTH_B": 0.500000000,
 }
+
+# MOD latch layer defaults (spec §3a): engine-backed depths carry the booted
+# values, host-computed depths and the latch itself start at 0 -- init is
+# byte-identical to today.
+INIT_DEFAULTS["MODBTN"] = 0.0
+for _base, _kind, _slot, _init in MOD_DECK_TARGETS:
+    INIT_DEFAULTS[f"MODD_{_base}_A"] = _init
+    INIT_DEFAULTS[f"MODD_{_base}_B"] = _init
+for _base, _kind, _slot, _init in MOD_CENTER_TARGETS:
+    INIT_DEFAULTS[f"MODD_{_base}"] = _init
 
 # --- lights --------------------------------------------------------------------
 # INPUTS/OUTPUTS are built above (see JACK_GROUPS, near CX) -- they had to move
@@ -1076,6 +1139,20 @@ def header():
     emit_table("kHwModInputCtls", HW_MOD_INPUTS)
     emit_table("kOutputCtls", OUTPUTS)
     emit_table("kLightCtls",  LIGHTS)
+
+    KINDMAP = {"TDEPTH": 0, "FXDEPTH": 1, "HOST": 2}
+    L2.append("enum ModKind { MODK_TDEPTH = 0, MODK_FXDEPTH = 1, MODK_HOST = 2 };")
+    L2.append("struct ModTarget { int soundId; int depthId; unsigned char kind; "
+              "unsigned char slot; unsigned char part; const char* name; };")
+    L2.append("static const ModTarget kModLayer[] = {")
+    for base, kind, slot, _init in MOD_DECK_TARGETS:
+        for pi, sfx in enumerate(("_A", "_B")):
+            L2.append(f'    {{{base}{sfx}, MODD_{base}{sfx}, {KINDMAP[kind]}, '
+                      f'{slot}, {pi}, "{base} {"AB"[pi]} mod depth"}},')
+    for base, kind, slot, _init in MOD_CENTER_TARGETS:
+        L2.append(f'    {{{base}, MODD_{base}, {KINDMAP[kind]}, {slot}, 2, '
+                  f'"{base} mod depth"}},')
+    L2.append("};")
 
     # State-dependent captions, expanded per deck. The driver id is the
     # control whose value picks the word -- ENGINE_A for a deck-A target, and

@@ -75,6 +75,55 @@ static constexpr float kInitParamDefaults[] = {
     0.167999804f, // PACE
     0.365333289f, // DEPTH_A
     0.5f, // DEPTH_B
+    0.0f, // MODBTN
+    1.0f, // MODD_SOURCE_A
+    1.0f, // MODD_SOURCE_B
+    0.7f, // MODD_DEPTH_A
+    0.7f, // MODD_DEPTH_B
+    0.55f, // MODD_FILT_A
+    0.55f, // MODD_FILT_B
+    0.0f, // MODD_FLUX_A
+    0.0f, // MODD_FLUX_B
+    0.0f, // MODD_FLUXFB_A
+    0.0f, // MODD_FLUXFB_B
+    0.0f, // MODD_REV_MIX_A
+    0.0f, // MODD_REV_MIX_B
+    0.0f, // MODD_RATE_A
+    0.0f, // MODD_RATE_B
+    0.0f, // MODD_SHAPE_A
+    0.0f, // MODD_SHAPE_B
+    0.0f, // MODD_DENSITY_A
+    0.0f, // MODD_DENSITY_B
+    0.0f, // MODD_SMOOTH_A
+    0.0f, // MODD_SMOOTH_B
+    0.0f, // MODD_RANGE_A
+    0.0f, // MODD_RANGE_B
+    0.0f, // MODD_MELODY_A
+    0.0f, // MODD_MELODY_B
+    0.0f, // MODD_SUB_A
+    0.0f, // MODD_SUB_B
+    0.0f, // MODD_DETUNE_A
+    0.0f, // MODD_DETUNE_B
+    0.0f, // MODD_ATTACK_A
+    0.0f, // MODD_ATTACK_B
+    0.0f, // MODD_DECAY_A
+    0.0f, // MODD_DECAY_B
+    0.0f, // MODD_RES_A
+    0.0f, // MODD_RES_B
+    0.0f, // MODD_COLOR_A
+    0.0f, // MODD_COLOR_B
+    0.0f, // MODD_TUNE_A
+    0.0f, // MODD_TUNE_B
+    0.0f, // MODD_LINK_A
+    0.0f, // MODD_LINK_B
+    0.0f, // MODD_COMP_A
+    0.0f, // MODD_COMP_B
+    0.0f, // MODD_MORPH
+    0.0f, // MODD_REV_SIZE
+    0.0f, // MODD_REV_DECAY
+    0.0f, // MODD_REV_TONE
+    0.0f, // MODD_REV_DIFF
+    0.0f, // MODD_TIDE
 };
 static_assert(sizeof(kInitParamDefaults) / sizeof(kInitParamDefaults[0])
               == NUM_PARAMS, "init snapshot must cover every ParamId");
