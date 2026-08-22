@@ -2,7 +2,6 @@
 // Spec: docs/superpowers/specs/2026-07-19-pull-chord-gravity-design.md
 // Plan: docs/superpowers/plans/2026-08-22-pull-chord-gravity.md
 #include <doctest/doctest.h>
-#include <vector>
 #include "parts/part.h"
 #include "pitch/chord.h"
 using namespace spky;
@@ -39,6 +38,12 @@ TEST_CASE("pc_mask12: absolute pitch classes, nearest semitone") {
     const float notes[3] = { 12.f / 36.f, 18.f / 36.f, 25.f / 36.f };
     CHECK(pc_mask12(notes, 3) == (uint16_t)((1u << 0) | (1u << 6) | (1u << 1)));
     CHECK(pc_mask12(notes, 0) == 0u);
+
+    // Round-to-nearest, not truncate-toward-zero: -1.9 semitones is nearer
+    // -2 than -1 (pc 10, not pc 11). A cast that truncates instead of floors
+    // gets this one semitone wrong for every negative input.
+    const float neg[1] = { -1.9f / Quantizer::SPAN_SEMIS };
+    CHECK(pc_mask12(neg, 1) == (uint16_t)(1u << 10));
 }
 
 TEST_CASE("leader: COLOR sets how many pitch classes the deck publishes") {

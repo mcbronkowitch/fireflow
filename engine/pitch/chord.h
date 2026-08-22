@@ -228,7 +228,7 @@ private:
 inline uint16_t pc_mask12(const float* norm, int n) {
     uint16_t m = 0;
     for (int i = 0; i < n; ++i) {
-        int s = static_cast<int>(norm[i] * Quantizer::SPAN_SEMIS + 0.5f) % 12;
+        int s = static_cast<int>(std::floor(norm[i] * Quantizer::SPAN_SEMIS + 0.5f)) % 12;
         if (s < 0) s += 12;
         m |= static_cast<uint16_t>(1u << s);
     }
