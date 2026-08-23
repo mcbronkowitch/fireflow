@@ -98,6 +98,25 @@ ifneq ($(filter $(SHELL_MUX_PROBE),0 1 2),$(SHELL_MUX_PROBE))
 $(error SHELL_MUX_PROBE must be 0, 1 or 2)
 endif
 
+# --- Leerlauf-Fuellung ---------------------------------------------------
+# 0 `while(1) {}` -- Sprung auf sich selbst, kein Speicherzugriff. Die Form,
+#   die das Audio-Bild bisher hatte.
+# 1 eine Schleife, die pro Iteration ein volatile aus dem Speicher laedt --
+#   die Form, die das CPU-Sonden-Bild hat.
+# 2 dieselbe Schleife plus echte ALU-Arbeit.
+#
+# Der Zweck ist eine Ablation, KEIN Betriebsmodus: das 500-Hz-Artefakt liegt
+# zwischen Audio-Bild und Sonden-Bild 15,5 dB auseinander, obwohl beide
+# dieselbe Engine im selben Betriebspunkt fahren. Der Leerlauf ist der
+# groesste unbeachtete Unterschied zwischen ihnen, und der 8. August hat
+# gemessen, dass Leerlauf-Inhalt den Ton um 7,5 dB bewegt. Capture:
+# ../docs/bench/2026-08-23-978cbaf-artifact-triage.md
+SHELL_IDLE_FILL ?= 0
+
+ifneq ($(filter $(SHELL_IDLE_FILL),0 1 2),$(SHELL_IDLE_FILL))
+$(error SHELL_IDLE_FILL must be 0, 1 or 2)
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	sdram_mem.cpp \
@@ -172,9 +191,10 @@ SWITCH_OBJECTS = $(BUILD_DIR)/main.o
 SWITCH_HEADERS := \
   $(shell python write_shell_selftest.py $(BUILD_DIR)/shell_selftest.h $(SHELL_SELFTEST) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_cpu_probe.py $(BUILD_DIR)/shell_cpu_probe.h $(SHELL_CPU_PROBE) $(SWITCH_OBJECTS)) \
-  $(shell python write_shell_mux_probe.py $(BUILD_DIR)/shell_mux_probe.h $(SHELL_MUX_PROBE) $(SWITCH_OBJECTS))
+  $(shell python write_shell_mux_probe.py $(BUILD_DIR)/shell_mux_probe.h $(SHELL_MUX_PROBE) $(SWITCH_OBJECTS)) \
+  $(shell python write_shell_idle_fill.py $(BUILD_DIR)/shell_idle_fill.h $(SHELL_IDLE_FILL) $(SWITCH_OBJECTS))
 
-$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.h $(BUILD_DIR)/shell_mux_probe.h
+$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.h $(BUILD_DIR)/shell_mux_probe.h $(BUILD_DIR)/shell_idle_fill.h
 
 .PHONY: FORCE
 FORCE:

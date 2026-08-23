@@ -10,6 +10,7 @@
 #include "shell_selftest.h"
 #include "shell_cpu_probe.h"
 #include "shell_mux_probe.h"
+#include "shell_idle_fill.h"
 #include "hw/board.h"
 #include "sdram_mem.h"
 #include "instrument.h"
@@ -85,6 +86,13 @@ volatile float    g_peak   = 0.f;
 } // namespace
 #endif
 
+// Nur fuer die Leerlauf-Ablation (SHELL_IDLE_FILL). g_idle_never ist immer
+// false und wird nie geschrieben; es steht da, damit die Schleife pro
+// Iteration einen echten Ladezugriff macht, den der Compiler nicht
+// wegoptimieren darf. g_idle_sink nimmt in Stellung 2 das Ergebnis auf, aus
+// demselben Grund.
+static volatile bool     g_idle_never = false;
+static volatile uint32_t g_idle_sink  = 0;
 static void AudioCallback(daisy::AudioHandle::InputBuffer  in,
                           daisy::AudioHandle::OutputBuffer out,
                           size_t                           size)
@@ -314,6 +322,30 @@ int main(void)
         }
     }
 #else
+#if SHELL_IDLE_FILL == 0
+    // Sprung auf sich selbst. Der Kern fasst hier keinen Speicher an und
+    // holt nach dem ersten Durchlauf nicht einmal mehr eine Instruktion --
+    // das ist der leiseste Leerlauf, den dieses Board haben kann, und es
+    // ist der, mit dem alle Audio-Bilder dieses Tages gemessen wurden.
     while(1) {}
+#elif SHELL_IDLE_FILL == 1
+    // Die Form, die das CPU-Sonden-Bild hat: pro Iteration ein Ladezugriff
+    // auf ein volatile. Kein Rechenaufwand, nur Speicherverkehr. Wenn die
+    // 15,5 dB Unterschied zwischen den beiden Bildern daran haengen, muss
+    // DIESE Stellung sie reproduzieren -- und zwar ohne dass sich am
+    // Callback ein Byte geaendert hat.
+    while(!g_idle_never) { }
+#else
+    // Speicherverkehr plus echte ALU-Arbeit. Nicht als Betriebsmodus
+    // gedacht, sondern als drittes Stuetzpunkt: liegt 2 noch tiefer als 1,
+    // skaliert der Effekt mit der Leerlaufauslastung, statt nur zwischen
+    // "leer" und "nicht leer" zu springen.
+    uint32_t acc = 1u;
+    while(!g_idle_never)
+    {
+        for(int i = 0; i < 64; ++i) acc = acc * 1664525u + 1013904223u;
+        g_idle_sink = acc;
+    }
+#endif
 #endif
 }
