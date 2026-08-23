@@ -530,12 +530,16 @@ Die Liste von 2026-08-08 nannte an erster Stelle die Einstufung der Parameter.
   könnten.
 - **Der Mux-Scan selbst.** libDaisys `InitMux` kann 8:1 an GPIOs, gebraucht wird
   16:1 mit Adressen aus der 595-Kette (§3). Die Umschaltung muss geschrieben
-  werden und ist in CPU-Zeit nicht veranschlagt. **Seit dem 2026-08-23 steht
-  sie in einem Plan:**
-  [`2026-08-23-mux-scan-placement-probe.md`](../superpowers/plans/2026-08-23-mux-scan-placement-probe.md).
-  Der misst auf dem vorhandenen Submodule **ohne Panel und ohne Mux**, was ein
-  Ketten-Write kostet und wo er laufen soll — und beantwortet die Einschwingzeit
-  ausdrücklich **nicht**.
+  werden. **Die CPU-Seite ist seit dem 2026-08-23 nicht mehr offen, sondern
+  gemessen** — sechs Läufe auf `patch_sm 3859386B3330`, `-O3`, Capture
+  [`2026-08-23-978cbaf-shell-mux-placement.md`](../bench/2026-08-23-978cbaf-shell-mux-placement.md).
+  32 gebitbangte Kettenbits plus vier ADC-Reads **pro Block** liegen unter der
+  Auflösung der Messung (Lauf-zu-Lauf-Streuung 0,03 Punkte, der gemessene
+  Aufschlag im Callback ist −0,10 auf `max`, also negativ und damit nicht
+  physikalisch). Offen an diesem Posten bleibt die Anwendungsseite
+  (`map_control` über 67 Kanäle, nicht gepreist) — und das war nie die Gefahr.
+  Was der Scan im *Audio* anrichtet, ist eine andere Frage und steht unten unter
+  Punkt 2.
 - **Die Wahl 8:1 gegen 16:1.** Hängt an Verfügbarkeit und Bestückungspreis.
 
 ### Ist das eine Zeit- oder eine Machbarkeitsfrage?
@@ -550,7 +554,27 @@ die Kapazität passt mit Reserve in jeder Zeile (§3), und der DMA-Scan der
 
 **Drei Stellen, an denen es trotzdem klemmen kann, nach Ernst sortiert:**
 
-1. **Das CPU-Budget — die reale Gefahr.** Der Gate `instrument_worst_bbd_dtcm`
+1. **Das CPU-Budget — war als „die reale Gefahr" eingestuft, und ist es nicht.**
+
+   > **Gemessen 2026-08-23, und damit ist dieser Punkt erledigt:**
+   > `docs/bench/2026-08-23-978cbaf-shell-mux-placement.md`. Der Scan im
+   > Audio-Callback, ein Schritt pro Block, kostet **weniger als die Messung
+   > auflöst** — die Streuung zwischen zwei Läufen desselben Images ist 0,03
+   > Punkte, und der „Aufschlag" kommt mit −0,10 auf `max` negativ heraus. Auf
+   > die 2,9 Punkte Reserve unten wirkt das nicht, und zwar um mehr als eine
+   > Größenordnung nicht. Die Übertragung auf den Bench-Worst-Case ist
+   > zulässig, weil die Arbeit pro Block fest ist und nicht davon abhängt, was
+   > die Engine tut; die Basis selbst ist **nicht** übertragbar (76,7 % ist der
+   > eine Betriebspunkt des Shells auf SYNTH, nicht `instrument_worst_bbd_dtcm`).
+   >
+   > **Und die Platzierungsfrage ist beantwortet:** der Vordergrund-Scan hat in
+   > beiden Läufen `steps=2500` gegen `blocks=2500` geschafft — keine einzige
+   > verpasste Schrittgelegenheit — bei Callback-Last auf Basisniveau. Der Scan
+   > **muss** nicht in den Callback, und außerhalb belastet er das Audio-Budget
+   > gar nicht. Der Absatz unten ist ab hier Historie: er beschreibt, was
+   > befürchtet wurde.
+
+   Der Gate `instrument_worst_bbd_dtcm`
    steht auf dem Submodule bei **97,02–97,16 % `pct_max`, also ~2,9 Punkte
    Reserve** — direkt gemessen am 2026-08-19
    (`docs/bench/2026-08-19-3def5d5-feed-axi-o2-patch_sm-usb.md`, zwei Läufe).
@@ -572,8 +596,10 @@ die Kapazität passt mit Reserve in jeder Zeile (§3), und der DMA-Scan der
    > mit vier Chips die Hälfte. Nebenbei fällt damit auch die Einschwingzeit
    > als Kostenposten weg — die Blockperiode **ist** das Einschwingfenster,
    > wenn die Adresse am Blockende geschrieben und am Blockanfang gelesen wird.
-   > Ob der Vordergrund mitkommt, ist gemessen oder es ist nichts; der Plan
-   > oben zählt dafür die tatsächlich geschafften Schritte mit.
+   > **Ob der Vordergrund mitkommt, ist am 2026-08-23 gemessen worden: er kommt
+   > mit, vollständig** (`steps=2500` gegen `blocks=2500`, zwei Läufe).
+   > Ob 2 ms als Einschwingfenster wirklich reichen, ist damit nicht gesagt —
+   > das bleibt 5b.
 2. **Der ungeklärte Block-Artefakt.** Auf dem Board liegt ein Störton auf der
    Blockrate, 28 dB über dem Desktop-Referenzpunkt. Zwei Messungen vom
    2026-08-08 sagen dazu: den Callback zwingen, nur Nullen zu schreiben, ändert
@@ -617,6 +643,13 @@ und ob die dünnste Ressource des Projekts — die CPU-Reserve — ihn mitträgt
 > danach nicht mehr —, und ob eine Ketten-Salve pro Block den Störton auf der
 > Blockrate bewegt. Der dritte ist durch kein Sparen zu beheben; er wäre ein
 > Befund über Aufbau und Entkopplung.
+>
+> **Stand 2026-08-23, nach der Messung:** Ausgang eins ist beantwortet (der
+> Vordergrund kommt mit, der Callback kostet nichts Messbares), und damit
+> spricht nichts mehr *aus CPU-Gründen* für den Co-Controller. Ausgang drei ist
+> offen und braucht das Board mit den Buchsen; solange der offen ist, ist die
+> Co-Controller-Frage nicht abgeschlossen, sondern nur nicht mehr von der CPU
+> getrieben.
 >
 > **Die ehrliche Grenze der billigen Hälfte:** an den vier Pins hängt nichts.
 > Der Treiberstrom ist damit kleiner als in der Serie, also ist ein

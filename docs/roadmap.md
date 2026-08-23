@@ -176,7 +176,11 @@ is actually built today, and what is still design-only.
   root firmware). On a Patch Submodule with audio on 3.5 mm jacks it makes
   sound, and `SHELL_CPU_PROBE=1` puts the operating point at **62.78 % avg /
   65.30 % max** (`sr=48000`, `block=96`, self-reported) — 35 points of room,
-  consistent with the bench row `instrument_init` (66.58 / 77.96 %). But the
+  consistent with the bench row `instrument_init` (66.58 / 77.96 %). **Those two
+  numbers are 8 Aug numbers and nothing else:** re-measured on 2026-08-23 at the
+  same operating point, the same probe reports **74.33 % avg / 76.70 % max**
+  (`docs/bench/2026-08-23-978cbaf-shell-mux-placement.md`) — FEED and everything
+  after it landed in between, and the room is 23 points, not 35. But the
   output carries a constant-amplitude artifact **on the audio block rate**,
   28 dB above what the desktop render of the identical operating point has
   there, plus audible tearing. Four explanations are each ruled out by their
@@ -3352,7 +3356,24 @@ whether the co-controller from io-budget §6's fallback path goes into the
 control-PCB schematic, and that is decided before the board is ordered or not
 at all. Plan:
 [`docs/superpowers/plans/2026-08-23-mux-scan-placement-probe.md`](superpowers/plans/2026-08-23-mux-scan-placement-probe.md).
-Nothing is measured yet; the plan is written, not executed.
+
+**2026-08-23, later the same day — the CPU half is measured and it is a
+non-event.** Six runs on `patch_sm 3859386B3330` at `-O3`, capture
+[`docs/bench/2026-08-23-978cbaf-shell-mux-placement.md`](bench/2026-08-23-978cbaf-shell-mux-placement.md).
+32 bit-banged chain bits plus four ADC reads **per block** sit below what the
+measurement resolves: run-to-run spread inside one image is 0.03 points, and
+the callback variant's "surcharge" comes out at −0.10 on `max`, i.e. negative
+and therefore not physical. Against the 2.9-point reserve that is a non-issue
+by more than an order of magnitude. **And the placement question has an
+answer:** the foreground scan hit `steps=2500` against `blocks=2500` in both
+runs — not one step opportunity missed — with callback load on the baseline. The
+scan does not have to live in the audio callback, and outside it never touches
+the audio budget. One correction that came with it: the shell's 8 Aug baseline
+of 62.78 % avg is history, not a comparison partner — the same operating point
+now runs at 74.33 %, because FEED and everything after it landed in between.
+**Still open:** whether the burst moves the block-rate tone (needs submodule
+`385138563330` with the 3.5 mm jacks; the three images are built and waiting),
+and the settle time per channel.
 
 **2026-08-14 — preset persistence now starts from nothing.** M6's scope names
 it, and until this date the repo had two pieces of prior art for it: the

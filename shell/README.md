@@ -232,3 +232,20 @@ Ketten-Salve auf den vier Produktionspins (B7, B8, D1, D10) beantwortet, ob
 der Scan überhaupt in den Callback muss und ob er den Störton auf der
 Blockrate bewegt. Plan:
 [`docs/superpowers/plans/2026-08-23-mux-scan-placement-probe.md`](../docs/superpowers/plans/2026-08-23-mux-scan-placement-probe.md).
+
+**Die CPU-Hälfte ist am selben Tag gemessen**, Capture
+[`docs/bench/2026-08-23-978cbaf-shell-mux-placement.md`](../docs/bench/2026-08-23-978cbaf-shell-mux-placement.md):
+dieser Betriebspunkt liegt heute bei **74,33 % avg / 76,70 % max**, der Scan im
+Callback kostet weniger als die Messung auflöst, und der Vordergrund-Scan
+schafft `steps=2500` gegen `blocks=2500`. Die Audio-Hälfte steht aus und
+braucht das Board mit den Buchsen (`385138563330`).
+
+Drei Schalter steuern diesen Shell, alle drei per generiertem Header:
+`SHELL_SELFTEST`, `SHELL_CPU_PROBE` und seit dem 2026-08-23 `SHELL_MUX_PROBE`
+(0 aus / 1 Scan im Callback / 2 Scan im Vordergrund). **Die Header werden zur
+Parse-Zeit des Makefiles geschrieben, nicht als Regel** — mit einer Regel
+lieferte der Build am 2026-08-23 zwei byte-identische Images für zwei
+verschiedene Schalterstellungen, weil Make hier Sekundenauflösung hat und der
+Header in derselben Sekunde wie `main.o` landete. Die Begründung steht im
+Makefile über `SWITCH_HEADERS`; wer sie wegräumt, räumt eine Messfalle wieder
+auf.
