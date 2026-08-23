@@ -610,6 +610,30 @@ die Kapazität passt mit Reserve in jeder Zeile (§3), und der DMA-Scan der
    periodische GPIO-Salve pro Block ist genau eine neue Quelle dieser Sorte.
    Das ist keine Spekulation über einen Zusammenhang, sondern die Fortschreibung
    einer vorliegenden Messung; ob sie eintritt, ist offen.
+
+   > **Gemessen am 2026-08-23** auf dem Submodule mit den Buchsen
+   > (`385138563330`, drei Bilder, zwei bis drei Aufnahmen je Bild, Interface-Gain
+   > über alle Läufe unangetastet,
+   > [`docs/bench/2026-08-23-978cbaf-shell-mux-placement.md`](../bench/2026-08-23-978cbaf-shell-mux-placement.md),
+   > Befunde 4 bis 5c). Auflösung 0,15 dB.
+   >
+   > **Die Salve im Callback bewegt den Störton nicht.** Die 500-Hz-Reihe liegt
+   > mit Scan bei −66,8 dBFS, ohne bei −66,6 — dieselbe Zahl. **Die Salve im
+   > Vordergrund bewegt ihn sehr wohl: +7,3 dB auf der Reihe**, während der Rest
+   > des Spektrums über alle drei Bilder gleich bleibt (−62,2 bis −62,9, kein
+   > Trend). Der Anstieg ist also ausschließlich das Artefakt, nicht der Boden.
+   >
+   > Damit ist dieser Posten für die gewählte Platzierung erledigt und die
+   > Fortschreibung oben war zutreffend — nur mit umgekehrtem Vorzeichen, als
+   > der Absatz vermutete: gefährlich ist der Vordergrund, nicht der Callback.
+   > Der Mechanismus bleibt unbenannt; ausgeschlossen ist allein die Schrittzahl,
+   > beide Platzierungen taktten einen Schritt pro Block.
+   >
+   > **Der Störton selbst ist unverändert da.** Mit ausgeschaltetem Scan liegt
+   > die 500-Hz-Reihe **4 dB unter dem Programm** (−66,6 gegen −62,6 dBFS) —
+   > hörbar als Dauerton, mit Harmonischen, die sich auf das Synth-Signal legen.
+   > Das ist der Befund vom 8. August, ungemindert, und er gehört nicht zu dieser
+   > Frage: er ist ohne jeden Mux da.
 3. **Die Einschwingzeit pro Kanal.** Sie entscheidet, wie viele Adressschritte
    pro Block gehen — nicht, ob es überhaupt geht. Der harmloseste der drei.
 
@@ -644,17 +668,21 @@ und ob die dünnste Ressource des Projekts — die CPU-Reserve — ihn mitträgt
 > Blockrate bewegt. Der dritte ist durch kein Sparen zu beheben; er wäre ein
 > Befund über Aufbau und Entkopplung.
 >
-> **Stand 2026-08-23, nach der Messung:** Ausgang eins ist beantwortet (der
-> Vordergrund kommt mit, der Callback kostet nichts Messbares), und damit
-> spricht nichts mehr *aus CPU-Gründen* für den Co-Controller. Ausgang drei ist
-> offen und braucht das Board mit den Buchsen; solange der offen ist, ist die
-> Co-Controller-Frage nicht abgeschlossen, sondern nur nicht mehr von der CPU
-> getrieben.
+> **Stand 2026-08-23, nach beiden Messhälften:** alle drei Ausgänge sind
+> beantwortet. Die Platzierung ist **der Audio-Callback** — er kostet nichts
+> Messbares (unter 0,2 Punkten) und bewegt den Störton nicht, während der
+> Vordergrund ihn um 7,3 dB anhebt. Damit spricht **weder aus CPU- noch aus
+> Störton-Gründen** etwas für den Co-Controller; er bleibt ein Rückfallweg, den
+> nichts mehr treibt, und muss nicht in den Schaltplan der Control-PCB. Offen
+> bleibt nur Punkt 3, die Einschwingzeit, und die entscheidet 8:1 gegen 16:1,
+> nicht das Prinzip.
 >
-> **Die ehrliche Grenze der billigen Hälfte:** an den vier Pins hängt nichts.
-> Der Treiberstrom ist damit kleiner als in der Serie, also ist ein
-> unveränderter Störton eine **untere Schranke und kein Freispruch** — ein
-> verschlechterter dagegen ist eindeutig.
+> **Die ehrliche Grenze beider Hälften:** an den vier Pins hängt nichts.
+> Der Treiberstrom ist damit kleiner als in der Serie, also ist der
+> unveränderte Störton im Callback eine **untere Schranke und kein Freispruch**.
+> Der verschlechterte im Vordergrund ist dagegen eindeutig — und er ist in der
+> Serie eher größer. Sobald eine echte 595-Kette an B7/B8/D1/D10 hängt, ist die
+> Callback-Messung zu wiederholen.
 - **Ob ein `MAX11300` das Buchsenfeld übernimmt.** Der Kandidat ist real (ein
   Modul ist vorhanden und verdrahtet), aber er kostet SPI2 und damit zwei rohe
   ADC-Pins, und seine CPU-Kosten sind ungemessen.

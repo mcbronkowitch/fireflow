@@ -3371,9 +3371,32 @@ scan does not have to live in the audio callback, and outside it never touches
 the audio budget. One correction that came with it: the shell's 8 Aug baseline
 of 62.78 % avg is history, not a comparison partner — the same operating point
 now runs at 74.33 %, because FEED and everything after it landed in between.
-**Still open:** whether the burst moves the block-rate tone (needs submodule
-`385138563330` with the 3.5 mm jacks; the three images are built and waiting),
-and the settle time per channel.
+**Still open:** the settle time per channel.
+
+**2026-08-23, the audio half — and it reverses the plan's expectation.** Same
+day, submodule `385138563330` with the 3.5 mm jacks, seven captures at a fixed
+interface gain, analysed with the new `tools/blockrate_fft.py`; same capture
+file, findings 4–5c. **The callback does not move the block-rate tone** — the
+500 Hz harmonic series sits at −66.8 dBFS with the scan against −66.6 without,
+one number. **The foreground raises it 7.3 dB**, and only it: the rest of the
+spectrum is identical across all three images (−62.2 to −62.9, no trend), so
+the extra level is the artifact and not the floor. Resolution 0.15 dB.
+
+**The verdict is therefore the opposite of the one the plan was braced for: the
+scan goes in the audio callback.** It costs nothing measurable there and it adds
+nothing measurable there, while the placement that was supposed to be the safe
+fallback is the one that degrades the output. With that, **nothing drives the
+co-controller any more** — not the CPU reserve and not the tone — so it stays a
+fallback and need not enter the control-PCB schematic. Both halves ran with
+floating chain pins, so the callback null is a lower bound and wants repeating
+once a real 595 chain hangs on B7/B8/D1/D10.
+
+**A separate finding fell out of it.** With the scan switched off, the 500 Hz
+harmonic series sits **4 dB under the program material**, audible as a standing
+tone with the synth signal distorting on top. That is the 8 Aug artifact,
+undiminished and still unexplained, and this capture only proves the mux
+question is independent of it. It now has a rig and a number; it needs its own
+session.
 
 **2026-08-14 — preset persistence now starts from nothing.** M6's scope names
 it, and until this date the repo had two pieces of prior art for it: the

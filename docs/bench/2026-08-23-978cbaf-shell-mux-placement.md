@@ -8,9 +8,9 @@ image, second run by RESET (fresh boot, no re-flash).
 
 Plan:
 [`docs/superpowers/plans/2026-08-23-mux-scan-placement-probe.md`](../superpowers/plans/2026-08-23-mux-scan-placement-probe.md),
-Task 4. Nothing is attached to the four chain pins — this prices the CPU side
-only. The audio side (Task 5) needs the submodule with the 3.5 mm jacks and is
-not in this capture.
+Tasks 4 and 5. Nothing is attached to the four chain pins in either half. The
+CPU half below runs on `3859386B3330`; the audio half runs later the same day on
+the submodule with the 3.5 mm jacks, `385138563330`.
 
 ## What ran
 
@@ -101,6 +101,100 @@ on the table.
   is `-O3`. The primary result here is shell-against-shell at identical
   optimization; the reserve only sizes the verdict.
 
+## The audio side
+
+**Board** `patch_sm`, serial `385138563330` — the submodule with the 3.5 mm
+jacks, not the board of the CPU half · **Images** `shell-audio-mux{0,1,2}.bin`,
+the same three switch positions built with `SHELL_CPU_PROBE=0`, md5-verified
+distinct before flashing · **Capture** `ffmpeg -f dshow -i audio="Line
+(Universal Audio Twin USB)" -t 10 -ac 2 -ar 48000`, interface gain set once and
+untouched across every run below · **Analysis** `python tools/blockrate_fft.py
+<wav> --block-rate 500` — RMS in a ±5 Hz band around the block rate, reported
+relative to total RMS so the unknown DAC-to-interface damping cancels.
+
+| image | placement | total RMS | 500 Hz band | excess |
+|---|---|---:|---:|---:|
+| mux0, run 1 | scan off | −61.16 | −68.96 | **−7.80** |
+| mux0, run 2 | scan off | −61.33 | −68.98 | **−7.65** |
+| mux1, run 1 | audio callback | −60.94 | −69.19 | **−8.26** |
+| mux1, run 2 | audio callback | −61.04 | −69.21 | **−8.18** |
+| mux2, run 1 | foreground | −57.77 | −61.75 | **−3.98** |
+| mux2, run 2 | foreground | −57.63 | −61.71 | **−4.08** |
+| mux2, run 3 | foreground | −57.54 | −61.66 | **−4.12** |
+
+All figures dBFS; `excess` is band minus total, in dB. Run-to-run spread within
+one image is **0.15 dB** on `excess` at worst — the resolution of this half, and
+the number the deltas have to be read against.
+
+**4. The callback adds no block-rate artifact.** `mux1` sits 0.5 dB *below* the
+baseline. That is outside the spread, but it points the wrong way for an
+artifact: switching the chain from inside the audio callback does not put energy
+on the block rate.
+
+**5. The foreground is the dirty placement, by a lot.** `mux2` runs **+3.6 dB**
+`excess` against the baseline and **+4.2 dB** against the callback, at 0.15 dB
+resolution.
+
+**5b. What it raises is the artifact alone, not the floor.** Splitting each
+capture into the 500 Hz harmonic series (40 harmonics, ±5 Hz each) and
+everything else:
+
+| image | total | 500 Hz series | residual |
+|---|---:|---:|---:|
+| mux0, runs 1 / 2 | −61.16 / −61.33 | −66.59 / −66.60 | −62.62 / −62.86 |
+| mux1, runs 1 / 2 | −60.94 / −61.04 | −66.76 / −66.78 | −62.25 / −62.39 |
+| mux2, runs 1 / 3 | −57.77 / −57.54 | **−59.35 / −59.25** | −62.94 / −62.42 |
+
+The residual is the same in all three images — 0.7 dB of spread, no trend. The
+foreground's entire 3.6 dB of extra total RMS is the harmonic series rising
+7.3 dB. The callback's series is within 0.2 dB of the baseline's, which is the
+same null as finding 4 seen a second way and is the stronger statement of it:
+the callback does not touch the artifact at all.
+
+**5c. The artifact was already there, and it is audible.** In the baseline —
+scan off — the 500 Hz series sits at −66.6 dBFS against −62.6 dBFS of program:
+a pulse train with a full harmonic series **4 dB under the music**. Bastian
+hears it as a standing tone with the synth signal distorting oddly on top, and
+that report was volunteered while `mux2` was running, i.e. against the worst of
+the three. Nothing clips: peak sample 0.008 of full scale, crest factor 19 dB.
+This is the 8 Aug tone, undiminished, and it is not the mux's doing — it is
+present with the scan switched off. It belongs to its own session.
+
+**6. The placement question is closed, opposite to the plan's expectation.** The
+plan treated the callback as the placement that had to prove itself and the
+foreground as the safe fallback. The CPU half found the callback's cost below
+resolution; the audio half finds the foreground measurably worse. **The scan
+goes in the audio callback.** Nothing is left that argues for the foreground.
+
+**The time-since-boot confound was controlled.** The `mux0` pair was recorded
+minutes after its boot, the `mux1` pair immediately after theirs — so a slow
+drift after reset would have masqueraded as a placement effect. `mux2 run 1`
+(immediately after boot) and `mux2 run 3` (minutes later) differ by 0.14 dB,
+inside the spread. This metric does not drift with time since reset.
+
+### Honest limits, audio half
+
+- **The mechanism is not measured and gets no name here.** One thing is ruled
+  out: it is not step *rate*. Both placements clock exactly one step per audio
+  block (`steps=2500` against `blocks=2500` — measured on the CPU-probe build at
+  the same two switch positions, not on these audio images). Everything else is
+  open.
+- **Nothing is attached to the four pins**, here as in the CPU half. The real
+  chain's input capacitance draws current these images never draw, so the
+  callback's null is a lower bound rather than an acquittal, and the
+  foreground's +3.6 dB is a lower bound too.
+- **The absolute levels are not comparable to the 8 Aug capture** (−54.6 dBFS
+  total, −59.5 dBFS band, −4.9 dB `excess`). The interface gain was re-set by
+  hand and the shell's operating point has moved since FEED; the level came out
+  6.6 dB lower. Only `excess`, and only within this session's fixed gain, is
+  being compared above.
+- **The audio images print no identity receipt** — `SHELL_CPU_PROBE=0` removes
+  the line that would say which build is running. The evidence that three
+  different firmwares ran is three distinct md5 sums and three separate flashes,
+  not a receipt from the board.
+- **10 s per run on non-stationary material.** The agreement across two and
+  three runs is what bounds that, not the length of a single capture.
+
 ## The build was lying, twice, and the plan's cmp check caught it
 
 Worth recording because it nearly produced three measurements of one firmware
@@ -124,7 +218,15 @@ the same pass and round-tripped `1 → 0 → 1` to an identical ELF hash. Fixed 
 
 ## Still open
 
-- **Task 5**, the audio side: does a per-block chain burst move the block-rate
-  tone? Needs submodule `385138563330` with the 3.5 mm jacks.
+- **Why the foreground places more energy on the block rate than the callback.**
+  Measured, unexplained, and deliberately not named. It does not block the
+  decision — the decision went to the callback — but it is the one result here
+  that nobody predicted.
+- **The pre-existing 500 Hz harmonic series** (finding 5c), 4 dB under the
+  program with the scan off. Diagnosed on 8 Aug, still unfixed, and now with a
+  measurement rig and a number attached to it. This capture only establishes
+  that the mux question is independent of it.
+- **Both halves ran with floating chain pins.** The whole thing wants repeating
+  once a real 74HC595 chain and a 4067 hang on B7/B8/D1/D10.
 - **Phase-0 Task 6 step 5b**, the settle time per channel, and with it the 8:1
   against 16:1 choice.

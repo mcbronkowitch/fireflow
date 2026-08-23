@@ -2,20 +2,29 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status 2026-08-23, executed the same day it was written.** Tasks 1, 2, 3
-> and 4 are **done** (`66b168a`, `e212baf`, `978cbaf`, `cc3d64c`); Task 6 is
-> done for everything Task 4 settled (`6ce7e73`). **Task 5 is the only open
-> one** — it needs submodule `385138563330` with the 3.5 mm jacks and the UA
-> interface; the three audio images are built and named
-> `shell/build/shell-audio-mux{0,1,2}.bin`. Results:
+> **Status 2026-08-23, executed and closed the same day it was written.** All
+> six tasks are **done** (`66b168a`, `e212baf`, `978cbaf`, `cc3d64c`, `6ce7e73`,
+> and the audio half in the commit that carries this line). Results:
 > [`docs/bench/2026-08-23-978cbaf-shell-mux-placement.md`](../../bench/2026-08-23-978cbaf-shell-mux-placement.md).
 >
-> Two things happened that the plan did not predict. The CPU surcharge came out
-> **below the measurement's resolution** and the foreground scan kept up
-> completely, so the placement question is answered and the CPU-reserve worry is
-> retired. And Task 3 step 6's `cmp` check earned its keep: the build handed out
-> byte-identical images for different switch positions, twice, and the switches
-> now resolve at make's parse time.
+> **Verdict: the scan goes in the audio callback** — which is the placement this
+> plan was braced to have to defend, and it needed no defending. Three things
+> happened that the plan did not predict:
+>
+> 1. The CPU surcharge came out **below the measurement's resolution** and the
+>    foreground kept up completely, so the CPU-reserve worry is retired.
+> 2. The audio half came out **backwards**. The callback leaves the block-rate
+>    tone untouched (−66.8 against −66.6 dBFS on the 500 Hz harmonic series);
+>    the foreground raises it **7.3 dB**, and raises nothing else. The fallback
+>    placement is the dirty one.
+> 3. Task 3 step 6's `cmp` check earned its keep: the build handed out
+>    byte-identical images for different switch positions, twice, and the
+>    switches now resolve at make's parse time.
+>
+> Left deliberately undone: step 5b, the settle time per channel — it needs a
+> 4067 and a pot on the desk, not a board. And the 8 Aug block-rate artifact is
+> **still there** with the scan off, 4 dB under the program; this plan only
+> proved it is not the mux's doing.
 
 **Goal:** Price the panel's 595-chain/mux scan on the Patch Submodule that is already on the desk — in the audio callback against in the foreground, in CPU points and in dB on the block-rate tone — so the control-PCB schematic is drawn with a measured number instead of a guess.
 
