@@ -796,17 +796,13 @@ def test_bodies_and_captions_sit_inside_their_frame():
     # themselves, which is what makes them read as "this pad is lit" rather
     # than as members of the jack-row frame. CEIL_L sits the same way, just
     # outside the OUT frame to the right of OUT_R.
-    # PULL joined this list 2026-08-22 (task 7, pull-chord-gravity): the
-    # centre column has no free slot for a 7th S-class knob (measured --
-    # see gen_hw_panel.py's CENTER_POS comment), so PULL sits loose,
-    # provisionally, pending a real layout pass.
-    # TEMPORARY, tied to the M6 layout pass -- unlike the pads/satellite LEDs
-    # above, PULL is not loose by design. It is here only because the plate
-    # is full (final-fix review, Important 3): remove this entry once M6's
-    # layout pass gives PULL a real group frame, at which point this guard
-    # goes back to asserting "every knob lives inside a frame" without an
-    # exception.
-    check(sorted(loose) == ["CEIL_L", "MODBTN", "MODBTN_L", "PULL",
+    # PULL was on this list for one day (2026-08-22 -> 2026-08-23) while it sat
+    # loose in the seam beside the GLOBAL box. It is gone again: re-pitching the
+    # GLOBAL centre row to four knobs gave it a real frame slot, so this guard
+    # is back to asserting "every knob lives inside a frame" with no knob
+    # exception. Only pads and their satellite LEDs are loose, which is the
+    # invariant this list is for -- keep it that way.
+    check(sorted(loose) == ["CEIL_L", "MODBTN", "MODBTN_L",
                              "SHIFTBTN", "SHIFTBTN_L"],
           f"controls outside the frame raster: {sorted(loose)}")
     # The SD slot is a body on the jack row like any other.

@@ -32,9 +32,11 @@ lane for something other than a note — a read position, a clock bend — so
 leading from one of those simply does nothing, in either mode; the follower
 side behaves normally as soon as the other deck leads instead.
 
-**On the 60 HP hardware draft, PULL had no ready-made slot.** It sits placed
-but loose, outside the panel's usual grouping — a provisional position pending
-a proper layout pass, not a finished placement.
+**On the 60 HP hardware draft, PULL joins the GLOBAL row as its fourth knob,**
+right beside CHOKE — the centre's only other bipolar control, and the one whose
+sign convention PULL borrows. Making room re-pitched the row: the three knobs
+that were there each moved 6.5 mm left so the four re-centre, at the same
+spacing they always had.
 
 Both the dead zone and the pull-probability curve are first-try values and have
 not been through a listening pass yet.

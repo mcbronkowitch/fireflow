@@ -235,30 +235,36 @@ DECK_POS = {
 }
 
 CENTER_POS = {
-    "SCALE":  (139.40, Y_TOP), "DRIFT": (152.40, Y_TOP), "CHOKE": (165.40, Y_TOP),
+    # The GLOBAL centre row carries FOUR knobs since 2026-08-23. It used to be
+    # three on a 13.0 mm pitch centred on 152.40; PULL made it four, so the
+    # group was re-centred and the three existing knobs each moved 6.5 mm left.
+    # The pitch is UNCHANGED at 13.0 and so is the 1.0 mm gap between bodies --
+    # this row sets no new clearance precedent, it just uses the width the
+    # centre cell always had (measured: bodies span 126.90..177.90 inside a
+    # cell of 123.00..181.80, so 3.90 mm spare on each side).
+    #
+    # What it costs, and it is deliberate: with an even count no knob sits on
+    # the centre line any more, and GLOBAL no longer flushes with TEMPO/COUPLE/
+    # SHUFFLE in the TIMING row below. Re-centring is not optional -- leaving
+    # SCALE at 139.40 and hanging PULL off the right end lands it at 178.40,
+    # whose body overruns the cell edge by 2.60 mm.
+    "SCALE":  (132.90, Y_TOP), "DRIFT": (145.90, Y_TOP), "CHOKE": (158.90, Y_TOP),
     "TEMPO":  (139.40, Y_B1K), "COUPLE": (152.40, Y_B1K), "SHUFFLE": (165.40, Y_B1K),
     "TIDE":   (136.40, Y_B1M), "MORPH": (152.40, Y_B1G), "PACE": (168.40, Y_B1M),
     "REV_SIZE": (136.40, Y_B2K), "REV_DECAY": (152.40, 79.00), "REV_DIFF": (168.40, Y_B2K),
     "REV_TONE": (152.40, 97.00),
-    # PULL (spec 2026-07-19 pull-chord-gravity): PROVISIONAL, unapproved by
-    # eye. Task 7 measured that the centre column has zero spare capacity
-    # for a 7th S-class knob: a brute-force scan of every centre-column
-    # group box (GLOBAL/TIMING/ROOM) found no clearing position for a new
-    # r=6.0 layout circle anywhere in ROOM (best margin -1.201 mm) or
-    # GLOBAL (-0.945 mm), and only a 0.100 mm curiosity in TIMING -- not a
-    # real slot, a coincidence of the search grid. Moving an approved
-    # control (REV_DECAY/REV_TONE's y are pinned in test_drawing_geometry,
-    # a by-ear decision) or re-pitching a band to make room is Bastian's
-    # call, not this task's -- ruled out on review. So PULL sits loose,
-    # outside every group-frame box's SEED zone (GROUP_ROWS y-range x
-    # cell x-span, the same thing _row_ink() tests), the same family as
-    # SHIFTBTN/MODBTN/CEIL_L below: in the ~3 mm horizontal seam between
-    # the GLOBAL centre box and deck B's CAPTURE box, just past CHOKE
-    # (the centre column's other status-row knob) on deck B's side.
-    # Nearest neighbour is CHOKE itself at 7.11 mm clearance -- comfortably
-    # more than the 0.5 mm a real placement needs, not a razor's edge.
-    # Needs a real layout pass before this is a settled position.
-    "PULL": (183.30, 21.20),
+    # PULL (spec 2026-07-19 pull-chord-gravity), fourth in the GLOBAL row and
+    # deliberately next to CHOKE: those two are the only bipolar controls in
+    # the whole centre (-1..+1; every other centre knob is 0..1 or stepped),
+    # they share the sign-picks-a-deck convention PULL was designed on, and
+    # both read "how do the two decks relate to each other".
+    #
+    # It shipped loose here first (2026-08-22): a scan for a slot that needed
+    # NOTHING to move found none -- best margin -1.201 mm in ROOM, -0.945 in
+    # GLOBAL, +0.100 in TIMING, which is fabrication noise. That was the right
+    # answer to the wrong question. Re-pitching the row was always the way in;
+    # it just was not an implementer's call to make. Bastian made it 2026-08-23.
+    "PULL": (171.90, Y_TOP),
     # MODBTN is a real latch param now (spec 2026-08-22 mod-latch-layer §5),
     # placed through the same place() path as every sound knob; the
     # coordinates are unchanged from its old HW_ONLY slot.

@@ -272,10 +272,10 @@
 <text x="137.500" y="42.000" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">TEMP</text>
 <circle cx="152.400" cy="34.000" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="152.400" y="42.000" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">SYNC</text>
-<circle cx="139.400" cy="14.500" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<text x="139.400" y="22.500" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">SCAL</text>
-<circle cx="152.400" cy="14.500" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<text x="152.400" y="22.500" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">DRFT</text>
+<circle cx="132.900" cy="14.500" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="132.900" y="22.500" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">SCAL</text>
+<circle cx="145.900" cy="14.500" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="145.900" y="22.500" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">DRFT</text>
 <circle cx="136.400" cy="76.000" r="4.400" fill="#080b0d" stroke="#7fb6c9" stroke-width="0.3"/>
 <text x="136.400" y="84.000" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">SIZE</text>
 <circle cx="152.400" cy="79.000" r="6.000" fill="#080b0d" stroke="#7fb6c9" stroke-width="0.3"/>
@@ -284,8 +284,8 @@
 <text x="152.400" y="105.000" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">TONE</text>
 <circle cx="168.400" cy="76.000" r="4.400" fill="#080b0d" stroke="#7fb6c9" stroke-width="0.3"/>
 <text x="168.400" y="84.000" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">DIFF</text>
-<circle cx="165.400" cy="14.500" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<text x="165.400" y="22.500" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">CHOK</text>
+<circle cx="158.900" cy="14.500" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="158.900" y="22.500" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">CHOK</text>
 <circle cx="68.250" cy="50.220" r="4.400" fill="#080b0d" stroke="#3fbf9c" stroke-width="0.3"/>
 <text x="66.350" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">FILT</text>
 <circle cx="236.550" cy="50.220" r="4.400" fill="#080b0d" stroke="#e8945a" stroke-width="0.3"/>
@@ -326,8 +326,8 @@
 <text x="94.250" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">DPTH</text>
 <circle cx="210.550" cy="50.220" r="4.400" fill="#080b0d" stroke="#e8945a" stroke-width="0.3"/>
 <text x="210.550" y="58.220" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">DPTH</text>
-<circle cx="183.300" cy="21.200" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<text x="183.300" y="29.200" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">PULL</text>
+<circle cx="171.900" cy="14.500" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
+<text x="171.900" y="22.500" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">PULL</text>
 <rect x="286.800" y="110.000" width="8.000" height="8.000" rx="1.2" fill="#dbe9ef" stroke="#3c525c" stroke-width="0.3"/>
 <text x="290.800" y="120.700" fill="#a7bcc6" text-anchor="middle" font-family="monospace" font-size="2.2">MOD</text>
 <circle cx="33.000" cy="114.000" r="3.100" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
