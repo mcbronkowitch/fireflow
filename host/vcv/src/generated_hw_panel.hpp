@@ -20,7 +20,7 @@ static const PanelCtl kParamCtls[] = {
     {DECAY_A, WK_SMKNOB, {81.250f, 34.000f}, "DEC", {81.250f, 42.000f}, 0, 2.20f, 0xA7BCC6, "DEC"},
     {RES_A, WK_SMKNOB, {94.250f, 34.000f}, "RES", {94.250f, 42.000f}, 0, 2.20f, 0xA7BCC6, "RES"},
     {SUB_A, WK_SMKNOB, {107.250f, 34.000f}, "SUB", {107.250f, 42.000f}, 0, 2.20f, 0xA7BCC6, "SUB"},
-    {SOURCE_A, WK_SMKNOB, {81.250f, 50.220f}, "TIMB", {79.350f, 58.220f}, 0, 2.20f, 0xA7BCC6, "SOURCE"},
+    {SOURCE_A, WK_SMKNOB, {72.875f, 50.220f}, "TIMB", {70.975f, 58.220f}, 0, 2.20f, 0xA7BCC6, "SOURCE"},
     {FLUX_A, WK_SMKNOB, {67.000f, 76.000f}, "MIX", {67.000f, 85.600f}, 0, 2.20f, 0xA7BCC6, "FLUX"},
     {GRIT_A, WK_KNOBC, {106.500f, 95.000f}, "GRIT", {106.500f, 103.000f}, 0, 2.20f, 0xA7BCC6, "GRIT"},
     {COMP_A, WK_SMKNOB, {106.500f, 76.000f}, "LVL", {104.600f, 85.600f}, 0, 2.20f, 0xA7BCC6, "Level / Comp"},
@@ -40,7 +40,7 @@ static const PanelCtl kParamCtls[] = {
     {DECAY_B, WK_SMKNOB, {223.550f, 34.000f}, "DEC", {223.550f, 42.000f}, 0, 2.20f, 0xA7BCC6, "DEC"},
     {RES_B, WK_SMKNOB, {210.550f, 34.000f}, "RES", {210.550f, 42.000f}, 0, 2.20f, 0xA7BCC6, "RES"},
     {SUB_B, WK_SMKNOB, {197.550f, 34.000f}, "SUB", {197.550f, 42.000f}, 0, 2.20f, 0xA7BCC6, "SUB"},
-    {SOURCE_B, WK_SMKNOB, {223.550f, 50.220f}, "TIMB", {221.650f, 58.220f}, 0, 2.20f, 0xA7BCC6, "SOURCE"},
+    {SOURCE_B, WK_SMKNOB, {231.925f, 50.220f}, "TIMB", {230.025f, 58.220f}, 0, 2.20f, 0xA7BCC6, "SOURCE"},
     {FLUX_B, WK_SMKNOB, {237.800f, 76.000f}, "MIX", {237.800f, 85.600f}, 0, 2.20f, 0xA7BCC6, "FLUX"},
     {GRIT_B, WK_KNOBC, {198.300f, 95.000f}, "GRIT", {198.300f, 103.000f}, 0, 2.20f, 0xA7BCC6, "GRIT"},
     {COMP_B, WK_SMKNOB, {198.300f, 76.000f}, "LVL", {196.400f, 85.600f}, 0, 2.20f, 0xA7BCC6, "Level / Comp"},
@@ -58,8 +58,8 @@ static const PanelCtl kParamCtls[] = {
     {REV_TONE, WK_SMKNOB, {152.400f, 97.000f}, "TONE", {152.400f, 105.000f}, 0, 2.20f, 0xA7BCC6, "TONE"},
     {REV_DIFF, WK_SMKNOB, {168.400f, 76.000f}, "DIFF", {168.400f, 84.000f}, 0, 2.20f, 0xA7BCC6, "DIFF"},
     {CHOKE, WK_SMKNOB, {158.900f, 14.500f}, "CHOK", {158.900f, 22.500f}, 0, 2.20f, 0xA7BCC6, "CHOKE"},
-    {FILT_A, WK_SMKNOB, {68.250f, 50.220f}, "FILT", {66.350f, 58.220f}, 0, 2.20f, 0xA7BCC6, "FILT"},
-    {FILT_B, WK_SMKNOB, {236.550f, 50.220f}, "FILT", {234.650f, 58.220f}, 0, 2.20f, 0xA7BCC6, "FILT"},
+    {FILT_A, WK_SMKNOB, {88.875f, 53.000f}, "FILT", {86.975f, 62.600f}, 0, 2.20f, 0xA7BCC6, "FILT"},
+    {FILT_B, WK_SMKNOB, {215.925f, 53.000f}, "FILT", {214.025f, 62.600f}, 0, 2.20f, 0xA7BCC6, "FILT"},
     {TIDE, WK_SMKNOB, {136.400f, 50.220f}, "TIDE", {136.400f, 58.220f}, 0, 2.20f, 0xA7BCC6, "TIDE"},
     {FLUXRATE_A, WK_KNOBI, {54.000f, 89.860f}, "TIME", {54.000f, 97.860f}, 0, 2.20f, 0xA7BCC6, "FLUX time"},
     {FLUXRATE_B, WK_KNOBI, {250.800f, 89.860f}, "TIME", {250.800f, 97.860f}, 0, 2.20f, 0xA7BCC6, "FLUX time"},
@@ -77,8 +77,8 @@ static const PanelCtl kParamCtls[] = {
     {REV_MIX_B, WK_SMKNOB, {168.400f, 95.000f}, "SEND", {168.400f, 104.600f}, 0, 2.20f, 0xA7BCC6, "Room send"},
     {SHUFFLE, WK_SMKNOB, {165.400f, 34.000f}, "SHFL", {165.400f, 42.000f}, 0, 2.20f, 0xA7BCC6, "SHUFL"},
     {PACE, WK_SMKNOB, {168.400f, 50.220f}, "PACE", {168.400f, 58.220f}, 0, 2.20f, 0xA7BCC6, "PACE"},
-    {DEPTH_A, WK_SMKNOB, {94.250f, 50.220f}, "DPTH", {94.250f, 58.220f}, 0, 2.20f, 0xA7BCC6, "MOTION lane base"},
-    {DEPTH_B, WK_SMKNOB, {210.550f, 50.220f}, "DPTH", {210.550f, 58.220f}, 0, 2.20f, 0xA7BCC6, "MOTION lane base"},
+    {DEPTH_A, WK_SMKNOB, {104.875f, 50.220f}, "DPTH", {104.875f, 58.220f}, 0, 2.20f, 0xA7BCC6, "MOTION lane base"},
+    {DEPTH_B, WK_SMKNOB, {199.925f, 50.220f}, "DPTH", {199.925f, 58.220f}, 0, 2.20f, 0xA7BCC6, "MOTION lane base"},
     {PULL, WK_SMKNOB, {171.900f, 14.500f}, "PULL", {171.900f, 22.500f}, 0, 2.20f, 0xA7BCC6, "PULL"},
     {MODBTN, WK_LATCH, {290.800f, 114.000f}, "MOD", {290.800f, 120.700f}, 0, 2.20f, 0xA7BCC6, "MOD layer latch"},
 };
@@ -86,7 +86,7 @@ static const PanelCtl kParamCtls[] = {
 // The rehearsal widget reads THIS, not c.kind -- kind says
 // bipolar/detented, which is not a diameter.
 static const unsigned char kParamSize[] = {
-    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0,
+    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0,
 };
 static_assert(sizeof(kParamSize) == sizeof(kParamCtls) / sizeof(kParamCtls[0]), "kParamSize desynced");
 static const PanelCtl kInputCtls[] = {
@@ -116,10 +116,10 @@ static const PanelCtl kLightCtls[] = {
     {GATE_B_L, WK_LIGHT, {238.600f, 41.208f}, "", {238.600f, 41.208f}, 0, 2.20f, 0xA7BCC6, ""},
     {REC_A_L, WK_LIGHT, {108.500f, 14.500f}, "", {108.500f, 14.500f}, 0, 2.20f, 0xA7BCC6, ""},
     {REC_B_L, WK_LIGHT, {196.300f, 14.500f}, "", {196.300f, 14.500f}, 0, 2.20f, 0xA7BCC6, ""},
-    {SRC_A_L, WK_LIGHT, {83.850f, 57.428f}, "", {83.850f, 57.428f}, 0, 2.20f, 0xA7BCC6, ""},
-    {SRC_B_L, WK_LIGHT, {226.150f, 57.428f}, "", {226.150f, 57.428f}, 0, 2.20f, 0xA7BCC6, ""},
-    {FLT_A_L, WK_LIGHT, {70.850f, 57.428f}, "", {70.850f, 57.428f}, 0, 2.20f, 0xA7BCC6, ""},
-    {FLT_B_L, WK_LIGHT, {239.150f, 57.428f}, "", {239.150f, 57.428f}, 0, 2.20f, 0xA7BCC6, ""},
+    {SRC_A_L, WK_LIGHT, {75.475f, 57.428f}, "", {75.475f, 57.428f}, 0, 2.20f, 0xA7BCC6, ""},
+    {SRC_B_L, WK_LIGHT, {234.525f, 57.428f}, "", {234.525f, 57.428f}, 0, 2.20f, 0xA7BCC6, ""},
+    {FLT_A_L, WK_LIGHT, {91.475f, 61.808f}, "", {91.475f, 61.808f}, 0, 2.20f, 0xA7BCC6, ""},
+    {FLT_B_L, WK_LIGHT, {218.525f, 61.808f}, "", {218.525f, 61.808f}, 0, 2.20f, 0xA7BCC6, ""},
     {CLR_A_L, WK_LIGHT, {26.100f, 103.808f}, "", {26.100f, 103.808f}, 0, 2.20f, 0xA7BCC6, ""},
     {CLR_B_L, WK_LIGHT, {283.900f, 103.808f}, "", {283.900f, 103.808f}, 0, 2.20f, 0xA7BCC6, ""},
     {LVL_A_L, WK_LIGHT, {108.550f, 84.808f}, "", {108.550f, 84.808f}, 0, 2.20f, 0xA7BCC6, ""},
@@ -138,9 +138,7 @@ static const HwOnlyCtl kHwOnlyCtls[] = {
     {WK_LATCH, {14.000f, 114.000f}, "SHFT", {14.000f, 120.700f}, 0, 2.20f, 0xA7BCC6},
 };
 static const PanelTxt kPanelTexts[] = {
-    {{4.500f, 9.400f}, 3.30f, 0.55f, 0xA7BCC6, 1, "FIREFLOW"},
     {{8.000f, 26.600f}, 2.10f, 0.55f, 0x3FBF9C, 1, "DECK A"},
-    {{300.300f, 9.400f}, 2.30f, 0.55f, 0x6F8894, 2, "60 HP"},
     {{296.800f, 26.600f}, 2.10f, 0.55f, 0xE8945A, 2, "DECK B"},
     {{12.000f, 9.000f}, 1.90f, 0.50f, 0x32937A, 1, "01"},
     {{16.400f, 9.000f}, 1.90f, 0.50f, 0x6F8894, 1, "ENG"},

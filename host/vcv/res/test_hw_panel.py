@@ -324,20 +324,22 @@ def test_every_control_has_a_size_class():
 def test_size_classes_match_the_spec():
     """Große Kappen nach Redistribution + Grafikrunde: SOURCE/TIMB ist klein,
     ENGINE ist ein Rastpoti (spec 2026-08-10 §5/§9, TIMB-Schrumpf 15. Aug)."""
-    # FILT left this set on 2026-08-19. Not for room -- four controls fit the
-    # VOICE row with FILT large -- but because at r=8.5 its neighbour spacing
-    # is 14.5 mm against 12 for every other pair, so the row could not sit on
-    # the same 13 mm pitch as the four knobs directly above it.
+    # FILT left this set on 2026-08-19 and came back 2026-08-23. It never left
+    # for room -- four controls fit the VOICE row with FILT large -- but
+    # because at r=8.5 its neighbour spacing is 14.5 mm against 12 for every
+    # other pair, so it could not sit on the same 13 mm pitch as the four
+    # knobs directly above it. It does not sit in that pitch any more: it is
+    # at the END of the lower row with column 3 left empty beside it.
     BIG = {"DENSITY", "MOD", "COLOR", "FLUX", "REV_MIX",
-           "COMP", "MORPH", "REV_DECAY"}
+           "COMP", "MORPH", "REV_DECAY", "FILT"}
     got = {b for b, cls in hw.HW_SIZE.items() if cls == "G"}
     check(got == BIG, f"big-knob set drifted: extra={got-BIG} missing={BIG-got}")
     big_positions = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "G"]
-    check(len(big_positions) == 14, f"expected 14 big positions, got {len(big_positions)}")
+    check(len(big_positions) == 16, f"expected 16 big positions, got {len(big_positions)}")
     small = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "S"]
-    # 51 + FILT×2 (was G) + DEPTH×2 = 55, +1 (spec 2026-07-19
-    # pull-chord-gravity): PULL joined as a small knob, HW_SIZE["PULL"]="S".
-    check(len(small) == 56, f"expected 56 small params, got {len(small)}")
+    # 51 + DEPTH×2 = 53, +1 (spec 2026-07-19 pull-chord-gravity): PULL joined
+    # as a small knob, HW_SIZE["PULL"]="S". FILT×2 left again 2026-08-23.
+    check(len(small) == 54, f"expected 54 small params, got {len(small)}")
     check(abs(hw.CLASS_R["G"] - 8.5) < 1e-9, "CLASS_R G is not 8.5")
     check(abs(hw.CLASS_R["S"] - 6.0) < 1e-9, "CLASS_R S is not 6.0")
     check(hw.HW_SIZE["SOURCE"] == "S", "TIMB/SOURCE is not small")
@@ -836,14 +838,32 @@ def test_drawing_geometry():
           "ENGINE_A is not on the status row")
     check("ENG" in [n for n, _s, _x, _w in hw._row_cells(hw.GROUP_ROWS[0])],
           "the status row has no ENG frame")
-    # The knob it paid for, on the same 13 mm pitch and the same x as
-    # ATTACK/DECAY/RES/SUB directly above them.
-    for lower, upper in (("FILT_A", "ATTACK_A"), ("SOURCE_A", "DECAY_A"),
-                         ("DEPTH_A", "RES_A")):
-        check(abs(by[lower].x - by[upper].x) < 1e-9,
-              f"{lower} is not aligned under {upper}")
-        check(abs(by[lower].y - hw.Y_B1M) < 1e-9,
-              f"{lower} is not on the VOICE lower row")
+    # VOICE's lower row, approved by eye 2026-08-23 against three alternatives.
+    # It is TIMING's small-BIG-small figure, so it is checked AGAINST TIMING
+    # rather than against numbers of its own: same pitch, same two lines, big
+    # cap centred. The row followed the ATTACK/DECAY/RES/SUB columns until that
+    # day; when FILT went big and moved to the end of the row it left two small
+    # knobs crowded at 4.20 mm, a 15.60 mm hole and a third line for one knob.
+    # Restoring the columns would restore that, which is why this guard pins
+    # the figure and not the raster.
+    voice = [b for b in hw.BOXES if b.n == "VOICE" and b.side == "A"][0]
+    check(abs(hw.VOICE_MID - (voice.x + voice.w / 2)) < 1e-9,
+          f"VOICE_MID is {hw.VOICE_MID}, not the centre of the VOICE frame "
+          f"({voice.x + voice.w / 2})")
+    for row, mid in (("FILT_A SOURCE_A DEPTH_A", hw.VOICE_MID),
+                     ("MORPH TIDE PACE", hw.W / 2)):
+        big, left, right = row.split()
+        check(abs(by[big].x - mid) < 1e-9,
+              f"{big} is at {by[big].x}, not centred on {mid}")
+        check(abs(by[big].y - hw.Y_B1G) < 1e-9, f"{big} left the big line")
+        check(abs((mid - by[left].x) - hw.CENTRE_PITCH) < 1e-9 and
+              abs((by[right].x - mid) - hw.CENTRE_PITCH) < 1e-9,
+              f"{left}/{right} are not {hw.CENTRE_PITCH} mm either side of {big}")
+        for small in (left, right):
+            check(abs(by[small].y - hw.Y_B1M) < 1e-9,
+                  f"{small} is not on the small line beside {big}")
+    check(abs(hw.CENTRE_PITCH - 16.0) < 1e-9,
+          f"CENTRE_PITCH is {hw.CENTRE_PITCH}, not the approved 16.0")
     for enum in ("ATTACK_A", "DECAY_A", "RES_A", "SUB_A"):
         ly = hw.hw_label(by[enum])[1]
         check(ly > by[enum].y, f"{enum} caption flipped above the knob")
@@ -880,8 +900,12 @@ def test_drawing_geometry():
     check(len(hw.TEXTS) == len(hw.BRAND_TEXTS) + 2 * len(hw.BOXES),
           f"TEXTS carries {len(hw.TEXTS)} rows, not brand + one pair per frame")
     words = {t[6] for t in hw.TEXTS}
-    for w in ("FIREFLOW", "DECK A", "DECK B", "60 HP", "SEQUENCE", "ROOM"):
+    for w in ("DECK A", "DECK B", "SEQUENCE", "ROOM"):
         check(w in words, f"{w!r} is not in the panel lettering")
+    # Pulled 2026-08-23 while the plate's branding is redrawn. Asserted absent
+    # so a stale generated SVG or header cannot quietly put them back.
+    for w in ("FIREFLOW", "60 HP"):
+        check(w not in words, f"{w!r} is back in the panel lettering")
     lx, ly = hw.hw_label(by["IN_L"])[:2]
     check(ly > by["IN_L"].y, "IN L caption is not under the jack")
     svg = hw.svg()

@@ -124,11 +124,14 @@ HW_SIZE = {
     "RATE": "S", "SHAPE": "S", "SMOOTH": "S", "RANGE": "S", "MELODY": "S",
     "COLOR": "G",
     "TUNE": "S", "DETUNE": "S",
-    # FILT went G -> S on 2026-08-19. Not for room -- four controls fit the
-    # VOICE row with FILT large -- but for RASTER: at r=8.5 its neighbour
-    # spacing is 14.5 mm against 12 for every other pair, so the row could
-    # not sit on the 13 mm pitch of the four knobs directly above it.
-    "FILT": "S", "SOURCE": "S",                    # TIMB is small (graphics round)
+    # FILT is big again since 2026-08-23. It went G -> S on 2026-08-19 for
+    # RASTER, not for room: at r=8.5 its neighbour spacing is 14.5 mm against
+    # 12 for every other pair, so it could not sit on the 13 mm pitch beside
+    # TIMB and DPTH. That reason is gone -- FILT no longer sits IN the pitch.
+    # It moved to the end of VOICE's lower row (column 4, under SUB) and the
+    # column between it and DPTH stays empty, which is what buys the 14.5.
+    "FILT": "G",
+    "SOURCE": "S",                                 # TIMB is small (graphics round)
     "DEPTH": "S",                                   # FEED, the VOICE knob
     "ATTACK": "S", "DECAY": "S", "RES": "S", "SUB": "S", "STAGES": "S",
     "FLUX": "G",
@@ -205,6 +208,17 @@ Y_B2K, Y_B2G = 76.0, 95.0
 JACK_Y = 114.0
 SD_X, SD_Y, SD_W, SD_H = 152.4, JACK_Y, 11.0, 6.0
 
+# The small-BIG-small figure, used twice on this plate: TIMING's TIDE/MRPH/
+# PACE and, since 2026-08-23, VOICE's lower row. Both are written from these
+# two numbers so the two cannot drift apart -- the whole reason VOICE reads
+# calm in that shape is that the eye has already learnt it from TIMING.
+# CENTRE_PITCH is what a small knob needs beside a big one (14.5 mm) plus a
+# margin; VOICE_MID is the centre of deck A's VOICE frame, which GROUP_ROWS
+# row 2 puts at 57.75..120.00. test_hw_panel pins VOICE_MID against the real
+# frame rather than trusting this comment.
+CENTRE_PITCH = 16.0
+VOICE_MID = 88.875
+
 # CV jack columns — uniform 11.5 mm raster, not under the knobs (spec §13).
 X_COLOR, X_FILT, X_TIMB, X_LVL = 79.0, 90.5, 102.0, 113.5
 
@@ -216,14 +230,26 @@ DECK_POS = {
     "MOD":    (21.75, Y_B1G), "DENSITY": (40.75, Y_B1G),
     "ATTACK": (68.25, Y_B1K), "DECAY": (81.25, Y_B1K),
     "RES":    (94.25, Y_B1K), "SUB": (107.25, Y_B1K),
-    # VOICE's lower row, on the SAME 13 mm pitch and the same x as the four
-    # knobs above it -- ATTACK/DECAY/RES/SUB. ENGINE used to open this row at
-    # 70.25; it moved to its own frame in the status row (GROUP_ROWS below),
-    # which is what freed the slot DEPTH now holds. The slot after it
-    # (107.25, Y_B1M) held DAMP (the EDGE knob) until 2026-08-20 and stays
-    # deliberately empty now that it is gone.
-    "FILT":   (68.25, Y_B1M), "SOURCE": (81.25, Y_B1M),
-    "DEPTH":  (94.25, Y_B1M),
+    # VOICE's lower row is TIMING's row, copied: small - BIG - small, the big
+    # one centred, on the CENTRE_PITCH raster. TIDE/MRPH/PACE has stood that
+    # way since the graphics round and reads calm even though it, too, spans
+    # two of the band's lines -- because it is symmetric about its big cap.
+    #
+    # The lower row left the ATTACK/DECAY/RES/SUB column raster to get there,
+    # and that is the point. It followed those columns until 2026-08-23, when
+    # FILT went back to a big cap and landed at the end of the row: that left
+    # two small knobs crowded at 4.20 mm, a 15.60 mm hole, and a big cap alone
+    # on a third line -- three heights in a two-row group, which is what made
+    # VOICE read restless next to MOTION. Approved by eye 2026-08-23 against
+    # three alternatives; the numbers here are measured, not chosen:
+    # body gaps 5.60/5.60, frame air 10.72 either side.
+    #
+    # (The old column 3 was RES's partner DAMP, the EDGE knob, until
+    # 2026-08-20; ENGINE opened this row at 70.25 before it moved to its own
+    # status-row frame, which is what freed the slot DPTH holds now.)
+    "SOURCE": (VOICE_MID - CENTRE_PITCH, Y_B1M),
+    "FILT":   (VOICE_MID, Y_B1G),
+    "DEPTH":  (VOICE_MID + CENTRE_PITCH, Y_B1M),
     "ENGINE": (16.25, Y_TOP),
     "TUNE":   (17.00, Y_B2K), "DETUNE": (30.00, Y_B2K),
     "COLOR":  (23.50, Y_B2G),
@@ -250,7 +276,11 @@ CENTER_POS = {
     # whose body overruns the cell edge by 2.60 mm.
     "SCALE":  (132.90, Y_TOP), "DRIFT": (145.90, Y_TOP), "CHOKE": (158.90, Y_TOP),
     "TEMPO":  (139.40, Y_B1K), "COUPLE": (152.40, Y_B1K), "SHUFFLE": (165.40, Y_B1K),
-    "TIDE":   (136.40, Y_B1M), "MORPH": (152.40, Y_B1G), "PACE": (168.40, Y_B1M),
+    # The small-BIG-small figure VOICE's lower row now copies. Same two
+    # numbers, so re-tuning one row re-tunes both -- which is what keeps them
+    # reading as the same figure instead of two rows that merely resemble it.
+    "TIDE":   (W / 2 - CENTRE_PITCH, Y_B1M), "MORPH": (W / 2, Y_B1G),
+    "PACE":   (W / 2 + CENTRE_PITCH, Y_B1M),
     "REV_SIZE": (136.40, Y_B2K), "REV_DECAY": (152.40, 79.00), "REV_DIFF": (168.40, Y_B2K),
     "REV_TONE": (152.40, 97.00),
     # PULL (spec 2026-07-19 pull-chord-gravity), fourth in the GLOBAL row and
@@ -631,14 +661,16 @@ def group_texts():
 
 
 BRAND_TEXTS = [
-    (4.50, 9.40, 3.3, 0.55, HW_LABEL, "start", "FIREFLOW"),
+    # The "FIREFLOW" wordmark (4.50, 9.40) and the "60 HP" legend (W - 4.50,
+    # 9.40) were pulled 2026-08-23: the branding of the plate is being redrawn
+    # and nothing placeholder should sit in the header strip meanwhile. The
+    # strip y=9.40 is free for whatever replaces them.
     # Moved out of the top-left corner 2026-08-19: ENG's own frame now sits
     # there, and "DECK A" ran x=4.60..14.20 straight through it. It drops into
     # the 3 mm gap between the status row (bottom 24.35) and the MOTION/VOICE
     # row (top 27.35) -- the one horizontal strip on the plate that no frame
     # claims -- and starts on PLATE_EDGE so it lines up with the row below it.
     (8.00, 26.60, 2.1, 0.55, ACC["A"], "start", "DECK A"),
-    (W - 4.50, 9.40, 2.3, 0.55, HW_LEGEND, "end", "60 HP"),
     (W - 8.00, 26.60, 2.1, 0.55, ACC["B"], "end", "DECK B"),
 ]
 
