@@ -131,3 +131,84 @@ purpose rather than by accident.
 - **The mechanism of the 500 Hz series is still unnamed.** Three measurements
   now constrain it — not in the samples, sensitive to idle-time content,
   sensitive to the binary — and none of them names it.
+
+## The idle loop is the whole 15.5 dB
+
+**Later the same evening** · **Board** `patch_sm` `3859386B3330`, the bare
+submodule, a Thonkiconn wired to **B2** and **A7**, no other module on the rig ·
+**Images** `shell-idle{0,1,2}.bin` at `1338d48`, three distinct hashes,
+position 0 byte-identical to `shell-audio-mux0.bin` · one 15 s capture each,
+interface gain untouched, channel 0.
+
+Finding 6 above proposed the binary's layout as the candidate class for the
+15.5 dB between two images. **It was not the layout. It was the foreground
+loop**, and `SHELL_IDLE_FILL` shows it inside one image, with a byte-identical
+callback in all three positions.
+
+| fill | idle loop | 500 Hz series | 500 Hz alone | rest | series over rest |
+|---|---|---:|---:|---:|---:|
+| 0 | `while(1) {}`, no memory access | −62.88 | −65.15 | −73.64 | **+10.8** |
+| 1 | spin on a volatile | **−75.73** | **−79.31** | −76.07 | **+0.3** |
+| 2 | that spin plus ALU work | −59.35 | −61.74 | −66.70 | +7.4 |
+| — | sine only, engine bypassed | −73.96 | −86.61 | −76.16 | — |
+| — | plug pulled at the board | −113.72 | −128.44 | −96.30 | — |
+
+**1. The mystery of finding 6 is closed.** 12.9 dB on the series and 14.2 dB on
+the fundamental, from changing nothing but what the core does between blocks.
+The `CpuLoadMeter` calls, the probe's counters and the linker were never
+involved. The 8 Aug `nop`-loop measurement was the right thread all along; it
+saw 7.5 dB because it had a different filling.
+
+**2. It is not monotonic in idle load, and that kills the obvious fix.** Real
+ALU work in the idle time (fill 2) is **16.4 dB worse** than the light spin and
+**3.5 dB worse than doing nothing at all**. "Keep the CPU busy" is not a
+remedy; it can make the artifact louder. Whatever the lever is, it is not the
+quantity of idle work.
+
+**3. There is an idle filling where the artifact stops being a tone.** At fill 1
+the series sits **0.3 dB** above the surrounding floor, against 10.8 dB at
+fill 0. It did not merely get quieter — it stopped standing out as a line. That
+is the first firmware-side state anyone here has measured in which the standing
+tone is not a standing tone.
+
+**4. Bypassing the engine is not the same as filling the idle time.** The
+sine-only image (engine replaced by a 997 Hz generator, callback trivial) lands
+at −73.96 on the series — close to fill 1 in the band, but its *fundamental* is
+at −86.61, the lowest of any image that had audio running. Two different levers,
+both real, and this capture does not separate them.
+
+### Honest limits of this section
+
+- **Nothing drives the output on this rig.** libDaisy's own header calls A1 and
+  A5 ±12 V *power inputs* (`daisy_patch_sm.h:263`, `:267`) and this submodule
+  runs on USB alone, so the analog output stage has no rails. Everything above
+  is coupling into a correctly wired but undriven pin — which is also why a
+  997 Hz sine written at −13.5 dBFS in the buffer arrives at −76.9, and why B1
+  and B2 behave identically to 0.05 dB.
+- **Therefore: firmware-against-firmware on one wiring is valid** — the three
+  rows are — **and the transfer to a driven output is not established.** The
+  next round of this belongs on a rig with ±12 V, and until then no absolute
+  number here should be quoted against the other board's.
+- **One capture per position.** The run-to-run spread of this rig is not
+  established; the deltas are large enough that it hardly matters for the
+  verdict, but 3.5 dB (fill 2 against fill 0) is the one figure that would
+  benefit from a repeat.
+- **The mechanism is still unnamed.** What the three fills differ in besides
+  "amount of work" — continuity of current draw, memory traffic, the
+  periodicity of the store in fill 2 — is not measured, and naming one would be
+  the exact mistake this file has avoided twice already.
+
+## What ruled out USB, for the record
+
+Bastian noticed that during a DFU flash the output is **dead silent**, and the
+noise appears the instant the application starts. The ST bootloader has the
+board powered, the core running and **USB at maximum throughput** — 230 KB
+going by — and produces nothing. So USB is not the carrier, and the 1 kHz SOF
+line of finding 5 is a curiosity and not a cause. What the bootloader does not
+do is initialise the codec: no SAI, no I2S, no audio DMA, no block grid.
+
+Together with the rest of the day, the artifact now needs all of: the audio
+subsystem running (`StopAudio` costs it 30 dB), the application rather than just
+power (silence in the bootloader), and it scales with what happens between the
+blocks (this section). It is not in the samples (8 Aug) and not the MAX11300
+(finding 1).
