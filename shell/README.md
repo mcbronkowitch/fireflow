@@ -215,6 +215,20 @@ Das ist eine Messung und keine Vermutung, und sie kostet einen Boardwechsel.
 
 `shell/controls.{h,cpp}` (Task 6 des Phase-0-Plans) bringt den ersten Poti
 über einen `74HC4051` herein und misst, was Mux-Scan und LED-Ausgabe auf die
-CPU-Reserve kosten. Diese Reserve ist **2,17 Punkte**, gemessen auf diesem
-Board — keine Seed-Zahl darf dafür zitiert werden, auch nicht als Näherung
-(`docs/bench/2026-08-07-seed-vs-patch-sm.md`).
+CPU-Reserve kosten. Keine Seed-Zahl darf dafür zitiert werden, auch nicht als
+Näherung (`docs/bench/2026-08-07-seed-vs-patch-sm.md`).
+
+**Nachtrag 2026-08-23, zwei Korrekturen und ein Vorzieher.** Hier stand, die
+Reserve sei **2,17 Punkte**; das war eine Seed-Hochrechnung. Direkt gemessen
+liegt `instrument_worst_bbd_dtcm` auf diesem Board bei 97,02–97,16 % `pct_max`,
+die Reserve also bei **~2,9 Punkten**
+(`docs/bench/2026-08-19-3def5d5-feed-axi-o2-patch_sm-usb.md`, zwei Läufe).
+Und die 62,78 % / 65,30 % der CPU-Sonde weiter oben sind seit FEED eine
+historische Zeile, kein Vergleichspartner mehr — wer den Aufschlag misst,
+misst die Basis im selben Stand neu.
+
+Vorgezogen wird der Teil, der **kein Panel braucht**: eine periodische
+Ketten-Salve auf den vier Produktionspins (B7, B8, D1, D10) beantwortet, ob
+der Scan überhaupt in den Callback muss und ob er den Störton auf der
+Blockrate bewegt. Plan:
+[`docs/superpowers/plans/2026-08-23-mux-scan-placement-probe.md`](../docs/superpowers/plans/2026-08-23-mux-scan-placement-probe.md).

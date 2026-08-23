@@ -3337,6 +3337,23 @@ cost is unmeasured. The rest of the I/O budget does fit, with slack in every row
 — the full four-resource balance is in
 [`docs/hardware/io-budget.md`](hardware/io-budget.md) §3.
 
+**2026-08-23 — that obligation is now planned, and it splits in two.** The
+expensive half is the settle time per channel (Phase-0 Task 6 step 5b): it
+needs a 74HC4067, a pot and jumper wires on the table, it decides 8:1 against
+16:1 and the capacitor at `COM`, and it waits for the parts. The cheap half
+needs no panel and no mux at all — a periodic bit-banged burst on the four
+production chain pins (B7, B8, D1, D10) of the submodule that has been on the
+desk since 8 August. It answers two things the CPU percentage does not: **where
+the scan runs** — nobody had asked whether it must sit in the audio callback,
+and a foreground scan paced at one step per block never enters the
+`CpuLoadMeter` at all — and **whether the burst moves the block-rate tone**,
+which is the one outcome no amount of CPU saving fixes. What hangs on it is
+whether the co-controller from io-budget §6's fallback path goes into the
+control-PCB schematic, and that is decided before the board is ordered or not
+at all. Plan:
+[`docs/superpowers/plans/2026-08-23-mux-scan-placement-probe.md`](superpowers/plans/2026-08-23-mux-scan-placement-probe.md).
+Nothing is measured yet; the plan is written, not executed.
+
 **2026-08-14 — preset persistence now starts from nothing.** M6's scope names
 it, and until this date the repo had two pieces of prior art for it: the
 terrain layer's `terrain_code.h`, the **only whole-patch serialiser** anything

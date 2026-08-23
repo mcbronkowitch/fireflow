@@ -530,7 +530,12 @@ Die Liste von 2026-08-08 nannte an erster Stelle die Einstufung der Parameter.
   könnten.
 - **Der Mux-Scan selbst.** libDaisys `InitMux` kann 8:1 an GPIOs, gebraucht wird
   16:1 mit Adressen aus der 595-Kette (§3). Die Umschaltung muss geschrieben
-  werden, sie steht in keinem Plan, und niemand hat sie in CPU-Zeit veranschlagt.
+  werden und ist in CPU-Zeit nicht veranschlagt. **Seit dem 2026-08-23 steht
+  sie in einem Plan:**
+  [`2026-08-23-mux-scan-placement-probe.md`](../superpowers/plans/2026-08-23-mux-scan-placement-probe.md).
+  Der misst auf dem vorhandenen Submodule **ohne Panel und ohne Mux**, was ein
+  Ketten-Write kostet und wo er laufen soll — und beantwortet die Einschwingzeit
+  ausdrücklich **nicht**.
 - **Die Wahl 8:1 gegen 16:1.** Hängt an Verfügbarkeit und Bestückungspreis.
 
 ### Ist das eine Zeit- oder eine Machbarkeitsfrage?
@@ -556,6 +561,19 @@ die Kapazität passt mit Reserve in jeder Zeile (§3), und der DMA-Scan der
    Reserve. Beherrschbar — ein voller Sweep muss nicht jeden Block laufen, die
    Potis sind auch bei einem Sweep alle paar Blöcke schnell genug —, aber nicht
    gratis, und **ungemessen**. Wenn etwas den Plan kippt, dann das.
+
+   > **Nachtrag 2026-08-23: dieser Absatz setzt still voraus, dass der Scan im
+   > Audio-Callback sitzt, und genau die Frage hat nie jemand gestellt.** Ein
+   > Vordergrund-Scan, getaktet auf einen Schritt pro Block, taucht im
+   > `CpuLoadMeter` gar nicht auf — er verbraucht Leerlaufzeit, nicht
+   > Callback-Zeit, und die Reserve oben wäre dann die falsche Zahl für dieses
+   > Problem. Dass ein Schritt pro Block reicht, ist Arithmetik: 32 Schritte
+   > (acht 16:1-Muxe) à 2 ms sind 64 ms für einen Vollscan, ~15,6 Hz pro Kanal;
+   > mit vier Chips die Hälfte. Nebenbei fällt damit auch die Einschwingzeit
+   > als Kostenposten weg — die Blockperiode **ist** das Einschwingfenster,
+   > wenn die Adresse am Blockende geschrieben und am Blockanfang gelesen wird.
+   > Ob der Vordergrund mitkommt, ist gemessen oder es ist nichts; der Plan
+   > oben zählt dafür die tatsächlich geschafften Schritte mit.
 2. **Der ungeklärte Block-Artefakt.** Auf dem Board liegt ein Störton auf der
    Blockrate, 28 dB über dem Desktop-Referenzpunkt. Zwei Messungen vom
    2026-08-08 sagen dazu: den Callback zwingen, nur Nullen zu schreiben, ändert
@@ -580,7 +598,30 @@ Firmware-Projekt.
 **Fazit für die Planung:** die Machbarkeit steht nicht zur Debatte, es gibt
 zwei Wege und der Rückfallweg ist der sauberere. Zur Debatte steht der Aufwand
 und ob die dünnste Ressource des Projekts — die CPU-Reserve — ihn mitträgt.
-**Das ist messbar, sobald ein Board mit Panel dranhängt, und vorher nicht.**
+
+> **Korrektur 2026-08-23.** Hier stand: „Das ist messbar, sobald ein Board mit
+> Panel dranhängt, und vorher nicht." Der zweite Halbsatz ist falsch, und er
+> hat die ganze Position teurer aussehen lassen, als sie ist. **Zwei der drei
+> Posten oben brauchen kein Panel:** die Platzierungsfrage (Callback gegen
+> Vordergrund) und der Block-Artefakt-Posten hängen an einer periodischen
+> GPIO-Salve auf den vier Kettenpins — und die lässt sich auf dem
+> unbestückten Submodule erzeugen, das seit dem 8. August auf dem Tisch liegt.
+> Nur Punkt 3, die Einschwingzeit, braucht wirklich einen Mux am
+> Steckbrett. Der Plan von diesem Tag misst deshalb die zwei billigen
+> Posten sofort und lässt 5b liegen, bis die Teile da sind.
+>
+> **Was das entscheidet, ist nicht „mehr CPU sparen".** Die drei Ausgänge
+> sind: die Platzierung (und damit, ob die CPU-Reserve für dieses Problem
+> überhaupt die richtige Zahl ist), ob der Co-Controller in den Schaltplan der
+> Control-PCB muss — eine Entscheidung, die **vor** der Bestellung fällt und
+> danach nicht mehr —, und ob eine Ketten-Salve pro Block den Störton auf der
+> Blockrate bewegt. Der dritte ist durch kein Sparen zu beheben; er wäre ein
+> Befund über Aufbau und Entkopplung.
+>
+> **Die ehrliche Grenze der billigen Hälfte:** an den vier Pins hängt nichts.
+> Der Treiberstrom ist damit kleiner als in der Serie, also ist ein
+> unveränderter Störton eine **untere Schranke und kein Freispruch** — ein
+> verschlechterter dagegen ist eindeutig.
 - **Ob ein `MAX11300` das Buchsenfeld übernimmt.** Der Kandidat ist real (ein
   Modul ist vorhanden und verdrahtet), aber er kostet SPI2 und damit zwei rohe
   ADC-Pins, und seine CPU-Kosten sind ungemessen.
