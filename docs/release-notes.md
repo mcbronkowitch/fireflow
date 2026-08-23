@@ -8,38 +8,33 @@
   Everything below the comment is public.
 -->
 
-## FireFlow 2.21.8
+## FireFlow 2.21.9
 
-**PULL — the two decks can share a chord now.** A new bipolar knob, centred in
-the panel under CHOKE, draws one deck's melody onto the other deck's sounding
-harmony. Turn it left and deck A leads: every note deck B's melodic lane fires
-has a chance to land on a pitch class deck A is currently sounding, in whatever
-octave deck B's own register puts it, instead of on its own scale. Turn it
-right and the roles swap — the same left/right convention CHOKE already uses.
-Centred, it does nothing; a small dead zone around noon keeps it reliably off
-there on a real knob rather than needing a pixel-perfect click-stop.
+A drawing release for the 60 HP hardware panel (`FireflowHW`). **No engine
+change** — nothing sounds different, and the main `Fireflow` module is
+untouched.
 
-**The pull is a probability, not a snap.** How far you turn PULL sets how often
-a follower note is pulled onto the leader's chord rather than how hard — near
-the dead zone only a few notes bind, at full deflection every one does. A note
-already sounding keeps listening: if the leader's chord changes underneath a
-bound note, that note glides onto the new chord over the same short slide the
-instrument already uses whenever a scale or root changes, instead of waiting
-for its own next strike.
+**FILT is a large cap again, and VOICE now stands in the same figure as
+TIMING.** The filter had been shrunk to a small knob in August because a large
+one could not sit on the 13 mm pitch it shared with TIMB and DPTH — a large cap
+needs 14.5 mm to a small neighbour. Rather than shrink the knob to fit the row,
+the row changed: VOICE's lower half is now small–LARGE–small with the filter
+centred, which is exactly how TIDE / MRPH / PACE has stood in TIMING since the
+graphics round. Both rows are now written from one pitch and one centre line, so
+re-tuning the figure re-tunes both instead of letting them drift apart.
 
-**Not every deck has a chord to offer.** SAMPLER and BBD decks use their pitch
-lane for something other than a note — a read position, a clock bend — so
-leading from one of those simply does nothing, in either mode; the follower
-side behaves normally as soon as the other deck leads instead.
+**What that fixes:** VOICE was the only two-row group on the plate running on
+three heights, with its two small knobs crowded together on the left, a 15.6 mm
+hole in the middle and the large filter alone on a third line. It read restless
+next to MOTION beside it. The new row is symmetric — 5.6 mm between bodies on
+both sides, 10.7 mm of air to the frame on both ends.
 
-**On the 60 HP hardware draft, PULL joins the GLOBAL row as its fourth knob,**
-right beside CHOKE — the centre's only other bipolar control, and the one whose
-sign convention PULL borrows. Making room re-pitched the row: the three knobs
-that were there each moved 6.5 mm left so the four re-centre, at the same
-spacing they always had.
+**The FIREFLOW wordmark and the "60 HP" legend have come off the plate** while
+the panel's branding is redrawn. The header strip is deliberately empty for now
+rather than carrying a placeholder.
 
-Both the dead zone and the pull-probability curve are first-try values and have
-not been through a listening pass yet.
+The hardware panel remains a design study. No hardware is ordered, and the
+module is still labelled DRAFT.
 
 ## Install
 
