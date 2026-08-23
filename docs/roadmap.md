@@ -3401,6 +3401,20 @@ third angle. That artifact is undiminished and still unexplained; this capture
 only proves the mux question is independent of it. It now has a rig and a
 number; it needs its own session.
 
+**2026-08-23, evening — that session ran, and the tone turned out to be three
+sources** ([`docs/bench/2026-08-23-978cbaf-artifact-triage.md`](bench/2026-08-23-978cbaf-artifact-triage.md)).
+The 500 Hz series is tied to the audio block: stop the audio and it drops 30 dB
+to −92.9 dBFS. The loudest component is not it at all but a **6.35 kHz switcher
+cluster from the MAX11300 breakout** — 38 dB ablation, and 31 dB louder after the
+module was pulled and re-seated, which is how it became audible in the first
+place. USB's start-of-frame is measurable at exactly 1 kHz and thirty decibels
+under that. Nothing changed pitch; a louder source was uncovered when a quieter
+one stopped. **The lead worth following:** two images running the same engine at
+the same operating point differ by 15.5 dB in the artifact, and their callbacks
+differ by two cycle-counter reads — so the difference is in the binary, not the
+code path, and the discriminating build is one image with `CpuLoadMeter` linked
+but never called.
+
 **And one hardware fact that cost an hour to establish.** Pulling the MAX11300
 module off the desk rig makes the engine inaudible at the jack and re-inserting
 it brings the sound back — same image, same md5, nothing else changed. The

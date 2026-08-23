@@ -638,6 +638,17 @@ die Kapazität passt mit Reserve in jeder Zeile (§3), und der DMA-Scan der
    > stabil auf −60,2 bis −61,2 — er folgt dem Interface-Gain und sonst nichts.
    > Das ist der Befund vom 8. August, ungemindert, und er gehört nicht zu dieser
    > Frage: er ist ohne jeden Mux da.
+   >
+   > **Am Abend des 2026-08-23 nachgemessen, und es sind drei Quellen**
+   > ([`2026-08-23-978cbaf-artifact-triage.md`](../bench/2026-08-23-978cbaf-artifact-triage.md)):
+   > die 500-Hz-Reihe hängt am Audioblock (mit gestopptem Audio fällt sie um
+   > 30 dB), ein Cluster um **6,35 kHz ist der Schaltwandler des
+   > MAX11300-Moduls** (38 dB Ablation — Modul drin −55,8, draußen −93,6; und
+   > 31 dB lauter, nachdem das Modul einmal gezogen und wieder gesteckt wurde),
+   > und USB steht mit seinem Start-of-Frame bei exakt 1 kHz, dreissig Dezibel
+   > darunter. **Für die PCB-Regeln zählt vor allem der zweite Punkt:** neben
+   > diesem Audioweg darf kein Schaltwandler auf derselben Versorgung hängen,
+   > und ein Steckkontakt entscheidet über 31 dB.
 3. **Die Einschwingzeit pro Kanal.** Sie entscheidet, wie viele Adressschritte
    pro Block gehen — nicht, ob es überhaupt geht. Der harmloseste der drei.
 

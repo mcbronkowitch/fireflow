@@ -1,0 +1,105 @@
+# The board's standing tone is three sources, not one
+
+**Date** 2026-08-23, evening · **Board** `patch_sm`, serial `385138563330`
+(the submodule with the 3.5 mm jacks) · **Images** `shell-audio-mux0.bin` and
+`shell-cpu-mux0.bin`, both built at `978cbaf`; `shell/` unchanged since ·
+**Capture** `ffmpeg -f dshow -i audio="Line (Universal Audio Twin USB)"`,
+interface gain fixed across every run, **channel 0 only** — the rig is mono ·
+**Analysis** band RMS by masking rFFT bins and transforming back, the method of
+`tools/blockrate_fft.py`.
+
+This started as the artifact session that
+[`2026-08-23-978cbaf-shell-mux-placement.md`](2026-08-23-978cbaf-shell-mux-placement.md)
+handed on: a 500 Hz harmonic series, diagnosed 8 Aug, never explained. It ends
+somewhere else. What sounded like one tone that changed pitch is three separate
+sources, and the loudest of them is not the one under investigation.
+
+## The numbers
+
+| condition | 500 Hz series | 500 Hz alone | ~6.35 kHz | 12.7 kHz |
+|---|---:|---:|---:|---:|
+| audio image, module **in**, morning | −60.58 | — | −86.86 | −97.76 |
+| audio image, module **in**, after re-seating | −60.82 | −63.31 | **−55.79** | −71.95 |
+| audio image, module **out** | −60.92 | — | **−93.57** | −101.01 |
+| audio image, module **out**, 20 s | −60.73 | — | −93.22 | −100.68 |
+| probe image, audio **running** | −74.39 | −78.54 | −55.73 | −65.67 |
+| probe image, audio **stopped**, USB up | −77.49 | **−92.94** | −55.29 | −65.50 |
+
+All dBFS. "Module" is the MAX11300 breakout on the desk rig. The two probe-image
+rows are one 30 s capture split at the point where `main.cpp:218` calls
+`StopAudio` — 2500 blocks of 96 at 48 kHz, i.e. 5 s in.
+
+## What it says
+
+**1. The audible whine is the MAX11300 module, and the ablation is 38 dB.**
+A cluster around 6.35 kHz with sidebands ~20 Hz apart and a second harmonic at
+12.7 kHz — a switcher's signature, not a tone from the engine. Module in:
+−55.8 dBFS. Module out: −93.6. It is also audible acoustically at the module
+itself, which is how it got noticed.
+
+**2. Its severity depends on how the module sits.** −86.9 dBFS in the morning,
+−55.8 after it was pulled and re-inserted: **31 dB louder**, same module, same
+board, same image. So the number above is not a property of the part; it is a
+property of that contact on that afternoon. Anything built on the absolute
+value is built on sand.
+
+**3. "The tone got higher" was a different source becoming dominant.** With
+audio stopped the 500 Hz line falls to −92.9 and the whine holds at −55.3,
+dominating by 22 dB. Nothing shifted pitch; the lower source went away and
+uncovered a higher one that had been there all along.
+
+**4. The 500 Hz line is tied to the audio callback.** −63.3 with audio running,
+**−92.9 with it stopped** — 30 dB. Whatever couples it in needs the audio block
+to be happening. That is consistent with the 8 Aug pair of measurements
+(forcing silence changed nothing, filling the idle time with a `nop` loop
+lowered it 7.5 dB) and it narrows them: not the signal path, but the block.
+
+**5. USB's start-of-frame is real, measurable and irrelevant.** With audio
+stopped there is a line at exactly 1000.0 Hz, which at that moment can only be
+USB full speed. It sits near −86 dBFS, thirty decibels under the whine. It was
+worth predicting and it is not worth fixing.
+
+> **A limit of this rig that follows from it:** 1 kHz is the second harmonic of
+> the block rate, so USB's SOF and the artifact are **not spectrally
+> separable**. Only a state with audio stopped tells them apart. Any future
+> claim about a 1 kHz component has to say which state it was measured in.
+
+**6. The open lead, and it is a good one.** Two images, the same engine, the
+same operating point, audio running in both: the artifact differs by
+**15.5 dB** (−63.0 against −78.5 on the fundamental, matched 4 s windows).
+While the probe is running, the two callback bodies differ by two cycle-counter
+reads and one increment — work that cannot account for 15 dB. So the difference
+lives outside the callback body, and what is left is the binary itself: layout,
+placement, what the linker did with `inst.process`. That is a candidate class,
+not a mechanism, and it is deliberately not named further here.
+
+**The experiment it implies** is cheap and discriminating: build one image with
+`CpuLoadMeter` linked but never called, so the two binaries differ in layout
+and in nothing else. If the artifact follows the layout, this stops being a
+mystery and becomes a build-time property. If it does not, the difference is
+somewhere neither image has been read for yet.
+
+## And one hardware fact
+
+Pulling the module makes the engine **inaudible at the jack** — the program
+material drops to the noise floor while the firmware keeps reporting
+74.33 % avg / 76.68 % max, identical to the baseline it printed on the *other*
+submodule. Re-inserting it brings the sound back, same image, same md5. The
+module is electrically load-bearing for the audio output on this desk rig.
+What it provides has not been traced, and the control PCB has to provide it on
+purpose rather than by accident.
+
+## Honest limits
+
+- **One channel, one board, one afternoon.** Every figure is channel 0 of a
+  mono-patched interface (see the placement capture's note on the 6 dB trap the
+  first pass fell into).
+- **The whine's level is not a repeatable number** — finding 2 is the reason.
+  The 38 dB ablation is solid because both of its rows come from the same
+  seating; the −55.8 is not.
+- **The program material wanders 6.5 dB per second**, so anything quoted
+  relative to it needs a window of tens of seconds. The artifact bands
+  themselves are stable to ~1 dB across twelve captures.
+- **The mechanism of the 500 Hz series is still unnamed.** Three measurements
+  now constrain it — not in the samples, sensitive to idle-time content,
+  sensitive to the binary — and none of them names it.
