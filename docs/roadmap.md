@@ -2908,6 +2908,35 @@ Two engine directions sit ahead of M5k with no design at all: **FEED** and
 were never built. Each needs its own brainstorming round before it can have a
 spec, which is why neither counts as a designed round above.
 
+### `test_panel.py`'s init snapshot guard does not assert its converse ⬜ (small, own task)
+
+Found while adding PULL to the panel (2026-08-22), **pre-existing and not caused
+by that work**. `res/test_panel.py`'s `approved` dict is documented as an
+"independent second transcription" of `gen_panel.py`'s `INIT_DEFAULTS` — the
+whole point being that a boot value has to be typed twice, by hand, before it
+counts. The loop that checks it is:
+
+```python
+for name, want in approved.items():
+    if name not in gp.INIT_DEFAULTS: continue
+    check(...)
+```
+
+It validates only the names `approved` already lists, and never asserts that
+every `INIT_DEFAULTS` key appears in `approved`. **A new control whose
+`approved` entry is simply forgotten leaves the guard GREEN** — the second
+transcription is optional in practice, which is exactly what it was built to
+prevent. Confirmed independently by three readers during the PULL round; PULL's
+own entry was written, so nothing shipped wrong.
+
+Why it is not a one-liner, and why it was left alone rather than patched
+mid-feature: `approved` carries 72 entries against `INIT_DEFAULTS`' ~121,
+because `gen_panel.py` appends `MODBTN` plus 48 `MODD_*` keys
+programmatically. A naive `set(INIT_DEFAULTS) - set(approved)` assertion is red
+on the day it is written. Closing this needs an explicit allowlist for the
+programmatic block — a real change to a guard, with its own RED to prove, not a
+drive-by.
+
 ### BODY level parity ⬜ (own session, next of the parity work)
 
 **BODY sits 10 dB below SYNTH as a drone and 29 dB below it struck**, measured

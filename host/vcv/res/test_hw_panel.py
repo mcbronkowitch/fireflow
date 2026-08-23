@@ -852,6 +852,26 @@ def test_drawing_geometry():
     check(abs(by["LINK_A"].y - 89.86) < 1e-9, "LINK did not rise toward MIX")
     check(abs(by["REV_DECAY"].y - 79.00) < 1e-9, "DECY did not drop away from MORPH")
     check(abs(by["REV_TONE"].y - 97.00) < 1e-9, "TONE did not follow DECY")
+    # The GLOBAL centre row, approved by eye on 2026-08-23 after PULL made it
+    # four knobs wide. Pinned for the same reason DECY/TONE above are: it is a
+    # looked-at decision, and without a pin the next control hunting for space
+    # re-pitches this row again and nobody notices.
+    #
+    # What is being held: the 13.0 mm pitch, the group centred on 152.40, and
+    # the order SCAL DRFT CHOK PULL -- PULL last so it sits beside CHOKE, the
+    # centre's only other bipolar control. Do not "restore" 139.40/152.40/
+    # 165.40 here; that was the three-knob layout and it cannot hold four
+    # (hanging PULL off the right end lands it at 178.40, whose body overruns
+    # the cell edge by 2.60 mm -- measured, see gen_hw_panel.py's CENTER_POS).
+    global_row = ("SCALE", "DRIFT", "CHOKE", "PULL")
+    for i, enum in enumerate(global_row):
+        want = 132.90 + i * 13.0
+        check(abs(by[enum].x - want) < 1e-9,
+              f"{enum} is at x={by[enum].x}, not {want} -- the GLOBAL row was re-pitched")
+        check(abs(by[enum].y - hw.Y_TOP) < 1e-9, f"{enum} left the GLOBAL status row")
+    span = by[global_row[-1]].x - by[global_row[0]].x
+    check(abs(span / 2.0 + by[global_row[0]].x - 152.40) < 1e-9,
+          "the GLOBAL row is no longer centred on the plate's centre line")
     check(abs(by["SHIFTBTN"].y - hw.JACK_Y) < 1e-9, "SHIFT is not on the jack row")
     check(abs(by["MODBTN"].y - hw.JACK_Y) < 1e-9, "MOD is not on the jack row")
     # Lettering Rack has to draw itself: brand block plus two rows per frame
