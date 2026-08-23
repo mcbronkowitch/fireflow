@@ -85,9 +85,24 @@ ifneq ($(filter $(SHELL_CPU_PROBE),0 1),$(SHELL_CPU_PROBE))
 $(error SHELL_CPU_PROBE must be 0 or 1)
 endif
 
+# --- Mux-Sonde -----------------------------------------------------------
+# Drei Stellungen, nicht zwei: 0 aus, 1 der Scan IM Audio-Callback, 2 der
+# Scan im Vordergrund, getaktet auf einen Schritt pro Block. Die Frage
+# dieser Runde ist genau der Unterschied zwischen 1 und 2 -- deshalb muss
+# derselbe Arbeitsumfang an beiden Stellen laufen und nicht ungefaehr
+# derselbe. Plan:
+# ../docs/superpowers/plans/2026-08-23-mux-scan-placement-probe.md
+SHELL_MUX_PROBE ?= 0
+
+ifneq ($(filter $(SHELL_MUX_PROBE),0 1 2),$(SHELL_MUX_PROBE))
+$(error SHELL_MUX_PROBE must be 0, 1 or 2)
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	sdram_mem.cpp \
+	mux_plan.cpp \
+	mux_scan.cpp \
 	../engine/body/mode_bank.cpp \
 	../engine/body/ks_string.cpp \
 	../engine/body/body_voice.cpp \
@@ -127,24 +142,42 @@ override OPT := -O3
 SYSTEM_FILES_DIR = $(LIBDAISY_DIR)/core
 include $(SYSTEM_FILES_DIR)/Makefile
 
-# --- generierter Selbsttest-Header ---------------------------------------
-# Als echter Header und mit echter Abhaengigkeitskante, nicht als blankes
+# --- generierte Schalter-Header ------------------------------------------
+# Als echte Header und mit echter Abhaengigkeitskante, nicht als blankes
 # -D. Die Begruendung steht in write_shell_selftest.py; es ist dieselbe
 # stale-Objekt-Falle, an der die Bench schon einmal haengengeblieben ist.
+#
+# UND DIE KANTE ALLEIN REICHT NICHT -- warum, steht im naechsten Block. Wer
+# hier ein Objekt vergisst, das einen Schalter liest, bekommt genau diesen
+# Fehler zurueck, und er sieht wie eine Messung aus.
 C_INCLUDES += -I$(BUILD_DIR)
+
+SWITCH_OBJECTS = $(BUILD_DIR)/main.o
+
+# ZUR PARSE-ZEIT, nicht als Regel, und das ist der Kern der Reparatur vom
+# 2026-08-23. Als Regel mit FORCE hat es ZWEIMAL nicht gehalten:
+#
+#   1. Die Zeitstempel-Kante allein reicht nicht. Der geschriebene Header lag
+#      0,36 s hinter main.o -- dieselbe Wanduhrsekunde, fuer Make also "nicht
+#      neuer", also kein Neuuebersetzen.
+#   2. Das Objekt aus dem Rezept heraus zu loeschen reicht auch nicht: Make
+#      hat den Verzeichnisinhalt zu diesem Zeitpunkt laengst gelesen und
+#      merkt das Verschwinden innerhalb desselben Laufs nicht.
+#
+# Beide Male kamen Images heraus, die sich byte-identisch verglichen, obwohl
+# der Schalter anders stand. $(shell ...) laeuft, waehrend das Makefile
+# gelesen wird -- also bevor Make den Graphen baut und bevor es irgendetwas
+# gestattet hat. Aendert sich der Wert, ist main.o weg, wenn der Graph
+# entsteht, und es gibt nichts zu glauben.
+SWITCH_HEADERS := \
+  $(shell python write_shell_selftest.py $(BUILD_DIR)/shell_selftest.h $(SHELL_SELFTEST) $(SWITCH_OBJECTS)) \
+  $(shell python write_shell_cpu_probe.py $(BUILD_DIR)/shell_cpu_probe.h $(SHELL_CPU_PROBE) $(SWITCH_OBJECTS)) \
+  $(shell python write_shell_mux_probe.py $(BUILD_DIR)/shell_mux_probe.h $(SHELL_MUX_PROBE) $(SWITCH_OBJECTS))
+
+$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.h $(BUILD_DIR)/shell_mux_probe.h
 
 .PHONY: FORCE
 FORCE:
-
-$(BUILD_DIR)/shell_selftest.h: FORCE | $(BUILD_DIR)
-	@python write_shell_selftest.py $@ $(SHELL_SELFTEST)
-
-$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h
-
-$(BUILD_DIR)/shell_cpu_probe.h: FORCE | $(BUILD_DIR)
-	@python write_shell_cpu_probe.py $@ $(SHELL_CPU_PROBE)
-
-$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_cpu_probe.h
 
 # --- die zwei physischen Images -----------------------------------------
 # libDaisys `all` wuerde ein flaches shell.bin ueber SRAM (0x24000000) UND
@@ -160,14 +193,22 @@ $(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_cpu_probe.h
 #                      das Ziel existiert, damit man es vergleichen kann.
 QSPI_SECTION = .qspiflash_data
 
+# FORCE an allen drei Ableitungen, und das ist kein Schluderfix. Make hat auf
+# diesem Rechner Sekundenaufloesung und vergleicht mit "echt neuer": werden
+# zwei Schalterstellungen kurz hintereinander gebaut, liegt die frisch
+# gelinkte shell.elf in DERSELBEN Sekunde wie das shell-sram.bin der
+# vorigen Stellung -- und objcopy laeuft nicht. Am 2026-08-23 sind so zwei
+# Images herausgekommen, die sich byte-identisch verglichen, obwohl ihre
+# ELFs verschieden waren. objcopy kostet Millisekunden, die Kante kostet
+# eine Messung.
 .PHONY: images
 images: $(BUILD_DIR)/$(TARGET)-sram.bin $(BUILD_DIR)/$(TARGET)-qspi.bin
 
-$(BUILD_DIR)/$(TARGET)-sram.elf: $(BUILD_DIR)/$(TARGET).elf
+$(BUILD_DIR)/$(TARGET)-sram.elf: $(BUILD_DIR)/$(TARGET).elf FORCE
 	$(CP) --remove-section=$(QSPI_SECTION) $< $@
 
-$(BUILD_DIR)/$(TARGET)-sram.bin: $(BUILD_DIR)/$(TARGET)-sram.elf
+$(BUILD_DIR)/$(TARGET)-sram.bin: $(BUILD_DIR)/$(TARGET)-sram.elf FORCE
 	$(CP) -O binary -S $< $@
 
-$(BUILD_DIR)/$(TARGET)-qspi.bin: $(BUILD_DIR)/$(TARGET).elf
+$(BUILD_DIR)/$(TARGET)-qspi.bin: $(BUILD_DIR)/$(TARGET).elf FORCE
 	$(CP) -O binary --only-section=$(QSPI_SECTION) $< $@

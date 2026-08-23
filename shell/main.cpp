@@ -9,12 +9,25 @@
 // Abhaengigkeitskante auf dieses Objekt (siehe dort, "Selbsttest").
 #include "shell_selftest.h"
 #include "shell_cpu_probe.h"
+#include "shell_mux_probe.h"
 #include "hw/board.h"
 #include "sdram_mem.h"
 #include "instrument.h"
 
 static bench::Board    hw;
 static spky::Instrument inst;
+
+#if SHELL_MUX_PROBE
+#include "mux_scan.h"
+static shell::MuxScan g_mux;
+namespace {
+// Ticked by the callback, read by the foreground. The foreground variant has
+// to do the SAME number of steps per unit time as the callback variant, or
+// the two numbers are not comparable -- pacing it off the audio block is the
+// only clock both share.
+volatile uint32_t g_block_tick = 0;
+}
+#endif
 
 #if defined(SHELL_CPU_PROBE)
 #include <cstdint>
@@ -91,13 +104,27 @@ static void AudioCallback(daisy::AudioHandle::InputBuffer  in,
 
     g_meter.OnBlockStart();
     inst.process(in[0], in[1], out[0], out[1], size);
+#if SHELL_MUX_PROBE == 1
+    g_mux.step(hw);            // INSIDE the meter: that is the point
+#endif
     g_meter.OnBlockEnd();
+
+#if SHELL_MUX_PROBE == 2
+    g_block_tick = g_block_tick + 1;   // outside the meter, on purpose
+#endif
 
     if(++g_probe_blocks >= g_probe_limit) g_probe_done = true;
     return;
 #endif
 
     inst.process(in[0], in[1], out[0], out[1], size);
+
+#if SHELL_MUX_PROBE == 1
+    g_mux.step(hw);
+#endif
+#if SHELL_MUX_PROBE == 2
+    g_block_tick = g_block_tick + 1;
+#endif
 
 #if defined(SHELL_SELFTEST)
     // Laeuft nur die erste Sekunde und danach nie wieder -- aber der
@@ -147,6 +174,14 @@ int main(void)
     inst.set_rate(spky::PART_A, 0.4f);
     inst.set_density(spky::PART_A, 0.6f);
 
+#if SHELL_MUX_PROBE
+    // Vier Pins als Ausgang, einer als Eingang -- mehr passiert hier nicht.
+    // Die Werte, die der Scan liest, gehen ABSICHTLICH nicht in die Engine:
+    // der Betriebspunkt muss derselbe bleiben wie im Basis-Image, sonst
+    // vergleicht die Audiomessung zwei verschiedene Instrumente.
+    g_mux.init();
+#endif
+
 #if defined(SHELL_CPU_PROBE)
     // Die Blockgroesse wird NICHT angenommen, sondern beim Board erfragt und
     // mitgemeldet. Am 8. August ist genau diese Annahme einmal schiefgegangen
@@ -162,7 +197,24 @@ int main(void)
     g_probe_done   = false;
 
     hw.StartAudio(AudioCallback);
+#if SHELL_MUX_PROBE == 2
+    // Der Vordergrund-Scan, getaktet am Audioblock. NICHT freilaufend: er
+    // muss pro Zeiteinheit genau so viele Schritte schaffen wie die
+    // Callback-Variante, sonst vergleicht die Runde zwei Arbeitsmengen und
+    // nicht zwei Platzierungen.
+    uint32_t last_tick = 0;
+    while(!g_probe_done)
+    {
+        const uint32_t t = g_block_tick;
+        if(t != last_tick)
+        {
+            last_tick = t;
+            g_mux.step(hw);
+        }
+    }
+#else
     while(!g_probe_done) { }          // der Callback begrenzt sich selbst
+#endif
     hw.StopAudio();
 
     // USB ERST JETZT hochfahren, nach der Messung. USB-CDC kostet auf diesem
@@ -179,11 +231,21 @@ int main(void)
     // das Ergebnis trotzdem bekommt -- es gibt hier keinen Handshake.
     while(1)
     {
-        hw.PrintLine("SHELL_CPU sr=%d block=%d blocks=%d avg=%d max=%d min=%d hundredths_pct",
+        // steps= ist kein Beiwerk: die Vordergrund-Variante ist nur dann
+        // gratis, wenn sie MITKOMMT. Ein Rueckstand gegen blocks= ist der
+        // eigentliche Befund und darf nicht als Prozentzahl unsichtbar sein.
+        hw.PrintLine("SHELL_CPU sr=%d block=%d blocks=%d avg=%d max=%d min=%d "
+                     "mux=%d steps=%d hundredths_pct",
                      static_cast<int>(probe_sr), static_cast<int>(probe_bs),
                      static_cast<int>(g_probe_limit),
                      static_cast<int>(avg), static_cast<int>(mx),
-                     static_cast<int>(mn));
+                     static_cast<int>(mn),
+                     static_cast<int>(SHELL_MUX_PROBE),
+#if SHELL_MUX_PROBE
+                     static_cast<int>(g_mux.steps()));
+#else
+                     0);
+#endif
         hw.Delay(500);
     }
 #endif
@@ -235,6 +297,20 @@ int main(void)
             hw.Delay(250);
             hw.SetLed(false);
             hw.Delay(250);
+        }
+    }
+#elif SHELL_MUX_PROBE == 2
+    // Ohne diese Schleife scannt das Audio-Image in Stellung 2 gar nichts --
+    // und eine Aufnahme, die nichts misst, sieht aus wie eine, die nichts
+    // findet.
+    uint32_t idle_tick = 0;
+    while(1)
+    {
+        const uint32_t t = g_block_tick;
+        if(t != idle_tick)
+        {
+            idle_tick = t;
+            g_mux.step(hw);
         }
     }
 #else
