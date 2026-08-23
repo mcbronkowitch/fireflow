@@ -37,6 +37,21 @@ A cluster around 6.35 kHz with sidebands ~20 Hz apart and a second harmonic at
 −55.8 dBFS. Module out: −93.6. It is also audible acoustically at the module
 itself, which is how it got noticed.
 
+> **Corroborated by ear, and that matters here.** Bastian matched the pitch of
+> the whine *in the recorded signal* against the acoustic whine audible at the
+> module itself and reports them as the same. An ear-match is not a
+> measurement, but it is an **independent** observation, and it rules out the
+> reading the ablation alone cannot: that something else on the same path
+> happens to ring at 6.35 kHz. The source is the part you can hear.
+
+> **And it is free-running.** The question posed earlier in the session — does
+> the whine change at the 5 s mark, when the audio callback stops and the
+> board's current draw changes pattern in one step — is answered **no**, twice
+> over: the measured level moves 0.44 dB (−55.73 running, −55.29 stopped) and
+> the pitch is unchanged by ear. The converter is not modulated by the MCU's
+> compute pattern. The 500 Hz series is (finding 4); this is not. Whatever
+> couples the whine in can therefore be attacked without touching firmware.
+
 **2. Its severity depends on how the module sits.** −86.9 dBFS in the morning,
 −55.8 after it was pulled and re-inserted: **31 dB louder**, same module, same
 board, same image. So the number above is not a property of the part; it is a
@@ -46,7 +61,20 @@ value is built on sand.
 **3. "The tone got higher" was a different source becoming dominant.** With
 audio stopped the 500 Hz line falls to −92.9 and the whine holds at −55.3,
 dominating by 22 dB. Nothing shifted pitch; the lower source went away and
-uncovered a higher one that had been there all along.
+uncovered a higher one.
+
+But **not** one that had been there all along at this level, which is the
+tempting reading and the wrong one:
+
+| | 500 Hz series | whine | gap |
+|---|---:|---:|---:|
+| morning, module in | −60.58 | −86.86 | whine **26 dB under** |
+| after re-seating | −60.82 | −55.79 | whine **5 dB over** |
+
+The series moved 0.24 dB. The whine moved **31 dB**. So it was masked all day —
+but by its own weakness, not by the artifact's strength, and what uncovered it
+was the re-seating and not the audio stopping. Both had to happen for it to
+become the thing one notices.
 
 **4. The 500 Hz line is tied to the audio callback.** −63.3 with audio running,
 **−92.9 with it stopped** — 30 dB. Whatever couples it in needs the audio block
