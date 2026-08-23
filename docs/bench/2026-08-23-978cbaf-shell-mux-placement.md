@@ -114,13 +114,13 @@ relative to total RMS so the unknown DAC-to-interface damping cancels.
 
 | image | placement | total RMS | 500 Hz band | excess |
 |---|---|---:|---:|---:|
-| mux0, run 1 | scan off | −61.16 | −68.96 | **−7.80** |
-| mux0, run 2 | scan off | −61.33 | −68.98 | **−7.65** |
-| mux1, run 1 | audio callback | −60.94 | −69.19 | **−8.26** |
-| mux1, run 2 | audio callback | −61.04 | −69.21 | **−8.18** |
-| mux2, run 1 | foreground | −57.77 | −61.75 | **−3.98** |
-| mux2, run 2 | foreground | −57.63 | −61.71 | **−4.08** |
-| mux2, run 3 | foreground | −57.54 | −61.66 | **−4.12** |
+| mux0, run 1 | scan off | −55.14 | −62.93 | **−7.79** |
+| mux0, run 2 | scan off | −55.31 | −62.96 | **−7.65** |
+| mux1, run 1 | audio callback | −54.92 | −63.17 | **−8.26** |
+| mux1, run 2 | audio callback | −55.02 | −63.19 | **−8.18** |
+| mux2, run 1 | foreground | −51.75 | −55.73 | **−3.98** |
+| mux2, run 2 | foreground | −51.61 | −55.69 | **−4.08** |
+| mux2, run 3 | foreground | −51.52 | −55.64 | **−4.12** |
 
 All figures dBFS; `excess` is band minus total, in dB. Run-to-run spread within
 one image is **0.15 dB** on `excess` at worst — the resolution of this half, and
@@ -141,24 +141,37 @@ everything else:
 
 | image | total | 500 Hz series | residual |
 |---|---:|---:|---:|
-| mux0, runs 1 / 2 | −61.16 / −61.33 | −66.59 / −66.60 | −62.62 / −62.86 |
-| mux1, runs 1 / 2 | −60.94 / −61.04 | −66.76 / −66.78 | −62.25 / −62.39 |
-| mux2, runs 1 / 3 | −57.77 / −57.54 | **−59.35 / −59.25** | −62.94 / −62.42 |
+| mux0, runs 1 / 2 | −55.14 / −55.31 | −60.57 / −60.58 | −56.60 / −56.84 |
+| mux1, runs 1 / 2 | −54.92 / −55.02 | −60.74 / −60.76 | −56.23 / −56.37 |
+| mux2, runs 1 / 3 | −51.75 / −51.52 | **−53.33 / −53.23** | −56.92 / −56.40 |
 
-The residual is the same in all three images — 0.7 dB of spread, no trend. The
+The residual is the same in all three images — 0.7 dB of spread, no trend, and
+that is the comparison this table is for; its absolute value is a function of
+which stretch of a wandering program got captured (see 5c). The
 foreground's entire 3.6 dB of extra total RMS is the harmonic series rising
 7.3 dB. The callback's series is within 0.2 dB of the baseline's, which is the
 same null as finding 4 seen a second way and is the stronger statement of it:
 the callback does not touch the artifact at all.
 
 **5c. The artifact was already there, and it is audible.** In the baseline —
-scan off — the 500 Hz series sits at −66.6 dBFS against −62.6 dBFS of program:
-a pulse train with a full harmonic series **4 dB under the music**. Bastian
-hears it as a standing tone with the synth signal distorting oddly on top, and
-that report was volunteered while `mux2` was running, i.e. against the worst of
-the three. Nothing clips: peak sample 0.008 of full scale, crest factor 19 dB.
-This is the 8 Aug tone, undiminished, and it is not the mux's doing — it is
-present with the scan switched off. It belongs to its own session.
+scan off — the 500 Hz series sits at −60.6 dBFS: a pulse train with a full
+harmonic series, and Bastian hears it as a standing tone with the synth signal
+distorting oddly on top. That report was volunteered while `mux2` was running,
+i.e. against the worst of the three. Nothing clips: peak sample 0.008 of full
+scale, crest factor 19 dB. This is the 8 Aug tone, undiminished, and it is not
+the mux's doing — it is present with the scan switched off. It belongs to its
+own session.
+
+**How far under the program it sits needs a longer window than these captures.**
+Against the 8–10 s baselines it computes to 4 dB under; against a 30 s capture
+taken later the same day it is **9.2 dB** under (program −51.67 dBFS, series
+−60.82). The program is a generative ambient patch and swings 6.5 dB from one
+second to the next, so a short window lands wherever it lands — the short one
+caught quiet stretches. The 30 s figure is the one to quote. What does *not*
+move is the series itself: across twelve captures today, three images, and both
+states of the MAX11300 module, it stayed inside −60.2 to −61.2 dBFS. It tracks
+the interface gain and nothing else — which is the 8 Aug finding ("not in the
+samples") seen from a third angle.
 
 **6. The placement question is closed, opposite to the plan's expectation.** The
 plan treated the callback as the placement that had to prove itself and the
@@ -183,11 +196,19 @@ inside the spread. This metric does not drift with time since reset.
   chain's input capacitance draws current these images never draw, so the
   callback's null is a lower bound rather than an acquittal, and the
   foreground's +3.6 dB is a lower bound too.
-- **The absolute levels are not comparable to the 8 Aug capture** (−54.6 dBFS
-  total, −59.5 dBFS band, −4.9 dB `excess`). The interface gain was re-set by
-  hand and the shell's operating point has moved since FEED; the level came out
-  6.6 dB lower. Only `excess`, and only within this session's fixed gain, is
-  being compared above.
+- **The absolute levels above are the connected channel, not a mix.** Only one
+  side of the interface is patched — the rig is mono by design — and the first
+  pass of this analysis averaged the live channel with the dead one, putting
+  every absolute dBFS figure 6.02 dB low. That gap was briefly written up here
+  as a moved operating point; it was arithmetic. Corrected the same day by
+  recomputing from channel 0, and `tools/blockrate_fft.py` now drops channels
+  more than 20 dB under the loudest and prints which it used. Every ratio in
+  this section — `excess`, series against residual, and all deltas — was
+  unaffected, because a dead channel in a mean is a constant factor.
+  **Corrected, the baseline matches the 8 Aug capture** (−54.6 dBFS total)
+  to half a dB, so the operating point did not move. The 8 Aug `excess` of
+  −4.9 dB is still not a like-for-like partner: it came out of an ad-hoc numpy
+  session, not this tool.
 - **The audio images print no identity receipt** — `SHELL_CPU_PROBE=0` removes
   the line that would say which build is running. The evidence that three
   different firmwares ran is three distinct md5 sums and three separate flashes,

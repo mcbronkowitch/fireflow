@@ -3377,9 +3377,9 @@ now runs at 74.33 %, because FEED and everything after it landed in between.
 day, submodule `385138563330` with the 3.5 mm jacks, seven captures at a fixed
 interface gain, analysed with the new `tools/blockrate_fft.py`; same capture
 file, findings 4–5c. **The callback does not move the block-rate tone** — the
-500 Hz harmonic series sits at −66.8 dBFS with the scan against −66.6 without,
+500 Hz harmonic series sits at −60.7 dBFS with the scan against −60.6 without,
 one number. **The foreground raises it 7.3 dB**, and only it: the rest of the
-spectrum is identical across all three images (−62.2 to −62.9, no trend), so
+spectrum is identical across all three images (−56.2 to −56.9, no trend), so
 the extra level is the artifact and not the floor. Resolution 0.15 dB.
 
 **The verdict is therefore the opposite of the one the plan was braced for: the
@@ -3392,11 +3392,24 @@ floating chain pins, so the callback null is a lower bound and wants repeating
 once a real 595 chain hangs on B7/B8/D1/D10.
 
 **A separate finding fell out of it.** With the scan switched off, the 500 Hz
-harmonic series sits **4 dB under the program material**, audible as a standing
-tone with the synth signal distorting on top. That is the 8 Aug artifact,
-undiminished and still unexplained, and this capture only proves the mux
-question is independent of it. It now has a rig and a number; it needs its own
-session.
+harmonic series sits at −60.8 dBFS, **9.2 dB under the program** over a 30 s
+window, and is audible as a standing tone with the synth signal distorting on
+top. Its level held inside −60.2 to −61.2 across twelve captures, three images
+and both states of the MAX11300 module on the desk — it follows the interface
+gain and nothing else, which is the 8 Aug "not in the samples" result from a
+third angle. That artifact is undiminished and still unexplained; this capture
+only proves the mux question is independent of it. It now has a rig and a
+number; it needs its own session.
+
+**And one hardware fact that cost an hour to establish.** Pulling the MAX11300
+module off the desk rig makes the engine inaudible at the jack and re-inserting
+it brings the sound back — same image, same md5, nothing else changed. The
+firmware meanwhile reports **74.33 % avg / 76.68 % max**, i.e. identical to the
+baseline it printed on the *other* submodule, so nothing about the engine is
+involved. Whatever that module provides electrically, the control PCB has to
+provide on purpose; what it is has not been traced. A by-product worth keeping:
+those two figures are a 0.02-point reproduction of the CPU baseline across two
+different Patch Submodules.
 
 **2026-08-14 — preset persistence now starts from nothing.** M6's scope names
 it, and until this date the repo had two pieces of prior art for it: the

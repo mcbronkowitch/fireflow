@@ -618,9 +618,9 @@ die Kapazität passt mit Reserve in jeder Zeile (§3), und der DMA-Scan der
    > Befunde 4 bis 5c). Auflösung 0,15 dB.
    >
    > **Die Salve im Callback bewegt den Störton nicht.** Die 500-Hz-Reihe liegt
-   > mit Scan bei −66,8 dBFS, ohne bei −66,6 — dieselbe Zahl. **Die Salve im
+   > mit Scan bei −60,7 dBFS, ohne bei −60,6 — dieselbe Zahl. **Die Salve im
    > Vordergrund bewegt ihn sehr wohl: +7,3 dB auf der Reihe**, während der Rest
-   > des Spektrums über alle drei Bilder gleich bleibt (−62,2 bis −62,9, kein
+   > des Spektrums über alle drei Bilder gleich bleibt (−56,2 bis −56,9, kein
    > Trend). Der Anstieg ist also ausschließlich das Artefakt, nicht der Boden.
    >
    > Damit ist dieser Posten für die gewählte Platzierung erledigt und die
@@ -630,8 +630,12 @@ die Kapazität passt mit Reserve in jeder Zeile (§3), und der DMA-Scan der
    > beide Platzierungen taktten einen Schritt pro Block.
    >
    > **Der Störton selbst ist unverändert da.** Mit ausgeschaltetem Scan liegt
-   > die 500-Hz-Reihe **4 dB unter dem Programm** (−66,6 gegen −62,6 dBFS) —
-   > hörbar als Dauerton, mit Harmonischen, die sich auf das Synth-Signal legen.
+   > die 500-Hz-Reihe bei −60,8 dBFS und damit über ein 30-s-Fenster **9,2 dB
+   > unter dem Programm** — hörbar als Dauerton, mit Harmonischen, die sich auf
+   > das Synth-Signal legen. (Gegen die kurzen 8–10-s-Aufnahmen rechnete sich
+   > 4 dB; das Programm schwankt sekundenweise um 6,5 dB, also gilt der längere
+   > Wert.) Der Pegel der Reihe selbst ist über zwölf Aufnahmen des Tages
+   > stabil auf −60,2 bis −61,2 — er folgt dem Interface-Gain und sonst nichts.
    > Das ist der Befund vom 8. August, ungemindert, und er gehört nicht zu dieser
    > Frage: er ist ohne jeden Mux da.
 3. **Die Einschwingzeit pro Kanal.** Sie entscheidet, wie viele Adressschritte
