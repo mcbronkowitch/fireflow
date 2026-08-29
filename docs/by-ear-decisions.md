@@ -394,6 +394,21 @@ which is exactly why they are recorded here.
   swinging depth — which is the reason the change was made. With a DENS depth
   turned up it was listened to and kept: the two meanings track each other and
   the face still reads as one control. Do not split them back apart.
+- **The MODBTN lamp double-pulses; it is not a steady light — by eye, owner's
+  call, 2026-08-29.** The 2026-08-22 spec §5 specified the lamp as the latch
+  state, and `led_law.hpp` implemented that as a steady `steps - 1`. Bastian
+  asked for the opposite of discreet: the latch re-points every wreathed knob
+  at once, so a lamp that sits still is furniture in peripheral vision and
+  forgetting the layer is engaged is the expensive mistake. Two flashes of
+  `kModPulseOn` 0.08 s separated by a `kModPulseGap` 0.08 s dark, then a long
+  tail, `kModPulsePeriod` 0.5 s — a pair, chosen over the even blink that was
+  offered alongside it, because an even blink of the same rate reads as a
+  loose contact rather than as a signal. All three constants are by-eye
+  candidates; the *shape* is not. Do not simplify it back to a steady lamp,
+  and do not flatten the pair into a single blink, without asking. Guarded by
+  `led law: MODBTN lamp double-pulses while the latch holds` in
+  `tests/test_led_law.cpp`, which measures the dark-run lengths precisely
+  because counting edges cannot tell a pair from an even blink.
 
 ## PULL (2026-08-22) — NOT YET HEARD
 

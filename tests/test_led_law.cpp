@@ -4,6 +4,8 @@
 #include "mod/song_form.h"
 #include "vcv/src/led_law.hpp"
 #include <cmath>
+#include <cstdlib>
+#include <vector>
 
 using namespace spky;
 
@@ -333,21 +335,92 @@ TEST_CASE("led: TEMPO_L is a metronome pulse on the transport beat") {
     CHECK(duty[spkyvcv::TEMPO_L] == steps - 1);     // next downbeat
 }
 
-TEST_CASE("led law: MODBTN lamp is the latch state") {
+TEST_CASE("led law: MODBTN lamp double-pulses while the latch holds") {
     Instrument inst;
     inst.init(48000.f);
 
     spkyled::Panel p;
     int duty[spkyvcv::NUM_LIGHTS] = {0};
-    const float dt = 1.f / 750.f;
+    const float dt = 1.f / 750.f;           // the control rate used in Rack
     const int steps = 16;
+    const int ticks = 1500;                 // two seconds of the law
 
-    spkyled::fill(inst, p, dt, steps, /*mod_latched=*/true, duty);
-    CHECK(duty[spkyvcv::MODBTN_L] == steps - 1);
-    CHECK(duty[spkyvcv::SHIFTBTN_L] == 0);   // SHIFT stays reserved and dark
+    SUBCASE("dark at every phase while the latch is open") {
+        for (int i = 0; i < ticks; ++i) {
+            spkyled::fill(inst, p, dt, steps, /*mod_latched=*/false, duty);
+            REQUIRE(duty[spkyvcv::MODBTN_L] == 0);
+            REQUIRE(duty[spkyvcv::SHIFTBTN_L] == 0);  // SHIFT stays reserved
+        }
+    }
 
-    spkyled::fill(inst, p, dt, steps, /*mod_latched=*/false, duty);
-    CHECK(duty[spkyvcv::MODBTN_L] == 0);
+    SUBCASE("hard on/off, and it really goes dark") {
+        bool sawOn = false, sawOff = false;
+        for (int i = 0; i < ticks; ++i) {
+            spkyled::fill(inst, p, dt, steps, /*mod_latched=*/true, duty);
+            const int d = duty[spkyvcv::MODBTN_L];
+            REQUIRE((d == 0 || d == steps - 1));   // a mode, never a level
+            sawOn  = sawOn  || d == steps - 1;
+            sawOff = sawOff || d == 0;
+        }
+        CHECK(sawOn);
+        CHECK(sawOff);   // the steady lamp this replaced never reaches here
+    }
+
+    // The shape is the point. Counting edges alone cannot tell a double
+    // pulse from an even blink of the same rate, so this measures the RUN
+    // LENGTHS: every lit run one flash long, and the dark runs falling into
+    // exactly two families -- the short gap inside a pair, and the long tail
+    // between pairs.
+    SUBCASE("two flashes and a long tail, not an even blink") {
+        // Expected lengths are derived from the constants, never counted:
+        // all three are by-eye tuning candidates, and hardcoded tick counts
+        // would start failing on arithmetic the first time they are retuned.
+        const int expOn  = static_cast<int>(spkyled::kModPulseOn  / dt + 0.5f);
+        const int expGap = static_cast<int>(spkyled::kModPulseGap / dt + 0.5f);
+        const int expTail = static_cast<int>(
+            (spkyled::kModPulsePeriod - 2.f * spkyled::kModPulseOn
+             - spkyled::kModPulseGap) / dt + 0.5f);
+        const int expPairs = static_cast<int>(ticks * dt / spkyled::kModPulsePeriod);
+
+        // The tail has to dominate the gap, or the pair stops reading as a
+        // pair. This is a gate on the constants themselves, not on the code.
+        CHECK(expTail > 2 * expGap);
+
+        std::vector<int> onRun, offRun;
+        bool prev = false, firstOn = false;
+        int  run  = 0;
+        for (int i = 0; i < ticks; ++i) {
+            spkyled::fill(inst, p, dt, steps, /*mod_latched=*/true, duty);
+            const bool on = duty[spkyvcv::MODBTN_L] != 0;
+            if (i == 0) { prev = firstOn = on; run = 1; continue; }
+            if (on == prev) { ++run; continue; }
+            (prev ? onRun : offRun).push_back(run);
+            prev = on;
+            run  = 1;
+        }
+        // The window cuts the first run short (the trailing one is never
+        // pushed, so only the leading partial needs dropping).
+        REQUIRE(!onRun.empty());
+        REQUIRE(!offRun.empty());
+        if (firstOn) onRun.erase(onRun.begin());
+        else         offRun.erase(offRun.begin());
+
+        REQUIRE(!onRun.empty());
+        for (int r : onRun)
+            CHECK(std::abs(r - expOn) <= 2);        // every flash the same
+
+        int shorts = 0, longs = 0;
+        for (int r : offRun) {
+            if (std::abs(r - expGap) <= 2) ++shorts;
+            else if (std::abs(r - expTail) <= 2) ++longs;
+            else FAIL("dark run of " << r << " ticks is neither gap nor tail");
+        }
+        CHECK(shorts > 0);
+        CHECK(longs > 0);
+        CHECK(shorts == longs);                     // one gap per tail: a PAIR
+        CHECK(longs >= expPairs - 1);               // and the cadence is right
+        CHECK(longs <= expPairs);
+    }
 }
 
 TEST_CASE("led: the envelope attacks instantly and falls slowly") {

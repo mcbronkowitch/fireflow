@@ -100,6 +100,29 @@ inline bool tempo_on(float beat_phase) {
     return beat_phase < kTempoPulse;
 }
 
+// The MOD latch's lamp: two short flashes, then a long dark tail, twice a
+// second. The latch re-points every wreathed knob on the plate at once, so
+// forgetting it is engaged is the expensive mistake this lamp exists to
+// prevent -- and the steady lamp it replaces sits in peripheral vision as
+// furniture. An EVEN blink of the same rate would be louder but reads as a
+// loose contact, the way a flickering panel light always does; a pair reads
+// as deliberate. Owner's call, 2026-08-29. All three numbers are by-eye
+// candidates, not invariants.
+//
+// kModPulsePeriod must divide 1 s exactly. The phase comes from Panel::blink,
+// which wraps at 1 s, so a period that does not fit a whole number of times
+// into the wrap would jump mid-pulse once a second.
+constexpr float kModPulsePeriod = 0.5f;   // s, one flash-flash-gap cycle
+constexpr float kModPulseOn     = 0.08f;  // s, each of the two flashes
+constexpr float kModPulseGap    = 0.08f;  // s, the dark between the pair
+
+inline bool mod_pulse_on(float blink) {
+    const float t = std::fmod(blink, kModPulsePeriod);
+    return t < kModPulseOn
+        || (t >= kModPulseOn + kModPulseGap
+            && t <  2.f * kModPulseOn + kModPulseGap);
+}
+
 struct Panel {
     // lamp[GATE_A_L] and lamp[GATE_B_L] are never touched: the gate lamps
     // read inst.gate() straight through in fill(), bypassing the envelope on
@@ -125,10 +148,6 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
     for (int id : {FLOW_A_L, FLOW_B_L, SYNC_L, SHIFTBTN_L})
         duty_out[id] = 0;
 
-    // The MOD layer's lamp: lit while the latch holds, hard on/off -- this
-    // reports a mode, not a level (spec 2026-08-22 mod-latch-layer §5).
-    duty_out[MODBTN_L] = mod_latched ? steps - 1 : 0;
-
     // Metronome: a short pulse on the transport downbeat. Hard on/off, no
     // envelope -- this reports where the beat is, which is the question the
     // lamp at TEMPO is there to answer.
@@ -136,6 +155,14 @@ inline void fill(const spky::Instrument& inst, Panel& p, float dt,
 
     p.blink += dt;
     if (p.blink >= 1.f) p.blink -= 1.f;
+
+    // The MOD layer's lamp: hard on/off, because it reports a mode and not a
+    // level (spec 2026-08-22 mod-latch-layer §5) -- but a double pulse rather
+    // than the steady light that spec described, see kModPulsePeriod above.
+    // Written here, AFTER the blink advance, so it reads the same phase REC
+    // reads further down; from above the advance it would sit one tick behind
+    // its twin and the two lamps would beat against each other.
+    duty_out[MODBTN_L] = (mod_latched && mod_pulse_on(p.blink)) ? steps - 1 : 0;
 
     struct Slot { int id; int lane; };
     static const Slot kExc[8] = {
