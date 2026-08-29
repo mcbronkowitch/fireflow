@@ -2730,37 +2730,44 @@ def test_sampler_preset_init_snapshot():
     with open(header_path) as f:
         header = f.read()
     approved = {
-        # Transcribed from FM-INIT.vcvm (2026-08-21), the preset Bastian
+        # Transcribed from NewInit.vcvm (2026-08-29), the preset Bastian
         # approved. A second, independent copy of the numbers in gen_panel's
         # INIT_DEFAULTS -- that is what makes this a test: a later hand-edit to
         # either table, or to the generated header, has to disagree with this
-        # one.
+        # one. NewInit revises FM-INIT.vcvm (2026-08-21) rather than replacing
+        # it: 12 entries below moved, the rest are FM-INIT's.
         #
-        # SMOOTH_A/B are plain transcriptions again. Under the FF_hw_Init.vcvm
+        # SMOOTH_A/B are plain transcriptions. Under the FF_hw_Init.vcvm
         # snapshot they were the one DERIVED pair, converted by hand from the
-        # old absolute-seconds slew law; FM-INIT.vcvm was saved from a module
-        # already running the interval-relative law, so there is nothing left
-        # to convert. tests/test_smooth_law.cpp keeps the old patch as its own
-        # fixture and stays the gate on the law itself.
+        # old absolute-seconds slew law; every snapshot since was saved from a
+        # module already running the interval-relative law, so there is nothing
+        # left to convert. tests/test_smooth_law.cpp keeps the old patch as its
+        # own fixture and stays the gate on the law itself.
+        #
+        # The MOD-layer depths are NOT transcribed here. They are pinned in
+        # test_mod_layer below, where the dead-zone pre-image arithmetic that
+        # makes sense of them already lives.
         "RATE_A": 0.112000011,
         "SHAPE_A": 0.0,
         "DENSITY_A": 0.604819179,
         "SMOOTH_A": 0.0,
         "RANGE_A": 0.0,
-        "MELODY_A": 0.0,
-        "MOD_A": 0.740963936,
+        "MELODY_A": 0.687999368,
+        "MOD_A": 0.856628835,
         "TUNE_A": 0.500000179,
         "ATTACK_A": 0.685333312,
         "DECAY_A": 0.609333158,
         "RES_A": 0.0,
-        "SUB_A": 0.711999893,
+        "SUB_A": 0.209333256,
         "SOURCE_A": 0.0,
         "FLUX_A": 0.0,
         "GRIT_A": 0.0,
-        # Both decks boot at the top of LVL/COMP: past kLvlCompSplit (0.6) the
-        # level clamps to unity and the rest is compressor amount, so this is
-        # kCompTop (0.7) exactly. Set by ear on the kCompShape taper.
-        "COMP_A": 1.0,
+        # Both decks sit past kLvlCompSplit (0.6), so the level clamps to
+        # unity on both and the rest is compressor amount. They no longer
+        # share one: deck B is at the top of travel (kCompTop, 0.7 exactly),
+        # deck A came off it here and lands at 0.576158. Set by ear on the
+        # kCompShape taper.
+        "COMP_A": 0.889155984,
         "STEPS_A": 0.0,
         # 5 == Feed. Deck B is Wave (2). No BODY and no SAMPLER deck boots in
         # this patch.
@@ -2777,11 +2784,11 @@ def test_sampler_preset_init_snapshot():
         "RANGE_B": 0.0,
         "MELODY_B": 0.671083927,
         "MOD_B": 0.710844219,
-        "TUNE_B": 0.179020017,
+        "TUNE_B": 0.174666643,
         "ATTACK_B": 1.0,
         "DECAY_B": 1.0,
         "RES_B": 0.539999962,
-        "SUB_B": 0.0,
+        "SUB_B": 0.662666559,
         "SOURCE_B": 0.404000044,
         "FLUX_B": 0.650667071,
         "GRIT_B": 0.0,
@@ -2792,7 +2799,9 @@ def test_sampler_preset_init_snapshot():
         "ENGINE_B": 2.0,
         "DETUNE_B": 0.455999434,
         "SONG_B": 0.0,
-        "MORPH": 0.384337217,
+        # Centre to within a float32 hair: both decks equally in the mix,
+        # where FM-INIT leaned to A at 0.384.
+        "MORPH": 0.499999762,
         # Off the tempo floor for the first time: 40 + 0.197333470 * 200
         # == 79.47 BPM.
         "TEMPO": 0.197333470,
@@ -2807,9 +2816,9 @@ def test_sampler_preset_init_snapshot():
         "REV_SIZE": 0.885333359,
         "REV_DECAY": 0.785541177,
         "REV_TONE": 1.0,
-        "REV_DIFF": 0.052000195,
+        "REV_DIFF": 0.634667158,
         "CHOKE": 0.0,
-        "FILT_A": -0.066666692,
+        "FILT_A": -0.302811146,
         "FILT_B": -0.064000070,
         "TIDE": 0.0,
         "FLUXRATE_A": 1.0,
@@ -2825,11 +2834,12 @@ def test_sampler_preset_init_snapshot():
         "STAGES_B": 0.0,
         "REC_A": 0.0,
         "REC_B": 0.0,
-        "REV_MIX_A": 0.774703741,
-        "REV_MIX_B": 0.805333197,
+        "REV_MIX_A": 0.772287607,
+        "REV_MIX_B": 0.789153814,
         "SHUFFLE": 0.0,
-        # Below x1 (0.5): the modulation clock boots slowed down.
-        "PACE": 0.167999804,
+        # Below x1 (0.5): the modulation clock boots slowed down. 0.1 is
+        # 32^-0.8 == x1/16 exactly (pace_mult, mod/divisions.h).
+        "PACE": 0.099999927,
         # The LANE_MOTION base per deck -- dialled on A, neutral on B.
         "DEPTH_A": 0.365333289,
         "DEPTH_B": 0.5,
@@ -3505,7 +3515,8 @@ def test_fixed_values_agree_across_host_and_bench():
 
 def test_mod_layer():
     """Spec 2026-08-22 mod-latch-layer: 48 depth targets + MODBTN appended
-    LAST, engine-backed inits carried over, everything else 0."""
+    LAST, engine-backed inits carried over, everything else 0 unless the
+    factory patch dials it (gen_panel's INIT_MOD_KNOBS)."""
     deck = g.MOD_DECK_TARGETS
     cent = g.MOD_CENTER_TARGETS
     check(len(deck) == 21, f"deck targets: {len(deck)} != 21")
@@ -3518,21 +3529,52 @@ def test_mod_layer():
               f"MODD_{base} pair missing from PARAMS tail")
     for base, _k, _s, _i in cent:
         check(f"MODD_{base}" in tail, f"MODD_{base} missing from PARAMS tail")
-    # inits: engine-backed carry the booted _tdepth values, all else 0.
-    # Since 2026-08-22 mod-sh-split the DEPTH and the KNOB POSITION are two
+    # inits: engine-backed carry the booted _tdepth values, all else 0 --
+    # except where the factory patch dials a HOST depth on top. Since
+    # 2026-08-22 mod-sh-split the DEPTH and the KNOB POSITION are two
     # different numbers -- depth_of() dead-zones noon and rescales the rest,
     # so INIT_DEFAULTS stores the PRE-IMAGE (0.7 -> 0.712) and the engine
     # still receives 0.7. The table's own init stays the depth; only the
     # stored default is the pre-image, and it is checked through the
     # generator's own inverse so the two cannot drift apart here.
     want = {"SOURCE": 1.0, "DEPTH": 0.7, "FILT": 0.55}
+    # Retyped from NewInit.vcvm (2026-08-29), not read back from
+    # g.INIT_MOD_KNOBS: this is the second, independent copy that makes the
+    # check a test, the same role the `approved` dict plays for the panel
+    # values. A preset stores knob space already, so these are raw knob
+    # positions with no pre-image arithmetic applied -- which is also why
+    # only HOST faces may appear here (checked below): a dialled TDEPTH or
+    # FXDEPTH face would have to be a pre-image and would silently disagree
+    # with the loop above it.
+    dialled = {
+        "MODD_SUB_B": 0.885333300,
+        "MODD_DETUNE_A": 0.298666626,
+        "MODD_DETUNE_B": 0.250666678,
+        "MODD_MORPH": 0.279517978,
+        "MODD_REV_DIFF": 0.442666322,
+    }
+    check(set(g.INIT_MOD_KNOBS) == set(dialled),
+          f"INIT_MOD_KNOBS names moved: {sorted(g.INIT_MOD_KNOBS)}")
+    for name, v in dialled.items():
+        check(abs(g.INIT_DEFAULTS[name] - v) < 1e-9,
+              f"INIT_DEFAULTS[{name}] != {v}")
+    engine_backed = {f"MODD_{b}{sfx}" for b, k, _s, _i in deck
+                     if k != "HOST" for sfx in ("_A", "_B")}
+    engine_backed |= {f"MODD_{b}" for b, k, _s, _i in cent if k != "HOST"}
+    for name in dialled:
+        check(name not in engine_backed,
+              f"{name} is engine-backed: a dialled default must be a "
+              f"_depth_knob pre-image, not a raw knob position")
     for base, kind, _s, init in deck:
         expect = want.get(base, 0.0)
         check(abs(init - expect) < 1e-9, f"{base} init {init} != {expect}")
         knob = g._depth_knob(expect)
         for sfx in ("_A", "_B"):
-            check(abs(g.INIT_DEFAULTS[f"MODD_{base}{sfx}"] - knob) < 1e-9,
-                  f"INIT_DEFAULTS[MODD_{base}{sfx}] != {knob}")
+            name = f"MODD_{base}{sfx}"
+            if name in dialled:
+                continue
+            check(abs(g.INIT_DEFAULTS[name] - knob) < 1e-9,
+                  f"INIT_DEFAULTS[{name}] != {knob}")
     # and the pre-image really is the inverse: the arithmetic here is the
     # generator's, so this pins the numbers the C++ side asserts too
     # (tests/test_mod_layer.cpp: 0.7 -> 0.712, 0.55 -> 0.568, 1.0 -> 1.0).
@@ -3541,8 +3583,10 @@ def test_mod_layer():
     check(g._depth_knob(1.0) == 1.0, "1.0 pre-image != 1.0")
     check(g._depth_knob(0.0) == 0.0, "noon pre-image != 0")
     for base, _k, _s, init in cent:
-        check(init == 0.0 and g.INIT_DEFAULTS[f"MODD_{base}"] == 0.0,
-              f"center {base} init must be 0")
+        check(init == 0.0, f"center {base} table init must be 0")
+        if f"MODD_{base}" not in dialled:
+            check(g.INIT_DEFAULTS[f"MODD_{base}"] == 0.0,
+                  f"center {base} boots off noon without being dialled")
     check(g.INIT_DEFAULTS["MODBTN"] == 0.0, "MODBTN boots unlatched")
     # the pitch anchor: no target may sit on LANE_PITCH via the engine table
     for base, kind, slot, _i in deck + cent:

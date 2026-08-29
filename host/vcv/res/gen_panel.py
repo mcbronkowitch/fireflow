@@ -710,23 +710,34 @@ PARAMS = PANEL_PARAMS + HIDDEN_PARAMS + APPENDED_PANEL_PARAMS + MOD_LAYER_PARAMS
 # Approved init snapshot, keyed by param NAME rather than by position: adding
 # or removing a control must not be able to shift somebody else's default.
 #
-# Provenance: FM-INIT.vcvm (2026-08-21), a FireflowHW preset Bastian played and
-# approved, saved from a 2.21.5 module. It replaces the FF_hw_Init.vcvm
-# (2026-08-09/08-10) lineage wholesale, the same way that one replaced
-# drone.vcvm: 42 of 71 values moved, both ENG selections included, so no
-# per-value note here justifies a number by what it preserved from the previous
-# patch. What changed in kind:
-#   * deck A boots FEED and deck B WAVE; the old patch was WAVE against SYNTH.
-#     No deck boots BODY or SAMPLER, so Part::set_excitation stays a no-op and
-#     BodyVoice::kDetuneScale touches nothing at boot.
-#   * deck B boots IN step mode (STEPS_B == 8). Every factory patch so far
-#     booted both decks free-running -- docs/gotchas.md records the one time
-#     that happened by accident. This one is deliberate: the preset was played
-#     and saved from the module in exactly this state.
-#   * TEMPO is off its floor for the first time (79.5 BPM, not 40).
+# Provenance: NewInit.vcvm (2026-08-29), a FireflowHW preset Bastian played and
+# approved, saved from a 2.22.0 module. Unlike the three snapshots before it
+# (drone.vcvm -> FF_hw_Init.vcvm -> FM-INIT.vcvm), this one does NOT replace
+# its predecessor wholesale: it is a revision of FM-INIT.vcvm (2026-08-21).
+# 12 of the 72 panel values moved and 5 MOD-layer depths came off noon; both
+# ENG selections, TEMPO, SCALE, DRIFT, COUPLE, STEPS_B, SONG_A/B and DPTH sit
+# exactly where FM-INIT left them, so the "changed in kind" notes below still
+# describe the shipped patch and are carried forward rather than rewritten.
+#   * deck A boots FEED and deck B WAVE (FM-INIT; the patch before that was
+#     WAVE against SYNTH). No deck boots BODY or SAMPLER, so
+#     Part::set_excitation stays a no-op and BodyVoice::kDetuneScale touches
+#     nothing at boot.
+#   * deck B boots IN step mode (STEPS_B == 8, FM-INIT). Every factory patch
+#     before that booted both decks free-running -- docs/gotchas.md records the
+#     one time it happened by accident; here it is deliberate, the preset was
+#     played and saved from the module in exactly this state.
+#   * TEMPO is off its floor (79.5 BPM, not 40), first done by FM-INIT.
 #   * DPTH is dialled on deck A, so the "boots at feed_cfg::kDepthBase" rule
 #     the knob shipped with in 2026-08-19 no longer describes the shipped
 #     patch -- see res/test_panel.py's DPTH case.
+# What this revision changes in kind:
+#   * the MOD latch layer boots with something dialled for the first time.
+#     FM-INIT was saved one day after the layer shipped and left all 48 depths
+#     at their engine-backed defaults; this one turns five HOST depths off
+#     noon -- see the INIT_MOD_KNOBS block below the tables.
+#   * the two decks no longer share one compressor amount: COMP_A came off the
+#     top of travel (see COMP_A).
+#   * PACE lands on exactly x1/16 (see PACE).
 # The preset's module data (sampler paths, excitation checkboxes) is NOT
 # carried: only params reach this table, and with no SAMPLER/BODY deck at boot
 # nothing in that blob is audible anyway.
@@ -743,23 +754,26 @@ INIT_DEFAULTS = {
     # still the gate on that law, independent of this table.
     "SMOOTH_A": 0.000000000,
     "RANGE_A": 0.000000000,
-    "MELODY_A": 0.000000000,
-    "MOD_A": 0.740963936,
+    "MELODY_A": 0.687999368,
+    "MOD_A": 0.856628835,
     "TUNE_A": 0.500000179,
     "ATTACK_A": 0.685333312,
     "DECAY_A": 0.609333158,
     "RES_A": 0.000000000,
-    "SUB_A": 0.711999893,
+    "SUB_A": 0.209333256,
     "SOURCE_A": 0.000000000,
     "FLUX_A": 0.000000000,
     "GRIT_A": 0.000000000,
-    # LVL/COMP: both decks boot at the TOP of the knob, i.e. deep inside the
-    # compressor zone above kLvlCompSplit (0.6), where the amount is exactly
-    # kCompTop (0.7). Level clamps to unity for anything at or above the split,
-    # so the whole top-of-travel setting is make-up, not gain. Set by ear on
-    # the kCompShape taper: if kLvlCompSplit or kCompShape ever move, these
-    # two do not follow mechanically -- they have to be re-heard.
-    "COMP_A": 1.000000000,
+    # LVL/COMP: both decks sit above kLvlCompSplit (0.6), so level clamps to
+    # unity on both and the whole setting is compressor make-up, not gain.
+    # They no longer sit on the same amount. Deck B is still at the top of
+    # travel, where the amount is exactly kCompTop (0.7); deck A came off the
+    # top in NewInit.vcvm and lands at
+    #   kCompTop * ((0.889155984 - 0.6) / 0.4) ^ kCompShape == 0.576158
+    # (pinned in tests/test_seed_audition_init.cpp). Set by ear on the
+    # kCompShape taper: if kLvlCompSplit, kCompTop or kCompShape ever move,
+    # these two do not follow mechanically -- they have to be re-heard.
+    "COMP_A": 0.889155984,
     # 0 IS flow mode: the count is the mode (the separate STEP pad was merged
     # into this knob, spec 2026-08-09 hw-control-reduction task 3). Deck A
     # free-running; deck B is the one that boots stepped, see STEPS_B.
@@ -786,11 +800,11 @@ INIT_DEFAULTS = {
     "RANGE_B": 0.000000000,
     "MELODY_B": 0.671083927,
     "MOD_B": 0.710844219,
-    "TUNE_B": 0.179020017,
+    "TUNE_B": 0.174666643,
     "ATTACK_B": 1.000000000,
     "DECAY_B": 1.000000000,
     "RES_B": 0.539999962,
-    "SUB_B": 0.000000000,
+    "SUB_B": 0.662666559,
     "SOURCE_B": 0.404000044,
     "FLUX_B": 0.650667071,
     "GRIT_B": 0.000000000,
@@ -805,7 +819,9 @@ INIT_DEFAULTS = {
     "ENGINE_B": 2.000000000,
     "DETUNE_B": 0.455999434,
     "SONG_B": 0.000000000,
-    "MORPH": 0.384337217,
+    # Centre, to within a float32 hair: the two decks boot equally in the
+    # mix. FM-INIT leaned to A at 0.384.
+    "MORPH": 0.499999762,
     # First factory patch off the tempo floor: bpm == 40 + 0.197333470 * 200
     # == 79.47. Everything clocked (both lane RATEs, the FLUX division, deck
     # B's step grid) is faster at boot than in every patch before this one.
@@ -821,9 +837,9 @@ INIT_DEFAULTS = {
     "REV_SIZE": 0.885333359,
     "REV_DECAY": 0.785541177,
     "REV_TONE": 1.000000000,
-    "REV_DIFF": 0.052000195,
+    "REV_DIFF": 0.634667158,
     "CHOKE": 0.000000000,
-    "FILT_A": -0.066666692,
+    "FILT_A": -0.302811146,
     "FILT_B": -0.064000070,
     "TIDE": 0.000000000,
     "FLUXRATE_A": 1.000000000,
@@ -841,13 +857,14 @@ INIT_DEFAULTS = {
     "STAGES_B": 0.000000000,
     "REC_A": 0.000000000,
     "REC_B": 0.000000000,
-    "REV_MIX_A": 0.774703741,
-    "REV_MIX_B": 0.805333197,
+    "REV_MIX_A": 0.772287607,
+    "REV_MIX_B": 0.789153814,
     "SHUFFLE": 0.000000000,
-    # PACE (spec 2026-08-12 modulation-pace): 0.5 is exactly x1. This patch
-    # sits BELOW it -- 0.168 slows the modulation clock well under unity, the
-    # first factory patch to use the knob for anything.
-    "PACE": 0.167999804,
+    # PACE (spec 2026-08-12 modulation-pace): 0.5 is exactly x1, and below the
+    # centre pace_mult(n) == 32^(2n-1). This patch sits at 0.1, which is
+    # 32^-0.8 == 2^-4 == x1/16 exactly -- the modulation clock boots four
+    # octaves slow, where FM-INIT sat at 0.168 (about x1/10).
+    "PACE": 0.099999927,
     # DPTH is the LANE_MOTION base on every engine -- the FM index on deck A's
     # FEED, width+drift on deck B's WAVE. Deck A is dialled below
     # feed_cfg::kDepthBase (0.5); deck B sits on it.
@@ -884,6 +901,34 @@ for _base, _kind, _slot, _init in MOD_DECK_TARGETS:
     INIT_DEFAULTS[f"MODD_{_base}_B"] = _depth_knob(_init)
 for _base, _kind, _slot, _init in MOD_CENTER_TARGETS:
     INIT_DEFAULTS[f"MODD_{_base}"] = _depth_knob(_init)
+
+# ...and then what the factory patch itself dials on top. NewInit.vcvm
+# (2026-08-29) is the first snapshot to use the MOD layer for anything beyond
+# the three engine-backed faces: five HOST depths boot off noon.
+#
+# They are kept out of the tables above on purpose. That `init` column answers
+# a question about the ENGINE -- "what _tdepth does part.h boot with" -- and
+# carries one value per FACE. These five are the PATCH's answer to a different
+# question, and two of them are per-DECK: DETUNE is dialled differently on A
+# and B, and SUB only on B. Widening the column to hold them would make the
+# tables' own rule ("engine-backed faces carry the booted values, everything
+# else 0") unreadable at exactly the place res/test_panel.py and
+# tests/test_mod_layer.cpp check it.
+#
+# The stored numbers are KNOB positions, read straight off the preset -- no
+# _depth_knob pre-image needed, because a preset already stores knob space.
+# All five sit right of noon, i.e. continuous rather than S&H, and depth_of()
+# resolves them to 0.881 / 0.269 / 0.219 / 0.249 / 0.419.
+INIT_MOD_KNOBS = {
+    "MODD_SUB_B": 0.885333300,
+    "MODD_DETUNE_A": 0.298666626,
+    "MODD_DETUNE_B": 0.250666678,
+    "MODD_MORPH": 0.279517978,
+    "MODD_REV_DIFF": 0.442666322,
+}
+for _k, _v in INIT_MOD_KNOBS.items():
+    assert _k in INIT_DEFAULTS, f"{_k} is not a MOD depth param"
+    INIT_DEFAULTS[_k] = _v
 
 # --- lights --------------------------------------------------------------------
 # INPUTS/OUTPUTS are built above (see JACK_GROUPS, near CX) -- they had to move
