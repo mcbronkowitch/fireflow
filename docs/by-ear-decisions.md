@@ -418,15 +418,16 @@ mistake "compiles and passes its gates" for "tuned."
   listening question — do not curve it, and do not declare the straight line
   "correct," without a pass.
 
-## MOD depth split (2026-08-23) — NOT YET HEARD
+## MOD depth split (2026-08-23) — HEARD, one item still open
 
 The bipolar depth knobs shipped with spec
 `docs/superpowers/specs/2026-08-22-mod-sh-split-design.md`: right of noon the
 lane's continuous output as before, left of noon the same lane sampled and
-held on its own slot boundaries, noon a standstill. Like the PULL section
-above, nothing here has been through a listening pass — the one value below is
-a first-try figure from the spec, recorded so a later session does not mistake
-"green suite" for "tuned."
+held on its own slot boundaries, noon a standstill. **Confirmed in Rack
+2026-08-29** — Bastian latched MOD on a FLOW deck with SMOOTH up and kept all
+three positions as they stand. Unlike the PULL section above, the *behaviour*
+is no longer a guess. The dead-zone width below still is, and it is the kind of
+question Rack cannot answer.
 
 - **`kDepthDead = 0.04f`** (`host/vcv/src/mod_layer.hpp`) — the standstill
   zone around noon, there for the same reason `kGritDead` is: a 9 mm pot on an
@@ -435,8 +436,11 @@ a first-try figure from the spec, recorded so a later session does not mistake
   ±1. **The alternative is 0.03**, which is what both `kGritDead`
   (`Fireflow.cpp`) and `kPullDead` (`engine/instrument.h`) use — this layer
   took 0.04 only because the spec asked for it (§5, "~±0.04"), and nobody has
-  turned the two against each other. Open: whether noon reads as reliably off
-  on a real pot at 0.04, and whether it should simply join the house 0.03.
+  turned the two against each other. **The Rack pass could not settle this and
+  never could have:** a mouse lands on an exact noon, so the zone is invisible
+  there — it exists for the pot, and the pot does not exist yet. Open until M6:
+  whether noon reads as reliably off on a real 9 mm pot at 0.04, and whether it
+  should simply join the house 0.03.
   **The cost of changing it is not zero:** the stored init knob positions are
   pre-images under this constant, so 0.03 moves them from 0.712 / 0.568 to
   0.709 / 0.5635 — that means re-running `res/gen_panel.py`, and re-probing

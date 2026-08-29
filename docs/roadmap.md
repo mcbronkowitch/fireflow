@@ -3487,17 +3487,25 @@ host and in the engine only. Also out of scope and not started: making STPS
 reachable in FLOW on the VCV host, CV over depths through the MOD1..4 jacks,
 and any change to lane shuffle semantics.
 
-**Outstanding: the listening pass.** Nothing here has been heard. `kDepthDead`
-is a first-try 0.04 against the house 0.03 that both `kGritDead` and
-`kPullDead` use, filed as an open candidate in
+**Checked interactively in Rack 2026-08-29** — Bastian latched MOD, turned a
+depth knob on a FLOW deck with SMOOTH up, and confirmed the feature behaves as
+designed: noon silent, right of noon gliding as before, left of noon stepping.
+That closes the gap no gate here can reach, the same one the latch layer had:
+the widget half cannot be driven from `spky_tests` because Rack does not link
+there, and screenshot mode renders and exits without clicking anything. The
+measured half agrees — end to end through `Instrument`, one depth knob in FLOW
+at SMOOTH 0.7 over 4 s: 2000 distinct excursions right of noon, 26 left of it,
+exactly 1 at noon and 1 inside the dead zone.
+
+**One item stays open, and it is a hardware question, not a Rack one.**
+`kDepthDead` is a first-try 0.04 against the house 0.03 that both `kGritDead`
+and `kPullDead` use. A mouse hits an exact noon; the zone exists for a 9 mm pot
+on an ADC, which does not exist yet — so the Rack pass could not settle it and
+was never going to. It stays an open candidate in
 [`docs/by-ear-decisions.md`](by-ear-decisions.md) under "MOD depth split
-(2026-08-23)". The end-to-end path is measured — through `Instrument`, one
-depth knob in FLOW at SMOOTH 0.7 over 4 s: 2000 distinct excursions right of
-noon, 26 left of it, exactly 1 at noon and 1 inside the dead zone — and both
-modules load and render in real Rack, but **a knob has not been turned by
-hand**. Where to start when it is: FLOW with SMOOTH up. In STEP at SMOOTH 0 the
-two halves are measurably the *same signal*, so a pass that starts there will
-conclude the knob does nothing.
+(2026-08-23)", to be answered on the M6 prototype. Note for whoever reads this
+next: in STEP at SMOOTH 0 the two halves are measurably the *same signal*, so a
+listening pass that starts there will conclude the knob does nothing.
 
 ### Two threads carried out of the SWARM withdrawal ⬜ (unscheduled)
 
