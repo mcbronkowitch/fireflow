@@ -260,6 +260,9 @@ public:
     float target_raw(int slot) const;          // base + mod*depth, unquantized
     float pitch_pre_quant() const;             // PITCH target + TUNE, pre-quantize
     float lane_output(int slot) const { return _mod.lane_output(slot); }
+    float lane_output_stepped(int slot) const {
+        return _mod.lane_output_stepped(slot);
+    }
     float lane_excursion(int slot) const { return _mod_term(slot); }
     bool  lane_fired(int slot) const  { return _mod.lane_fired(slot); }
     // GATE jack: the ~5 ms retrigger pulse, OR'd with the composed melodic
