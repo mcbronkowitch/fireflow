@@ -251,6 +251,46 @@ a single figure.** An earlier version of this file canonicalised "4.8×" from on
 seed measured in the wrong construction order; that is exactly the mistake this
 file exists to stop.
 
+### In FLOW the VCV host leaves every lane at one slot
+
+`_steps` is not a property of the engine's FLOW mode — it is whatever the host
+last pushed, and the three hosts push different things. On the VCV host the
+STPS knob runs 0..16 and `Fireflow.cpp` calls `set_step(p, steps > 0, steps)`:
+the position that *selects* FLOW **is** 0, and `set_step` clamps 0 up to 1. So
+every lane on a VCV FLOW deck carries `_steps == 1`, and no STPS setting can
+raise it without leaving FLOW.
+
+Measured 2026-08-23 (scratchpad `probe_flowsteps.cpp`, spec
+[`2026-08-22-mod-sh-split-design.md`](superpowers/specs/2026-08-22-mod-sh-split-design.md)
+§7 probe 1). Setup: `SuperModulator`, `init(48000, seed 12345)`, then exactly
+the call `Part::set_step` forwards; printed `lane_slots_for_test(i)` (==
+`_steps`) and `lane_effective_length_for_test(i)`.
+
+| Call | source | `deck_steps` | lane steps |
+|---|---|---|---|
+| `set_step(false, 0)` | VCV FLOW | 1 | 1 1 1 1 1 |
+| `set_step(true, 8)` | VCV STEP 8 | 8 | 4 16 8 12 6 |
+| `set_step(false, 0)` after STEP | VCV, live mode switch | 1 | 1 1 1 1 1 |
+| `set_step(false, 8)` | render host (`param_table.h`) | 8 | 8 8 8 8 8 |
+| `set_step(false, 16)` | render host | 16 | 16 16 16 16 16 |
+
+Two things follow, and both have already caught a design:
+
+1. **A STEP lane's slot count is its OWN, not the deck's.** At deck STEPS 8 the
+   five lanes run 4 / 16 / 8 / 12 / 6 — `lane_slots()` derives each from the
+   deck's STEPS through the lane's rate ratio. Anything that needs "the slot
+   count" has to say whose.
+2. **Any engine feature deriving a grid from `_steps` degenerates to a flat
+   line in VCV FLOW.** One latch, then `floor(phase × 1)` never changes again —
+   measured p2p **0.0000** over 20 s. This is why the MOD S&H split carries a
+   fixed `ModLane::kShFlowSlots = 8` instead of a `_steps` grid, and why
+   `tests/test_lane_sh.cpp` has a gate whose only job is to stop that
+   "simplification".
+
+A note deck's LANE_PITCH is the exception: `_effective_length()` reads 8
+(`kFlowPhraseSlots`) even in VCV FLOW, which is why the melody rows above stand
+unchanged.
+
 ---
 
 ## 2. Axis fan-in — the asymmetry

@@ -8,33 +8,42 @@
   Everything below the comment is public.
 -->
 
-## FireFlow 2.21.9
+## FireFlow 2.22.0
 
-A drawing release for the 60 HP hardware panel (`FireflowHW`). **No engine
-change** — nothing sounds different, and the main `Fireflow` module is
-untouched.
+**Every MOD depth knob now has two halves.** Hold MOD and turn a wreathed knob:
+to the **right of noon** it does what it always did — the depth of that lane's
+continuous, gliding modulation. To the **left of noon** the same lane is
+**sampled and held** at its own slot boundaries, so the target steps between
+values instead of sliding between them. Noon is a standstill: the knob is off
+there, with a small dead zone around it so "off" is reachable on a real pot the
+way it already is on GRIT and PULL.
 
-**FILT is a large cap again, and VOICE now stands in the same figure as
-TIMING.** The filter had been shrunk to a small knob in August because a large
-one could not sit on the 13 mm pitch it shared with TIMB and DPTH — a large cap
-needs 14.5 mm to a small neighbour. Rather than shrink the knob to fit the row,
-the row changed: VOICE's lower half is now small–LARGE–small with the filter
-centred, which is exactly how TIDE / MRPH / PACE has stood in TIMING since the
-graphics round. Both rows are now written from one pitch and one centre line, so
-re-tuning the figure re-tunes both instead of letting them drift apart.
+A left-hand setting is **not an inverted right-hand one.** The sign picks which
+reading of the lane the target follows; the distance from noon sets how much.
+At equal distance in both directions you get the same amount of modulation, one
+gliding and one stepping.
 
-**What that fixes:** VOICE was the only two-row group on the plate running on
-three heights, with its two small knobs crowded together on the left, a 15.6 mm
-hole in the middle and the large filter alone on a third line. It read restless
-next to MOTION beside it. The new row is symmetric — 5.6 mm between bodies on
-both sides, 10.7 mm of air to the frame on both ends.
+**Where you will hear it.** The two halves diverge most in FLOW with SMOOTH up
+— that is where the continuous reading is smoothest and the held one is most
+obviously a staircase. In STEP at SMOOTH 0 they are *the same signal*, exactly,
+because the follower is already a staircase and sampling it changes nothing. If
+you go looking for the feature there you will conclude the knob is broken; it
+is not.
 
-**The FIREFLOW wordmark and the "60 HP" legend have come off the plate** while
-the panel's branding is redrawn. The header strip is deliberately empty for now
-rather than carrying a placeholder.
+**One honest caveat:** sampling shaves the peaks a little. The grid rarely
+catches a lane's exact extremes, so a held reading swings slightly less than
+its continuous twin — measured 0.905 against 0.941 peak-to-peak at SMOOTH 0.7.
+That is ordinary sample-and-hold behaviour, not a defect, but it means the left
+half is a touch gentler than the right at the same distance from noon.
 
-The hardware panel remains a design study. No hardware is ordered, and the
-module is still labelled DRAFT.
+**Init is unchanged.** The six engine-backed depths still boot at the values
+they always had, so a fresh patch sounds exactly like the last release. Their
+stored knob positions moved (the dead zone rescales the axis), but what reaches
+the engine did not.
+
+The depth knobs' range is now −1..+1 instead of 0..1. Patches from earlier
+versions are not converted — this is a development alpha and saved patches may
+break between releases.
 
 ## Install
 
