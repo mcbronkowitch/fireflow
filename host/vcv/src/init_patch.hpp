@@ -9,17 +9,17 @@ static constexpr float kInitParamDefaults[] = {
     0.604819179f, // DENSITY_A
     0.0f, // SMOOTH_A
     0.0f, // RANGE_A
-    0.0f, // MELODY_A
-    0.740963936f, // MOD_A
+    0.687999368f, // MELODY_A
+    0.856628835f, // MOD_A
     0.500000179f, // TUNE_A
     0.685333312f, // ATTACK_A
     0.609333158f, // DECAY_A
     0.0f, // RES_A
-    0.711999893f, // SUB_A
+    0.209333256f, // SUB_A
     0.0f, // SOURCE_A
     0.0f, // FLUX_A
     0.0f, // GRIT_A
-    1.0f, // COMP_A
+    0.889155984f, // COMP_A
     0.0f, // STEPS_A
     5.0f, // ENGINE_A
     0.0f, // DETUNE_A
@@ -31,11 +31,11 @@ static constexpr float kInitParamDefaults[] = {
     0.0f, // RANGE_B
     0.671083927f, // MELODY_B
     0.710844219f, // MOD_B
-    0.179020017f, // TUNE_B
+    0.174666643f, // TUNE_B
     1.0f, // ATTACK_B
     1.0f, // DECAY_B
     0.539999962f, // RES_B
-    0.0f, // SUB_B
+    0.662666559f, // SUB_B
     0.404000044f, // SOURCE_B
     0.650667071f, // FLUX_B
     0.0f, // GRIT_B
@@ -44,7 +44,7 @@ static constexpr float kInitParamDefaults[] = {
     2.0f, // ENGINE_B
     0.455999434f, // DETUNE_B
     0.0f, // SONG_B
-    0.384337217f, // MORPH
+    0.499999762f, // MORPH
     0.19733347f, // TEMPO
     1.0f, // COUPLE
     6.0f, // SCALE
@@ -52,9 +52,9 @@ static constexpr float kInitParamDefaults[] = {
     0.885333359f, // REV_SIZE
     0.785541177f, // REV_DECAY
     1.0f, // REV_TONE
-    0.052000195f, // REV_DIFF
+    0.634667158f, // REV_DIFF
     0.0f, // CHOKE
-    -0.066666692f, // FILT_A
+    -0.302811146f, // FILT_A
     -0.06400007f, // FILT_B
     0.0f, // TIDE
     1.0f, // FLUXRATE_A
@@ -69,10 +69,10 @@ static constexpr float kInitParamDefaults[] = {
     0.0f, // STAGES_B
     0.0f, // REC_A
     0.0f, // REC_B
-    0.774703741f, // REV_MIX_A
-    0.805333197f, // REV_MIX_B
+    0.772287607f, // REV_MIX_A
+    0.789153814f, // REV_MIX_B
     0.0f, // SHUFFLE
-    0.167999804f, // PACE
+    0.099999927f, // PACE
     0.365333289f, // DEPTH_A
     0.5f, // DEPTH_B
     0.0f, // PULL
@@ -102,9 +102,9 @@ static constexpr float kInitParamDefaults[] = {
     0.0f, // MODD_MELODY_A
     0.0f, // MODD_MELODY_B
     0.0f, // MODD_SUB_A
-    0.0f, // MODD_SUB_B
-    0.0f, // MODD_DETUNE_A
-    0.0f, // MODD_DETUNE_B
+    0.8853333f, // MODD_SUB_B
+    0.298666626f, // MODD_DETUNE_A
+    0.250666678f, // MODD_DETUNE_B
     0.0f, // MODD_ATTACK_A
     0.0f, // MODD_ATTACK_B
     0.0f, // MODD_DECAY_A
@@ -119,11 +119,11 @@ static constexpr float kInitParamDefaults[] = {
     0.0f, // MODD_LINK_B
     0.0f, // MODD_COMP_A
     0.0f, // MODD_COMP_B
-    0.0f, // MODD_MORPH
+    0.279517978f, // MODD_MORPH
     0.0f, // MODD_REV_SIZE
     0.0f, // MODD_REV_DECAY
     0.0f, // MODD_REV_TONE
-    0.0f, // MODD_REV_DIFF
+    0.442666322f, // MODD_REV_DIFF
     0.0f, // MODD_TIDE
 };
 static_assert(sizeof(kInitParamDefaults) / sizeof(kInitParamDefaults[0])

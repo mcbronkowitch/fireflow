@@ -115,6 +115,8 @@ TEST_CASE("mod layer: kModLayer is exactly the spec's table") {
 }
 
 TEST_CASE("mod layer: init defaults keep today's sound through the dead zone") {
+    // "today's sound" is still the rule for the three engine-backed faces.
+    // What the factory patch dials on top of them is pinned at the bottom.
     CHECK(initParamDefault(MODBTN) == 0.f);
     // The knob positions are the PRE-IMAGES: 0.7 depth sits at knob 0.712,
     // because depth_of() rescales the axis around the dead zone. What has to
@@ -131,8 +133,44 @@ TEST_CASE("mod layer: init defaults keep today's sound through the dead zone") {
           == doctest::Approx(0.7f));
     CHECK(spkymod::depth_of(initParamDefault(MODD_FILT_B))
           == doctest::Approx(0.55f));
-    // every host-computed depth and every FX depth still boots at standstill
-    for (const auto& t : kModLayer)
-        if (t.kind != MODK_TDEPTH)
+    // Every FX depth still boots at standstill, and so does every HOST depth
+    // the factory patch does not dial. NewInit.vcvm (2026-08-29) is the first
+    // snapshot to dial any: five HOST faces boot off noon (res/gen_panel.py's
+    // INIT_MOD_KNOBS). Spelled out as a literal set rather than read back off
+    // the table, so widening the patch's reach is a deliberate edit here too.
+    const std::set<int> dialled = {(int)MODD_SUB_B, (int)MODD_DETUNE_A,
+                                   (int)MODD_DETUNE_B, (int)MODD_MORPH,
+                                   (int)MODD_REV_DIFF};
+    for (const auto& t : kModLayer) {
+        if (t.kind == MODK_TDEPTH) continue;
+        if (dialled.count(t.depthId)) {
+            // A dialled default is a raw knob position off the preset, not a
+            // _depth_knob pre-image, so it may only land on a HOST face --
+            // the engine-backed kinds are pushed as depths and would arrive
+            // rescaled. Positive: left of noon would put the face on the
+            // lane's S&H twin, which is a different patch, not a deeper one.
+            CHECK(t.kind == MODK_HOST);
+            CHECK(spkymod::depth_of(initParamDefault(t.depthId)) > 0.f);
+        } else {
             CHECK(initParamDefault(t.depthId) == 0.f);
+        }
+    }
+    // The five, by value: knob positions transcribed from the preset, and the
+    // depths they resolve to. Both sides are literals -- reading either off
+    // gen_panel.py or off depth_of() would let one number move both.
+    CHECK(initParamDefault(MODD_SUB_B) == doctest::Approx(0.885333300f));
+    CHECK(initParamDefault(MODD_DETUNE_A) == doctest::Approx(0.298666626f));
+    CHECK(initParamDefault(MODD_DETUNE_B) == doctest::Approx(0.250666678f));
+    CHECK(initParamDefault(MODD_MORPH) == doctest::Approx(0.279517978f));
+    CHECK(initParamDefault(MODD_REV_DIFF) == doctest::Approx(0.442666322f));
+    CHECK(spkymod::depth_of(initParamDefault(MODD_SUB_B))
+          == doctest::Approx(0.880555520f));
+    CHECK(spkymod::depth_of(initParamDefault(MODD_DETUNE_A))
+          == doctest::Approx(0.269444402f));
+    CHECK(spkymod::depth_of(initParamDefault(MODD_DETUNE_B))
+          == doctest::Approx(0.219444456f));
+    CHECK(spkymod::depth_of(initParamDefault(MODD_MORPH))
+          == doctest::Approx(0.249497894f));
+    CHECK(spkymod::depth_of(initParamDefault(MODD_REV_DIFF))
+          == doctest::Approx(0.419444085f));
 }

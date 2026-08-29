@@ -31,10 +31,12 @@ TEST_CASE("Seed audition applies the VCV init engine and arranger state")
     CHECK(inst.engine_id(spky::PART_B) == spky::ENGINE_WAVE);
 
     // SONG_A/B's init default is a ladder rung index (spec 2026-08-09
-    // hw-control-reduction task 3), and FM-INIT.vcvm asks for rung 0 on both
-    // decks. The two decks reach it by different routes, which is new: deck A
-    // boots STEPS_A == 0 (FLOW), deck B boots STEPS_B == 8 (step mode, eight
-    // steps) -- the first factory patch that starts a deck stepped on purpose.
+    // hw-control-reduction task 3), and the factory patch asks for rung 0 on
+    // both decks (FM-INIT.vcvm 2026-08-21, unchanged by NewInit.vcvm
+    // 2026-08-29). The two decks reach it by different routes: deck A boots
+    // STEPS_A == 0 (FLOW), deck B boots STEPS_B == 8 (step mode, eight steps)
+    // -- FM-INIT was the first factory patch to start a deck stepped on
+    // purpose, and NewInit keeps it there.
     //
     // Before spec 2026-08-13 flow-melody-engine task 8, a FLOW deck's rung did
     // not land at boot at all: ModLane::set_form/set_song only raise
@@ -86,9 +88,10 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
                   "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 121 -- "
                   "if the panel inventory genuinely changed, update this "
                   "literal to match");
-    // FM-INIT.vcvm (2026-08-21) pairs FEED (5) on deck A with WAVE (2) on
-    // deck B, where the FF_hw_Init.vcvm lineage before it paired WAVE with
-    // SYNTH. Both ENG pins must track the snapshot exactly, because
+    // The factory patch pairs FEED (5) on deck A with WAVE (2) on deck B --
+    // set by FM-INIT.vcvm (2026-08-21) and kept by NewInit.vcvm (2026-08-29),
+    // where the FF_hw_Init.vcvm lineage before them paired WAVE with SYNTH.
+    // Both ENG pins must track the snapshot exactly, because
     // bench/audition/init_patch.cpp dispatches off this same table -- and a
     // number here that the dispatcher has no arm for boots as SAMPLER in
     // silence (see "boots the same engines the VCV host does" below).
@@ -157,8 +160,9 @@ TEST_CASE("Seed audition boots the same engines the VCV host does")
     for(int block = 0; block < 8; ++block)
         inst.process(in, in, out_l, out_r, 96);
 
-    // The snapshot puts deck A on FEED and deck B on WAVE (FM-INIT.vcvm,
-    // 2026-08-21). The previous one paired WAVE with SYNTH.
+    // The snapshot puts deck A on FEED and deck B on WAVE (FM-INIT.vcvm
+    // 2026-08-21, carried unchanged into NewInit.vcvm 2026-08-29). The
+    // lineage before them paired WAVE with SYNTH.
     //
     // What this case is really guarding has not changed with the patch: every
     // engine the snapshot can name needs its own explicit arm in the
@@ -182,7 +186,7 @@ TEST_CASE("Seed audition dispatcher routes generated STAGES by generated engine"
     snapshot[spkyvcv::TUNE_A] = 0.5f;
     snapshot[spkyvcv::TUNE_B] = 0.5f;
     // Both decks in FLOW is this case's premise, not an accident of the
-    // snapshot: FM-INIT.vcvm boots deck B stepped (STEPS_B == 8), and
+    // snapshot: the factory patch boots deck B stepped (STEPS_B == 8), and
     // part.cpp's _pitch_q rule quantizes a stepped deck's pitch to the scale
     // grid, which is exactly the continuity the two pins below measure.
     // Overridden here rather than worked around, so the case keeps testing
@@ -403,21 +407,23 @@ TEST_CASE("Seed audition's factory init pins every engine-side observable "
     CHECK(inst.song(spky::PART_A) == static_cast<int>(spky::SongMode::Off));
     CHECK(inst.song(spky::PART_B) == static_cast<int>(spky::SongMode::Off));
 
-    // --- per-part level and compressor amount: both decks boot at the TOP ---
-    // of LVL/COMP, deeper into the comp zone than any earlier patch. Level
-    // clamps to unity for anything at or above kLvlCompSplit (0.6), and the
-    // amount is kCompTop * ((knob - 0.6) / 0.4) ^ kCompShape, which at knob
-    // 1.0 is kCompTop * 1 ^ 0.6 == 0.7 exactly on both decks -- the maximum
-    // the taper offers. These numbers are only meaningful together with
-    // kCompShape: reshape the taper and the same knob positions give
-    // different amounts, which is exactly what this pin is here to force
-    // somebody to notice. (At the top of travel the shape drops out, so this
-    // pin no longer catches a kCompShape change on its own -- kCompTop and
-    // kLvlCompSplit still move it.)
+    // --- per-part level and compressor amount: both decks boot inside the ---
+    // comp zone, but on DIFFERENT amounts since NewInit.vcvm (2026-08-29)
+    // took deck A off the top of travel. Level clamps to unity for anything
+    // at or above kLvlCompSplit (0.6), so both decks still report level 1.
+    // The amount is kCompTop * ((knob - 0.6) / 0.4) ^ kCompShape:
+    //   deck A  knob 0.889155984 -> 0.7 * 0.72288996 ^ 0.6 == 0.576158
+    //   deck B  knob 1.0         -> 0.7 * 1 ^ 0.6          == 0.7 exactly
+    // These numbers are only meaningful together with kCompShape: reshape the
+    // taper and the same knob positions give different amounts, which is
+    // exactly what this pin is here to force somebody to notice. Deck A is
+    // now the deck that catches a kCompShape change -- at the top of travel
+    // the shape drops out of deck B's number entirely, leaving it sensitive
+    // to kCompTop and kLvlCompSplit only.
     CHECK(inst.part_level_for_test(spky::PART_A) == doctest::Approx(1.f));
     CHECK(inst.part_level_for_test(spky::PART_B) == doctest::Approx(1.f));
     CHECK(inst.comp_amount_for_test(spky::PART_A)
-          == doctest::Approx(0.7f).epsilon(0.0001));
+          == doctest::Approx(0.576158f).epsilon(0.0001));
     CHECK(inst.comp_amount_for_test(spky::PART_B)
           == doctest::Approx(0.7f).epsilon(0.0001));
 
@@ -471,4 +477,13 @@ TEST_CASE("Seed audition's factory init pins every engine-side observable "
     CHECK(inst.master_drive_pre_gain_for_test() == doctest::Approx(1.48f));
     CHECK(inst.reverb_smear_for_test() == doctest::Approx(0.30f));
     CHECK(inst.reverb_mod_for_test() == doctest::Approx(0.15f));
+
+    // NOT reachable from here, on purpose: the five HOST mod depths
+    // NewInit.vcvm dials (SUB B, DETUNE A/B, MORPH, REV_DIFF). A HOST depth
+    // is applied in Rack's own pushParams via mv()/modded(), from live lane
+    // readings -- bench/audition/init_patch.cpp is a one-shot push with no
+    // lane term, and modded() returns the knob when the term is 0 anyway, so
+    // the boot INSTANT is identical either way and there is nothing here for
+    // an engine observer to see. Those five are pinned in
+    // tests/test_mod_layer.cpp, against the table the host reads.
 }

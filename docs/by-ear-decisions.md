@@ -296,18 +296,26 @@ on the other five engines, none of them confirmed by ear yet (spec §9).
   word) and COUPLE's `FREE|GRID`, at nine characters the longest label on the
   instrument. Do not "shorten for the hardware" — the footprint was measured
   and `res/test_hw_panel.py` guards it.
-- **The factory patch is FM-INIT.vcvm (2026-08-21).** The third wholesale
-  replacement (drone.vcvm → FF_hw_Init.vcvm → this one), played and saved from
-  a 2.21.5 module: 42 of 71 values moved. Deck A boots **FEED** against
-  **WAVE** on deck B — no SYNTH, BODY or SAMPLER deck at boot for the first
-  time. Four things are new in kind and are not to be "fixed" back:
-  **deck B boots in step mode** (`STEPS_B == 8`), **TEMPO is off its floor**
-  (79.47 BPM, so every clocked thing runs faster than in any earlier patch),
-  **DRIFT is parked at 0**, and **PACE sits below ×1** (0.168). Both decks sit
-  at the top of LVL/COMP, i.e. at the taper's maximum compressor amount (0.7).
-  SCALE is Minor pentatonic, the first patch outside the modes group.
-  Comments and specs describing the FF_hw_Init.vcvm or drone.vcvm boot sound
-  describe closed lineages.
+- **The factory patch is NewInit.vcvm (2026-08-29).** The first snapshot that
+  *revises* its predecessor instead of replacing it: FM-INIT.vcvm (2026-08-21,
+  itself the third wholesale replacement after drone.vcvm → FF_hw_Init.vcvm)
+  played and saved on from a 2.22.0 module, 12 of the 72 panel values moved
+  plus 5 MOD depths. FM-INIT's decisions therefore still stand and are not to
+  be "fixed" back: deck A boots **FEED** against **WAVE** on deck B (no SYNTH,
+  BODY or SAMPLER deck at boot), **deck B boots in step mode**
+  (`STEPS_B == 8`), **TEMPO is off its floor** (79.47 BPM), **DRIFT is parked
+  at 0**, and SCALE is Minor pentatonic, outside the modes group. What
+  NewInit adds, also by ear:
+  - **the MOD layer boots dialled** — five HOST depths off noon (SUB on deck B,
+    DETUNE on both, MORPH, REV_DIFF), the first factory patch to use the layer
+    for anything past its three engine-backed faces. `gen_panel.py`'s
+    `INIT_MOD_KNOBS` is where they live and why they are not in the tables.
+  - **the decks no longer share one compressor amount** — deck B stays at the
+    top of LVL/COMP (0.7, the taper's maximum), deck A came off it to 0.576.
+  - **PACE moved further down**, from 0.168 to exactly ×1/16 (0.1).
+  - **MORPH boots at centre**, where FM-INIT leaned to deck A.
+  Comments and specs describing the FM-INIT, FF_hw_Init.vcvm or drone.vcvm
+  boot sound describe closed lineages.
 - **DPTH no longer boots neutral.** The knob shipped (2026-08-19) with a rule
   that both decks start at `feed_cfg::kDepthBase` so an existing patch could
   not change; this patch dials deck A to 0.365. `res/test_panel.py` keeps the
@@ -354,8 +362,11 @@ which is exactly why they are recorded here.
     (teal/orange/blue-grey) exactly as it prints when unlatched — nothing
     extra appears or changes on the plate when the layer engages.
   - The three engine-backed depth defaults land at their booted positions:
-    TIMB depth ≈ 1.0, DPTH depth ≈ 0.7, FILT depth ≈ 0.55; every other
-    depth twin boots at 0.
+    TIMB depth ≈ 1.0, DPTH depth ≈ 0.7, FILT depth ≈ 0.55. Every other depth
+    twin booted at noon when this list was written; since NewInit.vcvm
+    (2026-08-29) five more are dialled on purpose — SUB on deck B, DETUNE on
+    both decks, MORPH and REV_DIFF in the centre. Seeing those off noon is
+    the factory patch, not a fault.
   - The excluded knobs stay live and unchanged while latched: MOD, GRIT,
     TIME/FLUXRATE, DRFT, SYNC/COUPLE, CHOK, and the whole clock/structure
     row (STPS, SONG, RATE, VARY, TEMP, SYNC, SHFL).
@@ -386,8 +397,8 @@ which is exactly why they are recorded here.
   — heard and kept, 2026-08-22.** `inst.sampler_overlap(p, ...)` was left reading the raw knob
   in `ea419ba` and changed to `mvp(DENSITY_A, p)` in `9f79141`, so both
   meanings of the DENS face now follow the same modulated read. Inert at
-  init — every host-computed depth boots at 0 — so it only bites once DENS
-  depth is raised above 0. The "Sampler" section above justifies sharing
+  init — DENS is one of the depths that still boots at noon, and NewInit.vcvm
+  did not dial it — so it only bites once DENS depth is raised above 0. The "Sampler" section above justifies sharing
   DENS across gate and overlap with "both point the same direction
   (sparser)"; under modulation that stops being automatically true — the
   gate would breathe while overlap sat still if the two diverged under a
