@@ -417,3 +417,35 @@ mistake "compiles and passes its gates" for "tuned."
   binding near-certain) or spread evenly across the whole span is an open
   listening question — do not curve it, and do not declare the straight line
   "correct," without a pass.
+
+## MOD depth split (2026-08-23) — NOT YET HEARD
+
+The bipolar depth knobs shipped with spec
+`docs/superpowers/specs/2026-08-22-mod-sh-split-design.md`: right of noon the
+lane's continuous output as before, left of noon the same lane sampled and
+held on its own slot boundaries, noon a standstill. Like the PULL section
+above, nothing here has been through a listening pass — the one value below is
+a first-try figure from the spec, recorded so a later session does not mistake
+"green suite" for "tuned."
+
+- **`kDepthDead = 0.04f`** (`host/vcv/src/mod_layer.hpp`) — the standstill
+  zone around noon, there for the same reason `kGritDead` is: a 9 mm pot on an
+  ADC cannot hit an exact zero, so without a zone "off" would be unreachable
+  on hardware. `|depth|` is rescaled off it so both stops still reach a full
+  ±1. **The alternative is 0.03**, which is what both `kGritDead`
+  (`Fireflow.cpp`) and `kPullDead` (`engine/instrument.h`) use — this layer
+  took 0.04 only because the spec asked for it (§5, "~±0.04"), and nobody has
+  turned the two against each other. Open: whether noon reads as reliably off
+  on a real pot at 0.04, and whether it should simply join the house 0.03.
+  **The cost of changing it is not zero:** the stored init knob positions are
+  pre-images under this constant, so 0.03 moves them from 0.712 / 0.568 to
+  0.709 / 0.5635 — that means re-running `res/gen_panel.py`, and re-probing
+  the round-trip figures asserted in `tests/test_mod_layer.cpp` and
+  `res/test_panel.py` (scratchpad `probe_dead.cpp`). It is the owner's call,
+  not an implementer's tidy-up.
+- **Where the feature is audible at all is measured, not a matter of taste.**
+  In STEP at SMOOTH 0 the two halves of the knob are the *same signal*
+  (measured max|difference| == 0.000000 over 20 s), because the follower is
+  already a staircase. The split is loudest in FLOW with SMOOTH up. A
+  listening pass that starts anywhere else will conclude the knob does
+  nothing.

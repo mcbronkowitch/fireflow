@@ -858,15 +858,32 @@ INIT_DEFAULTS = {
     "PULL": 0.000000000,
 }
 
-# MOD latch layer defaults (spec §3a): engine-backed depths carry the booted
-# values, host-computed depths and the latch itself start at 0 -- init is
-# byte-identical to today.
+# MOD latch layer defaults (spec §3a, revised by 2026-08-22 mod-sh-split §5):
+# engine-backed depths carry the booted values, host-computed depths and the
+# latch itself start at noon.
+#
+# The stored numbers are KNOB positions, and since the depth axis became
+# bipolar the knob is not the depth: mod_layer.hpp's depth_of() dead-zones
+# noon and rescales the remainder, so a booted depth of 0.7 has to be stored
+# as 0.712 to arrive at the engine as 0.7. _depth_knob is that inverse, and
+# it is the same arithmetic as spkymod::depth_knob -- tests/test_mod_layer.cpp
+# pins the round trip through both.
+MOD_DEPTH_DEAD = 0.04
+
+
+def _depth_knob(d):
+    if d == 0.0:
+        return 0.0
+    raw = MOD_DEPTH_DEAD + abs(d) * (1.0 - MOD_DEPTH_DEAD)
+    return -raw if d < 0.0 else raw
+
+
 INIT_DEFAULTS["MODBTN"] = 0.0
 for _base, _kind, _slot, _init in MOD_DECK_TARGETS:
-    INIT_DEFAULTS[f"MODD_{_base}_A"] = _init
-    INIT_DEFAULTS[f"MODD_{_base}_B"] = _init
+    INIT_DEFAULTS[f"MODD_{_base}_A"] = _depth_knob(_init)
+    INIT_DEFAULTS[f"MODD_{_base}_B"] = _depth_knob(_init)
 for _base, _kind, _slot, _init in MOD_CENTER_TARGETS:
-    INIT_DEFAULTS[f"MODD_{_base}"] = _init
+    INIT_DEFAULTS[f"MODD_{_base}"] = _depth_knob(_init)
 
 # --- lights --------------------------------------------------------------------
 # INPUTS/OUTPUTS are built above (see JACK_GROUPS, near CX) -- they had to move
@@ -1158,10 +1175,12 @@ def header():
     for base, kind, slot, _init in MOD_DECK_TARGETS:
         for pi, sfx in enumerate(("_A", "_B")):
             L2.append(f'    {{{base}{sfx}, MODD_{base}{sfx}, {KINDMAP[kind]}, '
-                      f'{slot}, {pi}, "{base} {"AB"[pi]} mod depth"}},')
+                      f'{slot}, {pi}, "{base} {"AB"[pi]} mod depth '
+                      f'(left of noon: S&H, right: continuous)"}},')
     for base, kind, slot, _init in MOD_CENTER_TARGETS:
         L2.append(f'    {{{base}, MODD_{base}, {KINDMAP[kind]}, {slot}, 2, '
-                  f'"{base} mod depth"}},')
+                  f'"{base} mod depth (left of noon: S&H, right: '
+                  f'continuous)"}},')
     L2.append("};")
 
     # State-dependent captions, expanded per deck. The driver id is the

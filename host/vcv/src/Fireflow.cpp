@@ -377,6 +377,7 @@ struct Fireflow : Module {
     // masters, sampled once at the top of pushParams so every mv() read in the
     // same tick sees the same modulation frame (spec 2026-08-22 §3b).
     float laneOut[spky::PART_COUNT][spky::LANE_COUNT] = {};
+    float laneOutStepped[spky::PART_COUNT][spky::LANE_COUNT] = {};
     float modMaster[spky::PART_COUNT] = {};
     // Reverse index into kModLayer, keyed by SOUND param id: -1 means the face
     // owns no depth param. Built once in the constructor -- mv() runs per param
@@ -591,13 +592,15 @@ struct Fireflow : Module {
         // NOT in kParamCtls -- the big panel never shows them; the HW widget
         // stacks each one on its sound twin and the latch picks which is
         // visible. Names come from the generator, so the tooltip and the
-        // wreath on the plate can never drift apart. Every depth is unipolar
-        // 0..1 whatever its sound twin's range is: it scales a swing, it is
-        // not a second copy of the knob.
+        // wreath on the plate can never drift apart. Every depth is bipolar
+        // -1..+1 whatever its sound twin's range is: it scales a swing and
+        // picks which reading of the lane that swing follows (left = S&H), it
+        // is not a second copy of the knob. Noon is standstill, dead-zoned in
+        // mod_layer.hpp so it is reachable on a pot.
         configSwitch(MODBTN, 0.f, 1.f, initParamDefault(MODBTN), "MOD layer",
                      {"Off", "On"});
         for (const auto& t : kModLayer)
-            configParam(t.depthId, 0.f, 1.f, initParamDefault(t.depthId), t.name);
+            configParam(t.depthId, -1.f, 1.f, initParamDefault(t.depthId), t.name);
     }
 
     // Re-init the engine for a new sample rate. Without the snapshot below,
@@ -701,13 +704,21 @@ struct Fireflow : Module {
         const ModTarget& t = kModLayer[mi];
         if (t.kind != MODK_HOST) return v;
         // t.part == 2 marks a center-column target: both decks mixed, so both
-        // masters down means the center is still.
+        // masters down means the center is still. Both readings are built the
+        // same way -- the sum of two staircases is itself a staircase (spec
+        // 2026-08-22 mod-sh-split §5), so the center needs no extra clock.
         const float term = (t.part == 2)
             ? spkymod::center_term(modMaster[0], laneOut[0][t.slot],
                                    modMaster[1], laneOut[1][t.slot])
             : spkymod::lane_term(modMaster[t.part], laneOut[t.part][t.slot]);
+        const float stepTerm = (t.part == 2)
+            ? spkymod::center_term(modMaster[0], laneOutStepped[0][t.slot],
+                                   modMaster[1], laneOutStepped[1][t.slot])
+            : spkymod::lane_term(modMaster[t.part],
+                                 laneOutStepped[t.part][t.slot]);
         ParamQuantity* q = paramQuantities[soundId];
-        return spkymod::modded(v, params[t.depthId].getValue(), term,
+        return spkymod::modded(v, spkymod::depth_of(params[t.depthId].getValue()),
+                               term, stepTerm,
                                q->getMinValue(), q->getMaxValue());
     }
     // Strided twin of pp(). Only valid inside the part blocks, exactly like
@@ -733,8 +744,10 @@ struct Fireflow : Module {
         // the center's mix of both decks is taken at one instant.
         for (int p = 0; p < 2; ++p) {
             modMaster[p] = pp(MOD_A, p);
-            for (int s = 0; s < spky::LANE_COUNT; ++s)
-                laneOut[p][s] = inst.lane_output(p, s);
+            for (int s = 0; s < spky::LANE_COUNT; ++s) {
+                laneOut[p][s]        = inst.lane_output(p, s);
+                laneOutStepped[p][s] = inst.lane_output_stepped(p, s);
+            }
         }
 
         // STEP entry latches the groove target immediately. Push the shared
@@ -1124,21 +1137,27 @@ struct Fireflow : Module {
 
         // Engine-backed mod depths (spec 2026-08-22 §3a): TIMB/DPTH/FILT write
         // the Part's own _tdepth slots, MIX/FB/SEND the FX row -- active iff
-        // the depth is up. Nothing else in this host writes those slots, so
-        // this loop is their sole owner and their boot values are exactly what
-        // the init snapshot repeats back (1.0 / 0.7 / 0.55 and three zeroes).
+        // the depth is off noon. Nothing else in this host writes those slots,
+        // so this loop is their sole owner. The init snapshot repeats back the
+        // KNOB POSITIONS, which since the bipolar split are the pre-images
+        // (1.0 / 0.712 / 0.568 and three zeroes); through depth_of they reach
+        // the engine as the booted depths 1.0 / 0.7 / 0.55 and three zeroes.
         //
         // The engine already multiplies its own master MOD into the texture
         // lanes, so no modMaster factor appears here -- that is the whole
         // reason these six faces do NOT take the host-computed path.
         for (const auto& t : kModLayer) {
+            // Through depth_of, not raw: noon needs its dead zone here too,
+            // and a negative depth is what tells Part to read the lane's S&H
+            // twin (spec 2026-08-22 mod-sh-split §4).
+            const float d = spkymod::depth_of(params[t.depthId].getValue());
             if (t.kind == MODK_TDEPTH) {
-                inst.set_target_depth(t.part, t.slot,
-                                      params[t.depthId].getValue());
+                inst.set_target_depth(t.part, t.slot, d);
             } else if (t.kind == MODK_FXDEPTH) {
-                const float d = params[t.depthId].getValue();
                 inst.set_fx_target_depth(t.part, t.slot, d);
-                inst.set_fx_target_active(t.part, t.slot, d > 0.f);
+                // Active on EITHER side of noon now -- the old `d > 0.f`
+                // would have left every S&H FX target pinned to its base.
+                inst.set_fx_target_active(t.part, t.slot, d != 0.f);
             }
         }
 

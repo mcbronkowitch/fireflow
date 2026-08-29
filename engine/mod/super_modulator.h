@@ -107,6 +107,10 @@ public:
     void process();                // advance all lanes one sample
 
     float lane_output(int i) const { return _out[i]; }
+    // The S&H twin of lane_output, on the same frozen frame. Reading
+    // _lanes[i].stepped_output() directly would bypass the 96-sample raster
+    // _out exists to enforce -- see the comment on process().
+    float lane_output_stepped(int i) const { return _out_stepped[i]; }
     bool  lane_fired(int i)  const { return _lanes[i].fired(); }
     bool  lane_frozen(int i) const { return _lanes[i].frozen(); }
     float lane_phase(int i)  const { return _lanes[i].phase(); }
@@ -220,6 +224,7 @@ private:
 
     std::array<ModLane, LANE_COUNT> _lanes;
     std::array<float, LANE_COUNT>   _out {};
+    std::array<float, LANE_COUNT>   _out_stepped {};
 
     float    _sr = 48000.f;
     float    _bpm = 120.f;

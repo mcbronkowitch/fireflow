@@ -3461,6 +3461,44 @@ settled in [`docs/by-ear-decisions.md`](by-ear-decisions.md) under "MOD latch
 layer (2026-08-22)", which also keeps the latch checklist as the regression
 list for that widget code. Nothing on this round is outstanding.
 
+**2026-08-23 — the depth knobs become bipolar (MOD depth split).** Every one of
+those 48 depth knobs now means two things: right of noon the lane's continuous
+output exactly as before, left of noon **the same lane sampled and held on its
+own slot boundaries**, and noon a standstill. One mechanism serves both paths —
+`ModLane` grows a second, held output latched at each slot change
+(`stepped_output()`), carried up through `SuperModulator` → `Part` →
+`Instrument` beside the continuous one, and the *sign* of a stored depth picks
+which of the two a target reads while the *magnitude* scales it. A negative
+depth is **not** an inversion. The rule lives twice, identically: in the
+engine's `_mod_term`/`fx_target_value` and in the host's `mod_layer.hpp`, which
+is also where noon's dead zone lives (`kDepthDead`, the same shape as
+`kGritDead`). Because that dead zone rescales the axis, `gen_panel.py` now
+stores the booted depths as their **pre-images** (1.0 / 0.712 / 0.568), so init
+still reaches the engine as 1.0 / 0.7 / 0.55. FLOW's S&H grid is a fixed
+`kShFlowSlots = 8`, deliberately not `_steps` — see the gotcha below. Spec
+`docs/superpowers/specs/2026-08-22-mod-sh-split-design.md`, plan
+`docs/superpowers/plans/2026-08-23-mod-sh-split.md`, branch
+`feat/mod-sh-split`.
+
+**Two things it deliberately did not do** (spec §9): the FLOW S&H grid is not
+TEMP-locked — it divides the lane's own cycle, so it drifts with RATE rather
+than the transport — and `shell/` is not wired, so the split exists on the VCV
+host and in the engine only. Also out of scope and not started: making STPS
+reachable in FLOW on the VCV host, CV over depths through the MOD1..4 jacks,
+and any change to lane shuffle semantics.
+
+**Outstanding: the listening pass.** Nothing here has been heard. `kDepthDead`
+is a first-try 0.04 against the house 0.03 that both `kGritDead` and
+`kPullDead` use, filed as an open candidate in
+[`docs/by-ear-decisions.md`](by-ear-decisions.md) under "MOD depth split
+(2026-08-23)". The end-to-end path is measured — through `Instrument`, one
+depth knob in FLOW at SMOOTH 0.7 over 4 s: 2000 distinct excursions right of
+noon, 26 left of it, exactly 1 at noon and 1 inside the dead zone — and both
+modules load and render in real Rack, but **a knob has not been turned by
+hand**. Where to start when it is: FLOW with SMOOTH up. In STEP at SMOOTH 0 the
+two halves are measurably the *same signal*, so a pass that starts there will
+conclude the knob does nothing.
+
 ### Two threads carried out of the SWARM withdrawal ⬜ (unscheduled)
 
 SWARM was withdrawn 2026-08-18 on a listening decision and `main` was wound

@@ -137,6 +137,23 @@ public:
     // where in the phrase a fire sits and how long a step is in samples.
     int   cur_step() const { return _cur_step; }
     int   steps()    const { return _steps; }
+
+    // S&H slot count for a FLOW texture lane (spec 2026-08-22 mod-sh-split
+    // §3). Deliberately NOT _steps: on the VCV host the STPS knob position
+    // that SELECTS flow is 0 (Fireflow.cpp, set_step(p, steps > 0, steps)),
+    // so every lane carries _steps == 1 in FLOW there and a _steps-derived
+    // grid emits no edges at all -- measured p2p 0.0000 over 20 s (spec §7
+    // probe 2). 8 is what the FLOW melody lane already runs on
+    // (kFlowPhraseSlots), so the two FLOW rasters agree.
+    static constexpr int kShFlowSlots = 8;
+
+    // The finished output, held between S&H slot boundaries -- the left half
+    // of a bipolar MOD depth knob reads this where the right half reads the
+    // return value of process()/tick()/follow(). It IS one of their past
+    // return values (post-SHAPE, post-SMOOTH, post-RANGE), never a separately
+    // computed signal, which is why its edges are always hard no matter what
+    // SMOOTH does.
+    float stepped_output() const { return _stepped_out; }
     int step_at_phase(float phase) const {
         return shuffle_step_index(phase, _steps, _shuffle_latched);
     }
@@ -227,6 +244,10 @@ private:
     void  _wrap_events();           // regen/EVOLVE/groove events at a cycle wrap
     float _compute_raw() const;
     int   _sh_slot() const;         // which _seq slot the S&H end reads now
+    // The S&H slot this lane occupies now. NOT _sh_slot() above -- that one
+    // is the SHAPE lookup's _seq slot and has nothing to do with this.
+    int   _hold_slot() const;
+    void  _latch_stepped(float out);
     void  _mutate_slot(int slot);   // GROW: variation dice + pitch walk on a fired step
     void  _fill_walk();             // deterministic contour-walk prefill (non-melodic lanes)
     bool  _effective_gate(int slot) const;  // melodic: groove rank < DENSE depth; else all-true
@@ -346,6 +367,8 @@ private:
     bool      _melodic_at_init = false;
     float     _density   = 1.f;
     float _target = 0.f;     // pre-smooth held value
+    float _stepped_out  = 0.f;   // S&H twin of the return value
+    int   _sh_prev_slot = -1;    // -1 arms the first call to latch
     bool  _fired = false;
     bool  _wrapped = false;
     bool  _frozen = false;

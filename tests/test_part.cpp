@@ -2,6 +2,7 @@
 #include <cmath>
 #include <algorithm>
 #include <vector>
+#include <set>
 #include "parts/part.h"
 using namespace spky;
 
@@ -1103,4 +1104,85 @@ TEST_CASE("part: FLOW to STEP latches the shuffle value already pushed in that c
               between_straight_and_shuffled_edge) == 0);
     CHECK(stale_order.mod().pitch_step_at_phase(
               between_straight_and_shuffled_edge) == 1);
+}
+
+TEST_CASE("part: a negative fx depth steps where the positive twin glides") {
+    // Same magnitude, same lane, same base -- only the sign differs. At
+    // SMOOTH 0.7 the continuous reading visits a large number of distinct
+    // values and the held one a handful (engine-side echo of the lane gates
+    // in tests/test_lane_sh.cpp).
+    auto run = [](float depth) {
+        Part p;
+        p.init(48000.f, 5);
+        p.set_step(false, 0);                 // FLOW, as the VCV host pushes
+        p.set_fx_target_active(FXT_FLUX_TIME, true);
+        p.set_fx_target_base(FXT_FLUX_TIME, 0.5f);
+        p.set_fx_target_depth(FXT_FLUX_TIME, depth);
+        p.set_depth(1.f);
+        p.mod().set_range(1.f);
+        p.mod().set_rate(0.6f);
+        p.mod().set_smooth(0.7f);
+        std::set<float> distinct;
+        float l, r;
+        for (int i = 0; i < 48000 * 4; ++i) {
+            p.process(l, r);
+            distinct.insert(p.fx_target_value(FXT_FLUX_TIME));
+        }
+        return distinct.size();
+    };
+    const size_t glides = run(+0.8f);
+    const size_t steps  = run(-0.8f);
+    CHECK(steps * 20 < glides);
+    CHECK(steps > 1);          // it still moves; a pinned target is not S&H
+}
+
+TEST_CASE("part: depth sign selects the reading, it does not invert it") {
+    // The load-bearing rule (spec §4). In STEP at SMOOTH 0 the two lane
+    // readings are the same signal (measured max|difference| == 0.000000,
+    // tests/test_lane_sh.cpp), so at equal magnitude the two signs must
+    // produce the SAME target -- not mirrored ones.
+    auto run = [](float depth) {
+        Part p;
+        p.init(48000.f, 5);
+        p.set_step(true, 8);
+        p.set_fx_target_active(FXT_FLUX_TIME, true);
+        p.set_fx_target_base(FXT_FLUX_TIME, 0.5f);
+        p.set_fx_target_depth(FXT_FLUX_TIME, depth);
+        p.set_depth(1.f);
+        p.mod().set_range(1.f);
+        p.mod().set_rate(0.6f);
+        p.mod().set_smooth(0.f);
+        float l, r, last = 0.f;
+        for (int i = 0; i < 48000 * 4; ++i) {
+            p.process(l, r);
+            last = p.fx_target_value(FXT_FLUX_TIME);
+        }
+        return last;
+    };
+    const float pos = run(+0.8f);
+    const float neg = run(-0.8f);
+    CHECK(neg == doctest::Approx(pos).epsilon(1e-6));
+    CHECK(pos != doctest::Approx(0.5f));   // and it actually moved off base
+}
+
+TEST_CASE("part: an over-range negative depth clamps to -1, not to 0") {
+    // Today's clamp is 0..1, so -3 lands on 0 and the target stops moving
+    // altogether. Both halves of this gate matter: it must MOVE (the old
+    // clamp pins it) and it must stay INSIDE the lane's own +-1 (a widened
+    // clamp that forgot its floor would not).
+    Part p;
+    p.init(48000.f, 5);
+    p.set_target_base(LANE_SIZE, 0.5f);
+    p.set_target_active(LANE_SIZE, true);
+    p.set_target_depth(LANE_SIZE, -3.f);
+    p.set_depth(1.f);
+    p.mod().set_range(1.f);
+    p.mod().set_rate(0.6f);
+    float l, r, worst = 0.f;
+    for (int i = 0; i < 48000; ++i) {
+        p.process(l, r);
+        worst = std::fmax(worst, std::fabs(p.lane_excursion(LANE_SIZE)));
+    }
+    CHECK(worst > 0.f);        // -3 must not have been clamped to 0
+    CHECK(worst <= 1.f);       // and not to -3 either
 }

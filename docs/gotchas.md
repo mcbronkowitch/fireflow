@@ -307,3 +307,27 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   `* PART_STRIDE` arithmetic in either token order — `p * PART_STRIDE` and
   `PART_STRIDE * p` both trip it, so `params[COLOR_A + PART_STRIDE * p]` is
   caught the same as `params[COLOR_A + p * PART_STRIDE]`.
+
+- **STPS 0 *is* FLOW on the VCV host, so `_steps` is 1 there.**
+  `Fireflow.cpp` pushes `set_step(p, steps > 0, steps)` from a 0..16 knob —
+  the position that selects FLOW is 0, and `set_step` clamps 0 to 1. Any
+  engine feature that derives a grid from `_steps` therefore degenerates to a
+  single slot per cycle in FLOW on this host, while the render host
+  (`param_table.h`, `P_STEPS_A` 2..16 with a separate mode param) and
+  `shell/` reach real counts. Measured 2026-08-23; it is what put the fixed
+  `ModLane::kShFlowSlots` into the S&H split instead of a `_steps` grid.
+  The full call/`deck_steps`/lane-steps table is in
+  [`engine-map.md`](engine-map.md) §1. Do not raise the FLOW count to "fix"
+  this without reading
+  `docs/superpowers/specs/2026-08-22-mod-sh-split-design.md` §9: `_deck_steps`
+  also feeds `pitch_step_samples()` into the sampler unguarded by mode
+  (`part.cpp:390`), so the clock would move with it.
+
+- **A negative depth in a render scenario means S&H, not inversion.**
+  `host/render/scenario.cpp:135`/`:143` pass a scenario's `set_target_depth`
+  and `set_fx_target_depth` values straight through, and the engine-side clamp
+  widened to `-1..1` on 2026-08-23. So a negative value in a `.json` scenario
+  is now legal and selects the lane's held reading scaled by `|depth|` — it
+  does **not** mirror the modulation. No existing scenario uses one; this is
+  written down so the next author of one does not read the sign as a phase
+  flip. The render host has no dead zone and needs none: it is not a pot.

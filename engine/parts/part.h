@@ -117,11 +117,16 @@ public:
     void set_detune_cents(float c) { _detune_cents = c; }   // DRIFT tune tap; engine pitch only
     void set_target_active(int slot, bool on) { _active[slot] = on; }
     void set_target_base(int slot, float b)   { _base[slot] = clampf(b, 0.f, 1.f); }
-    void set_target_depth(int slot, float d)  { _tdepth[slot] = clampf(d, 0.f, 1.f); }
+    // Bipolar since spec 2026-08-22 mod-sh-split: the SIGN picks which lane
+    // reading the target follows (negative = the S&H twin), the MAGNITUDE
+    // scales it. A negative depth does NOT invert the modulation -- see
+    // _mod_term in part.cpp, and mod_layer.hpp for the host's copy of the
+    // same rule.
+    void set_target_depth(int slot, float d)  { _tdepth[slot] = clampf(d, -1.f, 1.f); }
 
     void set_fx_target_active(int slot, bool on) { _fx_active[slot] = on; }
     void set_fx_target_base(int slot, float b)   { _fx_base[slot] = clampf(b, 0.f, 1.f); }
-    void set_fx_target_depth(int slot, float d)  { _fx_depth[slot] = clampf(d, 0.f, 1.f); }
+    void set_fx_target_depth(int slot, float d)  { _fx_depth[slot] = clampf(d, -1.f, 1.f); }
     float fx_target_value(int slot) const;
 
     // --- engine selection (M2). Boot default: ENGINE_SYNTH. ---
@@ -260,6 +265,9 @@ public:
     float target_raw(int slot) const;          // base + mod*depth, unquantized
     float pitch_pre_quant() const;             // PITCH target + TUNE, pre-quantize
     float lane_output(int slot) const { return _mod.lane_output(slot); }
+    float lane_output_stepped(int slot) const {
+        return _mod.lane_output_stepped(slot);
+    }
     float lane_excursion(int slot) const { return _mod_term(slot); }
     bool  lane_fired(int slot) const  { return _mod.lane_fired(slot); }
     // GATE jack: the ~5 ms retrigger pulse, OR'd with the composed melodic

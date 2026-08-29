@@ -160,3 +160,79 @@ TEST_CASE("super modulator: shared shuffle exposes the pitch lane's warped looku
     CHECK(m.pitch_step_at_phase(between_grids) == 0);
     CHECK(m.pitch_step_at_phase(0.17f) == 1);
 }
+
+TEST_CASE("super: the stepped mirror updates on the same raster as _out") {
+    // Both arrays are written at the same two sites -- LANE_PITCH per sample,
+    // the four texture lanes every kTickInterval. The gate: between two tick
+    // boundaries the texture entries do not move, and across one they may.
+    spky::SuperModulator m;
+    m.init(48000.f, 12345);
+    m.set_step(false, 0);          // FLOW, exactly as the VCV host pushes it
+    m.set_rate(0.5f);
+    m.set_smooth(0.7f);
+
+    // Run past the cold start so the lanes are actually moving.
+    for (int i = 0; i < 48000; ++i) m.process();
+
+    bool sawAChange = false;
+    int  violations = 0;
+    float prevHeld[spky::LANE_COUNT] = {};
+    for (int frame = 0; frame < 400; ++frame) {
+        m.process();                                   // this call may tick
+        float held[spky::LANE_COUNT];
+        for (int i = 0; i < spky::LANE_COUNT; ++i)
+            held[i] = m.lane_output_stepped(i);
+        // The change has to be looked for BETWEEN frames, not at the end of
+        // one: this frame's first call is the only one that ticks, so by the
+        // end of the inner loop below the mirror is back to `held` by
+        // construction and a same-frame comparison could never be true.
+        // Measured on the finished implementation: 23 cross-frame changes
+        // against 0 within-frame ones (2026-08-29, scratchpad
+        // probe_mirror.cpp).
+        if (frame > 0)
+            for (int i = 0; i < spky::LANE_COUNT; ++i)
+                if (i != spky::LANE_PITCH && held[i] != prevHeld[i])
+                    sawAChange = true;
+        for (int i = 0; i < spky::LANE_COUNT; ++i) prevHeld[i] = held[i];
+        for (int k = 1; k < spky::ModLane::kTickInterval; ++k) {
+            m.process();                               // these cannot tick
+            for (int i = 0; i < spky::LANE_COUNT; ++i) {
+                if (i == spky::LANE_PITCH) continue;   // per-sample path
+                if (m.lane_output_stepped(i) != held[i]) ++violations;
+            }
+        }
+    }
+    CHECK(violations == 0);
+    CHECK(sawAChange);   // a mirror that never moves would pass the rest
+}
+
+TEST_CASE("super: the stepped mirror is the CURRENT raster, not the last one") {
+    // The companion the plan's own sabotage could not provide. Moving the
+    // mirror write out of the tick block is inert -- a texture lane is only
+    // advanced inside that block, so a live read between ticks returns the
+    // same value the mirror holds (measured: 0 within-frame changes either
+    // way, 2026-08-29, scratchpad probe_mirror.cpp). What a wrong write DOES
+    // change is WHICH raster the mirror carries, and this is the gate for it:
+    // in STEP at SMOOTH 0 the held reading and the continuous one are the
+    // same signal (tests/test_lane_sh.cpp), so at the mirror they must agree
+    // sample for sample -- measured max|difference| == 0.000000000 over 5 s
+    // (2026-08-29, scratchpad probe_step0.cpp). A mirror written one raster
+    // early carries the previous step's value across every boundary and this
+    // goes red.
+    spky::SuperModulator m;
+    m.init(48000.f, 12345);
+    m.set_step(true, 8);
+    m.set_rate(0.5f);
+    m.set_smooth(0.f);
+
+    float worst = 0.f;
+    for (int i = 0; i < 48000 * 5; ++i) {
+        m.process();
+        for (int s = 0; s < spky::LANE_COUNT; ++s) {
+            if (s == spky::LANE_PITCH) continue;
+            worst = std::fmax(worst,
+                              std::fabs(m.lane_output_stepped(s) - m.lane_output(s)));
+        }
+    }
+    CHECK(worst == 0.f);
+}

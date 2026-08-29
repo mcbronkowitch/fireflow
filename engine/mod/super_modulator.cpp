@@ -107,6 +107,7 @@ void SuperModulator::process() {
     // grids happen to coincide again. Documented as the spec's "Accepted
     // asymmetry"; see also part.h.
     _out[LANE_PITCH] = _lanes[LANE_PITCH].process();
+    _out_stepped[LANE_PITCH] = _lanes[LANE_PITCH].stepped_output();
 
     // The deck's step clock. Counted from the master lane's own step index
     // rather than from lane_fired(), because a gated melodic step still
@@ -166,6 +167,7 @@ void SuperModulator::process() {
             if (i == LANE_PITCH) continue;
             _out[i] = _step_on ? _lanes[i].follow(_deck_step, frac, sh)
                                : _lanes[i].tick();
+            _out_stepped[i] = _lanes[i].stepped_output();
         }
     }
     --_tick_ctr;

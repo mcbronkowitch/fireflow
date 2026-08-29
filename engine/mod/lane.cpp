@@ -58,6 +58,8 @@ void ModLane::init(float sample_rate, uint32_t seed) {
                   // turns computation spanning a re-init reads a stale count
 #endif
     _cur_step = -1;
+    _stepped_out  = 0.f;
+    _sh_prev_slot = -1;
     _shuffle_target = 0.f;
     _shuffle_latched = 0.f;
     if (_song.form_pending)
@@ -208,7 +210,7 @@ void ModLane::set_step(bool on, int steps) {
     // Either direction: a slot index and a freeze decision from the other mode
     // mean nothing in this one. _cur_step = -1 makes the first sample fire slot
     // 0, the same way init and reset do.
-    if (mode_changed) { _cur_step = -1; _frozen = false; _note_accent = 0.f; _prime_floors(); }
+    if (mode_changed) { _cur_step = -1; _sh_prev_slot = -1; _frozen = false; _note_accent = 0.f; _prime_floors(); }
     // Entering STEP disarms the follower so its first follow() call lands on
     // the deck's current position instead of replaying the whole count.
     if (entering_step) { _follow_armed = false; _follow_jumped = false; }
@@ -547,11 +549,12 @@ float ModLane::follow(int32_t deck_step, float frac, float shuffle) {
     _phase = shuffle_phase_for_position(
         static_cast<float>(here) + frac, slots, shuffle);
 
-    float smoothed = _slew_tick.process(_target);
+    const float out = apply_range(_slew_tick.process(_target), _range);
+    _latch_stepped(out);
 #ifdef SPKY_TESTING
-    _last_out = apply_range(smoothed, _range);
+    _last_out = out;
 #endif
-    return apply_range(smoothed, _range);
+    return out;
 }
 
 void ModLane::settle() {
@@ -562,6 +565,7 @@ void ModLane::reset(float phase) {
     _phase = clampf(phase, 0.f, 0.999999f);
     _shuffle_latched = _shuffle_target;
     _cur_step = -1;
+    _sh_prev_slot = -1;
     // Until 2026-08-13 (Task 11, FLOW melody engine plan) this line was
     // observable through tick() only: process() re-evaluates the boundary on
     // its very next call regardless (_cur_step == -1 forces slot 0, always
@@ -798,6 +802,34 @@ void ModLane::_wrap_events() {
     }
 }
 
+// Which S&H slot this lane occupies right now (spec 2026-08-22 mod-sh-split
+// §3). STEP and FLOW melody both already walk a slot raster and keep it in
+// _cur_step, so they reuse it -- in STEP that is the lane's OWN slot count,
+// which lane_slots() derives from the deck's STEPS (measured 4/16/8/12/6 at
+// deck STEPS 8), not the deck count itself. The FLOW texture LFO walks no
+// raster at all -- its only edge is the wrap, next_edge is always 1.0 (engine
+// map §4) -- so its slot is derived from the phase against kShFlowSlots.
+//
+// step_index, NOT shuffle_step_index: SHUFFLE is a rhythmic control and stays
+// out of FLOW (spec §2), the same call process()'s own flow-melody branch
+// makes and for the same reason.
+int ModLane::_hold_slot() const {
+    if (_step_mode || _flow_melody_on()) return _cur_step;
+    return step_index(static_cast<float>(_phase), kShFlowSlots);
+}
+
+// Latch on a slot change, with the value THIS call is about to return. The
+// ordering is the one probe 2 measured (spec §7): the slot index is read
+// AFTER the phase advance, the value comes from the same call. Reading the
+// slot before the advance would latch one call late at every edge.
+void ModLane::_latch_stepped(float out) {
+    const int slot = _hold_slot();
+    if (slot != _sh_prev_slot) {
+        _sh_prev_slot = slot;
+        _stepped_out  = out;
+    }
+}
+
 float ModLane::process() {
     _fired = false;
     _wrapped = false;
@@ -843,11 +875,12 @@ float ModLane::process() {
         if (!_frozen) _target = _compute_raw();     // continuous in FLOW
     }
 
-    float smoothed = _slew.process(_target);
+    const float out = apply_range(_slew.process(_target), _range);
+    _latch_stepped(out);
 #ifdef SPKY_TESTING
-    _last_out = apply_range(smoothed, _range);
+    _last_out = out;
 #endif
-    return apply_range(smoothed, _range);
+    return out;
 }
 
 // Advance exactly kTickInterval samples in one call -- the texture-lane path
@@ -1093,9 +1126,10 @@ float ModLane::tick() {
     if (!_step_mode && !_flow_melody_on() && !_frozen)
         _target = _compute_raw();
 
-    float smoothed = _slew_tick.process(_target);
+    const float out = apply_range(_slew_tick.process(_target), _range);
+    _latch_stepped(out);
 #ifdef SPKY_TESTING
-    _last_out = apply_range(smoothed, _range);
+    _last_out = out;
 #endif
-    return apply_range(smoothed, _range);
+    return out;
 }
