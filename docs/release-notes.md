@@ -8,7 +8,7 @@
   Everything below the comment is public.
 -->
 
-## FireFlow 2.22.0
+## FireFlow 2.21.10
 
 **Every MOD depth knob now has two halves.** Hold MOD and turn a wreathed knob:
 to the **right of noon** it does what it always did — the depth of that lane's
@@ -36,10 +36,23 @@ its continuous twin — measured 0.905 against 0.941 peak-to-peak at SMOOTH 0.7.
 That is ordinary sample-and-hold behaviour, not a defect, but it means the left
 half is a touch gentler than the right at the same distance from noon.
 
-**Init is unchanged.** The six engine-backed depths still boot at the values
-they always had, so a fresh patch sounds exactly like the last release. Their
-stored knob positions moved (the dead zone rescales the axis), but what reaches
-the engine did not.
+**The MOD lamp now double-pulses while the latch holds.** Two short flashes,
+a gap, then a longer dark tail, twice a second. The latch re-points every
+wreathed knob on the plate at once, so forgetting it is engaged is the
+expensive mistake, and a steady lamp sits in peripheral vision as furniture.
+An even blink was tried alongside and rejected — at this rate it reads as a
+loose contact rather than as a signal.
+
+**A new factory patch.** A fresh module no longer boots the 2.21.6 sound. Deck
+A still runs FEED against WAVE on deck B, deck B still boots stepped, and the
+tempo, scale and drift settings are unchanged — but the voicing moved, MORPH
+sits at centre, the modulation clock runs at ×1/16, and the two decks no longer
+share one compressor amount.
+
+The part worth knowing about: **the MOD layer now boots with something
+dialled.** Five depths sit off noon out of the box — SUB on deck B, DETUNE on
+both decks, and MORPH and REV_DIFF in the centre column. Latch MOD on a fresh
+patch and you will see them away from centre. That is the patch, not a fault.
 
 The depth knobs' range is now −1..+1 instead of 0..1. Patches from earlier
 versions are not converted — this is a development alpha and saved patches may
