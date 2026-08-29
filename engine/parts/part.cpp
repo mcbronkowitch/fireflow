@@ -121,7 +121,14 @@ float Part::_mod_term(int slot) const {
     float d = (slot == LANE_PITCH) ? 1.f : _depth;
     if (slot == LANE_SOURCE && _engine_id == ENGINE_SAMPLER)
         d = std::pow(d, sampler_cfg::kSourceModExp);
-    return _active[slot] ? _mod.lane_output(slot) * d * _tdepth[slot] : 0.f;
+    // Sign picks the reading, magnitude scales (spec 2026-08-22 mod-sh-split
+    // §4). Everything else in this expression is untouched -- master MOD, the
+    // sampler SOURCE exponent above, and the operand order, so a positive
+    // depth still produces exactly the float it produced before.
+    const float td   = _tdepth[slot];
+    const float lane = td < 0.f ? _mod.lane_output_stepped(slot)
+                                : _mod.lane_output(slot);
+    return _active[slot] ? lane * d * std::fabs(td) : 0.f;
 }
 
 float Part::target_raw(int slot) const {
@@ -168,8 +175,10 @@ float Part::target_value(int slot) const {
 // Same combine rule as target_raw, tapped from the SAME lanes — the FX breathe
 // in the part's own character. Never quantized (that is a PITCH-lane concern).
 float Part::fx_target_value(int slot) const {
-    float mod = _fx_active[slot]
-        ? _mod.lane_output(slot) * _depth * _fx_depth[slot] : 0.f;
+    const float fd   = _fx_depth[slot];
+    const float lane = fd < 0.f ? _mod.lane_output_stepped(slot)
+                                : _mod.lane_output(slot);
+    float mod = _fx_active[slot] ? lane * _depth * std::fabs(fd) : 0.f;
     return clampf(_fx_base[slot] + mod, 0.f, 1.f);
 }
 
