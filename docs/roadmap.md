@@ -36,7 +36,16 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-08-16 (**the STEP accent lands**: a note deck's
+- **Last updated:** 2026-08-29 (**the MOD depth split is heard, the latch lamp
+  learns to insist, and a new patch boots**: the bipolar depth knobs were
+  checked by hand in Rack — noon silent, right of noon gliding, left of noon
+  stepping — which leaves `kDepthDead` = 0.04 as the round's only open item and
+  it is a hardware question, not a Rack one; `MODBTN_L` now double-pulses while
+  the latch holds, an even blink having been tried alongside and rejected as
+  reading like a loose contact; and `NewInit.vcvm` replaces the 2.21.6 boot
+  state, with five MOD depths already off noon out of the box. Released in
+  **2.21.10** — see "The MOD latch layer" under M6 and "A new factory patch"
+  under "Done"); before that, 2026-08-16 (**the STEP accent lands**: a note deck's
   melodic lane now derives a per-note accent from its groove rank
   (`ModLane::note_accent()`, 0 at the rank-0 anchor, 1 at the rank DENSE last
   reveals) and `Part` pushes it into the active engine every STEP fire. The
@@ -469,8 +478,9 @@ is actually built today, and what is still design-only.
 | **SMOOTH becomes interval-relative** | The slew law is `τ = smooth · TOP · interval` instead of absolute wall-clock seconds, so SMOOTH means the same thing at every rate; `kSmoothTopTexture = 0.5` chosen by ear, factory defaults converted to preserve the shipped sound, five gates behind it. SHAPE is deliberately not delivered and goes to the Marbles round | ✅ **done** (engine + VCV defaults; spec `docs/superpowers/specs/2026-08-13-shape-smooth-rework-design.md`, plan `docs/superpowers/plans/2026-08-14-smooth-interval-relative.md`; merged to `main` 2026-08-15 (`4493d67`), released in 2.21.2) |
 | **60 HP plate** | The hardware panel gets its layout and then its drawing: the redistribution round's placement reaches `gen_hw_panel.py` (2.21.2), and design round 2a, "Technical Blueprint", replaces the organic light plate with a dark anodised one in three tinted zones, a printed airflow/ember silhouette and framed fields with numbered legends — no control moved for it. Three fixes follow: frames hug their own ink with 3 mm between rows, one caption distance (3.6 mm) for every control instead of one per size class, and three knob lines through the MOTION/VOICE/TIMING band instead of five | ✅ **done** as a design study (VCV `FireflowHW` panel + generator; spec `docs/superpowers/specs/2026-08-10-hw-panel-redistribution-design.md`; released in 2.21.2 and 2.21.3; still labelled `DRAFT`, and no hardware is ordered — see "M6 — Hardware prototype" under "Planned") |
 | **STEP accent** | A note deck's melodic lane derives a per-note accent from the groove rank it already computes — 0 at the rank-0 anchor, 1 at the rank DENSE last reveals (`ModLane::note_accent()`) — and `Part` pushes it into the active engine on every STEP fire. The engine spends it twice, on velocity and on decay, the decay half gated by the DEC knob so DEC 0 leaves ring time untouched. **No new control**, no new RNG draw, and FLOW is unaffected (the accent is 0 there). SYNTH, WAVE and BODY take it; SAMPLER and BBD take neither half | ✅ **done** (engine; spec `docs/superpowers/specs/2026-08-15-step-accent-design.md`, plan `docs/superpowers/plans/2026-08-15-step-accent.md`; merged to `main` 2026-08-16 (`83d29e1`), released in 2.21.4; **both depth floors are first-try 0.3 and have not been through a listening session** — see "The STEP accent" under "Done") |
-| **LED feedback** | What the panel shows while the instrument runs, settled the way spec §1/§10 argue it: the quantity is the modulation **excursion**, never the knob (`target_value()` would let a still knob at 0.9 outshine one swinging full-scale at 0.1). An envelope-tracked excursion light per texture lane (one per lane, at the knob nearest its usual destination — `SOURCE`/`FILT`/`COLOR`/`COMP`), a `SONG` phrase lamp per deck that flashes on an A/B switch (150 ms) then goes dark, a `CEIL` lamp for the limiter's audible onset (not its gain reduction), and two latch-ready modifier lamps at `MODBTN`/`SHIFTBTN`. The display law (`host/vcv/src/led_law.hpp`) is Rack-free and unit-tested; `engine/instrument.h` gains `lane_excursion()` and the limiter exposes its bend as a const observer | ✅ **done** (engine + VCV `FireflowHW`; spec `docs/superpowers/specs/2026-08-16-led-feedback-design.md`, plan `docs/superpowers/plans/2026-08-16-led-feedback.md`; branch `led-feedback`, merged to `main` 2026-08-16 (`354db6f`), released in 2.21.5. **19 lamps drawn on FireflowHW, 21 LightIds (`FLOW_*` undrawn), up from ten** — two dead ones, `CAP_A_L`/`CAP_B_L`, removed along with the capture sequencer they used to indicate (see M3 below). **Five lamps are deliberately dark** at the end of this round: `FLOW_A_L`, `FLOW_B_L`, `SYNC_L`, and the two pad lamps `MODBTN_L`/`SHIFTBTN_L` — the last two need a latch that does not exist yet (spec §3.4 leaves it to the round that builds MOD and SHIFT). All five are *written* every tick, not skipped; a gate asserts that. `TEMPO_L` pulses the transport beat (metronome, `kTempoPulse` of `beat_phase()`). The 8:1-versus-16:1 mux width is **still open** (`docs/hardware/io-budget.md` §6), which is why `duty()` takes the step count as a parameter rather than a constant. `kFloor`, `kGamma`, `kEnvFall` and `kEnvOff` are **by-ear candidates awaiting Bastian's eye on real hardware** — `kEnvOff` in particular was set from arithmetic, not by listening; today that flag survives only in a comment in `host/vcv/src/led_law.hpp`) |
+| **LED feedback** | What the panel shows while the instrument runs, settled the way spec §1/§10 argue it: the quantity is the modulation **excursion**, never the knob (`target_value()` would let a still knob at 0.9 outshine one swinging full-scale at 0.1). An envelope-tracked excursion light per texture lane (one per lane, at the knob nearest its usual destination — `SOURCE`/`FILT`/`COLOR`/`COMP`), a `SONG` phrase lamp per deck that flashes on an A/B switch (150 ms) then goes dark, a `CEIL` lamp for the limiter's audible onset (not its gain reduction), and two latch-ready modifier lamps at `MODBTN`/`SHIFTBTN`. The display law (`host/vcv/src/led_law.hpp`) is Rack-free and unit-tested; `engine/instrument.h` gains `lane_excursion()` and the limiter exposes its bend as a const observer | ✅ **done** (engine + VCV `FireflowHW`; spec `docs/superpowers/specs/2026-08-16-led-feedback-design.md`, plan `docs/superpowers/plans/2026-08-16-led-feedback.md`; branch `led-feedback`, merged to `main` 2026-08-16 (`354db6f`), released in 2.21.5. **19 lamps drawn on FireflowHW, 21 LightIds (`FLOW_*` undrawn), up from ten** — two dead ones, `CAP_A_L`/`CAP_B_L`, removed along with the capture sequencer they used to indicate (see M3 below). **Five lamps were deliberately dark** at the end of this round: `FLOW_A_L`, `FLOW_B_L`, `SYNC_L`, and the two pad lamps `MODBTN_L`/`SHIFTBTN_L` — the last two needed a latch that did not exist yet (spec §3.4 left it to the round that builds MOD and SHIFT). All five are *written* every tick, not skipped; a gate asserts that. **Three are dark today**: the MOD latch layer lit `MODBTN_L` in 2.21.7 and 2.21.10 made it double-pulse, while `SHIFTBTN_L` still waits on a SHIFT that does nothing. `TEMPO_L` pulses the transport beat (metronome, `kTempoPulse` of `beat_phase()`). The 8:1-versus-16:1 mux width is **still open** (`docs/hardware/io-budget.md` §6), which is why `duty()` takes the step count as a parameter rather than a constant. `kFloor`, `kGamma`, `kEnvFall` and `kEnvOff` are **by-ear candidates awaiting Bastian's eye on real hardware** — `kEnvOff` in particular was set from arithmetic, not by listening; today that flag survives only in a comment in `host/vcv/src/led_law.hpp`) |
 | **FEED** | Coupled feedback-FM drone engine — `ENGINE_FEED = 6`, a fixed ring of `feed_cfg::kPairs` two-operator FM pairs per deck, free-running. BOND morphs each modulator's phase-modulation input from its own feedback into its neighbour's output; the motion is a consequence of that coupling rather than an addition to it. Two stabilizers, no oversampling: the Plaits two-sample feedback average and the Braids pitch-dependent attenuation. One `Env` drives amplitude AND index. Seven knobs re-pointed (BOND/RISE/FALL/RATIO/SUB/BRITE/SPREAD), and DEPTH has no knob by decision | ✅ **engine + both hosts built** (spec `docs/superpowers/specs/2026-08-18-feed-coupled-feedback-fm-design.md`, plan `docs/superpowers/plans/2026-08-19-feed-coupled-feedback-fm.md`; branch `feat/feed-coupled-feedback-fm`). **THREE things are open and none is cosmetic:** (1) **P is DECIDED — 6 pairs, 18 655 cycles each** (2026-08-19). Three sweep points on the Patch Submodule at kPairs 2/4/8, confirmed by its own run at 6: `inst_feed_engine_worst` 92.51 % of block budget against the same image's `instrument_worst` at 102.76 %. `kPDecided` is true and **gate `feed G8` is GREEN — the whole desktop suite is green, 6 of 6.** P=6 also sounds 3 of the 4 chord tones COLOR reaches, against 2 at P=4. Derivation: `docs/bench/2026-08-19-3def5d5-feed-axi-o2-patch_sm-usb.md`. (2) **Hardware says FEED fits, and that silence is its worst case** — measured 2026-08-19 on the Patch Submodule at `-O2` (`-O3` still does not link: the `system` family ALREADY overflows SRAM_EXEC by 2844 B before FEED existed). `inst_feed_engine_worst` 75.99 % / 81.41 % of block budget against the same image's `instrument_worst` at 99.30 % / 104.18 %, so Task 11's gate passes. The desktop denormal probe found an idle FEED deck running **1.65× slower than a sounding one** — 92 % of a 20 s tail subnormal, because `FeedBank`'s amplitude glide converged geometrically and never arrived at zero. FIXED (`FeedBankT::kArriveEps` plus `SvfLp::FlushDenormals`, which the deck going exactly silent exposed underneath it): 0 subnormals, and FTZ on/off now makes no difference at all. The new `inst_feed_engine_idle` row prices that state on the board at 75.64 % / 76.77 %, BELOW the sounding row's 77.70 % / 83.32 %. See `docs/engine-map.md` §9. (3) **Seventeen by-ear constants are still first-try**, and two of the open questions now have a hand-testable surface: the VCV context menu carries a **FEED A/B — audition** submenu with DEPTH (the FM index, which has no knob and sat pinned at `kDepthBase`) and the in-loop DAMP cutoff in Hz (`kDampFixedHz` = 3200 was confirmed only against DARKER alternatives, never a brighter one). Both default to the shipped constants, are persisted per patch, and are guarded by `res/test_panel.py` against drifting off those defaults. See "FEED" under "Done") |
+| **MOD layer** | Hold MODBTN and every wreathed knob shows and edits its own modulation depth instead of its sound value — one global latch (`WK_LATCH`, like REC) over 48 depth params, six per deck engine-backed and the rest host-computed, with a printed dashed wreath marking exactly the set the live widget swaps. The depth knobs are **bipolar**: right of noon the lane's continuous output, left of noon the same lane **sampled and held** on its own slot boundaries (`ModLane::stepped_output()`), noon a standstill inside a dead zone. A left-hand setting is not an inverted right-hand one — the sign picks which reading of the lane the target follows, the magnitude scales it — and that rule lives twice, identically, in the engine's `_mod_term`/`fx_target_value` and in the host's `mod_layer.hpp` | ✅ **done** (engine + VCV `FireflowHW`; specs `docs/superpowers/specs/2026-08-22-mod-latch-layer-design.md` and `docs/superpowers/specs/2026-08-22-mod-sh-split-design.md`; released in 2.21.7 and 2.21.10. **Both halves were checked by hand in Rack** (2026-08-22 and 2026-08-29), because the widget code cannot be driven from `spky_tests` — Rack does not link there and screenshot mode renders and exits without clicking anything. **One item stays open and it is a hardware question:** `kDepthDead` = 0.04 against the house 0.03 that `kGritDead` and `kPullDead` use; a mouse hits an exact noon, the zone exists for a 9 mm pot on an ADC that does not exist yet. `MODBTN_L` double-pulses while the latch holds (2.21.10); SHIFT stays reserved and inert. Out of scope and not started: STPS reachable in FLOW on the VCV host, CV over depths through MOD1..4, `shell/` wiring) |
 | **AIR** | Noise/formant texture engine (working title) — filtered noise through a resonant bank: wind, breath, vowel colours without sample material | ⬜ **planned** (queued 2026-08-17, ordered before M5k; no spec — needs its own brainstorming round. Restored 2026-08-18, same reason as FEED) |
 | **M5k** | ZAP — monophonic percussion part engine | ⬜ **planned** (spec ready; not implemented) |
 | **M5l** | PULL — chord gravity between the two decks: one deck's melody drawn onto the other's sounding chord by a bipolar centre knob under CHOKE | ✅ **done** (engine + both VCV panels; spec `docs/superpowers/specs/2026-07-19-pull-chord-gravity-design.md`, plan `docs/superpowers/plans/2026-08-22-pull-chord-gravity.md`; branch `feat/pull-chord-gravity` off `main` `224d2ac`, tip `8f412b9`, released in 2.21.8. **PULL has had no listening pass** — `kPullDead = 0.03` and the linear-after-dead-zone probability curve are both first-try values, see `docs/by-ear-decisions.md`. On the 60 HP plate PULL is the fourth knob of the GLOBAL centre row beside CHOKE, settled 2026-08-23 by re-pitching that row: same 13.0 mm pitch, the three existing knobs each 6.5 mm left so the four re-centre) |
@@ -502,7 +512,7 @@ existing one.
 
 ## Done
 
-### FEED — coupled feedback-FM drone engine ✅ built (2026-08-19), ⏳ P undecided, ⏳ untuned
+### FEED — coupled feedback-FM drone engine ✅ built (2026-08-19), P decided and measured on hardware, ⏳ untuned by ear
 
 The sixth part engine, `ENGINE_FEED = 6`. A fixed ring of `feed_cfg::kPairs`
 two-operator FM pairs per deck, running continuously; a trigger retunes the ring
@@ -518,13 +528,28 @@ plan `docs/superpowers/plans/2026-08-19-feed-coupled-feedback-fm.md`, branch
 pitch-dependent attenuation, both Émilie Gillet, both MIT, both reimplemented
 in float on normalized phase rather than vendored.
 
-**What is open, and it is the important half of this entry:**
+**What was open when this entry was first written is now measured. The state
+today:**
 
-- **P is a placeholder and the branch does not merge.** `feed_cfg::kPairs` is 4
-  because the desktop tasks had to build; `kPDecided` is false and gate
-  `feed G8` is RED. The `feed_pairs` bench row and the `feed` profile are
-  written and the image links, but nothing has run on the board. **No CPU claim
-  of any kind exists for FEED.**
+- **P is DECIDED — `feed_cfg::kPairs` = 6, `kPDecided` is true and gate
+  `feed G8` is GREEN**, the whole desktop suite with it. Three sweep points on
+  the Patch Submodule at 2/4/8 pairs, confirmed by the image's own run at 6:
+  `inst_feed_engine_worst` 92.51 % of the block budget against the same image's
+  `instrument_worst` at 102.76 %. Six pairs also sound 3 of the 4 chord tones
+  COLOR reaches, against 2 at P = 4. Derivation:
+  `docs/bench/2026-08-19-3def5d5-feed-axi-o2-patch_sm-usb.md`.
+- **Hardware says FEED fits, and it says silence used to be its worst case.**
+  Measured 2026-08-19 on the Patch Submodule at `-O2`:
+  `inst_feed_engine_worst` 75.99 % / 81.41 % against the same image's
+  `instrument_worst` at 99.30 % / 104.18 %. The desktop denormal probe then
+  found an **idle** FEED deck running **1.65× slower than a sounding one** —
+  92 % of a 20 s tail subnormal, because `FeedBank`'s amplitude glide converged
+  geometrically and never arrived. Fixed with `FeedBankT::kArriveEps` plus
+  `SvfLp::FlushDenormals`, which going exactly silent exposed underneath it:
+  0 subnormals, and FTZ on or off now makes no difference at all. The
+  `inst_feed_engine_idle` row prices that state on the board at 75.64 % /
+  76.77 %, **below** the sounding row's 77.70 % / 83.32 %. See
+  `docs/engine-map.md` §9.
 - **The bench does not link at `-O3` on the submodule, and that is not FEED's
   doing.** Measured against a stashed tree: the `system` family ALONE overflows
   SRAM_EXEC by 2844 B at o3/patch_sm before any FEED code exists. FEED adds
@@ -533,9 +558,14 @@ in float on normalized phase rather than vendored.
   (88.94 %) and links. Since the only submodule prior art the plan permits
   citing is an o3 run, "measure at o2" is a comparison-validity decision rather
   than a build workaround.
-- **Every by-ear constant is first-try**, and the listening pass has not
-  happened. `kDepthBase` matters most, because DEPTH is the one FEED control
-  with no knob of its own.
+- **Seventeen by-ear constants are still first-try**, and the listening pass
+  has not happened. Two of them now have a hand-testable surface: the VCV
+  context menu carries a **FEED A/B — audition** submenu with DEPTH (the FM
+  index, which has no knob of its own and sat pinned at `kDepthBase`) and the
+  in-loop DAMP cutoff in Hz (`kDampFixedHz` = 3200, confirmed only against
+  DARKER alternatives, never a brighter one). Both default to the shipped
+  constants, persist per patch, and are guarded by `res/test_panel.py` against
+  drifting off those defaults.
 
 **What was measured, and is therefore not open** (`docs/engine-map.md` §9
 carries the tables and the setups):
@@ -2814,6 +2844,48 @@ Both floors are 0.3 because they were written that way, not because a session
 chose them; they are tuning values and no gate depends on either number
 (`fireflow-by-ear-decisions` applies once they are set by ear, not before).
 
+### LED feedback — what the instrument shows ✅ built (2026-08-16), ⏳ four by-ear constants unverified on hardware
+
+Opened by the owner on 2026-08-16 with a starting list — RATE, MOD, TIME and
+LVL per deck, plus TIDE and PACE — and specced, built and released (2.21.5) the
+same week. The hardware half was never in doubt: `docs/hardware/io-budget.md`
+§3 had already priced twenty lamps at a **fourth 74HC595 and not one GPIO**, so
+the round was free to be about the instrument.
+
+**The question it opened was *position or movement*, and it answered
+movement.** What a lamp shows is the modulation **excursion**, never the knob —
+`target_value()` would let a still knob at 0.9 outshine one swinging full-scale
+at 0.1 (spec §1/§10). What shipped on `FireflowHW`: one envelope-tracked
+excursion light per texture lane, each at the knob nearest that lane's usual
+destination (`SOURCE`/`FILT`/`COLOR`/`COMP`); a `SONG` phrase lamp per deck that
+flashes 150 ms on an A/B switch and then goes dark; a `CEIL` lamp for the
+limiter's audible onset — its bend, not its gain reduction; and two modifier
+lamps at `MODBTN`/`SHIFTBTN`. Nineteen lamps drawn against 21 `LightId`s, up
+from ten; the two dead ones, `CAP_A_L`/`CAP_B_L`, went with the capture
+sequencer they used to indicate. `TEMPO_L` pulses the transport beat.
+
+The display law is `host/vcv/src/led_law.hpp` — Rack-free and unit-tested — and
+`engine/instrument.h` gained `lane_excursion()` beside the observers the render
+host had been building `mods.csv` from all along.
+
+**What is still open, and none of it is a round:**
+
+- **Four by-ear constants** — `kFloor`, `kGamma`, `kEnvFall`, `kEnvOff` — are
+  candidates awaiting Bastian's eye on real hardware. `kEnvOff` in particular
+  came from arithmetic rather than from looking, and today that flag survives
+  only in a comment in `led_law.hpp`.
+- **The 8:1-versus-16:1 mux width** (`docs/hardware/io-budget.md` §6), which is
+  why `duty()` takes the step count as a parameter rather than a constant.
+- **Three lamps are still deliberately dark**: `FLOW_A_L`, `FLOW_B_L` and
+  `SYNC_L`. All are *written* every tick, not skipped, and a gate asserts that.
+  Two more were dark when this round closed — the MOD latch layer gave
+  `MODBTN_L` its state in 2.21.7 and 2.21.10 made it double-pulse, while
+  `SHIFTBTN_L` still waits on a SHIFT that does nothing.
+
+Spec `docs/superpowers/specs/2026-08-16-led-feedback-design.md`, plan
+`docs/superpowers/plans/2026-08-16-led-feedback.md`, branch `led-feedback`,
+merged to `main` 2026-08-16 (`354db6f`), released in 2.21.5.
+
 ### PULL — chord gravity between the two decks ✅ built (2026-08-22), HW placement settled (2026-08-23), ⏳ no listening pass
 
 A bipolar centre knob, CHOKE's own left/right convention, draws one deck's
@@ -2896,6 +2968,35 @@ only through re-pitching.** There is still no slot that costs nothing — the
 next control that wants one will move its neighbours too
 (`fireflow-hardware-constraint`).
 
+### A new factory patch ✅ (2026-08-29)
+
+A fresh module no longer boots the 2.21.6 sound. `NewInit.vcvm` — a
+`FireflowHW` preset Bastian played and saved — is transcribed into
+`gen_panel.py`'s `INIT_DEFAULTS`, which is where every boot value on both
+modules comes from. Deck A still runs FEED against WAVE on deck B, deck B still
+boots stepped, and tempo, scale and drift are unchanged; what moved is the
+voicing, MORPH to centre, the modulation clock to ×1/16, and the two decks off
+one shared compressor amount.
+
+**The part worth knowing about: the MOD layer now boots with something
+dialled.** Five depths sit off noon out of the box — SUB on deck B, DETUNE on
+both decks, MORPH and REV_DIFF in the centre column. Latch MOD on a fresh patch
+and they are away from centre; that is the patch, not a fault. All five sit
+right of noon — continuous, not sampled-and-held — and they live in their own
+`INIT_MOD_KNOBS` table rather than in `MOD_DECK_TARGETS`/`MOD_CENTER_TARGETS`,
+for two reasons that are easy to lose: those tables' `init` column answers a
+question about the *engine* (what `_tdepth` a face boots with) and carries one
+value per face, while two of these five differ per deck; and a preset already
+stores knob space, so unlike the engine-backed depths they need no
+`_depth_knob()` pre-image. The depth axis is −1..+1 since the split. Patches
+from earlier versions are not converted — this is a development alpha and saved
+patches may break between releases.
+
+Released in 2.21.10. The boot state is guarded twice by hand: `res/test_panel.py`
+carries its own transcription of the same preset, which is the point of the
+second copy — see the open item about that guard's missing converse under
+"Planned".
+
 ## Planned
 
 The SHAPE/SMOOTH rework's SMOOTH half has shipped — see "SMOOTH becomes
@@ -2903,9 +3004,11 @@ interval-relative" under "Done". Its SHAPE half was handed to the round below
 rather than delivered, per spec §5, so **the Marbles round is the only designed
 round left before M5k**, followed by loose threads that have no round of their
 own yet (the pitch RANGE law, and two carried out of the SWARM withdrawal, all
-below it). Newly opened on 2026-08-16 and ahead of every one of them in the
-owner's order: **LED feedback**, which has neither a spec nor a brainstorming
-round yet — its hardware envelope is answered, its instrument question is not.
+below it). **LED feedback** was opened on 2026-08-16 and stood here as the next
+round for exactly as long as it took to spec, build and release it — 2.21.5,
+the same week — so it no longer sits ahead of anything; what it left behind is
+four by-ear constants that need real hardware rather than a round, and they are
+listed under "LED feedback" in "Done".
 
 Two engine directions sit ahead of M5k with no design at all: **FEED** and
 **AIR**, the two candidates of the 2026-08-17 ambient-engine brainstorming that
@@ -3092,58 +3195,32 @@ Two things constrain whoever picks it up:
   deleted one day later on 2026-08-14. The numbers stand as measured; anything
   new has to be re-measured through a different setup.
 
-### LED feedback — what the instrument shows ⬜ (next, needs a brainstorming round)
+### LED feedback — what the instrument shows ✅ built (2026-08-16), ⏳ four constants owed to real hardware
 
-Opened 2026-08-16 by the owner: the panel should say more about what is
-happening. His starting list is **RATE, MOD, TIME and LVL per deck, plus TIDE
-and PACE** — TEMPO already has an LED — and "more if the board allows it
-without a big operation".
+Opened 2026-08-16 by the owner — the panel should say more about what is
+happening — and closed the same week: spec, plan, build, released in 2.21.5.
+The detail is under "LED feedback" in "Done"; this entry stays here only as the
+pointer, because what it left open is not a round. Four by-ear constants need
+Bastian's eye on a real plate, and the 8:1-versus-16:1 mux width is still open
+(`docs/hardware/io-budget.md` §6) — which is why `duty()` takes the step count
+as a parameter instead of a constant.
 
-**The board does allow it, and that part is already answered**, so the round
-does not have to negotiate with the hardware. Measured and derived in
-[`docs/hardware/io-budget.md`](hardware/io-budget.md) §3: ten LEDs are drawn
-today; those ten more make twenty, which needs a **fourth 74HC595 and not one
-GPIO** — the shift-register chain exists precisely so that this costs a part
-rather than a pin. Every further register is another eight. On/off costs no CPU
-at all (a chain is written whole, and the mux addresses already rewrite it at
-every address step), and **16-step brightness rides along on the mux scan for
-free**. The sharp edge is finer brightness than that: it needs a PWM loop
-decoupled from the scan, which is real per-block CPU and feeds the unexplained
-block-rate artifact.
-
-**Nothing has to be built in `engine/` either.** `lane_output(part, slot)`,
-`target_value(part, lane)`, `gate(part)` and `pitch_gate(part)` are already
-public and const (`engine/instrument.h:409-414`) — the render host has been
-building `mods.csv` from them all along.
-
-So the round is free to be about the instrument, which is where it should be.
-What it has to answer:
-
-- **Position or movement?** A knob's position is already visible on the knob.
-  The gain is seeing the modulation *run* — and that decides the cost: a flash
-  per cycle is binary, a breathing MOD or LVL wants brightness.
-- **Which lanes earn a light**, and whether a light per macro is even the right
-  cut, or whether the two decks want one shared "what is moving right now"
-  display instead of four each.
-- **What the light means when the deck is a SAMPLER or a BBD**, where the same
-  lanes drive read positions and clock rates rather than notes.
-- **Where they go on a plate that is already drawn** and guarded — per-deck
-  lights mirror by themselves, TIDE and PACE would want a mirrored pair around
-  x = 152,4 the way `TEMPO_L`/`SYNC_L` already sit at 130,4 and 174,4.
-
-Not blocking anything: it can run before or after M5k, and its result lands in
-M6's panel and bring-up. **Needs a brainstorming round, then a spec.**
-
-### FEED — coupled feedback-FM drone engine ✅ built, ⏳ unmeasured on hardware, ⏳ untuned by ear
+### FEED — coupled feedback-FM drone engine ✅ built and measured on hardware, ⏳ untuned by ear
 
 Queued 2026-08-17 from the ambient-engine brainstorming, specced 2026-08-18 and
 built 2026-08-19. The detail is under "Done"; this entry stays here only as the
-pointer, because two of the three things this section promised are still open.
+pointer, because one of the three things this section promised is still open —
+the listening pass. P is decided at 6 pairs and the engine is measured on the
+Patch Submodule; seventeen by-ear constants are still first-try.
 
 What the SWARM round left behind for it held up. The fixed-bank-per-deck shape
 was copied. Its "the kernel row alone sizes the bank too generously" lesson is
 exactly why `inst_feed_engine_worst` exists beside `feed_pairs` rather than
-instead of it. The denormal question is still open and still unmeasured.
+instead of it. **The denormal question is no longer open**: it was measured on
+this engine and it bit — an idle deck cost 1.65× a sounding one until
+`kArriveEps` and `SvfLp::FlushDenormals` ended it. Note what that does *not*
+close: nothing in this repo sets FTZ/DAZ, so the instrument-wide question below
+stands.
 
 The cost question this section said the round had to settle — whether the
 chaotic end needs oversampling — was deferred by the plan rather than answered,
@@ -3306,6 +3383,21 @@ spec, preamble to §1).
   now; and Rack's 8.03 mm `PJ301M` body buries lettering that a real 6.2 mm
   jack clears — now a guard of its own, beside the plate body and the layout
   clearance circle. Four new guards in total, each shown red once.
+
+- **Two fixes after the rounds, both 2026-08-23** — **2.21.8** gave PULL a real
+  GLOBAL slot by re-pitching that row to four (13.0 mm kept, the three existing
+  knobs each 6.5 mm left so the four re-centre); **2.21.9** put FILT back at
+  r = 8.5 and rebuilt the row around it. FILT had been shrunk on 2026-08-19 for
+  raster and not for room: at r = 8.5 it needs 14.5 mm to a small neighbour and
+  the row it shared with TIMB and DPTH runs on 13. Landing it big at the end of
+  that row solved the clearance and broke the group instead, so **the row
+  changed rather than the knob** — VOICE's lower half is now small-BIG-small
+  with FILT centred, the same figure TIDE/MRPH/PACE has had in TIMING since the
+  graphics round (body gaps 5.60/5.60, frame air 10.72 either side), chosen by
+  eye against three alternatives. VOICE had been the only two-row group running
+  on three heights. The same release pulled the FIREFLOW wordmark and the
+  "60 HP" legend off the plate while the branding is redrawn, and the guard now
+  asserts both words **absent** so a stale SVG cannot put them back.
 
 Step 1 is closed as far as the drawing goes; **step 2 (bring-up) still has no
 spec and is next**, and no hardware is ordered.
@@ -3506,6 +3598,16 @@ was never going to. It stays an open candidate in
 (2026-08-23)", to be answered on the M6 prototype. Note for whoever reads this
 next: in STEP at SMOOTH 0 the two halves are measurably the *same signal*, so a
 listening pass that starts there will conclude the knob does nothing.
+
+**2026-08-29 — the latch lamp learns to insist.** `MODBTN_L` no longer sits
+steady while MOD is held: it **double-pulses** — two short flashes, a gap, then
+a longer dark tail, twice a second. The reasoning is the latch's blast radius:
+it re-points every wreathed knob on the plate at once, so forgetting it is
+engaged is the expensive mistake, and a steady lamp sits in peripheral vision
+as furniture. An even blink was built and compared alongside it and **rejected
+by eye — at this rate it reads as a loose contact rather than as a signal**.
+Released in 2.21.10. `SHIFTBTN_L` is untouched and still dark; SHIFT does
+nothing yet.
 
 ### Two threads carried out of the SWARM withdrawal ⬜ (unscheduled)
 

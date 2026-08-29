@@ -165,11 +165,13 @@ carries recordings from most milestones, next to the story of how they came
 about.
 
 **[Download the latest release](https://github.com/mcbronkowitch/fireflow/releases/latest)**
-— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.21.4**
-(both modules: Synth, Sampler, WAVE, BODY and BBD, the independent FORM/SONG
-phrase arranger, the STEP mod grid lock, the PACE modulation time-stretch, the
-redrawn 60 HP hardware plate, and the STEP accent). Unpack into Rack's
-user plugin directory and restart Rack.
+— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.21.10**
+(both modules: Synth, Sampler, WAVE, BODY, BBD and FEED, the independent
+FORM/SONG phrase arranger, the STEP mod grid lock, the PACE modulation
+time-stretch, the redrawn 60 HP hardware plate with its excursion lamps, the
+STEP accent, PULL's chord gravity, and the MOD layer — hold MOD and every
+wreathed knob edits its own modulation depth). Unpack into Rack's user plugin
+directory and restart Rack.
 
 Building it yourself needs its own toolchain (a native MinGW/GCC compiler, not
 the desktop clang path); the build, install and I/O details live in
@@ -199,9 +201,13 @@ the desktop clang path); the build, install and I/O details live in
 | **Modulation reachability** | Four rounds that made the modulation surface mean what it says: **PACE**, one global time-stretch from ×1/32 to ×4, because TEMPO was inert in the free world and TIDE never reached the melodic lane; the **FLOW melody engine**, so the free mode's melodic lane walks an 8-slot phrase instead of a continuous LFO; the same phrase in **STEP**, which makes FORM and SONG audible at every SHAPE position instead of only above 0.75; and **SMOOTH as a fraction of the lane interval** rather than absolute seconds, so the knob means the same thing at every rate | **done** (engine + hosts; released in 2.21.2) |
 | **60 HP plate** | The hardware panel, drawn and playable in Rack as the second module: seven engine-grounded groups, eight CV inputs under the knobs they drive, and a dark anodised plate with framed fields and numbered legends | **done** as a design study (released in 2.21.2/2.21.3; still labelled `DRAFT`, no hardware ordered) |
 | **STEP accent** | STEP notes get a contour from the groove rank the deck already computes: the anchor slot is loudest and longest, the slots DENSE reveals sit under it, on velocity and — once DEC is up — on ring time. No new control, no new randomness, FLOW unaffected; SYNTH, WAVE and BODY only | **done** (engine; released in 2.21.4) |
+| **LED feedback** | What the panel shows while it runs: a lamp tracks the modulation **excursion**, never the knob position — one per texture lane, plus a phrase lamp per deck, a ceiling lamp for the limiter's audible onset, and the two modifier lamps. Nineteen lamps on the hardware plate, up from ten | **done** (engine + VCV `FireflowHW`; released in 2.21.5; four brightness constants still wait on real hardware) |
+| **FEED** | Sixth part engine: a ring of six two-operator FM pairs per deck, free-running, where BOND morphs each modulator's input from its own feedback into its neighbour's output — the motion is the coupling, not an LFO on top | **done** (engine + hosts; released in 2.21.6; measured on a Patch Submodule, seventeen by-ear constants still first-try) |
+| **M5l** | PULL: chord gravity between the two decks — a bipolar centre knob draws one deck's melody onto the other's sounding chord | **done** (engine + both VCV panels; released in 2.21.8; no listening pass yet) |
+| **MOD layer** | Hold MOD and every wreathed knob shows and edits its own modulation depth instead of its sound value. The depth knobs are bipolar: right of noon the lane's continuous output, left of noon the same lane sampled and held on its own slots, noon off | **done** (engine + VCV `FireflowHW`; released in 2.21.7 and 2.21.10) |
+| **AIR** | Noise/formant texture engine (working title): filtered noise through a resonant bank — wind, breath, vowel colours without sample material | planned (no spec yet) |
 | **M5k** | ZAP: monophonic percussion part engine | planned (spec ready; not implemented) |
-| **M5l** | PULL: chord gravity between the two decks | planned (spec ready; not implemented) |
-| **M6** | Hardware prototype: bring-up on a Daisy Patch Submodule — panel, controls, LEDs, CV/gate I/O, preset persistence | planned after M5l (panel design **done**, see above; **bring-up needs a new spec** — the existing shell spec assumes Spotykach's panel) |
+| **M6** | Hardware prototype: bring-up on a Daisy Patch Submodule — panel, controls, LEDs, CV/gate I/O, preset persistence | planned after AIR and M5k (panel design **done**, see above; **bring-up needs a new spec** — the existing shell spec assumes Spotykach's panel) |
 
 Per-milestone detail and current status live in [`docs/roadmap.md`](docs/roadmap.md).
 
