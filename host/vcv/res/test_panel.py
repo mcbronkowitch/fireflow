@@ -3518,14 +3518,28 @@ def test_mod_layer():
               f"MODD_{base} pair missing from PARAMS tail")
     for base, _k, _s, _i in cent:
         check(f"MODD_{base}" in tail, f"MODD_{base} missing from PARAMS tail")
-    # inits: engine-backed carry the booted _tdepth values, all else 0
+    # inits: engine-backed carry the booted _tdepth values, all else 0.
+    # Since 2026-08-22 mod-sh-split the DEPTH and the KNOB POSITION are two
+    # different numbers -- depth_of() dead-zones noon and rescales the rest,
+    # so INIT_DEFAULTS stores the PRE-IMAGE (0.7 -> 0.712) and the engine
+    # still receives 0.7. The table's own init stays the depth; only the
+    # stored default is the pre-image, and it is checked through the
+    # generator's own inverse so the two cannot drift apart here.
     want = {"SOURCE": 1.0, "DEPTH": 0.7, "FILT": 0.55}
     for base, kind, _s, init in deck:
         expect = want.get(base, 0.0)
         check(abs(init - expect) < 1e-9, f"{base} init {init} != {expect}")
+        knob = g._depth_knob(expect)
         for sfx in ("_A", "_B"):
-            check(abs(g.INIT_DEFAULTS[f"MODD_{base}{sfx}"] - expect) < 1e-9,
-                  f"INIT_DEFAULTS[MODD_{base}{sfx}] != {expect}")
+            check(abs(g.INIT_DEFAULTS[f"MODD_{base}{sfx}"] - knob) < 1e-9,
+                  f"INIT_DEFAULTS[MODD_{base}{sfx}] != {knob}")
+    # and the pre-image really is the inverse: the arithmetic here is the
+    # generator's, so this pins the numbers the C++ side asserts too
+    # (tests/test_mod_layer.cpp: 0.7 -> 0.712, 0.55 -> 0.568, 1.0 -> 1.0).
+    check(abs(g._depth_knob(0.7) - 0.712) < 1e-9, "0.7 pre-image != 0.712")
+    check(abs(g._depth_knob(0.55) - 0.568) < 1e-9, "0.55 pre-image != 0.568")
+    check(g._depth_knob(1.0) == 1.0, "1.0 pre-image != 1.0")
+    check(g._depth_knob(0.0) == 0.0, "noon pre-image != 0")
     for base, _k, _s, init in cent:
         check(init == 0.0 and g.INIT_DEFAULTS[f"MODD_{base}"] == 0.0,
               f"center {base} init must be 0")

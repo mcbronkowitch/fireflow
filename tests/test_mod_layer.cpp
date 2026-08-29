@@ -114,11 +114,24 @@ TEST_CASE("mod layer: kModLayer is exactly the spec's table") {
         CHECK(soundIds.count(excluded) == 0);
 }
 
-TEST_CASE("mod layer: init defaults keep today's sound") {
+TEST_CASE("mod layer: init defaults keep today's sound through the dead zone") {
     CHECK(initParamDefault(MODBTN) == 0.f);
-    CHECK(initParamDefault(MODD_SOURCE_A) == doctest::Approx(1.0f));
-    CHECK(initParamDefault(MODD_DEPTH_A) == doctest::Approx(0.7f));
-    CHECK(initParamDefault(MODD_FILT_A) == doctest::Approx(0.55f));
+    // The knob positions are the PRE-IMAGES: 0.7 depth sits at knob 0.712,
+    // because depth_of() rescales the axis around the dead zone. What has to
+    // stay at the booted engine value is the DEPTH, not the knob.
+    CHECK(spkymod::depth_of(initParamDefault(MODD_SOURCE_A))
+          == doctest::Approx(1.0f));
+    CHECK(spkymod::depth_of(initParamDefault(MODD_DEPTH_A))
+          == doctest::Approx(0.7f));
+    CHECK(spkymod::depth_of(initParamDefault(MODD_FILT_A))
+          == doctest::Approx(0.55f));
+    CHECK(spkymod::depth_of(initParamDefault(MODD_SOURCE_B))
+          == doctest::Approx(1.0f));
+    CHECK(spkymod::depth_of(initParamDefault(MODD_DEPTH_B))
+          == doctest::Approx(0.7f));
+    CHECK(spkymod::depth_of(initParamDefault(MODD_FILT_B))
+          == doctest::Approx(0.55f));
+    // every host-computed depth and every FX depth still boots at standstill
     for (const auto& t : kModLayer)
         if (t.kind != MODK_TDEPTH)
             CHECK(initParamDefault(t.depthId) == 0.f);
