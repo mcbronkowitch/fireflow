@@ -22,6 +22,20 @@ host (`host/vcv/`, clang via `build-local.sh`), Python panel generators
 (revised 2026-08-23). The parent layer it extends:
 [`docs/superpowers/specs/2026-08-22-mod-latch-layer-design.md`](../specs/2026-08-22-mod-latch-layer-design.md).
 
+> **Re-checked 2026-08-29, not started.** Every line anchor in this plan was
+> verified against the tree that day and still points where it says — nothing
+> it touches has changed since it was written (`git log 64b84cb..HEAD` on
+> `engine/`, `mod_layer.hpp`, `gen_panel.py` and `tests/` shows only the
+> unrelated `tests/test_mux_plan.cpp`). Three corrections went in on that
+> pass: Task 4 Step 1 now replaces **both** old five-parameter `modded` cases
+> rather than one (the missed one is a compile error two steps later), Task 6's
+> preamble counts **two** depth reads rather than three (its own Step 3 hoists
+> them), and Task 7 gained the `by-ear-decisions.md` filing for `kDepthDead`
+> plus the render-host consequence of the widened clamp. One drift worth
+> knowing while reading Task 1: `lane.cpp`'s three return sites sit at
+> 848-850 / 552-554 / 1098-1100, two lines below the `~846 / ~550 / ~1096` the
+> text names.
+
 ## Global Constraints
 
 - **Build the engine with clang + Ninja and `-DCMAKE_BUILD_TYPE=Release`.**
@@ -70,7 +84,7 @@ host (`host/vcv/`, clang via `build-local.sh`), Python panel generators
 | `host/vcv/res/gen_panel.py` | bipolar init pre-images, depth tooltips | 5 |
 | `host/vcv/src/generated_panel.hpp`, `init_patch.hpp` | regenerated | 5 |
 | `host/vcv/src/Fireflow.cpp` | stepped lane frame, `mv()`, engine-backed push, `configParam` range | 6 |
-| `docs/engine-map.md`, `docs/gotchas.md`, `docs/roadmap.md`, `docs/release-notes.md` | where the measured facts land | 7 |
+| `docs/engine-map.md`, `docs/gotchas.md`, `docs/by-ear-decisions.md`, `docs/roadmap.md`, `docs/release-notes.md` | where the measured facts land | 7 |
 
 ---
 
@@ -852,9 +866,17 @@ EOF
   - `lane_term` and `center_term` are unchanged.
 
 **Why the dead zone rescales.** GRIT already does exactly this
-(`Fireflow.cpp`, `kGritDead`) and for the same reason: a 9 mm pot on an ADC
+(`Fireflow.cpp:1094`, `kGritDead`) and for the same reason: a 9 mm pot on an ADC
 cannot hit an exact zero, so "standstill" needs a zone, and the remainder is
-rescaled so the stops still mean full depth. The cost is that a *booted* engine
+rescaled so the stops still mean full depth. **The arithmetic is GRIT's; the
+number is not.** `kGritDead` is `0.03` and so is `kPullDead` — this layer takes
+`0.04` because that is what the spec asked for (§5, "~±0.04"), and nobody has
+turned either knob to compare. It is a first-try by-ear candidate, not a
+derived value: Task 7 files it as one. Do not quietly "harmonize" it to 0.03
+while implementing — that would move every pre-image below (0.709 / 0.5635
+instead of 0.712 / 0.568) and invalidate the round trip `probe_dead.cpp`
+printed, so it costs a re-probe and is the owner's call, not the
+implementer's. The cost is that a *booted* engine
 depth is no longer its own knob position — 0.7 sits at knob 0.712. `depth_knob`
 is that inverse, and Task 5 makes the generator use it so there is one source
 for the arithmetic. Measured round trip (2026-08-23, scratchpad
@@ -863,8 +885,12 @@ for the arithmetic. Measured round trip (2026-08-23, scratchpad
 
 - [ ] **Step 1: Write the failing tests**
 
-In `tests/test_mod_layer.cpp`, replace the existing "depth 0 is the identity"
-case (its `modded` calls take the old five-parameter form) and append the rest:
+In `tests/test_mod_layer.cpp`, **both** existing cases call `modded` in the old
+five-parameter form — "depth 0 is the identity" (`:14-18`) and "offset lands in
+knob space and clamps to the range" (`:21-28`). Replace both, then append the
+rest. Missing the second one is not a silent gap: it is a `too few arguments`
+compile error in Step 4, at a point where this plan says the suite should be
+green.
 
 ```cpp
 TEST_CASE("mod layer: depth 0 is the identity") {
@@ -872,6 +898,23 @@ TEST_CASE("mod layer: depth 0 is the identity") {
         CHECK(spkymod::modded(knob, 0.f, 0.83f, -0.4f, -1.f, 1.f) == knob);
         CHECK(spkymod::modded(knob, 0.f, -1.f, 1.f, -1.f, 1.f) == knob);
     }
+}
+
+TEST_CASE("mod layer: offset lands in knob space and clamps to the range") {
+    // Unchanged in meaning -- this is the positive half, and it must keep
+    // producing exactly the floats it produced before the split. The stepTerm
+    // passed here is deliberately NOT the continuous one: a positive depth
+    // that read it would fail these three lines.
+    CHECK(spkymod::modded(0.5f, 1.f, 0.25f, -0.25f, 0.f, 1.f)
+          == doctest::Approx(0.75f));
+    CHECK(spkymod::modded(0.9f, 1.f, 1.f, -1.f, 0.f, 1.f) == 1.f);      // top clamp
+    CHECK(spkymod::modded(-0.9f, 1.f, -1.f, 1.f, -1.f, 1.f) == -1.f);   // bipolar floor
+    // lane_term and center_term are untouched by this task; these three lines
+    // move only because the case around them does.
+    CHECK(spkymod::lane_term(0.5f, -0.8f) == doctest::Approx(-0.4f));
+    // both masters down -> the center is still (spec §2)
+    CHECK(spkymod::center_term(0.f, 1.f, 0.f, -1.f) == 0.f);
+    CHECK(spkymod::center_term(1.f, 0.6f, 1.f, 0.2f) == doctest::Approx(0.4f));
 }
 
 TEST_CASE("mod layer: the dead zone makes noon exact and keeps both stops") {
@@ -936,6 +979,10 @@ entities above it:
 // GRIT's kGritDead exists (Fireflow.cpp): a 9 mm pot on an ADC cannot hit an
 // exact zero, so without a zone "off" would be unreachable on hardware. The
 // remainder is rescaled so both stops still reach a full +-1.
+//
+// 0.04 where kGritDead and kPullDead are both 0.03 -- the spec's figure
+// (2026-08-22 mod-sh-split-design §5), untried against 0.03 by ear. See
+// docs/by-ear-decisions.md; changing it moves the init pre-images.
 constexpr float kDepthDead = 0.04f;
 
 // Knob position -> depth. Inside the zone the answer is exactly 0.f, which
@@ -1216,10 +1263,12 @@ EOF
 - Produces: the finished feature. No new symbols for later tasks.
 
 **This is the task where a wrong `depth_of` call site silently costs the dead
-zone.** There are exactly three reads of a depth param's raw value in
-`Fireflow.cpp` after this task — `mv()` and the two branches of the
-engine-backed loop — and all three must go through `depth_of`. A raw read
-compiles fine and just means that knob has no detent.
+zone.** After this task exactly **two** call sites read a depth param's value:
+`mv()` (`:710`) and the engine-backed loop (`:1134`), where Step 3 hoists
+today's two branch-local reads into one `const float d`. Both must go through
+`depth_of`. A raw read compiles fine and just means that knob has no detent.
+`grep -n 'params\[t.depthId\]' host/vcv/src/Fireflow.cpp` must print two lines
+when the task is done, and each must have `depth_of` on it.
 
 - [ ] **Step 1: Add the stepped lane frame**
 
@@ -1356,6 +1405,7 @@ EOF
 - Modify: `docs/engine-map.md` (§1 or §4 — wherever the lane state space
   records what a lane's slot count is)
 - Modify: `docs/gotchas.md` (the "Host (VCV)" section, `:235`)
+- Modify: `docs/by-ear-decisions.md` (`kDepthDead`, as an open candidate)
 - Modify: `docs/roadmap.md`
 - Modify: `docs/release-notes.md`
 
@@ -1390,15 +1440,37 @@ Append to the "Host (VCV)" section of `docs/gotchas.md`:
   `docs/superpowers/specs/2026-08-22-mod-sh-split-design.md` §9: `_deck_steps`
   also feeds `pitch_step_samples()` into the sampler unguarded by mode
   (`part.cpp:390`), so the clock would move with it.
+
+- **A negative depth in a render scenario means S&H, not inversion.**
+  `host/render/scenario.cpp:135`/`:143` pass a scenario's `set_target_depth`
+  and `set_fx_target_depth` values straight through, and the engine-side clamp
+  widened to `-1..1` on 2026-08-23. So a negative value in a `.json` scenario
+  is now legal and selects the lane's held reading scaled by `|depth|` — it
+  does **not** mirror the modulation. No existing scenario uses one; this is
+  written down so the next author of one does not read the sign as a phase
+  flip. The render host has no dead zone and needs none: it is not a pot.
 ```
 
-- [ ] **Step 3: Update the living status**
+- [ ] **Step 3: File the dead zone as an open by-ear candidate**
+
+`kDepthDead = 0.04` is a first-try value from the spec, and both neighbours in
+the tree that solve the same problem — `kGritDead` and `kPullDead` — are
+`0.03`. Nobody has compared them by turning a knob. Add it to
+`docs/by-ear-decisions.md` under a new "MOD depth split (2026-08-23)" heading
+as an **open** item, not a settled one: what it is (the standstill zone around
+noon), what the alternative is (0.03, the house value), and the cost of
+changing it (the init pre-images move to 0.709 / 0.5635 and
+`tests/test_mod_layer.cpp`'s round-trip figures need re-probing with
+`probe_dead.cpp`). Do not turn it into a settled decision — the file's purpose
+is that nothing on it gets "finished" without a listening pass.
+
+- [ ] **Step 4: Update the living status**
 
 In `docs/roadmap.md`, mark the MOD depth split as shipped and note the two
 things it deliberately did not do (a TEMP-locked FLOW grid; `shell/` wiring),
 per spec §9.
 
-- [ ] **Step 4: Rewrite the release notes**
+- [ ] **Step 5: Rewrite the release notes**
 
 `docs/release-notes.md` is the body of the *current* release, not a changelog —
 rewrite it rather than appending. It needs: what the two halves of a depth knob
@@ -1408,16 +1480,22 @@ SMOOTH 0.7), because the grid rarely catches the exact extremes. Also say
 plainly that in STEP at SMOOTH 0 both halves are the same signal, so the
 feature is most audible in FLOW and at high SMOOTH.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add docs/engine-map.md docs/gotchas.md docs/roadmap.md docs/release-notes.md
+git add docs/engine-map.md docs/gotchas.md docs/by-ear-decisions.md \
+        docs/roadmap.md docs/release-notes.md
 git commit -m "$(cat <<'EOF'
 docs: record where FLOW's slot count actually comes from
 
 The engine map gets probe 1's table (the VCV host leaves every lane at one
 slot in FLOW) and gotchas gets the trap that follows from it, so the next
 session does not re-measure it or "simplify" kShFlowSlots back to _steps.
+Gotchas also carries what the widened clamp means on the render host, where
+a negative scenario depth is now legal and is NOT an inversion.
+
+kDepthDead goes on the by-ear list as an open candidate: 0.04 against the
+0.03 that kGritDead and kPullDead both use, never compared by ear.
 
 Co-Authored-By: HAL 9000 <293417720+bea-ton-k@users.noreply.github.com>
 EOF
