@@ -2,6 +2,16 @@
 
 This directory holds discontinued work from FireFlow development—specs, plans, audits, and tuning notes that remain in the repository for their reasoning and design rationale, rather than their code implementation. The documents here have been superseded or removed from the active roadmap and should be read for context only, not as current direction.
 
+## How to recover TAME
+
+**Tag:** `attic/tame-2026-08-29`. The withdrawal is written up in
+[`2026-08-29-tame-withdrawn.md`](2026-08-29-tame-withdrawn.md), which carries
+the recovery commands, what both attempts measured, and what was never
+established. **Nothing else is kept here** — the master-bus resonance leveler
+was one day's work and `main` was wound back past all of it, so specs, plans,
+engine, tests, scenes and bench rows exist only in the tag, and `main` carries
+no trace of the feature for a later search to find.
+
 ## How to recover SWARM
 
 **Tag:** `attic/swarm-2026-08-18`. The withdrawal is written up in
