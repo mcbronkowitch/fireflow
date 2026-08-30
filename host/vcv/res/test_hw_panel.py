@@ -376,8 +376,9 @@ def test_mod_wreaths():
     check(hw.MOD_WREATHED == want,
           f"MOD_WREATHED diverged from gp tables: {hw.MOD_WREATHED ^ want}")
     svg = open(os.path.join(HERE, "FireflowHW.svg"), encoding="utf-8").read()
-    # no satellite ring survives: the group frames still use this dash but
-    # are <rect>, so any <circle ... stroke-dasharray> left would be a wreath
+    # no satellite ring survives: since Option B (2026-08-29) nothing on the
+    # plate uses a dash at all, so any <circle ... stroke-dasharray> left
+    # would be a wreath
     check(not re.search(r'<circle[^>]*stroke-dasharray', svg),
           "a dashed satellite circle still exists on the plate")
     knobs = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) != "P"]
@@ -557,38 +558,60 @@ def test_sd_cutout_is_clear():
 
 
 def test_plate_paints_survive_nanosvg():
-    """The plate is the 15 Aug design round, variant 2a: three tinted zones,
-    an airflow/ember print, a baked fade. Rack parses the panel with NanoSVG,
-    which silently drops <mask>, <pattern> and <filter> -- a design that
-    leans on any of them looks right in a browser and wrong on the module,
-    which is exactly how it would ship unnoticed."""
+    """The plate is Option B (owner decision 2026-08-29): ONE continuous dark
+    surface plus soft tinted group fields. No zone rects, no seam gradients,
+    no baked fade overlays, no airflow/ember print, no drawing frames.
+
+    Rack parses the panel with NanoSVG, which silently drops <mask>,
+    <pattern> and <filter> -- a design that leans on any of them looks right
+    in a browser and wrong on the module, which is exactly how it would ship
+    unnoticed. That rationale outlives the design round, so it stays."""
     svg = hw.svg()
-    for zone in ("zoneA", "zoneC", "zoneB"):
-        check(f'fill="url(#hw-{zone})"' in svg, f"plate zone {zone} is missing")
     check("<mask" not in svg and "mask=" not in svg,
-          "an SVG mask is back -- NanoSVG drops it, so the fade must be baked")
+          "an SVG mask is back -- NanoSVG drops it")
     check("<pattern" not in svg, "a <pattern> is in the plate -- NanoSVG drops it")
     check("<filter" not in svg and "feTurbulence" not in svg,
           "a <filter> is in the plate -- NanoSVG drops it")
     check("rgba(" not in svg,
           "rgba() is in the plate -- NanoSVG's colour parser is not a browser's")
-    # Measured, not assumed: with objectBoundingBox gradients Rack painted
-    # the fadeA overlay opaque across the whole of deck A and swallowed the
-    # airflow print, while the mirrored deck B rendered correctly. The
-    # browser preview showed both halves. Every gradient stays in mm.
+    # Measured, not assumed: with objectBoundingBox gradients Rack painted an
+    # overlay opaque across the whole of deck A and swallowed the print under
+    # it, while the mirrored deck B rendered correctly; the browser preview
+    # showed both halves. Whatever gradient the plate carries stays in mm.
     n_grad = svg.count("<linearGradient")
-    check(n_grad == 8, f"expected 8 plate gradients, got {n_grad}")
+    check(n_grad == 1, f"expected 1 plate gradient, got {n_grad}")
+    check('<linearGradient id="hw-plate"' in svg, "the plate gradient is missing")
     check(svg.count('gradientUnits="userSpaceOnUse"') == n_grad,
           "a gradient is in bounding-box units -- NanoSVG and the browser "
           "then disagree about the plate")
-    check(f'stroke-opacity="{hw.SILHOUETTE_OPACITY}"' in svg,
-          "the airflow/ember print is missing")
-    check(svg.count('d="M-14.0,8.7C') == 1, "the airflow paths are missing")
-    check(svg.count('transform="translate(304.800,0) scale(-1,1)"') == 1,
-          "the ember half is not the mirrored airflow artwork")
-    for fade in ("fadeA", "fadeB", "seamL", "seamR"):
-        check(svg.count(f'fill="url(#hw-{fade})"') == 1,
-              f"the baked {fade} overlay is missing")
+    check(svg.count('fill="url(#hw-plate)"') == 1,
+          "the plate is not painted by exactly one hw-plate rect")
+    # Struck with Option B and asserted ABSENT, so a half-reverted generator
+    # cannot quietly bring any of it back.
+    for gone in ("zoneA", "zoneC", "zoneB", "fadeA", "fadeB", "seamL", "seamR"):
+        check(f"hw-{gone}" not in svg, f"plate paint {gone} is back")
+    check('d="M-14.0,8.7C' not in svg, "the airflow/ember print is back")
+    check('stroke-opacity="0.09"' not in svg,
+          "the silhouette's print opacity is back on the plate")
+    check("stroke-dasharray" not in svg,
+          "a dashed stroke is back -- the drawing frames were struck")
+    # The group fields: two rounded rects on identical geometry per box, a
+    # white wash that lifts the field off the plate and the zone accent over
+    # it. The decks carry the cool/warm identity the plate itself no longer
+    # has, so they run at twice the centre's tint. The numbers are pinned
+    # here, not read from hw, or the generator could redefine them unseen.
+    rx = f'rx="{hw.mm(1.5)}"'
+    check(svg.count(rx) == 2 * len(hw.BOXES),
+          f"expected {2 * len(hw.BOXES)} field rects, got {svg.count(rx)}")
+    for b in hw.BOXES:
+        geom = (f'x="{hw.mm(b.x)}" y="{hw.mm(b.y)}" width="{hw.mm(b.w)}" '
+                f'height="{hw.mm(b.h)}" {rx}')
+        check(f'<rect {geom} fill="#ffffff" fill-opacity="0.02"/>' in svg,
+              f"{b.n}/{b.side} has no white field wash")
+        want = 0.025 if b.side == "C" else 0.05
+        check(f'<rect {geom} fill="{hw.ACC[b.side]}" fill-opacity="{want}"/>'
+              in svg,
+              f"{b.n}/{b.side} has no {b.side} accent field at {want}")
 
 
 def test_group_raster_closes():
@@ -821,8 +844,10 @@ def test_sd_cutout_is_drawn():
 
 
 def test_drawing_geometry():
-    """Pins the 15 Aug graphics-round drawing: row rhythm, SD, no title,
-    no rail dashes, zone wash to the edge, jack captions under the jacks."""
+    """Pins the graphics-round drawing: row rhythm, SD, no title, no rail
+    dashes, the plate gradient starting at the edge (Option B 2026-08-29 --
+    it is the plate itself now, not a zone wash), jack captions under the
+    jacks."""
     by = {c.enum: c for c in hw.ALL_HW}
     check(abs(hw.JACK_Y - 114.0) < 1e-9, f"JACK_Y is {hw.JACK_Y}, not 114")
     check((hw.SD_W, hw.SD_H) == (11.0, 6.0), f"SD size is {hw.SD_W}x{hw.SD_H}")
@@ -900,18 +925,22 @@ def test_drawing_geometry():
     check(len(hw.TEXTS) == len(hw.BRAND_TEXTS) + 2 * len(hw.BOXES),
           f"TEXTS carries {len(hw.TEXTS)} rows, not brand + one pair per frame")
     words = {t[6] for t in hw.TEXTS}
-    for w in ("DECK A", "DECK B", "SEQUENCE", "ROOM"):
+    for w in ("SEQUENCE", "ROOM"):
         check(w in words, f"{w!r} is not in the panel lettering")
-    # Pulled 2026-08-23 while the plate's branding is redrawn. Asserted absent
-    # so a stale generated SVG or header cannot quietly put them back.
-    for w in ("FIREFLOW", "60 HP"):
+    # FIREFLOW/60 HP were pulled 2026-08-23 while the plate's branding is
+    # redrawn; DECK A/DECK B were struck 2026-08-29 with the Option B round --
+    # the tinted group fields carry the deck identity, so the words were
+    # redundant. Asserted absent so a stale generated SVG or header cannot
+    # quietly put any of them back.
+    for w in ("FIREFLOW", "60 HP", "DECK A", "DECK B"):
         check(w not in words, f"{w!r} is back in the panel lettering")
     lx, ly = hw.hw_label(by["IN_L"])[:2]
     check(ly > by["IN_L"].y, "IN L caption is not under the jack")
     svg = hw.svg()
     check('y1="9.00"' not in svg and 'y1="119.50"' not in svg,
           "rail keep-out dashes are still drawn")
-    check('y="0"' in svg or 'y="0.000"' in svg, "the plate zones do not start at the edge")
+    check('y="0"' in svg or 'y="0.000"' in svg,
+          "the plate does not start at the top edge")
     for c in hw.HW_PARAMS:
         if hw.hw_class(c.enum) == "P":
             continue
