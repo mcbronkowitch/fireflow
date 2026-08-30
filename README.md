@@ -1,6 +1,6 @@
 <p align="center">
-  <img src="docs/img/fireflow-panel.png" width="820"
-       alt="The FireFlow front panel: two mirrored halves — green A on the left, copper B on the right — each with nine macro knobs orbiting an LED ring inside MOTION, TIMBRE and PITCH sectors, above VOICE, FX and PLAY rows. The centre column holds BLEND, a TIME group with SYNC, TEMPO, COUPLE and the SHUFFLE swing control, DUO, and a six-knob ROOM, with the FIREFLOW wordmark on top and ten jacks in five labelled groups along the bottom.">
+  <img src="docs/img/fireflow-hw-panel.png" width="900"
+       alt="The 60 HP FireFlow hardware panel: a dark plate with two mirrored halves — green A on the left, copper B on the right — each holding ENG, SEQUENCE and CAPTURE at the top, then MOTION and VOICE, then PITCH, FLUX and LEVEL. The centre column carries GLOBAL with SCAL, DRFT, CHOK and PULL, a TIMING group around the big MRPH knob, and ROOM. A single row of jacks runs along the bottom, from the SHFT button through IN, PIT, GATE and MOD1-4 to CLK, RST, OUT and the MOD button.">
 </p>
 
 # FireFlow — a modulation-first ambient groovebox
@@ -159,6 +159,11 @@ The plugin ships **two modules over the one engine core**. **FireFlow** is the
 full surface: every engine setter on its own knob. **FireFlow HW Draft** is a
 design study of the 60 HP hardware panel M6 is heading for, on the same engine.
 Details in [`host/vcv/README.md`](host/vcv/README.md).
+
+<p align="center">
+  <img src="docs/img/fireflow-panel.png" width="820"
+       alt="The FireFlow Rack module: two mirrored halves on a bone-coloured plate — green A on the left, copper B on the right — each with nine macro knobs orbiting an LED ring inside MOTION, TIMBRE and PITCH, above VOICE, FX and PLAY rows. The centre column holds BLEND, TIMING, DUO and ROOM, with the FIREFLOW wordmark on top and ten jacks in five labelled groups along the bottom.">
+</p>
 
 You can also just listen first: the [build log](https://fireflow.ton-k.de/)
 carries recordings from most milestones, next to the story of how they came

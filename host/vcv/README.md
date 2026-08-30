@@ -648,23 +648,33 @@ python3 res/gen_panel.py     # run from host/vcv/
 
 Edit the control table in `res/gen_panel.py`, re-run, rebuild.
 
-### The README hero image
+### The README panel images
 
-`docs/img/fireflow-panel.png` is a raster of that same SVG, and **nothing
-regenerates it automatically** — it silently went two caption rounds stale once
-already. After a panel change, re-render it. Any browser's headless screenshot
-does the job faithfully, including the knob-cap gradients that pure-Python SVG
-rasterisers drop:
+The root `README.md` shows two panel rasters and **nothing regenerates them
+automatically** — the hero silently went two caption rounds stale once already:
+
+| File | Module |
+|---|---|
+| `docs/img/fireflow-hw-panel.png` | `FireflowHW` — the hero at the top |
+| `docs/img/fireflow-panel.png` | `Fireflow` — in the VCV Rack section |
+
+Both come out of Rack's own screenshot mode, which renders every module panel of
+every installed plugin and exits by itself. Point `-u` at a throwaway user
+directory holding only this plugin, or Rack renders every plugin you own:
 
 ```bash
-# wrapper keeps the exact pixel size; the SVG's own units are mm
-printf '<style>html,body{margin:0;overflow:hidden}img{display:block;width:1640px;height:988px}</style><img src="Fireflow.svg">' > res/_r.html
-<your-browser> --headless=new --hide-scrollbars --window-size=1640,988 \
-  --screenshot=../../docs/img/fireflow-panel.png res/_r.html
-rm res/_r.html
+./build-local.sh dist
+mkdir -p /tmp/rackshot/plugins-win-x64
+cp -r dist/Fireflow /tmp/rackshot/plugins-win-x64/Fireflow
+<rack-install>/Rack.exe -u /tmp/rackshot -t 2
+cp /tmp/rackshot/screenshots/Fireflow/FireflowHW.png ../../docs/img/fireflow-hw-panel.png
+cp /tmp/rackshot/screenshots/Fireflow/Fireflow.png   ../../docs/img/fireflow-panel.png
 ```
 
-1640 × 988 is twice the 820 px the README displays it at.
+`-t` is the zoom factor: 2 gives 1800 x 760 for the 60 HP draft and 1260 x 760
+for the 42 HP full module, twice the 900 / 820 px the README displays them at.
+This renders the real widgets — knob caps, lamps, jacks — not just the SVG
+plate, so it is also the honest picture of what a user sees.
 
 ## I/O
 
