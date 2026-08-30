@@ -367,6 +367,23 @@ void Instrument::process(const float* inL, const float* inR,
         // injects no new reverb", M4) -- reading the raw output here gave the
         // engine two different answers to whether a silent deck still acts on
         // the bus.
+        //
+        // PAN stays OUT of this on purpose -- ga/gb here are the unpanned
+        // morph gains, exactly as at the reverb send. The detector answers
+        // "how loud is the priority deck", which is a property of the deck,
+        // not of where it sits in the stereo field: a deck moved to one side
+        // is not a quieter deck, and a duck that shallows out as you pan away
+        // would make the knob a second, hidden CHOKE amount. Folding the PAN
+        // pair in would also drop one channel entirely at a hard stop, so a
+        // hard-panned deck would stop ducking whatever lives in the channel it
+        // vacated -- the opposite of what the sidechain is for.
+        // (An earlier draft of the spec argued this from max(|L|, |R|): the
+        // law puts the UNATTENUATED channel at unity, so folding PAN in was
+        // said to change nothing. That is false -- which channel is the loud
+        // one is a property of the signal, and SYNTH and BODY carry real side
+        // energy, L/R correlation 0.848 and 0.811 (probe, 2026-08-30). The
+        // conclusion held, the reason did not; see the spec's §5.)
+        // tests/test_pan.cpp's fifth gate guards this line.
         const float pri_gain = (pri == PART_A) ? ga : gb;
         const float rect = std::max(std::fabs(pl[pri] * pri_gain),
                                     std::fabs(prr[pri] * pri_gain));

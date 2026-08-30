@@ -60,6 +60,7 @@ void Center::init(float sample_rate, uint32_t seed) {
         _lvl_target[i] = 1.f;
         _lvl_smooth[i].init(_cr, 0.03f);
         _lvl_smooth[i].reset(1.f);
+        _pan_target[i] = 0.f;
         _pan_smooth[i].init(_cr, 0.03f);
         _pan_smooth[i].reset(0.f);
     }

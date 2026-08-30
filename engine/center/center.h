@@ -14,7 +14,8 @@ namespace spky {
 // (equal-power A/B gains), COUPLE (Kuramoto PLL), DRIFT (one OU weather walk
 // tapped to six destinations), SPOT (per-lane stumble) and SETTLE (panic).
 // update() reads both banks' phases/rates and writes back through narrow hooks;
-// the audio path only multiplies the morph gains.
+// the audio path multiplies the morph gains and, on the DRY sums only, the PAN
+// gains (see set_pan below for why those two are separate pairs).
 class Center {
 public:
     static constexpr int kCtrlInterval = 96;   // control tick, matches M2
@@ -44,13 +45,18 @@ public:
     // Balance law, unity at centre: only the fading side moves. At p == 0 both
     // are exactly 1.0f, so a centred PAN multiplies by 1 and cannot move a
     // render -- tests/test_pan.cpp's first gate rests on that exactness.
+    // clampf's low arm never fires here: the position is clamped to -1..+1 in
+    // set_pan and a OnePole cannot overshoot its target, so 1 -/+ p stays in
+    // 0..2 and only the min against 1 has anything to do. It is written as a
+    // clamp anyway because that is the idiom two lines above and it reads as
+    // what it is.
     float pan_l(int part) const {
         const float p = _pan_smooth[part & 1].value();
-        return 1.f - p < 1.f ? 1.f - p : 1.f;
+        return clampf(1.f - p, 0.f, 1.f);
     }
     float pan_r(int part) const {
         const float p = _pan_smooth[part & 1].value();
-        return 1.f + p < 1.f ? 1.f + p : 1.f;
+        return clampf(1.f + p, 0.f, 1.f);
     }
     void set_couple(float c) { _couple        = clampf(c, 0.f, 1.f); }
     void set_drift(float d)  { _drift_target  = clampf(d, 0.f, 1.f); }

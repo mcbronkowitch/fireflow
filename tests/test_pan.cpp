@@ -42,33 +42,38 @@ void render(Instrument& in, int n, std::vector<float>& l, std::vector<float>& r)
 
 } // namespace
 
-// Gate 1. The whole exactness argument of the design rests on this: under the
-// balance law p == 0 gives gL == gR == 1.0f, a multiply by 1.0f is exact, and
-// therefore a centred PAN cannot move a single sample of an existing render.
-// If this reddens, the render-hash gates (ctrl_identity, spky_tests) will
-// redden too, and this test says WHY where they only say "reference moved".
-TEST_CASE("pan: centre is exactly unity and cannot move a render") {
-    Instrument untouched, centred;
-    untouched.init(48000.f);
-    centred.init(48000.f);
-    for (Instrument* in : { &untouched, &centred }) {
-        in->set_engine(PART_A, ENGINE_SYNTH);
-        in->set_engine(PART_B, ENGINE_SYNTH);
-        in->set_tempo_bpm(120.f);
-    }
-    centred.set_pan(PART_A, 0.f);
-    centred.set_pan(PART_B, 0.f);
+// Gate 1. The whole exactness argument of the design rests on gL == gR ==
+// 1.0f at centre: a multiply by 1.0f is exact, so a centred PAN cannot move a
+// single sample of an existing render. On a FRESH instrument that is true by
+// construction -- _pan_target boots at {0, 0} and reset(0.f) leaves the
+// smoother there -- so asserting it on a fresh instrument asserts nothing, and
+// the render-identity property it implies is already held down by
+// ctrl_identity and the spky_tests render hashes.
+//
+// What is NOT trivial, and what nothing else verifies, is that unity comes
+// BACK after the knob has been somewhere else. The position rides a OnePole,
+// and a one-pole only approaches its target asymptotically -- it lands on it
+// exactly because OnePole::process() writes _value = target once the distance
+// falls inside its 0.0005 dead band (engine/util/onepole.h). That snap is the
+// only reason a knob returned to centre leaves 1.0f in the mix rather than a
+// 0.9999997 that would sit there, inaudible and de-exacting every render,
+// forever. If the dead band ever goes, this is the gate that says so.
+TEST_CASE("pan: a return to centre lands on exact unity again") {
+    Instrument in;
+    in.init(48000.f);
+    in.set_tempo_bpm(120.f);
 
-    std::vector<float> ul, ur, cl, cr;
-    render(untouched, 48000, ul, ur);
-    render(centred,   48000, cl, cr);
+    std::vector<float> l, r;
+    in.set_pan(PART_A, -1.f);
+    render(in, 16000, l, r);              // > 111 control ticks: the move arrives
+    REQUIRE(in.pan_l_for_test(PART_A) == 1.0f);
+    REQUIRE(in.pan_r_for_test(PART_A) == 0.0f);   // sanity: it really left centre
 
-    CHECK(centred.pan_l_for_test(PART_A) == 1.0f);
-    CHECK(centred.pan_r_for_test(PART_A) == 1.0f);
-    for (size_t i = 0; i < ul.size(); ++i) {
-        REQUIRE(cl[i] == ul[i]);
-        REQUIRE(cr[i] == ur[i]);
-    }
+    in.set_pan(PART_A, 0.f);
+    render(in, 16000, l, r);
+
+    CHECK(in.pan_l_for_test(PART_A) == 1.0f);
+    CHECK(in.pan_r_for_test(PART_A) == 1.0f);
 }
 
 // Gate 2. A stop is a stop: hard left silences the right channel exactly.
@@ -96,6 +101,38 @@ TEST_CASE("pan: a hard stop empties the opposite channel exactly") {
     }
     CHECK(heard_l > 0.0);                 // the deck is actually sounding
     CHECK(heard_r == 0.0);
+}
+
+// Gate 2b. Deck B's half of the routing. Everything else in this file drives
+// deck A, and a swap of plb/prb in the mix, a pla<->plb slip or a `part & 1`
+// mistake would pass all of it -- tests/test_param_impact.cpp only asks
+// whether P_PAN_B moves audio at all, which a swapped-but-live PAN does.
+//
+// The asymmetry is deliberate: gate 2 pans deck A hard LEFT and asserts the
+// RIGHT channel empty, this one pans deck B hard RIGHT and asserts the LEFT
+// channel empty. A copy-paste of gate 2 that forgot to flip the channel goes
+// red here immediately.
+TEST_CASE("pan: deck B's hard stop empties the opposite channel exactly") {
+    Instrument in;
+    in.init(48000.f);
+    in.set_engine(PART_B, ENGINE_SYNTH);
+    in.set_tempo_bpm(120.f);
+    in.set_part_level(PART_A, 0.f);       // deck A silent: ga contributes nothing
+    in.set_part_level(PART_B, 1.f);
+    in.set_pan(PART_B, 1.f);              // hard RIGHT, the mirror of gate 2
+
+    std::vector<float> l, r;
+    render(in, 48000, l, r);              // 1 s: the smoother needs ~222 ms
+
+    CHECK(in.pan_r_for_test(PART_B) == 1.0f);
+    CHECK(in.pan_l_for_test(PART_B) == 0.0f);
+    double heard_l = 0.0, heard_r = 0.0;
+    for (size_t i = 24000; i < l.size(); ++i) {   // after the smoother arrived
+        heard_l += std::fabs(l[i]);
+        heard_r += std::fabs(r[i]);
+    }
+    CHECK(heard_r > 0.0);                 // the deck is actually sounding
+    CHECK(heard_l == 0.0);
 }
 
 // Gate 3. THE gate of this feature. PAN must not reach the reverb send, so a
@@ -163,4 +200,47 @@ TEST_CASE("pan: the position is smoothed, not stepped") {
     const float gr = in.pan_r_for_test(PART_A);
     CHECK(gr > 0.90f);
     CHECK(gr < 0.96f);
+}
+
+// Gate 5. The second exclusion, and until now the undefended one: PAN must not
+// reach the CHOKE sidechain either. instrument.cpp's `pri_gain` reads the
+// UNPANNED morph gain, so moving the priority deck across the stereo field has
+// to leave the yielding deck's duck bit-identical. Folding PAN into pri_gain
+// would look like the same tidy-up gate 3 guards against and would pass gates
+// 1, 2, 2b and 4 (two of them engage no CHOKE at all, and gate 3's deck A is
+// wet-only, so its dry path -- and with it the detector's input -- is 0).
+//
+// Instrument::choke_duck_gain() is the public observer for exactly this: from
+// outside, a duck is indistinguishable from quieter playing, so the duck gain
+// itself is what has to be compared.
+//
+// CHOKE at -0.4: negative puts deck A on priority (it is the deck being
+// panned), and |c| <= 0.5 is the duck zone, so deck B is ducked but never
+// inhibited -- the duck gain is the only thing under test.
+TEST_CASE("pan: the CHOKE sidechain does not move with the knob") {
+    Instrument centre, left;
+    for (Instrument* in : { &centre, &left }) {
+        in->init(48000.f);
+        in->set_tempo_bpm(120.f);
+        for (int p = 0; p < PART_COUNT; ++p) {
+            in->set_engine(p, ENGINE_SYNTH);
+            in->set_rate(p, p == PART_A ? 0.8f : 0.9f);
+            in->set_density(p, 1.f);
+            in->set_range(p, 1.f);
+        }
+        in->set_choke(-0.4f);
+    }
+    centre.set_pan(PART_A, 0.f);
+    left.set_pan(PART_A, -1.f);
+
+    bool ducked = false;
+    for (int i = 0; i < 96000; ++i) {          // 2 s
+        float il = 0.f, ir = 0.f, ol = 0.f, orr = 0.f;
+        centre.process(&il, &ir, &ol, &orr, 1);
+        left.process(&il, &ir, &ol, &orr, 1);
+        if (centre.choke_duck_gain() < 1.f) ducked = true;
+        REQUIRE(left.choke_duck_gain() == centre.choke_duck_gain());
+    }
+    CHECK(ducked);                             // sanity: the duck is working
+    REQUIRE(left.pan_r_for_test(PART_A) == 0.0f);   // and the knob really moved
 }
