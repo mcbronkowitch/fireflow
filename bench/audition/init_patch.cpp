@@ -120,6 +120,9 @@ void apply_init_patch(spky::Instrument& inst, const float* values)
                              : kCompTop * std::pow(
                                    (lvlKnob - kLvlCompSplit) /
                                    (1.f - kLvlCompSplit), kCompShape));
+        // PAN is an appended pair, not a strided one: value(...), not
+        // part(PAN_A, deck) -- the same trap as mvp() in Fireflow.cpp.
+        inst.set_pan(deck, value(deck ? PAN_B : PAN_A));
 
         inst.sampler_speed_mode(deck, true);
         inst.sampler_reverse(deck, false);
