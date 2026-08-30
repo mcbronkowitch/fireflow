@@ -15,3 +15,16 @@
 #
 # The other pinned artefacts needed no entry: a KiCad preview PNG is detected as
 # binary and left alone, and the official DXF was local-only under .reference/.
+
+# 2026-08-30: the subject is back, and the rule with it. hardware/lib/DaisyKiCad
+# is vendored third-party and pinned by sha256 in its own checksums.sha256, so
+# every KiCad text format has to round-trip byte-identically through a clone.
+# Without these lines the first fresh clone on this machine turns LF into CRLF
+# and the checksums fail on a tree that is correct. Proven, not assumed: a clone
+# into a temporary directory reproduces the committed sums.
+*.kicad_sym  -text
+*.kicad_mod  -text
+*.kicad_pcb  -text
+*.kicad_sch  -text
+*.kicad_pro  -text
+*.kicad_dru  -text
