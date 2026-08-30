@@ -230,6 +230,9 @@ TEST_CASE("pan: the CHOKE sidechain does not move with the knob") {
         }
         in->set_choke(-0.4f);
     }
+    // centre's push is a no-op against the boot default -- written for the
+    // reader, not for the assertion. What carries the gate is that `left`
+    // really travelled, which the final REQUIRE proves.
     centre.set_pan(PART_A, 0.f);
     left.set_pan(PART_A, -1.f);
 
