@@ -665,10 +665,16 @@ APPENDED_PANEL_PARAMS = [
     Ctl("PULL", SMKNOB, CX, ROW_DUO2, "PULL"),
     # PAN: per-deck balance in the master mix (spec 2026-08-30 pan). Appended
     # LAST like PULL/CHOKE/FILT/TIDE -- never into part_controls(), which would
-    # grow PART_STRIDE and shift every part-B and SHARED id. The 49
-    # MOD_LAYER_PARAMS ids behind it shift by two; accepted, this is a dev
-    # alpha and saved patches may break (memory
-    # fireflow-dev-alpha-no-patch-compat).
+    # grow PART_STRIDE and shift every part-B and SHARED id.
+    #
+    # The MOD_LAYER_PARAMS block behind it shifts, but NOT uniformly, and the
+    # difference matters to anyone re-deriving a pin by hand: MODBTN and the
+    # deck depths up to MODD_COMP_B move by TWO (the two panel params above
+    # them), while the six MOD_CENTER_TARGETS ids at the tail move by FOUR --
+    # PAN also inserted MODD_PAN_A/MODD_PAN_B inside the block itself, ahead
+    # of them. test_panel.py:255-266 is the transcription that has this right;
+    # the block is 51 ids now, not 49. Accepted, this is a dev alpha and saved
+    # patches may break (memory fireflow-dev-alpha-no-patch-compat).
     #
     # The slot is FX_BOT[1], MULT's old place, empty since the 2026-08-09
     # control reduction. Freed slots are not regrouped -- but they can be
