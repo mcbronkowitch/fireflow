@@ -729,7 +729,7 @@ struct Fireflow : Module {
     }
     // Strided twin of pp(). Only valid inside the part blocks, exactly like
     // pp() itself -- the appended pairs (COLOR/LINK/FILT/FLUX/FLUXFB/REV_MIX/
-    // DEPTH/STAGES) must go through mv(p ? X_B : X_A). mvp() still takes
+    // DEPTH/STAGES/PAN) must go through mv(p ? X_B : X_A). mvp() still takes
     // `part`: it needs it to build the strided soundId, same as pp() does.
     inline float mvp(int baseA, int part) {
         return mv(baseA + part * PART_STRIDE);
@@ -870,8 +870,8 @@ struct Fireflow : Module {
             // mv(p ? PAN_B : PAN_A), NOT mvp(PAN_A, p): mvp() adds p * PART_STRIDE
             // and is only valid for params inside part_controls(). PAN is an
             // APPENDED pair, so its two ids are not a stride apart -- see the
-            // comment on mvp itself (Fireflow.cpp:728-731), which names the
-            // appended pairs that have to take this route.
+            // comment on mvp itself, which names the appended pairs that
+            // have to take this route.
             inst.set_pan(p, mv(p ? PAN_B : PAN_A));
 
             // Saved ENG meanings remain 0 = Synth and 1 = Sampler; 2 adds
