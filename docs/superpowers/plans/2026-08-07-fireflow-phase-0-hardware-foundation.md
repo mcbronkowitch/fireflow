@@ -664,6 +664,15 @@ Verwendet wird das vorhandene **CJMCU-Breakout mit `74HC4051`**, 8 Kanäle
 (roboter-bausatz RBS17672, 30 × 19 mm). Der Aufbau steht auf dem Breadboard, es
 wird nichts bestellt.
 
+> **Nachtrag 2026-08-30 — was dieser Aufbau ist und was er nicht ist.** Er
+> bleibt, aber als **Bring-up-Platz für den Scan**, nicht als Messplatz. Die
+> Kanalumschaltung für 16:1 mit Adressen aus der 595-Kette muss geschrieben
+> werden (io-budget §3), und sie zum ersten Mal auf einem frisch gerouteten
+> Coupon zu debuggen hieße, dass ein Firmware-Fehler und ein Layout-Fehler
+> gleich aussehen. Dafür genügt dieses Breakout vollauf: ein Mux, ein Poti, und
+> die Kette darf man sich mit LEDs beweisen. **Zahlen kommen hier keine heraus**
+> — warum nicht, steht in Schritt 5b.
+
 > **Nachtrag 2026-08-22 — das Board ist angesehen worden, und drei Dinge ändern
 > sich gegenüber dem Text von 2026-08-07.** Die Bestückung ist vom Produktfoto
 > abgelesen, nicht aus der Artikelbeschreibung — die sagt zu Passiven nichts,
@@ -720,6 +729,10 @@ Die abwechselnd auf die Extreme gezogenen Nachbarkanäle sind kein Beiwerk, sond
 
 An `COM` **höchstens 1 nF** gegen GND — die früher hier empfohlenen 10 nF machen τ ≈ 26 µs und drücken den Vollscan auf ~270 Hz, haarscharf ans Ziel (Envelope-Spec §5); Schritt 5b misst, ob es auch ganz ohne Kondensator ruhig ist. Der vorhandene Abblockkondensator liegt an `VCC`/`GND` und ist davon nicht betroffen.
 
+> **Nachtrag 2026-08-30, und er dreht diesen Absatz um: gar kein Kondensator, und zwar aufgebaut wie gebaut wird.** Die Rechnung in [`docs/hardware/settle-budget.md`](../../hardware/settle-budget.md) sagt, dass jede Bestückung am `COM` schlechter ist als keine — 100 pF kosten bei einem 10-k-Poti schon 80 % mehr Sweep-Zeit, 1 nF das Siebzehnfache. Der Reservoir-Gedanke dahinter ist real, verliert aber: die Erholzeit wächst linear mit der Kapazität, der unterdrückte Einbruch schrumpft nur logarithmisch. Die 1-nF-Obergrenze oben ist damit nicht falsch, sondern überflüssig.
+>
+> Die τ-Zahl dieses Absatzes ist übrigens die einzige Settle-Zahl, die es vor dem 30. August im Repo gab, und das Modell reproduziert sie (26,7 µs gegen 26 µs) — wobei herauskommt, dass hier still ein **10-k-Poti** angenommen wurde. Genau der Wert ist inzwischen eine Entscheidung und keine Annahme mehr: 10 k oder 20 k, ab 50 kΩ kippt der 16:1.
+
 Nicht verwenden: **`CD4051B`** oder andere klassische CMOS-Typen. Das Submodule läuft auf 3,3 V, wo diese Typen einen deutlich höheren Durchlasswiderstand haben — das verschleppt die Einschwingzeit beim Kanalwechsel und erzeugt zappelige ADC-Werte, die man dann für einen Software-Fehler hält. Das `HC` im Namen ist der Unterschied; der Aufdruck auf dem Chip zählt, nicht die Artikelbeschreibung.
 
 - [ ] **Schritt 5b: Die Einschwingzeit messen**
@@ -729,6 +742,16 @@ Das ist die zweite Zahl, die Phase 0 liefern muss, und sie ist mehr wert als die
 Vorgehen: Adresse auf Kanal 0 setzen, definiert warten, lesen — die Wartezeit von großzügig (z. B. 50 µs) in Schritten halbieren und beobachten, ab wann der gelesene Wert vom Nachbarkanal beeinflusst wird. Das Poti dabei auf eine Mittelstellung, weil ein Übersprechen dort am deutlichsten auffällt.
 
 Festgehalten wird die kürzeste Wartezeit, bei der über 1000 Messungen die Streuung unter einem LSB-Rauschband bleibt, plus 50 % Sicherheit. Diese Zahl geht in `docs/hardware/io-budget.md` und ist ab dann die Konstante, mit der jede Panelgröße gegengerechnet wird.
+
+> **Nachtrag 2026-08-30: dieser Schritt ist keine Halbierungssuche mehr, sondern eine Vorhersage zum Bestätigen.** Die Papierhälfte ist gerechnet — [`docs/hardware/settle-budget.md`](../../hardware/settle-budget.md), Skript [`tools/settle_budget.py`](../../../tools/settle_budget.py) mit Guard. **Sie ersetzt die Messung nicht** (Arithmetik, kein Prüfstand), aber sie ersetzt das Suchverfahren:
+>
+> > Bei **10 kΩ linear**, **nichts am `COM`** und **`SPEED_16CYCLES_5`** muss ein Kanalwechsel nach **1,6 µs** sauber sein — mit den beiden Nachbarkanälen auf entgegengesetzten Extremen, wie der Aufbau oben ihn ohnehin vorsieht.
+>
+> Bestätigt sich das, ist die Topologie durch und es bleibt nur noch 8:1 gegen 16:1 als Preisfrage. Bestätigt es sich nicht, benennt der Abstand zwischen Vorhersage und Messung, **welche** der drei Schätzgrößen falsch war (Streukapazität 15 pF, `R_on` bei 3,3 V, `R_ADC`) — und das ist mehr wert als eine nackte Zahl.
+>
+> Zwei Dinge, die das Modell ausdrücklich **nicht** kann und die dieser Schritt deshalb weiterhin allein trägt: **Übersprechen** zwischen benachbarten Kanälen — wofür der Prüfaufbau mit den gegensinnigen Nachbarn genau gebaut ist — und **Ladungsinjektion** beim Schalten.
+>
+> > **Wo gemessen wird, ist am selben Tag entschieden worden, und es ist nicht das Steckbrett: es ist der Testcoupon.** Der Aufbau in Schritt 5 bleibt als Bring-up-Platz für den Scan bestehen, aber die Zahl kommt vom Coupon. Grund: das Modell ist **linear in der Node-Kapazität**, und ein Jumper-Node ist ein unbekanntes Vielfaches der angesetzten 65 pF — die 1,6 µs haben auf dem Steckbrett also gar keinen definierten Wert. Beim Settling wäre ein Steckbrett-Pass immerhin konservativ (mehr C → langsamer); bei **Übersprechen und Rauschen neben dem Audiopfad** gilt auch das nicht, weil sich die Kopplungswege in der Art unterscheiden und nicht nur im Grad. Was der Coupon dafür tragen muss, steht als Anforderungsliste in der Envelope-Spec §5 (Nachtrag 2026-08-30) — acht Punkte, die **vor** dem Layout feststehen müssen, darunter der `COM`-Messpunkt, beide Chip-Footprints, 10 k und 20 k nebeneinander und die Referenzkanäle.
 
 - [ ] **Schritt 6: Scan in den Shell einbauen und hören**
 

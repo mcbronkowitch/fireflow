@@ -195,6 +195,60 @@ FX/VOICE stimmig, Orbit-Knobs nicht) läuft als definierter Prozess **vor H1**:
   8. August wird auf dem Coupon gejagt, mit Analog/Digital-
   Versorgungstrennung als expliziter Entwurfsregel
   (Messstrecke: `fireflow-audio-measurement-rig`).
+
+  > **Nachtrag 2026-08-30 — der Coupon ist der Messplatz für 5b, nicht ein
+  > Steckbrettaufbau davor, und daraus wird eine Anforderungsliste.**
+  >
+  > Zwei Dinge haben sich geändert. **Erstens ist die Papierhälfte der
+  > Einschwingzeit gerechnet** ([`docs/hardware/settle-budget.md`](../../hardware/settle-budget.md)):
+  > die drei Entscheidungen, die das Coupon-Layout von 5b brauchte — Kondensator
+  > am `COM`, Poti-Wert, 8:1 gegen 16:1 — sind auf Papier gefallen. 5b blockiert
+  > das Layout also nicht mehr. **Zweitens hält der Grund nicht, es vorher am
+  > Steckbrett zu messen:** das Modell ist linear in der Node-Kapazität, ein
+  > Jumper-Node ist ein unbekanntes Vielfaches davon, und bei Übersprechen und
+  > Rauschen neben dem Audiopfad unterscheiden sich die Kopplungswege in der
+  > Art, nicht nur im Grad. Ein Breadboard-Pass bewiese dort nichts und ein
+  > Breadboard-Fail erklärte nichts.
+  >
+  > Was der Coupon dafür tragen muss — **vor** dem Layout, nicht danach:
+  >
+  > 1. **Beide Chip-Footprints**, 8:1 und 16:1. Der Coupon-Inhalt oben sagt
+  >    „4067-Kette"; das ist eine geerbte Annahme. Die Rechnung sagt, dass die
+  >    Zeit die Wahl nicht entscheidet — dann soll der Coupon sie entscheiden.
+  > 2. **`COM`-Kondensator als unbestückter Footprint.** Die Rechnung sagt
+  >    „keiner", und genau deshalb muss der Coupon das billig widerlegen können.
+  >    Das „≤ 1 nF oder weg" im Absatz oben ist damit zu **weg** aufgelöst; die
+  >    Obergrenze ist überflüssig geworden, nicht falsch.
+  > 3. **Messpunkt direkt am `COM`.** Sonst wird das Einschwingen nur durch den
+  >    ADC gesehen, also durch die Stufe, deren Verhalten mit zur Debatte steht.
+  > 4. **10 k und 20 k gleichzeitig bestückt**, auf verschiedenen Kanälen
+  >    desselben Mux — der kontrollierte Vergleich: gleiche Kette, gleicher
+  >    Sense-Pin, gleicher Takt. Der 3V3-Strom fällt dabei mit ab.
+  > 5. **Zwei Nachbarkanäle hart auf 3V3 und GND**, links und rechts vom
+  >    Messkanal. Plan Schritt 5b verlangt genau diesen Aufbau; als Leiterbahn
+  >    ist er umsonst und ohne Jumper reproduzierbar.
+  > 6. **Ein bis zwei Referenzkanäle auf festem Spannungsteiler**, Mittenpegel.
+  >    Trennt „der Scan rauscht" von „das Poti rauscht" — ohne so einen Kanal
+  >    sieht man nur die Summe — und ist der erste Kanal, den die
+  >    Bring-up-Firmware sinnvoll lesen kann, lange bevor ein Poti stimmt.
+  > 7. **Die echte 595-Kette an `B7`/`B8`/`D1`/`D10`.** Die Callback-Messung vom
+  >    2026-08-23 lief mit nichts an den Pins und ist ausdrücklich als untere
+  >    Schranke protokolliert; hier wird sie wiederholt.
+  > 8. **Versorgungs-/Massetopologie als 0-Ω-Brücke umschaltbar**, nicht als
+  >    zweite Boardvariante: dasselbe Exemplar mit und ohne ist die bessere
+  >    Messung. Nach dem 31-dB-Befund vom 2026-08-23 abends ist das die Stelle
+  >    mit dem größten unerklärten Hebel.
+  >
+  > **Bestückung statt Rework.** Die Fab liefert ohnehin eine Handvoll Kopien
+  > und nicht ein Stück — also ein Board je `COM`-Kondensatorwert, statt dreimal
+  > an derselben Stelle zu löten, bis ein Pad abhebt und man den Schaden misst
+  > statt der Schaltung.
+  >
+  > **Die Grenze fürs Jumpern, und sie ist scharf:** digital beliebig
+  > (Kettenlänge, Enable-Schema, Adressen), **analog gar nicht**. Am `COM`-Node
+  > und am Audioweg ist eine Drahtbrücke kein Verbinder, sondern ein Bauteil —
+  > dort holt man sich genau das Steckbrett zurück, dessentwegen der Coupon
+  > existiert.
 - **Neuer Notausgang** (die alte Achse „42→34 HP, zwei Lanes weniger" ist mit
   dem vollen Instrument tot): (a) Rev A als akzeptierter Superbooth-Stand,
   Rev B danach; (b) Acryl- statt Alu-Panel als finaler Stand; (c)

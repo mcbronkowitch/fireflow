@@ -36,7 +36,22 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-08-29 (**the MOD depth split is heard, the latch lamp
+- **Last updated:** 2026-08-30 (**the settle time is calculated, and it picks
+  the pot value**: the last open item on the mux gets its paper half —
+  [`docs/hardware/settle-budget.md`](hardware/settle-budget.md) and
+  `tools/settle_budget.py`. **Arithmetic, not a measurement**, so Phase-0
+  Task 6 step 5b stays open, but it becomes a prediction to confirm instead of
+  a bisection search. The capacitor at `COM` goes away entirely rather than
+  getting smaller, the pot value is a decision with a ceiling of 10 k or 20 k,
+  the binding term is charge redistribution rather than the ADC's charging rule
+  — which makes libDaisy's 8.5-cycle default too short in every case — and
+  timing does not decide 8:1 against 16:1. **And 5b is confirmed on the test
+  coupon, not on a breadboard**, because the model is linear in a node
+  capacitance a jumper wire makes unknown; the envelope spec's §5 now carries
+  the eight-point list the coupon has to satisfy before layout. Docs and tool
+  only; no engine, host or firmware code moved. See "M6 — Hardware prototype"
+  under "Planned");
+  before that, 2026-08-29 (**the MOD depth split is heard, the latch lamp
   learns to insist, and a new patch boots**: the bipolar depth knobs were
   checked by hand in Rack — noon silent, right of noon gliding, left of noon
   stepping — which leaves `kDepthDead` = 0.04 as the round's only open item and
@@ -3517,6 +3532,52 @@ involved. Whatever that module provides electrically, the control PCB has to
 provide on purpose; what it is has not been traced. A by-product worth keeping:
 those two figures are a 0.02-point reproduction of the CPU baseline across two
 different Patch Submodules.
+
+**2026-08-30 — the settle time is calculated, and it decides the pot value.**
+The remaining open item on the mux (Phase-0 Task 6 step 5b) was waiting for a
+74HC4067 on the desk. Its paper half is now done —
+[`docs/hardware/settle-budget.md`](hardware/settle-budget.md), from
+[`tools/settle_budget.py`](../tools/settle_budget.py) with a guard beside it.
+**This is arithmetic and not a measurement, so 5b stays open**; what changes is
+that 5b is no longer a bisection search but a prediction to confirm: at 10 kΩ,
+nothing fitted at `COM`, `SPEED_16CYCLES_5`, a channel change must read clean
+1.6 µs after the address is written. Four results outlast the round. **The
+capacitor at `COM` goes away entirely** rather than getting smaller — every
+fitted value is worse than none, which resolves the envelope spec's "≤ 1 nF or
+gone". **The pot value is a real decision with a ceiling of 10 k or 20 k**; at
+50 kΩ the 16:1 falls off a cliff, and the only argument against 10 k is that
+65 pots then stand ~21 mA on the 3V3 rail, which the submodule's budget has not
+been checked against. **It is charge redistribution from the previous channel
+that sets the sampling window, never the ADC's charging rule** — which is also
+why libDaisy's mux path discards a conversion — and it makes the libDaisy
+default of 8.5 cycles too short in every configuration. **Timing does not decide
+8:1 against 16:1**; that stays a question of availability, price and 595
+outputs. One number in circulation is corrected on the way: the "~15.6 Hz per
+channel" of the 2026-08-23 capture is right for the one-step-per-block pacing
+that was measured, but a *complete* sweep fits in 0.16 of a block at 10 kΩ, so
+the design's ceiling is the block rate — ~500 Hz per channel. The capture is
+left as written; it is an honest record of its own experiment.
+
+**And the same day settles where 5b gets confirmed: on the test coupon, not on
+a breadboard.** The model is linear in the node capacitance and a jumper-wire
+node is an unknown multiple of the 65 pF it assumes, so the prediction has no
+defined value there; for crosstalk and for noise beside the audio path a
+breadboard pass would not even be conservative. That is where the envelope spec
+always put this measurement — what changed is that the paper round removed the
+three layout decisions that used to be blocked behind it, so the coupon is no
+longer waiting on anything. §5 of the envelope spec now carries the eight-point
+list the coupon has to satisfy **before** layout: both chip footprints rather
+than the inherited "4067 chain", an unpopulated `COM` cap footprint so the
+"fit none" result can be cheaply falsified, a probe point on `COM`, 10 k and
+20 k side by side on one mux, the two neighbours hard-wired to the rails that
+5b's rig needs, fixed-divider reference channels that separate a noisy scan
+from a noisy pot, the real 595 chain on `B7`/`B8`/`D1`/`D10`, and the supply
+topology as a switchable 0 Ω link rather than a second board variant. Two rules
+come with it: populate copies rather than reworking one board — the fab ships a
+handful either way — and jumper the digital side freely but never the `COM`
+node or the audio path, where a wire is a component and not a connection. The
+breadboard build in Task 6 step 5 keeps its place as the bring-up rig for the
+scan firmware, which still has to be written; it is not a measuring rig.
 
 **2026-08-14 — preset persistence now starts from nothing.** M6's scope names
 it, and until this date the repo had two pieces of prior art for it: the

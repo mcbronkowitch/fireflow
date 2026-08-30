@@ -528,6 +528,41 @@ Die Liste von 2026-08-08 nannte an erster Stelle die Einstufung der Parameter.
   Ohne sie ist keine Panelgröße gegen das Audio-Budget gegengerechnet — das ist
   die einzige *Zahl* in diesem Dokument, an der die 67 Positionen noch scheitern
   könnten.
+
+  > **Nachtrag 2026-08-30: die Papierhälfte ist gerechnet, und sie ist
+  > deutlicher ausgefallen als erwartet** —
+  > [`settle-budget.md`](settle-budget.md), Skript
+  > [`tools/settle_budget.py`](../../tools/settle_budget.py) mit Guard.
+  > **Das ist Arithmetik und keine Messung**, 5b bleibt also offen; aber 5b ist
+  > damit keine Halbierungssuche mehr, sondern eine Vorhersage zum Bestätigen:
+  > bei 10 kΩ, nichts am `COM`, `SPEED_16CYCLES_5` muss ein Kanalwechsel nach
+  > **1,6 µs** sauber sein. Drei Ergebnisse betreffen dieses Dokument direkt:
+  >
+  > 1. **Der Kondensator am `COM` fällt ganz weg**, er wird nicht kleiner. Jede
+  >    Bestückung ist schlechter als keine — die Envelope-Spec sagt „≤ 1 nF oder
+  >    weg", die Rechnung sagt weg.
+  > 2. **Der Poti-Wert ist die eigentliche Entscheidung: 10 k oder 20 k.** Ab
+  >    50 kΩ kippt der 16:1 über eine Klippe. Der Preis für 10 k ist Strom —
+  >    65 Potis ziehen ~21 mA dauerhaft auf 3V3 (20 k → ~11 mA), und **was der
+  >    3V3-Pin des Submodules hergibt, ist ungeprüft.** Das ist das einzige
+  >    Argument für 20 k, und es ist ein neuer offener Posten dieser Liste.
+  > 3. **Nicht die Ladezeit des ADC setzt das Sample-Fenster, sondern die
+  >    Ladungsumverteilung** aus dem vorigen Kanal. Daraus folgt ein konkreter
+  >    Firmware-Wert: das libDaisy-Default `SPEED_8CYCLES_5` ist in jedem
+  >    gerechneten Fall zu kurz, mindestens `SPEED_16CYCLES_5`.
+  >
+  > **Und eine Zahl, die hier und im Capture herumgetragen wird, ist zu
+  > pessimistisch:** die „~15,6 Hz pro Kanal" gelten für *einen Schritt pro
+  > Block*, so wie gemessen wurde. Ein **vollständiger** Sweep passt bei 10 kΩ in
+  > 0,16 Blöcke, die Obergrenze ist also die Blockrate selbst — **~500 Hz pro
+  > Kanal**, das Zweiunddreißigfache.
+  >
+  > **Gemessen wird auf dem Testcoupon, nicht am Steckbrett** (entschieden
+  > 2026-08-30). Das Modell ist linear in der Node-Kapazität, ein Jumper-Node
+  > ist ein unbekanntes Vielfaches der angesetzten 65 pF — und für Übersprechen
+  > und Rauschen neben dem Audiopfad wäre ein Steckbrett-Pass nicht einmal
+  > konservativ. Die acht Punkte, die der Coupon dafür **vor** dem Layout
+  > tragen muss, stehen in der Envelope-Spec §5 (Nachtrag 2026-08-30).
 - **Der Mux-Scan selbst.** libDaisys `InitMux` kann 8:1 an GPIOs, gebraucht wird
   16:1 mit Adressen aus der 595-Kette (§3). Die Umschaltung muss geschrieben
   werden. **Die CPU-Seite ist seit dem 2026-08-23 nicht mehr offen, sondern
@@ -541,6 +576,13 @@ Die Liste von 2026-08-08 nannte an erster Stelle die Einstufung der Parameter.
   Was der Scan im *Audio* anrichtet, ist eine andere Frage und steht unten unter
   Punkt 2.
 - **Die Wahl 8:1 gegen 16:1.** Hängt an Verfügbarkeit und Bestückungspreis.
+  **Nachtrag 2026-08-30: die Zeit entscheidet sie nicht** — der 4051 gewinnt
+  zwar doppelt (halbe `C_COM`, und neun Chips verteilen sich mit 24 Schritten
+  besser auf vier Sense-Pins als fünf mit 32), aber bei 10 k und 20 k liegen
+  beide bequem in einem Audioblock. Erst ab 50 kΩ wird daraus eine Zeitfrage.
+  Die Entscheidung bleibt also, wo sie steht: Verfügbarkeit, Preis, und
+  595-Ausgänge (28 gegen 31 von 32). Siehe
+  [`settle-budget.md`](settle-budget.md) Befund 5.
 
 ### Ist das eine Zeit- oder eine Machbarkeitsfrage?
 
