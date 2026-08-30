@@ -99,6 +99,8 @@ enum ParamId {
     DEPTH_A,
     DEPTH_B,
     PULL,
+    PAN_A,
+    PAN_B,
     MODBTN,
     MODD_SOURCE_A,
     MODD_SOURCE_B,
@@ -142,6 +144,8 @@ enum ParamId {
     MODD_LINK_B,
     MODD_COMP_A,
     MODD_COMP_B,
+    MODD_PAN_A,
+    MODD_PAN_B,
     MODD_MORPH,
     MODD_REV_SIZE,
     MODD_REV_DECAY,
@@ -271,6 +275,8 @@ static const PanelCtl kParamCtls[] = {
     {DEPTH_A, WK_SMKNOB, {37.250f, 77.300f}, "DPTH", {37.250f, 82.900f}, 0, 1.90f, 0x171713, "MOTION lane base"},
     {DEPTH_B, WK_SMKNOB, {176.110f, 77.300f}, "DPTH", {176.110f, 82.900f}, 0, 1.90f, 0x171713, "MOTION lane base"},
     {PULL, WK_SMKNOB, {106.680f, 78.000f}, "PULL", {106.680f, 83.600f}, 0, 1.90f, 0x171713, "PULL"},
+    {PAN_A, WK_SMKNOB, {54.750f, 89.400f}, "PAN", {54.750f, 95.000f}, 0, 1.90f, 0x171713, "Deck balance"},
+    {PAN_B, WK_SMKNOB, {158.610f, 89.400f}, "PAN", {158.610f, 95.000f}, 0, 1.90f, 0x171713, "Deck balance"},
 };
 // Knob accent, parallel to kParamCtls, same order. Green left,
 // copper right, muted in the centre strip -- side_accent().
@@ -347,6 +353,8 @@ static const FfAccent kParamAccent[] = {
     {0x1D6F5F, 0x1D6F5F},
     {0xB96532, 0xB96532},
     {0x656056, 0x656056},
+    {0x1D6F5F, 0x1D6F5F},
+    {0xB96532, 0xB96532},
 };
 static_assert(sizeof(kParamAccent) / sizeof(kParamAccent[0]) == sizeof(kParamCtls) / sizeof(kParamCtls[0]), "kParamAccent desynced");
 static const PanelCtl kInputCtls[] = {
@@ -433,6 +441,8 @@ static const ModTarget kModLayer[] = {
     {LINK_B, MODD_LINK_B, 2, 4, 1, "LINK B mod depth (left of noon: S&H, right: continuous)"},
     {COMP_A, MODD_COMP_A, 2, 4, 0, "COMP A mod depth (left of noon: S&H, right: continuous)"},
     {COMP_B, MODD_COMP_B, 2, 4, 1, "COMP B mod depth (left of noon: S&H, right: continuous)"},
+    {PAN_A, MODD_PAN_A, 2, 1, 0, "PAN A mod depth (left of noon: S&H, right: continuous)"},
+    {PAN_B, MODD_PAN_B, 2, 1, 1, "PAN B mod depth (left of noon: S&H, right: continuous)"},
     {MORPH, MODD_MORPH, 2, 3, 2, "MORPH mod depth (left of noon: S&H, right: continuous)"},
     {REV_SIZE, MODD_REV_SIZE, 2, 1, 2, "REV_SIZE mod depth (left of noon: S&H, right: continuous)"},
     {REV_DECAY, MODD_REV_DECAY, 2, 1, 2, "REV_DECAY mod depth (left of noon: S&H, right: continuous)"},

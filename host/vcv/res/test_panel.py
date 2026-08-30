@@ -71,10 +71,14 @@ PARAM_ORDER = [
     # number -- the 49 MOD_LAYER_PARAMS ids behind it all shift by one
     # (accepted, dev alpha).
     'PULL',
+    # PAN (spec 2026-08-30 pan): appended last in APPENDED_PANEL_PARAMS,
+    # after PULL, so every id above keeps its number -- the mod layer ids
+    # behind it all shift by two (accepted, dev alpha).
+    'PAN_A', 'PAN_B',
     # MOD latch layer (spec 2026-08-22-mod-latch-layer-design.md): MODBTN
     # then one depth pair per deck target (MOD_DECK_TARGETS order), then one
     # depth per center target (MOD_CENTER_TARGETS order). Appended after
-    # PULL, so every id above keeps its number.
+    # PULL and PAN, so every id above keeps its number.
     'MODBTN',
     'MODD_SOURCE_A', 'MODD_SOURCE_B', 'MODD_DEPTH_A', 'MODD_DEPTH_B',
     'MODD_FILT_A', 'MODD_FILT_B', 'MODD_FLUX_A', 'MODD_FLUX_B',
@@ -86,7 +90,7 @@ PARAM_ORDER = [
     'MODD_ATTACK_A', 'MODD_ATTACK_B', 'MODD_DECAY_A', 'MODD_DECAY_B',
     'MODD_RES_A', 'MODD_RES_B', 'MODD_COLOR_A', 'MODD_COLOR_B',
     'MODD_TUNE_A', 'MODD_TUNE_B', 'MODD_LINK_A', 'MODD_LINK_B',
-    'MODD_COMP_A', 'MODD_COMP_B',
+    'MODD_COMP_A', 'MODD_COMP_B', 'MODD_PAN_A', 'MODD_PAN_B',
     'MODD_MORPH', 'MODD_REV_SIZE', 'MODD_REV_DECAY', 'MODD_REV_TONE',
     'MODD_REV_DIFF', 'MODD_TIDE',
 ]
@@ -112,7 +116,11 @@ PARAM_TIPS = [
     # PULL (spec 2026-07-19 pull-chord-gravity, task 6): Ctl's
     # tip-defaults-to-label rule, same as CHOKE, so the tip is just "PULL".
     'PULL',
-    # MOD latch layer: MODBTN carries a real tooltip; the 48 depth knobs are
+    # PAN (spec 2026-08-30 pan): a real tip, given explicitly by the Ctl row
+    # rather than left to default-to-label, same reason DPTH's is -- "PAN"
+    # alone would not say what the knob does.
+    'Deck balance', 'Deck balance',
+    # MOD latch layer: MODBTN carries a real tooltip; the 50 depth knobs are
     # unlabelled widgetless-in-Rack SMKNOBs (Task 5/6 draw them on the HW
     # panel only), so Ctl's tip-defaults-to-label rule leaves every one of
     # them "".
@@ -120,7 +128,7 @@ PARAM_TIPS = [
     '', '', '', '', '', '', '', '', '', '', '', '',
     '', '', '', '', '', '', '', '', '', '', '', '',
     '', '', '', '', '', '', '', '', '', '', '', '',
-    '', '', '', '', '', '', '', '', '', '', '', '',
+    '', '', '', '', '', '', '', '', '', '', '', '', '', '',
 ]
 INPUT_ORDER = ['IN_L', 'IN_R', 'CLOCK', 'RESET']
 OUTPUT_ORDER = ['OUT_L', 'OUT_R', 'PITCH_A', 'GATE_A', 'PITCH_B', 'GATE_B']
@@ -144,9 +152,14 @@ def test_enum_order():
     # keeps its number.
     check(PARAM_ORDER[PARAM_ORDER.index('DEPTH_B') + 1] == 'PULL',
           "PULL moved out of the appended tail -- ids above it renumbered")
-    # MOD latch layer (spec 2026-08-22): appended after PULL for the same
-    # reason -- everything above (through PULL) keeps its number.
-    check(PARAM_ORDER[PARAM_ORDER.index('PULL') + 1] == 'MODBTN',
+    # PAN (spec 2026-08-30 pan): appended after PULL for the same reason --
+    # everything above (through PULL) keeps its number.
+    check(PARAM_ORDER[PARAM_ORDER.index('PULL') + 1:PARAM_ORDER.index('PULL') + 3]
+          == ['PAN_A', 'PAN_B'],
+          "PAN moved out of the appended tail -- ids above it renumbered")
+    # MOD latch layer (spec 2026-08-22): appended after PAN for the same
+    # reason -- everything above (through PAN_B) keeps its number.
+    check(PARAM_ORDER[PARAM_ORDER.index('PAN_B') + 1] == 'MODBTN',
           "MODBTN moved out of the appended tail -- ids above it renumbered")
     check(PARAM_ORDER[-1] == 'MODD_TIDE',
           "the mod-layer block is no longer the persistent tail")
@@ -234,20 +247,26 @@ def test_bbd_pitch_flux_time_collections():
     runtime = [c.enum for c in g.RUNTIME_PANEL_PARAMS]
     static = [c.enum for c in g.STATIC_PANEL_PARAMS]
     check([c.enum for c in g.APPENDED_PANEL_PARAMS]
-          == ['PACE', 'DEPTH_A', 'DEPTH_B', 'PULL'],
+          == ['PACE', 'DEPTH_A', 'DEPTH_B', 'PULL', 'PAN_A', 'PAN_B'],
           "APPENDED_PANEL_PARAMS changed")
     check("FLUXTIME_A" not in persistent and "FLUXTIME_B" not in persistent,
           "FLUXTIME must not survive as a saved ParamId")
-    check(persistent[-52:-50] == ['DEPTH_A', 'DEPTH_B'],
+    # PAN (spec 2026-08-30 pan) is appended after PULL, ahead of the mod
+    # layer, AND it added a MOD_DECK_TARGETS row of its own -- so unlike
+    # PULL's own arrival, this one moves both ends: PAN_A/B push DEPTH_A/B
+    # and PULL two further from the tail, and PAN's own MODD_PAN_A/B (deck
+    # loop runs before the fixed MOD_CENTER_TARGETS tail) grow
+    # MOD_LAYER_PARAMS by two, so PAN_A/B sit exactly MOD_LAYER_PARAMS'
+    # new length + 2 from the end -- the same distance PULL used to sit
+    # at, before the mod layer itself grew.
+    check(persistent[-56:-54] == ['DEPTH_A', 'DEPTH_B'],
           "the appended FEED block moved out of its slot ahead of PULL")
-    # PULL (task 6) is appended after FEED, ahead of the mod layer, so it now
-    # sits directly before the mod layer's fixed-length tail -- inserting it
-    # does not move MODBTN's own distance from the end (MOD_LAYER_PARAMS'
-    # length is unchanged), only DEPTH_A/B's.
-    check(persistent[-50] == 'PULL',
-          "PULL moved out of its slot ahead of the mod layer")
-    # MOD latch layer (spec 2026-08-22) is appended after PULL, so it is now
-    # the persistent tail instead.
+    check(persistent[-54] == 'PULL',
+          "PULL moved out of its slot ahead of PAN")
+    check(persistent[-53:-51] == ['PAN_A', 'PAN_B'],
+          "PAN moved out of its slot ahead of the mod layer")
+    # MOD latch layer (spec 2026-08-22) is appended after PULL and PAN, so
+    # it is now the persistent tail instead.
     check(persistent[-1] == 'MODD_TIDE',
           "the appended mod-layer block is not the persistent tail")
     check(all(e in runtime for e in ('STAGES_A', 'STAGES_B',
@@ -378,21 +397,25 @@ def test_param_runtime_tip_contract():
     check(PARAM_TIPS[ids["LINK_A"]:ids["STAGES_B"] + 1]
           == ['LINK', 'LINK', 'BBD Bend', 'BBD Bend'],
           "BBD Bend runtime tips drifted")
-    check(PARAM_TIPS[-52:-50] == ['MOTION lane base', 'MOTION lane base'],
+    check(PARAM_TIPS[-56:-54] == ['MOTION lane base', 'MOTION lane base'],
           "the appended DPTH tip moved out of its slot ahead of PULL")
-    check(PARAM_TIPS[-53] == 'PACE',
+    check(PARAM_TIPS[-57] == 'PACE',
           "PACE must sit at the end of the legacy runtime tips (spec 2026-08-12 "
           "modulation-pace)")
-    # PULL (task 6) sits directly ahead of the mod layer's fixed-length tail,
-    # so its own tip is one slot further from the end than DPTH's pair, and
-    # MODBTN's distance from the end is unchanged (MOD_LAYER_PARAMS' length
-    # did not change).
-    check(PARAM_TIPS[-50] == 'PULL',
-          "PULL's tooltip moved out of its slot ahead of the mod layer")
-    # MOD latch layer (spec 2026-08-22) is appended after PULL, so its own
-    # tips (MODBTN's real tooltip, then 48 blank SMKNOB tips) are now the
+    # PULL (task 6) sits directly ahead of PAN, one slot further from the end
+    # than DPTH's pair.
+    check(PARAM_TIPS[-54] == 'PULL',
+          "PULL's tooltip moved out of its slot ahead of PAN")
+    # PAN (spec 2026-08-30 pan) sits directly ahead of the mod layer's
+    # fixed-length tail, so its own tip pair is one slot further from the end
+    # than PULL's, and MODBTN's distance from the end DID move this time --
+    # PAN added a MOD_DECK_TARGETS row, growing the mod layer by two.
+    check(PARAM_TIPS[-53:-51] == ['Deck balance', 'Deck balance'],
+          "PAN's tooltip moved out of its slot ahead of the mod layer")
+    # MOD latch layer (spec 2026-08-22) is appended after PAN, so its own
+    # tips (MODBTN's real tooltip, then 50 blank SMKNOB tips) are now the
     # trailing runtime tips.
-    check(PARAM_TIPS[-49] == 'MOD layer latch',
+    check(PARAM_TIPS[-51] == 'MOD layer latch',
           "MODBTN's tooltip is not the first mod-layer runtime tip")
     check(PARAM_TIPS[-1] == '',
           "the mod-layer block's tip is not the trailing runtime tip")
@@ -2960,6 +2983,12 @@ def test_sampler_preset_init_snapshot():
         # at boot is a surprise, not a feature (spec 2026-07-19
         # pull-chord-gravity, task 6).
         "PULL": 0.0,
+        # Centre = unpanned, same reason as PULL: an audible move at boot
+        # would be a surprise, not a feature (spec 2026-08-30 pan).
+        "PAN_A": 0.0,
+        "PAN_B": 0.0,
+        "MODD_PAN_A": 0.0,
+        "MODD_PAN_B": 0.0,
     }
     for name, want in approved.items():
         if name not in gp.INIT_DEFAULTS:
@@ -3627,12 +3656,15 @@ def test_fixed_values_agree_across_host_and_bench():
 
 
 def test_mod_layer():
-    """Spec 2026-08-22 mod-latch-layer: 48 depth targets + MODBTN appended
+    """Spec 2026-08-22 mod-latch-layer: 50 depth targets + MODBTN appended
     LAST, engine-backed inits carried over, everything else 0 unless the
-    factory patch dials it (gen_panel's INIT_MOD_KNOBS)."""
+    factory patch dials it (gen_panel's INIT_MOD_KNOBS). PAN (spec
+    2026-08-30 pan) is deck target #22, added after this test's own count
+    was written -- the arithmetic below (2*deck + cent) still derives the
+    total, only the pinned numbers moved."""
     deck = g.MOD_DECK_TARGETS
     cent = g.MOD_CENTER_TARGETS
-    check(len(deck) == 21, f"deck targets: {len(deck)} != 21")
+    check(len(deck) == 22, f"deck targets: {len(deck)} != 22")
     check(len(cent) == 6, f"center targets: {len(cent)} != 6")
     # the appended block is PARAMS' tail, MODBTN first
     tail = [c.enum for c in g.PARAMS[-(1 + 2 * len(deck) + len(cent)):]]
@@ -3718,8 +3750,8 @@ def test_mod_layer():
     check("kModLayer" in src, "kModLayer missing from generated_panel.hpp")
     check(src.count("MODK_HOST") >= 1 and "struct ModTarget" in src,
           "ModTarget/ModKind missing from generated_panel.hpp")
-    check(len(re.findall(r"\{\s*\w+, MODD_", src)) == 48,
-          f"kModLayer row count != 48")
+    check(len(re.findall(r"\{\s*\w+, MODD_", src)) == 50,
+          f"kModLayer row count != 50")
 
 
 def test_committed_files_match_the_generator():

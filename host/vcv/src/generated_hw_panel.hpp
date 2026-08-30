@@ -80,13 +80,15 @@ static const PanelCtl kParamCtls[] = {
     {DEPTH_A, WK_SMKNOB, {104.875f, 50.220f}, "DPTH", {104.875f, 58.220f}, 0, 2.20f, 0xB9CDD7, "MOTION lane base"},
     {DEPTH_B, WK_SMKNOB, {199.925f, 50.220f}, "DPTH", {199.925f, 58.220f}, 0, 2.20f, 0xB9CDD7, "MOTION lane base"},
     {PULL, WK_SMKNOB, {171.900f, 14.500f}, "PULL", {171.900f, 22.500f}, 0, 2.20f, 0xB9CDD7, "PULL"},
+    {PAN_A, WK_SMKNOB, {103.750f, 97.000f}, "PAN", {103.750f, 105.000f}, 0, 2.20f, 0xB9CDD7, "Deck balance"},
+    {PAN_B, WK_SMKNOB, {201.050f, 97.000f}, "PAN", {201.050f, 105.000f}, 0, 2.20f, 0xB9CDD7, "Deck balance"},
     {MODBTN, WK_LATCH, {290.800f, 114.000f}, "MOD", {290.800f, 120.700f}, 0, 2.20f, 0xB9CDD7, "MOD layer latch"},
 };
 // 1 = big cap, 0 = small. Parallel to kParamCtls, same order.
 // The rehearsal widget reads THIS, not c.kind -- kind says
 // bipolar/detented, which is not a diameter.
 static const unsigned char kParamSize[] = {
-    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
 static_assert(sizeof(kParamSize) == sizeof(kParamCtls) / sizeof(kParamCtls[0]), "kParamSize desynced");
 // Latch-gated mod ring, parallel to kParamCtls, same order.
@@ -166,6 +168,8 @@ static const HwModRing kModRing[] = {
     {0x3FBF9C, 4.400f},
     {0xE8945A, 4.400f},
     {0, 0.000f},
+    {0x3FBF9C, 4.400f},
+    {0xE8945A, 4.400f},
     {0, 0.000f},
 };
 static_assert(sizeof(kModRing) / sizeof(kModRing[0]) == sizeof(kParamCtls) / sizeof(kParamCtls[0]), "kModRing desynced");
@@ -243,6 +247,8 @@ static const FfAccent kParamAccent[] = {
     {0x3FBF9C, 0x3FBF9C},
     {0xE8945A, 0xE8945A},
     {0x7FB6C9, 0x7FB6C9},
+    {0x3FBF9C, 0x3FBF9C},
+    {0xE8945A, 0xE8945A},
     {0x7FB6C9, 0x7FB6C9},
 };
 static_assert(sizeof(kParamAccent) / sizeof(kParamAccent[0]) == sizeof(kParamCtls) / sizeof(kParamCtls[0]), "kParamAccent desynced");

@@ -343,8 +343,9 @@ def test_size_classes_match_the_spec():
     small = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "S"]
     # 51 + DEPTH×2 = 53, +1 (spec 2026-07-19 pull-chord-gravity): PULL joined
     # as a small knob, HW_SIZE["PULL"]="S". FILT×2 left again 2026-08-23,
-    # REV_MIX×2 joined 2026-08-30.
-    check(len(small) == 56, f"expected 56 small params, got {len(small)}")
+    # REV_MIX×2 joined 2026-08-30, PAN×2 joined the same day (spec 2026-08-30
+    # pan) taking the slot REV_MIX×2 had been held next to.
+    check(len(small) == 58, f"expected 58 small params, got {len(small)}")
     check(abs(hw.CLASS_R["G"] - 8.5) < 1e-9, "CLASS_R G is not 8.5")
     check(abs(hw.CLASS_R["S"] - 6.0) < 1e-9, "CLASS_R S is not 6.0")
     check(hw.HW_SIZE["SOURCE"] == "S", "TIMB/SOURCE is not small")
@@ -856,27 +857,28 @@ def test_level_band_clears_rooms_shoulder():
           f"bottom line has split in two")
     band = sorted(c.enum for c in hw.ALL_HW
                   if abs(c.y - hw.Y_B2L) < 1e-9 and c.x <= hw.CX + 1e-9)
-    check(band == ["FLUXFB_A", "GRIT_A", "REV_MIX_A", "REV_TONE"],
-          f"deck A's bottom line is {band}, not FB / GRIT / SEND / TONE")
+    check(band == ["FLUXFB_A", "GRIT_A", "PAN_A", "REV_MIX_A", "REV_TONE"],
+          f"deck A's bottom line is {band}, not FB / PAN / GRIT / SEND / TONE")
 
 
-def test_level_band_holds_an_empty_slot():
-    """Slot 0 is empty ON PURPOSE, held for PAN. An empty slot costs the same
-    geometry as a filled one, so it is paid for once now instead of re-pitching
-    the band later. Without this guard the gap reads as an arithmetic slip and
-    the next tidy-up closes it."""
+def test_level_band_holds_pan_in_slot_zero():
+    """Slot 0 was held empty for PAN from 2026-08-30 until PAN got a ParamId,
+    and the guard that held it open said so in as many words. This is that
+    guard's successor: the slot is now FILLED, by PAN and by nothing else, and
+    the band still reads PAN / GRIT / SEND left to right. An empty slot here
+    would now be a regression, not a reservation."""
     occupied = {}
     for c in hw.ALL_HW:
         for i, s in enumerate(hw.LEVEL_SLOTS):
             if abs(c.x - s) < 1e-9 and abs(c.y - hw.Y_B2L) < 1e-9:
                 occupied[i] = c.enum
-    check(sorted(occupied) == [1, 2],
-          f"the LEVEL band holds {occupied}; slot 0 must stay empty and "
-          f"slots 1 and 2 must be filled")
+    check(sorted(occupied) == [0, 1, 2],
+          f"the LEVEL band holds {occupied}; all three slots must be filled")
+    check(occupied.get(0) == "PAN_A", f"slot 0 holds {occupied.get(0)}, not PAN_A")
     check(occupied.get(1) == "GRIT_A" and occupied.get(2) == "REV_MIX_A",
           f"the band's order changed: {occupied}")
-    check(not any(hw.HW_SIZE.get(b) for b in ("PAN",)),
-          "PAN has a size class now -- if the ParamId exists, put it in slot 0")
+    check(hw.HW_SIZE.get("PAN") == "S",
+          f"PAN's size class is {hw.HW_SIZE.get('PAN')!r}, not 'S'")
 
 
 def test_text_run_counts_gaps_between_glyphs():
