@@ -29,6 +29,29 @@ public:
     void set_level(int part, float lvl) {
         _lvl_target[part & 1] = clampf(lvl, 0.f, 1.f);
     }
+    // PAN: per-deck balance in the master mix. Deliberately NOT folded into
+    // _g_a/_g_b the way LVL is, and the reason is the whole design: the same
+    // morph gains feed the reverb SEND (instrument.cpp), and PAN must not
+    // reach it -- a deck moves to the side while its tail stays in the middle.
+    // So this is a second, parallel per-deck pair that only the DRY sums read.
+    //
+    // It lives in Center anyway because this is where per-deck mix state and
+    // the control-tick machinery (_cr, OnePole) already are; putting it in
+    // Instrument would mean a second home for the same kind of value.
+    void set_pan(int part, float p) {
+        _pan_target[part & 1] = clampf(p, -1.f, 1.f);
+    }
+    // Balance law, unity at centre: only the fading side moves. At p == 0 both
+    // are exactly 1.0f, so a centred PAN multiplies by 1 and cannot move a
+    // render -- tests/test_pan.cpp's first gate rests on that exactness.
+    float pan_l(int part) const {
+        const float p = _pan_smooth[part & 1].value();
+        return 1.f - p < 1.f ? 1.f - p : 1.f;
+    }
+    float pan_r(int part) const {
+        const float p = _pan_smooth[part & 1].value();
+        return 1.f + p < 1.f ? 1.f + p : 1.f;
+    }
     void set_couple(float c) { _couple        = clampf(c, 0.f, 1.f); }
     void set_drift(float d)  { _drift_target  = clampf(d, 0.f, 1.f); }
     void set_sync(bool on)        { _sync = on; }
@@ -92,6 +115,12 @@ private:
     // LVL (per-deck output level, multiplies the equal-power morph gain)
     float   _lvl_target[2] = {1.f, 1.f};
     OnePole _lvl_smooth[2];
+
+    // PAN (per-deck balance; smoothed on the POSITION, not on the two gains --
+    // one smoother instead of two, and reset(0.f) -> process(0.f) returns
+    // exactly 0.f, which is what pan_l/pan_r's exact 1.0f at centre needs).
+    float   _pan_target[2] = {0.f, 0.f};
+    OnePole _pan_smooth[2];
 
     // COUPLE
     float _couple = 0.f;

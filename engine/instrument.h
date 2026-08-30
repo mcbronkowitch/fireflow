@@ -287,6 +287,12 @@ public:
     // Observer only, for tests: LVL's smoothed per-deck level, read after a
     // control tick (see Center::level()'s comment for why).
     float part_level_for_test(int p) const { return _center.level(p); }
+    // Observers only, for tests: the balance gains PAN actually produces after
+    // a control tick (see Center::level()'s comment for why a caller must run
+    // blocks first). Plain observers, not SPKY_TESTING-only, exactly like
+    // part_level_for_test above.
+    float pan_l_for_test(int p) const { return _center.pan_l(p); }
+    float pan_r_for_test(int p) const { return _center.pan_r(p); }
     // Observers only, for tests: SMEAR/WOBL's fixed-by-ear constants, as
     // actually stored on the shared room (see AmbientReverb's _for_test
     // getters). 0.f with no reverb attached (engine-only init(sample_rate)).
@@ -458,6 +464,7 @@ public:
     // --- M4 center section ---
     void set_morph(float m)  { _center.set_morph(m); }
     void set_part_level(int p, float lvl) { _center.set_level(p, lvl); }
+    void set_pan(int p, float n) { _center.set_pan(p, n); }
     void set_couple(float c) { _center.set_couple(c); }
     void set_drift(float d)  { _center.set_drift(d); }
     void set_tide(float n)   { for (auto& p : _parts) p.mod().set_tide(n); }

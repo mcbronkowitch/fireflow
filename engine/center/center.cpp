@@ -60,6 +60,8 @@ void Center::init(float sample_rate, uint32_t seed) {
         _lvl_target[i] = 1.f;
         _lvl_smooth[i].init(_cr, 0.03f);
         _lvl_smooth[i].reset(1.f);
+        _pan_smooth[i].init(_cr, 0.03f);
+        _pan_smooth[i].reset(0.f);
     }
 
     _couple = 0.f; _phase_err = 0.f;
@@ -132,6 +134,11 @@ void Center::update(SuperModulator& a, SuperModulator& b, Part& pa, Part& pb) {
     _morph = _morph_smooth.process(_morph_target);
     _g_a = std::cos(_morph * kQuarter) * _lvl_smooth[0].process(_lvl_target[0]);
     _g_b = std::sin(_morph * kQuarter) * _lvl_smooth[1].process(_lvl_target[1]);
+
+    // PAN rides its own smoother and is NOT multiplied into _g_a/_g_b -- see
+    // set_pan()'s comment in center.h. The mix stage reads pan_l()/pan_r().
+    _pan_smooth[0].process(_pan_target[0]);
+    _pan_smooth[1].process(_pan_target[1]);
 
     // --- DRIFT amount (smoothed) + weather step ---
     _drift = _drift_smooth.process(_drift_target);
