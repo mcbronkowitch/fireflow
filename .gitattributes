@@ -28,3 +28,9 @@
 *.kicad_sch  -text
 *.kicad_pro  -text
 *.kicad_dru  -text
+
+# Extensions are not enough on their own: the first clone check passed the three
+# KiCad files above and still failed on LICENSE, which has no extension and so
+# matched no rule. What is pinned here is a whole vendored directory, so the
+# attribute belongs to the directory.
+hardware/lib/**  -text
