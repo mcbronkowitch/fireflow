@@ -32,18 +32,42 @@ def test_parts_are_symmetric():
           % (counts["part_a"], counts["part_b"]))
 
 
-def test_known_baseline_2026_08_07():
-    # Baseline am Tag der Phase-0-Planung, am 8. August unveraendert
-    # nachgemessen. Wenn diese Zeile rot wird, hat sich das Panel geaendert
-    # -- dann docs/hardware/io-budget.md nachziehen, nicht den Test
-    # aufweichen. Die Hardware-Reduktion haengt an genau dieser Zahl.
+# The inventory as gen_panel.py prints it today. This is a tripwire, not a
+# spec: any commit that adds, removes or re-sides a control turns it red on
+# purpose, and re-basing it is part of that commit's work.
+#
+# When it goes red, in the SAME commit:
+#   1. python tools/count_panel_controls.py   -- the generator is the authority,
+#      never a count quoted from a spec, a plan or this file
+#   2. copy what it printed into BASELINE below, and move BASELINE_ROUND on
+#   3. pull docs/hardware/io-budget.md sec. 1 along -- its two command dumps, the
+#      by-Bauform table and the physical-position count all quote these numbers
+# Do NOT weaken or delete the check instead. It was left red through five
+# panel rounds (2.21.1 regrouping, 2.21.2 redistribution, 2.21.3 plate round
+# 2a, the MOD latch layer, PAN); io-budget.md drifted right back out of date
+# behind it, because nothing was pushing back.
+#
+# History, so retiring the old marker loses nothing: the baseline was 82
+# runtime / 23 part_a / 16 shared on 2026-08-07 (Phase-0 planning, remeasured
+# unchanged on 08-08). The hw-control-reduction round of 2026-08-09 took that
+# inventory down on purpose; the number it was guarding is a finished job.
+BASELINE_ROUND = "2026-08-30, after PAN (spec 2026-08-30-pan)"
+BASELINE = {
+    "panel": 68,
+    "appended": 6,
+    "runtime": 74,
+    "part_a": 20,
+    "shared": 10,
+}
+
+
+def test_current_baseline():
     counts = c.count_controls()
-    check(counts["runtime"] == 82, "runtime baseline moved: %d, expected 82"
-          % counts["runtime"])
-    check(counts["part_a"] == 23, "part_a baseline moved: %d, expected 23"
-          % counts["part_a"])
-    check(counts["shared"] == 16, "shared baseline moved: %d, expected 16"
-          % counts["shared"])
+    for key, expected in sorted(BASELINE.items()):
+        check(counts[key] == expected,
+              "%s baseline moved: %d, expected %d (baseline pins %s) -- "
+              "re-base BASELINE and docs/hardware/io-budget.md sec. 1 together"
+              % (key, counts[key], expected, BASELINE_ROUND))
 
 
 if __name__ == "__main__":

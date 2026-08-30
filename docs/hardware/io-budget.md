@@ -1,6 +1,6 @@
 # I/O-Budget — FireFlow auf 60 HP
 
-> **Stand 2026-08-16.** Ursprünglich am 2026-08-08 (Git `9326fee`) als
+> **Stand 2026-08-30.** Ursprünglich am 2026-08-08 (Git `9326fee`) als
 > **Vorarbeit auf 42 HP** geschrieben, mit leerer Einstufungsspalte in §2, weil
 > die Panel-Reduktion Instrumentendesign ist und Bastian gehört.
 >
@@ -19,12 +19,35 @@
 > Seed-Hochrechnung (2,17 Punkte) statt als die inzwischen direkt gemessenen
 > ~2,9 (§6). Beide Korrekturen gehen zugunsten des Entwurfs aus.
 >
-> **Was das für dieses Dokument heißt:** §1, §2, §4 und §5 sind auf das
-> **gebaute** Panel nachgezogen und nicht mehr Vorarbeit — die Einstufung ist
-> entschieden, sie steht in §2 und sie kommt aus dem Generator, nicht aus einer
-> Absicht. §3 (Pins) ist von der Parameterzahl unabhängig und steht unverändert;
-> es hat nur einen Nachtrag zur Mux-Topologie bekommen. §6 listet, was heute
-> noch offen ist — es ist eine andere Liste als 2026-08-08.
+> **Nachtrag 2026-08-30. §1, §2 und §4 neu gemessen, und es hatte sich wieder
+> bewegt.**
+> Zwischen dem 19. und dem 30. August sind die MOD-Latch-Runde
+> (`2026-08-22-mod-latch-layer-design.md`) und PAN (`2026-08-30-pan`) gelandet;
+> §1 stand danach elf Tage falsch da. Es waren keine Rundungsfehler, sondern das
+> Inventar: 69 → **75** Parameter auf der Platte, 67 → **73** Positionen, die
+> Bauformverteilung 16/51/2 → **14/58/3**, `HW_ONLY` 2 → **1** (`MODBTN` ist ein
+> echter `ParamId` geworden), und die Kernaussage „keine hardware-only
+> Parameter" musste ihre Prüfmenge wechseln (`PARAMS`, nicht
+> `RUNTIME_PANEL_PARAMS`). Der Grund, dass es niemandem auffiel: der Wächter
+> `tools/test_count_panel_controls.py` stand seit dem 7. August rot und wurde
+> gelesen wie Rauschen. Er ist am 2026-08-30 neu geeicht, mit der Anweisung, §1
+> im selben Commit mitzuziehen.
+>
+> **§2 und §4 sind am selben Tag mitgezogen worden.** §2 trug eine
+> 69-Zeilen-Tabelle; die Platte hat 75. Sie ist neu **erzeugt** statt
+> nachgepflegt — und dabei kam heraus, dass nicht nur sechs Zeilen fehlten:
+> **25 der alten 69 hatten auch ihre Position oder ihre Bauform geändert**
+> (`REV_MIX_A/B` ist gar kein grosser Poti mehr). §4 nannte „67
+> Poti-/Taster-Positionen, 2 reservierte Pads"; es sind **73** und **1**, und
+> die Geometriezeile hatte eine Reihe (76 → 74,4) und beide waagerechten Ränder
+> falsch. Die 19 LEDs, 18 Buchsen und der SD-Slot stimmten durchweg.
+>
+> **Was das für dieses Dokument heißt:** §1, §2 und §4 sind auf das **gebaute**
+> Panel nachgezogen und am 2026-08-30 gemessen. §5 (Buchsen, 12/6) gilt
+> unverändert weiter, am selben Tag gegengeprüft. §3 (Pins) ist von der
+> Parameterzahl unabhängig und steht unverändert; es hat nur einen Nachtrag zur
+> Mux-Topologie bekommen. §6 listet, was heute noch offen ist — es ist eine
+> andere Liste als 2026-08-08.
 
 ## 1. Die Ausgangslage
 
@@ -34,41 +57,58 @@ ist mit ihm reproduzierbar.
 
 ```
 python host/vcv/res/gen_hw_panel.py          # aus host/vcv/, idempotent
-params=69 inputs=12 outputs=6 lights=19  panel=60HP
+params=75 inputs=12 outputs=6 lights=19  panel=60HP
 
 python tools/count_panel_controls.py         # aus dem Repo-Wurzelverzeichnis
-panel 68 · appended 1 · runtime 69 · part_a 20 · part_b 20 · shared 10
+panel 68 · appended 6 · runtime 74 · part_a 20 · part_b 20 · shared 10
 ```
 
-Beide Zahlen sind gemessen 2026-08-16. **Die 69 sind dieselben 69:** jeder
-Parameter des Hardware-Panels ist auch ein VCV-Runtime-Parameter, es gibt
-keinen hardware-only *Parameter* (geprüft gegen `RUNTIME_PANEL_PARAMS`, leere
-Differenzmenge). Was nur auf der Hardware existiert, sind Bedienelemente ohne
-Parameterwert und die LEDs — siehe unten.
+Beide Zahlen sind gemessen 2026-08-30. **Sie sind nicht mehr dieselbe Zahl, und
+das ist kein Fehler:** die Platte trägt 75 Parameter, `RUNTIME_PANEL_PARAMS`
+hat 74. Der eine Unterschied ist `MODBTN`. Er ist trotzdem **kein**
+hardware-only *Parameter* — er ist ein echter `ParamId`, er kommt nur aus einem
+anderen Block: `MOD_LAYER_PARAMS` (51 ids, Spec
+`2026-08-22-mod-latch-layer-design.md`), nicht aus der Panel-Liste. Zusammen
+sind das `gen_panel.PARAMS` = 74 + 51 = **125**, und *gegen die* ist die
+Differenzmenge leer: kein Element der Hardwareplatte ist ein Parameter, den
+VCV nicht auch hat.
 
-**69 Runtime-Parameter auf 67 physischen Positionen.** Die Differenz sind die
-beiden bewussten Doppelbelegungen: `STAGES_A/B` (BEND) teilt sich den Knopf mit
-`ATTACK_A/B`, mit engine-abhängigem Moduswechsel. Das ist die einzige
-Mehrfachbelegung auf dem Panel.
+> **Die alte Formulierung prüfte gegen `RUNTIME_PANEL_PARAMS` und stimmt seit
+> der MOD-Latch-Runde nicht mehr.** Wer die Aussage nachprüft, muss gegen
+> `gen_panel.PARAMS` prüfen, sonst fällt `MODBTN` fälschlich als
+> hardware-only heraus.
+
+Was auf der Hardware existiert und **gar keinen** Parameterwert hat, sind die
+LEDs und ein einziger Taster — siehe unten.
+
+**75 Parameter auf 73 physischen Positionen.** Die Differenz sind die beiden
+bewussten Doppelbelegungen: `STAGES_A/B` (BEND) teilt sich den Knopf mit
+`ATTACK_A/B` (68,25 / 34,00 und 236,55 / 34,00), mit engine-abhängigem
+Moduswechsel. Das ist die einzige Mehrfachbelegung auf dem Panel.
 
 Nach Bauform **auf der Hardware** — nicht nach dem VCV-Glyph, der eine andere
 Größenklasse haben darf und bei mehreren Controls auch hat:
 
 | Bauform | Radius | Anzahl | Positionen |
 |---|---:|---:|---:|
-| grosser Poti (`G`) | 8,5 mm | 16 | 16 |
-| kleiner Poti (`S`) | 6,0 mm | 51 | 49 |
-| Taster (`P`) | 4,0 mm | 2 | 2 |
-| **Summe** | | **69** | **67** |
+| grosser Poti (`G`) | 8,5 mm | 14 | 14 |
+| kleiner Poti (`S`) | 6,0 mm | 58 | 56 |
+| Taster (`P`) | 4,0 mm | 3 | 3 |
+| **Summe** | | **75** | **73** |
 
-Dazu 2 Elemente, die **kein** Runtime-Parameter sind und deshalb in keiner der
-Zahlen oben stecken (`HW_ONLY` im Generator):
+Die Radiusspalte ist `CLASS_R` — der Abstandsradius, mit dem das Layout rechnet,
+nicht der Körper. Die Körperradien (`BODY_R`) sind 6,0 / 4,4 / 4,0 mm.
+
+Dazu **1** Element, das gar keinen `ParamId` hat und deshalb in keiner der
+Zahlen oben steckt (`HW_ONLY` im Generator):
 
 | Element | Art | Anmerkung |
 |---|---|---|
-| `MODBTN`, `SHIFTBTN` | Taster | reserviert, ohne Funktion — 2 weitere Pads |
+| `SHIFTBTN` | Taster | reserviert, ohne Funktion — 1 weiteres Pad |
 
-Macht **4 Taster** (`REC_A/B` + die zwei reservierten).
+Macht **4 Taster**: `REC_A/B`, `MODBTN` (seit der MOD-Latch-Runde ein echter
+Parameter, kein `HW_ONLY` mehr — deshalb steht er jetzt in der `P`-Zeile oben)
+und das reservierte `SHIFTBTN`.
 
 **Die LEDs laufen seit der LED-Feedback-Runde (2026-08-16) nicht mehr über
 `HW_ONLY`.** Alle Lampen auf der Platte sind jetzt echte `LightId`s.
@@ -113,13 +153,33 @@ Parameter): Spec
 Freeze Attack, die Sampler-Untermenüs, Excitation-Flags), es trägt nur keinen
 Wert mehr, der nicht auch auf dem Panel sitzt.
 
-## 2. Die 69 Parameter
+## 2. Die 75 Parameter
 
 Die Einstufungsspalte dieses Abschnitts war bis 2026-08-09 leer und war die
 offene Frage des ganzen Dokuments. **Sie ist entschieden.** Was hier steht, ist
 nicht mehr eine Absicht, sondern das gebaute Panel, ausgelesen aus
 `host/vcv/res/gen_hw_panel.py` (`HW_PARAMS`, `hw_class()`, Positionen in mm vom
-linken oberen Panelrand). Die Prüfsumme der Zeilen ist **69**.
+linken oberen Panelrand). Die Prüfsumme der Zeilen ist **75**.
+
+**Die Tabelle ist generiert, nicht gepflegt** (Neustand 2026-08-30). Reihenfolge
+und Nummerierung sind die von `HW_PARAMS`, die Bauform kommt aus `hw_class()`,
+die Gruppe aus `PART_A`/`PART_B`/`SHARED` — alles andere bekommt „—". Wer sie
+neu erzeugt, prüft die Herleitung daran, dass die unveränderten Zeilen Zeichen
+für Zeichen zurückkommen.
+
+> **Sie stand länger falsch da, als die sechs fehlenden Zeilen vermuten
+> lassen.** Beim Neuerzeugen kamen nicht nur die neuen Parameter dazu: **25 der
+> alten 69 Zeilen hatten sich bewegt** (gemessen, nicht geschätzt — die
+> übrigen 44 kamen unverändert zurück). `ENGINE_A/B` sitzt jetzt in der oberen
+> Außenecke (16,25 bzw. 288,55 / 14,50) statt bei y = 50,22. **Die Reihe
+> y = 76 gibt es nicht mehr:** sie ist auf 74,4 (TUNE, DETUNE, REV_SIZE,
+> REV_DIFF) und 79 (FLUX, COMP) aufgeteilt. Von y = 95 sind einzelne Elemente
+> auf 97 gerückt (GRIT, FLUXFB, REV_MIX) — die Reihe 95 selbst gibt es weiter,
+> `COLOR_A/B` steht unverändert darauf. `SOURCE_A/B` und `FILT_A/B` sind
+> waagerecht gerückt, und `REV_MIX_A/B` ist vom **grossen** auf den **kleinen**
+> Poti gewechselt. Welche der Runden das jeweils war, steht hier bewusst nicht
+> — es wurde nicht nachgeschlagen. Eine Position aus der alten Tabelle zu
+> zitieren, hätte ein Bohrbild ruiniert.
 
 | # | Parameter | Bauform auf der Hardware | Gruppe | Position (mm) |
 |---:|---|---|---|---|
@@ -130,18 +190,18 @@ linken oberen Panelrand). Die Prüfsumme der Zeilen ist **69**.
 | 5 | `RANGE_A` | kleiner Poti | PART_A | 44,25 / 34,00 |
 | 6 | `MELODY_A` | kleiner Poti | PART_A | 74,00 / 14,50 |
 | 7 | `MOD_A` | grosser Poti | PART_A | 21,75 / 53,00 |
-| 8 | `TUNE_A` | kleiner Poti | PART_A | 17,00 / 76,00 |
+| 8 | `TUNE_A` | kleiner Poti | PART_A | 17,00 / 74,40 |
 | 9 | `ATTACK_A` | kleiner Poti | PART_A | 68,25 / 34,00 — geteilt mit `STAGES_A` |
 | 10 | `DECAY_A` | kleiner Poti | PART_A | 81,25 / 34,00 |
 | 11 | `RES_A` | kleiner Poti | PART_A | 94,25 / 34,00 |
 | 12 | `SUB_A` | kleiner Poti | PART_A | 107,25 / 34,00 |
-| 13 | `SOURCE_A` | kleiner Poti | PART_A | 102,25 / 50,22 |
-| 14 | `FLUX_A` | grosser Poti | PART_A | 67,00 / 76,00 |
-| 15 | `GRIT_A` | kleiner Poti | PART_A | 106,50 / 95,00 |
-| 16 | `COMP_A` | grosser Poti | PART_A | 106,50 / 76,00 |
+| 13 | `SOURCE_A` | kleiner Poti | PART_A | 72,88 / 50,22 |
+| 14 | `FLUX_A` | grosser Poti | PART_A | 67,00 / 79,00 |
+| 15 | `GRIT_A` | kleiner Poti | PART_A | 116,75 / 97,00 |
+| 16 | `COMP_A` | grosser Poti | PART_A | 106,50 / 79,00 |
 | 17 | `STEPS_A` | kleiner Poti | PART_A | 35,00 / 14,50 |
-| 18 | `ENGINE_A` | kleiner Poti | PART_A | 70,25 / 50,22 |
-| 19 | `DETUNE_A` | kleiner Poti | PART_A | 30,00 / 76,00 |
+| 18 | `ENGINE_A` | kleiner Poti | PART_A | 16,25 / 14,50 |
+| 19 | `DETUNE_A` | kleiner Poti | PART_A | 30,00 / 74,40 |
 | 20 | `SONG_A` | kleiner Poti | PART_A | 48,00 / 14,50 |
 | 21 | `RATE_B` | kleiner Poti | PART_B | 243,80 / 14,50 |
 | 22 | `SHAPE_B` | kleiner Poti | PART_B | 286,55 / 34,00 |
@@ -150,36 +210,36 @@ linken oberen Panelrand). Die Prüfsumme der Zeilen ist **69**.
 | 25 | `RANGE_B` | kleiner Poti | PART_B | 260,55 / 34,00 |
 | 26 | `MELODY_B` | kleiner Poti | PART_B | 230,80 / 14,50 |
 | 27 | `MOD_B` | grosser Poti | PART_B | 283,05 / 53,00 |
-| 28 | `TUNE_B` | kleiner Poti | PART_B | 287,80 / 76,00 |
+| 28 | `TUNE_B` | kleiner Poti | PART_B | 287,80 / 74,40 |
 | 29 | `ATTACK_B` | kleiner Poti | PART_B | 236,55 / 34,00 — geteilt mit `STAGES_B` |
 | 30 | `DECAY_B` | kleiner Poti | PART_B | 223,55 / 34,00 |
 | 31 | `RES_B` | kleiner Poti | PART_B | 210,55 / 34,00 |
 | 32 | `SUB_B` | kleiner Poti | PART_B | 197,55 / 34,00 |
-| 33 | `SOURCE_B` | kleiner Poti | PART_B | 202,55 / 50,22 |
-| 34 | `FLUX_B` | grosser Poti | PART_B | 237,80 / 76,00 |
-| 35 | `GRIT_B` | kleiner Poti | PART_B | 198,30 / 95,00 |
-| 36 | `COMP_B` | grosser Poti | PART_B | 198,30 / 76,00 |
+| 33 | `SOURCE_B` | kleiner Poti | PART_B | 231,93 / 50,22 |
+| 34 | `FLUX_B` | grosser Poti | PART_B | 237,80 / 79,00 |
+| 35 | `GRIT_B` | kleiner Poti | PART_B | 188,05 / 97,00 |
+| 36 | `COMP_B` | grosser Poti | PART_B | 198,30 / 79,00 |
 | 37 | `STEPS_B` | kleiner Poti | PART_B | 269,80 / 14,50 |
-| 38 | `ENGINE_B` | kleiner Poti | PART_B | 234,55 / 50,22 |
-| 39 | `DETUNE_B` | kleiner Poti | PART_B | 274,80 / 76,00 |
+| 38 | `ENGINE_B` | kleiner Poti | PART_B | 288,55 / 14,50 |
+| 39 | `DETUNE_B` | kleiner Poti | PART_B | 274,80 / 74,40 |
 | 40 | `SONG_B` | kleiner Poti | PART_B | 256,80 / 14,50 |
 | 41 | `MORPH` | grosser Poti | SHARED | 152,40 / 53,00 |
 | 42 | `TEMPO` | kleiner Poti | SHARED | 139,40 / 34,00 |
 | 43 | `COUPLE` | kleiner Poti | SHARED | 152,40 / 34,00 |
-| 44 | `SCALE` | kleiner Poti | SHARED | 139,40 / 14,50 |
-| 45 | `DRIFT` | kleiner Poti | SHARED | 152,40 / 14,50 |
-| 46 | `REV_SIZE` | kleiner Poti | SHARED | 136,40 / 76,00 |
+| 44 | `SCALE` | kleiner Poti | SHARED | 132,90 / 14,50 |
+| 45 | `DRIFT` | kleiner Poti | SHARED | 145,90 / 14,50 |
+| 46 | `REV_SIZE` | kleiner Poti | SHARED | 136,40 / 74,40 |
 | 47 | `REV_DECAY` | grosser Poti | SHARED | 152,40 / 79,00 |
 | 48 | `REV_TONE` | kleiner Poti | SHARED | 152,40 / 97,00 |
-| 49 | `REV_DIFF` | kleiner Poti | SHARED | 168,40 / 76,00 |
-| 50 | `CHOKE` | kleiner Poti | SHARED | 165,40 / 14,50 |
-| 51 | `FILT_A` | grosser Poti | — | 86,25 / 53,00 |
-| 52 | `FILT_B` | grosser Poti | — | 218,55 / 53,00 |
+| 49 | `REV_DIFF` | kleiner Poti | SHARED | 168,40 / 74,40 |
+| 50 | `CHOKE` | kleiner Poti | SHARED | 158,90 / 14,50 |
+| 51 | `FILT_A` | grosser Poti | — | 88,88 / 53,00 |
+| 52 | `FILT_B` | grosser Poti | — | 215,93 / 53,00 |
 | 53 | `TIDE` | kleiner Poti | — | 136,40 / 50,22 |
 | 54 | `FLUXRATE_A` | kleiner Poti | — | 54,00 / 89,86 |
 | 55 | `FLUXRATE_B` | kleiner Poti | — | 250,80 / 89,86 |
-| 56 | `FLUXFB_A` | kleiner Poti | — | 67,00 / 95,00 |
-| 57 | `FLUXFB_B` | kleiner Poti | — | 237,80 / 95,00 |
+| 56 | `FLUXFB_A` | kleiner Poti | — | 67,00 / 97,00 |
+| 57 | `FLUXFB_B` | kleiner Poti | — | 237,80 / 97,00 |
 | 58 | `COLOR_A` | grosser Poti | — | 23,50 / 95,00 |
 | 59 | `COLOR_B` | grosser Poti | — | 281,30 / 95,00 |
 | 60 | `LINK_A` | kleiner Poti | — | 80,00 / 89,86 |
@@ -188,21 +248,45 @@ linken oberen Panelrand). Die Prüfsumme der Zeilen ist **69**.
 | 63 | `STAGES_B` | kleiner Poti | — | 236,55 / 34,00 — geteilt mit `ATTACK_B` |
 | 64 | `REC_A` | Taster | — | 101,00 / 14,50 |
 | 65 | `REC_B` | Taster | — | 203,80 / 14,50 |
-| 66 | `REV_MIX_A` | grosser Poti | — | 136,40 / 95,00 |
-| 67 | `REV_MIX_B` | grosser Poti | — | 168,40 / 95,00 |
+| 66 | `REV_MIX_A` | kleiner Poti | — | 129,75 / 97,00 |
+| 67 | `REV_MIX_B` | kleiner Poti | — | 175,05 / 97,00 |
 | 68 | `SHUFFLE` | kleiner Poti | — | 165,40 / 34,00 |
 | 69 | `PACE` | kleiner Poti | — | 168,40 / 50,22 |
+| 70 | `DEPTH_A` | kleiner Poti | — | 104,88 / 50,22 |
+| 71 | `DEPTH_B` | kleiner Poti | — | 199,93 / 50,22 |
+| 72 | `PULL` | kleiner Poti | — | 171,90 / 14,50 |
+| 73 | `PAN_A` | kleiner Poti | — | 103,75 / 97,00 |
+| 74 | `PAN_B` | kleiner Poti | — | 201,05 / 97,00 |
+| 75 | `MODBTN` | Taster | — | 290,80 / 114,00 |
 
-**Zugegangen seit dem Stand 2026-08-08:** `PACE` (Zeile 69), der globale
-Modulations-Zeitdehner aus der PACE-Runde — der einzige Parameter, den das
-Instrument seit der Reduktion dazubekommen hat, und ein Beleg dafür, dass
-„one in, one out" wirklich tot ist: es musste nichts weichen.
+**Zugegangen seit der Reduktion** — sechs Zeilen, und keine davon hat etwas
+verdrängt. Das ist der eigentliche Beleg dafür, dass „one in, one out" tot ist:
+
+| Zeile | Parameter | Woher |
+|---:|---|---|
+| 69 | `PACE` | globaler Modulations-Zeitdehner, Spec 2026-08-12 modulation-pace |
+| 70–71 | `DEPTH_A/B` (DPTH) | die `LANE_MOTION`-Basis, aus FEED gewachsen — Spec 2026-08-18 feed §4, auf alle sechs Engines gezogen in 2026-08-19 voice-knobs-dpth-edge |
+| 72 | `PULL` | bipolare Akkord-Schwerkraft zwischen den Decks, Spec 2026-07-19 pull-chord-gravity |
+| 73–74 | `PAN_A/B` | Deck-Balance im Master-Mix, Spec 2026-08-30 pan — auf `LEVEL_SLOTS[0]`, den die Platte dafür freigehalten hatte |
+| 75 | `MODBTN` | **kein neues Bedienelement.** Das Pad gab es schon, es lief bis zur MOD-Latch-Runde (Spec 2026-08-22) als `HW_ONLY` ohne Parameterwert — jetzt ist es ein echter `ParamId` und zählt mit (§1) |
+
+**Der Satz, der hier bis 2026-08-30 stand** — `PACE` sei „der einzige
+Parameter, den das Instrument seit der Reduktion dazubekommen hat" — wurde mit
+`d18e50f` (2026-08-19, DPTH) falsch und ist es elf Tage lang geblieben;
+`ee23912` (08-22, PULL) und `32835ff` (08-30, PAN) sind danach darüber
+hinweggelaufen.
 
 **Retiriert und nicht mehr Teil der Zählung** (Begründung in
 `2026-08-09-hw-control-reduction-design.md`): `GRITMODE_A/B`, `STEP_A/B`,
 `FORM_A/B`, `NEWPHRASE_A/B`; `SYNC`, `SPOT`, `MASTER_DRIVE`, `SETTLE`,
 `REV_SMEAR`, `REV_MOD`; `FLUXTIME_A/B` (in FLUX aufgegangen); `DRIVE_A/B`
 (ersatzlos, BBD-Drive kommt aus `bbd_engine.cpp`).
+
+**Dazugekommen und wieder weg, ohne je in dieser Tabelle gestanden zu haben:**
+`DAMP_A/B` (der EDGE-Knopf, ROW_V2 unter DPTH) kam am 2026-08-19 mit DPTH und
+ging am 2026-08-20 wieder (Plan `edge-knob-removal`) — gemessen und verworfen,
+er hat seinen Panelplatz nicht verdient. Der Platz bleibt absichtlich leer;
+freigewordene Slots werden nicht neu gruppiert.
 
 **Eine offene Kleinigkeit, die genau hier auffällt:** `STAGES` hat im Generator
 ein **leeres Plattenwort** (`HW_CAPTION["STAGES"] = ""`), BEND wird also gar
@@ -448,10 +532,13 @@ inzwischen gezeichnet, generiert und gegen seine eigenen Keep-outs geprüft:
 - Plattenmaß **304,8 × 128,5 mm** (60 HP, 3 HE) — `HP = 60`,
   `W = HP * MM_PER_HP`, `Hh = 128.5` in `gen_hw_panel.py`.
 - Bedienelemente laufen von **y = 14,5 mm** (obere Reihe) bis **y = 97 mm**, auf
-  neun Linien (14,5 / 34 / 50,22 / 53 / 76 / 79 / 89,86 / 95 / 97); waagerecht
-  von x = 17 bis x = 287,8. Darunter die Buchsenreihe bei **y = 114 mm**, in der
-  auch die zwei reservierten Pads und der SD-Slot sitzen.
-- Untergebracht sind **67 Poti-/Taster-Positionen, 2 reservierte Pads, 19 LEDs,
+  neun Linien (14,5 / 34 / 50,22 / 53 / 74,4 / 79 / 89,86 / 95 / 97); waagerecht
+  von x = 16,25 bis x = 288,55, beide Ränder von `ENGINE_A/B`. Darunter die
+  Buchsenreihe bei **y = 114 mm**, in der auch das reservierte Pad, der SD-Slot
+  und — als einziger Parameter außerhalb der neun Linien — `MODBTN` bei
+  x = 290,8 sitzen.
+- Untergebracht sind **73 Poti-/Taster-Positionen** (72 auf den neun Linien,
+  dazu `MODBTN` in der Buchsenreihe), **1 reserviertes Pad, 19 LEDs,
   18 Buchsen und der SD-Slot** — 19, nicht die 21 der LED-Spec, weil die
   Hardwareplatte `FLOW_A_L`/`FLOW_B_L` nicht zeichnet (§3) — geprüft von
   `hw_panel_guard`: Schienen-Keepout,
