@@ -84,8 +84,12 @@ TEST_CASE("Seed audition shares the complete generated VCV parameter snapshot")
     // 120 -> 121 on 2026-08-22: PULL, the chord-gravity knob, appended last
     // in APPENDED_PANEL_PARAMS by res/gen_panel.py -- this also shifts the
     // 49 MOD-layer ids (MODBTN plus the 48 MODD_* depths) up by one slot.
-    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 121,
-                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 121 -- "
+    // 121 -> 125 on 2026-08-30: PAN_A/B, appended last in
+    // APPENDED_PANEL_PARAMS by res/gen_panel.py, plus MODD_PAN_A/B, a new
+    // MOD_DECK_TARGETS row -- the pair appended to APPENDED_PANEL_PARAMS
+    // also shifts every MOD-layer id up by two slots.
+    CHECK_MESSAGE(spkyvcv::NUM_PARAMS == 125,
+                  "NUM_PARAMS is " << spkyvcv::NUM_PARAMS << ", want 125 -- "
                   "if the panel inventory genuinely changed, update this "
                   "literal to match");
     // The factory patch pairs FEED (5) on deck A with WAVE (2) on deck B --

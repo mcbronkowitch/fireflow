@@ -206,6 +206,7 @@ HW_SIZE = {
     # on TIMING's 13.0 pitch. A big SEND cannot stand on that pitch at all --
     # see the guard test_level_band_is_evenly_divided.
     "REV_MIX": "S",
+    "PAN": "S",                                     # the LEVEL band's third small knob
     "COMP": "G", "GRIT": "S",
     "STEPS": "S", "SONG": "S",
     "ENGINE": "S", "REC": "P",                     # ENGINE is a 5-zone detent pot
@@ -292,8 +293,8 @@ Y_B2B = 79.0
 # 84.00 and the shoulder/foot chain was 0.70 mm short on Y_B2G. That reason
 # EXPIRED on 2026-08-30 when Y_B2K went to 74.40 and the caption rose to
 # 82.40 -- Y_B2G would fit again now. The band stays here for the reason it
-# is kept, not the one that put it here: FB, PAN's slot, GRIT, SEND and TONE
-# read as ONE line across the plate, and REV_TONE anchors it.
+# is kept, not the one that put it here: FB, PAN, GRIT, SEND and TONE read
+# as ONE line across the plate, and REV_TONE anchors it.
 Y_B2L = 97.0
 JACK_Y = 114.0
 SD_X, SD_Y, SD_W, SD_H = 152.4, JACK_Y, 11.0, 6.0
@@ -332,10 +333,12 @@ LEVEL_BAND_L = 93.95              # LEVEL A's own left edge; the guard pins this
 LEVEL_PITCH = 13.00               # TEMP -> SYNC -> SHFL, unchanged since
 LEVEL_H_MARGIN = 5.40             # the one free number
 _lvl0 = LEVEL_BAND_L + BODY_R["S"] + LEVEL_H_MARGIN
-# Slot 0 is deliberately EMPTY. It is held for PAN, which has no ParamId yet;
-# an empty slot costs the same geometry as a filled one, so it is cheaper to
-# pay once now than to re-pitch the band later. Do not "tidy" it away --
-# test_level_band_holds_an_empty_slot exists to stop exactly that.
+# Slot 0 held PAN before PAN had a ParamId, on the argument that an empty slot
+# costs the same geometry as a filled one and it was cheaper to pay once than
+# to re-pitch the band later. That bet paid off on 2026-08-30: PAN arrived and
+# nothing moved. The guard that protected the reservation
+# (test_level_band_holds_an_empty_slot) has been replaced by its successor,
+# test_level_band_holds_pan_in_slot_zero, which now pins the slot as FILLED.
 LEVEL_SLOTS = (_lvl0, _lvl0 + LEVEL_PITCH, _lvl0 + 2 * LEVEL_PITCH)
 
 DECK_POS = {
@@ -371,13 +374,14 @@ DECK_POS = {
     "COLOR":  (23.50, Y_B2G),
     "FLUX":   (67.00, Y_B2B),
     # FB came off Y_B2G onto the LEVEL band's line 2026-08-30, so the plate's
-    # bottom line reads straight across: FB, PAN's slot, GRIT, SEND, TONE.
-    # Free of charge -- its caption lands on 105.00, where REV_TONE's already
-    # was, so the row's ink and therefore its frame do not move.
+    # bottom line reads straight across: FB, PAN, GRIT, SEND, TONE. Free of
+    # charge -- its caption lands on 105.00, where REV_TONE's already was, so
+    # the row's ink and therefore its frame do not move.
     "FLUXRATE": (54.00, 89.86), "FLUXFB": (67.00, Y_B2L), "LINK": (80.00, 89.86),
     # LVL keeps its place; only the band below it is new. GRIT came off Y_B2G
     # to join it, and SEND came the whole way over from ROOM.
     "COMP":   (106.50, Y_B2B),
+    "PAN":    (LEVEL_SLOTS[0], Y_B2L),
     "GRIT":   (LEVEL_SLOTS[1], Y_B2L),
     "REV_MIX": (LEVEL_SLOTS[2], Y_B2L),
     "STAGES": (68.25, Y_B1K),

@@ -39,6 +39,11 @@
 // sides of the round trip. The inventory marker in tests/test_param_table.cpp
 // moved with it both times.
 //
+// APPENDED AGAIN, HARMLESSLY: P_PAN_A/P_PAN_B on 2026-08-30 (spec pan), at the
+// very end. Every row below keeps its index; the short aggregate initializers
+// zero-fill the two new tail slots. On PAN's -1..+1 axis 0.0 is centre, so the
+// frozen points render with PAN neutral -- which is what they should do.
+//
 // THE TWO DIRECTIONS ARE NOT SYMMETRIC, and 2026-08-20 is the proof: an
 // INSERTION shifts these vectors silently (short aggregate initializer,
 // zero-filled tail, no warning -- the failure mode this header spends most
@@ -49,14 +54,17 @@
 // above exists for the insertion case only; a removal announces itself for
 // free.
 //
-// HOW TO TELL WHICH HAPPENED: compare P_COUNT and P_MODE/P_PACE against
-// tests/test_param_table.cpp's inventory-marker case (`P_MODE == 62`,
-// `P_PACE == P_COUNT - 1`). If that case still passes unmodified, nothing
-// was inserted or removed above P_MODE and this file's rows are still
-// aligned. If you changed the enum and that case reddened as intended,
-// re-derive these vectors (there is no generator left -- re-measure by hand,
-// or shift the affected rows to match the new indices) before trusting a red
-// run here.
+// HOW TO TELL WHICH HAPPENED: compare P_COUNT and P_MODE against
+// tests/test_param_table.cpp's inventory-marker case (`P_MODE == 62` plus a
+// `<last id> == P_COUNT - 1` line). The second marker is deliberately
+// re-pointed at whatever the last enum entry is on every append, so READ IT
+// THERE rather than trusting a name quoted here -- it has been P_PACE, then
+// P_PULL (2026-08-22), and is P_PAN_B as of 2026-08-30. If that case still
+// passes unmodified, nothing was inserted or removed above P_MODE and this
+// file's rows are still aligned. If you changed the enum and that case
+// reddened as intended, re-derive these vectors (there is no generator left
+// -- re-measure by hand, or shift the affected rows to match the new
+// indices) before trusting a red run here.
 #pragma once
 #include "param_table.h"
 

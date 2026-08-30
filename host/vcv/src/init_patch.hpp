@@ -76,6 +76,8 @@ static constexpr float kInitParamDefaults[] = {
     0.365333289f, // DEPTH_A
     0.5f, // DEPTH_B
     0.0f, // PULL
+    0.0f, // PAN_A
+    0.0f, // PAN_B
     0.0f, // MODBTN
     1.0f, // MODD_SOURCE_A
     1.0f, // MODD_SOURCE_B
@@ -119,6 +121,8 @@ static constexpr float kInitParamDefaults[] = {
     0.0f, // MODD_LINK_B
     0.0f, // MODD_COMP_A
     0.0f, // MODD_COMP_B
+    0.0f, // MODD_PAN_A
+    0.0f, // MODD_PAN_B
     0.279517978f, // MODD_MORPH
     0.0f, // MODD_REV_SIZE
     0.0f, // MODD_REV_DECAY

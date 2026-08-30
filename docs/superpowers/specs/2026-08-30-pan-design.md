@@ -119,10 +119,42 @@ reverb tail stays in the middle.
 
 The CHOKE exclusion needs its own argument, because the sidechain's stated rule
 is "a sidechain follows what you HEAR" (`instrument.cpp:362-369`), and a panned
-deck is still heard. The detector takes `max(|L|, |R|)`; under §3's law the loud
-channel is always at unity, so folding PAN in would change the detector's answer
-neither at centre nor at a stop. **This is an argument from the law, not a
-measurement.** If it is ever doubted, measure it — do not reason about it twice.
+deck is still heard.
+
+The argument is about what a sidechain is *for*. The detector answers one
+question — how loud is the priority deck right now — and that is a property of
+the deck, not of where it sits in the stereo field. A deck moved to one side is
+not a quieter deck: it is the same performance, placed. Folding PAN in would
+not change that reading uniformly: for a deck whose channels are equal (§2's
+FEED and TEST_TONE, `|L| == |R|` exactly) it would change nothing at any knob
+position, and for a deck with real side energy (SYNTH, BODY) it would lower the
+reading only on the samples where the attenuated channel happened to be the
+louder one — signal-dependent, not proportional to how far the knob has
+travelled. At a hard stop the detector still sees the unattenuated channel at
+full unity, so the duck does not stop there either; `pri_gain` is one scalar
+applied to the yielding deck's whole sum, not a per-channel value, so there is
+no per-channel duck for a hard pan to "stop". `pri_gain` therefore reads the
+unpanned `ga`/`gb`, exactly as the send does, and `tests/test_pan.cpp`'s fifth
+gate holds that down through `Instrument::choke_duck_gain()`.
+
+> **Correction, 2026-08-30 (pre-merge review).** An earlier revision of this
+> section argued the exclusion from an identity instead: the detector takes
+> `max(|L|, |R|)`, §3's law leaves the loud channel at unity, so folding PAN in
+> was said to change nothing. **That premise is false, and §2 above disproves
+> it.** The law guarantees the *unattenuated* channel is at unity; whether that
+> channel is the *louder* one is a property of the signal. For `p < 0` today's
+> `rect = ga·max(|L|, |R|)` and the folded-in `ga·max(|L|, (1−|p|)·|R|)` agree
+> only where `|L| ≥ |R|` at that sample — always for a genuinely mono
+> deck, but on roughly half the samples for SYNTH (L/R correlation 0.848) and
+> BODY (0.811), and at a hard stop the right channel is gone. The conclusion
+> was right; the reason was not. It is recorded rather than quietly replaced so
+> that nobody re-derives it.
+>
+> **Second pass, same day.** The paragraph above this notice also stated two
+> false consequences — that the duck "would shallow out as the knob travels"
+> and that a hard-panned deck "would stop ducking whatever it had vacated."
+> Both were corrected in place on 2026-08-30. A section wrong once should not
+> be left to say so twice.
 
 PAN joins **after** `_deck_tap` and `_dry_tap` are written
 (`instrument.cpp:455`), the same rule MORPH and the CHOKE duck already obey
@@ -196,11 +228,21 @@ that slot 0 is unoccupied. It is not deleted — it is inverted: slot 0 holds
 
 New engine gates (`tests/test_pan.cpp`):
 
-1. **Centre is unity.** After settling, `pan_l == pan_r == 1.0f` exactly, and
-   the summed output of an instrument that had `set_pan(p, 0.f)` pushed is
-   bit-identical to one that never had `set_pan` called at all.
+1. **Centre is unity — and stays reachable.** After a move to −1 and back, the
+   settled position gives `pan_l == pan_r == 1.0f` *exactly*.
+   **Revised 2026-08-30 (pre-merge review):** as first written this gate also
+   rendered two instruments and compared them sample by sample, one of them
+   having had `set_pan(p, 0.f)` pushed. That was vacuous — `_pan_target` boots
+   at `{0, 0}`, so the push is a no-op and the two objects were equal by
+   construction. The render identity is already held by `ctrl_identity` and the
+   `spky_tests` hashes; what nothing else covers is the *return*, which rests
+   on `OnePole::process()` snapping inside its 0.0005 dead band (§4).
 2. **A stop is a stop.** PAN at −1 with deck B silent: the right channel's dry
-   contribution is exactly 0.
+   contribution is exactly 0. **Mirrored on deck B** (added 2026-08-30,
+   pre-merge review) with the channels deliberately flipped — deck B hard
+   RIGHT, left channel exactly 0 — because every other gate drives deck A, and
+   `test_param_impact` only asks whether `P_PAN_B` moves audio at all, which a
+   swapped-but-live PAN does.
 3. **The send does not move.** PAN hard left with SEND up: the reverb return
    stays symmetric. This is the gate that defends §5, and it defends it against
    the *obvious* simplification — folding PAN into `ga`/`gb`, which would look
@@ -209,6 +251,11 @@ New engine gates (`tests/test_pan.cpp`):
 4. **No zipper.** A step from −1 to +1 produces no per-sample discontinuity
    above a threshold. The threshold is **not written here**: it is a runtime
    number and must come from a probe before it enters the plan.
+5. **The sidechain does not move either** (added 2026-08-30, pre-merge review).
+   Deck A panned hard left with CHOKE engaged: deck B's `choke_duck_gain()` is
+   bit-identical to an otherwise identical centred run. §5's second exclusion
+   was undefended — folding PAN into `pri_gain` passed gates 1–4, because two
+   of them engage no CHOKE and gate 3's deck A is wet-only.
 
 Each gate is proved RED before it is made to pass (`docs/gotchas.md`,
 memory `fireflow-tests-must-be-able-to-fail`).

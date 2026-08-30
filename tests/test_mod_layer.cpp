@@ -77,7 +77,7 @@ TEST_CASE("mod layer: the sign picks the term, the magnitude scales it") {
 
 TEST_CASE("mod layer: kModLayer is exactly the spec's table") {
     const int n = sizeof(kModLayer) / sizeof(kModLayer[0]);
-    CHECK(n == 48);
+    CHECK(n == 50);          // 48 + PAN A/B (spec 2026-08-30 pan)
     std::set<int> depthIds, soundIds;
     int centers = 0, tdepth = 0, fxdepth = 0;
     for (int i = 0; i < n; ++i) {

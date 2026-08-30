@@ -479,3 +479,20 @@ question Rack cannot answer.
   already a staircase. The split is loudest in FLOW with SMOOTH up. A
   listening pass that starts anywhere else will conclude the knob does
   nothing.
+
+## PAN (2026-08-30) — NOT YET HEARD
+
+Three values shipped first-try and none has been heard against an alternative:
+
+- **The balance law itself** (`gL = min(1, 1 − p)`, unity at centre), chosen
+  over equal-power and over mid/side rotation. The measurement that supported
+  it is real (spec `2026-08-30-pan-design.md` §2: a deck's own side energy is
+  at most ~0.32 of its mid, on SYNTH and BODY, and exactly 0 on FEED); the
+  preference between the three laws is not.
+- **The 30 ms smoothing time**, copied from LVL rather than chosen for PAN.
+  Measured behaviour: one control tick moves 0.0667 of the way, a full-scale
+  step arrives after 111 ticks = 222 ms.
+- **`LANE_SIZE` (×1/2) as the mod ring's lane**, chosen on paper for being the
+  slowest of the five.
+
+Do not "finish" any of these without a listening pass.

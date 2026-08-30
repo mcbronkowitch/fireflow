@@ -367,6 +367,29 @@ void Instrument::process(const float* inL, const float* inR,
         // injects no new reverb", M4) -- reading the raw output here gave the
         // engine two different answers to whether a silent deck still acts on
         // the bus.
+        //
+        // PAN stays OUT of this on purpose -- ga/gb here are the unpanned
+        // morph gains, exactly as at the reverb send. The detector answers
+        // "how loud is the priority deck", which is a property of the deck,
+        // not of where it sits in the stereo field: a deck moved to one side
+        // is not a quieter deck. Folding PAN in would not change that reading
+        // uniformly: for a deck whose channels are equal (FEED, TEST_TONE) it
+        // would change nothing at any knob position, and for a deck with real
+        // side energy (SYNTH, BODY) it would lower the reading only on the
+        // samples where the attenuated channel happened to be the louder one
+        // -- signal-dependent, not proportional to how far the knob has
+        // travelled. At a hard stop the detector still sees the unattenuated
+        // channel at full unity, so the duck does not stop there either;
+        // pri_gain is one scalar for the whole deck sum, not per-channel, so
+        // there is no per-channel duck for a hard pan to "stop".
+        // (An earlier draft of the spec argued this from max(|L|, |R|): the
+        // law puts the UNATTENUATED channel at unity, so folding PAN in was
+        // said to change nothing. That is false -- which channel is the loud
+        // one is a property of the signal, and SYNTH and BODY carry real side
+        // energy, L/R correlation 0.848 and 0.811 (probe, 2026-08-30). A
+        // second pass the same day found the two consequence claims above
+        // this parenthetical were themselves false; see the spec's §5.)
+        // tests/test_pan.cpp's fifth gate guards this line.
         const float pri_gain = (pri == PART_A) ? ga : gb;
         const float rect = std::max(std::fabs(pl[pri] * pri_gain),
                                     std::fabs(prr[pri] * pri_gain));
@@ -461,8 +484,21 @@ void Instrument::process(const float* inL, const float* inR,
         // already written and must stay untouched -- same argument as the
         // Bloom duck's at the reverb mix below. duck[] is { 1, 1 } whenever
         // CHOKE is at noon, and a multiply by 1.0f is exact.
-        float l = al * ga * duck[PART_A] + bl * gb * duck[PART_B];
-        float r = ar * ga * duck[PART_A] + br * gb * duck[PART_B];
+        //
+        // PAN joins HERE, with MORPH and the CHOKE duck, and for the same
+        // reason: al/ar/bl/br, _dry_tap and _deck_tap above are already
+        // written and must stay unpanned -- BODY's excitation bus and the deck
+        // bus are not stereo destinations.
+        //
+        // These four multiply the DRY sums only. The reverb send below keeps
+        // reading the unpanned ga/gb on purpose: the deck moves to the side,
+        // its tail stays in the middle. Do not "simplify" this by folding the
+        // pair into ga/gb -- tests/test_pan.cpp's third gate exists to catch
+        // exactly that, because it would also pan the send.
+        const float pla = _center.pan_l(PART_A), pra = _center.pan_r(PART_A);
+        const float plb = _center.pan_l(PART_B), prb = _center.pan_r(PART_B);
+        float l = al * ga * pla * duck[PART_A] + bl * gb * plb * duck[PART_B];
+        float r = ar * ga * pra * duck[PART_A] + br * gb * prb * duck[PART_B];
         if (_reverb) {
             if (!_rev_primed) {              // snap the mix set before the first block
                 for (int p = 0; p < PART_COUNT; ++p) {
@@ -511,8 +547,8 @@ void Instrument::process(const float* inL, const float* inR,
                                                          : _duck_keep_up;
             _duck_residual *= keep;
             _duck_gain = _duck_target + _duck_residual;
-            l = (al * ga * dga * duck[PART_A] + bl * gb * dgb * duck[PART_B]) * _duck_gain;
-            r = (ar * ga * dga * duck[PART_A] + br * gb * dgb * duck[PART_B]) * _duck_gain;
+            l = (al * ga * dga * pla * duck[PART_A] + bl * gb * dgb * plb * duck[PART_B]) * _duck_gain;
+            r = (ar * ga * dga * pra * duck[PART_A] + br * gb * dgb * prb * duck[PART_B]) * _duck_gain;
             if (!_rev_asleep) {
                 // Per-deck send: the equal-power wet curve (sin) rides the SEND
                 // -- one shared room has only one return. MORPH fades the send

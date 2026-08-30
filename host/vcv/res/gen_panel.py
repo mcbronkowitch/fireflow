@@ -312,10 +312,11 @@ FX_TOP   = [44.25, 54.75, 65.25, 75.75]   # TIME MIX FB | SEND (per-deck reverb 
 # again (spec 2026-07-28 flux-link): DRAG -> LINK, because the control became
 # bipolar and LINK names the axis rather than one of its two ends.
 # The BBD-only BEND widget overlaps ATK at runtime. FX_BOT[1] held MULT until
-# task 6 (spec 2026-08-09 hw-control-reduction) retired it; the slot stays
-# empty (freed slots are not regrouped), so the static Synth preview now
-# reads LINK . | GRIT COMP.
-FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # LINK . | GRIT COMP (FX_BOT[1] empty)
+# task 6 (spec 2026-08-09 hw-control-reduction) retired it; freed slots are
+# not regrouped, so it sat empty rather than being closed up -- until PAN
+# (spec 2026-08-30 pan, APPENDED_PANEL_PARAMS below) took it, and the static
+# Synth preview now reads LINK PAN | GRIT COMP.
+FX_BOT   = [44.25, 54.75, 65.25, 75.75]   # LINK PAN | GRIT COMP
 PLAY_Y   = 103.6
 # The PLAY row's left block re-spaced to seat REC between GRIT and STEPS
 # (spec 2026-07-18 "VCV layer": REC is the only new panel element). All four
@@ -567,9 +568,10 @@ PANEL_PARAMS = PART_A + PART_B + SHARED + [
     # GRIT/COMP fill FX_BOT below. TIME used to be DIV beside a free MULT
     # multiplier (FX_BOT[1]); task 6 (spec 2026-08-09 hw-control-reduction)
     # retired MULT -- one notched knob over the 12 synced divisions is TIME
-    # now, and FX_BOT[1] stays empty. FXT_FLUX_TIME, the modulation sink
-    # MULT used to feed, survives at a pinned neutral base so CV and the mod
-    # lanes can still bend the tape (Fireflow.cpp pushParams).
+    # now, and FX_BOT[1] sat empty until PAN took it (spec 2026-08-30 pan).
+    # FXT_FLUX_TIME, the modulation sink MULT used to feed, survives at a
+    # pinned neutral base so CV and the mod lanes can still bend the tape
+    # (Fireflow.cpp pushParams).
     Ctl("FLUXRATE_A", KNOBI, FX_TOP[0],     ROW_V1, "TIME", "FLUX time"),
     Ctl("FLUXRATE_B", KNOBI, W - FX_TOP[0], ROW_V1, "TIME", "FLUX time"),
     Ctl("FLUXFB_A",   SMKNOB, FX_TOP[2],     ROW_V1, "FB", "FFB"),
@@ -630,7 +632,8 @@ HIDDEN_PARAMS = []
 # The modulation sink it fed, FXT_FLUX_TIME, survives at a pinned neutral
 # base (Fireflow.cpp pushParams) so CV and the mod lanes can still bend the
 # tape; only the panel's second way to set it is gone. FX_BOT[1], MULT's old
-# slot, stays empty -- freed slots are not regrouped.
+# slot, sat empty -- freed slots are not regrouped, but they can be filled --
+# until PAN took it below (spec 2026-08-30 pan).
 APPENDED_PANEL_PARAMS = [
     # PACE: the global modulation time-stretch (spec 2026-08-12). Takes the
     # ROW_TIME1 slot freed when SYNC folded into COUPLE. It belongs in TIMING
@@ -660,6 +663,25 @@ APPENDED_PANEL_PARAMS = [
     # break (memory fireflow-dev-alpha-no-patch-compat). The slot is the empty
     # ROW_DUO2 directly under CHOKE, the centre's other cross-deck knob.
     Ctl("PULL", SMKNOB, CX, ROW_DUO2, "PULL"),
+    # PAN: per-deck balance in the master mix (spec 2026-08-30 pan). Appended
+    # LAST like PULL/CHOKE/FILT/TIDE -- never into part_controls(), which would
+    # grow PART_STRIDE and shift every part-B and SHARED id.
+    #
+    # The MOD_LAYER_PARAMS block behind it shifts, but NOT uniformly, and the
+    # difference matters to anyone re-deriving a pin by hand: MODBTN and the
+    # deck depths up to MODD_COMP_B move by TWO (the two panel params above
+    # them), while the six MOD_CENTER_TARGETS ids at the tail move by FOUR --
+    # PAN also inserted MODD_PAN_A/MODD_PAN_B inside the block itself, ahead
+    # of them. test_panel.py:255-266 is the transcription that has this right;
+    # the block is 51 ids now, not 49. Accepted, this is a dev alpha and saved
+    # patches may break (memory fireflow-dev-alpha-no-patch-compat).
+    #
+    # The slot is FX_BOT[1], MULT's old place, empty since the 2026-08-09
+    # control reduction. Freed slots are not regrouped -- but they can be
+    # filled, and the FX bottom row now reads LINK PAN GRIT LVL. The hardware
+    # plate's twin slot (LEVEL_SLOTS[0]) was held open for the same control.
+    Ctl("PAN_A", SMKNOB, FX_BOT[1],     ROW_V2, "PAN", "Deck balance"),
+    Ctl("PAN_B", SMKNOB, W - FX_BOT[1], ROW_V2, "PAN", "Deck balance"),
 ]
 
 # --- MOD latch layer (spec 2026-08-22-mod-latch-layer-design.md) ----------
@@ -695,6 +717,7 @@ MOD_DECK_TARGETS = [
     ("TUNE",    "HOST", 2, 0.0),      # HOST on the pitch lane is fine; TDEPTH is not
     ("LINK",    "HOST", 4, 0.0),
     ("COMP",    "HOST", 4, 0.0),
+    ("PAN",     "HOST", 1, 0.0),      # LANE_SIZE (x1/2): a drift, not a ping-pong
 ]
 MOD_CENTER_TARGETS = [
     ("MORPH",     "HOST", 3, 0.0),
@@ -895,6 +918,11 @@ INIT_DEFAULTS = {
     # Centre = off, the same boot value CHOKE has and for the same reason:
     # a cross-deck control that is on at boot is a surprise, not a feature.
     "PULL": 0.000000000,
+    # PAN (spec 2026-08-30 pan): centre = unpanned, the same reasoning as PULL
+    # and CHOKE -- a mix control that audibly moved at boot would be a
+    # surprise, not a feature.
+    "PAN_A": 0.000000000,
+    "PAN_B": 0.000000000,
 }
 
 # MOD latch layer defaults (spec §3a, revised by 2026-08-22 mod-sh-split §5):

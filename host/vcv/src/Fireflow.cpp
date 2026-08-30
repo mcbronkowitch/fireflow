@@ -319,7 +319,7 @@ static_assert(REC_B == REC_A + 1,
 // aliases a mod-layer param. Appended params are read explicitly or through
 // kModLayer, never via pp().
 static_assert(MODBTN > REC_B, "mod-layer params must stay appended after REC");
-static_assert(NUM_PARAMS == MODBTN + 49, "mod layer is 49 params: MODBTN + 48 depths");
+static_assert(NUM_PARAMS == MODBTN + 51, "mod layer is 51 params: MODBTN + 50 depths");
 
 struct Fireflow : Module {
     spky::Instrument inst;
@@ -445,6 +445,8 @@ struct Fireflow : Module {
                         configParam(c.id, -1.f, 1.f, init,
                                     "Chord gravity: left = A leads, right = B leads");
                     else if (c.id == FILT_A || c.id == FILT_B)  // bipolar cutoff trim
+                        configParam(c.id, -1.f, 1.f, init, lbl);
+                    else if (c.id == PAN_A || c.id == PAN_B)  // per-deck balance, dry only (spec 2026-08-30 pan)
                         configParam(c.id, -1.f, 1.f, init, lbl);
                     else if (c.id == TIDE)  // texture-lane rate, snaps in the GRID zone
                         configParam<TideQuantity>(c.id, 0.f, 1.f, init, lbl);
@@ -727,7 +729,7 @@ struct Fireflow : Module {
     }
     // Strided twin of pp(). Only valid inside the part blocks, exactly like
     // pp() itself -- the appended pairs (COLOR/LINK/FILT/FLUX/FLUXFB/REV_MIX/
-    // DEPTH/STAGES) must go through mv(p ? X_B : X_A). mvp() still takes
+    // DEPTH/STAGES/PAN) must go through mv(p ? X_B : X_A). mvp() still takes
     // `part`: it needs it to build the strided soundId, same as pp() does.
     inline float mvp(int baseA, int part) {
         return mv(baseA + part * PART_STRIDE);
@@ -860,6 +862,17 @@ struct Fireflow : Module {
                              : kCompTop * std::pow(
                                    (lvlKnob - kLvlCompSplit) /
                                    (1.f - kLvlCompSplit), kCompShape));
+
+            // PAN goes through mv() so the MOD ring's host-computed term is
+            // included; at boot the depth is 0 and mv() returns the knob by early
+            // return, so this is bit-identical to pushing the raw param.
+            //
+            // mv(p ? PAN_B : PAN_A), NOT mvp(PAN_A, p): mvp() adds p * PART_STRIDE
+            // and is only valid for params inside part_controls(). PAN is an
+            // APPENDED pair, so its two ids are not a stride apart -- see the
+            // comment on mvp itself, which names the appended pairs that
+            // have to take this route.
+            inst.set_pan(p, mv(p ? PAN_B : PAN_A));
 
             // Saved ENG meanings remain 0 = Synth and 1 = Sampler; 2 adds
             // Wave, 3 Body, 4 the BBD, 5 FEED. Each new engine needs its own
