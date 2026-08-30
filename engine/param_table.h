@@ -116,7 +116,14 @@ struct Span { float lo, hi; };
      per-note bind probability, 0 = off with a +-0.03 dead zone in the
      engine. Appended LAST: tests/param_impact_points.h's frozen vectors are
      positional, so an append is free and an insertion is not. */ \
-  X(P_PULL,      -1.f, 1.f, 0)
+  X(P_PULL,      -1.f, 1.f, 0) \
+  /* PAN: per-deck balance in the master mix (spec 2026-08-30 pan). Bipolar,
+     0 = centre, and centre is unity on both channels. Appended LAST for the
+     same reason P_PULL was: tests/param_impact_points.h's frozen vectors are
+     positional, so an append zero-fills the new tail slot and an insertion
+     silently pairs every later row with the wrong parameter. On a -1..+1 axis
+     that zero-fill lands exactly on centre, i.e. on the neutral value. */ \
+  X(P_PAN_A,     -1.f, 1.f, 0)   X(P_PAN_B,     -1.f, 1.f, 0)
 
 enum ParamId {
 #define SPKY_ENUM(id, lo, hi, st) id,
@@ -197,6 +204,8 @@ inline void apply_param(Instrument& in, int param, float v) {
     case P_TIDE:       in.set_tide(v); break;
     case P_CHOKE:      in.set_choke(v); break;
     case P_PULL:       in.set_pull(v); break;
+    case P_PAN_A:      in.set_pan(PART_A, v); break;
+    case P_PAN_B:      in.set_pan(PART_B, v); break;
     case P_SHUFFLE:    in.set_shuffle(v); break;
     case P_DRIVE:      in.set_master_drive(v); break;
     case P_REV_SIZE:   in.set_reverb_size(v); break;

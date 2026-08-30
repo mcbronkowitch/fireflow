@@ -67,7 +67,7 @@ TEST_CASE("param table: inventory marker -- P_MODE, P_PACE, P_COUNT") {
     // only that marker moves. That is what an append is supposed to cost.
     CHECK(P_MODE == 62);
     CHECK(P_PACE == P_MODE + 1);
-    CHECK(P_PULL == P_COUNT - 1);      // inventory marker: bump on append
+    CHECK(P_PAN_B == P_COUNT - 1);     // inventory marker: bump on append
 }
 
 TEST_CASE("param table: the two rows other code reads by hand") {
@@ -86,6 +86,15 @@ TEST_CASE("param table: PULL is bipolar and continuous") {
     CHECK(kParams[P_PULL].steps == 0);
     CHECK(kParams[P_PULL].lo == doctest::Approx(-1.f));
     CHECK(kParams[P_PULL].hi == doctest::Approx(1.f));
+}
+
+TEST_CASE("param table: PAN is bipolar and continuous") {
+    CHECK(kParams[P_PAN_A].steps == 0);
+    CHECK(kParams[P_PAN_A].lo == doctest::Approx(-1.f));
+    CHECK(kParams[P_PAN_A].hi == doctest::Approx(1.f));
+    CHECK(kParams[P_PAN_B].steps == 0);
+    CHECK(kParams[P_PAN_B].lo == doctest::Approx(-1.f));
+    CHECK(kParams[P_PAN_B].hi == doctest::Approx(1.f));
 }
 
 TEST_CASE("param table: apply_mode_and_steps reaches what apply_param refuses") {

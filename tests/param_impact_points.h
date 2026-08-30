@@ -39,6 +39,11 @@
 // sides of the round trip. The inventory marker in tests/test_param_table.cpp
 // moved with it both times.
 //
+// APPENDED AGAIN, HARMLESSLY: P_PAN_A/P_PAN_B on 2026-08-30 (spec pan), at the
+// very end. Every row below keeps its index; the short aggregate initializers
+// zero-fill the two new tail slots. On PAN's -1..+1 axis 0.0 is centre, so the
+// frozen points render with PAN neutral -- which is what they should do.
+//
 // THE TWO DIRECTIONS ARE NOT SYMMETRIC, and 2026-08-20 is the proof: an
 // INSERTION shifts these vectors silently (short aggregate initializer,
 // zero-filled tail, no warning -- the failure mode this header spends most
