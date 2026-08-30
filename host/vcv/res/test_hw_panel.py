@@ -371,10 +371,11 @@ def test_hw_only_inventory():
 
 
 def test_mod_wreaths():
-    """Spec 2026-08-22 §5 (revised 2026-08-22 after the owner reviewed the
-    rendered plate): every mod target's own body ring is recoloured to its
-    zone accent -- same radius, same stroke-width, solid, no satellite
-    circle -- and every other knob keeps the plain HW_RING body ring."""
+    """Spec 2026-08-22 §5 revision 3 (2026-08-30): the accent ring is not
+    plate print any more. Every knob on the plate wears the plain HW_RING
+    body ring; the accent moved into the generated header as kModRing[], and
+    Rack draws it only while the MOD latch is engaged. The aluminium panel
+    therefore marks nothing -- that is the stated cost of variant A."""
     want = ({f"{b}_A" for b, _, _, _ in gp.MOD_DECK_TARGETS}
             | {f"{b}_B" for b, _, _, _ in gp.MOD_DECK_TARGETS}
             | {b for b, _, _, _ in gp.MOD_CENTER_TARGETS})
@@ -387,23 +388,43 @@ def test_mod_wreaths():
     check(not re.search(r'<circle[^>]*stroke-dasharray', svg),
           "a dashed satellite circle still exists on the plate")
     knobs = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) != "P"]
-    accent_rings = 0
     for c in knobs:
         br = hw.body_r(c)
-        want_stroke = hw.ACC[hw.zone_of(c.x)] if c.enum in want else hw.HW_RING
         pat = (f'<circle cx="{c.x:.3f}" cy="{c.y:.3f}" r="{br:.3f}" '
-               f'fill="{hw.HW_WELL}" stroke="{want_stroke}" stroke-width="0.3"/>')
-        check(pat in svg, f"{c.enum} body ring is not {want_stroke}: {pat}")
-        if want_stroke != hw.HW_RING:
-            accent_rings += 1
-    check(accent_rings == len(want),
-          f"{accent_rings} knobs carry an accent ring, want {len(want)}")
-    # the master knobs are deliberately unwreathed
+               f'fill="{hw.HW_WELL}" stroke="{hw.HW_RING}" stroke-width="0.3"/>')
+        check(pat in svg, f"{c.enum} body ring is not the plain HW_RING: {pat}")
+    for col in set(hw.ACC.values()):
+        check(f'stroke="{col}" stroke-width="0.3"' not in svg,
+              f"an accent body ring in {col} is still printed on the plate")
+    # the master knobs are deliberately unringed
     for enum in ("MOD_A", "MOD_B"):
         check(enum not in want, f"{enum} unexpectedly in MOD_WREATHED")
-    # MODBTN: real param, out of kHwOnlyCtls, caption on the jack-row baseline
     src = open(os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"),
                encoding="utf-8").read()
+    # kModRing is parallel to kParamCtls: {rgb, radius mm}, rgb 0 = no ring.
+    # Colour and radius live HERE, not in the widget -- hardcoded literals
+    # duplicating ACC / ZONE_A / W are what sank the first ModDepthRing
+    # (spec §5 revision 2).
+    m = re.search(r"static const HwModRing kModRing\[\] = \{(.*?)\n\};", src, re.S)
+    check(m is not None, "kModRing table missing from generated_hw_panel.hpp")
+    if m:
+        rows = re.findall(r"\{\s*(0x[0-9A-F]+|0)\s*,\s*([0-9.]+)f\s*\}", m.group(1))
+        check(len(rows) == len(hw.HW_PARAMS),
+              f"kModRing has {len(rows)} rows, want {len(hw.HW_PARAMS)}")
+        lit = 0
+        for c, (rgbs, rs) in zip(hw.HW_PARAMS, rows):
+            if c.enum in want:
+                lit += 1
+                check(rgbs == hw.rgb(hw.ACC[hw.zone_of(c.x)]),
+                      f"{c.enum} ring colour {rgbs} is not its zone accent")
+                check(abs(float(rs) - hw.body_r(c)) < 1e-6,
+                      f"{c.enum} ring radius {rs} != body_r {hw.body_r(c)}")
+            else:
+                check(rgbs == "0", f"{c.enum} carries a ring but owns no depth")
+        check(lit == len(want),
+              f"{lit} knobs carry an accent ring, want {len(want)}")
+    check("kModRing desynced" in src, "kModRing has no length static_assert")
+    # MODBTN: real param, out of kHwOnlyCtls, caption on the jack-row baseline
     check(re.search(r"\{\s*MODBTN\s*,\s*WK_LATCH", src), "MODBTN not in kParamCtls")
     hwonly = src.split("kHwOnlyCtls")[1]
     check("MODBTN" not in hwonly.split("};")[0], "MODBTN still in kHwOnlyCtls")

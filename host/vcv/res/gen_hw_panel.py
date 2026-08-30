@@ -131,9 +131,10 @@ def _blend_hex(fg, bg, t):
 # at partial alpha has to be mixed down here or Rack would print it solid.
 LED_ON = {s: _blend_hex(ACC[s], LED_OFF, 0.55) for s in ACC}
 
-# Which pots wear the printed mod wreath (spec 2026-08-22 §5, variant B):
-# exactly the faces with a depth param. Derived from gen_panel's tables so
-# the plate and the param block cannot drift apart.
+# Which pots wear the mod ring (spec 2026-08-22 §5): exactly the faces with a
+# depth param. Derived from gen_panel's tables so the ring and the param block
+# cannot drift apart. Since revision 3 (2026-08-30) this feeds kModRing in the
+# header, not the plate print -- see the ring comment in svg().
 MOD_WREATHED = ({f"{b}_A" for b, _, _, _ in gp.MOD_DECK_TARGETS}
                 | {f"{b}_B" for b, _, _, _ in gp.MOD_DECK_TARGETS}
                 | {b for b, _, _, _ in gp.MOD_CENTER_TARGETS})
@@ -971,15 +972,15 @@ def svg():
         else:
             # The mounting hole, drawn at the real pot body -- not a cap. Rack
             # puts its own knob widget on top and a plate has a hole here.
-            # Variant B mod wreath (docs/superpowers/specs/2026-08-22-mod-latch-
-            # layer-design.md §5): a wreathed knob's own body ring is recoloured
-            # to the zone accent instead of HW_RING -- same radius, same
-            # stroke-width, solid. A non-wreathed knob keeps the plain dark
-            # ring. Absence of the accent colour still carries the meaning:
-            # the knob keeps its sound function while MOD is latched.
-            ring = ACC[zone_of(c.x)] if c.enum in MOD_WREATHED else HW_RING
+            # Every body ring is the plain dark hairline again. The accent
+            # recolour that marked a modulatable knob was plate print from
+            # 2026-08-22 to 2026-08-30; it now lives in kModRing and Rack
+            # draws it only while the MOD latch is engaged (spec
+            # docs/superpowers/specs/2026-08-22-mod-latch-layer-design.md §5
+            # revision 3). Silkscreen cannot switch, so the aluminium plate
+            # marks nothing -- the accepted cost of that call.
             P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="{mm(br)}" '
-                      f'fill="{HW_WELL}" stroke="{ring}" stroke-width="0.3"/>')
+                      f'fill="{HW_WELL}" stroke="{HW_RING}" stroke-width="0.3"/>')
         if c.label:
             lx, ly, anchor, size, colour = hw_label(c)
             P.append(f'<text x="{mm(lx)}" y="{mm(ly)}" fill="{colour}" '
@@ -1030,6 +1031,25 @@ def header():
     L2.append("};")
     L2.append("static_assert(sizeof(kParamSize) == sizeof(kParamCtls) / "
                "sizeof(kParamCtls[0]), \"kParamSize desynced\");")
+    # The mod ring left the plate on 2026-08-30 (spec 2026-08-22 §5 revision
+    # 3): Rack draws it, gated on the MOD latch, so the colour and the radius
+    # have to reach the widget as data. They come from here and nowhere else
+    # -- a widget carrying its own ACC / ZONE_A / W literals is exactly what
+    # sank the first ModDepthRing.
+    L2.append("// Latch-gated mod ring, parallel to kParamCtls, same order.")
+    L2.append("// rgb 0 = this knob owns no depth and wears no ring. rMm is")
+    L2.append("// the pot BODY radius -- the ring the plate used to print.")
+    L2.append("struct HwModRing { unsigned rgb; float rMm; };")
+    L2.append("static const HwModRing kModRing[] = {")
+    for c in HW_PARAMS:
+        if c.enum in MOD_WREATHED:
+            L2.append(f"    {{{rgb(ACC[zone_of(c.x)])}, {body_r(c):.3f}f}},")
+        else:
+            L2.append("    {0, 0.000f},")
+    L2.append("};")
+    L2.append("static_assert(sizeof(kModRing) / sizeof(kModRing[0]) == "
+               "sizeof(kParamCtls) / sizeof(kParamCtls[0]), "
+               "\"kModRing desynced\");")
     L2.extend(emit_table("kInputCtls", HW_INPUTS))
     L2.extend(emit_table("kOutputCtls", HW_OUTPUTS))
     L2.extend(emit_table("kLightCtls", HW_LIGHTS))

@@ -2167,6 +2167,11 @@ Model* modelFireflow = createModel<Fireflow, FireflowWidget>("Fireflow");
 // ATTACK/BEND knob and the sampler-only REC pads. An aluminium panel can do
 // none of those tricks, so neither does its rehearsal.
 //
+// One knowing exception since 2026-08-30: HwModRing appears and vanishes with
+// the MOD latch, which no printed plate can. It is the owner's call (spec
+// 2026-08-22 §5 revision 3) and its price is stated there -- the real panel
+// marks its modulatable knobs nowhere at all.
+//
 // Font handling follows PanelText's proven idiom (loadFont from the shared
 // system asset, not APP->window->uiFont) rather than the brief's sketch --
 // uiFont is the Rack UI's own font, not the panel's ShareTechMono, and would
@@ -2202,6 +2207,34 @@ struct HwPanelText : Widget {
                 text(c.lbl.x, c.lbl.y, c.lblSize, 0.f, c.lblRgb, c.anchor, c.label);
         for (const auto& t : spkyhw::kPanelTexts)
             text(t.mm.x, t.mm.y, t.size, t.spacing, t.rgb, t.anchor, t.str);
+    }
+};
+
+// The mod ring, latch-gated (spec 2026-08-22 §5 revision 3, 2026-08-30). It
+// draws exactly the stroke the plate printed from 2026-08-22 to 2026-08-30 --
+// the knob's own body ring at the body radius, 0.3 mm hairline, zone accent --
+// but only while MOD is latched, which silkscreen cannot do. Colour and radius
+// arrive from spkyhw::kModRing; no ACC / ZONE_A / W literals live here. That
+// duplication is what sank the first ModDepthRing, and the ring came back on
+// the owner's call (2026-08-30) with the plate print given up in exchange.
+struct HwModRing : Widget {
+    Fireflow* fireflow = nullptr;
+    int soundId = 0;
+    NVGcolor colour = nvgRGB(0, 0, 0);
+    float rMm = 0.f;
+
+    // Same predicate as the depth knob it belongs to: a ring around a hidden
+    // ATTACK on a BBD deck would outlive its own control.
+    void step() override {
+        setVisible(ctlVisible(fireflow, soundId) && modLatched(fireflow));
+        Widget::step();
+    }
+    void draw(const DrawArgs& args) override {
+        nvgBeginPath(args.vg);
+        nvgCircle(args.vg, box.size.x * 0.5f, box.size.y * 0.5f, mm2px(rMm));
+        nvgStrokeColor(args.vg, colour);
+        nvgStrokeWidth(args.vg, mm2px(0.3f));
+        nvgStroke(args.vg);
     }
 };
 
@@ -2246,6 +2279,22 @@ struct FireflowHWWidget : ModuleWidget {
                         }
                         break;
                     }
+                    // The ring goes on before the knobs so the pointer stays
+                    // on top of it. It is drawn, not printed, since
+                    // 2026-08-30 -- the plate is one flat ring colour again.
+                    if (spkyhw::kModRing[i].rgb) {
+                        const unsigned c32 = spkyhw::kModRing[i].rgb;
+                        auto* ring = new HwModRing();
+                        ring->fireflow = module;
+                        ring->soundId = c.id;
+                        ring->colour = nvgRGB((c32 >> 16) & 0xFF,
+                                              (c32 >> 8) & 0xFF, c32 & 0xFF);
+                        ring->rMm = spkyhw::kModRing[i].rMm;
+                        const float d = mm2px(2.f * (ring->rMm + 0.3f));
+                        ring->box.size = Vec(d, d);
+                        ring->box.pos = pos.minus(Vec(d, d).div(2.f));
+                        addChild(ring);
+                    }
                     // wreathed: sound half hides under the latch (ModSound
                     // still runs ctlVisible first, so ATTACK keeps its BBD
                     // hiding under the layer too)...
@@ -2258,11 +2307,8 @@ struct FireflowHWWidget : ModuleWidget {
                         k->fireflow = module; k->ctlId = c.id;
                         addParam(k);
                     }
-                    // ...and the depth twin surfaces with it. The printed
-                    // wreath (res/gen_hw_panel.py's ZONE_A/W and ACC dict)
-                    // already marks which knobs are modulatable; there is no
-                    // dynamic ring to draw here any more (owner's call,
-                    // 2026-08-22 -- see spec §5).
+                    // ...and the depth twin surfaces with it, inside the ring
+                    // added above.
                     if (big) {
                         auto* d = createParamCentered<ModDepth<RoundBlackKnob>>(pos, module, depthId);
                         d->fireflow = module; d->soundId = c.id;

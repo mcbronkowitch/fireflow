@@ -209,6 +209,37 @@ panel**)
   ring remains visible around the Rack knob widget exactly as the plain
   `HW_RING` ring always has.
 
+**Revision 3 (2026-08-30): the ring is drawn again, and the plate gives it
+up.** The owner asked for the accent rings to show only while the MOD latch
+is engaged. Silkscreen cannot switch, so this is not a VCV cosmetic choice
+but a plate decision, and he took variant A of two: the print goes plain.
+
+- `gen_hw_panel.py` strokes **every** knob body ring in `HW_RING` again. The
+  plate reads as one ring colour, the way it did before 2026-08-22.
+- The accent moved into the generated header as `kModRing[]`, parallel to
+  `kParamCtls`: `{rgb, rMm}`, `rgb == 0` for a knob with no depth. Colour
+  (`ACC[zone_of(x)]`) and radius (`body_r`) are computed by the generator, so
+  the widget owns no `ACC`/`ZONE_A`/`W` literals — the defect that revision 2
+  named when it deleted `ModDepthRing` does not come back with it.
+- `HwModRing` in `host/vcv/src/Fireflow.cpp` draws that stroke — same body
+  radius, same 0.3 mm hairline, solid — gated on
+  `ctlVisible(soundId) && modLatched()`. The `ctlVisible` half matters: an
+  ATTACK ring must not outlive a BBD-hidden ATTACK. It is added before the
+  two knob widgets so the pointer stays on top.
+- Revision 2's "no duplicate signal" reasoning still holds and is why this
+  works: with the print gone, the drawn ring is the *only* accent ring, not a
+  second concentric one.
+- **The cost, stated plainly:** the aluminium panel now marks its modulatable
+  knobs nowhere at all. On hardware, pressing MOD changes the `MODBTN_L` lamp
+  and nothing else; which knobs carry a depth is learned, not read. VCV
+  therefore carries one indicator hardware cannot — knowingly, for the second
+  time, and this time on purpose. The comment above `FireflowHWWidget` records
+  the exception so nobody "fixes" the rehearsal back into agreement.
+- Guard: `res/test_hw_panel.py::test_mod_wreaths` inverted with it — the SVG
+  must contain **no** accent body ring, and `kModRing` must carry exactly one
+  lit entry per `MOD_WREATHED` face with the right colour and radius. The
+  assertion did not weaken; it changed address.
+
 ## 6. Measured facts this design stands on
 
 All probes 2026-08-22, scratchpad probe round (probe recipe
