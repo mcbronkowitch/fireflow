@@ -218,6 +218,11 @@ TEST_CASE("pan: the position is smoothed, not stepped") {
 // panned), and |c| <= 0.5 is the duck zone, so deck B is ducked but never
 // inhibited -- the duck gain is the only thing under test.
 TEST_CASE("pan: the CHOKE sidechain does not move with the knob") {
+    // Uses ENGINE_SYNTH on purpose: this gate can only go red because SYNTH
+    // carries real side energy (S/M 0.287, L/R correlation 0.848, spec
+    // §2/§5). Folding the pan pair into pri_gain agrees with today's unpanned
+    // max(|L|, |R|) whenever |L| == |R|, which is exact for a mono engine
+    // (FEED, BBD, TEST_TONE) -- swap this in and the gate would be vacuous.
     Instrument centre, left;
     for (Instrument* in : { &centre, &left }) {
         in->init(48000.f);

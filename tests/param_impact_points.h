@@ -62,9 +62,9 @@
 // P_PULL (2026-08-22), and is P_PAN_B as of 2026-08-30. If that case still
 // passes unmodified, nothing was inserted or removed above P_MODE and this
 // file's rows are still aligned. If you changed the enum and that case
-// reddened as intended, re-derive these vectors (there is no generator left -- re-measure by hand,
-// or shift the affected rows to match the new indices) before trusting a red
-// run here.
+// reddened as intended, re-derive these vectors (there is no generator left
+// -- re-measure by hand, or shift the affected rows to match the new
+// indices) before trusting a red run here.
 #pragma once
 #include "param_table.h"
 

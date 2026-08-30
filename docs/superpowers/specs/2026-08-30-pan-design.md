@@ -125,13 +125,17 @@ The argument is about what a sidechain is *for*. The detector answers one
 question — how loud is the priority deck right now — and that is a property of
 the deck, not of where it sits in the stereo field. A deck moved to one side is
 not a quieter deck: it is the same performance, placed. Folding PAN in would
-make the duck shallow out as the knob travels, which turns PAN into a second,
-hidden CHOKE amount and gives the player two controls over one behaviour. At a
-hard stop it is worse than shallow: one channel is dropped entirely, so a
-hard-panned deck would stop ducking whatever it had vacated — the opposite of
-what the sidechain exists to do. `pri_gain` therefore reads the unpanned
-`ga`/`gb`, exactly as the send does, and `tests/test_pan.cpp`'s fifth gate holds
-that down through `Instrument::choke_duck_gain()`.
+not change that reading uniformly: for a deck whose channels are equal (§2's
+FEED and TEST_TONE, `|L| == |R|` exactly) it would change nothing at any knob
+position, and for a deck with real side energy (SYNTH, BODY) it would lower the
+reading only on the samples where the attenuated channel happened to be the
+louder one — signal-dependent, not proportional to how far the knob has
+travelled. At a hard stop the detector still sees the unattenuated channel at
+full unity, so the duck does not stop there either; `pri_gain` is one scalar
+applied to the yielding deck's whole sum, not a per-channel value, so there is
+no per-channel duck for a hard pan to "stop". `pri_gain` therefore reads the
+unpanned `ga`/`gb`, exactly as the send does, and `tests/test_pan.cpp`'s fifth
+gate holds that down through `Instrument::choke_duck_gain()`.
 
 > **Correction, 2026-08-30 (pre-merge review).** An earlier revision of this
 > section argued the exclusion from an identity instead: the detector takes
@@ -140,11 +144,17 @@ that down through `Instrument::choke_duck_gain()`.
 > it.** The law guarantees the *unattenuated* channel is at unity; whether that
 > channel is the *louder* one is a property of the signal. For `p < 0` today's
 > `rect = ga·max(|L|, |R|)` and the folded-in `ga·max(|L|, (1−|p|)·|R|)` agree
-> only where `|L| ≥ (1−|p|)·|R|` at that sample — always for a genuinely mono
+> only where `|L| ≥ |R|` at that sample — always for a genuinely mono
 > deck, but on roughly half the samples for SYNTH (L/R correlation 0.848) and
 > BODY (0.811), and at a hard stop the right channel is gone. The conclusion
 > was right; the reason was not. It is recorded rather than quietly replaced so
 > that nobody re-derives it.
+>
+> **Second pass, same day.** The paragraph above this notice also stated two
+> false consequences — that the duck "would shallow out as the knob travels"
+> and that a hard-panned deck "would stop ducking whatever it had vacated."
+> Both were corrected in place on 2026-08-30. A section wrong once should not
+> be left to say so twice.
 
 PAN joins **after** `_deck_tap` and `_dry_tap` are written
 (`instrument.cpp:455`), the same rule MORPH and the CHOKE duck already obey

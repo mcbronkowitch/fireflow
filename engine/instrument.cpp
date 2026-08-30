@@ -372,17 +372,23 @@ void Instrument::process(const float* inL, const float* inR,
         // morph gains, exactly as at the reverb send. The detector answers
         // "how loud is the priority deck", which is a property of the deck,
         // not of where it sits in the stereo field: a deck moved to one side
-        // is not a quieter deck, and a duck that shallows out as you pan away
-        // would make the knob a second, hidden CHOKE amount. Folding the PAN
-        // pair in would also drop one channel entirely at a hard stop, so a
-        // hard-panned deck would stop ducking whatever lives in the channel it
-        // vacated -- the opposite of what the sidechain is for.
+        // is not a quieter deck. Folding PAN in would not change that reading
+        // uniformly: for a deck whose channels are equal (FEED, TEST_TONE) it
+        // would change nothing at any knob position, and for a deck with real
+        // side energy (SYNTH, BODY) it would lower the reading only on the
+        // samples where the attenuated channel happened to be the louder one
+        // -- signal-dependent, not proportional to how far the knob has
+        // travelled. At a hard stop the detector still sees the unattenuated
+        // channel at full unity, so the duck does not stop there either;
+        // pri_gain is one scalar for the whole deck sum, not per-channel, so
+        // there is no per-channel duck for a hard pan to "stop".
         // (An earlier draft of the spec argued this from max(|L|, |R|): the
         // law puts the UNATTENUATED channel at unity, so folding PAN in was
         // said to change nothing. That is false -- which channel is the loud
         // one is a property of the signal, and SYNTH and BODY carry real side
-        // energy, L/R correlation 0.848 and 0.811 (probe, 2026-08-30). The
-        // conclusion held, the reason did not; see the spec's §5.)
+        // energy, L/R correlation 0.848 and 0.811 (probe, 2026-08-30). A
+        // second pass the same day found the two consequence claims above
+        // this parenthetical were themselves false; see the spec's §5.)
         // tests/test_pan.cpp's fifth gate guards this line.
         const float pri_gain = (pri == PART_A) ? ga : gb;
         const float rect = std::max(std::fabs(pl[pri] * pri_gain),
