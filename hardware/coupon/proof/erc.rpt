@@ -1,0 +1,22 @@
+ERC report (2026-08-30T20:43:04, Encoding UTF8)
+Report includes: Errors, Warnings
+
+***** Sheet /
+[pin_to_pin]: Pins vom Typ Output und Output sind verbunden
+    ; error
+    @(58.42 mm, 210.82 mm): Symbol U_IN1 Pin 9 [Q7, Output, Line]
+    @(80.01 mm, 93.98 mm): Symbol U_SM Pin D10 [SPI_SCK, Output, Line]
+[pin_not_driven]: Input pin not driven by any Output pins
+    ; error
+    @(444.50 mm, 140.97 mm): Symbol U_SR1 Pin 14 [SER, Input, Line]
+[lib_symbol_mismatch]: Symbol "74HC165" stimmt nicht mit Kopie in Bibliothek "74xx" überein
+    ; warning
+    @(45.72 mm, 226.06 mm): Symbol U_IN1 [74HC165]
+
+ ** ERC messages: 3  Errors 2  Warnings 1
+
+ ** Ignored checks:
+    - Global label only appears once in the schematic
+    - Four connection points are joined together
+    - SPICE model issue
+    - Assigned footprint doesn't match footprint filters
