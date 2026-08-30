@@ -242,7 +242,8 @@ def test_bbd_pitch_flux_time_collections():
     retired (task 6, spec 2026-08-09 hw-control-reduction), and TIME
     (FLUXRATE_A/B, unchanged ParamId) is the only surviving delay-time
     widget. APPENDED_PANEL_PARAMS was empty from task 6 until PACE (spec
-    2026-08-12 modulation-pace) became its first and, so far, only member."""
+    2026-08-12 modulation-pace) became its first member; DEPTH_A/B, PULL
+    and now PAN_A/B followed."""
     persistent = [c.enum for c in g.PARAMS]
     runtime = [c.enum for c in g.RUNTIME_PANEL_PARAMS]
     static = [c.enum for c in g.STATIC_PANEL_PARAMS]
@@ -257,8 +258,9 @@ def test_bbd_pitch_flux_time_collections():
     # and PULL two further from the tail, and PAN's own MODD_PAN_A/B (deck
     # loop runs before the fixed MOD_CENTER_TARGETS tail) grow
     # MOD_LAYER_PARAMS by two, so PAN_A/B sit exactly MOD_LAYER_PARAMS'
-    # new length + 2 from the end -- the same distance PULL used to sit
-    # at, before the mod layer itself grew.
+    # new length + 2 from the end -- PAN now holds the role PULL held
+    # before it: the last appended pair directly ahead of the mod layer's
+    # fixed-length tail.
     check(persistent[-56:-54] == ['DEPTH_A', 'DEPTH_B'],
           "the appended FEED block moved out of its slot ahead of PULL")
     check(persistent[-54] == 'PULL',

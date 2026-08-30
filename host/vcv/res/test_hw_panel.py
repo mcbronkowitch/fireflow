@@ -343,8 +343,9 @@ def test_size_classes_match_the_spec():
     small = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "S"]
     # 51 + DEPTH×2 = 53, +1 (spec 2026-07-19 pull-chord-gravity): PULL joined
     # as a small knob, HW_SIZE["PULL"]="S". FILT×2 left again 2026-08-23,
-    # REV_MIX×2 joined 2026-08-30, PAN×2 joined the same day (spec 2026-08-30
-    # pan) taking the slot REV_MIX×2 had been held next to.
+    # REV_MIX×2 joined 2026-08-30, and PAN×2 joined the same day (spec
+    # 2026-08-30 pan), filling the slot beside GRIT that had been held open
+    # for it.
     check(len(small) == 58, f"expected 58 small params, got {len(small)}")
     check(abs(hw.CLASS_R["G"] - 8.5) < 1e-9, "CLASS_R G is not 8.5")
     check(abs(hw.CLASS_R["S"] - 6.0) < 1e-9, "CLASS_R S is not 6.0")
