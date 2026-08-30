@@ -53,6 +53,20 @@ BRICK      = "#8f4a45"   # "I refused you" -- a muted, greyish red. Same value
                          # 2026-08-14; the value is kept as the palette's
                          # "refused" slot for whatever needs one next.
 GRAPHITE   = "#252721"   # knob caps, jack wells
+KNOB_RIM   = "#3a3d36"   # hairline that lifts a cap off a dark plate
+# FfKnob's footprint, in mm. These are the radii the stock RoundBlackKnob and
+# Trimpot occupied, kept so replacing them moves nothing on either panel and
+# no caption-clearance check has to run again. gen_hw_panel.py's RACK_R reads
+# G and S from here rather than carrying its own copy.
+FF_KNOB_R  = {"G": 4.80, "S": 3.02}
+# FfPort. Same footprint as the stock PJ301MPort it replaces -- Rack lands a
+# cable end on the port's centre, so changing this would move every plugged
+# cable. gen_hw_panel.py's RACK_R["J"] reads it rather than repeating it.
+FF_PORT_R  = 4.02
+PORT_WELL  = "#1b1d19"   # the barrel a plug goes into
+PORT_RING  = "#6b7278"   # pewter, not chrome: the stock port's shine was the
+                         # one thing on either plate that still read as Rack's
+PORT_HOLE  = "#0b0c0a"
 WELL       = "#1d1f1a"   # LED-ring well (dark, so the glow reads)
 WHITE      = "#fffdf7"   # pad keys / knob ticks
 GREEN      = "#1d6f5f"   # part A accent (solder green)
@@ -1026,24 +1040,14 @@ def ring_svg(cx, dot):
     return "\n".join(P)
 
 def knob_svg(c):
-    """Graphite cap + accent collar + paper tick. The collar sits OUTSIDE the
-    runtime widget's footprint (RoundBlackKnob r4.2, Trimpot ~r3.3), so the
-    side colour stays visible in Rack, not just in this preview."""
+    """Graphite cap + paper tick, the bed a knob widget sits on.
+
+    The accent collar used to be printed here at c.r + 0.85, outside the stock
+    widget's footprint, because a RoundBlackKnob covered everything inside it.
+    FfKnob draws its own collar since 2026-08-30, so printing one too would put
+    two rings on every knob -- the print is gone and kParamAccent carries the
+    colour instead."""
     P = []
-    big = c.kind in (BIGKNOB, KNOBC)
-    accent = side_accent(c.x)
-    if c.enum == "MORPH":  # signature: the bridge knob wears both colours
-        collar_r = c.r + 0.85
-        for (col, sweep) in ((GREEN, 0), (COPPER, 1)):
-            P.append(f'<path d="M {mm(c.x)} {mm(c.y-collar_r)} '
-                     f'A {mm(collar_r)} {mm(collar_r)} 0 0 {sweep} '
-                     f'{mm(c.x)} {mm(c.y+collar_r)}" fill="none" '
-                     f'stroke="{col}" stroke-width="0.5"/>')
-    elif big:
-        # Only the orbit keeps its collar -- it marks the performance layer.
-        # 20+ rings per side on the small pots were noise (spec §3).
-        P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="{mm(c.r + 0.85)}" '
-                 f'fill="none" stroke="{accent}" stroke-width="0.5"/>')
     P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="{mm(c.r)}" '
              f'fill="url(#knobCap)" stroke="{GRAPHITE}" stroke-width="0.3"/>')
     P.append(f'<line x1="{mm(c.x)}" y1="{mm(c.y)}" x2="{mm(c.x)}" '
@@ -1132,13 +1136,14 @@ def svg():
             P.append(f'<rect x="{mm(c.x-1.1)}" y="{mm(c.y-2.4)}" width="2.2" '
                      f'height="2.4" rx="0.5" fill="{GRAPHITE}"/>')
         elif c.kind in (LATCH, SMBTN):
-            # Pads: a plain paper key bed, no accent edge. Rack's button widgets
-            # are ROUND and cover the square almost exactly, so a coloured
-            # stroke survived only as a halo peeking out around each button
-            # (spotted in Rack, 2026-07-18) -- side identity is carried by the
-            # edge bands, ring letter and sector tints anyway.
+            # Pads: the key bed, printed at the size FfPad covers. It was
+            # paper white until 2026-08-30, from the days of a ROUND Rack
+            # button on a square bed -- anything but a plain fill survived
+            # only as a halo peeking out (spotted in Rack, 2026-07-18). FfPad
+            # is square and the same size, so the bed is now the cap's own
+            # colour: what little AA lets through no longer reads as a rim.
             P.append(f'<rect x="{mm(c.x-c.r)}" y="{mm(c.y-c.r)}" width="{mm(2*c.r)}" '
-                     f'height="{mm(2*c.r)}" rx="1.0" fill="{WHITE}"/>')
+                     f'height="{mm(2*c.r)}" rx="1.0" fill="{PORT_WELL}"/>')
         else:
             P.append(knob_svg(c))
         if c.label:
@@ -1175,6 +1180,21 @@ def header():
               "unsigned char anchor; const char* str; };")
     L2.append("struct DynCaption { int id; int driverId; int count; "
               "const char* words[6]; };")
+    # FfKnob's collar and pointer colour. Two per row so the widget needs no
+    # branch for MORPH, the bridge knob that has worn both side colours since
+    # the 2026-07-18 faceplate: equal halves draw one solid collar, differing
+    # halves draw two arcs. Declared here and used by both panels -- the hw
+    # header pulls it in with `using namespace spkyvcv`.
+    L2.append("struct FfAccent { unsigned rgbA, rgbB; };")
+    L2.append(f"static constexpr unsigned kFfKnobCap = {rgb(GRAPHITE)};")
+    L2.append(f"static constexpr unsigned kFfKnobRim = {rgb(KNOB_RIM)};")
+    L2.append(f"static constexpr float kFfKnobRBig = {FF_KNOB_R['G']:.3f}f;   // mm")
+    L2.append(f"static constexpr float kFfKnobRSmall = {FF_KNOB_R['S']:.3f}f; // mm")
+    L2.append(f"static constexpr float kFfPortR = {FF_PORT_R:.3f}f;      // mm")
+    L2.append(f"static constexpr unsigned kFfPortWell = {rgb(PORT_WELL)};")
+    L2.append(f"static constexpr unsigned kFfPortRing = {rgb(PORT_RING)};")
+    L2.append(f"static constexpr unsigned kFfPortHole = {rgb(PORT_HOLE)};")
+    L2.append(f"static constexpr float kFfPadR = {GLYPH_R[LATCH]:.3f}f;   // mm")
     L2.append(f"static constexpr int PART_STRIDE = {PART_STRIDE};")
     L2.append(f"static constexpr float kRingR = {RING_R:.3f}f;      // mm, LED-dot orbit")
     L2.append(f"static constexpr float kRingDotR = 0.95f;   // mm, lit-dot radius")
@@ -1207,6 +1227,19 @@ def header():
         L2.append("};")
 
     emit_table("kParamCtls",  RUNTIME_PANEL_PARAMS)
+    L2.append("// Knob accent, parallel to kParamCtls, same order. Green left,")
+    L2.append("// copper right, muted in the centre strip -- side_accent().")
+    L2.append("static const FfAccent kParamAccent[] = {")
+    for c in RUNTIME_PANEL_PARAMS:
+        if c.enum == "MORPH":
+            L2.append(f"    {{{rgb(GREEN)}, {rgb(COPPER)}}},")
+        else:
+            a = rgb(side_accent(c.x))
+            L2.append(f"    {{{a}, {a}}},")
+    L2.append("};")
+    L2.append("static_assert(sizeof(kParamAccent) / sizeof(kParamAccent[0]) == "
+              "sizeof(kParamCtls) / sizeof(kParamCtls[0]), "
+              "\"kParamAccent desynced\");")
     emit_table("kInputCtls",  INPUTS)
     emit_table("kHwModInputCtls", HW_MOD_INPUTS)
     emit_table("kOutputCtls", OUTPUTS)

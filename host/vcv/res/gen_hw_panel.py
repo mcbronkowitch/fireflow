@@ -44,8 +44,11 @@ HW_RING    = "#33454e"            # hairline around a body
 HW_RING2   = "#1e2a30"            # secondary hairline (LED bezel)
 HW_WELL    = "#080b0d"            # mounting hole under a pot
 JACK_METAL = "#7f8f96"
-PAD_FILL   = "#dbe9ef"            # button keycap
-PAD_STROKE = "#3c525c"
+PAD_FILL   = "#151b1f"            # button keycap. Near-white until 2026-08-30,
+                                  # when FfPad joined the knob/jack family: a
+                                  # dark cap with an accent edge. The edge
+                                  # colour is per-pad now, so PAD_STROKE is
+                                  # gone -- see pad_accent().
 LED_OFF    = "#0d1417"
 ACC = {"A": "#3fbf9c", "B": "#e8945a", "C": "#7fb6c9"}
 
@@ -95,7 +98,8 @@ CAPTION_GAP = 3.60
 # and it is the one that can bury a legend the SVG preview shows fine.
 # Measured from Rack2Pro/res/ComponentLibrary at 75 dpi -- RoundBlackKnob
 # 28.348 px, Trimpot 17.856 px, VCVButton 18.000 px, PJ301M 23.700 px.
-RACK_R = {"G": 4.80, "S": 3.02, "P": 3.05, "J": 4.02, "L": 1.50}
+RACK_R = {"G": gp.FF_KNOB_R["G"], "S": gp.FF_KNOB_R["S"],
+          "P": 3.05, "J": gp.FF_PORT_R, "L": 1.50}
 
 # ShareTechMono, the face HwPanelText loads: 0.5 em advance, ~0.72 em cap
 # height. Both numbers are what the legend notches are cut to, via text_run.
@@ -140,6 +144,13 @@ MOD_WREATHED = ({f"{b}_A" for b, _, _, _ in gp.MOD_DECK_TARGETS}
                 | {b for b, _, _, _ in gp.MOD_CENTER_TARGETS})
 
 
+# The two keycaps whose position lies. MOD sits at the right end of the jack
+# row and SHFT at the left end, so zone_of() would file the global MOD latch
+# under deck B and SHFT under deck A. Both are global; both get the neutral
+# centre accent. Same reasoning that kept the jacks colourless entirely.
+GLOBAL_KEYS = {"MODBTN", "SHIFTBTN"}
+
+
 def zone_of(x):
     """Which of the three accent zones x falls in. The plate is one flat
     surface now -- this only picks a group field's tint, a lamp's lit colour
@@ -149,6 +160,11 @@ def zone_of(x):
     if x > W - ZONE_A:
         return "B"
     return "C"
+
+def pad_accent(c):
+    """A keycap's edge colour: its zone, unless the key is a global one."""
+    return ACC["C"] if c.enum in GLOBAL_KEYS else ACC[zone_of(c.x)]
+
 
 HW_SIZE = {
     "MOD": "G", "DENSITY": "G",
@@ -968,7 +984,7 @@ def svg():
         elif hw_class(c.enum) == "P":
             P.append(f'<rect x="{mm(c.x-c.r)}" y="{mm(c.y-c.r)}" width="{mm(2*c.r)}" '
                       f'height="{mm(2*c.r)}" rx="1.2" fill="{PAD_FILL}" '
-                      f'stroke="{PAD_STROKE}" stroke-width="0.3"/>')
+                      f'stroke="{pad_accent(c)}" stroke-width="0.3"/>')
         else:
             # The mounting hole, drawn at the real pot body -- not a cap. Rack
             # puts its own knob widget on top and a plate has a hole here.
@@ -1050,6 +1066,22 @@ def header():
     L2.append("static_assert(sizeof(kModRing) / sizeof(kModRing[0]) == "
                "sizeof(kParamCtls) / sizeof(kParamCtls[0]), "
                "\"kModRing desynced\");")
+    # FfKnob's collar and pointer. FfAccent itself is declared in
+    # generated_panel.hpp; both halves are the same zone here -- the two-tone
+    # row exists for the big panel's MORPH, which this plate has no twin for.
+    L2.append("// Knob and keycap accent, parallel to kParamCtls, same order.")
+    L2.append("static const FfAccent kParamAccent[] = {")
+    for c in HW_PARAMS:
+        a = rgb(pad_accent(c) if hw_class(c.enum) == "P" else ACC[zone_of(c.x)])
+        L2.append(f"    {{{a}, {a}}},")
+    L2.append("};")
+    L2.append("static_assert(sizeof(kParamAccent) / sizeof(kParamAccent[0]) == "
+               "sizeof(kParamCtls) / sizeof(kParamCtls[0]), "
+               "\"kParamAccent desynced\");")
+    # FfPad covers its printed bed exactly, so the widget's half-width is the
+    # pad's own body radius, not RACK_R -- the stock button was smaller than
+    # the square it sat on, which is what made the two read as two objects.
+    L2.append(f"static constexpr float kFfPadR = {BODY_R['P']:.3f}f;  // mm")
     L2.extend(emit_table("kInputCtls", HW_INPUTS))
     L2.extend(emit_table("kOutputCtls", HW_OUTPUTS))
     L2.extend(emit_table("kLightCtls", HW_LIGHTS))

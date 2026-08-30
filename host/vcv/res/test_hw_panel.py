@@ -393,8 +393,12 @@ def test_mod_wreaths():
         pat = (f'<circle cx="{c.x:.3f}" cy="{c.y:.3f}" r="{br:.3f}" '
                f'fill="{hw.HW_WELL}" stroke="{hw.HW_RING}" stroke-width="0.3"/>')
         check(pat in svg, f"{c.enum} body ring is not the plain HW_RING: {pat}")
+    # Only body rings are checked, not every accent stroke: the keycaps have
+    # worn an accent edge at the same width since 2026-08-30 (see
+    # test_pad_keycaps_are_dark_and_accented), and those are rects.
     for col in set(hw.ACC.values()):
-        check(f'stroke="{col}" stroke-width="0.3"' not in svg,
+        check(not re.search(r'<circle[^>]*stroke="%s" stroke-width="0\.3"' % col,
+                            svg),
               f"an accent body ring in {col} is still printed on the plate")
     # the master knobs are deliberately unringed
     for enum in ("MOD_A", "MOD_B"):
@@ -432,6 +436,64 @@ def test_mod_wreaths():
     shift = next(c for c in hw.HW_ONLY if c.enum == "SHIFTBTN")
     my, sy = hw.hw_label(mod)[1], hw.hw_label(shift)[1]
     check(abs(my - sy) < 1e-6, f"MOD caption baseline {my} != SHFT {sy}")
+
+
+def test_knob_accent_table():
+    """FfKnob draws its collar and pointer in the zone accent, and the colour
+    reaches it as data: kParamAccent is parallel to kParamCtls, two colours per
+    row so the big panel's two-tone MORPH needs no branch in the widget. On
+    this plate both halves are always the same zone."""
+    src = open(os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"),
+               encoding="utf-8").read()
+    m = re.search(r"static const FfAccent kParamAccent\[\] = \{(.*?)\n\};",
+                  src, re.S)
+    check(m is not None, "kParamAccent table missing from generated_hw_panel.hpp")
+    if m:
+        rows = re.findall(r"\{\s*(0x[0-9A-F]+)\s*,\s*(0x[0-9A-F]+)\s*\}", m.group(1))
+        check(len(rows) == len(hw.HW_PARAMS),
+              f"kParamAccent has {len(rows)} rows, want {len(hw.HW_PARAMS)}")
+        for c, (a, b) in zip(hw.HW_PARAMS, rows):
+            # Keycaps route through pad_accent(): MOD sits at the right end of
+            # the jack row and would be filed under deck B by position alone.
+            want = hw.rgb(hw.pad_accent(c) if hw.hw_class(c.enum) == "P"
+                          else hw.ACC[hw.zone_of(c.x)])
+            check(a == want and b == want,
+                  f"{c.enum} accent {a}/{b} is not its zone accent {want}")
+    check("kParamAccent desynced" in src, "kParamAccent has no length static_assert")
+
+
+def test_pad_keycaps_are_dark_and_accented():
+    """The keycaps went from a near-white bed to the knob/jack family on
+    2026-08-30: a dark cap with an accent edge, printed at the size FfPad
+    actually covers. MOD and SHFT are the exception the accent table has to
+    be told about -- they sit at the two ends of the jack row, so zone_of()
+    would file the global MOD latch under deck B and SHFT under deck A."""
+    r, g, b = hw.rgb(hw.PAD_FILL)[2:4], hw.rgb(hw.PAD_FILL)[4:6], hw.rgb(hw.PAD_FILL)[6:8]
+    check(max(int(r, 16), int(g, 16), int(b, 16)) < 0x40,
+          f"PAD_FILL {hw.PAD_FILL} is still a light keycap")
+    svg = open(os.path.join(HERE, "FireflowHW.svg"), encoding="utf-8").read()
+    pads = [c for c in hw.ALL_HW if hw.hw_class(c.enum) == "P"]
+    check(len(pads) == 4, f"expected 4 keycaps on the plate, got {len(pads)}")
+    for c in pads:
+        want = (hw.ACC["C"] if c.enum in hw.GLOBAL_KEYS
+                else hw.ACC[hw.zone_of(c.x)])
+        pat = (f'<rect x="{hw.mm(c.x - c.r)}" y="{hw.mm(c.y - c.r)}" '
+               f'width="{hw.mm(2 * c.r)}" height="{hw.mm(2 * c.r)}" rx="1.2" '
+               f'fill="{hw.PAD_FILL}" stroke="{want}" stroke-width="0.3"/>')
+        check(pat in svg, f"{c.enum} keycap is not dark with a {want} edge: {pat}")
+    check(hw.GLOBAL_KEYS == {"MODBTN", "SHIFTBTN"},
+          f"GLOBAL_KEYS drifted: {hw.GLOBAL_KEYS}")
+    src = open(os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"),
+               encoding="utf-8").read()
+    m = re.search(r"static const FfAccent kParamAccent\[\] = \{(.*?)\n\};",
+                  src, re.S)
+    if m:
+        rows = re.findall(r"\{\s*(0x[0-9A-F]+)\s*,\s*(0x[0-9A-F]+)\s*\}", m.group(1))
+        by = {c.enum: rows[i] for i, c in enumerate(hw.HW_PARAMS) if i < len(rows)}
+        want = hw.rgb(hw.ACC["C"])
+        check(by.get("MODBTN") == (want, want),
+              f"MODBTN accent {by.get('MODBTN')} is not the neutral {want}")
+    check("kFfPadR" in src, "the hw header carries no pad radius")
 
 
 def test_steps_has_no_lamp_on_the_hw_plate():

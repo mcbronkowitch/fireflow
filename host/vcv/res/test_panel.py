@@ -753,13 +753,83 @@ def test_play_mode_fields_are_exact_mirrors():
               "PLAY fields must render before controls")
 
 
-def test_small_knobs_have_no_collar():
-    """Spec §3: only the orbit and MORPH keep an accent collar."""
+def test_no_knob_wears_a_printed_collar():
+    """The accent collar moved from the plate onto the knob widget (2026-08-30):
+    FfKnob draws it, so the orbit and MORPH lose their printed one too, or the
+    panel would carry two collars per knob. Nothing prints at c.r + 0.85 now."""
     s = g.svg()
-    for enum in ('ATTACK_A', 'REV_SIZE', 'TEMPO', 'TIDE'):
-        c = ctl(enum)
+    for c in g.RUNTIME_PANEL_PARAMS:
         needle = f'cx="{g.mm(c.x)}" cy="{g.mm(c.y)}" r="{g.mm(c.r + 0.85)}"'
-        check(needle not in s, f"{enum} still draws a collar")
+        check(needle not in s, f"{c.enum} still draws a printed collar")
+    morph = ctl('MORPH')
+    check(f'A {g.mm(morph.r + 0.85)} {g.mm(morph.r + 0.85)}' not in s,
+          "MORPH still draws its printed two-tone collar arcs")
+
+
+def test_both_panels_use_the_house_port():
+    """The stock PJ301MPort's chrome ring was the last piece of Rack's own
+    component library left on either plate, and it fell out of the picture
+    once the knobs stopped being stock (2026-08-30). FfPort replaces it at
+    the same footprint, so cable ends land where they always did."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp"),
+               encoding="utf-8").read()
+    check("PJ301MPort" not in cpp, "a stock PJ301MPort is still built")
+    for needle, label in (("createInputCentered<FfPort>", "inputs"),
+                          ("createOutputCentered<FfPort>", "outputs")):
+        # one call site per panel, and both panels must agree
+        check(cpp.count(needle) == 2,
+              f"{label} must be built as FfPort on both panels "
+              f"(found {cpp.count(needle)} of 2)")
+
+
+def test_both_panels_use_the_house_pad():
+    """The last stock components on either plate were the buttons: a round
+    VCVLatch sitting on an 8 mm printed square. FfPad covers its own bed and
+    joins the knob/jack family (2026-08-30)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp"),
+               encoding="utf-8").read()
+    for stock in ("VCVLatch", "VCVButton"):
+        check(stock not in cpp, f"a stock {stock} is still built")
+    check(re.search(r"struct\s+EngineCycleLatch\s*:\s*FfPadLatch", cpp),
+          "EngineCycleLatch no longer rides on the house pad")
+    # REC is slot-visible on both panels; the mixin must wrap the house pad
+    check(cpp.count("SlotVisible<FfPadLatch>") == 2,
+          f"REC must be a slot-visible house pad on both panels "
+          f"(found {cpp.count('SlotVisible<FfPadLatch>')} of 2)")
+
+
+def test_knob_accent_table():
+    """FfKnob's collar and pointer colour arrives as data, not as a literal:
+    kParamAccent is parallel to kParamCtls and carries two colours per row.
+    They differ on exactly one control -- MORPH, the bridge knob, which has
+    worn both side colours since the 2026-07-18 faceplate."""
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "..", "src", "generated_panel.hpp"),
+               encoding="utf-8").read()
+    m = re.search(r"static const FfAccent kParamAccent\[\] = \{(.*?)\n\};",
+                  src, re.S)
+    check(m is not None, "kParamAccent table missing from generated_panel.hpp")
+    if m:
+        rows = re.findall(r"\{\s*(0x[0-9A-F]+)\s*,\s*(0x[0-9A-F]+)\s*\}", m.group(1))
+        check(len(rows) == len(g.RUNTIME_PANEL_PARAMS),
+              f"kParamAccent has {len(rows)} rows, "
+              f"want {len(g.RUNTIME_PANEL_PARAMS)}")
+        two_tone = []
+        for c, (a, b) in zip(g.RUNTIME_PANEL_PARAMS, rows):
+            if c.enum == 'MORPH':
+                check(a == g.rgb(g.GREEN) and b == g.rgb(g.COPPER),
+                      f"MORPH accent {a}/{b} is not GREEN/COPPER")
+            else:
+                want = g.rgb(g.side_accent(c.x))
+                check(a == want and b == want,
+                      f"{c.enum} accent {a}/{b} is not its side accent {want}")
+            if a != b:
+                two_tone.append(c.enum)
+        check(two_tone == ['MORPH'],
+              f"two-tone collars on {two_tone}, want MORPH alone")
+    check("kParamAccent desynced" in src, "kParamAccent has no length static_assert")
 
 
 LOWER_A = {   # enum -> (x, y)   part A; part B is W - x
@@ -1492,7 +1562,7 @@ def compact_cpp(source):
 def engine_cycle_wiring_issues(cpp, makefile, led_law):
     """Return scoped ENG integration regressions found in host source."""
     issues = []
-    latch = cpp_scope(cpp, "struct EngineCycleLatch : VCVLatch")
+    latch = cpp_scope(cpp, "struct EngineCycleLatch : FfPadLatch")
     shades = cpp_scope(cpp, "static const NVGcolor kEngineShades[]")
     config = cpp_scope(cpp, "void configControls()")
     push = cpp_scope(cpp, "void pushParams()")
@@ -1533,9 +1603,9 @@ def engine_cycle_wiring_issues(cpp, makefile, led_law):
             f"kEngineShades colours are {got_shades!r}, want {want_shades!r}")
 
     latch_expected = """
-struct EngineCycleLatch : VCVLatch {
+struct EngineCycleLatch : FfPadLatch {
     void drawLayer(const DrawArgs& args, int layer) override {
-        VCVLatch::drawLayer(args, layer);
+        FfPadLatch::drawLayer(args, layer);
         if (layer != 1) return;
         engine::ParamQuantity* pq = getParamQuantity();
         if (!pq) return;
@@ -1567,21 +1637,29 @@ else if (c.id == ENGINE_A || c.id == ENGINE_B) {
 
     engine_widget = """
 case WK_LATCH:
-    if (c.id == ENGINE_A || c.id == ENGINE_B)
-        addParam(createParamCentered<EngineCycleLatch>(pos, module, c.id));
+    if (c.id == ENGINE_A || c.id == ENGINE_B) {
+        auto* pad = createParamCentered<EngineCycleLatch>(pos, module, c.id);
+        pad->setAccent(kParamAccent[i]);
+        addParam(pad);
+    }
     else if (c.id == REC_A || c.id == REC_B) {
-        auto* pad = createParamCentered<SlotVisible<VCVLatch>>(
+        auto* pad = createParamCentered<SlotVisible<FfPadLatch>>(
             pos, module, c.id);
         pad->fireflow = module;
         pad->ctlId = c.id;
+        pad->setAccent(kParamAccent[i]);
         addParam(pad);
     }
-    else
-        addParam(createParamCentered<VCVLatch>(pos, module, c.id));
+    else {
+        auto* pad = createParamCentered<FfPadLatch>(pos, module, c.id);
+        pad->setAccent(kParamAccent[i]);
+        addParam(pad);
+    }
     break;"""
     if compact_cpp(widget).count(compact_cpp(engine_widget)) != 1:
         issues.append("only ENGINE_A/B may use EngineCycleLatch; REC uses a "
-                      "slot-visible VCVLatch; other latches use VCVLatch directly")
+                      "slot-visible FfPadLatch; other latches use FfPadLatch "
+                      "directly -- and every pad gets its accent row")
     if widget.count("createParamCentered<EngineCycleLatch>") != 1:
         issues.append("widget must create exactly one EngineCycleLatch branch")
 
@@ -2489,8 +2567,8 @@ struct SlotVisible : W {
     for required, label in (
         ("if(c.id==ATTACK_A||c.id==ATTACK_B||c.id==STAGES_A||c.id==STAGES_B)",
          "ATTACK/STAGES need the exclusive widget branch"),
-        ("createParamCentered<SlotVisible<Trimpot>>(pos,module,c.id)",
-         "ATTACK/STAGES must use SlotVisible<Trimpot> at their generated position"),
+        ("createParamCentered<SlotVisible<FfKnobSmall>>(pos,module,c.id)",
+         "ATTACK/STAGES must use SlotVisible<FfKnobSmall> at their generated position"),
         ("knob->ctlId=c.id;",
          "the shared VOICE widget must set ctlId from the control's own id"),
     ):
@@ -2574,9 +2652,9 @@ def rec_visibility_issues(cpp):
         issues.append("widget scope is missing")
     else:
         n = compact_cpp(widget)
-        if "SlotVisible<VCVLatch>" not in n:
+        if "SlotVisible<FfPadLatch>" not in n:
             issues.append("REC is not built as a slot-visible latch")
-        if "SlotVisible<Trimpot>" not in n:
+        if "SlotVisible<FfKnobSmall>" not in n:
             issues.append("the ATTACK/STAGES pair must use the same mixin")
     return issues
 
@@ -2597,7 +2675,7 @@ def test_rec_visibility_guard_rejects_representative_regressions():
         ("case REC_B: return samplerDeck(m, ENGINE_B);",
          "case REC_B: return samplerDeck(m, ENGINE_A);",
          "part B ENG binding"),
-        ("SlotVisible<VCVLatch>", "VCVLatch", "slot-visible latch"),
+        ("SlotVisible<FfPadLatch>", "FfPadLatch", "slot-visible latch"),
     ]
     for before, after, label in mutations:
         mutated = cpp.replace(before, after, 1)

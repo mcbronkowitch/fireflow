@@ -7,6 +7,16 @@ struct PanelCtl { int id; WidgetKind kind; XY mm; const char* label; XY lbl; uns
 // anchor: 0 = middle, 1 = start (left-aligned), 2 = end (right-aligned)
 struct PanelTxt { XY mm; float size; float spacing; unsigned rgb; unsigned char anchor; const char* str; };
 struct DynCaption { int id; int driverId; int count; const char* words[6]; };
+struct FfAccent { unsigned rgbA, rgbB; };
+static constexpr unsigned kFfKnobCap = 0x252721;
+static constexpr unsigned kFfKnobRim = 0x3A3D36;
+static constexpr float kFfKnobRBig = 4.800f;   // mm
+static constexpr float kFfKnobRSmall = 3.020f; // mm
+static constexpr float kFfPortR = 4.020f;      // mm
+static constexpr unsigned kFfPortWell = 0x1B1D19;
+static constexpr unsigned kFfPortRing = 0x6B7278;
+static constexpr unsigned kFfPortHole = 0x0B0C0A;
+static constexpr float kFfPadR = 2.700f;   // mm
 static constexpr int PART_STRIDE = 20;
 static constexpr float kRingR = 16.000f;      // mm, LED-dot orbit
 static constexpr float kRingDotR = 0.95f;   // mm, lit-dot radius
@@ -259,6 +269,83 @@ static const PanelCtl kParamCtls[] = {
     {DEPTH_B, WK_SMKNOB, {176.110f, 77.300f}, "DPTH", {176.110f, 82.900f}, 0, 1.90f, 0x171713, "MOTION lane base"},
     {PULL, WK_SMKNOB, {106.680f, 78.000f}, "PULL", {106.680f, 83.600f}, 0, 1.90f, 0x171713, "PULL"},
 };
+// Knob accent, parallel to kParamCtls, same order. Green left,
+// copper right, muted in the centre strip -- side_accent().
+static const FfAccent kParamAccent[] = {
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0x1D6F5F, 0x1D6F5F},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0xB96532, 0xB96532},
+    {0x1D6F5F, 0xB96532},
+    {0x656056, 0x656056},
+    {0x656056, 0x656056},
+    {0x656056, 0x656056},
+    {0x656056, 0x656056},
+    {0x656056, 0x656056},
+    {0x656056, 0x656056},
+    {0x656056, 0x656056},
+    {0x656056, 0x656056},
+    {0x656056, 0x656056},
+    {0x1D6F5F, 0x1D6F5F},
+    {0xB96532, 0xB96532},
+    {0x656056, 0x656056},
+    {0x1D6F5F, 0x1D6F5F},
+    {0xB96532, 0xB96532},
+    {0x1D6F5F, 0x1D6F5F},
+    {0xB96532, 0xB96532},
+    {0x1D6F5F, 0x1D6F5F},
+    {0xB96532, 0xB96532},
+    {0x1D6F5F, 0x1D6F5F},
+    {0xB96532, 0xB96532},
+    {0x1D6F5F, 0x1D6F5F},
+    {0xB96532, 0xB96532},
+    {0x1D6F5F, 0x1D6F5F},
+    {0xB96532, 0xB96532},
+    {0x1D6F5F, 0x1D6F5F},
+    {0xB96532, 0xB96532},
+    {0x656056, 0x656056},
+    {0x656056, 0x656056},
+    {0x1D6F5F, 0x1D6F5F},
+    {0xB96532, 0xB96532},
+    {0x656056, 0x656056},
+};
+static_assert(sizeof(kParamAccent) / sizeof(kParamAccent[0]) == sizeof(kParamCtls) / sizeof(kParamCtls[0]), "kParamAccent desynced");
 static const PanelCtl kInputCtls[] = {
     {IN_L, WK_IN, {55.250f, 118.400f}, "L", {55.250f, 124.800f}, 0, 1.80f, 0x171713, "IN L"},
     {IN_R, WK_IN, {66.750f, 118.400f}, "R", {66.750f, 124.800f}, 0, 1.80f, 0x171713, "IN R"},

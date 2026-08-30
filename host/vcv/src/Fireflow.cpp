@@ -7,6 +7,9 @@
 #include <osdialog.h>
 #include "plugin.hpp"
 #include "generated_panel.hpp"   // enums + control table (generated from res/gen_panel.py)
+#include "ff_knob.hpp"           // the panel's own knob: dark cap, deck-accent collar
+#include "ff_port.hpp"           // the panel's own jack: dark barrel, pewter ring
+#include "ff_button.hpp"         // the panel's own keycap: dark cap, accent edge
 #include "init_patch.hpp"       // sampler.vcvm snapshot + non-param init state
 #include "form_song_migration.hpp"
 #include "link_migration.hpp"
@@ -248,7 +251,7 @@ struct ParamMenuSlider : ui::Slider {
     }
 };
 
-// ENG is a five-position Rack switch (Synth/Sampler/Wave/Body/BBD). VCVLatch
+// ENG is a five-position switch (Synth/Sampler/Wave/Body/BBD). FfPadLatch
 // retains Rack's native switch handling; this overlay only makes the
 // non-Synth positions readable at a glance without changing its footprint.
 // Indexed defensively: an out-of-range state (there isn't one today) reuses
@@ -261,9 +264,9 @@ static const NVGcolor kEngineShades[] = {
     nvgRGBA(230, 140, 255, 140),  // BBD: violet
     nvgRGBA(230, 140, 110, 140),  // Feed: warm ember
 };
-struct EngineCycleLatch : VCVLatch {
+struct EngineCycleLatch : FfPadLatch {
     void drawLayer(const DrawArgs& args, int layer) override {
-        VCVLatch::drawLayer(args, layer);
+        FfPadLatch::drawLayer(args, layer);
         if (layer != 1) return;
         engine::ParamQuantity* pq = getParamQuantity();
         if (!pq) return;
@@ -2083,48 +2086,69 @@ struct FireflowWidget : ModuleWidget {
         labels->box.size = box.size;
         addChild(labels);
 
-        for (const auto& c : kParamCtls) {
+        // Indexed, not range-for: a knob needs its row in kParamAccent, and the
+        // two tables are generated in lockstep (static_assert'd same length).
+        for (size_t i = 0; i < sizeof(kParamCtls) / sizeof(kParamCtls[0]); ++i) {
+            const auto& c = kParamCtls[i];
             Vec pos = mm2px(Vec(c.mm.x, c.mm.y));
             switch (c.kind) {
-                case WK_BIGKNOB: case WK_KNOBC:
-                    addParam(createParamCentered<RoundBlackKnob>(pos, module, c.id)); break;
+                case WK_BIGKNOB: case WK_KNOBC: {
+                    auto* k = createParamCentered<FfKnobBig>(pos, module, c.id);
+                    k->setAccent(kParamAccent[i]);
+                    addParam(k);
+                    break;
+                }
                 case WK_SMKNOB: case WK_KNOBI:
                     if (c.id == ATTACK_A || c.id == ATTACK_B
                             || c.id == STAGES_A || c.id == STAGES_B) {
-                        auto* knob = createParamCentered<SlotVisible<Trimpot>>(
+                        auto* knob = createParamCentered<SlotVisible<FfKnobSmall>>(
                             pos, module, c.id);
                         knob->fireflow = module;
                         knob->ctlId = c.id;
+                        knob->setAccent(kParamAccent[i]);
                         addParam(knob);
                     }
                     else {
-                        addParam(createParamCentered<Trimpot>(pos, module, c.id));
+                        auto* k = createParamCentered<FfKnobSmall>(pos, module, c.id);
+                        k->setAccent(kParamAccent[i]);
+                        addParam(k);
                     }
                     break;
                 case WK_SW2:
                     addParam(createParamCentered<CKSS>(pos, module, c.id)); break;
                 case WK_LATCH:
-                    if (c.id == ENGINE_A || c.id == ENGINE_B)
-                        addParam(createParamCentered<EngineCycleLatch>(pos, module, c.id));
+                    if (c.id == ENGINE_A || c.id == ENGINE_B) {
+                        auto* pad = createParamCentered<EngineCycleLatch>(pos, module, c.id);
+                        pad->setAccent(kParamAccent[i]);
+                        addParam(pad);
+                    }
                     else if (c.id == REC_A || c.id == REC_B) {
-                        auto* pad = createParamCentered<SlotVisible<VCVLatch>>(
+                        auto* pad = createParamCentered<SlotVisible<FfPadLatch>>(
                             pos, module, c.id);
                         pad->fireflow = module;
                         pad->ctlId = c.id;
+                        pad->setAccent(kParamAccent[i]);
                         addParam(pad);
                     }
-                    else
-                        addParam(createParamCentered<VCVLatch>(pos, module, c.id));
+                    else {
+                        auto* pad = createParamCentered<FfPadLatch>(pos, module, c.id);
+                        pad->setAccent(kParamAccent[i]);
+                        addParam(pad);
+                    }
                     break;
-                case WK_SMBTN:
-                    addParam(createParamCentered<VCVButton>(pos, module, c.id)); break;
+                case WK_SMBTN: {
+                    auto* pad = createParamCentered<FfPadMomentary>(pos, module, c.id);
+                    pad->setAccent(kParamAccent[i]);
+                    addParam(pad);
+                    break;
+                }
                 default: break;
             }
         }
         for (const auto& c : kInputCtls)
-            addInput(createInputCentered<PJ301MPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
+            addInput(createInputCentered<FfPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
         for (const auto& c : kOutputCtls)
-            addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
+            addOutput(createOutputCentered<FfPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
         for (const auto& c : kLightCtls) {
             Vec pos = mm2px(Vec(c.mm.x, c.mm.y));
             if (c.id == REC_A_L || c.id == REC_B_L) {   // record = red, Sampler-only
@@ -2268,14 +2292,19 @@ struct FireflowHWWidget : ModuleWidget {
                         // always a mod target now -- STAGES stays, it owns
                         // no depth.
                         if (big) {
-                            addParam(createParamCentered<RoundBlackKnob>(pos, module, c.id));
+                            auto* k = createParamCentered<FfKnobBig>(pos, module, c.id);
+                            k->setAccent(spkyhw::kParamAccent[i]);
+                            addParam(k);
                         } else if (c.id == STAGES_A || c.id == STAGES_B) {
-                            auto* knob = createParamCentered<SlotVisible<Trimpot>>(pos, module, c.id);
+                            auto* knob = createParamCentered<SlotVisible<FfKnobSmall>>(pos, module, c.id);
                             knob->fireflow = module;
                             knob->ctlId = c.id;
+                            knob->setAccent(spkyhw::kParamAccent[i]);
                             addParam(knob);
                         } else {
-                            addParam(createParamCentered<Trimpot>(pos, module, c.id));
+                            auto* k = createParamCentered<FfKnobSmall>(pos, module, c.id);
+                            k->setAccent(spkyhw::kParamAccent[i]);
+                            addParam(k);
                         }
                         break;
                     }
@@ -2299,23 +2328,27 @@ struct FireflowHWWidget : ModuleWidget {
                     // still runs ctlVisible first, so ATTACK keeps its BBD
                     // hiding under the layer too)...
                     if (big) {
-                        auto* k = createParamCentered<ModSound<RoundBlackKnob>>(pos, module, c.id);
+                        auto* k = createParamCentered<ModSound<FfKnobBig>>(pos, module, c.id);
                         k->fireflow = module; k->ctlId = c.id;
+                        k->setAccent(spkyhw::kParamAccent[i]);
                         addParam(k);
                     } else {
-                        auto* k = createParamCentered<ModSound<Trimpot>>(pos, module, c.id);
+                        auto* k = createParamCentered<ModSound<FfKnobSmall>>(pos, module, c.id);
                         k->fireflow = module; k->ctlId = c.id;
+                        k->setAccent(spkyhw::kParamAccent[i]);
                         addParam(k);
                     }
                     // ...and the depth twin surfaces with it, inside the ring
                     // added above.
                     if (big) {
-                        auto* d = createParamCentered<ModDepth<RoundBlackKnob>>(pos, module, depthId);
+                        auto* d = createParamCentered<ModDepth<FfKnobBig>>(pos, module, depthId);
                         d->fireflow = module; d->soundId = c.id;
+                        d->setAccent(spkyhw::kParamAccent[i]);
                         addParam(d);
                     } else {
-                        auto* d = createParamCentered<ModDepth<Trimpot>>(pos, module, depthId);
+                        auto* d = createParamCentered<ModDepth<FfKnobSmall>>(pos, module, depthId);
                         d->fireflow = module; d->soundId = c.id;
+                        d->setAccent(spkyhw::kParamAccent[i]);
                         addParam(d);
                     }
                     break;
@@ -2326,28 +2359,47 @@ struct FireflowHWWidget : ModuleWidget {
                     if (c.id == ENGINE_A || c.id == ENGINE_B) {
                         // Detent pot on the hardware draft (spec 2026-08-10 §5);
                         // the big module keeps the cycle latch.
-                        if (big)
-                            addParam(createParamCentered<EngineCycleLatch>(pos, module, c.id));
-                        else
-                            addParam(createParamCentered<Trimpot>(pos, module, c.id));
+                        if (big) {
+                            auto* pad = createParamCentered<EngineCycleLatch>(pos, module, c.id);
+                            pad->setRadiusMm(spkyhw::kFfPadR);
+                            pad->setAccent(spkyhw::kParamAccent[i]);
+                            addParam(pad);
+                        }
+                        else {
+                            auto* k = createParamCentered<FfKnobSmall>(pos, module, c.id);
+                            k->setAccent(spkyhw::kParamAccent[i]);
+                            addParam(k);
+                        }
                     }
                     else if (c.id == REC_A || c.id == REC_B) {
-                        auto* pad = createParamCentered<SlotVisible<VCVLatch>>(pos, module, c.id);
+                        auto* pad = createParamCentered<SlotVisible<FfPadLatch>>(pos, module, c.id);
                         pad->fireflow = module;
                         pad->ctlId = c.id;
+                        pad->setRadiusMm(spkyhw::kFfPadR);
+                        pad->setAccent(spkyhw::kParamAccent[i]);
                         addParam(pad);
-                    } else
-                        addParam(createParamCentered<VCVLatch>(pos, module, c.id));
+                    } else {
+                        auto* pad = createParamCentered<FfPadLatch>(pos, module, c.id);
+                        pad->setRadiusMm(spkyhw::kFfPadR);
+                        pad->setAccent(spkyhw::kParamAccent[i]);
+                        addParam(pad);
+                    }
                     break;
                 case WK_SMBTN:
-                    addParam(createParamCentered<VCVButton>(pos, module, c.id)); break;
+                    {
+                        auto* pad = createParamCentered<FfPadMomentary>(pos, module, c.id);
+                        pad->setRadiusMm(spkyhw::kFfPadR);
+                        pad->setAccent(spkyhw::kParamAccent[i]);
+                        addParam(pad);
+                    }
+                    break;
                 default: break;
             }
         }
         for (const auto& c : spkyhw::kInputCtls)
-            addInput(createInputCentered<PJ301MPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
+            addInput(createInputCentered<FfPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
         for (const auto& c : spkyhw::kOutputCtls)
-            addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
+            addOutput(createOutputCentered<FfPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
         for (const auto& c : spkyhw::kLightCtls) {
             Vec pos = mm2px(Vec(c.mm.x, c.mm.y));
             if (c.id == REC_A_L || c.id == REC_B_L) {

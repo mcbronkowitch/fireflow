@@ -182,9 +182,9 @@
 <text x="224.800" y="97.860" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">LINK</text>
 <circle cx="68.250" cy="34.000" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <circle cx="236.550" cy="34.000" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
-<rect x="97.000" y="10.500" width="8.000" height="8.000" rx="1.2" fill="#dbe9ef" stroke="#3c525c" stroke-width="0.3"/>
+<rect x="97.000" y="10.500" width="8.000" height="8.000" rx="1.2" fill="#151b1f" stroke="#3fbf9c" stroke-width="0.3"/>
 <text x="101.000" y="22.100" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">REC</text>
-<rect x="199.800" y="10.500" width="8.000" height="8.000" rx="1.2" fill="#dbe9ef" stroke="#3c525c" stroke-width="0.3"/>
+<rect x="199.800" y="10.500" width="8.000" height="8.000" rx="1.2" fill="#151b1f" stroke="#e8945a" stroke-width="0.3"/>
 <text x="203.800" y="22.100" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">REC</text>
 <circle cx="129.750" cy="97.000" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="129.750" y="105.000" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">SEND</text>
@@ -200,7 +200,7 @@
 <text x="199.925" y="58.220" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">DPTH</text>
 <circle cx="171.900" cy="14.500" r="4.400" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <text x="171.900" y="22.500" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">PULL</text>
-<rect x="286.800" y="110.000" width="8.000" height="8.000" rx="1.2" fill="#dbe9ef" stroke="#3c525c" stroke-width="0.3"/>
+<rect x="286.800" y="110.000" width="8.000" height="8.000" rx="1.2" fill="#151b1f" stroke="#7fb6c9" stroke-width="0.3"/>
 <text x="290.800" y="120.700" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">MOD</text>
 <circle cx="33.000" cy="114.000" r="3.100" fill="#080b0d" stroke="#33454e" stroke-width="0.3"/>
 <circle cx="33.000" cy="114.000" r="2.000" fill="none" stroke="#7f8f96" stroke-width="0.7"/>
@@ -312,7 +312,7 @@
 <circle cx="19.500" cy="114.000" r="0.750" fill="#297260"/>
 <circle cx="277.300" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
 <circle cx="277.300" cy="114.000" r="0.750" fill="#855a3c"/>
-<rect x="10.000" y="110.000" width="8.000" height="8.000" rx="1.2" fill="#dbe9ef" stroke="#3c525c" stroke-width="0.3"/>
+<rect x="10.000" y="110.000" width="8.000" height="8.000" rx="1.2" fill="#151b1f" stroke="#7fb6c9" stroke-width="0.3"/>
 <text x="14.000" y="120.700" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">SHFT</text>
 <text x="12.000" y="9.000" fill="#7f9aa8" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">ENG</text>
 <text x="31.500" y="9.000" fill="#7f9aa8" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">SEQUENCE</text>
