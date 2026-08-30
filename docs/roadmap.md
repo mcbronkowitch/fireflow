@@ -36,7 +36,19 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-08-30 (**the settle time is calculated, and it picks
+- **Last updated:** 2026-08-30, evening (**the coupon exists as a schematic and
+  survived its first review round**: `hardware/coupon/` holds the coupon as
+  data — `scripts/design.py` is the channel plan, `scripts/netlist.py` wires it
+  by pin name, `scripts/build.py` proves the generated sheet by comparing
+  KiCad's own exported netlist node for node against the intent, and
+  `scripts/review.py` writes `proof/review.md`, the sheet a human reviews. All
+  eight §5 points are wired. The review round changed three things before
+  anything gets ordered — the audio jack (a mono symbol on the stereo footprint
+  had put `AUDIO_R` on the sleeve pad and ground on no pad at all), a shrouded
+  box header for Eurorack power, and the SM's two 2x10 sockets as BOM line
+  items. Commit `23beab4`; the order-blocking checklist lives in the M6
+  paragraph of the same date);
+  earlier the same day (**the settle time is calculated, and it picks
   the pot value**: the last open item on the mux gets its paper half —
   [`docs/hardware/settle-budget.md`](hardware/settle-budget.md) and
   `tools/settle_budget.py`. **Arithmetic, not a measurement**, so Phase-0
@@ -3587,6 +3599,42 @@ handful either way — and jumper the digital side freely but never the `COM`
 node or the audio path, where a wire is a component and not a connection. The
 breadboard build in Task 6 step 5 keeps its place as the bring-up rig for the
 scan firmware, which still has to be written; it is not a measuring rig.
+
+**2026-08-30 — the coupon schematic exists, is proven, and survived its first
+review round** (`hardware/coupon/`, commit `23beab4`). The coupon is generated,
+not drawn: `scripts/design.py` holds the channel plan, `scripts/netlist.py`
+wires it by pin NAME through the symbol libraries, and `scripts/build.py` is
+the proof chain — the load-bearing check is KiCad's own exported netlist
+compared node for node against the intent, plus zero drawing collisions and an
+ERC run that is down to three violations, each explained in
+`proof/review.md` §5 (all three are the vendored Patch SM symbol naming pins
+after their default peripheral; `hardware/lib/README.md` records the trap).
+All eight §5 points of the envelope spec are wired, and the measured channels
+sit as 5b's rig demands: CH2 (10 k) and CH6 (20 k) on the 4067 between
+neighbours hard-tied to opposite rails — which on this package are also
+physically adjacent pins — and the same shape once more on the 4051. The
+same-day review round changed three things, one of them a real defect: the
+audio jack had the mono `AudioJack2_Ground` symbol on the stereo SJ1-3513N
+footprint, which put `AUDIO_R` on the **sleeve** pad and the symbol's ground
+pin on **no pad at all** — a symbol-to-footprint defect that no netlist-level
+check can see, found only by resolving the symbol's pin numbers against the
+footprint's pads; it is now `AudioJack3` with the sleeve on `AGND`. The
+Eurorack header became a shrouded IDC box header — the notch, not the pinout,
+is what makes a reversed (±12 V swapped) or row-shifted plug impossible — with
+pins 7/8 still open and the rationale corrected: the A-100 standard grounds
+3–8, +5 V exists only on the 16-pin connector's 11/12, so the open pins are
+cheap insurance, not a standard hazard. And the SM's two 2×10 sockets are on
+the BOM as purchase-only line items (no footprint of their own — the 40 holes
+belong to the `DAISY_PATCH_SM` landing pattern), because without the line item
+"removable" meant "soldered in". **Still open before the fab/parts order goes
+out:** measure the actual bus board (pin 1/stripe against −12 V, 3–8 against
+GND, and what really sits on 7/8) — the one connection here from convention
+rather than a datasheet; settle the pot question, since `netlist.py`'s note
+says "Alpha 9 mm" while the footprint is Alps RK09K and the two are not
+drop-in identical; put a voltage rating on the 10 µF bulk caps (the two on
+±12 V need ≥16 V, better 25 V); confirm a linear 20 k in 9 mm vertical is
+actually buyable; and the Patch SM land-pattern dimensions remain
+Electrosmith's numbers, unproven until a module sits in a real board.
 
 **2026-08-14 — preset persistence now starts from nothing.** M6's scope names
 it, and until this date the repo had two pieces of prior art for it: the
