@@ -12,6 +12,11 @@ entirely in the soft tinted group fields (cool on deck A, warm on deck B,
 near-neutral in the centre), and the lettering carries the rest. Not a single
 control moved for it -- the round is colour only.
 
+Legends lost their two-digit index on 2026-08-30, and each field's top edge
+now takes a small rounded bite around its own legend so the word sits on bare
+plate instead of half on the edge. Lettering did not move: the name starts
+where the index used to.
+
 Shares all parameter identity with gen_panel.py (import); defines only
 geometry. Run from host/vcv/:  python3 res/gen_hw_panel.py
 """
@@ -53,6 +58,23 @@ ACC = {"A": "#3fbf9c", "B": "#e8945a", "C": "#7fb6c9"}
 FIELD_BASE_OPACITY = 0.02
 FIELD_ACC_OPACITY = {"A": 0.05, "B": 0.05, "C": 0.025}
 
+# The legend straddles its field's top edge, so that edge ran straight through
+# the middle of the glyphs. The field is a FILL and not a stroke, so the fix is
+# a bite taken out of its outline rather than a patch laid over one: the top
+# edge steps down before the legend and back up after it, and the whole word
+# sits on bare plate. Cut from the outline, so it cannot go stale against the
+# fill the way the old knockout patch could.
+FIELD_R = 1.5                     # the field's own corner radius
+NOTCH_R = 0.4                     # the bite's own corners -- minimal on purpose
+NOTCH_PAD = 1.0                   # air each side of the legend's ink
+NOTCH_DEPTH = 1.10                # clears the baseline (LEGEND_DY 0.75) by 0.35
+# The number that constrains the three above is how much frame is left to the
+# RIGHT of the longest legend in the narrowest box. Measured, not assumed:
+# ENG, a 16.50 mm frame, has 5.25 mm to spare before the notch would reach
+# its rounded corner; every other frame has more (LEVEL 11.90, then up). So
+# LEGEND_INSET + NOTCH_PAD may grow by 5.2 mm between them before the guard
+# in test_hw_panel.py starts refusing a plate.
+
 # Real hardware bodies, not the finger-clearance radius the layout is spaced
 # on. The frames are drawn against THESE, which is what buys the air between
 # the boxes (design note 2a).
@@ -76,13 +98,21 @@ CAPTION_GAP = 3.60
 RACK_R = {"G": 4.80, "S": 3.02, "P": 3.05, "J": 4.02, "L": 1.50}
 
 # ShareTechMono, the face HwPanelText loads: 0.5 em advance, ~0.72 em cap
-# height. Both numbers below are what the legend knockouts are cut to.
+# height. Both numbers are what the legend notches are cut to, via text_run.
 FONT_ADVANCE, FONT_CAP = 0.50, 0.72
 
 
 def text_run(x, y, size, spacing, anchor, txt):
-    """Ink box of a lettering row: (x0, x1, y_top, y_baseline)."""
-    w = len(txt) * (size * FONT_ADVANCE + spacing)
+    """Ink box of a lettering row: (x0, x1, y_top, y_baseline).
+
+    The gaps are BETWEEN the glyphs, so there are len-1 of them, not len.
+    nvgTextLetterSpacing puts one after the last glyph too, but that only
+    moves the pen -- no ink follows it. Counting it made every run read
+    `spacing` too wide on the right, which is invisible in a collision test
+    (it only errs safe) and very visible the moment something is CENTRED on
+    the box: the legend notches came out 1.00 mm of air on the left and 1.50
+    on the right, and that is what Bastian saw on the plate 2026-08-30."""
+    w = len(txt) * size * FONT_ADVANCE + max(len(txt) - 1, 0) * spacing
     x0 = x if anchor == "start" else (x - w if anchor == "end" else x - w / 2)
     return (x0, x0 + w, y - size * FONT_CAP, y)
 
@@ -99,11 +129,6 @@ def _blend_hex(fg, bg, t):
 
 # PanelTxt/PanelCtl carry a colour, not an opacity: anything the design draws
 # at partial alpha has to be mixed down here or Rack would print it solid.
-# The legend index used to print on a knockout patch cut into the frame; with
-# the frames gone it prints on the plate/field instead. Same ink either way:
-# the knockout colour WAS PLATE_LO, so blending against PLATE_LO keeps the
-# emitted values identical.
-IDX_COL = {s: _blend_hex(ACC[s], PLATE_LO, 0.75) for s in ACC}
 LED_ON = {s: _blend_hex(ACC[s], LED_OFF, 0.55) for s in ACC}
 
 # Which pots wear the printed mod wreath (spec 2026-08-22 §5, variant B):
@@ -141,7 +166,11 @@ HW_SIZE = {
     "ATTACK": "S", "DECAY": "S", "RES": "S", "SUB": "S", "STAGES": "S",
     "FLUX": "G",
     "FLUXRATE": "S", "FLUXFB": "S", "LINK": "S",
-    "REV_MIX": "G",
+    # SEND went G -> S on 2026-08-30 when it left ROOM for LEVEL. Not a taste
+    # call: at r=8.5 it needs 14.5 mm to its neighbour, and the LEVEL band runs
+    # on TIMING's 13.0 pitch. A big SEND cannot stand on that pitch at all --
+    # see the guard test_level_band_is_evenly_divided.
+    "REV_MIX": "S",
     "COMP": "G", "GRIT": "S",
     "STEPS": "S", "SONG": "S",
     "ENGINE": "S", "REC": "P",                     # ENGINE is a 5-zone detent pot
@@ -209,7 +238,28 @@ _LIGHT_ENUMS = {c.enum for c in gp.LIGHTS}
 # is left in the whole row chain).
 Y_TOP = 14.5
 Y_B1K, Y_B1M, Y_B1G = 34.0, 50.22, 53.0
-Y_B2K, Y_B2G = 76.0, 95.0
+# Y_B2K was 76.0 until 2026-08-30, when the last big cap left it for Y_B2B.
+# It is 74.40 for one reason and it is arithmetic, not taste: a small body is
+# 4.40, so 74.40 puts its top on 70.00 -- exactly where the big caps' tops
+# used to be. The row's topmost ink therefore does not move, its margin stays
+# 2.15, and its bottom edge stays on 107.15. Change this number and the whole
+# chain below shifts; test_row3_ceiling_holds_at_seventy is the guard.
+Y_B2K, Y_B2G = 74.40, 95.0
+# The line REV_DECAY has always sat on, 3 mm under the small caps. FLUX's MIX
+# joined it 2026-08-30. Note what a move onto this line costs: while ANY big
+# cap is still on Y_B2K its body top (70.00) is the row's topmost ink, so the
+# row frame does not move and the move is free. The last one to leave takes
+# the topmost ink down to the small caps at 71.60, and row_frames() mirrors
+# that onto the bottom edge -- 1.60 mm the chain to the jack row has not got.
+Y_B2B = 79.0
+# The LEVEL band, on the line REV_TONE already used. When it was chosen this
+# was forced: with the small caps still on 76.00, REV_SIZE's caption sat at
+# 84.00 and the shoulder/foot chain was 0.70 mm short on Y_B2G. That reason
+# EXPIRED on 2026-08-30 when Y_B2K went to 74.40 and the caption rose to
+# 82.40 -- Y_B2G would fit again now. The band stays here for the reason it
+# is kept, not the one that put it here: FB, PAN's slot, GRIT, SEND and TONE
+# read as ONE line across the plate, and REV_TONE anchors it.
+Y_B2L = 97.0
 JACK_Y = 114.0
 SD_X, SD_Y, SD_W, SD_H = 152.4, JACK_Y, 11.0, 6.0
 
@@ -226,6 +276,32 @@ VOICE_MID = 88.875
 
 # CV jack columns — uniform 11.5 mm raster, not under the knobs (spec §13).
 X_COLOR, X_FILT, X_TIMB, X_LVL = 79.0, 90.5, 102.0, 113.5
+
+# ---------------------------------------------------------------------------
+#  The LEVEL band (2026-08-30). SEND left ROOM for LEVEL, which is where it
+#  belongs -- it is a per-deck send, not a reverb control. LEVEL's frame has no
+#  room for it, so the frame grows a FOOT past the deck edge and the three
+#  small knobs stand in the band that main box and foot form together.
+#
+#  Only ONE number here is chosen: LEVEL_H_MARGIN. Everything else follows.
+#  The pitch is TIMING's own (TEMP - SYNC - SHFL); the outer slots hug their
+#  edges with the margin, which centres the group by construction; and the
+#  foot's right edge is wherever SEND's margin ends.
+#
+#  Why 5.40 and not the 2.15 the ROW uses: 2.15 is the VERTICAL margin. The
+#  plate's knob rows hold 3.10..9.00 horizontally (median 5.98), and every mm
+#  the band takes costs ROOM's tongue two -- it closes in from both sides. The
+#  balance point is 16.25 - 2m = m, i.e. 5.42; 5.40 rounds it and leaves the
+#  band 5.40 and REV_TONE 5.45. Pinned by test_level_band_is_evenly_divided.
+LEVEL_BAND_L = 93.95              # LEVEL A's own left edge; the guard pins this
+LEVEL_PITCH = 13.00               # TEMP -> SYNC -> SHFL, unchanged since
+LEVEL_H_MARGIN = 5.40             # the one free number
+_lvl0 = LEVEL_BAND_L + BODY_R["S"] + LEVEL_H_MARGIN
+# Slot 0 is deliberately EMPTY. It is held for PAN, which has no ParamId yet;
+# an empty slot costs the same geometry as a filled one, so it is cheaper to
+# pay once now than to re-pitch the band later. Do not "tidy" it away --
+# test_level_band_holds_an_empty_slot exists to stop exactly that.
+LEVEL_SLOTS = (_lvl0, _lvl0 + LEVEL_PITCH, _lvl0 + 2 * LEVEL_PITCH)
 
 DECK_POS = {
     "STEPS":  (35.00, Y_TOP), "SONG": (48.00, Y_TOP),
@@ -258,10 +334,17 @@ DECK_POS = {
     "ENGINE": (16.25, Y_TOP),
     "TUNE":   (17.00, Y_B2K), "DETUNE": (30.00, Y_B2K),
     "COLOR":  (23.50, Y_B2G),
-    "FLUX":   (67.00, Y_B2K),
-    "FLUXRATE": (54.00, 89.86), "FLUXFB": (67.00, Y_B2G), "LINK": (80.00, 89.86),
-    "COMP":   (106.50, Y_B2K), "GRIT": (106.50, Y_B2G),
-    "REV_MIX": (136.40, Y_B2G),
+    "FLUX":   (67.00, Y_B2B),
+    # FB came off Y_B2G onto the LEVEL band's line 2026-08-30, so the plate's
+    # bottom line reads straight across: FB, PAN's slot, GRIT, SEND, TONE.
+    # Free of charge -- its caption lands on 105.00, where REV_TONE's already
+    # was, so the row's ink and therefore its frame do not move.
+    "FLUXRATE": (54.00, 89.86), "FLUXFB": (67.00, Y_B2L), "LINK": (80.00, 89.86),
+    # LVL keeps its place; only the band below it is new. GRIT came off Y_B2G
+    # to join it, and SEND came the whole way over from ROOM.
+    "COMP":   (106.50, Y_B2B),
+    "GRIT":   (LEVEL_SLOTS[1], Y_B2L),
+    "REV_MIX": (LEVEL_SLOTS[2], Y_B2L),
     "STAGES": (68.25, Y_B1K),
 }
 
@@ -286,7 +369,7 @@ CENTER_POS = {
     # reading as the same figure instead of two rows that merely resemble it.
     "TIDE":   (W / 2 - CENTRE_PITCH, Y_B1M), "MORPH": (W / 2, Y_B1G),
     "PACE":   (W / 2 + CENTRE_PITCH, Y_B1M),
-    "REV_SIZE": (136.40, Y_B2K), "REV_DECAY": (152.40, 79.00), "REV_DIFF": (168.40, Y_B2K),
+    "REV_SIZE": (136.40, Y_B2K), "REV_DECAY": (152.40, Y_B2B), "REV_DIFF": (168.40, Y_B2K),
     "REV_TONE": (152.40, 97.00),
     # PULL (spec 2026-07-19 pull-chord-gravity), fourth in the GLOBAL row and
     # deliberately next to CHOKE: those two are the only bipolar controls in
@@ -464,6 +547,20 @@ def hw_label(c):
 BOX_GAP = 3.0
 DECK_EDGE = 120.0                 # right edge of the last deck-A box
 CENTRE_L = 123.0                  # left edge of the centre column
+
+# A box's LOWER BAND may run to a different width than its upper one -- that
+# is the whole of the L, expressed once. LEVEL's lower band is WIDER (it
+# reaches past the deck edge into the master area); ROOM's is NARROWER by the
+# same amount plus the usual gap, which is what makes room for it. Neither
+# frame is a special case in the drawing code: both are "a rectangle whose
+# bottom part has its own left and right edge".
+BAND_INK_MARGIN = 2.15            # the row's own vertical ink margin, reused
+                                  # for the horizontal step -- it is a frame
+                                  # edge running past ink either way
+LEVEL_FOOT_R = LEVEL_SLOTS[2] + BODY_R["S"] + LEVEL_H_MARGIN
+FOOT_TOP = Y_B2L - BODY_R["S"] - BAND_INK_MARGIN
+SHOULDER_BOT = FOOT_TOP - BOX_GAP          # ROOM's upper band stops here
+ROOM_FOOT_L = LEVEL_FOOT_R + BOX_GAP
 PLATE_EDGE = 8.0                  # outer edge of a full-width row
 
 # The y/h pair in each row below is a SEED, not the drawn frame: it only
@@ -486,8 +583,10 @@ GROUP_ROWS = [
      ["IN", "CV A", "MOD A"], ["OUT", "CV B", "MOD B"], "CLOCK"),
 ]
 
-# Legend numbering, in reading order: decks top to bottom, then the centre
-# column, then the jack row.
+# Every group name the plate carries, in reading order: decks top to bottom,
+# then the centre column, then the jack row. This printed as a two-digit index
+# in front of each legend until 2026-08-30; it outlives the numbering as the
+# roster the guard checks the drawn frames against.
 GROUP_ORDER = ("ENG", "SEQUENCE", "CAPTURE", "MOTION", "VOICE", "PITCH",
                "FLUX", "LEVEL", "GLOBAL", "TIMING", "ROOM", "IN", "CV", "MOD",
                "CLOCK", "OUT")
@@ -496,6 +595,10 @@ GROUP_ORDER = ("ENG", "SEQUENCE", "CAPTURE", "MOTION", "VOICE", "PITCH",
 LEGEND_SIZE, LEGEND_SPACING = 1.9, 0.5
 LEGEND_DY = 0.75                  # legend baseline below a frame's top edge
 LEGEND_LIFT = 0.80                # jack row: baseline ABOVE its top edge
+LEGEND_INSET = 4.0                # legend's left edge, in from the frame's.
+                                  # It is where the struck index used to start,
+                                  # so the lettering did not move on 2026-08-30
+                                  # -- only the two digits in front of it went.
 
 # The one free number in the whole vertical chain. Not a taste value: the
 # status row sits as high as its own legend is allowed to print, so that
@@ -578,15 +681,45 @@ JACK_ROW_Y = ROW_FRAMES[-1][0]
 
 
 class Box:
-    __slots__ = ("n", "side", "x", "y", "w", "h")
+    """A group frame. Rectangular, EXCEPT that its lower band may have its own
+    left and right edge -- `foot` is (x0, x1, y): below y the frame spans
+    x0..x1 instead of x..x+w. Wider than the box makes an L (LEVEL), narrower
+    makes a bracket (ROOM). None means a plain rectangle, which is 24 of 26."""
 
-    def __init__(self, n, side, x, y, w, h):
+    __slots__ = ("n", "side", "x", "y", "w", "h", "foot")
+
+    def __init__(self, n, side, x, y, w, h, foot=None):
         self.n, self.side, self.x, self.y, self.w, self.h = n, side, x, y, w, h
+        self.foot = foot
 
     @property
-    def idx(self):
-        stem = self.n[:-2] if self.n.endswith((" A", " B")) else self.n
-        return GROUP_ORDER.index(stem) + 1
+    def bands(self):
+        """((x0, x1, y0, y1), ...) -- one entry for a plain box, two when the
+        lower band differs. Everything that asks 'what does this frame cover'
+        goes through here, so a foot cannot be honoured in one place and
+        forgotten in another."""
+        if self.foot is None:
+            return ((self.x, self.x + self.w, self.y, self.y + self.h),)
+        fx0, fx1, fy = self.foot
+        return ((self.x, self.x + self.w, self.y, fy),
+                (fx0, fx1, fy, self.y + self.h))
+
+    def covers(self, x, y):
+        return any(x0 - 1e-9 <= x <= x1 + 1e-9 and y0 - 1e-9 <= y <= y1 + 1e-9
+                   for x0, x1, y0, y1 in self.bands)
+
+    def overlaps(self, other):
+        for ax0, ax1, ay0, ay1 in self.bands:
+            for bx0, bx1, by0, by1 in other.bands:
+                if (ax0 < bx1 - 1e-9 and bx0 < ax1 - 1e-9
+                        and ay0 < by1 - 1e-9 and by0 < ay1 - 1e-9):
+                    return True
+        return False
+
+    @property
+    def stem(self):
+        """The legend without its deck suffix -- an entry in GROUP_ORDER."""
+        return self.n[:-2] if self.n.endswith((" A", " B")) else self.n
 
     @property
     def legend_y(self):
@@ -604,13 +737,40 @@ class Box:
     def legend_straddles(self):
         return self.y != JACK_ROW_Y
 
+    @property
+    def notch(self):
+        """(x0, x1) of the bite this field's top edge takes around its own
+        legend, or None where the legend does not straddle the edge."""
+        if not self.legend_straddles:
+            return None
+        _, ink_r, _, _ = text_run(self.x + LEGEND_INSET, self.legend_y,
+                                  LEGEND_SIZE, LEGEND_SPACING, "start", self.n)
+        return (self.x + LEGEND_INSET - NOTCH_PAD, ink_r + NOTCH_PAD)
+
+
+# The two frames that are not rectangles, keyed by (name, side). Deck B is
+# mirrored here rather than written out, so the two can never disagree.
+FEET = {
+    ("LEVEL", "A"): (LEVEL_BAND_L, LEVEL_FOOT_R, FOOT_TOP),
+    ("ROOM", "C"): (ROOM_FOOT_L, W - ROOM_FOOT_L, SHOULDER_BOT),
+}
+
+
+def _foot_for(n, side, x, w):
+    key = (n, "A" if side == "B" else side)
+    if key not in FEET:
+        return None
+    fx0, fx1, fy = FEET[key]
+    return (W - fx1, W - fx0, fy) if side == "B" else (fx0, fx1, fy)
+
 
 def group_boxes():
-    """The 24 drawing frames, left to right within each row."""
+    """The 26 drawing frames, left to right within each row. Two of them (and
+    deck B's mirror of one) carry a foot -- see Box and FEET."""
     out = []
     for row, (y, h) in zip(GROUP_ROWS, ROW_FRAMES):
         for n, side, x, w in _row_cells(row):
-            out.append(Box(n, side, x, y, w, h))
+            out.append(Box(n, side, x, y, w, h, _foot_for(n, side, x, w)))
     return out
 
 
@@ -618,39 +778,102 @@ BOXES = group_boxes()
 
 
 def box_of(c):
-    """The frame a control's centre falls in, or None (SHFT/MOD sit loose)."""
+    """The frame a control's centre falls in, or None (SHFT/MOD sit loose).
+
+    Asks the box, so a foot counts: SEND's centre is past the deck edge and
+    still belongs to LEVEL, which is the entire point of the 2026-08-30 round.
+    A plain rectangle comparison here would hand it to nobody."""
     for b in BOXES:
-        if b.x <= c.x <= b.x + b.w and b.y <= c.y <= b.y + b.h:
+        if b.covers(c.x, c.y):
             return b
     return None
 
 
+def _field_d(b):
+    """One group field as a path: a rounded rect with a bite taken out of the
+    top edge where the legend prints.
+
+    A path and not a <rect rx>, because the bite has to come out of the
+    OUTLINE. The field is a fill, so the old trick -- a knockout patch laid
+    over the frame in the plate's own colour -- has nothing to hide any more:
+    it would have to repaint the plate exactly, and the plate is a gradient.
+    Cutting the fill instead cannot drift out of step with what is under it.
+
+    Quadratic curves, not elliptical arcs: at NOTCH_R = 0.4 mm the two are
+    indistinguishable, and Q takes the sweep-flag question -- and any question
+    about NanoSVG's arc parser -- off the table entirely."""
+    x, y, w, h = b.x, b.y, b.w, b.h
+    fx0, fx1, fy = b.foot if b.foot else (x, x + w, y + h)
+
+    # Vertices clockwise from the top-left, with the notch inserted into the
+    # top edge and the foot's step into the sides. Where the foot matches the
+    # box on one side, two vertices coincide and _rounded_poly drops them --
+    # so an L, a bracket and a plain rectangle all come out of this one list.
+    pts = [(x, y)]
+    rad = [FIELD_R]
+    if b.notch:
+        n0, n1 = b.notch
+        pts += [(n0, y), (n0, y + NOTCH_DEPTH),
+                (n1, y + NOTCH_DEPTH), (n1, y)]
+        rad += [NOTCH_R] * 4
+    pts += [(x + w, y), (x + w, fy), (fx1, fy), (fx1, y + h),
+            (fx0, y + h), (fx0, fy), (x, fy)]
+    rad += [FIELD_R] * 7
+    return _rounded_poly(pts, rad)
+
+
+def _rounded_poly(pts, radii):
+    """Closed polygon, every corner rounded, quadratics only.
+
+    Consecutive duplicates are dropped first: that is what lets a plain
+    rectangle, an L and a bracket share one vertex list. Q and not A because
+    at these radii the two are indistinguishable, and Q asks nothing of
+    NanoSVG's arc parser or of my sweep-flag arithmetic."""
+    keep = [(p, r) for i, (p, r) in enumerate(zip(pts, radii))
+            if p != pts[i - 1]]
+    pts = [p for p, _ in keep]
+    radii = [r for _, r in keep]
+    n, out = len(pts), []
+    for i, p in enumerate(pts):
+        pv, nx, want = pts[i - 1], pts[(i + 1) % n], radii[i]
+
+        def toward(q):
+            dx, dy = q[0] - p[0], q[1] - p[1]
+            L = (dx * dx + dy * dy) ** 0.5
+            return (dx / L, dy / L), L
+
+        (ux1, uy1), L1 = toward(pv)
+        (ux2, uy2), L2 = toward(nx)
+        r = min(want, L1 / 2, L2 / 2)
+        a = (p[0] + ux1 * r, p[1] + uy1 * r)
+        c = (p[0] + ux2 * r, p[1] + uy2 * r)
+        out.append(("M" if i == 0 else "L") + f"{mm(a[0])},{mm(a[1])}")
+        out.append(f"Q{mm(p[0])},{mm(p[1])} {mm(c[0])},{mm(c[1])}")
+    return " ".join(out + ["Z"])
+
+
 def _groups_svg():
-    """Every group is two rounded rects on the same geometry: a white wash
-    that lifts the field off the plate, and an accent wash that says which
-    zone it belongs to. With the plate now flat, these fields carry the whole
-    cool/warm deck identity -- the centre stays near-neutral on purpose."""
+    """Every group is two washes on the same outline: a white one that lifts
+    the field off the plate, and an accent one that says which zone it belongs
+    to. With the plate flat, these fields carry the whole cool/warm deck
+    identity -- the centre stays near-neutral on purpose."""
     out = []
     for b in BOXES:
-        geom = (f'x="{mm(b.x)}" y="{mm(b.y)}" width="{mm(b.w)}" '
-                f'height="{mm(b.h)}" rx="{mm(1.5)}"')
-        out.append(f'<rect {geom} fill="#ffffff" '
+        d = _field_d(b)
+        out.append(f'<path d="{d}" fill="#ffffff" '
                    f'fill-opacity="{FIELD_BASE_OPACITY}"/>')
-        out.append(f'<rect {geom} fill="{ACC[b.side]}" '
+        out.append(f'<path d="{d}" fill="{ACC[b.side]}" '
                    f'fill-opacity="{FIELD_ACC_OPACITY[b.side]}"/>')
     return out
 
 
 def group_texts():
-    """Legends as PanelTxt rows. Rack does not render SVG text, so the plate
-    lettering and the rehearsal lettering must both come from this table."""
-    out = []
-    for b in BOXES:
-        out.append((b.x + 4.0, b.legend_y, LEGEND_SIZE, LEGEND_SPACING,
-                    IDX_COL[b.side], "start", f"{b.idx:02d}"))
-        out.append((b.x + 8.4, b.legend_y, LEGEND_SIZE, LEGEND_SPACING,
-                    HW_LEGEND, "start", b.n))
-    return out
+    """Legends as PanelTxt rows -- ONE per frame since 2026-08-30, when the
+    two-digit index in front of every name was struck. Rack does not render
+    SVG text, so the plate lettering and the rehearsal lettering must both
+    come from this table."""
+    return [(b.x + LEGEND_INSET, b.legend_y, LEGEND_SIZE, LEGEND_SPACING,
+             HW_LEGEND, "start", b.n) for b in BOXES]
 
 
 BRAND_TEXTS = [

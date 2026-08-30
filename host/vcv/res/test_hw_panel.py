@@ -330,16 +330,21 @@ def test_size_classes_match_the_spec():
     # other pair, so it could not sit on the same 13 mm pitch as the four
     # knobs directly above it. It does not sit in that pitch any more: it is
     # at the END of the lower row with column 3 left empty beside it.
-    BIG = {"DENSITY", "MOD", "COLOR", "FLUX", "REV_MIX",
+    # REV_MIX/SEND left this set on 2026-08-30, and for the reason FILT once
+    # did: it moved onto a 13.0 mm pitch, and a big knob wants 14.5 between
+    # neighbours. Unlike FILT it is not coming back -- the LEVEL band IS the
+    # pitch, so there is no "end of the row" for it to retire to.
+    BIG = {"DENSITY", "MOD", "COLOR", "FLUX",
            "COMP", "MORPH", "REV_DECAY", "FILT"}
     got = {b for b, cls in hw.HW_SIZE.items() if cls == "G"}
     check(got == BIG, f"big-knob set drifted: extra={got-BIG} missing={BIG-got}")
     big_positions = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "G"]
-    check(len(big_positions) == 16, f"expected 16 big positions, got {len(big_positions)}")
+    check(len(big_positions) == 14, f"expected 14 big positions, got {len(big_positions)}")
     small = [c for c in hw.HW_PARAMS if hw.hw_class(c.enum) == "S"]
     # 51 + DEPTH×2 = 53, +1 (spec 2026-07-19 pull-chord-gravity): PULL joined
-    # as a small knob, HW_SIZE["PULL"]="S". FILT×2 left again 2026-08-23.
-    check(len(small) == 54, f"expected 54 small params, got {len(small)}")
+    # as a small knob, HW_SIZE["PULL"]="S". FILT×2 left again 2026-08-23,
+    # REV_MIX×2 joined 2026-08-30.
+    check(len(small) == 56, f"expected 56 small params, got {len(small)}")
     check(abs(hw.CLASS_R["G"] - 8.5) < 1e-9, "CLASS_R G is not 8.5")
     check(abs(hw.CLASS_R["S"] - 6.0) < 1e-9, "CLASS_R S is not 6.0")
     check(hw.HW_SIZE["SOURCE"] == "S", "TIMB/SOURCE is not small")
@@ -595,23 +600,243 @@ def test_plate_paints_survive_nanosvg():
           "the silhouette's print opacity is back on the plate")
     check("stroke-dasharray" not in svg,
           "a dashed stroke is back -- the drawing frames were struck")
-    # The group fields: two rounded rects on identical geometry per box, a
-    # white wash that lifts the field off the plate and the zone accent over
-    # it. The decks carry the cool/warm identity the plate itself no longer
-    # has, so they run at twice the centre's tint. The numbers are pinned
-    # here, not read from hw, or the generator could redefine them unseen.
-    rx = f'rx="{hw.mm(1.5)}"'
-    check(svg.count(rx) == 2 * len(hw.BOXES),
-          f"expected {2 * len(hw.BOXES)} field rects, got {svg.count(rx)}")
+    # The group fields: two washes on ONE outline per box, a white one that
+    # lifts the field off the plate and the zone accent over it. The decks
+    # carry the cool/warm identity the plate itself no longer has, so they run
+    # at twice the centre's tint. The opacities are pinned here, not read from
+    # hw, or the generator could redefine them unseen.
+    check(svg.count("<path d=\"M") >= 2 * len(hw.BOXES),
+          "the group fields are not drawn as paths")
+    check(f'rx="{hw.mm(1.5)}"' not in svg,
+          "a field is back to a <rect rx> -- a rect cannot carry the notch")
     for b in hw.BOXES:
-        geom = (f'x="{hw.mm(b.x)}" y="{hw.mm(b.y)}" width="{hw.mm(b.w)}" '
-                f'height="{hw.mm(b.h)}" {rx}')
-        check(f'<rect {geom} fill="#ffffff" fill-opacity="0.02"/>' in svg,
+        d = hw._field_d(b)
+        check(f'<path d="{d}" fill="#ffffff" fill-opacity="0.02"/>' in svg,
               f"{b.n}/{b.side} has no white field wash")
         want = 0.025 if b.side == "C" else 0.05
-        check(f'<rect {geom} fill="{hw.ACC[b.side]}" fill-opacity="{want}"/>'
+        check(f'<path d="{d}" fill="{hw.ACC[b.side]}" fill-opacity="{want}"/>'
               in svg,
               f"{b.n}/{b.side} has no {b.side} accent field at {want}")
+        # Both washes trace the SAME outline. Two nearly-identical path
+        # builders is exactly how the accent would keep a notch the white
+        # wash lost, and the seam would be a 2%-opacity sliver nobody sees.
+        check(svg.count(f'<path d="{d}"') == 2,
+              f"{b.n}/{b.side}: the two washes do not share one outline")
+
+
+def test_row3_ceiling_holds_at_seventy():
+    """Row 3's frame is chained: its TOP is pinned by row 2 + BOX_GAP, and
+    row_frames() mirrors whatever margin that leaves onto the BOTTOM edge. So
+    the row's topmost ink is not cosmetic -- it sets where the jack row below
+    starts, and the jack row has 0.75 mm of slack.
+
+    Until 2026-08-30 the big caps held that ceiling at 70.00. They moved to
+    Y_B2B, and Y_B2K came up to 74.40 so the SMALL caps hold it instead: a
+    small body is 4.40, and 74.40 - 4.40 is exactly 70.00. Lose that and the
+    frame's bottom edge drops by the same amount, which the chain cannot pay."""
+    CEILING = 70.00
+    t, _b = hw._row_ink(hw.GROUP_ROWS[2])
+    check(abs(t - CEILING) < 1e-9,
+          f"row 3's topmost ink is {t:.2f}, not {CEILING} -- its bottom edge "
+          f"has moved {t - CEILING:+.2f} mm and taken the jack row with it")
+    check(abs((hw.Y_B2K - hw.BODY_R["S"]) - CEILING) < 1e-9,
+          f"Y_B2K {hw.Y_B2K} puts a small body top at "
+          f"{hw.Y_B2K - hw.BODY_R['S']:.2f}, not on the ceiling {CEILING}")
+    y, h = hw.ROW_FRAMES[2]
+    check(abs(y - 67.85) < 1e-9 and abs((y + h) - 107.15) < 1e-9,
+          f"row 3's frame is {y:.2f}..{y+h:.2f}, not 67.85..107.15")
+    jy, jh = hw.ROW_FRAMES[3]
+    jt, _jb = hw._row_ink(hw.GROUP_ROWS[3])
+    check(jt - jy >= -1e-9,
+          f"the jack row's frame starts at {jy:.2f}, BELOW its own ink "
+          f"{jt:.2f} -- its captions are outside their frames")
+    check(abs(jy - 110.15) < 1e-9,
+          f"the jack row moved to {jy:.2f}; it belongs at 110.15")
+
+
+def test_level_band_is_evenly_divided():
+    """LEVEL's lower band (2026-08-30): three small slots on TIMING's own
+    13.0 mm pitch, hugging both ends with the same margin -- which is what
+    centres the group, rather than a centring step that could drift out of
+    step with the pitch."""
+    check(abs(hw.LEVEL_PITCH - 13.00) < 1e-9,
+          f"the pitch is {hw.LEVEL_PITCH}, not TIMING's 13.00")
+    # Not asserted from a constant: read TIMING's actual knobs, so the two
+    # cannot part company without this failing.
+    timing = sorted((c.x for c in hw.ALL_HW
+                     if c.enum in ("TEMPO", "COUPLE", "SHUFFLE")))
+    steps = {round(b - a, 6) for a, b in zip(timing, timing[1:])}
+    check(steps == {hw.LEVEL_PITCH},
+          f"TEMP/SYNC/SHFL now run on {steps}, not {hw.LEVEL_PITCH}")
+    lvl = next(b for b in hw.BOXES if b.n == "LEVEL" and b.side == "A")
+    check(abs(lvl.x - hw.LEVEL_BAND_L) < 1e-9,
+          f"LEVEL_BAND_L is {hw.LEVEL_BAND_L}, but the frame starts at {lvl.x}")
+    if lvl.foot is None:
+        # Report, do not unpack None: a traceback here aborts the whole run
+        # and the operator never sees the other 40 checks.
+        check(False, "LEVEL A lost its foot -- SEND has nothing to stand in")
+        return
+    fx0, fx1, _fy = lvl.foot
+    rs = hw.BODY_R["S"]
+    slots = hw.LEVEL_SLOTS
+    check(len(slots) == 3, f"the band has {len(slots)} slots, not 3")
+    for a, b in zip(slots, slots[1:]):
+        check(abs((b - a) - hw.LEVEL_PITCH) < 1e-9,
+              f"slots {a:.2f}/{b:.2f} are {b-a:.3f} apart, not the pitch")
+    left = (slots[0] - rs) - fx0
+    right = fx1 - (slots[-1] + rs)
+    check(abs(left - hw.LEVEL_H_MARGIN) < 1e-9 and
+          abs(right - hw.LEVEL_H_MARGIN) < 1e-9,
+          f"the band's margins are {left:.3f}/{right:.3f}, not "
+          f"{hw.LEVEL_H_MARGIN} on both sides")
+    # Equal margins ARE the centring; say so, so nobody adds a second rule.
+    check(abs((slots[0] + slots[-1]) / 2 - (fx0 + fx1) / 2) < 1e-9,
+          "the three are not centred in their own band")
+    # And the margin has to be a horizontal one. 2.15 is the row's VERTICAL
+    # margin and was wrong here by eye before it was wrong by measurement.
+    check(3.10 - 1e-9 <= hw.LEVEL_H_MARGIN <= 9.00 + 1e-9,
+          f"{hw.LEVEL_H_MARGIN} is outside the 3.10..9.00 the plate's knob "
+          f"rows actually hold horizontally")
+
+
+def test_level_band_clears_rooms_shoulder():
+    """The foot reaches under ROOM, so ROOM's upper band has to stop short of
+    it by the usual gap -- and still hold REV_SIZE's caption. That chain is
+    what forced the band down to Y_B2L; on Y_B2G it is 0.70 mm short."""
+    lvl = next(b for b in hw.BOXES if b.n == "LEVEL" and b.side == "A")
+    room = next(b for b in hw.BOXES if b.n == "ROOM")
+    if lvl.foot is None or room.foot is None:
+        check(False, f"LEVEL A foot={lvl.foot}, ROOM foot={room.foot} -- both "
+                     f"are needed; the foot and the shoulder it clears are "
+                     f"one decision, not two")
+        return
+    _fx0, _fx1, foot_top = lvl.foot
+    _rx0, _rx1, shoulder = room.foot
+    check(abs((foot_top - shoulder) - hw.BOX_GAP) < 1e-9,
+          f"shoulder {shoulder:.2f} to foot {foot_top:.2f} is "
+          f"{foot_top-shoulder:.2f} mm, not {hw.BOX_GAP}")
+    size = next(c for c in hw.ALL_HW if c.enum == "REV_SIZE")
+    cap_y = hw.hw_label(size)[1]
+    # The shoulder must run PAST the caption by the ink margin, not merely
+    # reach its baseline -- an edge sitting on the glyphs is the defect this
+    # whole round started from.
+    need = cap_y + hw.BAND_INK_MARGIN
+    check(shoulder >= need - 1e-9,
+          f"ROOM's shoulder ends at {shoulder:.2f}; REV_SIZE's caption needs "
+          f"it at {need:.2f} ({cap_y:.2f} + {hw.BAND_INK_MARGIN})")
+    send = next(c for c in hw.ALL_HW if c.enum == "REV_MIX_A")
+    check(foot_top <= send.y - hw.body_r(send) - hw.BAND_INK_MARGIN + 1e-9,
+          f"the foot starts at {foot_top:.2f}, too close to SEND's body top "
+          f"{send.y - hw.body_r(send):.2f}")
+    # The band was FORCED onto Y_B2L while the small caps were on 76.00 and
+    # REV_SIZE's caption sat at 84.00. Y_B2K went to 74.40 on 2026-08-30 and
+    # that reason expired -- Y_B2G would clear the chain again. So do not
+    # assert impossibility here; assert the reason the band is KEPT, which is
+    # that the plate's bottom line is ONE line and REV_TONE anchors it.
+    tone = next(c for c in hw.ALL_HW if c.enum == "REV_TONE")
+    check(abs(hw.Y_B2L - tone.y) < 1e-9,
+          f"the band is on {hw.Y_B2L} but REV_TONE is on {tone.y} -- the "
+          f"bottom line has split in two")
+    band = sorted(c.enum for c in hw.ALL_HW
+                  if abs(c.y - hw.Y_B2L) < 1e-9 and c.x <= hw.CX + 1e-9)
+    check(band == ["FLUXFB_A", "GRIT_A", "REV_MIX_A", "REV_TONE"],
+          f"deck A's bottom line is {band}, not FB / GRIT / SEND / TONE")
+
+
+def test_level_band_holds_an_empty_slot():
+    """Slot 0 is empty ON PURPOSE, held for PAN. An empty slot costs the same
+    geometry as a filled one, so it is paid for once now instead of re-pitching
+    the band later. Without this guard the gap reads as an arithmetic slip and
+    the next tidy-up closes it."""
+    occupied = {}
+    for c in hw.ALL_HW:
+        for i, s in enumerate(hw.LEVEL_SLOTS):
+            if abs(c.x - s) < 1e-9 and abs(c.y - hw.Y_B2L) < 1e-9:
+                occupied[i] = c.enum
+    check(sorted(occupied) == [1, 2],
+          f"the LEVEL band holds {occupied}; slot 0 must stay empty and "
+          f"slots 1 and 2 must be filled")
+    check(occupied.get(1) == "GRIT_A" and occupied.get(2) == "REV_MIX_A",
+          f"the band's order changed: {occupied}")
+    check(not any(hw.HW_SIZE.get(b) for b in ("PAN",)),
+          "PAN has a size class now -- if the ParamId exists, put it in slot 0")
+
+
+def test_text_run_counts_gaps_between_glyphs():
+    """len-1 gaps, not len. nvgTextLetterSpacing emits one after the last
+    glyph as well, but no ink follows it, so counting it overstates every run
+    by one `spacing` on the right. A collision test cannot see that -- a box
+    that is too wide only errs safe -- so it survived until something was
+    CENTRED on the box and the legend notches came out lopsided."""
+    x0, x1, ytop, ybase = hw.text_run(10.0, 20.0, 2.0, 0.5, "start", "AB")
+    check(abs(x0 - 10.0) < 1e-9, f"a start-anchored run begins at {x0}, not 10")
+    check(abs((x1 - x0) - (2 * 2.0 * hw.FONT_ADVANCE + 0.5)) < 1e-9,
+          f"'AB' is {x1 - x0:.3f} wide, not two glyphs plus ONE gap "
+          f"({2 * 2.0 * hw.FONT_ADVANCE + 0.5:.3f})")
+    check(abs((ybase - ytop) - 2.0 * hw.FONT_CAP) < 1e-9, "cap height is off")
+    # One glyph has no gap at all, and zero glyphs cannot have -1 of them.
+    one = hw.text_run(0.0, 0.0, 2.0, 0.5, "start", "A")
+    check(abs(one[1] - 2.0 * hw.FONT_ADVANCE) < 1e-9,
+          f"a single glyph is {one[1]:.3f} wide, not one advance")
+    check(hw.text_run(0.0, 0.0, 2.0, 0.5, "start", "")[1] == 0.0,
+          "an empty run has a non-zero width")
+    # The anchors hang off the same width, so the fix moves right- and
+    # centre-set lettering too. Nothing on the plate is set that way today;
+    # this is here so the next thing that is does not inherit the old bug.
+    check(abs(hw.text_run(10.0, 0.0, 2.0, 0.5, "end", "AB")[1] - 10.0) < 1e-9,
+          "an end-anchored run does not finish on its anchor")
+    mid = hw.text_run(10.0, 0.0, 2.0, 0.5, "middle", "AB")
+    check(abs((mid[0] + mid[1]) / 2 - 10.0) < 1e-9,
+          "a centred run is not centred on its anchor")
+
+
+def test_legend_notches_clear_their_lettering():
+    """The legend straddles its field's top edge, so the edge is cut away
+    around it (2026-08-30). Two ways that goes wrong and neither shows up in
+    a thumbnail: the bite is too short and a glyph still sits half on the
+    edge, or it is too long for a narrow frame and eats into a rounded
+    corner, which reads as a dented box rather than a notch."""
+    for b in hw.BOXES:
+        if not b.legend_straddles:
+            check(b.notch is None,
+                  f"{b.n}: the jack row's legend rides above its frame and "
+                  f"must not cut a notch into it")
+            continue
+        check(b.notch is not None, f"{b.n}: straddling legend with no notch")
+        n0, n1 = b.notch
+        x0, x1, ytop, ybase = hw.text_run(b.x + hw.LEGEND_INSET, b.legend_y,
+                                          hw.LEGEND_SIZE, hw.LEGEND_SPACING,
+                                          "start", b.n)
+        check(abs((x0 - n0) - hw.NOTCH_PAD) < 1e-9 and
+              abs((n1 - x1) - hw.NOTCH_PAD) < 1e-9,
+              f"{b.n}: the notch does not clear its lettering by NOTCH_PAD "
+              f"({n0:.2f}..{n1:.2f} around ink {x0:.2f}..{x1:.2f})")
+        # Deep enough that the whole glyph sits on plate. Caps only, so the
+        # baseline IS the bottom of the ink -- no descender to allow for.
+        check(b.y + hw.NOTCH_DEPTH > ybase,
+              f"{b.n}: the notch bottom {b.y + hw.NOTCH_DEPTH:.2f} is above "
+              f"the legend's baseline {ybase:.2f} -- the edge still crosses "
+              f"the glyphs")
+        check(ytop < b.y, f"{b.n}: the legend no longer straddles the edge, "
+                          f"so the notch is pointless")
+        # ... and shallow enough to stay a notch in the top edge.
+        check(hw.NOTCH_DEPTH < b.h / 2.0, f"{b.n}: the notch halves the field")
+        # The corners it is cut with need room on both sides, or the bite
+        # runs into the field's own rounded corner.
+        check(n0 - hw.NOTCH_R >= b.x + hw.FIELD_R,
+              f"{b.n}: the notch starts inside the field's left corner")
+        check(n1 + hw.NOTCH_R <= b.x + b.w - hw.FIELD_R,
+              f"{b.n}: {b.n!r} is too long for a {b.w:.1f} mm frame -- the "
+              f"notch ends {n1 + hw.NOTCH_R - (b.x + b.w - hw.FIELD_R):.2f} mm "
+              f"into the right corner")
+        check(hw.NOTCH_DEPTH >= 2 * hw.NOTCH_R,
+              "the notch is shallower than its own corner radii")
+        # And it is the drawn outline that carries it, not just the numbers.
+        d = hw._field_d(b)
+        check(f"L{hw.mm(n0 - hw.NOTCH_R)},{hw.mm(b.y)}" in d,
+              f"{b.n}: the drawn field does not step down at the notch")
+        check(f"{hw.mm(n1)},{hw.mm(b.y + hw.NOTCH_DEPTH - hw.NOTCH_R)}" in d,
+              f"{b.n}: the drawn field does not come back up after the notch")
 
 
 def test_group_raster_closes():
@@ -621,16 +846,24 @@ def test_group_raster_closes():
     boxes = hw.BOXES
     # 24 + the two ENG frames the status row gained on 2026-08-19.
     check(len(boxes) == 26, f"expected 26 group frames, got {len(boxes)}")
+    # BAND by band, not rect by rect. Since 2026-08-30 two frames are not
+    # rectangles, and comparing their bounding boxes would be worse than
+    # useless: LEVEL's rect is unchanged, so a foot could grow straight
+    # through ROOM's tongue and this loop would report nothing.
     for i, a in enumerate(boxes):
         for b in boxes[i + 1:]:
-            ox = min(a.x + a.w, b.x + b.w) - max(a.x, b.x)
-            oy = min(a.y + a.h, b.y + b.h) - max(a.y, b.y)
             tag = f"{a.n}/{a.side} and {b.n}/{b.side}"
-            check(ox <= 1e-9 or oy <= 1e-9, f"{tag} overlap")
-            if oy > 1e-9:
-                check(-ox >= hw.BOX_GAP - 1e-9, f"{tag} are only {-ox:.2f} mm apart")
-            elif ox > 1e-9:
-                check(-oy >= hw.BOX_GAP - 1e-9, f"{tag} are only {-oy:.2f} mm apart")
+            check(not a.overlaps(b), f"{tag} overlap")
+            for ax0, ax1, ay0, ay1 in a.bands:
+                for bx0, bx1, by0, by1 in b.bands:
+                    ox = min(ax1, bx1) - max(ax0, bx0)
+                    oy = min(ay1, by1) - max(ay0, by0)
+                    if oy > 1e-9:
+                        check(-ox >= hw.BOX_GAP - 1e-9,
+                              f"{tag} are only {-ox:.2f} mm apart")
+                    elif ox > 1e-9:
+                        check(-oy >= hw.BOX_GAP - 1e-9,
+                              f"{tag} are only {-oy:.2f} mm apart")
     for (_sy, _sh, x0, _cuts, names_a, _nb, _c), (y, h) in zip(hw.GROUP_ROWS,
                                                                hw.ROW_FRAMES):
         row = [b for b in boxes if abs(b.y - y) < 1e-9]
@@ -651,8 +884,11 @@ def test_group_raster_closes():
         check(abs(centre[0].x - hw.CENTRE_L) < 1e-9, "centre column moved")
         check(abs(centre[0].x + centre[0].w - (hw.W - hw.CENTRE_L)) < 1e-9,
               "centre column is not symmetric")
-    check(len({b.idx for b in boxes}) == len(hw.GROUP_ORDER),
-          "group legend numbering is not one number per group name")
+    # GROUP_ORDER outlived the two-digit index it used to number (struck
+    # 2026-08-30); it is the roster now, so it has to still match the plate.
+    check({b.stem for b in boxes} == set(hw.GROUP_ORDER),
+          f"the drawn frames and GROUP_ORDER disagree: "
+          f"{ {b.stem for b in boxes} ^ set(hw.GROUP_ORDER)}")
 
 
 def test_middle_band_runs_on_three_lines():
@@ -773,6 +1009,20 @@ def test_rows_are_centred_on_their_ink():
           f"the rail line {hw.KEEP_TOP}")
 
 
+def _bbox_inside(b, x0, x1, y0, y1):
+    """Is this box fully covered by the frame -- foot included?
+
+    The frame's bands are stacked vertically, so it is enough that every band
+    the bbox reaches into holds the WHOLE of its x-range. That is stricter
+    than testing the four corners, which a body straddling the foot's step
+    would pass while poking out through the notch of the step itself."""
+    touched = [(bx0, bx1) for bx0, bx1, by0, by1 in b.bands
+               if y0 < by1 - 1e-9 and by0 < y1 + 1e-9]
+    if not touched:
+        return False
+    return all(bx0 - 1e-9 <= x0 and x1 <= bx1 + 1e-9 for bx0, bx1 in touched)
+
+
 def _rect_hits_circle(x0, x1, y0, y1, cx, cy, r):
     dx = max(x0 - cx, 0.0, cx - x1)
     dy = max(y0 - cy, 0.0, cy - y1)
@@ -808,13 +1058,12 @@ def test_bodies_and_captions_sit_inside_their_frame():
             loose.append(c.enum)
             continue
         r = hw.body_r(c)
-        check(c.x - r >= b.x - 1e-9 and c.x + r <= b.x + b.w + 1e-9 and
-              c.y - r >= b.y - 1e-9 and c.y + r <= b.y + b.h + 1e-9,
+        check(_bbox_inside(b, c.x - r, c.x + r, c.y - r, c.y + r),
               f"{c.enum} ({r} mm body) pokes out of frame {b.n}/{b.side}")
         if not c.label:
             continue
         lx, ly = hw.hw_label(c)[:2]
-        check(b.x <= lx <= b.x + b.w and b.y <= ly <= b.y + b.h,
+        check(b.covers(lx, ly),
               f"caption {c.enum} at ({lx:.1f},{ly:.1f}) is outside {b.n}/{b.side}")
     # LED feedback round (2026-08-16): MODBTN_L/SHIFTBTN_L are satellites of
     # the two pads, at anchor radius + 1.5 mm -- exactly as loose as the pads
@@ -919,12 +1168,19 @@ def test_drawing_geometry():
           "the GLOBAL row is no longer centred on the plate's centre line")
     check(abs(by["SHIFTBTN"].y - hw.JACK_Y) < 1e-9, "SHIFT is not on the jack row")
     check(abs(by["MODBTN"].y - hw.JACK_Y) < 1e-9, "MOD is not on the jack row")
-    # Lettering Rack has to draw itself: brand block plus two rows per frame
-    # (index, name). Rack does not render SVG text, so an empty TEXTS means a
-    # plate whose legends exist in the preview and nowhere else.
-    check(len(hw.TEXTS) == len(hw.BRAND_TEXTS) + 2 * len(hw.BOXES),
-          f"TEXTS carries {len(hw.TEXTS)} rows, not brand + one pair per frame")
+    # Lettering Rack has to draw itself: brand block plus ONE row per frame
+    # since 2026-08-30, when the two-digit index in front of each name was
+    # struck. Rack does not render SVG text, so an empty TEXTS means a plate
+    # whose legends exist in the preview and nowhere else.
+    check(len(hw.TEXTS) == len(hw.BRAND_TEXTS) + len(hw.BOXES),
+          f"TEXTS carries {len(hw.TEXTS)} rows, not brand + one per frame")
     words = {t[6] for t in hw.TEXTS}
+    # Asserted absent, not merely uncounted: a half-reverted generator that
+    # brings the numbering back would otherwise only trip the count above,
+    # which a second brand row could mask.
+    check(not any(re.fullmatch(r"\d{2}", w) for w in words),
+          f"a two-digit legend index is back: "
+          f"{sorted(w for w in words if re.fullmatch(r'\d{2}', w))}")
     for w in ("SEQUENCE", "ROOM"):
         check(w in words, f"{w!r} is not in the panel lettering")
     # FIREFLOW/60 HP were pulled 2026-08-23 while the plate's branding is
