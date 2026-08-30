@@ -480,7 +480,7 @@ question Rack cannot answer.
   listening pass that starts anywhere else will conclude the knob does
   nothing.
 
-## PAN — no listening pass yet (2026-08-30)
+## PAN (2026-08-30) — NOT YET HEARD
 
 Three values shipped first-try and none has been heard against an alternative:
 
