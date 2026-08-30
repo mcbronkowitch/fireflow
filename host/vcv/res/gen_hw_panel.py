@@ -135,6 +135,24 @@ def _blend_hex(fg, bg, t):
 # at partial alpha has to be mixed down here or Rack would print it solid.
 LED_ON = {s: _blend_hex(ACC[s], LED_OFF, 0.55) for s in ACC}
 
+# Three of the nineteen lamps sit at the plate's edges and would be filed
+# under a deck by position alone: the MOD and SHFT lamps, and CEIL_L, which
+# reports the master limiter and merely happens to stand beside OUT R. Same
+# correction GLOBAL_KEYS makes for the keycaps -- see pad_accent().
+LED_GLOBALS = {"MODBTN_L", "SHIFTBTN_L", "CEIL_L"}
+
+
+def led_accent(c):
+    """A lamp's live glow colour."""
+    if c.enum in ("REC_A_L", "REC_B_L"):
+        return gp.LED_REC
+    return ACC["C"] if c.enum in LED_GLOBALS else ACC[zone_of(c.x)]
+
+
+def led_bed(c):
+    """The printed dot under a lamp: its own glow, mixed down into the dark."""
+    return _blend_hex(led_accent(c), LED_OFF, 0.55)
+
 # Which pots wear the mod ring (spec 2026-08-22 §5): exactly the faces with a
 # depth param. Derived from gen_panel's tables so the ring and the param block
 # cannot drift apart. Since revision 3 (2026-08-30) this feeds kModRing in the
@@ -980,7 +998,7 @@ def svg():
             P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="{mm(br)}" '
                       f'fill="{LED_OFF}" stroke="{HW_RING2}" stroke-width="0.25"/>')
             P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="0.750" '
-                      f'fill="{LED_ON[zone_of(c.x)]}"/>')
+                      f'fill="{led_bed(c)}"/>')
         elif hw_class(c.enum) == "P":
             P.append(f'<rect x="{mm(c.x-c.r)}" y="{mm(c.y-c.r)}" width="{mm(2*c.r)}" '
                       f'height="{mm(2*c.r)}" rx="1.2" fill="{PAD_FILL}" '
@@ -1085,6 +1103,15 @@ def header():
     L2.extend(emit_table("kInputCtls", HW_INPUTS))
     L2.extend(emit_table("kOutputCtls", HW_OUTPUTS))
     L2.extend(emit_table("kLightCtls", HW_LIGHTS))
+    L2.append("// Light glow, parallel to kLightCtls, same order.")
+    L2.append("static const FfAccent kLightAccent[] = {")
+    for c in HW_LIGHTS:
+        a = rgb(led_accent(c))
+        L2.append(f"    {{{a}, {a}}},")
+    L2.append("};")
+    L2.append("static_assert(sizeof(kLightAccent) / sizeof(kLightAccent[0]) == "
+               "sizeof(kLightCtls) / sizeof(kLightCtls[0]), "
+               "\"kLightAccent desynced\");")
     L2.append("// Hardware-only: no VCV id. Rack does not render SVG text,")
     L2.append("// so these captions must come from here (spec 2026-08-10 §5).")
     L2.append("static const HwOnlyCtl kHwOnlyCtls[] = {")

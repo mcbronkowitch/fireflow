@@ -10,6 +10,7 @@
 #include "ff_knob.hpp"           // the panel's own knob: dark cap, deck-accent collar
 #include "ff_port.hpp"           // the panel's own jack: dark barrel, pewter ring
 #include "ff_button.hpp"         // the panel's own keycap: dark cap, accent edge
+#include "ff_light.hpp"          // the panel's own lamp: accent glow, red on REC
 #include "init_patch.hpp"       // sampler.vcvm snapshot + non-param init state
 #include "form_song_migration.hpp"
 #include "link_migration.hpp"
@@ -2149,17 +2150,22 @@ struct FireflowWidget : ModuleWidget {
             addInput(createInputCentered<FfPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
         for (const auto& c : kOutputCtls)
             addOutput(createOutputCentered<FfPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
-        for (const auto& c : kLightCtls) {
+        for (size_t i = 0; i < sizeof(kLightCtls) / sizeof(kLightCtls[0]); ++i) {
+            const auto& c = kLightCtls[i];
             Vec pos = mm2px(Vec(c.mm.x, c.mm.y));
             if (c.id == REC_A_L || c.id == REC_B_L) {   // record = red, Sampler-only
-                auto* led = createLightCentered<SamplerOnly<SmallLight<RedLight>>>(
+                auto* led = createLightCentered<SamplerOnly<FfLight>>(
                     pos, module, c.id);
                 led->fireflow = module;
                 led->engineId = (c.id == REC_A_L) ? ENGINE_A : ENGINE_B;
+                led->setAccent(kLightAccent[i]);
                 addChild(led);
             }
-            else                                       // gate glow = warm signal hue
-                addChild(createLightCentered<MediumLight<YellowLight>>(pos, module, c.id));
+            else {                                     // gate glow = the deck's own
+                auto* led = createLightCentered<FfLight>(pos, module, c.id);
+                led->setAccent(kLightAccent[i]);
+                addChild(led);
+            }
         }
 
         // live LED rings, centred on each ring (same coords as the gate lights)
@@ -2400,15 +2406,20 @@ struct FireflowHWWidget : ModuleWidget {
             addInput(createInputCentered<FfPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
         for (const auto& c : spkyhw::kOutputCtls)
             addOutput(createOutputCentered<FfPort>(mm2px(Vec(c.mm.x, c.mm.y)), module, c.id));
-        for (const auto& c : spkyhw::kLightCtls) {
+        for (size_t i = 0; i < sizeof(spkyhw::kLightCtls) / sizeof(spkyhw::kLightCtls[0]); ++i) {
+            const auto& c = spkyhw::kLightCtls[i];
             Vec pos = mm2px(Vec(c.mm.x, c.mm.y));
             if (c.id == REC_A_L || c.id == REC_B_L) {
-                auto* led = createLightCentered<SamplerOnly<SmallLight<RedLight>>>(pos, module, c.id);
+                auto* led = createLightCentered<SamplerOnly<FfLight>>(pos, module, c.id);
                 led->fireflow = module;
                 led->engineId = (c.id == REC_A_L) ? ENGINE_A : ENGINE_B;
+                led->setAccent(spkyhw::kLightAccent[i]);
                 addChild(led);
-            } else
-                addChild(createLightCentered<MediumLight<YellowLight>>(pos, module, c.id));
+            } else {
+                auto* led = createLightCentered<FfLight>(pos, module, c.id);
+                led->setAccent(spkyhw::kLightAccent[i]);
+                addChild(led);
+            }
         }
         addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
         addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));

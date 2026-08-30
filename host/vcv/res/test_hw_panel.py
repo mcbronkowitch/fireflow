@@ -496,6 +496,40 @@ def test_pad_keycaps_are_dark_and_accented():
     check("kFfPadR" in src, "the hw header carries no pad radius")
 
 
+def test_light_accent_table():
+    """Every LED takes its zone accent, printed bed and live glow from the
+    same led_accent() (2026-08-30). Three of the nineteen sit at the plate's
+    edges and would be read as a deck by position alone: the MOD and SHFT
+    lamps, and CEIL_L, which reports the master limiter and merely happens to
+    stand next to OUT R. REC stays red on both plates."""
+    check(hw.LED_GLOBALS == {"MODBTN_L", "SHIFTBTN_L", "CEIL_L"},
+          f"LED_GLOBALS drifted: {hw.LED_GLOBALS}")
+    svg = open(os.path.join(HERE, "FireflowHW.svg"), encoding="utf-8").read()
+    for c in hw.HW_LIGHTS:
+        check(f'<circle cx="{hw.mm(c.x)}" cy="{hw.mm(c.y)}" r="0.750" '
+              f'fill="{hw.led_bed(c)}"/>' in svg,
+              f"{c.enum} printed bed is not {hw.led_bed(c)}")
+    src = open(os.path.join(HERE, "..", "src", "generated_hw_panel.hpp"),
+               encoding="utf-8").read()
+    m = re.search(r"static const FfAccent kLightAccent\[\] = \{(.*?)\n\};",
+                  src, re.S)
+    check(m is not None, "kLightAccent table missing from generated_hw_panel.hpp")
+    if m:
+        rows = re.findall(r"\{\s*(0x[0-9A-F]+)\s*,\s*(0x[0-9A-F]+)\s*\}", m.group(1))
+        check(len(rows) == len(hw.HW_LIGHTS),
+              f"kLightAccent has {len(rows)} rows, want {len(hw.HW_LIGHTS)}")
+        for c, (a, b) in zip(hw.HW_LIGHTS, rows):
+            want = hw.rgb(hw.led_accent(c))
+            check(a == want and b == want,
+                  f"{c.enum} light accent {a}/{b} is not {want}")
+        by = {c.enum: rows[i] for i, c in enumerate(hw.HW_LIGHTS) if i < len(rows)}
+        neutral = hw.rgb(hw.ACC["C"])
+        for enum in ("MODBTN_L", "SHIFTBTN_L", "CEIL_L"):
+            check(by.get(enum) == (neutral, neutral),
+                  f"{enum} is not neutral: {by.get(enum)}")
+    check("kLightAccent desynced" in src, "kLightAccent has no length static_assert")
+
+
 def test_steps_has_no_lamp_on_the_hw_plate():
     """Spec 2026-08-16 song-phrase-flash S4: FLOW lamps are not drawn;
     STPS captions sit on the knob x."""

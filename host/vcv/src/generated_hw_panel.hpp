@@ -290,6 +290,29 @@ static const PanelCtl kLightCtls[] = {
     {SHIFTBTN_L, WK_LIGHT, {19.500f, 114.000f}, "", {19.500f, 114.000f}, 0, 2.20f, 0xB9CDD7, ""},
     {CEIL_L, WK_LIGHT, {277.300f, 114.000f}, "", {277.300f, 114.000f}, 0, 2.20f, 0xB9CDD7, ""},
 };
+// Light glow, parallel to kLightCtls, same order.
+static const FfAccent kLightAccent[] = {
+    {0x3FBF9C, 0x3FBF9C},
+    {0xE8945A, 0xE8945A},
+    {0xE0503C, 0xE0503C},
+    {0xE0503C, 0xE0503C},
+    {0x3FBF9C, 0x3FBF9C},
+    {0xE8945A, 0xE8945A},
+    {0x3FBF9C, 0x3FBF9C},
+    {0xE8945A, 0xE8945A},
+    {0x3FBF9C, 0x3FBF9C},
+    {0xE8945A, 0xE8945A},
+    {0x3FBF9C, 0x3FBF9C},
+    {0xE8945A, 0xE8945A},
+    {0x3FBF9C, 0x3FBF9C},
+    {0xE8945A, 0xE8945A},
+    {0x7FB6C9, 0x7FB6C9},
+    {0x7FB6C9, 0x7FB6C9},
+    {0x7FB6C9, 0x7FB6C9},
+    {0x7FB6C9, 0x7FB6C9},
+    {0x7FB6C9, 0x7FB6C9},
+};
+static_assert(sizeof(kLightAccent) / sizeof(kLightAccent[0]) == sizeof(kLightCtls) / sizeof(kLightCtls[0]), "kLightAccent desynced");
 // Hardware-only: no VCV id. Rack does not render SVG text,
 // so these captions must come from here (spec 2026-08-10 §5).
 static const HwOnlyCtl kHwOnlyCtls[] = {

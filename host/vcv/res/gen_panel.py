@@ -67,6 +67,14 @@ PORT_WELL  = "#1b1d19"   # the barrel a plug goes into
 PORT_RING  = "#6b7278"   # pewter, not chrome: the stock port's shine was the
                          # one thing on either plate that still read as Rack's
 PORT_HOLE  = "#0b0c0a"
+# FfLight. The LED bed and its bezel; the glow colour itself is per-light and
+# lives in kLightAccent. LED_REC is the one saturated colour left on either
+# plate: record-is-red is a device convention, not Rack's, and that lamp
+# reports real writing (owner's call, 2026-08-30).
+FF_LED_R   = 1.50        # mm, the printed LED body radius
+LED_BED    = "#171a15"
+LED_BEZEL  = "#31352c"
+LED_REC    = "#e0503c"
 WELL       = "#1d1f1a"   # LED-ring well (dark, so the glow reads)
 WHITE      = "#fffdf7"   # pad keys / knob ticks
 GREEN      = "#1d6f5f"   # part A accent (solder green)
@@ -1127,9 +1135,13 @@ def svg():
             P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="{mm(c.r)}" '
                      f'fill="{GRAPHITE}" stroke="#4a4a40" stroke-width="0.4"/>')
             P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="1.3" fill="#0e0e0c"/>')
-        elif c.kind == LIGHT:  # dark LED housing; live YellowLight glows amber on top
+        elif c.kind == LIGHT:
+            # The housing was amber until 2026-08-30, chosen to sit under a
+            # yellow Rack light. FfLight glows in the side accent (and red on
+            # REC), so an amber bed would tint every one of them; it is
+            # neutral now and the live colour does all the talking.
             P.append(f'<circle cx="{mm(c.x)}" cy="{mm(c.y)}" r="{mm(c.r)}" '
-                     f'fill="#1a1206" stroke="#3a2c12" stroke-width="0.25"/>')
+                     f'fill="{LED_BED}" stroke="{LED_BEZEL}" stroke-width="0.25"/>')
         elif c.kind == SW2:
             P.append(f'<rect x="{mm(c.x-1.7)}" y="{mm(c.y-3.0)}" width="3.4" '
                      f'height="6.0" rx="0.8" fill="{WHITE}" stroke="{INK}" stroke-width="0.35"/>')
@@ -1195,6 +1207,9 @@ def header():
     L2.append(f"static constexpr unsigned kFfPortRing = {rgb(PORT_RING)};")
     L2.append(f"static constexpr unsigned kFfPortHole = {rgb(PORT_HOLE)};")
     L2.append(f"static constexpr float kFfPadR = {GLYPH_R[LATCH]:.3f}f;   // mm")
+    L2.append(f"static constexpr float kFfLedR = {FF_LED_R:.3f}f;     // mm")
+    L2.append(f"static constexpr unsigned kFfLedBed = {rgb(LED_BED)};")
+    L2.append(f"static constexpr unsigned kFfLedBezel = {rgb(LED_BEZEL)};")
     L2.append(f"static constexpr int PART_STRIDE = {PART_STRIDE};")
     L2.append(f"static constexpr float kRingR = {RING_R:.3f}f;      // mm, LED-dot orbit")
     L2.append(f"static constexpr float kRingDotR = 0.95f;   // mm, lit-dot radius")
@@ -1244,6 +1259,17 @@ def header():
     emit_table("kHwModInputCtls", HW_MOD_INPUTS)
     emit_table("kOutputCtls", OUTPUTS)
     emit_table("kLightCtls",  LIGHTS)
+    L2.append("// Light glow, parallel to kLightCtls, same order. REC is the")
+    L2.append("// one lamp that does not take a side colour.")
+    L2.append("static const FfAccent kLightAccent[] = {")
+    for c in LIGHTS:
+        a = rgb(LED_REC if c.enum in ("REC_A_L", "REC_B_L")
+                else side_accent(c.x))
+        L2.append(f"    {{{a}, {a}}},")
+    L2.append("};")
+    L2.append("static_assert(sizeof(kLightAccent) / sizeof(kLightAccent[0]) == "
+              "sizeof(kLightCtls) / sizeof(kLightCtls[0]), "
+              "\"kLightAccent desynced\");")
 
     KINDMAP = {"TDEPTH": 0, "FXDEPTH": 1, "HOST": 2}
     L2.append("enum ModKind { MODK_TDEPTH = 0, MODK_FXDEPTH = 1, MODK_HOST = 2 };")

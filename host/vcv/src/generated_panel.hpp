@@ -17,6 +17,9 @@ static constexpr unsigned kFfPortWell = 0x1B1D19;
 static constexpr unsigned kFfPortRing = 0x6B7278;
 static constexpr unsigned kFfPortHole = 0x0B0C0A;
 static constexpr float kFfPadR = 2.700f;   // mm
+static constexpr float kFfLedR = 1.500f;     // mm
+static constexpr unsigned kFfLedBed = 0x171A15;
+static constexpr unsigned kFfLedBezel = 0x31352C;
 static constexpr int PART_STRIDE = 20;
 static constexpr float kRingR = 16.000f;      // mm, LED-dot orbit
 static constexpr float kRingDotR = 0.95f;   // mm, lit-dot radius
@@ -376,6 +379,15 @@ static const PanelCtl kLightCtls[] = {
     {REC_A_L, WK_LIGHT, {31.000f, 103.600f}, "", {31.000f, 103.600f}, 0, 1.90f, 0x171713, ""},
     {REC_B_L, WK_LIGHT, {182.360f, 103.600f}, "", {182.360f, 103.600f}, 0, 1.90f, 0x171713, ""},
 };
+// Light glow, parallel to kLightCtls, same order. REC is the
+// one lamp that does not take a side colour.
+static const FfAccent kLightAccent[] = {
+    {0x1D6F5F, 0x1D6F5F},
+    {0xB96532, 0xB96532},
+    {0xE0503C, 0xE0503C},
+    {0xE0503C, 0xE0503C},
+};
+static_assert(sizeof(kLightAccent) / sizeof(kLightAccent[0]) == sizeof(kLightCtls) / sizeof(kLightCtls[0]), "kLightAccent desynced");
 enum ModKind { MODK_TDEPTH = 0, MODK_FXDEPTH = 1, MODK_HOST = 2 };
 struct ModTarget { int soundId; int depthId; unsigned char kind; unsigned char slot; unsigned char part; const char* name; };
 static const ModTarget kModLayer[] = {

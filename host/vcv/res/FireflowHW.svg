@@ -279,9 +279,9 @@
 <circle cx="238.600" cy="41.208" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
 <circle cx="238.600" cy="41.208" r="0.750" fill="#855a3c"/>
 <circle cx="108.500" cy="14.500" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="108.500" cy="14.500" r="0.750" fill="#297260"/>
+<circle cx="108.500" cy="14.500" r="0.750" fill="#81352b"/>
 <circle cx="196.300" cy="14.500" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="196.300" cy="14.500" r="0.750" fill="#855a3c"/>
+<circle cx="196.300" cy="14.500" r="0.750" fill="#81352b"/>
 <circle cx="75.475" cy="57.428" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
 <circle cx="75.475" cy="57.428" r="0.750" fill="#297260"/>
 <circle cx="234.525" cy="57.428" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
@@ -307,11 +307,11 @@
 <circle cx="130.500" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
 <circle cx="130.500" cy="114.000" r="0.750" fill="#4c6d79"/>
 <circle cx="285.300" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="285.300" cy="114.000" r="0.750" fill="#855a3c"/>
+<circle cx="285.300" cy="114.000" r="0.750" fill="#4c6d79"/>
 <circle cx="19.500" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="19.500" cy="114.000" r="0.750" fill="#297260"/>
+<circle cx="19.500" cy="114.000" r="0.750" fill="#4c6d79"/>
 <circle cx="277.300" cy="114.000" r="1.500" fill="#0d1417" stroke="#1e2a30" stroke-width="0.25"/>
-<circle cx="277.300" cy="114.000" r="0.750" fill="#855a3c"/>
+<circle cx="277.300" cy="114.000" r="0.750" fill="#4c6d79"/>
 <rect x="10.000" y="110.000" width="8.000" height="8.000" rx="1.2" fill="#151b1f" stroke="#7fb6c9" stroke-width="0.3"/>
 <text x="14.000" y="120.700" fill="#b9cdd7" text-anchor="middle" font-family="monospace" font-size="2.2">SHFT</text>
 <text x="12.000" y="9.000" fill="#7f9aa8" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">ENG</text>

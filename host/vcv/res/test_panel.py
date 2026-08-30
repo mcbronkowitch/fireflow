@@ -800,6 +800,41 @@ def test_both_panels_use_the_house_pad():
           f"(found {cpp.count('SlotVisible<FfPadLatch>')} of 2)")
 
 
+def test_both_panels_use_the_house_light():
+    """The LEDs were the last stock parts: a saturated Rack yellow over a
+    plate that had already printed the right tint underneath. FfLight keeps
+    Rack's own ModuleLightWidget shape and only takes its colours from
+    kLightAccent (2026-08-30). REC stays red -- record-is-red is a device
+    convention, not Rack's, and that LED reports real writing."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    cpp = open(os.path.join(here, "..", "src", "Fireflow.cpp"),
+               encoding="utf-8").read()
+    for stock in ("YellowLight", "RedLight", "MediumLight", "SmallLight"):
+        check(stock not in cpp, f"a stock {stock} is still built")
+    check(cpp.count("SamplerOnly<FfLight>") == 2,
+          f"REC must be a sampler-only house light on both panels "
+          f"(found {cpp.count('SamplerOnly<FfLight>')} of 2)")
+
+    src = open(os.path.join(here, "..", "src", "generated_panel.hpp"),
+               encoding="utf-8").read()
+    m = re.search(r"static const FfAccent kLightAccent\[\] = \{(.*?)\n\};",
+                  src, re.S)
+    check(m is not None, "kLightAccent table missing from generated_panel.hpp")
+    if m:
+        rows = re.findall(r"\{\s*(0x[0-9A-F]+)\s*,\s*(0x[0-9A-F]+)\s*\}", m.group(1))
+        check(len(rows) == len(g.LIGHTS),
+              f"kLightAccent has {len(rows)} rows, want {len(g.LIGHTS)}")
+        for c, (a, b) in zip(g.LIGHTS, rows):
+            want = g.rgb(g.LED_REC if c.enum in ("REC_A_L", "REC_B_L")
+                         else g.side_accent(c.x))
+            check(a == want and b == want,
+                  f"{c.enum} light accent {a}/{b} is not {want}")
+    check("kLightAccent desynced" in src, "kLightAccent has no length static_assert")
+    # the amber LED housing was chosen to sit under a yellow Rack light; with
+    # the light no longer yellow it has to go neutral or it tints every LED
+    check("#1a1206" not in g.svg(), "the amber LED housing is still printed")
+
+
 def test_knob_accent_table():
     """FfKnob's collar and pointer colour arrives as data, not as a literal:
     kParamAccent is parallel to kParamCtls and carries two colours per row.
@@ -2725,8 +2760,8 @@ struct SamplerOnly : W {
         issues.append("widget scope is missing")
     else:
         n = compact_cpp(widget)
-        if "SamplerOnly<SmallLight<RedLight>>" not in n:
-            issues.append("REC lights must be built as SamplerOnly<SmallLight<RedLight>>")
+        if "SamplerOnly<FfLight>" not in n:
+            issues.append("REC lights must be built as SamplerOnly<FfLight>")
         if "led->engineId=(c.id==REC_A_L)?ENGINE_A:ENGINE_B;" not in n:
             issues.append("each deck's REC light must bind its own ENGINE_* id")
     return issues
@@ -2748,7 +2783,7 @@ def test_rec_light_visibility_guard_rejects_representative_regressions():
         ("led->engineId = (c.id == REC_A_L) ? ENGINE_A : ENGINE_B;",
          "led->engineId = (c.id == REC_A_L) ? ENGINE_A : ENGINE_A;",
          "deck-B light bound to the wrong deck's ENGINE"),
-        ("SamplerOnly<SmallLight<RedLight>>", "SmallLight<RedLight>",
+        ("SamplerOnly<FfLight>", "FfLight",
          "REC light built with the bare widget type"),
     ]
     for before, after, label in mutations:
