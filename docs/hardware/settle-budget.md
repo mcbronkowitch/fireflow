@@ -133,12 +133,30 @@ reservoir helps the S&H — is real but loses: the reservoir's recovery time gro
 linearly with the capacitance while the dip it suppresses shrinks only
 logarithmically.
 
-**2. The pot value is a real design decision with a hard ceiling: 10 k or 20 k.**
-At 50 k the 16:1 falls off a cliff, because term C forces the sampling window
-from 64.5 to 387.5 cycles and the step cost multiplies. The price of 10 k is
-current: 65 pots at 3.3 V/10 k is **~21 mA** standing on the 3V3 rail (20 k →
-~11 mA). **What the 3V3 pin of the Patch Submodule will actually give is not
-checked here**, and it is the only argument on the table for 20 k.
+**2. The pot value is a real design decision with a hard ceiling, and it lands
+on 10 k.** At 50 k the 16:1 falls off a cliff, because term C forces the
+sampling window from 64.5 to 387.5 cycles and the step cost multiplies. The
+price of 10 k is current: 65 pots at 3.3 V/10 k is **~21 mA** standing on the
+3V3 rail (20 k → ~11 mA) — which was the only argument for 20 k, and it does not
+hold. The Patch SM datasheet (v1.0.5, Table 1, *Absolute Maximum Ratings*) gives
+**3V3 Output = 500 mA**, so the pots are 4 % of it. Two caveats for honesty: that
+is an absolute-maximum figure rather than an operating one, and the module's own
+consumption comes out of the same budget and is **stated nowhere** — the
+footnote only says "Maximum output current is firmware dependent". The
+defensible claim is that 21 mA is not the problem, not that 479 mA are free.
+
+Two side findings from the same datasheet, both of which bear on the design.
+Electrosmith's own potentiometer application example names an **Alpha 9 mm
+Linear 10K** (`RD901F-40-15F-B10K-00D70`) — the vendor's reference design lands
+on the same value this calculation does, independently. And a note beside it
+closes an option that would otherwise look attractive: *"When using ADC_9 to
+ADC_12, use +3V3 OUT (A10) instead of +5V OUT (A6)."* `ADC_9`–`ADC_12` are
+exactly the four sense pins. Giving the pots their **own** 3.3 V regulator on the
+control PCB to spare the module's is therefore wrong: the conversion is
+ratiometric to the ADC reference, and a second regulator's difference from it
+appears as a gain error and as noise in every reading. The pots hang on `A10`.
+(libDaisy never configures `VREFBUF` — checked; how the board ties `VREF+` is not
+verifiable from here, but the instruction stands on its own.)
 
 **3. It is charge redistribution that sets the sampling window, never the
 acquisition rule.** Term C beats term B in every configuration considered — the

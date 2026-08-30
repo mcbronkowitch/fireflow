@@ -541,11 +541,11 @@ Die Liste von 2026-08-08 nannte an erster Stelle die Einstufung der Parameter.
   > 1. **Der Kondensator am `COM` fällt ganz weg**, er wird nicht kleiner. Jede
   >    Bestückung ist schlechter als keine — die Envelope-Spec sagt „≤ 1 nF oder
   >    weg", die Rechnung sagt weg.
-  > 2. **Der Poti-Wert ist die eigentliche Entscheidung: 10 k oder 20 k.** Ab
-  >    50 kΩ kippt der 16:1 über eine Klippe. Der Preis für 10 k ist Strom —
-  >    65 Potis ziehen ~21 mA dauerhaft auf 3V3 (20 k → ~11 mA), und **was der
-  >    3V3-Pin des Submodules hergibt, ist ungeprüft.** Das ist das einzige
-  >    Argument für 20 k, und es ist ein neuer offener Posten dieser Liste.
+  > 2. **Der Poti-Wert ist die eigentliche Entscheidung, und sie ist auf 10 k
+  >    gefallen.** Ab 50 kΩ kippt der 16:1 über eine Klippe. Der Preis für 10 k
+  >    ist Strom — 65 Potis ziehen ~21 mA dauerhaft auf 3V3 (20 k → ~11 mA);
+  >    das war das einzige Argument für 20 k, und es trägt nicht (siehe den
+  >    Nachtrag zur Versorgung unten).
   > 3. **Nicht die Ladezeit des ADC setzt das Sample-Fenster, sondern die
   >    Ladungsumverteilung** aus dem vorigen Kanal. Daraus folgt ein konkreter
   >    Firmware-Wert: das libDaisy-Default `SPEED_8CYCLES_5` ist in jedem
@@ -563,6 +563,33 @@ Die Liste von 2026-08-08 nannte an erster Stelle die Einstufung der Parameter.
   > und Rauschen neben dem Audiopfad wäre ein Steckbrett-Pass nicht einmal
   > konservativ. Die acht Punkte, die der Coupon dafür **vor** dem Layout
   > tragen muss, stehen in der Envelope-Spec §5 (Nachtrag 2026-08-30).
+  >
+  > **Nachtrag zur Versorgung, 2026-08-30, und er schließt den Posten:** das
+  > Patch-SM-Datenblatt (v1.0.5, Table 1 — *Absolute Maximum Ratings*) gibt
+  > **3V3 Output = 500 mA**, 5V Output = 800 mA, mit der Fußnote „Maximum
+  > output current is firmware dependent". Die ~21 mA der 10-k-Potis sind davon
+  > **4 %**. Zwei Einschränkungen der Vollständigkeit halber: es ist die
+  > Absolute-Maximum-Tabelle und keine Betriebsangabe, und der Eigenverbrauch
+  > des Moduls (H750 bei 480 MHz, SDRAM, Codec, USB) kommt aus demselben
+  > Budget und **steht im Datenblatt nirgends**. Die belastbare Aussage ist
+  > „21 mA sind nicht das Problem", nicht „479 mA sind frei".
+  >
+  > **Zwei Nebenfunde aus demselben Datenblatt, beide entscheidungsrelevant.**
+  > Erstens nennt Electrosmiths eigenes Potentiometer-Anwendungsbeispiel als
+  > Beispielteil ein **Alpha 9 mm Linear 10K** (`RD901F-40-15F-B10K-00D70`) —
+  > der Herstellerreferenzentwurf landet unabhängig auf demselben Wert wie die
+  > Rechnung. Zweitens, und das schließt eine Option, die sonst naheliegt:
+  >
+  > > „When using ADC_9 to ADC_1 2, use +3V3 OUT (A1 0) instead of +5V OUT (A6)."
+  >
+  > `ADC_9`–`ADC_12` sind genau die vier Sense-Pins A2/A3/D8/D9 (§3). Die
+  > Potis auf einen **eigenen** 3,3-V-Regler der Control-PCB zu legen, um den
+  > Modulregler zu entlasten, ist damit falsch: die Wandlung ist ratiometrisch
+  > zur ADC-Referenz, und die Differenz eines zweiten Reglers zu dieser
+  > Referenz erscheint als Verstärkungsfehler und als Rauschen in jedem
+  > Messwert. Die Potis hängen an **A10**. (`VREFBUF` wird von libDaisy
+  > nirgends konfiguriert — geprüft; wie das Board `VREF+` beschaltet, ist von
+  > hier aus nicht prüfbar, die Anweisung steht aber für sich.)
 - **Der Mux-Scan selbst.** libDaisys `InitMux` kann 8:1 an GPIOs, gebraucht wird
   16:1 mit Adressen aus der 595-Kette (§3). Die Umschaltung muss geschrieben
   werden. **Die CPU-Seite ist seit dem 2026-08-23 nicht mehr offen, sondern

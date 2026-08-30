@@ -223,7 +223,14 @@ FX/VOICE stimmig, Orbit-Knobs nicht) läuft als definierter Prozess **vor H1**:
   >    ADC gesehen, also durch die Stufe, deren Verhalten mit zur Debatte steht.
   > 4. **10 k und 20 k gleichzeitig bestückt**, auf verschiedenen Kanälen
   >    desselben Mux — der kontrollierte Vergleich: gleiche Kette, gleicher
-  >    Sense-Pin, gleicher Takt. Der 3V3-Strom fällt dabei mit ab.
+  >    Sense-Pin, gleicher Takt. **Die Wahl ist inzwischen auf 10 k gefallen**
+  >    (Strombedenken erledigt, und Electrosmiths eigenes Anwendungsbeispiel
+  >    nennt ein Alpha 9 mm Linear 10K) — der zweite Wert bleibt trotzdem auf
+  >    dem Board, weil das Modell für ihn eine *bestimmte* Zeit vorhersagt und
+  >    zwei Punkte das Modell prüfen, wo einer nur die Konfiguration prüft.
+  >    Die Potis hängen an **A10**, nicht an einem eigenen Regler: die Wandlung
+  >    ist ratiometrisch zur ADC-Referenz, und das Datenblatt schreibt für
+  >    `ADC_9`–`ADC_12` ausdrücklich +3V3 OUT (A10) vor.
   > 5. **Zwei Nachbarkanäle hart auf 3V3 und GND**, links und rechts vom
   >    Messkanal. Plan Schritt 5b verlangt genau diesen Aufbau; als Leiterbahn
   >    ist er umsonst und ohne Jumper reproduzierbar.

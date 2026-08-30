@@ -3544,10 +3544,19 @@ nothing fitted at `COM`, `SPEED_16CYCLES_5`, a channel change must read clean
 1.6 µs after the address is written. Four results outlast the round. **The
 capacitor at `COM` goes away entirely** rather than getting smaller — every
 fitted value is worse than none, which resolves the envelope spec's "≤ 1 nF or
-gone". **The pot value is a real decision with a ceiling of 10 k or 20 k**; at
-50 kΩ the 16:1 falls off a cliff, and the only argument against 10 k is that
-65 pots then stand ~21 mA on the 3V3 rail, which the submodule's budget has not
-been checked against. **It is charge redistribution from the previous channel
+gone". **The pot value is a real decision, and it lands on 10 k**; at 50 kΩ the 16:1
+falls off a cliff, and the only argument against 10 k — that 65 pots stand
+~21 mA on the 3V3 rail — did not survive the datasheet: Patch SM Table 1 gives
+3V3 Output = 500 mA, so the pots are 4 % of an absolute-maximum figure (the
+module's own draw comes out of the same budget and is stated nowhere, so the
+claim is "21 mA is not the problem", not "479 mA are free"). Two side findings
+came with it: Electrosmith's own potentiometer example names an Alpha 9 mm
+Linear **10K**, i.e. the vendor's reference design lands on the same value
+independently; and the note *"When using ADC_9 to ADC_12, use +3V3 OUT (A10)
+instead of +5V OUT (A6)"* closes the idea of sparing the module's regulator with
+a local 3.3 V one — `ADC_9`–`ADC_12` are exactly the four sense pins, the
+conversion is ratiometric to the ADC reference, and a second regulator's
+difference from it would arrive as gain error and noise in every reading. **It is charge redistribution from the previous channel
 that sets the sampling window, never the ADC's charging rule** — which is also
 why libDaisy's mux path discards a conversion — and it makes the libDaisy
 default of 8.5 cycles too short in every configuration. **Timing does not decide
