@@ -333,11 +333,4 @@
 <text x="268.300" y="68.600" fill="#7f9aa8" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">PITCH</text>
 <text x="217.850" y="68.600" fill="#7f9aa8" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">FLUX</text>
 <text x="188.800" y="68.600" fill="#7f9aa8" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">LEVEL</text>
-<text x="32.000" y="109.350" fill="#7f9aa8" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">IN</text>
-<text x="55.750" y="109.350" fill="#7f9aa8" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">CV A</text>
-<text x="78.750" y="109.350" fill="#7f9aa8" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">MOD A</text>
-<text x="127.000" y="109.350" fill="#7f9aa8" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">CLOCK</text>
-<text x="260.050" y="109.350" fill="#7f9aa8" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">OUT</text>
-<text x="237.050" y="109.350" fill="#7f9aa8" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">CV B</text>
-<text x="188.800" y="109.350" fill="#7f9aa8" text-anchor="start" font-family="monospace" font-size="1.9" letter-spacing="0.5">MOD B</text>
 </svg>

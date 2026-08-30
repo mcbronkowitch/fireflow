@@ -797,12 +797,12 @@ def test_legend_notches_clear_their_lettering():
     edge, or it is too long for a narrow frame and eats into a rounded
     corner, which reads as a dented box rather than a notch."""
     for b in hw.BOXES:
-        if not b.legend_straddles:
+        if not b.prints_legend:
             check(b.notch is None,
-                  f"{b.n}: the jack row's legend rides above its frame and "
-                  f"must not cut a notch into it")
+                  f"{b.n}: this frame prints no legend, so there is nothing "
+                  f"for a notch to make room for")
             continue
-        check(b.notch is not None, f"{b.n}: straddling legend with no notch")
+        check(b.notch is not None, f"{b.n}: printed legend with no notch")
         n0, n1 = b.notch
         x0, x1, ytop, ybase = hw.text_run(b.x + hw.LEGEND_INSET, b.legend_y,
                                           hw.LEGEND_SIZE, hw.LEGEND_SPACING,
@@ -1172,9 +1172,17 @@ def test_drawing_geometry():
     # since 2026-08-30, when the two-digit index in front of each name was
     # struck. Rack does not render SVG text, so an empty TEXTS means a plate
     # whose legends exist in the preview and nowhere else.
-    check(len(hw.TEXTS) == len(hw.BRAND_TEXTS) + len(hw.BOXES),
-          f"TEXTS carries {len(hw.TEXTS)} rows, not brand + one per frame")
+    printing = [b for b in hw.BOXES if b.prints_legend]
+    check(len(hw.TEXTS) == len(hw.BRAND_TEXTS) + len(printing),
+          f"TEXTS carries {len(hw.TEXTS)} rows, not brand + one per frame "
+          f"that prints a legend ({len(printing)} of {len(hw.BOXES)})")
+    # The jack row's seven were struck 2026-08-30. Asserted absent, not merely
+    # uncounted: a stale SVG or header could otherwise still carry them.
     words = {t[6] for t in hw.TEXTS}
+    for w in ("IN", "OUT", "CV A", "CV B", "MOD A", "MOD B", "CLOCK"):
+        check(w not in words, f"the jack-row legend {w!r} is back")
+    check(all(b.y != hw.JACK_ROW_Y for b in printing),
+          "a jack-row frame prints a legend again")
     # Asserted absent, not merely uncounted: a half-reverted generator that
     # brings the numbering back would otherwise only trip the count above,
     # which a second brand row could mask.

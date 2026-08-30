@@ -594,7 +594,6 @@ GROUP_ORDER = ("ENG", "SEQUENCE", "CAPTURE", "MOTION", "VOICE", "PITCH",
 
 LEGEND_SIZE, LEGEND_SPACING = 1.9, 0.5
 LEGEND_DY = 0.75                  # legend baseline below a frame's top edge
-LEGEND_LIFT = 0.80                # jack row: baseline ABOVE its top edge
 LEGEND_INSET = 4.0                # legend's left edge, in from the frame's.
                                   # It is where the struck index used to start,
                                   # so the lettering did not move on 2026-08-30
@@ -722,26 +721,29 @@ class Box:
         return self.n[:-2] if self.n.endswith((" A", " B")) else self.n
 
     @property
-    def legend_y(self):
-        """Baseline of the group legend.
+    def prints_legend(self):
+        """The jack row prints none since 2026-08-30 -- IN / CV A / MOD A /
+        CLOCK / MOD B / CV B / OUT are struck. The jacks are the one row a
+        legend never helped: they are already the only sockets on the plate,
+        the captions under them name every one, and the words had to ride
+        ABOVE their frame to escape Rack's 8.03 mm PJ301M widgets, which put
+        them in the gap between two rows rather than on either.
 
-        Rows 1-3 straddle the frame's top edge, as drawn in the design. The
-        jack row cannot: a PJ301M is 8.03 mm across, so its widget reaches
-        up to y=109.99 and would bury a legend sitting at 111.15 -- visible
-        in Rack, invisible in the SVG, where the jack body is only 6.2 mm.
-        So that one row's legend rides just above its frame instead."""
-        return (self.y - LEGEND_LIFT if self.y == JACK_ROW_Y
-                else self.y + LEGEND_DY)
+        That lift was the only reason a legend could fail to straddle its own
+        top edge, so with the jack row silent, printing and straddling are the
+        same question and LEGEND_LIFT is gone."""
+        return self.y != JACK_ROW_Y
 
     @property
-    def legend_straddles(self):
-        return self.y != JACK_ROW_Y
+    def legend_y(self):
+        """Baseline of the group legend -- always straddling the top edge."""
+        return self.y + LEGEND_DY
 
     @property
     def notch(self):
         """(x0, x1) of the bite this field's top edge takes around its own
-        legend, or None where the legend does not straddle the edge."""
-        if not self.legend_straddles:
+        legend, or None where the frame prints no legend to make room for."""
+        if not self.prints_legend:
             return None
         _, ink_r, _, _ = text_run(self.x + LEGEND_INSET, self.legend_y,
                                   LEGEND_SIZE, LEGEND_SPACING, "start", self.n)
@@ -873,7 +875,7 @@ def group_texts():
     SVG text, so the plate lettering and the rehearsal lettering must both
     come from this table."""
     return [(b.x + LEGEND_INSET, b.legend_y, LEGEND_SIZE, LEGEND_SPACING,
-             HW_LEGEND, "start", b.n) for b in BOXES]
+             HW_LEGEND, "start", b.n) for b in BOXES if b.prints_legend]
 
 
 BRAND_TEXTS = [
