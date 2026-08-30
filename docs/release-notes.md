@@ -8,55 +8,61 @@
   Everything below the comment is public.
 -->
 
-## FireFlow 2.21.10
+## FireFlow 2.22.0
 
-**Every MOD depth knob now has two halves.** Hold MOD and turn a wreathed knob:
-to the **right of noon** it does what it always did — the depth of that lane's
-continuous, gliding modulation. To the **left of noon** the same lane is
-**sampled and held** at its own slot boundaries, so the target steps between
-values instead of sliding between them. Noon is a standstill: the knob is off
-there, with a small dead zone around it so "off" is reachable on a real pot the
-way it already is on GRIT and PULL.
+**Each deck can now be placed in the stereo field.** A new bipolar `PAN` knob
+per deck, centre at noon, unity on both channels there — a centred PAN cannot
+move a render at all. The law is a plain balance: turn right and the left
+channel comes down, the right stays where it was. Nothing gets louder.
 
-A left-hand setting is **not an inverted right-hand one.** The sign picks which
-reading of the lane the target follows; the distance from noon sets how much.
-At equal distance in both directions you get the same amount of modulation, one
-gliding and one stepping.
+**The reverb stays in the middle.** PAN moves the dry signal only. The send
+into the room is taken before the balance, so panning a deck hard left leaves
+its reverb tail centred and the cloud intact, rather than dragging the whole
+space over with it. This was the decision, not an oversight.
 
-**Where you will hear it.** The two halves diverge most in FLOW with SMOOTH up
-— that is where the continuous reading is smoothest and the held one is most
-obviously a staircase. In STEP at SMOOTH 0 they are *the same signal*, exactly,
-because the follower is already a staircase and sampling it changes nothing. If
-you go looking for the feature there you will conclude the knob is broken; it
-is not.
+**PAN has a MOD ring, and the two decks mirror each other.** Latch MOD and the
+PAN knobs take a depth like any other wreathed control. Deck B reads deck A's
+lane **negated**, so the decks always move apart — one goes left as the other
+goes right — instead of drifting to the same side together.
 
-**One honest caveat:** sampling shaves the peaks a little. The grid rarely
-catches a lane's exact extremes, so a held reading swings slightly less than
-its continuous twin — measured 0.905 against 0.941 peak-to-peak at SMOOTH 0.7.
-That is ordinary sample-and-hold behaviour, not a defect, but it means the left
-half is a touch gentler than the right at the same distance from noon.
+That mirror is not cosmetic. Both decks reading their own lane was measured at
+a correlation of **+1.0000** whenever the two decks share a RATE: 98.7 % of the
+time on the same side, 0.0 % opposite. The modulation lane does not depend on
+the deck's seed, so two decks were producing one drift, twice, and the ring
+panned the whole mix rather than opening it up.
 
-**The MOD lamp now double-pulses while the latch holds.** Two short flashes,
-a gap, then a longer dark tail, twice a second. The latch re-points every
-wreathed knob on the plate at once, so forgetting it is engaged is the
-expensive mistake, and a steady lamp sits in peripheral vision as furniture.
-An even blink was tried alongside and rejected — at this rate it reads as a
-loose contact rather than as a signal.
+**What the mirror costs, said plainly:** `MOD B` no longer reaches `PAN B`.
+Deck B's pan modulation now runs off deck A's master, so `MOD A` down stills
+both pans, and you switch deck B's off at its own depth ring instead. PAN has
+had **no listening pass yet** — the balance law, the smoothing time, the lane
+it rides and the mirror itself are all first-try values.
 
-**A new factory patch.** A fresh module no longer boots the 2.21.6 sound. Deck
-A still runs FEED against WAVE on deck B, deck B still boots stepped, and the
-tempo, scale and drift settings are unchanged — but the voicing moved, MORPH
-sits at centre, the modulation clock runs at ×1/16, and the two decks no longer
-share one compressor amount.
+**Neither panel borrows Rack's parts any more.** New house knobs, jacks and
+keys, drawn rather than pulled from the stock library: the knob caps now carry
+their deck's accent colour on collar and pointer, so the hand can tell deck A
+from deck B without reading a caption. Dragging, snapping, tooltips and the
+right-click menu are unchanged — they are still the framework's.
 
-The part worth knowing about: **the MOD layer now boots with something
-dialled.** Five depths sit off noon out of the box — SUB on deck B, DETUNE on
-both decks, and MORPH and REV_DIFF in the centre column. Latch MOD on a fresh
-patch and you will see them away from centre. That is the patch, not a fault.
+**The lamps light in the colours the plates already printed.** Every LED bed on
+both plates has carried a zone tint for a long while, and a saturated yellow
+was painting over all of them. Deck A is teal now, deck B orange, the centre
+blue-grey. REC stays red, because on a record light that is the point.
 
-The depth knobs' range is now −1..+1 instead of 0..1. Patches from earlier
-versions are not converted — this is a development alpha and saved patches may
-break between releases.
+**The hardware plate (`FireflowHW`) is one flat surface.** The tinted zones,
+the printed ember silhouette, the fade overlays and the dashed drawing frames
+are all struck; zone identity moved into the group fields instead, which is
+also why the "DECK A" / "DECK B" legends are gone — the tint says it. `SEND`
+moved out of `ROOM` and into `LEVEL`, where it belongs, on a frame that now
+reaches past the deck edge to hold it. The jack row lost its group legends: the
+caption under each socket already names it.
+
+**One deliberate regression on that plate:** the accent rings marking which
+knobs accept modulation are no longer printed — they are drawn, and only while
+MOD is latched. Silkscreen cannot switch, and a real aluminium panel would have
+to carry them permanently or not at all. This release rehearses "not at all",
+so on the hardware draft, which knobs carry a depth is learned rather than read.
+
+This is a development alpha. Saved patches may break between releases.
 
 ## Install
 

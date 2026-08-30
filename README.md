@@ -165,7 +165,7 @@ carries recordings from most milestones, next to the story of how they came
 about.
 
 **[Download the latest release](https://github.com/mcbronkowitch/fireflow/releases/latest)**
-— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.21.10**
+— `.vcvplugin` builds for Windows, Apple Silicon and Linux, currently **2.22.0**
 (both modules: Synth, Sampler, WAVE, BODY, BBD and FEED, the independent
 FORM/SONG phrase arranger, the STEP mod grid lock, the PACE modulation
 time-stretch, the redrawn 60 HP hardware plate with its excursion lamps, the

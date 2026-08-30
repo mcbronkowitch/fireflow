@@ -494,5 +494,11 @@ Three values shipped first-try and none has been heard against an alternative:
   step arrives after 111 ticks = 222 ms.
 - **`LANE_SIZE` (×1/2) as the mod ring's lane**, chosen on paper for being the
   slowest of the five.
+- **Deck B's ring mirroring deck A** (2026-08-30, after the first release).
+  The *problem* was measured, not guessed — at equal RATE the two decks' own
+  `LANE_SIZE` outputs correlate at r = +1.0000, so both rings panned the mix
+  to one side (spec §6 amendment carries the table). What was **not** heard is
+  the cure: whether a hard mirror is the right width, or whether the shared
+  master is worth losing `MOD_B`'s reach over `PAN_B`.
 
 Do not "finish" any of these without a listening pass.
