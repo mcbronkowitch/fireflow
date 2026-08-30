@@ -713,13 +713,32 @@ struct Fireflow : Module {
         // masters down means the center is still. Both readings are built the
         // same way -- the sum of two staircases is itself a staircase (spec
         // 2026-08-22 mod-sh-split §5), so the center needs no extra clock.
+        //
+        // PAN_B is the layer's one cross-deck row: it reads deck A's lane
+        // through deck A's MASTER, negated, so the two PANs always open the
+        // stereo image instead of walking the whole mix to one side (why, and
+        // the measurement behind it: spkymod::mirror_term). Both readings are
+        // mirrored, continuous and S&H alike -- mirroring only one would flip
+        // the symmetry the moment the depth ring crosses noon.
+        //
+        // The exception is keyed off the soundId HERE rather than handed in by
+        // the caller, for the same reason mv() lost its `part` parameter in
+        // fix round 2: the row decides, never the call site. t.part stays 1
+        // for that row, and truthfully so -- PAN_B's DEPTH is still deck B's
+        // ring. Only the source moved. What it costs: MOD_B no longer reaches
+        // PAN_B, so deck B's pan is switched off at its own depth ring.
+        const bool mirror = (soundId == PAN_B);
         const float term = (t.part == 2)
             ? spkymod::center_term(modMaster[0], laneOut[0][t.slot],
                                    modMaster[1], laneOut[1][t.slot])
+            : mirror
+            ? spkymod::mirror_term(modMaster[0], laneOut[0][t.slot])
             : spkymod::lane_term(modMaster[t.part], laneOut[t.part][t.slot]);
         const float stepTerm = (t.part == 2)
             ? spkymod::center_term(modMaster[0], laneOutStepped[0][t.slot],
                                    modMaster[1], laneOutStepped[1][t.slot])
+            : mirror
+            ? spkymod::mirror_term(modMaster[0], laneOutStepped[0][t.slot])
             : spkymod::lane_term(modMaster[t.part],
                                  laneOutStepped[t.part][t.slot]);
         ParamQuantity* q = paramQuantities[soundId];
@@ -866,6 +885,10 @@ struct Fireflow : Module {
             // PAN goes through mv() so the MOD ring's host-computed term is
             // included; at boot the depth is 0 and mv() returns the knob by early
             // return, so this is bit-identical to pushing the raw param.
+            //
+            // Deck B's mirror is NOT applied here -- mv() recognises PAN_B by
+            // its own soundId and swaps the lane source itself, so this call
+            // site stays the same shape as every other one. See mv().
             //
             // mv(p ? PAN_B : PAN_A), NOT mvp(PAN_A, p): mvp() adds p * PART_STRIDE
             // and is only valid for params inside part_controls(). PAN is an

@@ -14,6 +14,31 @@ inline float lane_term(float master, float laneOut) {
     return master * laneOut;
 }
 
+// PAN's mirror, and the only place in this layer where one deck's face is
+// driven by the OTHER deck's modulation (spec 2026-08-30 pan, amended
+// 2026-08-30).
+//
+// Why PAN is the exception: every other paired face is interesting when both
+// decks move together. PAN is not -- a common-mode pan is just the whole mix
+// walking to one side, and it is what the layer produced before this, reliably
+// so: measured 2026-08-30 on two SuperModulators with the real seeds from
+// instrument.cpp (0x1234abcd / 0x9e3779b9), FLOW, 48 kHz, 120 s per run, the
+// two decks' LANE_SIZE outputs correlate at r = +1.0000 whenever the decks
+// share a RATE -- 98.7% of samples on the same side, 0.0% opposite. The
+// non-melodic lane is seed-independent, so different seeds buy no spread. At
+// the factory RATEs (.112 / .164) it is r = +0.21, still same-side biased.
+//
+// Note the MASTER passed here is deck A's, not deck B's: the caller hands this
+// deck A's lane AND deck A's master, so the mirror is exact in amount and not
+// only in direction. The cost is that MOD_B no longer reaches PAN_B -- deck
+// B's per-parameter off switch is its own depth ring instead. This is the same
+// shape of exception center_term() already is (a deck-column face that does
+// not follow one deck's master), and it is the reason the ModTarget row for
+// PAN_B still reads part 1: its DEPTH is deck B's, only the source is not.
+inline float mirror_term(float master, float laneOut) {
+    return -lane_term(master, laneOut);
+}
+
 // The center term: mean of both decks' terms, so both masters down means
 // the center is still (spec §2).
 inline float center_term(float masterA, float laneA,

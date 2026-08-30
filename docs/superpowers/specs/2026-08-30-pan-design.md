@@ -1,7 +1,8 @@
 # PAN — design
 
 **Date:** 2026-08-30
-**Status:** designed, not implemented
+**Status:** implemented and merged (`feat/pan`, 2026-08-30); §6 carries an
+amendment of the same day that changed deck B's mod source after it shipped
 **Scope:** engine (`Center` + the mix stage), both VCV modules, `param_table.h`.
 The `shell/` firmware and the CV surface are explicitly out (§9).
 
@@ -186,6 +187,49 @@ Two properties fall out for free and should not be re-derived later:
 - **The swing is symmetric about the knob.** PAN is bipolar and boots at 0, so
   a lane term of ±1 at depth 1 sweeps the full width around centre. No offset
   correction is needed.
+
+### Amendment 2026-08-30: deck B mirrors deck A
+
+The row above shipped as written and was wrong about the thing that matters.
+Both decks reading their *own* `LANE_SIZE` does not give two independent
+drifts — it gives one drift, twice, and the mix walks to one side.
+
+**Measured 2026-08-30**, two `SuperModulator`s driven directly with the real
+seed bases from `instrument.cpp:144/148` (`0x1234abcd` / `0x9e3779b9`), FLOW,
+48 kHz, `set_synced(false)`, `set_step(false, 8)`, shape 0, range 0, 120 s per
+run, correlating `lane_output(LANE_SIZE)`:
+
+| Setup | corr `r` | same side | opposite |
+|---|---|---|---|
+| both decks RATE .112 | **+1.0000** | 98.7 % | **0.0 %** |
+| both decks RATE .112, SMOOTH .97 | +1.0000 | 94.2 % | 0.0 % |
+| both decks RATE .5 | +1.0000 | 98.7 % | 0.0 % |
+| factory init (RATE .112 / .164) | +0.2094 | 56.3 % | 37.9 % |
+
+The seeds buy nothing: a non-melodic lane's output does not depend on the seed,
+so at equal RATE the two decks are the *same* signal, and PAN is the one face
+where that is worthless. Note what this also rules out — merely negating deck
+B's own term would leave two uncorrelated signals uncorrelated at the factory
+RATEs, so a sign flip alone does not buy a stereo image either.
+
+**The law, amended.** `PAN_B`'s term is deck A's lane through deck A's master,
+negated: `spkymod::mirror_term(modMaster[0], laneOut[0][LANE_SIZE])`, and the
+same for the S&H twin. `mv()` (`host/vcv/src/Fireflow.cpp`) keys the exception
+off `soundId == PAN_B` itself rather than taking it from the call site — the
+same rule that removed mv()'s `part` parameter in the PAN fix round.
+
+**What it costs, stated plainly:** `MOD_B` no longer reaches `PAN_B`. Deck B's
+pan modulation is switched off at its own depth ring instead. The `ModTarget`
+row keeps `part == 1` and that stays true — the depth is deck B's; only the
+source moved. `center_term()` is precedent for a row that does not follow one
+deck's master.
+
+**What is gated and what is not.** `tests/test_mod_layer.cpp` pins the
+arithmetic (the mirror is the exact negative of `lane_term`, and two equal
+depths land symmetrically), RED proved by dropping the negation. The *wiring* —
+that `mv()` really hands `PAN_B` deck A's lane and deck A's master — is not
+reachable from `spky_tests`, because Rack cannot be linked there. It rests on
+inspection and on listening in Rack. No gate is claimed for it.
 
 ## 7. Surface
 

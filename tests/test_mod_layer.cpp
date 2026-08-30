@@ -75,6 +75,34 @@ TEST_CASE("mod layer: the sign picks the term, the magnitude scales it") {
     CHECK(spkymod::modded(-0.9f, -1.f, 0.f, -1.f, -1.f, 1.f) == -1.f);
 }
 
+// PAN is the one face where the two decks moving together is worth nothing --
+// a common-mode pan is the whole mix wandering, not a stereo image. So deck
+// B's PAN reads deck A's lane THROUGH DECK A'S MASTER, negated (spec
+// 2026-08-30 pan, amended 2026-08-30). Everything else in the layer follows
+// its own deck; this is the exception, and the arithmetic half of it lives
+// here where spky_tests can drive it. The wiring half -- that Fireflow.cpp
+// really hands this deck A's lane and deck A's master -- is not reachable
+// from here, because Rack cannot be linked into spky_tests.
+TEST_CASE("mod layer: the PAN mirror is the exact negative of deck A's term") {
+    for (float master : {0.f, 0.31f, 0.856628835f, 1.f})
+        for (float lane : {-1.f, -0.4f, 0.f, 0.37f, 1.f})
+            CHECK(spkymod::mirror_term(master, lane)
+                  == -spkymod::lane_term(master, lane));
+    // MOD_A down means BOTH pans stand still. That is the price of the shared
+    // master and it is deliberate: the per-parameter off switch is PAN B's own
+    // depth ring, not MOD_B.
+    CHECK(spkymod::mirror_term(0.f, 1.f) == 0.f);
+    // At equal depth the two decks land symmetrically around their knobs --
+    // the whole point of the exception.
+    const float m = 0.8f, lane = 0.6f, d = 0.5f;
+    const float ta = spkymod::lane_term(m, lane);
+    const float tb = spkymod::mirror_term(m, lane);
+    const float a = spkymod::modded(0.f, d, ta, ta, -1.f, 1.f);
+    const float b = spkymod::modded(0.f, d, tb, tb, -1.f, 1.f);
+    CHECK(a == -b);
+    CHECK(a != 0.f);   // or the line above would hold for the trivial reason
+}
+
 TEST_CASE("mod layer: kModLayer is exactly the spec's table") {
     const int n = sizeof(kModLayer) / sizeof(kModLayer[0]);
     CHECK(n == 50);          // 48 + PAN A/B (spec 2026-08-30 pan)
