@@ -198,12 +198,36 @@ PLACE = {
     # The eight 0R neighbour ties, packed around the two muxes rather than out
     # with the pots: "neighbour hard at the rail" has to be true physically,
     # which means the tie belongs at the mux pin and not at the pot.
+    #
+    # The 16:1's four sit in two rows below it, 8.5..13 mm from their pins.
+    # The 8:1's four USED to sit in the same block, at (91,76), (96,76),
+    # (96.5,62) and (96.5,66) -- 20 to 23 mm from the pins they tie, and all
+    # four behind the 16:1, whose own east-column fan-out stands across every
+    # lane between them and the 8:1 from y 56 to y 77. That is what made
+    # MUX8_CH1/CH3/CH5/CH7 unroutable in Task 4's first pass, and the fix is
+    # here rather than in the routing: a tie 22 mm from its pin was not
+    # "neighbour hard at the rail" in the first place.
+    #
+    # R_HI3 and R_LO3 now sit in a row 0.36 mm below the 8:1's south edge,
+    # 8.4 mm and 6.3 mm straight-line from the pins they tie. 6.3 mm is the
+    # floor for anything south of that package -- its courtyard is 10.5 mm
+    # tall and the channel pins are in the middle of it -- and R_HI3's 8.4 mm
+    # is because pin 14 is the northernmost of the two and the row cannot
+    # extend past x 82.03 without hitting the 16:1.
+    #
+    # R_HI4 and R_LO4 stay where they were. They tie the 8:1's WEST column,
+    # and the only slot inside 5 mm of those pins is the 2 mm strip west of
+    # the package -- which is also the only F.Cu approach to pin 6, the
+    # 8:1's enable. A tie there costs the enable its route, and the enable is
+    # the one net that cannot be moved. Their 22 mm is not ideal; it is the
+    # price of a 7.5 mm package with pins on both sides and a jack, a pot and
+    # a divider block pressed against it.
     "R_HI1": (86.0, 72.0, 0),
     "R_LO1": (91.0, 72.0, 0),
     "R_HI2": (96.0, 72.0, 0),
     "R_LO2": (86.0, 76.0, 0),
+    "R_LO3": (77.4, 69.6, 90),
     "R_HI3": (91.0, 76.0, 0),
-    "R_LO3": (96.0, 76.0, 0),
     "R_HI4": (96.5, 62.0, 90),
     "R_LO4": (96.5, 66.0, 90),
 }

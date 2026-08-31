@@ -151,14 +151,14 @@ TRACKS += [
 # module is otherwise empty -- the only things down there are the landing
 # pattern's own holes, 2.54 mm away on either side.
 TRACKS += [
-    ("SENSE_ADC9_MUX16", "F.Cu", W_SIG, [_p("R_S16", 2), (79.54, 47.0)]),
-    ("SENSE_ADC9_MUX16", "B.Cu", W_SIG, [(79.54, 47.0), _p("U_SM", "A2")]),
-    ("SENSE_ADC10_MUX8", "F.Cu", W_SIG, [_p("R_S8", 2), (77.0, 47.0)]),
-    ("SENSE_ADC10_MUX8", "B.Cu", W_SIG, [(77.0, 47.0), _p("U_SM", "A3")]),
+    ("SENSE_ADC9_MUX16", "F.Cu", W_SIG, [_p("R_S16", 2), (79.54, 46.2)]),
+    ("SENSE_ADC9_MUX16", "B.Cu", W_SIG, [(79.54, 46.2), _p("U_SM", "A2")]),
+    ("SENSE_ADC10_MUX8", "F.Cu", W_SIG, [_p("R_S8", 2), (77.0, 46.2)]),
+    ("SENSE_ADC10_MUX8", "B.Cu", W_SIG, [(77.0, 46.2), _p("U_SM", "A3")]),
 ]
 VIAS += [
-    ("SENSE_ADC9_MUX16", (79.54, 47.0)),
-    ("SENSE_ADC10_MUX8", (77.0, 47.0)),
+    ("SENSE_ADC9_MUX16", (79.54, 46.2)),
+    ("SENSE_ADC10_MUX8", (77.0, 46.2)),
 ]
 
 
@@ -458,15 +458,15 @@ for _net, (_lx, _ly) in sorted(ADDR_LANE.items()):
 # needs a single via at the very end, where the analog band begins.
 TRACKS += [
     ("MUX8_EN_N", "F.Cu", W_SIG, [_p("U_SR1", 5), (1.0, 10.88), (1.0, 33.5),
-                                  (6.0, 33.5), (6.0, 46.9)]),
+                                  (6.0, 33.5), (6.0, 46.6)]),
     # East along the board's southern digital edge, then back to F.Cu at
     # x 70.5 for the descent into the analog band -- F.Cu because SR_LATCH's
     # own B.Cu arm lies across y 47.4 for the full width, and the 8:1's
     # enable pin has to get under it.
-    ("MUX8_EN_N", "B.Cu", W_SIG, [(6.0, 46.9), (70.5, 46.9)]),
-    ("MUX8_EN_N", "F.Cu", W_SIG, [(70.5, 46.9), (70.5, 63.905), _p("U_MUX8", 6)]),
+    ("MUX8_EN_N", "B.Cu", W_SIG, [(6.0, 46.6), (70.5, 46.6)]),
+    ("MUX8_EN_N", "F.Cu", W_SIG, [(70.5, 46.6), (70.5, 63.905), _p("U_MUX8", 6)]),
 ]
-VIAS += [("MUX8_EN_N", (6.0, 46.9)), ("MUX8_EN_N", (70.5, 46.9))]
+VIAS += [("MUX8_EN_N", (6.0, 46.6)), ("MUX8_EN_N", (70.5, 46.6))]
 
 
 # --- SR_LATCH: the module's D1 to both 595s and the 165 -----------------
@@ -484,7 +484,7 @@ TRACKS += [
     ("SR_LATCH", "B.Cu", W_SIG, [(6.0, 11.52), (4.5, 11.52), (4.5, 26.4),
                                  (6.0, 26.4)]),
     ("SR_LATCH", "B.Cu", W_SIG, [(4.5, 26.4), (4.5, 34.4), (5.3, 34.4)]),
-    ("SR_LATCH", "B.Cu", W_SIG, [(4.5, 34.4), (4.5, 48.0), (84.0, 48.0),
+    ("SR_LATCH", "B.Cu", W_SIG, [(4.5, 34.4), (4.5, 47.4), (84.0, 47.4),
                                  (84.0, 16.0), (82.08, 16.0), _p("U_SM", "D1")]),
 ]
 VIAS += [("SR_LATCH", (6.0, 11.52)), ("SR_LATCH", (6.0, 26.4)),
@@ -623,11 +623,11 @@ VIAS.append(("MUX16_CH8", (62.5, 67.2)))
 # end. Two vias, and no crossing with anything in the band above.
 TRACKS += [
     ("MUX16_CH9", "B.Cu", W_SIG, [(MUX16_R, 57.555), (86.175, 57.555),
-                                  (86.175, 71.35), (72.68, 71.35), (57.7, 71.35)]),
-    ("MUX16_CH9", "F.Cu", W_SIG, [(72.68, 71.35), (72.68, 66.5), _p("R_REFB1", 2)]),
-    ("MUX16_CH9", "F.Cu", W_SIG, [(57.7, 71.35), _p("R_REFB2", 1)]),
+                                  (86.175, 70.9), (72.68, 70.9), (57.7, 70.9)]),
+    ("MUX16_CH9", "F.Cu", W_SIG, [(72.68, 70.9), (72.68, 66.5), _p("R_REFB1", 2)]),
+    ("MUX16_CH9", "F.Cu", W_SIG, [(57.7, 70.9), _p("R_REFB2", 1)]),
 ]
-VIAS += [("MUX16_CH9", (72.68, 71.35)), ("MUX16_CH9", (57.7, 71.35))]
+VIAS += [("MUX16_CH9", (72.68, 70.9)), ("MUX16_CH9", (57.7, 70.9))]
 
 # The six spare-channel ties. CH10/CH11 join the westward band -- northern
 # pins, northern lanes, and their 0 Rs are in the northern spare row at
@@ -708,29 +708,43 @@ MUX8_R = 77.4                    # the only via column inside the 8:1
 # Two of the crossings run down the 8:1's interior (x 76.3 and 76.75) and two
 # down the strip between the two packages (x 80.4 and 81.75).
 TRACKS += [
-    ("MUX8_CH4", "F.Cu", W_SIG, [_p("U_MUX8", 1), (76.6, 57.555), (76.6, 68.85)]),
-    ("MUX8_CH4", "B.Cu", W_SIG, [(76.6, 68.85), (50.5, 68.85), _p("RV7", 2)]),
-    ("MUX8_CH6", "F.Cu", W_SIG, [_p("U_MUX8", 2), (75.8, 58.825), (75.8, 68.1)]),
-    ("MUX8_CH6", "B.Cu", W_SIG, [(75.8, 68.1), (67.5, 68.1)]),
+    ("MUX8_CH4", "F.Cu", W_SIG, [_p("U_MUX8", 1), (75.85, 57.555), (75.85, 68.85), (75.2, 68.85)]),
+    ("MUX8_CH4", "B.Cu", W_SIG, [(75.2, 68.85), (50.5, 68.85), _p("RV7", 2)]),
+    ("MUX8_CH6", "F.Cu", W_SIG, [_p("U_MUX8", 2), (75.35, 58.825), (75.35, 68.1), (74.9, 68.1)]),
+    ("MUX8_CH6", "B.Cu", W_SIG, [(74.9, 68.1), (67.5, 68.1)]),
     ("MUX8_CH6", "F.Cu", W_SIG, [(67.5, 68.1), (67.5, 69.5), _p("R_REFC1", 2)]),
     ("MUX8_CH6", "F.Cu", W_SIG, [(67.5, 69.5), _p("R_REFC2", 1)]),
-    ("MUX8_CH2", "F.Cu", W_SIG, [_p("U_MUX8", 15), (80.85, 58.825), (80.85, 76.7)]),
-    ("MUX8_CH2", "B.Cu", W_SIG, [(80.85, 76.7), (37.0, 76.7)]),
+    ("MUX8_CH2", "F.Cu", W_SIG, [_p("U_MUX8", 15), (76.35, 58.825), (76.35, 76.7)]),
+    ("MUX8_CH2", "B.Cu", W_SIG, [(76.35, 76.7), (37.0, 76.7)]),
     ("MUX8_CH2", "F.Cu", W_SIG, [(37.0, 76.7), _p("RV6", 2)]),
     ("MUX8_CH0", "F.Cu", W_SIG, [_p("U_MUX8", 13), (80.4, 61.365), (80.4, 75.9),
                                  (79.6, 75.9)]),
     ("MUX8_CH0", "B.Cu", W_SIG, [(79.6, 75.9), (23.5, 75.9), _p("RV5", 2)]),
 ]
-VIAS += [("MUX8_CH4", (76.6, 68.85)), ("MUX8_CH6", (75.8, 68.1)),
-         ("MUX8_CH6", (67.5, 68.1)), ("MUX8_CH2", (80.85, 76.7)),
+VIAS += [("MUX8_CH4", (75.2, 68.85)), ("MUX8_CH6", (74.9, 68.1)),
+         ("MUX8_CH6", (67.5, 68.1)), ("MUX8_CH2", (76.35, 76.7)),
          ("MUX8_CH2", (37.0, 76.7)), ("MUX8_CH0", (79.6, 75.9))]
 
-# R_LO4 and R_HI4 sit in the board's east column, and the 16:1's east-band
-# descents stand between them and the 8:1 from y 56 to y 77. These two go
-# NORTH instead, over the COM cluster at y 50.6 and 51.05 -- the only two
-# lanes that thread JP_GND's and C_COM16's stitching vias -- and come back
-# down the board's east edge.
+# The four neighbour ties, now that placement put them against the package.
+# All four are direct F.Cu, no via, no layer change: CH7 is a 2.5 mm straight
+# line from pin 4 to the tie west of the package, and the other three drop
+# out of the package -- CH5 and CH3 through its own empty interior, CH1 down
+# the x 80.5 lane east of it -- into the row 1.25 mm below its south edge.
+# Task 4's first pass spent four vias and four 20 mm detours on these,
+# because the ties were on the far side of the 16:1.
 TRACKS += [
+    # CH3 drops straight down the package's own interior into its 0 R; CH1
+    # steps 2 mm east of the package first, into the 2.08 mm strip the two
+    # SOICs leave between them, and drops there. Neither needs a via.
+    ("MUX8_CH3", "F.Cu", W_SIG, [_p("U_MUX8", 12), (77.4, 62.635),
+                                 _p("R_LO3", 2)]),
+    ("MUX8_CH1", "F.Cu", W_SIG, [_p("U_MUX8", 14), (80.85, 60.095), (80.85, 78.6),
+                                 (92.0, 78.6), _p("R_HI3", 2)]),
+    # R_HI4 and R_LO4 are still in the board's east column, and the 16:1's
+    # east-band descents stand between them and the 8:1 from y 56 to y 77.
+    # These two go NORTH instead, over the COM cluster at y 50.6 and 51.05 --
+    # the only two lanes that thread JP_GND's and C_COM16's stitching vias --
+    # and come back down the board's east edge.
     ("MUX8_CH7", "F.Cu", W_SIG, [_p("U_MUX8", 4), (72.0, 61.365), (72.0, 51.7)]),
     ("MUX8_CH7", "B.Cu", W_SIG, [(72.0, 51.7), (72.0, 51.05), (94.2, 51.05),
                                  (94.2, 65.0)]),
