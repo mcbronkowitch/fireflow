@@ -541,10 +541,10 @@ MUX8_L, MUX8_R = 76.0, 77.4      # and inside the 8:1's
 # that no two of the four cross: a wiper whose lane is further south turns
 # further west.
 for _net, _py, _tx, _lane, _pot in (
-        ("MUX16_CH6", 57.555, 84.0, 60.3, "RV4"),
-        ("MUX16_CH4", 60.095, 84.45, 60.75, "RV3"),
-        ("MUX16_CH2", 62.635, 83.55, 61.2, "RV2"),
-        ("MUX16_CH0", 65.175, 83.1, 61.65, "RV1")):
+        ("MUX16_CH6", 57.555, 84.0, 60.6, "RV4"),
+        ("MUX16_CH4", 60.095, 84.45, 61.05, "RV3"),
+        ("MUX16_CH2", 62.635, 83.55, 61.5, "RV2"),
+        ("MUX16_CH0", 65.175, 83.1, 61.95, "RV1")):
     _wx = {"RV1": 23.5, "RV2": 37.0, "RV3": 50.5, "RV4": 64.0}[_pot]
     TRACKS += [
         (_net, "F.Cu", W_SIG, [(MUX16_L, _py), _p("U_MUX16", {
@@ -582,7 +582,7 @@ TRACKS += [
     ("MUX16_CH1", "F.Cu", W_SIG, [_p("U_MUX16", 8), (87.5, 63.905),
                                   (87.5, 71.4), _p("R_HI1", 2)]),
     ("MUX16_CH3", "F.Cu", W_SIG, [_p("U_MUX16", 6), (88.0, 61.365),
-                                  (88.0, 73.9), (92.0, 73.9), _p("R_LO1", 2)]),
+                                  (88.0, 74.95), (92.0, 74.95), _p("R_LO1", 2)]),
 ]
 
 
@@ -675,10 +675,10 @@ for _net, _py, _pin, _bx, _lane, _tv, _tref, _tail in (
 # easternmost descent takes the northernmost eastward lane (CH3 at y 73.9,
 # CH5 at 77.35, CH7 at 78.2).
 TRACKS += [
-    ("MUX16_CH5", "F.Cu", W_SIG, [_p("U_MUX16", 4), (81.75, 58.825), (81.75, 74.35),
-                                  (98.0, 74.35), (98.0, 72.0), _p("R_HI2", 2)]),
-    ("MUX16_CH7", "F.Cu", W_SIG, [_p("U_MUX16", 2), (81.3, 56.285), (81.3, 74.8),
-                                  (87.0, 74.8), _p("R_LO2", 2)]),
+    ("MUX16_CH5", "F.Cu", W_SIG, [_p("U_MUX16", 4), (88.45, 58.825), (88.45, 70.79),
+                                  (98.0, 70.79), (98.0, 72.0), _p("R_HI2", 2)]),
+    ("MUX16_CH7", "F.Cu", W_SIG, [_p("U_MUX16", 2), (88.9, 56.285), (88.9, 57.5), (86.0, 57.5),
+                                  (86.0, 76.0), _p("R_LO2", 2)]),
 ]
 
 
@@ -708,22 +708,22 @@ MUX8_R = 77.4                    # the only via column inside the 8:1
 # Two of the crossings run down the 8:1's interior (x 76.3 and 76.75) and two
 # down the strip between the two packages (x 80.4 and 81.75).
 TRACKS += [
-    ("MUX8_CH4", "F.Cu", W_SIG, [_p("U_MUX8", 1), (75.85, 57.555), (75.85, 68.85), (75.2, 68.85)]),
-    ("MUX8_CH4", "B.Cu", W_SIG, [(75.2, 68.85), (50.5, 68.85), _p("RV7", 2)]),
-    ("MUX8_CH6", "F.Cu", W_SIG, [_p("U_MUX8", 2), (75.35, 58.825), (75.35, 68.1), (74.9, 68.1)]),
-    ("MUX8_CH6", "B.Cu", W_SIG, [(74.9, 68.1), (67.5, 68.1)]),
+    ("MUX8_CH4", "F.Cu", W_SIG, [_p("U_MUX8", 1), (75.775, 57.555), (75.775, 68.85), (74.3, 68.85)]),
+    ("MUX8_CH4", "B.Cu", W_SIG, [(74.3, 68.85), (50.5, 68.85), _p("RV7", 2)]),
+    ("MUX8_CH6", "F.Cu", W_SIG, [_p("U_MUX8", 2), (75.325, 58.825), (75.325, 68.1), (74.7, 68.1)]),
+    ("MUX8_CH6", "B.Cu", W_SIG, [(74.7, 68.1), (67.5, 68.1)]),
     ("MUX8_CH6", "F.Cu", W_SIG, [(67.5, 68.1), (67.5, 69.5), _p("R_REFC1", 2)]),
     ("MUX8_CH6", "F.Cu", W_SIG, [(67.5, 69.5), _p("R_REFC2", 1)]),
-    ("MUX8_CH2", "F.Cu", W_SIG, [_p("U_MUX8", 15), (76.35, 58.825), (76.35, 76.7)]),
-    ("MUX8_CH2", "B.Cu", W_SIG, [(76.35, 76.7), (37.0, 76.7)]),
+    ("MUX8_CH2", "F.Cu", W_SIG, [_p("U_MUX8", 15), (76.225, 58.825), (76.225, 76.7), (75.7, 76.7)]),
+    ("MUX8_CH2", "B.Cu", W_SIG, [(75.7, 76.7), (37.0, 76.7)]),
     ("MUX8_CH2", "F.Cu", W_SIG, [(37.0, 76.7), _p("RV6", 2)]),
-    ("MUX8_CH0", "F.Cu", W_SIG, [_p("U_MUX8", 13), (80.4, 61.365), (80.4, 75.9),
-                                 (79.6, 75.9)]),
-    ("MUX8_CH0", "B.Cu", W_SIG, [(79.6, 75.9), (23.5, 75.9), _p("RV5", 2)]),
+    ("MUX8_CH0", "F.Cu", W_SIG, [_p("U_MUX8", 13), (77.125, 61.365),
+                                 (77.125, 75.9), (77.8, 75.9)]),
+    ("MUX8_CH0", "B.Cu", W_SIG, [(77.8, 75.9), (23.5, 75.9), _p("RV5", 2)]),
 ]
-VIAS += [("MUX8_CH4", (75.2, 68.85)), ("MUX8_CH6", (74.9, 68.1)),
-         ("MUX8_CH6", (67.5, 68.1)), ("MUX8_CH2", (76.35, 76.7)),
-         ("MUX8_CH2", (37.0, 76.7)), ("MUX8_CH0", (79.6, 75.9))]
+VIAS += [("MUX8_CH4", (74.3, 68.85)), ("MUX8_CH6", (74.7, 68.1)),
+         ("MUX8_CH6", (67.5, 68.1)), ("MUX8_CH2", (75.7, 76.7)),
+         ("MUX8_CH2", (37.0, 76.7)), ("MUX8_CH0", (77.8, 75.9))]
 
 # The four neighbour ties, now that placement put them against the package.
 # All four are direct F.Cu, no via, no layer change: CH7 is a 2.5 mm straight
@@ -736,9 +736,9 @@ TRACKS += [
     # CH3 drops straight down the package's own interior into its 0 R; CH1
     # steps 2 mm east of the package first, into the 2.08 mm strip the two
     # SOICs leave between them, and drops there. Neither needs a via.
-    ("MUX8_CH3", "F.Cu", W_SIG, [_p("U_MUX8", 12), (77.4, 62.635),
+    ("MUX8_CH3", "F.Cu", W_SIG, [_p("U_MUX8", 12), (77.575, 62.635), (77.575, 68.6),
                                  _p("R_LO3", 2)]),
-    ("MUX8_CH1", "F.Cu", W_SIG, [_p("U_MUX8", 14), (80.85, 60.095), (80.85, 78.6),
+    ("MUX8_CH1", "F.Cu", W_SIG, [_p("U_MUX8", 14), (76.675, 60.095), (76.675, 78.6),
                                  (92.0, 78.6), _p("R_HI3", 2)]),
     # R_HI4 and R_LO4 are still in the board's east column, and the 16:1's
     # east-band descents stand between them and the 8:1 from y 56 to y 77.
