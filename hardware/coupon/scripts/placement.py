@@ -19,166 +19,181 @@ data/clock B7/B8. The two things the layout most wants next to each other --
 muxes at their sense pins, jack at the audio pins -- therefore sit on
 opposite edges of the module no matter what. That is measured, not assumed.
 
-**The SM is rotated 180 deg.** At 0 deg banks A and B both face the board's
-top edge, where there is no room; at 180 deg they both face the board's
-bottom edge, which is the only free strip on an 80x60 board. The sense pins
-(A2/A3) and the audio pins (B1/B2) then look straight into the analog
-region, and the unused bank C plus the shift-chain's latch/data-in (D1/D10)
-take the top, where the digital cluster lives anyway. 90/270 deg are not
-available at all: the pad field is 61.35 x 36.16 mm, so a quarter turn needs
-61.35 mm of board height and there are 60.
+**The SM is rotated 180 deg.** At 0 deg banks A and B both face the module's
+top edge; at 180 deg they both face its bottom edge, which is where the
+analog region is. The sense pins (A2/A3) and the audio pins (B1/B2) then look
+straight down into that region, and the unused bank C plus the chain's
+latch/data-in (D1/D10) take the top. 90/270 deg are not available at all: the
+pad field is 61.35 x 36.16 mm, so a quarter turn needs 61.35 mm of board
+height and there are 80 -- it would fit, but it would put the 61 mm dimension
+across the short axis and leave nothing usable on either side.
 
-Placed at (34, 20) the module's own outline (a 68 x 40 silkscreen rectangle,
-read from the footprint) covers x 0..68, y 0..40 -- more than half the board.
-The layout that follows is the consequence:
+**The consequence is a horizontal split, not the spec's left/right one.** Both
+analog anchors are on the module's bottom edge, so analog is the bottom band
+and digital is everything above it. What the spec asked for survives in
+substance: the jack is on the left board edge under B1/B2, the muxes are under
+A2/A3, and the Eurorack header is beside the SM's own supply pins.
 
-  * the bottom strip y 40..60 is the ANALOG region: audio jack at the left
-    edge under B1/B2, three pots, both muxes and their COM clusters at the
-    right end under A2/A3;
-  * the module's own pad-free interior carries the DIGITAL cluster (the two
-    595s, the 165, the LEDs and every decoupler) on the left and an ANALOG
-    tongue -- four more pots and the tie/reference resistors -- on the right,
-    all of it surface mount, all of it under a module that stands ~11 mm off
-    the board on its sockets;
-  * the right-hand column x 68..80 is DIGITAL: the Eurorack header beside the
-    supply pins, the button, and the probe points that must stay reachable.
+Placed at (50, 26) the module's own outline -- a 68 x 40 mm silkscreen
+rectangle, read out of the footprint -- covers x 16..84, y 6..46. On the
+100 x 80 board (grown from 80 x 60 by controller ruling; see design.py for the
+arithmetic) that leaves four clear regions and **nothing tall, connected or
+probeable sits in the module's shadow**:
 
-Nothing tall and nothing probeable sits under the module -- except four pots
-that have nowhere else to go. See the Task-2 report: 80 x 60 is 300-400 mm^2
-short of what this part list needs, and design.py was out of scope here.
+  * bottom band, y 48.7..79, full width: ANALOG. Jack at the left edge, seven
+    pots in two rows, both muxes and their COM clusters at the right end
+    under A2/A3, ties and references filling in around them.
+  * left column, x 0..16: DIGITAL. The three shift-register packages in a
+    stack with their decouplers, and the eight LEDs with their resistors in
+    two narrow columns beside them.
+  * right column, x 84..100: DIGITAL. Eurorack header beside the SM's supply
+    pins, the bulk caps, the button, and the probe points that must stay
+    reachable with the module plugged in.
+  * the module's interior stays empty. It may legally hold surface-mount
+    passives; on this board it does not have to.
+
+**Rule 2 (audio 10 mm from SR_CLK and the LED nets) is measured outside the
+SM footprint by controller ruling** -- the 3.59 mm between the module's own B2
+and B8 pads is Electrosmith's spacing, not ours, and no placement can change
+it. Outside the footprint the layout is built for that ruling: the audio jack
+and its probe point own the board's bottom-left corner, the LED rows stop at
+y 32 in the left column, and the two families keep 16.87 mm between them
+(J_AUDIO.R to U_IN1's clock pin). Counting the SM's own audio pad against a
+board part -- the strictest reading the ruling still allows -- it is 10.87 mm,
+B2 to R_LED8.
 """
 
 # --- the module -------------------------------------------------------------
-SM = (34.0, 20.0, 180)        # body x 0..68, y 0..40; banks per docstring
+SM = (50.0, 26.0, 180)        # body x 16..84, y 6..46; banks per docstring
 
 PLACE = {
     "U_SM": SM,
 
-    # --- digital: the module's interior, left (x 9..28) ----------------------
-    # Shift chain and its decouplers. Every 100n sits off its package's SHORT
-    # end, never beside it, and that is forced rather than tidy: on SOIC-16
-    # the VCC pad stops 0.80 mm short of the courtyard's end and 1.27 mm short
-    # of its side, so a cap parked alongside lands at 2.24 mm however hard it
-    # is pushed, and only the end placement comes in under the 2 mm rule
-    # (1.82 mm measured). The two 595s are turned 180 deg for the same reason:
-    # that puts pin 16 at the bottom, away from the LED rows above them.
-    "U_SR1": (14.0, 14.5, 180),
-    "C_SR1": (11.52, 21.8, 270),
-    "U_SR2": (14.0, 30.0, 180),
-    "C_SR2": (11.52, 37.3, 270),
-    "U_IN1": (23.5, 20.5, 0),
-    "C_IN1": (25.98, 13.2, 90),
-    "R_BTN": (23.5, 28.5, 0),
-    "C_B3V3": (23.5, 32.0, 0),
+    # --- digital: the left column (x 0..16) ---------------------------------
+    # The chain and its decouplers, alternating down the column so every 100n
+    # sits off its package's SHORT end. That is forced, not tidy: on SOIC-16
+    # the VCC pad stops 0.80 mm short of the courtyard's end but 1.27 mm short
+    # of its side, so a cap parked alongside can never come closer than
+    # 2.24 mm however hard it is pushed, while the end placement lands at
+    # 1.84 mm. 1.68 mm is the floor for this footprint pair at zero courtyard
+    # clearance (5.245 + 1.925 - 1.038 - 4.45), so 1.84 is as much margin as
+    # the parts allow -- the 1.5 mm the ruling asks for is not reachable with
+    # an 0805 hand-solder pad against a SOIC courtyard.
+    "C_SR1": (7.48, 2.925, 90),
+    "U_SR1": (5.0, 10.245, 0),
+    "C_SR2": (7.48, 17.565, 90),
+    "U_SR2": (5.0, 24.885, 0),
+    "C_IN1": (7.48, 32.205, 90),
+    "U_IN1": (5.0, 39.525, 0),
 
-    # The eight LEDs and their series resistors, two rows along the module's
-    # TOP interior edge: the switched load that makes the noise question
-    # realistic, put as far from the audio corner as the board allows. Moving
-    # them here from the bottom rows took the closest audio-to-LED pad
-    # approach from 4.63 mm to 8.85 mm (measured on the built board). Rule 2
-    # asks for 10 mm and this board cannot give it -- the SM's own B2 and B8
-    # pads are 3.59 mm apart, which no placement can change.
-    "D1": (9.5, 2.5, 90),
-    "D2": (12.0, 2.5, 90),
-    "D3": (14.5, 2.5, 90),
-    "D4": (17.0, 2.5, 90),
-    "D5": (19.5, 2.5, 90),
-    "D6": (22.0, 2.5, 90),
-    "D7": (24.5, 2.5, 90),
-    "D8": (27.0, 2.5, 90),
-    "R_LED1": (9.5, 6.5, 90),
-    "R_LED2": (12.0, 6.5, 90),
-    "R_LED3": (14.5, 6.5, 90),
-    "R_LED4": (17.0, 6.5, 90),
-    "R_LED5": (19.5, 6.5, 90),
-    "R_LED6": (22.0, 6.5, 90),
-    "R_LED7": (24.5, 6.5, 90),
-    "R_LED8": (27.0, 6.5, 90),
+    # The eight LEDs and their series resistors, two columns beside the chain.
+    # They stop at y 32 on purpose: rule 2 measures from here to the audio net,
+    # and the SM's B2 pad is at (20.73, 41.54). Every 4 mm further down cost
+    # about 1 mm of that clearance.
+    "D1": (11.0, 4.0, 90),
+    "D2": (11.0, 8.0, 90),
+    "D3": (11.0, 12.0, 90),
+    "D4": (11.0, 16.0, 90),
+    "D5": (11.0, 20.0, 90),
+    "D6": (11.0, 24.0, 90),
+    "D7": (11.0, 28.0, 90),
+    "D8": (11.0, 32.0, 90),
+    "R_LED1": (14.0, 4.0, 90),
+    "R_LED2": (14.0, 8.0, 90),
+    "R_LED3": (14.0, 12.0, 90),
+    "R_LED4": (14.0, 16.0, 90),
+    "R_LED5": (14.0, 20.0, 90),
+    "R_LED6": (14.0, 24.0, 90),
+    "R_LED7": (14.0, 28.0, 90),
+    "R_LED8": (14.0, 32.0, 90),
 
-    # --- digital: the right column (x 68..80) -------------------------------
-    # The only board edge the module leaves free. The IDC header sits beside
-    # the SM's own supply pins (A1/A5/A10 at x 56..66, y 33..35), the two
-    # 10u bulk caps directly under it, and the probe points that have to stay
-    # reachable with the module plugged in.
-    "SW1": (70.0, 4.0, 0),
-    "TP_ADC11": (69.5, 11.5, 0),
-    "TP_ADC12": (72.5, 11.5, 0),
-    "TP_GND": (75.5, 11.5, 0),
-    "TP_CLK": (78.5, 11.5, 0),
-    "J_PWR": (72.0, 19.5, 0),
-    "C_BP12": (70.0, 36.8, 0),
-    "C_BN12": (75.0, 36.8, 0),
-    "TP_3V3": (78.3, 36.8, 0),
+    # --- digital: the right column (x 84..100) ------------------------------
+    # The IDC header sits beside the SM's own supply pins (A5 at x 71.9, A1
+    # and A10 at x 82.1, y 38.7..43.3), with both 10u bulk caps alongside it.
+    # The two ADC probe points are under D8/D9 at the module's top-right.
+    "TP_ADC11": (86.0, 3.0, 0),
+    "TP_ADC12": (90.0, 3.0, 0),
+    "TP_GND": (94.0, 3.0, 0),
+    "TP_CLK": (97.0, 4.0, 0),
+    "SW1": (86.0, 8.0, 0),
+    "R_BTN": (97.0, 10.0, 90),
+    "J_PWR": (88.0, 22.0, 0),
+    "C_BP12": (96.5, 20.0, 90),
+    "C_BN12": (96.5, 24.0, 90),
+    "C_B3V3": (96.5, 28.0, 90),
+    "TP_3V3": (96.5, 32.0, 0),
 
     # --- the seam -----------------------------------------------------------
     # Both jumpers straddle the plane split: pad A lands in the digital zone
-    # (which ends at y 38.3), pad B in the analog one (which starts at 39.5),
+    # (which ends at y 47.5), pad B in the analog one (which starts at 48.7),
     # so the 1.3 mm pad pitch bridges the 1.2 mm moat and nothing else does.
-    # Both want to sit under the SM's own GND / +3V3 pins (A4/A7 at x 58.5,
-    # A10 at x 66.1) and neither can: that whole stretch of the moat is taken
-    # by the two COM clusters, whose 15 mm budget is the harder constraint.
-    # They sit ~11 and ~22 mm west instead -- still the only place where the
-    # two ground planes and the two supply planes meet.
-    "JP_GND": (48.0, 38.9, 270),
-    "JP_3V3": (44.0, 38.9, 270),
+    # JP_GND is the star point and sits directly below the SM's own ground
+    # pins A4/A7 (74.46, 41.27 and 40.73) with nothing between them. 6.08 mm
+    # is the floor for that: the ground pads are 4.73 mm inside the module's
+    # outline, and the jumper has to clear the outline plus its own courtyard.
+    # JP_3V3 sits the same way under A10 (+3V3 OUT).
+    "JP_GND": (74.46, 48.0, 270),
+    "JP_3V3": (82.08, 48.0, 270),
 
-    # --- analog: the tongue under the module (x 29..55) ----------------------
-    # Four pots that the bottom strip cannot hold, plus the reference dividers
-    # and the spare-channel ties. Surface mount under a socketed module is
-    # fine; the pots are not, and are the concession this board size forces.
-    "RV1": (38.0, 5.5, 270),
-    "RV3": (51.0, 5.5, 270),
-    "RV5": (38.0, 19.5, 270),
-    "RV7": (51.0, 19.5, 270),
-    "R_REFA1": (30.0, 33.6, 0),
-    "R_REFA2": (34.0, 33.6, 0),
-    "R_REFB1": (38.0, 33.6, 0),
-    "R_REFB2": (42.0, 33.6, 0),
-    "R_REFC1": (46.0, 33.6, 0),
-    "R_REFC2": (50.0, 33.6, 0),
-    "R_SP10": (30.0, 36.6, 0),
-    "R_SP11": (34.0, 36.6, 0),
-    "R_SP12": (38.0, 36.6, 0),
+    # --- analog: the bottom band, left (audio and the pots) -----------------
+    # The jack's opening faces the left board edge -- its own footprint marks
+    # where the edge belongs, at local x -1.8 -- directly under B1/B2.
+    "J_AUDIO": (2.6, 56.0, 0),
+    "TP_AUDIO_L": (6.0, 66.0, 0),
+    "TP_AGND": (10.0, 66.0, 0),
+    "TP_A3V3": (14.0, 66.0, 0),
+    "RV1": (26.0, 50.5, 270),
+    "RV2": (39.5, 50.5, 270),
+    "RV3": (53.0, 50.5, 270),
+    "RV4": (66.5, 50.5, 270),
+    "RV5": (26.0, 65.0, 270),
+    "RV6": (39.5, 65.0, 270),
+    "RV7": (53.0, 65.0, 270),
 
-    # --- analog: the bottom strip, left (audio + pots) -----------------------
-    # The jack's opening faces the left board edge (its own footprint marks
-    # the edge at local x -1.8), directly under B1/B2.
-    "J_AUDIO": (2.6, 47.0, 0),
-    "TP_AUDIO_L": (4.5, 56.0, 0),
-    "TP_AGND": (8.5, 56.0, 0),
-    "TP_A3V3": (12.5, 56.0, 0),
-    "RV2": (24.45, 44.5, 270),
-    "RV4": (37.50, 44.5, 270),
-    "RV6": (50.55, 44.5, 270),
-    "R_SP13": (20.0, 41.5, 0),
-    "R_SP14": (26.0, 41.5, 0),
-    "R_SP15": (32.0, 41.5, 0),
+    # Reference dividers and the spare-channel ties, between the pots and the
+    # muxes. Both reference pairs stay together so the 10k/10k and 1k/1k
+    # source impedances differ only in the resistors, not in the wiring.
+    "R_REFA1": (60.0, 65.5, 0),
+    "R_REFA2": (65.0, 65.5, 0),
+    "R_REFB1": (70.0, 65.5, 0),
+    "R_REFB2": (60.0, 69.5, 0),
+    "R_REFC1": (65.0, 69.5, 0),
+    "R_REFC2": (70.0, 69.5, 0),
+    "R_SP10": (60.0, 73.5, 0),
+    "R_SP11": (65.0, 73.5, 0),
+    "R_SP12": (70.0, 73.5, 0),
+    "R_SP13": (60.0, 77.5, 0),
+    "R_SP14": (65.0, 77.5, 0),
+    "R_SP15": (70.0, 77.5, 0),
 
-    # The eight 0R neighbour ties, in the strip below the pots.
-    "R_HI1": (16.0, 58.5, 0),
-    "R_LO1": (20.5, 58.5, 0),
-    "R_HI2": (25.0, 58.5, 0),
-    "R_LO2": (29.5, 58.5, 0),
-    "R_HI3": (34.0, 58.5, 0),
-    "R_LO3": (38.5, 58.5, 0),
-    "R_HI4": (43.0, 58.5, 0),
-    "R_LO4": (47.5, 58.5, 0),
-    "C_BA3V3": (52.0, 58.5, 0),
+    # --- analog: the bottom band, right (muxes and the COM clusters) --------
+    # Both COM nets run mux pin -> test point -> DNP cap -> 0R -> sense pin
+    # inside this block, so each stays a short single-layer run, and both 0R
+    # links sit directly under their sense pin: R_S8 under A3 (77.00, 41.27)
+    # and R_S16 under A2 (79.54, 41.27), 6.73 mm of straight vertical run each.
+    "U_MUX8": (76.5, 62.0, 0),
+    "C_M8": (78.98, 54.73, 90),
+    "TP_COM8": (74.02, 55.3, 0),
+    "C_COM8": (74.02, 51.8, 90),
+    "R_S8": (77.0, 49.0, 90),
+    "U_MUX16": (88.0, 62.0, 0),
+    "C_M16": (92.65, 52.0, 90),
+    "TP_COM16": (86.5, 52.0, 0),
+    "C_COM16": (82.5, 52.0, 180),
+    "R_S16": (79.54, 49.0, 90),
+    "C_BA3V3": (96.5, 57.0, 90),
 
-    # --- analog: the bottom strip, right (muxes and the COM clusters) --------
-    # Both COM nets run mux pin -> test point -> DNP cap -> 0R -> sense pin,
-    # entirely inside this block, so each stays a short single-layer run. The
-    # 0R lands 5-6 mm under A3 (SENSE_ADC10_MUX8) and A2 (SENSE_ADC9_MUX16).
-    "U_MUX8": (58.6, 51.0, 0),
-    "C_M8": (61.08, 43.73, 90),
-    "TP_COM8": (56.12, 43.5, 0),
-    "C_COM8": (56.12, 40.2, 90),
-    "R_S8": (59.4, 40.2, 0),
-    "U_MUX16": (69.5, 51.5, 0),
-    "C_M16": (74.15, 41.48, 90),
-    "TP_COM16": (63.5, 41.0, 0),
-    "C_COM16": (66.9, 41.0, 0),
-    "R_S16": (70.8, 41.0, 0),
+    # The eight 0R neighbour ties, packed around the two muxes rather than out
+    # with the pots: "neighbour hard at the rail" has to be true physically,
+    # which means the tie belongs at the mux pin and not at the pot.
+    "R_HI1": (86.0, 72.0, 0),
+    "R_LO1": (91.0, 72.0, 0),
+    "R_HI2": (96.0, 72.0, 0),
+    "R_LO2": (86.0, 76.0, 0),
+    "R_HI3": (91.0, 76.0, 0),
+    "R_LO3": (96.0, 76.0, 0),
+    "R_HI4": (96.5, 62.0, 90),
+    "R_LO4": (96.5, 66.0, 90),
 }
 
 DOMAIN = {
@@ -214,16 +229,14 @@ DOMAIN = {
     "TP_A3V3": "analog", "TP_AGND": "analog",
 }
 
-# The digital zone is a U: the analog tongue (x 29..55, y 5..39.5) reaches up
-# into the module's interior and splits the digital region in two, so the
-# plane bridges over it along the board's top edge. Every pair keeps a 1 mm
-# gap, and the two In1/In2 pairs share their outlines exactly -- a supply
-# plane that did not follow its own return would be the one thing this coupon
-# exists to measure.
-_DIGITAL = [(1, 1), (79, 1), (79, 38.3), (56, 38.3),
-            (56, 4), (28, 4), (28, 38.3), (1, 38.3)]
-_ANALOG = [(1, 39.5), (29, 39.5), (29, 5), (55, 5), (55, 39.5),
-           (79, 39.5), (79, 59), (1, 59)]
+# Two full-width bands with a 1.2 mm moat between them, and the same outlines
+# on In1 and In2 -- a supply plane that did not follow its own return would be
+# the one thing this coupon exists to measure. Full-width is the point: an
+# earlier draft on the smaller board had the analog region reach up into the
+# module's interior, which left the digital plane bridging over it through a
+# 3 mm neck. Here neither plane is ever narrower than the board.
+_DIGITAL = [(1, 1), (99, 1), (99, 47.5), (1, 47.5)]
+_ANALOG = [(1, 48.7), (99, 48.7), (99, 79), (1, 79)]
 
 ZONE_RECTS = {
     ("In1.Cu", "AGND"): _ANALOG,

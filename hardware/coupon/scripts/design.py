@@ -17,10 +17,18 @@ I2C1_SCL/I2C1_SDA/SPI_NSS/SPI_SCK. See hardware/lib/README.md.
 
 # --- board ------------------------------------------------------------------
 # The hardware roadmap sizes the coupon at "~5x5 cm". It cannot be: the Patch SM
-# landing pattern alone is 61.35 mm wide. 80 x 60 keeps it inside the cheap fab
-# tier (<=100 x 100 mm at the usual vendors -- confirm at order time).
-BOARD_W_MM = 80.0
-BOARD_H_MM = 60.0
+# landing pattern alone is 61.35 mm wide, and the module's body outline covers
+# 68 x 40 mm of whatever board it sits on.
+#
+# 80 x 60 was tried and measured short. The parts that cannot live in the
+# module's shadow -- it stands ~11 mm off the board on its sockets, so every
+# pot shaft, connector, button and probe point has to be outside it -- want
+# 1839 mm^2, and 80 x 60 leaves about 2100 mm^2 of L-shaped scraps that pack to
+# six of the seven pots at best. 100 x 80 leaves 5280 mm^2 and is still inside
+# the cheap fab tier (<=100 x 100 mm at the usual vendors -- confirm at order
+# time). See scripts/placement.py for what the extra 40 mm bought.
+BOARD_W_MM = 100.0
+BOARD_H_MM = 80.0
 LAYERS = 4          # ground plane on In1, supply on In2; see README
 
 # --- the parts the eight points need ----------------------------------------
