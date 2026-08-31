@@ -30,6 +30,92 @@ def fail(msg):
     sys.exit(1)
 
 
+# Keepout arithmetic for the collision search in _stitch_plane_pads(): every
+# margin here is the Minkowski-sum radius that lets the search treat a via or
+# track as a POINT against an obstacle's own bounding box, inflated by
+# whatever gap the board's DesignSettings actually requires around it.
+CLEARANCE_MM = 0.2        # kipcb.new_board's bds.m_MinClearance
+VIA_RADIUS_MM = 0.3       # kipcb.add_via's fixed 0.6 mm via width / 2
+TRACK_HALF_MM = 0.25      # the 0.5 mm stitching track width / 2
+PAD_KEEPOUT_MM = VIA_RADIUS_MM + CLEARANCE_MM      # 0.5 mm: via edge to pad edge
+TRACK_KEEPOUT_MM = TRACK_HALF_MM + CLEARANCE_MM    # 0.45 mm: track edge to pad edge
+VIA_VIA_MIN_MM = 2 * VIA_RADIUS_MM + 0.3           # 0.9 mm centre-to-centre,
+                                                    # comfortably past the
+                                                    # board's own 0.2495 mm
+                                                    # hole-to-hole minimum
+                                                    # between two 0.6 mm vias
+STANDOFFS_MM = (1.0, 1.5, 2.0, 2.5, 3.0)
+
+
+def _pad_obstacles(board):
+    """`[(netname, (left, top, right, bottom))]` for every pad on the board,
+    world-aligned -- `pad.GetBoundingBox()` already accounts for the
+    footprint's own rotation, so a pad on an R_LED turned 90 deg reports the
+    same shape a rotation-naive reader of its local pad size would miss."""
+    obstacles = []
+    for fp in board.GetFootprints():
+        for pad in fp.Pads():
+            bb = pad.GetBoundingBox()
+            obstacles.append((pad.GetNetname(), (
+                pcbnew.ToMM(bb.GetLeft()), pcbnew.ToMM(bb.GetTop()),
+                pcbnew.ToMM(bb.GetRight()), pcbnew.ToMM(bb.GetBottom()))))
+    return obstacles
+
+
+def _clear_of_pads(x, y, net, obstacles, margin):
+    for onet, (left, top, right, bottom) in obstacles:
+        if onet == net or not onet:      # same net may touch; no-net pads don't exist electrically
+            continue
+        if left - margin <= x <= right + margin and top - margin <= y <= bottom + margin:
+            return False
+    return True
+
+
+def _clear_of_vias(x, y, placed):
+    return all(((x - vx) ** 2 + (y - vy) ** 2) ** 0.5 >= VIA_VIA_MIN_MM
+               for vx, vy in placed)
+
+
+def _candidate_clear(px, py, vx, vy, net, obstacles, placed):
+    """A candidate via is clear if the via point, and the midpoint of the
+    straight pad->via track, both clear every different-net pad by their
+    respective keepouts, and the via clears every via already placed this
+    pass (any net -- hole-to-hole is a drilling constraint, not a net one).
+    One midpoint sample is a coarse stand-in for the whole <=3 mm segment;
+    the real arbiter is `check_stitch_hygiene()`'s kicad-cli gate, which
+    this search only exists to satisfy on the first try."""
+    if not _clear_of_vias(vx, vy, placed):
+        return False
+    if not _clear_of_pads(vx, vy, net, obstacles, PAD_KEEPOUT_MM):
+        return False
+    mx, my = (px + vx) / 2.0, (py + vy) / 2.0
+    return _clear_of_pads(mx, my, net, obstacles, TRACK_KEEPOUT_MM)
+
+
+def _find_via_offset(px, py, fx, fy, half_w, half_h, net, obstacles, placed):
+    """Search for a clear via position, starting from the courtyard-
+    normalized outward direction (see `_stitch_plane_pads()`) and widening
+    from there: that direction first, then the perpendicular one, then both
+    reversed -- each at growing standoff, 1.0 mm to 3.0 mm -- before giving
+    up. Reversed directions matter for parts wedged against a denser
+    neighbour on their outward side (the LED/resistor and bulk-cap columns,
+    4 mm pitch): the free space there is often on the *other* side of the
+    pad, or across the part rather than along its row."""
+    dx, dy = px - fx, py - fy
+    if abs(dx) / half_w >= abs(dy) / half_h:
+        primary = (1.0 if dx >= 0 else -1.0, 0.0)
+        secondary = (0.0, 1.0 if dy >= 0 else (-1.0 if dy < 0 else 1.0))
+    else:
+        primary = (0.0, 1.0 if dy >= 0 else -1.0)
+        secondary = (1.0 if dx >= 0 else (-1.0 if dx < 0 else 1.0), 0.0)
+    for ux, uy in (primary, secondary, (-primary[0], -primary[1]), (-secondary[0], -secondary[1])):
+        for d in STANDOFFS_MM:
+            vx, vy = px + ux * d, py + uy * d
+            if _candidate_clear(px, py, vx, vy, net, obstacles, placed):
+                return vx, vy
+    return None
+
+
 def _stitch_plane_pads(board):
     """One via + 0.5 mm F.Cu track per SMD pad on a plane net, generated
     mechanically from the board's own pads rather than as hand data (brief
@@ -38,31 +124,45 @@ def _stitch_plane_pads(board):
     same nets need nothing here -- the hole itself reaches every copper
     layer, In1/In2 included.
 
-    Via placement: 1.0 mm from the pad centre, stepped straight out along
-    whichever body axis (x or y) the pad sits *proportionally* closer to the
-    edge of -- (dx / half-width) vs (dy / half-height) of the footprint's
-    own courtyard box, not the raw (dx, dy) magnitudes. Tried first and
-    wrong: raw-magnitude dominance picks the axis the pad happens to be
-    furthest along in absolute terms, which for an oblong two-row IC is the
-    *along-the-row* axis for any pin more than a package half-width from
-    centre -- so the via walks parallel to the row, straight at the next
-    pin. Confirmed as an actual `shorting_items` violation (GND via landing
-    0.78 mm from `U_IN1` pin 16, `+3V3`) with the raw vector, and *still*
-    shorting after switching to raw-magnitude axis snapping (GND via 0.27 mm
-    from the same pin, because pin 13 sits further from the package's
-    vertical centre than the half-width, so the wrong axis won both times).
-    Normalizing each axis by the courtyard's own half-extent asks the
-    question the geometry actually needs -- "is this pad nearer the
-    package's left/right edge or its top/bottom edge" -- so a pin's step
-    stays perpendicular to the row it is in, moving it away from every
-    other pin on that row at once instead of along it. `JP_GND`/`JP_3V3`
-    fall out of the same rule for free: their two pads straddle the moat on
-    the y axis with a much taller courtyard than it is wide, so each pad's
-    dominant normalized axis is y and the via lands in its own zone
-    (digital pad north, analog pad south) -- what actually joins each
-    domain pair when the jumper is closed. Both `GetPosition()` calls
-    return absolute board coordinates, so no separate un-rotate step is
-    needed for either axis choice.
+    Via placement starts 1.0 mm from the pad centre, stepped along whichever
+    body axis (x or y) the pad sits *proportionally* closer to the edge of --
+    (dx / half-width) vs (dy / half-height) of the footprint's own courtyard
+    box, not the raw (dx, dy) magnitudes. Tried first and wrong: raw-
+    magnitude dominance picks the axis the pad happens to be furthest along
+    in absolute terms, which for an oblong two-row IC is the *along-the-row*
+    axis for any pin more than a package half-width from centre -- so the
+    via walks parallel to the row, straight at the next pin. Confirmed as an
+    actual `shorting_items` violation (GND via landing 0.78 mm from `U_IN1`
+    pin 16, `+3V3`) with the raw vector, and *still* shorting after switching
+    to raw-magnitude axis snapping (GND via 0.27 mm from the same pin,
+    because pin 13 sits further from the package's vertical centre than the
+    half-width, so the wrong axis won both times). Normalizing each axis by
+    the courtyard's own half-extent asks the question the geometry actually
+    needs -- "is this pad nearer the package's left/right edge or its
+    top/bottom edge" -- so a pin's step stays perpendicular to the row it is
+    in, moving it away from every other pin on that row at once instead of
+    along it. `JP_GND`/`JP_3V3` fall out of the same rule for free: their two
+    pads straddle the moat on the y axis with a much taller courtyard than it
+    is wide, so each pad's dominant normalized axis is y and the via lands in
+    its own zone (digital pad north, analog pad south) -- what actually joins
+    each domain pair when the jumper is closed.
+
+    That axis rule alone still left real clearance/hole_clearance violations
+    where a component sits in a tightly-pitched column (the 4 mm-pitch
+    LED/resistor and bulk-cap columns): the geometrically correct outward
+    direction has no 1.0 mm of clear room there, because the next part in
+    the column is already only ~0.2 mm past it. `_find_via_offset()` widens
+    the same rule into a real collision search -- same starting direction,
+    growing standoff, then the perpendicular and both reversed directions --
+    checked against every other-net pad's actual bounding box and every via
+    already placed this pass, so it stops at the first position that is
+    genuinely clear rather than trusting the first guess. Review round 1
+    measured two severe results of the untested first guess: a GND via at
+    0.0375 mm actual clearance to a +-12V bulk-cap pad, and several
+    ~0.10-0.15 mm LED-column squeezes, all below the board's 0.2 mm floor.
+
+    Both `GetPosition()` calls return absolute board coordinates, so no
+    separate un-rotate step is needed for any axis or direction choice.
 
     The 0.6 mm via / 0.3 mm drill come from `kipcb.add_via` (the Global
     Constraints minimums); the 0.5 mm track width is spec Section 4's supply
@@ -70,7 +170,10 @@ def _stitch_plane_pads(board):
     is unnecessary here).
     """
     boxes = kipcb.courtyard_boxes(board)
+    obstacles = _pad_obstacles(board)
+    placed_vias = []
     stitched = {net: 0 for net in PLANE_NETS}
+    unresolved = []
     for fp in board.GetFootprints():
         left, top, right, bottom = boxes[fp.GetReference()]
         fx, fy = (left + right) / 2.0, (top + bottom) / 2.0
@@ -82,14 +185,25 @@ def _stitch_plane_pads(board):
                 continue
             px = pcbnew.ToMM(pad.GetPosition().x)
             py = pcbnew.ToMM(pad.GetPosition().y)
-            dx, dy = px - fx, py - fy
-            if abs(dx) / half_w >= abs(dy) / half_h:
-                via_x, via_y = px + (1.0 if dx >= 0 else -1.0), py
+            found = _find_via_offset(px, py, fx, fy, half_w, half_h, net, obstacles, placed_vias)
+            if found is None:
+                dx, dy = px - fx, py - fy
+                if abs(dx) / half_w >= abs(dy) / half_h:
+                    via_x, via_y = px + (1.0 if dx >= 0 else -1.0), py
+                else:
+                    via_x, via_y = px, py + (1.0 if dy >= 0 else -1.0)
+                unresolved.append("%s.%s [%s] at (%.3f, %.3f) -- kept at the 1.0 mm default"
+                                   % (fp.GetReference(), pad.GetNumber(), net, px, py))
             else:
-                via_x, via_y = px, py + (1.0 if dy >= 0 else -1.0)
+                via_x, via_y = found
+            placed_vias.append((via_x, via_y))
             kipcb.add_via(board, (via_x, via_y), net)
             kipcb.add_track(board, "F.Cu", 0.5, net, [(px, py), (via_x, via_y)])
             stitched[net] += 1
+    if unresolved:
+        print("   UNRESOLVED via placements (collision search found nothing clear within 3.0 mm):")
+        for line in unresolved:
+            print("     " + line)
     return stitched
 
 
@@ -284,6 +398,45 @@ def check_plane_connectivity(rpt_path):
     print("5. plane nets fully connected (GND/AGND/+3V3/A+3V3)")
 
 
+# Review round 1: the only copper anywhere on this still-unrouted board is
+# Task 3's own zone fill plus its stitching vias/tracks -- Task 2's DRC
+# baseline (recorded in the Task-2 report) had zero entries in every one of
+# these four classes. A count that goes back above zero is this task's own
+# regression, not "unrouted-board noise" the way `unconnected_items` and the
+# silkscreen classes are -- those exist because Task 4/6 have not run yet;
+# these exist only if the stitching itself is wrong.
+GATED_STITCH_CLASSES = ("shorting_items", "clearance", "hole_clearance", "hole_to_hole")
+
+
+def check_stitch_hygiene(rpt_path):
+    """`shorting_items`, `clearance`, `hole_clearance`, `hole_to_hole` must
+    all be exactly zero in the same DRC report `check_courtyards()` and
+    `check_plane_connectivity()` already read.
+
+    This is the gate `_stitch_plane_pads()`'s own docstring argues for: two
+    different via-direction heuristics each produced a real `shorting_items`
+    violation before the courtyard-normalized-axis fix, and the collision
+    search added afterward (`_find_via_offset()`) is a heuristic too --
+    printing a count only helps if someone remembers to read it on every
+    run. A hard gate is honest here specifically because the board is
+    unrouted: nothing but this task's own copper exists yet to blame a
+    violation on.
+    """
+    txt = open(rpt_path, encoding="utf-8", errors="replace").read()
+    counts = {}
+    for kind in re.findall(r"^\[([a-z0-9_]+)\]", txt, re.M):
+        if kind in GATED_STITCH_CLASSES:
+            counts[kind] = counts.get(kind, 0) + 1
+    bad = {k: counts[k] for k in GATED_STITCH_CLASSES if counts.get(k)}
+    if bad:
+        for k in sorted(bad):
+            print("  %s: %d" % (k, bad[k]))
+        fail("stitching introduced %d DRC violations (%s)"
+             % (sum(bad.values()), ", ".join(sorted(bad))))
+    print("6. stitching is clean: 0 shorting_items, 0 clearance, "
+          "0 hole_clearance, 0 hole_to_hole")
+
+
 if __name__ == "__main__":
     board, parts = build()
     check_nets(board, parts)
@@ -292,3 +445,4 @@ if __name__ == "__main__":
     check_courtyards(PCB)
     check_shadow(board)
     check_plane_connectivity(os.path.join(PROOF, "drc-placement.rpt"))
+    check_stitch_hygiene(os.path.join(PROOF, "drc-placement.rpt"))
