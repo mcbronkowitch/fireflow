@@ -36,7 +36,16 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-08-30, evening (**the coupon exists as a schematic and
+- **Last updated:** 2026-08-31 (**three of the coupon's five order blockers are
+  closed at the desk**: the pots are Alpha RD901F-40 — the Alps RK09K footprint
+  is gone, disproven pad for pad against KiCad's own library, not swapped on
+  taste; linear 20 k in 9 mm vertical is confirmed buyable as Alpha B20K at
+  Tayda/Thonk/Exploding Shed; and the four bulk caps are "10u 25V" X5R as one
+  BOM line. Proof chain re-run, green. What remains before the order: the bus
+  board measurement and the land-pattern risk — both need hands, not a
+  browser. Details in the M6 paragraph of 2026-08-30, which carries the desk
+  round inline);
+  before that, 2026-08-30, evening (**the coupon exists as a schematic and
   survived its first review round**: `hardware/coupon/` holds the coupon as
   data — `scripts/design.py` is the channel plan, `scripts/netlist.py` wires it
   by pin name, `scripts/build.py` proves the generated sheet by comparing
@@ -3626,15 +3635,26 @@ pins 7/8 still open and the rationale corrected: the A-100 standard grounds
 cheap insurance, not a standard hazard. And the SM's two 2×10 sockets are on
 the BOM as purchase-only line items (no footprint of their own — the 40 holes
 belong to the `DAISY_PATCH_SM` landing pattern), because without the line item
-"removable" meant "soldered in". **Still open before the fab/parts order goes
-out:** measure the actual bus board (pin 1/stripe against −12 V, 3–8 against
-GND, and what really sits on 7/8) — the one connection here from convention
-rather than a datasheet; settle the pot question, since `netlist.py`'s note
-says "Alpha 9 mm" while the footprint is Alps RK09K and the two are not
-drop-in identical; put a voltage rating on the 10 µF bulk caps (the two on
-±12 V need ≥16 V, better 25 V); confirm a linear 20 k in 9 mm vertical is
-actually buyable; and the Patch SM land-pattern dimensions remain
-Electrosmith's numbers, unproven until a module sits in a real board.
+"removable" meant "soldered in". A second desk round on 2026-08-31 closed
+three of the open items. The pot question is settled **for Alpha**: the two
+footprints were compared pad for pad out of KiCad's own library — pins 1/2/3
+are identical (2.5 mm in-line, 1 mm drill) but the support lugs are not (Alps
+slots at x 7 mm, y −1.9/6.9; Alpha lugs at x 7.5 mm, y −2.3/7.3), so an Alpha
+pot does not enter the Alps footprint. The coupon now carries
+`Potentiometer_Alpha_RD901F-40-00D_Single_Vertical`, which matches the part
+the note always named. That also answers the 20 k question: linear 20 k in
+9 mm vertical is a real Alpha part (`RD901F-…-B20K-00D`), stocked as B20K by
+Tayda, Thonk and Exploding Shed — the shaft variant (round metal vs T18
+knurled) is a panel decision the coupon does not have to make. And the four
+10 µF bulk caps are now "10u 25V" on the BOM as one line item (e.g. Samsung
+CL21A106KAYNNNE, X5R 0805 25 V): the ±12 V pair needs the rating, the 3V3
+pair rides along; X5R at 12 V bias keeps roughly half its capacitance, which
+is fine for bulk behind the 100n decouplers. The proof chain was re-run and
+stayed green. **Still open before the fab/parts order goes out:** measure the
+actual bus board (pin 1/stripe against −12 V, 3–8 against GND, and what
+really sits on 7/8) — the one connection here from convention rather than a
+datasheet; and the Patch SM land-pattern dimensions remain Electrosmith's
+numbers, unproven until a module sits in a real board.
 
 **2026-08-14 — preset persistence now starts from nothing.** M6's scope names
 it, and until this date the repo had two pieces of prior art for it: the

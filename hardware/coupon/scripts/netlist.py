@@ -21,7 +21,7 @@ FP_C = "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
 FP_LED = "LED_SMD:LED_0805_2012Metric_Pad1.15x1.40mm_HandSolder"
 FP_TP = "TestPoint:TestPoint_Pad_D1.5mm"
 FP_JP = "Jumper:SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm"
-FP_POT = "Potentiometer_THT:Potentiometer_Alps_RK09K_Single_Vertical"
+FP_POT = "Potentiometer_THT:Potentiometer_Alpha_RD901F-40-00D_Single_Vertical"
 FP_SOIC16 = "Package_SO:SOIC-16_3.9x9.9mm_P1.27mm"
 FP_SOIC24 = "Package_SO:SOIC-24W_7.5x15.4mm_P1.27mm"
 
@@ -173,7 +173,10 @@ def build():
                       "RV7": ("MUX8", 4)}
     for ref, (prefix, ch) in sorted(POT_TO_CHANNEL.items()):
         p = add(ref, "Device:R_Potentiometer", D.POT_VALUES[ref], FP_POT,
-                "Alpha 9 mm linear, the part Electrosmith's own example names")
+                "Alpha RD901F-40 9 mm linear, the part Electrosmith's own "
+                "example names; NOT the Alps RK09K footprint -- pins 1/2/3 "
+                "match (2.5 mm in-line) but the support lugs sit 0.5 mm "
+                "further out and 0.4 mm lower, so the two are not drop-in")
         p.by_number(1, D.AGND)
         p.by_number(2, chan_net(prefix, ch))
         p.by_number(3, D.A3V3)
@@ -302,10 +305,14 @@ def build():
         c = add(ref, "Device:C", "100n", FP_C, "decoupling")
         c.by_number(1, hi)
         c.by_number(2, lo)
-    BULK = [("C_B3V3", D.P3V3, D.GND, "10u"), ("C_BA3V3", D.A3V3, D.AGND, "10u"),
-            ("C_BP12", D.P12, D.GND, "10u"), ("C_BN12", D.N12, D.GND, "10u")]
-    for ref, hi, lo, value in BULK:
-        c = add(ref, "Device:C", value, FP_C, "bulk")
+    # All four are 25 V (e.g. Samsung CL21A106KAYNNNE): the pair on +/-12 V
+    # needs the rating, and the 3V3 pair rides along so the BOM stays one line.
+    # X5R at 12 V bias keeps roughly half its capacitance -- fine for bulk
+    # behind the 100n decouplers, not a precision value.
+    BULK = [("C_B3V3", D.P3V3, D.GND), ("C_BA3V3", D.A3V3, D.AGND),
+            ("C_BP12", D.P12, D.GND), ("C_BN12", D.N12, D.GND)]
+    for ref, hi, lo in BULK:
+        c = add(ref, "Device:C", "10u 25V", FP_C, "bulk, X5R")
         c.by_number(1, hi)
         c.by_number(2, lo)
 
