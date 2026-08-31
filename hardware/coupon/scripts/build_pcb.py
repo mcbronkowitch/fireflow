@@ -10,6 +10,7 @@ import design as D
 import ksexp
 import netlist as N
 import placement as P
+import routing as R
 import kipcb
 import pcbnew
 
@@ -223,9 +224,16 @@ def build():
     for (layer, net), points in P.ZONE_RECTS.items():
         kipcb.add_zone(board, layer, net, points)
     stitched = _stitch_plane_pads(board)
-    kipcb.fill_zones(board)
     print("   stitched %s" % ", ".join(
         "%s:%d" % (net, n) for net, n in sorted(stitched.items())))
+    # Signal routing goes down BEFORE the fill: the zone filler has to knit
+    # around routing's vias (and around nothing else -- tracks live on F.Cu/B.Cu
+    # where no zone is). Filling first and routing after would leave every
+    # signal via sitting in solid plane copper of a foreign net.
+    n_tracks, n_segments, n_vias = R.apply(board, kipcb)
+    print("   routed %d tracks / %d segments, %d signal vias"
+          % (n_tracks, n_segments, n_vias))
+    kipcb.fill_zones(board)
     return board, parts
 
 
@@ -405,7 +413,15 @@ def check_plane_connectivity(rpt_path):
 # regression, not "unrouted-board noise" the way `unconnected_items` and the
 # silkscreen classes are -- those exist because Task 4/6 have not run yet;
 # these exist only if the stitching itself is wrong.
-GATED_STITCH_CLASSES = ("shorting_items", "clearance", "hole_clearance", "hole_to_hole")
+#
+# Task 4 added `tracks_crossing` to the same list, and earned it on its very
+# first routing round: the opening +-12 V draft crossed -12 V over the +12 V
+# lane at (86.0, 22.0) and DRC saw it, while step 3 was still filing the class
+# under "not gated here". Two tracks of different nets sharing a point is a
+# short on the finished board, not unrouted-board noise, and there is no
+# reading of "the board is not routed yet" that makes one acceptable.
+GATED_STITCH_CLASSES = ("shorting_items", "clearance", "hole_clearance",
+                        "hole_to_hole", "tracks_crossing")
 
 
 def check_stitch_hygiene(rpt_path):
@@ -433,8 +449,55 @@ def check_stitch_hygiene(rpt_path):
             print("  %s: %d" % (k, bad[k]))
         fail("stitching introduced %d DRC violations (%s)"
              % (sum(bad.values()), ", ".join(sorted(bad))))
-    print("6. stitching is clean: 0 shorting_items, 0 clearance, "
-          "0 hole_clearance, 0 hole_to_hole")
+    print("6. copper is clean: %s" % ", ".join("0 " + k for k in GATED_STITCH_CLASSES))
+
+
+def check_ratsnest(board, rpt_path):
+    """Nothing is left unrouted. Every pad of every net -- signal nets by
+    `routing.TRACKS`, plane nets by their stitching vias -- has to be joined
+    to the rest of its net.
+
+    Measured, not read from a docstring: probed under pcbnew 10.0.5 on the
+    board this generator builds,
+
+        board.BuildConnectivity()
+        board.GetConnectivity().GetUnconnectedCount(True)   -> 84
+
+    against kicad-cli's own `[unconnected_items]` count of 84 in the same
+    report -- the two agree exactly, on the pre-routing board and after every
+    routing round since. `GetUnconnectedCount(False)` returns the same 84 here
+    (the flag selects whether items with no net are visited at all, and this
+    board has none), so the `True` form is kept as the one the DRC number was
+    matched against.
+
+    Both numbers are therefore available and both are printed; the pcbnew one
+    gates, because it is read off the live board object rather than re-parsed
+    out of a text file that a stale run could have left behind. The DRC number
+    is printed beside it as the second opinion -- a silent divergence between
+    them would mean the connectivity object and the saved file disagree, which
+    is worth seeing rather than hiding behind one of the two.
+    """
+    board.BuildConnectivity()
+    live = board.GetConnectivity().GetUnconnectedCount(True)
+    txt = open(rpt_path, encoding="utf-8", errors="replace").read()
+    from_drc = len(re.findall(r"^\[unconnected_items\]", txt, re.M))
+    if live or from_drc:
+        # The `[unconnected_items]` header line names neither net nor pad --
+        # the two pads are on the two lines under it. Same block split as
+        # `_unconnected_plane_pads()`, reported per net so a routing round can
+        # see which nets it still owes rather than a wall of identical lines.
+        by_net = {}
+        pad_re = re.compile(r"(?:PTH pad|Pad) (\S+) \[([^\]]+)\] of (\S+)")
+        for block in re.split(r"(?=^\[)", txt, flags=re.M):
+            if not block.startswith("[unconnected_items]"):
+                continue
+            for padnum, net, ref in pad_re.findall(block):
+                by_net.setdefault(net, set()).add("%s.%s" % (ref, padnum))
+        for net in sorted(by_net):
+            print("  %-20s %s" % (net, ", ".join(sorted(by_net[net]))))
+        fail("%d unconnected pairs (pcbnew), %d (kicad-cli) -- the ratsnest "
+             "is not empty" % (live, from_drc))
+    print("7. ratsnest 0 -- every net routed (pcbnew and kicad-cli agree)")
 
 
 if __name__ == "__main__":
@@ -446,3 +509,4 @@ if __name__ == "__main__":
     check_shadow(board)
     check_plane_connectivity(os.path.join(PROOF, "drc-placement.rpt"))
     check_stitch_hygiene(os.path.join(PROOF, "drc-placement.rpt"))
+    check_ratsnest(board, os.path.join(PROOF, "drc-placement.rpt"))

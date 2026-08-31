@@ -1,72 +1,200 @@
 ** Drc report for coupon.kicad_pcb **
-** Created on 2026-08-31T13:59:09 **
+** Created on 2026-08-31T20:01:44 **
 ** Report includes: Errors, Warnings **
 
-** Found 120 DRC violations **
+** Found 125 DRC violations **
+[track_dangling]: Track has unconnected end
+    Local override; warning
+    @(0.9000 mm, 4.5300 mm): Track [MUX_A0] on B.Cu, length 58.2700 mm
+[track_dangling]: Track has unconnected end
+    Local override; warning
+    @(1.8000 mm, 43.0000 mm): Track [MUX_A1] on B.Cu, length 5.9500 mm
+[track_dangling]: Track has unconnected end
+    Local override; warning
+    @(3.6000 mm, 8.3400 mm): Track [MUX_A3] on B.Cu, length 39.1600 mm
+[track_dangling]: Track has unconnected end
+    Local override; warning
+    @(3.1500 mm, 7.0700 mm): Track [MUX_A2] on B.Cu, length 41.4300 mm
+[track_dangling]: Track has unconnected end
+    Local override; warning
+    @(4.0500 mm, 9.6100 mm): Track [MUX16_EN_N] on B.Cu, length 36.8900 mm
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 28.0000 mm): Reference field of R_LED7
-    @(12.3500 mm, 24.0000 mm): Reference field of R_LED6
+    @(74.0200 mm, 53.6520 mm): Reference field of TP_COM8
+    @(77.3000 mm, 54.7300 mm): Reference field of C_M8
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 24.0000 mm): Reference field of R_LED6
-    @(10.0400 mm, 25.8600 mm): Segment of D6 on F.Silkscreen
+    @(75.4600 mm, 46.7000 mm): Segment of JP_GND on F.Silkscreen
+    @(75.3500 mm, 49.0000 mm): Reference field of R_S8
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 24.0000 mm): Reference field of R_LED6
-    @(11.9600 mm, 25.8600 mm): Segment of D6 on F.Silkscreen
+    @(75.3500 mm, 49.0000 mm): Reference field of R_S8
+    @(76.2600 mm, 48.1000 mm): Reference field of JP_GND
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 28.0000 mm): Reference field of R_LED7
-    @(10.0400 mm, 25.8600 mm): Segment of D6 on F.Silkscreen
+    @(77.7350 mm, 49.2271 mm): Segment of R_S8 on F.Silkscreen
+    @(77.8900 mm, 49.0000 mm): Reference field of R_S16
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 28.0000 mm): Reference field of R_LED7
-    @(11.9600 mm, 25.8600 mm): Segment of D6 on F.Silkscreen
+    @(84.0000 mm, 46.0000 mm): Segment of U_SM on F.Silkscreen
+    @(76.2600 mm, 48.1000 mm): Reference field of JP_GND
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 28.0000 mm): Reference field of R_LED7
-    @(12.3500 mm, 32.0000 mm): Reference field of R_LED8
+    @(94.8200 mm, 20.0000 mm): Reference field of C_BP12
+    @(94.8200 mm, 24.0000 mm): Reference field of C_BN12
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 28.0000 mm): Reference field of R_LED7
-    @(10.0400 mm, 29.8600 mm): Segment of D7 on F.Silkscreen
+    @(91.5000 mm, 7.0000 mm): Segment of SW1 on F.Silkscreen
+    @(88.1000 mm, 8.2200 mm): Reference field of U_SM
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 28.0000 mm): Reference field of R_LED7
-    @(11.9600 mm, 29.8600 mm): Segment of D7 on F.Silkscreen
+    @(89.2500 mm, 6.0000 mm): Reference field of SW1
+    @(88.1000 mm, 8.2200 mm): Reference field of U_SM
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 32.0000 mm): Reference field of R_LED8
-    @(10.0400 mm, 29.8600 mm): Segment of D7 on F.Silkscreen
+    @(83.3200 mm, 22.5000 mm): Segment of J_PWR on F.Silkscreen
+    @(84.0000 mm, 6.0000 mm): Segment of U_SM on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(11.9600 mm, 33.8600 mm): Segment of D8 on F.Silkscreen
-    @(12.3500 mm, 32.0000 mm): Reference field of R_LED8
+    @(84.0000 mm, 6.0000 mm): Segment of U_SM on F.Silkscreen
+    @(84.3200 mm, 22.0000 mm): Segment of J_PWR on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 32.0000 mm): Reference field of R_LED8
-    @(10.0400 mm, 33.8600 mm): Segment of D8 on F.Silkscreen
+    @(84.7100 mm, 37.3700 mm): Segment of J_PWR on F.Silkscreen
+    @(83.0200 mm, 32.3500 mm): Footprint text of U_SM (INSTALL ON
+THIS SIDE)
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(11.9600 mm, 29.8600 mm): Segment of D7 on F.Silkscreen
-    @(12.3500 mm, 32.0000 mm): Reference field of R_LED8
+    @(92.5200 mm, 18.0900 mm): Segment of J_PWR on F.Silkscreen
+    @(83.0200 mm, 32.3500 mm): Footprint text of U_SM (INSTALL ON
+THIS SIDE)
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(5.0000 mm, 33.6250 mm): Reference field of U_IN1
-    @(5.8000 mm, 32.2050 mm): Reference field of C_IN1
+    @(93.8300 mm, 16.7900 mm): Segment of J_PWR on F.Silkscreen
+    @(96.5000 mm, 30.3520 mm): Reference field of TP_3V3
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 20.0000 mm): Reference field of R_LED5
-    @(11.9600 mm, 21.8600 mm): Segment of D5 on F.Silkscreen
+    @(84.0000 mm, 6.0000 mm): Segment of U_SM on F.Silkscreen
+    @(83.0200 mm, 32.3500 mm): Footprint text of U_SM (INSTALL ON
+THIS SIDE)
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 20.0000 mm): Reference field of R_LED5
+    @(84.0000 mm, 6.0000 mm): Segment of U_SM on F.Silkscreen
+    @(83.8800 mm, 48.1000 mm): Reference field of JP_3V3
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(86.0200 mm, 29.1300 mm): Segment of J_PWR on F.Silkscreen
+    @(83.0200 mm, 32.3500 mm): Footprint text of U_SM (INSTALL ON
+THIS SIDE)
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(86.0200 mm, 36.0700 mm): Segment of J_PWR on F.Silkscreen
+    @(83.0200 mm, 32.3500 mm): Footprint text of U_SM (INSTALL ON
+THIS SIDE)
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(96.5000 mm, 30.3520 mm): Reference field of TP_3V3
+    @(94.8200 mm, 28.0000 mm): Reference field of C_B3V3
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(94.8200 mm, 24.0000 mm): Reference field of C_BN12
+    @(94.8200 mm, 28.0000 mm): Reference field of C_B3V3
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(94.0000 mm, 1.3520 mm): Reference field of TP_GND
+    @(97.0000 mm, 2.3520 mm): Reference field of TP_CLK
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(97.0000 mm, 2.3520 mm): Reference field of TP_CLK
+    @(94.0000 mm, 3.0000 mm): Circle of TP_GND on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(94.0000 mm, 1.3520 mm): Reference field of TP_GND
+    @(90.0000 mm, 1.3520 mm): Reference field of TP_ADC12
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(86.0000 mm, 1.3520 mm): Reference field of TP_ADC11
+    @(90.0000 mm, 1.3520 mm): Reference field of TP_ADC12
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(57.6400 mm, 71.7100 mm): Reference field of RV7
+    @(60.0000 mm, 71.8500 mm): Reference field of R_SP10
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(12.3500 mm, 12.0000 mm): Reference field of R_LED3
     @(12.3500 mm, 16.0000 mm): Reference field of R_LED4
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(12.3500 mm, 12.0000 mm): Reference field of R_LED3
+    @(11.9600 mm, 13.8600 mm): Segment of D3 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(12.3500 mm, 12.0000 mm): Reference field of R_LED3
+    @(10.0400 mm, 13.8600 mm): Segment of D3 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(12.3500 mm, 16.0000 mm): Reference field of R_LED4
+    @(11.9600 mm, 13.8600 mm): Segment of D3 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(12.3500 mm, 16.0000 mm): Reference field of R_LED4
+    @(10.0400 mm, 13.8600 mm): Segment of D3 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(12.3500 mm, 12.0000 mm): Reference field of R_LED3
+    @(12.3500 mm, 8.0000 mm): Reference field of R_LED2
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(84.0000 mm, 46.0000 mm): Segment of U_SM on F.Silkscreen
+    @(83.8800 mm, 48.1000 mm): Reference field of JP_3V3
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(12.3500 mm, 12.0000 mm): Reference field of R_LED3
+    @(10.0400 mm, 9.8600 mm): Segment of D2 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(12.3500 mm, 12.0000 mm): Reference field of R_LED3
+    @(11.9600 mm, 9.8600 mm): Segment of D2 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(10.0400 mm, 9.8600 mm): Segment of D2 on F.Silkscreen
+    @(12.3500 mm, 8.0000 mm): Reference field of R_LED2
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(11.9600 mm, 9.8600 mm): Segment of D2 on F.Silkscreen
+    @(12.3500 mm, 8.0000 mm): Reference field of R_LED2
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(12.3500 mm, 4.0000 mm): Reference field of R_LED1
+    @(10.0400 mm, 5.8600 mm): Segment of D1 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(10.0400 mm, 5.8600 mm): Segment of D1 on F.Silkscreen
+    @(12.3500 mm, 8.0000 mm): Reference field of R_LED2
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(12.3500 mm, 16.0000 mm): Reference field of R_LED4
     @(12.3500 mm, 20.0000 mm): Reference field of R_LED5
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
     @(10.0400 mm, 17.8600 mm): Segment of D4 on F.Silkscreen
+    @(12.3500 mm, 16.0000 mm): Reference field of R_LED4
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(12.3500 mm, 16.0000 mm): Reference field of R_LED4
+    @(11.9600 mm, 17.8600 mm): Segment of D4 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(11.9600 mm, 5.8600 mm): Segment of D1 on F.Silkscreen
+    @(12.3500 mm, 4.0000 mm): Reference field of R_LED1
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(11.9600 mm, 5.8600 mm): Segment of D1 on F.Silkscreen
+    @(12.3500 mm, 8.0000 mm): Reference field of R_LED2
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(74.0200 mm, 53.6520 mm): Reference field of TP_COM8
+    @(72.3400 mm, 51.8000 mm): Reference field of C_COM8
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
     @(10.0000 mm, 64.3520 mm): Reference field of TP_AGND
@@ -77,40 +205,12 @@
     @(6.0000 mm, 64.3520 mm): Reference field of TP_AUDIO_L
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 12.0000 mm): Reference field of R_LED3
-    @(12.3500 mm, 16.0000 mm): Reference field of R_LED4
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 12.0000 mm): Reference field of R_LED3
-    @(11.9600 mm, 13.8600 mm): Segment of D3 on F.Silkscreen
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(10.0400 mm, 13.8600 mm): Segment of D3 on F.Silkscreen
-    @(12.3500 mm, 16.0000 mm): Reference field of R_LED4
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 16.0000 mm): Reference field of R_LED4
-    @(11.9600 mm, 13.8600 mm): Segment of D3 on F.Silkscreen
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(10.0400 mm, 13.8600 mm): Segment of D3 on F.Silkscreen
-    @(12.3500 mm, 12.0000 mm): Reference field of R_LED3
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 16.0000 mm): Reference field of R_LED4
-    @(10.0400 mm, 17.8600 mm): Segment of D4 on F.Silkscreen
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 16.0000 mm): Reference field of R_LED4
-    @(11.9600 mm, 17.8600 mm): Segment of D4 on F.Silkscreen
+    @(12.3500 mm, 24.0000 mm): Reference field of R_LED6
+    @(11.9600 mm, 25.8600 mm): Segment of D6 on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
     @(12.3500 mm, 24.0000 mm): Reference field of R_LED6
     @(12.3500 mm, 20.0000 mm): Reference field of R_LED5
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 20.0000 mm): Reference field of R_LED5
-    @(10.0400 mm, 21.8600 mm): Segment of D5 on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
     @(12.3500 mm, 24.0000 mm): Reference field of R_LED6
@@ -121,15 +221,23 @@
     @(11.9600 mm, 21.8600 mm): Segment of D5 on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(60.0000 mm, 63.8500 mm): Reference field of R_REFA1
-    @(65.0000 mm, 63.8500 mm): Reference field of R_REFA2
+    @(10.0400 mm, 21.8600 mm): Segment of D5 on F.Silkscreen
+    @(12.3500 mm, 20.0000 mm): Reference field of R_LED5
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(57.6400 mm, 71.7100 mm): Reference field of RV7
-    @(60.0000 mm, 71.8500 mm): Reference field of R_SP10
+    @(11.9600 mm, 21.8600 mm): Segment of D5 on F.Silkscreen
+    @(12.3500 mm, 20.0000 mm): Reference field of R_LED5
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(10.0400 mm, 17.8600 mm): Segment of D4 on F.Silkscreen
+    @(12.3500 mm, 20.0000 mm): Reference field of R_LED5
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(5.8000 mm, 17.5650 mm): Reference field of C_SR2
     @(5.0000 mm, 18.9850 mm): Reference field of U_SR2
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(2.9400 mm, 19.8250 mm): Segment of U_SR2 on F.Silkscreen
     @(5.8000 mm, 17.5650 mm): Reference field of C_SR2
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
@@ -137,313 +245,168 @@
     @(5.8000 mm, 17.5650 mm): Reference field of C_SR2
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(2.9400 mm, 19.8250 mm): Segment of U_SR2 on F.Silkscreen
-    @(5.8000 mm, 17.5650 mm): Reference field of C_SR2
+    @(5.8000 mm, 32.2050 mm): Reference field of C_IN1
+    @(5.0000 mm, 33.6250 mm): Reference field of U_IN1
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(94.8500 mm, 62.0000 mm): Reference field of R_HI4
-    @(94.8200 mm, 57.0000 mm): Reference field of C_BA3V3
+    @(12.3500 mm, 28.0000 mm): Reference field of R_LED7
+    @(12.3500 mm, 32.0000 mm): Reference field of R_LED8
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(94.8500 mm, 66.0000 mm): Reference field of R_LO4
-    @(94.8500 mm, 62.0000 mm): Reference field of R_HI4
+    @(12.3500 mm, 28.0000 mm): Reference field of R_LED7
+    @(10.0400 mm, 29.8600 mm): Segment of D7 on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(77.8900 mm, 49.0000 mm): Reference field of R_S16
-    @(77.7350 mm, 49.2271 mm): Segment of R_S8 on F.Silkscreen
+    @(12.3500 mm, 28.0000 mm): Reference field of R_LED7
+    @(11.9600 mm, 29.8600 mm): Segment of D7 on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(75.3500 mm, 49.0000 mm): Reference field of R_S8
-    @(76.2600 mm, 48.1000 mm): Reference field of JP_GND
+    @(12.3500 mm, 32.0000 mm): Reference field of R_LED8
+    @(10.0400 mm, 33.8600 mm): Segment of D8 on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(75.3500 mm, 49.0000 mm): Reference field of R_S8
-    @(75.4600 mm, 46.7000 mm): Segment of JP_GND on F.Silkscreen
+    @(11.9600 mm, 33.8600 mm): Segment of D8 on F.Silkscreen
+    @(12.3500 mm, 32.0000 mm): Reference field of R_LED8
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(86.5000 mm, 50.3520 mm): Reference field of TP_COM16
-    @(83.8800 mm, 48.1000 mm): Reference field of JP_3V3
+    @(12.3500 mm, 24.0000 mm): Reference field of R_LED6
+    @(12.3500 mm, 28.0000 mm): Reference field of R_LED7
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(84.0000 mm, 46.0000 mm): Segment of U_SM on F.Silkscreen
-    @(76.2600 mm, 48.1000 mm): Reference field of JP_GND
+    @(12.3500 mm, 24.0000 mm): Reference field of R_LED6
+    @(10.0400 mm, 25.8600 mm): Segment of D6 on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(84.0000 mm, 46.0000 mm): Segment of U_SM on F.Silkscreen
-    @(83.8800 mm, 48.1000 mm): Reference field of JP_3V3
+    @(12.3500 mm, 32.0000 mm): Reference field of R_LED8
+    @(10.0400 mm, 29.8600 mm): Segment of D7 on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(84.0000 mm, 6.0000 mm): Segment of U_SM on F.Silkscreen
-    @(83.8800 mm, 48.1000 mm): Reference field of JP_3V3
+    @(12.3500 mm, 32.0000 mm): Reference field of R_LED8
+    @(11.9600 mm, 29.8600 mm): Segment of D7 on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(82.5000 mm, 53.6800 mm): Reference field of C_COM16
-    @(88.0000 mm, 53.3500 mm): Reference field of U_MUX16
+    @(12.3500 mm, 28.0000 mm): Reference field of R_LED7
+    @(10.0400 mm, 25.8600 mm): Segment of D6 on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(86.5000 mm, 52.0000 mm): Circle of TP_COM16 on F.Silkscreen
-    @(88.0000 mm, 53.3500 mm): Reference field of U_MUX16
+    @(12.3500 mm, 28.0000 mm): Reference field of R_LED7
+    @(11.9600 mm, 25.8600 mm): Segment of D6 on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(90.9700 mm, 52.0000 mm): Reference field of C_M16
-    @(88.0000 mm, 53.3500 mm): Reference field of U_MUX16
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(90.9700 mm, 52.0000 mm): Reference field of C_M16
-    @(84.1400 mm, 54.1900 mm): Segment of U_MUX16 on F.Silkscreen
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(82.5000 mm, 53.6800 mm): Reference field of C_COM16
-    @(84.1400 mm, 54.1900 mm): Segment of U_MUX16 on F.Silkscreen
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(76.5000 mm, 56.1000 mm): Reference field of U_MUX8
-    @(77.3000 mm, 54.7300 mm): Reference field of C_M8
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(83.3500 mm, 54.4500 mm): Polygon of U_MUX16 on F.Silkscreen
-    @(82.5000 mm, 53.6800 mm): Reference field of C_COM16
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(82.5000 mm, 53.6800 mm): Reference field of C_COM16
-    @(84.1400 mm, 54.4550 mm): Segment of U_MUX16 on F.Silkscreen
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(74.0200 mm, 53.6520 mm): Reference field of TP_COM8
-    @(77.3000 mm, 54.7300 mm): Reference field of C_M8
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(72.3400 mm, 51.8000 mm): Reference field of C_COM8
-    @(74.0200 mm, 53.6520 mm): Reference field of TP_COM8
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(74.0200 mm, 55.3000 mm): Circle of TP_COM8 on F.Silkscreen
-    @(76.5000 mm, 56.1000 mm): Reference field of U_MUX8
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(96.5000 mm, 30.3520 mm): Reference field of TP_3V3
-    @(94.8200 mm, 28.0000 mm): Reference field of C_B3V3
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(93.8300 mm, 16.7900 mm): Segment of J_PWR on F.Silkscreen
-    @(96.5000 mm, 30.3520 mm): Reference field of TP_3V3
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(92.5200 mm, 18.0900 mm): Segment of J_PWR on F.Silkscreen
-    @(83.0200 mm, 32.3500 mm): Footprint text of U_SM (INSTALL ON
-THIS SIDE)
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(84.0000 mm, 6.0000 mm): Segment of U_SM on F.Silkscreen
-    @(83.0200 mm, 32.3500 mm): Footprint text of U_SM (INSTALL ON
-THIS SIDE)
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(83.0200 mm, 32.3500 mm): Footprint text of U_SM (INSTALL ON
-THIS SIDE)
-    @(86.0200 mm, 29.1300 mm): Segment of J_PWR on F.Silkscreen
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(84.7100 mm, 37.3700 mm): Segment of J_PWR on F.Silkscreen
-    @(83.0200 mm, 32.3500 mm): Footprint text of U_SM (INSTALL ON
-THIS SIDE)
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(83.0200 mm, 32.3500 mm): Footprint text of U_SM (INSTALL ON
-THIS SIDE)
-    @(86.0200 mm, 36.0700 mm): Segment of J_PWR on F.Silkscreen
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(89.2500 mm, 6.0000 mm): Reference field of SW1
-    @(88.1000 mm, 8.2200 mm): Reference field of U_SM
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(88.1000 mm, 8.2200 mm): Reference field of U_SM
-    @(91.5000 mm, 7.0000 mm): Segment of SW1 on F.Silkscreen
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(5.0000 mm, 4.3450 mm): Reference field of U_SR1
     @(5.8000 mm, 2.9250 mm): Reference field of C_SR1
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
     @(2.9400 mm, 5.1850 mm): Segment of U_SR1 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
     @(5.8000 mm, 2.9250 mm): Reference field of C_SR1
+    @(5.0000 mm, 4.3450 mm): Reference field of U_SR1
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 12.0000 mm): Reference field of R_LED3
-    @(12.3500 mm, 8.0000 mm): Reference field of R_LED2
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(10.0400 mm, 9.8600 mm): Segment of D2 on F.Silkscreen
-    @(12.3500 mm, 8.0000 mm): Reference field of R_LED2
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(10.0400 mm, 9.8600 mm): Segment of D2 on F.Silkscreen
-    @(12.3500 mm, 12.0000 mm): Reference field of R_LED3
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(11.9600 mm, 9.8600 mm): Segment of D2 on F.Silkscreen
-    @(12.3500 mm, 8.0000 mm): Reference field of R_LED2
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(90.0000 mm, 1.3520 mm): Reference field of TP_ADC12
-    @(94.0000 mm, 1.3520 mm): Reference field of TP_GND
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(94.0000 mm, 1.3520 mm): Reference field of TP_GND
-    @(97.0000 mm, 2.3520 mm): Reference field of TP_CLK
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(94.0000 mm, 3.0000 mm): Circle of TP_GND on F.Silkscreen
-    @(97.0000 mm, 2.3520 mm): Reference field of TP_CLK
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(90.0000 mm, 1.3520 mm): Reference field of TP_ADC12
-    @(86.0000 mm, 1.3520 mm): Reference field of TP_ADC11
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(84.0000 mm, 6.0000 mm): Segment of U_SM on F.Silkscreen
-    @(83.3200 mm, 22.5000 mm): Segment of J_PWR on F.Silkscreen
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(84.3200 mm, 22.0000 mm): Segment of J_PWR on F.Silkscreen
-    @(84.0000 mm, 6.0000 mm): Segment of U_SM on F.Silkscreen
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 12.0000 mm): Reference field of R_LED3
-    @(11.9600 mm, 9.8600 mm): Segment of D2 on F.Silkscreen
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(12.3500 mm, 8.0000 mm): Reference field of R_LED2
     @(12.3500 mm, 4.0000 mm): Reference field of R_LED1
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(10.0400 mm, 5.8600 mm): Segment of D1 on F.Silkscreen
     @(12.3500 mm, 8.0000 mm): Reference field of R_LED2
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(11.9600 mm, 5.8600 mm): Segment of D1 on F.Silkscreen
-    @(12.3500 mm, 8.0000 mm): Reference field of R_LED2
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(10.0400 mm, 5.8600 mm): Segment of D1 on F.Silkscreen
-    @(12.3500 mm, 4.0000 mm): Reference field of R_LED1
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(11.9600 mm, 5.8600 mm): Segment of D1 on F.Silkscreen
-    @(12.3500 mm, 4.0000 mm): Reference field of R_LED1
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(94.8200 mm, 24.0000 mm): Reference field of C_BN12
-    @(94.8200 mm, 28.0000 mm): Reference field of C_B3V3
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(94.8200 mm, 24.0000 mm): Reference field of C_BN12
-    @(94.8200 mm, 20.0000 mm): Reference field of C_BP12
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(70.0000 mm, 63.8500 mm): Reference field of R_REFB1
-    @(65.0000 mm, 63.8500 mm): Reference field of R_REFA2
-[silk_overlap]: Silkscreen clearance
-    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(73.9000 mm, 56.9900 mm): Polygon of U_MUX8 on F.Silkscreen
-    @(76.5000 mm, 56.1000 mm): Reference field of U_MUX8
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
     @(65.0000 mm, 67.8500 mm): Reference field of R_REFC1
     @(60.0000 mm, 67.8500 mm): Reference field of R_REFB2
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(65.0000 mm, 63.8500 mm): Reference field of R_REFA2
+    @(60.0000 mm, 63.8500 mm): Reference field of R_REFA1
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(60.0000 mm, 71.8500 mm): Reference field of R_SP10
+    @(65.0000 mm, 71.8500 mm): Reference field of R_SP11
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(65.0000 mm, 63.8500 mm): Reference field of R_REFA2
+    @(70.0000 mm, 63.8500 mm): Reference field of R_REFB1
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
     @(70.0000 mm, 67.8500 mm): Reference field of R_REFC2
     @(65.0000 mm, 67.8500 mm): Reference field of R_REFC1
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(70.0000 mm, 75.8500 mm): Reference field of R_SP15
+    @(65.0000 mm, 75.8500 mm): Reference field of R_SP14
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(60.0000 mm, 75.8500 mm): Reference field of R_SP13
+    @(65.0000 mm, 75.8500 mm): Reference field of R_SP14
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
     @(70.0000 mm, 71.8500 mm): Reference field of R_SP12
     @(65.0000 mm, 71.8500 mm): Reference field of R_SP11
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(91.8600 mm, 69.8100 mm): Segment of U_MUX16 on F.Silkscreen
     @(91.0000 mm, 70.3500 mm): Reference field of R_LO1
-    @(91.8600 mm, 69.8100 mm): Segment of U_MUX16 on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(91.8600 mm, 69.8100 mm): Segment of U_MUX16 on F.Silkscreen
-    @(86.0000 mm, 70.3500 mm): Reference field of R_HI1
+    @(76.5000 mm, 56.1000 mm): Reference field of U_MUX8
+    @(74.0200 mm, 55.3000 mm): Circle of TP_COM8 on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(86.0000 mm, 70.3500 mm): Reference field of R_HI1
-    @(84.1400 mm, 69.8100 mm): Segment of U_MUX16 on F.Silkscreen
+    @(73.9000 mm, 56.9900 mm): Polygon of U_MUX8 on F.Silkscreen
+    @(76.5000 mm, 56.1000 mm): Reference field of U_MUX8
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(77.3000 mm, 54.7300 mm): Reference field of C_M8
+    @(76.5000 mm, 56.1000 mm): Reference field of U_MUX8
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(82.5000 mm, 53.6800 mm): Reference field of C_COM16
+    @(83.3500 mm, 54.4500 mm): Polygon of U_MUX16 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(83.8800 mm, 48.1000 mm): Reference field of JP_3V3
+    @(86.5000 mm, 50.3520 mm): Reference field of TP_COM16
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
     @(91.0000 mm, 70.3500 mm): Reference field of R_LO1
     @(91.8600 mm, 69.5450 mm): Segment of U_MUX16 on F.Silkscreen
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(65.0000 mm, 75.8500 mm): Reference field of R_SP14
-    @(60.0000 mm, 75.8500 mm): Reference field of R_SP13
+    @(94.8500 mm, 66.0000 mm): Reference field of R_LO4
+    @(94.8500 mm, 62.0000 mm): Reference field of R_HI4
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(65.0000 mm, 75.8500 mm): Reference field of R_SP14
-    @(70.0000 mm, 75.8500 mm): Reference field of R_SP15
+    @(91.8600 mm, 69.8100 mm): Segment of U_MUX16 on F.Silkscreen
+    @(86.0000 mm, 70.3500 mm): Reference field of R_HI1
 [silk_overlap]: Silkscreen clearance
     Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
-    @(60.0000 mm, 71.8500 mm): Reference field of R_SP10
-    @(65.0000 mm, 71.8500 mm): Reference field of R_SP11
-[silk_over_copper]: Silkscreen clipped by solder mask
-    Local override; warning
-    @(30.6400 mm, 71.7100 mm): Reference field of RV5
-    @(32.2000 mm, 72.5000 mm): PTH pad [<no net>] of RV6
-[silk_over_copper]: Silkscreen clipped by solder mask
-    Local override; warning
-    @(30.6400 mm, 57.2100 mm): Reference field of RV1
-    @(32.2000 mm, 58.0000 mm): PTH pad [<no net>] of RV2
-[silk_over_copper]: Silkscreen clipped by solder mask
-    Local override; warning
-    @(57.6400 mm, 57.2100 mm): Reference field of RV3
-    @(59.2000 mm, 58.0000 mm): PTH pad [<no net>] of RV4
-[silk_over_copper]: Silkscreen clipped by solder mask
-    Local override; warning
-    @(44.1400 mm, 71.7100 mm): Reference field of RV6
-    @(45.7000 mm, 72.5000 mm): PTH pad [<no net>] of RV7
-[silk_over_copper]: Silkscreen clipped by solder mask
-    Local override; warning
-    @(44.1400 mm, 57.2100 mm): Reference field of RV2
-    @(45.7000 mm, 58.0000 mm): PTH pad [<no net>] of RV3
-[silk_over_copper]: Silkscreen clipped by solder mask
-    Local override; warning
-    @(5.0000 mm, 18.9850 mm): Reference field of U_SR2
-    @(7.4800 mm, 18.6025 mm): Pad 1 [+3V3] of C_SR2 on F.Cu
+    @(84.1400 mm, 69.8100 mm): Segment of U_MUX16 on F.Silkscreen
+    @(86.0000 mm, 70.3500 mm): Reference field of R_HI1
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(82.5000 mm, 53.6800 mm): Reference field of C_COM16
+    @(84.1400 mm, 54.1900 mm): Segment of U_MUX16 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(82.5000 mm, 53.6800 mm): Reference field of C_COM16
+    @(84.1400 mm, 54.4550 mm): Segment of U_MUX16 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(90.9700 mm, 52.0000 mm): Reference field of C_M16
+    @(84.1400 mm, 54.1900 mm): Segment of U_MUX16 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(82.5000 mm, 53.6800 mm): Reference field of C_COM16
+    @(88.0000 mm, 53.3500 mm): Reference field of U_MUX16
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(90.9700 mm, 52.0000 mm): Reference field of C_M16
+    @(88.0000 mm, 53.3500 mm): Reference field of U_MUX16
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(94.8200 mm, 57.0000 mm): Reference field of C_BA3V3
+    @(94.8500 mm, 62.0000 mm): Reference field of R_HI4
+[silk_overlap]: Silkscreen clearance
+    Rule: Einschränkungen aus Platinenkonfiguration zum Bestückungsdruck; warning
+    @(88.0000 mm, 53.3500 mm): Reference field of U_MUX16
+    @(86.5000 mm, 52.0000 mm): Circle of TP_COM16 on F.Silkscreen
 [silk_over_copper]: Silkscreen clipped by solder mask
     Local override; warning
     @(77.8900 mm, 49.0000 mm): Reference field of R_S16
     @(77.0000 mm, 50.0000 mm): Pad 1 [MUX8_COM] of R_S8 on F.Cu
-[silk_over_copper]: Silkscreen clipped by solder mask
-    Local override; warning
-    @(77.8900 mm, 49.0000 mm): Reference field of R_S16
-    @(77.0000 mm, 48.0000 mm): Pad 2 [SENSE_ADC10_MUX8] of R_S8 on F.Cu
-[silk_over_copper]: Silkscreen clipped by solder mask
-    Local override; warning
-    @(76.2600 mm, 48.1000 mm): Reference field of JP_GND
-    @(77.0000 mm, 48.0000 mm): Pad 2 [SENSE_ADC10_MUX8] of R_S8 on F.Cu
-[silk_over_copper]: Silkscreen clipped by solder mask
-    Local override; warning
-    @(88.0000 mm, 53.3500 mm): Reference field of U_MUX16
-    @(86.5000 mm, 52.0000 mm): Pad 1 [MUX16_COM] of TP_COM16 on F.Cu
-[silk_over_copper]: Silkscreen clipped by solder mask
-    Local override; warning
-    @(76.5000 mm, 56.1000 mm): Reference field of U_MUX8
-    @(78.9800 mm, 55.7675 mm): Pad 1 [A+3V3] of C_M8 on F.Cu
-[silk_over_copper]: Silkscreen clipped by solder mask
-    Local override; warning
-    @(82.5000 mm, 53.6800 mm): Reference field of C_COM16
-    @(78.9800 mm, 53.6925 mm): Pad 2 [AGND] of C_M8 on F.Cu
-[silk_over_copper]: Silkscreen clipped by solder mask
-    Local override; warning
-    @(74.0200 mm, 53.6520 mm): Reference field of TP_COM8
-    @(74.0200 mm, 52.8375 mm): Pad 1 [MUX8_COM] of C_COM8 on F.Cu
-[silk_over_copper]: Silkscreen clipped by solder mask
-    Local override; warning
-    @(75.3500 mm, 49.0000 mm): Reference field of R_S8
-    @(74.0200 mm, 50.7625 mm): Pad 2 [AGND] of C_COM8 on F.Cu
 [silk_over_copper]: Silkscreen clipped by solder mask
     Local override; warning
     @(75.3500 mm, 49.0000 mm): Reference field of R_S8
@@ -454,22 +417,34 @@ THIS SIDE)
     @(75.2100 mm, 47.9500 mm): Rectangle of JP_GND on F.Mask
 [silk_over_copper]: Silkscreen clipped by solder mask
     Local override; warning
-    @(76.2600 mm, 48.1000 mm): Reference field of JP_GND
-    @(77.0000 mm, 50.0000 mm): Pad 1 [MUX8_COM] of R_S8 on F.Cu
-[silk_over_copper]: Silkscreen clipped by solder mask
-    Local override; warning
     @(75.3500 mm, 49.0000 mm): Reference field of R_S8
     @(74.4600 mm, 47.4500 mm): Pad 1 [GND] of JP_GND on F.Cu
 [silk_over_copper]: Silkscreen clipped by solder mask
     Local override; warning
-    @(83.0200 mm, 32.3500 mm): Footprint text of U_SM (INSTALL ON
-THIS SIDE)
-    @(90.5400 mm, 29.6200 mm): PTH pad 8 [<no net>] of J_PWR
+    @(76.2600 mm, 48.1000 mm): Reference field of JP_GND
+    @(77.0000 mm, 48.0000 mm): Pad 2 [SENSE_ADC10_MUX8] of R_S8 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(75.3500 mm, 49.0000 mm): Reference field of R_S8
+    @(74.0200 mm, 50.7625 mm): Pad 2 [AGND] of C_COM8 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(76.2600 mm, 48.1000 mm): Reference field of JP_GND
+    @(77.0000 mm, 50.0000 mm): Pad 1 [MUX8_COM] of R_S8 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(77.8900 mm, 49.0000 mm): Reference field of R_S16
+    @(77.0000 mm, 48.0000 mm): Pad 2 [SENSE_ADC10_MUX8] of R_S8 on F.Cu
 [silk_over_copper]: Silkscreen clipped by solder mask
     Local override; warning
     @(83.0200 mm, 32.3500 mm): Footprint text of U_SM (INSTALL ON
 THIS SIDE)
     @(90.5400 mm, 32.1600 mm): PTH pad 10 [+12V] of J_PWR
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(83.0200 mm, 32.3500 mm): Footprint text of U_SM (INSTALL ON
+THIS SIDE)
+    @(90.5400 mm, 29.6200 mm): PTH pad 8 [<no net>] of J_PWR
 [silk_over_copper]: Silkscreen clipped by solder mask
     Local override; warning
     @(83.0200 mm, 32.3500 mm): Footprint text of U_SM (INSTALL ON
@@ -486,133 +461,61 @@ THIS SIDE)
     @(94.0000 mm, 3.0000 mm): Pad 1 [GND] of TP_GND on F.Cu
 [silk_over_copper]: Silkscreen clipped by solder mask
     Local override; warning
+    @(44.1400 mm, 71.7100 mm): Reference field of RV6
+    @(45.7000 mm, 72.5000 mm): PTH pad [<no net>] of RV7
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(30.6400 mm, 71.7100 mm): Reference field of RV5
+    @(32.2000 mm, 72.5000 mm): PTH pad [<no net>] of RV6
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(44.1400 mm, 57.2100 mm): Reference field of RV2
+    @(45.7000 mm, 58.0000 mm): PTH pad [<no net>] of RV3
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(57.6400 mm, 57.2100 mm): Reference field of RV3
+    @(59.2000 mm, 58.0000 mm): PTH pad [<no net>] of RV4
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(30.6400 mm, 57.2100 mm): Reference field of RV1
+    @(32.2000 mm, 58.0000 mm): PTH pad [<no net>] of RV2
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(5.0000 mm, 18.9850 mm): Reference field of U_SR2
+    @(7.4800 mm, 18.6025 mm): Pad 1 [+3V3] of C_SR2 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
     @(5.0000 mm, 4.3450 mm): Reference field of U_SR1
     @(7.4800 mm, 3.9625 mm): Pad 1 [+3V3] of C_SR1 on F.Cu
 [silk_over_copper]: Silkscreen clipped by solder mask
     Local override; warning
+    @(74.0200 mm, 53.6520 mm): Reference field of TP_COM8
+    @(74.0200 mm, 52.8375 mm): Pad 1 [MUX8_COM] of C_COM8 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
     @(76.5000 mm, 56.1000 mm): Reference field of U_MUX8
     @(74.0200 mm, 55.3000 mm): Pad 1 [MUX8_COM] of TP_COM8 on F.Cu
-
-** Found 84 unconnected pads **
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(61.0000 mm, 65.5000 mm): Pad 2 [MUX16_CH8] of R_REFA1 on F.Cu
-    @(64.0000 mm, 65.5000 mm): Pad 1 [MUX16_CH8] of R_REFA2 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(64.0000 mm, 65.5000 mm): Pad 1 [MUX16_CH8] of R_REFA2 on F.Cu
-    @(92.6500 mm, 56.2850 mm): Pad 23 [MUX16_CH8] of U_MUX16 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(11.0000 mm, 13.0250 mm): Pad 1 [LED_3_K] of D3 on F.Cu
-    @(14.0000 mm, 13.0000 mm): Pad 1 [LED_3_K] of R_LED3 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(7.4750 mm, 21.7100 mm): Pad 15 [LED_3] of U_SR2 on F.Cu
-    @(11.0000 mm, 10.9750 mm): Pad 2 [LED_3] of D3 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(11.0000 mm, 25.0250 mm): Pad 1 [LED_6_K] of D6 on F.Cu
-    @(14.0000 mm, 25.0000 mm): Pad 1 [LED_6_K] of R_LED6 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(2.5250 mm, 22.9800 mm): Pad 3 [LED_6] of U_SR2 on F.Cu
-    @(11.0000 mm, 22.9750 mm): Pad 2 [LED_6] of D6 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(11.0000 mm, 21.0250 mm): Pad 1 [LED_5_K] of D5 on F.Cu
-    @(14.0000 mm, 21.0000 mm): Pad 1 [LED_5_K] of R_LED5 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(7.4750 mm, 12.1500 mm): Pad 11 [SR_CLK] of U_SR1 on F.Cu
-    @(7.4750 mm, 26.7900 mm): Pad 11 [SR_CLK] of U_SR2 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(7.4750 mm, 26.7900 mm): Pad 11 [SR_CLK] of U_SR2 on F.Cu
-    @(2.5250 mm, 36.3500 mm): Pad 2 [SR_CLK] of U_IN1 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(23.2700 mm, 39.0000 mm): PTH pad B8 [SR_CLK] of U_SM
-    @(7.4750 mm, 26.7900 mm): Pad 11 [SR_CLK] of U_SR2 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(23.2700 mm, 39.0000 mm): PTH pad B8 [SR_CLK] of U_SM
-    @(97.0000 mm, 4.0000 mm): Pad 1 [SR_CLK] of TP_CLK on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(86.0000 mm, 8.0000 mm): PTH pad 1 [BTN_1] of SW1
-    @(7.4750 mm, 41.4300 mm): Pad 11 [BTN_1] of U_IN1 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(92.5000 mm, 8.0000 mm): PTH pad 1 [BTN_1] of SW1
-    @(86.0000 mm, 8.0000 mm): PTH pad 1 [BTN_1] of SW1
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(97.0000 mm, 9.0000 mm): Pad 2 [BTN_1] of R_BTN on F.Cu
-    @(92.5000 mm, 8.0000 mm): PTH pad 1 [BTN_1] of SW1
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(66.0000 mm, 77.5000 mm): Pad 2 [MUX16_CH14] of R_SP14 on F.Cu
-    @(92.6500 mm, 63.9050 mm): Pad 17 [MUX16_CH14] of U_MUX16 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(79.5400 mm, 50.0000 mm): Pad 1 [MUX16_COM] of R_S16 on F.Cu
-    @(83.5375 mm, 52.0000 mm): Pad 1 [MUX16_COM] of C_COM16 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(83.5375 mm, 52.0000 mm): Pad 1 [MUX16_COM] of C_COM16 on F.Cu
-    @(83.3500 mm, 55.0150 mm): Pad 1 [MUX16_COM] of U_MUX16 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(76.5000 mm, 56.1000 mm): Reference field of U_MUX8
+    @(78.9800 mm, 55.7675 mm): Pad 1 [A+3V3] of C_M8 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(82.5000 mm, 53.6800 mm): Reference field of C_COM16
+    @(78.9800 mm, 53.6925 mm): Pad 2 [AGND] of C_M8 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(88.0000 mm, 53.3500 mm): Reference field of U_MUX16
     @(86.5000 mm, 52.0000 mm): Pad 1 [MUX16_COM] of TP_COM16 on F.Cu
-    @(83.5375 mm, 52.0000 mm): Pad 1 [MUX16_COM] of C_COM16 on F.Cu
+
+** Found 10 unconnected pads **
 [unconnected_items]: Missing connection between items
     Local override; error
-    @(79.5400 mm, 41.2700 mm): PTH pad A2 [SENSE_ADC9_MUX16] of U_SM
-    @(79.5400 mm, 48.0000 mm): Pad 2 [SENSE_ADC9_MUX16] of R_S16 on F.Cu
+    @(78.9750 mm, 60.0950 mm): Pad 14 [MUX8_CH1] of U_MUX8 on F.Cu
+    @(92.0000 mm, 76.0000 mm): Pad 2 [MUX8_CH1] of R_HI3 on F.Cu
 [unconnected_items]: Missing connection between items
     Local override; error
-    @(83.3500 mm, 56.2850 mm): Pad 2 [MUX16_CH7] of U_MUX16 on F.Cu
-    @(87.0000 mm, 76.0000 mm): Pad 2 [MUX16_CH7] of R_LO2 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(64.0000 mm, 50.5000 mm): PTH pad 2 [MUX16_CH6] of RV4
-    @(83.3500 mm, 57.5550 mm): Pad 3 [MUX16_CH6] of U_MUX16 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(83.3500 mm, 58.8250 mm): Pad 4 [MUX16_CH5] of U_MUX16 on F.Cu
-    @(97.0000 mm, 72.0000 mm): Pad 2 [MUX16_CH5] of R_HI2 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(50.5000 mm, 50.5000 mm): PTH pad 2 [MUX16_CH4] of RV3
-    @(83.3500 mm, 60.0950 mm): Pad 5 [MUX16_CH4] of U_MUX16 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(83.3500 mm, 61.3650 mm): Pad 6 [MUX16_CH3] of U_MUX16 on F.Cu
-    @(92.0000 mm, 72.0000 mm): Pad 2 [MUX16_CH3] of R_LO1 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(37.0000 mm, 50.5000 mm): PTH pad 2 [MUX16_CH2] of RV2
-    @(83.3500 mm, 62.6350 mm): Pad 7 [MUX16_CH2] of U_MUX16 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(83.3500 mm, 63.9050 mm): Pad 8 [MUX16_CH1] of U_MUX16 on F.Cu
-    @(87.0000 mm, 72.0000 mm): Pad 2 [MUX16_CH1] of R_HI1 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(23.5000 mm, 50.5000 mm): PTH pad 2 [MUX16_CH0] of RV1
-    @(83.3500 mm, 65.1750 mm): Pad 9 [MUX16_CH0] of U_MUX16 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(7.4750 mm, 7.0700 mm): Pad 15 [MUX_A0] of U_SR1 on F.Cu
-    @(78.9750 mm, 63.9050 mm): Pad 11 [MUX_A0] of U_MUX8 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(78.9750 mm, 63.9050 mm): Pad 11 [MUX_A0] of U_MUX8 on F.Cu
-    @(83.3500 mm, 66.4450 mm): Pad 10 [MUX_A0] of U_MUX16 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(2.5250 mm, 5.8000 mm): Pad 1 [MUX_A1] of U_SR1 on F.Cu
+    @(1.8000 mm, 43.0000 mm): Track [MUX_A1] on B.Cu, length 5.9500 mm
     @(78.9750 mm, 65.1750 mm): Pad 10 [MUX_A1] of U_MUX8 on F.Cu
 [unconnected_items]: Missing connection between items
     Local override; error
@@ -620,11 +523,7 @@ THIS SIDE)
     @(83.3500 mm, 67.7150 mm): Pad 11 [MUX_A1] of U_MUX16 on F.Cu
 [unconnected_items]: Missing connection between items
     Local override; error
-    @(2.5250 mm, 8.3400 mm): Pad 3 [MUX_A3] of U_SR1 on F.Cu
-    @(92.6500 mm, 68.9850 mm): Pad 13 [MUX_A3] of U_MUX16 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(2.5250 mm, 7.0700 mm): Pad 2 [MUX_A2] of U_SR1 on F.Cu
+    @(3.1500 mm, 7.0700 mm): Track [MUX_A2] on B.Cu, length 41.4300 mm
     @(78.9750 mm, 66.4450 mm): Pad 9 [MUX_A2] of U_MUX8 on F.Cu
 [unconnected_items]: Missing connection between items
     Local override; error
@@ -632,204 +531,24 @@ THIS SIDE)
     @(92.6500 mm, 67.7150 mm): Pad 14 [MUX_A2] of U_MUX16 on F.Cu
 [unconnected_items]: Missing connection between items
     Local override; error
-    @(2.5250 mm, 9.6100 mm): Pad 4 [MUX16_EN_N] of U_SR1 on F.Cu
+    @(3.6000 mm, 8.3400 mm): Track [MUX_A3] on B.Cu, length 39.1600 mm
+    @(92.6500 mm, 68.9850 mm): Pad 13 [MUX_A3] of U_MUX16 on F.Cu
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(4.0500 mm, 9.6100 mm): Track [MUX16_EN_N] on B.Cu, length 36.8900 mm
     @(92.6500 mm, 66.4450 mm): Pad 15 [MUX16_EN_N] of U_MUX16 on F.Cu
 [unconnected_items]: Missing connection between items
     Local override; error
-    @(71.0000 mm, 77.5000 mm): Pad 2 [MUX16_CH15] of R_SP15 on F.Cu
-    @(92.6500 mm, 65.1750 mm): Pad 16 [MUX16_CH15] of U_MUX16 on F.Cu
+    @(0.9000 mm, 4.5300 mm): Track [MUX_A0] on B.Cu, length 58.2700 mm
+    @(78.9750 mm, 63.9050 mm): Pad 11 [MUX_A0] of U_MUX8 on F.Cu
 [unconnected_items]: Missing connection between items
     Local override; error
-    @(61.0000 mm, 77.5000 mm): Pad 2 [MUX16_CH13] of R_SP13 on F.Cu
-    @(92.6500 mm, 62.6350 mm): Pad 18 [MUX16_CH13] of U_MUX16 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(71.0000 mm, 73.5000 mm): Pad 2 [MUX16_CH12] of R_SP12 on F.Cu
-    @(92.6500 mm, 61.3650 mm): Pad 19 [MUX16_CH12] of U_MUX16 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(66.0000 mm, 73.5000 mm): Pad 2 [MUX16_CH11] of R_SP11 on F.Cu
-    @(92.6500 mm, 60.0950 mm): Pad 20 [MUX16_CH11] of U_MUX16 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(61.0000 mm, 73.5000 mm): Pad 2 [MUX16_CH10] of R_SP10 on F.Cu
-    @(92.6500 mm, 58.8250 mm): Pad 21 [MUX16_CH10] of U_MUX16 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(59.0000 mm, 69.5000 mm): Pad 1 [MUX16_CH9] of R_REFB2 on F.Cu
-    @(71.0000 mm, 65.5000 mm): Pad 2 [MUX16_CH9] of R_REFB1 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(71.0000 mm, 65.5000 mm): Pad 2 [MUX16_CH9] of R_REFB1 on F.Cu
-    @(92.6500 mm, 57.5550 mm): Pad 22 [MUX16_CH9] of U_MUX16 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(23.5000 mm, 65.0000 mm): PTH pad 2 [MUX8_CH0] of RV5
-    @(78.9750 mm, 61.3650 mm): Pad 13 [MUX8_CH0] of U_MUX8 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(74.0250 mm, 62.6350 mm): Pad 5 [MUX8_CH5] of U_MUX8 on F.Cu
-    @(96.5000 mm, 61.0000 mm): Pad 2 [MUX8_CH5] of R_HI4 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(2.5250 mm, 21.7100 mm): Pad 2 [LED_5] of U_SR2 on F.Cu
-    @(11.0000 mm, 18.9750 mm): Pad 2 [LED_5] of D5 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(2.5250 mm, 10.8800 mm): Pad 5 [MUX8_EN_N] of U_SR1 on F.Cu
-    @(74.0250 mm, 63.9050 mm): Pad 6 [MUX8_EN_N] of U_MUX8 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(2.5250 mm, 12.1500 mm): Pad 6 [LED_1] of U_SR1 on F.Cu
-    @(11.0000 mm, 2.9750 mm): Pad 2 [LED_1] of D1 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(2.5250 mm, 13.4200 mm): Pad 7 [LED_2] of U_SR1 on F.Cu
-    @(11.0000 mm, 6.9750 mm): Pad 2 [LED_2] of D2 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(7.4750 mm, 14.6900 mm): Pad 9 [SR1_TO_SR2] of U_SR1 on F.Cu
-    @(7.4750 mm, 22.9800 mm): Pad 14 [SR1_TO_SR2] of U_SR2 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(2.5250 mm, 35.0800 mm): Pad 1 [SR_LATCH] of U_IN1 on F.Cu
-    @(7.4750 mm, 25.5200 mm): Pad 12 [SR_LATCH] of U_SR2 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(7.4750 mm, 25.5200 mm): Pad 12 [SR_LATCH] of U_SR2 on F.Cu
-    @(7.4750 mm, 10.8800 mm): Pad 12 [SR_LATCH] of U_SR1 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(82.0800 mm, 13.2700 mm): PTH pad D1 [SR_LATCH] of U_SM
-    @(7.4750 mm, 10.8800 mm): Pad 12 [SR_LATCH] of U_SR1 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(7.4750 mm, 8.3400 mm): Pad 14 [SR_DATA_OUT] of U_SR1 on F.Cu
-    @(23.2700 mm, 36.4600 mm): PTH pad B7 [SR_DATA_OUT] of U_SM
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(37.0000 mm, 65.0000 mm): PTH pad 2 [MUX8_CH2] of RV6
-    @(78.9750 mm, 58.8250 mm): Pad 15 [MUX8_CH2] of U_MUX8 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(74.0250 mm, 61.3650 mm): Pad 4 [MUX8_CH7] of U_MUX8 on F.Cu
-    @(96.5000 mm, 65.0000 mm): Pad 2 [MUX8_CH7] of R_LO4 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(11.0000 mm, 29.0250 mm): Pad 1 [LED_7_K] of D7 on F.Cu
-    @(14.0000 mm, 29.0000 mm): Pad 1 [LED_7_K] of R_LED7 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(10.9000 mm, 51.0000 mm): PTH pad R [AUDIO_OUT_R] of J_AUDIO
-    @(20.7300 mm, 44.0800 mm): PTH pad B1 [AUDIO_OUT_R] of U_SM
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(6.1000 mm, 60.5000 mm): PTH pad T [AUDIO_OUT_L] of J_AUDIO
-    @(6.0000 mm, 66.0000 mm): Pad 1 [AUDIO_OUT_L] of TP_AUDIO_L on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(20.7300 mm, 41.5400 mm): PTH pad B2 [AUDIO_OUT_L] of U_SM
-    @(6.1000 mm, 60.5000 mm): PTH pad T [AUDIO_OUT_L] of J_AUDIO
+    @(83.3500 mm, 66.4450 mm): Pad 10 [MUX_A0] of U_MUX16 on F.Cu
+    @(78.9750 mm, 63.9050 mm): Pad 11 [MUX_A0] of U_MUX8 on F.Cu
 [unconnected_items]: Missing connection between items
     Local override; error
     @(78.9750 mm, 62.6350 mm): Pad 12 [MUX8_CH3] of U_MUX8 on F.Cu
     @(97.0000 mm, 76.0000 mm): Pad 2 [MUX8_CH3] of R_LO3 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(11.0000 mm, 33.0250 mm): Pad 1 [LED_8_K] of D8 on F.Cu
-    @(14.0000 mm, 33.0000 mm): Pad 1 [LED_8_K] of R_LED8 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(50.5000 mm, 65.0000 mm): PTH pad 2 [MUX8_CH4] of RV7
-    @(74.0250 mm, 57.5550 mm): Pad 1 [MUX8_CH4] of U_MUX8 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(66.0000 mm, 69.5000 mm): Pad 2 [MUX8_CH6] of R_REFC1 on F.Cu
-    @(69.0000 mm, 69.5000 mm): Pad 1 [MUX8_CH6] of R_REFC2 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(69.0000 mm, 69.5000 mm): Pad 1 [MUX8_CH6] of R_REFC2 on F.Cu
-    @(74.0250 mm, 58.8250 mm): Pad 2 [MUX8_CH6] of U_MUX8 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(74.0200 mm, 52.8375 mm): Pad 1 [MUX8_COM] of C_COM8 on F.Cu
-    @(74.0200 mm, 55.3000 mm): Pad 1 [MUX8_COM] of TP_COM8 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(74.0200 mm, 55.3000 mm): Pad 1 [MUX8_COM] of TP_COM8 on F.Cu
-    @(74.0250 mm, 60.0950 mm): Pad 3 [MUX8_COM] of U_MUX8 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(77.0000 mm, 50.0000 mm): Pad 1 [MUX8_COM] of R_S8 on F.Cu
-    @(74.0200 mm, 52.8375 mm): Pad 1 [MUX8_COM] of C_COM8 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(78.9750 mm, 60.0950 mm): Pad 14 [MUX8_CH1] of U_MUX8 on F.Cu
-    @(92.0000 mm, 76.0000 mm): Pad 2 [MUX8_CH1] of R_HI3 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(77.0000 mm, 10.7300 mm): PTH pad D8 [SENSE_ADC11_TP] of U_SM
-    @(86.0000 mm, 3.0000 mm): Pad 1 [SENSE_ADC11_TP] of TP_ADC11 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(7.4750 mm, 43.9700 mm): Pad 9 [SR_DATA_IN] of U_IN1 on F.Cu
-    @(82.0800 mm, 10.7300 mm): PTH pad D10 [SR_DATA_IN] of U_SM
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(79.5400 mm, 10.7300 mm): PTH pad D9 [SENSE_ADC12_TP] of U_SM
-    @(90.0000 mm, 3.0000 mm): Pad 1 [SENSE_ADC12_TP] of TP_ADC12 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(2.5250 mm, 25.5200 mm): Pad 5 [LED_8] of U_SR2 on F.Cu
-    @(11.0000 mm, 30.9750 mm): Pad 2 [LED_8] of D8 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(11.0000 mm, 9.0250 mm): Pad 1 [LED_2_K] of D2 on F.Cu
-    @(14.0000 mm, 9.0000 mm): Pad 1 [LED_2_K] of R_LED2 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(11.0000 mm, 5.0250 mm): Pad 1 [LED_1_K] of D1 on F.Cu
-    @(14.0000 mm, 5.0000 mm): Pad 1 [LED_1_K] of R_LED1 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(2.5250 mm, 20.4400 mm): Pad 1 [LED_4] of U_SR2 on F.Cu
-    @(11.0000 mm, 14.9750 mm): Pad 2 [LED_4] of D4 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(2.5250 mm, 24.2500 mm): Pad 4 [LED_7] of U_SR2 on F.Cu
-    @(11.0000 mm, 26.9750 mm): Pad 2 [LED_7] of D7 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(88.0000 mm, 32.1600 mm): PTH pad 9 [+12V] of J_PWR
-    @(90.5400 mm, 32.1600 mm): PTH pad 10 [+12V] of J_PWR
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(88.0000 mm, 32.1600 mm): PTH pad 9 [+12V] of J_PWR
-    @(71.9200 mm, 41.2700 mm): PTH pad A5 [+12V] of U_SM
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(90.5400 mm, 32.1600 mm): PTH pad 10 [+12V] of J_PWR
-    @(96.5000 mm, 21.0375 mm): Pad 1 [+12V] of C_BP12 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(77.0000 mm, 41.2700 mm): PTH pad A3 [SENSE_ADC10_MUX8] of U_SM
-    @(77.0000 mm, 48.0000 mm): Pad 2 [SENSE_ADC10_MUX8] of R_S8 on F.Cu
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(88.0000 mm, 22.0000 mm): PTH pad 1 [-12V] of J_PWR
-    @(82.0800 mm, 41.2700 mm): PTH pad A1 [-12V] of U_SM
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(90.5400 mm, 22.0000 mm): PTH pad 2 [-12V] of J_PWR
-    @(88.0000 mm, 22.0000 mm): PTH pad 1 [-12V] of J_PWR
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(96.5000 mm, 25.0375 mm): Pad 1 [-12V] of C_BN12 on F.Cu
-    @(90.5400 mm, 22.0000 mm): PTH pad 2 [-12V] of J_PWR
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(11.0000 mm, 17.0250 mm): Pad 1 [LED_4_K] of D4 on F.Cu
-    @(14.0000 mm, 17.0000 mm): Pad 1 [LED_4_K] of R_LED4 on F.Cu
 
 ** Found 0 Footprint errors **
 
