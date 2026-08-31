@@ -66,6 +66,13 @@ B2 to R_LED8.
 # --- the module -------------------------------------------------------------
 SM = (50.0, 26.0, 180)        # body x 16..84, y 6..46; banks per docstring
 
+# The module's own body outline -- a 68 x 40 mm silkscreen rectangle centred on
+# SM, so (50-34, 26-20) to (50+34, 26+20) -- as (left, top, right, bottom).
+# Exported because KiCad's DRC cannot see it: DAISY_PATCH_SM.kicad_mod has no
+# courtyard geometry, so nothing in the courtyard-overlap check knows the
+# module occupies board area. build_pcb.check_shadow() gates it instead.
+SM_SHADOW = (16.0, 6.0, 84.0, 46.0)
+
 PLACE = {
     "U_SM": SM,
 
@@ -124,16 +131,21 @@ PLACE = {
     "TP_3V3": (96.5, 32.0, 0),
 
     # --- the seam -----------------------------------------------------------
-    # Both jumpers straddle the plane split: pad A lands in the digital zone
-    # (which ends at y 47.5), pad B in the analog one (which starts at 48.7),
-    # so the 1.3 mm pad pitch bridges the 1.2 mm moat and nothing else does.
+    # Both jumpers straddle the plane split, one pad centre on each side of
+    # the 1.0 mm moat: pad A at y 47.45 inside the digital outline (which ends
+    # at 47.6), pad B at y 48.75 inside the analog one (which starts at 48.6),
+    # 0.15 mm of margin each way out of the footprint's fixed 1.3 mm pitch.
+    # That is placement only. BOTH PADS ARE SMD ON F.Cu AND THE ZONES LIVE ON
+    # In1/In2, so nothing here connects them -- the jumper is merely standing
+    # in the right place for Task 4 to drop a via from each pad into the plane
+    # below it. Do not read this as a finished ground/supply bridge.
     # JP_GND is the star point and sits directly below the SM's own ground
-    # pins A4/A7 (74.46, 41.27 and 40.73) with nothing between them. 6.08 mm
-    # is the floor for that: the ground pads are 4.73 mm inside the module's
-    # outline, and the jumper has to clear the outline plus its own courtyard.
-    # JP_3V3 sits the same way under A10 (+3V3 OUT).
-    "JP_GND": (74.46, 48.0, 270),
-    "JP_3V3": (82.08, 48.0, 270),
+    # pins A4 (74.46, 41.27) and A7 (74.46, 38.73), same x, nothing between.
+    # 6.18 mm to A4 is the floor: the ground pads are 4.73 mm inside the
+    # module's outline and the jumper has to clear the outline plus its own
+    # courtyard. JP_3V3 sits the same way under A10 (+3V3 OUT).
+    "JP_GND": (74.46, 48.1, 270),
+    "JP_3V3": (82.08, 48.1, 270),
 
     # --- analog: the bottom band, left (audio and the pots) -----------------
     # The jack's opening faces the left board edge -- its own footprint marks
@@ -235,8 +247,11 @@ DOMAIN = {
 # earlier draft on the smaller board had the analog region reach up into the
 # module's interior, which left the digital plane bridging over it through a
 # 3 mm neck. Here neither plane is ever narrower than the board.
-_DIGITAL = [(1, 1), (99, 1), (99, 47.5), (1, 47.5)]
-_ANALOG = [(1, 48.7), (99, 48.7), (99, 79), (1, 79)]
+# The moat is 1.0 mm rather than a rounder number because the solder jumpers
+# have to straddle it: their pad pitch is a fixed 1.3 mm, so a wider moat
+# pushes one pad centre or the other outside the zone it is meant to reach.
+_DIGITAL = [(1, 1), (99, 1), (99, 47.6), (1, 47.6)]
+_ANALOG = [(1, 48.6), (99, 48.6), (99, 79), (1, 79)]
 
 ZONE_RECTS = {
     ("In1.Cu", "AGND"): _ANALOG,

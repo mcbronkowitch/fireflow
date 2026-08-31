@@ -68,9 +68,24 @@ def check_courtyards(pcb_path):
     its own generator. Only `courtyards_overlap` gates this step; the other
     violation classes are unrouted-board noise until Task 6 routes it, so
     they are counted and printed, not enforced.
+
+    THE SM IS INVISIBLE TO THIS CHECK. `DAISY_PATCH_SM.kicad_mod` carries no
+    courtyard geometry, so DRC cannot report the module overlapping anything
+    -- it does not know the module occupies board area at all. A green step 3
+    therefore says nothing about the largest part on the board, which is why
+    `check_shadow()` exists beside it.
+
+    The report is deleted before the run and its absence afterwards is the
+    failure signal. It is a committed file, so testing `os.path.exists()` on
+    a stale one would read the PREVIOUS run's verdict and print green for a
+    `kicad-cli` that never produced anything. Return code cannot stand in for
+    it: `--exit-code-violations` makes a nonzero rc the normal outcome here,
+    since the board is deliberately unrouted until Task 4.
     """
     os.makedirs(PROOF, exist_ok=True)
     rpt = os.path.join(PROOF, "drc-placement.rpt")
+    if os.path.exists(rpt):
+        os.remove(rpt)
     r = subprocess.run([ksexp.KICAD_CLI, "pcb", "drc",
                         "--exit-code-violations", "--severity-error",
                         "--severity-warning", "-o", rpt, pcb_path],
@@ -92,9 +107,42 @@ def check_courtyards(pcb_path):
           % (", ".join("%s %d" % kv for kv in sorted(kinds.items())) or "none"))
 
 
+def check_shadow(board):
+    """Nothing may sit under the module.
+
+    The Patch SM stands ~11 mm off the board on its sockets and its body
+    covers `placement.SM_SHADOW`, so every pot shaft, connector, button,
+    jumper and probe point has to be outside that rectangle. Step 3 cannot
+    see this -- the module has no courtyard for DRC to collide with -- so the
+    module's own outline is checked here as data instead. `U_SM` is exempt
+    for the obvious reason.
+
+    Courtyards, not centres: a part whose centre clears the rectangle by a
+    millimetre while its body reaches 4 mm under the module is exactly the
+    drift this guards against.
+    """
+    x0, y0, x1, y1 = P.SM_SHADOW
+    bad = []
+    for ref, (left, top, right, bottom) in sorted(
+            kipcb.courtyard_boxes(board).items()):
+        if ref == "U_SM":
+            continue
+        if not (right < x0 or left > x1 or bottom < y0 or top > y1):
+            bad.append("%-9s occupies (%.2f,%.2f)-(%.2f,%.2f)"
+                       % (ref, left, top, right, bottom))
+    if bad:
+        for line in bad[:20]:
+            print("  " + line)
+        fail("%d parts in the module's shadow (%.1f,%.1f)-(%.1f,%.1f)"
+             % (len(bad), x0, y0, x1, y1))
+    print("4. 0 parts in the module's shadow (%.1f,%.1f)-(%.1f,%.1f)"
+          % (x0, y0, x1, y1))
+
+
 if __name__ == "__main__":
     board, parts = build()
     check_nets(board, parts)
     kipcb.save(board, PCB)
     print("wrote", PCB)
     check_courtyards(PCB)
+    check_shadow(board)

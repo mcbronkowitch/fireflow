@@ -161,6 +161,26 @@ def load(path):
     return pcbnew.LoadBoard(path)
 
 
+def courtyard_boxes(board):
+    """`{ref: (left, top, right, bottom)}` in mm, read back from the board.
+
+    The front courtyard where a footprint has one, its own graphic/pad
+    bounding box where it does not. The fallback is not hypothetical:
+    `DAISY_PATCH_SM` carries no courtyard geometry at all, so KiCad's DRC
+    cannot see it collide with anything and a caller that needs to reason
+    about the module's footprint has to ask for its outline instead.
+    """
+    boxes = {}
+    for fp in board.GetFootprints():
+        bb = fp.GetCourtyard(pcbnew.F_CrtYd).BBox()
+        if not bb.GetWidth() and not bb.GetHeight():
+            bb = fp.GetBoundingBox(False, False)
+        boxes[fp.GetReference()] = (
+            pcbnew.ToMM(bb.GetLeft()), pcbnew.ToMM(bb.GetTop()),
+            pcbnew.ToMM(bb.GetRight()), pcbnew.ToMM(bb.GetBottom()))
+    return boxes
+
+
 def board_nets(board):
     """`{net_name: [(ref, pad_number), ...]}` read back from the board --
     the same shape as `netlist.nets_from()`, so the two are directly
