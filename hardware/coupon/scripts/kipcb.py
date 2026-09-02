@@ -49,11 +49,50 @@ def _net(board, name):
     return net
 
 
+# A fixed seed for pcbnew's own KIID (UUID) generator, consumed by every
+# object this module creates from here on. Diagnosed for Task 6's
+# determinism gate: a comment-only source edit re-emitted coupon.kicad_pcb
+# with ~27000 changed lines across two runs, and splitting the file into its
+# top-level S-expression items (708 of them) showed the true cause is not
+# "zones recompute their fill independently of everything else" -- EVERY
+# item kind that pcbnew stores by UUID (footprints, but also the individual
+# track/via segments that share a net, and the zone filler's own internal
+# bookkeeping) comes out of `board.GetFootprints()`/`board.GetTracks()`/the
+# filler in whatever order its UUID-keyed container iterates, and that
+# order is a function of the random UUIDs each run mints -- not of geometry.
+# Two from-scratch builds with `pcbnew.KIID.SeedGenerator()` NOT called
+# diffed on ~150 reordered `(footprint ...)` blocks alone at the top level;
+# normalizing that reorder away by re-sorting both files' footprint blocks
+# by reference before diffing still left ~7700 non-uuid changed lines
+# (6136 of them `(xy ...)`) -- track/via emission order and zone-fill
+# vertex order both shift too, confirming stripping UUIDs from a diff would
+# not have closed this gate either, exactly as Ruling G predicted.
+#
+# `pcbnew.KIID.SeedGenerator(seed)` is a documented static method (probed:
+# `help(pcbnew.KIID)` lists it) that reseeds the process-global generator
+# every `KIID()` draws from. Calling it here, before the first item of a
+# fresh board is created, makes the WHOLE sequence of UUIDs -- and therefore
+# every UUID-ordered container's iteration order, footprints and fill alike
+# -- reproduce identically run after run: two from-scratch builds probed
+# with the same seed produced a byte-IDENTICAL coupon.kicad_pcb (0 diff
+# lines); a build probed with a different seed reordered everything again
+# (35370 diff lines), which rules out the 0-diff result being a coincidence
+# of this one probe run. The seed value itself carries no meaning -- it is
+# not a design constant, just a fixed choice so the sequence repeats.
+KIID_SEED = 0xC0FFEE
+
+
 def new_board(width_mm, height_mm, copper_layers):
     """Fresh board: rectangular Edge.Cuts outline at (0,0)-(w,h), copper
     layer count set, design-rule minimums from the coupon plan's Global
     Constraints (track 0.25 mm, via 0.6 mm outer / 0.3 mm drill, clearance
-    0.2 mm)."""
+    0.2 mm).
+
+    Seeds pcbnew's UUID generator first (see KIID_SEED above) so this board,
+    and everything later added to it, comes out in the same order on every
+    run -- the determinism gate build_pcb.py's own step depends on.
+    """
+    pcbnew.KIID.SeedGenerator(KIID_SEED)
     board = pcbnew.BOARD()
     board.SetCopperLayerCount(copper_layers)
     bds = board.GetDesignSettings()

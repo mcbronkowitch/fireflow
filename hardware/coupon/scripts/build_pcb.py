@@ -19,6 +19,19 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 PCB = os.path.join(ROOT, "coupon.kicad_pcb")
 PROOF = os.path.join(ROOT, "proof")
+FAB = os.path.join(ROOT, "fab")
+
+
+def run(args, what):
+    """Same shape as build.py's helper -- print rc and the first 25 lines of
+    combined stdout/stderr, return (rc, output) for a caller that needs more."""
+    r = subprocess.run(args, capture_output=True, text=True)
+    out = (r.stdout + r.stderr).strip()
+    print("   %-28s rc=%d" % (what, r.returncode))
+    if out:
+        for line in out.splitlines()[:25]:
+            print("       " + line)
+    return r.returncode, out
 
 # The four plane nets, derived from placement.ZONE_RECTS rather than
 # hand-duplicated -- GND/AGND on In1.Cu, +3V3/A+3V3 on In2.Cu. +-12V is not a
@@ -530,6 +543,102 @@ def check_analog_rules(pcb_path):
              m["worst_decoupler_mm"], m["worst_tie_mm"], worst_tie_ref))
 
 
+# Every violation class this board's own final DRC pass has ever actually
+# produced, all of them warnings and all of them silkscreen (measured: 94
+# `silk_overlap` + 25 `silk_over_copper`, see check_final_drc()'s docstring).
+# Ruling J: an accepted class needs a NAMED reason here, not silence -- and
+# this dict is also the gate. Any class DRC reports that is NOT a key here
+# fails step 9 outright, so a real defect (a new clearance violation, a
+# short) cannot quietly join the accepted pile the way it could if this were
+# only a printed note.
+ACCEPTED_DRC_CLASSES = {
+    "silk_overlap": "reference-designator silkscreen overlaps another "
+                     "silkscreen item -- KiCad's own default placement, "
+                     "never hand-tuned. Spec Section 7 puts silkscreen "
+                     "artistry beyond references and channel numbers "
+                     "explicitly out of scope for this board.",
+    "silk_over_copper": "a reference designator's silkscreen is clipped by "
+                         "the solder-mask opening of a nearby pad -- the "
+                         "same default-placement issue as silk_overlap, "
+                         "same out-of-scope call.",
+}
+
+
+def check_final_drc(pcb_path):
+    """The proof chain's own acceptance DRC (spec Section 6 point 3):
+    `kicad-cli pcb drc` at both error and warning severity, written to the
+    file the spec names, `proof/drc.rpt` -- distinct from
+    `check_courtyards()`'s `drc-placement.rpt`, which exists to gate the
+    earlier placement/stitch/ratsnest steps against the SAME underlying
+    report at the point each of them runs. This step is the one a human (or
+    a fab reviewer) is pointed at: it runs last, after fill, routing and
+    every other proof step, so nothing later could still add a violation.
+
+    Measured on the real board (2026-09-02, seeded build): 119 violations,
+    all severity `warning`, in exactly two classes -- `silk_overlap` (94)
+    and `silk_over_copper` (25) -- and nothing else. Both are named in
+    `ACCEPTED_DRC_CLASSES` with their reason; anything else fails this step,
+    per Ruling J ("never silenced").
+    """
+    os.makedirs(PROOF, exist_ok=True)
+    rpt = os.path.join(PROOF, "drc.rpt")
+    if os.path.exists(rpt):
+        os.remove(rpt)
+    subprocess.run([ksexp.KICAD_CLI, "pcb", "drc", "--exit-code-violations",
+                    "--severity-error", "--severity-warning",
+                    "-o", rpt, pcb_path], capture_output=True, text=True)
+    if not os.path.exists(rpt):
+        fail("kicad-cli pcb drc wrote no report")
+    txt = open(rpt, encoding="utf-8", errors="replace").read()
+    counts = {}
+    for kind in re.findall(r"^\[([a-z0-9_]+)\]", txt, re.M):
+        counts[kind] = counts.get(kind, 0) + 1
+    unexpected = {k: v for k, v in counts.items() if k not in ACCEPTED_DRC_CLASSES}
+    if unexpected:
+        for k in sorted(unexpected):
+            print("  %s: %d (not in ACCEPTED_DRC_CLASSES)" % (k, unexpected[k]))
+        fail("%d DRC violation(s) in %d unaccepted class(es) -- %s"
+             % (sum(unexpected.values()), len(unexpected), rpt))
+    print("9. DRC clean except %d accepted violation(s) in %d class(es): %s"
+          % (sum(counts.values()), len(counts),
+             ", ".join("%s %d" % (k, counts[k]) for k in sorted(counts)) or "none"))
+
+
+def check_render_and_gerbers(pcb_path):
+    """Render (spec Section 6 point 5) and Gerber + drill export (point 6),
+    the last two proof-chain steps -- both read-only on the finished board,
+    neither one gates anything past its own subprocess return code.
+
+    `kicad-cli pcb render` writes a raster PNG per side; the front/back file
+    names match what `review.py`'s layout section and the README point at.
+    `kicad-cli pcb export gerbers`/`export drill` both take the SAME output
+    directory (`fab/gerbers/`) -- probed (`--help` on both subcommands, then
+    a real run): neither collides with the other's files. Gerbers land as
+    24 per-layer files (`coupon-F_Cu.gtl`, `coupon-In1_Cu.g1`, ...,
+    `coupon-B_Fab.gbr`); drill export, with no `--excellon-separate-th`
+    passed, writes ONE combined `coupon.drl` (PTH and NPTH holes together),
+    not the separate `coupon-PTH.drl`/`coupon-NPTH.drl` pair that flag would
+    produce.
+    """
+    os.makedirs(FAB, exist_ok=True)
+    gerbers_dir = os.path.join(FAB, "gerbers")
+    os.makedirs(gerbers_dir, exist_ok=True)
+    rc1, _ = run([ksexp.KICAD_CLI, "pcb", "render", "--side", "top",
+                  "-o", os.path.join(PROOF, "coupon-board-front.png"), pcb_path],
+                 "render front")
+    rc2, _ = run([ksexp.KICAD_CLI, "pcb", "render", "--side", "bottom",
+                  "-o", os.path.join(PROOF, "coupon-board-back.png"), pcb_path],
+                 "render back")
+    rc3, _ = run([ksexp.KICAD_CLI, "pcb", "export", "gerbers",
+                  "-o", gerbers_dir, pcb_path], "gerbers")
+    rc4, _ = run([ksexp.KICAD_CLI, "pcb", "export", "drill",
+                  "-o", gerbers_dir, pcb_path], "drill")
+    if rc1 or rc2 or rc3 or rc4:
+        fail("render/gerber/drill export returned nonzero (see rc above)")
+    print("10. rendered front/back PNGs, exported gerbers + drill to %s"
+          % os.path.relpath(gerbers_dir, ROOT))
+
+
 if __name__ == "__main__":
     board, parts = build()
     check_nets(board, parts)
@@ -541,3 +650,5 @@ if __name__ == "__main__":
     check_stitch_hygiene(os.path.join(PROOF, "drc-placement.rpt"))
     check_ratsnest(board, os.path.join(PROOF, "drc-placement.rpt"))
     check_analog_rules(PCB)
+    check_final_drc(PCB)
+    check_render_and_gerbers(PCB)
