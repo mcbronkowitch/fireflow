@@ -36,7 +36,21 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-09-02 (**the bus-board blocker turns out to be half a
+- **Last updated:** 2026-09-02 (**one of the coupon's two order blockers is
+  closed — the bus board is metered and standard**: Bastian put the meter on
+  it and it reads as Doepfer describes — red stripe on −12 V, GND on 3..8,
+  +12 V on 9/10. Polarity was the only failure mode that costs the board, so
+  the Eurorack connector stops being an order blocker; pins 7/8 stop
+  mattering altogether rather than merely reading as expected, since they are
+  open on this board and nothing there can arrive. **One blocker remains, and
+  it is the one that cannot be closed before an order at all:** the Patch SM
+  land pattern is Electrosmith's numbers until a module seats in a fabricated
+  board — an accepted first-batch risk, not a task. The keying question
+  turned out not to be a blocker either, only an assembly-time check: a
+  wrongly keyed cable cannot be tested against a header that does not exist
+  yet, and the answer to one is a different cable, never a cut-off nose.
+  Recorded in `review.py` §3 and `hardware/coupon/README.md`); earlier the
+  same day (**the bus-board blocker turns out to be half a
   paper question, and the answer was published all along**: the Eurorack
   connector's own datasheet is mechanical only, but the *pinout* is Doepfer's
   A-100 standard, and read out it does settle pins 7/8 — the 16-pin ribbon
@@ -3780,6 +3794,30 @@ written down instead of re-measured. Docs only: `review.py`'s
 Section 3 rewritten with its sources, `hardware/coupon/README.md`'s order
 list carrying both the standard and the measured geometry; no board or
 schematic file moved, so the other two order blockers stand as they were.
+
+**2026-09-02, later still — the bus board is metered, and that closes one of
+the two order blockers.** Bastian put the meter on the actual bus board and
+it reads exactly as Doepfer describes it: the red stripe on −12 V, `GND` on
+3..8, `+12 V` on 9/10. That is the half no document could supply, and it
+lands on the safe side. **Polarity was the only failure mode that costs the
+board** — a reversed pinout would put ±12 V into the Patch SM through a
+standard cable — so the Eurorack connector stops being an order blocker
+rather than merely being better understood. **Pins 7/8 stop mattering
+altogether**, which is a stronger result than "confirmed": they are open on
+this board, so whatever the bus carries there cannot arrive, and the earlier
+insurance argument is now moot as well as correct. The keying question
+resolves the same way but for a different reason — a wrongly keyed cable
+cannot be tested against a header that does not exist yet, so it is an
+assembly-time check rather than a pre-order one, and its answer is a
+different cable, never a cut-off nose. **One blocker remains, and it is the
+one that cannot be closed before an order by construction:** the Patch SM
+land pattern is Electrosmith's vendored numbers until a module seats in a
+fabricated board. That is an accepted first-batch risk, not an open task —
+which means nothing further stands between this design and a fab order
+except the decision to place it. Recorded in `review.py`'s Section 3 (so
+`proof/review.md` carries it for whoever reads the sheet) and in
+`hardware/coupon/README.md`'s order list; docs only, no board or schematic
+file moved.
 
 **2026-08-14 — preset persistence now starts from nothing.** M6's scope names
 it, and until this date the repo had two pieces of prior art for it: the

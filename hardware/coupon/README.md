@@ -145,34 +145,39 @@ on `COM` or on `AUDIO_OUT_L`/`AUDIO_OUT_R` a wire is a component, and the
 whole point of measuring on a board instead of a breadboard is that neither
 of those paths carries an unmodelled jumper-wire capacitance.
 
-Two things need hands on a real board, not a screen, before the fab order
-goes out (`docs/roadmap.md`'s M6 section carries the up-to-date status):
+One thing still needs hands on a real board, and one that used to is now
+closed (`docs/roadmap.md`'s M6 section carries the up-to-date status):
 
-1. **The Eurorack bus board** -- pin 1/the red stripe against `-12V`, pins
-   3-8 against `GND`, and the cable's key against this header's notch. This
-   is the one connection on the whole board with no part datasheet behind
+1. ~~**The Eurorack bus board**~~ -- **closed 2026-09-02, metered.** This
+   was the one connection on the whole board with no part datasheet behind
    it: an IDC 2x5 box header's own drawing is mechanical only, and the
    pinout comes from Doepfer's A-100 standard instead.
 
-   **The standard itself was read on 2026-09-02 and it does answer pins
-   7/8** -- the 16-pin ribbon runs in pairs (-12V, GND, GND, GND, +12V, +5V,
-   CV, Gate) and the 10-pin connector is its first ten conductors, so 3..8
-   are all `GND` and +5 V starts no earlier than 11/12. `review.py`'s
-   Section 3 carries the sources. **7/8 stay open regardless**, now as
-   insurance against a non-standard board rather than against a +5 V that
-   the standard does not put there; it costs two ground pins. What the
-   standard cannot settle is whether the bus board on the bench obeys it,
-   and every careful source in this corner says the same -- never trust the
-   stripe, meter the rails, boards that deviate exist (Cwejman reversed the
-   pinout outright, so a standard cable applies reverse power). So this
-   stays a measurement, but a confirming one.
+   **The standard was read first, and it does answer pins 7/8** -- the
+   16-pin ribbon runs in pairs (-12V, GND, GND, GND, +12V, +5V, CV, Gate)
+   and the 10-pin connector is its first ten conductors, so 3..8 are all
+   `GND` and +5 V starts no earlier than 11/12. `review.py`'s Section 3
+   carries the sources. **7/8 stay open regardless**, as insurance against a
+   non-standard board rather than against a +5 V that the standard does not
+   put there; it costs two ground pins.
+
+   **Then the bench answered the part no document could:** Bastian metered
+   the bus board and it follows the standard -- red stripe on `-12V`, `GND`
+   on 3..8, `+12V` on 9/10. Polarity was the only failure mode that costs
+   the board, and it is confirmed the right way round, so this stops being
+   an order blocker. Pins 7/8 stop mattering altogether rather than merely
+   reading as expected: they are open here, so whatever the bus carries
+   there cannot arrive.
 
    **The shroud deviates from Doepfer's own advice on purpose.** Doepfer
    recommends against keyed headers on bus boards, because mis-keyed boards
    and cables are common. This board keeps one anyway: a rotated or
    row-shifted plug is +/-12 V into the Patch SM, and the notch is what
-   makes that impossible. The cost is that a cable keyed the other way will
-   not seat at all -- hence checking the key, not just the rails.
+   makes that impossible. Its one cost cannot be tested until the board
+   exists -- a cable keyed the other way will not seat at all -- so that is
+   an assembly-time check, not an order blocker. If the plug does not go in,
+   the fault is the key and the answer is a different cable, never a cut-off
+   nose.
 
    **Where the notch actually points, measured from the committed
    `coupon.kicad_pcb` on 2026-09-02** -- so nobody re-measures it: the header

@@ -162,16 +162,20 @@ def main():
         "there -- is not what the standard says, and no source was found for "
         "it; open stays right anyway, for the weaker reason.")
     add("")
-    add("**What the standard does not settle, and why this stays on the "
-        "hands-on list.** Whether the actual bus board follows it. Every "
-        "careful source in this corner says the same thing: never trust the "
-        "red stripe, meter the rails before plugging anything in, and expect "
-        "boards that deviate -- Cwejman's reversed pinout means a standard "
-        "cable applies reverse power "
+    add("**What the standard could not settle was measured on 2026-09-02, and "
+        "it agrees.** The one thing no document can answer is whether the bus "
+        "board on this bench follows the standard -- boards that deviate are "
+        "real, and Cwejman's reversed pinout means a standard cable applies "
+        "reverse power "
         "(<https://northcoastsynthesis.com/news/ribbon-cable-experience/>, "
         "<https://www.davidhaillant.com/eurorack-power-connectors-and-ribbon-cables/>). "
-        "The measurement shrinks from a bisection to a confirmation; it does "
-        "not go away.")
+        "Bastian metered it: the red stripe sits on -12V, and the rest of the "
+        "rails read as Doepfer describes them -- `GND` on 3..8, +12V on 9/10. "
+        "**So this connector is no longer an order blocker.** Polarity was "
+        "the only failure that costs the board, and it is confirmed the right "
+        "way round. Pins 7/8 stop mattering entirely rather than merely being "
+        "confirmed: they are open on this board, so whatever the bus carries "
+        "there cannot arrive.")
     add("")
     add("**The shroud is a deliberate deviation from Doepfer's own advice.** "
         "Doepfer recommends against keyed headers on bus boards -- strongly "
@@ -180,9 +184,11 @@ def main():
         "regardless: the notch is what makes a rotated or row-shifted IDC plug "
         "impossible, and a rotated plug here is +/-12 V swapped straight into "
         "the Patch SM. For a board that will hang off one known rack that is "
-        "the better trade, but it has a cost worth knowing before the order -- "
-        "if that rack's cable is keyed the other way, this header will not "
-        "accept it. Check the cable's key alongside the rails.")
+        "the better trade. Its one cost cannot be tested before the board "
+        "exists -- a cable keyed the other way will not seat at all -- so it "
+        "is an assembly-time check, not an order blocker: if the plug does not "
+        "go in, the fault is the key, and the answer is a different cable, "
+        "never a cut-off nose.")
     add("")
     add("| pin | net |")
     add("|---:|---|")
