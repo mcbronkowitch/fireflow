@@ -99,3 +99,120 @@ All three come from the vendored Patch SM symbol naming pins after their default
 - `U_IN1.Q7` against `U_SM.D10`: two outputs connected, because `D10` is `SPI_SCK` in the symbol while the coupon reads it as the chain's data input.
 - `lib_symbol_mismatch` on the 165: the embedded copy has its unit sub-symbols renamed from `74LS165_*` to `74HC165_*`, which is what makes a derived symbol loadable at all.
 
+## 6. Layout
+
+From `hardware/coupon/coupon.kicad_pcb`, read through `check_layout.py` -- the same checker that gates `build_pcb.py`'s proof chain, so this table is not a second, independently-fallible copy of what it measures.
+
+**Placement** -- every reference `placement.py` places, grouped by domain (`seam` is the two solder jumpers plus the module itself).
+
+| ref | x mm | y mm | rot | domain |
+|---|---:|---:|---:|---|
+| C_BA3V3 | 96.50 | 57.00 | 90 | analog |
+| C_COM16 | 82.50 | 52.00 | 180 | analog |
+| C_COM8 | 74.02 | 51.80 | 90 | analog |
+| C_M16 | 92.65 | 52.00 | 90 | analog |
+| C_M8 | 78.98 | 54.73 | 90 | analog |
+| J_AUDIO | 2.60 | 56.00 | 0 | analog |
+| RV1 | 26.00 | 50.50 | 270 | analog |
+| RV2 | 39.50 | 50.50 | 270 | analog |
+| RV3 | 53.00 | 50.50 | 270 | analog |
+| RV4 | 66.50 | 50.50 | 270 | analog |
+| RV5 | 26.00 | 65.00 | 270 | analog |
+| RV6 | 39.50 | 65.00 | 270 | analog |
+| RV7 | 53.00 | 65.00 | 270 | analog |
+| R_HI1 | 86.00 | 72.00 | 0 | analog |
+| R_HI2 | 96.00 | 72.00 | 0 | analog |
+| R_HI3 | 91.00 | 76.00 | 0 | analog |
+| R_HI4 | 96.50 | 62.00 | 90 | analog |
+| R_LO1 | 91.00 | 72.00 | 0 | analog |
+| R_LO2 | 86.00 | 76.00 | 0 | analog |
+| R_LO3 | 78.40 | 69.60 | 90 | analog |
+| R_LO4 | 96.50 | 66.00 | 90 | analog |
+| R_REFA1 | 60.00 | 65.50 | 0 | analog |
+| R_REFA2 | 65.00 | 65.50 | 0 | analog |
+| R_REFB1 | 70.00 | 65.50 | 0 | analog |
+| R_REFB2 | 60.00 | 69.50 | 0 | analog |
+| R_REFC1 | 65.00 | 69.50 | 0 | analog |
+| R_REFC2 | 70.00 | 69.50 | 0 | analog |
+| R_S16 | 79.54 | 49.00 | 90 | analog |
+| R_S8 | 77.00 | 49.00 | 90 | analog |
+| R_SP10 | 60.00 | 73.50 | 0 | analog |
+| R_SP11 | 65.00 | 73.50 | 0 | analog |
+| R_SP12 | 70.00 | 73.50 | 0 | analog |
+| R_SP13 | 60.00 | 77.50 | 0 | analog |
+| R_SP14 | 65.00 | 77.50 | 0 | analog |
+| R_SP15 | 70.00 | 77.50 | 0 | analog |
+| TP_A3V3 | 14.00 | 66.00 | 0 | analog |
+| TP_AGND | 10.00 | 66.00 | 0 | analog |
+| TP_AUDIO_L | 6.00 | 66.00 | 0 | analog |
+| TP_COM16 | 86.50 | 52.00 | 0 | analog |
+| TP_COM8 | 74.02 | 55.30 | 0 | analog |
+| U_MUX16 | 88.00 | 62.00 | 0 | analog |
+| U_MUX8 | 76.50 | 62.00 | 0 | analog |
+| C_B3V3 | 96.50 | 28.00 | 90 | digital |
+| C_BN12 | 96.50 | 24.00 | 90 | digital |
+| C_BP12 | 96.50 | 36.00 | 90 | digital |
+| C_IN1 | 7.48 | 32.20 | 90 | digital |
+| C_SR1 | 7.48 | 2.92 | 90 | digital |
+| C_SR2 | 7.48 | 17.57 | 90 | digital |
+| D1 | 11.00 | 4.00 | 90 | digital |
+| D2 | 11.00 | 8.00 | 90 | digital |
+| D3 | 11.00 | 12.00 | 90 | digital |
+| D4 | 11.00 | 16.00 | 90 | digital |
+| D5 | 11.00 | 20.00 | 90 | digital |
+| D6 | 11.00 | 24.00 | 90 | digital |
+| D7 | 11.00 | 28.00 | 90 | digital |
+| D8 | 11.00 | 32.00 | 90 | digital |
+| J_PWR | 88.00 | 22.00 | 0 | digital |
+| R_BTN | 97.00 | 10.00 | 90 | digital |
+| R_LED1 | 14.00 | 4.00 | 90 | digital |
+| R_LED2 | 14.00 | 8.00 | 90 | digital |
+| R_LED3 | 14.00 | 12.00 | 90 | digital |
+| R_LED4 | 14.00 | 16.00 | 90 | digital |
+| R_LED5 | 14.00 | 20.00 | 90 | digital |
+| R_LED6 | 14.00 | 24.00 | 90 | digital |
+| R_LED7 | 14.00 | 28.00 | 90 | digital |
+| R_LED8 | 14.00 | 32.00 | 90 | digital |
+| SW1 | 86.00 | 8.00 | 0 | digital |
+| TP_3V3 | 96.50 | 32.00 | 0 | digital |
+| TP_ADC11 | 86.00 | 3.00 | 0 | digital |
+| TP_ADC12 | 90.00 | 3.00 | 0 | digital |
+| TP_CLK | 97.00 | 4.00 | 0 | digital |
+| TP_GND | 94.00 | 3.00 | 0 | digital |
+| U_IN1 | 5.00 | 39.52 | 0 | digital |
+| U_SR1 | 5.00 | 10.24 | 0 | digital |
+| U_SR2 | 5.00 | 24.89 | 0 | digital |
+| JP_3V3 | 82.08 | 48.10 | 270 | seam |
+| JP_GND | 74.46 | 48.10 | 270 | seam |
+| U_SM | 50.00 | 26.00 | 180 | seam |
+
+**Measured analog rules** (spec Section 4) -- the four that reduce to one number; DOMAIN containment and the SR_CLK single-path check are pass/fail and carry no number of their own. All five gated rules read 0 violations from `check_layout.run()` as of this sheet.
+
+| rule | measured | limit |
+|---|---:|---|
+| MUX16_COM copper | 13.320 mm | <= 15.0 mm |
+| MUX8_COM copper | 14.017 mm | <= 15.0 mm |
+| audio clearance (outside the SM's own courtyard) | 11.064 mm | >= 10.0 mm |
+| worst 100n decoupler to its chip's VCC pad | 1.977 mm | <= 2.0 mm |
+
+**0R neighbour-tie distances -- measured, deliberately NOT gated.** Spec Section 4 rule 3 asks each tie to sit "directly at the mux pin" it carries; the spec states no numeric bound for it (unlike rules 1/2/5 above), so `check_layout.measure_ties()` reports these without a pass/fail. This is the sheet where Bastian sees them before an order: three of the eight are known long -- `R_HI3` and the 8:1's west-column pair `R_HI4`/`R_LO4` sit where they do because the only F.Cu approach within reach also carries the mux's own enable pin, which cannot lose its route (`placement.py`'s own comment on the block; task-4-report.md Sections 8 and 11 have the full placement history). Fixing them means re-pitching the 8:1's column, a placement-level rework Task 6 does not attempt.
+
+| ref | mm | ref | mm |
+|---|---:|---|---:|
+| R_HI1 | 8.880 | R_HI2 | 18.971 |
+| R_HI3 | 20.558 | R_HI4 | 22.534 |
+| R_LO1 | 13.709 | R_LO2 | 20.050 |
+| R_LO3 | 5.993 | R_LO4 | 22.767 |
+
+Worst: `R_LO4` at 22.767 mm.
+
+**Moat-crossing nets -- measured, deliberately NOT gated.** Spec Section 3 asks every net that changes domain to cross "at a defined place beside the star point" (`JP_GND`, placed at (74.46, 48.10)). Five of the address/enable bus's six nets instead cross on the board's west edge, 70-74 mm from the star point. The reason is upstream of routing: all six originate at `U_SR1`, placed at (5.00, 10.24) in the digital column that also holds the LEDs -- the far west edge, not beside `JP_GND` on the far east. `routing.py`'s own comment records that its five interior vias feed exactly five B.Cu lanes straight down that same west edge; only the sixth net (`MUX8_EN_N`) found a different way across, an F.Cu detour that happens to land beside the star point because the five west lanes were already spoken for. Distance is `|JP_GND.x - lane x|`, exact because both the crossing and the star point sit in the same moat-width y band.
+
+| net | B.Cu lane x mm | mm from JP_GND |
+|---|---:|---:|
+| MUX16_EN_N | 4.05 | 70.41 |
+| MUX_A0 | 0.90 | 73.56 |
+| MUX_A1 | 1.80 | 72.66 |
+| MUX_A2 | 3.15 | 71.31 |
+| MUX_A3 | 3.60 | 70.86 |
+
