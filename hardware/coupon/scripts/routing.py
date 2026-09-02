@@ -440,8 +440,8 @@ VIAS += [(net, xy) for net, xy in sorted(ADDR_VIA.items())]
 # where BTN_1's and SR_DATA_IN's own B.Cu arms have already finished: south
 # of that line nothing crosses the board until the pots at y 49.6.
 ADDR_LANE = {                    # net: (lane x, east-turn y)
-    "MUX_A0": (0.9, 62.8), "MUX_A1": (1.8, 48.95), "MUX_A2": (3.15, 48.5),
-    "MUX_A3": (3.6, 47.5), "MUX16_EN_N": (4.05, 46.5),
+    "MUX_A0": (0.9, 58.2), "MUX_A1": (1.8, 53.7), "MUX_A2": (3.15, 53.25),
+    "MUX_A3": (3.6, 52.8), "MUX16_EN_N": (4.05, 52.15),
 }
 for _net, (_lx, _ly) in sorted(ADDR_LANE.items()):
     _vx, _vy = ADDR_VIA[_net]
@@ -611,7 +611,8 @@ for _net, _py, _pin in (("MUX16_CH8", 56.285, 23), ("MUX16_CH9", 57.555, 22)):
 # via in the middle of that link's approach.
 TRACKS += [
     ("MUX16_CH8", "B.Cu", W_SIG, [(MUX16_R, 56.285), (85.725, 56.285),
-                                  (85.725, 66.75), (62.5, 66.75), (62.5, 67.2)]),
+                                  (85.725, 68.4), (76.5, 68.4), (76.5, 66.8),
+                                  (62.5, 66.8), (62.5, 67.2)]),
     ("MUX16_CH8", "F.Cu", W_SIG, [(62.5, 67.2), (62.5, 65.5), _p("R_REFA1", 2)]),
     ("MUX16_CH8", "F.Cu", W_SIG, [(62.5, 65.5), _p("R_REFA2", 1)]),
 ]
@@ -677,8 +678,8 @@ for _net, _py, _pin, _bx, _lane, _tv, _tref, _tail in (
 TRACKS += [
     ("MUX16_CH5", "F.Cu", W_SIG, [_p("U_MUX16", 4), (88.45, 58.825), (88.45, 70.79),
                                   (98.0, 70.79), (98.0, 72.0), _p("R_HI2", 2)]),
-    ("MUX16_CH7", "F.Cu", W_SIG, [_p("U_MUX16", 2), (88.9, 56.285), (88.9, 57.5), (86.0, 57.5),
-                                  (86.0, 76.0), _p("R_LO2", 2)]),
+    ("MUX16_CH7", "F.Cu", W_SIG, [_p("U_MUX16", 2), (81.9, 56.285), (81.9, 73.6),
+                                  (87.0, 73.6), _p("R_LO2", 2)]),
 ]
 
 
@@ -738,8 +739,14 @@ TRACKS += [
     # SOICs leave between them, and drops there. Neither needs a via.
     ("MUX8_CH3", "F.Cu", W_SIG, [_p("U_MUX8", 12), (77.575, 62.635), (77.575, 68.6),
                                  _p("R_LO3", 2)]),
-    ("MUX8_CH1", "F.Cu", W_SIG, [_p("U_MUX8", 14), (76.675, 60.095), (76.675, 78.6),
-                                 (92.0, 78.6), _p("R_HI3", 2)]),
+    # CH1's last 2.6 mm dive under the strip's three F.Cu descents: A2's and
+    # A3's runs to the pocket cross the board's south edge at y 78.0 and 77.2,
+    # so the leg that used to climb into R_HI3 on F.Cu now crosses them from
+    # underneath, in the one clear B.Cu column east of CH13's lane end.
+    ("MUX8_CH1", "F.Cu", W_SIG, [_p("U_MUX8", 14), (76.675, 60.095), (76.675, 79.0),
+                                 (92.0, 79.0)]),
+    ("MUX8_CH1", "B.Cu", W_SIG, [(92.0, 79.0), (92.0, 76.4)]),
+    ("MUX8_CH1", "F.Cu", W_SIG, [(92.0, 76.4), _p("R_HI3", 2)]),
     # R_HI4 and R_LO4 are still in the board's east column, and the 16:1's
     # east-band descents stand between them and the 8:1 from y 56 to y 77.
     # These two go NORTH instead, over the COM cluster at y 50.6 and 51.05 --
@@ -753,8 +760,117 @@ TRACKS += [
     ("MUX8_CH5", "B.Cu", W_SIG, [(71.2, 50.6), (95.0, 50.6), (95.0, 61.4)]),
     ("MUX8_CH5", "F.Cu", W_SIG, [(95.0, 61.4), _p("R_HI4", 2)]),
 ]
-VIAS += [("MUX8_CH7", (72.0, 51.7)), ("MUX8_CH7", (94.2, 65.0)),
+VIAS += [("MUX8_CH1", (92.0, 79.0)), ("MUX8_CH1", (92.0, 76.4)),
+         ("MUX8_CH7", (72.0, 51.7)), ("MUX8_CH7", (94.2, 65.0)),
          ("MUX8_CH5", (71.2, 50.6)), ("MUX8_CH5", (95.0, 61.4))]
+
+
+# --- the address/enable bus, west lanes to the mux pins ------------------
+# Five nets have to cross the whole board, and the analog half offers exactly
+# three east-west corridors. All three were measured off the built board, not
+# guessed, and every one of them is bounded by Task 3's stitching vias rather
+# than by parts:
+#
+# * **y 62.4..63.775, x 4..80** -- between the four wiper lanes (60.6..61.95)
+#   and the lower pots' pins (top edge 64.1). Free of vias for its whole
+#   length; the SOICs' pads are SMD, so it runs straight under the 8:1.
+#   Reached only from x < 23.5, because CH0's wiper lane starts there and the
+#   four wiper lanes wall off every descent from the moat between x 23.5 and
+#   x 83.
+# * **y 54.663..54.93** -- the single lane between C_M8's stitching via at
+#   (78.975, 55.555) and C_M16's at (92.65, 54.038). One net fits; the gap
+#   between C_M8's own two vias (55.855..56.467) is 0.612 mm against the
+#   0.65 mm a 0.25 mm track needs, so there is no second lane beside it.
+# * **F.Cu at y 52.1..52.55, x 9..69.5** -- the band between the upper pots'
+#   pins (bottom 51.4) and their mounting lugs (top 56.38). On B.Cu it is
+#   chopped by the four wiper climbs at x 23.5/37/50.5/64; on F.Cu it is
+#   empty, because the wipers reach their pads from underneath.
+#
+# The two enables' landing pins (13/14/15 on the 16:1's east column) are not
+# reachable from the west at all: the package interior carries eight via
+# stubs leaving x 90.0 westward between y 56.285 and 65.175 and six descents
+# standing at x 86.625..91.15 from y 58 to 78, so nothing crosses it. They are
+# entered from the 2.1 mm pocket east of the package instead, from a via
+# column at x 94.0 whose F.Cu stubs reach the pads sideways.
+#
+# The fan-out order out of U_SR1 fixes the rest: the five west lanes turn east
+# in strict north-to-south order of their lane x, so `MUX_A0` (lane 0.9) turns
+# deepest and `MUX16_EN_N` (lane 4.05) shallowest. That is why A0/A1/A2 own
+# the y-62 band and A3/EN16 the F.Cu one, and why A1 needs the one layer hop
+# in the group: its landing (pin 10, y 65.175) is south of A0's (pin 11,
+# 63.905) while its lane is north of A0's, and two nets that swap order cross
+# exactly once. The hop is at x 57, in the clear board between RV3's east lug
+# and R_REFA1, because a 0.6 mm via needs 0.625 mm to the next lane and the
+# bus runs on a 0.45 mm pitch -- there is nowhere inside the band itself where
+# a via fits.
+#
+# One more measured wall shapes the west end: `J_AUDIO`'s sleeve pad is
+# through-hole and stands across x 1.35..3.85, y 54.25..57.75. Four of the
+# five lanes therefore turn east above it (y 52.15..53.7, in the 1.85 mm
+# between the jack's ring pad and the sleeve), and only `MUX_A0` -- whose
+# lane at x 0.9 clears the sleeve by 0.325 mm -- goes past it and turns east
+# at y 58.2.
+TRACKS += [
+    # A0: past the jack, down to the y-62 band, out at y 64.5 to the 8:1's
+    # pin 11, then across the strip on B.Cu to the 16:1's pin 10. Both
+    # bridges stay on B.Cu so the strip's three F.Cu descents (A2, A3, CH7)
+    # can pass straight over them.
+    ("MUX_A0", "B.Cu", W_SIG, [(0.9, 58.2), (15.75, 58.2), (15.75, 63.3),
+                               (55.5, 63.3), (55.5, 64.5), (81.2, 64.5)]),
+    ("MUX_A0", "B.Cu", W_SIG, [(79.9, 63.905), (81.2, 63.905), (81.2, 66.0),
+                               (84.5, 66.0), (84.5, 66.445)]),
+    ("MUX_A0", "F.Cu", W_SIG, [(79.9, 63.905), _p("U_MUX8", 11)]),
+    ("MUX_A0", "F.Cu", W_SIG, [(84.5, 66.445), _p("U_MUX16", 10)]),
+
+    # A1: the hop, then the y-66.25 lane south of A0's, then pins 10 and 11.
+    ("MUX_A1", "B.Cu", W_SIG, [(1.8, 53.7), (16.2, 53.7), (16.2, 62.85),
+                               (56.0, 62.85), (56.0, 63.6), (57.0, 63.6)]),
+    ("MUX_A1", "F.Cu", W_SIG, [(57.0, 63.6), (57.0, 66.25)]),
+    ("MUX_A1", "B.Cu", W_SIG, [(57.0, 66.25), (80.75, 66.25)]),
+    ("MUX_A1", "B.Cu", W_SIG, [(79.9, 65.175), (80.75, 65.175), (80.75, 67.2),
+                               (84.5, 67.2), (84.5, 67.715)]),
+    ("MUX_A1", "F.Cu", W_SIG, [(79.9, 65.175), _p("U_MUX8", 10)]),
+    ("MUX_A1", "F.Cu", W_SIG, [(84.5, 67.715), _p("U_MUX16", 11)]),
+
+    # A2: the y-62.4 lane to the strip, then F.Cu all the way down the strip
+    # and along the board's south edge to the pocket. Pin 9 is a stub off the
+    # descent, which is why A2 owns the westernmost of the four F.Cu lanes.
+    ("MUX_A2", "B.Cu", W_SIG, [(3.15, 53.25), (16.65, 53.25), (16.65, 62.4),
+                               (70.0, 62.4), (70.0, 62.9), (80.55, 62.9)]),
+    ("MUX_A2", "F.Cu", W_SIG, [(80.55, 62.9), (80.55, 78.0), (95.65, 78.0)]),
+    ("MUX_A2", "F.Cu", W_SIG, [(80.55, 66.445), _p("U_MUX8", 9)]),
+    ("MUX_A2", "B.Cu", W_SIG, [(95.65, 78.0), (95.65, 67.715), (94.0, 67.715)]),
+    ("MUX_A2", "F.Cu", W_SIG, [(94.0, 67.715), _p("U_MUX16", 14)]),
+
+    # A3: the F.Cu pot band, over the COM cluster on B.Cu at y 53.5, down the
+    # strip and east above the tie rows to the pocket.
+    ("MUX_A3", "B.Cu", W_SIG, [(3.6, 52.8), (20.0, 52.8)]),
+    ("MUX_A3", "F.Cu", W_SIG, [(20.0, 52.8), (67.0, 52.8), (67.0, 53.5),
+                               (69.5, 53.5)]),
+    ("MUX_A3", "B.Cu", W_SIG, [(69.5, 53.5), (81.2, 53.5)]),
+    ("MUX_A3", "F.Cu", W_SIG, [(81.2, 53.5), (81.2, 77.2), (94.75, 77.2)]),
+    ("MUX_A3", "B.Cu", W_SIG, [(94.75, 77.2), (94.75, 68.985), (94.0, 68.985)]),
+    ("MUX_A3", "F.Cu", W_SIG, [(94.0, 68.985), _p("U_MUX16", 13)]),
+
+    # EN16: the F.Cu pot band and the single y-54.75 lane north of the muxes.
+    ("MUX16_EN_N", "B.Cu", W_SIG, [(4.05, 52.15), (18.5, 52.15)]),
+    ("MUX16_EN_N", "F.Cu", W_SIG, [(18.5, 52.15), (68.5, 52.15)]),
+    ("MUX16_EN_N", "B.Cu", W_SIG, [(68.5, 52.15), (68.5, 54.75), (93.5, 54.75),
+                                   (93.5, 66.445), (94.0, 66.445)]),
+    ("MUX16_EN_N", "F.Cu", W_SIG, [(94.0, 66.445), _p("U_MUX16", 15)]),
+]
+VIAS += [
+    ("MUX_A0", (79.9, 63.905)), ("MUX_A0", (84.5, 66.445)),
+    ("MUX_A1", (57.0, 63.6)), ("MUX_A1", (57.0, 66.25)),
+    ("MUX_A1", (79.9, 65.175)), ("MUX_A1", (84.5, 67.715)),
+    ("MUX_A2", (80.55, 62.9)), ("MUX_A2", (95.65, 78.0)),
+    ("MUX_A2", (94.0, 67.715)),
+    ("MUX_A3", (20.0, 52.8)), ("MUX_A3", (69.5, 53.5)),
+    ("MUX_A3", (81.2, 53.5)), ("MUX_A3", (94.75, 77.2)),
+    ("MUX_A3", (94.0, 68.985)),
+    ("MUX16_EN_N", (18.5, 52.15)), ("MUX16_EN_N", (68.5, 52.15)),
+    ("MUX16_EN_N", (94.0, 66.445)),
+]
 
 
 def pad_xy(board, ref, number):
