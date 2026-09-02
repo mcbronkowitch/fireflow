@@ -44,12 +44,17 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import design as D
 import kipcb
 import netlist as NL
 import placement as P
 import pcbnew
 
-COM_NETS = ("MUX16_COM", "MUX8_COM")
+# Net names come from design.py -- the single source of truth build_pcb.py
+# itself builds the board from -- not from a second hardcoded copy in this
+# file. A rename in design.py now changes what this checker looks for too,
+# instead of quietly leaving it looking for a net that no longer exists.
+COM_NETS = (D.COM16, D.COM8)
 COM_MAX_MM = 15.0
 
 AUDIO_MIN_MM = 10.0
@@ -228,27 +233,37 @@ def _track_segments(board, net_pred):
 # --- rule 1: COM ------------------------------------------------------------
 
 def _com_lengths(board):
-    """`{net: (total_mm, via_count, [non-F.Cu layer names])}`."""
-    out = {net: (0.0, 0, []) for net in COM_NETS}
+    """`{net: (total_mm, via_count, [non-F.Cu layer names], item_count)}`."""
+    out = {net: (0.0, 0, [], 0) for net in COM_NETS}
     for t in board.GetTracks():
         net = t.GetNetname()
         if net not in COM_NETS:
             continue
-        total, vias, bad_layers = out[net]
+        total, vias, bad_layers, count = out[net]
+        count += 1
         if t.Type() == pcbnew.PCB_VIA_T:
             vias += 1
         elif t.Type() == pcbnew.PCB_TRACE_T:
             total += pcbnew.ToMM(t.GetLength())
             if t.GetLayerName() != "F.Cu":
                 bad_layers = bad_layers + [t.GetLayerName()]
-        out[net] = (total, vias, bad_layers)
+        out[net] = (total, vias, bad_layers, count)
     return out
 
 
 def check_com(board, violations, meas):
     lengths = _com_lengths(board)
     for net in COM_NETS:
-        total, vias, bad_layers = lengths[net]
+        total, vias, bad_layers, count = lengths[net]
+        if count == 0:
+            # A net matching zero items reports a passing 0.0 mm / 0 vias
+            # by construction -- the same silent-pass shape as rule 4's
+            # zero-match bug. Flag it explicitly instead of letting it look
+            # identical to a genuinely clean, fully-measured net.
+            violations.append(
+                "%s has no copper/vias on the board to measure -- net "
+                "missing, unrouted, or renamed away from design.py" % net)
+            continue
         if total > COM_MAX_MM:
             violations.append("%s copper %.3f mm exceeds %.1f mm"
                                % (net, total, COM_MAX_MM))
@@ -257,18 +272,24 @@ def check_com(board, violations, meas):
         if bad_layers:
             violations.append("%s has segment(s) off F.Cu: %s"
                                % (net, ", ".join(sorted(set(bad_layers)))))
-    meas["com16_mm"] = lengths["MUX16_COM"][0]
-    meas["com8_mm"] = lengths["MUX8_COM"][0]
+    meas["com16_mm"] = lengths[D.COM16][0]
+    meas["com8_mm"] = lengths[D.COM8][0]
 
 
 # --- rule 2: audio clearance -------------------------------------------------
 
+AUDIO_NETS = (D.AUDIO_L, D.AUDIO_R)
+
+
 def _is_audio(net):
-    return net.startswith("AUDIO_")
+    return net in AUDIO_NETS
 
 
 def _is_digital_switch(net):
-    return net == "SR_CLK" or net.startswith("LED_")
+    # LED_n has no single design.py constant to source from -- it is built
+    # as "LED_%d" % n directly in build_pcb.py's SR-chain wiring, not a
+    # named net like SR_CLK/COM/AUDIO. The prefix stays a literal here.
+    return net == D.SR_CLK or net.startswith("LED_")
 
 
 def check_audio_clearance(board, violations, meas):
@@ -283,7 +304,16 @@ def check_audio_clearance(board, violations, meas):
             if worst is None or d < worst:
                 worst = d
     meas["audio_clearance_mm"] = worst
-    if worst is not None and worst < AUDIO_MIN_MM:
+    if worst is None:
+        # No audio segment, no digital segment, or both -- outside the SM
+        # courtyard -- were found to measure between. `run()`'s violation
+        # list is the actual gate interface; leaving this silent (as
+        # opposed to build_pcb.py's proof print, which happened to crash
+        # on `%.3f` % None) let the rule pass with nothing examined.
+        violations.append(
+            "audio clearance has no AUDIO_*/SR_CLK/LED_* track segments "
+            "outside the SM courtyard to measure between")
+    elif worst < AUDIO_MIN_MM:
         violations.append("audio clearance %.3f mm below %.1f mm" % (worst, AUDIO_MIN_MM))
 
 
@@ -311,6 +341,13 @@ def check_domain(board, violations):
             continue
         fp = _footprint(board, ref)
         if fp is None:
+            # Matches check_bulk's/check_decoupling's own "missing means a
+            # violation, not a skip" -- a stale or hand-edited artifact
+            # that dropped a DOMAIN ref's footprint must not look like a
+            # part that is simply, correctly, inside its zone.
+            violations.append(
+                "%s (%s) has no footprint on the board to check DOMAIN "
+                "containment" % (ref, domain))
             continue
         x, y = _mm(fp.GetPosition())
         x0, y0, x1, y1 = DOMAIN_BBOX[domain]
@@ -322,9 +359,21 @@ def check_domain(board, violations):
 
 # --- rule 4: SR_CLK single path ----------------------------------------------
 
-def check_sr_clk_path(board, violations):
+def check_sr_clk_path(board, violations, meas):
+    segments = _track_segments(board, lambda n: n == D.SR_CLK)
+    meas["sr_clk_segments"] = len(segments)
+    if not segments:
+        # The vacuous-gate shape this rule used to have: a net rename, a
+        # routing regression that drops all SR_CLK copper, or any drift
+        # between D.SR_CLK and reality left `degree` empty and `branches`
+        # empty, so the rule reported green having examined nothing. An
+        # explicit zero-match check turns that silence into a violation.
+        violations.append(
+            "SR_CLK has no track segments to measure -- net missing, "
+            "unrouted, or renamed away from design.SR_CLK")
+        return
     degree = {}
-    for net, a, b in _track_segments(board, lambda n: n == "SR_CLK"):
+    for net, a, b in segments:
         for pt in (a, b):
             key = (round(pt[0], 3), round(pt[1], 3))
             degree[key] = degree.get(key, 0) + 1
@@ -406,7 +455,7 @@ def _evaluate(board):
     check_com(board, violations, meas)
     check_audio_clearance(board, violations, meas)
     check_domain(board, violations)
-    check_sr_clk_path(board, violations)
+    check_sr_clk_path(board, violations, meas)
     check_decoupling(board, violations, meas)
     check_bulk(board, violations)
     tie_mm, worst_tie = measure_ties(board)
