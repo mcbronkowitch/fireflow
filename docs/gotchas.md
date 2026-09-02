@@ -331,3 +331,40 @@ by ear are a different list: [`docs/by-ear-decisions.md`](by-ear-decisions.md).
   does **not** mirror the modulation. No existing scenario uses one; this is
   written down so the next author of one does not read the sign as a phase
   flip. The render host has no dead zone and needs none: it is not a pot.
+
+## Hardware generators (`pcbnew`, `hardware/coupon/scripts/`)
+
+Measured 2026-09-02 while generating the test coupon's PCB. All three are
+invisible from reading the scripts, and each cost real time.
+
+- **`pcbnew` orders its containers by each item's RANDOM UUID.** Footprints,
+  per-net track/via segments and the zone filler's own bookkeeping all
+  reorder together on every run, so a generated `.kicad_pcb` diffs by tens of
+  thousands of lines between two builds of *identical* source (a sample from
+  the coupon: 26226 lines, and the count itself varies per run). Excluding
+  `uuid` lines from the diff does **not** help — the UUIDs are not the
+  payload, they are the **sort key**. Fix is one call,
+  `pcbnew.KIID.SeedGenerator()`, in the board constructor before any item
+  exists; the board then goes byte-stable. It is process-global, so call it
+  once per process — a second board built in the same interpreter reseeds to
+  the same start state and replicates the first board's UUID sequence. Do
+  this on day one of any generated board: without it every task has to
+  hand-restore the artifact to keep the churn out of history.
+
+- **`board.Remove()` leaves a dangling wrapper that corrupts the next
+  save/reload.** `Delete()` is the safe one. Bites any script that mutates a
+  board it also saves — including a checker's own sabotage/perturbation
+  modes.
+
+- **Copper landing exactly on a filled zone, or on an item of a different
+  net, is SILENTLY REASSIGNED to that net across a save/reload.** So a
+  deliberate perturbation can quietly become a no-op, and a check written
+  against it passes for the wrong reason. Perturbation copper must land
+  either on same-net copper or a few mm clear of everything.
+
+- **Timestamps are the residue no seed removes.** Even with the board
+  byte-stable, `kicad-cli`'s exports carry an embedded `CreationDate`, so
+  every gerber, the drill file, the DRC reports and the rendered PNGs still
+  diff on every run while being content-identical. Expect ~32 modified files
+  after any build of the coupon and discard them with `git checkout --`; do
+  not sweep `proof/review.md` into that, which is real content.
