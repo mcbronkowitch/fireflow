@@ -125,10 +125,21 @@ PLACE = {
     "SW1": (86.0, 8.0, 0),
     "R_BTN": (97.0, 10.0, 90),
     "J_PWR": (88.0, 22.0, 0),
-    "C_BP12": (96.5, 20.0, 90),
     "C_BN12": (96.5, 24.0, 90),
     "C_B3V3": (96.5, 28.0, 90),
     "TP_3V3": (96.5, 32.0, 0),
+    # C_BP12 does NOT stay in the 4 mm-pitch stack above: check_layout.py's
+    # bulk-cap rule (Sec. 4 rule 5, <=8 mm pad-centre to the nearest other
+    # pad on its rail) measured it at 12.62 mm from J_PWR pin 10 there --
+    # +12 V's IDC pins sit on the header's BOTTOM row (y 32.16), and stacking
+    # top-down from y 20 put C_BP12 at the far end of the header instead.
+    # C_BN12 already sits right for -12 V's TOP-row pins (y 22, 6.69 mm) and
+    # C_B3V3 does not care about the header at all (+3V3 has no IDC pin; its
+    # nearest same-net pad is TP_3V3, 4 mm below it either way), so only this
+    # one part needed to move. y 36 continues the column's own 4 mm pitch
+    # past TP_3V3 into open board (nothing else lives here before the seam at
+    # y 48.1) and measures 7.70 mm to J_PWR pin 10 -- under the bound.
+    "C_BP12": (96.5, 36.0, 90),
 
     # --- the seam -----------------------------------------------------------
     # Both jumpers straddle the plane split, one pad centre on each side of

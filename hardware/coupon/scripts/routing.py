@@ -72,20 +72,31 @@ VIAS = []
 #
 #   +12 V  A5 -> south out of the bank (y 44.5) -> east -> up the x 86.0 lane,
 #          which passes west of every J_PWR pad (nearest edge x 87.15) --
-#          taps pins 9/10 on the way -> over the header's top (y 19.6) ->
-#          down into C_BP12 pad 1 from the west at its own y.
+#          taps pins 9/10 on the way -> over the header's top (y 19.6) -> east
+#          again, past the header AND the whole C_BN12/C_B3V3/TP_3V3 column,
+#          to the x 98.5 lane in the board's own edge margin (courtyard right
+#          edge of that column is x 97.525, so 0.975 mm clear before the
+#          track's own 0.4 mm half-width) -> straight down -> into C_BP12
+#          pad 1 from the EAST at its own y.
 #   -12 V  A1 -> east at its own y to the x 84.6 lane -> north to the header's
 #          top row -> pins 1/2 -> east at x 92.5, in the 4.4 mm channel
 #          between the header's pad column (edge x 91.39) and the bulk-cap
 #          column (edge x 95.775) -> C_BN12 pad 1.
 #
-# The two never cross: +12 V is north of y 21.04 wherever it is east of
-# x 92.5, and -12 V is south of y 22 there. Nothing approaches a bulk cap
-# from directly above or below -- each cap's other pad is GND, 2.08 mm away
-# on the same x, so both rails come in sideways at the pad's own y.
+# check_layout.py's bulk-cap rule moved C_BP12 to (96.5, 36.0) --
+# placement.py's own comment there has the number: 12.62 mm from J_PWR pin 10
+# stacked at the top of the cap column near y 20, 7.70 mm stacked past
+# TP_3V3 at y 36 instead, where +12 V's own pins sit (y 32.16, the header's
+# bottom row). The first attempt at re-routing this net kept the old x 94.0
+# lane and only extended it downward -- DRC caught a real `tracks_crossing`
+# at (94.0, 25.038): -12 V's own sideways jog into C_BN12 runs y-constant at
+# 25.038 from x 92.5 to 96.5, and x 94.0 sits inside that span. Going around
+# the whole bulk-cap column on its EAST side instead of threading the gap on
+# its west removes the crossing outright rather than dodging it by a
+# fraction of a millimetre.
 TRACKS += [
     ("+12V", "F.Cu", W_12V, [_p("U_SM", "A5"), (71.92, 44.5), (86.0, 44.5),
-                             (86.0, 19.6), (93.0, 19.6), (93.0, 21.038),
+                             (86.0, 19.6), (98.5, 19.6), (98.5, 37.0375),
                              _p("C_BP12", 1)]),
     ("+12V", "F.Cu", W_12V, [(86.0, 32.16), _p("J_PWR", 9), _p("J_PWR", 10)]),
     ("-12V", "F.Cu", W_12V, [_p("U_SM", "A1"), (84.6, 41.27), (84.6, 22.0),

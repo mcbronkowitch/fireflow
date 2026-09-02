@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import check_layout as CL
 import design as D
 import ksexp
 import netlist as N
@@ -501,6 +502,34 @@ def check_ratsnest(board, rpt_path):
     print("7. ratsnest 0 -- every net routed (pcbnew and kicad-cli agree)")
 
 
+def check_analog_rules(pcb_path):
+    """Task 5's five gated rules (check_layout.run/measurements), against
+    the board ON DISK -- controller Ruling E: this step must not shuffle
+    ahead of the `kipcb.save()` above it, because `check_layout.py` loads
+    `pcb_path` fresh every time by design (it checks the artifact that
+    ships, not this process's in-memory `board`).
+
+    The 0R tie distances are measured and printed here too, per controller
+    Ruling A, but never gated -- three of the eight are known to sit far
+    from the mux pins they tie (R_HI3 ~20.6 mm, R_HI4/R_LO4 ~22 mm) for
+    reasons recorded in placement.py's own comments and task-4-report.md
+    Sections 8 and 11, and fixing them is a placement-level rework outside
+    this task's scope.
+    """
+    violations = CL.run(pcb_path)
+    if violations:
+        for v in violations:
+            print("  " + v)
+        fail("%d analog-rule violation(s)" % len(violations))
+    m = CL.measurements(pcb_path)
+    worst_tie_ref = max(m["tie_mm"], key=m["tie_mm"].get)
+    print("8. analog rules: 0 violations -- COM16 %.3f mm, COM8 %.3f mm, "
+          "audio clearance %.3f mm, worst decoupler %.3f mm, worst tie "
+          "%.3f mm (%s, ungated)"
+          % (m["com16_mm"], m["com8_mm"], m["audio_clearance_mm"],
+             m["worst_decoupler_mm"], m["worst_tie_mm"], worst_tie_ref))
+
+
 if __name__ == "__main__":
     board, parts = build()
     check_nets(board, parts)
@@ -511,3 +540,4 @@ if __name__ == "__main__":
     check_plane_connectivity(os.path.join(PROOF, "drc-placement.rpt"))
     check_stitch_hygiene(os.path.join(PROOF, "drc-placement.rpt"))
     check_ratsnest(board, os.path.join(PROOF, "drc-placement.rpt"))
+    check_analog_rules(PCB)
