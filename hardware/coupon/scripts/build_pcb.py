@@ -564,6 +564,22 @@ ACCEPTED_DRC_CLASSES = {
 }
 
 
+def count_drc_violations(rpt_path):
+    """Parse a `kicad-cli pcb drc` report into {violation class: count}.
+
+    Shared with `review.py`'s Layout-section DRC table (finding 1 of Task
+    6's fix round) so the sheet a human reads and the gate that fails the
+    build parse the SAME report the SAME way -- never a second, independent
+    re-parse that could silently drift from what `check_final_drc()` below
+    actually enforces.
+    """
+    txt = open(rpt_path, encoding="utf-8", errors="replace").read()
+    counts = {}
+    for kind in re.findall(r"^\[([a-z0-9_]+)\]", txt, re.M):
+        counts[kind] = counts.get(kind, 0) + 1
+    return counts
+
+
 def check_final_drc(pcb_path):
     """The proof chain's own acceptance DRC (spec Section 6 point 3):
     `kicad-cli pcb drc` at both error and warning severity, written to the
@@ -589,10 +605,7 @@ def check_final_drc(pcb_path):
                     "-o", rpt, pcb_path], capture_output=True, text=True)
     if not os.path.exists(rpt):
         fail("kicad-cli pcb drc wrote no report")
-    txt = open(rpt, encoding="utf-8", errors="replace").read()
-    counts = {}
-    for kind in re.findall(r"^\[([a-z0-9_]+)\]", txt, re.M):
-        counts[kind] = counts.get(kind, 0) + 1
+    counts = count_drc_violations(rpt)
     unexpected = {k: v for k, v in counts.items() if k not in ACCEPTED_DRC_CLASSES}
     if unexpected:
         for k in sorted(unexpected):

@@ -216,3 +216,12 @@ Worst: `R_LO4` at 22.767 mm.
 | MUX_A2 | 3.15 | 71.31 |
 | MUX_A3 | 3.60 | 70.86 |
 
+**Accepted DRC violations, and why they stay.** From the last `build_pcb.py` run's `proof/drc.rpt` (step 9, `--severity-error --severity-warning`), cross-referenced against `build_pcb.ACCEPTED_DRC_CLASSES` -- the same dict that gates that step. Any class DRC reports that is not a key there fails the build outright, so a class listed here can only be one that was consciously accepted, never a silenced one (Ruling J), and this table cannot drift from what the gate actually accepts because it reads the same report through the same parser.
+
+| class | count | reason |
+|---|---:|---|
+| `silk_over_copper` | 25 | a reference designator's silkscreen is clipped by the solder-mask opening of a nearby pad -- the same default-placement issue as silk_overlap, same out-of-scope call. |
+| `silk_overlap` | 94 | reference-designator silkscreen overlaps another silkscreen item -- KiCad's own default placement, never hand-tuned. Spec Section 7 puts silkscreen artistry beyond references and channel numbers explicitly out of scope for this board. |
+
+119 violation(s) total, all severity `warning`, in 2 class(es). No error-severity violation -- clearance, shorting, hole and courtyard classes are separately gated at zero by earlier proof steps and were confirmed zero again in this report.
+

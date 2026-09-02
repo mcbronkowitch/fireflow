@@ -19,28 +19,17 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import build_pcb as BP
 import check_layout as CL
 import design as D
 import netlist as N
 import placement as P
+import routing as RT
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.normpath(os.path.join(HERE, "..", "proof", "review.md"))
 PCB = os.path.normpath(os.path.join(HERE, "..", "coupon.kicad_pcb"))
-
-# The five nets that change domain far from JP_GND (spec Section 3: "every
-# net that changes domain ... crosses at a defined place beside the star
-# point"), and the star point's own placement -- both read from the data
-# files that actually place them (placement.py, routing.py), not
-# re-measured here. routing.py's own comment ("The five interior vias feed
-# five B.Cu lanes down the board's west edge") names these exact five; the
-# crossing point of each is its fixed-x B.Cu lane at the moat's y, so the
-# distance to the star point is |JP_GND.x - lane x| exactly (both points
-# share the moat's y band).
-MOAT_CROSSING_LANES = {          # net: B.Cu lane x mm (routing.ADDR_LANE)
-    "MUX_A0": 0.9, "MUX_A1": 1.8, "MUX_A2": 3.15,
-    "MUX_A3": 3.6, "MUX16_EN_N": 4.05,
-}
+DRC_RPT = os.path.normpath(os.path.join(HERE, "..", "proof", "drc.rpt"))
 
 
 def requirement_rows(parts):
@@ -79,11 +68,28 @@ def placement_rows():
 
 def moat_crossing_rows():
     """(net, lane x mm, distance to JP_GND mm) for the five address/enable
-    nets routing.py's own comment documents as crossing the moat on the
-    board's west edge -- see MOAT_CROSSING_LANES above for where the
-    number comes from."""
+    nets `routing.py`'s own comment documents as crossing the moat on the
+    board's west edge -- read from `routing.ADDR_LANE` (a {net: (lane x,
+    east-turn y)} dict; the sheet only needs the x) rather than a second,
+    hand-copied table, so a future change to those lanes (e.g. Ruling I's
+    tie/moat rework) shows up here without anyone remembering to edit this
+    file too."""
     gx, gy, _rot = P.PLACE["JP_GND"]
-    return sorted((net, x, abs(gx - x)) for net, x in MOAT_CROSSING_LANES.items())
+    return sorted((net, lane_x, abs(gx - lane_x))
+                  for net, (lane_x, _turn_y) in RT.ADDR_LANE.items())
+
+
+def drc_rows():
+    """(class, count, reason) for every violation class in the last
+    `build_pcb.py` run's `proof/drc.rpt` (step 9), cross-referenced against
+    `build_pcb.ACCEPTED_DRC_CLASSES` -- the same dict that gates that step,
+    parsed by the same `count_drc_violations()` it uses, so this table
+    cannot silently drift from what the build actually accepts (Ruling J)."""
+    counts = BP.count_drc_violations(DRC_RPT)
+    return sorted((k, v, BP.ACCEPTED_DRC_CLASSES.get(
+        k, "**NOT in ACCEPTED_DRC_CLASSES -- build_pcb.py step 9 fails the "
+           "build on this class**"))
+        for k, v in counts.items())
 
 
 def main():
@@ -255,6 +261,29 @@ def main():
     add("|---|---:|---:|")
     for net, lane_x, dist in moat_crossing_rows():
         add("| %s | %.2f | %.2f |" % (net, lane_x, dist))
+    add("")
+
+    add("**Accepted DRC violations, and why they stay.** From the last "
+        "`build_pcb.py` run's `proof/drc.rpt` (step 9, "
+        "`--severity-error --severity-warning`), cross-referenced against "
+        "`build_pcb.ACCEPTED_DRC_CLASSES` -- the same dict that gates that "
+        "step. Any class DRC reports that is not a key there fails the "
+        "build outright, so a class listed here can only be one that was "
+        "consciously accepted, never a silenced one (Ruling J), and this "
+        "table cannot drift from what the gate actually accepts because it "
+        "reads the same report through the same parser.")
+    add("")
+    add("| class | count | reason |")
+    add("|---|---:|---|")
+    drc = drc_rows()
+    for cls, count, reason in drc:
+        add("| `%s` | %d | %s |" % (cls, count, reason))
+    add("")
+    add("%d violation(s) total, all severity `warning`, in %d class(es). No "
+        "error-severity violation -- clearance, shorting, hole and "
+        "courtyard classes are separately gated at zero by earlier proof "
+        "steps and were confirmed zero again in this report."
+        % (sum(c for _k, c, _r in drc), len(drc)))
     add("")
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

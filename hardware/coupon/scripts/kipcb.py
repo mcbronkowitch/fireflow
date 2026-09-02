@@ -51,8 +51,13 @@ def _net(board, name):
 
 # A fixed seed for pcbnew's own KIID (UUID) generator, consumed by every
 # object this module creates from here on. Diagnosed for Task 6's
-# determinism gate: a comment-only source edit re-emitted coupon.kicad_pcb
-# with ~27000 changed lines across two runs, and splitting the file into its
+# determinism gate: two builds from the SAME committed source, with
+# `pcbnew.KIID.SeedGenerator()` not called (the pre-fix condition -- a
+# source edit is not even needed to show it), diffed at 26226 lines
+# (`git diff --no-index`, default 3-line context, `| wc -l`; fix-round
+# probe, 2026-09-02 -- the exact count is not a constant, since it depends
+# on which random UUIDs that pair of runs happened to draw, but it is
+# reliably five figures every time). Splitting the file into its
 # top-level S-expression items (708 of them) showed the true cause is not
 # "zones recompute their fill independently of everything else" -- EVERY
 # item kind that pcbnew stores by UUID (footprints, but also the individual
@@ -91,6 +96,17 @@ def new_board(width_mm, height_mm, copper_layers):
     Seeds pcbnew's UUID generator first (see KIID_SEED above) so this board,
     and everything later added to it, comes out in the same order on every
     run -- the determinism gate build_pcb.py's own step depends on.
+
+    Call this at most once per process. `SeedGenerator()` reseeds pcbnew's
+    ONE process-global UUID generator, not a per-board one; a second call
+    (a second `new_board()` in the same process) would restart the sequence
+    from the same point and hand this board's items UUIDs already used by
+    the first board's. No caller does this today -- one call site, and
+    nothing here links board to schematic by UUID (`SetPath`/`GetPath` are
+    never called; matching is by reference designator throughout) -- so
+    there is no collision risk yet, but a future script that builds more
+    than one board per run needs to reseed with a different value, or not
+    reseed at all, between them.
     """
     pcbnew.KIID.SeedGenerator(KIID_SEED)
     board = pcbnew.BOARD()

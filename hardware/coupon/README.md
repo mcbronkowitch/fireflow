@@ -46,14 +46,30 @@ address bus, both below).
 file is byte-reproducible.** `pcbnew` orders every UUID-keyed item —
 footprints, the individual track/via segments sharing a net, and the zone
 filler's own bookkeeping — by whatever random UUIDs that run happened to
-mint, so an unseeded build reorders on every run even when nothing in the
-data changed (measured: ~27000 changed lines from a comment-only edit).
+mint, so an unseeded build reorders on every run even with no source edit
+at all (measured, fix-round probe, 2026-09-02: two unseeded builds from the
+identical committed source diffed at 26226 lines — `git diff --no-index`,
+default context, `| wc -l`; the exact count varies run to run since it
+depends on which random UUIDs each pair of builds draws, but it is
+reliably five figures).
 `kipcb.new_board()` seeds `pcbnew`'s UUID generator with a fixed constant
 before creating anything, which makes that whole order reproduce identically
 — two from-scratch builds under the same seed produced a 0-diff
 `coupon.kicad_pcb`. Regenerating and committing the file is therefore safe
 and expected; a real content change is the only thing that should still show
 up in `git diff`.
+
+**Every other generated file still shows as modified after each run — that
+is expected, and it is timestamps only.** All 32 of them (every gerber,
+`coupon.drl`, both board PNGs, `drc.rpt` and `drc-placement.rpt`) embed a
+`CreationDate`/wall-clock line KiCad regenerates on every export; the
+content underneath is unchanged (confirmed by diffing a gerber with its
+`CreationDate`/`Created by ... date` lines excluded: 0 lines differ). Discard
+this churn with `git checkout -- hardware/coupon/fab` and, under `proof/`,
+every file EXCEPT `review.md` (`coupon-board-front.png`,
+`coupon-board-back.png`, `drc.rpt`, `drc-placement.rpt`) — `review.md` is
+`review.py`'s own real content, not timestamp noise, and committing it is
+the point of that step.
 
 ## Layer and zone map
 
