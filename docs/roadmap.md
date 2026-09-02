@@ -36,7 +36,28 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-08-31 (**three of the coupon's five order blockers are
+- **Last updated:** 2026-09-02 (**the coupon layout is generated, proven ten
+  ways, and Gerbers exist**: `hardware/coupon/` now carries the physical
+  board — placement, zones, routing all as data — alongside the schematic,
+  with a ten-step proof chain ending in DRC, render and Gerber/drill export,
+  all green. The proof chain's own determinism gate turned out to be the
+  real work: a five-figure per-run diff (measured, fix-round probe:
+  26226 lines between two unseeded builds of the identical committed
+  source) traced to `pcbnew` ordering footprints, tracks and the zone
+  filler's own bookkeeping by random UUIDs, closed byte-stable by seeding
+  `pcbnew.KIID.SeedGenerator()` once before board creation — stronger than
+  the weaker fallback that was on the table if it proved unreachable. DRC
+  is clean except two accepted, explicitly gated silkscreen-warning
+  classes, now shown with their reasons in `review.md` itself. Two known
+  layout deviations (three long 0R ties, five address/enable nets crossing
+  the moat away from the star point) are measured and written up, not
+  fixed. `hardware/coupon/README.md` now exists. The other 32 generated
+  files (gerbers, drill, PNGs, DRC reports) still show as modified on every
+  run — timestamps only, safe to discard with `git checkout --`. What
+  remains before the order is unchanged: the bus board measurement and the
+  land-pattern risk, both needing hands, not a screen. Details in the M6
+  paragraph dated 2026-09-02);
+  before that, 2026-08-31 (**three of the coupon's five order blockers are
   closed at the desk**: the pots are Alpha RD901F-40 — the Alps RK09K footprint
   is gone, disproven pad for pad against KiCad's own library, not swapped on
   taste; linear 20 k in 9 mm vertical is confirmed buyable as Alpha B20K at
@@ -3655,6 +3676,55 @@ actual bus board (pin 1/stripe against −12 V, 3–8 against GND, and what
 really sits on 7/8) — the one connection here from convention rather than a
 datasheet; and the Patch SM land-pattern dimensions remain Electrosmith's
 numbers, unproven until a module sits in a real board.
+
+**2026-09-02 — the coupon layout is generated, proven ten ways, and Gerbers
+exist.** `hardware/coupon/` now carries the physical board alongside the
+schematic: `scripts/placement.py`/`routing.py` hold every part's position
+and every signal track as data, `scripts/check_layout.py` measures the
+layout spec's five analog rules from the saved artifact, and
+`scripts/build_pcb.py` is the proof chain -- net comparison, courtyard and
+module-shadow placement sanity, plane connectivity, stitch-copper hygiene,
+ratsnest, the five analog rules, a final DRC pass, and render + Gerber/drill
+export, ten steps, all green from one clean run. **The proof chain's own
+determinism gate was the real work of this task, and it closed stronger
+than planned.** Even with no source edit at all, two runs re-emitted
+`coupon.kicad_pcb` reordered against each other -- a fix-round probe
+measured 26226 changed lines between two unseeded builds of the identical
+committed source; splitting the file into its 708 top-level items traced
+this to `pcbnew` storing footprints, per-net track/via segments and the
+zone filler's own bookkeeping in containers ordered by each item's UUID,
+and every run mints fresh random UUIDs. `pcbnew.KIID.SeedGenerator()`,
+called once before `kipcb.new_board()` creates anything, reseeds that
+whole sequence, and two from-scratch builds under the same seed came out
+**byte-identical** -- not the weaker same-property fallback the brief
+allowed for if byte-stability proved unreachable. (The other 32 generated
+files -- gerbers, drill, both PNGs, the DRC reports -- still show as
+modified on every run regardless of the seed; that part is timestamps
+only, `git checkout --`-safe, not the gate's subject.) DRC is clean except
+two accepted classes, both silkscreen warnings from KiCad's own default
+reference-designator placement (`silk_overlap` 94, `silk_over_copper` 25)
+-- spec Section 7 puts silkscreen artistry beyond references and channel
+numbers explicitly out of scope, `scripts/build_pcb.py` gates on exactly
+that accepted set so any new class still fails loud, and `review.py`'s
+Layout section now shows the same two classes with their reasons, sourced
+from that same accepted-class dict rather than restated by hand.
+`scripts/review.py` grew a "Layout" section (placement table, the four
+numeric analog-rule measurements against their limits) and
+`hardware/coupon/README.md` now exists, fixing `design.py`'s long-dangling
+"see README" comment with the layer/zone map, the two-interpreter build
+chain, and the order rule. **Two measured deviations
+carry forward, deliberately ungated and written up in both the review sheet
+and the README** rather than fixed here: three of the eight 0R neighbour
+ties sit 20.6-22.8 mm from the mux pin they carry instead of "directly at
+the pin" (their only F.Cu approach also carries the 8:1 mux's enable route),
+and five of the six address/enable-bus nets cross the moat 70-74 mm from the
+star point `JP_GND` instead of beside it, because they originate at `U_SR1`
+in the far-west digital column rather than near `JP_GND` on the far east.
+Both share the same unattempted fix -- re-pitching the 8:1's column and its
+west approach. **What still blocks the order is unchanged and needs hands,
+not a screen:** the Eurorack bus board (pin 1/stripe against −12 V, 3–8
+against GND, what sits on 7/8) and the Patch SM land-pattern dimensions,
+neither measurable from a generated file.
 
 **2026-08-14 — preset persistence now starts from nothing.** M6's scope names
 it, and until this date the repo had two pieces of prior art for it: the

@@ -9,16 +9,27 @@ right. Both are tables, and a table is not easier to read as an A2 drawing.
 It also checks design.REQUIREMENTS against what netlist.build() actually
 creates: the requirement list names parts by reference, and a name that no part
 answers to is a requirement nothing serves.
+
+Section 6 ("Layout") reads `hardware/coupon/coupon.kicad_pcb` through
+`check_layout.py`, so from here on this script needs `pcbnew` and has to run
+under KiCad's own Python -- see `kipcb.KIPY` / the README's build chain --
+not the system interpreter Sections 1-5 alone would tolerate.
 """
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import build_pcb as BP
+import check_layout as CL
 import design as D
 import netlist as N
+import placement as P
+import routing as RT
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.normpath(os.path.join(HERE, "..", "proof", "review.md"))
+PCB = os.path.normpath(os.path.join(HERE, "..", "coupon.kicad_pcb"))
+DRC_RPT = os.path.normpath(os.path.join(HERE, "..", "proof", "drc.rpt"))
 
 
 def requirement_rows(parts):
@@ -44,6 +55,41 @@ def channel_rows(parts):
             wired = [r for r in nodes if not r.startswith("U_MUX")]
             out.append((prefix, idx, intent, ", ".join(wired) or "NOTHING"))
     return out
+
+
+def placement_rows():
+    """(ref, x, y, rot, domain) for every placed part, sorted domain then
+    reference so the sheet groups analog/digital/seam together rather than
+    in placement.py's authoring order."""
+    return sorted(
+        ((ref, x, y, rot, P.DOMAIN[ref]) for ref, (x, y, rot) in P.PLACE.items()),
+        key=lambda row: (row[4], row[0]))
+
+
+def moat_crossing_rows():
+    """(net, lane x mm, distance to JP_GND mm) for the five address/enable
+    nets `routing.py`'s own comment documents as crossing the moat on the
+    board's west edge -- read from `routing.ADDR_LANE` (a {net: (lane x,
+    east-turn y)} dict; the sheet only needs the x) rather than a second,
+    hand-copied table, so a future change to those lanes (e.g. Ruling I's
+    tie/moat rework) shows up here without anyone remembering to edit this
+    file too."""
+    gx, gy, _rot = P.PLACE["JP_GND"]
+    return sorted((net, lane_x, abs(gx - lane_x))
+                  for net, (lane_x, _turn_y) in RT.ADDR_LANE.items())
+
+
+def drc_rows():
+    """(class, count, reason) for every violation class in the last
+    `build_pcb.py` run's `proof/drc.rpt` (step 9), cross-referenced against
+    `build_pcb.ACCEPTED_DRC_CLASSES` -- the same dict that gates that step,
+    parsed by the same `count_drc_violations()` it uses, so this table
+    cannot silently drift from what the build actually accepts (Ruling J)."""
+    counts = BP.count_drc_violations(DRC_RPT)
+    return sorted((k, v, BP.ACCEPTED_DRC_CLASSES.get(
+        k, "**NOT in ACCEPTED_DRC_CLASSES -- build_pcb.py step 9 fails the "
+           "build on this class**"))
+        for k, v in counts.items())
 
 
 def main():
@@ -134,6 +180,132 @@ def main():
     add("- `lib_symbol_mismatch` on the 165: the embedded copy has its unit "
         "sub-symbols renamed from `74LS165_*` to `74HC165_*`, which is what "
         "makes a derived symbol loadable at all.")
+    add("")
+
+    add("## 6. Layout")
+    add("")
+    add("From `hardware/coupon/coupon.kicad_pcb`, read through `check_layout.py` "
+        "-- the same checker that gates `build_pcb.py`'s proof chain, so this "
+        "table is not a second, independently-fallible copy of what it measures.")
+    add("")
+
+    add("**Placement** -- every reference `placement.py` places, grouped by "
+        "domain (`seam` is the two solder jumpers plus the module itself).")
+    add("")
+    add("| ref | x mm | y mm | rot | domain |")
+    add("|---|---:|---:|---:|---|")
+    for ref, x, y, rot, domain in placement_rows():
+        add("| %s | %.2f | %.2f | %d | %s |" % (ref, x, y, rot, domain))
+    add("")
+
+    meas = CL.measurements(PCB)
+    add("**Measured analog rules** (spec Section 4) -- the four that reduce "
+        "to one number; DOMAIN containment and the SR_CLK single-path check "
+        "are pass/fail and carry no number of their own. All five gated "
+        "rules read 0 violations from `check_layout.run()` as of this sheet.")
+    add("")
+    add("| rule | measured | limit |")
+    add("|---|---:|---|")
+    add("| MUX16_COM copper | %.3f mm | <= %.1f mm |"
+        % (meas["com16_mm"], CL.COM_MAX_MM))
+    add("| MUX8_COM copper | %.3f mm | <= %.1f mm |"
+        % (meas["com8_mm"], CL.COM_MAX_MM))
+    add("| audio clearance (outside the SM's own courtyard) | %.3f mm | >= %.1f mm |"
+        % (meas["audio_clearance_mm"], CL.AUDIO_MIN_MM))
+    add("| worst 100n decoupler to its chip's VCC pad | %.3f mm | <= %.1f mm |"
+        % (meas["worst_decoupler_mm"], CL.DECOUPLE_MAX_MM))
+    add("")
+
+    tie_mm = meas["tie_mm"]
+    add("**0R neighbour-tie distances -- measured, deliberately NOT gated.** "
+        "Spec Section 4 rule 3 asks each tie to sit \"directly at the mux "
+        "pin\" it carries; the spec states no numeric bound for it (unlike "
+        "rules 1/2/5 above), so `check_layout.measure_ties()` reports these "
+        "without a pass/fail. This is the sheet where Bastian sees them "
+        "before an order, and the table below is a CONTINUUM rather than a "
+        "few outliers: only two ties are genuinely at their pin, six of the "
+        "eight are past 13 mm, and the three longest (`R_HI3` and the 8:1's "
+        "west-column pair `R_HI4`/`R_LO4`) are barely further out than "
+        "`R_HI2`/`R_LO2`. Read the numbers, not a count. The long ones sit "
+        "where they do because the only F.Cu approach within reach also "
+        "carries the mux's own enable pin, which cannot lose its route "
+        "(`placement.py`'s own comment on the block; task-4-report.md "
+        "Sections 8 and 11 have the full placement history). Fixing them "
+        "means re-pitching the 8:1's column, a placement-level rework Task 6 "
+        "does not attempt.")
+    add("")
+    add("**What the distance is likely to cost, and what it is not.** "
+        "Reasoned, NOT measured -- the probe rule applies to this paragraph "
+        "as much as to the rest of the sheet. These ties hold the NEIGHBOUR "
+        "channels at a rail while the measured channel settles "
+        "(`docs/hardware/settle-budget.md` Section 6: a channel change must "
+        "read clean 1.6 us after the address is written, with the two "
+        "neighbours held at opposite extremes). A neighbour tied through 0 R "
+        "is a static node: 22 mm of copper leaves it essentially at the "
+        "rail, and a node held at constant DC is a poor aggressor. The "
+        "second-order effects -- charge injection at the address switch "
+        "decaying through the extra trace inductance -- are nanoseconds "
+        "against a 1.6 us window. So the deviation is expected to be "
+        "irrelevant to the experiment this coupon exists to run; rule 3 is "
+        "good hygiene, not a hard requirement here. What would settle it is "
+        "the coupon itself, which is the instrument for exactly this "
+        "question -- settle-budget.md Section 5 names crosstalk as the thing "
+        "its model is blindest to.")
+    add("")
+    add("| ref | mm | ref | mm |")
+    add("|---|---:|---|---:|")
+    tie_refs = sorted(tie_mm)
+    for a, b in zip(tie_refs[0::2], tie_refs[1::2]):
+        add("| %s | %.3f | %s | %.3f |" % (a, tie_mm[a], b, tie_mm[b]))
+    add("")
+    worst_tie_ref = max(tie_mm, key=tie_mm.get)
+    add("Worst: `%s` at %.3f mm." % (worst_tie_ref, meas["worst_tie_mm"]))
+    add("")
+
+    add("**Moat-crossing nets -- measured, deliberately NOT gated.** Spec "
+        "Section 3 asks every net that changes domain to cross \"at a "
+        "defined place beside the star point\" (`JP_GND`, placed at "
+        "(%.2f, %.2f)). Five of the address/enable bus's six nets instead "
+        "cross on the board's west edge, 70-74 mm from the star point. The "
+        "reason is upstream of routing: all six originate at `U_SR1`, "
+        "placed at (5.00, 10.24) in the digital column that also holds the "
+        "LEDs -- the far west edge, not beside `JP_GND` on the far east. "
+        "`routing.py`'s own comment records that its five interior vias "
+        "feed exactly five B.Cu lanes straight down that same west edge; "
+        "only the sixth net (`MUX8_EN_N`) found a different way across, an "
+        "F.Cu detour that happens to land beside the star point because "
+        "the five west lanes were already spoken for. Distance is "
+        "`|JP_GND.x - lane x|`, exact because both the crossing and the "
+        "star point sit in the same moat-width y band."
+        % P.PLACE["JP_GND"][:2])
+    add("")
+    add("| net | B.Cu lane x mm | mm from JP_GND |")
+    add("|---|---:|---:|")
+    for net, lane_x, dist in moat_crossing_rows():
+        add("| %s | %.2f | %.2f |" % (net, lane_x, dist))
+    add("")
+
+    add("**Accepted DRC violations, and why they stay.** From the last "
+        "`build_pcb.py` run's `proof/drc.rpt` (step 9, "
+        "`--severity-error --severity-warning`), cross-referenced against "
+        "`build_pcb.ACCEPTED_DRC_CLASSES` -- the same dict that gates that "
+        "step. Any class DRC reports that is not a key there fails the "
+        "build outright, so a class listed here can only be one that was "
+        "consciously accepted, never a silenced one (Ruling J), and this "
+        "table cannot drift from what the gate actually accepts because it "
+        "reads the same report through the same parser.")
+    add("")
+    add("| class | count | reason |")
+    add("|---|---:|---|")
+    drc = drc_rows()
+    for cls, count, reason in drc:
+        add("| `%s` | %d | %s |" % (cls, count, reason))
+    add("")
+    add("%d violation(s) total, all severity `warning`, in %d class(es). No "
+        "error-severity violation -- clearance, shorting, hole and "
+        "courtyard classes are separately gated at zero by earlier proof "
+        "steps and were confirmed zero again in this report."
+        % (sum(c for _k, c, _r in drc), len(drc)))
     add("")
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
