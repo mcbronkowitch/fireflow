@@ -104,11 +104,26 @@ deg were never an option).
 placement-level rework, not something Task 6 (or any task before an order)
 attempts:
 
-- **Three of the eight 0R neighbour ties sit far from the mux pin they
-  carry** (`R_HI3` ~20.6 mm, `R_HI4`/`R_LO4` ~22.5-22.8 mm, against
-  "directly at the mux pin" of the layout spec's Section 4 rule 3). The only
-  F.Cu approach within reach of those three also carries the 8:1 mux's own
-  enable pin, which cannot lose its route.
+- **Six of the eight 0R neighbour ties sit well away from the mux pin they
+  carry**, against "directly at the mux pin" of the layout spec's Section 4
+  rule 3. The measured spread is a continuum, not a few outliers — only
+  `R_LO3` (5.99 mm) and `R_HI1` (8.88 mm) are genuinely at their pin, and
+  the three longest (`R_HI3` 20.56 mm, `R_HI4` 22.53 mm, `R_LO4` 22.77 mm)
+  are barely further out than `R_HI2` (18.97 mm) and `R_LO2` (20.05 mm).
+  Read the table in `proof/review.md`, not a count. The longest three sit
+  where they do because the only F.Cu approach within reach also carries the
+  8:1 mux's own enable pin, which cannot lose its route.
+
+  **What this is expected to cost — reasoned, not measured.** These ties
+  hold the *neighbour* channels at a rail while the measured channel settles
+  (`docs/hardware/settle-budget.md` §6). A neighbour tied through 0 R is a
+  static node: 22 mm of copper leaves it essentially at the rail, and a node
+  held at constant DC is a poor aggressor. Charge injection at the address
+  switch decays through the extra trace inductance in nanoseconds, against a
+  1.6 µs window. So this is expected to be irrelevant to the experiment the
+  coupon exists to run — rule 3 is good hygiene here, not a hard
+  requirement. The coupon itself is the instrument that would settle it;
+  settle-budget.md §5 names crosstalk as what its model is blindest to.
 - **Five of the address/enable bus's six nets cross the moat on the board's
   west edge, 70-74 mm from the star point** `JP_GND`, against Section 3's
   "beside the star point." All six originate at `U_SR1`, which sits in the

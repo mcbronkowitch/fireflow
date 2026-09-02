@@ -222,13 +222,35 @@ def main():
         "pin\" it carries; the spec states no numeric bound for it (unlike "
         "rules 1/2/5 above), so `check_layout.measure_ties()` reports these "
         "without a pass/fail. This is the sheet where Bastian sees them "
-        "before an order: three of the eight are known long -- `R_HI3` and "
-        "the 8:1's west-column pair `R_HI4`/`R_LO4` sit where they do "
-        "because the only F.Cu approach within reach also carries the mux's "
-        "own enable pin, which cannot lose its route (`placement.py`'s own "
-        "comment on the block; task-4-report.md Sections 8 and 11 have the "
-        "full placement history). Fixing them means re-pitching the 8:1's "
-        "column, a placement-level rework Task 6 does not attempt.")
+        "before an order, and the table below is a CONTINUUM rather than a "
+        "few outliers: only two ties are genuinely at their pin, six of the "
+        "eight are past 13 mm, and the three longest (`R_HI3` and the 8:1's "
+        "west-column pair `R_HI4`/`R_LO4`) are barely further out than "
+        "`R_HI2`/`R_LO2`. Read the numbers, not a count. The long ones sit "
+        "where they do because the only F.Cu approach within reach also "
+        "carries the mux's own enable pin, which cannot lose its route "
+        "(`placement.py`'s own comment on the block; task-4-report.md "
+        "Sections 8 and 11 have the full placement history). Fixing them "
+        "means re-pitching the 8:1's column, a placement-level rework Task 6 "
+        "does not attempt.")
+    add("")
+    add("**What the distance is likely to cost, and what it is not.** "
+        "Reasoned, NOT measured -- the probe rule applies to this paragraph "
+        "as much as to the rest of the sheet. These ties hold the NEIGHBOUR "
+        "channels at a rail while the measured channel settles "
+        "(`docs/hardware/settle-budget.md` Section 6: a channel change must "
+        "read clean 1.6 us after the address is written, with the two "
+        "neighbours held at opposite extremes). A neighbour tied through 0 R "
+        "is a static node: 22 mm of copper leaves it essentially at the "
+        "rail, and a node held at constant DC is a poor aggressor. The "
+        "second-order effects -- charge injection at the address switch "
+        "decaying through the extra trace inductance -- are nanoseconds "
+        "against a 1.6 us window. So the deviation is expected to be "
+        "irrelevant to the experiment this coupon exists to run; rule 3 is "
+        "good hygiene, not a hard requirement here. What would settle it is "
+        "the coupon itself, which is the instrument for exactly this "
+        "question -- settle-budget.md Section 5 names crosstalk as the thing "
+        "its model is blindest to.")
     add("")
     add("| ref | mm | ref | mm |")
     add("|---|---:|---|---:|")
