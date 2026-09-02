@@ -48,9 +48,17 @@ Envelope spec section 5, addendum 2026-08-30. The last column is checked against
 | MUX8 | 6 | REF_C: 10k/10k divider, mid scale | `R_REFC1, R_REFC2` |
 | MUX8 | 7 | tied to AGND | `R_LO4` |
 
-## 3. The Eurorack connector -- the one thing here that is NOT from a datasheet
+## 3. The Eurorack connector -- a standard, not a datasheet
 
-Everything else in this schematic came out of the Patch SM datasheet or a KiCad symbol. This is convention, taken on trust, and it is the single most likely thing to be wrong. Pins 7 and 8 are deliberately left open rather than grounded, because some bus boards carry +5 V there and grounding it would be a short.
+Everything else in this schematic came out of the Patch SM datasheet or a KiCad symbol. This connector has a datasheet too, but it is purely mechanical -- an IDC 2x5 box header's drawing gives pitch, shroud and the pin-1 marker and says nothing about which pin carries which rail. The pinout comes from Doepfer's A-100 standard instead, so it is the one net here that no part datasheet can confirm.
+
+**What the standard actually says** (checked 2026-09-02): the 16-pin ribbon runs in pairs -- -12V, GND, GND, GND, +12V, +5V, CV, Gate -- and the 10-pin connector is that ribbon's first ten conductors. So the standard puts GND on 3..8 and +5 V no earlier than 11/12. Doepfer's own page carries the assignment only as an image; its text confirms just the shape of it, that both variants carry -12V/GND/+12V and that "the 16 pin version of the bus connection has the three signals +5V, CV and Gate available" (<https://doepfer.de/a100_man/a100t_e.htm>). The pair-by-pair table is second-hand from <https://sdiy.info/wiki/Eurorack>.
+
+**Pins 7 and 8 are still left open, and that is now insurance rather than a fix.** The standard grounds them; leaving them open costs two ground pins and nothing else, and it is what protects the board if the bus board on the bench turns out not to follow the standard. The earlier reading of this table -- that some bus boards carry +5 V there -- is not what the standard says, and no source was found for it; open stays right anyway, for the weaker reason.
+
+**What the standard does not settle, and why this stays on the hands-on list.** Whether the actual bus board follows it. Every careful source in this corner says the same thing: never trust the red stripe, meter the rails before plugging anything in, and expect boards that deviate -- Cwejman's reversed pinout means a standard cable applies reverse power (<https://northcoastsynthesis.com/news/ribbon-cable-experience/>, <https://www.davidhaillant.com/eurorack-power-connectors-and-ribbon-cables/>). The measurement shrinks from a bisection to a confirmation; it does not go away.
+
+**The shroud is a deliberate deviation from Doepfer's own advice.** Doepfer recommends against keyed headers on bus boards -- strongly enough to void warranties over it -- because mis-keyed boards and cables are common. This coupon takes a shrouded, keyed header regardless: the notch is what makes a rotated or row-shifted IDC plug impossible, and a rotated plug here is +/-12 V swapped straight into the Patch SM. For a board that will hang off one known rack that is the better trade, but it has a cost worth knowing before the order -- if that rack's cable is keyed the other way, this header will not accept it. Check the cable's key alongside the rails.
 
 | pin | net |
 |---:|---|

@@ -149,10 +149,51 @@ Two things need hands on a real board, not a screen, before the fab order
 goes out (`docs/roadmap.md`'s M6 section carries the up-to-date status):
 
 1. **The Eurorack bus board** -- pin 1/the red stripe against `-12V`, pins
-   3-8 against `GND`, and what actually sits on pins 7/8 (left open here on
-   the theory that some bus boards carry +5 V there and grounding it would
-   short). This is the one connection on the whole board that comes from
-   convention rather than a datasheet.
+   3-8 against `GND`, and the cable's key against this header's notch. This
+   is the one connection on the whole board with no part datasheet behind
+   it: an IDC 2x5 box header's own drawing is mechanical only, and the
+   pinout comes from Doepfer's A-100 standard instead.
+
+   **The standard itself was read on 2026-09-02 and it does answer pins
+   7/8** -- the 16-pin ribbon runs in pairs (-12V, GND, GND, GND, +12V, +5V,
+   CV, Gate) and the 10-pin connector is its first ten conductors, so 3..8
+   are all `GND` and +5 V starts no earlier than 11/12. `review.py`'s
+   Section 3 carries the sources. **7/8 stay open regardless**, now as
+   insurance against a non-standard board rather than against a +5 V that
+   the standard does not put there; it costs two ground pins. What the
+   standard cannot settle is whether the bus board on the bench obeys it,
+   and every careful source in this corner says the same -- never trust the
+   stripe, meter the rails, boards that deviate exist (Cwejman reversed the
+   pinout outright, so a standard cable applies reverse power). So this
+   stays a measurement, but a confirming one.
+
+   **The shroud deviates from Doepfer's own advice on purpose.** Doepfer
+   recommends against keyed headers on bus boards, because mis-keyed boards
+   and cables are common. This board keeps one anyway: a rotated or
+   row-shifted plug is +/-12 V into the Patch SM, and the notch is what
+   makes that impossible. The cost is that a cable keyed the other way will
+   not seat at all -- hence checking the key, not just the rails.
+
+   **Where the notch actually points, measured from the committed
+   `coupon.kicad_pcb` on 2026-09-02** -- so nobody re-measures it: the header
+   sits at (88.00, 22.00), rotation 0 deg, its pins running south to
+   (90.54, 32.16), so the long axis is north-south. The shroud's outer wall
+   is x 84.82..93.72, y 16.90..37.26; its **west** inner wall (x 86.02)
+   breaks between y 25.03 and y 29.13, with both break ends running out to
+   x 84.82. That gap is the polarising notch: 4.10 mm wide, centred on
+   y 27.08, which is the pin-5/6 row and the header's own centre. Pin 1 is
+   in the x 88.00 column, the notch side. **So the notch faces west, into
+   the board.** That was never a free choice -- the footprint fixes the
+   notch against the pin numbering and the numbering comes from the
+   netlist; the only free parameter was the rotation, and it is 0 deg.
+
+   **Mechanically this is clear on both sides.** Nothing is placed west of
+   the header in the y 17..37 band (the nearest neighbour that way is `SW1`
+   at y 8, well north). East of it, `C_BN12`/`C_B3V3`/`C_BP12`/`TP_3V3` sit
+   on x 96.5 between the shroud and the board's east edge at x 100, but they
+   are flat 0805/testpoint parts passing under a plug that rests on the
+   shroud. The ribbon can therefore fold either way: 6.3 mm to the east
+   edge, or out over open board to the west.
 2. **The Patch Submodule's own land-pattern dimensions** -- vendored from
    Electrosmith's KiCad library
    ([`hardware/lib/README.md`](../lib/README.md)), unproven until a module

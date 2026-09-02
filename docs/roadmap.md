@@ -36,7 +36,24 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-09-02 (**the coupon layout is generated, proven ten
+- **Last updated:** 2026-09-02 (**the bus-board blocker turns out to be half a
+  paper question, and the answer was published all along**: the Eurorack
+  connector's own datasheet is mechanical only, but the *pinout* is Doepfer's
+  A-100 standard, and read out it does settle pins 7/8 — the 16-pin ribbon
+  runs in pairs (−12V, GND, GND, GND, +12V, +5V, CV, Gate) and the 10-pin
+  connector is its first ten conductors, so 3..8 are all GND and +5 V starts
+  no earlier than 11/12. `review.md` §3 said the opposite reason for leaving
+  7/8 open — that some bus boards carry +5 V there — and no source was found
+  for it; the pins stay open regardless, now as insurance against a
+  non-standard board. **The measurement does not go away**, it shrinks to a
+  confirmation: every careful source says meter the rails and never trust the
+  stripe, and boards that deviate exist. **And a second thing to check came
+  out of it**: Doepfer recommends against keyed headers on bus boards, so the
+  coupon's shrouded header is a deliberate deviation — it makes the rotated
+  plug (±12 V into the Patch SM) impossible at the price that a
+  differently-keyed cable will not seat. Docs only, in `review.py` §3 and
+  `hardware/coupon/README.md`; no board file moved); earlier the same day
+  (**the coupon layout is generated, proven ten
   ways, and Gerbers exist**: `hardware/coupon/` now carries the physical
   board — placement, zones, routing all as data — alongside the schematic,
   with a ten-step proof chain ending in DRC, render and Gerber/drill export,
@@ -3725,6 +3742,44 @@ west approach. **What still blocks the order is unchanged and needs hands,
 not a screen:** the Eurorack bus board (pin 1/stripe against −12 V, 3–8
 against GND, what sits on 7/8) and the Patch SM land-pattern dimensions,
 neither measurable from a generated file.
+
+**2026-09-02, later — the bus-board blocker is half a paper question, and
+that half is now read rather than assumed.** The connector has a datasheet,
+but an IDC 2x5 box header's drawing is mechanical: pitch, shroud, pin-1
+marker, nothing about rails. The pinout is Doepfer's A-100 standard, and
+reading it out **does settle pins 7/8**: the 16-pin ribbon runs in pairs —
+−12V, GND, GND, GND, +12V, +5V, CV, Gate — and the 10-pin connector is that
+ribbon's first ten conductors, so 3..8 are all GND and +5 V appears no
+earlier than 11/12. Doepfer's own page carries the assignment only as an
+image; its text confirms just the shape, that both variants carry
+−12V/GND/+12V and that +5 V, CV and Gate exist only on the 16-pin version.
+`netlist.py`'s comment already had this right; `review.md` §3 did not — it
+justified leaving 7/8 open by "some bus boards carry +5 V there," which is
+not what the standard says and for which no source was found. **The pins
+stay open**, for the weaker and correct reason: insurance against a
+non-standard board, at a cost of two ground pins. **The measurement itself
+does not go away, it shrinks to a confirmation** — never trust the red
+stripe, meter the rails, and boards that deviate are real (Cwejman reversed
+the pinout outright, so a standard cable applies reverse power). **A second
+check came out of the round:** Doepfer recommends against keyed headers on
+bus boards, strongly enough to void warranties, because mis-keyed boards and
+cables are common — so this coupon's shrouded header is a deliberate
+deviation, buying the impossibility of a rotated plug (±12 V straight into
+the Patch SM) at the price that a differently-keyed cable will not seat at
+all. Check the cable's key alongside the rails. **Which raised the obvious
+follow-up, and it was measured rather than assumed:** a probe over the
+committed `coupon.kicad_pcb` reports the notch as a 4.10 mm gap in the
+shroud's *west* inner wall, centred on y 27.08 — the pin-5/6 row, the
+header's own centre — so it faces into the board, with pin 1 in the column
+on the notch side. Nothing is placed west of the header between y 17 and
+37, and the four flat parts east of it on x 96.5 pass under a plug that
+rests on the shroud, so the ribbon folds either way: 6.3 mm to the east
+edge or out over open board. The notch direction was never a free choice
+anyway — the footprint fixes it against the pin numbering — but it is now
+written down instead of re-measured. Docs only: `review.py`'s
+Section 3 rewritten with its sources, `hardware/coupon/README.md`'s order
+list carrying both the standard and the measured geometry; no board or
+schematic file moved, so the other two order blockers stand as they were.
 
 **2026-08-14 — preset persistence now starts from nothing.** M6's scope names
 it, and until this date the repo had two pieces of prior art for it: the
