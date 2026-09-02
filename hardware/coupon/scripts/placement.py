@@ -208,12 +208,17 @@ PLACE = {
     # here rather than in the routing: a tie 22 mm from its pin was not
     # "neighbour hard at the rail" in the first place.
     #
-    # R_HI3 and R_LO3 now sit in a row 0.36 mm below the 8:1's south edge,
-    # 8.4 mm and 6.3 mm straight-line from the pins they tie. 6.3 mm is the
-    # floor for anything south of that package -- its courtyard is 10.5 mm
-    # tall and the channel pins are in the middle of it -- and R_HI3's 8.4 mm
-    # is because pin 14 is the northernmost of the two and the row cannot
-    # extend past x 82.03 without hitting the 16:1.
+    # Of that block, only R_LO3 moved. It now sits 0.36 mm below the 8:1's
+    # south edge, 6.3 mm straight-line from the pin it ties -- the floor for
+    # anything south of that package, whose courtyard is 10.5 mm tall with
+    # the channel pins in the middle of it.
+    #
+    # R_HI3 did NOT move. It is still at (91,76), one of the four coordinates
+    # named above, and its pad 2 is ~20.6 mm from U_MUX8 pin 14 at
+    # (78.975, 60.095). The row south of the package cannot extend past
+    # x 82.03 without hitting the 16:1, so there is no slot there for a
+    # second tie. Its distance is the same open item as R_HI4/R_LO4 below,
+    # and the same placement pass would settle all three.
     #
     # R_HI4 and R_LO4 stay where they were. They tie the 8:1's WEST column,
     # and the only slot inside 5 mm of those pins is the 2 mm strip west of

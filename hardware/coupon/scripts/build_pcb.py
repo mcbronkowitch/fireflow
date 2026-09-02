@@ -425,8 +425,9 @@ GATED_STITCH_CLASSES = ("shorting_items", "clearance", "hole_clearance",
 
 
 def check_stitch_hygiene(rpt_path):
-    """`shorting_items`, `clearance`, `hole_clearance`, `hole_to_hole` must
-    all be exactly zero in the same DRC report `check_courtyards()` and
+    """Every class in `GATED_STITCH_CLASSES` -- `shorting_items`,
+    `clearance`, `hole_clearance`, `hole_to_hole` and `tracks_crossing` --
+    must be exactly zero in the same DRC report `check_courtyards()` and
     `check_plane_connectivity()` already read.
 
     This is the gate `_stitch_plane_pads()`'s own docstring argues for: two

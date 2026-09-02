@@ -42,6 +42,11 @@ band while `SR_CLK` and the LED nets stay north of y 44.
 
 # Spec Section 4 widths: signal, supply rails, and the Eurorack +-12 V pair.
 W_SIG = 0.25
+# W_SUP is the spec's 0.5 mm supply floor. Nothing in TRACKS uses it and that
+# is correct, not an omission: every supply-carrying net on this board is
+# either a plane (GND/AGND/+3V3/A+3V3, drawn as zones and stitched in Task 3,
+# never as a track) or the +-12 V pair, which takes W_12V. It stays as the
+# number to reach for if a rail ever does become a track.
 W_SUP = 0.5
 W_12V = 0.8
 
