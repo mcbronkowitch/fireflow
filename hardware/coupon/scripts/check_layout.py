@@ -478,11 +478,35 @@ def measurements(pcb_path):
 
 # --- --sabotage, Step 2's RED proof only -------------------------------------
 
+def _remove_net(board, net_name):
+    """Delete every track/via on `net_name` -- stands in for either a
+    routing regression that drops a net's copper outright, or a net rename
+    that leaves nothing on the board still answering to the old name.
+
+    `board.Delete(item)`, not `board.Remove(item)`: `Remove()` hands
+    ownership back to Python and waits for garbage collection to free the
+    C++ object (probed: leaves it a dangling wrapper that reliably
+    corrupts the very next `kipcb.save()`/`kipcb.load()` round-trip --
+    `SaveBoard` writes something `LoadBoard` cannot parse back into a
+    `pcbnew.BOARD`, so a later `board.GetTracks()` call fails with
+    `AttributeError: 'SwigPyObject' object has no attribute 'GetTracks'`).
+    `Delete()` frees the C++ object immediately and round-trips clean."""
+    for t in list(board.GetTracks()):
+        if t.GetNetname() == net_name:
+            board.Delete(t)
+
+
 def _sabotage(rule, pcb_path):
     """Copy `pcb_path` into a fresh scratch directory (`tempfile.mkdtemp`,
     never the repo copy) and perturb ONE thing in it, returning the copy's
     path. Exists only so this checker can be proven capable of going red;
-    nothing in the normal build calls it."""
+    nothing in the normal build calls it.
+
+    One mode per gated rule (`com`, `audio`, `sr_clk`, plus the pre-existing
+    `decoupling`), and one zero-match mode per rule that gained a
+    zero-match guard in this fix round (`com_missing`, `audio_missing`,
+    `sr_clk_missing`, `domain_missing`) -- proof that a rule which measures
+    nothing now reports a violation instead of a silent pass."""
     tmp_dir = tempfile.mkdtemp(prefix="check_layout_sabotage_")
     tmp_path = os.path.join(tmp_dir, os.path.basename(pcb_path))
     shutil.copy(pcb_path, tmp_path)
@@ -493,16 +517,75 @@ def _sabotage(rule, pcb_path):
         fp = board.FindFootprintByReference("C_M16")
         pos = fp.GetPosition()
         fp.SetPosition(pcbnew.VECTOR2I(pos.x + pcbnew.FromMM(10.0), pos.y))
+    elif rule == "com":
+        # Rule 1: MUX16_COM must be via-free. The via has to land ON an
+        # existing MUX16_COM track endpoint, not just anywhere on the
+        # board -- probed: an arbitrary point inside the filled AGND zone
+        # (COM16 sits in the analog region) gets its net silently
+        # reassigned to AGND by the save/reload round-trip, because an
+        # unconnected via touching only a zone pour is read back as that
+        # zone's net, not the net it was authored with.
+        _n, (x0, y0), _end = _track_segments(board, lambda n: n == D.COM16)[0]
+        kipcb.add_via(board, (x0, y0), D.COM16)
+    elif rule == "com_missing":
+        # Rule 1's new zero-match guard.
+        _remove_net(board, D.COM16)
+    elif rule == "audio":
+        # Rule 2: drop a new SR_CLK stub 3 mm from an existing
+        # outside-courtyard AUDIO_* segment's own endpoint -- well inside
+        # the 10 mm bound. Not AT that point: probed, copper landing
+        # exactly on an existing different-net track's coordinate gets
+        # merged onto that track's net by the save/reload round-trip (the
+        # same physical-overlap reassignment `com`'s via sabotage hit),
+        # which would silently turn the stub into more AUDIO_* copper
+        # instead of digital copper close to it.
+        segs = [sub for _n, a, b in _track_segments(board, _is_audio)
+                for sub in _clip_outside_shadow((a, b))]
+        (ax, ay), _ = segs[0]
+        kipcb.add_track(board, "F.Cu", 0.25, D.SR_CLK,
+                         [(ax + 3.0, ay), (ax + 4.0, ay)])
+    elif rule == "audio_missing":
+        # Rule 2's new zero-match guard: remove every AUDIO_* item so the
+        # segment-to-segment loop has nothing to iterate -- `worst` stays
+        # `None` regardless of what the digital side looks like.
+        for net in AUDIO_NETS:
+            _remove_net(board, net)
+    elif rule == "sr_clk":
+        # Rule 4: a third segment at a point two SR_CLK segments already
+        # share (degree 2, a straight-through joint) makes it a branch.
+        degree = {}
+        for _n, a, b in _track_segments(board, lambda n: n == D.SR_CLK):
+            for pt in (a, b):
+                key = (round(pt[0], 3), round(pt[1], 3))
+                degree[key] = degree.get(key, 0) + 1
+        joint = next(k for k, v in degree.items() if v == 2)
+        kipcb.add_track(board, "F.Cu", 0.25, D.SR_CLK,
+                         [joint, (joint[0] + 1.0, joint[1])])
+    elif rule == "sr_clk_missing":
+        # Rule 4's new zero-match guard -- THE blocking-defect proof: with
+        # every SR_CLK item gone, `degree`/`branches` build from nothing,
+        # exactly the shape a net rename or a routing regression produces.
+        _remove_net(board, D.SR_CLK)
+    elif rule == "domain_missing":
+        # Rule 3's new missing-footprint guard: delete an analog-domain
+        # part (RV1) outright, simulating a stale/hand-edited artifact.
+        # `Delete()`, not `Remove()` -- see `_remove_net`'s docstring.
+        board.Delete(board.FindFootprintByReference("RV1"))
     else:
         raise ValueError("unknown --sabotage rule: %s" % rule)
     kipcb.save(board, tmp_path)
     return tmp_path
 
 
+SABOTAGE_MODES = ["decoupling", "com", "com_missing", "audio",
+                   "audio_missing", "sr_clk", "sr_clk_missing",
+                   "domain_missing"]
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("pcb_path")
-    ap.add_argument("--sabotage", choices=["decoupling"], default=None,
+    ap.add_argument("--sabotage", choices=SABOTAGE_MODES, default=None,
                      help="RED-proof only: perturb a scratch copy before "
                           "checking; never touches pcb_path itself")
     args = ap.parse_args()
