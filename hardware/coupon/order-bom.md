@@ -1,5 +1,10 @@
 # Coupon parts order
 
+**Both orders are placed. Boards: JLCPCB, 2026-09-02, $22.02. Parts: Reichelt,
+2026-09-03, 14.19 € + 5.95 € shipping.** This file stays as the record of what
+was bought and why, and as the list to repeat from if a second board gets
+populated.
+
 What to buy to populate one coupon. The board itself was ordered from JLCPCB
 on 2026-09-02 (5 pieces, bare boards, no assembly), so everything here is
 hand-soldered. Derived from `proof/review.md` Section 4, which stays the

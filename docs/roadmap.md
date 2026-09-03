@@ -36,9 +36,10 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-09-03 (**the boards are ordered and the parts list is
-  down to one domestic parcel**: JLCPCB, five bare 4-layer boards, $22.02 all
-  in. Populating them needs one Reichelt order of roughly 20 € —
+- **Last updated:** 2026-09-03 (**the coupon is fully ordered — boards and
+  parts**: JLCPCB, five bare 4-layer boards, $22.02 all in, and one Reichelt
+  order at 14.19 € plus 5.95 € shipping, both placed. The next move on M6 is a
+  soldering iron, not a screen —
   [`hardware/coupon/order-bom.md`](../hardware/coupon/order-bom.md) carries it
   with article numbers. Three things collapsed the sourcing problem rather than
   solving it: the seven pots come out of Bastian's own drawer (right-angle
@@ -3851,7 +3852,14 @@ which the design was drawn for (every passive sits on a `_HandSolder`
 footprint, and nothing is finer than 0805 or 1.27 mm pitch). The parts to
 populate one board are now written down in
 [`hardware/coupon/order-bom.md`](../hardware/coupon/order-bom.md) with Reichelt
-article numbers: **≈ 14.21 € plus 5.95 € shipping**, one order, no customs.
+article numbers: **14.19 € plus 5.95 € shipping**, one order, no customs —
+**placed the same day**, after every line was put in a cart and read back
+against the BOM, quantity by quantity. That pass also closed the round's last
+open question: Reichelt's listing calls the 16-channel multiplexer "SO-24"
+without a width, but its article page names `CD74HC4067M`, which is the wide
+body `SOIC-24W` needs and exactly what `netlist.py` asks for. **So M6's coupon
+is fully ordered — boards and parts — and the next move is a soldering iron,
+not a screen.**
 **Two of the three awkward positions were removed rather than sourced.** The
 seven pots come from Bastian's own stock — right-angle parts instead of the
 vertical Alpha the footprint draws, which changes nothing electrically (the
