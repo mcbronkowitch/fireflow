@@ -12,8 +12,10 @@ drift; the article numbers are the durable part.
 ## One supplier: Reichelt
 
 Everything that has to be bought fits in a single domestic order — no customs,
-no second shipping fee. **≈ 14.21 € + 5.95 € shipping ≈ 20 €**, in stock,
-1–2 working days.
+no second shipping fee. **14.19 € + 5.95 € shipping**, in stock, 1–2 working
+days. (That total is the cart's own figure, checked 2026-09-03 with all
+thirteen lines in it; the per-line sums below add to 14.21 € because the
+tiered resistor prices round differently line by line.)
 
 | qty | part | Reichelt no. | needed | each | sum |
 |---:|---|---|---:|---:|---:|
@@ -42,10 +44,12 @@ copy rather than rework the first.
   part lands near 0.7 mcd and is barely visible; the 500 mcd part above gives
   about 30 mcd at the same current. Any high-efficiency green 0805 will do —
   the brightness figure is what matters, not the article number.
-- **`SMD HC 4067` must be the wide SO-24 body (7.5 mm).** The board's footprint
-  is `SOIC-24W`; the narrow SO-24 variant does not fit. Reichelt's listing says
-  SO-24 without stating the width — confirm on the article page before
-  ordering.
+- **`SMD HC 4067` is the right part — checked 2026-09-03, no longer an open
+  question.** The board's footprint is `SOIC-24W` and the narrow SO-24 variant
+  would not fit, and Reichelt's search listing states only "SO-24" without a
+  width. The article page settles it: manufacturer part number
+  **`CD74HC4067M`** (Texas Instruments), which is exactly what `netlist.py`
+  names, and the `M` suffix is the wide body.
 
 ## Not bought, and why
 

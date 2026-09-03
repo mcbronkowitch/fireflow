@@ -53,3 +53,6 @@ desktop.ini
 # tracked so the material they write is reproducible from a clean checkout.
 /host/render/scenarios/assets/*
 !/host/render/scenarios/assets/*.py
+
+# Playwright MCP scratch output (page snapshots, console logs) -- never tracked.
+/.playwright-mcp/
