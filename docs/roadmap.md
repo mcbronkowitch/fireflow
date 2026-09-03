@@ -36,7 +36,24 @@ is actually built today, and what is still design-only.
   (`docs/superpowers/specs/2026-07-25-spotykach-form-song-split-design.md`).
   (These specs keep their original filenames, written while the project was
   still a Spotykach fork.)
-- **Last updated:** 2026-09-02 (**one of the coupon's two order blockers is
+- **Last updated:** 2026-09-03 (**the boards are ordered and the parts list is
+  down to one domestic parcel**: JLCPCB, five bare 4-layer boards, $22.02 all
+  in. Populating them needs one Reichelt order of roughly 20 € —
+  [`hardware/coupon/order-bom.md`](../hardware/coupon/order-bom.md) carries it
+  with article numbers. Three things collapsed the sourcing problem rather than
+  solving it: the seven pots come out of Bastian's own drawer (right-angle
+  instead of vertical, which is electrically irrelevant and mechanically a
+  Kapton-and-hot-glue job — the clearances are measured in that file), and the
+  3.5 mm jack is simply **not populated**, because it serves none of the eight
+  measurement points and the rig is mono anyway. **One desk claim did not
+  survive being looked up:** the 2026-08-31 note that B20K is stocked by Tayda,
+  Thonk and Exploding Shed is wrong — Exploding Shed lists no B20K at all,
+  Thonk none either, and only Tayda seemed to have it behind a page that would
+  not load. Moot now, but corrected in place. Two smaller findings worth
+  keeping: the LEDs run at ~1.2 mA off a 1 kΩ resistor, so a cheap 12 mcd part
+  would be near-invisible and the BOM names a 500 mcd one instead; and
+  Reichelt's SO-24 4067 listing does not state its body width, which has to be
+  the wide 7.5 mm variant); earlier, 2026-09-02 (**one of the coupon's two order blockers is
   closed — the bus board is metered and standard**: Bastian put the meter on
   it and it reads as Doepfer describes — red stripe on −12 V, GND on 3..8,
   +12 V on 9/10. Polarity was the only failure mode that costs the board, so
@@ -92,7 +109,8 @@ is actually built today, and what is still design-only.
   closed at the desk**: the pots are Alpha RD901F-40 — the Alps RK09K footprint
   is gone, disproven pad for pad against KiCad's own library, not swapped on
   taste; linear 20 k in 9 mm vertical is confirmed buyable as Alpha B20K at
-  Tayda/Thonk/Exploding Shed; and the four bulk caps are "10u 25V" X5R as one
+  Tayda/Thonk/Exploding Shed [**the three-shop part of that is wrong, corrected
+  2026-09-03 in the M6 paragraph**]; and the four bulk caps are "10u 25V" X5R as one
   BOM line. Proof chain re-run, green. What remains before the order: the bus
   board measurement and the land-pattern risk — both need hands, not a
   browser. Details in the M6 paragraph of 2026-08-30, which carries the desk
@@ -3697,7 +3715,13 @@ pot does not enter the Alps footprint. The coupon now carries
 the note always named. That also answers the 20 k question: linear 20 k in
 9 mm vertical is a real Alpha part (`RD901F-…-B20K-00D`), stocked as B20K by
 Tayda, Thonk and Exploding Shed — the shaft variant (round metal vs T18
-knurled) is a panel decision the coupon does not have to make. And the four
+knurled) is a panel decision the coupon does not have to make.
+**[Corrected 2026-09-03: the stock half of that sentence is wrong. Checked at
+the shops — Exploding Shed lists no B20K at all and its B10k is sold out;
+Thonk has B10K but no B20K. Only Tayda appeared to carry it, and its page
+refused to load. The part exists; three named shops stocking it was a desk
+claim that did not survive being looked up. Moot in the end, see the
+2026-09-03 paragraph below.]** And the four
 10 µF bulk caps are now "10u 25V" on the BOM as one line item (e.g. Samsung
 CL21A106KAYNNNE, X5R 0805 25 V): the ±12 V pair needs the rating, the 3V3
 pair rides along; X5R at 12 V bias keeps roughly half its capacitance, which
@@ -3818,6 +3842,37 @@ except the decision to place it. Recorded in `review.py`'s Section 3 (so
 `proof/review.md` carries it for whoever reads the sheet) and in
 `hardware/coupon/README.md`'s order list; docs only, no board or schematic
 file moved.
+
+**2026-09-03 — the boards are ordered, and the parts list collapses to one
+domestic parcel.** The fab order went to JLCPCB on 2026-09-02: five bare
+4-layer boards, 100 × 80 mm, HASL, production-file confirmation on, $22.02
+delivered including German VAT. No assembly — everything is hand-soldered,
+which the design was drawn for (every passive sits on a `_HandSolder`
+footprint, and nothing is finer than 0805 or 1.27 mm pitch). The parts to
+populate one board are now written down in
+[`hardware/coupon/order-bom.md`](../hardware/coupon/order-bom.md) with Reichelt
+article numbers: **≈ 14.21 € plus 5.95 € shipping**, one order, no customs.
+**Two of the three awkward positions were removed rather than sourced.** The
+seven pots come from Bastian's own stock — right-angle parts instead of the
+vertical Alpha the footprint draws, which changes nothing electrically (the
+resistance is the device under test, the package is not) but needs Kapton
+under the metal bodies and hot glue in place of the support lugs; the
+clearances are measured, and `RV4` is the tight one, with `JP_GND` 1.5 mm
+north and `R_SP11` 1.3 mm south of it. The 3.5 mm jack is **not populated**:
+it serves none of the eight measurement points, the measurement rig is mono,
+`TP_AUDIO_L` already brings the channel out, Reichelt carries nothing with that
+pad pattern, and a Thonkiconn does not substitute (measured — its three pins
+sit in a line at y 0 / 3.1 / 11.4 mm against this footprint's scattered 2.0 mm
+holes, and it has no ring contact at all). **One earlier claim was checked and
+failed:** 2026-08-31 recorded B20K as stocked by Tayda, Thonk and Exploding
+Shed. Exploding Shed lists no B20K and its B10k is sold out; Thonk has B10K but
+no B20K; only Tayda appeared to carry it, behind a page that answered 403. The
+part exists — three shops stocking it was a desk claim, and it is corrected in
+place above. Two findings worth keeping for the build: the LEDs run at about
+**1.2 mA** off their 1 kΩ resistors rather than 20 mA, so the BOM names a
+500 mcd part instead of a 12 mcd one that would be near-invisible; and
+Reichelt's `SMD HC 4067` listing says SO-24 without stating the body width,
+which has to be the **wide 7.5 mm** variant or it will not fit `SOIC-24W`.
 
 **2026-08-14 — preset persistence now starts from nothing.** M6's scope names
 it, and until this date the repo had two pieces of prior art for it: the
