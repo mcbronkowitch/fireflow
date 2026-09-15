@@ -42,6 +42,48 @@ table, the four numeric analog-rule measurements, and the two families of
 measured-but-not-gated deviations (the long 0R ties and the moat-crossing
 address bus, both below).
 
+## Stuffing it
+
+`scripts/assembly_plan.py` draws the sheet you actually solder from, because
+the fabricated board cannot be read: 0805 parts sit on a 2 mm pitch and their
+reference designators need about 5 mm, so the silkscreen overlaps itself and
+the analog corner is one grey smear. The board renders under `proof/` have the
+same problem for the same reason.
+
+```
+python scripts\assembly_plan.py
+```
+
+**This one runs under the system interpreter** — it reads `coupon.kicad_pcb`
+and nothing else, so no `pcbnew`, no symbol libraries, no KiCad install. Every
+number in it is read rather than transcribed: placement, rotation, courtyard
+and pad positions come from the footprints, and the part values come from each
+footprint's own `Value` property — the same field the BOM in `proof/review.md`
+reports. Re-run it after any placement change and the drawing follows; there is
+no hand-kept table to drift.
+
+It writes two sheets:
+
+- **`proof/coupon-assembly.svg`** — the working sheet. The whole board, the
+  analog corner enlarged, and a stuffing list with one row per reel. All 78
+  parts named, coloured by value, with pad 1 marked at its measured position
+  (the notch end on the SOIC chips) and a bar on each LED's `_K` pad.
+- **`proof/coupon-overview.svg`** — the same geometry at a width that survives
+  a narrow column, with eight numbered zones instead of 78 labels. This is the
+  one the journal prints, with the assembly sheet linked beside it.
+
+Labels are placed by search, and the script checks its own work: a slot is
+rejected if it touches a part body, another label, a leader already drawn or
+the board outline, and a leader may not cross a part unless nothing legal is
+left. It prints how many labels needed that fallback (one, as of this writing)
+and exits non-zero if any part ends up unlabelled or any two labels overlap.
+
+The website keeps its own copies under different names:
+
+```
+python scripts\assembly_plan.py --out-dir ..\..\..\FireFlow_Website\public\media\site --prefix fireflow-hw-coupon
+```
+
 **`coupon.kicad_pcb` is generated fresh by every `build_pcb.py` run, but the
 file is byte-reproducible.** `pcbnew` orders every UUID-keyed item —
 footprints, the individual track/via segments sharing a net, and the zone
