@@ -39,9 +39,14 @@ void run_coupon_bringup(bench::Board& hw)
             hw.adc.Get(static_cast<uint8_t>(kCouponChain.sense_adc_base + sense)));
     }
 
-    // Park with both muxes disabled before the port opens: nothing should be
-    // connected to a sense pin while nobody is reading it.
-    chain.write_chain(chain_word(kCouponChain, step_pattern(kCouponChain, -1), 0u));
+    // Park with both muxes disabled, and take the 165's stream on the same
+    // pass -- the two chains share clock and latch, so a separate read would
+    // cost a second latch and re-load the buttons mid-flight.
+    const uint32_t parked
+        = chain_word(kCouponChain, step_pattern(kCouponChain, -1), 0u);
+    const uint32_t ret     = chain.read_chain(parked);
+    const int      bb      = button_bit(kCouponChain);
+    const int      pressed = (bb < 0) ? -1 : (((ret >> bb) & 1u) == 0u ? 1 : 0);
 
     hw.StartLog(false);
 
@@ -51,8 +56,10 @@ void run_coupon_bringup(bench::Board& hw)
 
     while(1)
     {
-        hw.PrintLine("COUPON_BEGIN steps=%d hold_ms=%d fails=%d",
-                     kSteps, static_cast<int>(kHoldMs), failures);
+        hw.PrintLine("COUPON_BEGIN steps=%d hold_ms=%d fails=%d button=%d "
+                     "ret=%d",
+                     kSteps, static_cast<int>(kHoldMs), failures, pressed,
+                     static_cast<int>(ret));
         for(int s = 0; s < kSteps; ++s)
         {
             const int    g = group_of_step(kCouponChain, s);

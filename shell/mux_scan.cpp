@@ -60,6 +60,30 @@ void MuxScan::write_chain(uint32_t word)
     latch_.Write(false);
 }
 
+uint32_t MuxScan::read_chain(uint32_t word)
+{
+    // Latch LOW first: that is the 165's ~PL, and the parallel load happens
+    // while it is low. The 595s do not care -- they latch on the rising
+    // edge at the end.
+    latch_.Write(false);
+    latch_.Write(true);
+
+    uint32_t in = 0;
+    for(int i = kActiveChain.chain_bits - 1; i >= 0; --i)
+    {
+        // Sample BEFORE the clock edge: the bit standing at Q7 now is the
+        // one the previous edge shifted there.
+        if(sense_in_.Read())
+            in |= 1u << (kActiveChain.chain_bits - 1 - i);
+        data_.Write(((word >> i) & 1u) != 0u);
+        clock_.Write(true);
+        clock_.Write(false);
+    }
+    latch_.Write(true);
+    latch_.Write(false);
+    return in;
+}
+
 void MuxScan::step(bench::Board& hw)
 {
     if(live_step_ >= 0)

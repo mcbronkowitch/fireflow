@@ -51,4 +51,6 @@ uint32_t chain_word(const ChainProfile& p, StepPattern s, uint32_t leds)
            | ((leds & led_mask) << p.led_shift);
 }
 
+int button_bit(const ChainProfile& p) { return p.button_bit; }
+
 } // namespace shell

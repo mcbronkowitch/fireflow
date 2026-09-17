@@ -49,6 +49,12 @@ class MuxScan
     // the ADC is read, which step() deliberately never does.
     void write_chain(uint32_t word);
 
+    // Clocks `word` out and the 165's parallel load back in, in the same
+    // pass -- the two chains share clock and latch, so a separate read pass
+    // would cost a second latch and re-load the buttons mid-flight.
+    // Returns the return stream, first bit shifted out in bit 0.
+    uint32_t read_chain(uint32_t word);
+
   private:
     daisy::GPIO data_, clock_, latch_, sense_in_;
     uint32_t    leds_      = 0;

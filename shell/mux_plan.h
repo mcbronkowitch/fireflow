@@ -40,6 +40,7 @@ struct ChainProfile
     int enable_shift;
     int led_shift;
     int led_bits;
+    int button_bit;        // index into the bits shifted out of the 165, -1 = none
 };
 
 // The shipping panel. 32 = four 74HC595: 19 LEDs (what FireflowHW draws
@@ -48,7 +49,7 @@ struct ChainProfile
 // what makes the panel cost zero GPIOs. Demand today is 67 pot positions,
 // so the 128 channels are headroom, not a plan.
 inline constexpr ChainProfile kPanelChain{
-    4, kSenseAdcBase, 2, {16, 16}, {-1, -1}, 32, 0, 4, 8, 19};
+    4, kSenseAdcBase, 2, {16, 16}, {-1, -1}, 32, 0, 4, 8, 19, -1};
 
 // The test coupon (hardware/coupon/). Two 74HC595 = 16 bits, eight LEDs, one
 // CD74HC4067 on ADC_9 and one CD74HC4051 on ADC_10 -- so the two groups do
@@ -56,7 +57,7 @@ inline constexpr ChainProfile kPanelChain{
 // Derivation of the bit order: netlist.py:268 plus MSB-first clocking
 // through U_SR1.QH' -> U_SR2.SER.
 inline constexpr ChainProfile kCouponChain{
-    2, kSenseAdcBase, 2, {16, 8}, {0, 1}, 16, 0, 4, 6, 8};
+    2, kSenseAdcBase, 2, {16, 8}, {0, 1}, 16, 0, 4, 6, 8, 7};
 
 constexpr int scan_steps(const ChainProfile& p)
 {
@@ -89,5 +90,9 @@ int mux_channel(const ChainProfile& p, int step, int sense);
 
 // The chain word for a step, with `leds` in the LED field.
 uint32_t chain_word(const ChainProfile& p, StepPattern s, uint32_t leds);
+
+// Which bit of the 74HC165 return stream carries the board's button, counted
+// from the first bit shifted out, or -1 if the board has none.
+int button_bit(const ChainProfile& p);
 
 } // namespace shell

@@ -148,3 +148,13 @@ TEST_CASE("mux plan: the sense pins are the raw ADC inputs, not the CV pins") {
     // nothing on the board drives.
     CHECK(shell::kSenseAdcBase == 8);
 }
+
+TEST_CASE("mux plan: the coupon's button is the eighth bit shifted out") {
+    // U_IN1 is a 74HC165 with Q7 on SR_DATA_IN. Q7 is the LAST parallel
+    // stage, so after ~PL the first bit read is D7 and D0 arrives eighth.
+    // netlist.py:283 puts BTN_1 on D0 and ties D1..D7 to GND, so bit 7
+    // counting from the first bit read is the only one that can move.
+    CHECK(shell::button_bit(shell::kCouponChain) == 7);
+    // The shipping panel has no single button on the chain yet.
+    CHECK(shell::button_bit(shell::kPanelChain) == -1);
+}
