@@ -131,9 +131,14 @@ int d_settle_index(const Point* pts, int n, int32_t settled);
 // kept equal to kGridStepNs (and to each other) by hand. A wrong constant
 // used to be a defect waiting for someone to change one of the three
 // numbers and not the other two; now there is only one number to change.
+//
+// kBandFactor is gone (Task 5 fix round 4): it scaled a floor for G3 when
+// G3 bounded raw per-sample spread and needed protection against demanding
+// better than the criterion on an exceptionally quiet run. G3 no longer
+// bounds that statistic (see RunSummary::settled_mean_spread below), so
+// there is no floor left to scale -- kSettleCounts is direct now.
 inline constexpr int32_t  kKneeMaxNs      = kGridStepNs;  // G1, one grid step
 inline constexpr int32_t  kFloorMaxCounts = 64;           // G2
-inline constexpr int32_t  kBandFactor     = 3;            // G3
 inline constexpr int32_t  kJitterMaxNs    = kGridStepNs;  // G4, one grid step
 
 // What a completed run reduces to before it is judged.
@@ -141,24 +146,41 @@ struct RunSummary
 {
     int32_t knee_ns[kSettlePairs];  // -1 where the pair never settled
     int32_t b0;                     // spread of P0's settled reference read
-    // Widest max-min over every SETTLED point of every pair -- i.e. only
-    // points at or after that pair's own knee, never the transient before
-    // it. Named widest_band through Task 5 fix round 1; renamed here because
-    // that name let the field silently mean "every point", which G3 cannot
-    // survive on a real curve: measured on the coupon board, pair 1's bands
-    // ran 934, 581, 379, 329, 148, 81 ... ns and pair 2's ran 1140, 803, 476,
-    // 275, 149 ... ns, widest at the EARLIEST points and collapsing to a
-    // 30-50 floor once settled. That is not noise -- while a node is still
-    // moving, the instrument's own ~140 ns aperture jitter gets converted
-    // into voltage by the curve's slope, so a steep point MUST have a wide
-    // band. G3's intent (a wide band must not be read as a time) applies to
-    // the settled region, not the transient the knee already reports as
-    // unsettled. A pair with no knee (knee_ns[p] == -1) contributes nothing
-    // to this field -- its failure to settle is already visible in knee_ns
-    // and must not also corrupt a band gate that was never about it. Do not
-    // re-broaden this back to "every point" because that reads more
-    // thorough; it fails every curve that actually settles.
-    int32_t widest_settled_band;
+    // Max - min of the per-point MEANS across the settled region (from the
+    // pair's own knee onward), in raw ADC counts. G3 bounds THIS against
+    // kSettleCounts directly.
+    //
+    // Fix round 4 (was widest_settled_band, and before that widest_band --
+    // see git history for those rounds' own reasoning, both since
+    // superseded): that field bounded max-min of the RAW PER-SAMPLE
+    // conversions at each point -- a different statistic from the one
+    // d_settle_index() actually decides on, which is the MEAN of 64
+    // repeats. On the coupon board this mismatch failed three perfectly
+    // good knees: pairs 1/2/3 each carried one single-point outlier in an
+    // otherwise clean settled region (159, 169, 146 raw counts) that moved
+    // that point's OWN MEAN by at most 169/64 ~= 2.6 counts -- comfortably
+    // inside the 8-count criterion the knee itself already satisfied. Pair
+    // 0 (a 0 ohm tie straight to AGND, so its whole curve should read a
+    // flat zero) showed a 106-count single-point outlier too -- real
+    // interference on a channel with nothing to settle, evidence for
+    // whatever this coupon's crosstalk question is asking, and STILL not a
+    // reason to refuse a knee the mean-based decision found solid.
+    //
+    // G3 now bounds mean agreement instead, and the bound is kSettleCounts
+    // itself, not a b0-scaled floor: the per-point mean is already averaged
+    // over 64 samples and is far quieter than a raw single-sample band, so
+    // this is not a widening -- the coupon board's own settled regions
+    // measured 2-4 counts of mean spread per pair, comfortably under the
+    // 8-count bound. The raw per-sample band this field used to carry is
+    // NOT deleted: it is still computed and printed, with its grid
+    // position, as an observation (SHELL_SETTLE_BAND in settle_probe.cpp)
+    // -- a wide single-point sample spread is informative on its own (see
+    // pair 0 above), it is only not a reason to block a knee the mean
+    // already cleared. Do not move this field back to raw per-sample
+    // spread on the grounds that it reads stricter: it bounds a statistic
+    // the verdict does not consume, and doing so is what failed the three
+    // good knees above.
+    int32_t settled_mean_spread;
     int32_t lat_min_ns;
     int32_t lat_max_ns;
     int32_t lat_mean_ns;

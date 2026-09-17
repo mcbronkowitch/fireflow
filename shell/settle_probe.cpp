@@ -638,7 +638,7 @@ void run_settle_probe(bench::Board& hw)
         summary.lat_min_ns          = lat_min;
         summary.lat_max_ns          = lat_max;
         summary.lat_mean_ns         = lat_mean;
-        summary.widest_settled_band = 0;
+        summary.settled_mean_spread = 0;
 
         int32_t d_settle_ns_print[kSettlePairs];
         bool    at_or_below_offset[kSettlePairs];
@@ -652,6 +652,13 @@ void run_settle_probe(bench::Board& hw)
         // points (fix round 3, item 2), and their own spread -- see below.
         int32_t tail_ref[kSettlePairs];
         int32_t tail_spread[kSettlePairs];
+        // Fix round 4: the raw per-sample band no longer gates anything
+        // (see the G3 comment below), but it is not thrown away -- kept per
+        // pair, with the grid position of its widest point, purely as a
+        // printed observation (SHELL_SETTLE_BAND). -1 where the pair has no
+        // settled region to observe (idx < 0).
+        int32_t widest_band_counts[kSettlePairs];
+        int32_t widest_band_d_ns[kSettlePairs];
 
         for(int p = 0; p < kSettlePairs; ++p)
         {
@@ -730,7 +737,7 @@ void run_settle_probe(bench::Board& hw)
             // curve that is still moving at the end of the grid could
             // average its own moving tail into a "settled" answer nothing
             // ever measured. tail_settled gates idx to -1 in that case; it
-            // does NOT touch summary.widest_settled_band's own idx>=0 guard
+            // does NOT touch summary.settled_mean_spread's own idx>=0 guard
             // below, which independently already excludes an unsettled
             // pair's transient from G3.
             const bool tail_settled = tail_spread[p] <= kSettleCounts;
@@ -759,25 +766,56 @@ void run_settle_probe(bench::Board& hw)
             at_or_below_offset[p] = (idx == 0);
             d_settle_ns_print[p]  = (idx > 0) ? static_cast<int32_t>(grid_ns(idx)) : -1;
 
-            // G3's widest_settled_band (Task 5 fix round 1, item 3): counted
-            // only from this pair's own knee onward, never the transient
-            // before it -- see the field's comment in settle_plan.h for the
-            // measured coupon-board numbers (934 ns down to 81 ns on pair 1,
-            // 1140 down to 149 on pair 2) that make the transient unfit to
-            // compare against a floor derived from the settled state. A pair
-            // with no knee (idx < 0) contributes nothing: its own failure to
-            // settle already shows up in knee_ns and must not also corrupt
-            // this gate.
+            // G3 (fix round 4): counted only from this pair's own knee
+            // onward, never the transient before it -- same reason as
+            // always (a pair with no knee, idx < 0, contributes nothing;
+            // its failure to settle already shows up in knee_ns). What
+            // changed is WHAT gets measured over that region.
+            //
+            // settled_mean_spread is max-min of the per-point MEANS -- the
+            // statistic d_settle_index() actually decided the knee on. See
+            // RunSummary::settled_mean_spread's comment in settle_plan.h
+            // for why this replaced a raw-per-sample-band gate that was
+            // refusing perfectly good knees on single-point outliers whose
+            // means barely moved.
+            //
+            // widest_band_counts/widest_band_d_ns are that SAME raw
+            // per-sample band this gate used to bound, computed the same
+            // way (max - min of the 64 individual conversions at a point),
+            // kept as a printed observation with its grid position rather
+            // than deleted -- a wide single-point sample spread is still
+            // informative (pair 0, a 0 ohm AGND tie with nothing to settle,
+            // showed a 106-count one: real interference, not settling),
+            // it is just not a reason to block a knee the mean already
+            // cleared.
             if(idx >= 0)
             {
-                int32_t widest_this_pair = 0;
+                int32_t mean_min = 0x7FFFFFFF, mean_max = -0x7FFFFFFF;
+                int32_t widest_sample_band    = 0;
+                int32_t widest_sample_band_ns = -1;
                 for(int i = idx; i < kGridPoints; ++i)
                 {
+                    if(pts[i].mean < mean_min) mean_min = pts[i].mean;
+                    if(pts[i].mean > mean_max) mean_max = pts[i].mean;
+
                     const int32_t band = pts[i].max - pts[i].min;
-                    if(band > widest_this_pair) widest_this_pair = band;
+                    if(band > widest_sample_band)
+                    {
+                        widest_sample_band    = band;
+                        widest_sample_band_ns = static_cast<int32_t>(grid_ns(i));
+                    }
                 }
-                if(widest_this_pair > summary.widest_settled_band)
-                    summary.widest_settled_band = widest_this_pair;
+                const int32_t mean_spread = mean_max - mean_min;
+                if(mean_spread > summary.settled_mean_spread)
+                    summary.settled_mean_spread = mean_spread;
+
+                widest_band_counts[p] = widest_sample_band;
+                widest_band_d_ns[p]   = widest_sample_band_ns;
+            }
+            else
+            {
+                widest_band_counts[p] = -1;
+                widest_band_d_ns[p]   = -1;
             }
         }
 
@@ -829,6 +867,19 @@ void run_settle_probe(bench::Board& hw)
                          "settled_raw_pre=%d settled_raw_post=%d",
                          p, tail_ref[p], tail_spread[p],
                          settled_raw_pre[p], settled_raw_post[p]);
+        }
+
+        // Fix round 4: the raw per-sample band G3 used to gate is now an
+        // observation only -- printed with the grid position (d_ns) of its
+        // widest point, not folded into a single "widest of the run"
+        // number, because WHICH point and WHICH pair is exactly what makes
+        // an outlier like pair 0's 106-count one (a 0 ohm AGND tie that
+        // should read a flat zero) interesting rather than just noise.
+        // -1/-1 for a pair with no settled region to observe (idx < 0).
+        for(int p = 0; p < kSettlePairs; ++p)
+        {
+            hw.PrintLine("SHELL_SETTLE_BAND pair=%d widest_sample_band_counts=%d at_d_ns=%d",
+                         p, widest_band_counts[p], widest_band_d_ns[p]);
         }
 
         hw.PrintLine("SHELL_SETTLE_GATES g1=%d g2=%d g3=%d g4=%d",

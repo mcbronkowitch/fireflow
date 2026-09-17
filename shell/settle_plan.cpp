@@ -53,16 +53,18 @@ Gates settle_gates(const RunSummary& s)
     // inside the decision threshold.
     g.g2_floor = s.b0 >= 0 && s.b0 <= kFloorMaxCounts;
 
-    // G3: no SETTLED point may be wider than three floors -- but never demand
-    // better than the criterion itself, or a quiet run fails for being quiet.
-    // widest_settled_band already excludes the transient before each pair's
-    // own knee (see its comment in settle_plan.h for the measured numbers
-    // that make excluding it necessary, not optional) and is 0 when no pair
-    // contributed a settled region, which G1 already catches separately.
-    const int32_t allowed = (kBandFactor * s.b0 > kSettleCounts)
-                                ? kBandFactor * s.b0
-                                : static_cast<int32_t>(kSettleCounts);
-    g.g3_band = s.widest_settled_band >= 0 && s.widest_settled_band <= allowed;
+    // G3 (fix round 4): the per-point MEANS in the settled region must
+    // agree with each other within kSettleCounts -- directly, no b0-scaled
+    // floor, because this is the same statistic d_settle_index() itself
+    // decided the knee on, not a noisier raw-sample quantity that needed a
+    // floor to avoid over-refusing a quiet run. See
+    // RunSummary::settled_mean_spread's comment in settle_plan.h for the
+    // three good knees the OLD (raw-per-sample) version of this gate
+    // refused, and why kSettleCounts alone is tight here, not loose.
+    // settled_mean_spread already excludes the transient before each pair's
+    // own knee and is 0 when no pair contributed a settled region, which G1
+    // already catches separately.
+    g.g3_band = s.settled_mean_spread >= 0 && s.settled_mean_spread <= kSettleCounts;
 
     // G4: aperture jitter inside one grid step, and a latency the conversion
     // model does not forbid. A negative mean means settle_probe.cpp's

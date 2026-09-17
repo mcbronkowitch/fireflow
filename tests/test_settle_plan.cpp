@@ -124,7 +124,11 @@ shell::RunSummary clean_summary() {
     shell::RunSummary s{};
     for(int p = 0; p < shell::kSettlePairs; ++p) s.knee_ns[p] = 100;
     s.b0                  = 12;
-    s.widest_settled_band = 30;
+    // Fix round 4: settled_mean_spread is now bounded directly against
+    // kSettleCounts (8), not a b0-scaled floor -- 4 matches the coupon
+    // board's own measured 2-4 counts of settled-region mean spread per
+    // pair, comfortably under that bound.
+    s.settled_mean_spread = 4;
     s.lat_min_ns          = 300;
     s.lat_max_ns          = 340;
     s.lat_mean_ns         = 320;
@@ -199,30 +203,42 @@ TEST_CASE("settle gates: G2 refuses a floor that swallows the criterion") {
     // fifth of the 8-count threshold. Above it every curve still LOOKS like
     // a curve, which is exactly why this must fail loudly.
     shell::RunSummary s = clean_summary();
-    s.b0                  = shell::kFloorMaxCounts;
-    s.widest_settled_band = shell::kFloorMaxCounts;
+    s.b0 = shell::kFloorMaxCounts;
     CHECK(shell::settle_gates(s).g2_floor);
     s.b0 = shell::kFloorMaxCounts + 1;
     CHECK_FALSE(shell::settle_gates(s).g2_floor);
 }
 
-TEST_CASE("settle gates: G3 measures the band against the measured floor") {
+TEST_CASE("settle gates: G3 refuses settled-region mean disagreement wider "
+          "than the criterion") {
+    // Fix round 4: G3 now bounds the SAME statistic d_settle_index() itself
+    // decided the knee on -- the spread of the per-point MEANS in the
+    // settled region -- directly against kSettleCounts, not a b0-scaled
+    // floor over a noisier raw-per-sample statistic. The coupon board's own
+    // settled regions measured 2-4 counts of mean spread per pair,
+    // comfortably inside this bound; see settle_plan.h's
+    // RunSummary::settled_mean_spread for the three good knees the OLD gate
+    // refused instead.
     shell::RunSummary s = clean_summary();
-    s.b0                  = 10;
-    s.widest_settled_band = 30;
+    s.settled_mean_spread = shell::kSettleCounts;
     CHECK(shell::settle_gates(s).g3_band);
-    s.widest_settled_band = 31;
+    s.settled_mean_spread = shell::kSettleCounts + 1;
     CHECK_FALSE(shell::settle_gates(s).g3_band);
 }
 
-TEST_CASE("settle gates: G3 never demands better than the criterion itself") {
-    // A band below the decision threshold cannot change a verdict, so an
-    // exceptionally quiet run must not fail for being quiet. Without the
-    // floor at kSettleCounts, b0 = 1 would demand every point inside
-    // 3 counts and fail a perfectly good run.
+TEST_CASE("settle gates: G3 does not depend on b0") {
+    // Fix round 4: the OLD gate scaled its own threshold by b0
+    // (kBandFactor * b0, floored at kSettleCounts) because it bounded a
+    // noisier raw-per-sample statistic that needed protection against
+    // demanding better than the criterion on an exceptionally quiet run.
+    // The new gate bounds mean agreement directly against kSettleCounts
+    // with no b0 term at all (kBandFactor is gone) -- this test is what
+    // would catch a future edit that re-introduced that coupling.
     shell::RunSummary s = clean_summary();
-    s.b0                  = 1;
-    s.widest_settled_band = shell::kSettleCounts;
+    s.settled_mean_spread = shell::kSettleCounts;
+    s.b0                   = 1;
+    CHECK(shell::settle_gates(s).g3_band);
+    s.b0 = shell::kFloorMaxCounts;
     CHECK(shell::settle_gates(s).g3_band);
 }
 
