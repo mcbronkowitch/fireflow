@@ -92,6 +92,8 @@ add_executable(spky_tests
     tests/test_controls_map.cpp
     shell/mux_plan.cpp
     tests/test_mux_plan.cpp
+    shell/coupon_expect.cpp
+    tests/test_coupon_expect.cpp
     tests/test_seed_audition_init.cpp
     tests/test_seed_audition_protocol.cpp
     tests/test_bbd_edge_state.cpp
