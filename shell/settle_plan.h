@@ -50,4 +50,53 @@ inline constexpr int kSettleCounts = 8;
 // prediction" but far past it -- 6.6x the slowest of them.
 inline constexpr uint32_t kParkNs = 20000;
 
+// One grid point's statistics across kRepeats conversions.
+struct Point
+{
+    int32_t mean;
+    int32_t min;
+    int32_t max;
+};
+
+// The smallest grid index whose mean is within kSettleCounts of `settled` AND
+// stays within it for every larger index, or -1 if there is none.
+//
+// "And stays within it" is the whole definition. A node that rings crosses the
+// band early and wanders back out; reporting the first crossing would report
+// that node as the fastest one on the board.
+int d_settle_index(const Point* pts, int n, int32_t settled);
+
+// Section 7a's gate constants. Each is derived; the spec carries the
+// derivation and it is not repeated here, but none of them is a taste.
+inline constexpr int32_t  kKneeMaxNs      = 100;  // G1, one grid step
+inline constexpr int32_t  kFloorMaxCounts = 64;   // G2
+inline constexpr int32_t  kBandFactor     = 3;    // G3
+inline constexpr int32_t  kJitterMaxNs    = 100;  // G4, one grid step
+
+// What a completed run reduces to before it is judged.
+struct RunSummary
+{
+    int32_t knee_ns[kSettlePairs];  // -1 where the pair never settled
+    int32_t b0;                     // spread of P0's settled reference read
+    int32_t widest_band;            // widest max-min over every point of every pair
+    int32_t lat_min_ns;
+    int32_t lat_max_ns;
+    int32_t lat_mean_ns;
+};
+
+struct Gates
+{
+    bool g1_knee;
+    bool g2_floor;
+    bool g3_band;
+    bool g4_jitter;
+
+    bool ok() const { return g1_knee && g2_floor && g3_band && g4_jitter; }
+};
+
+// A run that fails any gate prints its numbers and refuses to name a settle
+// time. It does NOT report a board defect -- the distinction is the entire
+// point of section 7.
+Gates settle_gates(const RunSummary& s);
+
 } // namespace shell
