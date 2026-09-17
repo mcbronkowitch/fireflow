@@ -59,6 +59,9 @@ TEST_CASE("coupon expect: the verdict brackets are not a matter of taste") {
     CHECK(shell::coupon_verdict(Expect::Mid, 32768 - shell::kMidMargin));
     CHECK_FALSE(shell::coupon_verdict(Expect::Mid,
                                       32768 - shell::kMidMargin - 1));
+    CHECK(shell::coupon_verdict(Expect::Mid, 32768 + shell::kMidMargin));
+    CHECK_FALSE(shell::coupon_verdict(Expect::Mid,
+                                      32768 + shell::kMidMargin + 1));
 
     // An unfitted pot floats. Anything it reads is allowed, including 0.
     CHECK(shell::coupon_verdict(Expect::Unchecked, 0));
