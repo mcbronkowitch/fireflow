@@ -224,10 +224,101 @@ TEST_CASE("settle gates: G4 refuses aperture jitter wider than a grid step") {
 
 TEST_CASE("settle gates: G4 refuses a latency the conversion model forbids") {
     // A negative mean latency means start-to-EOC came back shorter than the
-    // 25 ADC cycles the conversion is supposed to take. Then the 2034 ns
-    // subtraction is wrong, and nothing downstream of it is trustworthy --
-    // including the delays every other pair was measured at.
+    // 25 ADC cycles the conversion is supposed to take. Then the
+    // conversion-time subtraction is wrong (settle_probe.cpp computes it
+    // from the measured ADC clock as of fix round 4; it used to be a fixed
+    // 2034 ns), and nothing downstream of it is trustworthy -- including the
+    // delays every other pair was measured at.
     shell::RunSummary s = clean_summary();
     s.lat_mean_ns = -1;
     CHECK_FALSE(shell::settle_gates(s).g4_jitter);
+}
+
+// --- Fix round 4: the sampling-time choice, per pair ---
+//
+// Recomputed here, not copied from shell/settle_plan.cpp -- same pattern as
+// "the predictions are recomputed, not copied" above. R_ADC/C_ADC are
+// docs/hardware/settle-budget.md section 1's figures (C_ADC: "ST, STM32H7
+// sample-and-hold", datasheet; R_ADC: "ST community figure for slow
+// channels", explicitly NOT datasheet-verbatim). kAdcHz is SHELL_SETTLE_CLK's
+// own board reading (span_short_cyc=2311, span_long_cyc=31286,
+// Δsampling=371 ADC cycles, 480 MHz core clock) -- see
+// shell/settle_plan.cpp's citation comment for the full derivation.
+namespace {
+
+constexpr double kRAdcOhmT   = 2000.0;
+constexpr double kCAdcFaradT = 4e-12;
+constexpr double kAcqNSigmaT = 9.01;
+constexpr double kAdcHzT     = 480e6 * 371.0 / (31286.0 - 2311.0);
+
+double required_acq_s(uint32_t r_src_ohm) {
+    return kAcqNSigmaT * (static_cast<double>(r_src_ohm) + kRAdcOhmT) * kCAdcFaradT;
+}
+
+double rung_window_s(int idx) {
+    return (static_cast<double>(shell::kSamplingLadderTenths[idx]) / 10.0) / kAdcHzT;
+}
+
+} // namespace
+
+TEST_CASE("sample time ladder: the ladder itself matches the HAL's eight sampling times") {
+    const int kExpectedTenths[shell::kSamplingLadderLen] =
+        {15, 25, 85, 165, 325, 645, 3875, 8105};
+    for(int i = 0; i < shell::kSamplingLadderLen; ++i) {
+        CAPTURE(i);
+        CHECK(shell::kSamplingLadderTenths[i] == kExpectedTenths[i]);
+    }
+}
+
+TEST_CASE("sample time ladder: a source impedance just under a rung's limit "
+          "picks that rung, just over picks the next") {
+    // The boundary between rung 3 (16.5 cycles) and rung 4 (32.5 cycles):
+    // the largest r_src_ohm at which 16.5 cycles is still >= 9.01 tau_acq.
+    // Derived from the same formula sample_time_index_for() uses, not
+    // hand-copied, so a rounding difference between this file and
+    // settle_plan.cpp cannot silently misalign the test with the code it
+    // checks.
+    const double boundary_r = rung_window_s(3) / (kAcqNSigmaT * kCAdcFaradT) - kRAdcOhmT;
+    CAPTURE(boundary_r);
+    REQUIRE(boundary_r > 100.0);  // sanity: nowhere near uint32_t/margin edge cases
+
+    const uint32_t just_under = static_cast<uint32_t>(boundary_r) - 1;
+    const uint32_t just_over  = static_cast<uint32_t>(boundary_r) + 2;
+
+    CHECK(shell::sample_time_index_for(just_under) == 3);
+    CHECK(shell::sample_time_index_for(just_over) == 4);
+}
+
+TEST_CASE("sample time ladder: index 0 is enough for the coupon's own smallest impedance") {
+    // r_src_ohm = 0 is the floor -- if even that needed more than the
+    // shortest rung, the ladder would be useless for this board.
+    CHECK(shell::sample_time_index_for(0) == 0);
+}
+
+TEST_CASE("sample time ladder: an impedance past the last rung's reach still "
+          "gets an answer, not a crash") {
+    // 9.01 tau for a huge r_src_ohm exceeds even 810.5 cycles' window --
+    // sample_time_index_for() must return the longest rung as its best
+    // available answer rather than an out-of-range index.
+    CHECK(shell::sample_time_index_for(100000000u) == shell::kSamplingLadderLen - 1);
+}
+
+TEST_CASE("sample time ladder: every pair in kSettlePlan gets a rung that "
+          "actually satisfies 9.01 tau for its own impedance") {
+    for(int p = 0; p < shell::kSettlePairs; ++p) {
+        const shell::SettlePair& sp = shell::kSettlePlan[p];
+        CAPTURE(p);
+        const int idx = shell::sample_time_index_for(sp.r_src_ohm);
+        REQUIRE(idx >= 0);
+        REQUIRE(idx < shell::kSamplingLadderLen);
+
+        const double required_s = required_acq_s(sp.r_src_ohm);
+        CHECK(rung_window_s(idx) >= required_s);
+
+        // Not merely A rung that covers it -- THE shortest one. A function
+        // that always answered the slowest rung would pass the check above
+        // and still be the wrong function; this is what makes the test able
+        // to fail on that bug.
+        if(idx > 0) CHECK(rung_window_s(idx - 1) < required_s);
+    }
 }

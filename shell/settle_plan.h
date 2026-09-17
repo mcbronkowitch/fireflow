@@ -28,6 +28,37 @@ struct SettlePair
 inline constexpr int kSettlePairs = 6;
 extern const SettlePair kSettlePlan[kSettlePairs];
 
+// --- The ADC's own sampling-time ladder (fix round 4) ---
+//
+// The STM32H7 ADC1 HAL only offers eight sampling times, in ADC cycles x10
+// (kept integer for the same %d-friendly reason as every other tenths field
+// in this codebase; order matches ADC_SAMPLETIME_* in stm32h7xx_hal_adc.h):
+// 1.5, 2.5, 8.5, 16.5, 32.5, 64.5, 387.5, 810.5.
+inline constexpr int kSamplingLadderLen = 8;
+extern const int     kSamplingLadderTenths[kSamplingLadderLen];
+
+// The shortest rung of kSamplingLadderTenths whose acquisition window covers
+// 9.01 * tau_acq for a channel whose source impedance is r_src_ohm -- ST's
+// rule for term B, settle-budget.md section 2: tau_acq = (r_src_ohm + R_ADC)
+// * C_ADC. Returns an index into kSamplingLadderTenths; the longest rung
+// (index kSamplingLadderLen - 1) is returned as the best available answer
+// for an impedance no rung covers, rather than an out-of-range index or a
+// crash.
+//
+// Deliberately does NOT touch SettlePair or kSettlePlan: the choice follows
+// from r_src_ohm, which the table already carries, so deriving it here keeps
+// the table honest and gives the host test something real to check, instead
+// of a ninth field that could silently drift from the impedance it claims to
+// answer for.
+//
+// Pure and host-testable, like every other function in this file -- no
+// hardware type, no runtime board measurement. See settle_plan.cpp for the
+// R_ADC/C_ADC citations and for why this function's own ADC-clock constant
+// is a fixed, measured-once figure rather than a live per-boot read (unlike
+// shell/settle_probe.cpp's latency arithmetic, which now uses the live
+// value every boot -- fix round 4's report explains the distinction).
+int sample_time_index_for(uint32_t r_src_ohm);
+
 // Delay grid: 0 to 6400 ns in 100 ns steps.
 inline constexpr int kGridStepNs = 100;
 inline constexpr int kGridPoints = 65;

@@ -61,7 +61,7 @@ void adc_init(bench::Board& hw)
     hw.StopAdc();                    // public on DaisyPatchSM; ADC1 is now free
 
     g_adc.Instance                      = ADC1;
-    g_adc.Init.ClockPrescaler           = ADC_CLOCK_ASYNC_DIV2;   // 12.29 MHz
+    g_adc.Init.ClockPrescaler           = ADC_CLOCK_ASYNC_DIV2;   // measured 6.146 MHz, not the 12.29 MHz this comment claimed through fix round 3 -- see SHELL_SETTLE_CLK / task-4-report.md fix round 4
     g_adc.Init.Resolution               = ADC_RESOLUTION_16B;
     g_adc.Init.ScanConvMode             = ADC_SCAN_DISABLE;
     g_adc.Init.EOCSelection             = ADC_EOC_SINGLE_CONV;
@@ -80,7 +80,8 @@ void adc_init(bench::Board& hw)
                                 ADC_SINGLE_ENDED);   // ONCE, never in the loop
 }
 
-// The working sampling time -- what kConversionNs predicts against, and what
+// The working sampling time -- what run_settle_probe()'s working-conversion
+// arithmetic predicts against (fix round 4; was kConversionNs), and what
 // every pass except the ADC-clock calibration pass (fix round 2, item 3)
 // runs under. kSampleTimeLong exists only for that one pass.
 constexpr uint32_t kSampleTimeWorking = ADC_SAMPLETIME_16CYCLES_5;
@@ -117,8 +118,9 @@ void adc_select(uint32_t channel)
 // Polling happens AFTER the aperture opens, so it costs wall clock and
 // nothing else. The span is what makes section 7a's G4 possible: it
 // brackets the start-to-aperture latency plus the conversion, and the
-// conversion time is known (kConversionNs below) -- but ONLY because this
-// function never calls HAL_ADC_Stop(). Fix round 1: the first cut of this
+// conversion time is computed in run_settle_probe() from the measured ADC
+// clock (fix round 4; kConversionNs, a fixed literal, is gone) -- but ONLY
+// because this function never calls HAL_ADC_Stop(). Fix round 1: the first cut of this
 // file called HAL_ADC_Stop() at the end of every sample, which clears ADEN;
 // the next call's HAL_ADC_Start() then took ADC_Enable()'s slow path and
 // busy-waited on ADC_FLAG_RDY *inside* [t0, t1] -- measured on the board at
@@ -207,12 +209,17 @@ uint16_t sample_now(uint32_t* span_cycles)
     return v;
 }
 
-// ADC_SAMPLETIME_16CYCLES_5 plus 8.5 cycles of 16-bit conversion is 25 ADC
-// cycles, and at 12.29 MHz that is 2034 ns. Subtracting it from a real
-// (non-timed-out) span leaves the start-to-aperture latency. DERIVED, not
-// measured -- if it is wrong the latency comes out negative, which G4
-// refuses.
-constexpr int32_t kConversionNs = 2034;
+// Fix round 4, item 1: there used to be a kConversionNs = 2034 here --
+// "16.5 sampling + 8.5 conversion = 25 ADC cycles, and at 12.29 MHz that is
+// 2034 ns." SHELL_SETTLE_CLK (below) measured the real ADC clock at
+// 6.146 MHz, exactly half of that assumption -- one prescaler step -- so
+// 2034 ns under-subtracted by 2034 ns, and that shortfall was the entire
+// "latency" fix rounds 1-3 spent three rounds chasing out of software that
+// was never the cause. A number this probe can measure must not also exist
+// as a literal: run_settle_probe() below now computes the working sampling
+// pass's conversion time (and every pair's offset) from THIS boot's
+// measured core-cycles-per-ADC-cycle ratio instead. See task-4-report.md's
+// fix-round-4 section for the derivation and the board numbers.
 
 // Runs the ADC's first conversion to completion, once, before any timed
 // sample and before any channel is treated as parked. HAL_ADC_Start() only
@@ -309,19 +316,24 @@ void run_settle_probe(bench::Board& hw)
 
     park(chain, hw, p0.group, p0.from_ch);
 
-    // ADC-clock calibration (fix round 2, item 3): kConversionNs assumes
-    // 12.29 MHz from ADC_CLOCK_ASYNC_DIV2's datasheet value, and every
-    // lat_*_ns this file has ever printed depends on that assumption being
-    // right. Measure it instead of trusting it: run two spans back to back
-    // on the SAME parked channel, identical in every way except the
+    // ADC-clock calibration (fix round 2, item 3): the deleted kConversionNs
+    // assumed 12.29 MHz from ADC_CLOCK_ASYNC_DIV2's datasheet value, and
+    // every lat_*_ns this file has ever printed depended on that assumption
+    // being right. Measure it instead of trusting it: run two spans back to
+    // back on the SAME parked channel, identical in every way except the
     // configured sampling time, so every fixed cost (register overhead, the
     // clock-domain synchronization, the 8.5-cycle conversion, any interrupt
     // that slips past the mask) cancels in the difference and only the
     // extra ADC cycles from the longer sampling time remain --
-    // 387.5 - 16.5 = 371 of them. This file does not do that division or
-    // convert either span to nanoseconds; the controller does:
-    // (span_long - span_short) / 371 = core cycles per ADC cycle, and
-    // 480 MHz divided by that is the real ADC clock.
+    // 387.5 - 16.5 = 371 of them.
+    //
+    // Fix round 4: this file now DOES do that division and the ns
+    // conversion itself (core_cyc_per_adc_cyc, working_conversion_ns,
+    // measured_adc_khz, offset_ns[] below) -- SHELL_SETTLE_CLK's raw spans
+    // are still printed unconverted every block (fix round 3) so the
+    // derivation stays independently checkable, but the probe no longer
+    // waits on the controller to do the arithmetic before it can correct
+    // its own latency numbers.
     const int32_t clk_span_short = mean_span_of_repeats(kRepeats);   // kSampleTimeWorking, already selected
 
     adc_select_time(channel_of_group(p0.group), kSampleTimeLong);
@@ -338,6 +350,72 @@ void run_settle_probe(bench::Board& hw)
     // device after flashing -- the line existed and was correct but nobody
     // could ever read it, the same failure shape as a probe that scans once
     // and reprints a frozen buffer forever. Do not move this back out.
+
+    // Fix round 4, item 1: every duration below is computed from THIS boot's
+    // measured clk_span_short/clk_span_long, never from a re-assumed
+    // literal. has_clk guards the case where the clock-calibration pass
+    // itself came back invalid (mean_span_of_repeats() returns -1 when every
+    // repeat timed out) -- everything downstream then prints -1 rather than
+    // a divide-by-zero or a number computed from a ratio that does not mean
+    // anything.
+    const bool   has_clk = clk_span_short > 0 && clk_span_long > clk_span_short;
+    const double core_cyc_per_adc_cyc =
+        has_clk ? static_cast<double>(clk_span_long - clk_span_short) / 371.0 : 0.0;
+
+    // The working sampling pass's own conversion time -- 16.5 sampling +
+    // 8.5 conversion = 25 ADC cycles -- replacing the deleted kConversionNs.
+    constexpr double kWorkingTotalAdcCycles = 25.0;
+    const double      working_conversion_core_cyc =
+        kWorkingTotalAdcCycles * core_cyc_per_adc_cyc;
+    const int32_t working_conversion_ns =
+        has_clk ? static_cast<int32_t>(cycles_to_ns(static_cast<uint32_t>(
+                      working_conversion_core_cyc + 0.5)))
+                : -1;
+
+    // adc_khz for SHELL_SETTLE_CFG below (fix round 4, item 4): the measured
+    // value, replacing the wrong 12.29 MHz assumption.
+    const int32_t measured_adc_khz =
+        has_clk ? static_cast<int32_t>(480000.0 / core_cyc_per_adc_cyc + 0.5) : -1;
+
+    // The true start-to-aperture overhead, isolated from the sampling
+    // window itself: span_short already includes it plus the working
+    // pass's own 25-cycle conversion, so subtracting that conversion's core
+    // cycles back out leaves just the overhead. Reused below for every
+    // pair's offset, not only P0's -- see the per-pair loop.
+    const double pre_adstart_overhead_core_cyc =
+        has_clk ? (static_cast<double>(clk_span_short) - working_conversion_core_cyc) : 0.0;
+
+    // Fix round 4, item 3: per pair, offset = pre_adstart_overhead + that
+    // pair's OWN sampling window -- NOT its conversion cycles. The S&H cap
+    // is acquired, and therefore already correct, at the END of the
+    // sampling window; the conversion cycles that follow only digitize what
+    // is already captured, so they do not delay the instant that needs the
+    // node to have settled. The rung comes from sample_time_index_for()
+    // (settle_plan.h/.cpp), the same pure, host-tested function Task 5 will
+    // use to actually configure each pair's ADC channel -- this file only
+    // reports what that choice implies, it does not yet reconfigure
+    // anything per pair.
+    //
+    // Task 5's knee_ns[] (the commanded delay a pair's own settle sweep
+    // reports) does not exist yet -- this task never runs a per-pair grid
+    // sweep, only P0's own repeated latency at a fixed park. So there is no
+    // "true settle" (d + offset) to report yet, and no knee to compare
+    // against offset_ns for the spec's "at or below the offset" rule.
+    // offset_ns is printed on its own, beside SHELL_SETTLE_CAL, so Task 5
+    // has it ready the moment knee_ns exists.
+    int32_t rung_idx[kSettlePairs];
+    int32_t offset_ns[kSettlePairs];
+    for(int p = 0; p < kSettlePairs; ++p)
+    {
+        rung_idx[p] = sample_time_index_for(kSettlePlan[p].r_src_ohm);
+        const double sampling_window_core_cyc =
+            (static_cast<double>(kSamplingLadderTenths[rung_idx[p]]) / 10.0)
+            * core_cyc_per_adc_cyc;
+        offset_ns[p] = has_clk
+            ? static_cast<int32_t>(cycles_to_ns(static_cast<uint32_t>(
+                  pre_adstart_overhead_core_cyc + sampling_window_core_cyc + 0.5)))
+            : -1;
+    }
 
     // Calibration (scope change from the brief's step 7): park permanently on
     // BOTH ends of P0's step and take kRepeats conversions at each, instead
@@ -369,14 +447,16 @@ void run_settle_probe(bench::Board& hw)
         // so it stays an integer for %d -- PrintLine() is the lightweight
         // printf and the existing probes stay on %d for that reason.
         //
-        // adc_khz=12290 is ASSUMED, not measured -- it is ADC_CLOCK_ASYNC_DIV2's
-        // datasheet value, the same assumption kConversionNs is built on, and
-        // it is exactly what SHELL_SETTLE_CLK below (span_short_cyc/
-        // span_long_cyc) exists to check. It sits beside real measurements in
-        // this same block; do not read it as one.
-        hw.PrintLine("SHELL_SETTLE_CFG sample_cycles=165 adc_khz=12290 "
+        // adc_khz now prints the MEASURED value (fix round 4, item 4) --
+        // computed once at startup from SHELL_SETTLE_CLK's own two spans,
+        // the same measurement that overturned the previously assumed
+        // 12.29 MHz (this line printed a bare "12290" literal through fix
+        // round 3; the real clock is 6.146 MHz, exactly half). -1 means
+        // has_clk was false -- the clock-calibration pass itself came back
+        // invalid and nothing downstream of it should be trusted either.
+        hw.PrintLine("SHELL_SETTLE_CFG sample_cycles=165 adc_khz=%d "
                      "repeats=%d grid_step_ns=%d grid_points=%d park_ns=%d",
-                     kRepeats, kGridStepNs, kGridPoints,
+                     measured_adc_khz, kRepeats, kGridStepNs, kGridPoints,
                      static_cast<int>(kParkNs));
 
         // Printed every pass, beside SHELL_SETTLE_CAL, even though
@@ -391,6 +471,22 @@ void run_settle_probe(bench::Board& hw)
         hw.PrintLine("SHELL_SETTLE_CLK span_short_cyc=%d span_long_cyc=%d "
                      "smp_short_tenths=%d smp_long_tenths=%d",
                      clk_span_short, clk_span_long, 165, 3875);
+
+        // Fix round 4, item 3: printed every pass, beside SHELL_SETTLE_CAL,
+        // for the same observability reason SHELL_SETTLE_CLK moved into the
+        // loop in fix round 3 -- offset_ns[]/rung_idx[] were computed once,
+        // above, since none of it changes boot to boot. There is no knee_ns
+        // to print beside it yet (see the comment above the computation
+        // loop): this line establishes the offset half of "true settle =
+        // d + offset" for Task 5 to complete once it adds the per-pair grid
+        // sweep. A pair whose real settle is at or below its own offset
+        // must be reported as such, not as a number -- Task 5's job when
+        // knee_ns exists, not this loop's.
+        for(int p = 0; p < kSettlePairs; ++p)
+        {
+            hw.PrintLine("SHELL_SETTLE_OFFSET pair=%d offset_ns=%d smp_tenths=%d",
+                         p, offset_ns[p], kSamplingLadderTenths[rung_idx[p]]);
+        }
 
         // The instrument measuring itself. Parked and fully settled, so the
         // only thing that varies between these conversions is the
@@ -407,24 +503,33 @@ void run_settle_probe(bench::Board& hw)
         int64_t lat_sum = 0;
         int32_t val_min = 0x7FFFFFFF, val_max = -0x7FFFFFFF;
         int     valid_n = 0;
-        for(int i = 0; i < kRepeats; ++i)
+        // has_clk guards the whole pass: kConversionNs is gone (fix round 4,
+        // item 1), so a bad clock measurement now means there is nothing
+        // correct to subtract at all, not a wrong-but-present number. The
+        // valid_n == 0 path below already prints -1 for exactly this shape
+        // of "nothing usable this block".
+        if(has_clk)
         {
-            uint32_t span = 0;
-            const int32_t v = sample_now(&span);
-            if(span == kTimeoutSentinel) continue;
-            const int32_t l = static_cast<int32_t>(cycles_to_ns(span)) - kConversionNs;
-            if(l < lat_min) lat_min = l;
-            if(l > lat_max) lat_max = l;
-            lat_sum += l;
-            if(v < val_min) val_min = v;
-            if(v > val_max) val_max = v;
-            ++valid_n;
+            for(int i = 0; i < kRepeats; ++i)
+            {
+                uint32_t span = 0;
+                const int32_t v = sample_now(&span);
+                if(span == kTimeoutSentinel) continue;
+                const int32_t l =
+                    static_cast<int32_t>(cycles_to_ns(span)) - working_conversion_ns;
+                if(l < lat_min) lat_min = l;
+                if(l > lat_max) lat_max = l;
+                lat_sum += l;
+                if(v < val_min) val_min = v;
+                if(v > val_max) val_max = v;
+                ++valid_n;
+            }
         }
         // -1 rather than a divide-by-zero, a silently zeroed mean, or the
         // 0x7FFFFFFF/-0x7FFFFFFF init values leaking into print, if every
-        // repeat in this block timed out. gates_ok is already an
-        // unconditional 0, but none of these fields may look like a number
-        // when they are not one.
+        // repeat in this block timed out (or has_clk was false). gates_ok is
+        // already an unconditional 0, but none of these fields may look
+        // like a number when they are not one.
         const bool    all_timed_out = valid_n == 0;
         const int32_t lat_mean = all_timed_out ? -1 : static_cast<int32_t>(lat_sum / valid_n);
         if(all_timed_out) { lat_min = -1; lat_max = -1; }

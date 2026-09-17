@@ -61,12 +61,95 @@ Gates settle_gates(const RunSummary& s)
     g.g3_band = s.widest_band >= 0 && s.widest_band <= allowed;
 
     // G4: aperture jitter inside one grid step, and a latency the conversion
-    // model does not forbid. A negative mean means the 2034 ns subtraction is
-    // wrong, which invalidates every delay in the run.
+    // model does not forbid. A negative mean means settle_probe.cpp's
+    // measured conversion-time subtraction (fix round 4: computed from the
+    // live-measured ADC clock, not a fixed literal) came out larger than the
+    // real span, which invalidates every delay in the run.
     g.g4_jitter = s.lat_mean_ns >= 0 && s.lat_max_ns >= s.lat_min_ns
                   && (s.lat_max_ns - s.lat_min_ns) <= kJitterMaxNs;
 
     return g;
+}
+
+// --- Fix round 4: the sampling-time choice, per pair ---
+//
+// SHELL_SETTLE_CLK (shell/settle_probe.cpp, fix rounds 2-3) measured the
+// ADC1 clock directly on the coupon board: span_short_cyc=2311,
+// span_long_cyc=31286, smp_short_tenths=165, smp_long_tenths=3875 -- i.e.
+// (31286-2311)/371 = 78.0997 core cycles per ADC cycle at the 480 MHz core
+// clock, which is 6.146 MHz, not the 12.29 MHz ADC_CLOCK_ASYNC_DIV2's own
+// comment (and this whole spec) assumed. Exactly half -- one prescaler step.
+//
+// This constant is the measured span pair itself, not a hand-rounded "6.146
+// MHz", so the derivation stays reproducible from the board reading in
+// task-4-report.md's fix-round-4 section rather than from a transcription of
+// it.
+constexpr double kClkSpanShortCyc = 2311.0;
+constexpr double kClkSpanLongCyc  = 31286.0;
+constexpr double kClkDeltaAdcCyc  = 371.0;   // 387.5 - 16.5 sampling cycles
+constexpr double kCoreClockHz     = 480e6;
+
+constexpr double kMeasuredAdcHz =
+    kCoreClockHz * kClkDeltaAdcCyc / (kClkSpanLongCyc - kClkSpanShortCyc);
+
+// This is a fixed hardware/firmware clock-configuration constant, not a
+// per-boot variable: ADC_CLOCK_ASYNC_DIV2 and the PLL3 config that feeds it
+// are compiled into the firmware, so the same build produces the same ratio
+// every boot (modulo the sub-percent measurement noise fix round 2's
+// SHELL_SETTLE_CAL already showed on the timed path). That determinism is
+// exactly why it is safe to bake in here, in a function this file's own
+// tests run on the host with no board at all -- unlike
+// shell/settle_probe.cpp's per-boot latency arithmetic (fix round 4), which
+// recomputes this same ratio fresh every boot instead of trusting a baked-in
+// figure, because THAT number is something the probe measures itself and
+// must never also exist as a literal. The two are different questions: one
+// is "what did THIS boot's ADC do" (measure, always), the other is "which
+// fixed sampling rung does a fixed hardware constant require" (a design-time
+// decision that has to be answered identically on a host with no board, so
+// it needs a constant to answer with -- the most defensible one available is
+// the freshly measured clock, not the wrong 12.29 MHz assumption it
+// replaces).
+//
+// R_ADC and C_ADC are NOT re-derived here: they are the exact figures
+// already cited in docs/hardware/settle-budget.md section 1 (reused by
+// tools/settle_budget.py's `terms()`), which this project's own tau9_ns
+// column (above) was already computed alongside. Repeating the citation
+// rather than inventing a new one:
+//   C_ADC = 4 pF   -- "ST, STM32H7 sample-and-hold" -- class: datasheet
+//   R_ADC = 2000 ohm -- "ST community figure for slow channels" -- class:
+//           estimate, explicitly NOT datasheet-verbatim (settle-budget.md
+//           section 1 also notes it "enters term B only... never the
+//           binding term", i.e. getting it wrong does not change much)
+constexpr double kRAdcOhm   = 2000.0;
+constexpr double kCAdcFarad = 4e-12;
+
+// 9.01 = ln(2^13), half an LSB of 12 bit -- the same criterion
+// tools/settle_budget.py's `_time_constants(12)` computes and this whole
+// spec already rounds to "9.01" everywhere else (tau9_ns above, the test
+// file's kLn8192).
+constexpr double kAcqNSigma = 9.01;
+
+const int kSamplingLadderTenths[kSamplingLadderLen] = {
+    15, 25, 85, 165, 325, 645, 3875, 8105,
+};
+
+int sample_time_index_for(uint32_t r_src_ohm)
+{
+    const double tau_acq_s  = (static_cast<double>(r_src_ohm) + kRAdcOhm) * kCAdcFarad;
+    const double required_s = kAcqNSigma * tau_acq_s;
+
+    for(int i = 0; i < kSamplingLadderLen; ++i)
+    {
+        const double window_s =
+            (static_cast<double>(kSamplingLadderTenths[i]) / 10.0) / kMeasuredAdcHz;
+        if(window_s >= required_s) return i;
+    }
+    // No rung covers it -- the longest one is the best available answer,
+    // not a crash or an out-of-range index. A caller comparing a real knee
+    // against this pair's offset will see that offset be large and the
+    // acquisition genuinely underprovisioned, which is a finding, not a bug
+    // in this function.
+    return kSamplingLadderLen - 1;
 }
 
 } // namespace shell
