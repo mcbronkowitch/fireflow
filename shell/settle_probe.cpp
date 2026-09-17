@@ -507,6 +507,16 @@ void run_settle_probe(bench::Board& hw)
     // that follows, forever.
     park(chain, hw, p0.group, p0.from_ch);
 
+    // Fix round 5: alternates the per-pair sweep's own visit order every
+    // block, so two consecutive blocks can answer whether a slow tail is
+    // settling or wall-clock drift (round 2's pre/post pair proved drift
+    // EXISTS -- pair 2 moved 29 counts between reads seconds apart -- but
+    // not how much of any one curve's shape it accounts for). Declared
+    // outside while(1) because the alternation has to survive across
+    // iterations, not reset every block; see SHELL_SETTLE_CFG's sweep_dir
+    // field and the per-pair sweep below for where it is read and flipped.
+    bool sweep_ascending = true;
+
     while(1)
     {
         // The sweep below (Task 5) reconfigures the ADC's channel and
@@ -522,6 +532,14 @@ void run_settle_probe(bench::Board& hw)
         // every iteration after.
         adc_select(channel_of_group(p0.group));
         park(chain, hw, p0.group, p0.from_ch);
+
+        // Fix round 5: this block's own sweep direction, captured into a
+        // const so the CFG line below, the per-pair sweep further down, and
+        // anyone reasoning about this block later all agree on one value --
+        // flipped immediately after capture so alternation applies to the
+        // NEXT block, not this one.
+        const bool ascending_this_block = sweep_ascending;
+        sweep_ascending                 = !sweep_ascending;
 
         // The configuration line comes FIRST and the end marker always
         // arrives, even on a pass that measured nothing. A reader that can
@@ -539,10 +557,18 @@ void run_settle_probe(bench::Board& hw)
         // round 3; the real clock is 6.146 MHz, exactly half). -1 means
         // has_clk was false -- the clock-calibration pass itself came back
         // invalid and nothing downstream of it should be trusted either.
+        //
+        // sweep_dir (fix round 5): 0 = ascending (d small -> large, the only
+        // order this probe has ever swept in), 1 = descending (d large ->
+        // small). Two consecutive blocks, one of each, are what let a
+        // reader tell settling from wall-clock drift apart -- see the
+        // per-pair sweep below for how the reversed order is made exactly
+        // as fresh a measurement as the forward one.
         hw.PrintLine("SHELL_SETTLE_CFG sample_cycles=165 adc_khz=%d "
-                     "repeats=%d grid_step_ns=%d grid_points=%d park_ns=%d",
+                     "repeats=%d grid_step_ns=%d grid_points=%d park_ns=%d "
+                     "sweep_dir=%d",
                      measured_adc_khz, kRepeats, kGridStepNs, kGridPoints,
-                     static_cast<int>(kParkNs));
+                     static_cast<int>(kParkNs), ascending_this_block ? 0 : 1);
 
         // Printed every pass, beside SHELL_SETTLE_CAL, even though
         // clk_span_short/clk_span_long were measured once at startup and
@@ -687,10 +713,27 @@ void run_settle_probe(bench::Board& hw)
 
             // This pair only, overwritten by the next one -- see the
             // "streamed, not buffered" comment above.
+            //
+            // Fix round 5: visited ascending or descending depending on
+            // ascending_this_block, but always stored (and printed) at its
+            // TRUE grid index `i` -- d_settle_index(), the tail-window mean
+            // and the settled-region band all depend on index order
+            // matching commanded-delay order, not visit order, and none of
+            // that changes with this round.
+            //
+            // No extra guarantee is needed to make the reversed pass "as
+            // fresh" as the forward one: measure_point() itself re-parks on
+            // from_ch and re-transitions to to_ch from scratch on EVERY
+            // SINGLE REPEAT (see its own doc comment), independent of
+            // whatever point was measured immediately before it. Calling it
+            // with d_ns=12800 first and d_ns=200 last leaves no more shared
+            // state between those two calls than the forward order does --
+            // there is nothing here that could leak.
             Point pts[kGridPoints];
-            for(int i = 0; i < kGridPoints; ++i)
+            for(int k = 0; k < kGridPoints; ++k)
             {
-                pts[i] = measure_point(chain, sp, grid_ns(i));
+                const int i = ascending_this_block ? k : (kGridPoints - 1 - k);
+                pts[i]      = measure_point(chain, sp, grid_ns(i));
                 hw.PrintLine("SHELL_SETTLE pair=%d sense=%d from=%d to=%d d_ns=%d "
                              "n=%d mean=%d min=%d max=%d",
                              p, sp.group, sp.from_ch, sp.to_ch,
