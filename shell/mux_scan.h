@@ -22,6 +22,7 @@
 // two objects gives g_mux_values two sizes in one link.
 #include "shell_coupon_probe.h"
 #include "mux_plan.h"
+#include "cycles.h"
 
 namespace shell {
 
@@ -49,6 +50,15 @@ class MuxScan
     // instead of stepping the scan: it has to hold one address still while
     // the ADC is read, which step() deliberately never does.
     void write_chain(uint32_t word);
+
+    // Like write_chain(), but returns the DWT cycle count taken immediately
+    // after the 595s' RCLK rising edge.
+    //
+    // t = 0 IS THAT EDGE, not the start of the bit-bang. write_chain() clocks
+    // 16 bits before the address reaches the mux at all, so timing from the
+    // call would fold the bit-bang into every settle time and make the fast
+    // channels look slow by a constant nobody measured.
+    uint32_t write_chain_timed(uint32_t word);
 
     // Clocks `word` out and the 165's parallel load back in, in the same
     // pass -- the two chains share clock and latch, so a separate read pass

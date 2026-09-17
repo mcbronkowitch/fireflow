@@ -60,6 +60,22 @@ void MuxScan::write_chain(uint32_t word)
     latch_.Write(false);
 }
 
+uint32_t MuxScan::write_chain_timed(uint32_t word)
+{
+    // Same shift loop as write_chain(), copied rather than reconstructed --
+    // its bit order and its latch rest state are load-bearing.
+    for(int i = kActiveChain.chain_bits - 1; i >= 0; --i)
+    {
+        data_.Write(((word >> i) & 1u) != 0u);
+        clock_.Write(true);
+        clock_.Write(false);
+    }
+    latch_.Write(true);
+    const uint32_t t0 = cycles_now();   // the edge the address becomes visible on
+    latch_.Write(false);
+    return t0;
+}
+
 uint32_t MuxScan::read_chain(uint32_t word)
 {
     // Latch LOW first: that is the 165's ~PL, and the parallel load happens
