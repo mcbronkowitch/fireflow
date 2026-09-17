@@ -20,6 +20,16 @@
 
 namespace shell {
 
+// Which board this image is built for. The switch header is generated at
+// Makefile PARSE time; see write_shell_coupon_probe.py for why a bare -D
+// is not enough. Task 3 of this plan adds that switch -- until then this
+// resolves to the panel.
+#if defined(SHELL_COUPON_PROBE) && SHELL_COUPON_PROBE
+inline constexpr ChainProfile kActiveChain = kCouponChain;
+#else
+inline constexpr ChainProfile kActiveChain = kPanelChain;
+#endif
+
 class MuxScan
 {
   public:
@@ -45,6 +55,6 @@ class MuxScan
 // the values still performs the reads -- the probe images deliberately do NOT
 // push these into the engine, because the operating point has to stay the one
 // the baseline image runs or the audio comparison compares two instruments.
-extern volatile float g_mux_values[kMuxTotal];
+extern volatile float g_mux_values[mux_total(kActiveChain)];
 
 } // namespace shell

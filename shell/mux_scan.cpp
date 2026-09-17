@@ -2,7 +2,7 @@
 
 namespace shell {
 
-volatile float g_mux_values[kMuxTotal] = {};
+volatile float g_mux_values[mux_total(kActiveChain)] = {};
 
 namespace {
 
@@ -50,7 +50,7 @@ void MuxScan::write_chain(uint32_t word)
     // some nanoseconds apart, which a 74HC595 at 3V3 may or may not accept.
     // If a real chain needs a delay, THE COST MEASURED HERE IS OPTIMISTIC --
     // that belongs in the write-up, not in a comment nobody reads.
-    for(int i = kChainBits - 1; i >= 0; --i)
+    for(int i = kActiveChain.chain_bits - 1; i >= 0; --i)
     {
         data_.Write(((word >> i) & 1u) != 0u);
         clock_.Write(true);
@@ -64,9 +64,9 @@ void MuxScan::step(bench::Board& hw)
 {
     if(live_step_ >= 0)
     {
-        for(int s = 0; s < kSensePins; ++s)
+        for(int s = 0; s < kActiveChain.sense_pins; ++s)
         {
-            const int ch = mux_channel(live_step_, s);
+            const int ch = mux_channel(kActiveChain, live_step_, s);
             if(ch >= 0)
                 g_mux_values[ch] = hw.GetAdcValue(kSenseAdcBase + s);
         }
@@ -75,13 +75,13 @@ void MuxScan::step(bench::Board& hw)
     // The LED field changes every step, as it does in production. A constant
     // word would let the compiler hoist the loop's work out of the hot path
     // and price a scan nobody will ship.
-    leds_ = (leds_ + 1u) & 0x7FFFFu;
+    leds_ = (leds_ + 1u) & ((1u << kActiveChain.led_bits) - 1u);
 
-    const StepPattern p = step_pattern(next_step_);
-    write_chain(chain_word(p, leds_));
+    const StepPattern p = step_pattern(kActiveChain, next_step_);
+    write_chain(chain_word(kActiveChain, p, leds_));
 
     live_step_ = next_step_;
-    next_step_ = (next_step_ + 1) % kScanSteps;
+    next_step_ = (next_step_ + 1) % scan_steps(kActiveChain);
     ++steps_;
 }
 
