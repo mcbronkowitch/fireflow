@@ -113,6 +113,48 @@ every file EXCEPT `review.md` (`coupon-board-front.png`,
 `review.py`'s own real content, not timestamp noise, and committing it is
 the point of that step.
 
+## The two solder jumpers switch one way only
+
+Envelope spec §5 point 8 asks for the supply and ground topology "as a
+switchable 0R link, not as a second board variant: the same copy with and
+without is the better measurement." **On this board the "without" half of
+that does not exist.** `AGND` and `A+3V3` reach the rest of the world
+through `JP_GND` and `JP_3V3` and through nothing else — the Eurorack header
+grounds pins 3..6 to `GND` (`scripts/netlist.py:139`) and the submodule's A10
+feeds `+3V3` (`:97`). Open both jumpers and the analog island is unpowered
+and unreferenced; both muxes lose VCC. Point 8 is not met as built, and no
+ordering of the measurements recovers it. A second board does not either:
+its open state is the same off state.
+
+**What the open state is still good for, and only before the jumpers are
+soldered:** meter `TP_AGND` against `TP_GND`, and `TP_A3V3` against
+`TP_3V3`. Both must read open. Continuity there means copper crosses the
+1.0 mm moat somewhere it should not — a defect in exactly the separation
+point 8 is about, and one that is invisible for good once the jumpers are
+bridged. The digital half needs neither jumper, so the 595 chain, the eight
+LEDs, the button through the 165 and point 7's callback measurement all run
+first, with the analog island still dark.
+
+**What does not work is a second join by wire.** The only two places where
+both planes are probeable are `TP_AGND` at (10.00, 66.00) and `TP_GND` at
+(94.00, 3.00) — 105.0 mm apart, the board's full diagonal. A wire that long
+is a component and not a connection, the same trap the `COM` rule below
+names.
+
+**A substitute for the lost A/B, neither reviewed nor measured:** change the
+link's impedance instead of removing it. A ferrite bead or a small resistor
+across `JP_GND`'s pads answers "how good does the single join have to be" at
+the designed star point. It costs one rework cycle on a pad, and whether an
+0603 lands cleanly on `SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm`'s 1.3 mm
+pitch is unchecked.
+
+**A second board for point 2's "capacitor at `COM`" case need not be fully
+stuffed.** It needs the submodule and its sockets, `J_PWR`, the bulk caps,
+both jumpers, `U_SR1`/`U_SR2`, one mux, `R_REFA1`/`R_REFA2`, the decoupling
+caps and the capacitor under test. No pots, no button, no 165, no LEDs —
+LEDs only if the round is chasing noise rather than time, which is the load
+they are there for (`scripts/design.py:115`).
+
 ## Layer and zone map
 
 4 copper layers, y growing downward from the board's top-left corner:
