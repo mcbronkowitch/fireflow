@@ -368,3 +368,57 @@ invisible from reading the scripts, and each cost real time.
   diff on every run while being content-identical. Expect ~32 modified files
   after any build of the coupon and discard them with `git checkout --`; do
   not sweep `proof/review.md` into that, which is real content.
+
+## Daisy Patch Submodule (the board itself, not the generators)
+
+- **The ADC reads about 3.1 % low, and it is gain, not offset.** Measured
+  2026-09-17 during the test coupon's bring-up, on ADC_9 and ADC_10 (module
+  pins A2/A3) through `hw.adc.Get()` with libDaisy's default configuration.
+  Channels tied to the analog rail through 0 ohms came back as 63485 of
+  65535 — 96.87 % of what the converter treats as full scale — on both
+  multiplexers and both sense pins, repeatable to within 2 counts.
+
+  The board is not the cause. A multimeter puts that rail at exactly 3.30 V
+  against AGND, and at 0 V against the submodule's own +3V3 output, so the
+  coupon's rail *is* pin A10 with nothing dropped in between.
+
+  It is a gain error rather than a zero offset, and the coupon's own dividers
+  prove which: three 50/50 dividers off the same rail read 31716, 31737 and
+  31758. A gain error predicts `65535 * 1.65 / 3.4066 = 31742`. A 2050-count
+  offset predicts about 30717, a thousand counts away from anything measured.
+  So the converter behaves as though its reference were ~3.407 V. Whether the
+  reference really sits high or the converter's gain is low cannot be
+  separated on a board where every node is ratiometric to the same rail — it
+  would take an independent voltage source, which the coupon does not have.
+
+  **The consequence is in the shipping firmware, not on the coupon.** A panel
+  pot at its mechanical stop lands on 0.969, never on 1.0. Anything that waits
+  for a normalized control to *reach* full scale — a mode that latches at the
+  top of a range, a filter that is only "fully open" at 1.0, any `>= 1.0f`
+  comparison fed from a pot — will never fire from the panel. Design ranges so
+  the last few percent are not load-bearing, or normalize against a measured
+  endpoint.
+
+  Do not silently scale raw conversions to "fix" this. One submodule was
+  measured; the number is not known to be a family constant, and a correction
+  factor baked in from a single board is a worse trap than the error.
+
+  The pattern that worked instead is in `shell/coupon_expect.h`: the board
+  carries 0-ohm ties to both rails, the scan measures them every round, and
+  every other channel is judged against that measured span rather than against
+  65535. Judged against full scale the coupon reported four failures and looked
+  broken; judged against its own span it is 24 of 24. Full scale grades the
+  reference, the span grades the board. Note that self-calibration needs
+  guards or it hides the faults it is meant to find — see the `Span` validity
+  conditions and the red-proof in `tests/test_coupon_expect.cpp`.
+
+- **A bring-up probe that scans once and then reprints its buffer is
+  indistinguishable from a working one.** Same shape as the stale-object trap,
+  one layer up: the values are per-channel correct, the report is well formed,
+  and it describes only the instant the board booted. Two coupon readings taken
+  with the pots at opposite mechanical stops came back bit-identical, and the
+  board was suspected before the firmware was. What gave it away was the
+  absence of noise — 13 consecutive blocks without a single LSB of movement on
+  any of 24 channels, which a live 16-bit converter does not do. Rescan inside
+  the loop, and treat a perfectly still reading as a symptom rather than a
+  clean one.
