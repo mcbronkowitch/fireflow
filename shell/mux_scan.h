@@ -16,15 +16,18 @@
 // That is arithmetic, not a measurement, and it is the rate the CPU numbers
 // belong to.
 #include "hw/board.h"
+// Which board this image is for. Included HERE and not left to main.cpp:
+// mux_scan.cpp sees only this header, and a profile that differs between
+// two objects gives g_mux_values two sizes in one link.
+#include "shell_coupon_probe.h"
 #include "mux_plan.h"
 
 namespace shell {
 
 // Which board this image is built for. The switch header is generated at
 // Makefile PARSE time; see write_shell_coupon_probe.py for why a bare -D
-// is not enough. Task 3 of this plan adds that switch -- until then this
-// resolves to the panel.
-#if defined(SHELL_COUPON_PROBE) && SHELL_COUPON_PROBE
+// is not enough.
+#if SHELL_COUPON_PROBE
 inline constexpr ChainProfile kActiveChain = kCouponChain;
 #else
 inline constexpr ChainProfile kActiveChain = kPanelChain;
@@ -41,9 +44,12 @@ class MuxScan
 
     uint32_t steps() const { return steps_; }
 
-  private:
+    // Public because the coupon bring-up probe drives the chain directly
+    // instead of stepping the scan: it has to hold one address still while
+    // the ADC is read, which step() deliberately never does.
     void write_chain(uint32_t word);
 
+  private:
     daisy::GPIO data_, clock_, latch_, sense_in_;
     uint32_t    leds_      = 0;
     int         next_step_ = 0;

@@ -11,6 +11,7 @@
 #include "shell_cpu_probe.h"
 #include "shell_mux_probe.h"
 #include "shell_idle_fill.h"
+#include "shell_coupon_probe.h"
 #include "hw/board.h"
 #include "sdram_mem.h"
 #include "instrument.h"
@@ -30,10 +31,16 @@ volatile uint32_t g_block_tick = 0;
 }
 #endif
 
+#if SHELL_COUPON_PROBE
+#include "coupon_scan.h"
+#endif
+
 #if defined(SHELL_CPU_PROBE)
 #include <cstdint>
 #include "util/CpuLoadMeter.h"
+#endif
 
+#if defined(SHELL_CPU_PROBE) || SHELL_COUPON_PROBE
 // libDaisy deklariert diese beiden in src/usbd/usbd_desc.c als
 // `extern const char*` und definiert sie nie -- die Anwendung besitzt ihre
 // eigene USB-Identitaet. Ohne sie scheitert der USB-Zweig beim LINKEN, nicht
@@ -44,7 +51,9 @@ extern "C" {
 const char* USBD_MANUFACTURER_STRING = "FireFlow";
 const char* USBD_PRODUCT_STRING_HS   = "FireFlow Shell";
 }
+#endif
 
+#if defined(SHELL_CPU_PROBE)
 namespace {
 
 // Wie lange gemessen wird. In BLOECKEN, nicht in Millisekunden, und das ist
@@ -167,6 +176,14 @@ int main(void)
     // BbdLine::Init durch, und die nullen ihre Puffer -- also echte Schreiber
     // in SDRAM, das vor board_init() noch keinen FMC hinter sich hat.
     inst.init(shell::kSampleRate, shell::fx_mem());
+
+#if SHELL_COUPON_PROBE
+    // The board under test is the coupon, not an instrument. No engine, no
+    // audio, no operating point: this image exists to say whether the thing
+    // is wired the way the netlist claims.
+    shell::run_coupon_bringup(hw);   // never returns
+#endif
+
     inst.set_tempo_bpm(96.0f);
 
     // Fester Betriebspunkt, damit ohne Bedienelemente ueberhaupt etwas
