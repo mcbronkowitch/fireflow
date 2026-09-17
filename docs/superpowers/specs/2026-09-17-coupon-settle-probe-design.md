@@ -248,9 +248,25 @@ probe is that nobody has measured any of it yet.
 
 ## 11. Out of scope
 
-- Requirement 8 (split versus joined supply planes) needs a second board with
-  `JP_GND`/`JP_3V3` left open. `hardware/coupon/README.md` forbids reworking
-  the first board, and only one is stuffed.
+- Requirement 8 (split versus joined supply planes) **cannot be met on this
+  board at all**, and a second copy does not recover it. `AGND` and `A+3V3`
+  reach the rest of the world through `JP_GND` and `JP_3V3` and through
+  nothing else: the Eurorack header grounds pins 3..6 to `GND`
+  (`netlist.py:139`) and the submodule's A10 feeds `+3V3` (`:97`). Open both
+  jumpers and the analog island is unpowered and unreferenced — both muxes
+  lose VCC. The "without" half of the A/B is not a second topology, it is an
+  off state. An earlier draft of this section said a second board with the
+  jumpers open would do it; that was wrong.
+
+  What the open state is still worth, and only before the jumpers are ever
+  bridged: meter `TP_AGND` against `TP_GND` and `TP_A3V3` against `TP_3V3`.
+  Both must read open. Continuity there means copper crosses the 1.0 mm moat
+  somewhere it should not, which is a defect in exactly the separation
+  requirement 8 is about — and it is invisible for good once the jumpers are
+  soldered. Joining the two planes a second time by wire is not an option
+  either: the only two places both are probeable are `TP_AGND` at (10.00,
+  66.00) and `TP_GND` at (94.00, 3.00), 105.0 mm apart — the board's full
+  diagonal, and a wire that long is a component, not a connection.
 - Requirement 2's "with a capacitor at `COM`" case needs `C_COM16`/`C_COM8`
   fitted, i.e. also a second copy.
 - Crosstalk with a pot as the measured channel (the literal §6 wording, with
