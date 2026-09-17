@@ -117,10 +117,27 @@ ifneq ($(filter $(SHELL_IDLE_FILL),0 1 2),$(SHELL_IDLE_FILL))
 $(error SHELL_IDLE_FILL must be 0, 1 or 2)
 endif
 
+# --- Coupon-Sonde --------------------------------------------------------
+# 0 aus, 1 der Bring-up-Scan fuer den Testcoupon (hardware/coupon/): laeuft
+# im Vordergrund, haelt jeden Kanal 5 ms, liest den frei laufenden ADC und
+# meldet pro Kanal ein Urteil ueber USB-CDC. KEIN Zeitmass -- die 1,6-us-
+# Frage ist die Settle-Sonde, nicht diese.
+#
+# Stellung 1 baut ausserdem das Kettenprofil des Coupons statt des Panels;
+# die beiden Platinen haben nicht eine Zahl gemeinsam. Plan:
+# ../docs/superpowers/plans/2026-09-17-coupon-bring-up.md
+SHELL_COUPON_PROBE ?= 0
+
+ifneq ($(filter $(SHELL_COUPON_PROBE),0 1),$(SHELL_COUPON_PROBE))
+$(error SHELL_COUPON_PROBE must be 0 or 1)
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	sdram_mem.cpp \
 	mux_plan.cpp \
+	coupon_expect.cpp \
+	coupon_scan.cpp \
 	mux_scan.cpp \
 	../engine/body/mode_bank.cpp \
 	../engine/body/ks_string.cpp \
@@ -171,7 +188,7 @@ include $(SYSTEM_FILES_DIR)/Makefile
 # Fehler zurueck, und er sieht wie eine Messung aus.
 C_INCLUDES += -I$(BUILD_DIR)
 
-SWITCH_OBJECTS = $(BUILD_DIR)/main.o
+SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o
 
 # ZUR PARSE-ZEIT, nicht als Regel, und das ist der Kern der Reparatur vom
 # 2026-08-23. Als Regel mit FORCE hat es ZWEIMAL nicht gehalten:
@@ -192,9 +209,11 @@ SWITCH_HEADERS := \
   $(shell python write_shell_selftest.py $(BUILD_DIR)/shell_selftest.h $(SHELL_SELFTEST) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_cpu_probe.py $(BUILD_DIR)/shell_cpu_probe.h $(SHELL_CPU_PROBE) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_mux_probe.py $(BUILD_DIR)/shell_mux_probe.h $(SHELL_MUX_PROBE) $(SWITCH_OBJECTS)) \
-  $(shell python write_shell_idle_fill.py $(BUILD_DIR)/shell_idle_fill.h $(SHELL_IDLE_FILL) $(SWITCH_OBJECTS))
+  $(shell python write_shell_idle_fill.py $(BUILD_DIR)/shell_idle_fill.h $(SHELL_IDLE_FILL) $(SWITCH_OBJECTS)) \
+  $(shell python write_shell_coupon_probe.py $(BUILD_DIR)/shell_coupon_probe.h $(SHELL_COUPON_PROBE) $(SWITCH_OBJECTS))
 
-$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.h $(BUILD_DIR)/shell_mux_probe.h $(BUILD_DIR)/shell_idle_fill.h
+$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.h $(BUILD_DIR)/shell_mux_probe.h $(BUILD_DIR)/shell_idle_fill.h $(BUILD_DIR)/shell_coupon_probe.h
+$(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o: $(BUILD_DIR)/shell_coupon_probe.h
 
 .PHONY: FORCE
 FORCE:

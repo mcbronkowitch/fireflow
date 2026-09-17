@@ -3,34 +3,54 @@
 namespace shell {
 
 namespace {
-constexpr uint8_t kAllOff = static_cast<uint8_t>((1u << kMuxGroups) - 1u);
+constexpr uint8_t all_off(const ChainProfile& p)
+{
+    return static_cast<uint8_t>((1u << p.groups) - 1u);
+}
 }
 
-StepPattern step_pattern(int step)
+int group_of_step(const ChainProfile& p, int step)
+{
+    if(step < 0 || step >= scan_steps(p)) return -1;
+    int rest = step;
+    for(int g = 0; g < p.groups; ++g)
+    {
+        if(rest < p.channels[g]) return g;
+        rest -= p.channels[g];
+    }
+    return -1;
+}
+
+StepPattern step_pattern(const ChainProfile& p, int step)
 {
     // A step that does not exist parks the scan with every enable off. An
     // out-of-range address would still select SOME channel and hand back a
     // foreign knob's voltage, which is worse than reading nothing.
-    if(step < 0 || step >= kScanSteps) return StepPattern{0, kAllOff};
+    const int g = group_of_step(p, step);
+    if(g < 0) return StepPattern{0, all_off(p)};
 
-    const int group = step / kMuxChannels;
-    const int addr  = step % kMuxChannels;
+    int addr = step;
+    for(int i = 0; i < g; ++i) addr -= p.channels[i];
     return StepPattern{static_cast<uint8_t>(addr),
-                       static_cast<uint8_t>(kAllOff & ~(1u << group))};
+                       static_cast<uint8_t>(all_off(p) & ~(1u << g))};
 }
 
-int mux_channel(int step, int sense)
+int mux_channel(const ChainProfile& p, int step, int sense)
 {
-    if(step < 0 || step >= kScanSteps) return -1;
-    if(sense < 0 || sense >= kSensePins) return -1;
-    return step * kSensePins + sense;
+    if(step < 0 || step >= scan_steps(p)) return -1;
+    if(sense < 0 || sense >= p.sense_pins) return -1;
+    return step * p.sense_pins + sense;
 }
 
-uint32_t chain_word(StepPattern p, uint32_t leds)
+uint32_t chain_word(const ChainProfile& p, StepPattern s, uint32_t leds)
 {
-    return (static_cast<uint32_t>(p.address & 0x0Fu) << kAddrShift)
-           | (static_cast<uint32_t>(p.enable_mask & kAllOff) << kEnableShift)
-           | (leds << kLedShift);
+    const uint32_t led_mask = (1u << p.led_bits) - 1u;
+    return (static_cast<uint32_t>(s.address & 0x0Fu) << p.addr_shift)
+           | (static_cast<uint32_t>(s.enable_mask & all_off(p))
+              << p.enable_shift)
+           | ((leds & led_mask) << p.led_shift);
 }
+
+int button_bit(const ChainProfile& p) { return p.button_bit; }
 
 } // namespace shell

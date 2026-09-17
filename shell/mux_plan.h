@@ -9,44 +9,101 @@
 // four raw ADC pins; their address lines and their enables ride on the same
 // 74HC595 chain that carries the LEDs, which is what makes the whole panel
 // cost zero GPIOs and is the reason the 4-bit SD slot fits. One STEP of the
-// scan is one address plus one enabled group; the four sense pins are then
-// read in parallel, so a step yields four channels.
+// scan is one address plus one enabled group. On the shipping panel every
+// group sits on all four sense pins, so a step yields four channels at once.
+// The test coupon (kCouponChain) is a second, differently-shaped profile:
+// two groups of unequal size (16 and 8 channels), each wired to its own
+// single sense pin (`sense_of_group`), so a step there yields one channel,
+// not four.
 #include <cstdint>
 
 namespace shell {
 
-inline constexpr int kSensePins   = 4;   // raw ADC pins carrying a mux output
-inline constexpr int kMuxGroups   = 2;   // 2 groups x 4 chips = 8 chips
-inline constexpr int kMuxChannels = 16;  // CD74HC4067
-inline constexpr int kScanSteps   = kMuxGroups * kMuxChannels;   // 32
-inline constexpr int kMuxTotal    = kScanSteps * kSensePins;     // 128
+// The first of the raw ADC pins, as an index into libDaisy's patch_sm
+// channel enum (CV_1..CV_8 = 0..7, then ADC_9 = 8). It is a number here and
+// not the enum constant because this header may not include a hardware
+// header -- mux_scan.cpp static_asserts the two against each other.
+inline constexpr int kSenseAdcBase = 8;
 
-// Bits clocked out per step, and the number the bit-bang cost scales with --
-// so it is a constant with a derivation and not a round figure. 32 = four
-// 74HC595: 19 LEDs (what FireflowHW draws today), four address lines, two
-// enables, seven spare. Demand today is 67 pot positions (io-budget §3), so
-// the 128 channels above are headroom, not a plan.
-inline constexpr int kChainBits = 32;
+inline constexpr int kMaxGroups = 2;
 
-inline constexpr int kAddrShift   = 0;  // four address lines, bits 0..3
-inline constexpr int kEnableShift = 4;  // one active-low enable per group
-inline constexpr int kLedShift    = 8;  // 19 LED bits from here up
+// One board's chain, as data. Two boards exist: the shipping panel and the
+// test coupon, and they differ in every number below. This is a value and
+// not a set of #defines so that the host test can run the same assertions
+// against both -- a wrong address pattern is a line here and a knob that
+// misbehaves on a board there.
+struct ChainProfile
+{
+    int sense_pins;        // raw ADC pins this board populates
+    int sense_adc_base;    // index of the first of them in patch_sm's enum
+    int groups;            // enable lines, one per group
+    int channels[kMaxGroups];        // channels on that group's chip
+    int sense_of_group[kMaxGroups];  // sense pin carrying it, -1 = all of them
+    int chain_bits;        // bits clocked per step; the bit-bang cost scales
+    int addr_shift;
+    int enable_shift;
+    int led_shift;
+    int led_bits;
+    int button_bit;        // index into the bits shifted out of the 165, -1 = none
+};
+
+// The shipping panel. 32 = four 74HC595: 19 LEDs (what FireflowHW draws
+// today), four address lines, two enables, seven spare. Up to eight
+// CD74HC4067 share the four raw ADC pins (io-budget section 3), which is
+// what makes the panel cost zero GPIOs. Demand today is 67 pot positions,
+// so the 128 channels are headroom, not a plan.
+inline constexpr ChainProfile kPanelChain{
+    4, kSenseAdcBase, 2, {16, 16}, {-1, -1}, 32, 0, 4, 8, 19, -1};
+
+// The test coupon (hardware/coupon/). Two 74HC595 = 16 bits, eight LEDs, one
+// CD74HC4067 on ADC_9 and one CD74HC4051 on ADC_10 -- so the two groups do
+// NOT have the same channel count, and each sits on its own sense pin.
+// Derivation of the bit order: netlist.py:267 plus MSB-first clocking
+// through U_SR1.QH' -> U_SR2.SER.
+inline constexpr ChainProfile kCouponChain{
+    2, kSenseAdcBase, 2, {16, 8}, {0, 1}, 16, 0, 4, 6, 8, 7};
+
+constexpr int scan_steps(const ChainProfile& p)
+{
+    int n = 0;
+    for(int g = 0; g < p.groups; ++g) n += p.channels[g];
+    return n;
+}
+
+constexpr int mux_total(const ChainProfile& p)
+{
+    return scan_steps(p) * p.sense_pins;
+}
 
 struct StepPattern
 {
-    uint8_t address;      // 0..kMuxChannels-1
+    uint8_t address;      // 0..channels[group]-1
     uint8_t enable_mask;  // active low: exactly one group's bit is 0
 };
 
-StepPattern step_pattern(int step);
+StepPattern step_pattern(const ChainProfile& p, int step);
+
+// The group a step belongs to, or -1 for a step that does not exist.
+int group_of_step(const ChainProfile& p, int step);
 
 // The channel a sense pin carries during `step`, or -1 for an index that does
 // not exist. Out of range gets an answer instead of an assumption: a
 // half-seated chip produces steps nobody planned, and an access past the end
 // would be a crash inside the audio callback.
-int mux_channel(int step, int sense);
+//
+// This is an index bijection over (step, sense) pairs, not a claim about the
+// board: it ignores `sense_of_group`, so on a profile where a group is wired
+// to only one sense pin (the coupon's), some (step, sense) pairs this
+// function happily answers name a sense pin whose mux is disabled during
+// that step -- no live channel reaches it. Callers that care which sense pin
+// is actually live for a step must read `sense_of_group` themselves.
+int mux_channel(const ChainProfile& p, int step, int sense);
 
 // The chain word for a step, with `leds` in the LED field.
-uint32_t chain_word(StepPattern p, uint32_t leds);
+uint32_t chain_word(const ChainProfile& p, StepPattern s, uint32_t leds);
+
+// Which bit of the 74HC165 return stream carries the board's button, counted
+// from the first bit shifted out, or -1 if the board has none.
+int button_bit(const ChainProfile& p);
 
 } // namespace shell

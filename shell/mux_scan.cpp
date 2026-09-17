@@ -2,7 +2,7 @@
 
 namespace shell {
 
-volatile float g_mux_values[kMuxTotal] = {};
+volatile float g_mux_values[mux_total(kActiveChain)] = {};
 
 namespace {
 
@@ -19,6 +19,14 @@ constexpr daisy::Pin kIn    = daisy::patch_sm::DaisyPatchSM::D10;
 // tone -- so it moves one thing at a time. A faster setting is a separate
 // measurement, not a footnote to this one.
 constexpr daisy::GPIO::Speed kSpeed = daisy::GPIO::Speed::LOW;
+
+// The sense pins are the RAW ADC inputs A2/A3/D8/D9, not the conditioned CV
+// pins. Until 2026-09-17 this read CV_1 + s, which cost nothing in the CPU
+// measurement it was written for and would have made every coupon reading
+// meaningless. The number lives in mux_plan.h so the host can assert it;
+// this is where it gets checked against libDaisy.
+static_assert(daisy::patch_sm::ADC_9 == kSenseAdcBase,
+              "libDaisy's patch_sm channel enum moved under kSenseAdcBase");
 
 } // namespace
 
@@ -42,7 +50,7 @@ void MuxScan::write_chain(uint32_t word)
     // some nanoseconds apart, which a 74HC595 at 3V3 may or may not accept.
     // If a real chain needs a delay, THE COST MEASURED HERE IS OPTIMISTIC --
     // that belongs in the write-up, not in a comment nobody reads.
-    for(int i = kChainBits - 1; i >= 0; --i)
+    for(int i = kActiveChain.chain_bits - 1; i >= 0; --i)
     {
         data_.Write(((word >> i) & 1u) != 0u);
         clock_.Write(true);
@@ -52,28 +60,59 @@ void MuxScan::write_chain(uint32_t word)
     latch_.Write(false);
 }
 
+uint32_t MuxScan::read_chain(uint32_t word)
+{
+    // Latch LOW first: that is the 165's ~PL, and the parallel load happens
+    // while it is low. The 595s do not care -- they latch on the rising
+    // edge at the end.
+    latch_.Write(false);
+    latch_.Write(true);
+
+    uint32_t in = 0;
+    for(int i = kActiveChain.chain_bits - 1; i >= 0; --i)
+    {
+        // Sample BEFORE the clock edge: for the first bit that is the
+        // parallel-loaded value sitting at Q7 from ~PL above, and for every
+        // bit after it, it is the one the previous edge shifted there.
+        if(sense_in_.Read())
+            in |= 1u << (kActiveChain.chain_bits - 1 - i);
+        data_.Write(((word >> i) & 1u) != 0u);
+        clock_.Write(true);
+        clock_.Write(false);
+    }
+    // RCLK on the 595s transfers on the RISING edge. The line is already
+    // HIGH here (raised above for ~PL), so writing true first is not an
+    // edge at all -- drop it low, then raise it to produce the rising edge
+    // that actually latches the 595 outputs, then drop it again to leave
+    // the line LOW, the same rest state write_chain() leaves it in.
+    latch_.Write(false);
+    latch_.Write(true);
+    latch_.Write(false);
+    return in;
+}
+
 void MuxScan::step(bench::Board& hw)
 {
     if(live_step_ >= 0)
     {
-        for(int s = 0; s < kSensePins; ++s)
+        for(int s = 0; s < kActiveChain.sense_pins; ++s)
         {
-            const int ch = mux_channel(live_step_, s);
+            const int ch = mux_channel(kActiveChain, live_step_, s);
             if(ch >= 0)
-                g_mux_values[ch] = hw.GetAdcValue(daisy::patch_sm::CV_1 + s);
+                g_mux_values[ch] = hw.GetAdcValue(kSenseAdcBase + s);
         }
     }
 
     // The LED field changes every step, as it does in production. A constant
     // word would let the compiler hoist the loop's work out of the hot path
     // and price a scan nobody will ship.
-    leds_ = (leds_ + 1u) & 0x7FFFFu;
+    leds_ = (leds_ + 1u) & ((1u << kActiveChain.led_bits) - 1u);
 
-    const StepPattern p = step_pattern(next_step_);
-    write_chain(chain_word(p, leds_));
+    const StepPattern p = step_pattern(kActiveChain, next_step_);
+    write_chain(chain_word(kActiveChain, p, leds_));
 
     live_step_ = next_step_;
-    next_step_ = (next_step_ + 1) % kScanSteps;
+    next_step_ = (next_step_ + 1) % scan_steps(kActiveChain);
     ++steps_;
 }
 
