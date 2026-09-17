@@ -193,6 +193,65 @@ This also gives the run its honesty check. If P0's band is wide or its knee
 sits far out, the instrument is not good enough to make the claim, and the run
 says so instead of quietly reporting a board defect.
 
+### 7a. The honesty check, in numbers
+
+"Wide" and "far out" are not something firmware can test, so here are the four
+gates. A run that fails any of them prints its numbers and refuses to name a
+settle time; it does not report a board defect.
+
+**G1 — the knee. `d_settle(P0) <= 100 ns` and `d_settle(P5) <= 100 ns`,** that
+is, the first or second grid point. Both pairs step between 0 Ω rail ties whose
+derived settles are 88 ns and 54 ns, already inside one grid step, so wherever
+the aperture sits relative to the grid the knee can only land on the first step
+or the one after it. Two steps out or more means something other than the 0 Ω
+path dominates the response, and at that point the §7 subtraction stops being a
+correction and becomes a guess.
+
+**G2 — the noise floor, measured, not assumed.** `B0` is `max - min` over the
+64 repeats of P0's settled reference read. **Gate: `B0 <= 64` counts.** The
+number is not taste: `d_settle` decides on the mean of 64, whose own spread is
+`sigma/8`, and 64 counts of peak-to-peak across 64 samples is about `5.1
+sigma`, so `B0 = 64` puts the mean's uncertainty at 1.6 counts — a fifth of the
+8-count decision threshold. Above that the criterion stops meaning what it
+says.
+
+For scale: the bring-up probe measured 2 counts of peak-to-peak on the rail
+ties across ten reads. That was at `OVS_32`; this probe runs `OVS_NONE`, so
+single shots should be roughly `sqrt(32)` = 5.7 times noisier, around 11
+counts. That last step is **derived**, which is exactly why the gate is on the
+measured `B0` and not on a constant.
+
+**G3 — per-point band. At every grid point of every pair, `max - min <= 3 *
+B0`.** A point wider than that is not a time and may not be read as one. Three
+is the smallest multiple that a merely noisy point will not trip: it is the
+instrument's own floor plus room, and anything jittering wider than three times
+the floor is jittering for a reason.
+
+**G4 — and the gate §7 was missing.** G1 cannot see a *fixed* start-to-aperture
+latency at all. If `L` is large, the d = 0 point already samples after the
+88 ns have passed, P0's knee sits at the first grid step, G1 passes — and every
+other pair reports `true_settle - L`, uniformly early, with `d_settle(P0) = 0`
+subtracting nothing. The pairs that would reveal it are the ones under test, so
+the run cannot infer `L` from its own results without circularity.
+
+Measure it instead. The timed path already brackets it: take the DWT timestamp
+at `HAL_ADC_Start()` and again at EOC. Their difference is `L` plus the
+conversion itself, and the conversion is known — `ADC_SAMPLETIME_16CYCLES_5`
+plus 8.5 cycles of 16-bit conversion is 25 ADC cycles, 2034 ns at 12.29 MHz. So
+
+```
+L = (t_EOC - t_start) - 2034 ns
+```
+
+over the same 64 repeats, reported as mean, min and max in the configuration
+line. **Gate: `max(L) - min(L) <= 100 ns`** — if the start-to-aperture jitter
+exceeds one grid step, the grid is finer than the instrument and no number from
+the run may be quoted. `mean(L)` is not a gate but a reported constant, and it
+is what the other pairs' delays are actually measured from.
+
+This moves `HAL_ADC_Start()` latency out of §10's **unmeasured** row. It costs
+one extra timestamp inside a path that is already timed.
+
 ## 8. Output
 
 One line per pair and grid point on USB-CDC, integers only — `PrintLine()` is
@@ -205,7 +264,13 @@ SHELL_SETTLE pair=%d sense=%d from=%d to=%d d_ns=%d n=%d mean=%d min=%d max=%d
 Preceded by one configuration line (sampling time in ADC cycles, ADC clock in
 kHz, repeats, grid step and count, park time, firmware git hash) and closed by
 `SHELL_SETTLE_END`, so a reader knows it has the whole set rather than
-guessing. The block repeats forever with a delay, like `SHELL_CPU` does, since
+guessing. The configuration line also carries §7a's four gates and their
+verdict, because a reader who sees only the curves cannot tell a measured run
+from one the instrument was not good enough to make:
+
+```
+SHELL_SETTLE_CAL lat_mean_ns=%d lat_min_ns=%d lat_max_ns=%d b0=%d gates_ok=%d
+``` The block repeats forever with a delay, like `SHELL_CPU` does, since
 there is no handshake and the host may open the port late.
 
 `shell/read_settle.py` collects one complete block and writes it as CSV.
@@ -227,9 +292,16 @@ and that is where the RED proof lives:
 - **The delay grid and pair table are pure data** and get host assertions:
   monotonic grid, every channel in the pair table inside its mux's range, every
   target's expected source impedance matching what `netlist.py` wires.
-- **On the board**, §7's P0/P5 pairs are the self-check. They are a gate, not a
-  courtesy: if the instrument response does not collapse to the first grid
-  step, no number from this run may be quoted.
+- **On the board**, §7's P0/P5 pairs are the self-check, and §7a gives the four
+  gates their numbers: knee within one grid step, a measured noise floor `B0`
+  at or under 64 counts, no grid point wider than `3 * B0`, and start-to-
+  aperture jitter under one grid step. They are gates, not courtesies — a run
+  that trips one prints its numbers and refuses to name a settle time.
+- **The gate arithmetic is pure data too** and belongs on the host: given a
+  synthetic curve and a `B0`, the gate verdict is a function, and each of the
+  four gets a fixture that trips it. The one to prove red deliberately is G2 —
+  a run whose noise floor swallows the 8-count criterion must fail, because
+  that is the case where every curve still looks like a curve.
 
 ## 10. What is read, what is derived, what is unmeasured
 
@@ -243,7 +315,7 @@ probe is that nobody has measured any of it yet.
 | The coupon's 595 outputs carry address/enable/LED as tabulated | read — `netlist.py:268` |
 | **Which chain bit lands on which 595 output** | **derived** from MSB-first clocking and `QH'`→`SER` order. The eight LEDs are the free proof at bring-up: a wrong order lights a wrong pattern |
 | 9.01 τ settle predictions in §6 | derived from `settle-budget.md`'s model, which is itself three estimates deep |
-| `HAL_ADC_Start()` latency is fixed and small | **unmeasured** — this is what §7 exists to find out, and the run is void if it is false |
+| `HAL_ADC_Start()` latency is fixed and small | **measured by the run itself** — §7a G4 brackets it with a second DWT timestamp at EOC and subtracts the known 25 ADC cycles. Earlier drafts listed this as unmeasured and leaned on §7's subtraction instead, which cannot see a fixed latency at all |
 | That the 595s accept `write_chain()`'s undelayed clock edges at 3V3 | **unmeasured** — `mux_scan.cpp` flags it; the bring-up probe answers it, not this one |
 
 ## 11. Out of scope
