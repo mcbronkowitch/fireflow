@@ -61,14 +61,20 @@ void run_coupon_bringup(bench::Board& hw)
         const int      bb      = button_bit(kCouponChain);
         const int pressed = (bb < 0) ? -1 : (((ret >> bb) & 1u) == 0u ? 1 : 0);
 
+        // The board's own yardstick, remeasured every round with everything
+        // else. Printed alongside the verdicts because a reader who cannot
+        // see the scale cannot tell a clean board from a generous one.
+        const Span span = coupon_span(g_raw, kSteps);
+
         int failures = 0;
         for(int s = 0; s < kSteps; ++s)
-            if(!coupon_verdict(coupon_expect(s), g_raw[s])) ++failures;
+            if(!coupon_verdict(coupon_expect(s), g_raw[s], span)) ++failures;
 
         hw.PrintLine("COUPON_BEGIN steps=%d hold_ms=%d fails=%d button=%d "
-                     "ret=%d",
+                     "ret=%d zero=%d rail=%d span_ok=%d",
                      kSteps, static_cast<int>(kHoldMs), failures, pressed,
-                     static_cast<int>(ret));
+                     static_cast<int>(ret), static_cast<int>(span.zero),
+                     static_cast<int>(span.rail), span.valid ? 1 : 0);
         for(int s = 0; s < kSteps; ++s)
         {
             const int    g = group_of_step(kCouponChain, s);
@@ -79,7 +85,7 @@ void run_coupon_bringup(bench::Board& hw)
                          static_cast<int>(step_pattern(kCouponChain, s).address),
                          kCouponChain.sense_of_group[g],
                          static_cast<int>(g_raw[s]), static_cast<int>(e),
-                         coupon_verdict(e, g_raw[s]) ? 1 : 0);
+                         coupon_verdict(e, g_raw[s], span) ? 1 : 0);
         }
         hw.PrintLine("COUPON_END");
         hw.Delay(1000);
