@@ -308,3 +308,12 @@ add_test(
     COMMAND ${Python3_EXECUTABLE} res/test_hw_panel.py
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/host/vcv
 )
+
+# The Python guards need a runner or they rot unnoticed -- tools/test_*.py in
+# this repo is wired to nothing, and the VCV panel guard stood red for 23
+# days behind exactly that gap. pytest is not installed here, so it runs as
+# a plain script and its exit code is the verdict.
+add_test(NAME read_coupon_guard
+         COMMAND ${CMAKE_COMMAND} -E env python
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_coupon.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
