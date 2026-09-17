@@ -132,12 +132,33 @@ ifneq ($(filter $(SHELL_COUPON_PROBE),0 1),$(SHELL_COUPON_PROBE))
 $(error SHELL_COUPON_PROBE must be 0 or 1)
 endif
 
+# Position 1 replaces the instrument with the settle probe: the coupon's mux
+# channels are stepped one pair at a time and timed through the ADC. It needs
+# the coupon chain profile, so it implies SHELL_COUPON_PROBE's board -- but
+# not its scan, which is a different measurement.
+# Spec:  ../docs/superpowers/specs/2026-09-17-coupon-settle-probe-design.md
+# Plan:  ../docs/superpowers/plans/2026-09-17-coupon-settle-probe.md
+SHELL_SETTLE_PROBE ?= 0
+
+ifneq ($(filter $(SHELL_SETTLE_PROBE),0 1),$(SHELL_SETTLE_PROBE))
+$(error SHELL_SETTLE_PROBE must be 0 or 1)
+endif
+
+ifeq ($(SHELL_SETTLE_PROBE),1)
+ifneq ($(SHELL_COUPON_PROBE),1)
+$(error SHELL_SETTLE_PROBE=1 needs SHELL_COUPON_PROBE=1: the probe drives the \
+coupon chain profile, and the panel profile has none of its channels)
+endif
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	sdram_mem.cpp \
 	mux_plan.cpp \
 	coupon_expect.cpp \
 	coupon_scan.cpp \
+	settle_plan.cpp \
+	settle_probe.cpp \
 	mux_scan.cpp \
 	../engine/body/mode_bank.cpp \
 	../engine/body/ks_string.cpp \
@@ -188,7 +209,7 @@ include $(SYSTEM_FILES_DIR)/Makefile
 # Fehler zurueck, und er sieht wie eine Messung aus.
 C_INCLUDES += -I$(BUILD_DIR)
 
-SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o
+SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o
 
 # ZUR PARSE-ZEIT, nicht als Regel, und das ist der Kern der Reparatur vom
 # 2026-08-23. Als Regel mit FORCE hat es ZWEIMAL nicht gehalten:
@@ -210,7 +231,8 @@ SWITCH_HEADERS := \
   $(shell python write_shell_cpu_probe.py $(BUILD_DIR)/shell_cpu_probe.h $(SHELL_CPU_PROBE) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_mux_probe.py $(BUILD_DIR)/shell_mux_probe.h $(SHELL_MUX_PROBE) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_idle_fill.py $(BUILD_DIR)/shell_idle_fill.h $(SHELL_IDLE_FILL) $(SWITCH_OBJECTS)) \
-  $(shell python write_shell_coupon_probe.py $(BUILD_DIR)/shell_coupon_probe.h $(SHELL_COUPON_PROBE) $(SWITCH_OBJECTS))
+  $(shell python write_shell_coupon_probe.py $(BUILD_DIR)/shell_coupon_probe.h $(SHELL_COUPON_PROBE) $(SWITCH_OBJECTS)) \
+  $(shell python write_shell_settle_probe.py $(BUILD_DIR)/shell_settle_probe.h $(SHELL_SETTLE_PROBE) $(SWITCH_OBJECTS))
 
 $(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.h $(BUILD_DIR)/shell_mux_probe.h $(BUILD_DIR)/shell_idle_fill.h $(BUILD_DIR)/shell_coupon_probe.h
 $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o: $(BUILD_DIR)/shell_coupon_probe.h

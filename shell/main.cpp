@@ -12,6 +12,7 @@
 #include "shell_mux_probe.h"
 #include "shell_idle_fill.h"
 #include "shell_coupon_probe.h"
+#include "shell_settle_probe.h"
 #include "hw/board.h"
 #include "sdram_mem.h"
 #include "instrument.h"
@@ -35,12 +36,16 @@ volatile uint32_t g_block_tick = 0;
 #include "coupon_scan.h"
 #endif
 
+#if SHELL_SETTLE_PROBE
+#include "settle_probe.h"
+#endif
+
 #if defined(SHELL_CPU_PROBE)
 #include <cstdint>
 #include "util/CpuLoadMeter.h"
 #endif
 
-#if defined(SHELL_CPU_PROBE) || SHELL_COUPON_PROBE
+#if defined(SHELL_CPU_PROBE) || SHELL_COUPON_PROBE || SHELL_SETTLE_PROBE
 // libDaisy deklariert diese beiden in src/usbd/usbd_desc.c als
 // `extern const char*` und definiert sie nie -- die Anwendung besitzt ihre
 // eigene USB-Identitaet. Ohne sie scheitert der USB-Zweig beim LINKEN, nicht
@@ -176,6 +181,13 @@ int main(void)
     // BbdLine::Init durch, und die nullen ihre Puffer -- also echte Schreiber
     // in SDRAM, das vor board_init() noch keinen FMC hinter sich hat.
     inst.init(shell::kSampleRate, shell::fx_mem());
+
+#if SHELL_SETTLE_PROBE
+    // The board under test is the coupon, and the question is time, not
+    // wiring. No engine, no audio: this image exists to say how long a mux
+    // channel takes to settle to within half an LSB.
+    shell::run_settle_probe(hw);   // never returns
+#endif
 
 #if SHELL_COUPON_PROBE
     // The board under test is the coupon, not an instrument. No engine, no
