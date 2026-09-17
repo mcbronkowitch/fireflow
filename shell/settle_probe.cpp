@@ -80,18 +80,33 @@ void adc_init(bench::Board& hw)
                                 ADC_SINGLE_ENDED);   // ONCE, never in the loop
 }
 
-// Runs when the sense pin changes -- once per channel pair, never inside the
+// The working sampling time -- what kConversionNs predicts against, and what
+// every pass except the ADC-clock calibration pass (fix round 2, item 3)
+// runs under. kSampleTimeLong exists only for that one pass.
+constexpr uint32_t kSampleTimeWorking = ADC_SAMPLETIME_16CYCLES_5;
+constexpr uint32_t kSampleTimeLong    = ADC_SAMPLETIME_387CYCLES_5;
+
+// Runs when the sense pin or the sampling time changes -- once per channel
+// pair (or once per side of the clock-calibration pass), never inside the
 // timed path.
-void adc_select(uint32_t channel)
+void adc_select_time(uint32_t channel, uint32_t sampling_time)
 {
     ADC_ChannelConfTypeDef cfg{};
     cfg.Channel      = channel;
     cfg.Rank         = ADC_REGULAR_RANK_1;
-    cfg.SamplingTime = ADC_SAMPLETIME_16CYCLES_5;   // what kConversionNs predicts against
+    cfg.SamplingTime = sampling_time;
     cfg.SingleDiff   = ADC_SINGLE_ENDED;
     cfg.OffsetNumber = ADC_OFFSET_NONE;
     cfg.Offset       = 0;
     HAL_ADC_ConfigChannel(&g_adc, &cfg);
+}
+
+// adc_select(channel) is the interface Task 5 consumes -- kept to that exact
+// name and signature. It always selects the working sampling time; only the
+// clock-calibration pass below reaches for adc_select_time() directly.
+void adc_select(uint32_t channel)
+{
+    adc_select_time(channel, kSampleTimeWorking);
 }
 
 // --- Step 4: the measurement primitive ---
@@ -111,6 +126,35 @@ void adc_select(uint32_t channel)
 // exists to resolve. The ADC is enabled once by adc_warm_up() below and left
 // enabled for the program's whole life; do not re-add a Stop() here.
 //
+// Fix round 2, item 2: HAL_ADC_Start()/HAL_ADC_GetValue() are gone from this
+// function too, even though round 1 already put the ADC on its fast path.
+// HAL_ADC_Start()'s fast path still takes a lock, updates a state-machine
+// field and clears three flags before it reaches the register write that
+// starts the conversion -- all of it still inside [t0, t1]. Measured on the
+// board after round 1: lat_mean_ns ~2900, larger than the entire 0..6400 ns
+// delay grid this instrument exists to resolve (see the round-2 report
+// section for the board numbers). What remains here is the direct register
+// sequence:
+//   - Start: `ADC1->CR |= ADC_CR_ADSTART;`. This is what
+//     LL_ADC_REG_StartConversion() itself reduces to
+//     (stm32h7xx_ll_adc.h:7030 -- `MODIFY_REG(ADCx->CR, ADC_CR_BITS_PROPERTY_RS, ADC_CR_ADSTART)`,
+//     a masked write that clears CR's other self-clearing ["read-set",
+//     property RS] command bits before setting ADSTART, so a stale ADSTP/
+//     ADDIS/JADSTART left set would not leak through). A plain `|=` is
+//     equivalent here because nothing in this program ever leaves those
+//     bits set between calls -- this file drives ADC1 exclusively and every
+//     conversion it starts is left to complete or to time out before the
+//     next one starts.
+//   - Poll: `ADC1->ISR & ADC_ISR_EOC`, the same flag __HAL_ADC_GET_FLAG()
+//     reads, read directly instead of through the macro's handle
+//     indirection.
+//   - Read: `ADC1->DR`. HAL_ADC_GetValue()'s own doc comment
+//     (stm32h7xx_hal_adc.c:2327) says "Reading register DR automatically
+//     clears ADC flag EOC", and its body (line 2353) is nothing but
+//     `return hadc->Instance->DR;` -- confirmed by reading the function, not
+//     assumed from the comment alone. No explicit flag clear is added here;
+//     the hardware does it on the DR read.
+//
 // The poll is bounded and the timed section is interrupt-masked:
 //   - kPollTimeoutCycles caps the EOC wait so a genuinely stuck ADC goes
 //     silent-with-a-flag instead of hanging the board with no clue why.
@@ -122,7 +166,13 @@ void adc_select(uint32_t channel)
 //     clock both run as interrupts on this board, and one landing inside
 //     the timed window is exactly the outlier this instrument must exclude,
 //     not report as the instrument's own latency.
-constexpr uint32_t kPollTimeoutCycles = 48000u;  // 100 us at 480 MHz, ~50x kConversionNs
+//
+// kPollTimeoutCycles also has to clear the ADC-clock calibration pass'
+// long (387.5 ADC cycle) sampling time, not just the working 16.5-cycle one
+// -- see kSampleTimeLong below. At an assumed 12.29 MHz that long conversion
+// is ~30 us; sized here to still clear it even if the real ADC clock turns
+// out as slow as 3 MHz (396 total ADC cycles / 3 MHz = ~132 us).
+constexpr uint32_t kPollTimeoutCycles = 144000u;  // 300 us at 480 MHz
 constexpr uint32_t kTimeoutSentinel   = 0xFFFFFFFFu;
 
 // Lifetime count of sample_now() calls that hit kPollTimeoutCycles. Printed
@@ -136,19 +186,19 @@ uint16_t sample_now(uint32_t* span_cycles)
     __disable_irq();
 
     const uint32_t t0 = cycles_now();
-    HAL_ADC_Start(&g_adc);
+    ADC1->CR |= ADC_CR_ADSTART;   // see the block comment above for why not HAL_ADC_Start()
 
     bool timed_out = true;
     while((cycles_now() - t0) < kPollTimeoutCycles)
     {
-        if(__HAL_ADC_GET_FLAG(&g_adc, ADC_FLAG_EOC) != 0u)
+        if((ADC1->ISR & ADC_ISR_EOC) != 0u)
         {
             timed_out = false;
             break;
         }
     }
     const uint32_t t1 = cycles_now();
-    const uint16_t v  = timed_out ? 0u : static_cast<uint16_t>(HAL_ADC_GetValue(&g_adc));
+    const uint16_t v  = timed_out ? 0u : static_cast<uint16_t>(ADC1->DR);   // read clears EOC
 
     __set_PRIMASK(primask);
 
@@ -170,12 +220,29 @@ constexpr int32_t kConversionNs = 2034;
 // been set and a first regular conversion has completed at least once; this
 // call is what pays that one-time enable cost off the clock. Must run AFTER
 // adc_select() -- the channel/rank configuration has to exist before a
-// conversion on it means anything, even a discarded one.
-void adc_warm_up()
+// conversion on it means anything, even a discarded one. Stays on HAL: this
+// function is outside the timed path, so HAL's checks are worth having.
+//
+// Fix round 2, item 1: this poll used to be unbounded -- exactly the failure
+// mode removed from sample_now() in round 1, just relocated one function
+// away, and running before the first SHELL_SETTLE_CFG line, so a stall here
+// left the board silent with no sentinel and no counter. It is now bounded
+// by the same kPollTimeoutCycles the timed path uses, and returns whether it
+// completed so the caller can say so even if the probe never gets running --
+// a probe that cannot start must say it cannot start, not go quiet.
+bool adc_warm_up()
 {
+    const uint32_t t0 = cycles_now();
     HAL_ADC_Start(&g_adc);
-    while(__HAL_ADC_GET_FLAG(&g_adc, ADC_FLAG_EOC) == 0u) { }
-    (void)HAL_ADC_GetValue(&g_adc);
+    while((cycles_now() - t0) < kPollTimeoutCycles)
+    {
+        if(__HAL_ADC_GET_FLAG(&g_adc, ADC_FLAG_EOC) != 0u)
+        {
+            (void)HAL_ADC_GetValue(&g_adc);
+            return true;
+        }
+    }
+    return false;
 }
 
 // Mean of `repeats` conversions on whatever channel/mux address is currently
@@ -186,6 +253,26 @@ int32_t mean_of_repeats(int repeats)
     int64_t sum = 0;
     for(int i = 0; i < repeats; ++i) sum += sample_now(nullptr);
     return static_cast<int32_t>(sum / repeats);
+}
+
+// Mean SPAN (in DWT cycles), not value, of `repeats` conversions on whatever
+// channel/sampling time is currently selected -- excluding any repeat that
+// hit the poll timeout, same as the latency pass below. Used only by the
+// ADC-clock calibration pass (fix round 2, item 3): everywhere else cares
+// about the converted value, not how long it took.
+int32_t mean_span_of_repeats(int repeats)
+{
+    int64_t sum     = 0;
+    int     valid_n = 0;
+    for(int i = 0; i < repeats; ++i)
+    {
+        uint32_t span = 0;
+        (void)sample_now(&span);
+        if(span == kTimeoutSentinel) continue;
+        sum += span;
+        ++valid_n;
+    }
+    return valid_n > 0 ? static_cast<int32_t>(sum / valid_n) : -1;
 }
 
 void park(MuxScan& chain, bench::Board& hw, int group, int ch)
@@ -208,7 +295,43 @@ void run_settle_probe(bench::Board& hw)
 
     const SettlePair& p0 = kSettlePlan[0];
     adc_select(channel_of_group(p0.group));
-    adc_warm_up();   // pays the one-time ADC_Enable() wait here, off the clock
+
+    // A probe that cannot start must say it cannot start. This is the first
+    // line printed after "Daisy is online" (StartLog's own banner), before
+    // the calibration or the forever loop, so a warm-up stall is visible
+    // even though it would otherwise leave the board silent -- fix round 2,
+    // item 1. ok=0 does not stop the rest of this function: every later ADC
+    // access is bounded the same way, so the run continues and reports
+    // whatever it can (see g_adc_timeouts in every SHELL_SETTLE_CAL line)
+    // rather than reaching a second unbounded wait.
+    const bool adc_warm_ok = adc_warm_up();
+    hw.PrintLine("SHELL_SETTLE_WARMUP ok=%d", adc_warm_ok ? 1 : 0);
+
+    park(chain, hw, p0.group, p0.from_ch);
+
+    // ADC-clock calibration (fix round 2, item 3): kConversionNs assumes
+    // 12.29 MHz from ADC_CLOCK_ASYNC_DIV2's datasheet value, and every
+    // lat_*_ns this file has ever printed depends on that assumption being
+    // right. Measure it instead of trusting it: run two spans back to back
+    // on the SAME parked channel, identical in every way except the
+    // configured sampling time, so every fixed cost (register overhead, the
+    // clock-domain synchronization, the 8.5-cycle conversion, any interrupt
+    // that slips past the mask) cancels in the difference and only the
+    // extra ADC cycles from the longer sampling time remain --
+    // 387.5 - 16.5 = 371 of them. This file does not do that division or
+    // convert either span to nanoseconds; the controller does:
+    // (span_long - span_short) / 371 = core cycles per ADC cycle, and
+    // 480 MHz divided by that is the real ADC clock.
+    const int32_t clk_span_short = mean_span_of_repeats(kRepeats);   // kSampleTimeWorking, already selected
+
+    adc_select_time(channel_of_group(p0.group), kSampleTimeLong);
+    const int32_t clk_span_long = mean_span_of_repeats(kRepeats);
+
+    adc_select_time(channel_of_group(p0.group), kSampleTimeWorking);   // restore -- every later pass needs this
+
+    hw.PrintLine("SHELL_SETTLE_CLK span_short_cyc=%d span_long_cyc=%d "
+                 "smp_short_tenths=%d smp_long_tenths=%d",
+                 clk_span_short, clk_span_long, 165, 3875);
 
     // Calibration (scope change from the brief's step 7): park permanently on
     // BOTH ends of P0's step and take kRepeats conversions at each, instead
@@ -217,7 +340,9 @@ void run_settle_probe(bench::Board& hw)
     // so this alone answers step 1's channel-number question: the right
     // constants put cal_from near full scale and cal_to near zero; wrong
     // ones put them equal, or both at some implausible value.
-    park(chain, hw, p0.group, p0.from_ch);
+    //
+    // Already parked on from_ch above (for the clock-calibration pass), so
+    // cal_from's park is not repeated here.
     const int32_t cal_from = mean_of_repeats(kRepeats);
 
     park(chain, hw, p0.group, p0.to_ch);
