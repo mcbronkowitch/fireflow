@@ -59,9 +59,26 @@ extern const int     kSamplingLadderTenths[kSamplingLadderLen];
 // value every boot -- fix round 4's report explains the distinction).
 int sample_time_index_for(uint32_t r_src_ohm);
 
-// Delay grid: 0 to 6400 ns in 100 ns steps.
-inline constexpr int kGridStepNs = 100;
-inline constexpr int kGridPoints = 65;
+// Delay grid: 0 to 6400 ns, span unchanged since section 6 -- but the step
+// itself is fix round 5, not the original 100 ns.
+//
+// Measured on the coupon board 2026-09-17 (fix round 4's SHELL_SETTLE_CAL,
+// after the instrument's own latency arithmetic was corrected to the
+// measured ADC clock): lat_max_ns - lat_min_ns = 807 - 669 = 138 ns of
+// aperture jitter. A 100 ns grid step claims resolution the instrument does
+// not have -- G4's own 100 ns gate would then refuse every run, and
+// widening THAT gate instead would be exactly the failure this whole probe
+// exists to avoid (a test that cannot go red). The grid step is the one
+// that has to give: it must never be finer than the instrument's own
+// measured spread, so it moved to 200 ns, comfortably above the 138 ns
+// floor, keeping 0..6400 ns's span with 33 points instead of 65.
+//
+// Whoever wants this narrower again must first RE-MEASURE the jitter (not
+// assume it improved) and show the new number is smaller before touching
+// this constant -- see task-4-report.md's fix-round-5 section for whether
+// 138 ns looked reducible at the time this was written.
+inline constexpr int kGridStepNs = 200;
+inline constexpr int kGridPoints = 33;
 
 constexpr uint32_t grid_ns(int i)
 {
@@ -99,10 +116,16 @@ int d_settle_index(const Point* pts, int n, int32_t settled);
 
 // Section 7a's gate constants. Each is derived; the spec carries the
 // derivation and it is not repeated here, but none of them is a taste.
-inline constexpr int32_t  kKneeMaxNs      = 100;  // G1, one grid step
-inline constexpr int32_t  kFloorMaxCounts = 64;   // G2
-inline constexpr int32_t  kBandFactor     = 3;    // G3
-inline constexpr int32_t  kJitterMaxNs    = 100;  // G4, one grid step
+//
+// kKneeMaxNs and kJitterMaxNs both MEAN "one grid step" -- fix round 5
+// makes that derivation explicit instead of two literal 100s that had to be
+// kept equal to kGridStepNs (and to each other) by hand. A wrong constant
+// used to be a defect waiting for someone to change one of the three
+// numbers and not the other two; now there is only one number to change.
+inline constexpr int32_t  kKneeMaxNs      = kGridStepNs;  // G1, one grid step
+inline constexpr int32_t  kFloorMaxCounts = 64;           // G2
+inline constexpr int32_t  kBandFactor     = 3;            // G3
+inline constexpr int32_t  kJitterMaxNs    = kGridStepNs;  // G4, one grid step
 
 // What a completed run reduces to before it is judged.
 struct RunSummary

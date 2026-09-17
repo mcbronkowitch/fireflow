@@ -9,8 +9,14 @@
 #include "../shell/mux_plan.h"
 
 TEST_CASE("settle plan: the grid is monotonic and ends where the spec says") {
-    CHECK(shell::kGridPoints == 65);
-    CHECK(shell::kGridStepNs == 100);
+    // Fix round 5: the SPAN (0..6400 ns) is unchanged since section 6, but
+    // the step is not -- 138 ns of measured aperture jitter on the coupon
+    // board (task-4-report.md, fix round 5) means a 100 ns step claimed
+    // resolution the instrument does not have. 65 points at 100 ns became
+    // 33 points at 200 ns; the boundary this test checks (grid_ns(last) ==
+    // 6400) is exactly the invariant that survives the change.
+    CHECK(shell::kGridPoints == 33);
+    CHECK(shell::kGridStepNs == 200);
     CHECK(shell::grid_ns(0) == 0u);
     CHECK(shell::grid_ns(shell::kGridPoints - 1) == 6400u);
     for(int i = 1; i < shell::kGridPoints; ++i)
@@ -161,11 +167,14 @@ TEST_CASE("settle gates: a clean run passes all four") {
 }
 
 TEST_CASE("settle gates: G1 refuses a reference knee more than one step out") {
+    // Fix round 5: kKneeMaxNs now derives from kGridStepNs (200, was 100),
+    // so the boundary is computed rather than a literal that would have
+    // silently sat exactly ON the new limit instead of past it.
     shell::RunSummary s = clean_summary();
-    s.knee_ns[0] = 200;                  // P0, a reference pair
+    s.knee_ns[0] = shell::kKneeMaxNs + 1;  // P0, a reference pair
     CHECK_FALSE(shell::settle_gates(s).g1_knee);
     s = clean_summary();
-    s.knee_ns[5] = 200;                  // P5, the other one
+    s.knee_ns[5] = shell::kKneeMaxNs + 1;  // P5, the other one
     CHECK_FALSE(shell::settle_gates(s).g1_knee);
     // A slow knee on a pair under test is the measurement, not a fault.
     s             = clean_summary();
@@ -214,11 +223,15 @@ TEST_CASE("settle gates: G3 never demands better than the criterion itself") {
 }
 
 TEST_CASE("settle gates: G4 refuses aperture jitter wider than a grid step") {
+    // Fix round 5: kJitterMaxNs now derives from kGridStepNs (200, was 100)
+    // -- the boundary here is computed from it rather than a literal that
+    // would have silently tested the wrong threshold after the grid step
+    // changed.
     shell::RunSummary s = clean_summary();
     s.lat_min_ns = 300;
-    s.lat_max_ns = 400;
+    s.lat_max_ns = 300 + shell::kJitterMaxNs;
     CHECK(shell::settle_gates(s).g4_jitter);
-    s.lat_max_ns = 401;
+    s.lat_max_ns = 300 + shell::kJitterMaxNs + 1;
     CHECK_FALSE(shell::settle_gates(s).g4_jitter);
 }
 
@@ -321,4 +334,15 @@ TEST_CASE("sample time ladder: every pair in kSettlePlan gets a rung that "
         // to fail on that bug.
         if(idx > 0) CHECK(rung_window_s(idx - 1) < required_s);
     }
+}
+
+TEST_CASE("settle gates: G1 and G4's grid-step gates derive from kGridStepNs, "
+          "not a second and third copy of it") {
+    // Fix round 5: kKneeMaxNs and kJitterMaxNs both mean "one grid step".
+    // Before this round they were two separate literal 100s that had to be
+    // kept equal to kGridStepNs (and to each other) by hand -- this test is
+    // what would have caught a future edit that changed the grid step
+    // without changing both gates to match.
+    CHECK(shell::kKneeMaxNs == shell::kGridStepNs);
+    CHECK(shell::kJitterMaxNs == shell::kGridStepNs);
 }
