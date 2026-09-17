@@ -632,6 +632,17 @@ void run_settle_probe(bench::Board& hw)
 
         int32_t d_settle_ns_print[kSettlePairs];
         bool    at_or_below_offset[kSettlePairs];
+        // Fix round 2, item 1: the yardstick every knee is judged against
+        // was never printed, so a reader had no way to check a single knee
+        // against the data in front of them. Both settled_raw_pre[] (the
+        // value d_settle_index() actually uses) and settled_raw_post[]
+        // (item 2, below) are kept for the SHELL_SETTLE_KNEE line.
+        int32_t settled_raw_pre[kSettlePairs];
+        int32_t settled_raw_post[kSettlePairs];
+        // Last point's mean minus settled_raw_pre, signed -- makes "never
+        // settled" interpretable: a reader can tell nine counts short from
+        // nine hundred instead of only seeing knee_ns == -1.
+        int32_t residual_counts[kSettlePairs];
 
         for(int p = 0; p < kSettlePairs; ++p)
         {
@@ -642,15 +653,17 @@ void run_settle_probe(bench::Board& hw)
             // reused here, not recomputed (amendment 4).
             adc_select_time(channel_of_group(sp.group), kSampleTimeByRung[rung_idx[p]]);
 
-            // The settled reference for THIS pair, READ at the end of a long
-            // park on to_ch, not assumed from the divider's nominal value --
-            // that is what makes the curve a comparison instead of a
-            // prediction checked against itself.
+            // The settled reference for THIS pair, READ (PRE) at the end of
+            // a long park on to_ch, not assumed from the divider's nominal
+            // value -- that is what makes the curve a comparison instead of
+            // a prediction checked against itself. d_settle_index() below
+            // uses THIS read, not the post one (fix round 2, item 2), so the
+            // knee's meaning does not change between rounds.
             chain.write_chain(chain_word(
                 kCouponChain, step_pattern(kCouponChain, step_of(sp.group, sp.to_ch)), 0u));
-            const uint32_t s0 = cycles_now();
-            while(cycles_now() - s0 < ns_to_cycles(kParkNs)) { }
-            const int32_t settled = sample_now(nullptr);
+            const uint32_t s0_pre = cycles_now();
+            while(cycles_now() - s0_pre < ns_to_cycles(kParkNs)) { }
+            const int32_t settled_pre = sample_now(nullptr);
 
             // This pair only, overwritten by the next one -- see the
             // "streamed, not buffered" comment above.
@@ -665,7 +678,26 @@ void run_settle_probe(bench::Board& hw)
                              pts[i].mean, pts[i].min, pts[i].max);
             }
 
-            const int idx = d_settle_index(pts, kGridPoints, settled);
+            // A second read of the SAME settled reference, AFTER the sweep
+            // (POST) -- fix round 2, item 2. This design cannot otherwise
+            // tell settling from drift: the grid is swept in increasing d,
+            // so elapsed wall-clock time and commanded delay grow together,
+            // and a slow thermal creep across the sweep's own ~0.6 s would
+            // look exactly like a slow tail. Pre and post read the same
+            // to_ch the same way; only the wall-clock time between them
+            // differs. Not interpreted here -- see the SHELL_SETTLE_KNEE
+            // comment below for what the two numbers would mean.
+            chain.write_chain(chain_word(
+                kCouponChain, step_pattern(kCouponChain, step_of(sp.group, sp.to_ch)), 0u));
+            const uint32_t s0_post = cycles_now();
+            while(cycles_now() - s0_post < ns_to_cycles(kParkNs)) { }
+            const int32_t settled_post = sample_now(nullptr);
+
+            settled_raw_pre[p]  = settled_pre;
+            settled_raw_post[p] = settled_post;
+            residual_counts[p]  = pts[kGridPoints - 1].mean - settled_pre;
+
+            const int idx = d_settle_index(pts, kGridPoints, settled_pre);
             summary.knee_ns[p] = (idx < 0) ? -1 : static_cast<int32_t>(grid_ns(idx));
 
             // idx == 0 means the FIRST grid point (0 ns commanded delay) was
@@ -723,13 +755,27 @@ void run_settle_probe(bench::Board& hw)
         // the gates -- it does not suppress numbers, it labels them. A
         // reader that sees gates_ok=0 must not quote a single d_settle_ns;
         // read_settle.py (Task 6) enforces that.
+        //
+        // settled_raw_pre/settled_raw_post (fix round 2): printed side by
+        // side, not reduced to a verdict here. If they agree within a
+        // couple of counts, the sweep's own ~0.6 s of wall-clock time did
+        // not move the node and a slow tail in SHELL_SETTLE is real
+        // settling; if they differ by roughly a slow tail's own creep, that
+        // creep is thermal drift across the sweep, not settling, and
+        // d_settle_index() (which uses PRE, never POST) is comparing every
+        // point against a reference the node had already drifted away from
+        // by the time later points were measured. Which of those this run
+        // shows is for the reader to read off the two numbers, not for this
+        // comment to declare.
         for(int p = 0; p < kSettlePairs; ++p)
         {
             hw.PrintLine("SHELL_SETTLE_KNEE pair=%d d_settle_ns=%d at_or_below_offset=%d "
-                         "predicted_ns=%d reference=%d",
+                         "predicted_ns=%d reference=%d settled_raw_pre=%d "
+                         "settled_raw_post=%d residual_counts=%d",
                          p, d_settle_ns_print[p], at_or_below_offset[p] ? 1 : 0,
                          static_cast<int>(kSettlePlan[p].tau9_ns),
-                         kSettlePlan[p].is_reference ? 1 : 0);
+                         kSettlePlan[p].is_reference ? 1 : 0,
+                         settled_raw_pre[p], settled_raw_post[p], residual_counts[p]);
         }
 
         hw.PrintLine("SHELL_SETTLE_GATES g1=%d g2=%d g3=%d g4=%d",
