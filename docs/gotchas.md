@@ -371,25 +371,34 @@ invisible from reading the scripts, and each cost real time.
 
 ## Daisy Patch Submodule (the board itself, not the generators)
 
-- **The ADC reads about 3.1 % low, and it is gain, not offset.** Measured
-  2026-09-17 during the test coupon's bring-up, on ADC_9 and ADC_10 (module
-  pins A2/A3) through `hw.adc.Get()` with libDaisy's default configuration.
-  Channels tied to the analog rail through 0 ohms came back as 63485 of
-  65535 — 96.87 % of what the converter treats as full scale — on both
-  multiplexers and both sense pins, repeatable to within 2 counts.
+- **`hw.adc.Get()` reads about 3.1 % low — and it is libDaisy's ADC
+  configuration, not the converter.** Measured 2026-09-17 during the test
+  coupon's bring-up, on ADC_9 and ADC_10 (module pins A2/A3) with libDaisy's
+  default configuration. Channels tied to the analog rail through 0 ohms came
+  back as 63485 of 65535 — 96.87 % of full scale — on both multiplexers and
+  both sense pins, repeatable to within 2 counts.
 
   The board is not the cause. A multimeter puts that rail at exactly 3.30 V
   against AGND, and at 0 V against the submodule's own +3V3 output, so the
   coupon's rail *is* pin A10 with nothing dropped in between.
 
-  It is a gain error rather than a zero offset, and the coupon's own dividers
-  prove which: three 50/50 dividers off the same rail read 31716, 31737 and
-  31758. A gain error predicts `65535 * 1.65 / 3.4066 = 31742`. A 2050-count
-  offset predicts about 30717, a thousand counts away from anything measured.
-  So the converter behaves as though its reference were ~3.407 V. Whether the
-  reference really sits high or the converter's gain is low cannot be
-  separated on a board where every node is ratiometric to the same rail — it
-  would take an independent voltage source, which the coupon does not have.
+  **The converter is not the cause either, and an earlier version of this entry
+  said it was.** That evening the settle probe — which takes ADC1 away from
+  libDaisy and drives it single-shot at `OVS_NONE` with its own sampling time —
+  read the *same physical rail tie* on the *same board* as 65529..65533, i.e.
+  full scale. Same node, same session, two configurations, 2050 counts apart.
+  So the deficit lives in how libDaisy sets the ADC up (free-running DMA across
+  twelve channels, `OVS_32`, its default sampling time), not in the silicon or
+  its reference. **The mechanism within that configuration is unmeasured.** Do
+  not replace one attribution with another; the measurement above is what is
+  known.
+
+  Within libDaisy's configuration the deficit behaves as a gain error rather
+  than a zero offset, and the coupon's dividers prove which: three 50/50
+  dividers off the same rail read 31716, 31737 and 31758. A gain error predicts
+  `65535 * 1.65 / 3.4066 = 31742`; a 2050-count offset predicts about 30717, a
+  thousand counts from anything measured. That part of the original entry
+  stands — it is the attribution to the converter that was wrong.
 
   **The consequence is in the shipping firmware, not on the coupon.** A panel
   pot at its mechanical stop lands on 0.969, never on 1.0. Anything that waits
@@ -411,6 +420,38 @@ invisible from reading the scripts, and each cost real time.
   reference, the span grades the board. Note that self-calibration needs
   guards or it hides the faults it is meant to find — see the `Span` validity
   conditions and the red-proof in `tests/test_coupon_expect.cpp`.
+
+- **The ADC kernel clock is 6.146 MHz, not the 12.29 MHz `settle-budget.md` §1
+  assumes — exactly half.** Measured 2026-09-17 by the settle probe, and the
+  measurement is cheap enough that nobody should ever assume it again: run the
+  same conversion at two sampling times and the difference in elapsed core
+  cycles is *purely* ADC cycles, because every fixed overhead cancels. At
+  `ADC_SAMPLETIME_16CYCLES_5` and `ADC_SAMPLETIME_387CYCLES_5` the DWT spans
+  were 2311 and 31286 core cycles over 371 ADC cycles, giving 78.10 core cycles
+  per ADC cycle and 480 MHz / 78.10 = 6.146 MHz.
+
+  Everything derived from the assumed clock is wrong by 2×: one ADC cycle is
+  162.7 ns, not 81.4, and a 16.5 + 8.5 = 25-cycle conversion takes 4068 ns, not
+  2034. `docs/hardware/settle-budget.md` §1 carries the wrong figure and every
+  number downstream of it inherits the error.
+
+  This cost most of an evening in a shape worth recognising: the probe
+  subtracted the assumed conversion time from its measured span and reported
+  the remainder as "start-to-aperture latency". The 2034 ns shortfall showed up
+  as a mysterious 2752 ns of overhead that no amount of register-level
+  tightening could remove — because it was not overhead at all. **A constant
+  that the instrument could have measured, sitting next to the instrument as a
+  literal, is where the error hid.** Derive it at startup instead.
+
+  Two consequences that outlive the number. The sampling window is part of the
+  measurement instant, not just a model term: the S&H holds at the *end* of it,
+  so at 16.5 cycles the effective sample lands 2685 ns after the conversion
+  starts, and anything settling faster than that is invisible. And the timing
+  jitter floor is one ADC clock period — measured 138 ns against a 162.7 ns
+  period — because the DWT counts core cycles while the conversion starts on
+  the ADC's own edge. That is clock-domain-crossing quantisation, not software
+  residue; no delay grid on this part can be finer than one ADC clock period
+  without a faster ADC clock.
 
 - **A bring-up probe that scans once and then reprints its buffer is
   indistinguishable from a working one.** Same shape as the stale-object trap,
