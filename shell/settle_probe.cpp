@@ -87,6 +87,18 @@ void adc_init(bench::Board& hw)
 constexpr uint32_t kSampleTimeWorking = ADC_SAMPLETIME_16CYCLES_5;
 constexpr uint32_t kSampleTimeLong    = ADC_SAMPLETIME_387CYCLES_5;
 
+// settle_plan.h/.cpp's kSamplingLadderTenths stays pure and host-testable, so
+// it carries no HAL type -- this is the HAL ADC_SAMPLETIME_* constant at the
+// same index, for Task 5's per-pair sweep to hand to adc_select_time(). Order
+// matches kSamplingLadderTenths exactly (settle_plan.h says so; both are
+// ADC_SAMPLETIME_1CYCLE_5 .. ADC_SAMPLETIME_810CYCLES_5 in HAL enum order).
+constexpr uint32_t kSampleTimeByRung[kSamplingLadderLen] = {
+    ADC_SAMPLETIME_1CYCLE_5,    ADC_SAMPLETIME_2CYCLES_5,
+    ADC_SAMPLETIME_8CYCLES_5,   ADC_SAMPLETIME_16CYCLES_5,
+    ADC_SAMPLETIME_32CYCLES_5,  ADC_SAMPLETIME_64CYCLES_5,
+    ADC_SAMPLETIME_387CYCLES_5, ADC_SAMPLETIME_810CYCLES_5,
+};
+
 // Runs when the sense pin or the sampling time changes -- once per channel
 // pair (or once per side of the clock-calibration pass), never inside the
 // timed path.
@@ -289,6 +301,56 @@ void park(MuxScan& chain, bench::Board& hw, int group, int ch)
     hw.Delay(1);
 }
 
+// --- Task 5: the sweep ---
+//
+// One grid point: park on the pair's from_ch for kParkNs, latch to to_ch
+// taking t0 from the 595 chain's own latch edge, spin until d_ns has
+// elapsed, convert. Repeated kRepeats times; mean/min/max come back for
+// d_settle_index() and for G2/G3's floor and band.
+//
+// No bench::Board& parameter (brief's step 1 pseudocode carried one and
+// never used it) -- every wait in here spins on the DWT counter via
+// cycles_now(), not on anything the board handle owns.
+Point measure_point(MuxScan& chain, const SettlePair& sp, uint32_t d_ns)
+{
+    const uint32_t park_word
+        = chain_word(kCouponChain,
+                     step_pattern(kCouponChain, step_of(sp.group, sp.from_ch)), 0u);
+    const uint32_t test_word
+        = chain_word(kCouponChain,
+                     step_pattern(kCouponChain, step_of(sp.group, sp.to_ch)), 0u);
+    const uint32_t d_cycles = ns_to_cycles(d_ns);
+    const uint32_t park_cycles = ns_to_cycles(kParkNs);
+
+    int64_t sum = 0;
+    int32_t lo = 0x7FFFFFFF, hi = -0x7FFFFFFF;
+    for(int r = 0; r < kRepeats; ++r)
+    {
+        chain.write_chain(park_word);
+        // Named park_t0, not p0: run_settle_probe() below has its own p0 --
+        // kSettlePlan[0], a SettlePair -- and this function must not read as
+        // sharing it even though the two never actually collide (separate
+        // function scopes, no shadowing).
+        const uint32_t park_t0 = cycles_now();
+        while(cycles_now() - park_t0 < park_cycles) { }
+
+        const uint32_t t0 = chain.write_chain_timed(test_word);
+        // t = 0 is the 595 latch edge write_chain_timed() hands back, not the
+        // call site -- see its own doc comment. `cycles_now() - t0` on
+        // uint32_t wraps correctly with no special case needed: the DWT
+        // counter is free-running and unsigned specifically so this
+        // subtraction is always valid, even across a wrap. Do not "fix" it.
+        while(cycles_now() - t0 < d_cycles) { }
+
+        uint32_t span = 0;
+        const int32_t v = sample_now(&span);
+        sum += v;
+        if(v < lo) lo = v;
+        if(v > hi) hi = v;
+    }
+    return Point{static_cast<int32_t>(sum / kRepeats), lo, hi};
+}
+
 } // namespace
 
 void run_settle_probe(bench::Board& hw)
@@ -391,18 +453,14 @@ void run_settle_probe(bench::Board& hw)
     // sampling window; the conversion cycles that follow only digitize what
     // is already captured, so they do not delay the instant that needs the
     // node to have settled. The rung comes from sample_time_index_for()
-    // (settle_plan.h/.cpp), the same pure, host-tested function Task 5 will
-    // use to actually configure each pair's ADC channel -- this file only
-    // reports what that choice implies, it does not yet reconfigure
-    // anything per pair.
+    // (settle_plan.h/.cpp), the same pure, host-tested function the sweep
+    // below (Task 5) uses to actually select each pair's ADC channel.
     //
-    // Task 5's knee_ns[] (the commanded delay a pair's own settle sweep
-    // reports) does not exist yet -- this task never runs a per-pair grid
-    // sweep, only P0's own repeated latency at a fixed park. So there is no
-    // "true settle" (d + offset) to report yet, and no knee to compare
-    // against offset_ns for the spec's "at or below the offset" rule.
-    // offset_ns is printed on its own, beside SHELL_SETTLE_CAL, so Task 5
-    // has it ready the moment knee_ns exists.
+    // Task 5's per-pair sweep, below, reuses rung_idx[]/offset_ns[] computed
+    // right here rather than recomputing them: "true settle = d + offset"
+    // needs this pair's offset, and offset_ns is printed on its own, beside
+    // SHELL_SETTLE_CAL, so a reader can check the arithmetic without
+    // trusting SHELL_SETTLE_KNEE's at_or_below_offset flag blind.
     int32_t rung_idx[kSettlePairs];
     int32_t offset_ns[kSettlePairs];
     for(int p = 0; p < kSettlePairs; ++p)
@@ -438,6 +496,20 @@ void run_settle_probe(bench::Board& hw)
 
     while(1)
     {
+        // The sweep below (Task 5) reconfigures the ADC's channel and
+        // sampling time per pair and leaves the mux parked on whichever
+        // grid point it measured last. Put both back to P0's own from_ch at
+        // the working sampling time before anything else this iteration
+        // does -- the instrument-measuring-itself pass a few lines down has
+        // to see the exact same node every single iteration, or lat_mean_ns
+        // stops meaning "the instrument's own latency" and starts meaning
+        // "whatever the previous sweep happened to visit last". A no-op on
+        // the very first iteration (already parked there by the setup
+        // above); cheap (hw.Delay(1) against a sweep costing ~0.3 s) on
+        // every iteration after.
+        adc_select(channel_of_group(p0.group));
+        park(chain, hw, p0.group, p0.from_ch);
+
         // The configuration line comes FIRST and the end marker always
         // arrives, even on a pass that measured nothing. A reader that can
         // only recognise a complete block is the point: a truncated one must
@@ -475,13 +547,11 @@ void run_settle_probe(bench::Board& hw)
         // Fix round 4, item 3: printed every pass, beside SHELL_SETTLE_CAL,
         // for the same observability reason SHELL_SETTLE_CLK moved into the
         // loop in fix round 3 -- offset_ns[]/rung_idx[] were computed once,
-        // above, since none of it changes boot to boot. There is no knee_ns
-        // to print beside it yet (see the comment above the computation
-        // loop): this line establishes the offset half of "true settle =
-        // d + offset" for Task 5 to complete once it adds the per-pair grid
-        // sweep. A pair whose real settle is at or below its own offset
-        // must be reported as such, not as a number -- Task 5's job when
-        // knee_ns exists, not this loop's.
+        // above, since none of it changes boot to boot. This line establishes
+        // the offset half of "true settle = d + offset"; the sweep below
+        // (Task 5) prints the other half in SHELL_SETTLE_KNEE, with its own
+        // at_or_below_offset flag for the pairs whose true settle falls
+        // below what's printed here.
         for(int p = 0; p < kSettlePairs; ++p)
         {
             hw.PrintLine("SHELL_SETTLE_OFFSET pair=%d offset_ns=%d smp_tenths=%d",
@@ -527,24 +597,133 @@ void run_settle_probe(bench::Board& hw)
         }
         // -1 rather than a divide-by-zero, a silently zeroed mean, or the
         // 0x7FFFFFFF/-0x7FFFFFFF init values leaking into print, if every
-        // repeat in this block timed out (or has_clk was false). gates_ok is
-        // already an unconditional 0, but none of these fields may look
-        // like a number when they are not one.
+        // repeat in this block timed out (or has_clk was false). gates_ok
+        // comes from the sweep below now (Task 5), not a hardcoded 0 -- but
+        // none of these fields may look like a number when they are not one.
         const bool    all_timed_out = valid_n == 0;
         const int32_t lat_mean = all_timed_out ? -1 : static_cast<int32_t>(lat_sum / valid_n);
         if(all_timed_out) { lat_min = -1; lat_max = -1; }
         const int32_t b0 = all_timed_out ? -1 : (val_max - val_min);  // G2's measured noise floor
 
-        // gates_ok is always 0 here -- Task 5 computes it via settle_gates().
-        // Do not read this pass as a verdict. timeouts is the LIFETIME count
-        // since boot (see g_adc_timeouts) so a single unlucky block does not
-        // hide behind an otherwise-clean-looking next one.
+        // --- Task 5: the sweep ---
+        //
+        // gates_ok, on the SHELL_SETTLE_CAL line below, needs
+        // summary.knee_ns[] and summary.widest_band, which only exist once
+        // this sweep has run -- but the spec's print order puts CAL before
+        // the per-point lines. So the sweep is run and fully reduced to
+        // `summary`/`gates` here, before ANY line below is printed; only the
+        // PRINTING is reordered, not the measuring. pts_all keeps every
+        // point of every pair so the per-point lines can still print in the
+        // required place afterwards without re-measuring -- re-measuring
+        // would also cost a second 0.3 s pass and could print slightly
+        // different numbers than the ones the knee/gates above were actually
+        // computed from.
+        RunSummary summary{};
+        summary.b0          = b0;
+        summary.lat_min_ns  = lat_min;
+        summary.lat_max_ns  = lat_max;
+        summary.lat_mean_ns = lat_mean;
+        summary.widest_band = 0;
+
+        Point   pts_all[kSettlePairs][kGridPoints];
+        int32_t d_settle_ns_print[kSettlePairs];
+        bool    at_or_below_offset[kSettlePairs];
+
+        for(int p = 0; p < kSettlePairs; ++p)
+        {
+            const SettlePair& sp = kSettlePlan[p];
+
+            // This pair's OWN rung (amendment 4), not kSampleTimeWorking.
+            // rung_idx[p] came from sample_time_index_for() at startup and is
+            // reused here, not recomputed (amendment 4).
+            adc_select_time(channel_of_group(sp.group), kSampleTimeByRung[rung_idx[p]]);
+
+            // The settled reference for THIS pair, READ at the end of a long
+            // park on to_ch, not assumed from the divider's nominal value --
+            // that is what makes the curve a comparison instead of a
+            // prediction checked against itself.
+            chain.write_chain(chain_word(
+                kCouponChain, step_pattern(kCouponChain, step_of(sp.group, sp.to_ch)), 0u));
+            const uint32_t s0 = cycles_now();
+            while(cycles_now() - s0 < ns_to_cycles(kParkNs)) { }
+            const int32_t settled = sample_now(nullptr);
+
+            for(int i = 0; i < kGridPoints; ++i)
+            {
+                pts_all[p][i]      = measure_point(chain, sp, grid_ns(i));
+                const int32_t band = pts_all[p][i].max - pts_all[p][i].min;
+                if(band > summary.widest_band) summary.widest_band = band;
+            }
+
+            const int idx = d_settle_index(pts_all[p], kGridPoints, settled);
+            summary.knee_ns[p] = (idx < 0) ? -1 : static_cast<int32_t>(grid_ns(idx));
+
+            // idx == 0 means the FIRST grid point (0 ns commanded delay) was
+            // already inside the band: the true settle instant -- d + this
+            // pair's own offset_ns, the SHELL_SETTLE_OFFSET line above -- is
+            // at or below the offset, i.e. faster than this instrument's own
+            // zero point can resolve. That is not "0 ns settle time"; the
+            // node did not settle instantaneously, the instrument simply
+            // cannot see anything faster than its own aperture closing.
+            // d_settle_ns prints -1 (impossible as a real duration, the same
+            // sentinel already used for "never settled") whenever idx <= 0,
+            // and at_or_below_offset is the only field that then tells the
+            // two apart: idx == 0 is a PASS (that collapse to grid point
+            // zero is G1's entire job, section 7), idx < 0 across the WHOLE
+            // 0..6400 ns grid means the pair never settled at all. A reader
+            // who ignores the flag still cannot mistake either -1 for a
+            // measured time, and one who reads it cannot conflate the two
+            // very different reasons behind it.
+            at_or_below_offset[p] = (idx == 0);
+            d_settle_ns_print[p]  = (idx > 0) ? static_cast<int32_t>(grid_ns(idx)) : -1;
+        }
+
+        const Gates gates = settle_gates(summary);
+
         hw.PrintLine("SHELL_SETTLE_CAL lat_mean_ns=%d lat_min_ns=%d "
                      "lat_max_ns=%d b0=%d cal_from=%d cal_to=%d timeouts=%d "
                      "gates_ok=%d",
                      lat_mean, lat_min, lat_max, b0, cal_from, cal_to,
-                     static_cast<int>(g_adc_timeouts), 0);
+                     static_cast<int>(g_adc_timeouts), gates.ok() ? 1 : 0);
+
+        // The per-point lines: every grid point of every pair, exactly the
+        // measurements summary.knee_ns[]/gates above were computed from.
+        for(int p = 0; p < kSettlePairs; ++p)
+        {
+            const SettlePair& sp = kSettlePlan[p];
+            for(int i = 0; i < kGridPoints; ++i)
+            {
+                hw.PrintLine("SHELL_SETTLE pair=%d sense=%d from=%d to=%d d_ns=%d "
+                             "n=%d mean=%d min=%d max=%d",
+                             p, sp.group, sp.from_ch, sp.to_ch,
+                             static_cast<int>(grid_ns(i)), kRepeats,
+                             pts_all[p][i].mean, pts_all[p][i].min, pts_all[p][i].max);
+            }
+        }
+
+        // The block prints the knees whether or not the gates passed, beside
+        // the gates -- it does not suppress numbers, it labels them. A
+        // reader that sees gates_ok=0 must not quote a single d_settle_ns;
+        // read_settle.py (Task 6) enforces that.
+        for(int p = 0; p < kSettlePairs; ++p)
+        {
+            hw.PrintLine("SHELL_SETTLE_KNEE pair=%d d_settle_ns=%d at_or_below_offset=%d "
+                         "predicted_ns=%d reference=%d",
+                         p, d_settle_ns_print[p], at_or_below_offset[p] ? 1 : 0,
+                         static_cast<int>(kSettlePlan[p].tau9_ns),
+                         kSettlePlan[p].is_reference ? 1 : 0);
+        }
+
+        hw.PrintLine("SHELL_SETTLE_GATES g1=%d g2=%d g3=%d g4=%d",
+                     gates.g1_knee ? 1 : 0, gates.g2_floor ? 1 : 0,
+                     gates.g3_band ? 1 : 0, gates.g4_jitter ? 1 : 0);
         hw.PrintLine("SHELL_SETTLE_END");
+
+        // Sweep state (last pair's channel/sampling time, mux parked on its
+        // last grid point) is NOT restored here: the top of the next
+        // iteration does it, right before that iteration's own lat pass
+        // needs it (adc_select(channel_of_group(p0.group)) + park() there).
+        // Restoring in two places would only be two places to keep in sync.
         hw.Delay(1000);
     }
 }
