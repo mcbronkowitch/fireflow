@@ -71,3 +71,13 @@ TEST_CASE("mux plan: the LED field cannot collide with address or enable") {
     CHECK(((no_leds >> shell::kEnableShift) & 0x03u) == p.enable_mask);
     CHECK((all_leds & 0xFFu) == (no_leds & 0xFFu));
 }
+
+TEST_CASE("mux plan: the sense pins are the raw ADC inputs, not the CV pins") {
+    // libDaisy's patch_sm enum runs CV_1..CV_8 = 0..7 and then ADC_9 = 8
+    // (daisy_patch_sm.h:20-28). io-budget section 3 spends A2/A3/D8/D9 =
+    // ADC_9..ADC_12 on raw pot sense and explicitly rejects the CV pins for
+    // it, because those are conditioned bipolar inputs (InitBipolarCv:
+    // +-5 V, inverted, 2 ms slew). Reading CV_1 on the coupon returns a pin
+    // nothing on the board drives.
+    CHECK(shell::kSenseAdcBase == 8);
+}

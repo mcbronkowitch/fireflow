@@ -28,6 +28,12 @@ inline constexpr int kMuxTotal    = kScanSteps * kSensePins;     // 128
 // the 128 channels above are headroom, not a plan.
 inline constexpr int kChainBits = 32;
 
+// The first of the raw ADC pins, as an index into libDaisy's patch_sm
+// channel enum (CV_1..CV_8 = 0..7, then ADC_9 = 8). It is a number here and
+// not the enum constant because this header may not include a hardware
+// header -- mux_scan.cpp static_asserts the two against each other.
+inline constexpr int kSenseAdcBase = 8;
+
 inline constexpr int kAddrShift   = 0;  // four address lines, bits 0..3
 inline constexpr int kEnableShift = 4;  // one active-low enable per group
 inline constexpr int kLedShift    = 8;  // 19 LED bits from here up

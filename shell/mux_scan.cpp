@@ -20,6 +20,14 @@ constexpr daisy::Pin kIn    = daisy::patch_sm::DaisyPatchSM::D10;
 // measurement, not a footnote to this one.
 constexpr daisy::GPIO::Speed kSpeed = daisy::GPIO::Speed::LOW;
 
+// The sense pins are the RAW ADC inputs A2/A3/D8/D9, not the conditioned CV
+// pins. Until 2026-09-17 this read CV_1 + s, which cost nothing in the CPU
+// measurement it was written for and would have made every coupon reading
+// meaningless. The number lives in mux_plan.h so the host can assert it;
+// this is where it gets checked against libDaisy.
+static_assert(daisy::patch_sm::ADC_9 == kSenseAdcBase,
+              "libDaisy's patch_sm channel enum moved under kSenseAdcBase");
+
 } // namespace
 
 void MuxScan::init()
@@ -60,7 +68,7 @@ void MuxScan::step(bench::Board& hw)
         {
             const int ch = mux_channel(live_step_, s);
             if(ch >= 0)
-                g_mux_values[ch] = hw.GetAdcValue(daisy::patch_sm::CV_1 + s);
+                g_mux_values[ch] = hw.GetAdcValue(kSenseAdcBase + s);
         }
     }
 
