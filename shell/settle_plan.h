@@ -59,8 +59,7 @@ extern const int     kSamplingLadderTenths[kSamplingLadderLen];
 // value every boot -- fix round 4's report explains the distinction).
 int sample_time_index_for(uint32_t r_src_ohm);
 
-// Delay grid: 0 to 6400 ns, span unchanged since section 6 -- but the step
-// itself is fix round 5, not the original 100 ns.
+// Delay grid step: fix round 5, not the original 100 ns.
 //
 // Measured on the coupon board 2026-09-17 (fix round 4's SHELL_SETTLE_CAL,
 // after the instrument's own latency arithmetic was corrected to the
@@ -71,14 +70,24 @@ int sample_time_index_for(uint32_t r_src_ohm);
 // exists to avoid (a test that cannot go red). The grid step is the one
 // that has to give: it must never be finer than the instrument's own
 // measured spread, so it moved to 200 ns, comfortably above the 138 ns
-// floor, keeping 0..6400 ns's span with 33 points instead of 65.
+// floor.
 //
 // Whoever wants this narrower again must first RE-MEASURE the jitter (not
 // assume it improved) and show the new number is smaller before touching
 // this constant -- see task-4-report.md's fix-round-5 section for whether
 // 138 ns looked reducible at the time this was written.
+//
+// Delay grid SPAN: 0..6400 ns through Task 5 fix round 1, extended to
+// 0..12800 ns in that same round. On the coupon board, P1 (REF_A, the
+// 3016 ns prediction) was STILL RISING at the last old grid point while its
+// 20 us parked reference sat higher still -- d_settle_index() correctly
+// reported "never settled", but at 6400 ns the grid could not distinguish
+// "slow" from "beyond my reach", which is exactly the distinction section 7
+// exists to make. kGridStepNs did not move again -- it is still pinned to
+// the measured 138 ns jitter above -- only kGridPoints doubled to extend the
+// reach.
 inline constexpr int kGridStepNs = 200;
-inline constexpr int kGridPoints = 33;
+inline constexpr int kGridPoints = 65;
 
 constexpr uint32_t grid_ns(int i)
 {
@@ -132,7 +141,24 @@ struct RunSummary
 {
     int32_t knee_ns[kSettlePairs];  // -1 where the pair never settled
     int32_t b0;                     // spread of P0's settled reference read
-    int32_t widest_band;            // widest max-min over every point of every pair
+    // Widest max-min over every SETTLED point of every pair -- i.e. only
+    // points at or after that pair's own knee, never the transient before
+    // it. Named widest_band through Task 5 fix round 1; renamed here because
+    // that name let the field silently mean "every point", which G3 cannot
+    // survive on a real curve: measured on the coupon board, pair 1's bands
+    // ran 934, 581, 379, 329, 148, 81 ... ns and pair 2's ran 1140, 803, 476,
+    // 275, 149 ... ns, widest at the EARLIEST points and collapsing to a
+    // 30-50 floor once settled. That is not noise -- while a node is still
+    // moving, the instrument's own ~140 ns aperture jitter gets converted
+    // into voltage by the curve's slope, so a steep point MUST have a wide
+    // band. G3's intent (a wide band must not be read as a time) applies to
+    // the settled region, not the transient the knee already reports as
+    // unsettled. A pair with no knee (knee_ns[p] == -1) contributes nothing
+    // to this field -- its failure to settle is already visible in knee_ns
+    // and must not also corrupt a band gate that was never about it. Do not
+    // re-broaden this back to "every point" because that reads more
+    // thorough; it fails every curve that actually settles.
+    int32_t widest_settled_band;
     int32_t lat_min_ns;
     int32_t lat_max_ns;
     int32_t lat_mean_ns;

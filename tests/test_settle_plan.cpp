@@ -9,16 +9,20 @@
 #include "../shell/mux_plan.h"
 
 TEST_CASE("settle plan: the grid is monotonic and ends where the spec says") {
-    // Fix round 5: the SPAN (0..6400 ns) is unchanged since section 6, but
-    // the step is not -- 138 ns of measured aperture jitter on the coupon
-    // board (task-4-report.md, fix round 5) means a 100 ns step claimed
-    // resolution the instrument does not have. 65 points at 100 ns became
-    // 33 points at 200 ns; the boundary this test checks (grid_ns(last) ==
-    // 6400) is exactly the invariant that survives the change.
-    CHECK(shell::kGridPoints == 33);
+    // Fix round 5: 138 ns of measured aperture jitter on the coupon board
+    // (task-4-report.md, fix round 5) means a 100 ns step claimed resolution
+    // the instrument does not have; the step moved to 200 ns.
+    //
+    // Task 5 fix round 1: the SPAN, not the step, moved this time -- on the
+    // coupon board, pair 1 (REF_A, 3016 ns predicted) was still rising at
+    // the old last grid point (6400 ns) while its 20 us parked reference sat
+    // higher still, so the grid could not tell "slow" from "beyond my
+    // reach". kGridPoints doubled, 33 -> 65, to reach 12800 ns; kGridStepNs
+    // is unchanged, still pinned to the measured jitter above.
+    CHECK(shell::kGridPoints == 65);
     CHECK(shell::kGridStepNs == 200);
     CHECK(shell::grid_ns(0) == 0u);
-    CHECK(shell::grid_ns(shell::kGridPoints - 1) == 6400u);
+    CHECK(shell::grid_ns(shell::kGridPoints - 1) == 12800u);
     for(int i = 1; i < shell::kGridPoints; ++i)
         CHECK(shell::grid_ns(i) > shell::grid_ns(i - 1));
 }
@@ -119,11 +123,11 @@ std::vector<shell::Point> make_curve(int knee, int32_t settled, int32_t band) {
 shell::RunSummary clean_summary() {
     shell::RunSummary s{};
     for(int p = 0; p < shell::kSettlePairs; ++p) s.knee_ns[p] = 100;
-    s.b0          = 12;
-    s.widest_band = 30;
-    s.lat_min_ns  = 300;
-    s.lat_max_ns  = 340;
-    s.lat_mean_ns = 320;
+    s.b0                  = 12;
+    s.widest_settled_band = 30;
+    s.lat_min_ns          = 300;
+    s.lat_max_ns          = 340;
+    s.lat_mean_ns         = 320;
     return s;
 }
 
@@ -195,8 +199,8 @@ TEST_CASE("settle gates: G2 refuses a floor that swallows the criterion") {
     // fifth of the 8-count threshold. Above it every curve still LOOKS like
     // a curve, which is exactly why this must fail loudly.
     shell::RunSummary s = clean_summary();
-    s.b0          = shell::kFloorMaxCounts;
-    s.widest_band = shell::kFloorMaxCounts;
+    s.b0                  = shell::kFloorMaxCounts;
+    s.widest_settled_band = shell::kFloorMaxCounts;
     CHECK(shell::settle_gates(s).g2_floor);
     s.b0 = shell::kFloorMaxCounts + 1;
     CHECK_FALSE(shell::settle_gates(s).g2_floor);
@@ -204,10 +208,10 @@ TEST_CASE("settle gates: G2 refuses a floor that swallows the criterion") {
 
 TEST_CASE("settle gates: G3 measures the band against the measured floor") {
     shell::RunSummary s = clean_summary();
-    s.b0          = 10;
-    s.widest_band = 30;
+    s.b0                  = 10;
+    s.widest_settled_band = 30;
     CHECK(shell::settle_gates(s).g3_band);
-    s.widest_band = 31;
+    s.widest_settled_band = 31;
     CHECK_FALSE(shell::settle_gates(s).g3_band);
 }
 
@@ -217,8 +221,8 @@ TEST_CASE("settle gates: G3 never demands better than the criterion itself") {
     // floor at kSettleCounts, b0 = 1 would demand every point inside
     // 3 counts and fail a perfectly good run.
     shell::RunSummary s = clean_summary();
-    s.b0          = 1;
-    s.widest_band = shell::kSettleCounts;
+    s.b0                  = 1;
+    s.widest_settled_band = shell::kSettleCounts;
     CHECK(shell::settle_gates(s).g3_band);
 }
 

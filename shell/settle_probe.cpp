@@ -342,8 +342,11 @@ Point measure_point(MuxScan& chain, const SettlePair& sp, uint32_t d_ns)
         // subtraction is always valid, even across a wrap. Do not "fix" it.
         while(cycles_now() - t0 < d_cycles) { }
 
-        uint32_t span = 0;
-        const int32_t v = sample_now(&span);
+        // nullptr: nothing in this function reads the per-repeat span (that
+        // came from the brief's own pseudocode, not a defect introduced
+        // here) -- the aperture-jitter measurement that DOES need spans is
+        // the lat pass in run_settle_probe(), on the parked reference.
+        const int32_t v = sample_now(nullptr);
         sum += v;
         if(v < lo) lo = v;
         if(v > hi) hi = v;
@@ -607,25 +610,26 @@ void run_settle_probe(bench::Board& hw)
 
         // --- Task 5: the sweep ---
         //
-        // gates_ok, on the SHELL_SETTLE_CAL line below, needs
-        // summary.knee_ns[] and summary.widest_band, which only exist once
-        // this sweep has run -- but the spec's print order puts CAL before
-        // the per-point lines. So the sweep is run and fully reduced to
-        // `summary`/`gates` here, before ANY line below is printed; only the
-        // PRINTING is reordered, not the measuring. pts_all keeps every
-        // point of every pair so the per-point lines can still print in the
-        // required place afterwards without re-measuring -- re-measuring
-        // would also cost a second 0.3 s pass and could print slightly
-        // different numbers than the ones the knee/gates above were actually
-        // computed from.
+        // Streamed, not buffered (Task 5 fix round 1, item 1): each
+        // SHELL_SETTLE line prints the instant its own point is measured,
+        // inside the loop below. Only the CURRENT pair's kGridPoints points
+        // (a few hundred bytes) are ever kept at once -- d_settle_index()
+        // needs the whole curve to find "the start of the final settled
+        // run" (a forward scan alone cannot do that), but never more than
+        // one pair's worth. This task's first round buffered all 6 pairs'
+        // points so SHELL_SETTLE_CAL's gates_ok could print before the
+        // per-point lines; that print order was itself the bug (a dispatch
+        // error, not the brief), so the fix is printing CAL, the knees, the
+        // gates and the end marker only AFTER the sweep below, matching the
+        // brief -- not carrying the whole sweep in memory to satisfy a print
+        // order that should not have existed.
         RunSummary summary{};
-        summary.b0          = b0;
-        summary.lat_min_ns  = lat_min;
-        summary.lat_max_ns  = lat_max;
-        summary.lat_mean_ns = lat_mean;
-        summary.widest_band = 0;
+        summary.b0                  = b0;
+        summary.lat_min_ns          = lat_min;
+        summary.lat_max_ns          = lat_max;
+        summary.lat_mean_ns         = lat_mean;
+        summary.widest_settled_band = 0;
 
-        Point   pts_all[kSettlePairs][kGridPoints];
         int32_t d_settle_ns_print[kSettlePairs];
         bool    at_or_below_offset[kSettlePairs];
 
@@ -648,14 +652,20 @@ void run_settle_probe(bench::Board& hw)
             while(cycles_now() - s0 < ns_to_cycles(kParkNs)) { }
             const int32_t settled = sample_now(nullptr);
 
+            // This pair only, overwritten by the next one -- see the
+            // "streamed, not buffered" comment above.
+            Point pts[kGridPoints];
             for(int i = 0; i < kGridPoints; ++i)
             {
-                pts_all[p][i]      = measure_point(chain, sp, grid_ns(i));
-                const int32_t band = pts_all[p][i].max - pts_all[p][i].min;
-                if(band > summary.widest_band) summary.widest_band = band;
+                pts[i] = measure_point(chain, sp, grid_ns(i));
+                hw.PrintLine("SHELL_SETTLE pair=%d sense=%d from=%d to=%d d_ns=%d "
+                             "n=%d mean=%d min=%d max=%d",
+                             p, sp.group, sp.from_ch, sp.to_ch,
+                             static_cast<int>(grid_ns(i)), kRepeats,
+                             pts[i].mean, pts[i].min, pts[i].max);
             }
 
-            const int idx = d_settle_index(pts_all[p], kGridPoints, settled);
+            const int idx = d_settle_index(pts, kGridPoints, settled);
             summary.knee_ns[p] = (idx < 0) ? -1 : static_cast<int32_t>(grid_ns(idx));
 
             // idx == 0 means the FIRST grid point (0 ns commanded delay) was
@@ -670,12 +680,35 @@ void run_settle_probe(bench::Board& hw)
             // and at_or_below_offset is the only field that then tells the
             // two apart: idx == 0 is a PASS (that collapse to grid point
             // zero is G1's entire job, section 7), idx < 0 across the WHOLE
-            // 0..6400 ns grid means the pair never settled at all. A reader
-            // who ignores the flag still cannot mistake either -1 for a
+            // grid means the pair never settled at all. A reader who
+            // ignores the flag still cannot mistake either -1 for a
             // measured time, and one who reads it cannot conflate the two
-            // very different reasons behind it.
+            // very different reasons behind it. Confirmed against the
+            // coupon board (fix round 1): pair 0 and pair 5, the two
+            // reference pairs, both came back idx == 0.
             at_or_below_offset[p] = (idx == 0);
             d_settle_ns_print[p]  = (idx > 0) ? static_cast<int32_t>(grid_ns(idx)) : -1;
+
+            // G3's widest_settled_band (Task 5 fix round 1, item 3): counted
+            // only from this pair's own knee onward, never the transient
+            // before it -- see the field's comment in settle_plan.h for the
+            // measured coupon-board numbers (934 ns down to 81 ns on pair 1,
+            // 1140 down to 149 on pair 2) that make the transient unfit to
+            // compare against a floor derived from the settled state. A pair
+            // with no knee (idx < 0) contributes nothing: its own failure to
+            // settle already shows up in knee_ns and must not also corrupt
+            // this gate.
+            if(idx >= 0)
+            {
+                int32_t widest_this_pair = 0;
+                for(int i = idx; i < kGridPoints; ++i)
+                {
+                    const int32_t band = pts[i].max - pts[i].min;
+                    if(band > widest_this_pair) widest_this_pair = band;
+                }
+                if(widest_this_pair > summary.widest_settled_band)
+                    summary.widest_settled_band = widest_this_pair;
+            }
         }
 
         const Gates gates = settle_gates(summary);
@@ -685,21 +718,6 @@ void run_settle_probe(bench::Board& hw)
                      "gates_ok=%d",
                      lat_mean, lat_min, lat_max, b0, cal_from, cal_to,
                      static_cast<int>(g_adc_timeouts), gates.ok() ? 1 : 0);
-
-        // The per-point lines: every grid point of every pair, exactly the
-        // measurements summary.knee_ns[]/gates above were computed from.
-        for(int p = 0; p < kSettlePairs; ++p)
-        {
-            const SettlePair& sp = kSettlePlan[p];
-            for(int i = 0; i < kGridPoints; ++i)
-            {
-                hw.PrintLine("SHELL_SETTLE pair=%d sense=%d from=%d to=%d d_ns=%d "
-                             "n=%d mean=%d min=%d max=%d",
-                             p, sp.group, sp.from_ch, sp.to_ch,
-                             static_cast<int>(grid_ns(i)), kRepeats,
-                             pts_all[p][i].mean, pts_all[p][i].min, pts_all[p][i].max);
-            }
-        }
 
         // The block prints the knees whether or not the gates passed, beside
         // the gates -- it does not suppress numbers, it labels them. A
