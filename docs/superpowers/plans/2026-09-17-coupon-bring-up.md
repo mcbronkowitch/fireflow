@@ -923,9 +923,22 @@ void run_coupon_bringup(bench::Board& hw)
 
 **Why the raw getter and not `GetAdcValue`:** `bench::Board` is an alias for `daisy::patch_sm::DaisyPatchSM` (`src/hw/board.h:24`), whose `AdcHandle adc` member is public (`daisy_patch_sm.h:248`, inside the `public:` block that opens at line 54). `adc.Get()` hands back the unconditioned 16-bit conversion, which is what `coupon_expect.h`'s brackets are written in. `GetAdcValue()` would route through libDaisy's `AnalogControl` — and for `ADC_9..ADC_12` that is a plain `Init()` rather than `InitBipolarCv()`, but it still normalises to 0..1 and carries the control's slew, so the brackets would have to be rewritten in floats for no gain.
 
-- [ ] **Step 4: Make `write_chain` reachable**
+- [ ] **Step 4: Let `mux_scan.h` actually see the switch, and make `write_chain` reachable**
 
-In `shell/mux_scan.h`, move `void write_chain(uint32_t word);` from `private:` to `public:` with:
+Task 2 left `mux_scan.h` selecting its profile with `#if defined(SHELL_COUPON_PROBE) && SHELL_COUPON_PROBE`, and nothing had defined that symbol yet. Now that the header exists, `mux_scan.h` must include it **itself** — `main.cpp` including it is not enough. `mux_scan.cpp` includes only `mux_scan.h`, so without this line `mux_scan.o` compiles against the panel profile while `main.o` compiles against the coupon's, and `g_mux_values` gets two different sizes in one link. That is an ODR violation the linker will not report.
+
+At the top of `shell/mux_scan.h`, above `#include "mux_plan.h"`:
+
+```cpp
+// Which board this image is for. Included HERE and not left to main.cpp:
+// mux_scan.cpp sees only this header, and a profile that differs between
+// two objects gives g_mux_values two sizes in one link.
+#include "shell_coupon_probe.h"
+```
+
+and simplify the guard below it to `#if SHELL_COUPON_PROBE`, since the symbol is now always defined.
+
+Then move `void write_chain(uint32_t word);` from `private:` to `public:` with:
 
 ```cpp
     // Public because the coupon bring-up probe drives the chain directly
