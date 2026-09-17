@@ -99,6 +99,16 @@ constexpr uint32_t kSampleTimeByRung[kSamplingLadderLen] = {
     ADC_SAMPLETIME_387CYCLES_5, ADC_SAMPLETIME_810CYCLES_5,
 };
 
+// Task 5 fix round 3, item 2: how many of the LAST grid points are averaged
+// into the settled reference d_settle_index() is judged against. Value is 8,
+// same as settle_plan.h's kSettleCounts -- but the two are NOT the same
+// constant wearing two names: kSettleCounts is a THRESHOLD in raw ADC
+// counts (half an LSB of 12 bit), kTailWindowPoints is a WINDOW SIZE in
+// grid points. They happen to share a numeral today; a future change to
+// either must not assume the other moves with it, so they stay two
+// separate names.
+constexpr int kTailWindowPoints = 8;
+
 // Runs when the sense pin or the sampling time changes -- once per channel
 // pair (or once per side of the clock-calibration pass), never inside the
 // timed path.
@@ -632,17 +642,16 @@ void run_settle_probe(bench::Board& hw)
 
         int32_t d_settle_ns_print[kSettlePairs];
         bool    at_or_below_offset[kSettlePairs];
-        // Fix round 2, item 1: the yardstick every knee is judged against
-        // was never printed, so a reader had no way to check a single knee
-        // against the data in front of them. Both settled_raw_pre[] (the
-        // value d_settle_index() actually uses) and settled_raw_post[]
-        // (item 2, below) are kept for the SHELL_SETTLE_KNEE line.
+        // Fix round 3, item 1: the parked reference is demoted to a printed
+        // cross-check (item 2 below explains why) but is still kept, pre
+        // and post, so a reader can see it disagree with the curve's own
+        // tail when it does.
         int32_t settled_raw_pre[kSettlePairs];
         int32_t settled_raw_post[kSettlePairs];
-        // Last point's mean minus settled_raw_pre, signed -- makes "never
-        // settled" interpretable: a reader can tell nine counts short from
-        // nine hundred instead of only seeing knee_ns == -1.
-        int32_t residual_counts[kSettlePairs];
+        // The actual yardstick now: mean of the last kTailWindowPoints grid
+        // points (fix round 3, item 2), and their own spread -- see below.
+        int32_t tail_ref[kSettlePairs];
+        int32_t tail_spread[kSettlePairs];
 
         for(int p = 0; p < kSettlePairs; ++p)
         {
@@ -653,12 +662,16 @@ void run_settle_probe(bench::Board& hw)
             // reused here, not recomputed (amendment 4).
             adc_select_time(channel_of_group(sp.group), kSampleTimeByRung[rung_idx[p]]);
 
-            // The settled reference for THIS pair, READ (PRE) at the end of
-            // a long park on to_ch, not assumed from the divider's nominal
-            // value -- that is what makes the curve a comparison instead of
-            // a prediction checked against itself. d_settle_index() below
-            // uses THIS read, not the post one (fix round 2, item 2), so the
-            // knee's meaning does not change between rounds.
+            // The PARKED reference for THIS pair (PRE), read at the end of a
+            // long park on to_ch. Fix round 3, item 2: this is no longer
+            // what d_settle_index() is judged against -- round 2 printed it
+            // and round 3's board data showed it moving run to run (pair 2's
+            // knee: 2600, then 11600, then 2800) while the curves themselves
+            // stayed reproducible. The yardstick was the noisy part. Kept
+            // here, and printed on SHELL_SETTLE_REF below, purely as a
+            // cross-check: a large disagreement between this parked read and
+            // the curve's own tail (see tail_ref below) is itself a finding
+            // a reader must be able to see, which is why it is not deleted.
             chain.write_chain(chain_word(
                 kCouponChain, step_pattern(kCouponChain, step_of(sp.group, sp.to_ch)), 0u));
             const uint32_t s0_pre = cycles_now();
@@ -678,15 +691,8 @@ void run_settle_probe(bench::Board& hw)
                              pts[i].mean, pts[i].min, pts[i].max);
             }
 
-            // A second read of the SAME settled reference, AFTER the sweep
-            // (POST) -- fix round 2, item 2. This design cannot otherwise
-            // tell settling from drift: the grid is swept in increasing d,
-            // so elapsed wall-clock time and commanded delay grow together,
-            // and a slow thermal creep across the sweep's own ~0.6 s would
-            // look exactly like a slow tail. Pre and post read the same
-            // to_ch the same way; only the wall-clock time between them
-            // differs. Not interpreted here -- see the SHELL_SETTLE_KNEE
-            // comment below for what the two numbers would mean.
+            // A second parked read (POST), after the sweep -- kept from fix
+            // round 2 as a cross-check too, same reasoning as PRE above.
             chain.write_chain(chain_word(
                 kCouponChain, step_pattern(kCouponChain, step_of(sp.group, sp.to_ch)), 0u));
             const uint32_t s0_post = cycles_now();
@@ -695,9 +701,41 @@ void run_settle_probe(bench::Board& hw)
 
             settled_raw_pre[p]  = settled_pre;
             settled_raw_post[p] = settled_post;
-            residual_counts[p]  = pts[kGridPoints - 1].mean - settled_pre;
 
-            const int idx = d_settle_index(pts, kGridPoints, settled_pre);
+            // The settled reference itself (fix round 3, item 2): the mean
+            // of the last kTailWindowPoints grid points, not a separate
+            // parked read. It is measured (satisfies the spec's "the target
+            // is measured, not assumed"), and it comes from the SAME sweep
+            // under the SAME conditions every other point in the curve was
+            // taken under -- which the parked read, arriving from whatever
+            // the previous pair left the mux on and read under a single
+            // fixed 20 us park, does not share.
+            int32_t tail_min = 0x7FFFFFFF, tail_max = -0x7FFFFFFF;
+            int64_t tail_sum = 0;
+            for(int i = kGridPoints - kTailWindowPoints; i < kGridPoints; ++i)
+            {
+                tail_sum += pts[i].mean;
+                if(pts[i].mean < tail_min) tail_min = pts[i].mean;
+                if(pts[i].mean > tail_max) tail_max = pts[i].mean;
+            }
+            tail_ref[p]    = static_cast<int32_t>(tail_sum / kTailWindowPoints);
+            tail_spread[p] = tail_max - tail_min;
+
+            // The guard fix round 3, item 2 asks for: if the tail itself
+            // has not converged (its own spread exceeds the same 8-count
+            // criterion d_settle_index() uses), the pair has not settled by
+            // the last grid point, full stop -- regardless of what
+            // d_settle_index() returns when compared against a reference
+            // computed from that same unconverged tail. Without this, a
+            // curve that is still moving at the end of the grid could
+            // average its own moving tail into a "settled" answer nothing
+            // ever measured. tail_settled gates idx to -1 in that case; it
+            // does NOT touch summary.widest_settled_band's own idx>=0 guard
+            // below, which independently already excludes an unsettled
+            // pair's transient from G3.
+            const bool tail_settled = tail_spread[p] <= kSettleCounts;
+            const int  idx_raw      = d_settle_index(pts, kGridPoints, tail_ref[p]);
+            const int  idx          = tail_settled ? idx_raw : -1;
             summary.knee_ns[p] = (idx < 0) ? -1 : static_cast<int32_t>(grid_ns(idx));
 
             // idx == 0 means the FIRST grid point (0 ns commanded delay) was
@@ -756,26 +794,41 @@ void run_settle_probe(bench::Board& hw)
         // reader that sees gates_ok=0 must not quote a single d_settle_ns;
         // read_settle.py (Task 6) enforces that.
         //
-        // settled_raw_pre/settled_raw_post (fix round 2): printed side by
-        // side, not reduced to a verdict here. If they agree within a
-        // couple of counts, the sweep's own ~0.6 s of wall-clock time did
-        // not move the node and a slow tail in SHELL_SETTLE is real
-        // settling; if they differ by roughly a slow tail's own creep, that
-        // creep is thermal drift across the sweep, not settling, and
-        // d_settle_index() (which uses PRE, never POST) is comparing every
-        // point against a reference the node had already drifted away from
-        // by the time later points were measured. Which of those this run
-        // shows is for the reader to read off the two numbers, not for this
-        // comment to declare.
+        // Fix round 3, item 1: this used to be ONE line carrying
+        // settled_raw_pre/settled_raw_post/residual_counts too, and it
+        // silently exceeded libDaisy's 128-byte log buffer
+        // (lib/libDaisy/src/hid/logger.h:29, LOGGER_BUFFER) -- vsnprintf()
+        // truncated it and Logger::TransmitBuf() (logger.cpp:67-69) stamped
+        // the last two bytes "$$" as its own overflow marker, so
+        // settled_raw_post and residual_counts never reached the board log
+        // at all. Split across two lines below; neither may grow back to
+        // where it needs this comment to remember why not to re-merge them.
+        // A reader who sees a line end in "$$" is looking at exactly this
+        // failure mode, on whichever line hit it.
         for(int p = 0; p < kSettlePairs; ++p)
         {
             hw.PrintLine("SHELL_SETTLE_KNEE pair=%d d_settle_ns=%d at_or_below_offset=%d "
-                         "predicted_ns=%d reference=%d settled_raw_pre=%d "
-                         "settled_raw_post=%d residual_counts=%d",
+                         "predicted_ns=%d reference=%d",
                          p, d_settle_ns_print[p], at_or_below_offset[p] ? 1 : 0,
                          static_cast<int>(kSettlePlan[p].tau9_ns),
-                         kSettlePlan[p].is_reference ? 1 : 0,
-                         settled_raw_pre[p], settled_raw_post[p], residual_counts[p]);
+                         kSettlePlan[p].is_reference ? 1 : 0);
+        }
+
+        // The cross-check line (fix round 3, item 2): tail_ref/tail_spread
+        // are the actual yardstick now (tail_spread is exactly the guard's
+        // own criterion value, kept next to tail_ref rather than reduced
+        // further, since it IS the number the guard compares against
+        // kSettleCounts). settled_raw_pre/settled_raw_post are the demoted
+        // parked reads, printed so a large disagreement against tail_ref is
+        // visible instead of silently discarded -- round 2's own board data
+        // is the reason: pair 1's parked read sat 852 counts from its own
+        // curve's tail while the curve itself was quiet to 3-4 counts.
+        for(int p = 0; p < kSettlePairs; ++p)
+        {
+            hw.PrintLine("SHELL_SETTLE_REF pair=%d tail_ref=%d tail_spread=%d "
+                         "settled_raw_pre=%d settled_raw_post=%d",
+                         p, tail_ref[p], tail_spread[p],
+                         settled_raw_pre[p], settled_raw_post[p]);
         }
 
         hw.PrintLine("SHELL_SETTLE_GATES g1=%d g2=%d g3=%d g4=%d",
