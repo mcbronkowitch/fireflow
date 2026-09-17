@@ -329,9 +329,15 @@ void run_settle_probe(bench::Board& hw)
 
     adc_select_time(channel_of_group(p0.group), kSampleTimeWorking);   // restore -- every later pass needs this
 
-    hw.PrintLine("SHELL_SETTLE_CLK span_short_cyc=%d span_long_cyc=%d "
-                 "smp_short_tenths=%d smp_long_tenths=%d",
-                 clk_span_short, clk_span_long, 165, 3875);
+    // clk_span_short/clk_span_long are measured exactly once, here -- see
+    // above for why re-running the 387.5-cycle pass every block would cost
+    // real time to keep reprinting a constant. Only the PRINT of them moves
+    // into the forever loop below (fix round 3): hw.StartLog(false) does not
+    // wait for a host, so a one-shot print here goes out within milliseconds
+    // of boot, long before Windows finishes re-enumerating the USB-CDC
+    // device after flashing -- the line existed and was correct but nobody
+    // could ever read it, the same failure shape as a probe that scans once
+    // and reprints a frozen buffer forever. Do not move this back out.
 
     // Calibration (scope change from the brief's step 7): park permanently on
     // BOTH ends of P0's step and take kRepeats conversions at each, instead
@@ -362,10 +368,29 @@ void run_settle_probe(bench::Board& hw)
         // sample_cycles=165 is ADC_SAMPLETIME_16CYCLES_5 expressed in tenths,
         // so it stays an integer for %d -- PrintLine() is the lightweight
         // printf and the existing probes stay on %d for that reason.
+        //
+        // adc_khz=12290 is ASSUMED, not measured -- it is ADC_CLOCK_ASYNC_DIV2's
+        // datasheet value, the same assumption kConversionNs is built on, and
+        // it is exactly what SHELL_SETTLE_CLK below (span_short_cyc/
+        // span_long_cyc) exists to check. It sits beside real measurements in
+        // this same block; do not read it as one.
         hw.PrintLine("SHELL_SETTLE_CFG sample_cycles=165 adc_khz=12290 "
                      "repeats=%d grid_step_ns=%d grid_points=%d park_ns=%d",
                      kRepeats, kGridStepNs, kGridPoints,
                      static_cast<int>(kParkNs));
+
+        // Printed every pass, beside SHELL_SETTLE_CAL, even though
+        // clk_span_short/clk_span_long were measured once at startup and
+        // never change (fix round 3): hw.StartLog(false) does not wait for a
+        // host, so the one-shot print this replaced went out within
+        // milliseconds of boot and no reader could ever open the port in
+        // time -- confirmed absent from 223 captured lines across a normal
+        // run and 110 seconds across a deliberate RESET. A measurement
+        // nobody can observe is not a measurement. Do not move this back to
+        // a one-shot print before the loop.
+        hw.PrintLine("SHELL_SETTLE_CLK span_short_cyc=%d span_long_cyc=%d "
+                     "smp_short_tenths=%d smp_long_tenths=%d",
+                     clk_span_short, clk_span_long, 165, 3875);
 
         // The instrument measuring itself. Parked and fully settled, so the
         // only thing that varies between these conversions is the
