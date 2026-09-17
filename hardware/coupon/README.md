@@ -131,9 +131,22 @@ soldered:** meter `TP_AGND` against `TP_GND`, and `TP_A3V3` against
 `TP_3V3`. Both must read open. Continuity there means copper crosses the
 1.0 mm moat somewhere it should not — a defect in exactly the separation
 point 8 is about, and one that is invisible for good once the jumpers are
-bridged. The digital half needs neither jumper, so the 595 chain, the eight
-LEDs, the button through the 165 and point 7's callback measurement all run
-first, with the analog island still dark.
+bridged. A continuity check is an unpowered measurement anyway, so this costs
+nothing but the order it is done in.
+
+**Do not power the board with the jumpers open.** It is tempting — the
+digital half needs neither of them — but the six address and enable nets run
+from `U_SR1` straight into both muxes, whose `VCC` is `A+3V3` and whose `GND`
+is `AGND` (`scripts/netlist.py:149`). With `JP_3V3` open that `VCC` floats
+while `U_SR1` drives those inputs at 3.3 V, which forward-biases the muxes'
+input clamp diodes and powers the chips parasitically through their own
+address pins — above the absolute maximum rating of `VCC + 0.5 V`, with
+latch-up as the failure mode. The current involved is microamps and it will
+very probably survive, but nothing is gained by finding out. Nor can it be
+avoided by not running the scan: `~OE` is tied to `GND` and `~SRCLR` to
+`+3V3` (`:258`), so the 595 outputs are driven from the instant power is
+applied, with whatever the shift register powered up holding. **Meter first,
+then bridge both jumpers, then apply power** — in that order, once.
 
 **What does not work is a second join by wire.** The only two places where
 both planes are probeable are `TP_AGND` at (10.00, 66.00) and `TP_GND` at
