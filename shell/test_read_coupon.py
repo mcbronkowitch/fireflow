@@ -38,6 +38,12 @@ def main() -> int:
     bad += check("incomplete", parse_block(SAMPLE[:-1]), None)
     bad += check("absent", parse_block(["nothing here"]), None)
 
+    # A block that ends but lost a row in transit: COUPON_END arrived, so
+    # only the row count can catch it. This is the case that makes the
+    # count check load-bearing rather than decorative.
+    short = SAMPLE[:3] + SAMPLE[4:]
+    bad += check("row count short", parse_block(short), None)
+
     csv = format_csv(block)
     bad += check("csv header", csv.splitlines()[0],
                  "step,group,addr,sense,raw,expect,pass")
