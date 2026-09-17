@@ -314,6 +314,6 @@ add_test(
 # days behind exactly that gap. pytest is not installed here, so it runs as
 # a plain script and its exit code is the verdict.
 add_test(NAME read_coupon_guard
-         COMMAND ${CMAKE_COMMAND} -E env python
+         COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_coupon.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)

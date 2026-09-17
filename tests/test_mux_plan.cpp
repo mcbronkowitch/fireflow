@@ -106,7 +106,7 @@ TEST_CASE("mux plan: the LED field cannot collide with address or enable") {
 }
 
 TEST_CASE("mux plan: the coupon profile matches the coupon's 595 wiring") {
-    // netlist.py:268 wires U_SR1 QA..QH = A0,A1,A2,A3,EN16,EN8,LED_1,LED_2
+    // netlist.py:267 wires U_SR1 QA..QH = A0,A1,A2,A3,EN16,EN8,LED_1,LED_2
     // and U_SR2 QA..QF = LED_3..LED_8, with QG/QH open. write_chain() clocks
     // MSB first and U_SR1.QH' feeds U_SR2.SER, so the bit clocked LAST sits
     // nearest the input, at U_SR1.QA. That makes bit 0 the first address
@@ -150,10 +150,11 @@ TEST_CASE("mux plan: the sense pins are the raw ADC inputs, not the CV pins") {
 }
 
 TEST_CASE("mux plan: the coupon's button is the eighth bit shifted out") {
-    // U_IN1 is a 74HC165 with Q7 on SR_DATA_IN. Q7 is the LAST parallel
-    // stage, so after ~PL the first bit read is D7 and D0 arrives eighth.
-    // netlist.py:283 puts BTN_1 on D0 and ties D1..D7 to GND, so bit 7
-    // counting from the first bit read is the only one that can move.
+    // U_IN1 is a 74HC165 with Q7 on SR_DATA_IN (netlist.py:283). Q7 is the
+    // LAST parallel stage, so after ~PL the first bit read is D7 and D0
+    // arrives eighth. netlist.py:285 puts BTN_1 on D0, and :286-287 tie
+    // D1..D7 to GND, so bit 7 counting from the first bit read is the only
+    // one that can move.
     CHECK(shell::button_bit(shell::kCouponChain) == 7);
     // The shipping panel has no single button on the chain yet.
     CHECK(shell::button_bit(shell::kPanelChain) == -1);

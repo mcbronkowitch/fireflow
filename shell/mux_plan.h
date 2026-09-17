@@ -9,8 +9,12 @@
 // four raw ADC pins; their address lines and their enables ride on the same
 // 74HC595 chain that carries the LEDs, which is what makes the whole panel
 // cost zero GPIOs and is the reason the 4-bit SD slot fits. One STEP of the
-// scan is one address plus one enabled group; the four sense pins are then
-// read in parallel, so a step yields four channels.
+// scan is one address plus one enabled group. On the shipping panel every
+// group sits on all four sense pins, so a step yields four channels at once.
+// The test coupon (kCouponChain) is a second, differently-shaped profile:
+// two groups of unequal size (16 and 8 channels), each wired to its own
+// single sense pin (`sense_of_group`), so a step there yields one channel,
+// not four.
 #include <cstdint>
 
 namespace shell {
@@ -54,7 +58,7 @@ inline constexpr ChainProfile kPanelChain{
 // The test coupon (hardware/coupon/). Two 74HC595 = 16 bits, eight LEDs, one
 // CD74HC4067 on ADC_9 and one CD74HC4051 on ADC_10 -- so the two groups do
 // NOT have the same channel count, and each sits on its own sense pin.
-// Derivation of the bit order: netlist.py:268 plus MSB-first clocking
+// Derivation of the bit order: netlist.py:267 plus MSB-first clocking
 // through U_SR1.QH' -> U_SR2.SER.
 inline constexpr ChainProfile kCouponChain{
     2, kSenseAdcBase, 2, {16, 8}, {0, 1}, 16, 0, 4, 6, 8, 7};
@@ -86,6 +90,13 @@ int group_of_step(const ChainProfile& p, int step);
 // not exist. Out of range gets an answer instead of an assumption: a
 // half-seated chip produces steps nobody planned, and an access past the end
 // would be a crash inside the audio callback.
+//
+// This is an index bijection over (step, sense) pairs, not a claim about the
+// board: it ignores `sense_of_group`, so on a profile where a group is wired
+// to only one sense pin (the coupon's), some (step, sense) pairs this
+// function happily answers name a sense pin whose mux is disabled during
+// that step -- no live channel reaches it. Callers that care which sense pin
+// is actually live for a step must read `sense_of_group` themselves.
 int mux_channel(const ChainProfile& p, int step, int sense);
 
 // The chain word for a step, with `leds` in the LED field.

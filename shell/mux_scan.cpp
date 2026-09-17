@@ -71,14 +71,21 @@ uint32_t MuxScan::read_chain(uint32_t word)
     uint32_t in = 0;
     for(int i = kActiveChain.chain_bits - 1; i >= 0; --i)
     {
-        // Sample BEFORE the clock edge: the bit standing at Q7 now is the
-        // one the previous edge shifted there.
+        // Sample BEFORE the clock edge: for the first bit that is the
+        // parallel-loaded value sitting at Q7 from ~PL above, and for every
+        // bit after it, it is the one the previous edge shifted there.
         if(sense_in_.Read())
             in |= 1u << (kActiveChain.chain_bits - 1 - i);
         data_.Write(((word >> i) & 1u) != 0u);
         clock_.Write(true);
         clock_.Write(false);
     }
+    // RCLK on the 595s transfers on the RISING edge. The line is already
+    // HIGH here (raised above for ~PL), so writing true first is not an
+    // edge at all -- drop it low, then raise it to produce the rising edge
+    // that actually latches the 595 outputs, then drop it again to leave
+    // the line LOW, the same rest state write_chain() leaves it in.
+    latch_.Write(false);
     latch_.Write(true);
     latch_.Write(false);
     return in;

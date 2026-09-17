@@ -15,6 +15,16 @@ SAMPLE = [
     "COUPON_END",
 ]
 
+# A COUPON_CH line cut short by the serial read timeout -- the exact case
+# the module docstring says this reader must survive. "ra" has no "=" of its
+# own, so _fields() would try int("") on it.
+GARBLED = [
+    "COUPON_BEGIN steps=2 hold_ms=5 fails=1 button=0 ret=255",
+    "COUPON_CH step=0 group=0 addr=0 sense=0 raw=100 expect=3 pass=1",
+    "COUPON_CH step=1 group=0 addr=1 sense=0 ra",
+    "COUPON_END",
+]
+
 
 def check(name, got, want):
     if got != want:
@@ -43,6 +53,10 @@ def main() -> int:
     # count check load-bearing rather than decorative.
     short = SAMPLE[:3] + SAMPLE[4:]
     bad += check("row count short", parse_block(short), None)
+
+    # A truncated COUPON_CH line must not raise out of the parser, and the
+    # block it sits in must not be accepted as complete either.
+    bad += check("garbled row", parse_block(GARBLED), None)
 
     csv = format_csv(block)
     bad += check("csv header", csv.splitlines()[0],

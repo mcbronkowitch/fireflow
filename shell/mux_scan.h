@@ -11,8 +11,9 @@
 // nothing. Whether 2 ms is actually enough is Phase-0 Task 6 step 5b's
 // question and needs a mux on the table; this file is what gets priced first.
 //
-// One step per block means a full sweep of kScanSteps takes 32 blocks = 64 ms,
-// i.e. ~15.6 Hz per channel with all eight chips populated, ~31 Hz with four.
+// One step per block means a full sweep of scan_steps(kPanelChain) takes
+// 32 blocks = 64 ms, i.e. ~15.6 Hz per channel with all eight chips
+// populated, ~31 Hz with four.
 // That is arithmetic, not a measurement, and it is the rate the CPU numbers
 // belong to.
 #include "hw/board.h"

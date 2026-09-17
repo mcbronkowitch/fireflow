@@ -11,7 +11,8 @@ namespace {
 // Nine full DMA rounds. libDaisy converts at 12.29 MHz (adc.cpp:229) with
 // SPEED_8CYCLES_5 sampling plus 8.5 cycles of 16-bit conversion = 17 ADC
 // cycles = 1.38 us, at OVS_32 over twelve channels = 531 us per round. Five
-// milliseconds is not a round number picked for comfort.
+// milliseconds is not a round number picked for comfort. That is arithmetic,
+// not a measurement -- same as mux_scan.h's sweep-rate comment.
 constexpr uint32_t kHoldMs = 5;
 
 constexpr int kSteps = scan_steps(kCouponChain);

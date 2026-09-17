@@ -17,8 +17,6 @@ Call:
 import sys
 import time
 
-import serial
-
 FIELDS = ("step", "group", "addr", "sense", "raw", "expect", "pass")
 
 
@@ -36,10 +34,24 @@ def parse_block(lines):
     for line in lines:
         line = line.strip()
         if line.startswith("COUPON_BEGIN"):
-            block = _fields(line, "COUPON_BEGIN")
+            try:
+                block = _fields(line, "COUPON_BEGIN")
+            except ValueError:
+                # A line the serial read timeout cut in half -- the exact
+                # case this reader exists to survive. Drop it and keep
+                # listening rather than crash on the board's next breath.
+                block = None
+                continue
             block["rows"] = []
         elif line.startswith("COUPON_CH") and block is not None:
-            block["rows"].append(_fields(line, "COUPON_CH"))
+            try:
+                block["rows"].append(_fields(line, "COUPON_CH"))
+            except ValueError:
+                # Same truncation, mid-block. The row count can never match
+                # now, so the block is unrecoverable; drop it rather than
+                # guess at the missing field. A later COUPON_BEGIN in the
+                # stream still gets its own chance.
+                block = None
         elif line.startswith("COUPON_END") and block is not None:
             if len(block["rows"]) != block["steps"]:
                 block = None
@@ -56,6 +68,11 @@ def format_csv(block):
 
 
 def main() -> int:
+    # Imported here, not at module scope: parse_block()/format_csv() are the
+    # pure parser the guard in test_read_coupon.py exercises, and that guard
+    # must not need pyserial installed to import this module.
+    import serial
+
     if len(sys.argv) not in (2, 3, 4):
         raise SystemExit("usage: read_coupon.py PORT [out.csv] [timeout_s]")
     port = sys.argv[1]
