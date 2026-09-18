@@ -45,8 +45,9 @@ constexpr int kTieHi1 = 1, kTieHi2 = 5, kTieLo1 = 3, kTieLo2 = 7;
 // that difference would carry the pre-roll as well as the event, and G6 would
 // be gating something it does not name. The same argument makes every
 // aggressor row's delta against row 2 a difference between two identical
-// starting conditions. Cost: 58 * 50 ms = 2.9 s per block, which the Task 6
-// report prices against the measured block time.
+// starting conditions. Cost: 54 * 50 ms = 2.7 s per block -- 54 and not 58,
+// because a skipped case takes its `continue` before any hw.Delay() -- out of
+// a block MEASURED 2026-09-18 at 9.07 s.
 //
 // 50 ms is derived, not measured: a block's widest per-case burst is about
 // 4.7 kB and USB-CDC on this machine has never been measured below the
@@ -505,6 +506,15 @@ Reduction run_grid_case(bench::Board& hw, MuxScan& chain, int i,
 void run_static_case(bench::Board& hw, MuxScan& chain, int i, const XtalkCase& c)
 {
     hw.Delay(kQuietMs);
+    // THE PARK HAPPENS TWICE HERE, and it is the one place park_victim()'s
+    // "every kind starts from exactly this state" is not literally true:
+    // measure_static() writes the same word_a again and spins another kParkNs
+    // before its first conversion. Harmless -- the word is identical and the
+    // second park is a full one, so the channel is at least as settled as
+    // every other kind's -- and it is left alone deliberately, because
+    // park_victim() is also what selects the ADC channel and the rung, and
+    // measure_static() (which is the task brief's block) does neither. Costs
+    // 10 * 20 us a block.
     park_victim(chain, c);
 
     const CountedPoint cp = measure_static(chain, c);
