@@ -60,6 +60,22 @@ class MuxScan
     // channels look slow by a constant nobody measured.
     uint32_t write_chain_timed(uint32_t word);
 
+    // Like write_chain_timed(), but the RCLK pulse is left out entirely:
+    // 16 bits are clocked and nothing is latched. Returns the DWT cycle
+    // count taken immediately after the last SRCLK falling edge.
+    //
+    // WHAT THIS IS FOR. The 595's outputs follow its STORAGE register, which
+    // moves on RCLK only -- so a shift with no latch is digital supply and
+    // ground activity with no change on any mux control line. That is the
+    // crosstalk probe's row 9, and it separates "the chain's traffic" from
+    // "the bits the chain carries". Read from the 74HC595 datasheet and
+    // UNMEASURED on this board; row 9 against row 2 is the check.
+    //
+    // The 165 is clocked too -- it shares CP -- which is what the shipping
+    // scan does on every step anyway, so this is not a quieter event than
+    // production, it is the production event minus the latch.
+    uint32_t shift_chain_timed(uint32_t word);
+
     // Clocks `word` out and the 165's parallel load back in, in the same
     // pass -- the two chains share clock and latch, so a separate read pass
     // would cost a second latch and re-load the buttons mid-flight.

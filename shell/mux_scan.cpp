@@ -76,6 +76,23 @@ uint32_t MuxScan::write_chain_timed(uint32_t word)
     return t0;
 }
 
+uint32_t MuxScan::shift_chain_timed(uint32_t word)
+{
+    // Same shift loop as write_chain() and write_chain_timed(), copied
+    // rather than reconstructed -- its bit order is load-bearing and the
+    // three must not drift apart.
+    for(int i = kActiveChain.chain_bits - 1; i >= 0; --i)
+    {
+        data_.Write(((word >> i) & 1u) != 0u);
+        clock_.Write(true);
+        clock_.Write(false);
+    }
+    // No latch_.Write() at all. The line is left where it was -- LOW, the
+    // rest state write_chain() leaves it in -- so this produces no RCLK edge
+    // and the 595 outputs do not move.
+    return cycles_now();
+}
+
 uint32_t MuxScan::read_chain(uint32_t word)
 {
     // Latch LOW first: that is the 165's ~PL, and the parallel load happens
