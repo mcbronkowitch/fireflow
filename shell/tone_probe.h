@@ -15,11 +15,17 @@
 
 namespace shell {
 
-// Never returns. Alternates two DC rungs -- exact silence and 0 dBFS --
-// holding each 15 seconds for a handheld meter, and prints one block per
-// pass on USB-CDC, forever. The bench instrument that took spec §9's
-// readings: -10.8 mV at silence, -8.66 V at 0 dBFS, both tracking the
-// callback. See tone_probe.cpp for what those two rungs separated.
+// Never returns. Drives a sine on AUDIO_OUT_L/R through a phase accumulator
+// clocked from the audio callback's own block boundaries (spec section 5),
+// while ADC1 reads one of round one's five victims through the divider under
+// test. Each block: the ADC clock and latency calibration (round one's
+// passes, unchanged), then per victim the two silent levels -- codec
+// stopped and codec running with the callback writing zeros, which is the
+// first measurement anywhere of the I2S/SAI-DMA floor with the SAI actually
+// running -- then G5's span and address verdict. Task 4 adds the frequency x
+// level phase grid on top of this; Task 5 adds the two window cases. See
+// tone_probe.cpp for the gates (G2, G4, G5, G7; G8 is computed by
+// read_tone.py, not here) and for what each printed line carries.
 void run_tone_probe(bench::Board& hw);
 
 } // namespace shell
