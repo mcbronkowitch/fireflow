@@ -27,7 +27,7 @@ namespace {
 // and then pass every victim against it.
 constexpr int kTieHi1 = 1, kTieHi2 = 5, kTieLo1 = 3, kTieLo2 = 7;
 
-// How long the board is left completely alone before a Silent grid starts.
+// How long the board is left completely alone before a case starts.
 //
 // NOT IN THE TASK BRIEF, and here on purpose. A Silent case's whole claim is
 // that nothing else on the board moved during its grid, and the case before
@@ -37,9 +37,16 @@ constexpr int kTieHi1 = 1, kTieHi2 = 5, kTieLo1 = 3, kTieLo2 = 7;
 // previous case's traffic still in flight -- which is precisely the candidate
 // settle-measured.md section 5 names and this block exists to isolate.
 //
-// Applied to EVERY Silent case, row 1 and row 10 alike, so the row 10 minus
-// row 1 comparison is not distorted by it: it moves the starting line for
-// both, and row 10 then puts its own traffic back inside the grid.
+// APPLIED TO EVERY CASE IN TASK 6, not only the Silent ones it was introduced
+// for, and the reason is G6. G6 is |mean_control(d) - mean_silent(d)|, i.e. a
+// difference between a Latch case (row 2) and a Silent case (row 1) that is
+// supposed to isolate the shift and the pulse. If row 1 started from a quiet
+// board and row 2 started with the previous case's USB burst still draining,
+// that difference would carry the pre-roll as well as the event, and G6 would
+// be gating something it does not name. The same argument makes every
+// aggressor row's delta against row 2 a difference between two identical
+// starting conditions. Cost: 58 * 50 ms = 2.9 s per block, which the Task 6
+// report prices against the measured block time.
 //
 // 50 ms is derived, not measured: a block's widest per-case burst is about
 // 4.7 kB and USB-CDC on this machine has never been measured below the
@@ -139,17 +146,64 @@ SpanRead measure_span(MuxScan& chain)
     return r;
 }
 
-// --- Step 5: the silent grid point ---
+// --- The grid point, and the one reducer every kind's repeats go through ---
 
 // A grid point plus the count of repeats that actually produced a
 // conversion. Point itself (settle_plan.h) carries no such field and is not
 // getting one: it is host-compiled, host-tested and shared with the settle
 // probe, so the count rides beside it here instead.
-struct SilentPoint
+//
+// Named for what it is rather than for the row that first needed it. Task 5
+// called this SilentPoint when Silent was the only kind this file measured;
+// Latch, ShiftOnly and Static all carry the same count now, for the same
+// reason -- see measure_silent_point().
+struct CountedPoint
 {
     Point p;
     int   valid;   // kRepeats unless a conversion timed out; 0 -> p is -1/-1/-1
 };
+
+// The reduction of kRepeats conversions into one point, written ONCE because
+// Task 6 gives it four call sites. "A timed-out repeat is excluded and the
+// survivors are counted" has to hold identically at all of them, or the n=
+// field stops meaning the same thing from one printed line to the next -- and
+// n= is the only place in the capture where a timeout becomes visible.
+struct RepeatAccum
+{
+    int64_t sum = 0;
+    int32_t lo  = 0x7FFFFFFF;
+    int32_t hi  = -0x7FFFFFFF;
+    int     n   = 0;
+
+    CountedPoint finish() const
+    {
+        // -1 rather than a divide by zero or the 0x7FFFFFFF init values
+        // leaking into print, and n dividing the sum rather than kRepeats --
+        // the same shape as the latency pass, for the same reason.
+        if(n == 0) return CountedPoint{Point{-1, -1, -1}, 0};
+        return CountedPoint{Point{static_cast<int32_t>(sum / n), lo, hi}, n};
+    }
+};
+
+// One conversion, folded in unless it timed out.
+//
+// probe_adc::sample_now() returns 0 on a timeout (probe_adc.cpp:236) and with
+// `nullptr` passed for the span the caller cannot tell that from a channel
+// reading zero -- so one timeout on a 32500-count divider would pull a point's
+// mean down by about 508 counts and set its `min` to 0, with nothing printed
+// to say so. probe_adc::timeouts() is a LIFETIME counter printed on the NEXT
+// block's CAL line, which leaves the last complete block of any capture
+// covered by no printed counter at all.
+void take_one(RepeatAccum& acc)
+{
+    uint32_t      span = 0;
+    const int32_t v    = probe_adc::sample_now(&span);
+    if(span == probe_adc::kTimeoutSentinel) return;
+    acc.sum += v;
+    if(v < acc.lo) acc.lo = v;
+    if(v > acc.hi) acc.hi = v;
+    ++acc.n;
+}
 
 // One grid point of a Silent case. There is no latch, so there is no t0 from
 // the chain -- the repeat takes its own, spins the SAME park + d it would
@@ -158,25 +212,15 @@ struct SilentPoint
 // wanted: the difference between this curve and the control curve is the
 // shift and the pulse, and nothing else.
 //
-// TIMED-OUT REPEATS ARE EXCLUDED, and the span is requested for no other
-// reason. probe_adc::sample_now() returns 0 on a timeout (probe_adc.cpp:236)
-// and with `nullptr` passed for the span the caller cannot tell that from a
-// channel reading zero -- so one timeout on a 32500-count divider would pull
-// this point's mean down by about 508 counts and set its `min` to 0, and
-// nothing printed would say so. probe_adc::timeouts() is a LIFETIME counter
-// printed on the next block's CAL line, which leaves the last complete block
-// of any capture covered by no printed counter at all. The latency pass in
-// run_xtalk_probe() has always done this correctly; the grid now does too,
-// and `valid` reaches the point line's own n= field so the exclusion is
-// visible in the capture rather than inferred from it.
-SilentPoint measure_silent_point(uint32_t d_ns)
+// TIMED-OUT REPEATS ARE EXCLUDED -- take_one() is where and why -- and
+// `valid` reaches the point line's own n= field so the exclusion is visible in
+// the capture rather than inferred from it.
+CountedPoint measure_silent_point(uint32_t d_ns)
 {
     const uint32_t park_cycles = ns_to_cycles(kParkNs);
     const uint32_t d_cycles    = ns_to_cycles(d_ns);
 
-    int64_t sum = 0;
-    int32_t lo = 0x7FFFFFFF, hi = -0x7FFFFFFF;
-    int     valid_n = 0;
+    RepeatAccum acc;
     for(int r = 0; r < kRepeats; ++r)
     {
         // cycles_now() - t0 on uint32_t wraps correctly with no special
@@ -185,20 +229,73 @@ SilentPoint measure_silent_point(uint32_t d_ns)
         // it.
         const uint32_t t0 = cycles_now();
         while(cycles_now() - t0 < park_cycles + d_cycles) { }
-        uint32_t      span = 0;
-        const int32_t v    = probe_adc::sample_now(&span);
-        if(span == probe_adc::kTimeoutSentinel) continue;
-        sum += v;
-        if(v < lo) lo = v;
-        if(v > hi) hi = v;
-        ++valid_n;
+        take_one(acc);
     }
-    // -1 rather than a divide by zero or the 0x7FFFFFFF init values leaking
-    // into print, and valid_n dividing the sum rather than kRepeats -- the
-    // same shape as the latency pass, for the same reason.
-    if(valid_n == 0) return SilentPoint{Point{-1, -1, -1}, 0};
-    return SilentPoint{
-        Point{static_cast<int32_t>(sum / valid_n), lo, hi}, valid_n};
+    return acc.finish();
+}
+
+// --- Step 1: the Latch and ShiftOnly grid point ---
+
+// One grid point of a Latch or ShiftOnly case.
+//
+// The victim's address and enable are the same in both words (xtalk_plan.h's
+// word builder guarantees it and test_xtalk_plan.cpp asserts it), so the
+// victim never changes channel and the sample-and-hold's charge
+// redistribution -- settle-measured.md section 7's 845-count first arrival --
+// is not in this measurement at all.
+//
+// ONE DEVIATION FROM THE TASK BRIEF'S BLOCK, and it is the semantic Task 5's
+// review installed: the brief passes `nullptr` for the span and divides by
+// kRepeats. That is the exact path the review found and closed for the silent
+// grid, and it would have come straight back in here for three more kinds. The
+// reduction goes through RepeatAccum/take_one instead, so a point whose mean is
+// over fewer real repeats prints its own n= and is the fix working.
+CountedPoint measure_event_point(MuxScan& chain, const XtalkCase& c, uint32_t d_ns)
+{
+    const uint32_t d_cycles    = ns_to_cycles(d_ns);
+    const uint32_t park_cycles = ns_to_cycles(kParkNs);
+
+    RepeatAccum acc;
+    for(int r = 0; r < kRepeats; ++r)
+    {
+        // The park establishes BOTH things the event needs: a settled victim
+        // and a defined starting state for the aggressor bits.
+        chain.write_chain(c.word_a);
+        const uint32_t park_t0 = cycles_now();
+        while(cycles_now() - park_t0 < park_cycles) { }
+
+        // t = 0 is the 595's own RCLK edge for a Latch case, and the last
+        // SRCLK falling edge for a ShiftOnly case. Neither is the call site:
+        // 16 clocked bits in front of the event would fold into every
+        // reading as a constant nobody measured.
+        const uint32_t t0 = (c.kind == XtalkKind::Latch)
+                                ? chain.write_chain_timed(c.word_b)
+                                : chain.shift_chain_timed(c.word_a);
+        while(cycles_now() - t0 < d_cycles) { }
+
+        take_one(acc);
+    }
+    return acc.finish();
+}
+
+// --- Step 2: the Static measurement ---
+
+// A Static case: one word held, kRepeats conversions, no grid and no event.
+// Row 8 is the DC shift of the ground join under eight LEDs, and a DC shift
+// has no d -- the reader differences the dark case's mean against the lit
+// case's for the same victim.
+//
+// Same deviation from the brief's block as measure_event_point(), for the same
+// reason: the repeats go through take_one().
+CountedPoint measure_static(MuxScan& chain, const XtalkCase& c)
+{
+    chain.write_chain(c.word_a);
+    const uint32_t t0 = cycles_now();
+    while(cycles_now() - t0 < ns_to_cycles(kParkNs)) { }
+
+    RepeatAccum acc;
+    for(int r = 0; r < kRepeats; ++r) take_one(acc);
+    return acc.finish();
 }
 
 // Which victim a case names. Matched on (group, channel) rather than trusted
@@ -220,16 +317,208 @@ int victim_index_of(const XtalkCase& c)
 // Row 1's five curves, held for the whole block.
 //
 // Row 1 prints AFTER its grid, so its points have to live somewhere until
-// then -- and holding all five rather than one is what Task 6's G6 needs:
+// then -- and holding all five rather than one is what G6 needs:
 // |mean_control(d) - mean_silent(d)| at every grid point is a difference
 // against row 1, per victim, and row 2 runs after all five of row 1.
 //
-// At namespace scope and not on the stack: 5 * 65 * sizeof(SilentPoint) is
+// THE TASK BRIEF'S int32_t silent_mean_curve[5][65] IS NOT ADDED BESIDE THIS.
+// It would be 1300 bytes holding a copy of the `mean` fields already here, and
+// a copy that silently drops `valid` -- G6 would then difference against a
+// point no repeat converted at, whose -1 mean is not a level. G6 reads
+// g_silent_pts[v][k].p.mean and checks g_silent_pts[v][k].valid, which is the
+// brief's intent with nothing duplicated.
+//
+// At namespace scope and not on the stack: 5 * 65 * sizeof(CountedPoint) is
 // about 5.2 kB, which is a large fraction of the probe's stack and none of
 // the .bss it sits in here.
-SilentPoint g_silent_pts[kXtalkVictims][kGridPoints];
+CountedPoint g_silent_pts[kXtalkVictims][kGridPoints];
 int32_t g_silent_mean[kXtalkVictims];
 bool    g_silent_seen[kXtalkVictims];
+
+// The scratch curve every case that is NOT row 1 measures into. One buffer and
+// not fifty-three: the only curve that has to outlive its own case is row 1's,
+// because that is the one G6 and G5 come back to. ~780 bytes of .bss.
+CountedPoint g_case_pts[kGridPoints];
+
+// --- The lines. ONE call site each, which is a requirement and not tidiness ---
+
+// Spec section 8 wants rows 1 and 10 -- and in Task 6 every other row too --
+// indistinguishable but for the `row` field. Task 5 kept two hand-copied
+// PrintLine sites in sync by hand, and its own self-review caught a
+// print-ORDER divergence of exactly that class before the build. Task 6 adds
+// three more kinds, so the copies would have become four and six.
+//
+// BYTE BUDGET, and this is why spec section 8's single SHELL_XTALK line is
+// split into a CASE line and a point line here. libDaisy's log buffer is 128
+// bytes (lib/libDaisy/src/hid/logger.h:29); the spec's combined line runs
+// about 150 and would be truncated and stamped "$$", which is how
+// settle_probe.cpp lost two fields before anyone noticed.
+//
+// MEASURED on the board 2026-09-18 across three whole blocks of rows 1 and 10:
+// 106 characters, 108 with CRLF. Those rows' chain words are two digits. Rows
+// 7 and 8 carry the whole LED field, whose widest word is 16383 (4 address +
+// 2 enable + 8 LED bits = 14 bits), so both word fields grow by three
+// characters -- DERIVED 112 / 114, still 14 bytes clear, and MEASURED again in
+// the Task 6 report off this image.
+void print_case_line(bench::Board& hw, int i, const XtalkCase& c, bool skipped)
+{
+    hw.PrintLine("SHELL_XTALK_CASE case=%d row=%d kind=%d victim_group=%d "
+                 "victim_ch=%d r_src=%d word_a=%d word_b=%d skipped=%d",
+                 i, static_cast<int>(c.row), static_cast<int>(c.kind),
+                 c.group, c.channel, static_cast<int>(c.r_src_ohm),
+                 static_cast<int>(c.word_a), static_cast<int>(c.word_b),
+                 skipped ? 1 : 0);
+}
+
+// The point line. n= carries the repeats that CONVERTED, not kRepeats: it
+// reads 64 on a clean grid and is the only place a timed-out repeat becomes
+// visible in the capture.
+//
+// BYTE BUDGET: MEASURED 2026-09-18 at 66 characters, 68 with CRLF.
+void print_point_line(bench::Board& hw, int i, uint32_t d_ns, const CountedPoint& cp)
+{
+    hw.PrintLine("SHELL_XTALK case=%d d_ns=%d n=%d mean=%d min=%d max=%d",
+                 i, static_cast<int>(d_ns), cp.valid,
+                 cp.p.mean, cp.p.min, cp.p.max);
+}
+
+// What a 65-point curve reduces to: both of settle-measured.md section 5's own
+// statistics, plus the curve mean G5 judges a floor row by.
+struct Reduction
+{
+    int32_t mean_spread;        // peak to peak of the per-point means
+    int32_t widest_band;        // widest raw min..max at any one point
+    int32_t widest_band_d_ns;
+    int32_t curve_mean;         // mean over the usable points' means
+    int     usable_points;      // points at which at least one repeat converted
+};
+
+// Reduce one case's curve and emit its lines in the order spec section 8
+// fixes: CASE, then the 65 points, then STAT -- the same order for every row,
+// so the `row` field is the only record of which row it was.
+//
+// ONE BODY FOR EVERY GRID KIND. Silent, Latch and ShiftOnly differ in which
+// measure_*() filled `pts` and in nothing else; four inline copies of this
+// reduction was the wrong direction with under 10 kB of SRAM_EXEC left, and it
+// is also how the three rows would have drifted apart.
+//
+// `lines_already_out` is row 10's case and only row 10's: it printed its CASE
+// line before the grid and each point as it was taken, which is the whole
+// point of that row. What it prints and in what order is identical.
+Reduction reduce_and_emit(bench::Board& hw, int i, const XtalkCase& c,
+                          const CountedPoint* pts, bool lines_already_out)
+{
+    Reduction red{};
+    int64_t   mean_sum = 0;
+    int32_t   mean_lo = 0x7FFFFFFF, mean_hi = -0x7FFFFFFF;
+    red.widest_band      = -1;
+    red.widest_band_d_ns = -1;
+
+    for(int k = 0; k < kGridPoints; ++k)
+    {
+        // A point with no conversion at all contributes to no statistic
+        // rather than folding a -1 into a spread: see take_one().
+        if(pts[k].valid <= 0) continue;
+        mean_sum += pts[k].p.mean;
+        if(pts[k].p.mean < mean_lo) mean_lo = pts[k].p.mean;
+        if(pts[k].p.mean > mean_hi) mean_hi = pts[k].p.mean;
+        const int32_t band = pts[k].p.max - pts[k].p.min;
+        if(band > red.widest_band)
+        {
+            red.widest_band      = band;
+            red.widest_band_d_ns = static_cast<int32_t>(grid_ns(k));
+        }
+        ++red.usable_points;
+    }
+    // -1, not a spread or a mean computed from the init values, if the whole
+    // grid came back unusable.
+    red.mean_spread = (red.usable_points > 0) ? (mean_hi - mean_lo) : -1;
+    red.curve_mean  = (red.usable_points > 0)
+                          ? static_cast<int32_t>(mean_sum / red.usable_points)
+                          : -1;
+
+    if(!lines_already_out)
+    {
+        print_case_line(hw, i, c, false);
+        for(int k = 0; k < kGridPoints; ++k) print_point_line(hw, i, grid_ns(k), pts[k]);
+    }
+
+    // Both of settle-measured.md section 5's statistics. Reported, neither
+    // gated: spec section 7 is explicit that the settled region's width is a
+    // quantity in this instrument and not a gate, because gating it would
+    // refuse the very run that answers the question.
+    hw.PrintLine("SHELL_XTALK_STAT case=%d settled_mean_spread=%d "
+                 "widest_sample_band=%d at_d_ns=%d",
+                 i, red.mean_spread, red.widest_band, red.widest_band_d_ns);
+    return red;
+}
+
+// Park the victim: the chain word, the ADC channel, the rung its impedance
+// picks, and the settle spin. Every kind starts from exactly this state, which
+// is what makes one case's curve subtractable from another's.
+//
+// The rung reads about 180-245 counts low at 5150 R in steady state
+// (settle-measured.md section 7), so no ABSOLUTE level from any curve here may
+// be quoted without that qualification. Every delta the reader computes is a
+// difference at the same rung, where the bias cancels.
+void park_victim(MuxScan& chain, const XtalkCase& c)
+{
+    chain.write_chain(c.word_a);
+    probe_adc::select_time(
+        probe_adc::channel_of_group(c.group),
+        probe_adc::sample_time_for_rung(sample_time_index_for(c.r_src_ohm)));
+    const uint32_t t0 = cycles_now();
+    while(cycles_now() - t0 < ns_to_cycles(kParkNs)) { }
+}
+
+// One grid case end to end: the quiet window, the park, the 65 points, the
+// lines. `pts` is where the curve lands -- row 1's own slot, or the scratch.
+Reduction run_grid_case(bench::Board& hw, MuxScan& chain, int i,
+                        const XtalkCase& c, CountedPoint* pts)
+{
+    hw.Delay(kQuietMs);   // see kQuietMs
+    park_victim(chain, c);
+
+    if(c.prints_inline) print_case_line(hw, i, c, false);
+
+    for(int k = 0; k < kGridPoints; ++k)
+    {
+        // FOR A SILENT CASE, FROM HERE TO THE END OF THE GRID: no chain access
+        // at all, and for row 1 no print either. That is the only way to read a
+        // settled channel with neither the 595's traffic nor USB-CDC's in the
+        // measurement, and it is the case the whole attribution turns on. Row
+        // 10 is the same grid with the point line moved inside it.
+        pts[k] = (c.kind == XtalkKind::Silent)
+                     ? measure_silent_point(grid_ns(k))
+                     : measure_event_point(chain, c, grid_ns(k));
+        if(c.prints_inline) print_point_line(hw, i, grid_ns(k), pts[k]);
+    }
+
+    return reduce_and_emit(hw, i, c, pts, c.prints_inline);
+}
+
+// One Static case end to end. No grid and no event, so no point lines and no
+// STAT line -- the reader differences the two means of a victim's pair.
+//
+// It still gets its SHELL_XTALK_CASE line, so the completeness check is ONE
+// rule for all 58 cases rather than one rule per kind.
+void run_static_case(bench::Board& hw, MuxScan& chain, int i, const XtalkCase& c)
+{
+    hw.Delay(kQuietMs);
+    park_victim(chain, c);
+
+    const CountedPoint cp = measure_static(chain, c);
+
+    print_case_line(hw, i, c, false);
+    // BYTE BUDGET: DERIVED 112 characters at the widest (word 16383, four
+    // 5-digit fields), 114 with CRLF, against the 128-byte log buffer.
+    // n= carries the repeats that converted, exactly as the point line does.
+    hw.PrintLine("SHELL_XTALK_STATIC case=%d victim_group=%d victim_ch=%d "
+                 "r_src=%d word=%d n=%d mean=%d min=%d max=%d",
+                 i, c.group, c.channel, static_cast<int>(c.r_src_ohm),
+                 static_cast<int>(c.word_a), cp.valid,
+                 cp.p.mean, cp.p.min, cp.p.max);
+}
 
 } // namespace
 
@@ -381,172 +670,109 @@ void run_xtalk_probe(bench::Board& hw)
                      lat_mean, lat_min, lat_max, b0,
                      static_cast<int>(probe_adc::timeouts()));
 
-        // --- Step 5: rows 1 and 10, the silent block ---
-
+        // --- Step 4: the whole table, in the order the plan runs it ---
+        //
+        // ROWS 1 AND 2 RUN FIRST FOR EVERY VICTIM, and that is a property of
+        // kXtalkPlan (xtalk_plan.cpp's own header comment says why it is
+        // ordered that way), not of this loop. What this loop guarantees is
+        // that a table which ever stopped doing it would FAIL G6 rather than
+        // compare a control against zeroed .bss: g_silent_seen[] gates the
+        // comparison, and controls_compared counts it.
         for(int v = 0; v < kXtalkVictims; ++v)
         {
             g_silent_mean[v] = 0;
             g_silent_seen[v] = false;
         }
 
+        // G6's accumulator. Reset per block: a gate that could latch a pass
+        // from an earlier block would stop being a statement about this one.
+        int32_t worst_control     = 0;
+        int     controls_compared = 0;
+
         for(int i = 0; i < kXtalkCases; ++i)
         {
             const XtalkCase& c = kXtalkPlan[i];
 
-            // THIS TASK MEASURES THE SILENT ROWS ONLY. Rows 2 to 9 are
-            // Latch, ShiftOnly and Static cases and belong to Task 6; they
-            // are passed over here without a line of their own, so a capture
-            // from this image contains nothing that could be mistaken for a
-            // measured aggressor. The `row` field on SHELL_XTALK_CASE is
-            // what tells rows 1 and 10 apart -- the point lines are
-            // deliberately identical.
-            if(c.kind != XtalkKind::Silent) continue;
+            // --- Step 3: skipped cases are lines, not absences ---
+            //
+            // Spec section 4: a skipped case is a LINE in the output, never a
+            // silently shorter table. A reader that has to infer an absence
+            // cannot tell "not run" from "lost in transit", and USB-CDC on
+            // this machine does lose whole lines.
+            //
+            // Row 6 is the only rv4-dependent row: its four cases toggle A3
+            // with the 16:1 enabled, which switches RV4's floating wiper into
+            // ADC_9 until the pot is fitted.
+            const bool skipped = c.needs_rv4 && (SHELL_XTALK_RV4 == 0);
+            if(skipped)
+            {
+                print_case_line(hw, i, c, true);
+                continue;   // no SHELL_XTALK points, no SHELL_XTALK_STATIC
+            }
 
             const int v = victim_index_of(c);
             if(v < 0) continue;   // a case naming no victim: see victim_index_of()
 
-            // Always 0 here: row 6 is the only rv4-dependent row and every
-            // one of its cases is a Latch. Computed rather than hardcoded so
-            // Task 6 inherits the field already wired to its own switch.
-            const bool skipped = c.needs_rv4 && !SHELL_XTALK_RV4;
-
-            // The board left alone before the grid -- see kQuietMs.
-            hw.Delay(kQuietMs);
-
-            // Park once on word_a, select the victim's channel and the rung
-            // sample_time_index_for() picks for its impedance. That rung
-            // reads about 200 counts low at 5150 R in steady state
-            // (settle-measured.md section 7), so no ABSOLUTE level from this
-            // curve may be quoted without that qualification; every delta
-            // Task 6 computes is a difference at the same rung, where the
-            // bias cancels.
-            chain.write_chain(c.word_a);
-            probe_adc::select_time(
-                probe_adc::channel_of_group(c.group),
-                probe_adc::sample_time_for_rung(sample_time_index_for(c.r_src_ohm)));
+            if(c.kind == XtalkKind::Static)
             {
-                const uint32_t t0 = cycles_now();
-                while(cycles_now() - t0 < ns_to_cycles(kParkNs)) { }
+                run_static_case(hw, chain, i, c);
+                continue;
             }
 
-            // FROM HERE TO THE END OF THE GRID: no chain access at all, and
-            // for row 1 no print either. That is the only way to read a
-            // settled channel with neither the 595's traffic nor USB-CDC's
-            // in the measurement, and it is the case the whole attribution
-            // turns on. Row 10 is the same grid with the point line moved
-            // inside it -- the difference between the two IS the USB-CDC/DMA
-            // candidate settle-measured.md section 5 names.
-            // BYTE BUDGET, and this is why the spec's single SHELL_XTALK
-            // line is split in two here. libDaisy's log buffer is 128 bytes
-            // (lib/libDaisy/src/hid/logger.h:29); the spec's combined line
-            // runs about 150 and would be truncated and stamped "$$", which
-            // is how settle_probe.cpp lost two fields before anyone noticed.
-            // MEASURED on the board 2026-09-18 across three whole blocks:
-            // this line's widest is 106 characters, 108 with CRLF, and the
-            // point line below runs 66 / 68. (The plan estimated 114 and 67;
-            // both were safe, and the real numbers are the ones to quote.)
-            if(c.prints_inline)
+            // Row 1's curve is held for the whole block; every other case
+            // reduces and prints from the scratch and is done with.
+            const bool      floor_row = (c.row == 1);
+            CountedPoint*   pts       = floor_row ? g_silent_pts[v] : g_case_pts;
+            const Reduction red       = run_grid_case(hw, chain, i, c, pts);
+
+            if(floor_row)
             {
-                hw.PrintLine("SHELL_XTALK_CASE case=%d row=%d kind=%d victim_group=%d "
-                             "victim_ch=%d r_src=%d word_a=%d word_b=%d skipped=%d",
-                             i, static_cast<int>(c.row), static_cast<int>(c.kind),
-                             c.group, c.channel, static_cast<int>(c.r_src_ohm),
-                             static_cast<int>(c.word_a), static_cast<int>(c.word_b),
-                             skipped ? 1 : 0);
-            }
-
-            int64_t mean_sum      = 0;
-            int32_t mean_lo       = 0x7FFFFFFF;
-            int32_t mean_hi       = -0x7FFFFFFF;
-            int32_t widest_band   = -1;
-            int32_t widest_band_d_ns = -1;
-            // Grid points that produced at least one conversion. A point
-            // with none of them contributes to no statistic at all rather
-            // than folding a -1 into a spread: see measure_silent_point().
-            int     usable_points = 0;
-
-            for(int k = 0; k < kGridPoints; ++k)
-            {
-                const SilentPoint sp = measure_silent_point(grid_ns(k));
-
-                // Row 1's curve is held for the whole block (Task 6's G6);
-                // row 10's is not, because everything it feeds is reduced on
-                // the fly right here.
-                if(!c.prints_inline) g_silent_pts[v][k] = sp;
-
-                if(sp.valid > 0)
-                {
-                    mean_sum += sp.p.mean;
-                    if(sp.p.mean < mean_lo) mean_lo = sp.p.mean;
-                    if(sp.p.mean > mean_hi) mean_hi = sp.p.mean;
-                    const int32_t band = sp.p.max - sp.p.min;
-                    if(band > widest_band)
-                    {
-                        widest_band      = band;
-                        widest_band_d_ns = static_cast<int32_t>(grid_ns(k));
-                    }
-                    ++usable_points;
-                }
-
-                if(c.prints_inline)
-                {
-                    // n= carries the repeats that CONVERTED, not kRepeats.
-                    // It reads 64 on a clean grid and is the only place a
-                    // timed-out repeat becomes visible in the capture.
-                    hw.PrintLine("SHELL_XTALK case=%d d_ns=%d n=%d mean=%d min=%d max=%d",
-                                 i, static_cast<int>(grid_ns(k)), sp.valid,
-                                 sp.p.mean, sp.p.min, sp.p.max);
-                }
-            }
-
-            // Row 1's lines, all of them, after the grid has finished. The
-            // CASE line comes before the points in BOTH rows, so a reader
-            // cannot tell the two apart from the line order either -- the
-            // `row` field is the record.
-            if(!c.prints_inline)
-            {
-                hw.PrintLine("SHELL_XTALK_CASE case=%d row=%d kind=%d victim_group=%d "
-                             "victim_ch=%d r_src=%d word_a=%d word_b=%d skipped=%d",
-                             i, static_cast<int>(c.row), static_cast<int>(c.kind),
-                             c.group, c.channel, static_cast<int>(c.r_src_ohm),
-                             static_cast<int>(c.word_a), static_cast<int>(c.word_b),
-                             skipped ? 1 : 0);
-                for(int k = 0; k < kGridPoints; ++k)
-                {
-                    hw.PrintLine("SHELL_XTALK case=%d d_ns=%d n=%d mean=%d min=%d max=%d",
-                                 i, static_cast<int>(grid_ns(k)),
-                                 g_silent_pts[v][k].valid,
-                                 g_silent_pts[v][k].p.mean, g_silent_pts[v][k].p.min,
-                                 g_silent_pts[v][k].p.max);
-                }
-
                 // G5 judges the floor row, not row 10: row 10 reads the same
                 // channel with its own traffic on the bus, and the address
                 // question deserves the quietest reading the block has.
                 //
-                // Divided by the points that produced a reading, not by
-                // kGridPoints. A curve with no usable point at all leaves
-                // g_silent_seen false, and G5 then fails that victim rather
-                // than judging it against a fabricated mean.
-                if(usable_points > 0)
+                // A curve with no usable point at all leaves g_silent_seen
+                // false, and G5 then fails that victim rather than judging it
+                // against a fabricated mean.
+                if(red.usable_points > 0)
                 {
-                    g_silent_mean[v] = static_cast<int32_t>(mean_sum / usable_points);
+                    g_silent_mean[v] = red.curve_mean;
                     g_silent_seen[v] = true;
                 }
             }
-
-            // Both of settle-measured.md section 5's own statistics.
-            // Reported, neither gated: spec section 7 is explicit that the
-            // settled region's width is a quantity in this instrument and
-            // not a gate, because gating it would refuse the very run that
-            // answers the question.
-            // -1, not a spread computed from the 0x7FFFFFFF init values, if
-            // the whole grid came back unusable.
-            const int32_t mean_spread
-                = (usable_points > 0) ? (mean_hi - mean_lo) : -1;
-            hw.PrintLine("SHELL_XTALK_STAT case=%d settled_mean_spread=%d "
-                         "widest_sample_band=%d at_d_ns=%d",
-                         i, mean_spread, widest_band, widest_band_d_ns);
+            else if(c.row == 2)
+            {
+                // --- Step 4: G6 ---
+                //
+                // For each victim, max |mean_control(d) - mean_silent(d)| over
+                // the whole grid. The control carries the same shift and the
+                // same latch pulse as every aggressor case, so if the control
+                // alone has already moved the reading past the criterion, the
+                // aggressor deltas are no longer interpretable as differences
+                // and the finding is G6 itself.
+                //
+                // A DIFFERENCE BETWEEN TWO CURVES TAKEN IN THE SAME BLOCK,
+                // which is why row 1's five are held rather than reduced to a
+                // remembered scalar. A curve against a memory is not the
+                // quantity spec section 7 defines.
+                if(g_silent_seen[v])
+                {
+                    int32_t worst = 0;
+                    for(int k = 0; k < kGridPoints; ++k)
+                    {
+                        // A point no repeat converted at is not a reading and
+                        // its -1 mean is not a level. Excluded on both sides.
+                        if(g_silent_pts[v][k].valid <= 0 || pts[k].valid <= 0)
+                            continue;
+                        const int32_t d
+                            = pts[k].p.mean - g_silent_pts[v][k].p.mean;
+                        const int32_t a = (d < 0) ? -d : d;
+                        if(a > worst) worst = a;
+                    }
+                    if(worst > worst_control) worst_control = worst;
+                    ++controls_compared;
+                }
+            }
         }
 
         // --- Step 3's verdict: the span and G5 ---
@@ -585,14 +811,20 @@ void run_xtalk_probe(bench::Board& hw)
         summary.lat_max_ns  = lat_max;
         summary.lat_mean_ns = lat_mean;
         summary.address_ok  = address_ok;
-        // G6 PASSES VACUOUSLY IN THIS IMAGE AND ITS g6=1 IS NOT A VERDICT
-        // ABOUT A CONTROL CURVE. This block takes no control curve at all --
-        // row 2 is a Latch case and belongs to Task 6 -- so there is no
-        // |mean_control(d) - mean_silent(d)| to reduce and the field is 0,
-        // which xtalk_gates() reads as "inside the criterion". The gate
-        // itself is not broken: its RED was proved on the host in Task 3.
-        // Nobody may quote this image's g6 as evidence about the control.
-        summary.worst_control_delta = 0;
+        // G6 IS NO LONGER VACUOUS. Task 5's image had no control curve at all
+        // and assigned 0 here, which xtalk_gates() reads as "inside the
+        // criterion"; this image reduces
+        // |mean_control(d) - mean_silent(d)| over the whole grid for all five
+        // victims and the field is that maximum.
+        //
+        // -1 -- a FAILED G6, since xtalk_gates() requires the field to be
+        // non-negative -- when any victim's control could not be compared
+        // against its own floor curve. That is the only honest answer when the
+        // difference the gate is DEFINED as was never computed, and it is what
+        // stops a reordered plan table from turning a missing comparison into
+        // a pass.
+        summary.worst_control_delta
+            = (controls_compared == kXtalkVictims) ? worst_control : -1;
 
         const XtalkGates gates = xtalk_gates(summary);
 
@@ -605,11 +837,13 @@ void run_xtalk_probe(bench::Board& hw)
         hw.PrintLine("SHELL_XTALK_END");
         // No inter-block delay. Task 4's skeleton ended its loop with
         // hw.Delay(1000), which existed only to keep an empty block from
-        // spinning at full speed; this block measures for over a second and
-        // that delay is gone. The cadence is now set by the work itself --
-        // ten grids of 65 points x 64 repeats plus the ten kQuietMs windows,
-        // MEASURED 2026-09-18 at about 1.8 s per block (2500 lines, 3.6
-        // blocks, 6.6 s of capture). Do not add one back to "settle" the
+        // spinning at full speed; this block measures for many seconds and
+        // that delay is gone. The cadence is set by the work itself: 44 grids
+        // of 65 points x 64 repeats, 10 static cases of 64 conversions, 4
+        // skipped lines, and 54 kQuietMs windows. Task 5's silent-only image
+        // MEASURED about 1.8 s per block over ten grids; the whole table is
+        // measured in the Task 6 report, and THAT is the number the reader's
+        // default timeout belongs to. Do not add a delay back to "settle" the
         // host: the reader accumulates to SHELL_XTALK_END and discards an
         // incomplete block, which is the mechanism that handles a slow host.
     }
