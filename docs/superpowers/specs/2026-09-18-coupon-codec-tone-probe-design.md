@@ -188,12 +188,26 @@ plausible and all be against the wrong baseline.
 ```
 SHELL_TONE_CFG   adc_khz=%d repeats=%d phase_points=%d block_size=%d sr=%d rv4=%d git=%s
 SHELL_TONE_CLK / _CAL                       (round one's lines, unchanged)
-SHELL_TONE       case=%d level=%d f_hz=%d dbfs=%d victim_group=%d victim_ch=%d r_src=%d phase_idx=%d n=%d mean=%d min=%d max=%d
+SHELL_TONE_CASE  case=%d level=%d f_hz=%d dbfs=%d victim_group=%d victim_ch=%d r_src=%d below_corner=%d
+SHELL_TONE       case=%d phase_idx=%d n=%d mean=%d min=%d max=%d
 SHELL_TONE_LEVEL case=%d level=%d victim_group=%d victim_ch=%d r_src=%d n=%d mean=%d min=%d max=%d   (stopped and running-silent)
 SHELL_TONE_WIN   case=%d victim_group=%d victim_ch=%d r_src=%d word_a=%d word_b=%d d_before_end_ns=%d n=%d mean=%d min=%d max=%d
 SHELL_TONE_GATES g2=%d g4=%d g5=%d g7=%d g8=%d missed_blocks=%d gates_ok=%d phase_timeouts=%d block_ms=%d
 SHELL_TONE_END
 ```
+
+**The `SHELL_TONE` line above is not this spec's original one.** The plan's
+[decision 1](2026-09-18-coupon-codec-tone-probe.md) already records why and
+is the citation for it, not repeated here: libDaisy's log buffer is 128
+bytes and this line's combined form (case, level, f_hz, dbfs, victim
+identity and one phase point together) runs about 130 characters at its
+widest values — past the buffer, truncated and stamped `"$$"`. The identity
+fields that do not change across a case's 16 phase points — `level`,
+`f_hz`, `dbfs`, `victim_group`, `victim_ch`, `r_src`, `below_corner` — move
+to `SHELL_TONE_CASE`, printed once per case; `SHELL_TONE` carries only what
+changes per phase point. Every tone case is split this way, not only the
+static one below. Same decision and same reason as round one's
+`SHELL_XTALK_CASE`/point-line split.
 
 `dbfs` is printed as a negative integer; `level` is 0 stopped, 1 running
 silent, 2 tone. `phase_timeouts` (Task 4) is a lifetime count of repeats
@@ -202,11 +216,12 @@ is the wall-clock duration of the block that just finished, in
 milliseconds, measured from the board's own millisecond tick and not
 derived from the plan's table constants. Neither is folded into
 `gates_ok`. The static row (present only when Task 1 measured a
-DC-coupled output) prints a `SHELL_TONE_CASE` line, like every other tone
-case, immediately followed by a `SHELL_TONE_LEVEL`/`SHELL_TONE_STAT` pair
-and no `SHELL_TONE` point lines — it has no phase, so there is no grid to
-walk, and a reader keys its identity off `SHELL_TONE_CASE` the same way it
-does for every other case. `shell/read_tone.py` follows `read_xtalk.py`,
+DC-coupled output) is a tone case like any other for this purpose: it
+prints its own `SHELL_TONE_CASE` line (`f_hz=0`, its `dbfs`), immediately
+followed by a `SHELL_TONE_LEVEL`/`SHELL_TONE_STAT` pair and no `SHELL_TONE`
+point lines — it has no phase, so there is no grid to walk, and a reader
+keys its identity off `SHELL_TONE_CASE` the same way it does for every
+other case. `shell/read_tone.py` follows `read_xtalk.py`,
 computes `delta(φ)` and `delta_pp` per tone case, the stopped-versus-running
 difference per victim, and the verdict; guard `shell/test_read_tone.py`,
 CTest `read_tone_guard`. G8 needs round one's silent-block numbers as an

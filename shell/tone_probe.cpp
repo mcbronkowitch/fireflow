@@ -779,12 +779,28 @@ void run_tone_probe(bench::Board& hw)
                 // BYTE BUDGET, and the reason the spec's single SHELL_TONE
                 // line is split in two here: libDaisy's log buffer is 128
                 // bytes (lib/libDaisy/src/hid/logger.h:29) and the spec's
-                // combined line runs about 130 at its widest values --
-                // truncated, and stamped "$$" (measured: exactly once in the
-                // 968-line board capture of commit 438fd51, on case=10's own
-                // phase_idx=2 line -- see task-4-report.md). Same split and
-                // same reason as the crosstalk probe's SHELL_XTALK_CASE. This
-                // line runs 108 bytes; the point line below runs 62.
+                // combined line runs about 130 at its widest values -- past
+                // the buffer. Same split and same reason as the crosstalk
+                // probe's SHELL_XTALK_CASE (plan decision 1, cited in spec
+                // section 8, not re-argued here). This line runs 108 bytes;
+                // the point line below runs 62.
+                //
+                // TWO DIFFERENT FAILURES, ONE VISIBLE SYMPTOM -- do not
+                // conflate them. A too-long line truncates at the 128-byte
+                // buffer and would ALSO stamp "$$"; that is what the split
+                // above prevents. But the ONE "$$" measured in the 968-line
+                // board capture of commit 438fd51 (line 2, fusing case=10's
+                // phase_idx=2 into the next SHELL_TONE_CASE line -- see
+                // task-4-report.md) landed on this file's 62-byte POINT
+                // line, nowhere near 128 bytes. That is logger.cpp:78-87's
+                // ACCUMULATION overflow: when the host does not drain fast
+                // enough, tx_ptr_ is not reset and the next PrintLine's
+                // vsnprintf appends into the same buffer regardless of any
+                // one line's length -- xtalk_probe.cpp's SHELL_XTALK_CFG
+                // comment carries the full mechanism. Shortening a line does
+                // not buy immunity from this kind; it only moves where the
+                // damage lands. The split fixes the first failure. Nothing
+                // in this file fixes, or was meant to fix, the second.
                 hw.PrintLine("SHELL_TONE_CASE case=%d level=%d f_hz=%d dbfs=%d "
                              "victim_group=%d victim_ch=%d r_src=%d below_corner=%d",
                              case_idx, static_cast<int>(ToneLevel::Tone), row.f_hz,
