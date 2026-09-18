@@ -177,11 +177,32 @@ Round one's G2, G4 and G5 unchanged, plus:
 | Gate | Bound | What it refuses |
 |---|---|---|
 | **G7** callback health | zero missed blocks across the case (the callback counts entries; the foreground compares against elapsed DWT time and the block size) | a run in which the tone was not the tone: a starved callback outputs the DMA buffer's stale contents, and a `delta_pp` against that is unreadable |
-| **G8** floor agreement | the stopped level's `settled_mean_spread` per victim within 4 counts of round one's silent block for the same victim | an image whose floor is not the floor round one measured — the refactor or the linker having moved something; the number is round one's own conversion-noise estimate |
+| **G8** floor agreement | the **boot-virgin** stopped level's `settled_mean_spread` per victim — the `SHELL_TONE_LEVEL`/`STAT` lines with `audio_virgin=1`, and only those — within 4 counts of round one's silent block for the same victim | an image whose floor is not the floor round one measured — the refactor or the linker having moved something; the number is round one's own conversion-noise estimate |
 
 G8 is the one to prove red deliberately: a stopped-level spread 5 counts off
 round one's must fail, because that is a run whose tone results would all be
 plausible and all be against the wrong baseline.
+
+**Measured across two boots, no mechanism attached** (Task 4 fix round 3):
+the boot-virgin floor's `settled_mean_spread`, against round one's own two
+published columns (`xtalk.csv.meta.csv`'s whole silent grid, and that grid
+with its `d=0` point dropped):
+
+| victim | boot-virgin spread | round one, whole grid | round one, `d=0` dropped |
+|---|---|---|---|
+| `REF_A` g0 ch8 5150 Ω | 17, then 16 | 15/16/17 | 10/11/12 |
+| `REF_C` g1 ch6 5150 Ω | 3, then 3 | 10/11/12 | 6/6/6 |
+| `REF_B` g0 ch9 650 Ω | 2, then 3 | 6/6/7 | 6/6/7 |
+| `R_SP10` 150 Ω | 1, then 1 | 0/0/1 | 0/0/1 |
+| `R_LO3` 150 Ω | 0, then 0 | 0/0/0 | 0/0/0 |
+
+`REF_A` lands on round one's whole-grid figure. `REF_C` and `REF_B` come out
+**lower** than either of round one's columns, not higher — so G8's 4-count
+bound, read literally against either column, does not hold for `REF_C`
+(3 against 10/11/12 or 6/6/6: 7-9 counts off, not 4). **This is stated as a
+measured fact, open, not resolved here**: which of round one's two columns
+G8 should compare against, and what to do about `REF_C`, is a decision for
+the controller and Bastian, not answered by this spec.
 
 ## 8. Output
 
@@ -190,7 +211,7 @@ SHELL_TONE_CFG   adc_khz=%d repeats=%d phase_points=%d block_size=%d sr=%d rv4=%
 SHELL_TONE_CLK / _CAL                       (round one's lines, unchanged)
 SHELL_TONE_CASE  case=%d level=%d f_hz=%d dbfs=%d victim_group=%d victim_ch=%d r_src=%d below_corner=%d
 SHELL_TONE       case=%d phase_idx=%d n=%d mean=%d min=%d max=%d
-SHELL_TONE_LEVEL case=%d level=%d victim_group=%d victim_ch=%d r_src=%d n=%d mean=%d min=%d max=%d   (stopped and running-silent)
+SHELL_TONE_LEVEL case=%d level=%d victim_group=%d victim_ch=%d r_src=%d n=%d mean=%d min=%d max=%d audio_virgin=%d   (stopped and running-silent)
 SHELL_TONE_WIN   case=%d victim_group=%d victim_ch=%d r_src=%d word_a=%d word_b=%d d_before_end_ns=%d n=%d mean=%d min=%d max=%d
 SHELL_TONE_GATES g2=%d g4=%d g5=%d g7=%d g8=%d missed_blocks=%d gates_ok=%d phase_timeouts=%d block_ms=%d
 SHELL_TONE_END
@@ -208,6 +229,22 @@ to `SHELL_TONE_CASE`, printed once per case; `SHELL_TONE` carries only what
 changes per phase point. Every tone case is split this way, not only the
 static one below. Same decision and same reason as round one's
 `SHELL_XTALK_CASE`/point-line split.
+
+**`audio_virgin` on `SHELL_TONE_LEVEL`/`SHELL_TONE_STAT` (Task 3, missing
+from this section until Task 4 fix round 3) is what G8 reads.** `1` marks
+the boot-virgin floor: measured exactly once per boot, before any
+`StartAudio()` call anywhere in the image, then cached and re-emitted
+verbatim inside every block at `case=-1` through `case=-5` (negative, one
+per victim, so it can never collide with a live case). Every other
+`SHELL_TONE_LEVEL` line — every per-block Stopped and RunningSilent
+measurement, `case >= 0` — carries `audio_virgin=0`: a per-block Stopped
+level is `StopAudio()` called on a codec an earlier block has already
+started and stopped, which is a different history from "never started",
+and is not the floor round one's own silent block (which never touches
+audio at all) is comparable to. **G8 reads the `audio_virgin=1` lines and
+only those.** The numbers on those lines are measured once, at boot, and
+re-emitted rather than re-measured on every later block — re-measuring
+would destroy the one property `audio_virgin=1` exists to assert.
 
 `dbfs` is printed as a negative integer; `level` is 0 stopped, 1 running
 silent, 2 tone. `phase_timeouts` (Task 4) is a lifetime count of repeats
