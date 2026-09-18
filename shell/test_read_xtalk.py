@@ -52,20 +52,36 @@ def check(label, cond):
 
 def build_block(scan_settle_ns=2000000, grid_points=2, gates_ok=1,
                 aggressor_means=(100, 100), control_means=(100, 100),
-                silent_means=(100, 100), g6=None, aggressor_n=64):
-    """Two victims (one 5150 ohm divider, one 150 ohm tie), ten cases:
-    silent, control and one LED aggressor per victim, plus two static cases
-    per victim.
+                silent_means=(100, 100), g6=None, aggressor_n=64,
+                orphan_victim=False):
+    """Two victims (one 5150 ohm divider, one 150 ohm tie), twelve cases:
+    silent, control and one LED aggressor per victim, two static cases per
+    victim, and one SKIPPED case per victim -- every real block has four of
+    those and a fixture without one cannot test the only rule that sees them.
 
     `g6` overrides the G6 bit alone, so a block can print a passing gate over
-    curves that do not support it -- the disagreement case 18 needs."""
+    curves that do not support it -- the disagreement case 19 needs.
+
+    `aggressor_n` is the row-7 point lines' surviving repeat count: an int
+    for the whole curve, or a tuple for one per grid point, which is what a
+    boundary point that no repeat converted at needs.
+
+    `orphan_victim` adds a third victim that appears in a skipped case and in
+    nothing else -- no floor curve, no control curve. G6 cannot be computed
+    for it at all, and it is the one shape in which a skipped case reaches
+    the per-victim arithmetic."""
     if g6 is None:
         g6 = gates_ok
+    if not isinstance(aggressor_n, tuple):
+        aggressor_n = (aggressor_n,) * grid_points
+    n_victims = 3 if orphan_victim else 2
+    n_cases = 13 if orphan_victim else 12
     lines = [
         "SHELL_XTALK_CFG adc_khz=6146 repeats=64 grid_ns=200 points=%d "
         "park_ns=20000 scan_settle_ns=%d rv4=0 git=4a7800f+"
         % (grid_points, scan_settle_ns),
-        "SHELL_XTALK_RATE block_size=96 sr_hz=48000 cases=10 victims=2",
+        "SHELL_XTALK_RATE block_size=96 sr_hz=48000 cases=%d victims=%d"
+        % (n_cases, n_victims),
         "SHELL_XTALK_CLK span_short_cyc=2000 span_long_cyc=30000 "
         "smp_short_tenths=165 smp_long_tenths=3875",
         "SHELL_XTALK_CAL lat_mean_ns=747 lat_min_ns=700 lat_max_ns=800 "
@@ -73,7 +89,8 @@ def build_block(scan_settle_ns=2000000, grid_points=2, gates_ok=1,
         "SHELL_XTALK_SPAN zero=0 rail=63485 hi_spread=1 lo_spread=1 valid=1",
     ]
     victims = ((0, 8, 5150), (1, 3, 150))
-    for g, ch, _r in victims:
+    g5_victims = victims + (((1, 5, 650),) if orphan_victim else ())
+    for g, ch, _r in g5_victims:
         lines.append("SHELL_XTALK_G5 victim_group=%d victim_ch=%d expect=2 "
                      "mean=100 ok=1" % (g, ch))
 
@@ -91,8 +108,8 @@ def build_block(scan_settle_ns=2000000, grid_points=2, gates_ok=1,
             # re-purposed the field when it closed an undetected-timeout
             # path, so n < 64 is a mean over fewer real conversions and is
             # good data, while n == 0 is not a reading at all.
-            n = aggressor_n if row == 7 else 64
             for k in range(grid_points):
+                n = aggressor_n[k] if row == 7 else 64
                 lines.append("SHELL_XTALK case=%d d_ns=%d n=%d mean=%d "
                              "min=%d max=%d"
                              % (case, k * 200, n, means[k], means[k] - 2,
@@ -118,6 +135,23 @@ def build_block(scan_settle_ns=2000000, grid_points=2, gates_ok=1,
                                      mean + 2))
             case += 1
 
+    # The skipped cases. Spec section 4: a skipped case is a line in the
+    # output, never a silently shorter table -- so it has a _CASE line and
+    # nothing behind it, no points, no _STAT and no _STATIC. It is also the
+    # only shape in which rule 1 has work of its own: every other lost _CASE
+    # line is caught by rule 2 as well, because the points behind it survive.
+    for g, ch, r in victims:
+        lines.append("SHELL_XTALK_CASE case=%d row=6 kind=1 victim_group=%d "
+                     "victim_ch=%d r_src=%d word_a=%d word_b=%d skipped=1"
+                     % (case, g, ch, r, 0x28, 0x2C))
+        case += 1
+    if orphan_victim:
+        og, och, orr = g5_victims[2]
+        lines.append("SHELL_XTALK_CASE case=%d row=6 kind=1 victim_group=%d "
+                     "victim_ch=%d r_src=%d word_a=%d word_b=%d skipped=1"
+                     % (case, og, och, orr, 0x28, 0x2C))
+        case += 1
+
     # gates_ok is the FOLD, not a free field: xtalk_gates()::ok() is the AND
     # of the four, so a fixture that printed g6=0 beside gates_ok=1 would be
     # a block the firmware cannot emit.
@@ -142,7 +176,9 @@ def drop_first(lines, prefix):
 base = build_block()
 block = parse_block(base)
 check("a complete block parses", block is not None)
-check("every case is kept", block and len(block["cases"]) == 10)
+check("every case is kept, skipped ones included",
+      block and len(block["cases"]) == 12
+      and sum(c["skipped"] for c in block["cases"]) == 2)
 check("every point is kept", block and len(block["points"]) == 12)
 check("the verdict bits are carried",
       block and block["gates"]["gates_ok"] == 1)
@@ -165,6 +201,12 @@ check("a block missing one case's point row is refused",
 # --- 7: a missing CASE line (rule 1) ---
 check("a block missing a SHELL_XTALK_CASE line is refused",
       parse_block(drop_first(base, "SHELL_XTALK_CASE case=2 ")) is None)
+# Rule 1's OWN work, which no other rule does: a skipped case has no points,
+# no statistic and no static measurement, so losing its _CASE line leaves
+# rules 2-5 with nothing to notice. Only the count and the 0..cases-1
+# identity catch it.
+check("a block missing a SKIPPED case's line is refused too",
+      parse_block(drop_first(base, "SHELL_XTALK_CASE case=10 ")) is None)
 
 # --- 8: a missing STATIC line (rule 3) ---
 check("a block whose static case has no measurement is refused",
@@ -182,6 +224,29 @@ check("a block missing one grid case's STAT line is refused",
 # table says it was.
 check("a block missing one victim's G5 line is refused",
       parse_block(drop_first(base, "SHELL_XTALK_G5 victim_group=1")) is None)
+
+# --- 10a: the block-level lines the module docstring promises (rule 0) ---
+# Losing _CAL used to leave the block ACCEPTED, both files written, and
+# main() raising a TypeError on block["cal"] with the output already on
+# disk. Losing _SPAN was quieter: accepted, and the metadata file silently
+# without the span row case 17 below asserts must be there.
+for _line, _why in (("SHELL_XTALK_CLK", "the measured clock"),
+                    ("SHELL_XTALK_CAL", "the calibration pass"),
+                    ("SHELL_XTALK_SPAN", "the span G5 was judged against")):
+    check("a block missing %s (%s) is refused" % (_line, _why),
+          parse_block(drop_first(base, _line)) is None)
+
+# --- 10b: the grid is checked by d_ns, not by how many rows arrived ---
+# A case with two d_ns=0 rows and no d_ns=200 has the right COUNT and the
+# wrong grid; accepting it makes deltas() difference one point fewer than the
+# row reports, with nothing saying so.
+duped = list(base)
+for i, line in enumerate(duped):
+    if line.startswith("SHELL_XTALK case=1 d_ns=200"):
+        duped[i] = line.replace("d_ns=200", "d_ns=0")
+        break
+check("a block whose grid has a duplicate d_ns and a missing one is refused",
+      parse_block(duped) is None)
 
 # --- 11: a failed run still parses and is marked ---
 failed = parse_block(build_block(gates_ok=0))
@@ -243,6 +308,39 @@ inside_fail = verdicts(parse_block(build_block(scan_settle_ns=200,
 check("an excursion at or past the boundary fails the criterion",
       inside_fail and not any(row["pass"] for row in inside_fail))
 
+# --- 14a: the basis comes from the GRID, not from the rows that survived ---
+# The boundary is inside the grid (it IS the last point) and the only point
+# at or past it was never converted. Choosing the basis from the surviving
+# rows would find none past the boundary, fall through to the envelope,
+# label the row "over the WHOLE grid" and PASS on a point that is
+# characterisation -- the points that count being unusable, silently turned
+# into a pass. That is not an envelope. It is no data.
+starved = verdicts(parse_block(build_block(scan_settle_ns=200,
+                                           aggressor_means=(106, 103),
+                                           aggressor_n=(64, 0))))
+check("a boundary inside the grid never falls back to the envelope",
+      starved and all(row["verdict_basis"] != "envelope" for row in starved))
+check("an unusable boundary point is no data, not a verdict",
+      starved and all(row["verdict_basis"] == "no-data"
+                      and row["worst_delta"] == -1 for row in starved))
+check("and no data is never a pass",
+      starved and not any(row["pass"] for row in starved))
+# The same grid with the boundary point converted takes the criterion branch,
+# so 14a is about the points being unusable and not about the boundary.
+fed = verdicts(parse_block(build_block(scan_settle_ns=200,
+                                       aggressor_means=(106, 103))))
+check("the same boundary with a usable point takes the criterion",
+      fed and all(row["verdict_basis"] == "criterion" for row in fed))
+
+# --- 14b: how many points the verdict actually rests on, on every row ---
+# A verdict over one surviving point and one over two are not the same
+# claim, and a row that does not say which leaves a reader assuming the grid
+# was whole.
+check("every verdict row says how many points it rests on",
+      all(row["points_considered"] == 1 for row in fed)
+      and all(row["points_considered"] == 2
+              for row in verdicts(parse_block(build_block()))))
+
 # --- 15a: n is read per line, and n == 0 is not a reading ---
 # Every point line in Task 6's capture reads n=64, but the field carries the
 # surviving repeat count and a reader that assumed 64 would fold a timed-out
@@ -263,6 +361,12 @@ check("but it still gets a verdict row, one per aggressor case",
 check("and that row is a refusal, not a pass",
       all(row["verdict_basis"] == "no-data" and not row["pass"]
           for row in dead_v))
+
+# --- 15b: a skipped case is carried, and is not differenced or judged ---
+check("a skipped case yields no delta and no verdict",
+      all(row["case"] not in (10, 11) for row in deltas(block))
+      and all(row["case"] not in (10, 11)
+              for row in verdicts(parse_block(base))))
 
 # --- 15: a failed gate refuses the verdict ---
 check("a run whose gates failed yields no per-aggressor verdict",
@@ -366,6 +470,23 @@ quiet_fail = parse_block(build_block(gates_ok=1, g6=0,
                                      control_means=(101, 100)))
 check("a g6=0 no curve accounts for is also a disagreement",
       g6_disagreement(quiet_fail) is not None)
+
+# --- 19a: a victim that appears only in a skipped case ---
+# No floor curve and no control curve, so G6 cannot be computed for it at
+# all. It must not read as a pass, it must not be dropped from the per-victim
+# table, and -- the reason this fixture exists -- r_src must come off the
+# skipped case rather than stay None, because main() formats it with %d.
+orphan = parse_block(build_block(orphan_victim=True))
+check("a victim with no curves still parses and is still a victim",
+      orphan is not None and len(control_deltas(orphan)) == 3)
+orphan_row = control_deltas(orphan)[2] if orphan else {}
+check("a victim with no curves is compared at no points and is not in bound",
+      orphan_row.get("points_compared") == 0
+      and orphan_row.get("within_bound") is False)
+check("and its r_src comes off the skipped case, not None",
+      orphan_row.get("r_src") == 650)
+check("a g6=1 over a victim that could not be compared is a disagreement",
+      g6_disagreement(orphan) is not None)
 
 # --- 20: libDaisy's "$$" overflow marker ---
 truncated = list(base)

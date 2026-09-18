@@ -142,8 +142,17 @@ def _is_complete(block):
     SHELL_XTALK_END. Anything short of this must be dropped rather than
     returned -- see the module docstring. Each rule exists because a
     different corruption gets past the other four."""
-    if block["cfg"] is None or block["rate"] is None or block["gates"] is None:
-        return False
+    # 0. Every block-level line the module docstring lists as part of the
+    #    block. _CLK, _CAL and _SPAN were missing from this check while the
+    #    docstring claimed them: a block that had lost _CAL was ACCEPTED,
+    #    both files were written, and main() then raised a TypeError on
+    #    block["cal"] with the output already on disk. A lost _SPAN was
+    #    quieter and worse -- accepted, and the metadata file silently
+    #    without the span G5 was judged against, which is the one row this
+    #    reader's own guard asserts must be there.
+    for key in ("cfg", "rate", "clk", "cal", "span", "gates"):
+        if block[key] is None:
+            return False
     # 1. Every case the firmware said it would print, printed. The count is
     #    the firmware's own (SHELL_XTALK_RATE's `cases=`), not this reader's
     #    idea of how big the table is -- a reader that carried its own 58
@@ -153,17 +162,21 @@ def _is_complete(block):
     if sorted(c["case"] for c in block["cases"]) != list(
             range(block["rate"]["cases"])):
         return False
-    # 2. Every grid case, and only a grid case, has exactly grid_points
-    #    points. PER CASE: a serial timeout loses one case's row while its
-    #    neighbours keep theirs, and a total count reports that as complete.
-    want = Counter()
-    for c in block["cases"]:
-        if c["skipped"]:
-            continue
-        if c["kind"] == KIND_STATIC:
-            continue
-        want[c["case"]] = block["cfg"]["points"]
-    if Counter(p["case"] for p in block["points"]) != want:
+    # 2. Every grid case, and only a grid case, has exactly the grid the
+    #    firmware said it would sweep. PER CASE: a serial timeout loses one
+    #    case's row while its neighbours keep theirs, and a total count
+    #    reports that as complete.
+    #
+    #    BY d_ns AND NOT BY COUNT: counting alone accepts a case with two
+    #    d_ns=0 rows and no d_ns=200 -- the count is right and the grid is
+    #    not -- after which deltas() differences one point fewer than it
+    #    reports and nothing says so. The grid is the firmware's own
+    #    (cfg's `points` and `grid_ns`), not this reader's.
+    grid = [i * block["cfg"]["grid_ns"] for i in range(block["cfg"]["points"])]
+    grid_cases = {c["case"] for c in block["cases"]
+                  if not c["skipped"] and c["kind"] != KIND_STATIC}
+    want = Counter((case, d) for case in grid_cases for d in grid)
+    if Counter((p["case"], p["d_ns"]) for p in block["points"]) != want:
         return False
     # 3. Every Static case has its one measurement.
     want_static = {c["case"] for c in block["cases"]
@@ -176,7 +189,7 @@ def _is_complete(block):
     #    one per grid case (reduce_and_emit()), not one per Silent case, and a
     #    rule that wanted only the Silent ones would accept a block that had
     #    lost an aggressor's.
-    if {s["case"] for s in block["stats"]} != set(want):
+    if {s["case"] for s in block["stats"]} != grid_cases:
         return False
     # 5. Every victim has its addressing evidence. None of rules 1-4 can see
     #    a lost SHELL_XTALK_G5 line: every case, point, static and statistic
@@ -347,12 +360,24 @@ def verdicts(block):
     in as many words. It is strictly more pessimistic than the criterion
     branch, and it is never labelled as a measurement taken at 2 ms.
 
+    THE BASIS IS A PROPERTY OF THE GRID, NOT OF THE ROWS THAT SURVIVED. It
+    is (points - 1) * grid_ns against scan_settle_ns, both the firmware's own
+    numbers, which is the condition the plan states. Deciding it from the
+    surviving delta rows instead reads the same in every case but one, and
+    that one is the dangerous one: a boundary that IS inside the grid, whose
+    only points at or past it were never examined, would fall through to the
+    envelope, be labelled "over the WHOLE grid", and PASS. The points that
+    count being unusable is not an envelope. It is no data, and it is a
+    refusal.
+
     A run whose gates did not pass yields NO verdicts at all: the differences
     stop being interpretable, which is the whole point of G6.
     """
     if not block["gates"]["gates_ok"]:
         return []
     scan_settle_ns = block["cfg"]["scan_settle_ns"]
+    grid_end_ns = (block["cfg"]["points"] - 1) * block["cfg"]["grid_ns"]
+    basis = "criterion" if scan_settle_ns <= grid_end_ns else "envelope"
     by_case = OrderedDict()
     for row in deltas(block):
         by_case.setdefault(row["case"], []).append(row)
@@ -371,13 +396,16 @@ def verdicts(block):
             continue
         case_id = c["case"]
         rows = by_case.get(case_id, [])
-        at_or_past = [row for row in rows if row["d_ns"] >= scan_settle_ns]
-        basis = "criterion" if at_or_past else "envelope"
-        considered = at_or_past if at_or_past else rows
+        if basis == "criterion":
+            considered = [row for row in rows if row["d_ns"] >= scan_settle_ns]
+        else:
+            considered = rows
         if not considered:
-            # No point in this case yielded a difference at all. Not a pass:
-            # it is a case that was never examined, and saying so is the
-            # whole reason this function has a basis column.
+            # Either no point in this case yielded a difference at all, or
+            # the boundary is inside the grid and every point at or past it
+            # was unusable. Not a pass, and not an envelope either: it is a
+            # case that was never examined, and saying so is the whole
+            # reason this function has a basis column.
             out.append({"case": case_id, "row": c["row"],
                         "victim_group": c["victim_group"],
                         "victim_ch": c["victim_ch"], "r_src": c["r_src"],
@@ -437,10 +465,16 @@ def control_deltas(block):
                 if magnitude > worst:
                     worst, worst_d_ns = magnitude, p["d_ns"]
         within = compared > 0 and worst <= CRITERION_COUNTS
-        r_src = None
-        for case_id in (silent_id, control_id):
-            if case_id is not None:
-                r_src = cases[case_id]["r_src"]
+        # Off ANY case carrying this victim, skipped and Static included, not
+        # only its floor and control cases: a victim whose row-1 and row-2
+        # cases were both skipped would otherwise leave this None, and
+        # main() formats it with %d. -1 only if the victim has a G5 line and
+        # no case at all, which is a block this reader should still print
+        # rather than crash on.
+        r_src = -1
+        for c in block["cases"]:
+            if _victim_key(c) == key:
+                r_src = c["r_src"]
                 break
         out.append({"victim_index": index,
                     "victim_group": key[0],
@@ -710,11 +744,16 @@ def main() -> int:
             worst_of[key] = row
     for key in sorted(worst_of):
         row = worst_of[key]
+        # points_considered on EVERY line, not only the failed ones: a
+        # verdict taken over three surviving points and one taken over 65
+        # are not the same claim, and a line that does not say which leaves
+        # the reader to assume the grid was whole.
         print("row=%-2d victim (%d,%d) r_src=%-4d worst_delta=%-4d at d_ns=%-6d "
-              "basis=%-9s %s"
+              "basis=%-9s pts=%-3d %s"
               % (row["row"], row["victim_group"], row["victim_ch"],
                  row["r_src"], row["worst_delta"], row["worst_d_ns"],
-                 row["verdict_basis"], "PASS" if row["pass"] else "FAIL"),
+                 row["verdict_basis"], row["points_considered"],
+                 "PASS" if row["pass"] else "FAIL"),
               file=sys.stderr)
 
     failed_cases = [row for row in rows if not row["pass"]]
