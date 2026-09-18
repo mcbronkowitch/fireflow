@@ -52,14 +52,30 @@ void AudioCallback(daisy::AudioHandle::InputBuffer  in,
 
     for(size_t i = 0; i < size; ++i)
     {
-        // sinf() and not a table: this callback has 96 samples of a 2 ms
-        // block to fill and nothing else to do, so the cost is irrelevant --
-        // and a table would put its own interpolation error into the
-        // aggressor, which is the one signal in this measurement that has to
-        // be what it says it is.
-        const float s = sinf(6.2831853f * (static_cast<float>(phase)
-                                           / static_cast<float>(kTonePhaseScale)));
-        const float v = a * s;
+        // st == 0 covers two cases: RunningSilent (a == 0, so which branch
+        // runs makes no audible difference) and Task 4's static row (a !=
+        // 0, f_hz == 0). phase_step_per_sample() returns 0 for f_hz == 0
+        // (tone_plan.h), which has no phase to modulate -- writing the raw
+        // amplitude directly is the same constant spec section 9's bench
+        // check wrote to measure DC coupling (0.5011872f at -6 dBFS), not
+        // amp * sin(whatever phase the previous row happened to leave
+        // behind in the accumulator).
+        float v;
+        if(st == 0)
+        {
+            v = a;
+        }
+        else
+        {
+            // sinf() and not a table: this callback has 96 samples of a
+            // 2 ms block to fill and nothing else to do, so the cost is
+            // irrelevant -- and a table would put its own interpolation
+            // error into the aggressor, which is the one signal in this
+            // measurement that has to be what it says it is.
+            const float s = sinf(6.2831853f * (static_cast<float>(phase)
+                                               / static_cast<float>(kTonePhaseScale)));
+            v = a * s;
+        }
         out[0][i] = v;
         out[1][i] = v;
         phase = phase_advance(phase, st, 1);
@@ -108,6 +124,86 @@ uint32_t phase_now(uint32_t step_per_sample, int sr_hz)
         (static_cast<uint64_t>(phase)
          + static_cast<uint64_t>(step_per_sample) * samples)
         & (kTonePhaseScale - 1u));
+}
+
+// --- Task 4: the phase-point measurement (spec section 5) ---
+
+// Two periods of the LOWEST frequency in the ladder, in core cycles: at
+// 100 Hz a period is 10 ms, so two are 20 ms, and at 480 MHz that is
+// 9 600 000 cycles. WORTH FLAGGING: the task brief's own comment for this
+// constant calls it "derived from kFreqHz[0] rather than written as a
+// literal, so a ladder that gains a lower frequency does not silently
+// shorten its own patience" -- but kFreqHz has internal linkage in
+// tone_plan.cpp (anonymous namespace) and is not visible here, so there is
+// no expression this file could actually write that tracks a ladder
+// change. This IS a literal, correct for TODAY's ladder (100/1000/5000 Hz)
+// only; a future row below 100 Hz needs this constant updated by hand
+// alongside it. Said plainly rather than left implied by a comment that
+// overclaims what the code does.
+constexpr uint32_t kPhaseWaitTimeoutCycles = 9600000u;
+
+// Repeats that never saw their target phase. Printed, never folded into an
+// average: a run that lost repeats must say so rather than report a
+// quieter n that looks like a cleaner measurement. Lifetime count, like
+// probe_adc::timeouts() -- not reset per block or per case -- and printed
+// on SHELL_TONE_GATES below: a Task 4 addition, appended after the design
+// spec's own field list for the same reason audio_virgin was appended to
+// SHELL_TONE_LEVEL/STAT in Task 3 (see print_level_lines()'s comment) -- a
+// reader keyed on the spec's names and positions is unaffected by a field
+// added at the end.
+uint32_t g_phase_timeouts = 0;
+
+// One phase point of one tone row against one victim.
+//
+// Every repeat waits for the NEXT crossing of its target phase, so repeats
+// are one or more periods apart and never share a block's interrupt jitter
+// -- which is the whole reason this is a phase grid and not 64 conversions
+// in a row. The wait runs with interrupts ENABLED; only the conversion
+// masks them.
+Point measure_phase_point(uint32_t step, int sr_hz, int phase_idx, int* n_out)
+{
+    const uint32_t target = phase_target(phase_idx);
+
+    int64_t sum   = 0;
+    int32_t lo    = 0x7FFFFFFF, hi = -0x7FFFFFFF;
+    int     valid = 0;
+    for(int r = 0; r < kToneRepeats; ++r)
+    {
+        uint32_t prev = phase_now(step, sr_hz);
+        // Bounded, like every other wait in these two probes: a tone that
+        // stopped -- a codec that lost its clock, a callback that died --
+        // must leave a flag and a shorter n, not a board that is silent with
+        // no clue why. Two periods at the LOWEST frequency in the ladder,
+        // expressed in core cycles.
+        const uint32_t t0 = cycles_now();
+        bool reached = false;
+        while(cycles_now() - t0 < kPhaseWaitTimeoutCycles)
+        {
+            const uint32_t now = phase_now(step, sr_hz);
+            if(phase_reached(prev, now, target)) { reached = true; break; }
+            prev = now;
+        }
+        if(!reached) { ++g_phase_timeouts; continue; }
+
+        // KNOWN GAP, same shape as read_parked()'s below: sample_now(nullptr)
+        // cannot see its own EOC-poll timeout -- the span pointer that would
+        // carry probe_adc::kTimeoutSentinel is null here -- so a conversion
+        // that times out on this one repeat folds a stale/garbage reading
+        // into sum/lo/hi uncounted. Same non-exclusion mean_of_repeats() has,
+        // not mean_span_of_repeats()'s exclusion. Verbatim from the task
+        // brief; the phase-wait's own bound above is the exclusion this
+        // function relies on for a dead callback, and probe_adc::timeouts()
+        // (printed on SHELL_TONE_CAL every block) is the lifetime count of
+        // any ADC-level timeout on this board, phase grid included.
+        const int32_t v = probe_adc::sample_now(nullptr);
+        sum += v;
+        if(v < lo) lo = v;
+        if(v > hi) hi = v;
+        ++valid;
+    }
+    if(n_out) *n_out = valid;
+    return valid > 0 ? Point{static_cast<int32_t>(sum / valid), lo, hi}
+                     : Point{-1, -1, -1};
 }
 
 // --- A small shared spin, used by both the calibration passes below and
@@ -620,6 +716,93 @@ void run_tone_probe(bench::Board& hw)
             }
         }
 
+        // --- Task 4: the frequency x level phase grid (spec section 5) ---
+        //
+        // Per row: the callback's step and amplitude are set ONCE here, in
+        // the foreground, between cases -- never touched by
+        // measure_phase_point() itself, which only ever reads the `step`
+        // argument the caller passes it -- and every victim of that row
+        // reads against the SAME tone. hw.Delay(20) lets the codec and the
+        // analog path settle into the new row before the first conversion
+        // of the first victim: ten blocks at 96 samples/48 kHz is ~20 ms,
+        // two periods of the lowest frequency in the ladder -- derived, not
+        // measured, and generous on purpose because it costs 20 ms against
+        // a row that costs seconds.
+        //
+        // case_idx CONTINUES the same non-negative counter the Stopped/
+        // RunningSilent loop above left at 2 * kXtalkVictims (10): every
+        // live case in this file is >= 0, matching the boot-virgin cache's
+        // own negative-vs-non-negative split above.
+        for(int i = 0; i < kToneRowCount; ++i)
+        {
+            const ToneRow& row = kToneRows[i];
+
+            // The amplitude from dbfs, computed once per row and handed to
+            // the callback between cases, never during one. powf() is fine
+            // here: this runs once per row in the foreground, nowhere near a
+            // timed path.
+            const float amp = powf(10.0f, static_cast<float>(row.dbfs) / 20.0f);
+            g_phase_step = phase_step_per_sample(row.f_hz, sr_hz);
+            g_amplitude  = amp;
+
+            hw.Delay(20);
+
+            for(int v = 0; v < kXtalkVictims; ++v)
+            {
+                const XtalkVictim& vv = kXtalkVictimTable[v];
+
+                if(row.f_hz == 0)
+                {
+                    // The static row: a tone row by table position (f_hz ==
+                    // 0, present only when Task 1 measured a DC-coupled
+                    // output, kToneHasStaticRow) but a LEVEL row by SHAPE:
+                    // it has no phase, so it is never walked as a 16-point
+                    // grid. It takes the same whole-block measurement the
+                    // Stopped/RunningSilent levels do -- measure_level(),
+                    // which parks the victim itself -- printed as
+                    // SHELL_TONE_LEVEL/SHELL_TONE_STAT with level=2 (Tone).
+                    // A reader that assumed every level=2 row carried a
+                    // phase grid would refuse this block on the one row
+                    // that never has one. missed_blocks is tracked here
+                    // (not nullptr): audio is running, same as
+                    // RunningSilent, so G7 applies -- see measure_level()'s
+                    // own comment on this parameter, "and Tone in Task 4".
+                    (void)measure_level(hw, chain, block_size, sr_hz, case_idx,
+                                        ToneLevel::Tone, vv, &missed_blocks, false);
+                    ++case_idx;
+                    continue;
+                }
+
+                // Park the victim and select its rung -- measure_level()
+                // does this internally for the two levels above;
+                // measure_phase_point() below does neither, so it is done
+                // here, once per victim, before the 16-point walk.
+                park_victim(chain, vv);
+
+                // BYTE BUDGET, and the reason the spec's single SHELL_TONE
+                // line is split in two here: libDaisy's log buffer is 128
+                // bytes (lib/libDaisy/src/hid/logger.h:29) and the spec's
+                // combined line runs about 130 at its widest values --
+                // truncated, and stamped "$$". Same split and same reason
+                // as the crosstalk probe's SHELL_XTALK_CASE. This line runs
+                // 108 bytes; the point line below runs 62.
+                hw.PrintLine("SHELL_TONE_CASE case=%d level=%d f_hz=%d dbfs=%d "
+                             "victim_group=%d victim_ch=%d r_src=%d below_corner=%d",
+                             case_idx, static_cast<int>(ToneLevel::Tone), row.f_hz,
+                             row.dbfs, vv.group, vv.channel,
+                             static_cast<int>(vv.r_src_ohm), row.below_corner ? 1 : 0);
+
+                for(int k = 0; k < kTonePhasePoints; ++k)
+                {
+                    int         n = 0;
+                    const Point p = measure_phase_point(g_phase_step, sr_hz, k, &n);
+                    hw.PrintLine("SHELL_TONE case=%d phase_idx=%d n=%d mean=%d min=%d max=%d",
+                                 case_idx, k, n, p.mean, p.min, p.max);
+                }
+                ++case_idx;
+            }
+        }
+
         // --- Step 4: G5's span and per-victim verdict, copied from
         // xtalk_probe.cpp's measure_span()/coupon_verdict() pass (see the
         // comment ahead of that section above) ---
@@ -671,13 +854,21 @@ void run_tone_probe(bench::Board& hw)
         // into a literal nobody re-measures -- which is exactly what the
         // deleted kConversionNs was. read_tone.py computes G8 from the two
         // files and folds it into its exit code; gates_ok below excludes it.
+        // phase_timeouts=%d is a Task 4 addition, appended after the design
+        // spec's field list (section 8 predates the phase grid) rather than
+        // inserted between existing fields -- same convention as
+        // audio_virgin on SHELL_TONE_LEVEL/STAT. Lifetime count from
+        // g_phase_timeouts, not reset per block; not folded into gates_ok,
+        // because a lost repeat already shows up as a shorter n on its own
+        // SHELL_TONE line and is not itself a gate.
         hw.PrintLine("SHELL_TONE_GATES g2=%d g4=%d g5=%d g7=%d g8=%d "
-                     "missed_blocks=%d gates_ok=%d",
+                     "missed_blocks=%d gates_ok=%d phase_timeouts=%d",
                      gates.g2_floor ? 1 : 0, gates.g4_jitter ? 1 : 0,
                      gates.g5_address ? 1 : 0, missed_blocks == 0 ? 1 : 0,
                      -1, static_cast<int>(missed_blocks),
                      (gates.g2_floor && gates.g4_jitter && gates.g5_address
-                      && missed_blocks == 0) ? 1 : 0);
+                      && missed_blocks == 0) ? 1 : 0,
+                     static_cast<int>(g_phase_timeouts));
         hw.PrintLine("SHELL_TONE_END");
     }
 }
