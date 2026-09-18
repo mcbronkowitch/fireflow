@@ -197,6 +197,52 @@ ifneq ($(filter $(SHELL_XTALK_RV4),0 1),$(SHELL_XTALK_RV4))
 $(error SHELL_XTALK_RV4 must be 0 or 1)
 endif
 
+# Position 1 replaces the instrument with the codec-tone probe: a tone of
+# chosen frequency and level runs on AUDIO_OUT_L/R through the analog domain
+# while a mux channel is read. Unlike every other probe switch here it DOES
+# call StartAudio -- that is the point, and it is why it cannot share an
+# image with the crosstalk probe, whose floor is measured with the codec
+# stopped.
+# Spec:  ../docs/superpowers/specs/2026-09-18-coupon-codec-tone-probe-design.md
+# Plan:  ../docs/superpowers/plans/2026-09-18-coupon-codec-tone-probe.md
+SHELL_TONE_PROBE ?= 0
+
+ifneq ($(filter $(SHELL_TONE_PROBE),0 1),$(SHELL_TONE_PROBE))
+$(error SHELL_TONE_PROBE must be 0 or 1)
+endif
+
+ifeq ($(SHELL_TONE_PROBE),1)
+ifneq ($(SHELL_COUPON_PROBE),1)
+$(error SHELL_TONE_PROBE=1 needs SHELL_COUPON_PROBE=1: the probe drives the \
+coupon chain profile, and the panel profile has none of its channels)
+endif
+ifeq ($(SHELL_SETTLE_PROBE),1)
+$(error SHELL_TONE_PROBE=1 and SHELL_SETTLE_PROBE=1 are mutually exclusive)
+endif
+ifeq ($(SHELL_XTALK_PROBE),1)
+$(error SHELL_TONE_PROBE=1 and SHELL_XTALK_PROBE=1 are mutually exclusive: \
+the crosstalk probe measures its floor with the codec stopped, and an image \
+that starts audio cannot produce that floor)
+endif
+endif
+
+# Whether the submodule's audio output is DC-coupled at B1/B2 -- MEASURED
+# 2026-09-18, handheld multimeter, DC volts, black probe on TP_AGND, red
+# probe on TP_AUDIO_L, spec section 9 and the codec-tone plan's Task 1: the
+# -6 dBFS constant read -4.34 V, steady, tracking the callback (collapses
+# toward zero on RESET, returns to exactly -4.34 V when the callback
+# restarts) -- no coupling capacitor. 1 adds the static-level row (the codec
+# held at a constant, the simplest possible aggressor); 0 would leave it out,
+# because a static row measured through a coupling capacitor reads as
+# silence and looks like a clean result -- that was the conservative default
+# before this reading. The question is answered, not open, so the default is
+# now 1.
+SHELL_TONE_DC ?= 1
+
+ifneq ($(filter $(SHELL_TONE_DC),0 1),$(SHELL_TONE_DC))
+$(error SHELL_TONE_DC must be 0 or 1)
+endif
+
 CPP_SOURCES = \
 	main.cpp \
 	sdram_mem.cpp \
@@ -208,6 +254,7 @@ CPP_SOURCES = \
 	settle_probe.cpp \
 	xtalk_plan.cpp \
 	xtalk_probe.cpp \
+	tone_probe.cpp \
 	mux_scan.cpp \
 	../engine/body/mode_bank.cpp \
 	../engine/body/ks_string.cpp \
@@ -258,7 +305,7 @@ include $(SYSTEM_FILES_DIR)/Makefile
 # Fehler zurueck, und er sieht wie eine Messung aus.
 C_INCLUDES += -I$(BUILD_DIR)
 
-SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o $(BUILD_DIR)/xtalk_probe.o
+SWITCH_OBJECTS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o $(BUILD_DIR)/settle_probe.o $(BUILD_DIR)/probe_adc.o $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o
 
 # ZUR PARSE-ZEIT, nicht als Regel, und das ist der Kern der Reparatur vom
 # 2026-08-23. Als Regel mit FORCE hat es ZWEIMAL nicht gehalten:
@@ -283,14 +330,17 @@ SWITCH_HEADERS := \
   $(shell python write_shell_coupon_probe.py $(BUILD_DIR)/shell_coupon_probe.h $(SHELL_COUPON_PROBE) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_settle_probe.py $(BUILD_DIR)/shell_settle_probe.h $(SHELL_SETTLE_PROBE) $(SWITCH_OBJECTS)) \
   $(shell python write_shell_xtalk_probe.py $(BUILD_DIR)/shell_xtalk_probe.h $(SHELL_XTALK_PROBE) $(SHELL_XTALK_RV4) $(SWITCH_OBJECTS)) \
-  $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o)
+  $(shell python write_shell_tone_probe.py $(BUILD_DIR)/shell_tone_probe.h $(SHELL_TONE_PROBE) $(SHELL_TONE_DC) $(SWITCH_OBJECTS)) \
+  $(shell python write_git_hash.py $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/xtalk_probe.o $(BUILD_DIR)/tone_probe.o)
 
-# The git stamp deletes only xtalk_probe.o, because that is the only object
-# that reads it. Listing the whole SWITCH_OBJECTS there would force a full
-# rebuild of six objects on every commit for a string in one format argument.
+# The git stamp deletes only xtalk_probe.o and tone_probe.o, because those are
+# the only objects that read it. Listing the whole SWITCH_OBJECTS there would
+# force a full rebuild of seven objects on every commit for a string in one
+# format argument.
 
-$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.h $(BUILD_DIR)/shell_mux_probe.h $(BUILD_DIR)/shell_idle_fill.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_xtalk_probe.h
+$(BUILD_DIR)/main.o: $(BUILD_DIR)/shell_selftest.h $(BUILD_DIR)/shell_cpu_probe.h $(BUILD_DIR)/shell_mux_probe.h $(BUILD_DIR)/shell_idle_fill.h $(BUILD_DIR)/shell_coupon_probe.h $(BUILD_DIR)/shell_xtalk_probe.h $(BUILD_DIR)/shell_tone_probe.h
 $(BUILD_DIR)/xtalk_probe.o: $(BUILD_DIR)/shell_xtalk_probe.h $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coupon_probe.h
+$(BUILD_DIR)/tone_probe.o: $(BUILD_DIR)/shell_tone_probe.h $(BUILD_DIR)/shell_git_hash.h $(BUILD_DIR)/shell_coupon_probe.h
 $(BUILD_DIR)/mux_scan.o $(BUILD_DIR)/coupon_scan.o: $(BUILD_DIR)/shell_coupon_probe.h
 
 .PHONY: FORCE

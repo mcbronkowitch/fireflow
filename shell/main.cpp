@@ -14,6 +14,7 @@
 #include "shell_coupon_probe.h"
 #include "shell_settle_probe.h"
 #include "shell_xtalk_probe.h"
+#include "shell_tone_probe.h"
 #include "hw/board.h"
 #include "sdram_mem.h"
 #include "instrument.h"
@@ -45,12 +46,16 @@ volatile uint32_t g_block_tick = 0;
 #include "xtalk_probe.h"
 #endif
 
+#if SHELL_TONE_PROBE
+#include "tone_probe.h"
+#endif
+
 #if defined(SHELL_CPU_PROBE)
 #include <cstdint>
 #include "util/CpuLoadMeter.h"
 #endif
 
-#if defined(SHELL_CPU_PROBE) || SHELL_COUPON_PROBE || SHELL_SETTLE_PROBE || SHELL_XTALK_PROBE
+#if defined(SHELL_CPU_PROBE) || SHELL_COUPON_PROBE || SHELL_SETTLE_PROBE || SHELL_XTALK_PROBE || SHELL_TONE_PROBE
 // libDaisy deklariert diese beiden in src/usbd/usbd_desc.c als
 // `extern const char*` und definiert sie nie -- die Anwendung besitzt ihre
 // eigene USB-Identitaet. Ohne sie scheitert der USB-Zweig beim LINKEN, nicht
@@ -250,6 +255,14 @@ int main(void)
     // is round two's aggressor and an image that runs it cannot measure
     // round one's floor.
     shell::run_xtalk_probe(hw);   // never returns
+#endif
+
+#if SHELL_TONE_PROBE
+    // The board under test is the coupon, and the aggressor is the codec.
+    // Unlike every other probe image here, this one DOES start audio -- with
+    // a callback that writes a tone and nothing else. No engine: the
+    // operating point has to be "the codec, and only the codec".
+    shell::run_tone_probe(hw);   // never returns
 #endif
 
 #if SHELL_SETTLE_PROBE

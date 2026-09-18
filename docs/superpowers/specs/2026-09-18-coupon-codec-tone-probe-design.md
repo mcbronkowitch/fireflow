@@ -205,16 +205,36 @@ line and refuses to run without it.
 
 ## 9. Before it is built
 
-One bench reading, unpowered by the probe and unmeasured today: **whether
-the Patch Submodule's audio output is DC-coupled at B1/B2.** Nothing in this
-repo says, and it decides whether a static-level case (the codec at a
-constant −6 dBFS, no tone, the simplest possible aggressor) is available or
-whether the lowest usable frequency is set by a coupling capacitor's corner.
-The check is a meter on `TP_AUDIO_L` against `TP_AGND` while the callback
-writes a constant: a DC reading that follows the constant means DC-coupled
-and adds a fourth "level" row; a reading that decays to zero means a corner
-frequency, and the 100 Hz row is checked against it. Either answer goes into
-this section as measured before the plan table is finalised.
+One bench reading, unpowered by the probe and unmeasured before this task:
+**whether the Patch Submodule's audio output is DC-coupled at B1/B2.**
+Nothing in this repo said, and it decides whether a static-level case (the
+codec at a constant, no tone, the simplest possible aggressor) is available
+or whether the lowest usable frequency is set by a coupling capacitor's
+corner. The check was a meter on `TP_AUDIO_L` against `TP_AGND` while the
+callback wrote a constant.
+
+Measured 2026-09-18, handheld multimeter, DC volts, black probe on
+`TP_AGND`, red probe on `TP_AUDIO_L`:
+
+| what the callback wrote | reading at `TP_AUDIO_L` |
+|---|---|
+| −6 dBFS constant (`0.5011872f`), single-constant image | **−4.34 V**, steady — holds indefinitely, dips toward zero on RESET, returns to exactly −4.34 V when the callback restarts |
+| true silence (`0.0f`), discriminator image | **−10.8 mV** |
+| 0 dBFS (`1.0f`), discriminator image | **−8.66 V** |
+
+The output is **DC-coupled** at B1/B2: there is no coupling capacitor — the
+level holds for minutes and tracks the callback, collapsing on reset and
+returning on restart. The static-level case therefore exists; `kToneCornerHz`
+is 0. `SHELL_TONE_DC` is built as **1** by default (`shell/Makefile`).
+
+The path **inverts**: a positive constant produces a negative voltage at
+`TP_AUDIO_L`. Measured; no mechanism is claimed for it.
+
+−8.66 / −4.34 = 1.995, against 10^(6/20) = 1.995: the chain does **not**
+saturate across the top 6 dB, and full scale is 8.66 V peak.
+
+True silence leaves 10.8 mV standing — a small offset, not zero. Stated as
+measured; not characterised further.
 
 ## 10. How this can go red
 
@@ -239,8 +259,9 @@ this section as measured before the plan table is finalised.
 | 48 kHz, block size from the board | read at runtime, printed |
 | Interrupt latency of "some hundreds of nanoseconds" | **estimate**; G7 and the phase grid are sized so it does not matter, and the CAL pass measures the part of it that does |
 | The 387.5-cycle rung lands on the divider's true value | measured — `settle-measured.md` §7 |
-| DC coupling of the audio output | **unmeasured** — §9 |
+| DC coupling of the audio output | measured — §9 |
 | That a 0 dBFS sine on an unloaded output is a valid aggressor for a loaded jack | **reasoned** — the trace is the coupling path either way; the load changes the drive impedance, not the geometry. Unverified, stated |
+| That 0 dBFS does not clip the unloaded output | measured — §9: −8.66 V is 1.995× the −6 dBFS reading of −4.34 V, matching 10^(6/20) exactly, so the chain is linear across the top 6 dB. This is a narrower claim than the row above it and does not settle the loaded-jack question |
 | Any `delta_pp` | unmeasured — that is the run |
 
 ## 12. Out of scope
