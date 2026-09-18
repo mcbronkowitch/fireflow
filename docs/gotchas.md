@@ -407,6 +407,14 @@ invisible from reading the scripts, and each cost real time.
   not replace one attribution with another; the measurement above is what is
   known.
 
+  **One candidate is ruled out, though: it is not charge redistribution from
+  the sample-and-hold.** That mechanism was measured on this board on
+  2026-09-18 and it is real and large —
+  [`settle-measured.md`](hardware/settle-measured.md) §7 has it at ±800 counts
+  on a 5150 Ω channel — but it scales with source impedance, and the same probe
+  found a 650 Ω channel already immune at under 10 counts. The channel reading
+  63485 is tied to the rail through **0 Ω**. It cannot be this.
+
   Within libDaisy's configuration the deficit behaves as a gain error rather
   than a zero offset, and the coupon's dividers prove which: three 50/50
   dividers off the same rail read 31716, 31737 and 31758. A gain error predicts

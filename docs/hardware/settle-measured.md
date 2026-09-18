@@ -129,6 +129,18 @@ And the design choice, a **read from the source, not a runtime claim**:
   arrival on a channel after a long absence — which is exactly and only what
   §7 describes. §7 says what follows from that, and what does not.
 
+  **Measured 2026-09-18, and it is not only a first-arrival effect.** Read at
+  the 387.5-cycle rung, the same settled channel comes back **180 to 245 counts
+  higher** than the working rung reports, with no dependence on where the
+  arrival came from — so the working rung reads low in steady state too. The
+  absolute value says which of the two is right: REF_A at 387.5 cycles is
+  32761…32765, against the 32767.5 an ideal 10 k/10 k divider puts at mid
+  scale. Term B's rung is measurably too short, which is `settle-budget.md`
+  finding 3 arriving on the bench. Every *level* this instrument prints is
+  therefore biased low by roughly that much; no *time* it prints is affected,
+  because a knee is judged against the tail of the same curve at the same rung.
+  §7 carries the numbers.
+
 ## 3. The four gates, and what each refuses
 
 The probe judges itself before it names anything. A run that fails a gate prints
@@ -427,33 +439,68 @@ visiting the same channel immediately afterwards, agreed with its own tail to
 within 15 counts in every block. So this is stable, not an artifact of one
 capture, and it is the same size as the 845 recorded a day earlier.
 
-**An untested candidate, named as one: charge redistribution.** §2 records a
-read from the source — the probe picks each pair's sampling rung from term B
-alone, so the 5150 Ω pairs get 407 ns of acquisition where
-[`settle-budget.md`](settle-budget.md) §2 puts term C at about 2190 ns. Inside
-a repeat loop that cancels; for a first arrival on a channel it does not, and a
-first arrival is exactly what the parked pre-read is. The mechanism would
-therefore predict a deficit on precisely that read and on no other, which is
-the shape of what is observed.
+**It is charge redistribution. Measured 2026-09-18**, by a throwaway probe that
+is not part of this instrument and was reverted after the run. Every arrival
+was made fresh, from the same away channel, with an actual conversion taken
+there first — the charge on the sample-and-hold comes from the last conversion,
+so an away channel nobody converted on would prove nothing.
 
-It is **not** offered as the explanation, and the arithmetic below is a bound,
-not a prediction. Derived from `settle-budget.md`'s own constants: the
+Three reads per arrival: as the probe normally takes it, after one discarded
+conversion on the same channel, and at the 387.5-cycle rung (63 µs of
+acquisition, far past term C). Each column is the deviation from that channel's
+own settled value, averaged over six blocks:
+
+| target | arriving from | first read | after 1 discard | at 387.5 cycles |
+|---|---|---:|---:|---:|
+| REF_A, 5150 Ω | AGND tie | **−866** | −41 | +243 |
+| REF_A, 5150 Ω | rail tie | **+795** | −39 | +245 |
+| REF_B, 650 Ω | AGND tie | −9 | +6 | 0 |
+| REF_B, 650 Ω | rail tie | +4 | +14 | +1 |
+| REF_C, 5150 Ω | AGND tie | **−682** | −18 | +184 |
+| REF_C, 5150 Ω | rail tie | **+604** | −27 | +180 |
+
+**The sign flips with the channel we arrived from.** That is the column that
+decides it, and it was not in the experiment §7 originally asked for: a drift,
+an unfinished settle or a software fault is blind to where the previous
+conversion happened. Only a sample-and-hold arriving with the previous
+channel's charge on it can read low from one direction and high from the other
+by a similar amount. Both variants that were asked for collapse the deficit to
+the noise floor, and the 650 Ω channel is immune in every column — the
+recovery time constant scales with the source impedance, so the low-impedance
+channel finishes inside the same window that the 5150 Ω channels cannot.
+
+The bound derived earlier still frames it: at first contact the
 sample-and-hold can pull at most `C_ADC / (C_node + C_ADC)` = 4 pF / 69 pF ≈
-**5.8 %** off the node at first contact, which is about **3800 counts** of full
-scale if the cap arrives holding a voltage at the opposite end of the range.
-The observed 845 is roughly a fifth of that. So the mechanism is *capable* of a
-deficit this large; that is all the arithmetic says, and it would say the same
-about several other mechanisms.
+5.8 % of the step, about 3800 counts across the full range. The measured 866
+is a fifth of that, i.e. most of the step is recovered inside the window and
+what is seen is the remainder.
 
-**The experiment that would settle it, in one round:** take the parked pre-read
-either after a discarded conversion on the same channel, or at the 387.5-cycle
-rung (63 µs of acquisition, far past term C). If the deficit is charge
-redistribution it collapses in both cases. If it survives either, it is not —
-and that is worth as much as a confirmation.
+**The larger finding is in the last column, and it is not about first
+arrivals.** The 387.5-cycle read sits 180 to 245 counts *above* the settled
+value, from both directions equally — no sign dependence, so this is not an
+arrival effect. It says the working rung reads systematically low even in
+steady state, which is §2's read fact turning up as a number: the rung is
+chosen from term B, and term B is never the binding term. The absolute value
+is the check: REF_A read at 387.5 cycles is 32761…32765 against the 32767.5 an
+ideal 10 k/10 k divider puts at mid scale. The long read lands on the divider;
+the working read does not.
 
-It is not a curiosity: it is why the settled reference is now the tail of the
-curve rather than a parked read (§1). Every knee was being judged against that
-845-count-wrong reference until the round that found this replaced it.
+**None of this moves a settle time.** The knee is measured against the tail of
+the same curve, taken at the same rung, so a bias common to both cancels. §4
+stands as written.
+
+It is also why the settled reference is the tail of the curve rather than a
+parked read (§1). Every knee was being judged against that 845-count-wrong
+reference until the round that found this replaced it.
+
+**What is still open:** whether the shipping firmware is exposed to the same
+mechanism. libDaisy's ADC free-runs a circular DMA across twelve channels, so
+every conversion follows one on a different pin at a different voltage. The
+coupon's own data argues against a large effect there — the three 5150 Ω
+dividers read through libDaisy agree with each other to 42 counts
+(`docs/gotchas.md`), which a redistribution term of this size would not allow —
+but that is an inference from readings taken for another purpose, not a
+measurement of this question.
 
 ## 8. What this rests on
 
