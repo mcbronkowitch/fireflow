@@ -319,3 +319,8 @@ add_test(NAME read_coupon_guard
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_coupon.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
+
+add_test(NAME read_settle_guard
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/test_read_settle.py
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/shell)
