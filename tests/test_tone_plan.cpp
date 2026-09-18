@@ -65,10 +65,61 @@ TEST_CASE("tone rows: the level ladder is a linearity check, at three points") {
 }
 
 TEST_CASE("tone rows: the table is the full cross product, plus the static row when it exists") {
-    // Nine rows of 3 x 3, and one static row iff the output is DC-coupled --
-    // which Task 1 measured and SHELL_TONE_DC carries.
+    // A COUNT ALONE CANNOT PROVE THIS. shell/tone_plan.h:62 defines
+    // kToneRowCount with this exact formula, and kToneRows is declared with
+    // extent kToneRowCount, so any mismatch between the table's element
+    // count and its declared extent is already a compile error -- a CHECK
+    // on the count observes nothing the compiler has not already blocked.
+    // What it cannot observe is a table that is the right SIZE and the
+    // wrong SHAPE: a missing (frequency, dBFS) combination compensated by a
+    // duplicate of another one. The pair assertion below is what catches
+    // that; the count is kept only because it is harmless, not because it
+    // does the checking.
     const int expected = 9 + (shell::kToneHasStaticRow ? 1 : 0);
     CHECK(shell::kToneRowCount == expected);
+
+    // Gather the distinct non-static frequencies and levels, the same way
+    // the two ladder tests above do.
+    int freqs[shell::kToneRowCount];
+    int freq_n = 0;
+    int dbfs_vals[shell::kToneRowCount];
+    int dbfs_n = 0;
+    int static_rows = 0;
+    for(int i = 0; i < shell::kToneRowCount; ++i) {
+        const shell::ToneRow& r = shell::kToneRows[i];
+        if(r.f_hz == 0) { ++static_rows; continue; }
+        bool seen_f = false;
+        for(int j = 0; j < freq_n; ++j) if(freqs[j] == r.f_hz) seen_f = true;
+        if(!seen_f) freqs[freq_n++] = r.f_hz;
+        bool seen_d = false;
+        for(int j = 0; j < dbfs_n; ++j) if(dbfs_vals[j] == r.dbfs) seen_d = true;
+        if(!seen_d) dbfs_vals[dbfs_n++] = r.dbfs;
+    }
+
+    // The static row's own existence and identity, checked separately from
+    // the cross product it is not part of: exactly one row with f_hz == 0
+    // iff kToneHasStaticRow, and none at all otherwise.
+    CHECK(static_rows == (shell::kToneHasStaticRow ? 1 : 0));
+
+    // THE ACTUAL CROSS-PRODUCT ASSERTION. Every (frequency, dBFS) pair among
+    // the distinct ladders gathered above must appear on EXACTLY ONE
+    // non-static row -- not zero (a missing combination) and not two or more
+    // (a duplicate standing in for a missing one elsewhere). A table with
+    // the right total row count can still fail this: nine rows that repeat
+    // one pair and drop another sum to nine, same as the real cross
+    // product, and only this loop tells them apart.
+    for(int fi = 0; fi < freq_n; ++fi) {
+        for(int di = 0; di < dbfs_n; ++di) {
+            CAPTURE(freqs[fi]);
+            CAPTURE(dbfs_vals[di]);
+            int found = 0;
+            for(int i = 0; i < shell::kToneRowCount; ++i) {
+                const shell::ToneRow& r = shell::kToneRows[i];
+                if(r.f_hz == freqs[fi] && r.dbfs == dbfs_vals[di]) ++found;
+            }
+            CHECK(found == 1);
+        }
+    }
 }
 
 TEST_CASE("tone rows: a row below the coupling corner is flagged, not deleted") {

@@ -237,6 +237,13 @@ endif
 # silence and looks like a clean result -- that was the conservative default
 # before this reading. The question is answered, not open, so the default is
 # now 1.
+#
+# LOAD-BEARING BEYOND THE FIRMWARE: CMakeLists.txt reads this exact line by
+# regex to derive the host test suite's SHELL_TONE_DC default, so that value
+# is never hand-copied a second time. Reformatting this line -- its spacing,
+# its quoting, or moving it elsewhere -- without keeping the name, the `?=`
+# default assignment and a trailing 0 or 1 breaks that regex, and CMake
+# configure fails loudly rather than silently keeping a stale host default.
 SHELL_TONE_DC ?= 1
 
 ifneq ($(filter $(SHELL_TONE_DC),0 1),$(SHELL_TONE_DC))
